@@ -49,7 +49,7 @@ textarea{flex:1;background:transparent;border:none;outline:none;color:#f0f0f0;fo
 </div>
 <script>
 const sb=supabase.createClient('https://tfmbqiwxfgrwtjvoqomf.supabase.co','sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_',{
-  auth:{flowType:'pkce',detectSessionInUrl:true,persistSession:true}
+  auth:{flowType:'pkce',detectSessionInUrl:true,persistSession:true,storageKey:'inout-auth'}
 });
 const authEl=document.getElementById('auth');
 const appEl=document.getElementById('app');
@@ -94,18 +94,28 @@ function hide(){
   feed.innerHTML='';
 }
 
-sb.auth.onAuthStateChange((_,session)=>{
+sb.auth.onAuthStateChange((event,session)=>{
   if(session)show(session.user);
   else hide();
 });
 
-sb.auth.getSession().then(({data:{session}})=>{
-  if(session)show(session.user);
-});
+const code=new URLSearchParams(location.search).get('code');
+if(code){
+  sb.auth.exchangeCodeForSession(code).then(({data,error})=>{
+    if(data?.session){
+      history.replaceState(null,'','/');
+      show(data.session.user);
+    }
+  });
+} else {
+  sb.auth.getSession().then(({data:{session}})=>{
+    if(session)show(session.user);
+  });
+}
 
 document.getElementById('google-btn').onclick=()=>sb.auth.signInWithOAuth({
   provider:'google',
-  options:{redirectTo:'https://inout.vercel.app',skipBrowserRedirect:false}
+  options:{redirectTo:'https://inout.vercel.app'}
 });
 document.getElementById('signout').onclick=()=>sb.auth.signOut();
 document.getElementById('btn').onclick=send;
