@@ -37,8 +37,7 @@ body{
   -webkit-font-smoothing:antialiased;
   display:flex;
   flex-direction:column;
-  height:100vh;
-  overflow:hidden;
+  min-height:100vh;
 }
 
 /* ── HEADER ── */
@@ -591,13 +590,14 @@ let msgCount    = 0;
 let atBottom    = true;
 let channel     = null;
 let presenceCh  = null;
-let toastTimer  = null;
-let myId        = crypto.randomUUID();
-let currentUser = null;
+let toastTimer     = null;
+let myId           = crypto.randomUUID();
+let currentUser    = null;
 let currentChannel = 'main';
-let channels      = ['main'];
-const CHANNELS_KEY = 'inout_channels_v1';
-const seenIds     = new Set();
+let channels       = ['main'];
+const CHANNELS_KEY  = 'inout_channels_v1';
+const seenIds       = new Set();
+const channelScroll = new Map();
 
 /* ═══ INIT ═══════════════════════════════════════════════ */
 async function init() {
@@ -838,6 +838,9 @@ async function syncChannelsFromServer() {
 
 function switchChannel(ch) {
   if (ch === currentChannel) return;
+  if (feedEl) {
+    channelScroll.set(currentChannel, feedEl.scrollTop);
+  }
   currentChannel = ch;
   updateTabsUI();
   if (input) input.focus();
@@ -1011,6 +1014,14 @@ async function reloadForUser() {
   clearMessages();
   await loadMessages();
   subscribeRealtime();
+   if (feedEl) {
+    const saved = channelScroll.get(currentChannel);
+    if (typeof saved === 'number') {
+      feedEl.scrollTop = saved;
+    } else {
+      scrollBottom();
+    }
+  }
 }
 
 function clearMessages() {
