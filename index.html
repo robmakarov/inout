@@ -650,8 +650,7 @@ async function loadMessages() {
   if (error) { console.error(error); return; }
 
   if (data && data.length > 0) {
-    hideEmpty();
-    data.forEach(m => appendMsg(m, false));
+    renderInitialMessages(data);
     msgCount = data.length;
     updateMsgCount();
   }
@@ -703,9 +702,9 @@ function setupPresence() {
 }
 
 /* ═══ RENDER ══════════════════════════════════════════════ */
-function appendMsg(msg, isNew) {
+function createMsgRow(msg, isNew) {
   if (msg && typeof msg.id !== 'undefined') {
-    if (seenIds.has(msg.id)) return;
+    if (seenIds.has(msg.id)) return null;
     seenIds.add(msg.id);
   }
   // remove empty state
@@ -745,7 +744,24 @@ function appendMsg(msg, isNew) {
   row.appendChild(text);
   row.appendChild(sender);
   row.appendChild(num);
+  return row;
+}
+
+function appendMsg(msg, isNew) {
+  const row = createMsgRow(msg, isNew);
+  if (!row) return;
   feedInner.appendChild(row);
+}
+
+function renderInitialMessages(list) {
+  if (!Array.isArray(list) || list.length === 0) return;
+  hideEmpty();
+  const frag = document.createDocumentFragment();
+  for (const msg of list) {
+    const row = createMsgRow(msg, false);
+    if (row) frag.appendChild(row);
+  }
+  feedInner.appendChild(frag);
 }
 
 let globalMsgNum = 0;
@@ -1169,7 +1185,7 @@ feedEl.addEventListener('scroll', () => {
   const threshold = 80;
   atBottom = feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < threshold;
   if (atBottom) scrollBtn.classList.remove('visible');
-});
+}, { passive: true });
 
 function scrollBottom() {
   feedEl.scrollTop = feedEl.scrollHeight;
