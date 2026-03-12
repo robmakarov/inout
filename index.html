@@ -14,10 +14,12 @@ html,body{height:100%;background:#0a0a0a;color:#f0f0f0;font-family:monospace;fon
 #bar{position:fixed;bottom:0;left:0;right:0;height:48px;display:flex;border-top:1px solid #1e1e1e}
 #inp{flex:1;background:#111;border:none;outline:none;color:#f0f0f0;font-family:monospace;font-size:14px;padding:0 16px}
 #btn{background:#e8ff47;color:#0a0a0a;border:none;cursor:pointer;font-family:monospace;font-size:13px;font-weight:bold;padding:0 20px}
+#err{position:fixed;top:8px;right:8px;background:#ff4444;color:#fff;padding:8px 12px;font-family:monospace;font-size:12px;display:none;border-radius:2px}
 </style>
 </head>
 <body>
 <div id="feed"></div>
+<div id="err" id="err"></div>
 <div id="bar">
   <input id="inp" placeholder="type anything..." autocomplete="off"/>
   <button id="btn">send</button>
@@ -26,6 +28,9 @@ html,body{height:100%;background:#0a0a0a;color:#f0f0f0;font-family:monospace;fon
 const sb=supabase.createClient('https://tfmbqiwxfgrwtjvoqomf.supabase.co','sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_');
 const feed=document.getElementById('feed');
 const inp=document.getElementById('inp');
+const err=document.getElementById('err');
+
+function showErr(msg){err.textContent=msg;err.style.display='block';setTimeout(()=>err.style.display='none',4000)}
 
 function add(text){
   const d=document.createElement('div');
@@ -36,7 +41,8 @@ function add(text){
 }
 
 async function load(){
-  const{data}=await sb.from('entries').select('text').order('created_at');
+  const{data,error}=await sb.from('entries').select('text').order('created_at');
+  if(error){showErr('load: '+error.message);return}
   if(data)data.forEach(r=>add(r.text));
 }
 
@@ -46,7 +52,8 @@ async function send(){
   const t=inp.value.trim();
   if(!t)return;
   inp.value='';
-  await sb.from('entries').insert({text:t});
+  const{error}=await sb.from('entries').insert({text:t});
+  if(error)showErr('send: '+error.message);
 }
 
 document.getElementById('btn').onclick=send;
