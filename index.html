@@ -589,6 +589,7 @@ let currentUser = null;
 let currentChannel = 'main';
 let channels      = ['main'];
 const CHANNELS_KEY = 'inout_channels_v1';
+const seenIds     = new Set();
 
 /* ═══ INIT ═══════════════════════════════════════════════ */
 async function init() {
@@ -673,12 +674,19 @@ function setupPresence() {
 
 /* ═══ RENDER ══════════════════════════════════════════════ */
 function appendMsg(msg, isNew) {
+  if (msg && typeof msg.id !== 'undefined') {
+    if (seenIds.has(msg.id)) return;
+    seenIds.add(msg.id);
+  }
   // remove empty state
   if (emptyEl.parentNode) emptyEl.remove();
 
   const row  = document.createElement('div');
   row.className = 'msg' + (isNew ? ' new-flash' : '');
   if (isNew) setTimeout(() => row.classList.remove('new-flash'), 800);
+  if (typeof msg.id !== 'undefined') {
+    row.dataset.id = String(msg.id);
+  }
 
   const time = document.createElement('div');
   time.className = 'msg-time';
@@ -961,6 +969,7 @@ function clearMessages() {
   globalMsgNum = 0;
   msgCount = 0;
   updateMsgCount();
+  seenIds.clear();
   if (emptyEl && !emptyEl.parentNode) {
     feedInner.appendChild(emptyEl);
   }
@@ -1027,11 +1036,15 @@ async function send() {
   sendBtn.disabled = true;
   input.disabled   = true;
 
-  const { error } = await sb.from('entries').insert({
-    text,
-    user_id: currentUser.id,
-    channel: currentChannel
-  });
+  const { data, error } = await sb
+    .from('entries')
+    .insert({
+      text,
+      user_id: currentUser.id,
+      channel: currentChannel
+    })
+    .select('id, created_at, text, channel')
+    .single();
 
   input.disabled = false;
 
@@ -1040,6 +1053,12 @@ async function send() {
     toast('Failed to send — ' + humanError(error.message));
     sendBtn.disabled = false;
   } else {
+    if (data && data.channel === currentChannel) {
+      hideEmpty();
+      appendMsg(data, true);
+      msgCount++;
+      updateMsgCount();
+    }
     input.value = '';
     autoResize();
     sendBtn.disabled = true;
