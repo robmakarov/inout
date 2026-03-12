@@ -652,7 +652,7 @@ function switchChannel(ch) {
   currentChannel = ch;
   updateTabsUI();
   if (currentUser) {
-    reloadForUser();
+    ensureMembership().then(reloadForUser);
   } else {
     clearMessages();
   }
@@ -689,6 +689,18 @@ function deleteChannel(ch) {
     reloadForUser();
   } else {
     clearMessages();
+  }
+}
+
+async function ensureMembership() {
+  if (!currentUser) return;
+  try {
+    await sb.from('channel_members').upsert({
+      channel: currentChannel,
+      user_id: currentUser.id
+    }, { onConflict: 'channel,user_id' });
+  } catch (e) {
+    console.error(e);
   }
 }
 
