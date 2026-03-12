@@ -416,7 +416,6 @@ async function init() {
   }
   setupPresence();
   scrollBottom();
-  cleanupAuthHash();
 }
 
 /* ═══ LOAD ════════════════════════════════════════════════ */
@@ -569,6 +568,7 @@ function updateAuthUI() {
     authStatus.textContent = email;
     authBtn.textContent = 'Sign out';
     sendBtn.disabled = !input.value.trim();
+    cleanupAuthHash();
   } else {
     authStatus.textContent = 'Not signed in';
     authBtn.textContent = 'Sign in';
