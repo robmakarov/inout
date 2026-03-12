@@ -612,7 +612,10 @@ async function send() {
   sendBtn.disabled = true;
   input.disabled   = true;
 
-  const { error } = await sb.from('entries').insert({ text });
+  const { error } = await sb.from('entries').insert({
+    text,
+    user_id: currentUser.id
+  });
 
   input.disabled = false;
 
