@@ -570,11 +570,11 @@ async function signIn() {
     });
     if (error) {
       console.error(error);
-      toast('Sign-in failed — ' + error.message);
+      toast('Sign-in failed — ' + humanError(error.message));
     }
   } catch (e) {
     console.error(e);
-    toast('Sign-in failed');
+    toast('Sign-in failed — ' + humanError(e.message));
   }
 }
 
@@ -583,11 +583,11 @@ async function signOut() {
     const { error } = await sb.auth.signOut();
     if (error) {
       console.error(error);
-      toast('Sign-out failed — ' + error.message);
+      toast('Sign-out failed — ' + humanError(error.message));
     }
   } catch (e) {
     console.error(e);
-    toast('Sign-out failed');
+    toast('Sign-out failed — ' + humanError(e.message));
   }
 }
 
@@ -605,7 +605,7 @@ async function send() {
   if (!text) return;
 
   if (!currentUser) {
-    toast('Sign in with Google to send');
+    toast('Sign in with Google to send.');
     return;
   }
 
@@ -621,7 +621,7 @@ async function send() {
 
   if (error) {
     console.error(error);
-    toast('Failed to send — ' + error.message);
+    toast('Failed to send — ' + humanError(error.message));
     sendBtn.disabled = false;
   } else {
     input.value = '';
@@ -701,6 +701,25 @@ function toast(msg, dur = 2800) {
   toastEl.textContent = msg;
   toastEl.classList.add('show');
   toastTimer = setTimeout(() => toastEl.classList.remove('show'), dur);
+}
+
+function humanError(message) {
+  if (!message) return 'Something went wrong.';
+  const msg = message.toLowerCase();
+
+  if (msg.includes('row-level security')) {
+    return 'Not allowed to send this message (security rules).';
+  }
+
+  if (msg.includes('failed to fetch') || msg.includes('network')) {
+    return 'Network issue — check your connection.';
+  }
+
+  if (msg.includes('invalid jw') || msg.includes('jwt')) {
+    return 'Session expired — refresh and sign in again.';
+  }
+
+  return message;
 }
 
 /* ═══ GO ══════════════════════════════════════════════════ */
