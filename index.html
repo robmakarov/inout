@@ -48,7 +48,9 @@ textarea{flex:1;background:transparent;border:none;outline:none;color:#f0f0f0;fo
   </div>
 </div>
 <script>
-const sb=supabase.createClient('https://tfmbqiwxfgrwtjvoqomf.supabase.co','sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_');
+const sb=supabase.createClient('https://tfmbqiwxfgrwtjvoqomf.supabase.co','sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_',{
+  auth:{flowType:'pkce',detectSessionInUrl:true,persistSession:true}
+});
 const authEl=document.getElementById('auth');
 const appEl=document.getElementById('app');
 const feed=document.getElementById('feed');
@@ -92,26 +94,19 @@ function hide(){
   feed.innerHTML='';
 }
 
-// handle hash fragment from OAuth redirect
-if(location.hash&&location.hash.includes('access_token')){
-  sb.auth.getSession().then(({data:{session}})=>{
-    if(session){
-      history.replaceState(null,'',location.pathname);
-      show(session.user);
-    }
-  });
-} else {
-  sb.auth.getSession().then(({data:{session}})=>{
-    if(session)show(session.user);
-  });
-}
-
 sb.auth.onAuthStateChange((_,session)=>{
   if(session)show(session.user);
   else hide();
 });
 
-document.getElementById('google-btn').onclick=()=>sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:'https://inout.vercel.app'}});
+sb.auth.getSession().then(({data:{session}})=>{
+  if(session)show(session.user);
+});
+
+document.getElementById('google-btn').onclick=()=>sb.auth.signInWithOAuth({
+  provider:'google',
+  options:{redirectTo:'https://inout.vercel.app',skipBrowserRedirect:false}
+});
 document.getElementById('signout').onclick=()=>sb.auth.signOut();
 document.getElementById('btn').onclick=send;
 inp.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});
