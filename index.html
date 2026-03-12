@@ -330,11 +330,38 @@ header{
   #input-area{padding:10px 14px 14px}
 }
 
-/* ── RED RECTANGLE ── */
+/* ── RED RECTANGLE / TABS ── */
 .red-rect{
   width:100%;
   height:4px;
   background:#ff2b2b;
+}
+
+#tabs{
+  display:flex;
+  gap:4px;
+  padding:6px 20px 4px;
+  border-bottom:1px solid var(--line);
+  background:var(--bg2);
+}
+
+.tab{
+  border:1px solid var(--line2);
+  background:transparent;
+  color:var(--soft);
+  font-family:var(--mono);
+  font-size:11px;
+  padding:3px 8px;
+  border-radius:12px;
+  cursor:pointer;
+  letter-spacing:0.04em;
+  text-transform:uppercase;
+}
+
+.tab-active{
+  background:var(--acc);
+  color:var(--bg);
+  border-color:var(--acc2);
 }
 </style>
 </head>
@@ -353,6 +380,12 @@ header{
 </header>
 
 <div class="red-rect"></div>
+
+<div id="tabs">
+  <button class="tab tab-active" data-channel="main">Main</button>
+  <button class="tab" data-channel="work">Work</button>
+  <button class="tab" data-channel="ideas">Ideas</button>
+</div>
 
 <div id="feed">
   <div class="feed-inner" id="feed-inner">
@@ -397,6 +430,7 @@ const msgCountEl = document.getElementById('msg-count');
 const toastEl    = document.getElementById('toast');
 const authStatus = document.getElementById('auth-status');
 const authBtn    = document.getElementById('auth-btn');
+const tabButtons = Array.from(document.querySelectorAll('.tab'));
 
 let msgCount    = 0;
 let atBottom    = true;
@@ -405,11 +439,13 @@ let presenceCh  = null;
 let toastTimer  = null;
 let myId        = crypto.randomUUID();
 let currentUser = null;
+let currentChannel = 'main';
 
 /* ═══ INIT ═══════════════════════════════════════════════ */
 async function init() {
   await refreshAuth();
   setupAuthListener();
+  setupTabs();
   if (currentUser) {
     await loadMessages();
     subscribeRealtime();
@@ -425,7 +461,8 @@ async function loadMessages() {
 
   const { data, error } = await sb
     .from('entries')
-    .select('id, created_at, text')
+    .select('id, created_at, text, channel')
+    .eq('channel', currentChannel)
     .order('created_at', { ascending: true })
     .limit(200);
 
@@ -441,10 +478,13 @@ async function loadMessages() {
 
 /* ═══ REALTIME ════════════════════════════════════════════ */
 function subscribeRealtime() {
+  if (channel) {
+    channel.unsubscribe();
+  }
   channel = sb
     .channel('entries-feed')
     .on('postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'entries' },
+      { event: 'INSERT', schema: 'public', table: 'entries', filter: 'channel=eq.' + currentChannel },
       payload => {
         hideEmpty();
         const wasAtBottom = atBottom;
@@ -517,6 +557,35 @@ function hideEmpty() {
 
 function updateMsgCount() {
   msgCountEl.textContent = msgCount + (msgCount === 1 ? ' msg' : ' msgs');
+}
+
+/* ═══ TABS ════════════════════════════════════════════════ */
+function setupTabs() {
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const ch = btn.getAttribute('data-channel') || 'main';
+      if (ch === currentChannel) return;
+      currentChannel = ch;
+      updateTabsUI();
+      if (currentUser) {
+        reloadForUser();
+      } else {
+        clearMessages();
+      }
+    });
+  });
+  updateTabsUI();
+}
+
+function updateTabsUI() {
+  tabButtons.forEach(btn => {
+    const ch = btn.getAttribute('data-channel') || 'main';
+    if (ch === currentChannel) {
+      btn.classList.add('tab-active');
+    } else {
+      btn.classList.remove('tab-active');
+    }
+  });
 }
 
 /* ═══ AUTH ════════════════════════════════════════════════ */
@@ -641,7 +710,8 @@ async function send() {
 
   const { error } = await sb.from('entries').insert({
     text,
-    user_id: currentUser.id
+    user_id: currentUser.id,
+    channel: currentChannel
   });
 
   input.disabled = false;
