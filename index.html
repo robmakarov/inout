@@ -219,6 +219,12 @@ header{
   user-select:none;
 }
 
+.msg-sender{
+  font-size:9px;
+  color:var(--dim);
+  letter-spacing:0.03em;
+}
+
 /* new message flash */
 .msg.new-flash{
   background:rgba(232,213,160,0.04);
@@ -595,6 +601,9 @@ const seenIds     = new Set();
 async function init() {
   loadChannelsList();
   await refreshAuth();
+  if (currentUser) {
+    await syncChannelsFromServer();
+  }
   setupAuthListener();
   setupTabs();
   if (currentUser) {
@@ -604,6 +613,7 @@ async function init() {
   setupPresence();
   scrollBottom();
   cleanupAuthHash();
+  if (input) input.focus();
 }
 
 /* ═══ LOAD ════════════════════════════════════════════════ */
@@ -612,7 +622,7 @@ async function loadMessages() {
 
   const { data, error } = await sb
     .from('entries')
-    .select('id, created_at, text, channel')
+    .select('id, created_at, text, channel, user_id')
     .eq('channel', currentChannel)
     .order('created_at', { ascending: true })
     .limit(200);
@@ -697,12 +707,23 @@ function appendMsg(msg, isNew) {
   text.className = 'msg-text';
   text.innerHTML = linkify(escapeHtml(msg.text));
 
+  const sender = document.createElement('div');
+  sender.className = 'msg-sender';
+  if (msg.user_id && currentUser && msg.user_id === currentUser.id) {
+    sender.textContent = 'you';
+  } else if (msg.user_id) {
+    sender.textContent = String(msg.user_id);
+  } else {
+    sender.textContent = 'unknown';
+  }
+
   const num = document.createElement('div');
   num.className = 'msg-num';
   num.textContent = '#' + (++globalMsgNum);
 
   row.appendChild(time);
   row.appendChild(text);
+  row.appendChild(sender);
   row.appendChild(num);
   feedInner.appendChild(row);
 }
@@ -790,10 +811,34 @@ function renderTabs() {
   updateTabsUI();
 }
 
+async function syncChannelsFromServer() {
+  if (!currentUser) return;
+  try {
+    const { data, error } = await sb
+      .from('channel_members')
+      .select('channel')
+      .eq('user_id', currentUser.id);
+    if (error) {
+      console.error(error);
+      return;
+    }
+    const server = (data || [])
+      .map(r => (typeof r.channel === 'string' ? r.channel.trim() : ''))
+      .filter(ch => ch && ch !== 'main');
+    const merged = new Set(['main', ...channels, ...server]);
+    channels = Array.from(merged);
+    saveChannelsList();
+    renderTabs();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
 function switchChannel(ch) {
   if (ch === currentChannel) return;
   currentChannel = ch;
   updateTabsUI();
+  if (input) input.focus();
   if (currentUser) {
     ensureMembership().then(reloadForUser);
   } else {
@@ -914,11 +959,12 @@ async function refreshAuth() {
 }
 
 function setupAuthListener() {
-  sb.auth.onAuthStateChange((_event, session) => {
+  sb.auth.onAuthStateChange(async (_event, session) => {
     const prevUser = currentUser;
     currentUser = session?.user ?? null;
     updateAuthUI();
     if (!prevUser && currentUser) {
+      await syncChannelsFromServer();
       reloadForUser();
     } else if (prevUser && !currentUser) {
       clearMessages();
