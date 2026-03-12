@@ -1,1 +1,6 @@
-{"version":2,"routes":[{"src":"^/$","dest":"/index.html"},{"src":"^/#(.*)$","dest":"/index.html"}]}
+{
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
