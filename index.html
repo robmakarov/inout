@@ -379,6 +379,91 @@ header{
 .tab-close:hover{
   opacity:1;
 }
+
+/* ── CHANNEL MODAL ── */
+#channel-modal-backdrop{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.6);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:200;
+}
+
+#channel-modal{
+  background:var(--bg2);
+  border:1px solid var(--line2);
+  border-radius:8px;
+  padding:16px 18px 14px;
+  width:320px;
+  max-width:90vw;
+  font-size:11px;
+  color:var(--soft);
+}
+
+.cm-title{
+  font-family:var(--sans);
+  font-size:13px;
+  font-weight:600;
+  color:var(--bright);
+  margin-bottom:10px;
+}
+
+.cm-field{
+  margin-bottom:8px;
+}
+
+.cm-label{
+  text-transform:uppercase;
+  letter-spacing:0.08em;
+  font-size:9px;
+  color:var(--dim);
+  margin-bottom:3px;
+}
+
+.cm-input{
+  width:100%;
+  border:1px solid var(--line2);
+  background:var(--bg);
+  color:var(--text);
+  border-radius:3px;
+  padding:5px 7px;
+  font-family:var(--mono);
+  font-size:11px;
+}
+
+.cm-hint{
+  font-size:9px;
+  color:var(--dim);
+  margin-top:2px;
+}
+
+.cm-row{
+  display:flex;
+  justify-content:flex-end;
+  gap:6px;
+  margin-top:10px;
+}
+
+.cm-btn{
+  border:1px solid var(--line2);
+  background:var(--bg);
+  color:var(--soft);
+  font-family:var(--mono);
+  font-size:10px;
+  padding:4px 10px;
+  border-radius:3px;
+  cursor:pointer;
+  text-transform:uppercase;
+  letter-spacing:0.06em;
+}
+
+.cm-btn-primary{
+  background:var(--acc);
+  color:var(--bg);
+  border-color:var(--acc2);
+}
 </style>
 </head>
 <body>
@@ -426,6 +511,30 @@ header{
 <button id="scroll-btn" onclick="scrollBottom()">↓ new messages</button>
 <div id="toast"></div>
 
+<div id="channel-modal-backdrop">
+  <div id="channel-modal">
+    <div class="cm-title">New feed</div>
+    <div class="cm-field">
+      <div class="cm-label">Name</div>
+      <input id="cm-name" class="cm-input" placeholder="e.g. team-a"/>
+    </div>
+    <div class="cm-field">
+      <div class="cm-label">Your user id</div>
+      <div class="cm-input" id="cm-self" style="font-size:9px;word-break:break-all;"></div>
+      <div class="cm-hint">Automatically added to this feed.</div>
+    </div>
+    <div class="cm-field">
+      <div class="cm-label">Share with user ids</div>
+      <input id="cm-others" class="cm-input" placeholder="comma separated user ids"/>
+      <div class="cm-hint">Paste other INOUT user ids to share this feed.</div>
+    </div>
+    <div class="cm-row">
+      <button class="cm-btn" id="cm-cancel">Cancel</button>
+      <button class="cm-btn cm-btn-primary" id="cm-create">Create</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const SUPABASE_URL  = 'https://tfmbqiwxfgrwtjvoqomf.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_';
@@ -443,6 +552,12 @@ const toastEl    = document.getElementById('toast');
 const authStatus = document.getElementById('auth-status');
 const authBtn    = document.getElementById('auth-btn');
 const tabsEl     = document.getElementById('tabs');
+const cmBackdrop = document.getElementById('channel-modal-backdrop');
+const cmName     = document.getElementById('cm-name');
+const cmSelf     = document.getElementById('cm-self');
+const cmOthers   = document.getElementById('cm-others');
+const cmCancel   = document.getElementById('cm-cancel');
+const cmCreate   = document.getElementById('cm-create');
 
 let msgCount    = 0;
 let atBottom    = true;
@@ -641,7 +756,7 @@ function renderTabs() {
   const addBtn = document.createElement('button');
   addBtn.className = 'tab tab-new';
   addBtn.textContent = '+';
-  addBtn.addEventListener('click', createChannelPrompt);
+  addBtn.addEventListener('click', openChannelModal);
   tabsEl.appendChild(addBtn);
 
   updateTabsUI();
@@ -658,22 +773,70 @@ function switchChannel(ch) {
   }
 }
 
-function createChannelPrompt() {
-  let name = prompt('New feed name');
-  if (!name) return;
-  name = name.trim();
-  if (!name) return;
+function openChannelModal() {
+  if (!currentUser) {
+    toast('Sign in to create a feed.');
+    return;
+  }
+  if (!cmBackdrop || !cmName || !cmSelf || !cmOthers) return;
+  cmName.value = '';
+  cmOthers.value = '';
+  cmSelf.textContent = currentUser.id || '';
+  cmBackdrop.style.display = 'flex';
+  cmName.focus();
+}
+
+function closeChannelModal() {
+  if (!cmBackdrop) return;
+  cmBackdrop.style.display = 'none';
+}
+
+if (cmCancel) cmCancel.addEventListener('click', closeChannelModal);
+if (cmBackdrop) cmBackdrop.addEventListener('click', e => {
+  if (e.target === cmBackdrop) closeChannelModal();
+});
+if (cmCreate) cmCreate.addEventListener('click', createChannelFromModal);
+
+async function createChannelFromModal() {
+  if (!currentUser) {
+    toast('Sign in to create a feed.');
+    return;
+  }
+  if (!cmName || !cmOthers) return;
+  let name = cmName.value.trim();
+  if (!name) {
+    toast('Feed name is required.');
+    return;
+  }
   if (name.toLowerCase() === 'main') {
     toast('Feed name \"main\" is reserved.');
     return;
   }
-  if (channels.includes(name)) {
-    switchChannel(name);
-    return;
+
+  if (!channels.includes(name)) {
+    channels.push(name);
+    saveChannelsList();
+    renderTabs();
   }
-  channels.push(name);
-  saveChannelsList();
-  renderTabs();
+
+  const extraRaw = cmOthers.value || '';
+  const extraIds = extraRaw
+    .split(',')
+    .map(x => x.trim())
+    .filter(x => x && x !== currentUser.id);
+
+  try {
+    const rows = [
+      { channel: name, user_id: currentUser.id },
+      ...extraIds.map(id => ({ channel: name, user_id: id })),
+    ];
+    await sb.from('channel_members').upsert(rows, { onConflict: 'channel,user_id' });
+  } catch (e) {
+    console.error(e);
+    toast('Failed to save members — ' + humanError(e.message));
+  }
+
+  closeChannelModal();
   switchChannel(name);
 }
 
