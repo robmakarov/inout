@@ -339,10 +339,11 @@ header{
 
 #tabs{
   display:flex;
-  gap:4px;
+  gap:6px;
   padding:6px 20px 4px;
   border-bottom:1px solid var(--line);
   background:var(--bg2);
+  align-items:center;
 }
 
 .tab{
@@ -352,7 +353,7 @@ header{
   font-family:var(--mono);
   font-size:11px;
   padding:3px 8px;
-  border-radius:12px;
+  border-radius:999px;
   cursor:pointer;
   letter-spacing:0.04em;
   text-transform:uppercase;
@@ -362,6 +363,21 @@ header{
   background:var(--acc);
   color:var(--bg);
   border-color:var(--acc2);
+}
+
+.tab-new{
+  border-style:dashed;
+  color:var(--dim);
+}
+
+.tab-close{
+  margin-left:6px;
+  font-size:11px;
+  opacity:0.7;
+}
+
+.tab-close:hover{
+  opacity:1;
 }
 </style>
 </head>
@@ -381,11 +397,7 @@ header{
 
 <div class="red-rect"></div>
 
-<div id="tabs">
-  <button class="tab tab-active" data-channel="main">Main</button>
-  <button class="tab" data-channel="work">Work</button>
-  <button class="tab" data-channel="ideas">Ideas</button>
-</div>
+<div id="tabs"></div>
 
 <div id="feed">
   <div class="feed-inner" id="feed-inner">
@@ -430,7 +442,7 @@ const msgCountEl = document.getElementById('msg-count');
 const toastEl    = document.getElementById('toast');
 const authStatus = document.getElementById('auth-status');
 const authBtn    = document.getElementById('auth-btn');
-const tabButtons = Array.from(document.querySelectorAll('.tab'));
+const tabsEl     = document.getElementById('tabs');
 
 let msgCount    = 0;
 let atBottom    = true;
@@ -440,9 +452,12 @@ let toastTimer  = null;
 let myId        = crypto.randomUUID();
 let currentUser = null;
 let currentChannel = 'main';
+let channels      = ['main'];
+const CHANNELS_KEY = 'inout_channels_v1';
 
 /* ═══ INIT ═══════════════════════════════════════════════ */
 async function init() {
+  loadChannelsList();
   await refreshAuth();
   setupAuthListener();
   setupTabs();
@@ -561,24 +576,13 @@ function updateMsgCount() {
 
 /* ═══ TABS ════════════════════════════════════════════════ */
 function setupTabs() {
-  tabButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const ch = btn.getAttribute('data-channel') || 'main';
-      if (ch === currentChannel) return;
-      currentChannel = ch;
-      updateTabsUI();
-      if (currentUser) {
-        reloadForUser();
-      } else {
-        clearMessages();
-      }
-    });
-  });
-  updateTabsUI();
+  renderTabs();
 }
 
 function updateTabsUI() {
-  tabButtons.forEach(btn => {
+  if (!tabsEl) return;
+  const buttons = tabsEl.querySelectorAll('.tab[data-channel]');
+  buttons.forEach(btn => {
     const ch = btn.getAttribute('data-channel') || 'main';
     if (ch === currentChannel) {
       btn.classList.add('tab-active');
@@ -586,6 +590,106 @@ function updateTabsUI() {
       btn.classList.remove('tab-active');
     }
   });
+}
+
+function loadChannelsList() {
+  try {
+    const raw = localStorage.getItem(CHANNELS_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      const cleaned = parsed
+        .map(x => (typeof x === 'string' ? x.trim() : ''))
+        .filter(x => x && x !== 'main');
+      channels = ['main', ...Array.from(new Set(cleaned))];
+    }
+  } catch (_) {}
+}
+
+function saveChannelsList() {
+  try {
+    const toSave = channels.filter(ch => ch !== 'main');
+    localStorage.setItem(CHANNELS_KEY, JSON.stringify(toSave));
+  } catch (_) {}
+}
+
+function renderTabs() {
+  if (!tabsEl) return;
+  tabsEl.innerHTML = '';
+
+  channels.forEach(ch => {
+    const btn = document.createElement('button');
+    btn.className = 'tab';
+    btn.setAttribute('data-channel', ch);
+    btn.textContent = ch === 'main' ? 'Main' : ch;
+
+    if (ch !== 'main') {
+      const close = document.createElement('span');
+      close.className = 'tab-close';
+      close.textContent = '×';
+      close.addEventListener('click', e => {
+        e.stopPropagation();
+        deleteChannel(ch);
+      });
+      btn.appendChild(close);
+    }
+
+    btn.addEventListener('click', () => switchChannel(ch));
+    tabsEl.appendChild(btn);
+  });
+
+  const addBtn = document.createElement('button');
+  addBtn.className = 'tab tab-new';
+  addBtn.textContent = '+';
+  addBtn.addEventListener('click', createChannelPrompt);
+  tabsEl.appendChild(addBtn);
+
+  updateTabsUI();
+}
+
+function switchChannel(ch) {
+  if (ch === currentChannel) return;
+  currentChannel = ch;
+  updateTabsUI();
+  if (currentUser) {
+    reloadForUser();
+  } else {
+    clearMessages();
+  }
+}
+
+function createChannelPrompt() {
+  let name = prompt('New feed name');
+  if (!name) return;
+  name = name.trim();
+  if (!name) return;
+  if (name.toLowerCase() === 'main') {
+    toast('Feed name \"main\" is reserved.');
+    return;
+  }
+  if (channels.includes(name)) {
+    switchChannel(name);
+    return;
+  }
+  channels.push(name);
+  saveChannelsList();
+  renderTabs();
+  switchChannel(name);
+}
+
+function deleteChannel(ch) {
+  if (ch === 'main') return;
+  channels = channels.filter(x => x !== ch);
+  saveChannelsList();
+  if (currentChannel === ch) {
+    currentChannel = 'main';
+  }
+  renderTabs();
+  if (currentUser) {
+    reloadForUser();
+  } else {
+    clearMessages();
+  }
 }
 
 /* ═══ AUTH ════════════════════════════════════════════════ */
