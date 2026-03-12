@@ -36,7 +36,6 @@ textarea{flex:1;background:transparent;border:none;outline:none;color:#f0f0f0;fo
   </button>
   <p>your inputs, private to you</p>
 </div>
-
 <div id="app">
   <div id="header">
     <span>inout</span>
@@ -48,7 +47,6 @@ textarea{flex:1;background:transparent;border:none;outline:none;color:#f0f0f0;fo
     <button id="btn">send</button>
   </div>
 </div>
-
 <script>
 const sb=supabase.createClient('https://tfmbqiwxfgrwtjvoqomf.supabase.co','sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_');
 const authEl=document.getElementById('auth');
@@ -94,9 +92,19 @@ function hide(){
   feed.innerHTML='';
 }
 
-sb.auth.getSession().then(({data:{session}})=>{
-  if(session)show(session.user);
-});
+// handle hash fragment from OAuth redirect
+if(location.hash&&location.hash.includes('access_token')){
+  sb.auth.getSession().then(({data:{session}})=>{
+    if(session){
+      history.replaceState(null,'',location.pathname);
+      show(session.user);
+    }
+  });
+} else {
+  sb.auth.getSession().then(({data:{session}})=>{
+    if(session)show(session.user);
+  });
+}
 
 sb.auth.onAuthStateChange((_,session)=>{
   if(session)show(session.user);
