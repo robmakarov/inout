@@ -410,8 +410,10 @@ let currentUser = null;
 async function init() {
   await refreshAuth();
   setupAuthListener();
-  await loadMessages();
-  subscribeRealtime();
+  if (currentUser) {
+    await loadMessages();
+    subscribeRealtime();
+  }
   setupPresence();
   scrollBottom();
   cleanupAuthHash();
@@ -419,6 +421,8 @@ async function init() {
 
 /* ═══ LOAD ════════════════════════════════════════════════ */
 async function loadMessages() {
+  if (!currentUser) return;
+
   const { data, error } = await sb
     .from('entries')
     .select('id, created_at, text')
@@ -534,8 +538,18 @@ async function refreshAuth() {
 
 function setupAuthListener() {
   sb.auth.onAuthStateChange((_event, session) => {
+    const prevUser = currentUser;
     currentUser = session?.user ?? null;
     updateAuthUI();
+    if (!prevUser && currentUser) {
+      reloadForUser();
+    } else if (prevUser && !currentUser) {
+      clearMessages();
+      if (channel) {
+        channel.unsubscribe();
+        channel = null;
+      }
+    }
   });
 
   authBtn.addEventListener('click', () => {
@@ -559,6 +573,22 @@ function updateAuthUI() {
     authStatus.textContent = 'Not signed in';
     authBtn.textContent = 'Sign in';
     sendBtn.disabled = true;
+  }
+}
+
+async function reloadForUser() {
+  clearMessages();
+  await loadMessages();
+  subscribeRealtime();
+}
+
+function clearMessages() {
+  feedInner.innerHTML = '';
+  globalMsgNum = 0;
+  msgCount = 0;
+  updateMsgCount();
+  if (emptyEl && !emptyEl.parentNode) {
+    feedInner.appendChild(emptyEl);
   }
 }
 
