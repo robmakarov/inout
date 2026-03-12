@@ -414,6 +414,7 @@ async function init() {
   subscribeRealtime();
   setupPresence();
   scrollBottom();
+  cleanupAuthHash();
 }
 
 /* ═══ LOAD ════════════════════════════════════════════════ */
@@ -588,6 +589,14 @@ async function signOut() {
     console.error(e);
     toast('Sign-out failed');
   }
+}
+
+function cleanupAuthHash() {
+  if (!location.hash) return;
+  if (!location.hash.includes('access_token=')) return;
+  try {
+    history.replaceState(null, '', location.pathname + location.search);
+  } catch (_) {}
 }
 
 /* ═══ SEND ════════════════════════════════════════════════ */
