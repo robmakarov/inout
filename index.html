@@ -71,6 +71,24 @@ header{
   font-size:11px;color:var(--dim);
 }
 
+#id-btn{
+  border:1px solid var(--line2);
+  background:transparent;
+  color:var(--dim);
+  font-family:var(--mono);
+  font-size:9px;
+  padding:3px 6px;
+  border-radius:3px;
+  cursor:pointer;
+  text-transform:uppercase;
+  letter-spacing:0.06em;
+}
+
+#id-btn:hover{
+  background:var(--line);
+  color:var(--text);
+}
+
 #auth-status{
   max-width:160px;
   white-space:nowrap;
@@ -477,6 +495,7 @@ header{
       <span id="auth-status">Not signed in</span>
       <button id="auth-btn">Sign in</button>
     </div>
+    <button id="id-btn" style="display:none;">Copy ID</button>
   </div>
 </header>
 
@@ -552,6 +571,7 @@ const toastEl    = document.getElementById('toast');
 const authStatus = document.getElementById('auth-status');
 const authBtn    = document.getElementById('auth-btn');
 const tabsEl     = document.getElementById('tabs');
+const idBtn      = document.getElementById('id-btn');
 const cmBackdrop = document.getElementById('channel-modal-backdrop');
 const cmName     = document.getElementById('cm-name');
 const cmSelf     = document.getElementById('cm-self');
@@ -907,6 +927,10 @@ function setupAuthListener() {
       signIn();
     }
   });
+
+  if (idBtn) {
+    idBtn.addEventListener('click', copyUserId);
+  }
 }
 
 function updateAuthUI() {
@@ -917,10 +941,12 @@ function updateAuthUI() {
     authStatus.textContent = email;
     authBtn.textContent = 'Sign out';
     sendBtn.disabled = !input.value.trim();
+    if (idBtn) idBtn.style.display = 'inline-block';
   } else {
     authStatus.textContent = 'Not signed in';
     authBtn.textContent = 'Sign in';
     sendBtn.disabled = true;
+    if (idBtn) idBtn.style.display = 'none';
   }
 }
 
@@ -963,6 +989,20 @@ async function signOut() {
   } catch (e) {
     console.error(e);
     toast('Sign-out failed — ' + humanError(e.message));
+  }
+}
+
+async function copyUserId() {
+  if (!currentUser || !currentUser.id) {
+    toast('No user id to copy.');
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(currentUser.id);
+    toast('User id copied.');
+  } catch (e) {
+    console.error(e);
+    toast('Failed to copy id.');
   }
 }
 
