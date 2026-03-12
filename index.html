@@ -35,9 +35,14 @@ body{
   font-size:13px;
   line-height:1.6;
   -webkit-font-smoothing:antialiased;
+  min-height:100vh;
+}
+
+#app{
   display:flex;
   flex-direction:column;
-  min-height:100vh;
+  height:100vh;
+  overflow:hidden;
 }
 
 /* ── HEADER ── */
@@ -493,45 +498,47 @@ header{
 </head>
 <body>
 
-<header>
-  <div class="logo">IN<span>OUT</span></div>
-  <div class="header-right">
-    <div id="online-count"><span class="dot"></span><span id="oc-num">—</span></div>
-    <div id="msg-count"></div>
-    <div id="auth-box">
-      <span id="auth-status">Not signed in</span>
-      <button id="auth-btn">Sign in</button>
+<div id="app">
+  <header>
+    <div class="logo">IN<span>OUT</span></div>
+    <div class="header-right">
+      <div id="online-count"><span class="dot"></span><span id="oc-num">—</span></div>
+      <div id="msg-count"></div>
+      <div id="auth-box">
+        <span id="auth-status">Not signed in</span>
+        <button id="auth-btn">Sign in</button>
+      </div>
+      <button id="id-btn" style="display:none;">Copy ID</button>
     </div>
-    <button id="id-btn" style="display:none;">Copy ID</button>
-  </div>
-</header>
+  </header>
 
-<div class="red-rect"></div>
+  <div class="red-rect"></div>
 
-<div id="tabs"></div>
+  <div id="tabs"></div>
 
-<div id="feed">
-  <div class="feed-inner" id="feed-inner">
-    <div id="empty">
-      <div class="e-label">Nothing yet.</div>
-      <div class="e-sub">Be the first to say something</div>
+  <div id="feed">
+    <div class="feed-inner" id="feed-inner">
+      <div id="empty">
+        <div class="e-label">Nothing yet.</div>
+        <div class="e-sub">Be the first to say something</div>
+      </div>
     </div>
   </div>
-</div>
 
-<div id="input-area">
-  <div class="input-wrap">
-    <textarea
-      id="msg-input"
-      placeholder="say something…"
-      rows="1"
-      maxlength="2000"
-      autocomplete="off"
-      spellcheck="true"
-    ></textarea>
-    <button id="send-btn" disabled>Send</button>
+  <div id="input-area">
+    <div class="input-wrap">
+      <textarea
+        id="msg-input"
+        placeholder="say something…"
+        rows="1"
+        maxlength="2000"
+        autocomplete="off"
+        spellcheck="true"
+      ></textarea>
+      <button id="send-btn" disabled>Send</button>
+    </div>
+    <div class="input-hint"><kbd>Enter</kbd> to send &nbsp;·&nbsp; <kbd>Shift+Enter</kbd> for newline</div>
   </div>
-  <div class="input-hint"><kbd>Enter</kbd> to send &nbsp;·&nbsp; <kbd>Shift+Enter</kbd> for newline</div>
 </div>
 
 <button id="scroll-btn" onclick="scrollBottom()">↓ new messages</button>
