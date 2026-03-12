@@ -1,2 +1,567 @@
-LOADING…
-CLICK TO REVEAL
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>INOUT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:     #0a0a09;
+  --bg2:    #111110;
+  --line:   #1e1e1c;
+  --line2:  #2a2a27;
+  --dim:    #3a3a36;
+  --muted:  #666660;
+  --soft:   #999990;
+  --text:   #e2ddd4;
+  --bright: #f0ece3;
+  --acc:    #e8d5a0;
+  --acc2:   #b8a060;
+  --mono:   'DM Mono', monospace;
+  --sans:   'Syne', sans-serif;
+}
+
+html,body{height:100%;overscroll-behavior:none}
+
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--mono);
+  font-size:13px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  display:flex;
+  flex-direction:column;
+  min-height:100vh;
+}
+
+/* ── HEADER ── */
+header{
+  position:sticky;top:0;z-index:100;
+  background:var(--bg);
+  border-bottom:1px solid var(--line);
+  padding:0 20px;
+  height:48px;
+  display:flex;align-items:center;justify-content:space-between;
+  flex-shrink:0;
+}
+
+.logo{
+  font-family:var(--sans);
+  font-size:15px;
+  font-weight:800;
+  letter-spacing:0.08em;
+  color:var(--bright);
+  text-transform:uppercase;
+  user-select:none;
+}
+.logo span{color:var(--acc)}
+
+.header-right{
+  display:flex;align-items:center;gap:16px;
+}
+
+#online-count{
+  font-size:11px;
+  color:var(--muted);
+  letter-spacing:0.05em;
+  display:flex;align-items:center;gap:6px;
+}
+.dot{
+  width:6px;height:6px;border-radius:50%;
+  background:#4a9;
+  box-shadow:0 0 6px rgba(68,170,136,0.6);
+  animation:pulse 2s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+#msg-count{
+  font-size:11px;color:var(--dim);letter-spacing:0.05em;
+}
+
+/* ── FEED ── */
+#feed{
+  flex:1;
+  overflow-y:auto;
+  padding:0;
+  display:flex;
+  flex-direction:column;
+  scroll-behavior:smooth;
+}
+#feed::-webkit-scrollbar{width:3px}
+#feed::-webkit-scrollbar-track{background:transparent}
+#feed::-webkit-scrollbar-thumb{background:var(--line2);border-radius:2px}
+
+.feed-inner{
+  padding:16px 0 8px;
+  display:flex;
+  flex-direction:column;
+  gap:0;
+}
+
+/* empty state */
+#empty{
+  flex:1;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:10px;
+  padding:60px 20px;
+  opacity:0;
+  animation:fadin .6s .3s ease both;
+}
+#empty .e-label{
+  font-family:var(--sans);
+  font-size:22px;font-weight:700;
+  color:var(--dim);
+  letter-spacing:0.02em;
+}
+#empty .e-sub{
+  font-size:11px;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase;
+}
+@keyframes fadin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* message row */
+.msg{
+  display:grid;
+  grid-template-columns:64px 1fr auto;
+  align-items:baseline;
+  gap:0 12px;
+  padding:7px 20px;
+  border-bottom:1px solid var(--line);
+  transition:background .1s;
+  animation:msgin .2s ease both;
+}
+@keyframes msgin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.msg:hover{background:var(--bg2)}
+.msg:last-child{border-bottom:none}
+
+.msg-time{
+  font-size:10px;color:var(--dim);
+  letter-spacing:0.04em;
+  text-align:right;
+  padding-top:1px;
+  white-space:nowrap;
+}
+
+.msg-text{
+  font-size:13px;color:var(--text);
+  word-break:break-word;
+  white-space:pre-wrap;
+  line-height:1.55;
+}
+
+.msg-text a{
+  color:var(--acc);
+  text-decoration:none;
+  border-bottom:1px solid var(--acc2);
+}
+.msg-text a:hover{color:var(--bright)}
+
+.msg-num{
+  font-size:10px;color:var(--line2);
+  letter-spacing:0.02em;
+  padding-top:1px;
+  user-select:none;
+}
+
+/* new message flash */
+.msg.new-flash{
+  background:rgba(232,213,160,0.04);
+}
+
+/* ── INPUT AREA ── */
+#input-area{
+  flex-shrink:0;
+  background:var(--bg);
+  border-top:1px solid var(--line);
+  padding:12px 20px 16px;
+}
+
+.input-wrap{
+  display:flex;
+  align-items:flex-end;
+  gap:10px;
+  max-width:900px;
+  margin:0 auto;
+}
+
+#msg-input{
+  flex:1;
+  background:var(--bg2);
+  border:1px solid var(--line2);
+  color:var(--text);
+  font-family:var(--mono);
+  font-size:13px;
+  line-height:1.55;
+  padding:9px 12px;
+  resize:none;
+  outline:none;
+  border-radius:3px;
+  min-height:38px;
+  max-height:160px;
+  overflow-y:auto;
+  transition:border-color .15s, background .15s;
+  scrollbar-width:none;
+}
+#msg-input::-webkit-scrollbar{display:none}
+#msg-input::placeholder{color:var(--dim)}
+#msg-input:focus{
+  border-color:var(--line2);
+  background:#161614;
+  outline:none;
+}
+#msg-input:focus-visible{outline:none}
+
+#send-btn{
+  flex-shrink:0;
+  height:38px;
+  padding:0 16px;
+  background:var(--acc);
+  color:var(--bg);
+  border:none;
+  font-family:var(--sans);
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  cursor:pointer;
+  border-radius:3px;
+  transition:background .12s, transform .08s;
+  white-space:nowrap;
+}
+#send-btn:hover{background:#f0e0b0}
+#send-btn:active{transform:scale(.97)}
+#send-btn:disabled{background:var(--dim);color:var(--muted);cursor:default;transform:none}
+
+.input-hint{
+  text-align:center;
+  font-size:10px;
+  color:var(--dim);
+  letter-spacing:0.06em;
+  margin-top:8px;
+  max-width:900px;
+  margin-inline:auto;
+}
+.input-hint kbd{
+  background:var(--line);
+  border:1px solid var(--line2);
+  border-radius:2px;
+  padding:0 4px;
+  font-family:var(--mono);
+  font-size:9px;
+  color:var(--soft);
+}
+
+/* ── TOAST ── */
+#toast{
+  position:fixed;
+  bottom:80px;left:50%;transform:translateX(-50%) translateY(8px);
+  background:var(--bg2);border:1px solid var(--line2);
+  border-radius:3px;
+  font-size:11px;color:var(--soft);
+  padding:6px 14px;
+  letter-spacing:0.06em;
+  pointer-events:none;
+  opacity:0;transition:opacity .2s,transform .2s;
+  z-index:999;white-space:nowrap;
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ── SCROLL TO BOTTOM BTN ── */
+#scroll-btn{
+  position:fixed;
+  bottom:90px;right:20px;
+  background:var(--bg2);
+  border:1px solid var(--line2);
+  color:var(--soft);
+  font-family:var(--mono);font-size:11px;
+  padding:6px 12px;
+  cursor:pointer;border-radius:3px;
+  opacity:0;pointer-events:none;
+  transition:opacity .2s;
+  z-index:50;
+  letter-spacing:0.04em;
+}
+#scroll-btn.visible{opacity:1;pointer-events:auto}
+#scroll-btn:hover{background:var(--line);color:var(--text)}
+
+/* ── MOBILE ── */
+@media(max-width:540px){
+  .msg{grid-template-columns:52px 1fr;gap:0 8px}
+  .msg-num{display:none}
+  header{padding:0 14px}
+  #input-area{padding:10px 14px 14px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">IN<span>OUT</span></div>
+  <div class="header-right">
+    <div id="online-count"><span class="dot"></span><span id="oc-num">—</span></div>
+    <div id="msg-count"></div>
+  </div>
+</header>
+
+<div id="feed">
+  <div class="feed-inner" id="feed-inner">
+    <div id="empty">
+      <div class="e-label">Nothing yet.</div>
+      <div class="e-sub">Be the first to say something</div>
+    </div>
+  </div>
+</div>
+
+<div id="input-area">
+  <div class="input-wrap">
+    <textarea
+      id="msg-input"
+      placeholder="say something…"
+      rows="1"
+      maxlength="2000"
+      autocomplete="off"
+      spellcheck="true"
+    ></textarea>
+    <button id="send-btn" disabled>Send</button>
+  </div>
+  <div class="input-hint"><kbd>Enter</kbd> to send &nbsp;·&nbsp; <kbd>Shift+Enter</kbd> for newline</div>
+</div>
+
+<button id="scroll-btn" onclick="scrollBottom()">↓ new messages</button>
+<div id="toast"></div>
+
+<script>
+const SUPABASE_URL  = 'https://tfmbqiwxfgrwtjvoqomf.supabase.co';
+const SUPABASE_ANON = 'sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+const feedInner  = document.getElementById('feed-inner');
+const feedEl     = document.getElementById('feed');
+const input      = document.getElementById('msg-input');
+const sendBtn    = document.getElementById('send-btn');
+const emptyEl    = document.getElementById('empty');
+const scrollBtn  = document.getElementById('scroll-btn');
+const ocNum      = document.getElementById('oc-num');
+const msgCountEl = document.getElementById('msg-count');
+const toastEl    = document.getElementById('toast');
+
+let msgCount    = 0;
+let atBottom    = true;
+let channel     = null;
+let presenceCh  = null;
+let toastTimer  = null;
+let myId        = crypto.randomUUID();
+
+/* ═══ INIT ═══════════════════════════════════════════════ */
+async function init() {
+  await loadMessages();
+  subscribeRealtime();
+  setupPresence();
+  scrollBottom();
+}
+
+/* ═══ LOAD ════════════════════════════════════════════════ */
+async function loadMessages() {
+  const { data, error } = await sb
+    .from('entries')
+    .select('id, created_at, text')
+    .order('created_at', { ascending: true })
+    .limit(200);
+
+  if (error) { console.error(error); return; }
+
+  if (data && data.length > 0) {
+    hideEmpty();
+    data.forEach(m => appendMsg(m, false));
+    msgCount = data.length;
+    updateMsgCount();
+  }
+}
+
+/* ═══ REALTIME ════════════════════════════════════════════ */
+function subscribeRealtime() {
+  channel = sb
+    .channel('entries-feed')
+    .on('postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'entries' },
+      payload => {
+        hideEmpty();
+        const wasAtBottom = atBottom;
+        appendMsg(payload.new, true);
+        msgCount++;
+        updateMsgCount();
+        if (wasAtBottom) {
+          requestAnimationFrame(scrollBottom);
+        } else {
+          scrollBtn.classList.add('visible');
+        }
+      }
+    )
+    .subscribe();
+}
+
+/* ═══ PRESENCE (online count) ════════════════════════════ */
+function setupPresence() {
+  presenceCh = sb.channel('presence-room', {
+    config: { presence: { key: myId } }
+  });
+
+  presenceCh
+    .on('presence', { event: 'sync' }, () => {
+      const state = presenceCh.presenceState();
+      ocNum.textContent = Object.keys(state).length;
+    })
+    .on('presence', { event: 'join' }, () => {})
+    .on('presence', { event: 'leave' }, () => {})
+    .subscribe(async status => {
+      if (status === 'SUBSCRIBED') {
+        await presenceCh.track({ online_at: new Date().toISOString() });
+      }
+    });
+}
+
+/* ═══ RENDER ══════════════════════════════════════════════ */
+function appendMsg(msg, isNew) {
+  // remove empty state
+  if (emptyEl.parentNode) emptyEl.remove();
+
+  const row  = document.createElement('div');
+  row.className = 'msg' + (isNew ? ' new-flash' : '');
+  if (isNew) setTimeout(() => row.classList.remove('new-flash'), 800);
+
+  const time = document.createElement('div');
+  time.className = 'msg-time';
+  time.textContent = formatTime(msg.created_at);
+  time.title = new Date(msg.created_at).toLocaleString();
+
+  const text = document.createElement('div');
+  text.className = 'msg-text';
+  text.innerHTML = linkify(escapeHtml(msg.text));
+
+  const num = document.createElement('div');
+  num.className = 'msg-num';
+  num.textContent = '#' + (++globalMsgNum);
+
+  row.appendChild(time);
+  row.appendChild(text);
+  row.appendChild(num);
+  feedInner.appendChild(row);
+}
+
+let globalMsgNum = 0;
+
+function hideEmpty() {
+  if (emptyEl.parentNode) emptyEl.remove();
+}
+
+function updateMsgCount() {
+  msgCountEl.textContent = msgCount + (msgCount === 1 ? ' msg' : ' msgs');
+}
+
+/* ═══ SEND ════════════════════════════════════════════════ */
+async function send() {
+  const text = input.value.trim();
+  if (!text) return;
+
+  sendBtn.disabled = true;
+  input.disabled   = true;
+
+  const { error } = await sb.from('entries').insert({ text });
+
+  input.disabled = false;
+
+  if (error) {
+    console.error(error);
+    toast('Failed to send — ' + error.message);
+    sendBtn.disabled = false;
+  } else {
+    input.value = '';
+    autoResize();
+    sendBtn.disabled = true;
+    input.focus();
+  }
+}
+
+/* ═══ INPUT HANDLING ══════════════════════════════════════ */
+input.addEventListener('input', () => {
+  autoResize();
+  sendBtn.disabled = !input.value.trim();
+});
+
+input.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    if (!sendBtn.disabled) send();
+  }
+});
+
+sendBtn.addEventListener('click', send);
+
+function autoResize() {
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 160) + 'px';
+}
+
+/* ═══ SCROLL ══════════════════════════════════════════════ */
+feedEl.addEventListener('scroll', () => {
+  const threshold = 80;
+  atBottom = feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < threshold;
+  if (atBottom) scrollBtn.classList.remove('visible');
+});
+
+function scrollBottom() {
+  feedEl.scrollTop = feedEl.scrollHeight;
+  scrollBtn.classList.remove('visible');
+  atBottom = true;
+}
+
+/* ═══ UTILS ═══════════════════════════════════════════════ */
+function formatTime(iso) {
+  const d = new Date(iso);
+  const now = new Date();
+  const diff = now - d;
+
+  if (diff < 60000)  return 'just now';
+  if (diff < 3600000) {
+    const m = Math.floor(diff / 60000);
+    return m + 'm ago';
+  }
+  if (diff < 86400000) {
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+function escapeHtml(s) {
+  return s
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+function linkify(s) {
+  return s.replace(
+    /(https?:\/\/[^\s<>"']+)/g,
+    '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+  );
+}
+
+function toast(msg, dur = 2800) {
+  clearTimeout(toastTimer);
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), dur);
+}
+
+/* ═══ GO ══════════════════════════════════════════════════ */
+init();
+</script>
+</body>
+</html>
