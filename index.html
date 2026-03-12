@@ -66,6 +66,36 @@ header{
   display:flex;align-items:center;gap:16px;
 }
 
+#auth-box{
+  display:flex;align-items:center;gap:8px;
+  font-size:11px;color:var(--dim);
+}
+
+#auth-status{
+  max-width:160px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+#auth-btn{
+  border:1px solid var(--line2);
+  background:transparent;
+  color:var(--soft);
+  font-family:var(--mono);
+  font-size:10px;
+  padding:3px 8px;
+  border-radius:2px;
+  cursor:pointer;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+}
+
+#auth-btn:hover{
+  background:var(--line);
+  color:var(--text);
+}
+
 #online-count{
   font-size:11px;
   color:var(--muted);
@@ -315,6 +345,10 @@ header{
   <div class="header-right">
     <div id="online-count"><span class="dot"></span><span id="oc-num">—</span></div>
     <div id="msg-count"></div>
+    <div id="auth-box">
+      <span id="auth-status">Not signed in</span>
+      <button id="auth-btn">Sign in</button>
+    </div>
   </div>
 </header>
 
@@ -361,6 +395,8 @@ const scrollBtn  = document.getElementById('scroll-btn');
 const ocNum      = document.getElementById('oc-num');
 const msgCountEl = document.getElementById('msg-count');
 const toastEl    = document.getElementById('toast');
+const authStatus = document.getElementById('auth-status');
+const authBtn    = document.getElementById('auth-btn');
 
 let msgCount    = 0;
 let atBottom    = true;
@@ -368,9 +404,12 @@ let channel     = null;
 let presenceCh  = null;
 let toastTimer  = null;
 let myId        = crypto.randomUUID();
+let currentUser = null;
 
 /* ═══ INIT ═══════════════════════════════════════════════ */
 async function init() {
+  await refreshAuth();
+  setupAuthListener();
   await loadMessages();
   subscribeRealtime();
   setupPresence();
@@ -475,10 +514,91 @@ function updateMsgCount() {
   msgCountEl.textContent = msgCount + (msgCount === 1 ? ' msg' : ' msgs');
 }
 
+/* ═══ AUTH ════════════════════════════════════════════════ */
+async function refreshAuth() {
+  try {
+    const { data, error } = await sb.auth.getUser();
+    if (error) {
+      console.error(error);
+      currentUser = null;
+    } else {
+      currentUser = data.user ?? null;
+    }
+  } catch (e) {
+    console.error(e);
+    currentUser = null;
+  }
+  updateAuthUI();
+}
+
+function setupAuthListener() {
+  sb.auth.onAuthStateChange((_event, session) => {
+    currentUser = session?.user ?? null;
+    updateAuthUI();
+  });
+
+  authBtn.addEventListener('click', () => {
+    if (currentUser) {
+      signOut();
+    } else {
+      signIn();
+    }
+  });
+}
+
+function updateAuthUI() {
+  if (!authStatus || !authBtn) return;
+
+  if (currentUser) {
+    const email = currentUser.email || 'Signed in';
+    authStatus.textContent = email;
+    authBtn.textContent = 'Sign out';
+    sendBtn.disabled = !input.value.trim();
+  } else {
+    authStatus.textContent = 'Not signed in';
+    authBtn.textContent = 'Sign in';
+    sendBtn.disabled = true;
+  }
+}
+
+async function signIn() {
+  try {
+    const { error } = await sb.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.href }
+    });
+    if (error) {
+      console.error(error);
+      toast('Sign-in failed — ' + error.message);
+    }
+  } catch (e) {
+    console.error(e);
+    toast('Sign-in failed');
+  }
+}
+
+async function signOut() {
+  try {
+    const { error } = await sb.auth.signOut();
+    if (error) {
+      console.error(error);
+      toast('Sign-out failed — ' + error.message);
+    }
+  } catch (e) {
+    console.error(e);
+    toast('Sign-out failed');
+  }
+}
+
 /* ═══ SEND ════════════════════════════════════════════════ */
 async function send() {
   const text = input.value.trim();
   if (!text) return;
+
+  if (!currentUser) {
+    toast('Sign in with Google to send');
+    return;
+  }
 
   sendBtn.disabled = true;
   input.disabled   = true;
