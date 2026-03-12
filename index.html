@@ -103,7 +103,7 @@ sb.auth.onAuthStateChange((_,session)=>{
   else hide();
 });
 
-document.getElementById('google-btn').onclick=()=>sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin}});
+document.getElementById('google-btn').onclick=()=>sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:'https://inout.vercel.app'}});
 document.getElementById('signout').onclick=()=>sb.auth.signOut();
 document.getElementById('btn').onclick=send;
 inp.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});
