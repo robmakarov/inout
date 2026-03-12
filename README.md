@@ -66,16 +66,15 @@ Project prompt
 
 Use this prompt when asking an AI to work on this repo:
 
-> You are editing **INOUT**, a single-file web app (`index.html`) hosted on Vercel.  
+> You are editing **INOUT**, a small web app hosted on Vercel.  
 > Rules:  
-> - Only touch `index.html` (and `vercel.json` if routing changes are needed).  
-> - No build tools, no bundlers, no external JS besides `@supabase/supabase-js`.  
-> - Optimize for **performance and simplicity over abstractions**.  
+> - The current entry point is `index.html`; you may also use additional JS/CSS/modules (e.g. `app.js`, `styles.css`, `src/components/*`) without introducing a heavy build system unless explicitly requested.  
+> - Keep things simple: prefer ES modules and plain HTML/CSS/JS over complex tooling.  
 > - Keep the visual style: dark, minimal, DM Mono + Syne, thin red separator, compact typography.  
 > - Authentication is via Supabase Google OAuth; respect existing RLS (per-user feeds and shared channels via `channel_members`).  
 > - Feeds are tabbed channels stored in `entries.channel`; users can create and delete tabs (except `Main`), and share them with other users by Supabase user id.  
 > - Preserve the current UX: realtime feed, presence count, sticky header, textarea input with Enter/Shift+Enter behavior, small toast notifications, and responsive layout.  
-> - When adding features, avoid introducing new global state libraries; use plain JavaScript and DOM APIs inside `index.html`.  
+> - When adding features, avoid introducing new global state libraries; prefer small, focused modules and components.  
 
 Local dev
 ---------
