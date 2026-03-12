@@ -855,8 +855,8 @@ async function createChannelFromModal() {
 
   try {
     const rows = [
-      { channel: name, user_id: currentUser.id },
-      ...extraIds.map(id => ({ channel: name, user_id: id })),
+      { channel: name, user_id: currentUser.id, creator_id: currentUser.id },
+      ...extraIds.map(id => ({ channel: name, user_id: id, creator_id: currentUser.id })),
     ];
     await sb.from('channel_members').upsert(rows, { onConflict: 'channel,user_id' });
   } catch (e) {
@@ -888,7 +888,8 @@ async function ensureMembership() {
   try {
     await sb.from('channel_members').upsert({
       channel: currentChannel,
-      user_id: currentUser.id
+      user_id: currentUser.id,
+      creator_id: currentUser.id
     }, { onConflict: 'channel,user_id' });
   } catch (e) {
     console.error(e);
