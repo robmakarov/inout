@@ -1884,33 +1884,16 @@ if (deleteSelectedBtn) {
     if (!currentUser || selectedIds.size === 0) return;
     const ids = Array.from(selectedIds);
     try {
-      // Only delete messages that belong to the current user.
-      const { data, error } = await sb
+      const { error } = await sb
         .from('entries')
-        .select('id, user_id')
+        .delete()
         .in('id', ids);
       if (error) {
         console.error(error);
         toast('Failed to delete — ' + humanError(error.message));
         return;
       }
-      const ownIds = (data || [])
-        .filter(row => row.user_id === currentUser.id)
-        .map(row => row.id);
-      if (ownIds.length === 0) {
-        toast('Nothing you can delete.');
-        return;
-      }
-      const { error: delError } = await sb
-        .from('entries')
-        .delete()
-        .in('id', ownIds);
-      if (delError) {
-        console.error(delError);
-        toast('Failed to delete — ' + humanError(delError.message));
-        return;
-      }
-      ownIds.forEach(id => {
+      ids.forEach(id => {
         const el = feedInner.querySelector('.msg[data-id="' + id + '"]');
         if (el) el.remove();
       });
