@@ -1203,7 +1203,6 @@ const CHANNELS_KEY         = 'inout_channels_v1';
 const CURRENT_CHANNEL_KEY  = 'inout_current_channel_v1';
 const INPUT_STATE_KEY      = 'inout_input_state_v2';
 const FIELD_PREFS_KEY      = 'inout_field_prefs_v1';
-const MESSAGE_ORDER_KEY    = 'inout_msg_order_v1';
 const seenIds       = new Set();
 const channelScroll = new Map();
 const unreadCounts  = new Map(); // channel -> number
@@ -1265,8 +1264,8 @@ async function init() {
   setupAuthListener();
   setupTabs();
   restoreLastChannel();
-  loadMessageOrderForCurrentChannel();
-   loadFieldPrefsForCurrentChannel();
+  await loadMessageOrderForCurrentChannel();
+  loadFieldPrefsForCurrentChannel();
   refreshMoveTargets();
   if (currentUser) {
     await loadMessages();
@@ -1800,26 +1799,46 @@ function saveChannelsList() {
   } catch (_) {}
 }
 
-function loadMessageOrderForCurrentChannel() {
+async function loadMessageOrderForCurrentChannel() {
   currentMessageOrder = [];
+  if (!currentUser) return;
   try {
-    const raw = localStorage.getItem(MESSAGE_ORDER_KEY);
-    if (!raw) return;
-    const map = JSON.parse(raw);
-    const arr = map && Array.isArray(map[currentChannel]) ? map[currentChannel] : [];
-    currentMessageOrder = arr.map(x => Number(x)).filter(x => Number.isFinite(x));
+    const { data, error } = await sb
+      .from('message_orders')
+      .select('entry_id, position')
+      .eq('user_id', currentUser.id)
+      .eq('channel', currentChannel)
+      .order('position', { ascending: true });
+    if (error) {
+      console.error(error);
+      return;
+    }
+    currentMessageOrder = (data || [])
+      .map(row => Number(row.entry_id))
+      .filter(x => Number.isFinite(x));
   } catch (_) {
     currentMessageOrder = [];
   }
 }
 
-function saveMessageOrderForCurrentChannel() {
+async function saveMessageOrderForCurrentChannel() {
+  if (!currentUser || !currentMessageOrder.length) return;
   try {
-    const raw = localStorage.getItem(MESSAGE_ORDER_KEY);
-    const map = raw ? JSON.parse(raw) : {};
-    map[currentChannel] = currentMessageOrder;
-    localStorage.setItem(MESSAGE_ORDER_KEY, JSON.stringify(map));
-  } catch (_) {}
+    const rows = currentMessageOrder.map((entryId, index) => ({
+      user_id: currentUser.id,
+      channel: currentChannel,
+      entry_id: entryId,
+      position: index,
+    }));
+    const { error } = await sb
+      .from('message_orders')
+      .upsert(rows, { onConflict: 'user_id,channel,entry_id' });
+    if (error) {
+      console.error(error);
+    }
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 function recomputeOrderFromDOM() {
