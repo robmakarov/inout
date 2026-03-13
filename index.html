@@ -581,7 +581,18 @@ header{
     padding:0 14px;
     z-index:120;
   }
-  #app{padding-top:48px}
+  /* pin manage bar under header too */
+  #manage-bar{
+    position:fixed;
+    top:calc(var(--vv-top) + 48px);
+    left:0;
+    right:0;
+    width:100%;
+    z-index:115;
+    padding:4px 14px;
+  }
+  /* reserve space for fixed header + manage bar */
+  #app{padding-top:calc(48px + 34px)}
   #input-area{padding:10px 10px 14px}
   #tabs{
     padding:8px 10px 8px;
