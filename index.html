@@ -70,6 +70,73 @@ header{
   flex-shrink:0;
 }
 
+/* ── MANAGE BAR (SELECTION) ── */
+#manage-bar{
+  flex-shrink:0;
+  background:var(--bg2);
+  border-bottom:1px solid var(--line);
+  padding:4px 20px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  font-size:10px;
+  color:var(--dim);
+}
+
+#select-toggle{
+  border:1px solid var(--line2);
+  background:transparent;
+  color:var(--soft);
+  font-family:var(--mono);
+  font-size:10px;
+  padding:3px 8px;
+  border-radius:999px;
+  cursor:pointer;
+  text-transform:uppercase;
+  letter-spacing:0.06em;
+}
+#select-toggle.active{
+  background:var(--acc);
+  color:var(--bg);
+  border-color:var(--acc2);
+}
+
+#manage-actions{
+  display:none;
+  align-items:center;
+  gap:6px;
+}
+#manage-actions.visible{
+  display:flex;
+}
+
+.manage-btn{
+  border:1px solid var(--line2);
+  background:var(--bg);
+  color:var(--soft);
+  font-family:var(--mono);
+  font-size:10px;
+  padding:3px 8px;
+  border-radius:4px;
+  cursor:pointer;
+  text-transform:uppercase;
+  letter-spacing:0.06em;
+}
+.manage-btn:hover{
+  background:var(--line);
+  color:var(--text);
+}
+
+#move-target{
+  border:1px solid var(--line2);
+  background:var(--bg);
+  color:var(--soft);
+  font-family:var(--mono);
+  font-size:10px;
+  padding:3px 6px;
+  border-radius:4px;
+}
+
 .logo{
   font-family:var(--sans);
   font-size:15px;
@@ -266,7 +333,7 @@ header{
 /* message row */
 .msg{
   display:flex;
-  align-items:baseline;
+  align-items:center;
   gap:8px;
   padding:4px 20px;
   border-bottom:1px solid var(--line);
@@ -450,7 +517,7 @@ header{
 
 .input-tools{
   display:flex;
-  justify-content:flex-end;
+  justify-content:flex-start;
   margin-top:6px;
 }
 
@@ -681,6 +748,15 @@ header{
     </div>
   </header>
 
+  <div id="manage-bar">
+    <button id="select-toggle">Select</button>
+    <div id="manage-actions">
+      <button id="delete-selected" class="manage-btn">Delete</button>
+      <select id="move-target"></select>
+      <button id="move-selected" class="manage-btn">Move</button>
+    </div>
+  </div>
+
   <div id="feed">
     <div class="feed-inner" id="feed-inner">
       <div id="empty">
@@ -814,6 +890,11 @@ const clipboardBubbleTxt = document.getElementById('clipboard-bubble-text');
 const clipboardPasteBtn  = document.getElementById('clipboard-paste');
 const clipboardDismissBtn= document.getElementById('clipboard-dismiss');
 const clipboardButton    = document.getElementById('clipboard-button');
+const selectToggle = document.getElementById('select-toggle');
+const manageActions = document.getElementById('manage-actions');
+const deleteSelectedBtn = document.getElementById('delete-selected');
+const moveSelectedBtn = document.getElementById('move-selected');
+const moveTargetSelect = document.getElementById('move-target');
 const draftBubble    = document.getElementById('draft-bubble');
 const draftBubbleTxt = document.getElementById('draft-bubble-text');
 const draftCopyBtn   = document.getElementById('draft-copy');
@@ -843,6 +924,8 @@ let channelSubs = new Map(); // channel -> realtime subscription
 let draftChannel = null;
 let latestRemoteDraft = '';
 let latestClipboardText = '';
+let selectMode = false;
+const selectedIds = new Set();
 
 function updateTabBadge(ch) {
   if (!tabsEl) return;
@@ -864,6 +947,17 @@ function updateAllTabBadges() {
   channels.forEach(ch => updateTabBadge(ch));
 }
 
+function refreshMoveTargets() {
+  if (!moveTargetSelect) return;
+  moveTargetSelect.innerHTML = '';
+  for (const ch of channels) {
+    const opt = document.createElement('option');
+    opt.value = ch;
+    opt.textContent = ch === 'main' ? 'Main' : ch;
+    moveTargetSelect.appendChild(opt);
+  }
+}
+
 function isNearBottom() {
   const base = 80;
   const extra = (inputArea && inputArea.offsetHeight) ? inputArea.offsetHeight : 120;
@@ -880,6 +974,7 @@ async function init() {
   }
   setupAuthListener();
   setupTabs();
+  refreshMoveTargets();
   if (currentUser) {
     await loadMessages();
     subscribeRealtimeAll();
@@ -1058,6 +1153,27 @@ function hideClipboardBubble() {
   if (clipboardBubbleTxt) clipboardBubbleTxt.textContent = '';
 }
 
+function setSelectMode(on) {
+  selectMode = !!on;
+  selectedIds.clear();
+  if (selectToggle) {
+    selectToggle.classList.toggle('active', selectMode);
+    selectToggle.textContent = selectMode ? 'Cancel' : 'Select';
+  }
+  const boxes = feedInner.querySelectorAll('.msg-select');
+  boxes.forEach(box => {
+    box.checked = false;
+    box.style.display = selectMode ? 'inline-block' : 'none';
+  });
+  updateSelectionUI();
+}
+
+function updateSelectionUI() {
+  if (!manageActions) return;
+  const hasAny = selectedIds.size > 0;
+  manageActions.classList.toggle('visible', hasAny);
+}
+
 /* ═══ RENDER ══════════════════════════════════════════════ */
 function createMsgRow(msg, isNew) {
   if (msg && typeof msg.id !== 'undefined') {
@@ -1092,6 +1208,22 @@ function createMsgRow(msg, isNew) {
   }
   sender.title = fullLabel;
 
+  const selectBox = document.createElement('input');
+  selectBox.type = 'checkbox';
+  selectBox.className = 'msg-select';
+  selectBox.addEventListener('change', () => {
+    if (!msg.id) return;
+    if (selectBox.checked) {
+      selectedIds.add(msg.id);
+    } else {
+      selectedIds.delete(msg.id);
+    }
+    updateSelectionUI();
+  });
+  if (!selectMode) {
+    selectBox.style.display = 'none';
+  }
+
   const time = document.createElement('div');
   time.className = 'msg-time';
   time.textContent = formatTime(msg.created_at);
@@ -1102,6 +1234,7 @@ function createMsgRow(msg, isNew) {
   text.innerHTML = linkify(escapeHtml(msg.text));
   text.title = msg.text || '';
 
+  row.appendChild(selectBox);
   row.appendChild(time);
   row.appendChild(sender);
   row.appendChild(text);
@@ -1221,6 +1354,7 @@ function renderTabs() {
 
   updateTabsUI();
   updateAllTabBadges();
+  refreshMoveTargets();
 }
 
 async function syncChannelsFromServer() {
@@ -1243,6 +1377,7 @@ async function syncChannelsFromServer() {
     await refreshSharedFlags();
     renderTabs();
     subscribeRealtimeAll();
+    refreshMoveTargets();
   } catch (e) {
     console.error(e);
   }
@@ -1279,6 +1414,7 @@ function switchChannel(ch) {
   unreadCounts.set(ch, 0);
   updateTabsUI();
   updateTabBadge(ch);
+  refreshMoveTargets();
   if (input) input.focus();
   if (currentUser) {
     ensureMembership().then(reloadForUser);
@@ -1688,6 +1824,64 @@ if (clipboardButton) {
     } catch (e) {
       console.error(e);
       toast('Could not read clipboard.');
+    }
+  });
+}
+
+if (selectToggle) {
+  selectToggle.addEventListener('click', () => {
+    setSelectMode(!selectMode);
+  });
+}
+
+if (deleteSelectedBtn) {
+  deleteSelectedBtn.addEventListener('click', async () => {
+    if (!currentUser || selectedIds.size === 0) return;
+    const ids = Array.from(selectedIds);
+    try {
+      const { error } = await sb
+        .from('entries')
+        .delete()
+        .in('id', ids);
+      if (error) {
+        console.error(error);
+        toast('Failed to delete — ' + humanError(error.message));
+        return;
+      }
+      ids.forEach(id => {
+        const el = feedInner.querySelector('.msg[data-id="' + id + '"]');
+        if (el) el.remove();
+      });
+      setSelectMode(false);
+    } catch (e) {
+      console.error(e);
+      toast('Failed to delete — ' + humanError(e.message));
+    }
+  });
+}
+
+if (moveSelectedBtn) {
+  moveSelectedBtn.addEventListener('click', async () => {
+    if (!currentUser || selectedIds.size === 0 || !moveTargetSelect) return;
+    const target = moveTargetSelect.value;
+    if (!target) return;
+    const ids = Array.from(selectedIds);
+    try {
+      const now = new Date().toISOString();
+      const { error } = await sb
+        .from('entries')
+        .update({ channel: target, created_at: now })
+        .in('id', ids);
+      if (error) {
+        console.error(error);
+        toast('Failed to move — ' + humanError(error.message));
+        return;
+      }
+      setSelectMode(false);
+      reloadForUser();
+    } catch (e) {
+      console.error(e);
+      toast('Failed to move — ' + humanError(e.message));
     }
   });
 }
