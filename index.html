@@ -1369,7 +1369,7 @@ async function init() {
   requestAnimationFrame(() => requestAnimationFrame(() => { if (input) input.focus(); }));
   setTimeout(() => { if (input) input.focus(); }, 100);
   setTimeout(() => { if (input) input.focus(); }, 300);
-  cancelEditingMode(false);
+  cancelEditingMode(true);
   setupFocusOnFirstInteraction();
 }
 
