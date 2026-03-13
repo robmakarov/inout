@@ -1805,8 +1805,14 @@ function loadFieldPrefsForCurrentChannel() {
   } catch(_) {
     fieldPrefs = { showTime:true, showAuthor: currentChannel !== 'main' };
   }
-  if (fieldTimeChk) fieldTimeChk.checked = !!fieldPrefs.showTime;
-  if (fieldAuthorChk) fieldAuthorChk.checked = !!fieldPrefs.showAuthor;
+  if (fieldTimeChk) {
+    fieldTimeChk.checked = !!fieldPrefs.showTime;
+  }
+  if (fieldAuthorChk) {
+    const canShowAuthor = currentChannel !== 'main';
+    fieldAuthorChk.disabled = !canShowAuthor;
+    fieldAuthorChk.checked = canShowAuthor && !!fieldPrefs.showAuthor;
+  }
 }
 
 function saveFieldPrefsForCurrentChannel() {
@@ -1853,6 +1859,15 @@ function applyFieldPrefsToMessages() {
       senderEl.style.display = !isMain && fieldPrefs.showAuthor ? '' : 'none';
     }
   });
+  // Keep the view menu checkboxes in sync with what is actually shown.
+  if (fieldTimeChk) {
+    fieldTimeChk.checked = !!fieldPrefs.showTime;
+  }
+  if (fieldAuthorChk) {
+    const canShowAuthor = currentChannel !== 'main';
+    fieldAuthorChk.disabled = !canShowAuthor;
+    fieldAuthorChk.checked = canShowAuthor && !!fieldPrefs.showAuthor;
+  }
 }
 
 /* ═══ RENDER ══════════════════════════════════════════════ */
@@ -3056,6 +3071,11 @@ if (fieldTimeChk) {
 
 if (fieldAuthorChk) {
   fieldAuthorChk.addEventListener('change', () => {
+    // Main feed never shows authors; keep UI and behavior aligned.
+    if (currentChannel === 'main' || fieldAuthorChk.disabled) {
+      fieldAuthorChk.checked = false;
+      return;
+    }
     fieldPrefs.showAuthor = !!fieldAuthorChk.checked;
     saveFieldPrefsForCurrentChannel();
     applyFieldPrefsToMessages();
