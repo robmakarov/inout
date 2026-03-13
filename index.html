@@ -448,7 +448,8 @@ header{
 }
 
 body.select-mode .msg-select-wrap,
-.msg:hover .msg-select-wrap{
+.msg:hover .msg-select-wrap,
+.msg.msg-selected .msg-select-wrap{
   opacity:1;
   pointer-events:auto;
 }
@@ -1669,8 +1670,10 @@ function createMsgRow(msg, isNew) {
     if (!msg.id) return;
     if (selectBox.checked) {
       selectedIds.add(msg.id);
+      row.classList.add('msg-selected');
     } else {
       selectedIds.delete(msg.id);
+      row.classList.remove('msg-selected');
     }
     updateSelectionUI();
   });
