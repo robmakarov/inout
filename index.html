@@ -1392,16 +1392,25 @@ function subscribeRealtimeAll() {
   });
 }
 
+function updateMessageRowText(msgId, text) {
+  if (!feedInner || msgId == null) return;
+  const idStr = String(msgId);
+  const el = feedInner.querySelector('.msg[data-id="' + CSS.escape(idStr) + '"]');
+  if (!el) return;
+  const textEl = el.querySelector('.msg-text');
+  if (textEl) textEl.innerHTML = linkify(escapeHtml(text || ''));
+}
+
 function onUpdateForChannel(ch, row) {
-  if (ch !== currentChannel || !row || row.id == null) return;
-  if (row.id === editingMessageId) {
+  if (ch !== currentChannel || !row) return;
+  const id = row.id != null ? row.id : row.Id;
+  if (id == null) return;
+  if (id === editingMessageId) {
     editingMessageId = null;
     if (input && input.placeholder === 'Editing message…') input.placeholder = 'say something…';
   }
-  const el = feedInner && feedInner.querySelector('.msg[data-id="' + CSS.escape(String(row.id)) + '"]');
-  if (!el) return;
-  const textEl = el.querySelector('.msg-text');
-  if (textEl) textEl.innerHTML = linkify(escapeHtml(row.text || ''));
+  const text = row.text != null ? row.text : (row.Text != null ? row.Text : '');
+  updateMessageRowText(id, text);
 }
 
 function subscribeOrderRealtime() {
@@ -2642,6 +2651,7 @@ async function sendText(text) {
       sendBtn.disabled = false;
       return;
     }
+    updateMessageRowText(editingMessageId, trimmed);
     editingMessageId = null;
     input.value = '';
     autoResize();
