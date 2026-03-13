@@ -928,7 +928,7 @@ async function loadMessages() {
 
   const { data, error } = await sb
     .from('entries')
-    .select('id, created_at, text, channel, user_id')
+    .select('id, created_at, text, channel, user_id, author_name')
     .eq('channel', currentChannel)
     .order('created_at', { ascending: true })
     .limit(200);
@@ -1089,7 +1089,9 @@ function createMsgRow(msg, isNew) {
 
   const sender = document.createElement('div');
   sender.className = 'msg-sender';
-  if (msg.user_id && currentUser && msg.user_id === currentUser.id) {
+  if (msg.author_name) {
+    sender.textContent = String(msg.author_name);
+  } else if (msg.user_id && currentUser && msg.user_id === currentUser.id) {
     const nick = currentUser.user_metadata && currentUser.user_metadata.nickname
       ? String(currentUser.user_metadata.nickname)
       : 'you';
