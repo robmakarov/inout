@@ -1326,6 +1326,56 @@ let selectModeAutoOn = false; /* true when select mode was turned on by checking
 const selectedIds = new Set();
 let editingMessageId = null;
 let fieldPrefs = { showTime:true, showAuthor:true };
+let undoStack = [];
+
+function pushUndo(action) {
+  if (!action) return;
+  undoStack.push(action);
+  if (undoStack.length > 50) undoStack.shift();
+}
+
+async function undoLastAction() {
+  if (!currentUser) {
+    toast('Sign in to undo.');
+    return;
+  }
+  const action = undoStack.pop();
+  if (!action) {
+    toast('Nothing to undo.');
+    return;
+  }
+  try {
+    if (action.type === 'delete' && Array.isArray(action.entries) && action.entries.length) {
+      const rows = action.entries.map(e => ({
+        id: e.id,
+        created_at: e.created_at,
+        text: e.text,
+        channel: e.channel,
+        user_id: e.user_id,
+        author_name: e.author_name ?? null,
+      }));
+      const { error } = await sb.from('entries').insert(rows);
+      if (error) throw error;
+    } else if (action.type === 'move' && Array.isArray(action.entries) && action.entries.length) {
+      const rows = action.entries;
+      await Promise.all(rows.map(e => {
+        return sb
+          .from('entries')
+          .update({ channel: e.channel, created_at: e.created_at })
+          .eq('user_id', currentUser.id)
+          .eq('id', e.id);
+      }));
+    } else {
+      // Unknown or empty action; nothing to do.
+      return;
+    }
+    await reloadForUser();
+    toast('Undid last action.');
+  } catch (e) {
+    console.error(e);
+    toast('Undo failed — ' + humanError(e.message));
+  }
+}
 
 function updateEditingRowHighlight() {
   if (!feedInner) return;
@@ -1459,7 +1509,20 @@ if (umBackdrop) umBackdrop.addEventListener('click', e => {
   if (e.target === umBackdrop) closeUserModal();
 });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && umBackdrop && umBackdrop.style.display === 'block') closeUserModal();
+  if (e.key === 'Escape' && umBackdrop && umBackdrop.style.display === 'block') {
+    closeUserModal();
+    return;
+  }
+  // Ctrl/Cmd+Z → undo last destructive action, unless typing in a field.
+  const isUndoKey = (e.key === 'z' || e.key === 'Z') && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey;
+  if (isUndoKey) {
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) {
+      return; // let native text undo work inside fields
+    }
+    e.preventDefault();
+    undoLastAction();
+  }
 });
 
 function setupFocusOnFirstInteraction() {
@@ -3125,11 +3188,12 @@ if (deleteSelectedBtn) {
       })
       .filter(id => typeof id === 'number');
     try {
+      let rowsToDelete = [];
       // If nothing selected, operate on whole tab (for this user).
       if (!ids.length) {
         const { data, error } = await sb
           .from('entries')
-          .select('id')
+          .select('id, created_at, text, channel, user_id, author_name')
           .eq('channel', currentChannel)
           .eq('user_id', currentUser.id);
         if (error) {
@@ -3137,8 +3201,20 @@ if (deleteSelectedBtn) {
           toast('Failed to delete — ' + humanError(error.message));
           return;
         }
-        ids = (data || []).map(r => r.id);
+        rowsToDelete = data || [];
+        ids = rowsToDelete.map(r => r.id);
         if (!ids.length) return;
+      } else {
+        const { data, error } = await sb
+          .from('entries')
+          .select('id, created_at, text, channel, user_id, author_name')
+          .in('id', ids);
+        if (error) {
+          console.error(error);
+          toast('Failed to delete — ' + humanError(error.message));
+          return;
+        }
+        rowsToDelete = data || [];
       }
       const { error } = await sb
         .from('entries')
@@ -3149,6 +3225,7 @@ if (deleteSelectedBtn) {
         toast('Failed to delete — ' + humanError(error.message));
         return;
       }
+      pushUndo({ type: 'delete', entries: rowsToDelete });
       setSelectMode(false);
       await reloadForUser();
     } catch (e) {
@@ -3173,9 +3250,9 @@ if (moveSelectedBtn) {
     if (!ids.length) return;
     try {
       const now = new Date().toISOString();
-      const { error } = await sb
+      const { data, error } = await sb
         .from('entries')
-        .update({ channel: target, created_at: now })
+        .select('id, created_at, text, channel, user_id, author_name')
         .eq('user_id', currentUser.id)
         .in('id', ids);
       if (error) {
@@ -3183,6 +3260,18 @@ if (moveSelectedBtn) {
         toast('Failed to move — ' + humanError(error.message));
         return;
       }
+      const rowsBefore = data || [];
+      const { error: updErr } = await sb
+        .from('entries')
+        .update({ channel: target, created_at: now })
+        .eq('user_id', currentUser.id)
+        .in('id', ids);
+      if (updErr) {
+        console.error(error);
+        toast('Failed to move — ' + humanError(error.message));
+        return;
+      }
+      pushUndo({ type: 'move', entries: rowsBefore });
       setSelectMode(false);
       await reloadForUser();
     } catch (e) {
@@ -3195,6 +3284,16 @@ if (moveSelectedBtn) {
 async function deleteSingleMessage(id) {
   if (!currentUser || !id) return;
   try {
+    const { data, error: selErr } = await sb
+      .from('entries')
+      .select('id, created_at, text, channel, user_id, author_name')
+      .eq('id', id)
+      .maybeSingle();
+    if (selErr) {
+      console.error(selErr);
+      toast('Failed to delete — ' + humanError(selErr.message));
+      return;
+    }
     const { error } = await sb
       .from('entries')
       .delete()
@@ -3203,6 +3302,9 @@ async function deleteSingleMessage(id) {
       console.error(error);
       toast('Failed to delete — ' + humanError(error.message));
       return;
+    }
+    if (data) {
+      pushUndo({ type: 'delete', entries: [data] });
     }
     const el = feedInner.querySelector('.msg[data-id="' + id + '"]');
     if (el) el.remove();
@@ -3257,6 +3359,16 @@ async function moveSingleMessage(id, targetChannel) {
   const target = targetChannel != null ? targetChannel : (moveTargetSelect && moveTargetSelect.value);
   if (!target || target === currentChannel) return false;
   try {
+    const { data: before, error: selErr } = await sb
+      .from('entries')
+      .select('id, created_at, text, channel, user_id, author_name')
+      .eq('id', id)
+      .maybeSingle();
+    if (selErr) {
+      console.error(selErr);
+      toast('Failed to move — ' + humanError(selErr.message));
+      return false;
+    }
     const now = new Date().toISOString();
     const { data, error } = await sb
       .from('entries')
@@ -3272,6 +3384,9 @@ async function moveSingleMessage(id, targetChannel) {
     if (!data || data.length === 0) {
       toast('Move not allowed — row may be read-only or policy blocks update.');
       return false;
+    }
+    if (before) {
+      pushUndo({ type: 'move', entries: [before] });
     }
     const el = feedInner.querySelector('.msg[data-id="' + CSS.escape(String(id)) + '"]');
     if (el) el.remove();
