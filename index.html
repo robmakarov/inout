@@ -2395,7 +2395,6 @@ if (deleteSelectedBtn) {
       const { error } = await sb
         .from('entries')
         .delete()
-        .eq('user_id', currentUser.id)
         .in('id', ids);
       if (error) {
         console.error(error);
@@ -2451,7 +2450,6 @@ async function deleteSingleMessage(id) {
     const { error } = await sb
       .from('entries')
       .delete()
-      .eq('user_id', currentUser.id)
       .eq('id', id);
     if (error) {
       console.error(error);
