@@ -2302,7 +2302,10 @@ function renderTabs() {
       if (!Number.isFinite(numId)) return;
       const rowEl = feedInner.querySelector('.msg[data-id="' + CSS.escape(String(numId)) + '"]');
       if (rowEl) {
-        animateMessageToTab(rowEl, btn, () => moveSingleMessage(numId, ch));
+        animateMessageToTab(rowEl, btn, async () => {
+          const ok = await moveSingleMessage(numId, ch);
+          if (!ok) rowEl.style.visibility = '';
+        });
       } else {
         moveSingleMessage(numId, ch);
       }
@@ -3093,29 +3096,36 @@ function animateMessageToTab(rowEl, tabEl, onDone) {
 }
 
 async function moveSingleMessage(id, targetChannel) {
-  if (!currentUser || !id) return;
+  if (!currentUser || !id) return false;
   const target = targetChannel != null ? targetChannel : (moveTargetSelect && moveTargetSelect.value);
-  if (!target || target === currentChannel) return;
+  if (!target || target === currentChannel) return false;
   try {
     const now = new Date().toISOString();
-    const { error } = await sb
+    const { data, error } = await sb
       .from('entries')
       .update({ channel: target, created_at: now })
       .eq('user_id', currentUser.id)
-      .eq('id', id);
+      .eq('id', id)
+      .select('id');
     if (error) {
       console.error(error);
       toast('Failed to move — ' + humanError(error.message));
-      return;
+      return false;
+    }
+    if (!data || data.length === 0) {
+      toast('Move not allowed — row may be read-only or policy blocks update.');
+      return false;
     }
     const el = feedInner.querySelector('.msg[data-id="' + CSS.escape(String(id)) + '"]');
     if (el) el.remove();
     currentMessageOrder = currentMessageOrder.filter(x => x !== id);
     saveMessageOrderForCurrentChannel();
     showEmptyIfNoMessages();
+    return true;
   } catch (e) {
     console.error(e);
     toast('Failed to move — ' + humanError(e.message));
+    return false;
   }
 }
 
