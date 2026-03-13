@@ -198,6 +198,12 @@ body.loaded #manage-bar{
   gap:4px;
   cursor:pointer;
 }
+#view-menu input[type="checkbox"]{
+  width:11px;
+  height:11px;
+  border-radius:3px;
+  accent-color:var(--acc);
+}
 
 .logo{
   font-family:var(--sans);
@@ -1805,14 +1811,8 @@ function loadFieldPrefsForCurrentChannel() {
   } catch(_) {
     fieldPrefs = { showTime:true, showAuthor: currentChannel !== 'main' };
   }
-  if (fieldTimeChk) {
-    fieldTimeChk.checked = !!fieldPrefs.showTime;
-  }
-  if (fieldAuthorChk) {
-    const canShowAuthor = currentChannel !== 'main';
-    fieldAuthorChk.disabled = !canShowAuthor;
-    fieldAuthorChk.checked = canShowAuthor && !!fieldPrefs.showAuthor;
-  }
+  if (fieldTimeChk) fieldTimeChk.checked = !!fieldPrefs.showTime;
+  if (fieldAuthorChk) fieldAuthorChk.checked = !!fieldPrefs.showAuthor;
 }
 
 function saveFieldPrefsForCurrentChannel() {
@@ -1859,15 +1859,6 @@ function applyFieldPrefsToMessages() {
       senderEl.style.display = !isMain && fieldPrefs.showAuthor ? '' : 'none';
     }
   });
-  // Keep the view menu checkboxes in sync with what is actually shown.
-  if (fieldTimeChk) {
-    fieldTimeChk.checked = !!fieldPrefs.showTime;
-  }
-  if (fieldAuthorChk) {
-    const canShowAuthor = currentChannel !== 'main';
-    fieldAuthorChk.disabled = !canShowAuthor;
-    fieldAuthorChk.checked = canShowAuthor && !!fieldPrefs.showAuthor;
-  }
 }
 
 /* ═══ RENDER ══════════════════════════════════════════════ */
@@ -2142,6 +2133,8 @@ function appendMsg(msg, isNew) {
   const row = createMsgRow(msg, isNew);
   if (!row) return;
   feedInner.appendChild(row);
+  // Ensure new messages respect the current view (time/author) settings.
+  applyFieldPrefsToMessages();
   if (typeof msg.id !== 'undefined') {
     const idNum = Number(msg.id);
     if (Number.isFinite(idNum)) {
@@ -3071,11 +3064,6 @@ if (fieldTimeChk) {
 
 if (fieldAuthorChk) {
   fieldAuthorChk.addEventListener('change', () => {
-    // Main feed never shows authors; keep UI and behavior aligned.
-    if (currentChannel === 'main' || fieldAuthorChk.disabled) {
-      fieldAuthorChk.checked = false;
-      return;
-    }
     fieldPrefs.showAuthor = !!fieldAuthorChk.checked;
     saveFieldPrefsForCurrentChannel();
     applyFieldPrefsToMessages();
