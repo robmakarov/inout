@@ -1199,10 +1199,11 @@ let myId           = crypto.randomUUID();
 let currentUser    = null;
 let currentChannel = 'main';
 let channels       = ['main'];
-const CHANNELS_KEY        = 'inout_channels_v1';
-const CURRENT_CHANNEL_KEY = 'inout_current_channel_v1';
-const INPUT_STATE_KEY     = 'inout_input_state_v2';
-const FIELD_PREFS_KEY     = 'inout_field_prefs_v1';
+const CHANNELS_KEY         = 'inout_channels_v1';
+const CURRENT_CHANNEL_KEY  = 'inout_current_channel_v1';
+const INPUT_STATE_KEY      = 'inout_input_state_v2';
+const FIELD_PREFS_KEY      = 'inout_field_prefs_v1';
+const MESSAGE_ORDER_KEY    = 'inout_msg_order_v1';
 const seenIds       = new Set();
 const channelScroll = new Map();
 const unreadCounts  = new Map(); // channel -> number
@@ -1214,6 +1215,7 @@ let latestClipboardText = '';
 let selectMode = false;
 const selectedIds = new Set();
 let fieldPrefs = { showTime:true, showAuthor:true };
+let currentMessageOrder = [];
 
 function updateTabBadge(ch) {
   if (!tabsEl) return;
@@ -1263,6 +1265,7 @@ async function init() {
   setupAuthListener();
   setupTabs();
   restoreLastChannel();
+  loadMessageOrderForCurrentChannel();
    loadFieldPrefsForCurrentChannel();
   refreshMoveTargets();
   if (currentUser) {
@@ -1322,6 +1325,9 @@ async function loadMessages() {
     renderInitialMessages(data);
     msgCount = data.length;
     updateMsgCount();
+    // apply any saved order after initial render
+    loadMessageOrderForCurrentChannel();
+    applyMessageOrderToDOM();
   }
 }
 
@@ -1717,6 +1723,14 @@ function appendMsg(msg, isNew) {
   const row = createMsgRow(msg, isNew);
   if (!row) return;
   feedInner.appendChild(row);
+  if (typeof msg.id !== 'undefined') {
+    const idNum = Number(msg.id);
+    if (Number.isFinite(idNum)) {
+      currentMessageOrder = currentMessageOrder.filter(x => x !== idNum);
+      currentMessageOrder.push(idNum);
+      saveMessageOrderForCurrentChannel();
+    }
+  }
 }
 
 function renderInitialMessages(list) {
@@ -1777,6 +1791,60 @@ function saveChannelsList() {
     const toSave = channels.filter(ch => ch !== 'main');
     localStorage.setItem(CHANNELS_KEY, JSON.stringify(toSave));
   } catch (_) {}
+}
+
+function loadMessageOrderForCurrentChannel() {
+  currentMessageOrder = [];
+  try {
+    const raw = localStorage.getItem(MESSAGE_ORDER_KEY);
+    if (!raw) return;
+    const map = JSON.parse(raw);
+    const arr = map && Array.isArray(map[currentChannel]) ? map[currentChannel] : [];
+    currentMessageOrder = arr.map(x => Number(x)).filter(x => Number.isFinite(x));
+  } catch (_) {
+    currentMessageOrder = [];
+  }
+}
+
+function saveMessageOrderForCurrentChannel() {
+  try {
+    const raw = localStorage.getItem(MESSAGE_ORDER_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    map[currentChannel] = currentMessageOrder;
+    localStorage.setItem(MESSAGE_ORDER_KEY, JSON.stringify(map));
+  } catch (_) {}
+}
+
+function recomputeOrderFromDOM() {
+  if (!feedInner) return;
+  const ids = Array.from(feedInner.querySelectorAll('.msg'))
+    .map(row => Number(row.dataset.id))
+    .filter(id => Number.isFinite(id));
+  currentMessageOrder = ids;
+}
+
+function applyMessageOrderToDOM() {
+  if (!feedInner) return;
+  if (!currentMessageOrder.length) return;
+  const rows = Array.from(feedInner.querySelectorAll('.msg'));
+  if (!rows.length) return;
+  const byId = new Map();
+  rows.forEach(row => {
+    const id = Number(row.dataset.id);
+    if (Number.isFinite(id)) byId.set(id, row);
+  });
+  if (!byId.size) return;
+  const frag = document.createDocumentFragment();
+  currentMessageOrder.forEach(id => {
+    const row = byId.get(id);
+    if (row) {
+      frag.appendChild(row);
+      byId.delete(id);
+    }
+  });
+  // append any remaining rows that weren't in the saved order
+  byId.forEach(row => frag.appendChild(row));
+  feedInner.appendChild(frag);
 }
 
 function renderTabs() {
@@ -1890,6 +1958,7 @@ function switchChannel(ch) {
   updateTabBadge(ch);
   refreshMoveTargets();
   loadFieldPrefsForCurrentChannel();
+  loadMessageOrderForCurrentChannel();
   applyFieldPrefsToMessages();
   if (input) input.focus();
   if (currentUser) {
@@ -2118,6 +2187,7 @@ async function reloadForUser() {
   // Always jump to the latest message when opening a tab.
   requestAnimationFrame(scrollBottom);
   applyFieldPrefsToMessages();
+  applyMessageOrderToDOM();
 }
 
 function clearMessages() {
@@ -2486,6 +2556,9 @@ async function deleteSingleMessage(id) {
     }
     const el = feedInner.querySelector('.msg[data-id="' + id + '"]');
     if (el) el.remove();
+    // keep local order in sync
+    currentMessageOrder = currentMessageOrder.filter(x => x !== id);
+    saveMessageOrderForCurrentChannel();
     showEmptyIfNoMessages();
   } catch (e) {
     console.error(e);
