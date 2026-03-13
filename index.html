@@ -4,6 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <title>INOUT</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230a0a09'/%3E%3Cpath d='M18 44V20h6v24h-6Zm22-24v24h-6V20h6Z' fill='%23e8d5a0'/%3E%3Cpath d='M30 20h4v24h-4z' fill='%23f0ece3' opacity='.65'/%3E%3C/svg%3E"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -24,6 +25,7 @@
   --acc2:   #b8a060;
   --mono:   'DM Mono', monospace;
   --sans:   'Syne', sans-serif;
+  --vv-top: 0px; /* visual viewport top offset (iOS keyboard) */
 }
 
 html,body{
@@ -572,7 +574,7 @@ header{
   /* keep header pinned even when keyboard opens */
   header{
     position:fixed;
-    top:0;
+    top:var(--vv-top);
     left:0;
     right:0;
     width:100%;
@@ -889,6 +891,19 @@ header{
 const SUPABASE_URL  = 'https://tfmbqiwxfgrwtjvoqomf.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// iOS Safari: keep fixed header pinned when keyboard opens
+(function setupVisualViewportPinning() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  const set = () => {
+    const top = (typeof vv.offsetTop === 'number') ? vv.offsetTop : 0;
+    document.documentElement.style.setProperty('--vv-top', top + 'px');
+  };
+  vv.addEventListener('resize', set);
+  vv.addEventListener('scroll', set);
+  set();
+})();
 
 const feedInner  = document.getElementById('feed-inner');
 const feedEl     = document.getElementById('feed');
