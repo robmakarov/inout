@@ -46,6 +46,26 @@ body{
   overflow:hidden; /* only the content area scrolls */
 }
 
+body.hover-idle .msg:hover,
+body.hover-idle .tab:hover,
+body.hover-idle #user-btn:hover,
+body.hover-idle .manage-btn:hover,
+body.hover-idle #scroll-btn:hover,
+body.hover-idle .msg-action-btn:hover{
+  background:none;
+  color:inherit;
+}
+
+body.hover-idle .msg:hover .msg-actions{
+  opacity:0;
+  pointer-events:none;
+}
+
+body.hover-idle .msg:hover .msg-select-wrap{
+  opacity:0;
+  pointer-events:none;
+}
+
 /* visible scrollbar (content area) */
 #feed{
   scrollbar-width:thin;
@@ -943,7 +963,7 @@ body.select-mode .msg-select-wrap,
     <div class="header-right">
       <div id="online-count"><span class="dot"></span><span id="oc-num">—</span></div>
       <div id="msg-count"></div>
-      <button id="user-btn" aria-label="Account" title="Account">
+      <button id="user-btn" aria-label="Account">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5Z" stroke="currentColor" stroke-width="1.8"/>
           <path d="M4 22c0-4.418 3.582-8 8-8s8 3.582 8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -1008,7 +1028,7 @@ body.select-mode .msg-select-wrap,
         autocomplete="off"
         spellcheck="true"
       ></textarea>
-      <button id="clear-input" class="clear-input-btn" aria-label="Clear input" title="Clear">
+      <button id="clear-input" class="clear-input-btn" aria-label="Clear input">
         ✕
       </button>
       <button id="send-btn" disabled>Send</button>
@@ -1026,7 +1046,7 @@ body.select-mode .msg-select-wrap,
   <div id="user-modal" role="dialog" aria-modal="true" aria-label="Account">
     <div class="um-top">
       <div class="um-title">Account</div>
-      <button id="user-close" aria-label="Close account screen" title="Close">×</button>
+      <button id="user-close" aria-label="Close account screen">×</button>
     </div>
 
     <div class="um-section">
@@ -1117,6 +1137,21 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
   schedule();
 })();
 
+// Global hover idle handling: after 3s of no mouse movement, suppress hover visuals.
+(function setupHoverIdle() {
+  const reset = () => {
+    document.body.classList.remove('hover-idle');
+    if (hoverIdleTimer) clearTimeout(hoverIdleTimer);
+    hoverIdleTimer = setTimeout(() => {
+      document.body.classList.add('hover-idle');
+    }, 3000);
+  };
+
+  window.addEventListener('mousemove', reset, { passive:true });
+  window.addEventListener('mousedown', reset, { passive:true });
+  reset();
+})();
+
 const feedInner  = document.getElementById('feed-inner');
 const feedEl     = document.getElementById('feed');
 const inputArea  = document.getElementById('input-area');
@@ -1191,6 +1226,7 @@ let latestClipboardText = '';
 let selectMode = false;
 const selectedIds = new Set();
 let fieldPrefs = { showTime:true, showAuthor:true };
+let hoverIdleTimer = null;
 
 function updateTabBadge(ch) {
   if (!tabsEl) return;
@@ -1629,7 +1665,6 @@ function createMsgRow(msg, isNew) {
   if (fullLabel.length > 10) {
     sender.textContent = fullLabel.slice(0, 10) + '…';
   }
-  sender.title = fullLabel;
 
   const isMainFeed = (msg.channel && msg.channel === 'main') || (!msg.channel && currentChannel === 'main');
   if (isMainFeed) {
@@ -1665,12 +1700,10 @@ function createMsgRow(msg, isNew) {
   const time = document.createElement('div');
   time.className = 'msg-time';
   time.textContent = formatTime(msg.created_at);
-  time.title = new Date(msg.created_at).toLocaleString();
 
   const text = document.createElement('div');
   text.className = 'msg-text';
   text.innerHTML = linkify(escapeHtml(msg.text));
-  text.title = msg.text || '';
 
   row.appendChild(selectWrap);
   row.appendChild(time);
@@ -1761,7 +1794,6 @@ function renderTabs() {
     if (sharedChannels.has(ch) && ch !== 'main') {
       const shared = document.createElement('span');
       shared.className = 'tab-shared';
-      shared.title = 'Shared';
       shared.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M16 11c1.657 0 3-1.567 3-3.5S17.657 4 16 4s-3 1.567-3 3.5S14.343 11 16 11Z" stroke="currentColor" stroke-width="1.6"/><path d="M8 11c1.657 0 3-1.567 3-3.5S9.657 4 8 4 5 5.567 5 7.5 6.343 11 8 11Z" stroke="currentColor" stroke-width="1.6"/><path d="M4 20c0-3.314 2.686-6 6-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M14 14c3.314 0 6 2.686 6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M10 14c1.7 0 3.24.71 4.33 1.85" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
       btn.appendChild(shared);
     }
