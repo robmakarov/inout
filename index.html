@@ -1216,6 +1216,7 @@ let selectMode = false;
 const selectedIds = new Set();
 let fieldPrefs = { showTime:true, showAuthor:true };
 let currentMessageOrder = [];
+let touchDragState = null; // for mobile long-press drag
 
 function updateTabBadge(ch) {
   if (!tabsEl) return;
@@ -1326,12 +1327,9 @@ async function loadMessages() {
     renderInitialMessages(data);
     msgCount = data.length;
     updateMsgCount();
-    await loadMessageOrderForCurrentChannel();
+    // apply any order that was already loaded (from init / switchChannel / realtime)
     if (currentMessageOrder.length) {
       applyMessageOrderToDOM();
-    } else {
-      recomputeOrderFromDOM();
-      saveMessageOrderForCurrentChannel();
     }
   }
 }
@@ -1601,6 +1599,59 @@ function applyFieldPrefsToMessages() {
 }
 
 /* ═══ RENDER ══════════════════════════════════════════════ */
+function setupTouchDragHandlers() {
+  if (touchDragState && touchDragState.bound) return;
+  touchDragState = {
+    row: null,
+    started: false,
+    timer: null,
+    bound: true,
+  };
+  const move = e => {
+    if (!touchDragState || !touchDragState.started || !touchDragState.row) return;
+    const touch = e.touches && e.touches[0];
+    if (!touch) return;
+    e.preventDefault();
+    const y = touch.clientY;
+    const rows = Array.from(feedInner.querySelectorAll('.msg'));
+    if (!rows.length) return;
+    let target = null;
+    let targetCenterDist = Infinity;
+    rows.forEach(r => {
+      if (r === touchDragState.row) return;
+      const rect = r.getBoundingClientRect();
+      const center = rect.top + rect.height / 2;
+      const dist = Math.abs(center - y);
+      if (dist < targetCenterDist) {
+        targetCenterDist = dist;
+        target = r;
+      }
+    });
+    if (!target) return;
+    const targetRect = target.getBoundingClientRect();
+    const before = y < targetRect.top + targetRect.height / 2;
+    if (before) {
+      feedInner.insertBefore(touchDragState.row, target);
+    } else {
+      feedInner.insertBefore(touchDragState.row, target.nextSibling);
+    }
+  };
+  const end = () => {
+    if (!touchDragState || !touchDragState.row) return;
+    clearTimeout(touchDragState.timer);
+    document.removeEventListener('touchmove', move, { passive: false });
+    document.removeEventListener('touchend', end);
+    touchDragState.row.classList.remove('dragging');
+    touchDragState.started = false;
+    touchDragState.row = null;
+    recomputeOrderFromDOM();
+    saveMessageOrderForCurrentChannel();
+    applyMessageOrderToDOM();
+  };
+  document.addEventListener('touchmove', move, { passive: false });
+  document.addEventListener('touchend', end);
+}
+
 function createMsgRow(msg, isNew) {
   if (msg && typeof msg.id !== 'undefined') {
     if (seenIds.has(msg.id)) return null;
@@ -1639,6 +1690,21 @@ function createMsgRow(msg, isNew) {
   row.addEventListener('drop', e => {
     e.preventDefault();
   });
+  row.addEventListener('touchstart', e => {
+    if (!feedInner) return;
+    if (!touchDragState || !touchDragState.bound) {
+      setupTouchDragHandlers();
+    }
+    if (!touchDragState) return;
+    clearTimeout(touchDragState.timer);
+    touchDragState.row = row;
+    touchDragState.started = false;
+    touchDragState.timer = setTimeout(() => {
+      if (!touchDragState || touchDragState.row !== row) return;
+      touchDragState.started = true;
+      row.classList.add('dragging');
+    }, 300); // long press threshold
+  }, { passive: true });
   if (isNew) setTimeout(() => row.classList.remove('new-flash'), 800);
   if (typeof msg.id !== 'undefined') {
     row.dataset.id = String(msg.id);
