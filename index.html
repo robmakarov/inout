@@ -1229,20 +1229,24 @@ function createMsgRow(msg, isNew) {
   }
   sender.title = fullLabel;
 
-  const selectBox = document.createElement('input');
-  selectBox.type = 'checkbox';
-  selectBox.className = 'msg-select';
-  selectBox.addEventListener('change', () => {
-    if (!msg.id) return;
-    if (selectBox.checked) {
-      selectedIds.add(msg.id);
-    } else {
-      selectedIds.delete(msg.id);
+  const selectBox = (msg.user_id && currentUser && msg.user_id === currentUser.id)
+    ? document.createElement('input')
+    : null;
+  if (selectBox) {
+    selectBox.type = 'checkbox';
+    selectBox.className = 'msg-select';
+    selectBox.addEventListener('change', () => {
+      if (!msg.id) return;
+      if (selectBox.checked) {
+        selectedIds.add(msg.id);
+      } else {
+        selectedIds.delete(msg.id);
+      }
+      updateSelectionUI();
+    });
+    if (!selectMode) {
+      selectBox.style.display = 'none';
     }
-    updateSelectionUI();
-  });
-  if (!selectMode) {
-    selectBox.style.display = 'none';
   }
 
   const time = document.createElement('div');
@@ -1255,7 +1259,7 @@ function createMsgRow(msg, isNew) {
   text.innerHTML = linkify(escapeHtml(msg.text));
   text.title = msg.text || '';
 
-  row.appendChild(selectBox);
+  if (selectBox) row.appendChild(selectBox);
   row.appendChild(time);
   row.appendChild(sender);
   row.appendChild(text);
@@ -1887,18 +1891,15 @@ if (deleteSelectedBtn) {
       const { error } = await sb
         .from('entries')
         .delete()
+        .eq('user_id', currentUser.id)
         .in('id', ids);
       if (error) {
         console.error(error);
         toast('Failed to delete — ' + humanError(error.message));
         return;
       }
-      ids.forEach(id => {
-        const el = feedInner.querySelector('.msg[data-id="' + id + '"]');
-        if (el) el.remove();
-      });
       setSelectMode(false);
-      showEmptyIfNoMessages();
+      await reloadForUser();
     } catch (e) {
       console.error(e);
       toast('Failed to delete — ' + humanError(e.message));
@@ -1913,38 +1914,19 @@ if (moveSelectedBtn) {
     if (!target || target === currentChannel) return;
     const ids = Array.from(selectedIds);
     try {
-      // Load selected messages so we can copy them into the target channel.
-      const { data, error } = await sb
+      const now = new Date().toISOString();
+      const { error } = await sb
         .from('entries')
-        .select('id, text, user_id, channel')
+        .update({ channel: target, created_at: now })
+        .eq('user_id', currentUser.id)
         .in('id', ids);
       if (error) {
         console.error(error);
         toast('Failed to move — ' + humanError(error.message));
         return;
       }
-      const rows = data || [];
-      if (rows.length === 0) {
-        toast('Nothing selected.');
-        return;
-      }
-      // Insert copies into target channel (new created_at), owned by current user.
-      const insertRows = rows.map(row => ({
-        text: row.text,
-        user_id: currentUser.id,
-        channel: target
-      }));
-      const { error: insertError, data: inserted } = await sb
-        .from('entries')
-        .insert(insertRows)
-        .select('id');
-      if (insertError) {
-        console.error(insertError);
-        toast('Failed to move — ' + humanError(insertError.message));
-        return;
-      }
       setSelectMode(false);
-      reloadForUser();
+      await reloadForUser();
     } catch (e) {
       console.error(e);
       toast('Failed to move — ' + humanError(e.message));
