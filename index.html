@@ -581,7 +581,7 @@ header{
     padding:0 14px;
     z-index:120;
     transform:translateY(var(--vv-top));
-    transition:transform .14s ease;
+    transition:transform .22s cubic-bezier(.2,.8,.2,1);
     will-change:transform;
   }
   /* pin manage bar under header too */
@@ -594,7 +594,7 @@ header{
     z-index:115;
     padding:4px 14px;
     transform:translateY(var(--vv-top));
-    transition:transform .14s ease;
+    transition:transform .22s cubic-bezier(.2,.8,.2,1);
     will-change:transform;
   }
   /* reserve space for fixed header + manage bar */
