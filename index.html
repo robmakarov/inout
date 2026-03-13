@@ -431,6 +431,7 @@ header{
   line-height:1.55;
   white-space:pre-wrap;
   padding-right:72px; /* reserve space under right-side actions */
+  cursor:pointer;
 }
 
 @media (max-width:540px){
@@ -664,69 +665,9 @@ body.select-mode .msg-select-wrap,
 
 .input-tools{
   display:flex;
-  justify-content:space-between;
-  align-items:center;
+  justify-content:flex-start;
   margin-top:6px;
-  gap:8px;
 }
-.input-tools-left{ display:flex; align-items:center; }
-.last-action-btn{
-  flex:0 0 auto;
-  max-width:200px;
-  padding:6px 10px;
-  font-size:11px;
-  color:var(--text);
-  background:var(--line2);
-  border:1px solid var(--line);
-  border-radius:6px;
-  cursor:pointer;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  font-family:var(--mono);
-}
-.last-action-btn.sa-error{ color:var(--acc); border-color:var(--acc); }
-.last-action-btn.sa-alert{ color:var(--bright); }
-#system-actions-panel{
-  position:fixed;
-  left:0; right:0;
-  bottom:0;
-  max-height:40vh;
-  background:var(--bg2);
-  border-top:1px solid var(--line);
-  z-index:140;
-  transform:translateY(100%);
-  transition:transform .25s ease;
-  display:flex;
-  flex-direction:column;
-  padding-bottom:env(safe-area-inset-bottom, 0);
-}
-#system-actions-panel.open{ transform:translateY(0); }
-#system-actions-panel .sa-header{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  padding:8px 12px;
-  border-bottom:1px solid var(--line);
-}
-#system-actions-panel .sa-list{
-  overflow-y:auto;
-  flex:1;
-  min-height:0;
-  padding:8px;
-}
-#system-actions-panel .sa-item{
-  font-size:11px;
-  color:var(--soft);
-  padding:4px 0;
-  border-bottom:1px solid var(--line2);
-  white-space:pre-wrap;
-  word-break:break-word;
-}
-#system-actions-panel .sa-item:last-child{ border-bottom:none }
-#system-actions-panel .sa-item time{ color:var(--muted); font-size:10px; margin-right:6px; }
-#system-actions-panel .sa-item .sa-label{ color:var(--acc); font-weight:600; margin-right:4px; }
-#system-actions-panel .sa-item .sa-label:empty{ display:none; }
 
 .clear-input-btn{
   position:absolute;
@@ -1093,19 +1034,9 @@ body.select-mode .msg-select-wrap,
       <button id="send-btn" disabled>Send</button>
     </div>
     <div class="input-tools">
-      <div class="input-tools-left">
-        <button id="clipboard-button" class="draft-btn">From clipboard</button>
-      </div>
-      <button type="button" id="last-action-btn" class="last-action-btn" aria-label="Last system action"></button>
+      <button id="clipboard-button" class="draft-btn">From clipboard</button>
     </div>
   </div>
-</div>
-<div id="system-actions-panel" aria-hidden="true">
-  <div class="sa-header">
-    <span>Actions</span>
-    <button type="button" id="system-actions-close" class="draft-btn">Close</button>
-  </div>
-  <div class="sa-list" id="system-actions-list"></div>
 </div>
 
 <button id="scroll-btn" onclick="scrollBottom()">↓ new messages</button>
@@ -1278,13 +1209,6 @@ let msgCount    = 0;
 let atBottom    = true;
 let presenceCh  = null;
 let toastTimer     = null;
-const systemActions = [];
-const SYSTEM_ACTIONS_MAX = 50;
-const lastActionBtn = document.getElementById('last-action-btn');
-const systemActionsPanel = document.getElementById('system-actions-panel');
-const systemActionsList = document.getElementById('system-actions-list');
-const systemActionsClose = document.getElementById('system-actions-close');
-if (lastActionBtn) lastActionBtn.textContent = 'Log';
 let myId           = crypto.randomUUID();
 let currentUser    = null;
 let currentChannel = 'main';
@@ -1306,8 +1230,7 @@ let latestRemoteDraft = '';
 let latestClipboardText = '';
 let selectMode = false;
 const selectedIds = new Set();
-let rangeSelectStartRow = null;
-let rangeSelectTouch = false;
+let editingMessageId = null;
 let fieldPrefs = { showTime:true, showAuthor:true };
 let currentMessageOrder = [];
 let touchDragState = null; // for mobile long-press drag
@@ -1397,12 +1320,6 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && umBackdrop && umBackdrop.style.display === 'block') closeUserModal();
 });
 
-if (feedEl) feedEl.addEventListener('click', e => {
-  if (e.target.closest('.msg')) return;
-  feedEl.focus();
-  if (input) input.blur();
-});
-
 /* ═══ LOAD ════════════════════════════════════════════════ */
 async function loadMessages() {
   if (!currentUser) return;
@@ -1455,9 +1372,26 @@ function subscribeRealtimeAll() {
         { event: 'INSERT', schema: 'public', table: 'entries', filter },
         payload => onInsertForChannel(ch, payload.new)
       )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'entries', filter },
+        payload => onUpdateForChannel(ch, payload.new)
+      )
       .subscribe();
     channelSubs.set(ch, sub);
   });
+}
+
+function onUpdateForChannel(ch, row) {
+  if (ch !== currentChannel || !row || row.id == null) return;
+  if (row.id === editingMessageId) {
+    editingMessageId = null;
+    if (input && input.placeholder === 'Editing message…') input.placeholder = 'say something…';
+  }
+  const el = feedInner && feedInner.querySelector('.msg[data-id="' + CSS.escape(String(row.id)) + '"]');
+  if (!el) return;
+  const textEl = el.querySelector('.msg-text');
+  if (textEl) textEl.innerHTML = linkify(escapeHtml(row.text || ''));
 }
 
 function subscribeOrderRealtime() {
@@ -1915,7 +1849,7 @@ function createMsgRow(msg, isNew) {
       toast('Message copied.');
     } catch (err) {
       console.error(err);
-      toast('Could not copy.', { type: 'error' });
+      toast('Could not copy.');
     }
   });
 
@@ -1975,6 +1909,19 @@ function createMsgRow(msg, isNew) {
   const text = document.createElement('div');
   text.className = 'msg-text';
   text.innerHTML = linkify(escapeHtml(msg.text));
+  text.addEventListener('click', e => {
+    if (e.target.closest('a')) return;
+    e.stopPropagation();
+    if (typeof msg.id === 'undefined') return;
+    input.value = msg.text || '';
+    editingMessageId = msg.id;
+    input.placeholder = 'Editing message…';
+    autoResize();
+    sendBtn.disabled = !input.value.trim();
+    updateClearInputBtn();
+    saveInputGlobal();
+    if (input) input.focus();
+  });
 
   row.appendChild(selectWrap);
   row.appendChild(time);
@@ -2340,7 +2287,7 @@ function switchChannel(ch) {
 
 function openChannelModal() {
   if (!currentUser) {
-    toast('Sign in to create a feed.', { type: 'alert' });
+    toast('Sign in to create a feed.');
     return;
   }
   if (!cmBackdrop || !cmName || !cmSelf || !cmOthers) return;
@@ -2364,17 +2311,17 @@ if (cmCreate) cmCreate.addEventListener('click', createChannelFromModal);
 
 async function createChannelFromModal() {
   if (!currentUser) {
-    toast('Sign in to create a feed.', { type: 'alert' });
+    toast('Sign in to create a feed.');
     return;
   }
   if (!cmName || !cmOthers) return;
   let name = cmName.value.trim();
   if (!name) {
-    toast('Feed name is required.', { type: 'alert' });
+    toast('Feed name is required.');
     return;
   }
   if (name.toLowerCase() === 'main') {
-    toast('Feed name "main" is reserved.', { type: 'alert' });
+    toast('Feed name "main" is reserved.');
     return;
   }
 
@@ -2398,7 +2345,7 @@ async function createChannelFromModal() {
     await sb.from('channel_members').upsert(rows, { onConflict: 'channel,user_id' });
   } catch (e) {
     console.error(e);
-    toast('Failed to save members — ' + humanError(e.message), { type: 'error' });
+    toast('Failed to save members — ' + humanError(e.message));
   }
 
   if (extraIds.length > 0) sharedChannels.add(name);
@@ -2510,7 +2457,7 @@ async function saveNickname() {
     });
     if (error) {
       console.error(error);
-      toast('Failed to save nickname — ' + humanError(error.message), { type: 'error' });
+      toast('Failed to save nickname — ' + humanError(error.message));
       return;
     }
     if (data && data.user) {
@@ -2520,7 +2467,7 @@ async function saveNickname() {
     }
   } catch (e) {
     console.error(e);
-    toast('Failed to save nickname — ' + humanError(e.message), { type: 'error' });
+    toast('Failed to save nickname — ' + humanError(e.message));
   }
 }
 
@@ -2576,11 +2523,11 @@ async function signIn() {
     const { error } = await sb.auth.signInWithOAuth({ provider: 'google' });
     if (error) {
       console.error(error);
-      toast('Sign-in failed — ' + humanError(error.message), { type: 'error' });
+      toast('Sign-in failed — ' + humanError(error.message));
     }
   } catch (e) {
     console.error(e);
-    toast('Sign-in failed — ' + humanError(e.message), { type: 'error' });
+    toast('Sign-in failed — ' + humanError(e.message));
   }
 }
 
@@ -2589,17 +2536,17 @@ async function signOut() {
     const { error } = await sb.auth.signOut();
     if (error) {
       console.error(error);
-      toast('Sign-out failed — ' + humanError(error.message), { type: 'error' });
+      toast('Sign-out failed — ' + humanError(error.message));
     }
   } catch (e) {
     console.error(e);
-    toast('Sign-out failed — ' + humanError(e.message), { type: 'error' });
+    toast('Sign-out failed — ' + humanError(e.message));
   }
 }
 
 async function copyUserId() {
   if (!currentUser || !currentUser.id) {
-    toast('No user id to copy.', { type: 'alert' });
+    toast('No user id to copy.');
     return;
   }
   try {
@@ -2607,7 +2554,7 @@ async function copyUserId() {
     toast('User id copied.');
   } catch (e) {
     console.error(e);
-    toast('Failed to copy id.', { type: 'error' });
+    toast('Failed to copy id.');
   }
 }
 
@@ -2632,17 +2579,43 @@ async function sendText(text) {
   if (!trimmed) return;
 
   if (!currentUser) {
-    toast('Sign in with Google to send.', { type: 'alert' });
+    toast('Sign in with Google to send.');
     return;
   }
 
   sendBtn.disabled = true;
   input.disabled   = true;
 
+  if (editingMessageId) {
+    const { data, error } = await sb
+      .from('entries')
+      .update({ text: trimmed })
+      .eq('id', editingMessageId)
+      .eq('user_id', currentUser.id)
+      .select('id, created_at, text, channel, user_id, author_name')
+      .single();
+    input.disabled = false;
+    if (error) {
+      console.error(error);
+      toast('Failed to update — ' + humanError(error.message));
+      sendBtn.disabled = false;
+      return;
+    }
+    editingMessageId = null;
+    input.value = '';
+    autoResize();
+    sendBtn.disabled = true;
+    updateClearInputBtn();
+    saveInputGlobal();
+    if (input.placeholder !== 'say something…') input.placeholder = 'say something…';
+    requestAnimationFrame(() => { if (input) input.focus(); });
+    return;
+  }
+
   const { data, error } = await sb
     .from('entries')
     .insert({
-      text,
+      text: trimmed,
       user_id: currentUser.id,
       channel: currentChannel,
     })
@@ -2653,7 +2626,7 @@ async function sendText(text) {
 
   if (error) {
     console.error(error);
-    toast('Failed to send — ' + humanError(error.message), { type: 'error' });
+    toast('Failed to send — ' + humanError(error.message));
     sendBtn.disabled = false;
   } else {
     if (data && data.channel === currentChannel) {
@@ -2684,6 +2657,18 @@ input.addEventListener('input', () => {
 });
 
 input.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (editingMessageId) {
+      editingMessageId = null;
+      input.placeholder = 'say something…';
+      input.value = '';
+      autoResize();
+      sendBtn.disabled = true;
+      updateClearInputBtn();
+      saveInputGlobal();
+    }
+    return;
+  }
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     if (!sendBtn.disabled) send();
@@ -2700,7 +2685,7 @@ if (draftCopyBtn) {
       toast('Draft copied to clipboard.');
     } catch (e) {
       console.error(e);
-      toast('Could not copy draft.', { type: 'error' });
+      toast('Could not copy draft.');
     }
   });
 }
@@ -2749,7 +2734,7 @@ if (clipboardButton) {
       showClipboardBubble(trimmed);
     } catch (e) {
       console.error(e);
-      toast('Could not read clipboard.', { type: 'error' });
+      toast('Could not read clipboard.');
     }
   });
 }
@@ -2805,73 +2790,6 @@ if (selectNoneBtn) {
   });
 }
 
-function applyRangeSelect(fromRow, toRow, check) {
-  if (!feedInner || !fromRow || !toRow) return;
-  const rows = Array.from(feedInner.querySelectorAll('.msg'));
-  const i = rows.indexOf(fromRow);
-  const j = rows.indexOf(toRow);
-  if (i < 0 || j < 0) return;
-  const [lo, hi] = i <= j ? [i, j] : [j, i];
-  for (let k = lo; k <= hi; k++) {
-    const row = rows[k];
-    const box = row.querySelector('.msg-select');
-    const id = row.dataset.id ? Number(row.dataset.id) : null;
-    if (!box || !Number.isFinite(id)) continue;
-    box.checked = check;
-    if (check) {
-      selectedIds.add(id);
-      row.classList.add('msg-selected');
-    } else {
-      selectedIds.delete(id);
-      row.classList.remove('msg-selected');
-    }
-  }
-  updateSelectionUI();
-}
-
-if (feedInner) {
-  feedInner.addEventListener('mousedown', e => {
-    if (!selectMode) return;
-    const row = e.target.closest('.msg');
-    if (!row || !row.querySelector('.msg-select-wrap')) return;
-    e.preventDefault();
-    rangeSelectStartRow = row;
-    rangeSelectTouch = false;
-    applyRangeSelect(row, row, true);
-  });
-  feedInner.addEventListener('touchstart', e => {
-    if (!selectMode || !e.touches.length) return;
-    const row = e.target.closest('.msg');
-    if (!row || !row.querySelector('.msg-select-wrap')) return;
-    e.preventDefault();
-    rangeSelectStartRow = row;
-    rangeSelectTouch = true;
-    applyRangeSelect(row, row, true);
-  }, { passive: false });
-}
-document.addEventListener('mousemove', e => {
-  if (rangeSelectStartRow && !rangeSelectTouch) {
-    const el = document.elementFromPoint(e.clientX, e.clientY);
-    const row = el && el.closest ? el.closest('.msg') : null;
-    if (row && feedInner && feedInner.contains(row)) {
-      applyRangeSelect(rangeSelectStartRow, row, true);
-    }
-  }
-});
-document.addEventListener('mouseup', () => { rangeSelectStartRow = null; });
-document.addEventListener('touchmove', e => {
-  if (rangeSelectStartRow && rangeSelectTouch && e.touches.length) {
-    e.preventDefault();
-    const t = e.touches[0];
-    const el = document.elementFromPoint(t.clientX, t.clientY);
-    const row = el && el.closest ? el.closest('.msg') : null;
-    if (row && feedInner && feedInner.contains(row)) {
-      applyRangeSelect(rangeSelectStartRow, row, true);
-    }
-  }
-}, { passive: false });
-document.addEventListener('touchend', () => { rangeSelectStartRow = null; rangeSelectTouch = false; });
-
 if (fieldTimeChk) {
   fieldTimeChk.addEventListener('change', () => {
     fieldPrefs.showTime = !!fieldTimeChk.checked;
@@ -2922,7 +2840,7 @@ if (deleteSelectedBtn) {
           .eq('user_id', currentUser.id);
         if (error) {
           console.error(error);
-          toast('Failed to delete — ' + humanError(error.message), { type: 'error' });
+          toast('Failed to delete — ' + humanError(error.message));
           return;
         }
         ids = (data || []).map(r => r.id);
@@ -2934,14 +2852,14 @@ if (deleteSelectedBtn) {
         .in('id', ids);
       if (error) {
         console.error(error);
-        toast('Failed to delete — ' + humanError(error.message), { type: 'error' });
+        toast('Failed to delete — ' + humanError(error.message));
         return;
       }
       setSelectMode(false);
       await reloadForUser();
     } catch (e) {
       console.error(e);
-      toast('Failed to delete — ' + humanError(e.message), { type: 'error' });
+      toast('Failed to delete — ' + humanError(e.message));
     }
   });
 }
@@ -2968,14 +2886,14 @@ if (moveSelectedBtn) {
         .in('id', ids);
       if (error) {
         console.error(error);
-        toast('Failed to move — ' + humanError(error.message), { type: 'error' });
+        toast('Failed to move — ' + humanError(error.message));
         return;
       }
       setSelectMode(false);
       await reloadForUser();
     } catch (e) {
       console.error(e);
-      toast('Failed to move — ' + humanError(e.message), { type: 'error' });
+      toast('Failed to move — ' + humanError(e.message));
     }
   });
 }
@@ -2989,7 +2907,7 @@ async function deleteSingleMessage(id) {
       .eq('id', id);
     if (error) {
       console.error(error);
-      toast('Failed to delete — ' + humanError(error.message), { type: 'error' });
+      toast('Failed to delete — ' + humanError(error.message));
       return;
     }
     const el = feedInner.querySelector('.msg[data-id="' + id + '"]');
@@ -3000,7 +2918,7 @@ async function deleteSingleMessage(id) {
     showEmptyIfNoMessages();
   } catch (e) {
     console.error(e);
-    toast('Failed to delete — ' + humanError(e.message), { type: 'error' });
+    toast('Failed to delete — ' + humanError(e.message));
   }
 }
 
@@ -3017,7 +2935,7 @@ async function moveSingleMessage(id) {
       .eq('id', id);
     if (error) {
       console.error(error);
-      toast('Failed to move — ' + humanError(error.message), { type: 'error' });
+      toast('Failed to move — ' + humanError(error.message));
       return;
     }
     const el = feedInner.querySelector('.msg[data-id="' + id + '"]');
@@ -3025,7 +2943,7 @@ async function moveSingleMessage(id) {
     showEmptyIfNoMessages();
   } catch (e) {
     console.error(e);
-    toast('Failed to move — ' + humanError(e.message), { type: 'error' });
+    toast('Failed to move — ' + humanError(e.message));
   }
 }
 
@@ -3039,11 +2957,11 @@ async function exportSingleMessage(id) {
       .maybeSingle();
     if (error) {
       console.error(error);
-      toast('Failed to export — ' + humanError(error.message), { type: 'error' });
+      toast('Failed to export — ' + humanError(error.message));
       return;
     }
     if (!data) {
-      toast('Nothing to export.', { type: 'alert' });
+      toast('Nothing to export.');
       return;
     }
     const d = new Date(data.created_at);
@@ -3069,14 +2987,14 @@ async function exportSingleMessage(id) {
     URL.revokeObjectURL(url);
   } catch (e) {
     console.error(e);
-    toast('Failed to export — ' + humanError(e.message), { type: 'error' });
+    toast('Failed to export — ' + humanError(e.message));
   }
 }
 
 if (exportTabBtn) {
   exportTabBtn.addEventListener('click', async () => {
     if (!currentUser) {
-      toast('Sign in to export.', { type: 'alert' });
+      toast('Sign in to export.');
       return;
     }
     try {
@@ -3106,13 +3024,13 @@ if (exportTabBtn) {
       const { data, error } = await query;
       if (error) {
         console.error(error);
-        toast('Failed to export — ' + humanError(error.message), { type: 'error' });
+        toast('Failed to export — ' + humanError(error.message));
         return;
       }
 
       const rows = data || [];
       if (!rows.length) {
-        toast('Nothing to export.', { type: 'alert' });
+        toast('Nothing to export.');
         return;
       }
 
@@ -3141,7 +3059,7 @@ if (exportTabBtn) {
       URL.revokeObjectURL(url);
     } catch (e) {
       console.error(e);
-      toast('Failed to export — ' + humanError(e.message), { type: 'error' });
+      toast('Failed to export — ' + humanError(e.message));
     }
   });
 }
@@ -3195,75 +3113,12 @@ function linkify(s) {
   );
 }
 
-function logAction(text, type = 'info') {
-  const t = typeof text === 'string' ? text : String(text);
-  systemActions.push({ text: t, time: Date.now(), type });
-  if (systemActions.length > SYSTEM_ACTIONS_MAX) systemActions.shift();
-  if (lastActionBtn) {
-    const label = type === 'error' ? 'Error' : type === 'alert' ? 'Alert' : 'Log';
-    const display = (type !== 'info' ? label + ': ' : '') + (t.length > 28 ? t.slice(0, 25) + '…' : t);
-    lastActionBtn.textContent = display || 'Log';
-    lastActionBtn.classList.remove('sa-error', 'sa-alert');
-    if (type === 'error') lastActionBtn.classList.add('sa-error');
-    else if (type === 'alert') lastActionBtn.classList.add('sa-alert');
-  }
-}
-
-function toast(msg, durOrOpts = 2800) {
-  const opts = typeof durOrOpts === 'number' ? { dur: durOrOpts, type: 'info' } : { dur: 2800, type: 'info', ...durOrOpts };
+function toast(msg, dur = 2800) {
   clearTimeout(toastTimer);
-  const text = typeof msg === 'string' ? msg : String(msg);
-  toastEl.textContent = text;
+  toastEl.textContent = typeof msg === 'string' ? msg : String(msg);
   toastEl.classList.add('show');
-  toastTimer = setTimeout(() => toastEl.classList.remove('show'), opts.dur);
-  logAction(text, opts.type);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), dur);
 }
-
-function openSystemActionsPanel() {
-  if (!systemActionsPanel || !systemActionsList) return;
-  systemActionsList.innerHTML = '';
-  const copy = systemActions.slice().reverse();
-  copy.forEach(({ text, time, type }) => {
-    const div = document.createElement('div');
-    div.className = 'sa-item';
-    const d = new Date(time);
-    const timeStr = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const label = type === 'error' ? 'Error' : type === 'alert' ? 'Alert' : 'Info';
-    div.innerHTML = '<time>' + timeStr + '</time><span class="sa-label">[' + escapeHtml(label) + ']</span> ' + escapeHtml(text);
-    systemActionsList.appendChild(div);
-  });
-  systemActionsPanel.classList.add('open');
-  systemActionsPanel.setAttribute('aria-hidden', 'false');
-}
-
-function closeSystemActionsPanel() {
-  if (!systemActionsPanel) return;
-  systemActionsPanel.classList.remove('open');
-  systemActionsPanel.setAttribute('aria-hidden', 'true');
-}
-
-let lastActionLongPressTimer = null;
-if (lastActionBtn) {
-  const clearLongPress = () => {
-    if (lastActionLongPressTimer) {
-      clearTimeout(lastActionLongPressTimer);
-      lastActionLongPressTimer = null;
-    }
-  };
-  lastActionBtn.addEventListener('mousedown', () => {
-    clearLongPress();
-    lastActionLongPressTimer = setTimeout(() => { lastActionLongPressTimer = null; openSystemActionsPanel(); }, 500);
-  });
-  lastActionBtn.addEventListener('mouseup', clearLongPress);
-  lastActionBtn.addEventListener('mouseleave', clearLongPress);
-  lastActionBtn.addEventListener('touchstart', e => {
-    clearLongPress();
-    lastActionLongPressTimer = setTimeout(() => { lastActionLongPressTimer = null; openSystemActionsPanel(); }, 500);
-  }, { passive: true });
-  lastActionBtn.addEventListener('touchend', clearLongPress);
-  lastActionBtn.addEventListener('touchcancel', clearLongPress);
-}
-if (systemActionsClose) systemActionsClose.addEventListener('click', closeSystemActionsPanel);
 
 function humanError(message) {
   if (!message) return 'Something went wrong.';
