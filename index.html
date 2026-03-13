@@ -672,11 +672,11 @@ body.select-mode .msg-select-wrap,
 .input-tools-left{ display:flex; align-items:center; }
 .last-action-btn{
   flex:0 0 auto;
-  max-width:160px;
-  padding:4px 8px;
+  max-width:200px;
+  padding:6px 10px;
   font-size:11px;
-  color:var(--muted);
-  background:var(--bg2);
+  color:var(--text);
+  background:var(--line2);
   border:1px solid var(--line);
   border-radius:6px;
   cursor:pointer;
@@ -685,7 +685,8 @@ body.select-mode .msg-select-wrap,
   text-overflow:ellipsis;
   font-family:var(--mono);
 }
-.last-action-btn:empty{ display:none; }
+.last-action-btn.sa-error{ color:var(--acc); border-color:var(--acc); }
+.last-action-btn.sa-alert{ color:var(--bright); }
 #system-actions-panel{
   position:fixed;
   left:0; right:0;
@@ -724,6 +725,8 @@ body.select-mode .msg-select-wrap,
 }
 #system-actions-panel .sa-item:last-child{ border-bottom:none }
 #system-actions-panel .sa-item time{ color:var(--muted); font-size:10px; margin-right:6px; }
+#system-actions-panel .sa-item .sa-label{ color:var(--acc); font-weight:600; margin-right:4px; }
+#system-actions-panel .sa-item .sa-label:empty{ display:none; }
 
 .clear-input-btn{
   position:absolute;
@@ -1281,6 +1284,7 @@ const lastActionBtn = document.getElementById('last-action-btn');
 const systemActionsPanel = document.getElementById('system-actions-panel');
 const systemActionsList = document.getElementById('system-actions-list');
 const systemActionsClose = document.getElementById('system-actions-close');
+if (lastActionBtn) lastActionBtn.textContent = 'Log';
 let myId           = crypto.randomUUID();
 let currentUser    = null;
 let currentChannel = 'main';
@@ -1393,7 +1397,8 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && umBackdrop && umBackdrop.style.display === 'block') closeUserModal();
 });
 
-if (feedEl) feedEl.addEventListener('click', () => {
+if (feedEl) feedEl.addEventListener('click', e => {
+  if (e.target.closest('.msg')) return;
   feedEl.focus();
   if (input) input.blur();
 });
@@ -1910,7 +1915,7 @@ function createMsgRow(msg, isNew) {
       toast('Message copied.');
     } catch (err) {
       console.error(err);
-      toast('Could not copy.');
+      toast('Could not copy.', { type: 'error' });
     }
   });
 
@@ -2335,7 +2340,7 @@ function switchChannel(ch) {
 
 function openChannelModal() {
   if (!currentUser) {
-    toast('Sign in to create a feed.');
+    toast('Sign in to create a feed.', { type: 'alert' });
     return;
   }
   if (!cmBackdrop || !cmName || !cmSelf || !cmOthers) return;
@@ -2359,17 +2364,17 @@ if (cmCreate) cmCreate.addEventListener('click', createChannelFromModal);
 
 async function createChannelFromModal() {
   if (!currentUser) {
-    toast('Sign in to create a feed.');
+    toast('Sign in to create a feed.', { type: 'alert' });
     return;
   }
   if (!cmName || !cmOthers) return;
   let name = cmName.value.trim();
   if (!name) {
-    toast('Feed name is required.');
+    toast('Feed name is required.', { type: 'alert' });
     return;
   }
   if (name.toLowerCase() === 'main') {
-    toast('Feed name \"main\" is reserved.');
+    toast('Feed name "main" is reserved.', { type: 'alert' });
     return;
   }
 
@@ -2393,7 +2398,7 @@ async function createChannelFromModal() {
     await sb.from('channel_members').upsert(rows, { onConflict: 'channel,user_id' });
   } catch (e) {
     console.error(e);
-    toast('Failed to save members — ' + humanError(e.message));
+    toast('Failed to save members — ' + humanError(e.message), { type: 'error' });
   }
 
   if (extraIds.length > 0) sharedChannels.add(name);
@@ -2505,7 +2510,7 @@ async function saveNickname() {
     });
     if (error) {
       console.error(error);
-      toast('Failed to save nickname — ' + humanError(error.message));
+      toast('Failed to save nickname — ' + humanError(error.message), { type: 'error' });
       return;
     }
     if (data && data.user) {
@@ -2515,7 +2520,7 @@ async function saveNickname() {
     }
   } catch (e) {
     console.error(e);
-    toast('Failed to save nickname — ' + humanError(e.message));
+    toast('Failed to save nickname — ' + humanError(e.message), { type: 'error' });
   }
 }
 
@@ -2571,11 +2576,11 @@ async function signIn() {
     const { error } = await sb.auth.signInWithOAuth({ provider: 'google' });
     if (error) {
       console.error(error);
-      toast('Sign-in failed — ' + humanError(error.message));
+      toast('Sign-in failed — ' + humanError(error.message), { type: 'error' });
     }
   } catch (e) {
     console.error(e);
-    toast('Sign-in failed — ' + humanError(e.message));
+    toast('Sign-in failed — ' + humanError(e.message), { type: 'error' });
   }
 }
 
@@ -2584,17 +2589,17 @@ async function signOut() {
     const { error } = await sb.auth.signOut();
     if (error) {
       console.error(error);
-      toast('Sign-out failed — ' + humanError(error.message));
+      toast('Sign-out failed — ' + humanError(error.message), { type: 'error' });
     }
   } catch (e) {
     console.error(e);
-    toast('Sign-out failed — ' + humanError(e.message));
+    toast('Sign-out failed — ' + humanError(e.message), { type: 'error' });
   }
 }
 
 async function copyUserId() {
   if (!currentUser || !currentUser.id) {
-    toast('No user id to copy.');
+    toast('No user id to copy.', { type: 'alert' });
     return;
   }
   try {
@@ -2602,7 +2607,7 @@ async function copyUserId() {
     toast('User id copied.');
   } catch (e) {
     console.error(e);
-    toast('Failed to copy id.');
+    toast('Failed to copy id.', { type: 'error' });
   }
 }
 
@@ -2627,7 +2632,7 @@ async function sendText(text) {
   if (!trimmed) return;
 
   if (!currentUser) {
-    toast('Sign in with Google to send.');
+    toast('Sign in with Google to send.', { type: 'alert' });
     return;
   }
 
@@ -2648,7 +2653,7 @@ async function sendText(text) {
 
   if (error) {
     console.error(error);
-    toast('Failed to send — ' + humanError(error.message));
+    toast('Failed to send — ' + humanError(error.message), { type: 'error' });
     sendBtn.disabled = false;
   } else {
     if (data && data.channel === currentChannel) {
@@ -2695,7 +2700,7 @@ if (draftCopyBtn) {
       toast('Draft copied to clipboard.');
     } catch (e) {
       console.error(e);
-      toast('Could not copy draft.');
+      toast('Could not copy draft.', { type: 'error' });
     }
   });
 }
@@ -2744,7 +2749,7 @@ if (clipboardButton) {
       showClipboardBubble(trimmed);
     } catch (e) {
       console.error(e);
-      toast('Could not read clipboard.');
+      toast('Could not read clipboard.', { type: 'error' });
     }
   });
 }
@@ -2829,16 +2834,20 @@ if (feedInner) {
     if (!selectMode) return;
     const row = e.target.closest('.msg');
     if (!row || !row.querySelector('.msg-select-wrap')) return;
+    e.preventDefault();
     rangeSelectStartRow = row;
     rangeSelectTouch = false;
+    applyRangeSelect(row, row, true);
   });
   feedInner.addEventListener('touchstart', e => {
     if (!selectMode || !e.touches.length) return;
     const row = e.target.closest('.msg');
     if (!row || !row.querySelector('.msg-select-wrap')) return;
+    e.preventDefault();
     rangeSelectStartRow = row;
     rangeSelectTouch = true;
-  }, { passive: true });
+    applyRangeSelect(row, row, true);
+  }, { passive: false });
 }
 document.addEventListener('mousemove', e => {
   if (rangeSelectStartRow && !rangeSelectTouch) {
@@ -2852,6 +2861,7 @@ document.addEventListener('mousemove', e => {
 document.addEventListener('mouseup', () => { rangeSelectStartRow = null; });
 document.addEventListener('touchmove', e => {
   if (rangeSelectStartRow && rangeSelectTouch && e.touches.length) {
+    e.preventDefault();
     const t = e.touches[0];
     const el = document.elementFromPoint(t.clientX, t.clientY);
     const row = el && el.closest ? el.closest('.msg') : null;
@@ -2859,7 +2869,7 @@ document.addEventListener('touchmove', e => {
       applyRangeSelect(rangeSelectStartRow, row, true);
     }
   }
-}, { passive: true });
+}, { passive: false });
 document.addEventListener('touchend', () => { rangeSelectStartRow = null; rangeSelectTouch = false; });
 
 if (fieldTimeChk) {
@@ -2912,7 +2922,7 @@ if (deleteSelectedBtn) {
           .eq('user_id', currentUser.id);
         if (error) {
           console.error(error);
-          toast('Failed to delete — ' + humanError(error.message));
+          toast('Failed to delete — ' + humanError(error.message), { type: 'error' });
           return;
         }
         ids = (data || []).map(r => r.id);
@@ -2924,14 +2934,14 @@ if (deleteSelectedBtn) {
         .in('id', ids);
       if (error) {
         console.error(error);
-        toast('Failed to delete — ' + humanError(error.message));
+        toast('Failed to delete — ' + humanError(error.message), { type: 'error' });
         return;
       }
       setSelectMode(false);
       await reloadForUser();
     } catch (e) {
       console.error(e);
-      toast('Failed to delete — ' + humanError(e.message));
+      toast('Failed to delete — ' + humanError(e.message), { type: 'error' });
     }
   });
 }
@@ -2958,14 +2968,14 @@ if (moveSelectedBtn) {
         .in('id', ids);
       if (error) {
         console.error(error);
-        toast('Failed to move — ' + humanError(error.message));
+        toast('Failed to move — ' + humanError(error.message), { type: 'error' });
         return;
       }
       setSelectMode(false);
       await reloadForUser();
     } catch (e) {
       console.error(e);
-      toast('Failed to move — ' + humanError(e.message));
+      toast('Failed to move — ' + humanError(e.message), { type: 'error' });
     }
   });
 }
@@ -2979,7 +2989,7 @@ async function deleteSingleMessage(id) {
       .eq('id', id);
     if (error) {
       console.error(error);
-      toast('Failed to delete — ' + humanError(error.message));
+      toast('Failed to delete — ' + humanError(error.message), { type: 'error' });
       return;
     }
     const el = feedInner.querySelector('.msg[data-id="' + id + '"]');
@@ -2990,7 +3000,7 @@ async function deleteSingleMessage(id) {
     showEmptyIfNoMessages();
   } catch (e) {
     console.error(e);
-    toast('Failed to delete — ' + humanError(e.message));
+    toast('Failed to delete — ' + humanError(e.message), { type: 'error' });
   }
 }
 
@@ -3007,7 +3017,7 @@ async function moveSingleMessage(id) {
       .eq('id', id);
     if (error) {
       console.error(error);
-      toast('Failed to move — ' + humanError(error.message));
+      toast('Failed to move — ' + humanError(error.message), { type: 'error' });
       return;
     }
     const el = feedInner.querySelector('.msg[data-id="' + id + '"]');
@@ -3015,7 +3025,7 @@ async function moveSingleMessage(id) {
     showEmptyIfNoMessages();
   } catch (e) {
     console.error(e);
-    toast('Failed to move — ' + humanError(e.message));
+    toast('Failed to move — ' + humanError(e.message), { type: 'error' });
   }
 }
 
@@ -3029,11 +3039,11 @@ async function exportSingleMessage(id) {
       .maybeSingle();
     if (error) {
       console.error(error);
-      toast('Failed to export — ' + humanError(error.message));
+      toast('Failed to export — ' + humanError(error.message), { type: 'error' });
       return;
     }
     if (!data) {
-      toast('Nothing to export.');
+      toast('Nothing to export.', { type: 'alert' });
       return;
     }
     const d = new Date(data.created_at);
@@ -3059,14 +3069,14 @@ async function exportSingleMessage(id) {
     URL.revokeObjectURL(url);
   } catch (e) {
     console.error(e);
-    toast('Failed to export — ' + humanError(e.message));
+    toast('Failed to export — ' + humanError(e.message), { type: 'error' });
   }
 }
 
 if (exportTabBtn) {
   exportTabBtn.addEventListener('click', async () => {
     if (!currentUser) {
-      toast('Sign in to export.');
+      toast('Sign in to export.', { type: 'alert' });
       return;
     }
     try {
@@ -3096,13 +3106,13 @@ if (exportTabBtn) {
       const { data, error } = await query;
       if (error) {
         console.error(error);
-        toast('Failed to export — ' + humanError(error.message));
+        toast('Failed to export — ' + humanError(error.message), { type: 'error' });
         return;
       }
 
       const rows = data || [];
       if (!rows.length) {
-        toast('Nothing to export.');
+        toast('Nothing to export.', { type: 'alert' });
         return;
       }
 
@@ -3131,7 +3141,7 @@ if (exportTabBtn) {
       URL.revokeObjectURL(url);
     } catch (e) {
       console.error(e);
-      toast('Failed to export — ' + humanError(e.message));
+      toast('Failed to export — ' + humanError(e.message), { type: 'error' });
     }
   });
 }
@@ -3185,29 +3195,41 @@ function linkify(s) {
   );
 }
 
-function toast(msg, dur = 2800) {
-  clearTimeout(toastTimer);
-  toastEl.textContent = msg;
-  toastEl.classList.add('show');
-  toastTimer = setTimeout(() => toastEl.classList.remove('show'), dur);
-  const text = typeof msg === 'string' ? msg : String(msg);
-  systemActions.push({ text, time: Date.now() });
+function logAction(text, type = 'info') {
+  const t = typeof text === 'string' ? text : String(text);
+  systemActions.push({ text: t, time: Date.now(), type });
   if (systemActions.length > SYSTEM_ACTIONS_MAX) systemActions.shift();
   if (lastActionBtn) {
-    lastActionBtn.textContent = text.length > 32 ? text.slice(0, 29) + '…' : text;
+    const label = type === 'error' ? 'Error' : type === 'alert' ? 'Alert' : 'Log';
+    const display = (type !== 'info' ? label + ': ' : '') + (t.length > 28 ? t.slice(0, 25) + '…' : t);
+    lastActionBtn.textContent = display || 'Log';
+    lastActionBtn.classList.remove('sa-error', 'sa-alert');
+    if (type === 'error') lastActionBtn.classList.add('sa-error');
+    else if (type === 'alert') lastActionBtn.classList.add('sa-alert');
   }
+}
+
+function toast(msg, durOrOpts = 2800) {
+  const opts = typeof durOrOpts === 'number' ? { dur: durOrOpts, type: 'info' } : { dur: 2800, type: 'info', ...durOrOpts };
+  clearTimeout(toastTimer);
+  const text = typeof msg === 'string' ? msg : String(msg);
+  toastEl.textContent = text;
+  toastEl.classList.add('show');
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), opts.dur);
+  logAction(text, opts.type);
 }
 
 function openSystemActionsPanel() {
   if (!systemActionsPanel || !systemActionsList) return;
   systemActionsList.innerHTML = '';
   const copy = systemActions.slice().reverse();
-  copy.forEach(({ text, time }) => {
+  copy.forEach(({ text, time, type }) => {
     const div = document.createElement('div');
     div.className = 'sa-item';
     const d = new Date(time);
     const timeStr = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    div.innerHTML = '<time>' + timeStr + '</time>' + escapeHtml(text);
+    const label = type === 'error' ? 'Error' : type === 'alert' ? 'Alert' : 'Info';
+    div.innerHTML = '<time>' + timeStr + '</time><span class="sa-label">[' + escapeHtml(label) + ']</span> ' + escapeHtml(text);
     systemActionsList.appendChild(div);
   });
   systemActionsPanel.classList.add('open');
