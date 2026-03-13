@@ -785,17 +785,6 @@ const SUPABASE_URL  = 'https://tfmbqiwxfgrwtjvoqomf.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-function fixViewportHeight() {
-  try {
-    const h = window.innerHeight;
-    if (h && h > 0) {
-      document.body.style.height = h + 'px';
-    }
-  } catch (_) {}
-}
-window.addEventListener('resize', fixViewportHeight);
-fixViewportHeight();
-
 const feedInner  = document.getElementById('feed-inner');
 const feedEl     = document.getElementById('feed');
 const inputArea  = document.getElementById('input-area');
@@ -995,7 +984,11 @@ function setupDraftChannel() {
   if (!currentUser) return;
 
   draftChannel = sb
-    .channel('drafts-' + currentUser.id)
+    .channel('drafts-' + currentUser.id, {
+      config: {
+        broadcast: { self: false }
+      }
+    })
     .on('broadcast', { event: 'draft' }, payload => {
       const data = payload.payload || {};
       if (!data || data.from === myId) return; // ignore own events
