@@ -58,16 +58,10 @@ body{
   display:flex;
   flex-direction:column;
   min-height:0;
-  position:relative;
-  padding-top:48px;    /* header height */
-  padding-bottom:96px; /* space for tabs + input bar */
 }
 
 /* ── HEADER ── */
 header{
-  position:fixed;
-  top:0;left:0;right:0;
-  z-index:100;
   background:var(--bg);
   border-bottom:1px solid var(--line);
   padding:0 20px;
@@ -236,11 +230,8 @@ header{
 
 /* ── FEED ── */
 #feed{
-  position:absolute;
-  top:48px;
-  left:0;
-  right:0;
-  bottom:96px;
+  flex:1;
+  min-height:0;
   padding:0;
   overflow-y:auto;
   -webkit-overflow-scrolling:touch;
@@ -343,11 +334,6 @@ header{
 /* ── INPUT AREA ── */
 #input-area{
   flex-shrink:0;
-  position:fixed;
-  left:0;
-  right:0;
-  bottom:0;
-  z-index:90;
   background:var(--bg);
   border-top:1px solid var(--line);
   padding:12px 20px calc(16px + env(safe-area-inset-bottom, 0px));
