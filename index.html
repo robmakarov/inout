@@ -46,26 +46,6 @@ body{
   overflow:hidden; /* only the content area scrolls */
 }
 
-body.hover-idle .msg:hover,
-body.hover-idle .tab:hover,
-body.hover-idle #user-btn:hover,
-body.hover-idle .manage-btn:hover,
-body.hover-idle #scroll-btn:hover,
-body.hover-idle .msg-action-btn:hover{
-  background:none;
-  color:inherit;
-}
-
-body.hover-idle .msg:hover .msg-actions{
-  opacity:0;
-  pointer-events:none;
-}
-
-body.hover-idle .msg:hover .msg-select-wrap{
-  opacity:0;
-  pointer-events:none;
-}
-
 /* visible scrollbar (content area) */
 #feed{
   scrollbar-width:thin;
@@ -1137,21 +1117,6 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
   schedule();
 })();
 
-// Global hover idle handling: after 3s of no mouse movement, suppress hover visuals.
-(function setupHoverIdle() {
-  const reset = () => {
-    document.body.classList.remove('hover-idle');
-    if (hoverIdleTimer) clearTimeout(hoverIdleTimer);
-    hoverIdleTimer = setTimeout(() => {
-      document.body.classList.add('hover-idle');
-    }, 3000);
-  };
-
-  window.addEventListener('mousemove', reset, { passive:true });
-  window.addEventListener('mousedown', reset, { passive:true });
-  reset();
-})();
-
 const feedInner  = document.getElementById('feed-inner');
 const feedEl     = document.getElementById('feed');
 const inputArea  = document.getElementById('input-area');
@@ -1226,7 +1191,6 @@ let latestClipboardText = '';
 let selectMode = false;
 const selectedIds = new Set();
 let fieldPrefs = { showTime:true, showAuthor:true };
-let hoverIdleTimer = null;
 
 function updateTabBadge(ch) {
   if (!tabsEl) return;
