@@ -1057,6 +1057,7 @@ body.select-mode .msg-select-wrap,
         maxlength="2000"
         autocomplete="off"
         spellcheck="true"
+        autofocus
       ></textarea>
       <button id="clear-input" class="clear-input-btn" aria-label="Clear input">
         ✕
@@ -1265,6 +1266,13 @@ let editingMessageId = null;
 let fieldPrefs = { showTime:true, showAuthor:true };
 let currentMessageOrder = [];
 let touchDragState = null; // for mobile long-press drag
+let allowScrollBlur = false; // true only after init so scrollBottom() does not steal focus
+let keyboardHotkeysUsedThisView = false; // set true when hotkeys used (coming soon); then we skip auto-focus
+
+function focusMessageInput() {
+  if (keyboardHotkeysUsedThisView) return;
+  if (input) input.focus();
+}
 
 function updateTabBadge(ch) {
   if (!tabsEl) return;
@@ -1329,6 +1337,10 @@ async function init() {
   scrollBottom();
   cleanupAuthHash();
   setupFullscreenOnFirstTap();
+  setTimeout(() => {
+    allowScrollBlur = true;
+    focusMessageInput();
+  }, 100);
 }
 
 function openUserModal() {
@@ -1341,6 +1353,7 @@ function closeUserModal() {
   if (!umBackdrop) return;
   umBackdrop.style.display = 'none';
   umBackdrop.setAttribute('aria-hidden', 'true');
+  requestAnimationFrame(focusMessageInput);
 }
 
 if (userBtn) userBtn.addEventListener('click', openUserModal);
@@ -1983,7 +1996,7 @@ function createMsgRow(msg, isNew) {
     sendBtn.disabled = !input.value.trim();
     updateClearInputBtn();
     saveInputGlobal();
-    if (input) input.focus();
+    focusMessageInput();
   });
 
   row.appendChild(selectWrap);
@@ -2411,6 +2424,7 @@ function openChannelModal() {
 function closeChannelModal() {
   if (!cmBackdrop) return;
   cmBackdrop.style.display = 'none';
+  requestAnimationFrame(focusMessageInput);
 }
 
 if (cmCancel) cmCancel.addEventListener('click', closeChannelModal);
@@ -2613,8 +2627,11 @@ async function reloadForUser() {
   await loadMessageOrderForCurrentChannel();
   await loadMessages();
   subscribeRealtimeAll();
-  // Always jump to the latest message when opening a tab.
-  requestAnimationFrame(scrollBottom);
+  keyboardHotkeysUsedThisView = false; // reset on view change so input gets focus again
+  requestAnimationFrame(() => {
+    scrollBottom();
+    focusMessageInput();
+  });
   applyFieldPrefsToMessages();
 }
 
@@ -2733,7 +2750,7 @@ async function sendText(text) {
     updateClearInputBtn();
     saveInputGlobal();
     if (input.placeholder !== 'say something…') input.placeholder = 'say something…';
-    requestAnimationFrame(() => { if (input) input.focus(); });
+    requestAnimationFrame(focusMessageInput);
     return;
   }
 
@@ -2765,7 +2782,7 @@ async function sendText(text) {
     sendBtn.disabled = true;
     updateClearInputBtn();
     saveInputGlobal();
-    requestAnimationFrame(() => { if (input) input.focus(); });
+    requestAnimationFrame(focusMessageInput);
   }
 }
 
@@ -2838,7 +2855,7 @@ if (clipboardPasteBtn) {
     input.value = latestClipboardText;
     autoResize();
     sendBtn.disabled = !input.value.trim();
-    requestAnimationFrame(() => { if (input) input.focus(); });
+    requestAnimationFrame(focusMessageInput);
   });
 }
 
@@ -2875,7 +2892,7 @@ if (clearInputBtn) {
     if (currentUser) {
       broadcastDraft('');
     }
-    requestAnimationFrame(() => { if (input) input.focus(); });
+    requestAnimationFrame(focusMessageInput);
   });
 }
 
@@ -3255,7 +3272,7 @@ function autoResize() {
 feedEl.addEventListener('scroll', () => {
   atBottom = isNearBottom();
   if (atBottom) scrollBtn.classList.remove('visible');
-  if (input && document.activeElement === input) input.blur();
+  if (allowScrollBlur && input && document.activeElement === input) input.blur();
 }, { passive: true });
 
 function scrollBottom() {
