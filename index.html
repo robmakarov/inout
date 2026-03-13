@@ -708,10 +708,11 @@ header{
     <div id="tabs"></div>
     <div id="draft-bubble">
       <div id="draft-bubble-text"></div>
-      <div class="draft-bubble-actions">
-        <button id="draft-copy" class="draft-btn">Copy</button>
-        <button id="draft-clear" class="draft-btn">Delete</button>
-      </div>
+    <div class="draft-bubble-actions">
+      <button id="draft-copy" class="draft-btn">Copy</button>
+      <button id="draft-send" class="draft-btn">Send</button>
+      <button id="draft-clear" class="draft-btn">Delete</button>
+    </div>
     </div>
     <div class="input-wrap">
       <textarea
@@ -806,6 +807,7 @@ const tabsEl     = document.getElementById('tabs');
 const draftBubble    = document.getElementById('draft-bubble');
 const draftBubbleTxt = document.getElementById('draft-bubble-text');
 const draftCopyBtn   = document.getElementById('draft-copy');
+const draftSendBtn   = document.getElementById('draft-send');
 const draftClearBtn  = document.getElementById('draft-clear');
 const cmBackdrop = document.getElementById('channel-modal-backdrop');
 const cmName     = document.getElementById('cm-name');
@@ -1506,6 +1508,13 @@ async function send() {
   const text = input.value.trim();
   if (!text) return;
 
+  await sendText(text);
+}
+
+async function sendText(text) {
+  const trimmed = (text || '').trim();
+  if (!trimmed) return;
+
   if (!currentUser) {
     toast('Sign in with Google to send.');
     return;
@@ -1566,10 +1575,20 @@ sendBtn.addEventListener('click', send);
 if (draftCopyBtn) {
   draftCopyBtn.addEventListener('click', () => {
     if (!latestRemoteDraft) return;
-    input.value = latestRemoteDraft;
-    autoResize();
-    sendBtn.disabled = !input.value.trim();
-    input.focus();
+    try {
+      navigator.clipboard.writeText(latestRemoteDraft);
+      toast('Draft copied to clipboard.');
+    } catch (e) {
+      console.error(e);
+      toast('Could not copy draft.');
+    }
+  });
+}
+
+if (draftSendBtn) {
+  draftSendBtn.addEventListener('click', () => {
+    if (!latestRemoteDraft) return;
+    sendText(latestRemoteDraft);
   });
 }
 
