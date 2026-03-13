@@ -44,17 +44,14 @@ body{
   overflow:hidden; /* only the content area scrolls */
 }
 
-/* visible page scrollbar */
-body::-webkit-scrollbar{
-  width:8px;
+/* visible scrollbar (content area) */
+#feed{
+  scrollbar-width:thin;
+  scrollbar-color:var(--line2) var(--bg2);
 }
-body::-webkit-scrollbar-track{
-  background:var(--bg2);
-}
-body::-webkit-scrollbar-thumb{
-  background:var(--line2);
-  border-radius:4px;
-}
+#feed::-webkit-scrollbar{width:8px}
+#feed::-webkit-scrollbar-track{background:var(--bg2)}
+#feed::-webkit-scrollbar-thumb{background:var(--line2);border-radius:4px}
 
 #app{
   flex:1;
@@ -453,6 +450,10 @@ header{
   }
   header{padding:0 14px}
   #input-area{padding:10px 10px 14px}
+  #tabs{
+    padding:8px 10px 8px;
+    margin:-10px -10px 10px;
+  }
 }
 
 #tabs{
@@ -869,15 +870,11 @@ function subscribeRealtimeAll() {
 function onInsertForChannel(ch, msg) {
   if (ch === currentChannel) {
     hideEmpty();
-    const wasAtBottom = isNearBottom();
     appendMsg(msg, true);
     msgCount++;
     updateMsgCount();
-    if (wasAtBottom) {
-      requestAnimationFrame(scrollBottom);
-    } else {
-      scrollBtn.classList.add('visible');
-    }
+    // Always keep the newest message visible (messenger behavior).
+    requestAnimationFrame(scrollBottom);
     return;
   }
 
