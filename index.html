@@ -1258,8 +1258,7 @@ const CURRENT_CHANNEL_KEY  = 'inout_current_channel_v1';
 const INPUT_STATE_KEY      = 'inout_input_state_v2';
 const FIELD_PREFS_KEY      = 'inout_field_prefs_v1';
 const ORDER_STATE_KEY      = 'inout_order_state_v1';
-try { localStorage.setItem(INPUT_STATE_KEY, ''); } catch (_) {}
-if (input) { input.value = ''; input.placeholder = 'say something…'; }
+const WAS_EDITING_KEY      = 'inout_was_editing_v1';
 const seenIds       = new Set();
 const channelScroll = new Map();
 const unreadCounts  = new Map(); // channel -> number
@@ -1287,6 +1286,7 @@ function updateEditingRowHighlight() {
 
 function cancelEditingMode(clearInput) {
   editingMessageId = null;
+  try { localStorage.removeItem(WAS_EDITING_KEY); } catch (_) {}
   if (input) {
     input.placeholder = 'say something…';
     if (clearInput) {
@@ -1346,8 +1346,6 @@ function isNearBottom() {
 
 /* ═══ INIT ═══════════════════════════════════════════════ */
 async function init() {
-  try { localStorage.setItem(INPUT_STATE_KEY, ''); } catch (_) {}
-  if (input) { input.value = ''; input.placeholder = 'say something…'; }
   loadChannelsList();
   await refreshAuth();
   if (currentUser) {
@@ -1366,14 +1364,16 @@ async function init() {
     subscribeOrderRealtime();
     subscribeViewRealtime();
   }
-  editingMessageId = null;
-  if (input) {
-    input.value = '';
-    input.placeholder = 'say something…';
-    try { localStorage.setItem(INPUT_STATE_KEY, ''); } catch (_) {}
-    autoResize();
-    sendBtn.disabled = true;
-    updateClearInputBtn();
+  if (localStorage.getItem(WAS_EDITING_KEY)) {
+    try { localStorage.removeItem(WAS_EDITING_KEY); } catch (_) {}
+    if (input) {
+      input.value = '';
+      input.placeholder = 'say something…';
+      saveInputGlobal();
+      updateClearInputBtn();
+      sendBtn.disabled = true;
+      autoResize();
+    }
   }
   setupPresence();
   scrollBottom();
@@ -1381,15 +1381,7 @@ async function init() {
   setupFullscreenOnFirstTap();
   if (input) input.focus();
   requestAnimationFrame(() => { if (input) input.focus(); });
-  setTimeout(() => {
-    if (input) {
-      input.value = '';
-      try { localStorage.setItem(INPUT_STATE_KEY, ''); } catch (_) {}
-      updateClearInputBtn();
-      sendBtn.disabled = true;
-      input.focus();
-    }
-  }, 50);
+  setTimeout(() => { if (input) input.focus(); }, 100);
   setupFocusOnFirstInteraction();
 }
 
@@ -1505,6 +1497,7 @@ function onUpdateForChannel(ch, row) {
   if (id == null) return;
   if (id === editingMessageId) {
     editingMessageId = null;
+    try { localStorage.removeItem(WAS_EDITING_KEY); } catch (_) {}
     if (input && input.placeholder === 'Editing message…') input.placeholder = 'say something…';
   }
   const text = row.text != null ? row.text : (row.Text != null ? row.Text : '');
@@ -2062,6 +2055,7 @@ function createMsgRow(msg, isNew) {
     }
     input.value = msg.text || '';
     editingMessageId = msg.id;
+    try { localStorage.setItem(WAS_EDITING_KEY, '1'); } catch (_) {}
     input.placeholder = 'Editing message…';
     autoResize();
     sendBtn.disabled = !input.value.trim();
@@ -2469,15 +2463,7 @@ async function refreshSharedFlags() {
 
 function switchChannel(ch) {
   if (ch === currentChannel) return;
-  editingMessageId = null;
-  if (input) {
-    input.value = '';
-    input.placeholder = 'say something…';
-    try { localStorage.setItem(INPUT_STATE_KEY, ''); } catch (_) {}
-    updateClearInputBtn();
-    sendBtn.disabled = true;
-  }
-  if (feedInner) feedInner.querySelectorAll('.msg.msg-editing').forEach(r => r.classList.remove('msg-editing'));
+  if (editingMessageId != null) cancelEditingMode(true);
   if (feedEl) {
     channelScroll.set(currentChannel, feedEl.scrollTop);
   }
@@ -2622,6 +2608,7 @@ async function refreshAuth() {
     restoreLastChannel();
     await loadMessageOrderForCurrentChannel();
     await loadMessages();
+    restoreInputGlobal();
   } else {
     sharedChannels.clear();
     unreadCounts.clear();
@@ -2712,22 +2699,14 @@ function updateAuthUI() {
 }
 
 async function reloadForUser() {
-  editingMessageId = null;
+  if (editingMessageId != null) cancelEditingMode(true);
   clearMessages();
   await loadMessageOrderForCurrentChannel();
   await loadMessages();
   subscribeRealtimeAll();
-  if (input) {
-    input.value = '';
-    input.placeholder = 'say something…';
-    try { localStorage.setItem(INPUT_STATE_KEY, ''); } catch (_) {}
-    autoResize();
-    sendBtn.disabled = true;
-    updateClearInputBtn();
-  }
   requestAnimationFrame(() => {
     scrollBottom();
-    if (input) { input.value = ''; try { localStorage.setItem(INPUT_STATE_KEY, ''); } catch (_) {} input.focus(); }
+    if (input) input.focus();
   });
   applyFieldPrefsToMessages();
 }
