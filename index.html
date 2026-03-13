@@ -266,9 +266,8 @@ header{
 /* message row */
 .msg{
   display:flex;
-  flex-direction:column;
-  align-items:flex-start;
-  gap:2px;
+  align-items:baseline;
+  gap:8px;
   padding:4px 20px;
   border-bottom:1px solid var(--line);
   transition:background .1s;
@@ -278,19 +277,15 @@ header{
 .msg:hover{background:var(--bg2)}
 .msg:last-child{border-bottom:none}
 
-.msg-meta{
-  display:flex;
-  align-items:center;
-  gap:6px;
-  font-size:10px;
-  color:var(--dim);
-  letter-spacing:0.02em;
-}
-
 .msg-sender{
   font-size:10px;
   color:var(--soft);
   font-weight:500;
+  flex:0 0 10ch;
+  max-width:10ch;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 
 .msg-time{
@@ -300,6 +295,7 @@ header{
 }
 
 .msg-text{
+  flex:1;
   font-size:13px;
   color:var(--text);
   line-height:1.55;
@@ -1084,9 +1080,6 @@ function createMsgRow(msg, isNew) {
     row.dataset.id = String(msg.id);
   }
 
-  const meta = document.createElement('div');
-  meta.className = 'msg-meta';
-
   const sender = document.createElement('div');
   sender.className = 'msg-sender';
   if (msg.user_id && currentUser && msg.user_id === currentUser.id) {
@@ -1099,22 +1092,24 @@ function createMsgRow(msg, isNew) {
   } else {
     sender.textContent = 'unknown';
   }
-  sender.title = sender.textContent;
+  const fullLabel = sender.textContent;
+  if (fullLabel.length > 10) {
+    sender.textContent = fullLabel.slice(0, 10) + '…';
+  }
+  sender.title = fullLabel;
 
   const time = document.createElement('div');
   time.className = 'msg-time';
   time.textContent = formatTime(msg.created_at);
   time.title = new Date(msg.created_at).toLocaleString();
 
-  meta.appendChild(sender);
-  meta.appendChild(time);
-
   const text = document.createElement('div');
   text.className = 'msg-text';
   text.innerHTML = linkify(escapeHtml(msg.text));
   text.title = msg.text || '';
 
-  row.appendChild(meta);
+  row.appendChild(time);
+  row.appendChild(sender);
   row.appendChild(text);
   return row;
 }
