@@ -749,7 +749,6 @@ const cmCreate   = document.getElementById('cm-create');
 
 let msgCount    = 0;
 let atBottom    = true;
-let channel     = null;
 let presenceCh  = null;
 let toastTimer     = null;
 let myId           = crypto.randomUUID();
@@ -762,6 +761,26 @@ const channelScroll = new Map();
 const unreadCounts  = new Map(); // channel -> number
 const sharedChannels = new Set(); // channel -> has other members
 let channelSubs = new Map(); // channel -> realtime subscription
+
+function updateTabBadge(ch) {
+  if (!tabsEl) return;
+  const btn = tabsEl.querySelector('.tab[data-channel="' + CSS.escape(ch) + '"]');
+  if (!btn) return;
+  const badge = btn.querySelector('.tab-badge');
+  if (!badge) return;
+  const n = unreadCounts.get(ch) || 0;
+  if (n > 0) {
+    badge.textContent = String(n);
+    badge.classList.add('show');
+  } else {
+    badge.textContent = '';
+    badge.classList.remove('show');
+  }
+}
+
+function updateAllTabBadges() {
+  channels.forEach(ch => updateTabBadge(ch));
+}
 
 function isNearBottom() {
   const base = 80;
@@ -1014,7 +1033,21 @@ function renderTabs() {
     const btn = document.createElement('button');
     btn.className = 'tab';
     btn.setAttribute('data-channel', ch);
-    btn.textContent = ch === 'main' ? 'Main' : ch;
+    const label = document.createElement('span');
+    label.textContent = ch === 'main' ? 'Main' : ch;
+    btn.appendChild(label);
+
+    if (sharedChannels.has(ch) && ch !== 'main') {
+      const shared = document.createElement('span');
+      shared.className = 'tab-shared';
+      shared.title = 'Shared';
+      shared.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M16 11c1.657 0 3-1.567 3-3.5S17.657 4 16 4s-3 1.567-3 3.5S14.343 11 16 11Z" stroke="currentColor" stroke-width="1.6"/><path d="M8 11c1.657 0 3-1.567 3-3.5S9.657 4 8 4 5 5.567 5 7.5 6.343 11 8 11Z" stroke="currentColor" stroke-width="1.6"/><path d="M4 20c0-3.314 2.686-6 6-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M14 14c3.314 0 6 2.686 6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M10 14c1.7 0 3.24.71 4.33 1.85" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+      btn.appendChild(shared);
+    }
+
+    const badge = document.createElement('span');
+    badge.className = 'tab-badge';
+    btn.appendChild(badge);
 
     if (ch !== 'main') {
       const close = document.createElement('span');
@@ -1038,6 +1071,7 @@ function renderTabs() {
   tabsEl.appendChild(addBtn);
 
   updateTabsUI();
+  updateAllTabBadges();
 }
 
 async function syncChannelsFromServer() {
@@ -1057,7 +1091,31 @@ async function syncChannelsFromServer() {
     const merged = new Set(['main', ...channels, ...server]);
     channels = Array.from(merged);
     saveChannelsList();
+    await refreshSharedFlags();
     renderTabs();
+    subscribeRealtimeAll();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function refreshSharedFlags() {
+  if (!currentUser) return;
+  sharedChannels.clear();
+  try {
+    // mark channel as shared if it has any member other than me
+    const { data, error } = await sb
+      .from('channel_members')
+      .select('channel,user_id')
+      .in('channel', channels)
+      .neq('user_id', currentUser.id);
+    if (error) {
+      console.error(error);
+      return;
+    }
+    (data || []).forEach(r => {
+      if (r && typeof r.channel === 'string') sharedChannels.add(r.channel);
+    });
   } catch (e) {
     console.error(e);
   }
@@ -1069,7 +1127,9 @@ function switchChannel(ch) {
     channelScroll.set(currentChannel, feedEl.scrollTop);
   }
   currentChannel = ch;
+  unreadCounts.set(ch, 0);
   updateTabsUI();
+  updateTabBadge(ch);
   if (input) input.focus();
   if (currentUser) {
     ensureMembership().then(reloadForUser);
@@ -1141,6 +1201,8 @@ async function createChannelFromModal() {
     toast('Failed to save members — ' + humanError(e.message));
   }
 
+  if (extraIds.length > 0) sharedChannels.add(name);
+
   closeChannelModal();
   switchChannel(name);
 }
@@ -1149,10 +1211,13 @@ function deleteChannel(ch) {
   if (ch === 'main') return;
   channels = channels.filter(x => x !== ch);
   saveChannelsList();
+  unreadCounts.delete(ch);
+  sharedChannels.delete(ch);
   if (currentChannel === ch) {
     currentChannel = 'main';
   }
   renderTabs();
+  subscribeRealtimeAll();
   if (currentUser) {
     reloadForUser();
   } else {
@@ -1188,6 +1253,16 @@ async function refreshAuth() {
     currentUser = null;
   }
   updateAuthUI();
+  if (currentUser) {
+    await refreshSharedFlags();
+    renderTabs();
+    subscribeRealtimeAll();
+  } else {
+    sharedChannels.clear();
+    unreadCounts.clear();
+    renderTabs();
+    subscribeRealtimeAll();
+  }
 }
 
 function setupAuthListener() {
@@ -1240,7 +1315,7 @@ function updateAuthUI() {
 async function reloadForUser() {
   clearMessages();
   await loadMessages();
-  subscribeRealtime();
+  subscribeRealtimeAll();
    if (feedEl) {
     const saved = channelScroll.get(currentChannel);
     if (typeof saved === 'number') {
