@@ -1302,9 +1302,7 @@ function setSelectMode(on) {
 }
 
 function updateSelectionUI() {
-  const hasAny = selectedIds.size > 0;
-  if (deleteSelectedBtn) deleteSelectedBtn.disabled = !hasAny;
-  if (moveSelectedBtn) moveSelectedBtn.disabled = !hasAny;
+  // Buttons stay enabled; behavior depends on whether anything is selected.
 }
 
 function restoreLastChannel() {
@@ -2038,14 +2036,28 @@ if (deleteSelectedBtn) {
   deleteSelectedBtn.addEventListener('click', async () => {
     if (!currentUser) return;
     const boxes = feedInner.querySelectorAll('.msg-select:checked');
-    const ids = Array.from(boxes)
+    let ids = Array.from(boxes)
       .map(box => {
         const row = box.closest('.msg');
         return row && row.dataset.id ? Number(row.dataset.id) : null;
       })
       .filter(id => typeof id === 'number');
-    if (!ids.length) return;
     try {
+      // If nothing selected, operate on whole tab (for this user).
+      if (!ids.length) {
+        const { data, error } = await sb
+          .from('entries')
+          .select('id')
+          .eq('channel', currentChannel)
+          .eq('user_id', currentUser.id);
+        if (error) {
+          console.error(error);
+          toast('Failed to delete — ' + humanError(error.message));
+          return;
+        }
+        ids = (data || []).map(r => r.id);
+        if (!ids.length) return;
+      }
       const { error } = await sb
         .from('entries')
         .delete()
@@ -2106,15 +2118,27 @@ if (exportTabBtn) {
       return;
     }
     try {
+      const boxes = feedInner.querySelectorAll('.msg-select:checked');
+      let ids = Array.from(boxes)
+        .map(box => {
+          const row = box.closest('.msg');
+          return row && row.dataset.id ? Number(row.dataset.id) : null;
+        })
+        .filter(id => typeof id === 'number');
+
       let query = sb
         .from('entries')
         .select('created_at,text,channel,user_id,author_name')
-        .eq('channel', currentChannel)
         .order('created_at', { ascending: true })
         .limit(1000);
 
-      if (currentChannel === 'main') {
-        query = query.eq('user_id', currentUser.id);
+      if (ids.length) {
+        query = query.in('id', ids);
+      } else {
+        query = query.eq('channel', currentChannel);
+        if (currentChannel === 'main') {
+          query = query.eq('user_id', currentUser.id);
+        }
       }
 
       const { data, error } = await query;
