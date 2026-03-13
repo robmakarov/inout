@@ -1203,6 +1203,7 @@ const CHANNELS_KEY         = 'inout_channels_v1';
 const CURRENT_CHANNEL_KEY  = 'inout_current_channel_v1';
 const INPUT_STATE_KEY      = 'inout_input_state_v2';
 const FIELD_PREFS_KEY      = 'inout_field_prefs_v1';
+const ORDER_STATE_KEY      = 'inout_order_state_v1';
 const seenIds       = new Set();
 const channelScroll = new Map();
 const unreadCounts  = new Map(); // channel -> number
@@ -1845,6 +1846,33 @@ function renderInitialMessages(list) {
   feedInner.appendChild(frag);
 }
 
+function loadOrderFromLocal() {
+  try {
+    const raw = localStorage.getItem(ORDER_STATE_KEY);
+    if (!raw) return [];
+    const map = JSON.parse(raw);
+    if (!map || typeof map !== 'object') return [];
+    const key = currentUser ? (currentUser.id + '::' + currentChannel) : ('anon::' + currentChannel);
+    const arr = map[key];
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map(x => Number(x))
+      .filter(x => Number.isFinite(x));
+  } catch (_) {
+    return [];
+  }
+}
+
+function saveOrderToLocal() {
+  try {
+    const raw = localStorage.getItem(ORDER_STATE_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    const key = currentUser ? (currentUser.id + '::' + currentChannel) : ('anon::' + currentChannel);
+    map[key] = (currentMessageOrder || []).slice();
+    localStorage.setItem(ORDER_STATE_KEY, JSON.stringify(map));
+  } catch (_) {}
+}
+
 let globalMsgNum = 0;
 
 function hideEmpty() {
@@ -1896,28 +1924,36 @@ function saveChannelsList() {
 
 async function loadMessageOrderForCurrentChannel() {
   currentMessageOrder = [];
-  if (!currentUser) return;
-  try {
-    const { data, error } = await sb
-      .from('message_orders')
-      .select('entry_id, position')
-      .eq('user_id', currentUser.id)
-      .eq('channel', currentChannel)
-      .order('position', { ascending: true });
-    if (error) {
-      console.error(error);
-      return;
+  // Try server-backed order first (if signed in).
+  if (currentUser) {
+    try {
+      const { data, error } = await sb
+        .from('message_orders')
+        .select('entry_id, position')
+        .eq('user_id', currentUser.id)
+        .eq('channel', currentChannel)
+        .order('position', { ascending: true });
+      if (!error && data && data.length) {
+        currentMessageOrder = data
+          .map(row => Number(row.entry_id))
+          .filter(x => Number.isFinite(x));
+      }
+    } catch (e) {
+      console.error(e);
     }
-    currentMessageOrder = (data || [])
-      .map(row => Number(row.entry_id))
-      .filter(x => Number.isFinite(x));
-  } catch (_) {
-    currentMessageOrder = [];
+  }
+  // Fallback / merge with local storage if nothing from server.
+  if (!currentMessageOrder.length) {
+    currentMessageOrder = loadOrderFromLocal();
   }
 }
 
 async function saveMessageOrderForCurrentChannel() {
-  if (!currentUser || !currentMessageOrder.length) return;
+  if (!currentMessageOrder.length) return;
+  // Always keep a local copy so order survives even if DB fails.
+  saveOrderToLocal();
+  // Also try to persist to server for cross-device sync.
+  if (!currentUser) return;
   try {
     const rows = currentMessageOrder.map((entryId, index) => ({
       user_id: currentUser.id,
