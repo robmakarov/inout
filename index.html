@@ -934,7 +934,7 @@ let currentChannel = 'main';
 let channels       = ['main'];
 const CHANNELS_KEY       = 'inout_channels_v1';
 const CURRENT_CHANNEL_KEY= 'inout_current_channel_v1';
-const INPUT_STATE_KEY    = 'inout_input_state_v1';
+const INPUT_STATE_KEY    = 'inout_input_state_v2';
 const seenIds       = new Set();
 const channelScroll = new Map();
 const unreadCounts  = new Map(); // channel -> number
@@ -999,7 +999,7 @@ async function init() {
     await loadMessages();
     subscribeRealtimeAll();
     setupDraftChannel();
-    restoreInputForChannel();
+    restoreInputGlobal();
   }
   setupPresence();
   scrollBottom();
@@ -1234,31 +1234,19 @@ function restoreLastChannel() {
   } catch (_) {}
 }
 
-function restoreInputForChannel() {
+function restoreInputGlobal() {
   if (!input) return;
   try {
-    const raw = localStorage.getItem(INPUT_STATE_KEY);
-    if (!raw) {
-      input.value = '';
-      autoResize();
-      sendBtn.disabled = true;
-      return;
-    }
-    const map = JSON.parse(raw);
-    const val = typeof map[currentChannel] === 'string' ? map[currentChannel] : '';
-    input.value = val;
+    input.value = localStorage.getItem(INPUT_STATE_KEY) || '';
     autoResize();
     sendBtn.disabled = !input.value.trim();
   } catch (_) {}
 }
 
-function saveInputForChannel() {
+function saveInputGlobal() {
   if (!input) return;
   try {
-    const raw = localStorage.getItem(INPUT_STATE_KEY);
-    const map = raw ? JSON.parse(raw) : {};
-    map[currentChannel] = input.value || '';
-    localStorage.setItem(INPUT_STATE_KEY, JSON.stringify(map));
+    localStorage.setItem(INPUT_STATE_KEY, input.value || '');
   } catch (_) {}
 }
 
@@ -1646,7 +1634,7 @@ async function refreshAuth() {
     setupDraftChannel();
     restoreLastChannel();
     await loadMessages();
-    restoreInputForChannel();
+    restoreInputGlobal();
   } else {
     sharedChannels.clear();
     unreadCounts.clear();
@@ -1740,7 +1728,7 @@ async function reloadForUser() {
   subscribeRealtimeAll();
   // Always jump to the latest message when opening a tab.
   requestAnimationFrame(scrollBottom);
-  restoreInputForChannel();
+    restoreInputGlobal();
 }
 
 function clearMessages() {
