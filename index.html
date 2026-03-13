@@ -1728,7 +1728,6 @@ async function reloadForUser() {
   subscribeRealtimeAll();
   // Always jump to the latest message when opening a tab.
   requestAnimationFrame(scrollBottom);
-    restoreInputGlobal();
 }
 
 function clearMessages() {
@@ -1844,7 +1843,7 @@ async function sendText(text) {
 input.addEventListener('input', () => {
   autoResize();
   sendBtn.disabled = !input.value.trim();
-  saveInputForChannel();
+  saveInputGlobal();
   // send current draft for this user so other devices see it
   if (currentUser) {
     broadcastDraft(input.value);
