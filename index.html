@@ -1337,11 +1337,13 @@ async function init() {
   scrollBottom();
   cleanupAuthHash();
   setupFullscreenOnFirstTap();
-  focusMessageInput();
+  requestAnimationFrame(() => requestAnimationFrame(focusMessageInput));
   setTimeout(() => {
     allowScrollBlur = true;
     focusMessageInput();
   }, 150);
+  setTimeout(focusMessageInput, 400);
+  setupFocusOnFirstInteraction();
 }
 
 function openUserModal() {
@@ -1365,6 +1367,20 @@ if (umBackdrop) umBackdrop.addEventListener('click', e => {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && umBackdrop && umBackdrop.style.display === 'block') closeUserModal();
 });
+
+function setupFocusOnFirstInteraction() {
+  if (!input) return;
+  function tryFocus(e) {
+    if (document.activeElement === input) return;
+    if (e.target && (e.target.tagName === 'BUTTON' || e.target.tagName === 'A')) return;
+    if (e.target && (e.target.closest && e.target.closest('input, textarea, [contenteditable="true"]'))) return;
+    input.focus();
+    document.removeEventListener('click', tryFocus, true);
+    document.removeEventListener('touchstart', tryFocus, true);
+  }
+  document.addEventListener('click', tryFocus, true);
+  document.addEventListener('touchstart', tryFocus, true);
+}
 
 /* ═══ LOAD ════════════════════════════════════════════════ */
 async function loadMessages() {
@@ -3343,6 +3359,9 @@ function humanError(message) {
 /* ═══ GO ══════════════════════════════════════════════════ */
 init();
 window.addEventListener('load', () => { focusMessageInput(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') focusMessageInput();
+});
 </script>
 </body>
 </html>
