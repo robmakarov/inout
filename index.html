@@ -431,6 +431,15 @@ header{
   padding-right:72px; /* reserve space under right-side actions */
 }
 
+@media (max-width:540px){
+  /* Disable text selection on messages on mobile so long-press is for drag, not selection */
+  .msg,
+  .msg *{
+    -webkit-user-select:none;
+    user-select:none;
+  }
+}
+
 /* on hover, make all message parameters (time/author) same color as text */
 .msg:hover .msg-time,
 .msg:hover .msg-sender{
@@ -1382,6 +1391,10 @@ function subscribeOrderRealtime() {
       async payload => {
         const row = payload.new || payload.old || {};
         if (!row || row.channel !== currentChannel) return;
+        if (suppressNextOrderApply) {
+          suppressNextOrderApply = false;
+          return; // skip self echo to avoid double re-render blink
+        }
         await loadMessageOrderForCurrentChannel();
         applyMessageOrderToDOM();
       }
@@ -1408,6 +1421,10 @@ function subscribeViewRealtime() {
       payload => {
         const row = payload.new || payload.old || {};
         if (!row || row.channel !== currentChannel || !row.config) return;
+        if (suppressNextViewApply) {
+          suppressNextViewApply = false;
+          return; // skip self echo to avoid double re-render blink
+        }
         const cfg = row.config || {};
         // Update order
         if (Array.isArray(cfg.order)) {
@@ -2043,6 +2060,9 @@ async function loadMessageOrderForCurrentChannel() {
   }
 }
 
+let suppressNextOrderApply = false;
+let suppressNextViewApply = false;
+
 async function saveMessageOrderForCurrentChannel() {
   if (!currentMessageOrder.length) return;
   // Always keep a local copy so order survives even if DB fails.
@@ -2056,6 +2076,7 @@ async function saveMessageOrderForCurrentChannel() {
         entry_id: entryId,
         position: index,
       }));
+      suppressNextOrderApply = true;
       const { error } = await sb
         .from('message_orders')
         .upsert(rows, { onConflict: 'user_id,channel,entry_id' });
@@ -2074,6 +2095,7 @@ async function saveMessageOrderForCurrentChannel() {
         showTime: !!fieldPrefs.showTime,
         showAuthor: !!fieldPrefs.showAuthor,
       };
+      suppressNextViewApply = true;
       await sb
         .from('views')
         .upsert(
