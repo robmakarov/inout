@@ -2103,6 +2103,10 @@ function applyMessageOrderToDOM() {
   if (!currentMessageOrder.length) return;
   const rows = Array.from(feedInner.querySelectorAll('.msg'));
   if (!rows.length) return;
+  // Skip if DOM order already matches — avoids reflow/blink when nothing changed
+  const domOrder = rows.map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id));
+  if (domOrder.length === currentMessageOrder.length &&
+      domOrder.every((id, i) => id === currentMessageOrder[i])) return;
   const byId = new Map();
   rows.forEach(row => {
     const id = Number(row.dataset.id);
