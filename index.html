@@ -745,6 +745,7 @@ body.select-mode .msg-select-wrap,
 
 /* ── MOBILE ── */
 @media(max-width:540px){
+  #scroll-btn{display:none !important;}
   .msg{gap:8px}
   .msg-meta{
     min-width:120px;
@@ -1373,6 +1374,8 @@ function setupFocusOnFirstInteraction() {
     if (t.closest && t.closest('.msg')) return;
     if (umBackdrop && umBackdrop.style.display === 'block' && (t === umBackdrop || umBackdrop.contains(t))) return;
     if (cmBackdrop && cmBackdrop.style.display === 'flex' && (t === cmBackdrop || cmBackdrop.contains(t))) return;
+    e.preventDefault();
+    e.stopPropagation();
     input.focus();
   }
   document.addEventListener('mousedown', moveFocusToInput, true);
@@ -2011,6 +2014,7 @@ function createMsgRow(msg, isNew) {
       sendBtn.disabled = true;
       updateClearInputBtn();
       saveInputGlobal();
+      focusMessageInput();
       return;
     }
     input.value = msg.text || '';
