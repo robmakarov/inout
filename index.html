@@ -1736,8 +1736,7 @@ function createMsgRow(msg, isNew) {
     row.classList.remove('dragging');
     recomputeOrderFromDOM();
     saveMessageOrderForCurrentChannel();
-    // local apply to feel instant; other devices get it via realtime
-    applyMessageOrderToDOM();
+    // DOM is already in the correct order from dragover; just persist.
   });
   row.addEventListener('dragover', e => {
     e.preventDefault();
