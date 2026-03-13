@@ -1470,6 +1470,16 @@ function setSelectMode(on) {
     selectToggle.textContent = selectMode ? 'Cancel' : 'Select';
   }
   if (selectExtra) selectExtra.classList.toggle('show', selectMode);
+  const wraps = feedInner.querySelectorAll('.msg-select-wrap');
+  wraps.forEach(wrap => {
+    if (selectMode) {
+      wrap.style.opacity = '1';
+      wrap.style.pointerEvents = 'auto';
+    } else {
+      wrap.style.opacity = '';
+      wrap.style.pointerEvents = '';
+    }
+  });
   document.body.classList.toggle('select-mode', selectMode);
   if (manageActions) {
     manageActions.classList.toggle('visible', selectMode);
