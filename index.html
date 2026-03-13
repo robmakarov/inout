@@ -798,6 +798,7 @@ header{
       <button id="delete-selected" class="manage-btn">Delete</button>
       <select id="move-target"></select>
       <button id="move-selected" class="manage-btn">Move</button>
+      <button id="export-tab" class="manage-btn">Export</button>
     </div>
   </div>
 
@@ -974,6 +975,7 @@ const manageActions = document.getElementById('manage-actions');
 const deleteSelectedBtn = document.getElementById('delete-selected');
 const moveSelectedBtn = document.getElementById('move-selected');
 const moveTargetSelect = document.getElementById('move-target');
+const exportTabBtn   = document.getElementById('export-tab');
 const draftBubble    = document.getElementById('draft-bubble');
 const draftBubbleTxt = document.getElementById('draft-bubble-text');
 const draftCopyBtn   = document.getElementById('draft-copy');
@@ -2060,6 +2062,67 @@ if (moveSelectedBtn) {
     } catch (e) {
       console.error(e);
       toast('Failed to move — ' + humanError(e.message));
+    }
+  });
+}
+
+if (exportTabBtn) {
+  exportTabBtn.addEventListener('click', async () => {
+    if (!currentUser) {
+      toast('Sign in to export.');
+      return;
+    }
+    try {
+      let query = sb
+        .from('entries')
+        .select('created_at,text,channel,user_id,author_name')
+        .eq('channel', currentChannel)
+        .order('created_at', { ascending: true })
+        .limit(1000);
+
+      if (currentChannel === 'main') {
+        query = query.eq('user_id', currentUser.id);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        console.error(error);
+        toast('Failed to export — ' + humanError(error.message));
+        return;
+      }
+
+      const rows = data || [];
+      if (!rows.length) {
+        toast('Nothing to export.');
+        return;
+      }
+
+      const lines = rows.map(row => {
+        const d = new Date(row.created_at);
+        const timeStr = d.toLocaleString();
+        if (row.channel === 'main') {
+          return `[${timeStr}] ${row.text}`;
+        }
+        const author = row.author_name
+          ? String(row.author_name)
+          : (row.user_id ? String(row.user_id) : 'unknown');
+        return `[${timeStr}] ${author}: ${row.text}`;
+      });
+
+      const content = lines.join('\n');
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const name = currentChannel === 'main' ? 'feed' : currentChannel;
+      a.href = url;
+      a.download = `inout-${name}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      toast('Failed to export — ' + humanError(e.message));
     }
   });
 }
