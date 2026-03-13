@@ -112,7 +112,9 @@ header{
 }
 
 .select-extra{
-  display:inline-block;
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
   overflow:hidden;
   max-width:0;
   opacity:0;
@@ -806,8 +808,10 @@ header{
   <div id="manage-bar">
     <div>
       <button id="select-toggle" class="manage-btn">Select</button>
-      <button id="select-all" class="manage-btn" style="display:none;">All</button>
-      <button id="select-none" class="manage-btn" style="display:none;">None</button>
+      <span id="select-extra" class="select-extra">
+        <button id="select-all" class="manage-btn">All</button>
+        <button id="select-none" class="manage-btn">None</button>
+      </span>
     </div>
     <div id="manage-actions">
       <button id="delete-selected" class="manage-btn">Delete</button>
@@ -984,6 +988,7 @@ const clipboardPasteBtn  = document.getElementById('clipboard-paste');
 const clipboardDismissBtn= document.getElementById('clipboard-dismiss');
 const clipboardButton    = document.getElementById('clipboard-button');
 const selectToggle = document.getElementById('select-toggle');
+const selectExtra  = document.getElementById('select-extra');
 const selectAllBtn = document.getElementById('select-all');
 const selectNoneBtn = document.getElementById('select-none');
 const manageActions = document.getElementById('manage-actions');
@@ -1284,8 +1289,7 @@ function setSelectMode(on) {
     selectToggle.classList.toggle('active', selectMode);
     selectToggle.textContent = selectMode ? 'Cancel' : 'Select';
   }
-  if (selectAllBtn) selectAllBtn.style.display = selectMode ? 'inline-block' : 'none';
-  if (selectNoneBtn) selectNoneBtn.style.display = selectMode ? 'inline-block' : 'none';
+  if (selectExtra) selectExtra.classList.toggle('show', selectMode);
   const boxes = feedInner.querySelectorAll('.msg-select');
   boxes.forEach(box => {
     box.checked = false;
@@ -2032,8 +2036,15 @@ if (selectNoneBtn) {
 
 if (deleteSelectedBtn) {
   deleteSelectedBtn.addEventListener('click', async () => {
-    if (!currentUser || selectedIds.size === 0) return;
-    const ids = Array.from(selectedIds);
+    if (!currentUser) return;
+    const boxes = feedInner.querySelectorAll('.msg-select:checked');
+    const ids = Array.from(boxes)
+      .map(box => {
+        const row = box.closest('.msg');
+        return row && row.dataset.id ? Number(row.dataset.id) : null;
+      })
+      .filter(id => typeof id === 'number');
+    if (!ids.length) return;
     try {
       const { error } = await sb
         .from('entries')
@@ -2056,10 +2067,17 @@ if (deleteSelectedBtn) {
 
 if (moveSelectedBtn) {
   moveSelectedBtn.addEventListener('click', async () => {
-    if (!currentUser || selectedIds.size === 0 || !moveTargetSelect) return;
+    if (!currentUser || !moveTargetSelect) return;
     const target = moveTargetSelect.value;
     if (!target || target === currentChannel) return;
-    const ids = Array.from(selectedIds);
+    const boxes = feedInner.querySelectorAll('.msg-select:checked');
+    const ids = Array.from(boxes)
+      .map(box => {
+        const row = box.closest('.msg');
+        return row && row.dataset.id ? Number(row.dataset.id) : null;
+      })
+      .filter(id => typeof id === 'number');
+    if (!ids.length) return;
     try {
       const now = new Date().toISOString();
       const { error } = await sb
