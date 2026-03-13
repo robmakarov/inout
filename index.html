@@ -1232,24 +1232,21 @@ function createMsgRow(msg, isNew) {
   }
   sender.title = fullLabel;
 
-  let selectBox = null;
-  if (msg.user_id && currentUser && msg.user_id === currentUser.id) {
-    selectBox = document.createElement('input');
-    selectBox.type = 'checkbox';
-    selectBox.className = 'msg-select';
-    selectBox.addEventListener('change', () => {
-      if (!msg.id) return;
-      if (selectBox.checked) {
-        selectedIds.add(msg.id);
-      } else {
-        selectedIds.delete(msg.id);
-      }
-      updateSelectionUI();
-    });
-    // Hidden until Select is turned on.
-    if (!selectMode) {
-      selectBox.style.display = 'none';
+  const selectBox = document.createElement('input');
+  selectBox.type = 'checkbox';
+  selectBox.className = 'msg-select';
+  selectBox.addEventListener('change', () => {
+    if (!msg.id) return;
+    if (selectBox.checked) {
+      selectedIds.add(msg.id);
+    } else {
+      selectedIds.delete(msg.id);
     }
+    updateSelectionUI();
+  });
+  // Hidden until Select is turned on.
+  if (!selectMode) {
+    selectBox.style.display = 'none';
   }
 
   const time = document.createElement('div');
@@ -1262,7 +1259,7 @@ function createMsgRow(msg, isNew) {
   text.innerHTML = linkify(escapeHtml(msg.text));
   text.title = msg.text || '';
 
-  if (selectBox) row.appendChild(selectBox);
+  row.appendChild(selectBox);
   row.appendChild(time);
   row.appendChild(sender);
   row.appendChild(text);
