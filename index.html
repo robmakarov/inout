@@ -1588,6 +1588,7 @@ function setSelectMode(on) {
   if (selectToggle) {
     selectToggle.classList.toggle('active', selectMode);
     selectToggle.textContent = selectMode ? 'Cancel' : 'Select';
+    selectToggle.setAttribute('aria-pressed', selectMode ? 'true' : 'false');
   }
   if (selectExtra) selectExtra.classList.toggle('show', selectMode);
   document.body.classList.toggle('select-mode', selectMode);
@@ -1598,7 +1599,7 @@ function setSelectMode(on) {
 }
 
 function updateSelectionUI() {
-  // Buttons stay enabled; behavior depends on whether anything is selected.
+  if (selectedIds.size > 0 && !selectMode) setSelectMode(true);
 }
 
 function restoreLastChannel() {
