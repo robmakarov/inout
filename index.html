@@ -1474,8 +1474,8 @@ function setSelectMode(on) {
   const boxes = feedInner.querySelectorAll('.msg-select');
   boxes.forEach(box => {
     box.checked = false;
-    box.style.display = selectMode ? 'inline-block' : 'none';
   });
+  document.body.classList.toggle('select-mode', selectMode);
   if (manageActions) {
     manageActions.classList.toggle('visible', selectMode);
   }
