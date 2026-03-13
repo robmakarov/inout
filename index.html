@@ -390,11 +390,9 @@ header{
   gap:6px;
   padding:4px 20px;
   border-bottom:1px solid var(--line);
-  transition:background .1s;
-  position:relative;
-}
-.msg.new-flash{
+  transition:background .1s, transform .12s;
   animation:msgin .2s ease both;
+  position:relative;
 }
 @keyframes msgin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
 .msg:hover{background:var(--bg2)}
@@ -1393,7 +1391,7 @@ function subscribeOrderRealtime() {
       async payload => {
         const row = payload.new || payload.old || {};
         if (!row || row.channel !== currentChannel) return;
-        if (suppressNextOrderApply) return;
+        if (suppressNextOrderApply) { suppressNextOrderApply = false; return; }
         await loadMessageOrderForCurrentChannel();
         applyMessageOrderToDOM();
       }
@@ -1420,7 +1418,7 @@ function subscribeViewRealtime() {
       payload => {
         const row = payload.new || payload.old || {};
         if (!row || row.channel !== currentChannel || !row.config) return;
-        if (suppressNextOrderApply) return;
+        if (suppressNextViewApply) { suppressNextViewApply = false; return; }
         const cfg = row.config || {};
         // Update order
         if (Array.isArray(cfg.order)) {
@@ -1708,11 +1706,10 @@ function setupTouchDragHandlers() {
     if (!target) return;
     const targetRect = target.getBoundingClientRect();
     const before = y < targetRect.top + targetRect.height / 2;
-    const row = touchDragState.row;
     if (before) {
-      if (row.nextSibling !== target) feedInner.insertBefore(row, target);
+      feedInner.insertBefore(touchDragState.row, target);
     } else {
-      if (row.previousSibling !== target) feedInner.insertBefore(row, target.nextSibling);
+      feedInner.insertBefore(touchDragState.row, target.nextSibling);
     }
   };
   const end = () => {
@@ -1758,12 +1755,10 @@ function createMsgRow(msg, isNew) {
     const bounding = row.getBoundingClientRect();
     const offset = e.clientY - bounding.top;
     const halfway = bounding.height / 2;
-    const insertAfter = offset > halfway;
-    // Only move when position actually changes to avoid blink
-    if (insertAfter) {
-      if (dragging.previousSibling !== row) feedInner.insertBefore(dragging, row.nextSibling);
+    if (offset > halfway) {
+      feedInner.insertBefore(dragging, row.nextSibling);
     } else {
-      if (dragging.nextSibling !== row) feedInner.insertBefore(dragging, row);
+      feedInner.insertBefore(dragging, row);
     }
   });
   row.addEventListener('drop', e => {
@@ -2059,20 +2054,11 @@ async function loadMessageOrderForCurrentChannel() {
 }
 
 let suppressNextOrderApply = false;
-let suppressOrderApplyTimer = null;
+let suppressNextViewApply = false;
 
 async function saveMessageOrderForCurrentChannel() {
   if (!currentMessageOrder.length) return;
-  // Always keep a local copy so order survives even if DB fails.
   saveOrderToLocal();
-  // Suppress realtime self-echo for a short window so we don't re-apply and blink
-  if (suppressOrderApplyTimer) clearTimeout(suppressOrderApplyTimer);
-  suppressNextOrderApply = true;
-  suppressOrderApplyTimer = setTimeout(() => {
-    suppressOrderApplyTimer = null;
-    suppressNextOrderApply = false;
-  }, 500);
-  // Persist to legacy message_orders for existing behavior / realtime.
   if (currentUser) {
     try {
       const rows = currentMessageOrder.map((entryId, index) => ({
@@ -2081,17 +2067,13 @@ async function saveMessageOrderForCurrentChannel() {
         entry_id: entryId,
         position: index,
       }));
+      suppressNextOrderApply = true;
       const { error } = await sb
         .from('message_orders')
         .upsert(rows, { onConflict: 'user_id,channel,entry_id' });
-      if (error) {
-        console.error(error);
-      }
-    } catch (e) {
-      console.error(e);
-    }
+      if (error) console.error(error);
+    } catch (e) { console.error(e); }
   }
-  // Also persist unified view object (order + rules) for this feed.
   if (currentUser) {
     try {
       const cfg = {
@@ -2099,20 +2081,12 @@ async function saveMessageOrderForCurrentChannel() {
         showTime: !!fieldPrefs.showTime,
         showAuthor: !!fieldPrefs.showAuthor,
       };
-      await sb
-        .from('views')
-        .upsert(
-          {
-            user_id: currentUser.id,
-            channel: currentChannel,
-            config: cfg,
-          },
-          { onConflict: 'user_id,channel' }
-        );
-    } catch (e) {
-      // If views table/index not ready, just ignore.
-      console.error(e);
-    }
+      suppressNextViewApply = true;
+      await sb.from('views').upsert(
+        { user_id: currentUser.id, channel: currentChannel, config: cfg },
+        { onConflict: 'user_id,channel' }
+      );
+    } catch (e) { console.error(e); }
   }
 }
 
