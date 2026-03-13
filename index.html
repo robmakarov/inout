@@ -334,7 +334,7 @@ header{
 .msg{
   display:flex;
   align-items:center;
-  gap:8px;
+  gap:10px;
   padding:4px 20px;
   border-bottom:1px solid var(--line);
   transition:background .1s;
@@ -345,14 +345,7 @@ header{
 .msg:last-child{border-bottom:none}
 
 .msg-sender{
-  font-size:10px;
-  color:var(--soft);
-  font-weight:500;
-  flex:0 0 10ch;
-  max-width:10ch;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
+  display:none;
 }
 
 .msg-time{
@@ -959,7 +952,7 @@ function refreshMoveTargets() {
   for (const ch of channels) {
     const opt = document.createElement('option');
     opt.value = ch;
-    opt.textContent = ch === 'main' ? 'Main' : ch;
+    opt.textContent = ch === 'main' ? 'Feed' : ch;
     moveTargetSelect.appendChild(opt);
   }
 }
@@ -1017,10 +1010,17 @@ document.addEventListener('keydown', e => {
 async function loadMessages() {
   if (!currentUser) return;
 
-  const { data, error } = await sb
+  let query = sb
     .from('entries')
     .select('id, created_at, text, channel, user_id')
-    .eq('channel', currentChannel)
+    .eq('channel', currentChannel);
+
+  // For the main feed, show only this user's own messages.
+  if (currentChannel === 'main' && currentUser) {
+    query = query.eq('user_id', currentUser.id);
+  }
+
+  const { data, error } = await query
     .order('created_at', { ascending: true })
     .limit(200);
 
@@ -1043,11 +1043,15 @@ function subscribeRealtimeAll() {
   if (!currentUser) return;
 
   channels.forEach(ch => {
+    let filter = 'channel=eq.' + ch;
+    if (ch === 'main' && currentUser) {
+      filter += ',user_id=eq.' + currentUser.id;
+    }
     const sub = sb
       .channel('entries-' + ch)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'entries', filter: 'channel=eq.' + ch },
+        { event: 'INSERT', schema: 'public', table: 'entries', filter },
         payload => onInsertForChannel(ch, payload.new)
       )
       .subscribe();
@@ -1341,7 +1345,7 @@ function renderTabs() {
     btn.className = 'tab';
     btn.setAttribute('data-channel', ch);
     const label = document.createElement('span');
-    label.textContent = ch === 'main' ? 'Main' : ch;
+    label.textContent = ch === 'main' ? 'Feed' : ch;
     btn.appendChild(label);
 
     if (sharedChannels.has(ch) && ch !== 'main') {
