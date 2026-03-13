@@ -395,6 +395,14 @@ header{
   position:relative;
 }
 @keyframes msgin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.msg-fly-clone{
+  position:fixed;
+  z-index:9999;
+  pointer-events:none;
+  box-shadow:0 4px 20px rgba(0,0,0,.25);
+  border-radius:4px;
+  transition:left .35s ease-out, top .35s ease-out, width .25s ease-out, height .25s ease-out, opacity .2s ease-out;
+}
 .msg:hover{background:var(--bg2)}
 .msg:last-child{border-bottom:none}
 
@@ -1798,11 +1806,12 @@ function createMsgRow(msg, isNew) {
 
   const row  = document.createElement('div');
   row.className = 'msg' + (isNew ? ' new-flash' : '');
+  if (typeof msg.id !== 'undefined') row.dataset.id = String(msg.id);
   row.draggable = true;
   row.addEventListener('dragstart', e => {
     row.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
-    if (row.dataset.id) e.dataTransfer.setData('text/plain', row.dataset.id);
+    if (typeof msg.id !== 'undefined') e.dataTransfer.setData('text/plain', String(msg.id));
   });
   row.addEventListener('dragend', () => {
     row.classList.remove('dragging');
@@ -1845,9 +1854,6 @@ function createMsgRow(msg, isNew) {
     }, 300); // long press threshold
   }, { passive: true });
   if (isNew) setTimeout(() => row.classList.remove('new-flash'), 800);
-  if (typeof msg.id !== 'undefined') {
-    row.dataset.id = String(msg.id);
-  }
 
   const actions = document.createElement('div');
   actions.className = 'msg-actions';
@@ -2273,7 +2279,13 @@ function renderTabs() {
       const id = e.dataTransfer.getData('text/plain');
       if (!id || ch === currentChannel) return;
       const numId = Number(id);
-      if (Number.isFinite(numId)) moveSingleMessage(numId, ch);
+      if (!Number.isFinite(numId)) return;
+      const rowEl = feedInner.querySelector('.msg[data-id="' + CSS.escape(String(numId)) + '"]');
+      if (rowEl) {
+        animateMessageToTab(rowEl, btn, () => moveSingleMessage(numId, ch));
+      } else {
+        moveSingleMessage(numId, ch);
+      }
     });
     tabsEl.appendChild(btn);
   });
@@ -3021,6 +3033,39 @@ async function deleteSingleMessage(id) {
     console.error(e);
     toast('Failed to delete — ' + humanError(e.message));
   }
+}
+
+function animateMessageToTab(rowEl, tabEl, onDone) {
+  const from = rowEl.getBoundingClientRect();
+  const clone = rowEl.cloneNode(true);
+  clone.classList.add('msg-fly-clone');
+  clone.style.left = from.left + 'px';
+  clone.style.top = from.top + 'px';
+  clone.style.width = from.width + 'px';
+  clone.style.height = from.height + 'px';
+  document.body.appendChild(clone);
+  rowEl.style.visibility = 'hidden';
+  const to = tabEl.getBoundingClientRect();
+  const toCenterX = to.left + to.width / 2;
+  const toCenterY = to.top + to.height / 2;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      clone.style.left = (toCenterX - from.width / 4) + 'px';
+      clone.style.top = (toCenterY - from.height / 4) + 'px';
+      clone.style.width = (from.width / 2) + 'px';
+      clone.style.height = (from.height / 2) + 'px';
+      clone.style.opacity = '0';
+    });
+  });
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    clone.remove();
+    if (typeof onDone === 'function') onDone();
+  };
+  clone.addEventListener('transitionend', finish);
+  setTimeout(finish, 600);
 }
 
 async function moveSingleMessage(id, targetChannel) {
