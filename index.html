@@ -1373,13 +1373,10 @@ async function loadMessages() {
   if (error) { console.error(error); return; }
 
   if (data && data.length > 0) {
-    renderInitialMessages(data);
+    const list = sortMessagesByOrder(data, currentMessageOrder);
+    renderInitialMessages(list);
     msgCount = data.length;
     updateMsgCount();
-    // apply any order that was already loaded (from init / switchChannel / realtime)
-    if (currentMessageOrder.length) {
-      applyMessageOrderToDOM();
-    }
   }
 }
 
@@ -2011,6 +2008,20 @@ function appendMsg(msg, isNew) {
   }
 }
 
+function sortMessagesByOrder(list, order) {
+  if (!Array.isArray(list) || list.length === 0) return list;
+  if (!Array.isArray(order) || order.length === 0) return list;
+  const byId = new Map();
+  list.forEach(m => { if (m && typeof m.id !== 'undefined') byId.set(m.id, m); });
+  const out = [];
+  order.forEach(id => {
+    const m = byId.get(id);
+    if (m) { out.push(m); byId.delete(id); }
+  });
+  byId.forEach(m => out.push(m));
+  return out.length ? out : list;
+}
+
 function renderInitialMessages(list) {
   if (!Array.isArray(list) || list.length === 0) return;
   hideEmpty();
@@ -2502,6 +2513,7 @@ async function refreshAuth() {
     subscribeRealtimeAll();
     setupDraftChannel();
     restoreLastChannel();
+    await loadMessageOrderForCurrentChannel();
     await loadMessages();
     restoreInputGlobal();
   } else {
