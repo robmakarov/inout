@@ -1267,10 +1267,8 @@ let fieldPrefs = { showTime:true, showAuthor:true };
 let currentMessageOrder = [];
 let touchDragState = null; // for mobile long-press drag
 let allowScrollBlur = false; // true only after init so scrollBottom() does not steal focus
-let keyboardHotkeysUsedThisView = false; // set true when hotkeys used (coming soon); then we skip auto-focus
 
 function focusMessageInput() {
-  if (keyboardHotkeysUsedThisView) return;
   if (input) input.focus();
 }
 
@@ -1337,12 +1335,14 @@ async function init() {
   scrollBottom();
   cleanupAuthHash();
   setupFullscreenOnFirstTap();
-  requestAnimationFrame(() => requestAnimationFrame(focusMessageInput));
+  if (input) input.focus();
+  requestAnimationFrame(() => { if (input) input.focus(); });
+  requestAnimationFrame(() => requestAnimationFrame(() => { if (input) input.focus(); }));
   setTimeout(() => {
     allowScrollBlur = true;
-    focusMessageInput();
-  }, 150);
-  setTimeout(focusMessageInput, 400);
+    if (input) input.focus();
+  }, 100);
+  setTimeout(() => { if (input) input.focus(); }, 300);
   setupFocusOnFirstInteraction();
 }
 
@@ -2646,11 +2646,11 @@ async function reloadForUser() {
   await loadMessageOrderForCurrentChannel();
   await loadMessages();
   subscribeRealtimeAll();
-  keyboardHotkeysUsedThisView = false; // reset on view change so input gets focus again
   requestAnimationFrame(() => {
     scrollBottom();
-    focusMessageInput();
+    if (input) input.focus();
   });
+  setTimeout(() => { if (input) input.focus(); }, 50);
   applyFieldPrefsToMessages();
 }
 
@@ -3360,9 +3360,9 @@ function humanError(message) {
 
 /* ═══ GO ══════════════════════════════════════════════════ */
 init();
-window.addEventListener('load', () => { focusMessageInput(); });
+window.addEventListener('load', () => { if (input) input.focus(); });
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') focusMessageInput();
+  if (document.visibilityState === 'visible' && input) input.focus();
 });
 </script>
 </body>
