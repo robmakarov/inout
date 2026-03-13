@@ -1265,6 +1265,7 @@ let editingMessageId = null;
 let fieldPrefs = { showTime:true, showAuthor:true };
 let currentMessageOrder = [];
 let touchDragState = null; // for mobile long-press drag
+let allowScrollBlur = false; // false until after init so scrollBottom() doesn't steal focus
 
 function updateTabBadge(ch) {
   if (!tabsEl) return;
@@ -1329,9 +1330,10 @@ async function init() {
   scrollBottom();
   cleanupAuthHash();
   setupFullscreenOnFirstTap();
-  if (input && !window.matchMedia('(max-width: 540px)').matches) {
-    requestAnimationFrame(() => { input.focus(); });
-  }
+  setTimeout(() => {
+    allowScrollBlur = true;
+    if (input) input.focus();
+  }, 100);
 }
 
 function openUserModal() {
@@ -1358,14 +1360,14 @@ document.addEventListener('keydown', e => {
 document.addEventListener('keydown', e => {
   if (!input) return;
   const el = document.activeElement;
-  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.getAttribute('contenteditable') === 'true')) return;
+  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable || (el.closest && el.closest('input, textarea, [contenteditable="true"]')))) return;
   if (e.ctrlKey || e.altKey || e.metaKey) return;
   if (e.key.length !== 1) return;
   e.preventDefault();
   e.stopPropagation();
   input.focus();
-  const start = input.selectionStart;
-  const end = input.selectionEnd;
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? input.value.length;
   const before = input.value.slice(0, start);
   const after = input.value.slice(end);
   input.value = before + e.key + after;
@@ -3276,7 +3278,7 @@ function autoResize() {
 feedEl.addEventListener('scroll', () => {
   atBottom = isNearBottom();
   if (atBottom) scrollBtn.classList.remove('visible');
-  if (input && document.activeElement === input) input.blur();
+  if (allowScrollBlur && input && document.activeElement === input) input.blur();
 }, { passive: true });
 
 function scrollBottom() {
