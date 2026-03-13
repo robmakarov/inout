@@ -386,7 +386,7 @@ header{
 .msg{
   display:flex;
   align-items:center;
-  gap:8px;
+  gap:6px;
   padding:4px 20px;
   border-bottom:1px solid var(--line);
   transition:background .1s;
@@ -415,10 +415,10 @@ header{
   font-size:10px;
   color:var(--dim);
   letter-spacing:0.04em;
-  flex:0 0 10ch;
-  max-width:10ch;
+  flex:0 0 auto;
+  max-width:none;
   white-space:nowrap;
-  text-align:right;
+  text-align:left;
 }
 
 .msg-text{
@@ -427,7 +427,6 @@ header{
   color:var(--text);
   line-height:1.55;
   white-space:pre-wrap;
-  margin-left:10px;
   padding-right:72px; /* reserve space under right-side actions */
 }
 
