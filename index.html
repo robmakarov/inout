@@ -1812,7 +1812,11 @@ function loadFieldPrefsForCurrentChannel() {
     fieldPrefs = { showTime:true, showAuthor: currentChannel !== 'main' };
   }
   if (fieldTimeChk) fieldTimeChk.checked = !!fieldPrefs.showTime;
-  if (fieldAuthorChk) fieldAuthorChk.checked = !!fieldPrefs.showAuthor;
+  if (fieldAuthorChk) {
+    const isMain = currentChannel === 'main';
+    fieldAuthorChk.disabled = isMain;
+    fieldAuthorChk.checked = !isMain && !!fieldPrefs.showAuthor;
+  }
 }
 
 function saveFieldPrefsForCurrentChannel() {
@@ -1859,6 +1863,13 @@ function applyFieldPrefsToMessages() {
       senderEl.style.display = !isMain && fieldPrefs.showAuthor ? '' : 'none';
     }
   });
+  // Keep View dropdown checkboxes visually aligned with actual behavior.
+  if (fieldTimeChk) fieldTimeChk.checked = !!fieldPrefs.showTime;
+  if (fieldAuthorChk) {
+    const isMain = currentChannel === 'main';
+    fieldAuthorChk.disabled = isMain;
+    fieldAuthorChk.checked = !isMain && !!fieldPrefs.showAuthor;
+  }
 }
 
 /* ═══ RENDER ══════════════════════════════════════════════ */
@@ -3064,6 +3075,11 @@ if (fieldTimeChk) {
 
 if (fieldAuthorChk) {
   fieldAuthorChk.addEventListener('change', () => {
+    // In main feed authors are never shown; keep UI in sync with that rule.
+    if (currentChannel === 'main' || fieldAuthorChk.disabled) {
+      fieldAuthorChk.checked = false;
+      return;
+    }
     fieldPrefs.showAuthor = !!fieldAuthorChk.checked;
     saveFieldPrefsForCurrentChannel();
     applyFieldPrefsToMessages();
@@ -3074,6 +3090,11 @@ if (viewToggleBtn && viewMenu) {
   viewToggleBtn.addEventListener('click', e => {
     e.stopPropagation();
     viewMenu.classList.toggle('open');
+  });
+
+  // Keep clicks inside the dropdown (labels, checkboxes) from closing it.
+  viewMenu.addEventListener('click', e => {
+    e.stopPropagation();
   });
 
   document.addEventListener('click', e => {
