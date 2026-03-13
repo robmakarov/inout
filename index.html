@@ -1229,6 +1229,7 @@ let draftChannel = null;
 let latestRemoteDraft = '';
 let latestClipboardText = '';
 let selectMode = false;
+let selectModeAutoOn = false; /* true when select mode was turned on by checking a box */
 const selectedIds = new Set();
 let editingMessageId = null;
 let fieldPrefs = { showTime:true, showAuthor:true };
@@ -1599,7 +1600,13 @@ function setSelectMode(on) {
 }
 
 function updateSelectionUI() {
-  if (selectedIds.size > 0 && !selectMode) setSelectMode(true);
+  if (selectedIds.size > 0 && !selectMode) {
+    selectModeAutoOn = true;
+    setSelectMode(true);
+  } else if (selectedIds.size === 0 && selectModeAutoOn) {
+    selectModeAutoOn = false;
+    setSelectMode(false);
+  }
 }
 
 function restoreLastChannel() {
@@ -2765,10 +2772,13 @@ if (selectToggle) {
   selectToggle.addEventListener('click', () => {
     if (selectMode) {
       selectedIds.clear();
+      selectModeAutoOn = false;
       if (feedInner) {
         feedInner.querySelectorAll('.msg-select').forEach(box => { box.checked = false; });
         feedInner.querySelectorAll('.msg.msg-selected').forEach(row => row.classList.remove('msg-selected'));
       }
+    } else {
+      selectModeAutoOn = false;
     }
     setSelectMode(!selectMode);
   });
