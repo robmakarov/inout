@@ -79,8 +79,8 @@ header{
   height:48px;
   display:flex;align-items:center;justify-content:space-between;
   flex-shrink:0;
-  transform:translateY(-100%);
-  transition:transform .5s cubic-bezier(0.22,1,0.36,1);
+  transform:translateY(-24px);
+  transition:transform .28s cubic-bezier(0.22,1,0.36,1);
 }
 body.loaded header{
   transform:translateY(0);
@@ -98,8 +98,8 @@ body.loaded header{
   font-size:10px;
   color:var(--dim);
   position:relative;
-  transform:translateY(-100%);
-  transition:transform .5s cubic-bezier(0.22,1,0.36,1) .06s;
+  transform:translateY(-20px);
+  transition:transform .26s cubic-bezier(0.22,1,0.36,1) .03s;
 }
 body.loaded #manage-bar{
   transform:translateY(0);
@@ -361,9 +361,9 @@ body.loaded #manage-bar{
   overflow-y:auto;
   -webkit-overflow-scrolling:touch;
   outline:none;
-  transform:translateY(20px);
+  transform:translateY(12px);
   opacity:0;
-  transition:transform .5s cubic-bezier(0.22,1,0.36,1) .08s, opacity .4s ease .08s;
+  transition:transform .26s cubic-bezier(0.22,1,0.36,1) .05s, opacity .22s ease .05s;
 }
 body.loaded #feed{
   transform:translateY(0);
@@ -573,9 +573,9 @@ body.select-mode .msg-select-wrap,
   background:var(--bg);
   border-top:1px solid var(--line);
   padding:12px 20px calc(16px + env(safe-area-inset-bottom, 0px));
-  transform:translateY(20px);
+  transform:translateY(16px);
   opacity:0;
-  transition:transform .5s cubic-bezier(0.22,1,0.36,1) .16s, opacity .4s ease .16s;
+  transition:transform .3s cubic-bezier(0.22,1,0.36,1) .08s, opacity .22s ease .08s;
 }
 body.loaded #input-area{
   transform:translateY(0);
