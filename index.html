@@ -2079,7 +2079,6 @@ function switchChannel(ch) {
   updateTabBadge(ch);
   refreshMoveTargets();
   loadFieldPrefsForCurrentChannel();
-  loadMessageOrderForCurrentChannel();
   applyFieldPrefsToMessages();
   if (input) input.focus();
   if (currentUser) {
@@ -2303,6 +2302,7 @@ function updateAuthUI() {
 
 async function reloadForUser() {
   clearMessages();
+  await loadMessageOrderForCurrentChannel();
   await loadMessages();
   subscribeRealtimeAll();
   // Always jump to the latest message when opening a tab.
