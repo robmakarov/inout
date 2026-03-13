@@ -407,6 +407,11 @@ header{
 }
 .msg-fly-clone .msg-actions{visibility:hidden}
 .msg:hover{background:var(--bg2)}
+.msg.msg-editing{background:var(--bg2)}
+.msg.msg-editing .msg-time,
+.msg.msg-editing .msg-sender{color:var(--text)}
+.msg.msg-editing .msg-select-wrap,
+.msg.msg-editing .msg-actions{opacity:1;pointer-events:auto}
 .msg:last-child{border-bottom:none}
 
 .msg-sender{
@@ -1265,6 +1270,31 @@ let selectModeAutoOn = false; /* true when select mode was turned on by checking
 const selectedIds = new Set();
 let editingMessageId = null;
 let fieldPrefs = { showTime:true, showAuthor:true };
+
+function updateEditingRowHighlight() {
+  if (!feedInner) return;
+  feedInner.querySelectorAll('.msg.msg-editing').forEach(r => r.classList.remove('msg-editing'));
+  if (editingMessageId != null) {
+    const row = feedInner.querySelector('.msg[data-id="' + CSS.escape(String(editingMessageId)) + '"]');
+    if (row) row.classList.add('msg-editing');
+  }
+}
+
+function cancelEditingMode(clearInput) {
+  editingMessageId = null;
+  if (input) {
+    input.placeholder = 'say something…';
+    if (clearInput) {
+      input.value = '';
+      saveInputGlobal();
+      if (currentUser) broadcastDraft('');
+    }
+    autoResize();
+    sendBtn.disabled = !input.value.trim();
+    updateClearInputBtn();
+  }
+  updateEditingRowHighlight();
+}
 let currentMessageOrder = [];
 let touchDragState = null; // for mobile long-press drag
 function focusMessageInput() {
@@ -1339,6 +1369,7 @@ async function init() {
   requestAnimationFrame(() => requestAnimationFrame(() => { if (input) input.focus(); }));
   setTimeout(() => { if (input) input.focus(); }, 100);
   setTimeout(() => { if (input) input.focus(); }, 300);
+  cancelEditingMode(false);
   setupFocusOnFirstInteraction();
 }
 
@@ -2005,18 +2036,8 @@ function createMsgRow(msg, isNew) {
       return;
     }
     if (Number(msg.id) === Number(editingMessageId)) {
-      editingMessageId = null;
-      input.placeholder = 'say something…';
-      input.value = '';
-      autoResize();
-      sendBtn.disabled = true;
-      updateClearInputBtn();
-      saveInputGlobal();
-      if (currentUser) broadcastDraft('');
-      setTimeout(() => {
-        saveInputGlobal();
-        if (input) input.focus();
-      }, 0);
+      cancelEditingMode(true);
+      setTimeout(() => { saveInputGlobal(); if (input) input.focus(); }, 0);
       return;
     }
     input.value = msg.text || '';
@@ -2026,6 +2047,7 @@ function createMsgRow(msg, isNew) {
     sendBtn.disabled = !input.value.trim();
     updateClearInputBtn();
     saveInputGlobal();
+    updateEditingRowHighlight();
     focusMessageInput();
   });
 
@@ -2035,18 +2057,8 @@ function createMsgRow(msg, isNew) {
     if (e.target.closest('button, a, .msg-actions, .msg-select, .msg-select-wrap')) return;
     e.stopPropagation();
     e.preventDefault();
-    editingMessageId = null;
-    input.placeholder = 'say something…';
-    input.value = '';
-    autoResize();
-    sendBtn.disabled = true;
-    updateClearInputBtn();
-    saveInputGlobal();
-    if (currentUser) broadcastDraft('');
-    setTimeout(() => {
-      saveInputGlobal();
-      if (input) input.focus();
-    }, 0);
+    cancelEditingMode(true);
+    setTimeout(() => { saveInputGlobal(); if (input) input.focus(); }, 0);
   }, true);
 
   row.appendChild(selectWrap);
@@ -2672,6 +2684,7 @@ function updateAuthUI() {
 }
 
 async function reloadForUser() {
+  cancelEditingMode(true);
   clearMessages();
   await loadMessageOrderForCurrentChannel();
   await loadMessages();
@@ -2792,13 +2805,7 @@ async function sendText(text) {
       return;
     }
     updateMessageRowText(editingMessageId, trimmed);
-    editingMessageId = null;
-    input.value = '';
-    autoResize();
-    sendBtn.disabled = true;
-    updateClearInputBtn();
-    saveInputGlobal();
-    if (input.placeholder !== 'say something…') input.placeholder = 'say something…';
+    cancelEditingMode(true);
     requestAnimationFrame(focusMessageInput);
     return;
   }
@@ -2849,15 +2856,7 @@ input.addEventListener('input', () => {
 
 input.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
-    if (editingMessageId) {
-      editingMessageId = null;
-      input.placeholder = 'say something…';
-      input.value = '';
-      autoResize();
-      sendBtn.disabled = true;
-      updateClearInputBtn();
-      saveInputGlobal();
-    }
+    if (editingMessageId) cancelEditingMode(true);
     return;
   }
   if (e.key === 'Enter' && !e.shiftKey) {
