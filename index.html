@@ -1316,14 +1316,8 @@ async function reloadForUser() {
   clearMessages();
   await loadMessages();
   subscribeRealtimeAll();
-   if (feedEl) {
-    const saved = channelScroll.get(currentChannel);
-    if (typeof saved === 'number') {
-      feedEl.scrollTop = saved;
-    } else {
-      scrollBottom();
-    }
-  }
+  // Always jump to the latest message when opening a tab.
+  requestAnimationFrame(scrollBottom);
 }
 
 function clearMessages() {
