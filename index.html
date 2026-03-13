@@ -913,13 +913,33 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 (function setupVisualViewportPinning() {
   const vv = window.visualViewport;
   if (!vv) return;
-  const set = () => {
-    const top = (typeof vv.offsetTop === 'number') ? vv.offsetTop : 0;
-    document.documentElement.style.setProperty('--vv-top', top + 'px');
+  let raf = 0;
+  let current = 0;
+  let pending = 0;
+
+  const readTop = () => {
+    const raw = (typeof vv.offsetTop === 'number') ? vv.offsetTop : 0;
+    // clamp & quantize to reduce jitter
+    return Math.max(0, Math.round(raw));
   };
-  vv.addEventListener('resize', set);
-  vv.addEventListener('scroll', set);
-  set();
+
+  const apply = () => {
+    raf = 0;
+    const next = pending;
+    if (Math.abs(next - current) < 2) return; // ignore tiny oscillations
+    current = next;
+    document.documentElement.style.setProperty('--vv-top', current + 'px');
+  };
+
+  const schedule = () => {
+    pending = readTop();
+    if (!raf) raf = requestAnimationFrame(apply);
+  };
+
+  vv.addEventListener('resize', schedule);
+  vv.addEventListener('scroll', schedule);
+  window.addEventListener('orientationchange', schedule);
+  schedule();
 })();
 
 const feedInner  = document.getElementById('feed-inner');
