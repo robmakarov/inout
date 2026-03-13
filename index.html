@@ -1159,6 +1159,19 @@ function hideClipboardBubble() {
   if (clipboardBubbleTxt) clipboardBubbleTxt.textContent = '';
 }
 
+function showEmptyIfNoMessages() {
+  if (!feedInner || !emptyEl) return;
+  const hasMsg = feedInner.querySelector('.msg');
+  if (hasMsg) return;
+  if (!emptyEl.parentNode) {
+    // retrigger animation
+    emptyEl.style.animation = 'none';
+    void emptyEl.offsetWidth;
+    emptyEl.style.animation = 'fadin .6s .3s ease both';
+    feedInner.appendChild(emptyEl);
+  }
+}
+
 function setSelectMode(on) {
   selectMode = !!on;
   selectedIds.clear();
@@ -1885,6 +1898,7 @@ if (deleteSelectedBtn) {
         if (el) el.remove();
       });
       setSelectMode(false);
+      showEmptyIfNoMessages();
     } catch (e) {
       console.error(e);
       toast('Failed to delete — ' + humanError(e.message));
