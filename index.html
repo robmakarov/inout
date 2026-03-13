@@ -739,7 +739,17 @@ body.select-mode .msg-select-wrap,
     min-width:120px;
     max-width:160px;
   }
-  body{overflow:auto;}
+  body{
+    overflow:auto;
+    scrollbar-width:none;
+    -ms-overflow-style:none;
+  }
+  body::-webkit-scrollbar{display:none}
+  #feed{
+    scrollbar-width:none;
+    -ms-overflow-style:none;
+  }
+  #feed::-webkit-scrollbar{display:none}
   /* keep header pinned even when keyboard opens */
   header{
     position:fixed;
@@ -3116,6 +3126,7 @@ function autoResize() {
 feedEl.addEventListener('scroll', () => {
   atBottom = isNearBottom();
   if (atBottom) scrollBtn.classList.remove('visible');
+  if (input && document.activeElement === input) input.blur();
 }, { passive: true });
 
 function scrollBottom() {
