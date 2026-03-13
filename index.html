@@ -1346,6 +1346,20 @@ function isNearBottom() {
 
 /* ═══ INIT ═══════════════════════════════════════════════ */
 async function init() {
+  /* Clear input immediately when returning from editing so it never paints with message text (avoids blink). */
+  if (localStorage.getItem(WAS_EDITING_KEY)) {
+    try {
+      localStorage.setItem(INPUT_STATE_KEY, '');
+      localStorage.removeItem(WAS_EDITING_KEY);
+    } catch (_) {}
+    if (input) {
+      input.value = '';
+      input.placeholder = 'say something…';
+      sendBtn.disabled = true;
+      autoResize();
+      updateClearInputBtn();
+    }
+  }
   loadChannelsList();
   await refreshAuth();
   if (currentUser) {
@@ -1363,17 +1377,6 @@ async function init() {
     setupDraftChannel();
     subscribeOrderRealtime();
     subscribeViewRealtime();
-  }
-  if (localStorage.getItem(WAS_EDITING_KEY)) {
-    try { localStorage.removeItem(WAS_EDITING_KEY); } catch (_) {}
-    if (input) {
-      input.value = '';
-      input.placeholder = 'say something…';
-      saveInputGlobal();
-      updateClearInputBtn();
-      sendBtn.disabled = true;
-      autoResize();
-    }
   }
   setupPresence();
   scrollBottom();
@@ -2608,9 +2611,6 @@ async function refreshAuth() {
     restoreLastChannel();
     await loadMessageOrderForCurrentChannel();
     await loadMessages();
-    if (localStorage.getItem(WAS_EDITING_KEY)) {
-      try { localStorage.setItem(INPUT_STATE_KEY, ''); } catch (_) {}
-    }
     restoreInputGlobal();
   } else {
     sharedChannels.clear();
