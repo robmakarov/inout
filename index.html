@@ -448,23 +448,10 @@ header{
 #send-btn:active{transform:scale(.97)}
 #send-btn:disabled{background:var(--dim);color:var(--muted);cursor:default;transform:none}
 
-.input-hint{
-  text-align:center;
-  font-size:10px;
-  color:var(--dim);
-  letter-spacing:0.06em;
-  margin-top:8px;
-  max-width:900px;
-  margin-inline:auto;
-}
-.input-hint kbd{
-  background:var(--line);
-  border:1px solid var(--line2);
-  border-radius:2px;
-  padding:0 4px;
-  font-family:var(--mono);
-  font-size:9px;
-  color:var(--soft);
+.input-tools{
+  display:flex;
+  justify-content:flex-end;
+  margin-top:6px;
 }
 
 /* ── TOAST ── */
@@ -731,7 +718,9 @@ header{
       ></textarea>
       <button id="send-btn" disabled>Send</button>
     </div>
-    <div class="input-hint"><kbd>Enter</kbd> to send &nbsp;·&nbsp; <kbd>Shift+Enter</kbd> for newline</div>
+    <div class="input-tools">
+      <button id="clipboard-button" class="draft-btn">From clipboard</button>
+    </div>
   </div>
 </div>
 
@@ -824,6 +813,7 @@ const clipboardBubble    = document.getElementById('clipboard-bubble');
 const clipboardBubbleTxt = document.getElementById('clipboard-bubble-text');
 const clipboardPasteBtn  = document.getElementById('clipboard-paste');
 const clipboardDismissBtn= document.getElementById('clipboard-dismiss');
+const clipboardButton    = document.getElementById('clipboard-button');
 const draftBubble    = document.getElementById('draft-bubble');
 const draftBubbleTxt = document.getElementById('draft-bubble-text');
 const draftCopyBtn   = document.getElementById('draft-copy');
@@ -1631,24 +1621,6 @@ input.addEventListener('input', () => {
   }
 });
 
-// On focus, try to read clipboard once (user gesture) and offer as bubble
-input.addEventListener('focus', async () => {
-  if (!navigator.clipboard || !navigator.clipboard.readText) return;
-  try {
-    const text = (await navigator.clipboard.readText()) || '';
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    // Avoid duplicating existing remote draft bubble
-    if (trimmed === latestRemoteDraft) return;
-    if (trimmed === latestClipboardText) return;
-    latestClipboardText = trimmed;
-    showClipboardBubble(trimmed);
-  } catch (e) {
-    // ignore clipboard errors silently
-    console.error(e);
-  }
-});
-
 input.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
@@ -1701,6 +1673,22 @@ if (clipboardPasteBtn) {
 if (clipboardDismissBtn) {
   clipboardDismissBtn.addEventListener('click', () => {
     hideClipboardBubble();
+  });
+}
+
+if (clipboardButton) {
+  clipboardButton.addEventListener('click', async () => {
+    if (!navigator.clipboard || !navigator.clipboard.readText) return;
+    try {
+      const text = (await navigator.clipboard.readText()) || '';
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      latestClipboardText = trimmed;
+      showClipboardBubble(trimmed);
+    } catch (e) {
+      console.error(e);
+      toast('Could not read clipboard.');
+    }
   });
 }
 
