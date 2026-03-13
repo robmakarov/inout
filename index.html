@@ -1184,14 +1184,18 @@ function setSelectMode(on) {
   const boxes = feedInner.querySelectorAll('.msg-select');
   boxes.forEach(box => {
     box.checked = false;
+    box.style.display = selectMode ? 'inline-block' : 'none';
   });
+  if (manageActions) {
+    manageActions.classList.toggle('visible', selectMode);
+  }
   updateSelectionUI();
 }
 
 function updateSelectionUI() {
-  if (!manageActions) return;
   const hasAny = selectedIds.size > 0;
-  manageActions.classList.toggle('visible', hasAny);
+  if (deleteSelectedBtn) deleteSelectedBtn.disabled = !hasAny;
+  if (moveSelectedBtn) moveSelectedBtn.disabled = !hasAny;
 }
 
 /* ═══ RENDER ══════════════════════════════════════════════ */
