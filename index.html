@@ -165,7 +165,7 @@ header{
 }
 
 .feed-inner{
-  padding:16px 0 8px;
+  padding:16px 0 80px;
   display:flex;
   flex-direction:column;
   justify-content:flex-end;
@@ -252,6 +252,11 @@ header{
 /* ── INPUT AREA ── */
 #input-area{
   flex-shrink:0;
+  position:fixed;
+  left:0;
+  right:0;
+  bottom:0;
+  z-index:150;
   background:var(--bg);
   border-top:1px solid var(--line);
   padding:12px 20px 16px;

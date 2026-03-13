@@ -1,0 +1,29 @@
+INOUT – Next Operations
+=======================
+
+1. Code structure & components
+- Extract inline JS from `index.html` into `app.js` (ES module).
+- Introduce a simple folder structure: `src/` with submodules for auth, feed, tabs, and presence.
+- Keep Supabase client init in a single shared module.
+
+2. UI & design system
+- Mirror Figma design tokens into CSS variables (colors, typography, spacing, radii).
+- Create reusable CSS component classes (buttons, inputs, tabs, toasts, modal).
+- Clean up layout for mobile/desktop breakpoints based on Figma designs.
+
+3. Paid subscription support
+- Choose billing provider (Stripe or merchant-of-record).
+- Add `user_subscriptions` table in Supabase with RLS.
+- Implement backend endpoints (Vercel functions or Supabase Edge Functions) for checkout + webhooks.
+- Gate “pro” features in UI and RLS based on subscription status.
+
+4. Legal & productization
+- Draft Terms of Service, Privacy Policy, and Refund/Cancel policy.
+- Add links to these pages from the app (footer/header or menu).
+- Confirm tax/VAT handling strategy with accountant or payment provider tools.
+
+5. Product polish
+- Add basic analytics (page view and key actions) with privacy-safe provider.
+- Improve error and empty states for feeds and auth failures.
+- Add simple onboarding or tooltip explaining feeds, sharing, and IDs.
+
