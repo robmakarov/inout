@@ -1325,9 +1325,6 @@ async function loadMessages() {
     renderInitialMessages(data);
     msgCount = data.length;
     updateMsgCount();
-    // apply any saved order after initial render
-    loadMessageOrderForCurrentChannel();
-    applyMessageOrderToDOM();
   }
 }
 
@@ -1587,6 +1584,8 @@ function createMsgRow(msg, isNew) {
   });
   row.addEventListener('dragend', () => {
     row.classList.remove('dragging');
+    recomputeOrderFromDOM();
+    saveMessageOrderForCurrentChannel();
   });
   row.addEventListener('dragover', e => {
     e.preventDefault();
@@ -1742,6 +1741,14 @@ function renderInitialMessages(list) {
     if (row) frag.appendChild(row);
   }
   feedInner.appendChild(frag);
+  // seed or apply saved order
+  loadMessageOrderForCurrentChannel();
+  if (currentMessageOrder.length) {
+    applyMessageOrderToDOM();
+  } else {
+    recomputeOrderFromDOM();
+    saveMessageOrderForCurrentChannel();
+  }
 }
 
 let globalMsgNum = 0;
@@ -2187,7 +2194,6 @@ async function reloadForUser() {
   // Always jump to the latest message when opening a tab.
   requestAnimationFrame(scrollBottom);
   applyFieldPrefsToMessages();
-  applyMessageOrderToDOM();
 }
 
 function clearMessages() {
