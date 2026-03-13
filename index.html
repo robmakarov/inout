@@ -1208,6 +1208,7 @@ const channelScroll = new Map();
 const unreadCounts  = new Map(); // channel -> number
 const sharedChannels = new Set(); // channel -> has other members
 let channelSubs = new Map(); // channel -> realtime subscription
+let orderSub = null;         // realtime subscription for message_orders
 let draftChannel = null;
 let latestRemoteDraft = '';
 let latestClipboardText = '';
@@ -1271,6 +1272,7 @@ async function init() {
     await loadMessages();
     subscribeRealtimeAll();
     setupDraftChannel();
+    subscribeOrderRealtime();
     restoreInputGlobal();
   }
   setupPresence();
@@ -1358,6 +1360,32 @@ function subscribeRealtimeAll() {
       .subscribe();
     channelSubs.set(ch, sub);
   });
+}
+
+function subscribeOrderRealtime() {
+  if (!currentUser) return;
+  if (orderSub) {
+    try { orderSub.unsubscribe(); } catch (_) {}
+    orderSub = null;
+  }
+  orderSub = sb
+    .channel('message-orders-' + currentUser.id)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'message_orders',
+        filter: 'user_id=eq.' + currentUser.id
+      },
+      async payload => {
+        const row = payload.new || payload.old || {};
+        if (!row || row.channel !== currentChannel) return;
+        await loadMessageOrderForCurrentChannel();
+        applyMessageOrderToDOM();
+      }
+    )
+    .subscribe();
 }
 
 function onInsertForChannel(ch, msg) {
@@ -1592,6 +1620,8 @@ function createMsgRow(msg, isNew) {
     row.classList.remove('dragging');
     recomputeOrderFromDOM();
     saveMessageOrderForCurrentChannel();
+    // local apply to feel instant; other devices get it via realtime
+    applyMessageOrderToDOM();
   });
   row.addEventListener('dragover', e => {
     e.preventDefault();
