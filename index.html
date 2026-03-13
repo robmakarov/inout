@@ -1370,16 +1370,18 @@ document.addEventListener('keydown', e => {
 
 function setupFocusOnFirstInteraction() {
   if (!input) return;
-  function tryFocus(e) {
-    if (document.activeElement === input) return;
-    if (e.target && (e.target.tagName === 'BUTTON' || e.target.tagName === 'A')) return;
-    if (e.target && (e.target.closest && e.target.closest('input, textarea, [contenteditable="true"]'))) return;
+  function moveFocusToInput(e) {
+    const t = e.target;
+    if (!t) return;
+    if (t.tagName === 'BUTTON' || t.tagName === 'A' || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') return;
+    if (t.isContentEditable || (t.closest && t.closest('input, textarea, [contenteditable="true"], button, a'))) return;
+    if (t.closest && t.closest('.msg')) return;
+    if (umBackdrop && umBackdrop.style.display === 'block' && (t === umBackdrop || umBackdrop.contains(t))) return;
+    if (cmBackdrop && cmBackdrop.style.display === 'flex' && (t === cmBackdrop || cmBackdrop.contains(t))) return;
     input.focus();
-    document.removeEventListener('click', tryFocus, true);
-    document.removeEventListener('touchstart', tryFocus, true);
   }
-  document.addEventListener('click', tryFocus, true);
-  document.addEventListener('touchstart', tryFocus, true);
+  document.addEventListener('mousedown', moveFocusToInput, true);
+  document.addEventListener('touchstart', moveFocusToInput, true);
 }
 
 /* ═══ LOAD ════════════════════════════════════════════════ */
