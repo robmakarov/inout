@@ -447,7 +447,6 @@ header{
   transition:opacity .12s ease;
 }
 
-body.select-mode .msg-select-wrap,
 .msg:hover .msg-select-wrap,
 .msg.msg-selected .msg-select-wrap{
   opacity:1;
@@ -1477,11 +1476,19 @@ function setSelectMode(on) {
       wrap.style.opacity = '1';
       wrap.style.pointerEvents = 'auto';
     } else {
-      wrap.style.opacity = '';
-      wrap.style.pointerEvents = '';
+      // keep visible only if its checkbox is checked
+      const box = wrap.querySelector('.msg-select');
+      if (box && box.checked) {
+        wrap.style.opacity = '1';
+        wrap.style.pointerEvents = 'auto';
+        wrap.closest('.msg')?.classList.add('msg-selected');
+      } else {
+        wrap.style.opacity = '';
+        wrap.style.pointerEvents = '';
+        wrap.closest('.msg')?.classList.remove('msg-selected');
+      }
     }
   });
-  document.body.classList.toggle('select-mode', selectMode);
   if (manageActions) {
     manageActions.classList.toggle('visible', selectMode);
   }
