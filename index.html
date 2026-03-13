@@ -1023,7 +1023,7 @@ body.select-mode .msg-select-wrap,
     </div>
   </div>
 
-  <div id="feed" tabindex="0">
+  <div id="feed">
     <div class="feed-inner" id="feed-inner">
       <div id="empty">
         <div class="e-label">Nothing yet.</div>
@@ -1337,10 +1337,11 @@ async function init() {
   scrollBottom();
   cleanupAuthHash();
   setupFullscreenOnFirstTap();
+  focusMessageInput();
   setTimeout(() => {
     allowScrollBlur = true;
     focusMessageInput();
-  }, 100);
+  }, 150);
 }
 
 function openUserModal() {
@@ -3341,6 +3342,7 @@ function humanError(message) {
 
 /* ═══ GO ══════════════════════════════════════════════════ */
 init();
+window.addEventListener('load', () => { focusMessageInput(); });
 </script>
 </body>
 </html>
