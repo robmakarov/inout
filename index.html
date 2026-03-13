@@ -385,7 +385,7 @@ header{
 .msg{
   display:flex;
   align-items:center;
-  gap:10px;
+  gap:8px;
   padding:4px 20px;
   border-bottom:1px solid var(--line);
   transition:background .1s;
@@ -417,11 +417,33 @@ header{
 }
 
 .msg-text{
-  flex:1;
+  flex:1 1 auto;
   font-size:13px;
   color:var(--text);
   line-height:1.55;
   white-space:pre-wrap;
+}
+
+.msg-select-wrap{
+  flex:0 0 20px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .12s ease;
+}
+
+body.select-mode .msg-select-wrap,
+.msg:hover .msg-select-wrap{
+  opacity:1;
+  pointer-events:auto;
+}
+
+.msg-select{
+  width:13px;
+  height:13px;
+  accent-color:var(--acc);
 }
 
 .msg-actions{
@@ -1533,6 +1555,8 @@ function createMsgRow(msg, isNew) {
     sender.style.display = '';
   }
 
+  const selectWrap = document.createElement('div');
+  selectWrap.className = 'msg-select-wrap';
   const selectBox = document.createElement('input');
   selectBox.type = 'checkbox';
   selectBox.className = 'msg-select';
@@ -1545,10 +1569,7 @@ function createMsgRow(msg, isNew) {
     }
     updateSelectionUI();
   });
-  // Hidden until Select is turned on.
-  if (!selectMode) {
-    selectBox.style.display = 'none';
-  }
+  selectWrap.appendChild(selectBox);
 
   const time = document.createElement('div');
   time.className = 'msg-time';
@@ -1560,7 +1581,7 @@ function createMsgRow(msg, isNew) {
   text.innerHTML = linkify(escapeHtml(msg.text));
   text.title = msg.text || '';
 
-  row.appendChild(selectBox);
+  row.appendChild(selectWrap);
   row.appendChild(time);
   row.appendChild(sender);
   row.appendChild(text);
