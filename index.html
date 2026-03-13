@@ -1465,15 +1465,22 @@ function showEmptyIfNoMessages() {
 
 function setSelectMode(on) {
   selectMode = !!on;
-  selectedIds.clear();
   if (selectToggle) {
     selectToggle.classList.toggle('active', selectMode);
     selectToggle.textContent = selectMode ? 'Cancel' : 'Select';
   }
   if (selectExtra) selectExtra.classList.toggle('show', selectMode);
-  const boxes = feedInner.querySelectorAll('.msg-select');
-  boxes.forEach(box => {
-    box.checked = false;
+  const wraps = feedInner.querySelectorAll('.msg-select-wrap');
+  wraps.forEach(wrap => {
+    const box = wrap.querySelector('.msg-select');
+    if (!box) return;
+    if (selectMode || box.checked) {
+      wrap.style.opacity = '1';
+      wrap.style.pointerEvents = 'auto';
+    } else {
+      wrap.style.opacity = '';
+      wrap.style.pointerEvents = '';
+    }
   });
   document.body.classList.toggle('select-mode', selectMode);
   if (manageActions) {
