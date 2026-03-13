@@ -1344,6 +1344,8 @@ function isNearBottom() {
 
 /* ═══ INIT ═══════════════════════════════════════════════ */
 async function init() {
+  try { localStorage.setItem(INPUT_STATE_KEY, ''); } catch (_) {}
+  if (input) { input.value = ''; input.placeholder = 'say something…'; }
   loadChannelsList();
   await refreshAuth();
   if (currentUser) {
@@ -2618,7 +2620,6 @@ async function refreshAuth() {
     restoreLastChannel();
     await loadMessageOrderForCurrentChannel();
     await loadMessages();
-    restoreInputGlobal();
   } else {
     sharedChannels.clear();
     unreadCounts.clear();
