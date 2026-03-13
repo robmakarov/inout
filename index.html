@@ -1924,8 +1924,40 @@ function saveChannelsList() {
 
 async function loadMessageOrderForCurrentChannel() {
   currentMessageOrder = [];
-  // Try server-backed order first (if signed in).
+  // 1) Try unified view object (if table exists and user is signed in).
   if (currentUser) {
+    try {
+      const { data, error } = await sb
+        .from('views')
+        .select('config')
+        .eq('user_id', currentUser.id)
+        .eq('channel', currentChannel)
+        .limit(1)
+        .maybeSingle();
+      if (!error && data && data.config) {
+        const cfg = data.config || {};
+        const orderArr = Array.isArray(cfg.order) ? cfg.order : [];
+        currentMessageOrder = orderArr
+          .map(x => Number(x))
+          .filter(x => Number.isFinite(x));
+        // Pull view rules into fieldPrefs and mirror into local storage.
+        const defTime = true;
+        const defAuthor = currentChannel === 'main' ? false : true;
+        fieldPrefs = {
+          showTime: typeof cfg.showTime === 'boolean' ? cfg.showTime : defTime,
+          showAuthor: typeof cfg.showAuthor === 'boolean' ? cfg.showAuthor : defAuthor,
+        };
+        saveFieldPrefsForCurrentChannel();
+        // also mirror order into local backup
+        saveOrderToLocal();
+      }
+    } catch (e) {
+      // views table might not exist yet; fail soft
+      console.error(e);
+    }
+  }
+  // 2) If no view-based order, fall back to legacy message_orders + local.
+  if (!currentMessageOrder.length && currentUser) {
     try {
       const { data, error } = await sb
         .from('message_orders')
@@ -1942,7 +1974,7 @@ async function loadMessageOrderForCurrentChannel() {
       console.error(e);
     }
   }
-  // Fallback / merge with local storage if nothing from server.
+  // 3) Final fallback: pure local order.
   if (!currentMessageOrder.length) {
     currentMessageOrder = loadOrderFromLocal();
   }
@@ -1952,23 +1984,47 @@ async function saveMessageOrderForCurrentChannel() {
   if (!currentMessageOrder.length) return;
   // Always keep a local copy so order survives even if DB fails.
   saveOrderToLocal();
-  // Also try to persist to server for cross-device sync.
-  if (!currentUser) return;
-  try {
-    const rows = currentMessageOrder.map((entryId, index) => ({
-      user_id: currentUser.id,
-      channel: currentChannel,
-      entry_id: entryId,
-      position: index,
-    }));
-    const { error } = await sb
-      .from('message_orders')
-      .upsert(rows, { onConflict: 'user_id,channel,entry_id' });
-    if (error) {
-      console.error(error);
+  // Persist to legacy message_orders for existing behavior / realtime.
+  if (currentUser) {
+    try {
+      const rows = currentMessageOrder.map((entryId, index) => ({
+        user_id: currentUser.id,
+        channel: currentChannel,
+        entry_id: entryId,
+        position: index,
+      }));
+      const { error } = await sb
+        .from('message_orders')
+        .upsert(rows, { onConflict: 'user_id,channel,entry_id' });
+      if (error) {
+        console.error(error);
+      }
+    } catch (e) {
+      console.error(e);
     }
-  } catch (e) {
-    console.error(e);
+  }
+  // Also persist unified view object (order + rules) for this feed.
+  if (currentUser) {
+    try {
+      const cfg = {
+        order: currentMessageOrder.slice(),
+        showTime: !!fieldPrefs.showTime,
+        showAuthor: !!fieldPrefs.showAuthor,
+      };
+      await sb
+        .from('views')
+        .upsert(
+          {
+            user_id: currentUser.id,
+            channel: currentChannel,
+            config: cfg,
+          },
+          { onConflict: 'user_id,channel' }
+        );
+    } catch (e) {
+      // If views table/index not ready, just ignore.
+      console.error(e);
+    }
   }
 }
 
