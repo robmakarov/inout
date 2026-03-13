@@ -164,6 +164,20 @@ header{
   border-radius:4px;
 }
 
+.field-controls{
+  font-size:10px;
+  color:var(--dim);
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.field-controls label{
+  display:inline-flex;
+  align-items:center;
+  gap:3px;
+  cursor:pointer;
+}
+
 .logo{
   font-family:var(--sans);
   font-size:15px;
@@ -398,6 +412,34 @@ header{
   color:var(--text);
   line-height:1.55;
   white-space:pre-wrap;
+}
+
+.msg-actions{
+  display:flex;
+  align-items:center;
+  gap:4px;
+  margin-right:4px;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .15s ease;
+}
+.msg:hover .msg-actions{
+  opacity:1;
+  pointer-events:auto;
+}
+.msg-action-btn{
+  border:1px solid var(--line2);
+  background:var(--bg);
+  color:var(--soft);
+  font-family:var(--mono);
+  font-size:9px;
+  padding:1px 4px;
+  border-radius:3px;
+  cursor:pointer;
+}
+.msg-action-btn:hover{
+  background:var(--line);
+  color:var(--text);
 }
 
 .msg-text a{
@@ -818,6 +860,11 @@ header{
       <select id="move-target"></select>
       <button id="move-selected" class="manage-btn">Move</button>
       <button id="export-tab" class="manage-btn">Export</button>
+      <div class="field-controls">
+        <span>View:</span>
+        <label><input type="checkbox" id="field-time" checked/>Time</label>
+        <label><input type="checkbox" id="field-author" checked/>Author</label>
+      </div>
     </div>
   </div>
 
@@ -996,6 +1043,8 @@ const deleteSelectedBtn = document.getElementById('delete-selected');
 const moveSelectedBtn = document.getElementById('move-selected');
 const moveTargetSelect = document.getElementById('move-target');
 const exportTabBtn   = document.getElementById('export-tab');
+const fieldTimeChk   = document.getElementById('field-time');
+const fieldAuthorChk = document.getElementById('field-author');
 const draftBubble    = document.getElementById('draft-bubble');
 const draftBubbleTxt = document.getElementById('draft-bubble-text');
 const draftCopyBtn   = document.getElementById('draft-copy');
@@ -1016,9 +1065,10 @@ let myId           = crypto.randomUUID();
 let currentUser    = null;
 let currentChannel = 'main';
 let channels       = ['main'];
-const CHANNELS_KEY       = 'inout_channels_v1';
-const CURRENT_CHANNEL_KEY= 'inout_current_channel_v1';
-const INPUT_STATE_KEY    = 'inout_input_state_v2';
+const CHANNELS_KEY        = 'inout_channels_v1';
+const CURRENT_CHANNEL_KEY = 'inout_current_channel_v1';
+const INPUT_STATE_KEY     = 'inout_input_state_v2';
+const FIELD_PREFS_KEY     = 'inout_field_prefs_v1';
 const seenIds       = new Set();
 const channelScroll = new Map();
 const unreadCounts  = new Map(); // channel -> number
@@ -1029,6 +1079,7 @@ let latestRemoteDraft = '';
 let latestClipboardText = '';
 let selectMode = false;
 const selectedIds = new Set();
+let fieldPrefs = { showTime:true, showAuthor:true };
 
 function updateTabBadge(ch) {
   if (!tabsEl) return;
@@ -1078,6 +1129,7 @@ async function init() {
   setupAuthListener();
   setupTabs();
   restoreLastChannel();
+   loadFieldPrefsForCurrentChannel();
   refreshMoveTargets();
   if (currentUser) {
     await loadMessages();
@@ -1331,6 +1383,51 @@ function saveInputGlobal() {
   } catch (_) {}
 }
 
+function loadFieldPrefsForCurrentChannel() {
+  try {
+    const raw = localStorage.getItem(FIELD_PREFS_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    const prefs = map[currentChannel] || {};
+    // defaults: main -> time only, others -> time+author
+    const defTime = true;
+    const defAuthor = currentChannel === 'main' ? false : true;
+    fieldPrefs = {
+      showTime: typeof prefs.showTime === 'boolean' ? prefs.showTime : defTime,
+      showAuthor: typeof prefs.showAuthor === 'boolean' ? prefs.showAuthor : defAuthor,
+    };
+  } catch(_) {
+    fieldPrefs = { showTime:true, showAuthor: currentChannel !== 'main' };
+  }
+  if (fieldTimeChk) fieldTimeChk.checked = !!fieldPrefs.showTime;
+  if (fieldAuthorChk) fieldAuthorChk.checked = !!fieldPrefs.showAuthor;
+}
+
+function saveFieldPrefsForCurrentChannel() {
+  try {
+    const raw = localStorage.getItem(FIELD_PREFS_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    map[currentChannel] = {
+      showTime: !!fieldPrefs.showTime,
+      showAuthor: !!fieldPrefs.showAuthor,
+    };
+    localStorage.setItem(FIELD_PREFS_KEY, JSON.stringify(map));
+  } catch(_) {}
+}
+
+function applyFieldPrefsToMessages() {
+  const rows = feedInner.querySelectorAll('.msg');
+  rows.forEach(row => {
+    const timeEl = row.querySelector('.msg-time');
+    const senderEl = row.querySelector('.msg-sender');
+    if (timeEl) timeEl.style.display = fieldPrefs.showTime ? '' : 'none';
+    // In main feed we always hide author.
+    const isMain = currentChannel === 'main' || (row.dataset.channel === 'main');
+    if (senderEl) {
+      senderEl.style.display = !isMain && fieldPrefs.showAuthor ? '' : 'none';
+    }
+  });
+}
+
 /* ═══ RENDER ══════════════════════════════════════════════ */
 function createMsgRow(msg, isNew) {
   if (msg && typeof msg.id !== 'undefined') {
@@ -1346,6 +1443,56 @@ function createMsgRow(msg, isNew) {
   if (typeof msg.id !== 'undefined') {
     row.dataset.id = String(msg.id);
   }
+
+  const actions = document.createElement('div');
+  actions.className = 'msg-actions';
+
+  const actionDelete = document.createElement('button');
+  actionDelete.className = 'msg-action-btn';
+  actionDelete.textContent = 'Del';
+  actionDelete.addEventListener('click', e => {
+    e.stopPropagation();
+    if (!msg.id) return;
+    deleteSingleMessage(msg.id);
+  });
+
+  const actionMove = document.createElement('button');
+  actionMove.className = 'msg-action-btn';
+  actionMove.textContent = 'Move';
+  actionMove.addEventListener('click', e => {
+    e.stopPropagation();
+    if (!msg.id) return;
+    moveSingleMessage(msg.id);
+  });
+
+  const actionExport = document.createElement('button');
+  actionExport.className = 'msg-action-btn';
+  actionExport.textContent = 'Exp';
+  actionExport.addEventListener('click', e => {
+    e.stopPropagation();
+    if (!msg.id) return;
+    exportSingleMessage(msg.id);
+  });
+
+  const actionCopy = document.createElement('button');
+  actionCopy.className = 'msg-action-btn';
+  actionCopy.textContent = 'Copy';
+  actionCopy.addEventListener('click', e => {
+    e.stopPropagation();
+    if (!msg.text) return;
+    try {
+      navigator.clipboard.writeText(msg.text);
+      toast('Message copied.');
+    } catch (err) {
+      console.error(err);
+      toast('Could not copy.');
+    }
+  });
+
+  actions.appendChild(actionDelete);
+  actions.appendChild(actionMove);
+  actions.appendChild(actionExport);
+  actions.appendChild(actionCopy);
 
   const sender = document.createElement('div');
   sender.className = 'msg-sender';
@@ -1401,6 +1548,7 @@ function createMsgRow(msg, isNew) {
   text.innerHTML = linkify(escapeHtml(msg.text));
   text.title = msg.text || '';
 
+  row.appendChild(actions);
   row.appendChild(selectBox);
   row.appendChild(time);
   row.appendChild(sender);
@@ -1585,6 +1733,8 @@ function switchChannel(ch) {
   updateTabsUI();
   updateTabBadge(ch);
   refreshMoveTargets();
+  loadFieldPrefsForCurrentChannel();
+  applyFieldPrefsToMessages();
   if (input) input.focus();
   if (currentUser) {
     ensureMembership().then(reloadForUser);
@@ -1809,6 +1959,7 @@ async function reloadForUser() {
   subscribeRealtimeAll();
   // Always jump to the latest message when opening a tab.
   requestAnimationFrame(scrollBottom);
+  applyFieldPrefsToMessages();
 }
 
 function clearMessages() {
@@ -2032,6 +2183,22 @@ if (selectNoneBtn) {
   });
 }
 
+if (fieldTimeChk) {
+  fieldTimeChk.addEventListener('change', () => {
+    fieldPrefs.showTime = !!fieldTimeChk.checked;
+    saveFieldPrefsForCurrentChannel();
+    applyFieldPrefsToMessages();
+  });
+}
+
+if (fieldAuthorChk) {
+  fieldAuthorChk.addEventListener('change', () => {
+    fieldPrefs.showAuthor = !!fieldAuthorChk.checked;
+    saveFieldPrefsForCurrentChannel();
+    applyFieldPrefsToMessages();
+  });
+}
+
 if (deleteSelectedBtn) {
   deleteSelectedBtn.addEventListener('click', async () => {
     if (!currentUser) return;
@@ -2109,6 +2276,97 @@ if (moveSelectedBtn) {
       toast('Failed to move — ' + humanError(e.message));
     }
   });
+}
+
+async function deleteSingleMessage(id) {
+  if (!currentUser || !id) return;
+  try {
+    const { error } = await sb
+      .from('entries')
+      .delete()
+      .eq('user_id', currentUser.id)
+      .eq('id', id);
+    if (error) {
+      console.error(error);
+      toast('Failed to delete — ' + humanError(error.message));
+      return;
+    }
+    const el = feedInner.querySelector('.msg[data-id="' + id + '"]');
+    if (el) el.remove();
+    showEmptyIfNoMessages();
+  } catch (e) {
+    console.error(e);
+    toast('Failed to delete — ' + humanError(e.message));
+  }
+}
+
+async function moveSingleMessage(id) {
+  if (!currentUser || !moveTargetSelect || !id) return;
+  const target = moveTargetSelect.value;
+  if (!target || target === currentChannel) return;
+  try {
+    const now = new Date().toISOString();
+    const { error } = await sb
+      .from('entries')
+      .update({ channel: target, created_at: now })
+      .eq('user_id', currentUser.id)
+      .eq('id', id);
+    if (error) {
+      console.error(error);
+      toast('Failed to move — ' + humanError(error.message));
+      return;
+    }
+    const el = feedInner.querySelector('.msg[data-id="' + id + '"]');
+    if (el) el.remove();
+    showEmptyIfNoMessages();
+  } catch (e) {
+    console.error(e);
+    toast('Failed to move — ' + humanError(e.message));
+  }
+}
+
+async function exportSingleMessage(id) {
+  if (!currentUser || !id) return;
+  try {
+    const { data, error } = await sb
+      .from('entries')
+      .select('created_at,text,channel,user_id,author_name')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) {
+      console.error(error);
+      toast('Failed to export — ' + humanError(error.message));
+      return;
+    }
+    if (!data) {
+      toast('Nothing to export.');
+      return;
+    }
+    const d = new Date(data.created_at);
+    const timeStr = d.toLocaleString();
+    let line;
+    if (data.channel === 'main') {
+      line = `[${timeStr}] ${data.text}`;
+    } else {
+      const author = data.author_name
+        ? String(data.author_name)
+        : (data.user_id ? String(data.user_id) : 'unknown');
+      line = `[${timeStr}] ${author}: ${data.text}`;
+    }
+    const blob = new Blob([line + '\n'], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const name = data.channel === 'main' ? 'feed' : data.channel;
+    a.download = `inout-${name}-msg-${id}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error(e);
+    toast('Failed to export — ' + humanError(e.message));
+  }
 }
 
 if (exportTabBtn) {
