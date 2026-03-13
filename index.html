@@ -1329,6 +1329,9 @@ async function init() {
   scrollBottom();
   cleanupAuthHash();
   setupFullscreenOnFirstTap();
+  if (input && !window.matchMedia('(max-width: 540px)').matches) {
+    requestAnimationFrame(() => { input.focus(); });
+  }
 }
 
 function openUserModal() {
@@ -1358,6 +1361,8 @@ document.addEventListener('keydown', e => {
   if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.getAttribute('contenteditable') === 'true')) return;
   if (e.ctrlKey || e.altKey || e.metaKey) return;
   if (e.key.length !== 1) return;
+  e.preventDefault();
+  e.stopPropagation();
   input.focus();
   const start = input.selectionStart;
   const end = input.selectionEnd;
@@ -1366,8 +1371,7 @@ document.addEventListener('keydown', e => {
   input.value = before + e.key + after;
   input.selectionStart = input.selectionEnd = start + 1;
   input.dispatchEvent(new Event('input', { bubbles: true }));
-  e.preventDefault();
-});
+}, true);
 
 /* ═══ LOAD ════════════════════════════════════════════════ */
 async function loadMessages() {
