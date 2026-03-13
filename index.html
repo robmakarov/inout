@@ -1588,7 +1588,7 @@ function setSelectMode(on) {
   selectMode = !!on;
   if (selectToggle) {
     selectToggle.classList.toggle('active', selectMode);
-    selectToggle.textContent = selectMode ? 'Cancel' : 'Select';
+    selectToggle.textContent = 'Select';
     selectToggle.setAttribute('aria-pressed', selectMode ? 'true' : 'false');
   }
   if (selectExtra) selectExtra.classList.toggle('show', selectMode);
@@ -1921,6 +1921,21 @@ function createMsgRow(msg, isNew) {
     if (e.target.closest('a')) return;
     e.stopPropagation();
     if (typeof msg.id === 'undefined') return;
+    if (selectMode) {
+      const box = row.querySelector('.msg-select');
+      if (box) {
+        box.checked = !box.checked;
+        if (box.checked) {
+          selectedIds.add(msg.id);
+          row.classList.add('msg-selected');
+        } else {
+          selectedIds.delete(msg.id);
+          row.classList.remove('msg-selected');
+        }
+        updateSelectionUI();
+      }
+      return;
+    }
     input.value = msg.text || '';
     editingMessageId = msg.id;
     input.placeholder = 'Editing message…';
