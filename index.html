@@ -2574,7 +2574,7 @@ async function sendText(text) {
     autoResize();
     sendBtn.disabled = true;
     updateClearInputBtn();
-    input.focus();
+    requestAnimationFrame(() => { if (input) input.focus(); });
   }
 }
 
@@ -2635,7 +2635,7 @@ if (clipboardPasteBtn) {
     input.value = latestClipboardText;
     autoResize();
     sendBtn.disabled = !input.value.trim();
-    input.focus();
+    requestAnimationFrame(() => { if (input) input.focus(); });
   });
 }
 
@@ -2672,7 +2672,7 @@ if (clearInputBtn) {
     if (currentUser) {
       broadcastDraft('');
     }
-    input.focus();
+    requestAnimationFrame(() => { if (input) input.focus(); });
   });
 }
 
