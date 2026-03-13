@@ -42,16 +42,8 @@ body{
   -webkit-font-smoothing:antialiased;
   display:flex;
   flex-direction:column;
-  height:100vh;
+  min-height:100vh;
   overflow:hidden; /* only the content area scrolls */
-}
-
-/* iOS/Safari dynamic viewport handling */
-@supports (height: 100dvh) {
-  body{height:100dvh}
-}
-@supports (height: 100svh) {
-  body{height:100svh}
 }
 
 /* visible scrollbar (content area) */
@@ -68,6 +60,15 @@ body{
   display:flex;
   flex-direction:column;
   min-height:0;
+  height:100vh;
+}
+
+/* iOS/Safari dynamic viewport handling for app shell */
+@supports (height: 100dvh) {
+  #app{height:100dvh}
+}
+@supports (height: 100svh) {
+  #app{height:100svh}
 }
 
 /* ── HEADER ── */
@@ -425,6 +426,7 @@ header{
   color:var(--text);
   line-height:1.55;
   white-space:pre-wrap;
+  margin-left:10px;
 }
 
 .msg-select-wrap{
