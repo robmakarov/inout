@@ -88,52 +88,124 @@ header{
   display:flex;align-items:center;gap:16px;
 }
 
-#auth-box{
-  display:flex;align-items:center;gap:8px;
-  font-size:11px;color:var(--dim);
-}
-
-#id-btn{
+/* user/account button */
+#user-btn{
+  width:30px;height:30px;
+  display:grid;place-items:center;
   border:1px solid var(--line2);
   background:transparent;
-  color:var(--dim);
-  font-family:var(--mono);
-  font-size:9px;
-  padding:3px 6px;
-  border-radius:3px;
+  color:var(--soft);
+  border-radius:999px;
   cursor:pointer;
+  transition:background .12s, border-color .12s, color .12s;
+}
+#user-btn:hover{background:var(--line);color:var(--text)}
+#user-btn.signed-in{
+  border-color:rgba(232,213,160,0.55);
+  box-shadow:0 0 0 1px rgba(232,213,160,0.12) inset;
+}
+#user-btn svg{display:block}
+
+/* ── ACCOUNT DRAWER ── */
+#user-modal-backdrop{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.62);
+  display:none;
+  z-index:250;
+}
+
+#user-modal{
+  position:absolute;
+  top:0;right:0;bottom:0;
+  width:360px;
+  max-width:92vw;
+  background:var(--bg2);
+  border-left:1px solid var(--line2);
+  box-shadow:-24px 0 60px rgba(0,0,0,0.55);
+  padding:14px 16px;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  animation:drawerIn .18s ease both;
+}
+
+@keyframes drawerIn{from{transform:translateX(10px);opacity:0}to{transform:translateX(0);opacity:1}}
+
+.um-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.um-title{
+  font-family:var(--sans);
+  font-size:13px;
+  font-weight:700;
+  letter-spacing:0.02em;
+  color:var(--bright);
+}
+
+#user-close{
+  border:1px solid var(--line2);
+  background:transparent;
+  color:var(--soft);
+  width:28px;height:28px;
+  border-radius:6px;
+  cursor:pointer;
+}
+#user-close:hover{background:var(--line);color:var(--text)}
+
+.um-section{
+  border:1px solid var(--line2);
+  background:var(--bg);
+  border-radius:8px;
+  padding:10px 10px;
+}
+.um-label{
   text-transform:uppercase;
-  letter-spacing:0.06em;
+  letter-spacing:0.08em;
+  font-size:9px;
+  color:var(--dim);
+  margin-bottom:6px;
 }
-
-#id-btn:hover{
-  background:var(--line);
-  color:var(--text);
+.um-value{
+  font-size:11px;
+  color:var(--soft);
+  word-break:break-word;
 }
-
-#auth-status{
-  max-width:160px;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
+.um-row{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  margin-top:10px;
 }
-
-#auth-btn{
+.um-btn{
   border:1px solid var(--line2);
   background:transparent;
   color:var(--soft);
   font-family:var(--mono);
   font-size:10px;
-  padding:3px 8px;
-  border-radius:2px;
+  padding:6px 10px;
+  border-radius:6px;
   cursor:pointer;
-  letter-spacing:0.06em;
   text-transform:uppercase;
+  letter-spacing:0.06em;
 }
+.um-btn:hover{background:var(--line);color:var(--text)}
+.um-btn-primary{
+  background:var(--acc);
+  color:var(--bg);
+  border-color:var(--acc2);
+}
+.um-btn-primary:hover{background:#f0e0b0;color:var(--bg)}
 
-#auth-btn:hover{
-  background:var(--line);
-  color:var(--text);
+@media(max-width:540px){
+  #user-modal{
+    width:100%;
+    max-width:100%;
+    border-left:none;
+  }
 }
 
 #online-count{
@@ -520,11 +592,12 @@ header{
     <div class="header-right">
       <div id="online-count"><span class="dot"></span><span id="oc-num">—</span></div>
       <div id="msg-count"></div>
-      <div id="auth-box">
-        <span id="auth-status">Not signed in</span>
-        <button id="auth-btn">Sign in</button>
-      </div>
-      <button id="id-btn" style="display:none;">Copy ID</button>
+      <button id="user-btn" aria-label="Account" title="Account">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5Z" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M4 22c0-4.418 3.582-8 8-8s8 3.582 8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </button>
     </div>
   </header>
 
@@ -559,6 +632,31 @@ header{
 
 <button id="scroll-btn" onclick="scrollBottom()">↓ new messages</button>
 <div id="toast"></div>
+
+<div id="user-modal-backdrop" aria-hidden="true">
+  <div id="user-modal" role="dialog" aria-modal="true" aria-label="Account">
+    <div class="um-top">
+      <div class="um-title">Account</div>
+      <button id="user-close" aria-label="Close account screen" title="Close">×</button>
+    </div>
+
+    <div class="um-section">
+      <div class="um-label">Status</div>
+      <div class="um-value" id="um-auth-status">Not signed in</div>
+      <div class="um-row">
+        <button class="um-btn um-btn-primary" id="um-auth-btn">Sign in</button>
+      </div>
+    </div>
+
+    <div class="um-section">
+      <div class="um-label">Your user id</div>
+      <div class="um-value" id="um-user-id">—</div>
+      <div class="um-row">
+        <button class="um-btn" id="um-copy-id" disabled>Copy ID</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div id="channel-modal-backdrop">
   <div id="channel-modal">
@@ -598,10 +696,14 @@ const scrollBtn  = document.getElementById('scroll-btn');
 const ocNum      = document.getElementById('oc-num');
 const msgCountEl = document.getElementById('msg-count');
 const toastEl    = document.getElementById('toast');
-const authStatus = document.getElementById('auth-status');
-const authBtn    = document.getElementById('auth-btn');
+const userBtn    = document.getElementById('user-btn');
+const umBackdrop = document.getElementById('user-modal-backdrop');
+const umClose    = document.getElementById('user-close');
+const umAuthStatus = document.getElementById('um-auth-status');
+const umAuthBtn    = document.getElementById('um-auth-btn');
+const umUserId     = document.getElementById('um-user-id');
+const umCopyIdBtn  = document.getElementById('um-copy-id');
 const tabsEl     = document.getElementById('tabs');
-const idBtn      = document.getElementById('id-btn');
 const cmBackdrop = document.getElementById('channel-modal-backdrop');
 const cmName     = document.getElementById('cm-name');
 const cmSelf     = document.getElementById('cm-self');
@@ -640,6 +742,27 @@ async function init() {
   cleanupAuthHash();
   if (input) input.focus();
 }
+
+function openUserModal() {
+  if (!umBackdrop) return;
+  umBackdrop.style.display = 'block';
+  umBackdrop.setAttribute('aria-hidden', 'false');
+}
+
+function closeUserModal() {
+  if (!umBackdrop) return;
+  umBackdrop.style.display = 'none';
+  umBackdrop.setAttribute('aria-hidden', 'true');
+}
+
+if (userBtn) userBtn.addEventListener('click', openUserModal);
+if (umClose) umClose.addEventListener('click', closeUserModal);
+if (umBackdrop) umBackdrop.addEventListener('click', e => {
+  if (e.target === umBackdrop) closeUserModal();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && umBackdrop && umBackdrop.style.display === 'block') closeUserModal();
+});
 
 /* ═══ LOAD ════════════════════════════════════════════════ */
 async function loadMessages() {
@@ -1019,7 +1142,7 @@ function setupAuthListener() {
     }
   });
 
-  authBtn.addEventListener('click', () => {
+  if (umAuthBtn) umAuthBtn.addEventListener('click', () => {
     if (currentUser) {
       signOut();
     } else {
@@ -1027,25 +1150,25 @@ function setupAuthListener() {
     }
   });
 
-  if (idBtn) {
-    idBtn.addEventListener('click', copyUserId);
-  }
+  if (umCopyIdBtn) umCopyIdBtn.addEventListener('click', copyUserId);
 }
 
 function updateAuthUI() {
-  if (!authStatus || !authBtn) return;
+  if (userBtn) userBtn.classList.toggle('signed-in', !!currentUser);
 
   if (currentUser) {
     const email = currentUser.email || 'Signed in';
-    authStatus.textContent = email;
-    authBtn.textContent = 'Sign out';
+    if (umAuthStatus) umAuthStatus.textContent = email;
+    if (umAuthBtn) umAuthBtn.textContent = 'Sign out';
     sendBtn.disabled = !input.value.trim();
-    if (idBtn) idBtn.style.display = 'inline-block';
+    if (umUserId) umUserId.textContent = currentUser.id || '—';
+    if (umCopyIdBtn) umCopyIdBtn.disabled = !currentUser.id;
   } else {
-    authStatus.textContent = 'Not signed in';
-    authBtn.textContent = 'Sign in';
+    if (umAuthStatus) umAuthStatus.textContent = 'Not signed in';
+    if (umAuthBtn) umAuthBtn.textContent = 'Sign in';
     sendBtn.disabled = true;
-    if (idBtn) idBtn.style.display = 'none';
+    if (umUserId) umUserId.textContent = '—';
+    if (umCopyIdBtn) umCopyIdBtn.disabled = true;
   }
 }
 
