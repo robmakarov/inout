@@ -399,10 +399,13 @@ header{
   position:fixed;
   z-index:9999;
   pointer-events:none;
-  box-shadow:0 4px 20px rgba(0,0,0,.25);
+  box-shadow:0 4px 20px rgba(0,0,0,.35);
   border-radius:4px;
-  transition:left .35s ease-out, top .35s ease-out, width .25s ease-out, height .25s ease-out, opacity .2s ease-out;
+  background:var(--bg2);
+  animation:none;
+  transition:transform .4s ease-out, opacity .35s ease-out;
 }
+.msg-fly-clone .msg-actions{visibility:hidden}
 .msg:hover{background:var(--bg2)}
 .msg:last-child{border-bottom:none}
 
@@ -833,6 +836,7 @@ body.select-mode .msg-select-wrap,
   display:inline-flex;
   align-items:center;
   gap:6px;
+  transition:background .15s, color .15s, border-color .15s, box-shadow .15s, transform .15s;
 }
 
 .tab-active{
@@ -871,11 +875,14 @@ body.select-mode .msg-select-wrap,
 }
 
 .tab.tab-drop-target{
-  background:var(--acc2);
-  border-color:var(--acc);
-  color:var(--bg);
-  box-shadow:0 0 0 2px var(--acc);
+  background:var(--acc) !important;
+  color:var(--bg) !important;
+  border-color:var(--acc) !important;
+  box-shadow:0 0 0 2px var(--bg);
+  transform:scale(1.06);
 }
+.tab.tab-drop-target .tab-shared{color:rgba(10,10,9,0.8)}
+.tab.tab-drop-target .tab-close{color:var(--bg);opacity:1}
 
 .tab-new{
   border-style:dashed;
@@ -2261,12 +2268,14 @@ function renderTabs() {
     btn.addEventListener('click', () => switchChannel(ch));
     btn.addEventListener('dragenter', e => {
       e.preventDefault();
+      e.stopPropagation();
       e.dataTransfer.dropEffect = 'move';
       tabsEl.querySelectorAll('.tab.tab-drop-target').forEach(t => t.classList.remove('tab-drop-target'));
       btn.classList.add('tab-drop-target');
     });
     btn.addEventListener('dragover', e => {
       e.preventDefault();
+      e.stopPropagation();
       e.dataTransfer.dropEffect = 'move';
       btn.classList.add('tab-drop-target');
     });
@@ -3043,17 +3052,20 @@ function animateMessageToTab(rowEl, tabEl, onDone) {
   clone.style.top = from.top + 'px';
   clone.style.width = from.width + 'px';
   clone.style.height = from.height + 'px';
+  clone.style.transform = 'translate(0,0) scale(1)';
+  clone.style.opacity = '1';
   document.body.appendChild(clone);
   rowEl.style.visibility = 'hidden';
   const to = tabEl.getBoundingClientRect();
   const toCenterX = to.left + to.width / 2;
   const toCenterY = to.top + to.height / 2;
+  const fromCenterX = from.left + from.width / 2;
+  const fromCenterY = from.top + from.height / 2;
+  const dx = toCenterX - fromCenterX;
+  const dy = toCenterY - fromCenterY;
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      clone.style.left = (toCenterX - from.width / 4) + 'px';
-      clone.style.top = (toCenterY - from.height / 4) + 'px';
-      clone.style.width = (from.width / 2) + 'px';
-      clone.style.height = (from.height / 2) + 'px';
+      clone.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(0.25)';
       clone.style.opacity = '0';
     });
   });
@@ -3065,7 +3077,7 @@ function animateMessageToTab(rowEl, tabEl, onDone) {
     if (typeof onDone === 'function') onDone();
   };
   clone.addEventListener('transitionend', finish);
-  setTimeout(finish, 600);
+  setTimeout(finish, 500);
 }
 
 async function moveSingleMessage(id, targetChannel) {
