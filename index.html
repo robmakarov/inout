@@ -1366,20 +1366,32 @@ document.addEventListener('keydown', e => {
 
 function setupFocusOnFirstInteraction() {
   if (!input) return;
+  function isInteractive(t) {
+    if (!t) return false;
+    if (t.tagName === 'BUTTON' || t.tagName === 'A' || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') return true;
+    if (t.isContentEditable) return true;
+    if (t.closest && t.closest('input, textarea, [contenteditable="true"], button, a')) return true;
+    if (t.closest && t.closest('.msg')) return true;
+    if (umBackdrop && umBackdrop.style.display === 'block' && (t === umBackdrop || umBackdrop.contains(t))) return true;
+    if (cmBackdrop && cmBackdrop.style.display === 'flex' && (t === cmBackdrop || cmBackdrop.contains(t))) return true;
+    return false;
+  }
   function moveFocusToInput(e) {
-    const t = e.target;
-    if (!t) return;
-    if (t.tagName === 'BUTTON' || t.tagName === 'A' || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') return;
-    if (t.isContentEditable || (t.closest && t.closest('input, textarea, [contenteditable="true"], button, a'))) return;
-    if (t.closest && t.closest('.msg')) return;
-    if (umBackdrop && umBackdrop.style.display === 'block' && (t === umBackdrop || umBackdrop.contains(t))) return;
-    if (cmBackdrop && cmBackdrop.style.display === 'flex' && (t === cmBackdrop || cmBackdrop.contains(t))) return;
+    if (isInteractive(e.target)) return;
     e.preventDefault();
     e.stopPropagation();
     input.focus();
   }
+  function reclaimFocus(e) {
+    if (document.activeElement === input) return;
+    if (isInteractive(e.target)) return;
+    e.preventDefault();
+    input.focus();
+  }
   document.addEventListener('mousedown', moveFocusToInput, true);
   document.addEventListener('touchstart', moveFocusToInput, true);
+  document.addEventListener('click', reclaimFocus, true);
+  document.addEventListener('touchend', reclaimFocus, true);
 }
 
 /* ═══ LOAD ════════════════════════════════════════════════ */
@@ -2006,7 +2018,7 @@ function createMsgRow(msg, isNew) {
       updateSelectionUI();
       return;
     }
-    if (msg.id === editingMessageId) {
+    if (Number(msg.id) === Number(editingMessageId)) {
       editingMessageId = null;
       input.placeholder = 'say something…';
       input.value = '';
@@ -2014,7 +2026,8 @@ function createMsgRow(msg, isNew) {
       sendBtn.disabled = true;
       updateClearInputBtn();
       saveInputGlobal();
-      focusMessageInput();
+      if (currentUser) broadcastDraft('');
+      requestAnimationFrame(() => { input.focus(); });
       return;
     }
     input.value = msg.text || '';
