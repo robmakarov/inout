@@ -1057,6 +1057,7 @@ body.select-mode .msg-select-wrap,
         maxlength="2000"
         autocomplete="off"
         spellcheck="true"
+        autofocus
       ></textarea>
       <button id="clear-input" class="clear-input-btn" aria-label="Clear input">
         ✕
@@ -1357,10 +1358,18 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && umBackdrop && umBackdrop.style.display === 'block') closeUserModal();
 });
 
+function isEditable(el) {
+  return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable || (el.closest && el.closest('input, textarea, [contenteditable="true"]')));
+}
+document.addEventListener('click', e => {
+  if (!input) return;
+  if (document.activeElement === input) return;
+  if (isEditable(e.target) || (e.target && (e.target.tagName === 'BUTTON' || e.target.tagName === 'A'))) return;
+  input.focus();
+}, true);
 document.addEventListener('keydown', e => {
   if (!input) return;
-  const el = document.activeElement;
-  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable || (el.closest && el.closest('input, textarea, [contenteditable="true"]')))) return;
+  if (isEditable(document.activeElement)) return;
   if (e.ctrlKey || e.altKey || e.metaKey) return;
   if (e.key.length !== 1) return;
   e.preventDefault();
