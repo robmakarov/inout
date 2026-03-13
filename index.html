@@ -1361,8 +1361,15 @@ async function init() {
     setupDraftChannel();
     subscribeOrderRealtime();
     subscribeViewRealtime();
-    cancelEditingMode(true);
-    restoreInputGlobal();
+  }
+  editingMessageId = null;
+  if (input) {
+    input.value = '';
+    input.placeholder = 'say something…';
+    try { localStorage.setItem(INPUT_STATE_KEY, ''); } catch (_) {}
+    autoResize();
+    sendBtn.disabled = true;
+    updateClearInputBtn();
   }
   setupPresence();
   scrollBottom();
@@ -1370,9 +1377,15 @@ async function init() {
   setupFullscreenOnFirstTap();
   if (input) input.focus();
   requestAnimationFrame(() => { if (input) input.focus(); });
-  requestAnimationFrame(() => requestAnimationFrame(() => { if (input) input.focus(); }));
-  setTimeout(() => { if (input) input.focus(); }, 100);
-  setTimeout(() => { if (input) input.focus(); }, 300);
+  setTimeout(() => {
+    if (input) {
+      input.value = '';
+      try { localStorage.setItem(INPUT_STATE_KEY, ''); } catch (_) {}
+      updateClearInputBtn();
+      sendBtn.disabled = true;
+      input.focus();
+    }
+  }, 50);
   setupFocusOnFirstInteraction();
 }
 
@@ -2452,7 +2465,15 @@ async function refreshSharedFlags() {
 
 function switchChannel(ch) {
   if (ch === currentChannel) return;
-  cancelEditingMode(true);
+  editingMessageId = null;
+  if (input) {
+    input.value = '';
+    input.placeholder = 'say something…';
+    try { localStorage.setItem(INPUT_STATE_KEY, ''); } catch (_) {}
+    updateClearInputBtn();
+    sendBtn.disabled = true;
+  }
+  if (feedInner) feedInner.querySelectorAll('.msg.msg-editing').forEach(r => r.classList.remove('msg-editing'));
   if (feedEl) {
     channelScroll.set(currentChannel, feedEl.scrollTop);
   }
@@ -2688,16 +2709,23 @@ function updateAuthUI() {
 }
 
 async function reloadForUser() {
-  cancelEditingMode(true);
+  editingMessageId = null;
   clearMessages();
   await loadMessageOrderForCurrentChannel();
   await loadMessages();
   subscribeRealtimeAll();
+  if (input) {
+    input.value = '';
+    input.placeholder = 'say something…';
+    try { localStorage.setItem(INPUT_STATE_KEY, ''); } catch (_) {}
+    autoResize();
+    sendBtn.disabled = true;
+    updateClearInputBtn();
+  }
   requestAnimationFrame(() => {
     scrollBottom();
-    if (input) input.focus();
+    if (input) { input.value = ''; try { localStorage.setItem(INPUT_STATE_KEY, ''); } catch (_) {} input.focus(); }
   });
-  setTimeout(() => { if (input) input.focus(); }, 50);
   applyFieldPrefsToMessages();
 }
 
