@@ -1843,14 +1843,6 @@ function renderInitialMessages(list) {
     if (row) frag.appendChild(row);
   }
   feedInner.appendChild(frag);
-  // seed or apply saved order
-  loadMessageOrderForCurrentChannel();
-  if (currentMessageOrder.length) {
-    applyMessageOrderToDOM();
-  } else {
-    recomputeOrderFromDOM();
-    saveMessageOrderForCurrentChannel();
-  }
 }
 
 let globalMsgNum = 0;
