@@ -332,6 +332,32 @@ header{
   gap:10px;
 }
 
+/* clipboard suggestion bubble (this device) */
+#clipboard-bubble{
+  display:none;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:6px;
+  padding:6px 8px;
+  border-radius:4px;
+  background:var(--bg2);
+  border:1px solid var(--line2);
+  font-size:11px;
+  color:var(--soft);
+}
+#clipboard-bubble-text{
+  flex:1;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.clipboard-bubble-actions{
+  display:flex;
+  gap:6px;
+}
+
 /* remote draft bubble (other device) */
 #draft-bubble{
   display:none;
@@ -679,6 +705,13 @@ header{
 
   <div id="input-area">
     <div id="tabs"></div>
+    <div id="clipboard-bubble">
+      <div id="clipboard-bubble-text"></div>
+      <div class="clipboard-bubble-actions">
+        <button id="clipboard-paste" class="draft-btn">Paste</button>
+        <button id="clipboard-dismiss" class="draft-btn">Dismiss</button>
+      </div>
+    </div>
     <div id="draft-bubble">
       <div id="draft-bubble-text"></div>
     <div class="draft-bubble-actions">
@@ -787,6 +820,10 @@ const umCopyIdBtn  = document.getElementById('um-copy-id');
 const umNickname   = document.getElementById('um-nickname');
 const umNickSave   = document.getElementById('um-nick-save');
 const tabsEl     = document.getElementById('tabs');
+const clipboardBubble    = document.getElementById('clipboard-bubble');
+const clipboardBubbleTxt = document.getElementById('clipboard-bubble-text');
+const clipboardPasteBtn  = document.getElementById('clipboard-paste');
+const clipboardDismissBtn= document.getElementById('clipboard-dismiss');
 const draftBubble    = document.getElementById('draft-bubble');
 const draftBubbleTxt = document.getElementById('draft-bubble-text');
 const draftCopyBtn   = document.getElementById('draft-copy');
@@ -815,6 +852,7 @@ const sharedChannels = new Set(); // channel -> has other members
 let channelSubs = new Map(); // channel -> realtime subscription
 let draftChannel = null;
 let latestRemoteDraft = '';
+let latestClipboardText = '';
 
 function updateTabBadge(ch) {
   if (!tabsEl) return;
@@ -1016,6 +1054,18 @@ function hideDraftBubble() {
   if (!draftBubble) return;
   draftBubble.style.display = 'none';
   if (draftBubbleTxt) draftBubbleTxt.textContent = '';
+}
+
+function showClipboardBubble(text) {
+  if (!clipboardBubble || !clipboardBubbleTxt) return;
+  clipboardBubbleTxt.textContent = text;
+  clipboardBubble.style.display = 'flex';
+}
+
+function hideClipboardBubble() {
+  if (!clipboardBubble) return;
+  clipboardBubble.style.display = 'none';
+  if (clipboardBubbleTxt) clipboardBubbleTxt.textContent = '';
 }
 
 /* ═══ RENDER ══════════════════════════════════════════════ */
@@ -1582,6 +1632,24 @@ input.addEventListener('input', () => {
   }
 });
 
+// On focus, try to read clipboard once (user gesture) and offer as bubble
+input.addEventListener('focus', async () => {
+  if (!navigator.clipboard || !navigator.clipboard.readText) return;
+  try {
+    const text = (await navigator.clipboard.readText()) || '';
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    // Avoid duplicating existing remote draft bubble
+    if (trimmed === latestRemoteDraft) return;
+    if (trimmed === latestClipboardText) return;
+    latestClipboardText = trimmed;
+    showClipboardBubble(trimmed);
+  } catch (e) {
+    // ignore clipboard errors silently
+    console.error(e);
+  }
+});
+
 input.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
@@ -1618,6 +1686,22 @@ if (draftClearBtn) {
     if (currentUser) {
       broadcastDraft('');
     }
+  });
+}
+
+if (clipboardPasteBtn) {
+  clipboardPasteBtn.addEventListener('click', () => {
+    if (!latestClipboardText) return;
+    input.value = latestClipboardText;
+    autoResize();
+    sendBtn.disabled = !input.value.trim();
+    input.focus();
+  });
+}
+
+if (clipboardDismissBtn) {
+  clipboardDismissBtn.addEventListener('click', () => {
+    hideClipboardBubble();
   });
 }
 
