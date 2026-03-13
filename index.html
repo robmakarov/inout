@@ -574,22 +574,28 @@ header{
   /* keep header pinned even when keyboard opens */
   header{
     position:fixed;
-    top:var(--vv-top);
+    top:0;
     left:0;
     right:0;
     width:100%;
     padding:0 14px;
     z-index:120;
+    transform:translateY(var(--vv-top));
+    transition:transform .14s ease;
+    will-change:transform;
   }
   /* pin manage bar under header too */
   #manage-bar{
     position:fixed;
-    top:calc(var(--vv-top) + 48px);
+    top:48px;
     left:0;
     right:0;
     width:100%;
     z-index:115;
     padding:4px 14px;
+    transform:translateY(var(--vv-top));
+    transition:transform .14s ease;
+    will-change:transform;
   }
   /* reserve space for fixed header + manage bar */
   #app{padding-top:calc(48px + 34px)}
