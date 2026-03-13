@@ -1767,11 +1767,15 @@ function setupTouchDragHandlers() {
     clearTimeout(touchDragState.timer);
     document.removeEventListener('touchmove', move, { passive: false });
     document.removeEventListener('touchend', end);
-    touchDragState.row.classList.remove('dragging');
+    const r = touchDragState.row;
+    r.classList.remove('dragging');
     touchDragState.started = false;
     touchDragState.row = null;
     recomputeOrderFromDOM();
     saveMessageOrderForCurrentChannel();
+    r.style.pointerEvents = 'none';
+    void r.offsetHeight;
+    requestAnimationFrame(() => { r.style.pointerEvents = ''; });
   };
   document.addEventListener('touchmove', move, { passive: false });
   document.addEventListener('touchend', end);
@@ -1796,7 +1800,9 @@ function createMsgRow(msg, isNew) {
     row.classList.remove('dragging');
     recomputeOrderFromDOM();
     saveMessageOrderForCurrentChannel();
-    // DOM is already in the correct order from dragover; just persist.
+    row.style.pointerEvents = 'none';
+    void row.offsetHeight;
+    requestAnimationFrame(() => { row.style.pointerEvents = ''; });
   });
   row.addEventListener('dragover', e => {
     e.preventDefault();
