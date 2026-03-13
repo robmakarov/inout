@@ -268,11 +268,10 @@ header{
 
 /* message row */
 .msg{
-  display:grid;
-  grid-template-columns:64px 1fr auto;
+  display:flex;
   align-items:baseline;
-  gap:0 12px;
-  padding:7px 20px;
+  gap:10px;
+  padding:4px 20px;
   border-bottom:1px solid var(--line);
   transition:background .1s;
   animation:msgin .2s ease both;
@@ -281,19 +280,42 @@ header{
 .msg:hover{background:var(--bg2)}
 .msg:last-child{border-bottom:none}
 
-.msg-time{
-  font-size:10px;color:var(--dim);
-  letter-spacing:0.04em;
-  text-align:right;
-  padding-top:1px;
+.msg-meta{
+  display:flex;
+  align-items:baseline;
+  gap:8px;
+  min-width:160px;
+  max-width:240px;
+  flex:0 0 auto;
   white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.msg-sender{
+  font-size:10px;
+  color:var(--soft);
+  letter-spacing:0.02em;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.msg-time{
+  font-size:10px;
+  color:var(--dim);
+  letter-spacing:0.04em;
+  flex:0 0 auto;
 }
 
 .msg-text{
-  font-size:13px;color:var(--text);
-  word-break:break-word;
-  white-space:pre-wrap;
+  flex:1;
+  min-width:0;
+  font-size:13px;
+  color:var(--text);
   line-height:1.55;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 
 .msg-text a{
@@ -302,19 +324,6 @@ header{
   border-bottom:1px solid var(--acc2);
 }
 .msg-text a:hover{color:var(--bright)}
-
-.msg-num{
-  font-size:10px;color:var(--line2);
-  letter-spacing:0.02em;
-  padding-top:1px;
-  user-select:none;
-}
-
-.msg-sender{
-  font-size:9px;
-  color:var(--dim);
-  letter-spacing:0.03em;
-}
 
 /* new message flash */
 .msg.new-flash{
@@ -442,8 +451,11 @@ header{
 
 /* ── MOBILE ── */
 @media(max-width:540px){
-  .msg{grid-template-columns:52px 1fr;gap:0 8px}
-  .msg-num{display:none}
+  .msg{gap:8px}
+  .msg-meta{
+    min-width:120px;
+    max-width:160px;
+  }
   header{padding:0 14px}
   #input-area{padding:10px 10px 14px}
 }
@@ -836,14 +848,8 @@ function createMsgRow(msg, isNew) {
     row.dataset.id = String(msg.id);
   }
 
-  const time = document.createElement('div');
-  time.className = 'msg-time';
-  time.textContent = formatTime(msg.created_at);
-  time.title = new Date(msg.created_at).toLocaleString();
-
-  const text = document.createElement('div');
-  text.className = 'msg-text';
-  text.innerHTML = linkify(escapeHtml(msg.text));
+  const meta = document.createElement('div');
+  meta.className = 'msg-meta';
 
   const sender = document.createElement('div');
   sender.className = 'msg-sender';
@@ -854,15 +860,23 @@ function createMsgRow(msg, isNew) {
   } else {
     sender.textContent = 'unknown';
   }
+  sender.title = sender.textContent;
 
-  const num = document.createElement('div');
-  num.className = 'msg-num';
-  num.textContent = '#' + (++globalMsgNum);
+  const time = document.createElement('div');
+  time.className = 'msg-time';
+  time.textContent = formatTime(msg.created_at);
+  time.title = new Date(msg.created_at).toLocaleString();
 
-  row.appendChild(time);
+  meta.appendChild(sender);
+  meta.appendChild(time);
+
+  const text = document.createElement('div');
+  text.className = 'msg-text';
+  text.innerHTML = linkify(escapeHtml(msg.text));
+  text.title = msg.text || '';
+
+  row.appendChild(meta);
   row.appendChild(text);
-  row.appendChild(sender);
-  row.appendChild(num);
   return row;
 }
 
