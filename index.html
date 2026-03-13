@@ -2763,6 +2763,13 @@ if (umUpgradeBtn) {
 
 if (selectToggle) {
   selectToggle.addEventListener('click', () => {
+    if (selectMode) {
+      selectedIds.clear();
+      if (feedInner) {
+        feedInner.querySelectorAll('.msg-select').forEach(box => { box.checked = false; });
+        feedInner.querySelectorAll('.msg.msg-selected').forEach(row => row.classList.remove('msg-selected'));
+      }
+    }
     setSelectMode(!selectMode);
   });
 }
