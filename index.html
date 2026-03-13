@@ -24,7 +24,6 @@
   --acc2:   #b8a060;
   --mono:   'DM Mono', monospace;
   --sans:   'Syne', sans-serif;
-  --bottom-inset: 140px; /* updated dynamically via JS */
 }
 
 html,body{
@@ -39,10 +38,10 @@ body{
   font-size:13px;
   line-height:1.6;
   -webkit-font-smoothing:antialiased;
-  min-height:100vh;
   display:flex;
   flex-direction:column;
-  overflow-y:auto;
+  height:100vh;
+  overflow:hidden; /* only the content area scrolls */
 }
 
 /* visible page scrollbar */
@@ -61,11 +60,11 @@ body::-webkit-scrollbar-thumb{
   flex:1;
   display:flex;
   flex-direction:column;
+  min-height:0;
 }
 
 /* ── HEADER ── */
 header{
-  position:sticky;top:0;z-index:100;
   background:var(--bg);
   border-bottom:1px solid var(--line);
   padding:0 20px;
@@ -238,7 +237,7 @@ header{
 }
 
 .feed-inner{
-  padding:16px 0 var(--bottom-inset);
+  padding:16px 0 8px;
   display:flex;
   flex-direction:column;
   justify-content:flex-end;
@@ -334,11 +333,6 @@ header{
 /* ── INPUT AREA ── */
 #input-area{
   flex-shrink:0;
-  position:fixed;
-  left:0;
-  right:0;
-  bottom:0;
-  z-index:150;
   background:var(--bg);
   border-top:1px solid var(--line);
   padding:12px 20px 16px;
@@ -763,12 +757,6 @@ const unreadCounts  = new Map(); // channel -> number
 const sharedChannels = new Set(); // channel -> has other members
 let channelSubs = new Map(); // channel -> realtime subscription
 
-function updateBottomInset() {
-  const extra = 12; // small breathing room above input area
-  const h = (inputArea && inputArea.offsetHeight) ? (inputArea.offsetHeight + extra) : 140;
-  document.documentElement.style.setProperty('--bottom-inset', h + 'px');
-}
-
 function updateTabBadge(ch) {
   if (!tabsEl) return;
   const btn = tabsEl.querySelector('.tab[data-channel="' + CSS.escape(ch) + '"]');
@@ -810,7 +798,6 @@ async function init() {
     subscribeRealtimeAll();
   }
   setupPresence();
-  updateBottomInset();
   scrollBottom();
   cleanupAuthHash();
   if (input) input.focus();
@@ -1080,7 +1067,6 @@ function renderTabs() {
 
   updateTabsUI();
   updateAllTabBadges();
-  updateBottomInset();
 }
 
 async function syncChannelsFromServer() {
@@ -1449,7 +1435,6 @@ sendBtn.addEventListener('click', send);
 function autoResize() {
   input.style.height = 'auto';
   input.style.height = Math.min(input.scrollHeight, 160) + 'px';
-  updateBottomInset();
 }
 
 /* ═══ SCROLL ══════════════════════════════════════════════ */
@@ -1459,15 +1444,10 @@ feedEl.addEventListener('scroll', () => {
 }, { passive: true });
 
 function scrollBottom() {
-  updateBottomInset();
   feedEl.scrollTop = feedEl.scrollHeight;
   scrollBtn.classList.remove('visible');
   atBottom = true;
 }
-
-window.addEventListener('resize', () => {
-  updateBottomInset();
-});
 
 /* ═══ UTILS ═══════════════════════════════════════════════ */
 function formatTime(iso) {
