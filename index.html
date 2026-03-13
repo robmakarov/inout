@@ -1366,32 +1366,18 @@ document.addEventListener('keydown', e => {
 
 function setupFocusOnFirstInteraction() {
   if (!input) return;
-  function isInteractive(t) {
-    if (!t) return false;
-    if (t.tagName === 'BUTTON' || t.tagName === 'A' || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') return true;
-    if (t.isContentEditable) return true;
-    if (t.closest && t.closest('input, textarea, [contenteditable="true"], button, a')) return true;
-    if (t.closest && t.closest('.msg')) return true;
-    if (umBackdrop && umBackdrop.style.display === 'block' && (t === umBackdrop || umBackdrop.contains(t))) return true;
-    if (cmBackdrop && cmBackdrop.style.display === 'flex' && (t === cmBackdrop || cmBackdrop.contains(t))) return true;
-    return false;
+  function focusMovedToNonInteractive(el) {
+    if (!el || el === input) return false;
+    if (el.tagName === 'BUTTON' || el.tagName === 'A' || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return false;
+    if (el.isContentEditable) return false;
+    if (el.closest && el.closest('input, textarea, [contenteditable="true"], button, a')) return false;
+    if (el.closest && (el.closest('#user-modal') || el.closest('#channel-modal-backdrop'))) return false;
+    return true;
   }
-  function moveFocusToInput(e) {
-    if (isInteractive(e.target)) return;
-    e.preventDefault();
-    e.stopPropagation();
-    input.focus();
-  }
-  function reclaimFocus(e) {
-    if (document.activeElement === input) return;
-    if (isInteractive(e.target)) return;
-    e.preventDefault();
-    input.focus();
-  }
-  document.addEventListener('mousedown', moveFocusToInput, true);
-  document.addEventListener('touchstart', moveFocusToInput, true);
-  document.addEventListener('click', reclaimFocus, true);
-  document.addEventListener('touchend', reclaimFocus, true);
+  document.addEventListener('focusin', () => {
+    if (!focusMovedToNonInteractive(document.activeElement)) return;
+    setTimeout(() => { if (input && document.activeElement !== input) input.focus(); }, 0);
+  });
 }
 
 /* ═══ LOAD ════════════════════════════════════════════════ */
@@ -2027,7 +2013,10 @@ function createMsgRow(msg, isNew) {
       updateClearInputBtn();
       saveInputGlobal();
       if (currentUser) broadcastDraft('');
-      requestAnimationFrame(() => { input.focus(); });
+      setTimeout(() => {
+        saveInputGlobal();
+        if (input) input.focus();
+      }, 0);
       return;
     }
     input.value = msg.text || '';
