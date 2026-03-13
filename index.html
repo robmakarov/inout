@@ -695,7 +695,20 @@ body.select-mode .msg-select-wrap,
   }
   /* reserve space for fixed header + manage bar */
   #app{padding-top:calc(48px + 34px)}
-  #input-area{padding:10px 10px 14px}
+  /* keep input bar above iOS Safari bottom panel & keyboard */
+  #input-area{
+    position:fixed;
+    left:0;
+    right:0;
+    bottom:0;
+    z-index:110;
+    padding:10px 10px calc(14px + env(safe-area-inset-bottom, 0px));
+    background:var(--bg);
+  }
+  /* add bottom space in feed so last messages are not hidden behind input */
+  #feed{
+    padding-bottom:120px;
+  }
   #tabs{
     padding:8px 10px 8px;
     margin:-10px -10px 10px;
