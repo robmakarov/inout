@@ -24,6 +24,7 @@
   --acc2:   #b8a060;
   --mono:   'DM Mono', monospace;
   --sans:   'Syne', sans-serif;
+  --bottom-inset: 140px; /* updated dynamically via JS */
 }
 
 html,body{
@@ -237,7 +238,7 @@ header{
 }
 
 .feed-inner{
-  padding:16px 0 140px;
+  padding:16px 0 var(--bottom-inset);
   display:flex;
   flex-direction:column;
   justify-content:flex-end;
@@ -762,6 +763,12 @@ const unreadCounts  = new Map(); // channel -> number
 const sharedChannels = new Set(); // channel -> has other members
 let channelSubs = new Map(); // channel -> realtime subscription
 
+function updateBottomInset() {
+  const extra = 12; // small breathing room above input area
+  const h = (inputArea && inputArea.offsetHeight) ? (inputArea.offsetHeight + extra) : 140;
+  document.documentElement.style.setProperty('--bottom-inset', h + 'px');
+}
+
 function updateTabBadge(ch) {
   if (!tabsEl) return;
   const btn = tabsEl.querySelector('.tab[data-channel="' + CSS.escape(ch) + '"]');
@@ -803,6 +810,7 @@ async function init() {
     subscribeRealtimeAll();
   }
   setupPresence();
+  updateBottomInset();
   scrollBottom();
   cleanupAuthHash();
   if (input) input.focus();
@@ -1072,6 +1080,7 @@ function renderTabs() {
 
   updateTabsUI();
   updateAllTabBadges();
+  updateBottomInset();
 }
 
 async function syncChannelsFromServer() {
@@ -1440,6 +1449,7 @@ sendBtn.addEventListener('click', send);
 function autoResize() {
   input.style.height = 'auto';
   input.style.height = Math.min(input.scrollHeight, 160) + 'px';
+  updateBottomInset();
 }
 
 /* ═══ SCROLL ══════════════════════════════════════════════ */
@@ -1449,10 +1459,15 @@ feedEl.addEventListener('scroll', () => {
 }, { passive: true });
 
 function scrollBottom() {
+  updateBottomInset();
   feedEl.scrollTop = feedEl.scrollHeight;
   scrollBtn.classList.remove('visible');
   atBottom = true;
 }
+
+window.addEventListener('resize', () => {
+  updateBottomInset();
+});
 
 /* ═══ UTILS ═══════════════════════════════════════════════ */
 function formatTime(iso) {
