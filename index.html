@@ -1896,18 +1896,48 @@ if (moveSelectedBtn) {
   moveSelectedBtn.addEventListener('click', async () => {
     if (!currentUser || selectedIds.size === 0 || !moveTargetSelect) return;
     const target = moveTargetSelect.value;
-    if (!target) return;
+    if (!target || target === currentChannel) return;
     const ids = Array.from(selectedIds);
     try {
-      const now = new Date().toISOString();
-      const { error } = await sb
+      // Load selected messages so we can re-insert them into the target channel.
+      const { data, error } = await sb
         .from('entries')
-        .update({ channel: target, created_at: now })
+        .select('id, text, user_id, channel')
         .in('id', ids);
       if (error) {
         console.error(error);
         toast('Failed to move — ' + humanError(error.message));
         return;
+      }
+      const rows = (data || []).filter(row => row.user_id === currentUser.id);
+      if (rows.length === 0) {
+        toast('Nothing you can move.');
+        return;
+      }
+      // Insert copies into target channel (new created_at).
+      const insertRows = rows.map(row => ({
+        text: row.text,
+        user_id: row.user_id,
+        channel: target
+      }));
+      const { error: insertError, data: inserted } = await sb
+        .from('entries')
+        .insert(insertRows)
+        .select('id');
+      if (insertError) {
+        console.error(insertError);
+        toast('Failed to move — ' + humanError(insertError.message));
+        return;
+      }
+      // Delete originals we just moved.
+      const originalIds = rows.map(r => r.id);
+      const { error: deleteError } = await sb
+        .from('entries')
+        .delete()
+        .in('id', originalIds);
+      if (deleteError) {
+        console.error(deleteError);
+        toast('Moved, but failed to delete old messages.');
       }
       setSelectMode(false);
       reloadForUser();
