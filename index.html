@@ -266,8 +266,9 @@ header{
 /* message row */
 .msg{
   display:flex;
-  align-items:baseline;
-  gap:10px;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:2px;
   padding:4px 20px;
   border-bottom:1px solid var(--line);
   transition:background .1s;
@@ -279,40 +280,30 @@ header{
 
 .msg-meta{
   display:flex;
-  align-items:baseline;
-  gap:8px;
-  min-width:160px;
-  max-width:240px;
-  flex:0 0 auto;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
+  align-items:center;
+  gap:6px;
+  font-size:10px;
+  color:var(--dim);
+  letter-spacing:0.02em;
 }
 
 .msg-sender{
   font-size:10px;
   color:var(--soft);
-  letter-spacing:0.02em;
-  overflow:hidden;
-  text-overflow:ellipsis;
+  font-weight:500;
 }
 
 .msg-time{
   font-size:10px;
   color:var(--dim);
   letter-spacing:0.04em;
-  flex:0 0 auto;
 }
 
 .msg-text{
-  flex:1;
-  min-width:0;
   font-size:13px;
   color:var(--text);
   line-height:1.55;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
+  white-space:pre-wrap;
 }
 
 .msg-text a{
@@ -730,6 +721,14 @@ header{
     </div>
 
     <div class="um-section">
+      <div class="um-label">Nickname</div>
+      <input id="um-nickname" class="cm-input" placeholder="optional nickname shown as author"/>
+      <div class="um-row">
+        <button class="um-btn" id="um-nick-save">Save nickname</button>
+      </div>
+    </div>
+
+    <div class="um-section">
       <div class="um-label">Your user id</div>
       <div class="um-value" id="um-user-id">—</div>
       <div class="um-row">
@@ -785,6 +784,8 @@ const umAuthStatus = document.getElementById('um-auth-status');
 const umAuthBtn    = document.getElementById('um-auth-btn');
 const umUserId     = document.getElementById('um-user-id');
 const umCopyIdBtn  = document.getElementById('um-copy-id');
+const umNickname   = document.getElementById('um-nickname');
+const umNickSave   = document.getElementById('um-nick-save');
 const tabsEl     = document.getElementById('tabs');
 const draftBubble    = document.getElementById('draft-bubble');
 const draftBubbleTxt = document.getElementById('draft-bubble-text');
@@ -1039,7 +1040,10 @@ function createMsgRow(msg, isNew) {
   const sender = document.createElement('div');
   sender.className = 'msg-sender';
   if (msg.user_id && currentUser && msg.user_id === currentUser.id) {
-    sender.textContent = 'you';
+    const nick = currentUser.user_metadata && currentUser.user_metadata.nickname
+      ? String(currentUser.user_metadata.nickname)
+      : 'you';
+    sender.textContent = nick;
   } else if (msg.user_id) {
     sender.textContent = String(msg.user_id);
   } else {
@@ -1397,6 +1401,34 @@ function setupAuthListener() {
   });
 
   if (umCopyIdBtn) umCopyIdBtn.addEventListener('click', copyUserId);
+
+  if (umNickSave && umNickname) {
+    umNickSave.addEventListener('click', saveNickname);
+  }
+}
+
+async function saveNickname() {
+  if (!currentUser || !umNickname) return;
+  const raw = umNickname.value.trim();
+  const nick = raw.slice(0, 40);
+  try {
+    const { data, error } = await sb.auth.updateUser({
+      data: { nickname: nick || null }
+    });
+    if (error) {
+      console.error(error);
+      toast('Failed to save nickname — ' + humanError(error.message));
+      return;
+    }
+    if (data && data.user) {
+      currentUser = data.user;
+      updateAuthUI();
+      toast('Nickname saved.');
+    }
+  } catch (e) {
+    console.error(e);
+    toast('Failed to save nickname — ' + humanError(e.message));
+  }
 }
 
 function updateAuthUI() {
@@ -1404,8 +1436,12 @@ function updateAuthUI() {
 
   if (currentUser) {
     const email = currentUser.email || 'Signed in';
+    const nick  = currentUser.user_metadata && currentUser.user_metadata.nickname
+      ? String(currentUser.user_metadata.nickname)
+      : '';
     if (umAuthStatus) umAuthStatus.textContent = email;
     if (umAuthBtn) umAuthBtn.textContent = 'Sign out';
+    if (umNickname) umNickname.value = nick;
     sendBtn.disabled = !input.value.trim();
     if (umUserId) umUserId.textContent = currentUser.id || '—';
     if (umCopyIdBtn) umCopyIdBtn.disabled = !currentUser.id;
@@ -1415,6 +1451,7 @@ function updateAuthUI() {
     sendBtn.disabled = true;
     if (umUserId) umUserId.textContent = '—';
     if (umCopyIdBtn) umCopyIdBtn.disabled = true;
+    if (umNickname) umNickname.value = '';
   }
 }
 
