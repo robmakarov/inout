@@ -3441,9 +3441,11 @@ function humanError(message) {
 }
 
 /* ═══ GO ══════════════════════════════════════════════════ */
-requestAnimationFrame(() => { document.body.classList.add('loaded'); });
 init();
-window.addEventListener('load', () => { if (input) input.focus(); });
+window.addEventListener('load', () => {
+  document.body.classList.add('loaded');
+  if (input) input.focus();
+});
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && input) input.focus();
 });
