@@ -418,7 +418,7 @@ header{
   display:flex;
   align-items:center;
   gap:4px;
-  margin-right:4px;
+  margin-left:8px;
   opacity:0;
   pointer-events:none;
   transition:opacity .15s ease;
@@ -1548,11 +1548,11 @@ function createMsgRow(msg, isNew) {
   text.innerHTML = linkify(escapeHtml(msg.text));
   text.title = msg.text || '';
 
-  row.appendChild(actions);
   row.appendChild(selectBox);
   row.appendChild(time);
   row.appendChild(sender);
   row.appendChild(text);
+  row.appendChild(actions);
   return row;
 }
 
