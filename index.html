@@ -481,12 +481,44 @@ header{
   cursor:pointer;
   letter-spacing:0.04em;
   text-transform:uppercase;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
 }
 
 .tab-active{
   background:var(--acc);
   color:var(--bg);
   border-color:var(--acc2);
+}
+
+.tab-shared{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:14px;height:14px;
+  color:var(--dim);
+}
+.tab-active .tab-shared{color:rgba(10,10,9,0.75)}
+
+.tab-badge{
+  display:none;
+  min-width:16px;
+  height:16px;
+  padding:0 5px;
+  border-radius:999px;
+  background:rgba(232,213,160,0.16);
+  border:1px solid rgba(232,213,160,0.35);
+  color:var(--acc);
+  font-size:10px;
+  line-height:14px;
+  letter-spacing:0.02em;
+}
+.tab-badge.show{display:inline-flex;align-items:center;justify-content:center}
+.tab-active .tab-badge{
+  background:rgba(10,10,9,0.12);
+  border-color:rgba(10,10,9,0.25);
+  color:rgba(10,10,9,0.8);
 }
 
 .tab-new{
@@ -692,6 +724,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const feedInner  = document.getElementById('feed-inner');
 const feedEl     = document.getElementById('feed');
+const inputArea  = document.getElementById('input-area');
 const input      = document.getElementById('msg-input');
 const sendBtn    = document.getElementById('send-btn');
 const emptyEl    = document.getElementById('empty');
@@ -726,6 +759,16 @@ let channels       = ['main'];
 const CHANNELS_KEY  = 'inout_channels_v1';
 const seenIds       = new Set();
 const channelScroll = new Map();
+const unreadCounts  = new Map(); // channel -> number
+const sharedChannels = new Set(); // channel -> has other members
+let channelSubs = new Map(); // channel -> realtime subscription
+
+function isNearBottom() {
+  const base = 80;
+  const extra = (inputArea && inputArea.offsetHeight) ? inputArea.offsetHeight : 120;
+  const threshold = base + extra;
+  return feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < threshold;
+}
 
 /* ═══ INIT ═══════════════════════════════════════════════ */
 async function init() {
@@ -738,7 +781,7 @@ async function init() {
   setupTabs();
   if (currentUser) {
     await loadMessages();
-    subscribeRealtime();
+    subscribeRealtimeAll();
   }
   setupPresence();
   scrollBottom();
@@ -788,28 +831,45 @@ async function loadMessages() {
 }
 
 /* ═══ REALTIME ════════════════════════════════════════════ */
-function subscribeRealtime() {
-  if (channel) {
-    channel.unsubscribe();
+function subscribeRealtimeAll() {
+  for (const sub of channelSubs.values()) {
+    try { sub.unsubscribe(); } catch (_) {}
   }
-  channel = sb
-    .channel('entries-feed')
-    .on('postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'entries', filter: 'channel=eq.' + currentChannel },
-      payload => {
-        hideEmpty();
-        const wasAtBottom = atBottom;
-        appendMsg(payload.new, true);
-        msgCount++;
-        updateMsgCount();
-        if (wasAtBottom) {
-          requestAnimationFrame(scrollBottom);
-        } else {
-          scrollBtn.classList.add('visible');
-        }
-      }
-    )
-    .subscribe();
+  channelSubs = new Map();
+
+  if (!currentUser) return;
+
+  channels.forEach(ch => {
+    const sub = sb
+      .channel('entries-' + ch)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'entries', filter: 'channel=eq.' + ch },
+        payload => onInsertForChannel(ch, payload.new)
+      )
+      .subscribe();
+    channelSubs.set(ch, sub);
+  });
+}
+
+function onInsertForChannel(ch, msg) {
+  if (ch === currentChannel) {
+    hideEmpty();
+    const wasAtBottom = isNearBottom();
+    appendMsg(msg, true);
+    msgCount++;
+    updateMsgCount();
+    if (wasAtBottom) {
+      requestAnimationFrame(scrollBottom);
+    } else {
+      scrollBtn.classList.add('visible');
+    }
+    return;
+  }
+
+  const next = (unreadCounts.get(ch) || 0) + 1;
+  unreadCounts.set(ch, next);
+  updateTabBadge(ch);
 }
 
 /* ═══ PRESENCE (online count) ════════════════════════════ */
@@ -1315,8 +1375,7 @@ function autoResize() {
 
 /* ═══ SCROLL ══════════════════════════════════════════════ */
 feedEl.addEventListener('scroll', () => {
-  const threshold = 80;
-  atBottom = feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < threshold;
+  atBottom = isNearBottom();
   if (atBottom) scrollBtn.classList.remove('visible');
 }, { passive: true });
 
