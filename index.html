@@ -1293,7 +1293,6 @@ async function init() {
   setupPresence();
   scrollBottom();
   cleanupAuthHash();
-  if (input) input.focus();
 }
 
 function openUserModal() {
@@ -2240,7 +2239,6 @@ function switchChannel(ch) {
   refreshMoveTargets();
   loadFieldPrefsForCurrentChannel();
   applyFieldPrefsToMessages();
-  if (input) input.focus();
   if (currentUser) {
     ensureMembership().then(reloadForUser);
   } else {
