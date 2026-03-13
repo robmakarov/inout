@@ -651,15 +651,15 @@ body.select-mode .msg-select-wrap,
 
 .clear-input-btn{
   position:absolute;
-  top:6px;
-  right:60px;
-  width:18px;
-  height:18px;
-  border-radius:50%;
-  border:1px solid var(--line2);
-  background:var(--bg2);
-  color:var(--soft);
-  font-size:11px;
+  top:10px;
+  right:76px; /* inside textarea, just before Send button */
+  width:16px;
+  height:16px;
+  border-radius:999px;
+  border:none;
+  background:transparent;
+  color:var(--dim);
+  font-size:12px;
   display:inline-flex;
   align-items:center;
   justify-content:center;
@@ -721,6 +721,7 @@ body.select-mode .msg-select-wrap,
     min-width:120px;
     max-width:160px;
   }
+  body{overflow:auto;}
   /* keep header pinned even when keyboard opens */
   header{
     position:fixed;
