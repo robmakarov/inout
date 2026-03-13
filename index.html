@@ -569,7 +569,17 @@ header{
     min-width:120px;
     max-width:160px;
   }
-  header{padding:0 14px}
+  /* keep header pinned even when keyboard opens */
+  header{
+    position:fixed;
+    top:0;
+    left:0;
+    right:0;
+    width:100%;
+    padding:0 14px;
+    z-index:120;
+  }
+  #app{padding-top:48px}
   #input-area{padding:10px 10px 14px}
   #tabs{
     padding:8px 10px 8px;
