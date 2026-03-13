@@ -524,6 +524,7 @@ body.select-mode .msg-select-wrap,
   display:flex;
   align-items:flex-end;
   gap:10px;
+  position:relative;
 }
 
 /* clipboard suggestion bubble (this device) */
@@ -646,6 +647,38 @@ body.select-mode .msg-select-wrap,
   display:flex;
   justify-content:flex-start;
   margin-top:6px;
+}
+
+.clear-input-btn{
+  position:absolute;
+  top:6px;
+  right:60px;
+  width:18px;
+  height:18px;
+  border-radius:50%;
+  border:1px solid var(--line2);
+  background:var(--bg2);
+  color:var(--soft);
+  font-size:11px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .12s ease, background .12s ease, color .12s ease;
+}
+.input-wrap:hover .clear-input-btn:not(:disabled){
+  opacity:1;
+  pointer-events:auto;
+}
+.clear-input-btn:hover:not(:disabled){
+  background:var(--line);
+  color:var(--text);
+}
+.clear-input-btn:disabled{
+  opacity:0;
+  pointer-events:none;
 }
 
 /* ── TOAST ── */
@@ -974,6 +1007,9 @@ body.select-mode .msg-select-wrap,
         autocomplete="off"
         spellcheck="true"
       ></textarea>
+      <button id="clear-input" class="clear-input-btn" aria-label="Clear input" title="Clear">
+        ✕
+      </button>
       <button id="send-btn" disabled>Send</button>
     </div>
     <div class="input-tools">
@@ -1085,6 +1121,7 @@ const feedEl     = document.getElementById('feed');
 const inputArea  = document.getElementById('input-area');
 const input      = document.getElementById('msg-input');
 const sendBtn    = document.getElementById('send-btn');
+const clearInputBtn = document.getElementById('clear-input');
 const emptyEl    = document.getElementById('empty');
 const scrollBtn  = document.getElementById('scroll-btn');
 const ocNum      = document.getElementById('oc-num');
@@ -1446,6 +1483,7 @@ function restoreInputGlobal() {
     input.value = localStorage.getItem(INPUT_STATE_KEY) || '';
     autoResize();
     sendBtn.disabled = !input.value.trim();
+    updateClearInputBtn();
   } catch (_) {}
 }
 
@@ -1454,6 +1492,11 @@ function saveInputGlobal() {
   try {
     localStorage.setItem(INPUT_STATE_KEY, input.value || '');
   } catch (_) {}
+}
+
+function updateClearInputBtn() {
+  if (!clearInputBtn || !input) return;
+  clearInputBtn.disabled = !input.value;
 }
 
 function loadFieldPrefsForCurrentChannel() {
@@ -2147,6 +2190,7 @@ async function sendText(text) {
     input.value = '';
     autoResize();
     sendBtn.disabled = true;
+    updateClearInputBtn();
     input.focus();
   }
 }
@@ -2156,6 +2200,7 @@ input.addEventListener('input', () => {
   autoResize();
   sendBtn.disabled = !input.value.trim();
   saveInputGlobal();
+  updateClearInputBtn();
   // send current draft for this user so other devices see it
   if (currentUser) {
     broadcastDraft(input.value);
@@ -2230,6 +2275,21 @@ if (clipboardButton) {
       console.error(e);
       toast('Could not read clipboard.');
     }
+  });
+}
+
+if (clearInputBtn) {
+  clearInputBtn.addEventListener('click', () => {
+    if (!input) return;
+    input.value = '';
+    autoResize();
+    saveInputGlobal();
+    updateClearInputBtn();
+    sendBtn.disabled = true;
+    if (currentUser) {
+      broadcastDraft('');
+    }
+    input.focus();
   });
 }
 
