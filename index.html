@@ -237,7 +237,7 @@ header{
 }
 
 .feed-inner{
-  padding:16px 0 80px;
+  padding:16px 0 140px;
   display:flex;
   flex-direction:column;
   justify-content:flex-end;
@@ -448,20 +448,14 @@ header{
   #input-area{padding:10px 10px 14px}
 }
 
-/* ── RED RECTANGLE / TABS ── */
-.red-rect{
-  width:100%;
-  height:4px;
-  background:#ff2b2b;
-}
-
 #tabs{
   display:flex;
   gap:6px;
-  padding:6px 20px 4px;
+  padding:8px 20px 8px;
   border-bottom:1px solid var(--line);
   background:var(--bg2);
   align-items:center;
+  margin:-12px -20px 10px;
 }
 
 .tab{
@@ -601,10 +595,6 @@ header{
     </div>
   </header>
 
-  <div class="red-rect"></div>
-
-  <div id="tabs"></div>
-
   <div id="feed">
     <div class="feed-inner" id="feed-inner">
       <div id="empty">
@@ -615,6 +605,7 @@ header{
   </div>
 
   <div id="input-area">
+    <div id="tabs"></div>
     <div class="input-wrap">
       <textarea
         id="msg-input"
