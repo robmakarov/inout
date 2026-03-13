@@ -658,7 +658,6 @@ body.select-mode .msg-select-wrap,
   outline:none;
 }
 #msg-input:focus-visible{outline:none}
-#msg-input.suppress-display{opacity:0;pointer-events:none}
 
 #send-btn{
   flex-shrink:0;
@@ -1062,7 +1061,6 @@ body.select-mode .msg-select-wrap,
     <div class="input-wrap">
       <textarea
         id="msg-input"
-        class="suppress-display"
         placeholder="say something…"
         rows="1"
         maxlength="2000"
@@ -1261,7 +1259,7 @@ const INPUT_STATE_KEY      = 'inout_input_state_v2';
 const FIELD_PREFS_KEY      = 'inout_field_prefs_v1';
 const ORDER_STATE_KEY      = 'inout_order_state_v1';
 try { localStorage.setItem(INPUT_STATE_KEY, ''); } catch (_) {}
-if (input) { input.value = ''; input.placeholder = 'say something…'; input.classList.remove('suppress-display'); }
+if (input) { input.value = ''; input.placeholder = 'say something…'; }
 const seenIds       = new Set();
 const channelScroll = new Map();
 const unreadCounts  = new Map(); // channel -> number
@@ -1372,7 +1370,6 @@ async function init() {
   if (input) {
     input.value = '';
     input.placeholder = 'say something…';
-    input.classList.remove('suppress-display');
     try { localStorage.setItem(INPUT_STATE_KEY, ''); } catch (_) {}
     autoResize();
     sendBtn.disabled = true;
@@ -1751,7 +1748,7 @@ function restoreInputGlobal() {
 function saveInputGlobal() {
   if (!input) return;
   try {
-    localStorage.setItem(INPUT_STATE_KEY, editingMessageId != null ? '' : (input.value || ''));
+    localStorage.setItem(INPUT_STATE_KEY, input.value || '');
   } catch (_) {}
 }
 
