@@ -1258,6 +1258,8 @@ const CURRENT_CHANNEL_KEY  = 'inout_current_channel_v1';
 const INPUT_STATE_KEY      = 'inout_input_state_v2';
 const FIELD_PREFS_KEY      = 'inout_field_prefs_v1';
 const ORDER_STATE_KEY      = 'inout_order_state_v1';
+try { localStorage.setItem(INPUT_STATE_KEY, ''); } catch (_) {}
+if (input) { input.value = ''; input.placeholder = 'say something…'; }
 const seenIds       = new Set();
 const channelScroll = new Map();
 const unreadCounts  = new Map(); // channel -> number
