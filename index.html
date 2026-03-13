@@ -664,9 +664,66 @@ body.select-mode .msg-select-wrap,
 
 .input-tools{
   display:flex;
-  justify-content:flex-start;
+  justify-content:space-between;
+  align-items:center;
   margin-top:6px;
+  gap:8px;
 }
+.input-tools-left{ display:flex; align-items:center; }
+.last-action-btn{
+  flex:0 0 auto;
+  max-width:160px;
+  padding:4px 8px;
+  font-size:11px;
+  color:var(--muted);
+  background:var(--bg2);
+  border:1px solid var(--line);
+  border-radius:6px;
+  cursor:pointer;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  font-family:var(--mono);
+}
+.last-action-btn:empty{ display:none; }
+#system-actions-panel{
+  position:fixed;
+  left:0; right:0;
+  bottom:0;
+  max-height:40vh;
+  background:var(--bg2);
+  border-top:1px solid var(--line);
+  z-index:140;
+  transform:translateY(100%);
+  transition:transform .25s ease;
+  display:flex;
+  flex-direction:column;
+  padding-bottom:env(safe-area-inset-bottom, 0);
+}
+#system-actions-panel.open{ transform:translateY(0); }
+#system-actions-panel .sa-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:8px 12px;
+  border-bottom:1px solid var(--line);
+}
+#system-actions-panel .sa-list{
+  overflow-y:auto;
+  flex:1;
+  min-height:0;
+  padding:8px;
+}
+#system-actions-panel .sa-item{
+  font-size:11px;
+  color:var(--soft);
+  padding:4px 0;
+  border-bottom:1px solid var(--line2);
+  white-space:pre-wrap;
+  word-break:break-word;
+}
+#system-actions-panel .sa-item:last-child{ border-bottom:none }
+#system-actions-panel .sa-item time{ color:var(--muted); font-size:10px; margin-right:6px; }
 
 .clear-input-btn{
   position:absolute;
@@ -1033,9 +1090,19 @@ body.select-mode .msg-select-wrap,
       <button id="send-btn" disabled>Send</button>
     </div>
     <div class="input-tools">
-      <button id="clipboard-button" class="draft-btn">From clipboard</button>
+      <div class="input-tools-left">
+        <button id="clipboard-button" class="draft-btn">From clipboard</button>
+      </div>
+      <button type="button" id="last-action-btn" class="last-action-btn" aria-label="Last system action"></button>
     </div>
   </div>
+</div>
+<div id="system-actions-panel" aria-hidden="true">
+  <div class="sa-header">
+    <span>Actions</span>
+    <button type="button" id="system-actions-close" class="draft-btn">Close</button>
+  </div>
+  <div class="sa-list" id="system-actions-list"></div>
 </div>
 
 <button id="scroll-btn" onclick="scrollBottom()">↓ new messages</button>
@@ -1208,6 +1275,12 @@ let msgCount    = 0;
 let atBottom    = true;
 let presenceCh  = null;
 let toastTimer     = null;
+const systemActions = [];
+const SYSTEM_ACTIONS_MAX = 50;
+const lastActionBtn = document.getElementById('last-action-btn');
+const systemActionsPanel = document.getElementById('system-actions-panel');
+const systemActionsList = document.getElementById('system-actions-list');
+const systemActionsClose = document.getElementById('system-actions-close');
 let myId           = crypto.randomUUID();
 let currentUser    = null;
 let currentChannel = 'main';
@@ -1229,6 +1302,8 @@ let latestRemoteDraft = '';
 let latestClipboardText = '';
 let selectMode = false;
 const selectedIds = new Set();
+let rangeSelectStartRow = null;
+let rangeSelectTouch = false;
 let fieldPrefs = { showTime:true, showAuthor:true };
 let currentMessageOrder = [];
 let touchDragState = null; // for mobile long-press drag
@@ -1318,7 +1393,10 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && umBackdrop && umBackdrop.style.display === 'block') closeUserModal();
 });
 
-if (feedEl) feedEl.addEventListener('click', () => { feedEl.focus(); });
+if (feedEl) feedEl.addEventListener('click', () => {
+  feedEl.focus();
+  if (input) input.blur();
+});
 
 /* ═══ LOAD ════════════════════════════════════════════════ */
 async function loadMessages() {
@@ -2247,6 +2325,7 @@ function switchChannel(ch) {
   refreshMoveTargets();
   loadFieldPrefsForCurrentChannel();
   applyFieldPrefsToMessages();
+  if (input) input.blur();
   if (currentUser) {
     ensureMembership().then(reloadForUser);
   } else {
@@ -2582,6 +2661,7 @@ async function sendText(text) {
     autoResize();
     sendBtn.disabled = true;
     updateClearInputBtn();
+    saveInputGlobal();
     requestAnimationFrame(() => { if (input) input.focus(); });
   }
 }
@@ -2719,6 +2799,68 @@ if (selectNoneBtn) {
     updateSelectionUI();
   });
 }
+
+function applyRangeSelect(fromRow, toRow, check) {
+  if (!feedInner || !fromRow || !toRow) return;
+  const rows = Array.from(feedInner.querySelectorAll('.msg'));
+  const i = rows.indexOf(fromRow);
+  const j = rows.indexOf(toRow);
+  if (i < 0 || j < 0) return;
+  const [lo, hi] = i <= j ? [i, j] : [j, i];
+  for (let k = lo; k <= hi; k++) {
+    const row = rows[k];
+    const box = row.querySelector('.msg-select');
+    const id = row.dataset.id ? Number(row.dataset.id) : null;
+    if (!box || !Number.isFinite(id)) continue;
+    box.checked = check;
+    if (check) {
+      selectedIds.add(id);
+      row.classList.add('msg-selected');
+    } else {
+      selectedIds.delete(id);
+      row.classList.remove('msg-selected');
+    }
+  }
+  updateSelectionUI();
+}
+
+if (feedInner) {
+  feedInner.addEventListener('mousedown', e => {
+    if (!selectMode) return;
+    const row = e.target.closest('.msg');
+    if (!row || !row.querySelector('.msg-select-wrap')) return;
+    rangeSelectStartRow = row;
+    rangeSelectTouch = false;
+  });
+  feedInner.addEventListener('touchstart', e => {
+    if (!selectMode || !e.touches.length) return;
+    const row = e.target.closest('.msg');
+    if (!row || !row.querySelector('.msg-select-wrap')) return;
+    rangeSelectStartRow = row;
+    rangeSelectTouch = true;
+  }, { passive: true });
+}
+document.addEventListener('mousemove', e => {
+  if (rangeSelectStartRow && !rangeSelectTouch) {
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const row = el && el.closest ? el.closest('.msg') : null;
+    if (row && feedInner && feedInner.contains(row)) {
+      applyRangeSelect(rangeSelectStartRow, row, true);
+    }
+  }
+});
+document.addEventListener('mouseup', () => { rangeSelectStartRow = null; });
+document.addEventListener('touchmove', e => {
+  if (rangeSelectStartRow && rangeSelectTouch && e.touches.length) {
+    const t = e.touches[0];
+    const el = document.elementFromPoint(t.clientX, t.clientY);
+    const row = el && el.closest ? el.closest('.msg') : null;
+    if (row && feedInner && feedInner.contains(row)) {
+      applyRangeSelect(rangeSelectStartRow, row, true);
+    }
+  }
+}, { passive: true });
+document.addEventListener('touchend', () => { rangeSelectStartRow = null; rangeSelectTouch = false; });
 
 if (fieldTimeChk) {
   fieldTimeChk.addEventListener('change', () => {
@@ -3048,7 +3190,58 @@ function toast(msg, dur = 2800) {
   toastEl.textContent = msg;
   toastEl.classList.add('show');
   toastTimer = setTimeout(() => toastEl.classList.remove('show'), dur);
+  const text = typeof msg === 'string' ? msg : String(msg);
+  systemActions.push({ text, time: Date.now() });
+  if (systemActions.length > SYSTEM_ACTIONS_MAX) systemActions.shift();
+  if (lastActionBtn) {
+    lastActionBtn.textContent = text.length > 32 ? text.slice(0, 29) + '…' : text;
+  }
 }
+
+function openSystemActionsPanel() {
+  if (!systemActionsPanel || !systemActionsList) return;
+  systemActionsList.innerHTML = '';
+  const copy = systemActions.slice().reverse();
+  copy.forEach(({ text, time }) => {
+    const div = document.createElement('div');
+    div.className = 'sa-item';
+    const d = new Date(time);
+    const timeStr = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    div.innerHTML = '<time>' + timeStr + '</time>' + escapeHtml(text);
+    systemActionsList.appendChild(div);
+  });
+  systemActionsPanel.classList.add('open');
+  systemActionsPanel.setAttribute('aria-hidden', 'false');
+}
+
+function closeSystemActionsPanel() {
+  if (!systemActionsPanel) return;
+  systemActionsPanel.classList.remove('open');
+  systemActionsPanel.setAttribute('aria-hidden', 'true');
+}
+
+let lastActionLongPressTimer = null;
+if (lastActionBtn) {
+  const clearLongPress = () => {
+    if (lastActionLongPressTimer) {
+      clearTimeout(lastActionLongPressTimer);
+      lastActionLongPressTimer = null;
+    }
+  };
+  lastActionBtn.addEventListener('mousedown', () => {
+    clearLongPress();
+    lastActionLongPressTimer = setTimeout(() => { lastActionLongPressTimer = null; openSystemActionsPanel(); }, 500);
+  });
+  lastActionBtn.addEventListener('mouseup', clearLongPress);
+  lastActionBtn.addEventListener('mouseleave', clearLongPress);
+  lastActionBtn.addEventListener('touchstart', e => {
+    clearLongPress();
+    lastActionLongPressTimer = setTimeout(() => { lastActionLongPressTimer = null; openSystemActionsPanel(); }, 500);
+  }, { passive: true });
+  lastActionBtn.addEventListener('touchend', clearLongPress);
+  lastActionBtn.addEventListener('touchcancel', clearLongPress);
+}
+if (systemActionsClose) systemActionsClose.addEventListener('click', closeSystemActionsPanel);
 
 function humanError(message) {
   if (!message) return 'Something went wrong.';
