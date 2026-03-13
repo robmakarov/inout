@@ -1057,7 +1057,6 @@ body.select-mode .msg-select-wrap,
         maxlength="2000"
         autocomplete="off"
         spellcheck="true"
-        autofocus
       ></textarea>
       <button id="clear-input" class="clear-input-btn" aria-label="Clear input">
         ✕
@@ -1266,7 +1265,6 @@ let editingMessageId = null;
 let fieldPrefs = { showTime:true, showAuthor:true };
 let currentMessageOrder = [];
 let touchDragState = null; // for mobile long-press drag
-let allowScrollBlur = false; // false until after init so scrollBottom() doesn't steal focus
 
 function updateTabBadge(ch) {
   if (!tabsEl) return;
@@ -1331,10 +1329,6 @@ async function init() {
   scrollBottom();
   cleanupAuthHash();
   setupFullscreenOnFirstTap();
-  setTimeout(() => {
-    allowScrollBlur = true;
-    if (input) input.focus();
-  }, 100);
 }
 
 function openUserModal() {
@@ -1357,32 +1351,6 @@ if (umBackdrop) umBackdrop.addEventListener('click', e => {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && umBackdrop && umBackdrop.style.display === 'block') closeUserModal();
 });
-
-function isEditable(el) {
-  return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable || (el.closest && el.closest('input, textarea, [contenteditable="true"]')));
-}
-document.addEventListener('click', e => {
-  if (!input) return;
-  if (document.activeElement === input) return;
-  if (isEditable(e.target) || (e.target && (e.target.tagName === 'BUTTON' || e.target.tagName === 'A'))) return;
-  input.focus();
-}, true);
-document.addEventListener('keydown', e => {
-  if (!input) return;
-  if (isEditable(document.activeElement)) return;
-  if (e.ctrlKey || e.altKey || e.metaKey) return;
-  if (e.key.length !== 1) return;
-  e.preventDefault();
-  e.stopPropagation();
-  input.focus();
-  const start = input.selectionStart ?? input.value.length;
-  const end = input.selectionEnd ?? input.value.length;
-  const before = input.value.slice(0, start);
-  const after = input.value.slice(end);
-  input.value = before + e.key + after;
-  input.selectionStart = input.selectionEnd = start + 1;
-  input.dispatchEvent(new Event('input', { bubbles: true }));
-}, true);
 
 /* ═══ LOAD ════════════════════════════════════════════════ */
 async function loadMessages() {
@@ -3287,7 +3255,7 @@ function autoResize() {
 feedEl.addEventListener('scroll', () => {
   atBottom = isNearBottom();
   if (atBottom) scrollBtn.classList.remove('visible');
-  if (allowScrollBlur && input && document.activeElement === input) input.blur();
+  if (input && document.activeElement === input) input.blur();
 }, { passive: true });
 
 function scrollBottom() {
