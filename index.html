@@ -1667,14 +1667,6 @@ function createMsgRow(msg, isNew) {
     } else {
       selectedIds.delete(msg.id);
     }
-    // Keep selected checkbox visible even without hover.
-    if (selectBox.checked || selectMode) {
-      selectWrap.style.opacity = '1';
-      selectWrap.style.pointerEvents = 'auto';
-    } else {
-      selectWrap.style.opacity = '';
-      selectWrap.style.pointerEvents = '';
-    }
     updateSelectionUI();
   });
   selectWrap.appendChild(selectBox);
