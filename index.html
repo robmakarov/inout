@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <title>INOUT</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
@@ -42,6 +42,14 @@ body{
   flex-direction:column;
   height:100vh;
   overflow:hidden; /* only the content area scrolls */
+}
+
+/* iOS/Safari dynamic viewport handling */
+@supports (height: 100dvh) {
+  body{height:100dvh}
+}
+@supports (height: 100svh) {
+  body{height:100svh}
 }
 
 /* visible scrollbar (content area) */
@@ -567,6 +575,9 @@ header{
     padding:8px 10px 8px;
     margin:-10px -10px 10px;
   }
+  /* prevent iOS Safari zoom-on-focus */
+  #msg-input{font-size:16px}
+  .cm-input{font-size:16px}
 }
 
 #tabs{
