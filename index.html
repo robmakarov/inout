@@ -1930,7 +1930,7 @@ if (moveSelectedBtn) {
     if (!target || target === currentChannel) return;
     const ids = Array.from(selectedIds);
     try {
-      // Load selected messages so we can re-insert them into the target channel.
+      // Load selected messages so we can copy them into the target channel.
       const { data, error } = await sb
         .from('entries')
         .select('id, text, user_id, channel')
@@ -1940,15 +1940,15 @@ if (moveSelectedBtn) {
         toast('Failed to move — ' + humanError(error.message));
         return;
       }
-      const rows = (data || []).filter(row => row.user_id === currentUser.id);
+      const rows = data || [];
       if (rows.length === 0) {
-        toast('Nothing you can move.');
+        toast('Nothing selected.');
         return;
       }
-      // Insert copies into target channel (new created_at).
+      // Insert copies into target channel (new created_at), owned by current user.
       const insertRows = rows.map(row => ({
         text: row.text,
-        user_id: row.user_id,
+        user_id: currentUser.id,
         channel: target
       }));
       const { error: insertError, data: inserted } = await sb
@@ -1959,17 +1959,6 @@ if (moveSelectedBtn) {
         console.error(insertError);
         toast('Failed to move — ' + humanError(insertError.message));
         return;
-      }
-      // Delete originals we just moved.
-      const originalIds = rows.map(r => r.id);
-      const { error: deleteError } = await sb
-        .from('entries')
-        .delete()
-        .eq('user_id', currentUser.id)
-        .in('id', originalIds);
-      if (deleteError) {
-        console.error(deleteError);
-        toast('Moved, but failed to delete old messages.');
       }
       setSelectMode(false);
       reloadForUser();
