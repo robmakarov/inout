@@ -2799,11 +2799,13 @@ if (selectAllBtn) {
 
 if (selectNoneBtn) {
   selectNoneBtn.addEventListener('click', () => {
+    selectModeAutoOn = false;
     const boxes = feedInner.querySelectorAll('.msg-select');
     boxes.forEach(box => {
       box.checked = false;
     });
     selectedIds.clear();
+    feedInner.querySelectorAll('.msg.msg-selected').forEach(row => row.classList.remove('msg-selected'));
     updateSelectionUI();
   });
 }
