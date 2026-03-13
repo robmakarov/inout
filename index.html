@@ -351,7 +351,9 @@ header{
   padding:0;
   overflow-y:auto;
   -webkit-overflow-scrolling:touch;
+  outline:none;
 }
+#feed:focus{outline:none}
 
 .feed-inner{
   padding:16px 0 8px;
@@ -990,7 +992,7 @@ body.select-mode .msg-select-wrap,
     </div>
   </div>
 
-  <div id="feed">
+  <div id="feed" tabindex="0">
     <div class="feed-inner" id="feed-inner">
       <div id="empty">
         <div class="e-label">Nothing yet.</div>
@@ -1316,6 +1318,8 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && umBackdrop && umBackdrop.style.display === 'block') closeUserModal();
 });
 
+if (feedEl) feedEl.addEventListener('click', () => { feedEl.focus(); });
+
 /* ═══ LOAD ════════════════════════════════════════════════ */
 async function loadMessages() {
   if (!currentUser) return;
@@ -1393,6 +1397,7 @@ function subscribeOrderRealtime() {
         const row = payload.new || payload.old || {};
         if (!row || row.channel !== currentChannel) return;
         if (suppressNextOrderApply) { suppressNextOrderApply = false; return; }
+        if (Date.now() < suppressOrderApplyUntil) return;
         await loadMessageOrderForCurrentChannel();
         applyMessageOrderToDOM();
       }
@@ -1420,6 +1425,7 @@ function subscribeViewRealtime() {
         const row = payload.new || payload.old || {};
         if (!row || row.channel !== currentChannel || !row.config) return;
         if (suppressNextViewApply) { suppressNextViewApply = false; return; }
+        if (Date.now() < suppressOrderApplyUntil) return;
         const cfg = row.config || {};
         // Update order
         if (Array.isArray(cfg.order)) {
@@ -2056,10 +2062,12 @@ async function loadMessageOrderForCurrentChannel() {
 
 let suppressNextOrderApply = false;
 let suppressNextViewApply = false;
+let suppressOrderApplyUntil = 0; /* ignore realtime order/view applies until this timestamp */
 
 async function saveMessageOrderForCurrentChannel() {
   if (!currentMessageOrder.length) return;
   saveOrderToLocal();
+  suppressOrderApplyUntil = Date.now() + 600;
   if (currentUser) {
     try {
       const rows = currentMessageOrder.map((entryId, index) => ({
