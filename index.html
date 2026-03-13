@@ -58,10 +58,16 @@ body{
   display:flex;
   flex-direction:column;
   min-height:0;
+  position:relative;
+  padding-top:48px;    /* header height */
+  padding-bottom:96px; /* space for tabs + input bar */
 }
 
 /* ── HEADER ── */
 header{
+  position:fixed;
+  top:0;left:0;right:0;
+  z-index:100;
   background:var(--bg);
   border-bottom:1px solid var(--line);
   padding:0 20px;
@@ -203,6 +209,10 @@ header{
     max-width:100%;
     border-left:none;
   }
+  #app{
+    padding-top:48px;
+    padding-bottom:96px;
+  }
 }
 
 #online-count{
@@ -226,8 +236,11 @@ header{
 
 /* ── FEED ── */
 #feed{
-  flex:1;
-  min-height:0;
+  position:absolute;
+  top:48px;
+  left:0;
+  right:0;
+  bottom:96px;
   padding:0;
   overflow-y:auto;
   -webkit-overflow-scrolling:touch;
@@ -330,9 +343,14 @@ header{
 /* ── INPUT AREA ── */
 #input-area{
   flex-shrink:0;
+  position:fixed;
+  left:0;
+  right:0;
+  bottom:0;
+  z-index:90;
   background:var(--bg);
   border-top:1px solid var(--line);
-  padding:12px 20px 16px;
+  padding:12px 20px calc(16px + env(safe-area-inset-bottom, 0px));
 }
 
 .input-wrap{
@@ -766,6 +784,17 @@ header{
 const SUPABASE_URL  = 'https://tfmbqiwxfgrwtjvoqomf.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+function fixViewportHeight() {
+  try {
+    const h = window.innerHeight;
+    if (h && h > 0) {
+      document.body.style.height = h + 'px';
+    }
+  } catch (_) {}
+}
+window.addEventListener('resize', fixViewportHeight);
+fixViewportHeight();
 
 const feedInner  = document.getElementById('feed-inner');
 const feedEl     = document.getElementById('feed');
