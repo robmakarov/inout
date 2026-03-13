@@ -429,6 +429,12 @@ header{
   margin-left:10px;
 }
 
+/* on hover, make all message parameters (time/author) same color as text */
+.msg:hover .msg-time,
+.msg:hover .msg-sender{
+  color:var(--text);
+}
+
 .msg-select-wrap{
   flex:0 0 20px;
   display:flex;
@@ -1594,6 +1600,14 @@ function createMsgRow(msg, isNew) {
       selectedIds.add(msg.id);
     } else {
       selectedIds.delete(msg.id);
+    }
+    // Keep selected checkbox visible even without hover.
+    if (selectBox.checked || selectMode) {
+      selectWrap.style.opacity = '1';
+      selectWrap.style.pointerEvents = 'auto';
+    } else {
+      selectWrap.style.opacity = '';
+      selectWrap.style.pointerEvents = '';
     }
     updateSelectionUI();
   });
