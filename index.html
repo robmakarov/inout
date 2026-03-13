@@ -111,6 +111,21 @@ header{
   border-color:var(--acc2);
 }
 
+.select-extra{
+  display:inline-block;
+  overflow:hidden;
+  max-width:0;
+  opacity:0;
+  transform:translateX(-4px);
+  transition:max-width .2s cubic-bezier(.2,.8,.2,1), opacity .2s cubic-bezier(.2,.8,.2,1), transform .2s cubic-bezier(.2,.8,.2,1);
+  vertical-align:top;
+}
+.select-extra.show{
+  max-width:120px;
+  opacity:1;
+  transform:translateX(0);
+}
+
 #manage-actions{
   display:none;
   align-items:center;
