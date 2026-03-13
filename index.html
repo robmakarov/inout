@@ -1513,13 +1513,9 @@ document.addEventListener('keydown', e => {
     closeUserModal();
     return;
   }
-  // Ctrl/Cmd+Z → undo last destructive action, unless typing in a field.
+  // Ctrl/Cmd+Z → undo last destructive action anywhere in the app.
   const isUndoKey = (e.key === 'z' || e.key === 'Z') && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey;
   if (isUndoKey) {
-    const ae = document.activeElement;
-    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) {
-      return; // let native text undo work inside fields
-    }
     e.preventDefault();
     undoLastAction();
   }
