@@ -390,7 +390,7 @@ header{
   gap:6px;
   padding:4px 20px;
   border-bottom:1px solid var(--line);
-  transition:background .1s;
+  transition:background .1s, transform .12s;
   animation:msgin .2s ease both;
   position:relative;
 }
@@ -512,6 +512,10 @@ body.select-mode .msg-select-wrap,
 /* new message flash */
 .msg.new-flash{
   background:rgba(232,213,160,0.04);
+}
+
+.msg.dragging{
+  opacity:0.6;
 }
 
 /* ── INPUT AREA ── */
@@ -1570,6 +1574,30 @@ function createMsgRow(msg, isNew) {
 
   const row  = document.createElement('div');
   row.className = 'msg' + (isNew ? ' new-flash' : '');
+  row.draggable = true;
+  row.addEventListener('dragstart', e => {
+    row.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  row.addEventListener('dragend', () => {
+    row.classList.remove('dragging');
+  });
+  row.addEventListener('dragover', e => {
+    e.preventDefault();
+    const dragging = feedInner.querySelector('.msg.dragging');
+    if (!dragging || dragging === row) return;
+    const bounding = row.getBoundingClientRect();
+    const offset = e.clientY - bounding.top;
+    const halfway = bounding.height / 2;
+    if (offset > halfway) {
+      feedInner.insertBefore(dragging, row.nextSibling);
+    } else {
+      feedInner.insertBefore(dragging, row);
+    }
+  });
+  row.addEventListener('drop', e => {
+    e.preventDefault();
+  });
   if (isNew) setTimeout(() => row.classList.remove('new-flash'), 800);
   if (typeof msg.id !== 'undefined') {
     row.dataset.id = String(msg.id);
