@@ -447,6 +447,7 @@ header{
   transition:opacity .12s ease;
 }
 
+body.select-mode .msg-select-wrap,
 .msg:hover .msg-select-wrap,
 .msg.msg-selected .msg-select-wrap{
   opacity:1;
@@ -1470,25 +1471,7 @@ function setSelectMode(on) {
     selectToggle.textContent = selectMode ? 'Cancel' : 'Select';
   }
   if (selectExtra) selectExtra.classList.toggle('show', selectMode);
-  const wraps = feedInner.querySelectorAll('.msg-select-wrap');
-  wraps.forEach(wrap => {
-    if (selectMode) {
-      wrap.style.opacity = '1';
-      wrap.style.pointerEvents = 'auto';
-    } else {
-      // keep visible only if its checkbox is checked
-      const box = wrap.querySelector('.msg-select');
-      if (box && box.checked) {
-        wrap.style.opacity = '1';
-        wrap.style.pointerEvents = 'auto';
-        wrap.closest('.msg')?.classList.add('msg-selected');
-      } else {
-        wrap.style.opacity = '';
-        wrap.style.pointerEvents = '';
-        wrap.closest('.msg')?.classList.remove('msg-selected');
-      }
-    }
-  });
+  document.body.classList.toggle('select-mode', selectMode);
   if (manageActions) {
     manageActions.classList.toggle('visible', selectMode);
   }
