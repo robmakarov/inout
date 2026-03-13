@@ -1019,7 +1019,7 @@ async function loadMessages() {
 
   let query = sb
     .from('entries')
-    .select('id, created_at, text, channel, user_id')
+    .select('id, created_at, text, channel, user_id, author_name')
     .eq('channel', currentChannel);
 
   // For the main feed, show only this user's own messages.
@@ -1227,7 +1227,9 @@ function createMsgRow(msg, isNew) {
 
   const sender = document.createElement('div');
   sender.className = 'msg-sender';
-  if (msg.user_id && currentUser && msg.user_id === currentUser.id) {
+  if (msg.author_name) {
+    sender.textContent = String(msg.author_name);
+  } else if (msg.user_id && currentUser && msg.user_id === currentUser.id) {
     const nick = currentUser.user_metadata && currentUser.user_metadata.nickname
       ? String(currentUser.user_metadata.nickname)
       : 'you';
@@ -1767,7 +1769,7 @@ async function sendText(text) {
       user_id: currentUser.id,
       channel: currentChannel,
     })
-    .select('id, created_at, text, channel, user_id')
+    .select('id, created_at, text, channel, user_id, author_name')
     .single();
 
   input.disabled = false;

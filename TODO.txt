@@ -27,3 +27,5 @@ INOUT – Next Operations
 - Improve error and empty states for feeds and auth failures.
 - Add simple onboarding or tooltip explaining feeds, sharing, and IDs.
 
+DO THIS (execute each steps one by one if not marked "done", mark it when finished):
+- 
