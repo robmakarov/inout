@@ -345,7 +345,14 @@ header{
 .msg:last-child{border-bottom:none}
 
 .msg-sender{
-  display:none;
+  font-size:10px;
+  color:var(--soft);
+  font-weight:500;
+  flex:0 0 10ch;
+  max-width:10ch;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 
 .msg-time{
@@ -1235,6 +1242,13 @@ function createMsgRow(msg, isNew) {
     sender.textContent = fullLabel.slice(0, 10) + '…';
   }
   sender.title = fullLabel;
+
+  const isMainFeed = (msg.channel && msg.channel === 'main') || (!msg.channel && currentChannel === 'main');
+  if (isMainFeed) {
+    sender.style.display = 'none';
+  } else {
+    sender.style.display = '';
+  }
 
   const selectBox = document.createElement('input');
   selectBox.type = 'checkbox';
