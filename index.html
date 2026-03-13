@@ -1365,6 +1365,36 @@ async function undoLastAction() {
           .eq('user_id', currentUser.id)
           .eq('id', e.id);
       }));
+    } else if (action.type === 'send' && Array.isArray(action.entries) && action.entries.length) {
+      const ids = action.entries.map(e => e.id).filter(Boolean);
+      if (ids.length) {
+        const { error } = await sb.from('entries').delete().in('id', ids);
+        if (error) throw error;
+      }
+    } else if (action.type === 'edit' && Array.isArray(action.entries) && action.entries.length) {
+      const rows = action.entries;
+      await Promise.all(rows.map(e => {
+        return sb
+          .from('entries')
+          .update({ text: e.beforeText })
+          .eq('user_id', currentUser.id)
+          .eq('id', e.id);
+      }));
+    } else if (action.type === 'view' && action.before && action.channel) {
+      if (action.channel !== currentChannel) {
+        currentChannel = action.channel;
+      }
+      fieldPrefs = {
+        showTime: !!action.before.showTime,
+        showAuthor: !!action.before.showAuthor,
+      };
+      saveFieldPrefsForCurrentChannel();
+      applyFieldPrefsToMessages();
+      return;
+    } else if (action.type === 'order' && Array.isArray(action.before)) {
+      currentMessageOrder = action.before.slice();
+      await saveMessageOrderForCurrentChannel();
+      applyMessageOrderToDOM();
     } else {
       // Unknown or empty action; nothing to do.
       return;
@@ -2424,6 +2454,7 @@ async function saveMessageOrderForCurrentChannel() {
 
 function recomputeOrderFromDOM() {
   if (!feedInner) return;
+  pushUndo({ type: 'order', before: (currentMessageOrder || []).slice() });
   const ids = Array.from(feedInner.querySelectorAll('.msg'))
     .map(row => Number(row.dataset.id))
     .filter(id => Number.isFinite(id));
@@ -2931,6 +2962,19 @@ async function sendText(text) {
   input.disabled   = true;
 
   if (editingMessageId) {
+    const { data: before, error: selErr } = await sb
+      .from('entries')
+      .select('id, created_at, text, channel, user_id, author_name')
+      .eq('id', editingMessageId)
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+    if (selErr) {
+      input.disabled = false;
+      console.error(selErr);
+      toast('Failed to update — ' + humanError(selErr.message));
+      sendBtn.disabled = false;
+      return;
+    }
     const { data, error } = await sb
       .from('entries')
       .update({ text: trimmed })
@@ -2944,6 +2988,9 @@ async function sendText(text) {
       toast('Failed to update — ' + humanError(error.message));
       sendBtn.disabled = false;
       return;
+    }
+    if (before && before.id) {
+      pushUndo({ type: 'edit', entries: [{ id: before.id, beforeText: before.text, afterText: trimmed }] });
     }
     updateMessageRowText(editingMessageId, trimmed);
     cancelEditingMode(true);
@@ -2973,6 +3020,9 @@ async function sendText(text) {
       appendMsg(data, true);
       msgCount++;
       updateMsgCount();
+    }
+    if (data) {
+      pushUndo({ type: 'send', entries: [data] });
     }
     input.value = '';
     autoResize();
@@ -3135,6 +3185,7 @@ if (selectNoneBtn) {
 
 if (fieldTimeChk) {
   fieldTimeChk.addEventListener('change', () => {
+    pushUndo({ type: 'view', channel: currentChannel, before: { showTime: fieldPrefs.showTime, showAuthor: fieldPrefs.showAuthor } });
     fieldPrefs.showTime = !!fieldTimeChk.checked;
     saveFieldPrefsForCurrentChannel();
     applyFieldPrefsToMessages();
@@ -3148,6 +3199,7 @@ if (fieldAuthorChk) {
       fieldAuthorChk.checked = false;
       return;
     }
+    pushUndo({ type: 'view', channel: currentChannel, before: { showTime: fieldPrefs.showTime, showAuthor: fieldPrefs.showAuthor } });
     fieldPrefs.showAuthor = !!fieldAuthorChk.checked;
     saveFieldPrefsForCurrentChannel();
     applyFieldPrefsToMessages();
