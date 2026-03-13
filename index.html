@@ -1184,7 +1184,6 @@ function setSelectMode(on) {
   const boxes = feedInner.querySelectorAll('.msg-select');
   boxes.forEach(box => {
     box.checked = false;
-    box.style.display = selectMode ? 'inline-block' : 'none';
   });
   updateSelectionUI();
 }
@@ -1229,10 +1228,9 @@ function createMsgRow(msg, isNew) {
   }
   sender.title = fullLabel;
 
-  const selectBox = (msg.user_id && currentUser && msg.user_id === currentUser.id)
-    ? document.createElement('input')
-    : null;
-  if (selectBox) {
+  let selectBox = null;
+  if (msg.user_id && currentUser && msg.user_id === currentUser.id) {
+    selectBox = document.createElement('input');
     selectBox.type = 'checkbox';
     selectBox.className = 'msg-select';
     selectBox.addEventListener('change', () => {
@@ -1244,6 +1242,7 @@ function createMsgRow(msg, isNew) {
       }
       updateSelectionUI();
     });
+    // Hidden until Select is turned on.
     if (!selectMode) {
       selectBox.style.display = 'none';
     }
