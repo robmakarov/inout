@@ -749,7 +749,11 @@ header{
   </header>
 
   <div id="manage-bar">
-    <button id="select-toggle">Select</button>
+    <div>
+      <button id="select-toggle" class="manage-btn">Select</button>
+      <button id="select-all" class="manage-btn" style="display:none;">All</button>
+      <button id="select-none" class="manage-btn" style="display:none;">None</button>
+    </div>
     <div id="manage-actions">
       <button id="delete-selected" class="manage-btn">Delete</button>
       <select id="move-target"></select>
@@ -891,6 +895,8 @@ const clipboardPasteBtn  = document.getElementById('clipboard-paste');
 const clipboardDismissBtn= document.getElementById('clipboard-dismiss');
 const clipboardButton    = document.getElementById('clipboard-button');
 const selectToggle = document.getElementById('select-toggle');
+const selectAllBtn = document.getElementById('select-all');
+const selectNoneBtn = document.getElementById('select-none');
 const manageActions = document.getElementById('manage-actions');
 const deleteSelectedBtn = document.getElementById('delete-selected');
 const moveSelectedBtn = document.getElementById('move-selected');
@@ -1160,6 +1166,8 @@ function setSelectMode(on) {
     selectToggle.classList.toggle('active', selectMode);
     selectToggle.textContent = selectMode ? 'Cancel' : 'Select';
   }
+  if (selectAllBtn) selectAllBtn.style.display = selectMode ? 'inline-block' : 'none';
+  if (selectNoneBtn) selectNoneBtn.style.display = selectMode ? 'inline-block' : 'none';
   const boxes = feedInner.querySelectorAll('.msg-select');
   boxes.forEach(box => {
     box.checked = false;
@@ -1831,6 +1839,30 @@ if (clipboardButton) {
 if (selectToggle) {
   selectToggle.addEventListener('click', () => {
     setSelectMode(!selectMode);
+  });
+}
+
+if (selectAllBtn) {
+  selectAllBtn.addEventListener('click', () => {
+    const boxes = feedInner.querySelectorAll('.msg-select');
+    boxes.forEach(box => {
+      box.checked = true;
+      const row = box.closest('.msg');
+      const id = row && row.dataset.id;
+      if (id) selectedIds.add(Number(id));
+    });
+    updateSelectionUI();
+  });
+}
+
+if (selectNoneBtn) {
+  selectNoneBtn.addEventListener('click', () => {
+    const boxes = feedInner.querySelectorAll('.msg-select');
+    boxes.forEach(box => {
+      box.checked = false;
+    });
+    selectedIds.clear();
+    updateSelectionUI();
   });
 }
 
