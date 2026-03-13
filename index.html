@@ -407,7 +407,10 @@ header{
 }
 .msg-fly-clone .msg-actions{visibility:hidden}
 .msg:hover{background:var(--bg2)}
-.msg.msg-editing{background:var(--bg2)}
+.msg.msg-editing{
+  background:var(--bg2);
+  box-shadow:inset 0 0 0 1px var(--line2);
+}
 .msg.msg-editing .msg-time,
 .msg.msg-editing .msg-sender{color:var(--text)}
 .msg.msg-editing .msg-select-wrap,
@@ -1358,6 +1361,7 @@ async function init() {
     setupDraftChannel();
     subscribeOrderRealtime();
     subscribeViewRealtime();
+    cancelEditingMode(true);
     restoreInputGlobal();
   }
   setupPresence();
@@ -1369,7 +1373,6 @@ async function init() {
   requestAnimationFrame(() => requestAnimationFrame(() => { if (input) input.focus(); }));
   setTimeout(() => { if (input) input.focus(); }, 100);
   setTimeout(() => { if (input) input.focus(); }, 300);
-  cancelEditingMode(true);
   setupFocusOnFirstInteraction();
 }
 
@@ -2449,6 +2452,7 @@ async function refreshSharedFlags() {
 
 function switchChannel(ch) {
   if (ch === currentChannel) return;
+  cancelEditingMode(true);
   if (feedEl) {
     channelScroll.set(currentChannel, feedEl.scrollTop);
   }
