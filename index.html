@@ -2029,6 +2029,26 @@ function createMsgRow(msg, isNew) {
     focusMessageInput();
   });
 
+  row.addEventListener('click', e => {
+    if (!editingMessageId) return;
+    if (String(row.dataset.id) !== String(editingMessageId)) return;
+    if (e.target.closest('button, a, .msg-actions, .msg-select, .msg-select-wrap')) return;
+    e.stopPropagation();
+    e.preventDefault();
+    editingMessageId = null;
+    input.placeholder = 'say something…';
+    input.value = '';
+    autoResize();
+    sendBtn.disabled = true;
+    updateClearInputBtn();
+    saveInputGlobal();
+    if (currentUser) broadcastDraft('');
+    setTimeout(() => {
+      saveInputGlobal();
+      if (input) input.focus();
+    }, 0);
+  }, true);
+
   row.appendChild(selectWrap);
   row.appendChild(time);
   row.appendChild(sender);
