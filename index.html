@@ -2605,6 +2605,7 @@ function cleanupAuthHash() {
 }
 
 function setupFullscreenOnFirstTap() {
+  if (!window.matchMedia('(max-width: 540px)').matches) return;
   let done = false;
   function tryFullscreen() {
     if (done) return;
