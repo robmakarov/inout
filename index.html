@@ -1324,6 +1324,13 @@ async function loadMessages() {
     renderInitialMessages(data);
     msgCount = data.length;
     updateMsgCount();
+    await loadMessageOrderForCurrentChannel();
+    if (currentMessageOrder.length) {
+      applyMessageOrderToDOM();
+    } else {
+      recomputeOrderFromDOM();
+      saveMessageOrderForCurrentChannel();
+    }
   }
 }
 
