@@ -341,6 +341,48 @@ header{
   gap:10px;
 }
 
+/* remote draft bubble (other device) */
+#draft-bubble{
+  display:none;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:6px;
+  padding:6px 8px;
+  border-radius:4px;
+  background:var(--bg2);
+  border:1px dashed var(--line2);
+  font-size:11px;
+  color:var(--soft);
+}
+#draft-bubble-text{
+  flex:1;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.draft-bubble-actions{
+  display:flex;
+  gap:6px;
+}
+.draft-btn{
+  border:1px solid var(--line2);
+  background:transparent;
+  color:var(--soft);
+  font-family:var(--mono);
+  font-size:9px;
+  padding:3px 6px;
+  border-radius:3px;
+  cursor:pointer;
+  text-transform:uppercase;
+  letter-spacing:0.06em;
+}
+.draft-btn:hover{
+  background:var(--line);
+  color:var(--text);
+}
+
 #msg-input{
   flex:1;
   background:var(--bg2);
@@ -646,6 +688,13 @@ header{
 
   <div id="input-area">
     <div id="tabs"></div>
+    <div id="draft-bubble">
+      <div id="draft-bubble-text"></div>
+      <div class="draft-bubble-actions">
+        <button id="draft-copy" class="draft-btn">Copy</button>
+        <button id="draft-clear" class="draft-btn">Delete</button>
+      </div>
+    </div>
     <div class="input-wrap">
       <textarea
         id="msg-input"
@@ -736,6 +785,10 @@ const umAuthBtn    = document.getElementById('um-auth-btn');
 const umUserId     = document.getElementById('um-user-id');
 const umCopyIdBtn  = document.getElementById('um-copy-id');
 const tabsEl     = document.getElementById('tabs');
+const draftBubble    = document.getElementById('draft-bubble');
+const draftBubbleTxt = document.getElementById('draft-bubble-text');
+const draftCopyBtn   = document.getElementById('draft-copy');
+const draftClearBtn  = document.getElementById('draft-clear');
 const cmBackdrop = document.getElementById('channel-modal-backdrop');
 const cmName     = document.getElementById('cm-name');
 const cmSelf     = document.getElementById('cm-self');
@@ -757,6 +810,8 @@ const channelScroll = new Map();
 const unreadCounts  = new Map(); // channel -> number
 const sharedChannels = new Set(); // channel -> has other members
 let channelSubs = new Map(); // channel -> realtime subscription
+let draftChannel = null;
+let latestRemoteDraft = '';
 
 function updateTabBadge(ch) {
   if (!tabsEl) return;
@@ -797,6 +852,7 @@ async function init() {
   if (currentUser) {
     await loadMessages();
     subscribeRealtimeAll();
+    setupDraftChannel();
   }
   setupPresence();
   scrollBottom();
@@ -901,6 +957,58 @@ function setupPresence() {
         await presenceCh.track({ online_at: new Date().toISOString() });
       }
     });
+}
+
+/* ═══ CROSS-DEVICE DRAFTS (SAME USER) ══════════════════════ */
+function setupDraftChannel() {
+  teardownDraftChannel();
+  latestRemoteDraft = '';
+  if (!currentUser) return;
+
+  draftChannel = sb
+    .channel('drafts-' + currentUser.id)
+    .on('broadcast', { event: 'draft' }, payload => {
+      const data = payload.payload || {};
+      if (!data || data.from === myId) return; // ignore own events
+      const text = (data.text || '').trim();
+      latestRemoteDraft = text;
+      if (text) {
+        showDraftBubble(text);
+      } else {
+        hideDraftBubble();
+      }
+    })
+    .subscribe();
+}
+
+function teardownDraftChannel() {
+  latestRemoteDraft = '';
+  hideDraftBubble();
+  if (draftChannel) {
+    try { draftChannel.unsubscribe(); } catch (_) {}
+    draftChannel = null;
+  }
+}
+
+function broadcastDraft(text) {
+  if (!draftChannel || !currentUser) return;
+  draftChannel.send({
+    type: 'broadcast',
+    event: 'draft',
+    payload: { from: myId, text: text || '' }
+  });
+}
+
+function showDraftBubble(text) {
+  if (!draftBubble || !draftBubbleTxt) return;
+  draftBubbleTxt.textContent = text;
+  draftBubble.style.display = 'flex';
+}
+
+function hideDraftBubble() {
+  if (!draftBubble) return;
+  draftBubble.style.display = 'none';
+  if (draftBubbleTxt) draftBubbleTxt.textContent = '';
 }
 
 /* ═══ RENDER ══════════════════════════════════════════════ */
@@ -1249,11 +1357,13 @@ async function refreshAuth() {
     await refreshSharedFlags();
     renderTabs();
     subscribeRealtimeAll();
+    setupDraftChannel();
   } else {
     sharedChannels.clear();
     unreadCounts.clear();
     renderTabs();
     subscribeRealtimeAll();
+    teardownDraftChannel();
   }
 }
 
@@ -1265,12 +1375,10 @@ function setupAuthListener() {
     if (!prevUser && currentUser) {
       await syncChannelsFromServer();
       reloadForUser();
+      setupDraftChannel();
     } else if (prevUser && !currentUser) {
       clearMessages();
-      if (channel) {
-        channel.unsubscribe();
-        channel = null;
-      }
+      teardownDraftChannel();
     }
   });
 
@@ -1418,6 +1526,10 @@ async function send() {
 input.addEventListener('input', () => {
   autoResize();
   sendBtn.disabled = !input.value.trim();
+  // send current draft for this user so other devices see it
+  if (currentUser) {
+    broadcastDraft(input.value);
+  }
 });
 
 input.addEventListener('keydown', e => {
@@ -1428,6 +1540,26 @@ input.addEventListener('keydown', e => {
 });
 
 sendBtn.addEventListener('click', send);
+
+if (draftCopyBtn) {
+  draftCopyBtn.addEventListener('click', () => {
+    if (!latestRemoteDraft) return;
+    input.value = latestRemoteDraft;
+    autoResize();
+    sendBtn.disabled = !input.value.trim();
+    input.focus();
+  });
+}
+
+if (draftClearBtn) {
+  draftClearBtn.addEventListener('click', () => {
+    latestRemoteDraft = '';
+    hideDraftBubble();
+    if (currentUser) {
+      broadcastDraft('');
+    }
+  });
+}
 
 function autoResize() {
   input.style.height = 'auto';
