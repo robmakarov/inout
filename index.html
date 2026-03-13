@@ -1266,8 +1266,6 @@ let editingMessageId = null;
 let fieldPrefs = { showTime:true, showAuthor:true };
 let currentMessageOrder = [];
 let touchDragState = null; // for mobile long-press drag
-let allowScrollBlur = false; // true only after init so scrollBottom() does not steal focus
-
 function focusMessageInput() {
   if (input) input.focus();
 }
@@ -1338,10 +1336,7 @@ async function init() {
   if (input) input.focus();
   requestAnimationFrame(() => { if (input) input.focus(); });
   requestAnimationFrame(() => requestAnimationFrame(() => { if (input) input.focus(); }));
-  setTimeout(() => {
-    allowScrollBlur = true;
-    if (input) input.focus();
-  }, 100);
+  setTimeout(() => { if (input) input.focus(); }, 100);
   setTimeout(() => { if (input) input.focus(); }, 300);
   setupFocusOnFirstInteraction();
 }
@@ -2008,6 +2003,16 @@ function createMsgRow(msg, isNew) {
       updateSelectionUI();
       return;
     }
+    if (msg.id === editingMessageId) {
+      editingMessageId = null;
+      input.placeholder = 'say something…';
+      input.value = '';
+      autoResize();
+      sendBtn.disabled = true;
+      updateClearInputBtn();
+      saveInputGlobal();
+      return;
+    }
     input.value = msg.text || '';
     editingMessageId = msg.id;
     input.placeholder = 'Editing message…';
@@ -2419,7 +2424,6 @@ function switchChannel(ch) {
   refreshMoveTargets();
   loadFieldPrefsForCurrentChannel();
   applyFieldPrefsToMessages();
-  if (input) input.blur();
   if (currentUser) {
     ensureMembership().then(reloadForUser);
   } else {
@@ -3291,7 +3295,6 @@ function autoResize() {
 feedEl.addEventListener('scroll', () => {
   atBottom = isNearBottom();
   if (atBottom) scrollBtn.classList.remove('visible');
-  if (allowScrollBlur && input && document.activeElement === input) input.blur();
 }, { passive: true });
 
 function scrollBottom() {
