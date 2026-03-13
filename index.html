@@ -1594,14 +1594,19 @@ async function sendText(text) {
   sendBtn.disabled = true;
   input.disabled   = true;
 
+  const nick = currentUser.user_metadata && currentUser.user_metadata.nickname
+    ? String(currentUser.user_metadata.nickname)
+    : null;
+
   const { data, error } = await sb
     .from('entries')
     .insert({
       text,
       user_id: currentUser.id,
-      channel: currentChannel
+      channel: currentChannel,
+      author_name: nick
     })
-    .select('id, created_at, text, channel')
+    .select('id, created_at, text, channel, user_id, author_name')
     .single();
 
   input.disabled = false;
