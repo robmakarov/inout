@@ -91,6 +91,7 @@ header{
   justify-content:space-between;
   font-size:10px;
   color:var(--dim);
+  position:relative;
 }
 
 #select-toggle{
@@ -129,12 +130,9 @@ header{
 }
 
 #manage-actions{
-  display:none;
+  display:flex;
   align-items:center;
   gap:6px;
-}
-#manage-actions.visible{
-  display:flex;
 }
 
 .manage-btn{
@@ -164,17 +162,29 @@ header{
   border-radius:4px;
 }
 
-.field-controls{
+#view-menu{
+  position:absolute;
+  top:100%;
+  right:20px;
+  margin-top:4px;
+  padding:6px 8px;
+  background:var(--bg);
+  border:1px solid var(--line2);
+  border-radius:4px;
   font-size:10px;
-  color:var(--dim);
-  display:flex;
-  align-items:center;
-  gap:6px;
+  color:var(--soft);
+  display:none;
+  flex-direction:column;
+  gap:4px;
+  z-index:130;
 }
-.field-controls label{
+#view-menu.open{
+  display:flex;
+}
+#view-menu label{
   display:inline-flex;
   align-items:center;
-  gap:3px;
+  gap:4px;
   cursor:pointer;
 }
 
@@ -860,10 +870,10 @@ header{
       <select id="move-target"></select>
       <button id="move-selected" class="manage-btn">Move</button>
       <button id="export-tab" class="manage-btn">Export</button>
-      <div class="field-controls">
-        <span>View:</span>
-        <label><input type="checkbox" id="field-time" checked/>Time</label>
-        <label><input type="checkbox" id="field-author" checked/>Author</label>
+      <button id="view-toggle" class="manage-btn">View ▾</button>
+      <div id="view-menu">
+        <label><input type="checkbox" id="field-time" checked>Time</label>
+        <label><input type="checkbox" id="field-author" checked>Author</label>
       </div>
     </div>
   </div>
@@ -1045,6 +1055,8 @@ const moveTargetSelect = document.getElementById('move-target');
 const exportTabBtn   = document.getElementById('export-tab');
 const fieldTimeChk   = document.getElementById('field-time');
 const fieldAuthorChk = document.getElementById('field-author');
+const viewToggleBtn  = document.getElementById('view-toggle');
+const viewMenu       = document.getElementById('view-menu');
 const draftBubble    = document.getElementById('draft-bubble');
 const draftBubbleTxt = document.getElementById('draft-bubble-text');
 const draftCopyBtn   = document.getElementById('draft-copy');
@@ -2196,6 +2208,20 @@ if (fieldAuthorChk) {
     fieldPrefs.showAuthor = !!fieldAuthorChk.checked;
     saveFieldPrefsForCurrentChannel();
     applyFieldPrefsToMessages();
+  });
+}
+
+if (viewToggleBtn && viewMenu) {
+  viewToggleBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    viewMenu.classList.toggle('open');
+  });
+
+  document.addEventListener('click', e => {
+    if (!viewMenu.classList.contains('open')) return;
+    const target = e.target;
+    if (target === viewMenu || viewMenu.contains(target) || target === viewToggleBtn) return;
+    viewMenu.classList.remove('open');
   });
 }
 
