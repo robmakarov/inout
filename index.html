@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://js.stripe.com/v3"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
@@ -1038,6 +1039,14 @@ body.select-mode .msg-select-wrap,
     </div>
 
     <div class="um-section">
+      <div class="um-label">Version</div>
+      <div class="um-row" style="justify-content:space-between;align-items:center;">
+        <span class="um-value" id="um-version-badge">Free</span>
+        <button class="um-btn" id="um-upgrade-btn">Get Pro</button>
+      </div>
+    </div>
+
+    <div class="um-section">
       <div class="um-label">Nickname</div>
       <input id="um-nickname" class="cm-input" placeholder="optional nickname shown as author"/>
       <div class="um-row">
@@ -1083,6 +1092,13 @@ body.select-mode .msg-select-wrap,
 const SUPABASE_URL  = 'https://tfmbqiwxfgrwtjvoqomf.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+// Stripe – replace with your real publishable key and price ID
+const STRIPE_PUBLISHABLE_KEY = 'pk_live_xxx_replace_me';
+const STRIPE_PRICE_ID        = 'price_xxx_replace_me';
+let stripe = null;
+if (window.Stripe && STRIPE_PUBLISHABLE_KEY && !STRIPE_PUBLISHABLE_KEY.includes('replace_me')) {
+  stripe = Stripe(STRIPE_PUBLISHABLE_KEY);
+}
 
 // iOS Safari: keep fixed header pinned when keyboard opens
 (function setupVisualViewportPinning() {
@@ -1137,6 +1153,8 @@ const umUserId     = document.getElementById('um-user-id');
 const umCopyIdBtn  = document.getElementById('um-copy-id');
 const umNickname   = document.getElementById('um-nickname');
 const umNickSave   = document.getElementById('um-nick-save');
+const umVersionBadge = document.getElementById('um-version-badge');
+const umUpgradeBtn   = document.getElementById('um-upgrade-btn');
 const tabsEl     = document.getElementById('tabs');
 const clipboardBubble    = document.getElementById('clipboard-bubble');
 const clipboardBubbleTxt = document.getElementById('clipboard-bubble-text');
@@ -2063,6 +2081,7 @@ function updateAuthUI() {
     sendBtn.disabled = !input.value.trim();
     if (umUserId) umUserId.textContent = currentUser.id || '—';
     if (umCopyIdBtn) umCopyIdBtn.disabled = !currentUser.id;
+    if (umVersionBadge) umVersionBadge.textContent = 'Free';
   } else {
     if (umAuthStatus) umAuthStatus.textContent = 'Not signed in';
     if (umAuthBtn) umAuthBtn.textContent = 'Sign in';
@@ -2070,6 +2089,7 @@ function updateAuthUI() {
     if (umUserId) umUserId.textContent = '—';
     if (umCopyIdBtn) umCopyIdBtn.disabled = true;
     if (umNickname) umNickname.value = '';
+    if (umVersionBadge) umVersionBadge.textContent = 'Free';
   }
 }
 
@@ -2287,6 +2307,12 @@ if (clearInputBtn) {
       broadcastDraft('');
     }
     input.focus();
+  });
+}
+
+if (umUpgradeBtn) {
+  umUpgradeBtn.addEventListener('click', () => {
+    toast('Pro version coming soon — payment provider not selected yet.');
   });
 }
 
