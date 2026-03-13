@@ -1210,6 +1210,8 @@ const unreadCounts  = new Map(); // channel -> number
 const sharedChannels = new Set(); // channel -> has other members
 let channelSubs = new Map(); // channel -> realtime subscription
 let orderSub = null;         // realtime subscription for message_orders
+let viewSub  = null;         // realtime subscription for views (order + rules)
+let orderApplyTimer = null;  // debounce for applying order smoothly
 let draftChannel = null;
 let latestRemoteDraft = '';
 let latestClipboardText = '';
@@ -1275,6 +1277,7 @@ async function init() {
     subscribeRealtimeAll();
     setupDraftChannel();
     subscribeOrderRealtime();
+    subscribeViewRealtime();
     restoreInputGlobal();
   }
   setupPresence();
@@ -1330,7 +1333,7 @@ async function loadMessages() {
     updateMsgCount();
     // apply any order that was already loaded (from init / switchChannel / realtime)
     if (currentMessageOrder.length) {
-      applyMessageOrderToDOM();
+      scheduleApplyOrder();
     }
   }
 }
@@ -1381,7 +1384,49 @@ function subscribeOrderRealtime() {
         const row = payload.new || payload.old || {};
         if (!row || row.channel !== currentChannel) return;
         await loadMessageOrderForCurrentChannel();
-        applyMessageOrderToDOM();
+        scheduleApplyOrder();
+      }
+    )
+    .subscribe();
+}
+
+function subscribeViewRealtime() {
+  if (!currentUser) return;
+  if (viewSub) {
+    try { viewSub.unsubscribe(); } catch (_) {}
+    viewSub = null;
+  }
+  viewSub = sb
+    .channel('views-' + currentUser.id)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'views',
+        filter: 'user_id=eq.' + currentUser.id
+      },
+      payload => {
+        const row = payload.new || payload.old || {};
+        if (!row || row.channel !== currentChannel || !row.config) return;
+        const cfg = row.config || {};
+        // Update order
+        if (Array.isArray(cfg.order)) {
+          currentMessageOrder = cfg.order
+            .map(x => Number(x))
+            .filter(x => Number.isFinite(x));
+          saveOrderToLocal();
+          scheduleApplyOrder();
+        }
+        // Update field prefs
+        const defTime = true;
+        const defAuthor = currentChannel === 'main' ? false : true;
+        fieldPrefs = {
+          showTime: typeof cfg.showTime === 'boolean' ? cfg.showTime : defTime,
+          showAuthor: typeof cfg.showAuthor === 'boolean' ? cfg.showAuthor : defAuthor,
+        };
+        saveFieldPrefsForCurrentChannel();
+        applyFieldPrefsToMessages();
       }
     )
     .subscribe();
@@ -1583,6 +1628,26 @@ function saveFieldPrefsForCurrentChannel() {
     };
     localStorage.setItem(FIELD_PREFS_KEY, JSON.stringify(map));
   } catch(_) {}
+  // Also persist into unified view config so other devices see it.
+  if (currentUser) {
+    const cfg = {
+      order: currentMessageOrder.slice(),
+      showTime: !!fieldPrefs.showTime,
+      showAuthor: !!fieldPrefs.showAuthor,
+    };
+    sb
+      .from('views')
+      .upsert(
+        {
+          user_id: currentUser.id,
+          channel: currentChannel,
+          config: cfg,
+        },
+        { onConflict: 'user_id,channel' }
+      )
+      .then(() => {})
+      .catch(() => {});
+  }
 }
 
 function applyFieldPrefsToMessages() {
@@ -1647,7 +1712,7 @@ function setupTouchDragHandlers() {
     touchDragState.row = null;
     recomputeOrderFromDOM();
     saveMessageOrderForCurrentChannel();
-    applyMessageOrderToDOM();
+    scheduleApplyOrder();
   };
   document.addEventListener('touchmove', move, { passive: false });
   document.addEventListener('touchend', end);
@@ -1672,8 +1737,8 @@ function createMsgRow(msg, isNew) {
     row.classList.remove('dragging');
     recomputeOrderFromDOM();
     saveMessageOrderForCurrentChannel();
-    // local apply to feel instant; other devices get it via realtime
-    applyMessageOrderToDOM();
+    // local apply to feel instant but smooth; other devices get it via realtime
+    scheduleApplyOrder();
   });
   row.addEventListener('dragover', e => {
     e.preventDefault();
@@ -1844,6 +1909,22 @@ function renderInitialMessages(list) {
     if (row) frag.appendChild(row);
   }
   feedInner.appendChild(frag);
+}
+
+function scheduleApplyOrder() {
+  if (!feedInner || !currentMessageOrder.length) return;
+  if (orderApplyTimer) {
+    cancelAnimationFrame(orderApplyTimer);
+    orderApplyTimer = null;
+  }
+  const prevScroll = feedEl ? feedEl.scrollTop : 0;
+  orderApplyTimer = requestAnimationFrame(() => {
+    orderApplyTimer = null;
+    applyMessageOrderToDOM();
+    if (feedEl) {
+      feedEl.scrollTop = prevScroll;
+    }
+  });
 }
 
 function loadOrderFromLocal() {
