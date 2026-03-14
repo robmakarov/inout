@@ -2950,24 +2950,29 @@ function createMsgRow(msg, isNew) {
   });
 
   row.addEventListener('click', e => {
+    if (e.target.closest('.msg-checkbox-zone')) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (dragSelectJustEnded || dragSelectToggledByTouch) return;
+      selectBox.checked = !selectBox.checked;
+      if (selectBox.checked) {
+        selectedIds.add(msg.id);
+        row.classList.add('msg-selected');
+      } else {
+        selectedIds.delete(msg.id);
+        row.classList.remove('msg-selected');
+      }
+      if (!selectMode) {
+        selectModeAutoOn = true;
+        setSelectMode(true);
+      }
+      updateSelectionUI();
+      return;
+    }
     if (selectMode) {
       if (e.target.closest('.msg-actions')) return;
       if (e.target.closest('.msg-text')) return;
       if (dragSelectJustEnded || dragSelectToggledByTouch) return;
-      if (e.target.closest('.msg-checkbox-zone')) {
-        e.preventDefault();
-        e.stopPropagation();
-        selectBox.checked = !selectBox.checked;
-        if (selectBox.checked) {
-          selectedIds.add(msg.id);
-          row.classList.add('msg-selected');
-        } else {
-          selectedIds.delete(msg.id);
-          row.classList.remove('msg-selected');
-        }
-        updateSelectionUI();
-        return;
-      }
       e.preventDefault();
       e.stopPropagation();
       selectBox.checked = !selectBox.checked;
@@ -4413,16 +4418,19 @@ feedEl.addEventListener('dragover', e => {
   const firstRect = firstRow.getBoundingClientRect();
   const lastRow = rows[rows.length - 1];
   const lastRect = lastRow.getBoundingClientRect();
+  const feedRect = feedEl.getBoundingClientRect();
   const dropAtEndThreshold = 40;
+  const bottomZoneHeight = 120;
+  const inBottomZone = y >= feedRect.bottom - bottomZoneHeight;
   const inEmptyZone = y >= lastRect.bottom - dropAtEndThreshold;
-  if (!inEmptyZone) {
+  if (!inEmptyZone && !inBottomZone) {
     const under = document.elementFromPoint(e.clientX, e.clientY);
     if (under && under.closest('.msg') && !under.closest('.msg-time') && !under.closest('.msg-sender') && !under.closest('.msg-text') && !under.closest('.msg-actions')) return;
   }
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
   const inLastRowLowerHalf = lastRow !== dragging && y >= lastRect.top + lastRect.height * 0.5;
-  const wantAppendFirst = inEmptyZone || inLastRowLowerHalf;
+  const wantAppendFirst = inEmptyZone || inLastRowLowerHalf || inBottomZone;
   let wantAppend = wantAppendFirst;
   let insertBeforeNode = null;
   let lineY = 0;
@@ -4481,7 +4489,6 @@ feedEl.addEventListener('dragover', e => {
       feedDropIndicatorEl.className = 'feed-drop-indicator';
       document.body.appendChild(feedDropIndicatorEl);
     }
-    const feedRect = feedEl.getBoundingClientRect();
     feedDropIndicatorEl.style.left = feedRect.left + 'px';
     feedDropIndicatorEl.style.width = feedRect.width + 'px';
     feedDropIndicatorEl.style.height = '4px';
