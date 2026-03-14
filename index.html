@@ -1607,6 +1607,12 @@ const logActionBtn   = document.getElementById('log-action-btn');
 const logDropupPanel = document.getElementById('log-dropup-panel');
 const logDropupBody  = document.getElementById('log-dropup-body');
 
+(function ensureModalsClosedOnLoad() {
+  if (umBackdrop) { umBackdrop.style.display = 'none'; umBackdrop.setAttribute('aria-hidden', 'true'); }
+  if (cmBackdrop) cmBackdrop.style.display = 'none';
+  if (logDropupPanel) logDropupPanel.classList.remove('open');
+})();
+
 let msgCount    = 0;
 let atBottom    = true;
 let presenceCh  = null;
