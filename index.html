@@ -1464,7 +1464,13 @@ if (document.body) document.body.classList.add('loaded');
 const SUPABASE_URL  = 'https://tfmbqiwxfgrwtjvoqomf.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_';
 var sb = null;
-try { if (typeof supabase !== 'undefined') sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON); } catch(e) {}
+try {
+  if (typeof supabase !== 'undefined') {
+    sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+      auth: { detectSessionInUrl: true }
+    });
+  }
+} catch(e) {}
 const STRIPE_PUBLISHABLE_KEY = 'pk_live_xxx_replace_me';
 const STRIPE_PRICE_ID        = 'price_xxx_replace_me';
 let stripe = null;
@@ -2092,7 +2098,6 @@ function init(done) {
           }
         });
       });
-      cleanupAuthHash();
       setupFullscreenOnFirstTap();
       setupFocusOnFirstInteraction();
     } catch (_) {}
@@ -2122,6 +2127,7 @@ function init(done) {
       currentUser = null;
       if (typeof updateAuthUI === 'function') updateAuthUI();
     }).then(function() {
+      if (typeof cleanupAuthHash === 'function') cleanupAuthHash();
       return Promise.race([
         (async function() {
           if (currentUser) await syncChannelsFromServer();
