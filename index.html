@@ -2114,20 +2114,31 @@ async function init() {
     currentUser = null;
     if (typeof updateAuthUI === 'function') updateAuthUI();
   }
-  if (currentUser) {
-    await syncChannelsFromServer();
+  var initDone = false;
+  try {
+    await Promise.race([
+      (async function() {
+        if (currentUser) await syncChannelsFromServer();
+        await loadMessageOrderForCurrentChannel();
+        await loadFieldPrefsForCurrentChannel();
+        refreshMoveTargets();
+        if (currentUser) {
+          await loadMessages();
+          subscribeRealtimeAll();
+          setupDraftChannel();
+          subscribeOrderRealtime();
+          subscribeViewRealtime();
+          subscribeActionLog();
+        }
+      })(),
+      new Promise(function(_, reject) { setTimeout(function() { reject(new Error('init load timeout')); }, 12000); })
+    ]);
+  } catch (e) {
+    if (e && e.message !== 'init load timeout') console.error(e);
+    refreshMoveTargets();
+    if (currentUser && typeof loadMessages === 'function') loadMessages().catch(function() {});
   }
-  await loadMessageOrderForCurrentChannel();
-  await loadFieldPrefsForCurrentChannel();
-  refreshMoveTargets();
-  if (currentUser) {
-    await loadMessages();
-    subscribeRealtimeAll();
-    setupDraftChannel();
-    subscribeOrderRealtime();
-    subscribeViewRealtime();
-    subscribeActionLog();
-  }
+  initDone = true;
   setupPresence();
   (function restoreScroll() {
     var saved = channelScroll.get(currentChannel);
