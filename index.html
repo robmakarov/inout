@@ -1342,7 +1342,7 @@ body.select-mode .msg-select-wrap,
     <div class="header-right">
       <div id="online-count"><span class="dot"></span><span id="oc-num">—</span></div>
       <div id="msg-count"></div>
-      <button id="user-btn" aria-label="Account">
+      <button id="user-btn" aria-label="Account" onclick="var m=document.getElementById('user-modal-backdrop');var c=document.getElementById('channel-modal-backdrop');if(c)c.style.display='none';if(m){m.style.display='block';m.setAttribute('aria-hidden','false');}">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5Z" stroke="currentColor" stroke-width="1.8"/>
           <path d="M4 22c0-4.418 3.582-8 8-8s8 3.582 8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -1510,6 +1510,7 @@ body.select-mode .msg-select-wrap,
 
 <script>
 if (document.body) document.body.classList.add('loaded');
+(function(){ var b=document.getElementById('user-btn'); if(b)b.addEventListener('click',function(){ var m=document.getElementById('user-modal-backdrop'); if(m){ m.style.display='block'; m.setAttribute('aria-hidden','false'); } var c=document.getElementById('channel-modal-backdrop'); if(c)c.style.display='none'; }); var x=document.getElementById('user-close'); if(x)x.addEventListener('click',function(){ var m=document.getElementById('user-modal-backdrop'); if(m){ m.style.display='none'; m.setAttribute('aria-hidden','true'); } }); var m=document.getElementById('user-modal-backdrop'); if(m)m.addEventListener('click',function(e){ if(e.target===m){ m.style.display='none'; m.setAttribute('aria-hidden','true'); } }); })();
 /* INOUT – shared state, Supabase client, DOM refs (load first) */
 const SUPABASE_URL  = 'https://tfmbqiwxfgrwtjvoqomf.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_';
