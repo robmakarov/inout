@@ -1447,6 +1447,39 @@ let dragSelectJustEnded = false;
 let dragSelectToggledByTouch = false;
 let dragSelectMode = 'select'; /* 'select' or 'deselect' */
 let pointerDownOnSelectArea = false; /* true while pointer is down on checkbox area, so row drag is not started */
+
+function applyDragSelectToRange(feedInner, lastRow, currentRow) {
+  if (!feedInner || !currentRow) return;
+  const rows = Array.from(feedInner.querySelectorAll('.msg'));
+  const currentIdx = rows.indexOf(currentRow);
+  if (currentIdx < 0) return;
+  const lastIdx = lastRow ? rows.indexOf(lastRow) : -1;
+  const lo = lastIdx >= 0 ? Math.min(currentIdx, lastIdx) : currentIdx;
+  const hi = lastIdx >= 0 ? Math.max(currentIdx, lastIdx) : currentIdx;
+  let changed = false;
+  for (let i = lo; i <= hi; i++) {
+    const r = rows[i];
+    const box = r.querySelector('.msg-select');
+    const id = r.dataset.id != null ? Number(r.dataset.id) : NaN;
+    if (!box || !Number.isFinite(id)) continue;
+    if (dragSelectMode === 'deselect') {
+      if (box.checked) {
+        box.checked = false;
+        selectedIds.delete(id);
+        r.classList.remove('msg-selected');
+        changed = true;
+      }
+    } else {
+      if (!box.checked) {
+        box.checked = true;
+        selectedIds.add(id);
+        r.classList.add('msg-selected');
+        changed = true;
+      }
+    }
+  }
+  if (changed) updateSelectionUI();
+}
 let editingMessageId = null;
 let fieldPrefs = { showTime:true, showAuthor:true };
 let undoStack = [];
@@ -2680,26 +2713,9 @@ function createMsgRow(msg, isNew) {
         const el = document.elementFromPoint(e.clientX, e.clientY);
         const m = el && el.closest('.msg');
         if (m === lastRow) return;
-        lastRow = m;
         if (!m) return;
-        const box = m.querySelector('.msg-select');
-        const id = m.dataset.id != null ? Number(m.dataset.id) : NaN;
-        if (!box || !Number.isFinite(id)) return;
-        if (dragSelectMode === 'deselect') {
-          if (box.checked) {
-            box.checked = false;
-            selectedIds.delete(id);
-            m.classList.remove('msg-selected');
-            updateSelectionUI();
-          }
-        } else {
-          if (!box.checked) {
-            box.checked = true;
-            selectedIds.add(id);
-            m.classList.add('msg-selected');
-            updateSelectionUI();
-          }
-        }
+        applyDragSelectToRange(feedInner, lastRow, m);
+        lastRow = m;
       };
       const onEnd = () => {
         document.removeEventListener('mousemove', onMove);
@@ -2760,26 +2776,9 @@ function createMsgRow(msg, isNew) {
         const el = document.elementFromPoint(t.clientX, t.clientY);
         const m = el && el.closest('.msg');
         if (m === lastRowT) return;
-        lastRowT = m;
         if (!m) return;
-        const box = m.querySelector('.msg-select');
-        const id = m.dataset.id != null ? Number(m.dataset.id) : NaN;
-        if (!box || !Number.isFinite(id)) return;
-        if (dragSelectMode === 'deselect') {
-          if (box.checked) {
-            box.checked = false;
-            selectedIds.delete(id);
-            m.classList.remove('msg-selected');
-            updateSelectionUI();
-          }
-        } else {
-          if (!box.checked) {
-            box.checked = true;
-            selectedIds.add(id);
-            m.classList.add('msg-selected');
-            updateSelectionUI();
-          }
-        }
+        applyDragSelectToRange(feedInner, lastRowT, m);
+        lastRowT = m;
       };
       const onTouchEnd = () => {
         document.removeEventListener('touchmove', onTouchMove, { passive: false });
@@ -2832,26 +2831,9 @@ function createMsgRow(msg, isNew) {
         const el = document.elementFromPoint(e.clientX, e.clientY);
         const m = el && el.closest('.msg');
         if (m === lastRow) return;
-        lastRow = m;
         if (!m) return;
-        const box = m.querySelector('.msg-select');
-        const id = m.dataset.id != null ? Number(m.dataset.id) : NaN;
-        if (!box || !Number.isFinite(id)) return;
-        if (dragSelectMode === 'deselect') {
-          if (box.checked) {
-            box.checked = false;
-            selectedIds.delete(id);
-            m.classList.remove('msg-selected');
-            updateSelectionUI();
-          }
-        } else {
-          if (!box.checked) {
-            box.checked = true;
-            selectedIds.add(id);
-            m.classList.add('msg-selected');
-            updateSelectionUI();
-          }
-        }
+        applyDragSelectToRange(feedInner, lastRow, m);
+        lastRow = m;
       };
       const onEnd = () => {
         document.removeEventListener('mousemove', onMove);
@@ -2904,26 +2886,9 @@ function createMsgRow(msg, isNew) {
         const el = document.elementFromPoint(t.clientX, t.clientY);
         const m = el && el.closest('.msg');
         if (m === lastRowT2) return;
-        lastRowT2 = m;
         if (!m) return;
-        const box = m.querySelector('.msg-select');
-        const id = m.dataset.id != null ? Number(m.dataset.id) : NaN;
-        if (!box || !Number.isFinite(id)) return;
-        if (dragSelectMode === 'deselect') {
-          if (box.checked) {
-            box.checked = false;
-            selectedIds.delete(id);
-            m.classList.remove('msg-selected');
-            updateSelectionUI();
-          }
-        } else {
-          if (!box.checked) {
-            box.checked = true;
-            selectedIds.add(id);
-            m.classList.add('msg-selected');
-            updateSelectionUI();
-          }
-        }
+        applyDragSelectToRange(feedInner, lastRowT2, m);
+        lastRowT2 = m;
       };
       const onTouchEnd = () => {
         document.removeEventListener('touchmove', onTouchMove, { passive: false });
@@ -2931,6 +2896,7 @@ function createMsgRow(msg, isNew) {
         document.removeEventListener('touchcancel', onTouchEnd);
         dragSelectActive = false;
         dragSelectStarted = false;
+        dragSelectJustEnded = true;
       };
       document.addEventListener('touchmove', onTouchMove, { passive: false });
       document.addEventListener('touchend', onTouchEnd);
