@@ -1619,6 +1619,29 @@ const logDropupBody  = document.getElementById('log-dropup-body');
   if (logDropupPanel) logDropupPanel.classList.remove('open');
 })();
 
+(function setupProfileAndModalsEarly() {
+  function openUserModalEarly() {
+    var back = document.getElementById('user-modal-backdrop');
+    if (!back) return;
+    var cm = document.getElementById('channel-modal-backdrop');
+    if (cm) cm.style.display = 'none';
+    back.style.display = 'block';
+    back.setAttribute('aria-hidden', 'false');
+  }
+  function closeUserModalEarly() {
+    var back = document.getElementById('user-modal-backdrop');
+    if (!back) return;
+    back.style.display = 'none';
+    back.setAttribute('aria-hidden', 'true');
+  }
+  var btn = document.getElementById('user-btn');
+  if (btn) btn.addEventListener('click', openUserModalEarly);
+  var closeBtn = document.getElementById('user-close');
+  if (closeBtn) closeBtn.addEventListener('click', closeUserModalEarly);
+  var back = document.getElementById('user-modal-backdrop');
+  if (back) back.addEventListener('click', function(e) { if (e.target === back) closeUserModalEarly(); });
+})();
+
 let msgCount    = 0;
 let atBottom    = true;
 let presenceCh  = null;
@@ -1632,7 +1655,8 @@ if (typeof crypto !== 'undefined' && !crypto.randomUUID) {
     });
   };
 }
-let myId           = crypto.randomUUID();
+let myId;
+try { myId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) { var r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16); }); } catch (_) { myId = 'fallback-' + Date.now(); }
 let currentUser    = null;
 let currentChannel = 'main';
 let channels       = ['main'];
