@@ -562,6 +562,7 @@ header{
 .msg.msg-drag-over{background:var(--bg2)}
 /* during DnD reorder, disable hover on dragged rows only; keep other rows normal brightness */
 body.dnd-active .msg{transition:none;animation:none}
+body.dnd-just-ended .msg{transition:none;animation:none}
 body.dnd-active .msg:not(.dragging):not(.msg-drag-group){
   opacity:1;
   background:transparent;
@@ -2798,16 +2799,14 @@ function saveFieldPrefsForCurrentChannel() {
 }
 
 function applyFieldPrefsToMessages() {
+  if (!feedInner || !fieldPrefs) return;
   const rows = feedInner.querySelectorAll('.msg');
   rows.forEach(row => {
     const timeEl = row.querySelector('.msg-time');
     const senderEl = row.querySelector('.msg-sender');
-    if (timeEl) timeEl.style.display = fieldPrefs.showTime ? 'block' : 'none';
-    // In main feed we always hide author.
+    if (timeEl) timeEl.style.setProperty('display', fieldPrefs.showTime ? 'block' : 'none', 'important');
     const isMain = currentChannel === 'main' || (row.dataset.channel === 'main');
-    if (senderEl) {
-      senderEl.style.display = !isMain && fieldPrefs.showAuthor ? 'flex' : 'none';
-    }
+    if (senderEl) senderEl.style.setProperty('display', !isMain && fieldPrefs.showAuthor ? 'flex' : 'none', 'important');
   });
   applyFieldPrefsUI();
 }
@@ -2875,16 +2874,23 @@ function setupTouchDragHandlers() {
     hideDropOriginLine();
     const r = touchDragState.row;
     r.classList.remove('dragging');
-    if (document.body) document.body.classList.remove('dnd-active');
+    if (document.body) {
+      document.body.classList.remove('dnd-active');
+      document.body.classList.add('dnd-just-ended');
+    }
     touchDragState.started = false;
     touchDragState.row = null;
     recomputeOrderFromDOM();
     saveMessageOrderForCurrentChannel();
+    applyFieldPrefsToMessages();
     r.style.pointerEvents = 'none';
     void r.offsetHeight;
     requestAnimationFrame(() => {
-      r.style.pointerEvents = '';
-      focusMessageInput();
+      requestAnimationFrame(() => {
+        if (document.body) document.body.classList.remove('dnd-just-ended');
+        r.style.pointerEvents = '';
+        focusMessageInput();
+      });
     });
   };
   document.addEventListener('touchmove', move, { passive: false });
@@ -2938,7 +2944,10 @@ function createMsgRow(msg, isNew) {
   row.addEventListener('dragend', () => {
     if (feedInner) feedInner.querySelectorAll('.msg-drag-group').forEach(r => r.classList.remove('msg-drag-group'));
     dragSelectedRows = [];
-    if (document.body) document.body.classList.remove('dnd-active');
+    if (document.body) {
+      document.body.classList.remove('dnd-active');
+      document.body.classList.add('dnd-just-ended');
+    }
     lastReorderTarget = null;
     feedDragoverRaf = null;
     feedDragoverLast = null;
@@ -2960,11 +2969,15 @@ function createMsgRow(msg, isNew) {
       recomputeOrderFromDOM();
       saveMessageOrderForCurrentChannel();
     }
+    applyFieldPrefsToMessages();
     row.style.pointerEvents = 'none';
     void row.offsetHeight;
     requestAnimationFrame(() => {
-      row.style.pointerEvents = '';
-      focusMessageInput();
+      requestAnimationFrame(() => {
+        if (document.body) document.body.classList.remove('dnd-just-ended');
+        row.style.pointerEvents = '';
+        focusMessageInput();
+      });
     });
   });
   /* row-level dragover/drop removed: feed is the single drop target for reliable reorder */
@@ -3069,7 +3082,7 @@ function createMsgRow(msg, isNew) {
 
   const isMainFeed = (msg.channel && msg.channel === 'main') || (!msg.channel && currentChannel === 'main');
   const wantAuthor = !isMainFeed && (!!fieldPrefs ? !!fieldPrefs.showAuthor : true);
-  sender.style.display = wantAuthor ? 'flex' : 'none';
+  sender.style.setProperty('display', wantAuthor ? 'flex' : 'none', 'important');
 
   const selectWrap = document.createElement('div');
   selectWrap.className = 'msg-select-wrap';
@@ -3348,9 +3361,7 @@ function createMsgRow(msg, isNew) {
   const time = document.createElement('div');
   time.className = 'msg-time';
   time.textContent = formatTime(msg.created_at);
-  if (fieldPrefs) {
-    time.style.display = fieldPrefs.showTime ? 'block' : 'none';
-  }
+  if (fieldPrefs) time.style.setProperty('display', fieldPrefs.showTime ? 'block' : 'none', 'important');
 
   const text = document.createElement('div');
   text.className = 'msg-text';
