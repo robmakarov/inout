@@ -3229,17 +3229,22 @@ function markLoaded() {
   } catch (_) {}
 }
 (function go() {
-  var loadTimeout = setTimeout(markLoaded, 8000);
+  var loadTimeout = setTimeout(markLoaded, 4000);
   function done() {
     clearTimeout(loadTimeout);
     markLoaded();
   }
   try {
-    if (typeof init === 'function') {
-      init().catch(function(err) { console.error('init error', err); }).finally(done);
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function onReady() {
+        if (typeof init === 'function') {
+          init().catch(function(err) { console.error('init error', err); }).finally(done);
+        } else { done(); }
+      });
     } else {
-      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', done);
-      else done();
+      if (typeof init === 'function') {
+        init().catch(function(err) { console.error('init error', err); }).finally(done);
+      } else { done(); }
     }
     document.addEventListener('visibilitychange', function() { if (document.visibilityState === 'visible' && typeof input !== 'undefined' && input) input.focus(); });
   } catch (err) {
