@@ -4396,6 +4396,8 @@ feedEl.addEventListener('dragover', e => {
   const firstRow = rows[0];
   const contentLeft = firstRow.querySelector('.msg-time') || firstRow.querySelector('.msg-sender') || firstRow.querySelector('.msg-text');
   if (contentLeft && e.clientX < contentLeft.getBoundingClientRect().left) return;
+  const under = document.elementFromPoint(e.clientX, e.clientY);
+  if (under && under.closest('.msg') && !under.closest('.msg-time') && !under.closest('.msg-sender') && !under.closest('.msg-text') && !under.closest('.msg-actions')) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
   const y = e.clientY;
