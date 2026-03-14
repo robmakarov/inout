@@ -504,16 +504,14 @@ header{
   position:fixed;
   left:0;
   right:0;
-  height:14px;
+  height:4px;
   pointer-events:none;
   z-index:2147483647;
   display:none;
-  background:#e85c2b;
-  border:3px solid #c43d12;
-  box-shadow:0 0 0 2px rgba(255,255,255,0.5), 0 0 12px rgba(232,92,43,0.9);
-  border-radius:4px;
+  background:#1a3a5c;
+  border:none;
+  border-radius:0;
   box-sizing:border-box;
-  transform:translateZ(0);
 }
 .feed-drop-origin.visible{ display:block; }
 
@@ -2070,7 +2068,7 @@ function showDropOriginLine() {
   if (block.length === 0) return;
   var firstRow = block[0];
   var r = firstRow.getBoundingClientRect();
-  var topPx = r.top + (r.height / 2) - 7;
+  var topPx = r.top + (r.height / 2) - 2;
   if (!feedDropOriginEl) {
     feedDropOriginEl = document.createElement('div');
     feedDropOriginEl.className = 'feed-drop-origin';
@@ -2920,7 +2918,9 @@ function createMsgRow(msg, isNew) {
     clearEdgeScrollInterval();
     hideDropOriginLine();
     if (feedDropIndicatorEl) feedDropIndicatorEl.classList.remove('visible');
-    if (feedInner) feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
+    lastIndicatorStyle = { left: -1, width: -1, top: -1, visible: false };
+    lastDragTargetRow = null;
+    if (feedInner) feedInner.querySelectorAll('.msg-drag-over, .msg-drag-target').forEach(r => r.classList.remove('msg-drag-over', 'msg-drag-target'));
     row.classList.remove('dragging');
     tabsEl.querySelectorAll('.tab.tab-drop-target').forEach(t => t.classList.remove('tab-drop-target'));
     const domOrder = feedInner ? Array.from(feedInner.querySelectorAll('.msg')).map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id)) : [];
@@ -4868,6 +4868,8 @@ function flipAnimateShift(feedInner, dragging, oldRects, rowsArray) {
 /* Single feed-level DnD: only the feed handles dragover/drop so drop always fires reliably */
 var feedDragoverRaf = null;
 var feedDragoverLast = null;
+var lastIndicatorStyle = { left: -1, width: -1, top: -1, visible: false };
+var lastDragTargetRow = null;
 function processFeedDragover(ev) {
   const dragging = feedInner ? feedInner.querySelector('.msg.dragging') : null;
   if (!dragging || !feedInner) return;
@@ -4937,11 +4939,11 @@ function processFeedDragover(ev) {
     }
   }
   var targetRow = (wantAppend || insertBeforeNode !== null) ? (wantAppend ? lastRow : insertBeforeNode) : null;
-  rows.forEach(function(r) {
-    if (r === dragging) return;
-    if (r === targetRow) r.classList.add('msg-drag-target');
-    else r.classList.remove('msg-drag-target');
-  });
+  if (targetRow !== lastDragTargetRow) {
+    if (lastDragTargetRow) lastDragTargetRow.classList.remove('msg-drag-target');
+    if (targetRow) targetRow.classList.add('msg-drag-target');
+    lastDragTargetRow = targetRow;
+  }
   const targetChanged = lastReorderTarget === null || lastReorderTarget.insertBefore !== insertBeforeNode || lastReorderTarget.wantAppend !== wantAppend;
   if ((wantAppend || insertBeforeNode !== null) && targetChanged) {
     lastReorderTarget = { insertBefore: insertBeforeNode, wantAppend: wantAppend };
@@ -4971,17 +4973,34 @@ function processFeedDragover(ev) {
       feedDropIndicatorEl.className = 'feed-drop-indicator';
       document.body.appendChild(feedDropIndicatorEl);
     }
-    feedDropIndicatorEl.style.left = feedRect.left + 'px';
-    feedDropIndicatorEl.style.width = feedRect.width + 'px';
-    feedDropIndicatorEl.style.height = '4px';
-    feedDropIndicatorEl.style.top = (lineY - 2) + 'px';
-    feedDropIndicatorEl.classList.add('visible');
+    var indLeft = feedRect.left;
+    var indWidth = feedRect.width;
+    var indTop = lineY - 2;
+    if (lastIndicatorStyle.left !== indLeft || lastIndicatorStyle.width !== indWidth || lastIndicatorStyle.top !== indTop) {
+      feedDropIndicatorEl.style.left = indLeft + 'px';
+      feedDropIndicatorEl.style.width = indWidth + 'px';
+      feedDropIndicatorEl.style.height = '4px';
+      feedDropIndicatorEl.style.top = indTop + 'px';
+      lastIndicatorStyle.left = indLeft;
+      lastIndicatorStyle.width = indWidth;
+      lastIndicatorStyle.top = indTop;
+    }
+    if (!lastIndicatorStyle.visible) {
+      feedDropIndicatorEl.classList.add('visible');
+      lastIndicatorStyle.visible = true;
+    }
   } else {
     var inFeed = ev.clientX >= feedRect.left && ev.clientX <= feedRect.right && ev.clientY >= feedRect.top && ev.clientY <= feedRect.bottom;
     if (inFeed) {
-      if (feedDropIndicatorEl) feedDropIndicatorEl.classList.remove('visible');
+      if (feedDropIndicatorEl && lastIndicatorStyle.visible) {
+        feedDropIndicatorEl.classList.remove('visible');
+        lastIndicatorStyle.visible = false;
+      }
       lastReorderTarget = null;
-      rows.forEach(function(r) { r.classList.remove('msg-drag-target'); });
+      if (lastDragTargetRow) {
+        lastDragTargetRow.classList.remove('msg-drag-target');
+        lastDragTargetRow = null;
+      }
     }
   }
   updateEdgeScroll(ev.clientY, ev.clientX);
