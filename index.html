@@ -1653,15 +1653,18 @@ function updateEdgeScroll(clientY, clientX) {
   else if (!inZone) clearEdgeScrollInterval();
 }
 
-function applyDragSelectRect(feedInner, startY, currentY, mode, startRowStates) {
-  if (!feedInner || startY == null || currentY == null || !startRowStates) return;
-  const rectTop = Math.min(startY, currentY);
-  const rectBottom = Math.max(startY, currentY);
+function applyDragSelectRect(feedInner, feedEl, startYContent, currentYClient, mode, startRowStates) {
+  if (!feedInner || !feedEl || startYContent == null || currentYClient == null || !startRowStates) return;
+  const feedRect = feedEl.getBoundingClientRect();
+  const currentYContent = currentYClient - feedRect.top + feedEl.scrollTop;
+  const rectTop = Math.min(startYContent, currentYContent);
+  const rectBottom = Math.max(startYContent, currentYContent);
   const rows = Array.from(feedInner.querySelectorAll('.msg'));
   let changed = false;
   for (const r of rows) {
-    const rect = r.getBoundingClientRect();
-    const overlaps = rect.bottom > rectTop && rect.top < rectBottom;
+    const rowTop = r.offsetTop;
+    const rowBottom = r.offsetTop + r.offsetHeight;
+    const overlaps = rowBottom > rectTop && rowTop < rectBottom;
     const desired = overlaps ? (mode === 'select') : (startRowStates.get(r) ?? false);
     const box = r.querySelector('.msg-select');
     const id = r.dataset.id != null ? Number(r.dataset.id) : NaN;
@@ -2923,7 +2926,7 @@ function createMsgRow(msg, isNew) {
     const state = { started: false, mode: null, startRowStates: null, didWeMove: false };
     const onMove = (ev) => {
       if (!state.started) return;
-      applyDragSelectRect(feedInner, startY, ev.clientY, state.mode, state.startRowStates);
+      applyDragSelectRect(feedInner, feedEl, state.startYContent, ev.clientY, state.mode, state.startRowStates);
       updateEdgeScroll(ev.clientY, ev.clientX);
       state.didWeMove = true;
     };
@@ -2949,6 +2952,7 @@ function createMsgRow(msg, isNew) {
       dragSelectActive = true;
       state.mode = selectBox.checked ? 'deselect' : 'select';
       state.startRowStates = new Map();
+      if (feedEl) state.startYContent = startY - feedEl.getBoundingClientRect().top + feedEl.scrollTop;
       feedInner.querySelectorAll('.msg').forEach(r => {
         const box = r.querySelector('.msg-select');
         if (box) state.startRowStates.set(r, box.checked);
@@ -2972,7 +2976,7 @@ function createMsgRow(msg, isNew) {
       if (!state.started || ev.touches.length !== 1) return;
       ev.preventDefault();
       const cy = ev.touches[0].clientY;
-      applyDragSelectRect(feedInner, startY, cy, state.mode, state.startRowStates);
+      applyDragSelectRect(feedInner, feedEl, state.startYContent, cy, state.mode, state.startRowStates);
       updateEdgeScroll(cy, ev.touches[0].clientX);
       state.didWeMove = true;
     };
@@ -3000,6 +3004,7 @@ function createMsgRow(msg, isNew) {
       dragSelectActive = true;
       state.mode = selectBox.checked ? 'deselect' : 'select';
       state.startRowStates = new Map();
+      if (feedEl) state.startYContent = startY - feedEl.getBoundingClientRect().top + feedEl.scrollTop;
       feedInner.querySelectorAll('.msg').forEach(r => {
         const box = r.querySelector('.msg-select');
         if (box) state.startRowStates.set(r, box.checked);
@@ -3025,10 +3030,10 @@ function createMsgRow(msg, isNew) {
     if (!msg.id) return;
     if (e.target.closest('.msg-checkbox-zone, .msg-actions') || (e.target.closest('a') && e.target.closest('.msg-text'))) return;
     const startY = e.clientY;
-    const state = { started: false, mode: null, startRowStates: null, didWeMove: false };
+    const state = { started: false, mode: null, startRowStates: null, startYContent: null, didWeMove: false };
     const onMove = (ev) => {
       if (!state.started) return;
-      applyDragSelectRect(feedInner, startY, ev.clientY, state.mode, state.startRowStates);
+      applyDragSelectRect(feedInner, feedEl, state.startYContent, ev.clientY, state.mode, state.startRowStates);
       updateEdgeScroll(ev.clientY, ev.clientX);
       state.didWeMove = true;
     };
@@ -3054,6 +3059,7 @@ function createMsgRow(msg, isNew) {
       dragSelectActive = true;
       state.mode = selectBox.checked ? 'deselect' : 'select';
       state.startRowStates = new Map();
+      if (feedEl) state.startYContent = startY - feedEl.getBoundingClientRect().top + feedEl.scrollTop;
       feedInner.querySelectorAll('.msg').forEach(r => {
         const box = r.querySelector('.msg-select');
         if (box) state.startRowStates.set(r, box.checked);
@@ -3079,12 +3085,12 @@ function createMsgRow(msg, isNew) {
     if (!msg.id || e.touches.length !== 1) return;
     if (e.target.closest('.msg-checkbox-zone, .msg-actions') || (e.target.closest('a') && e.target.closest('.msg-text'))) return;
     const startY = e.touches[0].clientY;
-    const state = { started: false, mode: null, startRowStates: null, didWeMove: false };
+    const state = { started: false, mode: null, startRowStates: null, startYContent: null, didWeMove: false };
     const onTouchMove = (ev) => {
       if (!state.started || ev.touches.length !== 1) return;
       ev.preventDefault();
       const cy = ev.touches[0].clientY;
-      applyDragSelectRect(feedInner, startY, cy, state.mode, state.startRowStates);
+      applyDragSelectRect(feedInner, feedEl, state.startYContent, cy, state.mode, state.startRowStates);
       updateEdgeScroll(cy, ev.touches[0].clientX);
       state.didWeMove = true;
     };
@@ -3112,6 +3118,7 @@ function createMsgRow(msg, isNew) {
       dragSelectActive = true;
       state.mode = selectBox.checked ? 'deselect' : 'select';
       state.startRowStates = new Map();
+      if (feedEl) state.startYContent = startY - feedEl.getBoundingClientRect().top + feedEl.scrollTop;
       feedInner.querySelectorAll('.msg').forEach(r => {
         const box = r.querySelector('.msg-select');
         if (box) state.startRowStates.set(r, box.checked);
