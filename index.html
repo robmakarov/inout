@@ -1360,7 +1360,6 @@ body.select-mode .msg-select-wrap,
         maxlength="2000"
         autocomplete="off"
         spellcheck="true"
-        autofocus
       ></textarea>
       <script>
         (function(){
@@ -2095,9 +2094,10 @@ function init(done) {
       });
       cleanupAuthHash();
       setupFullscreenOnFirstTap();
-      if (input) input.focus();
-      requestAnimationFrame(function() { if (input) input.focus(); });
-      setTimeout(function() { if (input) input.focus(); }, 100);
+      var a = document.activeElement;
+      if (input && (!a || a === document.body || !/^(INPUT|TEXTAREA|BUTTON|SELECT)$/.test((a.tagName || '').toUpperCase()))) {
+        requestAnimationFrame(function() { if (input) input.focus(); });
+      }
       setupFocusOnFirstInteraction();
     } catch (_) {}
     if (typeof done === 'function') done();
@@ -3866,12 +3866,14 @@ async function refreshAuth() {
     return;
   }
   try {
-    const { data, error } = await sb.auth.getUser();
+    const result = await Promise.resolve(sb.auth.getUser()).catch(function() {
+      return { data: { user: null }, error: { message: 'session missing' } };
+    });
+    const { data, error } = result;
     if (error) {
-      // AuthSessionMissingError or any other auth error → behave as signed out.
       currentUser = null;
     } else {
-      currentUser = data.user ?? null;
+      currentUser = (data && data.user) ?? null;
     }
   } catch (e) {
     currentUser = null;
@@ -5010,7 +5012,8 @@ function humanError(message) {
 function markLoaded() {
   try {
     if (document.body && !document.body.classList.contains('loaded')) document.body.classList.add('loaded');
-    if (typeof input !== 'undefined' && input) input.focus();
+    var a = document.activeElement;
+    if (typeof input !== 'undefined' && input && (!a || a === document.body || !/^(INPUT|TEXTAREA|BUTTON|SELECT)$/.test((a.tagName || '').toUpperCase()))) input.focus();
   } catch (_) {}
 }
 var loaderMinUntil = 0;
@@ -5057,7 +5060,13 @@ function ensureLoaderMinDisplay() {
     } else {
       run();
     }
-    document.addEventListener('visibilitychange', function() { if (document.visibilityState === 'visible' && typeof input !== 'undefined' && input) input.focus(); });
+    document.addEventListener('visibilitychange', function() {
+      if (document.visibilityState !== 'visible') return;
+      var inp = typeof input !== 'undefined' ? input : null;
+      if (!inp) return;
+      var a = document.activeElement;
+      if (!a || a === document.body || !/^(INPUT|TEXTAREA|BUTTON|SELECT)$/.test((a.tagName || '').toUpperCase())) inp.focus();
+    });
   } catch (err) {
     console.error('startup error', err);
     done();
