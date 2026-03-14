@@ -437,19 +437,7 @@ body.loaded #app-loader{
   animation:loader-bars-inner 1.25s ease-in-out infinite;
 }
 #app-loader-label{
-  position:absolute;
-  left:50%;
-  top:calc(100% + 18px);
-  transform:translateX(-50%);
-  font-family:var(--sans);
-  font-size:10px;
-  font-weight:700;
-  letter-spacing:0.4em;
-  color:var(--acc);
-  text-transform:uppercase;
-  opacity:0.9;
-  animation:loader-label 2s ease-in-out infinite;
-  white-space:nowrap;
+  display:none;
 }
 @keyframes loader-spin{
   to{ transform:rotate(360deg); }
@@ -1506,10 +1494,8 @@ body.loaded #input-area{
   </div>
 </div>
 
+<script>document.body.classList.add('loaded');</script>
 <script src="app/state.js"></script>
 <script src="app/main.js"></script>
-<script>
-  (function(){ if (document.body) document.body.classList.add('loaded'); })();
-</script>
 </body>
 </html>
