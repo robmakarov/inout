@@ -1527,6 +1527,20 @@ try {
     sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, { auth: { detectSessionInUrl: true } });
   }
 } catch(e) {}
+if (typeof window !== 'undefined') window.sb = sb;
+(function attachAuthButtonEarly() {
+  var btn = document.getElementById('um-auth-btn');
+  if (!btn) return;
+  btn.addEventListener('click', function authBtnClick() {
+    if (typeof signIn === 'function') signIn();
+    else if (sb && sb.auth && typeof sb.auth.signInWithOAuth === 'function') {
+      sb.auth.signInWithOAuth({ provider: 'google' }).catch(function(err) {
+        if (typeof toast === 'function') toast('Sign-in failed');
+        else if (console && console.error) console.error(err);
+      });
+    }
+  });
+})();
 const STRIPE_PUBLISHABLE_KEY = 'pk_live_xxx_replace_me';
 const STRIPE_PRICE_ID        = 'price_xxx_replace_me';
 let stripe = null;
@@ -4329,6 +4343,7 @@ async function signIn() {
     toast('Sign-in failed — ' + humanError(e.message));
   }
 }
+if (typeof window !== 'undefined') window.signIn = signIn;
 
 async function signOut() {
   if (!sb || !sb.auth || typeof sb.auth.signOut !== 'function') {
@@ -5491,6 +5506,15 @@ function ensureLoaderMinDisplay() {
   if(btn){ btn.onclick = openModal; }
   if(closeBtn){ closeBtn.onclick = closeModal; }
   if(back){ back.onclick = function(e){ if(e.target===back) closeModal(); }; }
+  var authBtn = document.getElementById('um-auth-btn');
+  if(authBtn && !authBtn.onclick){
+    authBtn.onclick = function(){
+      if(window.signIn && typeof window.signIn === 'function'){ window.signIn(); return; }
+      if(window.sb && window.sb.auth && window.sb.auth.signInWithOAuth){
+        window.sb.auth.signInWithOAuth({ provider: 'google' }).catch(function(){});
+      }
+    };
+  }
 })();
 </script>
 </body>
