@@ -723,8 +723,106 @@ body.loaded #input-area{
 .input-tools{
   display:flex;
   justify-content:flex-start;
+  align-items:center;
+  gap:0;
   margin-top:6px;
 }
+#log-action-btn{
+  margin-left:20px;
+  font-size:10px;
+  padding:4px 8px;
+  min-width:28px;
+  position:relative;
+}
+#log-action-btn .log-badge{
+  position:absolute;
+  top:-2px;
+  right:-2px;
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:var(--acc);
+  opacity:0;
+  transition:opacity .15s;
+}
+#log-action-btn.has-error .log-badge{background:#c55;opacity:1}
+#log-action-btn.has-events .log-badge{background:var(--muted);opacity:1}
+#log-modal-backdrop{
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.5);
+  z-index:200;
+  align-items:center;
+  justify-content:center;
+  padding:20px;
+}
+#log-modal-backdrop.open{display:flex}
+#log-modal{
+  background:var(--bg2);
+  border:1px solid var(--line2);
+  border-radius:8px;
+  max-width:420px;
+  width:100%;
+  max-height:80vh;
+  display:flex;
+  flex-direction:column;
+  box-shadow:0 8px 32px rgba(0,0,0,.4);
+}
+#log-modal .log-modal-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:12px 16px;
+  border-bottom:1px solid var(--line);
+}
+#log-modal .log-modal-title{font-size:13px;font-weight:600;color:var(--text)}
+#log-modal .log-modal-close{
+  background:none;
+  border:none;
+  color:var(--soft);
+  font-size:18px;
+  cursor:pointer;
+  padding:0 4px;
+  line-height:1;
+}
+#log-modal .log-modal-body{
+  overflow-y:auto;
+  padding:8px;
+  flex:1;
+  min-height:0;
+}
+.log-event-card{
+  display:flex;
+  align-items:flex-start;
+  gap:8px;
+  padding:8px 10px;
+  margin-bottom:4px;
+  border-radius:4px;
+  border:1px solid transparent;
+  transition:background .12s, border-color .12s;
+}
+.log-event-card:hover{
+  background:var(--bg);
+  border-color:var(--line2);
+}
+.log-event-card.from-this-device{border-left:3px solid var(--acc)}
+.log-event-card.error{border-left:3px solid #c55}
+.log-event-card .log-event-time{
+  font-size:10px;
+  color:var(--muted);
+  flex-shrink:0;
+}
+.log-event-card .log-event-body{flex:1;min-width:0}
+.log-event-card .log-event-action{font-size:11px;color:var(--text)}
+.log-event-card .log-event-message{font-size:10px;color:var(--soft);margin-top:2px}
+.log-event-card .log-event-device{
+  font-size:9px;
+  text-transform:uppercase;
+  letter-spacing:0.05em;
+  color:var(--dim);
+}
+.log-event-card.from-this-device .log-event-device{color:var(--acc2)}
 
 .clear-input-btn{
   position:absolute;
@@ -1127,12 +1225,23 @@ body.loaded #input-area{
     </div>
     <div class="input-tools">
       <button id="clipboard-button" class="draft-btn">From clipboard</button>
+      <button id="log-action-btn" class="draft-btn" aria-label="Action log"><span class="log-badge"></span>Log</button>
     </div>
   </div>
 </div>
 
 <button id="scroll-btn" onclick="scrollBottom()">↓ new messages</button>
 <div id="toast"></div>
+
+<div id="log-modal-backdrop" aria-hidden="true">
+  <div id="log-modal" role="dialog" aria-modal="true" aria-label="Action log">
+    <div class="log-modal-top">
+      <span class="log-modal-title">Action log</span>
+      <button type="button" id="log-modal-close" class="log-modal-close" aria-label="Close">×</button>
+    </div>
+    <div class="log-modal-body" id="log-modal-body"></div>
+  </div>
+</div>
 
 <div id="user-modal-backdrop" aria-hidden="true">
   <div id="user-modal" role="dialog" aria-modal="true" aria-label="Account">
@@ -1296,6 +1405,10 @@ const cmSelf     = document.getElementById('cm-self');
 const cmOthers   = document.getElementById('cm-others');
 const cmCancel   = document.getElementById('cm-cancel');
 const cmCreate   = document.getElementById('cm-create');
+const logActionBtn   = document.getElementById('log-action-btn');
+const logModalBackdrop = document.getElementById('log-modal-backdrop');
+const logModalClose   = document.getElementById('log-modal-close');
+const logModalBody    = document.getElementById('log-modal-body');
 
 let msgCount    = 0;
 let atBottom    = true;
@@ -1327,6 +1440,126 @@ const selectedIds = new Set();
 let editingMessageId = null;
 let fieldPrefs = { showTime:true, showAuthor:true };
 let undoStack = [];
+let actionLog = [];
+let actionLogSub = null;
+/* Create table in Supabase SQL editor for realtime log across devices:
+create table if not exists action_log (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  device_id text not null,
+  created_at timestamptz default now(),
+  type text not null,
+  action text not null,
+  details jsonb default '{}',
+  message text
+);
+alter table action_log enable row level security;
+create policy "Users can manage own action_log" on action_log for all using (auth.uid() = user_id);
+alter publication supabase_realtime add table action_log;
+*/
+
+function logAction(action, details, opts) {
+  const entry = {
+    id: crypto.randomUUID(),
+    ts: Date.now(),
+    deviceId: myId,
+    userId: currentUser ? currentUser.id : null,
+    type: 'action',
+    action: action || 'unknown',
+    details: details || {},
+    fromThisDevice: true,
+  };
+  actionLog.unshift(entry);
+  if (actionLog.length > 200) actionLog.pop();
+  updateLogBadge();
+  if (currentUser) {
+    try {
+      sb.from('action_log').insert({
+        id: entry.id,
+        user_id: currentUser.id,
+        device_id: myId,
+        type: 'action',
+        action: entry.action,
+        details: entry.details || {},
+        message: null,
+      }).then(() => {}).catch(() => {});
+    } catch (_) {}
+  }
+}
+
+function logError(message) {
+  const entry = {
+    id: crypto.randomUUID(),
+    ts: Date.now(),
+    deviceId: myId,
+    userId: currentUser ? currentUser.id : null,
+    type: 'error',
+    action: 'error',
+    message: typeof message === 'string' ? message : String(message),
+    fromThisDevice: true,
+  };
+  actionLog.unshift(entry);
+  if (actionLog.length > 200) actionLog.pop();
+  updateLogBadge();
+  if (currentUser) {
+    try {
+      sb.from('action_log').insert({
+        id: entry.id,
+        user_id: currentUser.id,
+        device_id: myId,
+        type: 'error',
+        action: 'error',
+        details: {},
+        message: entry.message,
+      }).then(() => {}).catch(() => {});
+    } catch (_) {}
+  }
+}
+
+function updateLogBadge() {
+  if (!logActionBtn) return;
+  const hasError = actionLog.some(e => e.type === 'error');
+  const hasEvents = actionLog.length > 0;
+  logActionBtn.classList.toggle('has-error', hasError);
+  logActionBtn.classList.toggle('has-events', hasEvents && !hasError);
+}
+
+function renderLogModal() {
+  if (!logModalBody) return;
+  logModalBody.innerHTML = '';
+  if (!actionLog.length) {
+    logModalBody.innerHTML = '<p style="padding:12px;color:var(--muted);font-size:11px;">No events yet.</p>';
+    return;
+  }
+  actionLog.forEach(entry => {
+    const card = document.createElement('div');
+    card.className = 'log-event-card' + (entry.fromThisDevice ? ' from-this-device' : '') + (entry.type === 'error' ? ' error' : '');
+    const timeStr = new Date(entry.ts).toLocaleTimeString();
+    const actionLabel = entry.action || entry.type;
+    const deviceLabel = entry.fromThisDevice ? 'This device' : 'Other device';
+    card.innerHTML =
+      '<span class="log-event-time">' + escapeHtml(timeStr) + '</span>' +
+      '<div class="log-event-body">' +
+        '<div class="log-event-device">' + escapeHtml(deviceLabel) + '</div>' +
+        '<div class="log-event-action">' + escapeHtml(actionLabel) + '</div>' +
+        (entry.message ? '<div class="log-event-message">' + escapeHtml(entry.message) + '</div>' : '') +
+      '</div>';
+    logModalBody.appendChild(card);
+  });
+}
+
+function openLogModal() {
+  if (!logModalBackdrop) return;
+  renderLogModal();
+  logModalBackdrop.classList.add('open');
+  logModalBackdrop.setAttribute('aria-hidden', 'false');
+}
+
+function closeLogModal() {
+  if (!logModalBackdrop) return;
+  logModalBackdrop.classList.remove('open');
+  logModalBackdrop.setAttribute('aria-hidden', 'true');
+}
 
 function pushUndo(action) {
   if (!action) return;
@@ -1509,6 +1742,7 @@ async function init() {
     setupDraftChannel();
     subscribeOrderRealtime();
     subscribeViewRealtime();
+    subscribeActionLog();
   }
   setupPresence();
   scrollBottom();
@@ -1538,10 +1772,21 @@ if (umClose) umClose.addEventListener('click', closeUserModal);
 if (umBackdrop) umBackdrop.addEventListener('click', e => {
   if (e.target === umBackdrop) closeUserModal();
 });
+if (logActionBtn) logActionBtn.addEventListener('click', openLogModal);
+if (logModalClose) logModalClose.addEventListener('click', closeLogModal);
+if (logModalBackdrop) logModalBackdrop.addEventListener('click', e => {
+  if (e.target === logModalBackdrop) closeLogModal();
+});
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && umBackdrop && umBackdrop.style.display === 'block') {
-    closeUserModal();
-    return;
+  if (e.key === 'Escape') {
+    if (logModalBackdrop && logModalBackdrop.classList.contains('open')) {
+      closeLogModal();
+      return;
+    }
+    if (umBackdrop && umBackdrop.style.display === 'block') {
+      closeUserModal();
+      return;
+    }
   }
   // Ctrl/Cmd+Z → undo last destructive action anywhere in the app.
   const isUndoKey = (e.key === 'z' || e.key === 'Z') && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey;
@@ -1742,6 +1987,48 @@ function subscribeViewRealtime() {
       }
     )
     .subscribe();
+}
+
+function subscribeActionLog() {
+  if (!currentUser) return;
+  if (actionLogSub) {
+    try { actionLogSub.unsubscribe(); } catch (_) {}
+    actionLogSub = null;
+  }
+  try {
+    actionLogSub = sb
+      .channel('action-log-' + currentUser.id)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'action_log',
+          filter: 'user_id=eq.' + currentUser.id
+        },
+        payload => {
+          const row = payload.new;
+          if (!row) return;
+          if (row.device_id === myId) return;
+          const entry = {
+            id: row.id,
+            ts: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+            deviceId: row.device_id,
+            userId: row.user_id,
+            type: row.type || 'action',
+            action: row.action || 'unknown',
+            details: row.details || {},
+            message: row.message || null,
+            fromThisDevice: false,
+          };
+          actionLog.unshift(entry);
+          if (actionLog.length > 200) actionLog.pop();
+          updateLogBadge();
+          if (logModalBackdrop && logModalBackdrop.classList.contains('open')) renderLogModal();
+        }
+      )
+      .subscribe();
+  } catch (_) {}
 }
 
 function onInsertForChannel(ch, msg) {
@@ -2221,18 +2508,7 @@ function createMsgRow(msg, isNew) {
     if (e.target.closest('a')) return;
     e.stopPropagation();
     if (typeof msg.id === 'undefined') return;
-    if (selectMode) {
-      selectBox.checked = !selectBox.checked;
-      if (selectBox.checked) {
-        selectedIds.add(msg.id);
-        row.classList.add('msg-selected');
-      } else {
-        selectedIds.delete(msg.id);
-        row.classList.remove('msg-selected');
-      }
-      updateSelectionUI();
-      return;
-    }
+    if (selectMode) return;
     if (Number(msg.id) === Number(editingMessageId)) {
       cancelEditingMode(true);
       setTimeout(() => { saveInputGlobal(); if (input) input.focus(); }, 0);
@@ -2485,6 +2761,7 @@ async function saveMessageOrderForCurrentChannel() {
 function recomputeOrderFromDOM() {
   if (!feedInner) return;
   pushUndo({ type: 'order', before: (currentMessageOrder || []).slice() });
+  logAction('reorder', { channel: currentChannel });
   const ids = Array.from(feedInner.querySelectorAll('.msg'))
     .map(row => Number(row.dataset.id))
     .filter(id => Number.isFinite(id));
@@ -3021,6 +3298,7 @@ async function sendText(text) {
     }
     if (before && before.id) {
       pushUndo({ type: 'edit', entries: [{ id: before.id, beforeText: before.text, afterText: trimmed }] });
+      logAction('edit', { id: before.id });
     }
     updateMessageRowText(editingMessageId, trimmed);
     cancelEditingMode(true);
@@ -3042,7 +3320,9 @@ async function sendText(text) {
 
   if (error) {
     console.error(error);
-    toast('Failed to send — ' + humanError(error.message));
+    const msg = 'Failed to send — ' + humanError(error.message);
+    toast(msg);
+    logError(msg);
     sendBtn.disabled = false;
   } else {
     if (data && data.channel === currentChannel) {
@@ -3053,6 +3333,7 @@ async function sendText(text) {
     }
     if (data) {
       pushUndo({ type: 'send', entries: [data] });
+      logAction('send', { channel: currentChannel });
     }
     input.value = '';
     autoResize();
@@ -3217,6 +3498,7 @@ if (fieldTimeChk) {
   fieldTimeChk.addEventListener('change', () => {
     pushUndo({ type: 'view', channel: currentChannel, before: { showTime: fieldPrefs.showTime, showAuthor: fieldPrefs.showAuthor } });
     fieldPrefs.showTime = !!fieldTimeChk.checked;
+    logAction('view', { showTime: !!fieldTimeChk.checked, showAuthor: fieldPrefs.showAuthor });
     saveFieldPrefsForCurrentChannel();
     applyFieldPrefsToMessages();
   });
@@ -3231,6 +3513,7 @@ if (fieldAuthorChk) {
     }
     pushUndo({ type: 'view', channel: currentChannel, before: { showTime: fieldPrefs.showTime, showAuthor: fieldPrefs.showAuthor } });
     fieldPrefs.showAuthor = !!fieldAuthorChk.checked;
+    logAction('view', { showTime: fieldPrefs.showTime, showAuthor: !!fieldAuthorChk.checked });
     saveFieldPrefsForCurrentChannel();
     applyFieldPrefsToMessages();
   });
@@ -3304,6 +3587,7 @@ if (deleteSelectedBtn) {
         return;
       }
       pushUndo({ type: 'delete', entries: rowsToDelete });
+      logAction('delete', { count: rowsToDelete.length, channel: currentChannel });
       setSelectMode(false);
       await reloadForUser();
     } catch (e) {
@@ -3350,6 +3634,7 @@ if (moveSelectedBtn) {
         return;
       }
       pushUndo({ type: 'move', entries: rowsBefore });
+      logAction('move', { count: rowsBefore.length, target });
       setSelectMode(false);
       await reloadForUser();
     } catch (e) {
@@ -3383,6 +3668,7 @@ async function deleteSingleMessage(id) {
     }
     if (data) {
       pushUndo({ type: 'delete', entries: [data] });
+      logAction('delete', { id: data.id });
     }
     const el = feedInner.querySelector('.msg[data-id="' + id + '"]');
     if (el) el.remove();
@@ -3465,6 +3751,7 @@ async function moveSingleMessage(id, targetChannel) {
     }
     if (before) {
       pushUndo({ type: 'move', entries: [before] });
+      logAction('move', { id: before.id, target });
     }
     const el = feedInner.querySelector('.msg[data-id="' + CSS.escape(String(id)) + '"]');
     if (el) el.remove();
@@ -3665,9 +3952,11 @@ function linkify(s) {
 
 function toast(msg, dur = 2800) {
   clearTimeout(toastTimer);
-  toastEl.textContent = typeof msg === 'string' ? msg : String(msg);
+  const s = typeof msg === 'string' ? msg : String(msg);
+  toastEl.textContent = s;
   toastEl.classList.add('show');
   toastTimer = setTimeout(() => toastEl.classList.remove('show'), dur);
+  if (s.toLowerCase().includes('failed') || s.toLowerCase().includes('error')) logError(s);
 }
 
 function humanError(message) {
