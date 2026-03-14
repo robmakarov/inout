@@ -2951,7 +2951,6 @@ function createMsgRow(msg, isNew) {
       setTimeout(() => { saveInputGlobal(); if (input) input.focus(); }, 0);
       return;
     }
-    if (selectMode) return;
     if (Number(msg.id) === Number(editingMessageId)) {
       cancelEditingMode(true);
       setTimeout(() => { saveInputGlobal(); if (input) input.focus(); }, 0);
