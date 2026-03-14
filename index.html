@@ -355,18 +355,21 @@ header{
 }
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
-/* ── LOADER (hidden by default so app always shows) ── */
+/* ── LOADER (visible until body.loaded) ── */
 #app-loader{
-  display:none;
   position:fixed;
   inset:0;
   z-index:10000;
   background:var(--bg);
+  display:flex;
   align-items:center;
   justify-content:center;
+  transition:opacity .4s ease, transform .5s cubic-bezier(0.22,1,0.36,1);
 }
 body.loaded #app-loader{
-  display:none;
+  opacity:0;
+  pointer-events:none;
+  transform:scale(1.08);
 }
 #app-loader-inner{
   position:relative;
@@ -1656,14 +1659,16 @@ function updateEdgeScroll(clientY, clientX) {
 function applyDragSelectRect(feedInner, feedEl, startYContent, currentYClient, mode, startRowStates) {
   if (!feedInner || !feedEl || startYContent == null || currentYClient == null || !startRowStates) return;
   const feedRect = feedEl.getBoundingClientRect();
-  const currentYContent = currentYClient - feedRect.top + feedEl.scrollTop;
+  const scrollTop = feedEl.scrollTop;
+  const currentYContent = currentYClient - feedRect.top + scrollTop;
   const rectTop = Math.min(startYContent, currentYContent);
   const rectBottom = Math.max(startYContent, currentYContent);
   const rows = Array.from(feedInner.querySelectorAll('.msg'));
   let changed = false;
   for (const r of rows) {
-    const rowTop = r.offsetTop;
-    const rowBottom = r.offsetTop + r.offsetHeight;
+    const rRect = r.getBoundingClientRect();
+    const rowTop = rRect.top - feedRect.top + scrollTop;
+    const rowBottom = rowTop + rRect.height;
     const overlaps = rowBottom > rectTop && rowTop < rectBottom;
     const desired = overlaps ? (mode === 'select') : (startRowStates.get(r) ?? false);
     const box = r.querySelector('.msg-select');
