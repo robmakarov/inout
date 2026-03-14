@@ -1499,6 +1499,7 @@ let pointerDownOnSelectArea = false; /* true while pointer is down on checkbox a
 var edgeScrollIntervalId = null;
 var edgeScrollLastY = 0;
 var edgeScrollLastX = 0;
+var dragImageEl = null;
 function clearEdgeScrollInterval() {
   if (edgeScrollIntervalId) {
     clearInterval(edgeScrollIntervalId);
@@ -1515,7 +1516,7 @@ function scrollFeedAtTouchEdge(clientY, clientX) {
   var inBottom = clientY > feedRect.bottom - edgeZone;
   if (typeof clientX === 'number') {
     var under = document.elementFromPoint(clientX, clientY);
-    if (under && (under.closest('header') || under.closest('#manage-bar') || under.closest('#input-area'))) return false;
+    if (under && (under.closest('#manage-bar') || under.closest('#input-area'))) return false;
   }
   var closeness, step;
   if (inTop) {
@@ -2622,6 +2623,13 @@ function createMsgRow(msg, isNew) {
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', typeof msg.text === 'string' ? msg.text : '');
     if (typeof msg.id !== 'undefined') e.dataTransfer.setData('application/x-inout-msg-id', String(msg.id));
+    if (!dragImageEl) {
+      dragImageEl = document.createElement('div');
+      dragImageEl.setAttribute('aria-hidden', 'true');
+      dragImageEl.style.cssText = 'position:fixed;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;';
+      document.body.appendChild(dragImageEl);
+    }
+    e.dataTransfer.setDragImage(dragImageEl, 0, 0);
   });
   row.addEventListener('dragend', () => {
     clearEdgeScrollInterval();
