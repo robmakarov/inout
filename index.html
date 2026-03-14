@@ -2794,6 +2794,7 @@ function createMsgRow(msg, isNew) {
     row.classList.add('dragging');
     savedOrderBeforeDrag = currentMessageOrder.slice();
     dragDropHandled = false;
+    if (feedInner) feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', typeof msg.text === 'string' ? msg.text : '');
     if (typeof msg.id !== 'undefined') e.dataTransfer.setData('application/x-inout-msg-id', String(msg.id));
@@ -4730,8 +4731,6 @@ feedEl.addEventListener('dragover', e => {
     }
   }
   rows.forEach(r => r.classList.remove('msg-drag-over'));
-  const hoverRow = wantAppend ? lastRow : insertBeforeNode;
-  if (hoverRow && hoverRow !== dragging && hoverRow.classList && hoverRow.classList.contains('msg')) hoverRow.classList.add('msg-drag-over');
   const targetChanged = lastReorderTarget === null || lastReorderTarget.insertBefore !== insertBeforeNode || lastReorderTarget.wantAppend !== wantAppend;
   if ((wantAppend || insertBeforeNode !== null) && targetChanged) {
     lastReorderTarget = { insertBefore: insertBeforeNode, wantAppend: wantAppend };
