@@ -2200,6 +2200,7 @@ async function fetchMessagesList() {
 
 async function loadMessages() {
   const list = await fetchMessagesList();
+  await ensureLoaderMinDisplay();
   if (list.length > 0) {
     renderInitialMessages(list);
     msgCount = list.length;
@@ -2207,7 +2208,8 @@ async function loadMessages() {
   }
 }
 
-function replaceFeedWithList(list) {
+async function replaceFeedWithList(list) {
+  await ensureLoaderMinDisplay();
   seenIds.clear();
   globalMsgNum = 0;
   msgCount = 0;
@@ -3848,7 +3850,7 @@ async function reloadForUser() {
   if (editingMessageId != null) cancelEditingMode(true);
   await loadMessageOrderForCurrentChannel();
   const list = await fetchMessagesList();
-  replaceFeedWithList(list);
+  await replaceFeedWithList(list);
   subscribeRealtimeAll();
   var savedScroll = channelScroll.get(currentChannel);
   requestAnimationFrame(() => {
@@ -4850,7 +4852,14 @@ function markLoaded() {
     if (typeof input !== 'undefined' && input) input.focus();
   } catch (_) {}
 }
+var loaderMinUntil = 0;
+function ensureLoaderMinDisplay() {
+  var w = loaderMinUntil - Date.now();
+  if (w > 0) return new Promise(function(r) { setTimeout(r, w); });
+  return Promise.resolve();
+}
 (function go() {
+  loaderMinUntil = Date.now() + 1200;
   var loadTimeout = setTimeout(markLoaded, 4000);
   function done() {
     clearTimeout(loadTimeout);
