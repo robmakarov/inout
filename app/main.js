@@ -576,6 +576,7 @@ function setupFocusOnFirstInteraction() {
 }
 
 /* ═══ LOAD ════════════════════════════════════════════════ */
+/* entries table fields: id, created_at, text, channel, user_id, author_name */
 async function fetchMessagesList() {
   if (!currentUser) return [];
   let query = sb
@@ -3084,8 +3085,11 @@ function processFeedDragover(ev) {
     feedDropIndicatorEl.style.top = (lineY - 2) + 'px';
     feedDropIndicatorEl.classList.add('visible');
   } else {
-    if (feedDropIndicatorEl) feedDropIndicatorEl.classList.remove('visible');
-    lastReorderTarget = null;
+    var inFeed = ev.clientX >= feedRect.left && ev.clientX <= feedRect.right && ev.clientY >= feedRect.top && ev.clientY <= feedRect.bottom;
+    if (inFeed) {
+      if (feedDropIndicatorEl) feedDropIndicatorEl.classList.remove('visible');
+      lastReorderTarget = null;
+    }
   }
   updateEdgeScroll(ev.clientY, ev.clientX);
 }
