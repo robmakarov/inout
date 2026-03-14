@@ -1327,7 +1327,7 @@ body.select-mode .msg-select-wrap,
 </head>
 <body>
 <script>try{document.body.classList.add('loaded');}catch(_){}</script>
-<div id="app-loader" aria-hidden="true">
+<div id="app-loader" aria-hidden="true" style="display:none !important">
   <div class="loader-inner">
     <div class="loader-ring"></div>
     <div class="loader-ring"></div>
@@ -1337,7 +1337,7 @@ body.select-mode .msg-select-wrap,
 </div>
 
 <div id="app">
-  <header>
+  <header style="position:relative;z-index:100">
     <div class="logo">IN<span>OUT</span></div>
     <div class="header-right">
       <div id="online-count"><span class="dot"></span><span id="oc-num">—</span></div>
@@ -5471,6 +5471,19 @@ function ensureLoaderMinDisplay() {
     console.error('startup error', err);
     done();
   }
+})();
+</script>
+<script>
+(function profileButtonFallback(){
+  var btn = document.getElementById('user-btn');
+  var back = document.getElementById('user-modal-backdrop');
+  var channelBack = document.getElementById('channel-modal-backdrop');
+  var closeBtn = document.getElementById('user-close');
+  function openModal(){ if(channelBack) channelBack.style.display='none'; if(back){ back.style.display='block'; back.setAttribute('aria-hidden','false'); } }
+  function closeModal(){ if(back){ back.style.display='none'; back.setAttribute('aria-hidden','true'); } }
+  if(btn){ btn.onclick = openModal; }
+  if(closeBtn){ closeBtn.onclick = closeModal; }
+  if(back){ back.onclick = function(e){ if(e.target===back) closeModal(); }; }
 })();
 </script>
 </body>
