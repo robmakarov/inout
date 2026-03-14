@@ -1,89 +1,134 @@
-INOUT
-=====
+# INOUT
 
-Minimal, single-file, realtime message app built on:
+Minimal, single-file realtime message app. Tabbed feeds (Main + custom channels), Google auth, Supabase backend, no build step.
 
-- Static `index.html` (no build, no framework)
-- Supabase (Postgres + Realtime + Auth + RLS)
-- Vercel static hosting
+---
 
-Current behavior
-----------------
+## For humans
 
-- Google-authenticated users can sign in and out.
-- Each user has:
-  - A private `Main` feed.
-  - Custom feeds (tabs) they create.
-- Feeds are **per channel name** and can be:
-  - Private (only the creator is a member).
-  - Shared: creator can add other users by Supabase user id.
-- Messages:
-  - Are stored in `public.entries` with `user_id` and `channel`.
-  - Are only readable if:
-    - You are the sender (`user_id = auth.uid()`), or
-    - You are a member of that channel via `channel_members`.
-- UI:
-  - Sticky header with INOUT logo, online count, message count, auth status, **Copy ID** button.
-  - Thin red separator bar and horizontal tab strip (`Main`, plus user-defined feeds).
-  - Center feed with time, text, and message number.
-  - Textarea at bottom; `Enter` sends, `Shift+Enter` inserts newline.
+### What it is
 
-Key Supabase pieces
--------------------
+- **Static SPA**: One `index.html` (~5k lines) with inlined CSS and JS. No bundler, no framework.
+- **Hosting**: Vercel (static). All routes serve `index.html` (see `vercel.json`).
+- **Backend**: Supabase (Postgres, Realtime, Auth with Google OAuth, RLS).
+- **Optional**: Stripe loaded from CDN for future subscription use.
 
-- Project: `tfmbqiwxfgrwtjvoqomf`
-- URL: `https://tfmbqiwxfgrwtjvoqomf.supabase.co`
-- Anon key: `sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_`
-
-Tables:
-
-- `public.entries`
-  - `id bigint primary key identity`
-  - `created_at timestamptz default now()`
-  - `updated_at timestamptz default now()`
-  - `text text`
-  - `user_id uuid references auth.users(id)`
-  - `channel text not null default 'main'`
-- `public.channel_members`
-  - `channel text`
-  - `user_id uuid references auth.users(id)`
-  - `inserted_at timestamptz default now()`
-  - primary key `(channel, user_id)`
-
-High-level RLS (conceptual)
----------------------------
-
-- `channel_members`:
-  - Authenticated users can manage memberships for channels they belong to.
-- `entries`:
-  - Authenticated users can `SELECT` rows where:
-    - `user_id = auth.uid()` **or**
-    - There exists `channel_members` with same `channel` and `user_id = auth.uid()`.
-  - Inserts are allowed only for authenticated users with `user_id = auth.uid()` (enforced in policy and in client).
-
-Project prompt
---------------
-
-Use this prompt when asking an AI to work on this repo:
-
-> You are editing **INOUT**, a small web app hosted on Vercel.  
-> Rules:  
-> - The current entry point is `index.html`; you may also use additional JS/CSS/modules (e.g. `app.js`, `styles.css`, `src/components/*`) without introducing a heavy build system unless explicitly requested.  
-> - Keep things simple: prefer ES modules and plain HTML/CSS/JS over complex tooling.  
-> - Keep the visual style: dark, minimal, DM Mono + Syne, thin red separator, compact typography.  
-> - Authentication is via Supabase Google OAuth; respect existing RLS (per-user feeds and shared channels via `channel_members`).  
-> - Feeds are tabbed channels stored in `entries.channel`; users can create and delete tabs (except `Main`), and share them with other users by Supabase user id.  
-> - Preserve the current UX: realtime feed, presence count, sticky header, textarea input with Enter/Shift+Enter behavior, small toast notifications, and responsive layout.  
-> - When adding features, avoid introducing new global state libraries; prefer small, focused modules and components.  
-
-Local dev
----------
-
-From the repo root:
+### Run locally
 
 ```bash
 npx serve -l 4173 .
 ```
 
-Then open `http://localhost:4173` in the browser.
+Open `http://localhost:4173`. Supabase anon key and URL are in `index.html`; replace or use env if you fork.
 
+### Features
+
+- **Auth**: Sign in/out with Google. Copy user ID from header for sharing.
+- **Feeds**: “Main” (private to you) + custom channels (tabs). Create/delete tabs; share a channel by adding other users’ Supabase user IDs.
+- **Messages**: Realtime send/receive; reorder by drag-and-drop; edit/delete; optional Time/Author visibility per channel (view settings sync across devices).
+- **UI**: Dark theme (DM Mono + Syne), sticky header, tab strip, scrollable feed, bottom input (Enter = send, Shift+Enter = newline). Loader animation in empty state. Scroll position and view settings persist across refresh.
+
+### Tech stack
+
+| Layer    | Choice                          |
+|----------|----------------------------------|
+| Frontend | Vanilla JS, single HTML file     |
+| Styling  | Inline `<style>`, CSS variables  |
+| Auth     | Supabase Auth (Google OAuth)     |
+| Data     | Supabase Postgres + Realtime     |
+| Hosting  | Vercel static                    |
+
+---
+
+## For AI / codebase context
+
+Use this section when editing the repo: file layout, data model, where behavior lives, and conventions.
+
+### File layout
+
+```
+/
+  index.html     # Single entry point: HTML, CSS, and JS inlined (~4968 lines)
+  vercel.json    # SPA routing: all paths → index.html
+  README.md      # This file
+  TODO.txt       # Product/tech backlog (optional reading)
+```
+
+There are also `app/state.js`, `app/main.js`, and `bundle.js` in the repo; the **live app uses only `index.html`** (no script tags to bundle.js). All app logic is in one `<script>` at the end of `index.html`.
+
+### Data model (Supabase)
+
+- **`public.entries`** — Messages.
+  - Columns: `id` (bigint PK), `created_at` (timestamptz), `text`, `channel`, `user_id` (uuid → auth.users), `author_name` (optional).
+  - Main feed: `channel = 'main'` and `user_id = auth.uid()`.
+  - Shared channels: access via `channel_members`.
+
+- **`public.channel_members`** — Who can see a channel.
+  - Columns: `channel` (text), `user_id` (uuid), `inserted_at`.
+  - PK: `(channel, user_id)`.
+
+- **`public.views`** — Per-user, per-channel view config (order + UI prefs).
+  - Columns: `user_id`, `channel`, `config` (jsonb: `{ order: number[], showTime: boolean, showAuthor: boolean }`).
+  - Conflict: `user_id, channel`. Realtime sync for cross-device view settings.
+
+- **`public.message_orders`** — Legacy per-message order (optional fallback).
+  - Columns: `user_id`, `channel`, `entry_id`, `position`.
+
+- **`public.action_log`** — Optional action log (see comment block in code for `create table`).
+
+### Where key behavior lives (in `index.html`)
+
+| Concern            | Where in index.html (approx / search)                    |
+|--------------------|----------------------------------------------------------|
+| Supabase client    | `supabase.createClient(...)` near top of script         |
+| Auth state         | `currentUser`, `refreshAuth()`, `setupAuthListener()`    |
+| Channels / tabs    | `channels`, `currentChannel`, `switchChannel()`, `renderTabs()` |
+| Feed messages      | `loadMessages()`, `fetchMessagesList()`, `replaceFeedWithList()`, `createMsgRow()` |
+| Realtime           | `subscribeRealtimeAll()`, `subscribeViewRealtime()`, `subscribeOrderRealtime()` |
+| View prefs         | `fieldPrefs`, `loadFieldPrefsForCurrentChannel()`, `saveFieldPrefsForCurrentChannel()`, `applyFieldPrefsToMessages()` |
+| Order / reorder    | `currentMessageOrder`, `loadMessageOrderForCurrentChannel()`, `applyMessageOrderToDOM()`, `saveMessageOrderForCurrentChannel()` |
+| DnD reorder        | `processFeedDragover()`, feed `dragover` / `drop` listeners, `flipAnimateShift()` |
+| Scroll persistence | `channelScroll`, `loadScrollState()`, `saveScrollState()`, scroll listener on `#feed` |
+| Local storage keys | `CHANNELS_KEY`, `CURRENT_CHANNEL_KEY`, `ORDER_STATE_KEY`, `SCROLL_STATE_KEY`, `FIELD_PREFS_KEY`, `INPUT_STATE_KEY` |
+
+### DOM IDs and structure
+
+- **`#app`** — Main app shell (visible after load).
+- **`#feed`** — Scrollable message list container; `#feed-inner` holds rows.
+- **`#empty`** — Empty state (loader + “Nothing yet”) inside `#feed-inner`.
+- **`#msg-input`** — Message textarea; Send button, clear button.
+- **`#tabs`** — Channel tab strip (Main + custom).
+- **`#manage-bar`** — Select mode toolbar (Select, All, None, Delete, Move, Export, View).
+- **View menu** — Checkboxes “Time” and “Author” (`#field-time`, `#field-author`).
+- **Modals**: `#user-modal-backdrop`, `#channel-modal-backdrop`.
+
+Message rows: class `.msg`, `data-id` = entry id, `draggable="true"`. Checkbox for select: `.msg-select`; actions: `.msg-actions`.
+
+### Conventions
+
+- **No build**: Keep the app runnable by opening `index.html` or serving the repo statically. No required compile step.
+- **Style**: Dark theme; CSS variables in `:root` (`--bg`, `--acc`, `--text`, `--mono`, `--sans`). Fonts: DM Mono, Syne (Google Fonts).
+- **Auth**: All Supabase calls that need a user check `currentUser`. RLS enforces per-user and channel_members access.
+- **State**: Global vars and one shared Supabase client. No Redux/Vue/React. View/order/scroll persisted in Supabase `views` + localStorage.
+- **Realtime**: Subscriptions are per channel / per user; cleanup on sign-out or channel switch (unsubscribe before resubscribe).
+
+### Project prompt (for AI)
+
+When asking an AI to work on this repo, you can say:
+
+> You are editing **INOUT**, a single-file web app (entry point `index.html`) hosted on Vercel, backend Supabase (Postgres + Realtime + Google Auth).  
+> - Keep the app build-free and the current dark, minimal style (DM Mono, Syne, CSS variables in index.html).  
+> - Auth and visibility: respect RLS; Main feed is per-user; shared channels use `channel_members`.  
+> - Preserve UX: realtime feed, tabbed channels, drag reorder, view settings (Time/Author) synced via `views` table, scroll and view prefs persisted, toast notifications, responsive layout.  
+> - Prefer small, focused changes; avoid new global state libraries. Read README “For AI / codebase context” for file layout, tables, and where behavior lives.
+
+---
+
+## Supabase setup (reference)
+
+- **Project URL**: `https://<project-ref>.supabase.co`
+- **Anon key**: In `index.html` or env; required for client.
+- **Tables**: See “Data model (Supabase)” above. Enable Realtime on tables used in subscriptions (`entries`, `views`, etc.).
+- **RLS**: `entries` — SELECT where `user_id = auth.uid()` or `(channel, auth.uid())` in `channel_members`. Inserts with `user_id = auth.uid()`. `views` and `channel_members` scoped by `user_id` / membership.
+
+Local dev: run `npx serve -l 4173 .` and open `http://localhost:4173`.
