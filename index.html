@@ -4402,12 +4402,14 @@ feedEl.addEventListener('dragover', e => {
   const firstRect = firstRow.getBoundingClientRect();
   const lastRow = rows[rows.length - 1];
   const lastRect = lastRow.getBoundingClientRect();
+  const dropAtEndThreshold = 24;
+  const inEmptyZoneOrPastLast = y >= lastRect.bottom - dropAtEndThreshold;
   let insertBeforeNode = null;
   let lineY = 0;
   if (y < firstRect.top) {
     insertBeforeNode = firstRow;
     lineY = firstRect.top;
-  } else if (y >= lastRect.bottom) {
+  } else if (inEmptyZoneOrPastLast || (lastRow !== dragging && y >= lastRect.top + lastRect.height * 0.6)) {
     insertBeforeNode = lastRow.nextSibling;
     lineY = lastRect.bottom;
   } else {
@@ -4417,6 +4419,11 @@ feedEl.addEventListener('dragover', e => {
       const rect = r.getBoundingClientRect();
       if (y >= rect.top && y <= rect.bottom) {
         if (r === dragging) break;
+        if (r === lastRow && y >= rect.top + rect.height * 0.6) {
+          insertBeforeNode = lastRow.nextSibling;
+          lineY = rect.bottom;
+          break;
+        }
         const top = rect.top + rowGap;
         const bottom = rect.bottom - rowGap;
         const halfway = rect.top + rect.height / 2;
@@ -4436,7 +4443,7 @@ feedEl.addEventListener('dragover', e => {
         break;
       }
     }
-    if (insertBeforeNode === null && rows.length && y >= lastRect.bottom) {
+    if (insertBeforeNode === null && rows.length && y >= lastRect.bottom - dropAtEndThreshold) {
       insertBeforeNode = lastRow.nextSibling;
       lineY = lastRect.bottom;
     }
