@@ -401,11 +401,10 @@ body.loaded #feed{
   left:0;
   width:100%;
   height:0;
-  border-top:3px solid var(--acc);
-  box-shadow:0 0 10px var(--acc);
+  border-top:1px solid var(--line2);
   pointer-events:none;
   z-index:9999;
-  opacity:.95;
+  opacity:.7;
   display:none;
 }
 .feed-drop-indicator.visible{ display:block; }
@@ -2505,7 +2504,7 @@ function createMsgRow(msg, isNew) {
     const feedRect = feedEl ? feedEl.getBoundingClientRect() : bounding;
     feedDropIndicatorEl.style.left = feedRect.left + 'px';
     feedDropIndicatorEl.style.width = feedRect.width + 'px';
-    feedDropIndicatorEl.style.top = (lineY - 1.5) + 'px';
+    feedDropIndicatorEl.style.top = (lineY - 0.5) + 'px';
     feedDropIndicatorEl.classList.add('visible');
   });
   row.addEventListener('drop', e => {
@@ -4054,6 +4053,54 @@ feedEl.addEventListener('scroll', () => {
   atBottom = isNearBottom();
   if (atBottom) scrollBtn.classList.remove('visible');
 }, { passive: true });
+
+/* feed-level DnD: drop at first/last when pointer is above or below the message list */
+feedEl.addEventListener('dragover', e => {
+  const dragging = feedInner ? feedInner.querySelector('.msg.dragging') : null;
+  if (!dragging || !feedInner) return;
+  const rows = feedInner.querySelectorAll('.msg');
+  if (!rows.length) return;
+  const firstRow = rows[0];
+  const lastRow = rows[rows.length - 1];
+  const firstRect = firstRow.getBoundingClientRect();
+  const lastRect = lastRow.getBoundingClientRect();
+  const y = e.clientY;
+  if (y < firstRect.top) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    feedInner.insertBefore(dragging, firstRow);
+    if (!feedDropIndicatorEl) {
+      feedDropIndicatorEl = document.createElement('div');
+      feedDropIndicatorEl.className = 'feed-drop-indicator';
+      document.body.appendChild(feedDropIndicatorEl);
+    }
+    const feedRect = feedEl.getBoundingClientRect();
+    feedDropIndicatorEl.style.left = feedRect.left + 'px';
+    feedDropIndicatorEl.style.width = feedRect.width + 'px';
+    feedDropIndicatorEl.style.top = (firstRect.top - 0.5) + 'px';
+    feedDropIndicatorEl.classList.add('visible');
+  } else if (y > lastRect.bottom) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    feedInner.insertBefore(dragging, lastRow.nextSibling);
+    if (!feedDropIndicatorEl) {
+      feedDropIndicatorEl = document.createElement('div');
+      feedDropIndicatorEl.className = 'feed-drop-indicator';
+      document.body.appendChild(feedDropIndicatorEl);
+    }
+    const feedRect = feedEl.getBoundingClientRect();
+    feedDropIndicatorEl.style.left = feedRect.left + 'px';
+    feedDropIndicatorEl.style.width = feedRect.width + 'px';
+    feedDropIndicatorEl.style.top = (lastRect.bottom - 0.5) + 'px';
+    feedDropIndicatorEl.classList.add('visible');
+  }
+});
+feedEl.addEventListener('drop', e => {
+  if (feedInner && feedInner.querySelector('.msg.dragging')) {
+    e.preventDefault();
+    dragDropHandled = true;
+  }
+});
 
 function scrollBottom() {
   feedEl.scrollTop = feedEl.scrollHeight;
