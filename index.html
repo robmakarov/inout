@@ -389,46 +389,52 @@ body.loaded #app-loader{
 }
 #app-loader-inner .loader-ring{
   position:absolute;
-  inset:0;
-  border-radius:8px;
-  background:linear-gradient(90deg, transparent 0, rgba(232,213,160,0.12) 10%, rgba(232,213,160,0.4) 50%, rgba(232,213,160,0.12) 90%, transparent 100%);
-  transform-origin:50% 50%;
-  animation:loader-orbit 1.15s linear infinite;
+  inset:-8px;
+  border:2px solid transparent;
+  border-radius:50%;
+  border-top-color:var(--acc);
+  border-right-color:var(--acc2);
+  animation:loader-spin 1.1s cubic-bezier(0.5, 0, 0.5, 1) infinite;
 }
 #app-loader-inner .loader-ring:nth-child(2){
-  inset:10px;
-  background:linear-gradient(90deg, transparent 0, rgba(184,160,96,0.08) 15%, rgba(184,160,96,0.35) 50%, rgba(184,160,96,0.08) 85%, transparent 100%);
-  animation-duration:0.95s;
+  inset:-4px;
+  border-top-color:transparent;
+  border-right-color:transparent;
+  border-bottom-color:var(--acc2);
+  border-left-color:var(--acc);
+  animation-duration:0.9s;
   animation-direction:reverse;
 }
 #app-loader-inner .loader-ring:nth-child(3){
-  inset:20px;
-  background:linear-gradient(90deg, transparent 0, rgba(232,213,160,0.18) 25%, rgba(232,213,160,0.55) 50%, rgba(232,213,160,0.18) 75%, transparent 100%);
-  animation-duration:1.35s;
+  inset:4px;
+  border-right-color:transparent;
+  border-bottom-color:var(--acc);
+  animation-duration:1.3s;
+  animation-direction:reverse;
 }
 #app-loader-inner .loader-dash{
   position:absolute;
-  inset:0;
-  display:flex;
-  align-items:center;
-  justify-content:center;
+  inset:-12px;
+  border:3px solid transparent;
+  border-radius:50%;
+  border-top-color:var(--acc);
+  border-top-width:5px;
+  filter:drop-shadow(0 0 6px rgba(232,213,160,0.5));
+  animation:loader-spin 0.75s linear infinite;
 }
 #app-loader-inner .loader-dash::after{
   content:'';
-  width:72px;
-  height:2px;
-  border-radius:999px;
-  background:linear-gradient(90deg, transparent 0, var(--acc) 40%, var(--acc2) 60%, transparent 100%);
-  box-shadow:0 0 12px rgba(232,213,160,0.5);
-  animation:loader-inout 1.4s ease-in-out infinite;
+  position:absolute;
+  inset:-14px;
+  border:2px solid transparent;
+  border-radius:50%;
+  border-top-color:var(--acc2);
+  border-top-width:3px;
+  opacity:0.7;
+  animation:loader-spin 1.2s linear infinite reverse;
 }
 #app-loader-inner .loader-dash::before{
-  content:'';
-  width:40px;
-  height:2px;
-  border-radius:999px;
-  background:linear-gradient(90deg, transparent 0, rgba(232,213,160,0.0) 15%, rgba(232,213,160,0.5) 50%, transparent 85%);
-  animation:loader-inout-inner 1.4s ease-in-out infinite;
+  display:none;
 }
 #app-loader-label{
   position:absolute;
@@ -445,82 +451,12 @@ body.loaded #app-loader{
   animation:loader-label 2s ease-in-out infinite;
   white-space:nowrap;
 }
-@keyframes loader-orbit{
-  0%{ transform:rotate(0deg); opacity:0.3; }
-  25%{ opacity:1; }
-  50%{ transform:rotate(180deg); opacity:0.7; }
-  100%{ transform:rotate(360deg); opacity:0.3; }
-}
-@keyframes loader-inout{
-  0%{
-    transform:scaleX(0.5) translateX(-12px);
-    opacity:0.4;
-  }
-  25%{
-    transform:scaleX(1) translateX(0);
-    opacity:1;
-  }
-  50%{
-    transform:scaleX(0.6) translateX(12px);
-    opacity:0.7;
-  }
-  75%{
-    transform:scaleX(1) translateX(0);
-    opacity:1;
-  }
-  100%{
-    transform:scaleX(0.5) translateX(-12px);
-    opacity:0.4;
-  }
-}
-@keyframes loader-inout-inner{
-  0%{
-    transform:scaleX(0.4) translateX(10px);
-    opacity:0.2;
-  }
-  25%{
-    transform:scaleX(0.9) translateX(0);
-    opacity:0.8;
-  }
-  50%{
-    transform:scaleX(0.4) translateX(-10px);
-    opacity:0.3;
-  }
-  75%{
-    transform:scaleX(0.9) translateX(0);
-    opacity:0.8;
-  }
-  100%{
-    transform:scaleX(0.4) translateX(10px);
-    opacity:0.2;
-  }
+@keyframes loader-spin{
+  to{ transform:rotate(360deg); }
 }
 @keyframes loader-label{
-  0%{
-    opacity:0.5;
-    letter-spacing:0.25em;
-    transform:translateX(-52%);
-  }
-  25%{
-    opacity:1;
-    letter-spacing:0.4em;
-    transform:translateX(-50%);
-  }
-  50%{
-    opacity:0.9;
-    letter-spacing:0.55em;
-    transform:translateX(-48%);
-  }
-  75%{
-    opacity:1;
-    letter-spacing:0.4em;
-    transform:translateX(-50%);
-  }
-  100%{
-    opacity:0.5;
-    letter-spacing:0.25em;
-    transform:translateX(-52%);
-  }
+  0%,100%{ opacity:0.7; letter-spacing:0.35em; }
+  50%{ opacity:1; letter-spacing:0.45em; }
 }
 
 #msg-count{
@@ -2791,30 +2727,25 @@ function createMsgRow(msg, isNew) {
       pointerDownOnSelectArea = false;
       return;
     }
-    row.classList.add('dragging');
-    savedOrderBeforeDrag = currentMessageOrder.slice();
-    dragDropHandled = false;
-    if (feedInner) feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', typeof msg.text === 'string' ? msg.text : '');
-    if (typeof msg.id !== 'undefined') e.dataTransfer.setData('application/x-inout-msg-id', String(msg.id));
     if (!dragImageEl) {
       var c = document.createElement('canvas');
       c.width = 1;
       c.height = 1;
       dragImageEl = c;
     }
-    var rect = row.getBoundingClientRect();
-    var offsetX = e.clientX - rect.left;
-    var offsetY = e.clientY - rect.top;
-    e.dataTransfer.setDragImage(dragImageEl, offsetX, offsetY);
+    e.dataTransfer.setDragImage(dragImageEl, 0, 0);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', typeof msg.text === 'string' ? msg.text : '');
+    if (typeof msg.id !== 'undefined') e.dataTransfer.setData('application/x-inout-msg-id', String(msg.id));
+    row.classList.add('dragging');
+    savedOrderBeforeDrag = currentMessageOrder.slice();
+    dragDropHandled = false;
+    if (feedInner) feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
   });
   row.addEventListener('dragend', () => {
     lastReorderTarget = null;
     feedDragoverRaf = null;
     feedDragoverLast = null;
-    docDragoverRaf = null;
-    docDragoverLast = null;
     clearEdgeScrollInterval();
     if (feedDropIndicatorEl) feedDropIndicatorEl.classList.remove('visible');
     if (feedInner) feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
@@ -4794,15 +4725,14 @@ feedEl.addEventListener('dragleave', e => {
 }
 
 // Keep drop indicator visible when dragging beyond the feed bounds (e.g. over header)
-var docDragoverRaf = null;
-var docDragoverLast = null;
-function processDocDragover(ev) {
+document.addEventListener('dragover', e => {
   if (!feedEl || !feedInner) return;
-  const dragging = feedInner.querySelector('.msg.dragging');
-  if (!dragging) return;
+  if (!feedInner.querySelector('.msg.dragging')) return;
   const feedRect = feedEl.getBoundingClientRect();
-  const y = ev.clientY;
+  const y = e.clientY;
   if (y >= feedRect.top && y <= feedRect.bottom) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
 
   const rows = Array.from(feedInner.querySelectorAll('.msg'));
   if (!rows.length) return;
@@ -4811,10 +4741,7 @@ function processDocDragover(ev) {
   const firstRect = firstRow.getBoundingClientRect();
   const lastRect = lastRow.getBoundingClientRect();
 
-  let lineY = null;
-  if (y < feedRect.top) lineY = firstRect.top;
-  else if (y > feedRect.bottom) lineY = lastRect.bottom;
-  if (lineY == null) return;
+  let lineY = y < feedRect.top ? firstRect.top : lastRect.bottom;
 
   if (!feedDropIndicatorEl) {
     feedDropIndicatorEl = document.createElement('div');
@@ -4827,25 +4754,7 @@ function processDocDragover(ev) {
   feedDropIndicatorEl.style.top = (lineY - 2) + 'px';
   feedDropIndicatorEl.classList.add('visible');
 
-  updateEdgeScroll(ev.clientY, ev.clientX);
-}
-document.addEventListener('dragover', e => {
-  if (!feedEl || !feedInner) return;
-  if (!feedInner.querySelector('.msg.dragging')) return;
-  const feedRect = feedEl.getBoundingClientRect();
-  const y = e.clientY;
-  if (y >= feedRect.top && y <= feedRect.bottom) return;
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-  docDragoverLast = e;
-  if (docDragoverRaf === null) {
-    docDragoverRaf = requestAnimationFrame(function() {
-      docDragoverRaf = null;
-      const ev = docDragoverLast;
-      docDragoverLast = null;
-      if (ev) processDocDragover(ev);
-    });
-  }
+  updateEdgeScroll(e.clientY, e.clientX);
 }, { passive: false });
 
 function scrollBottom() {
