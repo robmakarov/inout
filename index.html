@@ -512,7 +512,8 @@ header{
   pointer-events:none;
   z-index:2147483646;
   display:none;
-  background:rgba(0,0,0,0.07);
+  background:rgba(255,255,255,0.06);
+  border:1px dashed rgba(255,255,255,0.12);
   border-radius:4px;
   box-sizing:border-box;
   transform:translateZ(0);
@@ -524,6 +525,7 @@ header{
 .feed-drop-origin.stuck{
   height:2px !important;
   background:rgba(37,99,235,0.7);
+  border:none;
   border-radius:0;
 }
 
@@ -571,11 +573,27 @@ body.dnd-just-ended .msg{transition:none;animation:none}
 body.dnd-active .msg:not(.dragging):not(.msg-drag-group){
   background:rgba(0,0,0,0.35);
 }
+body.dnd-active .msg:not(.dragging):not(.msg-drag-group) .msg-time,
+body.dnd-active .msg:not(.dragging):not(.msg-drag-group) .msg-sender,
+body.dnd-active .msg:not(.dragging):not(.msg-drag-group) .msg-text{
+  color:var(--dim);
+}
 body.dnd-active .msg:not(.dragging):not(.msg-drag-group):hover{
   background:rgba(0,0,0,0.35);
 }
 body.dnd-active .msg.dragging,
-body.dnd-active .msg.msg-drag-group{background:transparent}
+body.dnd-active .msg.msg-drag-group{
+  background:rgba(255,255,255,0.14);
+  color:#fff;
+}
+body.dnd-active .msg.dragging .msg-time,
+body.dnd-active .msg.dragging .msg-sender,
+body.dnd-active .msg.dragging .msg-text,
+body.dnd-active .msg.msg-drag-group .msg-time,
+body.dnd-active .msg.msg-drag-group .msg-sender,
+body.dnd-active .msg.msg-drag-group .msg-text{
+  color:#fff;
+}
 body.dnd-active .msg.dragging .msg-select-wrap,
 body.dnd-active .msg.dragging .msg-actions,
 body.dnd-active .msg.msg-drag-group .msg-select-wrap,
@@ -767,6 +785,10 @@ body.select-mode .msg-select-wrap,
   opacity: 1;
   animation: none;
 }
+body.dnd-active .msg.msg-drag-group{transition:margin 0.2s ease}
+.msg.msg-drag-group + .msg.msg-drag-group{margin-top:-2px}
+.msg.dragging + .msg.msg-drag-group,
+.msg.msg-drag-group + .msg.dragging{margin-top:-2px}
 
 /* ── INPUT AREA ── */
 #input-area{
