@@ -512,15 +512,6 @@ header{
   padding:60px 20px;
   opacity:1;
 }
-#empty .e-label{
-  font-family:var(--sans);
-  font-size:22px;font-weight:700;
-  color:var(--dim);
-  letter-spacing:0.02em;
-}
-#empty .e-sub{
-  font-size:11px;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase;
-}
 @keyframes fadin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
 /* message row */
@@ -2237,11 +2228,7 @@ async function fetchMessagesList() {
 async function loadMessages() {
   const list = await fetchMessagesList();
   await ensureLoaderMinDisplay();
-  if (list.length > 0) {
-    renderInitialMessages(list);
-    msgCount = list.length;
-    updateMsgCount();
-  }
+  await replaceFeedWithList(list);
 }
 
 async function replaceFeedWithList(list) {
