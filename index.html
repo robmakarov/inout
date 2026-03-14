@@ -1459,6 +1459,18 @@ body.select-mode .msg-select-wrap,
 </div>
 
 <script>
+(function(){
+  var el = document.getElementById('empty');
+  if (el) {
+    var loader = el.querySelector('.loader-inner');
+    var toRemove = [];
+    for (var i = 0; i < el.childNodes.length; i++) {
+      var n = el.childNodes[i];
+      if (n !== loader) toRemove.push(n);
+    }
+    toRemove.forEach(function(n){ if (n.parentNode) n.parentNode.removeChild(n); });
+  }
+})();
 if (document.body) document.body.classList.add('loaded');
 /* INOUT – shared state, Supabase client, DOM refs (load first) */
 const SUPABASE_URL  = 'https://tfmbqiwxfgrwtjvoqomf.supabase.co';
