@@ -1766,7 +1766,7 @@ function logAction(action, details, opts) {
     fromThisDevice: true,
   };
   actionLog.unshift(entry);
-  if (actionLog.length > 200) actionLog.pop();
+  if (actionLog.length > 100) actionLog.pop();
   updateLogBadge();
   if (currentUser) {
     try {
@@ -1795,7 +1795,7 @@ function logError(message) {
     fromThisDevice: true,
   };
   actionLog.unshift(entry);
-  if (actionLog.length > 200) actionLog.pop();
+  if (actionLog.length > 100) actionLog.pop();
   updateLogBadge();
   if (currentUser) {
     try {
@@ -2437,7 +2437,7 @@ function subscribeActionLog() {
             fromThisDevice: false,
           };
           actionLog.unshift(entry);
-          if (actionLog.length > 200) actionLog.pop();
+          if (actionLog.length > 100) actionLog.pop();
           updateLogBadge();
           if (logDropupPanel && logDropupPanel.classList.contains('open')) renderLogDropup();
         }
