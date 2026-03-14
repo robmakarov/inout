@@ -1500,6 +1500,16 @@ const input      = document.getElementById('msg-input');
 const sendBtn    = document.getElementById('send-btn');
 const clearInputBtn = document.getElementById('clear-input');
 const emptyEl    = document.getElementById('empty');
+try {
+  if (emptyEl) {
+    var loader = emptyEl.querySelector('.loader-inner');
+    if (loader) {
+      for (var i = emptyEl.childNodes.length - 1; i >= 0; i--) {
+        if (emptyEl.childNodes[i] !== loader) emptyEl.removeChild(emptyEl.childNodes[i]);
+      }
+    }
+  }
+} catch (_) {}
 const scrollBtn  = document.getElementById('scroll-btn');
 const ocNum      = document.getElementById('oc-num');
 const msgCountEl = document.getElementById('msg-count');
@@ -2536,8 +2546,15 @@ function showEmptyIfNoMessages() {
   if (!feedInner || !emptyEl) return;
   const hasMsg = feedInner.querySelector('.msg');
   if (hasMsg) return;
+  try {
+    var loader = emptyEl.querySelector('.loader-inner');
+    if (loader) {
+      for (var i = emptyEl.childNodes.length - 1; i >= 0; i--) {
+        if (emptyEl.childNodes[i] !== loader) emptyEl.removeChild(emptyEl.childNodes[i]);
+      }
+    }
+  } catch (_) {}
   if (!emptyEl.parentNode) {
-    // retrigger animation
     emptyEl.style.animation = 'none';
     void emptyEl.offsetWidth;
     emptyEl.style.animation = 'fadin .6s .3s ease both';
