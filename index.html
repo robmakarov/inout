@@ -747,6 +747,11 @@ body.select-mode .msg-select-wrap,
   transition: opacity 0.15s ease-out;
   background: var(--bg2);
 }
+.msg.msg-drag-group{
+  opacity: 0.5;
+  background: var(--bg2);
+  transition: transform 0.15s ease-out, opacity 0.15s ease-out;
+}
 
 /* ── INPUT AREA ── */
 #input-area{
@@ -2035,6 +2040,7 @@ let currentMessageOrder = [];
 let touchDragState = null; // for mobile long-press drag
 let dragDropHandled = false;
 let savedOrderBeforeDrag = [];
+var dragSelectedRows = [];
 let feedDropIndicatorEl = null;
 function focusMessageInput() {
   if (input) input.focus();
@@ -2732,10 +2738,12 @@ function setupTouchDragHandlers() {
     const y = touch.clientY;
     const rows = Array.from(feedInner.querySelectorAll('.msg'));
     if (!rows.length) return;
+    var block = dragSelectedRows && dragSelectedRows.length > 1 ? dragSelectedRows.slice() : [touchDragState.row];
+    var skip = new Set(block);
     let target = null;
     let targetCenterDist = Infinity;
     rows.forEach(r => {
-      if (r === touchDragState.row) return;
+      if (skip.has(r)) return;
       const rect = r.getBoundingClientRect();
       const center = rect.top + rect.height / 2;
       const dist = Math.abs(center - y);
@@ -2747,15 +2755,28 @@ function setupTouchDragHandlers() {
     if (!target) return;
     const targetRect = target.getBoundingClientRect();
     const before = y < targetRect.top + targetRect.height / 2;
-    if (before) {
-      feedInner.insertBefore(touchDragState.row, target);
+    var insertRef = before ? target : target.nextSibling;
+    if (block.length > 1) {
+      var refAfterBlock = block[block.length - 1].nextSibling;
+      block.forEach(function(r) { if (r.parentNode === feedInner) feedInner.removeChild(r); });
+      var ins = block.indexOf(target) >= 0 ? refAfterBlock : insertRef;
+      if (ins) {
+        feedInner.insertBefore(block[0], ins);
+        for (var i = 1; i < block.length; i++) feedInner.insertBefore(block[i], block[i - 1].nextSibling);
+      } else {
+        feedInner.appendChild(block[0]);
+        for (var j = 1; j < block.length; j++) feedInner.insertBefore(block[j], block[j - 1].nextSibling);
+      }
     } else {
-      feedInner.insertBefore(touchDragState.row, target.nextSibling);
+      if (insertRef) feedInner.insertBefore(touchDragState.row, insertRef);
+      else feedInner.appendChild(touchDragState.row);
     }
     updateEdgeScroll(y, touch.clientX);
   };
   const end = () => {
     if (!touchDragState || !touchDragState.row) return;
+    if (feedInner) feedInner.querySelectorAll('.msg-drag-group').forEach(function(r) { r.classList.remove('msg-drag-group'); });
+    dragSelectedRows = [];
     clearEdgeScrollInterval();
     clearTimeout(touchDragState.timer);
     document.removeEventListener('touchmove', move, { passive: false });
@@ -2807,6 +2828,14 @@ function createMsgRow(msg, isNew) {
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', typeof msg.text === 'string' ? msg.text : '');
     if (typeof msg.id !== 'undefined') e.dataTransfer.setData('application/x-inout-msg-id', String(msg.id));
+    if (feedInner && selectedIds.has(msg.id) && selectedIds.size > 1) {
+      dragSelectedRows = Array.from(feedInner.querySelectorAll('.msg.msg-selected'));
+    } else {
+      dragSelectedRows = [row];
+    }
+    dragSelectedRows.forEach(function(r) {
+      if (r !== row) r.classList.add('msg-drag-group');
+    });
     row.classList.add('dragging');
     if (document.body) document.body.classList.add('dnd-active');
     savedOrderBeforeDrag = currentMessageOrder.slice();
@@ -2814,6 +2843,8 @@ function createMsgRow(msg, isNew) {
     if (feedInner) feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
   });
   row.addEventListener('dragend', () => {
+    if (feedInner) feedInner.querySelectorAll('.msg-drag-group').forEach(r => r.classList.remove('msg-drag-group'));
+    dragSelectedRows = [];
     if (document.body) document.body.classList.remove('dnd-active');
     lastReorderTarget = null;
     feedDragoverRaf = null;
@@ -2856,6 +2887,14 @@ function createMsgRow(msg, isNew) {
     touchDragState.timer = setTimeout(() => {
       if (!touchDragState || touchDragState.row !== row) return;
       touchDragState.started = true;
+      if (feedInner && selectedIds.has(msg.id) && selectedIds.size > 1) {
+        dragSelectedRows = Array.from(feedInner.querySelectorAll('.msg.msg-selected'));
+      } else {
+        dragSelectedRows = [row];
+      }
+      dragSelectedRows.forEach(function(r) {
+        if (r !== row) r.classList.add('msg-drag-group');
+      });
       row.classList.add('dragging');
       if (document.body) document.body.classList.add('dnd-active');
     }, 300); // long press threshold
@@ -4722,7 +4761,20 @@ function processFeedDragover(ev) {
       const r = rows[i];
       const rect = r.getBoundingClientRect();
       if (y >= rect.top && y <= rect.bottom) {
-        if (r === dragging) break;
+        if (r === dragging && (!dragSelectedRows || dragSelectedRows.length <= 1)) break;
+        if (dragSelectedRows.length > 1 && (r === dragging || dragSelectedRows.indexOf(r) >= 0)) {
+          var blockFirst = dragSelectedRows[0];
+          var blockLast = dragSelectedRows[dragSelectedRows.length - 1];
+          var halfway = rect.top + rect.height / 2;
+          if (y < halfway) {
+            insertBeforeNode = blockFirst;
+            lineY = blockFirst.getBoundingClientRect().top;
+          } else {
+            insertBeforeNode = blockLast.nextSibling;
+            lineY = blockLast.getBoundingClientRect().bottom;
+          }
+          break;
+        }
         if (r === lastRow && lastRow !== dragging) {
           wantAppend = true;
           lineY = rect.bottom;
@@ -4753,14 +4805,25 @@ function processFeedDragover(ev) {
   const targetChanged = lastReorderTarget === null || lastReorderTarget.insertBefore !== insertBeforeNode || lastReorderTarget.wantAppend !== wantAppend;
   if ((wantAppend || insertBeforeNode !== null) && targetChanged) {
     lastReorderTarget = { insertBefore: insertBeforeNode, wantAppend: wantAppend };
-    const oldRects = new Map();
-    rows.forEach(r => { if (r !== dragging) oldRects.set(r, r.getBoundingClientRect()); });
-    if (wantAppend) {
-      feedInner.appendChild(dragging);
+    var block = dragSelectedRows && dragSelectedRows.length > 1 ? dragSelectedRows.slice() : [dragging];
+    if (block.length > 1) {
+      var refAfterBlock = block[block.length - 1].nextSibling;
+      block.forEach(function(r) { if (r.parentNode === feedInner) feedInner.removeChild(r); });
+      var insertRef = wantAppend ? null : (block.indexOf(insertBeforeNode) >= 0 ? refAfterBlock : insertBeforeNode);
+      if (insertRef) {
+        feedInner.insertBefore(block[0], insertRef);
+        for (var i = 1; i < block.length; i++) feedInner.insertBefore(block[i], block[i - 1].nextSibling);
+      } else {
+        feedInner.appendChild(block[0]);
+        for (var j = 1; j < block.length; j++) feedInner.insertBefore(block[j], block[j - 1].nextSibling);
+      }
     } else {
-      feedInner.insertBefore(dragging, insertBeforeNode);
+      if (wantAppend) {
+        feedInner.appendChild(dragging);
+      } else {
+        feedInner.insertBefore(dragging, insertBeforeNode);
+      }
     }
-    flipAnimateShift(feedInner, dragging, oldRects, rows);
   }
   if (wantAppend || insertBeforeNode !== null) {
     if (!feedDropIndicatorEl) {

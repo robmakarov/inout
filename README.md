@@ -53,6 +53,12 @@ Use this section when editing the repo: file layout, data model, where behavior 
   README.md      # This file
   ELEMENTS.md    # Reference: DOM elements, JS state, conditions, and functions (for humans and AI)
   TODO.txt       # Product/tech backlog (optional reading)
+  docs/          # Extra reference docs (for humans and AI); keep updated when doing tasks
+    README.md    # Index of docs and when to use each
+    architecture.md   # Init order, auth, realtime, data flow
+    functions-index.md # One-line purpose of each function
+    styling.md   # CSS variables, breakpoints, body/class states
+    edge-cases.md # Gotchas, conventions, "don't do X"
 ```
 
 There are also `app/state.js`, `app/main.js`, and `bundle.js` in the repo; the **live app uses only `index.html`** (no script tags to bundle.js). All app logic is in one `<script>` at the end of `index.html`.
@@ -104,6 +110,11 @@ There are also `app/state.js`, `app/main.js`, and `bundle.js` in the repo; the *
 - **Modals**: `#user-modal-backdrop`, `#channel-modal-backdrop`.
 
 Message rows: class `.msg`, `data-id` = entry id, `draggable="true"`. Checkbox for select: `.msg-select`; actions: `.msg-actions`.
+
+### Documentation
+
+- **ELEMENTS.md** (root) — DOM elements, global state, conditions, and functions that set/read them.
+- **docs/** — Extra reference: **docs/README.md** (index), **architecture.md** (init, auth, realtime, data flow), **functions-index.md** (function list), **styling.md** (CSS vars, breakpoints, states), **edge-cases.md** (gotchas, conventions). When doing tasks, update the relevant doc (e.g. add a function to functions-index.md, or a gotcha to edge-cases.md).
 
 ### Conventions
 
