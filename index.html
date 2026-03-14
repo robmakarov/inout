@@ -947,11 +947,9 @@ body.loaded #input-area{
     max-width:160px;
   }
   body{
-    overflow:auto;
-    scrollbar-width:none;
-    -ms-overflow-style:none;
+    overflow:hidden;
+    overscroll-behavior:none;
   }
-  body::-webkit-scrollbar{display:none}
   #feed{
     scrollbar-width:none;
     -ms-overflow-style:none;
@@ -1509,10 +1507,11 @@ function scrollFeedAtTouchEdge(clientY) {
   var feedRect = feedEl.getBoundingClientRect();
   var edgeZone = 48;
   var step = 18;
-  var inTop = clientY < feedRect.top + edgeZone;
-  var inBottom = clientY > feedRect.bottom - edgeZone;
+  var maxScroll = feedEl.scrollHeight - feedEl.clientHeight;
+  var inTop = clientY >= feedRect.top && clientY < feedRect.top + edgeZone;
+  var inBottom = clientY > feedRect.bottom - edgeZone && clientY <= feedRect.bottom;
   if (inTop) feedEl.scrollTop = Math.max(0, feedEl.scrollTop - step);
-  else if (inBottom) feedEl.scrollTop = Math.min(feedEl.scrollHeight - feedEl.clientHeight, feedEl.scrollTop + step);
+  else if (inBottom && maxScroll > 0) feedEl.scrollTop = Math.min(maxScroll, feedEl.scrollTop + step);
   else return false;
   return true;
 }
