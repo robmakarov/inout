@@ -480,6 +480,7 @@ header{
 #feed.feed-updating{opacity:0.998;contain:layout style}
 
 .feed-inner{
+  position:relative;
   padding:16px 0 8px;
   display:flex;
   flex-direction:column;
@@ -501,14 +502,14 @@ header{
 }
 .feed-drop-indicator.visible{ display:block; }
 .feed-drop-origin{
-  position:fixed;
+  position:absolute;
   left:0;
-  width:100%;
+  right:0;
   height:2px;
   pointer-events:none;
-  z-index:2147483647;
+  z-index:100;
   display:none;
-  background:#1a3a5c;
+  background:#0a1628;
   border:none;
   border-radius:0;
   box-sizing:border-box;
@@ -2067,23 +2068,21 @@ function showDropOriginLine() {
   var block = (dragSelectedRows && dragSelectedRows.length > 0) ? dragSelectedRows : (feedInner.querySelector('.msg.dragging') ? [feedInner.querySelector('.msg.dragging')] : []);
   if (block.length === 0) return;
   var firstRow = block[0];
-  var r = firstRow.getBoundingClientRect();
-  var feedRect = feedEl.getBoundingClientRect();
-  var topPx = Math.round(r.top) - 1;
+  var originTop = (firstRow.offsetTop || 0) - 1;
   if (!feedDropOriginEl) {
     feedDropOriginEl = document.createElement('div');
     feedDropOriginEl.className = 'feed-drop-origin';
     feedDropOriginEl.setAttribute('aria-hidden', 'true');
-    document.body.appendChild(feedDropOriginEl);
   }
-  if (feedDropOriginEl.parentNode !== document.body) document.body.appendChild(feedDropOriginEl);
-  feedDropOriginEl.style.left = feedRect.left + 'px';
-  feedDropOriginEl.style.width = feedRect.width + 'px';
-  feedDropOriginEl.style.top = topPx + 'px';
+  if (feedDropOriginEl.parentNode !== feedInner) feedInner.appendChild(feedDropOriginEl);
+  feedDropOriginEl.style.top = originTop + 'px';
   feedDropOriginEl.classList.add('visible');
 }
 function hideDropOriginLine() {
-  if (feedDropOriginEl) feedDropOriginEl.classList.remove('visible');
+  if (feedDropOriginEl) {
+    feedDropOriginEl.classList.remove('visible');
+    if (feedDropOriginEl.parentNode) feedDropOriginEl.parentNode.removeChild(feedDropOriginEl);
+  }
 }
 function focusMessageInput() {
   if (input) input.focus();
