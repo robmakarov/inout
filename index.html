@@ -1623,6 +1623,7 @@ var edgeScrollIntervalId = null;
 var edgeScrollLastY = 0;
 var edgeScrollLastX = 0;
 var dragImageEl = null;
+var lastReorderTarget = null;
 function clearEdgeScrollInterval() {
   if (edgeScrollIntervalId) {
     clearInterval(edgeScrollIntervalId);
@@ -2747,14 +2748,15 @@ function createMsgRow(msg, isNew) {
     e.dataTransfer.setData('text/plain', typeof msg.text === 'string' ? msg.text : '');
     if (typeof msg.id !== 'undefined') e.dataTransfer.setData('application/x-inout-msg-id', String(msg.id));
     if (!dragImageEl) {
-      dragImageEl = document.createElement('div');
-      dragImageEl.setAttribute('aria-hidden', 'true');
-      dragImageEl.style.cssText = 'position:fixed;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;';
-      document.body.appendChild(dragImageEl);
+      var c = document.createElement('canvas');
+      c.width = 1;
+      c.height = 1;
+      dragImageEl = c;
     }
     e.dataTransfer.setDragImage(dragImageEl, 0, 0);
   });
   row.addEventListener('dragend', () => {
+    lastReorderTarget = null;
     clearEdgeScrollInterval();
     if (feedDropIndicatorEl) feedDropIndicatorEl.classList.remove('visible');
     if (feedInner) feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
@@ -4676,8 +4678,10 @@ feedEl.addEventListener('dragover', e => {
   }
   rows.forEach(r => r.classList.remove('msg-drag-over'));
   const hoverRow = wantAppend ? lastRow : insertBeforeNode;
-  if (hoverRow && hoverRow.classList && hoverRow.classList.contains('msg')) hoverRow.classList.add('msg-drag-over');
-  if (wantAppend || insertBeforeNode !== null) {
+  if (hoverRow && hoverRow !== dragging && hoverRow.classList && hoverRow.classList.contains('msg')) hoverRow.classList.add('msg-drag-over');
+  const targetChanged = lastReorderTarget === null || lastReorderTarget.insertBefore !== insertBeforeNode || lastReorderTarget.wantAppend !== wantAppend;
+  if ((wantAppend || insertBeforeNode !== null) && targetChanged) {
+    lastReorderTarget = { insertBefore: insertBeforeNode, wantAppend: wantAppend };
     const oldRects = new Map();
     rows.forEach(r => { if (r !== dragging) oldRects.set(r, r.getBoundingClientRect()); });
     if (wantAppend) {
@@ -4686,6 +4690,8 @@ feedEl.addEventListener('dragover', e => {
       feedInner.insertBefore(dragging, insertBeforeNode);
     }
     flipAnimateShift(feedInner, dragging, oldRects);
+  }
+  if (wantAppend || insertBeforeNode !== null) {
     if (!feedDropIndicatorEl) {
       feedDropIndicatorEl = document.createElement('div');
       feedDropIndicatorEl.className = 'feed-drop-indicator';
@@ -4696,6 +4702,9 @@ feedEl.addEventListener('dragover', e => {
     feedDropIndicatorEl.style.height = '4px';
     feedDropIndicatorEl.style.top = (lineY - 2) + 'px';
     feedDropIndicatorEl.classList.add('visible');
+  } else {
+    if (feedDropIndicatorEl) feedDropIndicatorEl.classList.remove('visible');
+    lastReorderTarget = null;
   }
   updateEdgeScroll(e.clientY, e.clientX);
 });
