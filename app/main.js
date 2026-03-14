@@ -472,12 +472,13 @@ async function init() {
   loadFieldPrefsForCurrentChannel();
   refreshMoveTargets();
   if (currentUser) {
-    await loadMessages();
-    subscribeRealtimeAll();
-    setupDraftChannel();
-    subscribeOrderRealtime();
-    subscribeViewRealtime();
-    subscribeActionLog();
+    loadMessages().then(() => {
+      subscribeRealtimeAll();
+      setupDraftChannel();
+      subscribeOrderRealtime();
+      subscribeViewRealtime();
+      subscribeActionLog();
+    }).catch(err => { console.error('loadMessages', err); });
   }
   setupPresence();
   scrollBottom();
@@ -584,7 +585,7 @@ async function fetchMessagesList() {
   if (currentChannel === 'main' && currentUser) {
     query = query.eq('user_id', currentUser.id);
   }
-  const { data, error } = await query.order('created_at', { ascending: true }).limit(200);
+  const { data, error } = await query.order('created_at', { ascending: true }).limit(100);
   if (error) { console.error(error); return []; }
   return data && data.length > 0 ? sortMessagesByOrder(data, currentMessageOrder) : [];
 }
@@ -607,15 +608,19 @@ function replaceFeedWithList(list) {
     const row = createMsgRow(msg, false);
     if (row) frag.appendChild(row);
   }
+  const hasRows = frag.childNodes.length > 0;
+  msgCount = hasRows ? frag.childNodes.length : 0;
   feedInner.innerHTML = '';
-  if (emptyEl.parentNode) emptyEl.remove();
-  if (frag.childNodes.length) {
-    feedInner.appendChild(frag);
-    msgCount = frag.childNodes.length;
+  if (emptyEl && emptyEl.parentNode) emptyEl.remove();
+  if (hasRows) {
+    requestAnimationFrame(() => {
+      if (feedInner) feedInner.appendChild(frag);
+      updateMsgCount();
+    });
   } else {
     showEmptyIfNoMessages();
+    updateMsgCount();
   }
-  updateMsgCount();
 }
 
 /* ═══ REALTIME ════════════════════════════════════════════ */
@@ -1642,7 +1647,9 @@ function renderInitialMessages(list) {
     const row = createMsgRow(msg, false);
     if (row) frag.appendChild(row);
   }
-  feedInner.appendChild(frag);
+  requestAnimationFrame(() => {
+    if (feedInner) feedInner.appendChild(frag);
+  });
 }
 
 function loadOrderFromLocal() {
