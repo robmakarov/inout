@@ -1446,6 +1446,7 @@ let dragSelectStarted = false;
 let dragSelectJustEnded = false;
 let dragSelectToggledByTouch = false;
 let dragSelectMode = 'select'; /* 'select' or 'deselect' */
+let pointerDownOnSelectArea = false; /* true while pointer is down on checkbox area, so row drag is not started */
 let editingMessageId = null;
 let fieldPrefs = { showTime:true, showAuthor:true };
 let undoStack = [];
@@ -2461,6 +2462,11 @@ function createMsgRow(msg, isNew) {
   if (typeof msg.id !== 'undefined') row.dataset.id = String(msg.id);
   row.draggable = true;
   row.addEventListener('dragstart', e => {
+    if (pointerDownOnSelectArea) {
+      e.preventDefault();
+      pointerDownOnSelectArea = false;
+      return;
+    }
     row.classList.add('dragging');
     savedOrderBeforeDrag = currentMessageOrder.slice();
     dragDropHandled = false;
@@ -2640,10 +2646,14 @@ function createMsgRow(msg, isNew) {
   }, true);
   selectWrap.addEventListener('mousedown', e => {
     if (!msg.id) return;
+    pointerDownOnSelectArea = true;
+    dragSelectJustEnded = false;
+    dragSelectToggledByTouch = false;
     let timer = null;
     const onDocUp = () => {
       if (timer) clearTimeout(timer);
       document.removeEventListener('mouseup', onDocUp, true);
+      pointerDownOnSelectArea = false;
     };
     document.addEventListener('mouseup', onDocUp, true);
     timer = setTimeout(() => {
@@ -2697,6 +2707,7 @@ function createMsgRow(msg, isNew) {
         dragSelectActive = false;
         dragSelectStarted = false;
         dragSelectJustEnded = true;
+        pointerDownOnSelectArea = false;
       };
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onEnd);
@@ -2704,11 +2715,15 @@ function createMsgRow(msg, isNew) {
   });
   selectWrap.addEventListener('touchstart', e => {
     if (!msg.id || e.touches.length !== 1) return;
+    pointerDownOnSelectArea = true;
+    dragSelectJustEnded = false;
+    dragSelectToggledByTouch = false;
     let timer = null;
     const onDocTouchEnd = () => {
       if (timer) clearTimeout(timer);
       document.removeEventListener('touchend', onDocTouchEnd, true);
       document.removeEventListener('touchcancel', onDocTouchEnd, true);
+      pointerDownOnSelectArea = false;
       if (!dragSelectStarted) {
         selectBox.checked = !selectBox.checked;
         dragSelectToggledByTouch = true;
@@ -2773,6 +2788,7 @@ function createMsgRow(msg, isNew) {
         dragSelectActive = false;
         dragSelectStarted = false;
         dragSelectJustEnded = true;
+        pointerDownOnSelectArea = false;
       };
       document.addEventListener('touchmove', onTouchMove, { passive: false });
       document.addEventListener('touchend', onTouchEnd);
