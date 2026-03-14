@@ -2696,11 +2696,25 @@ function createMsgRow(msg, isNew) {
   checkboxZone.appendChild(selectWrap);
   checkboxZone.addEventListener('click', e => {
     if (dragSelectJustEnded || dragSelectToggledByTouch) {
-      e.preventDefault();
-      e.stopPropagation();
       dragSelectJustEnded = false;
       dragSelectToggledByTouch = false;
+      return;
     }
+    e.preventDefault();
+    e.stopPropagation();
+    selectBox.checked = !selectBox.checked;
+    if (selectBox.checked) {
+      selectedIds.add(msg.id);
+      row.classList.add('msg-selected');
+    } else {
+      selectedIds.delete(msg.id);
+      row.classList.remove('msg-selected');
+    }
+    if (!selectMode) {
+      selectModeAutoOn = true;
+      setSelectMode(true);
+    }
+    updateSelectionUI();
   }, true);
   checkboxZone.addEventListener('mousedown', e => {
     if (!msg.id) return;
@@ -2950,25 +2964,7 @@ function createMsgRow(msg, isNew) {
   });
 
   row.addEventListener('click', e => {
-    if (e.target.closest('.msg-checkbox-zone')) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (dragSelectJustEnded || dragSelectToggledByTouch) return;
-      selectBox.checked = !selectBox.checked;
-      if (selectBox.checked) {
-        selectedIds.add(msg.id);
-        row.classList.add('msg-selected');
-      } else {
-        selectedIds.delete(msg.id);
-        row.classList.remove('msg-selected');
-      }
-      if (!selectMode) {
-        selectModeAutoOn = true;
-        setSelectMode(true);
-      }
-      updateSelectionUI();
-      return;
-    }
+    if (e.target.closest('.msg-checkbox-zone')) return;
     if (selectMode) {
       if (e.target.closest('.msg-actions')) return;
       if (e.target.closest('.msg-text')) return;
