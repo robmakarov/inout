@@ -81,11 +81,6 @@ header{
   height:48px;
   display:flex;align-items:center;justify-content:space-between;
   flex-shrink:0;
-  transform:translateY(-24px);
-  transition:transform .28s cubic-bezier(0.22,1,0.36,1);
-}
-body.loaded header{
-  transform:translateY(0);
 }
 
 /* ── MANAGE BAR (SELECTION) ── */
@@ -100,11 +95,6 @@ body.loaded header{
   font-size:10px;
   color:var(--dim);
   position:relative;
-  transform:translateY(-20px);
-  transition:transform .26s cubic-bezier(0.22,1,0.36,1) .03s;
-}
-body.loaded #manage-bar{
-  transform:translateY(0);
 }
 
 #select-toggle{
@@ -365,21 +355,18 @@ body.loaded #manage-bar{
 }
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
-/* ── LOADER (until body.loaded) ── */
+/* ── LOADER (hidden by default so app always shows) ── */
 #app-loader{
+  display:none;
   position:fixed;
   inset:0;
   z-index:10000;
   background:var(--bg);
-  display:flex;
   align-items:center;
   justify-content:center;
-  transition:opacity .4s ease, transform .5s cubic-bezier(0.22,1,0.36,1);
 }
 body.loaded #app-loader{
-  opacity:0;
-  pointer-events:none;
-  transform:scale(1.08);
+  display:none;
 }
 #app-loader-inner{
   position:relative;
@@ -504,13 +491,6 @@ body.loaded #app-loader{
   overflow-y:auto;
   -webkit-overflow-scrolling:touch;
   outline:none;
-  transform:translateY(12px);
-  opacity:0;
-  transition:transform .26s cubic-bezier(0.22,1,0.36,1) .05s, opacity .22s ease .05s;
-}
-body.loaded #feed{
-  transform:translateY(0);
-  opacity:1;
 }
 #feed:focus{outline:none}
 #feed.feed-updating{opacity:0.998;contain:layout style}
@@ -775,13 +755,6 @@ body.select-mode .msg-select-wrap,
   background:var(--bg);
   border-top:1px solid var(--line);
   padding:12px 20px calc(16px + env(safe-area-inset-bottom, 0px));
-  transform:translateY(16px);
-  opacity:0;
-  transition:transform .3s cubic-bezier(0.22,1,0.36,1) .08s, opacity .22s ease .08s;
-}
-body.loaded #input-area{
-  transform:translateY(0);
-  opacity:1;
 }
 
 .input-wrap{
