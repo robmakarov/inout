@@ -1290,8 +1290,6 @@ body.select-mode .msg-select-wrap,
 </style>
 </head>
 <body>
-<script>document.body.classList.add('loaded');</script>
-
 <div id="app-loader" aria-hidden="true">
   <div id="app-loader-inner">
     <div class="loader-ring"></div>
@@ -3859,9 +3857,18 @@ async function reloadForUser() {
   const list = await fetchMessagesList();
   replaceFeedWithList(list);
   subscribeRealtimeAll();
+  var savedScroll = channelScroll.get(currentChannel);
   requestAnimationFrame(() => {
-    scrollBottom();
-    if (input) input.focus();
+    requestAnimationFrame(() => {
+      if (feedEl) {
+        if (typeof savedScroll === 'number' && savedScroll >= 0) {
+          feedEl.scrollTop = Math.min(savedScroll, Math.max(0, feedEl.scrollHeight - feedEl.clientHeight));
+        } else {
+          scrollBottom();
+        }
+      }
+      if (input) input.focus();
+    });
   });
   applyFieldPrefsToMessages();
 }
