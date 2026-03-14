@@ -2076,90 +2076,92 @@ function isNearBottom() {
 }
 
 /* ═══ INIT ═══════════════════════════════════════════════ */
-async function init() {
-  /* Clear input immediately when returning from editing so it never paints with message text (avoids blink). */
-  if (localStorage.getItem(WAS_EDITING_KEY)) {
+function init(done) {
+  function finish() {
     try {
-      localStorage.setItem(INPUT_STATE_KEY, '');
-      localStorage.removeItem(WAS_EDITING_KEY);
+      setupPresence();
+      var saved = channelScroll.get(currentChannel);
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() {
+          if (feedEl) {
+            if (typeof saved === 'number' && saved >= 0) {
+              feedEl.scrollTop = Math.min(saved, Math.max(0, feedEl.scrollHeight - feedEl.clientHeight));
+            } else {
+              scrollBottom();
+            }
+          }
+        });
+      });
+      cleanupAuthHash();
+      setupFullscreenOnFirstTap();
+      if (input) input.focus();
+      requestAnimationFrame(function() { if (input) input.focus(); });
+      setTimeout(function() { if (input) input.focus(); }, 100);
+      setupFocusOnFirstInteraction();
     } catch (_) {}
-    if (input) {
-      input.value = '';
-      input.placeholder = 'say something…';
-      sendBtn.disabled = true;
-      autoResize();
-      updateClearInputBtn();
-    }
+    if (typeof done === 'function') done();
   }
-  loadChannelsList();
-  loadScrollState();
-  setupTabs();
-  restoreLastChannel();
-  refreshMoveTargets();
   try {
+    if (localStorage.getItem(WAS_EDITING_KEY)) {
+      try {
+        localStorage.setItem(INPUT_STATE_KEY, '');
+        localStorage.removeItem(WAS_EDITING_KEY);
+      } catch (_) {}
+      if (input) {
+        input.value = '';
+        input.placeholder = 'say something…';
+        sendBtn.disabled = true;
+        autoResize();
+        updateClearInputBtn();
+      }
+    }
+    loadChannelsList();
+    loadScrollState();
+    setupTabs();
+    restoreLastChannel();
+    refreshMoveTargets();
     if (feedInner) {
       feedInner.innerHTML = '';
       if (emptyEl && emptyEl.parentNode) emptyEl.remove();
       showEmptyIfNoMessages();
-      if (typeof updateMsgCount === 'function') updateMsgCount();
+      if (msgCountEl) updateMsgCount();
     }
-  } catch (_) {}
-  setupAuthListener();
-  try {
-    await Promise.race([
-      refreshAuth(),
-      new Promise(function(_, reject) { setTimeout(function() { reject(new Error('auth timeout')); }, 8000); })
-    ]);
-  } catch (_) {
-    currentUser = null;
-    if (typeof updateAuthUI === 'function') updateAuthUI();
-  }
-  var initDone = false;
-  try {
-    await Promise.race([
-      (async function() {
-        if (currentUser) await syncChannelsFromServer();
-        await loadMessageOrderForCurrentChannel();
-        await loadFieldPrefsForCurrentChannel();
-        refreshMoveTargets();
-        if (currentUser) {
-          await loadMessages();
-          subscribeRealtimeAll();
-          setupDraftChannel();
-          subscribeOrderRealtime();
-          subscribeViewRealtime();
-          subscribeActionLog();
-        }
-      })(),
-      new Promise(function(_, reject) { setTimeout(function() { reject(new Error('init load timeout')); }, 12000); })
-    ]);
+    setupAuthListener();
   } catch (e) {
-    if (e && e.message !== 'init load timeout') console.error(e);
-    refreshMoveTargets();
-    if (currentUser && typeof loadMessages === 'function') loadMessages().catch(function() {});
+    console.error('init shell', e);
   }
-  initDone = true;
-  setupPresence();
-  (function restoreScroll() {
-    var saved = channelScroll.get(currentChannel);
-    requestAnimationFrame(function() {
-      requestAnimationFrame(function() {
-        if (feedEl) {
-          if (typeof saved === 'number' && saved >= 0) {
-            feedEl.scrollTop = Math.min(saved, Math.max(0, feedEl.scrollHeight - feedEl.clientHeight));
-          } else {
-            scrollBottom();
+  finish();
+  (function runAsync() {
+    Promise.race([
+      refreshAuth(),
+      new Promise(function(_, rej) { setTimeout(function() { rej(new Error('auth timeout')); }, 8000); })
+    ]).catch(function() {
+      currentUser = null;
+      if (typeof updateAuthUI === 'function') updateAuthUI();
+    }).then(function() {
+      return Promise.race([
+        (async function() {
+          if (currentUser) await syncChannelsFromServer();
+          await loadMessageOrderForCurrentChannel();
+          await loadFieldPrefsForCurrentChannel();
+          refreshMoveTargets();
+          if (currentUser) {
+            await loadMessages();
+            subscribeRealtimeAll();
+            setupDraftChannel();
+            subscribeOrderRealtime();
+            subscribeViewRealtime();
+            subscribeActionLog();
           }
-        }
-      });
+        })(),
+        new Promise(function(_, rej) { setTimeout(function() { rej(new Error('timeout')); }, 12000); })
+      ]);
+    }).catch(function(e) {
+      if (e && e.message !== 'timeout') console.error(e);
+      refreshMoveTargets();
+      if (currentUser && typeof loadMessages === 'function') loadMessages().catch(function() {});
     });
   })();
-  cleanupAuthHash();
-  setupFullscreenOnFirstTap();
-  if (input) input.focus();
-  requestAnimationFrame(() => { if (input) input.focus(); });
-  setTimeout(() => { if (input) input.focus(); }, 100);
-  setupFocusOnFirstInteraction();
 }
 
 function openUserModal() {
@@ -5025,17 +5027,25 @@ function ensureLoaderMinDisplay() {
     clearTimeout(loadTimeout);
     markLoaded();
   }
+  function run() {
+    try {
+      if (typeof init === 'function') {
+        init(done);
+      } else {
+        done();
+      }
+    } catch (err) {
+      console.error('startup error', err);
+      done();
+    }
+  }
   try {
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', function onReady() {
-        if (typeof init === 'function') {
-          init().catch(function(err) { console.error('init error', err); }).finally(done);
-        } else { done(); }
+        run();
       });
     } else {
-      if (typeof init === 'function') {
-        init().catch(function(err) { console.error('init error', err); }).finally(done);
-      } else { done(); }
+      run();
     }
     document.addEventListener('visibilitychange', function() { if (document.visibilityState === 'visible' && typeof input !== 'undefined' && input) input.focus(); });
   } catch (err) {
