@@ -1505,16 +1505,21 @@ function clearEdgeScrollInterval() {
 function scrollFeedAtTouchEdge(clientY) {
   if (!feedEl) return false;
   var feedRect = feedEl.getBoundingClientRect();
-  var edgeZone = 48;
-  var step = 22;
+  var edgeZone = Math.max(56, feedRect.height * 0.2);
+  var baseStep = 6;
   var maxScroll = feedEl.scrollHeight - feedEl.clientHeight;
   var inTop = clientY >= feedRect.top && clientY < feedRect.top + edgeZone;
   var inBottom = clientY > feedRect.bottom - edgeZone && clientY <= feedRect.bottom;
+  var closeness, step;
   if (inTop) {
+    closeness = 1 - (clientY - feedRect.top) / edgeZone;
+    step = baseStep * (0.5 + 2.5 * closeness);
     feedEl.scrollTop = Math.max(0, feedEl.scrollTop - step);
     return true;
   }
   if (inBottom) {
+    closeness = 1 - (feedRect.bottom - clientY) / edgeZone;
+    step = baseStep * (0.5 + 2.5 * closeness);
     if (maxScroll > 0) feedEl.scrollTop = Math.min(maxScroll, feedEl.scrollTop + step);
     return true;
   }
@@ -3028,9 +3033,9 @@ function createMsgRow(msg, isNew) {
 
   row.addEventListener('click', e => {
     if (e.target.closest('.msg-checkbox-zone')) return;
+    if (e.target.closest('.msg-text')) return;
     if (selectMode) {
       if (e.target.closest('.msg-actions')) return;
-      if (e.target.closest('.msg-text')) return;
       if (dragSelectJustEnded || dragSelectToggledByTouch) return;
       e.preventDefault();
       e.stopPropagation();
