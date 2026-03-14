@@ -1276,6 +1276,7 @@ body.select-mode .msg-select-wrap,
 </style>
 </head>
 <body>
+<script>try{document.body.classList.add('loaded');}catch(_){}</script>
 <div id="app-loader" aria-hidden="true">
   <div class="loader-inner">
     <div class="loader-ring"></div>
@@ -2101,35 +2102,21 @@ function init(done) {
     } catch (_) {}
     if (typeof done === 'function') done();
   }
+  try { if (localStorage.getItem(WAS_EDITING_KEY)) { try { localStorage.setItem(INPUT_STATE_KEY, ''); localStorage.removeItem(WAS_EDITING_KEY); } catch (_) {} if (input) { input.value = ''; input.placeholder = 'say something…'; sendBtn.disabled = true; autoResize(); updateClearInputBtn(); } } } catch (_) {}
+  try { loadChannelsList(); } catch (_) {}
+  try { loadScrollState(); } catch (_) {}
+  try { setupTabs(); } catch (_) {}
+  try { restoreLastChannel(); } catch (_) {}
+  try { refreshMoveTargets(); } catch (_) {}
   try {
-    if (localStorage.getItem(WAS_EDITING_KEY)) {
-      try {
-        localStorage.setItem(INPUT_STATE_KEY, '');
-        localStorage.removeItem(WAS_EDITING_KEY);
-      } catch (_) {}
-      if (input) {
-        input.value = '';
-        input.placeholder = 'say something…';
-        sendBtn.disabled = true;
-        autoResize();
-        updateClearInputBtn();
-      }
-    }
-    loadChannelsList();
-    loadScrollState();
-    setupTabs();
-    restoreLastChannel();
-    refreshMoveTargets();
     if (feedInner) {
       feedInner.innerHTML = '';
       if (emptyEl && emptyEl.parentNode) emptyEl.remove();
       showEmptyIfNoMessages();
       if (msgCountEl) updateMsgCount();
     }
-    setupAuthListener();
-  } catch (e) {
-    console.error('init shell', e);
-  }
+  } catch (_) {}
+  try { setupAuthListener(); } catch (_) {}
   finish();
   (function runAsync() {
     Promise.race([
@@ -5032,6 +5019,17 @@ function ensureLoaderMinDisplay() {
       if (typeof init === 'function') {
         init(done);
       } else {
+        var t = document.getElementById('tabs');
+        if (t && !t.hasChildNodes()) {
+          var b = document.createElement('button');
+          b.className = 'tab';
+          b.setAttribute('data-channel', 'main');
+          b.appendChild(document.createElement('span')).textContent = 'Feed';
+          t.appendChild(b);
+        }
+        var fi = document.getElementById('feed-inner');
+        var emp = document.getElementById('empty');
+        if (fi && emp && !emp.parentNode) fi.appendChild(emp);
         done();
       }
     } catch (err) {
