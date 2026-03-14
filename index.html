@@ -2028,7 +2028,10 @@ function setupTouchDragHandlers() {
     saveMessageOrderForCurrentChannel();
     r.style.pointerEvents = 'none';
     void r.offsetHeight;
-    requestAnimationFrame(() => { r.style.pointerEvents = ''; });
+    requestAnimationFrame(() => {
+      r.style.pointerEvents = '';
+      focusMessageInput();
+    });
   };
   document.addEventListener('touchmove', move, { passive: false });
   document.addEventListener('touchend', end);
@@ -2058,7 +2061,10 @@ function createMsgRow(msg, isNew) {
     saveMessageOrderForCurrentChannel();
     row.style.pointerEvents = 'none';
     void row.offsetHeight;
-    requestAnimationFrame(() => { row.style.pointerEvents = ''; });
+    requestAnimationFrame(() => {
+      row.style.pointerEvents = '';
+      focusMessageInput();
+    });
   });
   row.addEventListener('dragover', e => {
     e.preventDefault();
