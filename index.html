@@ -569,12 +569,10 @@ header{
 body.dnd-active .msg{transition:none;animation:none}
 body.dnd-just-ended .msg{transition:none;animation:none}
 body.dnd-active .msg:not(.dragging):not(.msg-drag-group){
-  opacity:0.5;
-  background:transparent;
+  background:rgba(0,0,0,0.35);
 }
 body.dnd-active .msg:not(.dragging):not(.msg-drag-group):hover{
-  background:transparent;
-  opacity:0.5;
+  background:rgba(0,0,0,0.35);
 }
 body.dnd-active .msg.dragging,
 body.dnd-active .msg.msg-drag-group{background:transparent}
