@@ -511,8 +511,7 @@ header{
   pointer-events:none;
   z-index:2147483646;
   display:none;
-  background:rgba(10,22,40,0.5);
-  border:2px solid rgba(37,99,235,0.85);
+  background:rgba(0,0,0,0.07);
   border-radius:4px;
   box-sizing:border-box;
   transform:translateZ(0);
@@ -521,6 +520,11 @@ header{
   padding:0;
 }
 .feed-drop-origin.visible{ display:block; }
+.feed-drop-origin.stuck{
+  height:2px !important;
+  background:rgba(37,99,235,0.7);
+  border-radius:0;
+}
 
 /* empty state: loader animation (visible on refresh before load) */
 #empty{
@@ -2079,19 +2083,22 @@ function updateOriginLinePosition() {
   var feedHeight = feedRect.height;
   var topPx, heightPx;
   if (originContentTop < scrollTop) {
+    feedDropOriginEl.classList.add('stuck');
     topPx = feedRect.top;
-    heightPx = Math.min(originContentHeight, feedHeight);
+    heightPx = 2;
   } else if (originContentTop + originContentHeight > scrollTop + feedHeight) {
-    heightPx = Math.min(originContentHeight, feedHeight);
-    topPx = feedRect.bottom - heightPx;
+    feedDropOriginEl.classList.add('stuck');
+    topPx = feedRect.bottom - 2;
+    heightPx = 2;
   } else {
+    feedDropOriginEl.classList.remove('stuck');
     topPx = feedRect.top + (originContentTop - scrollTop);
     heightPx = originContentHeight;
   }
   feedDropOriginEl.style.left = feedRect.left + 'px';
   feedDropOriginEl.style.width = feedRect.width + 'px';
   feedDropOriginEl.style.top = topPx + 'px';
-  feedDropOriginEl.style.height = Math.max(2, heightPx) + 'px';
+  feedDropOriginEl.style.height = heightPx + 'px';
   feedDropOriginEl.classList.add('visible');
 }
 function showDropOriginLine() {
