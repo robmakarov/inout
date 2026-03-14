@@ -553,8 +553,6 @@ header{
 /* during DnD reorder, disable hover so wrong rows don't blink */
 body.dnd-active .msg{transition:none;animation:none}
 body.dnd-active .msg:hover{background:transparent}
-body.dnd-active .msg:hover .msg-time,
-body.dnd-active .msg:hover .msg-sender{color:var(--dim)}
 body.dnd-active .msg:hover .msg-select-wrap{opacity:0;pointer-events:none}
 body.dnd-active .msg:hover .msg-actions{opacity:0;pointer-events:none}
 .msg.msg-editing{
@@ -601,13 +599,7 @@ body.dnd-active .msg:hover .msg-actions{opacity:0;pointer-events:none}
   padding-right:72px; /* reserve space under right-side actions */
   cursor:pointer;
 }
-/* DnD reorder: row under drop position gets message content nudge right */
-.msg.msg-drag-target .msg-time,
-.msg.msg-drag-target .msg-sender,
-.msg.msg-drag-target .msg-text{
-  transform:translateX(30px);
-  transition:none;
-}
+/* DnD reorder: row under drop position (no nudge to avoid shake) */
 
 @media (max-width:540px){
   /* Disable text selection on messages on mobile so long-press is for drag, not selection */
@@ -746,11 +738,12 @@ body.select-mode .msg-select-wrap,
 
 .msg.dragging,
 .msg.msg-drag-group{
-  opacity: 0.4;
+  opacity: 0.88;
   box-shadow: 0 0 0 1px var(--line);
   background: var(--bg2);
   transition: none;
   animation: none;
+  contain: layout style;
 }
 
 /* ── INPUT AREA ── */
@@ -2300,15 +2293,24 @@ async function replaceFeedWithList(list) {
   }
   const hasRows = frag.childNodes.length > 0;
   msgCount = hasRows ? frag.childNodes.length : 0;
-  feedInner.innerHTML = '';
-  if (emptyEl && emptyEl.parentNode) emptyEl.remove();
   if (hasRows) {
     requestAnimationFrame(() => {
-      if (feedInner) feedInner.appendChild(frag);
+      if (feedInner) {
+        feedInner.innerHTML = '';
+        if (emptyEl && emptyEl.parentNode) emptyEl.remove();
+        feedInner.appendChild(frag);
+      }
       updateMsgCount();
       applyFieldPrefsToMessages();
+      var saved = channelScroll.get(currentChannel);
+      if (feedEl && typeof saved === 'number' && saved >= 0) {
+        var maxScroll = feedEl.scrollHeight - feedEl.clientHeight;
+        if (maxScroll > 0) feedEl.scrollTop = Math.min(saved, maxScroll);
+      }
     });
   } else {
+    feedInner.innerHTML = '';
+    if (emptyEl && emptyEl.parentNode) emptyEl.remove();
     showEmptyIfNoMessages();
     updateMsgCount();
   }
