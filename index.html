@@ -4781,8 +4781,7 @@ function processFeedDragover(ev) {
         if (dragSelectedRows.length > 1 && (r === dragging || dragSelectedRows.indexOf(r) >= 0)) {
           var blockFirst = dragSelectedRows[0];
           var blockLast = dragSelectedRows[dragSelectedRows.length - 1];
-          var halfway = rect.top + rect.height / 2;
-          if (y < halfway) {
+          if (y < rect.top + rect.height / 2) {
             insertBeforeNode = blockFirst;
             lineY = blockFirst.getBoundingClientRect().top;
           } else {
