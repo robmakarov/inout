@@ -4405,7 +4405,7 @@ feedEl.addEventListener('dragover', e => {
   if (y < firstRect.top) {
     insertBeforeNode = firstRow;
     lineY = firstRect.top;
-  } else if (y > lastRect.bottom) {
+  } else if (y >= lastRect.bottom) {
     insertBeforeNode = lastRow.nextSibling;
     lineY = lastRect.bottom;
   } else {
@@ -4434,11 +4434,19 @@ feedEl.addEventListener('dragover', e => {
         break;
       }
     }
+    if (insertBeforeNode === null && rows.length && y >= lastRect.bottom) {
+      insertBeforeNode = lastRow.nextSibling;
+      lineY = lastRect.bottom;
+    }
   }
   if (insertBeforeNode !== null) {
     const oldRects = new Map();
     rows.forEach(r => { if (r !== dragging) oldRects.set(r, r.getBoundingClientRect()); });
-    feedInner.insertBefore(dragging, insertBeforeNode);
+    if (insertBeforeNode) {
+      feedInner.insertBefore(dragging, insertBeforeNode);
+    } else {
+      feedInner.appendChild(dragging);
+    }
     flipAnimateShift(feedInner, dragging, oldRects);
     if (!feedDropIndicatorEl) {
       feedDropIndicatorEl = document.createElement('div');
