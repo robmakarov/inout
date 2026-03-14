@@ -4725,6 +4725,42 @@ feedEl.addEventListener('dragleave', e => {
 });
 }
 
+// Keep drop indicator visible when dragging beyond the feed bounds (e.g. over header)
+document.addEventListener('dragover', e => {
+  if (!feedEl || !feedInner) return;
+  const dragging = feedInner.querySelector('.msg.dragging');
+  if (!dragging) return;
+  const feedRect = feedEl.getBoundingClientRect();
+  const y = e.clientY;
+  if (y >= feedRect.top && y <= feedRect.bottom) return; // feed handles its own indicator + reordering
+
+  const rows = Array.from(feedInner.querySelectorAll('.msg'));
+  if (!rows.length) return;
+  const firstRow = rows[0];
+  const lastRow = rows[rows.length - 1];
+  const firstRect = firstRow.getBoundingClientRect();
+  const lastRect = lastRow.getBoundingClientRect();
+
+  let lineY = null;
+  if (y < feedRect.top) lineY = firstRect.top;
+  else if (y > feedRect.bottom) lineY = lastRect.bottom;
+  if (lineY == null) return;
+
+  if (!feedDropIndicatorEl) {
+    feedDropIndicatorEl = document.createElement('div');
+    feedDropIndicatorEl.className = 'feed-drop-indicator';
+    document.body.appendChild(feedDropIndicatorEl);
+  }
+  feedDropIndicatorEl.style.left = feedRect.left + 'px';
+  feedDropIndicatorEl.style.width = feedRect.width + 'px';
+  feedDropIndicatorEl.style.height = '4px';
+  feedDropIndicatorEl.style.top = (lineY - 2) + 'px';
+  feedDropIndicatorEl.classList.add('visible');
+
+  // keep edge scroll running even when pointer is outside feed
+  updateEdgeScroll(e.clientY, e.clientX);
+}, { passive: false });
+
 function scrollBottom() {
   if (!feedEl) return;
   feedEl.scrollTop = feedEl.scrollHeight;
