@@ -2322,6 +2322,7 @@ function init(done) {
 
 function openUserModal() {
   if (!umBackdrop) return;
+  if (typeof closeChannelModal === 'function') closeChannelModal();
   umBackdrop.style.display = 'block';
   umBackdrop.setAttribute('aria-hidden', 'false');
 }
@@ -2350,6 +2351,10 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (logDropupPanel && logDropupPanel.classList.contains('open')) {
       closeLogDropup();
+      return;
+    }
+    if (cmBackdrop && cmBackdrop.style.display === 'flex') {
+      closeChannelModal();
       return;
     }
     if (umBackdrop && umBackdrop.style.display === 'block') {
@@ -3044,44 +3049,47 @@ function createMsgRow(msg, isNew) {
   });
   row.addEventListener('dragend', () => {
     requestAnimationFrame(() => {
-      removeOriginGhostsAndInsertRows();
-      if (feedInner) feedInner.querySelectorAll('.msg-drag-group').forEach(r => r.classList.remove('msg-drag-group'));
-      dragSelectedRows = [];
-      if (document.body) {
-        document.body.classList.remove('dnd-active');
-        document.body.classList.add('dnd-just-ended');
-      }
-      lastReorderTarget = null;
-      feedDragoverRaf = null;
-      feedDragoverLast = null;
-      clearEdgeScrollInterval();
-      hideDropOriginLine();
-      if (feedDropIndicatorEl) feedDropIndicatorEl.classList.remove('visible');
-      lastIndicatorStyle = { left: -1, width: -1, top: -1, visible: false };
-      lastDragTargetRow = null;
-      if (feedInner) feedInner.querySelectorAll('.msg-drag-over, .msg-drag-target').forEach(r => r.classList.remove('msg-drag-over', 'msg-drag-target'));
-      row.classList.remove('dragging');
-      tabsEl.querySelectorAll('.tab.tab-drop-target').forEach(t => t.classList.remove('tab-drop-target'));
-      const domOrder = feedInner ? Array.from(feedInner.querySelectorAll('.msg')).map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id)) : [];
-      const orderChanged = !dragDropHandled && domOrder.length === savedOrderBeforeDrag.length && domOrder.some((id, i) => id !== savedOrderBeforeDrag[i]);
-      if (!dragDropHandled && !orderChanged) {
-        currentMessageOrder = savedOrderBeforeDrag.slice();
-        applyMessageOrderToDOM();
-        saveMessageOrderForCurrentChannel();
-      } else {
-        recomputeOrderFromDOM();
-        saveMessageOrderForCurrentChannel();
-      }
-      applyFieldPrefsToMessages();
-      row.style.pointerEvents = 'none';
-      void row.offsetHeight;
-      requestAnimationFrame(() => {
+      try {
+        removeOriginGhostsAndInsertRows();
+        if (feedInner) feedInner.querySelectorAll('.msg-drag-group').forEach(r => r.classList.remove('msg-drag-group'));
+        dragSelectedRows = [];
+        if (document.body) {
+          document.body.classList.remove('dnd-active');
+          document.body.classList.add('dnd-just-ended');
+        }
+        lastReorderTarget = null;
+        feedDragoverRaf = null;
+        feedDragoverLast = null;
+        clearEdgeScrollInterval();
+        lastDragTargetRow = null;
+        if (feedInner) feedInner.querySelectorAll('.msg-drag-over, .msg-drag-target').forEach(r => r.classList.remove('msg-drag-over', 'msg-drag-target'));
+        row.classList.remove('dragging');
+        tabsEl.querySelectorAll('.tab.tab-drop-target').forEach(t => t.classList.remove('tab-drop-target'));
+        const domOrder = feedInner ? Array.from(feedInner.querySelectorAll('.msg')).map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id)) : [];
+        const orderChanged = !dragDropHandled && domOrder.length === savedOrderBeforeDrag.length && domOrder.some((id, i) => id !== savedOrderBeforeDrag[i]);
+        if (!dragDropHandled && !orderChanged) {
+          currentMessageOrder = savedOrderBeforeDrag.slice();
+          applyMessageOrderToDOM();
+          saveMessageOrderForCurrentChannel();
+        } else {
+          recomputeOrderFromDOM();
+          saveMessageOrderForCurrentChannel();
+        }
+        applyFieldPrefsToMessages();
+        row.style.pointerEvents = 'none';
+        void row.offsetHeight;
         requestAnimationFrame(() => {
-          if (document.body) document.body.classList.remove('dnd-just-ended');
-          row.style.pointerEvents = '';
-          focusMessageInput();
+          requestAnimationFrame(() => {
+            if (document.body) document.body.classList.remove('dnd-just-ended');
+            row.style.pointerEvents = '';
+            focusMessageInput();
+          });
         });
-      });
+      } finally {
+        hideDropOriginLine();
+        if (feedDropIndicatorEl) feedDropIndicatorEl.classList.remove('visible');
+        lastIndicatorStyle = { left: -1, width: -1, top: -1, visible: false };
+      }
     });
   });
   /* row-level dragover/drop removed: feed is the single drop target for reliable reorder */
@@ -4014,12 +4022,18 @@ async function createChannelFromModal() {
   } catch (e) {
     console.error(e);
     toast('Failed to save members — ' + humanError(e.message));
+    closeChannelModal();
+    return;
   }
 
   if (extraIds.length > 0) sharedChannels.add(name);
 
   closeChannelModal();
-  switchChannel(name);
+  try {
+    switchChannel(name);
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 function deleteChannel(ch) {
