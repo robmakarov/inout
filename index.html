@@ -3859,22 +3859,18 @@ async function ensureMembership() {
 
 /* ═══ AUTH ════════════════════════════════════════════════ */
 async function refreshAuth() {
-  // If Supabase auth isn't available, treat as signed out and skip network calls.
-  if (!sb || !sb.auth || typeof sb.auth.getUser !== 'function') {
+  if (!sb || !sb.auth) {
     currentUser = null;
     updateAuthUI();
     return;
   }
   try {
-    const result = await Promise.resolve(sb.auth.getUser()).catch(function() {
-      return { data: { user: null }, error: { message: 'session missing' } };
-    });
-    const { data, error } = result;
-    if (error) {
-      currentUser = null;
-    } else {
-      currentUser = (data && data.user) ?? null;
+    var session = null;
+    if (typeof sb.auth.getSession === 'function') {
+      var res = await sb.auth.getSession();
+      session = (res && res.data && res.data.session) || null;
     }
+    currentUser = (session && session.user) ?? null;
   } catch (e) {
     currentUser = null;
   }
