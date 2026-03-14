@@ -504,17 +504,17 @@ header{
   transition:top 0.06s ease-out;
 }
 .feed-drop-indicator.visible{ display:block; }
+/* Origin: always a 2px dark blue line (fixed, never in flow) to avoid 4px shake */
 .feed-drop-origin{
   position:fixed;
   left:0;
   width:100%;
-  height:0;
+  height:2px;
   pointer-events:none;
   z-index:2147483646;
   display:none;
-  background:rgba(255,255,255,0.06);
-  border:1px dashed rgba(255,255,255,0.12);
-  border-radius:4px;
+  background:rgba(37,99,235,0.75);
+  border-radius:0;
   box-sizing:border-box;
   transform:translateZ(0);
   isolation:isolate;
@@ -522,12 +522,7 @@ header{
   padding:0;
 }
 .feed-drop-origin.visible{ display:block; }
-.feed-drop-origin.stuck{
-  height:2px !important;
-  background:rgba(37,99,235,0.7);
-  border:none;
-  border-radius:0;
-}
+.feed-drop-origin.stuck{ height:2px; }
 
 /* empty state: loader animation (visible on refresh before load) */
 #empty{
@@ -567,33 +562,20 @@ header{
 .msg-fly-clone .msg-actions{visibility:hidden}
 .msg:hover{background:var(--bg2)}
 .msg.msg-drag-over{background:var(--bg2)}
-/* during DnD: no hover on any row; dragged stay plain, others dimmed; no transitions to avoid blink */
+/* during DnD: dragged plain, others dimmed; drop-target and stack margin animate */
 body.dnd-active .msg{transition:none;animation:none}
+body.dnd-active .msg.msg-drag-group{transition:margin 0.2s ease}
 body.dnd-just-ended .msg{transition:none;animation:none}
 body.dnd-active .msg:not(.dragging):not(.msg-drag-group){
-  background:rgba(0,0,0,0.35);
-}
-body.dnd-active .msg:not(.dragging):not(.msg-drag-group) .msg-time,
-body.dnd-active .msg:not(.dragging):not(.msg-drag-group) .msg-sender,
-body.dnd-active .msg:not(.dragging):not(.msg-drag-group) .msg-text{
-  color:var(--dim);
+  opacity:0.5;
+  background:transparent;
 }
 body.dnd-active .msg:not(.dragging):not(.msg-drag-group):hover{
-  background:rgba(0,0,0,0.35);
+  background:transparent;
+  opacity:0.5;
 }
 body.dnd-active .msg.dragging,
-body.dnd-active .msg.msg-drag-group{
-  background:rgba(255,255,255,0.14);
-  color:#fff;
-}
-body.dnd-active .msg.dragging .msg-time,
-body.dnd-active .msg.dragging .msg-sender,
-body.dnd-active .msg.dragging .msg-text,
-body.dnd-active .msg.msg-drag-group .msg-time,
-body.dnd-active .msg.msg-drag-group .msg-sender,
-body.dnd-active .msg.msg-drag-group .msg-text{
-  color:#fff;
-}
+body.dnd-active .msg.msg-drag-group{background:transparent}
 body.dnd-active .msg.dragging .msg-select-wrap,
 body.dnd-active .msg.dragging .msg-actions,
 body.dnd-active .msg.msg-drag-group .msg-select-wrap,
@@ -2104,7 +2086,7 @@ function updateOriginLinePosition() {
   } else {
     feedDropOriginEl.classList.remove('stuck');
     topPx = feedRect.top + (originContentTop - scrollTop);
-    heightPx = originContentHeight;
+    heightPx = 2;
   }
   feedDropOriginEl.style.left = feedRect.left + 'px';
   feedDropOriginEl.style.width = feedRect.width + 'px';
