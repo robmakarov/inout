@@ -2796,11 +2796,11 @@ function applyFieldPrefsToMessages() {
   rows.forEach(row => {
     const timeEl = row.querySelector('.msg-time');
     const senderEl = row.querySelector('.msg-sender');
-    if (timeEl) timeEl.style.display = fieldPrefs.showTime ? '' : 'none';
+    if (timeEl) timeEl.style.display = fieldPrefs.showTime ? 'block' : 'none';
     // In main feed we always hide author.
     const isMain = currentChannel === 'main' || (row.dataset.channel === 'main');
     if (senderEl) {
-      senderEl.style.display = !isMain && fieldPrefs.showAuthor ? '' : 'none';
+      senderEl.style.display = !isMain && fieldPrefs.showAuthor ? 'flex' : 'none';
     }
   });
   applyFieldPrefsUI();
@@ -3063,7 +3063,7 @@ function createMsgRow(msg, isNew) {
 
   const isMainFeed = (msg.channel && msg.channel === 'main') || (!msg.channel && currentChannel === 'main');
   const wantAuthor = !isMainFeed && (!!fieldPrefs ? !!fieldPrefs.showAuthor : true);
-  sender.style.display = wantAuthor ? '' : 'none';
+  sender.style.display = wantAuthor ? 'flex' : 'none';
 
   const selectWrap = document.createElement('div');
   selectWrap.className = 'msg-select-wrap';
@@ -3343,7 +3343,7 @@ function createMsgRow(msg, isNew) {
   time.className = 'msg-time';
   time.textContent = formatTime(msg.created_at);
   if (fieldPrefs) {
-    time.style.display = fieldPrefs.showTime ? '' : 'none';
+    time.style.display = fieldPrefs.showTime ? 'block' : 'none';
   }
 
   const text = document.createElement('div');
