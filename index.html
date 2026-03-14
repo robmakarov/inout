@@ -573,9 +573,9 @@ body.dnd-active .msg:hover .msg-actions{opacity:0;pointer-events:none}
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
-   display:flex;
-   justify-content:flex-end;
-   text-align:right;
+  display:none; /* JS shows based on view prefs + non-main channel */
+  justify-content:flex-end;
+  text-align:right;
 }
 
 .msg-time{
@@ -586,6 +586,7 @@ body.dnd-active .msg:hover .msg-actions{opacity:0;pointer-events:none}
   max-width:none;
   white-space:nowrap;
   text-align:left;
+  display:none; /* JS shows based on view prefs */
 }
 
 .msg-text{

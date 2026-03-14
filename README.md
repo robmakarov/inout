@@ -51,6 +51,7 @@ Use this section when editing the repo: file layout, data model, where behavior 
   index.html     # Single entry point: HTML, CSS, and JS inlined (~4968 lines)
   vercel.json    # SPA routing: all paths → index.html
   README.md      # This file
+  ELEMENTS.md    # Reference: DOM elements, JS state, conditions, and functions (for humans and AI)
   TODO.txt       # Product/tech backlog (optional reading)
 ```
 
