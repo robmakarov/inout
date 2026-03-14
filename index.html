@@ -1443,6 +1443,9 @@ let selectModeAutoOn = false; /* true when select mode was turned on by checking
 const selectedIds = new Set();
 let dragSelectActive = false;
 let dragSelectStarted = false;
+let dragSelectJustEnded = false;
+let dragSelectToggledByTouch = false;
+let dragSelectMode = 'select'; /* 'select' or 'deselect' */
 let editingMessageId = null;
 let fieldPrefs = { showTime:true, showAuthor:true };
 let undoStack = [];
@@ -2627,29 +2630,39 @@ function createMsgRow(msg, isNew) {
     }
     updateSelectionUI();
   });
+  selectWrap.addEventListener('click', e => {
+    if (dragSelectJustEnded || dragSelectToggledByTouch) {
+      e.preventDefault();
+      e.stopPropagation();
+      dragSelectJustEnded = false;
+      dragSelectToggledByTouch = false;
+    }
+  }, true);
   selectWrap.addEventListener('mousedown', e => {
     if (!msg.id) return;
-    e.preventDefault();
     let timer = null;
     const onDocUp = () => {
       if (timer) clearTimeout(timer);
       document.removeEventListener('mouseup', onDocUp, true);
-      if (!dragSelectStarted) {
-        selectBox.checked = !selectBox.checked;
-        updateSelectionUI();
-      }
     };
     document.addEventListener('mouseup', onDocUp, true);
     timer = setTimeout(() => {
       timer = null;
       dragSelectStarted = true;
+      dragSelectMode = selectBox.checked ? 'deselect' : 'select';
       if (!selectMode) {
         selectModeAutoOn = true;
         setSelectMode(true);
       }
-      selectedIds.add(msg.id);
-      row.classList.add('msg-selected');
-      selectBox.checked = true;
+      if (dragSelectMode === 'deselect') {
+        selectBox.checked = false;
+        selectedIds.delete(msg.id);
+        row.classList.remove('msg-selected');
+      } else {
+        selectBox.checked = true;
+        selectedIds.add(msg.id);
+        row.classList.add('msg-selected');
+      }
       updateSelectionUI();
       dragSelectActive = true;
       let lastRow = null;
@@ -2662,22 +2675,28 @@ function createMsgRow(msg, isNew) {
         const box = m.querySelector('.msg-select');
         const id = m.dataset.id != null ? Number(m.dataset.id) : NaN;
         if (!box || !Number.isFinite(id)) return;
-        if (box.checked) {
-          box.checked = false;
-          selectedIds.delete(id);
-          m.classList.remove('msg-selected');
+        if (dragSelectMode === 'deselect') {
+          if (box.checked) {
+            box.checked = false;
+            selectedIds.delete(id);
+            m.classList.remove('msg-selected');
+            updateSelectionUI();
+          }
         } else {
-          box.checked = true;
-          selectedIds.add(id);
-          m.classList.add('msg-selected');
+          if (!box.checked) {
+            box.checked = true;
+            selectedIds.add(id);
+            m.classList.add('msg-selected');
+            updateSelectionUI();
+          }
         }
-        updateSelectionUI();
       };
       const onEnd = () => {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onEnd);
         dragSelectActive = false;
         dragSelectStarted = false;
+        dragSelectJustEnded = true;
       };
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onEnd);
@@ -2692,6 +2711,7 @@ function createMsgRow(msg, isNew) {
       document.removeEventListener('touchcancel', onDocTouchEnd, true);
       if (!dragSelectStarted) {
         selectBox.checked = !selectBox.checked;
+        dragSelectToggledByTouch = true;
         updateSelectionUI();
       }
     };
@@ -2701,13 +2721,20 @@ function createMsgRow(msg, isNew) {
       timer = null;
       dragSelectStarted = true;
       e.preventDefault();
+      dragSelectMode = selectBox.checked ? 'deselect' : 'select';
       if (!selectMode) {
         selectModeAutoOn = true;
         setSelectMode(true);
       }
-      selectedIds.add(msg.id);
-      row.classList.add('msg-selected');
-      selectBox.checked = true;
+      if (dragSelectMode === 'deselect') {
+        selectBox.checked = false;
+        selectedIds.delete(msg.id);
+        row.classList.remove('msg-selected');
+      } else {
+        selectBox.checked = true;
+        selectedIds.add(msg.id);
+        row.classList.add('msg-selected');
+      }
       updateSelectionUI();
       dragSelectActive = true;
       let lastRowT = null;
@@ -2723,16 +2750,21 @@ function createMsgRow(msg, isNew) {
         const box = m.querySelector('.msg-select');
         const id = m.dataset.id != null ? Number(m.dataset.id) : NaN;
         if (!box || !Number.isFinite(id)) return;
-        if (box.checked) {
-          box.checked = false;
-          selectedIds.delete(id);
-          m.classList.remove('msg-selected');
+        if (dragSelectMode === 'deselect') {
+          if (box.checked) {
+            box.checked = false;
+            selectedIds.delete(id);
+            m.classList.remove('msg-selected');
+            updateSelectionUI();
+          }
         } else {
-          box.checked = true;
-          selectedIds.add(id);
-          m.classList.add('msg-selected');
+          if (!box.checked) {
+            box.checked = true;
+            selectedIds.add(id);
+            m.classList.add('msg-selected');
+            updateSelectionUI();
+          }
         }
-        updateSelectionUI();
       };
       const onTouchEnd = () => {
         document.removeEventListener('touchmove', onTouchMove, { passive: false });
@@ -2740,6 +2772,7 @@ function createMsgRow(msg, isNew) {
         document.removeEventListener('touchcancel', onTouchEnd);
         dragSelectActive = false;
         dragSelectStarted = false;
+        dragSelectJustEnded = true;
       };
       document.addEventListener('touchmove', onTouchMove, { passive: false });
       document.addEventListener('touchend', onTouchEnd);
@@ -2762,13 +2795,20 @@ function createMsgRow(msg, isNew) {
     timer = setTimeout(() => {
       timer = null;
       dragSelectStarted = true;
+      dragSelectMode = selectBox.checked ? 'deselect' : 'select';
       if (!selectMode) {
         selectModeAutoOn = true;
         setSelectMode(true);
       }
-      selectedIds.add(msg.id);
-      row.classList.add('msg-selected');
-      selectBox.checked = true;
+      if (dragSelectMode === 'deselect') {
+        selectBox.checked = false;
+        selectedIds.delete(msg.id);
+        row.classList.remove('msg-selected');
+      } else {
+        selectBox.checked = true;
+        selectedIds.add(msg.id);
+        row.classList.add('msg-selected');
+      }
       updateSelectionUI();
       dragSelectActive = true;
       let lastRow = null;
@@ -2781,22 +2821,28 @@ function createMsgRow(msg, isNew) {
         const box = m.querySelector('.msg-select');
         const id = m.dataset.id != null ? Number(m.dataset.id) : NaN;
         if (!box || !Number.isFinite(id)) return;
-        if (box.checked) {
-          box.checked = false;
-          selectedIds.delete(id);
-          m.classList.remove('msg-selected');
+        if (dragSelectMode === 'deselect') {
+          if (box.checked) {
+            box.checked = false;
+            selectedIds.delete(id);
+            m.classList.remove('msg-selected');
+            updateSelectionUI();
+          }
         } else {
-          box.checked = true;
-          selectedIds.add(id);
-          m.classList.add('msg-selected');
+          if (!box.checked) {
+            box.checked = true;
+            selectedIds.add(id);
+            m.classList.add('msg-selected');
+            updateSelectionUI();
+          }
         }
-        updateSelectionUI();
       };
       const onEnd = () => {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onEnd);
         dragSelectActive = false;
         dragSelectStarted = false;
+        dragSelectJustEnded = true;
       };
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onEnd);
@@ -2818,13 +2864,20 @@ function createMsgRow(msg, isNew) {
       timer = null;
       dragSelectStarted = true;
       e.preventDefault();
+      dragSelectMode = selectBox.checked ? 'deselect' : 'select';
       if (!selectMode) {
         selectModeAutoOn = true;
         setSelectMode(true);
       }
-      selectedIds.add(msg.id);
-      row.classList.add('msg-selected');
-      selectBox.checked = true;
+      if (dragSelectMode === 'deselect') {
+        selectBox.checked = false;
+        selectedIds.delete(msg.id);
+        row.classList.remove('msg-selected');
+      } else {
+        selectBox.checked = true;
+        selectedIds.add(msg.id);
+        row.classList.add('msg-selected');
+      }
       updateSelectionUI();
       dragSelectActive = true;
       let lastRowT2 = null;
@@ -2840,16 +2893,21 @@ function createMsgRow(msg, isNew) {
         const box = m.querySelector('.msg-select');
         const id = m.dataset.id != null ? Number(m.dataset.id) : NaN;
         if (!box || !Number.isFinite(id)) return;
-        if (box.checked) {
-          box.checked = false;
-          selectedIds.delete(id);
-          m.classList.remove('msg-selected');
+        if (dragSelectMode === 'deselect') {
+          if (box.checked) {
+            box.checked = false;
+            selectedIds.delete(id);
+            m.classList.remove('msg-selected');
+            updateSelectionUI();
+          }
         } else {
-          box.checked = true;
-          selectedIds.add(id);
-          m.classList.add('msg-selected');
+          if (!box.checked) {
+            box.checked = true;
+            selectedIds.add(id);
+            m.classList.add('msg-selected');
+            updateSelectionUI();
+          }
         }
-        updateSelectionUI();
       };
       const onTouchEnd = () => {
         document.removeEventListener('touchmove', onTouchMove, { passive: false });
@@ -2897,6 +2955,7 @@ function createMsgRow(msg, isNew) {
     if (selectMode) {
       if (e.target.closest('.msg-actions')) return;
       if (e.target.closest('.msg-select-wrap')) return;
+      if (dragSelectJustEnded || dragSelectToggledByTouch) return;
       e.preventDefault();
       e.stopPropagation();
       selectBox.checked = !selectBox.checked;
