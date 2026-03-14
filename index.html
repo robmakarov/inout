@@ -365,6 +365,114 @@ body.loaded #manage-bar{
 }
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
+/* ── LOADER (until body.loaded) ── */
+#app-loader{
+  position:fixed;
+  inset:0;
+  z-index:10000;
+  background:var(--bg);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  transition:opacity .4s ease, transform .5s cubic-bezier(0.22,1,0.36,1);
+}
+body.loaded #app-loader{
+  opacity:0;
+  pointer-events:none;
+  transform:scale(1.08);
+}
+#app-loader-inner{
+  position:relative;
+  width:88px;
+  height:88px;
+  overflow:visible;
+}
+#app-loader-inner .loader-ring{
+  position:absolute;
+  inset:-8px;
+  border:2px solid transparent;
+  border-radius:50%;
+  border-top-color:var(--acc);
+  border-right-color:var(--acc2);
+  animation:loader-spin 1.1s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+#app-loader-inner .loader-ring:nth-child(2){
+  inset:-4px;
+  border-top-color:transparent;
+  border-right-color:transparent;
+  border-bottom-color:var(--acc2);
+  border-left-color:var(--acc);
+  animation-duration:0.9s;
+  animation-direction:reverse;
+}
+#app-loader-inner .loader-ring:nth-child(3){
+  inset:4px;
+  border-right-color:transparent;
+  border-bottom-color:var(--acc);
+  animation-duration:1.3s;
+  animation-direction:reverse;
+}
+#app-loader-inner .loader-dash{
+  position:absolute;
+  inset:-12px;
+  border:3px solid transparent;
+  border-radius:50%;
+  border-top-color:var(--acc);
+  border-top-width:5px;
+  filter:drop-shadow(0 0 6px rgba(232,213,160,0.5));
+  animation:loader-spin 0.75s linear infinite;
+}
+#app-loader-inner .loader-dash::after{
+  content:'';
+  position:absolute;
+  inset:-14px;
+  border:2px solid transparent;
+  border-radius:50%;
+  border-top-color:var(--acc2);
+  border-top-width:3px;
+  opacity:0.7;
+  animation:loader-spin 1.2s linear infinite reverse;
+}
+#app-loader-inner .loader-dash::before{
+  content:'';
+  position:absolute;
+  top:50%;
+  left:50%;
+  width:14px;
+  height:14px;
+  margin:-7px 0 0 -7px;
+  background:radial-gradient(circle at 30% 30%, var(--bright), var(--acc));
+  border-radius:50%;
+  box-shadow:0 0 24px rgba(232,213,160,0.7), 0 0 48px rgba(232,213,160,0.25);
+  animation:loader-ping 1.2s ease-in-out infinite;
+}
+#app-loader-label{
+  position:absolute;
+  left:50%;
+  top:calc(100% + 18px);
+  transform:translateX(-50%);
+  font-family:var(--sans);
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:0.4em;
+  color:var(--acc);
+  text-transform:uppercase;
+  opacity:0.9;
+  animation:loader-label 2s ease-in-out infinite;
+  white-space:nowrap;
+}
+@keyframes loader-spin{
+  to{ transform:rotate(360deg); }
+}
+@keyframes loader-ping{
+  0%,100%{ transform:scale(1); opacity:1; }
+  50%{ transform:scale(1.4); opacity:0.5; }
+}
+@keyframes loader-label{
+  0%,100%{ opacity:0.7; letter-spacing:0.35em; }
+  50%{ opacity:1; letter-spacing:0.45em; }
+}
+
 #msg-count{
   font-size:11px;color:var(--dim);letter-spacing:0.05em;
   display:none;
@@ -1187,6 +1295,16 @@ body.loaded #input-area{
 </style>
 </head>
 <body>
+
+<div id="app-loader" aria-hidden="true">
+  <div id="app-loader-inner">
+    <div class="loader-ring"></div>
+    <div class="loader-ring"></div>
+    <div class="loader-ring"></div>
+    <div class="loader-dash"></div>
+    <span id="app-loader-label">INOUT</span>
+  </div>
+</div>
 
 <div id="app">
   <header>
@@ -4671,10 +4789,13 @@ function markLoaded() {
 }
 (function go() {
   try {
-    markLoaded();
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', markLoaded);
-    window.addEventListener('load', markLoaded);
-    if (typeof init === 'function') init().catch(function(err) { console.error('init error', err); }).finally(markLoaded);
+    if (typeof init === 'function') {
+      init().catch(function(err) { console.error('init error', err); }).finally(markLoaded);
+    } else {
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', markLoaded);
+      else markLoaded();
+    }
+    window.addEventListener('load', function() { if (!document.body.classList.contains('loaded')) markLoaded(); });
     document.addEventListener('visibilitychange', function() { if (document.visibilityState === 'visible' && typeof input !== 'undefined' && input) input.focus(); });
   } catch (err) {
     console.error('startup error', err);
