@@ -2093,13 +2093,30 @@ async function init() {
   }
   loadChannelsList();
   loadScrollState();
-  await refreshAuth();
+  setupTabs();
+  restoreLastChannel();
+  refreshMoveTargets();
+  try {
+    if (feedInner) {
+      feedInner.innerHTML = '';
+      if (emptyEl && emptyEl.parentNode) emptyEl.remove();
+      showEmptyIfNoMessages();
+      if (typeof updateMsgCount === 'function') updateMsgCount();
+    }
+  } catch (_) {}
+  setupAuthListener();
+  try {
+    await Promise.race([
+      refreshAuth(),
+      new Promise(function(_, reject) { setTimeout(function() { reject(new Error('auth timeout')); }, 8000); })
+    ]);
+  } catch (_) {
+    currentUser = null;
+    if (typeof updateAuthUI === 'function') updateAuthUI();
+  }
   if (currentUser) {
     await syncChannelsFromServer();
   }
-  setupAuthListener();
-  setupTabs();
-  restoreLastChannel();
   await loadMessageOrderForCurrentChannel();
   await loadFieldPrefsForCurrentChannel();
   refreshMoveTargets();
