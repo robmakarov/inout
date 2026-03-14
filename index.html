@@ -2730,12 +2730,13 @@ function createMsgRow(msg, isNew) {
       return;
     }
     if (!dragImageEl) {
-      var c = document.createElement('canvas');
-      c.width = 1;
-      c.height = 1;
-      dragImageEl = c;
+      dragImageEl = document.createElement('div');
+      dragImageEl.setAttribute('aria-hidden', 'true');
+      dragImageEl.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;';
+      document.body.appendChild(dragImageEl);
     }
-    e.dataTransfer.setDragImage(dragImageEl, 0, 0);
+    if (dragImageEl.parentNode !== document.body) document.body.appendChild(dragImageEl);
+    e.dataTransfer.setDragImage(dragImageEl, -9999, -9999);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', typeof msg.text === 'string' ? msg.text : '');
     if (typeof msg.id !== 'undefined') e.dataTransfer.setData('application/x-inout-msg-id', String(msg.id));
