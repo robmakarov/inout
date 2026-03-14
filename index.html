@@ -395,17 +395,17 @@ body.loaded #feed{
   min-height:100%;
   gap:0;
 }
-/* drop position area (fixed overlay, not inside feed so DnD is not affected) */
+/* drop position: 4px line, brighter */
 .feed-drop-indicator{
   position:fixed;
   left:0;
   width:100%;
-  height:8px;
+  height:4px;
   pointer-events:none;
   z-index:9999;
   display:none;
-  background:rgba(232, 213, 160, 0.12);
-  border-radius:2px;
+  background:rgba(232, 213, 160, 0.35);
+  border-radius:1px;
 }
 .feed-drop-indicator.visible{ display:block; }
 
@@ -437,7 +437,7 @@ body.loaded #feed{
   gap:6px;
   padding:4px 20px;
   border-bottom:1px solid var(--line);
-  transition:background .1s, transform .12s;
+  transition:background .1s, transform .1s ease-out;
   animation:msgin .2s ease both;
   position:relative;
 }
@@ -2486,6 +2486,9 @@ function createMsgRow(msg, isNew) {
     e.preventDefault();
     const dragging = feedInner.querySelector('.msg.dragging');
     if (!dragging || dragging === row) return;
+    const rows = Array.from(feedInner.querySelectorAll('.msg'));
+    const oldRects = new Map();
+    rows.forEach(r => { if (r !== dragging) oldRects.set(r, r.getBoundingClientRect()); });
     const bounding = row.getBoundingClientRect();
     const offset = e.clientY - bounding.top;
     const halfway = bounding.height / 2;
@@ -2495,6 +2498,7 @@ function createMsgRow(msg, isNew) {
     } else {
       feedInner.insertBefore(dragging, row);
     }
+    flipAnimateShift(feedInner, dragging, oldRects);
     if (!feedDropIndicatorEl) {
       feedDropIndicatorEl = document.createElement('div');
       feedDropIndicatorEl.className = 'feed-drop-indicator';
@@ -2504,8 +2508,8 @@ function createMsgRow(msg, isNew) {
     const feedRect = feedEl ? feedEl.getBoundingClientRect() : bounding;
     feedDropIndicatorEl.style.left = feedRect.left + 'px';
     feedDropIndicatorEl.style.width = feedRect.width + 'px';
-    feedDropIndicatorEl.style.height = '8px';
-    feedDropIndicatorEl.style.top = (lineY - 4) + 'px';
+    feedDropIndicatorEl.style.height = '4px';
+    feedDropIndicatorEl.style.top = (lineY - 2) + 'px';
     feedDropIndicatorEl.classList.add('visible');
   });
   row.addEventListener('drop', e => {
@@ -4055,6 +4059,26 @@ feedEl.addEventListener('scroll', () => {
   if (atBottom) scrollBtn.classList.remove('visible');
 }, { passive: true });
 
+/* FLIP animation: smooth shift of rows when reordering during drag */
+function flipAnimateShift(feedInner, dragging, oldRects) {
+  if (!feedInner || !dragging || !oldRects) return;
+  const rows = feedInner.querySelectorAll('.msg');
+  rows.forEach(r => {
+    if (r === dragging) return;
+    const old = oldRects.get(r);
+    if (!old) return;
+    const nr = r.getBoundingClientRect();
+    const dy = nr.top - old.top;
+    if (Math.abs(dy) < 0.5) return;
+    r.style.transform = 'translateY(' + (-dy) + 'px)';
+    r.offsetHeight;
+    r.style.transform = 'translateY(0)';
+  });
+  setTimeout(() => {
+    rows.forEach(r => { if (r !== dragging) r.style.transform = ''; });
+  }, 110);
+}
+
 /* feed-level DnD: drop at first/last when pointer is above or below the message list */
 feedEl.addEventListener('dragover', e => {
   const dragging = feedInner ? feedInner.querySelector('.msg.dragging') : null;
@@ -4069,7 +4093,11 @@ feedEl.addEventListener('dragover', e => {
   if (y < firstRect.top) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
+    const rows = Array.from(feedInner.querySelectorAll('.msg'));
+    const oldRects = new Map();
+    rows.forEach(r => { if (r !== dragging) oldRects.set(r, r.getBoundingClientRect()); });
     feedInner.insertBefore(dragging, firstRow);
+    flipAnimateShift(feedInner, dragging, oldRects);
     if (!feedDropIndicatorEl) {
       feedDropIndicatorEl = document.createElement('div');
       feedDropIndicatorEl.className = 'feed-drop-indicator';
@@ -4078,13 +4106,17 @@ feedEl.addEventListener('dragover', e => {
     const feedRect = feedEl.getBoundingClientRect();
     feedDropIndicatorEl.style.left = feedRect.left + 'px';
     feedDropIndicatorEl.style.width = feedRect.width + 'px';
-    feedDropIndicatorEl.style.height = '8px';
-    feedDropIndicatorEl.style.top = (firstRect.top - 4) + 'px';
+    feedDropIndicatorEl.style.height = '4px';
+    feedDropIndicatorEl.style.top = (firstRect.top - 2) + 'px';
     feedDropIndicatorEl.classList.add('visible');
   } else if (y > lastRect.bottom) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
+    const rows = Array.from(feedInner.querySelectorAll('.msg'));
+    const oldRects = new Map();
+    rows.forEach(r => { if (r !== dragging) oldRects.set(r, r.getBoundingClientRect()); });
     feedInner.insertBefore(dragging, lastRow.nextSibling);
+    flipAnimateShift(feedInner, dragging, oldRects);
     if (!feedDropIndicatorEl) {
       feedDropIndicatorEl = document.createElement('div');
       feedDropIndicatorEl.className = 'feed-drop-indicator';
@@ -4093,8 +4125,8 @@ feedEl.addEventListener('dragover', e => {
     const feedRect = feedEl.getBoundingClientRect();
     feedDropIndicatorEl.style.left = feedRect.left + 'px';
     feedDropIndicatorEl.style.width = feedRect.width + 'px';
-    feedDropIndicatorEl.style.height = '8px';
-    feedDropIndicatorEl.style.top = (lastRect.bottom - 4) + 'px';
+    feedDropIndicatorEl.style.height = '4px';
+    feedDropIndicatorEl.style.top = (lastRect.bottom - 2) + 'px';
     feedDropIndicatorEl.classList.add('visible');
   }
 });
