@@ -562,9 +562,8 @@ header{
 .msg-fly-clone .msg-actions{visibility:hidden}
 .msg:hover{background:var(--bg2)}
 .msg.msg-drag-over{background:var(--bg2)}
-/* during DnD: dragged plain, others dimmed; drop-target and stack margin animate */
+/* during DnD: dragged plain, others dimmed; no transitions to avoid stack/line shake */
 body.dnd-active .msg{transition:none;animation:none}
-body.dnd-active .msg.msg-drag-group{transition:margin 0.2s ease}
 body.dnd-just-ended .msg{transition:none;animation:none}
 body.dnd-active .msg:not(.dragging):not(.msg-drag-group){
   opacity:0.5;
@@ -767,7 +766,6 @@ body.select-mode .msg-select-wrap,
   opacity: 1;
   animation: none;
 }
-body.dnd-active .msg.msg-drag-group{transition:margin 0.2s ease}
 .msg.msg-drag-group + .msg.msg-drag-group{margin-top:-2px}
 .msg.dragging + .msg.msg-drag-group,
 .msg.msg-drag-group + .msg.dragging{margin-top:-2px}
@@ -2100,6 +2098,7 @@ function showDropOriginLine() {
   if (block.length === 0) return;
   var firstRow = block[0];
   var lastRow = block[block.length - 1];
+  /* Capture positions before any msg-drag-group margin is applied */
   originContentTop = firstRow.offsetTop || 0;
   originContentHeight = (lastRow.offsetTop || 0) + (lastRow.offsetHeight || 0) - originContentTop;
   if (originContentHeight < 2) originContentHeight = 2;
@@ -2951,6 +2950,8 @@ function createMsgRow(msg, isNew) {
     } else {
       dragSelectedRows = [row];
     }
+    /* Freeze origin line position before adding msg-drag-group so margin animation doesn't move the line */
+    showDropOriginLine();
     dragSelectedRows.forEach(function(r) {
       if (dragSelectedRows.length > 1) r.classList.add('msg-drag-group');
     });
@@ -2959,7 +2960,6 @@ function createMsgRow(msg, isNew) {
     savedOrderBeforeDrag = currentMessageOrder.slice();
     dragDropHandled = false;
     if (feedInner) feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
-    showDropOriginLine();
   });
   row.addEventListener('dragend', () => {
     if (feedInner) feedInner.querySelectorAll('.msg-drag-group').forEach(r => r.classList.remove('msg-drag-group'));
@@ -4926,7 +4926,7 @@ var feedDragoverLast = null;
 var lastIndicatorStyle = { left: -1, width: -1, top: -1, visible: false };
 var lastDragTargetRow = null;
 function processFeedDragover(ev) {
-  if (typeof updateOriginLinePosition === 'function') updateOriginLinePosition();
+  /* Origin line updates only on scroll to avoid shaky line during drag */
   const dragging = feedInner ? feedInner.querySelector('.msg.dragging') : null;
   if (!dragging || !feedInner) return;
   const rows = Array.from(feedInner.querySelectorAll('.msg'));
