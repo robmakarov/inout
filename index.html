@@ -2551,7 +2551,9 @@ function createMsgRow(msg, isNew) {
     if (feedDropIndicatorEl) feedDropIndicatorEl.classList.remove('visible');
     row.classList.remove('dragging');
     tabsEl.querySelectorAll('.tab.tab-drop-target').forEach(t => t.classList.remove('tab-drop-target'));
-    if (!dragDropHandled) {
+    const domOrder = feedInner ? Array.from(feedInner.querySelectorAll('.msg')).map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id)) : [];
+    const orderChanged = !dragDropHandled && domOrder.length === savedOrderBeforeDrag.length && domOrder.some((id, i) => id !== savedOrderBeforeDrag[i]);
+    if (!dragDropHandled && !orderChanged) {
       currentMessageOrder = savedOrderBeforeDrag.slice();
       applyMessageOrderToDOM();
       saveMessageOrderForCurrentChannel();
@@ -4340,7 +4342,7 @@ function autoResize() {
 }
 
 /* ═══ SCROLL ══════════════════════════════════════════════ */
-feedEl.addEventListener('scroll', () => {
+if (feedEl) feedEl.addEventListener('scroll', () => {
   atBottom = isNearBottom();
   if (atBottom) scrollBtn.classList.remove('visible');
 }, { passive: true });
@@ -4510,21 +4512,21 @@ function humanError(message) {
 
 /* ═══ GO ══════════════════════════════════════════════════ */
 function markLoaded() {
-  if (document.body && !document.body.classList.contains('loaded')) document.body.classList.add('loaded');
-  if (input) input.focus();
+  try {
+    if (document.body && !document.body.classList.contains('loaded')) document.body.classList.add('loaded');
+    if (input) input.focus();
+  } catch (_) {}
 }
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', markLoaded);
-} else {
+try {
+  markLoaded();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', markLoaded);
+  window.addEventListener('load', markLoaded);
+  init().catch(err => { console.error('init error', err); }).finally(markLoaded);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && input) input.focus(); });
+} catch (err) {
+  console.error('startup error', err);
   markLoaded();
 }
-window.addEventListener('load', markLoaded);
-init().catch(err => {
-  console.error('init error', err);
-}).finally(markLoaded);
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && input) input.focus();
-});
 </script>
 </body>
 </html>
