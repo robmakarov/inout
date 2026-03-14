@@ -3857,13 +3857,25 @@ async function refreshAuth() {
       var b = sessionStorage.getItem(AUTH_BACKUP_KEY);
       if (b) currentUser = JSON.parse(b);
     } catch (_) {}
-    const { data: sessionData } = await sb.auth.getSession();
-    const session = sessionData?.session ?? null;
+    var session = null;
+    try {
+      var sessionPromise = sb.auth.getSession();
+      var sessionResult = await Promise.race([
+        sessionPromise,
+        new Promise(function(_, rej) { setTimeout(function() { rej(new Error('session timeout')); }, 4000); })
+      ]);
+      session = (sessionResult && sessionResult.data && sessionResult.data.session) || null;
+    } catch (_) {}
     if (session?.user) {
       currentUser = session.user;
     } else if (!currentUser) {
-      const { data: userData, error } = await sb.auth.getUser();
-      if (!error && userData?.user) currentUser = userData.user;
+      try {
+        var userResult = await Promise.race([
+          sb.auth.getUser(),
+          new Promise(function(_, rej) { setTimeout(function() { rej(new Error('user timeout')); }, 3000); })
+        ]);
+        if (userResult && userResult.data && userResult.data.user) currentUser = userResult.data.user;
+      } catch (_) {}
     }
     if (!currentUser) {
       try {
@@ -3881,14 +3893,20 @@ async function refreshAuth() {
   }
   updateAuthUI();
   if (currentUser) {
-    await refreshSharedFlags();
-    renderTabs();
-    subscribeRealtimeAll();
-    setupDraftChannel();
-    restoreLastChannel();
-    await loadMessageOrderForCurrentChannel();
-    await loadMessages();
-    restoreInputGlobal();
+    try {
+      await refreshSharedFlags();
+      renderTabs();
+      subscribeRealtimeAll();
+      setupDraftChannel();
+      restoreLastChannel();
+      await loadMessageOrderForCurrentChannel();
+      await loadMessages();
+      restoreInputGlobal();
+    } catch (e) {
+      renderTabs();
+      try { await loadMessages(); } catch (_) {}
+      if (feedInner && emptyEl && !emptyEl.parentNode) feedInner.appendChild(emptyEl);
+    }
   } else {
     sharedChannels.clear();
     unreadCounts.clear();
