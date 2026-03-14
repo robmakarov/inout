@@ -1506,14 +1506,19 @@ function scrollFeedAtTouchEdge(clientY) {
   if (!feedEl) return false;
   var feedRect = feedEl.getBoundingClientRect();
   var edgeZone = 48;
-  var step = 18;
+  var step = 22;
   var maxScroll = feedEl.scrollHeight - feedEl.clientHeight;
   var inTop = clientY >= feedRect.top && clientY < feedRect.top + edgeZone;
   var inBottom = clientY > feedRect.bottom - edgeZone && clientY <= feedRect.bottom;
-  if (inTop) feedEl.scrollTop = Math.max(0, feedEl.scrollTop - step);
-  else if (inBottom && maxScroll > 0) feedEl.scrollTop = Math.min(maxScroll, feedEl.scrollTop + step);
-  else return false;
-  return true;
+  if (inTop) {
+    feedEl.scrollTop = Math.max(0, feedEl.scrollTop - step);
+    return true;
+  }
+  if (inBottom) {
+    if (maxScroll > 0) feedEl.scrollTop = Math.min(maxScroll, feedEl.scrollTop + step);
+    return true;
+  }
+  return false;
 }
 function tickEdgeScroll() {
   if (!scrollFeedAtTouchEdge(edgeScrollLastY)) clearEdgeScrollInterval();
@@ -1521,7 +1526,7 @@ function tickEdgeScroll() {
 function updateEdgeScroll(clientY) {
   edgeScrollLastY = clientY;
   var inZone = scrollFeedAtTouchEdge(clientY);
-  if (inZone && !edgeScrollIntervalId) edgeScrollIntervalId = setInterval(tickEdgeScroll, 20);
+  if (inZone && !edgeScrollIntervalId) edgeScrollIntervalId = setInterval(tickEdgeScroll, 16);
   else if (!inZone) clearEdgeScrollInterval();
 }
 
