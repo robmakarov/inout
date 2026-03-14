@@ -2804,7 +2804,7 @@ function createMsgRow(msg, isNew) {
   }, { passive: true });
   selectWrap.appendChild(selectBox);
 
-  /* long-press on message row (anywhere except checkbox/actions/links) starts drag-select */
+  /* long-press on message row (anywhere except checkbox/actions/links) starts drag-select; any movement cancels so reorder doesn't trigger it */
   row.addEventListener('mousedown', e => {
     if (!msg.id) return;
     if (e.target.closest('.msg-select-wrap, .msg-actions') || (e.target.closest('a') && e.target.closest('.msg-text'))) return;
@@ -2812,11 +2812,21 @@ function createMsgRow(msg, isNew) {
     const onDocUp = () => {
       if (timer) clearTimeout(timer);
       document.removeEventListener('mouseup', onDocUp, true);
+      document.removeEventListener('mousemove', onDocMove, true);
       if (!dragSelectStarted) return;
     };
+    const onDocMove = () => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      document.removeEventListener('mousemove', onDocMove, true);
+      document.removeEventListener('mouseup', onDocUp, true);
+    };
     document.addEventListener('mouseup', onDocUp, true);
+    document.addEventListener('mousemove', onDocMove, true);
     timer = setTimeout(() => {
       timer = null;
+      document.removeEventListener('mousemove', onDocMove, true);
+      document.removeEventListener('mouseup', onDocUp, true);
       dragSelectStarted = true;
       dragSelectMode = selectBox.checked ? 'deselect' : 'select';
       if (!selectMode) {
@@ -2861,12 +2871,24 @@ function createMsgRow(msg, isNew) {
       if (timer) clearTimeout(timer);
       document.removeEventListener('touchend', onDocTouchEnd, true);
       document.removeEventListener('touchcancel', onDocTouchEnd, true);
+      document.removeEventListener('touchmove', onDocTouchMove, true);
       if (!dragSelectStarted) return;
+    };
+    const onDocTouchMove = () => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      document.removeEventListener('touchmove', onDocTouchMove, true);
+      document.removeEventListener('touchend', onDocTouchEnd, true);
+      document.removeEventListener('touchcancel', onDocTouchEnd, true);
     };
     document.addEventListener('touchend', onDocTouchEnd, true);
     document.addEventListener('touchcancel', onDocTouchEnd, true);
+    document.addEventListener('touchmove', onDocTouchMove, true);
     timer = setTimeout(() => {
       timer = null;
+      document.removeEventListener('touchmove', onDocTouchMove, true);
+      document.removeEventListener('touchend', onDocTouchEnd, true);
+      document.removeEventListener('touchcancel', onDocTouchEnd, true);
       dragSelectStarted = true;
       e.preventDefault();
       dragSelectMode = selectBox.checked ? 'deselect' : 'select';
