@@ -2572,6 +2572,8 @@ function createMsgRow(msg, isNew) {
   row.addEventListener('touchstart', e => {
     if (!feedInner) return;
     if (e.target.closest('.msg-checkbox-zone')) return;
+    const contentLeft = row.querySelector('.msg-time') || row.querySelector('.msg-sender') || row.querySelector('.msg-text');
+    if (contentLeft && e.touches[0].clientX < contentLeft.getBoundingClientRect().left) return;
     if (!touchDragState || !touchDragState.bound) {
       setupTouchDragHandlers();
     }
@@ -2975,6 +2977,18 @@ function createMsgRow(msg, isNew) {
   row.appendChild(sender);
   row.appendChild(text);
   row.appendChild(actions);
+  row.addEventListener('mousedown', e => {
+    if (e.target.closest('.msg-checkbox-zone')) return;
+    const contentLeft = row.querySelector('.msg-time') || row.querySelector('.msg-sender') || row.querySelector('.msg-text');
+    if (contentLeft && e.clientX < contentLeft.getBoundingClientRect().left) {
+      pointerDownOnSelectArea = true;
+      const clear = () => {
+        document.removeEventListener('mouseup', clear, true);
+        pointerDownOnSelectArea = false;
+      };
+      document.addEventListener('mouseup', clear, true);
+    }
+  });
   return row;
 }
 
@@ -4445,8 +4459,9 @@ feedEl.addEventListener('drop', e => {
 }
 
 function scrollBottom() {
+  if (!feedEl) return;
   feedEl.scrollTop = feedEl.scrollHeight;
-  scrollBtn.classList.remove('visible');
+  if (scrollBtn) scrollBtn.classList.remove('visible');
   atBottom = true;
 }
 
@@ -4514,19 +4529,21 @@ function humanError(message) {
 function markLoaded() {
   try {
     if (document.body && !document.body.classList.contains('loaded')) document.body.classList.add('loaded');
-    if (input) input.focus();
+    if (typeof input !== 'undefined' && input) input.focus();
   } catch (_) {}
 }
-try {
-  markLoaded();
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', markLoaded);
-  window.addEventListener('load', markLoaded);
-  init().catch(err => { console.error('init error', err); }).finally(markLoaded);
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && input) input.focus(); });
-} catch (err) {
-  console.error('startup error', err);
-  markLoaded();
-}
+(function go() {
+  try {
+    markLoaded();
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', markLoaded);
+    window.addEventListener('load', markLoaded);
+    if (typeof init === 'function') init().catch(function(err) { console.error('init error', err); }).finally(markLoaded);
+    document.addEventListener('visibilitychange', function() { if (document.visibilityState === 'visible' && typeof input !== 'undefined' && input) input.focus(); });
+  } catch (err) {
+    console.error('startup error', err);
+    markLoaded();
+  }
+})();
 </script>
 </body>
 </html>
