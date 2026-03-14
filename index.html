@@ -499,6 +499,8 @@ header{
   display:none;
   background:rgba(91, 155, 213, 0.55);
   border-radius:1px;
+  transform:translateZ(0);
+  isolation:isolate;
 }
 .feed-drop-indicator.visible{ display:block; }
 .feed-drop-origin{
@@ -512,6 +514,8 @@ header{
   background:#0a1628;
   border:none;
   box-sizing:border-box;
+  transform:translateZ(0);
+  isolation:isolate;
 }
 .feed-drop-origin.visible{ display:block; }
 
@@ -744,7 +748,6 @@ body.select-mode .msg-select-wrap,
   opacity: 1;
   transition: none;
   animation: none;
-  contain: layout style;
 }
 
 /* ── INPUT AREA ── */
