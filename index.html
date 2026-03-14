@@ -507,11 +507,12 @@ header{
   position:fixed;
   left:0;
   width:100%;
-  height:2px;
+  height:3px;
   pointer-events:none;
-  z-index:9998;
+  z-index:2147483646;
   display:none;
-  background:#0a1628;
+  background:#2563eb;
+  box-shadow:0 0 0 1px rgba(37,99,235,0.6);
   border:none;
   box-sizing:border-box;
   transform:translateZ(0);
@@ -561,8 +562,13 @@ header{
 .msg.msg-drag-over{background:var(--bg2)}
 /* during DnD reorder, disable hover on dragged rows only; keep other rows normal brightness */
 body.dnd-active .msg{transition:none;animation:none}
+body.dnd-active .msg:not(.dragging):not(.msg-drag-group){
+  opacity:1;
+  background:transparent;
+}
 body.dnd-active .msg:not(.dragging):not(.msg-drag-group) .msg-time,
-body.dnd-active .msg:not(.dragging):not(.msg-drag-group) .msg-sender{color:var(--text)}
+body.dnd-active .msg:not(.dragging):not(.msg-drag-group) .msg-sender,
+body.dnd-active .msg:not(.dragging):not(.msg-drag-group) .msg-text{color:var(--text)}
 body.dnd-active .msg.dragging,
 body.dnd-active .msg.msg-drag-group{background:transparent}
 body.dnd-active .msg.dragging .msg-select-wrap,
@@ -2062,7 +2068,7 @@ function updateOriginLinePosition() {
   if (originContentTop < scrollTop) {
     topPx = feedRect.top;
   } else if (originContentTop > scrollTop + feedHeight) {
-    topPx = feedRect.bottom - 2;
+    topPx = feedRect.bottom - 3;
   } else {
     topPx = feedRect.top + (originContentTop - scrollTop) - 1;
   }
