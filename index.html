@@ -1589,18 +1589,22 @@ async function undoLastAction() {
       }));
       const { error } = await sb.from('entries').insert(rows);
       if (error) throw error;
-      rows.forEach(e => {
-        const row = createMsgRow(e, false);
-        if (row) {
-          feedInner.appendChild(row);
-          if (e.id != null) currentMessageOrder.push(e.id);
-          msgCount++;
-        }
+      requestAnimationFrame(() => {
+        const frag = document.createDocumentFragment();
+        rows.forEach(e => {
+          const row = createMsgRow(e, false);
+          if (row) {
+            frag.appendChild(row);
+            if (e.id != null) currentMessageOrder.push(e.id);
+            msgCount++;
+          }
+        });
+        feedInner.appendChild(frag);
+        updateMsgCount();
+        saveMessageOrderForCurrentChannel();
+        applyFieldPrefsToMessages();
+        showEmptyIfNoMessages();
       });
-      updateMsgCount();
-      saveMessageOrderForCurrentChannel();
-      applyFieldPrefsToMessages();
-      showEmptyIfNoMessages();
     } else if (action.type === 'move' && Array.isArray(action.entries) && action.entries.length) {
       const rows = action.entries;
       await Promise.all(rows.map(e => {
@@ -1611,35 +1615,41 @@ async function undoLastAction() {
           .eq('id', e.id);
       }));
       const forCurrent = rows.filter(e => e.channel === currentChannel);
-      forCurrent.forEach(e => {
-        const row = createMsgRow(e, false);
-        if (row) {
-          feedInner.appendChild(row);
-          if (e.id != null) currentMessageOrder.push(e.id);
-          msgCount++;
+      requestAnimationFrame(() => {
+        const frag = document.createDocumentFragment();
+        forCurrent.forEach(e => {
+          const row = createMsgRow(e, false);
+          if (row) {
+            frag.appendChild(row);
+            if (e.id != null) currentMessageOrder.push(e.id);
+            msgCount++;
+          }
+        });
+        if (frag.childNodes.length) feedInner.appendChild(frag);
+        if (forCurrent.length) {
+          saveMessageOrderForCurrentChannel();
+          applyMessageOrderToDOM();
+          applyFieldPrefsToMessages();
         }
+        showEmptyIfNoMessages();
       });
-      if (forCurrent.length) {
-        saveMessageOrderForCurrentChannel();
-        applyMessageOrderToDOM();
-        applyFieldPrefsToMessages();
-      }
-      showEmptyIfNoMessages();
     } else if (action.type === 'send' && Array.isArray(action.entries) && action.entries.length) {
       const ids = action.entries.map(e => e.id).filter(Boolean);
       if (ids.length) {
         const { error } = await sb.from('entries').delete().in('id', ids);
         if (error) throw error;
       }
-      ids.forEach(id => {
-        const el = feedInner.querySelector('.msg[data-id="' + CSS.escape(String(id)) + '"]');
-        if (el) el.remove();
-        currentMessageOrder = currentMessageOrder.filter(x => x !== id);
-        msgCount = Math.max(0, msgCount - 1);
+      requestAnimationFrame(() => {
+        ids.forEach(id => {
+          const el = feedInner.querySelector('.msg[data-id="' + CSS.escape(String(id)) + '"]');
+          if (el) el.remove();
+        });
+        currentMessageOrder = currentMessageOrder.filter(x => !ids.includes(x));
+        msgCount = Math.max(0, msgCount - ids.length);
+        updateMsgCount();
+        saveMessageOrderForCurrentChannel();
+        showEmptyIfNoMessages();
       });
-      updateMsgCount();
-      saveMessageOrderForCurrentChannel();
-      showEmptyIfNoMessages();
     } else if (action.type === 'edit' && Array.isArray(action.entries) && action.entries.length) {
       const rows = action.entries;
       await Promise.all(rows.map(e => {
@@ -2583,6 +2593,22 @@ function createMsgRow(msg, isNew) {
   });
 
   row.addEventListener('click', e => {
+    if (selectMode) {
+      if (e.target.closest('.msg-actions')) return;
+      if (e.target.closest('.msg-select-wrap')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      selectBox.checked = !selectBox.checked;
+      if (selectBox.checked) {
+        selectedIds.add(msg.id);
+        row.classList.add('msg-selected');
+      } else {
+        selectedIds.delete(msg.id);
+        row.classList.remove('msg-selected');
+      }
+      updateSelectionUI();
+      return;
+    }
     if (!editingMessageId) return;
     if (String(row.dataset.id) !== String(editingMessageId)) return;
     if (e.target.closest('button, a, .msg-actions, .msg-select, .msg-select-wrap')) return;
