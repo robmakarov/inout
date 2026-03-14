@@ -395,17 +395,6 @@ body.loaded #feed{
   min-height:100%;
   gap:0;
 }
-/* drop position indicator during message DnD */
-.feed-drop-indicator{
-  flex-shrink:0;
-  height:0;
-  margin:0 20px;
-  border-top:3px solid var(--acc);
-  box-shadow:0 0 10px var(--acc);
-  pointer-events:none;
-  opacity:.95;
-}
-
 /* empty state */
 #empty{
   flex:1;
@@ -588,34 +577,9 @@ body.select-mode .msg-select-wrap,
 }
 
 .msg.dragging{
-  opacity: 0;
+  opacity: 1;
   box-shadow: 0 0 0 1px var(--line);
   background: var(--bg2);
-  pointer-events: none;
-}
-/* Custom drag sprite (replaces browser ghost); setDragImage uses this */
-.app-drag-sprite{
-  position:fixed;
-  left:-9999px;
-  top:0;
-  z-index:10000;
-  pointer-events:none;
-  padding:10px 14px;
-  border-radius:8px;
-  background:var(--bg2);
-  box-shadow:0 4px 16px rgba(0,0,0,.25), 0 0 0 1px var(--line);
-  color:var(--text);
-  font-size:13px;
-  font-family:inherit;
-  white-space:nowrap;
-  max-width:200px;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  animation: drag-sprite-float .4s ease-out infinite alternate;
-}
-@keyframes drag-sprite-float{
-  from{ transform: translateY(0) scale(1); box-shadow: 0 4px 16px rgba(0,0,0,.25), 0 0 0 1px var(--line); }
-  to{ transform: translateY(-2px) scale(1.02); box-shadow: 0 8px 20px rgba(0,0,0,.3), 0 0 0 1px var(--line); }
 }
 
 /* ── INPUT AREA ── */
@@ -1771,7 +1735,6 @@ let currentMessageOrder = [];
 let touchDragState = null; // for mobile long-press drag
 let dragDropHandled = false;
 let savedOrderBeforeDrag = [];
-let feedDropIndicatorEl = null;
 function focusMessageInput() {
   if (input) input.focus();
 }
@@ -2477,7 +2440,6 @@ function createMsgRow(msg, isNew) {
   row.className = 'msg' + (isNew ? ' new-flash' : '');
   if (typeof msg.id !== 'undefined') row.dataset.id = String(msg.id);
   row.draggable = true;
-  let dragSpriteEl = null;
   row.addEventListener('dragstart', e => {
     row.classList.add('dragging');
     savedOrderBeforeDrag = currentMessageOrder.slice();
@@ -2485,18 +2447,8 @@ function createMsgRow(msg, isNew) {
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', typeof msg.text === 'string' ? msg.text : '');
     if (typeof msg.id !== 'undefined') e.dataTransfer.setData('application/x-inout-msg-id', String(msg.id));
-    const text = (typeof msg.text === 'string' ? msg.text : '').trim() || 'Message';
-    dragSpriteEl = document.createElement('div');
-    dragSpriteEl.className = 'app-drag-sprite';
-    dragSpriteEl.textContent = text;
-    document.body.appendChild(dragSpriteEl);
-    const rect = dragSpriteEl.getBoundingClientRect();
-    e.dataTransfer.setDragImage(dragSpriteEl, Math.round(rect.width / 2), Math.round(rect.height / 2));
   });
   row.addEventListener('dragend', () => {
-    if (dragSpriteEl && dragSpriteEl.parentNode) dragSpriteEl.remove();
-    dragSpriteEl = null;
-    if (feedDropIndicatorEl && feedDropIndicatorEl.parentNode) feedDropIndicatorEl.remove();
     row.classList.remove('dragging');
     tabsEl.querySelectorAll('.tab.tab-drop-target').forEach(t => t.classList.remove('tab-drop-target'));
     if (!dragDropHandled) {
@@ -2521,14 +2473,10 @@ function createMsgRow(msg, isNew) {
     const bounding = row.getBoundingClientRect();
     const offset = e.clientY - bounding.top;
     const halfway = bounding.height / 2;
-    const insertBeforeNode = offset > halfway ? row.nextSibling : row;
-    feedInner.insertBefore(dragging, insertBeforeNode);
-    if (!feedDropIndicatorEl && feedInner) {
-      feedDropIndicatorEl = document.createElement('div');
-      feedDropIndicatorEl.className = 'feed-drop-indicator';
-    }
-    if (feedDropIndicatorEl) {
-      feedInner.insertBefore(feedDropIndicatorEl, dragging.nextSibling);
+    if (offset > halfway) {
+      feedInner.insertBefore(dragging, row.nextSibling);
+    } else {
+      feedInner.insertBefore(dragging, row);
     }
   });
   row.addEventListener('drop', e => {
