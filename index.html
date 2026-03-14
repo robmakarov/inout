@@ -4440,7 +4440,6 @@ feedEl.addEventListener('dragover', e => {
   } else if (wantAppend) {
     lineY = lastRect.bottom;
   } else {
-    const rowGap = 4;
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       const rect = r.getBoundingClientRect();
@@ -4451,16 +4450,8 @@ feedEl.addEventListener('dragover', e => {
           lineY = rect.bottom;
           break;
         }
-        const top = rect.top + rowGap;
-        const bottom = rect.bottom - rowGap;
         const halfway = rect.top + rect.height / 2;
-        if (y < top) {
-          insertBeforeNode = r;
-          lineY = rect.top;
-        } else if (y > bottom) {
-          insertBeforeNode = r.nextSibling;
-          lineY = rect.bottom;
-        } else if (y < halfway) {
+        if (y < halfway) {
           insertBeforeNode = r;
           lineY = rect.top;
         } else {
