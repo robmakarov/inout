@@ -1581,9 +1581,27 @@ const CURRENT_CHANNEL_KEY  = 'inout_current_channel_v1';
 const INPUT_STATE_KEY      = 'inout_input_state_v2';
 const FIELD_PREFS_KEY      = 'inout_field_prefs_v1';
 const ORDER_STATE_KEY      = 'inout_order_state_v1';
+const SCROLL_STATE_KEY     = 'inout_scroll_state_v1';
 const WAS_EDITING_KEY      = 'inout_was_editing_v1';
 const seenIds       = new Set();
 const channelScroll = new Map();
+function loadScrollState() {
+  try {
+    var raw = localStorage.getItem(SCROLL_STATE_KEY);
+    if (!raw) return;
+    var o = JSON.parse(raw);
+    if (o && typeof o === 'object') {
+      for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k) && typeof o[k] === 'number' && o[k] >= 0) channelScroll.set(k, o[k]);
+    }
+  } catch (_) {}
+}
+function saveScrollState() {
+  try {
+    var o = {};
+    channelScroll.forEach(function(v, k) { o[k] = v; });
+    localStorage.setItem(SCROLL_STATE_KEY, JSON.stringify(o));
+  } catch (_) {}
+}
 const unreadCounts  = new Map();
 const sharedChannels = new Set();
 let channelSubs = new Map();
@@ -2075,6 +2093,7 @@ async function init() {
     }
   }
   loadChannelsList();
+  loadScrollState();
   await refreshAuth();
   if (currentUser) {
     await syncChannelsFromServer();
@@ -2083,7 +2102,7 @@ async function init() {
   setupTabs();
   restoreLastChannel();
   await loadMessageOrderForCurrentChannel();
-  loadFieldPrefsForCurrentChannel();
+  await loadFieldPrefsForCurrentChannel();
   refreshMoveTargets();
   if (currentUser) {
     await loadMessages();
@@ -2094,7 +2113,20 @@ async function init() {
     subscribeActionLog();
   }
   setupPresence();
-  scrollBottom();
+  (function restoreScroll() {
+    var saved = channelScroll.get(currentChannel);
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        if (feedEl) {
+          if (typeof saved === 'number' && saved >= 0) {
+            feedEl.scrollTop = Math.min(saved, Math.max(0, feedEl.scrollHeight - feedEl.clientHeight));
+          } else {
+            scrollBottom();
+          }
+        }
+      });
+    });
+  })();
   cleanupAuthHash();
   setupFullscreenOnFirstTap();
   if (input) input.focus();
@@ -2580,27 +2612,58 @@ function updateClearInputBtn() {
   clearInputBtn.disabled = !input.value;
 }
 
-function loadFieldPrefsForCurrentChannel() {
-  try {
-    const raw = localStorage.getItem(FIELD_PREFS_KEY);
-    const map = raw ? JSON.parse(raw) : {};
-    const prefs = map[currentChannel] || {};
-    // defaults: main -> time only, others -> time+author
-    const defTime = true;
-    const defAuthor = currentChannel === 'main' ? false : true;
-    fieldPrefs = {
-      showTime: typeof prefs.showTime === 'boolean' ? prefs.showTime : defTime,
-      showAuthor: typeof prefs.showAuthor === 'boolean' ? prefs.showAuthor : defAuthor,
-    };
-  } catch(_) {
-    fieldPrefs = { showTime:true, showAuthor: currentChannel !== 'main' };
-  }
+function applyFieldPrefsUI() {
   if (fieldTimeChk) fieldTimeChk.checked = !!fieldPrefs.showTime;
   if (fieldAuthorChk) {
     const isMain = currentChannel === 'main';
     fieldAuthorChk.disabled = isMain;
     fieldAuthorChk.checked = !isMain && !!fieldPrefs.showAuthor;
   }
+}
+
+async function loadFieldPrefsForCurrentChannel() {
+  const defTime = true;
+  const defAuthor = currentChannel === 'main' ? false : true;
+  if (currentUser) {
+    try {
+      const { data, error } = await sb
+        .from('views')
+        .select('config')
+        .eq('user_id', currentUser.id)
+        .eq('channel', currentChannel)
+        .limit(1)
+        .maybeSingle();
+      if (!error && data && data.config) {
+        const cfg = data.config || {};
+        fieldPrefs = {
+          showTime: typeof cfg.showTime === 'boolean' ? cfg.showTime : defTime,
+          showAuthor: typeof cfg.showAuthor === 'boolean' ? cfg.showAuthor : defAuthor,
+        };
+        try {
+          const raw = localStorage.getItem(FIELD_PREFS_KEY);
+          const map = raw ? JSON.parse(raw) : {};
+          map[currentChannel] = { showTime: !!fieldPrefs.showTime, showAuthor: !!fieldPrefs.showAuthor };
+          localStorage.setItem(FIELD_PREFS_KEY, JSON.stringify(map));
+        } catch (_) {}
+        applyFieldPrefsUI();
+        applyFieldPrefsToMessages();
+        return;
+      }
+    } catch (_) {}
+  }
+  try {
+    const raw = localStorage.getItem(FIELD_PREFS_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    const prefs = map[currentChannel] || {};
+    fieldPrefs = {
+      showTime: typeof prefs.showTime === 'boolean' ? prefs.showTime : defTime,
+      showAuthor: typeof prefs.showAuthor === 'boolean' ? prefs.showAuthor : defAuthor,
+    };
+  } catch (_) {
+    fieldPrefs = { showTime: true, showAuthor: currentChannel !== 'main' };
+  }
+  applyFieldPrefsUI();
+  applyFieldPrefsToMessages();
 }
 
 function saveFieldPrefsForCurrentChannel() {
@@ -2647,13 +2710,7 @@ function applyFieldPrefsToMessages() {
       senderEl.style.display = !isMain && fieldPrefs.showAuthor ? '' : 'none';
     }
   });
-  // Keep View dropdown checkboxes visually aligned with actual behavior.
-  if (fieldTimeChk) fieldTimeChk.checked = !!fieldPrefs.showTime;
-  if (fieldAuthorChk) {
-    const isMain = currentChannel === 'main';
-    fieldAuthorChk.disabled = isMain;
-    fieldAuthorChk.checked = !isMain && !!fieldPrefs.showAuthor;
-  }
+  applyFieldPrefsUI();
 }
 
 /* ═══ RENDER ══════════════════════════════════════════════ */
@@ -3619,11 +3676,12 @@ async function refreshSharedFlags() {
   }
 }
 
-function switchChannel(ch) {
+async function switchChannel(ch) {
   if (ch === currentChannel) return;
   if (editingMessageId != null) cancelEditingMode(true);
   if (feedEl) {
     channelScroll.set(currentChannel, feedEl.scrollTop);
+    saveScrollState();
   }
   currentChannel = ch;
   try {
@@ -3633,8 +3691,7 @@ function switchChannel(ch) {
   updateTabsUI();
   updateTabBadge(ch);
   refreshMoveTargets();
-  loadFieldPrefsForCurrentChannel();
-  applyFieldPrefsToMessages();
+  await loadFieldPrefsForCurrentChannel();
   if (currentUser) {
     ensureMembership().then(reloadForUser);
   } else {
@@ -4609,10 +4666,16 @@ function autoResize() {
 }
 
 /* ═══ SCROLL ══════════════════════════════════════════════ */
-if (feedEl) feedEl.addEventListener('scroll', () => {
-  atBottom = isNearBottom();
-  if (atBottom) scrollBtn.classList.remove('visible');
-}, { passive: true });
+var scrollSaveTimer = null;
+if (feedEl) {
+  feedEl.addEventListener('scroll', () => {
+    atBottom = isNearBottom();
+    if (atBottom) scrollBtn.classList.remove('visible');
+    channelScroll.set(currentChannel, feedEl.scrollTop);
+    if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
+    scrollSaveTimer = setTimeout(saveScrollState, 200);
+  }, { passive: true });
+}
 
 /* FLIP animation: smooth shift of rows when reordering during drag */
 function flipAnimateShift(feedInner, dragging, oldRects, rowsArray) {
