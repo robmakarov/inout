@@ -3853,13 +3853,17 @@ async function ensureMembership() {
 /* ═══ AUTH ════════════════════════════════════════════════ */
 async function refreshAuth() {
   try {
+    try {
+      var b = sessionStorage.getItem(AUTH_BACKUP_KEY);
+      if (b) currentUser = JSON.parse(b);
+    } catch (_) {}
     const { data: sessionData } = await sb.auth.getSession();
     const session = sessionData?.session ?? null;
-    currentUser = session?.user ?? null;
-    if (!currentUser) {
+    if (session?.user) {
+      currentUser = session.user;
+    } else if (!currentUser) {
       const { data: userData, error } = await sb.auth.getUser();
       if (!error && userData?.user) currentUser = userData.user;
-      else if (error) currentUser = null;
     }
     if (!currentUser) {
       try {
@@ -3869,7 +3873,11 @@ async function refreshAuth() {
     }
     if (currentUser) try { sessionStorage.setItem(AUTH_BACKUP_KEY, JSON.stringify(currentUser)); } catch (_) {}
   } catch (e) {
-    currentUser = null;
+    try {
+      var b = sessionStorage.getItem(AUTH_BACKUP_KEY);
+      if (b) currentUser = JSON.parse(b);
+    } catch (_) {}
+    if (!currentUser) currentUser = null;
   }
   updateAuthUI();
   if (currentUser) {
