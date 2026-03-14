@@ -385,6 +385,7 @@ body.loaded #feed{
   opacity:1;
 }
 #feed:focus{outline:none}
+#feed.feed-updating{opacity:0.998;contain:layout style}
 
 .feed-inner{
   padding:16px 0 8px;
@@ -727,68 +728,62 @@ body.loaded #input-area{
   gap:0;
   margin-top:6px;
 }
-#log-action-btn{
+.log-dropup-wrap{
   margin-left:20px;
-  font-size:10px;
-  padding:4px 8px;
-  min-width:28px;
   position:relative;
 }
-#log-action-btn .log-badge{
-  position:absolute;
-  top:-2px;
-  right:-2px;
-  width:8px;
-  height:8px;
-  border-radius:50%;
-  background:var(--acc);
-  opacity:0;
-  transition:opacity .15s;
+#log-action-btn{
+  font-size:11px;
+  padding:6px 10px;
+  min-width:80px;
+  max-width:180px;
+  text-align:left;
+  border:1px solid var(--line2);
+  background:var(--bg2);
+  color:var(--text);
+  border-radius:4px;
+  cursor:pointer;
+  transition:border-color .2s, box-shadow .2s;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
 }
-#log-action-btn.has-error .log-badge{background:#c55;opacity:1}
-#log-action-btn.has-events .log-badge{background:var(--muted);opacity:1}
-#log-modal-backdrop{
+#log-action-btn .log-caption{
+  display:block;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+#log-action-btn.error-signal{
+  border-color:#c55;
+  box-shadow:0 0 0 1px #c55;
+}
+#log-action-btn.error-signal-faded{
+  border-color:rgba(197,85,85,0.5);
+  box-shadow:none;
+}
+#log-dropup-panel{
   display:none;
-  position:fixed;
-  inset:0;
-  background:rgba(0,0,0,.5);
-  z-index:200;
-  align-items:center;
-  justify-content:center;
-  padding:20px;
-}
-#log-modal-backdrop.open{display:flex}
-#log-modal{
+  position:absolute;
+  bottom:100%;
+  left:0;
+  margin-bottom:4px;
+  width:320px;
+  max-height:280px;
   background:var(--bg2);
   border:1px solid var(--line2);
-  border-radius:8px;
-  max-width:420px;
-  width:100%;
-  max-height:80vh;
-  display:flex;
+  border-radius:6px;
+  box-shadow:0 -4px 20px rgba(0,0,0,.35);
+  z-index:200;
   flex-direction:column;
-  box-shadow:0 8px 32px rgba(0,0,0,.4);
+  overflow:hidden;
 }
-#log-modal .log-modal-top{
+#log-dropup-panel.open{
   display:flex;
-  align-items:center;
-  justify-content:space-between;
-  padding:12px 16px;
-  border-bottom:1px solid var(--line);
 }
-#log-modal .log-modal-title{font-size:13px;font-weight:600;color:var(--text)}
-#log-modal .log-modal-close{
-  background:none;
-  border:none;
-  color:var(--soft);
-  font-size:18px;
-  cursor:pointer;
-  padding:0 4px;
-  line-height:1;
-}
-#log-modal .log-modal-body{
+#log-dropup-panel .log-dropup-body{
   overflow-y:auto;
-  padding:8px;
+  padding:6px;
   flex:1;
   min-height:0;
 }
@@ -796,8 +791,8 @@ body.loaded #input-area{
   display:flex;
   align-items:flex-start;
   gap:8px;
-  padding:8px 10px;
-  margin-bottom:4px;
+  padding:6px 8px;
+  margin-bottom:2px;
   border-radius:4px;
   border:1px solid transparent;
   transition:background .12s, border-color .12s;
@@ -808,6 +803,8 @@ body.loaded #input-area{
 }
 .log-event-card.from-this-device{border-left:3px solid var(--acc)}
 .log-event-card.error{border-left:3px solid #c55}
+.log-event-card.error .log-event-action,
+.log-event-card.error .log-event-message{color:#e88}
 .log-event-card .log-event-time{
   font-size:10px;
   color:var(--muted);
@@ -1225,23 +1222,18 @@ body.loaded #input-area{
     </div>
     <div class="input-tools">
       <button id="clipboard-button" class="draft-btn">From clipboard</button>
-      <button id="log-action-btn" class="draft-btn" aria-label="Action log"><span class="log-badge"></span>Log</button>
+      <div class="log-dropup-wrap">
+        <button id="log-action-btn" type="button" aria-label="Action log"><span class="log-caption">Log</span></button>
+        <div id="log-dropup-panel" role="dialog" aria-label="Action log">
+          <div class="log-dropup-body" id="log-dropup-body"></div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
 
 <button id="scroll-btn" onclick="scrollBottom()">↓ new messages</button>
 <div id="toast"></div>
-
-<div id="log-modal-backdrop" aria-hidden="true">
-  <div id="log-modal" role="dialog" aria-modal="true" aria-label="Action log">
-    <div class="log-modal-top">
-      <span class="log-modal-title">Action log</span>
-      <button type="button" id="log-modal-close" class="log-modal-close" aria-label="Close">×</button>
-    </div>
-    <div class="log-modal-body" id="log-modal-body"></div>
-  </div>
-</div>
 
 <div id="user-modal-backdrop" aria-hidden="true">
   <div id="user-modal" role="dialog" aria-modal="true" aria-label="Account">
@@ -1406,9 +1398,8 @@ const cmOthers   = document.getElementById('cm-others');
 const cmCancel   = document.getElementById('cm-cancel');
 const cmCreate   = document.getElementById('cm-create');
 const logActionBtn   = document.getElementById('log-action-btn');
-const logModalBackdrop = document.getElementById('log-modal-backdrop');
-const logModalClose   = document.getElementById('log-modal-close');
-const logModalBody    = document.getElementById('log-modal-body');
+const logDropupPanel = document.getElementById('log-dropup-panel');
+const logDropupBody  = document.getElementById('log-dropup-body');
 
 let msgCount    = 0;
 let atBottom    = true;
@@ -1442,6 +1433,7 @@ let fieldPrefs = { showTime:true, showAuthor:true };
 let undoStack = [];
 let actionLog = [];
 let actionLogSub = null;
+let logErrorSignalTimer = null;
 /* Create table in Supabase SQL editor for realtime log across devices:
 create table if not exists action_log (
   id uuid primary key default gen_random_uuid(),
@@ -1516,19 +1508,40 @@ function logError(message) {
   }
 }
 
-function updateLogBadge() {
-  if (!logActionBtn) return;
-  const hasError = actionLog.some(e => e.type === 'error');
-  const hasEvents = actionLog.length > 0;
-  logActionBtn.classList.toggle('has-error', hasError);
-  logActionBtn.classList.toggle('has-events', hasEvents && !hasError);
+function getLastEventCaption() {
+  const e = actionLog[0];
+  if (!e) return 'Log';
+  if (e.type === 'error' && e.message) {
+    const s = String(e.message);
+    return s.length > 40 ? s.slice(0, 37) + '…' : s;
+  }
+  return e.action || e.type || 'Log';
 }
 
-function renderLogModal() {
-  if (!logModalBody) return;
-  logModalBody.innerHTML = '';
+function updateLogBadge() {
+  if (!logActionBtn) return;
+  const captionEl = logActionBtn.querySelector('.log-caption');
+  if (captionEl) captionEl.textContent = getLastEventCaption();
+  const last = actionLog[0];
+  const isError = last && last.type === 'error';
+  logActionBtn.classList.remove('error-signal', 'error-signal-faded');
+  if (isError) {
+    logActionBtn.classList.add('error-signal');
+    clearTimeout(logErrorSignalTimer);
+    logErrorSignalTimer = setTimeout(() => {
+      if (logActionBtn) {
+        logActionBtn.classList.remove('error-signal');
+        logActionBtn.classList.add('error-signal-faded');
+      }
+    }, 5000);
+  }
+}
+
+function renderLogDropup() {
+  if (!logDropupBody) return;
+  logDropupBody.innerHTML = '';
   if (!actionLog.length) {
-    logModalBody.innerHTML = '<p style="padding:12px;color:var(--muted);font-size:11px;">No events yet.</p>';
+    logDropupBody.innerHTML = '<p style="padding:10px;color:var(--muted);font-size:11px;">No events yet.</p>';
     return;
   }
   actionLog.forEach(entry => {
@@ -1544,21 +1557,19 @@ function renderLogModal() {
         '<div class="log-event-action">' + escapeHtml(actionLabel) + '</div>' +
         (entry.message ? '<div class="log-event-message">' + escapeHtml(entry.message) + '</div>' : '') +
       '</div>';
-    logModalBody.appendChild(card);
+    logDropupBody.appendChild(card);
   });
 }
 
-function openLogModal() {
-  if (!logModalBackdrop) return;
-  renderLogModal();
-  logModalBackdrop.classList.add('open');
-  logModalBackdrop.setAttribute('aria-hidden', 'false');
+function openLogDropup() {
+  if (!logDropupPanel) return;
+  renderLogDropup();
+  logDropupPanel.classList.add('open');
 }
 
-function closeLogModal() {
-  if (!logModalBackdrop) return;
-  logModalBackdrop.classList.remove('open');
-  logModalBackdrop.setAttribute('aria-hidden', 'true');
+function closeLogDropup() {
+  if (!logDropupPanel) return;
+  logDropupPanel.classList.remove('open');
 }
 
 function pushUndo(action) {
@@ -1589,6 +1600,7 @@ async function undoLastAction() {
       }));
       const { error } = await sb.from('entries').insert(rows);
       if (error) throw error;
+      if (feedEl) feedEl.classList.add('feed-updating');
       requestAnimationFrame(() => {
         const frag = document.createDocumentFragment();
         rows.forEach(e => {
@@ -1604,6 +1616,7 @@ async function undoLastAction() {
         saveMessageOrderForCurrentChannel();
         applyFieldPrefsToMessages();
         showEmptyIfNoMessages();
+        requestAnimationFrame(() => { if (feedEl) feedEl.classList.remove('feed-updating'); });
       });
     } else if (action.type === 'move' && Array.isArray(action.entries) && action.entries.length) {
       const rows = action.entries;
@@ -1615,6 +1628,7 @@ async function undoLastAction() {
           .eq('id', e.id);
       }));
       const forCurrent = rows.filter(e => e.channel === currentChannel);
+      if (feedEl) feedEl.classList.add('feed-updating');
       requestAnimationFrame(() => {
         const frag = document.createDocumentFragment();
         forCurrent.forEach(e => {
@@ -1632,6 +1646,7 @@ async function undoLastAction() {
           applyFieldPrefsToMessages();
         }
         showEmptyIfNoMessages();
+        requestAnimationFrame(() => { if (feedEl) feedEl.classList.remove('feed-updating'); });
       });
     } else if (action.type === 'send' && Array.isArray(action.entries) && action.entries.length) {
       const ids = action.entries.map(e => e.id).filter(Boolean);
@@ -1639,6 +1654,7 @@ async function undoLastAction() {
         const { error } = await sb.from('entries').delete().in('id', ids);
         if (error) throw error;
       }
+      if (feedEl) feedEl.classList.add('feed-updating');
       requestAnimationFrame(() => {
         ids.forEach(id => {
           const el = feedInner.querySelector('.msg[data-id="' + CSS.escape(String(id)) + '"]');
@@ -1649,6 +1665,7 @@ async function undoLastAction() {
         updateMsgCount();
         saveMessageOrderForCurrentChannel();
         showEmptyIfNoMessages();
+        requestAnimationFrame(() => { if (feedEl) feedEl.classList.remove('feed-updating'); });
       });
     } else if (action.type === 'edit' && Array.isArray(action.entries) && action.entries.length) {
       const rows = action.entries;
@@ -1822,15 +1839,18 @@ if (umClose) umClose.addEventListener('click', closeUserModal);
 if (umBackdrop) umBackdrop.addEventListener('click', e => {
   if (e.target === umBackdrop) closeUserModal();
 });
-if (logActionBtn) logActionBtn.addEventListener('click', openLogModal);
-if (logModalClose) logModalClose.addEventListener('click', closeLogModal);
-if (logModalBackdrop) logModalBackdrop.addEventListener('click', e => {
-  if (e.target === logModalBackdrop) closeLogModal();
+if (logActionBtn) logActionBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  if (logDropupPanel && logDropupPanel.classList.contains('open')) closeLogDropup();
+  else openLogDropup();
+});
+document.addEventListener('click', e => {
+  if (logDropupPanel && logDropupPanel.classList.contains('open') && !logDropupPanel.contains(e.target) && e.target !== logActionBtn) closeLogDropup();
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
-    if (logModalBackdrop && logModalBackdrop.classList.contains('open')) {
-      closeLogModal();
+    if (logDropupPanel && logDropupPanel.classList.contains('open')) {
+      closeLogDropup();
       return;
     }
     if (umBackdrop && umBackdrop.style.display === 'block') {
@@ -2090,7 +2110,7 @@ function subscribeActionLog() {
           actionLog.unshift(entry);
           if (actionLog.length > 200) actionLog.pop();
           updateLogBadge();
-          if (logModalBackdrop && logModalBackdrop.classList.contains('open')) renderLogModal();
+          if (logDropupPanel && logDropupPanel.classList.contains('open')) renderLogDropup();
         }
       )
       .subscribe();
@@ -2422,7 +2442,8 @@ function createMsgRow(msg, isNew) {
   row.addEventListener('dragstart', e => {
     row.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
-    if (typeof msg.id !== 'undefined') e.dataTransfer.setData('text/plain', String(msg.id));
+    e.dataTransfer.setData('text/plain', typeof msg.text === 'string' ? msg.text : '');
+    if (typeof msg.id !== 'undefined') e.dataTransfer.setData('application/x-inout-msg-id', String(msg.id));
   });
   row.addEventListener('dragend', () => {
     row.classList.remove('dragging');
@@ -2932,7 +2953,7 @@ function renderTabs() {
     btn.addEventListener('drop', e => {
       e.preventDefault();
       btn.classList.remove('tab-drop-target');
-      const id = e.dataTransfer.getData('text/plain');
+      const id = e.dataTransfer.getData('application/x-inout-msg-id') || e.dataTransfer.getData('text/plain');
       if (!id || ch === currentChannel) return;
       const numId = Number(id);
       if (!Number.isFinite(numId)) return;
