@@ -2952,9 +2952,22 @@ function createMsgRow(msg, isNew) {
   row.addEventListener('click', e => {
     if (selectMode) {
       if (e.target.closest('.msg-actions')) return;
-      if (e.target.closest('.msg-checkbox-zone')) return;
       if (e.target.closest('.msg-text')) return;
       if (dragSelectJustEnded || dragSelectToggledByTouch) return;
+      if (e.target.closest('.msg-checkbox-zone')) {
+        e.preventDefault();
+        e.stopPropagation();
+        selectBox.checked = !selectBox.checked;
+        if (selectBox.checked) {
+          selectedIds.add(msg.id);
+          row.classList.add('msg-selected');
+        } else {
+          selectedIds.delete(msg.id);
+          row.classList.remove('msg-selected');
+        }
+        updateSelectionUI();
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       selectBox.checked = !selectBox.checked;
