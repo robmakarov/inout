@@ -551,6 +551,7 @@ header{
 .msg:hover{background:var(--bg2)}
 .msg.msg-drag-over{background:var(--bg2)}
 /* during DnD reorder, disable hover so wrong rows don't blink */
+body.dnd-active .msg{transition:none;animation:none}
 body.dnd-active .msg:hover{background:transparent}
 body.dnd-active .msg:hover .msg-time,
 body.dnd-active .msg:hover .msg-sender{color:var(--dim)}
@@ -605,7 +606,7 @@ body.dnd-active .msg:hover .msg-actions{opacity:0;pointer-events:none}
 .msg.msg-drag-target .msg-sender,
 .msg.msg-drag-target .msg-text{
   transform:translateX(30px);
-  transition:transform .12s ease;
+  transition:none;
 }
 
 @media (max-width:540px){
@@ -743,25 +744,13 @@ body.select-mode .msg-select-wrap,
   background:rgba(232,213,160,0.04);
 }
 
-.msg.dragging{
-  opacity: 0.4;
-  box-shadow: 0 0 0 1px var(--line);
-  transition: opacity 0.15s ease-out;
-  background: var(--bg2);
-}
+.msg.dragging,
 .msg.msg-drag-group{
   opacity: 0.4;
+  box-shadow: 0 0 0 1px var(--line);
   background: var(--bg2);
-  transition: transform 0.15s ease-out, opacity 0.15s ease-out;
-  border-left: 3px solid var(--line2);
-}
-.msg.msg-drag-group-first{
-  border-top-left-radius: 8px;
-  border-top-right-radius: 8px;
-}
-.msg.msg-drag-group-last{
-  border-bottom-left-radius: 8px;
-  border-bottom-right-radius: 8px;
+  transition: none;
+  animation: none;
 }
 
 /* ── INPUT AREA ── */
@@ -2892,12 +2881,8 @@ function createMsgRow(msg, isNew) {
     } else {
       dragSelectedRows = [row];
     }
-    dragSelectedRows.forEach(function(r, i) {
-      if (dragSelectedRows.length > 1) {
-        r.classList.add('msg-drag-group');
-        r.classList.toggle('msg-drag-group-first', i === 0);
-        r.classList.toggle('msg-drag-group-last', i === dragSelectedRows.length - 1);
-      }
+    dragSelectedRows.forEach(function(r) {
+      if (dragSelectedRows.length > 1) r.classList.add('msg-drag-group');
     });
     row.classList.add('dragging');
     if (document.body) document.body.classList.add('dnd-active');
@@ -2907,11 +2892,7 @@ function createMsgRow(msg, isNew) {
     showDropOriginLine();
   });
   row.addEventListener('dragend', () => {
-    if (feedInner) {
-      feedInner.querySelectorAll('.msg-drag-group').forEach(r => {
-        r.classList.remove('msg-drag-group', 'msg-drag-group-first', 'msg-drag-group-last');
-      });
-    }
+    if (feedInner) feedInner.querySelectorAll('.msg-drag-group').forEach(r => r.classList.remove('msg-drag-group'));
     dragSelectedRows = [];
     if (document.body) document.body.classList.remove('dnd-active');
     lastReorderTarget = null;
@@ -2963,12 +2944,8 @@ function createMsgRow(msg, isNew) {
       } else {
         dragSelectedRows = [row];
       }
-      dragSelectedRows.forEach(function(r, i) {
-        if (dragSelectedRows.length > 1) {
-          r.classList.add('msg-drag-group');
-          r.classList.toggle('msg-drag-group-first', i === 0);
-          r.classList.toggle('msg-drag-group-last', i === dragSelectedRows.length - 1);
-        }
+      dragSelectedRows.forEach(function(r) {
+        if (dragSelectedRows.length > 1) r.classList.add('msg-drag-group');
       });
       row.classList.add('dragging');
       if (document.body) document.body.classList.add('dnd-active');
