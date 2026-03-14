@@ -1464,13 +1464,7 @@ if (document.body) document.body.classList.add('loaded');
 const SUPABASE_URL  = 'https://tfmbqiwxfgrwtjvoqomf.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_';
 var sb = null;
-try {
-  if (typeof supabase !== 'undefined') {
-    sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
-      auth: { detectSessionInUrl: true }
-    });
-  }
-} catch(e) {}
+try { if (typeof supabase !== 'undefined') sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON); } catch(e) {}
 const STRIPE_PUBLISHABLE_KEY = 'pk_live_xxx_replace_me';
 const STRIPE_PRICE_ID        = 'price_xxx_replace_me';
 let stripe = null;
@@ -3861,19 +3855,16 @@ async function ensureMembership() {
 
 /* ═══ AUTH ════════════════════════════════════════════════ */
 async function refreshAuth() {
-  if (!sb || !sb.auth) {
-    currentUser = null;
-    updateAuthUI();
-    return;
-  }
   try {
-    var session = null;
-    if (typeof sb.auth.getSession === 'function') {
-      var res = await sb.auth.getSession().catch(function() { return { data: { session: null } }; });
-      session = (res && res.data && res.data.session) || null;
+    const { data, error } = await sb.auth.getUser();
+    if (error) {
+      console.error(error);
+      currentUser = null;
+    } else {
+      currentUser = data.user ?? null;
     }
-    currentUser = (session && session.user) ?? null;
   } catch (e) {
+    console.error(e);
     currentUser = null;
   }
   updateAuthUI();
