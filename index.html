@@ -1468,6 +1468,7 @@ body.select-mode .msg-select-wrap,
 </div>
 
 <script>
+if (document.body) document.body.classList.add('loaded');
 /* INOUT – shared state, Supabase client, DOM refs (load first) */
 const SUPABASE_URL  = 'https://tfmbqiwxfgrwtjvoqomf.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_';
