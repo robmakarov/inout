@@ -480,6 +480,7 @@ header{
 #feed.feed-updating{opacity:0.998;contain:layout style}
 
 .feed-inner{
+  position:relative;
   padding:16px 0 8px;
   display:flex;
   flex-direction:column;
@@ -501,16 +502,19 @@ header{
 }
 .feed-drop-indicator.visible{ display:block; }
 .feed-drop-origin{
-  position:fixed;
+  position:absolute;
   left:0;
-  width:100%;
-  height:4px;
+  right:0;
+  height:14px;
+  margin-top:-7px;
   pointer-events:none;
-  z-index:9998;
+  z-index:100;
   display:none;
-  background:rgba(232, 213, 160, 0.2);
-  border-top:1px dashed rgba(232, 213, 160, 0.5);
-  border-radius:1px;
+  background:#e85c2b;
+  border:3px solid #c43d12;
+  box-shadow:0 0 0 2px rgba(255,255,255,0.5), 0 0 12px rgba(232,92,43,0.9);
+  border-radius:4px;
+  box-sizing:border-box;
 }
 .feed-drop-origin.visible{ display:block; }
 
@@ -746,15 +750,24 @@ body.select-mode .msg-select-wrap,
 }
 
 .msg.dragging{
-  opacity: 0.35;
+  opacity: 0.4;
   box-shadow: 0 0 0 1px var(--line);
   transition: opacity 0.15s ease-out;
   background: var(--bg2);
 }
 .msg.msg-drag-group{
-  opacity: 0.5;
+  opacity: 0.4;
   background: var(--bg2);
   transition: transform 0.15s ease-out, opacity 0.15s ease-out;
+  border-left: 3px solid var(--line2);
+}
+.msg.msg-drag-group-first{
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+.msg.msg-drag-group-last{
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
 }
 
 /* ── INPUT AREA ── */
@@ -2057,20 +2070,22 @@ function showDropOriginLine() {
   var block = (dragSelectedRows && dragSelectedRows.length > 0) ? dragSelectedRows : (feedInner.querySelector('.msg.dragging') ? [feedInner.querySelector('.msg.dragging')] : []);
   if (block.length === 0) return;
   var firstRow = block[0];
-  var r = firstRow.getBoundingClientRect();
-  var feedRect = feedEl.getBoundingClientRect();
+  var topPx = (firstRow.offsetTop || 0) - 2;
   if (!feedDropOriginEl) {
     feedDropOriginEl = document.createElement('div');
     feedDropOriginEl.className = 'feed-drop-origin';
-    document.body.appendChild(feedDropOriginEl);
+    feedDropOriginEl.setAttribute('aria-hidden', 'true');
   }
-  feedDropOriginEl.style.left = feedRect.left + 'px';
-  feedDropOriginEl.style.width = feedRect.width + 'px';
-  feedDropOriginEl.style.top = (r.top - 2) + 'px';
+  if (feedDropOriginEl.parentNode !== feedInner) feedInner.appendChild(feedDropOriginEl);
+  feedDropOriginEl.style.top = topPx + 'px';
+  feedDropOriginEl.style.marginTop = '0';
   feedDropOriginEl.classList.add('visible');
 }
 function hideDropOriginLine() {
-  if (feedDropOriginEl) feedDropOriginEl.classList.remove('visible');
+  if (feedDropOriginEl) {
+    feedDropOriginEl.classList.remove('visible');
+    if (feedDropOriginEl.parentNode) feedDropOriginEl.parentNode.removeChild(feedDropOriginEl);
+  }
 }
 function focusMessageInput() {
   if (input) input.focus();
@@ -2877,8 +2892,12 @@ function createMsgRow(msg, isNew) {
     } else {
       dragSelectedRows = [row];
     }
-    dragSelectedRows.forEach(function(r) {
-      if (r !== row) r.classList.add('msg-drag-group');
+    dragSelectedRows.forEach(function(r, i) {
+      if (dragSelectedRows.length > 1) {
+        r.classList.add('msg-drag-group');
+        r.classList.toggle('msg-drag-group-first', i === 0);
+        r.classList.toggle('msg-drag-group-last', i === dragSelectedRows.length - 1);
+      }
     });
     row.classList.add('dragging');
     if (document.body) document.body.classList.add('dnd-active');
@@ -2888,7 +2907,11 @@ function createMsgRow(msg, isNew) {
     showDropOriginLine();
   });
   row.addEventListener('dragend', () => {
-    if (feedInner) feedInner.querySelectorAll('.msg-drag-group').forEach(r => r.classList.remove('msg-drag-group'));
+    if (feedInner) {
+      feedInner.querySelectorAll('.msg-drag-group').forEach(r => {
+        r.classList.remove('msg-drag-group', 'msg-drag-group-first', 'msg-drag-group-last');
+      });
+    }
     dragSelectedRows = [];
     if (document.body) document.body.classList.remove('dnd-active');
     lastReorderTarget = null;
@@ -2938,8 +2961,12 @@ function createMsgRow(msg, isNew) {
       } else {
         dragSelectedRows = [row];
       }
-      dragSelectedRows.forEach(function(r) {
-        if (r !== row) r.classList.add('msg-drag-group');
+      dragSelectedRows.forEach(function(r, i) {
+        if (dragSelectedRows.length > 1) {
+          r.classList.add('msg-drag-group');
+          r.classList.toggle('msg-drag-group-first', i === 0);
+          r.classList.toggle('msg-drag-group-last', i === dragSelectedRows.length - 1);
+        }
       });
       row.classList.add('dragging');
       if (document.body) document.body.classList.add('dnd-active');
