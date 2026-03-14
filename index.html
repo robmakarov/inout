@@ -601,7 +601,7 @@ body.dnd-active .msg:hover .msg-actions{opacity:0;pointer-events:none}
 .msg.msg-drag-target .msg-time,
 .msg.msg-drag-target .msg-sender,
 .msg.msg-drag-target .msg-text{
-  transform:translateX(10px);
+  transform:translateX(30px);
   transition:transform .12s ease;
 }
 
@@ -2931,11 +2931,8 @@ function createMsgRow(msg, isNew) {
   }
 
   const isMainFeed = (msg.channel && msg.channel === 'main') || (!msg.channel && currentChannel === 'main');
-  if (isMainFeed) {
-    sender.style.display = 'none';
-  } else {
-    sender.style.display = '';
-  }
+  const wantAuthor = !isMainFeed && (!!fieldPrefs ? !!fieldPrefs.showAuthor : true);
+  sender.style.display = wantAuthor ? '' : 'none';
 
   const selectWrap = document.createElement('div');
   selectWrap.className = 'msg-select-wrap';
@@ -3214,6 +3211,9 @@ function createMsgRow(msg, isNew) {
   const time = document.createElement('div');
   time.className = 'msg-time';
   time.textContent = formatTime(msg.created_at);
+  if (fieldPrefs) {
+    time.style.display = fieldPrefs.showTime ? '' : 'none';
+  }
 
   const text = document.createElement('div');
   text.className = 'msg-text';
@@ -4680,23 +4680,8 @@ if (feedEl) {
 
 /* FLIP animation: smooth shift of rows when reordering during drag */
 function flipAnimateShift(feedInner, dragging, oldRects, rowsArray) {
-  if (!feedInner || !dragging || !oldRects) return;
-  const rows = rowsArray && rowsArray.length ? rowsArray : feedInner.querySelectorAll('.msg');
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i];
-    if (r === dragging) continue;
-    const old = oldRects.get(r);
-    if (!old) continue;
-    const nr = r.getBoundingClientRect();
-    const dy = nr.top - old.top;
-    if (Math.abs(dy) < 0.5) continue;
-    r.style.transform = 'translateY(' + (-dy) + 'px)';
-    r.offsetHeight;
-    r.style.transform = 'translateY(0)';
-  }
-  setTimeout(() => {
-    for (let i = 0; i < rows.length; i++) { if (rows[i] !== dragging) rows[i].style.transform = ''; }
-  }, 110);
+  // FLIP animation disabled to avoid extra ghost line at previous position.
+  // Keep function for API compatibility; no-op for now.
 }
 
 /* Single feed-level DnD: only the feed handles dragover/drop so drop always fires reliably */
