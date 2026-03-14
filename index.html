@@ -256,6 +256,7 @@ header{
   background:rgba(0,0,0,0.62);
   display:none;
   z-index:250;
+  pointer-events:auto;
 }
 
 #user-modal{
@@ -271,6 +272,12 @@ header{
   flex-direction:column;
   gap:12px;
   animation:drawerIn .18s ease both;
+  pointer-events:auto;
+}
+
+#user-modal button,
+#user-modal input{
+  pointer-events:auto;
 }
 
 @keyframes drawerIn{from{transform:translateX(10px);opacity:0}to{transform:translateX(0);opacity:1}}
@@ -1461,7 +1468,7 @@ body.select-mode .msg-select-wrap,
       <div class="um-label">Status</div>
       <div class="um-value" id="um-auth-status">Not signed in</div>
       <div class="um-row">
-        <button class="um-btn um-btn-primary" id="um-auth-btn">Sign in</button>
+        <button class="um-btn um-btn-primary" id="um-auth-btn" type="button" onclick="if(window.sb&&window.sb.auth&&window.sb.auth.signInWithOAuth){window.sb.auth.signInWithOAuth({provider:'google'})}">Sign in</button>
       </div>
     </div>
 
