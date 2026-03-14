@@ -2812,9 +2812,11 @@ function createMsgRow(msg, isNew) {
     const onMove = (ev) => {
       if (!state.started) return;
       applyDragSelectRect(feedInner, startY, ev.clientY, state.mode, state.startRowStates);
+      updateEdgeScroll(ev.clientY, ev.clientX);
       state.didWeMove = true;
     };
     const onEnd = () => {
+      clearEdgeScrollInterval();
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onEnd);
       if (state.started && !state.didWeMove) toggleRowAtY(feedInner, startY);
@@ -2915,9 +2917,11 @@ function createMsgRow(msg, isNew) {
     const onMove = (ev) => {
       if (!state.started) return;
       applyDragSelectRect(feedInner, startY, ev.clientY, state.mode, state.startRowStates);
+      updateEdgeScroll(ev.clientY, ev.clientX);
       state.didWeMove = true;
     };
     const onEnd = () => {
+      clearEdgeScrollInterval();
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onEnd);
       if (state.started && !state.didWeMove) toggleRowAtY(feedInner, startY);
