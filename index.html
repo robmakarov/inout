@@ -2118,12 +2118,7 @@ function init(done) {
   try { setupAuthListener(); } catch (_) {}
   finish();
   (function runAsync() {
-    Promise.race([
-      refreshAuth(),
-      new Promise(function(_, rej) { setTimeout(function() { rej(new Error('auth timeout')); }, 8000); })
-    ]).catch(function() {
-      /* timeout: don't overwrite currentUser — let existing session stay; just stop waiting */
-    }).then(function() {
+    refreshAuth().then(function() {
       if (typeof cleanupAuthHash === 'function') cleanupAuthHash();
       return Promise.race([
         (async function() {
@@ -3890,8 +3885,18 @@ async function refreshAuth() {
 }
 
 function setupAuthListener() {
-  sb.auth.onAuthStateChange(async (_event, session) => {
+  sb.auth.onAuthStateChange(async (event, session) => {
     const prevUser = currentUser;
+    if (!session) {
+      try {
+        const { data } = await sb.auth.getSession();
+        if (data?.session?.user) {
+          currentUser = data.session.user;
+          updateAuthUI();
+          return;
+        }
+      } catch (_) {}
+    }
     currentUser = session?.user ?? null;
     updateAuthUI();
     if (!prevUser && currentUser) {
