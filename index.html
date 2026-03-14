@@ -1441,6 +1441,8 @@ let latestClipboardText = '';
 let selectMode = false;
 let selectModeAutoOn = false; /* true when select mode was turned on by checking a box */
 const selectedIds = new Set();
+let dragSelectActive = false;
+let dragSelectStarted = false;
 let editingMessageId = null;
 let fieldPrefs = { showTime:true, showAuthor:true };
 let undoStack = [];
@@ -2625,6 +2627,117 @@ function createMsgRow(msg, isNew) {
     }
     updateSelectionUI();
   });
+  selectWrap.addEventListener('mousedown', e => {
+    if (!msg.id) return;
+    e.preventDefault();
+    let timer = null;
+    const onDocUp = () => {
+      if (timer) clearTimeout(timer);
+      document.removeEventListener('mouseup', onDocUp);
+      if (!dragSelectStarted) {
+        selectBox.checked = !selectBox.checked;
+        if (selectBox.checked) {
+          selectedIds.add(msg.id);
+          row.classList.add('msg-selected');
+        } else {
+          selectedIds.delete(msg.id);
+          row.classList.remove('msg-selected');
+        }
+        updateSelectionUI();
+      }
+    };
+    document.addEventListener('mouseup', onDocUp);
+    timer = setTimeout(() => {
+      timer = null;
+      dragSelectStarted = true;
+      if (!selectMode) setSelectMode(true);
+      selectedIds.add(msg.id);
+      row.classList.add('msg-selected');
+      selectBox.checked = true;
+      updateSelectionUI();
+      dragSelectActive = true;
+      const onMove = (e) => {
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const m = el && el.closest('.msg');
+        if (!m) return;
+        const box = m.querySelector('.msg-select');
+        const id = m.dataset.id != null ? Number(m.dataset.id) : NaN;
+        if (!box || !Number.isFinite(id)) return;
+        if (box.checked) return;
+        box.checked = true;
+        selectedIds.add(id);
+        m.classList.add('msg-selected');
+        updateSelectionUI();
+      };
+      const onEnd = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onEnd);
+        dragSelectActive = false;
+        dragSelectStarted = false;
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onEnd);
+    }, 380);
+  });
+  selectWrap.addEventListener('touchstart', e => {
+    if (!msg.id || e.touches.length !== 1) return;
+    let timer = null;
+    const onDocTouchEnd = () => {
+      if (timer) clearTimeout(timer);
+      document.removeEventListener('touchend', onDocTouchEnd);
+      document.removeEventListener('touchcancel', onDocTouchEnd);
+      if (!dragSelectStarted) {
+        selectBox.checked = !selectBox.checked;
+        if (selectBox.checked) {
+          selectedIds.add(msg.id);
+          row.classList.add('msg-selected');
+        } else {
+          selectedIds.delete(msg.id);
+          row.classList.remove('msg-selected');
+        }
+        updateSelectionUI();
+      }
+    };
+    document.addEventListener('touchend', onDocTouchEnd);
+    document.addEventListener('touchcancel', onDocTouchEnd);
+    timer = setTimeout(() => {
+      timer = null;
+      dragSelectStarted = true;
+      e.preventDefault();
+      if (!selectMode) setSelectMode(true);
+      selectedIds.add(msg.id);
+      row.classList.add('msg-selected');
+      selectBox.checked = true;
+      updateSelectionUI();
+      dragSelectActive = true;
+      const onTouchMove = (e) => {
+        if (e.touches.length !== 1) return;
+        e.preventDefault();
+        const t = e.touches[0];
+        const el = document.elementFromPoint(t.clientX, t.clientY);
+        const m = el && el.closest('.msg');
+        if (!m) return;
+        const box = m.querySelector('.msg-select');
+        const id = m.dataset.id != null ? Number(m.dataset.id) : NaN;
+        if (!box || !Number.isFinite(id)) return;
+        if (box.checked) return;
+        box.checked = true;
+        selectedIds.add(id);
+        m.classList.add('msg-selected');
+        updateSelectionUI();
+      };
+      const onTouchEnd = () => {
+        document.removeEventListener('touchmove', onTouchMove, { passive: false });
+        document.removeEventListener('touchend', onTouchEnd);
+        document.removeEventListener('touchcancel', onTouchEnd);
+        dragSelectActive = false;
+        dragSelectStarted = false;
+      };
+      document.addEventListener('touchmove', onTouchMove, { passive: false });
+      document.addEventListener('touchend', onTouchEnd);
+      document.addEventListener('touchcancel', onTouchEnd);
+    }, 380);
+  }, { passive: true });
   selectWrap.appendChild(selectBox);
 
   const time = document.createElement('div');
