@@ -3859,16 +3859,21 @@ async function ensureMembership() {
 
 /* ═══ AUTH ════════════════════════════════════════════════ */
 async function refreshAuth() {
+  // If Supabase auth isn't available, treat as signed out and skip network calls.
+  if (!sb || !sb.auth || typeof sb.auth.getUser !== 'function') {
+    currentUser = null;
+    updateAuthUI();
+    return;
+  }
   try {
     const { data, error } = await sb.auth.getUser();
     if (error) {
-      console.error(error);
+      // AuthSessionMissingError or any other auth error → behave as signed out.
       currentUser = null;
     } else {
       currentUser = data.user ?? null;
     }
   } catch (e) {
-    console.error(e);
     currentUser = null;
   }
   updateAuthUI();
