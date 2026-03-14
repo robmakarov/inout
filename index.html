@@ -4993,7 +4993,14 @@ function processFeedDragover(ev) {
     }
     var indLeft = feedRect.left;
     var indWidth = feedRect.width;
-    var indTop = lineY - 2;
+    var indTop;
+    if (lineY < feedRect.top) {
+      indTop = feedRect.top - 2;
+    } else if (lineY > feedRect.bottom) {
+      indTop = feedRect.bottom - 2;
+    } else {
+      indTop = lineY - 2;
+    }
     if (lastIndicatorStyle.left !== indLeft || lastIndicatorStyle.width !== indWidth || lastIndicatorStyle.top !== indTop) {
       feedDropIndicatorEl.style.left = indLeft + 'px';
       feedDropIndicatorEl.style.width = indWidth + 'px';
@@ -5073,7 +5080,8 @@ document.addEventListener('dragover', e => {
   const firstRect = firstRow.getBoundingClientRect();
   const lastRect = lastRow.getBoundingClientRect();
 
-  let lineY = y < feedRect.top ? firstRect.top : lastRect.bottom;
+  var lineY = y < feedRect.top ? firstRect.top : lastRect.bottom;
+  var indTop = lineY < feedRect.top ? feedRect.top - 2 : (lineY > feedRect.bottom ? feedRect.bottom - 2 : lineY - 2);
 
   if (!feedDropIndicatorEl) {
     feedDropIndicatorEl = document.createElement('div');
@@ -5083,7 +5091,7 @@ document.addEventListener('dragover', e => {
   feedDropIndicatorEl.style.left = feedRect.left + 'px';
   feedDropIndicatorEl.style.width = feedRect.width + 'px';
   feedDropIndicatorEl.style.height = '4px';
-  feedDropIndicatorEl.style.top = (lineY - 2) + 'px';
+  feedDropIndicatorEl.style.top = indTop + 'px';
   feedDropIndicatorEl.classList.add('visible');
 
   updateEdgeScroll(e.clientY, e.clientX);
