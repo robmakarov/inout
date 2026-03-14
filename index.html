@@ -395,6 +395,16 @@ body.loaded #feed{
   min-height:100%;
   gap:0;
 }
+/* drop position indicator during message DnD */
+.feed-drop-indicator{
+  flex-shrink:0;
+  height:0;
+  margin:0 20px;
+  border-top:3px solid var(--acc);
+  box-shadow:0 0 10px var(--acc);
+  pointer-events:none;
+  opacity:.95;
+}
 
 /* empty state */
 #empty{
@@ -1761,6 +1771,7 @@ let currentMessageOrder = [];
 let touchDragState = null; // for mobile long-press drag
 let dragDropHandled = false;
 let savedOrderBeforeDrag = [];
+let feedDropIndicatorEl = null;
 function focusMessageInput() {
   if (input) input.focus();
 }
@@ -2471,6 +2482,11 @@ function createMsgRow(msg, isNew) {
     row.classList.add('dragging');
     savedOrderBeforeDrag = currentMessageOrder.slice();
     dragDropHandled = false;
+    if (!feedDropIndicatorEl && feedInner) {
+      feedDropIndicatorEl = document.createElement('div');
+      feedDropIndicatorEl.className = 'feed-drop-indicator';
+    }
+    if (feedDropIndicatorEl && feedInner && !feedDropIndicatorEl.parentNode) feedInner.appendChild(feedDropIndicatorEl);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', typeof msg.text === 'string' ? msg.text : '');
     if (typeof msg.id !== 'undefined') e.dataTransfer.setData('application/x-inout-msg-id', String(msg.id));
@@ -2485,6 +2501,7 @@ function createMsgRow(msg, isNew) {
   row.addEventListener('dragend', () => {
     if (dragSpriteEl && dragSpriteEl.parentNode) dragSpriteEl.remove();
     dragSpriteEl = null;
+    if (feedDropIndicatorEl && feedDropIndicatorEl.parentNode) feedDropIndicatorEl.remove();
     row.classList.remove('dragging');
     tabsEl.querySelectorAll('.tab.tab-drop-target').forEach(t => t.classList.remove('tab-drop-target'));
     if (!dragDropHandled) {
@@ -2509,11 +2526,9 @@ function createMsgRow(msg, isNew) {
     const bounding = row.getBoundingClientRect();
     const offset = e.clientY - bounding.top;
     const halfway = bounding.height / 2;
-    if (offset > halfway) {
-      feedInner.insertBefore(dragging, row.nextSibling);
-    } else {
-      feedInner.insertBefore(dragging, row);
-    }
+    const insertBeforeNode = offset > halfway ? row.nextSibling : row;
+    feedInner.insertBefore(dragging, insertBeforeNode);
+    if (feedDropIndicatorEl) feedInner.insertBefore(feedDropIndicatorEl, dragging.nextSibling);
   });
   row.addEventListener('drop', e => {
     e.preventDefault();
