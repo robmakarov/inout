@@ -63,13 +63,6 @@ body{
   min-height:0;
   height:100vh;
   overflow:hidden;
-  opacity:0;
-  pointer-events:none;
-  transition:opacity .45s ease;
-}
-body.loaded #app{
-  opacity:1;
-  pointer-events:auto;
 }
 
 /* iOS/Safari dynamic viewport handling for app shell */
@@ -362,29 +355,17 @@ header{
 }
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
-/* ── SPLASH (loader is full-screen until body.loaded) ── */
+/* ── LOADER (shared: splash + empty state) ── */
 #app-loader{
-  position:fixed;
-  inset:0;
-  z-index:10000;
-  background:var(--bg);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  transition:opacity .5s ease, transform .5s cubic-bezier(0.22,1,0.36,1);
+  display:none;
 }
-body.loaded #app-loader{
-  opacity:0;
-  pointer-events:none;
-  transform:scale(1.06);
-}
-#app-loader-inner{
+.loader-inner{
   position:relative;
   width:88px;
   height:88px;
   overflow:visible;
 }
-#app-loader-inner .loader-ring{
+.loader-inner .loader-ring{
   position:absolute;
   inset:-8px;
   border:2px solid transparent;
@@ -393,7 +374,7 @@ body.loaded #app-loader{
   border-right-color:var(--acc2);
   animation:loader-spin 1.1s cubic-bezier(0.5, 0, 0.5, 1) infinite;
 }
-#app-loader-inner .loader-ring:nth-child(2){
+.loader-inner .loader-ring:nth-child(2){
   inset:-4px;
   border-top-color:transparent;
   border-right-color:transparent;
@@ -402,21 +383,21 @@ body.loaded #app-loader{
   animation-duration:0.9s;
   animation-direction:reverse;
 }
-#app-loader-inner .loader-ring:nth-child(3){
+.loader-inner .loader-ring:nth-child(3){
   inset:4px;
   border-right-color:transparent;
   border-bottom-color:var(--acc);
   animation-duration:1.3s;
   animation-direction:reverse;
 }
-#app-loader-inner .loader-dash{
+.loader-inner .loader-dash{
   position:absolute;
   inset:0;
   display:flex;
   align-items:center;
   justify-content:center;
 }
-#app-loader-inner .loader-dash::after{
+.loader-inner .loader-dash::after{
   content:'';
   width:70px;
   height:2px;
@@ -425,7 +406,7 @@ body.loaded #app-loader{
   box-shadow:0 0 12px rgba(232,213,160,0.4);
   animation:loader-bars 1.25s ease-in-out infinite;
 }
-#app-loader-inner .loader-dash::before{
+.loader-inner .loader-dash::before{
   content:'';
   width:44px;
   height:2px;
@@ -433,9 +414,7 @@ body.loaded #app-loader{
   background:linear-gradient(90deg, transparent 0, rgba(232,213,160,0.0) 15%, rgba(232,213,160,0.55) 50%, transparent 85%);
   animation:loader-bars-inner 1.25s ease-in-out infinite;
 }
-#app-loader-label{
-  display:none;
-}
+#app-loader-label{ display:none; }
 @keyframes loader-spin{
   to{ transform:rotate(360deg); }
 }
@@ -527,15 +506,16 @@ body.loaded #app-loader{
 }
 .feed-drop-indicator.visible{ display:block; }
 
-/* empty state */
+/* empty state: loader animation (visible on refresh before load) */
 #empty{
   flex:1;
-  display:flex;flex-direction:column;
-  align-items:center;justify-content:center;
-  gap:10px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:16px;
   padding:60px 20px;
-  opacity:0;
-  animation:fadin .6s .3s ease both;
+  opacity:1;
 }
 #empty .e-label{
   font-family:var(--sans);
@@ -1298,7 +1278,7 @@ body.select-mode .msg-select-wrap,
 </head>
 <body>
 <div id="app-loader" aria-hidden="true">
-  <div id="app-loader-inner">
+  <div class="loader-inner">
     <div class="loader-ring"></div>
     <div class="loader-ring"></div>
     <div class="loader-ring"></div>
@@ -1346,6 +1326,12 @@ body.select-mode .msg-select-wrap,
   <div id="feed">
     <div class="feed-inner" id="feed-inner">
       <div id="empty">
+        <div class="loader-inner">
+          <div class="loader-ring"></div>
+          <div class="loader-ring"></div>
+          <div class="loader-ring"></div>
+          <div class="loader-dash"></div>
+        </div>
         <div class="e-label">Nothing yet.</div>
         <div class="e-sub">Be the first to say something</div>
       </div>
