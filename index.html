@@ -1587,6 +1587,7 @@ const FIELD_PREFS_KEY      = 'inout_field_prefs_v1';
 const ORDER_STATE_KEY      = 'inout_order_state_v1';
 const SCROLL_STATE_KEY     = 'inout_scroll_state_v1';
 const WAS_EDITING_KEY      = 'inout_was_editing_v1';
+const AUTH_BACKUP_KEY     = 'inout_auth_user_backup';
 const seenIds       = new Set();
 const channelScroll = new Map();
 function loadScrollState() {
@@ -3862,6 +3863,13 @@ async function refreshAuth() {
       if (!error && userData?.user) currentUser = userData.user;
       else if (error) currentUser = null;
     }
+    if (!currentUser) {
+      try {
+        var backup = sessionStorage.getItem(AUTH_BACKUP_KEY);
+        if (backup) currentUser = JSON.parse(backup);
+      } catch (_) {}
+    }
+    if (currentUser) try { sessionStorage.setItem(AUTH_BACKUP_KEY, JSON.stringify(currentUser)); } catch (_) {}
   } catch (e) {
     currentUser = null;
   }
@@ -3888,22 +3896,34 @@ var explicitSignOut = false;
 function setupAuthListener() {
   sb.auth.onAuthStateChange(async (event, session) => {
     const prevUser = currentUser;
-    if (!session) {
+    const signedOut = !session || !session.user;
+    if (signedOut) {
       if (!explicitSignOut) {
         try {
           const { data } = await sb.auth.getSession();
           if (data?.session?.user) {
             currentUser = data.session.user;
+            try { sessionStorage.setItem(AUTH_BACKUP_KEY, JSON.stringify(currentUser)); } catch (_) {}
             updateAuthUI();
             return;
           }
         } catch (_) {}
-        /* Supabase cleared session (e.g. token refresh failed) — keep showing signed in until user explicitly signs out */
+        try {
+          var backup = sessionStorage.getItem(AUTH_BACKUP_KEY);
+          if (backup) {
+            currentUser = JSON.parse(backup);
+            updateAuthUI();
+            return;
+          }
+        } catch (_) {}
         return;
       }
       explicitSignOut = false;
+      try { sessionStorage.removeItem(AUTH_BACKUP_KEY); } catch (_) {}
+    } else {
+      currentUser = session.user ?? null;
+      if (currentUser) try { sessionStorage.setItem(AUTH_BACKUP_KEY, JSON.stringify(currentUser)); } catch (_) {}
     }
-    currentUser = session?.user ?? null;
     updateAuthUI();
     if (!prevUser && currentUser) {
       await syncChannelsFromServer();
