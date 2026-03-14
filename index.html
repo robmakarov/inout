@@ -1553,17 +1553,24 @@ document.addEventListener('keydown', e => {
 
 function setupFocusOnFirstInteraction() {
   if (!input) return;
-  function focusMovedToNonInteractive(el) {
-    if (!el || el === input) return false;
-    if (el.tagName === 'BUTTON' || el.tagName === 'A' || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return false;
-    if (el.isContentEditable) return false;
-    if (el.closest && el.closest('input, textarea, [contenteditable="true"], button, a')) return false;
-    if (el.closest && (el.closest('#user-modal') || el.closest('#channel-modal-backdrop'))) return false;
-    return true;
+  function isInteractive(el) {
+    if (!el || el === document.body) return false;
+    if (el.tagName === 'BUTTON' || el.tagName === 'A' || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return true;
+    if (el.isContentEditable) return true;
+    if (el.closest && el.closest('input, textarea, [contenteditable="true"], button, a, select')) return true;
+    if (el.closest && (el.closest('#user-modal') || el.closest('#channel-modal-backdrop') || el.closest('#view-menu'))) return true;
+    if (el.closest && el.closest('.msg-actions, .msg-select-wrap')) return true;
+    return false;
   }
   document.addEventListener('focusin', () => {
-    if (!focusMovedToNonInteractive(document.activeElement)) return;
+    if (isInteractive(document.activeElement)) return;
     setTimeout(() => { if (input && document.activeElement !== input) input.focus(); }, 0);
+  });
+  document.addEventListener('click', (e) => {
+    if (isInteractive(e.target)) return;
+    if (input && document.activeElement !== input) {
+      setTimeout(() => { if (input) input.focus(); }, 0);
+    }
   });
 }
 
