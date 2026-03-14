@@ -1476,6 +1476,15 @@ let dragSelectToggledByTouch = false;
 let dragSelectMode = 'select'; /* 'select' or 'deselect' */
 let pointerDownOnSelectArea = false; /* true while pointer is down on checkbox area, so row drag is not started */
 
+function scrollFeedAtTouchEdge(clientY) {
+  if (!feedEl) return;
+  const edgeZone = 56;
+  const step = 14;
+  const vh = window.innerHeight || 0;
+  if (clientY < edgeZone) feedEl.scrollTop = Math.max(0, feedEl.scrollTop - step);
+  else if (clientY > vh - edgeZone) feedEl.scrollTop = Math.min(feedEl.scrollHeight - feedEl.clientHeight, feedEl.scrollTop + step);
+}
+
 function applyDragSelectRect(feedInner, startY, currentY, mode, startRowStates) {
   if (!feedInner || startY == null || currentY == null || !startRowStates) return;
   const rectTop = Math.min(startY, currentY);
@@ -2771,7 +2780,9 @@ function createMsgRow(msg, isNew) {
     const onTouchMove = (ev) => {
       if (!state.started || ev.touches.length !== 1) return;
       ev.preventDefault();
-      applyDragSelectRect(feedInner, startY, ev.touches[0].clientY, state.mode, state.startRowStates);
+      const cy = ev.touches[0].clientY;
+      applyDragSelectRect(feedInner, startY, cy, state.mode, state.startRowStates);
+      scrollFeedAtTouchEdge(cy);
       state.didWeMove = true;
     };
     const onTouchEnd = () => {
@@ -2878,7 +2889,9 @@ function createMsgRow(msg, isNew) {
     const onTouchMove = (ev) => {
       if (!state.started || ev.touches.length !== 1) return;
       ev.preventDefault();
-      applyDragSelectRect(feedInner, startY, ev.touches[0].clientY, state.mode, state.startRowStates);
+      const cy = ev.touches[0].clientY;
+      applyDragSelectRect(feedInner, startY, cy, state.mode, state.startRowStates);
+      scrollFeedAtTouchEdge(cy);
       state.didWeMove = true;
     };
     const onTouchEnd = () => {
@@ -4415,18 +4428,16 @@ feedEl.addEventListener('dragover', e => {
   const lastRow = rows[rows.length - 1];
   const lastRect = lastRow.getBoundingClientRect();
   const feedRect = feedEl.getBoundingClientRect();
-  const dropAtEndThreshold = 40;
-  const bottomZoneHeight = 120;
-  const inBottomZone = y >= feedRect.bottom - bottomZoneHeight;
+  const dropAtEndThreshold = 32;
   const inEmptyZone = y >= lastRect.bottom - dropAtEndThreshold;
-  if (!inEmptyZone && !inBottomZone) {
+  if (!inEmptyZone) {
     const under = document.elementFromPoint(e.clientX, e.clientY);
     if (under && under.closest('.msg') && !under.closest('.msg-time') && !under.closest('.msg-sender') && !under.closest('.msg-text') && !under.closest('.msg-actions')) return;
   }
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
   const inLastRowLowerHalf = lastRow !== dragging && y >= lastRect.top + lastRect.height * 0.5;
-  const wantAppendFirst = inEmptyZone || inLastRowLowerHalf || inBottomZone;
+  const wantAppendFirst = inEmptyZone || inLastRowLowerHalf;
   let wantAppend = wantAppendFirst;
   let insertBeforeNode = null;
   let lineY = 0;
@@ -4436,7 +4447,6 @@ feedEl.addEventListener('dragover', e => {
   } else if (wantAppend) {
     lineY = lastRect.bottom;
   } else {
-    const secondLastRow = rows.length >= 2 ? rows[rows.length - 2] : null;
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       const rect = r.getBoundingClientRect();
@@ -4445,11 +4455,6 @@ feedEl.addEventListener('dragover', e => {
         if (r === lastRow && lastRow !== dragging) {
           wantAppend = true;
           lineY = rect.bottom;
-          break;
-        }
-        if (r === secondLastRow && lastRow !== dragging && y >= rect.top + rect.height / 2) {
-          wantAppend = true;
-          lineY = lastRect.bottom;
           break;
         }
         const halfway = rect.top + rect.height / 2;
