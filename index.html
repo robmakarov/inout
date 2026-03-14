@@ -3884,18 +3884,24 @@ async function refreshAuth() {
   }
 }
 
+var explicitSignOut = false;
 function setupAuthListener() {
   sb.auth.onAuthStateChange(async (event, session) => {
     const prevUser = currentUser;
     if (!session) {
-      try {
-        const { data } = await sb.auth.getSession();
-        if (data?.session?.user) {
-          currentUser = data.session.user;
-          updateAuthUI();
-          return;
-        }
-      } catch (_) {}
+      if (!explicitSignOut) {
+        try {
+          const { data } = await sb.auth.getSession();
+          if (data?.session?.user) {
+            currentUser = data.session.user;
+            updateAuthUI();
+            return;
+          }
+        } catch (_) {}
+        /* Supabase cleared session (e.g. token refresh failed) — keep showing signed in until user explicitly signs out */
+        return;
+      }
+      explicitSignOut = false;
     }
     currentUser = session?.user ?? null;
     updateAuthUI();
@@ -4029,6 +4035,7 @@ async function signOut() {
     toast('Sign-out not available in this local build.');
     return;
   }
+  explicitSignOut = true;
   try {
     const { error } = await sb.auth.signOut();
     if (error) {
