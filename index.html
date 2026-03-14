@@ -501,6 +501,7 @@ header{
   border-radius:1px;
   transform:translateZ(0);
   isolation:isolate;
+  transition:top 0.06s ease-out;
 }
 .feed-drop-indicator.visible{ display:block; }
 .feed-drop-origin{
@@ -564,9 +565,8 @@ header{
 .msg-fly-clone .msg-actions{visibility:hidden}
 .msg:hover{background:var(--bg2)}
 .msg.msg-drag-over{background:var(--bg2)}
-/* during DnD: only dragged rows get hover; others are dimmed to focus on dragged */
+/* during DnD: no hover on any row; dragged stay plain, others dimmed; no transitions to avoid blink */
 body.dnd-active .msg{transition:none;animation:none}
-body.dnd-active .msg.msg-drag-group{transition:margin .2s ease}
 body.dnd-just-ended .msg{transition:none;animation:none}
 body.dnd-active .msg:not(.dragging):not(.msg-drag-group){
   opacity:0.5;
@@ -576,12 +576,13 @@ body.dnd-active .msg:not(.dragging):not(.msg-drag-group):hover{
   background:transparent;
   opacity:0.5;
 }
-body.dnd-active .msg.dragging:hover,
-body.dnd-active .msg.msg-drag-group:hover{background:var(--bg2)}
+body.dnd-active .msg.dragging,
+body.dnd-active .msg.msg-drag-group{background:transparent}
 body.dnd-active .msg.dragging .msg-select-wrap,
 body.dnd-active .msg.dragging .msg-actions,
 body.dnd-active .msg.msg-drag-group .msg-select-wrap,
 body.dnd-active .msg.msg-drag-group .msg-actions{opacity:0;pointer-events:none;visibility:hidden}
+body.dnd-active .msg.msg-drag-target{background:rgba(91,155,213,0.12);transition:background 0.06s ease-out}
 .msg.msg-editing{
   background:var(--bg2);
   box-shadow:inset 0 0 0 1px var(--line2);
@@ -767,16 +768,6 @@ body.select-mode .msg-select-wrap,
 .msg.msg-drag-group{
   opacity: 1;
   animation: none;
-}
-.msg.msg-drag-group{
-  transition: margin 0.2s ease, box-shadow 0.2s ease;
-}
-.msg.msg-drag-group + .msg.msg-drag-group{
-  margin-top: -2px;
-}
-.msg.dragging + .msg.msg-drag-group,
-.msg.msg-drag-group + .msg.dragging{
-  margin-top: -2px;
 }
 
 /* ── INPUT AREA ── */
@@ -4948,10 +4939,6 @@ function processFeedDragover(ev) {
   const feedRect = feedEl.getBoundingClientRect();
   const dropAtEndThreshold = 32;
   const inEmptyZone = y >= lastRect.bottom - dropAtEndThreshold;
-  if (!inEmptyZone) {
-    const under = document.elementFromPoint(ev.clientX, ev.clientY);
-    if (under && under.closest('.msg') && !under.closest('.msg-time') && !under.closest('.msg-sender') && !under.closest('.msg-text') && !under.closest('.msg-actions')) return;
-  }
   const inLastRowLowerHalf = lastRow !== dragging && y >= lastRect.top + lastRect.height * 0.5;
   const wantAppendFirst = inEmptyZone || inLastRowLowerHalf;
   let wantAppend = wantAppendFirst;
