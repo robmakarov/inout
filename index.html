@@ -2094,10 +2094,6 @@ function init(done) {
       });
       cleanupAuthHash();
       setupFullscreenOnFirstTap();
-      var a = document.activeElement;
-      if (input && (!a || a === document.body || !/^(INPUT|TEXTAREA|BUTTON|SELECT)$/.test((a.tagName || '').toUpperCase()))) {
-        requestAnimationFrame(function() { if (input) input.focus(); });
-      }
       setupFocusOnFirstInteraction();
     } catch (_) {}
     if (typeof done === 'function') done();
@@ -3867,7 +3863,7 @@ async function refreshAuth() {
   try {
     var session = null;
     if (typeof sb.auth.getSession === 'function') {
-      var res = await sb.auth.getSession();
+      var res = await sb.auth.getSession().catch(function() { return { data: { session: null } }; });
       session = (res && res.data && res.data.session) || null;
     }
     currentUser = (session && session.user) ?? null;
@@ -5008,8 +5004,6 @@ function humanError(message) {
 function markLoaded() {
   try {
     if (document.body && !document.body.classList.contains('loaded')) document.body.classList.add('loaded');
-    var a = document.activeElement;
-    if (typeof input !== 'undefined' && input && (!a || a === document.body || !/^(INPUT|TEXTAREA|BUTTON|SELECT)$/.test((a.tagName || '').toUpperCase()))) input.focus();
   } catch (_) {}
 }
 var loaderMinUntil = 0;
@@ -5057,11 +5051,9 @@ function ensureLoaderMinDisplay() {
       run();
     }
     document.addEventListener('visibilitychange', function() {
-      if (document.visibilityState !== 'visible') return;
-      var inp = typeof input !== 'undefined' ? input : null;
-      if (!inp) return;
-      var a = document.activeElement;
-      if (!a || a === document.body || !/^(INPUT|TEXTAREA|BUTTON|SELECT)$/.test((a.tagName || '').toUpperCase())) inp.focus();
+      if (document.visibilityState === 'visible' && typeof input !== 'undefined' && input && document.activeElement && document.activeElement !== input && !/^(INPUT|TEXTAREA|BUTTON|SELECT)$/.test((document.activeElement.tagName || '').toUpperCase())) {
+        setTimeout(function() { input.focus(); }, 0);
+      }
     });
   } catch (err) {
     console.error('startup error', err);
