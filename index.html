@@ -4375,8 +4375,8 @@ feedEl.addEventListener('dragover', e => {
   const rows = Array.from(feedInner.querySelectorAll('.msg'));
   if (!rows.length) return;
   const firstRow = rows[0];
-  const cbZone = firstRow.querySelector('.msg-checkbox-zone');
-  if (cbZone && e.clientX < cbZone.getBoundingClientRect().right) return;
+  const contentLeft = firstRow.querySelector('.msg-time') || firstRow.querySelector('.msg-sender') || firstRow.querySelector('.msg-text');
+  if (contentLeft && e.clientX < contentLeft.getBoundingClientRect().left) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
   const y = e.clientY;
