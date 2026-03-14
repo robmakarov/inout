@@ -1509,7 +1509,7 @@ body.loaded #input-area{
 <script src="app/state.js"></script>
 <script src="app/main.js"></script>
 <script>
-  (function(){ setTimeout(function(){ if (document.body && !document.body.classList.contains('loaded')) document.body.classList.add('loaded'); }, 2500); })();
+  (function(){ if (document.body) document.body.classList.add('loaded'); })();
 </script>
 </body>
 </html>
