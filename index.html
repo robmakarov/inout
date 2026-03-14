@@ -414,27 +414,27 @@ body.loaded #app-loader{
 }
 #app-loader-inner .loader-dash{
   position:absolute;
-  inset:-12px;
-  border:3px solid transparent;
-  border-radius:50%;
-  border-top-color:var(--acc);
-  border-top-width:5px;
-  filter:drop-shadow(0 0 6px rgba(232,213,160,0.5));
-  animation:loader-spin 0.75s linear infinite;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
 }
 #app-loader-inner .loader-dash::after{
   content:'';
-  position:absolute;
-  inset:-14px;
-  border:2px solid transparent;
-  border-radius:50%;
-  border-top-color:var(--acc2);
-  border-top-width:3px;
-  opacity:0.7;
-  animation:loader-spin 1.2s linear infinite reverse;
+  width:70px;
+  height:2px;
+  border-radius:999px;
+  background:linear-gradient(90deg, transparent 0, var(--acc) 40%, var(--acc2) 60%, transparent 100%);
+  box-shadow:0 0 12px rgba(232,213,160,0.4);
+  animation:loader-bars 1.25s ease-in-out infinite;
 }
 #app-loader-inner .loader-dash::before{
-  display:none;
+  content:'';
+  width:44px;
+  height:2px;
+  border-radius:999px;
+  background:linear-gradient(90deg, transparent 0, rgba(232,213,160,0.0) 15%, rgba(232,213,160,0.55) 50%, transparent 85%);
+  animation:loader-bars-inner 1.25s ease-in-out infinite;
 }
 #app-loader-label{
   position:absolute;
@@ -453,6 +453,50 @@ body.loaded #app-loader{
 }
 @keyframes loader-spin{
   to{ transform:rotate(360deg); }
+}
+@keyframes loader-bars{
+  0%{
+    transform:scaleX(0.5) translateX(-10px);
+    opacity:0.4;
+  }
+  25%{
+    transform:scaleX(1) translateX(0);
+    opacity:1;
+  }
+  50%{
+    transform:scaleX(0.6) translateX(10px);
+    opacity:0.7;
+  }
+  75%{
+    transform:scaleX(1) translateX(0);
+    opacity:1;
+  }
+  100%{
+    transform:scaleX(0.5) translateX(-10px);
+    opacity:0.4;
+  }
+}
+@keyframes loader-bars-inner{
+  0%{
+    transform:scaleX(0.4) translateX(8px);
+    opacity:0.2;
+  }
+  25%{
+    transform:scaleX(0.9) translateX(0);
+    opacity:0.85;
+  }
+  50%{
+    transform:scaleX(0.4) translateX(-8px);
+    opacity:0.3;
+  }
+  75%{
+    transform:scaleX(0.9) translateX(0);
+    opacity:0.85;
+  }
+  100%{
+    transform:scaleX(0.4) translateX(8px);
+    opacity:0.2;
+  }
 }
 @keyframes loader-label{
   0%,100%{ opacity:0.7; letter-spacing:0.35em; }
