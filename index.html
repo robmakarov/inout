@@ -2811,6 +2811,10 @@ function createMsgRow(msg, isNew) {
   });
   row.addEventListener('dragend', () => {
     lastReorderTarget = null;
+    feedDragoverRaf = null;
+    feedDragoverLast = null;
+    docDragoverRaf = null;
+    docDragoverLast = null;
     clearEdgeScrollInterval();
     if (feedDropIndicatorEl) feedDropIndicatorEl.classList.remove('visible');
     if (feedInner) feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
@@ -4651,36 +4655,38 @@ if (feedEl) feedEl.addEventListener('scroll', () => {
 }, { passive: true });
 
 /* FLIP animation: smooth shift of rows when reordering during drag */
-function flipAnimateShift(feedInner, dragging, oldRects) {
+function flipAnimateShift(feedInner, dragging, oldRects, rowsArray) {
   if (!feedInner || !dragging || !oldRects) return;
-  const rows = feedInner.querySelectorAll('.msg');
-  rows.forEach(r => {
-    if (r === dragging) return;
+  const rows = rowsArray && rowsArray.length ? rowsArray : feedInner.querySelectorAll('.msg');
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (r === dragging) continue;
     const old = oldRects.get(r);
-    if (!old) return;
+    if (!old) continue;
     const nr = r.getBoundingClientRect();
     const dy = nr.top - old.top;
-    if (Math.abs(dy) < 0.5) return;
+    if (Math.abs(dy) < 0.5) continue;
     r.style.transform = 'translateY(' + (-dy) + 'px)';
     r.offsetHeight;
     r.style.transform = 'translateY(0)';
-  });
+  }
   setTimeout(() => {
-    rows.forEach(r => { if (r !== dragging) r.style.transform = ''; });
+    for (let i = 0; i < rows.length; i++) { if (rows[i] !== dragging) rows[i].style.transform = ''; }
   }, 110);
 }
 
 /* Single feed-level DnD: only the feed handles dragover/drop so drop always fires reliably */
-if (feedEl) {
-feedEl.addEventListener('dragover', e => {
+var feedDragoverRaf = null;
+var feedDragoverLast = null;
+function processFeedDragover(ev) {
   const dragging = feedInner ? feedInner.querySelector('.msg.dragging') : null;
   if (!dragging || !feedInner) return;
   const rows = Array.from(feedInner.querySelectorAll('.msg'));
   if (!rows.length) return;
   const firstRow = rows[0];
   const contentLeft = firstRow.querySelector('.msg-time') || firstRow.querySelector('.msg-sender') || firstRow.querySelector('.msg-text');
-  if (contentLeft && e.clientX < contentLeft.getBoundingClientRect().left) return;
-  const y = e.clientY;
+  if (contentLeft && ev.clientX < contentLeft.getBoundingClientRect().left) return;
+  const y = ev.clientY;
   const firstRect = firstRow.getBoundingClientRect();
   const lastRow = rows[rows.length - 1];
   const lastRect = lastRow.getBoundingClientRect();
@@ -4688,11 +4694,9 @@ feedEl.addEventListener('dragover', e => {
   const dropAtEndThreshold = 32;
   const inEmptyZone = y >= lastRect.bottom - dropAtEndThreshold;
   if (!inEmptyZone) {
-    const under = document.elementFromPoint(e.clientX, e.clientY);
+    const under = document.elementFromPoint(ev.clientX, ev.clientY);
     if (under && under.closest('.msg') && !under.closest('.msg-time') && !under.closest('.msg-sender') && !under.closest('.msg-text') && !under.closest('.msg-actions')) return;
   }
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
   const inLastRowLowerHalf = lastRow !== dragging && y >= lastRect.top + lastRect.height * 0.5;
   const wantAppendFirst = inEmptyZone || inLastRowLowerHalf;
   let wantAppend = wantAppendFirst;
@@ -4730,7 +4734,6 @@ feedEl.addEventListener('dragover', e => {
       lineY = lastRect.bottom;
     }
   }
-  rows.forEach(r => r.classList.remove('msg-drag-over'));
   const targetChanged = lastReorderTarget === null || lastReorderTarget.insertBefore !== insertBeforeNode || lastReorderTarget.wantAppend !== wantAppend;
   if ((wantAppend || insertBeforeNode !== null) && targetChanged) {
     lastReorderTarget = { insertBefore: insertBeforeNode, wantAppend: wantAppend };
@@ -4741,7 +4744,7 @@ feedEl.addEventListener('dragover', e => {
     } else {
       feedInner.insertBefore(dragging, insertBeforeNode);
     }
-    flipAnimateShift(feedInner, dragging, oldRects);
+    flipAnimateShift(feedInner, dragging, oldRects, rows);
   }
   if (wantAppend || insertBeforeNode !== null) {
     if (!feedDropIndicatorEl) {
@@ -4758,7 +4761,23 @@ feedEl.addEventListener('dragover', e => {
     if (feedDropIndicatorEl) feedDropIndicatorEl.classList.remove('visible');
     lastReorderTarget = null;
   }
-  updateEdgeScroll(e.clientY, e.clientX);
+  updateEdgeScroll(ev.clientY, ev.clientX);
+}
+if (feedEl) {
+feedEl.addEventListener('dragover', e => {
+  const dragging = feedInner ? feedInner.querySelector('.msg.dragging') : null;
+  if (!dragging || !feedInner) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  feedDragoverLast = e;
+  if (feedDragoverRaf === null) {
+    feedDragoverRaf = requestAnimationFrame(function() {
+      feedDragoverRaf = null;
+      const ev = feedDragoverLast;
+      feedDragoverLast = null;
+      if (ev) processFeedDragover(ev);
+    });
+  }
 });
 feedEl.addEventListener('drop', e => {
   if (feedInner && feedInner.querySelector('.msg.dragging')) {
@@ -4775,13 +4794,15 @@ feedEl.addEventListener('dragleave', e => {
 }
 
 // Keep drop indicator visible when dragging beyond the feed bounds (e.g. over header)
-document.addEventListener('dragover', e => {
+var docDragoverRaf = null;
+var docDragoverLast = null;
+function processDocDragover(ev) {
   if (!feedEl || !feedInner) return;
   const dragging = feedInner.querySelector('.msg.dragging');
   if (!dragging) return;
   const feedRect = feedEl.getBoundingClientRect();
-  const y = e.clientY;
-  if (y >= feedRect.top && y <= feedRect.bottom) return; // feed handles its own indicator + reordering
+  const y = ev.clientY;
+  if (y >= feedRect.top && y <= feedRect.bottom) return;
 
   const rows = Array.from(feedInner.querySelectorAll('.msg'));
   if (!rows.length) return;
@@ -4806,8 +4827,25 @@ document.addEventListener('dragover', e => {
   feedDropIndicatorEl.style.top = (lineY - 2) + 'px';
   feedDropIndicatorEl.classList.add('visible');
 
-  // keep edge scroll running even when pointer is outside feed
-  updateEdgeScroll(e.clientY, e.clientX);
+  updateEdgeScroll(ev.clientY, ev.clientX);
+}
+document.addEventListener('dragover', e => {
+  if (!feedEl || !feedInner) return;
+  if (!feedInner.querySelector('.msg.dragging')) return;
+  const feedRect = feedEl.getBoundingClientRect();
+  const y = e.clientY;
+  if (y >= feedRect.top && y <= feedRect.bottom) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  docDragoverLast = e;
+  if (docDragoverRaf === null) {
+    docDragoverRaf = requestAnimationFrame(function() {
+      docDragoverRaf = null;
+      const ev = docDragoverLast;
+      docDragoverLast = null;
+      if (ev) processDocDragover(ev);
+    });
+  }
 }, { passive: false });
 
 function scrollBottom() {
@@ -4818,9 +4856,19 @@ function scrollBottom() {
 }
 
 /* ═══ UTILS ═══════════════════════════════════════════════ */
+var formatTimeCache = new Map();
+var formatTimeCacheMax = 200;
 function formatTime(iso) {
+  var cached = formatTimeCache.get(iso);
+  if (cached !== undefined) return cached;
   const d = new Date(iso);
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  const s = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  if (formatTimeCache.size >= formatTimeCacheMax) {
+    var first = formatTimeCache.keys().next().value;
+    if (first !== undefined) formatTimeCache.delete(first);
+  }
+  formatTimeCache.set(iso, s);
+  return s;
 }
 
 function escapeHtml(s) {
