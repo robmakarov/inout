@@ -2249,12 +2249,10 @@ async function fetchMessagesList() {
 
 async function loadMessages() {
   const list = await fetchMessagesList();
-  await ensureLoaderMinDisplay();
   await replaceFeedWithList(list);
 }
 
 async function replaceFeedWithList(list) {
-  await ensureLoaderMinDisplay();
   seenIds.clear();
   globalMsgNum = 0;
   msgCount = 0;
@@ -3895,44 +3893,39 @@ async function refreshAuth() {
 var explicitSignOut = false;
 function setupAuthListener() {
   sb.auth.onAuthStateChange(async (event, session) => {
-    const prevUser = currentUser;
-    const signedOut = !session || !session.user;
-    if (signedOut) {
-      if (!explicitSignOut) {
-        try {
-          const { data } = await sb.auth.getSession();
-          if (data?.session?.user) {
-            currentUser = data.session.user;
-            try { sessionStorage.setItem(AUTH_BACKUP_KEY, JSON.stringify(currentUser)); } catch (_) {}
-            updateAuthUI();
-            return;
-          }
-        } catch (_) {}
-        try {
-          var backup = sessionStorage.getItem(AUTH_BACKUP_KEY);
-          if (backup) {
-            currentUser = JSON.parse(backup);
-            updateAuthUI();
-            return;
-          }
-        } catch (_) {}
-        return;
+    if (session && session.user) {
+      const prevUser = currentUser;
+      currentUser = session.user;
+      try { sessionStorage.setItem(AUTH_BACKUP_KEY, JSON.stringify(currentUser)); } catch (_) {}
+      updateAuthUI();
+      if (!prevUser && currentUser) {
+        await syncChannelsFromServer();
+        reloadForUser();
+        setupDraftChannel();
       }
+      return;
+    }
+    if (explicitSignOut) {
       explicitSignOut = false;
       try { sessionStorage.removeItem(AUTH_BACKUP_KEY); } catch (_) {}
-    } else {
-      currentUser = session.user ?? null;
-      if (currentUser) try { sessionStorage.setItem(AUTH_BACKUP_KEY, JSON.stringify(currentUser)); } catch (_) {}
+      return;
     }
-    updateAuthUI();
-    if (!prevUser && currentUser) {
-      await syncChannelsFromServer();
-      reloadForUser();
-      setupDraftChannel();
-    } else if (prevUser && !currentUser) {
-      clearMessages();
-      teardownDraftChannel();
-    }
+    try {
+      const { data } = await sb.auth.getSession();
+      if (data?.session?.user) {
+        currentUser = data.session.user;
+        try { sessionStorage.setItem(AUTH_BACKUP_KEY, JSON.stringify(currentUser)); } catch (_) {}
+        updateAuthUI();
+        return;
+      }
+    } catch (_) {}
+    try {
+      var backup = sessionStorage.getItem(AUTH_BACKUP_KEY);
+      if (backup) {
+        currentUser = JSON.parse(backup);
+        updateAuthUI();
+      }
+    } catch (_) {}
   });
 
   if (umAuthBtn) umAuthBtn.addEventListener('click', () => {
@@ -4056,16 +4049,18 @@ async function signOut() {
     return;
   }
   explicitSignOut = true;
+  currentUser = null;
+  try { sessionStorage.removeItem(AUTH_BACKUP_KEY); } catch (_) {}
+  updateAuthUI();
+  clearMessages();
+  teardownDraftChannel();
+  sharedChannels.clear();
+  unreadCounts.clear();
+  renderTabs();
   try {
     const { error } = await sb.auth.signOut();
-    if (error) {
-      console.error(error);
-      toast('Sign-out failed — ' + humanError(error.message));
-    }
-  } catch (e) {
-    console.error(e);
-    toast('Sign-out failed — ' + humanError(e.message));
-  }
+    if (error) console.error(error);
+  } catch (e) { console.error(e); }
 }
 
 async function copyUserId() {
@@ -5045,7 +5040,7 @@ function ensureLoaderMinDisplay() {
   return Promise.resolve();
 }
 (function go() {
-  loaderMinUntil = Date.now() + 1200;
+  loaderMinUntil = 0;
   var loadTimeout = setTimeout(markLoaded, 4000);
   function done() {
     clearTimeout(loadTimeout);
