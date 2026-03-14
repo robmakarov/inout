@@ -557,11 +557,16 @@ header{
 .msg-fly-clone .msg-actions{visibility:hidden}
 .msg:hover{background:var(--bg2)}
 .msg.msg-drag-over{background:var(--bg2)}
-/* during DnD reorder, disable hover so wrong rows don't blink */
+/* during DnD reorder, disable hover on dragged rows only; keep other rows normal brightness */
 body.dnd-active .msg{transition:none;animation:none}
-body.dnd-active .msg:hover{background:transparent}
-body.dnd-active .msg:hover .msg-select-wrap{opacity:0;pointer-events:none}
-body.dnd-active .msg:hover .msg-actions{opacity:0;pointer-events:none}
+body.dnd-active .msg:not(.dragging):not(.msg-drag-group) .msg-time,
+body.dnd-active .msg:not(.dragging):not(.msg-drag-group) .msg-sender{color:var(--text)}
+body.dnd-active .msg.dragging:hover,
+body.dnd-active .msg.msg-drag-group:hover{background:transparent}
+body.dnd-active .msg.dragging:hover .msg-select-wrap,
+body.dnd-active .msg.dragging:hover .msg-actions,
+body.dnd-active .msg.msg-drag-group:hover .msg-select-wrap,
+body.dnd-active .msg.msg-drag-group:hover .msg-actions{opacity:0;pointer-events:none}
 .msg.msg-editing{
   background:var(--bg2);
   box-shadow:inset 0 0 0 1px var(--line2);
