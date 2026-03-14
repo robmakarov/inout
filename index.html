@@ -4404,15 +4404,17 @@ feedEl.addEventListener('dragover', e => {
   const firstRect = firstRow.getBoundingClientRect();
   const lastRow = rows[rows.length - 1];
   const lastRect = lastRow.getBoundingClientRect();
-  const dropAtEndThreshold = 24;
+  const dropAtEndThreshold = 32;
   const inEmptyZoneOrPastLast = y >= lastRect.bottom - dropAtEndThreshold;
+  const inLastRowLowerHalf = lastRow !== dragging && y >= lastRect.top + lastRect.height * 0.5;
+  let wantAppend = inEmptyZoneOrPastLast || inLastRowLowerHalf;
   let insertBeforeNode = null;
   let lineY = 0;
   if (y < firstRect.top) {
     insertBeforeNode = firstRow;
     lineY = firstRect.top;
-  } else if (inEmptyZoneOrPastLast || (lastRow !== dragging && y >= lastRect.top + lastRect.height * 0.6)) {
-    insertBeforeNode = lastRow.nextSibling;
+  } else if (wantAppend) {
+    insertBeforeNode = null;
     lineY = lastRect.bottom;
   } else {
     const rowGap = 4;
@@ -4421,8 +4423,8 @@ feedEl.addEventListener('dragover', e => {
       const rect = r.getBoundingClientRect();
       if (y >= rect.top && y <= rect.bottom) {
         if (r === dragging) break;
-        if (r === lastRow && y >= rect.top + rect.height * 0.6) {
-          insertBeforeNode = lastRow.nextSibling;
+        if (r === lastRow && y >= rect.top + rect.height * 0.5) {
+          wantAppend = true;
           lineY = rect.bottom;
           break;
         }
@@ -4445,18 +4447,18 @@ feedEl.addEventListener('dragover', e => {
         break;
       }
     }
-    if (insertBeforeNode === null && rows.length && y >= lastRect.bottom - dropAtEndThreshold) {
-      insertBeforeNode = lastRow.nextSibling;
+    if (insertBeforeNode === null && !wantAppend && rows.length && y >= lastRect.bottom - dropAtEndThreshold) {
+      wantAppend = true;
       lineY = lastRect.bottom;
     }
   }
-  if (insertBeforeNode !== null) {
+  if (wantAppend || insertBeforeNode !== null) {
     const oldRects = new Map();
     rows.forEach(r => { if (r !== dragging) oldRects.set(r, r.getBoundingClientRect()); });
-    if (insertBeforeNode) {
-      feedInner.insertBefore(dragging, insertBeforeNode);
-    } else {
+    if (wantAppend) {
       feedInner.appendChild(dragging);
+    } else {
+      feedInner.insertBefore(dragging, insertBeforeNode);
     }
     flipAnimateShift(feedInner, dragging, oldRects);
     if (!feedDropIndicatorEl) {
