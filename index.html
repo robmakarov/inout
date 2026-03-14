@@ -1456,19 +1456,21 @@ let dragSelectToggledByTouch = false;
 let dragSelectMode = 'select'; /* 'select' or 'deselect' */
 let pointerDownOnSelectArea = false; /* true while pointer is down on checkbox area, so row drag is not started */
 
-function applyDragSelectToggleByYRange(feedInner, lastY, currentY) {
-  if (!feedInner || lastY == null || currentY == null) return;
-  const segmentMin = Math.min(lastY, currentY);
-  const segmentMax = Math.max(lastY, currentY);
+function applyDragSelectRect(feedInner, startY, currentY, mode, startRowStates) {
+  if (!feedInner || startY == null || currentY == null || !startRowStates) return;
+  const rectTop = Math.min(startY, currentY);
+  const rectBottom = Math.max(startY, currentY);
   const rows = Array.from(feedInner.querySelectorAll('.msg'));
   let changed = false;
   for (const r of rows) {
     const rect = r.getBoundingClientRect();
-    if (rect.bottom <= segmentMin || rect.top >= segmentMax) continue;
+    const overlaps = rect.bottom > rectTop && rect.top < rectBottom;
+    const desired = overlaps ? (mode === 'select') : (startRowStates.get(r) ?? false);
     const box = r.querySelector('.msg-select');
     const id = r.dataset.id != null ? Number(r.dataset.id) : NaN;
     if (!box || !Number.isFinite(id)) continue;
-    box.checked = !box.checked;
+    if (box.checked === desired) continue;
+    box.checked = desired;
     if (box.checked) {
       selectedIds.add(id);
       r.classList.add('msg-selected');
@@ -2552,6 +2554,11 @@ function createMsgRow(msg, isNew) {
   row.addEventListener('dragover', e => {
     const dragging = feedInner.querySelector('.msg.dragging');
     if (!dragging || dragging === row) return;
+    const zone = row.querySelector('.msg-checkbox-zone');
+    if (zone) {
+      const zr = zone.getBoundingClientRect();
+      if (e.clientX >= zr.left && e.clientX <= zr.right) return;
+    }
     const textEl = row.querySelector('.msg-text');
     if (textEl && e.clientX < textEl.getBoundingClientRect().left) return;
     e.preventDefault();
@@ -2726,18 +2733,22 @@ function createMsgRow(msg, isNew) {
         setSelectMode(true);
       }
       dragSelectActive = true;
-      let lastY = e.clientY;
+      const startY = e.clientY;
+      const mode = selectBox.checked ? 'deselect' : 'select';
+      const startRowStates = new Map();
+      feedInner.querySelectorAll('.msg').forEach(r => {
+        const box = r.querySelector('.msg-select');
+        if (box) startRowStates.set(r, box.checked);
+      });
       let didWeMove = false;
       const onMove = (e) => {
-        const y = e.clientY;
-        applyDragSelectToggleByYRange(feedInner, lastY, y);
-        lastY = y;
+        applyDragSelectRect(feedInner, startY, e.clientY, mode, startRowStates);
         didWeMove = true;
       };
       const onEnd = () => {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onEnd);
-        if (!didWeMove) toggleRowAtY(feedInner, lastY);
+        if (!didWeMove) toggleRowAtY(feedInner, startY);
         dragSelectActive = false;
         dragSelectStarted = false;
         dragSelectJustEnded = true;
@@ -2775,21 +2786,25 @@ function createMsgRow(msg, isNew) {
         setSelectMode(true);
       }
       dragSelectActive = true;
-      let lastY = e.touches[0].clientY;
+      const startY = e.touches[0].clientY;
+      const mode = selectBox.checked ? 'deselect' : 'select';
+      const startRowStates = new Map();
+      feedInner.querySelectorAll('.msg').forEach(r => {
+        const box = r.querySelector('.msg-select');
+        if (box) startRowStates.set(r, box.checked);
+      });
       let didWeMove = false;
       const onTouchMove = (e) => {
         if (e.touches.length !== 1) return;
         e.preventDefault();
-        const y = e.touches[0].clientY;
-        applyDragSelectToggleByYRange(feedInner, lastY, y);
-        lastY = y;
+        applyDragSelectRect(feedInner, startY, e.touches[0].clientY, mode, startRowStates);
         didWeMove = true;
       };
       const onTouchEnd = () => {
         document.removeEventListener('touchmove', onTouchMove, { passive: false });
         document.removeEventListener('touchend', onTouchEnd);
         document.removeEventListener('touchcancel', onTouchEnd);
-        if (!didWeMove) toggleRowAtY(feedInner, lastY);
+        if (!didWeMove) toggleRowAtY(feedInner, startY);
         dragSelectActive = false;
         dragSelectStarted = false;
         dragSelectJustEnded = true;
@@ -2830,18 +2845,22 @@ function createMsgRow(msg, isNew) {
         setSelectMode(true);
       }
       dragSelectActive = true;
-      let lastY = e.clientY;
+      const startY = e.clientY;
+      const mode = selectBox.checked ? 'deselect' : 'select';
+      const startRowStates = new Map();
+      feedInner.querySelectorAll('.msg').forEach(r => {
+        const box = r.querySelector('.msg-select');
+        if (box) startRowStates.set(r, box.checked);
+      });
       let didWeMove = false;
       const onMove = (e) => {
-        const y = e.clientY;
-        applyDragSelectToggleByYRange(feedInner, lastY, y);
-        lastY = y;
+        applyDragSelectRect(feedInner, startY, e.clientY, mode, startRowStates);
         didWeMove = true;
       };
       const onEnd = () => {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onEnd);
-        if (!didWeMove) toggleRowAtY(feedInner, lastY);
+        if (!didWeMove) toggleRowAtY(feedInner, startY);
         dragSelectActive = false;
         dragSelectStarted = false;
         dragSelectJustEnded = true;
@@ -2883,21 +2902,25 @@ function createMsgRow(msg, isNew) {
         setSelectMode(true);
       }
       dragSelectActive = true;
-      let lastY = e.touches[0].clientY;
+      const startY = e.touches[0].clientY;
+      const mode = selectBox.checked ? 'deselect' : 'select';
+      const startRowStates = new Map();
+      feedInner.querySelectorAll('.msg').forEach(r => {
+        const box = r.querySelector('.msg-select');
+        if (box) startRowStates.set(r, box.checked);
+      });
       let didWeMove = false;
       const onTouchMove = (e) => {
         if (e.touches.length !== 1) return;
         e.preventDefault();
-        const y = e.touches[0].clientY;
-        applyDragSelectToggleByYRange(feedInner, lastY, y);
-        lastY = y;
+        applyDragSelectRect(feedInner, startY, e.touches[0].clientY, mode, startRowStates);
         didWeMove = true;
       };
       const onTouchEnd = () => {
         document.removeEventListener('touchmove', onTouchMove, { passive: false });
         document.removeEventListener('touchend', onTouchEnd);
         document.removeEventListener('touchcancel', onTouchEnd);
-        if (!didWeMove) toggleRowAtY(feedInner, lastY);
+        if (!didWeMove) toggleRowAtY(feedInner, startY);
         dragSelectActive = false;
         dragSelectStarted = false;
         dragSelectJustEnded = true;
@@ -4369,6 +4392,11 @@ feedEl.addEventListener('dragover', e => {
   if (!rows.length) return;
   const firstRow = rows[0];
   const lastRow = rows[rows.length - 1];
+  const zone = firstRow.querySelector('.msg-checkbox-zone');
+  if (zone) {
+    const zr = zone.getBoundingClientRect();
+    if (e.clientX >= zr.left && e.clientX <= zr.right) return;
+  }
   const contentLeft = firstRow.querySelector('.msg-text');
   if (contentLeft && e.clientX < contentLeft.getBoundingClientRect().left) return;
   const firstRect = firstRow.getBoundingClientRect();
