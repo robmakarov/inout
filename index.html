@@ -4009,6 +4009,10 @@ function clearMessages() {
 }
 
 async function signIn() {
+  if (!sb || !sb.auth || typeof sb.auth.signInWithOAuth !== 'function') {
+    toast('Sign-in not available in this local build.');
+    return;
+  }
   try {
     const { error } = await sb.auth.signInWithOAuth({ provider: 'google' });
     if (error) {
@@ -4022,6 +4026,10 @@ async function signIn() {
 }
 
 async function signOut() {
+  if (!sb || !sb.auth || typeof sb.auth.signOut !== 'function') {
+    toast('Sign-out not available in this local build.');
+    return;
+  }
   try {
     const { error } = await sb.auth.signOut();
     if (error) {
