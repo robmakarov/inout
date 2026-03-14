@@ -5038,14 +5038,14 @@ var lastDragTargetRow = null;
 function processFeedDragover(ev) {
   if (!feedInner) return;
   if (originGhostsActive) {
-    var rows = Array.from(feedInner.children).filter(function(n) { return n.classList && (n.classList.contains('msg') || n.classList.contains('msg-origin-ghost')); });
-    if (!rows.length) return;
-    var firstRow = rows[0];
+    var slotRows = Array.from(feedInner.children).filter(function(n) { return n.classList && (n.classList.contains('msg') || n.classList.contains('msg-origin-ghost')); });
+    if (!slotRows.length) return;
+    var firstRow = slotRows[0];
     var contentLeft = firstRow.querySelector('.msg-time') || firstRow.querySelector('.msg-sender') || firstRow.querySelector('.msg-text');
     if (contentLeft && ev.clientX < contentLeft.getBoundingClientRect().left) return;
     var y = ev.clientY;
     var firstRect = firstRow.getBoundingClientRect();
-    var lastRow = rows[rows.length - 1];
+    var lastRow = slotRows[slotRows.length - 1];
     var lastRect = lastRow.getBoundingClientRect();
     var feedRect = feedEl.getBoundingClientRect();
     var dropAtEndThreshold = 32;
@@ -5061,8 +5061,8 @@ function processFeedDragover(ev) {
     } else if (wantAppend) {
       lineY = lastRect.bottom;
     } else {
-      for (var i = 0; i < rows.length; i++) {
-        var r = rows[i];
+      for (var i = 0; i < slotRows.length; i++) {
+        var r = slotRows[i];
         var rect = r.getBoundingClientRect();
         if (y >= rect.top && y <= rect.bottom) {
           if (r === lastRow && !r.classList.contains('msg-origin-ghost')) {
@@ -5081,7 +5081,7 @@ function processFeedDragover(ev) {
           break;
         }
       }
-      if (insertBeforeNode === null && !wantAppend && rows.length && y >= lastRect.bottom - dropAtEndThreshold) {
+      if (insertBeforeNode === null && !wantAppend && slotRows.length && y >= lastRect.bottom - dropAtEndThreshold) {
         wantAppend = true;
         lineY = lastRect.bottom;
       }
