@@ -2633,24 +2633,20 @@ function createMsgRow(msg, isNew) {
     let timer = null;
     const onDocUp = () => {
       if (timer) clearTimeout(timer);
-      document.removeEventListener('mouseup', onDocUp);
+      document.removeEventListener('mouseup', onDocUp, true);
       if (!dragSelectStarted) {
         selectBox.checked = !selectBox.checked;
-        if (selectBox.checked) {
-          selectedIds.add(msg.id);
-          row.classList.add('msg-selected');
-        } else {
-          selectedIds.delete(msg.id);
-          row.classList.remove('msg-selected');
-        }
         updateSelectionUI();
       }
     };
-    document.addEventListener('mouseup', onDocUp);
+    document.addEventListener('mouseup', onDocUp, true);
     timer = setTimeout(() => {
       timer = null;
       dragSelectStarted = true;
-      if (!selectMode) setSelectMode(true);
+      if (!selectMode) {
+        selectModeAutoOn = true;
+        setSelectMode(true);
+      }
       selectedIds.add(msg.id);
       row.classList.add('msg-selected');
       selectBox.checked = true;
@@ -2692,27 +2688,23 @@ function createMsgRow(msg, isNew) {
     let timer = null;
     const onDocTouchEnd = () => {
       if (timer) clearTimeout(timer);
-      document.removeEventListener('touchend', onDocTouchEnd);
-      document.removeEventListener('touchcancel', onDocTouchEnd);
+      document.removeEventListener('touchend', onDocTouchEnd, true);
+      document.removeEventListener('touchcancel', onDocTouchEnd, true);
       if (!dragSelectStarted) {
         selectBox.checked = !selectBox.checked;
-        if (selectBox.checked) {
-          selectedIds.add(msg.id);
-          row.classList.add('msg-selected');
-        } else {
-          selectedIds.delete(msg.id);
-          row.classList.remove('msg-selected');
-        }
         updateSelectionUI();
       }
     };
-    document.addEventListener('touchend', onDocTouchEnd);
-    document.addEventListener('touchcancel', onDocTouchEnd);
+    document.addEventListener('touchend', onDocTouchEnd, true);
+    document.addEventListener('touchcancel', onDocTouchEnd, true);
     timer = setTimeout(() => {
       timer = null;
       dragSelectStarted = true;
       e.preventDefault();
-      if (!selectMode) setSelectMode(true);
+      if (!selectMode) {
+        selectModeAutoOn = true;
+        setSelectMode(true);
+      }
       selectedIds.add(msg.id);
       row.classList.add('msg-selected');
       selectBox.checked = true;
@@ -2763,14 +2755,17 @@ function createMsgRow(msg, isNew) {
     let timer = null;
     const onDocUp = () => {
       if (timer) clearTimeout(timer);
-      document.removeEventListener('mouseup', onDocUp);
+      document.removeEventListener('mouseup', onDocUp, true);
       if (!dragSelectStarted) return;
     };
-    document.addEventListener('mouseup', onDocUp);
+    document.addEventListener('mouseup', onDocUp, true);
     timer = setTimeout(() => {
       timer = null;
       dragSelectStarted = true;
-      if (!selectMode) setSelectMode(true);
+      if (!selectMode) {
+        selectModeAutoOn = true;
+        setSelectMode(true);
+      }
       selectedIds.add(msg.id);
       row.classList.add('msg-selected');
       selectBox.checked = true;
@@ -2813,17 +2808,20 @@ function createMsgRow(msg, isNew) {
     let timer = null;
     const onDocTouchEnd = () => {
       if (timer) clearTimeout(timer);
-      document.removeEventListener('touchend', onDocTouchEnd);
-      document.removeEventListener('touchcancel', onDocTouchEnd);
+      document.removeEventListener('touchend', onDocTouchEnd, true);
+      document.removeEventListener('touchcancel', onDocTouchEnd, true);
       if (!dragSelectStarted) return;
     };
-    document.addEventListener('touchend', onDocTouchEnd);
-    document.addEventListener('touchcancel', onDocTouchEnd);
+    document.addEventListener('touchend', onDocTouchEnd, true);
+    document.addEventListener('touchcancel', onDocTouchEnd, true);
     timer = setTimeout(() => {
       timer = null;
       dragSelectStarted = true;
       e.preventDefault();
-      if (!selectMode) setSelectMode(true);
+      if (!selectMode) {
+        selectModeAutoOn = true;
+        setSelectMode(true);
+      }
       selectedIds.add(msg.id);
       row.classList.add('msg-selected');
       selectBox.checked = true;
