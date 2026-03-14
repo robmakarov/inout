@@ -1589,6 +1589,18 @@ async function undoLastAction() {
       }));
       const { error } = await sb.from('entries').insert(rows);
       if (error) throw error;
+      rows.forEach(e => {
+        const row = createMsgRow(e, false);
+        if (row) {
+          feedInner.appendChild(row);
+          if (e.id != null) currentMessageOrder.push(e.id);
+          msgCount++;
+        }
+      });
+      updateMsgCount();
+      saveMessageOrderForCurrentChannel();
+      applyFieldPrefsToMessages();
+      showEmptyIfNoMessages();
     } else if (action.type === 'move' && Array.isArray(action.entries) && action.entries.length) {
       const rows = action.entries;
       await Promise.all(rows.map(e => {
@@ -1598,12 +1610,36 @@ async function undoLastAction() {
           .eq('user_id', currentUser.id)
           .eq('id', e.id);
       }));
+      const forCurrent = rows.filter(e => e.channel === currentChannel);
+      forCurrent.forEach(e => {
+        const row = createMsgRow(e, false);
+        if (row) {
+          feedInner.appendChild(row);
+          if (e.id != null) currentMessageOrder.push(e.id);
+          msgCount++;
+        }
+      });
+      if (forCurrent.length) {
+        saveMessageOrderForCurrentChannel();
+        applyMessageOrderToDOM();
+        applyFieldPrefsToMessages();
+      }
+      showEmptyIfNoMessages();
     } else if (action.type === 'send' && Array.isArray(action.entries) && action.entries.length) {
       const ids = action.entries.map(e => e.id).filter(Boolean);
       if (ids.length) {
         const { error } = await sb.from('entries').delete().in('id', ids);
         if (error) throw error;
       }
+      ids.forEach(id => {
+        const el = feedInner.querySelector('.msg[data-id="' + CSS.escape(String(id)) + '"]');
+        if (el) el.remove();
+        currentMessageOrder = currentMessageOrder.filter(x => x !== id);
+        msgCount = Math.max(0, msgCount - 1);
+      });
+      updateMsgCount();
+      saveMessageOrderForCurrentChannel();
+      showEmptyIfNoMessages();
     } else if (action.type === 'edit' && Array.isArray(action.entries) && action.entries.length) {
       const rows = action.entries;
       await Promise.all(rows.map(e => {
@@ -1613,6 +1649,9 @@ async function undoLastAction() {
           .eq('user_id', currentUser.id)
           .eq('id', e.id);
       }));
+      rows.forEach(e => { updateMessageRowText(e.id, e.beforeText); });
+      toast('Undid last action.');
+      return;
     } else if (action.type === 'view' && action.before && action.channel) {
       if (action.channel !== currentChannel) {
         currentChannel = action.channel;
@@ -1628,11 +1667,12 @@ async function undoLastAction() {
       currentMessageOrder = action.before.slice();
       await saveMessageOrderForCurrentChannel();
       applyMessageOrderToDOM();
+      toast('Undid last action.');
+      return;
     } else {
       // Unknown or empty action; nothing to do.
       return;
     }
-    await reloadForUser();
     toast('Undid last action.');
   } catch (e) {
     console.error(e);
@@ -1837,31 +1877,47 @@ function setupFocusOnFirstInteraction() {
 }
 
 /* ═══ LOAD ════════════════════════════════════════════════ */
-async function loadMessages() {
-  if (!currentUser) return;
-
+async function fetchMessagesList() {
+  if (!currentUser) return [];
   let query = sb
     .from('entries')
     .select('id, created_at, text, channel, user_id, author_name')
     .eq('channel', currentChannel);
-
-  // For the main feed, show only this user's own messages.
   if (currentChannel === 'main' && currentUser) {
     query = query.eq('user_id', currentUser.id);
   }
+  const { data, error } = await query.order('created_at', { ascending: true }).limit(200);
+  if (error) { console.error(error); return []; }
+  return data && data.length > 0 ? sortMessagesByOrder(data, currentMessageOrder) : [];
+}
 
-  const { data, error } = await query
-    .order('created_at', { ascending: true })
-    .limit(200);
-
-  if (error) { console.error(error); return; }
-
-  if (data && data.length > 0) {
-    const list = sortMessagesByOrder(data, currentMessageOrder);
+async function loadMessages() {
+  const list = await fetchMessagesList();
+  if (list.length > 0) {
     renderInitialMessages(list);
-    msgCount = data.length;
+    msgCount = list.length;
     updateMsgCount();
   }
+}
+
+function replaceFeedWithList(list) {
+  seenIds.clear();
+  globalMsgNum = 0;
+  msgCount = 0;
+  const frag = document.createDocumentFragment();
+  for (const msg of list) {
+    const row = createMsgRow(msg, false);
+    if (row) frag.appendChild(row);
+  }
+  feedInner.innerHTML = '';
+  if (emptyEl.parentNode) emptyEl.remove();
+  if (frag.childNodes.length) {
+    feedInner.appendChild(frag);
+    msgCount = frag.childNodes.length;
+  } else {
+    showEmptyIfNoMessages();
+  }
+  updateMsgCount();
 }
 
 /* ═══ REALTIME ════════════════════════════════════════════ */
@@ -3165,9 +3221,9 @@ function updateAuthUI() {
 
 async function reloadForUser() {
   if (editingMessageId != null) cancelEditingMode(true);
-  clearMessages();
   await loadMessageOrderForCurrentChannel();
-  await loadMessages();
+  const list = await fetchMessagesList();
+  replaceFeedWithList(list);
   subscribeRealtimeAll();
   requestAnimationFrame(() => {
     scrollBottom();
