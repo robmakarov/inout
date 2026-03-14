@@ -414,7 +414,6 @@ header{
   background:linear-gradient(90deg, transparent 0, rgba(232,213,160,0.0) 15%, rgba(232,213,160,0.55) 50%, transparent 85%);
   animation:loader-bars-inner 1.25s ease-in-out infinite;
 }
-#app-loader-label{ display:none; }
 @keyframes loader-spin{
   to{ transform:rotate(360deg); }
 }
@@ -461,10 +460,6 @@ header{
     transform:scaleX(0.4) translateX(8px);
     opacity:0.2;
   }
-}
-@keyframes loader-label{
-  0%,100%{ opacity:0.7; letter-spacing:0.35em; }
-  50%{ opacity:1; letter-spacing:0.45em; }
 }
 
 #msg-count{
@@ -584,7 +579,7 @@ body.dnd-active .msg:hover .msg-actions{opacity:0;pointer-events:none}
 }
 
 .msg-time{
-  font-size:10px;
+  font-size:6px;
   color:var(--dim);
   letter-spacing:0.04em;
   flex:0 0 auto;
@@ -601,6 +596,13 @@ body.dnd-active .msg:hover .msg-actions{opacity:0;pointer-events:none}
   white-space:pre-wrap;
   padding-right:72px; /* reserve space under right-side actions */
   cursor:pointer;
+}
+/* DnD reorder: row under drop position gets message content nudge right */
+.msg.msg-drag-target .msg-time,
+.msg.msg-drag-target .msg-sender,
+.msg.msg-drag-target .msg-text{
+  transform:translateX(10px);
+  transition:transform .12s ease;
 }
 
 @media (max-width:540px){
@@ -1289,7 +1291,6 @@ body.select-mode .msg-select-wrap,
     <div class="loader-ring"></div>
     <div class="loader-ring"></div>
     <div class="loader-dash"></div>
-    <span id="app-loader-label">INOUT</span>
   </div>
 </div>
 
@@ -4757,6 +4758,12 @@ function processFeedDragover(ev) {
       lineY = lastRect.bottom;
     }
   }
+  var targetRow = (wantAppend || insertBeforeNode !== null) ? (wantAppend ? lastRow : insertBeforeNode) : null;
+  rows.forEach(function(r) {
+    if (r === dragging) return;
+    if (r === targetRow) r.classList.add('msg-drag-target');
+    else r.classList.remove('msg-drag-target');
+  });
   const targetChanged = lastReorderTarget === null || lastReorderTarget.insertBefore !== insertBeforeNode || lastReorderTarget.wantAppend !== wantAppend;
   if ((wantAppend || insertBeforeNode !== null) && targetChanged) {
     lastReorderTarget = { insertBefore: insertBeforeNode, wantAppend: wantAppend };
@@ -4785,6 +4792,7 @@ function processFeedDragover(ev) {
     if (inFeed) {
       if (feedDropIndicatorEl) feedDropIndicatorEl.classList.remove('visible');
       lastReorderTarget = null;
+      rows.forEach(function(r) { r.classList.remove('msg-drag-target'); });
     }
   }
   updateEdgeScroll(ev.clientY, ev.clientX);
@@ -4809,7 +4817,10 @@ feedEl.addEventListener('drop', e => {
   if (feedInner && feedInner.querySelector('.msg.dragging')) {
     e.preventDefault();
     dragDropHandled = true;
-    if (feedInner) feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
+    if (feedInner) {
+      feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
+      feedInner.querySelectorAll('.msg-drag-target').forEach(r => r.classList.remove('msg-drag-target'));
+    }
   }
 });
 feedEl.addEventListener('dragleave', e => {
