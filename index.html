@@ -1572,6 +1572,23 @@ function setupFocusOnFirstInteraction() {
       setTimeout(() => { if (input) input.focus(); }, 0);
     }
   });
+  document.addEventListener('click', (e) => {
+    const t = e.target;
+    if (!t || !t.closest || !t.closest('button')) return;
+    if (t.closest('#user-modal') || t.closest('#channel-modal-backdrop')) return;
+    setTimeout(() => { if (input) input.focus(); }, 0);
+  });
+  if (feedEl) {
+    feedEl.addEventListener('focus', () => {
+      if (input && document.activeElement === feedEl) setTimeout(() => { if (input) input.focus(); }, 0);
+    });
+  }
+  input.addEventListener('focusout', (e) => {
+    const next = e.relatedTarget;
+    if (next && isInteractive(next)) return;
+    if (document.activeElement && (document.activeElement.closest('#user-modal') || document.activeElement.closest('#channel-modal-backdrop'))) return;
+    setTimeout(() => { if (input && document.activeElement !== input) input.focus(); }, 0);
+  });
 }
 
 /* ═══ LOAD ════════════════════════════════════════════════ */
