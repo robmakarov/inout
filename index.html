@@ -505,6 +505,26 @@ body.loaded #feed{
     -webkit-user-select:none;
     user-select:none;
   }
+  /* On mobile hide checkbox zone until select mode is on */
+  .msg-checkbox-zone{
+    width:0;
+    min-width:0;
+    margin-left:0;
+    overflow:hidden;
+    opacity:0;
+    pointer-events:none;
+  }
+  .msg-checkbox-zone-left{ width:0; min-width:0; }
+  body.select-mode .msg-checkbox-zone{
+    width:auto;
+    min-width:auto;
+    margin-left:-48px;
+    overflow:visible;
+    opacity:1;
+    pointer-events:auto;
+  }
+  body.select-mode .msg-checkbox-zone-left{ width:48px; min-width:48px; }
+  body.select-mode .msg-select-wrap{ opacity:1; pointer-events:auto; }
 }
 
 /* on hover, make all message parameters (time/author) same color as text */
@@ -1476,13 +1496,34 @@ let dragSelectToggledByTouch = false;
 let dragSelectMode = 'select'; /* 'select' or 'deselect' */
 let pointerDownOnSelectArea = false; /* true while pointer is down on checkbox area, so row drag is not started */
 
+var edgeScrollIntervalId = null;
+var edgeScrollLastY = 0;
+function clearEdgeScrollInterval() {
+  if (edgeScrollIntervalId) {
+    clearInterval(edgeScrollIntervalId);
+    edgeScrollIntervalId = null;
+  }
+}
 function scrollFeedAtTouchEdge(clientY) {
-  if (!feedEl) return;
-  const edgeZone = 56;
-  const step = 14;
-  const vh = window.innerHeight || 0;
-  if (clientY < edgeZone) feedEl.scrollTop = Math.max(0, feedEl.scrollTop - step);
-  else if (clientY > vh - edgeZone) feedEl.scrollTop = Math.min(feedEl.scrollHeight - feedEl.clientHeight, feedEl.scrollTop + step);
+  if (!feedEl) return false;
+  var feedRect = feedEl.getBoundingClientRect();
+  var edgeZone = 48;
+  var step = 18;
+  var inTop = clientY < feedRect.top + edgeZone;
+  var inBottom = clientY > feedRect.bottom - edgeZone;
+  if (inTop) feedEl.scrollTop = Math.max(0, feedEl.scrollTop - step);
+  else if (inBottom) feedEl.scrollTop = Math.min(feedEl.scrollHeight - feedEl.clientHeight, feedEl.scrollTop + step);
+  else return false;
+  return true;
+}
+function tickEdgeScroll() {
+  if (!scrollFeedAtTouchEdge(edgeScrollLastY)) clearEdgeScrollInterval();
+}
+function updateEdgeScroll(clientY) {
+  edgeScrollLastY = clientY;
+  var inZone = scrollFeedAtTouchEdge(clientY);
+  if (inZone && !edgeScrollIntervalId) edgeScrollIntervalId = setInterval(tickEdgeScroll, 20);
+  else if (!inZone) clearEdgeScrollInterval();
 }
 
 function applyDragSelectRect(feedInner, startY, currentY, mode, startRowStates) {
@@ -2782,10 +2823,11 @@ function createMsgRow(msg, isNew) {
       ev.preventDefault();
       const cy = ev.touches[0].clientY;
       applyDragSelectRect(feedInner, startY, cy, state.mode, state.startRowStates);
-      scrollFeedAtTouchEdge(cy);
+      updateEdgeScroll(cy);
       state.didWeMove = true;
     };
     const onTouchEnd = () => {
+      clearEdgeScrollInterval();
       document.removeEventListener('touchmove', onTouchMove, { passive: false });
       document.removeEventListener('touchend', onTouchEnd);
       document.removeEventListener('touchcancel', onTouchEnd);
@@ -2891,10 +2933,11 @@ function createMsgRow(msg, isNew) {
       ev.preventDefault();
       const cy = ev.touches[0].clientY;
       applyDragSelectRect(feedInner, startY, cy, state.mode, state.startRowStates);
-      scrollFeedAtTouchEdge(cy);
+      updateEdgeScroll(cy);
       state.didWeMove = true;
     };
     const onTouchEnd = () => {
+      clearEdgeScrollInterval();
       document.removeEventListener('touchmove', onTouchMove, { passive: false });
       document.removeEventListener('touchend', onTouchEnd);
       document.removeEventListener('touchcancel', onTouchEnd);
