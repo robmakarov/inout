@@ -540,6 +540,7 @@ header{
 .msg-origin-ghost .msg-time,
 .msg-origin-ghost .msg-sender,
 .msg-origin-ghost .msg-text{ color:var(--text); }
+.msg-origin-ghost + .msg-origin-ghost{ margin-top:-2px }
 
 /* empty state: loader animation (visible on refresh before load) */
 #empty{
@@ -583,12 +584,12 @@ header{
 body.dnd-active .msg{transition:none;animation:none}
 body.dnd-just-ended .msg{transition:none;animation:none}
 body.dnd-active .msg:not(.dragging):not(.msg-drag-group){
-  opacity:0.5;
+  opacity:0.68;
   background:transparent;
 }
 body.dnd-active .msg:not(.dragging):not(.msg-drag-group):hover{
   background:transparent;
-  opacity:0.5;
+  opacity:0.68;
 }
 body.dnd-active .msg.dragging,
 body.dnd-active .msg.msg-drag-group{background:transparent}
@@ -2179,7 +2180,8 @@ function insertOriginGhostsAndDetachRows(block) {
   }
 }
 function removeOriginGhostsAndInsertRows() {
-  if (!originGhostsActive || !feedInner) return;
+  if (!originGhostsActive || !feedInner || !feedEl) return;
+  var scrollTop = feedEl.scrollTop;
   var insertBefore = lastDropInsertBefore;
   if (!insertBefore && originInsertBefore) insertBefore = originInsertBefore;
   if (draggedRowsStored.length) {
@@ -2197,6 +2199,7 @@ function removeOriginGhostsAndInsertRows() {
   lastDropInsertBefore = null;
   lastWantAppend = false;
   originInsertBefore = null;
+  feedEl.scrollTop = scrollTop;
 }
 function focusMessageInput() {
   if (input) input.focus();
@@ -3040,42 +3043,44 @@ function createMsgRow(msg, isNew) {
     if (feedInner) feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
   });
   row.addEventListener('dragend', () => {
-    removeOriginGhostsAndInsertRows();
-    if (feedInner) feedInner.querySelectorAll('.msg-drag-group').forEach(r => r.classList.remove('msg-drag-group'));
-    dragSelectedRows = [];
-    if (document.body) {
-      document.body.classList.remove('dnd-active');
-      document.body.classList.add('dnd-just-ended');
-    }
-    lastReorderTarget = null;
-    feedDragoverRaf = null;
-    feedDragoverLast = null;
-    clearEdgeScrollInterval();
-    hideDropOriginLine();
-    if (feedDropIndicatorEl) feedDropIndicatorEl.classList.remove('visible');
-    lastIndicatorStyle = { left: -1, width: -1, top: -1, visible: false };
-    lastDragTargetRow = null;
-    if (feedInner) feedInner.querySelectorAll('.msg-drag-over, .msg-drag-target').forEach(r => r.classList.remove('msg-drag-over', 'msg-drag-target'));
-    row.classList.remove('dragging');
-    tabsEl.querySelectorAll('.tab.tab-drop-target').forEach(t => t.classList.remove('tab-drop-target'));
-    const domOrder = feedInner ? Array.from(feedInner.querySelectorAll('.msg')).map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id)) : [];
-    const orderChanged = !dragDropHandled && domOrder.length === savedOrderBeforeDrag.length && domOrder.some((id, i) => id !== savedOrderBeforeDrag[i]);
-    if (!dragDropHandled && !orderChanged) {
-      currentMessageOrder = savedOrderBeforeDrag.slice();
-      applyMessageOrderToDOM();
-      saveMessageOrderForCurrentChannel();
-    } else {
-      recomputeOrderFromDOM();
-      saveMessageOrderForCurrentChannel();
-    }
-    applyFieldPrefsToMessages();
-    row.style.pointerEvents = 'none';
-    void row.offsetHeight;
     requestAnimationFrame(() => {
+      removeOriginGhostsAndInsertRows();
+      if (feedInner) feedInner.querySelectorAll('.msg-drag-group').forEach(r => r.classList.remove('msg-drag-group'));
+      dragSelectedRows = [];
+      if (document.body) {
+        document.body.classList.remove('dnd-active');
+        document.body.classList.add('dnd-just-ended');
+      }
+      lastReorderTarget = null;
+      feedDragoverRaf = null;
+      feedDragoverLast = null;
+      clearEdgeScrollInterval();
+      hideDropOriginLine();
+      if (feedDropIndicatorEl) feedDropIndicatorEl.classList.remove('visible');
+      lastIndicatorStyle = { left: -1, width: -1, top: -1, visible: false };
+      lastDragTargetRow = null;
+      if (feedInner) feedInner.querySelectorAll('.msg-drag-over, .msg-drag-target').forEach(r => r.classList.remove('msg-drag-over', 'msg-drag-target'));
+      row.classList.remove('dragging');
+      tabsEl.querySelectorAll('.tab.tab-drop-target').forEach(t => t.classList.remove('tab-drop-target'));
+      const domOrder = feedInner ? Array.from(feedInner.querySelectorAll('.msg')).map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id)) : [];
+      const orderChanged = !dragDropHandled && domOrder.length === savedOrderBeforeDrag.length && domOrder.some((id, i) => id !== savedOrderBeforeDrag[i]);
+      if (!dragDropHandled && !orderChanged) {
+        currentMessageOrder = savedOrderBeforeDrag.slice();
+        applyMessageOrderToDOM();
+        saveMessageOrderForCurrentChannel();
+      } else {
+        recomputeOrderFromDOM();
+        saveMessageOrderForCurrentChannel();
+      }
+      applyFieldPrefsToMessages();
+      row.style.pointerEvents = 'none';
+      void row.offsetHeight;
       requestAnimationFrame(() => {
-        if (document.body) document.body.classList.remove('dnd-just-ended');
-        row.style.pointerEvents = '';
-        focusMessageInput();
+        requestAnimationFrame(() => {
+          if (document.body) document.body.classList.remove('dnd-just-ended');
+          row.style.pointerEvents = '';
+          focusMessageInput();
+        });
       });
     });
   });
