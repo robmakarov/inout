@@ -2068,7 +2068,8 @@ function showDropOriginLine() {
   if (block.length === 0) return;
   var firstRow = block[0];
   var r = firstRow.getBoundingClientRect();
-  var topPx = r.top + (r.height / 2) - 2;
+  var feedRect = feedEl.getBoundingClientRect();
+  var topPx = r.top - 4;
   if (!feedDropOriginEl) {
     feedDropOriginEl = document.createElement('div');
     feedDropOriginEl.className = 'feed-drop-origin';
@@ -2076,8 +2077,8 @@ function showDropOriginLine() {
     document.body.appendChild(feedDropOriginEl);
   }
   if (feedDropOriginEl.parentNode !== document.body) document.body.appendChild(feedDropOriginEl);
-  feedDropOriginEl.style.left = '0';
-  feedDropOriginEl.style.width = '100%';
+  feedDropOriginEl.style.left = feedRect.left + 'px';
+  feedDropOriginEl.style.width = feedRect.width + 'px';
   feedDropOriginEl.style.top = topPx + 'px';
   feedDropOriginEl.classList.add('visible');
 }
