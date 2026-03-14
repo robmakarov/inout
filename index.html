@@ -911,12 +911,6 @@ body.select-mode .msg-select-wrap,
   text-overflow:ellipsis;
   white-space:nowrap;
 }
-#log-action-btn .log-caption{
-  display:block;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-}
 #log-action-btn.error-signal{
   border-color:#c55;
   box-shadow:0 0 0 1px #c55;
@@ -1345,8 +1339,6 @@ body.select-mode .msg-select-wrap,
           <div class="loader-ring"></div>
           <div class="loader-dash"></div>
         </div>
-        <div class="e-label">Nothing yet.</div>
-        <div class="e-sub">Be the first to say something</div>
       </div>
     </div>
   </div>
@@ -1398,7 +1390,7 @@ body.select-mode .msg-select-wrap,
     <div class="input-tools">
       <button id="clipboard-button" class="draft-btn">From clipboard</button>
       <div class="log-dropup-wrap">
-        <button id="log-action-btn" type="button" aria-label="Action log"><span class="log-caption">Log</span></button>
+        <button id="log-action-btn" type="button" aria-label="Action log"></button>
         <div id="log-dropup-panel" role="dialog" aria-label="Action log">
           <div class="log-dropup-body" id="log-dropup-body"></div>
         </div>
@@ -1476,7 +1468,6 @@ body.select-mode .msg-select-wrap,
 </div>
 
 <script>
-if (document.body) document.body.classList.add('loaded');
 /* INOUT – shared state, Supabase client, DOM refs (load first) */
 const SUPABASE_URL  = 'https://tfmbqiwxfgrwtjvoqomf.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_';
@@ -1766,7 +1757,12 @@ function logAction(action, details, opts) {
     fromThisDevice: true,
   };
   actionLog.unshift(entry);
-  if (actionLog.length > 100) actionLog.pop();
+  if (actionLog.length > 100) {
+    const removed = actionLog.pop();
+    if (currentUser && removed?.id) {
+      try { sb.from('action_log').delete().eq('user_id', currentUser.id).eq('id', removed.id).then(() => {}).catch(() => {}); } catch (_) {}
+    }
+  }
   updateLogBadge();
   if (currentUser) {
     try {
@@ -1795,7 +1791,12 @@ function logError(message) {
     fromThisDevice: true,
   };
   actionLog.unshift(entry);
-  if (actionLog.length > 100) actionLog.pop();
+  if (actionLog.length > 100) {
+    const removed = actionLog.pop();
+    if (currentUser && removed?.id) {
+      try { sb.from('action_log').delete().eq('user_id', currentUser.id).eq('id', removed.id).then(() => {}).catch(() => {}); } catch (_) {}
+    }
+  }
   updateLogBadge();
   if (currentUser) {
     try {
@@ -1812,20 +1813,8 @@ function logError(message) {
   }
 }
 
-function getLastEventCaption() {
-  const e = actionLog[0];
-  if (!e) return 'Log';
-  if (e.type === 'error' && e.message) {
-    const s = String(e.message);
-    return s.length > 40 ? s.slice(0, 37) + '…' : s;
-  }
-  return e.action || e.type || 'Log';
-}
-
 function updateLogBadge() {
   if (!logActionBtn) return;
-  const captionEl = logActionBtn.querySelector('.log-caption');
-  if (captionEl) captionEl.textContent = getLastEventCaption();
   const last = actionLog[0];
   const isError = last && last.type === 'error';
   logActionBtn.classList.remove('error-signal', 'error-signal-faded');
@@ -2437,7 +2426,12 @@ function subscribeActionLog() {
             fromThisDevice: false,
           };
           actionLog.unshift(entry);
-          if (actionLog.length > 100) actionLog.pop();
+          if (actionLog.length > 100) {
+            const removed = actionLog.pop();
+            if (currentUser && removed?.id) {
+              try { sb.from('action_log').delete().eq('user_id', currentUser.id).eq('id', removed.id).then(() => {}).catch(() => {}); } catch (_) {}
+            }
+          }
           updateLogBadge();
           if (logDropupPanel && logDropupPanel.classList.contains('open')) renderLogDropup();
         }
