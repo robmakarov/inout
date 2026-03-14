@@ -480,7 +480,6 @@ header{
 #feed.feed-updating{opacity:0.998;contain:layout style}
 
 .feed-inner{
-  position:relative;
   padding:16px 0 8px;
   display:flex;
   flex-direction:column;
@@ -502,19 +501,19 @@ header{
 }
 .feed-drop-indicator.visible{ display:block; }
 .feed-drop-origin{
-  position:absolute;
+  position:fixed;
   left:0;
   right:0;
   height:14px;
-  margin-top:-7px;
   pointer-events:none;
-  z-index:100;
+  z-index:2147483647;
   display:none;
   background:#e85c2b;
   border:3px solid #c43d12;
   box-shadow:0 0 0 2px rgba(255,255,255,0.5), 0 0 12px rgba(232,92,43,0.9);
   border-radius:4px;
   box-sizing:border-box;
+  transform:translateZ(0);
 }
 .feed-drop-origin.visible{ display:block; }
 
@@ -2070,22 +2069,22 @@ function showDropOriginLine() {
   var block = (dragSelectedRows && dragSelectedRows.length > 0) ? dragSelectedRows : (feedInner.querySelector('.msg.dragging') ? [feedInner.querySelector('.msg.dragging')] : []);
   if (block.length === 0) return;
   var firstRow = block[0];
-  var topPx = (firstRow.offsetTop || 0) - 2;
+  var r = firstRow.getBoundingClientRect();
+  var topPx = r.top + (r.height / 2) - 7;
   if (!feedDropOriginEl) {
     feedDropOriginEl = document.createElement('div');
     feedDropOriginEl.className = 'feed-drop-origin';
     feedDropOriginEl.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(feedDropOriginEl);
   }
-  if (feedDropOriginEl.parentNode !== feedInner) feedInner.appendChild(feedDropOriginEl);
+  if (feedDropOriginEl.parentNode !== document.body) document.body.appendChild(feedDropOriginEl);
+  feedDropOriginEl.style.left = '0';
+  feedDropOriginEl.style.width = '100%';
   feedDropOriginEl.style.top = topPx + 'px';
-  feedDropOriginEl.style.marginTop = '0';
   feedDropOriginEl.classList.add('visible');
 }
 function hideDropOriginLine() {
-  if (feedDropOriginEl) {
-    feedDropOriginEl.classList.remove('visible');
-    if (feedDropOriginEl.parentNode) feedDropOriginEl.parentNode.removeChild(feedDropOriginEl);
-  }
+  if (feedDropOriginEl) feedDropOriginEl.classList.remove('visible');
 }
 function focusMessageInput() {
   if (input) input.focus();
@@ -2318,6 +2317,7 @@ async function replaceFeedWithList(list) {
     requestAnimationFrame(() => {
       if (feedInner) feedInner.appendChild(frag);
       updateMsgCount();
+      applyFieldPrefsToMessages();
     });
   } else {
     showEmptyIfNoMessages();
