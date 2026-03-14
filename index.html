@@ -2753,7 +2753,10 @@ function createMsgRow(msg, isNew) {
       c.height = 1;
       dragImageEl = c;
     }
-    e.dataTransfer.setDragImage(dragImageEl, 0, 0);
+    var rect = row.getBoundingClientRect();
+    var offsetX = e.clientX - rect.left;
+    var offsetY = e.clientY - rect.top;
+    e.dataTransfer.setDragImage(dragImageEl, offsetX, offsetY);
   });
   row.addEventListener('dragend', () => {
     lastReorderTarget = null;
