@@ -4409,25 +4409,27 @@ feedEl.addEventListener('dragover', e => {
   const firstRow = rows[0];
   const contentLeft = firstRow.querySelector('.msg-time') || firstRow.querySelector('.msg-sender') || firstRow.querySelector('.msg-text');
   if (contentLeft && e.clientX < contentLeft.getBoundingClientRect().left) return;
-  const under = document.elementFromPoint(e.clientX, e.clientY);
-  if (under && under.closest('.msg') && !under.closest('.msg-time') && !under.closest('.msg-sender') && !under.closest('.msg-text') && !under.closest('.msg-actions')) return;
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
   const y = e.clientY;
   const firstRect = firstRow.getBoundingClientRect();
   const lastRow = rows[rows.length - 1];
   const lastRect = lastRow.getBoundingClientRect();
-  const dropAtEndThreshold = 32;
-  const inEmptyZoneOrPastLast = y >= lastRect.bottom - dropAtEndThreshold;
+  const dropAtEndThreshold = 40;
+  const inEmptyZone = y >= lastRect.bottom - dropAtEndThreshold;
+  if (!inEmptyZone) {
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    if (under && under.closest('.msg') && !under.closest('.msg-time') && !under.closest('.msg-sender') && !under.closest('.msg-text') && !under.closest('.msg-actions')) return;
+  }
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
   const inLastRowLowerHalf = lastRow !== dragging && y >= lastRect.top + lastRect.height * 0.5;
-  let wantAppend = inEmptyZoneOrPastLast || inLastRowLowerHalf;
+  const wantAppendFirst = inEmptyZone || inLastRowLowerHalf;
+  let wantAppend = wantAppendFirst;
   let insertBeforeNode = null;
   let lineY = 0;
   if (y < firstRect.top) {
     insertBeforeNode = firstRow;
     lineY = firstRect.top;
   } else if (wantAppend) {
-    insertBeforeNode = null;
     lineY = lastRect.bottom;
   } else {
     const rowGap = 4;
@@ -4436,7 +4438,7 @@ feedEl.addEventListener('dragover', e => {
       const rect = r.getBoundingClientRect();
       if (y >= rect.top && y <= rect.bottom) {
         if (r === dragging) break;
-        if (r === lastRow && y >= rect.top + rect.height * 0.5) {
+        if (r === lastRow && lastRow !== dragging) {
           wantAppend = true;
           lineY = rect.bottom;
           break;
