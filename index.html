@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="color-scheme" content="dark"/>
 <title>INOUT</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230a0a09'/%3E%3Cpath d='M18 44V20h6v24h-6Zm22-24v24h-6V20h6Z' fill='%23e8d5a0'/%3E%3Cpath d='M30 20h4v24h-4z' fill='%23f0ece3' opacity='.65'/%3E%3C/svg%3E"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -13,6 +14,7 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
 :root{
+  color-scheme:dark;
   --bg:     #0a0a09;
   --bg2:    #111110;
   --line:   #1e1e1c;
@@ -1496,41 +1498,49 @@ let pointerDownOnSelectArea = false; /* true while pointer is down on checkbox a
 
 var edgeScrollIntervalId = null;
 var edgeScrollLastY = 0;
+var edgeScrollLastX = 0;
 function clearEdgeScrollInterval() {
   if (edgeScrollIntervalId) {
     clearInterval(edgeScrollIntervalId);
     edgeScrollIntervalId = null;
   }
 }
-function scrollFeedAtTouchEdge(clientY) {
+function scrollFeedAtTouchEdge(clientY, clientX) {
   if (!feedEl) return false;
   var feedRect = feedEl.getBoundingClientRect();
   var edgeZone = Math.max(56, feedRect.height * 0.2);
   var baseStep = 6;
   var maxScroll = feedEl.scrollHeight - feedEl.clientHeight;
-  var inTop = clientY >= feedRect.top && clientY < feedRect.top + edgeZone;
-  var inBottom = clientY > feedRect.bottom - edgeZone && clientY <= feedRect.bottom;
+  var inTop = clientY < feedRect.top + edgeZone;
+  var inBottom = clientY > feedRect.bottom - edgeZone;
+  if (typeof clientX === 'number') {
+    var under = document.elementFromPoint(clientX, clientY);
+    if (under && (under.closest('header') || under.closest('#manage-bar') || under.closest('#input-area'))) return false;
+  }
   var closeness, step;
   if (inTop) {
-    closeness = 1 - (clientY - feedRect.top) / edgeZone;
-    step = baseStep * (0.5 + 2.5 * closeness);
+    if (clientY <= feedRect.top) closeness = 1;
+    else closeness = 1 - (clientY - feedRect.top) / edgeZone;
+    step = baseStep * (0.5 + 2.5 * Math.min(1, closeness));
     feedEl.scrollTop = Math.max(0, feedEl.scrollTop - step);
     return true;
   }
   if (inBottom) {
-    closeness = 1 - (feedRect.bottom - clientY) / edgeZone;
-    step = baseStep * (0.5 + 2.5 * closeness);
+    if (clientY >= feedRect.bottom) closeness = 1;
+    else closeness = 1 - (feedRect.bottom - clientY) / edgeZone;
+    step = baseStep * (0.5 + 2.5 * Math.min(1, closeness));
     if (maxScroll > 0) feedEl.scrollTop = Math.min(maxScroll, feedEl.scrollTop + step);
     return true;
   }
   return false;
 }
 function tickEdgeScroll() {
-  if (!scrollFeedAtTouchEdge(edgeScrollLastY)) clearEdgeScrollInterval();
+  if (!scrollFeedAtTouchEdge(edgeScrollLastY, edgeScrollLastX)) clearEdgeScrollInterval();
 }
-function updateEdgeScroll(clientY) {
+function updateEdgeScroll(clientY, clientX) {
   edgeScrollLastY = clientY;
-  var inZone = scrollFeedAtTouchEdge(clientY);
+  edgeScrollLastX = typeof clientX === 'number' ? clientX : edgeScrollLastX;
+  var inZone = scrollFeedAtTouchEdge(clientY, edgeScrollLastX);
   if (inZone && !edgeScrollIntervalId) edgeScrollIntervalId = setInterval(tickEdgeScroll, 16);
   else if (!inZone) clearEdgeScrollInterval();
 }
@@ -2563,7 +2573,7 @@ function setupTouchDragHandlers() {
     } else {
       feedInner.insertBefore(touchDragState.row, target.nextSibling);
     }
-    updateEdgeScroll(y);
+    updateEdgeScroll(y, touch.clientX);
   };
   const end = () => {
     if (!touchDragState || !touchDragState.row) return;
@@ -2835,7 +2845,7 @@ function createMsgRow(msg, isNew) {
       ev.preventDefault();
       const cy = ev.touches[0].clientY;
       applyDragSelectRect(feedInner, startY, cy, state.mode, state.startRowStates);
-      updateEdgeScroll(cy);
+      updateEdgeScroll(cy, ev.touches[0].clientX);
       state.didWeMove = true;
     };
     const onTouchEnd = () => {
@@ -2945,7 +2955,7 @@ function createMsgRow(msg, isNew) {
       ev.preventDefault();
       const cy = ev.touches[0].clientY;
       applyDragSelectRect(feedInner, startY, cy, state.mode, state.startRowStates);
-      updateEdgeScroll(cy);
+      updateEdgeScroll(cy, ev.touches[0].clientX);
       state.didWeMove = true;
     };
     const onTouchEnd = () => {
@@ -4548,7 +4558,7 @@ feedEl.addEventListener('dragover', e => {
     feedDropIndicatorEl.style.top = (lineY - 2) + 'px';
     feedDropIndicatorEl.classList.add('visible');
   }
-  updateEdgeScroll(e.clientY);
+  updateEdgeScroll(e.clientY, e.clientX);
 });
 feedEl.addEventListener('drop', e => {
   if (feedInner && feedInner.querySelector('.msg.dragging')) {
