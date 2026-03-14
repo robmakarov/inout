@@ -3501,21 +3501,33 @@ if (exportTabBtn) {
     }
     try {
       const boxes = feedInner.querySelectorAll('.msg-select:checked');
-      let ids = Array.from(boxes)
-        .map(box => {
-          const row = box.closest('.msg');
-          return row && row.dataset.id ? Number(row.dataset.id) : null;
-        })
-        .filter(id => typeof id === 'number');
+      let orderedIds = [];
+      if (boxes.length) {
+        const selectedIds = new Set(
+          Array.from(boxes)
+            .map(b => { const row = b.closest('.msg'); return row && row.dataset.id ? Number(row.dataset.id) : null; })
+            .filter(id => typeof id === 'number')
+        );
+        // Order as presented in the feed (DOM order).
+        orderedIds = Array.from(feedInner.querySelectorAll('.msg'))
+          .map(row => row.dataset.id ? Number(row.dataset.id) : null)
+          .filter(id => Number.isFinite(id) && selectedIds.has(id));
+      } else {
+        // Whole tab: use current view order (currentMessageOrder), or DOM order if empty.
+        orderedIds = currentMessageOrder.length
+          ? currentMessageOrder.slice()
+          : Array.from(feedInner.querySelectorAll('.msg'))
+              .map(row => row.dataset.id ? Number(row.dataset.id) : null)
+              .filter(id => Number.isFinite(id));
+      }
 
       let query = sb
         .from('entries')
-        .select('created_at,text,channel,user_id,author_name')
-        .order('created_at', { ascending: true })
+        .select('id,created_at,text,channel,user_id,author_name')
         .limit(1000);
 
-      if (ids.length) {
-        query = query.in('id', ids);
+      if (orderedIds.length) {
+        query = query.in('id', orderedIds);
       } else {
         query = query.eq('channel', currentChannel);
         if (currentChannel === 'main') {
@@ -3536,7 +3548,13 @@ if (exportTabBtn) {
         return;
       }
 
-      const lines = rows.map(row => {
+      // Sort by current view order (orderedIds); append any extra at end.
+      const byId = new Map(rows.map(r => [r.id, r]));
+      const ordered = orderedIds.map(id => byId.get(id)).filter(Boolean);
+      byId.forEach((row, id) => { if (!orderedIds.includes(id)) ordered.push(row); });
+      const finalRows = ordered;
+
+      const lines = finalRows.map(row => {
         const d = new Date(row.created_at);
         const timeStr = d.toLocaleString();
         if (row.channel === 'main') {
