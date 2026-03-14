@@ -518,8 +518,12 @@ body.loaded #feed{
   display:flex;
   align-items:center;
   margin-left:-20px;
-  padding-left:20px;
   min-height:1em;
+}
+.msg-checkbox-zone-left{
+  width:20px;
+  min-width:20px;
+  flex-shrink:0;
 }
 .msg-select-wrap{
   flex:0 0 20px;
@@ -2554,14 +2558,10 @@ function createMsgRow(msg, isNew) {
   row.addEventListener('dragover', e => {
     const dragging = feedInner.querySelector('.msg.dragging');
     if (!dragging || dragging === row) return;
-    const zone = row.querySelector('.msg-checkbox-zone');
-    if (zone) {
-      const zr = zone.getBoundingClientRect();
-      if (e.clientX >= zr.left && e.clientX <= zr.right) return;
-    }
     const textEl = row.querySelector('.msg-text');
     if (textEl && e.clientX < textEl.getBoundingClientRect().left) return;
     e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
     const rows = Array.from(feedInner.querySelectorAll('.msg'));
     const oldRects = new Map();
     rows.forEach(r => { if (r !== dragging) oldRects.set(r, r.getBoundingClientRect()); });
@@ -2704,6 +2704,10 @@ function createMsgRow(msg, isNew) {
   selectWrap.appendChild(selectBox);
   const checkboxZone = document.createElement('div');
   checkboxZone.className = 'msg-checkbox-zone';
+  const zoneLeft = document.createElement('div');
+  zoneLeft.className = 'msg-checkbox-zone-left';
+  zoneLeft.setAttribute('aria-hidden', 'true');
+  checkboxZone.appendChild(zoneLeft);
   checkboxZone.appendChild(selectWrap);
   checkboxZone.addEventListener('click', e => {
     if (dragSelectJustEnded || dragSelectToggledByTouch) {
@@ -2942,6 +2946,11 @@ function createMsgRow(msg, isNew) {
     if (e.target.closest('a')) return;
     e.stopPropagation();
     if (typeof msg.id === 'undefined') return;
+    if (selectMode && editingMessageId) {
+      cancelEditingMode(true);
+      setTimeout(() => { saveInputGlobal(); if (input) input.focus(); }, 0);
+      return;
+    }
     if (selectMode) return;
     if (Number(msg.id) === Number(editingMessageId)) {
       cancelEditingMode(true);
@@ -4392,11 +4401,6 @@ feedEl.addEventListener('dragover', e => {
   if (!rows.length) return;
   const firstRow = rows[0];
   const lastRow = rows[rows.length - 1];
-  const zone = firstRow.querySelector('.msg-checkbox-zone');
-  if (zone) {
-    const zr = zone.getBoundingClientRect();
-    if (e.clientX >= zr.left && e.clientX <= zr.right) return;
-  }
   const contentLeft = firstRow.querySelector('.msg-text');
   if (contentLeft && e.clientX < contentLeft.getBoundingClientRect().left) return;
   const firstRect = firstRow.getBoundingClientRect();
