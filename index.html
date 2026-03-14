@@ -395,6 +395,21 @@ body.loaded #feed{
   min-height:100%;
   gap:0;
 }
+/* drop position line (fixed overlay, not inside feed so DnD is not affected) */
+.feed-drop-indicator{
+  position:fixed;
+  left:0;
+  width:100%;
+  height:0;
+  border-top:3px solid var(--acc);
+  box-shadow:0 0 10px var(--acc);
+  pointer-events:none;
+  z-index:9999;
+  opacity:.95;
+  display:none;
+}
+.feed-drop-indicator.visible{ display:block; }
+
 /* empty state */
 #empty{
   flex:1;
@@ -1735,6 +1750,7 @@ let currentMessageOrder = [];
 let touchDragState = null; // for mobile long-press drag
 let dragDropHandled = false;
 let savedOrderBeforeDrag = [];
+let feedDropIndicatorEl = null;
 function focusMessageInput() {
   if (input) input.focus();
 }
@@ -2449,6 +2465,7 @@ function createMsgRow(msg, isNew) {
     if (typeof msg.id !== 'undefined') e.dataTransfer.setData('application/x-inout-msg-id', String(msg.id));
   });
   row.addEventListener('dragend', () => {
+    if (feedDropIndicatorEl) feedDropIndicatorEl.classList.remove('visible');
     row.classList.remove('dragging');
     tabsEl.querySelectorAll('.tab.tab-drop-target').forEach(t => t.classList.remove('tab-drop-target'));
     if (!dragDropHandled) {
@@ -2473,11 +2490,23 @@ function createMsgRow(msg, isNew) {
     const bounding = row.getBoundingClientRect();
     const offset = e.clientY - bounding.top;
     const halfway = bounding.height / 2;
-    if (offset > halfway) {
+    const insertAfter = offset > halfway;
+    if (insertAfter) {
       feedInner.insertBefore(dragging, row.nextSibling);
     } else {
       feedInner.insertBefore(dragging, row);
     }
+    if (!feedDropIndicatorEl) {
+      feedDropIndicatorEl = document.createElement('div');
+      feedDropIndicatorEl.className = 'feed-drop-indicator';
+      document.body.appendChild(feedDropIndicatorEl);
+    }
+    const lineY = insertAfter ? bounding.bottom : bounding.top;
+    const feedRect = feedEl ? feedEl.getBoundingClientRect() : bounding;
+    feedDropIndicatorEl.style.left = feedRect.left + 'px';
+    feedDropIndicatorEl.style.width = feedRect.width + 'px';
+    feedDropIndicatorEl.style.top = (lineY - 1.5) + 'px';
+    feedDropIndicatorEl.classList.add('visible');
   });
   row.addEventListener('drop', e => {
     e.preventDefault();
