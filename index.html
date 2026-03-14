@@ -518,12 +518,14 @@ body.loaded #feed{
   display:flex;
   align-items:center;
   margin-left:-48px;
-  min-height:1em;
+  min-height:100%;
+  align-self:stretch;
 }
 .msg-checkbox-zone-left{
   width:48px;
   min-width:48px;
   flex-shrink:0;
+  align-self:stretch;
 }
 .msg-select-wrap{
   flex:0 0 24px;
@@ -2696,58 +2698,93 @@ function createMsgRow(msg, isNew) {
     pointerDownOnSelectArea = true;
     dragSelectJustEnded = false;
     dragSelectToggledByTouch = false;
-    let timer = null;
-    const onDocUp = () => {
-      if (timer) clearTimeout(timer);
-      document.removeEventListener('mouseup', onDocUp, true);
+    const startY = e.clientY;
+    const state = { started: false, mode: null, startRowStates: null, didWeMove: false };
+    const onMove = (ev) => {
+      if (!state.started) return;
+      applyDragSelectRect(feedInner, startY, ev.clientY, state.mode, state.startRowStates);
+      state.didWeMove = true;
+    };
+    const onEnd = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onEnd);
+      if (state.started && !state.didWeMove) toggleRowAtY(feedInner, startY);
+      dragSelectActive = false;
+      dragSelectStarted = false;
+      dragSelectJustEnded = true;
       pointerDownOnSelectArea = false;
     };
-    document.addEventListener('mouseup', onDocUp, true);
-    timer = setTimeout(() => {
-      timer = null;
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onEnd);
+    const timer = setTimeout(() => {
+      state.started = true;
       dragSelectStarted = true;
       if (!selectMode) {
         selectModeAutoOn = true;
         setSelectMode(true);
       }
       dragSelectActive = true;
-      const startY = e.clientY;
-      const mode = selectBox.checked ? 'deselect' : 'select';
-      const startRowStates = new Map();
+      state.mode = selectBox.checked ? 'deselect' : 'select';
+      state.startRowStates = new Map();
       feedInner.querySelectorAll('.msg').forEach(r => {
         const box = r.querySelector('.msg-select');
-        if (box) startRowStates.set(r, box.checked);
+        if (box) state.startRowStates.set(r, box.checked);
       });
-      let didWeMove = false;
-      const onMove = (e) => {
-        applyDragSelectRect(feedInner, startY, e.clientY, mode, startRowStates);
-        didWeMove = true;
-      };
-      const onEnd = () => {
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onEnd);
-        if (!didWeMove) toggleRowAtY(feedInner, startY);
-        dragSelectActive = false;
-        dragSelectStarted = false;
-        dragSelectJustEnded = true;
-        pointerDownOnSelectArea = false;
-      };
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onEnd);
-    }, 380);
+    }, 200);
+    const onDocUp = () => {
+      clearTimeout(timer);
+      document.removeEventListener('mouseup', onDocUp, true);
+      pointerDownOnSelectArea = false;
+    };
+    document.addEventListener('mouseup', onDocUp, true);
   });
   checkboxZone.addEventListener('touchstart', e => {
     if (!msg.id || e.touches.length !== 1) return;
     pointerDownOnSelectArea = true;
     dragSelectJustEnded = false;
     dragSelectToggledByTouch = false;
-    let timer = null;
+    const startY = e.touches[0].clientY;
+    const state = { started: false, mode: null, startRowStates: null, didWeMove: false };
+    const onTouchMove = (ev) => {
+      if (!state.started || ev.touches.length !== 1) return;
+      ev.preventDefault();
+      applyDragSelectRect(feedInner, startY, ev.touches[0].clientY, state.mode, state.startRowStates);
+      state.didWeMove = true;
+    };
+    const onTouchEnd = () => {
+      document.removeEventListener('touchmove', onTouchMove, { passive: false });
+      document.removeEventListener('touchend', onTouchEnd);
+      document.removeEventListener('touchcancel', onTouchEnd);
+      if (state.started && !state.didWeMove) toggleRowAtY(feedInner, startY);
+      dragSelectActive = false;
+      dragSelectStarted = false;
+      dragSelectJustEnded = true;
+      pointerDownOnSelectArea = false;
+    };
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+    document.addEventListener('touchend', onTouchEnd);
+    document.addEventListener('touchcancel', onTouchEnd);
+    const timer = setTimeout(() => {
+      state.started = true;
+      dragSelectStarted = true;
+      if (!selectMode) {
+        selectModeAutoOn = true;
+        setSelectMode(true);
+      }
+      dragSelectActive = true;
+      state.mode = selectBox.checked ? 'deselect' : 'select';
+      state.startRowStates = new Map();
+      feedInner.querySelectorAll('.msg').forEach(r => {
+        const box = r.querySelector('.msg-select');
+        if (box) state.startRowStates.set(r, box.checked);
+      });
+    }, 200);
     const onDocTouchEnd = () => {
-      if (timer) clearTimeout(timer);
+      clearTimeout(timer);
       document.removeEventListener('touchend', onDocTouchEnd, true);
       document.removeEventListener('touchcancel', onDocTouchEnd, true);
       pointerDownOnSelectArea = false;
-      if (!dragSelectStarted) {
+      if (!state.started) {
         selectBox.checked = !selectBox.checked;
         dragSelectToggledByTouch = true;
         updateSelectionUI();
@@ -2755,158 +2792,119 @@ function createMsgRow(msg, isNew) {
     };
     document.addEventListener('touchend', onDocTouchEnd, true);
     document.addEventListener('touchcancel', onDocTouchEnd, true);
-    timer = setTimeout(() => {
+  }, { passive: true });
+
+  /* long-press on message row (anywhere except checkbox-zone/actions/links) starts drag-select; any movement before delay cancels so reorder doesn't trigger */
+  row.addEventListener('mousedown', e => {
+    if (!msg.id) return;
+    if (e.target.closest('.msg-checkbox-zone, .msg-actions') || (e.target.closest('a') && e.target.closest('.msg-text'))) return;
+    const startY = e.clientY;
+    const state = { started: false, mode: null, startRowStates: null, didWeMove: false };
+    const onMove = (ev) => {
+      if (!state.started) return;
+      applyDragSelectRect(feedInner, startY, ev.clientY, state.mode, state.startRowStates);
+      state.didWeMove = true;
+    };
+    const onEnd = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onEnd);
+      if (state.started && !state.didWeMove) toggleRowAtY(feedInner, startY);
+      dragSelectActive = false;
+      dragSelectStarted = false;
+      dragSelectJustEnded = true;
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onEnd);
+    let timer = setTimeout(() => {
       timer = null;
+      state.started = true;
       dragSelectStarted = true;
-      e.preventDefault();
       if (!selectMode) {
         selectModeAutoOn = true;
         setSelectMode(true);
       }
       dragSelectActive = true;
-      const startY = e.touches[0].clientY;
-      const mode = selectBox.checked ? 'deselect' : 'select';
-      const startRowStates = new Map();
+      state.mode = selectBox.checked ? 'deselect' : 'select';
+      state.startRowStates = new Map();
       feedInner.querySelectorAll('.msg').forEach(r => {
         const box = r.querySelector('.msg-select');
-        if (box) startRowStates.set(r, box.checked);
+        if (box) state.startRowStates.set(r, box.checked);
       });
-      let didWeMove = false;
-      const onTouchMove = (e) => {
-        if (e.touches.length !== 1) return;
-        e.preventDefault();
-        applyDragSelectRect(feedInner, startY, e.touches[0].clientY, mode, startRowStates);
-        didWeMove = true;
-      };
-      const onTouchEnd = () => {
-        document.removeEventListener('touchmove', onTouchMove, { passive: false });
-        document.removeEventListener('touchend', onTouchEnd);
-        document.removeEventListener('touchcancel', onTouchEnd);
-        if (!didWeMove) toggleRowAtY(feedInner, startY);
-        dragSelectActive = false;
-        dragSelectStarted = false;
-        dragSelectJustEnded = true;
-        pointerDownOnSelectArea = false;
-      };
-      document.addEventListener('touchmove', onTouchMove, { passive: false });
-      document.addEventListener('touchend', onTouchEnd);
-      document.addEventListener('touchcancel', onTouchEnd);
-    }, 380);
-  }, { passive: true });
-
-  /* long-press on message row (anywhere except checkbox-zone/actions/links) starts drag-select; any movement cancels so reorder doesn't trigger it */
-  row.addEventListener('mousedown', e => {
-    if (!msg.id) return;
-    if (e.target.closest('.msg-checkbox-zone, .msg-actions') || (e.target.closest('a') && e.target.closest('.msg-text'))) return;
-    let timer = null;
+    }, 200);
+    const onDocMove = () => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onEnd);
+      document.removeEventListener('mousemove', onDocMove, true);
+      document.removeEventListener('mouseup', onDocUp, true);
+    };
     const onDocUp = () => {
       if (timer) clearTimeout(timer);
       document.removeEventListener('mouseup', onDocUp, true);
       document.removeEventListener('mousemove', onDocMove, true);
-      if (!dragSelectStarted) return;
-    };
-    const onDocMove = () => {
-      if (timer) clearTimeout(timer);
-      timer = null;
-      document.removeEventListener('mousemove', onDocMove, true);
-      document.removeEventListener('mouseup', onDocUp, true);
     };
     document.addEventListener('mouseup', onDocUp, true);
     document.addEventListener('mousemove', onDocMove, true);
-    timer = setTimeout(() => {
+  });
+  row.addEventListener('touchstart', e => {
+    if (!msg.id || e.touches.length !== 1) return;
+    if (e.target.closest('.msg-checkbox-zone, .msg-actions') || (e.target.closest('a') && e.target.closest('.msg-text'))) return;
+    const startY = e.touches[0].clientY;
+    const state = { started: false, mode: null, startRowStates: null, didWeMove: false };
+    const onTouchMove = (ev) => {
+      if (!state.started || ev.touches.length !== 1) return;
+      ev.preventDefault();
+      applyDragSelectRect(feedInner, startY, ev.touches[0].clientY, state.mode, state.startRowStates);
+      state.didWeMove = true;
+    };
+    const onTouchEnd = () => {
+      document.removeEventListener('touchmove', onTouchMove, { passive: false });
+      document.removeEventListener('touchend', onTouchEnd);
+      document.removeEventListener('touchcancel', onTouchEnd);
+      if (state.started && !state.didWeMove) toggleRowAtY(feedInner, startY);
+      dragSelectActive = false;
+      dragSelectStarted = false;
+      dragSelectJustEnded = true;
+    };
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+    document.addEventListener('touchend', onTouchEnd);
+    document.addEventListener('touchcancel', onTouchEnd);
+    let timer = setTimeout(() => {
       timer = null;
-      document.removeEventListener('mousemove', onDocMove, true);
-      document.removeEventListener('mouseup', onDocUp, true);
+      state.started = true;
       dragSelectStarted = true;
       if (!selectMode) {
         selectModeAutoOn = true;
         setSelectMode(true);
       }
       dragSelectActive = true;
-      const startY = e.clientY;
-      const mode = selectBox.checked ? 'deselect' : 'select';
-      const startRowStates = new Map();
+      state.mode = selectBox.checked ? 'deselect' : 'select';
+      state.startRowStates = new Map();
       feedInner.querySelectorAll('.msg').forEach(r => {
         const box = r.querySelector('.msg-select');
-        if (box) startRowStates.set(r, box.checked);
+        if (box) state.startRowStates.set(r, box.checked);
       });
-      let didWeMove = false;
-      const onMove = (e) => {
-        applyDragSelectRect(feedInner, startY, e.clientY, mode, startRowStates);
-        didWeMove = true;
-      };
-      const onEnd = () => {
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onEnd);
-        if (!didWeMove) toggleRowAtY(feedInner, startY);
-        dragSelectActive = false;
-        dragSelectStarted = false;
-        dragSelectJustEnded = true;
-      };
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onEnd);
-    }, 380);
-  });
-  row.addEventListener('touchstart', e => {
-    if (!msg.id || e.touches.length !== 1) return;
-    if (e.target.closest('.msg-checkbox-zone, .msg-actions') || (e.target.closest('a') && e.target.closest('.msg-text'))) return;
-    let timer = null;
+    }, 200);
+    const onDocTouchMove = (ev) => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      document.removeEventListener('touchmove', onTouchMove, { passive: false });
+      document.removeEventListener('touchend', onTouchEnd);
+      document.removeEventListener('touchcancel', onTouchEnd);
+      document.removeEventListener('touchmove', onDocTouchMove, true);
+      document.removeEventListener('touchend', onDocTouchEnd, true);
+      document.removeEventListener('touchcancel', onDocTouchEnd, true);
+    };
     const onDocTouchEnd = () => {
       if (timer) clearTimeout(timer);
       document.removeEventListener('touchend', onDocTouchEnd, true);
       document.removeEventListener('touchcancel', onDocTouchEnd, true);
       document.removeEventListener('touchmove', onDocTouchMove, true);
-      if (!dragSelectStarted) return;
-    };
-    const onDocTouchMove = () => {
-      if (timer) clearTimeout(timer);
-      timer = null;
-      document.removeEventListener('touchmove', onDocTouchMove, true);
-      document.removeEventListener('touchend', onDocTouchEnd, true);
-      document.removeEventListener('touchcancel', onDocTouchEnd, true);
     };
     document.addEventListener('touchend', onDocTouchEnd, true);
     document.addEventListener('touchcancel', onDocTouchEnd, true);
     document.addEventListener('touchmove', onDocTouchMove, true);
-    timer = setTimeout(() => {
-      timer = null;
-      document.removeEventListener('touchmove', onDocTouchMove, true);
-      document.removeEventListener('touchend', onDocTouchEnd, true);
-      document.removeEventListener('touchcancel', onDocTouchEnd, true);
-      dragSelectStarted = true;
-      e.preventDefault();
-      if (!selectMode) {
-        selectModeAutoOn = true;
-        setSelectMode(true);
-      }
-      dragSelectActive = true;
-      const startY = e.touches[0].clientY;
-      const mode = selectBox.checked ? 'deselect' : 'select';
-      const startRowStates = new Map();
-      feedInner.querySelectorAll('.msg').forEach(r => {
-        const box = r.querySelector('.msg-select');
-        if (box) startRowStates.set(r, box.checked);
-      });
-      let didWeMove = false;
-      const onTouchMove = (e) => {
-        if (e.touches.length !== 1) return;
-        e.preventDefault();
-        applyDragSelectRect(feedInner, startY, e.touches[0].clientY, mode, startRowStates);
-        didWeMove = true;
-      };
-      const onTouchEnd = () => {
-        document.removeEventListener('touchmove', onTouchMove, { passive: false });
-        document.removeEventListener('touchend', onTouchEnd);
-        document.removeEventListener('touchcancel', onTouchEnd);
-        if (!didWeMove) toggleRowAtY(feedInner, startY);
-        dragSelectActive = false;
-        dragSelectStarted = false;
-        dragSelectJustEnded = true;
-      };
-      document.addEventListener('touchmove', onTouchMove, { passive: false });
-      document.addEventListener('touchend', onTouchEnd);
-      document.addEventListener('touchcancel', onTouchEnd);
-    }, 380);
   }, { passive: true });
 
   const time = document.createElement('div');
@@ -4392,13 +4390,22 @@ feedEl.addEventListener('dragover', e => {
     insertBeforeNode = lastRow.nextSibling;
     lineY = lastRect.bottom;
   } else {
+    const rowGap = 4;
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       const rect = r.getBoundingClientRect();
       if (y >= rect.top && y <= rect.bottom) {
         if (r === dragging) break;
+        const top = rect.top + rowGap;
+        const bottom = rect.bottom - rowGap;
         const halfway = rect.top + rect.height / 2;
-        if (y < halfway) {
+        if (y < top) {
+          insertBeforeNode = r;
+          lineY = rect.top;
+        } else if (y > bottom) {
+          insertBeforeNode = r.nextSibling;
+          lineY = rect.bottom;
+        } else if (y < halfway) {
           insertBeforeNode = r;
           lineY = rect.top;
         } else {
