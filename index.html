@@ -511,14 +511,14 @@ header{
   pointer-events:none;
   z-index:2147483646;
   display:none;
-  background:rgba(0,0,0,0.4);
+  background:rgba(10,22,40,0.5);
+  border:2px solid rgba(37,99,235,0.85);
   border-radius:4px;
   box-sizing:border-box;
   transform:translateZ(0);
   isolation:isolate;
   margin:0;
   padding:0;
-  transition:opacity 0.15s ease;
 }
 .feed-drop-origin.visible{ display:block; }
 
@@ -560,19 +560,20 @@ header{
 .msg-fly-clone .msg-actions{visibility:hidden}
 .msg:hover{background:var(--bg2)}
 .msg.msg-drag-over{background:var(--bg2)}
-/* during DnD reorder, disable hover on dragged rows only; keep other rows normal brightness */
+/* during DnD: only dragged rows get hover; others are dimmed to focus on dragged */
 body.dnd-active .msg{transition:none;animation:none}
 body.dnd-active .msg.msg-drag-group{transition:margin .2s ease}
 body.dnd-just-ended .msg{transition:none;animation:none}
 body.dnd-active .msg:not(.dragging):not(.msg-drag-group){
-  opacity:1;
+  opacity:0.5;
   background:transparent;
 }
-body.dnd-active .msg:not(.dragging):not(.msg-drag-group) .msg-time,
-body.dnd-active .msg:not(.dragging):not(.msg-drag-group) .msg-sender,
-body.dnd-active .msg:not(.dragging):not(.msg-drag-group) .msg-text{color:var(--text)}
-body.dnd-active .msg.dragging,
-body.dnd-active .msg.msg-drag-group{background:transparent}
+body.dnd-active .msg:not(.dragging):not(.msg-drag-group):hover{
+  background:transparent;
+  opacity:0.5;
+}
+body.dnd-active .msg.dragging:hover,
+body.dnd-active .msg.msg-drag-group:hover{background:var(--bg2)}
 body.dnd-active .msg.dragging .msg-select-wrap,
 body.dnd-active .msg.dragging .msg-actions,
 body.dnd-active .msg.msg-drag-group .msg-select-wrap,
