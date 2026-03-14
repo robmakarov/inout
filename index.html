@@ -1448,12 +1448,20 @@ let dragSelectToggledByTouch = false;
 let dragSelectMode = 'select'; /* 'select' or 'deselect' */
 let pointerDownOnSelectArea = false; /* true while pointer is down on checkbox area, so row drag is not started */
 
-function applyDragSelectToRange(feedInner, lastRow, currentRow) {
-  if (!feedInner || !currentRow) return;
+function getRowIndexAtY(feedInner, clientY) {
+  if (!feedInner) return -1;
   const rows = Array.from(feedInner.querySelectorAll('.msg'));
-  const currentIdx = rows.indexOf(currentRow);
-  if (currentIdx < 0) return;
-  const lastIdx = lastRow ? rows.indexOf(lastRow) : -1;
+  for (let i = 0; i < rows.length; i++) {
+    const rect = rows[i].getBoundingClientRect();
+    if (clientY >= rect.top && clientY <= rect.bottom) return i;
+  }
+  return -1;
+}
+
+function applyDragSelectToRangeByIndex(feedInner, lastIdx, currentIdx) {
+  if (!feedInner || currentIdx < 0) return;
+  const rows = Array.from(feedInner.querySelectorAll('.msg'));
+  if (currentIdx >= rows.length) return;
   const lo = lastIdx >= 0 ? Math.min(currentIdx, lastIdx) : currentIdx;
   const hi = lastIdx >= 0 ? Math.max(currentIdx, lastIdx) : currentIdx;
   let changed = false;
@@ -2527,9 +2535,11 @@ function createMsgRow(msg, isNew) {
     });
   });
   row.addEventListener('dragover', e => {
-    e.preventDefault();
     const dragging = feedInner.querySelector('.msg.dragging');
     if (!dragging || dragging === row) return;
+    const textEl = row.querySelector('.msg-text');
+    if (textEl && e.clientX < textEl.getBoundingClientRect().left) return;
+    e.preventDefault();
     const rows = Array.from(feedInner.querySelectorAll('.msg'));
     const oldRects = new Map();
     rows.forEach(r => { if (r !== dragging) oldRects.set(r, r.getBoundingClientRect()); });
@@ -2708,14 +2718,13 @@ function createMsgRow(msg, isNew) {
       }
       updateSelectionUI();
       dragSelectActive = true;
-      let lastRow = null;
+      let lastIdx = -1;
       const onMove = (e) => {
-        const el = document.elementFromPoint(e.clientX, e.clientY);
-        const m = el && el.closest('.msg');
-        if (m === lastRow) return;
-        if (!m) return;
-        applyDragSelectToRange(feedInner, lastRow, m);
-        lastRow = m;
+        const idx = getRowIndexAtY(feedInner, e.clientY);
+        if (idx === lastIdx) return;
+        if (idx < 0) return;
+        applyDragSelectToRangeByIndex(feedInner, lastIdx, idx);
+        lastIdx = idx;
       };
       const onEnd = () => {
         document.removeEventListener('mousemove', onMove);
@@ -2768,17 +2777,16 @@ function createMsgRow(msg, isNew) {
       }
       updateSelectionUI();
       dragSelectActive = true;
-      let lastRowT = null;
+      let lastIdxT = -1;
       const onTouchMove = (e) => {
         if (e.touches.length !== 1) return;
         e.preventDefault();
         const t = e.touches[0];
-        const el = document.elementFromPoint(t.clientX, t.clientY);
-        const m = el && el.closest('.msg');
-        if (m === lastRowT) return;
-        if (!m) return;
-        applyDragSelectToRange(feedInner, lastRowT, m);
-        lastRowT = m;
+        const idx = getRowIndexAtY(feedInner, t.clientY);
+        if (idx === lastIdxT) return;
+        if (idx < 0) return;
+        applyDragSelectToRangeByIndex(feedInner, lastIdxT, idx);
+        lastIdxT = idx;
       };
       const onTouchEnd = () => {
         document.removeEventListener('touchmove', onTouchMove, { passive: false });
@@ -2826,14 +2834,13 @@ function createMsgRow(msg, isNew) {
       }
       updateSelectionUI();
       dragSelectActive = true;
-      let lastRow = null;
+      let lastIdx = -1;
       const onMove = (e) => {
-        const el = document.elementFromPoint(e.clientX, e.clientY);
-        const m = el && el.closest('.msg');
-        if (m === lastRow) return;
-        if (!m) return;
-        applyDragSelectToRange(feedInner, lastRow, m);
-        lastRow = m;
+        const idx = getRowIndexAtY(feedInner, e.clientY);
+        if (idx === lastIdx) return;
+        if (idx < 0) return;
+        applyDragSelectToRangeByIndex(feedInner, lastIdx, idx);
+        lastIdx = idx;
       };
       const onEnd = () => {
         document.removeEventListener('mousemove', onMove);
@@ -2878,17 +2885,16 @@ function createMsgRow(msg, isNew) {
       }
       updateSelectionUI();
       dragSelectActive = true;
-      let lastRowT2 = null;
+      let lastIdxT2 = -1;
       const onTouchMove = (e) => {
         if (e.touches.length !== 1) return;
         e.preventDefault();
         const t = e.touches[0];
-        const el = document.elementFromPoint(t.clientX, t.clientY);
-        const m = el && el.closest('.msg');
-        if (m === lastRowT2) return;
-        if (!m) return;
-        applyDragSelectToRange(feedInner, lastRowT2, m);
-        lastRowT2 = m;
+        const idx = getRowIndexAtY(feedInner, t.clientY);
+        if (idx === lastIdxT2) return;
+        if (idx < 0) return;
+        applyDragSelectToRangeByIndex(feedInner, lastIdxT2, idx);
+        lastIdxT2 = idx;
       };
       const onTouchEnd = () => {
         document.removeEventListener('touchmove', onTouchMove, { passive: false });
@@ -4365,6 +4371,8 @@ feedEl.addEventListener('dragover', e => {
   if (!rows.length) return;
   const firstRow = rows[0];
   const lastRow = rows[rows.length - 1];
+  const contentLeft = firstRow.querySelector('.msg-text');
+  if (contentLeft && e.clientX < contentLeft.getBoundingClientRect().left) return;
   const firstRect = firstRow.getBoundingClientRect();
   const lastRect = lastRow.getBoundingClientRect();
   const y = e.clientY;
