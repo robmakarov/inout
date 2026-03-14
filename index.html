@@ -517,16 +517,16 @@ body.loaded #feed{
   flex:0 0 auto;
   display:flex;
   align-items:center;
-  margin-left:-20px;
+  margin-left:-48px;
   min-height:1em;
 }
 .msg-checkbox-zone-left{
-  width:20px;
-  min-width:20px;
+  width:48px;
+  min-width:48px;
   flex-shrink:0;
 }
 .msg-select-wrap{
-  flex:0 0 20px;
+  flex:0 0 24px;
   display:flex;
   align-items:center;
   justify-content:center;
@@ -2558,8 +2558,8 @@ function createMsgRow(msg, isNew) {
   row.addEventListener('dragover', e => {
     const dragging = feedInner.querySelector('.msg.dragging');
     if (!dragging || dragging === row) return;
-    const textEl = row.querySelector('.msg-text');
-    if (textEl && e.clientX < textEl.getBoundingClientRect().left) return;
+    const cbZone = row.querySelector('.msg-checkbox-zone');
+    if (cbZone && e.clientX < cbZone.getBoundingClientRect().right) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     const rows = Array.from(feedInner.querySelectorAll('.msg'));
@@ -2590,6 +2590,7 @@ function createMsgRow(msg, isNew) {
   });
   row.addEventListener('drop', e => {
     e.preventDefault();
+    e.stopPropagation();
     dragDropHandled = true;
   });
   row.addEventListener('touchstart', e => {
@@ -2972,6 +2973,7 @@ function createMsgRow(msg, isNew) {
     if (selectMode) {
       if (e.target.closest('.msg-actions')) return;
       if (e.target.closest('.msg-checkbox-zone')) return;
+      if (e.target.closest('.msg-text')) return;
       if (dragSelectJustEnded || dragSelectToggledByTouch) return;
       e.preventDefault();
       e.stopPropagation();
@@ -4400,8 +4402,8 @@ feedEl.addEventListener('dragover', e => {
   if (!rows.length) return;
   const firstRow = rows[0];
   const lastRow = rows[rows.length - 1];
-  const contentLeft = firstRow.querySelector('.msg-text');
-  if (contentLeft && e.clientX < contentLeft.getBoundingClientRect().left) return;
+  const cbZone = firstRow.querySelector('.msg-checkbox-zone');
+  if (cbZone && e.clientX < cbZone.getBoundingClientRect().right) return;
   const firstRect = firstRow.getBoundingClientRect();
   const lastRect = lastRow.getBoundingClientRect();
   const y = e.clientY;
