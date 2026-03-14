@@ -4796,8 +4796,8 @@ function processFeedDragover(ev) {
           lineY = rect.bottom;
           break;
         }
-        const halfway = rect.top + rect.height / 2;
-        if (y < halfway) {
+        const midY = rect.top + rect.height / 2;
+        if (y < midY) {
           insertBeforeNode = r;
           lineY = rect.top;
         } else {
