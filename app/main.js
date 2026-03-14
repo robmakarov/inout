@@ -472,13 +472,12 @@ async function init() {
   loadFieldPrefsForCurrentChannel();
   refreshMoveTargets();
   if (currentUser) {
-    loadMessages().then(() => {
-      subscribeRealtimeAll();
-      setupDraftChannel();
-      subscribeOrderRealtime();
-      subscribeViewRealtime();
-      subscribeActionLog();
-    }).catch(err => { console.error('loadMessages', err); });
+    await loadMessages();
+    subscribeRealtimeAll();
+    setupDraftChannel();
+    subscribeOrderRealtime();
+    subscribeViewRealtime();
+    subscribeActionLog();
   }
   setupPresence();
   scrollBottom();
@@ -3230,16 +3229,21 @@ function markLoaded() {
   } catch (_) {}
 }
 (function go() {
+  var loadTimeout = setTimeout(markLoaded, 8000);
+  function done() {
+    clearTimeout(loadTimeout);
+    markLoaded();
+  }
   try {
     if (typeof init === 'function') {
-      init().catch(function(err) { console.error('init error', err); }).finally(markLoaded);
+      init().catch(function(err) { console.error('init error', err); }).finally(done);
     } else {
-      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', markLoaded);
-      else markLoaded();
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', done);
+      else done();
     }
     document.addEventListener('visibilitychange', function() { if (document.visibilityState === 'visible' && typeof input !== 'undefined' && input) input.focus(); });
   } catch (err) {
     console.error('startup error', err);
-    markLoaded();
+    done();
   }
 })();
