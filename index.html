@@ -2122,8 +2122,7 @@ function init(done) {
       refreshAuth(),
       new Promise(function(_, rej) { setTimeout(function() { rej(new Error('auth timeout')); }, 8000); })
     ]).catch(function() {
-      currentUser = null;
-      if (typeof updateAuthUI === 'function') updateAuthUI();
+      /* timeout: don't overwrite currentUser — let existing session stay; just stop waiting */
     }).then(function() {
       if (typeof cleanupAuthHash === 'function') cleanupAuthHash();
       return Promise.race([
