@@ -2558,9 +2558,11 @@ function setupTouchDragHandlers() {
     } else {
       feedInner.insertBefore(touchDragState.row, target.nextSibling);
     }
+    updateEdgeScroll(y);
   };
   const end = () => {
     if (!touchDragState || !touchDragState.row) return;
+    clearEdgeScrollInterval();
     clearTimeout(touchDragState.timer);
     document.removeEventListener('touchmove', move, { passive: false });
     document.removeEventListener('touchend', end);
@@ -2607,6 +2609,7 @@ function createMsgRow(msg, isNew) {
     if (typeof msg.id !== 'undefined') e.dataTransfer.setData('application/x-inout-msg-id', String(msg.id));
   });
   row.addEventListener('dragend', () => {
+    clearEdgeScrollInterval();
     if (feedDropIndicatorEl) feedDropIndicatorEl.classList.remove('visible');
     row.classList.remove('dragging');
     tabsEl.querySelectorAll('.tab.tab-drop-target').forEach(t => t.classList.remove('tab-drop-target'));
@@ -4540,6 +4543,7 @@ feedEl.addEventListener('dragover', e => {
     feedDropIndicatorEl.style.top = (lineY - 2) + 'px';
     feedDropIndicatorEl.classList.add('visible');
   }
+  updateEdgeScroll(e.clientY);
 });
 feedEl.addEventListener('drop', e => {
   if (feedInner && feedInner.querySelector('.msg.dragging')) {
