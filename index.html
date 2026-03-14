@@ -500,6 +500,19 @@ header{
   border-radius:1px;
 }
 .feed-drop-indicator.visible{ display:block; }
+.feed-drop-origin{
+  position:fixed;
+  left:0;
+  width:100%;
+  height:4px;
+  pointer-events:none;
+  z-index:9998;
+  display:none;
+  background:rgba(232, 213, 160, 0.2);
+  border-top:1px dashed rgba(232, 213, 160, 0.5);
+  border-radius:1px;
+}
+.feed-drop-origin.visible{ display:block; }
 
 /* empty state: loader animation (visible on refresh before load) */
 #empty{
@@ -2038,6 +2051,27 @@ let dragDropHandled = false;
 let savedOrderBeforeDrag = [];
 var dragSelectedRows = [];
 let feedDropIndicatorEl = null;
+let feedDropOriginEl = null;
+function showDropOriginLine() {
+  if (!feedEl || !feedInner) return;
+  var block = (dragSelectedRows && dragSelectedRows.length > 0) ? dragSelectedRows : (feedInner.querySelector('.msg.dragging') ? [feedInner.querySelector('.msg.dragging')] : []);
+  if (block.length === 0) return;
+  var firstRow = block[0];
+  var r = firstRow.getBoundingClientRect();
+  var feedRect = feedEl.getBoundingClientRect();
+  if (!feedDropOriginEl) {
+    feedDropOriginEl = document.createElement('div');
+    feedDropOriginEl.className = 'feed-drop-origin';
+    document.body.appendChild(feedDropOriginEl);
+  }
+  feedDropOriginEl.style.left = feedRect.left + 'px';
+  feedDropOriginEl.style.width = feedRect.width + 'px';
+  feedDropOriginEl.style.top = (r.top - 2) + 'px';
+  feedDropOriginEl.classList.add('visible');
+}
+function hideDropOriginLine() {
+  if (feedDropOriginEl) feedDropOriginEl.classList.remove('visible');
+}
 function focusMessageInput() {
   if (input) input.focus();
 }
@@ -2790,6 +2824,7 @@ function setupTouchDragHandlers() {
     clearTimeout(touchDragState.timer);
     document.removeEventListener('touchmove', move, { passive: false });
     document.removeEventListener('touchend', end);
+    hideDropOriginLine();
     const r = touchDragState.row;
     r.classList.remove('dragging');
     if (document.body) document.body.classList.remove('dnd-active');
@@ -2850,6 +2885,7 @@ function createMsgRow(msg, isNew) {
     savedOrderBeforeDrag = currentMessageOrder.slice();
     dragDropHandled = false;
     if (feedInner) feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
+    showDropOriginLine();
   });
   row.addEventListener('dragend', () => {
     if (feedInner) feedInner.querySelectorAll('.msg-drag-group').forEach(r => r.classList.remove('msg-drag-group'));
@@ -2859,6 +2895,7 @@ function createMsgRow(msg, isNew) {
     feedDragoverRaf = null;
     feedDragoverLast = null;
     clearEdgeScrollInterval();
+    hideDropOriginLine();
     if (feedDropIndicatorEl) feedDropIndicatorEl.classList.remove('visible');
     if (feedInner) feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
     row.classList.remove('dragging');
@@ -2906,6 +2943,7 @@ function createMsgRow(msg, isNew) {
       });
       row.classList.add('dragging');
       if (document.body) document.body.classList.add('dnd-active');
+      showDropOriginLine();
     }, 300); // long press threshold
   }, { passive: true });
   if (isNew) setTimeout(() => row.classList.remove('new-flash'), 800);
