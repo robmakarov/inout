@@ -524,6 +524,23 @@ header{
 .feed-drop-origin.visible{ display:block; }
 .feed-drop-origin.stuck{ height:2px; }
 
+/* Ghost copies at origin: barely visible, same layout as .msg, not interactive */
+.msg-origin-ghost{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding:4px 20px;
+  border-bottom:1px solid var(--line);
+  pointer-events:none;
+  opacity:0.22;
+  background:rgba(0,0,0,0.2);
+  box-sizing:border-box;
+  min-height:32px;
+}
+.msg-origin-ghost .msg-time,
+.msg-origin-ghost .msg-sender,
+.msg-origin-ghost .msg-text{ color:var(--text); }
+
 /* empty state: loader animation (visible on refresh before load) */
 #empty{
   flex:1;
@@ -2063,6 +2080,12 @@ let touchDragState = null; // for mobile long-press drag
 let dragDropHandled = false;
 let savedOrderBeforeDrag = [];
 var dragSelectedRows = [];
+var originGhostRows = [];
+var draggedRowsStored = [];
+var originGhostsActive = false;
+var lastDropInsertBefore = null;
+var lastWantAppend = false;
+var originInsertBefore = null;
 let feedDropIndicatorEl = null;
 let feedDropOriginEl = null;
 var originContentTop = null;
@@ -2118,6 +2141,62 @@ function hideDropOriginLine() {
     feedDropOriginEl.classList.remove('visible');
     if (feedDropOriginEl.parentNode) feedDropOriginEl.parentNode.removeChild(feedDropOriginEl);
   }
+}
+function createOriginGhostFromRow(row) {
+  var g = row.cloneNode(true);
+  g.classList.remove('msg', 'dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target');
+  g.classList.add('msg-origin-ghost');
+  g.removeAttribute('draggable');
+  g.removeAttribute('data-id');
+  g.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
+  return g;
+}
+function insertOriginGhostsAndDetachRows(block) {
+  if (!feedInner || !block || block.length === 0) return;
+  originInsertBefore = block[block.length - 1].nextSibling;
+  var ghosts = [];
+  for (var i = 0; i < block.length; i++) ghosts.push(createOriginGhostFromRow(block[i]));
+  for (var j = 0; j < block.length; j++) feedInner.insertBefore(ghosts[j], block[j]);
+  for (var k = block.length - 1; k >= 0; k--) block[k].parentNode && block[k].parentNode.removeChild(block[k]);
+  originGhostRows = ghosts;
+  draggedRowsStored = block.slice();
+  originGhostsActive = true;
+  lastDropInsertBefore = ghosts[0];
+  lastWantAppend = false;
+  if (ghosts.length && ghosts[0].offsetTop !== undefined) {
+    originContentTop = ghosts[0].offsetTop;
+    var lastG = ghosts[ghosts.length - 1];
+    originContentHeight = (lastG.offsetTop || 0) + (lastG.offsetHeight || 0) - originContentTop;
+    if (originContentHeight < 2) originContentHeight = 2;
+    if (!feedDropOriginEl) {
+      feedDropOriginEl = document.createElement('div');
+      feedDropOriginEl.className = 'feed-drop-origin';
+      feedDropOriginEl.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(feedDropOriginEl);
+    }
+    if (feedDropOriginEl.parentNode !== document.body) document.body.appendChild(feedDropOriginEl);
+    updateOriginLinePosition();
+  }
+}
+function removeOriginGhostsAndInsertRows() {
+  if (!originGhostsActive || !feedInner) return;
+  var insertBefore = lastDropInsertBefore;
+  if (!insertBefore && originInsertBefore) insertBefore = originInsertBefore;
+  if (draggedRowsStored.length) {
+    if (insertBefore && insertBefore.parentNode === feedInner) {
+      feedInner.insertBefore(draggedRowsStored[0], insertBefore);
+      for (var i = 1; i < draggedRowsStored.length; i++) feedInner.insertBefore(draggedRowsStored[i], draggedRowsStored[i - 1].nextSibling);
+    } else {
+      draggedRowsStored.forEach(function(r) { feedInner.appendChild(r); });
+    }
+  }
+  originGhostRows.forEach(function(g) { if (g.parentNode) g.parentNode.removeChild(g); });
+  originGhostRows = [];
+  draggedRowsStored = [];
+  originGhostsActive = false;
+  lastDropInsertBefore = null;
+  lastWantAppend = false;
+  originInsertBefore = null;
 }
 function focusMessageInput() {
   if (input) input.focus();
@@ -2950,18 +3029,18 @@ function createMsgRow(msg, isNew) {
     } else {
       dragSelectedRows = [row];
     }
-    /* Freeze origin line position before adding msg-drag-group so margin animation doesn't move the line */
-    showDropOriginLine();
     dragSelectedRows.forEach(function(r) {
       if (dragSelectedRows.length > 1) r.classList.add('msg-drag-group');
     });
     row.classList.add('dragging');
+    insertOriginGhostsAndDetachRows(dragSelectedRows.slice());
     if (document.body) document.body.classList.add('dnd-active');
     savedOrderBeforeDrag = currentMessageOrder.slice();
     dragDropHandled = false;
     if (feedInner) feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
   });
   row.addEventListener('dragend', () => {
+    removeOriginGhostsAndInsertRows();
     if (feedInner) feedInner.querySelectorAll('.msg-drag-group').forEach(r => r.classList.remove('msg-drag-group'));
     dragSelectedRows = [];
     if (document.body) {
@@ -4926,9 +5005,89 @@ var feedDragoverLast = null;
 var lastIndicatorStyle = { left: -1, width: -1, top: -1, visible: false };
 var lastDragTargetRow = null;
 function processFeedDragover(ev) {
-  /* Origin line updates only on scroll to avoid shaky line during drag */
-  const dragging = feedInner ? feedInner.querySelector('.msg.dragging') : null;
-  if (!dragging || !feedInner) return;
+  if (!feedInner) return;
+  if (originGhostsActive) {
+    var rows = Array.from(feedInner.children).filter(function(n) { return n.classList && (n.classList.contains('msg') || n.classList.contains('msg-origin-ghost')); });
+    if (!rows.length) return;
+    var firstRow = rows[0];
+    var contentLeft = firstRow.querySelector('.msg-time') || firstRow.querySelector('.msg-sender') || firstRow.querySelector('.msg-text');
+    if (contentLeft && ev.clientX < contentLeft.getBoundingClientRect().left) return;
+    var y = ev.clientY;
+    var firstRect = firstRow.getBoundingClientRect();
+    var lastRow = rows[rows.length - 1];
+    var lastRect = lastRow.getBoundingClientRect();
+    var feedRect = feedEl.getBoundingClientRect();
+    var dropAtEndThreshold = 32;
+    var inEmptyZone = y >= lastRect.bottom - dropAtEndThreshold;
+    var inLastRowLowerHalf = y >= lastRect.top + lastRect.height * 0.5;
+    var wantAppendFirst = inEmptyZone || inLastRowLowerHalf;
+    var wantAppend = wantAppendFirst;
+    var insertBeforeNode = null;
+    var lineY = 0;
+    if (y < firstRect.top) {
+      insertBeforeNode = firstRow;
+      lineY = firstRect.top;
+    } else if (wantAppend) {
+      lineY = lastRect.bottom;
+    } else {
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        var rect = r.getBoundingClientRect();
+        if (y >= rect.top && y <= rect.bottom) {
+          if (r === lastRow && !r.classList.contains('msg-origin-ghost')) {
+            wantAppend = true;
+            lineY = rect.bottom;
+            break;
+          }
+          var midY = rect.top + rect.height / 2;
+          if (y < midY) {
+            insertBeforeNode = r;
+            lineY = rect.top;
+          } else {
+            insertBeforeNode = r.nextSibling;
+            lineY = rect.bottom;
+          }
+          break;
+        }
+      }
+      if (insertBeforeNode === null && !wantAppend && rows.length && y >= lastRect.bottom - dropAtEndThreshold) {
+        wantAppend = true;
+        lineY = lastRect.bottom;
+      }
+    }
+    lastDropInsertBefore = wantAppend ? null : insertBeforeNode;
+    lastWantAppend = wantAppend;
+    var targetRow = wantAppend ? lastRow : insertBeforeNode;
+    if (targetRow !== lastDragTargetRow) {
+      if (lastDragTargetRow) lastDragTargetRow.classList.remove('msg-drag-target');
+      if (targetRow && targetRow.classList && targetRow.classList.contains('msg')) targetRow.classList.add('msg-drag-target');
+      lastDragTargetRow = targetRow;
+    }
+    lastReorderTarget = { insertBefore: insertBeforeNode, wantAppend: wantAppend };
+    if (!feedDropIndicatorEl) {
+      feedDropIndicatorEl = document.createElement('div');
+      feedDropIndicatorEl.className = 'feed-drop-indicator';
+      document.body.appendChild(feedDropIndicatorEl);
+    }
+    var indLeft = feedRect.left;
+    var indWidth = feedRect.width;
+    var indTop = lineY < feedRect.top ? feedRect.top - 2 : (lineY > feedRect.bottom ? feedRect.bottom - 2 : lineY - 2);
+    feedDropIndicatorEl.style.left = indLeft + 'px';
+    feedDropIndicatorEl.style.width = indWidth + 'px';
+    feedDropIndicatorEl.style.height = '4px';
+    feedDropIndicatorEl.style.top = indTop + 'px';
+    if (!lastIndicatorStyle.visible) {
+      feedDropIndicatorEl.classList.add('visible');
+      lastIndicatorStyle.visible = true;
+    }
+    lastIndicatorStyle.left = indLeft;
+    lastIndicatorStyle.width = indWidth;
+    lastIndicatorStyle.top = indTop;
+    updateEdgeScroll(ev.clientY, ev.clientX);
+    return;
+  }
+  const dragging = feedInner.querySelector('.msg.dragging');
+  if (!dragging) return;
   const rows = Array.from(feedInner.querySelectorAll('.msg'));
   if (!rows.length) return;
   const firstRow = rows[0];
@@ -5067,7 +5226,7 @@ function processFeedDragover(ev) {
 if (feedEl) {
 feedEl.addEventListener('dragover', e => {
   const dragging = feedInner ? feedInner.querySelector('.msg.dragging') : null;
-  if (!dragging || !feedInner) return;
+  if (!feedInner || (!dragging && !originGhostsActive)) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
   feedDragoverLast = e;
@@ -5081,7 +5240,7 @@ feedEl.addEventListener('dragover', e => {
   }
 });
 feedEl.addEventListener('drop', e => {
-  if (feedInner && feedInner.querySelector('.msg.dragging')) {
+  if (feedInner && (feedInner.querySelector('.msg.dragging') || originGhostsActive)) {
     e.preventDefault();
     dragDropHandled = true;
     if (feedInner) {
@@ -5100,7 +5259,7 @@ feedEl.addEventListener('dragleave', e => {
 // Keep drop indicator visible when dragging beyond the feed bounds (e.g. over header)
 document.addEventListener('dragover', e => {
   if (!feedEl || !feedInner) return;
-  if (!feedInner.querySelector('.msg.dragging')) return;
+  if (!feedInner.querySelector('.msg.dragging') && !originGhostsActive) return;
   const feedRect = feedEl.getBoundingClientRect();
   const y = e.clientY;
   if (y >= feedRect.top && y <= feedRect.bottom) return;
