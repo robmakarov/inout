@@ -2656,17 +2656,25 @@ function createMsgRow(msg, isNew) {
       selectBox.checked = true;
       updateSelectionUI();
       dragSelectActive = true;
+      let lastRow = null;
       const onMove = (e) => {
         const el = document.elementFromPoint(e.clientX, e.clientY);
         const m = el && el.closest('.msg');
+        if (m === lastRow) return;
+        lastRow = m;
         if (!m) return;
         const box = m.querySelector('.msg-select');
         const id = m.dataset.id != null ? Number(m.dataset.id) : NaN;
         if (!box || !Number.isFinite(id)) return;
-        if (box.checked) return;
-        box.checked = true;
-        selectedIds.add(id);
-        m.classList.add('msg-selected');
+        if (box.checked) {
+          box.checked = false;
+          selectedIds.delete(id);
+          m.classList.remove('msg-selected');
+        } else {
+          box.checked = true;
+          selectedIds.add(id);
+          m.classList.add('msg-selected');
+        }
         updateSelectionUI();
       };
       const onEnd = () => {
@@ -2710,20 +2718,28 @@ function createMsgRow(msg, isNew) {
       selectBox.checked = true;
       updateSelectionUI();
       dragSelectActive = true;
+      let lastRowT = null;
       const onTouchMove = (e) => {
         if (e.touches.length !== 1) return;
         e.preventDefault();
         const t = e.touches[0];
         const el = document.elementFromPoint(t.clientX, t.clientY);
         const m = el && el.closest('.msg');
+        if (m === lastRowT) return;
+        lastRowT = m;
         if (!m) return;
         const box = m.querySelector('.msg-select');
         const id = m.dataset.id != null ? Number(m.dataset.id) : NaN;
         if (!box || !Number.isFinite(id)) return;
-        if (box.checked) return;
-        box.checked = true;
-        selectedIds.add(id);
-        m.classList.add('msg-selected');
+        if (box.checked) {
+          box.checked = false;
+          selectedIds.delete(id);
+          m.classList.remove('msg-selected');
+        } else {
+          box.checked = true;
+          selectedIds.add(id);
+          m.classList.add('msg-selected');
+        }
         updateSelectionUI();
       };
       const onTouchEnd = () => {
@@ -2739,6 +2755,116 @@ function createMsgRow(msg, isNew) {
     }, 380);
   }, { passive: true });
   selectWrap.appendChild(selectBox);
+
+  /* long-press on message row (anywhere except checkbox/actions/links) starts drag-select */
+  row.addEventListener('mousedown', e => {
+    if (!msg.id) return;
+    if (e.target.closest('.msg-select-wrap, .msg-actions') || (e.target.closest('a') && e.target.closest('.msg-text'))) return;
+    let timer = null;
+    const onDocUp = () => {
+      if (timer) clearTimeout(timer);
+      document.removeEventListener('mouseup', onDocUp);
+      if (!dragSelectStarted) return;
+    };
+    document.addEventListener('mouseup', onDocUp);
+    timer = setTimeout(() => {
+      timer = null;
+      dragSelectStarted = true;
+      if (!selectMode) setSelectMode(true);
+      selectedIds.add(msg.id);
+      row.classList.add('msg-selected');
+      selectBox.checked = true;
+      updateSelectionUI();
+      dragSelectActive = true;
+      let lastRow = null;
+      const onMove = (e) => {
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const m = el && el.closest('.msg');
+        if (m === lastRow) return;
+        lastRow = m;
+        if (!m) return;
+        const box = m.querySelector('.msg-select');
+        const id = m.dataset.id != null ? Number(m.dataset.id) : NaN;
+        if (!box || !Number.isFinite(id)) return;
+        if (box.checked) {
+          box.checked = false;
+          selectedIds.delete(id);
+          m.classList.remove('msg-selected');
+        } else {
+          box.checked = true;
+          selectedIds.add(id);
+          m.classList.add('msg-selected');
+        }
+        updateSelectionUI();
+      };
+      const onEnd = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onEnd);
+        dragSelectActive = false;
+        dragSelectStarted = false;
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onEnd);
+    }, 380);
+  });
+  row.addEventListener('touchstart', e => {
+    if (!msg.id || e.touches.length !== 1) return;
+    if (e.target.closest('.msg-select-wrap, .msg-actions') || (e.target.closest('a') && e.target.closest('.msg-text'))) return;
+    let timer = null;
+    const onDocTouchEnd = () => {
+      if (timer) clearTimeout(timer);
+      document.removeEventListener('touchend', onDocTouchEnd);
+      document.removeEventListener('touchcancel', onDocTouchEnd);
+      if (!dragSelectStarted) return;
+    };
+    document.addEventListener('touchend', onDocTouchEnd);
+    document.addEventListener('touchcancel', onDocTouchEnd);
+    timer = setTimeout(() => {
+      timer = null;
+      dragSelectStarted = true;
+      e.preventDefault();
+      if (!selectMode) setSelectMode(true);
+      selectedIds.add(msg.id);
+      row.classList.add('msg-selected');
+      selectBox.checked = true;
+      updateSelectionUI();
+      dragSelectActive = true;
+      let lastRowT2 = null;
+      const onTouchMove = (e) => {
+        if (e.touches.length !== 1) return;
+        e.preventDefault();
+        const t = e.touches[0];
+        const el = document.elementFromPoint(t.clientX, t.clientY);
+        const m = el && el.closest('.msg');
+        if (m === lastRowT2) return;
+        lastRowT2 = m;
+        if (!m) return;
+        const box = m.querySelector('.msg-select');
+        const id = m.dataset.id != null ? Number(m.dataset.id) : NaN;
+        if (!box || !Number.isFinite(id)) return;
+        if (box.checked) {
+          box.checked = false;
+          selectedIds.delete(id);
+          m.classList.remove('msg-selected');
+        } else {
+          box.checked = true;
+          selectedIds.add(id);
+          m.classList.add('msg-selected');
+        }
+        updateSelectionUI();
+      };
+      const onTouchEnd = () => {
+        document.removeEventListener('touchmove', onTouchMove, { passive: false });
+        document.removeEventListener('touchend', onTouchEnd);
+        document.removeEventListener('touchcancel', onTouchEnd);
+        dragSelectActive = false;
+        dragSelectStarted = false;
+      };
+      document.addEventListener('touchmove', onTouchMove, { passive: false });
+      document.addEventListener('touchend', onTouchEnd);
+      document.addEventListener('touchcancel', onTouchEnd);
+    }, 380);
+  }, { passive: true });
 
   const time = document.createElement('div');
   time.className = 'msg-time';
