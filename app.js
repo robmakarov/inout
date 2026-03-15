@@ -642,6 +642,10 @@ var originGhostsActive = false;
 var lastDropInsertBefore = null;
 var lastWantAppend = false;
 var originInsertBefore = null;
+var dndOriginInsertBefore = null;
+var dndOriginWantAppend = false;
+var dndOriginLineY = null;
+var dndStackFormTimer = null;
 let feedDropIndicatorEl = null;
 let feedDropOriginEl = null;
 var originContentTop = null;
@@ -1662,6 +1666,25 @@ function createMsgRow(msg, isNew) {
       if (dragSelectedRows.length > 1) r.classList.add('msg-drag-group');
       r.classList.add('dragging-in-feed');
     });
+    if (dragSelectedRows.length > 1) {
+      dragSelectedRows.forEach(function(r) { r.classList.add('msg-dnd-stack-form'); });
+      if (dndStackFormTimer) clearTimeout(dndStackFormTimer);
+      dndStackFormTimer = setTimeout(function() {
+        if (feedInner) feedInner.querySelectorAll('.msg.msg-dnd-stack-form').forEach(function(r) { r.classList.remove('msg-dnd-stack-form'); });
+        dndStackFormTimer = null;
+      }, 280);
+      var block = dragSelectedRows;
+      var lastInBlock = block[block.length - 1];
+      dndOriginInsertBefore = lastInBlock.nextSibling;
+      dndOriginWantAppend = !dndOriginInsertBefore;
+      var firstRect = block[0].getBoundingClientRect();
+      dndOriginLineY = firstRect.top;
+    } else {
+      dndOriginInsertBefore = row.nextSibling;
+      dndOriginWantAppend = !dndOriginInsertBefore;
+      var rowRect = row.getBoundingClientRect();
+      dndOriginLineY = rowRect.top;
+    }
     row.classList.add('dragging');
     showOriginGhostOverlay(dragSelectedRows.slice());
     if (document.body) document.body.classList.add('dnd-active');
@@ -1725,7 +1748,11 @@ function createMsgRow(msg, isNew) {
         lastDragClientY = null;
         clearEdgeScrollInterval();
         lastDragTargetRow = null;
-        if (feedInner) feedInner.querySelectorAll('.msg-drag-over, .msg-drag-target').forEach(r => r.classList.remove('msg-drag-over', 'msg-drag-target', 'msg-drag-nudge-right'));
+        dndOriginInsertBefore = null;
+        dndOriginWantAppend = false;
+        dndOriginLineY = null;
+        if (dndStackFormTimer) { clearTimeout(dndStackFormTimer); dndStackFormTimer = null; }
+        if (feedInner) feedInner.querySelectorAll('.msg-drag-over, .msg-drag-target, .msg-dnd-stack-form').forEach(r => r.classList.remove('msg-drag-over', 'msg-drag-target', 'msg-drag-nudge-right', 'msg-dnd-stack-form'));
         row.classList.remove('dragging');
         tabsEl.querySelectorAll('.tab.tab-drop-target').forEach(t => t.classList.remove('tab-drop-target'));
         const domOrder = feedInner ? Array.from(feedInner.querySelectorAll('.msg')).map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id)) : [];
@@ -1753,6 +1780,10 @@ function createMsgRow(msg, isNew) {
         dragSpiritEl = null;
         lastDragClientX = null;
         lastDragClientY = null;
+        dndOriginInsertBefore = null;
+        dndOriginWantAppend = false;
+        dndOriginLineY = null;
+        if (dndStackFormTimer) { clearTimeout(dndStackFormTimer); dndStackFormTimer = null; }
         removeOriginGhostOverlay();
         if (feedInner) feedInner.querySelectorAll('.msg.dragging-in-feed').forEach(r => r.classList.remove('dragging-in-feed'));
         hideDropOriginLine();
@@ -3800,6 +3831,11 @@ function processFeedDragover(ev) {
         slotLineY = slotLastRect.bottom;
       }
     }
+    if (dndOriginLineY != null && Math.abs(slotLineY - dndOriginLineY) < 14) {
+      slotInsertBeforeNode = dndOriginInsertBefore;
+      slotWantAppend = dndOriginWantAppend;
+      slotLineY = dndOriginLineY;
+    }
     lastDropInsertBefore = slotWantAppend ? null : slotInsertBeforeNode;
     lastWantAppend = slotWantAppend;
     var slotTargetRow = slotWantAppend ? slotLastRow : slotInsertBeforeNode;
@@ -3898,6 +3934,11 @@ function processFeedDragover(ev) {
       targetRow.classList.add('msg-drag-target', 'msg-drag-nudge-right');
     }
     lastDragTargetRow = targetRow;
+  }
+  if (dndOriginLineY != null && (wantAppend || insertBeforeNode !== null) && Math.abs(lineY - dndOriginLineY) < 14) {
+    insertBeforeNode = dndOriginInsertBefore;
+    wantAppend = dndOriginWantAppend;
+    lineY = dndOriginLineY;
   }
   const targetChanged = lastReorderTarget === null || lastReorderTarget.insertBefore !== insertBeforeNode || lastReorderTarget.wantAppend !== wantAppend;
   if ((wantAppend || insertBeforeNode !== null) && targetChanged) {

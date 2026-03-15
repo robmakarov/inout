@@ -13,9 +13,9 @@
 - --dnd-drop-line-color, --dnd-drop-line-height, --dnd-origin-line-color
 - --dnd-target-bg, --dnd-idle-opacity, --dnd-idle-bg, --dnd-placeholder-opacity, --dnd-ghost-opacity
 - --dnd-spirit-shadow, --dnd-spirit-radius
-- --dnd-stack-drop-in-duration, --dnd-stack-stagger-step, --dnd-spirit-stack-max-visible
+- --dnd-stack-drop-in-duration, --dnd-stack-stagger-step, --dnd-spirit-stack-max-visible, --dnd-stack-form-duration
 
-**DnD:** body.dnd-active → .msg no transition except .msg-drag-nudge-right. Spirit follows cursor by view type: vertical feed = X fixed (feed center), Y follows cursor. Rows unchanged during DnD: no bg/opacity change on .msg; only spirit has hover bg (--bg2). No row hover state. Stack: left-edge cue; drop-in staggered.
+**DnD:** body.dnd-active → .msg no transition except .msg-drag-nudge-right. Spirit follows cursor by view type: vertical feed = X fixed (feed center), Y follows cursor. Rows unchanged; only spirit has hover bg. No row hover state. Stack: left-edge cue; drop-in staggered; when objects come together (.msg-dnd-stack-form) brief scale/opacity animation (--dnd-stack-form-duration). Drop on origin line (within 14px) = undo (reorder to original position).
 
 ## Where used
 - Modal: slide-in-right 0.18s. Message row: msgin 0.2s. DnD: tokens above. Toast/scroll: ~0.2s. Buttons: ~0.1–0.2s.
