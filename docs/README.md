@@ -11,6 +11,7 @@ This folder holds reference docs for the INOUT codebase. Use it to understand fl
 | **functions-index.md** | You need to find a function by name or see what exists (one-line purpose per function). |
 | **styling.md** | You change CSS: variables, body/class states, breakpoints, key classes. |
 | **edge-cases.md** | You need conventions, gotchas, or “don’t do X” (e.g. script tags, feedback loops, localStorage). |
+| **security.md** | RLS, sharing, access: who can see/edit data, channel_members, creator_id. |
 
 ## Root-level docs (not in this folder)
 
