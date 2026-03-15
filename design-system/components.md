@@ -13,20 +13,20 @@ header, .logo, .header-right, #online-count, #msg-count, #user-btn (.signed-in)
 ## Feed
 #empty, .loader-inner, .feed-drop-indicator (.visible)
 
-### Object component (message row)
-One object = one **.msg** row. Same component in both Feed and Table visual (Table currently uses the same layout as Feed; to be corrected later).
+### Object row (one class of object)
+View mode = visualisation of the **object base**; the current view is for one class of object only. One object = one **.msg** row (object row). Same component in both Feed and Table visual (Table currently uses the same layout as Feed).
 
 **Structure**
-- **Properties (text only):** `.msg-time`, `.msg-sender`, `.msg-text` — the three fields of the object (time, author, value). No wrapper; they are direct children of `.msg`.
-- **Optional captions:** In Feed visual only, each property shows a small label above its value (Time, Author, Value) via CSS `::before` on `.feed-inner:not(.view-table) .msg .msg-time/sender/text`. Table visual has no per-cell captions (reserved for future table header).
-- **Chrome:** `.msg-checkbox-zone` (select), `.msg-actions` (Del, Move, Exp, Copy, Cut). Same row can be selected, edited, or reordered.
+- **Object = container of:** (1) text fields (object meta + messages), (2) action buttons on the right.
+- **Basic parameters (object meta):** non-editable. Default: `.msg-time`, `.msg-sender`. Styled **secondary** (smaller, muted): 11px, `color: var(--muted)`.
+- **Message parameters (primary):** editable in edit mode. `.msg-text` = main message (more can be added later; order = priority, highest to lowest). Styled **primary**: normal size (13px), `color: var(--text)` (white/primary content).
+- **Actions:** `.msg-actions` on the right (Del, Move, Exp, Copy, Cut). Actions apply to the whole object row.
 
 **Behavior**
-- **Edit:** Click message text → main input loads value, row gets `.msg-editing`; row mirrors input in realtime (doppelganger). Send to save, Escape to cancel.
-- **Select / reorder:** Checkbox and DnD; reorder uses row middle-line crossing only for drop position. All rules (edit, reorder, selection) apply the same in Feed and Table visual.
+- **Edit:** Click message text → main input loads value; only message(s) are edited; meta (time, author) stay read-only. Row mirrors input in realtime (doppelganger). Send to save, Escape to cancel.
+- **Select / reorder / actions:** Checkbox, DnD (middle-line crossing), and action buttons operate on the full object row. Logic unchanged.
 
-.msg — .msg-sender, .msg-time, .msg-text, .msg-checkbox-zone, .msg-select, .msg-actions, .msg-action-btn (Del, Move, Exp, Copy, Cut). When editing: click message → edit through main input; changes update the message row in the view in realtime as you type. Send to save, Escape or cancel to restore.
-**Hover-revealed controls** (select-wrap, actions, time/sender styling) are part of the row: they show accessible actions for this object in this view; same hover boundary as the row.
+.msg — .msg-time, .msg-sender, .msg-text, .msg-checkbox-zone, .msg-select, .msg-actions, .msg-action-btn. **Hover-revealed** select-wrap and actions; same hover boundary as the row.
 States: .msg-selected, .msg-editing, .msg-drag-target, .msg-drag-nudge-right, .new-flash, .dragging, .msg-drag-group, .dragging-in-feed, .msg-dnd-just-dropped
 .msg-origin-ghost, .origin-ghost-overlay | .msg-drag-spirit, .msg-drag-spirit-stack, .msg-drag-spirit-row, .msg-drag-spirit-stack-more | .msg-fly-clone
 .tab — .tab-active, .tab-shared, .tab-badge, .tab-new, .tab-close, .tab-drop-target

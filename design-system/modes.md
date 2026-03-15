@@ -10,7 +10,7 @@ So: input mode → new object; edit mode → change existing object. Input mode 
 | Select | #select-toggle, auto-on | body.select-mode, #select-toggle.active, .select-extra.show |
 | Edit | Edit on message | editingMessageId, .msg-editing |
 | Reordering | Drag row (DnD) | body.dnd-active, .msg.dragging, .msg-drag-group, .dragging-in-feed, .msg-drag-target, .feed-drop-indicator.visible, .tab.tab-drop-target |
-| View menu | #view-toggle | #view-menu.open, fieldPrefs |
+| View menu | #view-toggle | #view-menu.open, fieldPrefs. **View mode** = visualisation of the object base (Feed / Table); one view for one class of object. |
 | Log dropup | #log-action-btn | #log-dropup-panel.open |
 | User modal | #user-btn | backdrop display, aria-hidden |
 | Channel modal | + tab | backdrop display |
