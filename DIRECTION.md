@@ -57,6 +57,15 @@
 
 ---
 
+## PLANNED (user preferences, same on all devices)
+
+- **Hotkeys** — User can set their own hotkeys for any action; optional different layouts. Stored per user, synced across all devices (desktop + mobile).
+- **App settings** — User can change app settings; saved to their profile and synced everywhere (all devices, including mobile). Same mechanism: server-side by user_id, so every device sees the same prefs.
+
+(Implies: prefs/hotkeys in DB keyed by user_id, not just localStorage; Realtime or load-on-init so all devices stay in sync.)
+
+---
+
 ## PRODUCT FACTS (short, structured)
 
 - INOUT = single-page app; one `index.html` (HTML + CSS + JS), no build. Supabase (Auth, Postgres, Realtime). Vercel static.
