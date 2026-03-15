@@ -1,13 +1,10 @@
-# Design system (rules for code)
+# Design system
 
-These files describe animations, components, colors, text, etc. They are the **rules set** for the codebase.
+You say what to change; assistant updates **code + these files**.
 
-**Rule:** You text what to change; the assistant updates **both** the code and these design-system files.
-
-Files:
-- **animations.md** — Animation rules, keyframes, durations, easings.
-- **components.md** — UI components and their structure/classes/states.
-- **colors.md** — Color tokens and usage.
-- **text.md** — Typography, labels, copy.
-- **modes.md** — Select, edit, DnD, view menu, modals, scroll btn, toast.
-- **dnd.md** — DnD abstraction so it works in feed, table, graph, horizontal views.
+- animations.md — tokens, keyframes, DnD
+- components.md — IDs, classes, states
+- colors.md — tokens + values
+- text.md — fonts, copy
+- modes.md — select, edit, DnD, view, modals, scroll, toast
+- dnd.md — feed/table/graph DnD abstraction

@@ -1,75 +1,30 @@
 # Components
 
-UI components and their IDs, classes, and states. Code should match this structure and naming.
-
 ## Layout
-
-- **#app** — Main shell (flex column, full height)
-- **#app-loader** — Splash loader (hidden by default)
-- **#feed** — Scrollable feed
-- **#feed-inner** — Feed content wrapper
+#app, #app-loader, #feed, #feed-inner
 
 ## Header
-
-- **header** — Top bar
-- **.logo** — "INOUT" (span = accent "OUT")
-- **.header-right** — Right group
-- **#online-count** — .dot + #oc-num
-- **#msg-count**
-- **#user-btn** — Account icon. State: .signed-in
+header, .logo, .header-right, #online-count, #msg-count, #user-btn (.signed-in)
 
 ## Manage bar
-
-- **#manage-bar**
-- **#select-toggle** — State: .active
-- **.select-extra** — State: .show
-- **.manage-btn** — Select, All, None, Delete, Move, Export, View
-- **#move-target** — select
-- **#view-toggle**, **#view-menu** — State: .open
-- **#view-menu** — labels + checkboxes Time, Author
+#manage-bar, #select-toggle (.active), .select-extra (.show), .manage-btn, #move-target, #view-toggle, #view-menu (.open)
 
 ## Feed
+#empty, .loader-inner, .feed-drop-indicator (.visible)
+.msg — .msg-sender, .msg-time, .msg-text, .msg-checkbox-zone, .msg-select, .msg-actions, .msg-action-btn
+States: .msg-selected, .msg-editing, .msg-drag-target, .msg-drag-nudge-right, .new-flash, .dragging, .msg-drag-group, .dragging-in-feed, .msg-dnd-just-dropped
+.msg-origin-ghost, .origin-ghost-overlay | .msg-drag-spirit, .msg-drag-spirit-stack, .msg-drag-spirit-row, .msg-drag-spirit-stack-more | .msg-fly-clone
+.tab — .tab-active, .tab-shared, .tab-badge, .tab-new, .tab-close, .tab-drop-target
 
-- **#empty** — Empty state (loader + text)
-- **.loader-inner** — .loader-ring, .loader-dash
-- **.feed-drop-indicator** — State: .visible
-- **.msg** — Message/object row
-  - .msg-sender, .msg-time, .msg-text
-  - .msg-checkbox-zone, .msg-select, .msg-actions, .msg-action-btn
-  - States: .msg-selected, .msg-editing, .msg-drag-target, .msg-drag-nudge-right, .new-flash, .dragging, .msg-drag-group, .dragging-in-feed, .msg-dnd-just-dropped (stack/single after drop, then removed)
-- **.msg-origin-ghost**, **.origin-ghost-overlay** — DnD origin
-- **.msg-drag-spirit**, **.msg-drag-spirit-stack** (container), **.msg-drag-spirit-row**, **.msg-drag-spirit-stack-more** ("+N") — DnD spirit (single or stack under cursor); **.msg-fly-clone** — fly-to-tab
-- **.tab** — Channel tab. States: .tab-active, .tab-shared, .tab-badge, .tab-new, .tab-close, .tab-drop-target
-
-## Input area
-
-- **#input-area**
-- **#tabs** — Tab strip
-- **#clipboard-bubble**, **#draft-bubble** — Bubbles + .draft-btn
-- **.input-wrap** — #msg-input, .clear-input-btn, #send-btn
-- **.input-tools** — #clipboard-button, .log-dropup-wrap
-- **#log-action-btn** — States: .error-signal, .error-signal-faded
-- **#log-dropup-panel** — State: .open. Body: .log-event-card (.from-this-device, .error)
+## Input
+#input-area, #tabs, #clipboard-bubble, #draft-bubble, .draft-btn, .input-wrap, #msg-input, .clear-input-btn, #send-btn, .input-tools, #clipboard-button, #log-action-btn (.error-signal), #log-dropup-panel (.open)
 
 ## Overlays
-
-- **#scroll-btn** — State: .visible
-- **#toast** — State: .show
+#scroll-btn (.visible), #toast (.show)
 
 ## Modals
-
-- **#user-modal-backdrop** + **#user-modal**
-  - .um-top, .um-title, #user-close
-  - .um-section, .um-label, .um-value, .um-row
-  - .um-btn, .um-btn-primary
-  - #um-auth-status, #um-auth-btn, #um-version-badge, #um-upgrade-btn, #um-nickname, #um-nick-save, #um-user-id, #um-copy-id
-- **#channel-modal-backdrop** + **#channel-modal**
-  - .cm-title, .cm-field, .cm-label, .cm-input, .cm-hint, .cm-row, .cm-btn, .cm-btn-primary
-  - #cm-name, #cm-self, #cm-others, #cm-cancel, #cm-create
+#user-modal-backdrop + #user-modal: .um-top, .um-title, #user-close, .um-section, .um-btn, .um-btn-primary, #um-auth-btn, #um-nick-save, #um-copy-id, etc.
+#channel-modal-backdrop + #channel-modal: .cm-title, .cm-field, .cm-btn, .cm-btn-primary, #cm-name, #cm-cancel, #cm-create
 
 ## Primitives
-
-- Buttons: .manage-btn, .um-btn, .um-btn-primary, .cm-btn, .cm-btn-primary, .draft-btn, .msg-action-btn
-- Inputs: .cm-input, #msg-input
-- Labels: .um-label, .cm-label, .um-value, .cm-hint
-- Structure: .um-section, .um-row, .cm-field, .cm-row
+Buttons: .manage-btn, .um-btn, .um-btn-primary, .cm-btn, .draft-btn, .msg-action-btn. Inputs: .cm-input, #msg-input.
