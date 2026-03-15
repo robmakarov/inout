@@ -566,17 +566,8 @@ header{
   position:absolute;
   left:0;
   right:0;
-  top:0;
-  bottom:0;
   pointer-events:none;
   z-index:1;
-}
-.origin-ghost-overlay .msg-origin-ghost{
-  position:absolute;
-  left:0;
-  right:0;
-  width:100%;
-  box-sizing:border-box;
 }
 .msg.dragging-in-feed{ opacity:0.35; }
 .msg-origin-ghost .msg-time,
@@ -622,7 +613,7 @@ header{
   border:1px solid var(--line);
   box-sizing:border-box;
 }
-/* Spirit = same as row, full feed width, drags only vertically. Colors like hover. */
+/* Spirit = same as row, colors like hover. Centered under cursor. */
 .msg-drag-spirit{
   position:fixed;
   z-index:10000;
@@ -631,20 +622,10 @@ header{
   border-radius:0;
   background:var(--bg2);
   box-sizing:border-box;
-  animation:spiritAppear 0.2s ease-out;
-}
-.msg-drag-spirit-stack{
-  display:flex;
-  flex-direction:column;
-  box-shadow:0 4px 16px rgba(0,0,0,.35);
+  transform:translate(-50%,-50%);
 }
 .msg-drag-spirit .msg-time,
 .msg-drag-spirit .msg-sender{ color:var(--text); }
-.msg-drag-spirit-row{ width:100%; box-sizing:border-box; }
-@keyframes spiritAppear{ from{ opacity:0.92; } to{ opacity:1; } }
-/* Row under cursor shifts 40px right while dragged over, then back */
-.msg-drag-nudge-right{ transform:translateX(40px); }
-body.dnd-active .msg.msg-drag-nudge-right{ transition:transform 0.12s ease-out; }
 .msg-fly-clone{
   position:fixed;
   z-index:9999;
@@ -677,7 +658,6 @@ body.dnd-active .msg.msg-drag-group .msg-select-wrap,
 body.dnd-active .msg.msg-drag-group .msg-actions{opacity:0;pointer-events:none;visibility:hidden}
 body.dnd-active .msg.msg-drag-target{background:rgba(91,155,213,0.12);transition:none}
 body.dnd-active .msg.msg-drag-spirit{opacity:1 !important;background:var(--bg2) !important;transition:none}
-body.dnd-active .msg.msg-origin-ghost{opacity:0.5}
 .msg.msg-editing{
   background:var(--bg2);
   box-shadow:inset 0 0 0 1px var(--line2);
@@ -2276,16 +2256,16 @@ function hideDropOriginLine() {
 function showOriginGhostOverlay(block) {
   if (!feedInner || !block || block.length === 0) return;
   removeOriginGhostOverlay();
+  var first = block[0];
+  var last = block[block.length - 1];
+  var top = first.offsetTop;
+  var height = (last.offsetTop + last.offsetHeight) - top;
+  if (height < 2) height = 32;
   originGhostOverlayEl = document.createElement('div');
-  originGhostOverlayEl.className = 'origin-ghost-overlay';
+  originGhostOverlayEl.className = 'origin-ghost-overlay msg-origin-ghost';
   originGhostOverlayEl.setAttribute('aria-hidden', 'true');
-  for (var i = 0; i < block.length; i++) {
-    var r = block[i];
-    var g = createOriginGhostFromRow(r);
-    g.style.top = r.offsetTop + 'px';
-    g.style.height = r.offsetHeight + 'px';
-    originGhostOverlayEl.appendChild(g);
-  }
+  originGhostOverlayEl.style.top = top + 'px';
+  originGhostOverlayEl.style.height = height + 'px';
   feedInner.appendChild(originGhostOverlayEl);
 }
 function removeOriginGhostOverlay() {
@@ -2294,8 +2274,8 @@ function removeOriginGhostOverlay() {
 }
 function createOriginGhostFromRow(row) {
   var g = row.cloneNode(true);
-  g.classList.remove('dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
-  g.classList.add('msg', 'msg-origin-ghost');
+  g.classList.remove('msg', 'dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target');
+  g.classList.add('msg-origin-ghost');
   g.removeAttribute('draggable');
   g.removeAttribute('data-id');
   g.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
@@ -3180,38 +3160,16 @@ function createMsgRow(msg, isNew) {
       return;
     }
     if (dragSpiritEl && dragSpiritEl.parentNode) dragSpiritEl.parentNode.removeChild(dragSpiritEl);
-    var feedRect = feedEl ? feedEl.getBoundingClientRect() : { left: 0, width: 300 };
-    var block = (feedInner && selectedIds.has(msg.id) && selectedIds.size > 1)
-      ? Array.from(feedInner.querySelectorAll('.msg.msg-selected'))
-      : [row];
-    if (block.length > 1) {
-      dragSpiritEl = document.createElement('div');
-      dragSpiritEl.className = 'msg-drag-spirit msg-drag-spirit-stack';
-      dragSpiritEl.setAttribute('aria-hidden', 'true');
-      dragSpiritEl.style.left = feedRect.left + 'px';
-      dragSpiritEl.style.width = feedRect.width + 'px';
-      dragSpiritEl.style.top = (e.clientY || 0) + 'px';
-      for (var bi = 0; bi < block.length; bi++) {
-        var rc = block[bi].cloneNode(true);
-        rc.classList.remove('dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
-        rc.classList.add('msg', 'msg-drag-spirit-row');
-        rc.removeAttribute('draggable');
-        rc.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
-        dragSpiritEl.appendChild(rc);
-      }
-      document.body.appendChild(dragSpiritEl);
-    } else {
-      dragSpiritEl = row.cloneNode(true);
-      dragSpiritEl.classList.remove('dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
-      dragSpiritEl.classList.add('msg', 'msg-drag-spirit');
-      dragSpiritEl.removeAttribute('draggable');
-      dragSpiritEl.setAttribute('aria-hidden', 'true');
-      dragSpiritEl.style.left = feedRect.left + 'px';
-      dragSpiritEl.style.width = feedRect.width + 'px';
-      dragSpiritEl.style.top = (e.clientY || 0) + 'px';
-      dragSpiritEl.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
-      document.body.appendChild(dragSpiritEl);
-    }
+    dragSpiritEl = row.cloneNode(true);
+    dragSpiritEl.classList.remove('dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
+    dragSpiritEl.classList.add('msg', 'msg-drag-spirit');
+    dragSpiritEl.removeAttribute('draggable');
+    dragSpiritEl.setAttribute('aria-hidden', 'true');
+    dragSpiritEl.style.width = Math.max(200, (row.offsetWidth || 280)) + 'px';
+    dragSpiritEl.style.left = (e.clientX || 0) + 'px';
+    dragSpiritEl.style.top = (e.clientY || 0) + 'px';
+    dragSpiritEl.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
+    document.body.appendChild(dragSpiritEl);
     if (!dragImageEl) {
       dragImageEl = document.createElement('div');
       dragImageEl.setAttribute('aria-hidden', 'true');
@@ -3280,7 +3238,7 @@ function createMsgRow(msg, isNew) {
         lastDragClientY = null;
         clearEdgeScrollInterval();
         lastDragTargetRow = null;
-        if (feedInner) feedInner.querySelectorAll('.msg-drag-over, .msg-drag-target').forEach(r => r.classList.remove('msg-drag-over', 'msg-drag-target', 'msg-drag-nudge-right'));
+        if (feedInner) feedInner.querySelectorAll('.msg-drag-over, .msg-drag-target').forEach(r => r.classList.remove('msg-drag-over', 'msg-drag-target'));
         row.classList.remove('dragging');
         tabsEl.querySelectorAll('.tab.tab-drop-target').forEach(t => t.classList.remove('tab-drop-target'));
         const domOrder = feedInner ? Array.from(feedInner.querySelectorAll('.msg')).map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id)) : [];
@@ -5297,10 +5255,8 @@ function processFeedDragover(ev) {
   if (!feedInner) return;
   if (typeof ev.clientX === 'number') lastDragClientX = ev.clientX;
   if (typeof ev.clientY === 'number') lastDragClientY = ev.clientY;
-  if (dragSpiritEl && typeof ev.clientY === 'number' && feedEl) {
-    var fr = feedEl.getBoundingClientRect();
-    dragSpiritEl.style.left = fr.left + 'px';
-    dragSpiritEl.style.width = fr.width + 'px';
+  if (dragSpiritEl && typeof ev.clientX === 'number' && typeof ev.clientY === 'number') {
+    dragSpiritEl.style.left = ev.clientX + 'px';
     dragSpiritEl.style.top = ev.clientY + 'px';
   }
   if (originGhostsActive) {
@@ -5356,8 +5312,8 @@ function processFeedDragover(ev) {
     lastWantAppend = slotWantAppend;
     var slotTargetRow = slotWantAppend ? slotLastRow : slotInsertBeforeNode;
     if (slotTargetRow !== lastDragTargetRow) {
-      if (lastDragTargetRow) lastDragTargetRow.classList.remove('msg-drag-target', 'msg-drag-nudge-right');
-      if (slotTargetRow && slotTargetRow.classList && slotTargetRow.classList.contains('msg')) slotTargetRow.classList.add('msg-drag-target', 'msg-drag-nudge-right');
+      if (lastDragTargetRow) lastDragTargetRow.classList.remove('msg-drag-target');
+      if (slotTargetRow && slotTargetRow.classList && slotTargetRow.classList.contains('msg')) slotTargetRow.classList.add('msg-drag-target');
       lastDragTargetRow = slotTargetRow;
     }
     lastReorderTarget = { insertBefore: slotInsertBeforeNode, wantAppend: slotWantAppend };
@@ -5443,12 +5399,8 @@ function processFeedDragover(ev) {
   var targetRow = (rowUnderCursor && rowUnderCursor.classList) ? rowUnderCursor : (wantAppend ? lastRow : (insertBeforeNode && insertBeforeNode.classList ? insertBeforeNode : firstRow));
   if (targetRow && !targetRow.classList) targetRow = null;
   if (targetRow !== lastDragTargetRow) {
-    if (lastDragTargetRow && lastDragTargetRow.classList) {
-      lastDragTargetRow.classList.remove('msg-drag-target', 'msg-drag-nudge-right');
-    }
-    if (targetRow && targetRow.classList) {
-      targetRow.classList.add('msg-drag-target', 'msg-drag-nudge-right');
-    }
+    if (lastDragTargetRow && lastDragTargetRow.classList) lastDragTargetRow.classList.remove('msg-drag-target');
+    if (targetRow && targetRow.classList) targetRow.classList.add('msg-drag-target');
     lastDragTargetRow = targetRow;
   }
   const targetChanged = lastReorderTarget === null || lastReorderTarget.insertBefore !== insertBeforeNode || lastReorderTarget.wantAppend !== wantAppend;
@@ -5494,7 +5446,7 @@ function processFeedDragover(ev) {
       }
       lastReorderTarget = null;
       if (lastDragTargetRow) {
-        lastDragTargetRow.classList.remove('msg-drag-target', 'msg-drag-nudge-right');
+        lastDragTargetRow.classList.remove('msg-drag-target');
         lastDragTargetRow = null;
       }
     }
@@ -5521,7 +5473,7 @@ feedEl.addEventListener('drop', e => {
     dragDropHandled = true;
     if (feedInner) {
       feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
-      feedInner.querySelectorAll('.msg-drag-target').forEach(r => r.classList.remove('msg-drag-target', 'msg-drag-nudge-right'));
+      feedInner.querySelectorAll('.msg-drag-target').forEach(r => r.classList.remove('msg-drag-target'));
     }
   }
 });
@@ -5540,12 +5492,11 @@ document.addEventListener('dragover', e => {
   e.dataTransfer.dropEffect = 'move';
   lastDragClientX = e.clientX;
   lastDragClientY = e.clientY;
-  const feedRect = feedEl.getBoundingClientRect();
   if (dragSpiritEl) {
-    dragSpiritEl.style.left = feedRect.left + 'px';
-    dragSpiritEl.style.width = feedRect.width + 'px';
+    dragSpiritEl.style.left = e.clientX + 'px';
     dragSpiritEl.style.top = e.clientY + 'px';
   }
+  const feedRect = feedEl.getBoundingClientRect();
   const y = e.clientY;
   const x = e.clientX;
   const inFeed = x >= feedRect.left && x <= feedRect.right && y >= feedRect.top && y <= feedRect.bottom;
@@ -5554,7 +5505,7 @@ document.addEventListener('dragover', e => {
     return;
   }
   if (lastDragTargetRow && lastDragTargetRow.classList) {
-    lastDragTargetRow.classList.remove('msg-drag-target', 'msg-drag-nudge-right');
+    lastDragTargetRow.classList.remove('msg-drag-target');
     lastDragTargetRow = null;
   }
   const rows = originGhostsActive
@@ -5589,7 +5540,7 @@ document.addEventListener('drop', e => {
     e.preventDefault();
     e.stopPropagation();
     dragDropHandled = true;
-    feedInner.querySelectorAll('.msg-drag-over, .msg-drag-target').forEach(function(r) { r.classList.remove('msg-drag-over', 'msg-drag-target', 'msg-drag-nudge-right'); });
+    feedInner.querySelectorAll('.msg-drag-over, .msg-drag-target').forEach(function(r) { r.classList.remove('msg-drag-over', 'msg-drag-target'); });
   }
 }, { passive: false });
 
