@@ -613,7 +613,7 @@ header{
   border:1px solid var(--line);
   box-sizing:border-box;
 }
-/* Spirit = same look as .msg row, only fixed + shadow for drag. Do not override .msg layout/colors. */
+/* Spirit = same layout/size as .msg row, only colors like hovered state. No size/position change. */
 .msg-drag-spirit{
   position:fixed;
   z-index:10000;
@@ -621,8 +621,10 @@ header{
   box-shadow:0 4px 16px rgba(0,0,0,.35);
   transform:translate(-50%, -50%);
   border-radius:0;
-  /* inherit .msg appearance: same padding, border, background from .msg */
+  background:var(--bg2);
 }
+.msg-drag-spirit .msg-time,
+.msg-drag-spirit .msg-sender{ color:var(--text); }
 .msg-fly-clone{
   position:fixed;
   z-index:9999;
@@ -653,8 +655,8 @@ body.dnd-active .msg.dragging .msg-select-wrap,
 body.dnd-active .msg.dragging .msg-actions,
 body.dnd-active .msg.msg-drag-group .msg-select-wrap,
 body.dnd-active .msg.msg-drag-group .msg-actions{opacity:0;pointer-events:none;visibility:hidden}
-body.dnd-active .msg.msg-drag-target{background:rgba(91,155,213,0.12);transition:background 0.06s ease-out}
-body.dnd-active .msg.msg-drag-spirit{opacity:1 !important;background:var(--bg2) !important;}
+body.dnd-active .msg.msg-drag-target{background:rgba(91,155,213,0.12);transition:none}
+body.dnd-active .msg.msg-drag-spirit{opacity:1 !important;background:var(--bg2) !important;transition:none}
 .msg.msg-editing{
   background:var(--bg2);
   box-shadow:inset 0 0 0 1px var(--line2);
