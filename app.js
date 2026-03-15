@@ -4,7 +4,7 @@ try { if (document.body) document.body.classList.add('loaded'); } catch (_) {}
     if (localStorage.getItem('inout_was_editing_v1')) {
       localStorage.setItem('inout_input_state_v2', '');
       localStorage.removeItem('inout_was_editing_v1');
-      var el = document.getElementById('obj-input');
+      var el = document.getElementById('msg-input');
       if (el) { el.value = ''; el.placeholder = 'say something…'; }
     }
   } catch (_) {}
@@ -16,16 +16,19 @@ const SUPABASE_URL  = 'https://tfmbqiwxfgrwtjvoqomf.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_';
 var sb = null;
 try {
-  if (typeof supabase !== 'undefined') {
+  if (typeof window !== 'undefined' && window.sb) {
+    sb = window.sb;
+  } else if (typeof supabase !== 'undefined') {
     sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
       auth: {
         detectSessionInUrl: true,
         flowType: 'pkce'
       }
     });
+    if (typeof window !== 'undefined') window.sb = sb;
   }
 } catch(e) {}
-if (typeof window !== 'undefined') window.sb = sb;
+if (typeof window !== 'undefined' && !window.sb) window.sb = sb;
 
 /* Run OAuth callback (code exchange) as soon as client exists so URL is still intact */
 var _oauthCallbackPromise = null;
@@ -97,7 +100,7 @@ if (window.Stripe && STRIPE_PUBLISHABLE_KEY && !STRIPE_PUBLISHABLE_KEY.includes(
 const feedInner  = document.getElementById('feed-inner');
 const feedEl     = document.getElementById('feed');
 const inputArea  = document.getElementById('input-area');
-const input      = document.getElementById('obj-input');
+const input      = document.getElementById('msg-input');
 const sendBtn    = document.getElementById('send-btn');
 const clearInputBtn = document.getElementById('clear-input');
 const emptyEl    = document.getElementById('empty');
@@ -3933,7 +3936,7 @@ async function sendText(text) {
 
 /* ═══ INPUT HANDLING ══════════════════════════════════════ */
 function updateComposerCount() {
-  var countEl = document.getElementById('obj-input-count');
+  var countEl = document.getElementById('msg-input-count');
   var wrap = input && input.closest && input.closest('.composer-input-wrap');
   if (!countEl || !wrap) return;
   var len = (input && input.value) ? input.value.length : 0;
@@ -3946,45 +3949,46 @@ function updateComposerCount() {
   }
 }
 
-input.addEventListener('input', () => {
-  autoResize();
-  sendBtn.disabled = !input.value.trim();
-  saveInputGlobal();
-  updateClearInputBtn();
-  if (editingObjectId != null) {
-    updateEditingRowFromInput();
-    if (editTypingCommitTimer) clearTimeout(editTypingCommitTimer);
-    editTypingCommitTimer = setTimeout(commitTypingSegment, TYPING_COMMIT_MS);
-  }
-  if (currentUser) {
-    broadcastDraft(input.value);
-  }
-});
+if (input) {
+  input.addEventListener('input', () => {
+    autoResize();
+    if (sendBtn) sendBtn.disabled = !input.value.trim();
+    saveInputGlobal();
+    updateClearInputBtn();
+    if (editingObjectId != null) {
+      updateEditingRowFromInput();
+      if (editTypingCommitTimer) clearTimeout(editTypingCommitTimer);
+      editTypingCommitTimer = setTimeout(commitTypingSegment, TYPING_COMMIT_MS);
+    }
+    if (currentUser) {
+      broadcastDraft(input.value);
+    }
+  });
 
-input.addEventListener('keydown', e => {
-  if (e.key === 'Escape') {
-    if (editingObjectId) cancelEditingMode(true);
-    return;
-  }
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    if (!sendBtn.disabled) send();
-  }
-});
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      if (editingObjectId) cancelEditingMode(true);
+      return;
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (sendBtn && !sendBtn.disabled) send();
+    }
+  });
 
-input.addEventListener('click', () => {
-  if (editingObjectId != null) updateEditingRowFromInput();
-});
+  input.addEventListener('click', () => {
+    if (editingObjectId != null) updateEditingRowFromInput();
+  });
 
-input.addEventListener('keyup', () => {
-  if (editingObjectId != null) updateEditingRowFromInput();
-});
+  input.addEventListener('keyup', () => {
+    if (editingObjectId != null) updateEditingRowFromInput();
+  });
 
-input.addEventListener('select', () => {
-  if (editingObjectId != null) updateEditingRowFromInput();
-});
-
-sendBtn.addEventListener('click', send);
+  input.addEventListener('select', () => {
+    if (editingObjectId != null) updateEditingRowFromInput();
+  });
+}
+if (sendBtn) sendBtn.addEventListener('click', send);
 
 if (draftCopyBtn) {
   draftCopyBtn.addEventListener('click', () => {
