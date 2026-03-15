@@ -1614,7 +1614,7 @@ function createMsgRow(msg, isNew) {
       stackContainer.style.width = spiritW + 'px';
       var rowRect = row.getBoundingClientRect();
       stackContainer.style.left = (rowRect.left + rowRect.width / 2) + 'px';
-      stackContainer.style.top = rowRect.top + 'px';
+      stackContainer.style.top = (e.clientY || rowRect.top) + 'px';
       var maxVisible = 4;
       var toShow = Math.min(dragSelectedRows.length, maxVisible);
       for (var si = 0; si < toShow; si++) {
@@ -1643,7 +1643,7 @@ function createMsgRow(msg, isNew) {
       dragSpiritEl.style.width = spiritW + 'px';
       var rowRect = row.getBoundingClientRect();
       dragSpiritEl.style.left = (rowRect.left + rowRect.width / 2) + 'px';
-      dragSpiritEl.style.top = rowRect.top + 'px';
+      dragSpiritEl.style.top = (e.clientY || rowRect.top) + 'px';
       dragSpiritEl.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
       document.body.appendChild(dragSpiritEl);
     }
@@ -3743,9 +3743,14 @@ var lastIndicatorStyle = { left: -1, width: -1, top: -1, visible: false };
 var lastDragTargetRow = null;
 var dragSpiritEl = null;
 function processFeedDragover(ev) {
-  if (!feedInner) return;
+  if (!feedInner || !feedEl) return;
   if (typeof ev.clientX === 'number') lastDragClientX = ev.clientX;
   if (typeof ev.clientY === 'number') lastDragClientY = ev.clientY;
+  if (dragSpiritEl) {
+    var fr = feedEl.getBoundingClientRect();
+    dragSpiritEl.style.left = (fr.left + fr.width / 2) + 'px';
+    dragSpiritEl.style.top = ev.clientY + 'px';
+  }
   if (originGhostsActive) {
     var slotRows = Array.from(feedInner.children).filter(function(n) { return n.classList && (n.classList.contains('msg') || n.classList.contains('msg-origin-ghost')); });
     if (!slotRows.length) return;
@@ -3823,10 +3828,6 @@ function processFeedDragover(ev) {
     lastIndicatorStyle.left = indLeft;
     lastIndicatorStyle.width = indWidth;
     lastIndicatorStyle.top = indTop;
-    if (dragSpiritEl) {
-      dragSpiritEl.style.left = (indLeft + indWidth / 2) + 'px';
-      dragSpiritEl.style.top = (indTop + 4) + 'px';
-    }
     updateEdgeScroll(ev.clientY, ev.clientX);
     return;
   }
@@ -3931,10 +3932,6 @@ function processFeedDragover(ev) {
     if (!lastIndicatorStyle.visible) {
       feedDropIndicatorEl.classList.add('visible');
       lastIndicatorStyle.visible = true;
-    }
-    if (dragSpiritEl) {
-      dragSpiritEl.style.left = (indLeft + indWidth / 2) + 'px';
-      dragSpiritEl.style.top = (indTop + 4) + 'px';
     }
   } else {
     var inFeed = ev.clientX >= feedRect.left && ev.clientX <= feedRect.right && ev.clientY >= feedRect.top && ev.clientY <= feedRect.bottom;

@@ -644,7 +644,7 @@ header{
   border:1px solid var(--line);
   box-sizing:border-box;
 }
-/* DnD: spirit = clone at future drop position (use tokens) */
+/* DnD: spirit = clone follows cursor along view axis only (vertical feed: fixed X, follow Y) */
 .msg-drag-spirit{
   position:fixed;
   z-index:10000;
@@ -653,7 +653,7 @@ header{
   border-radius:var(--dnd-spirit-radius);
   background:var(--bg2);
   box-sizing:border-box;
-  transform:translate(-50%,0);
+  transform:translate(-50%,-50%);
 }
 .msg-drag-spirit .msg-time,
 .msg-drag-spirit .msg-sender{ color:var(--text); }
@@ -664,7 +664,7 @@ header{
   overflow:hidden;
   max-height:200px;
   border:1px solid var(--line);
-  transform:translate(-50%,0);
+  transform:translate(-50%,-50%);
 }
 .msg-drag-spirit-stack .msg-drag-spirit-row{
   flex:0 0 auto;
