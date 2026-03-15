@@ -1040,31 +1040,33 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
 .obj.obj-editing .obj-actions{opacity:1;pointer-events:auto}
 .obj:last-child{border-bottom:none}
 
-/* Remote editing doppelganger: badge with author + device icon */
-.obj-remote-edit-badge{
+/* Remote editing doppelganger: badge with author + device icon (inside .obj-text) */
+.obj-text .obj-remote-edit-badge{
   display:inline-flex;
   align-items:center;
   gap:4px;
-  margin-top:4px;
+  margin-left:8px;
   padding:2px 6px;
   font-size:10px;
+  line-height:1.2;
   color:var(--dim);
   background:var(--bg2);
   border:1px solid var(--line2);
   border-radius:4px;
   flex-shrink:0;
+  vertical-align:middle;
 }
-.obj-remote-edit-device{
+.obj-text .obj-remote-edit-badge .obj-remote-edit-device{
   display:inline-flex;
   color:var(--acc);
+  flex-shrink:0;
 }
-.obj-remote-edit-author{
+.obj-text .obj-remote-edit-badge .obj-remote-edit-author{
   max-width:120px;
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
 }
-.obj.obj-remote-editing .obj-remote-edit-badge{display:inline-flex}
 
 /* Object row: meta (time, author) = secondary; message = primary. */
 .obj-sender{

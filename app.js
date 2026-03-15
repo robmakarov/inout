@@ -1557,9 +1557,9 @@ function showRemoteEditingDoppelganger(objId, text, authorName, deviceId) {
   }
   textEl.innerHTML = linkify(escapeHtml(text || ''));
   row.classList.add('obj-remote-editing');
-  let badge = row.querySelector('.obj-remote-edit-badge');
+  let badge = textEl.querySelector('.obj-remote-edit-badge');
   if (!badge) {
-    badge = document.createElement('div');
+    badge = document.createElement('span');
     badge.className = 'obj-remote-edit-badge';
     badge.setAttribute('aria-label', 'Editing elsewhere');
     const icon = document.createElement('span');
@@ -1569,9 +1569,7 @@ function showRemoteEditingDoppelganger(objId, text, authorName, deviceId) {
     const label = document.createElement('span');
     label.className = 'obj-remote-edit-author';
     badge.appendChild(label);
-    const insertAfter = row.querySelector('.obj-text');
-    if (insertAfter && insertAfter.nextSibling) row.insertBefore(badge, insertAfter.nextSibling);
-    else row.appendChild(badge);
+    textEl.appendChild(badge);
   }
   const authorSpan = badge.querySelector('.obj-remote-edit-author');
   if (authorSpan) authorSpan.textContent = authorName || 'Editing';
@@ -1582,7 +1580,8 @@ function clearRemoteEditingDoppelganger(objId, skipRestore) {
   const row = findObjectRowEl(objId);
   if (row) {
     row.classList.remove('obj-remote-editing');
-    const badge = row.querySelector('.obj-remote-edit-badge');
+    const textEl = findObjectRowTextEl(objId);
+    const badge = textEl ? textEl.querySelector('.obj-remote-edit-badge') : row.querySelector('.obj-remote-edit-badge');
     if (badge && badge.parentNode) badge.parentNode.removeChild(badge);
     if (!skipRestore) {
       const textEl = findObjectRowTextEl(objId);
