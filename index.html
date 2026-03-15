@@ -129,7 +129,7 @@
       <div class="um-label">Status</div>
       <div class="um-value" id="um-auth-status">Not signed in</div>
       <div class="um-row">
-        <button class="um-btn um-btn-primary" id="um-auth-btn" type="button">Sign in</button>
+        <button class="um-btn um-btn-primary" id="um-auth-btn" type="button" onclick="(function(){var s=window.sb;if(window.signIn){window.signIn();return;}if(s&&s.auth&&s.auth.signInWithOAuth){var opt={provider:'google'};if(window.location.origin){opt.options={redirectTo:window.location.origin+'/'};}s.auth.signInWithOAuth(opt).then(function(r){if(r&&r.data&&r.data.url){window.location.href=r.data.url;}}).catch(function(e){console.error(e);});}else{if(window.toast){window.toast('Sign-in not ready');}else{alert('Sign-in not ready. Check console.');}}})();">Sign in</button>
       </div>
     </div>
 
