@@ -108,6 +108,7 @@ header,
   min-width:0;
   min-height:0;
   overflow:hidden;
+  --multiview-split: 0.5;
 }
 .multiview-panels .view{
   flex:1 1 auto;
@@ -119,6 +120,40 @@ header,
 }
 .multiview-panels .view:only-child{
   flex:1 1 100%;
+}
+.multiview-panels:has(.multiview-resizer) .view.view-primary{
+  flex:0 0 calc(var(--multiview-split) * (100% - 8px));
+  min-width:120px;
+}
+.multiview-panels:has(.multiview-resizer) .view.view-secondary{
+  flex:1 1 0;
+  min-width:120px;
+}
+.multiview-resizer{
+  flex:0 0 8px;
+  min-width:8px;
+  cursor:col-resize;
+  background:var(--border);
+  position:relative;
+}
+.multiview-resizer:hover,
+.multiview-resizer:active{
+  background:var(--acc);
+}
+.multiview-resizer::after{
+  content:'';
+  position:absolute;
+  left:50%;
+  top:0;
+  bottom:0;
+  width:2px;
+  transform:translateX(-50%);
+  background:var(--bg);
+  opacity:0.6;
+}
+.multiview-resizer:hover::after,
+.multiview-resizer:active::after{
+  opacity:1;
 }
 .view .visual{
   flex:1;

@@ -214,6 +214,7 @@ const CHANNELS_KEY         = 'inout_channels_v1';
 const LEFT_CHANNELS_KEY    = 'inout_left_channels_v1';
 const CURRENT_CHANNEL_KEY  = 'inout_current_channel_v1';
 const SECONDARY_VIEW_KEY   = 'inout_secondary_view_channel_v1';
+const MULTIVIEW_SPLIT_KEY = 'inout_multiview_split_v1';
 const INPUT_STATE_KEY      = 'inout_input_state_v2';
 const FIELD_PREFS_KEY      = 'inout_field_prefs_v1';
 const ORDER_STATE_KEY      = 'inout_order_state_v1';
@@ -647,10 +648,11 @@ async function undoLastAction() {
 }
 
 function updateEditingRowHighlight() {
-  if (!feedInner) return;
-  feedInner.querySelectorAll('.obj.obj-editing').forEach(r => r.classList.remove('obj-editing'));
+  [feedInner, secondaryFeedInner].forEach(fi => {
+    if (fi) fi.querySelectorAll('.obj.obj-editing').forEach(r => r.classList.remove('obj-editing'));
+  });
   if (editingObjectId != null) {
-    const row = feedInner.querySelector('.obj[data-id="' + CSS.escape(String(editingObjectId)) + '"]');
+    const row = findObjectRowEl(editingObjectId);
     if (row) row.classList.add('obj-editing');
   }
 }
@@ -1163,7 +1165,7 @@ async function replaceFeedWithListInto(list, targetFeedInner) {
   seenIds.clear();
   const frag = document.createDocumentFragment();
   for (const msg of list) {
-    const row = createObjectRow(msg, false);
+    const row = createObjectRow(msg, false, { skipEmptyRemove: true });
     if (row) frag.appendChild(row);
   }
   seenIds.clear();
@@ -1211,24 +1213,49 @@ function subscribeRealtimeAll() {
   });
 }
 
-/** Update the message property (primary value) of an object row in the view. */
+/** Update the message property (primary value) of an object row. Looks in primary feed, then secondary. */
 function updateObjectRowMessage(objId, messageValue) {
-  if (!feedInner || objId == null) return;
+  if (objId == null) return;
   const idStr = String(objId);
-  const el = feedInner.querySelector('.obj[data-id="' + CSS.escape(idStr) + '"]');
-  if (!el) return;
-  const textEl = el.querySelector('.obj-text');
+  const textEl = findObjectRowTextEl(objId);
   if (!textEl) return;
   textEl.innerHTML = linkify(escapeHtml(messageValue || ''));
 }
 
-/** Doppelganger: mirror of main input with same value, style, cursor and selection. */
+function findObjectRowTextEl(objId) {
+  if (objId == null) return null;
+  const idStr = String(objId);
+  const sel = '.obj[data-id="' + CSS.escape(idStr) + '"] .obj-text';
+  if (feedInner) {
+    const el = feedInner.querySelector(sel);
+    if (el) return el;
+  }
+  if (secondaryFeedInner) {
+    const el = secondaryFeedInner.querySelector(sel);
+    if (el) return el;
+  }
+  return null;
+}
+
+function findObjectRowEl(objId) {
+  if (objId == null) return null;
+  const idStr = String(objId);
+  const sel = '.obj[data-id="' + CSS.escape(idStr) + '"]';
+  if (feedInner) {
+    const el = feedInner.querySelector(sel);
+    if (el) return el;
+  }
+  if (secondaryFeedInner) {
+    const el = secondaryFeedInner.querySelector(sel);
+    if (el) return el;
+  }
+  return null;
+}
+
+/** Doppelganger: mirror of main input with same value, style, cursor and selection. Works for row in primary or secondary feed. */
 function updateEditingRowFromInput() {
-  if (!feedInner || editingObjectId == null || !input) return;
-  const idStr = String(editingObjectId);
-  const el = feedInner.querySelector('.obj[data-id="' + CSS.escape(idStr) + '"]');
-  if (!el) return;
-  const textEl = el.querySelector('.obj-text');
+  if (editingObjectId == null || !input) return;
+  const textEl = findObjectRowTextEl(editingObjectId);
   if (!textEl) return;
   const value = input.value;
   const start = Math.min(input.selectionStart || 0, value.length);
@@ -1258,7 +1285,7 @@ function commitTypingSegment() {
 }
 
 function onUpdateForChannel(ch, row) {
-  if (ch !== currentChannel || !row) return;
+  if (!row) return;
   const id = row.id != null ? row.id : row.Id;
   if (id == null) return;
   const text = row.text != null ? row.text : (row.Text != null ? row.Text : '');
@@ -1268,8 +1295,10 @@ function onUpdateForChannel(ch, row) {
     try { localStorage.removeItem(WAS_EDITING_KEY); } catch (_) {}
     if (input) input.placeholder = 'Say something…';
   }
-  updateObjectRowMessage(id, text);
-  updateEditingRowHighlight();
+  if (ch === currentChannel || ch === secondaryViewChannel) {
+    updateObjectRowMessage(id, text);
+  }
+  if (ch === currentChannel) updateEditingRowHighlight();
 }
 
 function subscribeOrderRealtime() {
@@ -1394,18 +1423,28 @@ function subscribeActionLog() {
 
 function onInsertForChannel(ch, msg) {
   if (ch === currentChannel) {
-        hideEmpty();
+    hideEmpty();
     appendMsg(msg, true);
-        objectCount++;
-        updateObjectCount();
-    // Always keep the newest message visible (messenger behavior).
-          requestAnimationFrame(scrollBottom);
+    objectCount++;
+    updateObjectCount();
+    requestAnimationFrame(scrollBottom);
     return;
   }
-
+  if (ch === secondaryViewChannel && secondaryFeedInner) {
+    hideEmptyInFeed(secondaryFeedInner);
+    const row = createObjectRow(msg, true, { skipEmptyRemove: true });
+    if (row) secondaryFeedInner.appendChild(row);
+    return;
+  }
   const next = (unreadCounts.get(ch) || 0) + 1;
   unreadCounts.set(ch, next);
   updateTabBadge(ch);
+}
+
+function hideEmptyInFeed(feedInnerEl) {
+  if (!feedInnerEl) return;
+  const empty = feedInnerEl.querySelector('.empty-placeholder');
+  if (empty && empty.parentNode) empty.parentNode.removeChild(empty);
 }
 
 /* ═══ PRESENCE (online count) ════════════════════════════ */
@@ -1984,21 +2023,26 @@ function restoreSecondaryView() {
 var secondaryViewEl = null;
 var secondaryFeedInner = null;
 var secondaryFeedEl = null;
+var multiviewResizerEl = null;
 
 function setupSecondaryFeedDnd() {
   if (!secondaryFeedEl || !secondaryViewEl) return;
-  secondaryFeedEl.addEventListener('dragover', e => {
+  function handleSecondaryDragover(e) {
     const src = getDraggingRowAndSource();
     if (!src || src.channel === secondaryViewChannel) return;
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
     secondaryViewEl.classList.add('view-secondary-drop-over');
-  });
-  secondaryFeedEl.addEventListener('dragleave', e => {
-    if (!secondaryFeedEl.contains(e.relatedTarget)) secondaryViewEl.classList.remove('view-secondary-drop-over');
-  });
-  secondaryFeedEl.addEventListener('drop', async e => {
+  }
+  function handleSecondaryDragleave(e) {
+    if (!secondaryViewEl.contains(e.relatedTarget)) secondaryViewEl.classList.remove('view-secondary-drop-over');
+  }
+  secondaryViewEl.addEventListener('dragover', handleSecondaryDragover);
+  secondaryViewEl.addEventListener('dragleave', handleSecondaryDragleave);
+  secondaryFeedEl.addEventListener('dragover', handleSecondaryDragover);
+  secondaryFeedEl.addEventListener('dragleave', handleSecondaryDragleave);
+  function handleSecondaryDrop(e) {
     e.preventDefault();
     e.stopPropagation();
     dragDropHandled = true;
@@ -2021,18 +2065,59 @@ function setupSecondaryFeedDnd() {
         await replaceFeedWithListInto(list, secondaryFeedInner);
       } else if (rowEl) rowEl.style.visibility = '';
     });
-  });
+  }
+  secondaryViewEl.addEventListener('drop', handleSecondaryDrop, true);
+  secondaryFeedEl.addEventListener('drop', handleSecondaryDrop, true);
 }
 
 function closeSecondaryView() {
-  if (!secondaryViewEl || !secondaryViewEl.parentNode) return;
-  secondaryViewEl.parentNode.removeChild(secondaryViewEl);
+  if (multiviewResizerEl && multiviewResizerEl.parentNode) multiviewResizerEl.parentNode.removeChild(multiviewResizerEl);
+  multiviewResizerEl = null;
+  if (secondaryViewEl && secondaryViewEl.parentNode) secondaryViewEl.parentNode.removeChild(secondaryViewEl);
   secondaryViewEl = null;
   secondaryFeedInner = null;
   secondaryFeedEl = null;
   secondaryViewChannel = null;
   saveSecondaryViewState();
   updateTabsUI();
+}
+
+function applyMultiviewSplit(ratio) {
+  const panels = document.querySelector('.multiview-panels');
+  if (!panels) return;
+  ratio = Math.max(0.2, Math.min(0.8, ratio));
+  panels.style.setProperty('--multiview-split', String(ratio));
+  try { localStorage.setItem(MULTIVIEW_SPLIT_KEY, String(ratio)); } catch (_) {}
+}
+
+function setupMultiviewResizer(resizerEl, panelsEl) {
+  if (!resizerEl || !panelsEl) return;
+  let startX = 0;
+  let startRatio = 0.5;
+  resizerEl.addEventListener('mousedown', e => {
+    e.preventDefault();
+    const rect = panelsEl.getBoundingClientRect();
+    const current = parseFloat(panelsEl.style.getPropertyValue('--multiview-split')) || 0.5;
+    startX = e.clientX;
+    startRatio = current;
+    const onMove = (e2) => {
+      const w = panelsEl.offsetWidth;
+      if (w <= 0) return;
+      const dx = e2.clientX - startX;
+      const ratio = startRatio + dx / w;
+      applyMultiviewSplit(ratio);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
 }
 
 async function openSecondaryView(ch) {
@@ -2042,6 +2127,19 @@ async function openSecondaryView(ch) {
   saveSecondaryViewState();
   const panels = document.querySelector('.multiview-panels');
   if (!panels) return;
+  const resizer = document.createElement('div');
+  resizer.className = 'multiview-resizer';
+  resizer.setAttribute('aria-label', 'Resize views');
+  try {
+    const saved = localStorage.getItem(MULTIVIEW_SPLIT_KEY);
+    if (saved) applyMultiviewSplit(parseFloat(saved));
+    else panels.style.setProperty('--multiview-split', '0.5');
+  } catch (_) {
+    panels.style.setProperty('--multiview-split', '0.5');
+  }
+  setupMultiviewResizer(resizer, panels);
+  panels.appendChild(resizer);
+  multiviewResizerEl = resizer;
   const view = document.createElement('div');
   view.className = 'view view-secondary';
   view.setAttribute('data-channel', ch);
@@ -2358,14 +2456,15 @@ function createMsgHeaderRow() {
   return row;
 }
 
-/** Create one object row (DOM) from object data; message is obj.text. */
-function createObjectRow(obj, isNew) {
+/** Create one object row (DOM) from object data; message is obj.text. options.skipEmptyRemove: true when building for a non-primary feed. */
+function createObjectRow(obj, isNew, options) {
   if (obj && typeof obj.id !== 'undefined') {
     if (seenIds.has(obj.id)) return null;
     seenIds.add(obj.id);
   }
-  // remove empty state
-  if (emptyEl.parentNode) emptyEl.remove();
+  if (!(options && options.skipEmptyRemove)) {
+    if (emptyEl && emptyEl.parentNode) emptyEl.remove();
+  }
 
   const row  = document.createElement('div');
   row.className = 'obj' + (isNew ? ' new-flash' : '');
@@ -4608,9 +4707,8 @@ async function deleteSingleMessage(id) {
       pushUndo({ type: 'delete', entries: [data] });
       logAction('delete', { id: data.id });
     }
-    const el = feedInner.querySelector('.obj[data-id="' + id + '"]');
-    if (el) el.remove();
-    // keep local order in sync
+    const el = findObjectRowEl(id);
+    if (el && el.parentNode) el.parentNode.removeChild(el);
     currentObjectOrder = currentObjectOrder.filter(x => x !== id);
     saveObjectOrderForCurrentChannel();
     showEmptyIfNoMessages();
