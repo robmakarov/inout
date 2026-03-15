@@ -70,7 +70,7 @@ UI and interaction modes. How they are toggled, what they affect, and the classe
 - During DnD, .msg has no transition/animation except .msg-drag-nudge-right (nudge), so the drop line and layout don’t jump. Spirit and fly-clone use the DnD duration tokens.
 
 **Effects:**
-- Under body.dnd-active: non-dragging rows use --dnd-idle-opacity and no transition; target row uses --dnd-target-bg and nudge; dragging/drag-group rows have transparent bg and hidden checkboxes/actions.
+- Under body.dnd-active: no floating spirit (hidden); dragged row(s) stay in place and look hovered (--bg2, opacity 1); non-dragging rows are slightly darker (--dnd-idle-bg, --dnd-idle-opacity) with no hover; target row uses --dnd-target-bg and nudge; checkboxes/actions hidden on dragged rows.
 - Touch: long-press (~300 ms) on a row starts drag (same DnD state).
 
 **Exit:** On dragend, all DnD classes cleared, order saved or move-to-tab applied.

@@ -23,15 +23,16 @@ Rules for animation in the app. Code should use these (variables/names/durations
 - **--dnd-drop-line-color**, **--dnd-drop-line-height** — insert-position line
 - **--dnd-origin-line-color** — fixed line at drag start
 - **--dnd-target-bg** — row under cursor highlight
-- **--dnd-idle-opacity** — non-target rows during drag (e.g. 0.68)
-- **--dnd-placeholder-opacity** — .dragging-in-feed rows (e.g. 0.35)
+- **--dnd-idle-opacity** — non-dragged rows during drag (e.g. 0.68)
+- **--dnd-idle-bg** — background of non-dragged rows during drag (e.g. var(--line)), slightly darker so draggable stands out
+- **--dnd-placeholder-opacity** — .dragging-in-feed rows when not using in-place look (e.g. 0.35)
 - **--dnd-ghost-opacity** — origin ghost copies (e.g. 0.5)
 - **--dnd-spirit-shadow**, **--dnd-spirit-radius** — cursor-following clone
 - **--dnd-stack-drop-in-duration** — after drop, reordered block (single or stack) plays same entrance animation; .msg-dnd-just-dropped applied then removed.
 - **--dnd-stack-stagger-step** — delay between each row in the stack drop-in animation (e.g. 0.03s); JS uses 30ms per row so the stack lands in sequence.
 - **--dnd-spirit-stack-max-visible** — max rows shown in the stack spirit under cursor (e.g. 4); rest show as "+N".
 
-**Rule:** During body.dnd-active, .msg has no transition/animation (except .msg-drag-nudge-right) so layout and drop line don’t jump. Spirit and fly-clone use the DnD durations above. **Stack of objects:** (1) Spirit under cursor shows multiple rows (up to --dnd-spirit-stack-max-visible) in a single .msg-drag-spirit-stack container, with "+N" if more; same shadow/radius as single spirit. (2) Placeholder rows in feed (.dragging-in-feed, .msg-drag-group) share a left-edge cue (inset box-shadow) so they read as one block. (3) After reorder drop, the inserted block gets .msg-dnd-just-dropped and msgin with --dnd-stack-drop-in-duration, staggered by --dnd-stack-stagger-step per row so the stack lands in sequence.
+**Rule:** During body.dnd-active, .msg has no transition/animation (except .msg-drag-nudge-right) so layout and drop line don’t jump. **In-place look:** floating spirit is hidden; dragged row(s) stay in place and look hovered (--bg2); other rows use --dnd-idle-bg and --dnd-idle-opacity with no hover. Fly-to-tab still uses clone. **Stack of objects:** (1) Placeholder rows in feed (.dragging-in-feed, .msg-drag-group) share a left-edge cue (inset box-shadow) so they read as one block. (2) After reorder drop, the inserted block gets .msg-dnd-just-dropped and msgin with --dnd-stack-drop-in-duration, staggered by --dnd-stack-stagger-step per row so the stack lands in sequence.
 
 ## Where used
 
