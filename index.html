@@ -1699,6 +1699,7 @@ let currentUser    = null;
 let currentChannel = 'main';
 let channels       = ['main'];
 const CHANNELS_KEY         = 'inout_channels_v1';
+const LEFT_CHANNELS_KEY    = 'inout_left_channels_v1';
 const CURRENT_CHANNEL_KEY  = 'inout_current_channel_v1';
 const INPUT_STATE_KEY      = 'inout_input_state_v2';
 const FIELD_PREFS_KEY      = 'inout_field_prefs_v1';
@@ -3733,7 +3734,29 @@ function updateTabsUI() {
   });
 }
 
+var leftChannels = new Set();
+
+function loadLeftChannelsList() {
+  try {
+    const raw = localStorage.getItem(LEFT_CHANNELS_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      leftChannels = new Set(parsed.map(x => (typeof x === 'string' ? x.trim() : '')).filter(x => x && x !== 'main'));
+    }
+  } catch (_) {}
+}
+
+function saveLeftChannelsList() {
+  try {
+    localStorage.setItem(LEFT_CHANNELS_KEY, JSON.stringify(Array.from(leftChannels)));
+  } catch (_) {}
+}
+
 function loadChannelsList() {
+  try {
+    loadLeftChannelsList();
+  } catch (_) {}
   try {
     const raw = localStorage.getItem(CHANNELS_KEY);
     if (!raw) return;
@@ -3741,7 +3764,7 @@ function loadChannelsList() {
     if (Array.isArray(parsed)) {
       const cleaned = parsed
         .map(x => (typeof x === 'string' ? x.trim() : ''))
-        .filter(x => x && x !== 'main');
+        .filter(x => x && x !== 'main' && !leftChannels.has(x));
       channels = ['main', ...Array.from(new Set(cleaned))];
     }
   } catch (_) {}
@@ -3985,7 +4008,7 @@ async function syncChannelsFromServer() {
     }
     const server = (data || [])
       .map(r => (typeof r.channel === 'string' ? r.channel.trim() : ''))
-      .filter(ch => ch && ch !== 'main');
+      .filter(ch => ch && ch !== 'main' && !leftChannels.has(ch));
     const merged = new Set(['main', ...channels, ...server]);
     channels = Array.from(merged);
     saveChannelsList();
@@ -4084,6 +4107,8 @@ async function createChannelFromModal() {
     return;
   }
 
+  leftChannels.delete(name);
+  saveLeftChannelsList();
   if (!channels.includes(name)) {
     channels.push(name);
     saveChannelsList();
@@ -4123,6 +4148,8 @@ async function createChannelFromModal() {
 
 function deleteChannel(ch) {
   if (ch === 'main') return;
+  leftChannels.add(ch);
+  saveLeftChannelsList();
   channels = channels.filter(x => x !== ch);
   saveChannelsList();
   unreadCounts.delete(ch);
@@ -4133,6 +4160,9 @@ function deleteChannel(ch) {
   renderTabs();
   subscribeRealtimeAll();
   if (currentUser) {
+    try {
+      sb.from('channel_members').delete().eq('channel', ch).eq('user_id', currentUser.id).then(function() {}).catch(function() {});
+    } catch (_) {}
     reloadForUser();
   } else {
     clearMessages();
