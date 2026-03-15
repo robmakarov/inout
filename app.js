@@ -1142,7 +1142,7 @@ function updateEditingRowFromInput() {
   const after = fullText.slice(caretPos);
   const html =
     escapeHtml(before) +
-    '<span class="msg-edit-caret">\u200B</span>' +
+    '<span class="msg-edit-caret" aria-hidden="true">|</span>' +
     escapeHtml(after);
   textEl.innerHTML = html;
 }
