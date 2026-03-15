@@ -1502,10 +1502,10 @@ function applyRemoteDndLines() {
     ? getLineRectForOrigin(feed, inner, origin.lastDraggedId, origin.wantAppend)
     : getLineRectForInsert(feed, inner, origin.insertBeforeId, origin.wantAppend);
   var targetRect = getLineRectForInsert(feed, inner, target.insertBeforeId, target.wantAppend);
-  /* Remote ghost = union of dragged rows' rects (viewport coords) */
+  /* Remote ghost = union of dragged rows' rects (size), positioned at cursor and clamped to feed */
   var ghostRect = null;
   if (draggingIds.length) {
-    var feedRect = feed.getBoundingClientRect();
+    var feedRectForGhost = feed.getBoundingClientRect();
     var minTop = Infinity;
     var maxBottom = -Infinity;
     for (var g = 0; g < rows.length; g++) {
@@ -1518,29 +1518,32 @@ function applyRemoteDndLines() {
       }
     }
     if (minTop !== Infinity && maxBottom !== -Infinity && maxBottom > minTop) {
-      ghostRect = { left: feedRect.left, width: feedRect.width, top: minTop, height: maxBottom - minTop };
+      ghostRect = { width: feedRectForGhost.width, height: maxBottom - minTop };
     }
   }
-  if (ghostRect) {
+  var cursorY = remoteDnd.cursorY;
+  var feedRect = feed ? feed.getBoundingClientRect() : null;
+  var spiritY = (typeof cursorY === 'number' && feedRect) ? Math.max(feedRect.top + 24, Math.min(feedRect.bottom - 24, cursorY)) : null;
+  if (ghostRect && typeof spiritY === 'number' && feedRect) {
+    var ghostTop = Math.max(feedRect.top, Math.min(feedRect.bottom - ghostRect.height, spiritY - ghostRect.height / 2));
     if (!remoteGhostEl) {
       remoteGhostEl = document.createElement('div');
       remoteGhostEl.className = 'remote-origin-ghost';
       remoteGhostEl.setAttribute('aria-hidden', 'true');
       document.body.appendChild(remoteGhostEl);
     }
-    remoteGhostEl.style.left = ghostRect.left + 'px';
+    remoteGhostEl.style.left = feedRect.left + 'px';
     remoteGhostEl.style.width = ghostRect.width + 'px';
-    remoteGhostEl.style.top = ghostRect.top + 'px';
+    remoteGhostEl.style.top = ghostTop + 'px';
     remoteGhostEl.style.height = ghostRect.height + 'px';
     remoteGhostEl.classList.add('visible');
   } else if (remoteGhostEl) {
     remoteGhostEl.classList.remove('visible');
   }
-  var cursorY = remoteDnd.cursorY;
   if (typeof cursorY === 'number' && feed) {
-    var feedRect = feed.getBoundingClientRect();
+    if (!feedRect) feedRect = feed.getBoundingClientRect();
     var margin = 24;
-    var spiritY = Math.max(feedRect.top + margin, Math.min(feedRect.bottom - margin, cursorY));
+    var spiritYVal = Math.max(feedRect.top + margin, Math.min(feedRect.bottom - margin, cursorY));
     var spiritX = feedRect.left + feedRect.width / 2;
     if (!remoteSpiritEl) {
       remoteSpiritEl = document.createElement('div');
@@ -1551,7 +1554,7 @@ function applyRemoteDndLines() {
       document.body.appendChild(remoteSpiritEl);
     }
     remoteSpiritEl.style.left = spiritX + 'px';
-    remoteSpiritEl.style.top = spiritY + 'px';
+    remoteSpiritEl.style.top = spiritYVal + 'px';
     remoteSpiritEl.classList.add('visible');
   } else if (remoteSpiritEl) {
     remoteSpiritEl.classList.remove('visible');
