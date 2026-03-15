@@ -644,12 +644,15 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
 .remote-origin-ghost-container.visible{ display:flex; }
 .remote-origin-ghost-container .msg-origin-ghost{ flex:0 0 auto; }
 .remote-origin-ghost-container .msg-origin-ghost + .msg-origin-ghost{ margin-top:-2px; }
-/* Realtime: spirit — same look as local spirit (shares .msg-drag-spirit) */
+/* Realtime: spirit — same look as local spirit (shares .msg-drag-spirit); fix layout when cloned on mobile */
 .remote-drag-spirit{
   display:none;
   transform:translate(-50%,-50%);
+  contain:none;
+  max-width:calc(100vw - 24px);
 }
 .remote-drag-spirit.visible{ display:block; }
+.remote-drag-spirit .msg-text{ min-width:0; padding-right:8px; }
 
 /* DnD: ghost copies at drag origin (placeholder, not interactive) */
 .msg-origin-ghost{

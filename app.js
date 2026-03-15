@@ -1558,11 +1558,13 @@ function applyRemoteDndLines() {
     var spiritYVal = Math.max(feedRect.top + margin, Math.min(feedRect.bottom - margin, cursorY));
     var spiritX = feedRect.left + feedRect.width / 2;
     var firstRow = null;
-    for (var si = 0; si < rows.length; si++) {
-      var rid = Number(rows[si].dataset.id);
-      if (Number.isFinite(rid) && draggingIds.indexOf(rid) >= 0) {
-        firstRow = rows[si];
-        break;
+    var firstId = draggingIds.length ? draggingIds[0] : null;
+    if (Number.isFinite(firstId)) {
+      for (var si = 0; si < rows.length; si++) {
+        if (Number(rows[si].dataset.id) === firstId) {
+          firstRow = rows[si];
+          break;
+        }
       }
     }
     if (!remoteSpiritEl || !remoteSpiritEl.classList.contains('msg')) {
@@ -1574,7 +1576,11 @@ function applyRemoteDndLines() {
         remoteSpiritEl.removeAttribute('draggable');
         remoteSpiritEl.setAttribute('aria-hidden', 'true');
         remoteSpiritEl.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
-        remoteSpiritEl.style.width = (firstRow.offsetWidth || 280) + 'px';
+        var spiritW = firstRow.offsetWidth || 280;
+        var maxW = (typeof window !== 'undefined' && window.innerWidth) ? window.innerWidth - 24 : spiritW;
+        if (spiritW > maxW) spiritW = maxW;
+        remoteSpiritEl.style.width = spiritW + 'px';
+        remoteSpiritEl.style.minWidth = '0';
         document.body.appendChild(remoteSpiritEl);
       } else {
         remoteSpiritEl = document.createElement('div');
