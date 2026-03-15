@@ -15,7 +15,7 @@
 - --dnd-spirit-shadow, --dnd-spirit-radius, --dnd-spirit-bg (semi-transparent so underlying row visible)
 - --dnd-stack-drop-in-duration, --dnd-stack-stagger-step, --dnd-spirit-stack-max-visible, --dnd-stack-form-duration
 
-**DnD:** body.dnd-active → .msg no transition except nudge. Spirit follows cursor; clamped to feed. Rows unchanged; placeholders 80% opacity. No drop-in animation (no blink/shake); .msg.msg-dnd-just-dropped has animation:none. body.dnd-just-ended kept ~120ms after 2 rAF before removal. Stack-form animation on stack. Drop on origin = undo.
+**DnD:** body.dnd-active → .msg no transition except nudge. Spirit follows cursor; clamped to feed. Rows unchanged; placeholders 80% opacity. No drop-in animation (no blink/shake); .msg.msg-dnd-just-dropped has animation:none. body.dnd-just-ended kept ~120ms after 2 rAF before removal. Stack-form animation on stack. Drop on origin = undo. **Remote reorder:** .msg-remote-reorder uses keyframe remote-reorder-in (opacity .88→1, .22s) with staggered delay so other devices see which rows moved.
 
 **DnD lifecycle (events / process):** dragstart → set dragSelectedRows, spirit, dndOrigin*, body.dnd-active; dragover → processFeedDragover (indicator, spirit position, lastReorderTarget, origin snap); drop/dragend → insert block, .msg-dnd-just-dropped (staggered), remove spirit, body.dnd-just-ended, then 2 rAF later remove dnd-just-ended. No custom events; all in DOM + classList.
 

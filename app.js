@@ -1424,6 +1424,36 @@ function setupDndBroadcastChannel() {
           remoteDnd = null;
           hideRemoteDndLines();
         }
+      } else if (data.type === 'dnd_dropped') {
+        if (data.from === myId) return;
+        if (String(data.channel) !== String(currentChannel)) return;
+        var newOrder = Array.isArray(data.newOrder) ? data.newOrder.map(function(x) { return Number(x); }).filter(function(x) { return Number.isFinite(x); }) : [];
+        var movedIds = Array.isArray(data.movedIds) ? data.movedIds.map(function(x) { return Number(x); }).filter(function(x) { return Number.isFinite(x); }) : [];
+        if (!newOrder.length) return;
+        suppressOrderApplyUntil = Date.now() + 800;
+        currentMessageOrder = newOrder;
+        saveOrderToLocal();
+        applyMessageOrderToDOM();
+        var inner = document.getElementById('feed-inner');
+        if (inner && movedIds.length) {
+          var stagger = 30;
+          var duration = 220 + movedIds.length * stagger;
+          inner.querySelectorAll('.msg').forEach(function(r) {
+            var id = Number(r.dataset.id);
+            if (movedIds.indexOf(id) >= 0) {
+              r.classList.add('msg-remote-reorder');
+              var i = movedIds.indexOf(id);
+              r.style.animationDelay = (i * stagger) + 'ms';
+            }
+          });
+          setTimeout(function() {
+            if (!inner.parentNode) return;
+            inner.querySelectorAll('.msg-remote-reorder').forEach(function(r) {
+              r.classList.remove('msg-remote-reorder');
+              r.style.animationDelay = '';
+            });
+          }, duration);
+        }
       }
     })
     .subscribe(function(status) {
@@ -1621,6 +1651,21 @@ function broadcastDndEnd() {
     type: 'broadcast',
     event: 'dnd',
     payload: { type: 'dnd_end', from: myId, channel: String(currentChannel) }
+  });
+}
+
+function broadcastDndDropped(newOrder, movedIds) {
+  if (!dndBroadcastChannel || !dndChannelReady || !newOrder || !movedIds.length) return;
+  dndBroadcastChannel.send({
+    type: 'broadcast',
+    event: 'dnd',
+    payload: {
+      type: 'dnd_dropped',
+      from: myId,
+      channel: String(currentChannel),
+      newOrder: newOrder,
+      movedIds: movedIds
+    }
   });
 }
 
@@ -1904,14 +1949,15 @@ function setupTouchDragHandlers() {
   };
   const end = () => {
     if (!touchDragState || !touchDragState.row) return;
-    if (feedInner) feedInner.querySelectorAll('.msg-drag-group').forEach(function(r) { r.classList.remove('msg-drag-group'); });
+    var r = touchDragState.row;
+    var droppedMovedIdsTouch = (dragSelectedRows && dragSelectedRows.length) ? dragSelectedRows.map(function(x) { return Number(x.dataset.id); }).filter(function(id) { return Number.isFinite(id); }) : (r.dataset && r.dataset.id ? [Number(r.dataset.id)] : []);
+    if (feedInner) feedInner.querySelectorAll('.msg-drag-group').forEach(function(el) { el.classList.remove('msg-drag-group'); });
     dragSelectedRows = [];
     clearEdgeScrollInterval();
     clearTimeout(touchDragState.timer);
     document.removeEventListener('touchmove', move, { passive: false });
     document.removeEventListener('touchend', end);
     hideDropOriginLine();
-    const r = touchDragState.row;
     r.classList.remove('dragging');
     if (document.body) {
       document.body.classList.remove('dnd-active');
@@ -1926,6 +1972,9 @@ function setupTouchDragHandlers() {
     broadcastDndEnd();
     recomputeOrderFromDOM();
     saveMessageOrderForCurrentChannel();
+    if (droppedMovedIdsTouch.length && dndBroadcastChannel && dndChannelReady) {
+      broadcastDndDropped(currentMessageOrder.slice(), droppedMovedIdsTouch);
+    }
     applyFieldPrefsToMessages();
     r.style.pointerEvents = 'none';
     void r.offsetHeight;
@@ -2061,11 +2110,13 @@ function createMsgRow(msg, isNew) {
   });
   row.addEventListener('dragend', () => {
     requestAnimationFrame(() => {
+      var droppedMovedIds = [];
       try {
         if (lastReorderTarget && !originGhostsActive && feedInner && dragSelectedRows.length) {
           var insertBefore = lastReorderTarget.insertBefore;
           var wantAppend = lastReorderTarget.wantAppend;
           var block = dragSelectedRows.length > 1 ? dragSelectedRows.slice() : [row];
+          droppedMovedIds = block.map(function(r) { return Number(r.dataset.id); }).filter(function(id) { return Number.isFinite(id); });
           if (block.length > 1) {
             var refAfterBlock = block[block.length - 1].nextSibling;
             block.forEach(function(r) { if (r.parentNode === feedInner) feedInner.removeChild(r); });
@@ -2132,6 +2183,9 @@ function createMsgRow(msg, isNew) {
         } else {
           recomputeOrderFromDOM();
           saveMessageOrderForCurrentChannel();
+          if (droppedMovedIds.length && dndBroadcastChannel && dndChannelReady) {
+            broadcastDndDropped(currentMessageOrder.slice(), droppedMovedIds);
+          }
         }
         applyFieldPrefsToMessages();
         row.style.pointerEvents = 'none';

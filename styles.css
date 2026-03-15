@@ -788,6 +788,8 @@ body.dnd-active .msg.msg-drag-over,
 body.dnd-active .msg.msg-drag-target{background:transparent !important}
 body.dnd-just-ended .msg{transition:none;animation:none}
 .msg.msg-dnd-just-dropped{animation:none}
+.msg.msg-remote-reorder{animation:remote-reorder-in .22s ease-out both}
+@keyframes remote-reorder-in{from{opacity:.88}to{opacity:1}}
 body.dnd-active .msg.dragging .msg-select-wrap,
 body.dnd-active .msg.dragging .msg-actions,
 body.dnd-active .msg.msg-drag-group .msg-select-wrap,
