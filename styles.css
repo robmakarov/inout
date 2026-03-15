@@ -630,34 +630,6 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
 .feed-inner.view-table .msg:not(.msg-header) .msg-sender{ width:1%; white-space:nowrap; }
 .feed-inner.view-table .msg:not(.msg-header) .msg-text{ width:auto; }
 .feed-inner.view-table .msg:not(.msg-header) .msg-actions{ width:1%; }
-/* In feed visual, each object shows property title above its value. */
-.feed-inner:not(.view-table) .msg .msg-time::before{
-  content:'Time';
-  display:block;
-  font-size:10px;
-  text-transform:uppercase;
-  letter-spacing:0.05em;
-  color:var(--muted);
-  margin-bottom:2px;
-}
-.feed-inner:not(.view-table) .msg .msg-sender::before{
-  content:'Author';
-  display:block;
-  font-size:10px;
-  text-transform:uppercase;
-  letter-spacing:0.05em;
-  color:var(--muted);
-  margin-bottom:2px;
-}
-.feed-inner:not(.view-table) .msg .msg-text::before{
-  content:'Value';
-  display:block;
-  font-size:10px;
-  text-transform:uppercase;
-  letter-spacing:0.05em;
-  color:var(--muted);
-  margin-bottom:2px;
-}
 /* ── DnD: drop position line (use tokens) ── */
 .feed-drop-indicator{
   position:fixed;
