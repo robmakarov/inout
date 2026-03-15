@@ -5504,6 +5504,11 @@ function ensureLoaderMinDisplay() {
 </script>
 <script>
 (function profileButtonFallback(){
+  if (!window.sb && typeof supabase !== 'undefined') {
+    try {
+      window.sb = supabase.createClient('https://tfmbqiwxfgrwtjvoqomf.supabase.co', 'sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_', { auth: { detectSessionInUrl: true } });
+    } catch(_) {}
+  }
   var btn = document.getElementById('user-btn');
   var back = document.getElementById('user-modal-backdrop');
   var channelBack = document.getElementById('channel-modal-backdrop');
@@ -5512,15 +5517,19 @@ function ensureLoaderMinDisplay() {
   function closeModal(){ if(back){ back.style.display='none'; back.setAttribute('aria-hidden','true'); } }
   if(btn){ btn.onclick = openModal; }
   if(closeBtn){ closeBtn.onclick = closeModal; }
-  if(back){ back.onclick = function(e){ if(e.target===back) closeModal(); }; }
-  var authBtn = document.getElementById('um-auth-btn');
-  if(authBtn && !authBtn.onclick){
-    authBtn.onclick = function(){
-      if(window.signIn && typeof window.signIn === 'function'){ window.signIn(); return; }
-      if(window.sb && window.sb.auth && window.sb.auth.signInWithOAuth){
-        window.sb.auth.signInWithOAuth({ provider: 'google' }).catch(function(){});
+  if(back){
+    back.onclick = function(e){ if(e.target===back) closeModal(); };
+    back.addEventListener('click', function(e){
+      var t = e.target;
+      if(t && t.closest && t.closest('#um-auth-btn')){
+        e.preventDefault();
+        e.stopPropagation();
+        if(window.signIn && typeof window.signIn === 'function'){ window.signIn(); return; }
+        if(window.sb && window.sb.auth && typeof window.sb.auth.signInWithOAuth === 'function'){
+          window.sb.auth.signInWithOAuth({ provider: 'google' }).catch(function(){});
+        }
       }
-    };
+    }, true);
   }
 })();
 </script>
