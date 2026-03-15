@@ -1310,6 +1310,7 @@ let dndChannelReady = false;
 let remoteDnd = null;
 let remoteDropOriginEl = null;
 let remoteDropTargetEl = null;
+let remoteGhostEl = null;
 let dndBroadcastThrottle = null;
 
 function getLineRectForInsert(feedEl, feedInner, insertBeforeId, wantAppend) {
@@ -1369,7 +1370,7 @@ function setupDndBroadcastChannel() {
   dndChannelReady = false;
   if (!currentUser || !currentChannel || !sb) return;
   remoteDndScrollResize = function() {
-    if (remoteDnd && (remoteDropOriginEl || remoteDropTargetEl)) applyRemoteDndLines();
+    if (remoteDnd && (remoteDropOriginEl || remoteDropTargetEl || remoteGhostEl)) applyRemoteDndLines();
   };
   var feedForScroll = document.getElementById('feed');
   if (feedForScroll) feedForScroll.addEventListener('scroll', remoteDndScrollResize, { passive: true });
@@ -1386,9 +1387,11 @@ function setupDndBroadcastChannel() {
       if (document.body && document.body.classList.contains('dnd-active')) return;
       if (data.type === 'dnd_start') {
         var o = data.origin || {};
+        var draggingIds = Array.isArray(data.draggingIds) ? data.draggingIds.map(function(x) { return Number(x); }).filter(function(x) { return Number.isFinite(x); }) : [];
         remoteDnd = {
           from: data.from,
           channel: data.channel,
+          draggingIds: draggingIds,
           origin: {
             insertBeforeId: o.insertBeforeId != null ? Number(o.insertBeforeId) : null,
             wantAppend: !!o.wantAppend,
@@ -1405,7 +1408,7 @@ function setupDndBroadcastChannel() {
           if (remoteDnd && remoteDnd.from === data.from) {
             remoteDnd.target = target;
           } else {
-            remoteDnd = { from: data.from, channel: data.channel, origin: {}, target: target };
+            remoteDnd = { from: data.from, channel: data.channel, draggingIds: remoteDnd && remoteDnd.draggingIds ? remoteDnd.draggingIds : [], origin: {}, target: target };
           }
           requestAnimationFrame(function() {
             requestAnimationFrame(function() { applyRemoteDndLines(); });
@@ -1458,11 +1461,46 @@ function applyRemoteDndLines() {
   }
   var origin = remoteDnd.origin;
   var target = remoteDnd.target;
+  var draggingIds = remoteDnd.draggingIds || [];
   /* Origin line = bottom of last dragged row (correct border across devices) */
   var originRect = origin.lastDraggedId != null
     ? getLineRectForOrigin(feed, inner, origin.lastDraggedId, origin.wantAppend)
     : getLineRectForInsert(feed, inner, origin.insertBeforeId, origin.wantAppend);
   var targetRect = getLineRectForInsert(feed, inner, target.insertBeforeId, target.wantAppend);
+  /* Remote ghost = union of dragged rows' rects (viewport coords) */
+  var ghostRect = null;
+  if (draggingIds.length) {
+    var feedRect = feed.getBoundingClientRect();
+    var minTop = Infinity;
+    var maxBottom = -Infinity;
+    for (var g = 0; g < rows.length; g++) {
+      var r = rows[g];
+      var id = Number(r.dataset.id);
+      if (Number.isFinite(id) && draggingIds.indexOf(id) >= 0) {
+        var br = r.getBoundingClientRect();
+        if (br.top < minTop) minTop = br.top;
+        if (br.bottom > maxBottom) maxBottom = br.bottom;
+      }
+    }
+    if (minTop !== Infinity && maxBottom !== -Infinity && maxBottom > minTop) {
+      ghostRect = { left: feedRect.left, width: feedRect.width, top: minTop, height: maxBottom - minTop };
+    }
+  }
+  if (ghostRect) {
+    if (!remoteGhostEl) {
+      remoteGhostEl = document.createElement('div');
+      remoteGhostEl.className = 'remote-origin-ghost';
+      remoteGhostEl.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(remoteGhostEl);
+    }
+    remoteGhostEl.style.left = ghostRect.left + 'px';
+    remoteGhostEl.style.width = ghostRect.width + 'px';
+    remoteGhostEl.style.top = ghostRect.top + 'px';
+    remoteGhostEl.style.height = ghostRect.height + 'px';
+    remoteGhostEl.classList.add('visible');
+  } else if (remoteGhostEl) {
+    remoteGhostEl.classList.remove('visible');
+  }
   if (originRect) {
     if (!remoteDropOriginEl) {
       remoteDropOriginEl = document.createElement('div');
@@ -1495,6 +1533,9 @@ function hideRemoteDndLines() {
   if (applyRemoteDndLinesRetry) {
     clearTimeout(applyRemoteDndLinesRetry);
     applyRemoteDndLinesRetry = null;
+  }
+  if (remoteGhostEl) {
+    remoteGhostEl.classList.remove('visible');
   }
   if (remoteDropOriginEl) {
     remoteDropOriginEl.classList.remove('visible');
