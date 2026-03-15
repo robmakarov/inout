@@ -89,6 +89,7 @@ body{
   height:100vh;
   overflow:hidden;
   pointer-events:none;
+  padding-top:48px; /* reserve space for fixed header; everything below = app content */
 }
 #app header,
 #app #manage-bar,
@@ -105,16 +106,23 @@ body{
   #app{height:100svh}
 }
 
-/* ── HEADER ── */
+/* ── HEADER: always fixed, nothing moves it; everything under it is App ── */
 header{
-  position:relative;
-  z-index:100;
+  position:fixed;
+  top:0;
+  left:0;
+  right:0;
+  width:100%;
+  z-index:1000;
   background:var(--bg);
   border-bottom:1px solid var(--line);
   padding:0 20px;
   height:48px;
-  display:flex;align-items:center;justify-content:space-between;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
   flex-shrink:0;
+  box-sizing:border-box;
 }
 
 /* ── MANAGE BAR (SELECTION) ── */
@@ -1230,20 +1238,12 @@ body.select-mode .msg-select-wrap,
     -ms-overflow-style:none;
   }
   #feed::-webkit-scrollbar{display:none}
-  /* keep header pinned even when keyboard opens */
+  /* header always fixed; never moved by keyboard or scroll */
   header{
-    position:fixed;
-    top:0;
-    left:0;
-    right:0;
-  width:100%;
     padding:0 14px;
     z-index:120;
-    transform:translateY(var(--vv-top));
-    transition:transform .22s cubic-bezier(.2,.8,.2,1);
-    will-change:transform;
   }
-  /* pin manage bar under header too */
+  /* pin manage bar under header */
   #manage-bar{
     position:fixed;
     top:48px;
@@ -1256,7 +1256,7 @@ body.select-mode .msg-select-wrap,
     transition:transform .22s cubic-bezier(.2,.8,.2,1);
     will-change:transform;
   }
-  /* reserve space for fixed header + manage bar */
+  /* app = content below fixed header; reserve space for header + fixed manage bar */
   #app{padding-top:calc(48px + 34px)}
   /* keep input bar above iOS Safari bottom panel & keyboard */
   #input-area{

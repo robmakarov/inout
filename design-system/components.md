@@ -1,7 +1,7 @@
 # Components
 
 ## Layout
-#app, #app-loader, #feed, #feed-inner
+Header is always fixed (position:fixed; top:0); nothing moves it. Everything below = App (#app has padding-top for header; content: #manage-bar, #feed, #input-area). #app-loader, #feed, #feed-inner.
 
 ## Header
 header, .logo, .header-right, #online-count, #msg-count, #user-btn (.signed-in)
