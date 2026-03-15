@@ -38,6 +38,8 @@
   --dnd-spirit-shadow:    0 4px 16px rgba(0, 0, 0, 0.35);
   --dnd-spirit-radius:    6px;
   --dnd-stack-drop-in-duration: 0.2s;
+  --dnd-stack-stagger-step: 0.03s;
+  --dnd-spirit-stack-max-visible: 4;
 }
 
 /* Reusable animation keyframes (use with var(--anim-duration-*) and var(--anim-ease-*) for rules) */
@@ -595,6 +597,8 @@ header{
 }
 .origin-ghost-overlay.msg-origin-ghost{ min-height:32px; }
 .msg.dragging-in-feed{ opacity:var(--dnd-placeholder-opacity); }
+.msg.dragging.dragging-in-feed,
+.msg.msg-drag-group.dragging-in-feed{ box-shadow:inset 3px 0 0 var(--dnd-drop-line-color); }
 .msg-origin-ghost .msg-time,
 .msg-origin-ghost .msg-sender,
 .msg-origin-ghost .msg-text{ color:var(--text); }
@@ -652,6 +656,31 @@ header{
 }
 .msg-drag-spirit .msg-time,
 .msg-drag-spirit .msg-sender{ color:var(--text); }
+/* DnD: stack spirit = multiple rows under cursor, same tokens */
+.msg-drag-spirit-stack{
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  max-height:200px;
+  border:1px solid var(--line);
+}
+.msg-drag-spirit-stack .msg-drag-spirit-row{
+  flex:0 0 auto;
+  border-bottom:1px solid var(--line);
+  background:var(--bg2);
+}
+.msg-drag-spirit-stack .msg-drag-spirit-row:last-of-type{ border-bottom:none; }
+.msg-drag-spirit-stack .msg-drag-spirit-row .msg-time,
+.msg-drag-spirit-stack .msg-drag-spirit-row .msg-sender{ color:var(--text); }
+.msg-drag-spirit-stack-more{
+  flex:0 0 auto;
+  padding:4px 12px;
+  font-size:11px;
+  color:var(--soft);
+  background:var(--line2);
+  text-align:center;
+}
+body.dnd-active .msg-drag-spirit-stack{ opacity:1; background:var(--bg2); }
 /* DnD: row under cursor nudge (use tokens) */
 .msg-drag-nudge-right{ transform:translateX(var(--dnd-nudge-offset)); }
 body.dnd-active .msg.msg-drag-nudge-right{ transition:transform var(--dnd-nudge-duration) var(--anim-ease-out); }

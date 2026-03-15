@@ -38,7 +38,7 @@ UI components and their IDs, classes, and states. Code should match this structu
   - .msg-checkbox-zone, .msg-select, .msg-actions, .msg-action-btn
   - States: .msg-selected, .msg-editing, .msg-drag-target, .msg-drag-nudge-right, .new-flash, .dragging, .msg-drag-group, .dragging-in-feed, .msg-dnd-just-dropped (stack/single after drop, then removed)
 - **.msg-origin-ghost**, **.origin-ghost-overlay** — DnD origin
-- **.msg-drag-spirit**, **.msg-fly-clone** — DnD spirit/fly
+- **.msg-drag-spirit**, **.msg-drag-spirit-stack** (container), **.msg-drag-spirit-row**, **.msg-drag-spirit-stack-more** ("+N") — DnD spirit (single or stack under cursor); **.msg-fly-clone** — fly-to-tab
 - **.tab** — Channel tab. States: .tab-active, .tab-shared, .tab-badge, .tab-new, .tab-close, .tab-drop-target
 
 ## Input area

@@ -28,8 +28,10 @@ Rules for animation in the app. Code should use these (variables/names/durations
 - **--dnd-ghost-opacity** — origin ghost copies (e.g. 0.5)
 - **--dnd-spirit-shadow**, **--dnd-spirit-radius** — cursor-following clone
 - **--dnd-stack-drop-in-duration** — after drop, reordered block (single or stack) plays same entrance animation; .msg-dnd-just-dropped applied then removed.
+- **--dnd-stack-stagger-step** — delay between each row in the stack drop-in animation (e.g. 0.03s); JS uses 30ms per row so the stack lands in sequence.
+- **--dnd-spirit-stack-max-visible** — max rows shown in the stack spirit under cursor (e.g. 4); rest show as "+N".
 
-**Rule:** During body.dnd-active, .msg has no transition/animation (except .msg-drag-nudge-right) so layout and drop line don’t jump. Spirit and fly-clone use the DnD durations above. **Stack of objects:** same nudge, placeholder opacity, and drop-line rules apply; after reorder drop, the inserted block (one or many rows) gets .msg-dnd-just-dropped and uses msgin keyframe with --dnd-stack-drop-in-duration so the stack animates into place.
+**Rule:** During body.dnd-active, .msg has no transition/animation (except .msg-drag-nudge-right) so layout and drop line don’t jump. Spirit and fly-clone use the DnD durations above. **Stack of objects:** (1) Spirit under cursor shows multiple rows (up to --dnd-spirit-stack-max-visible) in a single .msg-drag-spirit-stack container, with "+N" if more; same shadow/radius as single spirit. (2) Placeholder rows in feed (.dragging-in-feed, .msg-drag-group) share a left-edge cue (inset box-shadow) so they read as one block. (3) After reorder drop, the inserted block gets .msg-dnd-just-dropped and msgin with --dnd-stack-drop-in-duration, staggered by --dnd-stack-stagger-step per row so the stack lands in sequence.
 
 ## Where used
 

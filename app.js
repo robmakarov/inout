@@ -1601,16 +1601,50 @@ function createMsgRow(msg, isNew) {
       return;
     }
     if (dragSpiritEl && dragSpiritEl.parentNode) dragSpiritEl.parentNode.removeChild(dragSpiritEl);
-    dragSpiritEl = row.cloneNode(true);
-    dragSpiritEl.classList.remove('dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
-    dragSpiritEl.classList.add('msg', 'msg-drag-spirit');
-    dragSpiritEl.removeAttribute('draggable');
-    dragSpiritEl.setAttribute('aria-hidden', 'true');
-    dragSpiritEl.style.width = Math.max(200, (row.offsetWidth || 280)) + 'px';
-    dragSpiritEl.style.left = (e.clientX || 0) + 'px';
-    dragSpiritEl.style.top = (e.clientY || 0) + 'px';
-    dragSpiritEl.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
-    document.body.appendChild(dragSpiritEl);
+    if (feedInner && selectedIds.has(msg.id) && selectedIds.size > 1) {
+      dragSelectedRows = Array.from(feedInner.querySelectorAll('.msg.msg-selected'));
+    } else {
+      dragSelectedRows = [row];
+    }
+    var spiritW = Math.max(200, (row.offsetWidth || 280));
+    if (dragSelectedRows.length > 1) {
+      var stackContainer = document.createElement('div');
+      stackContainer.className = 'msg-drag-spirit msg-drag-spirit-stack';
+      stackContainer.setAttribute('aria-hidden', 'true');
+      stackContainer.style.width = spiritW + 'px';
+      stackContainer.style.left = (e.clientX || 0) + 'px';
+      stackContainer.style.top = (e.clientY || 0) + 'px';
+      var maxVisible = 4;
+      var toShow = Math.min(dragSelectedRows.length, maxVisible);
+      for (var si = 0; si < toShow; si++) {
+        var r = dragSelectedRows[si];
+        var clone = r.cloneNode(true);
+        clone.classList.remove('dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
+        clone.classList.add('msg', 'msg-drag-spirit-row');
+        clone.removeAttribute('draggable');
+        clone.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
+        stackContainer.appendChild(clone);
+      }
+      if (dragSelectedRows.length > maxVisible) {
+        var extra = document.createElement('div');
+        extra.className = 'msg-drag-spirit-stack-more';
+        extra.textContent = '+' + (dragSelectedRows.length - maxVisible);
+        stackContainer.appendChild(extra);
+      }
+      document.body.appendChild(stackContainer);
+      dragSpiritEl = stackContainer;
+    } else {
+      dragSpiritEl = row.cloneNode(true);
+      dragSpiritEl.classList.remove('dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
+      dragSpiritEl.classList.add('msg', 'msg-drag-spirit');
+      dragSpiritEl.removeAttribute('draggable');
+      dragSpiritEl.setAttribute('aria-hidden', 'true');
+      dragSpiritEl.style.width = spiritW + 'px';
+      dragSpiritEl.style.left = (e.clientX || 0) + 'px';
+      dragSpiritEl.style.top = (e.clientY || 0) + 'px';
+      dragSpiritEl.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
+      document.body.appendChild(dragSpiritEl);
+    }
     if (!dragImageEl) {
       dragImageEl = document.createElement('div');
       dragImageEl.setAttribute('aria-hidden', 'true');
@@ -1622,11 +1656,6 @@ function createMsgRow(msg, isNew) {
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', typeof msg.text === 'string' ? msg.text : '');
     if (typeof msg.id !== 'undefined') e.dataTransfer.setData('application/x-inout-msg-id', String(msg.id));
-    if (feedInner && selectedIds.has(msg.id) && selectedIds.size > 1) {
-      dragSelectedRows = Array.from(feedInner.querySelectorAll('.msg.msg-selected'));
-    } else {
-      dragSelectedRows = [row];
-    }
     dragSelectedRows.forEach(function(r) {
       if (dragSelectedRows.length > 1) r.classList.add('msg-drag-group');
       r.classList.add('dragging-in-feed');
@@ -1656,13 +1685,24 @@ function createMsgRow(msg, isNew) {
               feedInner.appendChild(block[0]);
               for (var j = 1; j < block.length; j++) feedInner.insertBefore(block[j], block[j - 1].nextSibling);
             }
-            block.forEach(function(r) { r.classList.add('msg-dnd-just-dropped'); });
-            setTimeout(function() { block.forEach(function(r) { r.classList.remove('msg-dnd-just-dropped'); }); }, 220);
+            block.forEach(function(r, i) {
+              r.classList.add('msg-dnd-just-dropped');
+              r.style.animationDelay = (i * 30) + 'ms';
+            });
+            setTimeout(function() {
+              block.forEach(function(r) {
+                r.classList.remove('msg-dnd-just-dropped');
+                r.style.animationDelay = '';
+              });
+            }, 220 + (block.length * 30));
           } else {
             if (wantAppend) feedInner.appendChild(row);
             else if (insertBefore && insertBefore.parentNode === feedInner) feedInner.insertBefore(row, insertBefore);
             row.classList.add('msg-dnd-just-dropped');
-            setTimeout(function() { row.classList.remove('msg-dnd-just-dropped'); }, 220);
+            setTimeout(function() {
+              row.classList.remove('msg-dnd-just-dropped');
+              row.style.animationDelay = '';
+            }, 220);
           }
         }
         if (dragSpiritEl && dragSpiritEl.parentNode) dragSpiritEl.parentNode.removeChild(dragSpiritEl);
