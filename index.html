@@ -2381,8 +2381,10 @@ function init(done) {
       ]);
     }).catch(function(e) {
       if (e && e.message !== 'timeout') console.error(e);
+      try { renderTabs(); } catch (_) {}
       refreshMoveTargets();
       if (currentUser && typeof loadMessages === 'function') loadMessages().catch(function() {});
+      if (feedInner && emptyEl && !emptyEl.parentNode) feedInner.appendChild(emptyEl);
     });
   })();
 }
@@ -2499,6 +2501,7 @@ async function loadMessages() {
 }
 
 async function replaceFeedWithList(list) {
+  if (!feedInner) return;
   seenIds.clear();
   globalMsgNum = 0;
   msgCount = 0;
@@ -4095,11 +4098,13 @@ async function createChannelFromModal() {
 
   if (extraIds.length > 0) sharedChannels.add(name);
 
-  closeChannelModal();
   try {
-    switchChannel(name);
+    closeChannelModal();
+    await switchChannel(name);
   } catch (e) {
     console.error(e);
+  } finally {
+    if (cmBackdrop && cmBackdrop.style.display === 'flex') cmBackdrop.style.display = 'none';
   }
 }
 
@@ -4209,9 +4214,16 @@ function setupAuthListener() {
       try { sessionStorage.setItem(AUTH_BACKUP_KEY, JSON.stringify(currentUser)); } catch (_) {}
       updateAuthUI();
       if (!prevUser && currentUser) {
-        await syncChannelsFromServer();
-        reloadForUser();
-        setupDraftChannel();
+        try {
+          await syncChannelsFromServer();
+          await reloadForUser();
+          setupDraftChannel();
+        } catch (e) {
+          console.error(e);
+          renderTabs();
+          try { await loadMessages(); } catch (_) {}
+          if (feedInner && emptyEl && !emptyEl.parentNode) feedInner.appendChild(emptyEl);
+        }
       }
       return;
     }
