@@ -27,7 +27,8 @@ if (typeof window !== 'undefined') window.sb = sb;
   btn.addEventListener('click', function authBtnClick() {
     if (typeof signIn === 'function') signIn();
     else if (sb && sb.auth && typeof sb.auth.signInWithOAuth === 'function') {
-      sb.auth.signInWithOAuth({ provider: 'google' }).then(function(r) {
+      var redirectTo = window.location.origin ? window.location.origin + '/' : undefined;
+      sb.auth.signInWithOAuth({ provider: 'google', options: redirectTo ? { redirectTo: redirectTo } : {} }).then(function(r) {
         if (r && r.data && r.data.url) window.location.href = r.data.url;
       }).catch(function(err) {
         if (typeof toast === 'function') toast('Sign-in failed');
@@ -2935,7 +2936,11 @@ async function signIn() {
     return;
   }
   try {
-    const { data, error } = await sb.auth.signInWithOAuth({ provider: 'google' });
+    const redirectTo = typeof window !== 'undefined' && window.location.origin ? window.location.origin + '/' : undefined;
+    const { data, error } = await sb.auth.signInWithOAuth({
+      provider: 'google',
+      options: redirectTo ? { redirectTo } : {}
+    });
     if (error) {
       console.error(error);
       toast('Sign-in failed — ' + humanError(error.message));
@@ -4136,7 +4141,8 @@ function ensureLoaderMinDisplay() {
         e.stopPropagation();
         if(window.signIn && typeof window.signIn === 'function'){ window.signIn(); return; }
         if(window.sb && window.sb.auth && typeof window.sb.auth.signInWithOAuth === 'function'){
-          window.sb.auth.signInWithOAuth({ provider: 'google' }).then(function(r){
+          var redirectTo = window.location.origin ? window.location.origin + '/' : undefined;
+          window.sb.auth.signInWithOAuth({ provider: 'google', options: redirectTo ? { redirectTo: redirectTo } : {} }).then(function(r){
             if(r && r.data && r.data.url) window.location.href = r.data.url;
           }).catch(function(){});
         }
