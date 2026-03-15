@@ -1,34 +1,37 @@
 ---
-description: When and how to keep INOUT documentation in sync with code
+description: When and how to keep all INOUT text files in sync with code and each other
 alwaysApply: true
 ---
 
-# Documentation upkeep
+# Project text files — upkeep
 
-When you change code or behavior, update the docs in the **same change set**. Do not leave docs stale.
+**Project text files** = all `.md` and `.txt` in the repo (README.md, documentation/**/*.md, design-system/**/*.md, TODO.txt, etc.). When you change code or any of these files, update the others in the **same change set**. Do not leave them stale or inconsistent with each other.
 
-## Which doc to update
+## Which text file(s) to update
 
 | You changed | Update |
 |-------------|--------|
-| Product scope, features, or flows | **documentation/REBUILD.md** — relevant section (Product, Key flows, DOM, State). |
-| Init order, auth, realtime, or data flow | **documentation/REBUILD.md** (Init order, Auth, Realtime, Key flows) and **documentation/architecture.md**. |
-| New or renamed function | **documentation/functions-index.md** — add/update row in the right section. |
-| DOM elements, IDs, global state, or who sets them | **documentation/REBUILD.md** (DOM, State) and **documentation/ELEMENTS.md**. |
-| CSS variables, breakpoints, or body/class states | **documentation/REBUILD.md** (Styling) and **documentation/styling.md**. |
+| Product scope, features, or flows | **documentation/REBUILD.md** (Product, Key flows, DOM, State). |
+| Init order, auth, realtime, or data flow | **documentation/REBUILD.md** + **documentation/architecture.md**. |
+| New or renamed function | **documentation/functions-index.md** (right section). |
+| DOM elements, IDs, global state, or who sets them | **documentation/REBUILD.md** + **documentation/ELEMENTS.md**. |
+| CSS variables, breakpoints, or body/class states | **documentation/REBUILD.md** (Styling) + **documentation/styling.md**. |
 | Layout, components, or UI structure | **design-system/components.md**. |
 | Modes (select, edit, DnD, view, modals) | **design-system/modes.md**. |
-| Animations or DnD tokens | **design-system/animations.md** (and **design-system/dnd.md** if DnD behavior). |
+| Animations or DnD tokens | **design-system/animations.md** (+ **design-system/dnd.md** if DnD behavior). |
 | Colors or typography tokens/copy | **design-system/colors.md**, **design-system/text.md**. |
-| RLS, channel_members, or access rules | **documentation/REBUILD.md** (Security) and **documentation/security.md** (and SQL if needed). |
-| Gotcha, convention, or “don’t do X” | **documentation/REBUILD.md** (Edge cases) and **documentation/edge-cases.md**. |
-| File layout or entry point | **documentation/REBUILD.md** (File layout) and **README.md** (File layout). |
+| RLS, channel_members, or access rules | **documentation/REBUILD.md** (Security) + **documentation/security.md** (and SQL if needed). |
+| Gotcha, convention, or "don't do X" | **documentation/REBUILD.md** (Edge cases) + **documentation/edge-cases.md**. |
+| File layout or entry point | **documentation/REBUILD.md** (File layout) + **README.md** (File layout). |
+| Backlog, roadmap, or tech debt | **TODO.txt** (and **documentation/DIRECTION.md** or **documentation/OPTIMIZATION.md** if relevant). |
+| Doc index or where to find things | **documentation/README.md**; root **README.md** if entry points or layout changed. |
 
 ## Rules
 
-1. **REBUILD.md is the single rebuild source.** Keep it accurate so the app can be rebuilt from it; prefer one short paragraph or table per topic.
-2. **One change set.** Edit the doc in the same commit/PR as the code change.
-3. **Deep-dives stay detailed.** architecture.md, ELEMENTS.md, styling.md, etc. hold full reference; REBUILD.md stays a terse summary with pointers.
+1. **All text files are part of the project.** Treat every `.md` and `.txt` as live: accurate and consistent with code and with each other.
+2. **REBUILD.md is the single rebuild source.** Keep it accurate; other docs can be longer; REBUILD stays terse with pointers.
+3. **One change set.** Edit the affected text file(s) in the same commit/PR as the code or content change.
 4. **design-system/** defines UI/UX tokens and behavior; code and REBUILD follow it.
+5. **When editing a text file:** if your edit contradicts code or another text file, fix the code or the other file in the same change set so everything matches.
 
-After any non-trivial code or config change, check the table above and update the listed docs.
+After any non-trivial code or config change, check the table and update the listed text files. When editing any .md or .txt, ensure it stays consistent with the rest of the project.

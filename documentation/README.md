@@ -29,4 +29,4 @@
 - **edge-cases.md** — When fixing or discovering a gotcha.
 - **ELEMENTS.md** — When adding/changing DOM or global state.
 
-**Keeping docs in sync:** See **.cursor/rules/docs.mdc** for a table mapping code changes to which doc(s) to update. Rule: same change set as the code; REBUILD.md stays the single rebuild source. AI and humans should follow it.
+**Keeping all text files in sync:** Project text files = all `.md` and `.txt` in the repo. See **.cursor/rules/docs.mdc** for a table mapping code changes to which text file(s) to update. Rules: same change set as the code; REBUILD.md = single rebuild source; keep every .md and .txt accurate and consistent with code and each other. AI and humans should follow it.
