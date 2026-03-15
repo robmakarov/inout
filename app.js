@@ -1311,6 +1311,7 @@ let remoteDnd = null;
 let remoteDropOriginEl = null;
 let remoteDropTargetEl = null;
 let remoteGhostEl = null;
+let remoteSpiritEl = null;
 let dndBroadcastThrottle = null;
 
 function getLineRectForInsert(feedEl, feedInner, insertBeforeId, wantAppend) {
@@ -1370,7 +1371,7 @@ function setupDndBroadcastChannel() {
   dndChannelReady = false;
   if (!currentUser || !currentChannel || !sb) return;
   remoteDndScrollResize = function() {
-    if (remoteDnd && (remoteDropOriginEl || remoteDropTargetEl || remoteGhostEl)) applyRemoteDndLines();
+    if (remoteDnd && (remoteDropOriginEl || remoteDropTargetEl || remoteGhostEl || remoteSpiritEl)) applyRemoteDndLines();
   };
   var feedForScroll = document.getElementById('feed');
   if (feedForScroll) feedForScroll.addEventListener('scroll', remoteDndScrollResize, { passive: true });
@@ -1388,10 +1389,12 @@ function setupDndBroadcastChannel() {
       if (data.type === 'dnd_start') {
         var o = data.origin || {};
         var draggingIds = Array.isArray(data.draggingIds) ? data.draggingIds.map(function(x) { return Number(x); }).filter(function(x) { return Number.isFinite(x); }) : [];
+        var startCursorY = typeof data.cursorY === 'number' ? data.cursorY : null;
         remoteDnd = {
           from: data.from,
           channel: data.channel,
           draggingIds: draggingIds,
+          cursorY: startCursorY,
           origin: {
             insertBeforeId: o.insertBeforeId != null ? Number(o.insertBeforeId) : null,
             wantAppend: !!o.wantAppend,
@@ -1405,10 +1408,12 @@ function setupDndBroadcastChannel() {
       } else if (data.type === 'dnd_move') {
         if (data.target) {
           var target = { insertBeforeId: data.target.insertBeforeId != null ? Number(data.target.insertBeforeId) : null, wantAppend: !!data.target.wantAppend };
+          var cursorY = typeof data.cursorY === 'number' ? data.cursorY : null;
           if (remoteDnd && remoteDnd.from === data.from) {
             remoteDnd.target = target;
+            remoteDnd.cursorY = cursorY;
           } else {
-            remoteDnd = { from: data.from, channel: data.channel, draggingIds: remoteDnd && remoteDnd.draggingIds ? remoteDnd.draggingIds : [], origin: {}, target: target };
+            remoteDnd = { from: data.from, channel: data.channel, draggingIds: remoteDnd && remoteDnd.draggingIds ? remoteDnd.draggingIds : [], origin: {}, target: target, cursorY: cursorY };
           }
           requestAnimationFrame(function() {
             requestAnimationFrame(function() { applyRemoteDndLines(); });
@@ -1501,6 +1506,26 @@ function applyRemoteDndLines() {
   } else if (remoteGhostEl) {
     remoteGhostEl.classList.remove('visible');
   }
+  var cursorY = remoteDnd.cursorY;
+  if (typeof cursorY === 'number' && feed) {
+    var feedRect = feed.getBoundingClientRect();
+    var margin = 24;
+    var spiritY = Math.max(feedRect.top + margin, Math.min(feedRect.bottom - margin, cursorY));
+    var spiritX = feedRect.left + feedRect.width / 2;
+    if (!remoteSpiritEl) {
+      remoteSpiritEl = document.createElement('div');
+      remoteSpiritEl.className = 'msg-drag-spirit remote-drag-spirit';
+      remoteSpiritEl.setAttribute('aria-hidden', 'true');
+      remoteSpiritEl.style.minWidth = Math.min(280, feedRect.width - 24) + 'px';
+      remoteSpiritEl.style.minHeight = '32px';
+      document.body.appendChild(remoteSpiritEl);
+    }
+    remoteSpiritEl.style.left = spiritX + 'px';
+    remoteSpiritEl.style.top = spiritY + 'px';
+    remoteSpiritEl.classList.add('visible');
+  } else if (remoteSpiritEl) {
+    remoteSpiritEl.classList.remove('visible');
+  }
   if (originRect) {
     if (!remoteDropOriginEl) {
       remoteDropOriginEl = document.createElement('div');
@@ -1537,6 +1562,9 @@ function hideRemoteDndLines() {
   if (remoteGhostEl) {
     remoteGhostEl.classList.remove('visible');
   }
+  if (remoteSpiritEl) {
+    remoteSpiritEl.classList.remove('visible');
+  }
   if (remoteDropOriginEl) {
     remoteDropOriginEl.classList.remove('visible');
   }
@@ -1559,7 +1587,8 @@ function broadcastDndStart() {
       from: myId,
       channel: String(currentChannel),
       draggingIds: draggingIds,
-      origin: { insertBeforeId: insertBeforeId, wantAppend: !!dndOriginWantAppend, lastDraggedId: lastDraggedId }
+      origin: { insertBeforeId: insertBeforeId, wantAppend: !!dndOriginWantAppend, lastDraggedId: lastDraggedId },
+      cursorY: typeof lastDragClientY === 'number' ? lastDragClientY : null
     }
   });
 }
@@ -1568,6 +1597,7 @@ function broadcastDndMove() {
   if (!dndBroadcastChannel || !dndChannelReady || !lastReorderTarget) return;
   var insertBeforeId = lastReorderTarget.insertBefore && lastReorderTarget.insertBefore.dataset ? Number(lastReorderTarget.insertBefore.dataset.id) : null;
   if (dndBroadcastThrottle) return;
+  var y = typeof lastDragClientY === 'number' ? lastDragClientY : null;
   dndBroadcastThrottle = setTimeout(function() {
     dndBroadcastThrottle = null;
     if (!dndBroadcastChannel || !dndChannelReady) return;
@@ -1578,7 +1608,8 @@ function broadcastDndMove() {
         type: 'dnd_move',
         from: myId,
         channel: String(currentChannel),
-        target: { insertBeforeId: insertBeforeId, wantAppend: !!lastReorderTarget.wantAppend }
+        target: { insertBeforeId: insertBeforeId, wantAppend: !!lastReorderTarget.wantAppend },
+        cursorY: y
       }
     });
   }, 80);
@@ -1811,6 +1842,8 @@ function setupTouchDragHandlers() {
       showDropOriginLine();
     }
     const y = touch.clientY;
+    lastDragClientY = y;
+    lastDragClientX = touch.clientX;
     const rows = Array.from(feedInner.querySelectorAll('.msg'));
     if (!rows.length) return;
     var block = dragSelectedRows && dragSelectedRows.length > 1 ? dragSelectedRows.slice() : [touchDragState.row];
@@ -1845,7 +1878,8 @@ function setupTouchDragHandlers() {
               type: 'dnd_move',
               from: myId,
               channel: String(currentChannel),
-              target: { insertBeforeId: insertBeforeId, wantAppend: !insertRef }
+              target: { insertBeforeId: insertBeforeId, wantAppend: !insertRef },
+              cursorY: y
             }
           });
         }
@@ -2015,6 +2049,8 @@ function createMsgRow(msg, isNew) {
       dndOriginLineY = rowRect.top;
     }
     row.classList.add('dragging');
+    lastDragClientX = typeof e.clientX === 'number' ? e.clientX : null;
+    lastDragClientY = typeof e.clientY === 'number' ? e.clientY : null;
     showOriginGhostOverlay(dragSelectedRows.slice());
     if (document.body) document.body.classList.add('dnd-active');
     savedOrderBeforeDrag = currentMessageOrder.slice();
@@ -2161,7 +2197,7 @@ function createMsgRow(msg, isNew) {
       hideRemoteDndLines();
       broadcastDndStart();
       /* origin line shown on first touchmove, not here, so it doesn't appear on long-press alone */
-    }, 300); // long press threshold
+    }, 200); // long press threshold
   }, { passive: true });
   if (isNew) setTimeout(() => row.classList.remove('new-flash'), 800);
 

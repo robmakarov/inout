@@ -628,21 +628,27 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
 /* Remote DnD lines (realtime from other clients) — above local indicator */
 .remote-dnd-line.feed-drop-origin{ z-index:10001; }
 .remote-dnd-line.feed-drop-indicator{ z-index:10002; }
-/* Remote origin ghost (realtime from other device) */
+/* Remote origin ghost (realtime from other device) — left-edge cue same side as local (inset shadow) */
 .remote-origin-ghost{
   position:fixed;
   left:0;
-  width:100%;
+  top:0;
   pointer-events:none;
   z-index:9997;
   box-sizing:border-box;
   opacity:var(--dnd-ghost-opacity);
   background:rgba(0,0,0,0.25);
   border:1px dashed var(--dnd-origin-line-color);
-  border-left-width:3px;
+  box-shadow:inset 3px 0 0 var(--dnd-origin-line-color);
   display:none;
 }
 .remote-origin-ghost.visible{ display:block; }
+/* Remote spirit (realtime from other device) — same look as local spirit */
+.remote-drag-spirit{
+  display:none;
+  transform:translate(-50%,-50%);
+}
+.remote-drag-spirit.visible{ display:block; }
 
 /* DnD: ghost copies at drag origin (placeholder, not interactive) */
 .msg-origin-ghost{
