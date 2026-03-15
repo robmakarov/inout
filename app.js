@@ -29,12 +29,17 @@ if (typeof window !== 'undefined') window.sb = sb;
     else if (sb && sb.auth && typeof sb.auth.signInWithOAuth === 'function') {
       var redirectTo = window.location.origin ? window.location.origin + '/' : undefined;
       sb.auth.signInWithOAuth({ provider: 'google', options: redirectTo ? { redirectTo: redirectTo } : {} }).then(function(r) {
+        if (r && r.error) {
+          if (typeof toast === 'function') toast('Sign-in failed — ' + (r.error.message || ''));
+          else console.error(r.error);
+          return;
+        }
         if (r && r.data && r.data.url) window.location.href = r.data.url;
       }).catch(function(err) {
         if (typeof toast === 'function') toast('Sign-in failed');
         else if (console && console.error) console.error(err);
       });
-    }
+    } else if (typeof toast === 'function') toast('Sign-in not available.');
   });
 })();
 const STRIPE_PUBLISHABLE_KEY = 'pk_live_xxx_replace_me';

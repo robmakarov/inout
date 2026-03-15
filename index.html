@@ -20,12 +20,20 @@
   if (!window.sb) window.sb = window._sb;
   window.doSignIn = function() {
     var s = window.sb || window._sb;
-    if (!s || !s.auth || !s.auth.signInWithOAuth) return;
-    var opt = { provider: 'google' };
-    if (window.location.origin) opt.options = { redirectTo: window.location.origin + '/' };
+    if (!s || !s.auth || !s.auth.signInWithOAuth) {
+      if (typeof window.toast === 'function') window.toast('Sign-in not available.');
+      else console.error('Supabase auth not loaded');
+      return;
+    }
+    var redirectTo = window.location.origin ? window.location.origin + '/' : undefined;
+    var opt = { provider: 'google', options: redirectTo ? { redirectTo: redirectTo } : {} };
     s.auth.signInWithOAuth(opt).then(function(r) {
       if (r && r.data && r.data.url) window.location.href = r.data.url;
-    }).catch(function(e) { console.error('Sign-in error', e); });
+      else if (r && r.error && typeof window.toast === 'function') window.toast('Sign-in failed — ' + (r.error.message || 'unknown'));
+    }).catch(function(e) {
+      if (typeof window.toast === 'function') window.toast('Sign-in failed');
+      else console.error('Sign-in error', e);
+    });
   };
 })();
 </script>
@@ -169,7 +177,7 @@
       <div class="um-label">Status</div>
       <div class="um-value" id="um-auth-status">Not signed in</div>
       <div class="um-row">
-        <button class="um-btn um-btn-primary" id="um-auth-btn" type="button" onclick="var f=window.doSignIn||window.signIn;if(f)f();">Sign in</button>
+        <button class="um-btn um-btn-primary" id="um-auth-btn" type="button">Sign in</button>
       </div>
     </div>
 
