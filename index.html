@@ -492,7 +492,9 @@ header{
   min-height:0;
   padding:0;
   overflow-y:auto;
+  overflow-x:hidden;
   -webkit-overflow-scrolling:touch;
+  touch-action:pan-y;
   outline:none;
 }
 #feed:focus{outline:none}
@@ -514,15 +516,17 @@ header{
   width:100%;
   height:4px;
   pointer-events:none;
+  touch-action:none;
   z-index:9999;
   display:none;
+  visibility:hidden;
   background:rgba(91, 155, 213, 0.55);
   border-radius:1px;
   transform:translateZ(0);
   isolation:isolate;
   transition:top 0.06s ease-out;
 }
-.feed-drop-indicator.visible{ display:block; }
+.feed-drop-indicator.visible{ display:block; visibility:visible; }
 /* Origin: always a 2px dark blue line (fixed, never in flow) to avoid 4px shake */
 .feed-drop-origin{
   position:fixed;
@@ -530,8 +534,10 @@ header{
   width:100%;
   height:2px;
   pointer-events:none;
-  z-index:2147483646;
+  touch-action:none;
+  z-index:9998;
   display:none;
+  visibility:hidden;
   background:rgba(37,99,235,0.75);
   border-radius:0;
   box-sizing:border-box;
@@ -540,7 +546,7 @@ header{
   margin:0;
   padding:0;
 }
-.feed-drop-origin.visible{ display:block; }
+.feed-drop-origin.visible{ display:block; visibility:visible; }
 .feed-drop-origin.stuck{ height:2px; }
 
 /* Ghost copies at origin: barely visible, same layout as .msg, not interactive */
@@ -949,6 +955,7 @@ body.select-mode .msg-select-wrap,
 .log-dropup-wrap{
   margin-left:20px;
   position:relative;
+  overflow:visible;
 }
 #log-action-btn{
   font-size:11px;
@@ -981,12 +988,12 @@ body.select-mode .msg-select-wrap,
   left:0;
   margin-bottom:4px;
   width:320px;
-  max-height:280px;
+  max-height:min(280px, 50vh);
   background:var(--bg2);
   border:1px solid var(--line2);
   border-radius:6px;
   box-shadow:0 -4px 20px rgba(0,0,0,.35);
-  z-index:200;
+  z-index:1100;
   flex-direction:column;
   overflow:hidden;
 }
@@ -1445,7 +1452,7 @@ body.select-mode .msg-select-wrap,
     <div class="input-tools">
       <button id="clipboard-button" class="draft-btn">From clipboard</button>
       <div class="log-dropup-wrap">
-        <button id="log-action-btn" type="button" aria-label="Action log"></button>
+        <button id="log-action-btn" type="button" aria-label="Action log">Log</button>
         <div id="log-dropup-panel" role="dialog" aria-label="Action log">
           <div class="log-dropup-body" id="log-dropup-body"></div>
         </div>
@@ -2250,7 +2257,7 @@ function removeOriginGhostsAndInsertRows() {
   if (!originGhostsActive || !feedInner || !feedEl) return;
   var scrollTop = feedEl.scrollTop;
   var insertBefore = lastDropInsertBefore;
-  if (!insertBefore && originInsertBefore) insertBefore = originInsertBefore;
+  if (!insertBefore && !lastWantAppend && originInsertBefore) insertBefore = originInsertBefore;
   if (draggedRowsStored.length) {
     if (insertBefore && insertBefore.parentNode === feedInner) {
       feedInner.insertBefore(draggedRowsStored[0], insertBefore);
@@ -2995,12 +3002,17 @@ function setupTouchDragHandlers() {
     started: false,
     timer: null,
     bound: true,
+    originLineShown: false,
   };
   const move = e => {
     if (!touchDragState || !touchDragState.started || !touchDragState.row) return;
     const touch = e.touches && e.touches[0];
     if (!touch) return;
     e.preventDefault();
+    if (!touchDragState.originLineShown) {
+      touchDragState.originLineShown = true;
+      showDropOriginLine();
+    }
     const y = touch.clientY;
     const rows = Array.from(feedInner.querySelectorAll('.msg'));
     if (!rows.length) return;
@@ -3056,6 +3068,7 @@ function setupTouchDragHandlers() {
     }
     touchDragState.started = false;
     touchDragState.row = null;
+    touchDragState.originLineShown = false;
     recomputeOrderFromDOM();
     saveMessageOrderForCurrentChannel();
     applyFieldPrefsToMessages();
@@ -3188,7 +3201,7 @@ function createMsgRow(msg, isNew) {
       });
       row.classList.add('dragging');
       if (document.body) document.body.classList.add('dnd-active');
-      showDropOriginLine();
+      /* origin line shown on first touchmove, not here, so it doesn't appear on long-press alone */
     }, 300); // long press threshold
   }, { passive: true });
   if (isNew) setTimeout(() => row.classList.remove('new-flash'), 800);
@@ -5369,7 +5382,9 @@ document.addEventListener('dragover', e => {
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
 
-  const rows = Array.from(feedInner.querySelectorAll('.msg'));
+  const rows = originGhostsActive
+    ? Array.from(feedInner.children).filter(function(n) { return n.classList && (n.classList.contains('msg') || n.classList.contains('msg-origin-ghost')); })
+    : Array.from(feedInner.querySelectorAll('.msg'));
   if (!rows.length) return;
   const firstRow = rows[0];
   const lastRow = rows[rows.length - 1];
