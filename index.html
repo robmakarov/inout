@@ -5100,11 +5100,11 @@ function processFeedDragover(ev) {
   if (originGhostsActive) {
     var slotRows = Array.from(feedInner.children).filter(function(n) { return n.classList && (n.classList.contains('msg') || n.classList.contains('msg-origin-ghost')); });
     if (!slotRows.length) return;
-    var firstRow = slotRows[0];
-    var contentLeft = firstRow.querySelector('.msg-time') || firstRow.querySelector('.msg-sender') || firstRow.querySelector('.msg-text');
+    var slotFirstRow = slotRows[0];
+    var contentLeft = slotFirstRow.querySelector('.msg-time') || slotFirstRow.querySelector('.msg-sender') || slotFirstRow.querySelector('.msg-text');
     if (contentLeft && ev.clientX < contentLeft.getBoundingClientRect().left) return;
     var y = ev.clientY;
-    var firstRect = firstRow.getBoundingClientRect();
+    var firstRect = slotFirstRow.getBoundingClientRect();
     var lastRow = slotRows[slotRows.length - 1];
     var lastRect = lastRow.getBoundingClientRect();
     var feedRect = feedEl.getBoundingClientRect();
@@ -5116,7 +5116,7 @@ function processFeedDragover(ev) {
     var insertBeforeNode = null;
     var lineY = 0;
     if (y < firstRect.top) {
-      insertBeforeNode = firstRow;
+      insertBeforeNode = slotFirstRow;
       lineY = firstRect.top;
     } else if (wantAppend) {
       lineY = lastRect.bottom;
