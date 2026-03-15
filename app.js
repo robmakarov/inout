@@ -1142,21 +1142,6 @@ function updateMessageRowText(msgId, text) {
 }
 
 function updateEditingRowFromInput() {
-  if (!feedInner || editingMessageId == null || !input) return;
-  const idStr = String(editingMessageId);
-  const el = feedInner.querySelector('.msg[data-id="' + CSS.escape(idStr) + '"]');
-  if (!el) return;
-  const textEl = el.querySelector('.msg-text');
-  if (!textEl) return;
-  var ghost = textEl.querySelector('.msg-edit-ghost');
-  if (!ghost) {
-    ghost = document.createElement('div');
-    ghost.className = 'msg-edit-ghost';
-    ghost.setAttribute('aria-hidden', 'true');
-    textEl.innerHTML = '';
-    textEl.appendChild(ghost);
-  }
-  ghost.textContent = input.value || '';
 }
 
 function commitTypingSegment() {
