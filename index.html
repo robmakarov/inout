@@ -3125,7 +3125,7 @@ function createMsgRow(msg, isNew) {
       if (dragSelectedRows.length > 1) r.classList.add('msg-drag-group');
     });
     row.classList.add('dragging');
-    insertOriginGhostsAndDetachRows(dragSelectedRows.slice());
+    /* Do not detach rows on dragstart: removing the drag source cancels the drag in most browsers. Keep rows in feed and move them during dragover. */
     if (document.body) document.body.classList.add('dnd-active');
     savedOrderBeforeDrag = currentMessageOrder.slice();
     dragDropHandled = false;
@@ -5402,16 +5402,28 @@ feedEl.addEventListener('dragleave', e => {
 });
 }
 
-// Keep drop indicator visible when dragging beyond the feed bounds (e.g. over header)
+// Dragover: when over feed, always run processFeedDragover (so lastDropInsertBefore updates even if feedEl doesn't receive the event). When outside feed, show indicator at top/bottom.
 document.addEventListener('dragover', e => {
   if (!feedEl || !feedInner) return;
   if (!feedInner.querySelector('.msg.dragging') && !originGhostsActive) return;
-  const feedRect = feedEl.getBoundingClientRect();
-  const y = e.clientY;
-  if (y >= feedRect.top && y <= feedRect.bottom) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
-
+  const feedRect = feedEl.getBoundingClientRect();
+  const y = e.clientY;
+  const x = e.clientX;
+  const inFeed = x >= feedRect.left && x <= feedRect.right && y >= feedRect.top && y <= feedRect.bottom;
+  if (inFeed) {
+    feedDragoverLast = e;
+    if (feedDragoverRaf === null) {
+      feedDragoverRaf = requestAnimationFrame(function() {
+        feedDragoverRaf = null;
+        const ev = feedDragoverLast;
+        feedDragoverLast = null;
+        if (ev) processFeedDragover(ev);
+      });
+    }
+    return;
+  }
   const rows = originGhostsActive
     ? Array.from(feedInner.children).filter(function(n) { return n.classList && (n.classList.contains('msg') || n.classList.contains('msg-origin-ghost')); })
     : Array.from(feedInner.querySelectorAll('.msg'));
@@ -5436,6 +5448,16 @@ document.addEventListener('dragover', e => {
   feedDropIndicatorEl.classList.add('visible');
 
   updateEdgeScroll(e.clientY, e.clientX);
+}, { passive: false });
+
+document.addEventListener('drop', e => {
+  if (!feedInner) return;
+  if (feedInner.querySelector('.msg.dragging') || originGhostsActive) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDropHandled = true;
+    feedInner.querySelectorAll('.msg-drag-over, .msg-drag-target').forEach(function(r) { r.classList.remove('msg-drag-over', 'msg-drag-target'); });
+  }
 }, { passive: false });
 
 function scrollBottom() {
