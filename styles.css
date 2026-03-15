@@ -853,23 +853,23 @@ body.dnd-active .msg-drag-spirit-stack{opacity:1;background:transparent;transiti
   padding-right:72px; /* reserve space under right-side actions */
   cursor:pointer;
 }
-/* Edit cursor in message row: pipe at same position as main input caret */
-.msg-edit-caret{
-  display:inline;
-  color:var(--bright);
-  font-weight:300;
-  margin:0 1px 0 0;
-  animation:msg-caret-blink 1s step-end infinite;
+/* Edit cursor: overlay in message row, only visible while editing; removed when not editing */
+.msg-editing .msg-text{
+  position:relative;
+}
+.msg-edit-cursor{
+  position:absolute;
+  left:0;
+  top:0;
+  width:2px;
+  height:20px;
+  background:var(--acc);
   pointer-events:none;
-  -webkit-user-select:none;
-  user-select:none;
+  animation:msg-cursor-blink 1s step-end infinite;
 }
-.msg-editing .msg-text .msg-edit-caret{
-  color:var(--acc);
-}
-@keyframes msg-caret-blink{
-  0%,60%{opacity:1}
-  61%,100%{opacity:0.25}
+@keyframes msg-cursor-blink{
+  0%,55%{opacity:1}
+  56%,100%{opacity:0.2}
 }
 /* DnD reorder: row under drop position (no nudge to avoid shake) */
 
