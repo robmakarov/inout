@@ -364,8 +364,10 @@ function toggleRowAtY(feedInner, clientY) {
   }
 }
 let editingObjectId = null;
-/** When multiple objects are selected and user edits, all selected show the same doppelganger. */
+/** When multiple objects are selected and user edits, each row shows its own value with same cursor/selection; edits (insert/delete) apply at the same position to all. */
 let editingObjectIds = null;
+/** Per-id current draft text during multi-edit (each object keeps its own value; same edit op applied to all). */
+var editingObjectTextMap = null;
 let originalEditTextForCancel = null;
 /** Per-id original text when cancelling multi-edit. */
 var originalEditTextForCancelMap = null;
@@ -679,6 +681,7 @@ function reactivateInputMode(opts) {
   restoreEditingRowsOnCancel();
   originalEditTextForCancel = null;
   originalEditTextForCancelMap = null;
+  editingObjectTextMap = null;
   editingObjectId = null;
   editingObjectIds = null;
   editTypingUndoStack = [];
@@ -1268,11 +1271,34 @@ function findObjectRowEl(objId) {
   return null;
 }
 
-/** Doppelganger: mirror of main input with same value, style, cursor and selection. Works for row(s) in primary or secondary feed; when multi-edit, all selected rows get the same doppelganger. */
+/** Apply the same edit (inferred from oldPrimary -> newPrimary) to every other id's text in editingObjectTextMap. */
+function applyPrimaryEditToMultiEdit(newPrimary) {
+  if (!editingObjectTextMap || !editingObjectIds || editingObjectIds.size <= 1) return;
+  const oldPrimary = editingObjectTextMap[editingObjectId];
+  if (oldPrimary === newPrimary) return;
+  const oldLen = oldPrimary.length;
+  const newLen = newPrimary.length;
+  let L = 0;
+  while (L < oldLen && L < newLen && oldPrimary[L] === newPrimary[L]) L++;
+  let R = 0;
+  while (R < oldLen - L && R < newLen - L && oldPrimary[oldLen - 1 - R] === newPrimary[newLen - 1 - R]) R++;
+  const oldMiddle = oldPrimary.slice(L, oldLen - R);
+  const newMiddle = newPrimary.slice(L, newLen - R);
+  editingObjectIds.forEach(id => {
+    if (id === editingObjectId) return;
+    let text = editingObjectTextMap[id];
+    if (text == null) return;
+    const pos = Math.min(L, text.length);
+    const removeLen = Math.min(oldMiddle.length, text.length - pos);
+    editingObjectTextMap[id] = text.slice(0, pos) + newMiddle + text.slice(pos + removeLen);
+  });
+  editingObjectTextMap[editingObjectId] = newPrimary;
+}
+
+/** Doppelganger: each row shows its own value (from editingObjectTextMap or input) with the same cursor/selection position (capped per row length). */
 function updateEditingRowFromInput() {
   const ids = editingObjectIds && editingObjectIds.size ? Array.from(editingObjectIds) : (editingObjectId != null ? [editingObjectId] : []);
   if (ids.length === 0 || !input) return;
-  /* Clear doppelganger/caret from any row not in the current editing set */
   const editingSet = new Set(ids);
   [feedInner, secondaryFeedInner].forEach(fi => {
     if (!fi) return;
@@ -1284,23 +1310,25 @@ function updateEditingRowFromInput() {
       textEl.innerHTML = linkify(escapeHtml(textEl.textContent || ''));
     });
   });
-  const value = input.value;
-  const start = Math.min(input.selectionStart || 0, value.length);
-  const end = Math.min(Math.max(input.selectionEnd || 0, start), value.length);
-  const before = value.slice(0, start);
-  const sel = value.slice(start, end);
-  const after = value.slice(end);
   const caret = '<span class="obj-edit-caret" aria-hidden="true"></span>';
   const selCls = 'obj-edit-selection';
-  const html =
-    escapeHtml(before) +
-    (sel ? '<span class="' + selCls + '">' + escapeHtml(sel) + '</span>' : '') +
-    caret +
-    escapeHtml(after);
-  const doppelgangerHtml = html || caret;
+  const cursorStart = input.selectionStart || 0;
+  const cursorEnd = input.selectionEnd != null ? input.selectionEnd : cursorStart;
   ids.forEach(id => {
+    const text = (editingObjectTextMap && editingObjectTextMap[id] != null) ? editingObjectTextMap[id] : input.value;
+    const len = text.length;
+    const start = Math.min(cursorStart, len);
+    const end = Math.min(Math.max(cursorEnd, start), len);
+    const before = text.slice(0, start);
+    const sel = text.slice(start, end);
+    const after = text.slice(end);
+    const html =
+      escapeHtml(before) +
+      (sel ? '<span class="' + selCls + '">' + escapeHtml(sel) + '</span>' : '') +
+      caret +
+      escapeHtml(after);
     const textEl = findObjectRowTextEl(id);
-    if (textEl) textEl.innerHTML = doppelgangerHtml;
+    if (textEl) textEl.innerHTML = html || caret;
   });
 }
 
@@ -3234,9 +3262,14 @@ function createObjectRow(obj, isNew, options) {
     const multi = selectMode && selectedIds.size > 1 && selectedIds.has(obj.id);
     const idsToEdit = multi ? new Set(selectedIds) : new Set([obj.id]);
     originalEditTextForCancelMap = {};
+    editingObjectTextMap = {};
     idsToEdit.forEach(id => {
       const el = findObjectRowTextEl(id);
-      if (el) originalEditTextForCancelMap[id] = el.textContent || '';
+      let raw = (el && el.textContent) ? el.textContent : '';
+      const badge = el && el.querySelector('.obj-remote-edit-badge');
+      if (badge && badge.textContent) raw = raw.slice(0, -badge.textContent.length);
+      originalEditTextForCancelMap[id] = raw;
+      editingObjectTextMap[id] = raw;
     });
     input.value = obj.text || '';
     editingObjectId = obj.id;
@@ -4244,6 +4277,7 @@ async function sendText(text) {
 
   const idsToSave = editingObjectIds && editingObjectIds.size ? Array.from(editingObjectIds) : (editingObjectId != null ? [editingObjectId] : []);
   if (idsToSave.length > 0) {
+    const trimmedPerId = idsToSave.map(id => (editingObjectTextMap && editingObjectTextMap[id] != null) ? String(editingObjectTextMap[id]).trim() : trimmed);
     const befores = [];
     if (idsToSave.length === 1) {
       const { data: before, error: selErr } = await sb
@@ -4275,26 +4309,34 @@ async function sendText(text) {
       }
       if (list) befores.push(...list);
     }
-    const { data: updated, error } = await sb
-      .from('entries')
-      .update({ text: trimmed })
-      .in('id', idsToSave)
-      .eq('user_id', currentUser.id)
-      .select('id, created_at, text, channel, user_id, author_name');
+    let lastError = null;
+    for (let i = 0; i < idsToSave.length; i++) {
+      const id = idsToSave[i];
+      const textToSave = trimmedPerId[i];
+      const { error } = await sb
+        .from('entries')
+        .update({ text: textToSave })
+        .eq('id', id)
+        .eq('user_id', currentUser.id);
+      if (error) lastError = error;
+    }
     input.disabled = false;
-    if (error) {
-      console.error(error);
-      toast('Failed to update — ' + humanError(error.message));
+    if (lastError) {
+      console.error(lastError);
+      toast('Failed to update — ' + humanError(lastError.message));
       sendBtn.disabled = false;
       return;
     }
     if (befores.length) {
-      pushUndo({ type: 'edit', entries: befores.map(b => ({ id: b.id, beforeText: b.text, afterText: trimmed })) });
+      const afterById = {};
+      idsToSave.forEach((id, i) => { afterById[id] = trimmedPerId[i] || trimmed; });
+      pushUndo({ type: 'edit', entries: befores.map(b => ({ id: b.id, beforeText: b.text, afterText: afterById[b.id] != null ? afterById[b.id] : trimmed })) });
       befores.forEach(b => logAction('edit', { id: b.id }));
     }
-    idsToSave.forEach(id => updateObjectRowMessage(id, trimmed));
+    idsToSave.forEach((id, i) => updateObjectRowMessage(id, trimmedPerId[i] || trimmed));
     originalEditTextForCancel = null;
     originalEditTextForCancelMap = null;
+    editingObjectTextMap = null;
     editingObjectIds = null;
     reactivateInputMode({ clearInput: true });
     return;
@@ -4363,6 +4405,11 @@ function attachInputListeners() {
     saveInputGlobal();
     updateClearInputBtn();
     if (editingObjectId != null) {
+      if (editingObjectIds && editingObjectIds.size > 1) {
+        applyPrimaryEditToMultiEdit(input.value);
+      } else if (editingObjectTextMap && editingObjectId != null) {
+        editingObjectTextMap[editingObjectId] = input.value;
+      }
       updateEditingRowFromInput();
       if (editTypingCommitTimer) clearTimeout(editTypingCommitTimer);
       editTypingCommitTimer = setTimeout(commitTypingSegment, TYPING_COMMIT_MS);
