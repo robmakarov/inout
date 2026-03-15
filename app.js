@@ -1148,7 +1148,7 @@ function updateEditingRowFromInput() {
   if (!el) return;
   const textEl = el.querySelector('.msg-text');
   if (!textEl) return;
-  textEl.innerHTML = escapeHtml(input.value || '');
+  textEl.textContent = input.value || '';
 }
 
 function commitTypingSegment() {
@@ -3781,7 +3781,7 @@ input.addEventListener('input', () => {
   saveInputGlobal();
   updateClearInputBtn();
   if (editingMessageId != null) {
-    updateEditingRowFromInput();
+    requestAnimationFrame(updateEditingRowFromInput);
     if (editTypingCommitTimer) clearTimeout(editTypingCommitTimer);
     editTypingCommitTimer = setTimeout(commitTypingSegment, TYPING_COMMIT_MS);
   }
