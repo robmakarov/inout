@@ -1142,6 +1142,13 @@ function updateMessageRowText(msgId, text) {
 }
 
 function updateEditingRowFromInput() {
+  if (!feedInner || editingMessageId == null || !input) return;
+  const idStr = String(editingMessageId);
+  const el = feedInner.querySelector('.msg[data-id="' + CSS.escape(idStr) + '"]');
+  if (!el) return;
+  const textEl = el.querySelector('.msg-text');
+  if (!textEl) return;
+  textEl.innerHTML = escapeHtml(input.value || '');
 }
 
 function commitTypingSegment() {
