@@ -3163,8 +3163,6 @@ function createMsgRow(msg, isNew) {
   row.addEventListener('dragend', () => {
     requestAnimationFrame(() => {
       try {
-        removeOriginGhostOverlay();
-        if (feedInner) feedInner.querySelectorAll('.msg.dragging-in-feed').forEach(r => r.classList.remove('dragging-in-feed'));
         if (lastReorderTarget && !originGhostsActive && feedInner && dragSelectedRows.length) {
           var insertBefore = lastReorderTarget.insertBefore;
           var wantAppend = lastReorderTarget.wantAppend;
@@ -3185,6 +3183,8 @@ function createMsgRow(msg, isNew) {
             else if (insertBefore && insertBefore.parentNode === feedInner) feedInner.insertBefore(row, insertBefore);
           }
         }
+        removeOriginGhostOverlay();
+        if (feedInner) feedInner.querySelectorAll('.msg.dragging-in-feed').forEach(r => r.classList.remove('dragging-in-feed'));
         removeOriginGhostsAndInsertRows();
         if (feedInner) feedInner.querySelectorAll('.msg-drag-group').forEach(r => r.classList.remove('msg-drag-group'));
         dragSelectedRows = [];
@@ -5287,7 +5287,9 @@ function processFeedDragover(ev) {
   }
   const dragging = feedInner.querySelector('.msg.dragging');
   if (!dragging) return;
-  const rows = Array.from(feedInner.querySelectorAll('.msg'));
+  const allRows = Array.from(feedInner.querySelectorAll('.msg'));
+  const skipSet = new Set(dragSelectedRows && dragSelectedRows.length ? dragSelectedRows : [dragging]);
+  const rows = allRows.filter(function(r) { return !skipSet.has(r); });
   if (!rows.length) return;
   const firstRow = rows[0];
   const contentLeft = firstRow.querySelector('.msg-time') || firstRow.querySelector('.msg-sender') || firstRow.querySelector('.msg-text');
@@ -5299,7 +5301,7 @@ function processFeedDragover(ev) {
   const feedRect = feedEl.getBoundingClientRect();
   const dropAtEndThreshold = 32;
   const inEmptyZone = y >= lastRect.bottom - dropAtEndThreshold;
-  const inLastRowLowerHalf = lastRow !== dragging && y >= lastRect.top + lastRect.height * 0.5;
+  const inLastRowLowerHalf = y >= lastRect.top + lastRect.height * 0.5;
   const wantAppendFirst = inEmptyZone || inLastRowLowerHalf;
   let wantAppend = wantAppendFirst;
   let insertBeforeNode = null;
@@ -5314,20 +5316,7 @@ function processFeedDragover(ev) {
       const r = rows[i];
       const rect = r.getBoundingClientRect();
       if (y >= rect.top && y <= rect.bottom) {
-        if (r === dragging && (!dragSelectedRows || dragSelectedRows.length <= 1)) break;
-        if (dragSelectedRows.length > 1 && (r === dragging || dragSelectedRows.indexOf(r) >= 0)) {
-          var blockFirst = dragSelectedRows[0];
-          var blockLast = dragSelectedRows[dragSelectedRows.length - 1];
-          if (y < rect.top + rect.height / 2) {
-            insertBeforeNode = blockFirst;
-            lineY = blockFirst.getBoundingClientRect().top;
-          } else {
-            insertBeforeNode = blockLast.nextSibling;
-            lineY = blockLast.getBoundingClientRect().bottom;
-          }
-          break;
-        }
-        if (r === lastRow && lastRow !== dragging) {
+        if (r === lastRow) {
           wantAppend = true;
           lineY = rect.bottom;
           break;
