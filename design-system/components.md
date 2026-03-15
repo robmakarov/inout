@@ -2,17 +2,17 @@
 
 ## Layout
 - **header** — Outside multiview. Fixed top; logo, online-count, object-count, user button.
-- **#nav** (.navigation-bar) — Outside multiview. Fixed under header; contains **#tabs**. Controls which view is shown in multiview (channel/feed selection).
-- **#multiview** — Container for the active view(s). Flex column, fills viewport; padding reserves space for header, nav bar, manage bar, and input area.
-- **.view** (#view-app) — One view: manage-bar + feed. More views can be added; nav bar switches between them.
+- **#nav** (.navigation-bar) — Outside multiview. Fixed under header; contains **#tabs**. Click tab = switch channel (primary view). **Shift+click** tab = open that channel as a **second view** to the right (both views fill width, 50% each). Shift+click same tab again closes the second view. Second-view state is **device-only** (localStorage).
+- **#multiview** — Container for the active view(s). Flex column, fills viewport; padding reserves space for header, nav bar, manage bar, and input area. Contains **.multiview-panels** (flex row) which holds one or two **.view** panels.
+- **.view** (#view-app primary, .view-secondary) — A view = **manage bar** + **visual**. The **visual** is the content area; **feed** and **table** are two visual variants (table uses same layout as feed for now). Manage bar is part of the view and controls it (control modes).
 - **#input-area** — Separate from multiview (sibling). Fixed at bottom; composer, draft/clipboard bubbles, no tabs (tabs are in nav). Keeps all connections and behaviour.
-- #app-loader, #feed, #feed-inner.
+- #app-loader, .visual, #feed, #feed-inner (primary); .view-secondary .feed, #feed-inner-secondary.
 
 ## Header
 header, .logo, .header-right, #online-count, #object-count, #user-btn (.signed-in)
 
 ## Manage bar (top bar)
-#manage-bar — fixed under header + nav, fills width; .bar-scroll (horizontal scroll), .bar-group; #manage-bar-scroll, #manage-actions. Buttons have data-bar-id; reorder via bar-dnd-mode (⋯ toggle). #bar-reorder-toggle, #view-menu (.open)
+#manage-bar — Part of the view; fixed under header + nav, fills width. Controls the view (control modes). .bar-scroll (horizontal scroll), .bar-group; #manage-bar-scroll, #manage-actions. Buttons have data-bar-id; reorder via bar-dnd-mode (⋯ toggle). #bar-reorder-toggle, #view-menu (.open)
 #select-toggle (.active), .select-extra (.show), .manage-btn, #move-target, #view-toggle
 
 ## Feed

@@ -209,9 +209,11 @@ try { myId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.rando
 let currentUser    = null;
 let currentChannel = 'main';
 let channels       = ['main'];
+let secondaryViewChannel = null; /* channel shown in second panel; null = single view. Persisted to device (localStorage). */
 const CHANNELS_KEY         = 'inout_channels_v1';
 const LEFT_CHANNELS_KEY    = 'inout_left_channels_v1';
 const CURRENT_CHANNEL_KEY  = 'inout_current_channel_v1';
+const SECONDARY_VIEW_KEY   = 'inout_secondary_view_channel_v1';
 const INPUT_STATE_KEY      = 'inout_input_state_v2';
 const FIELD_PREFS_KEY      = 'inout_field_prefs_v1';
 const ORDER_STATE_KEY      = 'inout_order_state_v1';
@@ -1085,17 +1087,26 @@ function setupFocusOnFirstInteraction() {
 /* ═══ LOAD ════════════════════════════════════════════════ */
 /* entries table fields: id, created_at, text, channel, user_id, author_name */
 async function fetchMessagesList() {
+  return fetchMessagesListForChannel(currentChannel);
+}
+
+/** Fetch messages for a specific channel (for primary or secondary view). */
+async function fetchMessagesListForChannel(ch) {
   if (!currentUser) return [];
   let query = sb
     .from('entries')
     .select('id, created_at, text, channel, user_id, author_name')
-    .eq('channel', currentChannel);
-  if (currentChannel === 'main' && currentUser) {
+    .eq('channel', ch);
+  if (ch === 'main' && currentUser) {
     query = query.eq('user_id', currentUser.id);
   }
   const { data, error } = await query.order('created_at', { ascending: true }).limit(100);
   if (error) { console.error(error); return []; }
-  return data && data.length > 0 ? sortObjectsByOrder(data, currentObjectOrder) : [];
+  const list = data || [];
+  if (ch === currentChannel && list.length > 0 && currentObjectOrder.length > 0) {
+    return sortObjectsByOrder(list, currentObjectOrder);
+  }
+  return list;
 }
 
 async function loadMessages() {
@@ -1134,6 +1145,30 @@ async function replaceFeedWithList(list) {
     if (emptyEl) feedInner.replaceChildren(emptyEl);
     else feedInner.replaceChildren();
     updateObjectCount();
+  }
+}
+
+/** Render a message list into a given feed-inner element (e.g. secondary view). Does not update global objectCount. */
+async function replaceFeedWithListInto(list, targetFeedInner) {
+  if (!targetFeedInner) return;
+  const savedSeen = new Set(seenIds);
+  seenIds.clear();
+  const frag = document.createDocumentFragment();
+  for (const msg of list) {
+    const row = createObjectRow(msg, false);
+    if (row) frag.appendChild(row);
+  }
+  seenIds.clear();
+  savedSeen.forEach(function(id) { seenIds.add(id); });
+  const hasRows = frag.childNodes.length > 0;
+  if (hasRows) {
+    targetFeedInner.classList.remove('view-table');
+    targetFeedInner.replaceChildren(frag);
+  } else {
+    const empty = targetFeedInner.querySelector('.empty-placeholder') || document.createElement('div');
+    empty.className = 'empty-placeholder';
+    if (!empty.textContent) empty.textContent = 'Nothing yet.';
+    targetFeedInner.replaceChildren(empty);
   }
 }
 
@@ -1919,6 +1954,75 @@ function restoreLastChannel() {
     currentChannel = saved;
     updateTabsUI();
   } catch (_) {}
+}
+
+function saveSecondaryViewState() {
+  try {
+    if (secondaryViewChannel) localStorage.setItem(SECONDARY_VIEW_KEY, secondaryViewChannel);
+    else localStorage.removeItem(SECONDARY_VIEW_KEY);
+  } catch (_) {}
+}
+
+function restoreSecondaryView() {
+  if (secondaryViewEl) return;
+  try {
+    const saved = localStorage.getItem(SECONDARY_VIEW_KEY);
+    if (!saved || !channels.includes(saved)) return;
+    secondaryViewChannel = saved;
+    openSecondaryView(saved);
+  } catch (_) {}
+}
+
+var secondaryViewEl = null;
+var secondaryFeedInner = null;
+
+function closeSecondaryView() {
+  if (!secondaryViewEl || !secondaryViewEl.parentNode) return;
+  secondaryViewEl.parentNode.removeChild(secondaryViewEl);
+  secondaryViewEl = null;
+  secondaryFeedInner = null;
+  secondaryViewChannel = null;
+  saveSecondaryViewState();
+}
+
+async function openSecondaryView(ch) {
+  if (!channels.includes(ch)) return;
+  closeSecondaryView();
+  secondaryViewChannel = ch;
+  saveSecondaryViewState();
+  const panels = document.querySelector('.multiview-panels');
+  if (!panels) return;
+  const view = document.createElement('div');
+  view.className = 'view view-secondary';
+  view.setAttribute('data-channel', ch);
+  const visual = document.createElement('div');
+  visual.className = 'visual';
+  visual.setAttribute('aria-label', 'View: ' + (ch === 'main' ? 'Feed' : ch));
+  const feed = document.createElement('div');
+  feed.className = 'feed';
+  const feedInner = document.createElement('div');
+  feedInner.className = 'feed-inner';
+  feedInner.id = 'feed-inner-secondary';
+  const empty = document.createElement('div');
+  empty.className = 'empty-placeholder';
+  empty.textContent = 'Loading…';
+  feedInner.appendChild(empty);
+  feed.appendChild(feedInner);
+  visual.appendChild(feed);
+  view.appendChild(visual);
+  panels.appendChild(view);
+  secondaryViewEl = view;
+  secondaryFeedInner = feedInner;
+  const list = await fetchMessagesListForChannel(ch);
+  await replaceFeedWithListInto(list, feedInner);
+}
+
+function toggleSecondaryView(ch) {
+  if (secondaryViewChannel === ch) {
+    closeSecondaryView();
+  } else {
+    openSecondaryView(ch);
+  }
 }
 
 function restoreInputGlobal() {
@@ -3260,7 +3364,14 @@ function renderTabs() {
       btn.appendChild(close);
     }
 
-    btn.addEventListener('click', () => switchChannel(ch));
+    btn.addEventListener('click', (e) => {
+      if (e.shiftKey) {
+        e.preventDefault();
+        toggleSecondaryView(ch);
+        return;
+      }
+      switchChannel(ch);
+    });
     btn.addEventListener('dragenter', e => {
       e.preventDefault();
       e.stopPropagation();
@@ -3593,6 +3704,7 @@ async function refreshAuth() {
       subscribeRealtimeAll();
       setupDraftChannel();
       restoreLastChannel();
+      restoreSecondaryView();
       await loadMessageOrderForCurrentChannel();
       await loadMessages();
       restoreInputGlobal();

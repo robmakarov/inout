@@ -68,8 +68,9 @@
 </nav>
 
 <div id="multiview">
-  <div class="view" id="view-app">
-    <div id="manage-bar">
+  <div class="multiview-panels">
+    <div class="view view-primary" id="view-app">
+      <div id="manage-bar">
       <div class="bar-scroll" id="manage-bar-scroll">
         <div class="bar-group" data-bar-group="left">
           <button id="select-toggle" class="manage-btn" data-bar-id="select-toggle">Select</button>
@@ -97,17 +98,20 @@
       <button type="button" id="bar-reorder-toggle" class="manage-btn" aria-label="Reorder bar buttons" title="Reorder bar">⋯</button>
     </div>
 
-    <div id="feed">
-      <div class="feed-inner" id="feed-inner">
-        <div id="empty">
-          <div class="loader-inner">
-            <div class="loader-ring"></div>
-            <div class="loader-ring"></div>
-            <div class="loader-ring"></div>
-            <div class="loader-dash"></div>
+    <div class="visual" id="visual" aria-label="View content">
+      <div id="feed">
+        <div class="feed-inner" id="feed-inner">
+          <div id="empty">
+            <div class="loader-inner">
+              <div class="loader-ring"></div>
+              <div class="loader-ring"></div>
+              <div class="loader-ring"></div>
+              <div class="loader-dash"></div>
+            </div>
           </div>
         </div>
       </div>
+    </div>
     </div>
   </div>
 </div>
