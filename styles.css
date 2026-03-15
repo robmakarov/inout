@@ -863,13 +863,17 @@ body.dnd-active .msg-drag-spirit-stack{opacity:1;background:transparent;transiti
   top:0;
   width:2px;
   height:20px;
-  background:var(--acc);
+  background:var(--dnd-drop-line-color);
   pointer-events:none;
   animation:msg-cursor-blink 1s step-end infinite;
 }
 @keyframes msg-cursor-blink{
   0%,55%{opacity:1}
   56%,100%{opacity:0.2}
+}
+
+.msg.msg-editing .msg-text{
+  color:var(--muted);
 }
 /* DnD reorder: row under drop position (no nudge to avoid shake) */
 
@@ -1173,6 +1177,12 @@ body.select-mode .msg-select-wrap,
   transition:color .15s ease;
   scrollbar-width:none;
   box-sizing:border-box;
+}
+#msg-input{
+  caret-color:var(--dnd-drop-line-color);
+}
+#msg-input.input-edit-has-cursor{
+  caret-color:transparent;
 }
 #msg-input::-webkit-scrollbar{display:none}
 #msg-input::placeholder{color:var(--dim)}

@@ -335,6 +335,7 @@ var editTypingUndoStack = [];
 var editTypingCommitTimer = null;
 var TYPING_COMMIT_MS = 1800;
 var MAX_TYPING_UNDO = 20;
+var editTypingRedoStack = [];
 var editCursorEl = null;
 let fieldPrefs = { showTime:true, showAuthor:true };
 let undoStack = [];
@@ -629,8 +630,10 @@ function reactivateInputMode(opts) {
   }
   originalEditTextForCancel = null;
   editingMessageId = null;
+  if (input) input.classList.remove('input-edit-has-cursor');
   removeEditCursor();
   editTypingUndoStack = [];
+  editTypingRedoStack = [];
   if (editTypingCommitTimer) {
     clearTimeout(editTypingCommitTimer);
     editTypingCommitTimer = null;
@@ -975,13 +978,27 @@ document.addEventListener('keydown', e => {
       return;
     }
   }
-  // Ctrl/Cmd+Z → during edit: undo last typing burst; else undo last destructive action.
+  // Ctrl/Cmd+Z → undo; Ctrl/Cmd+Shift+Z → redo when typing in edit mode.
   const isUndoKey = (e.key === 'z' || e.key === 'Z') && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey;
+  const isRedoKey = (e.key === 'z' || e.key === 'Z') && (e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey;
   if (isUndoKey && editingMessageId != null && editTypingUndoStack.length > 1) {
     e.preventDefault();
-    editTypingUndoStack.pop();
+    var last = editTypingUndoStack.pop();
+    editTypingRedoStack.push(last);
     var prev = editTypingUndoStack[editTypingUndoStack.length - 1];
     input.value = prev;
+    updateEditingRowFromInput();
+    saveInputGlobal();
+    updateClearInputBtn();
+    sendBtn.disabled = !input.value.trim();
+    if (currentUser) broadcastDraft(input.value);
+    return;
+  }
+  if (isRedoKey && editingMessageId != null && editTypingRedoStack.length > 0) {
+    e.preventDefault();
+    var next = editTypingRedoStack.pop();
+    editTypingUndoStack.push(next);
+    input.value = next;
     updateEditingRowFromInput();
     saveInputGlobal();
     updateClearInputBtn();
@@ -1174,7 +1191,6 @@ function updateEditingRowFromInput() {
   var lineH = parseFloat(window.getComputedStyle(textEl).lineHeight) || 20;
   editCursorEl.style.left = cursorLeft + 'px';
   editCursorEl.style.top = '0';
-  editCursorEl.style.width = '2px';
   editCursorEl.style.height = (lineH > 0 ? lineH : 20) + 'px';
   textEl.appendChild(editCursorEl);
 }
@@ -1185,6 +1201,7 @@ function commitTypingSegment() {
   var t = input.value;
   if (editTypingUndoStack[editTypingUndoStack.length - 1] !== t) {
     editTypingUndoStack.push(t);
+    editTypingRedoStack = [];
     if (editTypingUndoStack.length > MAX_TYPING_UNDO) editTypingUndoStack.shift();
   }
 }
@@ -2792,6 +2809,7 @@ function createMsgRow(msg, isNew) {
     editingMessageId = msg.id;
     originalEditTextForCancel = msg.text || '';
     editTypingUndoStack = [msg.text || ''];
+    editTypingRedoStack = [];
     if (editTypingCommitTimer) {
       clearTimeout(editTypingCommitTimer);
       editTypingCommitTimer = null;
@@ -2804,6 +2822,7 @@ function createMsgRow(msg, isNew) {
     saveInputGlobal();
     updateEditingRowHighlight();
     focusMessageInput();
+    if (input) input.classList.add('input-edit-has-cursor');
     updateEditingRowFromInput();
   });
 
