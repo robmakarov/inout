@@ -1291,10 +1291,14 @@ function setupDraftChannel() {
       const data = payload.payload || {};
       if (!data || data.from === myId) return; // ignore own events
       const text = (data.text || '').trim();
+      const editingId = data.editingId != null ? Number(data.editingId) : null;
       latestRemoteDraft = text;
-      if (text) {
+      if (editingId != null && Number.isFinite(editingId)) {
+        updateMessageRowText(editingId, text);
+      }
+      if (text && !editingId) {
         showDraftBubble(text);
-      } else {
+      } else if (!text) {
         hideDraftBubble();
       }
     })
@@ -1315,7 +1319,11 @@ function broadcastDraft(text) {
   draftChannel.send({
     type: 'broadcast',
     event: 'draft',
-    payload: { from: myId, text: text || '' }
+    payload: {
+      from: myId,
+      text: text || '',
+      editingId: editingMessageId != null ? editingMessageId : null
+    }
   });
 }
 
