@@ -140,6 +140,11 @@ header,
   -ms-overflow-style:none;
 }
 .view-secondary .feed::-webkit-scrollbar{display:none}
+.view-secondary-drop-over.view-secondary .feed{
+  outline:2px solid var(--acc);
+  outline-offset:-2px;
+  border-radius:6px;
+}
 #multiview #manage-bar,
 #multiview #feed,
 #multiview .visual,
@@ -1674,6 +1679,23 @@ body.select-mode .obj-select-wrap,
   color:var(--bg);
   border-color:var(--acc2);
 }
+
+.tab-secondary-open{
+  position:relative;
+}
+.tab-secondary-open::after{
+  content:'';
+  position:absolute;
+  right:6px;
+  top:50%;
+  transform:translateY(-50%);
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  background:var(--acc);
+  opacity:0.9;
+}
+.tab-active.tab-secondary-open::after{ background:var(--bg); }
 
 .tab-shared{
   display:inline-flex;

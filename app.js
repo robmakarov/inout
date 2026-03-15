@@ -704,6 +704,14 @@ var dndOriginLineY = null;
 var dndStackFormTimer = null;
 let feedDropIndicatorEl = null;
 let feedDropOriginEl = null;
+
+function getDraggingRowAndSource() {
+  const fromPrimary = feedInner && feedInner.querySelector('.obj.dragging');
+  if (fromPrimary) return { row: fromPrimary, feedInner: feedInner, channel: currentChannel };
+  const fromSecondary = secondaryFeedInner && secondaryFeedInner.querySelector('.obj.dragging');
+  if (fromSecondary) return { row: fromSecondary, feedInner: secondaryFeedInner, channel: secondaryViewChannel };
+  return null;
+}
 var originContentTop = null;
 var originContentHeight = null;
 var originGhostOverlayEl = null;
@@ -1975,14 +1983,56 @@ function restoreSecondaryView() {
 
 var secondaryViewEl = null;
 var secondaryFeedInner = null;
+var secondaryFeedEl = null;
+
+function setupSecondaryFeedDnd() {
+  if (!secondaryFeedEl || !secondaryViewEl) return;
+  secondaryFeedEl.addEventListener('dragover', e => {
+    const src = getDraggingRowAndSource();
+    if (!src || src.channel === secondaryViewChannel) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    secondaryViewEl.classList.add('view-secondary-drop-over');
+  });
+  secondaryFeedEl.addEventListener('dragleave', e => {
+    if (!secondaryFeedEl.contains(e.relatedTarget)) secondaryViewEl.classList.remove('view-secondary-drop-over');
+  });
+  secondaryFeedEl.addEventListener('drop', async e => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDropHandled = true;
+    secondaryViewEl.classList.remove('view-secondary-drop-over');
+    const id = e.dataTransfer.getData('application/x-inout-obj-id') || e.dataTransfer.getData('text/plain');
+    const numId = Number(id);
+    if (!Number.isFinite(numId)) return;
+    const src = getDraggingRowAndSource();
+    if (!src || src.channel === secondaryViewChannel) return;
+    const rowEl = src.row;
+    animateMessageToView(rowEl, secondaryFeedEl, async () => {
+      const ok = await moveSingleMessage(numId, secondaryViewChannel);
+      if (src.channel === currentChannel) {
+        currentObjectOrder = currentObjectOrder.filter(x => x !== numId);
+        saveObjectOrderForCurrentChannel();
+        showEmptyIfNoMessages();
+      }
+      if (ok) {
+        const list = await fetchMessagesListForChannel(secondaryViewChannel);
+        await replaceFeedWithListInto(list, secondaryFeedInner);
+      } else if (rowEl) rowEl.style.visibility = '';
+    });
+  });
+}
 
 function closeSecondaryView() {
   if (!secondaryViewEl || !secondaryViewEl.parentNode) return;
   secondaryViewEl.parentNode.removeChild(secondaryViewEl);
   secondaryViewEl = null;
   secondaryFeedInner = null;
+  secondaryFeedEl = null;
   secondaryViewChannel = null;
   saveSecondaryViewState();
+  updateTabsUI();
 }
 
 async function openSecondaryView(ch) {
@@ -2013,8 +2063,11 @@ async function openSecondaryView(ch) {
   panels.appendChild(view);
   secondaryViewEl = view;
   secondaryFeedInner = feedInner;
+  secondaryFeedEl = view.querySelector('.feed');
+  if (secondaryFeedEl) setupSecondaryFeedDnd();
   const list = await fetchMessagesListForChannel(ch);
   await replaceFeedWithListInto(list, feedInner);
+  updateTabsUI();
 }
 
 function toggleSecondaryView(ch) {
@@ -3145,6 +3198,17 @@ function updateTabsUI() {
       btn.classList.add('tab-active');
     } else {
       btn.classList.remove('tab-active');
+    }
+    if (ch === secondaryViewChannel) {
+      btn.classList.add('tab-secondary-open');
+      btn.title = 'Right panel — Shift+click to close';
+    } else {
+      btn.classList.remove('tab-secondary-open');
+      if (secondaryViewChannel) {
+        btn.title = 'Shift+click to open in right panel';
+      } else {
+        btn.title = '';
+      }
     }
   });
 }
@@ -4592,6 +4656,46 @@ function animateMessageToTab(rowEl, tabEl, onDone) {
   setTimeout(finish, 500);
 }
 
+function animateMessageToView(rowEl, targetFeedEl, onDone) {
+  if (!rowEl || !targetFeedEl) {
+    if (typeof onDone === 'function') onDone();
+    return;
+  }
+  const from = rowEl.getBoundingClientRect();
+  const clone = rowEl.cloneNode(true);
+  clone.classList.add('obj-fly-clone');
+  clone.style.left = from.left + 'px';
+  clone.style.top = from.top + 'px';
+  clone.style.width = from.width + 'px';
+  clone.style.height = from.height + 'px';
+  clone.style.transform = 'translate(0,0) scale(1)';
+  clone.style.opacity = '1';
+  document.body.appendChild(clone);
+  rowEl.style.visibility = 'hidden';
+  const to = targetFeedEl.getBoundingClientRect();
+  const toCenterX = to.left + to.width / 2;
+  const toCenterY = to.top + to.height / 2;
+  const fromCenterX = from.left + from.width / 2;
+  const fromCenterY = from.top + from.height / 2;
+  const dx = toCenterX - fromCenterX;
+  const dy = toCenterY - fromCenterY;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      clone.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(0.4)';
+      clone.style.opacity = '0';
+    });
+  });
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    clone.remove();
+    if (typeof onDone === 'function') onDone();
+  };
+  clone.addEventListener('transitionend', finish);
+  setTimeout(finish, 500);
+}
+
 async function moveSingleMessage(id, targetChannel) {
   if (!currentUser || !id) return false;
   const target = targetChannel != null ? targetChannel : (moveTargetSelect && moveTargetSelect.value);
@@ -5015,12 +5119,32 @@ if (feedEl) {
 feedEl.addEventListener('scroll', onFeedScrollDuringDrag, { passive: true });
 feedEl.addEventListener('dragover', e => {
   const dragging = feedInner ? feedInner.querySelector('.obj.dragging') : null;
-  if (!feedInner || (!dragging && !originGhostsActive)) return;
+  const draggingFromSecondary = secondaryFeedInner && secondaryFeedInner.querySelector('.obj.dragging');
+  if (!feedInner || (!dragging && !draggingFromSecondary && !originGhostsActive)) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
-  processFeedDragover(e);
+  if (dragging || originGhostsActive) processFeedDragover(e);
 });
 feedEl.addEventListener('drop', e => {
+  const fromSecondary = secondaryFeedInner && secondaryFeedInner.querySelector('.obj.dragging');
+  if (fromSecondary && secondaryViewChannel && currentChannel !== secondaryViewChannel) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDropHandled = true;
+    const id = e.dataTransfer.getData('application/x-inout-obj-id') || e.dataTransfer.getData('text/plain');
+    const numId = Number(id);
+    if (Number.isFinite(numId)) {
+      const rowEl = fromSecondary;
+      animateMessageToView(rowEl, feedEl, async () => {
+        const ok = await moveSingleMessage(numId, currentChannel);
+        if (rowEl.parentNode) rowEl.parentNode.removeChild(rowEl);
+        if (ok) {
+          await loadMessages();
+        } else if (rowEl) rowEl.style.visibility = '';
+      });
+    }
+    return;
+  }
   if (feedInner && (feedInner.querySelector('.obj.dragging') || originGhostsActive)) {
     e.preventDefault();
     dragDropHandled = true;
@@ -5037,10 +5161,12 @@ feedEl.addEventListener('dragleave', e => {
 });
 }
 
-// Dragover: when over feed, always run processFeedDragover (so lastDropInsertBefore updates even if feedEl doesn't receive the event). When outside feed, show indicator at top/bottom.
+// Dragover: when over feed, run processFeedDragover (primary reorder) or show indicator (drag from secondary). When outside feed, show indicator at top/bottom.
 document.addEventListener('dragover', e => {
   if (!feedEl || !feedInner) return;
-  if (!feedInner.querySelector('.obj.dragging') && !originGhostsActive) return;
+  const draggingPrimary = feedInner.querySelector('.obj.dragging');
+  const draggingSecondary = secondaryFeedInner && secondaryFeedInner.querySelector('.obj.dragging');
+  if (!draggingPrimary && !draggingSecondary && !originGhostsActive) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
   lastDragClientX = e.clientX;
@@ -5050,7 +5176,21 @@ document.addEventListener('dragover', e => {
   const x = e.clientX;
   const inFeed = x >= feedRect.left && x <= feedRect.right && y >= feedRect.top && y <= feedRect.bottom;
   if (inFeed) {
-    processFeedDragover(e);
+    if (draggingPrimary || originGhostsActive) {
+      processFeedDragover(e);
+    } else if (draggingSecondary) {
+      if (!feedDropIndicatorEl) {
+        feedDropIndicatorEl = document.createElement('div');
+        feedDropIndicatorEl.className = 'feed-drop-indicator';
+        document.body.appendChild(feedDropIndicatorEl);
+      }
+      feedDropIndicatorEl.style.left = feedRect.left + 'px';
+      feedDropIndicatorEl.style.width = feedRect.width + 'px';
+      feedDropIndicatorEl.style.height = '4px';
+      feedDropIndicatorEl.style.top = (feedRect.bottom - 2) + 'px';
+      feedDropIndicatorEl.classList.add('visible');
+      lastIndicatorStyle = { left: feedRect.left, width: feedRect.width, top: feedRect.bottom - 2, visible: true };
+    }
     return;
   }
   if (lastDragTargetRow && lastDragTargetRow.classList) {

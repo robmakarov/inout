@@ -3,7 +3,7 @@
 ## Layout
 - **header** — Outside multiview. Fixed top; logo, online-count, object-count, user button.
 - **#nav** (.navigation-bar) — Outside multiview. Fixed under header; contains **#tabs**. Click tab = switch channel (primary view). **Shift+click** tab = open that channel as a **second view** to the right (both views fill width, 50% each). Shift+click same tab again closes the second view. Second-view state is **device-only** (localStorage).
-- **#multiview** — Container for the active view(s). Flex column, fills viewport; padding reserves space for header, nav bar, manage bar, and input area. Contains **.multiview-panels** (flex row) which holds one or two **.view** panels.
+- **#multiview** — Container for the active view(s). Flex column, fills viewport; padding reserves space for header, nav bar, manage bar, and input area. Contains **.multiview-panels** (flex row) which holds one or two **.view** panels. Objects can be **drag-and-dropped between views** (primary ↔ secondary); fly animation targets the destination panel.
 - **.view** (#view-app primary, .view-secondary) — A view = **manage bar** + **visual**. The **visual** is the content area; **feed** and **table** are two visual variants (table uses same layout as feed for now). Manage bar is part of the view and controls it (control modes).
 - **#input-area** — Separate from multiview (sibling). Fixed at bottom; composer, draft/clipboard bubbles, no tabs (tabs are in nav). Keeps all connections and behaviour.
 - #app-loader, .visual, #feed, #feed-inner (primary); .view-secondary .feed, #feed-inner-secondary.
@@ -34,7 +34,7 @@ View mode = visualisation of the **object base**; the current view is for one cl
 .obj — .obj-time, .obj-sender, .obj-text, .obj-checkbox-zone, .obj-select, .obj-actions, .obj-action-btn. **Hover-revealed** select-wrap and actions; same hover boundary as the row.
 States: .obj-selected, .obj-editing, .obj-drag-target, .obj-drag-nudge-right, .new-flash, .dragging, .obj-drag-group, .dragging-in-feed, .obj-dnd-just-dropped
 .obj-origin-ghost, .origin-ghost-overlay | .obj-drag-spirit, .obj-drag-spirit-stack, .obj-drag-spirit-row, .obj-drag-spirit-stack-more | .obj-fly-clone
-.tab — .tab-active, .tab-shared, .tab-badge, .tab-new, .tab-close, .tab-drop-target
+.tab — .tab-active, .tab-secondary-open (open in right panel; tooltip “Right panel”), .tab-shared, .tab-badge, .tab-new, .tab-close, .tab-drop-target
 
 ## Input
 #input-area (no tabs; tabs are in #nav), #clipboard-bubble, #draft-bubble, .draft-btn, .input-wrap, .input-tools, #clipboard-button, #log-action-btn (.error-signal), #log-dropup-panel (.open). **Composer:** .composer (single bar: input + send), .composer-input-wrap, #msg-input, #msg-input-count (.composer-count), .clear-input-btn, #send-btn (.composer-send). Main input is used for both new messages and editing; when editing a message, typing updates the message row in the view in realtime.
