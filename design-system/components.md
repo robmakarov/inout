@@ -12,6 +12,19 @@ header, .logo, .header-right, #online-count, #msg-count, #user-btn (.signed-in)
 
 ## Feed
 #empty, .loader-inner, .feed-drop-indicator (.visible)
+
+### Object component (message row)
+One object = one **.msg** row. Same component in both Feed and Table visual (Table currently uses the same layout as Feed; to be corrected later).
+
+**Structure**
+- **Properties (text only):** `.msg-time`, `.msg-sender`, `.msg-text` — the three fields of the object (time, author, value). No wrapper; they are direct children of `.msg`.
+- **Optional captions:** In Feed visual only, each property shows a small label above its value (Time, Author, Value) via CSS `::before` on `.feed-inner:not(.view-table) .msg .msg-time/sender/text`. Table visual has no per-cell captions (reserved for future table header).
+- **Chrome:** `.msg-checkbox-zone` (select), `.msg-actions` (Del, Move, Exp, Copy, Cut). Same row can be selected, edited, or reordered.
+
+**Behavior**
+- **Edit:** Click message text → main input loads value, row gets `.msg-editing`; row mirrors input in realtime (doppelganger). Send to save, Escape to cancel.
+- **Select / reorder:** Checkbox and DnD; reorder uses row middle-line crossing only for drop position. All rules (edit, reorder, selection) apply the same in Feed and Table visual.
+
 .msg — .msg-sender, .msg-time, .msg-text, .msg-checkbox-zone, .msg-select, .msg-actions, .msg-action-btn (Del, Move, Exp, Copy, Cut). When editing: click message → edit through main input; changes update the message row in the view in realtime as you type. Send to save, Escape or cancel to restore.
 **Hover-revealed controls** (select-wrap, actions, time/sender styling) are part of the row: they show accessible actions for this object in this view; same hover boundary as the row.
 States: .msg-selected, .msg-editing, .msg-drag-target, .msg-drag-nudge-right, .new-flash, .dragging, .msg-drag-group, .dragging-in-feed, .msg-dnd-just-dropped

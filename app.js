@@ -1083,12 +1083,8 @@ async function replaceFeedWithList(list) {
   }
   const hasRows = frag.childNodes.length > 0;
   msgCount = hasRows ? frag.childNodes.length : 0;
-  if (fieldPrefs.viewMode === 'table' && hasRows) {
-    feedInner.classList.add('view-table');
-    frag.insertBefore(createMsgHeaderRow(), frag.firstChild);
-  } else {
-    feedInner.classList.remove('view-table');
-  }
+  /* Table visual: same as feed for now (to be corrected later). */
+  feedInner.classList.remove('view-table');
   if (hasRows) {
     requestAnimationFrame(() => {
       if (feedInner) {
@@ -4626,42 +4622,31 @@ function processFeedDragover(ev) {
     var slotLastRow = slotRows[slotRows.length - 1];
     var slotLastRect = slotLastRow.getBoundingClientRect();
     var slotFeedRect = feedEl.getBoundingClientRect();
-    var slotDropAtEndThreshold = 32;
-    var slotInEmptyZone = slotY >= slotLastRect.bottom - slotDropAtEndThreshold;
-    var slotInLastRowLowerHalf = slotY >= slotLastRect.top + slotLastRect.height * 0.5;
-    var slotWantAppendFirst = slotInEmptyZone || slotInLastRowLowerHalf;
-    var slotWantAppend = slotWantAppendFirst;
+    var slotMidYs = slotRows.map(function(r) {
+      var rect = r.getBoundingClientRect();
+      return rect.top + rect.height / 2;
+    });
+    var slotWantAppend = false;
     var slotInsertBeforeNode = null;
     var slotLineY = 0;
-    if (slotY < slotFirstRect.top) {
+    if (slotY < slotMidYs[0]) {
       slotInsertBeforeNode = slotFirstRow;
       slotLineY = slotFirstRect.top;
-    } else if (slotWantAppend) {
+    } else if (slotY >= slotMidYs[slotMidYs.length - 1]) {
+      slotWantAppend = true;
       slotLineY = slotLastRect.bottom;
     } else {
-      for (var i = 0; i < slotRows.length; i++) {
-        var r = slotRows[i];
-        var rect = r.getBoundingClientRect();
-        if (slotY >= rect.top && slotY <= rect.bottom) {
-          if (r === slotLastRow && !r.classList.contains('msg-origin-ghost')) {
-            slotWantAppend = true;
-            slotLineY = rect.bottom;
-            break;
-          }
-          var midY = rect.top + rect.height / 2;
-          if (slotY < midY) {
-            slotInsertBeforeNode = r;
-            slotLineY = rect.top;
-          } else {
-            slotInsertBeforeNode = r.nextSibling;
-            slotLineY = rect.bottom;
-          }
+      for (var i = 0; i < slotRows.length - 1; i++) {
+        if (slotY >= slotMidYs[i] && slotY < slotMidYs[i + 1]) {
+          var rect = slotRows[i].getBoundingClientRect();
+          slotInsertBeforeNode = slotRows[i].nextElementSibling || slotRows[i].nextSibling;
+          slotLineY = rect.bottom;
           break;
         }
       }
-      if (slotInsertBeforeNode === null && !slotWantAppend && slotRows.length && slotY >= slotLastRect.bottom - slotDropAtEndThreshold) {
-        slotWantAppend = true;
-        slotLineY = slotLastRect.bottom;
+      if (slotInsertBeforeNode === null && !slotWantAppend) {
+        slotInsertBeforeNode = slotFirstRow;
+        slotLineY = slotFirstRect.top;
       }
     }
     if (dndOriginLineY != null && Math.abs(slotLineY - dndOriginLineY) < 14) {
@@ -4715,50 +4700,39 @@ function processFeedDragover(ev) {
   const lastRow = rows[rows.length - 1];
   const lastRect = lastRow.getBoundingClientRect();
   const feedRect = feedEl.getBoundingClientRect();
-  const dropAtEndThreshold = 32;
-  const inEmptyZone = y >= lastRect.bottom - dropAtEndThreshold;
-  const inLastRowLowerHalf = y >= lastRect.top + lastRect.height * 0.5;
-  const wantAppendFirst = inEmptyZone || inLastRowLowerHalf;
-  let wantAppend = wantAppendFirst;
+  /* Use only row middle lines as boundaries: drop position changes only when cursor crosses a row's vertical center. */
+  const midYs = rows.map(function(r) {
+    const rect = r.getBoundingClientRect();
+    return rect.top + rect.height / 2;
+  });
+  let wantAppend = false;
   let insertBeforeNode = null;
   let lineY = 0;
-  var rowUnderCursor = null;
-  if (y < firstRect.top) {
+  var targetRow = null;
+  if (y < midYs[0]) {
     insertBeforeNode = firstRow;
     lineY = firstRect.top;
-    rowUnderCursor = firstRow;
-  } else if (wantAppend) {
+    targetRow = firstRow;
+  } else if (y >= midYs[midYs.length - 1]) {
+    wantAppend = true;
     lineY = lastRect.bottom;
-    rowUnderCursor = lastRow;
+    targetRow = lastRow;
   } else {
-    for (let i = 0; i < rows.length; i++) {
-      const r = rows[i];
-      const rect = r.getBoundingClientRect();
-      if (y >= rect.top && y <= rect.bottom) {
-        rowUnderCursor = r;
-        if (r === lastRow) {
-          wantAppend = true;
-          lineY = rect.bottom;
-          break;
-        }
-        const midY = rect.top + rect.height / 2;
-        if (y < midY) {
-          insertBeforeNode = r;
-          lineY = rect.top;
-        } else {
-          insertBeforeNode = r.nextElementSibling || r.nextSibling;
-          lineY = rect.bottom;
-        }
+    for (let i = 0; i < rows.length - 1; i++) {
+      if (y >= midYs[i] && y < midYs[i + 1]) {
+        insertBeforeNode = rows[i].nextElementSibling || rows[i].nextSibling;
+        const rect = rows[i].getBoundingClientRect();
+        lineY = rect.bottom;
+        targetRow = rows[i + 1];
         break;
       }
     }
-    if (insertBeforeNode === null && !wantAppend && rows.length && y >= lastRect.bottom - dropAtEndThreshold) {
-      wantAppend = true;
-      lineY = lastRect.bottom;
-      rowUnderCursor = lastRow;
+    if (insertBeforeNode === null && !wantAppend) {
+      insertBeforeNode = firstRow;
+      lineY = firstRect.top;
+      targetRow = firstRow;
     }
   }
-  var targetRow = (rowUnderCursor && rowUnderCursor.classList) ? rowUnderCursor : (wantAppend ? lastRow : (insertBeforeNode && insertBeforeNode.classList ? insertBeforeNode : firstRow));
   if (targetRow && !targetRow.classList) targetRow = null;
   if (targetRow !== lastDragTargetRow) {
     if (lastDragTargetRow && lastDragTargetRow.classList) {
