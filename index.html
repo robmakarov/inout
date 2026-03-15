@@ -1173,7 +1173,7 @@ body.select-mode .msg-select-wrap,
     top:0;
     left:0;
     right:0;
-    width:100%;
+  width:100%;
     padding:0 14px;
     z-index:120;
     transform:translateY(var(--vv-top));
@@ -2387,7 +2387,7 @@ function isNearBottom() {
 function init(done) {
   function finish() {
     try {
-      setupPresence();
+  setupPresence();
       var saved = channelScroll.get(currentChannel);
       requestAnimationFrame(function() {
         requestAnimationFrame(function() {
@@ -2395,7 +2395,7 @@ function init(done) {
             if (typeof saved === 'number' && saved >= 0) {
               feedEl.scrollTop = Math.min(saved, Math.max(0, feedEl.scrollHeight - feedEl.clientHeight));
             } else {
-              scrollBottom();
+  scrollBottom();
             }
           }
         });
@@ -2588,22 +2588,19 @@ async function replaceFeedWithList(list) {
   if (hasRows) {
     requestAnimationFrame(() => {
       if (feedInner) {
-        feedInner.innerHTML = '';
-        if (emptyEl && emptyEl.parentNode) emptyEl.remove();
-        feedInner.appendChild(frag);
-      }
-      updateMsgCount();
-      applyFieldPrefsToMessages();
-      var saved = channelScroll.get(currentChannel);
-      if (feedEl && typeof saved === 'number' && saved >= 0) {
-        var maxScroll = feedEl.scrollHeight - feedEl.clientHeight;
-        if (maxScroll > 0) feedEl.scrollTop = Math.min(saved, maxScroll);
+        feedInner.replaceChildren(frag);
+        updateMsgCount();
+        applyFieldPrefsToMessages();
+        var saved = channelScroll.get(currentChannel);
+        if (feedEl && typeof saved === 'number' && saved >= 0) {
+          var maxScroll = feedEl.scrollHeight - feedEl.clientHeight;
+          if (maxScroll > 0) feedEl.scrollTop = Math.min(saved, maxScroll);
+        }
       }
     });
   } else {
-    feedInner.innerHTML = '';
-    if (emptyEl && emptyEl.parentNode) emptyEl.remove();
-    showEmptyIfNoMessages();
+    if (emptyEl) feedInner.replaceChildren(emptyEl);
+    else feedInner.replaceChildren();
     updateMsgCount();
   }
 }
@@ -2782,12 +2779,12 @@ function subscribeActionLog() {
 
 function onInsertForChannel(ch, msg) {
   if (ch === currentChannel) {
-    hideEmpty();
+        hideEmpty();
     appendMsg(msg, true);
-    msgCount++;
-    updateMsgCount();
+        msgCount++;
+        updateMsgCount();
     // Always keep the newest message visible (messenger behavior).
-    requestAnimationFrame(scrollBottom);
+          requestAnimationFrame(scrollBottom);
     return;
   }
 
@@ -2897,9 +2894,7 @@ function showEmptyIfNoMessages() {
     }
   } catch (_) {}
   if (!emptyEl.parentNode) {
-    emptyEl.style.animation = 'none';
-    void emptyEl.offsetWidth;
-    emptyEl.style.animation = 'fadin .6s .3s ease both';
+    emptyEl.style.animation = '';
     feedInner.appendChild(emptyEl);
   }
 }
@@ -3709,7 +3704,7 @@ function createMsgRow(msg, isNew) {
       if (selectBox.checked) {
         selectedIds.add(msg.id);
         row.classList.add('msg-selected');
-      } else {
+  } else {
         selectedIds.delete(msg.id);
         row.classList.remove('msg-selected');
       }
@@ -4246,7 +4241,7 @@ async function createChannelFromModal() {
   if (extraIds.length > 0) sharedChannels.add(name);
 
   try {
-    closeChannelModal();
+  closeChannelModal();
     await switchChannel(name);
   } catch (e) {
     console.error(e);
@@ -4361,13 +4356,13 @@ var explicitSignOut = false;
 function setupAuthListener() {
   sb.auth.onAuthStateChange(async (event, session) => {
     if (session && session.user) {
-      const prevUser = currentUser;
+    const prevUser = currentUser;
       currentUser = session.user;
       try { sessionStorage.setItem(AUTH_BACKUP_KEY, JSON.stringify(currentUser)); } catch (_) {}
-      updateAuthUI();
-      if (!prevUser && currentUser) {
+    updateAuthUI();
+    if (!prevUser && currentUser) {
         try {
-          await syncChannelsFromServer();
+      await syncChannelsFromServer();
           await reloadForUser();
           setupDraftChannel();
         } catch (e) {
@@ -4476,13 +4471,13 @@ async function reloadForUser() {
   var savedScroll = channelScroll.get(currentChannel);
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      if (feedEl) {
+   if (feedEl) {
         if (typeof savedScroll === 'number' && savedScroll >= 0) {
           feedEl.scrollTop = Math.min(savedScroll, Math.max(0, feedEl.scrollHeight - feedEl.clientHeight));
-        } else {
-          scrollBottom();
-        }
-      }
+    } else {
+      scrollBottom();
+    }
+  }
       if (input) input.focus();
     });
   });
@@ -5238,14 +5233,14 @@ function autoResize() {
 /* ═══ SCROLL ══════════════════════════════════════════════ */
 var scrollSaveTimer = null;
 if (feedEl) {
-  feedEl.addEventListener('scroll', () => {
+feedEl.addEventListener('scroll', () => {
     atBottom = isNearBottom();
-    if (atBottom) scrollBtn.classList.remove('visible');
+  if (atBottom) scrollBtn.classList.remove('visible');
     channelScroll.set(currentChannel, feedEl.scrollTop);
     if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
     scrollSaveTimer = setTimeout(saveScrollState, 200);
     if (document.body.classList.contains('dnd-active')) updateOriginLinePosition();
-  }, { passive: true });
+}, { passive: true });
 }
 
 /* FLIP animation: smooth shift of rows when reordering during drag */

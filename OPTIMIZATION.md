@@ -1,6 +1,6 @@
 # Optimization plan — insanely optimized
 
-**Riot session: backend, UI, design system. Data loss is acceptable but must be warned.**
+**Riot session: product, backend, UI, design system. Data loss is acceptable but must be warned.**
 
 ---
 
