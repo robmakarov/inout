@@ -19,7 +19,7 @@ States: .msg-selected, .msg-editing, .msg-drag-target, .msg-drag-nudge-right, .n
 .tab — .tab-active, .tab-shared, .tab-badge, .tab-new, .tab-close, .tab-drop-target
 
 ## Input
-#input-area, #tabs, #clipboard-bubble, #draft-bubble, .draft-btn, .input-wrap, #msg-input, .clear-input-btn, #send-btn, .input-tools, #clipboard-button, #log-action-btn (.error-signal), #log-dropup-panel (.open). #msg-input is the main input (new messages only). Edit mode uses an inline input inside the message row (.msg-edit-inline), not the main input.
+#input-area, #tabs, #clipboard-bubble, #draft-bubble, .draft-btn, .input-wrap, .input-tools, #clipboard-button, #log-action-btn (.error-signal), #log-dropup-panel (.open). **Composer:** .composer (single bar: input + send), .composer-input-wrap, #msg-input, #msg-input-count (.composer-count, shown near 2000 limit), .clear-input-btn, #send-btn (.composer-send: icon + label, accent when enabled). #msg-input is the main input (new messages only). Edit mode uses .msg-edit-inline inside the message row.
 
 ## Overlays
 #scroll-btn (.visible), #toast (.show)

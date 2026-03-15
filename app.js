@@ -1873,6 +1873,7 @@ function saveInputGlobal() {
 function updateClearInputBtn() {
   if (!clearInputBtn || !input) return;
   clearInputBtn.disabled = !input.value;
+  updateComposerCount();
 }
 
 function applyFieldPrefsUI() {
@@ -3728,12 +3729,25 @@ async function sendText(text) {
 }
 
 /* ═══ INPUT HANDLING ══════════════════════════════════════ */
+function updateComposerCount() {
+  var countEl = document.getElementById('msg-input-count');
+  var wrap = input && input.closest && input.closest('.composer-input-wrap');
+  if (!countEl || !wrap) return;
+  var len = (input && input.value) ? input.value.length : 0;
+  if (len >= 1800) {
+    wrap.classList.add('has-count');
+    countEl.textContent = len + '/2000';
+  } else {
+    wrap.classList.remove('has-count');
+    countEl.textContent = '';
+  }
+}
+
 input.addEventListener('input', () => {
   autoResize();
   sendBtn.disabled = !input.value.trim();
   saveInputGlobal();
   updateClearInputBtn();
-  // send current draft for this user so other devices see it
   if (currentUser) {
     broadcastDraft(input.value);
   }
@@ -3788,6 +3802,7 @@ if (clipboardPasteBtn) {
     input.value = latestClipboardText;
     autoResize();
     sendBtn.disabled = !input.value.trim();
+    updateClearInputBtn();
     requestAnimationFrame(focusMessageInput);
   });
 }
