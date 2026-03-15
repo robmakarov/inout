@@ -853,6 +853,20 @@ body.dnd-active .msg-drag-spirit-stack{opacity:1;background:transparent;transiti
   padding-right:72px; /* reserve space under right-side actions */
   cursor:pointer;
 }
+/* Edit cursor inside message row, mirroring main input caret */
+.msg-edit-caret{
+  display:inline-block;
+  width:1px;
+  height:1.2em;
+  margin-left:-0.5px;
+  vertical-align:baseline;
+  background:var(--bright);
+  animation:msg-caret-blink 1s steps(1) infinite;
+}
+@keyframes msg-caret-blink{
+  0%,60%{opacity:1}
+  61%,100%{opacity:0}
+}
 /* DnD reorder: row under drop position (no nudge to avoid shake) */
 
 @media (max-width:540px){

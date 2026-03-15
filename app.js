@@ -1106,6 +1106,26 @@ function updateMessageRowText(msgId, text) {
   textEl.innerHTML = linkify(escapeHtml(text || ''));
 }
 
+function updateEditingRowFromInput() {
+  if (!feedInner || editingMessageId == null || !input) return;
+  const idStr = String(editingMessageId);
+  const el = feedInner.querySelector('.msg[data-id="' + CSS.escape(idStr) + '"]');
+  if (!el) return;
+  const textEl = el.querySelector('.msg-text');
+  if (!textEl) return;
+  const fullText = input.value || '';
+  var caretPos = typeof input.selectionStart === 'number' ? input.selectionStart : fullText.length;
+  if (!Number.isFinite(caretPos)) caretPos = fullText.length;
+  caretPos = Math.max(0, Math.min(caretPos, fullText.length));
+  const before = fullText.slice(0, caretPos);
+  const after = fullText.slice(caretPos);
+  const html =
+    escapeHtml(before) +
+    '<span class="msg-edit-caret"></span>' +
+    escapeHtml(after);
+  textEl.innerHTML = html;
+}
+
 function onUpdateForChannel(ch, row) {
   if (ch !== currentChannel || !row) return;
   const id = row.id != null ? row.id : row.Id;
@@ -2716,6 +2736,7 @@ function createMsgRow(msg, isNew) {
     saveInputGlobal();
     updateEditingRowHighlight();
     focusMessageInput();
+    updateEditingRowFromInput();
   });
 
   row.addEventListener('click', e => {
@@ -3718,7 +3739,7 @@ input.addEventListener('input', () => {
   saveInputGlobal();
   updateClearInputBtn();
   if (editingMessageId != null) {
-    updateMessageRowText(editingMessageId, input.value);
+    updateEditingRowFromInput();
   }
   if (currentUser) {
     broadcastDraft(input.value);
@@ -3734,6 +3755,14 @@ input.addEventListener('keydown', e => {
     e.preventDefault();
     if (!sendBtn.disabled) send();
   }
+});
+
+input.addEventListener('click', () => {
+  if (editingMessageId != null) updateEditingRowFromInput();
+});
+
+input.addEventListener('keyup', () => {
+  if (editingMessageId != null) updateEditingRowFromInput();
 });
 
 sendBtn.addEventListener('click', send);
