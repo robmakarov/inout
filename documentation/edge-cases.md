@@ -22,7 +22,7 @@ Gotchas, “don’t do this,” and patterns to follow. **When you fix or discov
 ## 3. View prefs and “flash” on refresh
 
 - **Time/Author default** — `.obj-time` and `.obj-sender` are `display:none` in CSS so they never “flash” visible before view prefs load. JS shows them from **fieldPrefs** in **createObjectRow** and **applyFieldPrefsToMessages**.
-- **Load order** — **loadMessageOrderForCurrentChannel** and **loadFieldPrefsForCurrentChannel** run before **loadMessages** so fieldPrefs are set before any row is created. Keep this order when changing init.
+- **Load order** — **loadObjectOrderForCurrentChannel** and **loadFieldPrefsForCurrentChannel** run before **loadObjects** so fieldPrefs are set before any row is created. Keep this order when changing init.
 
 ---
 
@@ -52,7 +52,7 @@ Gotchas, “don’t do this,” and patterns to follow. **When you fix or discov
 ## 7. Loader and empty state
 
 - **Loader in #empty** — The rings+bars loader lives inside **#empty** in the feed. **#app-loader** is display:none. So the only visible loader is in the feed empty state.
-- **ensureLoaderMinDisplay** — **loadMessages** and **replaceFeedWithList** await this so the loader is visible at least 1.2s (loaderMinUntil set in **go()**).
+- **ensureLoaderMinDisplay** — **loadObjects** and **replaceFeedWithList** await this so the loader is visible at least 1.2s (loaderMinUntil set in **go()**).
 
 ---
 
@@ -65,7 +65,7 @@ Gotchas, “don’t do this,” and patterns to follow. **When you fix or discov
 
 ## 9. Focus and modals
 
-- **focusMessageInput** — Called after many actions (send, cancel edit, drag end, etc.). Modals and interactive elements (buttons, links) are excluded from “steal focus” so clicking them doesn’t immediately refocus the textarea in a bad way (see isInteractive in setupFocusOnFirstInteraction).
+- **focusMainInput** — Called after many actions (send, cancel edit, drag end, etc.). Modals and interactive elements (buttons, links) are excluded from “steal focus” so clicking them doesn’t immediately refocus the textarea in a bad way (see isInteractive in setupFocusOnFirstInteraction).
 
 ---
 

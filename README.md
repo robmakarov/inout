@@ -1,6 +1,6 @@
 # INOUT
 
-Minimal, single-file realtime message app. Tabbed feeds (Main + custom channels), Google auth, Supabase backend, no build step.
+Minimal, single-file app for keeping and managing objects. Tabbed feeds (Main + custom channels), Google auth, Supabase backend, no build step.
 
 ---
 
@@ -25,7 +25,7 @@ Open `http://localhost:4173`. Supabase anon key and URL are in `index.html`; rep
 
 - **Auth**: Sign in/out with Google. Copy user ID from header for sharing.
 - **Feeds**: “Main” (private to you) + custom channels (tabs). Create/delete tabs; share a channel by adding other users’ Supabase user IDs.
-- **Messages**: Realtime send/receive; reorder by drag-and-drop; edit/delete; optional Time/Author visibility per channel (view settings sync across devices).
+- **Objects**: Create, edit, reorder, delete; realtime sync; optional Time/Author visibility per channel (view settings sync across devices).
 - **UI**: Dark theme (DM Mono + Syne), sticky header, tab strip, scrollable feed, bottom input (Enter = send, Shift+Enter = newline). Loader animation in empty state. Scroll position and view settings persist across refresh.
 
 ### Tech stack
@@ -64,7 +64,7 @@ Open `http://localhost:4173`. Supabase anon key and URL are in `index.html`; rep
 
 ### Data model (Supabase)
 
-- **`public.entries`** — Messages.
+- **`public.entries`** — Objects (one row per object).
   - Columns: `id` (bigint PK), `created_at` (timestamptz), `text`, `channel`, `user_id` (uuid → auth.users), `author_name` (optional).
   - Main feed: `channel = 'main'` and `user_id = auth.uid()`.
   - Shared channels: access via `channel_members`.
@@ -89,10 +89,10 @@ Open `http://localhost:4173`. Supabase anon key and URL are in `index.html`; rep
 | Supabase client    | `supabase.createClient(...)` near top of script         |
 | Auth state         | `currentUser`, `refreshAuth()`, `setupAuthListener()`    |
 | Channels / tabs    | `channels`, `currentChannel`, `switchChannel()`, `renderTabs()` |
-| Feed messages      | `loadMessages()`, `fetchMessagesList()`, `replaceFeedWithList()`, `createMsgRow()` |
+| Feed / objects      | `loadObjects()`, `fetchObjectsList()`, `replaceFeedWithList()`, `createObjectRow()` |
 | Realtime           | `subscribeRealtimeAll()`, `subscribeViewRealtime()`, `subscribeOrderRealtime()` |
-| View prefs         | `fieldPrefs`, `loadFieldPrefsForCurrentChannel()`, `saveFieldPrefsForCurrentChannel()`, `applyFieldPrefsToMessages()` |
-| Order / reorder    | `currentMessageOrder`, `loadMessageOrderForCurrentChannel()`, `applyMessageOrderToDOM()`, `saveMessageOrderForCurrentChannel()` |
+| View prefs         | `fieldPrefs`, `loadFieldPrefsForCurrentChannel()`, `saveFieldPrefsForCurrentChannel()`, `applyFieldPrefsToObjects()` |
+| Order / reorder    | `currentObjectOrder`, `loadObjectOrderForCurrentChannel()`, `applyObjectOrderToDOM()`, `saveObjectOrderForCurrentChannel()` |
 | DnD reorder        | `processFeedDragover()`, feed `dragover` / `drop` listeners, `flipAnimateShift()` |
 | Scroll persistence | `channelScroll`, `loadScrollState()`, `saveScrollState()`, scroll listener on `#feed` |
 | Local storage keys | `CHANNELS_KEY`, `CURRENT_CHANNEL_KEY`, `ORDER_STATE_KEY`, `SCROLL_STATE_KEY`, `FIELD_PREFS_KEY`, `INPUT_STATE_KEY` |
@@ -100,15 +100,15 @@ Open `http://localhost:4173`. Supabase anon key and URL are in `index.html`; rep
 ### DOM IDs and structure
 
 - **`#app`** — Main app shell (visible after load).
-- **`#feed`** — Scrollable message list container; `#feed-inner` holds rows.
+- **`#feed`** — Scrollable object list container; `#feed-inner` holds rows.
 - **`#empty`** — Empty state (loader + “Nothing yet”) inside `#feed-inner`.
-- **`#msg-input`** — Message textarea; Send button, clear button.
+- **`#msg-input`** — Main input (object value); Send button, clear button.
 - **`#tabs`** — Channel tab strip (Main + custom).
 - **`#manage-bar`** — Select mode toolbar (Select, All, None, Delete, Move, Export, View).
 - **View menu** — Checkboxes “Time” and “Author” (`#field-time`, `#field-author`).
 - **Modals**: `#user-modal-backdrop`, `#channel-modal-backdrop`.
 
-Message rows: class `.obj`, `data-id` = entry id, `draggable="true"`. Checkbox: `.obj-select`; actions: `.obj-actions`.
+Object rows: class `.obj`, `data-id` = entry id, `draggable="true"`. Checkbox: `.obj-select`; actions: `.obj-actions`.
 
 ### Documentation
 
@@ -126,7 +126,7 @@ Message rows: class `.obj`, `data-id` = entry id, `draggable="true"`. Checkbox: 
 
 When asking an AI to work on this repo, you can say:
 
-> You are editing **INOUT**, a single-file web app (entry point `index.html`) hosted on Vercel, backend Supabase (Postgres + Realtime + Google Auth).  
+> You are editing **INOUT**, a single-file app for keeping and managing objects (entry point `index.html`), hosted on Vercel, backend Supabase (Postgres + Realtime + Google Auth).  
 > - Keep the app build-free and the current dark, minimal style (DM Mono, Syne, CSS variables in index.html).  
 > - Auth and visibility: respect RLS; Main feed is per-user; shared channels use `channel_members`.  
 > - Preserve UX: realtime feed, tabbed channels, drag reorder, view settings (Time/Author) synced via `views` table, scroll and view prefs persisted, toast notifications, responsive layout.  

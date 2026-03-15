@@ -558,8 +558,8 @@ async function undoLastAction() {
         feedInner.appendChild(frag);
         updateObjectCount();
         saveObjectOrderForCurrentChannel();
-        applyFieldPrefsToMessages();
-        showEmptyIfNoMessages();
+        applyFieldPrefsToObjects();
+        showEmptyIfNoObjects();
         requestAnimationFrame(() => { if (feedEl) feedEl.classList.remove('feed-updating'); });
       });
     } else if (action.type === 'move' && Array.isArray(action.entries) && action.entries.length) {
@@ -587,9 +587,9 @@ async function undoLastAction() {
         if (forCurrent.length) {
           saveObjectOrderForCurrentChannel();
           applyObjectOrderToDOM();
-          applyFieldPrefsToMessages();
+          applyFieldPrefsToObjects();
         }
-        showEmptyIfNoMessages();
+        showEmptyIfNoObjects();
         requestAnimationFrame(() => { if (feedEl) feedEl.classList.remove('feed-updating'); });
       });
     } else if (action.type === 'send' && Array.isArray(action.entries) && action.entries.length) {
@@ -608,7 +608,7 @@ async function undoLastAction() {
         objectCount = Math.max(0, objectCount - ids.length);
         updateObjectCount();
         saveObjectOrderForCurrentChannel();
-        showEmptyIfNoMessages();
+        showEmptyIfNoObjects();
         requestAnimationFrame(() => { if (feedEl) feedEl.classList.remove('feed-updating'); });
       });
     } else if (action.type === 'edit' && Array.isArray(action.entries) && action.entries.length) {
@@ -620,7 +620,7 @@ async function undoLastAction() {
           .eq('user_id', currentUser.id)
           .eq('id', e.id);
       }));
-      rows.forEach(e => { updateObjectRowMessage(e.id, e.beforeText); });
+      rows.forEach(e => { updateObjectRowText(e.id, e.beforeText); });
       toast('Undid last action.');
       return;
     } else if (action.type === 'view' && action.before && action.channel) {
@@ -634,7 +634,7 @@ async function undoLastAction() {
       };
       saveFieldPrefsForCurrentChannel();
       applyFieldPrefsUI();
-      loadMessages().catch(() => {});
+      loadObjects().catch(() => {});
       return;
     } else if (action.type === 'order' && Array.isArray(action.before)) {
       currentObjectOrder = action.before.slice();
@@ -668,10 +668,10 @@ function restoreEditingRowsOnCancel() {
   if (editingObjectIds && originalEditTextForCancelMap) {
     editingObjectIds.forEach(id => {
       const text = originalEditTextForCancelMap[id];
-      if (text !== undefined) updateObjectRowMessage(id, text);
+      if (text !== undefined) updateObjectRowText(id, text);
     });
   } else if (editingObjectId != null && originalEditTextForCancel != null) {
-    updateObjectRowMessage(editingObjectId, originalEditTextForCancel);
+    updateObjectRowText(editingObjectId, originalEditTextForCancel);
   }
 }
 
@@ -702,7 +702,7 @@ function reactivateInputMode(opts) {
     updateClearInputBtn();
   }
   updateEditingRowHighlight();
-  focusMessageInput();
+  focusMainInput();
 }
 
 function cancelEditingMode(clearInput) {
@@ -865,7 +865,7 @@ function removeOriginGhostsAndInsertRows() {
   originInsertBefore = null;
   feedEl.scrollTop = scrollTop;
 }
-function focusMessageInput() {
+function focusMainInput() {
   if (input) input.focus();
 }
 
@@ -939,7 +939,7 @@ function init(done) {
     if (feedInner) {
       feedInner.innerHTML = '';
       if (emptyEl && emptyEl.parentNode) emptyEl.remove();
-      showEmptyIfNoMessages();
+      showEmptyIfNoObjects();
       if (objectCountEl) updateObjectCount();
     }
   } catch (_) {}
@@ -951,11 +951,11 @@ function init(done) {
       return Promise.race([
         (async function() {
           if (currentUser) await syncChannelsFromServer();
-          await loadMessageOrderForCurrentChannel();
+          await loadObjectOrderForCurrentChannel();
           await loadFieldPrefsForCurrentChannel();
           refreshMoveTargets();
           if (currentUser) {
-            await loadMessages();
+            await loadObjects();
             (function restoreScrollAfterLoad() {
               var saved = channelScroll.get(currentChannel);
               if (feedEl && typeof saved === 'number' && saved >= 0) {
@@ -989,7 +989,7 @@ function init(done) {
       if (e && e.message !== 'timeout') console.error(e);
       try { renderTabs(); } catch (_) {}
       refreshMoveTargets();
-      if (currentUser && typeof loadMessages === 'function') loadMessages().catch(function() {});
+      if (currentUser && typeof loadMessages === 'function') loadObjects().catch(function() {});
       if (feedInner && emptyEl && !emptyEl.parentNode) feedInner.appendChild(emptyEl);
     });
   })();
@@ -1006,7 +1006,7 @@ function closeUserModal() {
   if (!umBackdrop) return;
   umBackdrop.style.display = 'none';
   umBackdrop.setAttribute('aria-hidden', 'true');
-  requestAnimationFrame(focusMessageInput);
+  requestAnimationFrame(focusMainInput);
 }
 
 if (userBtn) userBtn.addEventListener('click', openUserModal);
@@ -1115,12 +1115,12 @@ function setupFocusOnFirstInteraction() {
 
 /* ═══ LOAD ════════════════════════════════════════════════ */
 /* entries table fields: id, created_at, text, channel, user_id, author_name */
-async function fetchMessagesList() {
-  return fetchMessagesListForChannel(currentChannel);
+async function fetchObjectsList() {
+  return fetchObjectsListForChannel(currentChannel);
 }
 
-/** Fetch messages for a specific channel (for primary or secondary view). */
-async function fetchMessagesListForChannel(ch) {
+/** Fetch objects for a specific channel (for primary or secondary view). */
+async function fetchObjectsListForChannel(ch) {
   if (!currentUser) return [];
   let query = sb
     .from('entries')
@@ -1138,15 +1138,15 @@ async function fetchMessagesListForChannel(ch) {
   return list;
 }
 
-async function loadMessages() {
-  const list = await fetchMessagesList();
+async function loadObjects() {
+  const list = await fetchObjectsList();
   await replaceFeedWithList(list);
 }
 
 async function replaceFeedWithList(list) {
   if (!feedInner) return;
   seenIds.clear();
-  globalMsgNum = 0;
+  globalObjectNum = 0;
   objectCount = 0;
   const frag = document.createDocumentFragment();
   for (const msg of list) {
@@ -1162,7 +1162,7 @@ async function replaceFeedWithList(list) {
       if (feedInner) {
         feedInner.replaceChildren(frag);
         updateObjectCount();
-        applyFieldPrefsToMessages();
+        applyFieldPrefsToObjects();
         var saved = channelScroll.get(currentChannel);
         if (feedEl && typeof saved === 'number' && saved >= 0) {
           var maxScroll = feedEl.scrollHeight - feedEl.clientHeight;
@@ -1232,13 +1232,13 @@ function subscribeRealtimeAll() {
   });
 }
 
-/** Update the message property (primary value) of an object row. Looks in primary feed, then secondary. */
-function updateObjectRowMessage(objId, messageValue) {
+/** Update the primary text of an object row. Looks in primary feed, then secondary. */
+function updateObjectRowText(objId, textValue) {
   if (objId == null) return;
   const idStr = String(objId);
   const textEl = findObjectRowTextEl(objId);
   if (!textEl) return;
-  textEl.innerHTML = linkify(escapeHtml(messageValue || ''));
+  textEl.innerHTML = linkify(escapeHtml(textValue || ''));
 }
 
 function findObjectRowTextEl(objId) {
@@ -1366,7 +1366,7 @@ function onUpdateForChannel(ch, row) {
     if (input) input.placeholder = 'Say something…';
   }
   if (ch === currentChannel || ch === secondaryViewChannel) {
-    updateObjectRowMessage(id, text);
+    updateObjectRowText(id, text);
     clearRemoteEditingDoppelganger(id, true);
   }
   if (ch === currentChannel) updateEditingRowHighlight();
@@ -1393,7 +1393,7 @@ function subscribeOrderRealtime() {
         if (!row || row.channel !== currentChannel) return;
         if (suppressNextOrderApply) { suppressNextOrderApply = false; return; }
         if (Date.now() < suppressOrderApplyUntil) return;
-        await loadMessageOrderForCurrentChannel();
+        await loadObjectOrderForCurrentChannel();
         applyObjectOrderToDOM();
       }
     )
@@ -1439,7 +1439,7 @@ function subscribeViewRealtime() {
           viewMode: (cfg.viewMode === 'table' || cfg.viewMode === 'feed') ? cfg.viewMode : 'feed',
         };
         saveFieldPrefsForCurrentChannel();
-        applyFieldPrefsToMessages();
+        applyFieldPrefsToObjects();
       }
     )
     .subscribe();
@@ -1495,7 +1495,7 @@ function subscribeActionLog() {
 function onInsertForChannel(ch, msg) {
   if (ch === currentChannel) {
     hideEmpty();
-    appendMsg(msg, true);
+    appendObject(msg, true);
     objectCount++;
     updateObjectCount();
     requestAnimationFrame(scrollBottom);
@@ -2083,7 +2083,7 @@ function hideClipboardBubble() {
   if (clipboardBubbleTxt) clipboardBubbleTxt.textContent = '';
 }
 
-function showEmptyIfNoMessages() {
+function showEmptyIfNoObjects() {
   if (!feedInner || !emptyEl) return;
   const hasMsg = feedInner.querySelector('.obj');
   if (hasMsg) return;
@@ -2186,15 +2186,15 @@ function setupSecondaryFeedDnd() {
     const src = getDraggingRowAndSource();
     if (!src || src.channel === secondaryViewChannel) return;
     const rowEl = src.row;
-    animateMessageToView(rowEl, secondaryFeedEl, async () => {
-      const ok = await moveSingleMessage(numId, secondaryViewChannel);
+    animateObjectToView(rowEl, secondaryFeedEl, async () => {
+      const ok = await moveSingleObject(numId, secondaryViewChannel);
       if (src.channel === currentChannel) {
         currentObjectOrder = currentObjectOrder.filter(x => x !== numId);
         saveObjectOrderForCurrentChannel();
-        showEmptyIfNoMessages();
+        showEmptyIfNoObjects();
       }
       if (ok) {
-        const list = await fetchMessagesListForChannel(secondaryViewChannel);
+        const list = await fetchObjectsListForChannel(secondaryViewChannel);
         await replaceFeedWithListInto(list, secondaryFeedInner);
       } else if (rowEl) rowEl.style.visibility = '';
     });
@@ -2296,7 +2296,7 @@ async function openSecondaryView(ch) {
   secondaryFeedInner = feedInner;
   secondaryFeedEl = view.querySelector('.feed');
   if (secondaryFeedEl) setupSecondaryFeedDnd();
-  const list = await fetchMessagesListForChannel(ch);
+  const list = await fetchObjectsListForChannel(ch);
   await replaceFeedWithListInto(list, feedInner);
   updateTabsUI();
 }
@@ -2368,7 +2368,7 @@ async function loadFieldPrefsForCurrentChannel() {
           localStorage.setItem(FIELD_PREFS_KEY, JSON.stringify(map));
         } catch (_) {}
         applyFieldPrefsUI();
-        applyFieldPrefsToMessages();
+        applyFieldPrefsToObjects();
         return;
       }
     } catch (_) {}
@@ -2386,7 +2386,7 @@ async function loadFieldPrefsForCurrentChannel() {
     fieldPrefs = { showTime: true, showAuthor: currentChannel !== 'main', viewMode: 'feed' };
   }
   applyFieldPrefsUI();
-  applyFieldPrefsToMessages();
+  applyFieldPrefsToObjects();
 }
 
 function saveFieldPrefsForCurrentChannel() {
@@ -2423,7 +2423,7 @@ function saveFieldPrefsForCurrentChannel() {
   }
 }
 
-function applyFieldPrefsToMessages() {
+function applyFieldPrefsToObjects() {
   if (!feedInner || !fieldPrefs) return;
   const rows = feedInner.querySelectorAll('.obj');
   rows.forEach(row => {
@@ -2545,7 +2545,7 @@ function setupTouchDragHandlers() {
     if (droppedMovedIdsTouch.length && dndBroadcastChannel && dndChannelReady) {
       broadcastDndDropped(currentObjectOrder.slice(), droppedMovedIdsTouch);
     }
-    applyFieldPrefsToMessages();
+    applyFieldPrefsToObjects();
     r.style.pointerEvents = 'none';
     void r.offsetHeight;
     requestAnimationFrame(() => {
@@ -2553,7 +2553,7 @@ function setupTouchDragHandlers() {
         setTimeout(() => {
           if (document.body) document.body.classList.remove('dnd-just-ended');
           r.style.pointerEvents = '';
-          focusMessageInput();
+          focusMainInput();
         }, 120);
       });
     });
@@ -2562,8 +2562,8 @@ function setupTouchDragHandlers() {
   document.addEventListener('touchend', end);
 }
 
-/** Table view: header row (Time, Author, Message, Actions). No dataset.id so it stays first. */
-function createMsgHeaderRow() {
+/** Table view: header row (Time, Author, Value, Actions). No dataset.id so it stays first. */
+function createObjectHeaderRow() {
   const row = document.createElement('div');
   row.className = 'obj obj-header';
   row.setAttribute('aria-hidden', 'true');
@@ -2578,7 +2578,7 @@ function createMsgHeaderRow() {
   sender.textContent = 'Author';
   const text = document.createElement('div');
   text.className = 'obj-text';
-  text.textContent = 'Message';
+  text.textContent = 'Value';
   const actions = document.createElement('div');
   actions.className = 'obj-actions';
   row.appendChild(checkboxPlaceholder);
@@ -2589,7 +2589,7 @@ function createMsgHeaderRow() {
   return row;
 }
 
-/** Create one object row (DOM) from object data; message is obj.text. options.skipEmptyRemove: true when building for a non-primary feed. */
+/** Create one object row (DOM) from object data; primary value is obj.text. options.skipEmptyRemove: true when building for a non-primary feed. */
 function createObjectRow(obj, isNew, options) {
   if (obj && typeof obj.id !== 'undefined') {
     if (seenIds.has(obj.id)) return null;
@@ -2816,7 +2816,7 @@ function createObjectRow(obj, isNew, options) {
             broadcastDndDropped(currentObjectOrder.slice(), droppedMovedIds);
           }
         }
-        applyFieldPrefsToMessages();
+        applyFieldPrefsToObjects();
         row.style.pointerEvents = 'none';
         void row.offsetHeight;
         requestAnimationFrame(() => {
@@ -2824,7 +2824,7 @@ function createObjectRow(obj, isNew, options) {
             setTimeout(() => {
               if (document.body) document.body.classList.remove('dnd-just-ended');
               row.style.pointerEvents = '';
-              focusMessageInput();
+              focusMainInput();
             }, 120);
           });
         });
@@ -2893,7 +2893,7 @@ function createObjectRow(obj, isNew, options) {
   actionDelete.addEventListener('click', e => {
     e.stopPropagation();
     if (!obj.id) return;
-    deleteSingleMessage(obj.id);
+    deleteSingleObject(obj.id);
   });
 
   const actionMove = document.createElement('button');
@@ -2902,7 +2902,7 @@ function createObjectRow(obj, isNew, options) {
   actionMove.addEventListener('click', e => {
     e.stopPropagation();
     if (!obj.id) return;
-    moveSingleMessage(obj.id);
+    moveSingleObject(obj.id);
   });
 
   const actionExport = document.createElement('button');
@@ -2911,7 +2911,7 @@ function createObjectRow(obj, isNew, options) {
   actionExport.addEventListener('click', e => {
     e.stopPropagation();
     if (!obj.id) return;
-    exportSingleMessage(obj.id);
+    exportSingleObject(obj.id);
   });
 
   const actionCopy = document.createElement('button');
@@ -2937,7 +2937,7 @@ function createObjectRow(obj, isNew, options) {
     if (!obj.id || !obj.text) return;
     try {
       navigator.clipboard.writeText(obj.text);
-      deleteSingleMessage(obj.id);
+      deleteSingleObject(obj.id);
       toast('Message cut.');
     } catch (err) {
       console.error(err);
@@ -3308,7 +3308,7 @@ function createObjectRow(obj, isNew, options) {
     saveInputGlobal();
     updateEditingRowHighlight();
     updateEditingRowFromInput();
-    focusMessageInput();
+    focusMainInput();
     requestAnimationFrame(updateEditingRowFromInput);
   });
 
@@ -3359,14 +3359,14 @@ function createObjectRow(obj, isNew, options) {
   return row;
 }
 
-function appendMsg(msg, isNew) {
-  const row = createObjectRow(msg, isNew);
+function appendObject(obj, isNew) {
+  const row = createObjectRow(obj, isNew);
   if (!row) return;
   feedInner.appendChild(row);
   // Ensure new messages respect the current view (time/author) settings.
-  applyFieldPrefsToMessages();
-  if (typeof msg.id !== 'undefined') {
-    const idNum = Number(msg.id);
+  applyFieldPrefsToObjects();
+  if (typeof obj.id !== 'undefined') {
+    const idNum = Number(obj.id);
     if (Number.isFinite(idNum)) {
       currentObjectOrder = currentObjectOrder.filter(x => x !== idNum);
       currentObjectOrder.push(idNum);
@@ -3389,7 +3389,7 @@ function sortObjectsByOrder(list, order) {
   return out.length ? out : list;
 }
 
-function renderInitialMessages(list) {
+function renderInitialObjects(list) {
   if (!Array.isArray(list) || list.length === 0) return;
   hideEmpty();
   const frag = document.createDocumentFragment();
@@ -3429,7 +3429,7 @@ function saveOrderToLocal() {
   } catch (_) {}
 }
 
-let globalMsgNum = 0;
+let globalObjectNum = 0;
 
 function hideEmpty() {
   if (emptyEl.parentNode) emptyEl.remove();
@@ -3511,7 +3511,7 @@ function saveChannelsList() {
   } catch (_) {}
 }
 
-async function loadMessageOrderForCurrentChannel() {
+async function loadObjectOrderForCurrentChannel() {
   currentObjectOrder = [];
   // 1) Try unified view object (if table exists and user is signed in).
   if (currentUser) {
@@ -3717,12 +3717,12 @@ function renderTabs() {
       if (!Number.isFinite(numId)) return;
       const rowEl = feedInner.querySelector('.obj[data-id="' + CSS.escape(String(numId)) + '"]');
       if (rowEl) {
-        animateMessageToTab(rowEl, btn, async () => {
-          const ok = await moveSingleMessage(numId, ch);
+        animateObjectToTab(rowEl, btn, async () => {
+          const ok = await moveSingleObject(numId, ch);
           if (!ok) rowEl.style.visibility = '';
         });
       } else {
-        moveSingleMessage(numId, ch);
+        moveSingleObject(numId, ch);
       }
     });
     tabsEl.appendChild(btn);
@@ -3808,7 +3808,7 @@ async function switchChannel(ch) {
     setupDndBroadcastChannel();
     ensureMembership().then(reloadForUser);
   } else {
-    clearMessages();
+    clearObjects();
   }
 }
 
@@ -3828,7 +3828,7 @@ function openChannelModal() {
 function closeChannelModal() {
   if (!cmBackdrop) return;
   cmBackdrop.style.display = 'none';
-  requestAnimationFrame(focusMessageInput);
+  requestAnimationFrame(focusMainInput);
 }
 
 if (cmCancel) cmCancel.addEventListener('click', closeChannelModal);
@@ -3911,7 +3911,7 @@ function deleteChannel(ch) {
     } catch (_) {}
     reloadForUser();
   } else {
-    clearMessages();
+    clearObjects();
   }
 }
 
@@ -4024,12 +4024,12 @@ async function refreshAuth() {
       setupDraftChannel();
       restoreLastChannel();
       restoreSecondaryView();
-      await loadMessageOrderForCurrentChannel();
-      await loadMessages();
+      await loadObjectOrderForCurrentChannel();
+      await loadObjects();
       restoreInputGlobal();
     } catch (e) {
       renderTabs();
-      try { await loadMessages(); } catch (_) {}
+      try { await loadObjects(); } catch (_) {}
       if (feedInner && emptyEl && !emptyEl.parentNode) feedInner.appendChild(emptyEl);
     }
   } else {
@@ -4059,7 +4059,7 @@ function setupAuthListener() {
         } catch (e) {
           console.error(e);
           renderTabs();
-          try { await loadMessages(); } catch (_) {}
+          try { await loadObjects(); } catch (_) {}
           if (feedInner && emptyEl && !emptyEl.parentNode) feedInner.appendChild(emptyEl);
         }
       }
@@ -4155,8 +4155,8 @@ function updateAuthUI() {
 
 async function reloadForUser() {
   if (editingObjectId != null) cancelEditingMode(true);
-  await loadMessageOrderForCurrentChannel();
-  const list = await fetchMessagesList();
+  await loadObjectOrderForCurrentChannel();
+  const list = await fetchObjectsList();
   await replaceFeedWithList(list);
   subscribeRealtimeAll();
   var savedScroll = channelScroll.get(currentChannel);
@@ -4172,12 +4172,12 @@ async function reloadForUser() {
       if (input) input.focus();
     });
   });
-  applyFieldPrefsToMessages();
+  applyFieldPrefsToObjects();
 }
 
-function clearMessages() {
+function clearObjects() {
   feedInner.innerHTML = '';
-  globalMsgNum = 0;
+  globalObjectNum = 0;
   objectCount = 0;
   updateObjectCount();
   seenIds.clear();
@@ -4221,7 +4221,7 @@ async function signOut() {
   currentUser = null;
   try { sessionStorage.removeItem(AUTH_BACKUP_KEY); } catch (_) {}
   updateAuthUI();
-  clearMessages();
+  clearObjects();
   teardownDraftChannel();
   teardownDndBroadcastChannel();
   sharedChannels.clear();
@@ -4352,7 +4352,7 @@ async function sendText(text) {
       pushUndo({ type: 'edit', entries: befores.map(b => ({ id: b.id, beforeText: b.text, afterText: afterById[b.id] != null ? afterById[b.id] : trimmed })) });
       befores.forEach(b => logAction('edit', { id: b.id }));
     }
-    idsToSave.forEach((id, i) => updateObjectRowMessage(id, trimmedPerId[i] || trimmed));
+    idsToSave.forEach((id, i) => updateObjectRowText(id, trimmedPerId[i] || trimmed));
     originalEditTextForCancel = null;
     originalEditTextForCancelMap = null;
     editingObjectTextMap = null;
@@ -4382,7 +4382,7 @@ async function sendText(text) {
   } else {
     if (data && data.channel === currentChannel) {
       hideEmpty();
-      appendMsg(data, true);
+      appendObject(data, true);
       objectCount++;
       updateObjectCount();
     }
@@ -4503,7 +4503,7 @@ if (clipboardPasteBtn) {
     autoResize();
     sendBtn.disabled = !input.value.trim();
     updateClearInputBtn();
-    requestAnimationFrame(focusMessageInput);
+    requestAnimationFrame(focusMainInput);
   });
 }
 
@@ -4540,7 +4540,7 @@ if (clearInputBtn) {
     if (currentUser) {
       broadcastDraft('');
     }
-    requestAnimationFrame(focusMessageInput);
+    requestAnimationFrame(focusMainInput);
   });
 }
 
@@ -4601,7 +4601,7 @@ if (viewVisualSelect) {
     logAction('view', { viewMode });
     saveFieldPrefsForCurrentChannel();
     applyFieldPrefsUI();
-    loadMessages().catch(() => {});
+    loadObjects().catch(() => {});
   });
 }
 
@@ -4611,7 +4611,7 @@ if (fieldTimeChk) {
     fieldPrefs.showTime = !!fieldTimeChk.checked;
     logAction('view', { showTime: !!fieldTimeChk.checked, showAuthor: fieldPrefs.showAuthor });
     saveFieldPrefsForCurrentChannel();
-    applyFieldPrefsToMessages();
+    applyFieldPrefsToObjects();
   });
 }
 
@@ -4626,7 +4626,7 @@ if (fieldAuthorChk) {
     fieldPrefs.showAuthor = !!fieldAuthorChk.checked;
     logAction('view', { showTime: fieldPrefs.showTime, showAuthor: !!fieldAuthorChk.checked });
     saveFieldPrefsForCurrentChannel();
-    applyFieldPrefsToMessages();
+    applyFieldPrefsToObjects();
   });
 }
 
@@ -4874,7 +4874,7 @@ if (moveSelectedBtn) {
   });
 }
 
-async function deleteSingleMessage(id) {
+async function deleteSingleObject(id) {
   if (!currentUser || !id) return;
   try {
     const { data, error: selErr } = await sb
@@ -4904,14 +4904,14 @@ async function deleteSingleMessage(id) {
     if (el && el.parentNode) el.parentNode.removeChild(el);
     currentObjectOrder = currentObjectOrder.filter(x => x !== id);
     saveObjectOrderForCurrentChannel();
-    showEmptyIfNoMessages();
+    showEmptyIfNoObjects();
   } catch (e) {
     console.error(e);
     toast('Failed to delete — ' + humanError(e.message));
   }
 }
 
-function animateMessageToTab(rowEl, tabEl, onDone) {
+function animateObjectToTab(rowEl, tabEl, onDone) {
   const from = rowEl.getBoundingClientRect();
   const clone = rowEl.cloneNode(true);
   clone.classList.add('obj-fly-clone');
@@ -4947,7 +4947,7 @@ function animateMessageToTab(rowEl, tabEl, onDone) {
   setTimeout(finish, 500);
 }
 
-function animateMessageToView(rowEl, targetFeedEl, onDone) {
+function animateObjectToView(rowEl, targetFeedEl, onDone) {
   if (!rowEl || !targetFeedEl) {
     if (typeof onDone === 'function') onDone();
     return;
@@ -4987,7 +4987,7 @@ function animateMessageToView(rowEl, targetFeedEl, onDone) {
   setTimeout(finish, 500);
 }
 
-async function moveSingleMessage(id, targetChannel) {
+async function moveSingleObject(id, targetChannel) {
   if (!currentUser || !id) return false;
   const target = targetChannel != null ? targetChannel : (moveTargetSelect && moveTargetSelect.value);
   if (!target || target === currentChannel) return false;
@@ -5026,7 +5026,7 @@ async function moveSingleMessage(id, targetChannel) {
     if (el) el.remove();
     currentObjectOrder = currentObjectOrder.filter(x => x !== id);
     saveObjectOrderForCurrentChannel();
-    showEmptyIfNoMessages();
+    showEmptyIfNoObjects();
     return true;
   } catch (e) {
     console.error(e);
@@ -5035,7 +5035,7 @@ async function moveSingleMessage(id, targetChannel) {
   }
 }
 
-async function exportSingleMessage(id) {
+async function exportSingleObject(id) {
   if (!currentUser || !id) return;
   try {
     const { data, error } = await sb
@@ -5426,11 +5426,11 @@ feedEl.addEventListener('drop', e => {
     const numId = Number(id);
     if (Number.isFinite(numId)) {
       const rowEl = fromSecondary;
-      animateMessageToView(rowEl, feedEl, async () => {
-        const ok = await moveSingleMessage(numId, currentChannel);
+      animateObjectToView(rowEl, feedEl, async () => {
+        const ok = await moveSingleObject(numId, currentChannel);
         if (rowEl.parentNode) rowEl.parentNode.removeChild(rowEl);
         if (ok) {
-          await loadMessages();
+          await loadObjects();
         } else if (rowEl) rowEl.style.visibility = '';
       });
     }

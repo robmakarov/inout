@@ -6,7 +6,7 @@ Single source to rebuild the app from scratch. Keep minimal; extend when behavio
 
 ## 1. Product
 
-Realtime message app: tabbed feeds (Main + custom channels), Google auth, Supabase. One object class per view: rows with time, author, message text. Create/edit/delete/reorder; optional Time/Author visibility per channel; multi-select (Delete, Move, Export); multi-edit (same single-char changes to all selected); second view (Shift+click tab) with resizable split and DnD between views; remote editing doppelganger (badge); draft/clipboard bubbles; scroll and view prefs persisted.
+Objects keeping and managing app: tabbed feeds (Main + custom channels), Google auth, Supabase. One object class per view: rows with time, author, and primary text. Create, edit, delete, reorder objects; optional Time/Author visibility per channel; multi-select (Delete, Move, Export); multi-edit (same single-char changes to all selected); second view (Shift+click tab) with resizable split and DnD between views; remote editing doppelganger (badge); draft/clipboard bubbles; scroll and view prefs persisted.
 
 ---
 
@@ -50,13 +50,13 @@ Supabase URL/anon key: in index.html (inline script) and in app.js fallback. Rep
 
 ## 4. Data model (Supabase)
 
-**entries** — Messages. `id` (bigint PK), `created_at`, `text`, `channel`, `user_id`, `author_name`. Main: `channel='main'`, `user_id=auth.uid()`. Shared: access via channel_members. Realtime: INSERT/UPDATE per channel.
+**entries** — Objects (one row per object). `id` (bigint PK), `created_at`, `text`, `channel`, `user_id`, `author_name`. Main: `channel='main'`, `user_id=auth.uid()`. Shared: access via channel_members. Realtime: INSERT/UPDATE per channel.
 
 **channel_members** — Who sees a channel. `channel`, `user_id`, `creator_id` (who added). PK (channel, user_id). Only creator can add members. RLS: see security.md.
 
 **views** — Per-user, per-channel config. `user_id`, `channel`, `config` (jsonb: `order`, `showTime`, `showAuthor`). Upsert key (user_id, channel). Realtime for cross-device.
 
-**message_orders** — Optional legacy order; fallback in loadMessageOrderForCurrentChannel.
+**message_orders** — Optional legacy order; fallback in loadObjectOrderForCurrentChannel.
 
 **action_log** — Optional; user_id, action, details.
 
@@ -70,7 +70,7 @@ Enable Realtime on entries, views (and message_orders if used). RLS on all; see 
 2. Supabase client: use window.sb from index.html or create in app.js; OAuth code exchange if `?code=` in URL.
 3. go(): set loaderMinUntil (e.g. +1200ms). If document.readyState === 'loading', wait DOMContentLoaded.
 4. init():  
-   loadChannelsList → loadScrollState → refreshAuth → (if user) syncChannelsFromServer → setupAuthListener → setupTabs → restoreLastChannel → loadMessageOrderForCurrentChannel → loadFieldPrefsForCurrentChannel → refreshMoveTargets → (if user) loadMessages (await ensureLoaderMinDisplay), subscribeRealtimeAll, setupDraftChannel, subscribeOrderRealtime, subscribeViewRealtime, subscribeActionLog → setupPresence → restore scroll (channelScroll or scrollBottom) → cleanupAuthHash, focus input, setupFocusOnFirstInteraction.
+   loadChannelsList → loadScrollState → refreshAuth → (if user) syncChannelsFromServer → setupAuthListener → setupTabs → restoreLastChannel → loadObjectOrderForCurrentChannel → loadFieldPrefsForCurrentChannel → refreshMoveTargets → (if user) loadObjects (await ensureLoaderMinDisplay), subscribeRealtimeAll, setupDraftChannel, subscribeOrderRealtime, subscribeViewRealtime, subscribeActionLog → setupPresence → restore scroll (channelScroll or scrollBottom) → cleanupAuthHash, focus input, setupFocusOnFirstInteraction.
 5. done(): clear 4s timeout, markLoaded() (body.loaded, focus input).
 
 Load order/prefs before messages so fieldPrefs exist when creating rows. Realtime after messages so INSERT/UPDATE handlers see DOM.
@@ -87,7 +87,7 @@ refreshAuth(): getSession → currentUser. setupAuthListener(): onAuthStateChang
 
 - **subscribeRealtimeAll**: entries INSERT/UPDATE per channel → onInsertForChannel (append/reorder), onUpdateForChannel (update row text, clear remote doppelganger).
 - **subscribeOrderRealtime**: message_orders → reload order, apply to DOM (use suppressNextOrderApply / suppressOrderApplyUntil to avoid feedback).
-- **subscribeViewRealtime**: views → update currentMessageOrder and/or fieldPrefs, apply (suppressNextViewApply).
+- **subscribeViewRealtime**: views → update currentObjectOrder and/or fieldPrefs, apply (suppressNextViewApply).
 - **setupDraftChannel**: presence + broadcast draft; broadcastDraft(text); show remote draft bubble; teardownDraftChannel on sign-out.
 - **DnD broadcast**: dnd-{channel} for origin/target lines and ghost (see dnd.md).
 
@@ -95,13 +95,13 @@ refreshAuth(): getSession → currentUser. setupAuthListener(): onAuthStateChang
 
 ## 8. Key flows
 
-**Channel switch** — switchChannel(ch): save scroll to channelScroll, saveScrollState; currentChannel, persist; updateTabsUI; loadFieldPrefsForCurrentChannel; ensureMembership().then(reloadForUser) or clearMessages. reloadForUser: loadMessageOrderForCurrentChannel, fetchMessagesList, replaceFeedWithList, subscribeRealtimeAll, restore scroll, applyFieldPrefsToMessages.
+**Channel switch** — switchChannel(ch): save scroll to channelScroll, saveScrollState; currentChannel, persist; updateTabsUI; loadFieldPrefsForCurrentChannel; ensureMembership().then(reloadForUser) or clearMessages. reloadForUser: loadObjectOrderForCurrentChannel, fetchObjectsList, replaceFeedWithList, subscribeRealtimeAll, restore scroll, applyFieldPrefsToObjects.
 
 **Send (input mode)** — send() → sendText(input.value): sb.from('entries').insert({ text, channel, user_id, ... }); clear input; append or reorder row.
 
 **Edit** — Click .obj-text → input.value = row text, input.selectionStart/End = 0 for multi; editingObjectId / editingObjectIds, editingObjectTextMap, originalEditTextForCancel(Map); updateEditingRowFromInput() (doppelganger: before + selection + caret + after); Send → update entries per id from editingObjectTextMap; Escape → restore rows from original, cancelEditingMode. Multi-edit: only single-char insert/delete propagated (applyPrimaryEditToMultiEdit); shorter rows: delete from end when pos past length.
 
-**Reorder** — DnD: dragstart (body.dnd-active, spirit/ghost), dragover (processFeedDragover: .obj-drag-target, feedDropIndicatorEl), drop/dragend (recomputeOrderFromDOM, saveMessageOrderForCurrentChannel, remove spirit). Realtime: broadcast dnd_start/dnd_move/dnd_end; other clients show origin/target lines and ghost; dnd_dropped → apply order, .obj-remote-reorder animation.
+**Reorder** — DnD: dragstart (body.dnd-active, spirit/ghost), dragover (processFeedDragover: .obj-drag-target, feedDropIndicatorEl), drop/dragend (recomputeOrderFromDOM, saveObjectOrderForCurrentChannel, remove spirit). Realtime: broadcast dnd_start/dnd_move/dnd_end; other clients show origin/target lines and ghost; dnd_dropped → apply order, .obj-remote-reorder animation.
 
 **Select** — setSelectMode(true): body.select-mode, #select-toggle.active, #select-extra.show; checkboxes on rows; selectedIds; Delete/Move/Export use selectedIds. Drag-select: rect from pointer; applyDragSelectRect.
 
@@ -133,7 +133,7 @@ refreshAuth(): getSession → currentUser. setupAuthListener(): onAuthStateChang
 
 ## 10. State (globals)
 
-Auth: currentUser, sb. Channel: currentChannel, channels, channelSubs, orderSub, viewSub, draftChannel. Order/prefs: currentMessageOrder (or currentObjectOrder), fieldPrefs { showTime, showAuthor }. Scroll: channelScroll (Map). Selection: selectMode, selectedIds. Edit: editingObjectId, editingObjectIds (Set), editingObjectTextMap { id → text }, originalEditTextForCancel(Map). DnD: lastReorderTarget, feedDropIndicatorEl, savedOrderBeforeDrag, dragDropHandled, touchDragState. UI: emptyEl, feedInner, feedEl, input, sendBtn, loaderMinUntil. Realtime feedback: suppressNextOrderApply, suppressNextViewApply, suppressOrderApplyUntil.
+Auth: currentUser, sb. Channel: currentChannel, channels, channelSubs, orderSub, viewSub, draftChannel. Order/prefs: currentObjectOrder (or currentObjectOrder), fieldPrefs { showTime, showAuthor }. Scroll: channelScroll (Map). Selection: selectMode, selectedIds. Edit: editingObjectId, editingObjectIds (Set), editingObjectTextMap { id → text }, originalEditTextForCancel(Map). DnD: lastReorderTarget, feedDropIndicatorEl, savedOrderBeforeDrag, dragDropHandled, touchDragState. UI: emptyEl, feedInner, feedEl, input, sendBtn, loaderMinUntil. Realtime feedback: suppressNextOrderApply, suppressNextViewApply, suppressOrderApplyUntil.
 
 ---
 
@@ -161,7 +161,7 @@ entries: SELECT where user_id=auth.uid() or (channel, auth.uid()) in channel_mem
 - Guard sb before Supabase calls (can be null).
 - Realtime feedback: use suppressNextViewApply / suppressNextOrderApply / suppressOrderApplyUntil after upserting views/order.
 - .obj-time and .obj-sender default display:none; JS shows from fieldPrefs (no flash).
-- loadMessageOrder + loadFieldPrefs before loadMessages.
+- loadMessageOrder + loadFieldPrefs before loadObjects.
 - Scroll: per-channel Map; debounce saveScrollState (~200ms).
 - body.dnd-active on dragstart, remove on dragend; disables .obj:hover.
 - WAS_EDITING_KEY: init clears input so no stale edit state.

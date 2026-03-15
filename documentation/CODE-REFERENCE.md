@@ -57,7 +57,7 @@ Short description of every top-level constant, variable, and function in the app
 ### Other constants
 | Name | Description |
 |------|--------------|
-| `seenIds` | Set of message IDs already rendered (avoid duplicates). |
+| `seenIds` | Set of object IDs already rendered (avoid duplicates). |
 | `channelScroll` | Map channel → scrollTop. |
 | `unreadCounts` | Map channel → unread count. |
 | `sharedChannels` | Set of channel names that are shared. |
@@ -91,7 +91,7 @@ Short description of every top-level constant, variable, and function in the app
 | `currentObjectOrder` | Ordered array of object IDs for current channel. |
 | `objectCount` | Number of objects in primary feed. |
 | `leftChannels` | Set of channel names (left tabs). |
-| `globalMsgNum` | Counter for message numbering. |
+| `globalObjectNum` | Counter for object numbering. |
 
 ### UI / scroll
 | Name | Description |
@@ -227,7 +227,7 @@ Short description of every top-level constant, variable, and function in the app
 | `restoreEditingRowsOnCancel()` | Restore all editing rows from originalEditTextForCancel(Map). |
 | `reactivateInputMode(opts)` | Clear edit state, restore placeholder, focus input. |
 | `cancelEditingMode(clearInput)` | Clear editingObjectId/editingObjectIds, restore rows, placeholder. |
-| `focusMessageInput()` | input.focus(). |
+| `focusMainInput()` | input.focus(). |
 | `setupFocusOnFirstInteraction()` | Focus input on first tap/click outside modals. |
 | `applyPrimaryEditToMultiEdit(newPrimary)` | Apply same single-char edit to all ids in editingObjectTextMap. |
 | `updateEditingRowFromInput()` | Update doppelganger in each row from input value and selection. |
@@ -255,7 +255,7 @@ Short description of every top-level constant, variable, and function in the app
 | `restoreLastChannel()` | Set currentChannel from localStorage. |
 | `loadChannelsList()` | Load channels from localStorage. |
 | `saveChannelsList()` | Save channels to localStorage. |
-| `loadMessageOrderForCurrentChannel()` | Load order and fieldPrefs from views/message_orders/local. |
+| `loadObjectOrderForCurrentChannel()` | Load order and fieldPrefs from views/message_orders/local. |
 | `saveObjectOrderForCurrentChannel()` | Save currentObjectOrder to local + message_orders + views. |
 | `loadOrderFromLocal()` | Return order array from localStorage. |
 | `saveOrderToLocal()` | Write currentObjectOrder to localStorage. |
@@ -274,8 +274,8 @@ Short description of every top-level constant, variable, and function in the app
 |----------|-------------|
 | `refreshAuth()` | getSession, set currentUser. |
 | `setupAuthListener()` | onAuthStateChange: reload or clear. |
-| `reloadForUser()` | Load order, fetch messages, replaceFeedWithList, subscribe realtime, restore scroll. |
-| `clearMessages()` | Clear feed-inner, show empty, reset objectCount. |
+| `reloadForUser()` | Load order, fetch objects, replaceFeedWithList, subscribe realtime, restore scroll. |
+| `clearObjects()` | Clear feed-inner, show empty, reset objectCount. |
 | `signIn()` | signInWithOAuth Google. |
 | `signOut()` | signOut. |
 | `copyUserId()` | Copy currentUser.id to clipboard. |
@@ -289,21 +289,21 @@ Short description of every top-level constant, variable, and function in the app
 ### Load and feed
 | Function | Description |
 |----------|-------------|
-| `fetchMessagesList()` | Supabase entries for currentChannel, sorted by currentObjectOrder. |
-| `fetchMessagesListForChannel(ch)` | Entries for given channel. |
-| `loadMessages()` | Fetch list, ensureLoaderMinDisplay, then renderInitialMessages if any. |
+| `fetchObjectsList()` | Supabase entries for currentChannel, sorted by currentObjectOrder. |
+| `fetchObjectsListForChannel(ch)` | Entries for given channel. |
+| `loadObjects()` | Fetch list, ensureLoaderMinDisplay, then renderInitialObjects if any. |
 | `replaceFeedWithList(list)` | ensureLoaderMinDisplay, build rows, replace feed-inner. |
 | `replaceFeedWithListInto(list, targetFeedInner)` | Render list into given feed-inner (e.g. secondary). |
-| `renderInitialMessages(list)` | hideEmpty, createObjectRow for each, append fragment. |
+| `renderInitialObjects(list)` | hideEmpty, createObjectRow for each, append fragment. |
 | `sortObjectsByOrder(list, order)` | Sort list by order array (IDs). |
 | `hideEmptyInFeed(feedInnerEl)` | Remove empty state from feed. |
-| `showEmptyIfNoMessages()` | Append emptyEl to feed-inner if no .obj. |
+| `showEmptyIfNoObjects()` | Append emptyEl to feed-inner if no .obj. |
 
 ### Realtime
 | Function | Description |
 |----------|-------------|
 | `subscribeRealtimeAll()` | Subscribe to entries INSERT/UPDATE per channel. |
-| `updateObjectRowMessage(objId, messageValue)` | Update .obj-text for row (primary or secondary feed). |
+| `updateObjectRowText(objId, textValue)` | Update .obj-text for row (primary or secondary feed). |
 | `findObjectRowTextEl(objId)` | Return .obj-text element for id (either feed). |
 | `findObjectRowEl(objId)` | Return .obj row element for id (either feed). |
 | `onUpdateForChannel(ch, row)` | Handle realtime UPDATE: update row text or clear remote doppelganger. |
@@ -361,12 +361,12 @@ Short description of every top-level constant, variable, and function in the app
 | `applyFieldPrefsUI()` | Set #field-time and #field-author checked from fieldPrefs. |
 | `loadFieldPrefsForCurrentChannel()` | Load view prefs from Supabase or localStorage; apply. |
 | `saveFieldPrefsForCurrentChannel()` | Save fieldPrefs to localStorage and Supabase views. |
-| `applyFieldPrefsToMessages()` | Set .obj-time and .obj-sender display; applyFieldPrefsUI. |
+| `applyFieldPrefsToObjects()` | Set .obj-time and .obj-sender display; applyFieldPrefsUI. |
 
 ### Render
 | Function | Description |
 |----------|-------------|
-| `createMsgHeaderRow()` | Table header row (Time, Author, Message, Actions). |
+| `createObjectHeaderRow()` | Table header row (Time, Author, Value, Actions). |
 | `createObjectRow(obj, isNew, options)` | Build one .obj row (time, sender, text, actions, checkbox). |
 | `appendMsg(msg, isNew)` | createObjectRow and append; showEmptyIfNoMessages if needed. |
 | `setupTouchDragHandlers()` | One-time setup for touch long-press drag. |
@@ -385,11 +385,11 @@ Short description of every top-level constant, variable, and function in the app
 |----------|-------------|
 | `send()` | Send input.value via sendText. |
 | `sendText(text)` | Insert or update entry, clear input, update UI. |
-| `deleteSingleMessage(id)` | Delete one entry, remove row. |
-| `moveSingleMessage(id, targetChannel)` | Update entry channel, optionally animate. |
-| `exportSingleMessage(id)` | Export one message as file. |
-| `animateMessageToTab(rowEl, tabEl, onDone)` | Animate row flying to tab. |
-| `animateMessageToView(rowEl, targetFeedEl, onDone)` | Animate row flying to feed (e.g. secondary). |
+| `deleteSingleObject(id)` | Delete one entry, remove row. |
+| `moveSingleObject(id, targetChannel)` | Update entry channel, optionally animate. |
+| `exportSingleObject(id)` | Export one object as file. |
+| `animateObjectToTab(rowEl, tabEl, onDone)` | Animate row flying to tab. |
+| `animateObjectToView(rowEl, targetFeedEl, onDone)` | Animate row flying to feed (e.g. secondary). |
 
 ### DnD (feed reorder)
 | Function | Description |

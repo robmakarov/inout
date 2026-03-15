@@ -4,6 +4,26 @@
 
 ---
 
+## How optimal the code is (short assessment)
+
+**Overall:** Good for a ~5.7k-line single-file app. No major waste; a few hot paths could be tuned if feeds grow very large (100s of rows) or low-end devices struggle.
+
+| Area | Status | Notes |
+|------|--------|--------|
+| **Backend** | Good | One subscription per channel; minimal column select; no duplicate fetch on channel switch; order/views batched. Add DB indexes if missing (see checklist). |
+| **Scroll** | Good | Scroll save debounced 200ms; listener passive; atBottom/scroll btn updated on scroll. |
+| **Feed render** | Good | replaceFeedWithList uses DocumentFragment + replaceChildren; no innerHTML for full feed. |
+| **Realtime** | Good | Subscriptions cleaned on teardown; suppress flags avoid feedback loops. |
+| **DnD dragover** | Medium | processFeedDragover runs on every dragover event (no RAF/throttle); feedDragoverRaf/feedDragoverLast exist but are only cleared on dragend, not used to throttle. With many rows, consider RAF or 16ms throttle. |
+| **Event listeners** | Medium | ~15+ listeners per row (dragstart, dragend, touch, click, actions, checkbox). Fine up to ~100 rows; for 500+ rows, delegated listeners on feed would reduce memory and attach cost. |
+| **DOM queries in hot paths** | Medium | processFeedDragover and updateEditingRowFromInput do querySelectorAll('.obj') each time. Cached node lists would go stale (rows reorder); acceptable unless profiling shows cost. |
+| **CSS** | Good | contain:layout style on feed; font-display and preconnect in use. content-visibility on rows not applied (could help very long feeds). |
+| **Bundle** | N/A | No build; single app.js. Tree-shaking not applicable. |
+
+**Summary:** Optimized enough for typical use (dozens of objects, multiple channels). For very large feeds or weak devices, add dragover throttle and consider event delegation or content-visibility.
+
+---
+
 ## ⚠️ DATA RISK (warn before doing)
 
 - **Backend**: Changing Supabase queries, RLS, or schema can **lose or hide data**, break realtime, or change who sees what. Always say: *"⚠️ Data risk: …"* before changing.

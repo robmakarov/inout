@@ -22,9 +22,9 @@ Reference for humans and AI: which DOM elements and JS objects exist, under what
 |----|---------|-------------------------|--------------------------------|
 | `#app` | Main app container (header, manage bar, feed, input) | Always visible after load | — |
 | `#app-loader` | Full-screen splash (loader animation) | `display:none` in CSS; not used as visible splash in current flow | — |
-| `#feed` | Scrollable message list container | — | Scroll listener: updates `channelScroll`, `atBottom`, scroll btn. `scrollBottom()`, scroll restore in init/reloadForUser. |
-| `#feed-inner` | Wrapper for message rows and `#empty` | — | `replaceFeedWithList()`, `renderInitialMessages()`, `applyMessageOrderToDOM()`, `showEmptyIfNoMessages()` append/clear children. |
-| `#empty` | Empty state (loader + “Nothing yet.”) | Shown when feed has no `.obj` children; removed when any message is added | `showEmptyIfNoMessages()` appends to feed-inner; `createObjectRow()` / `replaceFeedWithList()` remove when adding rows. |
+| `#feed` | Scrollable object list container | — | Scroll listener: updates `channelScroll`, `atBottom`, scroll btn. `scrollBottom()`, scroll restore in init/reloadForUser. |
+| `#feed-inner` | Wrapper for object rows and `#empty` | — | `replaceFeedWithList()`, `renderInitialObjects()`, `applyObjectOrderToDOM()`, `showEmptyIfNoObjects()` append/clear children. |
+| `#empty` | Empty state (loader + “Nothing yet.”) | Shown when feed has no `.obj` children; removed when any object row is added | `showEmptyIfNoMessages()` appends to feed-inner; `createObjectRow()` / `replaceFeedWithList()` remove when adding rows. |
 | `#manage-bar` | Select / Delete / Move / Export / View bar | — | `setSelectMode()` toggles visibility of `#manage-actions`. |
 | `#input-area` | Tabs + input + tools | — | — |
 
@@ -40,9 +40,9 @@ Reference for humans and AI: which DOM elements and JS objects exist, under what
 
 | ID | Purpose | Conditions | Functions |
 |----|---------|------------|-----------|
-| `#msg-input` | Message textarea | — | `input.value`, `autoResize()`, `sendBtn.disabled` tied to content; `saveInputGlobal()` / restore; focus helpers. |
+| `#msg-input` | Main input (object value) | — | `input.value`, `autoResize()`, `sendBtn.disabled` tied to content; `saveInputGlobal()` / restore; focus helpers. |
 | `#clear-input` | Clear textarea button | — | `updateClearInputBtn()` toggles disabled. |
-| `#send-btn` | Send message button | — | Disabled when input empty; click sends via Supabase `entries.insert`. |
+| `#send-btn` | Send button | — | Disabled when input empty; click sends via Supabase `entries.insert`. |
 | `#tabs` | Channel tab strip | — | `renderTabs()` fills; tab click calls `switchChannel(ch)`. |
 
 ### Select mode and view
@@ -52,7 +52,7 @@ Reference for humans and AI: which DOM elements and JS objects exist, under what
 | `#select-toggle` | Toggle Select mode | — | `setSelectMode()`; `selectToggle.classList.toggle('active', selectMode)`. |
 | `#select-extra` | All / None buttons wrapper | — | `selectExtra.classList.toggle('show', selectMode)`. |
 | `#select-all`, `#select-none` | Select all / none | — | Update `selectedIds` and row `.obj-selected` / checkbox. |
-| `#delete-selected`, `#move-target`, `#move-selected`, `#export-tab` | Bulk actions | — | Delete/move/export selected message IDs. |
+| `#delete-selected`, `#move-target`, `#move-selected`, `#export-tab` | Bulk actions | — | Delete/move/export selected object IDs. |
 | `#view-toggle`, `#view-menu` | View dropdown | — | Toggle menu open. |
 | `#field-time`, `#field-author` | Time/Author checkboxes | — | `loadFieldPrefsForCurrentChannel()`, `applyFieldPrefsUI()` set checked; change handlers call `saveFieldPrefsForCurrentChannel()`. |
 
@@ -70,7 +70,7 @@ Reference for humans and AI: which DOM elements and JS objects exist, under what
 
 | ID | Purpose | Conditions | Functions |
 |----|---------|------------|-----------|
-| `#scroll-btn` | “↓ new messages” button | Visible when not at bottom | `scrollBtn.classList.add/remove('visible')` from scroll handler and `scrollBottom()`. |
+| `#scroll-btn` | “↓ new objects” button | Visible when not at bottom | `scrollBtn.classList.add/remove('visible')` from scroll handler and `scrollBottom()`. |
 | `#toast` | Toast message | `toastEl.classList.add('show')` with timeout then remove | `toast(msg, dur)`. |
 
 ---
@@ -87,22 +87,22 @@ Reference for humans and AI: which DOM elements and JS objects exist, under what
 
 | Class or attribute | When added | When removed | Set by / effect |
 |--------------------|------------|--------------|------------------|
-| `.obj` | Every message row | — | `createObjectRow()`. |
+| `.obj` | Every object row | — | `createObjectRow()`. |
 | `data-id` | Row created | — | Entry `id`; used for order, selection, delete/move. |
 | `.obj-selected` | Checkbox checked or drag-select over row | Checkbox unchecked, select-none, or drop | Selection state; `selectedIds` sync. |
-| `.obj-editing` | User clicks row to edit | Cancel or send | One row at a time; `editingObjectId`; input shows message text. |
+| `.obj-editing` | User clicks row to edit | Cancel or send | One row at a time; `editingObjectId`; input shows object text. |
 | `.obj.dragging` | Drag started (mouse or touch) | Drag ended | Row is being reordered; opacity 0.35. |
 | `.obj-drag-target` | Cursor over feed at drop position; this row is the target | Cursor leaves or drop | `processFeedDragover()`; content (time, sender, text) shifts 30px right. |
 | `.obj-drag-over` | (Legacy; currently only removed, not added) | dragend / drop / dragleave | — |
-| `.new-flash` | New message inserted (realtime) | After 800ms | `setTimeout(… remove, 800)`. |
+| `.new-flash` | New object inserted (realtime) | After 800ms | `setTimeout(… remove, 800)`. |
 
-### Message row children (classes)
+### Object row children (classes)
 
 | Class | Purpose | Visibility / conditions | Functions |
 |-------|---------|--------------------------|-----------|
-| `.obj-time` | Timestamp | `fieldPrefs.showTime`; in createMsgRow and `applyFieldPrefsToMessages()` | `formatTime()`; display toggled by view prefs. |
+| `.obj-time` | Timestamp | `fieldPrefs.showTime`; in createObjectRow and `applyFieldPrefsToObjects()` | `formatTime()`; display toggled by view prefs. |
 | `.obj-sender` | Author name | Main feed always hidden; other channels by `fieldPrefs.showAuthor` | Same apply logic. |
-| `.obj-text` | Message body | Always visible | Linkify; click to edit. |
+| `.obj-text` | Primary property (text) | Always visible | Linkify; click to edit. |
 | `.obj-actions` | Del / Move / Exp / Copy | Visible on hover (or when `body.dnd-active` disabled); always in `.obj-editing` | — |
 | `.obj-select-wrap`, `.obj-select` | Checkbox for selection | Visible in select mode or on hover; `.obj-select-wrap` opacity 0 by default | `setSelectMode()`; checkbox change updates `selectedIds`. |
 | `.obj-checkbox-zone` | Wrapper for checkbox (touch/click target) | Same as select-wrap | Drag-select logic. |
@@ -114,7 +114,7 @@ Reference for humans and AI: which DOM elements and JS objects exist, under what
 | `.tab` | Each channel tab | — | `renderTabs()`. |
 | `data-channel` | Channel name | — | `switchChannel(ch)` on click. |
 | `.tab-active` | Current channel | Channel switch | `updateTabsUI()`. |
-| `.tab-drop-target` | Dragging message over tab for move | dragleave / drop | Tab dragover/dragleave. |
+| `.tab-drop-target` | Dragging object row over tab for move | dragleave / drop | Tab dragover/dragleave. |
 | `.tab-badge` | Unread count | — | `updateTabBadge(ch)` adds `.show` when count > 0. |
 
 ---
@@ -134,7 +134,7 @@ Reference for humans and AI: which DOM elements and JS objects exist, under what
 |----------|------|---------|-------------------|
 | `currentChannel` | string | Active tab channel name | `switchChannel(ch)`; `restoreLastChannel()`; load/save from localStorage. |
 | `channels` | string[] | List of channel names (main first) | `loadChannelsList()`; `createChannelFromModal()`; `deleteChannel()`. |
-| `currentMessageOrder` | number[] | Ordered entry IDs for current channel | `loadMessageOrderForCurrentChannel()`; `applyMessageOrderToDOM()`; `recomputeOrderFromDOM()`; `saveMessageOrderForCurrentChannel()`. |
+| `currentObjectOrder` | number[] | Ordered entry IDs for current channel | `loadObjectOrderForCurrentChannel()`; `applyObjectOrderToDOM()`; `recomputeOrderFromDOM()`; `saveObjectOrderForCurrentChannel()`. |
 | `channelScroll` | Map<string, number> | Per-channel scroll position | Scroll listener; `loadScrollState()`; `saveScrollState()`; `switchChannel()` saves; init/reloadForUser restore. |
 | `channelSubs` | Map | Realtime subscriptions per channel | `subscribeRealtimeAll()`; unsubscribe on channel switch. |
 | `viewSub`, `orderSub` | Realtime subscription | Views and order sync | `subscribeViewRealtime()`, `subscribeOrderRealtime()`. |
@@ -149,7 +149,7 @@ Reference for humans and AI: which DOM elements and JS objects exist, under what
 
 | Variable | Type | Meaning | Set by / read by |
 |----------|------|---------|-------------------|
-| `selectedIds` | Set<number> | Selected message IDs | Checkbox and drag-select; select-all/none; delete/move/export. |
+| `selectedIds` | Set<number> | Selected object IDs | Checkbox and drag-select; select-all/none; delete/move/export. |
 | `selectMode` | boolean | Select mode on/off | `setSelectMode(on)`; `updateSelectionUI()` may turn on if any selected. |
 | `selectModeAutoOn` | boolean | Auto-enter select when first item selected | — |
 | `dragSelectActive`, `dragSelectStarted`, `dragSelectJustEnded`, `dragSelectToggledByTouch` | booleans | Drag-select state (prevent accidental toggle) | Checkbox-zone and row drag-select handlers. |
@@ -176,11 +176,11 @@ Reference for humans and AI: which DOM elements and JS objects exist, under what
 
 | Variable | Type | Meaning | Set by / read by |
 |----------|------|---------|-------------------|
-| `msgCount` | number | Number of messages in feed | `replaceFeedWithList()`, `renderInitialMessages()`, `createObjectRow()` (emptyEl remove). |
+| `objectCount` | number | Number of objects in feed | `replaceFeedWithList()`, `renderInitialObjects()`, `createObjectRow()` (emptyEl remove). |
 | `atBottom` | boolean | Feed scrolled to bottom | Scroll listener, `scrollBottom()`, `isNearBottom()`. |
-| `emptyEl` | element | Reference to `#empty` | `showEmptyIfNoMessages()`, `createObjectRow()`. |
+| `emptyEl` | element | Reference to `#empty` | `showEmptyIfNoObjects()`, `createObjectRow()`. |
 | `feedInner`, `feedEl` | elements | References to `#feed-inner`, `#feed` | All feed DOM updates. |
-| `seenIds` | Set | Message IDs already rendered (avoid duplicates) | `createObjectRow()`; cleared in `replaceFeedWithList()`. |
+| `seenIds` | Set | Object IDs already rendered (avoid duplicates) | `createObjectRow()`; cleared in `replaceFeedWithList()`. |
 | `editingObjectId` | number \| null | Row being edited | Click row to edit; cancel/send clear. |
 | `suppressNextOrderApply`, `suppressNextViewApply`, `suppressOrderApplyUntil` | boolean, number | Avoid feedback loops from realtime | Order/view save and subscribe. |
 
@@ -205,12 +205,12 @@ Reference for humans and AI: which DOM elements and JS objects exist, under what
 | Function | What it does (elements / state) |
 |----------|----------------------------------|
 | `init()` | Loads channels, scroll, auth, tabs, view prefs, messages; restores scroll; calls `markLoaded()`. |
-| `loadFieldPrefsForCurrentChannel()` | Fetches view from Supabase (or localStorage); sets `fieldPrefs`; updates `#field-time`, `#field-author`; calls `applyFieldPrefsToMessages()`. |
-| `applyFieldPrefsToMessages()` | For each `.obj`: sets `.obj-time` and `.obj-sender` display from `fieldPrefs`; calls `applyFieldPrefsUI()`. |
+| `loadFieldPrefsForCurrentChannel()` | Fetches view from Supabase (or localStorage); sets `fieldPrefs`; updates `#field-time`, `#field-author`; calls `applyFieldPrefsToObjects()`. |
+| `applyFieldPrefsToObjects()` | For each `.obj`: sets `.obj-time` and `.obj-sender` display from `fieldPrefs`; calls `applyFieldPrefsUI()`. |
 | `applyFieldPrefsUI()` | Sets `#field-time`.checked and `#field-author`.checked (and author disabled on main) from `fieldPrefs`. |
 | `setSelectMode(on)` | Sets `selectMode`; toggles `#select-toggle.active`, `#select-extra.show`, `body.select-mode`, `#manage-actions.visible`. |
 | `updateSelectionUI()` | Enables/disables delete/move/export; may call `setSelectMode(true)` if any selected. |
-| `showEmptyIfNoMessages()` | If no `.obj` in feed-inner, appends `emptyEl` to feed-inner (with fadin if re-added). |
+| `showEmptyIfNoObjects()` | If no `.obj` in feed-inner, appends `emptyEl` to feed-inner (with fadin if re-added). |
 | `processFeedDragover(ev)` | Computes drop target; adds `.obj-drag-target` to target row; shows `feedDropIndicatorEl`; may move dragging row (insertBefore/appendChild). |
 | `markLoaded()` | Adds `body.loaded`; focuses input. |
 
@@ -221,7 +221,7 @@ Reference for humans and AI: which DOM elements and JS objects exist, under what
 - **entries**: select (feed), insert (send), update (edit), delete. Realtime INSERT/UPDATE per channel.
 - **channel_members**: select (who can see channel), insert (share). Used for RLS and sharing UI.
 - **views**: select (order + showTime/showAuthor), upsert (save order and view prefs). Realtime for cross-device.
-- **message_orders**: optional legacy order; fallback in `loadMessageOrderForCurrentChannel()`.
+- **message_orders**: optional legacy order; fallback in `loadObjectOrderForCurrentChannel()`.
 - **action_log**: optional insert for logging (e.g. view changes).
 
 All access is via `sb` (Supabase client). RLS enforces: entries visible if user is sender or in `channel_members`; views and order by `user_id`.

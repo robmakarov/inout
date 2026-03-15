@@ -53,7 +53,7 @@ One-line purpose of each function in `index.html`. Use to find the right functio
 |----------|---------|
 | `updateEditingRowHighlight()` | Add/remove .obj-editing on row matching editingObjectId. |
 | `cancelEditingMode(clearInput)` | Clear editingObjectId, remove msg-editing, restore placeholder. |
-| `focusMessageInput()` | input.focus(). |
+| `focusMainInput()` | input.focus(). |
 | `setupFocusOnFirstInteraction()` | Focus input on first tap/click outside modals. |
 
 ---
@@ -69,12 +69,12 @@ One-line purpose of each function in `index.html`. Use to find the right functio
 | `restoreLastChannel()` | Set currentChannel from localStorage. |
 | `loadChannelsList()` | Load channels array from localStorage. |
 | `saveChannelsList()` | Save channels to localStorage. |
-| `loadMessageOrderForCurrentChannel()` | Load order (+ fieldPrefs from views) from Supabase or fallbacks. |
-| `saveMessageOrderForCurrentChannel()` | Save currentObjectOrder to local + Supabase (message_orders + views). |
+| `loadObjectOrderForCurrentChannel()` | Load order (+ fieldPrefs from views) from Supabase or fallbacks. |
+| `saveObjectOrderForCurrentChannel()` | Save currentObjectOrder to local + Supabase (message_orders + views). |
 | `loadOrderFromLocal()` | Return order array from localStorage for current user+channel. |
 | `saveOrderToLocal()` | Write currentObjectOrder to localStorage. |
 | `hideEmpty()` | Remove emptyEl from DOM. |
-| `updateMsgCount()` | Set msgCountEl text from msgCount. |
+| `updateObjectCount()` | Set objectCountEl text from objectCount. |
 | `setupTabs()` | renderTabs(). |
 | `updateTabsUI()` | Set .tab-active on current channel tab. |
 | `renderTabs()` | Build tab buttons for each channel, wire click and drag. |
@@ -91,7 +91,7 @@ One-line purpose of each function in `index.html`. Use to find the right functio
 | `refreshAuth()` | getSession, set currentUser. |
 | `setupAuthListener()` | onAuthStateChange: reload or clear. |
 | `reloadForUser()` | Load order, fetch messages, replaceFeedWithList, subscribe realtime, restore scroll. |
-| `clearMessages()` | Clear feed-inner, show empty, reset msgCount. |
+| `clearObjects()` | Clear feed-inner, show empty, reset objectCount. |
 | `signIn()` | signInWithOAuth Google. |
 | `signOut()` | signOut. |
 | `copyUserId()` | Copy currentUser.id to clipboard. |
@@ -106,11 +106,11 @@ One-line purpose of each function in `index.html`. Use to find the right functio
 
 | Function | Purpose |
 |----------|---------|
-| `fetchMessagesList()` | Supabase entries for currentChannel, sorted by currentObjectOrder. |
-| `loadMessages()` | Fetch list, ensureLoaderMinDisplay, then renderInitialMessages if any. |
+| `fetchObjectsList()` | Supabase entries for currentChannel, sorted by currentObjectOrder. |
+| `loadObjects()` | Fetch list, ensureLoaderMinDisplay, then renderInitialObjects if any. |
 | `replaceFeedWithList(list)` | ensureLoaderMinDisplay, build rows, replace feed-inner content. |
 | `subscribeRealtimeAll()` | Subscribe to entries INSERT/UPDATE per channel. |
-| `updateObjectRowMessage(msgId, text)` | Update .obj-text for row with data-id. |
+| `updateObjectRowText(msgId, text)` | Update .obj-text for row with data-id. |
 | `onUpdateForChannel(ch, row)` | Handle realtime UPDATE: update row text or cancel edit. |
 | `subscribeOrderRealtime()` | message_orders changes → reload order, apply to DOM. |
 | `subscribeViewRealtime()` | views changes → update order and/or fieldPrefs, apply. |
@@ -124,19 +124,19 @@ One-line purpose of each function in `index.html`. Use to find the right functio
 | `hideDraftBubble()` | Hide draft bubble. |
 | `showClipboardBubble(text)` | Show clipboard paste bubble. |
 | `hideClipboardBubble()` | Hide clipboard bubble. |
-| `showEmptyIfNoMessages()` | Append emptyEl to feed-inner if no .obj. |
+| `showEmptyIfNoObjects()` | Append emptyEl to feed-inner if no .obj. |
 | `restoreInputGlobal()` | Restore input value from localStorage. |
 | `saveInputGlobal()` | Save input value to localStorage. |
 | `updateClearInputBtn()` | Enable/disable clear input button. |
 | `applyFieldPrefsUI()` | Set #field-time and #field-author checked from fieldPrefs. |
 | `loadFieldPrefsForCurrentChannel()` | Load view prefs from Supabase views or localStorage; apply to UI and messages. |
 | `saveFieldPrefsForCurrentChannel()` | Save fieldPrefs to localStorage and Supabase views. |
-| `applyFieldPrefsToMessages()` | Set .obj-time and .obj-sender display on all rows from fieldPrefs; applyFieldPrefsUI. |
+| `applyFieldPrefsToObjects()` | Set .obj-time and .obj-sender display on all rows from fieldPrefs; applyFieldPrefsUI. |
 | `setupTouchDragHandlers()` | One-time setup for touch long-press drag. |
 | `createObjectRow(msg, isNew)` | Build one .obj row (time, sender, text, actions, checkbox); apply fieldPrefs. |
-| `appendMsg(msg, isNew)` | createObjectRow and append to feed-inner; showEmptyIfNoMessages if needed. |
-| `sortMessagesByOrder(list, order)` | Sort message list by order array (IDs). |
-| `renderInitialMessages(list)` | hideEmpty, createObjectRow for each, append fragment. |
+| `appendObject(msg, isNew)` | createObjectRow and append to feed-inner; showEmptyIfNoObjects if needed. |
+| `sortObjectsByOrder(list, order)` | Sort message list by order array (IDs). |
+| `renderInitialObjects(list)` | hideEmpty, createObjectRow for each, append fragment. |
 | `recomputeOrderFromDOM()` | Set currentObjectOrder from DOM .obj order. |
 | `applyObjectOrderToDOM()` | Reorder .obj nodes to match currentObjectOrder. |
 | `flipAnimateShift(...)` | No-op (was FLIP animation; disabled). |
@@ -164,10 +164,10 @@ One-line purpose of each function in `index.html`. Use to find the right functio
 |----------|---------|
 | `send()` | Send input.value via sendText. |
 | `sendText(text)` | Insert entry, clear input, update UI. |
-| `deleteSingleMessage(id)` | Delete one entry; remove row. |
-| `animateMessageToTab(rowEl, tabEl, onDone)` | Animate row flying to tab (move UX). |
-| `moveSingleMessage(id, targetChannel)` | Update entry channel, optionally animate. |
-| `exportSingleMessage(id)` | Export one message as file. |
+| `deleteSingleObject(id)` | Delete one entry; remove row. |
+| `animateObjectToTab(rowEl, tabEl, onDone)` | Animate row flying to tab (move UX). |
+| `moveSingleObject(id, targetChannel)` | Update entry channel, optionally animate. |
+| `exportSingleObject(id)` | Export one message as file. |
 | (Export all) | Handled in export button: fetch entries, build file, download. |
 
 ---

@@ -18,10 +18,10 @@ High-level order of operations and data flow. All code is in `index.html`.
    - **setupAuthListener()** — on auth change, reload or clear.
    - **setupTabs()** → renderTabs().
    - **restoreLastChannel()** — currentChannel from localStorage.
-   - **loadMessageOrderForCurrentChannel()** — order + fieldPrefs from Supabase `views` (or fallbacks).
+   - **loadObjectOrderForCurrentChannel()** — order + fieldPrefs from Supabase `views` (or fallbacks).
    - **loadFieldPrefsForCurrentChannel()** — view prefs from Supabase `views` (or localStorage); updates checkboxes and applies to messages.
    - **refreshMoveTargets()**.
-   - If currentUser: **loadMessages()** (await ensureLoaderMinDisplay, then renderInitialMessages or leave empty), **subscribeRealtimeAll()**, **setupDraftChannel()**, **subscribeOrderRealtime()**, **subscribeViewRealtime()**, **subscribeActionLog()**.
+   - If currentUser: **loadObjects()** (await ensureLoaderMinDisplay, then renderInitialMessages or leave empty), **subscribeRealtimeAll()**, **setupDraftChannel()**, **subscribeOrderRealtime()**, **subscribeViewRealtime()**, **subscribeActionLog()**.
    - **setupPresence()**.
    - **Restore scroll** — from channelScroll for currentChannel (double rAF), else scrollBottom().
    - **cleanupAuthHash()**, **setupFullscreenOnFirstTap()**, focus input, **setupFocusOnFirstInteraction()**.
@@ -44,7 +44,7 @@ So: **channels and scroll** load first, then **auth**, then **tabs and last chan
 
 - **subscribeRealtimeAll()** — Unsubscribes all channelSubs, then for each channel subscribes to `entries` INSERT/UPDATE (postgres_changes). On INSERT → **onInsertForChannel(ch, payload)** (append or reorder). On UPDATE → **onUpdateForChannel** (update row text).
 - **subscribeOrderRealtime()** — `message_orders` for current user; on change loads order and applies to DOM.
-- **subscribeViewRealtime()** — `views` for current user; on change updates `currentMessageOrder` and/or `fieldPrefs`, saves to local, applies to DOM and messages.
+- **subscribeViewRealtime()** — `views` for current user; on change updates `currentObjectOrder` and/or `fieldPrefs`, saves to local, applies to DOM and messages.
 - **subscribeActionLog()** — `action_log` INSERTs for current user (optional).
 - **setupDraftChannel()** — Realtime presence/broadcast for draft text; **teardownDraftChannel()** on sign-out.
 - On **switchChannel(ch)** we do **not** resubscribe entries (all channels already subscribed). We call **reloadForUser()** which replaces feed and re-subscribes realtime (subscribeRealtimeAll again). Order and view subs are global (user-scoped), not per-channel.
@@ -53,20 +53,20 @@ So: **channels and scroll** load first, then **auth**, then **tabs and last chan
 
 ## 4. Data flow (Supabase ↔ state ↔ DOM)
 
-- **Entries (messages)**  
-  - **Read**: `fetchMessagesList()` → Supabase `entries` for currentChannel (and user for main) → sorted by `currentMessageOrder` → **renderInitialMessages(list)** or **replaceFeedWithList(list)** → **createMsgRow()** per message.  
-  - **Write**: Send → `sb.from('entries').insert(...)`. Edit → `.update({ text })`. Delete → `.delete().in('id', ids)`.  
+- **Entries (objects)**
+  - **Read**: `fetchObjectsList()` → Supabase `entries` for currentChannel (and user for main) → sorted by order → **renderInitialMessages(list)** or **replaceFeedWithList(list)** → **createObjectRow()** per object.
+  - **Write**: Send → `sb.from('entries').insert(...)`. Edit → `.update({ text })`. Delete → `.delete().in('id', ids)`.
   - **Realtime**: INSERT/UPDATE → onInsertForChannel / onUpdateForChannel → DOM update or append.
 
 - **Order**  
-  - **Read**: `loadMessageOrderForCurrentChannel()` → `views.config.order` (or message_orders, or localStorage).  
-  - **Write**: Reorder (DnD or move) → **recomputeOrderFromDOM()** or explicit order → **saveMessageOrderForCurrentChannel()** → localStorage + Supabase `message_orders` + **views** (upsert config.order).  
+  - **Read**: `loadObjectOrderForCurrentChannel()` → `views.config.order` (or message_orders, or localStorage).  
+  - **Write**: Reorder (DnD or move) → **recomputeOrderFromDOM()** or explicit order → **saveObjectOrderForCurrentChannel()** → localStorage + Supabase `message_orders` + **views** (upsert config.order).  
   - **Realtime**: `subscribeOrderRealtime` / **subscribeViewRealtime** → reload order, apply to DOM.
 
 - **View prefs (Time/Author)**  
   - **Read**: `loadFieldPrefsForCurrentChannel()` → Supabase `views.config` (showTime, showAuthor) or localStorage.  
   - **Write**: Checkbox change → **saveFieldPrefsForCurrentChannel()** → localStorage + Supabase `views` upsert.  
-  - **Realtime**: **subscribeViewRealtime** → update fieldPrefs, **applyFieldPrefsToMessages()**, **applyFieldPrefsUI()**.
+  - **Realtime**: **subscribeViewRealtime** → update fieldPrefs, **applyFieldPrefsToObjects()**, **applyFieldPrefsUI()**.
 
 - **Scroll**  
   - **Read**: On init/reload: `channelScroll.get(currentChannel)` (from localStorage via loadScrollState).  
@@ -77,14 +77,14 @@ So: **channels and scroll** load first, then **auth**, then **tabs and last chan
 ## 5. Channel switch flow
 
 - **switchChannel(ch)** — If same channel, return. Save current feed scroll to channelScroll and **saveScrollState()**. Set currentChannel, persist to localStorage. Update tabs UI, badges, move targets. **loadFieldPrefsForCurrentChannel()** for new channel. If currentUser: **ensureMembership().then(reloadForUser)**. Else **clearMessages()**.
-- **reloadForUser()** — loadMessageOrderForCurrentChannel, fetchMessagesList, **replaceFeedWithList(list)** (with ensureLoaderMinDisplay), subscribeRealtimeAll, restore scroll from channelScroll (or scrollBottom), applyFieldPrefsToMessages.
+- **reloadForUser()** — loadObjectOrderForCurrentChannel, fetchObjectsList, **replaceFeedWithList(list)** (with ensureLoaderMinDisplay), subscribeRealtimeAll, restore scroll from channelScroll (or scrollBottom), applyFieldPrefsToObjects.
 
 ---
 
 ## 6. Where state lives
 
 - **Server**: Supabase (entries, channel_members, views, message_orders, action_log). Realtime pushes changes to client.
-- **Client memory**: currentUser, currentChannel, channels, currentMessageOrder, fieldPrefs, channelScroll, selectedIds, selectMode, editingMessageId, etc. See **ELEMENTS.md** (root) for full list.
+- **Client memory**: currentUser, currentChannel, channels, currentObjectOrder, fieldPrefs, channelScroll, selectedIds, selectMode, editingObjectId, etc. See **ELEMENTS.md** (root) for full list.
 - **Client persistence**: localStorage (channels, current channel, input draft, field prefs, order backup, scroll, “was editing”). See **ELEMENTS.md** for keys.
 - **DOM**: Reflects state; updated by apply* and render* functions. No separate “store”; read from DOM when needed (e.g. order from .obj rows).
 
