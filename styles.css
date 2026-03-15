@@ -628,21 +628,22 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
 /* Realtime: DnD lines from other clients — above local indicator */
 .remote-dnd-line.feed-drop-origin{ z-index:10001; }
 .remote-dnd-line.feed-drop-indicator{ z-index:10002; }
-/* Realtime: origin ghost — same look as local spirit (tokens), left-edge cue */
-.remote-origin-ghost{
+/* Realtime: origin ghost container — row clones with .msg-origin-ghost (same as local) */
+.remote-origin-ghost-container{
   position:fixed;
   left:0;
   top:0;
   pointer-events:none;
   z-index:9997;
   box-sizing:border-box;
-  opacity:var(--dnd-ghost-opacity);
-  background:var(--dnd-spirit-bg);
-  border-radius:var(--dnd-spirit-radius);
-  box-shadow:inset 3px 0 0 var(--dnd-origin-line-color), var(--dnd-spirit-shadow);
   display:none;
+  flex-direction:column;
+  overflow:hidden;
+  box-shadow:inset 3px 0 0 var(--dnd-origin-line-color);
 }
-.remote-origin-ghost.visible{ display:block; }
+.remote-origin-ghost-container.visible{ display:flex; }
+.remote-origin-ghost-container .msg-origin-ghost{ flex:0 0 auto; }
+.remote-origin-ghost-container .msg-origin-ghost + .msg-origin-ghost{ margin-top:-2px; }
 /* Realtime: spirit — same look as local spirit (shares .msg-drag-spirit) */
 .remote-drag-spirit{
   display:none;

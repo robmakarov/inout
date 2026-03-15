@@ -1526,11 +1526,23 @@ function applyRemoteDndLines() {
   var spiritY = (typeof cursorY === 'number' && feedRect) ? Math.max(feedRect.top + 24, Math.min(feedRect.bottom - 24, cursorY)) : null;
   if (ghostRect && typeof spiritY === 'number' && feedRect) {
     var ghostTop = Math.max(feedRect.top, Math.min(feedRect.bottom - ghostRect.height, spiritY - ghostRect.height / 2));
-    if (!remoteGhostEl) {
-      remoteGhostEl = document.createElement('div');
-      remoteGhostEl.className = 'remote-origin-ghost';
-      remoteGhostEl.setAttribute('aria-hidden', 'true');
-      document.body.appendChild(remoteGhostEl);
+    if (!remoteGhostEl || !remoteGhostEl.classList.contains('remote-origin-ghost-container')) {
+      if (remoteGhostEl && remoteGhostEl.parentNode) remoteGhostEl.parentNode.removeChild(remoteGhostEl);
+      var ghostContainer = document.createElement('div');
+      ghostContainer.className = 'remote-origin-ghost-container';
+      ghostContainer.setAttribute('aria-hidden', 'true');
+      var orderedRows = [];
+      for (var gi = 0; gi < draggingIds.length; gi++) {
+        for (var g = 0; g < rows.length; g++) {
+          if (Number(rows[g].dataset.id) === draggingIds[gi]) {
+            orderedRows.push(rows[g]);
+            break;
+          }
+        }
+      }
+      for (var oi = 0; oi < orderedRows.length; oi++) ghostContainer.appendChild(createOriginGhostFromRow(orderedRows[oi]));
+      document.body.appendChild(ghostContainer);
+      remoteGhostEl = ghostContainer;
     }
     remoteGhostEl.style.left = feedRect.left + 'px';
     remoteGhostEl.style.width = ghostRect.width + 'px';
@@ -1545,17 +1557,39 @@ function applyRemoteDndLines() {
     var margin = 24;
     var spiritYVal = Math.max(feedRect.top + margin, Math.min(feedRect.bottom - margin, cursorY));
     var spiritX = feedRect.left + feedRect.width / 2;
-    if (!remoteSpiritEl) {
-      remoteSpiritEl = document.createElement('div');
-      remoteSpiritEl.className = 'msg-drag-spirit remote-drag-spirit';
-      remoteSpiritEl.setAttribute('aria-hidden', 'true');
-      remoteSpiritEl.style.minWidth = Math.min(280, feedRect.width - 24) + 'px';
-      remoteSpiritEl.style.minHeight = '32px';
-      document.body.appendChild(remoteSpiritEl);
+    var firstRow = null;
+    for (var si = 0; si < rows.length; si++) {
+      var rid = Number(rows[si].dataset.id);
+      if (Number.isFinite(rid) && draggingIds.indexOf(rid) >= 0) {
+        firstRow = rows[si];
+        break;
+      }
     }
-    remoteSpiritEl.style.left = spiritX + 'px';
-    remoteSpiritEl.style.top = spiritYVal + 'px';
-    remoteSpiritEl.classList.add('visible');
+    if (!remoteSpiritEl || !remoteSpiritEl.classList.contains('msg')) {
+      if (remoteSpiritEl && remoteSpiritEl.parentNode) remoteSpiritEl.parentNode.removeChild(remoteSpiritEl);
+      if (firstRow) {
+        remoteSpiritEl = firstRow.cloneNode(true);
+        remoteSpiritEl.classList.remove('dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
+        remoteSpiritEl.classList.add('msg', 'msg-drag-spirit', 'remote-drag-spirit');
+        remoteSpiritEl.removeAttribute('draggable');
+        remoteSpiritEl.setAttribute('aria-hidden', 'true');
+        remoteSpiritEl.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
+        remoteSpiritEl.style.width = (firstRow.offsetWidth || 280) + 'px';
+        document.body.appendChild(remoteSpiritEl);
+      } else {
+        remoteSpiritEl = document.createElement('div');
+        remoteSpiritEl.className = 'msg-drag-spirit remote-drag-spirit';
+        remoteSpiritEl.setAttribute('aria-hidden', 'true');
+        remoteSpiritEl.style.minWidth = '280px';
+        remoteSpiritEl.style.minHeight = '32px';
+        document.body.appendChild(remoteSpiritEl);
+      }
+    }
+    if (remoteSpiritEl) {
+      remoteSpiritEl.style.left = spiritX + 'px';
+      remoteSpiritEl.style.top = spiritYVal + 'px';
+      remoteSpiritEl.classList.add('visible');
+    }
   } else if (remoteSpiritEl) {
     remoteSpiritEl.classList.remove('visible');
   }
