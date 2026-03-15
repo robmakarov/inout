@@ -40,7 +40,7 @@ Reference for humans and AI: which DOM elements and JS objects exist, under what
 
 | ID | Purpose | Conditions | Functions |
 |----|---------|------------|-----------|
-| `#msg-input` | Main input (object value) | — | `input.value`, `autoResize()`, `sendBtn.disabled` tied to content; `saveInputGlobal()` / restore; focus helpers. |
+| `#object-input` | Main input (object value) | — | `input.value`, `autoResize()`, `sendBtn.disabled` tied to content; `saveInputGlobal()` / restore; focus helpers. |
 | `#clear-input` | Clear textarea button | — | `updateClearInputBtn()` toggles disabled. |
 | `#send-btn` | Send button | — | Disabled when input empty; click sends via Supabase `entries.insert`. |
 | `#tabs` | Channel tab strip | — | `renderTabs()` fills; tab click calls `switchChannel(ch)`. |

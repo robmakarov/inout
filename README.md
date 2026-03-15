@@ -102,7 +102,7 @@ Open `http://localhost:4173`. Supabase anon key and URL are in `index.html`; rep
 - **`#app`** — Main app shell (visible after load).
 - **`#feed`** — Scrollable object list container; `#feed-inner` holds rows.
 - **`#empty`** — Empty state (loader + “Nothing yet”) inside `#feed-inner`.
-- **`#msg-input`** — Main input (object value); Send button, clear button.
+- **`#object-input`** — Main input (object value); Send button, clear button.
 - **`#tabs`** — Channel tab strip (Main + custom).
 - **`#manage-bar`** — Select mode toolbar (Select, All, None, Delete, Move, Export, View).
 - **View menu** — Checkboxes “Time” and “Author” (`#field-time`, `#field-author`).

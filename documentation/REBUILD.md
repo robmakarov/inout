@@ -121,7 +121,7 @@ refreshAuth(): getSession → currentUser. setupAuthListener(): onAuthStateChang
 
 **Feed** — .feed-inner, #empty, .feed-drop-indicator (.visible). Row: .obj, data-id, .obj-time, .obj-sender, .obj-text (doppelganger + .obj-remote-edit-badge), .obj-checkbox-zone, .obj-select-wrap, .obj-select, .obj-actions, .obj-action-btn. States: .obj-selected, .obj-editing, .obj-drag-target, .dragging, .new-flash, .obj-dnd-just-dropped, .obj-remote-reorder.
 
-**Input** — #msg-input, #send-btn, #clear-input, #clipboard-bubble, #draft-bubble, #log-action-btn, #log-dropup-panel.
+**Input** — #object-input, #send-btn, #clear-input, #clipboard-bubble, #draft-bubble, #log-action-btn, #log-dropup-panel.
 
 **Modals** — #user-modal-backdrop, #user-modal; #channel-modal-backdrop, #channel-modal (#cm-name, #cm-self, #cm-others, #cm-create).
 

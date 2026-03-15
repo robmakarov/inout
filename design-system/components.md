@@ -37,7 +37,7 @@ States: .obj-selected, .obj-editing, .obj-drag-target, .obj-drag-nudge-right, .n
 .tab — .tab-active, .tab-secondary-open (open in right panel; tooltip “Right panel”), .tab-shared, .tab-badge, .tab-new, .tab-close, .tab-drop-target
 
 ## Input
-#input-area (no tabs; tabs are in #nav), #clipboard-bubble, #draft-bubble, .draft-btn, .input-wrap, .input-tools, #clipboard-button, #log-action-btn (.error-signal), #log-dropup-panel (.open). **Composer:** .composer (single bar: input + send), .composer-input-wrap, #msg-input, #msg-input-count (.composer-count), .clear-input-btn, #send-btn (.composer-send). Main input is used for both creating new objects and editing; when editing, typing updates the object row in the view in realtime.
+#input-area (no tabs; tabs are in #nav), #clipboard-bubble, #draft-bubble, .draft-btn, .input-wrap, .input-tools, #clipboard-button, #log-action-btn (.error-signal), #log-dropup-panel (.open). **Composer:** .composer (single bar: input + send), .composer-input-wrap, #object-input, #object-input-count (.composer-count), .clear-input-btn, #send-btn (.composer-send). Main input is used for both creating new objects and editing; when editing, typing updates the object row in the view in realtime.
 
 ## Overlays
 #scroll-btn (.visible), #toast (.show)
@@ -47,4 +47,4 @@ States: .obj-selected, .obj-editing, .obj-drag-target, .obj-drag-nudge-right, .n
 #channel-modal-backdrop + #channel-modal: .cm-title, .cm-field, .cm-btn, .cm-btn-primary, #cm-name, #cm-cancel, #cm-create
 
 ## Primitives
-Buttons: .manage-btn, .um-btn, .um-btn-primary, .cm-btn, .draft-btn, .obj-action-btn. Inputs: .cm-input, #msg-input.
+Buttons: .manage-btn, .um-btn, .um-btn-primary, .cm-btn, .draft-btn, .obj-action-btn. Inputs: .cm-input, #object-input.

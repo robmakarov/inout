@@ -35,7 +35,7 @@ Short description of every top-level constant, variable, and function in the app
 | `feedInner` | `#feed-inner` (primary feed content). |
 | `feedEl` | `#feed` (scrollable feed container). |
 | `inputArea` | `#input-area`. |
-| `input` | `#msg-input` (main textarea). |
+| `input` | `#object-input` (main textarea). |
 | `sendBtn` | Send button. |
 | `clearInputBtn` | Clear input button. |
 | `emptyEl` | `#empty` (empty state node). |

@@ -4,8 +4,8 @@ try { if (document.body) document.body.classList.add('loaded'); } catch (_) {}
     if (localStorage.getItem('inout_was_editing_v1')) {
       localStorage.setItem('inout_input_state_v2', '');
       localStorage.removeItem('inout_was_editing_v1');
-      var el = document.getElementById('msg-input');
-      if (el) { el.value = ''; el.placeholder = 'say something…'; }
+      var el = document.getElementById('object-input');
+      if (el) { el.value = ''; el.placeholder = 'Add object…'; }
     }
   } catch (_) {}
 })();
@@ -98,7 +98,7 @@ if (window.Stripe && STRIPE_PUBLISHABLE_KEY && !STRIPE_PUBLISHABLE_KEY.includes(
 const feedInner  = document.getElementById('feed-inner');
 const feedEl     = document.getElementById('feed');
 const inputArea  = document.getElementById('input-area');
-var input       = document.getElementById('msg-input');
+var input       = document.getElementById('object-input');
 var sendBtn     = document.getElementById('send-btn');
 const clearInputBtn = document.getElementById('clear-input');
 const emptyEl    = document.getElementById('empty');
@@ -691,7 +691,7 @@ function reactivateInputMode(opts) {
   }
   try { localStorage.removeItem(WAS_EDITING_KEY); } catch (_) {}
   if (input) {
-    input.placeholder = 'say something…';
+    input.placeholder = 'Add object…';
     if (opts.clearInput) {
       input.value = '';
       saveInputGlobal();
@@ -929,7 +929,7 @@ function init(done) {
     } catch (_) {}
     if (typeof done === 'function') done();
   }
-  try { if (localStorage.getItem(WAS_EDITING_KEY)) { try { localStorage.setItem(INPUT_STATE_KEY, ''); localStorage.removeItem(WAS_EDITING_KEY); } catch (_) {} if (input) { input.value = ''; input.placeholder = 'say something…'; sendBtn.disabled = true; autoResize(); updateClearInputBtn(); } } } catch (_) {}
+  try { if (localStorage.getItem(WAS_EDITING_KEY)) { try { localStorage.setItem(INPUT_STATE_KEY, ''); localStorage.removeItem(WAS_EDITING_KEY); } catch (_) {} if (input) { input.value = ''; input.placeholder = 'Add object…'; sendBtn.disabled = true; autoResize(); updateClearInputBtn(); } } } catch (_) {}
   try { loadChannelsList(); } catch (_) {}
   try { loadScrollState(); } catch (_) {}
   try { setupTabs(); } catch (_) {}
@@ -1363,7 +1363,7 @@ function onUpdateForChannel(ch, row) {
     originalEditTextForCancel = null;
     editingObjectId = null;
     try { localStorage.removeItem(WAS_EDITING_KEY); } catch (_) {}
-    if (input) input.placeholder = 'Say something…';
+    if (input) input.placeholder = 'Add object…';
   }
   if (ch === currentChannel || ch === secondaryViewChannel) {
     updateObjectRowText(id, text);
@@ -4396,7 +4396,7 @@ async function sendText(text) {
 
 /* ═══ INPUT HANDLING ══════════════════════════════════════ */
 function updateComposerCount() {
-  var countEl = document.getElementById('msg-input-count');
+  var countEl = document.getElementById('object-input-count');
   var wrap = input && input.closest && input.closest('.composer-input-wrap');
   if (!countEl || !wrap) return;
   var len = (input && input.value) ? input.value.length : 0;
@@ -4412,7 +4412,7 @@ function updateComposerCount() {
 var _inputListenersAttached = false;
 function attachInputListeners() {
   if (_inputListenersAttached) return;
-  var inp = document.getElementById('msg-input');
+  var inp = document.getElementById('object-input');
   var btn = document.getElementById('send-btn');
   if (inp) input = inp;
   if (btn) sendBtn = btn;
