@@ -2,7 +2,7 @@
 
 ## Input mode vs Edit mode
 **Input mode** is the default and is always active: it reactivates after every operation (send, cancel, etc.). The input field is for creating **new** objects in the selected view. Result on send: a **new object** is added to the view.  
-**Edit mode** interrupts input mode: the input is bound to the **selected object** (or its parameters/properties). User edits that object’s content; result on send: the **selected object is updated**, not a new one created.  
+**Edit mode** interrupts input mode: the input is bound to the **selected object** (or its parameters/properties). User edits in the main input; the view updates in realtime as they type. Result on send: the **selected object is updated**, not a new one created.  
 So: input mode → new object; edit mode → change existing object. Input mode is only interrupted by edit mode; after edit (send or cancel), input mode is active again.
 
 | Mode | Trigger | Key state |

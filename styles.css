@@ -853,28 +853,6 @@ body.dnd-active .msg-drag-spirit-stack{opacity:1;background:transparent;transiti
   padding-right:72px; /* reserve space under right-side actions */
   cursor:pointer;
 }
-/* Inline edit: input inside message row when editing — hugs text, cursor at click */
-.msg-edit-inline{
-  display:block;
-  width:100%;
-  min-width:0;
-  box-sizing:border-box;
-  margin:0;
-  padding:0;
-  border:none;
-  outline:none;
-  background:transparent;
-  font:inherit;
-  font-size:13px;
-  color:var(--text);
-  line-height:1.55;
-  white-space:pre-wrap;
-  resize:none;
-  cursor:text;
-  min-height:1.4em;
-  vertical-align:top;
-}
-.msg-edit-inline::placeholder{ color:var(--dim); }
 /* DnD reorder: row under drop position (no nudge to avoid shake) */
 
 @media (max-width:540px){

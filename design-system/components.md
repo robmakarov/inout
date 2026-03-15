@@ -12,14 +12,14 @@ header, .logo, .header-right, #online-count, #msg-count, #user-btn (.signed-in)
 
 ## Feed
 #empty, .loader-inner, .feed-drop-indicator (.visible)
-.msg — .msg-sender, .msg-time, .msg-text, .msg-checkbox-zone, .msg-select, .msg-actions, .msg-action-btn (Del, Move, Exp, Copy, Cut). When editing: .msg-text is replaced by an inline input .msg-edit-inline (textarea) so the message is edited in place; Enter to save, Escape to cancel. No extra chrome — looks like editing the text right there.
+.msg — .msg-sender, .msg-time, .msg-text, .msg-checkbox-zone, .msg-select, .msg-actions, .msg-action-btn (Del, Move, Exp, Copy, Cut). When editing: click message → edit through main input; changes update the message row in the view in realtime as you type. Send to save, Escape or cancel to restore.
 **Hover-revealed controls** (select-wrap, actions, time/sender styling) are part of the row: they show accessible actions for this object in this view; same hover boundary as the row.
 States: .msg-selected, .msg-editing, .msg-drag-target, .msg-drag-nudge-right, .new-flash, .dragging, .msg-drag-group, .dragging-in-feed, .msg-dnd-just-dropped
 .msg-origin-ghost, .origin-ghost-overlay | .msg-drag-spirit, .msg-drag-spirit-stack, .msg-drag-spirit-row, .msg-drag-spirit-stack-more | .msg-fly-clone
 .tab — .tab-active, .tab-shared, .tab-badge, .tab-new, .tab-close, .tab-drop-target
 
 ## Input
-#input-area, #tabs, #clipboard-bubble, #draft-bubble, .draft-btn, .input-wrap, .input-tools, #clipboard-button, #log-action-btn (.error-signal), #log-dropup-panel (.open). **Composer:** .composer (single bar: input + send), .composer-input-wrap, #msg-input, #msg-input-count (.composer-count, shown near 2000 limit), .clear-input-btn, #send-btn (.composer-send: icon + label, accent when enabled). #msg-input is the main input (new messages only). Edit mode uses .msg-edit-inline inside the message row.
+#input-area, #tabs, #clipboard-bubble, #draft-bubble, .draft-btn, .input-wrap, .input-tools, #clipboard-button, #log-action-btn (.error-signal), #log-dropup-panel (.open). **Composer:** .composer (single bar: input + send), .composer-input-wrap, #msg-input, #msg-input-count (.composer-count), .clear-input-btn, #send-btn (.composer-send). Main input is used for both new messages and editing; when editing a message, typing updates the message row in the view in realtime.
 
 ## Overlays
 #scroll-btn (.visible), #toast (.show)
