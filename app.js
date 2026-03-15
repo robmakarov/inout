@@ -618,6 +618,7 @@ function updateEditingRowHighlight() {
 /** Input mode is default and reactivates after every operation; only edit mode interrupts it. */
 function reactivateInputMode(opts) {
   opts = opts || {};
+  if (editingMessageId != null) exitInlineEditUI(editingMessageId);
   editingMessageId = null;
   try { localStorage.removeItem(WAS_EDITING_KEY); } catch (_) {}
   if (input) {
@@ -1097,19 +1098,75 @@ function updateMessageRowText(msgId, text) {
   const el = feedInner.querySelector('.msg[data-id="' + CSS.escape(idStr) + '"]');
   if (!el) return;
   const textEl = el.querySelector('.msg-text');
-  if (textEl) textEl.innerHTML = linkify(escapeHtml(text || ''));
+  if (!textEl) return;
+  if (textEl.querySelector('.msg-edit-inline')) return;
+  textEl.innerHTML = linkify(escapeHtml(text || ''));
+}
+
+function exitInlineEditUI(msgId, newText) {
+  if (!feedInner || msgId == null) return;
+  const idStr = String(msgId);
+  const row = feedInner.querySelector('.msg[data-id="' + CSS.escape(idStr) + '"]');
+  if (!row) return;
+  const textEl = row.querySelector('.msg-text');
+  if (!textEl) return;
+  const inline = textEl.querySelector('.msg-edit-inline');
+  if (inline && inline.parentNode) inline.parentNode.removeChild(inline);
+  const text = newText != null ? newText : (row.dataset.originalEditText || '');
+  if (row.dataset.originalEditText !== undefined) delete row.dataset.originalEditText;
+  textEl.innerHTML = linkify(escapeHtml(text));
+}
+
+function enterInlineEdit(row, currentText) {
+  const textEl = row.querySelector('.msg-text');
+  if (!textEl) return;
+  row.dataset.originalEditText = currentText || '';
+  const textarea = document.createElement('textarea');
+  textarea.className = 'msg-edit-inline';
+  textarea.value = currentText || '';
+  textarea.setAttribute('aria-label', 'Edit message');
+  textarea.rows = 2;
+  textEl.innerHTML = '';
+  textEl.appendChild(textarea);
+  editingMessageId = row.dataset.id ? Number(row.dataset.id) : null;
+  if (!Number.isFinite(editingMessageId)) editingMessageId = null;
+  try { localStorage.setItem(WAS_EDITING_KEY, '1'); } catch (_) {}
+  updateEditingRowHighlight();
+  textarea.focus();
+  textarea.select();
+  function onKeydown(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      exitInlineEditUI(editingMessageId);
+      reactivateInputMode({ clearInput: true });
+      textarea.removeEventListener('keydown', onKeydown);
+      return;
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      var trimmed = textarea.value.trim();
+      textarea.removeEventListener('keydown', onKeydown);
+      if (trimmed) sendText(trimmed);
+      else {
+        exitInlineEditUI(editingMessageId);
+        reactivateInputMode({ clearInput: true });
+      }
+    }
+  }
+  textarea.addEventListener('keydown', onKeydown);
 }
 
 function onUpdateForChannel(ch, row) {
   if (ch !== currentChannel || !row) return;
   const id = row.id != null ? row.id : row.Id;
   if (id == null) return;
+  const text = row.text != null ? row.text : (row.Text != null ? row.Text : '');
   if (id === editingMessageId) {
+    exitInlineEditUI(id, text);
     editingMessageId = null;
     try { localStorage.removeItem(WAS_EDITING_KEY); } catch (_) {}
-    if (input && input.placeholder === 'Editing message…') input.placeholder = 'say something…';
+    if (input) input.placeholder = 'say something…';
   }
-  const text = row.text != null ? row.text : (row.Text != null ? row.Text : '');
   updateMessageRowText(id, text);
 }
 
@@ -2689,16 +2746,7 @@ function createMsgRow(msg, isNew) {
       cancelEditingMode(true);
       return;
     }
-    input.value = msg.text || '';
-    editingMessageId = msg.id;
-    try { localStorage.setItem(WAS_EDITING_KEY, '1'); } catch (_) {}
-    input.placeholder = 'Editing message…';
-    autoResize();
-    sendBtn.disabled = !input.value.trim();
-    updateClearInputBtn();
-    saveInputGlobal();
-    updateEditingRowHighlight();
-    focusMessageInput();
+    enterInlineEdit(row, msg.text || '');
   });
 
   row.addEventListener('click', e => {
@@ -3641,7 +3689,7 @@ async function sendText(text) {
       pushUndo({ type: 'edit', entries: [{ id: before.id, beforeText: before.text, afterText: trimmed }] });
       logAction('edit', { id: before.id });
     }
-    updateMessageRowText(editingMessageId, trimmed);
+    exitInlineEditUI(editingMessageId, trimmed);
     reactivateInputMode({ clearInput: true });
     return;
   }

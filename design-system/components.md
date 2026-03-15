@@ -12,14 +12,14 @@ header, .logo, .header-right, #online-count, #msg-count, #user-btn (.signed-in)
 
 ## Feed
 #empty, .loader-inner, .feed-drop-indicator (.visible)
-.msg — .msg-sender, .msg-time, .msg-text, .msg-checkbox-zone, .msg-select, .msg-actions, .msg-action-btn (Del, Move, Exp, Copy, Cut)
+.msg — .msg-sender, .msg-time, .msg-text, .msg-checkbox-zone, .msg-select, .msg-actions, .msg-action-btn (Del, Move, Exp, Copy, Cut). When editing: .msg-text is replaced by an inline input .msg-edit-inline (textarea) so the message is edited in place; Enter to save, Escape to cancel. No extra chrome — looks like editing the text right there.
 **Hover-revealed controls** (select-wrap, actions, time/sender styling) are part of the row: they show accessible actions for this object in this view; same hover boundary as the row.
 States: .msg-selected, .msg-editing, .msg-drag-target, .msg-drag-nudge-right, .new-flash, .dragging, .msg-drag-group, .dragging-in-feed, .msg-dnd-just-dropped
 .msg-origin-ghost, .origin-ghost-overlay | .msg-drag-spirit, .msg-drag-spirit-stack, .msg-drag-spirit-row, .msg-drag-spirit-stack-more | .msg-fly-clone
 .tab — .tab-active, .tab-shared, .tab-badge, .tab-new, .tab-close, .tab-drop-target
 
 ## Input
-#input-area, #tabs, #clipboard-bubble, #draft-bubble, .draft-btn, .input-wrap, #msg-input, .clear-input-btn, #send-btn, .input-tools, #clipboard-button, #log-action-btn (.error-signal), #log-dropup-panel (.open)
+#input-area, #tabs, #clipboard-bubble, #draft-bubble, .draft-btn, .input-wrap, #msg-input, .clear-input-btn, #send-btn, .input-tools, #clipboard-button, #log-action-btn (.error-signal), #log-dropup-panel (.open). #msg-input is the main input (new messages only). Edit mode uses an inline input inside the message row (.msg-edit-inline), not the main input.
 
 ## Overlays
 #scroll-btn (.visible), #toast (.show)
