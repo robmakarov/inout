@@ -15,9 +15,9 @@
 - --dnd-spirit-shadow, --dnd-spirit-radius, --dnd-spirit-bg (semi-transparent so underlying row visible)
 - --dnd-stack-drop-in-duration, --dnd-stack-stagger-step, --dnd-spirit-stack-max-visible, --dnd-stack-form-duration
 
-**DnD:** body.dnd-active → .msg no transition except .msg-drag-nudge-right. Spirit follows cursor; clamped to feed. Rows unchanged; placeholders 80% opacity. Drop-in: opacity-only (dnd-drop-in), no translate = no shake. Stack-form animation on stack. Drop on origin = undo.
+**DnD:** body.dnd-active → .msg no transition except nudge. Spirit follows cursor; clamped to feed. Rows unchanged; placeholders 80% opacity. No drop-in animation (no blink/shake); .msg.msg-dnd-just-dropped has animation:none. body.dnd-just-ended kept ~120ms after 2 rAF before removal. Stack-form animation on stack. Drop on origin = undo.
 
 **DnD lifecycle (events / process):** dragstart → set dragSelectedRows, spirit, dndOrigin*, body.dnd-active; dragover → processFeedDragover (indicator, spirit position, lastReorderTarget, origin snap); drop/dragend → insert block, .msg-dnd-just-dropped (staggered), remove spirit, body.dnd-just-ended, then 2 rAF later remove dnd-just-ended. No custom events; all in DOM + classList.
 
 ## Where used
-- Modal: slide-in-right 0.18s. Message row: msgin 0.2s. DnD: tokens above. Toast/scroll: ~0.2s. Buttons: ~0.1–0.2s.
+- Modal: slide-in-right 0.18s. DnD: tokens above. Toast/scroll: ~0.2s. Buttons: ~0.1–0.2s.

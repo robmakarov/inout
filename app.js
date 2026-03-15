@@ -1576,9 +1576,11 @@ function setupTouchDragHandlers() {
     void r.offsetHeight;
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        if (document.body) document.body.classList.remove('dnd-just-ended');
-        r.style.pointerEvents = '';
-        focusMessageInput();
+        setTimeout(() => {
+          if (document.body) document.body.classList.remove('dnd-just-ended');
+          r.style.pointerEvents = '';
+          focusMessageInput();
+        }, 120);
       });
     });
   };
@@ -1776,9 +1778,11 @@ function createMsgRow(msg, isNew) {
         void row.offsetHeight;
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
-            if (document.body) document.body.classList.remove('dnd-just-ended');
-            row.style.pointerEvents = '';
-            focusMessageInput();
+            setTimeout(() => {
+              if (document.body) document.body.classList.remove('dnd-just-ended');
+              row.style.pointerEvents = '';
+              focusMessageInput();
+            }, 120);
           });
         });
       } finally {
