@@ -118,18 +118,18 @@
 <button id="scroll-btn" onclick="scrollBottom()">↓ new messages</button>
 <div id="toast"></div>
 
-<div id="user-modal-backdrop" aria-hidden="true">
-  <div id="user-modal" role="dialog" aria-modal="true" aria-label="Account">
+<div id="user-modal-backdrop" aria-hidden="true" onclick="if(event.target===this){this.style.display='none';this.setAttribute('aria-hidden','true')}">
+  <div id="user-modal" role="dialog" aria-modal="true" aria-label="Account" onclick="event.stopPropagation()">
     <div class="um-top">
       <div class="um-title">Account</div>
-      <button id="user-close" aria-label="Close account screen">×</button>
+      <button id="user-close" type="button" aria-label="Close account screen" onclick="var m=document.getElementById('user-modal-backdrop');if(m){m.style.display='none';m.setAttribute('aria-hidden','true')}">×</button>
     </div>
 
     <div class="um-section">
       <div class="um-label">Status</div>
       <div class="um-value" id="um-auth-status">Not signed in</div>
       <div class="um-row">
-        <button class="um-btn um-btn-primary" id="um-auth-btn" type="button" onclick="if(window.signIn)window.signIn();else if(window.sb&&window.sb.auth&&window.sb.auth.signInWithOAuth){var o={provider:'google'};if(window.location.origin){o.options={redirectTo:window.location.origin+'/'}}window.sb.auth.signInWithOAuth(o).then(function(r){if(r&&r.data&&r.data.url)window.location.href=r.data.url})}">Sign in</button>
+        <button class="um-btn um-btn-primary" id="um-auth-btn" type="button">Sign in</button>
       </div>
     </div>
 
