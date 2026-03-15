@@ -654,6 +654,7 @@ body.dnd-active .msg.dragging .msg-actions,
 body.dnd-active .msg.msg-drag-group .msg-select-wrap,
 body.dnd-active .msg.msg-drag-group .msg-actions{opacity:0;pointer-events:none;visibility:hidden}
 body.dnd-active .msg.msg-drag-target{background:rgba(91,155,213,0.12);transition:background 0.06s ease-out}
+body.dnd-active .msg.msg-drag-spirit{opacity:1 !important;background:var(--bg2) !important;}
 .msg.msg-editing{
   background:var(--bg2);
   box-shadow:inset 0 0 0 1px var(--line2);
@@ -5249,9 +5250,9 @@ var lastDragTargetRow = null;
 var dragSpiritEl = null;
 function processFeedDragover(ev) {
   if (!feedInner) return;
-  lastDragClientX = ev.clientX;
-  lastDragClientY = ev.clientY;
-  if (dragSpiritEl) {
+  if (typeof ev.clientX === 'number') lastDragClientX = ev.clientX;
+  if (typeof ev.clientY === 'number') lastDragClientY = ev.clientY;
+  if (dragSpiritEl && typeof ev.clientX === 'number' && typeof ev.clientY === 'number') {
     dragSpiritEl.style.left = ev.clientX + 'px';
     dragSpiritEl.style.top = ev.clientY + 'px';
   }
@@ -5356,16 +5357,20 @@ function processFeedDragover(ev) {
   let wantAppend = wantAppendFirst;
   let insertBeforeNode = null;
   let lineY = 0;
+  var rowUnderCursor = null;
   if (y < firstRect.top) {
     insertBeforeNode = firstRow;
     lineY = firstRect.top;
+    rowUnderCursor = firstRow;
   } else if (wantAppend) {
     lineY = lastRect.bottom;
+    rowUnderCursor = lastRow;
   } else {
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       const rect = r.getBoundingClientRect();
       if (y >= rect.top && y <= rect.bottom) {
+        rowUnderCursor = r;
         if (r === lastRow) {
           wantAppend = true;
           lineY = rect.bottom;
@@ -5376,7 +5381,7 @@ function processFeedDragover(ev) {
           insertBeforeNode = r;
           lineY = rect.top;
         } else {
-          insertBeforeNode = r.nextSibling;
+          insertBeforeNode = r.nextElementSibling || r.nextSibling;
           lineY = rect.bottom;
         }
         break;
@@ -5385,12 +5390,14 @@ function processFeedDragover(ev) {
     if (insertBeforeNode === null && !wantAppend && rows.length && y >= lastRect.bottom - dropAtEndThreshold) {
       wantAppend = true;
       lineY = lastRect.bottom;
+      rowUnderCursor = lastRow;
     }
   }
-  var targetRow = (wantAppend || insertBeforeNode !== null) ? (wantAppend ? lastRow : insertBeforeNode) : null;
+  var targetRow = (rowUnderCursor && rowUnderCursor.classList) ? rowUnderCursor : (wantAppend ? lastRow : (insertBeforeNode && insertBeforeNode.classList ? insertBeforeNode : firstRow));
+  if (targetRow && !targetRow.classList) targetRow = null;
   if (targetRow !== lastDragTargetRow) {
-    if (lastDragTargetRow) lastDragTargetRow.classList.remove('msg-drag-target');
-    if (targetRow) targetRow.classList.add('msg-drag-target');
+    if (lastDragTargetRow && lastDragTargetRow.classList) lastDragTargetRow.classList.remove('msg-drag-target');
+    if (targetRow && targetRow.classList) targetRow.classList.add('msg-drag-target');
     lastDragTargetRow = targetRow;
   }
   const targetChanged = lastReorderTarget === null || lastReorderTarget.insertBefore !== insertBeforeNode || lastReorderTarget.wantAppend !== wantAppend;
