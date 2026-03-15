@@ -853,7 +853,7 @@ body.dnd-active .msg-drag-spirit-stack{opacity:1;background:transparent;transiti
   padding-right:72px; /* reserve space under right-side actions */
   cursor:pointer;
 }
-/* Inline edit: input inside message row when editing — looks like text, no chrome */
+/* Inline edit: input inside message row when editing — hugs text, cursor at click */
 .msg-edit-inline{
   display:block;
   width:100%;
@@ -871,7 +871,8 @@ body.dnd-active .msg-drag-spirit-stack{opacity:1;background:transparent;transiti
   white-space:pre-wrap;
   resize:none;
   cursor:text;
-  min-height:2.5em;
+  min-height:1.4em;
+  vertical-align:top;
 }
 .msg-edit-inline::placeholder{ color:var(--dim); }
 /* DnD reorder: row under drop position (no nudge to avoid shake) */

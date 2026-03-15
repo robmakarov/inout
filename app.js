@@ -1117,7 +1117,35 @@ function exitInlineEditUI(msgId, newText) {
   textEl.innerHTML = linkify(escapeHtml(text));
 }
 
-function enterInlineEdit(row, currentText) {
+function getCharacterOffsetFromPoint(containerEl, clientX, clientY) {
+  function offsetFromNodeAndOffset(startNode, startOffset) {
+    if (startNode.nodeType !== Node.TEXT_NODE) return 0;
+    if (!containerEl.contains(startNode)) return 0;
+    var offset = 0;
+    var walker = document.createTreeWalker(containerEl, NodeFilter.SHOW_TEXT, null, false);
+    var node;
+    while ((node = walker.nextNode())) {
+      if (node === startNode) {
+        return offset + Math.min(startOffset, node.length);
+      }
+      offset += node.length;
+    }
+    return 0;
+  }
+  try {
+    if (typeof document.caretPositionFromPoint === 'function') {
+      var pos = document.caretPositionFromPoint(clientX, clientY);
+      if (pos && pos.offsetNode) return offsetFromNodeAndOffset(pos.offsetNode, pos.offset);
+    }
+    if (typeof document.caretRangeFromPoint === 'function') {
+      var range = document.caretRangeFromPoint(clientX, clientY);
+      if (range && range.startContainer) return offsetFromNodeAndOffset(range.startContainer, range.startOffset);
+    }
+  } catch (_) {}
+  return 0;
+}
+
+function enterInlineEdit(row, currentText, cursorOffset) {
   const textEl = row.querySelector('.msg-text');
   if (!textEl) return;
   row.dataset.originalEditText = currentText || '';
@@ -1125,7 +1153,8 @@ function enterInlineEdit(row, currentText) {
   textarea.className = 'msg-edit-inline';
   textarea.value = currentText || '';
   textarea.setAttribute('aria-label', 'Edit message');
-  textarea.rows = 2;
+  var lineCount = (currentText.match(/\n/g) || []).length + 1;
+  textarea.rows = Math.min(6, Math.max(1, lineCount));
   textEl.innerHTML = '';
   textEl.appendChild(textarea);
   editingMessageId = row.dataset.id ? Number(row.dataset.id) : null;
@@ -1133,7 +1162,9 @@ function enterInlineEdit(row, currentText) {
   try { localStorage.setItem(WAS_EDITING_KEY, '1'); } catch (_) {}
   updateEditingRowHighlight();
   textarea.focus();
-  textarea.select();
+  var len = textarea.value.length;
+  var pos = typeof cursorOffset === 'number' ? Math.max(0, Math.min(cursorOffset, len)) : len;
+  textarea.setSelectionRange(pos, pos);
   function onKeydown(e) {
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -2747,7 +2778,8 @@ function createMsgRow(msg, isNew) {
       cancelEditingMode(true);
       return;
     }
-    enterInlineEdit(row, msg.text || '');
+    var cursorOffset = getCharacterOffsetFromPoint(text, e.clientX, e.clientY);
+    enterInlineEdit(row, msg.text || '', cursorOffset);
   });
 
   row.addEventListener('click', e => {
