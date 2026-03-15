@@ -11,6 +11,24 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://js.stripe.com/v3"></script>
+<script>
+(function(){
+  if (typeof supabase === 'undefined') return;
+  var url = 'https://tfmbqiwxfgrwtjvoqomf.supabase.co';
+  var key = 'sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_';
+  window._sb = window._sb || supabase.createClient(url, key, { auth: { detectSessionInUrl: true } });
+  if (!window.sb) window.sb = window._sb;
+  window.doSignIn = function() {
+    var s = window.sb || window._sb;
+    if (!s || !s.auth || !s.auth.signInWithOAuth) return;
+    var opt = { provider: 'google' };
+    if (window.location.origin) opt.options = { redirectTo: window.location.origin + '/' };
+    s.auth.signInWithOAuth(opt).then(function(r) {
+      if (r && r.data && r.data.url) window.location.href = r.data.url;
+    }).catch(function(e) { console.error('Sign-in error', e); });
+  };
+})();
+</script>
 <link rel="stylesheet" href="/styles.css"/>
 </head>
 <body>
@@ -129,7 +147,7 @@
       <div class="um-label">Status</div>
       <div class="um-value" id="um-auth-status">Not signed in</div>
       <div class="um-row">
-        <button class="um-btn um-btn-primary" id="um-auth-btn" type="button" onclick="(function(){var s=window.sb;if(window.signIn){window.signIn();return;}if(s&&s.auth&&s.auth.signInWithOAuth){var opt={provider:'google'};if(window.location.origin){opt.options={redirectTo:window.location.origin+'/'};}s.auth.signInWithOAuth(opt).then(function(r){if(r&&r.data&&r.data.url){window.location.href=r.data.url;}}).catch(function(e){console.error(e);});}else{if(window.toast){window.toast('Sign-in not ready');}else{alert('Sign-in not ready. Check console.');}}})();">Sign in</button>
+        <button class="um-btn um-btn-primary" id="um-auth-btn" type="button" onclick="var f=window.doSignIn||window.signIn;if(f)f();">Sign in</button>
       </div>
     </div>
 
