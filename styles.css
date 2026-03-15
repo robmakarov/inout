@@ -22,6 +22,21 @@
   --anim-duration-slow:   0.35s;
   --anim-ease-out:        ease-out;
   --anim-ease-smooth:     cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* DnD: use these so feed/table/graph stay consistent */
+  --dnd-nudge-duration:   0.12s;
+  --dnd-nudge-offset:     40px;
+  --dnd-indicator-duration: 0.06s;
+  --dnd-spirit-fly-duration: 0.4s;
+  --dnd-spirit-fade-duration: 0.35s;
+  --dnd-drop-line-color:  rgba(91, 155, 213, 0.55);
+  --dnd-drop-line-height: 4px;
+  --dnd-origin-line-color: rgba(37, 99, 235, 0.75);
+  --dnd-target-bg:        rgba(91, 155, 213, 0.12);
+  --dnd-idle-opacity:     0.68;
+  --dnd-placeholder-opacity: 0.35;
+  --dnd-ghost-opacity:    0.5;
+  --dnd-spirit-shadow:    0 4px 16px rgba(0, 0, 0, 0.35);
+  --dnd-spirit-radius:    6px;
 }
 
 /* Reusable animation keyframes (use with var(--anim-duration-*) and var(--anim-ease-*) for rules) */
@@ -514,25 +529,25 @@ header{
   min-height:100%;
   gap:0;
 }
-/* drop position: 4px line, brighter */
+/* ── DnD: drop position line (use tokens) ── */
 .feed-drop-indicator{
   position:fixed;
   left:0;
-  height:4px;
+  height:var(--dnd-drop-line-height);
   pointer-events:none;
   touch-action:none;
   z-index:9999;
   display:none;
   visibility:hidden;
-  background:rgba(91, 155, 213, 0.55);
+  background:var(--dnd-drop-line-color);
   border-radius:1px;
   transform:translateZ(0);
   isolation:isolate;
   box-sizing:border-box;
-  transition:top 0.06s ease-out;
+  transition:top var(--dnd-indicator-duration) var(--anim-ease-out);
 }
 .feed-drop-indicator.visible{ display:block; visibility:visible; }
-/* Origin: always a 2px dark blue line (fixed, never in flow) to avoid 4px shake */
+/* DnD: origin line (fixed, 2px, so no layout shake) */
 .feed-drop-origin{
   position:fixed;
   left:0;
@@ -543,7 +558,7 @@ header{
   z-index:9998;
   display:none;
   visibility:hidden;
-  background:rgba(37,99,235,0.75);
+  background:var(--dnd-origin-line-color);
   border-radius:0;
   box-sizing:border-box;
   transform:translateZ(0);
@@ -554,7 +569,7 @@ header{
 .feed-drop-origin.visible{ display:block; visibility:visible; }
 .feed-drop-origin.stuck{ height:2px; }
 
-/* Ghost copies at origin: visible placeholder, same layout as .msg, not interactive */
+/* DnD: ghost copies at drag origin (placeholder, not interactive) */
 .msg-origin-ghost{
   display:flex;
   align-items:center;
@@ -562,7 +577,7 @@ header{
   padding:4px 20px;
   border-bottom:1px solid var(--line);
   pointer-events:none;
-  opacity:0.5;
+  opacity:var(--dnd-ghost-opacity);
   background:rgba(0,0,0,0.25);
   box-sizing:border-box;
   min-height:32px;
@@ -578,7 +593,7 @@ header{
   z-index:2;
 }
 .origin-ghost-overlay.msg-origin-ghost{ min-height:32px; }
-.msg.dragging-in-feed{ opacity:0.35; }
+.msg.dragging-in-feed{ opacity:var(--dnd-placeholder-opacity); }
 .msg-origin-ghost .msg-time,
 .msg-origin-ghost .msg-sender,
 .msg-origin-ghost .msg-text{ color:var(--text); }
@@ -616,52 +631,53 @@ header{
   left:-9999px;
   top:0;
   pointer-events:none;
-  box-shadow:0 4px 20px rgba(0,0,0,.4);
-  border-radius:6px;
+  box-shadow:var(--dnd-spirit-shadow);
+  border-radius:var(--dnd-spirit-radius);
   opacity:0.95;
   background:var(--bg2);
   border:1px solid var(--line);
   box-sizing:border-box;
 }
-/* Spirit = same as row, colors like hover. Centered under cursor. */
+/* DnD: spirit = clone under cursor (use tokens) */
 .msg-drag-spirit{
   position:fixed;
   z-index:10000;
   pointer-events:none;
-  box-shadow:0 4px 16px rgba(0,0,0,.35);
-  border-radius:0;
+  box-shadow:var(--dnd-spirit-shadow);
+  border-radius:var(--dnd-spirit-radius);
   background:var(--bg2);
   box-sizing:border-box;
   transform:translate(-50%,-50%);
 }
 .msg-drag-spirit .msg-time,
 .msg-drag-spirit .msg-sender{ color:var(--text); }
-/* Row under cursor shifts 40px right while dragged over (crossed objects animated) */
-.msg-drag-nudge-right{ transform:translateX(40px); }
-body.dnd-active .msg.msg-drag-nudge-right{ transition:transform 0.12s ease-out; }
+/* DnD: row under cursor nudge (use tokens) */
+.msg-drag-nudge-right{ transform:translateX(var(--dnd-nudge-offset)); }
+body.dnd-active .msg.msg-drag-nudge-right{ transition:transform var(--dnd-nudge-duration) var(--anim-ease-out); }
+/* DnD: fly-to-tab clone (use tokens) */
 .msg-fly-clone{
   position:fixed;
   z-index:9999;
   pointer-events:none;
-  box-shadow:0 4px 20px rgba(0,0,0,.35);
-  border-radius:4px;
+  box-shadow:var(--dnd-spirit-shadow);
+  border-radius:var(--dnd-spirit-radius);
   background:var(--bg2);
   animation:none;
-  transition:transform .4s ease-out, opacity .35s ease-out;
+  transition:transform var(--dnd-spirit-fly-duration) var(--anim-ease-out), opacity var(--dnd-spirit-fade-duration) var(--anim-ease-out);
 }
 .msg-fly-clone .msg-actions{visibility:hidden}
 .msg:hover{background:var(--bg2)}
 .msg.msg-drag-over{background:var(--bg2)}
-/* during DnD: dragged plain, others dimmed; no transitions to avoid stack/line shake */
+/* DnD mode: no transition/animation on .msg except nudge, to avoid layout/line jump */
 body.dnd-active .msg{transition:none;animation:none}
 body.dnd-just-ended .msg{transition:none;animation:none}
 body.dnd-active .msg:not(.dragging):not(.msg-drag-group){
-  opacity:0.68;
+  opacity:var(--dnd-idle-opacity);
   background:transparent;
 }
 body.dnd-active .msg:not(.dragging):not(.msg-drag-group):hover{
   background:transparent;
-  opacity:0.68;
+  opacity:var(--dnd-idle-opacity);
 }
 body.dnd-active .msg.dragging,
 body.dnd-active .msg.msg-drag-group{background:transparent}
@@ -669,8 +685,8 @@ body.dnd-active .msg.dragging .msg-select-wrap,
 body.dnd-active .msg.dragging .msg-actions,
 body.dnd-active .msg.msg-drag-group .msg-select-wrap,
 body.dnd-active .msg.msg-drag-group .msg-actions{opacity:0;pointer-events:none;visibility:hidden}
-body.dnd-active .msg.msg-drag-target{background:rgba(91,155,213,0.12);transition:none}
-body.dnd-active .msg.msg-drag-target.msg-drag-nudge-right{transition:transform 0.12s ease-out}
+body.dnd-active .msg.msg-drag-target{background:var(--dnd-target-bg);transition:none}
+body.dnd-active .msg.msg-drag-target.msg-drag-nudge-right{transition:transform var(--dnd-nudge-duration) var(--anim-ease-out)}
 body.dnd-active .msg.msg-drag-spirit{opacity:1 !important;background:var(--bg2) !important;transition:none}
 .msg.msg-editing{
   background:var(--bg2);

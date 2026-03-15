@@ -9,3 +9,5 @@ Files:
 - **components.md** — UI components and their structure/classes/states.
 - **colors.md** — Color tokens and usage.
 - **text.md** — Typography, labels, copy.
+- **modes.md** — Select, edit, DnD, view menu, modals, scroll btn, toast.
+- **dnd.md** — DnD abstraction so it works in feed, table, graph, horizontal views.
