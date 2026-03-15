@@ -27,8 +27,9 @@ Rules for animation in the app. Code should use these (variables/names/durations
 - **--dnd-placeholder-opacity** — .dragging-in-feed rows (e.g. 0.35)
 - **--dnd-ghost-opacity** — origin ghost copies (e.g. 0.5)
 - **--dnd-spirit-shadow**, **--dnd-spirit-radius** — cursor-following clone
+- **--dnd-stack-drop-in-duration** — after drop, reordered block (single or stack) plays same entrance animation; .msg-dnd-just-dropped applied then removed.
 
-**Rule:** During body.dnd-active, .msg has no transition/animation (except .msg-drag-nudge-right) so layout and drop line don’t jump. Spirit and fly-clone use the DnD durations above.
+**Rule:** During body.dnd-active, .msg has no transition/animation (except .msg-drag-nudge-right) so layout and drop line don’t jump. Spirit and fly-clone use the DnD durations above. **Stack of objects:** same nudge, placeholder opacity, and drop-line rules apply; after reorder drop, the inserted block (one or many rows) gets .msg-dnd-just-dropped and uses msgin keyframe with --dnd-stack-drop-in-duration so the stack animates into place.
 
 ## Where used
 
@@ -36,7 +37,7 @@ Rules for animation in the app. Code should use these (variables/names/durations
 - **Message row (.msg):** on appear, slide down + fade, 0.2s ease
 - **Empty state:** optional fade + slide up
 - **Loader:** spin (rings), bars (moving gradient), pulse (online dot)
-- **DnD:** see DnD tokens above; nudge uses --dnd-nudge-duration; spirit/fly use --dnd-spirit-*; drop line uses --dnd-indicator-duration.
+- **DnD:** see DnD tokens above; nudge uses --dnd-nudge-duration; spirit/fly use --dnd-spirit-*; drop line uses --dnd-indicator-duration; stack/single after drop uses --dnd-stack-drop-in-duration and .msg-dnd-just-dropped.
 - **Toast, scroll btn:** opacity/transform ~0.2s
 - **Buttons/inputs:** hover/transition ~0.1–0.2s
 

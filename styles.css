@@ -37,6 +37,7 @@
   --dnd-ghost-opacity:    0.5;
   --dnd-spirit-shadow:    0 4px 16px rgba(0, 0, 0, 0.35);
   --dnd-spirit-radius:    6px;
+  --dnd-stack-drop-in-duration: 0.2s;
 }
 
 /* Reusable animation keyframes (use with var(--anim-duration-*) and var(--anim-ease-*) for rules) */
@@ -671,6 +672,8 @@ body.dnd-active .msg.msg-drag-nudge-right{ transition:transform var(--dnd-nudge-
 /* DnD mode: no transition/animation on .msg except nudge, to avoid layout/line jump */
 body.dnd-active .msg{transition:none;animation:none}
 body.dnd-just-ended .msg{transition:none;animation:none}
+/* Stack (and single) after drop: same entrance animation as new messages */
+body.dnd-just-ended .msg.msg-dnd-just-dropped{animation:msgin var(--dnd-stack-drop-in-duration) var(--anim-ease-out) both}
 body.dnd-active .msg:not(.dragging):not(.msg-drag-group){
   opacity:var(--dnd-idle-opacity);
   background:transparent;
@@ -869,10 +872,11 @@ body.select-mode .msg-select-wrap,
   background:rgba(232,213,160,0.04);
 }
 
+/* DnD: stack (single or multi) — same tokens, no entrance animation during drag */
 .msg.dragging,
 .msg.msg-drag-group{
-  opacity: 1;
-  animation: none;
+  opacity:1;
+  animation:none;
 }
 .msg.msg-drag-group + .msg.msg-drag-group{margin-top:-2px}
 .msg.dragging + .msg.msg-drag-group,

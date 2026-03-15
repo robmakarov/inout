@@ -36,7 +36,7 @@ UI components and their IDs, classes, and states. Code should match this structu
 - **.msg** — Message/object row
   - .msg-sender, .msg-time, .msg-text
   - .msg-checkbox-zone, .msg-select, .msg-actions, .msg-action-btn
-  - States: .msg-selected, .msg-editing, .msg-drag-target, .msg-drag-nudge-right, .new-flash, .dragging, .msg-drag-group, .dragging-in-feed
+  - States: .msg-selected, .msg-editing, .msg-drag-target, .msg-drag-nudge-right, .new-flash, .dragging, .msg-drag-group, .dragging-in-feed, .msg-dnd-just-dropped (stack/single after drop, then removed)
 - **.msg-origin-ghost**, **.origin-ghost-overlay** — DnD origin
 - **.msg-drag-spirit**, **.msg-fly-clone** — DnD spirit/fly
 - **.tab** — Channel tab. States: .tab-active, .tab-shared, .tab-badge, .tab-new, .tab-close, .tab-drop-target

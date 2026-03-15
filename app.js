@@ -1656,9 +1656,13 @@ function createMsgRow(msg, isNew) {
               feedInner.appendChild(block[0]);
               for (var j = 1; j < block.length; j++) feedInner.insertBefore(block[j], block[j - 1].nextSibling);
             }
+            block.forEach(function(r) { r.classList.add('msg-dnd-just-dropped'); });
+            setTimeout(function() { block.forEach(function(r) { r.classList.remove('msg-dnd-just-dropped'); }); }, 220);
           } else {
             if (wantAppend) feedInner.appendChild(row);
             else if (insertBefore && insertBefore.parentNode === feedInner) feedInner.insertBefore(row, insertBefore);
+            row.classList.add('msg-dnd-just-dropped');
+            setTimeout(function() { row.classList.remove('msg-dnd-just-dropped'); }, 220);
           }
         }
         if (dragSpiritEl && dragSpiritEl.parentNode) dragSpiritEl.parentNode.removeChild(dragSpiritEl);
