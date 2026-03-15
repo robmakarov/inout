@@ -16,19 +16,17 @@ const SUPABASE_URL  = 'https://tfmbqiwxfgrwtjvoqomf.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_';
 var sb = null;
 try {
-  if (typeof window !== 'undefined' && window.sb) {
-    sb = window.sb;
-  } else if (typeof supabase !== 'undefined') {
+  if (typeof window !== 'undefined') {
+    sb = window.sb || window._sb || null;
+    if (sb) window.sb = sb;
+  }
+  if (!sb && typeof supabase !== 'undefined') {
     sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
-      auth: {
-        detectSessionInUrl: true,
-        flowType: 'pkce'
-      }
+      auth: { detectSessionInUrl: true, flowType: 'pkce' }
     });
     if (typeof window !== 'undefined') window.sb = sb;
   }
 } catch(e) {}
-if (typeof window !== 'undefined' && !window.sb) window.sb = sb;
 
 /* Run OAuth callback (code exchange) as soon as client exists so URL is still intact */
 var _oauthCallbackPromise = null;
@@ -100,8 +98,8 @@ if (window.Stripe && STRIPE_PUBLISHABLE_KEY && !STRIPE_PUBLISHABLE_KEY.includes(
 const feedInner  = document.getElementById('feed-inner');
 const feedEl     = document.getElementById('feed');
 const inputArea  = document.getElementById('input-area');
-const input      = document.getElementById('msg-input');
-const sendBtn    = document.getElementById('send-btn');
+var input       = document.getElementById('msg-input');
+var sendBtn     = document.getElementById('send-btn');
 const clearInputBtn = document.getElementById('clear-input');
 const emptyEl    = document.getElementById('empty');
 try {
@@ -1074,12 +1072,14 @@ function setupFocusOnFirstInteraction() {
       if (input && document.activeElement === feedEl) setTimeout(() => { if (input) input.focus(); }, 0);
     });
   }
-  input.addEventListener('focusout', (e) => {
-    const next = e.relatedTarget;
-    if (next && isInteractive(next)) return;
-    if (document.activeElement && (document.activeElement.closest('#user-modal') || document.activeElement.closest('#channel-modal-backdrop'))) return;
-    setTimeout(() => { if (input && document.activeElement !== input) input.focus(); }, 0);
-  });
+  if (input) {
+    input.addEventListener('focusout', (e) => {
+      const next = e.relatedTarget;
+      if (next && isInteractive(next)) return;
+      if (document.activeElement && (document.activeElement.closest('#user-modal') || document.activeElement.closest('#channel-modal-backdrop'))) return;
+      setTimeout(() => { if (input && document.activeElement !== input) input.focus(); }, 0);
+    });
+  }
 }
 
 /* ═══ LOAD ════════════════════════════════════════════════ */
@@ -3949,7 +3949,15 @@ function updateComposerCount() {
   }
 }
 
-if (input) {
+var _inputListenersAttached = false;
+function attachInputListeners() {
+  if (_inputListenersAttached) return;
+  var inp = document.getElementById('msg-input');
+  var btn = document.getElementById('send-btn');
+  if (inp) input = inp;
+  if (btn) sendBtn = btn;
+  if (!input) return;
+  _inputListenersAttached = true;
   input.addEventListener('input', () => {
     autoResize();
     if (sendBtn) sendBtn.disabled = !input.value.trim();
@@ -3964,7 +3972,6 @@ if (input) {
       broadcastDraft(input.value);
     }
   });
-
   input.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       if (editingObjectId) cancelEditingMode(true);
@@ -3975,20 +3982,21 @@ if (input) {
       if (sendBtn && !sendBtn.disabled) send();
     }
   });
-
   input.addEventListener('click', () => {
     if (editingObjectId != null) updateEditingRowFromInput();
   });
-
   input.addEventListener('keyup', () => {
     if (editingObjectId != null) updateEditingRowFromInput();
   });
-
   input.addEventListener('select', () => {
     if (editingObjectId != null) updateEditingRowFromInput();
   });
+  if (sendBtn) sendBtn.addEventListener('click', send);
 }
-if (sendBtn) sendBtn.addEventListener('click', send);
+attachInputListeners();
+if (!input && typeof document !== 'undefined' && document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', attachInputListeners);
+}
 
 if (draftCopyBtn) {
   draftCopyBtn.addEventListener('click', () => {
@@ -5100,11 +5108,7 @@ function ensureLoaderMinDisplay() {
   }
 })();
 (function profileButtonFallback(){
-  if (!window.sb && typeof supabase !== 'undefined') {
-    try {
-      window.sb = supabase.createClient('https://tfmbqiwxfgrwtjvoqomf.supabase.co', 'sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_', { auth: { detectSessionInUrl: true, flowType: 'pkce' } });
-    } catch(_) {}
-  }
+  if (!window.sb && window._sb) window.sb = window._sb;
   var btn = document.getElementById('user-btn');
   var back = document.getElementById('user-modal-backdrop');
   var channelBack = document.getElementById('channel-modal-backdrop');
