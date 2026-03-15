@@ -1148,7 +1148,15 @@ function updateEditingRowFromInput() {
   if (!el) return;
   const textEl = el.querySelector('.msg-text');
   if (!textEl) return;
-  textEl.innerHTML = escapeHtml(input.value || '');
+  var ghost = textEl.querySelector('.msg-edit-ghost');
+  if (!ghost) {
+    ghost = document.createElement('div');
+    ghost.className = 'msg-edit-ghost';
+    ghost.setAttribute('aria-hidden', 'true');
+    textEl.innerHTML = '';
+    textEl.appendChild(ghost);
+  }
+  ghost.textContent = input.value || '';
 }
 
 function commitTypingSegment() {

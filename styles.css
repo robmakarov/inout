@@ -853,12 +853,25 @@ body.dnd-active .msg-drag-spirit-stack{opacity:1;background:transparent;transiti
   padding-right:72px; /* reserve space under right-side actions */
   cursor:pointer;
 }
-/* Editing: object shows same value as input in realtime, same text style as input */
+/* Editing: message value replaced by ghost input — realtime copy of main input */
 .msg-editing .msg-text{
+  padding:0;
+  min-width:0;
+}
+.msg-edit-ghost{
   font-family:var(--mono);
   font-size:14px;
   line-height:1.5;
   color:var(--text);
+  white-space:pre-wrap;
+  word-break:break-word;
+  padding:10px 12px;
+  min-height:40px;
+  border:1px solid var(--line2);
+  border-radius:6px;
+  background:var(--bg2);
+  box-sizing:border-box;
+  width:100%;
 }
 /* DnD reorder: row under drop position (no nudge to avoid shake) */
 
