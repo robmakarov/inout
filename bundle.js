@@ -34,13 +34,13 @@ if (window.Stripe && STRIPE_PUBLISHABLE_KEY && !STRIPE_PUBLISHABLE_KEY.includes(
 const feedInner  = document.getElementById('feed-inner');
 const feedEl     = document.getElementById('feed');
 const inputArea  = document.getElementById('input-area');
-const input      = document.getElementById('msg-input');
+const input      = document.getElementById('obj-input');
 const sendBtn    = document.getElementById('send-btn');
 const clearInputBtn = document.getElementById('clear-input');
 const emptyEl    = document.getElementById('empty');
 const scrollBtn  = document.getElementById('scroll-btn');
 const ocNum      = document.getElementById('oc-num');
-const msgCountEl = document.getElementById('msg-count');
+const msgCountEl = document.getElementById('obj-count');
 const toastEl    = document.getElementById('toast');
 const userBtn    = document.getElementById('user-btn');
 const umBackdrop = document.getElementById('user-modal-backdrop');
@@ -185,23 +185,23 @@ function applyDragSelectRect(feedInner, startY, currentY, mode, startRowStates) 
   if (!feedInner || startY == null || currentY == null || !startRowStates) return;
   const rectTop = Math.min(startY, currentY);
   const rectBottom = Math.max(startY, currentY);
-  const rows = Array.from(feedInner.querySelectorAll('.msg'));
+  const rows = Array.from(feedInner.querySelectorAll('.obj'));
   let changed = false;
   for (const r of rows) {
     const rect = r.getBoundingClientRect();
     const overlaps = rect.bottom > rectTop && rect.top < rectBottom;
     const desired = overlaps ? (mode === 'select') : (startRowStates.get(r) ?? false);
-    const box = r.querySelector('.msg-select');
+    const box = r.querySelector('.obj-select');
     const id = r.dataset.id != null ? Number(r.dataset.id) : NaN;
     if (!box || !Number.isFinite(id)) continue;
     if (box.checked === desired) continue;
     box.checked = desired;
     if (box.checked) {
       selectedIds.add(id);
-      r.classList.add('msg-selected');
+      r.classList.add('obj-selected');
     } else {
       selectedIds.delete(id);
-      r.classList.remove('msg-selected');
+      r.classList.remove('obj-selected');
     }
     changed = true;
   }
@@ -210,20 +210,20 @@ function applyDragSelectRect(feedInner, startY, currentY, mode, startRowStates) 
 
 function toggleRowAtY(feedInner, clientY) {
   if (!feedInner) return;
-  const rows = Array.from(feedInner.querySelectorAll('.msg'));
+  const rows = Array.from(feedInner.querySelectorAll('.obj'));
   for (const r of rows) {
     const rect = r.getBoundingClientRect();
     if (clientY >= rect.top && clientY <= rect.bottom) {
-      const box = r.querySelector('.msg-select');
+      const box = r.querySelector('.obj-select');
       const id = r.dataset.id != null ? Number(r.dataset.id) : NaN;
       if (!box || !Number.isFinite(id)) continue;
       box.checked = !box.checked;
       if (box.checked) {
         selectedIds.add(id);
-        r.classList.add('msg-selected');
+        r.classList.add('obj-selected');
       } else {
         selectedIds.delete(id);
-        r.classList.remove('msg-selected');
+        r.classList.remove('obj-selected');
       }
       updateSelectionUI();
       return;
@@ -459,7 +459,7 @@ async function undoLastAction() {
       if (feedEl) feedEl.classList.add('feed-updating');
       requestAnimationFrame(() => {
         ids.forEach(id => {
-          const el = feedInner.querySelector('.msg[data-id="' + CSS.escape(String(id)) + '"]');
+          const el = feedInner.querySelector('.obj[data-id="' + CSS.escape(String(id)) + '"]');
           if (el) el.remove();
         });
         currentMessageOrder = currentMessageOrder.filter(x => !ids.includes(x));
@@ -511,10 +511,10 @@ async function undoLastAction() {
 
 function updateEditingRowHighlight() {
   if (!feedInner) return;
-  feedInner.querySelectorAll('.msg.msg-editing').forEach(r => r.classList.remove('msg-editing'));
+  feedInner.querySelectorAll('.obj.obj-editing').forEach(r => r.classList.remove('obj-editing'));
   if (editingMessageId != null) {
-    const row = feedInner.querySelector('.msg[data-id="' + CSS.escape(String(editingMessageId)) + '"]');
-    if (row) row.classList.add('msg-editing');
+    const row = feedInner.querySelector('.obj[data-id="' + CSS.escape(String(editingMessageId)) + '"]');
+    if (row) row.classList.add('obj-editing');
   }
 }
 
@@ -679,7 +679,7 @@ function setupFocusOnFirstInteraction() {
     if (el.isContentEditable) return true;
     if (el.closest && el.closest('input, textarea, [contenteditable="true"], button, a, select')) return true;
     if (el.closest && (el.closest('#user-modal') || el.closest('#channel-modal-backdrop') || el.closest('#view-menu'))) return true;
-    if (el.closest && el.closest('.msg-actions, .msg-select-wrap')) return true;
+    if (el.closest && el.closest('.obj-actions, .obj-select-wrap')) return true;
     return false;
   }
   document.addEventListener('focusin', () => {
@@ -794,9 +794,9 @@ function subscribeRealtimeAll() {
 function updateMessageRowText(msgId, text) {
   if (!feedInner || msgId == null) return;
   const idStr = String(msgId);
-  const el = feedInner.querySelector('.msg[data-id="' + CSS.escape(idStr) + '"]');
+  const el = feedInner.querySelector('.obj[data-id="' + CSS.escape(idStr) + '"]');
   if (!el) return;
-  const textEl = el.querySelector('.msg-text');
+  const textEl = el.querySelector('.obj-text');
   if (textEl) textEl.innerHTML = linkify(escapeHtml(text || ''));
 }
 
@@ -1033,7 +1033,7 @@ function hideClipboardBubble() {
 
 function showEmptyIfNoMessages() {
   if (!feedInner || !emptyEl) return;
-  const hasMsg = feedInner.querySelector('.msg');
+  const hasMsg = feedInner.querySelector('.obj');
   if (hasMsg) return;
   if (!emptyEl.parentNode) {
     // retrigger animation
@@ -1157,10 +1157,10 @@ function saveFieldPrefsForCurrentChannel() {
 }
 
 function applyFieldPrefsToMessages() {
-  const rows = feedInner.querySelectorAll('.msg');
+  const rows = feedInner.querySelectorAll('.obj');
   rows.forEach(row => {
-    const timeEl = row.querySelector('.msg-time');
-    const senderEl = row.querySelector('.msg-sender');
+    const timeEl = row.querySelector('.obj-time');
+    const senderEl = row.querySelector('.obj-sender');
     if (timeEl) timeEl.style.display = fieldPrefs.showTime ? '' : 'none';
     // In main feed we always hide author.
     const isMain = currentChannel === 'main' || (row.dataset.channel === 'main');
@@ -1192,7 +1192,7 @@ function setupTouchDragHandlers() {
     if (!touch) return;
     e.preventDefault();
     const y = touch.clientY;
-    const rows = Array.from(feedInner.querySelectorAll('.msg'));
+    const rows = Array.from(feedInner.querySelectorAll('.obj'));
     if (!rows.length) return;
     let target = null;
     let targetCenterDist = Infinity;
@@ -1248,7 +1248,7 @@ function createMsgRow(msg, isNew) {
   if (emptyEl.parentNode) emptyEl.remove();
 
   const row  = document.createElement('div');
-  row.className = 'msg' + (isNew ? ' new-flash' : '');
+  row.className = 'obj' + (isNew ? ' new-flash' : '');
   if (typeof msg.id !== 'undefined') row.dataset.id = String(msg.id);
   row.draggable = true;
   row.addEventListener('dragstart', e => {
@@ -1270,7 +1270,7 @@ function createMsgRow(msg, isNew) {
     row.classList.add('dragging');
     savedOrderBeforeDrag = currentMessageOrder.slice();
     dragDropHandled = false;
-    if (feedInner) feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
+    if (feedInner) feedInner.querySelectorAll('.obj-drag-over').forEach(r => r.classList.remove('obj-drag-over'));
   });
   row.addEventListener('dragend', () => {
     lastReorderTarget = null;
@@ -1278,10 +1278,10 @@ function createMsgRow(msg, isNew) {
     feedDragoverLast = null;
     clearEdgeScrollInterval();
     if (feedDropIndicatorEl) feedDropIndicatorEl.classList.remove('visible');
-    if (feedInner) feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
+    if (feedInner) feedInner.querySelectorAll('.obj-drag-over').forEach(r => r.classList.remove('obj-drag-over'));
     row.classList.remove('dragging');
     tabsEl.querySelectorAll('.tab.tab-drop-target').forEach(t => t.classList.remove('tab-drop-target'));
-    const domOrder = feedInner ? Array.from(feedInner.querySelectorAll('.msg')).map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id)) : [];
+    const domOrder = feedInner ? Array.from(feedInner.querySelectorAll('.obj')).map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id)) : [];
     const orderChanged = !dragDropHandled && domOrder.length === savedOrderBeforeDrag.length && domOrder.some((id, i) => id !== savedOrderBeforeDrag[i]);
     if (!dragDropHandled && !orderChanged) {
       currentMessageOrder = savedOrderBeforeDrag.slice();
@@ -1301,8 +1301,8 @@ function createMsgRow(msg, isNew) {
   /* row-level dragover/drop removed: feed is the single drop target for reliable reorder */
   row.addEventListener('touchstart', e => {
     if (!feedInner) return;
-    if (e.target.closest('.msg-checkbox-zone')) return;
-    const contentLeft = row.querySelector('.msg-time') || row.querySelector('.msg-sender') || row.querySelector('.msg-text');
+    if (e.target.closest('.obj-checkbox-zone')) return;
+    const contentLeft = row.querySelector('.obj-time') || row.querySelector('.obj-sender') || row.querySelector('.obj-text');
     if (contentLeft && e.touches[0].clientX < contentLeft.getBoundingClientRect().left) return;
     if (!touchDragState || !touchDragState.bound) {
       setupTouchDragHandlers();
@@ -1320,10 +1320,10 @@ function createMsgRow(msg, isNew) {
   if (isNew) setTimeout(() => row.classList.remove('new-flash'), 800);
 
   const actions = document.createElement('div');
-  actions.className = 'msg-actions';
+  actions.className = 'obj-actions';
 
   const actionDelete = document.createElement('button');
-  actionDelete.className = 'msg-action-btn';
+  actionDelete.className = 'obj-action-btn';
   actionDelete.textContent = 'Del';
   actionDelete.addEventListener('click', e => {
     e.stopPropagation();
@@ -1332,7 +1332,7 @@ function createMsgRow(msg, isNew) {
   });
 
   const actionMove = document.createElement('button');
-  actionMove.className = 'msg-action-btn';
+  actionMove.className = 'obj-action-btn';
   actionMove.textContent = 'Move';
   actionMove.addEventListener('click', e => {
     e.stopPropagation();
@@ -1341,7 +1341,7 @@ function createMsgRow(msg, isNew) {
   });
 
   const actionExport = document.createElement('button');
-  actionExport.className = 'msg-action-btn';
+  actionExport.className = 'obj-action-btn';
   actionExport.textContent = 'Exp';
   actionExport.addEventListener('click', e => {
     e.stopPropagation();
@@ -1350,7 +1350,7 @@ function createMsgRow(msg, isNew) {
   });
 
   const actionCopy = document.createElement('button');
-  actionCopy.className = 'msg-action-btn';
+  actionCopy.className = 'obj-action-btn';
   actionCopy.textContent = 'Copy';
   actionCopy.addEventListener('click', e => {
     e.stopPropagation();
@@ -1370,7 +1370,7 @@ function createMsgRow(msg, isNew) {
   actions.appendChild(actionCopy);
 
   const sender = document.createElement('div');
-  sender.className = 'msg-sender';
+  sender.className = 'obj-sender';
   if (msg.author_name) {
     sender.textContent = String(msg.author_name);
   } else if (msg.user_id && currentUser && msg.user_id === currentUser.id) {
@@ -1396,26 +1396,26 @@ function createMsgRow(msg, isNew) {
   }
 
   const selectWrap = document.createElement('div');
-  selectWrap.className = 'msg-select-wrap';
+  selectWrap.className = 'obj-select-wrap';
   const selectBox = document.createElement('input');
   selectBox.type = 'checkbox';
-  selectBox.className = 'msg-select';
+  selectBox.className = 'obj-select';
   selectBox.addEventListener('change', () => {
     if (!msg.id) return;
     if (selectBox.checked) {
       selectedIds.add(msg.id);
-      row.classList.add('msg-selected');
+      row.classList.add('obj-selected');
     } else {
       selectedIds.delete(msg.id);
-      row.classList.remove('msg-selected');
+      row.classList.remove('obj-selected');
     }
     updateSelectionUI();
   });
   selectWrap.appendChild(selectBox);
   const checkboxZone = document.createElement('div');
-  checkboxZone.className = 'msg-checkbox-zone';
+  checkboxZone.className = 'obj-checkbox-zone';
   const zoneLeft = document.createElement('div');
-  zoneLeft.className = 'msg-checkbox-zone-left';
+  zoneLeft.className = 'obj-checkbox-zone-left';
   zoneLeft.setAttribute('aria-hidden', 'true');
   checkboxZone.appendChild(zoneLeft);
   checkboxZone.appendChild(selectWrap);
@@ -1430,10 +1430,10 @@ function createMsgRow(msg, isNew) {
     selectBox.checked = !selectBox.checked;
     if (selectBox.checked) {
       selectedIds.add(msg.id);
-      row.classList.add('msg-selected');
+      row.classList.add('obj-selected');
     } else {
       selectedIds.delete(msg.id);
-      row.classList.remove('msg-selected');
+      row.classList.remove('obj-selected');
     }
     if (!selectMode) {
       selectModeAutoOn = true;
@@ -1476,8 +1476,8 @@ function createMsgRow(msg, isNew) {
       dragSelectActive = true;
       state.mode = selectBox.checked ? 'deselect' : 'select';
       state.startRowStates = new Map();
-      feedInner.querySelectorAll('.msg').forEach(r => {
-        const box = r.querySelector('.msg-select');
+      feedInner.querySelectorAll('.obj').forEach(r => {
+        const box = r.querySelector('.obj-select');
         if (box) state.startRowStates.set(r, box.checked);
       });
     }, 200);
@@ -1527,8 +1527,8 @@ function createMsgRow(msg, isNew) {
       dragSelectActive = true;
       state.mode = selectBox.checked ? 'deselect' : 'select';
       state.startRowStates = new Map();
-      feedInner.querySelectorAll('.msg').forEach(r => {
-        const box = r.querySelector('.msg-select');
+      feedInner.querySelectorAll('.obj').forEach(r => {
+        const box = r.querySelector('.obj-select');
         if (box) state.startRowStates.set(r, box.checked);
       });
     }, 200);
@@ -1550,7 +1550,7 @@ function createMsgRow(msg, isNew) {
   /* long-press on message row (anywhere except checkbox-zone/actions/links) starts drag-select; any movement before delay cancels so reorder doesn't trigger */
   row.addEventListener('mousedown', e => {
     if (!msg.id) return;
-    if (e.target.closest('.msg-checkbox-zone, .msg-actions') || (e.target.closest('a') && e.target.closest('.msg-text'))) return;
+    if (e.target.closest('.obj-checkbox-zone, .obj-actions') || (e.target.closest('a') && e.target.closest('.obj-text'))) return;
     const startY = e.clientY;
     const state = { started: false, mode: null, startRowStates: null, didWeMove: false };
     const onMove = (ev) => {
@@ -1581,8 +1581,8 @@ function createMsgRow(msg, isNew) {
       dragSelectActive = true;
       state.mode = selectBox.checked ? 'deselect' : 'select';
       state.startRowStates = new Map();
-      feedInner.querySelectorAll('.msg').forEach(r => {
-        const box = r.querySelector('.msg-select');
+      feedInner.querySelectorAll('.obj').forEach(r => {
+        const box = r.querySelector('.obj-select');
         if (box) state.startRowStates.set(r, box.checked);
       });
     }, 200);
@@ -1604,7 +1604,7 @@ function createMsgRow(msg, isNew) {
   });
   row.addEventListener('touchstart', e => {
     if (!msg.id || e.touches.length !== 1) return;
-    if (e.target.closest('.msg-checkbox-zone, .msg-actions') || (e.target.closest('a') && e.target.closest('.msg-text'))) return;
+    if (e.target.closest('.obj-checkbox-zone, .obj-actions') || (e.target.closest('a') && e.target.closest('.obj-text'))) return;
     const startY = e.touches[0].clientY;
     const state = { started: false, mode: null, startRowStates: null, didWeMove: false };
     const onTouchMove = (ev) => {
@@ -1639,8 +1639,8 @@ function createMsgRow(msg, isNew) {
       dragSelectActive = true;
       state.mode = selectBox.checked ? 'deselect' : 'select';
       state.startRowStates = new Map();
-      feedInner.querySelectorAll('.msg').forEach(r => {
-        const box = r.querySelector('.msg-select');
+      feedInner.querySelectorAll('.obj').forEach(r => {
+        const box = r.querySelector('.obj-select');
         if (box) state.startRowStates.set(r, box.checked);
       });
     }, 200);
@@ -1666,11 +1666,11 @@ function createMsgRow(msg, isNew) {
   }, { passive: true });
 
   const time = document.createElement('div');
-  time.className = 'msg-time';
+  time.className = 'obj-time';
   time.textContent = formatTime(msg.created_at);
 
   const text = document.createElement('div');
-  text.className = 'msg-text';
+  text.className = 'obj-text';
   text.innerHTML = linkify(escapeHtml(msg.text));
   text.addEventListener('click', e => {
     if (e.target.closest('a')) return;
@@ -1699,27 +1699,27 @@ function createMsgRow(msg, isNew) {
   });
 
   row.addEventListener('click', e => {
-    if (e.target.closest('.msg-checkbox-zone')) return;
-    if (e.target.closest('.msg-text')) return;
+    if (e.target.closest('.obj-checkbox-zone')) return;
+    if (e.target.closest('.obj-text')) return;
     if (selectMode) {
-      if (e.target.closest('.msg-actions')) return;
+      if (e.target.closest('.obj-actions')) return;
       if (dragSelectJustEnded || dragSelectToggledByTouch) return;
       e.preventDefault();
       e.stopPropagation();
       selectBox.checked = !selectBox.checked;
       if (selectBox.checked) {
         selectedIds.add(msg.id);
-        row.classList.add('msg-selected');
+        row.classList.add('obj-selected');
       } else {
         selectedIds.delete(msg.id);
-        row.classList.remove('msg-selected');
+        row.classList.remove('obj-selected');
       }
       updateSelectionUI();
       return;
     }
     if (!editingMessageId) return;
     if (String(row.dataset.id) !== String(editingMessageId)) return;
-    if (e.target.closest('button, a, .msg-actions, .msg-select, .msg-select-wrap')) return;
+    if (e.target.closest('button, a, .obj-actions, .obj-select, .obj-select-wrap')) return;
     e.stopPropagation();
     e.preventDefault();
     cancelEditingMode(true);
@@ -1732,8 +1732,8 @@ function createMsgRow(msg, isNew) {
   row.appendChild(text);
   row.appendChild(actions);
   row.addEventListener('mousedown', e => {
-    if (e.target.closest('.msg-checkbox-zone')) return;
-    const contentLeft = row.querySelector('.msg-time') || row.querySelector('.msg-sender') || row.querySelector('.msg-text');
+    if (e.target.closest('.obj-checkbox-zone')) return;
+    const contentLeft = row.querySelector('.obj-time') || row.querySelector('.obj-sender') || row.querySelector('.obj-text');
     if (contentLeft && e.clientX < contentLeft.getBoundingClientRect().left) {
       pointerDownOnSelectArea = true;
       const clear = () => {
@@ -1966,7 +1966,7 @@ function recomputeOrderFromDOM() {
   if (!feedInner) return;
   pushUndo({ type: 'order', before: (currentMessageOrder || []).slice() });
   logAction('reorder', { channel: currentChannel });
-  const ids = Array.from(feedInner.querySelectorAll('.msg'))
+  const ids = Array.from(feedInner.querySelectorAll('.obj'))
     .map(row => Number(row.dataset.id))
     .filter(id => Number.isFinite(id));
   currentMessageOrder = ids;
@@ -1975,7 +1975,7 @@ function recomputeOrderFromDOM() {
 function applyMessageOrderToDOM() {
   if (!feedInner) return;
   if (!currentMessageOrder.length) return;
-  const rows = Array.from(feedInner.querySelectorAll('.msg'));
+  const rows = Array.from(feedInner.querySelectorAll('.obj'));
   if (!rows.length) return;
   // Skip if DOM order already matches — avoids reflow/blink when nothing changed
   const domOrder = rows.map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id));
@@ -2059,7 +2059,7 @@ function renderTabs() {
       if (!id || ch === currentChannel) return;
       const numId = Number(id);
       if (!Number.isFinite(numId)) return;
-      const rowEl = feedInner.querySelector('.msg[data-id="' + CSS.escape(String(numId)) + '"]');
+      const rowEl = feedInner.querySelector('.obj[data-id="' + CSS.escape(String(numId)) + '"]');
       if (rowEl) {
         animateMessageToTab(rowEl, btn, async () => {
           const ok = await moveSingleMessage(numId, ch);
@@ -2663,8 +2663,8 @@ if (selectToggle) {
       selectedIds.clear();
       selectModeAutoOn = false;
       if (feedInner) {
-        feedInner.querySelectorAll('.msg-select').forEach(box => { box.checked = false; });
-        feedInner.querySelectorAll('.msg.msg-selected').forEach(row => row.classList.remove('msg-selected'));
+        feedInner.querySelectorAll('.obj-select').forEach(box => { box.checked = false; });
+        feedInner.querySelectorAll('.obj.obj-selected').forEach(row => row.classList.remove('obj-selected'));
       }
     } else {
       selectModeAutoOn = false;
@@ -2675,10 +2675,10 @@ if (selectToggle) {
 
 if (selectAllBtn) {
   selectAllBtn.addEventListener('click', () => {
-    const boxes = feedInner.querySelectorAll('.msg-select');
+    const boxes = feedInner.querySelectorAll('.obj-select');
     boxes.forEach(box => {
       box.checked = true;
-      const row = box.closest('.msg');
+      const row = box.closest('.obj');
       const id = row && row.dataset.id;
       if (id) selectedIds.add(Number(id));
     });
@@ -2689,12 +2689,12 @@ if (selectAllBtn) {
 if (selectNoneBtn) {
   selectNoneBtn.addEventListener('click', () => {
     selectModeAutoOn = false;
-    const boxes = feedInner.querySelectorAll('.msg-select');
+    const boxes = feedInner.querySelectorAll('.obj-select');
     boxes.forEach(box => {
       box.checked = false;
     });
     selectedIds.clear();
-    feedInner.querySelectorAll('.msg.msg-selected').forEach(row => row.classList.remove('msg-selected'));
+    feedInner.querySelectorAll('.obj.obj-selected').forEach(row => row.classList.remove('obj-selected'));
     updateSelectionUI();
   });
 }
@@ -2746,10 +2746,10 @@ if (viewToggleBtn && viewMenu) {
 if (deleteSelectedBtn) {
   deleteSelectedBtn.addEventListener('click', async () => {
     if (!currentUser) return;
-    const boxes = feedInner.querySelectorAll('.msg-select:checked');
+    const boxes = feedInner.querySelectorAll('.obj-select:checked');
     let ids = Array.from(boxes)
       .map(box => {
-        const row = box.closest('.msg');
+        const row = box.closest('.obj');
         return row && row.dataset.id ? Number(row.dataset.id) : null;
       })
       .filter(id => typeof id === 'number');
@@ -2807,10 +2807,10 @@ if (moveSelectedBtn) {
     if (!currentUser || !moveTargetSelect) return;
     const target = moveTargetSelect.value;
     if (!target || target === currentChannel) return;
-    const boxes = feedInner.querySelectorAll('.msg-select:checked');
+    const boxes = feedInner.querySelectorAll('.obj-select:checked');
     const ids = Array.from(boxes)
       .map(box => {
-        const row = box.closest('.msg');
+        const row = box.closest('.obj');
         return row && row.dataset.id ? Number(row.dataset.id) : null;
       })
       .filter(id => typeof id === 'number');
@@ -2875,7 +2875,7 @@ async function deleteSingleMessage(id) {
       pushUndo({ type: 'delete', entries: [data] });
       logAction('delete', { id: data.id });
     }
-    const el = feedInner.querySelector('.msg[data-id="' + id + '"]');
+    const el = feedInner.querySelector('.obj[data-id="' + id + '"]');
     if (el) el.remove();
     // keep local order in sync
     currentMessageOrder = currentMessageOrder.filter(x => x !== id);
@@ -2890,7 +2890,7 @@ async function deleteSingleMessage(id) {
 function animateMessageToTab(rowEl, tabEl, onDone) {
   const from = rowEl.getBoundingClientRect();
   const clone = rowEl.cloneNode(true);
-  clone.classList.add('msg-fly-clone');
+  clone.classList.add('obj-fly-clone');
   clone.style.left = from.left + 'px';
   clone.style.top = from.top + 'px';
   clone.style.width = from.width + 'px';
@@ -2958,7 +2958,7 @@ async function moveSingleMessage(id, targetChannel) {
       pushUndo({ type: 'move', entries: [before] });
       logAction('move', { id: before.id, target });
     }
-    const el = feedInner.querySelector('.msg[data-id="' + CSS.escape(String(id)) + '"]');
+    const el = feedInner.querySelector('.obj[data-id="' + CSS.escape(String(id)) + '"]');
     if (el) el.remove();
     currentMessageOrder = currentMessageOrder.filter(x => x !== id);
     saveMessageOrderForCurrentChannel();
@@ -3022,23 +3022,23 @@ if (exportTabBtn) {
       return;
     }
     try {
-      const boxes = feedInner.querySelectorAll('.msg-select:checked');
+      const boxes = feedInner.querySelectorAll('.obj-select:checked');
       let orderedIds = [];
       if (boxes.length) {
         const selectedIds = new Set(
           Array.from(boxes)
-            .map(b => { const row = b.closest('.msg'); return row && row.dataset.id ? Number(row.dataset.id) : null; })
+            .map(b => { const row = b.closest('.obj'); return row && row.dataset.id ? Number(row.dataset.id) : null; })
             .filter(id => typeof id === 'number')
         );
         // Order as presented in the feed (DOM order).
-        orderedIds = Array.from(feedInner.querySelectorAll('.msg'))
+        orderedIds = Array.from(feedInner.querySelectorAll('.obj'))
           .map(row => row.dataset.id ? Number(row.dataset.id) : null)
           .filter(id => Number.isFinite(id) && selectedIds.has(id));
       } else {
         // Whole tab: use current view order (currentMessageOrder), or DOM order if empty.
         orderedIds = currentMessageOrder.length
           ? currentMessageOrder.slice()
-          : Array.from(feedInner.querySelectorAll('.msg'))
+          : Array.from(feedInner.querySelectorAll('.obj'))
               .map(row => row.dataset.id ? Number(row.dataset.id) : null)
               .filter(id => Number.isFinite(id));
       }
@@ -3120,7 +3120,7 @@ if (feedEl) feedEl.addEventListener('scroll', () => {
 /* FLIP animation: smooth shift of rows when reordering during drag */
 function flipAnimateShift(feedInner, dragging, oldRects, rowsArray) {
   if (!feedInner || !dragging || !oldRects) return;
-  const rows = rowsArray && rowsArray.length ? rowsArray : feedInner.querySelectorAll('.msg');
+  const rows = rowsArray && rowsArray.length ? rowsArray : feedInner.querySelectorAll('.obj');
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     if (r === dragging) continue;
@@ -3142,12 +3142,12 @@ function flipAnimateShift(feedInner, dragging, oldRects, rowsArray) {
 var feedDragoverRaf = null;
 var feedDragoverLast = null;
 function processFeedDragover(ev) {
-  const dragging = feedInner ? feedInner.querySelector('.msg.dragging') : null;
+  const dragging = feedInner ? feedInner.querySelector('.obj.dragging') : null;
   if (!dragging || !feedInner) return;
-  const rows = Array.from(feedInner.querySelectorAll('.msg'));
+  const rows = Array.from(feedInner.querySelectorAll('.obj'));
   if (!rows.length) return;
   const firstRow = rows[0];
-  const contentLeft = firstRow.querySelector('.msg-time') || firstRow.querySelector('.msg-sender') || firstRow.querySelector('.msg-text');
+  const contentLeft = firstRow.querySelector('.obj-time') || firstRow.querySelector('.obj-sender') || firstRow.querySelector('.obj-text');
   if (contentLeft && ev.clientX < contentLeft.getBoundingClientRect().left) return;
   const y = ev.clientY;
   const firstRect = firstRow.getBoundingClientRect();
@@ -3158,7 +3158,7 @@ function processFeedDragover(ev) {
   const inEmptyZone = y >= lastRect.bottom - dropAtEndThreshold;
   if (!inEmptyZone) {
     const under = document.elementFromPoint(ev.clientX, ev.clientY);
-    if (under && under.closest('.msg') && !under.closest('.msg-time') && !under.closest('.msg-sender') && !under.closest('.msg-text') && !under.closest('.msg-actions')) return;
+    if (under && under.closest('.obj') && !under.closest('.obj-time') && !under.closest('.obj-sender') && !under.closest('.obj-text') && !under.closest('.obj-actions')) return;
   }
   const inLastRowLowerHalf = lastRow !== dragging && y >= lastRect.top + lastRect.height * 0.5;
   const wantAppendFirst = inEmptyZone || inLastRowLowerHalf;
@@ -3231,7 +3231,7 @@ function processFeedDragover(ev) {
 }
 if (feedEl) {
 feedEl.addEventListener('dragover', e => {
-  const dragging = feedInner ? feedInner.querySelector('.msg.dragging') : null;
+  const dragging = feedInner ? feedInner.querySelector('.obj.dragging') : null;
   if (!dragging || !feedInner) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
@@ -3246,15 +3246,15 @@ feedEl.addEventListener('dragover', e => {
   }
 });
 feedEl.addEventListener('drop', e => {
-  if (feedInner && feedInner.querySelector('.msg.dragging')) {
+  if (feedInner && feedInner.querySelector('.obj.dragging')) {
     e.preventDefault();
     dragDropHandled = true;
-    if (feedInner) feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
+    if (feedInner) feedInner.querySelectorAll('.obj-drag-over').forEach(r => r.classList.remove('obj-drag-over'));
   }
 });
 feedEl.addEventListener('dragleave', e => {
   if (!e.relatedTarget || !feedEl.contains(e.relatedTarget)) {
-    if (feedInner) feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
+    if (feedInner) feedInner.querySelectorAll('.obj-drag-over').forEach(r => r.classList.remove('obj-drag-over'));
   }
 });
 }
@@ -3262,14 +3262,14 @@ feedEl.addEventListener('dragleave', e => {
 // Keep drop indicator visible when dragging beyond the feed bounds (e.g. over header)
 document.addEventListener('dragover', e => {
   if (!feedEl || !feedInner) return;
-  if (!feedInner.querySelector('.msg.dragging')) return;
+  if (!feedInner.querySelector('.obj.dragging')) return;
   const feedRect = feedEl.getBoundingClientRect();
   const y = e.clientY;
   if (y >= feedRect.top && y <= feedRect.bottom) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
 
-  const rows = Array.from(feedInner.querySelectorAll('.msg'));
+  const rows = Array.from(feedInner.querySelectorAll('.obj'));
   if (!rows.length) return;
   const firstRow = rows[0];
   const lastRow = rows[rows.length - 1];
