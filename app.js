@@ -615,12 +615,14 @@ function updateEditingRowHighlight() {
   }
 }
 
-function cancelEditingMode(clearInput) {
+/** Input mode is default and reactivates after every operation; only edit mode interrupts it. */
+function reactivateInputMode(opts) {
+  opts = opts || {};
   editingMessageId = null;
   try { localStorage.removeItem(WAS_EDITING_KEY); } catch (_) {}
   if (input) {
     input.placeholder = 'say something…';
-    if (clearInput) {
+    if (opts.clearInput) {
       input.value = '';
       saveInputGlobal();
       if (currentUser) broadcastDraft('');
@@ -630,6 +632,11 @@ function cancelEditingMode(clearInput) {
     updateClearInputBtn();
   }
   updateEditingRowHighlight();
+  focusMessageInput();
+}
+
+function cancelEditingMode(clearInput) {
+  reactivateInputMode({ clearInput: !!clearInput });
 }
 let currentMessageOrder = [];
 let touchDragState = null; // for mobile long-press drag
@@ -2676,12 +2683,10 @@ function createMsgRow(msg, isNew) {
     if (typeof msg.id === 'undefined') return;
     if (selectMode && editingMessageId) {
       cancelEditingMode(true);
-      setTimeout(() => { saveInputGlobal(); if (input) input.focus(); }, 0);
       return;
     }
     if (Number(msg.id) === Number(editingMessageId)) {
       cancelEditingMode(true);
-      setTimeout(() => { saveInputGlobal(); if (input) input.focus(); }, 0);
       return;
     }
     input.value = msg.text || '';
@@ -2721,7 +2726,6 @@ function createMsgRow(msg, isNew) {
     e.stopPropagation();
     e.preventDefault();
     cancelEditingMode(true);
-    setTimeout(() => { saveInputGlobal(); if (input) input.focus(); }, 0);
   }, true);
 
   row.appendChild(checkboxZone);
@@ -3638,8 +3642,7 @@ async function sendText(text) {
       logAction('edit', { id: before.id });
     }
     updateMessageRowText(editingMessageId, trimmed);
-    cancelEditingMode(true);
-    requestAnimationFrame(focusMessageInput);
+    reactivateInputMode({ clearInput: true });
     return;
   }
 
@@ -3672,12 +3675,7 @@ async function sendText(text) {
       pushUndo({ type: 'send', entries: [data] });
       logAction('send', { channel: currentChannel });
     }
-    input.value = '';
-    autoResize();
-    sendBtn.disabled = true;
-    updateClearInputBtn();
-    saveInputGlobal();
-    requestAnimationFrame(focusMessageInput);
+    reactivateInputMode({ clearInput: true });
   }
 }
 
