@@ -1149,15 +1149,23 @@ function updateEditingRowFromInput() {
   const textEl = el.querySelector('.msg-text');
   if (!textEl) return;
   const fullText = input.value || '';
-  var caretPos = typeof input.selectionStart === 'number' ? input.selectionStart : fullText.length;
-  if (!Number.isFinite(caretPos)) caretPos = fullText.length;
-  caretPos = Math.max(0, Math.min(caretPos, fullText.length));
-  const before = fullText.slice(0, caretPos);
-  const after = fullText.slice(caretPos);
-  const html =
-    escapeHtml(before) +
-    '<span class="msg-edit-caret" aria-hidden="true">|</span>' +
-    escapeHtml(after);
+  var start = typeof input.selectionStart === 'number' ? input.selectionStart : fullText.length;
+  var end = typeof input.selectionEnd === 'number' ? input.selectionEnd : fullText.length;
+  if (!Number.isFinite(start)) start = fullText.length;
+  if (!Number.isFinite(end)) end = fullText.length;
+  if (start > end) { var t = start; start = end; end = t; }
+  start = Math.max(0, Math.min(start, fullText.length));
+  end = Math.max(0, Math.min(end, fullText.length));
+  var part1 = fullText.slice(0, start);
+  var part2 = fullText.slice(start, end);
+  var part3 = fullText.slice(end);
+  var caretHtml = '<span class="msg-edit-caret" aria-hidden="true"></span>';
+  var html;
+  if (part2.length > 0) {
+    html = escapeHtml(part1) + '<span class="msg-edit-selection">' + escapeHtml(part2) + '</span>' + caretHtml + escapeHtml(part3);
+  } else {
+    html = escapeHtml(part1) + caretHtml + escapeHtml(part3);
+  }
   textEl.innerHTML = html;
 }
 
@@ -3816,6 +3824,10 @@ input.addEventListener('click', () => {
 });
 
 input.addEventListener('keyup', () => {
+  if (editingMessageId != null) updateEditingRowFromInput();
+});
+
+input.addEventListener('select', () => {
   if (editingMessageId != null) updateEditingRowFromInput();
 });
 
