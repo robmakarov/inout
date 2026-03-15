@@ -12,7 +12,7 @@
 - --dnd-spirit-fly-duration, --dnd-spirit-fade-duration
 - --dnd-drop-line-color, --dnd-drop-line-height, --dnd-origin-line-color
 - --dnd-target-bg, --dnd-idle-opacity, --dnd-idle-bg, --dnd-placeholder-opacity, --dnd-ghost-opacity
-- --dnd-spirit-shadow, --dnd-spirit-radius
+- --dnd-spirit-shadow, --dnd-spirit-radius, --dnd-spirit-bg (semi-transparent so underlying row visible)
 - --dnd-stack-drop-in-duration, --dnd-stack-stagger-step, --dnd-spirit-stack-max-visible, --dnd-stack-form-duration
 
 **DnD:** body.dnd-active → .msg no transition except .msg-drag-nudge-right. Spirit follows cursor; clamped to feed. Rows unchanged; placeholders 80% opacity. Drop-in: opacity-only (dnd-drop-in), no translate = no shake. Stack-form animation on stack. Drop on origin = undo.
