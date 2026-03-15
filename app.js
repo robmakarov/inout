@@ -2197,27 +2197,44 @@ function createMsgRow(msg, isNew) {
       dragSelectedRows = [row];
     }
     var spiritW = Math.max(200, (row.offsetWidth || 280));
+    var rowRect = row.getBoundingClientRect();
+    var fr0 = feedEl ? feedEl.getBoundingClientRect() : rowRect;
+    var margin0 = 24;
+    var startTop = Math.max(fr0.top + margin0, Math.min(fr0.bottom - margin0, e.clientY || rowRect.top));
+    var isTableView = !!(feedInner && feedInner.classList.contains('view-table'));
     if (dragSelectedRows.length > 1) {
       var stackContainer = document.createElement('div');
       stackContainer.className = 'msg-drag-spirit msg-drag-spirit-stack';
       stackContainer.setAttribute('aria-hidden', 'true');
       stackContainer.style.width = spiritW + 'px';
-      var rowRect = row.getBoundingClientRect();
-      var fr0 = feedEl ? feedEl.getBoundingClientRect() : rowRect;
-      var margin0 = 24;
-      var startTop = Math.max(fr0.top + margin0, Math.min(fr0.bottom - margin0, e.clientY || rowRect.top));
       stackContainer.style.left = (rowRect.left + rowRect.width / 2) + 'px';
       stackContainer.style.top = startTop + 'px';
       var maxVisible = 4;
       var toShow = Math.min(dragSelectedRows.length, maxVisible);
-      for (var si = 0; si < toShow; si++) {
-        var r = dragSelectedRows[si];
-        var clone = r.cloneNode(true);
-        clone.classList.remove('dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
-        clone.classList.add('msg', 'msg-drag-spirit-row');
-        clone.removeAttribute('draggable');
-        clone.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
-        stackContainer.appendChild(clone);
+      if (isTableView) {
+        var tableWrap = document.createElement('div');
+        tableWrap.className = 'msg-drag-spirit-table-wrap';
+        tableWrap.style.width = '100%';
+        for (var si = 0; si < toShow; si++) {
+          var r = dragSelectedRows[si];
+          var clone = r.cloneNode(true);
+          clone.classList.remove('dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
+          clone.classList.add('msg', 'msg-drag-spirit-row');
+          clone.removeAttribute('draggable');
+          clone.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
+          tableWrap.appendChild(clone);
+        }
+        stackContainer.appendChild(tableWrap);
+      } else {
+        for (var si = 0; si < toShow; si++) {
+          var r = dragSelectedRows[si];
+          var clone = r.cloneNode(true);
+          clone.classList.remove('dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
+          clone.classList.add('msg', 'msg-drag-spirit-row');
+          clone.removeAttribute('draggable');
+          clone.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
+          stackContainer.appendChild(clone);
+        }
       }
       if (dragSelectedRows.length > maxVisible) {
         var extra = document.createElement('div');
@@ -2228,20 +2245,33 @@ function createMsgRow(msg, isNew) {
       document.body.appendChild(stackContainer);
       dragSpiritEl = stackContainer;
     } else {
-      dragSpiritEl = row.cloneNode(true);
-      dragSpiritEl.classList.remove('dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
-      dragSpiritEl.classList.add('msg', 'msg-drag-spirit');
-      dragSpiritEl.removeAttribute('draggable');
-      dragSpiritEl.setAttribute('aria-hidden', 'true');
-      dragSpiritEl.style.width = spiritW + 'px';
-      var rowRect = row.getBoundingClientRect();
-      var fr0 = feedEl ? feedEl.getBoundingClientRect() : rowRect;
-      var margin0 = 24;
-      var startTop = Math.max(fr0.top + margin0, Math.min(fr0.bottom - margin0, e.clientY || rowRect.top));
-      dragSpiritEl.style.left = (rowRect.left + rowRect.width / 2) + 'px';
-      dragSpiritEl.style.top = startTop + 'px';
-      dragSpiritEl.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
-      document.body.appendChild(dragSpiritEl);
+      if (isTableView) {
+        var wrap = document.createElement('div');
+        wrap.className = 'msg-drag-spirit-table-wrap';
+        wrap.setAttribute('aria-hidden', 'true');
+        wrap.style.width = spiritW + 'px';
+        wrap.style.left = (rowRect.left + rowRect.width / 2) + 'px';
+        wrap.style.top = startTop + 'px';
+        var clone = row.cloneNode(true);
+        clone.classList.remove('dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
+        clone.classList.add('msg', 'msg-drag-spirit');
+        clone.removeAttribute('draggable');
+        clone.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
+        wrap.appendChild(clone);
+        document.body.appendChild(wrap);
+        dragSpiritEl = wrap;
+      } else {
+        dragSpiritEl = row.cloneNode(true);
+        dragSpiritEl.classList.remove('dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
+        dragSpiritEl.classList.add('msg', 'msg-drag-spirit');
+        dragSpiritEl.removeAttribute('draggable');
+        dragSpiritEl.setAttribute('aria-hidden', 'true');
+        dragSpiritEl.style.width = spiritW + 'px';
+        dragSpiritEl.style.left = (rowRect.left + rowRect.width / 2) + 'px';
+        dragSpiritEl.style.top = startTop + 'px';
+        dragSpiritEl.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
+        document.body.appendChild(dragSpiritEl);
+      }
     }
     if (!dragImageEl) {
       dragImageEl = document.createElement('div');

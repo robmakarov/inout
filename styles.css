@@ -630,6 +630,58 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
 .feed-inner.view-table .msg:not(.msg-header) .msg-sender{ width:1%; white-space:nowrap; }
 .feed-inner.view-table .msg:not(.msg-header) .msg-text{ width:auto; }
 .feed-inner.view-table .msg:not(.msg-header) .msg-actions{ width:1%; }
+
+/* Object component: property text fields. Feed view only — switchable captions above each value. */
+.feed-inner:not(.view-table) .msg .msg-time::before,
+.feed-inner:not(.view-table) .msg .msg-sender::before,
+.feed-inner:not(.view-table) .msg .msg-text::before{
+  display:block;
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:0.05em;
+  color:var(--muted);
+  margin-bottom:2px;
+}
+.feed-inner:not(.view-table) .msg .msg-time::before{ content:'Time'; }
+.feed-inner:not(.view-table) .msg .msg-sender::before{ content:'Author'; }
+.feed-inner:not(.view-table) .msg .msg-text::before{ content:'Value'; }
+
+/* DnD spirit: table visual — wrap cloned row(s) in table so they render as table row(s). */
+.msg-drag-spirit-table-wrap{
+  position:fixed;
+  z-index:10000;
+  pointer-events:none;
+  transform:translate(-50%,-50%);
+  display:table;
+  width:100%;
+  border-collapse:collapse;
+  table-layout:fixed;
+  background:var(--bg2);
+  border:1px solid var(--line2);
+  border-radius:8px;
+  box-shadow:var(--dnd-spirit-shadow);
+  box-sizing:border-box;
+}
+.msg-drag-spirit-table-wrap .msg{
+  display:table-row;
+}
+.msg-drag-spirit-table-wrap .msg > *{
+  display:table-cell;
+  vertical-align:top;
+  padding:6px 12px;
+  border-bottom:1px solid var(--line2);
+}
+.msg-drag-spirit-table-wrap .msg:last-child > *{ border-bottom:none; }
+.msg-drag-spirit-table-wrap .msg-time,
+.msg-drag-spirit-table-wrap .msg-sender{ white-space:nowrap; }
+.msg-drag-spirit-table-wrap .msg-text{ width:auto; }
+/* When table wrap is inside stack, don't duplicate fixed positioning */
+.msg-drag-spirit-stack .msg-drag-spirit-table-wrap{
+  position:static;
+  transform:none;
+  width:100%;
+}
+
 /* ── DnD: drop position line (use tokens) ── */
 .feed-drop-indicator{
   position:fixed;
@@ -785,6 +837,8 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
 .msg-drag-spirit .msg-sender{ color:var(--text); }
 /* DnD: stack spirit = multiple rows under cursor, same tokens */
 .msg-drag-spirit-stack{
+  position:fixed;
+  z-index:10000;
   display:flex;
   flex-direction:column;
   overflow:hidden;
