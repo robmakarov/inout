@@ -1309,14 +1309,18 @@ function getLineRectForInsert(feedEl, feedInner, insertBeforeId, wantAppend) {
   if (!rows.length) return null;
   var feedRect = feedEl.getBoundingClientRect();
   var row = null;
-  if (wantAppend || insertBeforeId == null) {
+  var id = insertBeforeId != null ? Number(insertBeforeId) : null;
+  if (wantAppend || id == null) {
     row = rows[rows.length - 1];
   } else {
     for (var i = 0; i < rows.length; i++) {
-      if (Number(rows[i].dataset.id) === insertBeforeId) { row = rows[i]; break; }
+      if (Number(rows[i].dataset.id) === id) { row = rows[i]; break; }
     }
   }
-  if (!row) return null;
+  if (!row) {
+    /* fallback: show at top or bottom of feed so line is visible */
+    row = wantAppend ? rows[rows.length - 1] : rows[0];
+  }
   var rect = row.getBoundingClientRect();
   var top = wantAppend ? rect.bottom : rect.top;
   if (top < feedRect.top) top = feedRect.top - 2;
@@ -1342,11 +1346,22 @@ function setupDndBroadcastChannel() {
       if (data.channel !== currentChannel) return;
       if (document.body && document.body.classList.contains('dnd-active')) return; /* don't show remote lines while we're dragging */
       if (data.type === 'dnd_start') {
-        remoteDnd = { from: data.from, channel: data.channel, origin: data.origin || {}, target: data.origin || {} };
+        remoteDnd = {
+          from: data.from,
+          channel: data.channel,
+          origin: { insertBeforeId: data.origin && data.origin.insertBeforeId != null ? Number(data.origin.insertBeforeId) : null, wantAppend: !!data.origin && !!data.origin.wantAppend },
+          target: { insertBeforeId: data.origin && data.origin.insertBeforeId != null ? Number(data.origin.insertBeforeId) : null, wantAppend: !!data.origin && !!data.origin.wantAppend }
+        };
         applyRemoteDndLines();
       } else if (data.type === 'dnd_move') {
-        if (remoteDnd && remoteDnd.from === data.from) {
-          remoteDnd.target = data.target || {};
+        if (data.target) {
+          var target = { insertBeforeId: data.target.insertBeforeId != null ? Number(data.target.insertBeforeId) : null, wantAppend: !!data.target.wantAppend };
+          if (remoteDnd && remoteDnd.from === data.from) {
+            remoteDnd.target = target;
+          } else {
+            /* joined mid-drag: show target line only */
+            remoteDnd = { from: data.from, channel: data.channel, origin: {}, target: target };
+          }
           applyRemoteDndLines();
         }
       } else if (data.type === 'dnd_end') {
@@ -1892,6 +1907,7 @@ function createMsgRow(msg, isNew) {
     savedOrderBeforeDrag = currentMessageOrder.slice();
     dragDropHandled = false;
     if (feedInner) feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
+    hideRemoteDndLines();
     broadcastDndStart();
   });
   row.addEventListener('dragend', () => {
@@ -2029,6 +2045,7 @@ function createMsgRow(msg, isNew) {
       });
       row.classList.add('dragging');
       if (document.body) document.body.classList.add('dnd-active');
+      hideRemoteDndLines();
       broadcastDndStart();
       /* origin line shown on first touchmove, not here, so it doesn't appear on long-press alone */
     }, 300); // long press threshold

@@ -574,6 +574,9 @@ header{
 }
 .feed-drop-origin.visible{ display:block; visibility:visible; }
 .feed-drop-origin.stuck{ height:2px; }
+/* Remote DnD lines (realtime from other clients) — above local indicator */
+.remote-dnd-line.feed-drop-origin{ z-index:10001; }
+.remote-dnd-line.feed-drop-indicator{ z-index:10002; }
 
 /* DnD: ghost copies at drag origin (placeholder, not interactive) */
 .msg-origin-ghost{
