@@ -1190,7 +1190,7 @@ function onUpdateForChannel(ch, row) {
     originalEditTextForCancel = null;
     editingMessageId = null;
     try { localStorage.removeItem(WAS_EDITING_KEY); } catch (_) {}
-    if (input) input.placeholder = 'say something…';
+    if (input) input.placeholder = 'Say something…';
   }
   updateMessageRowText(id, text);
   updateEditingRowHighlight();
@@ -2855,7 +2855,7 @@ function createMsgRow(msg, isNew) {
       editTypingCommitTimer = null;
     }
     try { localStorage.setItem(WAS_EDITING_KEY, '1'); } catch (_) {}
-    input.placeholder = 'Editing message…';
+    input.placeholder = 'Editing object…';
     autoResize();
     sendBtn.disabled = !input.value.trim();
     updateClearInputBtn();
@@ -2990,7 +2990,7 @@ function hideEmpty() {
 }
 
 function updateMsgCount() {
-  msgCountEl.textContent = msgCount + (msgCount === 1 ? ' msg' : ' msgs');
+  msgCountEl.textContent = msgCount + (msgCount === 1 ? ' object' : ' objects');
 }
 
 /* ═══ TABS ════════════════════════════════════════════════ */
