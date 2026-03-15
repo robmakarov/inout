@@ -331,6 +331,10 @@ function toggleRowAtY(feedInner, clientY) {
 }
 let editingMessageId = null;
 let originalEditTextForCancel = null;
+var editTypingUndoStack = [];
+var editTypingCommitTimer = null;
+var TYPING_COMMIT_MS = 1800;
+var MAX_TYPING_UNDO = 20;
 let fieldPrefs = { showTime:true, showAuthor:true };
 let undoStack = [];
 let actionLog = [];
@@ -624,6 +628,11 @@ function reactivateInputMode(opts) {
   }
   originalEditTextForCancel = null;
   editingMessageId = null;
+  editTypingUndoStack = [];
+  if (editTypingCommitTimer) {
+    clearTimeout(editTypingCommitTimer);
+    editTypingCommitTimer = null;
+  }
   try { localStorage.removeItem(WAS_EDITING_KEY); } catch (_) {}
   if (input) {
     input.placeholder = 'say something…';
@@ -964,8 +973,20 @@ document.addEventListener('keydown', e => {
       return;
     }
   }
-  // Ctrl/Cmd+Z → undo last destructive action anywhere in the app.
+  // Ctrl/Cmd+Z → during edit: undo last typing burst; else undo last destructive action.
   const isUndoKey = (e.key === 'z' || e.key === 'Z') && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey;
+  if (isUndoKey && editingMessageId != null && editTypingUndoStack.length > 1) {
+    e.preventDefault();
+    editTypingUndoStack.pop();
+    var prev = editTypingUndoStack[editTypingUndoStack.length - 1];
+    input.value = prev;
+    updateEditingRowFromInput();
+    saveInputGlobal();
+    updateClearInputBtn();
+    sendBtn.disabled = !input.value.trim();
+    if (currentUser) broadcastDraft(input.value);
+    return;
+  }
   if (isUndoKey) {
     e.preventDefault();
     undoLastAction();
@@ -1121,9 +1142,19 @@ function updateEditingRowFromInput() {
   const after = fullText.slice(caretPos);
   const html =
     escapeHtml(before) +
-    '<span class="msg-edit-caret"></span>' +
+    '<span class="msg-edit-caret">\u200B</span>' +
     escapeHtml(after);
   textEl.innerHTML = html;
+}
+
+function commitTypingSegment() {
+  editTypingCommitTimer = null;
+  if (editingMessageId == null || !input) return;
+  var t = input.value;
+  if (editTypingUndoStack[editTypingUndoStack.length - 1] !== t) {
+    editTypingUndoStack.push(t);
+    if (editTypingUndoStack.length > MAX_TYPING_UNDO) editTypingUndoStack.shift();
+  }
 }
 
 function onUpdateForChannel(ch, row) {
@@ -2728,6 +2759,11 @@ function createMsgRow(msg, isNew) {
     input.value = msg.text || '';
     editingMessageId = msg.id;
     originalEditTextForCancel = msg.text || '';
+    editTypingUndoStack = [msg.text || ''];
+    if (editTypingCommitTimer) {
+      clearTimeout(editTypingCommitTimer);
+      editTypingCommitTimer = null;
+    }
     try { localStorage.setItem(WAS_EDITING_KEY, '1'); } catch (_) {}
     input.placeholder = 'Editing message…';
     autoResize();
@@ -3740,6 +3776,8 @@ input.addEventListener('input', () => {
   updateClearInputBtn();
   if (editingMessageId != null) {
     updateEditingRowFromInput();
+    if (editTypingCommitTimer) clearTimeout(editTypingCommitTimer);
+    editTypingCommitTimer = setTimeout(commitTypingSegment, TYPING_COMMIT_MS);
   }
   if (currentUser) {
     broadcastDraft(input.value);
