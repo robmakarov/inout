@@ -613,6 +613,19 @@ header{
   border:1px solid var(--line);
   box-sizing:border-box;
 }
+.msg-drag-spirit{
+  position:fixed;
+  z-index:10000;
+  pointer-events:none;
+  box-shadow:0 6px 24px rgba(0,0,0,.45);
+  border-radius:8px;
+  opacity:0.97;
+  background:var(--bg2);
+  border:1px solid var(--line);
+  box-sizing:border-box;
+  max-width:min(400px, 95vw);
+  transform:translate(-50%, -50%);
+}
 .msg-fly-clone{
   position:fixed;
   z-index:9999;
@@ -3145,17 +3158,25 @@ function createMsgRow(msg, isNew) {
       pointerDownOnSelectArea = false;
       return;
     }
-    var ghost = row.cloneNode(true);
-    ghost.classList.remove('msg', 'dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
-    ghost.classList.add('msg-drag-image-ghost');
-    ghost.removeAttribute('draggable');
-    ghost.style.width = Math.max(200, (row.offsetWidth || 280)) + 'px';
-    ghost.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
-    document.body.appendChild(ghost);
-    var gx = Math.floor((ghost.offsetWidth || 280) / 2);
-    var gy = Math.min(24, Math.floor((ghost.offsetHeight || 40) / 2));
-    e.dataTransfer.setDragImage(ghost, gx, gy);
-    if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
+    if (dragSpiritEl && dragSpiritEl.parentNode) dragSpiritEl.parentNode.removeChild(dragSpiritEl);
+    dragSpiritEl = row.cloneNode(true);
+    dragSpiritEl.classList.remove('msg', 'dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
+    dragSpiritEl.classList.add('msg-drag-spirit');
+    dragSpiritEl.removeAttribute('draggable');
+    dragSpiritEl.setAttribute('aria-hidden', 'true');
+    dragSpiritEl.style.width = Math.max(200, (row.offsetWidth || 280)) + 'px';
+    dragSpiritEl.style.left = (e.clientX || 0) + 'px';
+    dragSpiritEl.style.top = (e.clientY || 0) + 'px';
+    dragSpiritEl.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
+    document.body.appendChild(dragSpiritEl);
+    if (!dragImageEl) {
+      dragImageEl = document.createElement('div');
+      dragImageEl.setAttribute('aria-hidden', 'true');
+      dragImageEl.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;';
+      document.body.appendChild(dragImageEl);
+    }
+    if (dragImageEl.parentNode !== document.body) document.body.appendChild(dragImageEl);
+    e.dataTransfer.setDragImage(dragImageEl, -9999, -9999);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', typeof msg.text === 'string' ? msg.text : '');
     if (typeof msg.id !== 'undefined') e.dataTransfer.setData('application/x-inout-msg-id', String(msg.id));
@@ -3198,6 +3219,8 @@ function createMsgRow(msg, isNew) {
             else if (insertBefore && insertBefore.parentNode === feedInner) feedInner.insertBefore(row, insertBefore);
           }
         }
+        if (dragSpiritEl && dragSpiritEl.parentNode) dragSpiritEl.parentNode.removeChild(dragSpiritEl);
+        dragSpiritEl = null;
         removeOriginGhostOverlay();
         if (feedInner) feedInner.querySelectorAll('.msg.dragging-in-feed').forEach(r => r.classList.remove('dragging-in-feed'));
         removeOriginGhostsAndInsertRows();
@@ -3210,6 +3233,8 @@ function createMsgRow(msg, isNew) {
         lastReorderTarget = null;
         feedDragoverRaf = null;
         feedDragoverLast = null;
+        lastDragClientX = null;
+        lastDragClientY = null;
         clearEdgeScrollInterval();
         lastDragTargetRow = null;
         if (feedInner) feedInner.querySelectorAll('.msg-drag-over, .msg-drag-target').forEach(r => r.classList.remove('msg-drag-over', 'msg-drag-target'));
@@ -3236,6 +3261,10 @@ function createMsgRow(msg, isNew) {
           });
         });
       } finally {
+        if (dragSpiritEl && dragSpiritEl.parentNode) dragSpiritEl.parentNode.removeChild(dragSpiritEl);
+        dragSpiritEl = null;
+        lastDragClientX = null;
+        lastDragClientY = null;
         removeOriginGhostOverlay();
         if (feedInner) feedInner.querySelectorAll('.msg.dragging-in-feed').forEach(r => r.classList.remove('dragging-in-feed'));
         hideDropOriginLine();
@@ -5216,10 +5245,19 @@ function flipAnimateShift(feedInner, dragging, oldRects, rowsArray) {
 /* Single feed-level DnD: only the feed handles dragover/drop so drop always fires reliably */
 var feedDragoverRaf = null;
 var feedDragoverLast = null;
+var lastDragClientX = null;
+var lastDragClientY = null;
 var lastIndicatorStyle = { left: -1, width: -1, top: -1, visible: false };
 var lastDragTargetRow = null;
+var dragSpiritEl = null;
 function processFeedDragover(ev) {
   if (!feedInner) return;
+  lastDragClientX = ev.clientX;
+  lastDragClientY = ev.clientY;
+  if (dragSpiritEl) {
+    dragSpiritEl.style.left = ev.clientX + 'px';
+    dragSpiritEl.style.top = ev.clientY + 'px';
+  }
   if (originGhostsActive) {
     var slotRows = Array.from(feedInner.children).filter(function(n) { return n.classList && (n.classList.contains('msg') || n.classList.contains('msg-origin-ghost')); });
     if (!slotRows.length) return;
@@ -5408,7 +5446,13 @@ function processFeedDragover(ev) {
   }
   updateEdgeScroll(ev.clientY, ev.clientX);
 }
+function onFeedScrollDuringDrag() {
+  if (document.body && document.body.classList.contains('dnd-active') && typeof lastDragClientX === 'number' && typeof lastDragClientY === 'number') {
+    processFeedDragover({ clientX: lastDragClientX, clientY: lastDragClientY });
+  }
+}
 if (feedEl) {
+feedEl.addEventListener('scroll', onFeedScrollDuringDrag, { passive: true });
 feedEl.addEventListener('dragover', e => {
   const dragging = feedInner ? feedInner.querySelector('.msg.dragging') : null;
   if (!feedInner || (!dragging && !originGhostsActive)) return;
@@ -5439,6 +5483,12 @@ document.addEventListener('dragover', e => {
   if (!feedInner.querySelector('.msg.dragging') && !originGhostsActive) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
+  lastDragClientX = e.clientX;
+  lastDragClientY = e.clientY;
+  if (dragSpiritEl) {
+    dragSpiritEl.style.left = e.clientX + 'px';
+    dragSpiritEl.style.top = e.clientY + 'px';
+  }
   const feedRect = feedEl.getBoundingClientRect();
   const y = e.clientY;
   const x = e.clientX;
