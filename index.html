@@ -5101,68 +5101,68 @@ function processFeedDragover(ev) {
     var slotRows = Array.from(feedInner.children).filter(function(n) { return n.classList && (n.classList.contains('msg') || n.classList.contains('msg-origin-ghost')); });
     if (!slotRows.length) return;
     var slotFirstRow = slotRows[0];
-    var contentLeft = slotFirstRow.querySelector('.msg-time') || slotFirstRow.querySelector('.msg-sender') || slotFirstRow.querySelector('.msg-text');
-    if (contentLeft && ev.clientX < contentLeft.getBoundingClientRect().left) return;
-    var y = ev.clientY;
-    var firstRect = slotFirstRow.getBoundingClientRect();
-    var lastRow = slotRows[slotRows.length - 1];
-    var lastRect = lastRow.getBoundingClientRect();
-    var feedRect = feedEl.getBoundingClientRect();
-    var dropAtEndThreshold = 32;
-    var inEmptyZone = y >= lastRect.bottom - dropAtEndThreshold;
-    var inLastRowLowerHalf = y >= lastRect.top + lastRect.height * 0.5;
-    var wantAppendFirst = inEmptyZone || inLastRowLowerHalf;
-    var wantAppend = wantAppendFirst;
-    var insertBeforeNode = null;
-    var lineY = 0;
-    if (y < firstRect.top) {
-      insertBeforeNode = slotFirstRow;
-      lineY = firstRect.top;
-    } else if (wantAppend) {
-      lineY = lastRect.bottom;
+    var slotContentLeft = slotFirstRow.querySelector('.msg-time') || slotFirstRow.querySelector('.msg-sender') || slotFirstRow.querySelector('.msg-text');
+    if (slotContentLeft && ev.clientX < slotContentLeft.getBoundingClientRect().left) return;
+    var slotY = ev.clientY;
+    var slotFirstRect = slotFirstRow.getBoundingClientRect();
+    var slotLastRow = slotRows[slotRows.length - 1];
+    var slotLastRect = slotLastRow.getBoundingClientRect();
+    var slotFeedRect = feedEl.getBoundingClientRect();
+    var slotDropAtEndThreshold = 32;
+    var slotInEmptyZone = slotY >= slotLastRect.bottom - slotDropAtEndThreshold;
+    var slotInLastRowLowerHalf = slotY >= slotLastRect.top + slotLastRect.height * 0.5;
+    var slotWantAppendFirst = slotInEmptyZone || slotInLastRowLowerHalf;
+    var slotWantAppend = slotWantAppendFirst;
+    var slotInsertBeforeNode = null;
+    var slotLineY = 0;
+    if (slotY < slotFirstRect.top) {
+      slotInsertBeforeNode = slotFirstRow;
+      slotLineY = slotFirstRect.top;
+    } else if (slotWantAppend) {
+      slotLineY = slotLastRect.bottom;
     } else {
       for (var i = 0; i < slotRows.length; i++) {
         var r = slotRows[i];
         var rect = r.getBoundingClientRect();
-        if (y >= rect.top && y <= rect.bottom) {
-          if (r === lastRow && !r.classList.contains('msg-origin-ghost')) {
-            wantAppend = true;
-            lineY = rect.bottom;
+        if (slotY >= rect.top && slotY <= rect.bottom) {
+          if (r === slotLastRow && !r.classList.contains('msg-origin-ghost')) {
+            slotWantAppend = true;
+            slotLineY = rect.bottom;
             break;
           }
           var midY = rect.top + rect.height / 2;
-          if (y < midY) {
-            insertBeforeNode = r;
-            lineY = rect.top;
+          if (slotY < midY) {
+            slotInsertBeforeNode = r;
+            slotLineY = rect.top;
           } else {
-            insertBeforeNode = r.nextSibling;
-            lineY = rect.bottom;
+            slotInsertBeforeNode = r.nextSibling;
+            slotLineY = rect.bottom;
           }
           break;
         }
       }
-      if (insertBeforeNode === null && !wantAppend && slotRows.length && y >= lastRect.bottom - dropAtEndThreshold) {
-        wantAppend = true;
-        lineY = lastRect.bottom;
+      if (slotInsertBeforeNode === null && !slotWantAppend && slotRows.length && slotY >= slotLastRect.bottom - slotDropAtEndThreshold) {
+        slotWantAppend = true;
+        slotLineY = slotLastRect.bottom;
       }
     }
-    lastDropInsertBefore = wantAppend ? null : insertBeforeNode;
-    lastWantAppend = wantAppend;
-    var targetRow = wantAppend ? lastRow : insertBeforeNode;
-    if (targetRow !== lastDragTargetRow) {
+    lastDropInsertBefore = slotWantAppend ? null : slotInsertBeforeNode;
+    lastWantAppend = slotWantAppend;
+    var slotTargetRow = slotWantAppend ? slotLastRow : slotInsertBeforeNode;
+    if (slotTargetRow !== lastDragTargetRow) {
       if (lastDragTargetRow) lastDragTargetRow.classList.remove('msg-drag-target');
-      if (targetRow && targetRow.classList && targetRow.classList.contains('msg')) targetRow.classList.add('msg-drag-target');
-      lastDragTargetRow = targetRow;
+      if (slotTargetRow && slotTargetRow.classList && slotTargetRow.classList.contains('msg')) slotTargetRow.classList.add('msg-drag-target');
+      lastDragTargetRow = slotTargetRow;
     }
-    lastReorderTarget = { insertBefore: insertBeforeNode, wantAppend: wantAppend };
+    lastReorderTarget = { insertBefore: slotInsertBeforeNode, wantAppend: slotWantAppend };
     if (!feedDropIndicatorEl) {
       feedDropIndicatorEl = document.createElement('div');
       feedDropIndicatorEl.className = 'feed-drop-indicator';
       document.body.appendChild(feedDropIndicatorEl);
     }
-    var indLeft = feedRect.left;
-    var indWidth = feedRect.width;
-    var indTop = lineY < feedRect.top ? feedRect.top - 2 : (lineY > feedRect.bottom ? feedRect.bottom - 2 : lineY - 2);
+    var indLeft = slotFeedRect.left;
+    var indWidth = slotFeedRect.width;
+    var indTop = slotLineY < slotFeedRect.top ? slotFeedRect.top - 2 : (slotLineY > slotFeedRect.bottom ? slotFeedRect.bottom - 2 : slotLineY - 2);
     feedDropIndicatorEl.style.left = indLeft + 'px';
     feedDropIndicatorEl.style.width = indWidth + 'px';
     feedDropIndicatorEl.style.height = '4px';
