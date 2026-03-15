@@ -1294,8 +1294,12 @@ function applyPrimaryEditToMultiEdit(newPrimary) {
       if (id === editingObjectId) return;
       let text = editingObjectTextMap[id];
       if (text == null) return;
-      const pos = Math.min(L, text.length);
-      const removeLen = Math.min(oldMiddle.length, text.length - pos);
+      let pos = Math.min(L, text.length);
+      let removeLen = Math.min(oldMiddle.length, text.length - pos);
+      if (removeLen < 1 && oldMiddle.length >= 1 && text.length > 0) {
+        pos = text.length - 1;
+        removeLen = 1;
+      }
       editingObjectTextMap[id] = text.slice(0, pos) + newMiddle + text.slice(pos + removeLen);
     });
   }
@@ -3285,6 +3289,8 @@ function createObjectRow(obj, isNew, options) {
       });
     });
     input.value = obj.text || '';
+    input.selectionStart = 0;
+    input.selectionEnd = 0;
     editingObjectId = obj.id;
     editingObjectIds = idsToEdit;
     originalEditTextForCancel = obj.text || '';
@@ -4448,6 +4454,9 @@ function attachInputListeners() {
     if (editingObjectId != null) updateEditingRowFromInput();
   });
   input.addEventListener('select', () => {
+    if (editingObjectId != null) updateEditingRowFromInput();
+  });
+  input.addEventListener('mouseup', () => {
     if (editingObjectId != null) updateEditingRowFromInput();
   });
   if (sendBtn) sendBtn.addEventListener('click', send);
