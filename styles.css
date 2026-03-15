@@ -702,11 +702,11 @@ body.dnd-active .msg.msg-drag-nudge-right{ transition:transform var(--dnd-nudge-
 .msg-fly-clone .msg-actions{visibility:hidden}
 .msg:hover{background:var(--bg2)}
 .msg.msg-drag-over{background:var(--bg2)}
-/* DnD: don't change bg/opacity of rows; only spirit has hover bg */
+/* DnD: no hover on any row; only spirit has hover bg */
 body.dnd-active .msg{transition:none;animation:none}
 body.dnd-active .msg:hover,
 body.dnd-active .msg.msg-drag-over,
-body.dnd-active .msg.msg-drag-target{background:transparent}
+body.dnd-active .msg.msg-drag-target{background:transparent !important}
 body.dnd-just-ended .msg{transition:none;animation:none}
 body.dnd-just-ended .msg.msg-dnd-just-dropped{animation:msgin var(--dnd-stack-drop-in-duration) var(--anim-ease-out) both}
 body.dnd-active .msg.dragging .msg-select-wrap,
@@ -717,7 +717,11 @@ body.dnd-active .msg.msg-drag-target.msg-drag-nudge-right{transition:transform v
 body.dnd-active .msg:hover .msg-select-wrap,
 body.dnd-active .msg:hover .msg-actions,
 body.dnd-active .msg.msg-drag-over .msg-select-wrap,
-body.dnd-active .msg.msg-drag-over .msg-actions{opacity:0;pointer-events:none}
+body.dnd-active .msg.msg-drag-over .msg-actions{opacity:0 !important;pointer-events:none !important}
+body.dnd-active .msg:hover .msg-time,
+body.dnd-active .msg:hover .msg-sender,
+body.dnd-active .msg.msg-drag-over .msg-time,
+body.dnd-active .msg.msg-drag-over .msg-sender{color:var(--dim) !important}
 body.dnd-active .msg.msg-drag-spirit,
 body.dnd-active .msg-drag-spirit-stack{opacity:1;background:var(--bg2);transition:none}
 .msg.msg-editing{
