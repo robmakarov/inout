@@ -1271,11 +1271,14 @@ function findObjectRowEl(objId) {
   return null;
 }
 
-/** Apply the same edit (inferred from oldPrimary -> newPrimary) to every other id's text in editingObjectTextMap. */
+/** Apply the same edit (inferred from oldPrimary -> newPrimary) to every other id. Only single-character insert or delete is applied to others so each object keeps its own text; larger pastes/replaces only change the primary. */
 function applyPrimaryEditToMultiEdit(newPrimary) {
   if (!editingObjectTextMap || !editingObjectIds || editingObjectIds.size <= 1) return;
   const oldPrimary = editingObjectTextMap[editingObjectId];
-  if (oldPrimary === newPrimary) return;
+  if (oldPrimary == null || oldPrimary === newPrimary) {
+    editingObjectTextMap[editingObjectId] = newPrimary;
+    return;
+  }
   const oldLen = oldPrimary.length;
   const newLen = newPrimary.length;
   let L = 0;
@@ -1284,14 +1287,18 @@ function applyPrimaryEditToMultiEdit(newPrimary) {
   while (R < oldLen - L && R < newLen - L && oldPrimary[oldLen - 1 - R] === newPrimary[newLen - 1 - R]) R++;
   const oldMiddle = oldPrimary.slice(L, oldLen - R);
   const newMiddle = newPrimary.slice(L, newLen - R);
-  editingObjectIds.forEach(id => {
-    if (id === editingObjectId) return;
-    let text = editingObjectTextMap[id];
-    if (text == null) return;
-    const pos = Math.min(L, text.length);
-    const removeLen = Math.min(oldMiddle.length, text.length - pos);
-    editingObjectTextMap[id] = text.slice(0, pos) + newMiddle + text.slice(pos + removeLen);
-  });
+  /* Only propagate single-character insert or single-character delete to others; larger changes (paste, replace selection) only update the primary so each object keeps its own content. */
+  const singleCharEdit = (oldMiddle.length <= 1 && newMiddle.length <= 1);
+  if (singleCharEdit) {
+    editingObjectIds.forEach(id => {
+      if (id === editingObjectId) return;
+      let text = editingObjectTextMap[id];
+      if (text == null) return;
+      const pos = Math.min(L, text.length);
+      const removeLen = Math.min(oldMiddle.length, text.length - pos);
+      editingObjectTextMap[id] = text.slice(0, pos) + newMiddle + text.slice(pos + removeLen);
+    });
+  }
   editingObjectTextMap[editingObjectId] = newPrimary;
 }
 
