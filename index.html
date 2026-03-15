@@ -601,6 +601,18 @@ header{
   position:relative;
 }
 @keyframes msgin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.msg-drag-image-ghost{
+  position:absolute;
+  left:-9999px;
+  top:0;
+  pointer-events:none;
+  box-shadow:0 4px 20px rgba(0,0,0,.4);
+  border-radius:6px;
+  opacity:0.95;
+  background:var(--bg2);
+  border:1px solid var(--line);
+  box-sizing:border-box;
+}
 .msg-fly-clone{
   position:fixed;
   z-index:9999;
@@ -3133,14 +3145,17 @@ function createMsgRow(msg, isNew) {
       pointerDownOnSelectArea = false;
       return;
     }
-    if (!dragImageEl) {
-      dragImageEl = document.createElement('div');
-      dragImageEl.setAttribute('aria-hidden', 'true');
-      dragImageEl.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;';
-      document.body.appendChild(dragImageEl);
-    }
-    if (dragImageEl.parentNode !== document.body) document.body.appendChild(dragImageEl);
-    e.dataTransfer.setDragImage(dragImageEl, -9999, -9999);
+    var ghost = row.cloneNode(true);
+    ghost.classList.remove('msg', 'dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
+    ghost.classList.add('msg-drag-image-ghost');
+    ghost.removeAttribute('draggable');
+    ghost.style.width = Math.max(200, (row.offsetWidth || 280)) + 'px';
+    ghost.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
+    document.body.appendChild(ghost);
+    var gx = Math.floor((ghost.offsetWidth || 280) / 2);
+    var gy = Math.min(24, Math.floor((ghost.offsetHeight || 40) / 2));
+    e.dataTransfer.setDragImage(ghost, gx, gy);
+    if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', typeof msg.text === 'string' ? msg.text : '');
     if (typeof msg.id !== 'undefined') e.dataTransfer.setData('application/x-inout-msg-id', String(msg.id));
@@ -5399,15 +5414,7 @@ feedEl.addEventListener('dragover', e => {
   if (!feedInner || (!dragging && !originGhostsActive)) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
-  feedDragoverLast = e;
-  if (feedDragoverRaf === null) {
-    feedDragoverRaf = requestAnimationFrame(function() {
-      feedDragoverRaf = null;
-      const ev = feedDragoverLast;
-      feedDragoverLast = null;
-      if (ev) processFeedDragover(ev);
-    });
-  }
+  processFeedDragover(e);
 });
 feedEl.addEventListener('drop', e => {
   if (feedInner && (feedInner.querySelector('.msg.dragging') || originGhostsActive)) {
@@ -5437,15 +5444,7 @@ document.addEventListener('dragover', e => {
   const x = e.clientX;
   const inFeed = x >= feedRect.left && x <= feedRect.right && y >= feedRect.top && y <= feedRect.bottom;
   if (inFeed) {
-    feedDragoverLast = e;
-    if (feedDragoverRaf === null) {
-      feedDragoverRaf = requestAnimationFrame(function() {
-        feedDragoverRaf = null;
-        const ev = feedDragoverLast;
-        feedDragoverLast = null;
-        if (ev) processFeedDragover(ev);
-      });
-    }
+    processFeedDragover(e);
     return;
   }
   const rows = originGhostsActive
