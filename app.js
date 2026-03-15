@@ -1141,6 +1141,7 @@ function updateMessageRowText(msgId, text) {
   textEl.innerHTML = linkify(escapeHtml(text || ''));
 }
 
+/** While editing, the message row shows a mirror of the main input; keep them in sync. */
 function updateEditingRowFromInput() {
   if (!feedInner || editingMessageId == null || !input) return;
   const idStr = String(editingMessageId);
@@ -1148,7 +1149,7 @@ function updateEditingRowFromInput() {
   if (!el) return;
   const textEl = el.querySelector('.msg-text');
   if (!textEl) return;
-  textEl.textContent = input.value || '';
+  textEl.textContent = input.value;
 }
 
 function commitTypingSegment() {
@@ -3781,7 +3782,7 @@ input.addEventListener('input', () => {
   saveInputGlobal();
   updateClearInputBtn();
   if (editingMessageId != null) {
-    requestAnimationFrame(updateEditingRowFromInput);
+    updateEditingRowFromInput();
     if (editTypingCommitTimer) clearTimeout(editTypingCommitTimer);
     editTypingCommitTimer = setTimeout(commitTypingSegment, TYPING_COMMIT_MS);
   }

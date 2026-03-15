@@ -853,6 +853,13 @@ body.dnd-active .msg-drag-spirit-stack{opacity:1;background:transparent;transiti
   padding-right:72px; /* reserve space under right-side actions */
   cursor:pointer;
 }
+/* Editing: row value replaced by mirror of main input — same content, same style */
+.msg-editing .msg-text{
+  font-family:var(--mono);
+  font-size:14px;
+  line-height:1.5;
+  color:var(--text);
+}
 /* DnD reorder: row under drop position (no nudge to avoid shake) */
 
 @media (max-width:540px){
