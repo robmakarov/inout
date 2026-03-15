@@ -1,7 +1,10 @@
 # Components
 
 ## Layout
-Header is always fixed (position:fixed; top:0); nothing moves it. Everything below = App (#app has padding-top for header; content: #manage-bar, #feed, #input-area). #app-loader, #feed, #feed-inner.
+- **#multiview** — Container for one or more views (same user). Flex column, fills viewport; padding reserves space for fixed header, manage bar, and input area.
+- **.view** (#view-app) — One view: header + manage-bar + feed. App content is a View; more views can be added later.
+- **#input-area** — Separate from multiview (sibling). Fixed at bottom; keeps all connections and behaviour (tabs, composer, send, draft, etc.).
+- Header is always fixed (position:fixed; top:0). #app-loader, #feed, #feed-inner.
 
 ## Header
 header, .logo, .header-right, #online-count, #object-count, #user-btn (.signed-in)

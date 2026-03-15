@@ -83,7 +83,8 @@ body{
 }
 #feed::-webkit-scrollbar{display:none}
 
-#app{
+/* Multiview: container for one or more views (same user); input is separate */
+#multiview{
   flex:1;
   display:flex;
   flex-direction:column;
@@ -91,22 +92,31 @@ body{
   height:100vh;
   overflow:hidden;
   pointer-events:none;
-  padding-top:calc(48px + var(--bar-top-height)); /* header + top bar; everything below = app content */
-  padding-bottom:var(--bar-bottom-min-height); /* reserve space for fixed bottom bar */
+  padding-top:calc(48px + var(--bar-top-height)); /* header + top bar */
+  padding-bottom:var(--bar-bottom-min-height); /* reserve space for fixed input area */
 }
-#app header,
-#app #manage-bar,
-#app #input-area,
-#app #feed{
+#multiview .view{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+  overflow:hidden;
+}
+#multiview header,
+#multiview #manage-bar,
+#multiview #feed{
+  pointer-events:auto;
+}
+#input-area{
   pointer-events:auto;
 }
 
-/* iOS/Safari dynamic viewport handling for app shell */
+/* iOS/Safari dynamic viewport handling */
 @supports (height: 100dvh) {
-  #app{height:100dvh}
+  #multiview{height:100dvh}
 }
 @supports (height: 100svh) {
-  #app{height:100svh}
+  #multiview{height:100svh}
 }
 
 /* ── HEADER: always fixed, nothing moves it; everything under it is App ── */
@@ -1539,8 +1549,7 @@ body.select-mode .obj-select-wrap,
     transition:transform .22s cubic-bezier(.2,.8,.2,1);
     will-change:transform;
   }
-  /* app = content below fixed header; reserve space for header + fixed manage bar */
-  #app{padding-top:calc(48px + var(--bar-top-height))}
+  #multiview{padding-top:calc(48px + var(--bar-top-height))}
   /* keep input bar above iOS Safari bottom panel & keyboard */
   #input-area{
     position:fixed;
