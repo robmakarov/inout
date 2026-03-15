@@ -9,8 +9,8 @@ Reference for humans and AI: which DOM elements and JS objects exist, under what
 | State | When set | Cleared when | Functions that set it | Effect (CSS) |
 |-------|----------|--------------|------------------------|--------------|
 | `body.loaded` | After init completes (or 4s timeout) | Never removed | `markLoaded()` | Hides `#app-loader` (splash). Not used to show/hide `#app` in current code. |
-| `body.select-mode` | User turns on Select mode | User turns off Select | `setSelectMode(true)` / `setSelectMode(false)` | Checkbox zones visible on rows; manage bar actions visible; `.msg-select-wrap` visible. |
-| `body.dnd-active` | Drag starts (mouse or touch long-press) | Drag ends | Row `dragstart` adds; row `dragend` / touch end remove | Disables `.msg:hover` styling so rows don’t blink during reorder. |
+| `body.select-mode` | User turns on Select mode | User turns off Select | `setSelectMode(true)` / `setSelectMode(false)` | Checkbox zones visible on rows; manage bar actions visible; `.obj-select-wrap` visible. |
+| `body.dnd-active` | Drag starts (mouse or touch long-press) | Drag ends | Row `dragstart` adds; row `dragend` / touch end remove | Disables `.obj:hover` styling so rows don’t blink during reorder. |
 
 ---
 
@@ -24,7 +24,7 @@ Reference for humans and AI: which DOM elements and JS objects exist, under what
 | `#app-loader` | Full-screen splash (loader animation) | `display:none` in CSS; not used as visible splash in current flow | — |
 | `#feed` | Scrollable message list container | — | Scroll listener: updates `channelScroll`, `atBottom`, scroll btn. `scrollBottom()`, scroll restore in init/reloadForUser. |
 | `#feed-inner` | Wrapper for message rows and `#empty` | — | `replaceFeedWithList()`, `renderInitialMessages()`, `applyMessageOrderToDOM()`, `showEmptyIfNoMessages()` append/clear children. |
-| `#empty` | Empty state (loader + “Nothing yet.”) | Shown when feed has no `.msg` children; removed when any message is added | `showEmptyIfNoMessages()` appends to feed-inner; `createMsgRow()` / `replaceFeedWithList()` remove when adding rows. |
+| `#empty` | Empty state (loader + “Nothing yet.”) | Shown when feed has no `.obj` children; removed when any message is added | `showEmptyIfNoMessages()` appends to feed-inner; `createObjectRow()` / `replaceFeedWithList()` remove when adding rows. |
 | `#manage-bar` | Select / Delete / Move / Export / View bar | — | `setSelectMode()` toggles visibility of `#manage-actions`. |
 | `#input-area` | Tabs + input + tools | — | — |
 
@@ -33,7 +33,7 @@ Reference for humans and AI: which DOM elements and JS objects exist, under what
 | ID | Purpose | Conditions | Functions |
 |----|---------|------------|-----------|
 | `#online-count`, `#oc-num` | Presence count | — | Presence subscription updates `ocNum.textContent`. |
-| `#msg-count` | Message count label | — | `updateMsgCount()`, `msgCountEl.textContent = ...`. |
+| `#object-count` | Object count label | — | `updateObjectCount()`, `objectCountEl.textContent = ...`. |
 | `#user-btn` | Account button | — | Opens user modal. |
 
 ### Input and send
@@ -51,7 +51,7 @@ Reference for humans and AI: which DOM elements and JS objects exist, under what
 |----|---------|------------|-----------|
 | `#select-toggle` | Toggle Select mode | — | `setSelectMode()`; `selectToggle.classList.toggle('active', selectMode)`. |
 | `#select-extra` | All / None buttons wrapper | — | `selectExtra.classList.toggle('show', selectMode)`. |
-| `#select-all`, `#select-none` | Select all / none | — | Update `selectedIds` and row `.msg-selected` / checkbox. |
+| `#select-all`, `#select-none` | Select all / none | — | Update `selectedIds` and row `.obj-selected` / checkbox. |
 | `#delete-selected`, `#move-target`, `#move-selected`, `#export-tab` | Bulk actions | — | Delete/move/export selected message IDs. |
 | `#view-toggle`, `#view-menu` | View dropdown | — | Toggle menu open. |
 | `#field-time`, `#field-author` | Time/Author checkboxes | — | `loadFieldPrefsForCurrentChannel()`, `applyFieldPrefsUI()` set checked; change handlers call `saveFieldPrefsForCurrentChannel()`. |
@@ -83,29 +83,29 @@ Reference for humans and AI: which DOM elements and JS objects exist, under what
 |------|---------|------------|-----------|
 | `feedDropIndicatorEl` (div.feed-drop-indicator) | Line showing drop position during DnD reorder | Created on first need; `.visible` when cursor over feed with valid drop target | `processFeedDragover()` sets position and adds `visible`; `dragend` / `drop` / `dragleave` remove `visible`. |
 
-### Message rows (`.msg`)
+### Object rows (`.obj`)
 
 | Class or attribute | When added | When removed | Set by / effect |
 |--------------------|------------|--------------|------------------|
-| `.msg` | Every message row | — | `createMsgRow()`. |
+| `.obj` | Every message row | — | `createObjectRow()`. |
 | `data-id` | Row created | — | Entry `id`; used for order, selection, delete/move. |
-| `.msg-selected` | Checkbox checked or drag-select over row | Checkbox unchecked, select-none, or drop | Selection state; `selectedIds` sync. |
-| `.msg-editing` | User clicks row to edit | Cancel or send | One row at a time; `editingMessageId`; input shows message text. |
-| `.msg.dragging` | Drag started (mouse or touch) | Drag ended | Row is being reordered; opacity 0.35. |
-| `.msg-drag-target` | Cursor over feed at drop position; this row is the target | Cursor leaves or drop | `processFeedDragover()`; content (time, sender, text) shifts 30px right. |
-| `.msg-drag-over` | (Legacy; currently only removed, not added) | dragend / drop / dragleave | — |
+| `.obj-selected` | Checkbox checked or drag-select over row | Checkbox unchecked, select-none, or drop | Selection state; `selectedIds` sync. |
+| `.obj-editing` | User clicks row to edit | Cancel or send | One row at a time; `editingObjectId`; input shows message text. |
+| `.obj.dragging` | Drag started (mouse or touch) | Drag ended | Row is being reordered; opacity 0.35. |
+| `.obj-drag-target` | Cursor over feed at drop position; this row is the target | Cursor leaves or drop | `processFeedDragover()`; content (time, sender, text) shifts 30px right. |
+| `.obj-drag-over` | (Legacy; currently only removed, not added) | dragend / drop / dragleave | — |
 | `.new-flash` | New message inserted (realtime) | After 800ms | `setTimeout(… remove, 800)`. |
 
 ### Message row children (classes)
 
 | Class | Purpose | Visibility / conditions | Functions |
 |-------|---------|--------------------------|-----------|
-| `.msg-time` | Timestamp | `fieldPrefs.showTime`; in createMsgRow and `applyFieldPrefsToMessages()` | `formatTime()`; display toggled by view prefs. |
-| `.msg-sender` | Author name | Main feed always hidden; other channels by `fieldPrefs.showAuthor` | Same apply logic. |
-| `.msg-text` | Message body | Always visible | Linkify; click to edit. |
-| `.msg-actions` | Del / Move / Exp / Copy | Visible on hover (or when `body.dnd-active` disabled); always in `.msg-editing` | — |
-| `.msg-select-wrap`, `.msg-select` | Checkbox for selection | Visible in select mode or on hover; `.msg-select-wrap` opacity 0 by default | `setSelectMode()`; checkbox change updates `selectedIds`. |
-| `.msg-checkbox-zone` | Wrapper for checkbox (touch/click target) | Same as select-wrap | Drag-select logic. |
+| `.obj-time` | Timestamp | `fieldPrefs.showTime`; in createMsgRow and `applyFieldPrefsToMessages()` | `formatTime()`; display toggled by view prefs. |
+| `.obj-sender` | Author name | Main feed always hidden; other channels by `fieldPrefs.showAuthor` | Same apply logic. |
+| `.obj-text` | Message body | Always visible | Linkify; click to edit. |
+| `.obj-actions` | Del / Move / Exp / Copy | Visible on hover (or when `body.dnd-active` disabled); always in `.obj-editing` | — |
+| `.obj-select-wrap`, `.obj-select` | Checkbox for selection | Visible in select mode or on hover; `.obj-select-wrap` opacity 0 by default | `setSelectMode()`; checkbox change updates `selectedIds`. |
+| `.obj-checkbox-zone` | Wrapper for checkbox (touch/click target) | Same as select-wrap | Drag-select logic. |
 
 ### Tabs (`.tab`)
 
@@ -143,7 +143,7 @@ Reference for humans and AI: which DOM elements and JS objects exist, under what
 
 | Variable | Type | Meaning | Set by / read by |
 |----------|------|---------|-------------------|
-| `fieldPrefs` | `{ showTime, showAuthor }` | Per-channel view settings | `loadFieldPrefsForCurrentChannel()` (from Supabase or localStorage); `saveFieldPrefsForCurrentChannel()`; checkbox handlers; `applyFieldPrefsToMessages()`, `createMsgRow()` use for visibility. |
+| `fieldPrefs` | `{ showTime, showAuthor }` | Per-channel view settings | `loadFieldPrefsForCurrentChannel()` (from Supabase or localStorage); `saveFieldPrefsForCurrentChannel()`; checkbox handlers; `applyFieldPrefsToMessages()`, `createObjectRow()` use for visibility. |
 
 ### Selection
 
@@ -176,12 +176,12 @@ Reference for humans and AI: which DOM elements and JS objects exist, under what
 
 | Variable | Type | Meaning | Set by / read by |
 |----------|------|---------|-------------------|
-| `msgCount` | number | Number of messages in feed | `replaceFeedWithList()`, `renderInitialMessages()`, `createMsgRow()` (emptyEl remove). |
+| `msgCount` | number | Number of messages in feed | `replaceFeedWithList()`, `renderInitialMessages()`, `createObjectRow()` (emptyEl remove). |
 | `atBottom` | boolean | Feed scrolled to bottom | Scroll listener, `scrollBottom()`, `isNearBottom()`. |
-| `emptyEl` | element | Reference to `#empty` | `showEmptyIfNoMessages()`, `createMsgRow()`. |
+| `emptyEl` | element | Reference to `#empty` | `showEmptyIfNoMessages()`, `createObjectRow()`. |
 | `feedInner`, `feedEl` | elements | References to `#feed-inner`, `#feed` | All feed DOM updates. |
-| `seenIds` | Set | Message IDs already rendered (avoid duplicates) | `createMsgRow()`; cleared in `replaceFeedWithList()`. |
-| `editingMessageId` | number \| null | Row being edited | Click row to edit; cancel/send clear. |
+| `seenIds` | Set | Message IDs already rendered (avoid duplicates) | `createObjectRow()`; cleared in `replaceFeedWithList()`. |
+| `editingObjectId` | number \| null | Row being edited | Click row to edit; cancel/send clear. |
 | `suppressNextOrderApply`, `suppressNextViewApply`, `suppressOrderApplyUntil` | boolean, number | Avoid feedback loops from realtime | Order/view save and subscribe. |
 
 ---
@@ -206,12 +206,12 @@ Reference for humans and AI: which DOM elements and JS objects exist, under what
 |----------|----------------------------------|
 | `init()` | Loads channels, scroll, auth, tabs, view prefs, messages; restores scroll; calls `markLoaded()`. |
 | `loadFieldPrefsForCurrentChannel()` | Fetches view from Supabase (or localStorage); sets `fieldPrefs`; updates `#field-time`, `#field-author`; calls `applyFieldPrefsToMessages()`. |
-| `applyFieldPrefsToMessages()` | For each `.msg`: sets `.msg-time` and `.msg-sender` display from `fieldPrefs`; calls `applyFieldPrefsUI()`. |
+| `applyFieldPrefsToMessages()` | For each `.obj`: sets `.obj-time` and `.obj-sender` display from `fieldPrefs`; calls `applyFieldPrefsUI()`. |
 | `applyFieldPrefsUI()` | Sets `#field-time`.checked and `#field-author`.checked (and author disabled on main) from `fieldPrefs`. |
 | `setSelectMode(on)` | Sets `selectMode`; toggles `#select-toggle.active`, `#select-extra.show`, `body.select-mode`, `#manage-actions.visible`. |
 | `updateSelectionUI()` | Enables/disables delete/move/export; may call `setSelectMode(true)` if any selected. |
-| `showEmptyIfNoMessages()` | If no `.msg` in feed-inner, appends `emptyEl` to feed-inner (with fadin if re-added). |
-| `processFeedDragover(ev)` | Computes drop target; adds `.msg-drag-target` to target row; shows `feedDropIndicatorEl`; may move dragging row (insertBefore/appendChild). |
+| `showEmptyIfNoMessages()` | If no `.obj` in feed-inner, appends `emptyEl` to feed-inner (with fadin if re-added). |
+| `processFeedDragover(ev)` | Computes drop target; adds `.obj-drag-target` to target row; shows `feedDropIndicatorEl`; may move dragging row (insertBefore/appendChild). |
 | `markLoaded()` | Adds `body.loaded`; focuses input. |
 
 ---

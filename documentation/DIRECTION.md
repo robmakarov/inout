@@ -74,7 +74,7 @@
 ## DESIGN SYSTEM (tokens + components)
 
 - **Tokens**: `:root` in index.html — `--bg`, `--bg2`, `--line`, `--text`, `--bright`, `--acc`, `--mono`, `--sans`. See docs/styling.md.
-- **Components**: header, #tabs, #feed / .msg, #input-area, #manage-bar, modals, toasts. States: body.loaded, body.select-mode, body.dnd-active; .msg.dragging, .msg-selected, .msg-drag-target.
+- **Components**: header, #tabs, #feed / .obj, #input-area, #manage-bar, modals, toasts. States: body.loaded, body.select-mode, body.dnd-active; .obj.dragging, .obj-selected, .obj-drag-target.
 - Single source: docs/styling.md + ELEMENTS.md. New component = add to both.
 
 ---

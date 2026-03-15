@@ -86,6 +86,6 @@ So: **channels and scroll** load first, then **auth**, then **tabs and last chan
 - **Server**: Supabase (entries, channel_members, views, message_orders, action_log). Realtime pushes changes to client.
 - **Client memory**: currentUser, currentChannel, channels, currentMessageOrder, fieldPrefs, channelScroll, selectedIds, selectMode, editingMessageId, etc. See **ELEMENTS.md** (root) for full list.
 - **Client persistence**: localStorage (channels, current channel, input draft, field prefs, order backup, scroll, “was editing”). See **ELEMENTS.md** for keys.
-- **DOM**: Reflects state; updated by apply* and render* functions. No separate “store”; read from DOM when needed (e.g. order from .msg rows).
+- **DOM**: Reflects state; updated by apply* and render* functions. No separate “store”; read from DOM when needed (e.g. order from .obj rows).
 
 Keeping this file updated: when you change init order, add/remove a subscription, or change how order/view/scroll are loaded or saved, update the relevant section above.

@@ -555,7 +555,7 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
   }
 }
 
-#msg-count{
+#object-count{
   font-size:11px;color:var(--dim);letter-spacing:0.05em;
   display:none;
 }
@@ -593,15 +593,15 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
   border-collapse:collapse;
   table-layout:fixed;
 }
-.feed-inner.view-table .msg{
+.feed-inner.view-table .obj{
   display:table-row;
 }
-.feed-inner.view-table .msg > *{
+.feed-inner.view-table .obj > *{
   display:table-cell;
   vertical-align:top;
   border-bottom:1px solid var(--line2);
 }
-.feed-inner.view-table .msg.msg-header > *{
+.feed-inner.view-table .obj.obj-header > *{
   font-size:11px;
   font-weight:600;
   text-transform:uppercase;
@@ -610,14 +610,14 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
   padding:8px 12px 6px;
   border-bottom:2px solid var(--line2);
 }
-.feed-inner.view-table .msg:not(.msg-header) .msg-time,
-.feed-inner.view-table .msg:not(.msg-header) .msg-sender{
+.feed-inner.view-table .obj:not(.obj-header) .obj-time,
+.feed-inner.view-table .obj:not(.obj-header) .obj-sender{
   padding:6px 12px;
 }
-.feed-inner.view-table .msg:not(.msg-header) .msg-text{
+.feed-inner.view-table .obj:not(.obj-header) .obj-text{
   padding:6px 12px;
 }
-.feed-inner.view-table .msg.msg-header{
+.feed-inner.view-table .obj.obj-header{
   position:sticky;
   top:0;
   z-index:2;
@@ -625,16 +625,16 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
   pointer-events:none;
   user-select:none;
 }
-.feed-inner.view-table .msg.msg-header .msg-actions{ width:1%; }
-.feed-inner.view-table .msg:not(.msg-header) .msg-time{ width:1%; white-space:nowrap; }
-.feed-inner.view-table .msg:not(.msg-header) .msg-sender{ width:1%; white-space:nowrap; }
-.feed-inner.view-table .msg:not(.msg-header) .msg-text{ width:auto; }
-.feed-inner.view-table .msg:not(.msg-header) .msg-actions{ width:1%; }
+.feed-inner.view-table .obj.obj-header .obj-actions{ width:1%; }
+.feed-inner.view-table .obj:not(.obj-header) .obj-time{ width:1%; white-space:nowrap; }
+.feed-inner.view-table .obj:not(.obj-header) .obj-sender{ width:1%; white-space:nowrap; }
+.feed-inner.view-table .obj:not(.obj-header) .obj-text{ width:auto; }
+.feed-inner.view-table .obj:not(.obj-header) .obj-actions{ width:1%; }
 
 /* Object component: property text fields. Feed view only — switchable captions above each value. */
-.feed-inner:not(.view-table) .msg .msg-time::before,
-.feed-inner:not(.view-table) .msg .msg-sender::before,
-.feed-inner:not(.view-table) .msg .msg-text::before{
+.feed-inner:not(.view-table) .obj .obj-time::before,
+.feed-inner:not(.view-table) .obj .obj-sender::before,
+.feed-inner:not(.view-table) .obj .obj-text::before{
   display:block;
   font-size:10px;
   text-transform:uppercase;
@@ -642,12 +642,12 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
   color:var(--muted);
   margin-bottom:2px;
 }
-.feed-inner:not(.view-table) .msg .msg-time::before{ content:'Time'; }
-.feed-inner:not(.view-table) .msg .msg-sender::before{ content:'Author'; }
-.feed-inner:not(.view-table) .msg .msg-text::before{ content:'Value'; }
+.feed-inner:not(.view-table) .obj .obj-time::before{ content:'Time'; }
+.feed-inner:not(.view-table) .obj .obj-sender::before{ content:'Author'; }
+.feed-inner:not(.view-table) .obj .obj-text::before{ content:'Value'; }
 
 /* DnD spirit: table visual — wrap cloned row(s) in table so they render as table row(s). */
-.msg-drag-spirit-table-wrap{
+.obj-drag-spirit-table-wrap{
   position:fixed;
   z-index:10000;
   pointer-events:none;
@@ -662,21 +662,21 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
   box-shadow:var(--dnd-spirit-shadow);
   box-sizing:border-box;
 }
-.msg-drag-spirit-table-wrap .msg{
+.obj-drag-spirit-table-wrap .obj{
   display:table-row;
 }
-.msg-drag-spirit-table-wrap .msg > *{
+.obj-drag-spirit-table-wrap .obj > *{
   display:table-cell;
   vertical-align:top;
   padding:6px 12px;
   border-bottom:1px solid var(--line2);
 }
-.msg-drag-spirit-table-wrap .msg:last-child > *{ border-bottom:none; }
-.msg-drag-spirit-table-wrap .msg-time,
-.msg-drag-spirit-table-wrap .msg-sender{ white-space:nowrap; }
-.msg-drag-spirit-table-wrap .msg-text{ width:auto; }
+.obj-drag-spirit-table-wrap .obj:last-child > *{ border-bottom:none; }
+.obj-drag-spirit-table-wrap .obj-time,
+.obj-drag-spirit-table-wrap .obj-sender{ white-space:nowrap; }
+.obj-drag-spirit-table-wrap .obj-text{ width:auto; }
 /* When table wrap is inside stack, don't duplicate fixed positioning */
-.msg-drag-spirit-stack .msg-drag-spirit-table-wrap{
+.obj-drag-spirit-stack .obj-drag-spirit-table-wrap{
   position:static;
   transform:none;
   width:100%;
@@ -724,7 +724,7 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
 /* Realtime: DnD lines from other clients — above local indicator */
 .remote-dnd-line.feed-drop-origin{ z-index:10001; }
 .remote-dnd-line.feed-drop-indicator{ z-index:10002; }
-/* Realtime: origin ghost container — row clones with .msg-origin-ghost (same as local) */
+/* Realtime: origin ghost container — row clones with .obj-origin-ghost (same as local) */
 .remote-origin-ghost-container{
   position:fixed;
   left:0;
@@ -738,9 +738,9 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
   box-shadow:inset 3px 0 0 var(--dnd-origin-line-color);
 }
 .remote-origin-ghost-container.visible{ display:flex; }
-.remote-origin-ghost-container .msg-origin-ghost{ flex:0 0 auto; }
-.remote-origin-ghost-container .msg-origin-ghost + .msg-origin-ghost{ margin-top:-2px; }
-/* Realtime: spirit — same look as local spirit (shares .msg-drag-spirit); fix layout when cloned on mobile */
+.remote-origin-ghost-container .obj-origin-ghost{ flex:0 0 auto; }
+.remote-origin-ghost-container .obj-origin-ghost + .obj-origin-ghost{ margin-top:-2px; }
+/* Realtime: spirit — same look as local spirit (shares .obj-drag-spirit); fix layout when cloned on mobile */
 .remote-drag-spirit{
   display:none;
   transform:translate(-50%,-50%);
@@ -748,10 +748,10 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
   max-width:calc(100vw - 24px);
 }
 .remote-drag-spirit.visible{ display:block; }
-.remote-drag-spirit .msg-text{ min-width:0; padding-right:8px; }
+.remote-drag-spirit .obj-text{ min-width:0; padding-right:8px; }
 
 /* DnD: ghost copies at drag origin (placeholder, not interactive) */
-.msg-origin-ghost{
+.obj-origin-ghost{
   display:flex;
   align-items:center;
   gap:6px;
@@ -773,16 +773,16 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
   pointer-events:none;
   z-index:2;
 }
-.origin-ghost-overlay.msg-origin-ghost{ min-height:32px; }
-.msg.dragging-in-feed{ opacity:0.8; background:transparent; }
-.msg.dragging.dragging-in-feed,
-.msg.msg-drag-group.dragging-in-feed{ box-shadow:inset 3px 0 0 var(--dnd-drop-line-color); }
+.origin-ghost-overlay.obj-origin-ghost{ min-height:32px; }
+.obj.dragging-in-feed{ opacity:0.8; background:transparent; }
+.obj.dragging.dragging-in-feed,
+.obj.obj-drag-group.dragging-in-feed{ box-shadow:inset 3px 0 0 var(--dnd-drop-line-color); }
 @keyframes dnd-stack-form{ from{ opacity:0.5; transform:scale(0.94) } to{ opacity:1; transform:scale(1) } }
-.msg.msg-dnd-stack-form{ animation:dnd-stack-form var(--dnd-stack-form-duration) var(--anim-ease-out) both; }
-.msg-origin-ghost .msg-time,
-.msg-origin-ghost .msg-sender,
-.msg-origin-ghost .msg-text{ color:var(--text); }
-.msg-origin-ghost + .msg-origin-ghost{ margin-top:-2px }
+.obj.obj-dnd-stack-form{ animation:dnd-stack-form var(--dnd-stack-form-duration) var(--anim-ease-out) both; }
+.obj-origin-ghost .obj-time,
+.obj-origin-ghost .obj-sender,
+.obj-origin-ghost .obj-text{ color:var(--text); }
+.obj-origin-ghost + .obj-origin-ghost{ margin-top:-2px }
 
 /* empty state: loader animation (visible on refresh before load) */
 #empty{
@@ -799,7 +799,7 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
 @keyframes fadin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
 /* message row */
-.msg{
+.obj{
   display:flex;
   align-items:center;
   gap:6px;
@@ -810,7 +810,7 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
   contain:layout style;
 }
 @keyframes msgin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
-.msg-drag-image-ghost{
+.obj-drag-image-ghost{
   position:absolute;
   left:-9999px;
   top:0;
@@ -823,7 +823,7 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
   box-sizing:border-box;
 }
 /* DnD: spirit = clone follows cursor along view axis only (vertical feed: fixed X, follow Y) */
-.msg-drag-spirit{
+.obj-drag-spirit{
   position:fixed;
   z-index:10000;
   pointer-events:none;
@@ -833,10 +833,10 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
   box-sizing:border-box;
   transform:translate(-50%,-50%);
 }
-.msg-drag-spirit .msg-time,
-.msg-drag-spirit .msg-sender{ color:var(--text); }
+.obj-drag-spirit .obj-time,
+.obj-drag-spirit .obj-sender{ color:var(--text); }
 /* DnD: stack spirit = multiple rows under cursor, same tokens */
-.msg-drag-spirit-stack{
+.obj-drag-spirit-stack{
   position:fixed;
   z-index:10000;
   display:flex;
@@ -846,15 +846,15 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
   border:1px solid var(--line);
   transform:translate(-50%,-50%);
 }
-.msg-drag-spirit-stack .msg-drag-spirit-row{
+.obj-drag-spirit-stack .obj-drag-spirit-row{
   flex:0 0 auto;
   border-bottom:1px solid var(--line);
   background:var(--dnd-spirit-bg);
 }
-.msg-drag-spirit-stack .msg-drag-spirit-row:last-of-type{ border-bottom:none; }
-.msg-drag-spirit-stack .msg-drag-spirit-row .msg-time,
-.msg-drag-spirit-stack .msg-drag-spirit-row .msg-sender{ color:var(--text); }
-.msg-drag-spirit-stack-more{
+.obj-drag-spirit-stack .obj-drag-spirit-row:last-of-type{ border-bottom:none; }
+.obj-drag-spirit-stack .obj-drag-spirit-row .obj-time,
+.obj-drag-spirit-stack .obj-drag-spirit-row .obj-sender{ color:var(--text); }
+.obj-drag-spirit-stack-more{
   flex:0 0 auto;
   padding:4px 12px;
   font-size:11px;
@@ -862,14 +862,14 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
   background:var(--line2);
   text-align:center;
 }
-body.dnd-active .msg-drag-spirit-stack{ opacity:1; background:transparent; }
-body.dnd-active .msg-drag-spirit,
-body.dnd-active .msg-drag-spirit-stack{ pointer-events:none; }
+body.dnd-active .obj-drag-spirit-stack{ opacity:1; background:transparent; }
+body.dnd-active .obj-drag-spirit,
+body.dnd-active .obj-drag-spirit-stack{ pointer-events:none; }
 /* DnD: row under cursor nudge (use tokens) */
-.msg-drag-nudge-right{ transform:translateX(var(--dnd-nudge-offset)); }
-body.dnd-active .msg.msg-drag-nudge-right{ transition:transform var(--dnd-nudge-duration) var(--anim-ease-out); }
+.obj-drag-nudge-right{ transform:translateX(var(--dnd-nudge-offset)); }
+body.dnd-active .obj.obj-drag-nudge-right{ transition:transform var(--dnd-nudge-duration) var(--anim-ease-out); }
 /* DnD: fly-to-tab clone (use tokens) */
-.msg-fly-clone{
+.obj-fly-clone{
   position:fixed;
   z-index:9999;
   pointer-events:none;
@@ -879,46 +879,46 @@ body.dnd-active .msg.msg-drag-nudge-right{ transition:transform var(--dnd-nudge-
   animation:none;
   transition:transform var(--dnd-spirit-fly-duration) var(--anim-ease-out), opacity var(--dnd-spirit-fade-duration) var(--anim-ease-out);
 }
-.msg-fly-clone .msg-actions{visibility:hidden}
-.msg:hover{background:var(--bg2)}
-.msg.msg-drag-over{background:var(--bg2)}
+.obj-fly-clone .obj-actions{visibility:hidden}
+.obj:hover{background:var(--bg2)}
+.obj.obj-drag-over{background:var(--bg2)}
 /* DnD: no hover on any row; only spirit has hover bg */
-body.dnd-active .msg{transition:none;animation:none}
-body.dnd-active .msg.msg-dnd-stack-form{animation:dnd-stack-form var(--dnd-stack-form-duration) var(--anim-ease-out) both}
-body.dnd-active .msg:hover,
-body.dnd-active .msg.msg-drag-over,
-body.dnd-active .msg.msg-drag-target{background:transparent !important}
-body.dnd-just-ended .msg{transition:none;animation:none}
-.msg.msg-dnd-just-dropped{animation:none}
-.msg.msg-remote-reorder{animation:remote-reorder-in .22s ease-out both}
+body.dnd-active .obj{transition:none;animation:none}
+body.dnd-active .obj.obj-dnd-stack-form{animation:dnd-stack-form var(--dnd-stack-form-duration) var(--anim-ease-out) both}
+body.dnd-active .obj:hover,
+body.dnd-active .obj.obj-drag-over,
+body.dnd-active .obj.obj-drag-target{background:transparent !important}
+body.dnd-just-ended .obj{transition:none;animation:none}
+.obj.obj-dnd-just-dropped{animation:none}
+.obj.obj-remote-reorder{animation:remote-reorder-in .22s ease-out both}
 @keyframes remote-reorder-in{from{opacity:.88}to{opacity:1}}
-body.dnd-active .msg.dragging .msg-select-wrap,
-body.dnd-active .msg.dragging .msg-actions,
-body.dnd-active .msg.msg-drag-group .msg-select-wrap,
-body.dnd-active .msg.msg-drag-group .msg-actions{opacity:0;pointer-events:none;visibility:hidden}
-body.dnd-active .msg.msg-drag-target.msg-drag-nudge-right{transition:transform var(--dnd-nudge-duration) var(--anim-ease-out)}
-body.dnd-active .msg:hover .msg-select-wrap,
-body.dnd-active .msg:hover .msg-actions,
-body.dnd-active .msg.msg-drag-over .msg-select-wrap,
-body.dnd-active .msg.msg-drag-over .msg-actions{opacity:0 !important;pointer-events:none !important}
-body.dnd-active .msg:hover .msg-time,
-body.dnd-active .msg:hover .msg-sender,
-body.dnd-active .msg.msg-drag-over .msg-time,
-body.dnd-active .msg.msg-drag-over .msg-sender{color:var(--dim) !important}
-body.dnd-active .msg.msg-drag-spirit{opacity:1;background:var(--dnd-spirit-bg);transition:none}
-body.dnd-active .msg-drag-spirit-stack{opacity:1;background:transparent;transition:none}
-.msg.msg-editing{
+body.dnd-active .obj.dragging .obj-select-wrap,
+body.dnd-active .obj.dragging .obj-actions,
+body.dnd-active .obj.obj-drag-group .obj-select-wrap,
+body.dnd-active .obj.obj-drag-group .obj-actions{opacity:0;pointer-events:none;visibility:hidden}
+body.dnd-active .obj.obj-drag-target.obj-drag-nudge-right{transition:transform var(--dnd-nudge-duration) var(--anim-ease-out)}
+body.dnd-active .obj:hover .obj-select-wrap,
+body.dnd-active .obj:hover .obj-actions,
+body.dnd-active .obj.obj-drag-over .obj-select-wrap,
+body.dnd-active .obj.obj-drag-over .obj-actions{opacity:0 !important;pointer-events:none !important}
+body.dnd-active .obj:hover .obj-time,
+body.dnd-active .obj:hover .obj-sender,
+body.dnd-active .obj.obj-drag-over .obj-time,
+body.dnd-active .obj.obj-drag-over .obj-sender{color:var(--dim) !important}
+body.dnd-active .obj.obj-drag-spirit{opacity:1;background:var(--dnd-spirit-bg);transition:none}
+body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transition:none}
+.obj.obj-editing{
   background:var(--bg2);
   box-shadow:inset 0 0 0 1px var(--line2);
 }
-.msg.msg-editing .msg-time,
-.msg.msg-editing .msg-sender{color:var(--text)}
-.msg.msg-editing .msg-select-wrap,
-.msg.msg-editing .msg-actions{opacity:1;pointer-events:auto}
-.msg:last-child{border-bottom:none}
+.obj.obj-editing .obj-time,
+.obj.obj-editing .obj-sender{color:var(--text)}
+.obj.obj-editing .obj-select-wrap,
+.obj.obj-editing .obj-actions{opacity:1;pointer-events:auto}
+.obj:last-child{border-bottom:none}
 
 /* Object row: meta (time, author) = secondary; message = primary. */
-.msg-sender{
+.obj-sender{
   font-size:10px;
   color:var(--dim);
   font-weight:500;
@@ -932,7 +932,7 @@ body.dnd-active .msg-drag-spirit-stack{opacity:1;background:transparent;transiti
   text-align:right;
 }
 
-.msg-time{
+.obj-time{
   font-size:6px;
   color:var(--dim);
   letter-spacing:0.04em;
@@ -943,7 +943,7 @@ body.dnd-active .msg-drag-spirit-stack{opacity:1;background:transparent;transiti
   display:none; /* JS shows based on view prefs */
 }
 
-.msg-text{
+.obj-text{
   flex:1 1 auto;
   font-size:13px;
   color:var(--text);
@@ -953,7 +953,7 @@ body.dnd-active .msg-drag-spirit-stack{opacity:1;background:transparent;transiti
   cursor:pointer;
 }
 /* Editing: doppelganger uses value style only — no background, no stroke */
-.msg-editing .msg-text{
+.obj-editing .obj-text{
   font-family:var(--mono);
   font-size:14px;
   line-height:1.5;
@@ -969,19 +969,19 @@ body.dnd-active .msg-drag-spirit-stack{opacity:1;background:transparent;transiti
   cursor:default;
 }
 /* Doppelganger: cursor and selection mirror main input */
-.msg-edit-caret{
+.obj-edit-caret{
   display:inline-block;
   width:0;
   height:1em;
   vertical-align:text-bottom;
   border-left:2px solid var(--acc);
   margin-left:-1px;
-  animation:msg-edit-caret-blink 1s step-end infinite;
+  animation:obj-edit-caret-blink 1s step-end infinite;
 }
-@keyframes msg-edit-caret-blink{
+@keyframes obj-edit-caret-blink{
   50%{ opacity:0; }
 }
-.msg-edit-selection{
+.obj-edit-selection{
   background:var(--acc);
   color:var(--bg);
   border-radius:2px;
@@ -990,13 +990,13 @@ body.dnd-active .msg-drag-spirit-stack{opacity:1;background:transparent;transiti
 
 @media (max-width:540px){
   /* Disable text selection on messages on mobile so long-press is for drag, not selection */
-  .msg,
-  .msg *{
+  .obj,
+  .obj *{
     -webkit-user-select:none;
     user-select:none;
   }
   /* On mobile hide checkbox zone until select mode is on */
-  .msg-checkbox-zone{
+  .obj-checkbox-zone{
     width:0;
     min-width:0;
     margin-left:0;
@@ -1004,8 +1004,8 @@ body.dnd-active .msg-drag-spirit-stack{opacity:1;background:transparent;transiti
     opacity:0;
     pointer-events:none;
   }
-  .msg-checkbox-zone-left{ width:0; min-width:0; }
-  body.select-mode .msg-checkbox-zone{
+  .obj-checkbox-zone-left{ width:0; min-width:0; }
+  body.select-mode .obj-checkbox-zone{
     width:auto;
     min-width:auto;
     margin-left:-48px;
@@ -1013,19 +1013,19 @@ body.dnd-active .msg-drag-spirit-stack{opacity:1;background:transparent;transiti
     opacity:1;
     pointer-events:auto;
   }
-  body.select-mode .msg-checkbox-zone-left{ width:48px; min-width:48px; }
-  body.select-mode .msg-select-wrap{ opacity:1; pointer-events:auto; }
+  body.select-mode .obj-checkbox-zone-left{ width:48px; min-width:48px; }
+  body.select-mode .obj-select-wrap{ opacity:1; pointer-events:auto; }
 }
 
 /* on hover, make all message parameters (time/author) same color as text */
-.msg:hover .msg-time,
-.msg:hover .msg-sender,
-.msg.msg-drag-over .msg-time,
-.msg.msg-drag-over .msg-sender{
+.obj:hover .obj-time,
+.obj:hover .obj-sender,
+.obj.obj-drag-over .obj-time,
+.obj.obj-drag-over .obj-sender{
   color:var(--text);
 }
 
-.msg-checkbox-zone{
+.obj-checkbox-zone{
   flex:0 0 auto;
   display:flex;
   align-items:center;
@@ -1037,14 +1037,14 @@ body.dnd-active .msg-drag-spirit-stack{opacity:1;background:transparent;transiti
   position:relative;
   z-index:1;
 }
-.msg-checkbox-zone-left{
+.obj-checkbox-zone-left{
   width:48px;
   min-width:48px;
   flex-shrink:0;
   align-self:stretch;
   min-height:100%;
 }
-.msg-select-wrap{
+.obj-select-wrap{
   flex:0 0 24px;
   display:flex;
   align-items:center;
@@ -1054,15 +1054,15 @@ body.dnd-active .msg-drag-spirit-stack{opacity:1;background:transparent;transiti
   transition:opacity .12s ease;
 }
 
-body.select-mode .msg-select-wrap,
-.msg:hover .msg-select-wrap,
-.msg.msg-drag-over .msg-select-wrap,
-.msg.msg-selected .msg-select-wrap{
+body.select-mode .obj-select-wrap,
+.obj:hover .obj-select-wrap,
+.obj.obj-drag-over .obj-select-wrap,
+.obj.obj-selected .obj-select-wrap{
   opacity:1;
   pointer-events:auto;
 }
 
-.msg-select{
+.obj-select{
   width:13px;
   height:13px;
   -webkit-appearance:none;
@@ -1072,13 +1072,13 @@ body.select-mode .msg-select-wrap,
   background:var(--bg);
   cursor:pointer;
 }
-.msg-select:checked{
+.obj-select:checked{
   background:var(--acc);
   border-color:var(--acc2);
   box-shadow:inset 0 0 0 2px var(--bg);
 }
 
-.msg-actions{
+.obj-actions{
   display:flex;
   align-items:center;
   gap:4px;
@@ -1091,12 +1091,12 @@ body.select-mode .msg-select-wrap,
   pointer-events:none;
   transition:opacity .15s ease;
 }
-.msg:hover .msg-actions,
-.msg.msg-drag-over .msg-actions{
+.obj:hover .obj-actions,
+.obj.obj-drag-over .obj-actions{
   opacity:1;
   pointer-events:auto;
 }
-.msg-action-btn{
+.obj-action-btn{
   border:1px solid var(--line2);
   background:var(--bg);
   color:var(--soft);
@@ -1106,32 +1106,32 @@ body.select-mode .msg-select-wrap,
   border-radius:3px;
   cursor:pointer;
 }
-.msg-action-btn:hover{
+.obj-action-btn:hover{
   background:var(--line);
   color:var(--text);
 }
 
-.msg-text a{
+.obj-text a{
   color:var(--acc);
   text-decoration:none;
   border-bottom:1px solid var(--acc2);
 }
-.msg-text a:hover{color:var(--bright)}
+.obj-text a:hover{color:var(--bright)}
 
 /* new message flash */
-.msg.new-flash{
+.obj.new-flash{
   background:rgba(232,213,160,0.04);
 }
 
 /* DnD: stack (single or multi) — same tokens, no entrance animation during drag */
-.msg.dragging,
-.msg.msg-drag-group{
+.obj.dragging,
+.obj.obj-drag-group{
   opacity:1;
   animation:none;
 }
-.msg.msg-drag-group + .msg.msg-drag-group{margin-top:-2px}
-.msg.dragging + .msg.msg-drag-group,
-.msg.msg-drag-group + .msg.dragging{margin-top:-2px}
+.obj.obj-drag-group + .obj.obj-drag-group{margin-top:-2px}
+.obj.dragging + .obj.obj-drag-group,
+.obj.obj-drag-group + .obj.dragging{margin-top:-2px}
 
 /* ── BOTTOM BAR (input): fixed at bottom, fills width ── */
 #input-area{
@@ -1507,8 +1507,8 @@ body.select-mode .msg-select-wrap,
 /* ── MOBILE ── */
 @media(max-width:540px){
   #scroll-btn{display:none !important;}
-  .msg{gap:8px}
-  .msg-meta{
+  .obj{gap:8px}
+  .obj-meta{
     min-width:120px;
     max-width:160px;
   }

@@ -38,8 +38,8 @@
 | Layer | What |
 |-------|------|
 | **Tokens** | `:root` vars (already in styling.md): --bg, --text, --acc, --mono, --sans, etc. |
-| **Components** | Header, tabs, feed, .msg row, input area, modals, toasts, manage bar. |
-| **States** | body.loaded, body.select-mode, body.dnd-active; .msg.dragging, .msg-selected, .msg-drag-target. |
+| **Components** | Header, tabs, feed, .obj row, input area, modals, toasts, manage bar. |
+| **States** | body.loaded, body.select-mode, body.dnd-active; .obj.dragging, .obj-selected, .obj-drag-target. |
 
 Keep single source: **docs/styling.md** + **ELEMENTS.md**. New components = add to both.
 
@@ -48,5 +48,5 @@ Keep single source: **docs/styling.md** + **ELEMENTS.md**. New components = add 
 ## Session checklist (try in-session)
 
 - [x] Backend: documented; entries select already minimal; no duplicate fetch on switch (reloadForUser does one fetch). DB: add indexes on `entries(channel, created_at)`, `views(user_id, channel)` in Supabase dashboard if not present — **no code change, no data risk.**
-- [x] UI: preconnect fonts.gstatic.com; `contain:layout style` on #feed and .msg; font-display=swap already in URL.
+- [x] UI: preconnect fonts.gstatic.com; `contain:layout style` on #feed and .obj; font-display=swap already in URL.
 - [x] Design system: DIRECTION.md updated with tokens + components; OPTIMIZATION.md references docs/styling.md + ELEMENTS.md.

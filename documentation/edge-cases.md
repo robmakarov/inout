@@ -21,7 +21,7 @@ Gotchas, “don’t do this,” and patterns to follow. **When you fix or discov
 
 ## 3. View prefs and “flash” on refresh
 
-- **Time/Author default** — `.msg-time` and `.msg-sender` are `display:none` in CSS so they never “flash” visible before view prefs load. JS shows them from **fieldPrefs** in **createMsgRow** and **applyFieldPrefsToMessages**.
+- **Time/Author default** — `.obj-time` and `.obj-sender` are `display:none` in CSS so they never “flash” visible before view prefs load. JS shows them from **fieldPrefs** in **createObjectRow** and **applyFieldPrefsToMessages**.
 - **Load order** — **loadMessageOrderForCurrentChannel** and **loadFieldPrefsForCurrentChannel** run before **loadMessages** so fieldPrefs are set before any row is created. Keep this order when changing init.
 
 ---
@@ -42,9 +42,9 @@ Gotchas, “don’t do this,” and patterns to follow. **When you fix or discov
 
 ## 6. DnD reorder
 
-- **body.dnd-active** — Added on dragstart (mouse or touch long-press), removed on dragend. Disables .msg:hover so rows don’t blink as the cursor moves.
+- **body.dnd-active** — Added on dragstart (mouse or touch long-press), removed on dragend. Disables .obj:hover so rows don’t blink as the cursor moves.
 - **feedDropIndicatorEl** — Created on first need, appended to document.body. Position fixed; .visible toggled in processFeedDragover and cleared on drop/dragend/dragleave.
-- **.msg-drag-target** — Applied to the single row that is the current drop target; its time/sender/text shift 30px right. Removed when target changes or drag ends.
+- **.obj-drag-target** — Applied to the single row that is the current drop target; its time/sender/text shift 30px right. Removed when target changes or drag ends.
 - **flipAnimateShift** — Currently a no-op (was causing an extra “ghost” line). Reorder is immediate.
 
 ---

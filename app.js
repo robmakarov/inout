@@ -4,7 +4,7 @@ try { if (document.body) document.body.classList.add('loaded'); } catch (_) {}
     if (localStorage.getItem('inout_was_editing_v1')) {
       localStorage.setItem('inout_input_state_v2', '');
       localStorage.removeItem('inout_was_editing_v1');
-      var el = document.getElementById('msg-input');
+      var el = document.getElementById('obj-input');
       if (el) { el.value = ''; el.placeholder = 'say something…'; }
     }
   } catch (_) {}
@@ -68,7 +68,7 @@ if (window.Stripe && STRIPE_PUBLISHABLE_KEY && !STRIPE_PUBLISHABLE_KEY.includes(
 const feedInner  = document.getElementById('feed-inner');
 const feedEl     = document.getElementById('feed');
 const inputArea  = document.getElementById('input-area');
-const input      = document.getElementById('msg-input');
+const input      = document.getElementById('obj-input');
 const sendBtn    = document.getElementById('send-btn');
 const clearInputBtn = document.getElementById('clear-input');
 const emptyEl    = document.getElementById('empty');
@@ -283,7 +283,7 @@ function applyDragSelectRect(feedInner, feedEl, startYContent, currentYClient, m
   const currentYContent = currentYClient - feedRect.top + scrollTop;
   const rectTop = Math.min(startYContent, currentYContent);
   const rectBottom = Math.max(startYContent, currentYContent);
-  const rows = Array.from(feedInner.querySelectorAll('.msg'));
+  const rows = Array.from(feedInner.querySelectorAll('.obj'));
   let changed = false;
   for (const r of rows) {
     const rRect = r.getBoundingClientRect();
@@ -291,17 +291,17 @@ function applyDragSelectRect(feedInner, feedEl, startYContent, currentYClient, m
     const rowBottom = rowTop + rRect.height;
     const overlaps = rowBottom > rectTop && rowTop < rectBottom;
     const desired = overlaps ? (mode === 'select') : (startRowStates.get(r) ?? false);
-    const box = r.querySelector('.msg-select');
+    const box = r.querySelector('.obj-select');
     const id = r.dataset.id != null ? Number(r.dataset.id) : NaN;
     if (!box || !Number.isFinite(id)) continue;
     if (box.checked === desired) continue;
     box.checked = desired;
     if (box.checked) {
       selectedIds.add(id);
-      r.classList.add('msg-selected');
+      r.classList.add('obj-selected');
     } else {
       selectedIds.delete(id);
-      r.classList.remove('msg-selected');
+      r.classList.remove('obj-selected');
     }
     changed = true;
   }
@@ -310,20 +310,20 @@ function applyDragSelectRect(feedInner, feedEl, startYContent, currentYClient, m
 
 function toggleRowAtY(feedInner, clientY) {
   if (!feedInner) return;
-  const rows = Array.from(feedInner.querySelectorAll('.msg'));
+  const rows = Array.from(feedInner.querySelectorAll('.obj'));
   for (const r of rows) {
     const rect = r.getBoundingClientRect();
     if (clientY >= rect.top && clientY <= rect.bottom) {
-      const box = r.querySelector('.msg-select');
+      const box = r.querySelector('.obj-select');
       const id = r.dataset.id != null ? Number(r.dataset.id) : NaN;
       if (!box || !Number.isFinite(id)) continue;
       box.checked = !box.checked;
       if (box.checked) {
         selectedIds.add(id);
-        r.classList.add('msg-selected');
+        r.classList.add('obj-selected');
       } else {
         selectedIds.delete(id);
-        r.classList.remove('msg-selected');
+        r.classList.remove('obj-selected');
       }
       updateSelectionUI();
       return;
@@ -562,7 +562,7 @@ async function undoLastAction() {
       if (feedEl) feedEl.classList.add('feed-updating');
       requestAnimationFrame(() => {
         ids.forEach(id => {
-          const el = feedInner.querySelector('.msg[data-id="' + CSS.escape(String(id)) + '"]');
+          const el = feedInner.querySelector('.obj[data-id="' + CSS.escape(String(id)) + '"]');
           if (el) el.remove();
         });
         currentObjectOrder = currentObjectOrder.filter(x => !ids.includes(x));
@@ -616,10 +616,10 @@ async function undoLastAction() {
 
 function updateEditingRowHighlight() {
   if (!feedInner) return;
-  feedInner.querySelectorAll('.msg.msg-editing').forEach(r => r.classList.remove('msg-editing'));
+  feedInner.querySelectorAll('.obj.obj-editing').forEach(r => r.classList.remove('obj-editing'));
   if (editingObjectId != null) {
-    const row = feedInner.querySelector('.msg[data-id="' + CSS.escape(String(editingObjectId)) + '"]');
-    if (row) row.classList.add('msg-editing');
+    const row = feedInner.querySelector('.obj[data-id="' + CSS.escape(String(editingObjectId)) + '"]');
+    if (row) row.classList.add('obj-editing');
   }
 }
 
@@ -702,11 +702,11 @@ function updateOriginLinePosition() {
 }
 function showDropOriginLine() {
   if (!feedEl || !feedInner) return;
-  var block = (dragSelectedRows && dragSelectedRows.length > 0) ? dragSelectedRows : (feedInner.querySelector('.msg.dragging') ? [feedInner.querySelector('.msg.dragging')] : []);
+  var block = (dragSelectedRows && dragSelectedRows.length > 0) ? dragSelectedRows : (feedInner.querySelector('.obj.dragging') ? [feedInner.querySelector('.obj.dragging')] : []);
   if (block.length === 0) return;
   var firstRow = block[0];
   var lastRow = block[block.length - 1];
-  /* Capture positions before any msg-drag-group margin is applied */
+  /* Capture positions before any obj-drag-group margin is applied */
   originContentTop = firstRow.offsetTop || 0;
   originContentHeight = (lastRow.offsetTop || 0) + (lastRow.offsetHeight || 0) - originContentTop;
   if (originContentHeight < 2) originContentHeight = 2;
@@ -736,7 +736,7 @@ function showOriginGhostOverlay(block) {
   var height = (last.offsetTop + last.offsetHeight) - top;
   if (height < 2) height = 32;
   originGhostOverlayEl = document.createElement('div');
-  originGhostOverlayEl.className = 'origin-ghost-overlay msg-origin-ghost';
+  originGhostOverlayEl.className = 'origin-ghost-overlay obj-origin-ghost';
   originGhostOverlayEl.setAttribute('aria-hidden', 'true');
   originGhostOverlayEl.style.top = top + 'px';
   originGhostOverlayEl.style.height = height + 'px';
@@ -748,11 +748,11 @@ function removeOriginGhostOverlay() {
 }
 function createOriginGhostFromRow(row) {
   var g = row.cloneNode(true);
-  g.classList.remove('msg', 'dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target');
-  g.classList.add('msg-origin-ghost');
+  g.classList.remove('obj', 'dragging', 'obj-drag-group', 'obj-selected', 'new-flash', 'obj-editing', 'obj-drag-over', 'obj-drag-target');
+  g.classList.add('obj-origin-ghost');
   g.removeAttribute('draggable');
   g.removeAttribute('data-id');
-  g.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
+  g.querySelectorAll('.obj-checkbox-zone, .obj-actions, .obj-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
   return g;
 }
 function insertOriginGhostsAndDetachRows(block) {
@@ -1018,7 +1018,7 @@ function setupFocusOnFirstInteraction() {
     if (el.isContentEditable) return true;
     if (el.closest && el.closest('input, textarea, [contenteditable="true"], button, a, select')) return true;
     if (el.closest && (el.closest('#user-modal') || el.closest('#channel-modal-backdrop') || el.closest('#view-menu'))) return true;
-    if (el.closest && el.closest('.msg-actions, .msg-select-wrap')) return true;
+    if (el.closest && el.closest('.obj-actions, .obj-select-wrap')) return true;
     return false;
   }
   document.addEventListener('focusin', () => {
@@ -1140,9 +1140,9 @@ function subscribeRealtimeAll() {
 function updateObjectRowMessage(objId, messageValue) {
   if (!feedInner || objId == null) return;
   const idStr = String(objId);
-  const el = feedInner.querySelector('.msg[data-id="' + CSS.escape(idStr) + '"]');
+  const el = feedInner.querySelector('.obj[data-id="' + CSS.escape(idStr) + '"]');
   if (!el) return;
-  const textEl = el.querySelector('.msg-text');
+  const textEl = el.querySelector('.obj-text');
   if (!textEl) return;
   textEl.innerHTML = linkify(escapeHtml(messageValue || ''));
 }
@@ -1151,9 +1151,9 @@ function updateObjectRowMessage(objId, messageValue) {
 function updateEditingRowFromInput() {
   if (!feedInner || editingObjectId == null || !input) return;
   const idStr = String(editingObjectId);
-  const el = feedInner.querySelector('.msg[data-id="' + CSS.escape(idStr) + '"]');
+  const el = feedInner.querySelector('.obj[data-id="' + CSS.escape(idStr) + '"]');
   if (!el) return;
-  const textEl = el.querySelector('.msg-text');
+  const textEl = el.querySelector('.obj-text');
   if (!textEl) return;
   const value = input.value;
   const start = Math.min(input.selectionStart || 0, value.length);
@@ -1161,8 +1161,8 @@ function updateEditingRowFromInput() {
   const before = value.slice(0, start);
   const sel = value.slice(start, end);
   const after = value.slice(end);
-  const caret = '<span class="msg-edit-caret" aria-hidden="true"></span>';
-  const selCls = 'msg-edit-selection';
+  const caret = '<span class="obj-edit-caret" aria-hidden="true"></span>';
+  const selCls = 'obj-edit-selection';
   const html =
     escapeHtml(before) +
     (sel ? '<span class="' + selCls + '">' + escapeHtml(sel) + '</span>' : '') +
@@ -1416,7 +1416,7 @@ let dndBroadcastThrottle = null;
 
 function getLineRectForInsert(feedEl, feedInner, insertBeforeId, wantAppend) {
   if (!feedEl || !feedInner) return null;
-  var rows = feedInner.querySelectorAll('.msg');
+  var rows = feedInner.querySelectorAll('.obj');
   if (!rows.length) return null;
   var feedRect = feedEl.getBoundingClientRect();
   var row = null;
@@ -1442,7 +1442,7 @@ function getLineRectForInsert(feedEl, feedInner, insertBeforeId, wantAppend) {
 /* Origin line = bottom of the last dragged row (so border is correct across devices) */
 function getLineRectForOrigin(feedEl, feedInner, lastDraggedId, wantAppend) {
   if (!feedEl || !feedInner) return null;
-  var rows = feedInner.querySelectorAll('.msg');
+  var rows = feedInner.querySelectorAll('.obj');
   if (!rows.length) return null;
   var feedRect = feedEl.getBoundingClientRect();
   var row = null;
@@ -1538,18 +1538,18 @@ function setupDndBroadcastChannel() {
         if (inner && movedIds.length) {
           var stagger = 30;
           var duration = 220 + movedIds.length * stagger;
-          inner.querySelectorAll('.msg').forEach(function(r) {
+          inner.querySelectorAll('.obj').forEach(function(r) {
             var id = Number(r.dataset.id);
             if (movedIds.indexOf(id) >= 0) {
-              r.classList.add('msg-remote-reorder');
+              r.classList.add('obj-remote-reorder');
               var i = movedIds.indexOf(id);
               r.style.animationDelay = (i * stagger) + 'ms';
             }
           });
           setTimeout(function() {
             if (!inner.parentNode) return;
-            inner.querySelectorAll('.msg-remote-reorder').forEach(function(r) {
-              r.classList.remove('msg-remote-reorder');
+            inner.querySelectorAll('.obj-remote-reorder').forEach(function(r) {
+              r.classList.remove('obj-remote-reorder');
               r.style.animationDelay = '';
             });
           }, duration);
@@ -1584,7 +1584,7 @@ function applyRemoteDndLines() {
   var feed = document.getElementById('feed');
   var inner = document.getElementById('feed-inner');
   if (!feed || !inner) return;
-  var rows = inner.querySelectorAll('.msg');
+  var rows = inner.querySelectorAll('.obj');
   if (!rows.length) {
     /* Feed may still be loading (e.g. on mobile); retry once so web→mobile works */
     if (applyRemoteDndLinesRetry) return;
@@ -1667,15 +1667,15 @@ function applyRemoteDndLines() {
         }
       }
     }
-    if (!remoteSpiritEl || !remoteSpiritEl.classList.contains('msg')) {
+    if (!remoteSpiritEl || !remoteSpiritEl.classList.contains('obj')) {
       if (remoteSpiritEl && remoteSpiritEl.parentNode) remoteSpiritEl.parentNode.removeChild(remoteSpiritEl);
       if (firstRow) {
         remoteSpiritEl = firstRow.cloneNode(true);
-        remoteSpiritEl.classList.remove('dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
-        remoteSpiritEl.classList.add('msg', 'msg-drag-spirit', 'remote-drag-spirit');
+        remoteSpiritEl.classList.remove('dragging', 'obj-drag-group', 'obj-selected', 'new-flash', 'obj-editing', 'obj-drag-over', 'obj-drag-target', 'dragging-in-feed');
+        remoteSpiritEl.classList.add('obj', 'obj-drag-spirit', 'remote-drag-spirit');
         remoteSpiritEl.removeAttribute('draggable');
         remoteSpiritEl.setAttribute('aria-hidden', 'true');
-        remoteSpiritEl.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
+        remoteSpiritEl.querySelectorAll('.obj-checkbox-zone, .obj-actions, .obj-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
         var spiritW = firstRow.offsetWidth || 280;
         var maxW = (typeof window !== 'undefined' && window.innerWidth) ? window.innerWidth - 24 : spiritW;
         if (spiritW > maxW) spiritW = maxW;
@@ -1684,7 +1684,7 @@ function applyRemoteDndLines() {
         document.body.appendChild(remoteSpiritEl);
       } else {
         remoteSpiritEl = document.createElement('div');
-        remoteSpiritEl.className = 'msg-drag-spirit remote-drag-spirit';
+        remoteSpiritEl.className = 'obj-drag-spirit remote-drag-spirit';
         remoteSpiritEl.setAttribute('aria-hidden', 'true');
         remoteSpiritEl.style.minWidth = '280px';
         remoteSpiritEl.style.minHeight = '32px';
@@ -1838,7 +1838,7 @@ function hideClipboardBubble() {
 
 function showEmptyIfNoMessages() {
   if (!feedInner || !emptyEl) return;
-  const hasMsg = feedInner.querySelector('.msg');
+  const hasMsg = feedInner.querySelector('.obj');
   if (hasMsg) return;
   try {
     var loader = emptyEl.querySelector('.loader-inner');
@@ -2005,11 +2005,11 @@ function saveFieldPrefsForCurrentChannel() {
 
 function applyFieldPrefsToMessages() {
   if (!feedInner || !fieldPrefs) return;
-  const rows = feedInner.querySelectorAll('.msg');
+  const rows = feedInner.querySelectorAll('.obj');
   rows.forEach(row => {
-    if (row.classList.contains('msg-header')) return;
-    const timeEl = row.querySelector('.msg-time');
-    const senderEl = row.querySelector('.msg-sender');
+    if (row.classList.contains('obj-header')) return;
+    const timeEl = row.querySelector('.obj-time');
+    const senderEl = row.querySelector('.obj-sender');
     if (timeEl) timeEl.style.setProperty('display', fieldPrefs.showTime ? 'block' : 'none', 'important');
     const isMain = currentChannel === 'main' || (row.dataset.channel === 'main');
     if (senderEl) senderEl.style.setProperty('display', !isMain && fieldPrefs.showAuthor ? 'flex' : 'none', 'important');
@@ -2039,7 +2039,7 @@ function setupTouchDragHandlers() {
     const y = touch.clientY;
     lastDragClientY = y;
     lastDragClientX = touch.clientX;
-    const rows = Array.from(feedInner.querySelectorAll('.msg'));
+    const rows = Array.from(feedInner.querySelectorAll('.obj'));
     if (!rows.length) return;
     var block = dragSelectedRows && dragSelectedRows.length > 1 ? dragSelectedRows.slice() : [touchDragState.row];
     var skip = new Set(block);
@@ -2101,7 +2101,7 @@ function setupTouchDragHandlers() {
     if (!touchDragState || !touchDragState.row) return;
     var r = touchDragState.row;
     var droppedMovedIdsTouch = (dragSelectedRows && dragSelectedRows.length) ? dragSelectedRows.map(function(x) { return Number(x.dataset.id); }).filter(function(id) { return Number.isFinite(id); }) : (r.dataset && r.dataset.id ? [Number(r.dataset.id)] : []);
-    if (feedInner) feedInner.querySelectorAll('.msg-drag-group').forEach(function(el) { el.classList.remove('msg-drag-group'); });
+    if (feedInner) feedInner.querySelectorAll('.obj-drag-group').forEach(function(el) { el.classList.remove('obj-drag-group'); });
     dragSelectedRows = [];
     clearEdgeScrollInterval();
     clearTimeout(touchDragState.timer);
@@ -2145,22 +2145,22 @@ function setupTouchDragHandlers() {
 /** Table view: header row (Time, Author, Message, Actions). No dataset.id so it stays first. */
 function createMsgHeaderRow() {
   const row = document.createElement('div');
-  row.className = 'msg msg-header';
+  row.className = 'obj obj-header';
   row.setAttribute('aria-hidden', 'true');
   const checkboxPlaceholder = document.createElement('div');
-  checkboxPlaceholder.className = 'msg-checkbox-zone';
+  checkboxPlaceholder.className = 'obj-checkbox-zone';
   checkboxPlaceholder.setAttribute('aria-hidden', 'true');
   const time = document.createElement('div');
-  time.className = 'msg-time';
+  time.className = 'obj-time';
   time.textContent = 'Time';
   const sender = document.createElement('div');
-  sender.className = 'msg-sender';
+  sender.className = 'obj-sender';
   sender.textContent = 'Author';
   const text = document.createElement('div');
-  text.className = 'msg-text';
+  text.className = 'obj-text';
   text.textContent = 'Message';
   const actions = document.createElement('div');
-  actions.className = 'msg-actions';
+  actions.className = 'obj-actions';
   row.appendChild(checkboxPlaceholder);
   row.appendChild(time);
   row.appendChild(sender);
@@ -2179,7 +2179,7 @@ function createObjectRow(obj, isNew) {
   if (emptyEl.parentNode) emptyEl.remove();
 
   const row  = document.createElement('div');
-  row.className = 'msg' + (isNew ? ' new-flash' : '');
+  row.className = 'obj' + (isNew ? ' new-flash' : '');
   if (typeof obj.id !== 'undefined') row.dataset.id = String(obj.id);
   row.draggable = true;
   row.addEventListener('dragstart', e => {
@@ -2190,7 +2190,7 @@ function createObjectRow(obj, isNew) {
     }
     if (dragSpiritEl && dragSpiritEl.parentNode) dragSpiritEl.parentNode.removeChild(dragSpiritEl);
     if (feedInner && selectedIds.has(obj.id) && selectedIds.size > 1) {
-      dragSelectedRows = Array.from(feedInner.querySelectorAll('.msg.msg-selected'));
+      dragSelectedRows = Array.from(feedInner.querySelectorAll('.obj.obj-selected'));
     } else {
       dragSelectedRows = [row];
     }
@@ -2202,7 +2202,7 @@ function createObjectRow(obj, isNew) {
     var isTableView = !!(feedInner && feedInner.classList.contains('view-table'));
     if (dragSelectedRows.length > 1) {
       var stackContainer = document.createElement('div');
-      stackContainer.className = 'msg-drag-spirit msg-drag-spirit-stack';
+      stackContainer.className = 'obj-drag-spirit obj-drag-spirit-stack';
       stackContainer.setAttribute('aria-hidden', 'true');
       stackContainer.style.width = spiritW + 'px';
       stackContainer.style.left = (rowRect.left + rowRect.width / 2) + 'px';
@@ -2211,15 +2211,15 @@ function createObjectRow(obj, isNew) {
       var toShow = Math.min(dragSelectedRows.length, maxVisible);
       if (isTableView) {
         var tableWrap = document.createElement('div');
-        tableWrap.className = 'msg-drag-spirit-table-wrap';
+        tableWrap.className = 'obj-drag-spirit-table-wrap';
         tableWrap.style.width = '100%';
         for (var si = 0; si < toShow; si++) {
           var r = dragSelectedRows[si];
           var clone = r.cloneNode(true);
-          clone.classList.remove('dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
-          clone.classList.add('msg', 'msg-drag-spirit-row');
+          clone.classList.remove('dragging', 'obj-drag-group', 'obj-selected', 'new-flash', 'obj-editing', 'obj-drag-over', 'obj-drag-target', 'dragging-in-feed');
+          clone.classList.add('obj', 'obj-drag-spirit-row');
           clone.removeAttribute('draggable');
-          clone.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
+          clone.querySelectorAll('.obj-checkbox-zone, .obj-actions, .obj-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
           tableWrap.appendChild(clone);
         }
         stackContainer.appendChild(tableWrap);
@@ -2227,16 +2227,16 @@ function createObjectRow(obj, isNew) {
         for (var si = 0; si < toShow; si++) {
           var r = dragSelectedRows[si];
           var clone = r.cloneNode(true);
-          clone.classList.remove('dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
-          clone.classList.add('msg', 'msg-drag-spirit-row');
+          clone.classList.remove('dragging', 'obj-drag-group', 'obj-selected', 'new-flash', 'obj-editing', 'obj-drag-over', 'obj-drag-target', 'dragging-in-feed');
+          clone.classList.add('obj', 'obj-drag-spirit-row');
           clone.removeAttribute('draggable');
-          clone.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
+          clone.querySelectorAll('.obj-checkbox-zone, .obj-actions, .obj-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
           stackContainer.appendChild(clone);
         }
       }
       if (dragSelectedRows.length > maxVisible) {
         var extra = document.createElement('div');
-        extra.className = 'msg-drag-spirit-stack-more';
+        extra.className = 'obj-drag-spirit-stack-more';
         extra.textContent = '+' + (dragSelectedRows.length - maxVisible);
         stackContainer.appendChild(extra);
       }
@@ -2245,29 +2245,29 @@ function createObjectRow(obj, isNew) {
     } else {
       if (isTableView) {
         var wrap = document.createElement('div');
-        wrap.className = 'msg-drag-spirit-table-wrap';
+        wrap.className = 'obj-drag-spirit-table-wrap';
         wrap.setAttribute('aria-hidden', 'true');
         wrap.style.width = spiritW + 'px';
         wrap.style.left = (rowRect.left + rowRect.width / 2) + 'px';
         wrap.style.top = startTop + 'px';
         var clone = row.cloneNode(true);
-        clone.classList.remove('dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
-        clone.classList.add('msg', 'msg-drag-spirit');
+        clone.classList.remove('dragging', 'obj-drag-group', 'obj-selected', 'new-flash', 'obj-editing', 'obj-drag-over', 'obj-drag-target', 'dragging-in-feed');
+        clone.classList.add('obj', 'obj-drag-spirit');
         clone.removeAttribute('draggable');
-        clone.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
+        clone.querySelectorAll('.obj-checkbox-zone, .obj-actions, .obj-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
         wrap.appendChild(clone);
         document.body.appendChild(wrap);
         dragSpiritEl = wrap;
       } else {
         dragSpiritEl = row.cloneNode(true);
-        dragSpiritEl.classList.remove('dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
-        dragSpiritEl.classList.add('msg', 'msg-drag-spirit');
+        dragSpiritEl.classList.remove('dragging', 'obj-drag-group', 'obj-selected', 'new-flash', 'obj-editing', 'obj-drag-over', 'obj-drag-target', 'dragging-in-feed');
+        dragSpiritEl.classList.add('obj', 'obj-drag-spirit');
         dragSpiritEl.removeAttribute('draggable');
         dragSpiritEl.setAttribute('aria-hidden', 'true');
         dragSpiritEl.style.width = spiritW + 'px';
         dragSpiritEl.style.left = (rowRect.left + rowRect.width / 2) + 'px';
         dragSpiritEl.style.top = startTop + 'px';
-        dragSpiritEl.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
+        dragSpiritEl.querySelectorAll('.obj-checkbox-zone, .obj-actions, .obj-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
         document.body.appendChild(dragSpiritEl);
       }
     }
@@ -2281,16 +2281,16 @@ function createObjectRow(obj, isNew) {
     e.dataTransfer.setDragImage(dragImageEl, -9999, -9999);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', typeof obj.text === 'string' ? obj.text : '');
-    if (typeof obj.id !== 'undefined') e.dataTransfer.setData('application/x-inout-msg-id', String(obj.id));
+    if (typeof obj.id !== 'undefined') e.dataTransfer.setData('application/x-inout-obj-id', String(obj.id));
     dragSelectedRows.forEach(function(r) {
-      if (dragSelectedRows.length > 1) r.classList.add('msg-drag-group');
+      if (dragSelectedRows.length > 1) r.classList.add('obj-drag-group');
       r.classList.add('dragging-in-feed');
     });
     if (dragSelectedRows.length > 1) {
-      dragSelectedRows.forEach(function(r) { r.classList.add('msg-dnd-stack-form'); });
+      dragSelectedRows.forEach(function(r) { r.classList.add('obj-dnd-stack-form'); });
       if (dndStackFormTimer) clearTimeout(dndStackFormTimer);
       dndStackFormTimer = setTimeout(function() {
-        if (feedInner) feedInner.querySelectorAll('.msg.msg-dnd-stack-form').forEach(function(r) { r.classList.remove('msg-dnd-stack-form'); });
+        if (feedInner) feedInner.querySelectorAll('.obj.obj-dnd-stack-form').forEach(function(r) { r.classList.remove('obj-dnd-stack-form'); });
         dndStackFormTimer = null;
       }, 280);
       var block = dragSelectedRows;
@@ -2312,7 +2312,7 @@ function createObjectRow(obj, isNew) {
     if (document.body) document.body.classList.add('dnd-active');
     savedOrderBeforeDrag = currentObjectOrder.slice();
     dragDropHandled = false;
-    if (feedInner) feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
+    if (feedInner) feedInner.querySelectorAll('.obj-drag-over').forEach(r => r.classList.remove('obj-drag-over'));
     hideRemoteDndLines();
     broadcastDndStart();
   });
@@ -2337,21 +2337,21 @@ function createObjectRow(obj, isNew) {
               for (var j = 1; j < block.length; j++) feedInner.insertBefore(block[j], block[j - 1].nextSibling);
             }
             block.forEach(function(r, i) {
-              r.classList.add('msg-dnd-just-dropped');
+              r.classList.add('obj-dnd-just-dropped');
               r.style.animationDelay = (i * 30) + 'ms';
             });
             setTimeout(function() {
               block.forEach(function(r) {
-                r.classList.remove('msg-dnd-just-dropped');
+                r.classList.remove('obj-dnd-just-dropped');
                 r.style.animationDelay = '';
               });
             }, 220 + (block.length * 30));
           } else {
             if (wantAppend) feedInner.appendChild(row);
             else if (insertBefore && insertBefore.parentNode === feedInner) feedInner.insertBefore(row, insertBefore);
-            row.classList.add('msg-dnd-just-dropped');
+            row.classList.add('obj-dnd-just-dropped');
             setTimeout(function() {
-              row.classList.remove('msg-dnd-just-dropped');
+              row.classList.remove('obj-dnd-just-dropped');
               row.style.animationDelay = '';
             }, 220);
           }
@@ -2359,9 +2359,9 @@ function createObjectRow(obj, isNew) {
         if (dragSpiritEl && dragSpiritEl.parentNode) dragSpiritEl.parentNode.removeChild(dragSpiritEl);
         dragSpiritEl = null;
         removeOriginGhostOverlay();
-        if (feedInner) feedInner.querySelectorAll('.msg.dragging-in-feed').forEach(r => r.classList.remove('dragging-in-feed'));
+        if (feedInner) feedInner.querySelectorAll('.obj.dragging-in-feed').forEach(r => r.classList.remove('dragging-in-feed'));
         removeOriginGhostsAndInsertRows();
-        if (feedInner) feedInner.querySelectorAll('.msg-drag-group').forEach(r => r.classList.remove('msg-drag-group'));
+        if (feedInner) feedInner.querySelectorAll('.obj-drag-group').forEach(r => r.classList.remove('obj-drag-group'));
         dragSelectedRows = [];
         if (document.body) {
           document.body.classList.remove('dnd-active');
@@ -2379,10 +2379,10 @@ function createObjectRow(obj, isNew) {
         dndOriginLineY = null;
         if (dndStackFormTimer) { clearTimeout(dndStackFormTimer); dndStackFormTimer = null; }
         broadcastDndEnd();
-        if (feedInner) feedInner.querySelectorAll('.msg-drag-over, .msg-drag-target, .msg-dnd-stack-form').forEach(r => r.classList.remove('msg-drag-over', 'msg-drag-target', 'msg-drag-nudge-right', 'msg-dnd-stack-form'));
+        if (feedInner) feedInner.querySelectorAll('.obj-drag-over, .obj-drag-target, .obj-dnd-stack-form').forEach(r => r.classList.remove('obj-drag-over', 'obj-drag-target', 'obj-drag-nudge-right', 'obj-dnd-stack-form'));
         row.classList.remove('dragging');
         tabsEl.querySelectorAll('.tab.tab-drop-target').forEach(t => t.classList.remove('tab-drop-target'));
-        const domOrder = feedInner ? Array.from(feedInner.querySelectorAll('.msg')).map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id)) : [];
+        const domOrder = feedInner ? Array.from(feedInner.querySelectorAll('.obj')).map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id)) : [];
         const orderChanged = !dragDropHandled && domOrder.length === savedOrderBeforeDrag.length && domOrder.some((id, i) => id !== savedOrderBeforeDrag[i]);
         if (!dragDropHandled && !orderChanged) {
           currentObjectOrder = savedOrderBeforeDrag.slice();
@@ -2417,7 +2417,7 @@ function createObjectRow(obj, isNew) {
         dndOriginLineY = null;
         if (dndStackFormTimer) { clearTimeout(dndStackFormTimer); dndStackFormTimer = null; }
         removeOriginGhostOverlay();
-        if (feedInner) feedInner.querySelectorAll('.msg.dragging-in-feed').forEach(r => r.classList.remove('dragging-in-feed'));
+        if (feedInner) feedInner.querySelectorAll('.obj.dragging-in-feed').forEach(r => r.classList.remove('dragging-in-feed'));
         hideDropOriginLine();
         if (feedDropIndicatorEl) feedDropIndicatorEl.classList.remove('visible');
         lastIndicatorStyle = { left: -1, width: -1, top: -1, visible: false };
@@ -2427,8 +2427,8 @@ function createObjectRow(obj, isNew) {
   /* row-level dragover/drop removed: feed is the single drop target for reliable reorder */
   row.addEventListener('touchstart', e => {
     if (!feedInner) return;
-    if (e.target.closest('.msg-checkbox-zone')) return;
-    const contentLeft = row.querySelector('.msg-time') || row.querySelector('.msg-sender') || row.querySelector('.msg-text');
+    if (e.target.closest('.obj-checkbox-zone')) return;
+    const contentLeft = row.querySelector('.obj-time') || row.querySelector('.obj-sender') || row.querySelector('.obj-text');
     if (contentLeft && e.touches[0].clientX < contentLeft.getBoundingClientRect().left) return;
     if (!touchDragState || !touchDragState.bound) {
       setupTouchDragHandlers();
@@ -2441,7 +2441,7 @@ function createObjectRow(obj, isNew) {
       if (!touchDragState || touchDragState.row !== row) return;
       touchDragState.started = true;
       if (feedInner && selectedIds.has(obj.id) && selectedIds.size > 1) {
-        dragSelectedRows = Array.from(feedInner.querySelectorAll('.msg.msg-selected'));
+        dragSelectedRows = Array.from(feedInner.querySelectorAll('.obj.obj-selected'));
       } else {
         dragSelectedRows = [row];
       }
@@ -2452,7 +2452,7 @@ function createObjectRow(obj, isNew) {
       var firstRect = block[0].getBoundingClientRect();
       dndOriginLineY = firstRect.top;
       dragSelectedRows.forEach(function(r) {
-        if (dragSelectedRows.length > 1) r.classList.add('msg-drag-group');
+        if (dragSelectedRows.length > 1) r.classList.add('obj-drag-group');
       });
       row.classList.add('dragging');
       if (document.body) document.body.classList.add('dnd-active');
@@ -2464,10 +2464,10 @@ function createObjectRow(obj, isNew) {
   if (isNew) setTimeout(() => row.classList.remove('new-flash'), 800);
 
   const actions = document.createElement('div');
-  actions.className = 'msg-actions';
+  actions.className = 'obj-actions';
 
   const actionDelete = document.createElement('button');
-  actionDelete.className = 'msg-action-btn';
+  actionDelete.className = 'obj-action-btn';
   actionDelete.textContent = 'Del';
   actionDelete.addEventListener('click', e => {
     e.stopPropagation();
@@ -2476,7 +2476,7 @@ function createObjectRow(obj, isNew) {
   });
 
   const actionMove = document.createElement('button');
-  actionMove.className = 'msg-action-btn';
+  actionMove.className = 'obj-action-btn';
   actionMove.textContent = 'Move';
   actionMove.addEventListener('click', e => {
     e.stopPropagation();
@@ -2485,7 +2485,7 @@ function createObjectRow(obj, isNew) {
   });
 
   const actionExport = document.createElement('button');
-  actionExport.className = 'msg-action-btn';
+  actionExport.className = 'obj-action-btn';
   actionExport.textContent = 'Exp';
   actionExport.addEventListener('click', e => {
     e.stopPropagation();
@@ -2494,7 +2494,7 @@ function createObjectRow(obj, isNew) {
   });
 
   const actionCopy = document.createElement('button');
-  actionCopy.className = 'msg-action-btn';
+  actionCopy.className = 'obj-action-btn';
   actionCopy.textContent = 'Copy';
   actionCopy.addEventListener('click', e => {
     e.stopPropagation();
@@ -2509,7 +2509,7 @@ function createObjectRow(obj, isNew) {
   });
 
   const actionCut = document.createElement('button');
-  actionCut.className = 'msg-action-btn';
+  actionCut.className = 'obj-action-btn';
   actionCut.textContent = 'Cut';
   actionCut.addEventListener('click', e => {
     e.stopPropagation();
@@ -2531,7 +2531,7 @@ function createObjectRow(obj, isNew) {
   actions.appendChild(actionCut);
 
   const sender = document.createElement('div');
-  sender.className = 'msg-sender';
+  sender.className = 'obj-sender';
   if (obj.author_name) {
     sender.textContent = String(obj.author_name);
   } else if (obj.user_id && currentUser && obj.user_id === currentUser.id) {
@@ -2554,26 +2554,26 @@ function createObjectRow(obj, isNew) {
   sender.style.setProperty('display', wantAuthor ? 'flex' : 'none', 'important');
 
   const selectWrap = document.createElement('div');
-  selectWrap.className = 'msg-select-wrap';
+  selectWrap.className = 'obj-select-wrap';
   const selectBox = document.createElement('input');
   selectBox.type = 'checkbox';
-  selectBox.className = 'msg-select';
+  selectBox.className = 'obj-select';
   selectBox.addEventListener('change', () => {
     if (!obj.id) return;
     if (selectBox.checked) {
       selectedIds.add(obj.id);
-      row.classList.add('msg-selected');
+      row.classList.add('obj-selected');
     } else {
       selectedIds.delete(obj.id);
-      row.classList.remove('msg-selected');
+      row.classList.remove('obj-selected');
     }
     updateSelectionUI();
   });
   selectWrap.appendChild(selectBox);
   const checkboxZone = document.createElement('div');
-  checkboxZone.className = 'msg-checkbox-zone';
+  checkboxZone.className = 'obj-checkbox-zone';
   const zoneLeft = document.createElement('div');
-  zoneLeft.className = 'msg-checkbox-zone-left';
+  zoneLeft.className = 'obj-checkbox-zone-left';
   zoneLeft.setAttribute('aria-hidden', 'true');
   checkboxZone.appendChild(zoneLeft);
   checkboxZone.appendChild(selectWrap);
@@ -2588,10 +2588,10 @@ function createObjectRow(obj, isNew) {
     selectBox.checked = !selectBox.checked;
     if (selectBox.checked) {
       selectedIds.add(obj.id);
-      row.classList.add('msg-selected');
+      row.classList.add('obj-selected');
     } else {
       selectedIds.delete(obj.id);
-      row.classList.remove('msg-selected');
+      row.classList.remove('obj-selected');
     }
     if (!selectMode) {
       selectModeAutoOn = true;
@@ -2635,8 +2635,8 @@ function createObjectRow(obj, isNew) {
       state.mode = selectBox.checked ? 'deselect' : 'select';
       state.startRowStates = new Map();
       if (feedEl) state.startYContent = startY - feedEl.getBoundingClientRect().top + feedEl.scrollTop;
-      feedInner.querySelectorAll('.msg').forEach(r => {
-        const box = r.querySelector('.msg-select');
+      feedInner.querySelectorAll('.obj').forEach(r => {
+        const box = r.querySelector('.obj-select');
         if (box) state.startRowStates.set(r, box.checked);
       });
     }, 200);
@@ -2687,8 +2687,8 @@ function createObjectRow(obj, isNew) {
       state.mode = selectBox.checked ? 'deselect' : 'select';
       state.startRowStates = new Map();
       if (feedEl) state.startYContent = startY - feedEl.getBoundingClientRect().top + feedEl.scrollTop;
-      feedInner.querySelectorAll('.msg').forEach(r => {
-        const box = r.querySelector('.msg-select');
+      feedInner.querySelectorAll('.obj').forEach(r => {
+        const box = r.querySelector('.obj-select');
         if (box) state.startRowStates.set(r, box.checked);
       });
     }, 200);
@@ -2710,7 +2710,7 @@ function createObjectRow(obj, isNew) {
   /* long-press on object row (anywhere except checkbox-zone/actions/links) starts drag-select */
   row.addEventListener('mousedown', e => {
     if (!obj.id) return;
-    if (e.target.closest('.msg-checkbox-zone, .msg-actions') || (e.target.closest('a') && e.target.closest('.msg-text'))) return;
+    if (e.target.closest('.obj-checkbox-zone, .obj-actions') || (e.target.closest('a') && e.target.closest('.obj-text'))) return;
     const startY = e.clientY;
     const state = { started: false, mode: null, startRowStates: null, startYContent: null, didWeMove: false };
     const onMove = (ev) => {
@@ -2742,8 +2742,8 @@ function createObjectRow(obj, isNew) {
       state.mode = selectBox.checked ? 'deselect' : 'select';
       state.startRowStates = new Map();
       if (feedEl) state.startYContent = startY - feedEl.getBoundingClientRect().top + feedEl.scrollTop;
-      feedInner.querySelectorAll('.msg').forEach(r => {
-        const box = r.querySelector('.msg-select');
+      feedInner.querySelectorAll('.obj').forEach(r => {
+        const box = r.querySelector('.obj-select');
         if (box) state.startRowStates.set(r, box.checked);
       });
     }, 200);
@@ -2765,7 +2765,7 @@ function createObjectRow(obj, isNew) {
   });
   row.addEventListener('touchstart', e => {
     if (!obj.id || e.touches.length !== 1) return;
-    if (e.target.closest('.msg-checkbox-zone, .msg-actions') || (e.target.closest('a') && e.target.closest('.msg-text'))) return;
+    if (e.target.closest('.obj-checkbox-zone, .obj-actions') || (e.target.closest('a') && e.target.closest('.obj-text'))) return;
     const startY = e.touches[0].clientY;
     const state = { started: false, mode: null, startRowStates: null, startYContent: null, didWeMove: false };
     const onTouchMove = (ev) => {
@@ -2801,8 +2801,8 @@ function createObjectRow(obj, isNew) {
       state.mode = selectBox.checked ? 'deselect' : 'select';
       state.startRowStates = new Map();
       if (feedEl) state.startYContent = startY - feedEl.getBoundingClientRect().top + feedEl.scrollTop;
-      feedInner.querySelectorAll('.msg').forEach(r => {
-        const box = r.querySelector('.msg-select');
+      feedInner.querySelectorAll('.obj').forEach(r => {
+        const box = r.querySelector('.obj-select');
         if (box) state.startRowStates.set(r, box.checked);
       });
     }, 200);
@@ -2828,12 +2828,12 @@ function createObjectRow(obj, isNew) {
   }, { passive: true });
 
   const time = document.createElement('div');
-  time.className = 'msg-time';
+  time.className = 'obj-time';
   time.textContent = formatTime(obj.created_at);
   if (fieldPrefs) time.style.setProperty('display', fieldPrefs.showTime ? 'block' : 'none', 'important');
 
   const text = document.createElement('div');
-  text.className = 'msg-text';
+  text.className = 'obj-text';
   text.innerHTML = linkify(escapeHtml(obj.text));
   text.addEventListener('click', e => {
     if (e.target.closest('a')) return;
@@ -2869,27 +2869,27 @@ function createObjectRow(obj, isNew) {
   });
 
   row.addEventListener('click', e => {
-    if (e.target.closest('.msg-checkbox-zone')) return;
-    if (e.target.closest('.msg-text')) return;
+    if (e.target.closest('.obj-checkbox-zone')) return;
+    if (e.target.closest('.obj-text')) return;
     if (selectMode) {
-      if (e.target.closest('.msg-actions')) return;
+      if (e.target.closest('.obj-actions')) return;
       if (dragSelectJustEnded || dragSelectToggledByTouch) return;
       e.preventDefault();
       e.stopPropagation();
       selectBox.checked = !selectBox.checked;
       if (selectBox.checked) {
         selectedIds.add(obj.id);
-        row.classList.add('msg-selected');
+        row.classList.add('obj-selected');
   } else {
         selectedIds.delete(obj.id);
-        row.classList.remove('msg-selected');
+        row.classList.remove('obj-selected');
       }
       updateSelectionUI();
       return;
     }
     if (!editingObjectId) return;
     if (String(row.dataset.id) !== String(editingObjectId)) return;
-    if (e.target.closest('button, a, .msg-actions, .msg-select, .msg-select-wrap')) return;
+    if (e.target.closest('button, a, .obj-actions, .obj-select, .obj-select-wrap')) return;
     e.stopPropagation();
     e.preventDefault();
     cancelEditingMode(true);
@@ -2901,8 +2901,8 @@ function createObjectRow(obj, isNew) {
   row.appendChild(text);
   row.appendChild(actions);
   row.addEventListener('mousedown', e => {
-    if (e.target.closest('.msg-checkbox-zone')) return;
-    const contentLeft = row.querySelector('.msg-time') || row.querySelector('.msg-sender') || row.querySelector('.msg-text');
+    if (e.target.closest('.obj-checkbox-zone')) return;
+    const contentLeft = row.querySelector('.obj-time') || row.querySelector('.obj-sender') || row.querySelector('.obj-text');
     if (contentLeft && e.clientX < contentLeft.getBoundingClientRect().left) {
       pointerDownOnSelectArea = true;
       const clear = () => {
@@ -3159,7 +3159,7 @@ function recomputeOrderFromDOM() {
   if (!feedInner) return;
   pushUndo({ type: 'order', before: (currentObjectOrder || []).slice() });
   logAction('reorder', { channel: currentChannel });
-  const ids = Array.from(feedInner.querySelectorAll('.msg'))
+  const ids = Array.from(feedInner.querySelectorAll('.obj'))
     .map(row => Number(row.dataset.id))
     .filter(id => Number.isFinite(id));
   currentObjectOrder = ids;
@@ -3168,8 +3168,8 @@ function recomputeOrderFromDOM() {
 function applyObjectOrderToDOM() {
   if (!feedInner) return;
   if (!currentObjectOrder.length) return;
-  const header = feedInner.querySelector('.msg.msg-header');
-  const rows = Array.from(feedInner.querySelectorAll('.msg:not(.msg-header)'));
+  const header = feedInner.querySelector('.obj.obj-header');
+  const rows = Array.from(feedInner.querySelectorAll('.obj:not(.obj-header)'));
   if (!rows.length) return;
   // Skip if DOM order already matches — avoids reflow/blink when nothing changed
   const domOrder = rows.map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id));
@@ -3249,11 +3249,11 @@ function renderTabs() {
       e.preventDefault();
       dragDropHandled = true;
       btn.classList.remove('tab-drop-target');
-      const id = e.dataTransfer.getData('application/x-inout-msg-id') || e.dataTransfer.getData('text/plain');
+      const id = e.dataTransfer.getData('application/x-inout-obj-id') || e.dataTransfer.getData('text/plain');
       if (!id || ch === currentChannel) return;
       const numId = Number(id);
       if (!Number.isFinite(numId)) return;
-      const rowEl = feedInner.querySelector('.msg[data-id="' + CSS.escape(String(numId)) + '"]');
+      const rowEl = feedInner.querySelector('.obj[data-id="' + CSS.escape(String(numId)) + '"]');
       if (rowEl) {
         animateMessageToTab(rowEl, btn, async () => {
           const ok = await moveSingleMessage(numId, ch);
@@ -3852,7 +3852,7 @@ async function sendText(text) {
 
 /* ═══ INPUT HANDLING ══════════════════════════════════════ */
 function updateComposerCount() {
-  var countEl = document.getElementById('msg-input-count');
+  var countEl = document.getElementById('obj-input-count');
   var wrap = input && input.closest && input.closest('.composer-input-wrap');
   if (!countEl || !wrap) return;
   var len = (input && input.value) ? input.value.length : 0;
@@ -3995,8 +3995,8 @@ if (selectToggle) {
       selectedIds.clear();
       selectModeAutoOn = false;
       if (feedInner) {
-        feedInner.querySelectorAll('.msg-select').forEach(box => { box.checked = false; });
-        feedInner.querySelectorAll('.msg.msg-selected').forEach(row => row.classList.remove('msg-selected'));
+        feedInner.querySelectorAll('.obj-select').forEach(box => { box.checked = false; });
+        feedInner.querySelectorAll('.obj.obj-selected').forEach(row => row.classList.remove('obj-selected'));
       }
     } else {
       selectModeAutoOn = false;
@@ -4007,10 +4007,10 @@ if (selectToggle) {
 
 if (selectAllBtn) {
   selectAllBtn.addEventListener('click', () => {
-    const boxes = feedInner.querySelectorAll('.msg-select');
+    const boxes = feedInner.querySelectorAll('.obj-select');
     boxes.forEach(box => {
       box.checked = true;
-      const row = box.closest('.msg');
+      const row = box.closest('.obj');
       const id = row && row.dataset.id;
       if (id) selectedIds.add(Number(id));
     });
@@ -4021,12 +4021,12 @@ if (selectAllBtn) {
 if (selectNoneBtn) {
   selectNoneBtn.addEventListener('click', () => {
     selectModeAutoOn = false;
-    const boxes = feedInner.querySelectorAll('.msg-select');
+    const boxes = feedInner.querySelectorAll('.obj-select');
     boxes.forEach(box => {
       box.checked = false;
     });
     selectedIds.clear();
-    feedInner.querySelectorAll('.msg.msg-selected').forEach(row => row.classList.remove('msg-selected'));
+    feedInner.querySelectorAll('.obj.obj-selected').forEach(row => row.classList.remove('obj-selected'));
     updateSelectionUI();
   });
 }
@@ -4210,10 +4210,10 @@ if (viewToggleBtn && viewMenu) {
 if (deleteSelectedBtn) {
   deleteSelectedBtn.addEventListener('click', async () => {
     if (!currentUser) return;
-    const boxes = feedInner.querySelectorAll('.msg-select:checked');
+    const boxes = feedInner.querySelectorAll('.obj-select:checked');
     let ids = Array.from(boxes)
       .map(box => {
-        const row = box.closest('.msg');
+        const row = box.closest('.obj');
         return row && row.dataset.id ? Number(row.dataset.id) : null;
       })
       .filter(id => typeof id === 'number');
@@ -4271,10 +4271,10 @@ if (moveSelectedBtn) {
     if (!currentUser || !moveTargetSelect) return;
     const target = moveTargetSelect.value;
     if (!target || target === currentChannel) return;
-    const boxes = feedInner.querySelectorAll('.msg-select:checked');
+    const boxes = feedInner.querySelectorAll('.obj-select:checked');
     const ids = Array.from(boxes)
       .map(box => {
-        const row = box.closest('.msg');
+        const row = box.closest('.obj');
         return row && row.dataset.id ? Number(row.dataset.id) : null;
       })
       .filter(id => typeof id === 'number');
@@ -4339,7 +4339,7 @@ async function deleteSingleMessage(id) {
       pushUndo({ type: 'delete', entries: [data] });
       logAction('delete', { id: data.id });
     }
-    const el = feedInner.querySelector('.msg[data-id="' + id + '"]');
+    const el = feedInner.querySelector('.obj[data-id="' + id + '"]');
     if (el) el.remove();
     // keep local order in sync
     currentObjectOrder = currentObjectOrder.filter(x => x !== id);
@@ -4354,7 +4354,7 @@ async function deleteSingleMessage(id) {
 function animateMessageToTab(rowEl, tabEl, onDone) {
   const from = rowEl.getBoundingClientRect();
   const clone = rowEl.cloneNode(true);
-  clone.classList.add('msg-fly-clone');
+  clone.classList.add('obj-fly-clone');
   clone.style.left = from.left + 'px';
   clone.style.top = from.top + 'px';
   clone.style.width = from.width + 'px';
@@ -4422,7 +4422,7 @@ async function moveSingleMessage(id, targetChannel) {
       pushUndo({ type: 'move', entries: [before] });
       logAction('move', { id: before.id, target });
     }
-    const el = feedInner.querySelector('.msg[data-id="' + CSS.escape(String(id)) + '"]');
+    const el = feedInner.querySelector('.obj[data-id="' + CSS.escape(String(id)) + '"]');
     if (el) el.remove();
     currentObjectOrder = currentObjectOrder.filter(x => x !== id);
     saveObjectOrderForCurrentChannel();
@@ -4486,23 +4486,23 @@ if (exportTabBtn) {
       return;
     }
     try {
-      const boxes = feedInner.querySelectorAll('.msg-select:checked');
+      const boxes = feedInner.querySelectorAll('.obj-select:checked');
       let orderedIds = [];
       if (boxes.length) {
         const selectedIds = new Set(
           Array.from(boxes)
-            .map(b => { const row = b.closest('.msg'); return row && row.dataset.id ? Number(row.dataset.id) : null; })
+            .map(b => { const row = b.closest('.obj'); return row && row.dataset.id ? Number(row.dataset.id) : null; })
             .filter(id => typeof id === 'number')
         );
         // Order as presented in the feed (DOM order).
-        orderedIds = Array.from(feedInner.querySelectorAll('.msg'))
+        orderedIds = Array.from(feedInner.querySelectorAll('.obj'))
           .map(row => row.dataset.id ? Number(row.dataset.id) : null)
           .filter(id => Number.isFinite(id) && selectedIds.has(id));
       } else {
         // Whole tab: use current view order (currentObjectOrder), or DOM order if empty.
         orderedIds = currentObjectOrder.length
           ? currentObjectOrder.slice()
-          : Array.from(feedInner.querySelectorAll('.msg'))
+          : Array.from(feedInner.querySelectorAll('.obj'))
               .map(row => row.dataset.id ? Number(row.dataset.id) : null)
               .filter(id => Number.isFinite(id));
       }
@@ -4614,10 +4614,10 @@ function processFeedDragover(ev) {
     dragSpiritEl.style.top = spiritTop + 'px';
   }
   if (originGhostsActive) {
-    var slotRows = Array.from(feedInner.children).filter(function(n) { return n.classList && (n.classList.contains('msg') || n.classList.contains('msg-origin-ghost')); });
+    var slotRows = Array.from(feedInner.children).filter(function(n) { return n.classList && (n.classList.contains('obj') || n.classList.contains('obj-origin-ghost')); });
     if (!slotRows.length) return;
     var slotFirstRow = slotRows[0];
-    var slotContentLeft = slotFirstRow.querySelector('.msg-time') || slotFirstRow.querySelector('.msg-sender') || slotFirstRow.querySelector('.msg-text');
+    var slotContentLeft = slotFirstRow.querySelector('.obj-time') || slotFirstRow.querySelector('.obj-sender') || slotFirstRow.querySelector('.obj-text');
     if (slotContentLeft && ev.clientX < slotContentLeft.getBoundingClientRect().left) return;
     var slotY = ev.clientY;
     var slotFirstRect = slotFirstRow.getBoundingClientRect();
@@ -4660,8 +4660,8 @@ function processFeedDragover(ev) {
     lastWantAppend = slotWantAppend;
     var slotTargetRow = slotWantAppend ? slotLastRow : slotInsertBeforeNode;
     if (slotTargetRow !== lastDragTargetRow) {
-      if (lastDragTargetRow && lastDragTargetRow.classList) lastDragTargetRow.classList.remove('msg-drag-target', 'msg-drag-nudge-right');
-      if (slotTargetRow && slotTargetRow.classList && slotTargetRow.classList.contains('msg')) slotTargetRow.classList.add('msg-drag-target', 'msg-drag-nudge-right');
+      if (lastDragTargetRow && lastDragTargetRow.classList) lastDragTargetRow.classList.remove('obj-drag-target', 'obj-drag-nudge-right');
+      if (slotTargetRow && slotTargetRow.classList && slotTargetRow.classList.contains('obj')) slotTargetRow.classList.add('obj-drag-target', 'obj-drag-nudge-right');
       lastDragTargetRow = slotTargetRow;
     }
     lastReorderTarget = { insertBefore: slotInsertBeforeNode, wantAppend: slotWantAppend };
@@ -4688,14 +4688,14 @@ function processFeedDragover(ev) {
     broadcastDndMove();
     return;
   }
-  const dragging = feedInner.querySelector('.msg.dragging');
+  const dragging = feedInner.querySelector('.obj.dragging');
   if (!dragging) return;
-  const allRows = Array.from(feedInner.querySelectorAll('.msg'));
+  const allRows = Array.from(feedInner.querySelectorAll('.obj'));
   const skipSet = new Set(dragSelectedRows && dragSelectedRows.length ? dragSelectedRows : [dragging]);
   const rows = allRows.filter(function(r) { return !skipSet.has(r); });
   if (!rows.length) return;
   const firstRow = rows[0];
-  const contentLeft = firstRow.querySelector('.msg-time') || firstRow.querySelector('.msg-sender') || firstRow.querySelector('.msg-text');
+  const contentLeft = firstRow.querySelector('.obj-time') || firstRow.querySelector('.obj-sender') || firstRow.querySelector('.obj-text');
   if (contentLeft && ev.clientX < contentLeft.getBoundingClientRect().left) return;
   const y = ev.clientY;
   const firstRect = firstRow.getBoundingClientRect();
@@ -4738,10 +4738,10 @@ function processFeedDragover(ev) {
   if (targetRow && !targetRow.classList) targetRow = null;
   if (targetRow !== lastDragTargetRow) {
     if (lastDragTargetRow && lastDragTargetRow.classList) {
-      lastDragTargetRow.classList.remove('msg-drag-target', 'msg-drag-nudge-right');
+      lastDragTargetRow.classList.remove('obj-drag-target', 'obj-drag-nudge-right');
     }
     if (targetRow && targetRow.classList) {
-      targetRow.classList.add('msg-drag-target', 'msg-drag-nudge-right');
+      targetRow.classList.add('obj-drag-target', 'obj-drag-nudge-right');
     }
     lastDragTargetRow = targetRow;
   }
@@ -4794,7 +4794,7 @@ function processFeedDragover(ev) {
       }
       lastReorderTarget = null;
       if (lastDragTargetRow) {
-        lastDragTargetRow.classList.remove('msg-drag-target', 'msg-drag-nudge-right');
+        lastDragTargetRow.classList.remove('obj-drag-target', 'obj-drag-nudge-right');
         lastDragTargetRow = null;
       }
     }
@@ -4809,25 +4809,25 @@ function onFeedScrollDuringDrag() {
 if (feedEl) {
 feedEl.addEventListener('scroll', onFeedScrollDuringDrag, { passive: true });
 feedEl.addEventListener('dragover', e => {
-  const dragging = feedInner ? feedInner.querySelector('.msg.dragging') : null;
+  const dragging = feedInner ? feedInner.querySelector('.obj.dragging') : null;
   if (!feedInner || (!dragging && !originGhostsActive)) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
   processFeedDragover(e);
 });
 feedEl.addEventListener('drop', e => {
-  if (feedInner && (feedInner.querySelector('.msg.dragging') || originGhostsActive)) {
+  if (feedInner && (feedInner.querySelector('.obj.dragging') || originGhostsActive)) {
     e.preventDefault();
     dragDropHandled = true;
     if (feedInner) {
-      feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
-      feedInner.querySelectorAll('.msg-drag-target').forEach(r => r.classList.remove('msg-drag-target', 'msg-drag-nudge-right'));
+      feedInner.querySelectorAll('.obj-drag-over').forEach(r => r.classList.remove('obj-drag-over'));
+      feedInner.querySelectorAll('.obj-drag-target').forEach(r => r.classList.remove('obj-drag-target', 'obj-drag-nudge-right'));
     }
   }
 });
 feedEl.addEventListener('dragleave', e => {
   if (!e.relatedTarget || !feedEl.contains(e.relatedTarget)) {
-    if (feedInner) feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
+    if (feedInner) feedInner.querySelectorAll('.obj-drag-over').forEach(r => r.classList.remove('obj-drag-over'));
   }
 });
 }
@@ -4835,7 +4835,7 @@ feedEl.addEventListener('dragleave', e => {
 // Dragover: when over feed, always run processFeedDragover (so lastDropInsertBefore updates even if feedEl doesn't receive the event). When outside feed, show indicator at top/bottom.
 document.addEventListener('dragover', e => {
   if (!feedEl || !feedInner) return;
-  if (!feedInner.querySelector('.msg.dragging') && !originGhostsActive) return;
+  if (!feedInner.querySelector('.obj.dragging') && !originGhostsActive) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
   lastDragClientX = e.clientX;
@@ -4849,12 +4849,12 @@ document.addEventListener('dragover', e => {
     return;
   }
   if (lastDragTargetRow && lastDragTargetRow.classList) {
-    lastDragTargetRow.classList.remove('msg-drag-target', 'msg-drag-nudge-right');
+    lastDragTargetRow.classList.remove('obj-drag-target', 'obj-drag-nudge-right');
     lastDragTargetRow = null;
   }
   const rows = originGhostsActive
-    ? Array.from(feedInner.children).filter(function(n) { return n.classList && (n.classList.contains('msg') || n.classList.contains('msg-origin-ghost')); })
-    : Array.from(feedInner.querySelectorAll('.msg'));
+    ? Array.from(feedInner.children).filter(function(n) { return n.classList && (n.classList.contains('obj') || n.classList.contains('obj-origin-ghost')); })
+    : Array.from(feedInner.querySelectorAll('.obj'));
   if (!rows.length) return;
   const firstRow = rows[0];
   const lastRow = rows[rows.length - 1];
@@ -4880,11 +4880,11 @@ document.addEventListener('dragover', e => {
 
 document.addEventListener('drop', e => {
   if (!feedInner) return;
-  if (feedInner.querySelector('.msg.dragging') || originGhostsActive) {
+  if (feedInner.querySelector('.obj.dragging') || originGhostsActive) {
     e.preventDefault();
     e.stopPropagation();
     dragDropHandled = true;
-    feedInner.querySelectorAll('.msg-drag-over, .msg-drag-target').forEach(function(r) { r.classList.remove('msg-drag-over', 'msg-drag-target', 'msg-drag-nudge-right'); });
+    feedInner.querySelectorAll('.obj-drag-over, .obj-drag-target').forEach(function(r) { r.classList.remove('obj-drag-over', 'obj-drag-target', 'obj-drag-nudge-right'); });
   }
 }, { passive: false });
 

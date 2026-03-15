@@ -51,8 +51,8 @@ One-line purpose of each function in `index.html`. Use to find the right functio
 
 | Function | Purpose |
 |----------|---------|
-| `updateEditingRowHighlight()` | Add/remove .msg-editing on row matching editingMessageId. |
-| `cancelEditingMode(clearInput)` | Clear editingMessageId, remove msg-editing, restore placeholder. |
+| `updateEditingRowHighlight()` | Add/remove .obj-editing on row matching editingObjectId. |
+| `cancelEditingMode(clearInput)` | Clear editingObjectId, remove msg-editing, restore placeholder. |
 | `focusMessageInput()` | input.focus(). |
 | `setupFocusOnFirstInteraction()` | Focus input on first tap/click outside modals. |
 
@@ -70,9 +70,9 @@ One-line purpose of each function in `index.html`. Use to find the right functio
 | `loadChannelsList()` | Load channels array from localStorage. |
 | `saveChannelsList()` | Save channels to localStorage. |
 | `loadMessageOrderForCurrentChannel()` | Load order (+ fieldPrefs from views) from Supabase or fallbacks. |
-| `saveMessageOrderForCurrentChannel()` | Save currentMessageOrder to local + Supabase (message_orders + views). |
+| `saveMessageOrderForCurrentChannel()` | Save currentObjectOrder to local + Supabase (message_orders + views). |
 | `loadOrderFromLocal()` | Return order array from localStorage for current user+channel. |
-| `saveOrderToLocal()` | Write currentMessageOrder to localStorage. |
+| `saveOrderToLocal()` | Write currentObjectOrder to localStorage. |
 | `hideEmpty()` | Remove emptyEl from DOM. |
 | `updateMsgCount()` | Set msgCountEl text from msgCount. |
 | `setupTabs()` | renderTabs(). |
@@ -106,11 +106,11 @@ One-line purpose of each function in `index.html`. Use to find the right functio
 
 | Function | Purpose |
 |----------|---------|
-| `fetchMessagesList()` | Supabase entries for currentChannel, sorted by currentMessageOrder. |
+| `fetchMessagesList()` | Supabase entries for currentChannel, sorted by currentObjectOrder. |
 | `loadMessages()` | Fetch list, ensureLoaderMinDisplay, then renderInitialMessages if any. |
 | `replaceFeedWithList(list)` | ensureLoaderMinDisplay, build rows, replace feed-inner content. |
 | `subscribeRealtimeAll()` | Subscribe to entries INSERT/UPDATE per channel. |
-| `updateMessageRowText(msgId, text)` | Update .msg-text for row with data-id. |
+| `updateObjectRowMessage(msgId, text)` | Update .obj-text for row with data-id. |
 | `onUpdateForChannel(ch, row)` | Handle realtime UPDATE: update row text or cancel edit. |
 | `subscribeOrderRealtime()` | message_orders changes → reload order, apply to DOM. |
 | `subscribeViewRealtime()` | views changes → update order and/or fieldPrefs, apply. |
@@ -124,21 +124,21 @@ One-line purpose of each function in `index.html`. Use to find the right functio
 | `hideDraftBubble()` | Hide draft bubble. |
 | `showClipboardBubble(text)` | Show clipboard paste bubble. |
 | `hideClipboardBubble()` | Hide clipboard bubble. |
-| `showEmptyIfNoMessages()` | Append emptyEl to feed-inner if no .msg. |
+| `showEmptyIfNoMessages()` | Append emptyEl to feed-inner if no .obj. |
 | `restoreInputGlobal()` | Restore input value from localStorage. |
 | `saveInputGlobal()` | Save input value to localStorage. |
 | `updateClearInputBtn()` | Enable/disable clear input button. |
 | `applyFieldPrefsUI()` | Set #field-time and #field-author checked from fieldPrefs. |
 | `loadFieldPrefsForCurrentChannel()` | Load view prefs from Supabase views or localStorage; apply to UI and messages. |
 | `saveFieldPrefsForCurrentChannel()` | Save fieldPrefs to localStorage and Supabase views. |
-| `applyFieldPrefsToMessages()` | Set .msg-time and .msg-sender display on all rows from fieldPrefs; applyFieldPrefsUI. |
+| `applyFieldPrefsToMessages()` | Set .obj-time and .obj-sender display on all rows from fieldPrefs; applyFieldPrefsUI. |
 | `setupTouchDragHandlers()` | One-time setup for touch long-press drag. |
-| `createMsgRow(msg, isNew)` | Build one .msg row (time, sender, text, actions, checkbox); apply fieldPrefs. |
-| `appendMsg(msg, isNew)` | createMsgRow and append to feed-inner; showEmptyIfNoMessages if needed. |
+| `createObjectRow(msg, isNew)` | Build one .obj row (time, sender, text, actions, checkbox); apply fieldPrefs. |
+| `appendMsg(msg, isNew)` | createObjectRow and append to feed-inner; showEmptyIfNoMessages if needed. |
 | `sortMessagesByOrder(list, order)` | Sort message list by order array (IDs). |
-| `renderInitialMessages(list)` | hideEmpty, createMsgRow for each, append fragment. |
-| `recomputeOrderFromDOM()` | Set currentMessageOrder from DOM .msg order. |
-| `applyMessageOrderToDOM()` | Reorder .msg nodes to match currentMessageOrder. |
+| `renderInitialMessages(list)` | hideEmpty, createObjectRow for each, append fragment. |
+| `recomputeOrderFromDOM()` | Set currentObjectOrder from DOM .obj order. |
+| `applyObjectOrderToDOM()` | Reorder .obj nodes to match currentObjectOrder. |
 | `flipAnimateShift(...)` | No-op (was FLIP animation; disabled). |
 
 ---
@@ -176,9 +176,9 @@ One-line purpose of each function in `index.html`. Use to find the right functio
 
 | Function | Purpose |
 |----------|---------|
-| `processFeedDragover(ev)` | Compute drop target; set .msg-drag-target on row; show feedDropIndicatorEl; insertBefore/appendChild dragging row. |
+| `processFeedDragover(ev)` | Compute drop target; set .obj-drag-target on row; show feedDropIndicatorEl; insertBefore/appendChild dragging row. |
 
-Event listeners (not listed above): feed dragover/drop/dragleave, document dragover (outside feed), row dragstart/dragend, tab dragover/dragleave/drop. Clean up .msg-drag-target and feedDropIndicatorEl on dragend/drop.
+Event listeners (not listed above): feed dragover/drop/dragleave, document dragover (outside feed), row dragstart/dragend, tab dragover/dragleave/drop. Clean up .obj-drag-target and feedDropIndicatorEl on dragend/drop.
 
 ---
 
