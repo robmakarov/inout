@@ -1468,7 +1468,7 @@ body.select-mode .msg-select-wrap,
       <div class="um-label">Status</div>
       <div class="um-value" id="um-auth-status">Not signed in</div>
       <div class="um-row">
-        <button class="um-btn um-btn-primary" id="um-auth-btn" type="button" onclick="if(window.sb&&window.sb.auth&&window.sb.auth.signInWithOAuth){window.sb.auth.signInWithOAuth({provider:'google'})}">Sign in</button>
+        <button class="um-btn um-btn-primary" id="um-auth-btn" type="button" onclick="if(window.sb&&window.sb.auth&&window.sb.auth.signInWithOAuth){window.sb.auth.signInWithOAuth({provider:'google'}).then(function(r){if(r&&r.data&&r.data.url)window.location.href=r.data.url})}">Sign in</button>
       </div>
     </div>
 
@@ -1541,7 +1541,9 @@ if (typeof window !== 'undefined') window.sb = sb;
   btn.addEventListener('click', function authBtnClick() {
     if (typeof signIn === 'function') signIn();
     else if (sb && sb.auth && typeof sb.auth.signInWithOAuth === 'function') {
-      sb.auth.signInWithOAuth({ provider: 'google' }).catch(function(err) {
+      sb.auth.signInWithOAuth({ provider: 'google' }).then(function(r) {
+        if (r && r.data && r.data.url) window.location.href = r.data.url;
+      }).catch(function(err) {
         if (typeof toast === 'function') toast('Sign-in failed');
         else if (console && console.error) console.error(err);
       });
@@ -4340,10 +4342,14 @@ async function signIn() {
     return;
   }
   try {
-    const { error } = await sb.auth.signInWithOAuth({ provider: 'google' });
+    const { data, error } = await sb.auth.signInWithOAuth({ provider: 'google' });
     if (error) {
       console.error(error);
       toast('Sign-in failed — ' + humanError(error.message));
+      return;
+    }
+    if (data && data.url) {
+      window.location.href = data.url;
     }
   } catch (e) {
     console.error(e);
@@ -5526,7 +5532,9 @@ function ensureLoaderMinDisplay() {
         e.stopPropagation();
         if(window.signIn && typeof window.signIn === 'function'){ window.signIn(); return; }
         if(window.sb && window.sb.auth && typeof window.sb.auth.signInWithOAuth === 'function'){
-          window.sb.auth.signInWithOAuth({ provider: 'google' }).catch(function(){});
+          window.sb.auth.signInWithOAuth({ provider: 'google' }).then(function(r){
+            if(r && r.data && r.data.url) window.location.href = r.data.url;
+          }).catch(function(){});
         }
       }
     }, true);
