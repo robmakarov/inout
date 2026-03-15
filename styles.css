@@ -707,23 +707,13 @@ body.dnd-active .msg{transition:none;animation:none}
 body.dnd-just-ended .msg{transition:none;animation:none}
 /* Stack (and single) after drop: same entrance animation as new messages */
 body.dnd-just-ended .msg.msg-dnd-just-dropped{animation:msgin var(--dnd-stack-drop-in-duration) var(--anim-ease-out) both}
-body.dnd-active .msg:not(.dragging):not(.msg-drag-group){
-  opacity:var(--dnd-idle-opacity);
-  background:var(--dnd-idle-bg);
-}
-body.dnd-active .msg:not(.dragging):not(.msg-drag-group):hover{
-  background:var(--dnd-idle-bg);
-  opacity:var(--dnd-idle-opacity);
-}
-body.dnd-active .msg.dragging,
-body.dnd-active .msg.msg-drag-group{ background:var(--bg2); opacity:1; }
-body.dnd-active .msg.dragging.dragging-in-feed,
-body.dnd-active .msg.msg-drag-group.dragging-in-feed{ opacity:1; }
+body.dnd-active .msg{ background:var(--dnd-idle-bg); opacity:var(--dnd-idle-opacity); }
+body.dnd-active .msg:hover{ background:var(--dnd-idle-bg); opacity:var(--dnd-idle-opacity); }
 body.dnd-active .msg.dragging .msg-select-wrap,
 body.dnd-active .msg.dragging .msg-actions,
 body.dnd-active .msg.msg-drag-group .msg-select-wrap,
 body.dnd-active .msg.msg-drag-group .msg-actions{opacity:0;pointer-events:none;visibility:hidden}
-body.dnd-active .msg.msg-drag-target{background:var(--dnd-target-bg);transition:none}
+body.dnd-active .msg.msg-drag-target{ transition:none; }
 body.dnd-active .msg.msg-drag-target.msg-drag-nudge-right{transition:transform var(--dnd-nudge-duration) var(--anim-ease-out)}
 body.dnd-active .msg.msg-drag-spirit{ opacity:1; background:var(--bg2); transition:none; }
 .msg.msg-editing{

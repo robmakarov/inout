@@ -15,7 +15,7 @@
 - --dnd-spirit-shadow, --dnd-spirit-radius
 - --dnd-stack-drop-in-duration, --dnd-stack-stagger-step, --dnd-spirit-stack-max-visible
 
-**DnD:** body.dnd-active → .msg no transition except .msg-drag-nudge-right. Spirit follows cursor by view type: vertical feed = X fixed (feed center), Y follows cursor; horizontal/table = same idea on other axis. Dragged rows = hover look; others = --dnd-idle-bg/opacity, no hover. Stack: left-edge cue; drop-in staggered.
+**DnD:** body.dnd-active → .msg no transition except .msg-drag-nudge-right. Spirit follows cursor by view type: vertical feed = X fixed (feed center), Y follows cursor. Nothing hovered during DnD: all .msg use --dnd-idle-bg/opacity, including at origin; no hover state. Stack: left-edge cue; drop-in staggered.
 
 ## Where used
 - Modal: slide-in-right 0.18s. Message row: msgin 0.2s. DnD: tokens above. Toast/scroll: ~0.2s. Buttons: ~0.1–0.2s.
