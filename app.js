@@ -891,7 +891,9 @@ function init(done) {
             if (!window._dndVisibilityBound) {
               window._dndVisibilityBound = true;
               document.addEventListener('visibilitychange', function() {
-                if (document.visibilityState === 'visible' && currentUser && currentChannel && typeof setupDndBroadcastChannel === 'function') setupDndBroadcastChannel();
+                if (document.visibilityState !== 'visible' || !currentUser || !currentChannel || typeof setupDndBroadcastChannel !== 'function') return;
+                /* Brief delay so WebSocket can reconnect (helps web→mobile when mobile was backgrounded) */
+                setTimeout(function() { setupDndBroadcastChannel(); }, 100);
               });
             }
           }
@@ -1325,11 +1327,36 @@ function getLineRectForInsert(feedEl, feedInner, insertBeforeId, wantAppend) {
     }
   }
   if (!row) {
-    /* fallback: show at top or bottom of feed so line is visible */
     row = wantAppend ? rows[rows.length - 1] : rows[0];
   }
   var rect = row.getBoundingClientRect();
   var top = wantAppend ? rect.bottom : rect.top;
+  if (top < feedRect.top) top = feedRect.top - 2;
+  else if (top > feedRect.bottom) top = feedRect.bottom - 2;
+  else top = top - 2;
+  return { left: feedRect.left, width: feedRect.width, top: top };
+}
+
+/* Origin line = bottom of the last dragged row (so border is correct across devices) */
+function getLineRectForOrigin(feedEl, feedInner, lastDraggedId, wantAppend) {
+  if (!feedEl || !feedInner) return null;
+  var rows = feedInner.querySelectorAll('.msg');
+  if (!rows.length) return null;
+  var feedRect = feedEl.getBoundingClientRect();
+  var row = null;
+  if (wantAppend || lastDraggedId == null) {
+    row = rows[rows.length - 1];
+  } else {
+    var id = Number(lastDraggedId);
+    for (var i = 0; i < rows.length; i++) {
+      if (Number(rows[i].dataset.id) === id) { row = rows[i]; break; }
+    }
+  }
+  if (!row) {
+    row = wantAppend ? rows[rows.length - 1] : rows[0];
+  }
+  var rect = row.getBoundingClientRect();
+  var top = rect.bottom; /* line just below the row (bottom of block) */
   if (top < feedRect.top) top = feedRect.top - 2;
   else if (top > feedRect.bottom) top = feedRect.bottom - 2;
   else top = top - 2;
@@ -1344,23 +1371,34 @@ function setupDndBroadcastChannel() {
   remoteDndScrollResize = function() {
     if (remoteDnd && (remoteDropOriginEl || remoteDropTargetEl)) applyRemoteDndLines();
   };
-  if (feedEl) feedEl.addEventListener('scroll', remoteDndScrollResize, { passive: true });
+  var feedForScroll = document.getElementById('feed');
+  if (feedForScroll) feedForScroll.addEventListener('scroll', remoteDndScrollResize, { passive: true });
   window.addEventListener('resize', remoteDndScrollResize);
   var chName = 'dnd-' + String(currentChannel);
   dndBroadcastChannel = sb.channel(chName, { config: { broadcast: { self: false } } })
     .on('broadcast', { event: 'dnd' }, function(msg) {
       var data = (msg && msg.payload) ? msg.payload : (msg && typeof msg.type !== 'undefined' ? msg : {});
-      if (!data || data.from === myId) return;
-      if (String(data.channel) !== String(currentChannel)) return;
+      if (!data || !data.type) return;
+      if (data.from === myId) return;
+      var ch = (data.channel != null) ? String(data.channel).trim() : '';
+      var curCh = (currentChannel != null) ? String(currentChannel).trim() : '';
+      if (ch !== curCh) return;
       if (document.body && document.body.classList.contains('dnd-active')) return;
       if (data.type === 'dnd_start') {
+        var o = data.origin || {};
         remoteDnd = {
           from: data.from,
           channel: data.channel,
-          origin: { insertBeforeId: data.origin && data.origin.insertBeforeId != null ? Number(data.origin.insertBeforeId) : null, wantAppend: !!data.origin && !!data.origin.wantAppend },
-          target: { insertBeforeId: data.origin && data.origin.insertBeforeId != null ? Number(data.origin.insertBeforeId) : null, wantAppend: !!data.origin && !!data.origin.wantAppend }
+          origin: {
+            insertBeforeId: o.insertBeforeId != null ? Number(o.insertBeforeId) : null,
+            wantAppend: !!o.wantAppend,
+            lastDraggedId: o.lastDraggedId != null ? Number(o.lastDraggedId) : null
+          },
+          target: { insertBeforeId: o.insertBeforeId != null ? Number(o.insertBeforeId) : null, wantAppend: !!o.wantAppend }
         };
-        requestAnimationFrame(function() { applyRemoteDndLines(); });
+        requestAnimationFrame(function() {
+          requestAnimationFrame(function() { applyRemoteDndLines(); });
+        });
       } else if (data.type === 'dnd_move') {
         if (data.target) {
           var target = { insertBeforeId: data.target.insertBeforeId != null ? Number(data.target.insertBeforeId) : null, wantAppend: !!data.target.wantAppend };
@@ -1369,7 +1407,9 @@ function setupDndBroadcastChannel() {
           } else {
             remoteDnd = { from: data.from, channel: data.channel, origin: {}, target: target };
           }
-          requestAnimationFrame(function() { applyRemoteDndLines(); });
+          requestAnimationFrame(function() {
+            requestAnimationFrame(function() { applyRemoteDndLines(); });
+          });
         }
       } else if (data.type === 'dnd_end') {
         if (remoteDnd && remoteDnd.from === data.from) {
@@ -1388,7 +1428,8 @@ function teardownDndBroadcastChannel() {
   remoteDnd = null;
   hideRemoteDndLines();
   if (remoteDndScrollResize) {
-    if (feedEl) feedEl.removeEventListener('scroll', remoteDndScrollResize);
+    var feedForScroll = document.getElementById('feed');
+    if (feedForScroll) feedForScroll.removeEventListener('scroll', remoteDndScrollResize);
     window.removeEventListener('resize', remoteDndScrollResize);
     remoteDndScrollResize = null;
   }
@@ -1399,14 +1440,28 @@ function teardownDndBroadcastChannel() {
   if (dndBroadcastThrottle) { clearTimeout(dndBroadcastThrottle); dndBroadcastThrottle = null; }
 }
 
+var applyRemoteDndLinesRetry = null;
 function applyRemoteDndLines() {
   if (!remoteDnd) return;
   var feed = document.getElementById('feed');
   var inner = document.getElementById('feed-inner');
   if (!feed || !inner) return;
+  var rows = inner.querySelectorAll('.msg');
+  if (!rows.length) {
+    /* Feed may still be loading (e.g. on mobile); retry once so web→mobile works */
+    if (applyRemoteDndLinesRetry) return;
+    applyRemoteDndLinesRetry = setTimeout(function() {
+      applyRemoteDndLinesRetry = null;
+      applyRemoteDndLines();
+    }, 80);
+    return;
+  }
   var origin = remoteDnd.origin;
   var target = remoteDnd.target;
-  var originRect = getLineRectForInsert(feed, inner, origin.insertBeforeId, origin.wantAppend);
+  /* Origin line = bottom of last dragged row (correct border across devices) */
+  var originRect = origin.lastDraggedId != null
+    ? getLineRectForOrigin(feed, inner, origin.lastDraggedId, origin.wantAppend)
+    : getLineRectForInsert(feed, inner, origin.insertBeforeId, origin.wantAppend);
   var targetRect = getLineRectForInsert(feed, inner, target.insertBeforeId, target.wantAppend);
   if (originRect) {
     if (!remoteDropOriginEl) {
@@ -1437,6 +1492,10 @@ function applyRemoteDndLines() {
 }
 
 function hideRemoteDndLines() {
+  if (applyRemoteDndLinesRetry) {
+    clearTimeout(applyRemoteDndLinesRetry);
+    applyRemoteDndLinesRetry = null;
+  }
   if (remoteDropOriginEl) {
     remoteDropOriginEl.classList.remove('visible');
   }
@@ -1448,9 +1507,9 @@ function hideRemoteDndLines() {
 function broadcastDndStart() {
   if (!dndBroadcastChannel || !currentUser || !dndChannelReady) return;
   var insertBeforeId = dndOriginInsertBefore && dndOriginInsertBefore.dataset ? Number(dndOriginInsertBefore.dataset.id) : null;
-  var draggingIds = (dragSelectedRows && dragSelectedRows.length)
-    ? dragSelectedRows.map(function(r) { return Number(r.dataset.id); }).filter(function(id) { return Number.isFinite(id); })
-    : (typeof row !== 'undefined' && row && row.dataset && row.dataset.id ? [Number(row.dataset.id)] : []);
+  var block = (dragSelectedRows && dragSelectedRows.length) ? dragSelectedRows : (typeof row !== 'undefined' && row ? [row] : []);
+  var lastDraggedId = block.length ? (block[block.length - 1].dataset && block[block.length - 1].dataset.id ? Number(block[block.length - 1].dataset.id) : null) : null;
+  var draggingIds = block.map(function(r) { return Number(r.dataset.id); }).filter(function(id) { return Number.isFinite(id); });
   dndBroadcastChannel.send({
     type: 'broadcast',
     event: 'dnd',
@@ -1459,7 +1518,7 @@ function broadcastDndStart() {
       from: myId,
       channel: String(currentChannel),
       draggingIds: draggingIds,
-      origin: { insertBeforeId: insertBeforeId, wantAppend: !!dndOriginWantAppend }
+      origin: { insertBeforeId: insertBeforeId, wantAppend: !!dndOriginWantAppend, lastDraggedId: lastDraggedId }
     }
   });
 }
