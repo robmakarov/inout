@@ -114,6 +114,7 @@ const moveTargetSelect = document.getElementById('move-target');
 const exportTabBtn   = document.getElementById('export-tab');
 const fieldTimeChk   = document.getElementById('field-time');
 const fieldAuthorChk = document.getElementById('field-author');
+const viewVisualSelect = document.getElementById('view-visual');
 const viewToggleBtn  = document.getElementById('view-toggle');
 const viewMenu       = document.getElementById('view-menu');
 const draftBubble    = document.getElementById('draft-bubble');
@@ -335,7 +336,7 @@ var editTypingUndoStack = [];
 var editTypingCommitTimer = null;
 var TYPING_COMMIT_MS = 1800;
 var MAX_TYPING_UNDO = 20;
-let fieldPrefs = { showTime:true, showAuthor:true };
+let fieldPrefs = { showTime:true, showAuthor:true, viewMode:'feed' };
 let undoStack = [];
 let actionLog = [];
 let actionLogSub = null;
@@ -590,9 +591,11 @@ async function undoLastAction() {
       fieldPrefs = {
         showTime: !!action.before.showTime,
         showAuthor: !!action.before.showAuthor,
+        viewMode: (action.before.viewMode === 'table' || action.before.viewMode === 'feed') ? action.before.viewMode : 'feed',
       };
       saveFieldPrefsForCurrentChannel();
-      applyFieldPrefsToMessages();
+      applyFieldPrefsUI();
+      loadMessages().catch(() => {});
       return;
     } else if (action.type === 'order' && Array.isArray(action.before)) {
       currentMessageOrder = action.before.slice();
@@ -1080,6 +1083,12 @@ async function replaceFeedWithList(list) {
   }
   const hasRows = frag.childNodes.length > 0;
   msgCount = hasRows ? frag.childNodes.length : 0;
+  if (fieldPrefs.viewMode === 'table' && hasRows) {
+    feedInner.classList.add('view-table');
+    frag.insertBefore(createMsgHeaderRow(), frag.firstChild);
+  } else {
+    feedInner.classList.remove('view-table');
+  }
   if (hasRows) {
     requestAnimationFrame(() => {
       if (feedInner) {
@@ -1255,6 +1264,7 @@ function subscribeViewRealtime() {
         fieldPrefs = {
           showTime: typeof cfg.showTime === 'boolean' ? cfg.showTime : defTime,
           showAuthor: typeof cfg.showAuthor === 'boolean' ? cfg.showAuthor : defAuthor,
+          viewMode: (cfg.viewMode === 'table' || cfg.viewMode === 'feed') ? cfg.viewMode : 'feed',
         };
         saveFieldPrefsForCurrentChannel();
         applyFieldPrefsToMessages();
@@ -1912,6 +1922,7 @@ function applyFieldPrefsUI() {
     fieldAuthorChk.disabled = isMain;
     fieldAuthorChk.checked = !isMain && !!fieldPrefs.showAuthor;
   }
+  if (viewVisualSelect) viewVisualSelect.value = (fieldPrefs.viewMode === 'table' ? 'table' : 'feed');
 }
 
 async function loadFieldPrefsForCurrentChannel() {
@@ -1931,11 +1942,12 @@ async function loadFieldPrefsForCurrentChannel() {
         fieldPrefs = {
           showTime: typeof cfg.showTime === 'boolean' ? cfg.showTime : defTime,
           showAuthor: typeof cfg.showAuthor === 'boolean' ? cfg.showAuthor : defAuthor,
+          viewMode: (cfg.viewMode === 'table' || cfg.viewMode === 'feed') ? cfg.viewMode : 'feed',
         };
         try {
           const raw = localStorage.getItem(FIELD_PREFS_KEY);
           const map = raw ? JSON.parse(raw) : {};
-          map[currentChannel] = { showTime: !!fieldPrefs.showTime, showAuthor: !!fieldPrefs.showAuthor };
+          map[currentChannel] = { showTime: !!fieldPrefs.showTime, showAuthor: !!fieldPrefs.showAuthor, viewMode: fieldPrefs.viewMode };
           localStorage.setItem(FIELD_PREFS_KEY, JSON.stringify(map));
         } catch (_) {}
         applyFieldPrefsUI();
@@ -1951,9 +1963,10 @@ async function loadFieldPrefsForCurrentChannel() {
     fieldPrefs = {
       showTime: typeof prefs.showTime === 'boolean' ? prefs.showTime : defTime,
       showAuthor: typeof prefs.showAuthor === 'boolean' ? prefs.showAuthor : defAuthor,
+      viewMode: (prefs.viewMode === 'table' || prefs.viewMode === 'feed') ? prefs.viewMode : 'feed',
     };
   } catch (_) {
-    fieldPrefs = { showTime: true, showAuthor: currentChannel !== 'main' };
+    fieldPrefs = { showTime: true, showAuthor: currentChannel !== 'main', viewMode: 'feed' };
   }
   applyFieldPrefsUI();
   applyFieldPrefsToMessages();
@@ -1966,6 +1979,7 @@ function saveFieldPrefsForCurrentChannel() {
     map[currentChannel] = {
       showTime: !!fieldPrefs.showTime,
       showAuthor: !!fieldPrefs.showAuthor,
+      viewMode: fieldPrefs.viewMode === 'table' ? 'table' : 'feed',
     };
     localStorage.setItem(FIELD_PREFS_KEY, JSON.stringify(map));
   } catch(_) {}
@@ -1975,6 +1989,7 @@ function saveFieldPrefsForCurrentChannel() {
       order: currentMessageOrder.slice(),
       showTime: !!fieldPrefs.showTime,
       showAuthor: !!fieldPrefs.showAuthor,
+      viewMode: fieldPrefs.viewMode === 'table' ? 'table' : 'feed',
     };
     sb
       .from('views')
@@ -1995,6 +2010,7 @@ function applyFieldPrefsToMessages() {
   if (!feedInner || !fieldPrefs) return;
   const rows = feedInner.querySelectorAll('.msg');
   rows.forEach(row => {
+    if (row.classList.contains('msg-header')) return;
     const timeEl = row.querySelector('.msg-time');
     const senderEl = row.querySelector('.msg-sender');
     if (timeEl) timeEl.style.setProperty('display', fieldPrefs.showTime ? 'block' : 'none', 'important');
@@ -2127,6 +2143,33 @@ function setupTouchDragHandlers() {
   };
   document.addEventListener('touchmove', move, { passive: false });
   document.addEventListener('touchend', end);
+}
+
+/** Table view: header row (Time, Author, Message, Actions). No dataset.id so it stays first. */
+function createMsgHeaderRow() {
+  const row = document.createElement('div');
+  row.className = 'msg msg-header';
+  row.setAttribute('aria-hidden', 'true');
+  const checkboxPlaceholder = document.createElement('div');
+  checkboxPlaceholder.className = 'msg-checkbox-zone';
+  checkboxPlaceholder.setAttribute('aria-hidden', 'true');
+  const time = document.createElement('div');
+  time.className = 'msg-time';
+  time.textContent = 'Time';
+  const sender = document.createElement('div');
+  sender.className = 'msg-sender';
+  sender.textContent = 'Author';
+  const text = document.createElement('div');
+  text.className = 'msg-text';
+  text.textContent = 'Message';
+  const actions = document.createElement('div');
+  actions.className = 'msg-actions';
+  row.appendChild(checkboxPlaceholder);
+  row.appendChild(time);
+  row.appendChild(sender);
+  row.appendChild(text);
+  row.appendChild(actions);
+  return row;
 }
 
 function createMsgRow(msg, isNew) {
@@ -3009,6 +3052,7 @@ async function loadMessageOrderForCurrentChannel() {
         fieldPrefs = {
           showTime: typeof cfg.showTime === 'boolean' ? cfg.showTime : defTime,
           showAuthor: typeof cfg.showAuthor === 'boolean' ? cfg.showAuthor : defAuthor,
+          viewMode: (cfg.viewMode === 'table' || cfg.viewMode === 'feed') ? cfg.viewMode : 'feed',
         };
         saveFieldPrefsForCurrentChannel();
         // also mirror order into local backup
@@ -3072,6 +3116,7 @@ async function saveMessageOrderForCurrentChannel() {
         order: currentMessageOrder.slice(),
         showTime: !!fieldPrefs.showTime,
         showAuthor: !!fieldPrefs.showAuthor,
+        viewMode: fieldPrefs.viewMode === 'table' ? 'table' : 'feed',
       };
       suppressNextViewApply = true;
       await sb.from('views').upsert(
@@ -3095,7 +3140,8 @@ function recomputeOrderFromDOM() {
 function applyMessageOrderToDOM() {
   if (!feedInner) return;
   if (!currentMessageOrder.length) return;
-  const rows = Array.from(feedInner.querySelectorAll('.msg'));
+  const header = feedInner.querySelector('.msg.msg-header');
+  const rows = Array.from(feedInner.querySelectorAll('.msg:not(.msg-header)'));
   if (!rows.length) return;
   // Skip if DOM order already matches — avoids reflow/blink when nothing changed
   const domOrder = rows.map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id));
@@ -3115,8 +3161,8 @@ function applyMessageOrderToDOM() {
       byId.delete(id);
     }
   });
-  // append any remaining rows that weren't in the saved order
   byId.forEach(row => frag.appendChild(row));
+  if (header) feedInner.insertBefore(header, feedInner.firstChild);
   feedInner.appendChild(frag);
 }
 
@@ -3957,9 +4003,22 @@ if (selectNoneBtn) {
   });
 }
 
+if (viewVisualSelect) {
+  viewVisualSelect.addEventListener('change', () => {
+    const viewMode = viewVisualSelect.value === 'table' ? 'table' : 'feed';
+    if (fieldPrefs.viewMode === viewMode) return;
+    pushUndo({ type: 'view', channel: currentChannel, before: { showTime: fieldPrefs.showTime, showAuthor: fieldPrefs.showAuthor, viewMode: fieldPrefs.viewMode } });
+    fieldPrefs.viewMode = viewMode;
+    logAction('view', { viewMode });
+    saveFieldPrefsForCurrentChannel();
+    applyFieldPrefsUI();
+    loadMessages().catch(() => {});
+  });
+}
+
 if (fieldTimeChk) {
   fieldTimeChk.addEventListener('change', () => {
-    pushUndo({ type: 'view', channel: currentChannel, before: { showTime: fieldPrefs.showTime, showAuthor: fieldPrefs.showAuthor } });
+    pushUndo({ type: 'view', channel: currentChannel, before: { showTime: fieldPrefs.showTime, showAuthor: fieldPrefs.showAuthor, viewMode: fieldPrefs.viewMode } });
     fieldPrefs.showTime = !!fieldTimeChk.checked;
     logAction('view', { showTime: !!fieldTimeChk.checked, showAuthor: fieldPrefs.showAuthor });
     saveFieldPrefsForCurrentChannel();
@@ -3974,7 +4033,7 @@ if (fieldAuthorChk) {
       fieldAuthorChk.checked = false;
       return;
     }
-    pushUndo({ type: 'view', channel: currentChannel, before: { showTime: fieldPrefs.showTime, showAuthor: fieldPrefs.showAuthor } });
+    pushUndo({ type: 'view', channel: currentChannel, before: { showTime: fieldPrefs.showTime, showAuthor: fieldPrefs.showAuthor, viewMode: fieldPrefs.viewMode } });
     fieldPrefs.showAuthor = !!fieldAuthorChk.checked;
     logAction('view', { showTime: fieldPrefs.showTime, showAuthor: !!fieldAuthorChk.checked });
     saveFieldPrefsForCurrentChannel();

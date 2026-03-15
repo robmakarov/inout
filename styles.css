@@ -586,6 +586,46 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
   min-height:100%;
   gap:0;
 }
+/* Table view: same object params as feed but laid out as table */
+.feed-inner.view-table{
+  display:table;
+  width:100%;
+  border-collapse:collapse;
+  table-layout:fixed;
+}
+.feed-inner.view-table .msg{
+  display:table-row;
+}
+.feed-inner.view-table .msg > *{
+  display:table-cell;
+  vertical-align:top;
+  border-bottom:1px solid var(--line2);
+}
+.feed-inner.view-table .msg.msg-header > *{
+  font-size:11px;
+  font-weight:600;
+  text-transform:uppercase;
+  letter-spacing:0.05em;
+  color:var(--muted);
+  padding:8px 12px 6px;
+  border-bottom:2px solid var(--line2);
+}
+.feed-inner.view-table .msg:not(.msg-header) .msg-time,
+.feed-inner.view-table .msg:not(.msg-header) .msg-sender{
+  padding:6px 12px;
+}
+.feed-inner.view-table .msg:not(.msg-header) .msg-text{
+  padding:6px 12px;
+}
+.feed-inner.view-table .msg.msg-header{
+  pointer-events:none;
+  user-select:none;
+}
+.feed-inner.view-table .msg.msg-header .msg-actions{ width:1%; }
+.feed-inner.view-table .msg:not(.msg-header) .msg-time{ width:1%; white-space:nowrap; }
+.feed-inner.view-table .msg:not(.msg-header) .msg-sender{ width:1%; white-space:nowrap; }
+.feed-inner.view-table .msg:not(.msg-header) .msg-text{ width:auto; }
+.feed-inner.view-table .msg:not(.msg-header) .msg-actions{ width:1%; }
 /* ── DnD: drop position line (use tokens) ── */
 .feed-drop-indicator{
   position:fixed;
