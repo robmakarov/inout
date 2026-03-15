@@ -1612,8 +1612,9 @@ function createMsgRow(msg, isNew) {
       stackContainer.className = 'msg-drag-spirit msg-drag-spirit-stack';
       stackContainer.setAttribute('aria-hidden', 'true');
       stackContainer.style.width = spiritW + 'px';
-      stackContainer.style.left = (e.clientX || 0) + 'px';
-      stackContainer.style.top = (e.clientY || 0) + 'px';
+      var rowRect = row.getBoundingClientRect();
+      stackContainer.style.left = (rowRect.left + rowRect.width / 2) + 'px';
+      stackContainer.style.top = rowRect.top + 'px';
       var maxVisible = 4;
       var toShow = Math.min(dragSelectedRows.length, maxVisible);
       for (var si = 0; si < toShow; si++) {
@@ -1640,8 +1641,9 @@ function createMsgRow(msg, isNew) {
       dragSpiritEl.removeAttribute('draggable');
       dragSpiritEl.setAttribute('aria-hidden', 'true');
       dragSpiritEl.style.width = spiritW + 'px';
-      dragSpiritEl.style.left = (e.clientX || 0) + 'px';
-      dragSpiritEl.style.top = (e.clientY || 0) + 'px';
+      var rowRect = row.getBoundingClientRect();
+      dragSpiritEl.style.left = (rowRect.left + rowRect.width / 2) + 'px';
+      dragSpiritEl.style.top = rowRect.top + 'px';
       dragSpiritEl.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
       document.body.appendChild(dragSpiritEl);
     }
@@ -3744,10 +3746,6 @@ function processFeedDragover(ev) {
   if (!feedInner) return;
   if (typeof ev.clientX === 'number') lastDragClientX = ev.clientX;
   if (typeof ev.clientY === 'number') lastDragClientY = ev.clientY;
-  if (dragSpiritEl && typeof ev.clientX === 'number' && typeof ev.clientY === 'number') {
-    dragSpiritEl.style.left = ev.clientX + 'px';
-    dragSpiritEl.style.top = ev.clientY + 'px';
-  }
   if (originGhostsActive) {
     var slotRows = Array.from(feedInner.children).filter(function(n) { return n.classList && (n.classList.contains('msg') || n.classList.contains('msg-origin-ghost')); });
     if (!slotRows.length) return;
@@ -3825,6 +3823,10 @@ function processFeedDragover(ev) {
     lastIndicatorStyle.left = indLeft;
     lastIndicatorStyle.width = indWidth;
     lastIndicatorStyle.top = indTop;
+    if (dragSpiritEl) {
+      dragSpiritEl.style.left = (indLeft + indWidth / 2) + 'px';
+      dragSpiritEl.style.top = (indTop + 4) + 'px';
+    }
     updateEdgeScroll(ev.clientY, ev.clientX);
     return;
   }
@@ -3930,6 +3932,10 @@ function processFeedDragover(ev) {
       feedDropIndicatorEl.classList.add('visible');
       lastIndicatorStyle.visible = true;
     }
+    if (dragSpiritEl) {
+      dragSpiritEl.style.left = (indLeft + indWidth / 2) + 'px';
+      dragSpiritEl.style.top = (indTop + 4) + 'px';
+    }
   } else {
     var inFeed = ev.clientX >= feedRect.left && ev.clientX <= feedRect.right && ev.clientY >= feedRect.top && ev.clientY <= feedRect.bottom;
     if (inFeed) {
@@ -3985,10 +3991,6 @@ document.addEventListener('dragover', e => {
   e.dataTransfer.dropEffect = 'move';
   lastDragClientX = e.clientX;
   lastDragClientY = e.clientY;
-  if (dragSpiritEl) {
-    dragSpiritEl.style.left = e.clientX + 'px';
-    dragSpiritEl.style.top = e.clientY + 'px';
-  }
   const feedRect = feedEl.getBoundingClientRect();
   const y = e.clientY;
   const x = e.clientX;
