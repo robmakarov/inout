@@ -335,8 +335,6 @@ var editTypingUndoStack = [];
 var editTypingCommitTimer = null;
 var TYPING_COMMIT_MS = 1800;
 var MAX_TYPING_UNDO = 20;
-var editTypingRedoStack = [];
-var editCursorEl = null;
 let fieldPrefs = { showTime:true, showAuthor:true };
 let undoStack = [];
 let actionLog = [];
@@ -630,10 +628,7 @@ function reactivateInputMode(opts) {
   }
   originalEditTextForCancel = null;
   editingMessageId = null;
-  if (input) input.classList.remove('input-edit-has-cursor');
-  removeEditCursor();
   editTypingUndoStack = [];
-  editTypingRedoStack = [];
   if (editTypingCommitTimer) {
     clearTimeout(editTypingCommitTimer);
     editTypingCommitTimer = null;
@@ -1146,13 +1141,6 @@ function updateMessageRowText(msgId, text) {
   textEl.innerHTML = linkify(escapeHtml(text || ''));
 }
 
-function removeEditCursor() {
-  if (editCursorEl && editCursorEl.parentNode) {
-    editCursorEl.parentNode.removeChild(editCursorEl);
-  }
-  editCursorEl = null;
-}
-
 function updateEditingRowFromInput() {
   if (!feedInner || editingMessageId == null || !input) return;
   const idStr = String(editingMessageId);
@@ -1165,34 +1153,12 @@ function updateEditingRowFromInput() {
   if (!Number.isFinite(caretPos)) caretPos = fullText.length;
   caretPos = Math.max(0, Math.min(caretPos, fullText.length));
   const before = fullText.slice(0, caretPos);
-  if (editCursorEl && editCursorEl.parentNode) editCursorEl.parentNode.removeChild(editCursorEl);
-  textEl.innerHTML = escapeHtml(fullText);
-  var cursorLeft = 0;
-  if (before.length > 0) {
-    var mirror = document.createElement('span');
-    mirror.setAttribute('aria-hidden', 'true');
-    mirror.style.cssText = 'position:absolute;left:-9999px;top:0;white-space:pre-wrap;visibility:hidden;pointer-events:none;';
-    var cs = window.getComputedStyle(textEl);
-    mirror.style.font = cs.font;
-    mirror.style.fontSize = cs.fontSize;
-    mirror.style.lineHeight = cs.lineHeight;
-    mirror.style.letterSpacing = cs.letterSpacing;
-    mirror.style.wordSpacing = cs.wordSpacing;
-    mirror.textContent = before;
-    document.body.appendChild(mirror);
-    cursorLeft = mirror.offsetWidth;
-    document.body.removeChild(mirror);
-  }
-  if (!editCursorEl) {
-    editCursorEl = document.createElement('div');
-    editCursorEl.className = 'msg-edit-cursor';
-    editCursorEl.setAttribute('aria-hidden', 'true');
-  }
-  var lineH = parseFloat(window.getComputedStyle(textEl).lineHeight) || 20;
-  editCursorEl.style.left = cursorLeft + 'px';
-  editCursorEl.style.top = '0';
-  editCursorEl.style.height = (lineH > 0 ? lineH : 20) + 'px';
-  textEl.appendChild(editCursorEl);
+  const after = fullText.slice(caretPos);
+  const html =
+    escapeHtml(before) +
+    '<span class="msg-edit-caret" aria-hidden="true">|</span>' +
+    escapeHtml(after);
+  textEl.innerHTML = html;
 }
 
 function commitTypingSegment() {
@@ -2822,7 +2788,6 @@ function createMsgRow(msg, isNew) {
     saveInputGlobal();
     updateEditingRowHighlight();
     focusMessageInput();
-    if (input) input.classList.add('input-edit-has-cursor');
     updateEditingRowFromInput();
   });
 

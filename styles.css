@@ -853,27 +853,20 @@ body.dnd-active .msg-drag-spirit-stack{opacity:1;background:transparent;transiti
   padding-right:72px; /* reserve space under right-side actions */
   cursor:pointer;
 }
-/* Edit cursor: overlay in message row, only visible while editing; removed when not editing */
-.msg-editing .msg-text{
-  position:relative;
-}
-.msg-edit-cursor{
-  position:absolute;
-  left:0;
-  top:0;
-  width:2px;
-  height:20px;
-  background:var(--dnd-drop-line-color);
+/* Edit cursor inside message row: inline pipe matching input caret color */
+.msg-edit-caret{
+  display:inline;
+  color:var(--dnd-drop-line-color);
+  font-weight:400;
+  margin:0 1px 0 0;
+  animation:msg-caret-blink 1s step-end infinite;
   pointer-events:none;
-  animation:msg-cursor-blink 1s step-end infinite;
+  -webkit-user-select:none;
+  user-select:none;
 }
-@keyframes msg-cursor-blink{
-  0%,55%{opacity:1}
-  56%,100%{opacity:0.2}
-}
-
-.msg.msg-editing .msg-text{
-  color:var(--muted);
+@keyframes msg-caret-blink{
+  0%,60%{opacity:1}
+  61%,100%{opacity:0.3}
 }
 /* DnD reorder: row under drop position (no nudge to avoid shake) */
 
@@ -1177,12 +1170,6 @@ body.select-mode .msg-select-wrap,
   transition:color .15s ease;
   scrollbar-width:none;
   box-sizing:border-box;
-}
-#msg-input{
-  caret-color:var(--dnd-drop-line-color);
-}
-#msg-input.input-edit-has-cursor{
-  caret-color:transparent;
 }
 #msg-input::-webkit-scrollbar{display:none}
 #msg-input::placeholder{color:var(--dim)}
