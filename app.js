@@ -1141,7 +1141,7 @@ function updateMessageRowText(msgId, text) {
   textEl.innerHTML = linkify(escapeHtml(text || ''));
 }
 
-/** While editing, the message row shows a mirror of the main input; keep them in sync. */
+/** When editing, replace row value on UI only with realtime mirror of main input; both stay in sync. */
 function updateEditingRowFromInput() {
   if (!feedInner || editingMessageId == null || !input) return;
   const idStr = String(editingMessageId);
