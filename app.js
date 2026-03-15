@@ -1255,7 +1255,19 @@ function findObjectRowEl(objId) {
 /** Doppelganger: mirror of main input with same value, style, cursor and selection. Works for row in primary or secondary feed. */
 function updateEditingRowFromInput() {
   if (editingObjectId == null || !input) return;
-  const textEl = findObjectRowTextEl(editingObjectId);
+  /* Clear doppelganger/caret from any other row so only the current editing row shows the cursor */
+  const currentTextEl = findObjectRowTextEl(editingObjectId);
+  [feedInner, secondaryFeedInner].forEach(fi => {
+    if (!fi) return;
+    fi.querySelectorAll('.obj').forEach(row => {
+      const textEl = row.querySelector('.obj-text');
+      if (!textEl || textEl === currentTextEl) return;
+      if (textEl.querySelector('.obj-edit-caret, .obj-edit-selection')) {
+        textEl.innerHTML = linkify(escapeHtml(textEl.textContent || ''));
+      }
+    });
+  });
+  const textEl = currentTextEl;
   if (!textEl) return;
   const value = input.value;
   const start = Math.min(input.selectionStart || 0, value.length);
