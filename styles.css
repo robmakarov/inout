@@ -702,11 +702,11 @@ body.dnd-active .msg.msg-drag-nudge-right{ transition:transform var(--dnd-nudge-
 .msg-fly-clone .msg-actions{visibility:hidden}
 .msg:hover{background:var(--bg2)}
 .msg.msg-drag-over{background:var(--bg2)}
-/* DnD mode: no transition/animation on .msg except nudge; no hover anywhere */
-body.dnd-active .msg{transition:none;animation:none;background:var(--dnd-idle-bg) !important;opacity:var(--dnd-idle-opacity) !important}
+/* DnD: don't change bg/opacity of rows; only spirit has hover bg */
+body.dnd-active .msg{transition:none;animation:none}
 body.dnd-active .msg:hover,
 body.dnd-active .msg.msg-drag-over,
-body.dnd-active .msg.msg-drag-target{background:var(--dnd-idle-bg) !important;opacity:var(--dnd-idle-opacity) !important}
+body.dnd-active .msg.msg-drag-target{background:transparent}
 body.dnd-just-ended .msg{transition:none;animation:none}
 body.dnd-just-ended .msg.msg-dnd-just-dropped{animation:msgin var(--dnd-stack-drop-in-duration) var(--anim-ease-out) both}
 body.dnd-active .msg.dragging .msg-select-wrap,
@@ -714,14 +714,12 @@ body.dnd-active .msg.dragging .msg-actions,
 body.dnd-active .msg.msg-drag-group .msg-select-wrap,
 body.dnd-active .msg.msg-drag-group .msg-actions{opacity:0;pointer-events:none;visibility:hidden}
 body.dnd-active .msg.msg-drag-target.msg-drag-nudge-right{transition:transform var(--dnd-nudge-duration) var(--anim-ease-out)}
-body.dnd-active .msg.msg-drag-target.msg-drag-nudge-right{transition:transform var(--dnd-nudge-duration) var(--anim-ease-out)}
 body.dnd-active .msg:hover .msg-select-wrap,
 body.dnd-active .msg:hover .msg-actions,
 body.dnd-active .msg.msg-drag-over .msg-select-wrap,
-body.dnd-active .msg.msg-drag-over .msg-actions{ opacity:0; pointer-events:none; }
-body.dnd-active .msg .msg-time,
-body.dnd-active .msg .msg-sender{ color:var(--dim); }
-body.dnd-active .msg.msg-drag-spirit{ opacity:1; background:var(--bg2); transition:none; }
+body.dnd-active .msg.msg-drag-over .msg-actions{opacity:0;pointer-events:none}
+body.dnd-active .msg.msg-drag-spirit,
+body.dnd-active .msg-drag-spirit-stack{opacity:1;background:var(--bg2);transition:none}
 .msg.msg-editing{
   background:var(--bg2);
   box-shadow:inset 0 0 0 1px var(--line2);
