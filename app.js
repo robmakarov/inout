@@ -364,7 +364,11 @@ function toggleRowAtY(feedInner, clientY) {
   }
 }
 let editingObjectId = null;
+/** When multiple objects are selected and user edits, all selected show the same doppelganger. */
+let editingObjectIds = null;
 let originalEditTextForCancel = null;
+/** Per-id original text when cancelling multi-edit. */
+var originalEditTextForCancelMap = null;
 var editTypingUndoStack = [];
 var editTypingCommitTimer = null;
 var TYPING_COMMIT_MS = 1800;
@@ -651,20 +655,32 @@ function updateEditingRowHighlight() {
   [feedInner, secondaryFeedInner].forEach(fi => {
     if (fi) fi.querySelectorAll('.obj.obj-editing').forEach(r => r.classList.remove('obj-editing'));
   });
-  if (editingObjectId != null) {
-    const row = findObjectRowEl(editingObjectId);
+  const ids = editingObjectIds && editingObjectIds.size ? editingObjectIds : (editingObjectId != null ? [editingObjectId] : []);
+  ids.forEach(id => {
+    const row = findObjectRowEl(id);
     if (row) row.classList.add('obj-editing');
+  });
+}
+
+function restoreEditingRowsOnCancel() {
+  if (editingObjectIds && originalEditTextForCancelMap) {
+    editingObjectIds.forEach(id => {
+      const text = originalEditTextForCancelMap[id];
+      if (text !== undefined) updateObjectRowMessage(id, text);
+    });
+  } else if (editingObjectId != null && originalEditTextForCancel != null) {
+    updateObjectRowMessage(editingObjectId, originalEditTextForCancel);
   }
 }
 
 /** Input mode is default and reactivates after every operation; only edit mode interrupts it. */
 function reactivateInputMode(opts) {
   opts = opts || {};
-  if (editingObjectId != null && originalEditTextForCancel != null) {
-    updateObjectRowMessage(editingObjectId, originalEditTextForCancel);
-  }
+  restoreEditingRowsOnCancel();
   originalEditTextForCancel = null;
+  originalEditTextForCancelMap = null;
   editingObjectId = null;
+  editingObjectIds = null;
   editTypingUndoStack = [];
   if (editTypingCommitTimer) {
     clearTimeout(editTypingCommitTimer);
@@ -1252,23 +1268,22 @@ function findObjectRowEl(objId) {
   return null;
 }
 
-/** Doppelganger: mirror of main input with same value, style, cursor and selection. Works for row in primary or secondary feed. */
+/** Doppelganger: mirror of main input with same value, style, cursor and selection. Works for row(s) in primary or secondary feed; when multi-edit, all selected rows get the same doppelganger. */
 function updateEditingRowFromInput() {
-  if (editingObjectId == null || !input) return;
-  /* Clear doppelganger/caret from any other row so only the current editing row shows the cursor */
-  const currentTextEl = findObjectRowTextEl(editingObjectId);
+  const ids = editingObjectIds && editingObjectIds.size ? Array.from(editingObjectIds) : (editingObjectId != null ? [editingObjectId] : []);
+  if (ids.length === 0 || !input) return;
+  /* Clear doppelganger/caret from any row not in the current editing set */
+  const editingSet = new Set(ids);
   [feedInner, secondaryFeedInner].forEach(fi => {
     if (!fi) return;
     fi.querySelectorAll('.obj').forEach(row => {
+      const id = row.dataset.id != null ? Number(row.dataset.id) : null;
+      if (id != null && editingSet.has(id)) return;
       const textEl = row.querySelector('.obj-text');
-      if (!textEl || textEl === currentTextEl) return;
-      if (textEl.querySelector('.obj-edit-caret, .obj-edit-selection')) {
-        textEl.innerHTML = linkify(escapeHtml(textEl.textContent || ''));
-      }
+      if (!textEl || !textEl.querySelector('.obj-edit-caret, .obj-edit-selection')) return;
+      textEl.innerHTML = linkify(escapeHtml(textEl.textContent || ''));
     });
   });
-  const textEl = currentTextEl;
-  if (!textEl) return;
   const value = input.value;
   const start = Math.min(input.selectionStart || 0, value.length);
   const end = Math.min(Math.max(input.selectionEnd || 0, start), value.length);
@@ -1282,7 +1297,11 @@ function updateEditingRowFromInput() {
     (sel ? '<span class="' + selCls + '">' + escapeHtml(sel) + '</span>' : '') +
     caret +
     escapeHtml(after);
-  textEl.innerHTML = html || caret;
+  const doppelgangerHtml = html || caret;
+  ids.forEach(id => {
+    const textEl = findObjectRowTextEl(id);
+    if (textEl) textEl.innerHTML = doppelgangerHtml;
+  });
 }
 
 function commitTypingSegment() {
@@ -3211,11 +3230,17 @@ function createObjectRow(obj, isNew, options) {
       return;
     }
     /* Restore previous row’s text so its doppelganger doesn’t stay */
-    if (editingObjectId != null && originalEditTextForCancel != null) {
-      updateObjectRowMessage(editingObjectId, originalEditTextForCancel);
-    }
+    restoreEditingRowsOnCancel();
+    const multi = selectMode && selectedIds.size > 1 && selectedIds.has(obj.id);
+    const idsToEdit = multi ? new Set(selectedIds) : new Set([obj.id]);
+    originalEditTextForCancelMap = {};
+    idsToEdit.forEach(id => {
+      const el = findObjectRowTextEl(id);
+      if (el) originalEditTextForCancelMap[id] = el.textContent || '';
+    });
     input.value = obj.text || '';
     editingObjectId = obj.id;
+    editingObjectIds = idsToEdit;
     originalEditTextForCancel = obj.text || '';
     editTypingUndoStack = [obj.text || ''];
     editTypingRedoStack = [];
@@ -3224,7 +3249,7 @@ function createObjectRow(obj, isNew, options) {
       editTypingCommitTimer = null;
     }
     try { localStorage.setItem(WAS_EDITING_KEY, '1'); } catch (_) {}
-    input.placeholder = 'Editing object…';
+    input.placeholder = idsToEdit.size > 1 ? 'Editing ' + idsToEdit.size + ' objects…' : 'Editing object…';
     autoResize();
     sendBtn.disabled = !input.value.trim();
     updateClearInputBtn();
@@ -3254,8 +3279,8 @@ function createObjectRow(obj, isNew, options) {
       updateSelectionUI();
       return;
     }
-    if (!editingObjectId) return;
-    if (String(row.dataset.id) !== String(editingObjectId)) return;
+    const inEditing = editingObjectId != null && (String(row.dataset.id) === String(editingObjectId) || (editingObjectIds && editingObjectIds.has(obj.id)));
+    if (!inEditing) return;
     if (e.target.closest('button, a, .obj-actions, .obj-select, .obj-select-wrap')) return;
     e.stopPropagation();
     e.preventDefault();
@@ -4217,27 +4242,45 @@ async function sendText(text) {
   sendBtn.disabled = true;
   input.disabled   = true;
 
-  if (editingObjectId) {
-    const { data: before, error: selErr } = await sb
-      .from('entries')
-      .select('id, created_at, text, channel, user_id, author_name')
-      .eq('id', editingObjectId)
-      .eq('user_id', currentUser.id)
-      .maybeSingle();
-    if (selErr) {
-      input.disabled = false;
-      console.error(selErr);
-      toast('Failed to update — ' + humanError(selErr.message));
-      sendBtn.disabled = false;
-      return;
+  const idsToSave = editingObjectIds && editingObjectIds.size ? Array.from(editingObjectIds) : (editingObjectId != null ? [editingObjectId] : []);
+  if (idsToSave.length > 0) {
+    const befores = [];
+    if (idsToSave.length === 1) {
+      const { data: before, error: selErr } = await sb
+        .from('entries')
+        .select('id, created_at, text, channel, user_id, author_name')
+        .eq('id', idsToSave[0])
+        .eq('user_id', currentUser.id)
+        .maybeSingle();
+      if (selErr) {
+        input.disabled = false;
+        console.error(selErr);
+        toast('Failed to update — ' + humanError(selErr.message));
+        sendBtn.disabled = false;
+        return;
+      }
+      if (before) befores.push(before);
+    } else {
+      const { data: list, error: selErr } = await sb
+        .from('entries')
+        .select('id, created_at, text, channel, user_id, author_name')
+        .in('id', idsToSave)
+        .eq('user_id', currentUser.id);
+      if (selErr) {
+        input.disabled = false;
+        console.error(selErr);
+        toast('Failed to update — ' + humanError(selErr.message));
+        sendBtn.disabled = false;
+        return;
+      }
+      if (list) befores.push(...list);
     }
-    const { data, error } = await sb
+    const { data: updated, error } = await sb
       .from('entries')
       .update({ text: trimmed })
-      .eq('id', editingObjectId)
+      .in('id', idsToSave)
       .eq('user_id', currentUser.id)
-      .select('id, created_at, text, channel, user_id, author_name')
-      .single();
+      .select('id, created_at, text, channel, user_id, author_name');
     input.disabled = false;
     if (error) {
       console.error(error);
@@ -4245,12 +4288,14 @@ async function sendText(text) {
       sendBtn.disabled = false;
       return;
     }
-    if (before && before.id) {
-      pushUndo({ type: 'edit', entries: [{ id: before.id, beforeText: before.text, afterText: trimmed }] });
-      logAction('edit', { id: before.id });
+    if (befores.length) {
+      pushUndo({ type: 'edit', entries: befores.map(b => ({ id: b.id, beforeText: b.text, afterText: trimmed })) });
+      befores.forEach(b => logAction('edit', { id: b.id }));
     }
-    updateObjectRowMessage(editingObjectId, trimmed);
+    idsToSave.forEach(id => updateObjectRowMessage(id, trimmed));
     originalEditTextForCancel = null;
+    originalEditTextForCancelMap = null;
+    editingObjectIds = null;
     reactivateInputMode({ clearInput: true });
     return;
   }
