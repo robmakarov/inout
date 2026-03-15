@@ -3135,6 +3135,10 @@ function createObjectRow(obj, isNew, options) {
       cancelEditingMode(true);
       return;
     }
+    /* Restore previous row’s text so its doppelganger doesn’t stay */
+    if (editingObjectId != null && originalEditTextForCancel != null) {
+      updateObjectRowMessage(editingObjectId, originalEditTextForCancel);
+    }
     input.value = obj.text || '';
     editingObjectId = obj.id;
     originalEditTextForCancel = obj.text || '';
