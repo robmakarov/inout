@@ -41,7 +41,7 @@
   --dnd-stack-drop-in-duration: 0.2s;
   --dnd-stack-stagger-step: 0.03s;
   --dnd-spirit-stack-max-visible: 4;
-  --dnd-stack-form-duration: 0.25s;
+  --dnd-stack-form-duration: 0.3s;
 }
 
 /* Reusable animation keyframes (use with var(--anim-duration-*) and var(--anim-ease-*) for rules) */
@@ -598,10 +598,10 @@ header{
   z-index:2;
 }
 .origin-ghost-overlay.msg-origin-ghost{ min-height:32px; }
-.msg.dragging-in-feed{ opacity:var(--dnd-placeholder-opacity); }
+.msg.dragging-in-feed{ opacity:0.8; background:transparent; }
 .msg.dragging.dragging-in-feed,
 .msg.msg-drag-group.dragging-in-feed{ box-shadow:inset 3px 0 0 var(--dnd-drop-line-color); }
-@keyframes dnd-stack-form{ from{ opacity:0.92; transform:scale(0.99) } to{ opacity:1; transform:scale(1) } }
+@keyframes dnd-stack-form{ from{ opacity:0.5; transform:scale(0.94) } to{ opacity:1; transform:scale(1) } }
 .msg.msg-dnd-stack-form{ animation:dnd-stack-form var(--dnd-stack-form-duration) var(--anim-ease-out) both; }
 .msg-origin-ghost .msg-time,
 .msg-origin-ghost .msg-sender,

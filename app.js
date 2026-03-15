@@ -1617,8 +1617,11 @@ function createMsgRow(msg, isNew) {
       stackContainer.setAttribute('aria-hidden', 'true');
       stackContainer.style.width = spiritW + 'px';
       var rowRect = row.getBoundingClientRect();
+      var fr0 = feedEl ? feedEl.getBoundingClientRect() : rowRect;
+      var margin0 = 24;
+      var startTop = Math.max(fr0.top + margin0, Math.min(fr0.bottom - margin0, e.clientY || rowRect.top));
       stackContainer.style.left = (rowRect.left + rowRect.width / 2) + 'px';
-      stackContainer.style.top = (e.clientY || rowRect.top) + 'px';
+      stackContainer.style.top = startTop + 'px';
       var maxVisible = 4;
       var toShow = Math.min(dragSelectedRows.length, maxVisible);
       for (var si = 0; si < toShow; si++) {
@@ -1646,8 +1649,11 @@ function createMsgRow(msg, isNew) {
       dragSpiritEl.setAttribute('aria-hidden', 'true');
       dragSpiritEl.style.width = spiritW + 'px';
       var rowRect = row.getBoundingClientRect();
+      var fr0 = feedEl ? feedEl.getBoundingClientRect() : rowRect;
+      var margin0 = 24;
+      var startTop = Math.max(fr0.top + margin0, Math.min(fr0.bottom - margin0, e.clientY || rowRect.top));
       dragSpiritEl.style.left = (rowRect.left + rowRect.width / 2) + 'px';
-      dragSpiritEl.style.top = (e.clientY || rowRect.top) + 'px';
+      dragSpiritEl.style.top = startTop + 'px';
       dragSpiritEl.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
       document.body.appendChild(dragSpiritEl);
     }
@@ -3779,8 +3785,10 @@ function processFeedDragover(ev) {
   if (typeof ev.clientY === 'number') lastDragClientY = ev.clientY;
   if (dragSpiritEl) {
     var fr = feedEl.getBoundingClientRect();
+    var margin = 24;
+    var spiritTop = Math.max(fr.top + margin, Math.min(fr.bottom - margin, ev.clientY));
     dragSpiritEl.style.left = (fr.left + fr.width / 2) + 'px';
-    dragSpiritEl.style.top = ev.clientY + 'px';
+    dragSpiritEl.style.top = spiritTop + 'px';
   }
   if (originGhostsActive) {
     var slotRows = Array.from(feedInner.children).filter(function(n) { return n.classList && (n.classList.contains('msg') || n.classList.contains('msg-origin-ghost')); });

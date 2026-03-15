@@ -15,7 +15,7 @@
 - --dnd-spirit-shadow, --dnd-spirit-radius
 - --dnd-stack-drop-in-duration, --dnd-stack-stagger-step, --dnd-spirit-stack-max-visible, --dnd-stack-form-duration
 
-**DnD:** body.dnd-active → .msg no transition except .msg-drag-nudge-right. Spirit follows cursor by view type: vertical feed = X fixed (feed center), Y follows cursor. Rows unchanged; only spirit has hover bg. No row hover state. Stack: left-edge cue; drop-in staggered; when objects come together (.msg-dnd-stack-form) brief scale/opacity animation (--dnd-stack-form-duration). Drop on origin line (within 14px) = undo (reorder to original position).
+**DnD:** body.dnd-active → .msg no transition except .msg-drag-nudge-right. Spirit follows cursor by view type: vertical feed = X fixed (feed center), Y follows cursor. Rows unchanged; only spirit has hover bg. No row hover state. Dragged placeholders: opacity 0.8, background transparent. Spirit clamped to feed view (margin 24px); feed keeps edge-scrolling when cursor at border. Stack: left-edge cue; drop-in staggered; stack-form animation 0.5→1 opacity, 0.94→1 scale (--dnd-stack-form-duration). Drop on origin line = undo.
 
 ## Where used
 - Modal: slide-in-right 0.18s. Message row: msgin 0.2s. DnD: tokens above. Toast/scroll: ~0.2s. Buttons: ~0.1–0.2s.
