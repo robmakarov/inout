@@ -3472,7 +3472,33 @@ async function ensureMembership() {
 }
 
 /* ═══ AUTH ════════════════════════════════════════════════ */
+/** Run when returning from OAuth redirect: exchange code for session or wait for URL to be processed. */
+async function ensureOAuthCallbackProcessed() {
+  if (!sb || !sb.auth) return;
+  var hasCode = typeof location !== 'undefined' && location.search && location.search.includes('code=');
+  var hasHash = typeof location !== 'undefined' && location.hash && (location.hash.includes('access_token=') || location.hash.includes('code='));
+  if (hasCode) {
+    try {
+      var params = new URLSearchParams(location.search);
+      var code = params.get('code');
+      if (code && typeof sb.auth.exchangeCodeForSession === 'function') {
+        var result = await sb.auth.exchangeCodeForSession(code);
+        if (result && result.data && result.data.session) {
+          try { history.replaceState(null, '', location.pathname || '/'); } catch (_) {}
+          return;
+        }
+      }
+    } catch (e) {
+      console.error('OAuth code exchange failed', e);
+    }
+  }
+  if (hasHash) {
+    await new Promise(function(r) { setTimeout(r, 250); });
+  }
+}
+
 async function refreshAuth() {
+  await ensureOAuthCallbackProcessed();
   try {
     try {
       var b = sessionStorage.getItem(AUTH_BACKUP_KEY);
@@ -3487,6 +3513,13 @@ async function refreshAuth() {
       ]);
       session = (sessionResult && sessionResult.data && sessionResult.data.session) || null;
     } catch (_) {}
+    if (!session && (location.hash && location.hash.includes('access_token=') || location.search && location.search.includes('code='))) {
+      await new Promise(function(r) { setTimeout(r, 300); });
+      try {
+        var retry = await sb.auth.getSession();
+        if (retry && retry.data && retry.data.session) session = retry.data.session;
+      } catch (_) {}
+    }
     if (session?.user) {
       currentUser = session.user;
     } else if (!currentUser) {
@@ -3744,10 +3777,16 @@ async function copyUserId() {
 }
 
 function cleanupAuthHash() {
-  if (!location.hash) return;
-  if (!location.hash.includes('access_token=')) return;
+  var clean = false;
+  if (location.hash && (location.hash.includes('access_token=') || location.hash.includes('code='))) {
+    clean = true;
+  }
+  if (location.search && location.search.includes('code=')) {
+    clean = true;
+  }
+  if (!clean) return;
   try {
-    history.replaceState(null, '', location.pathname + location.search);
+    history.replaceState(null, '', location.pathname || '/');
   } catch (_) {}
 }
 
