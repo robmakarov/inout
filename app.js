@@ -1141,7 +1141,7 @@ function updateMessageRowText(msgId, text) {
   textEl.innerHTML = linkify(escapeHtml(text || ''));
 }
 
-/** One value, two places: row is a realtime mirror of main input (UI only). */
+/** Doppelganger: mirror of main input with same value, style, cursor and selection. */
 function updateEditingRowFromInput() {
   if (!feedInner || editingMessageId == null || !input) return;
   const idStr = String(editingMessageId);
@@ -1150,7 +1150,19 @@ function updateEditingRowFromInput() {
   const textEl = el.querySelector('.msg-text');
   if (!textEl) return;
   const value = input.value;
-  if (textEl.textContent !== value) textEl.textContent = value;
+  const start = Math.min(input.selectionStart || 0, value.length);
+  const end = Math.min(Math.max(input.selectionEnd || 0, start), value.length);
+  const before = value.slice(0, start);
+  const sel = value.slice(start, end);
+  const after = value.slice(end);
+  const caret = '<span class="msg-edit-caret" aria-hidden="true"></span>';
+  const selCls = 'msg-edit-selection';
+  const html =
+    escapeHtml(before) +
+    (sel ? '<span class="' + selCls + '">' + escapeHtml(sel) + '</span>' : '') +
+    caret +
+    escapeHtml(after);
+  textEl.innerHTML = html || caret;
 }
 
 function commitTypingSegment() {

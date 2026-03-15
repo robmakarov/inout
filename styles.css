@@ -871,6 +871,24 @@ body.dnd-active .msg-drag-spirit-stack{opacity:1;background:transparent;transiti
   cursor:default;
 }
 .msg-editing .msg-text::-webkit-scrollbar{ display:none; }
+/* Doppelganger: cursor and selection mirror main input */
+.msg-edit-caret{
+  display:inline-block;
+  width:0;
+  height:1em;
+  vertical-align:text-bottom;
+  border-left:2px solid var(--acc);
+  margin-left:-1px;
+  animation:msg-edit-caret-blink 1s step-end infinite;
+}
+@keyframes msg-edit-caret-blink{
+  50%{ opacity:0; }
+}
+.msg-edit-selection{
+  background:var(--acc);
+  color:var(--bg);
+  border-radius:2px;
+}
 /* DnD reorder: row under drop position (no nudge to avoid shake) */
 
 @media (max-width:540px){
