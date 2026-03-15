@@ -1,16 +1,18 @@
 # Components
 
 ## Layout
-- **#multiview** — Container for one or more views (same user). Flex column, fills viewport; padding reserves space for fixed header, manage bar, and input area.
-- **.view** (#view-app) — One view: header + manage-bar + feed. App content is a View; more views can be added later.
-- **#input-area** — Separate from multiview (sibling). Fixed at bottom; keeps all connections and behaviour (tabs, composer, send, draft, etc.).
-- Header is always fixed (position:fixed; top:0). #app-loader, #feed, #feed-inner.
+- **header** — Outside multiview. Fixed top; logo, online-count, object-count, user button.
+- **#nav** (.navigation-bar) — Outside multiview. Fixed under header; contains **#tabs**. Controls which view is shown in multiview (channel/feed selection).
+- **#multiview** — Container for the active view(s). Flex column, fills viewport; padding reserves space for header, nav bar, manage bar, and input area.
+- **.view** (#view-app) — One view: manage-bar + feed. More views can be added; nav bar switches between them.
+- **#input-area** — Separate from multiview (sibling). Fixed at bottom; composer, draft/clipboard bubbles, no tabs (tabs are in nav). Keeps all connections and behaviour.
+- #app-loader, #feed, #feed-inner.
 
 ## Header
 header, .logo, .header-right, #online-count, #object-count, #user-btn (.signed-in)
 
 ## Manage bar (top bar)
-#manage-bar — fixed under header, fills width; .bar-scroll (horizontal scroll), .bar-group; #manage-bar-scroll, #manage-actions. Buttons have data-bar-id; reorder via bar-dnd-mode (⋯ toggle). #bar-reorder-toggle, #view-menu (.open)
+#manage-bar — fixed under header + nav, fills width; .bar-scroll (horizontal scroll), .bar-group; #manage-bar-scroll, #manage-actions. Buttons have data-bar-id; reorder via bar-dnd-mode (⋯ toggle). #bar-reorder-toggle, #view-menu (.open)
 #select-toggle (.active), .select-extra (.show), .manage-btn, #move-target, #view-toggle
 
 ## Feed
@@ -35,7 +37,7 @@ States: .obj-selected, .obj-editing, .obj-drag-target, .obj-drag-nudge-right, .n
 .tab — .tab-active, .tab-shared, .tab-badge, .tab-new, .tab-close, .tab-drop-target
 
 ## Input
-#input-area, #tabs, #clipboard-bubble, #draft-bubble, .draft-btn, .input-wrap, .input-tools, #clipboard-button, #log-action-btn (.error-signal), #log-dropup-panel (.open). **Composer:** .composer (single bar: input + send), .composer-input-wrap, #msg-input, #msg-input-count (.composer-count), .clear-input-btn, #send-btn (.composer-send). Main input is used for both new messages and editing; when editing a message, typing updates the message row in the view in realtime.
+#input-area (no tabs; tabs are in #nav), #clipboard-bubble, #draft-bubble, .draft-btn, .input-wrap, .input-tools, #clipboard-button, #log-action-btn (.error-signal), #log-dropup-panel (.open). **Composer:** .composer (single bar: input + send), .composer-input-wrap, #msg-input, #msg-input-count (.composer-count), .clear-input-btn, #send-btn (.composer-send). Main input is used for both new messages and editing; when editing a message, typing updates the message row in the view in realtime.
 
 ## Overlays
 #scroll-btn (.visible), #toast (.show)

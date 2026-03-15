@@ -49,22 +49,26 @@
   </div>
 </div>
 
+<header>
+  <div class="logo">IN<span>OUT</span></div>
+  <div class="header-right">
+    <div id="online-count"><span class="dot"></span><span id="oc-num">—</span></div>
+    <div id="object-count"></div>
+    <button id="user-btn" aria-label="Account" onclick="var m=document.getElementById('user-modal-backdrop');var c=document.getElementById('channel-modal-backdrop');if(c)c.style.display='none';if(m){m.style.display='block';m.setAttribute('aria-hidden','false');}">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5Z" stroke="currentColor" stroke-width="1.8"/>
+        <path d="M4 22c0-4.418 3.582-8 8-8s8 3.582 8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<nav id="nav" class="navigation-bar" role="navigation" aria-label="Views">
+  <div id="tabs"></div>
+</nav>
+
 <div id="multiview">
   <div class="view" id="view-app">
-    <header>
-      <div class="logo">IN<span>OUT</span></div>
-      <div class="header-right">
-        <div id="online-count"><span class="dot"></span><span id="oc-num">—</span></div>
-        <div id="object-count"></div>
-        <button id="user-btn" aria-label="Account" onclick="var m=document.getElementById('user-modal-backdrop');var c=document.getElementById('channel-modal-backdrop');if(c)c.style.display='none';if(m){m.style.display='block';m.setAttribute('aria-hidden','false');}">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5Z" stroke="currentColor" stroke-width="1.8"/>
-            <path d="M4 22c0-4.418 3.582-8 8-8s8 3.582 8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-          </svg>
-        </button>
-      </div>
-    </header>
-
     <div id="manage-bar">
       <div class="bar-scroll" id="manage-bar-scroll">
         <div class="bar-group" data-bar-group="left">
@@ -109,7 +113,6 @@
 </div>
 
 <div id="input-area">
-    <div id="tabs"></div>
     <div id="clipboard-bubble">
       <div id="clipboard-bubble-text"></div>
       <div class="clipboard-bubble-actions">

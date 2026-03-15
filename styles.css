@@ -45,6 +45,7 @@
   --dnd-stack-form-duration: 0.3s;
   --bar-top-height: 42px;
   --bar-bottom-min-height: 120px;
+  --nav-height: 40px; /* Navigation bar: controls which view is shown in multiview */
 }
 
 /* Reusable animation keyframes (use with var(--anim-duration-*) and var(--anim-ease-*) for rules) */
@@ -83,7 +84,12 @@ body{
 }
 #feed::-webkit-scrollbar{display:none}
 
-/* Multiview: container for one or more views (same user); input is separate */
+/* Header and Navigation bar are outside multiview; nav controls which view is shown */
+header,
+#nav{
+  pointer-events:auto;
+}
+/* Multiview: container for the active view(s); input is separate */
 #multiview{
   flex:1;
   display:flex;
@@ -92,7 +98,7 @@ body{
   height:100vh;
   overflow:hidden;
   pointer-events:none;
-  padding-top:calc(48px + var(--bar-top-height)); /* header + top bar */
+  padding-top:calc(48px + var(--nav-height) + var(--bar-top-height)); /* header + nav + manage bar */
   padding-bottom:var(--bar-bottom-min-height); /* reserve space for fixed input area */
 }
 #multiview .view{
@@ -102,7 +108,6 @@ body{
   min-height:0;
   overflow:hidden;
 }
-#multiview header,
 #multiview #manage-bar,
 #multiview #feed{
   pointer-events:auto;
@@ -110,6 +115,40 @@ body{
 #input-area{
   pointer-events:auto;
 }
+
+/* ── NAVIGATION BAR: fixed under header, controls which view is shown in multiview ── */
+#nav.navigation-bar{
+  position:fixed;
+  top:48px;
+  left:0;
+  right:0;
+  width:100%;
+  height:var(--nav-height);
+  z-index:999;
+  flex-shrink:0;
+  background:var(--bg2);
+  border-bottom:1px solid var(--line);
+  display:flex;
+  align-items:center;
+  padding:0 20px;
+  box-sizing:border-box;
+}
+#nav #tabs{
+  display:flex;
+  gap:6px;
+  padding:0;
+  margin:0;
+  border:none;
+  background:transparent;
+  align-items:center;
+  flex:1;
+  min-width:0;
+  overflow-x:auto;
+  overflow-y:hidden;
+  scrollbar-width:none;
+  -ms-overflow-style:none;
+}
+#nav #tabs::-webkit-scrollbar{ display:none; }
 
 /* iOS/Safari dynamic viewport handling */
 @supports (height: 100dvh) {
@@ -138,15 +177,15 @@ header{
   box-sizing:border-box;
 }
 
-/* ── TOP BAR (manage): fixed under header, fills width ── */
+/* ── TOP BAR (manage): fixed under header + nav, fills width ── */
 #manage-bar{
   position:fixed;
-  top:48px;
+  top:calc(48px + var(--nav-height));
   left:0;
   right:0;
   width:100%;
   height:var(--bar-top-height);
-  z-index:999;
+  z-index:998;
   flex-shrink:0;
   background:var(--bg2);
   border-bottom:1px solid var(--line);
@@ -1549,7 +1588,7 @@ body.select-mode .obj-select-wrap,
     transition:transform .22s cubic-bezier(.2,.8,.2,1);
     will-change:transform;
   }
-  #multiview{padding-top:calc(48px + var(--bar-top-height))}
+  #multiview{padding-top:calc(48px + var(--nav-height) + var(--bar-top-height))}
   /* keep input bar above iOS Safari bottom panel & keyboard */
   #input-area{
     position:fixed;
@@ -1564,23 +1603,19 @@ body.select-mode .obj-select-wrap,
   #feed{
     padding-bottom:120px;
   }
-  #tabs{
-    padding:8px 10px 8px;
-    margin:-10px -10px 10px;
+  #nav #tabs{
+    padding:0 10px;
   }
   /* prevent iOS Safari zoom-on-focus */
   #msg-input{font-size:16px}
   .cm-input{font-size:16px}
 }
 
+/* #tabs lives in #nav (Navigation bar); base tab strip layout in #nav #tabs above */
 #tabs{
   display:flex;
   gap:6px;
-  padding:8px 20px 8px;
-  border-bottom:1px solid var(--line);
-  background:var(--bg2);
   align-items:center;
-  margin:-12px -20px 10px;
 }
 
 .tab{
