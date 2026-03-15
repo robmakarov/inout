@@ -84,7 +84,7 @@ try {
 } catch (_) {}
 const scrollBtn  = document.getElementById('scroll-btn');
 const ocNum      = document.getElementById('oc-num');
-const msgCountEl = document.getElementById('msg-count');
+const objectCountEl = document.getElementById('object-count');
 const toastEl    = document.getElementById('toast');
 const userBtn    = document.getElementById('user-btn');
 const umBackdrop = document.getElementById('user-modal-backdrop');
@@ -161,7 +161,7 @@ const logDropupBody  = document.getElementById('log-dropup-body');
   if (back) back.addEventListener('click', function(e) { if (e.target === back) closeUserModalEarly(); });
 })();
 
-let msgCount    = 0;
+let objectCount    = 0;
 let atBottom    = true;
 let presenceCh  = null;
 let toastTimer     = null;
@@ -330,7 +330,7 @@ function toggleRowAtY(feedInner, clientY) {
     }
   }
 }
-let editingMessageId = null;
+let editingObjectId = null;
 let originalEditTextForCancel = null;
 var editTypingUndoStack = [];
 var editTypingCommitTimer = null;
@@ -509,16 +509,16 @@ async function undoLastAction() {
       requestAnimationFrame(() => {
         const frag = document.createDocumentFragment();
         rows.forEach(e => {
-          const row = createMsgRow(e, false);
+          const row = createObjectRow(e, false);
           if (row) {
             frag.appendChild(row);
-            if (e.id != null) currentMessageOrder.push(e.id);
-            msgCount++;
+            if (e.id != null) currentObjectOrder.push(e.id);
+            objectCount++;
           }
         });
         feedInner.appendChild(frag);
-        updateMsgCount();
-        saveMessageOrderForCurrentChannel();
+        updateObjectCount();
+        saveObjectOrderForCurrentChannel();
         applyFieldPrefsToMessages();
         showEmptyIfNoMessages();
         requestAnimationFrame(() => { if (feedEl) feedEl.classList.remove('feed-updating'); });
@@ -537,17 +537,17 @@ async function undoLastAction() {
       requestAnimationFrame(() => {
         const frag = document.createDocumentFragment();
         forCurrent.forEach(e => {
-          const row = createMsgRow(e, false);
+          const row = createObjectRow(e, false);
           if (row) {
             frag.appendChild(row);
-            if (e.id != null) currentMessageOrder.push(e.id);
-            msgCount++;
+            if (e.id != null) currentObjectOrder.push(e.id);
+            objectCount++;
           }
         });
         if (frag.childNodes.length) feedInner.appendChild(frag);
         if (forCurrent.length) {
-          saveMessageOrderForCurrentChannel();
-          applyMessageOrderToDOM();
+          saveObjectOrderForCurrentChannel();
+          applyObjectOrderToDOM();
           applyFieldPrefsToMessages();
         }
         showEmptyIfNoMessages();
@@ -565,10 +565,10 @@ async function undoLastAction() {
           const el = feedInner.querySelector('.msg[data-id="' + CSS.escape(String(id)) + '"]');
           if (el) el.remove();
         });
-        currentMessageOrder = currentMessageOrder.filter(x => !ids.includes(x));
-        msgCount = Math.max(0, msgCount - ids.length);
-        updateMsgCount();
-        saveMessageOrderForCurrentChannel();
+        currentObjectOrder = currentObjectOrder.filter(x => !ids.includes(x));
+        objectCount = Math.max(0, objectCount - ids.length);
+        updateObjectCount();
+        saveObjectOrderForCurrentChannel();
         showEmptyIfNoMessages();
         requestAnimationFrame(() => { if (feedEl) feedEl.classList.remove('feed-updating'); });
       });
@@ -581,7 +581,7 @@ async function undoLastAction() {
           .eq('user_id', currentUser.id)
           .eq('id', e.id);
       }));
-      rows.forEach(e => { updateMessageRowText(e.id, e.beforeText); });
+      rows.forEach(e => { updateObjectRowMessage(e.id, e.beforeText); });
       toast('Undid last action.');
       return;
     } else if (action.type === 'view' && action.before && action.channel) {
@@ -598,9 +598,9 @@ async function undoLastAction() {
       loadMessages().catch(() => {});
       return;
     } else if (action.type === 'order' && Array.isArray(action.before)) {
-      currentMessageOrder = action.before.slice();
-      await saveMessageOrderForCurrentChannel();
-      applyMessageOrderToDOM();
+      currentObjectOrder = action.before.slice();
+      await saveObjectOrderForCurrentChannel();
+      applyObjectOrderToDOM();
       toast('Undid last action.');
       return;
     } else {
@@ -617,8 +617,8 @@ async function undoLastAction() {
 function updateEditingRowHighlight() {
   if (!feedInner) return;
   feedInner.querySelectorAll('.msg.msg-editing').forEach(r => r.classList.remove('msg-editing'));
-  if (editingMessageId != null) {
-    const row = feedInner.querySelector('.msg[data-id="' + CSS.escape(String(editingMessageId)) + '"]');
+  if (editingObjectId != null) {
+    const row = feedInner.querySelector('.msg[data-id="' + CSS.escape(String(editingObjectId)) + '"]');
     if (row) row.classList.add('msg-editing');
   }
 }
@@ -626,11 +626,11 @@ function updateEditingRowHighlight() {
 /** Input mode is default and reactivates after every operation; only edit mode interrupts it. */
 function reactivateInputMode(opts) {
   opts = opts || {};
-  if (editingMessageId != null && originalEditTextForCancel != null) {
-    updateMessageRowText(editingMessageId, originalEditTextForCancel);
+  if (editingObjectId != null && originalEditTextForCancel != null) {
+    updateObjectRowMessage(editingObjectId, originalEditTextForCancel);
   }
   originalEditTextForCancel = null;
-  editingMessageId = null;
+  editingObjectId = null;
   editTypingUndoStack = [];
   if (editTypingCommitTimer) {
     clearTimeout(editTypingCommitTimer);
@@ -655,7 +655,7 @@ function reactivateInputMode(opts) {
 function cancelEditingMode(clearInput) {
   reactivateInputMode({ clearInput: !!clearInput });
 }
-let currentMessageOrder = [];
+let currentObjectOrder = [];
 let touchDragState = null; // for mobile long-press drag
 let dragDropHandled = false;
 let savedOrderBeforeDrag = [];
@@ -879,7 +879,7 @@ function init(done) {
       feedInner.innerHTML = '';
       if (emptyEl && emptyEl.parentNode) emptyEl.remove();
       showEmptyIfNoMessages();
-      if (msgCountEl) updateMsgCount();
+      if (objectCountEl) updateObjectCount();
     }
   } catch (_) {}
   try { setupAuthListener(); } catch (_) {}
@@ -979,7 +979,7 @@ document.addEventListener('keydown', e => {
   // Ctrl/Cmd+Z → undo; Ctrl/Cmd+Shift+Z → redo when typing in edit mode.
   const isUndoKey = (e.key === 'z' || e.key === 'Z') && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey;
   const isRedoKey = (e.key === 'z' || e.key === 'Z') && (e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey;
-  if (isUndoKey && editingMessageId != null && editTypingUndoStack.length > 1) {
+  if (isUndoKey && editingObjectId != null && editTypingUndoStack.length > 1) {
     e.preventDefault();
     var last = editTypingUndoStack.pop();
     editTypingRedoStack.push(last);
@@ -992,7 +992,7 @@ document.addEventListener('keydown', e => {
     if (currentUser) broadcastDraft(input.value);
     return;
   }
-  if (isRedoKey && editingMessageId != null && editTypingRedoStack.length > 0) {
+  if (isRedoKey && editingObjectId != null && editTypingRedoStack.length > 0) {
     e.preventDefault();
     var next = editTypingRedoStack.pop();
     editTypingUndoStack.push(next);
@@ -1063,7 +1063,7 @@ async function fetchMessagesList() {
   }
   const { data, error } = await query.order('created_at', { ascending: true }).limit(100);
   if (error) { console.error(error); return []; }
-  return data && data.length > 0 ? sortMessagesByOrder(data, currentMessageOrder) : [];
+  return data && data.length > 0 ? sortObjectsByOrder(data, currentObjectOrder) : [];
 }
 
 async function loadMessages() {
@@ -1075,21 +1075,21 @@ async function replaceFeedWithList(list) {
   if (!feedInner) return;
   seenIds.clear();
   globalMsgNum = 0;
-  msgCount = 0;
+  objectCount = 0;
   const frag = document.createDocumentFragment();
   for (const msg of list) {
-    const row = createMsgRow(msg, false);
+    const row = createObjectRow(msg, false);
     if (row) frag.appendChild(row);
   }
   const hasRows = frag.childNodes.length > 0;
-  msgCount = hasRows ? frag.childNodes.length : 0;
+  objectCount = hasRows ? frag.childNodes.length : 0;
   /* Table visual: same as feed for now (to be corrected later). */
   feedInner.classList.remove('view-table');
   if (hasRows) {
     requestAnimationFrame(() => {
       if (feedInner) {
         feedInner.replaceChildren(frag);
-        updateMsgCount();
+        updateObjectCount();
         applyFieldPrefsToMessages();
         var saved = channelScroll.get(currentChannel);
         if (feedEl && typeof saved === 'number' && saved >= 0) {
@@ -1101,7 +1101,7 @@ async function replaceFeedWithList(list) {
   } else {
     if (emptyEl) feedInner.replaceChildren(emptyEl);
     else feedInner.replaceChildren();
-    updateMsgCount();
+    updateObjectCount();
   }
 }
 
@@ -1136,20 +1136,21 @@ function subscribeRealtimeAll() {
   });
 }
 
-function updateMessageRowText(msgId, text) {
-  if (!feedInner || msgId == null) return;
-  const idStr = String(msgId);
+/** Update the message property (primary value) of an object row in the view. */
+function updateObjectRowMessage(objId, messageValue) {
+  if (!feedInner || objId == null) return;
+  const idStr = String(objId);
   const el = feedInner.querySelector('.msg[data-id="' + CSS.escape(idStr) + '"]');
   if (!el) return;
   const textEl = el.querySelector('.msg-text');
   if (!textEl) return;
-  textEl.innerHTML = linkify(escapeHtml(text || ''));
+  textEl.innerHTML = linkify(escapeHtml(messageValue || ''));
 }
 
 /** Doppelganger: mirror of main input with same value, style, cursor and selection. */
 function updateEditingRowFromInput() {
-  if (!feedInner || editingMessageId == null || !input) return;
-  const idStr = String(editingMessageId);
+  if (!feedInner || editingObjectId == null || !input) return;
+  const idStr = String(editingObjectId);
   const el = feedInner.querySelector('.msg[data-id="' + CSS.escape(idStr) + '"]');
   if (!el) return;
   const textEl = el.querySelector('.msg-text');
@@ -1172,7 +1173,7 @@ function updateEditingRowFromInput() {
 
 function commitTypingSegment() {
   editTypingCommitTimer = null;
-  if (editingMessageId == null || !input) return;
+  if (editingObjectId == null || !input) return;
   var t = input.value;
   if (editTypingUndoStack[editTypingUndoStack.length - 1] !== t) {
     editTypingUndoStack.push(t);
@@ -1186,13 +1187,13 @@ function onUpdateForChannel(ch, row) {
   const id = row.id != null ? row.id : row.Id;
   if (id == null) return;
   const text = row.text != null ? row.text : (row.Text != null ? row.Text : '');
-  if (id === editingMessageId) {
+  if (id === editingObjectId) {
     originalEditTextForCancel = null;
-    editingMessageId = null;
+    editingObjectId = null;
     try { localStorage.removeItem(WAS_EDITING_KEY); } catch (_) {}
     if (input) input.placeholder = 'Say something…';
   }
-  updateMessageRowText(id, text);
+  updateObjectRowMessage(id, text);
   updateEditingRowHighlight();
 }
 
@@ -1218,7 +1219,7 @@ function subscribeOrderRealtime() {
         if (suppressNextOrderApply) { suppressNextOrderApply = false; return; }
         if (Date.now() < suppressOrderApplyUntil) return;
         await loadMessageOrderForCurrentChannel();
-        applyMessageOrderToDOM();
+        applyObjectOrderToDOM();
       }
     )
     .subscribe();
@@ -1248,11 +1249,11 @@ function subscribeViewRealtime() {
         const cfg = row.config || {};
         // Update order
         if (Array.isArray(cfg.order)) {
-          currentMessageOrder = cfg.order
+          currentObjectOrder = cfg.order
             .map(x => Number(x))
             .filter(x => Number.isFinite(x));
           saveOrderToLocal();
-          applyMessageOrderToDOM();
+          applyObjectOrderToDOM();
         }
         // Update field prefs
         const defTime = true;
@@ -1320,8 +1321,8 @@ function onInsertForChannel(ch, msg) {
   if (ch === currentChannel) {
         hideEmpty();
     appendMsg(msg, true);
-        msgCount++;
-        updateMsgCount();
+        objectCount++;
+        updateObjectCount();
     // Always keep the newest message visible (messenger behavior).
           requestAnimationFrame(scrollBottom);
     return;
@@ -1371,7 +1372,7 @@ function setupDraftChannel() {
       const editingId = data.editingId != null ? Number(data.editingId) : null;
       latestRemoteDraft = text;
       if (editingId != null && Number.isFinite(editingId)) {
-        updateMessageRowText(editingId, text);
+        updateObjectRowMessage(editingId, text);
       }
       if (text && !editingId) {
         showDraftBubble(text);
@@ -1399,7 +1400,7 @@ function broadcastDraft(text) {
     payload: {
       from: myId,
       text: text || '',
-      editingId: editingMessageId != null ? editingMessageId : null
+      editingId: editingObjectId != null ? editingObjectId : null
     }
   });
 }
@@ -1530,9 +1531,9 @@ function setupDndBroadcastChannel() {
         var movedIds = Array.isArray(data.movedIds) ? data.movedIds.map(function(x) { return Number(x); }).filter(function(x) { return Number.isFinite(x); }) : [];
         if (!newOrder.length) return;
         suppressOrderApplyUntil = Date.now() + 800;
-        currentMessageOrder = newOrder;
+        currentObjectOrder = newOrder;
         saveOrderToLocal();
-        applyMessageOrderToDOM();
+        applyObjectOrderToDOM();
         var inner = document.getElementById('feed-inner');
         if (inner && movedIds.length) {
           var stagger = 30;
@@ -1982,7 +1983,7 @@ function saveFieldPrefsForCurrentChannel() {
   // Also persist into unified view config so other devices see it.
   if (currentUser) {
     const cfg = {
-      order: currentMessageOrder.slice(),
+      order: currentObjectOrder.slice(),
       showTime: !!fieldPrefs.showTime,
       showAuthor: !!fieldPrefs.showAuthor,
       viewMode: fieldPrefs.viewMode === 'table' ? 'table' : 'feed',
@@ -2120,9 +2121,9 @@ function setupTouchDragHandlers() {
     dndOriginLineY = null;
     broadcastDndEnd();
     recomputeOrderFromDOM();
-    saveMessageOrderForCurrentChannel();
+    saveObjectOrderForCurrentChannel();
     if (droppedMovedIdsTouch.length && dndBroadcastChannel && dndChannelReady) {
-      broadcastDndDropped(currentMessageOrder.slice(), droppedMovedIdsTouch);
+      broadcastDndDropped(currentObjectOrder.slice(), droppedMovedIdsTouch);
     }
     applyFieldPrefsToMessages();
     r.style.pointerEvents = 'none';
@@ -2168,17 +2169,18 @@ function createMsgHeaderRow() {
   return row;
 }
 
-function createMsgRow(msg, isNew) {
-  if (msg && typeof msg.id !== 'undefined') {
-    if (seenIds.has(msg.id)) return null;
-    seenIds.add(msg.id);
+/** Create one object row (DOM) from object data; message is obj.text. */
+function createObjectRow(obj, isNew) {
+  if (obj && typeof obj.id !== 'undefined') {
+    if (seenIds.has(obj.id)) return null;
+    seenIds.add(obj.id);
   }
   // remove empty state
   if (emptyEl.parentNode) emptyEl.remove();
 
   const row  = document.createElement('div');
   row.className = 'msg' + (isNew ? ' new-flash' : '');
-  if (typeof msg.id !== 'undefined') row.dataset.id = String(msg.id);
+  if (typeof obj.id !== 'undefined') row.dataset.id = String(obj.id);
   row.draggable = true;
   row.addEventListener('dragstart', e => {
     if (pointerDownOnSelectArea) {
@@ -2187,7 +2189,7 @@ function createMsgRow(msg, isNew) {
       return;
     }
     if (dragSpiritEl && dragSpiritEl.parentNode) dragSpiritEl.parentNode.removeChild(dragSpiritEl);
-    if (feedInner && selectedIds.has(msg.id) && selectedIds.size > 1) {
+    if (feedInner && selectedIds.has(obj.id) && selectedIds.size > 1) {
       dragSelectedRows = Array.from(feedInner.querySelectorAll('.msg.msg-selected'));
     } else {
       dragSelectedRows = [row];
@@ -2278,8 +2280,8 @@ function createMsgRow(msg, isNew) {
     if (dragImageEl.parentNode !== document.body) document.body.appendChild(dragImageEl);
     e.dataTransfer.setDragImage(dragImageEl, -9999, -9999);
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', typeof msg.text === 'string' ? msg.text : '');
-    if (typeof msg.id !== 'undefined') e.dataTransfer.setData('application/x-inout-msg-id', String(msg.id));
+    e.dataTransfer.setData('text/plain', typeof obj.text === 'string' ? obj.text : '');
+    if (typeof obj.id !== 'undefined') e.dataTransfer.setData('application/x-inout-msg-id', String(obj.id));
     dragSelectedRows.forEach(function(r) {
       if (dragSelectedRows.length > 1) r.classList.add('msg-drag-group');
       r.classList.add('dragging-in-feed');
@@ -2308,7 +2310,7 @@ function createMsgRow(msg, isNew) {
     lastDragClientY = typeof e.clientY === 'number' ? e.clientY : null;
     showOriginGhostOverlay(dragSelectedRows.slice());
     if (document.body) document.body.classList.add('dnd-active');
-    savedOrderBeforeDrag = currentMessageOrder.slice();
+    savedOrderBeforeDrag = currentObjectOrder.slice();
     dragDropHandled = false;
     if (feedInner) feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
     hideRemoteDndLines();
@@ -2383,14 +2385,14 @@ function createMsgRow(msg, isNew) {
         const domOrder = feedInner ? Array.from(feedInner.querySelectorAll('.msg')).map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id)) : [];
         const orderChanged = !dragDropHandled && domOrder.length === savedOrderBeforeDrag.length && domOrder.some((id, i) => id !== savedOrderBeforeDrag[i]);
         if (!dragDropHandled && !orderChanged) {
-          currentMessageOrder = savedOrderBeforeDrag.slice();
-          applyMessageOrderToDOM();
-          saveMessageOrderForCurrentChannel();
+          currentObjectOrder = savedOrderBeforeDrag.slice();
+          applyObjectOrderToDOM();
+          saveObjectOrderForCurrentChannel();
         } else {
           recomputeOrderFromDOM();
-          saveMessageOrderForCurrentChannel();
+          saveObjectOrderForCurrentChannel();
           if (droppedMovedIds.length && dndBroadcastChannel && dndChannelReady) {
-            broadcastDndDropped(currentMessageOrder.slice(), droppedMovedIds);
+            broadcastDndDropped(currentObjectOrder.slice(), droppedMovedIds);
           }
         }
         applyFieldPrefsToMessages();
@@ -2438,7 +2440,7 @@ function createMsgRow(msg, isNew) {
     touchDragState.timer = setTimeout(() => {
       if (!touchDragState || touchDragState.row !== row) return;
       touchDragState.started = true;
-      if (feedInner && selectedIds.has(msg.id) && selectedIds.size > 1) {
+      if (feedInner && selectedIds.has(obj.id) && selectedIds.size > 1) {
         dragSelectedRows = Array.from(feedInner.querySelectorAll('.msg.msg-selected'));
       } else {
         dragSelectedRows = [row];
@@ -2469,8 +2471,8 @@ function createMsgRow(msg, isNew) {
   actionDelete.textContent = 'Del';
   actionDelete.addEventListener('click', e => {
     e.stopPropagation();
-    if (!msg.id) return;
-    deleteSingleMessage(msg.id);
+    if (!obj.id) return;
+    deleteSingleMessage(obj.id);
   });
 
   const actionMove = document.createElement('button');
@@ -2478,8 +2480,8 @@ function createMsgRow(msg, isNew) {
   actionMove.textContent = 'Move';
   actionMove.addEventListener('click', e => {
     e.stopPropagation();
-    if (!msg.id) return;
-    moveSingleMessage(msg.id);
+    if (!obj.id) return;
+    moveSingleMessage(obj.id);
   });
 
   const actionExport = document.createElement('button');
@@ -2487,8 +2489,8 @@ function createMsgRow(msg, isNew) {
   actionExport.textContent = 'Exp';
   actionExport.addEventListener('click', e => {
     e.stopPropagation();
-    if (!msg.id) return;
-    exportSingleMessage(msg.id);
+    if (!obj.id) return;
+    exportSingleMessage(obj.id);
   });
 
   const actionCopy = document.createElement('button');
@@ -2496,9 +2498,9 @@ function createMsgRow(msg, isNew) {
   actionCopy.textContent = 'Copy';
   actionCopy.addEventListener('click', e => {
     e.stopPropagation();
-    if (!msg.text) return;
+    if (!obj.text) return;
     try {
-      navigator.clipboard.writeText(msg.text);
+      navigator.clipboard.writeText(obj.text);
       toast('Message copied.');
     } catch (err) {
       console.error(err);
@@ -2511,10 +2513,10 @@ function createMsgRow(msg, isNew) {
   actionCut.textContent = 'Cut';
   actionCut.addEventListener('click', e => {
     e.stopPropagation();
-    if (!msg.id || !msg.text) return;
+    if (!obj.id || !obj.text) return;
     try {
-      navigator.clipboard.writeText(msg.text);
-      deleteSingleMessage(msg.id);
+      navigator.clipboard.writeText(obj.text);
+      deleteSingleMessage(obj.id);
       toast('Message cut.');
     } catch (err) {
       console.error(err);
@@ -2530,15 +2532,15 @@ function createMsgRow(msg, isNew) {
 
   const sender = document.createElement('div');
   sender.className = 'msg-sender';
-  if (msg.author_name) {
-    sender.textContent = String(msg.author_name);
-  } else if (msg.user_id && currentUser && msg.user_id === currentUser.id) {
+  if (obj.author_name) {
+    sender.textContent = String(obj.author_name);
+  } else if (obj.user_id && currentUser && obj.user_id === currentUser.id) {
     const nick = currentUser.user_metadata && currentUser.user_metadata.nickname
       ? String(currentUser.user_metadata.nickname)
       : 'you';
     sender.textContent = nick;
-  } else if (msg.user_id) {
-    sender.textContent = String(msg.user_id);
+  } else if (obj.user_id) {
+    sender.textContent = String(obj.user_id);
   } else {
     sender.textContent = 'unknown';
   }
@@ -2547,7 +2549,7 @@ function createMsgRow(msg, isNew) {
     sender.textContent = fullLabel.slice(0, 10) + '…';
   }
 
-  const isMainFeed = (msg.channel && msg.channel === 'main') || (!msg.channel && currentChannel === 'main');
+  const isMainFeed = (obj.channel && obj.channel === 'main') || (!obj.channel && currentChannel === 'main');
   const wantAuthor = !isMainFeed && (!!fieldPrefs ? !!fieldPrefs.showAuthor : true);
   sender.style.setProperty('display', wantAuthor ? 'flex' : 'none', 'important');
 
@@ -2557,12 +2559,12 @@ function createMsgRow(msg, isNew) {
   selectBox.type = 'checkbox';
   selectBox.className = 'msg-select';
   selectBox.addEventListener('change', () => {
-    if (!msg.id) return;
+    if (!obj.id) return;
     if (selectBox.checked) {
-      selectedIds.add(msg.id);
+      selectedIds.add(obj.id);
       row.classList.add('msg-selected');
     } else {
-      selectedIds.delete(msg.id);
+      selectedIds.delete(obj.id);
       row.classList.remove('msg-selected');
     }
     updateSelectionUI();
@@ -2585,10 +2587,10 @@ function createMsgRow(msg, isNew) {
     e.stopPropagation();
     selectBox.checked = !selectBox.checked;
     if (selectBox.checked) {
-      selectedIds.add(msg.id);
+      selectedIds.add(obj.id);
       row.classList.add('msg-selected');
     } else {
-      selectedIds.delete(msg.id);
+      selectedIds.delete(obj.id);
       row.classList.remove('msg-selected');
     }
     if (!selectMode) {
@@ -2598,7 +2600,7 @@ function createMsgRow(msg, isNew) {
     updateSelectionUI();
   }, true);
   checkboxZone.addEventListener('mousedown', e => {
-    if (!msg.id) return;
+    if (!obj.id) return;
     pointerDownOnSelectArea = true;
     dragSelectJustEnded = false;
     dragSelectToggledByTouch = false;
@@ -2646,7 +2648,7 @@ function createMsgRow(msg, isNew) {
     document.addEventListener('mouseup', onDocUp, true);
   });
   checkboxZone.addEventListener('touchstart', e => {
-    if (!msg.id || e.touches.length !== 1) return;
+    if (!obj.id || e.touches.length !== 1) return;
     pointerDownOnSelectArea = true;
     dragSelectJustEnded = false;
     dragSelectToggledByTouch = false;
@@ -2705,9 +2707,9 @@ function createMsgRow(msg, isNew) {
     document.addEventListener('touchcancel', onDocTouchEnd, true);
   }, { passive: true });
 
-  /* long-press on message row (anywhere except checkbox-zone/actions/links) starts drag-select; any movement before delay cancels so reorder doesn't trigger */
+  /* long-press on object row (anywhere except checkbox-zone/actions/links) starts drag-select */
   row.addEventListener('mousedown', e => {
-    if (!msg.id) return;
+    if (!obj.id) return;
     if (e.target.closest('.msg-checkbox-zone, .msg-actions') || (e.target.closest('a') && e.target.closest('.msg-text'))) return;
     const startY = e.clientY;
     const state = { started: false, mode: null, startRowStates: null, startYContent: null, didWeMove: false };
@@ -2762,7 +2764,7 @@ function createMsgRow(msg, isNew) {
     document.addEventListener('mousemove', onDocMove, true);
   });
   row.addEventListener('touchstart', e => {
-    if (!msg.id || e.touches.length !== 1) return;
+    if (!obj.id || e.touches.length !== 1) return;
     if (e.target.closest('.msg-checkbox-zone, .msg-actions') || (e.target.closest('a') && e.target.closest('.msg-text'))) return;
     const startY = e.touches[0].clientY;
     const state = { started: false, mode: null, startRowStates: null, startYContent: null, didWeMove: false };
@@ -2827,28 +2829,28 @@ function createMsgRow(msg, isNew) {
 
   const time = document.createElement('div');
   time.className = 'msg-time';
-  time.textContent = formatTime(msg.created_at);
+  time.textContent = formatTime(obj.created_at);
   if (fieldPrefs) time.style.setProperty('display', fieldPrefs.showTime ? 'block' : 'none', 'important');
 
   const text = document.createElement('div');
   text.className = 'msg-text';
-  text.innerHTML = linkify(escapeHtml(msg.text));
+  text.innerHTML = linkify(escapeHtml(obj.text));
   text.addEventListener('click', e => {
     if (e.target.closest('a')) return;
     e.stopPropagation();
-    if (typeof msg.id === 'undefined') return;
-    if (selectMode && editingMessageId) {
+    if (typeof obj.id === 'undefined') return;
+    if (selectMode && editingObjectId) {
       cancelEditingMode(true);
       return;
     }
-    if (Number(msg.id) === Number(editingMessageId)) {
+    if (Number(obj.id) === Number(editingObjectId)) {
       cancelEditingMode(true);
       return;
     }
-    input.value = msg.text || '';
-    editingMessageId = msg.id;
-    originalEditTextForCancel = msg.text || '';
-    editTypingUndoStack = [msg.text || ''];
+    input.value = obj.text || '';
+    editingObjectId = obj.id;
+    originalEditTextForCancel = obj.text || '';
+    editTypingUndoStack = [obj.text || ''];
     editTypingRedoStack = [];
     if (editTypingCommitTimer) {
       clearTimeout(editTypingCommitTimer);
@@ -2876,17 +2878,17 @@ function createMsgRow(msg, isNew) {
       e.stopPropagation();
       selectBox.checked = !selectBox.checked;
       if (selectBox.checked) {
-        selectedIds.add(msg.id);
+        selectedIds.add(obj.id);
         row.classList.add('msg-selected');
   } else {
-        selectedIds.delete(msg.id);
+        selectedIds.delete(obj.id);
         row.classList.remove('msg-selected');
       }
       updateSelectionUI();
       return;
     }
-    if (!editingMessageId) return;
-    if (String(row.dataset.id) !== String(editingMessageId)) return;
+    if (!editingObjectId) return;
+    if (String(row.dataset.id) !== String(editingObjectId)) return;
     if (e.target.closest('button, a, .msg-actions, .msg-select, .msg-select-wrap')) return;
     e.stopPropagation();
     e.preventDefault();
@@ -2914,7 +2916,7 @@ function createMsgRow(msg, isNew) {
 }
 
 function appendMsg(msg, isNew) {
-  const row = createMsgRow(msg, isNew);
+  const row = createObjectRow(msg, isNew);
   if (!row) return;
   feedInner.appendChild(row);
   // Ensure new messages respect the current view (time/author) settings.
@@ -2922,14 +2924,14 @@ function appendMsg(msg, isNew) {
   if (typeof msg.id !== 'undefined') {
     const idNum = Number(msg.id);
     if (Number.isFinite(idNum)) {
-      currentMessageOrder = currentMessageOrder.filter(x => x !== idNum);
-      currentMessageOrder.push(idNum);
-      saveMessageOrderForCurrentChannel();
+      currentObjectOrder = currentObjectOrder.filter(x => x !== idNum);
+      currentObjectOrder.push(idNum);
+      saveObjectOrderForCurrentChannel();
     }
   }
 }
 
-function sortMessagesByOrder(list, order) {
+function sortObjectsByOrder(list, order) {
   if (!Array.isArray(list) || list.length === 0) return list;
   if (!Array.isArray(order) || order.length === 0) return list;
   const byId = new Map();
@@ -2948,7 +2950,7 @@ function renderInitialMessages(list) {
   hideEmpty();
   const frag = document.createDocumentFragment();
   for (const msg of list) {
-    const row = createMsgRow(msg, false);
+    const row = createObjectRow(msg, false);
     if (row) frag.appendChild(row);
   }
   requestAnimationFrame(() => {
@@ -2978,7 +2980,7 @@ function saveOrderToLocal() {
     const raw = localStorage.getItem(ORDER_STATE_KEY);
     const map = raw ? JSON.parse(raw) : {};
     const key = currentUser ? (currentUser.id + '::' + currentChannel) : ('anon::' + currentChannel);
-    map[key] = (currentMessageOrder || []).slice();
+    map[key] = (currentObjectOrder || []).slice();
     localStorage.setItem(ORDER_STATE_KEY, JSON.stringify(map));
   } catch (_) {}
 }
@@ -2989,8 +2991,8 @@ function hideEmpty() {
   if (emptyEl.parentNode) emptyEl.remove();
 }
 
-function updateMsgCount() {
-  msgCountEl.textContent = msgCount + (msgCount === 1 ? ' object' : ' objects');
+function updateObjectCount() {
+  objectCountEl.textContent = objectCount + (objectCount === 1 ? ' object' : ' objects');
 }
 
 /* ═══ TABS ════════════════════════════════════════════════ */
@@ -3055,7 +3057,7 @@ function saveChannelsList() {
 }
 
 async function loadMessageOrderForCurrentChannel() {
-  currentMessageOrder = [];
+  currentObjectOrder = [];
   // 1) Try unified view object (if table exists and user is signed in).
   if (currentUser) {
     try {
@@ -3069,7 +3071,7 @@ async function loadMessageOrderForCurrentChannel() {
       if (!error && data && data.config) {
         const cfg = data.config || {};
         const orderArr = Array.isArray(cfg.order) ? cfg.order : [];
-        currentMessageOrder = orderArr
+        currentObjectOrder = orderArr
           .map(x => Number(x))
           .filter(x => Number.isFinite(x));
         // Pull view rules into fieldPrefs and mirror into local storage.
@@ -3090,7 +3092,7 @@ async function loadMessageOrderForCurrentChannel() {
     }
   }
   // 2) If no view-based order, fall back to legacy message_orders + local.
-  if (!currentMessageOrder.length && currentUser) {
+  if (!currentObjectOrder.length && currentUser) {
     try {
       const { data, error } = await sb
         .from('message_orders')
@@ -3099,7 +3101,7 @@ async function loadMessageOrderForCurrentChannel() {
         .eq('channel', currentChannel)
         .order('position', { ascending: true });
       if (!error && data && data.length) {
-        currentMessageOrder = data
+        currentObjectOrder = data
           .map(row => Number(row.entry_id))
           .filter(x => Number.isFinite(x));
       }
@@ -3108,8 +3110,8 @@ async function loadMessageOrderForCurrentChannel() {
     }
   }
   // 3) Final fallback: pure local order.
-  if (!currentMessageOrder.length) {
-    currentMessageOrder = loadOrderFromLocal();
+  if (!currentObjectOrder.length) {
+    currentObjectOrder = loadOrderFromLocal();
   }
 }
 
@@ -3117,13 +3119,13 @@ let suppressNextOrderApply = false;
 let suppressNextViewApply = false;
 let suppressOrderApplyUntil = 0; /* ignore realtime order/view applies until this timestamp */
 
-async function saveMessageOrderForCurrentChannel() {
-  if (!currentMessageOrder.length) return;
+async function saveObjectOrderForCurrentChannel() {
+  if (!currentObjectOrder.length) return;
   saveOrderToLocal();
   suppressOrderApplyUntil = Date.now() + 600;
   if (currentUser) {
     try {
-      const rows = currentMessageOrder.map((entryId, index) => ({
+      const rows = currentObjectOrder.map((entryId, index) => ({
         user_id: currentUser.id,
         channel: currentChannel,
         entry_id: entryId,
@@ -3139,7 +3141,7 @@ async function saveMessageOrderForCurrentChannel() {
   if (currentUser) {
     try {
       const cfg = {
-        order: currentMessageOrder.slice(),
+        order: currentObjectOrder.slice(),
         showTime: !!fieldPrefs.showTime,
         showAuthor: !!fieldPrefs.showAuthor,
         viewMode: fieldPrefs.viewMode === 'table' ? 'table' : 'feed',
@@ -3155,24 +3157,24 @@ async function saveMessageOrderForCurrentChannel() {
 
 function recomputeOrderFromDOM() {
   if (!feedInner) return;
-  pushUndo({ type: 'order', before: (currentMessageOrder || []).slice() });
+  pushUndo({ type: 'order', before: (currentObjectOrder || []).slice() });
   logAction('reorder', { channel: currentChannel });
   const ids = Array.from(feedInner.querySelectorAll('.msg'))
     .map(row => Number(row.dataset.id))
     .filter(id => Number.isFinite(id));
-  currentMessageOrder = ids;
+  currentObjectOrder = ids;
 }
 
-function applyMessageOrderToDOM() {
+function applyObjectOrderToDOM() {
   if (!feedInner) return;
-  if (!currentMessageOrder.length) return;
+  if (!currentObjectOrder.length) return;
   const header = feedInner.querySelector('.msg.msg-header');
   const rows = Array.from(feedInner.querySelectorAll('.msg:not(.msg-header)'));
   if (!rows.length) return;
   // Skip if DOM order already matches — avoids reflow/blink when nothing changed
   const domOrder = rows.map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id));
-  if (domOrder.length === currentMessageOrder.length &&
-      domOrder.every((id, i) => id === currentMessageOrder[i])) return;
+  if (domOrder.length === currentObjectOrder.length &&
+      domOrder.every((id, i) => id === currentObjectOrder[i])) return;
   const byId = new Map();
   rows.forEach(row => {
     const id = Number(row.dataset.id);
@@ -3180,7 +3182,7 @@ function applyMessageOrderToDOM() {
   });
   if (!byId.size) return;
   const frag = document.createDocumentFragment();
-  currentMessageOrder.forEach(id => {
+  currentObjectOrder.forEach(id => {
     const row = byId.get(id);
     if (row) {
       frag.appendChild(row);
@@ -3326,7 +3328,7 @@ async function refreshSharedFlags() {
 async function switchChannel(ch) {
   if (ch === currentChannel) return;
   teardownDndBroadcastChannel();
-  if (editingMessageId != null) cancelEditingMode(true);
+  if (editingObjectId != null) cancelEditingMode(true);
   if (feedEl) {
     channelScroll.set(currentChannel, feedEl.scrollTop);
     saveScrollState();
@@ -3643,7 +3645,7 @@ function updateAuthUI() {
 }
 
 async function reloadForUser() {
-  if (editingMessageId != null) cancelEditingMode(true);
+  if (editingObjectId != null) cancelEditingMode(true);
   await loadMessageOrderForCurrentChannel();
   const list = await fetchMessagesList();
   await replaceFeedWithList(list);
@@ -3667,8 +3669,8 @@ async function reloadForUser() {
 function clearMessages() {
   feedInner.innerHTML = '';
   globalMsgNum = 0;
-  msgCount = 0;
-  updateMsgCount();
+  objectCount = 0;
+  updateObjectCount();
   seenIds.clear();
   if (emptyEl && !emptyEl.parentNode) {
     feedInner.appendChild(emptyEl);
@@ -3777,11 +3779,11 @@ async function sendText(text) {
   sendBtn.disabled = true;
   input.disabled   = true;
 
-  if (editingMessageId) {
+  if (editingObjectId) {
     const { data: before, error: selErr } = await sb
       .from('entries')
       .select('id, created_at, text, channel, user_id, author_name')
-      .eq('id', editingMessageId)
+      .eq('id', editingObjectId)
       .eq('user_id', currentUser.id)
       .maybeSingle();
     if (selErr) {
@@ -3794,7 +3796,7 @@ async function sendText(text) {
     const { data, error } = await sb
       .from('entries')
       .update({ text: trimmed })
-      .eq('id', editingMessageId)
+      .eq('id', editingObjectId)
       .eq('user_id', currentUser.id)
       .select('id, created_at, text, channel, user_id, author_name')
       .single();
@@ -3809,7 +3811,7 @@ async function sendText(text) {
       pushUndo({ type: 'edit', entries: [{ id: before.id, beforeText: before.text, afterText: trimmed }] });
       logAction('edit', { id: before.id });
     }
-    updateMessageRowText(editingMessageId, trimmed);
+    updateObjectRowMessage(editingObjectId, trimmed);
     originalEditTextForCancel = null;
     reactivateInputMode({ clearInput: true });
     return;
@@ -3837,8 +3839,8 @@ async function sendText(text) {
     if (data && data.channel === currentChannel) {
       hideEmpty();
       appendMsg(data, true);
-      msgCount++;
-      updateMsgCount();
+      objectCount++;
+      updateObjectCount();
     }
     if (data) {
       pushUndo({ type: 'send', entries: [data] });
@@ -3868,7 +3870,7 @@ input.addEventListener('input', () => {
   sendBtn.disabled = !input.value.trim();
   saveInputGlobal();
   updateClearInputBtn();
-  if (editingMessageId != null) {
+  if (editingObjectId != null) {
     updateEditingRowFromInput();
     if (editTypingCommitTimer) clearTimeout(editTypingCommitTimer);
     editTypingCommitTimer = setTimeout(commitTypingSegment, TYPING_COMMIT_MS);
@@ -3880,7 +3882,7 @@ input.addEventListener('input', () => {
 
 input.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
-    if (editingMessageId) cancelEditingMode(true);
+    if (editingObjectId) cancelEditingMode(true);
     return;
   }
   if (e.key === 'Enter' && !e.shiftKey) {
@@ -3890,15 +3892,15 @@ input.addEventListener('keydown', e => {
 });
 
 input.addEventListener('click', () => {
-  if (editingMessageId != null) updateEditingRowFromInput();
+  if (editingObjectId != null) updateEditingRowFromInput();
 });
 
 input.addEventListener('keyup', () => {
-  if (editingMessageId != null) updateEditingRowFromInput();
+  if (editingObjectId != null) updateEditingRowFromInput();
 });
 
 input.addEventListener('select', () => {
-  if (editingMessageId != null) updateEditingRowFromInput();
+  if (editingObjectId != null) updateEditingRowFromInput();
 });
 
 sendBtn.addEventListener('click', send);
@@ -4340,8 +4342,8 @@ async function deleteSingleMessage(id) {
     const el = feedInner.querySelector('.msg[data-id="' + id + '"]');
     if (el) el.remove();
     // keep local order in sync
-    currentMessageOrder = currentMessageOrder.filter(x => x !== id);
-    saveMessageOrderForCurrentChannel();
+    currentObjectOrder = currentObjectOrder.filter(x => x !== id);
+    saveObjectOrderForCurrentChannel();
     showEmptyIfNoMessages();
   } catch (e) {
     console.error(e);
@@ -4422,8 +4424,8 @@ async function moveSingleMessage(id, targetChannel) {
     }
     const el = feedInner.querySelector('.msg[data-id="' + CSS.escape(String(id)) + '"]');
     if (el) el.remove();
-    currentMessageOrder = currentMessageOrder.filter(x => x !== id);
-    saveMessageOrderForCurrentChannel();
+    currentObjectOrder = currentObjectOrder.filter(x => x !== id);
+    saveObjectOrderForCurrentChannel();
     showEmptyIfNoMessages();
     return true;
   } catch (e) {
@@ -4497,9 +4499,9 @@ if (exportTabBtn) {
           .map(row => row.dataset.id ? Number(row.dataset.id) : null)
           .filter(id => Number.isFinite(id) && selectedIds.has(id));
       } else {
-        // Whole tab: use current view order (currentMessageOrder), or DOM order if empty.
-        orderedIds = currentMessageOrder.length
-          ? currentMessageOrder.slice()
+        // Whole tab: use current view order (currentObjectOrder), or DOM order if empty.
+        orderedIds = currentObjectOrder.length
+          ? currentObjectOrder.slice()
           : Array.from(feedInner.querySelectorAll('.msg'))
               .map(row => row.dataset.id ? Number(row.dataset.id) : null)
               .filter(id => Number.isFinite(id));
