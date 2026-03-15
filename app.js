@@ -3270,13 +3270,19 @@ function createObjectRow(obj, isNew, options) {
     const idsToEdit = multi ? new Set(selectedIds) : new Set([obj.id]);
     originalEditTextForCancelMap = {};
     editingObjectTextMap = {};
-    idsToEdit.forEach(id => {
-      const el = findObjectRowTextEl(id);
-      let raw = (el && el.textContent) ? el.textContent : '';
-      const badge = el && el.querySelector('.obj-remote-edit-badge');
-      if (badge && badge.textContent) raw = raw.slice(0, -badge.textContent.length);
-      originalEditTextForCancelMap[id] = raw;
-      editingObjectTextMap[id] = raw;
+    /* Read each row's own text from that row's DOM so every object keeps its own doppelganger. */
+    [feedInner, secondaryFeedInner].forEach(fi => {
+      if (!fi) return;
+      fi.querySelectorAll('.obj').forEach(row => {
+        const id = row.dataset.id != null ? Number(row.dataset.id) : null;
+        if (id == null || !idsToEdit.has(id)) return;
+        const textEl = row.querySelector('.obj-text');
+        let raw = (textEl && textEl.textContent) ? textEl.textContent : '';
+        const badge = textEl && textEl.querySelector('.obj-remote-edit-badge');
+        if (badge && badge.textContent) raw = raw.slice(0, -badge.textContent.length);
+        originalEditTextForCancelMap[id] = raw;
+        editingObjectTextMap[id] = raw;
+      });
     });
     input.value = obj.text || '';
     editingObjectId = obj.id;
