@@ -1,6 +1,7 @@
 # DnD (views-agnostic)
 
 DnD is the **interaction tool for reordering mode**: user reorders by dragging; reordering mode is the mode, DnD is how it’s done.
+**Realtime origin/target lines:** When someone drags in a channel, other clients viewing that channel see their origin line and target (drop) line via broadcast (channel `dnd-{channel}`): dnd_start (origin + draggingIds), dnd_move (target, throttled), dnd_end. Remote lines use same tokens (feed-drop-origin, feed-drop-indicator); positions updated on feed scroll/resize; not shown while local user is dragging.
 Use animations.md DnD tokens in feed, table, graph so DnD stays consistent.
 
 **Payload:** object ids only (application/x-inout-msg-id). No view-specific data.

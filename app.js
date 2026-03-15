@@ -884,6 +884,7 @@ function init(done) {
             })();
             subscribeRealtimeAll();
             setupDraftChannel();
+            setupDndBroadcastChannel();
             subscribeOrderRealtime();
             subscribeViewRealtime();
             subscribeActionLog();
@@ -1296,6 +1297,174 @@ function broadcastDraft(text) {
   });
 }
 
+let dndBroadcastChannel = null;
+let remoteDnd = null;
+let remoteDropOriginEl = null;
+let remoteDropTargetEl = null;
+let dndBroadcastThrottle = null;
+
+function getLineRectForInsert(feedEl, feedInner, insertBeforeId, wantAppend) {
+  if (!feedEl || !feedInner) return null;
+  var rows = feedInner.querySelectorAll('.msg');
+  if (!rows.length) return null;
+  var feedRect = feedEl.getBoundingClientRect();
+  var row = null;
+  if (wantAppend || insertBeforeId == null) {
+    row = rows[rows.length - 1];
+  } else {
+    for (var i = 0; i < rows.length; i++) {
+      if (Number(rows[i].dataset.id) === insertBeforeId) { row = rows[i]; break; }
+    }
+  }
+  if (!row) return null;
+  var rect = row.getBoundingClientRect();
+  var top = wantAppend ? rect.bottom : rect.top;
+  if (top < feedRect.top) top = feedRect.top - 2;
+  else if (top > feedRect.bottom) top = feedRect.bottom - 2;
+  else top = top - 2;
+  return { left: feedRect.left, width: feedRect.width, top: top };
+}
+
+var remoteDndScrollResize = null;
+function setupDndBroadcastChannel() {
+  teardownDndBroadcastChannel();
+  if (!currentUser || !currentChannel || !sb) return;
+  remoteDndScrollResize = function() {
+    if (remoteDnd && (remoteDropOriginEl || remoteDropTargetEl)) applyRemoteDndLines();
+  };
+  if (feedEl) feedEl.addEventListener('scroll', remoteDndScrollResize, { passive: true });
+  window.addEventListener('resize', remoteDndScrollResize);
+  var chName = 'dnd-' + currentChannel;
+  dndBroadcastChannel = sb.channel(chName, { config: { broadcast: { self: false } } })
+    .on('broadcast', { event: 'dnd' }, function(payload) {
+      var data = payload.payload || {};
+      if (data.from === myId) return;
+      if (data.channel !== currentChannel) return;
+      if (document.body && document.body.classList.contains('dnd-active')) return; /* don't show remote lines while we're dragging */
+      if (data.type === 'dnd_start') {
+        remoteDnd = { from: data.from, channel: data.channel, origin: data.origin || {}, target: data.origin || {} };
+        applyRemoteDndLines();
+      } else if (data.type === 'dnd_move') {
+        if (remoteDnd && remoteDnd.from === data.from) {
+          remoteDnd.target = data.target || {};
+          applyRemoteDndLines();
+        }
+      } else if (data.type === 'dnd_end') {
+        if (remoteDnd && remoteDnd.from === data.from) {
+          remoteDnd = null;
+          hideRemoteDndLines();
+        }
+      }
+    })
+    .subscribe();
+}
+
+function teardownDndBroadcastChannel() {
+  remoteDnd = null;
+  hideRemoteDndLines();
+  if (remoteDndScrollResize) {
+    if (feedEl) feedEl.removeEventListener('scroll', remoteDndScrollResize);
+    window.removeEventListener('resize', remoteDndScrollResize);
+    remoteDndScrollResize = null;
+  }
+  if (dndBroadcastChannel) {
+    try { dndBroadcastChannel.unsubscribe(); } catch (_) {}
+    dndBroadcastChannel = null;
+  }
+  if (dndBroadcastThrottle) { clearTimeout(dndBroadcastThrottle); dndBroadcastThrottle = null; }
+}
+
+function applyRemoteDndLines() {
+  if (!remoteDnd || !feedEl || !feedInner) return;
+  var origin = remoteDnd.origin;
+  var target = remoteDnd.target;
+  var originRect = getLineRectForInsert(feedEl, feedInner, origin.insertBeforeId, origin.wantAppend);
+  var targetRect = getLineRectForInsert(feedEl, feedInner, target.insertBeforeId, target.wantAppend);
+  if (originRect) {
+    if (!remoteDropOriginEl) {
+      remoteDropOriginEl = document.createElement('div');
+      remoteDropOriginEl.className = 'feed-drop-origin remote-dnd-line';
+      remoteDropOriginEl.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(remoteDropOriginEl);
+    }
+    remoteDropOriginEl.style.left = originRect.left + 'px';
+    remoteDropOriginEl.style.width = originRect.width + 'px';
+    remoteDropOriginEl.style.top = originRect.top + 'px';
+    remoteDropOriginEl.style.height = '2px';
+    remoteDropOriginEl.classList.add('visible');
+  }
+  if (targetRect) {
+    if (!remoteDropTargetEl) {
+      remoteDropTargetEl = document.createElement('div');
+      remoteDropTargetEl.className = 'feed-drop-indicator remote-dnd-line';
+      remoteDropTargetEl.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(remoteDropTargetEl);
+    }
+    remoteDropTargetEl.style.left = targetRect.left + 'px';
+    remoteDropTargetEl.style.width = targetRect.width + 'px';
+    remoteDropTargetEl.style.top = targetRect.top + 'px';
+    remoteDropTargetEl.style.height = '4px';
+    remoteDropTargetEl.classList.add('visible');
+  }
+}
+
+function hideRemoteDndLines() {
+  if (remoteDropOriginEl) {
+    remoteDropOriginEl.classList.remove('visible');
+  }
+  if (remoteDropTargetEl) {
+    remoteDropTargetEl.classList.remove('visible');
+  }
+}
+
+function broadcastDndStart() {
+  if (!dndBroadcastChannel || !currentUser) return;
+  var insertBeforeId = dndOriginInsertBefore ? Number(dndOriginInsertBefore.dataset.id) : null;
+  var draggingIds = (dragSelectedRows && dragSelectedRows.length)
+    ? dragSelectedRows.map(function(r) { return Number(r.dataset.id); }).filter(function(id) { return Number.isFinite(id); })
+    : (row && row.dataset && row.dataset.id ? [Number(row.dataset.id)] : []);
+  dndBroadcastChannel.send({
+    type: 'broadcast',
+    event: 'dnd',
+    payload: {
+      type: 'dnd_start',
+      from: myId,
+      channel: currentChannel,
+      draggingIds: draggingIds,
+      origin: { insertBeforeId: insertBeforeId, wantAppend: dndOriginWantAppend }
+    }
+  });
+}
+
+function broadcastDndMove() {
+  if (!dndBroadcastChannel || !lastReorderTarget) return;
+  var insertBeforeId = lastReorderTarget.insertBefore ? Number(lastReorderTarget.insertBefore.dataset.id) : null;
+  if (dndBroadcastThrottle) return;
+  dndBroadcastThrottle = setTimeout(function() {
+    dndBroadcastThrottle = null;
+    if (!dndBroadcastChannel) return;
+    dndBroadcastChannel.send({
+      type: 'broadcast',
+      event: 'dnd',
+      payload: {
+        type: 'dnd_move',
+        from: myId,
+        channel: currentChannel,
+        target: { insertBeforeId: insertBeforeId, wantAppend: lastReorderTarget.wantAppend }
+      }
+    });
+  }, 80);
+}
+
+function broadcastDndEnd() {
+  if (!dndBroadcastChannel) return;
+  dndBroadcastChannel.send({
+    type: 'broadcast',
+    event: 'dnd',
+    payload: { type: 'dnd_end', from: myId, channel: currentChannel }
+  });
+}
+
 function showDraftBubble(text) {
   if (!draftBubble || !draftBubbleTxt) return;
   draftBubbleTxt.textContent = text;
@@ -1534,6 +1703,26 @@ function setupTouchDragHandlers() {
     const targetRect = target.getBoundingClientRect();
     const before = y < targetRect.top + targetRect.height / 2;
     var insertRef = before ? target : target.nextSibling;
+    lastReorderTarget = { insertBefore: insertRef || null, wantAppend: !insertRef };
+    if (dndBroadcastChannel) {
+      var insertBeforeId = insertRef && insertRef.dataset && insertRef.dataset.id ? Number(insertRef.dataset.id) : null;
+      if (dndBroadcastThrottle) { clearTimeout(dndBroadcastThrottle); }
+      dndBroadcastThrottle = setTimeout(function() {
+        dndBroadcastThrottle = null;
+        if (dndBroadcastChannel) {
+          dndBroadcastChannel.send({
+            type: 'broadcast',
+            event: 'dnd',
+            payload: {
+              type: 'dnd_move',
+              from: myId,
+              channel: currentChannel,
+              target: { insertBeforeId: insertBeforeId, wantAppend: !insertRef }
+            }
+          });
+        }
+      }, 80);
+    }
     if (block.length > 1) {
       var refAfterBlock = block[block.length - 1].nextSibling;
       block.forEach(function(r) { if (r.parentNode === feedInner) feedInner.removeChild(r); });
@@ -1569,6 +1758,10 @@ function setupTouchDragHandlers() {
     touchDragState.started = false;
     touchDragState.row = null;
     touchDragState.originLineShown = false;
+    dndOriginInsertBefore = null;
+    dndOriginWantAppend = false;
+    dndOriginLineY = null;
+    broadcastDndEnd();
     recomputeOrderFromDOM();
     saveMessageOrderForCurrentChannel();
     applyFieldPrefsToMessages();
@@ -1699,6 +1892,7 @@ function createMsgRow(msg, isNew) {
     savedOrderBeforeDrag = currentMessageOrder.slice();
     dragDropHandled = false;
     if (feedInner) feedInner.querySelectorAll('.msg-drag-over').forEach(r => r.classList.remove('msg-drag-over'));
+    broadcastDndStart();
   });
   row.addEventListener('dragend', () => {
     requestAnimationFrame(() => {
@@ -1760,6 +1954,7 @@ function createMsgRow(msg, isNew) {
         dndOriginWantAppend = false;
         dndOriginLineY = null;
         if (dndStackFormTimer) { clearTimeout(dndStackFormTimer); dndStackFormTimer = null; }
+        broadcastDndEnd();
         if (feedInner) feedInner.querySelectorAll('.msg-drag-over, .msg-drag-target, .msg-dnd-stack-form').forEach(r => r.classList.remove('msg-drag-over', 'msg-drag-target', 'msg-drag-nudge-right', 'msg-dnd-stack-form'));
         row.classList.remove('dragging');
         tabsEl.querySelectorAll('.tab.tab-drop-target').forEach(t => t.classList.remove('tab-drop-target'));
@@ -1823,11 +2018,18 @@ function createMsgRow(msg, isNew) {
       } else {
         dragSelectedRows = [row];
       }
+      var block = dragSelectedRows;
+      var lastInBlock = block[block.length - 1];
+      dndOriginInsertBefore = lastInBlock.nextSibling;
+      dndOriginWantAppend = !dndOriginInsertBefore;
+      var firstRect = block[0].getBoundingClientRect();
+      dndOriginLineY = firstRect.top;
       dragSelectedRows.forEach(function(r) {
         if (dragSelectedRows.length > 1) r.classList.add('msg-drag-group');
       });
       row.classList.add('dragging');
       if (document.body) document.body.classList.add('dnd-active');
+      broadcastDndStart();
       /* origin line shown on first touchmove, not here, so it doesn't appear on long-press alone */
     }, 300); // long press threshold
   }, { passive: true });
@@ -2671,6 +2873,7 @@ async function refreshSharedFlags() {
 
 async function switchChannel(ch) {
   if (ch === currentChannel) return;
+  teardownDndBroadcastChannel();
   if (editingMessageId != null) cancelEditingMode(true);
   if (feedEl) {
     channelScroll.set(currentChannel, feedEl.scrollTop);
@@ -2686,6 +2889,7 @@ async function switchChannel(ch) {
   refreshMoveTargets();
   await loadFieldPrefsForCurrentChannel();
   if (currentUser) {
+    setupDndBroadcastChannel();
     ensureMembership().then(reloadForUser);
   } else {
     clearMessages();
@@ -2871,6 +3075,7 @@ async function refreshAuth() {
     renderTabs();
     subscribeRealtimeAll();
     teardownDraftChannel();
+    teardownDndBroadcastChannel();
   }
 }
 
@@ -2887,6 +3092,7 @@ function setupAuthListener() {
       await syncChannelsFromServer();
           await reloadForUser();
           setupDraftChannel();
+          setupDndBroadcastChannel();
         } catch (e) {
           console.error(e);
           renderTabs();
@@ -3054,6 +3260,7 @@ async function signOut() {
   updateAuthUI();
   clearMessages();
   teardownDraftChannel();
+  teardownDndBroadcastChannel();
   sharedChannels.clear();
   unreadCounts.clear();
   renderTabs();
@@ -3877,6 +4084,7 @@ function processFeedDragover(ev) {
     lastIndicatorStyle.width = indWidth;
     lastIndicatorStyle.top = indTop;
     updateEdgeScroll(ev.clientY, ev.clientX);
+    broadcastDndMove();
     return;
   }
   const dragging = feedInner.querySelector('.msg.dragging');
@@ -3986,6 +4194,7 @@ function processFeedDragover(ev) {
       feedDropIndicatorEl.classList.add('visible');
       lastIndicatorStyle.visible = true;
     }
+    broadcastDndMove();
   } else {
     var inFeed = ev.clientX >= feedRect.left && ev.clientX <= feedRect.right && ev.clientY >= feedRect.top && ev.clientY <= feedRect.bottom;
     if (inFeed) {
