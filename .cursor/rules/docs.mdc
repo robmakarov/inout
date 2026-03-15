@@ -13,7 +13,8 @@ alwaysApply: true
 |-------------|--------|
 | Product scope, features, or flows | **documentation/REBUILD.md** (Product, Key flows, DOM, State). |
 | Init order, auth, realtime, or data flow | **documentation/REBUILD.md** + **documentation/architecture.md**. |
-| New or renamed function | **documentation/functions-index.md** (right section). |
+| New or renamed function | **documentation/functions-index.md** + **documentation/CODE-REFERENCE.md** (Functions). |
+| New or renamed variable or constant | **documentation/CODE-REFERENCE.md** (Constants or Variables). |
 | DOM elements, IDs, global state, or who sets them | **documentation/REBUILD.md** + **documentation/ELEMENTS.md**. |
 | CSS variables, breakpoints, or body/class states | **documentation/REBUILD.md** (Styling) + **documentation/styling.md**. |
 | Layout, components, or UI structure | **design-system/components.md**. |

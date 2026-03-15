@@ -26,19 +26,22 @@ No build step. Run: `npx serve -l 4173 .` → `http://localhost:4173`.
 
 ## 3. File layout
 
+All `.md` and `.txt` in the repo are **documentation** (root, documentation/, design-system/). Keep them in sync with code; see .cursor/rules/docs.mdc.
+
 ```
 /
   index.html       # Shell: head (meta, fonts, Supabase script, sb/doSignIn), body (header, nav, multiview, input-area, modals, scroll btn, toast), <link href="/styles.css">, <script src="/app.js">
   styles.css       # All CSS: :root vars, layout, components, DnD, modals, responsive
   app.js           # All app logic: sb client, DOM refs, state, init(), realtime, DnD, edit, send, etc.
   vercel.json      # SPA: /styles.css, /app.js → self; (.*) → index.html
-  README.md        # Overview, run, stack, doc index
-  documentation/
+  README.md        # Overview, run, stack, doc index (documentation)
+  TODO.txt         # Backlog, roadmap (documentation)
+  documentation/   # Documentation: rebuild spec, architecture, ELEMENTS, styling, edge-cases, security, functions-index
     REBUILD.md     # This file — rebuild spec
     README.md      # Doc index
-    architecture.md, ELEMENTS.md, styling.md, edge-cases.md, security.md, functions-index.md  # Deep-dives
-  design-system/
-    components.md, modes.md, animations.md, colors.md, text.md, dnd.md  # UI/UX tokens and behavior
+    architecture.md, ELEMENTS.md, styling.md, edge-cases.md, security.md, functions-index.md
+  design-system/   # Documentation: UI/UX tokens and behavior
+    components.md, modes.md, animations.md, colors.md, text.md, dnd.md
 ```
 
 Supabase URL/anon key: in index.html (inline script) and in app.js fallback. Replace for fork.

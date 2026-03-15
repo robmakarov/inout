@@ -112,9 +112,7 @@ Message rows: class `.obj`, `data-id` = entry id, `draggable="true"`. Checkbox: 
 
 ### Documentation
 
-- **documentation/REBUILD.md** — Single rebuild spec (product, stack, data, init, flows, DOM, state, styling, security).
-- **documentation/ELEMENTS.md** — DOM elements, global state, conditions, functions.
-- **documentation/** — architecture.md, functions-index.md, styling.md, edge-cases.md, security.md. Update relevant doc when changing behavior.
+**Documentation = all `.md` and `.txt` files in the repo** — this README, TODO.txt, **documentation/** (REBUILD.md, architecture, ELEMENTS, styling, edge-cases, security, functions-index), and **design-system/** (components, modes, animations, colors, text, dnd). Keep them in sync with code and each other; see **.cursor/rules/docs.mdc**.
 
 ### Conventions
 
