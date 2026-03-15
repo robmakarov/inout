@@ -16,7 +16,7 @@
   if (typeof supabase === 'undefined') return;
   var url = 'https://tfmbqiwxfgrwtjvoqomf.supabase.co';
   var key = 'sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_';
-  window._sb = window._sb || supabase.createClient(url, key, { auth: { detectSessionInUrl: true } });
+  window._sb = window._sb || supabase.createClient(url, key, { auth: { detectSessionInUrl: true, flowType: 'pkce' } });
   if (!window.sb) window.sb = window._sb;
   window.doSignIn = function() {
     var s = window.sb || window._sb;

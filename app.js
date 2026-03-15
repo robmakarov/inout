@@ -17,10 +17,34 @@ const SUPABASE_ANON = 'sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_';
 var sb = null;
 try {
   if (typeof supabase !== 'undefined') {
-    sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, { auth: { detectSessionInUrl: true } });
+    sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+      auth: {
+        detectSessionInUrl: true,
+        flowType: 'pkce'
+      }
+    });
   }
 } catch(e) {}
 if (typeof window !== 'undefined') window.sb = sb;
+
+/* Run OAuth callback (code exchange) as soon as client exists so URL is still intact */
+var _oauthCallbackPromise = null;
+if (sb && sb.auth && typeof location !== 'undefined' && location.search && location.search.includes('code=')) {
+  (function runCodeExchange() {
+    var params = new URLSearchParams(location.search);
+    var code = params.get('code');
+    if (!code || typeof sb.auth.exchangeCodeForSession !== 'function') return;
+    _oauthCallbackPromise = sb.auth.exchangeCodeForSession(code).then(function(result) {
+      if (result && result.data && result.data.session) {
+        try { history.replaceState(null, '', location.pathname || '/'); } catch (_) {}
+      }
+      return result;
+    }).catch(function(e) {
+      console.error('OAuth code exchange failed', e);
+      return null;
+    });
+  })();
+}
 (function attachAuthButtonEarly() {
   var btn = document.getElementById('um-auth-btn');
   if (!btn) return;
@@ -3475,25 +3499,38 @@ async function ensureMembership() {
 /** Run when returning from OAuth redirect: exchange code for session or wait for URL to be processed. */
 async function ensureOAuthCallbackProcessed() {
   if (!sb || !sb.auth) return;
+  if (_oauthCallbackPromise) {
+    await _oauthCallbackPromise;
+    _oauthCallbackPromise = null;
+    await new Promise(function(r) { setTimeout(r, 80); });
+    return;
+  }
   var hasCode = typeof location !== 'undefined' && location.search && location.search.includes('code=');
   var hasHash = typeof location !== 'undefined' && location.hash && (location.hash.includes('access_token=') || location.hash.includes('code='));
   if (hasCode) {
-    try {
-      var params = new URLSearchParams(location.search);
-      var code = params.get('code');
-      if (code && typeof sb.auth.exchangeCodeForSession === 'function') {
+    var params = new URLSearchParams(location.search);
+    var code = params.get('code');
+    if (code && typeof sb.auth.exchangeCodeForSession === 'function') {
+      try {
         var result = await sb.auth.exchangeCodeForSession(code);
-        if (result && result.data && result.data.session) {
-          try { history.replaceState(null, '', location.pathname || '/'); } catch (_) {}
+        if (result && result.error) {
+          console.error('OAuth code exchange error', result.error);
+          if (typeof toast === 'function') toast('Sign-in failed — ' + (result.error.message || 'try again'));
           return;
         }
+        if (result && result.data && result.data.session) {
+          try { history.replaceState(null, '', location.pathname || '/'); } catch (_) {}
+          await new Promise(function(r) { setTimeout(r, 50); });
+          return;
+        }
+      } catch (e) {
+        console.error('OAuth code exchange failed', e);
+        if (typeof toast === 'function') toast('Sign-in failed — ' + (e && e.message ? e.message : 'try again'));
       }
-    } catch (e) {
-      console.error('OAuth code exchange failed', e);
     }
   }
   if (hasHash) {
-    await new Promise(function(r) { setTimeout(r, 250); });
+    await new Promise(function(r) { setTimeout(r, 350); });
   }
 }
 
@@ -5061,7 +5098,7 @@ function ensureLoaderMinDisplay() {
 (function profileButtonFallback(){
   if (!window.sb && typeof supabase !== 'undefined') {
     try {
-      window.sb = supabase.createClient('https://tfmbqiwxfgrwtjvoqomf.supabase.co', 'sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_', { auth: { detectSessionInUrl: true } });
+      window.sb = supabase.createClient('https://tfmbqiwxfgrwtjvoqomf.supabase.co', 'sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_', { auth: { detectSessionInUrl: true, flowType: 'pkce' } });
     } catch(_) {}
   }
   var btn = document.getElementById('user-btn');
