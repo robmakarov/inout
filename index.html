@@ -677,6 +677,7 @@ body.dnd-active .msg.msg-drag-group .msg-select-wrap,
 body.dnd-active .msg.msg-drag-group .msg-actions{opacity:0;pointer-events:none;visibility:hidden}
 body.dnd-active .msg.msg-drag-target{background:rgba(91,155,213,0.12);transition:none}
 body.dnd-active .msg.msg-drag-spirit{opacity:1 !important;background:var(--bg2) !important;transition:none}
+body.dnd-active .msg.msg-origin-ghost{opacity:0.5}
 .msg.msg-editing{
   background:var(--bg2);
   box-shadow:inset 0 0 0 1px var(--line2);
@@ -2293,8 +2294,8 @@ function removeOriginGhostOverlay() {
 }
 function createOriginGhostFromRow(row) {
   var g = row.cloneNode(true);
-  g.classList.remove('msg', 'dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target');
-  g.classList.add('msg-origin-ghost');
+  g.classList.remove('dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
+  g.classList.add('msg', 'msg-origin-ghost');
   g.removeAttribute('draggable');
   g.removeAttribute('data-id');
   g.querySelectorAll('.msg-checkbox-zone, .msg-actions, .msg-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
@@ -5551,6 +5552,10 @@ document.addEventListener('dragover', e => {
   if (inFeed) {
     processFeedDragover(e);
     return;
+  }
+  if (lastDragTargetRow && lastDragTargetRow.classList) {
+    lastDragTargetRow.classList.remove('msg-drag-target', 'msg-drag-nudge-right');
+    lastDragTargetRow = null;
   }
   const rows = originGhostsActive
     ? Array.from(feedInner.children).filter(function(n) { return n.classList && (n.classList.contains('msg') || n.classList.contains('msg-origin-ghost')); })
