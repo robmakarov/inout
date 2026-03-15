@@ -1,5 +1,6 @@
 # DnD (views-agnostic)
 
+DnD is the **interaction tool for reordering mode**: user reorders by dragging; reordering mode is the mode, DnD is how it’s done.
 Use animations.md DnD tokens in feed, table, graph so DnD stays consistent.
 
 **Payload:** object ids only (application/x-inout-msg-id). No view-specific data.
