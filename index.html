@@ -549,7 +549,7 @@ header{
 .feed-drop-origin.visible{ display:block; visibility:visible; }
 .feed-drop-origin.stuck{ height:2px; }
 
-/* Ghost copies at origin: barely visible, same layout as .msg, not interactive */
+/* Ghost copies at origin: visible placeholder, same layout as .msg, not interactive */
 .msg-origin-ghost{
   display:flex;
   align-items:center;
@@ -557,11 +557,19 @@ header{
   padding:4px 20px;
   border-bottom:1px solid var(--line);
   pointer-events:none;
-  opacity:0.22;
-  background:rgba(0,0,0,0.2);
+  opacity:0.5;
+  background:rgba(0,0,0,0.25);
   box-sizing:border-box;
   min-height:32px;
 }
+.origin-ghost-overlay{
+  position:absolute;
+  left:0;
+  right:0;
+  pointer-events:none;
+  z-index:1;
+}
+.msg.dragging-in-feed{ opacity:0.35; }
 .msg-origin-ghost .msg-time,
 .msg-origin-ghost .msg-sender,
 .msg-origin-ghost .msg-text{ color:var(--text); }
@@ -2166,6 +2174,7 @@ let feedDropIndicatorEl = null;
 let feedDropOriginEl = null;
 var originContentTop = null;
 var originContentHeight = null;
+var originGhostOverlayEl = null;
 function updateOriginLinePosition() {
   if (!feedEl || !feedInner || !feedDropOriginEl || typeof originContentTop !== 'number' || typeof originContentHeight !== 'number') return;
   var feedRect = feedEl.getBoundingClientRect();
@@ -2217,6 +2226,25 @@ function hideDropOriginLine() {
     feedDropOriginEl.classList.remove('visible');
     if (feedDropOriginEl.parentNode) feedDropOriginEl.parentNode.removeChild(feedDropOriginEl);
   }
+}
+function showOriginGhostOverlay(block) {
+  if (!feedInner || !block || block.length === 0) return;
+  removeOriginGhostOverlay();
+  var first = block[0];
+  var last = block[block.length - 1];
+  var top = first.offsetTop;
+  var height = (last.offsetTop + last.offsetHeight) - top;
+  if (height < 2) height = 32;
+  originGhostOverlayEl = document.createElement('div');
+  originGhostOverlayEl.className = 'origin-ghost-overlay msg-origin-ghost';
+  originGhostOverlayEl.setAttribute('aria-hidden', 'true');
+  originGhostOverlayEl.style.top = top + 'px';
+  originGhostOverlayEl.style.height = height + 'px';
+  feedInner.appendChild(originGhostOverlayEl);
+}
+function removeOriginGhostOverlay() {
+  if (originGhostOverlayEl && originGhostOverlayEl.parentNode) originGhostOverlayEl.parentNode.removeChild(originGhostOverlayEl);
+  originGhostOverlayEl = null;
 }
 function createOriginGhostFromRow(row) {
   var g = row.cloneNode(true);
@@ -3123,9 +3151,10 @@ function createMsgRow(msg, isNew) {
     }
     dragSelectedRows.forEach(function(r) {
       if (dragSelectedRows.length > 1) r.classList.add('msg-drag-group');
+      r.classList.add('dragging-in-feed');
     });
     row.classList.add('dragging');
-    /* Do not detach rows on dragstart: removing the drag source cancels the drag in most browsers. Keep rows in feed and move them during dragover. */
+    showOriginGhostOverlay(dragSelectedRows.slice());
     if (document.body) document.body.classList.add('dnd-active');
     savedOrderBeforeDrag = currentMessageOrder.slice();
     dragDropHandled = false;
@@ -3134,6 +3163,28 @@ function createMsgRow(msg, isNew) {
   row.addEventListener('dragend', () => {
     requestAnimationFrame(() => {
       try {
+        removeOriginGhostOverlay();
+        if (feedInner) feedInner.querySelectorAll('.msg.dragging-in-feed').forEach(r => r.classList.remove('dragging-in-feed'));
+        if (lastReorderTarget && !originGhostsActive && feedInner && dragSelectedRows.length) {
+          var insertBefore = lastReorderTarget.insertBefore;
+          var wantAppend = lastReorderTarget.wantAppend;
+          var block = dragSelectedRows.length > 1 ? dragSelectedRows.slice() : [row];
+          if (block.length > 1) {
+            var refAfterBlock = block[block.length - 1].nextSibling;
+            block.forEach(function(r) { if (r.parentNode === feedInner) feedInner.removeChild(r); });
+            var insertRef = wantAppend ? null : (block.indexOf(insertBefore) >= 0 ? refAfterBlock : insertBefore);
+            if (insertRef) {
+              feedInner.insertBefore(block[0], insertRef);
+              for (var i = 1; i < block.length; i++) feedInner.insertBefore(block[i], block[i - 1].nextSibling);
+            } else {
+              feedInner.appendChild(block[0]);
+              for (var j = 1; j < block.length; j++) feedInner.insertBefore(block[j], block[j - 1].nextSibling);
+            }
+          } else {
+            if (wantAppend) feedInner.appendChild(row);
+            else if (insertBefore && insertBefore.parentNode === feedInner) feedInner.insertBefore(row, insertBefore);
+          }
+        }
         removeOriginGhostsAndInsertRows();
         if (feedInner) feedInner.querySelectorAll('.msg-drag-group').forEach(r => r.classList.remove('msg-drag-group'));
         dragSelectedRows = [];
@@ -3170,6 +3221,8 @@ function createMsgRow(msg, isNew) {
           });
         });
       } finally {
+        removeOriginGhostOverlay();
+        if (feedInner) feedInner.querySelectorAll('.msg.dragging-in-feed').forEach(r => r.classList.remove('dragging-in-feed'));
         hideDropOriginLine();
         if (feedDropIndicatorEl) feedDropIndicatorEl.classList.remove('visible');
         lastIndicatorStyle = { left: -1, width: -1, top: -1, visible: false };
@@ -5304,25 +5357,7 @@ function processFeedDragover(ev) {
   const targetChanged = lastReorderTarget === null || lastReorderTarget.insertBefore !== insertBeforeNode || lastReorderTarget.wantAppend !== wantAppend;
   if ((wantAppend || insertBeforeNode !== null) && targetChanged) {
     lastReorderTarget = { insertBefore: insertBeforeNode, wantAppend: wantAppend };
-    var block = dragSelectedRows && dragSelectedRows.length > 1 ? dragSelectedRows.slice() : [dragging];
-    if (block.length > 1) {
-      var refAfterBlock = block[block.length - 1].nextSibling;
-      block.forEach(function(r) { if (r.parentNode === feedInner) feedInner.removeChild(r); });
-      var insertRef = wantAppend ? null : (block.indexOf(insertBeforeNode) >= 0 ? refAfterBlock : insertBeforeNode);
-      if (insertRef) {
-        feedInner.insertBefore(block[0], insertRef);
-        for (var i = 1; i < block.length; i++) feedInner.insertBefore(block[i], block[i - 1].nextSibling);
-      } else {
-        feedInner.appendChild(block[0]);
-        for (var j = 1; j < block.length; j++) feedInner.insertBefore(block[j], block[j - 1].nextSibling);
-      }
-    } else {
-      if (wantAppend) {
-        feedInner.appendChild(dragging);
-      } else {
-        feedInner.insertBefore(dragging, insertBeforeNode);
-      }
-    }
+    /* Do not move DOM during dragover: keeps hover target correct and avoids blink. Reorder applied once on dragend. */
   }
   if (wantAppend || insertBeforeNode !== null) {
     if (!feedDropIndicatorEl) {
