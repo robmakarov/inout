@@ -9,6 +9,7 @@
 | Log dropup | #log-action-btn | #log-dropup-panel.open |
 | User modal | #user-btn | backdrop display, aria-hidden |
 | Channel modal | + tab | backdrop display |
+| Bar reorder | #bar-reorder-toggle (⋯) | body.bar-dnd-mode; reorder buttons in top bar only |
 | Scroll btn | scroll position | #scroll-btn.visible |
 | Toast | toast() | #toast.show |
 

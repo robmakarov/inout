@@ -6,12 +6,13 @@ Header is always fixed (position:fixed; top:0); nothing moves it. Everything bel
 ## Header
 header, .logo, .header-right, #online-count, #msg-count, #user-btn (.signed-in)
 
-## Manage bar
-#manage-bar, #select-toggle (.active), .select-extra (.show), .manage-btn, #move-target, #view-toggle, #view-menu (.open)
+## Manage bar (top bar)
+#manage-bar — fixed under header, fills width; .bar-scroll (horizontal scroll), .bar-group; #manage-bar-scroll, #manage-actions. Buttons have data-bar-id; reorder via bar-dnd-mode (⋯ toggle). #bar-reorder-toggle, #view-menu (.open)
+#select-toggle (.active), .select-extra (.show), .manage-btn, #move-target, #view-toggle
 
 ## Feed
 #empty, .loader-inner, .feed-drop-indicator (.visible)
-.msg — .msg-sender, .msg-time, .msg-text, .msg-checkbox-zone, .msg-select, .msg-actions, .msg-action-btn
+.msg — .msg-sender, .msg-time, .msg-text, .msg-checkbox-zone, .msg-select, .msg-actions, .msg-action-btn (Del, Move, Exp, Copy, Cut)
 **Hover-revealed controls** (select-wrap, actions, time/sender styling) are part of the row: they show accessible actions for this object in this view; same hover boundary as the row.
 States: .msg-selected, .msg-editing, .msg-drag-target, .msg-drag-nudge-right, .new-flash, .dragging, .msg-drag-group, .dragging-in-feed, .msg-dnd-just-dropped
 .msg-origin-ghost, .origin-ghost-overlay | .msg-drag-spirit, .msg-drag-spirit-stack, .msg-drag-spirit-row, .msg-drag-spirit-stack-more | .msg-fly-clone

@@ -57,24 +57,27 @@
   </header>
 
   <div id="manage-bar">
-    <div>
-      <button id="select-toggle" class="manage-btn">Select</button>
-      <span id="select-extra" class="select-extra">
-        <button id="select-all" class="manage-btn">All</button>
-        <button id="select-none" class="manage-btn">None</button>
-      </span>
-    </div>
-    <div id="manage-actions">
-      <button id="delete-selected" class="manage-btn">Delete</button>
-      <select id="move-target"></select>
-      <button id="move-selected" class="manage-btn">Move</button>
-      <button id="export-tab" class="manage-btn">Export</button>
-      <button id="view-toggle" class="manage-btn">View ▾</button>
-      <div id="view-menu">
-        <label><input type="checkbox" id="field-time" checked>Time</label>
-        <label><input type="checkbox" id="field-author" checked>Author</label>
+    <div class="bar-scroll" id="manage-bar-scroll">
+      <div class="bar-group" data-bar-group="left">
+        <button id="select-toggle" class="manage-btn" data-bar-id="select-toggle">Select</button>
+        <span id="select-extra" class="select-extra">
+          <button id="select-all" class="manage-btn">All</button>
+          <button id="select-none" class="manage-btn">None</button>
+        </span>
+      </div>
+      <div class="bar-group" id="manage-actions" data-bar-group="actions">
+        <button id="delete-selected" class="manage-btn" data-bar-id="delete-selected">Delete</button>
+        <select id="move-target" data-bar-id="move-target"></select>
+        <button id="move-selected" class="manage-btn" data-bar-id="move-selected">Move</button>
+        <button id="export-tab" class="manage-btn" data-bar-id="export-tab">Export</button>
+        <button id="view-toggle" class="manage-btn" data-bar-id="view-toggle">View ▾</button>
+        <div id="view-menu">
+          <label><input type="checkbox" id="field-time" checked>Time</label>
+          <label><input type="checkbox" id="field-author" checked>Author</label>
+        </div>
       </div>
     </div>
+    <button type="button" id="bar-reorder-toggle" class="manage-btn" aria-label="Reorder bar buttons" title="Reorder bar">⋯</button>
   </div>
 
   <div id="feed">

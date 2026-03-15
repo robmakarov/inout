@@ -43,6 +43,8 @@
   --dnd-stack-stagger-step: 0.03s;
   --dnd-spirit-stack-max-visible: 4;
   --dnd-stack-form-duration: 0.3s;
+  --bar-top-height: 42px;
+  --bar-bottom-min-height: 120px;
 }
 
 /* Reusable animation keyframes (use with var(--anim-duration-*) and var(--anim-ease-*) for rules) */
@@ -89,7 +91,8 @@ body{
   height:100vh;
   overflow:hidden;
   pointer-events:none;
-  padding-top:48px; /* reserve space for fixed header; everything below = app content */
+  padding-top:calc(48px + var(--bar-top-height)); /* header + top bar; everything below = app content */
+  padding-bottom:var(--bar-bottom-min-height); /* reserve space for fixed bottom bar */
 }
 #app header,
 #app #manage-bar,
@@ -125,19 +128,45 @@ header{
   box-sizing:border-box;
 }
 
-/* ── MANAGE BAR (SELECTION) ── */
+/* ── TOP BAR (manage): fixed under header, fills width ── */
 #manage-bar{
-  position:relative;
-  z-index:99;
+  position:fixed;
+  top:48px;
+  left:0;
+  right:0;
+  width:100%;
+  height:var(--bar-top-height);
+  z-index:999;
   flex-shrink:0;
   background:var(--bg2);
   border-bottom:1px solid var(--line);
-  padding:4px 20px;
+  padding:0 12px;
   display:flex;
   align-items:center;
   justify-content:space-between;
+  gap:8px;
   font-size:10px;
   color:var(--dim);
+  box-sizing:border-box;
+}
+#manage-bar .bar-scroll{
+  overflow-x:auto;
+  overflow-y:hidden;
+  flex:1;
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding:4px 0;
+  scrollbar-width:none;
+  -ms-overflow-style:none;
+}
+#manage-bar .bar-scroll::-webkit-scrollbar{ display:none; }
+#manage-bar .bar-group{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-shrink:0;
 }
 
 #select-toggle{
@@ -179,6 +208,7 @@ header{
   display:flex;
   align-items:center;
   gap:6px;
+  flex-shrink:0;
 }
 
 .manage-btn{
@@ -197,6 +227,19 @@ header{
   background:var(--line);
   color:var(--text);
 }
+/* Bar DnD mode: reorder buttons (separate from message reorder) */
+body.bar-dnd-mode #manage-bar .manage-btn[data-bar-id]{ cursor:grab; }
+body.bar-dnd-mode #manage-bar .manage-btn[data-bar-id]:active{ cursor:grabbing; }
+body.bar-dnd-mode #manage-bar .manage-btn[data-bar-id].bar-dragging{ opacity:0.6; }
+body.bar-dnd-mode #manage-bar .bar-drop-indicator{
+  flex:0 0 2px;
+  height:20px;
+  background:var(--acc);
+  border-radius:1px;
+  margin:0 -1px;
+  transition:opacity .1s;
+}
+body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
 
 #move-target{
   border:1px solid var(--line2);
@@ -930,13 +973,31 @@ body.select-mode .msg-select-wrap,
 .msg.dragging + .msg.msg-drag-group,
 .msg.msg-drag-group + .msg.dragging{margin-top:-2px}
 
-/* ── INPUT AREA ── */
+/* ── BOTTOM BAR (input): fixed at bottom, fills width ── */
 #input-area{
+  position:fixed;
+  bottom:0;
+  left:0;
+  right:0;
+  width:100%;
+  z-index:998;
   flex-shrink:0;
   background:var(--bg);
   border-top:1px solid var(--line);
   padding:12px 20px calc(16px + env(safe-area-inset-bottom, 0px));
+  box-sizing:border-box;
 }
+#input-area .bar-scroll{
+  overflow-x:auto;
+  overflow-y:hidden;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding:4px 0;
+  scrollbar-width:none;
+  -ms-overflow-style:none;
+}
+#input-area .bar-scroll::-webkit-scrollbar{ display:none; }
 
 .input-wrap{
   display:flex;
@@ -1257,7 +1318,7 @@ body.select-mode .msg-select-wrap,
     will-change:transform;
   }
   /* app = content below fixed header; reserve space for header + fixed manage bar */
-  #app{padding-top:calc(48px + 34px)}
+  #app{padding-top:calc(48px + var(--bar-top-height))}
   /* keep input bar above iOS Safari bottom panel & keyboard */
   #input-area{
     position:fixed;
