@@ -1,0 +1,34 @@
+---
+description: When and how to keep INOUT documentation in sync with code
+alwaysApply: true
+---
+
+# Documentation upkeep
+
+When you change code or behavior, update the docs in the **same change set**. Do not leave docs stale.
+
+## Which doc to update
+
+| You changed | Update |
+|-------------|--------|
+| Product scope, features, or flows | **documentation/REBUILD.md** — relevant section (Product, Key flows, DOM, State). |
+| Init order, auth, realtime, or data flow | **documentation/REBUILD.md** (Init order, Auth, Realtime, Key flows) and **documentation/architecture.md**. |
+| New or renamed function | **documentation/functions-index.md** — add/update row in the right section. |
+| DOM elements, IDs, global state, or who sets them | **documentation/REBUILD.md** (DOM, State) and **documentation/ELEMENTS.md**. |
+| CSS variables, breakpoints, or body/class states | **documentation/REBUILD.md** (Styling) and **documentation/styling.md**. |
+| Layout, components, or UI structure | **design-system/components.md**. |
+| Modes (select, edit, DnD, view, modals) | **design-system/modes.md**. |
+| Animations or DnD tokens | **design-system/animations.md** (and **design-system/dnd.md** if DnD behavior). |
+| Colors or typography tokens/copy | **design-system/colors.md**, **design-system/text.md**. |
+| RLS, channel_members, or access rules | **documentation/REBUILD.md** (Security) and **documentation/security.md** (and SQL if needed). |
+| Gotcha, convention, or “don’t do X” | **documentation/REBUILD.md** (Edge cases) and **documentation/edge-cases.md**. |
+| File layout or entry point | **documentation/REBUILD.md** (File layout) and **README.md** (File layout). |
+
+## Rules
+
+1. **REBUILD.md is the single rebuild source.** Keep it accurate so the app can be rebuilt from it; prefer one short paragraph or table per topic.
+2. **One change set.** Edit the doc in the same commit/PR as the code change.
+3. **Deep-dives stay detailed.** architecture.md, ELEMENTS.md, styling.md, etc. hold full reference; REBUILD.md stays a terse summary with pointers.
+4. **design-system/** defines UI/UX tokens and behavior; code and REBUILD follow it.
+
+After any non-trivial code or config change, check the table above and update the listed docs.

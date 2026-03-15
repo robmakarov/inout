@@ -1,29 +1,32 @@
 # INOUT documentation (for humans and AI)
 
-This folder holds reference docs for the INOUT codebase. Use it to understand flows, find functions, respect styling, and avoid pitfalls. **When doing tasks, update the relevant doc** (e.g. add a function to `functions-index.md`, note a gotcha in `edge-cases.md`, or extend `ELEMENTS.md` in the repo root).
+**Rebuild from scratch:** use **REBUILD.md** — single spec (product, stack, files, data, init, flows, DOM, state, styling, security, edge cases, design system). Everything else is a deep-dive or index.
 
-## What’s here
+## What's here
 
 | File | Use when |
 |------|----------|
-| **README.md** (this file) | You need an index or a reminder to keep docs updated. |
-| **architecture.md** | You need init order, auth flow, realtime lifecycle, or data flow (Supabase ↔ state ↔ DOM). |
-| **functions-index.md** | You need to find a function by name or see what exists (one-line purpose per function). |
-| **styling.md** | You change CSS: variables, body/class states, breakpoints, key classes. |
-| **edge-cases.md** | You need conventions, gotchas, or “don’t do X” (e.g. script tags, feedback loops, localStorage). |
-| **security.md** | RLS, sharing, access: who can see/edit data, channel_members, creator_id. |
+| **REBUILD.md** | Rebuilding the app or onboarding; single source for behavior and structure. |
+| **README.md** (this file) | Doc index and reminder to keep docs updated. |
+| **architecture.md** | Init order, auth flow, realtime lifecycle, data flow (Supabase ↔ state ↔ DOM). |
+| **ELEMENTS.md** | DOM elements, JS state, conditions, functions (detailed reference). |
+| **functions-index.md** | Find a function by name; one-line purpose per function. |
+| **styling.md** | CSS variables, body/class states, breakpoints, key classes. |
+| **edge-cases.md** | Conventions, gotchas, "don't do X". |
+| **security.md** | RLS, channel_members, creator_id; runnable SQL. |
 
-## Root-level docs (not in this folder)
+## Root-level
 
-- **README.md** — Project overview, run locally, tech stack, file layout, data model, project prompt for AI.
-- **ELEMENTS.md** — DOM elements, JS state, conditions, and functions (detailed reference).
+- **README.md** — Overview, run, stack, file layout, project prompt for AI.
+- **design-system/** — components.md, modes.md, animations.md, colors.md, text.md, dnd.md.
 
 ## Keeping docs updated
 
-- After adding or changing a **function** that others might search for: add or update its entry in **functions-index.md**.
-- After changing **init order**, **realtime**, or **auth flow**: update **architecture.md**.
-- After changing **CSS variables**, **breakpoints**, or **body/class states**: update **styling.md**.
-- When you hit or fix a **gotcha** (e.g. feedback loop, escaping, RLS): add it to **edge-cases.md**.
-- When you add **new DOM elements or global state** or change who sets them: update **ELEMENTS.md** in the repo root.
+- **REBUILD.md** — Update when product, init, flows, DOM, or state change so rebuild stays accurate.
+- **functions-index.md** — Add/update when adding or renaming functions.
+- **architecture.md** — When changing init order, realtime, or auth flow.
+- **styling.md** — When changing CSS vars, breakpoints, or state-driven classes.
+- **edge-cases.md** — When fixing or discovering a gotcha.
+- **ELEMENTS.md** — When adding/changing DOM or global state.
 
-AI: when completing a task, consider whether any of these docs need an update and edit them in the same change set.
+**Keeping docs in sync:** See **.cursor/rules/docs.mdc** for a table mapping code changes to which doc(s) to update. Rule: same change set as the code; REBUILD.md stays the single rebuild source. AI and humans should follow it.

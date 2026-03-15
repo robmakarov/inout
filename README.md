@@ -42,26 +42,25 @@ Open `http://localhost:4173`. Supabase anon key and URL are in `index.html`; rep
 
 ## For AI / codebase context
 
-Use this section when editing the repo: file layout, data model, where behavior lives, and conventions.
+**Full rebuild spec:** **documentation/REBUILD.md** (product, stack, files, data, init, flows, DOM, state, styling, security, edge cases). Use this section for file layout, data model, and where behavior lives.
 
 ### File layout
 
 ```
 /
-  index.html     # Single entry point: HTML, CSS, and JS inlined (~4968 lines)
-  vercel.json    # SPA routing: all paths → index.html
-  README.md      # This file
-  ELEMENTS.md    # Reference: DOM elements, JS state, conditions, and functions (for humans and AI)
-  TODO.txt       # Product/tech backlog (optional reading)
-  docs/          # Extra reference docs (for humans and AI); keep updated when doing tasks
-    README.md    # Index of docs and when to use each
-    architecture.md   # Init order, auth, realtime, data flow
-    functions-index.md # One-line purpose of each function
-    styling.md   # CSS variables, breakpoints, body/class states
-    edge-cases.md # Gotchas, conventions, "don't do X"
+  index.html       # Shell: head (Supabase script, sb/doSignIn), body (header, nav, multiview, input, modals), <link href="/styles.css">, <script src="/app.js">
+  styles.css       # All CSS
+  app.js            # All app logic (Supabase client, state, init, realtime, DnD, edit, send, etc.)
+  vercel.json      # SPA: styles.css, app.js → self; (.*) → index.html
+  README.md        # This file
+  documentation/
+    REBUILD.md     # Single rebuild spec — product, stack, data, init, flows, DOM, state, styling, security (for human + AI)
+    README.md      # Doc index
+    architecture.md, ELEMENTS.md, functions-index.md, styling.md, edge-cases.md, security.md
+  design-system/   # components.md, modes.md, animations.md, colors.md, text.md, dnd.md
 ```
 
-There are also `app/state.js`, `app/main.js`, and `bundle.js` in the repo; the **live app uses only `index.html`** (no script tags to bundle.js). All app logic is in one `<script>` at the end of `index.html`.
+**Rebuild from scratch:** read **documentation/REBUILD.md**. The live app uses only `index.html`, `styles.css`, and `app.js` (no bundle).
 
 ### Data model (Supabase)
 
@@ -83,9 +82,9 @@ There are also `app/state.js`, `app/main.js`, and `bundle.js` in the repo; the *
 
 - **`public.action_log`** — Optional action log (see comment block in code for `create table`).
 
-### Where key behavior lives (in `index.html`)
+### Where key behavior lives (in `app.js`)
 
-| Concern            | Where in index.html (approx / search)                    |
+| Concern            | Where in app.js (approx / search)                        |
 |--------------------|----------------------------------------------------------|
 | Supabase client    | `supabase.createClient(...)` near top of script         |
 | Auth state         | `currentUser`, `refreshAuth()`, `setupAuthListener()`    |
@@ -109,12 +108,13 @@ There are also `app/state.js`, `app/main.js`, and `bundle.js` in the repo; the *
 - **View menu** — Checkboxes “Time” and “Author” (`#field-time`, `#field-author`).
 - **Modals**: `#user-modal-backdrop`, `#channel-modal-backdrop`.
 
-Message rows: class `.msg`, `data-id` = entry id, `draggable="true"`. Checkbox for select: `.msg-select`; actions: `.msg-actions`.
+Message rows: class `.obj`, `data-id` = entry id, `draggable="true"`. Checkbox: `.obj-select`; actions: `.obj-actions`.
 
 ### Documentation
 
-- **ELEMENTS.md** (root) — DOM elements, global state, conditions, and functions that set/read them.
-- **docs/** — Extra reference: **docs/README.md** (index), **architecture.md** (init, auth, realtime, data flow), **functions-index.md** (function list), **styling.md** (CSS vars, breakpoints, states), **edge-cases.md** (gotchas, conventions). When doing tasks, update the relevant doc (e.g. add a function to functions-index.md, or a gotcha to edge-cases.md).
+- **documentation/REBUILD.md** — Single rebuild spec (product, stack, data, init, flows, DOM, state, styling, security).
+- **documentation/ELEMENTS.md** — DOM elements, global state, conditions, functions.
+- **documentation/** — architecture.md, functions-index.md, styling.md, edge-cases.md, security.md. Update relevant doc when changing behavior.
 
 ### Conventions
 
