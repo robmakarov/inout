@@ -4119,6 +4119,7 @@ function ensureLoaderMinDisplay() {
     done();
   }
 })();
+(function profileButtonFallback(){
   if (!window.sb && typeof supabase !== 'undefined') {
     try {
       window.sb = supabase.createClient('https://tfmbqiwxfgrwtjvoqomf.supabase.co', 'sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_', { auth: { detectSessionInUrl: true } });
