@@ -1141,7 +1141,7 @@ function updateMessageRowText(msgId, text) {
   textEl.innerHTML = linkify(escapeHtml(text || ''));
 }
 
-/** When editing, replace row value on UI only with realtime mirror of main input; both stay in sync. */
+/** One value, two places: row is a realtime mirror of main input (UI only). */
 function updateEditingRowFromInput() {
   if (!feedInner || editingMessageId == null || !input) return;
   const idStr = String(editingMessageId);
@@ -1149,7 +1149,8 @@ function updateEditingRowFromInput() {
   if (!el) return;
   const textEl = el.querySelector('.msg-text');
   if (!textEl) return;
-  textEl.textContent = input.value;
+  const value = input.value;
+  if (textEl.textContent !== value) textEl.textContent = value;
 }
 
 function commitTypingSegment() {
@@ -2778,8 +2779,9 @@ function createMsgRow(msg, isNew) {
     updateClearInputBtn();
     saveInputGlobal();
     updateEditingRowHighlight();
-    focusMessageInput();
     updateEditingRowFromInput();
+    focusMessageInput();
+    requestAnimationFrame(updateEditingRowFromInput);
   });
 
   row.addEventListener('click', e => {

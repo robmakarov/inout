@@ -853,6 +853,24 @@ body.dnd-active .msg-drag-spirit-stack{opacity:1;background:transparent;transiti
   padding-right:72px; /* reserve space under right-side actions */
   cursor:pointer;
 }
+/* Editing: complete copy of main input — doppelganger (same look, same value) */
+.msg-editing .msg-text{
+  font-family:var(--mono);
+  font-size:14px;
+  line-height:1.5;
+  color:var(--text);
+  background:var(--bg2);
+  border:1px solid var(--line2);
+  border-radius:14px;
+  padding:14px 16px;
+  min-height:48px;
+  max-height:160px;
+  overflow-y:auto;
+  box-sizing:border-box;
+  scrollbar-width:none;
+  cursor:default;
+}
+.msg-editing .msg-text::-webkit-scrollbar{ display:none; }
 /* DnD reorder: row under drop position (no nudge to avoid shake) */
 
 @media (max-width:540px){
