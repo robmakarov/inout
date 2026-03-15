@@ -613,18 +613,15 @@ header{
   border:1px solid var(--line);
   box-sizing:border-box;
 }
+/* Spirit = same look as .msg row, only fixed + shadow for drag. Do not override .msg layout/colors. */
 .msg-drag-spirit{
   position:fixed;
   z-index:10000;
   pointer-events:none;
-  box-shadow:0 6px 24px rgba(0,0,0,.45);
-  border-radius:8px;
-  opacity:0.97;
-  background:var(--bg2);
-  border:1px solid var(--line);
-  box-sizing:border-box;
-  max-width:min(400px, 95vw);
+  box-shadow:0 4px 16px rgba(0,0,0,.35);
   transform:translate(-50%, -50%);
+  border-radius:0;
+  /* inherit .msg appearance: same padding, border, background from .msg */
 }
 .msg-fly-clone{
   position:fixed;
@@ -3160,8 +3157,8 @@ function createMsgRow(msg, isNew) {
     }
     if (dragSpiritEl && dragSpiritEl.parentNode) dragSpiritEl.parentNode.removeChild(dragSpiritEl);
     dragSpiritEl = row.cloneNode(true);
-    dragSpiritEl.classList.remove('msg', 'dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
-    dragSpiritEl.classList.add('msg-drag-spirit');
+    dragSpiritEl.classList.remove('dragging', 'msg-drag-group', 'msg-selected', 'new-flash', 'msg-editing', 'msg-drag-over', 'msg-drag-target', 'dragging-in-feed');
+    dragSpiritEl.classList.add('msg', 'msg-drag-spirit');
     dragSpiritEl.removeAttribute('draggable');
     dragSpiritEl.setAttribute('aria-hidden', 'true');
     dragSpiritEl.style.width = Math.max(200, (row.offsetWidth || 280)) + 'px';
