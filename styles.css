@@ -1197,6 +1197,15 @@ body.select-mode .msg-select-wrap,
 #msg-input:focus{outline:none}
 #msg-input:focus-visible{outline:none}
 
+/* When editing, caret and selection visually move into the doppelganger (row); hide them in the real input. */
+body.input-edit-has-cursor #msg-input{
+  caret-color:transparent;
+  color:transparent;
+}
+body.input-edit-has-cursor #msg-input::selection{
+  background:transparent;
+}
+
 /* Send: part of composer bar, accent when enabled */
 .composer-send{
   flex-shrink:0;
