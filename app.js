@@ -618,13 +618,6 @@ function updateEditingRowHighlight() {
     const row = feedInner.querySelector('.msg[data-id="' + CSS.escape(String(editingMessageId)) + '"]');
     if (row) row.classList.add('msg-editing');
   }
-  if (typeof document !== 'undefined' && document.body) {
-    if (editingMessageId != null) {
-      document.body.classList.add('input-edit-has-cursor');
-    } else {
-      document.body.classList.remove('input-edit-has-cursor');
-    }
-  }
 }
 
 /** Input mode is default and reactivates after every operation; only edit mode interrupts it. */
