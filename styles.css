@@ -618,6 +618,10 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
   padding:6px 12px;
 }
 .feed-inner.view-table .msg.msg-header{
+  position:sticky;
+  top:0;
+  z-index:2;
+  background:var(--bg);
   pointer-events:none;
   user-select:none;
 }
