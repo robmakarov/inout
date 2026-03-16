@@ -184,29 +184,48 @@ let views = [];
 })();
 
 (function setupQrModal() {
-  if (!umShowQrBtn || !qrModalBackdrop || !qrModalImg) return;
-  umShowQrBtn.addEventListener('click', () => {
-    try {
-      const base = (typeof window !== 'undefined' && window.location)
-        ? (window.location.origin + window.location.pathname)
-        : '';
-      const nick = (umNickname && umNickname.value.trim())
-        || (currentUser && currentUser.user_metadata && currentUser.user_metadata.nickname)
-        || (currentUser && currentUser.email)
-        || (currentUser && currentUser.id)
-        || 'Visitor';
-      const inviteUrl = base
-        ? (base + (base.includes('?') ? '&' : '?') + 'visitNick=' + encodeURIComponent(nick))
-        : ('visitNick=' + encodeURIComponent(nick));
-      const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&color=FFFFFF&bgcolor=000000&data=' + encodeURIComponent(inviteUrl);
-      qrModalImg.src = qrUrl;
-      qrModalBackdrop.setAttribute('aria-hidden', 'false');
-    } catch (_) {}
-  });
+  if (!qrModalBackdrop || !qrModalImg) return;
+
+  if (umShowQrBtn) {
+    umShowQrBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        const base = (typeof window !== 'undefined' && window.location)
+          ? (window.location.origin + window.location.pathname)
+          : '';
+        const nick = (umNickname && umNickname.value.trim())
+          || (currentUser && currentUser.user_metadata && currentUser.user_metadata.nickname)
+          || (currentUser && currentUser.email)
+          || (currentUser && currentUser.id)
+          || 'Visitor';
+        const inviteUrl = base
+          ? (base + (base.includes('?') ? '&' : '?') + 'visitNick=' + encodeURIComponent(nick))
+          : ('visitNick=' + encodeURIComponent(nick));
+        const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&color=FFFFFF&bgcolor=000000&data=' + encodeURIComponent(inviteUrl);
+        qrModalImg.src = qrUrl;
+        qrModalBackdrop.setAttribute('aria-hidden', 'false');
+      } catch (_) {}
+    });
+  }
+
   const closeQrModal = () => {
     qrModalBackdrop.setAttribute('aria-hidden', 'true');
   };
-  if (qrModalClose) qrModalClose.addEventListener('click', closeQrModal);
+  if (qrModalClose) {
+    qrModalClose.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      closeQrModal();
+    });
+  }
+  const inner = document.getElementById('qr-modal');
+  if (inner) {
+    inner.addEventListener('click', (e) => {
+      // clicks inside modal content should not close it
+      e.stopPropagation();
+    });
+  }
   qrModalBackdrop.addEventListener('click', e => {
     if (e.target === qrModalBackdrop) closeQrModal();
   });
