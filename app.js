@@ -270,7 +270,6 @@ const ORDER_STATE_KEY      = 'inout_order_state_v1';
 const SCROLL_STATE_KEY     = 'inout_scroll_state_v1';
 const WAS_EDITING_KEY      = 'inout_was_editing_v1';
 const AUTH_BACKUP_KEY     = 'inout_auth_user_backup';
-const SIGN_OUT_BLOCK_KEY  = 'inout_signout_block_v1';
 const seenIds       = new Set();
 const viewScroll = new Map();
 const OPEN_VIEWS_KEY     = 'inout_open_views_v1';
@@ -4057,25 +4056,8 @@ async function ensureOAuthCallbackProcessed() {
 
 async function refreshAuth() {
   await ensureOAuthCallbackProcessed();
-  const hardSignedOut = (() => {
-    try { return localStorage.getItem(SIGN_OUT_BLOCK_KEY) === '1'; } catch (_) { return false; }
-  })();
-  if (hardSignedOut) {
-    currentUser = null;
-    updateAuthUI();
-    sharedChannels.clear();
-    unreadCounts.clear();
-    renderTabs();
-    subscribeRealtimeAll();
-    teardownDraftChannel();
-    teardownDndBroadcastChannel();
-    return;
-  }
   try {
-    try {
-      var b = sessionStorage.getItem(AUTH_BACKUP_KEY);
-      if (b) currentUser = JSON.parse(b);
-    } catch (_) {}
+    // Do not auto-restore from backup on fresh load; rely on Supabase session instead.
     var session = null;
     try {
       var sessionPromise = sb.auth.getSession();
@@ -4094,27 +4076,8 @@ async function refreshAuth() {
     }
     if (session?.user) {
       currentUser = session.user;
-    } else if (!currentUser) {
-      try {
-        var userResult = await Promise.race([
-          sb.auth.getUser(),
-          new Promise(function(_, rej) { setTimeout(function() { rej(new Error('user timeout')); }, 3000); })
-        ]);
-        if (userResult && userResult.data && userResult.data.user) currentUser = userResult.data.user;
-      } catch (_) {}
     }
-    if (!currentUser) {
-      try {
-        var backup = sessionStorage.getItem(AUTH_BACKUP_KEY);
-        if (backup) currentUser = JSON.parse(backup);
-      } catch (_) {}
-    }
-    if (currentUser) try { sessionStorage.setItem(AUTH_BACKUP_KEY, JSON.stringify(currentUser)); } catch (_) {}
   } catch (e) {
-    try {
-      var b = sessionStorage.getItem(AUTH_BACKUP_KEY);
-      if (b) currentUser = JSON.parse(b);
-    } catch (_) {}
     if (!currentUser) currentUser = null;
   }
   updateAuthUI();
@@ -4146,12 +4109,9 @@ async function refreshAuth() {
 
 var explicitSignOut = false;
 function setupAuthListener() {
-  const hardSignedOut = (() => {
-    try { return localStorage.getItem(SIGN_OUT_BLOCK_KEY) === '1'; } catch (_) { return false; }
-  })();
-  if (hardSignedOut || !sb || !sb.auth || typeof sb.auth.onAuthStateChange !== 'function') return;
+  if (!sb || !sb.auth || typeof sb.auth.onAuthStateChange !== 'function') return;
   sb.auth.onAuthStateChange(async (event, session) => {
-    if (session && session.user && !hardSignedOut) {
+    if (session && session.user) {
       const prevUser = currentUser;
       currentUser = session.user;
       try { sessionStorage.setItem(AUTH_BACKUP_KEY, JSON.stringify(currentUser)); } catch (_) {}
@@ -4176,24 +4136,15 @@ function setupAuthListener() {
       try { sessionStorage.removeItem(AUTH_BACKUP_KEY); } catch (_) {}
       return;
     }
-    if (!hardSignedOut) {
-      try {
-        const { data } = await sb.auth.getSession();
-        if (data?.session?.user) {
-          currentUser = data.session.user;
-          try { sessionStorage.setItem(AUTH_BACKUP_KEY, JSON.stringify(currentUser)); } catch (_) {}
-          updateAuthUI();
-          return;
-        }
-      } catch (_) {}
-      try {
-        var backup = sessionStorage.getItem(AUTH_BACKUP_KEY);
-        if (backup) {
-          currentUser = JSON.parse(backup);
-          updateAuthUI();
-        }
-      } catch (_) {}
-    }
+    try {
+      const { data } = await sb.auth.getSession();
+      if (data?.session?.user) {
+        currentUser = data.session.user;
+        try { sessionStorage.setItem(AUTH_BACKUP_KEY, JSON.stringify(currentUser)); } catch (_) {}
+        updateAuthUI();
+        return;
+      }
+    } catch (_) {}
   });
 
   if (umAuthBtn) umAuthBtn.addEventListener('click', () => {
@@ -4303,7 +4254,6 @@ function clearObjects() {
 
 async function signIn() {
   try {
-    try { localStorage.removeItem(SIGN_OUT_BLOCK_KEY); } catch (_) {}
     if (!sb && typeof supabase !== 'undefined') {
       sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
         auth: { detectSessionInUrl: true, flowType: 'pkce' }
@@ -4336,7 +4286,6 @@ if (typeof window !== 'undefined') window.signIn = signIn;
 
 async function signOut() {
   explicitSignOut = true;
-  try { localStorage.setItem(SIGN_OUT_BLOCK_KEY, '1'); } catch (_) {}
   currentUser = null;
   try { sessionStorage.removeItem(AUTH_BACKUP_KEY); } catch (_) {}
   updateAuthUI();
@@ -4352,11 +4301,6 @@ async function signOut() {
       if (error) console.error(error);
     }
   } catch (e) { console.error(e); }
-  // Fully detach Supabase client so it cannot auto-refresh a session until next explicit sign-in.
-  try {
-    if (typeof window !== 'undefined') window.sb = null;
-  } catch (_) {}
-  sb = null;
 }
 
 async function copyUserId() {
