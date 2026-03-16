@@ -2367,11 +2367,16 @@ async function openSecondaryView(ch) {
 }
 
 function toggleSecondaryView(ch) {
-  if (secondaryViewChannel === ch) {
-    closeSecondaryView();
-  } else {
-    openSecondaryView(ch);
+  // If a non-main view with this name is already open, close it; otherwise open a new one.
+  const existing = views.find(v => v && v.id !== 'view-0' && v.channel === ch && v.rootEl && document.body.contains(v.rootEl));
+  if (existing && existing.rootEl && existing.rootEl.parentNode) {
+    existing.rootEl.parentNode.removeChild(existing.rootEl);
+    const idx = views.indexOf(existing);
+    if (idx >= 0) views.splice(idx, 1);
+    try { localStorage.removeItem(SECONDARY_VIEW_KEY); } catch (_) {}
+    return;
   }
+  openSecondaryView(ch);
 }
 
 function restoreInputGlobal() {
