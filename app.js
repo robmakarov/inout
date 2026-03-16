@@ -438,19 +438,7 @@ function logAction(action, details, opts) {
     }
   }
   updateLogBadge();
-  if (currentUser && sb && sb.from) {
-    try {
-      sb.from('action_log').insert({
-        id: entry.id,
-        user_id: currentUser.id,
-        device_id: myId,
-        type: 'action',
-        action: entry.action,
-        details: entry.details || {},
-        message: null,
-      }).then(() => {}).catch(() => {});
-    } catch (_) {}
-  }
+  // Remote action_log table is optional; skip network writes to avoid 404 spam.
 }
 
 function logError(message) {
@@ -2470,29 +2458,7 @@ function saveFieldPrefsForCurrentChannel() {
     };
     localStorage.setItem(FIELD_PREFS_KEY, JSON.stringify(map));
   } catch(_) {}
-  // Also persist into unified view config so other devices see it.
-  if (currentUser && sb && sb.from) {
-    try {
-      const cfg = {
-        order: currentObjectOrder.slice(),
-        showTime: !!fieldPrefs.showTime,
-        showAuthor: !!fieldPrefs.showAuthor,
-        viewMode: fieldPrefs.viewMode === 'table' ? 'table' : 'feed',
-      };
-      sb
-        .from('views')
-        .upsert(
-          {
-            user_id: currentUser.id,
-            channel: currentChannel,
-            config: cfg,
-          },
-          { onConflict: 'user_id,channel' }
-        )
-        .then(() => {})
-        .catch(() => {});
-    } catch (_) {}
-  }
+  // Skipping remote views upsert for now (table is optional / may not exist).
 }
 
 function applyFieldPrefsToObjects() {
@@ -3660,24 +3626,7 @@ async function saveObjectOrderForCurrentChannel() {
       if (error) console.error(error);
     } catch (e) { console.error(e); }
   }
-  if (currentUser && sb && sb.from) {
-    try {
-      const cfg = {
-        order: currentObjectOrder.slice(),
-        showTime: !!fieldPrefs.showTime,
-        showAuthor: !!fieldPrefs.showAuthor,
-        viewMode: fieldPrefs.viewMode === 'table' ? 'table' : 'feed',
-      };
-      suppressNextViewApply = true;
-      sb.from('views')
-        .upsert(
-          { user_id: currentUser.id, channel: currentChannel, config: cfg },
-          { onConflict: 'user_id,channel' }
-        )
-        .then(() => {})
-        .catch(() => {});
-    } catch (_) {}
-  }
+  // Skipping remote views upsert for now (table is optional / may not exist).
 }
 
 function recomputeOrderFromDOM() {
