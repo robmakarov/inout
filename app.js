@@ -221,6 +221,7 @@ let myId;
 try { myId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) { var r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16); }); } catch (_) { myId = 'fallback-' + Date.now(); }
 let currentUser    = null;
 let currentView    = 'main';
+let currentChannel = currentView; // temporary alias while migrating off "channel"
 let viewNames      = ['main'];
 let secondaryViewName = null; /* legacy; will be removed when views[] fully replaces secondary. Persisted to device (localStorage). */
 const VIEWS_KEY           = 'inout_views_v1';
