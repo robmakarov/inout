@@ -974,7 +974,7 @@ function init(done) {
       if (objectCountEl) updateObjectCount();
     }
   } catch (_) {}
-  try { setupAuthListener(); } catch (_) {}
+  // In this build we do not auto-sync auth state from Supabase; sign-in/out are driven by buttons only.
   finish();
   (function runAsync() {
     refreshAuth().then(function() {
@@ -4075,8 +4075,21 @@ async function ensureOAuthCallbackProcessed() {
 }
 
 async function refreshAuth() {
-  // Local-only auth: rely on currentUser set by signIn/signOut; do not auto-fetch Supabase session.
+  await ensureOAuthCallbackProcessed();
+  currentUser = null;
+  try {
+    if (sb && sb.auth && typeof sb.auth.getSession === 'function') {
+      const { data } = await sb.auth.getSession();
+      if (data && data.session && data.session.user) {
+        currentUser = data.session.user;
+      }
+    }
+  } catch (_) {
+    currentUser = null;
+  }
+
   updateAuthUI();
+
   if (currentUser) {
     try {
       await refreshSharedFlags();
@@ -4089,6 +4102,7 @@ async function refreshAuth() {
       await loadObjects();
       restoreInputGlobal();
     } catch (e) {
+      console.error(e);
       renderTabs();
       try { await loadObjects(); } catch (_) {}
       if (feedInner && emptyEl && !emptyEl.parentNode) feedInner.appendChild(emptyEl);
