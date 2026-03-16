@@ -118,6 +118,9 @@ header,
   min-height:0;
   overflow:hidden;
 }
+.multiview-views #view-app{
+  display:none; /* start with no visible views; dynamic views only */
+}
 .multiview-views .view:only-child{
   flex:1 1 100%;
 }
