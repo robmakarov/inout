@@ -2210,7 +2210,16 @@ function setupSecondaryFeedDnd() {
   if (!secondaryFeedEl || !secondaryViewEl) return;
   function handleSecondaryDragover(e) {
     const src = getDraggingRowAndSource();
-    if (!src || src.channel === secondaryViewChannel) return;
+    if (!src) return;
+    // Dragging inside this view: run full reorder logic for this feed.
+    if (src.channel === secondaryViewChannel) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'move';
+      processFeedDragover(e);
+      return;
+    }
+    // Dragging from another view: just show drop-over highlight.
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
@@ -3463,7 +3472,7 @@ function loadOrderFromLocal() {
     if (!raw) return [];
     const map = JSON.parse(raw);
     if (!map || typeof map !== 'object') return [];
-    const key = currentUser ? (currentUser.id + '::' + currentChannel) : ('anon::' + currentChannel);
+    const key = currentUser ? (currentUser.id + '::' + currentView) : ('anon::' + currentView);
     const arr = map[key];
     if (!Array.isArray(arr)) return [];
     return arr
@@ -3478,7 +3487,7 @@ function saveOrderToLocal() {
   try {
     const raw = localStorage.getItem(ORDER_STATE_KEY);
     const map = raw ? JSON.parse(raw) : {};
-    const key = currentUser ? (currentUser.id + '::' + currentChannel) : ('anon::' + currentChannel);
+    const key = currentUser ? (currentUser.id + '::' + currentView) : ('anon::' + currentView);
     map[key] = (currentObjectOrder || []).slice();
     localStorage.setItem(ORDER_STATE_KEY, JSON.stringify(map));
   } catch (_) {}
