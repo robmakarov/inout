@@ -4826,66 +4826,6 @@ function setupBarDndMode(on) {
   }
 }
 
-(function initBarReorder() {
-  applyManageBarOrder();
-  var toggle = document.getElementById('bar-reorder-toggle');
-  var scroll = document.getElementById('manage-bar-scroll');
-  var actions = document.getElementById('manage-actions');
-  if (!toggle || !scroll || !actions) return;
-  function getIndicator() {
-    if (!barDndIndicatorEl) {
-      barDndIndicatorEl = document.createElement('div');
-      barDndIndicatorEl.className = 'bar-drop-indicator';
-      barDndIndicatorEl.setAttribute('aria-hidden', 'true');
-    }
-    return barDndIndicatorEl;
-  }
-  var buttons = Array.from(actions.querySelectorAll('[data-bar-id]'));
-  buttons.forEach(function(btn) {
-    btn.addEventListener('dragstart', function(e) {
-      if (!document.body.classList.contains('bar-dnd-mode')) return;
-      barDndDraggedEl = btn;
-      e.dataTransfer.setData('text/plain', btn.getAttribute('data-bar-id') || '');
-      e.dataTransfer.effectAllowed = 'move';
-      btn.classList.add('bar-dragging');
-    });
-    btn.addEventListener('dragend', function() {
-      btn.classList.remove('bar-dragging');
-      barDndDraggedEl = null;
-      if (barDndIndicatorEl && barDndIndicatorEl.parentNode) barDndIndicatorEl.remove();
-    });
-  });
-  scroll.addEventListener('dragover', function(e) {
-    if (!document.body.classList.contains('bar-dnd-mode') || !barDndDraggedEl) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    var t = e.target;
-    var node = t && (t.closest && t.closest('[data-bar-id]'));
-    if (!node || node === barDndDraggedEl || !actions.contains(node)) return;
-    var ind = getIndicator();
-    if (node.nextSibling === ind) return;
-    if (ind.parentNode) ind.parentNode.removeChild(ind);
-    actions.insertBefore(ind, node);
-  });
-  scroll.addEventListener('drop', function(e) {
-    e.preventDefault();
-    if (!barDndDraggedEl) return;
-    var ind = barDndIndicatorEl;
-    if (ind && ind.parentNode) {
-      var next = ind.nextSibling;
-      actions.removeChild(ind);
-      if (next) actions.insertBefore(barDndDraggedEl, next);
-      else actions.appendChild(barDndDraggedEl);
-      saveManageBarOrder();
-    }
-    barDndDraggedEl = null;
-  });
-  toggle.addEventListener('click', function() {
-    document.body.classList.toggle('bar-dnd-mode');
-    setupBarDndMode(document.body.classList.contains('bar-dnd-mode'));
-  });
-})();
-
 if (viewToggleBtn && viewMenu) {
   viewToggleBtn.addEventListener('click', e => {
     e.stopPropagation();

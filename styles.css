@@ -367,20 +367,6 @@ header{
   background:var(--line);
   color:var(--text);
 }
-/* Bar DnD mode: reorder buttons (separate from message reorder) */
-body.bar-dnd-mode #manage-bar .manage-btn[data-bar-id]{ cursor:grab; }
-body.bar-dnd-mode #manage-bar .manage-btn[data-bar-id]:active{ cursor:grabbing; }
-body.bar-dnd-mode #manage-bar .manage-btn[data-bar-id].bar-dragging{ opacity:0.6; }
-body.bar-dnd-mode #manage-bar .bar-drop-indicator{
-  flex:0 0 2px;
-  height:20px;
-  background:var(--acc);
-  border-radius:1px;
-  margin:0 -1px;
-  transition:opacity .1s;
-}
-body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
-
 #move-target{
   border:1px solid var(--line2);
   background:var(--bg);
