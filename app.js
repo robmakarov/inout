@@ -908,13 +908,13 @@ function updateTabBadge(ch) {
 }
 
 function updateAllTabBadges() {
-  viewNames.forEach(ch => updateTabBadge(ch));
+  channels.forEach(ch => updateTabBadge(ch));
 }
 
 function refreshMoveTargets() {
   if (!moveTargetSelect) return;
   moveTargetSelect.innerHTML = '';
-  for (const ch of viewNames) {
+  for (const ch of channels) {
     const opt = document.createElement('option');
     opt.value = ch;
     opt.textContent = ch === 'main' ? 'Feed' : ch;
@@ -2178,11 +2178,10 @@ function updateSelectionUI() {
 
 function restoreLastChannel() {
   try {
-    const saved = localStorage.getItem(CURRENT_VIEW_KEY);
+    const saved = localStorage.getItem(CURRENT_CHANNEL_KEY);
     if (!saved) return;
-    if (!viewNames.includes(saved)) return;
-    currentView = saved;
-    if (views[0]) views[0].channel = currentView;
+    if (!channels.includes(saved)) return;
+    currentChannel = saved;
     updateTabsUI();
   } catch (_) {}
 }
@@ -2198,7 +2197,7 @@ function restoreSecondaryView() {
   if (secondaryViewEl) return;
   try {
     const saved = localStorage.getItem(SECONDARY_VIEW_KEY);
-    if (!saved || !viewNames.includes(saved)) return;
+    if (!saved || !channels.includes(saved)) return;
     secondaryViewChannel = saved;
     openSecondaryView(saved);
   } catch (_) {}
@@ -2308,7 +2307,7 @@ function setupMultiviewResizer(resizerEl, viewsEl) {
 }
 
 async function openSecondaryView(ch) {
-  if (!viewNames.includes(ch)) return;
+  if (!channels.includes(ch)) return;
   closeSecondaryView();
   secondaryViewChannel = ch;
   saveSecondaryViewState();
@@ -3519,7 +3518,7 @@ function updateTabsUI() {
   const buttons = tabsEl.querySelectorAll('.tab[data-channel]');
   buttons.forEach(btn => {
     const ch = btn.getAttribute('data-channel') || 'main';
-    if (ch === currentChannel) {
+    if (ch === currentView) {
       btn.classList.add('tab-active');
     } else {
       btn.classList.remove('tab-active');
@@ -3569,14 +3568,14 @@ function loadChannelsList() {
       const cleaned = parsed
         .map(x => (typeof x === 'string' ? x.trim() : ''))
         .filter(x => x && x !== 'main' && !leftChannels.has(x));
-      viewNames = ['main', ...Array.from(new Set(cleaned))];
+      channels = ['main', ...Array.from(new Set(cleaned))];
     }
   } catch (_) {}
 }
 
 function saveChannelsList() {
   try {
-    const toSave = viewNames.filter(ch => ch !== 'main');
+    const toSave = channels.filter(ch => ch !== 'main');
     localStorage.setItem(CHANNELS_KEY, JSON.stringify(toSave));
   } catch (_) {}
 }
@@ -3726,7 +3725,7 @@ function renderTabs() {
   if (!tabsEl) return;
   tabsEl.innerHTML = '';
 
-  viewNames.forEach(ch => {
+  channels.forEach(ch => {
     const btn = document.createElement('button');
     btn.className = 'tab';
     btn.setAttribute('data-channel', ch);
@@ -3842,11 +3841,11 @@ async function refreshSharedFlags() {
   if (!currentUser) return;
   sharedChannels.clear();
   try {
-    // mark view as shared if it has any member other than me
+    // mark channel as shared if it has any member other than me
     const { data, error } = await sb
       .from('channel_members')
       .select('channel,user_id')
-      .in('channel', viewNames)
+      .in('channel', channels)
       .neq('user_id', currentUser.id);
     if (error) {
       console.error(error);
@@ -3930,8 +3929,8 @@ async function createChannelFromModal() {
 
   leftChannels.delete(name);
   saveLeftChannelsList();
-  if (!viewNames.includes(name)) {
-    viewNames.push(name);
+  if (!channels.includes(name)) {
+    channels.push(name);
     saveChannelsList();
     renderTabs();
   }
