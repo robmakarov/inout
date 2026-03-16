@@ -1557,14 +1557,15 @@ function setupDraftChannel() {
     })
     .on('broadcast', { event: 'draft' }, payload => {
       const data = payload.payload || {};
-      if (!data || data.from === myId) return; // ignore own events
+      if (!data) return;
       const text = (data.text != null ? String(data.text) : '').trim();
       const editingId = data.editingId != null ? Number(data.editingId) : null;
       const authorName = data.authorName != null ? String(data.authorName) : '';
       const deviceId = data.deviceId != null ? String(data.deviceId) : '';
       latestRemoteDraft = text;
       if (editingId != null && Number.isFinite(editingId)) {
-        showRemoteEditingDoppelganger(editingId, text, authorName || 'Someone', deviceId);
+        const isSelf = (data.from === myId);
+        showRemoteEditingDoppelganger(editingId, text, authorName || (isSelf ? 'Editing' : 'Someone'), deviceId, isSelf);
       } else {
         if (lastRemoteEditingId != null) clearRemoteEditingDoppelganger(lastRemoteEditingId);
       }
@@ -1607,57 +1608,71 @@ function broadcastDraft(text) {
 var lastRemoteEditingId = null;
 var savedTextForRemote = Object.create(null);
 
-function showRemoteEditingDoppelganger(objId, text, authorName, deviceId) {
-  const row = findObjectRowEl(objId);
-  if (!row) return;
-  const textEl = findObjectRowTextEl(objId);
-  if (!textEl) return;
+function showRemoteEditingDoppelganger(objId, text, authorName, deviceId, skipEditingRows) {
+  const idStr = String(objId);
+  const rows = [];
+  if (feedInner) {
+    rows.push.apply(rows, Array.from(feedInner.querySelectorAll('.obj[data-id="' + CSS.escape(idStr) + '"]')));
+  }
+  if (secondaryFeedInner) {
+    rows.push.apply(rows, Array.from(secondaryFeedInner.querySelectorAll('.obj[data-id="' + CSS.escape(idStr) + '"]')));
+  }
+  if (!rows.length) return;
   if (lastRemoteEditingId != null && lastRemoteEditingId !== objId) {
     clearRemoteEditingDoppelganger(lastRemoteEditingId);
   }
-  if (savedTextForRemote[objId] === undefined) {
-    savedTextForRemote[objId] = textEl.textContent || '';
-  }
-  textEl.innerHTML = linkify(escapeHtml(text || ''));
-  row.classList.add('obj-remote-editing');
-  let badge = textEl.querySelector('.obj-remote-edit-badge');
-  if (!badge) {
-    badge = document.createElement('span');
-    badge.className = 'obj-remote-edit-badge';
-    badge.setAttribute('aria-label', 'Editing elsewhere');
-    const icon = document.createElement('span');
-    icon.className = 'obj-remote-edit-device';
-    icon.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18"/></svg>';
-    badge.appendChild(icon);
-    const label = document.createElement('span');
-    label.className = 'obj-remote-edit-author';
-    badge.appendChild(label);
-    textEl.appendChild(badge);
-  }
-  const authorSpan = badge.querySelector('.obj-remote-edit-author');
-  if (authorSpan) {
-    var name = (authorName || 'Editing').trim();
-    var shortName = name.split(/\s+/)[0] || name;
-    if (shortName.length > 12) shortName = shortName.slice(0, 12) + '…';
-    authorSpan.textContent = shortName;
-  }
+  rows.forEach(function(row) {
+    if (skipEditingRows && row.classList.contains('obj-editing')) return;
+    const textEl = row.querySelector('.obj-text');
+    if (!textEl) return;
+    if (savedTextForRemote[objId] === undefined) {
+      savedTextForRemote[objId] = textEl.textContent || '';
+    }
+    textEl.innerHTML = linkify(escapeHtml(text || ''));
+    row.classList.add('obj-remote-editing');
+    let badge = textEl.querySelector('.obj-remote-edit-badge');
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'obj-remote-edit-badge';
+      badge.setAttribute('aria-label', 'Editing elsewhere');
+      const icon = document.createElement('span');
+      icon.className = 'obj-remote-edit-device';
+      icon.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18"/></svg>';
+      badge.appendChild(icon);
+      const label = document.createElement('span');
+      label.className = 'obj-remote-edit-author';
+      badge.appendChild(label);
+      textEl.appendChild(badge);
+    }
+    const authorSpan = badge.querySelector('.obj-remote-edit-author');
+    if (authorSpan) {
+      var name = (authorName || 'Editing').trim();
+      var shortName = name.split(/\s+/)[0] || name;
+      if (shortName.length > 12) shortName = shortName.slice(0, 12) + '…';
+      authorSpan.textContent = shortName;
+    }
+  });
   lastRemoteEditingId = objId;
 }
 
 function clearRemoteEditingDoppelganger(objId, skipRestore) {
-  const row = findObjectRowEl(objId);
-  if (row) {
+  const idStr = String(objId);
+  const rows = [];
+  if (feedInner) {
+    rows.push.apply(rows, Array.from(feedInner.querySelectorAll('.obj[data-id="' + CSS.escape(idStr) + '"]')));
+  }
+  if (secondaryFeedInner) {
+    rows.push.apply(rows, Array.from(secondaryFeedInner.querySelectorAll('.obj[data-id="' + CSS.escape(idStr) + '"]')));
+  }
+  rows.forEach(function(row) {
     row.classList.remove('obj-remote-editing');
-    const textEl = findObjectRowTextEl(objId);
+    const textEl = row.querySelector('.obj-text');
     const badge = textEl ? textEl.querySelector('.obj-remote-edit-badge') : row.querySelector('.obj-remote-edit-badge');
     if (badge && badge.parentNode) badge.parentNode.removeChild(badge);
-    if (!skipRestore) {
-      const textEl = findObjectRowTextEl(objId);
-      if (textEl && savedTextForRemote[objId] !== undefined) {
-        textEl.innerHTML = linkify(escapeHtml(savedTextForRemote[objId] || ''));
-      }
+    if (!skipRestore && savedTextForRemote[objId] !== undefined && textEl) {
+      textEl.innerHTML = linkify(escapeHtml(savedTextForRemote[objId] || ''));
     }
-  }
+  });
   delete savedTextForRemote[objId];
   if (lastRemoteEditingId === objId) lastRemoteEditingId = null;
 }
