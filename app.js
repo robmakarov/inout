@@ -260,7 +260,12 @@ let views = [];
 })();
 
 // Supabase table name for stored objects (was 'entries').
-const OBJECTS_TABLE = 'entries';
+const OBJECTS_TABLE        = 'entries';
+
+// Per-device/local storage keys (do NOT clear these on sign out).
+const LOCAL_DEVICE_ID_KEY  = 'inout_device_id';
+const LOCAL_VIEWS_KEY      = 'inout_local_views_v1';
+const LOCAL_OBJECTS_KEY    = 'inout_local_objects_v1';
 
 let objectCount    = 0;
 let atBottom    = true;
@@ -298,6 +303,62 @@ let suppressAutoAuth      = false; // when true, never auto-log user back in thi
 const seenIds       = new Set();
 const viewScroll = new Map();
 const OPEN_VIEWS_KEY     = 'inout_open_views_v1';
+
+function loadLocalObjects() {
+  try {
+    const raw = localStorage.getItem(LOCAL_OBJECTS_KEY);
+    if (!raw) return {};
+    const o = JSON.parse(raw);
+    return o && typeof o === 'object' ? o : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function saveLocalObjects(objByView) {
+  try {
+    localStorage.setItem(LOCAL_OBJECTS_KEY, JSON.stringify(objByView || {}));
+  } catch (_) {}
+}
+
+function upsertLocalObjectForCurrentView(obj) {
+  if (!obj || typeof obj.id === 'undefined') return;
+  const byView = loadLocalObjects();
+  const key = currentView || 'main';
+  const list = Array.isArray(byView[key]) ? byView[key] : [];
+  const idx = list.findIndex(o => o && o.id === obj.id);
+  if (idx >= 0) list[idx] = obj; else list.push(obj);
+  byView[key] = list;
+  saveLocalObjects(byView);
+}
+
+function removeLocalObjectsForCurrentView(ids) {
+  if (!ids || !ids.length) return;
+  const byView = loadLocalObjects();
+  const key = currentView || 'main';
+  let list = Array.isArray(byView[key]) ? byView[key] : [];
+  const set = new Set(ids);
+  list = list.filter(o => !o || typeof o.id === 'undefined' ? false : !set.has(o.id));
+  byView[key] = list;
+  saveLocalObjects(byView);
+}
+function getDeviceId() {
+  try {
+    let id = localStorage.getItem(LOCAL_DEVICE_ID_KEY);
+    if (!id) {
+      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        id = crypto.randomUUID();
+      } else {
+        id = 'dev-' + Date.now().toString(16) + '-' + Math.random().toString(16).slice(2);
+      }
+      localStorage.setItem(LOCAL_DEVICE_ID_KEY, id);
+    }
+    return id;
+  } catch (_) {
+    return 'dev-fallback-' + Date.now().toString(16);
+  }
+}
+
 function loadScrollState() {
   try {
     var raw = localStorage.getItem(SCROLL_STATE_KEY);
@@ -1177,6 +1238,15 @@ async function fetchObjectsListForChannel(ch) {
 async function loadObjects() {
   const list = await fetchObjectsList();
   await replaceFeedWithList(list);
+  // Mirror current view's objects into local per-device storage so they persist on this device.
+  try {
+    if (Array.isArray(list)) {
+      const byView = loadLocalObjects();
+      const key = currentView || 'main';
+      byView[key] = list;
+      saveLocalObjects(byView);
+    }
+  } catch (_) {}
 }
 
 async function replaceFeedWithList(list) {
@@ -4325,7 +4395,26 @@ async function signOut() {
   explicitSignOut = true;
   suppressAutoAuth = true;
   currentUser = null;
+
+  // 1) Clear app storage (everything this tab controls)
+  try { sessionStorage.clear(); } catch (_) {}
+  try { localStorage.clear(); } catch (_) {}
+
+  // 2) Clear all non-httpOnly cookies on this domain (best-effort)
+  try {
+    const rawCookies = (document.cookie || '').split(';');
+    for (const raw of rawCookies) {
+      const name = raw.split('=')[0].trim();
+      if (!name) continue;
+      document.cookie = name + '=; Max-Age=0; path=/';
+      document.cookie = name + '=; Max-Age=0; path=/; SameSite=Lax';
+    }
+  } catch (_) {}
+
+  // 3) Clear any in-memory auth backup key we used
   try { sessionStorage.removeItem(AUTH_BACKUP_KEY); } catch (_) {}
+
+  // 4) Update UI + local state
   updateAuthUI();
   clearObjects();
   teardownDraftChannel();
@@ -4333,6 +4422,8 @@ async function signOut() {
   sharedChannels.clear();
   unreadCounts.clear();
   renderTabs();
+
+  // 5) Ask Supabase to sign out on its side (if available)
   try {
     if (sb && sb.auth && typeof sb.auth.signOut === 'function') {
       const { error } = await sb.auth.signOut();
