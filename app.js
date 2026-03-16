@@ -50,8 +50,16 @@ if (sb && sb.auth && typeof location !== 'undefined' && location.search && locat
   var btn = document.getElementById('um-auth-btn');
   if (!btn) return;
   btn.addEventListener('click', function authBtnClick() {
-    if (typeof signIn === 'function') signIn();
-    else if (sb && sb.auth && typeof sb.auth.signInWithOAuth === 'function') {
+    if (typeof signIn === 'function') { signIn(); return; }
+    if (!sb && typeof supabase !== 'undefined') {
+      try {
+        sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+          auth: { detectSessionInUrl: true, flowType: 'pkce' }
+        });
+        if (typeof window !== 'undefined') window.sb = sb;
+      } catch (_) {}
+    }
+    if (sb && sb.auth && typeof sb.auth.signInWithOAuth === 'function') {
       var redirectTo = window.location.origin ? window.location.origin + '/' : undefined;
       sb.auth.signInWithOAuth({ provider: 'google', options: redirectTo ? { redirectTo: redirectTo } : {} }).then(function(r) {
         if (r && r.error) {
@@ -4251,11 +4259,17 @@ function clearObjects() {
 }
 
 async function signIn() {
-  if (!sb || !sb.auth || typeof sb.auth.signInWithOAuth !== 'function') {
-    toast('Sign-in not available in this local build.');
-    return;
-  }
   try {
+    if (!sb && typeof supabase !== 'undefined') {
+      sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+        auth: { detectSessionInUrl: true, flowType: 'pkce' }
+      });
+      if (typeof window !== 'undefined') window.sb = sb;
+    }
+    if (!sb || !sb.auth || typeof sb.auth.signInWithOAuth !== 'function') {
+      toast('Sign-in not available.');
+      return;
+    }
     const redirectTo = typeof window !== 'undefined' && window.location.origin ? window.location.origin + '/' : undefined;
     const { data, error } = await sb.auth.signInWithOAuth({
       provider: 'google',
