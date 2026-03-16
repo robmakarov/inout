@@ -973,16 +973,20 @@ header{
 }
 @keyframes fadin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
-/* message row */
+/* object card (grid layout in view visual) */
 .obj{
   display:flex;
-  align-items:center;
+  flex-direction:row;
+  align-items:flex-start;
   gap:6px;
   padding:4px 20px;
   border-bottom:1px solid var(--line);
   transition:background .1s, transform .1s ease-out;
   position:relative;
   contain:layout style;
+  width:100%;
+  box-sizing:border-box;
+  break-inside:avoid;
 }
 @keyframes msgin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
 .obj-drag-image-ghost{
