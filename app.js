@@ -317,15 +317,12 @@ function subscribeTempSessionJoins() {
           ? (window.location.origin + window.location.pathname)
           : '';
 
-        // Generate a dedicated shared View name for this visit link.
-        const userPrefix = (currentUser.id || '').toString().slice(0, 8) || 'user';
-        const sharedChannel = 'visit-' + userPrefix + '-' + Date.now().toString(36);
-
-        // Create temp session row in Supabase for this new shared View
+        // Create temp session row in Supabase for this link.
+        // The actual shared View name will be decided when the link is opened.
         const { data, error } = await sb
           .from('temp_sessions')
           .insert({
-            channel: sharedChannel,
+            channel: null,
             owner_id: currentUser.id,
             expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           })
@@ -337,16 +334,6 @@ function subscribeTempSessionJoins() {
           toast('Failed to create visit link.');
           return;
         }
-
-        // Ensure the shared View is present in the owner's nav and opened.
-        if (!viewNames.includes(sharedChannel)) {
-          viewNames.push(sharedChannel);
-          saveChannelsList();
-        }
-        currentView = sharedChannel;
-        currentChannel = sharedChannel;
-        renderTabs();
-        await loadObjects();
 
         const inviteUrl = base
           ? (base + (base.includes('?') ? '&' : '?') + 'tempSession=' + encodeURIComponent(data.id))
@@ -4401,7 +4388,23 @@ async function refreshAuth() {
         tempSessionId = null;
       } else {
         const sessionInfo = data[0];
-        const ch = sessionInfo.channel || 'main';
+        // Decide shared View name on first link open.
+        let ch = sessionInfo.channel;
+        if (!ch) {
+          const tsPrefix = (tempSessionId || 'temp').toString().slice(0, 8);
+          ch = 'visit-' + tsPrefix;
+          try {
+            if (sb && sb.from) {
+              await sb
+                .from('temp_sessions')
+                .update({ channel: ch })
+                .eq('id', tempSessionId);
+            }
+          } catch (e) {
+            console.error('Failed to set shared channel for temp session', e);
+          }
+        }
+        if (!ch) ch = 'main';
         if (!viewNames.includes(ch)) {
           viewNames.push(ch);
           saveChannelsList();
