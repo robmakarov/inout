@@ -163,6 +163,14 @@ const logActionBtn   = document.getElementById('log-action-btn');
 const logDropupPanel = document.getElementById('log-dropup-panel');
 const logDropupBody  = document.getElementById('log-dropup-body');
 
+// Register initial view from static DOM.
+views.push({
+  id: 'view-0',
+  channel: () => currentChannel,
+  rootEl: document.getElementById('view-app'),
+  get feedInner() { return feedInner; }
+});
+
 // View registry: first step toward true multiview (one entry per visible view).
 const views = [];
 
@@ -220,7 +228,7 @@ try { myId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.rando
 let currentUser    = null;
 let currentChannel = 'main';
 let channels       = ['main'];
-let secondaryViewChannel = null; /* channel shown in second panel; null = single view. Persisted to device (localStorage). */
+let secondaryViewChannel = null; /* legacy; will be removed when views[] fully replaces secondary. Persisted to device (localStorage). */
 const CHANNELS_KEY         = 'inout_channels_v1';
 const LEFT_CHANNELS_KEY    = 'inout_left_channels_v1';
 const CURRENT_CHANNEL_KEY  = 'inout_current_channel_v1';
@@ -234,6 +242,10 @@ const WAS_EDITING_KEY      = 'inout_was_editing_v1';
 const AUTH_BACKUP_KEY     = 'inout_auth_user_backup';
 const seenIds       = new Set();
 const channelScroll = new Map();
+
+// View registry: all open views on this device.
+// Each entry: { id, channel, rootEl, feedInner }
+const views = [];
 function loadScrollState() {
   try {
     var raw = localStorage.getItem(SCROLL_STATE_KEY);
@@ -1504,7 +1516,7 @@ function subscribeActionLog() {
 function onInsertForChannel(ch, msg) {
   let handled = false;
   views.forEach(view => {
-    if (!view || view.channel !== ch || !view.feedInner) return;
+    if (!view || typeof view.channel !== 'function' || view.channel() !== ch || !view.feedInner) return;
     const inner = view.feedInner;
     if (inner === feedInner) {
       hideEmpty();
@@ -2244,9 +2256,10 @@ function closeSecondaryView() {
   secondaryFeedInner = null;
   secondaryFeedEl = null;
   secondaryViewChannel = null;
-  // remove secondary from views[]
+  // remove any view entries whose rootEl is gone
   for (let i = views.length - 1; i >= 0; i--) {
-    if (views[i] && views[i].id === 'secondary') views.splice(i, 1);
+    const v = views[i];
+    if (!v || (v.rootEl && !document.body.contains(v.rootEl))) views.splice(i, 1);
   }
   saveSecondaryViewState();
   updateTabsUI();
@@ -2333,10 +2346,12 @@ async function openSecondaryView(ch) {
   secondaryFeedInner = feedInner;
   secondaryFeedEl = view.querySelector('.feed');
   if (secondaryFeedEl) setupSecondaryFeedDnd();
-  // register secondary in views[]
+  // register this view in views[]
+  const viewId = 'view-' + views.length;
   views.push({
-    id: 'secondary',
-    get channel() { return secondaryViewChannel; },
+    id: viewId,
+    channel: () => secondaryViewChannel,
+    rootEl: view,
     get feedInner() { return secondaryFeedInner; }
   });
   const list = await fetchObjectsListForChannel(ch);
