@@ -98,7 +98,7 @@ header,
   height:100vh;
   overflow:hidden;
   pointer-events:none;
-  padding-top:calc(48px + var(--nav-height)); /* header + nav; manage bar is inside each view */
+  padding-top:calc(48px + var(--nav-height) + var(--bar-top-height)); /* header + nav + fixed manage bar */
   padding-bottom:var(--bar-bottom-min-height); /* reserve space for fixed input area */
 }
 .multiview-views{
@@ -117,9 +117,6 @@ header,
   flex-direction:column;
   min-height:0;
   overflow:hidden;
-}
-.multiview-views #view-app{
-  display:none; /* start with no visible views; dynamic views only */
 }
 .multiview-views .view:only-child{
   flex:1 1 100%;
@@ -254,13 +251,13 @@ header{
 
 /* ── TOP BAR (manage): fixed under header + nav, fills width ── */
 #manage-bar{
-  position:relative;
-  top:auto;
-  left:auto;
-  right:auto;
+  position:fixed;
+  top:calc(48px + var(--nav-height));
+  left:0;
+  right:0;
   width:100%;
   height:var(--bar-top-height);
-  z-index:auto;
+  z-index:998;
   flex-shrink:0;
   background:var(--bg2);
   border-bottom:1px solid var(--line);
@@ -1736,15 +1733,15 @@ body.select-mode .obj-select-wrap,
   }
   /* pin manage bar under header */
   #manage-bar{
-    position:relative;
-    top:auto;
-    left:auto;
-    right:auto;
+    position:fixed;
+    top:48px;
+    left:0;
+    right:0;
     width:100%;
-    z-index:auto;
+    z-index:115;
     padding:4px 14px;
   }
-  #multiview{padding-top:calc(48px + var(--nav-height))}
+  #multiview{padding-top:calc(48px + var(--nav-height) + var(--bar-top-height))}
   /* keep input bar above iOS Safari bottom panel & keyboard */
   #input-area{
     position:fixed;
