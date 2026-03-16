@@ -2316,7 +2316,6 @@ function setupMultiviewResizer(resizerEl, viewsEl) {
 
 async function openSecondaryView(ch) {
   if (!viewNames.includes(ch)) return;
-  closeSecondaryView();
   secondaryViewChannel = ch;
   saveSecondaryViewState();
   const viewsContainer = document.querySelector('.multiview-views');
@@ -2376,18 +2375,7 @@ async function openSecondaryView(ch) {
 }
 
 function toggleSecondaryView(ch) {
-  // If a non-main view with this name is already open, close it; otherwise open a new one.
-  const existing = views.find(v => v && v.id !== 'view-0' && v.channel === ch && v.rootEl && document.body.contains(v.rootEl));
-  if (existing && existing.rootEl && existing.rootEl.parentNode) {
-    existing.rootEl.parentNode.removeChild(existing.rootEl);
-    const idx = views.indexOf(existing);
-    if (idx >= 0) views.splice(idx, 1);
-    try {
-      const open = Array.from(new Set(views.filter(v => v && v.id !== 'view-0').map(v => v.channel)));
-      localStorage.setItem(OPEN_VIEWS_KEY, JSON.stringify(open));
-    } catch (_) {}
-    return;
-  }
+  // Always open another view for this name; multiview supports many views.
   openSecondaryView(ch);
 }
 
