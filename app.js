@@ -4342,25 +4342,33 @@ function setupAuthListener() {
   if (umClearLocalBtn) {
     umClearLocalBtn.addEventListener('click', () => {
       try {
-        const deviceId = localStorage.getItem(LOCAL_DEVICE_ID_KEY);
-        localStorage.removeItem(LOCAL_ANON_OBJECTS_KEY);
-        // also clear anon order keys
-        try {
-          const raw = localStorage.getItem(ORDER_STATE_KEY);
-          if (raw) {
-            const map = JSON.parse(raw);
-            if (map && typeof map === 'object') {
-              Object.keys(map).forEach(k => {
-                if (k.startsWith('anon::')) delete map[k];
-              });
-              localStorage.setItem(ORDER_STATE_KEY, JSON.stringify(map));
-            }
-          }
-        } catch (_) {}
-        if (deviceId) localStorage.setItem(LOCAL_DEVICE_ID_KEY, deviceId);
+        // 1) Unregister all service workers for this origin (remove shell)
+        if (typeof navigator !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+          navigator.serviceWorker.getRegistrations().then(regs => {
+            regs.forEach(reg => reg.unregister().catch(() => {}));
+          }).catch(() => {});
+        }
+
+        // 2) Clear all caches used by service workers
+        if (typeof caches !== 'undefined' && caches.keys) {
+          caches.keys().then(keys => {
+            keys.forEach(k => caches.delete(k).catch(() => {}));
+          }).catch(() => {});
+        }
+
+        // 3) Clear all local/session storage for this origin
+        try { localStorage.clear(); } catch (_) {}
+        try { sessionStorage.clear(); } catch (_) {}
+
+        // 4) Clear current UI
         clearObjects();
-        if (emptyEl && !emptyEl.parentNode) feedInner.appendChild(emptyEl);
-        toast('Local data cleared from this device.');
+        if (emptyEl && !emptyEl.parentNode && feedInner) feedInner.appendChild(emptyEl);
+        toast('All local data and shell cleared. Reloading…');
+
+        // 5) Reload page to pick up a clean state
+        setTimeout(() => {
+          if (typeof location !== 'undefined' && location.reload) location.reload();
+        }, 600);
       } catch (e) {
         console.error(e);
         toast('Failed to clear local data.');
