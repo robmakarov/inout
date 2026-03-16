@@ -2184,10 +2184,11 @@ function setSelectMode(on) {
 }
 
 function updateSelectionUI() {
-  if (selectedIds.size > 0 && !selectMode) {
+  const count = (modeState && modeState.selectedIds) ? modeState.selectedIds.size : selectedIds.size;
+  if (count > 0 && !selectMode) {
     selectModeAutoOn = true;
     setSelectMode(true);
-  } else if (selectedIds.size === 0 && selectModeAutoOn) {
+  } else if (count === 0 && selectModeAutoOn) {
     selectModeAutoOn = false;
     setSelectMode(false);
   }
@@ -4893,13 +4894,10 @@ if (viewToggleBtn && viewMenu) {
 if (deleteSelectedBtn) {
   deleteSelectedBtn.addEventListener('click', async () => {
     if (!currentUser) return;
-    const boxes = feedInner.querySelectorAll('.obj-select:checked');
-    let ids = Array.from(boxes)
-      .map(box => {
-        const row = box.closest('.obj');
-        return row && row.dataset.id ? Number(row.dataset.id) : null;
-      })
-      .filter(id => typeof id === 'number');
+    // Use global selection union (across all open views).
+    let ids = Array.from(modeState.selectedIds || [])
+      .map(x => Number(x))
+      .filter(id => Number.isFinite(id));
     try {
       let rowsToDelete = [];
       // If nothing selected, operate on whole tab (for this user).
@@ -4940,6 +4938,17 @@ if (deleteSelectedBtn) {
       }
       pushUndo({ type: 'delete', entries: rowsToDelete });
       logAction('delete', { count: rowsToDelete.length, channel: currentChannel });
+      // Clear selection across all views.
+      selectedIds.clear();
+      modeState.selectedIds.clear();
+      try {
+        views.forEach(v => {
+          const inner = v && v.feedInner;
+          if (!inner) return;
+          inner.querySelectorAll('.obj-select:checked').forEach(box => { box.checked = false; });
+          inner.querySelectorAll('.obj.obj-selected').forEach(row => row.classList.remove('obj-selected'));
+        });
+      } catch (_) {}
       setSelectMode(false);
       await reloadForUser();
     } catch (e) {
