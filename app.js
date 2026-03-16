@@ -675,8 +675,9 @@ async function undoLastAction() {
 }
 
 function updateEditingRowHighlight() {
-  [feedInner, secondaryFeedInner].forEach(fi => {
-    if (fi) fi.querySelectorAll('.obj.obj-editing').forEach(r => r.classList.remove('obj-editing'));
+  views.forEach(view => {
+    const inner = view && view.feedInner;
+    if (inner) inner.querySelectorAll('.obj.obj-editing').forEach(r => r.classList.remove('obj-editing'));
   });
   const ids = editingObjectIds && editingObjectIds.size ? editingObjectIds : (editingObjectId != null ? [editingObjectId] : []);
   ids.forEach(id => {
@@ -1384,11 +1385,15 @@ function onUpdateForChannel(ch, row) {
     try { localStorage.removeItem(WAS_EDITING_KEY); } catch (_) {}
     if (input) input.placeholder = 'Add object…';
   }
-  if (ch === currentChannel || ch === secondaryViewChannel) {
+  // apply update in all views showing this channel
+  let anyUpdated = false;
+  views.forEach(view => {
+    if (!view || typeof view.channel !== 'function' || view.channel() !== ch) return;
     updateObjectRowText(id, text);
     clearRemoteEditingDoppelganger(id, true);
-  }
-  if (ch === currentChannel) updateEditingRowHighlight();
+    anyUpdated = true;
+  });
+  if (anyUpdated) updateEditingRowHighlight();
 }
 
 function subscribeOrderRealtime() {
