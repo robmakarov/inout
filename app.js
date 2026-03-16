@@ -131,6 +131,7 @@ const umAuthStatus = document.getElementById('um-auth-status');
 const umAuthBtn    = document.getElementById('um-auth-btn');
 const umUserId     = document.getElementById('um-user-id');
 const umCopyIdBtn  = document.getElementById('um-copy-id');
+const umShowQrBtn  = document.getElementById('um-show-qr');
 const umNickname   = document.getElementById('um-nickname');
 const umNickSave   = document.getElementById('um-nick-save');
 const umVersionBadge = document.getElementById('um-version-badge');
@@ -4169,6 +4170,31 @@ function setupAuthListener() {
   });
 
   if (umCopyIdBtn) umCopyIdBtn.addEventListener('click', copyUserId);
+
+  if (umShowQrBtn) {
+    umShowQrBtn.addEventListener('click', () => {
+      try {
+        const url = (typeof window !== 'undefined' && window.location)
+          ? (window.location.origin + window.location.pathname)
+          : '';
+        const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(url);
+        const existing = document.getElementById('um-qr-img');
+        if (existing) {
+          existing.src = qrUrl;
+        } else {
+          const img = document.createElement('img');
+          img.id = 'um-qr-img';
+          img.src = qrUrl;
+          img.alt = 'QR code to open this app';
+          img.style.marginTop = '12px';
+          img.style.borderRadius = '8px';
+          img.style.border = '1px solid var(--line2)';
+          const section = umShowQrBtn.closest('.um-section');
+          if (section) section.appendChild(img);
+        }
+      } catch (_) {}
+    });
+  }
 
   if (umNickSave && umNickname) {
     umNickSave.addEventListener('click', saveNickname);
