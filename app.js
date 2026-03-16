@@ -3527,17 +3527,6 @@ function updateTabsUI() {
     } else {
       btn.classList.remove('tab-active');
     }
-    if (ch === secondaryViewChannel) {
-      btn.classList.add('tab-secondary-open');
-      btn.title = 'Right panel — Shift+click to close';
-    } else {
-      btn.classList.remove('tab-secondary-open');
-      if (secondaryViewChannel) {
-        btn.title = 'Shift+click to open in right panel';
-      } else {
-        btn.title = '';
-      }
-    }
   });
 }
 
