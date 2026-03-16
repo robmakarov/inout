@@ -436,7 +436,7 @@ function logAction(action, details, opts) {
     }
   }
   updateLogBadge();
-  if (currentUser) {
+  if (currentUser && sb && sb.from) {
     try {
       sb.from('action_log').insert({
         id: entry.id,
@@ -2060,12 +2060,12 @@ function broadcastDndStart() {
 
 function broadcastDndMove() {
   if (!dndBroadcastChannel || !dndChannelReady || !lastReorderTarget) return;
-  var insertBeforeId = lastReorderTarget.insertBefore && lastReorderTarget.insertBefore.dataset ? Number(lastReorderTarget.insertBefore.dataset.id) : null;
   if (dndBroadcastThrottle) return;
-  var y = typeof lastDragClientY === 'number' ? lastDragClientY : null;
   dndBroadcastThrottle = setTimeout(function() {
     dndBroadcastThrottle = null;
-    if (!dndBroadcastChannel || !dndChannelReady) return;
+    if (!dndBroadcastChannel || !dndChannelReady || !lastReorderTarget) return;
+    var insertBeforeId = lastReorderTarget.insertBefore && lastReorderTarget.insertBefore.dataset ? Number(lastReorderTarget.insertBefore.dataset.id) : null;
+    var y = typeof lastDragClientY === 'number' ? lastDragClientY : null;
     dndBroadcastChannel.send({
       type: 'broadcast',
       event: 'dnd',
@@ -2457,7 +2457,7 @@ function saveFieldPrefsForCurrentChannel() {
     localStorage.setItem(FIELD_PREFS_KEY, JSON.stringify(map));
   } catch(_) {}
   // Also persist into unified view config so other devices see it.
-  if (currentUser) {
+  if (currentUser && sb && sb.from) {
     const cfg = {
       order: currentObjectOrder.slice(),
       showTime: !!fieldPrefs.showTime,
