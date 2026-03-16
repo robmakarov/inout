@@ -251,13 +251,13 @@ header{
 
 /* ── TOP BAR (manage): fixed under header + nav, fills width ── */
 #manage-bar{
-  position:fixed;
-  top:calc(48px + var(--nav-height));
-  left:0;
-  right:0;
+  position:relative;
+  top:auto;
+  left:auto;
+  right:auto;
   width:100%;
   height:var(--bar-top-height);
-  z-index:998;
+  z-index:auto;
   flex-shrink:0;
   background:var(--bg2);
   border-bottom:1px solid var(--line);
@@ -1687,18 +1687,15 @@ body.select-mode .obj-select-wrap,
   }
   /* pin manage bar under header */
   #manage-bar{
-    position:fixed;
-    top:48px;
-    left:0;
-    right:0;
+    position:relative;
+    top:auto;
+    left:auto;
+    right:auto;
     width:100%;
-    z-index:115;
+    z-index:auto;
     padding:4px 14px;
-    transform:translateY(var(--vv-top));
-    transition:transform .22s cubic-bezier(.2,.8,.2,1);
-    will-change:transform;
   }
-  #multiview{padding-top:calc(48px + var(--nav-height) + var(--bar-top-height))}
+  #multiview{padding-top:calc(48px + var(--nav-height))}
   /* keep input bar above iOS Safari bottom panel & keyboard */
   #input-area{
     position:fixed;
