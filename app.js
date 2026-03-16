@@ -974,7 +974,7 @@ function init(done) {
       if (objectCountEl) updateObjectCount();
     }
   } catch (_) {}
-  // In this build we do not auto-sync auth state from Supabase; sign-in/out are driven by buttons only.
+  try { setupAuthListener(); } catch (_) {}
   finish();
   (function runAsync() {
     refreshAuth().then(function() {
