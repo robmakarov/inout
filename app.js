@@ -3666,32 +3666,35 @@ function recomputeOrderFromDOM(container) {
 }
 
 function applyObjectOrderToDOM() {
-  if (!feedInner) return;
   if (!currentObjectOrder.length) return;
-  const header = feedInner.querySelector('.obj.obj-header');
-  const rows = Array.from(feedInner.querySelectorAll('.obj:not(.obj-header)'));
-  if (!rows.length) return;
-  // Skip if DOM order already matches — avoids reflow/blink when nothing changed
-  const domOrder = rows.map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id));
-  if (domOrder.length === currentObjectOrder.length &&
-      domOrder.every((id, i) => id === currentObjectOrder[i])) return;
-  const byId = new Map();
-  rows.forEach(row => {
-    const id = Number(row.dataset.id);
-    if (Number.isFinite(id)) byId.set(id, row);
+  // Reapply order in every open view showing the current view name.
+  views.forEach(view => {
+    if (!view || view.channel !== currentView || !view.feedInner) return;
+    const inner = view.feedInner;
+    const header = inner.querySelector('.obj.obj-header');
+    const rows = Array.from(inner.querySelectorAll('.obj:not(.obj-header)'));
+    if (!rows.length) return;
+    const domOrder = rows.map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id));
+    if (domOrder.length === currentObjectOrder.length &&
+        domOrder.every((id, i) => id === currentObjectOrder[i])) return;
+    const byId = new Map();
+    rows.forEach(row => {
+      const id = Number(row.dataset.id);
+      if (Number.isFinite(id)) byId.set(id, row);
+    });
+    if (!byId.size) return;
+    const frag = document.createDocumentFragment();
+    currentObjectOrder.forEach(id => {
+      const row = byId.get(id);
+      if (row) {
+        frag.appendChild(row);
+        byId.delete(id);
+      }
+    });
+    byId.forEach(row => frag.appendChild(row));
+    if (header && header.parentNode === inner) inner.insertBefore(header, inner.firstChild);
+    inner.appendChild(frag);
   });
-  if (!byId.size) return;
-  const frag = document.createDocumentFragment();
-  currentObjectOrder.forEach(id => {
-    const row = byId.get(id);
-    if (row) {
-      frag.appendChild(row);
-      byId.delete(id);
-    }
-  });
-  byId.forEach(row => frag.appendChild(row));
-  if (header) feedInner.insertBefore(header, feedInner.firstChild);
-  feedInner.appendChild(frag);
 }
 
 function renderTabs() {
@@ -3833,7 +3836,7 @@ async function refreshSharedFlags() {
 }
 
 async function switchChannel(ch) {
-  if (ch === currentChannel) return;
+  if (ch === currentChannel && ch === currentView) return;
   teardownDndBroadcastChannel();
   if (editingObjectId != null) cancelEditingMode(true);
   if (feedEl) {
@@ -3841,6 +3844,7 @@ async function switchChannel(ch) {
     saveScrollState();
   }
   currentChannel = ch;
+  currentView = ch;
   // keep main view's View name in sync
   if (views[0]) views[0].channel = ch;
   try {
