@@ -746,13 +746,20 @@ header{
   padding:16px 0 8px;
   min-height:100%;
 }
-/* Default feed: two-dimensional grid of objects (cards) */
+/* Default feed: two-dimensional, no gaps: two columns that fill the view */
 .feed-inner:not(.view-table){
-  display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
-  align-items:flex-start;
-  justify-content:center;
-  gap:12px 16px;
+  column-count:2;
+  column-gap:0;
+}
+.feed-inner:not(.view-table)::before{
+  content:'';
+  position:absolute;
+  top:0;
+  bottom:0;
+  left:50%;
+  width:1px;
+  background:var(--line2);
+  pointer-events:none;
 }
 /* Table view: same object params as feed but laid out as table */
 .feed-inner.view-table{
