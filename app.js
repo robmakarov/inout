@@ -220,13 +220,13 @@ if (typeof crypto !== 'undefined' && !crypto.randomUUID) {
 let myId;
 try { myId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) { var r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16); }); } catch (_) { myId = 'fallback-' + Date.now(); }
 let currentUser    = null;
-let currentChannel = 'main';
-let channels       = ['main'];
-let secondaryViewChannel = null; /* legacy; will be removed when views[] fully replaces secondary. Persisted to device (localStorage). */
-const CHANNELS_KEY         = 'inout_channels_v1';
-const LEFT_CHANNELS_KEY    = 'inout_left_channels_v1';
-const CURRENT_CHANNEL_KEY  = 'inout_current_channel_v1';
-const SECONDARY_VIEW_KEY   = 'inout_secondary_view_channel_v1';
+let currentView    = 'main';
+let viewNames      = ['main'];
+let secondaryViewName = null; /* legacy; will be removed when views[] fully replaces secondary. Persisted to device (localStorage). */
+const VIEWS_KEY           = 'inout_views_v1';
+const LEFT_VIEWS_KEY      = 'inout_left_views_v1';
+const CURRENT_VIEW_KEY    = 'inout_current_view_v1';
+const SECONDARY_VIEW_KEY  = 'inout_secondary_view_name_v1';
 const MULTIVIEW_SPLIT_KEY = 'inout_multiview_split_v1';
 const INPUT_STATE_KEY      = 'inout_input_state_v2';
 const FIELD_PREFS_KEY      = 'inout_field_prefs_v1';
@@ -235,21 +235,21 @@ const SCROLL_STATE_KEY     = 'inout_scroll_state_v1';
 const WAS_EDITING_KEY      = 'inout_was_editing_v1';
 const AUTH_BACKUP_KEY     = 'inout_auth_user_backup';
 const seenIds       = new Set();
-const channelScroll = new Map();
+const viewScroll = new Map();
 function loadScrollState() {
   try {
     var raw = localStorage.getItem(SCROLL_STATE_KEY);
     if (!raw) return;
     var o = JSON.parse(raw);
     if (o && typeof o === 'object') {
-      for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k) && typeof o[k] === 'number' && o[k] >= 0) channelScroll.set(k, o[k]);
+      for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k) && typeof o[k] === 'number' && o[k] >= 0) viewScroll.set(k, o[k]);
     }
   } catch (_) {}
 }
 function saveScrollState() {
   try {
     var o = {};
-    channelScroll.forEach(function(v, k) { o[k] = v; });
+    viewScroll.forEach(function(v, k) { o[k] = v; });
     localStorage.setItem(SCROLL_STATE_KEY, JSON.stringify(o));
   } catch (_) {}
 }
@@ -262,10 +262,10 @@ let draftChannel = null;
 let latestRemoteDraft = '';
 let latestClipboardText = '';
 
-// Register initial view from static DOM once globals (including currentChannel) are initialized.
+// Register initial view from static DOM once globals (including currentView) are initialized.
 views.push({
   id: 'view-0',
-  channel: currentChannel,
+  channel: currentView,
   rootEl: document.getElementById('view-app'),
   get feedInner() { return feedInner; }
 });
@@ -934,7 +934,7 @@ function init(done) {
   function finish() {
     try {
   setupPresence();
-      var saved = channelScroll.get(currentChannel);
+      var saved = viewScroll.get(currentView);
       requestAnimationFrame(function() {
         requestAnimationFrame(function() {
           if (feedEl) {
@@ -979,7 +979,7 @@ function init(done) {
           if (currentUser) {
             await loadObjects();
             (function restoreScrollAfterLoad() {
-              var saved = channelScroll.get(currentChannel);
+              var saved = viewScroll.get(currentView);
               if (feedEl && typeof saved === 'number' && saved >= 0) {
                 requestAnimationFrame(function() {
                   requestAnimationFrame(function() {
@@ -1185,7 +1185,7 @@ async function replaceFeedWithList(list) {
         feedInner.replaceChildren(frag);
         updateObjectCount();
         applyFieldPrefsToObjects();
-        var saved = channelScroll.get(currentChannel);
+        var saved = viewScroll.get(currentView);
         if (feedEl && typeof saved === 'number' && saved >= 0) {
           var maxScroll = feedEl.scrollHeight - feedEl.clientHeight;
           if (maxScroll > 0) feedEl.scrollTop = Math.min(saved, maxScroll);
@@ -3864,7 +3864,7 @@ async function switchChannel(ch) {
   teardownDndBroadcastChannel();
   if (editingObjectId != null) cancelEditingMode(true);
   if (feedEl) {
-    channelScroll.set(currentChannel, feedEl.scrollTop);
+    viewScroll.set(currentView, feedEl.scrollTop);
     saveScrollState();
   }
   currentChannel = ch;
@@ -4233,7 +4233,7 @@ async function reloadForUser() {
   const list = await fetchObjectsList();
   await replaceFeedWithList(list);
   subscribeRealtimeAll();
-  var savedScroll = channelScroll.get(currentChannel);
+  var savedScroll = viewScroll.get(currentView);
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
    if (feedEl) {
@@ -5261,7 +5261,7 @@ if (feedEl) {
 feedEl.addEventListener('scroll', () => {
     atBottom = isNearBottom();
   if (atBottom) scrollBtn.classList.remove('visible');
-    channelScroll.set(currentChannel, feedEl.scrollTop);
+    viewScroll.set(currentView, feedEl.scrollTop);
     if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
     scrollSaveTimer = setTimeout(saveScrollState, 200);
     if (document.body.classList.contains('dnd-active')) updateOriginLinePosition();
