@@ -1553,7 +1553,7 @@ function setupDraftChannel() {
   draftChannel = sb
     .channel('drafts-' + currentUser.id, {
       config: {
-        broadcast: { self: false }
+        broadcast: { self: true }
       }
     })
     .on('broadcast', { event: 'draft' }, payload => {
