@@ -1393,7 +1393,13 @@ async function fetchObjectsListForChannel(ch) {
     .from(OBJECTS_TABLE)
     .select('id, created_at, text, channel, user_id, author_name')
     .eq('channel', ch);
-  if (ch === 'main' && currentUser) {
+
+  // In shared temp-session, owner should see both their rows and guest rows.
+  if (tempSessionId) {
+    query = query.or(
+      'user_id.eq.' + currentUser.id + ',temp_session_id.eq.' + tempSessionId
+    );
+  } else if (ch === 'main' && currentUser) {
     query = query.eq('user_id', currentUser.id);
   }
   const { data, error } = await query.order('created_at', { ascending: true }).limit(100);
