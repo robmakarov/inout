@@ -128,6 +128,7 @@ const umNickSave   = document.getElementById('um-nick-save');
 const umVersionBadge = document.getElementById('um-version-badge');
 const umUpgradeBtn   = document.getElementById('um-upgrade-btn');
 const tabsEl     = document.getElementById('tabs');
+const viewsCloseAllBtn = document.getElementById('views-close-all');
 const clipboardBubble    = document.getElementById('clipboard-bubble');
 const clipboardBubbleTxt = document.getElementById('clipboard-bubble-text');
 const clipboardPasteBtn  = document.getElementById('clipboard-paste');
@@ -3468,6 +3469,11 @@ function updateObjectCount() {
 /* ═══ TABS ════════════════════════════════════════════════ */
 function setupTabs() {
   renderTabs();
+  if (viewsCloseAllBtn) {
+    viewsCloseAllBtn.addEventListener('click', () => {
+      closeSecondaryView();
+    });
+  }
 }
 
 function updateTabsUI() {
