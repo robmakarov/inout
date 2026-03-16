@@ -4140,14 +4140,18 @@ async function refreshAuth() {
 var explicitSignOut = false;
 function setupAuthListener() {
   sb.auth.onAuthStateChange(async (event, session) => {
-    if (session && session.user) {
-    const prevUser = currentUser;
+    const hardSignedOut = (() => {
+      try { return localStorage.getItem(SIGN_OUT_BLOCK_KEY) === '1'; } catch (_) { return false; }
+    })();
+
+    if (session && session.user && !hardSignedOut) {
+      const prevUser = currentUser;
       currentUser = session.user;
       try { sessionStorage.setItem(AUTH_BACKUP_KEY, JSON.stringify(currentUser)); } catch (_) {}
-    updateAuthUI();
-    if (!prevUser && currentUser) {
+      updateAuthUI();
+      if (!prevUser && currentUser) {
         try {
-      await syncChannelsFromServer();
+          await syncChannelsFromServer();
           await reloadForUser();
           setupDraftChannel();
           setupDndBroadcastChannel();
@@ -4165,22 +4169,24 @@ function setupAuthListener() {
       try { sessionStorage.removeItem(AUTH_BACKUP_KEY); } catch (_) {}
       return;
     }
-    try {
-      const { data } = await sb.auth.getSession();
-      if (data?.session?.user) {
-        currentUser = data.session.user;
-        try { sessionStorage.setItem(AUTH_BACKUP_KEY, JSON.stringify(currentUser)); } catch (_) {}
-        updateAuthUI();
-        return;
-      }
-    } catch (_) {}
-    try {
-      var backup = sessionStorage.getItem(AUTH_BACKUP_KEY);
-      if (backup) {
-        currentUser = JSON.parse(backup);
-        updateAuthUI();
-      }
-    } catch (_) {}
+    if (!hardSignedOut) {
+      try {
+        const { data } = await sb.auth.getSession();
+        if (data?.session?.user) {
+          currentUser = data.session.user;
+          try { sessionStorage.setItem(AUTH_BACKUP_KEY, JSON.stringify(currentUser)); } catch (_) {}
+          updateAuthUI();
+          return;
+        }
+      } catch (_) {}
+      try {
+        var backup = sessionStorage.getItem(AUTH_BACKUP_KEY);
+        if (backup) {
+          currentUser = JSON.parse(backup);
+          updateAuthUI();
+        }
+      } catch (_) {}
+    }
   });
 
   if (umAuthBtn) umAuthBtn.addEventListener('click', () => {
