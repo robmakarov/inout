@@ -4057,18 +4057,25 @@ async function ensureOAuthCallbackProcessed() {
 
 async function refreshAuth() {
   await ensureOAuthCallbackProcessed();
+  const hardSignedOut = (() => {
+    try { return localStorage.getItem(SIGN_OUT_BLOCK_KEY) === '1'; } catch (_) { return false; }
+  })();
+  if (hardSignedOut) {
+    currentUser = null;
+    updateAuthUI();
+    sharedChannels.clear();
+    unreadCounts.clear();
+    renderTabs();
+    subscribeRealtimeAll();
+    teardownDraftChannel();
+    teardownDndBroadcastChannel();
+    return;
+  }
   try {
-    const hardSignedOut = (() => {
-      try { return localStorage.getItem(SIGN_OUT_BLOCK_KEY) === '1'; } catch (_) { return false; }
-    })();
-    if (!hardSignedOut) {
-      try {
-        var b = sessionStorage.getItem(AUTH_BACKUP_KEY);
-        if (b) currentUser = JSON.parse(b);
-      } catch (_) {}
-    } else {
-      currentUser = null;
-    }
+    try {
+      var b = sessionStorage.getItem(AUTH_BACKUP_KEY);
+      if (b) currentUser = JSON.parse(b);
+    } catch (_) {}
     var session = null;
     try {
       var sessionPromise = sb.auth.getSession();
@@ -4085,9 +4092,9 @@ async function refreshAuth() {
         if (retry && retry.data && retry.data.session) session = retry.data.session;
       } catch (_) {}
     }
-    if (session?.user && !hardSignedOut) {
+    if (session?.user) {
       currentUser = session.user;
-    } else if (!currentUser && !hardSignedOut) {
+    } else if (!currentUser) {
       try {
         var userResult = await Promise.race([
           sb.auth.getUser(),
@@ -4096,7 +4103,7 @@ async function refreshAuth() {
         if (userResult && userResult.data && userResult.data.user) currentUser = userResult.data.user;
       } catch (_) {}
     }
-    if (!currentUser && !hardSignedOut) {
+    if (!currentUser) {
       try {
         var backup = sessionStorage.getItem(AUTH_BACKUP_KEY);
         if (backup) currentUser = JSON.parse(backup);
@@ -4139,11 +4146,11 @@ async function refreshAuth() {
 
 var explicitSignOut = false;
 function setupAuthListener() {
+  const hardSignedOut = (() => {
+    try { return localStorage.getItem(SIGN_OUT_BLOCK_KEY) === '1'; } catch (_) { return false; }
+  })();
+  if (hardSignedOut || !sb || !sb.auth || typeof sb.auth.onAuthStateChange !== 'function') return;
   sb.auth.onAuthStateChange(async (event, session) => {
-    const hardSignedOut = (() => {
-      try { return localStorage.getItem(SIGN_OUT_BLOCK_KEY) === '1'; } catch (_) { return false; }
-    })();
-
     if (session && session.user && !hardSignedOut) {
       const prevUser = currentUser;
       currentUser = session.user;
@@ -4345,6 +4352,11 @@ async function signOut() {
       if (error) console.error(error);
     }
   } catch (e) { console.error(e); }
+  // Fully detach Supabase client so it cannot auto-refresh a session until next explicit sign-in.
+  try {
+    if (typeof window !== 'undefined') window.sb = null;
+  } catch (_) {}
+  sb = null;
 }
 
 async function copyUserId() {
