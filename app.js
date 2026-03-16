@@ -955,7 +955,7 @@ function init(done) {
       if (objectCountEl) updateObjectCount();
     }
   } catch (_) {}
-  try { setupAuthListener(); } catch (_) {}
+  // In this build we do not auto-sync auth state from Supabase; sign-in/out are driven by buttons only.
   finish();
   (function runAsync() {
     refreshAuth().then(function() {
@@ -4056,42 +4056,7 @@ async function ensureOAuthCallbackProcessed() {
 }
 
 async function refreshAuth() {
-  if (suppressAutoAuth) {
-    currentUser = null;
-    updateAuthUI();
-    sharedChannels.clear();
-    unreadCounts.clear();
-    renderTabs();
-    subscribeRealtimeAll();
-    teardownDraftChannel();
-    teardownDndBroadcastChannel();
-    return;
-  }
-  await ensureOAuthCallbackProcessed();
-  try {
-    // Do not auto-restore from backup on fresh load; rely on Supabase session instead.
-    var session = null;
-    try {
-      var sessionPromise = sb.auth.getSession();
-      var sessionResult = await Promise.race([
-        sessionPromise,
-        new Promise(function(_, rej) { setTimeout(function() { rej(new Error('session timeout')); }, 4000); })
-      ]);
-      session = (sessionResult && sessionResult.data && sessionResult.data.session) || null;
-    } catch (_) {}
-    if (!session && (location.hash && location.hash.includes('access_token=') || location.search && location.search.includes('code='))) {
-      await new Promise(function(r) { setTimeout(r, 300); });
-      try {
-        var retry = await sb.auth.getSession();
-        if (retry && retry.data && retry.data.session) session = retry.data.session;
-      } catch (_) {}
-    }
-    if (session?.user) {
-      currentUser = session.user;
-    }
-  } catch (e) {
-    if (!currentUser) currentUser = null;
-  }
+  // Local-only auth: rely on currentUser set by signIn/signOut; do not auto-fetch Supabase session.
   updateAuthUI();
   if (currentUser) {
     try {
