@@ -203,6 +203,39 @@ let views = [];
   } catch (_) {}
 })();
 
+function subscribeTempSessionJoins() {
+  if (!sb || !currentUser || !sb.channel) return;
+  try {
+    sb
+      .channel('temp-session-joins')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'temp_session_events' },
+        async (payload) => {
+          try {
+            const tempId = payload.new && payload.new.temp_session_id;
+            if (!tempId || !sb.from) return;
+            const { data, error } = await sb
+              .from('temp_sessions')
+              .select('channel')
+              .eq('id', tempId)
+              .maybeSingle();
+            if (error || !data) return;
+            if (qrModalBackdrop) qrModalBackdrop.setAttribute('aria-hidden', 'true');
+            currentView = data.channel;
+            currentChannel = currentView;
+            renderTabs();
+            await loadObjects();
+            toast('Guest joined your view ' + currentView + '.');
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      )
+      .subscribe();
+  } catch (_) {}
+}
+
 (function setupLocalDataButtons() {
   if (umExportLocalBtn) {
     umExportLocalBtn.addEventListener('click', () => {
@@ -4347,6 +4380,13 @@ async function refreshAuth() {
         currentChannel = currentView;
         renderTabs();
         await loadObjectsForTempSession();
+
+        // Emit "joined" event so owner can react in realtime
+        try {
+          await sb.from('temp_session_events').insert({ temp_session_id: tempSessionId });
+        } catch (e) {
+          console.error('temp_session_events insert failed', e);
+        }
       }
     } catch (e) {
       console.error(e);
@@ -4373,6 +4413,8 @@ async function refreshAuth() {
       try { await loadObjects(); } catch (_) {}
       if (feedInner && emptyEl && !emptyEl.parentNode) feedInner.appendChild(emptyEl);
     }
+    // Owner realtime subscriptions, including temp-session joins
+    subscribeTempSessionJoins();
   } else {
     sharedChannels.clear();
     unreadCounts.clear();
@@ -4380,8 +4422,13 @@ async function refreshAuth() {
     subscribeRealtimeAll();
     teardownDraftChannel();
     teardownDndBroadcastChannel();
-    // When not signed in, hydrate view from local per-device objects (anonymous mode).
-    await loadLocalObjectsForCurrentView();
+    // When not signed in, hydrate view from local per-device objects (anonymous mode),
+    // unless we are in a temp-session guest mode.
+    if (tempSessionId) {
+      await loadObjectsForTempSession();
+    } else {
+      await loadLocalObjectsForCurrentView();
+    }
   }
 }
 
@@ -4760,6 +4807,19 @@ async function sendText(text) {
         channel: currentChannel,
       })
       .select('id, created_at, text, channel, user_id, author_name')
+      .single();
+    data = res.data;
+    error = res.error;
+  } else if (tempSessionId && sb && sb.from) {
+    // Guest in temp session: write to Supabase with temp_session_id
+    const res = await sb
+      .from(OBJECTS_TABLE)
+      .insert({
+        text: trimmed,
+        temp_session_id: tempSessionId,
+        channel: currentChannel,
+      })
+      .select('id, created_at, text, channel, user_id, author_name, temp_session_id')
       .single();
     data = res.data;
     error = res.error;
