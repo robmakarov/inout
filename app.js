@@ -238,6 +238,7 @@ const WAS_EDITING_KEY      = 'inout_was_editing_v1';
 const AUTH_BACKUP_KEY     = 'inout_auth_user_backup';
 const seenIds       = new Set();
 const viewScroll = new Map();
+const OPEN_VIEWS_KEY     = 'inout_open_views_v1';
 function loadScrollState() {
   try {
     var raw = localStorage.getItem(SCROLL_STATE_KEY);
@@ -2188,10 +2189,15 @@ function saveSecondaryViewState() {
 function restoreSecondaryView() {
   if (secondaryViewEl) return;
   try {
-    const saved = localStorage.getItem(SECONDARY_VIEW_KEY);
-    if (!saved || !viewNames.includes(saved)) return;
-    secondaryViewChannel = saved;
-    openSecondaryView(saved);
+    const raw = localStorage.getItem(OPEN_VIEWS_KEY);
+    if (!raw) return;
+    const list = JSON.parse(raw);
+    if (!Array.isArray(list) || !list.length) return;
+    list.forEach(name => {
+      if (typeof name === 'string' && viewNames.includes(name)) {
+        openSecondaryView(name);
+      }
+    });
   } catch (_) {}
 }
 
@@ -2352,6 +2358,11 @@ async function openSecondaryView(ch) {
   const list = await fetchObjectsListForChannel(ch);
   await replaceFeedWithListInto(list, feedInner);
   updateTabsUI();
+  // Persist open views (excluding the base view-0) to localStorage so layout is restored.
+  try {
+    const open = Array.from(new Set(views.filter(v => v && v.id !== 'view-0').map(v => v.channel)));
+    localStorage.setItem(OPEN_VIEWS_KEY, JSON.stringify(open));
+  } catch (_) {}
 }
 
 function toggleSecondaryView(ch) {
@@ -2361,7 +2372,10 @@ function toggleSecondaryView(ch) {
     existing.rootEl.parentNode.removeChild(existing.rootEl);
     const idx = views.indexOf(existing);
     if (idx >= 0) views.splice(idx, 1);
-    try { localStorage.removeItem(SECONDARY_VIEW_KEY); } catch (_) {}
+    try {
+      const open = Array.from(new Set(views.filter(v => v && v.id !== 'view-0').map(v => v.channel)));
+      localStorage.setItem(OPEN_VIEWS_KEY, JSON.stringify(open));
+    } catch (_) {}
     return;
   }
   openSecondaryView(ch);
@@ -5234,18 +5248,31 @@ var lastIndicatorStyle = { left: -1, width: -1, top: -1, visible: false };
 var lastDragTargetRow = null;
 var dragSpiritEl = null;
 function processFeedDragover(ev) {
-  if (!feedInner || !feedEl) return;
+  // Determine which feed/view this drag event is over.
+  let localFeedEl = null;
+  if (ev.currentTarget && ev.currentTarget.classList && ev.currentTarget.classList.contains('feed')) {
+    localFeedEl = ev.currentTarget;
+  } else if (ev.target && ev.target.closest) {
+    localFeedEl = ev.target.closest('.feed');
+  }
+  if (!localFeedEl && typeof ev.clientX === 'number' && typeof ev.clientY === 'number') {
+    const elAtPoint = document.elementFromPoint(ev.clientX, ev.clientY);
+    if (elAtPoint && elAtPoint.closest) localFeedEl = elAtPoint.closest('.feed');
+  }
+  if (!localFeedEl) localFeedEl = feedEl;
+  const localFeedInner = localFeedEl ? localFeedEl.querySelector('.feed-inner') : null;
+  if (!localFeedEl || !localFeedInner) return;
   if (typeof ev.clientX === 'number') lastDragClientX = ev.clientX;
   if (typeof ev.clientY === 'number') lastDragClientY = ev.clientY;
   if (dragSpiritEl) {
-    var fr = feedEl.getBoundingClientRect();
+    var fr = localFeedEl.getBoundingClientRect();
     var margin = 24;
     var spiritTop = Math.max(fr.top + margin, Math.min(fr.bottom - margin, ev.clientY));
     dragSpiritEl.style.left = (fr.left + fr.width / 2) + 'px';
     dragSpiritEl.style.top = spiritTop + 'px';
   }
   if (originGhostsActive) {
-    var slotRows = Array.from(feedInner.children).filter(function(n) { return n.classList && (n.classList.contains('obj') || n.classList.contains('obj-origin-ghost')); });
+    var slotRows = Array.from(localFeedInner.children).filter(function(n) { return n.classList && (n.classList.contains('obj') || n.classList.contains('obj-origin-ghost')); });
     if (!slotRows.length) return;
     var slotFirstRow = slotRows[0];
     var slotContentLeft = slotFirstRow.querySelector('.obj-time') || slotFirstRow.querySelector('.obj-sender') || slotFirstRow.querySelector('.obj-text');
@@ -5254,7 +5281,7 @@ function processFeedDragover(ev) {
     var slotFirstRect = slotFirstRow.getBoundingClientRect();
     var slotLastRow = slotRows[slotRows.length - 1];
     var slotLastRect = slotLastRow.getBoundingClientRect();
-    var slotFeedRect = feedEl.getBoundingClientRect();
+    var slotFeedRect = localFeedEl.getBoundingClientRect();
     var slotMidYs = slotRows.map(function(r) {
       var rect = r.getBoundingClientRect();
       return rect.top + rect.height / 2;
@@ -5319,9 +5346,9 @@ function processFeedDragover(ev) {
     broadcastDndMove();
     return;
   }
-  const dragging = feedInner.querySelector('.obj.dragging');
+  const dragging = localFeedInner.querySelector('.obj.dragging');
   if (!dragging) return;
-  const allRows = Array.from(feedInner.querySelectorAll('.obj'));
+  const allRows = Array.from(localFeedInner.querySelectorAll('.obj'));
   const skipSet = new Set(dragSelectedRows && dragSelectedRows.length ? dragSelectedRows : [dragging]);
   const rows = allRows.filter(function(r) { return !skipSet.has(r); });
   if (!rows.length) return;
@@ -5332,7 +5359,7 @@ function processFeedDragover(ev) {
   const firstRect = firstRow.getBoundingClientRect();
   const lastRow = rows[rows.length - 1];
   const lastRect = lastRow.getBoundingClientRect();
-  const feedRect = feedEl.getBoundingClientRect();
+  const feedRect = localFeedEl.getBoundingClientRect();
   /* Use only row middle lines as boundaries: drop position changes only when cursor crosses a row's vertical center. */
   const midYs = rows.map(function(r) {
     const rect = r.getBoundingClientRect();
@@ -5493,7 +5520,8 @@ document.addEventListener('dragover', e => {
   e.dataTransfer.dropEffect = 'move';
   lastDragClientX = e.clientX;
   lastDragClientY = e.clientY;
-  const feedRect = feedEl.getBoundingClientRect();
+  const targetFeed = (e.target && e.target.closest && e.target.closest('.feed')) || feedEl;
+  const feedRect = targetFeed.getBoundingClientRect();
   const y = e.clientY;
   const x = e.clientX;
   const inFeed = x >= feedRect.left && x <= feedRect.right && y >= feedRect.top && y <= feedRect.bottom;
