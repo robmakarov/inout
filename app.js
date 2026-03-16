@@ -222,8 +222,13 @@ function subscribeTempSessionJoins() {
               .maybeSingle();
             if (error || !data) return;
             if (qrModalBackdrop) qrModalBackdrop.setAttribute('aria-hidden', 'true');
-            currentView = data.channel;
-            currentChannel = currentView;
+            const ch = data.channel || 'main';
+            if (!viewNames.includes(ch)) {
+              viewNames.push(ch);
+              saveChannelsList();
+            }
+            currentView = ch;
+            currentChannel = ch;
             renderTabs();
             await loadObjects();
             toast('Guest joined your view ' + currentView + '.');
@@ -4376,8 +4381,13 @@ async function refreshAuth() {
         tempSessionId = null;
       } else {
         const sessionInfo = data[0];
-        currentView = sessionInfo.channel;
-        currentChannel = currentView;
+        const ch = sessionInfo.channel || 'main';
+        if (!viewNames.includes(ch)) {
+          viewNames.push(ch);
+          saveChannelsList();
+        }
+        currentView = ch;
+        currentChannel = ch;
         renderTabs();
         await loadObjectsForTempSession();
 
