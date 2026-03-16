@@ -2578,7 +2578,8 @@ function setupTouchDragHandlers() {
     dndOriginWantAppend = false;
     dndOriginLineY = null;
     broadcastDndEnd();
-    recomputeOrderFromDOM();
+    const container = r && r.closest ? r.closest('.feed-inner') : null;
+    recomputeOrderFromDOM(container);
     saveObjectOrderForCurrentChannel();
     if (droppedMovedIdsTouch.length && dndBroadcastChannel && dndChannelReady) {
       broadcastDndDropped(currentObjectOrder.slice(), droppedMovedIdsTouch);
@@ -2848,7 +2849,8 @@ function createObjectRow(obj, isNew, options) {
           applyObjectOrderToDOM();
           saveObjectOrderForCurrentChannel();
         } else {
-          recomputeOrderFromDOM();
+          const container = row && row.closest ? row.closest('.feed-inner') : null;
+          recomputeOrderFromDOM(container);
           saveObjectOrderForCurrentChannel();
           if (droppedMovedIds.length && dndBroadcastChannel && dndChannelReady) {
             broadcastDndDropped(currentObjectOrder.slice(), droppedMovedIds);
@@ -3629,11 +3631,12 @@ async function saveObjectOrderForCurrentChannel() {
   // Skipping remote views upsert for now (table is optional / may not exist).
 }
 
-function recomputeOrderFromDOM() {
-  if (!feedInner) return;
+function recomputeOrderFromDOM(container) {
+  const targetInner = container || feedInner;
+  if (!targetInner) return;
   pushUndo({ type: 'order', before: (currentObjectOrder || []).slice() });
   logAction('reorder', { channel: currentChannel });
-  const ids = Array.from(feedInner.querySelectorAll('.obj'))
+  const ids = Array.from(targetInner.querySelectorAll('.obj'))
     .map(row => Number(row.dataset.id))
     .filter(id => Number.isFinite(id));
   currentObjectOrder = ids;
