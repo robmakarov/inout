@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
 <meta name="color-scheme" content="dark"/>
 <title>INOUT</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230a0a09'/%3E%3Cpath d='M18 44V20h6v24h-6Zm22-24v24h-6V20h6Z' fill='%23e8d5a0'/%3E%3Cpath d='M30 20h4v24h-4z' fill='%23f0ece3' opacity='.65'/%3E%3C/svg%3E"/>
@@ -225,6 +225,21 @@
       </div>
     </div>
 
+  </div>
+</div>
+
+<div id="qr-modal-backdrop" aria-hidden="true">
+  <div id="qr-modal" role="dialog" aria-modal="true" aria-label="Visit code">
+    <div class="qr-modal-inner">
+      <div class="qr-modal-logo">IN<span>OUT</span></div>
+      <div class="qr-modal-title">Share this visit code</div>
+      <div class="qr-modal-sub">Ask a friend to point their camera here to open your visit page.</div>
+      <div class="qr-modal-frame">
+        <div class="qr-modal-glow"></div>
+        <img id="qr-modal-img" alt="Visit QR code"/>
+      </div>
+      <button id="qr-modal-close" type="button" class="qr-modal-close-btn" aria-label="Close QR code">Close</button>
+    </div>
   </div>
 </div>
 

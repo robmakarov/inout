@@ -142,6 +142,9 @@ const umAuthBtn    = document.getElementById('um-auth-btn');
 const umUserId     = document.getElementById('um-user-id');
 const umCopyIdBtn  = document.getElementById('um-copy-id');
 const umShowQrBtn  = document.getElementById('um-show-qr');
+const qrModalBackdrop = document.getElementById('qr-modal-backdrop');
+const qrModalImg   = document.getElementById('qr-modal-img');
+const qrModalClose = document.getElementById('qr-modal-close');
 const umNickname   = document.getElementById('um-nickname');
 const umNickSave   = document.getElementById('um-nick-save');
 const umVersionBadge = document.getElementById('um-version-badge');
@@ -4200,18 +4203,23 @@ function setupAuthListener() {
           ? (base + (base.includes('?') ? '&' : '?') + 'visitNick=' + encodeURIComponent(nick))
           : ('visitNick=' + encodeURIComponent(nick));
         const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&color=FFFFFF&bgcolor=000000&data=' + encodeURIComponent(inviteUrl);
-        const existing = document.getElementById('um-qr-img');
-        if (existing) {
-          existing.src = qrUrl;
-        } else {
-          const img = document.createElement('img');
-          img.id = 'um-qr-img';
-          img.src = qrUrl;
-          img.alt = 'QR code to open this app';
-          const section = umShowQrBtn.closest('.um-section');
-          if (section) section.appendChild(img);
+        if (qrModalImg) {
+          qrModalImg.src = qrUrl;
+        }
+        if (qrModalBackdrop) {
+          qrModalBackdrop.setAttribute('aria-hidden', 'false');
         }
       } catch (_) {}
+    });
+  }
+
+  if (qrModalClose && qrModalBackdrop) {
+    const closeQrModal = () => {
+      qrModalBackdrop.setAttribute('aria-hidden', 'true');
+    };
+    qrModalClose.addEventListener('click', closeQrModal);
+    qrModalBackdrop.addEventListener('click', e => {
+      if (e.target === qrModalBackdrop) closeQrModal();
     });
   }
 
@@ -4272,6 +4280,7 @@ function updateAuthUI() {
   // If we arrived via a visit link, gently show who you are visiting and offer next steps.
   if (visitInviteNick && typeof toast === 'function') {
     toast('You are visiting ' + visitInviteNick + '. You can create a shared view with this person.');
+    // In future: auto-open a modal with visit info + "Create shared view" button.
     visitInviteNick = null;
   }
 }
