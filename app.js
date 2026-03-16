@@ -4080,6 +4080,19 @@ async function ensureOAuthCallbackProcessed() {
 }
 
 async function refreshAuth() {
+  // After explicit sign-out in this tab, never auto-log back in until user clicks "Sign in" again.
+  if (suppressAutoAuth) {
+    currentUser = null;
+    updateAuthUI();
+    sharedChannels.clear();
+    unreadCounts.clear();
+    renderTabs();
+    subscribeRealtimeAll();
+    teardownDraftChannel();
+    teardownDndBroadcastChannel();
+    return;
+  }
+
   await ensureOAuthCallbackProcessed();
   currentUser = null;
   try {
