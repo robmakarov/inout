@@ -47,13 +47,13 @@ if (sb && sb.auth && typeof location !== 'undefined' && location.search && locat
   })();
 }
 
-// Optional contact invite encoded in QR URL: ?contact=<user_id>
-let contactInviteUserId = null;
+// Optional visit info encoded in QR URL: ?visitNick=<nickname>
+let visitInviteNick = null;
 try {
   if (typeof location !== 'undefined' && location.search) {
     const params = new URLSearchParams(location.search);
-    const cid = params.get('contact');
-    if (cid) contactInviteUserId = cid;
+    const vn = params.get('visitNick');
+    if (vn) visitInviteNick = decodeURIComponent(vn);
   }
 } catch (_) {}
 (function attachAuthButtonEarly() {
@@ -4191,9 +4191,14 @@ function setupAuthListener() {
         const base = (typeof window !== 'undefined' && window.location)
           ? (window.location.origin + window.location.pathname)
           : '';
+        const nick = (umNickname && umNickname.value.trim())
+          || (currentUser.user_metadata && currentUser.user_metadata.nickname)
+          || currentUser.email
+          || currentUser.id
+          || 'Visitor';
         const inviteUrl = base
-          ? (base + (base.includes('?') ? '&' : '?') + 'contact=' + encodeURIComponent(currentUser.id))
-          : ('contact:' + encodeURIComponent(currentUser.id));
+          ? (base + (base.includes('?') ? '&' : '?') + 'visitNick=' + encodeURIComponent(nick))
+          : ('visitNick=' + encodeURIComponent(nick));
         const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&color=FFFFFF&bgcolor=000000&data=' + encodeURIComponent(inviteUrl);
         const existing = document.getElementById('um-qr-img');
         if (existing) {
@@ -4254,15 +4259,6 @@ function updateAuthUI() {
     if (umUserId) umUserId.textContent = currentUser.id || '—';
     if (umCopyIdBtn) umCopyIdBtn.disabled = !currentUser.id;
     if (umVersionBadge) umVersionBadge.textContent = 'Free';
-    // If we arrived via a contact invite, gently suggest creating a view with that user.
-    if (contactInviteUserId && typeof toast === 'function') {
-      if (contactInviteUserId === currentUser.id) {
-        toast('This is your own contact code.');
-      } else {
-        toast('Scanned user code: ' + contactInviteUserId + '. Create a view with this user id.');
-      }
-      contactInviteUserId = null;
-    }
   } else {
     if (umAuthStatus) umAuthStatus.textContent = 'Not signed in';
     if (umAuthBtn) umAuthBtn.textContent = 'Sign in';
@@ -4271,6 +4267,12 @@ function updateAuthUI() {
     if (umCopyIdBtn) umCopyIdBtn.disabled = true;
     if (umNickname) umNickname.value = '';
     if (umVersionBadge) umVersionBadge.textContent = 'Free';
+  }
+
+  // If we arrived via a visit link, gently show who you are visiting and offer next steps.
+  if (visitInviteNick && typeof toast === 'function') {
+    toast('You are visiting ' + visitInviteNick + '. You can create a shared view with this person.');
+    visitInviteNick = null;
   }
 }
 
