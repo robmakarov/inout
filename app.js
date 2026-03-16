@@ -220,6 +220,9 @@ let views = [];
   if (back) back.addEventListener('click', function(e) { if (e.target === back) closeUserModalEarly(); });
 })();
 
+// Supabase table name for stored objects (was 'entries').
+const OBJECTS_TABLE = 'entries';
+
 let objectCount    = 0;
 let atBottom    = true;
 let presenceCh  = null;
@@ -577,7 +580,7 @@ async function undoLastAction() {
         user_id: e.user_id,
         author_name: e.author_name ?? null,
       }));
-      const { error } = await sb.from('entries').insert(rows);
+      const { error } = await sb.from(OBJECTS_TABLE).insert(rows);
       if (error) throw error;
       if (feedEl) feedEl.classList.add('feed-updating');
       requestAnimationFrame(() => {
@@ -601,7 +604,7 @@ async function undoLastAction() {
       const rows = action.entries;
       await Promise.all(rows.map(e => {
         return sb
-          .from('entries')
+          .from(OBJECTS_TABLE)
           .update({ channel: e.channel, created_at: e.created_at })
           .eq('user_id', currentUser.id)
           .eq('id', e.id);
@@ -630,7 +633,7 @@ async function undoLastAction() {
     } else if (action.type === 'send' && Array.isArray(action.entries) && action.entries.length) {
       const ids = action.entries.map(e => e.id).filter(Boolean);
       if (ids.length) {
-        const { error } = await sb.from('entries').delete().in('id', ids);
+        const { error } = await sb.from(OBJECTS_TABLE).delete().in('id', ids);
         if (error) throw error;
       }
       if (feedEl) feedEl.classList.add('feed-updating');
@@ -650,7 +653,7 @@ async function undoLastAction() {
       const rows = action.entries;
       await Promise.all(rows.map(e => {
         return sb
-          .from('entries')
+          .from(OBJECTS_TABLE)
           .update({ text: e.beforeText })
           .eq('user_id', currentUser.id)
           .eq('id', e.id);
@@ -1116,7 +1119,7 @@ async function fetchObjectsList() {
 async function fetchObjectsListForChannel(ch) {
   if (!currentUser) return [];
   let query = sb
-    .from('entries')
+    .from(OBJECTS_TABLE)
     .select('id, created_at, text, channel, user_id, author_name')
     .eq('channel', ch);
   if (ch === 'main' && currentUser) {
@@ -4375,7 +4378,7 @@ async function sendText(text) {
     const befores = [];
     if (idsToSave.length === 1) {
     const { data: before, error: selErr } = await sb
-      .from('entries')
+      .from(OBJECTS_TABLE)
       .select('id, created_at, text, channel, user_id, author_name')
         .eq('id', idsToSave[0])
       .eq('user_id', currentUser.id)
@@ -4390,7 +4393,7 @@ async function sendText(text) {
       if (before) befores.push(before);
     } else {
       const { data: list, error: selErr } = await sb
-      .from('entries')
+      .from(OBJECTS_TABLE)
       .select('id, created_at, text, channel, user_id, author_name')
         .in('id', idsToSave)
         .eq('user_id', currentUser.id);
@@ -4408,7 +4411,7 @@ async function sendText(text) {
       const id = idsToSave[i];
       const textToSave = trimmedPerId[i];
       const { error } = await sb
-        .from('entries')
+        .from(OBJECTS_TABLE)
         .update({ text: textToSave })
         .eq('id', id)
         .eq('user_id', currentUser.id);
@@ -4437,7 +4440,7 @@ async function sendText(text) {
   }
 
   const { data, error } = await sb
-    .from('entries')
+    .from(OBJECTS_TABLE)
     .insert({
       text: trimmed,
       user_id: currentUser.id,
@@ -4801,7 +4804,7 @@ if (deleteSelectedBtn) {
       // If nothing selected, operate on whole tab (for this user).
       if (!ids.length) {
         const { data, error } = await sb
-          .from('entries')
+          .from(OBJECTS_TABLE)
           .select('id, created_at, text, channel, user_id, author_name')
           .eq('channel', currentChannel)
           .eq('user_id', currentUser.id);
@@ -4815,7 +4818,7 @@ if (deleteSelectedBtn) {
         if (!ids.length) return;
       } else {
         const { data, error } = await sb
-          .from('entries')
+          .from(OBJECTS_TABLE)
           .select('id, created_at, text, channel, user_id, author_name')
           .in('id', ids);
         if (error) {
@@ -4826,7 +4829,7 @@ if (deleteSelectedBtn) {
         rowsToDelete = data || [];
       }
       const { error } = await sb
-        .from('entries')
+        .from(OBJECTS_TABLE)
         .delete()
         .in('id', ids);
       if (error) {
@@ -4872,7 +4875,7 @@ if (moveSelectedBtn) {
     try {
       const now = new Date().toISOString();
       const { data, error } = await sb
-        .from('entries')
+        .from(OBJECTS_TABLE)
         .select('id, created_at, text, channel, user_id, author_name')
         .eq('user_id', currentUser.id)
         .in('id', ids);
@@ -4883,7 +4886,7 @@ if (moveSelectedBtn) {
       }
       const rowsBefore = data || [];
       const { error: updErr } = await sb
-        .from('entries')
+        .from(OBJECTS_TABLE)
         .update({ channel: target, created_at: now })
         .eq('user_id', currentUser.id)
         .in('id', ids);
@@ -4907,7 +4910,7 @@ async function deleteSingleObject(id) {
   if (!currentUser || !id) return;
   try {
     const { data, error: selErr } = await sb
-      .from('entries')
+      .from(OBJECTS_TABLE)
       .select('id, created_at, text, channel, user_id, author_name')
       .eq('id', id)
       .maybeSingle();
@@ -4917,7 +4920,7 @@ async function deleteSingleObject(id) {
       return;
     }
     const { error } = await sb
-      .from('entries')
+      .from(OBJECTS_TABLE)
       .delete()
       .eq('id', id);
     if (error) {
@@ -5022,7 +5025,7 @@ async function moveSingleObject(id, targetChannel) {
   if (!target || target === currentChannel) return false;
   try {
     const { data: before, error: selErr } = await sb
-      .from('entries')
+      .from(OBJECTS_TABLE)
       .select('id, created_at, text, channel, user_id, author_name')
       .eq('id', id)
       .maybeSingle();
@@ -5137,7 +5140,7 @@ if (exportTabBtn) {
       }
 
       let query = sb
-        .from('entries')
+        .from(OBJECTS_TABLE)
         .select('id,created_at,text,channel,user_id,author_name')
         .limit(1000);
 
