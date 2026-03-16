@@ -346,7 +346,23 @@ async function loadLocalObjectsForCurrentView() {
   try {
     const byView = loadLocalObjects();
     const key = currentView || 'main';
-    const list = Array.isArray(byView[key]) ? byView[key] : [];
+    let list = Array.isArray(byView[key]) ? byView[key] : [];
+
+    // Apply saved order (same mechanism as cloud, but using anon/user key)
+    try {
+      const raw = localStorage.getItem(ORDER_STATE_KEY);
+      if (raw) {
+        const map = JSON.parse(raw);
+        if (map && typeof map === 'object') {
+          const orderKey = currentUser && currentUser.id
+            ? (currentUser.id + '::' + key)
+            : ('anon::' + key);
+          const arr = Array.isArray(map[orderKey]) ? map[orderKey] : [];
+          if (arr.length) list = sortObjectsByOrder(list, arr);
+        }
+      }
+    } catch (_) {}
+
     await replaceFeedWithList(list);
   } catch (_) {
     // ignore local load errors; show empty state
