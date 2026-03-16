@@ -2336,14 +2336,6 @@ async function openSecondaryView(ch) {
   const view = document.createElement('div');
   view.className = 'view';
   view.setAttribute('data-channel', ch);
-  // per-view manage bar: simple clone of global manage bar markup (visual only for now)
-  const baseManageBar = document.getElementById('manage-bar');
-  if (baseManageBar) {
-    const mbClone = baseManageBar.cloneNode(true);
-    mbClone.removeAttribute('id');
-    mbClone.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
-    view.appendChild(mbClone);
-  }
   const visual = document.createElement('div');
   visual.className = 'visual';
   visual.setAttribute('aria-label', 'View: ' + (ch === 'main' ? 'Feed' : ch));
@@ -2378,24 +2370,28 @@ async function openSecondaryView(ch) {
   if (secondaryFeedEl) setupSecondaryFeedDnd();
   // register this view in views[]
   const viewId = 'view-' + views.length;
-  views.push({
+  const viewRecord = {
     id: viewId,
     channel: ch,
     rootEl: view,
     get feedInner() { return secondaryFeedInner; }
+  };
+  views.push(viewRecord);
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'view-close-floating';
+  closeBtn.setAttribute('aria-label', 'Close view');
+  closeBtn.textContent = '×';
+  view.appendChild(closeBtn);
+  closeBtn.addEventListener('click', () => {
+    const idx = views.indexOf(viewRecord);
+    if (idx >= 0) views.splice(idx, 1);
+    if (view.parentNode) view.parentNode.removeChild(view);
+    try {
+      const open = Array.from(new Set(views.filter(v => v && v.id !== 'view-0').map(v => v.channel)));
+      localStorage.setItem(OPEN_VIEWS_KEY, JSON.stringify(open));
+    } catch (_) {}
   });
-  const closeBtn = view.querySelector('.view-close-btn');
-  if (closeBtn) {
-    closeBtn.addEventListener('click', () => {
-      const idx = views.findIndex(v => v.rootEl === view);
-      if (idx >= 0) views.splice(idx, 1);
-      if (view.parentNode) view.parentNode.removeChild(view);
-      try {
-        const open = Array.from(new Set(views.filter(v => v && v.id !== 'view-0').map(v => v.channel)));
-        localStorage.setItem(OPEN_VIEWS_KEY, JSON.stringify(open));
-      } catch (_) {}
-    });
-  }
   const list = await fetchObjectsListForChannel(ch);
   await replaceFeedWithListInto(list, feedInner);
   updateTabsUI();
