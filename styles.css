@@ -429,17 +429,17 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
   color:var(--bright);
   text-transform:uppercase;
   user-select:none;
-  display:flex;
-  align-items:center;
-  gap:6px;
 }
-.logo span{color:var(--acc)}
+.logo span{
+  color:var(--acc);
+  display:inline-block;
+  animation:logoPulse 1.4s ease-in-out infinite;
+}
 
-.logo-accent-rect{
-  width:18px;
-  height:10px;
-  border-radius:3px;
-  background:#ff3b3b;
+@keyframes logoPulse{
+  0%{transform:translateY(0);opacity:1;}
+  50%{transform:translateY(-1px);opacity:0.8;}
+  100%{transform:translateY(0);opacity:1;}
 }
 
 .header-right{

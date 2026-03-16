@@ -521,6 +521,7 @@ function openLogDropup() {
   if (!logDropupPanel) return;
   renderLogDropup();
   logDropupPanel.classList.add('open');
+  console.debug('[inout] Action log opened');
 }
 
 function closeLogDropup() {
