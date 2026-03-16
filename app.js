@@ -1630,7 +1630,12 @@ function showRemoteEditingDoppelganger(objId, text, authorName, deviceId) {
     textEl.appendChild(badge);
   }
   const authorSpan = badge.querySelector('.obj-remote-edit-author');
-  if (authorSpan) authorSpan.textContent = authorName || 'Editing';
+  if (authorSpan) {
+    var name = (authorName || 'Editing').trim();
+    var shortName = name.split(/\s+/)[0] || name;
+    if (shortName.length > 12) shortName = shortName.slice(0, 12) + '…';
+    authorSpan.textContent = shortName;
+  }
   lastRemoteEditingId = objId;
 }
 
@@ -3289,8 +3294,9 @@ function createObjectRow(obj, isNew, options) {
       });
     });
     input.value = obj.text || '';
-    input.selectionStart = 0;
-    input.selectionEnd = 0;
+    var len = input.value.length;
+    input.selectionStart = len;
+    input.selectionEnd = len;
     editingObjectId = obj.id;
     editingObjectIds = idsToEdit;
     originalEditTextForCancel = obj.text || '';

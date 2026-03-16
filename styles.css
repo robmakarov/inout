@@ -1046,8 +1046,8 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
   align-items:center;
   gap:4px;
   margin-left:8px;
-  padding:2px 6px;
-  font-size:10px;
+  padding:1px 4px;
+  font-size:9px;
   line-height:1.2;
   color:var(--dim);
   background:var(--bg2);
@@ -1062,7 +1062,7 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
   flex-shrink:0;
 }
 .obj-text .obj-remote-edit-badge .obj-remote-edit-author{
-  max-width:120px;
+  max-width:96px;
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
