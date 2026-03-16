@@ -179,13 +179,15 @@ views.push({
   get feedInner() { return feedInner; }
 });
 
-// View registry: first step toward true multiview (one entry per visible view).
+// View registry: all open views on this device.
+// Each entry: { id, channel, rootEl, feedInner }
 const views = [];
 
-// Register primary view in views[]
+// Register initial view from static DOM.
 views.push({
-  id: 'primary',
-  get channel() { return currentChannel; },
+  id: 'view-0',
+  channel: () => currentChannel,
+  rootEl: document.getElementById('view-app'),
   get feedInner() { return feedInner; }
 });
 
@@ -250,10 +252,6 @@ const WAS_EDITING_KEY      = 'inout_was_editing_v1';
 const AUTH_BACKUP_KEY     = 'inout_auth_user_backup';
 const seenIds       = new Set();
 const channelScroll = new Map();
-
-// View registry: all open views on this device.
-// Each entry: { id, channel, rootEl, feedInner }
-const views = [];
 function loadScrollState() {
   try {
     var raw = localStorage.getItem(SCROLL_STATE_KEY);
