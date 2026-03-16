@@ -262,10 +262,11 @@ let views = [];
 // Supabase table name for stored objects (was 'entries').
 const OBJECTS_TABLE        = 'entries';
 
-// Per-device/local storage keys (do NOT clear these on sign out).
-const LOCAL_DEVICE_ID_KEY  = 'inout_device_id';
-const LOCAL_VIEWS_KEY      = 'inout_local_views_v1';
-const LOCAL_OBJECTS_KEY    = 'inout_local_objects_v1';
+// Per-device/local storage keys.
+const LOCAL_DEVICE_ID_KEY      = 'inout_device_id';
+const LOCAL_ANON_OBJECTS_KEY   = 'inout_anon_objects_v1';
+// (Optional: per-user local objects, not yet used but reserved)
+const LOCAL_USER_OBJECTS_KEY_PREFIX = 'inout_user_objects_';
 
 let objectCount    = 0;
 let atBottom    = true;
@@ -304,9 +305,17 @@ const seenIds       = new Set();
 const viewScroll = new Map();
 const OPEN_VIEWS_KEY     = 'inout_open_views_v1';
 
+function getLocalObjectsKey() {
+  if (currentUser && currentUser.id) {
+    return LOCAL_USER_OBJECTS_KEY_PREFIX + String(currentUser.id);
+  }
+  return LOCAL_ANON_OBJECTS_KEY;
+}
+
 function loadLocalObjects() {
   try {
-    const raw = localStorage.getItem(LOCAL_OBJECTS_KEY);
+    const key = getLocalObjectsKey();
+    const raw = localStorage.getItem(key);
     if (!raw) return {};
     const o = JSON.parse(raw);
     return o && typeof o === 'object' ? o : {};
@@ -317,7 +326,8 @@ function loadLocalObjects() {
 
 function saveLocalObjects(objByView) {
   try {
-    localStorage.setItem(LOCAL_OBJECTS_KEY, JSON.stringify(objByView || {}));
+    const key = getLocalObjectsKey();
+    localStorage.setItem(key, JSON.stringify(objByView || {}));
   } catch (_) {}
 }
 
@@ -1247,21 +1257,22 @@ async function fetchObjectsListForChannel(ch) {
 }
 
 async function loadObjects() {
+  if (!currentUser) {
+    // Never hit Supabase for anonymous users; use local store instead.
+    await loadLocalObjectsForCurrentView();
+    return;
+  }
   const list = await fetchObjectsList();
   await replaceFeedWithList(list);
   // Mirror current view's objects into local per-device storage so they persist on this device.
-  // Only mirror Supabase-backed objects when a user is signed in;
-  // for anonymous users we preserve the local-only store instead.
-  if (currentUser) {
-    try {
-      if (Array.isArray(list)) {
-        const byView = loadLocalObjects();
-        const key = currentView || 'main';
-        byView[key] = list;
-        saveLocalObjects(byView);
-      }
-    } catch (_) {}
-  }
+  try {
+    if (Array.isArray(list)) {
+      const byView = loadLocalObjects();
+      const key = currentView || 'main';
+      byView[key] = list;
+      saveLocalObjects(byView);
+    }
+  } catch (_) {}
 }
 
 async function replaceFeedWithList(list) {
@@ -4413,9 +4424,19 @@ async function signOut() {
   suppressAutoAuth = true;
   currentUser = null;
 
-  // 1) Clear app storage (everything this tab controls)
+  // 1) Clear app storage (everything this tab controls) but PRESERVE device id and anon objects.
+  let preserved = {};
+  try {
+    preserved[LOCAL_DEVICE_ID_KEY] = localStorage.getItem(LOCAL_DEVICE_ID_KEY);
+    preserved[LOCAL_ANON_OBJECTS_KEY] = localStorage.getItem(LOCAL_ANON_OBJECTS_KEY);
+  } catch (_) {}
   try { sessionStorage.clear(); } catch (_) {}
-  try { localStorage.clear(); } catch (_) {}
+  try {
+    localStorage.clear();
+    Object.keys(preserved).forEach(k => {
+      if (preserved[k] != null) localStorage.setItem(k, preserved[k]);
+    });
+  } catch (_) {}
 
   // 2) Clear all non-httpOnly cookies on this domain (best-effort)
   try {
