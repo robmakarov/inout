@@ -2336,6 +2336,14 @@ async function openSecondaryView(ch) {
   const view = document.createElement('div');
   view.className = 'view';
   view.setAttribute('data-channel', ch);
+  // per-view manage bar: simple clone of global manage bar markup (visual only for now)
+  const baseManageBar = document.getElementById('manage-bar');
+  if (baseManageBar) {
+    const mbClone = baseManageBar.cloneNode(true);
+    mbClone.removeAttribute('id');
+    mbClone.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+    view.appendChild(mbClone);
+  }
   const visual = document.createElement('div');
   visual.className = 'visual';
   visual.setAttribute('aria-label', 'View: ' + (ch === 'main' ? 'Feed' : ch));
