@@ -2384,8 +2384,8 @@ async function openSecondaryView(ch) {
   closeBtn.textContent = '×';
   view.appendChild(closeBtn);
   closeBtn.addEventListener('click', () => {
-    const idx = views.indexOf(viewRecord);
-    if (idx >= 0) views.splice(idx, 1);
+    // Remove this view instance from registry and DOM
+    views = views.filter(v => v && v !== viewRecord);
     if (view.parentNode) view.parentNode.removeChild(view);
     try {
       const open = Array.from(new Set(views.filter(v => v && v.id !== 'view-0').map(v => v.channel)));
