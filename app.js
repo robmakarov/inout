@@ -2220,10 +2220,10 @@ function setupSecondaryFeedDnd() {
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
-    secondaryViewEl.classList.add('view-extra-drop-over');
+    secondaryViewEl.classList.add('view-drop-over');
   }
   function handleSecondaryDragleave(e) {
-    if (!secondaryViewEl.contains(e.relatedTarget)) secondaryViewEl.classList.remove('view-extra-drop-over');
+    if (!secondaryViewEl.contains(e.relatedTarget)) secondaryViewEl.classList.remove('view-drop-over');
   }
   secondaryViewEl.addEventListener('dragover', handleSecondaryDragover);
   secondaryViewEl.addEventListener('dragleave', handleSecondaryDragleave);
@@ -2233,7 +2233,7 @@ function setupSecondaryFeedDnd() {
     e.preventDefault();
     e.stopPropagation();
     dragDropHandled = true;
-    secondaryViewEl.classList.remove('view-extra-drop-over');
+    secondaryViewEl.classList.remove('view-drop-over');
     const id = e.dataTransfer.getData('application/x-inout-obj-id') || e.dataTransfer.getData('text/plain');
     const numId = Number(id);
     if (!Number.isFinite(numId)) return;
@@ -2331,7 +2331,7 @@ async function openSecondaryView(ch) {
   viewsContainer.appendChild(resizer);
   multiviewResizerEl = resizer;
   const view = document.createElement('div');
-  view.className = 'view view-extra';
+  view.className = 'view';
   view.setAttribute('data-channel', ch);
   const visual = document.createElement('div');
   visual.className = 'visual';

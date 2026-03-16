@@ -121,11 +121,11 @@ header,
 .multiview-views .view:only-child{
   flex:1 1 100%;
 }
-.multiview-views:has(.multiview-resizer) .view.view-main{
+.multiview-views:has(.multiview-resizer) .view:first-of-type{
   flex:0 0 calc(var(--multiview-split) * (100% - 8px));
   min-width:120px;
 }
-.multiview-views:has(.multiview-resizer) .view.view-extra{
+.multiview-views:has(.multiview-resizer) .view:not(:first-of-type){
   flex:1 1 0;
   min-width:120px;
 }
@@ -162,7 +162,7 @@ header,
   flex-direction:column;
   overflow:hidden;
 }
-.view-extra .feed{
+.multiview-views .view .feed{
   position:relative;
   z-index:1;
   flex:1;
@@ -174,8 +174,8 @@ header,
   scrollbar-width:none;
   -ms-overflow-style:none;
 }
-.view-extra .feed::-webkit-scrollbar{display:none}
-.view-extra-drop-over.view-extra .feed{
+.multiview-views .view .feed::-webkit-scrollbar{display:none}
+.view-drop-over .feed{
   outline:2px solid var(--acc);
   outline-offset:-2px;
   border-radius:6px;
@@ -183,7 +183,7 @@ header,
 #multiview #manage-bar,
 #multiview #feed,
 #multiview .visual,
-.view-extra .feed{
+.multiview-views .view .feed{
   pointer-events:auto;
 }
 #input-area{
