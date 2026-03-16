@@ -552,13 +552,13 @@ header{
   position:fixed;
   inset:0;
   background:radial-gradient(circle at top,var(--bg2),rgba(0,0,0,0.96));
-  display:none;
+  display:flex;
   align-items:center;
   justify-content:center;
   z-index:2100;
 }
-#qr-modal-backdrop[aria-hidden="false"]{
-  display:flex;
+#qr-modal-backdrop[aria-hidden="true"]{
+  display:none;
 }
 #qr-modal{
   max-width:360px;
