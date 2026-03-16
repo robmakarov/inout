@@ -317,11 +317,15 @@ function subscribeTempSessionJoins() {
           ? (window.location.origin + window.location.pathname)
           : '';
 
-        // Create temp session row in Supabase for this view
+        // Generate a dedicated shared View name for this visit link.
+        const userPrefix = (currentUser.id || '').toString().slice(0, 8) || 'user';
+        const sharedChannel = 'visit-' + userPrefix + '-' + Date.now().toString(36);
+
+        // Create temp session row in Supabase for this new shared View
         const { data, error } = await sb
           .from('temp_sessions')
           .insert({
-            channel: currentView,
+            channel: sharedChannel,
             owner_id: currentUser.id,
             expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           })
@@ -333,6 +337,16 @@ function subscribeTempSessionJoins() {
           toast('Failed to create visit link.');
           return;
         }
+
+        // Ensure the shared View is present in the owner's nav and opened.
+        if (!viewNames.includes(sharedChannel)) {
+          viewNames.push(sharedChannel);
+          saveChannelsList();
+        }
+        currentView = sharedChannel;
+        currentChannel = sharedChannel;
+        renderTabs();
+        await loadObjects();
 
         const inviteUrl = base
           ? (base + (base.includes('?') ? '&' : '?') + 'tempSession=' + encodeURIComponent(data.id))
