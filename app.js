@@ -172,13 +172,13 @@ const logDropupPanel = document.getElementById('log-dropup-panel');
 const logDropupBody  = document.getElementById('log-dropup-body');
 
 // View registry: all open views on this device.
-// Each entry: { id, channel, rootEl, feedInner }
+// Each entry: { id, channel (View name), rootEl, feedInner }
 const views = [];
 
 // Register initial view from static DOM.
 views.push({
   id: 'view-0',
-  channel: () => currentChannel,
+  channel: currentChannel,
   rootEl: document.getElementById('view-app'),
   get feedInner() { return feedInner; }
 });
@@ -1388,7 +1388,7 @@ function onUpdateForChannel(ch, row) {
   // apply update in all views showing this channel
   let anyUpdated = false;
   views.forEach(view => {
-    if (!view || typeof view.channel !== 'function' || view.channel() !== ch) return;
+    if (!view || view.channel !== ch) return;
     updateObjectRowText(id, text);
     clearRemoteEditingDoppelganger(id, true);
     anyUpdated = true;
@@ -1519,7 +1519,7 @@ function subscribeActionLog() {
 function onInsertForChannel(ch, msg) {
   let handled = false;
   views.forEach(view => {
-    if (!view || typeof view.channel !== 'function' || view.channel() !== ch || !view.feedInner) return;
+    if (!view || view.channel !== ch || !view.feedInner) return;
     const inner = view.feedInner;
     if (inner === feedInner) {
       hideEmpty();
@@ -2353,7 +2353,7 @@ async function openSecondaryView(ch) {
   const viewId = 'view-' + views.length;
   views.push({
     id: viewId,
-    channel: () => secondaryViewChannel,
+    channel: ch,
     rootEl: view,
     get feedInner() { return secondaryFeedInner; }
   });
@@ -3863,6 +3863,8 @@ async function switchChannel(ch) {
     saveScrollState();
   }
   currentChannel = ch;
+  // keep main view's View name in sync
+  if (views[0]) views[0].channel = ch;
   try {
     localStorage.setItem(CURRENT_CHANNEL_KEY, currentChannel);
   } catch (_) {}
