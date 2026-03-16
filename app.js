@@ -4670,6 +4670,7 @@ if (selectToggle) {
   selectToggle.addEventListener('click', () => {
     if (selectMode) {
       selectedIds.clear();
+      modeState.selectedIds.clear();
       selectModeAutoOn = false;
       if (feedInner) {
         feedInner.querySelectorAll('.obj-select').forEach(box => { box.checked = false; });
@@ -4689,7 +4690,11 @@ if (selectAllBtn) {
       box.checked = true;
       const row = box.closest('.obj');
       const id = row && row.dataset.id;
-      if (id) selectedIds.add(Number(id));
+      if (id) {
+        const n = Number(id);
+        selectedIds.add(n);
+        modeState.selectedIds.add(n);
+      }
     });
     updateSelectionUI();
   });
@@ -4703,6 +4708,7 @@ if (selectNoneBtn) {
       box.checked = false;
     });
     selectedIds.clear();
+    modeState.selectedIds.clear();
     feedInner.querySelectorAll('.obj.obj-selected').forEach(row => row.classList.remove('obj-selected'));
     updateSelectionUI();
   });
