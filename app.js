@@ -24,7 +24,7 @@ try {
     sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
       auth: { detectSessionInUrl: true, flowType: 'pkce' }
     });
-    if (typeof window !== 'undefined') window.sb = sb;
+if (typeof window !== 'undefined') window.sb = sb;
   }
 } catch(e) {}
 
@@ -1118,12 +1118,12 @@ function setupFocusOnFirstInteraction() {
     });
   }
   if (input) {
-    input.addEventListener('focusout', (e) => {
-      const next = e.relatedTarget;
-      if (next && isInteractive(next)) return;
-      if (document.activeElement && (document.activeElement.closest('#user-modal') || document.activeElement.closest('#channel-modal-backdrop'))) return;
-      setTimeout(() => { if (input && document.activeElement !== input) input.focus(); }, 0);
-    });
+  input.addEventListener('focusout', (e) => {
+    const next = e.relatedTarget;
+    if (next && isInteractive(next)) return;
+    if (document.activeElement && (document.activeElement.closest('#user-modal') || document.activeElement.closest('#channel-modal-backdrop'))) return;
+    setTimeout(() => { if (input && document.activeElement !== input) input.focus(); }, 0);
+  });
   }
 }
 
@@ -1514,11 +1514,11 @@ function onInsertForChannel(ch, msg) {
     if (!view || view.channel !== ch || !view.feedInner) return;
     const inner = view.feedInner;
     if (inner === feedInner) {
-      hideEmpty();
+        hideEmpty();
       appendObject(msg, true);
       objectCount++;
       updateObjectCount();
-      requestAnimationFrame(scrollBottom);
+          requestAnimationFrame(scrollBottom);
       handled = true;
     } else {
       hideEmptyInFeed(inner);
@@ -1528,9 +1528,9 @@ function onInsertForChannel(ch, msg) {
     }
   });
   if (!handled) {
-    const next = (unreadCounts.get(ch) || 0) + 1;
-    unreadCounts.set(ch, next);
-    updateTabBadge(ch);
+  const next = (unreadCounts.get(ch) || 0) + 1;
+  unreadCounts.set(ch, next);
+  updateTabBadge(ch);
   }
 }
 
@@ -2631,8 +2631,8 @@ function setupTouchDragHandlers() {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         setTimeout(() => {
-          if (document.body) document.body.classList.remove('dnd-just-ended');
-          r.style.pointerEvents = '';
+        if (document.body) document.body.classList.remove('dnd-just-ended');
+        r.style.pointerEvents = '';
           focusMainInput();
         }, 120);
       });
@@ -2760,16 +2760,16 @@ function createObjectRow(obj, isNew, options) {
         document.body.appendChild(wrap);
         dragSpiritEl = wrap;
       } else {
-        dragSpiritEl = row.cloneNode(true);
+    dragSpiritEl = row.cloneNode(true);
         dragSpiritEl.classList.remove('dragging', 'obj-drag-group', 'obj-selected', 'new-flash', 'obj-editing', 'obj-drag-over', 'obj-drag-target', 'dragging-in-feed');
         dragSpiritEl.classList.add('obj', 'obj-drag-spirit');
-        dragSpiritEl.removeAttribute('draggable');
-        dragSpiritEl.setAttribute('aria-hidden', 'true');
+    dragSpiritEl.removeAttribute('draggable');
+    dragSpiritEl.setAttribute('aria-hidden', 'true');
         dragSpiritEl.style.width = spiritW + 'px';
         dragSpiritEl.style.left = (rowRect.left + rowRect.width / 2) + 'px';
         dragSpiritEl.style.top = startTop + 'px';
         dragSpiritEl.querySelectorAll('.obj-checkbox-zone, .obj-actions, .obj-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
-        document.body.appendChild(dragSpiritEl);
+    document.body.appendChild(dragSpiritEl);
       }
     }
     if (!dragImageEl) {
@@ -2904,8 +2904,8 @@ function createObjectRow(obj, isNew, options) {
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             setTimeout(() => {
-              if (document.body) document.body.classList.remove('dnd-just-ended');
-              row.style.pointerEvents = '';
+            if (document.body) document.body.classList.remove('dnd-just-ended');
+            row.style.pointerEvents = '';
               focusMainInput();
             }, 120);
           });
@@ -3702,25 +3702,25 @@ function applyObjectOrderToDOM() {
     const inner = view.feedInner;
     const header = inner.querySelector('.obj.obj-header');
     const rows = Array.from(inner.querySelectorAll('.obj:not(.obj-header)'));
-    if (!rows.length) return;
-    const domOrder = rows.map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id));
+  if (!rows.length) return;
+  const domOrder = rows.map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id));
     if (domOrder.length === currentObjectOrder.length &&
         domOrder.every((id, i) => id === currentObjectOrder[i])) return;
-    const byId = new Map();
-    rows.forEach(row => {
-      const id = Number(row.dataset.id);
-      if (Number.isFinite(id)) byId.set(id, row);
-    });
-    if (!byId.size) return;
-    const frag = document.createDocumentFragment();
+  const byId = new Map();
+  rows.forEach(row => {
+    const id = Number(row.dataset.id);
+    if (Number.isFinite(id)) byId.set(id, row);
+  });
+  if (!byId.size) return;
+  const frag = document.createDocumentFragment();
     currentObjectOrder.forEach(id => {
-      const row = byId.get(id);
-      if (row) {
-        frag.appendChild(row);
-        byId.delete(id);
-      }
-    });
-    byId.forEach(row => frag.appendChild(row));
+    const row = byId.get(id);
+    if (row) {
+      frag.appendChild(row);
+      byId.delete(id);
+    }
+  });
+  byId.forEach(row => frag.appendChild(row));
     if (header && header.parentNode === inner) inner.insertBefore(header, inner.firstChild);
     inner.appendChild(frag);
   });
@@ -4275,10 +4275,10 @@ async function signIn() {
       });
       if (typeof window !== 'undefined') window.sb = sb;
     }
-    if (!sb || !sb.auth || typeof sb.auth.signInWithOAuth !== 'function') {
+  if (!sb || !sb.auth || typeof sb.auth.signInWithOAuth !== 'function') {
       toast('Sign-in not available.');
-      return;
-    }
+    return;
+  }
     const redirectTo = typeof window !== 'undefined' && window.location.origin ? window.location.origin + '/' : undefined;
     const { data, error } = await sb.auth.signInWithOAuth({
       provider: 'google',
@@ -4386,33 +4386,33 @@ async function sendText(text) {
     const trimmedPerId = idsToSave.map(id => (editingObjectTextMap && editingObjectTextMap[id] != null) ? String(editingObjectTextMap[id]).trim() : trimmed);
     const befores = [];
     if (idsToSave.length === 1) {
-      const { data: before, error: selErr } = await sb
-        .from('entries')
-        .select('id, created_at, text, channel, user_id, author_name')
+    const { data: before, error: selErr } = await sb
+      .from('entries')
+      .select('id, created_at, text, channel, user_id, author_name')
         .eq('id', idsToSave[0])
-        .eq('user_id', currentUser.id)
-        .maybeSingle();
-      if (selErr) {
-        input.disabled = false;
-        console.error(selErr);
-        toast('Failed to update — ' + humanError(selErr.message));
-        sendBtn.disabled = false;
-        return;
-      }
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+    if (selErr) {
+      input.disabled = false;
+      console.error(selErr);
+      toast('Failed to update — ' + humanError(selErr.message));
+      sendBtn.disabled = false;
+      return;
+    }
       if (before) befores.push(before);
     } else {
       const { data: list, error: selErr } = await sb
-        .from('entries')
-        .select('id, created_at, text, channel, user_id, author_name')
+      .from('entries')
+      .select('id, created_at, text, channel, user_id, author_name')
         .in('id', idsToSave)
         .eq('user_id', currentUser.id);
       if (selErr) {
-        input.disabled = false;
+    input.disabled = false;
         console.error(selErr);
         toast('Failed to update — ' + humanError(selErr.message));
-        sendBtn.disabled = false;
-        return;
-      }
+      sendBtn.disabled = false;
+      return;
+    }
       if (list) befores.push(...list);
     }
     let lastError = null;
@@ -4505,11 +4505,11 @@ function attachInputListeners() {
   if (btn) sendBtn = btn;
   if (!input) return;
   _inputListenersAttached = true;
-  input.addEventListener('input', () => {
-    autoResize();
+input.addEventListener('input', () => {
+  autoResize();
     if (sendBtn) sendBtn.disabled = !input.value.trim();
-    saveInputGlobal();
-    updateClearInputBtn();
+  saveInputGlobal();
+  updateClearInputBtn();
     if (editingObjectId != null) {
       if (editingObjectIds && editingObjectIds.size > 1) {
         applyPrimaryEditToMultiEdit(input.value);
@@ -4520,17 +4520,17 @@ function attachInputListeners() {
       if (editTypingCommitTimer) clearTimeout(editTypingCommitTimer);
       editTypingCommitTimer = setTimeout(commitTypingSegment, TYPING_COMMIT_MS);
     }
-    if (currentUser) {
-      broadcastDraft(input.value);
-    }
-  });
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Escape') {
+  if (currentUser) {
+    broadcastDraft(input.value);
+  }
+});
+input.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
       if (editingObjectId) cancelEditingMode(true);
-      return;
-    }
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
+    return;
+  }
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
       if (sendBtn && !sendBtn.disabled) send();
     }
   });
@@ -5342,9 +5342,9 @@ function processFeedDragover(ev) {
         if (slotY >= slotMidYs[i] && slotY < slotMidYs[i + 1]) {
           var rect = slotRows[i].getBoundingClientRect();
           slotInsertBeforeNode = slotRows[i].nextElementSibling || slotRows[i].nextSibling;
-          slotLineY = rect.bottom;
-          break;
-        }
+            slotLineY = rect.bottom;
+            break;
+          }
       }
       if (slotInsertBeforeNode === null && !slotWantAppend) {
         slotInsertBeforeNode = slotFirstRow;
@@ -5424,10 +5424,10 @@ function processFeedDragover(ev) {
       if (y >= midYs[i] && y < midYs[i + 1]) {
         insertBeforeNode = rows[i].nextElementSibling || rows[i].nextSibling;
         const rect = rows[i].getBoundingClientRect();
-        lineY = rect.bottom;
+          lineY = rect.bottom;
         targetRow = rows[i + 1];
-        break;
-      }
+          break;
+        }
     }
     if (insertBeforeNode === null && !wantAppend) {
       insertBeforeNode = firstRow;
@@ -5569,7 +5569,7 @@ document.addEventListener('dragover', e => {
   const inFeed = x >= feedRect.left && x <= feedRect.right && y >= feedRect.top && y <= feedRect.bottom;
   if (inFeed) {
     if (draggingPrimary || originGhostsActive) {
-      processFeedDragover(e);
+    processFeedDragover(e);
     } else if (draggingSecondary) {
       if (!feedDropIndicatorEl) {
         feedDropIndicatorEl = document.createElement('div');
