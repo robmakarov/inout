@@ -163,6 +163,9 @@ const logActionBtn   = document.getElementById('log-action-btn');
 const logDropupPanel = document.getElementById('log-dropup-panel');
 const logDropupBody  = document.getElementById('log-dropup-body');
 
+// View registry: first step toward true multiview (one entry per visible view).
+const views = [];
+
 // Register primary view in views[]
 views.push({
   id: 'primary',
@@ -231,8 +234,6 @@ const WAS_EDITING_KEY      = 'inout_was_editing_v1';
 const AUTH_BACKUP_KEY     = 'inout_auth_user_backup';
 const seenIds       = new Set();
 const channelScroll = new Map();
-// View registry: first step toward true multiview (one entry per visible view).
-const views = [];
 function loadScrollState() {
   try {
     var raw = localStorage.getItem(SCROLL_STATE_KEY);
