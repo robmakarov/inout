@@ -369,9 +369,11 @@ function applyDragSelectRect(feedInner, feedEl, startYContent, currentYClient, m
     box.checked = desired;
     if (box.checked) {
       selectedIds.add(id);
+      modeState.selectedIds.add(id);
       r.classList.add('obj-selected');
     } else {
       selectedIds.delete(id);
+      modeState.selectedIds.delete(id);
       r.classList.remove('obj-selected');
     }
     changed = true;
@@ -391,9 +393,11 @@ function toggleRowAtY(feedInner, clientY) {
       box.checked = !box.checked;
       if (box.checked) {
         selectedIds.add(id);
+        modeState.selectedIds.add(id);
         r.classList.add('obj-selected');
       } else {
         selectedIds.delete(id);
+        modeState.selectedIds.delete(id);
         r.classList.remove('obj-selected');
       }
       updateSelectionUI();
@@ -3086,9 +3090,11 @@ function createObjectRow(obj, isNew, options) {
     if (!obj.id) return;
     if (selectBox.checked) {
       selectedIds.add(obj.id);
+      modeState.selectedIds.add(obj.id);
       row.classList.add('obj-selected');
     } else {
       selectedIds.delete(obj.id);
+      modeState.selectedIds.delete(obj.id);
       row.classList.remove('obj-selected');
     }
     updateSelectionUI();
@@ -3112,9 +3118,11 @@ function createObjectRow(obj, isNew, options) {
     selectBox.checked = !selectBox.checked;
     if (selectBox.checked) {
       selectedIds.add(obj.id);
+      modeState.selectedIds.add(obj.id);
       row.classList.add('obj-selected');
     } else {
       selectedIds.delete(obj.id);
+      modeState.selectedIds.delete(obj.id);
       row.classList.remove('obj-selected');
     }
     if (!selectMode) {
