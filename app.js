@@ -4295,6 +4295,12 @@ async function signOut() {
   sharedChannels.clear();
   unreadCounts.clear();
   renderTabs();
+  try {
+    if (sb && sb.auth && typeof sb.auth.signOut === 'function') {
+      const { error } = await sb.auth.signOut();
+      if (error) console.error(error);
+    }
+  } catch (e) { console.error(e); }
 }
 
 async function copyUserId() {
