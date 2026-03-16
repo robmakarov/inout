@@ -56,35 +56,6 @@ try {
     if (vn) visitInviteNick = decodeURIComponent(vn);
   }
 } catch (_) {}
-(function attachAuthButtonEarly() {
-  var btn = document.getElementById('um-auth-btn');
-  if (!btn) return;
-  btn.addEventListener('click', function authBtnClick() {
-    if (typeof signIn === 'function') { signIn(); return; }
-    if (!sb && typeof supabase !== 'undefined') {
-      try {
-        sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
-          auth: { detectSessionInUrl: true, flowType: 'pkce' }
-        });
-        if (typeof window !== 'undefined') window.sb = sb;
-      } catch (_) {}
-    }
-    if (sb && sb.auth && typeof sb.auth.signInWithOAuth === 'function') {
-      var redirectTo = window.location.origin ? window.location.origin + '/' : undefined;
-      sb.auth.signInWithOAuth({ provider: 'google', options: redirectTo ? { redirectTo: redirectTo } : {} }).then(function(r) {
-        if (r && r.error) {
-          if (typeof toast === 'function') toast('Sign-in failed — ' + (r.error.message || ''));
-          else console.error(r.error);
-          return;
-        }
-        if (r && r.data && r.data.url) window.location.href = r.data.url;
-      }).catch(function(err) {
-        if (typeof toast === 'function') toast('Sign-in failed');
-        else if (console && console.error) console.error(err);
-      });
-    } else if (typeof toast === 'function') toast('Sign-in not available.');
-  });
-})();
 const STRIPE_PUBLISHABLE_KEY = 'pk_live_xxx_replace_me';
 const STRIPE_PRICE_ID        = 'price_xxx_replace_me';
 let stripe = null;
