@@ -460,7 +460,7 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
   inset:0;
   background:rgba(0,0,0,0.62);
   display:none;
-  z-index:250;
+  z-index:2000; /* above header, nav, multiview panels */
   pointer-events:auto;
 }
 

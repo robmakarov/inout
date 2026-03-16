@@ -1502,28 +1502,29 @@ function subscribeActionLog() {
 }
 
 function onInsertForChannel(ch, msg) {
-  if (ch === currentChannel) {
-    hideEmpty();
-    appendObject(msg, true);
-    objectCount++;
-    updateObjectCount();
-    requestAnimationFrame(scrollBottom);
-    if (secondaryViewChannel === currentChannel && secondaryFeedInner) {
-      hideEmptyInFeed(secondaryFeedInner);
-      const mirrorRow = createObjectRow(msg, true, { skipEmptyRemove: true });
-      if (mirrorRow) secondaryFeedInner.appendChild(mirrorRow);
+  let handled = false;
+  views.forEach(view => {
+    if (!view || view.channel !== ch || !view.feedInner) return;
+    const inner = view.feedInner;
+    if (inner === feedInner) {
+      hideEmpty();
+      appendObject(msg, true);
+      objectCount++;
+      updateObjectCount();
+      requestAnimationFrame(scrollBottom);
+      handled = true;
+    } else {
+      hideEmptyInFeed(inner);
+      const row = createObjectRow(msg, true, { skipEmptyRemove: true });
+      if (row) inner.appendChild(row);
+      handled = true;
     }
-    return;
+  });
+  if (!handled) {
+    const next = (unreadCounts.get(ch) || 0) + 1;
+    unreadCounts.set(ch, next);
+    updateTabBadge(ch);
   }
-  if (ch === secondaryViewChannel && secondaryFeedInner) {
-    hideEmptyInFeed(secondaryFeedInner);
-    const row = createObjectRow(msg, true, { skipEmptyRemove: true });
-    if (row) secondaryFeedInner.appendChild(row);
-    return;
-  }
-  const next = (unreadCounts.get(ch) || 0) + 1;
-  unreadCounts.set(ch, next);
-  updateTabBadge(ch);
 }
 
 function hideEmptyInFeed(feedInnerEl) {
