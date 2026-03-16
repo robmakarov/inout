@@ -4485,16 +4485,13 @@ async function sendText(text) {
   const trimmed = (text || '').trim();
   if (!trimmed) return;
 
-  if (!currentUser) {
-    toast('Sign in with Google to send.');
-    return;
-  }
-
   sendBtn.disabled = true;
   input.disabled   = true;
 
-  const idsToSave = editingObjectIds && editingObjectIds.size ? Array.from(editingObjectIds) : (editingObjectId != null ? [editingObjectId] : []);
-  if (idsToSave.length > 0) {
+  const idsToSave = currentUser && editingObjectIds && editingObjectIds.size
+    ? Array.from(editingObjectIds)
+    : (currentUser && editingObjectId != null ? [editingObjectId] : []);
+  if (currentUser && idsToSave.length > 0) {
     const trimmedPerId = idsToSave.map(id => (editingObjectTextMap && editingObjectTextMap[id] != null) ? String(editingObjectTextMap[id]).trim() : trimmed);
     const befores = [];
     if (idsToSave.length === 1) {
@@ -4560,15 +4557,34 @@ async function sendText(text) {
     return;
   }
 
-  const { data, error } = await sb
-    .from(OBJECTS_TABLE)
-    .insert({
+  let data = null;
+  let error = null;
+
+  if (currentUser && sb && sb.from) {
+    // Signed-in path: insert into Supabase as before.
+    const res = await sb
+      .from(OBJECTS_TABLE)
+      .insert({
+        text: trimmed,
+        user_id: currentUser.id,
+        channel: currentChannel,
+      })
+      .select('id, created_at, text, channel, user_id, author_name')
+      .single();
+    data = res.data;
+    error = res.error;
+  } else {
+    // Local-only path: create a synthetic object stored on this device.
+    const nowIso = new Date().toISOString();
+    data = {
+      id: Date.now(),
+      created_at: nowIso,
       text: trimmed,
-      user_id: currentUser.id,
       channel: currentChannel,
-    })
-    .select('id, created_at, text, channel, user_id, author_name')
-    .single();
+      user_id: getDeviceId(),
+      author_name: null,
+    };
+  }
 
   input.disabled = false;
 
@@ -4578,18 +4594,24 @@ async function sendText(text) {
     toast(msg);
     logError(msg);
     sendBtn.disabled = false;
-  } else {
-    if (data && data.channel === currentChannel) {
+  } else if (data) {
+    // Update UI
+    if (data.channel === currentChannel) {
       hideEmpty();
       appendObject(data, true);
       objectCount++;
       updateObjectCount();
     }
-    if (data) {
+    // Persist locally for this device
+    upsertLocalObjectForCurrentView(data);
+    // Undo/log only for signed-in Supabase sends
+    if (currentUser && sb && sb.from) {
       pushUndo({ type: 'send', entries: [data] });
       logAction('send', { channel: currentChannel });
     }
     reactivateInputMode({ clearInput: true });
+  } else {
+    sendBtn.disabled = false;
   }
 }
 
