@@ -188,8 +188,8 @@ const modeState = {
 };
 
 // View registry: all open views on this device.
-// Each entry: { id, channel (View name), rootEl, feedInner }
-const views = [];
+// Each entry: { id, channel (View name), rootEl, feedInner, objects, config }
+let views = [];
 
 (function ensureModalsClosedOnLoad() {
   if (umBackdrop) { umBackdrop.style.display = 'none'; umBackdrop.setAttribute('aria-hidden', 'true'); }
@@ -286,7 +286,9 @@ views.push({
   id: 'view-0',
   channel: currentView,
   rootEl: document.getElementById('view-app'),
-  get feedInner() { return feedInner; }
+  get feedInner() { return feedInner; },
+  objects: [],      // array of objects (or ids) belonging to this view
+  config: {},       // per-view settings (layout, filters, etc.), to be filled later
 });
 let selectMode = false;
 let selectModeAutoOn = false;
@@ -2349,7 +2351,9 @@ async function openSecondaryView(ch) {
     id: viewId,
     channel: ch,
     rootEl: view,
-    get feedInner() { return secondaryFeedInner; }
+    get feedInner() { return secondaryFeedInner; },
+    objects: [],   // data for this view only; populated later
+    config: {},    // per-view settings; editable by user later
   };
   views.push(viewRecord);
   const closeBtn = document.createElement('button');
