@@ -200,6 +200,66 @@ let views = [];
   } catch (_) {}
 })();
 
+(function setupLocalDataButtons() {
+  if (umExportLocalBtn) {
+    umExportLocalBtn.addEventListener('click', () => {
+      try {
+        const key = getLocalObjectsKey();
+        const raw = localStorage.getItem(key) || '{}';
+        const blob = new Blob([raw], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'inout-local-base.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error(e);
+        toast('Failed to export local base.');
+      }
+    });
+  }
+
+  if (umClearLocalBtn) {
+    umClearLocalBtn.addEventListener('click', () => {
+      try {
+        // 1) Unregister all service workers for this origin (remove shell)
+        if (typeof navigator !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+          navigator.serviceWorker.getRegistrations().then(regs => {
+            regs.forEach(reg => reg.unregister().catch(() => {}));
+          }).catch(() => {});
+        }
+
+        // 2) Clear all caches used by service workers
+        if (typeof caches !== 'undefined' && caches.keys) {
+          caches.keys().then(keys => {
+            keys.forEach(k => caches.delete(k).catch(() => {}));
+          }).catch(() => {});
+        }
+
+        // 3) Clear all local/session storage for this origin
+        try { localStorage.clear(); } catch (_) {}
+        try { sessionStorage.clear(); } catch (_) {}
+
+        // 4) Clear current UI
+        clearObjects();
+        if (emptyEl && !emptyEl.parentNode && feedInner) feedInner.appendChild(emptyEl);
+        toast('All local data and shell cleared. Reloading…');
+
+        // 5) Reload page to pick up a clean state
+        setTimeout(() => {
+          if (typeof location !== 'undefined' && location.reload) location.reload();
+        }, 600);
+      } catch (e) {
+        console.error(e);
+        toast('Failed to clear local data.');
+      }
+    });
+  }
+})();
+
 (function setupQrModal() {
   if (!qrModalBackdrop || !qrModalImg) return;
 
@@ -4316,64 +4376,6 @@ function setupAuthListener() {
 
   if (umNickSave && umNickname) {
     umNickSave.addEventListener('click', saveNickname);
-  }
-
-  if (umExportLocalBtn) {
-    umExportLocalBtn.addEventListener('click', () => {
-      try {
-        const key = getLocalObjectsKey();
-        const raw = localStorage.getItem(key) || '{}';
-        const blob = new Blob([raw], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'inout-local-base.json';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-      } catch (e) {
-        console.error(e);
-        toast('Failed to export local base.');
-      }
-    });
-  }
-
-  if (umClearLocalBtn) {
-    umClearLocalBtn.addEventListener('click', () => {
-      try {
-        // 1) Unregister all service workers for this origin (remove shell)
-        if (typeof navigator !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
-          navigator.serviceWorker.getRegistrations().then(regs => {
-            regs.forEach(reg => reg.unregister().catch(() => {}));
-          }).catch(() => {});
-        }
-
-        // 2) Clear all caches used by service workers
-        if (typeof caches !== 'undefined' && caches.keys) {
-          caches.keys().then(keys => {
-            keys.forEach(k => caches.delete(k).catch(() => {}));
-          }).catch(() => {});
-        }
-
-        // 3) Clear all local/session storage for this origin
-        try { localStorage.clear(); } catch (_) {}
-        try { sessionStorage.clear(); } catch (_) {}
-
-        // 4) Clear current UI
-        clearObjects();
-        if (emptyEl && !emptyEl.parentNode && feedInner) feedInner.appendChild(emptyEl);
-        toast('All local data and shell cleared. Reloading…');
-
-        // 5) Reload page to pick up a clean state
-        setTimeout(() => {
-          if (typeof location !== 'undefined' && location.reload) location.reload();
-        }, 600);
-      } catch (e) {
-        console.error(e);
-        toast('Failed to clear local data.');
-      }
-    });
   }
 }
 
