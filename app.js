@@ -332,6 +332,17 @@ function upsertLocalObjectForCurrentView(obj) {
   saveLocalObjects(byView);
 }
 
+async function loadLocalObjectsForCurrentView() {
+  try {
+    const byView = loadLocalObjects();
+    const key = currentView || 'main';
+    const list = Array.isArray(byView[key]) ? byView[key] : [];
+    await replaceFeedWithList(list);
+  } catch (_) {
+    // ignore local load errors; show empty state
+  }
+}
+
 function removeLocalObjectsForCurrentView(ids) {
   if (!ids || !ids.length) return;
   const byView = loadLocalObjects();
@@ -4202,6 +4213,8 @@ async function refreshAuth() {
     subscribeRealtimeAll();
     teardownDraftChannel();
     teardownDndBroadcastChannel();
+    // When not signed in, hydrate view from local per-device objects (anonymous mode).
+    await loadLocalObjectsForCurrentView();
   }
 }
 
