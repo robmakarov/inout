@@ -552,6 +552,45 @@ header{
   border-radius:8px;
   padding:10px 10px;
 }
+.um-section.app-qr-section{
+  position:relative;
+  overflow:hidden;
+}
+.um-section.app-qr-section::before{
+  content:'';
+  position:absolute;
+  inset:-40%;
+  background:conic-gradient(from 0deg,var(--acc),transparent 45%,var(--soft),transparent 70%,var(--acc));
+  opacity:0.4;
+  animation:qrGlow 6s linear infinite;
+  pointer-events:none;
+}
+.um-section.app-qr-section::after{
+  content:'';
+  position:absolute;
+  inset:1px;
+  border-radius:8px;
+  background:radial-gradient(circle at top,var(--bg2),transparent 55%), radial-gradient(circle at bottom,var(--bg2),var(--bg));
+  z-index:0;
+}
+.um-section.app-qr-section > *{ position:relative; z-index:1; }
+.um-section.app-qr-section #um-qr-img{
+  display:block;
+  margin-top:12px;
+  border-radius:12px;
+  padding:8px;
+  background:#000;
+  box-shadow:0 0 0 1px rgba(255,255,255,0.04),0 0 24px rgba(0,0,0,0.7);
+  animation:qrFloat 4s ease-in-out infinite;
+}
+@keyframes qrGlow{
+  from{ transform:rotate(0deg); }
+  to{ transform:rotate(360deg); }
+}
+@keyframes qrFloat{
+  0%,100%{ transform:translateY(0); }
+  50%{ transform:translateY(-3px); }
+}
 .um-label{
   text-transform:uppercase;
   letter-spacing:0.08em;

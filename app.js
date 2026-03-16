@@ -4177,7 +4177,7 @@ function setupAuthListener() {
         const url = (typeof window !== 'undefined' && window.location)
           ? (window.location.origin + window.location.pathname)
           : '';
-        const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(url);
+        const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&color=FFFFFF&bgcolor=000000&data=' + encodeURIComponent(url);
         const existing = document.getElementById('um-qr-img');
         if (existing) {
           existing.src = qrUrl;
@@ -4186,9 +4186,6 @@ function setupAuthListener() {
           img.id = 'um-qr-img';
           img.src = qrUrl;
           img.alt = 'QR code to open this app';
-          img.style.marginTop = '12px';
-          img.style.borderRadius = '8px';
-          img.style.border = '1px solid var(--line2)';
           const section = umShowQrBtn.closest('.um-section');
           if (section) section.appendChild(img);
         }
