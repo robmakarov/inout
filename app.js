@@ -171,14 +171,6 @@ const logActionBtn   = document.getElementById('log-action-btn');
 const logDropupPanel = document.getElementById('log-dropup-panel');
 const logDropupBody  = document.getElementById('log-dropup-body');
 
-// Register initial view from static DOM.
-views.push({
-  id: 'view-0',
-  channel: () => currentChannel,
-  rootEl: document.getElementById('view-app'),
-  get feedInner() { return feedInner; }
-});
-
 // View registry: all open views on this device.
 // Each entry: { id, channel, rootEl, feedInner }
 const views = [];
