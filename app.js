@@ -2348,7 +2348,7 @@ async function openSecondaryView(ch) {
   feed.appendChild(feedInner);
   visual.appendChild(feed);
   view.appendChild(visual);
-  panels.appendChild(view);
+  viewsContainer.appendChild(view);
   secondaryViewEl = view;
   secondaryFeedInner = feedInner;
   secondaryFeedEl = view.querySelector('.feed');
