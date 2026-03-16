@@ -568,7 +568,7 @@ async function undoLastAction() {
         });
         feedInner.appendChild(frag);
         updateObjectCount();
-        saveObjectOrderForCurrentChannel();
+        saveObjectOrderForCurrentView();
         applyFieldPrefsToObjects();
         showEmptyIfNoObjects();
         requestAnimationFrame(() => { if (feedEl) feedEl.classList.remove('feed-updating'); });
@@ -596,7 +596,7 @@ async function undoLastAction() {
         });
         if (frag.childNodes.length) feedInner.appendChild(frag);
         if (forCurrent.length) {
-          saveObjectOrderForCurrentChannel();
+          saveObjectOrderForCurrentView();
           applyObjectOrderToDOM();
           applyFieldPrefsToObjects();
         }
@@ -618,7 +618,7 @@ async function undoLastAction() {
         currentObjectOrder = currentObjectOrder.filter(x => !ids.includes(x));
         objectCount = Math.max(0, objectCount - ids.length);
         updateObjectCount();
-        saveObjectOrderForCurrentChannel();
+        saveObjectOrderForCurrentView();
         showEmptyIfNoObjects();
         requestAnimationFrame(() => { if (feedEl) feedEl.classList.remove('feed-updating'); });
       });
@@ -649,7 +649,7 @@ async function undoLastAction() {
       return;
     } else if (action.type === 'order' && Array.isArray(action.before)) {
       currentObjectOrder = action.before.slice();
-      await saveObjectOrderForCurrentChannel();
+      await saveObjectOrderForCurrentView();
       applyObjectOrderToDOM();
       toast('Undid last action.');
       return;
@@ -2232,7 +2232,7 @@ function setupSecondaryFeedDnd() {
       const ok = await moveSingleObject(numId, secondaryViewChannel);
       if (src.channel === currentChannel) {
         currentObjectOrder = currentObjectOrder.filter(x => x !== numId);
-        saveObjectOrderForCurrentChannel();
+        saveObjectOrderForCurrentView();
         showEmptyIfNoObjects();
       }
       if (ok) {
@@ -2580,7 +2580,7 @@ function setupTouchDragHandlers() {
     broadcastDndEnd();
     const container = r && r.closest ? r.closest('.feed-inner') : null;
     recomputeOrderFromDOM(container);
-    saveObjectOrderForCurrentChannel();
+    saveObjectOrderForCurrentView();
     if (droppedMovedIdsTouch.length && dndBroadcastChannel && dndChannelReady) {
       broadcastDndDropped(currentObjectOrder.slice(), droppedMovedIdsTouch);
     }
@@ -2847,11 +2847,11 @@ function createObjectRow(obj, isNew, options) {
         if (!dragDropHandled && !orderChanged) {
           currentObjectOrder = savedOrderBeforeDrag.slice();
           applyObjectOrderToDOM();
-          saveObjectOrderForCurrentChannel();
+          saveObjectOrderForCurrentView();
         } else {
           const container = row && row.closest ? row.closest('.feed-inner') : null;
           recomputeOrderFromDOM(container);
-          saveObjectOrderForCurrentChannel();
+          saveObjectOrderForCurrentView();
           if (droppedMovedIds.length && dndBroadcastChannel && dndChannelReady) {
             broadcastDndDropped(currentObjectOrder.slice(), droppedMovedIds);
           }
@@ -3411,7 +3411,7 @@ function appendObject(obj, isNew) {
     if (Number.isFinite(idNum)) {
       currentObjectOrder = currentObjectOrder.filter(x => x !== idNum);
       currentObjectOrder.push(idNum);
-      saveObjectOrderForCurrentChannel();
+      saveObjectOrderForCurrentView();
     }
   }
 }
@@ -3609,7 +3609,7 @@ let suppressNextOrderApply = false;
 let suppressNextViewApply = false;
 let suppressOrderApplyUntil = 0; /* ignore realtime order/view applies until this timestamp */
 
-async function saveObjectOrderForCurrentChannel() {
+async function saveObjectOrderForCurrentView() {
   if (!currentObjectOrder.length) return;
   saveOrderToLocal();
   suppressOrderApplyUntil = Date.now() + 600;
@@ -3617,7 +3617,7 @@ async function saveObjectOrderForCurrentChannel() {
     try {
       const rows = currentObjectOrder.map((entryId, index) => ({
         user_id: currentUser.id,
-        channel: currentChannel,
+        channel: currentView,
         entry_id: entryId,
         position: index,
       }));
@@ -4934,7 +4934,7 @@ async function deleteSingleObject(id) {
     const el = findObjectRowEl(id);
     if (el && el.parentNode) el.parentNode.removeChild(el);
     currentObjectOrder = currentObjectOrder.filter(x => x !== id);
-    saveObjectOrderForCurrentChannel();
+    saveObjectOrderForCurrentView();
     showEmptyIfNoObjects();
   } catch (e) {
     console.error(e);
@@ -5056,7 +5056,7 @@ async function moveSingleObject(id, targetChannel) {
     const el = feedInner.querySelector('.obj[data-id="' + CSS.escape(String(id)) + '"]');
     if (el) el.remove();
     currentObjectOrder = currentObjectOrder.filter(x => x !== id);
-    saveObjectOrderForCurrentChannel();
+    saveObjectOrderForCurrentView();
     showEmptyIfNoObjects();
     return true;
   } catch (e) {
