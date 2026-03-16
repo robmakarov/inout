@@ -2372,6 +2372,18 @@ async function openSecondaryView(ch) {
     rootEl: view,
     get feedInner() { return secondaryFeedInner; }
   });
+  const closeBtn = view.querySelector('.view-close-btn');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      const idx = views.findIndex(v => v.rootEl === view);
+      if (idx >= 0) views.splice(idx, 1);
+      if (view.parentNode) view.parentNode.removeChild(view);
+      try {
+        const open = Array.from(new Set(views.filter(v => v && v.id !== 'view-0').map(v => v.channel)));
+        localStorage.setItem(OPEN_VIEWS_KEY, JSON.stringify(open));
+      } catch (_) {}
+    });
+  }
   const list = await fetchObjectsListForChannel(ch);
   await replaceFeedWithListInto(list, feedInner);
   updateTabsUI();

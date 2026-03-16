@@ -308,6 +308,23 @@ header{
   border-color:var(--acc2);
 }
 
+.view-close-btn{
+  border:1px solid var(--line2);
+  background:transparent;
+  color:var(--soft);
+  font-family:var(--mono);
+  font-size:10px;
+  padding:3px 6px;
+  border-radius:999px;
+  cursor:pointer;
+}
+.view-close-btn:hover{
+  background:var(--bg2);
+}
+#view-app .view-close-btn{
+  display:none; /* cannot close primary view */
+}
+
 .select-extra{
   display:inline-flex;
   align-items:center;
