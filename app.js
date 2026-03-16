@@ -175,12 +175,14 @@ const logDropupBody  = document.getElementById('log-dropup-body');
 const Modes = {
   NORMAL: 'normal',
   SELECT: 'select',
+  EDIT: 'edit',
   REORDER: 'reorder',
   REALTIME_INSPECT: 'realtime-inspect',
 };
 let currentMode = Modes.NORMAL;
 const modeState = {
   selectedIds: new Set(),      // union of selected objects across all views
+  editing: { active: false, primaryId: null, ids: null },
   reorderActive: false,
   realtimeInspectTarget: null, // object id or view name being inspected
 };
@@ -738,6 +740,13 @@ function reactivateInputMode(opts) {
 }
 
 function cancelEditingMode(clearInput) {
+  modeState.editing.active = false;
+  modeState.editing.primaryId = null;
+  modeState.editing.ids = null;
+  if (currentMode === Modes.EDIT) {
+    currentMode = selectMode ? Modes.SELECT : Modes.NORMAL;
+    document.body.dataset.mode = currentMode;
+  }
   reactivateInputMode({ clearInput: !!clearInput });
 }
 let currentObjectOrder = [];
@@ -3409,6 +3418,11 @@ function createObjectRow(obj, isNew, options) {
     originalEditTextForCancel = obj.text || '';
     editTypingUndoStack = [obj.text || ''];
     editTypingRedoStack = [];
+    modeState.editing.active = true;
+    modeState.editing.primaryId = obj.id;
+    modeState.editing.ids = idsToEdit;
+    currentMode = Modes.EDIT;
+    document.body.dataset.mode = Modes.EDIT;
     if (editTypingCommitTimer) {
       clearTimeout(editTypingCommitTimer);
       editTypingCommitTimer = null;
