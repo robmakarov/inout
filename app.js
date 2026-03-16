@@ -1250,14 +1250,18 @@ async function loadObjects() {
   const list = await fetchObjectsList();
   await replaceFeedWithList(list);
   // Mirror current view's objects into local per-device storage so they persist on this device.
-  try {
-    if (Array.isArray(list)) {
-      const byView = loadLocalObjects();
-      const key = currentView || 'main';
-      byView[key] = list;
-      saveLocalObjects(byView);
-    }
-  } catch (_) {}
+  // Only mirror Supabase-backed objects when a user is signed in;
+  // for anonymous users we preserve the local-only store instead.
+  if (currentUser) {
+    try {
+      if (Array.isArray(list)) {
+        const byView = loadLocalObjects();
+        const key = currentView || 'main';
+        byView[key] = list;
+        saveLocalObjects(byView);
+      }
+    } catch (_) {}
+  }
 }
 
 async function replaceFeedWithList(list) {
