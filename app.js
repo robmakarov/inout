@@ -2194,16 +2194,60 @@ var secondaryFeedEl = null;
 var multiviewResizerEl = null;
 
 function setupSecondaryFeedDnd() {
-  // Multiview disabled for now; no secondary feed DnD.
+  if (!secondaryFeedEl || !secondaryViewEl) return;
+  function handleSecondaryDragover(e) {
+    const src = getDraggingRowAndSource();
+    if (!src || src.channel === secondaryViewChannel) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    secondaryViewEl.classList.add('view-secondary-drop-over');
+  }
+  function handleSecondaryDragleave(e) {
+    if (!secondaryViewEl.contains(e.relatedTarget)) secondaryViewEl.classList.remove('view-secondary-drop-over');
+  }
+  secondaryViewEl.addEventListener('dragover', handleSecondaryDragover);
+  secondaryViewEl.addEventListener('dragleave', handleSecondaryDragleave);
+  secondaryFeedEl.addEventListener('dragover', handleSecondaryDragover);
+  secondaryFeedEl.addEventListener('dragleave', handleSecondaryDragleave);
+  function handleSecondaryDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDropHandled = true;
+    secondaryViewEl.classList.remove('view-secondary-drop-over');
+    const id = e.dataTransfer.getData('application/x-inout-obj-id') || e.dataTransfer.getData('text/plain');
+    const numId = Number(id);
+    if (!Number.isFinite(numId)) return;
+    const src = getDraggingRowAndSource();
+    if (!src || src.channel === secondaryViewChannel) return;
+    const rowEl = src.row;
+    animateObjectToView(rowEl, secondaryFeedEl, async () => {
+      const ok = await moveSingleObject(numId, secondaryViewChannel);
+      if (src.channel === currentChannel) {
+        currentObjectOrder = currentObjectOrder.filter(x => x !== numId);
+        saveObjectOrderForCurrentChannel();
+        showEmptyIfNoObjects();
+      }
+      if (ok) {
+        const list = await fetchObjectsListForChannel(secondaryViewChannel);
+        await replaceFeedWithListInto(list, secondaryFeedInner);
+      } else if (rowEl) rowEl.style.visibility = '';
+    });
+  }
+  secondaryViewEl.addEventListener('drop', handleSecondaryDrop, true);
+  secondaryFeedEl.addEventListener('drop', handleSecondaryDrop, true);
 }
 
 function closeSecondaryView() {
-  // Collapse back to single view: just clear secondary state and update tabs.
   if (secondaryViewEl && secondaryViewEl.parentNode) secondaryViewEl.parentNode.removeChild(secondaryViewEl);
   secondaryViewEl = null;
   secondaryFeedInner = null;
   secondaryFeedEl = null;
   secondaryViewChannel = null;
+  // remove secondary from views[]
+  for (let i = views.length - 1; i >= 0; i--) {
+    if (views[i] && views[i].id === 'secondary') views.splice(i, 1);
+  }
   saveSecondaryViewState();
   updateTabsUI();
 }
@@ -2247,13 +2291,65 @@ function setupMultiviewResizer(resizerEl, panelsEl) {
 }
 
 async function openSecondaryView(ch) {
-  // Multiview secondary view creation disabled for now.
-  void ch;
+  if (!channels.includes(ch)) return;
+  closeSecondaryView();
+  secondaryViewChannel = ch;
+  saveSecondaryViewState();
+  const panels = document.querySelector('.multiview-panels');
+  if (!panels) return;
+  const resizer = document.createElement('div');
+  resizer.className = 'multiview-resizer';
+  resizer.setAttribute('aria-label', 'Resize views');
+  try {
+    const saved = localStorage.getItem(MULTIVIEW_SPLIT_KEY);
+    if (saved) applyMultiviewSplit(parseFloat(saved));
+    else panels.style.setProperty('--multiview-split', '0.5');
+  } catch (_) {
+    panels.style.setProperty('--multiview-split', '0.5');
+  }
+  setupMultiviewResizer(resizer, panels);
+  panels.appendChild(resizer);
+  multiviewResizerEl = resizer;
+  const view = document.createElement('div');
+  view.className = 'view view-secondary';
+  view.setAttribute('data-channel', ch);
+  const visual = document.createElement('div');
+  visual.className = 'visual';
+  visual.setAttribute('aria-label', 'View: ' + (ch === 'main' ? 'Feed' : ch));
+  const feed = document.createElement('div');
+  feed.className = 'feed';
+  const feedInner = document.createElement('div');
+  feedInner.className = 'feed-inner';
+  feedInner.id = 'feed-inner-secondary';
+  const empty = document.createElement('div');
+  empty.className = 'empty-placeholder';
+  empty.textContent = 'Loading…';
+  feedInner.appendChild(empty);
+  feed.appendChild(feedInner);
+  visual.appendChild(feed);
+  view.appendChild(visual);
+  panels.appendChild(view);
+  secondaryViewEl = view;
+  secondaryFeedInner = feedInner;
+  secondaryFeedEl = view.querySelector('.feed');
+  if (secondaryFeedEl) setupSecondaryFeedDnd();
+  // register secondary in views[]
+  views.push({
+    id: 'secondary',
+    get channel() { return secondaryViewChannel; },
+    get feedInner() { return secondaryFeedInner; }
+  });
+  const list = await fetchObjectsListForChannel(ch);
+  await replaceFeedWithListInto(list, feedInner);
+  updateTabsUI();
 }
 
 function toggleSecondaryView(ch) {
-  // Multiview toggle disabled; always single view.
-  void ch;
+  if (secondaryViewChannel === ch) {
+    closeSecondaryView();
+  } else {
+    openSecondaryView(ch);
+  }
 }
 
 function restoreInputGlobal() {
