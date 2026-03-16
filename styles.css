@@ -97,7 +97,7 @@ header,
   min-height:0;
   height:100vh;
   overflow:hidden;
-  pointer-events:none;
+  pointer-events:auto;
   padding-top:calc(48px + var(--nav-height) + var(--bar-top-height)); /* header + nav + fixed manage bar */
   padding-bottom:var(--bar-bottom-min-height); /* reserve space for fixed input area */
 }
@@ -257,7 +257,7 @@ header{
   right:0;
   width:100%;
   height:var(--bar-top-height);
-  z-index:998;
+  z-index:1200;
   flex-shrink:0;
   background:var(--bg2);
   border-bottom:1px solid var(--line);
