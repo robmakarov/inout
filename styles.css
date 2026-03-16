@@ -455,11 +455,22 @@ header{
   color:var(--bright);
   text-transform:uppercase;
   user-select:none;
+  display:flex;
+  align-items:center;
+  gap:8px;
 }
 .logo span{
   color:var(--acc);
   display:inline-block;
   animation:logoPulse 1.4s ease-in-out infinite;
+}
+
+.logo-accent-rect{
+  width:14px;
+  height:14px;
+  border-radius:3px;
+  background:#e63946;
+  box-shadow:0 0 0 1px rgba(0,0,0,0.4),0 0 14px rgba(230,57,70,0.8);
 }
 
 @keyframes logoPulse{
