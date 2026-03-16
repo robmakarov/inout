@@ -4845,7 +4845,11 @@ if (viewVisualSelect) {
     logAction('view', { viewMode });
     saveFieldPrefsForCurrentChannel();
     applyFieldPrefsUI();
-    loadObjects().catch(() => {});
+    if (currentUser) {
+      loadObjects().catch(() => {});
+    } else {
+      loadLocalObjectsForCurrentView().catch?.(() => {});
+    }
   });
 }
 
@@ -5620,7 +5624,8 @@ feedEl.addEventListener('drop', e => {
         const ok = await moveSingleObject(numId, currentChannel);
         if (rowEl.parentNode) rowEl.parentNode.removeChild(rowEl);
         if (ok) {
-          await loadObjects();
+          if (currentUser) await loadObjects();
+          else await loadLocalObjectsForCurrentView();
         } else if (rowEl) rowEl.style.visibility = '';
       });
     }
