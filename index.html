@@ -81,22 +81,31 @@
           </span>
         </div>
         <div class="bar-group" id="manage-actions" data-bar-group="actions">
-          <button id="delete-selected" class="manage-btn" data-bar-id="delete-selected">Delete</button>
-          <select id="move-target" data-bar-id="move-target"></select>
-          <button id="move-selected" class="manage-btn" data-bar-id="move-selected">Move</button>
-          <button id="export-tab" class="manage-btn" data-bar-id="export-tab">Export</button>
-          <button id="view-toggle" class="manage-btn" data-bar-id="view-toggle">View ▾</button>
-          <div id="view-menu">
-            <label>Visual <select id="view-visual" aria-label="View style">
-              <option value="feed">Feed</option>
-              <option value="table">Table</option>
-            </select></label>
-            <label><input type="checkbox" id="field-time" checked>Time</label>
-            <label><input type="checkbox" id="field-author" checked>Author</label>
+          <button id="manage-menu-toggle" class="manage-btn" data-bar-id="manage-menu" aria-haspopup="true" aria-expanded="false" aria-label="More actions">⋮</button>
+          <div id="manage-menu" class="manage-menu" role="menu" aria-label="View actions">
+            <button id="delete-selected" class="manage-btn" data-bar-id="delete-selected" role="menuitem">Delete</button>
+            <div class="manage-subgroup" role="group" aria-label="Move">
+              <label>Move to
+                <select id="move-target" data-bar-id="move-target"></select>
+              </label>
+              <button id="move-selected" class="manage-btn" data-bar-id="move-selected" role="menuitem">Move</button>
+            </div>
+            <button id="export-tab" class="manage-btn" data-bar-id="export-tab" role="menuitem">Export</button>
+            <div class="manage-subgroup" role="group" aria-label="View options">
+              <button id="view-toggle" class="manage-btn" data-bar-id="view-toggle" type="button">View ▾</button>
+              <div id="view-menu">
+                <label>Visual <select id="view-visual" aria-label="View style">
+                  <option value="feed">Feed</option>
+                  <option value="table">Table</option>
+                </select></label>
+                <label><input type="checkbox" id="field-time" checked>Time</label>
+                <label><input type="checkbox" id="field-author" checked>Author</label>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-      <button type="button" id="bar-reorder-toggle" class="manage-btn" aria-label="Reorder bar buttons" title="Reorder bar">⋯</button>
+      <button type="button" id="bar-reorder-toggle" class="manage-btn" aria-label="Reorder bar buttons" title="Reorder bar" style="display:none">⋯</button>
     </div>
 
     <div class="visual" id="visual" aria-label="View content">

@@ -391,6 +391,34 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
 #view-menu.open{
   display:flex;
 }
+
+.manage-menu{
+  position:relative;
+}
+.manage-menu[hidden]{
+  display:none;
+}
+.manage-menu.open{
+  position:absolute;
+  top:100%;
+  right:0;
+  background:var(--bg);
+  border:1px solid var(--line2);
+  border-radius:4px;
+  padding:6px 8px;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  z-index:1200;
+}
+.manage-subgroup{
+  border-top:1px solid var(--line2);
+  margin-top:4px;
+  padding-top:4px;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
 #view-menu label{
   display:inline-flex;
   align-items:center;

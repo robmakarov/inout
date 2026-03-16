@@ -3510,6 +3510,16 @@ function setupTabs() {
       closeSecondaryView();
     });
   }
+  const manageMenuToggle = document.getElementById('manage-menu-toggle');
+  const manageMenu = document.getElementById('manage-menu');
+  if (manageMenuToggle && manageMenu) {
+    manageMenu.hidden = true;
+    manageMenuToggle.addEventListener('click', () => {
+      const isOpen = manageMenu.classList.toggle('open');
+      manageMenu.hidden = !isOpen;
+      manageMenuToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    });
+  }
 }
 
 function updateTabsUI() {
