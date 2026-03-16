@@ -98,7 +98,7 @@ header,
   height:100vh;
   overflow:hidden;
   pointer-events:none;
-  padding-top:calc(48px + var(--nav-height) + var(--bar-top-height)); /* header + nav + manage bar */
+  padding-top:calc(48px + var(--nav-height)); /* header + nav; manage bar is inside each view */
   padding-bottom:var(--bar-bottom-min-height); /* reserve space for fixed input area */
 }
 .multiview-views{
