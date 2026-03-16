@@ -2347,22 +2347,34 @@ async function openSecondaryView(ch) {
   const visual = document.createElement('div');
   visual.className = 'visual';
   visual.setAttribute('aria-label', 'View: ' + (ch === 'main' ? 'Feed' : ch));
-  const feed = document.createElement('div');
-  feed.className = 'feed';
-  const feedInner = document.createElement('div');
-  feedInner.className = 'feed-inner';
-  feedInner.id = 'feed-inner-secondary';
-  const empty = document.createElement('div');
-  empty.className = 'empty-placeholder';
-  empty.textContent = 'Loading…';
-  feedInner.appendChild(empty);
-  feed.appendChild(feedInner);
-  visual.appendChild(feed);
+  // clone base feed structure so each view has identical markup, including loader/empty classes
+  const baseFeed = document.getElementById('feed');
+  let feedInner = null;
+  if (baseFeed) {
+    const feedClone = baseFeed.cloneNode(true);
+    feedClone.removeAttribute('id');
+    feedClone.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+    feedInner = feedClone.querySelector('.feed-inner');
+    visual.appendChild(feedClone);
+    secondaryFeedEl = feedClone;
+    secondaryFeedInner = feedInner;
+  } else {
+    const feed = document.createElement('div');
+    feed.className = 'feed';
+    feedInner = document.createElement('div');
+    feedInner.className = 'feed-inner';
+    const empty = document.createElement('div');
+    empty.className = 'empty-placeholder';
+    empty.textContent = 'Loading…';
+    feedInner.appendChild(empty);
+    feed.appendChild(feedInner);
+    visual.appendChild(feed);
+    secondaryFeedEl = feed;
+    secondaryFeedInner = feedInner;
+  }
   view.appendChild(visual);
   viewsContainer.appendChild(view);
   secondaryViewEl = view;
-  secondaryFeedInner = feedInner;
-  secondaryFeedEl = view.querySelector('.feed');
   if (secondaryFeedEl) setupSecondaryFeedDnd();
   // register this view in views[]
   const viewId = 'view-' + views.length;
