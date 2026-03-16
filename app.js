@@ -270,6 +270,7 @@ const ORDER_STATE_KEY      = 'inout_order_state_v1';
 const SCROLL_STATE_KEY     = 'inout_scroll_state_v1';
 const WAS_EDITING_KEY      = 'inout_was_editing_v1';
 const AUTH_BACKUP_KEY     = 'inout_auth_user_backup';
+let suppressAutoAuth      = false; // when true, never auto-log user back in this tab
 const seenIds       = new Set();
 const viewScroll = new Map();
 const OPEN_VIEWS_KEY     = 'inout_open_views_v1';
@@ -4055,6 +4056,17 @@ async function ensureOAuthCallbackProcessed() {
 }
 
 async function refreshAuth() {
+  if (suppressAutoAuth) {
+    currentUser = null;
+    updateAuthUI();
+    sharedChannels.clear();
+    unreadCounts.clear();
+    renderTabs();
+    subscribeRealtimeAll();
+    teardownDraftChannel();
+    teardownDndBroadcastChannel();
+    return;
+  }
   await ensureOAuthCallbackProcessed();
   try {
     // Do not auto-restore from backup on fresh load; rely on Supabase session instead.
@@ -4111,6 +4123,9 @@ var explicitSignOut = false;
 function setupAuthListener() {
   if (!sb || !sb.auth || typeof sb.auth.onAuthStateChange !== 'function') return;
   sb.auth.onAuthStateChange(async (event, session) => {
+    if (suppressAutoAuth) {
+      return;
+    }
     if (session && session.user) {
       const prevUser = currentUser;
       currentUser = session.user;
@@ -4254,6 +4269,7 @@ function clearObjects() {
 
 async function signIn() {
   try {
+    suppressAutoAuth = false;
     if (!sb && typeof supabase !== 'undefined') {
       sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
         auth: { detectSessionInUrl: true, flowType: 'pkce' }
@@ -4286,6 +4302,7 @@ if (typeof window !== 'undefined') window.signIn = signIn;
 
 async function signOut() {
   explicitSignOut = true;
+  suppressAutoAuth = true;
   currentUser = null;
   try { sessionStorage.removeItem(AUTH_BACKUP_KEY); } catch (_) {}
   updateAuthUI();
