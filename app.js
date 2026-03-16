@@ -180,6 +180,36 @@ let views = [];
   if (umBackdrop) { umBackdrop.style.display = 'none'; umBackdrop.setAttribute('aria-hidden', 'true'); }
   if (cmBackdrop) cmBackdrop.style.display = 'none';
   if (logDropupPanel) logDropupPanel.classList.remove('open');
+  if (qrModalBackdrop) qrModalBackdrop.setAttribute('aria-hidden', 'true');
+})();
+
+(function setupQrModal() {
+  if (!umShowQrBtn || !qrModalBackdrop || !qrModalImg) return;
+  umShowQrBtn.addEventListener('click', () => {
+    try {
+      const base = (typeof window !== 'undefined' && window.location)
+        ? (window.location.origin + window.location.pathname)
+        : '';
+      const nick = (umNickname && umNickname.value.trim())
+        || (currentUser && currentUser.user_metadata && currentUser.user_metadata.nickname)
+        || (currentUser && currentUser.email)
+        || (currentUser && currentUser.id)
+        || 'Visitor';
+      const inviteUrl = base
+        ? (base + (base.includes('?') ? '&' : '?') + 'visitNick=' + encodeURIComponent(nick))
+        : ('visitNick=' + encodeURIComponent(nick));
+      const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&color=FFFFFF&bgcolor=000000&data=' + encodeURIComponent(inviteUrl);
+      qrModalImg.src = qrUrl;
+      qrModalBackdrop.setAttribute('aria-hidden', 'false');
+    } catch (_) {}
+  });
+  const closeQrModal = () => {
+    qrModalBackdrop.setAttribute('aria-hidden', 'true');
+  };
+  if (qrModalClose) qrModalClose.addEventListener('click', closeQrModal);
+  qrModalBackdrop.addEventListener('click', e => {
+    if (e.target === qrModalBackdrop) closeQrModal();
+  });
 })();
 
 (function setupProfileAndModalsEarly() {
@@ -240,6 +270,7 @@ const ORDER_STATE_KEY      = 'inout_order_state_v1';
 const SCROLL_STATE_KEY     = 'inout_scroll_state_v1';
 const WAS_EDITING_KEY      = 'inout_was_editing_v1';
 const AUTH_BACKUP_KEY     = 'inout_auth_user_backup';
+const SIGN_OUT_BLOCK_KEY  = 'inout_signout_block_v1';
 const seenIds       = new Set();
 const viewScroll = new Map();
 const OPEN_VIEWS_KEY     = 'inout_open_views_v1';
@@ -4027,10 +4058,17 @@ async function ensureOAuthCallbackProcessed() {
 async function refreshAuth() {
   await ensureOAuthCallbackProcessed();
   try {
-    try {
-      var b = sessionStorage.getItem(AUTH_BACKUP_KEY);
-      if (b) currentUser = JSON.parse(b);
-    } catch (_) {}
+    const hardSignedOut = (() => {
+      try { return localStorage.getItem(SIGN_OUT_BLOCK_KEY) === '1'; } catch (_) { return false; }
+    })();
+    if (!hardSignedOut) {
+      try {
+        var b = sessionStorage.getItem(AUTH_BACKUP_KEY);
+        if (b) currentUser = JSON.parse(b);
+      } catch (_) {}
+    } else {
+      currentUser = null;
+    }
     var session = null;
     try {
       var sessionPromise = sb.auth.getSession();
@@ -4047,9 +4085,9 @@ async function refreshAuth() {
         if (retry && retry.data && retry.data.session) session = retry.data.session;
       } catch (_) {}
     }
-    if (session?.user) {
+    if (session?.user && !hardSignedOut) {
       currentUser = session.user;
-    } else if (!currentUser) {
+    } else if (!currentUser && !hardSignedOut) {
       try {
         var userResult = await Promise.race([
           sb.auth.getUser(),
@@ -4058,7 +4096,7 @@ async function refreshAuth() {
         if (userResult && userResult.data && userResult.data.user) currentUser = userResult.data.user;
       } catch (_) {}
     }
-    if (!currentUser) {
+    if (!currentUser && !hardSignedOut) {
       try {
         var backup = sessionStorage.getItem(AUTH_BACKUP_KEY);
         if (backup) currentUser = JSON.parse(backup);
@@ -4154,45 +4192,6 @@ function setupAuthListener() {
   });
 
   if (umCopyIdBtn) umCopyIdBtn.addEventListener('click', copyUserId);
-
-  if (umShowQrBtn) {
-    umShowQrBtn.addEventListener('click', () => {
-      try {
-        if (!currentUser || !currentUser.id) {
-          toast('Sign in to share your code.');
-          return;
-        }
-        const base = (typeof window !== 'undefined' && window.location)
-          ? (window.location.origin + window.location.pathname)
-          : '';
-        const nick = (umNickname && umNickname.value.trim())
-          || (currentUser.user_metadata && currentUser.user_metadata.nickname)
-          || currentUser.email
-          || currentUser.id
-          || 'Visitor';
-        const inviteUrl = base
-          ? (base + (base.includes('?') ? '&' : '?') + 'visitNick=' + encodeURIComponent(nick))
-          : ('visitNick=' + encodeURIComponent(nick));
-        const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&color=FFFFFF&bgcolor=000000&data=' + encodeURIComponent(inviteUrl);
-        if (qrModalImg) {
-          qrModalImg.src = qrUrl;
-        }
-        if (qrModalBackdrop) {
-          qrModalBackdrop.setAttribute('aria-hidden', 'false');
-        }
-      } catch (_) {}
-    });
-  }
-
-  if (qrModalClose && qrModalBackdrop) {
-    const closeQrModal = () => {
-      qrModalBackdrop.setAttribute('aria-hidden', 'true');
-    };
-    qrModalClose.addEventListener('click', closeQrModal);
-    qrModalBackdrop.addEventListener('click', e => {
-      if (e.target === qrModalBackdrop) closeQrModal();
-    });
-  }
 
   if (umNickSave && umNickname) {
     umNickSave.addEventListener('click', saveNickname);
@@ -4291,6 +4290,7 @@ function clearObjects() {
 
 async function signIn() {
   try {
+    try { localStorage.removeItem(SIGN_OUT_BLOCK_KEY); } catch (_) {}
     if (!sb && typeof supabase !== 'undefined') {
       sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
         auth: { detectSessionInUrl: true, flowType: 'pkce' }
@@ -4322,11 +4322,8 @@ async function signIn() {
 if (typeof window !== 'undefined') window.signIn = signIn;
 
 async function signOut() {
-  if (!sb || !sb.auth || typeof sb.auth.signOut !== 'function') {
-    toast('Sign-out not available in this local build.');
-    return;
-  }
   explicitSignOut = true;
+  try { localStorage.setItem(SIGN_OUT_BLOCK_KEY, '1'); } catch (_) {}
   currentUser = null;
   try { sessionStorage.removeItem(AUTH_BACKUP_KEY); } catch (_) {}
   updateAuthUI();
@@ -4337,8 +4334,10 @@ async function signOut() {
   unreadCounts.clear();
   renderTabs();
   try {
-    const { error } = await sb.auth.signOut();
-    if (error) console.error(error);
+    if (sb && sb.auth && typeof sb.auth.signOut === 'function') {
+      const { error } = await sb.auth.signOut();
+      if (error) console.error(error);
+    }
   } catch (e) { console.error(e); }
 }
 
