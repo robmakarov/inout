@@ -171,6 +171,20 @@ const logActionBtn   = document.getElementById('log-action-btn');
 const logDropupPanel = document.getElementById('log-dropup-panel');
 const logDropupBody  = document.getElementById('log-dropup-body');
 
+// Global interaction modes (kept separate from views/objects).
+const Modes = {
+  NORMAL: 'normal',
+  SELECT: 'select',
+  REORDER: 'reorder',
+  REALTIME_INSPECT: 'realtime-inspect',
+};
+let currentMode = Modes.NORMAL;
+const modeState = {
+  selectedIds: new Set(),      // union of selected objects across all views
+  reorderActive: false,
+  realtimeInspectTarget: null, // object id or view name being inspected
+};
+
 // View registry: all open views on this device.
 // Each entry: { id, channel (View name), rootEl, feedInner }
 const views = [];
@@ -2145,6 +2159,13 @@ function showEmptyIfNoObjects() {
 
 function setSelectMode(on) {
   selectMode = !!on;
+  currentMode = selectMode ? Modes.SELECT : Modes.NORMAL;
+  if (selectMode) {
+    document.body.dataset.mode = Modes.SELECT;
+  } else {
+    document.body.dataset.mode = Modes.NORMAL;
+    modeState.selectedIds.clear();
+  }
   if (selectToggle) {
     selectToggle.classList.toggle('active', selectMode);
     selectToggle.textContent = 'Select';
@@ -5633,6 +5654,36 @@ function scrollBottom() {
 }
 
 /* ═══ UTILS ═══════════════════════════════════════════════ */
+
+// Pure helpers for view state (order, selection) – safe to reuse across controllers.
+function normalizeOrder(list, order) {
+  if (!Array.isArray(list) || !list.length) return [];
+  if (!Array.isArray(order) || !order.length) return list
+    .map(m => (m && typeof m.id !== 'undefined') ? Number(m.id) : null)
+    .filter(id => Number.isFinite(id));
+  const byId = new Set(list.map(m => (m && typeof m.id !== 'undefined') ? Number(m.id) : null).filter(id => Number.isFinite(id)));
+  const out = [];
+  order.forEach(id => {
+    id = Number(id);
+    if (Number.isFinite(id) && byId.has(id)) {
+      out.push(id);
+      byId.delete(id);
+    }
+  });
+  byId.forEach(id => out.push(id));
+  return out;
+}
+
+function toggleIdInSet(set, id, on) {
+  if (!set || !Number.isFinite(id)) return;
+  if (on === true) {
+    set.add(id);
+  } else if (on === false) {
+    set.delete(id);
+  } else {
+    if (set.has(id)) set.delete(id); else set.add(id);
+  }
+}
 var formatTimeCache = new Map();
 var formatTimeCacheMax = 200;
 function formatTime(iso) {
