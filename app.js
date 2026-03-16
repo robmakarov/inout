@@ -46,6 +46,16 @@ if (sb && sb.auth && typeof location !== 'undefined' && location.search && locat
     });
   })();
 }
+
+// Optional contact invite encoded in QR URL: ?contact=<user_id>
+let contactInviteUserId = null;
+try {
+  if (typeof location !== 'undefined' && location.search) {
+    const params = new URLSearchParams(location.search);
+    const cid = params.get('contact');
+    if (cid) contactInviteUserId = cid;
+  }
+} catch (_) {}
 (function attachAuthButtonEarly() {
   var btn = document.getElementById('um-auth-btn');
   if (!btn) return;
@@ -4174,10 +4184,17 @@ function setupAuthListener() {
   if (umShowQrBtn) {
     umShowQrBtn.addEventListener('click', () => {
       try {
-        const url = (typeof window !== 'undefined' && window.location)
+        if (!currentUser || !currentUser.id) {
+          toast('Sign in to share your code.');
+          return;
+        }
+        const base = (typeof window !== 'undefined' && window.location)
           ? (window.location.origin + window.location.pathname)
           : '';
-        const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&color=FFFFFF&bgcolor=000000&data=' + encodeURIComponent(url);
+        const inviteUrl = base
+          ? (base + (base.includes('?') ? '&' : '?') + 'contact=' + encodeURIComponent(currentUser.id))
+          : ('contact:' + encodeURIComponent(currentUser.id));
+        const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&color=FFFFFF&bgcolor=000000&data=' + encodeURIComponent(inviteUrl);
         const existing = document.getElementById('um-qr-img');
         if (existing) {
           existing.src = qrUrl;
@@ -4237,6 +4254,15 @@ function updateAuthUI() {
     if (umUserId) umUserId.textContent = currentUser.id || '—';
     if (umCopyIdBtn) umCopyIdBtn.disabled = !currentUser.id;
     if (umVersionBadge) umVersionBadge.textContent = 'Free';
+    // If we arrived via a contact invite, gently suggest creating a view with that user.
+    if (contactInviteUserId && typeof toast === 'function') {
+      if (contactInviteUserId === currentUser.id) {
+        toast('This is your own contact code.');
+      } else {
+        toast('Scanned user code: ' + contactInviteUserId + '. Create a view with this user id.');
+      }
+      contactInviteUserId = null;
+    }
   } else {
     if (umAuthStatus) umAuthStatus.textContent = 'Not signed in';
     if (umAuthBtn) umAuthBtn.textContent = 'Sign in';
