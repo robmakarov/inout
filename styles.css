@@ -111,7 +111,7 @@ header,
   --multiview-split: 0.5;
 }
 .multiview-views .view{
-  flex:1 1 auto;
+  flex:1 1 0;
   min-width:0;
   display:flex;
   flex-direction:column;
@@ -120,14 +120,6 @@ header,
 }
 .multiview-views .view:only-child{
   flex:1 1 100%;
-}
-.multiview-views:has(.multiview-resizer) .view:first-of-type{
-  flex:0 0 calc(var(--multiview-split) * (100% - 8px));
-  min-width:120px;
-}
-.multiview-views:has(.multiview-resizer) .view:not(:first-of-type){
-  flex:1 1 0;
-  min-width:120px;
 }
 .multiview-resizer{
   flex:0 0 8px;
