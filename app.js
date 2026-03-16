@@ -118,6 +118,8 @@ const umAuthBtn    = document.getElementById('um-auth-btn');
 const umUserId     = document.getElementById('um-user-id');
 const umCopyIdBtn  = document.getElementById('um-copy-id');
 const umShowQrBtn  = document.getElementById('um-show-qr');
+const umExportLocalBtn = document.getElementById('um-export-local');
+const umClearLocalBtn  = document.getElementById('um-clear-local');
 const qrModalBackdrop = document.getElementById('qr-modal-backdrop');
 const qrModalImg   = document.getElementById('qr-modal-img');
 const qrModalClose = document.getElementById('qr-modal-close');
@@ -186,6 +188,16 @@ let views = [];
   if (cmBackdrop) cmBackdrop.style.display = 'none';
   if (logDropupPanel) logDropupPanel.classList.remove('open');
   if (qrModalBackdrop) qrModalBackdrop.setAttribute('aria-hidden', 'true');
+})();
+
+(function registerServiceWorker() {
+  try {
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+      });
+    }
+  } catch (_) {}
 })();
 
 (function setupQrModal() {
@@ -4304,6 +4316,56 @@ function setupAuthListener() {
 
   if (umNickSave && umNickname) {
     umNickSave.addEventListener('click', saveNickname);
+  }
+
+  if (umExportLocalBtn) {
+    umExportLocalBtn.addEventListener('click', () => {
+      try {
+        const key = getLocalObjectsKey();
+        const raw = localStorage.getItem(key) || '{}';
+        const blob = new Blob([raw], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'inout-local-base.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error(e);
+        toast('Failed to export local base.');
+      }
+    });
+  }
+
+  if (umClearLocalBtn) {
+    umClearLocalBtn.addEventListener('click', () => {
+      try {
+        const deviceId = localStorage.getItem(LOCAL_DEVICE_ID_KEY);
+        localStorage.removeItem(LOCAL_ANON_OBJECTS_KEY);
+        // also clear anon order keys
+        try {
+          const raw = localStorage.getItem(ORDER_STATE_KEY);
+          if (raw) {
+            const map = JSON.parse(raw);
+            if (map && typeof map === 'object') {
+              Object.keys(map).forEach(k => {
+                if (k.startsWith('anon::')) delete map[k];
+              });
+              localStorage.setItem(ORDER_STATE_KEY, JSON.stringify(map));
+            }
+          }
+        } catch (_) {}
+        if (deviceId) localStorage.setItem(LOCAL_DEVICE_ID_KEY, deviceId);
+        clearObjects();
+        if (emptyEl && !emptyEl.parentNode) feedInner.appendChild(emptyEl);
+        toast('Local data cleared from this device.');
+      } catch (e) {
+        console.error(e);
+        toast('Failed to clear local data.');
+      }
+    });
   }
 }
 
