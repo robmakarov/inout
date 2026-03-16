@@ -2463,24 +2463,26 @@ function saveFieldPrefsForCurrentChannel() {
   } catch(_) {}
   // Also persist into unified view config so other devices see it.
   if (currentUser && sb && sb.from) {
-    const cfg = {
-      order: currentObjectOrder.slice(),
-      showTime: !!fieldPrefs.showTime,
-      showAuthor: !!fieldPrefs.showAuthor,
-      viewMode: fieldPrefs.viewMode === 'table' ? 'table' : 'feed',
-    };
-    sb
-      .from('views')
-      .upsert(
-        {
-          user_id: currentUser.id,
-          channel: currentChannel,
-          config: cfg,
-        },
-        { onConflict: 'user_id,channel' }
-      )
-      .then(() => {})
-      .catch(() => {});
+    try {
+      const cfg = {
+        order: currentObjectOrder.slice(),
+        showTime: !!fieldPrefs.showTime,
+        showAuthor: !!fieldPrefs.showAuthor,
+        viewMode: fieldPrefs.viewMode === 'table' ? 'table' : 'feed',
+      };
+      sb
+        .from('views')
+        .upsert(
+          {
+            user_id: currentUser.id,
+            channel: currentChannel,
+            config: cfg,
+          },
+          { onConflict: 'user_id,channel' }
+        )
+        .then(() => {})
+        .catch(() => {});
+    } catch (_) {}
   }
 }
 
@@ -3660,7 +3662,7 @@ async function saveObjectOrderForCurrentChannel() {
       if (error) console.error(error);
     } catch (e) { console.error(e); }
   }
-  if (currentUser) {
+  if (currentUser && sb && sb.from) {
     try {
       const cfg = {
         order: currentObjectOrder.slice(),
@@ -3669,11 +3671,14 @@ async function saveObjectOrderForCurrentChannel() {
         viewMode: fieldPrefs.viewMode === 'table' ? 'table' : 'feed',
       };
       suppressNextViewApply = true;
-      await sb.from('views').upsert(
-        { user_id: currentUser.id, channel: currentChannel, config: cfg },
-        { onConflict: 'user_id,channel' }
-      );
-    } catch (e) { console.error(e); }
+      sb.from('views')
+        .upsert(
+          { user_id: currentUser.id, channel: currentChannel, config: cfg },
+          { onConflict: 'user_id,channel' }
+        )
+        .then(() => {})
+        .catch(() => {});
+    } catch (_) {}
   }
 }
 
