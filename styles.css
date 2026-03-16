@@ -744,11 +744,15 @@ header{
 .feed-inner{
   position:relative;
   padding:16px 0 8px;
-  display:flex;
-  flex-direction:column;
-  justify-content:center;
   min-height:100%;
-  gap:0;
+}
+/* Default feed: two-dimensional grid of objects (cards) */
+.feed-inner:not(.view-table){
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
+  align-items:flex-start;
+  justify-content:center;
+  gap:12px 16px;
 }
 /* Table view: same object params as feed but laid out as table */
 .feed-inner.view-table{
