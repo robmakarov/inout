@@ -1419,7 +1419,7 @@ body.select-mode .obj-select-wrap,
   color:var(--text);
 }
 
-#msg-input{
+#object-input{
   flex:1;
   min-width:0;
   width:100%;
@@ -1440,10 +1440,10 @@ body.select-mode .obj-select-wrap,
   scrollbar-width:none;
   box-sizing:border-box;
 }
-#msg-input::-webkit-scrollbar{display:none}
-#msg-input::placeholder{color:var(--dim)}
-#msg-input:focus{outline:none}
-#msg-input:focus-visible{outline:none}
+#object-input::-webkit-scrollbar{display:none}
+#object-input::placeholder{color:var(--dim)}
+#object-input:focus{outline:none}
+#object-input:focus-visible{outline:none}
 
 
 /* Send: part of composer bar, accent when enabled */
@@ -1709,7 +1709,7 @@ body.select-mode .obj-select-wrap,
     padding:0 10px;
   }
   /* prevent iOS Safari zoom-on-focus */
-  #msg-input{font-size:16px}
+  #object-input{font-size:16px}
   .cm-input{font-size:16px}
 }
 
