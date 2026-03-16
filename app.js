@@ -2216,10 +2216,10 @@ function setupSecondaryFeedDnd() {
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
-    secondaryViewEl.classList.add('view-secondary-drop-over');
+    secondaryViewEl.classList.add('view-extra-drop-over');
   }
   function handleSecondaryDragleave(e) {
-    if (!secondaryViewEl.contains(e.relatedTarget)) secondaryViewEl.classList.remove('view-secondary-drop-over');
+    if (!secondaryViewEl.contains(e.relatedTarget)) secondaryViewEl.classList.remove('view-extra-drop-over');
   }
   secondaryViewEl.addEventListener('dragover', handleSecondaryDragover);
   secondaryViewEl.addEventListener('dragleave', handleSecondaryDragleave);
@@ -2229,7 +2229,7 @@ function setupSecondaryFeedDnd() {
     e.preventDefault();
     e.stopPropagation();
     dragDropHandled = true;
-    secondaryViewEl.classList.remove('view-secondary-drop-over');
+    secondaryViewEl.classList.remove('view-extra-drop-over');
     const id = e.dataTransfer.getData('application/x-inout-obj-id') || e.dataTransfer.getData('text/plain');
     const numId = Number(id);
     if (!Number.isFinite(numId)) return;
@@ -2269,25 +2269,25 @@ function closeSecondaryView() {
 }
 
 function applyMultiviewSplit(ratio) {
-  const panels = document.querySelector('.multiview-panels');
-  if (!panels) return;
+  const viewsContainer = document.querySelector('.multiview-views');
+  if (!viewsContainer) return;
   ratio = Math.max(0.2, Math.min(0.8, ratio));
-  panels.style.setProperty('--multiview-split', String(ratio));
+  viewsContainer.style.setProperty('--multiview-split', String(ratio));
   try { localStorage.setItem(MULTIVIEW_SPLIT_KEY, String(ratio)); } catch (_) {}
 }
 
-function setupMultiviewResizer(resizerEl, panelsEl) {
-  if (!resizerEl || !panelsEl) return;
+function setupMultiviewResizer(resizerEl, viewsEl) {
+  if (!resizerEl || !viewsEl) return;
   let startX = 0;
   let startRatio = 0.5;
   resizerEl.addEventListener('mousedown', e => {
     e.preventDefault();
-    const rect = panelsEl.getBoundingClientRect();
-    const current = parseFloat(panelsEl.style.getPropertyValue('--multiview-split')) || 0.5;
+    const rect = viewsEl.getBoundingClientRect();
+    const current = parseFloat(viewsEl.style.getPropertyValue('--multiview-split')) || 0.5;
     startX = e.clientX;
     startRatio = current;
     const onMove = (e2) => {
-      const w = panelsEl.offsetWidth;
+      const w = viewsEl.offsetWidth;
       if (w <= 0) return;
       const dx = e2.clientX - startX;
       const ratio = startRatio + dx / w;
@@ -2311,23 +2311,23 @@ async function openSecondaryView(ch) {
   closeSecondaryView();
   secondaryViewChannel = ch;
   saveSecondaryViewState();
-  const panels = document.querySelector('.multiview-panels');
-  if (!panels) return;
+  const viewsContainer = document.querySelector('.multiview-views');
+  if (!viewsContainer) return;
   const resizer = document.createElement('div');
   resizer.className = 'multiview-resizer';
   resizer.setAttribute('aria-label', 'Resize views');
   try {
     const saved = localStorage.getItem(MULTIVIEW_SPLIT_KEY);
     if (saved) applyMultiviewSplit(parseFloat(saved));
-    else panels.style.setProperty('--multiview-split', '0.5');
+    else viewsContainer.style.setProperty('--multiview-split', '0.5');
   } catch (_) {
-    panels.style.setProperty('--multiview-split', '0.5');
+    viewsContainer.style.setProperty('--multiview-split', '0.5');
   }
-  setupMultiviewResizer(resizer, panels);
-  panels.appendChild(resizer);
+  setupMultiviewResizer(resizer, viewsContainer);
+  viewsContainer.appendChild(resizer);
   multiviewResizerEl = resizer;
   const view = document.createElement('div');
-  view.className = 'view view-secondary';
+  view.className = 'view view-extra';
   view.setAttribute('data-channel', ch);
   const visual = document.createElement('div');
   visual.className = 'visual';
