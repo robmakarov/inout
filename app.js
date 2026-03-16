@@ -22,9 +22,14 @@ try {
   }
   if (!sb && typeof supabase !== 'undefined') {
     sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
-      auth: { detectSessionInUrl: true, flowType: 'pkce' }
+      auth: {
+        detectSessionInUrl: true,
+        flowType: 'pkce',
+        persistSession: false,
+        autoRefreshToken: false,
+      }
     });
-if (typeof window !== 'undefined') window.sb = sb;
+    if (typeof window !== 'undefined') window.sb = sb;
   }
 } catch(e) {}
 
@@ -4270,7 +4275,12 @@ async function signIn() {
     suppressAutoAuth = false;
     if (!sb && typeof supabase !== 'undefined') {
       sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
-        auth: { detectSessionInUrl: true, flowType: 'pkce' }
+        auth: {
+          detectSessionInUrl: true,
+          flowType: 'pkce',
+          persistSession: false,
+          autoRefreshToken: false,
+        }
       });
       if (typeof window !== 'undefined') window.sb = sb;
     }
