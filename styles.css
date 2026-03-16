@@ -575,10 +575,10 @@ header{
   display:none;
 }
 #qr-modal{
-  max-width:360px;
-  width:90%;
-  padding:20px 18px 18px;
-  border-radius:20px;
+  max-width:420px;
+  width:min(100%, 420px);
+  padding:24px 20px 20px;
+  border-radius:24px;
   background:
     radial-gradient(circle at top,var(--bg2),var(--bg)),
     linear-gradient(135deg,rgba(232,213,160,0.09),transparent 40%,rgba(104,159,255,0.12));
@@ -620,10 +620,10 @@ header{
 }
 .qr-modal-frame{
   position:relative;
-  margin:0 auto 14px;
-  width:220px;
-  height:220px;
-  border-radius:28px;
+  margin:8px auto 16px;
+  width:260px;
+  height:260px;
+  border-radius:32px;
   padding:12px;
   background:
     radial-gradient(circle at top,var(--bg2),#050505),
