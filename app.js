@@ -163,6 +163,13 @@ const logActionBtn   = document.getElementById('log-action-btn');
 const logDropupPanel = document.getElementById('log-dropup-panel');
 const logDropupBody  = document.getElementById('log-dropup-body');
 
+// Register primary view in views[]
+views.push({
+  id: 'primary',
+  get channel() { return currentChannel; },
+  get feedInner() { return feedInner; }
+});
+
 (function ensureModalsClosedOnLoad() {
   if (umBackdrop) { umBackdrop.style.display = 'none'; umBackdrop.setAttribute('aria-hidden', 'true'); }
   if (cmBackdrop) cmBackdrop.style.display = 'none';
@@ -224,6 +231,8 @@ const WAS_EDITING_KEY      = 'inout_was_editing_v1';
 const AUTH_BACKUP_KEY     = 'inout_auth_user_backup';
 const seenIds       = new Set();
 const channelScroll = new Map();
+// View registry: first step toward true multiview (one entry per visible view).
+const views = [];
 function loadScrollState() {
   try {
     var raw = localStorage.getItem(SCROLL_STATE_KEY);
@@ -1246,12 +1255,11 @@ function findObjectRowTextEl(objId) {
   if (objId == null) return null;
   const idStr = String(objId);
   const sel = '.obj[data-id="' + CSS.escape(idStr) + '"] .obj-text';
-  if (feedInner) {
-    const el = feedInner.querySelector(sel);
-    if (el) return el;
-  }
-  if (secondaryFeedInner) {
-    const el = secondaryFeedInner.querySelector(sel);
+  for (let i = 0; i < views.length; i++) {
+    const v = views[i];
+    const inner = v && v.feedInner;
+    if (!inner) continue;
+    const el = inner.querySelector(sel);
     if (el) return el;
   }
   return null;
@@ -1261,12 +1269,11 @@ function findObjectRowEl(objId) {
   if (objId == null) return null;
   const idStr = String(objId);
   const sel = '.obj[data-id="' + CSS.escape(idStr) + '"]';
-  if (feedInner) {
-    const el = feedInner.querySelector(sel);
-    if (el) return el;
-  }
-  if (secondaryFeedInner) {
-    const el = secondaryFeedInner.querySelector(sel);
+  for (let i = 0; i < views.length; i++) {
+    const v = views[i];
+    const inner = v && v.feedInner;
+    if (!inner) continue;
+    const el = inner.querySelector(sel);
     if (el) return el;
   }
   return null;
