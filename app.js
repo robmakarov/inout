@@ -204,14 +204,6 @@ const views = [];
   if (back) back.addEventListener('click', function(e) { if (e.target === back) closeUserModalEarly(); });
 })();
 
-// Register initial view from static DOM (after globals are initialized).
-views.push({
-  id: 'view-0',
-  channel: currentChannel,
-  rootEl: document.getElementById('view-app'),
-  get feedInner() { return feedInner; }
-});
-
 let objectCount    = 0;
 let atBottom    = true;
 let presenceCh  = null;
@@ -269,6 +261,14 @@ let viewSub  = null;
 let draftChannel = null;
 let latestRemoteDraft = '';
 let latestClipboardText = '';
+
+// Register initial view from static DOM once globals (including currentChannel) are initialized.
+views.push({
+  id: 'view-0',
+  channel: currentChannel,
+  rootEl: document.getElementById('view-app'),
+  get feedInner() { return feedInner; }
+});
 let selectMode = false;
 let selectModeAutoOn = false;
 const selectedIds = new Set();
