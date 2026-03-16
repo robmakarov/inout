@@ -1499,6 +1499,11 @@ function onInsertForChannel(ch, msg) {
     objectCount++;
     updateObjectCount();
     requestAnimationFrame(scrollBottom);
+    if (secondaryViewChannel === currentChannel && secondaryFeedInner) {
+      hideEmptyInFeed(secondaryFeedInner);
+      const mirrorRow = createObjectRow(msg, true, { skipEmptyRemove: true });
+      if (mirrorRow) secondaryFeedInner.appendChild(mirrorRow);
+    }
     return;
   }
   if (ch === secondaryViewChannel && secondaryFeedInner) {
