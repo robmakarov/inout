@@ -2603,6 +2603,7 @@ function setupTouchDragHandlers() {
     broadcastDndEnd();
     const container = r && r.closest ? r.closest('.feed-inner') : null;
     recomputeOrderFromDOM(container);
+    applyObjectOrderToDOM();
     saveObjectOrderForCurrentView();
     if (droppedMovedIdsTouch.length && dndBroadcastChannel && dndChannelReady) {
       broadcastDndDropped(currentObjectOrder.slice(), droppedMovedIdsTouch);
@@ -2874,6 +2875,7 @@ function createObjectRow(obj, isNew, options) {
         } else {
           const container = row && row.closest ? row.closest('.feed-inner') : null;
           recomputeOrderFromDOM(container);
+          applyObjectOrderToDOM();
           saveObjectOrderForCurrentView();
           if (droppedMovedIds.length && dndBroadcastChannel && dndChannelReady) {
             broadcastDndDropped(currentObjectOrder.slice(), droppedMovedIds);
