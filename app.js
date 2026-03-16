@@ -802,61 +802,11 @@ function updateOriginLinePosition() {
   feedDropOriginEl.style.height = heightPx + 'px';
   feedDropOriginEl.classList.add('visible');
 }
-function showDropOriginLine() {
-  if (!feedEl || !feedInner) return;
-  var block = (dragSelectedRows && dragSelectedRows.length > 0) ? dragSelectedRows : (feedInner.querySelector('.obj.dragging') ? [feedInner.querySelector('.obj.dragging')] : []);
-  if (block.length === 0) return;
-  var firstRow = block[0];
-  var lastRow = block[block.length - 1];
-  /* Capture positions before any obj-drag-group margin is applied */
-  originContentTop = firstRow.offsetTop || 0;
-  originContentHeight = (lastRow.offsetTop || 0) + (lastRow.offsetHeight || 0) - originContentTop;
-  if (originContentHeight < 2) originContentHeight = 2;
-  if (!feedDropOriginEl) {
-    feedDropOriginEl = document.createElement('div');
-    feedDropOriginEl.className = 'feed-drop-origin';
-    feedDropOriginEl.setAttribute('aria-hidden', 'true');
-    document.body.appendChild(feedDropOriginEl);
-  }
-  if (feedDropOriginEl.parentNode !== document.body) document.body.appendChild(feedDropOriginEl);
-  updateOriginLinePosition();
-}
-function hideDropOriginLine() {
-  originContentTop = null;
-  originContentHeight = null;
-  if (feedDropOriginEl) {
-    feedDropOriginEl.classList.remove('visible');
-    if (feedDropOriginEl.parentNode) feedDropOriginEl.parentNode.removeChild(feedDropOriginEl);
-  }
-}
-function showOriginGhostOverlay(block) {
-  if (!feedInner || !block || block.length === 0) return;
-  removeOriginGhostOverlay();
-  var first = block[0];
-  var last = block[block.length - 1];
-  var top = first.offsetTop;
-  var height = (last.offsetTop + last.offsetHeight) - top;
-  if (height < 2) height = 32;
-  originGhostOverlayEl = document.createElement('div');
-  originGhostOverlayEl.className = 'origin-ghost-overlay obj-origin-ghost';
-  originGhostOverlayEl.setAttribute('aria-hidden', 'true');
-  originGhostOverlayEl.style.top = top + 'px';
-  originGhostOverlayEl.style.height = height + 'px';
-  feedInner.appendChild(originGhostOverlayEl);
-}
-function removeOriginGhostOverlay() {
-  if (originGhostOverlayEl && originGhostOverlayEl.parentNode) originGhostOverlayEl.parentNode.removeChild(originGhostOverlayEl);
-  originGhostOverlayEl = null;
-}
-function createOriginGhostFromRow(row) {
-  var g = row.cloneNode(true);
-  g.classList.remove('obj', 'dragging', 'obj-drag-group', 'obj-selected', 'new-flash', 'obj-editing', 'obj-drag-over', 'obj-drag-target');
-  g.classList.add('obj-origin-ghost');
-  g.removeAttribute('draggable');
-  g.removeAttribute('data-id');
-  g.querySelectorAll('.obj-checkbox-zone, .obj-actions, .obj-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
-  return g;
-}
+function showDropOriginLine() {}
+function hideDropOriginLine() { originContentTop = null; originContentHeight = null; }
+function showOriginGhostOverlay(block) {}
+function removeOriginGhostOverlay() { originGhostOverlayEl = null; }
+function createOriginGhostFromRow(row) { return row; }
 function insertOriginGhostsAndDetachRows(block) {
   if (!feedInner || !block || block.length === 0) return;
   originInsertBefore = block[block.length - 1].nextSibling;
@@ -2029,17 +1979,7 @@ function applyRemoteDndLines() {
     remoteDropOriginEl.classList.add('visible');
   }
   if (targetRect) {
-    if (!remoteDropTargetEl) {
-      remoteDropTargetEl = document.createElement('div');
-      remoteDropTargetEl.className = 'feed-drop-indicator remote-dnd-line';
-      remoteDropTargetEl.setAttribute('aria-hidden', 'true');
-      document.body.appendChild(remoteDropTargetEl);
-    }
-    remoteDropTargetEl.style.left = targetRect.left + 'px';
-    remoteDropTargetEl.style.width = targetRect.width + 'px';
-    remoteDropTargetEl.style.top = targetRect.top + 'px';
-    remoteDropTargetEl.style.height = '4px';
-    remoteDropTargetEl.classList.add('visible');
+    // remote drop target visual removed
   }
 }
 
@@ -5363,25 +5303,10 @@ function processFeedDragover(ev) {
       lastDragTargetRow = slotTargetRow;
     }
     lastReorderTarget = { insertBefore: slotInsertBeforeNode, wantAppend: slotWantAppend };
-    if (!feedDropIndicatorEl) {
-      feedDropIndicatorEl = document.createElement('div');
-      feedDropIndicatorEl.className = 'feed-drop-indicator';
-      document.body.appendChild(feedDropIndicatorEl);
-    }
     var indLeft = slotFeedRect.left;
     var indWidth = slotFeedRect.width;
     var indTop = slotLineY < slotFeedRect.top ? slotFeedRect.top - 2 : (slotLineY > slotFeedRect.bottom ? slotFeedRect.bottom - 2 : slotLineY - 2);
-    feedDropIndicatorEl.style.left = indLeft + 'px';
-    feedDropIndicatorEl.style.width = indWidth + 'px';
-    feedDropIndicatorEl.style.height = '4px';
-    feedDropIndicatorEl.style.top = indTop + 'px';
-    if (!lastIndicatorStyle.visible) {
-      feedDropIndicatorEl.classList.add('visible');
-      lastIndicatorStyle.visible = true;
-    }
-    lastIndicatorStyle.left = indLeft;
-    lastIndicatorStyle.width = indWidth;
-    lastIndicatorStyle.top = indTop;
+    // local drop indicator visuals removed
     updateEdgeScroll(ev.clientY, ev.clientX);
     broadcastDndMove();
     return;
@@ -5599,17 +5524,7 @@ document.addEventListener('dragover', e => {
   var lineY = y < feedRect.top ? firstRect.top : lastRect.bottom;
   var indTop = lineY < feedRect.top ? feedRect.top - 2 : (lineY > feedRect.bottom ? feedRect.bottom - 2 : lineY - 2);
 
-  if (!feedDropIndicatorEl) {
-    feedDropIndicatorEl = document.createElement('div');
-    feedDropIndicatorEl.className = 'feed-drop-indicator';
-    document.body.appendChild(feedDropIndicatorEl);
-  }
-  feedDropIndicatorEl.style.left = feedRect.left + 'px';
-  feedDropIndicatorEl.style.width = feedRect.width + 'px';
-  feedDropIndicatorEl.style.height = '4px';
-  feedDropIndicatorEl.style.top = indTop + 'px';
-  feedDropIndicatorEl.classList.add('visible');
-
+  // drop indicator visuals removed
   updateEdgeScroll(e.clientY, e.clientX);
 }, { passive: false });
 
