@@ -52,13 +52,16 @@ if (sb && sb.auth && typeof location !== 'undefined' && location.search && locat
   })();
 }
 
-// Optional visit info encoded in QR URL: ?visitNick=<nickname>
+// Optional visit / temp-session info encoded in QR URL: ?tempSession=<id>&visitNick=<nickname>
 let visitInviteNick = null;
+let tempSessionId = null;
 try {
   if (typeof location !== 'undefined' && location.search) {
     const params = new URLSearchParams(location.search);
+    const ts = params.get('tempSession');
+    if (ts) tempSessionId = ts;
     const vn = params.get('visitNick');
-    if (vn) visitInviteNick = decodeURIComponent(vn);
+    if (vn && !ts) visitInviteNick = decodeURIComponent(vn);
   }
 } catch (_) {}
 const STRIPE_PUBLISHABLE_KEY = 'pk_live_xxx_replace_me';
@@ -264,25 +267,45 @@ let views = [];
   if (!qrModalBackdrop || !qrModalImg) return;
 
   if (umShowQrBtn) {
-    umShowQrBtn.addEventListener('click', (e) => {
+    umShowQrBtn.addEventListener('click', async (e) => {
       e.preventDefault();
       e.stopPropagation();
       try {
+        if (!currentUser || !sb || !sb.from) {
+          toast('Sign in to share a visit link.');
+          return;
+        }
         const base = (typeof window !== 'undefined' && window.location)
           ? (window.location.origin + window.location.pathname)
           : '';
-        const nick = (umNickname && umNickname.value.trim())
-          || (currentUser && currentUser.user_metadata && currentUser.user_metadata.nickname)
-          || (currentUser && currentUser.email)
-          || (currentUser && currentUser.id)
-          || 'Visitor';
+
+        // Create temp session row in Supabase for this view
+        const { data, error } = await sb
+          .from('temp_sessions')
+          .insert({
+            channel: currentView,
+            owner_id: currentUser.id,
+            expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          })
+          .select('id')
+          .single();
+
+        if (error || !data) {
+          console.error(error);
+          toast('Failed to create visit link.');
+          return;
+        }
+
         const inviteUrl = base
-          ? (base + (base.includes('?') ? '&' : '?') + 'visitNick=' + encodeURIComponent(nick))
-          : ('visitNick=' + encodeURIComponent(nick));
+          ? (base + (base.includes('?') ? '&' : '?') + 'tempSession=' + encodeURIComponent(data.id))
+          : ('?tempSession=' + encodeURIComponent(data.id));
         const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&color=FFFFFF&bgcolor=000000&data=' + encodeURIComponent(inviteUrl);
         qrModalImg.src = qrUrl;
         qrModalBackdrop.setAttribute('aria-hidden', 'false');
-      } catch (_) {}
+      } catch (err) {
+        console.error(err);
+        toast('Failed to create visit QR.');
+      }
     });
   }
 
@@ -1347,7 +1370,11 @@ async function fetchObjectsListForChannel(ch) {
 async function loadObjects() {
   if (!currentUser) {
     // Never hit Supabase for anonymous users; use local store instead.
-    await loadLocalObjectsForCurrentView();
+    if (tempSessionId) {
+      await loadObjectsForTempSession();
+    } else {
+      await loadLocalObjectsForCurrentView();
+    }
     return;
   }
   const list = await fetchObjectsList();
@@ -1361,6 +1388,21 @@ async function loadObjects() {
       saveLocalObjects(byView);
     }
   } catch (_) {}
+}
+
+async function loadObjectsForTempSession() {
+  if (!tempSessionId || !sb || !sb.from) return;
+  const { data, error } = await sb
+    .from(OBJECTS_TABLE)
+    .select('id, created_at, text, channel, user_id, author_name, temp_session_id')
+    .eq('temp_session_id', tempSessionId)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error(error);
+    return;
+  }
+  await replaceFeedWithList(data || []);
 }
 
 async function replaceFeedWithList(list) {
@@ -4291,6 +4333,28 @@ async function refreshAuth() {
   }
 
   updateAuthUI();
+
+  // Guest temp-session mode: no account, but URL has ?tempSession=...
+  if (!currentUser && tempSessionId && sb && sb.rpc) {
+    try {
+      const { data, error } = await sb.rpc('resolve_temp_session', { temp_session: tempSessionId });
+      if (error || !data || !data.length) {
+        toast('This visit link is expired or invalid.');
+        tempSessionId = null;
+      } else {
+        const sessionInfo = data[0];
+        currentView = sessionInfo.channel;
+        currentChannel = currentView;
+        renderTabs();
+        await loadObjectsForTempSession();
+      }
+    } catch (e) {
+      console.error(e);
+      toast('Failed to join shared view.');
+      tempSessionId = null;
+    }
+    return;
+  }
 
   if (currentUser) {
     try {
