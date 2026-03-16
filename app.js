@@ -224,6 +224,7 @@ let currentView    = 'main';
 let currentChannel = currentView; // temporary alias while migrating off "channel"
 let viewNames      = ['main'];
 let secondaryViewName = null; /* legacy; will be removed when views[] fully replaces secondary. Persisted to device (localStorage). */
+let secondaryViewChannel = null; // temporary alias during migration
 const VIEWS_KEY           = 'inout_views_v1';
 const LEFT_VIEWS_KEY      = 'inout_left_views_v1';
 const CURRENT_VIEW_KEY    = 'inout_current_view_v1';
