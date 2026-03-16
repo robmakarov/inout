@@ -429,8 +429,18 @@ body.bar-dnd-mode #manage-bar .bar-scroll{ cursor:default; }
   color:var(--bright);
   text-transform:uppercase;
   user-select:none;
+  display:flex;
+  align-items:center;
+  gap:6px;
 }
 .logo span{color:var(--acc)}
+
+.logo-accent-rect{
+  width:18px;
+  height:10px;
+  border-radius:3px;
+  background:#ff3b3b;
+}
 
 .header-right{
   display:flex;align-items:center;gap:16px;
