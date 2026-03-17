@@ -457,6 +457,24 @@ header{
   user-select:none;
   display:flex;
   align-items:center;
+  position:relative;
+}
+.logo-lottie{
+  width:32px;
+  height:50px;
+  margin-right:0;
+}
+.logo-lottie svg{
+  width:100%;
+  height:100%;
+  display:block;
+}
+.logo-fallback{
+  display:none;
+  position:absolute;
+  left:0;
+  top:50%;
+  transform:translateY(-50%);
 }
 .logo-inner{
   position:relative;
@@ -474,8 +492,7 @@ header{
   color:var(--acc);
 }
 
-/* Single bar between IN and OUT that steps through:
-   INOUT → IN|OUT → IN||OUT → IN|||OUT → INOUT (once) */
+/* Single bar between IN and OUT (CSS fallback when Lottie not used) */
 .logo-inner::before{
   content:'';
   position:absolute;
@@ -488,7 +505,7 @@ header{
   opacity:0;
   box-shadow:none;
   transform:translateX(0);
-  animation:logoBarsOnce 1s ease-out 0s 1 forwards;
+  animation:logoBarsOnce 0.5s ease-out 0s 1 forwards;
 }
 
 @keyframes logoBarsOnce{
