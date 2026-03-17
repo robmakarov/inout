@@ -1090,7 +1090,7 @@ function reactivateInputMode(opts) {
     if (opts.clearInput) {
       input.value = '';
       saveInputGlobal();
-      if (currentUser) broadcastDraft('');
+      broadcastDraft('');
     }
     autoResize();
     sendBtn.disabled = !input.value.trim();
@@ -1402,7 +1402,7 @@ document.addEventListener('keydown', e => {
     saveInputGlobal();
     updateClearInputBtn();
     sendBtn.disabled = !input.value.trim();
-    if (currentUser) broadcastDraft(input.value);
+    broadcastDraft(input.value);
     return;
   }
   if (isRedoKey && editingObjectId != null && editTypingRedoStack.length > 0) {
@@ -1414,7 +1414,7 @@ document.addEventListener('keydown', e => {
     saveInputGlobal();
     updateClearInputBtn();
     sendBtn.disabled = !input.value.trim();
-    if (currentUser) broadcastDraft(input.value);
+    broadcastDraft(input.value);
     return;
   }
   if (isUndoKey) {
@@ -1887,20 +1887,22 @@ function subscribeOrderRealtime() {
 }
 
 function subscribeViewRealtime() {
-  if (!currentUser) return;
+  if (!sb || !sb.channel) return;
   if (viewSub) {
     try { viewSub.unsubscribe(); } catch (_) {}
     viewSub = null;
   }
+  const chName = 'views-' + String(currentChannel || '');
+  const filter = 'channel=eq.' + String(currentChannel || '');
   viewSub = sb
-    .channel('views-' + currentUser.id)
+    .channel(chName)
     .on(
       'postgres_changes',
       {
         event: '*',
         schema: 'public',
         table: 'views',
-        filter: 'user_id=eq.' + currentUser.id
+        filter,
       },
       payload => {
         const row = payload.new || payload.old || {};
@@ -2050,10 +2052,9 @@ function setupPresence() {
 function setupDraftChannel() {
   teardownDraftChannel();
   latestRemoteDraft = '';
-  if (!currentUser) return;
 
   draftChannel = sb
-    .channel('drafts-' + currentUser.id, {
+    .channel('drafts-' + String(currentChannel || 'global'), {
       config: {
         broadcast: { self: true }
       }
@@ -2092,10 +2093,11 @@ function teardownDraftChannel() {
 }
 
 function broadcastDraft(text) {
-  if (!draftChannel || !currentUser) return;
-  const authorName = (currentUser.user_metadata && currentUser.user_metadata.full_name) ||
-    currentUser.email ||
-    (currentUser.id ? String(currentUser.id).slice(0, 8) : '');
+  if (!draftChannel) return;
+  const authorName =
+    (currentUser && currentUser.user_metadata && currentUser.user_metadata.full_name) ||
+    (currentUser && currentUser.email) ||
+    (currentUser && currentUser.id ? String(currentUser.id).slice(0, 8) : (visitInviteNick || 'guest'));
   draftChannel.send({
     type: 'broadcast',
     event: 'draft',
@@ -5140,9 +5142,7 @@ input.addEventListener('input', () => {
       if (editTypingCommitTimer) clearTimeout(editTypingCommitTimer);
       editTypingCommitTimer = setTimeout(commitTypingSegment, TYPING_COMMIT_MS);
     }
-  if (currentUser) {
-    broadcastDraft(input.value);
-  }
+  broadcastDraft(input.value);
 });
 input.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
@@ -5197,9 +5197,7 @@ if (draftClearBtn) {
   draftClearBtn.addEventListener('click', () => {
     latestRemoteDraft = '';
     hideDraftBubble();
-    if (currentUser) {
-      broadcastDraft('');
-    }
+    broadcastDraft('');
   });
 }
 
@@ -5244,9 +5242,7 @@ if (clearInputBtn) {
     saveInputGlobal();
     updateClearInputBtn();
     sendBtn.disabled = true;
-    if (currentUser) {
-      broadcastDraft('');
-    }
+    broadcastDraft('');
     requestAnimationFrame(focusMainInput);
   });
 }
