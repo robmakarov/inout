@@ -458,11 +458,15 @@ header{
   display:flex;
   align-items:center;
   position:relative;
+  min-width:52px;
+  min-height:24px;
 }
 .logo-lottie{
   width:32px;
   height:50px;
   margin-right:0;
+  position:relative;
+  z-index:0;
 }
 .logo-lottie svg{
   width:100%;
@@ -470,11 +474,16 @@ header{
   display:block;
 }
 .logo-fallback{
-  display:none;
+  display:inline;
   position:absolute;
   left:0;
   top:50%;
   transform:translateY(-50%);
+  pointer-events:none;
+  z-index:1;
+}
+.logo.logo-lottie-loaded .logo-fallback{
+  display:none;
 }
 .logo-inner{
   position:relative;

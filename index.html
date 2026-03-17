@@ -283,20 +283,24 @@
 (function(){
   function initLogoLottie(){
     var container = document.getElementById('logo-lottie');
-    if (!container || typeof lottie === 'undefined') { document.querySelector('.logo-fallback') && (document.querySelector('.logo-fallback').style.display = 'inline'); return; }
+    var logoEl = container && container.closest('.logo');
+    if (!container || typeof lottie === 'undefined') return;
+    var path = 'assets/logo-animation.json';
     try {
       var anim = lottie.loadAnimation({
         container: container,
         renderer: 'svg',
         loop: false,
         autoplay: true,
-        path: '/assets/logo-animation.json'
+        path: path
       });
-      if (anim) anim.setSpeed(2);
-    } catch (e) {
-      var fb = document.querySelector('.logo-fallback');
-      if (fb) fb.style.display = 'inline';
-    }
+      if (anim) {
+        anim.setSpeed(2);
+        anim.addEventListener('DOMLoaded', function() {
+          if (logoEl) logoEl.classList.add('logo-lottie-loaded');
+        });
+      }
+    } catch (e) {}
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initLogoLottie);
   else initLogoLottie();
