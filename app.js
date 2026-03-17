@@ -1583,6 +1583,37 @@ function subscribeRealtimeAll() {
       .subscribe();
     channelSubs.set(ch, sub);
   });
+
+  // When a guest sends a message (entry with temp_session_id), add that shared view to inviter's nav if owned by currentUser
+  (function subscribeGuestViewReveal() {
+    const chName = 'entries-guest-view-reveal';
+    const sub = sb
+      .channel(chName)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'entries' },
+        async (payload) => {
+          const row = payload.new;
+          if (!row || row.temp_session_id == null) return;
+          const channel = row.channel;
+          if (!channel) return;
+          try {
+            const { data } = await sb
+              .from('temp_sessions')
+              .select('owner_id')
+              .eq('id', row.temp_session_id)
+              .maybeSingle();
+            if (!data || data.owner_id !== currentUser.id) return;
+            if (viewNames.includes(channel)) return;
+            viewNames.push(channel);
+            saveChannelsList();
+            renderTabs();
+          } catch (_) {}
+        }
+      )
+      .subscribe();
+    channelSubs.set(chName, sub);
+  })();
 }
 
 /** Update the primary text of an object row. Looks in primary feed, then secondary. */
