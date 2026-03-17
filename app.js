@@ -1605,6 +1605,9 @@ function subscribeRealtimeAll() {
               viewNames.push(channel);
               saveChannelsList();
             }
+            // Switch inviter into the shared view immediately.
+            currentView = channel;
+            currentChannel = channel;
             renderTabs();
             // Ensure realtime + data for this shared view are active for inviter.
             subscribeRealtimeAll();
