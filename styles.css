@@ -480,90 +480,43 @@ header{
   margin:0;
   overflow:visible;
 }
-.logo-dot{
+.logo-dot{ display:none; }
+
+/* Bars animation: INOUT → IN|OUT → IN||OUT → IN|||OUT → INOUT */
+.logo-icon::before{
+  content:'';
   position:absolute;
+  top:0;
   bottom:0;
+  left:0;
   width:2px;
-  height:100%;
   border-radius:2px;
   background:var(--line2);
-  box-shadow:0 0 0 rgba(0,0,0,0);
   opacity:0;
-}
-.logo-dot:nth-child(1){
-  left:2px;
-  animation:logoWaveArc 0.8s ease-out 0s 3 forwards;
-}
-.logo-dot:nth-child(2){
-  left:8px;
-  animation:logoWaveArc 0.8s ease-out 0.06s 3 forwards;
-}
-.logo-dot:nth-child(3){
-  left:14px;
-  animation:logoWaveArc 0.8s ease-out 0.12s 3 forwards;
+  box-shadow:none;
+  animation:logoBars 0.9s ease-out 0s 1 forwards;
 }
 
-.logo-legacy{
-  font-size:13px;
-  letter-spacing:0.14em;
-  margin-left:10px;
-  gap:6px;
-}
-.logo-accent-rect{
-  width:12px;
-  height:12px;
-  border-radius:3px;
-  background:#e63946;
-  box-shadow:0 0 0 1px rgba(0,0,0,0.4),0 0 12px rgba(230,57,70,0.7);
-}
-.logo-legacy-text span{
-  color:var(--acc);
-}
-
-/* Text motion: OUT gently slides out from under IN once */
-.logo-in{
-  animation:logoInOnce 0.8s ease-out forwards;
-}
-.logo-out{
-  animation:logoOutOnce 0.8s ease-out forwards;
-}
-
-@keyframes logoWaveArc{
+@keyframes logoBars{
   0%{
     opacity:0;
-  }
-  25%{
-    transform:scaleY(0.9);
-    background:var(--bright);
-    box-shadow:0 0 6px rgba(232,213,160,0.9);
-    opacity:0.95;
-  }
-  100%{
-    transform:scaleY(1);
-    background:var(--line2);
-    box-shadow:0 0 0 rgba(232,213,160,0);
-    opacity:0.35;
-  }
-}
-
-@keyframes logoInOnce{
-  0%{ transform:translateX(0); }
-  10%{ transform:translateX(0); }
-  90%{ transform:translateX(0); }
-  100%{ transform:translateX(0); }
-}
-@keyframes logoOutOnce{
-  0%{
-    transform:translateX(-4px);
-    opacity:0;
+    box-shadow:none;
   }
   20%{
-    transform:translateX(-1px);
     opacity:1;
+    box-shadow:none; /* one bar: IN|OUT */
+  }
+  50%{
+    opacity:1;
+    box-shadow:6px 0 0 var(--line2); /* two bars: IN||OUT */
+  }
+  80%{
+    opacity:1;
+    box-shadow:6px 0 0 var(--line2), 12px 0 0 var(--line2); /* three bars: IN|||OUT */
   }
   100%{
-    transform:translateX(0);
-    opacity:1;
+    opacity:0;
+    box-shadow:none; /* back to INOUT */
   }
 }
 
