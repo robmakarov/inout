@@ -2709,18 +2709,17 @@ function saveSecondaryViewState() {
   } catch (_) {}
 }
 
-function restoreSecondaryView() {
-  if (secondaryViewEl) return;
+async function restoreSecondaryView() {
   try {
     const raw = localStorage.getItem(OPEN_VIEWS_KEY);
     if (!raw) return;
     const list = JSON.parse(raw);
     if (!Array.isArray(list) || !list.length) return;
-    list.forEach(name => {
+    for (const name of list) {
       if (typeof name === 'string' && viewNames.includes(name)) {
-        openSecondaryView(name);
+        await openSecondaryView(name);
       }
-    });
+    }
   } catch (_) {}
 }
 
@@ -2784,16 +2783,18 @@ function setupSecondaryFeedDnd() {
 }
 
 function closeSecondaryView() {
-  if (secondaryViewEl && secondaryViewEl.parentNode) secondaryViewEl.parentNode.removeChild(secondaryViewEl);
+  const viewsContainer = document.querySelector('.multiview-views');
+  if (viewsContainer) {
+    viewsContainer.querySelectorAll('.view').forEach(el => { if (el.parentNode) el.parentNode.removeChild(el); });
+    if (multiviewResizerEl && multiviewResizerEl.parentNode) multiviewResizerEl.parentNode.removeChild(multiviewResizerEl);
+  }
+  multiviewResizerEl = null;
   secondaryViewEl = null;
   secondaryFeedInner = null;
   secondaryFeedEl = null;
   secondaryViewChannel = null;
-  // remove any view entries whose rootEl is gone
-  for (let i = views.length - 1; i >= 0; i--) {
-    const v = views[i];
-    if (!v || (v.rootEl && !document.body.contains(v.rootEl))) views.splice(i, 1);
-  }
+  views = views.filter(v => v && v.id === 'view-0');
+  try { localStorage.setItem(OPEN_VIEWS_KEY, '[]'); } catch (_) {}
   saveSecondaryViewState();
   updateTabsUI();
 }
@@ -2842,19 +2843,22 @@ async function openSecondaryView(ch) {
   saveSecondaryViewState();
   const viewsContainer = document.querySelector('.multiview-views');
   if (!viewsContainer) return;
-  const resizer = document.createElement('div');
-  resizer.className = 'multiview-resizer';
-  resizer.setAttribute('aria-label', 'Resize views');
-  try {
-    const saved = localStorage.getItem(MULTIVIEW_SPLIT_KEY);
-    if (saved) applyMultiviewSplit(parseFloat(saved));
-    else viewsContainer.style.setProperty('--multiview-split', '0.5');
-  } catch (_) {
-    viewsContainer.style.setProperty('--multiview-split', '0.5');
+  // Add resizer only once when opening the first secondary view
+  if (!multiviewResizerEl) {
+    const resizer = document.createElement('div');
+    resizer.className = 'multiview-resizer';
+    resizer.setAttribute('aria-label', 'Resize views');
+    try {
+      const saved = localStorage.getItem(MULTIVIEW_SPLIT_KEY);
+      if (saved) applyMultiviewSplit(parseFloat(saved));
+      else viewsContainer.style.setProperty('--multiview-split', '0.5');
+    } catch (_) {
+      viewsContainer.style.setProperty('--multiview-split', '0.5');
+    }
+    setupMultiviewResizer(resizer, viewsContainer);
+    viewsContainer.appendChild(resizer);
+    multiviewResizerEl = resizer;
   }
-  setupMultiviewResizer(resizer, viewsContainer);
-  viewsContainer.appendChild(resizer);
-  multiviewResizerEl = resizer;
   const view = document.createElement('div');
   view.className = 'view';
   view.setAttribute('data-channel', ch);
@@ -2864,14 +2868,14 @@ async function openSecondaryView(ch) {
   // clone base feed structure so each view has identical markup, including loader/empty classes
   const baseFeed = document.getElementById('feed');
   let feedInner = null;
+  let feedEl = null;
   if (baseFeed) {
     const feedClone = baseFeed.cloneNode(true);
     feedClone.removeAttribute('id');
     feedClone.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
     feedInner = feedClone.querySelector('.feed-inner');
+    feedEl = feedClone;
     visual.appendChild(feedClone);
-    secondaryFeedEl = feedClone;
-    secondaryFeedInner = feedInner;
   } else {
     const feed = document.createElement('div');
     feed.className = 'feed';
@@ -2882,23 +2886,24 @@ async function openSecondaryView(ch) {
     empty.textContent = 'Loading…';
     feedInner.appendChild(empty);
     feed.appendChild(feedInner);
+    feedEl = feed;
     visual.appendChild(feed);
-    secondaryFeedEl = feed;
-    secondaryFeedInner = feedInner;
   }
   view.appendChild(visual);
   viewsContainer.appendChild(view);
   secondaryViewEl = view;
+  secondaryFeedEl = feedEl;
+  secondaryFeedInner = feedInner;
   if (secondaryFeedEl) setupSecondaryFeedDnd();
-  // register this view in views[]
+  // register this view in views[] with its own feedInner so realtime/updates target the right feed
   const viewId = 'view-' + views.length;
   const viewRecord = {
     id: viewId,
     channel: ch,
     rootEl: view,
-    get feedInner() { return secondaryFeedInner; },
-    objects: [],   // data for this view only; populated later
-    config: {},    // per-view settings; editable by user later
+    feedInner: feedInner,
+    objects: [],
+    config: {},
   };
   views.push(viewRecord);
   const closeBtn = document.createElement('button');
@@ -2908,18 +2913,34 @@ async function openSecondaryView(ch) {
   closeBtn.textContent = '×';
   view.appendChild(closeBtn);
   closeBtn.addEventListener('click', () => {
-    // Remove this view instance from registry and DOM
     views = views.filter(v => v && v !== viewRecord);
     if (view.parentNode) view.parentNode.removeChild(view);
+    if (secondaryViewEl === view) {
+      const other = views.find(v => v && v.id !== 'view-0' && v.rootEl && document.body.contains(v.rootEl));
+      if (other) {
+        secondaryViewEl = other.rootEl;
+        secondaryViewChannel = other.channel;
+        secondaryFeedInner = other.feedInner;
+        secondaryFeedEl = other.rootEl && other.rootEl.querySelector && other.rootEl.querySelector('.feed') || null;
+      } else {
+        secondaryViewEl = null;
+        secondaryFeedInner = null;
+        secondaryFeedEl = null;
+        secondaryViewChannel = null;
+        if (multiviewResizerEl && multiviewResizerEl.parentNode) multiviewResizerEl.parentNode.removeChild(multiviewResizerEl);
+        multiviewResizerEl = null;
+      }
+      saveSecondaryViewState();
+    }
     try {
       const open = Array.from(new Set(views.filter(v => v && v.id !== 'view-0').map(v => v.channel)));
       localStorage.setItem(OPEN_VIEWS_KEY, JSON.stringify(open));
     } catch (_) {}
+    updateTabsUI();
   });
   const list = await fetchObjectsListForChannel(ch);
   await replaceFeedWithListInto(list, feedInner);
   updateTabsUI();
-  // Persist open views (excluding the base view-0) to localStorage so layout is restored.
   try {
     const open = Array.from(new Set(views.filter(v => v && v.id !== 'view-0').map(v => v.channel)));
     localStorage.setItem(OPEN_VIEWS_KEY, JSON.stringify(open));
@@ -4673,7 +4694,7 @@ async function refreshAuth() {
       subscribeRealtimeAll();
       setupDraftChannel();
       restoreLastChannel();
-      restoreSecondaryView();
+      await restoreSecondaryView();
       await loadObjectOrderForCurrentChannel();
       await loadObjects();
       restoreInputGlobal();
@@ -4698,7 +4719,7 @@ async function refreshAuth() {
       await loadObjects();
     } else {
       // Restore multiview layout (open views + split) for anonymous/guest users.
-      restoreSecondaryView();
+      await restoreSecondaryView();
       await loadLocalObjectsForCurrentView();
     }
   }
