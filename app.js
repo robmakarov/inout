@@ -5010,14 +5010,20 @@ async function sendText(text) {
 
   if (currentUser && sb && sb.from) {
     // Signed-in path: insert into Supabase as before.
+    const payload = {
+      text: trimmed,
+      user_id: currentUser.id,
+      channel: currentChannel,
+    };
+    // In a shared temp-session View, also tag owner rows with temp_session_id
+    // so guests can see and edit them via RLS.
+    if (tempSessionId) {
+      payload.temp_session_id = tempSessionId;
+    }
     const res = await sb
       .from(OBJECTS_TABLE)
-      .insert({
-        text: trimmed,
-        user_id: currentUser.id,
-        channel: currentChannel,
-      })
-      .select('id, created_at, text, channel, user_id, author_name')
+      .insert(payload)
+      .select('id, created_at, text, channel, user_id, author_name, temp_session_id')
       .single();
     data = res.data;
     error = res.error;
