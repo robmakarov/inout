@@ -1619,6 +1619,11 @@ function subscribeRealtimeAll() {
         { event: 'UPDATE', schema: 'public', table: 'entries', filter },
         payload => onUpdateForChannel(ch, payload.new)
       )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'entries', filter },
+        payload => onDeleteForChannel(ch, payload.old)
+      )
       .subscribe();
     channelSubs.set(ch, sub);
   });
@@ -1856,6 +1861,36 @@ function onUpdateForChannel(ch, row) {
     anyUpdated = true;
   }
   if (anyUpdated) updateEditingRowHighlight();
+}
+
+function onDeleteForChannel(ch, row) {
+  if (!row) return;
+  const id = row.id != null ? row.id : row.Id;
+  if (id == null) return;
+  // Remove from all views showing this channel
+  let removed = false;
+  views.forEach(view => {
+    if (!view || view.channel !== ch || !view.feedInner) return;
+    const sel = '.obj[data-id="' + CSS.escape(String(id)) + '"]';
+    const el = view.feedInner.querySelector(sel);
+    if (el && el.parentNode) {
+      el.parentNode.removeChild(el);
+      removed = true;
+    }
+  });
+  if (!removed && ch === currentChannel && feedInner) {
+    const sel = '.obj[data-id="' + CSS.escape(String(id)) + '"]';
+    const el = feedInner.querySelector(sel);
+    if (el && el.parentNode) {
+      el.parentNode.removeChild(el);
+      removed = true;
+    }
+  }
+  if (removed) {
+    currentObjectOrder = currentObjectOrder.filter(x => x !== id);
+    saveObjectOrderForCurrentView();
+    showEmptyIfNoObjects();
+  }
 }
 
 function subscribeOrderRealtime() {
