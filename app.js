@@ -4921,12 +4921,16 @@ async function sendText(text) {
     const trimmedPerId = idsToSave.map(id => (editingObjectTextMap && editingObjectTextMap[id] != null) ? String(editingObjectTextMap[id]).trim() : trimmed);
     const befores = [];
     if (idsToSave.length === 1) {
-    const { data: before, error: selErr } = await sb
-      .from(OBJECTS_TABLE)
-      .select('id, created_at, text, channel, user_id, author_name')
-        .eq('id', idsToSave[0])
-      .eq('user_id', currentUser.id)
-      .maybeSingle();
+      let sel = sb
+        .from(OBJECTS_TABLE)
+        .select('id, created_at, text, channel, user_id, author_name')
+        .eq('id', idsToSave[0]);
+      if (tempSessionId) {
+        sel = sel.eq('temp_session_id', tempSessionId);
+      } else {
+        sel = sel.eq('user_id', currentUser.id);
+      }
+      const { data: before, error: selErr } = await sel.maybeSingle();
     if (selErr) {
       input.disabled = false;
       console.error(selErr);
@@ -4936,11 +4940,16 @@ async function sendText(text) {
     }
       if (before) befores.push(before);
     } else {
-      const { data: list, error: selErr } = await sb
-      .from(OBJECTS_TABLE)
-      .select('id, created_at, text, channel, user_id, author_name')
-        .in('id', idsToSave)
-        .eq('user_id', currentUser.id);
+      let sel = sb
+        .from(OBJECTS_TABLE)
+        .select('id, created_at, text, channel, user_id, author_name')
+        .in('id', idsToSave);
+      if (tempSessionId) {
+        sel = sel.eq('temp_session_id', tempSessionId);
+      } else {
+        sel = sel.eq('user_id', currentUser.id);
+      }
+      const { data: list, error: selErr } = await sel;
       if (selErr) {
     input.disabled = false;
         console.error(selErr);
@@ -4954,11 +4963,16 @@ async function sendText(text) {
     for (let i = 0; i < idsToSave.length; i++) {
       const id = idsToSave[i];
       const textToSave = trimmedPerId[i];
-      const { error } = await sb
+      let upd = sb
         .from(OBJECTS_TABLE)
         .update({ text: textToSave })
-        .eq('id', id)
-        .eq('user_id', currentUser.id);
+        .eq('id', id);
+      if (tempSessionId) {
+        upd = upd.eq('temp_session_id', tempSessionId);
+      } else {
+        upd = upd.eq('user_id', currentUser.id);
+      }
+      const { error } = await upd;
       if (error) lastError = error;
     }
     input.disabled = false;
