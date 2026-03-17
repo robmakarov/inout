@@ -317,10 +317,26 @@ function subscribeTempSessionJoins() {
     lastCreatedTempSessionId = null;
   }
 
-  function onGuestJoined(ch) {
+  async function onGuestJoined(ch) {
     stopPolling();
     if (qrModalBackdrop) qrModalBackdrop.setAttribute('aria-hidden', 'true');
     if (!ch) return;
+
+    // Tag owner's existing objects in this shared View with the temp session id,
+    // so the anonymous guest (who only has temp_session_id) can read them via RLS.
+    try {
+      if (sb && sb.from && lastCreatedTempSessionId && currentUser) {
+        await sb
+          .from(OBJECTS_TABLE)
+          .update({ temp_session_id: lastCreatedTempSessionId })
+          .eq('channel', ch)
+          .eq('user_id', currentUser.id)
+          .is('temp_session_id', null);
+      }
+    } catch (e) {
+      console.error('Failed to tag shared objects with temp_session_id', e);
+    }
+
     if (!viewNames.includes(ch)) {
       viewNames.push(ch);
       if (typeof saveChannelsList === 'function') saveChannelsList();
