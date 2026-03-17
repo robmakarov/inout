@@ -306,6 +306,32 @@ function subscribeTempSessionJoins() {
 (function setupQrModal() {
   if (!qrModalBackdrop || !qrModalImg) return;
 
+  let pollIntervalId = null;
+  let lastCreatedTempSessionId = null;
+
+  function stopPolling() {
+    if (pollIntervalId) {
+      clearInterval(pollIntervalId);
+      pollIntervalId = null;
+    }
+    lastCreatedTempSessionId = null;
+  }
+
+  function onGuestJoined(ch) {
+    stopPolling();
+    if (qrModalBackdrop) qrModalBackdrop.setAttribute('aria-hidden', 'true');
+    if (!ch) return;
+    if (!viewNames.includes(ch)) {
+      viewNames.push(ch);
+      if (typeof saveChannelsList === 'function') saveChannelsList();
+    }
+    currentView = ch;
+    currentChannel = ch;
+    if (typeof renderTabs === 'function') renderTabs();
+    if (typeof loadObjects === 'function') loadObjects().catch(function() {});
+    if (typeof toast === 'function') toast('Guest joined your view ' + ch + '.');
+  }
+
   if (umShowQrBtn) {
     umShowQrBtn.addEventListener('click', async (e) => {
       e.preventDefault();
@@ -315,12 +341,11 @@ function subscribeTempSessionJoins() {
           toast('Sign in to share a visit link.');
           return;
         }
+        stopPolling();
         const base = (typeof window !== 'undefined' && window.location)
           ? (window.location.origin + window.location.pathname)
           : '';
 
-        // Create temp session row in Supabase for this link.
-        // The actual shared View name will be decided when the link is opened.
         const { data, error } = await sb
           .from('temp_sessions')
           .insert({
@@ -337,6 +362,24 @@ function subscribeTempSessionJoins() {
           return;
         }
 
+        lastCreatedTempSessionId = data.id;
+        pollIntervalId = setInterval(async () => {
+          const id = lastCreatedTempSessionId;
+          if (!id || !sb || !currentUser) return;
+          try {
+            const { data: row, error: err } = await sb
+              .from('temp_sessions')
+              .select('channel')
+              .eq('id', id)
+              .eq('owner_id', currentUser.id)
+              .maybeSingle();
+            if (err || !row) return;
+            const ch = row.channel && String(row.channel).trim();
+            if (!ch) return;
+            onGuestJoined(ch);
+          } catch (_) {}
+        }, 2000);
+
         const inviteUrl = base
           ? (base + (base.includes('?') ? '&' : '?') + 'tempSession=' + encodeURIComponent(data.id))
           : ('?tempSession=' + encodeURIComponent(data.id));
@@ -351,6 +394,7 @@ function subscribeTempSessionJoins() {
   }
 
   const closeQrModal = () => {
+    stopPolling();
     qrModalBackdrop.setAttribute('aria-hidden', 'true');
   };
   if (qrModalClose) {
