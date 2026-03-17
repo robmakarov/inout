@@ -451,7 +451,7 @@ header{
   font-family:var(--sans);
   font-size:15px;
   font-weight:800;
-  letter-spacing:0.12em;
+  letter-spacing:0.05em;
   color:var(--bright);
   text-transform:uppercase;
   user-select:none;
@@ -463,7 +463,7 @@ header{
   display:inline-flex;
   align-items:center;
   gap:0;
-  padding-bottom:1px;
+  padding-bottom:0px;
 }
 .logo-in,
 .logo-out{
@@ -501,6 +501,23 @@ header{
 .logo-dot:nth-child(3){
   left:14px;
   animation:logoWaveArc 0.8s ease-out 0.12s 3 forwards;
+}
+
+.logo-legacy{
+  font-size:13px;
+  letter-spacing:0.14em;
+  margin-left:10px;
+  gap:6px;
+}
+.logo-accent-rect{
+  width:12px;
+  height:12px;
+  border-radius:3px;
+  background:#e63946;
+  box-shadow:0 0 0 1px rgba(0,0,0,0.4),0 0 12px rgba(230,57,70,0.7);
+}
+.logo-legacy-text span{
+  color:var(--acc);
 }
 
 /* Text motion: OUT gently slides out from under IN once */
