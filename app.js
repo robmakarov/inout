@@ -4444,7 +4444,13 @@ async function switchChannel(ch) {
   await loadFieldPrefsForCurrentChannel();
   if (currentUser) {
     setupDndBroadcastChannel();
+    subscribeOrderRealtime();
+    subscribeViewRealtime();
     ensureMembership().then(reloadForUser);
+  } else if (tempSessionId) {
+    subscribeViewRealtime();
+    await loadObjectOrderForCurrentChannel();
+    await loadObjects();
   } else {
     clearObjects();
   }
@@ -4676,14 +4682,16 @@ async function refreshAuth() {
         } catch (e) {
           console.error('temp_session_events insert failed', e);
         }
+        await loadObjectOrderForCurrentChannel();
       }
   } catch (e) {
       console.error(e);
       toast('Failed to join shared view.');
       tempSessionId = null;
     }
-    // Anonymous guest in shared view: use normal channel-based realtime.
+    // Anonymous guest in shared view: use channel-based realtime + view (order) realtime.
     subscribeRealtimeAll();
+    subscribeViewRealtime();
     return;
   }
 
@@ -4704,8 +4712,10 @@ async function refreshAuth() {
       try { await loadObjects(); } catch (_) {}
       if (feedInner && emptyEl && !emptyEl.parentNode) feedInner.appendChild(emptyEl);
     }
-    // Owner realtime subscriptions, including temp-session joins
+    // Owner realtime subscriptions, including temp-session joins and view/order
     subscribeTempSessionJoins();
+    subscribeOrderRealtime();
+    subscribeViewRealtime();
   } else {
     sharedChannels.clear();
     unreadCounts.clear();
@@ -4716,7 +4726,9 @@ async function refreshAuth() {
     // When not signed in, hydrate view from local per-device objects (anonymous mode),
     // unless we are in a temp-session guest mode.
     if (tempSessionId) {
+      await loadObjectOrderForCurrentChannel();
       await loadObjects();
+      subscribeViewRealtime();
     } else {
       // Restore multiview layout (open views + split) for anonymous/guest users.
       await restoreSecondaryView();
