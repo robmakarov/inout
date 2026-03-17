@@ -5035,10 +5035,12 @@ async function sendText(text) {
     for (let i = 0; i < idsToSave.length; i++) {
       const id = idsToSave[i];
       const textToSave = trimmedPerId[i];
-      const { error } = await sb
-        .from(OBJECTS_TABLE)
-        .update({ text: textToSave })
-        .eq('id', id);
+      const { error } = await sb.rpc('perform_entry_action', {
+        p_channel: currentChannel,
+        p_entry_id: id,
+        p_action: 'edit',
+        p_payload: { text: textToSave },
+      });
       if (error) lastError = error;
     }
     input.disabled = false;
@@ -5573,36 +5575,20 @@ if (moveSelectedBtn) {
 }
 
 async function deleteSingleObject(id) {
-  if (!currentUser || !id) return;
+  if (!id) return;
   try {
-    const { data, error: selErr } = await sb
-      .from(OBJECTS_TABLE)
-      .select('id, created_at, text, channel, user_id, author_name')
-      .eq('id', id)
-      .maybeSingle();
-    if (selErr) {
-      console.error(selErr);
-      toast('Failed to delete — ' + humanError(selErr.message));
-      return;
-    }
-    const { error } = await sb
-      .from(OBJECTS_TABLE)
-      .delete()
-      .eq('id', id);
+    const { error } = await sb.rpc('perform_entry_action', {
+      p_channel: currentChannel,
+      p_entry_id: id,
+      p_action: 'delete',
+      p_payload: {},
+    });
     if (error) {
       console.error(error);
       toast('Failed to delete — ' + humanError(error.message));
       return;
     }
-    if (data) {
-      pushUndo({ type: 'delete', entries: [data] });
-      logAction('delete', { id: data.id });
-    }
-    const el = findObjectRowEl(id);
-    if (el && el.parentNode) el.parentNode.removeChild(el);
-    currentObjectOrder = currentObjectOrder.filter(x => x !== id);
-    saveObjectOrderForCurrentView();
-    showEmptyIfNoObjects();
+    // UI removal will be driven by realtime DELETE events (onDeleteForChannel).
   } catch (e) {
     console.error(e);
     toast('Failed to delete — ' + humanError(e.message));
