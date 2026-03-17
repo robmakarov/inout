@@ -462,7 +462,7 @@ header{
   position:relative;
   display:inline-flex;
   align-items:flex-end;
-  gap:0.4em;
+  gap:4px;
   padding-bottom:1px;
 }
 .logo-in,
@@ -473,25 +473,11 @@ header{
 .logo-out{
   color:var(--acc);
 }
-.logo-inner::before,
-.logo-inner::after{
-  content:'';
-  position:absolute;
-  bottom:-4px;
-  height:1px;
-  background:linear-gradient(90deg, transparent, var(--acc), transparent);
-  opacity:0.9;
-  transform-origin:center;
-  animation:logoCollapse 3s var(--anim-ease-smooth) infinite;
+.logo-in{
+  animation:logoSlideIn 3s var(--anim-ease-smooth) infinite;
 }
-.logo-inner::before{
-  left:0;
-  right:0;
-}
-.logo-inner::after{
-  left:12%;
-  right:12%;
-  opacity:0.5;
+.logo-out{
+  animation:logoSlideOut 3s var(--anim-ease-smooth) infinite;
 }
 
 @keyframes logoPulse{
@@ -500,12 +486,15 @@ header{
   100%{transform:translateY(0);opacity:1;}
 }
 
-@keyframes logoCollapse{
-  0%,20%{ transform:scaleX(1); }
-  40%{ transform:scaleX(0.3); }
-  60%{ transform:scaleX(1); }
-  80%{ transform:scaleX(0.7); }
-  100%{ transform:scaleX(1); }
+@keyframes logoSlideIn{
+  0%,60%{ transform:translateX(0); }
+  75%{ transform:translateX(1px); }
+  90%,100%{ transform:translateX(0); }
+}
+@keyframes logoSlideOut{
+  0%,60%{ transform:translateX(0); }
+  75%{ transform:translateX(-1px); }
+  90%,100%{ transform:translateX(0); }
 }
 
 .header-right{
