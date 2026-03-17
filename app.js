@@ -322,7 +322,6 @@ function subscribeTempSessionJoins() {
 
   async function onGuestJoined(ch) {
     stopPolling();
-    if (qrModalBackdrop) qrModalBackdrop.setAttribute('aria-hidden', 'true');
     if (!ch) return;
 
     // Tag owner's existing objects in this shared View with the temp session id,
@@ -352,7 +351,6 @@ function subscribeTempSessionJoins() {
     currentChannel = ch;
     if (typeof renderTabs === 'function') renderTabs();
     if (typeof loadObjects === 'function') loadObjects().catch(function() {});
-    if (typeof toast === 'function') toast('Guest joined your view ' + ch + '.');
   }
 
   if (umShowQrBtn) {
@@ -1997,9 +1995,22 @@ function onInsertForChannel(ch, msg) {
     }
   });
   if (!handled) {
-  const next = (unreadCounts.get(ch) || 0) + 1;
-  unreadCounts.set(ch, next);
-  updateTabBadge(ch);
+    // Fallback: if this is the current View and we have a primary feed,
+    // append directly so guests (or layouts without a registered view)
+    // still see realtime inserts.
+    if (ch === currentChannel && feedInner) {
+      hideEmpty();
+      appendObject(msg, true);
+      objectCount++;
+      updateObjectCount();
+      try {
+        requestAnimationFrame(scrollBottom);
+      } catch (_) {}
+    } else {
+      const next = (unreadCounts.get(ch) || 0) + 1;
+      unreadCounts.set(ch, next);
+      updateTabBadge(ch);
+    }
   }
 }
 
