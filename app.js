@@ -4695,8 +4695,10 @@ async function refreshAuth() {
     // When not signed in, hydrate view from local per-device objects (anonymous mode),
     // unless we are in a temp-session guest mode.
     if (tempSessionId) {
-      await loadObjectsForTempSession();
+      await loadObjects();
     } else {
+      // Restore multiview layout (open views + split) for anonymous/guest users.
+      restoreSecondaryView();
       await loadLocalObjectsForCurrentView();
     }
   }
