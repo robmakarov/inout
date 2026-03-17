@@ -474,20 +474,21 @@ header{
   color:var(--acc);
 }
 .logo-icon{
-  width:20px;
-  height:10px;
+  width:18px;
+  height:9px;
   border-radius:999px;
   border:1px solid var(--line2);
   box-sizing:border-box;
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  gap:3px;
-  margin:0 3px 1px;
+  gap:2px;
+  padding:0 2px;
+  margin:0 2px 1px;
 }
 .logo-dot{
-  width:3px;
-  height:3px;
+  width:2px;
+  height:2px;
   border-radius:50%;
   background:var(--soft);
   opacity:0.4;
