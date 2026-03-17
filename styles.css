@@ -462,7 +462,7 @@ header{
   position:relative;
   display:inline-flex;
   align-items:center;
-  gap:4px;
+  gap:0;
   padding-bottom:1px;
 }
 .logo-in,
@@ -477,7 +477,7 @@ header{
   position:relative;
   width:18px;
   height:14px;
-  margin:0 2px 0;
+  margin:0;
   overflow:visible;
 }
 .logo-dot{
@@ -492,23 +492,23 @@ header{
 }
 .logo-dot:nth-child(1){
   left:2px;
-  animation:logoWaveArc 1.4s ease-out 0s 3 forwards;
+  animation:logoWaveArc 0.8s ease-out 0s 3 forwards;
 }
 .logo-dot:nth-child(2){
   left:8px;
-  animation:logoWaveArc 1.4s ease-out 0.08s 3 forwards;
+  animation:logoWaveArc 0.8s ease-out 0.06s 3 forwards;
 }
 .logo-dot:nth-child(3){
   left:14px;
-  animation:logoWaveArc 1.4s ease-out 0.16s 3 forwards;
+  animation:logoWaveArc 0.8s ease-out 0.12s 3 forwards;
 }
 
 /* Text motion: OUT gently slides out from under IN once */
 .logo-in{
-  animation:logoInOnce 1.4s ease-out forwards;
+  animation:logoInOnce 0.8s ease-out forwards;
 }
 .logo-out{
-  animation:logoOutOnce 1.4s ease-out forwards;
+  animation:logoOutOnce 0.8s ease-out forwards;
 }
 
 @keyframes logoWaveArc{
