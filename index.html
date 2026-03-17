@@ -290,13 +290,14 @@
         container: container,
         renderer: 'svg',
         loop: false,
-        autoplay: true,
+        autoplay: false,
         path: 'assets/logo-animation.json'
       });
       if (anim) {
         anim.setSpeed(2);
         anim.addEventListener('DOMLoaded', function() {
           if (logoEl) logoEl.classList.add('logo-lottie-loaded');
+          anim.goToAndPlay(0, true);
         });
       }
     } catch (e) {}
