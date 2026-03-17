@@ -1601,7 +1601,7 @@ function subscribeRealtimeAll() {
   channelSubs = new Map();
 
   viewNames.forEach(ch => {
-    try { console.debug('[realtime] subscribe', ch); } catch (_) {}
+    try { console.log('[realtime] subscribe', ch); } catch (_) {}
     let filter = 'channel=eq.' + ch;
     // For signed-in users, "main" is per-user; other views rely on RLS.
     if (currentUser && ch === 'main') {
@@ -1973,8 +1973,8 @@ function subscribeActionLog() {
 }
 
 function onInsertForChannel(ch, msg) {
+  try { console.log('[realtime] insert', ch, msg && msg.id); } catch (_) {}
   let handled = false;
-  try { console.debug('[realtime] insert', ch, msg && msg.id); } catch (_) {}
   views.forEach(view => {
     if (!view || view.channel !== ch || !view.feedInner) return;
     const inner = view.feedInner;
