@@ -322,7 +322,7 @@ function subscribeTempSessionJoins() {
         const { data, error } = await sb
           .from('temp_sessions')
           .insert({
-            channel: null,
+            channel: '',
             owner_id: currentUser.id,
             expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           })
