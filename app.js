@@ -1441,12 +1441,9 @@ async function fetchObjectsListForChannel(ch) {
     .select('id, created_at, text, channel, user_id, author_name')
     .eq('channel', ch);
 
-  // In shared temp-session, owner should see both their rows and guest rows.
-  if (tempSessionId) {
-    query = query.or(
-      'user_id.eq.' + currentUser.id + ',temp_session_id.eq.' + tempSessionId
-    );
-  } else if (ch === 'main' && currentUser) {
+  // For the main view, keep per-user isolation; for all other views (including shared
+  // visit Views), rely on RLS to decide which rows the owner can see.
+  if (ch === 'main' && currentUser) {
     query = query.eq('user_id', currentUser.id);
   }
   const { data, error } = await query.order('created_at', { ascending: true }).limit(100);
@@ -1604,10 +1601,16 @@ function subscribeRealtimeAll() {
               .eq('id', row.temp_session_id)
               .maybeSingle();
             if (!data || data.owner_id !== currentUser.id) return;
-            if (viewNames.includes(channel)) return;
-            viewNames.push(channel);
-            saveChannelsList();
+            if (!viewNames.includes(channel)) {
+              viewNames.push(channel);
+              saveChannelsList();
+            }
             renderTabs();
+            // Ensure realtime + data for this shared view are active for inviter.
+            subscribeRealtimeAll();
+            if (typeof loadObjects === 'function') {
+              loadObjects().catch(function() {});
+            }
           } catch (_) {}
         }
       )
