@@ -475,23 +475,38 @@ header{
 }
 .logo-icon{
   position:relative;
-  width:18px;
-  height:8px;
+  width:20px;
+  height:10px;
   margin:0 2px 1px;
+  overflow:visible;
 }
 .logo-dot{
   position:absolute;
   top:50%;
-  width:3px;
-  height:3px;
-  margin-top:-1.5px;
-  border-radius:50%;
-  background:var(--soft);
+  height:6px;
+  margin-top:-3px;
+  border-radius:999px;
+  border:1px solid rgba(232,213,160,0.35);
+  border-left:none;
+  border-top:none;
+  border-bottom:none;
   opacity:0;
 }
-.logo-dot:nth-child(1){ left:0;   animation:logoWave 1.4s linear 0s 3 forwards; }
-.logo-dot:nth-child(2){ left:6px; animation:logoWave 1.4s linear 0.12s 3 forwards; }
-.logo-dot:nth-child(3){ left:12px;animation:logoWave 1.4s linear 0.24s 3 forwards; }
+.logo-dot:nth-child(1){
+  left:0;
+  width:4px;
+  animation:logoWaveArc 1.4s ease-out 0s 1 forwards;
+}
+.logo-dot:nth-child(2){
+  left:6px;
+  width:7px;
+  animation:logoWaveArc 1.4s ease-out 0.08s 1 forwards;
+}
+.logo-dot:nth-child(3){
+  left:12px;
+  width:10px;
+  animation:logoWaveArc 1.4s ease-out 0.16s 1 forwards;
+}
 
 /* Text motion: OUT gently slides out from under IN once */
 .logo-in{
@@ -501,19 +516,18 @@ header{
   animation:logoOutOnce 1.4s ease-out forwards;
 }
 
-@keyframes logoWave{
+@keyframes logoWaveArc{
   0%{
     opacity:0;
   }
-  20%{
+  25%{
     transform:translateY(-1px);
+    box-shadow:0 0 4px rgba(232,213,160,0.8);
     opacity:1;
   }
-  80%{
-    transform:translateY(0);
-    opacity:0.4;
-  }
   100%{
+    transform:translateY(0);
+    box-shadow:0 0 0 rgba(232,213,160,0);
     opacity:0;
   }
 }
