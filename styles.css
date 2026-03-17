@@ -46,7 +46,7 @@
   --bar-top-height: 42px;
   --bar-bottom-min-height: 120px;
   --nav-height: 40px; /* Navigation bar: controls which view is shown in multiview */
-  --header-height: 500px; /* tall enough for 10x logo animation */
+  --header-height: 48px;
 }
 
 /* Reusable animation keyframes (use with var(--anim-duration-*) and var(--anim-ease-*) for rules) */
@@ -459,12 +459,12 @@ header{
   display:flex;
   align-items:center;
   position:relative;
-  min-width:320px;
-  min-height:500px;
+  min-width:32px;
+  min-height:24px;
 }
 .logo-lottie{
-  width:320px;
-  height:500px;
+  width:32px;
+  height:50px;
   position:relative;
   z-index:0;
 }
