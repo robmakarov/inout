@@ -452,14 +452,13 @@ header{
   font-size:15px;
   font-weight:800;
   letter-spacing:0.02em;
-  color:var(--bright);
+  color:var(--text);
   text-transform:uppercase;
   user-select:none;
   display:flex;
   align-items:center;
 }
 .logo-inner{
-  position:relative;
   display:inline-flex;
   align-items:center;
   gap:0;
@@ -467,49 +466,9 @@ header{
 .logo-in,
 .logo-out{
   display:inline-block;
-  position:relative;
 }
 .logo-out{
-  color:var(--acc);
-}
-
-/* Animated bars between IN and OUT: IN|OUT → IN||OUT → IN|||OUT → INOUT (once, 0.5s) */
-.logo-in::after{
-  content:'';
-  position:absolute;
-  top:0;
-  bottom:0;
-  left:100%;
-  margin-left:2px;
-  width:2px;
-  border-radius:2px;
-  background:var(--line2);
-  opacity:0;
-  box-shadow:none;
-  animation:logoBarsOnce 0.5s ease-out 0s 1 forwards;
-}
-
-@keyframes logoBarsOnce{
-  0%{
-    opacity:0;
-    box-shadow:none;         /* INOUT */
-  }
-  20%{
-    opacity:1;
-    box-shadow:none;         /* IN|OUT (one bar) */
-  }
-  45%{
-    opacity:1;
-    box-shadow:6px 0 0 var(--line2); /* IN||OUT (two bars) */
-  }
-  75%{
-    opacity:1;
-    box-shadow:6px 0 0 var(--line2), 12px 0 0 var(--line2); /* IN|||OUT (three bars) */
-  }
-  100%{
-    opacity:0;
-    box-shadow:none;         /* back to INOUT */
-  }
+  color:var(--text);
 }
 
 .header-right{
