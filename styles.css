@@ -477,29 +477,21 @@ header{
   position:relative;
   width:18px;
   height:8px;
-  border-radius:999px;
-  border:1px solid var(--line2);
-  box-sizing:border-box;
   margin:0 2px 1px;
-  overflow:hidden;
 }
-/* Hide structural dots from previous version */
-.logo-dot{display:none;}
-
-/* Single pulse bubble making 3 passes from IN to OUT */
-.logo-icon::before{
-  content:'';
+.logo-dot{
   position:absolute;
   top:50%;
-  left:2px;
-  width:6px;
-  height:6px;
-  margin-top:-3px;
-  border-radius:999px;
-  background:radial-gradient(circle at 30% 30%, var(--bright), var(--acc));
-  box-shadow:0 0 6px rgba(232,213,160,0.5);
-  animation:logoBubble 1.4s ease-out 0s 3;
+  width:3px;
+  height:3px;
+  margin-top:-1.5px;
+  border-radius:50%;
+  background:var(--soft);
+  opacity:0;
 }
+.logo-dot:nth-child(1){ left:0;   animation:logoWave 1.4s linear 0s 3 forwards; }
+.logo-dot:nth-child(2){ left:6px; animation:logoWave 1.4s linear 0.12s 3 forwards; }
+.logo-dot:nth-child(3){ left:12px;animation:logoWave 1.4s linear 0.24s 3 forwards; }
 
 /* Text motion: OUT gently slides out from under IN once */
 .logo-in{
@@ -509,20 +501,19 @@ header{
   animation:logoOutOnce 1.4s ease-out forwards;
 }
 
-@keyframes logoBubble{
+@keyframes logoWave{
   0%{
-    transform:translateX(0);
     opacity:0;
   }
-  10%{
+  20%{
+    transform:translateY(-1px);
     opacity:1;
   }
   80%{
-    transform:translateX(8px);
-    opacity:1;
+    transform:translateY(0);
+    opacity:0.4;
   }
   100%{
-    transform:translateX(10px);
     opacity:0;
   }
 }
