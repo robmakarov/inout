@@ -369,10 +369,14 @@ function subscribeTempSessionJoins() {
           ? (window.location.origin + window.location.pathname)
           : '';
 
+        // Create a dedicated shared View channel owned by inviter.
+        const idPrefix = Date.now().toString(36);
+        const sharedChannel = 'visit-' + idPrefix;
+
         const { data, error } = await sb
           .from('temp_sessions')
           .insert({
-            channel: '',
+            channel: sharedChannel,
             owner_id: currentUser.id,
             expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           })
@@ -386,6 +390,19 @@ function subscribeTempSessionJoins() {
         }
 
         lastCreatedTempSessionId = data.id;
+
+        // Ensure inviter owns and sees this shared View immediately.
+        if (!viewNames.includes(sharedChannel)) {
+          viewNames.push(sharedChannel);
+          if (typeof saveChannelsList === 'function') saveChannelsList();
+        }
+        currentView = sharedChannel;
+        currentChannel = sharedChannel;
+        if (typeof renderTabs === 'function') renderTabs();
+        if (typeof ensureMembership === 'function') {
+          try { await ensureMembership(); } catch (_) {}
+        }
+
         pollIntervalId = setInterval(async () => {
           const id = lastCreatedTempSessionId;
           if (!id || !sb || !currentUser) return;
