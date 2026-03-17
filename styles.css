@@ -46,6 +46,7 @@
   --bar-top-height: 42px;
   --bar-bottom-min-height: 120px;
   --nav-height: 40px; /* Navigation bar: controls which view is shown in multiview */
+  --header-height: 500px; /* tall enough for 10x logo animation */
 }
 
 /* Reusable animation keyframes (use with var(--anim-duration-*) and var(--anim-ease-*) for rules) */
@@ -99,7 +100,7 @@ header,
   height:100vh;
   overflow:hidden;
   pointer-events:auto;
-  padding-top:calc(48px + var(--nav-height) + var(--bar-top-height)); /* header + nav + fixed manage bar */
+  padding-top:calc(var(--header-height) + var(--nav-height) + var(--bar-top-height)); /* header + nav + fixed manage bar */
   padding-bottom:var(--bar-bottom-min-height); /* reserve space for fixed input area */
 }
 .multiview-views{
@@ -187,7 +188,7 @@ header,
 /* ── NAVIGATION BAR: fixed under header, controls which view is shown in multiview ── */
 #nav.navigation-bar{
   position:fixed;
-  top:48px;
+  top:var(--header-height);
   left:0;
   right:0;
   width:100%;
@@ -243,7 +244,7 @@ header{
   background:var(--bg);
   border-bottom:1px solid var(--line);
   padding:0 20px;
-  height:48px;
+  height:var(--header-height);
   display:flex;
   align-items:center;
   justify-content:space-between;
@@ -254,7 +255,7 @@ header{
 /* ── TOP BAR (manage): fixed under header + nav, fills width ── */
 #manage-bar{
   position:fixed;
-  top:calc(48px + var(--nav-height));
+  top:calc(var(--header-height) + var(--nav-height));
   left:0;
   right:0;
   width:100%;
@@ -1765,14 +1766,14 @@ body.select-mode .obj-select-wrap,
   /* pin manage bar under header */
   #manage-bar{
     position:fixed;
-    top:48px;
+    top:var(--header-height);
     left:0;
     right:0;
     width:100%;
     z-index:115;
     padding:4px 14px;
   }
-  #multiview{padding-top:calc(48px + var(--nav-height) + var(--bar-top-height))}
+  #multiview{padding-top:calc(var(--header-height) + var(--nav-height) + var(--bar-top-height))}
   /* keep input bar above iOS Safari bottom panel & keyboard */
   #input-area{
     position:fixed;
