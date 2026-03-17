@@ -1480,11 +1480,20 @@ async function loadObjects() {
 
 async function loadObjectsForTempSession() {
   if (!tempSessionId || !sb || !sb.from) return;
-  const { data, error } = await sb
+  let query = sb
     .from(OBJECTS_TABLE)
-    .select('id, created_at, text, channel, user_id, author_name, temp_session_id')
-    .eq('temp_session_id', tempSessionId)
-    .order('created_at', { ascending: true });
+    .select('id, created_at, text, channel, user_id, author_name, temp_session_id');
+
+  // For a shared view, load both owner's and guest's objects by channel or temp_session_id.
+  if (currentChannel) {
+    query = query.or(
+      'channel.eq.' + currentChannel + ',temp_session_id.eq.' + tempSessionId
+    );
+  } else {
+    query = query.eq('temp_session_id', tempSessionId);
+  }
+
+  const { data, error } = await query.order('created_at', { ascending: true });
 
   if (error) {
     console.error(error);
@@ -1627,12 +1636,12 @@ function subscribeTempSessionRealtimeGuest() {
   if (!sb || sb === null || currentUser || !tempSessionId || !sb.channel) return;
   try {
     const chName = 'entries-temp-session-' + String(tempSessionId);
-    const filter = 'temp_session_id=eq.' + String(tempSessionId);
+    const orFilter = 'channel.eq.' + String(currentChannel) + ',temp_session_id.eq.' + String(tempSessionId);
     const sub = sb
       .channel(chName)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'entries', filter },
+        { event: 'INSERT', schema: 'public', table: 'entries', filter: orFilter },
         (payload) => {
           const row = payload.new;
           if (!row) return;
@@ -1652,7 +1661,7 @@ function subscribeTempSessionRealtimeGuest() {
       )
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'entries', filter },
+        { event: 'UPDATE', schema: 'public', table: 'entries', filter: orFilter },
         (payload) => {
           const row = payload.new;
           if (!row) return;
