@@ -1456,17 +1456,14 @@ async function fetchObjectsList() {
   return fetchObjectsListForChannel(currentChannel);
 }
 
-/** Fetch objects for a specific channel (for primary or secondary view). */
 async function fetchObjectsListForChannel(ch) {
-  if (!currentUser) return [];
   let query = sb
     .from(OBJECTS_TABLE)
     .select('id, created_at, text, channel, user_id, author_name')
     .eq('channel', ch);
 
-  // For the main view, keep per-user isolation; for all other views (including shared
-  // visit Views), rely on RLS to decide which rows the owner can see.
-  if (ch === 'main' && currentUser) {
+  // For the main view when signed in, keep per-user isolation.
+  if (currentUser && ch === 'main') {
     query = query.eq('user_id', currentUser.id);
   }
   const { data, error } = await query.order('created_at', { ascending: true }).limit(100);
@@ -1479,13 +1476,9 @@ async function fetchObjectsListForChannel(ch) {
 }
 
 async function loadObjects() {
-  if (!currentUser) {
-    // Never hit Supabase for anonymous users; use local store instead.
-    if (tempSessionId) {
-      await loadObjectsForTempSession();
-    } else {
-      await loadLocalObjectsForCurrentView();
-    }
+  // Anonymous, non-shared: use local per-device store.
+  if (!currentUser && !tempSessionId) {
+    await loadLocalObjectsForCurrentView();
     return;
   }
   const list = await fetchObjectsList();
@@ -1590,11 +1583,10 @@ function subscribeRealtimeAll() {
   }
   channelSubs = new Map();
 
-  if (!currentUser) return;
-
   viewNames.forEach(ch => {
     let filter = 'channel=eq.' + ch;
-    if (ch === 'main' && currentUser) {
+    // For signed-in users, "main" is per-user; other views rely on RLS.
+    if (currentUser && ch === 'main') {
       filter += ',user_id=eq.' + currentUser.id;
     }
     const sub = sb
@@ -4574,7 +4566,7 @@ async function refreshAuth() {
         currentView = ch;
         currentChannel = ch;
         renderTabs();
-        await loadObjectsForTempSession();
+        await loadObjects();
 
         // Emit "joined" event so owner can react in realtime
         try {
@@ -4588,8 +4580,8 @@ async function refreshAuth() {
       toast('Failed to join shared view.');
       tempSessionId = null;
     }
-    // Anonymous guest in shared view: set up realtime for this temp-session.
-    subscribeTempSessionRealtimeGuest();
+    // Anonymous guest in shared view: use normal channel-based realtime.
+    subscribeRealtimeAll();
     return;
   }
 
