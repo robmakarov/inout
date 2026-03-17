@@ -449,34 +449,63 @@ header{
 
 .logo{
   font-family:var(--sans);
-  font-size:15px;
+  font-size:16px;
   font-weight:800;
-  letter-spacing:0.08em;
+  letter-spacing:0.18em;
   color:var(--bright);
   text-transform:uppercase;
   user-select:none;
   display:flex;
   align-items:center;
-  gap:8px;
 }
-.logo span{
-  color:var(--acc);
+.logo-inner{
+  position:relative;
+  display:inline-flex;
+  align-items:flex-end;
+  gap:0.4em;
+  padding-bottom:1px;
+}
+.logo-in,
+.logo-out{
   display:inline-block;
-  animation:logoPulse 1.4s ease-in-out infinite;
+  position:relative;
 }
-
-.logo-accent-rect{
-  width:14px;
-  height:14px;
-  border-radius:3px;
-  background:#e63946;
-  box-shadow:0 0 0 1px rgba(0,0,0,0.4),0 0 14px rgba(230,57,70,0.8);
+.logo-out{
+  color:var(--acc);
+}
+.logo-inner::before,
+.logo-inner::after{
+  content:'';
+  position:absolute;
+  bottom:-4px;
+  height:1px;
+  background:linear-gradient(90deg, transparent, var(--acc), transparent);
+  opacity:0.9;
+  transform-origin:center;
+  animation:logoCollapse 3s var(--anim-ease-smooth) infinite;
+}
+.logo-inner::before{
+  left:0;
+  right:0;
+}
+.logo-inner::after{
+  left:12%;
+  right:12%;
+  opacity:0.5;
 }
 
 @keyframes logoPulse{
   0%{transform:translateY(0);opacity:1;}
   50%{transform:translateY(-1px);opacity:0.8;}
   100%{transform:translateY(0);opacity:1;}
+}
+
+@keyframes logoCollapse{
+  0%,20%{ transform:scaleX(1); }
+  40%{ transform:scaleX(0.3); }
+  60%{ transform:scaleX(1); }
+  80%{ transform:scaleX(0.7); }
+  100%{ transform:scaleX(1); }
 }
 
 .header-right{
