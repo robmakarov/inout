@@ -367,9 +367,8 @@ function subscribeTempSessionJoins() {
           ? (window.location.origin + window.location.pathname)
           : '';
 
-        // Create a dedicated shared View channel owned by inviter.
-        const idPrefix = Date.now().toString(36);
-        const sharedChannel = 'visit-' + idPrefix;
+        // Share the current View so owner and guest see the same view name in nav.
+        const sharedChannel = currentChannel || currentView || 'main';
 
         const { data, error } = await sb
           .from('temp_sessions')
@@ -389,14 +388,12 @@ function subscribeTempSessionJoins() {
 
         lastCreatedTempSessionId = data.id;
 
-        // Ensure inviter owns and sees this shared View immediately.
+        // Ensure this view is in owner's nav (usually already is).
         if (!viewNames.includes(sharedChannel)) {
           viewNames.push(sharedChannel);
           if (typeof saveChannelsList === 'function') saveChannelsList();
+          if (typeof renderTabs === 'function') renderTabs();
         }
-        currentView = sharedChannel;
-        currentChannel = sharedChannel;
-        if (typeof renderTabs === 'function') renderTabs();
         if (typeof ensureMembership === 'function') {
           try { await ensureMembership(); } catch (_) {}
         }
@@ -4404,19 +4401,28 @@ async function refreshSharedFlags() {
   if (!currentUser) return;
   sharedChannels.clear();
   try {
-    // mark channel as shared if it has any member other than me
+    // Mark channel as shared if it has any member other than me
     const { data, error } = await sb
       .from('channel_members')
       .select('channel,user_id')
       .in('channel', viewNames)
       .neq('user_id', currentUser.id);
-    if (error) {
-      console.error(error);
-      return;
+    if (!error && (data || []).length) {
+      (data || []).forEach(r => {
+        if (r && typeof r.channel === 'string') sharedChannels.add(r.channel);
+      });
     }
-    (data || []).forEach(r => {
-      if (r && typeof r.channel === 'string') sharedChannels.add(r.channel);
-    });
+    // Also mark channels that have an active visit link (temp_session) owned by me
+    const { data: sessions, error: sessErr } = await sb
+      .from('temp_sessions')
+      .select('channel')
+      .eq('owner_id', currentUser.id)
+      .not('channel', 'is', null);
+    if (!sessErr && (sessions || []).length) {
+      (sessions || []).forEach(r => {
+        if (r && typeof r.channel === 'string' && viewNames.includes(r.channel)) sharedChannels.add(r.channel);
+      });
+    }
   } catch (e) {
     console.error(e);
   }
@@ -5068,12 +5074,14 @@ async function sendText(text) {
     for (let i = 0; i < idsToSave.length; i++) {
       const id = idsToSave[i];
       const textToSave = trimmedPerId[i];
-      const { error } = await sb.rpc('perform_entry_action', {
+      const editPayload = {
         p_channel: currentChannel,
         p_entry_id: id,
         p_action: 'edit',
         p_payload: { text: textToSave },
-      });
+      };
+      if (tempSessionId) editPayload.p_temp_session_id = tempSessionId;
+      const { error } = await sb.rpc('perform_entry_action', editPayload);
       if (error) lastError = error;
     }
     input.disabled = false;
@@ -5608,14 +5616,16 @@ if (moveSelectedBtn) {
 }
 
 async function deleteSingleObject(id) {
-  if (!id) return;
+  if (!id || !sb || !sb.rpc) return;
   try {
-    const { error } = await sb.rpc('perform_entry_action', {
+    const payload = {
       p_channel: currentChannel,
       p_entry_id: id,
       p_action: 'delete',
       p_payload: {},
-    });
+    };
+    if (tempSessionId) payload.p_temp_session_id = tempSessionId;
+    const { error } = await sb.rpc('perform_entry_action', payload);
     if (error) {
       console.error(error);
       toast('Failed to delete — ' + humanError(error.message));
@@ -5705,9 +5715,51 @@ function animateObjectToView(rowEl, targetFeedEl, onDone) {
 }
 
 async function moveSingleObject(id, targetChannel) {
-  if (!currentUser || !id) return false;
+  if (!id) return false;
   const target = targetChannel != null ? targetChannel : (moveTargetSelect && moveTargetSelect.value);
   if (!target || target === currentChannel) return false;
+  if (!sb || !sb.rpc) return false;
+
+  const useRpc = !!tempSessionId || !!currentUser;
+
+  if (useRpc) {
+    try {
+      const rpcPayload = {
+        p_channel: currentChannel,
+        p_entry_id: id,
+        p_action: 'move',
+        p_payload: { target_channel: target },
+      };
+      if (tempSessionId) rpcPayload.p_temp_session_id = tempSessionId;
+      const { error } = await sb.rpc('perform_entry_action', rpcPayload);
+      if (!error) {
+        const el = feedInner && feedInner.querySelector('.obj[data-id="' + CSS.escape(String(id)) + '"]');
+        if (el) el.remove();
+        currentObjectOrder = currentObjectOrder.filter(x => x !== id);
+        saveObjectOrderForCurrentView();
+        showEmptyIfNoObjects();
+        return true;
+      }
+      if (tempSessionId) {
+        toast('Failed to move — ' + humanError(error.message));
+        return false;
+      }
+      // Owner: fall through to direct update if RPC doesn't support move
+      if (error.code !== 'PGRST202' && error.message && !error.message.includes('move')) {
+        toast('Failed to move — ' + humanError(error.message));
+        return false;
+      }
+    } catch (e) {
+      if (tempSessionId) {
+        console.error(e);
+        toast('Failed to move — ' + humanError(e.message));
+        return false;
+      }
+    }
+  }
+
+  // Owner-only fallback: direct update (when RPC move not implemented)
+  if (!currentUser) return false;
   try {
     const { data: before, error: selErr } = await sb
       .from(OBJECTS_TABLE)
@@ -5721,7 +5773,7 @@ async function moveSingleObject(id, targetChannel) {
     }
     const now = new Date().toISOString();
     const { data, error } = await sb
-      .from('entries')
+      .from(OBJECTS_TABLE)
       .update({ channel: target, created_at: now })
       .eq('user_id', currentUser.id)
       .eq('id', id)
