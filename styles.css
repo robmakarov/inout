@@ -473,54 +473,32 @@ header{
 .logo-out{
   color:var(--acc);
 }
-.logo-in{
-  animation:logoInPulse 3.2s var(--anim-ease-smooth) infinite;
+.logo-icon{
+  width:18px;
+  height:12px;
+  border-radius:999px;
+  border:1px solid var(--line2);
+  box-sizing:border-box;
+  position:relative;
+  margin:0 2px 1px;
 }
-.logo-out{
-  animation:logoOutPulse 3.2s var(--anim-ease-smooth) infinite;
+.logo-icon::before,
+.logo-icon::after{
+  content:'';
+  position:absolute;
+  top:50%;
+  width:4px;
+  height:4px;
+  border-radius:50%;
+  transform:translateY(-50%);
 }
-
-@keyframes logoPulse{
-  0%{transform:translateY(0);opacity:1;}
-  50%{transform:translateY(-1px);opacity:0.8;}
-  100%{transform:translateY(0);opacity:1;}
+.logo-icon::before{
+  left:3px;
+  background:var(--soft);
 }
-
-@keyframes logoInPulse{
-  0%,55%{
-    transform:scale(1);
-    opacity:1;
-  }
-  65%{
-    transform:scale(0.95);
-    opacity:0.9;
-  }
-  75%{
-    transform:scale(1.03);
-    opacity:1;
-  }
-  100%{
-    transform:scale(1);
-    opacity:1;
-  }
-}
-@keyframes logoOutPulse{
-  0%,25%{
-    transform:scale(1);
-    opacity:1;
-  }
-  35%{
-    transform:scale(0.97);
-    opacity:0.9;
-  }
-  45%{
-    transform:scale(1.04);
-    opacity:1;
-  }
-  100%{
-    transform:scale(1);
-    opacity:1;
-  }
+.logo-icon::after{
+  right:3px;
+  background:var(--acc);
 }
 
 .header-right{
