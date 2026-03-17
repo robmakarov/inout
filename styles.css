@@ -474,50 +474,76 @@ header{
   color:var(--acc);
 }
 .logo-icon{
+  position:relative;
   width:18px;
-  height:9px;
+  height:8px;
   border-radius:999px;
   border:1px solid var(--line2);
   box-sizing:border-box;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  gap:2px;
-  padding:0 2px;
   margin:0 2px 1px;
+  overflow:hidden;
 }
-.logo-dot{
-  width:2px;
-  height:2px;
-  border-radius:50%;
-  background:var(--soft);
-  opacity:0.4;
-}
-.logo-dot:nth-child(1){
-  animation:logoDotFlow 1.2s linear infinite;
-}
-.logo-dot:nth-child(2){
-  animation:logoDotFlow 1.2s linear infinite 0.12s;
-}
-.logo-dot:nth-child(3){
-  animation:logoDotFlow 1.2s linear infinite 0.24s;
+/* Hide structural dots from previous version */
+.logo-dot{display:none;}
+
+/* Single pulse bubble making 3 passes from IN to OUT */
+.logo-icon::before{
+  content:'';
+  position:absolute;
+  top:50%;
+  left:2px;
+  width:6px;
+  height:6px;
+  margin-top:-3px;
+  border-radius:999px;
+  background:radial-gradient(circle at 30% 30%, var(--bright), var(--acc));
+  box-shadow:0 0 6px rgba(232,213,160,0.5);
+  animation:logoBubble 1.4s ease-out 0s 3;
 }
 
-@keyframes logoDotFlow{
+/* Text motion: OUT gently slides out from under IN once */
+.logo-in{
+  animation:logoInOnce 1.4s ease-out forwards;
+}
+.logo-out{
+  animation:logoOutOnce 1.4s ease-out forwards;
+}
+
+@keyframes logoBubble{
   0%{
-    transform:translateY(0) scale(0.9);
-    background:var(--soft);
-    opacity:0.25;
+    transform:translateX(0);
+    opacity:0;
   }
-  35%{
-    transform:translateY(-1px) scale(1.15);
-    background:var(--acc);
+  10%{
     opacity:1;
   }
-  70%,100%{
-    transform:translateY(0) scale(0.9);
-    background:var(--soft);
-    opacity:0.2;
+  80%{
+    transform:translateX(8px);
+    opacity:1;
+  }
+  100%{
+    transform:translateX(10px);
+    opacity:0;
+  }
+}
+
+@keyframes logoInOnce{
+  0%{ transform:translateX(0); }
+  40%{ transform:translateX(0); }
+  100%{ transform:translateX(0); }
+}
+@keyframes logoOutOnce{
+  0%{
+    transform:translateX(-6px);
+    opacity:0;
+  }
+  40%{
+    transform:translateX(-2px);
+    opacity:1;
+  }
+  100%{
+    transform:translateX(0);
+    opacity:1;
   }
 }
 
