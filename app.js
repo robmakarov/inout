@@ -1849,6 +1849,12 @@ function onUpdateForChannel(ch, row) {
     clearRemoteEditingDoppelganger(id, true);
     anyUpdated = true;
   });
+  if (!anyUpdated && ch === currentChannel) {
+    // Fallback for guests or layouts without registered views: update primary feed directly.
+    updateObjectRowText(id, text);
+    clearRemoteEditingDoppelganger(id, true);
+    anyUpdated = true;
+  }
   if (anyUpdated) updateEditingRowHighlight();
 }
 
