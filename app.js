@@ -48,8 +48,8 @@ if (sb && sb.auth && typeof location !== 'undefined' && location.search && locat
     }).catch(function(e) {
       console.error('OAuth code exchange failed', e);
       return null;
-    });
-  })();
+  });
+})();
 }
 
 // Optional visit / temp-session info encoded in QR URL: ?tempSession=<id>&visitNick=<nickname>
@@ -1601,6 +1601,7 @@ function subscribeRealtimeAll() {
   channelSubs = new Map();
 
   viewNames.forEach(ch => {
+    try { console.debug('[realtime] subscribe', ch); } catch (_) {}
     let filter = 'channel=eq.' + ch;
     // For signed-in users, "main" is per-user; other views rely on RLS.
     if (currentUser && ch === 'main') {
@@ -1973,6 +1974,7 @@ function subscribeActionLog() {
 
 function onInsertForChannel(ch, msg) {
   let handled = false;
+  try { console.debug('[realtime] insert', ch, msg && msg.id); } catch (_) {}
   views.forEach(view => {
     if (!view || view.channel !== ch || !view.feedInner) return;
     const inner = view.feedInner;
@@ -4592,7 +4594,7 @@ async function refreshAuth() {
           console.error('temp_session_events insert failed', e);
         }
       }
-    } catch (e) {
+  } catch (e) {
       console.error(e);
       toast('Failed to join shared view.');
       tempSessionId = null;
@@ -4646,13 +4648,13 @@ function setupAuthListener() {
       return;
     }
     if (session && session.user) {
-      const prevUser = currentUser;
+    const prevUser = currentUser;
       currentUser = session.user;
       try { sessionStorage.setItem(AUTH_BACKUP_KEY, JSON.stringify(currentUser)); } catch (_) {}
-      updateAuthUI();
-      if (!prevUser && currentUser) {
+    updateAuthUI();
+    if (!prevUser && currentUser) {
         try {
-          await syncChannelsFromServer();
+      await syncChannelsFromServer();
           await reloadForUser();
           setupDraftChannel();
           setupDndBroadcastChannel();
@@ -4869,8 +4871,8 @@ async function signOut() {
   // 5) Ask Supabase to sign out on its side (if available)
   try {
     if (sb && sb.auth && typeof sb.auth.signOut === 'function') {
-      const { error } = await sb.auth.signOut();
-      if (error) console.error(error);
+    const { error } = await sb.auth.signOut();
+    if (error) console.error(error);
     }
   } catch (e) { console.error(e); }
 }
@@ -4940,7 +4942,7 @@ async function sendText(text) {
     if (idsToSave.length === 1) {
       let sel = sb
         .from(OBJECTS_TABLE)
-        .select('id, created_at, text, channel, user_id, author_name')
+      .select('id, created_at, text, channel, user_id, author_name')
         .eq('id', idsToSave[0]);
       if (tempSessionId) {
         sel = sel.eq('temp_session_id', tempSessionId);
@@ -4959,7 +4961,7 @@ async function sendText(text) {
     } else {
       let sel = sb
         .from(OBJECTS_TABLE)
-        .select('id, created_at, text, channel, user_id, author_name')
+      .select('id, created_at, text, channel, user_id, author_name')
         .in('id', idsToSave);
       if (tempSessionId) {
         sel = sel.eq('temp_session_id', tempSessionId);
@@ -5043,10 +5045,10 @@ async function sendText(text) {
       .insert({
         text: trimmed,
         temp_session_id: tempSessionId,
-        channel: currentChannel,
-      })
+      channel: currentChannel,
+    })
       .select('id, created_at, text, channel, user_id, author_name, temp_session_id')
-      .single();
+    .single();
     data = res.data;
     error = res.error;
   } else {
