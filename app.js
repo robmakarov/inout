@@ -1622,6 +1622,52 @@ function subscribeRealtimeAll() {
   })();
 }
 
+// Anonymous guest realtime for a temp-session shared view.
+function subscribeTempSessionRealtimeGuest() {
+  if (!sb || sb === null || currentUser || !tempSessionId || !sb.channel) return;
+  try {
+    const chName = 'entries-temp-session-' + String(tempSessionId);
+    const filter = 'temp_session_id=eq.' + String(tempSessionId);
+    const sub = sb
+      .channel(chName)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'entries', filter },
+        (payload) => {
+          const row = payload.new;
+          if (!row) return;
+          const ch = row.channel || currentChannel;
+          if (!ch) return;
+          if (!viewNames.includes(ch)) {
+            viewNames.push(ch);
+            if (typeof saveChannelsList === 'function') saveChannelsList();
+          }
+          currentView = ch;
+          currentChannel = ch;
+          if (typeof renderTabs === 'function') renderTabs();
+          if (typeof onInsertForChannel === 'function') {
+            onInsertForChannel(ch, row);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'entries', filter },
+        (payload) => {
+          const row = payload.new;
+          if (!row) return;
+          const ch = row.channel || currentChannel;
+          if (!ch) return;
+          if (typeof onUpdateForChannel === 'function') {
+            onUpdateForChannel(ch, row);
+          }
+        }
+      )
+      .subscribe();
+    channelSubs.set(chName, sub);
+  } catch (_) {}
+}
+
 /** Update the primary text of an object row. Looks in primary feed, then secondary. */
 function updateObjectRowText(objId, textValue) {
   if (objId == null) return;
@@ -4509,6 +4555,8 @@ async function refreshAuth() {
       toast('Failed to join shared view.');
       tempSessionId = null;
     }
+    // Anonymous guest in shared view: set up realtime for this temp-session.
+    subscribeTempSessionRealtimeGuest();
     return;
   }
 
