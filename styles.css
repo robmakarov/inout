@@ -452,23 +452,37 @@ header{
   font-size:15px;
   font-weight:800;
   letter-spacing:0.02em;
-  color:var(--text);
+  color:var(--bright);
   text-transform:uppercase;
   user-select:none;
   display:flex;
   align-items:center;
+  position:relative;
+  min-width:52px;
+  min-height:24px;
 }
-.logo-inner{
-  display:inline-flex;
-  align-items:center;
-  gap:0;
+.logo-lottie{
+  width:32px;
+  height:50px;
+  position:relative;
+  z-index:0;
 }
-.logo-in,
-.logo-out{
-  display:inline-block;
+.logo-lottie svg{
+  width:100%;
+  height:100%;
+  display:block;
 }
-.logo-out{
-  color:var(--text);
+.logo-fallback{
+  display:inline;
+  position:absolute;
+  left:0;
+  top:50%;
+  transform:translateY(-50%);
+  pointer-events:none;
+  z-index:1;
+}
+.logo.logo-lottie-loaded .logo-fallback{
+  display:none;
 }
 
 .header-right{
