@@ -215,14 +215,16 @@ function subscribeTempSessionJoins() {
           try {
             const tempId = payload.new && payload.new.temp_session_id;
             if (!tempId || !sb.from) return;
+            let ch = null;
             const { data, error } = await sb
               .from('temp_sessions')
               .select('channel')
               .eq('id', tempId)
               .maybeSingle();
-            if (error || !data) return;
+            if (data && (data.channel === '' || data.channel)) ch = data.channel;
+            if (!ch) ch = 'visit-' + String(tempId).slice(0, 8);
+            if (!ch) ch = 'main';
             if (qrModalBackdrop) qrModalBackdrop.setAttribute('aria-hidden', 'true');
-            const ch = data.channel || 'main';
             if (!viewNames.includes(ch)) {
               viewNames.push(ch);
               saveChannelsList();
