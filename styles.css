@@ -505,7 +505,7 @@ header{
 .logo-dot:nth-child(3){
   left:12px;
   width:10px;
-  animation:logoWaveArc 1.4s ease-out 0.16s 1 forwards;
+  animation:logoWaveArc 1.4s ease-out 0.16s 3 forwards;
 }
 
 /* Text motion: OUT gently slides out from under IN once */
@@ -534,16 +534,17 @@ header{
 
 @keyframes logoInOnce{
   0%{ transform:translateX(0); }
-  40%{ transform:translateX(0); }
+  10%{ transform:translateX(0); }
+  90%{ transform:translateX(0); }
   100%{ transform:translateX(0); }
 }
 @keyframes logoOutOnce{
   0%{
-    transform:translateX(-6px);
+    transform:translateX(-4px);
     opacity:0;
   }
-  40%{
-    transform:translateX(-2px);
+  20%{
+    transform:translateX(-1px);
     opacity:1;
   }
   100%{
