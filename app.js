@@ -4079,38 +4079,35 @@ function saveChannelsList() {
 
 async function loadObjectOrderForCurrentChannel() {
   currentObjectOrder = [];
-  // 1) Try unified view object (if table exists and user is signed in).
-  if (currentUser) {
-    try {
-      const { data, error } = await sb
-        .from('views')
-        .select('config')
-        .eq('user_id', currentUser.id)
-        .eq('channel', currentChannel)
-        .limit(1)
-        .maybeSingle();
-      if (!error && data && data.config) {
-        const cfg = data.config || {};
-        const orderArr = Array.isArray(cfg.order) ? cfg.order : [];
-        currentObjectOrder = orderArr
-          .map(x => Number(x))
-          .filter(x => Number.isFinite(x));
-        // Pull view rules into fieldPrefs and mirror into local storage.
-        const defTime = true;
-        const defAuthor = currentChannel === 'main' ? false : true;
-        fieldPrefs = {
-          showTime: typeof cfg.showTime === 'boolean' ? cfg.showTime : defTime,
-          showAuthor: typeof cfg.showAuthor === 'boolean' ? cfg.showAuthor : defAuthor,
-          viewMode: (cfg.viewMode === 'table' || cfg.viewMode === 'feed') ? cfg.viewMode : 'feed',
-        };
-        saveFieldPrefsForCurrentChannel();
-        // also mirror order into local backup
-        saveOrderToLocal();
-      }
-    } catch (e) {
-      // views table might not exist yet; fail soft
-      console.error(e);
+  // 1) Try unified view object (channel-owned, not per-user).
+  try {
+    const { data, error } = await sb
+      .from('views')
+      .select('config')
+      .eq('channel', currentChannel)
+      .limit(1)
+      .maybeSingle();
+    if (!error && data && data.config) {
+      const cfg = data.config || {};
+      const orderArr = Array.isArray(cfg.order) ? cfg.order : [];
+      currentObjectOrder = orderArr
+        .map(x => Number(x))
+        .filter(x => Number.isFinite(x));
+      // Pull view rules into fieldPrefs and mirror into local storage.
+      const defTime = true;
+      const defAuthor = currentChannel === 'main' ? false : true;
+      fieldPrefs = {
+        showTime: typeof cfg.showTime === 'boolean' ? cfg.showTime : defTime,
+        showAuthor: typeof cfg.showAuthor === 'boolean' ? cfg.showAuthor : defAuthor,
+        viewMode: (cfg.viewMode === 'table' || cfg.viewMode === 'feed') ? cfg.viewMode : 'feed',
+      };
+      saveFieldPrefsForCurrentChannel();
+      // also mirror order into local backup
+      saveOrderToLocal();
     }
+  } catch (e) {
+    // views table might not exist yet; fail soft
+    console.error(e);
   }
   // 2) If no view-based order, fall back to legacy message_orders + local.
   if (!currentObjectOrder.length && currentUser) {
@@ -4144,22 +4141,29 @@ async function saveObjectOrderForCurrentView() {
   if (!currentObjectOrder.length) return;
   saveOrderToLocal();
   suppressOrderApplyUntil = Date.now() + 600;
+  // Persist order into unified views config for this channel (owner writes; guests just read).
   if (currentUser) {
     try {
-      const rows = currentObjectOrder.map((entryId, index) => ({
-        user_id: currentUser.id,
-        channel: currentView,
-        entry_id: entryId,
-        position: index,
-      }));
-      suppressNextOrderApply = true;
+      const cfg = {
+        order: currentObjectOrder.slice(),
+        showTime: fieldPrefs && typeof fieldPrefs.showTime === 'boolean' ? fieldPrefs.showTime : true,
+        showAuthor: fieldPrefs && typeof fieldPrefs.showAuthor === 'boolean'
+          ? fieldPrefs.showAuthor
+          : (currentView === 'main' ? false : true),
+        viewMode: fieldPrefs && (fieldPrefs.viewMode === 'table' || fieldPrefs.viewMode === 'feed')
+          ? fieldPrefs.viewMode
+          : 'feed',
+      };
+      suppressNextViewApply = true;
       const { error } = await sb
-        .from('message_orders')
-        .upsert(rows, { onConflict: 'user_id,channel,entry_id' });
+        .from('views')
+        .upsert(
+          { channel: currentView, config: cfg },
+          { onConflict: 'channel' }
+        );
       if (error) console.error(error);
     } catch (e) { console.error(e); }
   }
-  // Skipping remote views upsert for now (table is optional / may not exist).
 }
 
 function recomputeOrderFromDOM(container) {
