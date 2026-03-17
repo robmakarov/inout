@@ -218,9 +218,10 @@ function subscribeTempSessionJoins() {
             let ch = null;
             const { data, error } = await sb
               .from('temp_sessions')
-              .select('channel')
+              .select('channel, owner_id')
               .eq('id', tempId)
               .maybeSingle();
+            if (!data || data.owner_id !== currentUser.id) return;
             if (data && (data.channel === '' || data.channel)) ch = data.channel;
             if (!ch) ch = 'visit-' + String(tempId).slice(0, 8);
             if (!ch) ch = 'main';
@@ -232,6 +233,8 @@ function subscribeTempSessionJoins() {
             currentView = ch;
             currentChannel = ch;
             renderTabs();
+            // Ensure inviter has persistent membership in this shared View.
+            ensureMembership().catch(function() {});
             await loadObjects();
             toast('Guest joined your view ' + currentView + '.');
           } catch (e) {
@@ -340,6 +343,10 @@ function subscribeTempSessionJoins() {
     if (!viewNames.includes(ch)) {
       viewNames.push(ch);
       if (typeof saveChannelsList === 'function') saveChannelsList();
+    }
+    // Persist membership so shared View survives refresh.
+    if (typeof ensureMembership === 'function') {
+      try { await ensureMembership(); } catch (_) {}
     }
     currentView = ch;
     currentChannel = ch;
