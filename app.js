@@ -2027,15 +2027,16 @@ function setupDraftChannel() {
       const authorName = data.authorName != null ? String(data.authorName) : '';
       const deviceId = data.deviceId != null ? String(data.deviceId) : '';
       latestRemoteDraft = text;
+      const isSelf = (data.from === myId);
       if (editingId != null && Number.isFinite(editingId)) {
-        const isSelf = (data.from === myId);
         showRemoteEditingDoppelganger(editingId, text, authorName || (isSelf ? 'Editing' : 'Someone'), deviceId, isSelf);
       } else {
         if (lastRemoteEditingId != null) clearRemoteEditingDoppelganger(lastRemoteEditingId);
       }
-      if (text && !editingId) {
+      // Only show draft bubble for drafts coming from other devices / clients.
+      if (!isSelf && text && !editingId) {
         showDraftBubble(text);
-      } else if (!text) {
+      } else if (!text || isSelf) {
         hideDraftBubble();
       }
     })
