@@ -474,10 +474,10 @@ header{
   color:var(--acc);
 }
 .logo-in{
-  animation:logoSlideIn 3s var(--anim-ease-smooth) infinite;
+  animation:logoInPulse 3.2s var(--anim-ease-smooth) infinite;
 }
 .logo-out{
-  animation:logoSlideOut 3s var(--anim-ease-smooth) infinite;
+  animation:logoOutPulse 3.2s var(--anim-ease-smooth) infinite;
 }
 
 @keyframes logoPulse{
@@ -486,15 +486,41 @@ header{
   100%{transform:translateY(0);opacity:1;}
 }
 
-@keyframes logoSlideIn{
-  0%,60%{ transform:translateX(0); }
-  75%{ transform:translateX(1px); }
-  90%,100%{ transform:translateX(0); }
+@keyframes logoInPulse{
+  0%,55%{
+    transform:scale(1);
+    opacity:1;
+  }
+  65%{
+    transform:scale(0.95);
+    opacity:0.9;
+  }
+  75%{
+    transform:scale(1.03);
+    opacity:1;
+  }
+  100%{
+    transform:scale(1);
+    opacity:1;
+  }
 }
-@keyframes logoSlideOut{
-  0%,60%{ transform:translateX(0); }
-  75%{ transform:translateX(-1px); }
-  90%,100%{ transform:translateX(0); }
+@keyframes logoOutPulse{
+  0%,25%{
+    transform:scale(1);
+    opacity:1;
+  }
+  35%{
+    transform:scale(0.97);
+    opacity:0.9;
+  }
+  45%{
+    transform:scale(1.04);
+    opacity:1;
+  }
+  100%{
+    transform:scale(1);
+    opacity:1;
+  }
 }
 
 .header-right{
