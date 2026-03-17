@@ -474,49 +474,49 @@ header{
   color:var(--acc);
 }
 .logo-icon{
-  width:26px;
-  height:14px;
+  width:20px;
+  height:10px;
   border-radius:999px;
   border:1px solid var(--line2);
   box-sizing:border-box;
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  gap:4px;
-  margin:0 4px 1px;
+  gap:3px;
+  margin:0 3px 1px;
 }
 .logo-dot{
-  width:4px;
-  height:4px;
+  width:3px;
+  height:3px;
   border-radius:50%;
   background:var(--soft);
-  opacity:0.7;
+  opacity:0.4;
 }
 .logo-dot:nth-child(1){
-  animation:logoDotFlow 2.4s var(--anim-ease-smooth) infinite;
+  animation:logoDotFlow 1.2s linear infinite;
 }
 .logo-dot:nth-child(2){
-  animation:logoDotFlow 2.4s var(--anim-ease-smooth) infinite 0.25s;
+  animation:logoDotFlow 1.2s linear infinite 0.12s;
 }
 .logo-dot:nth-child(3){
-  animation:logoDotFlow 2.4s var(--anim-ease-smooth) infinite 0.5s;
+  animation:logoDotFlow 1.2s linear infinite 0.24s;
 }
 
 @keyframes logoDotFlow{
   0%{
-    transform:translateY(0);
+    transform:translateY(0) scale(0.9);
     background:var(--soft);
-    opacity:0.6;
+    opacity:0.25;
   }
-  40%{
-    transform:translateY(-1px);
+  35%{
+    transform:translateY(-1px) scale(1.15);
     background:var(--acc);
     opacity:1;
   }
-  80%,100%{
-    transform:translateY(0);
+  70%,100%{
+    transform:translateY(0) scale(0.9);
     background:var(--soft);
-    opacity:0.6;
+    opacity:0.2;
   }
 }
 
