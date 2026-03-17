@@ -4960,10 +4960,10 @@ async function sendText(text) {
   sendBtn.disabled = true;
   input.disabled   = true;
 
-  const idsToSave = currentUser && editingObjectIds && editingObjectIds.size
+  const idsToSave = editingObjectIds && editingObjectIds.size
     ? Array.from(editingObjectIds)
-    : (currentUser && editingObjectId != null ? [editingObjectId] : []);
-  if (currentUser && idsToSave.length > 0) {
+    : (editingObjectId != null ? [editingObjectId] : []);
+  if (idsToSave.length > 0) {
     const trimmedPerId = idsToSave.map(id => (editingObjectTextMap && editingObjectTextMap[id] != null) ? String(editingObjectTextMap[id]).trim() : trimmed);
     const befores = [];
     if (idsToSave.length === 1) {
