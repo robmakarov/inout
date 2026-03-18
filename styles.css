@@ -1080,14 +1080,14 @@ header{
   box-sizing:border-box;
   break-inside:avoid;
 }
-/* Default feed: time left, author right on first row; value (text) full-width below */
+/* Default feed: time and author next to each other on first row; value full-width below */
 .obj-content{
   display:grid;
-  grid-template-columns:1fr auto;
+  grid-template-columns:auto auto 1fr;
   grid-template-rows:auto auto;
   flex:1;
   min-width:0;
-  gap:2px;
+  gap:2px 8px;
 }
 .obj-content .obj-time{ grid-column:1; grid-row:1; }
 .obj-content .obj-sender{ grid-column:2; grid-row:1; }
