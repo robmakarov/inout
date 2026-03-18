@@ -207,7 +207,8 @@ header,
   flex-direction:column;
   min-height:0;
   position:relative;
-  padding-left:28px;
+  /* DnD grips are hidden; no left gap needed. */
+  padding-left:0;
   box-sizing:border-box;
 }
 .frame.frame-fill{
