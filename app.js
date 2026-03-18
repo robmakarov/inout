@@ -1160,6 +1160,10 @@ function updateLogBadge() {
   if (!logActionBtn) return;
   const last = actionLog[0];
   const isError = last && last.type === 'error';
+  const label = last
+    ? (last.message ? String(last.message).slice(0, 36) + (last.message.length > 36 ? '…' : '') : (last.action || last.type || 'event'))
+    : 'No events';
+  logActionBtn.textContent = label;
   logActionBtn.classList.remove('error-signal', 'error-signal-faded');
   if (isError) {
     logActionBtn.classList.add('error-signal');
@@ -1757,11 +1761,14 @@ if (umClose) umClose.addEventListener('click', closeUserModal);
 if (umBackdrop) umBackdrop.addEventListener('click', e => {
   if (e.target === umBackdrop) closeUserModal();
 });
-if (logActionBtn) logActionBtn.addEventListener('click', e => {
-  e.stopPropagation();
-  if (logDropupPanel && logDropupPanel.classList.contains('open')) closeLogDropup();
-  else openLogDropup();
-});
+if (logActionBtn) {
+  logActionBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (logDropupPanel && logDropupPanel.classList.contains('open')) closeLogDropup();
+    else openLogDropup();
+  });
+  updateLogBadge();
+}
 document.addEventListener('click', e => {
   if (logDropupPanel && logDropupPanel.classList.contains('open') && !logDropupPanel.contains(e.target) && e.target !== logActionBtn) closeLogDropup();
 });

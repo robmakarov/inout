@@ -1821,16 +1821,9 @@ body.select-mode .obj-select-wrap,
 .input-tools{
   display:flex;
   justify-content:flex-start;
-  align-items:stretch;
+  align-items:center;
   gap:6px;
   margin-top:6px;
-}
-.input-tools .draft-btn{
-  min-height:32px;
-  height:auto;
-  padding:6px 10px;
-  font-size:11px;
-  box-sizing:border-box;
 }
 .log-dropup-wrap{
   margin-left:0;
@@ -1842,40 +1835,36 @@ body.select-mode .obj-select-wrap,
   align-items:stretch;
 }
 #log-action-btn{
-  font-size:11px;
-  padding:6px 10px;
+  font-family:var(--mono);
+  font-size:9px;
+  padding:3px 6px;
+  min-height:0;
   min-width:0;
-  max-width:none;
-  min-height:32px;
-  box-sizing:border-box;
   text-align:left;
-  border:1px solid var(--line2);
+  border:none;
   background:transparent;
-  color:var(--soft);
-  border-radius:4px;
+  color:var(--muted);
+  border-radius:3px;
   cursor:pointer;
-  transition:border-color .2s, box-shadow .2s, background .15s, color .15s;
+  transition:background .15s, color .15s;
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
   width:100%;
+  text-transform:uppercase;
+  letter-spacing:0.06em;
+}
+#log-action-btn:hover{
+  background:var(--line);
+  color:var(--text);
 }
 #log-action-btn.error-signal{
-  border-color:#c55;
   color:#fdd;
+  background:rgba(197,85,85,0.25);
+}
+#log-action-btn.error-signal-faded{
+  color:#e99;
   background:rgba(197,85,85,0.12);
-}
-#log-action-btn.error-signal-faded{
-  border-color:rgba(197,85,85,0.5);
-  background:transparent;
-}
-#log-action-btn.error-signal{
-  border-color:#c55;
-  box-shadow:0 0 0 1px #c55;
-}
-#log-action-btn.error-signal-faded{
-  border-color:rgba(197,85,85,0.5);
-  box-shadow:none;
 }
 #log-dropup-panel{
   display:none;
