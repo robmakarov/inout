@@ -702,6 +702,16 @@ function renderComposerSlots() {
     row.setAttribute('aria-label', 'New object');
     row.dataset.slotIndex = String(index);
     row.dataset.slotId = slot.id;
+    const slotHasContent = (slot.value || '').trim().length > 0;
+    row.draggable = slotHasContent;
+    if (slotHasContent) {
+      row.classList.add('composer-slot-draggable');
+      row.addEventListener('dragstart', function(ev) {
+        ev.dataTransfer.effectAllowed = 'move';
+        ev.dataTransfer.setData('text/plain', (slot.value || '').trim());
+        ev.dataTransfer.setData('application/x-inout-draft', String(index));
+      });
+    }
 
     const targetWrap = document.createElement('div');
     targetWrap.className = 'composer-slot-target';
@@ -784,6 +794,8 @@ function renderComposerSlots() {
       if (sendB) sendB.disabled = !val.trim();
       const clrB = row.querySelector('.clear-input-btn');
       if (clrB) clrB.disabled = !val;
+      row.draggable = !!val.trim();
+      row.classList.toggle('composer-slot-draggable', !!val.trim());
       if (isPrimary) {
         saveInputGlobal();
         updateClearInputBtn();
@@ -831,10 +843,11 @@ function renderComposerSlots() {
   updatePrimaryInputRefs();
 }
 
-function addComposerSlot() {
+function addComposerSlot(opts) {
   loadInputSlots();
-  const ch = typeof currentChannel !== 'undefined' ? currentChannel : 'main';
-  inputSlots.push({ id: 'slot-' + Date.now(), channel: ch, value: '' });
+  const ch = (opts && opts.channel != null) ? opts.channel : (typeof currentChannel !== 'undefined' ? currentChannel : 'main');
+  const text = (opts && opts.text != null) ? String(opts.text) : '';
+  inputSlots.push({ id: 'slot-' + Date.now(), channel: ch, value: text });
   saveInputSlots();
   renderComposerSlots();
   const lastRow = composerSlotsContainer && composerSlotsContainer.querySelector('[data-slot-index="' + (inputSlots.length - 1) + '"]');
@@ -1380,6 +1393,46 @@ function getDraggingRowAndSource() {
   if (fromSecondary) return { row: fromSecondary, feedInner: secondaryFeedInner, channel: secondaryViewChannel };
   return null;
 }
+
+function setupInputAreaDropTarget() {
+  const zone = document.getElementById('input-area');
+  if (!zone) return;
+  zone.addEventListener('dragover', function(e) {
+    const id = e.dataTransfer.getData('application/x-inout-obj-id');
+    if (!id && !e.dataTransfer.types.includes('application/x-inout-obj-id')) return;
+    const src = getDraggingRowAndSource();
+    if (!src) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    zone.classList.add('input-area-drag-over');
+  });
+  zone.addEventListener('dragleave', function(e) {
+    if (!zone.contains(e.relatedTarget)) zone.classList.remove('input-area-drag-over');
+  });
+  zone.addEventListener('drop', function(e) {
+    zone.classList.remove('input-area-drag-over');
+    const id = e.dataTransfer.getData('application/x-inout-obj-id');
+    const numId = Number(id);
+    const text = (e.dataTransfer.getData('text/plain') || '').trim();
+    const src = getDraggingRowAndSource();
+    if (!Number.isFinite(numId) || !text) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragDropHandled = true;
+    const fromChannel = src ? src.channel : currentChannel;
+    addComposerSlot({ text: text, channel: fromChannel });
+    deleteSingleObject(numId, fromChannel);
+    if (src && src.row && src.row.parentNode) {
+      src.row.parentNode.removeChild(src.row);
+      if (src.channel === currentChannel) {
+        currentObjectOrder = currentObjectOrder.filter(x => x !== numId);
+        saveObjectOrderForCurrentView();
+        showEmptyIfNoObjects();
+      }
+    }
+  });
+}
+
 var originContentTop = null;
 var originContentHeight = null;
 var originGhostOverlayEl = null;
@@ -3063,6 +3116,13 @@ var multiviewResizerEl = null;
 function setupSecondaryFeedDnd() {
   if (!secondaryFeedEl || !secondaryViewEl) return;
   function handleSecondaryDragover(e) {
+    if (e.dataTransfer.types.includes('application/x-inout-draft')) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'move';
+      secondaryViewEl.classList.add('view-drop-over');
+      return;
+    }
     const src = getDraggingRowAndSource();
     if (!src) return;
     // Dragging inside this view: run full reorder logic for this feed.
@@ -3091,6 +3151,26 @@ function setupSecondaryFeedDnd() {
     e.stopPropagation();
     dragDropHandled = true;
     secondaryViewEl.classList.remove('view-drop-over');
+    const draftSlotIndex = e.dataTransfer.getData('application/x-inout-draft');
+    if (draftSlotIndex !== '' && draftSlotIndex != null) {
+      const text = (e.dataTransfer.getData('text/plain') || '').trim();
+      const slotIndex = parseInt(draftSlotIndex, 10);
+      if (text && Number.isFinite(slotIndex) && inputSlots[slotIndex] && secondaryViewChannel) {
+        sendText(text, { channel: secondaryViewChannel });
+        inputSlots[slotIndex].value = '';
+        saveInputSlots();
+        const slotRow = composerSlotsContainer && composerSlotsContainer.querySelector('[data-slot-index="' + slotIndex + '"]');
+        if (slotRow) {
+          const ta = slotRow.querySelector('textarea');
+          if (ta) ta.value = '';
+          slotRow.draggable = false;
+          slotRow.classList.remove('composer-slot-draggable');
+          const sendB = slotRow.querySelector('.composer-send');
+          if (sendB) sendB.disabled = true;
+        }
+      }
+      return;
+    }
     const id = e.dataTransfer.getData('application/x-inout-obj-id') || e.dataTransfer.getData('text/plain');
     const numId = Number(id);
     if (!Number.isFinite(numId)) return;
@@ -5624,6 +5704,7 @@ input.addEventListener('keydown', e => {
 if (composerSlotsContainer) {
   renderComposerSlots();
 }
+setupInputAreaDropTarget();
 attachInputListeners();
 if (!input && typeof document !== 'undefined' && document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', function() {
@@ -5999,11 +6080,12 @@ if (moveSelectedBtn) {
   });
 }
 
-async function deleteSingleObject(id) {
+async function deleteSingleObject(id, fromChannel) {
   if (!id || !sb || !sb.rpc) return;
+  const ch = fromChannel != null ? fromChannel : currentChannel;
   try {
     const payload = {
-      p_channel: currentChannel,
+      p_channel: ch,
       p_entry_id: id,
       p_action: 'delete',
       p_payload: {},
@@ -6562,6 +6644,11 @@ function onFeedScrollDuringDrag() {
 if (feedEl) {
 feedEl.addEventListener('scroll', onFeedScrollDuringDrag, { passive: true });
 feedEl.addEventListener('dragover', e => {
+  if (e.dataTransfer.types.includes('application/x-inout-draft')) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    return;
+  }
   const dragging = feedInner ? feedInner.querySelector('.obj.dragging') : null;
   const draggingFromSecondary = secondaryFeedInner && secondaryFeedInner.querySelector('.obj.dragging');
   if (!feedInner || (!dragging && !draggingFromSecondary && !originGhostsActive)) return;
@@ -6570,6 +6657,29 @@ feedEl.addEventListener('dragover', e => {
   if (dragging || originGhostsActive) processFeedDragover(e);
 });
 feedEl.addEventListener('drop', e => {
+  const draftSlotIndex = e.dataTransfer.getData('application/x-inout-draft');
+  if (draftSlotIndex !== '' && draftSlotIndex != null) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDropHandled = true;
+    const text = (e.dataTransfer.getData('text/plain') || '').trim();
+    const slotIndex = parseInt(draftSlotIndex, 10);
+    if (text && Number.isFinite(slotIndex) && inputSlots[slotIndex]) {
+      sendText(text, { channel: currentChannel });
+      inputSlots[slotIndex].value = '';
+      saveInputSlots();
+      const slotRow = composerSlotsContainer && composerSlotsContainer.querySelector('[data-slot-index="' + slotIndex + '"]');
+      if (slotRow) {
+        const ta = slotRow.querySelector('textarea');
+        if (ta) ta.value = '';
+        slotRow.draggable = false;
+        slotRow.classList.remove('composer-slot-draggable');
+        const sendB = slotRow.querySelector('.composer-send');
+        if (sendB) sendB.disabled = true;
+      }
+    }
+    return;
+  }
   const fromSecondary = secondaryFeedInner && secondaryFeedInner.querySelector('.obj.dragging');
   if (fromSecondary && secondaryViewChannel && currentChannel !== secondaryViewChannel) {
     e.preventDefault();

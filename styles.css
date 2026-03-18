@@ -1623,6 +1623,19 @@ body.select-mode .obj-select-wrap,
 .composer-slot-input::placeholder{color:var(--dim)}
 .composer-slot-input:focus{outline:none}
 
+#input-area.input-area-drag-over .input-wrap,
+#input-area.input-area-drag-over .composer-slots-container{
+  outline:2px dashed var(--acc);
+  outline-offset:4px;
+  border-radius:14px;
+}
+.composer-slot-draggable{
+  cursor:grab;
+}
+.composer-slot-draggable:active{
+  cursor:grabbing;
+}
+
 /* Send: part of composer bar, accent when enabled */
 .composer-send{
   flex-shrink:0;
