@@ -78,12 +78,36 @@ body{
   touch-action:manipulation;
 }
 
-/* hide scrollbars, keep scroll behavior */
-#feed{
-  scrollbar-width:none;
-  -ms-overflow-style:none;
+/* feed scrollbars: custom, only visible on hover */
+/* Primary feed (#feed) and cloned feeds (.multiview-views .view .feed) share the same look. */
+#feed,
+.multiview-views .view .feed{
+  scrollbar-width:none;          /* Firefox: hide by default */
+  -ms-overflow-style:none;       /* IE/Edge legacy */
 }
-#feed::-webkit-scrollbar{display:none}
+#feed:hover,
+.multiview-views .view .feed:hover{
+  scrollbar-width:thin;          /* Firefox: show thin bar on hover */
+  scrollbar-color:var(--acc) transparent;
+}
+#feed::-webkit-scrollbar,
+.multiview-views .view .feed::-webkit-scrollbar{
+  width:0;
+  height:0;
+}
+#feed:hover::-webkit-scrollbar,
+.multiview-views .view .feed:hover::-webkit-scrollbar{
+  width:6px;
+}
+#feed:hover::-webkit-scrollbar-track,
+.multiview-views .view .feed:hover::-webkit-scrollbar-track{
+  background:transparent;
+}
+#feed:hover::-webkit-scrollbar-thumb,
+.multiview-views .view .feed:hover::-webkit-scrollbar-thumb{
+  background:var(--acc);
+  border-radius:4px;
+}
 
 /* Header and Navigation bar are outside multiview; nav controls which view is shown */
 header,
@@ -129,18 +153,15 @@ header,
 }
 .multiview-resizer:hover,
 .multiview-resizer:active{
-  background:var(--acc);
-}
-.multiview-resizer::after{
-  content:'';
-  position:absolute;
-  left:50%;
-  top:0;
-  bottom:0;
-  width:2px;
-  transform:translateX(-50%);
-  background:var(--bg);
-  opacity:0.6;
+.multiview-views .view .feed{
+  position:relative;
+  z-index:1;
+  flex:1;
+  min-height:0;
+  padding:0;
+  overflow-y:auto;
+  overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
 }
 .multiview-resizer:hover::after,
 .multiview-resizer:active::after{
@@ -1983,11 +2004,7 @@ body.select-mode .obj-select-wrap,
   color:var(--soft);
   font-family:var(--mono);font-size:11px;
   padding:6px 12px;
-  cursor:pointer;border-radius:3px;
-  opacity:0;pointer-events:none;
-  transition:opacity .2s;
-  z-index:50;
-  letter-spacing:0.04em;
+  /* feed scrollbars on mobile: use global custom hover style above */
 }
 #scroll-btn.visible{opacity:1;pointer-events:auto}
 #scroll-btn:hover{background:var(--line);color:var(--text)}
