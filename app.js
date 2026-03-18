@@ -151,6 +151,7 @@ const moveTargetSelect = document.getElementById('move-target');
 const exportTabBtn   = document.getElementById('export-tab');
 const fieldTimeChk   = document.getElementById('field-time');
 const fieldAuthorChk = document.getElementById('field-author');
+const fieldLabelsChk = document.getElementById('field-labels');
 const viewVisualSelect = document.getElementById('view-visual');
 const viewToggleBtn  = document.getElementById('view-toggle');
 const viewMenu       = document.getElementById('view-menu');
@@ -1065,7 +1066,7 @@ var editTypingUndoStack = [];
 var editTypingCommitTimer = null;
 var TYPING_COMMIT_MS = 1800;
 var MAX_TYPING_UNDO = 20;
-let fieldPrefs = { showTime:true, showAuthor:true, viewMode:'feed' };
+let fieldPrefs = { showTime:true, showAuthor:true, showLabels:true, viewMode:'feed' };
 let undoStack = [];
 let actionLog = [];
 let actionLogSub = null;
@@ -1327,6 +1328,7 @@ async function undoLastAction() {
       fieldPrefs = {
         showTime: !!action.before.showTime,
         showAuthor: !!action.before.showAuthor,
+        showLabels: typeof action.before.showLabels === 'boolean' ? action.before.showLabels : true,
         viewMode: (action.before.viewMode === 'table' || action.before.viewMode === 'feed') ? action.before.viewMode : 'feed',
       };
       saveFieldPrefsForCurrentChannel();
@@ -2413,6 +2415,7 @@ function subscribeViewRealtime() {
           fieldPrefs = {
             showTime: typeof cfg.showTime === 'boolean' ? cfg.showTime : defTime,
             showAuthor: typeof cfg.showAuthor === 'boolean' ? cfg.showAuthor : defAuthor,
+            showLabels: typeof cfg.showLabels === 'boolean' ? cfg.showLabels : true,
             viewMode: (cfg.viewMode === 'table' || cfg.viewMode === 'feed') ? cfg.viewMode : 'feed',
           };
           saveFieldPrefsForCurrentChannel();
@@ -3938,6 +3941,7 @@ function updateClearInputBtn() {
 function applyFieldPrefsUI() {
   if (fieldTimeChk) fieldTimeChk.checked = !!fieldPrefs.showTime;
   if (fieldAuthorChk) fieldAuthorChk.checked = !!fieldPrefs.showAuthor;
+  if (fieldLabelsChk) fieldLabelsChk.checked = !!fieldPrefs.showLabels;
   if (viewVisualSelect) viewVisualSelect.value = (fieldPrefs.viewMode === 'table' ? 'table' : 'feed');
 }
 
@@ -3958,12 +3962,13 @@ async function loadFieldPrefsForCurrentChannel() {
         fieldPrefs = {
           showTime: typeof cfg.showTime === 'boolean' ? cfg.showTime : defTime,
           showAuthor: typeof cfg.showAuthor === 'boolean' ? cfg.showAuthor : defAuthor,
+          showLabels: typeof cfg.showLabels === 'boolean' ? cfg.showLabels : true,
           viewMode: (cfg.viewMode === 'table' || cfg.viewMode === 'feed') ? cfg.viewMode : 'feed',
         };
         try {
           const raw = localStorage.getItem(FIELD_PREFS_KEY);
           const map = raw ? JSON.parse(raw) : {};
-          map[currentChannel] = { showTime: !!fieldPrefs.showTime, showAuthor: !!fieldPrefs.showAuthor, viewMode: fieldPrefs.viewMode };
+          map[currentChannel] = { showTime: !!fieldPrefs.showTime, showAuthor: !!fieldPrefs.showAuthor, showLabels: !!fieldPrefs.showLabels, viewMode: fieldPrefs.viewMode };
           localStorage.setItem(FIELD_PREFS_KEY, JSON.stringify(map));
         } catch (_) {}
         applyFieldPrefsUI();
@@ -3979,10 +3984,11 @@ async function loadFieldPrefsForCurrentChannel() {
     fieldPrefs = {
       showTime: typeof prefs.showTime === 'boolean' ? prefs.showTime : defTime,
       showAuthor: typeof prefs.showAuthor === 'boolean' ? prefs.showAuthor : defAuthor,
+      showLabels: typeof prefs.showLabels === 'boolean' ? prefs.showLabels : true,
       viewMode: (prefs.viewMode === 'table' || prefs.viewMode === 'feed') ? prefs.viewMode : 'feed',
     };
   } catch (_) {
-    fieldPrefs = { showTime: true, showAuthor: true, viewMode: 'feed' };
+    fieldPrefs = { showTime: true, showAuthor: true, showLabels: true, viewMode: 'feed' };
   }
   applyFieldPrefsUI();
   applyFieldPrefsToObjects();
@@ -3995,6 +4001,7 @@ function saveFieldPrefsForCurrentChannel() {
     map[currentChannel] = {
       showTime: !!fieldPrefs.showTime,
       showAuthor: !!fieldPrefs.showAuthor,
+      showLabels: !!fieldPrefs.showLabels,
       viewMode: fieldPrefs.viewMode === 'table' ? 'table' : 'feed',
     };
     localStorage.setItem(FIELD_PREFS_KEY, JSON.stringify(map));
@@ -4012,6 +4019,9 @@ function applyFieldPrefsToObjects() {
     if (timeEl) timeEl.style.setProperty('display', fieldPrefs.showTime ? 'block' : 'none', 'important');
     if (senderEl) senderEl.style.setProperty('display', fieldPrefs.showAuthor ? 'block' : 'none', 'important');
   });
+  const labelsOff = !fieldPrefs.showLabels;
+  feedInner.classList.toggle('obj-labels-off', labelsOff);
+  if (secondaryFeedInner) secondaryFeedInner.classList.toggle('obj-labels-off', labelsOff);
   applyFieldPrefsUI();
 }
 
@@ -5141,6 +5151,7 @@ async function loadObjectOrderForCurrentChannel() {
       fieldPrefs = {
         showTime: typeof cfg.showTime === 'boolean' ? cfg.showTime : defTime,
         showAuthor: typeof cfg.showAuthor === 'boolean' ? cfg.showAuthor : defAuthor,
+        showLabels: typeof cfg.showLabels === 'boolean' ? cfg.showLabels : true,
         viewMode: (cfg.viewMode === 'table' || cfg.viewMode === 'feed') ? cfg.viewMode : 'feed',
       };
       saveFieldPrefsForCurrentChannel();
@@ -5192,6 +5203,7 @@ async function saveObjectOrderForCurrentView() {
         showAuthor: fieldPrefs && typeof fieldPrefs.showAuthor === 'boolean'
           ? fieldPrefs.showAuthor
           : (currentView === 'main' ? false : true),
+        showLabels: fieldPrefs && typeof fieldPrefs.showLabels === 'boolean' ? fieldPrefs.showLabels : true,
         viewMode: fieldPrefs && (fieldPrefs.viewMode === 'table' || fieldPrefs.viewMode === 'feed')
           ? fieldPrefs.viewMode
           : 'feed',
@@ -6437,7 +6449,7 @@ if (viewVisualSelect) {
   viewVisualSelect.addEventListener('change', () => {
     const viewMode = viewVisualSelect.value === 'table' ? 'table' : 'feed';
     if (fieldPrefs.viewMode === viewMode) return;
-    pushUndo({ type: 'view', channel: currentChannel, before: { showTime: fieldPrefs.showTime, showAuthor: fieldPrefs.showAuthor, viewMode: fieldPrefs.viewMode } });
+    pushUndo({ type: 'view', channel: currentChannel, before: { showTime: fieldPrefs.showTime, showAuthor: fieldPrefs.showAuthor, showLabels: fieldPrefs.showLabels, viewMode: fieldPrefs.viewMode } });
     fieldPrefs.viewMode = viewMode;
     logAction('view', { viewMode });
     saveFieldPrefsForCurrentChannel();
@@ -6452,7 +6464,7 @@ if (viewVisualSelect) {
 
 if (fieldTimeChk) {
   fieldTimeChk.addEventListener('change', () => {
-    pushUndo({ type: 'view', channel: currentChannel, before: { showTime: fieldPrefs.showTime, showAuthor: fieldPrefs.showAuthor, viewMode: fieldPrefs.viewMode } });
+    pushUndo({ type: 'view', channel: currentChannel, before: { showTime: fieldPrefs.showTime, showAuthor: fieldPrefs.showAuthor, showLabels: fieldPrefs.showLabels, viewMode: fieldPrefs.viewMode } });
     fieldPrefs.showTime = !!fieldTimeChk.checked;
     logAction('view', { showTime: !!fieldTimeChk.checked, showAuthor: fieldPrefs.showAuthor });
     saveFieldPrefsForCurrentChannel();
@@ -6462,14 +6474,19 @@ if (fieldTimeChk) {
 
 if (fieldAuthorChk) {
   fieldAuthorChk.addEventListener('change', () => {
-    // In main feed authors are never shown; keep UI in sync with that rule.
-    if (currentChannel === 'main' || fieldAuthorChk.disabled) {
-      fieldAuthorChk.checked = false;
-      return;
-    }
-    pushUndo({ type: 'view', channel: currentChannel, before: { showTime: fieldPrefs.showTime, showAuthor: fieldPrefs.showAuthor, viewMode: fieldPrefs.viewMode } });
+    pushUndo({ type: 'view', channel: currentChannel, before: { showTime: fieldPrefs.showTime, showAuthor: fieldPrefs.showAuthor, showLabels: fieldPrefs.showLabels, viewMode: fieldPrefs.viewMode } });
     fieldPrefs.showAuthor = !!fieldAuthorChk.checked;
     logAction('view', { showTime: fieldPrefs.showTime, showAuthor: !!fieldAuthorChk.checked });
+    saveFieldPrefsForCurrentChannel();
+    applyFieldPrefsToObjects();
+  });
+}
+
+if (fieldLabelsChk) {
+  fieldLabelsChk.addEventListener('change', () => {
+    pushUndo({ type: 'view', channel: currentChannel, before: { showTime: fieldPrefs.showTime, showAuthor: fieldPrefs.showAuthor, showLabels: fieldPrefs.showLabels, viewMode: fieldPrefs.viewMode } });
+    fieldPrefs.showLabels = !!fieldLabelsChk.checked;
+    logAction('view', { showLabels: !!fieldLabelsChk.checked });
     saveFieldPrefsForCurrentChannel();
     applyFieldPrefsToObjects();
   });
