@@ -1012,6 +1012,15 @@ header{
   letter-spacing:0.05em;
   color:var(--muted);
   margin-bottom:2px;
+  opacity:0;
+  transform:translateY(6px);
+  transition:opacity .2s ease-out, transform .2s ease-out;
+}
+.feed-inner:not(.view-table) .obj:hover .obj-time::before,
+.feed-inner:not(.view-table) .obj:hover .obj-sender::before,
+.feed-inner:not(.view-table) .obj:hover .obj-text::before{
+  opacity:1;
+  transform:translateY(0);
 }
 .feed-inner:not(.view-table) .obj .obj-time::before{ content:'Time'; }
 .feed-inner:not(.view-table) .obj .obj-sender::before{ content:'Author'; }
