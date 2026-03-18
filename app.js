@@ -2508,12 +2508,35 @@ function setupInputStateRealtime() {
             const raw = (row.text != null ? String(row.text) : '') || '[]';
             const slots = JSON.parse(raw);
             if (Array.isArray(slots) && slots.length > 0) {
+              let hadPrimaryFocus = false;
+              let primaryValue = '';
+              let primaryStart = 0;
+              let primaryEnd = 0;
+              try {
+                hadPrimaryFocus = typeof document !== 'undefined' && input && document.activeElement === input;
+                if (hadPrimaryFocus) {
+                  primaryValue = input.value || '';
+                  primaryStart = input.selectionStart != null ? input.selectionStart : primaryValue.length;
+                  primaryEnd = input.selectionEnd != null ? input.selectionEnd : primaryStart;
+                }
+              } catch (_) {}
               inputSlots = slots;
+              if (hadPrimaryFocus && inputSlots.length > 0) {
+                inputSlots[0] = Object.assign({}, inputSlots[0], { value: primaryValue });
+              }
               try { localStorage.setItem(INPUT_SLOTS_KEY, JSON.stringify(inputSlots)); } catch (_) {}
               if (composerSlotsContainer && typeof renderComposerSlots === 'function') {
                 renderComposerSlots();
                 updatePrimaryInputRefs();
                 if (typeof attachInputListeners === 'function') attachInputListeners();
+                if (hadPrimaryFocus && input) {
+                  input.focus();
+                  input.value = primaryValue;
+                  input.setSelectionRange(primaryStart, primaryEnd);
+                  if (typeof autoResize === 'function') autoResize();
+                  if (sendBtn) sendBtn.disabled = !primaryValue.trim();
+                  if (typeof updateClearInputBtn === 'function') updateClearInputBtn();
+                }
               }
             }
           } catch (_) {}
@@ -2521,31 +2544,18 @@ function setupInputStateRealtime() {
         }
         if (row.channel !== (currentChannel || 'main')) return;
         if (!input) return;
-        // Apply remote text but preserve focus/selection if the user is typing here.
-        let wasActive = false;
-        let selStart = null;
-        let selEnd = null;
+        // If this window is focused and the main input is currently active, skip
+        // applying remote text so we don't fight with local typing.
         try {
-          if (typeof document !== 'undefined' && document.activeElement === input) {
-            wasActive = true;
-            selStart = input.selectionStart;
-            selEnd = input.selectionEnd;
-          }
+          const isWindowFocused = typeof document !== 'undefined' && typeof document.hasFocus === 'function' ? document.hasFocus() : true;
+          const isInputActive = typeof document !== 'undefined' && document.activeElement === input;
+          if (isWindowFocused && isInputActive) return;
         } catch (_) {}
         const text = (row.text != null ? String(row.text) : '') || '';
         input.value = text;
         if (typeof autoResize === 'function') autoResize();
         if (sendBtn) sendBtn.disabled = !text.trim();
         if (typeof updateClearInputBtn === 'function') updateClearInputBtn();
-        if (wasActive) {
-          try {
-            const len = input.value.length;
-            const start = selStart != null ? Math.min(selStart, len) : len;
-            const end = selEnd != null ? Math.min(selEnd, len) : start;
-            input.focus();
-            input.setSelectionRange(start, end);
-          } catch (_) {}
-        }
         saveInputGlobal();
       })
       .subscribe();
