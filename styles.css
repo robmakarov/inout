@@ -1025,11 +1025,16 @@ header{
   display:block;
 }
 .feed-inner:not(.view-table) .obj .obj-time,
-.feed-inner:not(.view-table) .obj .obj-sender,
-.feed-inner:not(.view-table) .obj .obj-text{
+.feed-inner:not(.view-table) .obj .obj-sender{
   font-size:10px;
   color:var(--dim);
   font-weight:500;
+}
+.feed-inner:not(.view-table) .obj .obj-text{
+  font-size:15px;
+  color:var(--text);
+  font-weight:400;
+  line-height:1.5;
 }
 
 /* DnD spirit: table visual — wrap cloned row(s) in table so they render as table row(s). */
