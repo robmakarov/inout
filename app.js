@@ -678,6 +678,7 @@ views.push({
 
 /** Multiple composer slots: each has target (channel) and value. Primary slot (index 0) keeps id="object-input" / id="send-btn" for existing code. */
 let inputSlots = [];
+let primarySlotAutoTarget = true;
 
 function loadInputSlots() {
   if (inputSlots.length > 0) return;
@@ -687,11 +688,15 @@ function loadInputSlots() {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
         inputSlots = parsed.map(normalizeSlot).filter(Boolean);
-        if (inputSlots.length > 0) return;
+        if (inputSlots.length > 0) {
+          primarySlotAutoTarget = true;
+          return;
+        }
       }
     }
   } catch (_) {}
   inputSlots = [{ id: 'slot-0', channel: (typeof currentChannel !== 'undefined' ? currentChannel : 'main'), value: '' }];
+  primarySlotAutoTarget = true;
 }
 function normalizeSlot(s) {
   if (!s || typeof s !== 'object') return null;
@@ -822,6 +827,7 @@ function renderComposerSlots() {
       const ch = this.value;
       inputSlots[index].channel = ch;
       saveInputSlots();
+      if (index === 0) primarySlotAutoTarget = false;
       const lbl = inputWrap.querySelector('.composer-slot-label');
       if (lbl) lbl.textContent = 'To: ' + (ch === 'main' ? 'Feed' : ch);
       textarea.setAttribute('aria-label', 'Object value for ' + (ch === 'main' ? 'Feed' : ch));
@@ -5401,6 +5407,15 @@ async function switchChannel(ch) {
   }
   currentChannel = ch;
   currentView = ch;
+  if (primarySlotAutoTarget && inputSlots && inputSlots.length > 0) {
+    inputSlots[0].channel = ch;
+    try { localStorage.setItem(INPUT_SLOTS_KEY, JSON.stringify(inputSlots)); } catch (_) {}
+    if (typeof renderComposerSlots === 'function' && composerSlotsContainer) {
+      renderComposerSlots();
+      updatePrimaryInputRefs();
+      if (typeof attachInputListeners === 'function') attachInputListeners();
+    }
+  }
   // keep main view's View name in sync
   if (views[0]) views[0].channel = ch;
   try {
