@@ -291,7 +291,6 @@ header{
   justify-content:space-between;
   flex-shrink:0;
   box-sizing:border-box;
-  overflow:hidden;
 }
 
 /* ── TOP BAR (manage): in flow at top of multiview frame ── */
@@ -501,11 +500,14 @@ header{
   flex-shrink:0;
   margin-left:0;
   background:transparent;
-  overflow:hidden;
+  visibility:visible;
+  opacity:1;
 }
 .logo-lottie{
   width:20px;
   height:28px;
+  min-width:20px;
+  min-height:28px;
   position:relative;
   z-index:0;
   flex-shrink:0;
@@ -535,6 +537,9 @@ header{
   transform:translateY(-50%);
   pointer-events:none;
   z-index:1;
+  visibility:visible;
+  opacity:1;
+  color:inherit;
 }
 .logo.logo-lottie-loaded .logo-fallback{
   display:none;
@@ -940,7 +945,7 @@ header{
 
 .feed-inner{
   position:relative;
-  padding:16px 0 8px;
+  padding:16px;
   display:flex;
   flex-direction:column;
   justify-content:center;
@@ -1080,7 +1085,7 @@ header{
   flex-direction:row;
   align-items:flex-start;
   gap:6px;
-  padding:4px 20px;
+  padding:12px;
   border-bottom:1px solid var(--line);
   transition:background .1s, transform .1s ease-out;
   position:relative;
@@ -2016,9 +2021,9 @@ body.select-mode .obj-select-wrap,
     -ms-overflow-style:none;
   }
   #feed::-webkit-scrollbar{display:none}
-  /* header always fixed; never moved by keyboard or scroll; no left padding so logo sits at edge */
+  /* header always fixed; never moved by keyboard or scroll */
   header{
-    padding:0 14px 0 0;
+    padding:0 14px 0 8px;
     z-index:120;
   }
   /* manage bar stays in normal flow above the view on mobile; no extra padding needed */
