@@ -486,7 +486,7 @@ header{
 
 .logo{
   font-family:var(--sans);
-  font-size:20px;
+  font-size:18px;
   font-weight:800;
   letter-spacing:0.02em;
   color:#fff;
@@ -495,7 +495,8 @@ header{
   display:flex;
   align-items:center;
   position:relative;
-  min-width:20px;
+  min-width:72px;
+  width:72px;
   min-height:28px;
   flex-shrink:0;
   margin:0;
@@ -506,9 +507,9 @@ header{
   overflow:hidden;
 }
 .logo-lottie{
-  width:20px;
+  width:72px;
   height:28px;
-  min-width:20px;
+  min-width:72px;
   min-height:28px;
   position:relative;
   z-index:0;
@@ -1003,27 +1004,23 @@ header{
 .feed-inner.view-table .obj:not(.obj-header) .obj-actions{ width:1%; }
 
 /* Object component: property text fields. Feed view only — switchable captions above each value. */
-/* Default: reserve same space for label area so toggling labels off doesn't make objects jump */
+/* Default: no labels, no reserved space (compact when labels off) */
 .feed-inner:not(.view-table) .obj .obj-time::before,
 .feed-inner:not(.view-table) .obj .obj-sender::before,
 .feed-inner:not(.view-table) .obj .obj-text::before{
-  display:block;
-  content:'';
-  min-height:14px;
-  margin-bottom:2px;
-  visibility:hidden;
-  overflow:hidden;
+  content:none;
+  display:none;
 }
-/* When labels on: show real labels (visible on hover); when off JS removes .obj-labels-on but space stays reserved */
+/* When labels on: show labels (visible on hover) */
 .feed-inner:not(.view-table).obj-labels-on .obj .obj-time::before,
 .feed-inner:not(.view-table).obj-labels-on .obj .obj-sender::before,
 .feed-inner:not(.view-table).obj-labels-on .obj .obj-text::before{
-  min-height:0;
-  visibility:visible;
+  display:block;
   font-size:10px;
   text-transform:uppercase;
   letter-spacing:0.05em;
   color:var(--muted);
+  margin-bottom:2px;
   opacity:0;
   transform:translateY(6px);
   transition:opacity .2s ease-out, transform .2s ease-out;
