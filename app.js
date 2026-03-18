@@ -651,7 +651,9 @@ let latestClipboardText = '';
 let inputStateSub = null;
 let inputSaveToDbTimer = null;
 let inputSlotsSaveToDbTimer = null;
-const INPUT_SAVE_DEBOUNCE_MS = 200;
+const INPUT_SAVE_DEBOUNCE_MS = 80;
+let lastPrimaryInputEditAt = 0;
+let lastSlotsEditAt = 0;
 
 // Register initial view from static DOM once globals (including currentView) are initialized.
 views.push({
@@ -804,6 +806,7 @@ function renderComposerSlots() {
       textarea.setAttribute('aria-label', 'Object value for ' + (ch === 'main' ? 'Feed' : ch));
     });
     textarea.addEventListener('input', function() {
+      lastSlotsEditAt = Date.now();
       const val = this.value || '';
       inputSlots[index].value = val;
       saveInputSlots();
@@ -2459,8 +2462,8 @@ function setSyncInputPref(on) {
   // Sync is always on; ignore UI toggles.
 }
 
-/** Merge local and remote text so both typists' input is preserved (same Doppelganger). */
-function mergeInputText(local, remote) {
+/** Merge local and remote text; both typists preserved. putRemoteSuffixLast: true = local then remote, false = remote then local (deterministic order across devices). */
+function mergeInputText(local, remote, putRemoteSuffixLast) {
   if (local == null) local = '';
   if (remote == null) remote = '';
   local = String(local);
@@ -2470,19 +2473,21 @@ function mergeInputText(local, remote) {
   if (local.indexOf(remote) === 0) return local;
   var i = 0;
   while (i < local.length && i < remote.length && local[i] === remote[i]) i++;
-  return local.slice(0, i) + local.slice(i) + remote.slice(i);
+  var pre = local.slice(0, i);
+  var localSuf = local.slice(i);
+  var remoteSuf = remote.slice(i);
+  if (putRemoteSuffixLast !== false) return pre + localSuf + remoteSuf;
+  return pre + remoteSuf + localSuf;
 }
 
 async function saveInputToDb() {
   inputSaveToDbTimer = null;
   if (!currentUser || !sb || !sb.from || !getSyncInputPref()) return;
-  const ch = currentChannel || 'main';
-  const text = input ? (input.value || '') : '';
   try {
     await sb.from(USER_INPUT_STATE_TABLE).upsert({
       user_id: currentUser.id,
-      channel: ch,
-      text: text,
+      channel: currentChannel || 'main',
+      text: input ? (input.value || '') : '',
       updated_at: new Date().toISOString(),
       device_id: myId
     }, { onConflict: 'user_id,channel' });
@@ -2551,12 +2556,14 @@ function setupInputStateRealtime() {
                 inputSlots = slots.map(function(s) { return Object.assign({}, s); });
                 const mobile = isMobileOrTouchDevice();
                 const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
+                const remoteAt = row.updated_at ? new Date(row.updated_at).getTime() : 0;
+                const putRemoteLast = remoteAt > lastSlotsEditAt || (remoteAt === lastSlotsEditAt && (row.device_id || '') > (myId || ''));
                 inputSlots.forEach(function(slot, i) {
                   const ta = (i === 0 && input) ? input : composerSlotsContainer.querySelector('.composer-slot[data-slot-index="' + i + '"] textarea');
                   if (!ta) return;
                   if (mobile && ta === activeEl) return;
                   const remoteVal = slot.value != null ? String(slot.value) : '';
-                  const merged = mergeInputText(ta.value, remoteVal);
+                  const merged = mergeInputText(ta.value, remoteVal, putRemoteLast);
                   if (merged === ta.value) return;
                   ta.value = merged;
                   inputSlots[i].value = merged;
@@ -2649,7 +2656,9 @@ function setupInputStateRealtime() {
         if (row.channel !== (currentChannel || 'main')) return;
         if (!input) return;
         const remoteText = (row.text != null ? String(row.text) : '') || '';
-        const merged = mergeInputText(input.value, remoteText);
+        const remoteAt = row.updated_at ? new Date(row.updated_at).getTime() : 0;
+        const putRemoteLast = remoteAt > lastPrimaryInputEditAt || (remoteAt === lastPrimaryInputEditAt && (row.device_id || '') > (myId || ''));
+        const merged = mergeInputText(input.value, remoteText, putRemoteLast);
         if (merged !== input.value) {
           input.value = merged;
           if (typeof autoResize === 'function') autoResize();
@@ -5877,6 +5886,7 @@ function attachInputListeners() {
   if (!input) return;
   _inputListenersAttached = true;
 input.addEventListener('input', () => {
+  lastPrimaryInputEditAt = Date.now();
   autoResize();
     if (sendBtn) sendBtn.disabled = !input.value.trim();
   saveInputGlobal();
