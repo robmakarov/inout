@@ -1004,14 +1004,14 @@ header{
 .feed-inner.view-table .obj:not(.obj-header) .obj-actions{ width:1%; }
 
 /* Object component: property text fields. Feed view only — switchable captions above each value. */
-/* Labels ON: labels always visible above values, no hover animation */
+/* Labels ON: labels always visible above values, 20px gap to values below */
 .feed-inner:not(.view-table):not(.obj-labels-off) .obj .obj-time::before,
 .feed-inner:not(.view-table):not(.obj-labels-off) .obj .obj-sender::before,
 .feed-inner:not(.view-table):not(.obj-labels-off) .obj .obj-text::before{
   display:block;
   font-size:10px;
   line-height:12px;
-  margin-bottom:2px;
+  margin-bottom:20px;
   text-transform:uppercase;
   letter-spacing:0.05em;
   color:var(--muted);
@@ -1039,9 +1039,12 @@ header{
   transition:opacity .2s ease-out, transform .2s ease-out;
   pointer-events:none;
 }
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-time{ position:relative; }
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-sender{ position:relative; }
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-text{ position:relative; }
+.feed-inner:not(.view-table).obj-labels-off .obj .obj-time,
+.feed-inner:not(.view-table).obj-labels-off .obj .obj-sender,
+.feed-inner:not(.view-table).obj-labels-off .obj .obj-text{
+  position:relative;
+  transition:padding-top .2s ease-out;
+}
 .feed-inner:not(.view-table).obj-labels-off .obj .obj-time::before{ content:'Time'; left:0; top:0; }
 .feed-inner:not(.view-table).obj-labels-off .obj .obj-sender::before{ content:'Author'; right:0; top:0; left:auto; }
 .feed-inner:not(.view-table).obj-labels-off .obj .obj-text::before{ content:'Value'; left:0; top:0; }
@@ -1051,17 +1054,23 @@ header{
   opacity:1;
   transform:translateY(0);
 }
+/* Same 20px gap when labels show on hover: reserve space so value sits 20px below label */
+.feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-time,
+.feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-sender,
+.feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-text{
+  padding-top:32px; /* label line-height ~12px + 20px gap */
+}
 
-/* When object hovered: values animate from left, moving right into place */
-.feed-inner:not(.view-table) .obj .obj-time,
-.feed-inner:not(.view-table) .obj .obj-sender,
-.feed-inner:not(.view-table) .obj .obj-text{
-  transition:transform .22s ease-out;
+/* When object hovered: values animate from left, moving right into place (ensure visible: overflow + transition) */
+.feed-inner:not(.view-table) .obj .obj-content{
+  overflow:visible;
 }
 .feed-inner:not(.view-table) .obj .obj-time,
 .feed-inner:not(.view-table) .obj .obj-sender,
 .feed-inner:not(.view-table) .obj .obj-text{
-  transform:translateX(-12px);
+  transform:translateX(-20px);
+  transition:transform .25s ease-out;
+  overflow:visible;
 }
 .feed-inner:not(.view-table) .obj:hover .obj-time,
 .feed-inner:not(.view-table) .obj:hover .obj-sender,
@@ -1144,12 +1153,15 @@ header{
   gap:6px;
   padding:12px;
   border-bottom:1px solid var(--line);
-  transition:background .1s, transform .1s ease-out;
+  transition:background .1s ease-out;
   position:relative;
-  contain:layout style;
   width:100%;
   box-sizing:border-box;
   break-inside:avoid;
+  overflow:visible;
+}
+.feed-inner:not(.view-table) .obj{
+  contain:none;
 }
 /* Default feed: time and author next to each other on first row; value full-width below */
 .obj-content{
