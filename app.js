@@ -2494,10 +2494,11 @@ async function saveInputToDb() {
   inputSaveToDbTimer = null;
   if (!currentUser || !sb || !sb.from || !getSyncInputPref()) return;
   try {
+    var text = input ? (input.value || '') : '';
     await sb.from(USER_INPUT_STATE_TABLE).upsert({
       user_id: currentUser.id,
       channel: currentChannel || 'main',
-      text: input ? (input.value || '') : '',
+      text: capSyncText(text),
       updated_at: new Date().toISOString(),
       device_id: myId
     }, { onConflict: 'user_id,channel' });
@@ -2514,10 +2515,13 @@ async function saveSlotsToDb() {
   inputSlotsSaveToDbTimer = null;
   if (!currentUser || !sb || !sb.from || !getSyncInputPref()) return;
   try {
+    var slotsToSave = inputSlots.map(function(s) {
+      return { id: s.id, channel: s.channel, value: capSyncText(s.value) };
+    });
     await sb.from(USER_INPUT_STATE_TABLE).upsert({
       user_id: currentUser.id,
       channel: SLOTS_SYNC_CHANNEL,
-      text: JSON.stringify(inputSlots),
+      text: JSON.stringify(slotsToSave),
       updated_at: new Date().toISOString(),
       device_id: myId
     }, { onConflict: 'user_id,channel' });
@@ -2550,9 +2554,9 @@ function setupInputStateRealtime() {
         filter: 'user_id=eq.' + currentUser.id
       }, payload => {
         try {
-        const row = payload.new || payload.old;
-        if (!row) return;
-        if (row.device_id === myId) return;
+        var row = payload && (payload.new || payload.old);
+        if (!row || typeof row !== 'object') return;
+        if (String(row.device_id) === String(myId)) return;
         if (row.channel === SLOTS_SYNC_CHANNEL) {
           try {
             const raw = (row.text != null ? String(row.text) : '') || '[]';
@@ -2570,8 +2574,9 @@ function setupInputStateRealtime() {
                 });
                 const mobile = isMobileOrTouchDevice();
                 const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
-                const remoteAt = row.updated_at ? new Date(row.updated_at).getTime() : 0;
-                const putRemoteLast = remoteAt > lastSlotsEditAt || (remoteAt === lastSlotsEditAt && (row.device_id || '') > (myId || ''));
+                var remoteAt = row.updated_at ? new Date(row.updated_at).getTime() : 0;
+                if (!Number.isFinite(remoteAt)) remoteAt = 0;
+                var putRemoteLast = remoteAt > lastSlotsEditAt || (remoteAt === lastSlotsEditAt && String(row.device_id || '') > String(myId || ''));
                 inputSlots.forEach(function(slot, i) {
                   const ta = (i === 0 && input) ? input : composerSlotsContainer.querySelector('.composer-slot[data-slot-index="' + i + '"] textarea');
                   if (!ta) return;
@@ -2595,7 +2600,6 @@ function setupInputStateRealtime() {
                   }
                 });
                 try { localStorage.setItem(INPUT_SLOTS_KEY, JSON.stringify(inputSlots)); } catch (_) {}
-                scheduleSaveSlotsToDb();
               } else {
                 let focusedSlotIndex = -1;
                 let savedValue = '';
@@ -2670,9 +2674,10 @@ function setupInputStateRealtime() {
         }
         if (row.channel !== (currentChannel || 'main')) return;
         if (!input) return;
-        const remoteText = capSyncText(row.text);
-        const remoteAt = row.updated_at ? new Date(row.updated_at).getTime() : 0;
-        const putRemoteLast = remoteAt > lastPrimaryInputEditAt || (remoteAt === lastPrimaryInputEditAt && (row.device_id || '') > (myId || ''));
+        var remoteText = capSyncText(row.text);
+        var remoteAt = row.updated_at ? new Date(row.updated_at).getTime() : 0;
+        if (!Number.isFinite(remoteAt)) remoteAt = 0;
+        var putRemoteLast = remoteAt > lastPrimaryInputEditAt || (remoteAt === lastPrimaryInputEditAt && String(row.device_id || '') > String(myId || ''));
         const merged = mergeInputText(input.value, remoteText, putRemoteLast);
         if (merged !== input.value) {
           input.value = merged;
@@ -2680,7 +2685,6 @@ function setupInputStateRealtime() {
           if (sendBtn) sendBtn.disabled = !merged.trim();
           if (typeof updateClearInputBtn === 'function') updateClearInputBtn();
           saveInputGlobal();
-          scheduleSaveInputToDb();
         }
         } catch (e) {
           if (typeof console !== 'undefined' && console.error) console.error('input-state realtime', e);
