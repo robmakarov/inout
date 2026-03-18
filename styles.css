@@ -1821,15 +1821,23 @@ body.select-mode .obj-select-wrap,
 .input-tools{
   display:flex;
   justify-content:flex-start;
-  align-items:center;
-  gap:0;
+  align-items:stretch;
+  gap:6px;
   margin-top:6px;
 }
+.input-tools .draft-btn{
+  min-height:32px;
+  height:auto;
+  padding:6px 10px;
+  font-size:11px;
+  box-sizing:border-box;
+}
 .log-dropup-wrap{
-  margin-left:8px;
+  margin-left:0;
   position:relative;
   overflow:visible;
   flex:1 1 0;
+  min-width:0;
   display:flex;
   align-items:stretch;
 }
@@ -1838,6 +1846,8 @@ body.select-mode .obj-select-wrap,
   padding:6px 10px;
   min-width:0;
   max-width:none;
+  min-height:32px;
+  box-sizing:border-box;
   text-align:left;
   border:1px solid var(--line2);
   background:transparent;

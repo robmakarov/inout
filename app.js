@@ -5331,6 +5331,24 @@ function renderTabs() {
   updateTabsUI();
   updateAllTabBadges();
   refreshMoveTargets();
+  syncComposerTargetSelects();
+}
+
+function syncComposerTargetSelects() {
+  const channels = (typeof viewNames !== 'undefined' && Array.isArray(viewNames)) ? viewNames : ['main'];
+  if (!composerSlotsContainer) return;
+  composerSlotsContainer.querySelectorAll('.composer-slot-target-select').forEach(sel => {
+    const current = sel.value;
+    sel.innerHTML = '';
+    channels.forEach(ch => {
+      const opt = document.createElement('option');
+      opt.value = ch;
+      opt.textContent = ch === 'main' ? 'Feed' : ch;
+      if (ch === current) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    if (!sel.value && channels.length) sel.selectedIndex = 0;
+  });
 }
 
 async function syncChannelsFromServer() {
