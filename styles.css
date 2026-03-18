@@ -1648,6 +1648,15 @@ body.select-mode .obj-select-wrap,
   border-radius:2px;
   display:inline;
 }
+.remote-caret{
+  display:inline-block;
+  width:2px;
+  min-width:2px;
+  background:rgba(80,120,200,0.9);
+  color:transparent;
+  vertical-align:text-bottom;
+  margin:0 -1px;
+}
 
 .composer-slot-input{
   flex:1;

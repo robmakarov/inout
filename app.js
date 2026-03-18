@@ -765,7 +765,10 @@ function renderComposerSlots() {
     textarea.rows = 1;
     textarea.maxLength = 2000;
     textarea.autocomplete = 'off';
-    textarea.spellcheck = true;
+    textarea.spellcheck = false;
+    textarea.setAttribute('spellcheck', 'false');
+    textarea.setAttribute('autocorrect', 'off');
+    textarea.setAttribute('autocapitalize', 'off');
     textarea.setAttribute('aria-label', 'Object value for ' + targetLabel);
     textarea.value = slot.value || '';
     if (isPrimary) {
@@ -2605,7 +2608,12 @@ function setupInputStateRealtime() {
                   const remoteVal = capSyncText(slot.value);
                   const merged = mergeInputText(ta.value, remoteVal, lastSlotsEditAt, remoteAt);
                   if (merged === ta.value) return;
+                  var taSelStart = ta.selectionStart != null ? ta.selectionStart : merged.length;
+                  var taSelEnd = ta.selectionEnd != null ? ta.selectionEnd : taSelStart;
                   ta.value = merged;
+                  var mlen = merged.length;
+                  ta.selectionStart = Math.min(taSelStart, mlen);
+                  ta.selectionEnd = Math.min(taSelEnd, mlen);
                   inputSlots[i].value = merged;
                   if (i === 0) {
                     if (typeof autoResize === 'function') autoResize();
@@ -2700,7 +2708,12 @@ function setupInputStateRealtime() {
         if (!Number.isFinite(remoteAt)) remoteAt = 0;
         var merged = mergeInputText(input.value, remoteText, lastPrimaryInputEditAt, remoteAt);
         if (merged !== input.value) {
+          var selStart = input.selectionStart != null ? input.selectionStart : merged.length;
+          var selEnd = input.selectionEnd != null ? input.selectionEnd : selStart;
           input.value = merged;
+          var len = merged.length;
+          input.selectionStart = Math.min(selStart, len);
+          input.selectionEnd = Math.min(selEnd, len);
           if (typeof autoResize === 'function') autoResize();
           if (sendBtn) sendBtn.disabled = !merged.trim();
           if (typeof updateClearInputBtn === 'function') updateClearInputBtn();
@@ -2786,11 +2799,10 @@ function setupDraftChannel() {
         var re = data.selectionEnd != null ? Number(data.selectionEnd) : null;
         if (Number.isFinite(rs) && Number.isFinite(re) && rs >= 0 && re >= 0) {
           remoteSelection = { start: Math.min(rs, re), end: Math.max(rs, re), deviceId: deviceId };
-          updateRemoteSelectionOverlay();
         } else {
           remoteSelection = null;
-          updateRemoteSelectionOverlay();
         }
+        updateRemoteSelectionOverlay();
       }
       if (!isSelf && text && !editingId) {
         showDraftBubble(text);
@@ -2845,17 +2857,13 @@ function updateRemoteSelectionOverlay() {
   if (!wrap) return;
   var id = 'remote-selection-overlay';
   var el = document.getElementById(id);
-  if (!remoteSelection || remoteSelection.start >= remoteSelection.end) {
+  if (!remoteSelection) {
     if (el && el.parentNode) el.parentNode.removeChild(el);
     return;
   }
   var text = input.value || '';
-  var start = Math.min(remoteSelection.start, text.length);
-  var end = Math.min(remoteSelection.end, text.length);
-  if (start >= end) {
-    if (el && el.parentNode) el.parentNode.removeChild(el);
-    return;
-  }
+  var start = Math.max(0, Math.min(remoteSelection.start, text.length));
+  var end = Math.max(0, Math.min(remoteSelection.end, text.length));
   if (!el) {
     el = document.createElement('div');
     el.id = id;
@@ -2878,9 +2886,15 @@ function updateRemoteSelectionOverlay() {
   el.style.width = (input.offsetWidth || 0) + 'px';
   el.style.height = (input.offsetHeight || 0) + 'px';
   var before = escapeHtml(text.slice(0, start));
-  var sel = escapeHtml(text.slice(start, end));
+  var mid = escapeHtml(text.slice(start, end));
   var after = escapeHtml(text.slice(end));
-  el.innerHTML = before + '<span class="remote-selection-highlight">' + sel + '</span>' + after;
+  var caret = '<span class="remote-caret" aria-hidden="true"></span>';
+  var selSpan = mid ? '<span class="remote-selection-highlight">' + mid + '</span>' : '';
+  if (start < end) {
+    el.innerHTML = before + selSpan + after;
+  } else {
+    el.innerHTML = before + caret + after;
+  }
   el.scrollTop = input.scrollTop;
   el.scrollLeft = input.scrollLeft;
 }
@@ -6039,6 +6053,16 @@ input.addEventListener('keydown', e => {
     if (editingObjectId != null) updateEditingRowFromInput();
     else broadcastDraft();
   });
+  var _selChangeTimer = null;
+  function onSelectionChange() {
+    if (document.activeElement !== input || editingObjectId != null) return;
+    if (_selChangeTimer) clearTimeout(_selChangeTimer);
+    _selChangeTimer = setTimeout(function() {
+      _selChangeTimer = null;
+      broadcastDraft();
+    }, 80);
+  }
+  try { document.addEventListener('selectionchange', onSelectionChange); } catch (_) {}
   input.addEventListener('scroll', () => {
     var ov = document.getElementById('remote-selection-overlay');
     if (ov) { ov.scrollTop = input.scrollTop; ov.scrollLeft = input.scrollLeft; }
