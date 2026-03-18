@@ -1517,6 +1517,14 @@ body.select-mode .obj-select-wrap,
   display:flex;
   align-items:stretch;
 }
+.composer-slot-label{
+  flex-shrink:0;
+  align-self:center;
+  font-size:10px;
+  letter-spacing:0.04em;
+  color:var(--muted);
+  margin-right:6px;
+}
 .composer-input-wrap.has-count .composer-count{ opacity:1; }
 .composer-count{
   position:absolute;

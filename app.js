@@ -481,6 +481,12 @@ const OBJECTS_TABLE        = 'entries';
 const USER_INPUT_STATE_TABLE = 'user_input_state';
 const SLOTS_SYNC_CHANNEL = '__slots__';
 
+function isMobileOrTouchDevice() {
+  try {
+    return !!(typeof navigator !== 'undefined' && (navigator.maxTouchPoints > 0 || ('ontouchstart' in (window || {}))));
+  } catch (_) { return false; }
+}
+
 // Per-device/local storage keys.
 const LOCAL_DEVICE_ID_KEY      = 'inout_device_id';
 const LOCAL_ANON_OBJECTS_KEY   = 'inout_anon_objects_v1';
@@ -645,7 +651,7 @@ let latestClipboardText = '';
 let inputStateSub = null;
 let inputSaveToDbTimer = null;
 let inputSlotsSaveToDbTimer = null;
-const INPUT_SAVE_DEBOUNCE_MS = 600;
+const INPUT_SAVE_DEBOUNCE_MS = 200;
 
 // Register initial view from static DOM once globals (including currentView) are initialized.
 views.push({
@@ -733,13 +739,19 @@ function renderComposerSlots() {
 
     const inputWrap = document.createElement('div');
     inputWrap.className = 'composer-input-wrap';
+    const targetLabel = (slot.channel === 'main' ? 'Feed' : slot.channel);
+    const labelEl = document.createElement('span');
+    labelEl.className = 'composer-slot-label';
+    labelEl.setAttribute('aria-hidden', 'true');
+    labelEl.textContent = 'To: ' + targetLabel;
+    inputWrap.appendChild(labelEl);
     const textarea = document.createElement('textarea');
     textarea.placeholder = 'Add object…';
     textarea.rows = 1;
     textarea.maxLength = 2000;
     textarea.autocomplete = 'off';
     textarea.spellcheck = true;
-    textarea.setAttribute('aria-label', 'Object value');
+    textarea.setAttribute('aria-label', 'Object value for ' + targetLabel);
     textarea.value = slot.value || '';
     if (isPrimary) {
       textarea.id = 'object-input';
@@ -787,6 +799,9 @@ function renderComposerSlots() {
       const ch = this.value;
       inputSlots[index].channel = ch;
       saveInputSlots();
+      const lbl = inputWrap.querySelector('.composer-slot-label');
+      if (lbl) lbl.textContent = 'To: ' + (ch === 'main' ? 'Feed' : ch);
+      textarea.setAttribute('aria-label', 'Object value for ' + (ch === 'main' ? 'Feed' : ch));
     });
     textarea.addEventListener('input', function() {
       const val = this.value || '';
@@ -1788,10 +1803,12 @@ function setupFocusOnFirstInteraction() {
   }
   document.addEventListener('focusin', () => {
     if (isInteractive(document.activeElement)) return;
+    if (isMobileOrTouchDevice()) return;
     setTimeout(() => { if (input && document.activeElement !== input) input.focus(); }, 0);
   });
   document.addEventListener('click', (e) => {
     if (isInteractive(e.target)) return;
+    if (isMobileOrTouchDevice()) return;
     if (input && document.activeElement !== input) {
       setTimeout(() => { if (input) input.focus(); }, 0);
     }
@@ -1800,15 +1817,18 @@ function setupFocusOnFirstInteraction() {
     const t = e.target;
     if (!t || !t.closest || !t.closest('button')) return;
     if (t.closest('#user-modal') || t.closest('#channel-modal-backdrop')) return;
+    if (isMobileOrTouchDevice()) return;
     setTimeout(() => { if (input) input.focus(); }, 0);
   });
   if (feedEl) {
     feedEl.addEventListener('focus', () => {
+      if (isMobileOrTouchDevice()) return;
       if (input && document.activeElement === feedEl) setTimeout(() => { if (input) input.focus(); }, 0);
     });
   }
   if (input) {
   input.addEventListener('focusout', (e) => {
+    if (isMobileOrTouchDevice()) return;
     const next = e.relatedTarget;
     if (next && isInteractive(next)) return;
     if (document.activeElement && (document.activeElement.closest('#user-modal') || document.activeElement.closest('#channel-modal-backdrop'))) return;
@@ -2508,69 +2528,100 @@ function setupInputStateRealtime() {
             const raw = (row.text != null ? String(row.text) : '') || '[]';
             const slots = JSON.parse(raw);
             if (Array.isArray(slots) && slots.length > 0) {
-              let focusedSlotIndex = -1;
-              let savedValue = '';
-              let savedStart = 0;
-              let savedEnd = 0;
-              try {
-                if (typeof document !== 'undefined' && composerSlotsContainer) {
-                  const el = document.activeElement;
-                  if (el && composerSlotsContainer.contains(el)) {
-                    if (el.id === 'object-input') {
-                      focusedSlotIndex = 0;
-                    } else if (el.classList && el.classList.contains('composer-slot-input') && el.dataset.slotIndex != null) {
-                      focusedSlotIndex = parseInt(el.dataset.slotIndex, 10);
-                    } else {
-                      const rowEl = el.closest && el.closest('.composer-slot');
-                      if (rowEl && rowEl.dataset.slotIndex != null) {
-                        focusedSlotIndex = parseInt(rowEl.dataset.slotIndex, 10);
-                      }
+              const structureSame = inputSlots.length === slots.length &&
+                inputSlots.every(function(s, i) {
+                  const t = slots[i];
+                  return t && s.id === t.id && s.channel === t.channel;
+                });
+              if (structureSame && composerSlotsContainer) {
+                inputSlots = slots.map(function(s) { return Object.assign({}, s); });
+                try { localStorage.setItem(INPUT_SLOTS_KEY, JSON.stringify(inputSlots)); } catch (_) {}
+                const mobile = isMobileOrTouchDevice();
+                const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
+                inputSlots.forEach(function(slot, i) {
+                  const ta = (i === 0 && input) ? input : composerSlotsContainer.querySelector('.composer-slot[data-slot-index="' + i + '"] textarea');
+                  if (!ta) return;
+                  if (mobile && ta === activeEl) return;
+                  if (ta.value === slot.value) return;
+                  ta.value = slot.value || '';
+                  if (i === 0) {
+                    if (typeof autoResize === 'function') autoResize();
+                    if (sendBtn) sendBtn.disabled = !(slot.value || '').trim();
+                    if (typeof updateClearInputBtn === 'function') updateClearInputBtn();
+                    if (typeof saveInputGlobal === 'function') saveInputGlobal();
+                  } else {
+                    const rowEl = ta.closest && ta.closest('.composer-slot');
+                    if (rowEl) {
+                      const sBtn = rowEl.querySelector('.composer-send');
+                      if (sBtn) sBtn.disabled = !(slot.value || '').trim();
                     }
-                    if (focusedSlotIndex >= 0) {
-                      const slotTextarea = (focusedSlotIndex === 0 && input) ? input : composerSlotsContainer.querySelector('.composer-slot[data-slot-index="' + focusedSlotIndex + '"] textarea');
-                      if (slotTextarea && slotTextarea.value !== undefined) {
-                        savedValue = slotTextarea.value || '';
-                        savedStart = slotTextarea.selectionStart != null ? slotTextarea.selectionStart : savedValue.length;
-                        savedEnd = slotTextarea.selectionEnd != null ? slotTextarea.selectionEnd : savedStart;
+                  }
+                });
+              } else {
+                let focusedSlotIndex = -1;
+                let savedValue = '';
+                let savedStart = 0;
+                let savedEnd = 0;
+                try {
+                  if (typeof document !== 'undefined' && composerSlotsContainer) {
+                    const el = document.activeElement;
+                    if (el && composerSlotsContainer.contains(el)) {
+                      if (el.id === 'object-input') {
+                        focusedSlotIndex = 0;
+                      } else if (el.classList && el.classList.contains('composer-slot-input') && el.dataset.slotIndex != null) {
+                        focusedSlotIndex = parseInt(el.dataset.slotIndex, 10);
+                      } else {
+                        const rowEl = el.closest && el.closest('.composer-slot');
+                        if (rowEl && rowEl.dataset.slotIndex != null) {
+                          focusedSlotIndex = parseInt(rowEl.dataset.slotIndex, 10);
+                        }
+                      }
+                      if (focusedSlotIndex >= 0) {
+                        const slotTextarea = (focusedSlotIndex === 0 && input) ? input : composerSlotsContainer.querySelector('.composer-slot[data-slot-index="' + focusedSlotIndex + '"] textarea');
+                        if (slotTextarea && slotTextarea.value !== undefined) {
+                          savedValue = slotTextarea.value || '';
+                          savedStart = slotTextarea.selectionStart != null ? slotTextarea.selectionStart : savedValue.length;
+                          savedEnd = slotTextarea.selectionEnd != null ? slotTextarea.selectionEnd : savedStart;
+                        }
                       }
                     }
                   }
+                } catch (_) {}
+                inputSlots = slots;
+                if (focusedSlotIndex >= 0 && focusedSlotIndex < inputSlots.length) {
+                  inputSlots[focusedSlotIndex] = Object.assign({}, inputSlots[focusedSlotIndex], { value: savedValue });
                 }
-              } catch (_) {}
-              inputSlots = slots;
-              if (focusedSlotIndex >= 0 && focusedSlotIndex < inputSlots.length) {
-                inputSlots[focusedSlotIndex] = Object.assign({}, inputSlots[focusedSlotIndex], { value: savedValue });
-              }
-              try { localStorage.setItem(INPUT_SLOTS_KEY, JSON.stringify(inputSlots)); } catch (_) {}
-              if (composerSlotsContainer && typeof renderComposerSlots === 'function') {
-                renderComposerSlots();
-                updatePrimaryInputRefs();
-                if (typeof attachInputListeners === 'function') attachInputListeners();
-                if (focusedSlotIndex >= 0) {
-                  const idx = focusedSlotIndex;
-                  const val = savedValue;
-                  const selStart = savedStart;
-                  const selEnd = savedEnd;
-                  requestAnimationFrame(function() {
-                    let toFocus = null;
-                    if (idx === 0 && input) {
-                      toFocus = input;
-                    } else if (composerSlotsContainer) {
-                      toFocus = composerSlotsContainer.querySelector('.composer-slot[data-slot-index="' + idx + '"] textarea');
-                    }
-                    if (toFocus) {
-                      if (toFocus.value !== undefined) {
-                        toFocus.value = val;
-                        toFocus.setSelectionRange(selStart, selEnd);
+                try { localStorage.setItem(INPUT_SLOTS_KEY, JSON.stringify(inputSlots)); } catch (_) {}
+                if (composerSlotsContainer && typeof renderComposerSlots === 'function') {
+                  renderComposerSlots();
+                  updatePrimaryInputRefs();
+                  if (typeof attachInputListeners === 'function') attachInputListeners();
+                  if (focusedSlotIndex >= 0) {
+                    const idx = focusedSlotIndex;
+                    const val = savedValue;
+                    const selStart = savedStart;
+                    const selEnd = savedEnd;
+                    requestAnimationFrame(function() {
+                      let toFocus = null;
+                      if (idx === 0 && input) {
+                        toFocus = input;
+                      } else if (composerSlotsContainer) {
+                        toFocus = composerSlotsContainer.querySelector('.composer-slot[data-slot-index="' + idx + '"] textarea');
                       }
-                      toFocus.focus();
-                      if (idx === 0) {
-                        if (typeof autoResize === 'function') autoResize();
-                        if (sendBtn) sendBtn.disabled = !val.trim();
-                        if (typeof updateClearInputBtn === 'function') updateClearInputBtn();
+                      if (toFocus) {
+                        if (toFocus.value !== undefined) {
+                          toFocus.value = val;
+                          toFocus.setSelectionRange(selStart, selEnd);
+                        }
+                        if (!isMobileOrTouchDevice()) toFocus.focus();
+                        if (idx === 0) {
+                          if (typeof autoResize === 'function') autoResize();
+                          if (sendBtn) sendBtn.disabled = !val.trim();
+                          if (typeof updateClearInputBtn === 'function') updateClearInputBtn();
+                        }
                       }
-                    }
-                  });
+                    });
+                  }
                 }
               }
             }
