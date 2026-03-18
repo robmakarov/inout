@@ -313,6 +313,10 @@
         anim.setSpeed(2);
         anim.addEventListener('DOMLoaded', function() {
           if (logoEl) logoEl.classList.add('logo-lottie-loaded');
+          if (anim.renderer && anim.renderer.svgElement) {
+            anim.renderer.svgElement.style.transformOrigin = 'left center';
+            anim.renderer.svgElement.style.transform = 'scale(2.5)';
+          }
           anim.goToAndPlay(0, true);
         });
       }
