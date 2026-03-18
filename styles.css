@@ -153,15 +153,7 @@ header,
 }
 .multiview-resizer:hover,
 .multiview-resizer:active{
-.multiview-views .view .feed{
-  position:relative;
-  z-index:1;
-  flex:1;
-  min-height:0;
-  padding:0;
-  overflow-y:auto;
-  overflow-x:hidden;
-  -webkit-overflow-scrolling:touch;
+  background:var(--acc);
 }
 .multiview-resizer:hover::after,
 .multiview-resizer:active::after{
@@ -174,19 +166,6 @@ header,
   flex-direction:column;
   overflow:hidden;
 }
-.multiview-views .view .feed{
-  position:relative;
-  z-index:1;
-  flex:1;
-  min-height:0;
-  padding:0;
-  overflow-y:auto;
-  overflow-x:hidden;
-  -webkit-overflow-scrolling:touch;
-  scrollbar-width:none;
-  -ms-overflow-style:none;
-}
-.multiview-views .view .feed::-webkit-scrollbar{display:none}
 .view-drop-over .feed{
   outline:2px solid var(--acc);
   outline-offset:-2px;
