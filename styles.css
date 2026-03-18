@@ -243,7 +243,7 @@ header{
   z-index:1000;
   background:var(--bg);
   border-bottom:1px solid var(--line);
-  padding:0 20px 0 6px;
+  padding:0 20px 0 2px;
   height:var(--header-height);
   display:flex;
   align-items:center;
