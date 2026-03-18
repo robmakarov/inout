@@ -1639,12 +1639,14 @@ body.select-mode .obj-select-wrap,
   color:transparent;
   box-sizing:border-box;
   scrollbar-width:none;
+  z-index:2;
 }
 .remote-selection-overlay::-webkit-scrollbar{display:none}
 .remote-selection-highlight{
-  background:rgba(100,180,255,0.35);
+  background:rgba(100,180,255,0.5);
   color:transparent;
   border-radius:2px;
+  display:inline;
 }
 
 .composer-slot-input{

@@ -2294,12 +2294,16 @@ function subscribeOrderRealtime() {
         filter: 'user_id=eq.' + currentUser.id
       },
       async payload => {
-        const row = payload.new || payload.old || {};
-        if (!row || row.channel !== currentChannel) return;
-        if (suppressNextOrderApply) { suppressNextOrderApply = false; return; }
-        if (Date.now() < suppressOrderApplyUntil) return;
-        await loadObjectOrderForCurrentChannel();
-        applyObjectOrderToDOM();
+        try {
+          const row = payload.new || payload.old || {};
+          if (!row || row.channel !== currentChannel) return;
+          if (suppressNextOrderApply) { suppressNextOrderApply = false; return; }
+          if (Date.now() < suppressOrderApplyUntil) return;
+          await loadObjectOrderForCurrentChannel();
+          applyObjectOrderToDOM();
+        } catch (e) {
+          if (typeof console !== 'undefined' && console.error) console.error('order realtime', e);
+        }
       }
     )
     .subscribe();
@@ -2324,29 +2328,31 @@ function subscribeViewRealtime() {
         filter,
       },
       payload => {
-        const row = payload.new || payload.old || {};
-        if (!row || row.channel !== currentChannel || !row.config) return;
-        if (suppressNextViewApply) { suppressNextViewApply = false; return; }
-        if (Date.now() < suppressOrderApplyUntil) return;
-        const cfg = row.config || {};
-        // Update order
-        if (Array.isArray(cfg.order)) {
-          currentObjectOrder = cfg.order
-            .map(x => Number(x))
-            .filter(x => Number.isFinite(x));
-          saveOrderToLocal();
-          applyObjectOrderToDOM();
+        try {
+          const row = payload.new || payload.old || {};
+          if (!row || row.channel !== currentChannel || !row.config) return;
+          if (suppressNextViewApply) { suppressNextViewApply = false; return; }
+          if (Date.now() < suppressOrderApplyUntil) return;
+          const cfg = row.config || {};
+          if (Array.isArray(cfg.order)) {
+            currentObjectOrder = cfg.order
+              .map(x => Number(x))
+              .filter(x => Number.isFinite(x));
+            saveOrderToLocal();
+            applyObjectOrderToDOM();
+          }
+          const defTime = true;
+          const defAuthor = currentChannel === 'main' ? false : true;
+          fieldPrefs = {
+            showTime: typeof cfg.showTime === 'boolean' ? cfg.showTime : defTime,
+            showAuthor: typeof cfg.showAuthor === 'boolean' ? cfg.showAuthor : defAuthor,
+            viewMode: (cfg.viewMode === 'table' || cfg.viewMode === 'feed') ? cfg.viewMode : 'feed',
+          };
+          saveFieldPrefsForCurrentChannel();
+          applyFieldPrefsToObjects();
+        } catch (e) {
+          if (typeof console !== 'undefined' && console.error) console.error('view realtime', e);
         }
-        // Update field prefs
-        const defTime = true;
-        const defAuthor = currentChannel === 'main' ? false : true;
-        fieldPrefs = {
-          showTime: typeof cfg.showTime === 'boolean' ? cfg.showTime : defTime,
-          showAuthor: typeof cfg.showAuthor === 'boolean' ? cfg.showAuthor : defAuthor,
-          viewMode: (cfg.viewMode === 'table' || cfg.viewMode === 'feed') ? cfg.viewMode : 'feed',
-        };
-        saveFieldPrefsForCurrentChannel();
-        applyFieldPrefsToObjects();
       }
     )
     .subscribe();
@@ -2865,13 +2871,12 @@ function updateRemoteSelectionOverlay() {
     el.style.letterSpacing = cs.letterSpacing;
     el.style.whiteSpace = cs.whiteSpace;
     el.style.wordWrap = cs.wordWrap;
+    el.style.boxSizing = cs.boxSizing || 'border-box';
   }
-  var wr = wrap.getBoundingClientRect();
-  var ir = input.getBoundingClientRect();
-  el.style.top = (ir.top - wr.top + wrap.scrollTop) + 'px';
-  el.style.left = (ir.left - wr.left) + 'px';
-  el.style.width = ir.width + 'px';
-  el.style.height = ir.height + 'px';
+  el.style.top = (input.offsetTop || 0) + 'px';
+  el.style.left = (input.offsetLeft || 0) + 'px';
+  el.style.width = (input.offsetWidth || 0) + 'px';
+  el.style.height = (input.offsetHeight || 0) + 'px';
   var before = escapeHtml(text.slice(0, start));
   var sel = escapeHtml(text.slice(start, end));
   var after = escapeHtml(text.slice(end));
@@ -4982,7 +4987,7 @@ let suppressOrderApplyUntil = 0; /* ignore realtime order/view applies until thi
 async function saveObjectOrderForCurrentView() {
   if (!currentObjectOrder.length) return;
   saveOrderToLocal();
-  suppressOrderApplyUntil = Date.now() + 600;
+  suppressOrderApplyUntil = Date.now() + 350;
   // Persist order into unified views config for this channel (owner writes; guests just read).
   if (currentUser) {
     try {
