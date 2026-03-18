@@ -495,8 +495,8 @@ header{
   display:flex;
   align-items:center;
   position:relative;
-  min-width:72px;
-  width:72px;
+  min-width:96px;
+  width:96px;
   min-height:28px;
   flex-shrink:0;
   margin:0;
@@ -507,9 +507,9 @@ header{
   overflow:hidden;
 }
 .logo-lottie{
-  width:72px;
+  width:96px;
   height:28px;
-  min-width:72px;
+  min-width:96px;
   min-height:28px;
   position:relative;
   z-index:0;
@@ -544,7 +544,7 @@ header{
   z-index:1;
   visibility:visible;
   opacity:1;
-  color:inherit;
+  color:#fff;
 }
 /* Keep fallback visible so logo is always shown */
 .logo.logo-lottie-loaded .logo-fallback{
@@ -1004,23 +1004,29 @@ header{
 .feed-inner.view-table .obj:not(.obj-header) .obj-actions{ width:1%; }
 
 /* Object component: property text fields. Feed view only — switchable captions above each value. */
-/* Default: no labels, no reserved space (compact when labels off) */
+/* Always reserve same space for label area so toggling labels never causes jump (invisible placeholder when off) */
 .feed-inner:not(.view-table) .obj .obj-time::before,
 .feed-inner:not(.view-table) .obj .obj-sender::before,
 .feed-inner:not(.view-table) .obj .obj-text::before{
-  content:none;
-  display:none;
+  display:block;
+  content:'';
+  font-size:10px;
+  line-height:12px;
+  min-height:12px;
+  margin-bottom:2px;
+  visibility:hidden;
+  overflow:hidden;
+  pointer-events:none;
 }
-/* When labels on: show labels (visible on hover) */
+/* When labels on: show real labels (visible on hover), same dimensions so no layout shift */
 .feed-inner:not(.view-table).obj-labels-on .obj .obj-time::before,
 .feed-inner:not(.view-table).obj-labels-on .obj .obj-sender::before,
 .feed-inner:not(.view-table).obj-labels-on .obj .obj-text::before{
-  display:block;
+  visibility:visible;
   font-size:10px;
   text-transform:uppercase;
   letter-spacing:0.05em;
   color:var(--muted);
-  margin-bottom:2px;
   opacity:0;
   transform:translateY(6px);
   transition:opacity .2s ease-out, transform .2s ease-out;
