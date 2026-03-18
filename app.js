@@ -2521,11 +2521,31 @@ function setupInputStateRealtime() {
         }
         if (row.channel !== (currentChannel || 'main')) return;
         if (!input) return;
+        // Apply remote text but preserve focus/selection if the user is typing here.
+        let wasActive = false;
+        let selStart = null;
+        let selEnd = null;
+        try {
+          if (typeof document !== 'undefined' && document.activeElement === input) {
+            wasActive = true;
+            selStart = input.selectionStart;
+            selEnd = input.selectionEnd;
+          }
+        } catch (_) {}
         const text = (row.text != null ? String(row.text) : '') || '';
         input.value = text;
         if (typeof autoResize === 'function') autoResize();
         if (sendBtn) sendBtn.disabled = !text.trim();
         if (typeof updateClearInputBtn === 'function') updateClearInputBtn();
+        if (wasActive) {
+          try {
+            const len = input.value.length;
+            const start = selStart != null ? Math.min(selStart, len) : len;
+            const end = selEnd != null ? Math.min(selEnd, len) : start;
+            input.focus();
+            input.setSelectionRange(start, end);
+          } catch (_) {}
+        }
         saveInputGlobal();
       })
       .subscribe();
