@@ -1011,7 +1011,7 @@ header{
   display:block;
   font-size:10px;
   line-height:12px;
-  margin-bottom:2px;
+  margin-bottom:8px;
   text-transform:uppercase;
   letter-spacing:0.05em;
   color:var(--muted);
@@ -1030,6 +1030,7 @@ header{
   position:absolute;
   font-size:10px;
   line-height:12px;
+  margin-bottom:0;
   text-transform:uppercase;
   letter-spacing:0.05em;
   color:var(--muted);
