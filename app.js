@@ -479,6 +479,7 @@ function subscribeTempSessionJoins() {
 // Supabase table name for stored objects (was 'entries').
 const OBJECTS_TABLE        = 'entries';
 const USER_INPUT_STATE_TABLE = 'user_input_state';
+const SLOTS_SYNC_CHANNEL = '__slots__';
 
 // Per-device/local storage keys.
 const LOCAL_DEVICE_ID_KEY      = 'inout_device_id';
@@ -643,6 +644,7 @@ let latestRemoteDraft = '';
 let latestClipboardText = '';
 let inputStateSub = null;
 let inputSaveToDbTimer = null;
+let inputSlotsSaveToDbTimer = null;
 const INPUT_SAVE_DEBOUNCE_MS = 600;
 
 // Register initial view from static DOM once globals (including currentView) are initialized.
@@ -676,6 +678,7 @@ function loadInputSlots() {
 function saveInputSlots() {
   try {
     localStorage.setItem(INPUT_SLOTS_KEY, JSON.stringify(inputSlots));
+    if (getSyncInputPref()) scheduleSaveSlotsToDb();
   } catch (_) {}
 }
 
@@ -2466,6 +2469,26 @@ function scheduleSaveInputToDb() {
   inputSaveToDbTimer = setTimeout(saveInputToDb, INPUT_SAVE_DEBOUNCE_MS);
 }
 
+async function saveSlotsToDb() {
+  inputSlotsSaveToDbTimer = null;
+  if (!currentUser || !sb || !sb.from || !getSyncInputPref()) return;
+  try {
+    await sb.from(USER_INPUT_STATE_TABLE).upsert({
+      user_id: currentUser.id,
+      channel: SLOTS_SYNC_CHANNEL,
+      text: JSON.stringify(inputSlots),
+      updated_at: new Date().toISOString(),
+      device_id: myId
+    }, { onConflict: 'user_id,channel' });
+  } catch (e) { console.error('saveSlotsToDb', e); }
+}
+
+function scheduleSaveSlotsToDb() {
+  if (inputSlotsSaveToDbTimer) clearTimeout(inputSlotsSaveToDbTimer);
+  if (!currentUser || !getSyncInputPref()) return;
+  inputSlotsSaveToDbTimer = setTimeout(saveSlotsToDb, INPUT_SAVE_DEBOUNCE_MS);
+}
+
 function teardownInputStateRealtime() {
   if (inputStateSub) {
     try { inputStateSub.unsubscribe(); } catch (_) {}
@@ -2486,8 +2509,25 @@ function setupInputStateRealtime() {
         filter: 'user_id=eq.' + currentUser.id
       }, payload => {
         const row = payload.new || payload.old;
-        if (!row || row.channel !== (currentChannel || 'main')) return;
+        if (!row) return;
         if (row.device_id === myId) return;
+        if (row.channel === SLOTS_SYNC_CHANNEL) {
+          try {
+            const raw = (row.text != null ? String(row.text) : '') || '[]';
+            const slots = JSON.parse(raw);
+            if (Array.isArray(slots) && slots.length > 0) {
+              inputSlots = slots;
+              try { localStorage.setItem(INPUT_SLOTS_KEY, JSON.stringify(inputSlots)); } catch (_) {}
+              if (composerSlotsContainer && typeof renderComposerSlots === 'function') {
+                renderComposerSlots();
+                updatePrimaryInputRefs();
+                if (typeof attachInputListeners === 'function') attachInputListeners();
+              }
+            }
+          } catch (_) {}
+          return;
+        }
+        if (row.channel !== (currentChannel || 'main')) return;
         if (!input) return;
         const text = (row.text != null ? String(row.text) : '') || '';
         input.value = text;
@@ -2515,7 +2555,27 @@ async function loadInputFromDbForChannel(ch) {
   } catch (_) {}
 }
 
+async function loadSlotsFromDb() {
+  if (!currentUser || !sb || !sb.from || !getSyncInputPref()) return false;
+  try {
+    const { data, error } = await sb.from(USER_INPUT_STATE_TABLE).select('text').eq('user_id', currentUser.id).eq('channel', SLOTS_SYNC_CHANNEL).maybeSingle();
+    if (error || !data || data.text == null) return false;
+    const raw = String(data.text).trim() || '[]';
+    const slots = JSON.parse(raw);
+    if (!Array.isArray(slots) || slots.length === 0) return false;
+    inputSlots = slots;
+    try { localStorage.setItem(INPUT_SLOTS_KEY, JSON.stringify(inputSlots)); } catch (_) {}
+    return true;
+  } catch (_) { return false; }
+}
+
 async function restoreInputFromDb() {
+  const slotsApplied = await loadSlotsFromDb();
+  if (slotsApplied && composerSlotsContainer && typeof renderComposerSlots === 'function') {
+    renderComposerSlots();
+    updatePrimaryInputRefs();
+    if (typeof attachInputListeners === 'function') attachInputListeners();
+  }
   await loadInputFromDbForChannel(currentChannel);
 }
 
