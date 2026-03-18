@@ -91,17 +91,14 @@ header,
 #nav{
   pointer-events:auto;
 }
-/* Multiview: container for the active view(s); input is separate */
+/* Multiview: container for the active view(s); in flow inside its frame */
 #multiview{
   flex:1;
   display:flex;
   flex-direction:column;
   min-height:0;
-  height:100vh;
   overflow:hidden;
   pointer-events:auto;
-  padding-top:calc(var(--header-height) + var(--nav-height) + var(--bar-top-height)); /* header + nav + fixed manage bar */
-  padding-bottom:var(--bar-bottom-min-height); /* reserve space for fixed input area */
 }
 .multiview-views{
   flex:1;
@@ -185,15 +182,58 @@ header,
   pointer-events:auto;
 }
 
-/* ── NAVIGATION BAR: fixed under header, controls which view is shown in multiview ── */
-#nav.navigation-bar{
-  position:fixed;
-  top:var(--header-height);
+/* ── APP BODY: right-side zone below header; contains reorderable frames ── */
+.app-body{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+  padding-top:var(--header-height);
+  margin:0;
+}
+.frames-zone{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+  overflow:hidden;
+}
+.frame{
+  flex:0 0 auto;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+  position:relative;
+  padding-left:22px;
+  box-sizing:border-box;
+}
+.frame.frame-fill{
+  flex:1 1 0;
+  min-height:0;
+}
+.frame-grip{
+  position:absolute;
   left:0;
-  right:0;
-  width:100%;
+  top:0;
+  bottom:0;
+  width:20px;
+  cursor:grab;
+  z-index:5;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:var(--muted);
+  font-size:12px;
+  user-select:none;
+}
+.frame-grip:active{ cursor:grabbing }
+.frame-grip::before{ content:'⋮⋮'; letter-spacing:-2px; }
+.frame-dragging{ opacity:0.7; }
+.frames-zone .frame.frame-drop-target{ outline:2px dashed var(--acc); outline-offset:-2px; border-radius:6px; }
+
+/* ── NAVIGATION BAR: in flow inside frames zone ── */
+#nav.navigation-bar{
   height:var(--nav-height);
-  z-index:999;
   flex-shrink:0;
   background:var(--bg2);
   border-bottom:1px solid var(--line);
@@ -252,15 +292,9 @@ header{
   box-sizing:border-box;
 }
 
-/* ── TOP BAR (manage): fixed under header + nav, fills width ── */
+/* ── TOP BAR (manage): in flow at top of multiview frame ── */
 #manage-bar{
-  position:fixed;
-  top:calc(var(--header-height) + var(--nav-height));
-  left:0;
-  right:0;
-  width:100%;
   height:var(--bar-top-height);
-  z-index:1200;
   flex-shrink:0;
   background:var(--bg2);
   border-bottom:1px solid var(--line);
@@ -1409,14 +1443,8 @@ body.select-mode .obj-select-wrap,
 .obj.dragging + .obj.obj-drag-group,
 .obj.obj-drag-group + .obj.dragging{margin-top:-2px}
 
-/* ── BOTTOM BAR (input): fixed at bottom, fills width ── */
+/* ── BOTTOM BAR (input): in flow inside its frame ── */
 #input-area{
-  position:fixed;
-  bottom:0;
-  left:0;
-  right:0;
-  width:100%;
-  z-index:998;
   flex-shrink:0;
   background:var(--bg);
   border-top:1px solid var(--line);
@@ -1934,9 +1962,14 @@ body.select-mode .obj-select-wrap,
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
 /* ── SCROLL TO BOTTOM BTN ── */
+.frame[data-frame-id="scroll-btn"]{
+  min-height:52px;
+  flex:0 0 auto;
+}
 #scroll-btn{
-  position:fixed;
-  bottom:90px;right:20px;
+  position:absolute;
+  bottom:8px;
+  right:12px;
   background:var(--bg2);
   border:1px solid var(--line2);
   color:var(--soft);
@@ -1994,6 +2027,7 @@ body.select-mode .obj-select-wrap,
     padding:10px 10px calc(14px + env(safe-area-inset-bottom, 0px));
     background:var(--bg);
   }
+  .frame[data-frame-id="input"]{ flex:0 0 0; min-height:0; overflow:visible; }
   /* add bottom space in feed so last messages are not hidden behind input */
   #feed{
     padding-bottom:120px;

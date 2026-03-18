@@ -130,6 +130,7 @@ const qrModalClose = document.getElementById('qr-modal-close');
 const umNickname   = document.getElementById('um-nickname');
 const umNickSave   = document.getElementById('um-nick-save');
 const umSyncInputChk = document.getElementById('um-sync-input');
+const umLayoutSyncChk = document.getElementById('um-layout-sync');
 const umVersionBadge = document.getElementById('um-version-badge');
 const umUpgradeBtn   = document.getElementById('um-upgrade-btn');
 const tabsEl     = document.getElementById('tabs');
@@ -531,6 +532,9 @@ let suppressAutoAuth      = false; // when true, never auto-log user back in thi
 const seenIds       = new Set();
 const viewScroll = new Map();
 const OPEN_VIEWS_KEY     = 'inout_open_views_v1';
+const FRAME_ORDER_KEY    = 'inout_frame_order_v1';
+const LAYOUT_SYNC_KEY    = 'inout_layout_sync_v1';
+const DEFAULT_FRAME_ORDER = ['nav', 'multiview', 'input', 'scroll-btn'];
 
 function getLocalObjectsKey() {
   if (currentUser && currentUser.id) {
@@ -646,6 +650,7 @@ let channelSubs = new Map();
 let orderSub = null;
 let viewSub  = null;
 let draftChannel = null;
+let layoutChannel = null;
 let latestRemoteDraft = '';
 let latestClipboardText = '';
 let inputStateSub = null;
@@ -1707,6 +1712,7 @@ function init(done) {
             })();
             subscribeRealtimeAll();
             setupDraftChannel();
+            setupLayoutChannel();
             setupDndBroadcastChannel();
             subscribeOrderRealtime();
             subscribeViewRealtime();
@@ -2841,6 +2847,136 @@ function teardownDraftChannel() {
     try { draftChannel.unsubscribe(); } catch (_) {}
     draftChannel = null;
   }
+}
+
+/* ═══ FRAME ORDER (reorderable app zones: nav, multiview, input, scroll-btn) ── */
+function getLayoutSyncPref() {
+  try {
+    const v = localStorage.getItem(LAYOUT_SYNC_KEY);
+    return v !== 'false' && v !== '0';
+  } catch (_) { return true; }
+}
+function setLayoutSyncPref(on) {
+  try { localStorage.setItem(LAYOUT_SYNC_KEY, on ? '1' : '0'); } catch (_) {}
+}
+
+function getFrameOrder() {
+  try {
+    const raw = localStorage.getItem(FRAME_ORDER_KEY);
+    if (!raw) return DEFAULT_FRAME_ORDER.slice();
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr) || arr.length === 0) return DEFAULT_FRAME_ORDER.slice();
+    const known = new Set(DEFAULT_FRAME_ORDER);
+    const out = arr.filter(id => known.has(id));
+    DEFAULT_FRAME_ORDER.forEach(id => { if (!out.includes(id)) out.push(id); });
+    return out;
+  } catch (_) { return DEFAULT_FRAME_ORDER.slice(); }
+}
+
+function applyFrameOrder(order) {
+  const zone = document.getElementById('frames-zone');
+  if (!zone || !Array.isArray(order) || order.length === 0) return;
+  const frames = Array.from(zone.querySelectorAll('.frame'));
+  const byId = new Map();
+  frames.forEach(f => { const id = f.getAttribute('data-frame-id'); if (id) byId.set(id, f); });
+  const ordered = order.map(id => byId.get(id)).filter(Boolean);
+  ordered.forEach(f => zone.appendChild(f));
+}
+
+function saveFrameOrder(order) {
+  if (!Array.isArray(order) || order.length === 0) return;
+  try { localStorage.setItem(FRAME_ORDER_KEY, JSON.stringify(order)); } catch (_) {}
+  if (layoutChannel && getLayoutSyncPref()) {
+    try {
+      layoutChannel.send({ type: 'broadcast', event: 'layout', payload: { frameOrder: order } });
+    } catch (_) {}
+  }
+}
+
+function setupLayoutChannel() {
+  if (layoutChannel) { try { layoutChannel.unsubscribe(); } catch (_) {} layoutChannel = null; }
+  if (!sb || !sb.channel || !getLayoutSyncPref()) return;
+  const layoutUserId = (currentUser && currentUser.id) ? String(currentUser.id) : getDeviceId();
+  const chName = 'layout-' + layoutUserId;
+  try {
+    layoutChannel = sb.channel(chName, { config: { broadcast: { self: true } } })
+      .on('broadcast', { event: 'layout' }, (payload) => {
+        const data = payload.payload || {};
+        const order = data.frameOrder;
+        if (!Array.isArray(order) || order.length === 0) return;
+        applyFrameOrder(order);
+        try { localStorage.setItem(FRAME_ORDER_KEY, JSON.stringify(order)); } catch (_) {}
+      })
+      .subscribe();
+  } catch (_) {}
+}
+
+function initFramesZone() {
+  const zone = document.getElementById('frames-zone');
+  if (!zone) return;
+  applyFrameOrder(getFrameOrder());
+  const frames = Array.from(zone.querySelectorAll('.frame'));
+  frames.forEach(frame => {
+    if (frame.querySelector('.frame-grip')) return;
+    const grip = document.createElement('div');
+    grip.className = 'frame-grip';
+    grip.setAttribute('aria-label', 'Drag to reorder section');
+    grip.draggable = true;
+    frame.appendChild(grip);
+    grip.addEventListener('dragstart', e => {
+      e.stopPropagation();
+      frame.classList.add('frame-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', frame.getAttribute('data-frame-id') || '');
+      e.dataTransfer.setData('application/x-inout-frame', frame.getAttribute('data-frame-id') || '');
+    });
+    grip.addEventListener('dragend', () => frame.classList.remove('frame-dragging'));
+  });
+  zone.addEventListener('dragover', e => {
+    e.preventDefault();
+    const id = e.dataTransfer.getData('application/x-inout-frame');
+    if (!id) return;
+    const fromFrame = zone.querySelector('.frame[data-frame-id="' + CSS.escape(id) + '"]');
+    if (!fromFrame) return;
+    const frames = Array.from(zone.querySelectorAll('.frame'));
+    let target = null;
+    for (let i = 0; i < frames.length; i++) {
+      const r = frames[i].getBoundingClientRect();
+      if (e.clientY <= r.top + r.height / 2) { target = frames[i]; break; }
+      target = frames[i];
+    }
+    frames.forEach(f => f.classList.remove('frame-drop-target'));
+    if (target && target !== fromFrame) target.classList.add('frame-drop-target');
+  });
+  zone.addEventListener('dragleave', e => {
+    if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.querySelectorAll('.frame').forEach(f => f.classList.remove('frame-drop-target'));
+  });
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.querySelectorAll('.frame').forEach(f => f.classList.remove('frame-drop-target'));
+    const id = e.dataTransfer.getData('application/x-inout-frame');
+    if (!id) return;
+    const fromFrame = zone.querySelector('.frame[data-frame-id="' + CSS.escape(id) + '"]');
+    if (!fromFrame) return;
+    const frames = Array.from(zone.querySelectorAll('.frame'));
+    const order = getFrameOrder();
+    const fromIdx = order.indexOf(id);
+    if (fromIdx < 0) return;
+    let target = null;
+    for (let i = 0; i < frames.length; i++) {
+      const r = frames[i].getBoundingClientRect();
+      if (e.clientY <= r.top + r.height / 2) { target = frames[i]; break; }
+      target = frames[i];
+    }
+    const targetId = target ? target.getAttribute('data-frame-id') : null;
+    const toIdx = targetId ? order.indexOf(targetId) : order.length;
+    if (toIdx === fromIdx) return;
+    const next = order.slice();
+    next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, id);
+    applyFrameOrder(next);
+    saveFrameOrder(next);
+  });
 }
 
 function broadcastDraft(text) {
@@ -5580,6 +5716,7 @@ function setupAuthListener() {
       await syncChannelsFromServer();
           await reloadForUser();
           setupDraftChannel();
+          setupLayoutChannel();
           setupDndBroadcastChannel();
         } catch (e) {
           console.error(e);
@@ -6095,10 +6232,20 @@ if (composerSlotsContainer) {
 }
 setupInputAreaDropTarget();
 attachInputListeners();
+if (typeof initFramesZone === 'function') initFramesZone();
+if (umLayoutSyncChk) {
+  umLayoutSyncChk.checked = getLayoutSyncPref();
+  umLayoutSyncChk.addEventListener('change', function() {
+    setLayoutSyncPref(umLayoutSyncChk.checked);
+    if (umLayoutSyncChk.checked && typeof setupLayoutChannel === 'function') setupLayoutChannel();
+    else if (layoutChannel) { try { layoutChannel.unsubscribe(); } catch (_) {} layoutChannel = null; }
+  });
+}
 if (!input && typeof document !== 'undefined' && document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', function() {
     if (composerSlotsContainer) renderComposerSlots();
     attachInputListeners();
+    if (typeof initFramesZone === 'function') initFramesZone();
   });
 }
 
