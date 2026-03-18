@@ -2544,13 +2544,6 @@ function setupInputStateRealtime() {
         }
         if (row.channel !== (currentChannel || 'main')) return;
         if (!input) return;
-        // If this window is focused and the main input is currently active, skip
-        // applying remote text so we don't fight with local typing.
-        try {
-          const isWindowFocused = typeof document !== 'undefined' && typeof document.hasFocus === 'function' ? document.hasFocus() : true;
-          const isInputActive = typeof document !== 'undefined' && document.activeElement === input;
-          if (isWindowFocused && isInputActive) return;
-        } catch (_) {}
         const text = (row.text != null ? String(row.text) : '') || '';
         input.value = text;
         if (typeof autoResize === 'function') autoResize();
