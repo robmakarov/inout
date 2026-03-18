@@ -1829,7 +1829,7 @@ body.select-mode .obj-select-wrap,
   margin-left:8px;
   position:relative;
   overflow:visible;
-  flex:0 0 auto;
+  flex:1 1 0;
   display:flex;
   align-items:stretch;
 }
@@ -1840,14 +1840,24 @@ body.select-mode .obj-select-wrap,
   max-width:none;
   text-align:left;
   border:1px solid var(--line2);
-  background:var(--bg2);
-  color:var(--text);
+  background:transparent;
+  color:var(--soft);
   border-radius:4px;
   cursor:pointer;
-  transition:border-color .2s, box-shadow .2s;
+  transition:border-color .2s, box-shadow .2s, background .15s, color .15s;
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
+  width:100%;
+}
+#log-action-btn.error-signal{
+  border-color:#c55;
+  color:#fdd;
+  background:rgba(197,85,85,0.12);
+}
+#log-action-btn.error-signal-faded{
+  border-color:rgba(197,85,85,0.5);
+  background:transparent;
 }
 #log-action-btn.error-signal{
   border-color:#c55;

@@ -765,11 +765,6 @@ function renderComposerSlots() {
     const inputWrap = document.createElement('div');
     inputWrap.className = 'composer-input-wrap';
     const targetLabel = (slot.channel === 'main' ? 'Feed' : slot.channel);
-    const labelEl = document.createElement('span');
-    labelEl.className = 'composer-slot-label';
-    labelEl.setAttribute('aria-hidden', 'true');
-    labelEl.textContent = 'To: ' + targetLabel;
-    inputWrap.appendChild(labelEl);
     const textarea = document.createElement('textarea');
     textarea.placeholder = 'Add object…';
     textarea.rows = 1;
@@ -828,8 +823,6 @@ function renderComposerSlots() {
       inputSlots[index].channel = ch;
       saveInputSlots();
       if (index === 0) primarySlotAutoTarget = false;
-      const lbl = inputWrap.querySelector('.composer-slot-label');
-      if (lbl) lbl.textContent = 'To: ' + (ch === 'main' ? 'Feed' : ch);
       textarea.setAttribute('aria-label', 'Object value for ' + (ch === 'main' ? 'Feed' : ch));
     });
     textarea.addEventListener('input', function() {
