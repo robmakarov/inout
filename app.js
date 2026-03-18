@@ -4019,9 +4019,8 @@ function applyFieldPrefsToObjects() {
     if (timeEl) timeEl.style.setProperty('display', fieldPrefs.showTime ? 'block' : 'none', 'important');
     if (senderEl) senderEl.style.setProperty('display', fieldPrefs.showAuthor ? 'block' : 'none', 'important');
   });
-  const labelsOff = !fieldPrefs.showLabels;
-  feedInner.classList.toggle('obj-labels-off', labelsOff);
-  if (secondaryFeedInner) secondaryFeedInner.classList.toggle('obj-labels-off', labelsOff);
+  feedInner.classList.toggle('obj-labels-on', !!fieldPrefs.showLabels);
+  if (secondaryFeedInner) secondaryFeedInner.classList.toggle('obj-labels-on', !!fieldPrefs.showLabels);
   applyFieldPrefsUI();
 }
 

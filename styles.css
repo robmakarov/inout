@@ -1003,9 +1003,17 @@ header{
 .feed-inner.view-table .obj:not(.obj-header) .obj-actions{ width:1%; }
 
 /* Object component: property text fields. Feed view only — switchable captions above each value. */
+/* Default: hide labels until JS adds .obj-labels-on (avoids blink on refresh when labels are off) */
 .feed-inner:not(.view-table) .obj .obj-time::before,
 .feed-inner:not(.view-table) .obj .obj-sender::before,
 .feed-inner:not(.view-table) .obj .obj-text::before{
+  content:none;
+  display:none;
+}
+/* Only show labels when explicitly enabled (opt-in class set by JS) */
+.feed-inner:not(.view-table).obj-labels-on .obj .obj-time::before,
+.feed-inner:not(.view-table).obj-labels-on .obj .obj-sender::before,
+.feed-inner:not(.view-table).obj-labels-on .obj .obj-text::before{
   display:block;
   font-size:10px;
   text-transform:uppercase;
@@ -1016,21 +1024,14 @@ header{
   transform:translateY(6px);
   transition:opacity .2s ease-out, transform .2s ease-out;
 }
-.feed-inner:not(.view-table) .obj:hover .obj-time::before,
-.feed-inner:not(.view-table) .obj:hover .obj-sender::before,
-.feed-inner:not(.view-table) .obj:hover .obj-text::before{
+.feed-inner:not(.view-table).obj-labels-on .obj .obj-time::before{ content:'Time'; }
+.feed-inner:not(.view-table).obj-labels-on .obj .obj-sender::before{ content:'Author'; }
+.feed-inner:not(.view-table).obj-labels-on .obj .obj-text::before{ content:'Value'; }
+.feed-inner:not(.view-table).obj-labels-on .obj:hover .obj-time::before,
+.feed-inner:not(.view-table).obj-labels-on .obj:hover .obj-sender::before,
+.feed-inner:not(.view-table).obj-labels-on .obj:hover .obj-text::before{
   opacity:1;
   transform:translateY(0);
-}
-.feed-inner:not(.view-table) .obj .obj-time::before{ content:'Time'; }
-.feed-inner:not(.view-table) .obj .obj-sender::before{ content:'Author'; }
-.feed-inner:not(.view-table) .obj .obj-text::before{ content:'Value'; }
-/* Hide labels (Time, Author, Value) when toggled off in manage bar */
-.feed-inner.obj-labels-off .obj .obj-time::before,
-.feed-inner.obj-labels-off .obj .obj-sender::before,
-.feed-inner.obj-labels-off .obj .obj-text::before{
-  content:none;
-  display:none;
 }
 /* Default feed: show time and author; same font size as author for time and value */
 .feed-inner:not(.view-table) .obj .obj-time,
