@@ -4560,9 +4560,8 @@ function createObjectRow(obj, isNew, options) {
     sender.textContent = fullLabel.slice(0, 10) + '…';
   }
 
-  const isMainFeed = (obj.channel && obj.channel === 'main') || (!obj.channel && currentChannel === 'main');
-  const wantAuthor = !isMainFeed && (!!fieldPrefs ? !!fieldPrefs.showAuthor : true);
-  sender.style.setProperty('display', wantAuthor ? 'flex' : 'none', 'important');
+  const wantAuthor = !!fieldPrefs ? !!fieldPrefs.showAuthor : true;
+  sender.style.setProperty('display', wantAuthor ? 'block' : 'none', 'important');
 
   const selectWrap = document.createElement('div');
   selectWrap.className = 'obj-select-wrap';
