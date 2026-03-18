@@ -651,9 +651,10 @@ let latestClipboardText = '';
 let inputStateSub = null;
 let inputSaveToDbTimer = null;
 let inputSlotsSaveToDbTimer = null;
-const INPUT_SAVE_DEBOUNCE_MS = 80;
+const INPUT_SAVE_DEBOUNCE_MS = 280;
 let lastPrimaryInputEditAt = 0;
 let lastSlotsEditAt = 0;
+const INPUT_SYNC_MAX_LENGTH = 10000;
 
 // Register initial view from static DOM once globals (including currentView) are initialized.
 views.push({
@@ -2462,22 +2463,29 @@ function setSyncInputPref(on) {
   // Sync is always on; ignore UI toggles.
 }
 
-/** Merge local and remote text; both typists preserved. putRemoteSuffixLast: true = local then remote, false = remote then local (deterministic order across devices). */
-function mergeInputText(local, remote, putRemoteSuffixLast) {
+/** Safe merge: when one is a prefix of the other we take the longer. When diverged we use last-write-wins only (no concatenation) to avoid runaway growth. putRemoteNewer = use remote when we must pick one. */
+function mergeInputText(local, remote, putRemoteNewer) {
   if (local == null) local = '';
   if (remote == null) remote = '';
   local = String(local);
   remote = String(remote);
   if (local === remote) return local;
+  if (local.length > INPUT_SYNC_MAX_LENGTH || remote.length > INPUT_SYNC_MAX_LENGTH) {
+    return putRemoteNewer ? remote : local;
+  }
   if (remote.indexOf(local) === 0) return remote;
   if (local.indexOf(remote) === 0) return local;
   var i = 0;
   while (i < local.length && i < remote.length && local[i] === remote[i]) i++;
-  var pre = local.slice(0, i);
   var localSuf = local.slice(i);
   var remoteSuf = remote.slice(i);
-  if (putRemoteSuffixLast !== false) return pre + localSuf + remoteSuf;
-  return pre + remoteSuf + localSuf;
+  if (localSuf.length > 50 || remoteSuf.length > 50) {
+    return putRemoteNewer ? remote : local;
+  }
+  var pre = local.slice(0, i);
+  var merged = putRemoteNewer !== false ? pre + localSuf + remoteSuf : pre + remoteSuf + localSuf;
+  if (merged.length > INPUT_SYNC_MAX_LENGTH) return putRemoteNewer ? remote : local;
+  return merged;
 }
 
 async function saveInputToDb() {
