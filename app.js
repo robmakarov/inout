@@ -2298,7 +2298,7 @@ function updateEditingRowFromInput() {
       caret +
       escapeHtml(after);
     const textEl = findObjectRowTextEl(id);
-    if (textEl) textEl.innerHTML = html || caret;
+    if (textEl) textEl.innerHTML = '<span class="obj-edit-value">' + (html || caret) + '</span>';
   });
 }
 

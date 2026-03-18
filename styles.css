@@ -1488,6 +1488,11 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
   box-sizing:border-box;
   cursor:default;
 }
+/* Doppelganger: wrap value so one flex item (cursor not split by .obj-text gap) */
+.obj-edit-value{
+  display:inline;
+  min-width:0;
+}
 /* Doppelganger: cursor and selection mirror main input */
 .obj-edit-caret{
   display:inline-block;
