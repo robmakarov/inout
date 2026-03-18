@@ -1489,29 +1489,21 @@ body.select-mode .obj-select-wrap,
   font-family:var(--mono);
   font-size:11px;
   color:var(--soft);
-  background:var(--bg2);
-  border:1px solid var(--line2);
-  border-radius:999px;
-  padding:5px 18px 5px 10px;
+  background:transparent;
+  border:none;
+  border-radius:0;
+  padding:0 14px 0 0;
   cursor:pointer;
   min-width:0;
   max-width:100px;
   appearance:none;
   -webkit-appearance:none;
-  border-right:14px solid transparent; /* space for arrow */
   white-space:nowrap;
   text-overflow:ellipsis;
   overflow:hidden;
 }
 .composer-slot-target::after{
-  content:'▾';
-  position:absolute;
-  right:10px;
-  top:50%;
-  transform:translateY(-50%);
-  font-size:9px;
-  color:var(--muted);
-  pointer-events:none;
+  display:none;
 }
 .composer-slot-remove{
   flex-shrink:0;
@@ -1834,15 +1826,18 @@ body.select-mode .obj-select-wrap,
   margin-top:6px;
 }
 .log-dropup-wrap{
-  margin-left:20px;
+  margin-left:8px;
   position:relative;
   overflow:visible;
+  flex:0 0 auto;
+  display:flex;
+  align-items:stretch;
 }
 #log-action-btn{
   font-size:11px;
   padding:6px 10px;
-  min-width:80px;
-  max-width:180px;
+  min-width:0;
+  max-width:none;
   text-align:left;
   border:1px solid var(--line2);
   background:var(--bg2);
@@ -2041,6 +2036,7 @@ body.select-mode .obj-select-wrap,
   align-items:center;
   gap:6px;
   transition:background .15s, color .15s, border-color .15s, box-shadow .15s, transform .15s;
+  white-space:nowrap;
 }
 
 .tab-active{
