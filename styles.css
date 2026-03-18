@@ -1481,7 +1481,9 @@ body.select-mode .obj-select-wrap,
 .composer-slot-target{
   flex-shrink:0;
   display:flex;
-  align-items:stretch;
+  align-items:center;
+  margin-right:6px;
+  position:relative;
 }
 .composer-slot-target-select{
   font-family:var(--mono);
@@ -1489,12 +1491,27 @@ body.select-mode .obj-select-wrap,
   color:var(--soft);
   background:var(--bg2);
   border:1px solid var(--line2);
-  border-radius:8px;
-  padding:6px 8px;
-  margin-right:6px;
+  border-radius:999px;
+  padding:5px 18px 5px 10px;
   cursor:pointer;
   min-width:0;
   max-width:100px;
+  appearance:none;
+  -webkit-appearance:none;
+  border-right:14px solid transparent; /* space for arrow */
+  white-space:nowrap;
+  text-overflow:ellipsis;
+  overflow:hidden;
+}
+.composer-slot-target::after{
+  content:'▾';
+  position:absolute;
+  right:10px;
+  top:50%;
+  transform:translateY(-50%);
+  font-size:9px;
+  color:var(--muted);
+  pointer-events:none;
 }
 .composer-slot-remove{
   flex-shrink:0;
@@ -1729,9 +1746,9 @@ body.select-mode .obj-select-wrap,
 .composer-slot-bubble .composer-slot-target-select{
   border-radius:999px;
   max-width:80px;
-  padding:4px 8px;
+  padding:4px 18px 4px 10px;
   font-size:10px;
-  margin-right:4px;
+  margin-right:0;
 }
 .composer-slot-bubble .composer-input-wrap{
   min-width:80px;
