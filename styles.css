@@ -1041,9 +1041,12 @@ header{
   transition:opacity .2s ease-out, transform .2s ease-out;
   pointer-events:none;
 }
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-time{ position:relative; }
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-sender{ position:relative; }
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-text{ position:relative; }
+.feed-inner:not(.view-table).obj-labels-off .obj .obj-time,
+.feed-inner:not(.view-table).obj-labels-off .obj .obj-sender,
+.feed-inner:not(.view-table).obj-labels-off .obj .obj-text{
+  position:relative;
+  transition:padding .2s ease-out;
+}
 .feed-inner:not(.view-table).obj-labels-off .obj .obj-time::before{ content:'Time'; }
 .feed-inner:not(.view-table).obj-labels-off .obj .obj-sender::before{ content:'Author'; }
 .feed-inner:not(.view-table).obj-labels-off .obj .obj-text::before{ content:'Value'; }
@@ -1053,7 +1056,12 @@ header{
   opacity:1;
   transform:translate(0, -50%);
 }
-/* Reserve space on hover so label doesn't overlap value */
+/* On hover, values move right to make room for labels (animated) */
+.feed-inner:not(.view-table).obj-labels-off .obj .obj-time,
+.feed-inner:not(.view-table).obj-labels-off .obj .obj-sender,
+.feed-inner:not(.view-table).obj-labels-off .obj .obj-text{
+  padding-left:0;
+}
 .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-time,
 .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-sender,
 .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-text{
