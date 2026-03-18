@@ -997,6 +997,16 @@ header{
 .feed-inner:not(.view-table) .obj .obj-time::before{ content:'Time'; }
 .feed-inner:not(.view-table) .obj .obj-sender::before{ content:'Author'; }
 .feed-inner:not(.view-table) .obj .obj-text::before{ content:'Value'; }
+/* Default feed: show time and author; same font size as author for time and value */
+.feed-inner:not(.view-table) .obj .obj-time,
+.feed-inner:not(.view-table) .obj .obj-sender{
+  display:block;
+}
+.feed-inner:not(.view-table) .obj .obj-time,
+.feed-inner:not(.view-table) .obj .obj-sender,
+.feed-inner:not(.view-table) .obj .obj-text{
+  font-size:10px;
+}
 
 /* DnD spirit: table visual — wrap cloned row(s) in table so they render as table row(s). */
 .obj-drag-spirit-table-wrap{
