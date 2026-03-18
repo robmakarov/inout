@@ -489,7 +489,7 @@ header{
   font-size:20px;
   font-weight:800;
   letter-spacing:0.02em;
-  color:var(--bright);
+  color:#fff;
   text-transform:uppercase;
   user-select:none;
   display:flex;
@@ -498,10 +498,12 @@ header{
   min-width:20px;
   min-height:28px;
   flex-shrink:0;
-  margin-left:0;
+  margin:0;
+  padding:0;
   background:transparent;
   visibility:visible;
   opacity:1;
+  overflow:hidden;
 }
 .logo-lottie{
   width:20px;
@@ -512,6 +514,8 @@ header{
   z-index:0;
   flex-shrink:0;
   overflow:hidden;
+  margin:0;
+  padding:0;
   background:transparent;
 }
 .logo-lottie svg,
@@ -541,9 +545,9 @@ header{
   opacity:1;
   color:inherit;
 }
-/* Keep fallback visible so logo is always shown (Lottie may be clipped in small box) */
+/* When Lottie has loaded, show animation and hide static text (animation contained, no extra gaps) */
 .logo.logo-lottie-loaded .logo-fallback{
-  display:inline;
+  display:none;
 }
 
 .header-right{
@@ -1031,7 +1035,7 @@ header{
   font-weight:500;
 }
 .feed-inner:not(.view-table) .obj .obj-text{
-  font-size:15px;
+  font-size:12px;
   color:var(--text);
   font-weight:400;
   line-height:1.5;
