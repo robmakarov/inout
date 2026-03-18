@@ -1979,6 +1979,58 @@ async function replaceFeedWithListInto(list, targetFeedInner) {
 }
 
 /* ═══ REALTIME ════════════════════════════════════════════ */
+var realtimeInsertBuffer = new Map();
+var realtimeInsertFlushTimer = null;
+function flushRealtimeInsertBuffer() {
+  realtimeInsertFlushTimer = null;
+  if (realtimeInsertBuffer.size === 0) return;
+  var byChannel = new Map(realtimeInsertBuffer);
+  realtimeInsertBuffer = new Map();
+  byChannel.forEach(function(msgs, ch) {
+    if (!msgs.length) return;
+    var primaryUpdated = false;
+    views.forEach(function(view) {
+      if (!view || view.channel !== ch || !view.feedInner) return;
+      var inner = view.feedInner;
+      var frag = document.createDocumentFragment();
+      msgs.forEach(function(msg) {
+        var row = createObjectRow(msg, true, { skipEmptyRemove: inner !== feedInner });
+        if (row) frag.appendChild(row);
+      });
+      if (frag.childNodes.length === 0) return;
+      if (inner === feedInner) {
+        hideEmpty();
+        feedInner.appendChild(frag);
+        objectCount += frag.childNodes.length;
+        updateObjectCount();
+        requestAnimationFrame(scrollBottom);
+        primaryUpdated = true;
+      } else {
+        hideEmptyInFeed(inner);
+        inner.appendChild(frag);
+      }
+    });
+    if (!primaryUpdated && ch === currentChannel && feedInner) {
+      hideEmpty();
+      var frag = document.createDocumentFragment();
+      msgs.forEach(function(msg) {
+        var row = createObjectRow(msg, true, { skipEmptyRemove: false });
+        if (row) frag.appendChild(row);
+      });
+      if (frag.childNodes.length > 0) {
+        feedInner.appendChild(frag);
+        objectCount += frag.childNodes.length;
+        updateObjectCount();
+        requestAnimationFrame(scrollBottom);
+      }
+    } else if (!primaryUpdated && msgs.length) {
+      var next = (unreadCounts.get(ch) || 0) + msgs.length;
+      unreadCounts.set(ch, next);
+      updateTabBadge(ch);
+    }
+  });
+}
+
 function subscribeRealtimeAll() {
   for (const sub of channelSubs.values()) {
     try { sub.unsubscribe(); } catch (_) {}
@@ -2409,44 +2461,13 @@ function subscribeActionLog() {
 }
 
 function onInsertForChannel(ch, msg) {
-  let handled = false;
   try {
     console.log('[realtime] insert', ch, msg && msg.id);
   } catch (_) {}
-  views.forEach(view => {
-    if (!view || view.channel !== ch || !view.feedInner) return;
-    const inner = view.feedInner;
-    if (inner === feedInner) {
-        hideEmpty();
-      appendObject(msg, true);
-      objectCount++;
-      updateObjectCount();
-          requestAnimationFrame(scrollBottom);
-      handled = true;
-    } else {
-      hideEmptyInFeed(inner);
-      const row = createObjectRow(msg, true, { skipEmptyRemove: true });
-      if (row) inner.appendChild(row);
-      handled = true;
-    }
-  });
-  if (!handled) {
-    // Fallback: if this is the current View and we have a primary feed,
-    // append directly so guests (or layouts without a registered view)
-    // still see realtime inserts.
-    if (ch === currentChannel && feedInner) {
-      hideEmpty();
-      appendObject(msg, true);
-      objectCount++;
-      updateObjectCount();
-      try {
-        requestAnimationFrame(scrollBottom);
-      } catch (_) {}
-    } else {
-      const next = (unreadCounts.get(ch) || 0) + 1;
-      unreadCounts.set(ch, next);
-      updateTabBadge(ch);
-    }
+  if (!realtimeInsertBuffer.has(ch)) realtimeInsertBuffer.set(ch, []);
+  realtimeInsertBuffer.get(ch).push(msg);
+  if (!realtimeInsertFlushTimer) {
+    realtimeInsertFlushTimer = setTimeout(flushRealtimeInsertBuffer, 0);
   }
 }
 

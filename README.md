@@ -65,3 +65,11 @@ INOUT is an **objects app** (not a chat). Users keep and manage objects, collect
   - A normal, owner‑owned View (channel) with cloud objects.
   - Guests granted full rights to that View via a shared key / session, not by being separate “temporary owners”.
 
+### Optimization
+
+- **Realtime insert batching**: Realtime INSERT events are buffered per channel and flushed once per tick. Multiple rapid inserts (e.g. paste or bulk add) cause a single DOM update and reflow per channel instead of one per object.
+- **Further ideas**:
+  - **Virtualize the feed**: Render only visible rows (e.g. with a virtual list or Intersection Observer) so feeds with hundreds of objects stay fast.
+  - **Collapse objects in UI**: Optionally group objects (e.g. by date or tag) and show a header with expand/collapse, so the list is shorter and fewer nodes are in the DOM.
+  - **Event delegation**: Attach one listener on the feed container and use `event.target.closest('.obj')` instead of many per-row listeners to reduce memory and speed up add/remove.
+
