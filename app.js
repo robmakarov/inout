@@ -2409,7 +2409,7 @@ function subscribeViewRealtime() {
             applyObjectOrderToDOM();
           }
           const defTime = true;
-          const defAuthor = currentChannel === 'main' ? false : true;
+          const defAuthor = true;
           fieldPrefs = {
             showTime: typeof cfg.showTime === 'boolean' ? cfg.showTime : defTime,
             showAuthor: typeof cfg.showAuthor === 'boolean' ? cfg.showAuthor : defAuthor,
@@ -3937,17 +3937,13 @@ function updateClearInputBtn() {
 
 function applyFieldPrefsUI() {
   if (fieldTimeChk) fieldTimeChk.checked = !!fieldPrefs.showTime;
-  if (fieldAuthorChk) {
-    const isMain = currentChannel === 'main';
-    fieldAuthorChk.disabled = isMain;
-    fieldAuthorChk.checked = !isMain && !!fieldPrefs.showAuthor;
-  }
+  if (fieldAuthorChk) fieldAuthorChk.checked = !!fieldPrefs.showAuthor;
   if (viewVisualSelect) viewVisualSelect.value = (fieldPrefs.viewMode === 'table' ? 'table' : 'feed');
 }
 
 async function loadFieldPrefsForCurrentChannel() {
   const defTime = true;
-  const defAuthor = currentChannel === 'main' ? false : true;
+  const defAuthor = true;
   if (currentUser) {
     try {
       const { data, error } = await sb
@@ -3986,7 +3982,7 @@ async function loadFieldPrefsForCurrentChannel() {
       viewMode: (prefs.viewMode === 'table' || prefs.viewMode === 'feed') ? prefs.viewMode : 'feed',
     };
   } catch (_) {
-    fieldPrefs = { showTime: true, showAuthor: currentChannel !== 'main', viewMode: 'feed' };
+    fieldPrefs = { showTime: true, showAuthor: true, viewMode: 'feed' };
   }
   applyFieldPrefsUI();
   applyFieldPrefsToObjects();
@@ -4014,8 +4010,7 @@ function applyFieldPrefsToObjects() {
     const timeEl = row.querySelector('.obj-time');
     const senderEl = row.querySelector('.obj-sender');
     if (timeEl) timeEl.style.setProperty('display', fieldPrefs.showTime ? 'block' : 'none', 'important');
-    const isMain = currentChannel === 'main' || (row.dataset.channel === 'main');
-    if (senderEl) senderEl.style.setProperty('display', !isMain && fieldPrefs.showAuthor ? 'flex' : 'none', 'important');
+    if (senderEl) senderEl.style.setProperty('display', fieldPrefs.showAuthor ? 'block' : 'none', 'important');
   });
   applyFieldPrefsUI();
 }
@@ -5142,7 +5137,7 @@ async function loadObjectOrderForCurrentChannel() {
         .filter(x => Number.isFinite(x));
       // Pull view rules into fieldPrefs and mirror into local storage.
       const defTime = true;
-      const defAuthor = currentChannel === 'main' ? false : true;
+      const defAuthor = true;
       fieldPrefs = {
         showTime: typeof cfg.showTime === 'boolean' ? cfg.showTime : defTime,
         showAuthor: typeof cfg.showAuthor === 'boolean' ? cfg.showAuthor : defAuthor,

@@ -78,17 +78,16 @@ body{
   touch-action:manipulation;
 }
 
-/* feed scrollbars: custom, only visible on hover */
-/* Primary feed (#feed) and cloned feeds (.multiview-views .view .feed) share the same look. */
+/* feed scrollbars: dark tab from under right edge, visible on hover */
 #feed,
 .multiview-views .view .feed{
-  scrollbar-width:none;          /* Firefox: hide by default */
-  -ms-overflow-style:none;       /* IE/Edge legacy */
+  scrollbar-width:none;
+  -ms-overflow-style:none;
 }
 #feed:hover,
 .multiview-views .view .feed:hover{
-  scrollbar-width:thin;          /* Firefox: show thin bar on hover */
-  scrollbar-color:var(--acc) transparent;
+  scrollbar-width:thin;
+  scrollbar-color:var(--line2) transparent;
 }
 #feed::-webkit-scrollbar,
 .multiview-views .view .feed::-webkit-scrollbar{
@@ -97,16 +96,24 @@ body{
 }
 #feed:hover::-webkit-scrollbar,
 .multiview-views .view .feed:hover::-webkit-scrollbar{
-  width:6px;
+  width:8px;
 }
 #feed:hover::-webkit-scrollbar-track,
 .multiview-views .view .feed:hover::-webkit-scrollbar-track{
-  background:transparent;
+  background:rgba(0,0,0,0.35);
+  border-radius:8px 0 0 8px;
+  margin:4px 0;
 }
 #feed:hover::-webkit-scrollbar-thumb,
 .multiview-views .view .feed:hover::-webkit-scrollbar-thumb{
-  background:var(--acc);
-  border-radius:4px;
+  background:var(--line);
+  border-radius:8px 0 0 8px;
+  border:1px solid var(--line2);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,0.2);
+}
+#feed:hover::-webkit-scrollbar-thumb:hover,
+.multiview-views .view .feed:hover::-webkit-scrollbar-thumb:hover{
+  background:var(--line2);
 }
 
 /* Header and Navigation bar are outside multiview; nav controls which view is shown */
