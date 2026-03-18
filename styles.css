@@ -1022,12 +1022,14 @@ header{
 .feed-inner:not(.view-table):not(.obj-labels-off) .obj .obj-sender::before{ content:'Author'; }
 .feed-inner:not(.view-table):not(.obj-labels-off) .obj .obj-text::before{ content:'Value'; }
 
-/* Labels OFF: no space for labels (container shrinks). On hover only, animate labels in so user can see them */
+/* Labels OFF: no space for labels (container shrinks). On hover, labels appear on the LEFT of values with slide-in animation */
 .feed-inner:not(.view-table).obj-labels-off .obj .obj-time::before,
 .feed-inner:not(.view-table).obj-labels-off .obj .obj-sender::before,
 .feed-inner:not(.view-table).obj-labels-off .obj .obj-text::before{
   display:block;
   position:absolute;
+  left:0;
+  top:50%;
   font-size:10px;
   line-height:12px;
   text-transform:uppercase;
@@ -1035,21 +1037,27 @@ header{
   color:var(--muted);
   white-space:nowrap;
   opacity:0;
-  transform:translateY(6px);
+  transform:translate(-10px, -50%);
   transition:opacity .2s ease-out, transform .2s ease-out;
   pointer-events:none;
 }
 .feed-inner:not(.view-table).obj-labels-off .obj .obj-time{ position:relative; }
 .feed-inner:not(.view-table).obj-labels-off .obj .obj-sender{ position:relative; }
 .feed-inner:not(.view-table).obj-labels-off .obj .obj-text{ position:relative; }
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-time::before{ content:'Time'; left:0; top:0; }
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-sender::before{ content:'Author'; right:0; top:0; left:auto; }
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-text::before{ content:'Value'; left:0; top:0; }
+.feed-inner:not(.view-table).obj-labels-off .obj .obj-time::before{ content:'Time'; }
+.feed-inner:not(.view-table).obj-labels-off .obj .obj-sender::before{ content:'Author'; }
+.feed-inner:not(.view-table).obj-labels-off .obj .obj-text::before{ content:'Value'; }
 .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-time::before,
 .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-sender::before,
 .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-text::before{
   opacity:1;
-  transform:translateY(0);
+  transform:translate(0, -50%);
+}
+/* Reserve space on hover so label doesn't overlap value */
+.feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-time,
+.feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-sender,
+.feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-text{
+  padding-left:2.8em;
 }
 /* Default feed: show time and author; same font size as author for time and value */
 .feed-inner:not(.view-table) .obj .obj-time,
