@@ -1063,14 +1063,18 @@ header{
   box-sizing:border-box;
   break-inside:avoid;
 }
-/* Default feed: author and value stack vertically inside .obj-content */
+/* Default feed: time left, author right on first row; value (text) full-width below */
 .obj-content{
-  display:flex;
-  flex-direction:column;
+  display:grid;
+  grid-template-columns:1fr auto;
+  grid-template-rows:auto auto;
   flex:1;
   min-width:0;
   gap:2px;
 }
+.obj-content .obj-time{ grid-column:1; grid-row:1; }
+.obj-content .obj-sender{ grid-column:2; grid-row:1; }
+.obj-content .obj-text{ grid-column:1 / -1; grid-row:2; }
 /* Table view: .obj-content is layout-transparent so time/sender/text stay as separate table cells */
 .feed-inner.view-table .obj-content{
   display:contents;
