@@ -1060,6 +1060,29 @@ header{
 }
 .obj-drag-spirit .obj-time,
 .obj-drag-spirit .obj-sender{ color:var(--text); }
+/* DnD: single object as bubble (compact chip during drag) */
+.obj-drag-spirit-bubble.obj-drag-spirit,
+.obj-drag-spirit-bubble.obj{
+  max-width:280px;
+  padding:8px 14px;
+  border-radius:999px;
+  box-shadow:0 4px 20px rgba(0,0,0,.35);
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:nowrap;
+}
+.obj-drag-spirit-bubble .obj-time,
+.obj-drag-spirit-bubble .obj-sender{ display:none; }
+.obj-drag-spirit-bubble .obj-text{
+  flex:1;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:13px;
+}
+.obj-drag-spirit-table-wrap .obj-drag-spirit-bubble.obj{ display:flex; }
 /* DnD: stack spirit = multiple rows under cursor, same tokens */
 .obj-drag-spirit-stack{
   position:fixed;
@@ -1634,6 +1657,55 @@ body.select-mode .obj-select-wrap,
 }
 .composer-slot-draggable:active{
   cursor:grabbing;
+}
+
+/* Slot as bubble (chip) style */
+.composer-slot-bubble.composer-slot{
+  flex-wrap:nowrap;
+  border-radius:999px;
+  overflow:hidden;
+  max-width:100%;
+}
+.composer-slot-bubble .composer-slot-target{
+  border-radius:999px 0 0 999px;
+}
+.composer-slot-bubble .composer-slot-target-select{
+  border-radius:999px;
+  max-width:80px;
+  padding:4px 8px;
+  font-size:10px;
+  margin-right:4px;
+}
+.composer-slot-bubble .composer-input-wrap{
+  min-width:80px;
+  flex:1;
+}
+.composer-slot-bubble .composer-slot-input,
+.composer-slot-bubble #object-input{
+  padding:8px 12px;
+  min-height:36px;
+  font-size:13px;
+}
+.composer-slot-bubble .composer-send{
+  min-width:40px;
+  height:36px;
+  padding:0 12px;
+  border-radius:0 999px 999px 0;
+}
+.composer-slot-bubble .clear-input-btn{
+  width:28px;
+  height:36px;
+}
+.composer-slot-bubble .composer-slot-remove{
+  width:28px;
+  height:36px;
+  border-radius:0 999px 999px 0;
+}
+.composer-slot-drop-before{
+  box-shadow:inset 0 2px 0 0 var(--acc);
+}
+.composer-slot-drop-after{
+  box-shadow:inset 0 -2px 0 0 var(--acc);
 }
 
 /* Send: part of composer bar, accent when enabled */

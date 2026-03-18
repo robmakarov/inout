@@ -697,7 +697,7 @@ function renderComposerSlots() {
   inputSlots.forEach((slot, index) => {
     const isPrimary = index === 0;
     const row = document.createElement('div');
-    row.className = 'composer composer-slot';
+    row.className = 'composer composer-slot composer-slot-bubble';
     row.setAttribute('role', 'group');
     row.setAttribute('aria-label', 'New object');
     row.dataset.slotIndex = String(index);
@@ -1397,6 +1397,57 @@ function getDraggingRowAndSource() {
 function setupInputAreaDropTarget() {
   const zone = document.getElementById('input-area');
   if (!zone) return;
+  const slotsContainer = document.getElementById('composer-slots-container');
+  if (slotsContainer) {
+    slotsContainer.addEventListener('dragover', function(e) {
+      if (!e.dataTransfer.types.includes('application/x-inout-draft')) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const slotRow = e.target && e.target.closest && e.target.closest('.composer-slot');
+      slotsContainer.querySelectorAll('.composer-slot-drop-before').forEach(function(el) { el.classList.remove('composer-slot-drop-before'); });
+      slotsContainer.querySelectorAll('.composer-slot-drop-after').forEach(function(el) { el.classList.remove('composer-slot-drop-after'); });
+      if (slotRow) {
+        const rect = slotRow.getBoundingClientRect();
+        if (e.clientY < rect.top + rect.height / 2) slotRow.classList.add('composer-slot-drop-before');
+        else slotRow.classList.add('composer-slot-drop-after');
+      }
+    });
+    slotsContainer.addEventListener('dragleave', function(e) {
+      if (!slotsContainer.contains(e.relatedTarget)) {
+        slotsContainer.querySelectorAll('.composer-slot-drop-before').forEach(function(el) { el.classList.remove('composer-slot-drop-before'); });
+        slotsContainer.querySelectorAll('.composer-slot-drop-after').forEach(function(el) { el.classList.remove('composer-slot-drop-after'); });
+      }
+    });
+    slotsContainer.addEventListener('drop', function(e) {
+      slotsContainer.querySelectorAll('.composer-slot-drop-before').forEach(function(el) { el.classList.remove('composer-slot-drop-before'); });
+      slotsContainer.querySelectorAll('.composer-slot-drop-after').forEach(function(el) { el.classList.remove('composer-slot-drop-after'); });
+      const draftIndex = e.dataTransfer.getData('application/x-inout-draft');
+      if (draftIndex === '' || draftIndex == null) return;
+      const draggedIndex = parseInt(draftIndex, 10);
+      if (!Number.isFinite(draggedIndex) || !inputSlots[draggedIndex]) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const slotRow = e.target && e.target.closest && e.target.closest('.composer-slot');
+      let dropIndex = draggedIndex;
+      if (slotRow) {
+        const targetIndex = parseInt(slotRow.dataset.slotIndex, 10);
+        if (Number.isFinite(targetIndex)) {
+          const rect = slotRow.getBoundingClientRect();
+          dropIndex = e.clientY < rect.top + rect.height / 2 ? targetIndex : targetIndex + 1;
+        }
+      } else {
+        dropIndex = inputSlots.length;
+      }
+      if (dropIndex === draggedIndex) return;
+      const removed = inputSlots.splice(draggedIndex, 1)[0];
+      const insertAt = dropIndex > draggedIndex ? dropIndex - 1 : dropIndex;
+      inputSlots.splice(insertAt, 0, removed);
+      saveInputSlots();
+      renderComposerSlots();
+      _inputListenersAttached = false;
+      attachInputListeners();
+    });
+  }
   zone.addEventListener('dragover', function(e) {
     const id = e.dataTransfer.getData('application/x-inout-obj-id');
     if (!id && !e.dataTransfer.types.includes('application/x-inout-obj-id')) return;
@@ -3719,7 +3770,7 @@ function createObjectRow(obj, isNew, options) {
         wrap.style.top = startTop + 'px';
         var clone = row.cloneNode(true);
         clone.classList.remove('dragging', 'obj-drag-group', 'obj-selected', 'new-flash', 'obj-editing', 'obj-drag-over', 'obj-drag-target', 'dragging-in-feed');
-        clone.classList.add('obj', 'obj-drag-spirit');
+        clone.classList.add('obj', 'obj-drag-spirit', 'obj-drag-spirit-bubble');
         clone.removeAttribute('draggable');
         clone.querySelectorAll('.obj-checkbox-zone, .obj-actions, .obj-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
         wrap.appendChild(clone);
@@ -3728,7 +3779,7 @@ function createObjectRow(obj, isNew, options) {
       } else {
     dragSpiritEl = row.cloneNode(true);
         dragSpiritEl.classList.remove('dragging', 'obj-drag-group', 'obj-selected', 'new-flash', 'obj-editing', 'obj-drag-over', 'obj-drag-target', 'dragging-in-feed');
-        dragSpiritEl.classList.add('obj', 'obj-drag-spirit');
+        dragSpiritEl.classList.add('obj', 'obj-drag-spirit', 'obj-drag-spirit-bubble');
     dragSpiritEl.removeAttribute('draggable');
     dragSpiritEl.setAttribute('aria-hidden', 'true');
         dragSpiritEl.style.width = spiritW + 'px';
