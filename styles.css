@@ -545,9 +545,9 @@ header{
   opacity:1;
   color:inherit;
 }
-/* When Lottie has loaded, show animation and hide static text (animation contained, no extra gaps) */
+/* Keep fallback visible so logo is always shown */
 .logo.logo-lottie-loaded .logo-fallback{
-  display:none;
+  display:inline;
 }
 
 .header-right{
@@ -1003,23 +1003,27 @@ header{
 .feed-inner.view-table .obj:not(.obj-header) .obj-actions{ width:1%; }
 
 /* Object component: property text fields. Feed view only — switchable captions above each value. */
-/* Default: hide labels until JS adds .obj-labels-on (avoids blink on refresh when labels are off) */
+/* Default: reserve same space for label area so toggling labels off doesn't make objects jump */
 .feed-inner:not(.view-table) .obj .obj-time::before,
 .feed-inner:not(.view-table) .obj .obj-sender::before,
 .feed-inner:not(.view-table) .obj .obj-text::before{
-  content:none;
-  display:none;
+  display:block;
+  content:'';
+  min-height:14px;
+  margin-bottom:2px;
+  visibility:hidden;
+  overflow:hidden;
 }
-/* Only show labels when explicitly enabled (opt-in class set by JS) */
+/* When labels on: show real labels (visible on hover); when off JS removes .obj-labels-on but space stays reserved */
 .feed-inner:not(.view-table).obj-labels-on .obj .obj-time::before,
 .feed-inner:not(.view-table).obj-labels-on .obj .obj-sender::before,
 .feed-inner:not(.view-table).obj-labels-on .obj .obj-text::before{
-  display:block;
+  min-height:0;
+  visibility:visible;
   font-size:10px;
   text-transform:uppercase;
   letter-spacing:0.05em;
   color:var(--muted);
-  margin-bottom:2px;
   opacity:0;
   transform:translateY(6px);
   transition:opacity .2s ease-out, transform .2s ease-out;
