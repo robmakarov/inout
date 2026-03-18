@@ -1092,6 +1092,20 @@ header{
   transform:none;
   transition:none;
 }
+
+/* Select mode: selected objects animate to right from checkboxes (same as hover) */
+body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .obj-time,
+body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .obj-sender,
+body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .obj-text{
+  padding-left:calc(3.5em + 20px);
+  transform:translateX(0);
+}
+body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .obj-time::before,
+body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .obj-sender::before,
+body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .obj-text::before{
+  opacity:1;
+  transform:translateX(0);
+}
 /* Default feed: time and author font size */
 .feed-inner:not(.view-table) .obj .obj-time,
 .feed-inner:not(.view-table) .obj .obj-sender{
@@ -1239,6 +1253,80 @@ header{
   font-size:13px;
 }
 .obj-drag-spirit-table-wrap .obj-drag-spirit-bubble.obj{ display:flex; }
+/* DnD reorder spirits: same look as hovered objects — labels left of values, 20px gap */
+.obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content,
+.obj-drag-spirit-table-wrap .obj .obj-content{
+  display:grid;
+  grid-template-columns:auto auto 1fr;
+  grid-template-rows:auto auto;
+  gap:2px 8px;
+}
+.obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content .obj-time,
+.obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content .obj-sender,
+.obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content .obj-text,
+.obj-drag-spirit-table-wrap .obj .obj-time,
+.obj-drag-spirit-table-wrap .obj .obj-sender,
+.obj-drag-spirit-table-wrap .obj .obj-text,
+.obj-drag-spirit-stack .obj-drag-spirit-row .obj-time,
+.obj-drag-spirit-stack .obj-drag-spirit-row .obj-sender,
+.obj-drag-spirit-stack .obj-drag-spirit-row .obj-text{
+  display:flex;
+  flex-direction:row;
+  align-items:baseline;
+  gap:20px;
+  min-width:0;
+  transform:none;
+  padding-left:calc(3.5em + 20px);
+  font-size:10px;
+  color:var(--dim);
+  font-weight:500;
+}
+.obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content .obj-text,
+.obj-drag-spirit-table-wrap .obj .obj-text,
+.obj-drag-spirit-stack .obj-drag-spirit-row .obj-text{
+  font-size:12px;
+  color:var(--text);
+  font-weight:400;
+  line-height:1.5;
+}
+.obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content .obj-time::before,
+.obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content .obj-sender::before,
+.obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content .obj-text::before,
+.obj-drag-spirit-table-wrap .obj .obj-time::before,
+.obj-drag-spirit-table-wrap .obj .obj-sender::before,
+.obj-drag-spirit-table-wrap .obj .obj-text::before,
+.obj-drag-spirit-stack .obj-drag-spirit-row .obj-time::before,
+.obj-drag-spirit-stack .obj-drag-spirit-row .obj-sender::before,
+.obj-drag-spirit-stack .obj-drag-spirit-row .obj-text::before{
+  display:block;
+  font-size:10px;
+  line-height:12px;
+  text-transform:uppercase;
+  letter-spacing:0.05em;
+  color:var(--muted);
+  flex-shrink:0;
+  width:3.5em;
+  min-width:3.5em;
+  opacity:1;
+  transform:none;
+}
+.obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content .obj-time::before{ content:'Time'; }
+.obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content .obj-sender::before{ content:'Author'; }
+.obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content .obj-text::before{ content:'Value'; }
+.obj-drag-spirit-table-wrap .obj .obj-time::before{ content:'Time'; }
+.obj-drag-spirit-table-wrap .obj .obj-sender::before{ content:'Author'; }
+.obj-drag-spirit-table-wrap .obj .obj-text::before{ content:'Value'; }
+.obj-drag-spirit-stack .obj-drag-spirit-row .obj-time::before{ content:'Time'; }
+.obj-drag-spirit-stack .obj-drag-spirit-row .obj-sender::before{ content:'Author'; }
+.obj-drag-spirit-stack .obj-drag-spirit-row .obj-text::before{ content:'Value'; }
+/* DnD table wrap: keep row/cell structure but obj-content uses grid */
+.obj-drag-spirit-table-wrap .obj .obj-content{
+  display:grid;
+}
+.obj-drag-spirit-table-wrap .obj > *{
+  display:table-cell;
+  vertical-align:top;
+}
 /* DnD: stack spirit = multiple rows under cursor, same tokens */
 .obj-drag-spirit-stack{
   position:fixed;
@@ -2107,17 +2195,22 @@ body.select-mode .obj-select-wrap,
     z-index:120;
   }
   /* manage bar stays in normal flow above the view on mobile; no extra padding needed */
-  /* keep input bar above iOS Safari bottom panel & keyboard */
+  /* keep input bar above keyboard: pin to bottom of visual viewport so it stays visible when keyboard opens */
   #input-area{
     position:fixed;
     left:0;
     right:0;
-    bottom:0;
+    bottom:calc(100vh - var(--vv-height, 100vh) - var(--vv-top, 0px));
     z-index:110;
     padding:10px 10px calc(14px + env(safe-area-inset-bottom, 0px));
     background:var(--bg);
   }
   .frame[data-frame-id="input"]{ flex:0 0 0; min-height:0; overflow:visible; }
+  /* prevent main view from shrinking when keyboard opens (keep layout viewport height) */
+  @supports (height: 100dvh) {
+    html{ height: 100%; min-height: 100vh; }
+    body{ min-height: 100vh; }
+  }
   /* add bottom space in feed so last messages are not hidden behind input */
   #feed{
     padding-bottom:120px;

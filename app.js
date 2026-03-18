@@ -75,17 +75,23 @@ if (window.Stripe && STRIPE_PUBLISHABLE_KEY && !STRIPE_PUBLISHABLE_KEY.includes(
   const vv = window.visualViewport;
   if (!vv) return;
   let raf = 0;
-  let current = 0;
-  let pending = 0;
-  const readTop = () => Math.max(0, Math.round((typeof vv.offsetTop === 'number') ? vv.offsetTop : 0));
+  let currentTop = 0;
+  let currentHeight = 0;
+  let pendingTop = 0;
+  let pendingHeight = 0;
+  const read = () => {
+    pendingTop = Math.max(0, Math.round((typeof vv.offsetTop === 'number') ? vv.offsetTop : 0));
+    pendingHeight = Math.max(100, Math.round((typeof vv.height === 'number') ? vv.height : window.innerHeight));
+  };
   const apply = () => {
     raf = 0;
-    const next = pending;
-    if (Math.abs(next - current) < 2) return;
-    current = next;
-    document.documentElement.style.setProperty('--vv-top', current + 'px');
+    if (Math.abs(pendingTop - currentTop) < 2 && Math.abs(pendingHeight - currentHeight) < 2) return;
+    currentTop = pendingTop;
+    currentHeight = pendingHeight;
+    document.documentElement.style.setProperty('--vv-top', currentTop + 'px');
+    document.documentElement.style.setProperty('--vv-height', currentHeight + 'px');
   };
-  const schedule = () => { pending = readTop(); if (!raf) raf = requestAnimationFrame(apply); };
+  const schedule = () => { read(); if (!raf) raf = requestAnimationFrame(apply); };
   vv.addEventListener('resize', schedule);
   vv.addEventListener('scroll', schedule);
   window.addEventListener('orientationchange', schedule);
