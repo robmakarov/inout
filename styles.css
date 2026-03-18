@@ -1063,6 +1063,18 @@ header{
   box-sizing:border-box;
   break-inside:avoid;
 }
+/* Default feed: author and value stack vertically inside .obj-content */
+.obj-content{
+  display:flex;
+  flex-direction:column;
+  flex:1;
+  min-width:0;
+  gap:2px;
+}
+/* Table view: .obj-content is layout-transparent so time/sender/text stay as separate table cells */
+.feed-inner.view-table .obj-content{
+  display:contents;
+}
 @keyframes msgin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
 .obj-drag-image-ghost{
   position:absolute;

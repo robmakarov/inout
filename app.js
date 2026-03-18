@@ -4166,10 +4166,13 @@ function createObjectHeaderRow() {
   text.textContent = 'Value';
   const actions = document.createElement('div');
   actions.className = 'obj-actions';
+  const contentWrap = document.createElement('div');
+  contentWrap.className = 'obj-content';
+  contentWrap.appendChild(time);
+  contentWrap.appendChild(sender);
+  contentWrap.appendChild(text);
   row.appendChild(checkboxPlaceholder);
-  row.appendChild(time);
-  row.appendChild(sender);
-  row.appendChild(text);
+  row.appendChild(contentWrap);
   row.appendChild(actions);
   return row;
 }
@@ -4909,6 +4912,12 @@ function createObjectRow(obj, isNew, options) {
     requestAnimationFrame(updateEditingRowFromInput);
   });
 
+  const contentWrap = document.createElement('div');
+  contentWrap.className = 'obj-content';
+  contentWrap.appendChild(time);
+  contentWrap.appendChild(sender);
+  contentWrap.appendChild(text);
+
   row.addEventListener('click', e => {
     if (e.target.closest('.obj-checkbox-zone')) return;
     if (e.target.closest('.obj-text')) return;
@@ -4937,9 +4946,7 @@ function createObjectRow(obj, isNew, options) {
   }, true);
 
   row.appendChild(checkboxZone);
-  row.appendChild(time);
-  row.appendChild(sender);
-  row.appendChild(text);
+  row.appendChild(contentWrap);
   row.appendChild(actions);
   row.addEventListener('mousedown', e => {
     if (e.target.closest('.obj-checkbox-zone')) return;
