@@ -459,12 +459,12 @@ header{
   display:flex;
   align-items:center;
   position:relative;
-  min-width:24px;
+  min-width:32px;
   min-height:24px;
 }
 .logo-lottie{
-  width:24px;
-  height:38px;
+  width:32px;
+  height:50px;
   position:relative;
   z-index:0;
 }
