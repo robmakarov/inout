@@ -1702,7 +1702,6 @@ function init(done) {
 function openUserModal() {
   if (!umBackdrop) return;
   if (typeof closeChannelModal === 'function') closeChannelModal();
-  if (umSyncInputChk) umSyncInputChk.checked = getSyncInputPref();
   umBackdrop.style.display = 'block';
   umBackdrop.setAttribute('aria-hidden', 'false');
 }
@@ -1906,11 +1905,7 @@ async function replaceFeedWithList(list) {
         feedInner.replaceChildren(frag);
         updateObjectCount();
         applyFieldPrefsToObjects();
-        var saved = viewScroll.get(currentView);
-        if (feedEl && typeof saved === 'number' && saved >= 0) {
-          var maxScroll = feedEl.scrollHeight - feedEl.clientHeight;
-          if (maxScroll > 0) feedEl.scrollTop = Math.min(saved, maxScroll);
-        }
+        if (feedEl) feedEl.scrollTop = 0;
       }
     });
   } else {
@@ -2438,13 +2433,10 @@ function setupPresence() {
 
 /* ═══ SYNC INPUT ACROSS DEVICES (DB + REALTIME) ═══════════ */
 function getSyncInputPref() {
-  try {
-    const v = localStorage.getItem(SYNC_INPUT_PREF_KEY);
-    return v === '1' || v === 'true';
-  } catch (_) { return false; }
+  return true;
 }
 function setSyncInputPref(on) {
-  try { localStorage.setItem(SYNC_INPUT_PREF_KEY, on ? '1' : '0'); } catch (_) {}
+  // Sync is always on; ignore UI toggles.
 }
 
 async function saveInputToDb() {
@@ -5344,21 +5336,6 @@ function setupAuthListener() {
   if (umNickSave && umNickname) {
     umNickSave.addEventListener('click', saveNickname);
   }
-
-  if (umSyncInputChk) {
-    umSyncInputChk.addEventListener('change', async function() {
-      const on = this.checked;
-      setSyncInputPref(on);
-      if (!currentUser) return;
-      if (on) {
-        setupInputStateRealtime();
-        await restoreInputFromDb();
-      } else {
-        teardownInputStateRealtime();
-      }
-      toast(on ? 'Input will sync across your devices.' : 'Input sync turned off.');
-    });
-  }
 }
 
 async function saveNickname() {
@@ -5399,7 +5376,6 @@ function updateAuthUI() {
     sendBtn.disabled = !input.value.trim();
     if (umUserId) umUserId.textContent = currentUser.id || '—';
     if (umCopyIdBtn) umCopyIdBtn.disabled = !currentUser.id;
-    if (umSyncInputChk) umSyncInputChk.checked = getSyncInputPref();
     if (umVersionBadge) umVersionBadge.textContent = 'Free';
   } else {
     if (umAuthStatus) umAuthStatus.textContent = 'Not signed in';
@@ -5408,7 +5384,6 @@ function updateAuthUI() {
     if (umUserId) umUserId.textContent = '—';
     if (umCopyIdBtn) umCopyIdBtn.disabled = true;
     if (umNickname) umNickname.value = '';
-    if (umSyncInputChk) umSyncInputChk.checked = false;
     if (umVersionBadge) umVersionBadge.textContent = 'Free';
   }
 
