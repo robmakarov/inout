@@ -2912,6 +2912,7 @@ function setupLayoutChannel() {
 }
 
 var _frameDragId = null;
+var _frameZoneListenersAttached = false;
 
 function initFramesZone() {
   const zone = document.getElementById('frames-zone');
@@ -2924,7 +2925,9 @@ function initFramesZone() {
     grip.className = 'frame-grip';
     grip.setAttribute('aria-label', 'Drag to reorder section');
     grip.draggable = true;
-    frame.insertBefore(grip, frame.firstChild);
+    var first = frame.firstChild;
+    while (first && first.nodeType !== 1) first = first.nextSibling;
+    frame.insertBefore(grip, first || null);
     grip.addEventListener('dragstart', e => {
       e.stopPropagation();
       _frameDragId = frame.getAttribute('data-frame-id') || '';
@@ -2938,6 +2941,8 @@ function initFramesZone() {
       _frameDragId = null;
     });
   });
+  if (_frameZoneListenersAttached) return;
+  _frameZoneListenersAttached = true;
   zone.addEventListener('dragover', e => {
     e.preventDefault();
     const id = _frameDragId || e.dataTransfer.getData('application/x-inout-frame');
