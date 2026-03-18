@@ -1003,18 +1003,35 @@ header{
 .feed-inner.view-table .obj:not(.obj-header) .obj-text{ width:auto; }
 .feed-inner.view-table .obj:not(.obj-header) .obj-actions{ width:1%; }
 
-/* Object component: property text fields. Feed view only — switchable captions above each value. */
-/* Labels ON: labels always visible above values, 20px gap to values below */
+/* Object component: property text fields. Feed view only — labels left of values, 20px gap. */
+/* Layout: label left, value right in every cell */
+.feed-inner:not(.view-table) .obj .obj-time,
+.feed-inner:not(.view-table) .obj .obj-sender,
+.feed-inner:not(.view-table) .obj .obj-text{
+  display:flex;
+  flex-direction:row;
+  align-items:baseline;
+  gap:20px;
+  min-width:0;
+}
+/* Label (::before) — shared style; fixed width so value aligns at same distance (20px gap) */
+.feed-inner:not(.view-table) .obj .obj-time::before,
+.feed-inner:not(.view-table) .obj .obj-sender::before,
+.feed-inner:not(.view-table) .obj .obj-text::before{
+  font-size:10px;
+  line-height:12px;
+  text-transform:uppercase;
+  letter-spacing:0.05em;
+  color:var(--muted);
+  flex-shrink:0;
+  width:3.5em;
+  min-width:3.5em;
+}
+/* Labels ON: label visible in flow */
 .feed-inner:not(.view-table):not(.obj-labels-off) .obj .obj-time::before,
 .feed-inner:not(.view-table):not(.obj-labels-off) .obj .obj-sender::before,
 .feed-inner:not(.view-table):not(.obj-labels-off) .obj .obj-text::before{
   display:block;
-  font-size:10px;
-  line-height:12px;
-  margin-bottom:20px;
-  text-transform:uppercase;
-  letter-spacing:0.05em;
-  color:var(--muted);
   opacity:1;
   transform:none;
 }
@@ -1022,66 +1039,60 @@ header{
 .feed-inner:not(.view-table):not(.obj-labels-off) .obj .obj-sender::before{ content:'Author'; }
 .feed-inner:not(.view-table):not(.obj-labels-off) .obj .obj-text::before{ content:'Value'; }
 
-/* Labels OFF: no space for labels (container shrinks). On hover only, labels appear above with slide-up animation */
+/* Labels OFF: label out of flow (no space). On hover, show label left of value; same 20px gap, smooth animation */
 .feed-inner:not(.view-table).obj-labels-off .obj .obj-time::before,
 .feed-inner:not(.view-table).obj-labels-off .obj .obj-sender::before,
 .feed-inner:not(.view-table).obj-labels-off .obj .obj-text::before{
   display:block;
   position:absolute;
-  font-size:10px;
-  line-height:12px;
-  text-transform:uppercase;
-  letter-spacing:0.05em;
-  color:var(--muted);
+  left:0;
+  top:0;
   white-space:nowrap;
   opacity:0;
-  transform:translateY(6px);
-  transition:opacity .2s ease-out, transform .2s ease-out;
+  transform:translateX(-6px);
+  transition:opacity .22s ease-out, transform .22s ease-out;
   pointer-events:none;
 }
+.feed-inner:not(.view-table).obj-labels-off .obj .obj-time::before{ content:'Time'; }
+.feed-inner:not(.view-table).obj-labels-off .obj .obj-sender::before{ content:'Author'; }
+.feed-inner:not(.view-table).obj-labels-off .obj .obj-text::before{ content:'Value'; }
 .feed-inner:not(.view-table).obj-labels-off .obj .obj-time,
 .feed-inner:not(.view-table).obj-labels-off .obj .obj-sender,
 .feed-inner:not(.view-table).obj-labels-off .obj .obj-text{
   position:relative;
-  transition:padding-top .2s ease-out;
+  transition:transform .22s ease-out, padding-left .22s ease-out;
+  overflow:visible;
 }
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-time::before{ content:'Time'; left:0; top:0; }
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-sender::before{ content:'Author'; right:0; top:0; left:auto; }
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-text::before{ content:'Value'; left:0; top:0; }
 .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-time::before,
 .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-sender::before,
 .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-text::before{
   opacity:1;
-  transform:translateY(0);
+  transform:translateX(0);
 }
-/* Same 20px gap when labels show on hover: reserve space so value sits 20px below label */
+/* Reserve space for label on hover — same distance (3.5em + 20px) so values align */
 .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-time,
 .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-sender,
 .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-text{
-  padding-top:32px; /* label line-height ~12px + 20px gap */
+  padding-left:calc(3.5em + 20px);
+  transform:translateX(0);
 }
-
-/* When object hovered: values animate from left, moving right into place (ensure visible: overflow + transition) */
+/* Values slide from left on hover (labels OFF only); rest state */
+.feed-inner:not(.view-table).obj-labels-off .obj .obj-time,
+.feed-inner:not(.view-table).obj-labels-off .obj .obj-sender,
+.feed-inner:not(.view-table).obj-labels-off .obj .obj-text{
+  transform:translateX(-20px);
+}
 .feed-inner:not(.view-table) .obj .obj-content{
   overflow:visible;
 }
-.feed-inner:not(.view-table) .obj .obj-time,
-.feed-inner:not(.view-table) .obj .obj-sender,
-.feed-inner:not(.view-table) .obj .obj-text{
-  transform:translateX(-20px);
-  transition:transform .25s ease-out;
-  overflow:visible;
+/* Labels ON: no slide animation, values stay at fixed 20px from labels */
+.feed-inner:not(.view-table):not(.obj-labels-off) .obj .obj-time,
+.feed-inner:not(.view-table):not(.obj-labels-off) .obj .obj-sender,
+.feed-inner:not(.view-table):not(.obj-labels-off) .obj .obj-text{
+  transform:none;
+  transition:none;
 }
-.feed-inner:not(.view-table) .obj:hover .obj-time,
-.feed-inner:not(.view-table) .obj:hover .obj-sender,
-.feed-inner:not(.view-table) .obj:hover .obj-text{
-  transform:translateX(0);
-}
-/* Default feed: show time and author; same font size as author for time and value */
-.feed-inner:not(.view-table) .obj .obj-time,
-.feed-inner:not(.view-table) .obj .obj-sender{
-  display:block;
-}
+/* Default feed: time and author font size */
 .feed-inner:not(.view-table) .obj .obj-time,
 .feed-inner:not(.view-table) .obj .obj-sender{
   font-size:10px;
