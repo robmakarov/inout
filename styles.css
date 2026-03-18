@@ -1004,14 +1004,14 @@ header{
 .feed-inner.view-table .obj:not(.obj-header) .obj-actions{ width:1%; }
 
 /* Object component: property text fields. Feed view only — switchable captions above each value. */
-/* When labels hidden: no space so container shrinks to text */
+/* When labels hidden: no space for labels, container shrinks to text */
 .feed-inner:not(.view-table) .obj .obj-time::before,
 .feed-inner:not(.view-table) .obj .obj-sender::before,
 .feed-inner:not(.view-table) .obj .obj-text::before{
   content:none;
   display:none;
 }
-/* When labels on: show labels on hover */
+/* When labels on: show labels (visible on hover) */
 .feed-inner:not(.view-table).obj-labels-on .obj .obj-time::before,
 .feed-inner:not(.view-table).obj-labels-on .obj .obj-sender::before,
 .feed-inner:not(.view-table).obj-labels-on .obj .obj-text::before{
