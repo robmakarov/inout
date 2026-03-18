@@ -655,6 +655,11 @@ const INPUT_SAVE_DEBOUNCE_MS = 280;
 let lastPrimaryInputEditAt = 0;
 let lastSlotsEditAt = 0;
 const INPUT_SYNC_MAX_LENGTH = 10000;
+function capSyncText(s) {
+  if (s == null) return '';
+  var t = String(s);
+  return t.length > INPUT_SYNC_MAX_LENGTH ? t.slice(0, INPUT_SYNC_MAX_LENGTH) : t;
+}
 
 // Register initial view from static DOM once globals (including currentView) are initialized.
 views.push({
@@ -676,12 +681,19 @@ function loadInputSlots() {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        inputSlots = parsed.map(s => ({ id: s.id || 'slot-' + Date.now(), channel: s.channel || 'main', value: (s.value != null ? String(s.value) : '') }));
-        return;
+        inputSlots = parsed.map(normalizeSlot).filter(Boolean);
+        if (inputSlots.length > 0) return;
       }
     }
   } catch (_) {}
   inputSlots = [{ id: 'slot-0', channel: (typeof currentChannel !== 'undefined' ? currentChannel : 'main'), value: '' }];
+}
+function normalizeSlot(s) {
+  if (!s || typeof s !== 'object') return null;
+  var id = s.id != null ? String(s.id) : 'slot-' + Date.now();
+  var ch = s.channel != null ? String(s.channel) : 'main';
+  var val = s.value != null ? String(s.value) : '';
+  return { id: id, channel: ch, value: capSyncText(val) };
 }
 
 function saveInputSlots() {
@@ -2471,21 +2483,20 @@ function mergeInputText(local, remote, putRemoteNewer) {
   remote = String(remote);
   if (local === remote) return local;
   if (local.length > INPUT_SYNC_MAX_LENGTH || remote.length > INPUT_SYNC_MAX_LENGTH) {
-    return putRemoteNewer ? remote : local;
+    return capSyncText(putRemoteNewer ? remote : local);
   }
-  if (remote.indexOf(local) === 0) return remote;
-  if (local.indexOf(remote) === 0) return local;
+  if (remote.indexOf(local) === 0) return capSyncText(remote);
+  if (local.indexOf(remote) === 0) return capSyncText(local);
   var i = 0;
   while (i < local.length && i < remote.length && local[i] === remote[i]) i++;
   var localSuf = local.slice(i);
   var remoteSuf = remote.slice(i);
   if (localSuf.length > 50 || remoteSuf.length > 50) {
-    return putRemoteNewer ? remote : local;
+    return capSyncText(putRemoteNewer ? remote : local);
   }
   var pre = local.slice(0, i);
   var merged = putRemoteNewer !== false ? pre + localSuf + remoteSuf : pre + remoteSuf + localSuf;
-  if (merged.length > INPUT_SYNC_MAX_LENGTH) return putRemoteNewer ? remote : local;
-  return merged;
+  return capSyncText(merged);
 }
 
 async function saveInputToDb() {
@@ -2547,12 +2558,14 @@ function setupInputStateRealtime() {
         table: USER_INPUT_STATE_TABLE,
         filter: 'user_id=eq.' + currentUser.id
       }, payload => {
+        try {
         const row = payload.new || payload.old;
         if (!row) return;
         if (row.device_id === myId) return;
         if (row.channel === SLOTS_SYNC_CHANNEL) {
           try {
             const raw = (row.text != null ? String(row.text) : '') || '[]';
+            if (raw.length > INPUT_SYNC_MAX_LENGTH * 20) return;
             const slots = JSON.parse(raw);
             if (Array.isArray(slots) && slots.length > 0) {
               const structureSame = inputSlots.length === slots.length &&
@@ -2561,7 +2574,9 @@ function setupInputStateRealtime() {
                   return t && s.id === t.id && s.channel === t.channel;
                 });
               if (structureSame && composerSlotsContainer) {
-                inputSlots = slots.map(function(s) { return Object.assign({}, s); });
+                inputSlots = slots.map(function(s) {
+                  return { id: s.id || '', channel: s.channel || 'main', value: capSyncText(s.value) };
+                });
                 const mobile = isMobileOrTouchDevice();
                 const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
                 const remoteAt = row.updated_at ? new Date(row.updated_at).getTime() : 0;
@@ -2570,7 +2585,7 @@ function setupInputStateRealtime() {
                   const ta = (i === 0 && input) ? input : composerSlotsContainer.querySelector('.composer-slot[data-slot-index="' + i + '"] textarea');
                   if (!ta) return;
                   if (mobile && ta === activeEl) return;
-                  const remoteVal = slot.value != null ? String(slot.value) : '';
+                  const remoteVal = capSyncText(slot.value);
                   const merged = mergeInputText(ta.value, remoteVal, putRemoteLast);
                   if (merged === ta.value) return;
                   ta.value = merged;
@@ -2620,9 +2635,10 @@ function setupInputStateRealtime() {
                     }
                   }
                 } catch (_) {}
-                inputSlots = slots;
+                inputSlots = slots.map(normalizeSlot).filter(Boolean);
+                if (inputSlots.length === 0) return;
                 if (focusedSlotIndex >= 0 && focusedSlotIndex < inputSlots.length) {
-                  inputSlots[focusedSlotIndex] = Object.assign({}, inputSlots[focusedSlotIndex], { value: savedValue });
+                  inputSlots[focusedSlotIndex] = Object.assign({}, inputSlots[focusedSlotIndex], { value: capSyncText(savedValue) });
                 }
                 try { localStorage.setItem(INPUT_SLOTS_KEY, JSON.stringify(inputSlots)); } catch (_) {}
                 if (composerSlotsContainer && typeof renderComposerSlots === 'function') {
@@ -2663,7 +2679,7 @@ function setupInputStateRealtime() {
         }
         if (row.channel !== (currentChannel || 'main')) return;
         if (!input) return;
-        const remoteText = (row.text != null ? String(row.text) : '') || '';
+        const remoteText = capSyncText(row.text);
         const remoteAt = row.updated_at ? new Date(row.updated_at).getTime() : 0;
         const putRemoteLast = remoteAt > lastPrimaryInputEditAt || (remoteAt === lastPrimaryInputEditAt && (row.device_id || '') > (myId || ''));
         const merged = mergeInputText(input.value, remoteText, putRemoteLast);
@@ -2674,6 +2690,9 @@ function setupInputStateRealtime() {
           if (typeof updateClearInputBtn === 'function') updateClearInputBtn();
           saveInputGlobal();
           scheduleSaveInputToDb();
+        }
+        } catch (e) {
+          if (typeof console !== 'undefined' && console.error) console.error('input-state realtime', e);
         }
       })
       .subscribe();
@@ -2686,7 +2705,7 @@ async function loadInputFromDbForChannel(ch) {
   try {
     const { data, error } = await sb.from(USER_INPUT_STATE_TABLE).select('text').eq('user_id', currentUser.id).eq('channel', channel).maybeSingle();
     if (error || !data) return;
-    const text = (data.text != null ? String(data.text) : '') || '';
+    const text = capSyncText(data.text);
     input.value = text;
     autoResize();
     sendBtn.disabled = !text.trim();
@@ -2701,9 +2720,11 @@ async function loadSlotsFromDb() {
     const { data, error } = await sb.from(USER_INPUT_STATE_TABLE).select('text').eq('user_id', currentUser.id).eq('channel', SLOTS_SYNC_CHANNEL).maybeSingle();
     if (error || !data || data.text == null) return false;
     const raw = String(data.text).trim() || '[]';
+    if (raw.length > INPUT_SYNC_MAX_LENGTH * 2) return false;
     const slots = JSON.parse(raw);
     if (!Array.isArray(slots) || slots.length === 0) return false;
-    inputSlots = slots;
+    inputSlots = slots.map(normalizeSlot).filter(Boolean);
+    if (inputSlots.length === 0) return false;
     try { localStorage.setItem(INPUT_SLOTS_KEY, JSON.stringify(inputSlots)); } catch (_) {}
     return true;
   } catch (_) { return false; }
