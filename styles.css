@@ -1973,25 +1973,6 @@ body.select-mode .obj-select-wrap,
 }
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
-/* ── SCROLL TO BOTTOM BTN ── */
-.frame[data-frame-id="scroll-btn"]{
-  min-height:52px;
-  flex:0 0 auto;
-}
-#scroll-btn{
-  position:absolute;
-  bottom:8px;
-  right:12px;
-  background:var(--bg2);
-  border:1px solid var(--line2);
-  color:var(--soft);
-  font-family:var(--mono);font-size:11px;
-  padding:6px 12px;
-  /* feed scrollbars on mobile: use global custom hover style above */
-}
-#scroll-btn.visible{opacity:1;pointer-events:auto}
-#scroll-btn:hover{background:var(--line);color:var(--text)}
-
 /* ── MOBILE ── */
 @media(max-width:540px){
   #scroll-btn{display:none !important;}

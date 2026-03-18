@@ -534,7 +534,7 @@ const viewScroll = new Map();
 const OPEN_VIEWS_KEY     = 'inout_open_views_v1';
 const FRAME_ORDER_KEY    = 'inout_frame_order_v1';
 const LAYOUT_SYNC_KEY    = 'inout_layout_sync_v1';
-const DEFAULT_FRAME_ORDER = ['nav', 'multiview', 'input', 'scroll-btn'];
+const DEFAULT_FRAME_ORDER = ['nav', 'multiview', 'input'];
 
 function getLocalObjectsKey() {
   if (currentUser && currentUser.id) {
