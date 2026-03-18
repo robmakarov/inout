@@ -2911,6 +2911,8 @@ function setupLayoutChannel() {
   } catch (_) {}
 }
 
+var _frameDragId = null;
+
 function initFramesZone() {
   const zone = document.getElementById('frames-zone');
   if (!zone) return;
@@ -2922,19 +2924,23 @@ function initFramesZone() {
     grip.className = 'frame-grip';
     grip.setAttribute('aria-label', 'Drag to reorder section');
     grip.draggable = true;
-    frame.appendChild(grip);
+    frame.insertBefore(grip, frame.firstChild);
     grip.addEventListener('dragstart', e => {
       e.stopPropagation();
+      _frameDragId = frame.getAttribute('data-frame-id') || '';
       frame.classList.add('frame-dragging');
       e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', frame.getAttribute('data-frame-id') || '');
-      e.dataTransfer.setData('application/x-inout-frame', frame.getAttribute('data-frame-id') || '');
+      e.dataTransfer.setData('text/plain', _frameDragId);
+      e.dataTransfer.setData('application/x-inout-frame', _frameDragId);
     });
-    grip.addEventListener('dragend', () => frame.classList.remove('frame-dragging'));
+    grip.addEventListener('dragend', () => {
+      frame.classList.remove('frame-dragging');
+      _frameDragId = null;
+    });
   });
   zone.addEventListener('dragover', e => {
     e.preventDefault();
-    const id = e.dataTransfer.getData('application/x-inout-frame');
+    const id = _frameDragId || e.dataTransfer.getData('application/x-inout-frame');
     if (!id) return;
     const fromFrame = zone.querySelector('.frame[data-frame-id="' + CSS.escape(id) + '"]');
     if (!fromFrame) return;
@@ -2954,7 +2960,7 @@ function initFramesZone() {
   zone.addEventListener('drop', e => {
     e.preventDefault();
     zone.querySelectorAll('.frame').forEach(f => f.classList.remove('frame-drop-target'));
-    const id = e.dataTransfer.getData('application/x-inout-frame');
+    const id = _frameDragId || e.dataTransfer.getData('application/x-inout-frame');
     if (!id) return;
     const fromFrame = zone.querySelector('.frame[data-frame-id="' + CSS.escape(id) + '"]');
     if (!fromFrame) return;
@@ -5035,6 +5041,12 @@ function setupTabs() {
       const isOpen = manageMenu.classList.toggle('open');
       manageMenu.hidden = !isOpen;
       manageMenuToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      if (isOpen) {
+        const r = manageMenuToggle.getBoundingClientRect();
+        manageMenu.style.top = (r.bottom + 4) + 'px';
+        manageMenu.style.left = r.left + 'px';
+        manageMenu.style.right = 'auto';
+      }
     });
   }
 }
@@ -6487,6 +6499,12 @@ if (viewToggleBtn && viewMenu) {
   viewToggleBtn.addEventListener('click', e => {
     e.stopPropagation();
     viewMenu.classList.toggle('open');
+    if (viewMenu.classList.contains('open')) {
+      const r = viewToggleBtn.getBoundingClientRect();
+      viewMenu.style.top = (r.bottom + 4) + 'px';
+      viewMenu.style.right = (window.innerWidth - r.right) + 'px';
+      viewMenu.style.left = 'auto';
+    }
   });
 
   // Keep clicks inside the dropdown (labels, checkboxes) from closing it.
