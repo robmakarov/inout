@@ -2508,34 +2508,69 @@ function setupInputStateRealtime() {
             const raw = (row.text != null ? String(row.text) : '') || '[]';
             const slots = JSON.parse(raw);
             if (Array.isArray(slots) && slots.length > 0) {
-              let hadPrimaryFocus = false;
-              let primaryValue = '';
-              let primaryStart = 0;
-              let primaryEnd = 0;
+              let focusedSlotIndex = -1;
+              let savedValue = '';
+              let savedStart = 0;
+              let savedEnd = 0;
               try {
-                hadPrimaryFocus = typeof document !== 'undefined' && input && document.activeElement === input;
-                if (hadPrimaryFocus) {
-                  primaryValue = input.value || '';
-                  primaryStart = input.selectionStart != null ? input.selectionStart : primaryValue.length;
-                  primaryEnd = input.selectionEnd != null ? input.selectionEnd : primaryStart;
+                if (typeof document !== 'undefined' && composerSlotsContainer) {
+                  const el = document.activeElement;
+                  if (el && composerSlotsContainer.contains(el)) {
+                    if (el.id === 'object-input') {
+                      focusedSlotIndex = 0;
+                    } else if (el.classList && el.classList.contains('composer-slot-input') && el.dataset.slotIndex != null) {
+                      focusedSlotIndex = parseInt(el.dataset.slotIndex, 10);
+                    } else {
+                      const rowEl = el.closest && el.closest('.composer-slot');
+                      if (rowEl && rowEl.dataset.slotIndex != null) {
+                        focusedSlotIndex = parseInt(rowEl.dataset.slotIndex, 10);
+                      }
+                    }
+                    if (focusedSlotIndex >= 0) {
+                      const slotTextarea = (focusedSlotIndex === 0 && input) ? input : composerSlotsContainer.querySelector('.composer-slot[data-slot-index="' + focusedSlotIndex + '"] textarea');
+                      if (slotTextarea && slotTextarea.value !== undefined) {
+                        savedValue = slotTextarea.value || '';
+                        savedStart = slotTextarea.selectionStart != null ? slotTextarea.selectionStart : savedValue.length;
+                        savedEnd = slotTextarea.selectionEnd != null ? slotTextarea.selectionEnd : savedStart;
+                      }
+                    }
+                  }
                 }
               } catch (_) {}
               inputSlots = slots;
-              if (hadPrimaryFocus && inputSlots.length > 0) {
-                inputSlots[0] = Object.assign({}, inputSlots[0], { value: primaryValue });
+              if (focusedSlotIndex >= 0 && focusedSlotIndex < inputSlots.length) {
+                inputSlots[focusedSlotIndex] = Object.assign({}, inputSlots[focusedSlotIndex], { value: savedValue });
               }
               try { localStorage.setItem(INPUT_SLOTS_KEY, JSON.stringify(inputSlots)); } catch (_) {}
               if (composerSlotsContainer && typeof renderComposerSlots === 'function') {
                 renderComposerSlots();
                 updatePrimaryInputRefs();
                 if (typeof attachInputListeners === 'function') attachInputListeners();
-                if (hadPrimaryFocus && input) {
-                  input.focus();
-                  input.value = primaryValue;
-                  input.setSelectionRange(primaryStart, primaryEnd);
-                  if (typeof autoResize === 'function') autoResize();
-                  if (sendBtn) sendBtn.disabled = !primaryValue.trim();
-                  if (typeof updateClearInputBtn === 'function') updateClearInputBtn();
+                if (focusedSlotIndex >= 0) {
+                  const idx = focusedSlotIndex;
+                  const val = savedValue;
+                  const selStart = savedStart;
+                  const selEnd = savedEnd;
+                  requestAnimationFrame(function() {
+                    let toFocus = null;
+                    if (idx === 0 && input) {
+                      toFocus = input;
+                    } else if (composerSlotsContainer) {
+                      toFocus = composerSlotsContainer.querySelector('.composer-slot[data-slot-index="' + idx + '"] textarea');
+                    }
+                    if (toFocus) {
+                      if (toFocus.value !== undefined) {
+                        toFocus.value = val;
+                        toFocus.setSelectionRange(selStart, selEnd);
+                      }
+                      toFocus.focus();
+                      if (idx === 0) {
+                        if (typeof autoResize === 'function') autoResize();
+                        if (sendBtn) sendBtn.disabled = !val.trim();
+                        if (typeof updateClearInputBtn === 'function') updateClearInputBtn();
+                      }
+                    }
+                  });
                 }
               }
             }
