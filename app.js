@@ -128,6 +128,7 @@ const qrModalImg   = document.getElementById('qr-modal-img');
 const qrModalClose = document.getElementById('qr-modal-close');
 const umNickname   = document.getElementById('um-nickname');
 const umNickSave   = document.getElementById('um-nick-save');
+const umSyncInputChk = document.getElementById('um-sync-input');
 const umVersionBadge = document.getElementById('um-version-badge');
 const umUpgradeBtn   = document.getElementById('um-upgrade-btn');
 const tabsEl     = document.getElementById('tabs');
@@ -476,6 +477,7 @@ function subscribeTempSessionJoins() {
 
 // Supabase table name for stored objects (was 'entries').
 const OBJECTS_TABLE        = 'entries';
+const USER_INPUT_STATE_TABLE = 'user_input_state';
 
 // Per-device/local storage keys.
 const LOCAL_DEVICE_ID_KEY      = 'inout_device_id';
@@ -510,6 +512,7 @@ const CURRENT_VIEW_KEY    = 'inout_current_view_v1';
 const SECONDARY_VIEW_KEY  = 'inout_secondary_view_name_v1';
 const MULTIVIEW_SPLIT_KEY = 'inout_multiview_split_v1';
 const INPUT_STATE_KEY      = 'inout_input_state_v2';
+const SYNC_INPUT_PREF_KEY  = 'inout_sync_input_v1';
 const FIELD_PREFS_KEY      = 'inout_field_prefs_v1';
 const ORDER_STATE_KEY      = 'inout_order_state_v1';
 const SCROLL_STATE_KEY     = 'inout_scroll_state_v1';
@@ -636,6 +639,9 @@ let viewSub  = null;
 let draftChannel = null;
 let latestRemoteDraft = '';
 let latestClipboardText = '';
+let inputStateSub = null;
+let inputSaveToDbTimer = null;
+const INPUT_SAVE_DEBOUNCE_MS = 600;
 
 // Register initial view from static DOM once globals (including currentView) are initialized.
 views.push({
@@ -796,6 +802,20 @@ create table if not exists action_log (
 alter table action_log enable row level security;
 create policy "Users can manage own action_log" on action_log for all using (auth.uid() = user_id);
 alter publication supabase_realtime add table action_log;
+*/
+
+/* Optional: persist main input per user+channel for cross-device sync. Run in Supabase SQL editor if you use "Sync input across devices":
+create table if not exists user_input_state (
+  user_id uuid references auth.users(id) on delete cascade not null,
+  channel text not null default 'main',
+  text text not null default '',
+  updated_at timestamptz default now(),
+  device_id text,
+  primary key (user_id, channel)
+);
+alter table user_input_state enable row level security;
+create policy "Users manage own input state" on user_input_state for all using (auth.uid() = user_id);
+alter publication supabase_realtime add table user_input_state;
 */
 
 function logAction(action, details, opts) {
@@ -1347,6 +1367,7 @@ function init(done) {
 function openUserModal() {
   if (!umBackdrop) return;
   if (typeof closeChannelModal === 'function') closeChannelModal();
+  if (umSyncInputChk) umSyncInputChk.checked = getSyncInputPref();
   umBackdrop.style.display = 'block';
   umBackdrop.setAttribute('aria-hidden', 'false');
 }
@@ -2078,6 +2099,92 @@ function setupPresence() {
         await presenceCh.track({ online_at: new Date().toISOString() });
       }
     });
+}
+
+/* ═══ SYNC INPUT ACROSS DEVICES (DB + REALTIME) ═══════════ */
+function getSyncInputPref() {
+  try {
+    const v = localStorage.getItem(SYNC_INPUT_PREF_KEY);
+    return v === '1' || v === 'true';
+  } catch (_) { return false; }
+}
+function setSyncInputPref(on) {
+  try { localStorage.setItem(SYNC_INPUT_PREF_KEY, on ? '1' : '0'); } catch (_) {}
+}
+
+async function saveInputToDb() {
+  inputSaveToDbTimer = null;
+  if (!currentUser || !sb || !sb.from || !getSyncInputPref()) return;
+  const ch = currentChannel || 'main';
+  const text = input ? (input.value || '') : '';
+  try {
+    await sb.from(USER_INPUT_STATE_TABLE).upsert({
+      user_id: currentUser.id,
+      channel: ch,
+      text: text,
+      updated_at: new Date().toISOString(),
+      device_id: myId
+    }, { onConflict: 'user_id,channel' });
+  } catch (e) { console.error('saveInputToDb', e); }
+}
+
+function scheduleSaveInputToDb() {
+  if (inputSaveToDbTimer) clearTimeout(inputSaveToDbTimer);
+  if (!currentUser || !getSyncInputPref()) return;
+  inputSaveToDbTimer = setTimeout(saveInputToDb, INPUT_SAVE_DEBOUNCE_MS);
+}
+
+function teardownInputStateRealtime() {
+  if (inputStateSub) {
+    try { inputStateSub.unsubscribe(); } catch (_) {}
+    inputStateSub = null;
+  }
+}
+
+function setupInputStateRealtime() {
+  teardownInputStateRealtime();
+  if (!currentUser || !sb || !getSyncInputPref()) return;
+  try {
+    inputStateSub = sb
+      .channel('input-state-' + currentUser.id)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: USER_INPUT_STATE_TABLE,
+        filter: 'user_id=eq.' + currentUser.id
+      }, payload => {
+        const row = payload.new || payload.old;
+        if (!row || row.channel !== (currentChannel || 'main')) return;
+        if (row.device_id === myId) return;
+        if (!input) return;
+        const text = (row.text != null ? String(row.text) : '') || '';
+        input.value = text;
+        if (typeof autoResize === 'function') autoResize();
+        if (sendBtn) sendBtn.disabled = !text.trim();
+        if (typeof updateClearInputBtn === 'function') updateClearInputBtn();
+        saveInputGlobal();
+      })
+      .subscribe();
+  } catch (_) {}
+}
+
+async function loadInputFromDbForChannel(ch) {
+  if (!currentUser || !sb || !sb.from || !getSyncInputPref() || !input) return;
+  const channel = ch || currentChannel || 'main';
+  try {
+    const { data, error } = await sb.from(USER_INPUT_STATE_TABLE).select('text').eq('user_id', currentUser.id).eq('channel', channel).maybeSingle();
+    if (error || !data) return;
+    const text = (data.text != null ? String(data.text) : '') || '';
+    input.value = text;
+    autoResize();
+    sendBtn.disabled = !text.trim();
+    updateClearInputBtn();
+    saveInputGlobal();
+  } catch (_) {}
+}
+
+async function restoreInputFromDb() {
+  await loadInputFromDbForChannel(currentChannel);
 }
 
 /* ═══ CROSS-DEVICE DRAFTS (SAME USER) ══════════════════════ */
@@ -4448,6 +4555,9 @@ async function switchChannel(ch) {
   updateTabBadge(ch);
   refreshMoveTargets();
   await loadFieldPrefsForCurrentChannel();
+  if (getSyncInputPref() && currentUser) {
+    await loadInputFromDbForChannel(ch);
+  }
   if (currentUser) {
     setupDndBroadcastChannel();
     subscribeOrderRealtime();
@@ -4712,6 +4822,12 @@ async function refreshAuth() {
       await loadObjectOrderForCurrentChannel();
       await loadObjects();
       restoreInputGlobal();
+      if (getSyncInputPref()) {
+        await restoreInputFromDb();
+        setupInputStateRealtime();
+      } else {
+        teardownInputStateRealtime();
+      }
     } catch (e) {
       console.error(e);
       renderTabs();
@@ -4728,6 +4844,7 @@ async function refreshAuth() {
     renderTabs();
     subscribeRealtimeAll();
     teardownDraftChannel();
+    teardownInputStateRealtime();
     teardownDndBroadcastChannel();
     // When not signed in, hydrate view from local per-device objects (anonymous mode),
     // unless we are in a temp-session guest mode.
@@ -4799,6 +4916,21 @@ function setupAuthListener() {
   if (umNickSave && umNickname) {
     umNickSave.addEventListener('click', saveNickname);
   }
+
+  if (umSyncInputChk) {
+    umSyncInputChk.addEventListener('change', async function() {
+      const on = this.checked;
+      setSyncInputPref(on);
+      if (!currentUser) return;
+      if (on) {
+        setupInputStateRealtime();
+        await restoreInputFromDb();
+      } else {
+        teardownInputStateRealtime();
+      }
+      toast(on ? 'Input will sync across your devices.' : 'Input sync turned off.');
+    });
+  }
 }
 
 async function saveNickname() {
@@ -4839,6 +4971,7 @@ function updateAuthUI() {
     sendBtn.disabled = !input.value.trim();
     if (umUserId) umUserId.textContent = currentUser.id || '—';
     if (umCopyIdBtn) umCopyIdBtn.disabled = !currentUser.id;
+    if (umSyncInputChk) umSyncInputChk.checked = getSyncInputPref();
     if (umVersionBadge) umVersionBadge.textContent = 'Free';
   } else {
     if (umAuthStatus) umAuthStatus.textContent = 'Not signed in';
@@ -4847,6 +4980,7 @@ function updateAuthUI() {
     if (umUserId) umUserId.textContent = '—';
     if (umCopyIdBtn) umCopyIdBtn.disabled = true;
     if (umNickname) umNickname.value = '';
+    if (umSyncInputChk) umSyncInputChk.checked = false;
     if (umVersionBadge) umVersionBadge.textContent = 'Free';
   }
 
@@ -5212,6 +5346,7 @@ input.addEventListener('input', () => {
     if (sendBtn) sendBtn.disabled = !input.value.trim();
   saveInputGlobal();
   updateClearInputBtn();
+  scheduleSaveInputToDb();
     if (editingObjectId != null) {
       if (editingObjectIds && editingObjectIds.size > 1) {
         applyPrimaryEditToMultiEdit(input.value);
