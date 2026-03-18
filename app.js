@@ -2475,19 +2475,31 @@ function setSyncInputPref(on) {
   // Sync is always on; ignore UI toggles.
 }
 
-/** No concatenation: take longer when one is prefix of the other; when diverged use last-write-wins by timestamp so outcome depends on order of typing, not speed. Stops runaway growth. */
-function mergeInputText(local, remote, putRemoteNewer) {
+/** Merge so both typists appear: when one is prefix take longer; when diverged, put both suffixes in timestamp order (earlier first). localAt/remoteAt = ms. */
+function mergeInputText(local, remote, localAt, remoteAt) {
   if (local == null) local = '';
   if (remote == null) remote = '';
   local = String(local);
   remote = String(remote);
   if (local === remote) return local;
   if (local.length > INPUT_SYNC_MAX_LENGTH || remote.length > INPUT_SYNC_MAX_LENGTH) {
-    return capSyncText(putRemoteNewer ? remote : local);
+    return capSyncText((remoteAt || 0) > (localAt || 0) ? remote : local);
   }
   if (remote.indexOf(local) === 0) return capSyncText(remote);
   if (local.indexOf(remote) === 0) return capSyncText(local);
-  return capSyncText(putRemoteNewer ? remote : local);
+  var i = 0;
+  while (i < local.length && i < remote.length && local[i] === remote[i]) i++;
+  var pre = local.slice(0, i);
+  var localSuf = local.slice(i);
+  var remoteSuf = remote.slice(i);
+  var limit = 300;
+  if (localSuf.length > limit || remoteSuf.length > limit) {
+    return capSyncText((remoteAt || 0) > (localAt || 0) ? remote : local);
+  }
+  var merged = (remoteAt || 0) <= (localAt || 0)
+    ? pre + remoteSuf + localSuf
+    : pre + localSuf + remoteSuf;
+  return capSyncText(merged);
 }
 
 async function saveInputToDb() {
@@ -2576,13 +2588,12 @@ function setupInputStateRealtime() {
                 const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
                 var remoteAt = row.updated_at ? new Date(row.updated_at).getTime() : 0;
                 if (!Number.isFinite(remoteAt)) remoteAt = 0;
-                var putRemoteLast = remoteAt > lastSlotsEditAt || (remoteAt === lastSlotsEditAt && String(row.device_id || '') > String(myId || ''));
                 inputSlots.forEach(function(slot, i) {
                   const ta = (i === 0 && input) ? input : composerSlotsContainer.querySelector('.composer-slot[data-slot-index="' + i + '"] textarea');
                   if (!ta) return;
                   if (mobile && ta === activeEl) return;
                   const remoteVal = capSyncText(slot.value);
-                  const merged = mergeInputText(ta.value, remoteVal, putRemoteLast);
+                  const merged = mergeInputText(ta.value, remoteVal, lastSlotsEditAt, remoteAt);
                   if (merged === ta.value) return;
                   ta.value = merged;
                   inputSlots[i].value = merged;
@@ -2677,8 +2688,7 @@ function setupInputStateRealtime() {
         var remoteText = capSyncText(row.text);
         var remoteAt = row.updated_at ? new Date(row.updated_at).getTime() : 0;
         if (!Number.isFinite(remoteAt)) remoteAt = 0;
-        var putRemoteLast = remoteAt > lastPrimaryInputEditAt || (remoteAt === lastPrimaryInputEditAt && String(row.device_id || '') > String(myId || ''));
-        const merged = mergeInputText(input.value, remoteText, putRemoteLast);
+        var merged = mergeInputText(input.value, remoteText, lastPrimaryInputEditAt, remoteAt);
         if (merged !== input.value) {
           input.value = merged;
           if (typeof autoResize === 'function') autoResize();
