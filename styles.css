@@ -62,6 +62,7 @@
 
 html,body{
   height:100%;
+  margin:0;
   overscroll-behavior:none;
 }
 
@@ -72,10 +73,8 @@ body{
   font-size:13px;
   line-height:1.6;
   -webkit-font-smoothing:antialiased;
-  display:flex;
-  flex-direction:column;
   min-height:100vh;
-  overflow:hidden; /* only the content area scrolls */
+  overflow:hidden;
   touch-action:manipulation;
 }
 
@@ -182,20 +181,24 @@ header,
   pointer-events:auto;
 }
 
-/* ── APP BODY: right-side zone below header; contains reorderable frames ── */
+/* ── APP BODY: stuck to header (below it) and all sides; fills viewport, resizes with browser ── */
 .app-body{
-  flex:1;
+  position:fixed;
+  top:var(--header-height);
+  left:0;
+  right:0;
+  bottom:0;
+  width:100%;
   display:flex;
   flex-direction:column;
-  min-height:0;
-  padding-top:var(--header-height);
-  margin:0;
+  overflow:hidden;
+  background:var(--bg);
 }
 .frames-zone{
-  flex:1;
+  flex:1 1 0;
+  min-height:0;
   display:flex;
   flex-direction:column;
-  min-height:0;
   overflow:hidden;
 }
 .frame{
@@ -265,13 +268,7 @@ header,
   padding:2px 6px;
 }
 
-/* iOS/Safari dynamic viewport handling */
-@supports (height: 100dvh) {
-  #multiview{height:100dvh}
-}
-@supports (height: 100svh) {
-  #multiview{height:100svh}
-}
+/* multiview height comes from app-body flex chain */
 
 /* ── HEADER: always fixed, nothing moves it; everything under it is App ── */
 header{
