@@ -243,7 +243,7 @@ header{
   z-index:1000;
   background:var(--bg);
   border-bottom:1px solid var(--line);
-  padding:0 20px;
+  padding:0 20px 0 6px;
   height:var(--header-height);
   display:flex;
   align-items:center;
@@ -462,6 +462,7 @@ header{
   min-width:36px;
   min-height:44px;
   flex-shrink:0;
+  margin-left:0;
 }
 .logo-lottie{
   width:36px;
