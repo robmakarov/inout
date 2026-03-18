@@ -98,6 +98,25 @@ if (window.Stripe && STRIPE_PUBLISHABLE_KEY && !STRIPE_PUBLISHABLE_KEY.includes(
   schedule();
 })();
 
+(function setupMobileInputScrollIntoView() {
+  const vv = window.visualViewport;
+  const inputArea = document.getElementById('input-area');
+  if (!vv || !inputArea) return;
+  let lastHeight = vv.height;
+  const onResize = () => {
+    if (window.innerWidth > 540) return;
+    const shrank = vv.height < lastHeight;
+    lastHeight = vv.height;
+    if (!shrank) return;
+    const active = document.activeElement;
+    if (!active || !inputArea.contains(active)) return;
+    requestAnimationFrame(() => {
+      inputArea.scrollIntoView({ block: 'end', behavior: 'smooth' });
+    });
+  };
+  vv.addEventListener('resize', onResize);
+})();
+
 const feedInner  = document.getElementById('feed-inner');
 const feedEl     = document.getElementById('feed');
 const inputArea  = document.getElementById('input-area');

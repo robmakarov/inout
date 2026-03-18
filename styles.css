@@ -2195,21 +2195,15 @@ body.select-mode .obj-select-wrap,
     z-index:120;
   }
   /* manage bar stays in normal flow above the view on mobile; no extra padding needed */
-  /* keep input bar above keyboard: pin to bottom of visual viewport so it stays visible when keyboard opens */
+  /* input in flow below multiview so it’s pushed down and never stuck when keyboard closes */
+  .frame[data-frame-id="input"]{
+    flex:0 0 auto;
+    min-height:0;
+    overflow:visible;
+  }
   #input-area{
-    position:fixed;
-    left:0;
-    right:0;
-    bottom:calc(100vh - var(--vv-height, 100vh) - var(--vv-top, 0px));
-    z-index:110;
     padding:10px 10px calc(14px + env(safe-area-inset-bottom, 0px));
     background:var(--bg);
-  }
-  .frame[data-frame-id="input"]{ flex:0 0 0; min-height:0; overflow:visible; }
-  /* prevent main view from shrinking when keyboard opens (keep layout viewport height) */
-  @supports (height: 100dvh) {
-    html{ height: 100%; min-height: 100vh; }
-    body{ min-height: 100vh; }
   }
   /* add bottom space in feed so last messages are not hidden behind input */
   #feed{
