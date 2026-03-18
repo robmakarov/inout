@@ -651,7 +651,7 @@ let latestClipboardText = '';
 let inputStateSub = null;
 let inputSaveToDbTimer = null;
 let inputSlotsSaveToDbTimer = null;
-const INPUT_SAVE_DEBOUNCE_MS = 280;
+const INPUT_SAVE_DEBOUNCE_MS = 150;
 let lastPrimaryInputEditAt = 0;
 let lastSlotsEditAt = 0;
 const INPUT_SYNC_MAX_LENGTH = 10000;
@@ -2475,7 +2475,7 @@ function setSyncInputPref(on) {
   // Sync is always on; ignore UI toggles.
 }
 
-/** Safe merge: when one is a prefix of the other we take the longer. When diverged we use last-write-wins only (no concatenation) to avoid runaway growth. putRemoteNewer = use remote when we must pick one. */
+/** Merge so both typists are preserved. When diverged a lot (big suffix) we use last-write-wins to avoid runaway growth. putRemoteNewer = which suffix goes last when we concatenate. */
 function mergeInputText(local, remote, putRemoteNewer) {
   if (local == null) local = '';
   if (remote == null) remote = '';
@@ -2491,7 +2491,7 @@ function mergeInputText(local, remote, putRemoteNewer) {
   while (i < local.length && i < remote.length && local[i] === remote[i]) i++;
   var localSuf = local.slice(i);
   var remoteSuf = remote.slice(i);
-  if (localSuf.length > 50 || remoteSuf.length > 50) {
+  if (localSuf.length > 400 || remoteSuf.length > 400) {
     return capSyncText(putRemoteNewer ? remote : local);
   }
   var pre = local.slice(0, i);
