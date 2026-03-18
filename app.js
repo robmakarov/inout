@@ -2475,7 +2475,7 @@ function setSyncInputPref(on) {
   // Sync is always on; ignore UI toggles.
 }
 
-/** Merge so both typists appear: when one is prefix take longer; when diverged, put both suffixes in timestamp order (earlier first). localAt/remoteAt = ms. */
+/** Merge so both typists appear; deletions sync by taking newer when one is prefix of the other. localAt/remoteAt = ms. */
 function mergeInputText(local, remote, localAt, remoteAt) {
   if (local == null) local = '';
   if (remote == null) remote = '';
@@ -2485,8 +2485,12 @@ function mergeInputText(local, remote, localAt, remoteAt) {
   if (local.length > INPUT_SYNC_MAX_LENGTH || remote.length > INPUT_SYNC_MAX_LENGTH) {
     return capSyncText((remoteAt || 0) > (localAt || 0) ? remote : local);
   }
-  if (remote.indexOf(local) === 0) return capSyncText(remote);
-  if (local.indexOf(remote) === 0) return capSyncText(local);
+  if (remote.indexOf(local) === 0) {
+    return capSyncText((remoteAt || 0) >= (localAt || 0) ? remote : local);
+  }
+  if (local.indexOf(remote) === 0) {
+    return capSyncText((localAt || 0) >= (remoteAt || 0) ? local : remote);
+  }
   var i = 0;
   while (i < local.length && i < remote.length && local[i] === remote[i]) i++;
   var pre = local.slice(0, i);
@@ -2695,6 +2699,7 @@ function setupInputStateRealtime() {
           if (sendBtn) sendBtn.disabled = !merged.trim();
           if (typeof updateClearInputBtn === 'function') updateClearInputBtn();
           saveInputGlobal();
+          updateRemoteSelectionOverlay();
         }
         } catch (e) {
           if (typeof console !== 'undefined' && console.error) console.error('input-state realtime', e);
@@ -2770,7 +2775,17 @@ function setupDraftChannel() {
       } else {
         if (lastRemoteEditingId != null) clearRemoteEditingDoppelganger(lastRemoteEditingId);
       }
-      // Only show draft bubble for drafts coming from other devices / clients.
+      if (!isSelf && editingId == null) {
+        var rs = data.selectionStart != null ? Number(data.selectionStart) : null;
+        var re = data.selectionEnd != null ? Number(data.selectionEnd) : null;
+        if (Number.isFinite(rs) && Number.isFinite(re) && rs >= 0 && re >= 0) {
+          remoteSelection = { start: Math.min(rs, re), end: Math.max(rs, re), deviceId: deviceId };
+          updateRemoteSelectionOverlay();
+        } else {
+          remoteSelection = null;
+          updateRemoteSelectionOverlay();
+        }
+      }
       if (!isSelf && text && !editingId) {
         showDraftBubble(text);
       } else if (!text || isSelf) {
@@ -2791,6 +2806,11 @@ function teardownDraftChannel() {
 
 function broadcastDraft(text) {
   if (!draftChannel) return;
+  var selStart = 0, selEnd = 0;
+  if (input && (editingObjectId == null)) {
+    selStart = input.selectionStart != null ? input.selectionStart : 0;
+    selEnd = input.selectionEnd != null ? input.selectionEnd : selStart;
+  }
   const authorName =
     (currentUser && currentUser.user_metadata && currentUser.user_metadata.full_name) ||
     (currentUser && currentUser.email) ||
@@ -2800,16 +2820,65 @@ function broadcastDraft(text) {
     event: 'draft',
     payload: {
       from: myId,
-      text: text || '',
+      text: text != null ? text : (input ? input.value : ''),
       editingId: editingObjectId != null ? editingObjectId : null,
       authorName: authorName || undefined,
-      deviceId: myId
+      deviceId: myId,
+      selectionStart: selStart,
+      selectionEnd: selEnd
     }
   });
 }
 
 var lastRemoteEditingId = null;
 var savedTextForRemote = Object.create(null);
+var remoteSelection = null;
+
+function updateRemoteSelectionOverlay() {
+  var wrap = input && input.closest && input.closest('.composer-input-wrap');
+  if (!wrap) return;
+  var id = 'remote-selection-overlay';
+  var el = document.getElementById(id);
+  if (!remoteSelection || remoteSelection.start >= remoteSelection.end) {
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+    return;
+  }
+  var text = input.value || '';
+  var start = Math.min(remoteSelection.start, text.length);
+  var end = Math.min(remoteSelection.end, text.length);
+  if (start >= end) {
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+    return;
+  }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = id;
+    el.className = 'remote-selection-overlay';
+    el.setAttribute('aria-hidden', 'true');
+    wrap.appendChild(el);
+  }
+  var cs = typeof getComputedStyle === 'function' ? getComputedStyle(input) : null;
+  if (cs) {
+    el.style.font = cs.font;
+    el.style.padding = cs.padding;
+    el.style.lineHeight = cs.lineHeight;
+    el.style.letterSpacing = cs.letterSpacing;
+    el.style.whiteSpace = cs.whiteSpace;
+    el.style.wordWrap = cs.wordWrap;
+  }
+  var wr = wrap.getBoundingClientRect();
+  var ir = input.getBoundingClientRect();
+  el.style.top = (ir.top - wr.top + wrap.scrollTop) + 'px';
+  el.style.left = (ir.left - wr.left) + 'px';
+  el.style.width = ir.width + 'px';
+  el.style.height = ir.height + 'px';
+  var before = escapeHtml(text.slice(0, start));
+  var sel = escapeHtml(text.slice(start, end));
+  var after = escapeHtml(text.slice(end));
+  el.innerHTML = before + '<span class="remote-selection-highlight">' + sel + '</span>' + after;
+  el.scrollTop = input.scrollTop;
+  el.scrollLeft = input.scrollLeft;
+}
 
 function showRemoteEditingDoppelganger(objId, text, authorName, deviceId, skipEditingRows) {
   const idStr = String(objId);
@@ -5937,6 +6006,7 @@ input.addEventListener('input', () => {
       editTypingCommitTimer = setTimeout(commitTypingSegment, TYPING_COMMIT_MS);
     }
   broadcastDraft(input.value);
+  updateRemoteSelectionOverlay();
 });
 input.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
@@ -5950,15 +6020,23 @@ input.addEventListener('keydown', e => {
   });
   input.addEventListener('click', () => {
     if (editingObjectId != null) updateEditingRowFromInput();
+    else broadcastDraft();
   });
   input.addEventListener('keyup', () => {
     if (editingObjectId != null) updateEditingRowFromInput();
+    else broadcastDraft();
   });
   input.addEventListener('select', () => {
     if (editingObjectId != null) updateEditingRowFromInput();
+    else broadcastDraft();
   });
   input.addEventListener('mouseup', () => {
     if (editingObjectId != null) updateEditingRowFromInput();
+    else broadcastDraft();
+  });
+  input.addEventListener('scroll', () => {
+    var ov = document.getElementById('remote-selection-overlay');
+    if (ov) { ov.scrollTop = input.scrollTop; ov.scrollLeft = input.scrollLeft; }
   });
   if (sendBtn) sendBtn.addEventListener('click', send);
 }

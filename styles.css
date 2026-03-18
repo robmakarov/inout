@@ -1632,6 +1632,21 @@ body.select-mode .obj-select-wrap,
 #object-input:focus{outline:none}
 #object-input:focus-visible{outline:none}
 
+.remote-selection-overlay{
+  position:absolute;
+  overflow:auto;
+  pointer-events:none;
+  color:transparent;
+  box-sizing:border-box;
+  scrollbar-width:none;
+}
+.remote-selection-overlay::-webkit-scrollbar{display:none}
+.remote-selection-highlight{
+  background:rgba(100,180,255,0.35);
+  color:transparent;
+  border-radius:2px;
+}
+
 .composer-slot-input{
   flex:1;
   min-width:0;
