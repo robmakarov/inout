@@ -1417,6 +1417,60 @@ body.select-mode .obj-select-wrap,
   align-items:stretch;
   position:relative;
 }
+.input-wrap-column{
+  flex-direction:column;
+  gap:8px;
+}
+.composer-slots-container{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  min-width:0;
+}
+.composer-slot{
+  display:flex;
+  align-items:stretch;
+  flex-wrap:nowrap;
+}
+.composer-slot-target{
+  flex-shrink:0;
+  display:flex;
+  align-items:stretch;
+}
+.composer-slot-target-select{
+  font-family:var(--mono);
+  font-size:11px;
+  color:var(--soft);
+  background:var(--bg2);
+  border:1px solid var(--line2);
+  border-radius:8px;
+  padding:6px 8px;
+  margin-right:6px;
+  cursor:pointer;
+  min-width:0;
+  max-width:100px;
+}
+.composer-slot-remove{
+  flex-shrink:0;
+  width:36px;
+  height:48px;
+  border:none;
+  border-left:1px solid var(--line2);
+  background:transparent;
+  color:var(--muted);
+  font-size:18px;
+  line-height:1;
+  cursor:pointer;
+  padding:0;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:0 14px 14px 0;
+}
+.composer-slot-remove:hover{
+  background:var(--line2);
+  color:var(--text);
+}
 /* Composer: single bar = input + send, one focus ring */
 .composer{
   flex:1;
@@ -1547,6 +1601,27 @@ body.select-mode .obj-select-wrap,
 #object-input:focus{outline:none}
 #object-input:focus-visible{outline:none}
 
+.composer-slot-input{
+  flex:1;
+  min-width:0;
+  width:100%;
+  background:transparent;
+  border:none;
+  color:var(--text);
+  font-family:var(--mono);
+  font-size:14px;
+  line-height:1.5;
+  padding:14px 48px 14px 16px;
+  resize:none;
+  outline:none;
+  min-height:48px;
+  max-height:160px;
+  overflow-y:auto;
+  scrollbar-width:none;
+  box-sizing:border-box;
+}
+.composer-slot-input::placeholder{color:var(--dim)}
+.composer-slot-input:focus{outline:none}
 
 /* Send: part of composer bar, accent when enabled */
 .composer-send{

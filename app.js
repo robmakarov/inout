@@ -97,7 +97,8 @@ const feedEl     = document.getElementById('feed');
 const inputArea  = document.getElementById('input-area');
 var input       = document.getElementById('object-input');
 var sendBtn     = document.getElementById('send-btn');
-const clearInputBtn = document.getElementById('clear-input');
+var clearInputBtn = document.getElementById('clear-input');
+const composerSlotsContainer = document.getElementById('composer-slots-container');
 const emptyEl    = document.getElementById('empty');
 try {
   if (emptyEl) {
@@ -512,6 +513,7 @@ const CURRENT_VIEW_KEY    = 'inout_current_view_v1';
 const SECONDARY_VIEW_KEY  = 'inout_secondary_view_name_v1';
 const MULTIVIEW_SPLIT_KEY = 'inout_multiview_split_v1';
 const INPUT_STATE_KEY      = 'inout_input_state_v2';
+const INPUT_SLOTS_KEY      = 'inout_input_slots_v1';
 const SYNC_INPUT_PREF_KEY  = 'inout_sync_input_v1';
 const FIELD_PREFS_KEY      = 'inout_field_prefs_v1';
 const ORDER_STATE_KEY      = 'inout_order_state_v1';
@@ -652,6 +654,232 @@ views.push({
   objects: [],      // array of objects (or ids) belonging to this view
   config: {},       // per-view settings (layout, filters, etc.), to be filled later
 });
+
+/** Multiple composer slots: each has target (channel) and value. Primary slot (index 0) keeps id="object-input" / id="send-btn" for existing code. */
+let inputSlots = [];
+
+function loadInputSlots() {
+  if (inputSlots.length > 0) return;
+  try {
+    const raw = localStorage.getItem(INPUT_SLOTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        inputSlots = parsed.map(s => ({ id: s.id || 'slot-' + Date.now(), channel: s.channel || 'main', value: (s.value != null ? String(s.value) : '') }));
+        return;
+      }
+    }
+  } catch (_) {}
+  inputSlots = [{ id: 'slot-0', channel: (typeof currentChannel !== 'undefined' ? currentChannel : 'main'), value: '' }];
+}
+
+function saveInputSlots() {
+  try {
+    localStorage.setItem(INPUT_SLOTS_KEY, JSON.stringify(inputSlots));
+  } catch (_) {}
+}
+
+function updatePrimaryInputRefs() {
+  if (typeof document === 'undefined') return;
+  const inp = document.getElementById('object-input');
+  const btn = document.getElementById('send-btn');
+  const clearBtn = document.getElementById('clear-input');
+  if (inp) input = inp;
+  if (btn) sendBtn = btn;
+  if (clearBtn) clearInputBtn = clearBtn;
+}
+
+function renderComposerSlots() {
+  if (!composerSlotsContainer) return;
+  loadInputSlots();
+  const channels = (typeof viewNames !== 'undefined' && Array.isArray(viewNames)) ? viewNames : ['main'];
+  composerSlotsContainer.innerHTML = '';
+  inputSlots.forEach((slot, index) => {
+    const isPrimary = index === 0;
+    const row = document.createElement('div');
+    row.className = 'composer composer-slot';
+    row.setAttribute('role', 'group');
+    row.setAttribute('aria-label', 'New object');
+    row.dataset.slotIndex = String(index);
+    row.dataset.slotId = slot.id;
+
+    const targetWrap = document.createElement('div');
+    targetWrap.className = 'composer-slot-target';
+    const targetSelect = document.createElement('select');
+    targetSelect.className = 'composer-slot-target-select';
+    targetSelect.setAttribute('aria-label', 'Target view');
+    channels.forEach(ch => {
+      const opt = document.createElement('option');
+      opt.value = ch;
+      opt.textContent = ch === 'main' ? 'Feed' : ch;
+      if (ch === slot.channel) opt.selected = true;
+      targetSelect.appendChild(opt);
+    });
+    targetWrap.appendChild(targetSelect);
+    row.appendChild(targetWrap);
+
+    const inputWrap = document.createElement('div');
+    inputWrap.className = 'composer-input-wrap';
+    const textarea = document.createElement('textarea');
+    textarea.placeholder = 'Add object…';
+    textarea.rows = 1;
+    textarea.maxLength = 2000;
+    textarea.autocomplete = 'off';
+    textarea.spellcheck = true;
+    textarea.setAttribute('aria-label', 'Object value');
+    textarea.value = slot.value || '';
+    if (isPrimary) {
+      textarea.id = 'object-input';
+    } else {
+      textarea.className = 'composer-slot-input';
+      textarea.dataset.slotIndex = String(index);
+    }
+    const countSpan = document.createElement('span');
+    countSpan.className = 'composer-count';
+    countSpan.setAttribute('aria-live', 'polite');
+    if (isPrimary) countSpan.id = 'object-input-count';
+    const clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.className = 'clear-input-btn';
+    clearBtn.setAttribute('aria-label', 'Clear input');
+    clearBtn.title = 'Clear';
+    clearBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+    if (isPrimary) clearBtn.id = 'clear-input';
+    inputWrap.appendChild(textarea);
+    inputWrap.appendChild(countSpan);
+    inputWrap.appendChild(clearBtn);
+    row.appendChild(inputWrap);
+
+    const sendBtnEl = document.createElement('button');
+    sendBtnEl.type = 'button';
+    sendBtnEl.className = 'composer-send';
+    sendBtnEl.disabled = !(slot.value || '').trim();
+    sendBtnEl.setAttribute('aria-label', 'Send');
+    sendBtnEl.innerHTML = '<span class="composer-send-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></span><span class="composer-send-label">Send</span>';
+    if (isPrimary) sendBtnEl.id = 'send-btn';
+    row.appendChild(sendBtnEl);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'composer-slot-remove';
+    removeBtn.setAttribute('aria-label', 'Remove input');
+    removeBtn.title = 'Remove input';
+    removeBtn.textContent = '×';
+    if (inputSlots.length <= 1) removeBtn.style.display = 'none';
+    row.appendChild(removeBtn);
+
+    composerSlotsContainer.appendChild(row);
+
+    targetSelect.addEventListener('change', function() {
+      const ch = this.value;
+      inputSlots[index].channel = ch;
+      saveInputSlots();
+    });
+    textarea.addEventListener('input', function() {
+      const val = this.value || '';
+      inputSlots[index].value = val;
+      saveInputSlots();
+      if (typeof autoResize === 'function') autoResize(this);
+      const sendB = row.querySelector('.composer-send');
+      if (sendB) sendB.disabled = !val.trim();
+      const clrB = row.querySelector('.clear-input-btn');
+      if (clrB) clrB.disabled = !val;
+      if (isPrimary) {
+        saveInputGlobal();
+        updateClearInputBtn();
+        scheduleSaveInputToDb();
+        if (sendBtn) sendBtn.disabled = !val.trim();
+        if (editingObjectId != null) {
+          if (editingObjectIds && editingObjectIds.size > 1) applyPrimaryEditToMultiEdit(val);
+          else if (editingObjectTextMap && editingObjectId != null) { editingObjectTextMap[editingObjectId] = val; }
+          updateEditingRowFromInput();
+          if (editTypingCommitTimer) clearTimeout(editTypingCommitTimer);
+          editTypingCommitTimer = setTimeout(commitTypingSegment, TYPING_COMMIT_MS);
+        }
+        broadcastDraft(val);
+      }
+    });
+    textarea.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        if (editingObjectId) cancelEditingMode(true);
+        return;
+      }
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        const sBtn = row.querySelector('.composer-send');
+        if (sBtn && !sBtn.disabled) sendFromSlot(index);
+      }
+    });
+    clearBtn.addEventListener('click', function() {
+      textarea.value = '';
+      inputSlots[index].value = '';
+      saveInputSlots();
+      if (typeof autoResize === 'function') autoResize(isPrimary ? input : textarea);
+      const sBtn = row.querySelector('.composer-send');
+      if (sBtn) sBtn.disabled = true;
+      clearBtn.disabled = true;
+      if (isPrimary) {
+        saveInputGlobal();
+        updateClearInputBtn();
+        broadcastDraft('');
+        requestAnimationFrame(focusMainInput);
+      }
+    });
+    sendBtnEl.addEventListener('click', function() { sendFromSlot(index); });
+    removeBtn.addEventListener('click', function() { removeComposerSlot(index); });
+  });
+  updatePrimaryInputRefs();
+}
+
+function addComposerSlot() {
+  loadInputSlots();
+  const ch = typeof currentChannel !== 'undefined' ? currentChannel : 'main';
+  inputSlots.push({ id: 'slot-' + Date.now(), channel: ch, value: '' });
+  saveInputSlots();
+  renderComposerSlots();
+  const lastRow = composerSlotsContainer && composerSlotsContainer.querySelector('[data-slot-index="' + (inputSlots.length - 1) + '"]');
+  if (lastRow) {
+    const ta = lastRow.querySelector('textarea');
+    if (ta) { ta.focus(); requestAnimationFrame(function() { if (ta) ta.focus(); }); }
+  }
+}
+
+function removeComposerSlot(index) {
+  loadInputSlots();
+  if (inputSlots.length <= 1) return;
+  inputSlots.splice(index, 1);
+  saveInputSlots();
+  renderComposerSlots();
+  _inputListenersAttached = false;
+  attachInputListeners();
+}
+
+async function sendFromSlot(index) {
+  loadInputSlots();
+  const slot = inputSlots[index];
+  if (!slot) return;
+  const text = (slot.value || '').trim();
+  if (!text) return;
+  const slotRow = composerSlotsContainer && composerSlotsContainer.querySelector('[data-slot-index="' + String(index) + '"]');
+  const textarea = slotRow ? slotRow.querySelector('textarea') : null;
+  const sendBtnEl = slotRow ? slotRow.querySelector('.composer-send') : null;
+  if (textarea) textarea.disabled = true;
+  if (sendBtnEl) sendBtnEl.disabled = true;
+  await sendText(text, { channel: slot.channel });
+  if (textarea) textarea.disabled = false;
+  if (sendBtnEl) sendBtnEl.disabled = true;
+  slot.value = '';
+  if (textarea) textarea.value = '';
+  saveInputSlots();
+  if (typeof autoResize === 'function' && textarea) autoResize(textarea);
+  if (sendBtnEl) sendBtnEl.disabled = true;
+  if (index === 0) {
+    saveInputGlobal();
+    updateClearInputBtn();
+    broadcastDraft('');
+  }
+}
+
 let selectMode = false;
 let selectModeAutoOn = false;
 const selectedIds = new Set();
@@ -3059,9 +3287,13 @@ function toggleSecondaryView(ch) {
 function restoreInputGlobal() {
   if (!input) return;
   try {
-    input.value = localStorage.getItem(INPUT_STATE_KEY) || '';
+    if (inputSlots.length > 0) {
+      input.value = inputSlots[0].value || '';
+    } else {
+      input.value = localStorage.getItem(INPUT_STATE_KEY) || '';
+    }
     autoResize();
-    sendBtn.disabled = !input.value.trim();
+    if (sendBtn) sendBtn.disabled = !input.value.trim();
     updateClearInputBtn();
   } catch (_) {}
 }
@@ -3069,7 +3301,12 @@ function restoreInputGlobal() {
 function saveInputGlobal() {
   if (!input) return;
   try {
-    localStorage.setItem(INPUT_STATE_KEY, input.value || '');
+    if (inputSlots.length > 0) {
+      inputSlots[0].value = input.value || '';
+      saveInputSlots();
+    } else {
+      localStorage.setItem(INPUT_STATE_KEY, input.value || '');
+    }
   } catch (_) {}
 }
 
@@ -5163,12 +5400,13 @@ async function send() {
   await sendText(text);
 }
 
-async function sendText(text) {
+async function sendText(text, options) {
   const trimmed = (text || '').trim();
   if (!trimmed) return;
+  const targetChannel = (options && options.channel != null) ? options.channel : currentChannel;
 
-  sendBtn.disabled = true;
-  input.disabled   = true;
+  if (input) { input.disabled = true; }
+  if (sendBtn) sendBtn.disabled = true;
 
   const idsToSave = editingObjectIds && editingObjectIds.size
     ? Array.from(editingObjectIds)
@@ -5236,7 +5474,7 @@ async function sendText(text) {
     originalEditTextForCancelMap = null;
     editingObjectTextMap = null;
     editingObjectIds = null;
-    reactivateInputMode({ clearInput: true });
+    reactivateInputMode({ clearInput: targetChannel === currentChannel });
     return;
   }
 
@@ -5248,7 +5486,7 @@ async function sendText(text) {
     const payload = {
       text: trimmed,
       user_id: currentUser.id,
-      channel: currentChannel,
+      channel: targetChannel,
     };
     // In a shared temp-session View, also tag owner rows with temp_session_id
     // so guests can see and edit them via RLS.
@@ -5269,7 +5507,7 @@ async function sendText(text) {
       .insert({
         text: trimmed,
         temp_session_id: tempSessionId,
-      channel: currentChannel,
+      channel: targetChannel,
     })
       .select('id, created_at, text, channel, user_id, author_name, temp_session_id')
     .single();
@@ -5282,20 +5520,20 @@ async function sendText(text) {
       id: Date.now(),
       created_at: nowIso,
       text: trimmed,
-      channel: currentChannel,
+      channel: targetChannel,
       user_id: getDeviceId(),
       author_name: null,
     };
   }
 
-  input.disabled = false;
+  if (input) input.disabled = false;
 
   if (error) {
     console.error(error);
     const msg = 'Failed to send — ' + humanError(error.message);
     toast(msg);
     logError(msg);
-    sendBtn.disabled = false;
+    if (sendBtn) sendBtn.disabled = false;
   } else if (data) {
     // Update UI
     if (data.channel === currentChannel) {
@@ -5311,9 +5549,9 @@ async function sendText(text) {
       pushUndo({ type: 'send', entries: [data] });
       logAction('send', { channel: currentChannel });
     }
-    reactivateInputMode({ clearInput: true });
+    reactivateInputMode({ clearInput: targetChannel === currentChannel });
   } else {
-    sendBtn.disabled = false;
+    if (sendBtn) sendBtn.disabled = false;
   }
 }
 
@@ -5383,9 +5621,20 @@ input.addEventListener('keydown', e => {
   });
   if (sendBtn) sendBtn.addEventListener('click', send);
 }
+if (composerSlotsContainer) {
+  renderComposerSlots();
+}
 attachInputListeners();
 if (!input && typeof document !== 'undefined' && document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', attachInputListeners);
+  document.addEventListener('DOMContentLoaded', function() {
+    if (composerSlotsContainer) renderComposerSlots();
+    attachInputListeners();
+  });
+}
+
+var composerAddSlotBtn = document.getElementById('composer-add-slot');
+if (composerAddSlotBtn) {
+  composerAddSlotBtn.addEventListener('click', addComposerSlot);
 }
 
 if (draftCopyBtn) {
@@ -6074,9 +6323,11 @@ if (exportTabBtn) {
   });
 }
 
-function autoResize() {
-  input.style.height = 'auto';
-  input.style.height = Math.min(input.scrollHeight, 160) + 'px';
+function autoResize(el) {
+  const target = (el && el.nodeType === 1) ? el : input;
+  if (!target) return;
+  target.style.height = 'auto';
+  target.style.height = Math.min(target.scrollHeight, 160) + 'px';
 }
 
 /* ═══ SCROLL ══════════════════════════════════════════════ */
