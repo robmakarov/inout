@@ -291,6 +291,7 @@ header{
   justify-content:space-between;
   flex-shrink:0;
   box-sizing:border-box;
+  overflow:hidden;
 }
 
 /* ── TOP BAR (manage): in flow at top of multiview frame ── */
@@ -500,6 +501,7 @@ header{
   flex-shrink:0;
   margin-left:0;
   background:transparent;
+  overflow:hidden;
 }
 .logo-lottie{
   width:20px;
@@ -507,7 +509,7 @@ header{
   position:relative;
   z-index:0;
   flex-shrink:0;
-  overflow:visible;
+  overflow:hidden;
   background:transparent;
 }
 .logo-lottie svg,
@@ -1340,26 +1342,6 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
     -webkit-user-select:none;
     user-select:none;
   }
-  /* On mobile hide checkbox zone until select mode is on */
-  .obj-checkbox-zone{
-    width:0;
-    min-width:0;
-    margin-left:0;
-    overflow:hidden;
-    opacity:0;
-    pointer-events:none;
-  }
-  .obj-checkbox-zone-left{ width:0; min-width:0; }
-  body.select-mode .obj-checkbox-zone{
-    width:auto;
-    min-width:auto;
-    margin-left:-48px;
-    overflow:visible;
-    opacity:1;
-    pointer-events:auto;
-  }
-  body.select-mode .obj-checkbox-zone-left{ width:48px; min-width:48px; }
-  body.select-mode .obj-select-wrap{ opacity:1; pointer-events:auto; }
 }
 
 /* on hover, make all message parameters (time/author) same color as text */
@@ -2036,7 +2018,7 @@ body.select-mode .obj-select-wrap,
   #feed::-webkit-scrollbar{display:none}
   /* header always fixed; never moved by keyboard or scroll */
   header{
-    padding:0 14px;
+    padding:0 14px 0 6px;
     z-index:120;
   }
   /* manage bar stays in normal flow above the view on mobile; no extra padding needed */
