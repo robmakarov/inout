@@ -2459,6 +2459,20 @@ function setSyncInputPref(on) {
   // Sync is always on; ignore UI toggles.
 }
 
+/** Merge local and remote text so both typists' input is preserved (same Doppelganger). */
+function mergeInputText(local, remote) {
+  if (local == null) local = '';
+  if (remote == null) remote = '';
+  local = String(local);
+  remote = String(remote);
+  if (local === remote) return local;
+  if (remote.indexOf(local) === 0) return remote;
+  if (local.indexOf(remote) === 0) return local;
+  var i = 0;
+  while (i < local.length && i < remote.length && local[i] === remote[i]) i++;
+  return local.slice(0, i) + local.slice(i) + remote.slice(i);
+}
+
 async function saveInputToDb() {
   inputSaveToDbTimer = null;
   if (!currentUser || !sb || !sb.from || !getSyncInputPref()) return;
@@ -2535,28 +2549,32 @@ function setupInputStateRealtime() {
                 });
               if (structureSame && composerSlotsContainer) {
                 inputSlots = slots.map(function(s) { return Object.assign({}, s); });
-                try { localStorage.setItem(INPUT_SLOTS_KEY, JSON.stringify(inputSlots)); } catch (_) {}
                 const mobile = isMobileOrTouchDevice();
                 const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
                 inputSlots.forEach(function(slot, i) {
                   const ta = (i === 0 && input) ? input : composerSlotsContainer.querySelector('.composer-slot[data-slot-index="' + i + '"] textarea');
                   if (!ta) return;
                   if (mobile && ta === activeEl) return;
-                  if (ta.value === slot.value) return;
-                  ta.value = slot.value || '';
+                  const remoteVal = slot.value != null ? String(slot.value) : '';
+                  const merged = mergeInputText(ta.value, remoteVal);
+                  if (merged === ta.value) return;
+                  ta.value = merged;
+                  inputSlots[i].value = merged;
                   if (i === 0) {
                     if (typeof autoResize === 'function') autoResize();
-                    if (sendBtn) sendBtn.disabled = !(slot.value || '').trim();
+                    if (sendBtn) sendBtn.disabled = !merged.trim();
                     if (typeof updateClearInputBtn === 'function') updateClearInputBtn();
                     if (typeof saveInputGlobal === 'function') saveInputGlobal();
                   } else {
                     const rowEl = ta.closest && ta.closest('.composer-slot');
                     if (rowEl) {
                       const sBtn = rowEl.querySelector('.composer-send');
-                      if (sBtn) sBtn.disabled = !(slot.value || '').trim();
+                      if (sBtn) sBtn.disabled = !merged.trim();
                     }
                   }
                 });
+                try { localStorage.setItem(INPUT_SLOTS_KEY, JSON.stringify(inputSlots)); } catch (_) {}
+                scheduleSaveSlotsToDb();
               } else {
                 let focusedSlotIndex = -1;
                 let savedValue = '';
@@ -2630,12 +2648,16 @@ function setupInputStateRealtime() {
         }
         if (row.channel !== (currentChannel || 'main')) return;
         if (!input) return;
-        const text = (row.text != null ? String(row.text) : '') || '';
-        input.value = text;
-        if (typeof autoResize === 'function') autoResize();
-        if (sendBtn) sendBtn.disabled = !text.trim();
-        if (typeof updateClearInputBtn === 'function') updateClearInputBtn();
-        saveInputGlobal();
+        const remoteText = (row.text != null ? String(row.text) : '') || '';
+        const merged = mergeInputText(input.value, remoteText);
+        if (merged !== input.value) {
+          input.value = merged;
+          if (typeof autoResize === 'function') autoResize();
+          if (sendBtn) sendBtn.disabled = !merged.trim();
+          if (typeof updateClearInputBtn === 'function') updateClearInputBtn();
+          saveInputGlobal();
+          scheduleSaveInputToDb();
+        }
       })
       .subscribe();
   } catch (_) {}
