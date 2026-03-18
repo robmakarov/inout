@@ -2016,9 +2016,9 @@ body.select-mode .obj-select-wrap,
     -ms-overflow-style:none;
   }
   #feed::-webkit-scrollbar{display:none}
-  /* header always fixed; never moved by keyboard or scroll */
+  /* header always fixed; never moved by keyboard or scroll; no left padding so logo sits at edge */
   header{
-    padding:0 14px 0 6px;
+    padding:0 14px 0 0;
     z-index:120;
   }
   /* manage bar stays in normal flow above the view on mobile; no extra padding needed */
