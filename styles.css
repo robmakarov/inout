@@ -221,28 +221,14 @@ header,
   bottom:0;
   width:28px;
   min-width:28px;
-  cursor:grab;
-  z-index:10;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  color:var(--muted);
-  font-size:12px;
-  user-select:none;
-  pointer-events:auto;
-  touch-action:none;
-  background:transparent;
+  /* DnD UI grips are currently hidden/disabled in production; keep styles for future. */
+  cursor:default;
+  z-index:-1;
+  display:none;
+  pointer-events:none;
 }
-.frame-grip:hover{ background:rgba(255,255,255,0.04); }
-.frame-grip:active{ cursor:grabbing }
-.frame-grip::before{ content:'⋮⋮'; letter-spacing:-2px; }
-.frame-dragging{ opacity:0.7; }
-.frames-zone .frame.frame-drop-target{ outline:2px dashed var(--acc); outline-offset:-2px; border-radius:6px; }
-
-/* Nav frame: grip must sit on top of nav so views bar can be reordered */
-.frame[data-frame-id="nav"]{ isolation:isolate; }
-.frame[data-frame-id="nav"] .frame-grip{ z-index:100; width:28px; min-width:28px; }
-.frame[data-frame-id="nav"] #nav.navigation-bar{ position:relative; z-index:0; pointer-events:auto; }
+.frame-dragging{ opacity:1; }
+.frames-zone .frame.frame-drop-target{ outline:none; }
 
 /* ── NAVIGATION BAR: in flow inside frames zone ── */
 #nav.navigation-bar{
