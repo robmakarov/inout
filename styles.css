@@ -2187,17 +2187,39 @@ body.select-mode .obj-select-wrap,
 }
 .mobile-keyboard{
   margin-top:8px;
-  border:1px solid rgba(232,213,160,0.28);
+  --kb-accent-rgb: 232,213,160;
+  --kb-accent2-rgb: 184,160,96;
+  --kb-accent: #e8d5a0;
+  --kb-accent2: #b8a060;
+  border:1px solid rgba(var(--kb-accent-rgb),0.28);
   border-radius:14px;
   padding:10px;
   background:
-    radial-gradient(circle at 18% 10%, rgba(232,213,160,0.12), transparent 36%),
-    radial-gradient(circle at 84% 90%, rgba(184,160,96,0.12), transparent 40%),
+    radial-gradient(circle at 18% 10%, rgba(var(--kb-accent-rgb),0.12), transparent 36%),
+    radial-gradient(circle at 84% 90%, rgba(var(--kb-accent2-rgb),0.12), transparent 40%),
     linear-gradient(160deg, rgba(255,255,255,0.03), rgba(255,255,255,0.00) 40%),
     var(--bg2);
   box-shadow:
     0 10px 26px rgba(0,0,0,0.35),
     inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.mobile-keyboard[data-kb-theme="gold"]{
+  --kb-accent-rgb: 232,213,160;
+  --kb-accent2-rgb: 184,160,96;
+  --acc: var(--kb-accent);
+  --acc2: var(--kb-accent2);
+}
+.mobile-keyboard[data-kb-theme="silver"]{
+  --kb-accent-rgb: 212,214,230;
+  --kb-accent2-rgb: 170,174,198;
+  --acc: rgb(212,214,230);
+  --acc2: rgb(170,174,198);
+}
+.mobile-keyboard[data-kb-theme="midnight"]{
+  --kb-accent-rgb: 127,183,255;
+  --kb-accent2-rgb: 62,111,184;
+  --acc: rgb(127,183,255);
+  --acc2: rgb(62,111,184);
 }
 .mobile-keyboard[hidden]{ display:none !important; }
 .mobile-keyboard-top{
@@ -2208,7 +2230,7 @@ body.select-mode .obj-select-wrap,
 }
 .mobile-kb-lang,
 .mobile-kb-key{
-  border:1px solid rgba(232,213,160,0.26);
+  border:1px solid rgba(var(--kb-accent-rgb),0.26);
   background:linear-gradient(170deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01)), var(--bg);
   color:var(--soft);
   border-radius:7px;
@@ -2218,11 +2240,13 @@ body.select-mode .obj-select-wrap,
   min-height:32px;
   box-shadow:0 2px 8px rgba(0,0,0,0.18);
   transition:transform .14s ease, box-shadow .14s ease, border-color .2s ease, background .2s ease;
+  position:relative;
+  overflow:hidden;
 }
 .mobile-kb-key:hover,
 .mobile-kb-lang:hover{
   transform:translateY(-1px);
-  border-color:rgba(232,213,160,0.45);
+  border-color:rgba(var(--kb-accent-rgb),0.45);
   box-shadow:0 5px 12px rgba(0,0,0,0.24);
 }
 .mobile-kb-lang.active{
@@ -2234,6 +2258,36 @@ body.select-mode .obj-select-wrap,
   display:flex;
   flex-direction:column;
   gap:6px;
+}
+
+.mobile-keyboard-tools{
+  margin-bottom:10px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  align-items:center;
+}
+.mobile-kb-tool{
+  border:1px solid rgba(var(--kb-accent-rgb),0.26);
+  background:rgba(var(--kb-accent-rgb),0.06);
+  color:var(--soft);
+  border-radius:999px;
+  font-family:var(--mono);
+  font-size:10px;
+  padding:5px 8px;
+  min-height:26px;
+  box-shadow:0 2px 8px rgba(0,0,0,0.14);
+  transition:transform .14s ease, background .2s ease, border-color .2s ease, color .2s ease;
+  cursor:pointer;
+}
+.mobile-kb-tool:hover{
+  transform:translateY(-1px);
+  border-color:rgba(var(--kb-accent-rgb),0.45);
+}
+.mobile-kb-tool.active{
+  background:linear-gradient(140deg, var(--acc), var(--acc2));
+  border-color:var(--acc2);
+  color:var(--bg);
 }
 .mobile-kb-row{
   display:grid;
@@ -2247,16 +2301,36 @@ body.select-mode .obj-select-wrap,
 .mobile-keyboard-fns{
   margin-top:8px;
   display:grid;
-  grid-template-columns:repeat(7, minmax(0, 1fr));
+  grid-template-columns:repeat(8, minmax(0, 1fr));
   gap:5px;
 }
 .mobile-kb-key-fn{
-  background:linear-gradient(170deg, rgba(232,213,160,0.20), rgba(232,213,160,0.08));
+  background:linear-gradient(170deg, rgba(var(--kb-accent-rgb),0.20), rgba(var(--kb-accent-rgb),0.08));
 }
 .mobile-kb-key-send{
   background:linear-gradient(140deg, var(--acc), var(--acc2));
   color:var(--bg);
   border-color:var(--acc2);
+}
+
+.mobile-kb-key::after{
+  content:'';
+  position:absolute;
+  inset:0;
+  border-radius:inherit;
+  background:radial-gradient(circle at var(--kb-press-x, 50%) var(--kb-press-y, 50%), rgba(var(--kb-accent-rgb),0.45), transparent 45%);
+  opacity:0;
+  transform:scale(0.75);
+  pointer-events:none;
+}
+.mobile-kb-key.kb-pressed::after{
+  opacity:1;
+  animation:kb-ripple .22s ease-out both;
+}
+@keyframes kb-ripple{
+  from{ transform:scale(0.75); opacity:0.0; }
+  30%{ opacity:1; }
+  to{ transform:scale(1.12); opacity:0; }
 }
 .log-dropup-wrap{
   margin-left:0;

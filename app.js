@@ -365,7 +365,14 @@ function subscribeTempSessionJoins() {
 (function setupCustomMobileKeyboard() {
   if (!mobileKbToggleBtn || !mobileKeyboardEl || !mobileKeyboardRowsEl) return;
   const PREF_KEY = 'inout_mobile_kb_open_v1';
+  const SETTINGS_KEY = 'inout_mobile_kb_settings_v1';
   let currentLang = 'en';
+  let kbMode = 'compact'; /* compact | full */
+  let kbTheme = 'gold'; /* gold | silver | midnight */
+  let fxEnabled = true;
+  let vibeEnabled = true;
+  let audioCtx = null;
+  const emojiQuick = ['😊', '😂', '❤️', '🔥', '🚀', '🙏', '👍', '🌙', '🎉', '🤖'];
   const keysets = {
     en: [
       ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
@@ -379,11 +386,73 @@ function subscribeTempSessionJoins() {
     ]
   };
 
+  const keysetsFull = {
+    en: [
+      ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
+      ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', '.'],
+      ['z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '?', '!'],
+      ['@', '#', '$', '%', '&', '*', '(', ')', '-', '_'],
+      emojiQuick,
+    ],
+    ru: [
+      ['й', 'ц', 'у', 'к', 'е', 'н', 'г', 'ш', 'щ', 'з'],
+      ['ф', 'ы', 'в', 'а', 'п', 'р', 'о', 'л', 'д', 'ж'],
+      ['я', 'ч', 'с', 'м', 'и', 'т', 'ь', 'б', 'ю', 'э'],
+      ['@', '#', '$', '%', '&', '*', '(', ')', '-', '_'],
+      emojiQuick,
+    ]
+  };
+
   function setOpen(open) {
     if (open) mobileKeyboardEl.removeAttribute('hidden');
     else mobileKeyboardEl.setAttribute('hidden', '');
     mobileKbToggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
     try { localStorage.setItem(PREF_KEY, open ? '1' : '0'); } catch (_) {}
+  }
+
+  function maybeVibrate() {
+    try {
+      if (!vibeEnabled) return;
+      if (typeof navigator === 'undefined' || !navigator.vibrate) return;
+      navigator.vibrate(10);
+    } catch (_) {}
+  }
+
+  function maybePlayFx() {
+    try {
+      if (!fxEnabled) return;
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const t0 = audioCtx.currentTime;
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'sine';
+      o.frequency.value = 680;
+      g.gain.value = 0.05;
+      o.connect(g);
+      g.connect(audioCtx.destination);
+      o.start(t0);
+      o.stop(t0 + 0.025);
+    } catch (_) {}
+  }
+
+  function pressFxOn(el, e) {
+    try {
+      if (el && el.classList && el.classList.contains('mobile-kb-key')) {
+        if (e && typeof e.clientX === 'number' && typeof e.clientY === 'number' && el.getBoundingClientRect) {
+          const r = el.getBoundingClientRect();
+          const x = ((e.clientX - r.left) / Math.max(1, r.width)) * 100;
+          const y = ((e.clientY - r.top) / Math.max(1, r.height)) * 100;
+          el.style.setProperty('--kb-press-x', String(x) + '%');
+          el.style.setProperty('--kb-press-y', String(y) + '%');
+        }
+        el.classList.add('kb-pressed');
+        setTimeout(function() {
+          try { el.classList.remove('kb-pressed'); } catch (_) {}
+        }, 260);
+      }
+    } catch (_) {}
+    maybeVibrate();
+    maybePlayFx();
   }
 
   function applyInputValue(v) {
@@ -435,6 +504,10 @@ function subscribeTempSessionJoins() {
     else if (key === 'enter') insertAtCaret('\n');
     else if (key === 'backspace') backspaceAtCaret();
     else if (key === 'clear') applyInputValue('');
+    else if (key === 'emoji') {
+      const em = emojiQuick[Math.floor(Math.random() * emojiQuick.length)] || '😊';
+      insertAtCaret(em);
+    }
     else if (key === 'send') { if (typeof send === 'function' && sendBtn && !sendBtn.disabled) send(); }
     else if (key === 'hide') setOpen(false);
     else if (key === 'copy') {
@@ -452,7 +525,8 @@ function subscribeTempSessionJoins() {
   }
 
   function renderKeys() {
-    const rows = keysets[currentLang] || keysets.en;
+    const src = (kbMode === 'full' ? keysetsFull : keysets);
+    const rows = src[currentLang] || src.en;
     mobileKeyboardRowsEl.innerHTML = '';
     rows.forEach(function(chars) {
       const row = document.createElement('div');
@@ -470,6 +544,19 @@ function subscribeTempSessionJoins() {
     mobileKeyboardEl.querySelectorAll('.mobile-kb-lang').forEach(function(btn) {
       btn.classList.toggle('active', btn.dataset.lang === currentLang);
     });
+
+    mobileKeyboardEl.querySelectorAll('.mobile-kb-tool[data-ui="mode"]').forEach(function(btn) {
+      btn.classList.toggle('active', btn.dataset.mode === kbMode);
+    });
+    mobileKeyboardEl.querySelectorAll('.mobile-kb-tool[data-ui="theme"]').forEach(function(btn) {
+      btn.classList.toggle('active', btn.dataset.theme === kbTheme);
+    });
+    mobileKeyboardEl.querySelectorAll('.mobile-kb-tool[data-ui="fx"]').forEach(function(btn) {
+      btn.classList.toggle('active', fxEnabled);
+    });
+    mobileKeyboardEl.querySelectorAll('.mobile-kb-tool[data-ui="vibe"]').forEach(function(btn) {
+      btn.classList.toggle('active', vibeEnabled);
+    });
   }
 
   mobileKbToggleBtn.addEventListener('click', function() {
@@ -480,22 +567,61 @@ function subscribeTempSessionJoins() {
   mobileKeyboardEl.addEventListener('click', function(e) {
     const t = e.target && e.target.closest ? e.target.closest('button') : null;
     if (!t) return;
+    pressFxOn(t, e);
     const lang = t.dataset.lang;
     if (lang) {
       currentLang = (lang === 'ru') ? 'ru' : 'en';
       renderKeys();
       return;
     }
+    const ui = t.dataset.ui;
+    if (ui) {
+      if (ui === 'mode') {
+        kbMode = t.dataset.mode === 'full' ? 'full' : 'compact';
+      } else if (ui === 'theme') {
+        kbTheme = t.dataset.theme || 'gold';
+        mobileKeyboardEl.dataset.kbTheme = kbTheme;
+      } else if (ui === 'fx') {
+        fxEnabled = !(t.dataset.on === '1');
+        t.dataset.on = fxEnabled ? '1' : '0';
+      } else if (ui === 'vibe') {
+        vibeEnabled = !(t.dataset.on === '1');
+        t.dataset.on = vibeEnabled ? '1' : '0';
+      }
+      if (typeof localStorage !== 'undefined') {
+        try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ kbMode: kbMode, kbTheme: kbTheme, fxEnabled: fxEnabled, vibeEnabled: vibeEnabled })); } catch (_) {}
+      }
+      renderKeys();
+      return;
+    }
     const key = t.dataset.key;
     if (!key) return;
-    if (key.length === 1 || key === '.') insertAtCaret(key);
-    else handleFn(key);
+    const fnKeys = new Set(['space', 'enter', 'backspace', 'clear', 'copy', 'paste', 'emoji', 'hide', 'send']);
+    if (fnKeys.has(key)) handleFn(key);
+    else insertAtCaret(key);
   });
 
   try {
     const saved = localStorage.getItem(PREF_KEY);
     setOpen(saved === '1');
   } catch (_) { setOpen(false); }
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (raw) {
+      const s = JSON.parse(raw);
+      if (s && (s.kbMode === 'compact' || s.kbMode === 'full')) kbMode = s.kbMode;
+      if (s && (s.kbTheme === 'gold' || s.kbTheme === 'silver' || s.kbTheme === 'midnight')) kbTheme = s.kbTheme;
+      if (s && typeof s.fxEnabled === 'boolean') fxEnabled = s.fxEnabled;
+      if (s && typeof s.vibeEnabled === 'boolean') vibeEnabled = s.vibeEnabled;
+    }
+  } catch (_) {}
+  mobileKeyboardEl.dataset.kbTheme = kbTheme;
+  mobileKeyboardEl.querySelectorAll('.mobile-kb-tool[data-ui="fx"], .mobile-kb-tool[data-ui="vibe"]').forEach(function(btn) {
+    const ui = btn.dataset.ui;
+    const on = ui === 'fx' ? fxEnabled : vibeEnabled;
+    btn.dataset.on = on ? '1' : '0';
+    btn.classList.toggle('active', on);
+  });
   renderKeys();
 })();
 
