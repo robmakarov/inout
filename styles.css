@@ -555,7 +555,7 @@ header{
 
 .logo{
   font-family:var(--sans);
-  font-size:18px;
+  font-size:14px;
   font-weight:800;
   letter-spacing:0.02em;
   color:#fff !important;
@@ -564,9 +564,10 @@ header{
   display:flex;
   align-items:center;
   position:relative;
-  min-width:120px;
-  width:120px;
-  min-height:28px;
+  width:72px;
+  min-width:72px;
+  height:20px;
+  min-height:20px;
   flex-shrink:0;
   margin:0;
   padding:0;
@@ -576,10 +577,10 @@ header{
   overflow:hidden;
 }
 .logo-lottie{
-  width:120px;
-  height:28px;
-  min-width:120px;
-  min-height:28px;
+  width:72px;
+  height:20px;
+  min-width:72px;
+  min-height:20px;
   position:absolute;
   left:0;
   top:0;
@@ -614,6 +615,7 @@ header{
   opacity:1;
   color:#fff !important;
   white-space:nowrap;
+  font-size:14px;
 }
 /* Keep fallback visible so logo is always shown */
 .logo.logo-lottie-loaded .logo-fallback{
