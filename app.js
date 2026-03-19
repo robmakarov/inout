@@ -5561,14 +5561,6 @@ function renderTabs() {
   if (!tabsEl) return;
   tabsEl.innerHTML = '';
 
-  // Prevent the subsequent single-click handler from switching views.
-  // Browsers fire click after dblclick, so we need a short suppression window.
-  var _tabRenameSuppressClick = false;
-  var setTabRenameSuppress = function(on) {
-    _tabRenameSuppressClick = !!on;
-    setTimeout(function() { _tabRenameSuppressClick = false; }, 220);
-  };
-
   viewNames.forEach(ch => {
     const btn = document.createElement('button');
     btn.className = 'tab';
@@ -5600,23 +5592,32 @@ function renderTabs() {
       btn.appendChild(close);
     }
 
+    var clickTimer = null;
     btn.addEventListener('dblclick', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      setTabRenameSuppress(true);
+      if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
       try {
         if (typeof renameView === 'function') renameView(ch, btn);
       } catch (_) {}
     });
 
     btn.addEventListener('click', (e) => {
-      if (_tabRenameSuppressClick) return;
       if (e.shiftKey) {
         e.preventDefault();
         toggleSecondaryView(ch);
         return;
       }
-      switchChannel(ch);
+      // Delay single-click switching so dblclick has priority for renaming.
+      // (Otherwise the first click may switch views before dblclick fires.)
+      const viewAtClick = currentView;
+      if (clickTimer) clearTimeout(clickTimer);
+      clickTimer = setTimeout(function() {
+        clickTimer = null;
+        if (currentView !== viewAtClick) return;
+        if (btn.querySelector('.tab-rename-input')) return;
+        switchChannel(ch);
+      }, 180);
     });
     btn.addEventListener('dragenter', e => {
       e.preventDefault();
