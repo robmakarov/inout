@@ -158,6 +158,7 @@ const qrModalImg   = document.getElementById('qr-modal-img');
 const qrModalClose = document.getElementById('qr-modal-close');
 const umNickname   = document.getElementById('um-nickname');
 const umNickSave   = document.getElementById('um-nick-save');
+const umLayoutEditBtn = document.getElementById('um-layout-edit');
 const mobileKbToggleBtn = document.getElementById('mobile-kb-toggle');
 const mobileKeyboardEl = document.getElementById('mobile-keyboard');
 const mobileKeyboardRowsEl = document.getElementById('mobile-keyboard-rows');
@@ -166,6 +167,12 @@ const calcToggleBtn = document.getElementById('calc-toggle');
 const customCalcEl = document.getElementById('custom-calc');
 const customCalcInputEl = document.getElementById('custom-calc-input');
 const customCalcOutputEl = document.getElementById('custom-calc-output');
+const secretControlsBackdrop = document.getElementById('secret-controls-backdrop');
+const secretControlsCloseBtn = document.getElementById('secret-controls-close');
+const secretToggleKbCalc = document.getElementById('secret-toggle-kbcalc');
+const secretToggleGrips = document.getElementById('secret-toggle-grips');
+const secretToggleLayout = document.getElementById('secret-toggle-layout');
+const secretControlsResetBtn = document.getElementById('secret-controls-reset');
 const umSyncInputChk = document.getElementById('um-sync-input');
 const umLayoutSyncChk = document.getElementById('um-layout-sync');
 const umVersionBadge = document.getElementById('um-version-badge');
@@ -227,11 +234,134 @@ const modeState = {
 // Each entry: { id, channel (View name), rootEl, feedInner, objects, config }
 let views = [];
 
+const SECRET_TOGGLES_KEY = 'inout_secret_toggles_v1';
+let secretToggles = {
+  showKbCalc: false,
+  showGrips: false,
+  enableLayoutEdit: false,
+};
+
+function loadSecretToggles() {
+  try {
+    const raw = localStorage.getItem(SECRET_TOGGLES_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return;
+    secretToggles.showKbCalc = !!parsed.showKbCalc;
+    secretToggles.showGrips = !!parsed.showGrips;
+    secretToggles.enableLayoutEdit = !!parsed.enableLayoutEdit;
+  } catch (_) {}
+}
+
+function saveSecretToggles() {
+  try { localStorage.setItem(SECRET_TOGGLES_KEY, JSON.stringify(secretToggles)); } catch (_) {}
+}
+
+function applySecretToggles() {
+  if (document.body) {
+    document.body.classList.toggle('secret-show-kbcalc', !!secretToggles.showKbCalc);
+    document.body.classList.toggle('secret-show-grips', !!secretToggles.showGrips);
+  }
+  if (umLayoutEditBtn) {
+    umLayoutEditBtn.disabled = !secretToggles.enableLayoutEdit;
+    if (secretToggles.enableLayoutEdit) {
+      umLayoutEditBtn.removeAttribute('title');
+      umLayoutEditBtn.textContent = 'Layout edit';
+    } else {
+      umLayoutEditBtn.setAttribute('title', 'Layout editing is temporarily disabled');
+      umLayoutEditBtn.textContent = 'Layout edit (coming soon)';
+    }
+  }
+}
+
+function openSecretControls() {
+  if (!secretControlsBackdrop) return;
+  if (secretToggleKbCalc) secretToggleKbCalc.checked = !!secretToggles.showKbCalc;
+  if (secretToggleGrips) secretToggleGrips.checked = !!secretToggles.showGrips;
+  if (secretToggleLayout) secretToggleLayout.checked = !!secretToggles.enableLayoutEdit;
+  secretControlsBackdrop.setAttribute('aria-hidden', 'false');
+}
+
+function closeSecretControls() {
+  if (!secretControlsBackdrop) return;
+  secretControlsBackdrop.setAttribute('aria-hidden', 'true');
+}
+
 (function ensureModalsClosedOnLoad() {
   if (umBackdrop) { umBackdrop.style.display = 'none'; umBackdrop.setAttribute('aria-hidden', 'true'); }
   if (cmBackdrop) cmBackdrop.style.display = 'none';
   if (logDropupPanel) logDropupPanel.classList.remove('open');
   if (qrModalBackdrop) qrModalBackdrop.setAttribute('aria-hidden', 'true');
+  if (secretControlsBackdrop) secretControlsBackdrop.setAttribute('aria-hidden', 'true');
+})();
+
+(function setupSecretControls() {
+  loadSecretToggles();
+  applySecretToggles();
+  if (secretToggleKbCalc) {
+    secretToggleKbCalc.addEventListener('change', function() {
+      secretToggles.showKbCalc = !!secretToggleKbCalc.checked;
+      saveSecretToggles();
+      applySecretToggles();
+    });
+  }
+  if (secretToggleGrips) {
+    secretToggleGrips.addEventListener('change', function() {
+      secretToggles.showGrips = !!secretToggleGrips.checked;
+      saveSecretToggles();
+      applySecretToggles();
+    });
+  }
+  if (secretToggleLayout) {
+    secretToggleLayout.addEventListener('change', function() {
+      secretToggles.enableLayoutEdit = !!secretToggleLayout.checked;
+      saveSecretToggles();
+      applySecretToggles();
+    });
+  }
+  if (secretControlsCloseBtn) secretControlsCloseBtn.addEventListener('click', closeSecretControls);
+  if (secretControlsBackdrop) {
+    secretControlsBackdrop.addEventListener('click', function(e) {
+      if (e.target === secretControlsBackdrop) closeSecretControls();
+    });
+  }
+  if (secretControlsResetBtn) {
+    secretControlsResetBtn.addEventListener('click', function() {
+      secretToggles = { showKbCalc: false, showGrips: false, enableLayoutEdit: false };
+      saveSecretToggles();
+      applySecretToggles();
+      if (secretToggleKbCalc) secretToggleKbCalc.checked = false;
+      if (secretToggleGrips) secretToggleGrips.checked = false;
+      if (secretToggleLayout) secretToggleLayout.checked = false;
+      if (typeof toast === 'function') toast('Secret toggles reset.');
+    });
+  }
+
+  // Hidden open gestures:
+  // 1) Click logo 5 times within ~2.2s
+  const logoEl = document.querySelector('.logo');
+  let logoTapCount = 0;
+  let logoTapTimer = null;
+  if (logoEl) {
+    logoEl.addEventListener('click', function() {
+      logoTapCount += 1;
+      if (logoTapTimer) clearTimeout(logoTapTimer);
+      if (logoTapCount >= 5) {
+        logoTapCount = 0;
+        openSecretControls();
+        return;
+      }
+      logoTapTimer = setTimeout(function() { logoTapCount = 0; logoTapTimer = null; }, 2200);
+    });
+  }
+  // 2) Keyboard shortcut Ctrl/Cmd + Alt + Shift + .
+  document.addEventListener('keydown', function(e) {
+    const isDot = e.key === '.' || e.code === 'Period';
+    if (!isDot) return;
+    if (!(e.altKey && e.shiftKey && (e.ctrlKey || e.metaKey))) return;
+    e.preventDefault();
+    openSecretControls();
+  });
 })();
 
 (function registerServiceWorker() {

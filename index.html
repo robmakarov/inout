@@ -366,6 +366,23 @@
   </div>
 </div>
 
+<div id="secret-controls-backdrop" aria-hidden="true">
+  <div id="secret-controls-panel" role="dialog" aria-modal="true" aria-label="Secret controls">
+    <div class="secret-controls-top">
+      <div class="secret-controls-title">Secret Controls</div>
+      <button id="secret-controls-close" type="button" aria-label="Close secret controls">×</button>
+    </div>
+    <div class="secret-controls-body">
+      <label class="secret-toggle-row"><input type="checkbox" id="secret-toggle-kbcalc"> Show keyboard + calculator UI</label>
+      <label class="secret-toggle-row"><input type="checkbox" id="secret-toggle-grips"> Show frame reorder grips</label>
+      <label class="secret-toggle-row"><input type="checkbox" id="secret-toggle-layout"> Enable layout edit button</label>
+      <div class="secret-controls-actions">
+        <button id="secret-controls-reset" type="button">Reset</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 (function(){
   var logoAnim = null;

@@ -2179,11 +2179,11 @@ body.select-mode .obj-select-wrap,
   gap:6px;
   margin-top:6px;
 }
-/* Temporarily hidden from UI */
-#mobile-kb-toggle,
-#calc-toggle,
-#mobile-keyboard,
-#custom-calc{
+/* Temporarily hidden from UI unless secret toggle enables them */
+body:not(.secret-show-kbcalc) #mobile-kb-toggle,
+body:not(.secret-show-kbcalc) #calc-toggle,
+body:not(.secret-show-kbcalc) #mobile-keyboard,
+body:not(.secret-show-kbcalc) #custom-calc{
   display:none !important;
 }
 .mobile-keyboard{
@@ -2383,6 +2383,84 @@ body.select-mode .obj-select-wrap,
 .custom-calc-use{
   background:linear-gradient(140deg, var(--acc), var(--acc2));
   color:var(--bg);
+}
+
+/* Secret controls panel */
+#secret-controls-backdrop{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.5);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:2300;
+}
+#secret-controls-backdrop[aria-hidden="false"]{ display:flex; }
+#secret-controls-panel{
+  width:340px;
+  max-width:92vw;
+  background:var(--bg2);
+  border:1px solid var(--line2);
+  border-radius:10px;
+  box-shadow:0 12px 30px rgba(0,0,0,0.3);
+  padding:10px 12px 12px;
+}
+.secret-controls-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+}
+.secret-controls-title{
+  font-family:var(--sans);
+  font-size:13px;
+  color:var(--text);
+}
+#secret-controls-close{
+  border:none;
+  background:transparent;
+  color:var(--soft);
+  font-size:18px;
+  line-height:1;
+  cursor:pointer;
+}
+.secret-controls-body{
+  margin-top:8px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.secret-toggle-row{
+  font-family:var(--mono);
+  font-size:11px;
+  color:var(--soft);
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.secret-controls-actions{
+  margin-top:6px;
+  display:flex;
+  justify-content:flex-end;
+}
+#secret-controls-reset{
+  border:1px solid var(--line2);
+  background:transparent;
+  color:var(--soft);
+  font-family:var(--mono);
+  font-size:10px;
+  padding:4px 8px;
+  border-radius:4px;
+  cursor:pointer;
+}
+#secret-controls-reset:hover{ background:var(--line); color:var(--text); }
+
+/* Reveal frame grips only when secret toggle is on */
+body.secret-show-grips .frame-grip{
+  display:block;
+  pointer-events:auto;
+  z-index:5;
+  cursor:grab;
 }
 
 .mobile-kb-key::after{
