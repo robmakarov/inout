@@ -2996,7 +2996,7 @@ function updateObjectRowText(objId, textValue) {
   const idStr = String(objId);
   const textEl = findObjectRowTextEl(objId);
   if (!textEl) return;
-  textEl.innerHTML = linkify(escapeHtml(textValue || ''));
+  textEl.innerHTML = renderVisualOnlyHtml(textValue || '');
 }
 
 function findObjectRowTextEl(objId) {
@@ -3074,7 +3074,7 @@ function updateEditingRowFromInput() {
       if (id != null && editingSet.has(id)) return;
       const textEl = row.querySelector('.obj-text');
       if (!textEl || !textEl.querySelector('.obj-edit-caret, .obj-edit-selection')) return;
-      textEl.innerHTML = linkify(escapeHtml(textEl.textContent || ''));
+      textEl.innerHTML = renderVisualOnlyHtml(textEl.textContent || '');
     });
   });
   const caret = '<span class="obj-edit-caret" aria-hidden="true"></span>';
@@ -3916,7 +3916,7 @@ function showRemoteEditingDoppelganger(objId, text, authorName, deviceId, skipEd
     if (savedTextForRemote[objId] === undefined) {
       savedTextForRemote[objId] = textEl.textContent || '';
     }
-    textEl.innerHTML = linkify(escapeHtml(text || ''));
+    textEl.innerHTML = renderVisualOnlyHtml(text || '');
     row.classList.add('obj-remote-editing');
     let badge = textEl.querySelector('.obj-remote-edit-badge');
     if (!badge) {
@@ -3958,7 +3958,7 @@ function clearRemoteEditingDoppelganger(objId, skipRestore) {
     const badge = textEl ? textEl.querySelector('.obj-remote-edit-badge') : row.querySelector('.obj-remote-edit-badge');
     if (badge && badge.parentNode) badge.parentNode.removeChild(badge);
     if (!skipRestore && savedTextForRemote[objId] !== undefined && textEl) {
-      textEl.innerHTML = linkify(escapeHtml(savedTextForRemote[objId] || ''));
+      textEl.innerHTML = renderVisualOnlyHtml(savedTextForRemote[objId] || '');
     }
   });
   delete savedTextForRemote[objId];
@@ -5770,7 +5770,7 @@ function createObjectRow(obj, isNew, options) {
 
   const text = document.createElement('div');
   text.className = 'obj-text';
-  text.innerHTML = linkify(escapeHtml(obj.text));
+  text.innerHTML = renderVisualOnlyHtml(obj.text);
   text.addEventListener('click', e => {
     if (e.target.closest('a')) return;
     e.stopPropagation();
@@ -8573,6 +8573,48 @@ function linkify(s) {
     /(https?:\/\/[^\s<>"']+)/g,
     '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
   );
+}
+
+function renderVisualOnlyHtml(input) {
+  const src = String(input == null ? '' : input);
+  if (!src) return '';
+  if (typeof document === 'undefined' || !document.implementation) {
+    return escapeHtml(src);
+  }
+  const doc = document.implementation.createHTMLDocument('');
+  const root = doc.createElement('div');
+  root.innerHTML = src;
+  const allowed = new Set([
+    'B', 'STRONG', 'I', 'EM', 'U', 'S', 'SMALL',
+    'SUB', 'SUP', 'BR', 'P', 'DIV', 'SPAN',
+    'UL', 'OL', 'LI', 'BLOCKQUOTE', 'CODE', 'PRE',
+    'H1', 'H2', 'H3', 'H4', 'H5', 'H6'
+  ]);
+
+  function sanitizeNode(node) {
+    if (!node) return;
+    if (node.nodeType === 3) return; // text
+    if (node.nodeType !== 1) {
+      if (node.parentNode) node.parentNode.removeChild(node);
+      return;
+    }
+    const tag = node.tagName ? node.tagName.toUpperCase() : '';
+    if (!allowed.has(tag)) {
+      const raw = node.outerHTML || node.textContent || '';
+      const asText = doc.createTextNode(raw);
+      if (node.parentNode) node.parentNode.replaceChild(asText, node);
+      return;
+    }
+    if (node.attributes && node.attributes.length) {
+      Array.from(node.attributes).forEach(function(a) {
+        node.removeAttribute(a.name);
+      });
+    }
+    Array.from(node.childNodes).forEach(sanitizeNode);
+  }
+
+  Array.from(root.childNodes).forEach(sanitizeNode);
+  return root.innerHTML;
 }
 
 function toast(msg, dur = 2800) {
