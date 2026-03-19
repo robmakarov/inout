@@ -1716,6 +1716,46 @@ function getViewDisplayName(ch) {
   return getViewDefaultName(key);
 }
 
+function applyRemoteViewTitle(channel, titleValue) {
+  const key = String(channel || '');
+  if (!key) return;
+  if (typeof titleValue === 'string' && titleValue.trim()) viewDisplayNames[key] = titleValue.trim();
+  else delete viewDisplayNames[key];
+  saveViewDisplayNames();
+  if (tabsEl) {
+    const btn = tabsEl.querySelector('.tab[data-channel="' + CSS.escape(key) + '"]');
+    if (btn) {
+      const lbl = btn.querySelector('.tab-label');
+      if (lbl) lbl.textContent = getViewDisplayName(key);
+    }
+  }
+  refreshMoveTargets();
+  syncComposerTargetSelects();
+}
+
+async function persistViewTitle(channel, titleValue) {
+  if (!sb || !sb.from || !channel) return;
+  try {
+    const ch = String(channel);
+    let cfg = {};
+    try {
+      const { data } = await sb
+        .from('views')
+        .select('config')
+        .eq('channel', ch)
+        .limit(1)
+        .maybeSingle();
+      if (data && data.config && typeof data.config === 'object') cfg = data.config;
+    } catch (_) {}
+    const nextCfg = Object.assign({}, cfg);
+    if (typeof titleValue === 'string' && titleValue.trim()) nextCfg.title = titleValue.trim();
+    else delete nextCfg.title;
+    await sb.from('views').upsert({ channel: ch, config: nextCfg }, { onConflict: 'channel' });
+  } catch (e) {
+    console.error(e);
+  }
+}
+
 function refreshMoveTargets() {
   if (!moveTargetSelect) return;
   moveTargetSelect.innerHTML = '';
@@ -2499,8 +2539,7 @@ function subscribeViewRealtime() {
     try { viewSub.unsubscribe(); } catch (_) {}
     viewSub = null;
   }
-  const chName = 'views-' + String(currentChannel || '');
-  const filter = 'channel=eq.' + String(currentChannel || '');
+  const chName = 'views-all';
   viewSub = sb
     .channel(chName)
     .on(
@@ -2509,15 +2548,16 @@ function subscribeViewRealtime() {
         event: '*',
         schema: 'public',
         table: 'views',
-        filter,
       },
       payload => {
         try {
           const row = payload.new || payload.old || {};
-          if (!row || row.channel !== currentChannel || !row.config) return;
+          if (!row || !row.channel || !row.config) return;
+          const cfg = row.config || {};
+          applyRemoteViewTitle(row.channel, cfg.title);
+          if (row.channel !== currentChannel) return;
           if (suppressNextViewApply) { suppressNextViewApply = false; return; }
           if (Date.now() < suppressOrderApplyUntil) return;
-          const cfg = row.config || {};
           if (Array.isArray(cfg.order)) {
             currentObjectOrder = cfg.order
               .map(x => Number(x))
@@ -4072,6 +4112,7 @@ async function loadFieldPrefsForCurrentChannel() {
         .maybeSingle();
       if (!error && data && data.config) {
         const cfg = data.config || {};
+        applyRemoteViewTitle(currentChannel, cfg.title);
         fieldPrefs = {
           showTime: typeof cfg.showTime === 'boolean' ? cfg.showTime : defTime,
           showAuthor: typeof cfg.showAuthor === 'boolean' ? cfg.showAuthor : defAuthor,
@@ -5389,6 +5430,7 @@ async function loadObjectOrderForCurrentChannel() {
       .maybeSingle();
     if (!error && data && data.config) {
       const cfg = data.config || {};
+      applyRemoteViewTitle(currentChannel, cfg.title);
       const orderArr = Array.isArray(cfg.order) ? cfg.order : [];
       currentObjectOrder = orderArr
         .map(x => Number(x))
@@ -5447,6 +5489,9 @@ async function saveObjectOrderForCurrentView() {
     try {
       const cfg = {
         order: currentObjectOrder.slice(),
+        title: (viewDisplayNames && typeof viewDisplayNames[currentView] === 'string' && viewDisplayNames[currentView].trim())
+          ? viewDisplayNames[currentView].trim()
+          : null,
         showTime: fieldPrefs && typeof fieldPrefs.showTime === 'boolean' ? fieldPrefs.showTime : true,
         showAuthor: fieldPrefs && typeof fieldPrefs.showAuthor === 'boolean'
           ? fieldPrefs.showAuthor
@@ -5560,7 +5605,7 @@ function renderTabs() {
       e.stopPropagation();
       setTabRenameSuppress(true);
       try {
-        if (typeof renameView === 'function') renameView(ch);
+        if (typeof renameView === 'function') renameView(ch, btn);
       } catch (_) {}
     });
 
@@ -5622,32 +5667,88 @@ function renderTabs() {
   syncComposerTargetSelects();
 }
 
-function renameView(ch) {
-  if (!ch) return;
-  try {
-    // Keep main predictable unless user explicitly wants a label override.
-    const curr = getViewDisplayName(ch);
-    const def = getViewDefaultName(ch);
-    const initial = curr && curr !== def ? curr : String(ch);
-    const next = window.prompt('Rename view', initial);
-    if (next == null) return;
-    const cleaned = String(next).trim();
-    const key = String(ch);
-    if (!cleaned) delete viewDisplayNames[key];
-    else viewDisplayNames[key] = cleaned;
-    saveViewDisplayNames();
+function renameView(ch, btn) {
+  if (!ch || !btn) return;
+  const label = btn.querySelector('.tab-label');
+  if (!label) return;
+  if (btn.querySelector('.tab-rename-input')) return;
+  const key = String(ch);
+  const hadCustomBefore = !!(viewDisplayNames && typeof viewDisplayNames[key] === 'string' && viewDisplayNames[key].trim());
+  const beforeRaw = hadCustomBefore ? viewDisplayNames[key].trim() : null;
+  const before = getViewDisplayName(key);
+  const input = document.createElement('input');
+  input.className = 'tab-rename-input';
+  input.type = 'text';
+  input.value = before;
+  input.setAttribute('aria-label', 'Rename view');
+  input.maxLength = 80;
+  label.style.display = 'none';
+  btn.classList.add('tab-renaming');
+  btn.insertBefore(input, label);
+  input.focus();
+  input.select();
+  var syncTimer = null;
+  var scheduleSync = function(nextTitle) {
+    if (syncTimer) clearTimeout(syncTimer);
+    syncTimer = setTimeout(function() {
+      persistViewTitle(key, nextTitle);
+      syncTimer = null;
+    }, 120);
+  };
 
-    // Update tab label immediately.
-    if (tabsEl) {
-      const btn = tabsEl.querySelector('.tab[data-channel="' + CSS.escape(key) + '"]');
-      if (btn) {
-        const lbl = btn.querySelector('.tab-label');
-        if (lbl) lbl.textContent = getViewDisplayName(key);
-      }
+  function cleanup(nextText) {
+    if (nextText == null) {
+      label.textContent = before;
+    } else {
+      label.textContent = nextText;
     }
-    refreshMoveTargets();
-    syncComposerTargetSelects();
-  } catch (_) {}
+    if (input.parentNode) input.parentNode.removeChild(input);
+    label.style.display = '';
+    btn.classList.remove('tab-renaming');
+    if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
+  }
+
+  var finished = false;
+  function commit() {
+    if (finished) return;
+    finished = true;
+    const cleaned = String(input.value || '').trim();
+    if (!cleaned) {
+      applyRemoteViewTitle(key, null);
+      cleanup(getViewDefaultName(key));
+      persistViewTitle(key, null);
+      return;
+    }
+    applyRemoteViewTitle(key, cleaned);
+    cleanup(cleaned);
+    persistViewTitle(key, cleaned);
+  }
+
+  function cancel() {
+    if (finished) return;
+    finished = true;
+    applyRemoteViewTitle(key, beforeRaw);
+    persistViewTitle(key, beforeRaw);
+    cleanup(before);
+  }
+
+  input.addEventListener('input', function() {
+    const liveRaw = String(input.value || '').trim();
+    const live = liveRaw || getViewDefaultName(key);
+    applyRemoteViewTitle(key, liveRaw || null);
+    scheduleSync(liveRaw || null);
+    label.textContent = live;
+  });
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancel();
+    }
+  });
+  input.addEventListener('blur', commit, { once: true });
 }
 
 function syncComposerTargetSelects() {
