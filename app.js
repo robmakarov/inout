@@ -1903,16 +1903,65 @@ async function fetchObjectsList() {
 }
 
 async function fetchObjectsListForChannel(ch) {
-  let query = sb
+  // Main view when signed in: per-user isolation only.
+  if (currentUser && ch === 'main') {
+    const { data, error } = await sb
+      .from(OBJECTS_TABLE)
+      .select('id, created_at, text, channel, user_id, author_name')
+      .eq('channel', ch)
+      .eq('user_id', currentUser.id)
+      .order('created_at', { ascending: true })
+      .limit(100);
+    if (error) { console.error(error); return []; }
+    const list = data || [];
+    if (list.length > 0 && currentObjectOrder.length > 0) return sortObjectsByOrder(list, currentObjectOrder);
+    return list;
+  }
+
+  // Shared channel when signed in (owner): include guest messages from owner's temp_sessions in this channel.
+  if (currentUser && ch !== 'main' && sb && sb.from) {
+    const ownerQuery = sb
+      .from(OBJECTS_TABLE)
+      .select('id, created_at, text, channel, user_id, author_name, temp_session_id')
+      .eq('channel', ch)
+      .eq('user_id', currentUser.id)
+      .order('created_at', { ascending: true })
+      .limit(100);
+    const [ownerRes, sessionsRes] = await Promise.all([
+      ownerQuery,
+      sb.from('temp_sessions').select('id').eq('owner_id', currentUser.id).eq('channel', ch),
+    ]);
+    if (ownerRes.error) { console.error(ownerRes.error); return []; }
+    const ownerList = ownerRes.data || [];
+    const sessionIds = (sessionsRes.data || []).map(r => r.id).filter(Boolean);
+    let guestList = [];
+    if (sessionIds.length > 0) {
+      const guestRes = await sb
+        .from(OBJECTS_TABLE)
+        .select('id, created_at, text, channel, user_id, author_name, temp_session_id')
+        .eq('channel', ch)
+        .in('temp_session_id', sessionIds)
+        .order('created_at', { ascending: true })
+        .limit(100);
+      if (!guestRes.error) guestList = guestRes.data || [];
+    }
+    const byId = new Map();
+    [...ownerList, ...guestList].forEach(row => { byId.set(row.id, row); });
+    const list = Array.from(byId.values()).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    const trimmed = list.slice(-100);
+    if (ch === currentChannel && trimmed.length > 0 && currentObjectOrder.length > 0) {
+      return sortObjectsByOrder(trimmed, currentObjectOrder);
+    }
+    return trimmed;
+  }
+
+  // Default: single query by channel (anon or RLS allows all).
+  const { data, error } = await sb
     .from(OBJECTS_TABLE)
     .select('id, created_at, text, channel, user_id, author_name')
-    .eq('channel', ch);
-
-  // For the main view when signed in, keep per-user isolation.
-  if (currentUser && ch === 'main') {
-    query = query.eq('user_id', currentUser.id);
-  }
-  const { data, error } = await query.order('created_at', { ascending: true }).limit(100);
+    .eq('channel', ch)
+    .order('created_at', { ascending: true })
+    .limit(100);
   if (error) { console.error(error); return []; }
   const list = data || [];
   if (ch === currentChannel && list.length > 0 && currentObjectOrder.length > 0) {
