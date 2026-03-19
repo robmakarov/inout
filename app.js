@@ -4506,38 +4506,75 @@ function createObjectRow(obj, isNew, options) {
   const actions = document.createElement('div');
   actions.className = 'obj-actions';
 
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'obj-actions-trigger';
+  trigger.setAttribute('aria-label', 'Object actions');
+  trigger.setAttribute('aria-haspopup', 'true');
+  trigger.setAttribute('aria-expanded', 'false');
+  trigger.textContent = '\u22EE';
+
+  const dropdown = document.createElement('div');
+  dropdown.className = 'obj-actions-dropdown';
+  dropdown.setAttribute('role', 'menu');
+
+  function closeDropdown() {
+    actions.classList.remove('obj-actions-open');
+    trigger.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('click', closeDropdown);
+  }
+  trigger.addEventListener('click', e => {
+    e.stopPropagation();
+    const isOpen = actions.classList.toggle('obj-actions-open');
+    trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    if (isOpen) document.addEventListener('click', closeDropdown);
+    else document.removeEventListener('click', closeDropdown);
+  });
+
   const actionDelete = document.createElement('button');
   actionDelete.className = 'obj-action-btn';
+  actionDelete.type = 'button';
+  actionDelete.setAttribute('role', 'menuitem');
   actionDelete.textContent = 'Del';
   actionDelete.addEventListener('click', e => {
     e.stopPropagation();
+    closeDropdown();
     if (!obj.id) return;
     deleteSingleObject(obj.id);
   });
 
   const actionMove = document.createElement('button');
   actionMove.className = 'obj-action-btn';
+  actionMove.type = 'button';
+  actionMove.setAttribute('role', 'menuitem');
   actionMove.textContent = 'Move';
   actionMove.addEventListener('click', e => {
     e.stopPropagation();
+    closeDropdown();
     if (!obj.id) return;
     moveSingleObject(obj.id);
   });
 
   const actionExport = document.createElement('button');
   actionExport.className = 'obj-action-btn';
+  actionExport.type = 'button';
+  actionExport.setAttribute('role', 'menuitem');
   actionExport.textContent = 'Exp';
   actionExport.addEventListener('click', e => {
     e.stopPropagation();
+    closeDropdown();
     if (!obj.id) return;
     exportSingleObject(obj.id);
   });
 
   const actionCopy = document.createElement('button');
   actionCopy.className = 'obj-action-btn';
+  actionCopy.type = 'button';
+  actionCopy.setAttribute('role', 'menuitem');
   actionCopy.textContent = 'Copy';
   actionCopy.addEventListener('click', e => {
     e.stopPropagation();
+    closeDropdown();
     if (!obj.text) return;
     try {
       navigator.clipboard.writeText(obj.text);
@@ -4550,9 +4587,12 @@ function createObjectRow(obj, isNew, options) {
 
   const actionCut = document.createElement('button');
   actionCut.className = 'obj-action-btn';
+  actionCut.type = 'button';
+  actionCut.setAttribute('role', 'menuitem');
   actionCut.textContent = 'Cut';
   actionCut.addEventListener('click', e => {
     e.stopPropagation();
+    closeDropdown();
     if (!obj.id || !obj.text) return;
     try {
       navigator.clipboard.writeText(obj.text);
@@ -4564,11 +4604,13 @@ function createObjectRow(obj, isNew, options) {
     }
   });
 
-  actions.appendChild(actionDelete);
-  actions.appendChild(actionMove);
-  actions.appendChild(actionExport);
-  actions.appendChild(actionCopy);
-  actions.appendChild(actionCut);
+  dropdown.appendChild(actionDelete);
+  dropdown.appendChild(actionMove);
+  dropdown.appendChild(actionExport);
+  dropdown.appendChild(actionCopy);
+  dropdown.appendChild(actionCut);
+  actions.appendChild(trigger);
+  actions.appendChild(dropdown);
 
   const sender = document.createElement('div');
   sender.className = 'obj-sender';
