@@ -158,6 +158,9 @@ const qrModalImg   = document.getElementById('qr-modal-img');
 const qrModalClose = document.getElementById('qr-modal-close');
 const umNickname   = document.getElementById('um-nickname');
 const umNickSave   = document.getElementById('um-nick-save');
+const mobileKbToggleBtn = document.getElementById('mobile-kb-toggle');
+const mobileKeyboardEl = document.getElementById('mobile-keyboard');
+const mobileKeyboardRowsEl = document.getElementById('mobile-keyboard-rows');
 const umSyncInputChk = document.getElementById('um-sync-input');
 const umLayoutSyncChk = document.getElementById('um-layout-sync');
 const umVersionBadge = document.getElementById('um-version-badge');
@@ -356,6 +359,151 @@ function subscribeTempSessionJoins() {
         toast('Could not request notification permission.');
       });
     } catch (_) {}
+  });
+})();
+
+(function setupCustomMobileKeyboard() {
+  if (!mobileKbToggleBtn || !mobileKeyboardEl || !mobileKeyboardRowsEl) return;
+  const PREF_KEY = 'inout_mobile_kb_open_v1';
+  let currentLang = 'en';
+  const keysets = {
+    en: [
+      ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
+      ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', '.'],
+      ['z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '?', '!']
+    ],
+    ru: [
+      ['й', 'ц', 'у', 'к', 'е', 'н', 'г', 'ш', 'щ', 'з'],
+      ['ф', 'ы', 'в', 'а', 'п', 'р', 'о', 'л', 'д', 'ж'],
+      ['я', 'ч', 'с', 'м', 'и', 'т', 'ь', 'б', 'ю', 'э']
+    ]
+  };
+
+  function isMobileViewport() {
+    try { return window.matchMedia && window.matchMedia('(max-width: 540px)').matches; } catch (_) { return false; }
+  }
+
+  function setOpen(open) {
+    if (!isMobileViewport()) open = false;
+    if (open) mobileKeyboardEl.removeAttribute('hidden');
+    else mobileKeyboardEl.setAttribute('hidden', '');
+    mobileKbToggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    try { localStorage.setItem(PREF_KEY, open ? '1' : '0'); } catch (_) {}
+  }
+
+  function applyInputValue(v) {
+    if (!input) return;
+    input.value = v;
+    try { autoResize(); } catch (_) {}
+    if (sendBtn) sendBtn.disabled = !String(v || '').trim();
+    try { updateClearInputBtn(); } catch (_) {}
+    try { saveInputGlobal(); } catch (_) {}
+    try { updateEditingRowFromInput(); } catch (_) {}
+  }
+
+  function insertAtCaret(text) {
+    if (!input) return;
+    const val = input.value || '';
+    const start = Number.isFinite(input.selectionStart) ? input.selectionStart : val.length;
+    const end = Number.isFinite(input.selectionEnd) ? input.selectionEnd : start;
+    const next = val.slice(0, start) + text + val.slice(end);
+    applyInputValue(next);
+    const pos = start + text.length;
+    input.selectionStart = pos;
+    input.selectionEnd = pos;
+    input.focus();
+  }
+
+  function backspaceAtCaret() {
+    if (!input) return;
+    const val = input.value || '';
+    const start = Number.isFinite(input.selectionStart) ? input.selectionStart : val.length;
+    const end = Number.isFinite(input.selectionEnd) ? input.selectionEnd : start;
+    if (start !== end) {
+      const next = val.slice(0, start) + val.slice(end);
+      applyInputValue(next);
+      input.selectionStart = start;
+      input.selectionEnd = start;
+      input.focus();
+      return;
+    }
+    if (start <= 0) return;
+    const next = val.slice(0, start - 1) + val.slice(start);
+    applyInputValue(next);
+    input.selectionStart = start - 1;
+    input.selectionEnd = start - 1;
+    input.focus();
+  }
+
+  async function handleFn(key) {
+    if (key === 'space') insertAtCaret(' ');
+    else if (key === 'enter') insertAtCaret('\n');
+    else if (key === 'backspace') backspaceAtCaret();
+    else if (key === 'clear') applyInputValue('');
+    else if (key === 'send') { if (typeof send === 'function' && sendBtn && !sendBtn.disabled) send(); }
+    else if (key === 'hide') setOpen(false);
+    else if (key === 'copy') {
+      try {
+        if (navigator.clipboard && input) await navigator.clipboard.writeText(input.value || '');
+      } catch (_) {}
+    } else if (key === 'paste') {
+      try {
+        if (navigator.clipboard) {
+          const txt = await navigator.clipboard.readText();
+          if (txt) insertAtCaret(txt);
+        }
+      } catch (_) {}
+    }
+  }
+
+  function renderKeys() {
+    const rows = keysets[currentLang] || keysets.en;
+    mobileKeyboardRowsEl.innerHTML = '';
+    rows.forEach(function(chars) {
+      const row = document.createElement('div');
+      row.className = 'mobile-kb-row';
+      chars.forEach(function(ch) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'mobile-kb-key';
+        b.textContent = ch;
+        b.dataset.key = ch;
+        row.appendChild(b);
+      });
+      mobileKeyboardRowsEl.appendChild(row);
+    });
+    mobileKeyboardEl.querySelectorAll('.mobile-kb-lang').forEach(function(btn) {
+      btn.classList.toggle('active', btn.dataset.lang === currentLang);
+    });
+  }
+
+  mobileKbToggleBtn.addEventListener('click', function() {
+    const open = mobileKeyboardEl.hasAttribute('hidden');
+    setOpen(open);
+  });
+
+  mobileKeyboardEl.addEventListener('click', function(e) {
+    const t = e.target && e.target.closest ? e.target.closest('button') : null;
+    if (!t) return;
+    const lang = t.dataset.lang;
+    if (lang) {
+      currentLang = (lang === 'ru') ? 'ru' : 'en';
+      renderKeys();
+      return;
+    }
+    const key = t.dataset.key;
+    if (!key) return;
+    if (key.length === 1 || key === '.') insertAtCaret(key);
+    else handleFn(key);
+  });
+
+  try {
+    const saved = localStorage.getItem(PREF_KEY);
+    setOpen(saved === '1');
+  } catch (_) { setOpen(false); }
+  renderKeys();
+  window.addEventListener('resize', function() {
+    if (!isMobileViewport()) setOpen(false);
   });
 })();
 

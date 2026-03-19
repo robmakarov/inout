@@ -2179,6 +2179,65 @@ body.select-mode .obj-select-wrap,
   gap:6px;
   margin-top:6px;
 }
+#mobile-kb-toggle{ display:none; }
+.mobile-keyboard{
+  margin-top:8px;
+  border:1px solid var(--line2);
+  border-radius:10px;
+  padding:8px;
+  background:var(--bg2);
+}
+.mobile-keyboard[hidden]{ display:none !important; }
+.mobile-keyboard-top{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  margin-bottom:6px;
+}
+.mobile-kb-lang,
+.mobile-kb-key{
+  border:1px solid var(--line2);
+  background:var(--bg);
+  color:var(--soft);
+  border-radius:7px;
+  font-family:var(--mono);
+  font-size:11px;
+  padding:6px 8px;
+  min-height:32px;
+}
+.mobile-kb-lang.active{
+  color:var(--bg);
+  background:var(--acc);
+  border-color:var(--acc2);
+}
+.mobile-keyboard-rows{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+.mobile-kb-row{
+  display:grid;
+  grid-template-columns:repeat(10, minmax(0, 1fr));
+  gap:4px;
+}
+.mobile-kb-row .mobile-kb-key{
+  padding:7px 4px;
+  text-align:center;
+}
+.mobile-keyboard-fns{
+  margin-top:8px;
+  display:grid;
+  grid-template-columns:repeat(7, minmax(0, 1fr));
+  gap:5px;
+}
+.mobile-kb-key-fn{
+  background:rgba(232,213,160,0.08);
+}
+.mobile-kb-key-send{
+  background:var(--acc);
+  color:var(--bg);
+  border-color:var(--acc2);
+}
 .log-dropup-wrap{
   margin-left:0;
   position:relative;
@@ -2377,6 +2436,8 @@ body.select-mode .obj-select-wrap,
   /* prevent iOS Safari zoom-on-focus */
   #object-input{font-size:16px}
   .cm-input{font-size:16px}
+  .mobile-keyboard{ display:block; }
+  #mobile-kb-toggle{ display:inline-flex; }
 }
 
 /* No hover state on touch devices: avoid stuck hover and show controls without hover */

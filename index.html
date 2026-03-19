@@ -161,11 +161,29 @@
     <div class="input-tools">
       <button type="button" id="composer-add-slot" class="draft-btn composer-add-slot">+ Add input</button>
       <button id="clipboard-button" class="draft-btn">From clipboard</button>
+      <button id="mobile-kb-toggle" class="draft-btn" type="button" aria-expanded="false" aria-controls="mobile-keyboard">Keyboard</button>
       <div class="log-dropup-wrap">
         <button id="log-action-btn" type="button" aria-label="Action log">No events</button>
         <div id="log-dropup-panel" role="dialog" aria-label="Action log">
           <div class="log-dropup-body" id="log-dropup-body"></div>
         </div>
+      </div>
+    </div>
+    <div id="mobile-keyboard" class="mobile-keyboard" aria-label="Custom mobile keyboard" hidden>
+      <div class="mobile-keyboard-top">
+        <button type="button" class="mobile-kb-lang active" data-lang="en">EN</button>
+        <button type="button" class="mobile-kb-lang" data-lang="ru">RU</button>
+        <button type="button" class="mobile-kb-key mobile-kb-key-fn" data-key="hide">Hide</button>
+      </div>
+      <div class="mobile-keyboard-rows" id="mobile-keyboard-rows"></div>
+      <div class="mobile-keyboard-fns">
+        <button type="button" class="mobile-kb-key mobile-kb-key-fn" data-key="backspace">⌫</button>
+        <button type="button" class="mobile-kb-key mobile-kb-key-fn" data-key="space">Space</button>
+        <button type="button" class="mobile-kb-key mobile-kb-key-fn" data-key="enter">↵</button>
+        <button type="button" class="mobile-kb-key mobile-kb-key-fn" data-key="clear">Clear</button>
+        <button type="button" class="mobile-kb-key mobile-kb-key-fn" data-key="copy">Copy</button>
+        <button type="button" class="mobile-kb-key mobile-kb-key-fn" data-key="paste">Paste</button>
+        <button type="button" class="mobile-kb-key mobile-kb-key-send" data-key="send">Send</button>
       </div>
     </div>
   </div>
