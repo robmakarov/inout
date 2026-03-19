@@ -2277,6 +2277,27 @@ body.select-mode .obj-select-wrap,
   .cm-input{font-size:16px}
 }
 
+/* No hover state on touch devices: avoid stuck hover and show controls without hover */
+@media (hover: none){
+  .obj:hover{ background:var(--bg) }
+  .obj .obj-select-wrap,
+  .obj .obj-actions{ opacity:1; pointer-events:auto }
+  .obj:hover .obj-time,
+  .obj:hover .obj-sender{ color:var(--dim) }
+  .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-time::before,
+  .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-sender::before,
+  .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-text::before{
+    opacity:0;
+    transform:translateX(-6px);
+  }
+  .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-time,
+  .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-sender,
+  .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-text{
+    padding-left:0;
+    transform:translateX(-20px);
+  }
+}
+
 /* #tabs lives in #nav (Navigation bar); base tab strip layout in #nav #tabs above */
 #tabs{
   display:flex;
