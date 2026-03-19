@@ -196,13 +196,14 @@ header,
 .view-pinned-rail::-webkit-scrollbar-thumb{ background:var(--line2); border-radius:2px }
 /* Little badges: message value only, clean look */
 .view-pinned-rail .obj{
-  display:flex;
+  display:inline-flex;
   align-items:center;
   justify-content:center;
-  width:44px;
-  min-height:44px;
-  padding:6px 5px;
-  border-radius:10px;
+  width:max-content;
+  max-width:100%;
+  min-height:24px;
+  padding:4px 6px;
+  border-radius:8px;
   border:1px solid rgba(232,213,160,0.2);
   background:rgba(232,213,160,0.06);
   cursor:grab;
@@ -217,15 +218,14 @@ header,
 }
 .view-pinned-rail .obj .obj-content{
   pointer-events:none;
-  flex:1;
-  min-width:0;
   display:flex;
   align-items:center;
   justify-content:center;
   text-align:center;
+  min-width:0;
 }
 .view-pinned-rail .obj .obj-time,
-.view-pinned-rail .obj .obj-sender{ display:none }
+.view-pinned-rail .obj .obj-sender{ display:none !important }
 .view-pinned-rail .obj .obj-text{
   font-size:10px;
   line-height:1.3;
