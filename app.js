@@ -551,6 +551,7 @@ const INPUT_SLOTS_KEY      = 'inout_input_slots_v1';
 const SYNC_INPUT_PREF_KEY  = 'inout_sync_input_v1';
 const FIELD_PREFS_KEY      = 'inout_field_prefs_v1';
 const ORDER_STATE_KEY      = 'inout_order_state_v1';
+const PINNED_STATE_KEY     = 'inout_pinned_v1';
 const SCROLL_STATE_KEY     = 'inout_scroll_state_v1';
 const WAS_EDITING_KEY      = 'inout_was_editing_v1';
 const AUTH_BACKUP_KEY     = 'inout_auth_user_backup';
@@ -1968,29 +1969,31 @@ async function replaceFeedWithList(list) {
   seenIds.clear();
   globalObjectNum = 0;
   objectCount = 0;
-  const frag = document.createDocumentFragment();
+  const pinnedIds = new Set(getPinnedIds(currentView));
+  const railFrag = document.createDocumentFragment();
+  const feedFrag = document.createDocumentFragment();
   for (const msg of list) {
     const row = createObjectRow(msg, false);
-    if (row) frag.appendChild(row);
+    if (!row) continue;
+    const id = Number(msg.id);
+    if (Number.isFinite(id) && pinnedIds.has(id)) railFrag.appendChild(row);
+    else feedFrag.appendChild(row);
   }
-  const hasRows = frag.childNodes.length > 0;
-  objectCount = hasRows ? frag.childNodes.length : 0;
-  /* Table visual: same as feed for now (to be corrected later). */
+  const rail = document.getElementById('view-pinned-rail');
+  const hasFeedRows = feedFrag.childNodes.length > 0;
+  objectCount = feedFrag.childNodes.length + railFrag.childNodes.length;
   feedInner.classList.remove('view-table');
-  if (hasRows) {
-    requestAnimationFrame(() => {
-      if (feedInner) {
-        feedInner.replaceChildren(frag);
-        updateObjectCount();
-        applyFieldPrefsToObjects();
-        if (feedEl) feedEl.scrollTop = 0;
-      }
-    });
-  } else {
-    if (emptyEl) feedInner.replaceChildren(emptyEl);
-    else feedInner.replaceChildren();
+  requestAnimationFrame(() => {
+    if (rail) rail.replaceChildren(railFrag);
+    if (feedInner) {
+      if (hasFeedRows) feedInner.replaceChildren(feedFrag);
+      else if (emptyEl) feedInner.replaceChildren(emptyEl);
+      else feedInner.replaceChildren();
+    }
     updateObjectCount();
-  }
+    applyFieldPrefsToObjects();
+    if (feedEl) feedEl.scrollTop = 0;
+  });
 }
 
 /** Render a message list into a given feed-inner element (e.g. secondary view). Does not update global objectCount. */
@@ -4056,6 +4059,7 @@ function setupTouchDragHandlers() {
     timer: null,
     bound: true,
     originLineShown: false,
+    fromRail: false,
   };
   const move = e => {
     if (!touchDragState || !touchDragState.started || !touchDragState.row) return;
@@ -4067,8 +4071,18 @@ function setupTouchDragHandlers() {
       showDropOriginLine();
     }
     const y = touch.clientY;
+    const x = touch.clientX;
     lastDragClientY = y;
-    lastDragClientX = touch.clientX;
+    lastDragClientX = x;
+    const rail = document.getElementById('view-pinned-rail');
+    if (rail) {
+      const rr = rail.getBoundingClientRect();
+      if (x >= rr.left && x <= rr.right && y >= rr.top && y <= rr.bottom) {
+        lastReorderTarget = { pinToEdge: true };
+        return;
+      }
+    }
+    if (lastReorderTarget && lastReorderTarget.pinToEdge) lastReorderTarget = null;
     const rows = Array.from(feedInner.querySelectorAll('.obj'));
     if (!rows.length) return;
     var block = dragSelectedRows && dragSelectedRows.length > 1 ? dragSelectedRows.slice() : [touchDragState.row];
@@ -4130,7 +4144,10 @@ function setupTouchDragHandlers() {
   const end = () => {
     if (!touchDragState || !touchDragState.row) return;
     var r = touchDragState.row;
-    var droppedMovedIdsTouch = (dragSelectedRows && dragSelectedRows.length) ? dragSelectedRows.map(function(x) { return Number(x.dataset.id); }).filter(function(id) { return Number.isFinite(id); }) : (r.dataset && r.dataset.id ? [Number(r.dataset.id)] : []);
+    var block = (dragSelectedRows && dragSelectedRows.length) ? dragSelectedRows.slice() : [r];
+    var droppedMovedIdsTouch = block.map(function(x) { return Number(x.dataset.id); }).filter(function(id) { return Number.isFinite(id); });
+    var fromRail = touchDragState.fromRail;
+    const railEnd = document.getElementById('view-pinned-rail');
     if (feedInner) feedInner.querySelectorAll('.obj-drag-group').forEach(function(el) { el.classList.remove('obj-drag-group'); });
     dragSelectedRows = [];
     clearEdgeScrollInterval();
@@ -4146,10 +4163,23 @@ function setupTouchDragHandlers() {
     touchDragState.started = false;
     touchDragState.row = null;
     touchDragState.originLineShown = false;
+    touchDragState.fromRail = false;
     dndOriginInsertBefore = null;
     dndOriginWantAppend = false;
     dndOriginLineY = null;
     broadcastDndEnd();
+    if (lastReorderTarget && lastReorderTarget.pinToEdge && railEnd && droppedMovedIdsTouch.length) {
+      addPinnedIds(currentView, droppedMovedIdsTouch);
+      block.forEach(function(el) {
+        if (el.parentNode === feedInner) feedInner.removeChild(el);
+        if (railEnd && el.parentNode !== railEnd) railEnd.appendChild(el);
+      });
+      currentObjectOrder = currentObjectOrder.filter(function(id) { return droppedMovedIdsTouch.indexOf(id) === -1; });
+      saveObjectOrderForCurrentView();
+      lastReorderTarget = null;
+    } else if (fromRail && droppedMovedIdsTouch.length) {
+      removePinnedIds(currentView, droppedMovedIdsTouch);
+    }
     const container = r && r.closest ? r.closest('.feed-inner') : null;
     recomputeOrderFromDOM(container);
     applyObjectOrderToDOM();
@@ -4157,6 +4187,7 @@ function setupTouchDragHandlers() {
     if (droppedMovedIdsTouch.length && dndBroadcastChannel && dndChannelReady) {
       broadcastDndDropped(currentObjectOrder.slice(), droppedMovedIdsTouch);
     }
+    lastReorderTarget = null;
     applyFieldPrefsToObjects();
     r.style.pointerEvents = 'none';
     void r.offsetHeight;
@@ -4355,41 +4386,66 @@ function createObjectRow(obj, isNew, options) {
   row.addEventListener('dragend', () => {
     requestAnimationFrame(() => {
       var droppedMovedIds = [];
+      const rail = document.getElementById('view-pinned-rail');
       try {
         if (lastReorderTarget && !originGhostsActive && feedInner && dragSelectedRows.length) {
-          var insertBefore = lastReorderTarget.insertBefore;
-          var wantAppend = lastReorderTarget.wantAppend;
           var block = dragSelectedRows.length > 1 ? dragSelectedRows.slice() : [row];
           droppedMovedIds = block.map(function(r) { return Number(r.dataset.id); }).filter(function(id) { return Number.isFinite(id); });
-          if (block.length > 1) {
-            var refAfterBlock = block[block.length - 1].nextSibling;
-            block.forEach(function(r) { if (r.parentNode === feedInner) feedInner.removeChild(r); });
-            var insertRef = wantAppend ? null : (block.indexOf(insertBefore) >= 0 ? refAfterBlock : insertBefore);
-            if (insertRef) {
-              feedInner.insertBefore(block[0], insertRef);
+          if (lastReorderTarget.pinToEdge && rail && droppedMovedIds.length) {
+            addPinnedIds(currentView, droppedMovedIds);
+            block.forEach(function(r) {
+              if (r.parentNode === feedInner) feedInner.removeChild(r);
+              if (rail && r.parentNode !== rail) rail.appendChild(r);
+            });
+            currentObjectOrder = currentObjectOrder.filter(id => !droppedMovedIds.includes(id));
+            saveObjectOrderForCurrentView();
+          } else if (rail && block[0] && block[0].parentNode === rail) {
+            removePinnedIds(currentView, droppedMovedIds);
+            var insertBefore = lastReorderTarget.insertBefore;
+            var wantAppend = lastReorderTarget.wantAppend;
+            block.forEach(function(r) { if (r.parentNode === rail) rail.removeChild(r); });
+            if (insertBefore && insertBefore.parentNode === feedInner) {
+              feedInner.insertBefore(block[0], insertBefore);
               for (var i = 1; i < block.length; i++) feedInner.insertBefore(block[i], block[i - 1].nextSibling);
             } else {
-              feedInner.appendChild(block[0]);
-              for (var j = 1; j < block.length; j++) feedInner.insertBefore(block[j], block[j - 1].nextSibling);
+              block.forEach(function(r) { feedInner.appendChild(r); });
             }
-            block.forEach(function(r, i) {
-              r.classList.add('obj-dnd-just-dropped');
-              r.style.animationDelay = (i * 30) + 'ms';
-            });
-            setTimeout(function() {
-              block.forEach(function(r) {
-                r.classList.remove('obj-dnd-just-dropped');
-                r.style.animationDelay = '';
-              });
-            }, 220 + (block.length * 30));
+            recomputeOrderFromDOM(feedInner);
+            applyObjectOrderToDOM();
+            saveObjectOrderForCurrentView();
           } else {
-            if (wantAppend) feedInner.appendChild(row);
-            else if (insertBefore && insertBefore.parentNode === feedInner) feedInner.insertBefore(row, insertBefore);
-            row.classList.add('obj-dnd-just-dropped');
-            setTimeout(function() {
-              row.classList.remove('obj-dnd-just-dropped');
-              row.style.animationDelay = '';
-            }, 220);
+            var insertBefore = lastReorderTarget.insertBefore;
+            var wantAppend = lastReorderTarget.wantAppend;
+            if (block.length > 1) {
+              var refAfterBlock = block[block.length - 1].nextSibling;
+              block.forEach(function(r) { if (r.parentNode === feedInner) feedInner.removeChild(r); });
+              var insertRef = wantAppend ? null : (block.indexOf(insertBefore) >= 0 ? refAfterBlock : insertBefore);
+              if (insertRef) {
+                feedInner.insertBefore(block[0], insertRef);
+                for (var i = 1; i < block.length; i++) feedInner.insertBefore(block[i], block[i - 1].nextSibling);
+              } else {
+                feedInner.appendChild(block[0]);
+                for (var j = 1; j < block.length; j++) feedInner.insertBefore(block[j], block[j - 1].nextSibling);
+              }
+              block.forEach(function(r, i) {
+                r.classList.add('obj-dnd-just-dropped');
+                r.style.animationDelay = (i * 30) + 'ms';
+              });
+              setTimeout(function() {
+                block.forEach(function(r) {
+                  r.classList.remove('obj-dnd-just-dropped');
+                  r.style.animationDelay = '';
+                });
+              }, 220 + (block.length * 30));
+            } else {
+              if (wantAppend) feedInner.appendChild(row);
+              else if (insertBefore && insertBefore.parentNode === feedInner) feedInner.insertBefore(row, insertBefore);
+              row.classList.add('obj-dnd-just-dropped');
+              setTimeout(function() {
+                row.classList.remove('obj-dnd-just-dropped');
+                row.style.animationDelay = '';
+              }, 220);
+            }
           }
         }
         if (dragSpiritEl && dragSpiritEl.parentNode) dragSpiritEl.parentNode.removeChild(dragSpiritEl);
@@ -4474,6 +4530,8 @@ function createObjectRow(obj, isNew, options) {
     if (!touchDragState) return;
     clearTimeout(touchDragState.timer);
     touchDragState.row = row;
+    const railForTouch = document.getElementById('view-pinned-rail');
+    touchDragState.fromRail = !!(railForTouch && railForTouch.contains(row));
     touchDragState.started = false;
     touchDragState.timer = setTimeout(() => {
       if (!touchDragState || touchDragState.row !== row) return;
@@ -5074,6 +5132,45 @@ function renderInitialObjects(list) {
   });
 }
 
+function getPinnedIds(channel) {
+  try {
+    const raw = localStorage.getItem(PINNED_STATE_KEY);
+    if (!raw) return [];
+    const map = JSON.parse(raw);
+    if (!map || typeof map !== 'object') return [];
+    const key = currentUser ? (currentUser.id + '::' + (channel || currentView)) : ('anon::' + (channel || currentView));
+    const arr = map[key];
+    if (!Array.isArray(arr)) return [];
+    return arr.map(x => Number(x)).filter(x => Number.isFinite(x));
+  } catch (_) {
+    return [];
+  }
+}
+
+function setPinnedIds(channel, ids) {
+  try {
+    const raw = localStorage.getItem(PINNED_STATE_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    const key = currentUser ? (currentUser.id + '::' + (channel || currentView)) : ('anon::' + (channel || currentView));
+    map[key] = (ids || []).slice();
+    localStorage.setItem(PINNED_STATE_KEY, JSON.stringify(map));
+  } catch (_) {}
+}
+
+function addPinnedIds(channel, idsToAdd) {
+  const ch = channel || currentView;
+  const set = new Set(getPinnedIds(ch));
+  idsToAdd.forEach(id => set.add(Number(id)));
+  setPinnedIds(ch, Array.from(set));
+}
+
+function removePinnedIds(channel, idsToRemove) {
+  const ch = channel || currentView;
+  const removeSet = new Set(idsToRemove.map(x => Number(x)));
+  const kept = getPinnedIds(ch).filter(id => !removeSet.has(id));
+  setPinnedIds(ch, kept);
+}
+
 function loadOrderFromLocal() {
   try {
     const raw = localStorage.getItem(ORDER_STATE_KEY);
@@ -5313,8 +5410,9 @@ function applyObjectOrderToDOM() {
     if (Number.isFinite(id)) byId.set(id, row);
   });
   if (!byId.size) return;
+  const order = currentObjectOrder.filter(id => byId.has(id));
   const frag = document.createDocumentFragment();
-    currentObjectOrder.forEach(id => {
+  order.forEach(id => {
     const row = byId.get(id);
     if (row) {
       frag.appendChild(row);
@@ -7114,7 +7212,21 @@ var lastIndicatorStyle = { left: -1, width: -1, top: -1, visible: false };
 var lastDragTargetRow = null;
 var dragSpiritEl = null;
 function processFeedDragover(ev) {
-  // Determine which feed/view this drag event is over.
+  const rail = document.getElementById('view-pinned-rail');
+  if (rail && typeof ev.clientX === 'number' && typeof ev.clientY === 'number') {
+    const railRect = rail.getBoundingClientRect();
+    if (ev.clientX >= railRect.left && ev.clientX <= railRect.right && ev.clientY >= railRect.top && ev.clientY <= railRect.bottom) {
+      if (feedInner && (feedInner.querySelector('.obj.dragging') || originGhostsActive)) {
+        lastReorderTarget = { pinToEdge: true };
+        if (lastDragTargetRow && lastDragTargetRow.classList) {
+          lastDragTargetRow.classList.remove('obj-drag-target', 'obj-drag-nudge-right');
+          lastDragTargetRow = null;
+        }
+      }
+      return;
+    }
+  }
+  if (lastReorderTarget && lastReorderTarget.pinToEdge) lastReorderTarget = null;
   let localFeedEl = null;
   if (ev.currentTarget && ev.currentTarget.classList && ev.currentTarget.classList.contains('feed')) {
     localFeedEl = ev.currentTarget;
@@ -7197,7 +7309,7 @@ function processFeedDragover(ev) {
     broadcastDndMove();
     return;
   }
-  const dragging = localFeedInner.querySelector('.obj.dragging');
+  const dragging = localFeedInner.querySelector('.obj.dragging') || (rail && rail.querySelector('.obj.dragging'));
   if (!dragging) return;
   const allRows = Array.from(localFeedInner.querySelectorAll('.obj'));
   const skipSet = new Set(dragSelectedRows && dragSelectedRows.length ? dragSelectedRows : [dragging]);
@@ -7323,7 +7435,8 @@ feedEl.addEventListener('dragover', e => {
     e.dataTransfer.dropEffect = 'move';
     return;
   }
-  const dragging = feedInner ? feedInner.querySelector('.obj.dragging') : null;
+  const railForFeed = document.getElementById('view-pinned-rail');
+  const dragging = feedInner ? (feedInner.querySelector('.obj.dragging') || (railForFeed && railForFeed.querySelector('.obj.dragging'))) : null;
   const draggingFromSecondary = secondaryFeedInner && secondaryFeedInner.querySelector('.obj.dragging');
   if (!feedInner || (!dragging && !draggingFromSecondary && !originGhostsActive)) return;
   e.preventDefault();
@@ -7374,7 +7487,9 @@ feedEl.addEventListener('drop', e => {
     }
     return;
   }
-  if (feedInner && (feedInner.querySelector('.obj.dragging') || originGhostsActive)) {
+  const railForDrop = document.getElementById('view-pinned-rail');
+  const draggingFromFeedOrRail = feedInner && (feedInner.querySelector('.obj.dragging') || (railForDrop && railForDrop.querySelector('.obj.dragging')) || originGhostsActive);
+  if (draggingFromFeedOrRail) {
     e.preventDefault();
     dragDropHandled = true;
     if (feedInner) {
@@ -7388,12 +7503,28 @@ feedEl.addEventListener('dragleave', e => {
     if (feedInner) feedInner.querySelectorAll('.obj-drag-over').forEach(r => r.classList.remove('obj-drag-over'));
   }
 });
+  const railEl = document.getElementById('view-pinned-rail');
+  if (railEl) {
+    railEl.addEventListener('dragover', e => {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    });
+    railEl.addEventListener('drop', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (feedInner) {
+        feedInner.querySelectorAll('.obj-drag-over').forEach(r => r.classList.remove('obj-drag-over'));
+        feedInner.querySelectorAll('.obj-drag-target').forEach(r => r.classList.remove('obj-drag-target', 'obj-drag-nudge-right'));
+      }
+    });
+  }
 }
 
 // Dragover: when over feed, run processFeedDragover (primary reorder) or show indicator (drag from secondary). When outside feed, show indicator at top/bottom.
 document.addEventListener('dragover', e => {
   if (!feedEl || !feedInner) return;
-  const draggingPrimary = feedInner.querySelector('.obj.dragging');
+  const rail = document.getElementById('view-pinned-rail');
+  const draggingPrimary = feedInner.querySelector('.obj.dragging') || (rail && rail.querySelector('.obj.dragging'));
   const draggingSecondary = secondaryFeedInner && secondaryFeedInner.querySelector('.obj.dragging');
   if (!draggingPrimary && !draggingSecondary && !originGhostsActive) return;
   e.preventDefault();
@@ -7405,10 +7536,15 @@ document.addEventListener('dragover', e => {
   const y = e.clientY;
   const x = e.clientX;
   const inFeed = x >= feedRect.left && x <= feedRect.right && y >= feedRect.top && y <= feedRect.bottom;
-  if (inFeed) {
+  let overRail = false;
+  if (rail) {
+    const rr = rail.getBoundingClientRect();
+    overRail = x >= rr.left && x <= rr.right && y >= rr.top && y <= rr.bottom;
+  }
+  if (inFeed || overRail) {
     if (draggingPrimary || originGhostsActive) {
     processFeedDragover(e);
-    } else if (draggingSecondary) {
+    } else if (draggingSecondary && inFeed) {
       if (!feedDropIndicatorEl) {
         feedDropIndicatorEl = document.createElement('div');
         feedDropIndicatorEl.className = 'feed-drop-indicator';

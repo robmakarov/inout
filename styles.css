@@ -170,9 +170,47 @@ header,
   flex:1;
   min-height:0;
   display:flex;
-  flex-direction:column;
+  flex-direction:row;
   overflow:hidden;
 }
+.view-pinned-rail{
+  flex:0 0 auto;
+  width:52px;
+  min-width:52px;
+  border-right:1px solid var(--line);
+  background:var(--bg2);
+  overflow-y:auto;
+  overflow-x:hidden;
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  gap:4px;
+  padding:6px 4px;
+  scrollbar-width:thin;
+}
+.view-pinned-rail::-webkit-scrollbar{ width:4px }
+.view-pinned-rail::-webkit-scrollbar-thumb{ background:var(--line2); border-radius:2px }
+.view-pinned-rail .obj{
+  padding:6px 4px;
+  min-height:32px;
+  cursor:grab;
+}
+.view-pinned-rail .obj .obj-content{ pointer-events:none }
+.view-pinned-rail .obj .obj-time,
+.view-pinned-rail .obj .obj-sender{ display:none }
+.view-pinned-rail .obj .obj-text{
+  font-size:10px;
+  line-height:1.3;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  display:-webkit-box;
+  -webkit-line-clamp:3;
+  -webkit-box-orient:vertical;
+  word-break:break-word;
+}
+.view-pinned-rail .obj::before{ display:none }
+.view-pinned-rail .obj .obj-actions,
+.view-pinned-rail .obj .obj-select-wrap{ display:none }
 .view-drop-over .feed{
   outline:2px solid var(--acc);
   outline-offset:-2px;
