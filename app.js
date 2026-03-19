@@ -143,8 +143,10 @@ const userBtn    = document.getElementById('user-btn');
 const umBackdrop = document.getElementById('user-modal-backdrop');
 const umClose    = document.getElementById('user-close');
 const umAuthStatus = document.getElementById('um-auth-status');
-const umAuthBtn    = document.getElementById('um-auth-btn');
-const umUserId     = document.getElementById('um-user-id');
+  const umAuthBtn    = document.getElementById('um-auth-btn');
+  const umStorageInfo = document.getElementById('um-storage-info');
+  const umUserId     = document.getElementById('um-user-id');
+  if (userBtn && umStorageInfo) userBtn.addEventListener('click', function() { umStorageInfo.textContent = getStorageLocationMessage(); });
 const umCopyIdBtn  = document.getElementById('um-copy-id');
 const umShowQrBtn  = document.getElementById('um-show-qr');
 const umExportLocalBtn = document.getElementById('um-export-local');
@@ -6017,8 +6019,16 @@ async function saveNickname() {
   }
 }
 
+function getStorageLocationMessage() {
+  if (currentUser) return 'Your data is stored in the cloud and synced across your devices.';
+  if (tempSessionId) return 'You\'re viewing a shared view. Edits sync to the owner\'s cloud; a copy is kept on this device.';
+  return 'Your data is stored only on this device. Sign in to sync across devices.';
+}
+
 function updateAuthUI() {
   if (userBtn) userBtn.classList.toggle('signed-in', !!currentUser);
+
+  if (umStorageInfo) umStorageInfo.textContent = getStorageLocationMessage();
 
   if (currentUser) {
     const email = currentUser.email || 'Signed in';
