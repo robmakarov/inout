@@ -379,12 +379,7 @@ function subscribeTempSessionJoins() {
     ]
   };
 
-  function isMobileViewport() {
-    try { return window.matchMedia && window.matchMedia('(max-width: 540px)').matches; } catch (_) { return false; }
-  }
-
   function setOpen(open) {
-    if (!isMobileViewport()) open = false;
     if (open) mobileKeyboardEl.removeAttribute('hidden');
     else mobileKeyboardEl.setAttribute('hidden', '');
     mobileKbToggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
@@ -502,9 +497,6 @@ function subscribeTempSessionJoins() {
     setOpen(saved === '1');
   } catch (_) { setOpen(false); }
   renderKeys();
-  window.addEventListener('resize', function() {
-    if (!isMobileViewport()) setOpen(false);
-  });
 })();
 
 (function setupQrModal() {
