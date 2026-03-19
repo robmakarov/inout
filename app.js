@@ -1982,6 +1982,16 @@ async function replaceFeedWithList(list) {
   const rail = document.getElementById('view-pinned-rail');
   const hasFeedRows = feedFrag.childNodes.length > 0;
   objectCount = feedFrag.childNodes.length + railFrag.childNodes.length;
+  /* When there is no saved order, seed currentObjectOrder from this list (feed part, in list order) and persist so the view has an order from first load. */
+  if (!currentObjectOrder.length && list.length) {
+    const feedOrder = list
+      .filter(m => m && Number.isFinite(Number(m.id)) && !pinnedIds.has(Number(m.id)))
+      .map(m => Number(m.id));
+    if (feedOrder.length) {
+      currentObjectOrder = feedOrder;
+      saveObjectOrderForCurrentView();
+    }
+  }
   feedInner.classList.remove('view-table');
   requestAnimationFrame(() => {
     if (rail) rail.replaceChildren(railFrag);
