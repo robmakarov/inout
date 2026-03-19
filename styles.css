@@ -293,7 +293,7 @@ header{
   box-sizing:border-box;
 }
 
-/* ── TOP BAR (manage): in flow at top of multiview frame ── */
+/* ── TOP BAR (manage): single trigger + dropdown (same pattern as object actions) ── */
 #manage-bar{
   height:var(--bar-top-height);
   flex-shrink:0;
@@ -302,31 +302,76 @@ header{
   padding:0 12px;
   display:flex;
   align-items:center;
-  justify-content:space-between;
+  justify-content:flex-end;
   gap:8px;
   font-size:10px;
   color:var(--dim);
   box-sizing:border-box;
+  position:relative;
+}
+.manage-bar-trigger{
+  border:1px solid var(--line2);
+  background:var(--bg);
+  color:var(--soft);
+  font-family:var(--mono);
+  font-size:14px;
+  line-height:1;
+  padding:2px 8px;
+  border-radius:4px;
+  cursor:pointer;
+  width:32px;
+  height:28px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+.manage-bar-trigger:hover{
+  background:var(--line);
+  color:var(--text);
+}
+.manage-bar-dropdown{
+  position:absolute;
+  top:100%;
+  right:12px;
+  margin-top:4px;
+  background:var(--bg);
+  border:1px solid var(--line2);
+  border-radius:6px;
+  box-shadow:0 4px 16px rgba(0,0,0,.3);
+  padding:8px;
+  min-width:180px;
+  max-width:min(320px, calc(100vw - 24px));
+  display:none;
+  flex-direction:column;
+  z-index:1200;
+}
+#manage-bar.manage-bar-open .manage-bar-dropdown{
+  display:flex;
 }
 #manage-bar .bar-scroll{
   overflow-x:auto;
-  overflow-y:hidden;
-  flex:1;
+  overflow-y:auto;
+  max-height:70vh;
   min-width:0;
   display:flex;
-  align-items:center;
+  flex-direction:column;
+  align-items:stretch;
   gap:6px;
-  padding:4px 0;
-  scrollbar-width:none;
+  padding:0;
+  scrollbar-width:thin;
   -ms-overflow-style:none;
 }
-#manage-bar .bar-scroll::-webkit-scrollbar{ display:none; }
+#manage-bar .bar-scroll::-webkit-scrollbar{ width:6px; height:0 }
+#manage-bar .bar-scroll::-webkit-scrollbar-thumb{ background:var(--line2); border-radius:3px }
 #manage-bar .bar-group{
   display:flex;
+  flex-wrap:wrap;
   align-items:center;
   gap:6px;
   flex-shrink:0;
 }
+#manage-bar .bar-group[data-bar-group="left"]{ border-bottom:1px solid var(--line2); padding-bottom:6px; margin-bottom:2px; }
+#manage-bar .bar-group[data-bar-group="actions"]{ flex-direction:column; align-items:stretch; }
 
 #select-toggle{
   border:1px solid var(--line2);
@@ -436,24 +481,6 @@ header{
   display:flex;
 }
 
-.manage-menu{
-  position:relative;
-}
-.manage-menu[hidden]{
-  display:none;
-}
-.manage-menu.open{
-  position:fixed;
-  /* top/left set by JS so menu is not clipped by overflow */
-  background:var(--bg);
-  border:1px solid var(--line2);
-  border-radius:4px;
-  padding:6px 8px;
-  display:flex;
-  flex-direction:column;
-  gap:6px;
-  z-index:1200;
-}
 .manage-subgroup{
   border-top:1px solid var(--line2);
   margin-top:4px;

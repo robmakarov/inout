@@ -2669,12 +2669,11 @@ function setupInputStateRealtime() {
                   const remoteVal = capSyncText(slot.value);
                   const merged = mergeInputText(ta.value, remoteVal, lastSlotsEditAt, remoteAt);
                   if (merged === ta.value) return;
-                  var taSelStart = ta.selectionStart != null ? ta.selectionStart : merged.length;
-                  var taSelEnd = ta.selectionEnd != null ? ta.selectionEnd : taSelStart;
                   ta.value = merged;
                   var mlen = merged.length;
-                  ta.selectionStart = Math.min(taSelStart, mlen);
-                  ta.selectionEnd = Math.min(taSelEnd, mlen);
+                  /* When applying remote update, keep cursor at end so it follows symbols added on other device */
+                  ta.selectionStart = mlen;
+                  ta.selectionEnd = mlen;
                   inputSlots[i].value = merged;
                   if (i === 0) {
                     if (typeof autoResize === 'function') autoResize();
@@ -2769,12 +2768,11 @@ function setupInputStateRealtime() {
         if (!Number.isFinite(remoteAt)) remoteAt = 0;
         var merged = mergeInputText(input.value, remoteText, lastPrimaryInputEditAt, remoteAt);
         if (merged !== input.value) {
-          var selStart = input.selectionStart != null ? input.selectionStart : merged.length;
-          var selEnd = input.selectionEnd != null ? input.selectionEnd : selStart;
           input.value = merged;
           var len = merged.length;
-          input.selectionStart = Math.min(selStart, len);
-          input.selectionEnd = Math.min(selEnd, len);
+          /* When applying remote update, keep cursor at end so it follows symbols added on other device */
+          input.selectionStart = len;
+          input.selectionEnd = len;
           if (typeof autoResize === 'function') autoResize();
           if (sendBtn) sendBtn.disabled = !merged.trim();
           if (typeof updateClearInputBtn === 'function') updateClearInputBtn();
@@ -5121,20 +5119,20 @@ function setupTabs() {
       closeSecondaryView();
     });
   }
-  const manageMenuToggle = document.getElementById('manage-menu-toggle');
-  const manageMenu = document.getElementById('manage-menu');
-  if (manageMenuToggle && manageMenu) {
-    manageMenu.hidden = true;
-    manageMenuToggle.addEventListener('click', () => {
-      const isOpen = manageMenu.classList.toggle('open');
-      manageMenu.hidden = !isOpen;
-      manageMenuToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-      if (isOpen) {
-        const r = manageMenuToggle.getBoundingClientRect();
-        manageMenu.style.top = (r.bottom + 4) + 'px';
-        manageMenu.style.left = r.left + 'px';
-        manageMenu.style.right = 'auto';
-      }
+  const manageBar = document.getElementById('manage-bar');
+  const manageBarTrigger = document.getElementById('manage-bar-trigger');
+  if (manageBar && manageBarTrigger) {
+    function closeManageBarDropdown() {
+      manageBar.classList.remove('manage-bar-open');
+      manageBarTrigger.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('click', closeManageBarDropdown);
+    }
+    manageBarTrigger.addEventListener('click', e => {
+      e.stopPropagation();
+      const isOpen = manageBar.classList.toggle('manage-bar-open');
+      manageBarTrigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      if (isOpen) document.addEventListener('click', closeManageBarDropdown);
+      else document.removeEventListener('click', closeManageBarDropdown);
     });
   }
 }
