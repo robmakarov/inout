@@ -750,6 +750,152 @@ function subscribeTempSessionJoins() {
   renderKeys();
 })();
 
+(function setupCustomCalculator() {
+  if (!calcToggleBtn || !customCalcEl || !customCalcInputEl || !customCalcOutputEl) return;
+
+  function setCalcOpen(open) {
+    if (open) customCalcEl.removeAttribute('hidden');
+    else customCalcEl.setAttribute('hidden', '');
+    calcToggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
+  function calcTransform(expr) {
+    let s = String(expr || '');
+    s = s.replace(/\^/g, '**');
+    s = s.replace(/\bpi\b/gi, 'PI');
+    s = s.replace(/\be\b/g, 'E');
+    s = s.replace(/\bln\s*\(/gi, 'ln(');
+    return s;
+  }
+
+  function safeCalcEval(expr) {
+    const raw = String(expr || '').trim();
+    if (!raw) return '';
+    const allowed = /^[0-9+\-*/%^().,!<>=&| \t\nA-Za-z_]+$/;
+    if (!allowed.test(raw)) throw new Error('Unsupported symbol');
+    const code = calcTransform(raw);
+    const fn = new Function(
+      '"use strict";' +
+      'const {sin,cos,tan,asin,acos,atan,sqrt,abs,log,exp,pow,round,floor,ceil,min,max,PI,E}=Math;' +
+      'const ln=(x)=>Math.log(x);' +
+      'return (' + code + ');'
+    );
+    const result = fn();
+    if (typeof result === 'number' && Number.isFinite(result)) return String(result);
+    if (typeof result === 'boolean') return result ? 'true' : 'false';
+    if (result == null) return '';
+    return String(result);
+  }
+
+  function updateCalcResult() {
+    try {
+      const out = safeCalcEval(customCalcInputEl.value || '');
+      customCalcOutputEl.textContent = out === '' ? '=' : ('= ' + out);
+      customCalcOutputEl.dataset.ok = '1';
+      return out;
+    } catch (e) {
+      customCalcOutputEl.textContent = '= error';
+      customCalcOutputEl.dataset.ok = '0';
+      return '';
+    }
+  }
+
+  function insertCalcAtCursor(text) {
+    const val = customCalcInputEl.value || '';
+    const start = Number.isFinite(customCalcInputEl.selectionStart) ? customCalcInputEl.selectionStart : val.length;
+    const end = Number.isFinite(customCalcInputEl.selectionEnd) ? customCalcInputEl.selectionEnd : start;
+    const next = val.slice(0, start) + text + val.slice(end);
+    customCalcInputEl.value = next;
+    const pos = start + text.length;
+    customCalcInputEl.selectionStart = pos;
+    customCalcInputEl.selectionEnd = pos;
+    updateCalcResult();
+    customCalcInputEl.focus();
+  }
+
+  function backspaceCalc() {
+    const val = customCalcInputEl.value || '';
+    const start = Number.isFinite(customCalcInputEl.selectionStart) ? customCalcInputEl.selectionStart : val.length;
+    const end = Number.isFinite(customCalcInputEl.selectionEnd) ? customCalcInputEl.selectionEnd : start;
+    if (start !== end) {
+      customCalcInputEl.value = val.slice(0, start) + val.slice(end);
+      customCalcInputEl.selectionStart = start;
+      customCalcInputEl.selectionEnd = start;
+      updateCalcResult();
+      customCalcInputEl.focus();
+      return;
+    }
+    if (start <= 0) return;
+    customCalcInputEl.value = val.slice(0, start - 1) + val.slice(start);
+    customCalcInputEl.selectionStart = start - 1;
+    customCalcInputEl.selectionEnd = start - 1;
+    updateCalcResult();
+    customCalcInputEl.focus();
+  }
+
+  calcToggleBtn.addEventListener('click', function() {
+    const open = customCalcEl.hasAttribute('hidden');
+    setCalcOpen(open);
+    if (open) customCalcInputEl.focus();
+  });
+
+  customCalcInputEl.addEventListener('input', updateCalcResult);
+  customCalcInputEl.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      updateCalcResult();
+    }
+  });
+
+  customCalcEl.addEventListener('click', function(e) {
+    const btn = e.target && e.target.closest ? e.target.closest('[data-calc-key]') : null;
+    if (!btn) return;
+    const key = btn.dataset.calcKey;
+    if (!key) return;
+    if (key === 'hide') {
+      setCalcOpen(false);
+      return;
+    }
+    if (key === 'clear') {
+      customCalcInputEl.value = '';
+      updateCalcResult();
+      customCalcInputEl.focus();
+      return;
+    }
+    if (key === 'backspace') {
+      backspaceCalc();
+      return;
+    }
+    if (key === 'eval') {
+      updateCalcResult();
+      return;
+    }
+    if (key === 'use') {
+      const out = updateCalcResult();
+      if (!out || customCalcOutputEl.dataset.ok !== '1') return;
+      if (!input) return;
+      const src = input.value || '';
+      const start = Number.isFinite(input.selectionStart) ? input.selectionStart : src.length;
+      const end = Number.isFinite(input.selectionEnd) ? input.selectionEnd : start;
+      const next = src.slice(0, start) + out + src.slice(end);
+      input.value = next;
+      if (typeof autoResize === 'function') autoResize();
+      if (sendBtn) sendBtn.disabled = !next.trim();
+      try { updateClearInputBtn(); } catch (_) {}
+      try { saveInputGlobal(); } catch (_) {}
+      try { updateEditingRowFromInput(); } catch (_) {}
+      input.selectionStart = start + out.length;
+      input.selectionEnd = start + out.length;
+      input.focus();
+      return;
+    }
+    insertCalcAtCursor(key);
+  });
+
+  setCalcOpen(false);
+  updateCalcResult();
+})();
+
 (function setupQrModal() {
   if (!qrModalBackdrop || !qrModalImg) return;
 

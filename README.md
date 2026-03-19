@@ -33,6 +33,7 @@ INOUT is an **objects app** (not a chat). Users keep and manage objects, collect
   - Edit, reorder, and manage objects.
   - Persist their “local base” on the device, backed by `localStorage` + PWA shell, so the app opens and works offline.
   - On any device, open an in-app keyboard with language toggle, emoji/symbol helpers, cursor move keys, smart word suggestions, and a toggle to disable system keyboard invocation.
+  - Open a custom calculator panel from the input tools for math/logic expressions and insert results directly into input.
 - The profile menu for non‑account users exposes:
   - **Export local base** (JSON).
   - **Clear from this device** (remove local storage + service worker caches and reload).
