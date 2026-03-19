@@ -151,6 +151,8 @@ const umCopyIdBtn  = document.getElementById('um-copy-id');
 const umShowQrBtn  = document.getElementById('um-show-qr');
 const umExportLocalBtn = document.getElementById('um-export-local');
 const umClearLocalBtn  = document.getElementById('um-clear-local');
+const umGuestNotifStatus = document.getElementById('um-guest-notif-status');
+const umEnableGuestNotifBtn = document.getElementById('um-enable-guest-notif');
 const qrModalBackdrop = document.getElementById('qr-modal-backdrop');
 const qrModalImg   = document.getElementById('qr-modal-img');
 const qrModalClose = document.getElementById('qr-modal-close');
@@ -335,6 +337,26 @@ function subscribeTempSessionJoins() {
       }
     });
   }
+})();
+
+(function setupGuestNotificationUI() {
+  if (!umEnableGuestNotifBtn) return;
+  umEnableGuestNotifBtn.addEventListener('click', function() {
+    try {
+      if (typeof Notification === 'undefined') {
+        toast('Notifications not supported in this browser.');
+        if (umGuestNotifStatus) umGuestNotifStatus.textContent = 'Not supported';
+        return;
+      }
+      Notification.requestPermission().then(function(p) {
+        if (umGuestNotifStatus) umGuestNotifStatus.textContent = 'Notification permission: ' + p;
+        if (p === 'granted') toast('Guest chat notifications enabled.');
+        else toast('Notifications not enabled.');
+      }).catch(function() {
+        toast('Could not request notification permission.');
+      });
+    } catch (_) {}
+  });
 })();
 
 (function setupQrModal() {
@@ -543,6 +565,8 @@ let currentChannel = currentView; // temporary alias while migrating off "channe
 let viewNames      = ['main'];
 let secondaryViewName = null; /* legacy; will be removed when views[] fully replaces secondary. Persisted to device (localStorage). */
 let secondaryViewChannel = null; // temporary alias during migration
+const VIEW_DISPLAY_NAMES_KEY = 'inout_view_display_names_v1';
+let viewDisplayNames = {};
 const VIEWS_KEY           = 'inout_views_v1';
 const LEFT_VIEWS_KEY      = 'inout_left_views_v1';
 const CURRENT_VIEW_KEY    = 'inout_current_view_v1';
@@ -1665,13 +1689,40 @@ function updateAllTabBadges() {
   viewNames.forEach(ch => updateTabBadge(ch));
 }
 
+function loadViewDisplayNames() {
+  viewDisplayNames = {};
+  try {
+    const raw = localStorage.getItem(VIEW_DISPLAY_NAMES_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') viewDisplayNames = parsed;
+  } catch (_) {}
+}
+
+function saveViewDisplayNames() {
+  try {
+    localStorage.setItem(VIEW_DISPLAY_NAMES_KEY, JSON.stringify(viewDisplayNames || {}));
+  } catch (_) {}
+}
+
+function getViewDefaultName(ch) {
+  return ch === 'main' ? 'Feed' : String(ch);
+}
+
+function getViewDisplayName(ch) {
+  const key = String(ch);
+  const v = viewDisplayNames && typeof viewDisplayNames === 'object' ? viewDisplayNames[key] : null;
+  if (typeof v === 'string' && v.trim()) return v.trim();
+  return getViewDefaultName(key);
+}
+
 function refreshMoveTargets() {
   if (!moveTargetSelect) return;
   moveTargetSelect.innerHTML = '';
   for (const ch of viewNames) {
     const opt = document.createElement('option');
     opt.value = ch;
-    opt.textContent = ch === 'main' ? 'Feed' : ch;
+    opt.textContent = getViewDisplayName(ch);
     moveTargetSelect.appendChild(opt);
   }
 }
@@ -1707,6 +1758,7 @@ function init(done) {
   }
   try { if (localStorage.getItem(WAS_EDITING_KEY)) { try { localStorage.setItem(INPUT_STATE_KEY, ''); localStorage.removeItem(WAS_EDITING_KEY); } catch (_) {} if (input) { input.value = ''; input.placeholder = 'Add object…'; sendBtn.disabled = true; autoResize(); updateClearInputBtn(); } } } catch (_) {}
   try { loadChannelsList(); } catch (_) {}
+  try { loadViewDisplayNames(); } catch (_) {}
   try { loadScrollState(); } catch (_) {}
   try { setupTabs(); } catch (_) {}
   try { restoreLastChannel(); } catch (_) {}
@@ -2081,8 +2133,31 @@ function flushRealtimeInsertBuffer() {
       var next = (unreadCounts.get(ch) || 0) + msgs.length;
       unreadCounts.set(ch, next);
       updateTabBadge(ch);
+      if (!currentUser && tempSessionId) {
+        maybeNotifyGuestMessage(ch, msgs[msgs.length - 1]);
+      }
     }
   });
+}
+
+function maybeNotifyGuestMessage(ch, msg) {
+  try {
+    if (!tempSessionId || currentUser) return;
+    if (typeof Notification === 'undefined') return;
+    if (document.visibilityState === 'visible' && !document.hidden) return;
+    if (Notification.permission !== 'granted') return;
+
+    const viewName = getViewDisplayName(ch);
+    const text = msg && typeof msg.text !== 'undefined' ? String(msg.text) : '';
+    const cleaned = text.trim().replace(/\s+/g, ' ');
+    const snippet = cleaned ? (cleaned.length > 90 ? cleaned.slice(0, 90) + '…' : cleaned) : 'New message';
+
+    new Notification('INOUT', {
+      body: viewName + ': ' + snippet,
+      tag: 'guest-chat-' + String(ch),
+      renotify: false,
+    });
+  } catch (_) {}
 }
 
 function subscribeRealtimeAll() {
@@ -5441,12 +5516,21 @@ function renderTabs() {
   if (!tabsEl) return;
   tabsEl.innerHTML = '';
 
+  // Prevent the subsequent single-click handler from switching views.
+  // Browsers fire click after dblclick, so we need a short suppression window.
+  var _tabRenameSuppressClick = false;
+  var setTabRenameSuppress = function(on) {
+    _tabRenameSuppressClick = !!on;
+    setTimeout(function() { _tabRenameSuppressClick = false; }, 220);
+  };
+
   viewNames.forEach(ch => {
     const btn = document.createElement('button');
     btn.className = 'tab';
     btn.setAttribute('data-channel', ch);
     const label = document.createElement('span');
-    label.textContent = ch === 'main' ? 'Feed' : ch;
+    label.className = 'tab-label';
+    label.textContent = getViewDisplayName(ch);
     btn.appendChild(label);
 
     if (sharedChannels.has(ch) && ch !== 'main') {
@@ -5471,7 +5555,17 @@ function renderTabs() {
       btn.appendChild(close);
     }
 
+    btn.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setTabRenameSuppress(true);
+      try {
+        if (typeof renameView === 'function') renameView(ch);
+      } catch (_) {}
+    });
+
     btn.addEventListener('click', (e) => {
+      if (_tabRenameSuppressClick) return;
       if (e.shiftKey) {
         e.preventDefault();
         toggleSecondaryView(ch);
@@ -5528,6 +5622,34 @@ function renderTabs() {
   syncComposerTargetSelects();
 }
 
+function renameView(ch) {
+  if (!ch) return;
+  try {
+    // Keep main predictable unless user explicitly wants a label override.
+    const curr = getViewDisplayName(ch);
+    const def = getViewDefaultName(ch);
+    const initial = curr && curr !== def ? curr : String(ch);
+    const next = window.prompt('Rename view', initial);
+    if (next == null) return;
+    const cleaned = String(next).trim();
+    const key = String(ch);
+    if (!cleaned) delete viewDisplayNames[key];
+    else viewDisplayNames[key] = cleaned;
+    saveViewDisplayNames();
+
+    // Update tab label immediately.
+    if (tabsEl) {
+      const btn = tabsEl.querySelector('.tab[data-channel="' + CSS.escape(key) + '"]');
+      if (btn) {
+        const lbl = btn.querySelector('.tab-label');
+        if (lbl) lbl.textContent = getViewDisplayName(key);
+      }
+    }
+    refreshMoveTargets();
+    syncComposerTargetSelects();
+  } catch (_) {}
+}
+
 function syncComposerTargetSelects() {
   const channels = (typeof viewNames !== 'undefined' && Array.isArray(viewNames)) ? viewNames : ['main'];
   if (!composerSlotsContainer) return;
@@ -5537,7 +5659,7 @@ function syncComposerTargetSelects() {
     channels.forEach(ch => {
       const opt = document.createElement('option');
       opt.value = ch;
-      opt.textContent = ch === 'main' ? 'Feed' : ch;
+      opt.textContent = getViewDisplayName(ch);
       if (ch === current) opt.selected = true;
       sel.appendChild(opt);
     });
@@ -6029,6 +6151,11 @@ function updateAuthUI() {
   if (userBtn) userBtn.classList.toggle('signed-in', !!currentUser);
 
   if (umStorageInfo) umStorageInfo.textContent = getStorageLocationMessage();
+
+  if (umGuestNotifStatus) {
+    if (typeof Notification === 'undefined') umGuestNotifStatus.textContent = 'Not supported';
+    else umGuestNotifStatus.textContent = 'Notification permission: ' + Notification.permission;
+  }
 
   if (currentUser) {
     const email = currentUser.email || 'Signed in';
@@ -7653,7 +7780,9 @@ function formatTime(iso) {
   var cached = formatTimeCache.get(iso);
   if (cached !== undefined) return cached;
   const d = new Date(iso);
-  const s = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  const date = d.toLocaleDateString([], { month: 'short', day: '2-digit' });
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  const s = date + ' ' + time;
   if (formatTimeCache.size >= formatTimeCacheMax) {
     var first = formatTimeCache.keys().next().value;
     if (first !== undefined) formatTimeCache.delete(first);

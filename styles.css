@@ -1552,7 +1552,7 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
 }
 
 .obj-time{
-  font-size:6px;
+  font-size:7px;
   color:var(--dim);
   letter-spacing:0.04em;
   flex:0 0 auto;
