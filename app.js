@@ -3679,6 +3679,7 @@ async function restoreSecondaryView() {
 var secondaryViewEl = null;
 var secondaryFeedInner = null;
 var secondaryFeedEl = null;
+var secondaryRailEl = null;
 var multiviewResizerEl = null;
 
 function setupSecondaryFeedDnd() {
@@ -3772,6 +3773,7 @@ function closeSecondaryView() {
   secondaryViewEl = null;
   secondaryFeedInner = null;
   secondaryFeedEl = null;
+  secondaryRailEl = null;
   secondaryViewChannel = null;
   views = views.filter(v => v && v.id === 'view-0');
   try { localStorage.setItem(OPEN_VIEWS_KEY, '[]'); } catch (_) {}
@@ -3845,6 +3847,11 @@ async function openSecondaryView(ch) {
   const visual = document.createElement('div');
   visual.className = 'visual';
   visual.setAttribute('aria-label', 'View: ' + (ch === 'main' ? 'Feed' : ch));
+  const rail = document.createElement('div');
+  rail.className = 'view-pinned-rail';
+  rail.setAttribute('aria-label', 'Pinned objects');
+  visual.appendChild(rail);
+  secondaryRailEl = rail;
   // clone base feed structure so each view has identical markup, including loader/empty classes
   const baseFeed = document.getElementById('feed');
   let feedInner = null;
@@ -3902,10 +3909,12 @@ async function openSecondaryView(ch) {
         secondaryViewChannel = other.channel;
         secondaryFeedInner = other.feedInner;
         secondaryFeedEl = other.rootEl && other.rootEl.querySelector && other.rootEl.querySelector('.feed') || null;
+        secondaryRailEl = other.rootEl && other.rootEl.querySelector && other.rootEl.querySelector('.view-pinned-rail') || null;
       } else {
         secondaryViewEl = null;
         secondaryFeedInner = null;
         secondaryFeedEl = null;
+        secondaryRailEl = null;
         secondaryViewChannel = null;
         if (multiviewResizerEl && multiviewResizerEl.parentNode) multiviewResizerEl.parentNode.removeChild(multiviewResizerEl);
         multiviewResizerEl = null;
