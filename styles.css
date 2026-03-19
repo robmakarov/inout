@@ -2179,6 +2179,13 @@ body.select-mode .obj-select-wrap,
   gap:6px;
   margin-top:6px;
 }
+/* Temporarily hidden from UI */
+#mobile-kb-toggle,
+#calc-toggle,
+#mobile-keyboard,
+#custom-calc{
+  display:none !important;
+}
 .mobile-keyboard{
   margin-top:8px;
   --kb-accent-rgb: 232,213,160;
