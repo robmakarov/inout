@@ -370,6 +370,7 @@ function subscribeTempSessionJoins() {
   const RECENT_WORDS_KEY = 'inout_mobile_kb_recent_words_v1';
   let currentLang = 'en';
   let kbMode = 'compact'; /* compact | full */
+  let systemKeyboardEnabled = true;
   let fxEnabled = true;
   let vibeEnabled = true;
   let audioCtx = null;
@@ -483,6 +484,17 @@ function subscribeTempSessionJoins() {
     else mobileKeyboardEl.setAttribute('hidden', '');
     mobileKbToggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
     try { localStorage.setItem(PREF_KEY, open ? '1' : '0'); } catch (_) {}
+  }
+
+  function applySystemKeyboardMode() {
+    try {
+      if (!input) return;
+      input.readOnly = !systemKeyboardEnabled;
+      if (!systemKeyboardEnabled && document.activeElement === input) {
+        // Drop OS keyboard when the user switches this off mid-focus.
+        input.blur();
+      }
+    } catch (_) {}
   }
 
   function maybeVibrate() {
@@ -637,6 +649,9 @@ function subscribeTempSessionJoins() {
     mobileKeyboardEl.querySelectorAll('.mobile-kb-tool[data-ui="mode"]').forEach(function(btn) {
       btn.classList.toggle('active', btn.dataset.mode === kbMode);
     });
+    mobileKeyboardEl.querySelectorAll('.mobile-kb-tool[data-ui="syskb"]').forEach(function(btn) {
+      btn.classList.toggle('active', systemKeyboardEnabled);
+    });
     mobileKeyboardEl.querySelectorAll('.mobile-kb-tool[data-ui="fx"]').forEach(function(btn) {
       btn.classList.toggle('active', fxEnabled);
     });
@@ -670,6 +685,10 @@ function subscribeTempSessionJoins() {
     if (ui) {
       if (ui === 'mode') {
         kbMode = t.dataset.mode === 'full' ? 'full' : 'compact';
+      } else if (ui === 'syskb') {
+        systemKeyboardEnabled = !(t.dataset.on === '1');
+        t.dataset.on = systemKeyboardEnabled ? '1' : '0';
+        applySystemKeyboardMode();
       } else if (ui === 'fx') {
         fxEnabled = !(t.dataset.on === '1');
         t.dataset.on = fxEnabled ? '1' : '0';
@@ -678,7 +697,7 @@ function subscribeTempSessionJoins() {
         t.dataset.on = vibeEnabled ? '1' : '0';
       }
       if (typeof localStorage !== 'undefined') {
-        try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ kbMode: kbMode, fxEnabled: fxEnabled, vibeEnabled: vibeEnabled })); } catch (_) {}
+        try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ kbMode: kbMode, systemKeyboardEnabled: systemKeyboardEnabled, fxEnabled: fxEnabled, vibeEnabled: vibeEnabled })); } catch (_) {}
       }
       renderKeys();
       return;
@@ -699,6 +718,7 @@ function subscribeTempSessionJoins() {
     if (raw) {
       const s = JSON.parse(raw);
       if (s && (s.kbMode === 'compact' || s.kbMode === 'full')) kbMode = s.kbMode;
+      if (s && typeof s.systemKeyboardEnabled === 'boolean') systemKeyboardEnabled = s.systemKeyboardEnabled;
       if (s && typeof s.fxEnabled === 'boolean') fxEnabled = s.fxEnabled;
       if (s && typeof s.vibeEnabled === 'boolean') vibeEnabled = s.vibeEnabled;
     }
@@ -710,12 +730,13 @@ function subscribeTempSessionJoins() {
       if (Array.isArray(arr)) recentWords = arr.map(normalizeWord).filter(Boolean).slice(0, 120);
     }
   } catch (_) {}
-  mobileKeyboardEl.querySelectorAll('.mobile-kb-tool[data-ui="fx"], .mobile-kb-tool[data-ui="vibe"]').forEach(function(btn) {
+  mobileKeyboardEl.querySelectorAll('.mobile-kb-tool[data-ui="syskb"], .mobile-kb-tool[data-ui="fx"], .mobile-kb-tool[data-ui="vibe"]').forEach(function(btn) {
     const ui = btn.dataset.ui;
-    const on = ui === 'fx' ? fxEnabled : vibeEnabled;
+    const on = ui === 'syskb' ? systemKeyboardEnabled : (ui === 'fx' ? fxEnabled : vibeEnabled);
     btn.dataset.on = on ? '1' : '0';
     btn.classList.toggle('active', on);
   });
+  applySystemKeyboardMode();
   if (input) {
     input.addEventListener('input', function() {
       recordWordsFromText(input.value || '');
