@@ -179,8 +179,8 @@ header,
 }
 .view-pinned-rail{
   flex:0 0 auto;
-  width:52px;
-  min-width:52px;
+  width:88px;
+  min-width:88px;
   border-right:1px solid var(--line);
   background:var(--bg2);
   overflow-y:auto;
@@ -188,33 +188,54 @@ header,
   display:flex;
   flex-direction:column;
   align-items:stretch;
-  gap:4px;
-  padding:6px 4px;
+  gap:6px;
+  padding:8px 6px;
   scrollbar-width:thin;
 }
 .view-pinned-rail::-webkit-scrollbar{ width:4px }
 .view-pinned-rail::-webkit-scrollbar-thumb{ background:var(--line2); border-radius:2px }
+/* Rail items as button-like badges with message inside */
 .view-pinned-rail .obj{
-  padding:6px 4px;
-  min-height:32px;
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  min-height:36px;
+  padding:6px 8px;
+  border-radius:8px;
+  border:1px solid var(--line);
+  background:var(--bg);
   cursor:grab;
+  flex-shrink:0;
+  transition:background .15s, border-color .15s;
 }
-.view-pinned-rail .obj .obj-content{ pointer-events:none }
+.view-pinned-rail .obj:hover{
+  background:var(--bg2);
+  border-color:var(--line2);
+}
+.view-pinned-rail .obj .obj-content{
+  pointer-events:none;
+  flex:1;
+  min-width:0;
+  display:flex;
+  align-items:center;
+}
 .view-pinned-rail .obj .obj-time,
 .view-pinned-rail .obj .obj-sender{ display:none }
 .view-pinned-rail .obj .obj-text{
-  font-size:10px;
-  line-height:1.3;
+  font-size:11px;
+  line-height:1.35;
   overflow:hidden;
   text-overflow:ellipsis;
   display:-webkit-box;
   -webkit-line-clamp:3;
   -webkit-box-orient:vertical;
   word-break:break-word;
+  color:var(--text);
 }
 .view-pinned-rail .obj::before{ display:none }
 .view-pinned-rail .obj .obj-actions,
-.view-pinned-rail .obj .obj-select-wrap{ display:none }
+.view-pinned-rail .obj .obj-select-wrap,
+.view-pinned-rail .obj .obj-checkbox-zone{ display:none !important }
 .view-drop-over .feed{
   outline:2px solid var(--acc);
   outline-offset:-2px;
