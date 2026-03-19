@@ -2179,47 +2179,23 @@ body.select-mode .obj-select-wrap,
   gap:6px;
   margin-top:6px;
 }
-#mobile-kb-toggle{
-  background:linear-gradient(135deg, rgba(232,213,160,0.24), rgba(184,160,96,0.24));
-  border:1px solid rgba(232,213,160,0.45);
-  color:var(--text);
-  box-shadow:0 4px 14px rgba(0,0,0,0.22);
-}
 .mobile-keyboard{
   margin-top:8px;
   --kb-accent-rgb: 232,213,160;
   --kb-accent2-rgb: 184,160,96;
   --kb-accent: #e8d5a0;
   --kb-accent2: #b8a060;
-  border:1px solid rgba(var(--kb-accent-rgb),0.28);
+  border:none;
   border-radius:14px;
   padding:10px;
   background:
-    radial-gradient(circle at 18% 10%, rgba(var(--kb-accent-rgb),0.12), transparent 36%),
-    radial-gradient(circle at 84% 90%, rgba(var(--kb-accent2-rgb),0.12), transparent 40%),
-    linear-gradient(160deg, rgba(255,255,255,0.03), rgba(255,255,255,0.00) 40%),
+    radial-gradient(circle at 18% 10%, rgba(var(--kb-accent-rgb),0.08), transparent 36%),
+    radial-gradient(circle at 84% 90%, rgba(var(--kb-accent2-rgb),0.07), transparent 40%),
+    linear-gradient(160deg, rgba(255,255,255,0.02), rgba(255,255,255,0.00) 40%),
     var(--bg2);
   box-shadow:
-    0 10px 26px rgba(0,0,0,0.35),
-    inset 0 1px 0 rgba(255,255,255,0.04);
-}
-.mobile-keyboard[data-kb-theme="gold"]{
-  --kb-accent-rgb: 232,213,160;
-  --kb-accent2-rgb: 184,160,96;
-  --acc: var(--kb-accent);
-  --acc2: var(--kb-accent2);
-}
-.mobile-keyboard[data-kb-theme="silver"]{
-  --kb-accent-rgb: 212,214,230;
-  --kb-accent2-rgb: 170,174,198;
-  --acc: rgb(212,214,230);
-  --acc2: rgb(170,174,198);
-}
-.mobile-keyboard[data-kb-theme="midnight"]{
-  --kb-accent-rgb: 127,183,255;
-  --kb-accent2-rgb: 62,111,184;
-  --acc: rgb(127,183,255);
-  --acc2: rgb(62,111,184);
+    0 10px 26px rgba(0,0,0,0.22),
+    inset 0 1px 0 rgba(255,255,255,0.03);
 }
 .mobile-keyboard[hidden]{ display:none !important; }
 .mobile-keyboard-top{
@@ -2230,8 +2206,8 @@ body.select-mode .obj-select-wrap,
 }
 .mobile-kb-lang,
 .mobile-kb-key{
-  border:1px solid rgba(var(--kb-accent-rgb),0.26);
-  background:linear-gradient(170deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01)), var(--bg);
+  border:none;
+  background:linear-gradient(170deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01)), rgba(255,255,255,0.02);
   color:var(--soft);
   border-radius:7px;
   font-family:var(--mono);
@@ -2246,8 +2222,7 @@ body.select-mode .obj-select-wrap,
 .mobile-kb-key:hover,
 .mobile-kb-lang:hover{
   transform:translateY(-1px);
-  border-color:rgba(var(--kb-accent-rgb),0.45);
-  box-shadow:0 5px 12px rgba(0,0,0,0.24);
+  box-shadow:0 5px 12px rgba(0,0,0,0.20);
 }
 .mobile-kb-lang.active{
   color:var(--bg);
@@ -2268,8 +2243,8 @@ body.select-mode .obj-select-wrap,
   align-items:center;
 }
 .mobile-kb-tool{
-  border:1px solid rgba(var(--kb-accent-rgb),0.26);
-  background:rgba(var(--kb-accent-rgb),0.06);
+  border:none;
+  background:rgba(var(--kb-accent-rgb),0.08);
   color:var(--soft);
   border-radius:999px;
   font-family:var(--mono);
@@ -2282,7 +2257,6 @@ body.select-mode .obj-select-wrap,
 }
 .mobile-kb-tool:hover{
   transform:translateY(-1px);
-  border-color:rgba(var(--kb-accent-rgb),0.45);
 }
 .mobile-kb-tool.active{
   background:linear-gradient(140deg, var(--acc), var(--acc2));
@@ -2301,7 +2275,7 @@ body.select-mode .obj-select-wrap,
 .mobile-keyboard-fns{
   margin-top:8px;
   display:grid;
-  grid-template-columns:repeat(8, minmax(0, 1fr));
+  grid-template-columns:repeat(10, minmax(0, 1fr));
   gap:5px;
 }
 .mobile-kb-key-fn{
@@ -2310,7 +2284,30 @@ body.select-mode .obj-select-wrap,
 .mobile-kb-key-send{
   background:linear-gradient(140deg, var(--acc), var(--acc2));
   color:var(--bg);
-  border-color:var(--acc2);
+}
+
+.mobile-kb-smart{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  margin-bottom:8px;
+}
+.mobile-kb-smart .mobile-kb-smart-chip{
+  border:none;
+  background:rgba(var(--kb-accent-rgb),0.12);
+  color:var(--text);
+  border-radius:999px;
+  font-family:var(--mono);
+  font-size:10px;
+  padding:5px 9px;
+  cursor:pointer;
+  max-width:42%;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.mobile-kb-smart .mobile-kb-smart-chip:hover{
+  background:rgba(var(--kb-accent-rgb),0.22);
 }
 
 .mobile-kb-key::after{

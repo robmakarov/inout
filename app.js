@@ -161,6 +161,7 @@ const umNickSave   = document.getElementById('um-nick-save');
 const mobileKbToggleBtn = document.getElementById('mobile-kb-toggle');
 const mobileKeyboardEl = document.getElementById('mobile-keyboard');
 const mobileKeyboardRowsEl = document.getElementById('mobile-keyboard-rows');
+const mobileKeyboardSmartEl = document.getElementById('mobile-kb-smart');
 const umSyncInputChk = document.getElementById('um-sync-input');
 const umLayoutSyncChk = document.getElementById('um-layout-sync');
 const umVersionBadge = document.getElementById('um-version-badge');
@@ -366,12 +367,13 @@ function subscribeTempSessionJoins() {
   if (!mobileKbToggleBtn || !mobileKeyboardEl || !mobileKeyboardRowsEl) return;
   const PREF_KEY = 'inout_mobile_kb_open_v1';
   const SETTINGS_KEY = 'inout_mobile_kb_settings_v1';
+  const RECENT_WORDS_KEY = 'inout_mobile_kb_recent_words_v1';
   let currentLang = 'en';
   let kbMode = 'compact'; /* compact | full */
-  let kbTheme = 'gold'; /* gold | silver | midnight */
   let fxEnabled = true;
   let vibeEnabled = true;
   let audioCtx = null;
+  let recentWords = [];
   const emojiQuick = ['😊', '😂', '❤️', '🔥', '🚀', '🙏', '👍', '🌙', '🎉', '🤖'];
   const keysets = {
     en: [
@@ -402,6 +404,79 @@ function subscribeTempSessionJoins() {
       emojiQuick,
     ]
   };
+
+  function normalizeWord(w) {
+    return String(w || '').trim().toLowerCase();
+  }
+
+  function recordWordsFromText(text) {
+    const src = String(text || '');
+    const found = src.match(/[\p{L}\p{N}_-]{2,}/gu) || [];
+    if (!found.length) return;
+    const next = recentWords.slice();
+    found.forEach(function(w) {
+      const n = normalizeWord(w);
+      if (!n) return;
+      const idx = next.indexOf(n);
+      if (idx >= 0) next.splice(idx, 1);
+      next.unshift(n);
+    });
+    recentWords = next.slice(0, 120);
+    try { localStorage.setItem(RECENT_WORDS_KEY, JSON.stringify(recentWords)); } catch (_) {}
+  }
+
+  function getCurrentWordPrefix() {
+    if (!input) return '';
+    const val = String(input.value || '');
+    const pos = Number.isFinite(input.selectionStart) ? input.selectionStart : val.length;
+    const left = val.slice(0, pos);
+    const m = left.match(/[\p{L}\p{N}_-]{1,}$/u);
+    return m ? m[0] : '';
+  }
+
+  function replaceCurrentWord(replacement) {
+    if (!input) return;
+    const val = String(input.value || '');
+    const pos = Number.isFinite(input.selectionStart) ? input.selectionStart : val.length;
+    const left = val.slice(0, pos);
+    const right = val.slice(pos);
+    const m = left.match(/[\p{L}\p{N}_-]{1,}$/u);
+    const start = m ? (pos - m[0].length) : pos;
+    const next = val.slice(0, start) + replacement + ' ' + right;
+    applyInputValue(next);
+    const caret = start + replacement.length + 1;
+    input.selectionStart = caret;
+    input.selectionEnd = caret;
+    input.focus();
+  }
+
+  function renderSmartChips() {
+    if (!mobileKeyboardSmartEl) return;
+    const prefix = normalizeWord(getCurrentWordPrefix());
+    const source = prefix
+      ? recentWords.filter(function(w) { return w.indexOf(prefix) === 0 && w !== prefix; })
+      : recentWords.slice();
+    const picks = source.slice(0, 6);
+    mobileKeyboardSmartEl.innerHTML = '';
+    if (!picks.length) {
+      const hint = document.createElement('button');
+      hint.type = 'button';
+      hint.className = 'mobile-kb-smart-chip';
+      hint.dataset.key = 'smart-hint';
+      hint.textContent = 'Type to get smart suggestions';
+      mobileKeyboardSmartEl.appendChild(hint);
+      return;
+    }
+    picks.forEach(function(w) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'mobile-kb-smart-chip';
+      b.dataset.key = 'smart-word';
+      b.dataset.value = w;
+      b.textContent = w;
+      mobileKeyboardSmartEl.appendChild(b);
+    });
+  }
 
   function setOpen(open) {
     if (open) mobileKeyboardEl.removeAttribute('hidden');
@@ -463,6 +538,7 @@ function subscribeTempSessionJoins() {
     try { updateClearInputBtn(); } catch (_) {}
     try { saveInputGlobal(); } catch (_) {}
     try { updateEditingRowFromInput(); } catch (_) {}
+    renderSmartChips();
   }
 
   function insertAtCaret(text) {
@@ -502,6 +578,19 @@ function subscribeTempSessionJoins() {
   async function handleFn(key) {
     if (key === 'space') insertAtCaret(' ');
     else if (key === 'enter') insertAtCaret('\n');
+    else if (key === 'left') {
+      if (!input) return;
+      const p = Number.isFinite(input.selectionStart) ? input.selectionStart : 0;
+      const n = Math.max(0, p - 1);
+      input.selectionStart = n; input.selectionEnd = n; input.focus();
+    }
+    else if (key === 'right') {
+      if (!input) return;
+      const p = Number.isFinite(input.selectionStart) ? input.selectionStart : 0;
+      const len = String(input.value || '').length;
+      const n = Math.min(len, p + 1);
+      input.selectionStart = n; input.selectionEnd = n; input.focus();
+    }
     else if (key === 'backspace') backspaceAtCaret();
     else if (key === 'clear') applyInputValue('');
     else if (key === 'emoji') {
@@ -548,15 +637,13 @@ function subscribeTempSessionJoins() {
     mobileKeyboardEl.querySelectorAll('.mobile-kb-tool[data-ui="mode"]').forEach(function(btn) {
       btn.classList.toggle('active', btn.dataset.mode === kbMode);
     });
-    mobileKeyboardEl.querySelectorAll('.mobile-kb-tool[data-ui="theme"]').forEach(function(btn) {
-      btn.classList.toggle('active', btn.dataset.theme === kbTheme);
-    });
     mobileKeyboardEl.querySelectorAll('.mobile-kb-tool[data-ui="fx"]').forEach(function(btn) {
       btn.classList.toggle('active', fxEnabled);
     });
     mobileKeyboardEl.querySelectorAll('.mobile-kb-tool[data-ui="vibe"]').forEach(function(btn) {
       btn.classList.toggle('active', vibeEnabled);
     });
+    renderSmartChips();
   }
 
   mobileKbToggleBtn.addEventListener('click', function() {
@@ -568,6 +655,11 @@ function subscribeTempSessionJoins() {
     const t = e.target && e.target.closest ? e.target.closest('button') : null;
     if (!t) return;
     pressFxOn(t, e);
+    if (t.dataset.key === 'smart-hint') return;
+    if (t.dataset.key === 'smart-word') {
+      replaceCurrentWord(t.dataset.value || '');
+      return;
+    }
     const lang = t.dataset.lang;
     if (lang) {
       currentLang = (lang === 'ru') ? 'ru' : 'en';
@@ -578,9 +670,6 @@ function subscribeTempSessionJoins() {
     if (ui) {
       if (ui === 'mode') {
         kbMode = t.dataset.mode === 'full' ? 'full' : 'compact';
-      } else if (ui === 'theme') {
-        kbTheme = t.dataset.theme || 'gold';
-        mobileKeyboardEl.dataset.kbTheme = kbTheme;
       } else if (ui === 'fx') {
         fxEnabled = !(t.dataset.on === '1');
         t.dataset.on = fxEnabled ? '1' : '0';
@@ -589,7 +678,7 @@ function subscribeTempSessionJoins() {
         t.dataset.on = vibeEnabled ? '1' : '0';
       }
       if (typeof localStorage !== 'undefined') {
-        try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ kbMode: kbMode, kbTheme: kbTheme, fxEnabled: fxEnabled, vibeEnabled: vibeEnabled })); } catch (_) {}
+        try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ kbMode: kbMode, fxEnabled: fxEnabled, vibeEnabled: vibeEnabled })); } catch (_) {}
       }
       renderKeys();
       return;
@@ -610,18 +699,29 @@ function subscribeTempSessionJoins() {
     if (raw) {
       const s = JSON.parse(raw);
       if (s && (s.kbMode === 'compact' || s.kbMode === 'full')) kbMode = s.kbMode;
-      if (s && (s.kbTheme === 'gold' || s.kbTheme === 'silver' || s.kbTheme === 'midnight')) kbTheme = s.kbTheme;
       if (s && typeof s.fxEnabled === 'boolean') fxEnabled = s.fxEnabled;
       if (s && typeof s.vibeEnabled === 'boolean') vibeEnabled = s.vibeEnabled;
     }
   } catch (_) {}
-  mobileKeyboardEl.dataset.kbTheme = kbTheme;
+  try {
+    const rw = localStorage.getItem(RECENT_WORDS_KEY);
+    if (rw) {
+      const arr = JSON.parse(rw);
+      if (Array.isArray(arr)) recentWords = arr.map(normalizeWord).filter(Boolean).slice(0, 120);
+    }
+  } catch (_) {}
   mobileKeyboardEl.querySelectorAll('.mobile-kb-tool[data-ui="fx"], .mobile-kb-tool[data-ui="vibe"]').forEach(function(btn) {
     const ui = btn.dataset.ui;
     const on = ui === 'fx' ? fxEnabled : vibeEnabled;
     btn.dataset.on = on ? '1' : '0';
     btn.classList.toggle('active', on);
   });
+  if (input) {
+    input.addEventListener('input', function() {
+      recordWordsFromText(input.value || '');
+      renderSmartChips();
+    });
+  }
   renderKeys();
 })();
 
