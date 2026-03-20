@@ -395,6 +395,7 @@
   function initLogoLottie(){
     var container = document.getElementById('logo-lottie');
     var logoEl = container && container.closest('.logo');
+    var fallbackEl = logoEl && logoEl.querySelector('.logo-fallback');
     if (!container || typeof lottie === 'undefined') return;
     var animationData = null;
     var dataEl = document.getElementById('logo-animation-data');
@@ -413,14 +414,25 @@
       if (anim) {
         logoAnim = anim;
         anim.setSpeed(2);
-        anim.addEventListener('DOMLoaded', function() {
-          if (logoEl) logoEl.classList.add('logo-lottie-loaded');
+        var logoStarted = false;
+        var domLoadedTimer = null;
+        function startLogoPlayback(){
           if (anim.renderer && anim.renderer.svgElement) {
             anim.renderer.svgElement.style.transformOrigin = 'left center';
             anim.renderer.svgElement.style.transform = 'scale(7.4)';
           }
           anim.goToAndPlay(0, true);
-        });
+        }
+        function onLogoReady(){
+          if (logoStarted) return;
+          logoStarted = true;
+          if (domLoadedTimer) clearTimeout(domLoadedTimer);
+          if (logoEl) logoEl.classList.add('logo-lottie-loaded');
+          if (fallbackEl) fallbackEl.setAttribute('aria-hidden', 'true');
+          startLogoPlayback();
+        }
+        anim.addEventListener('DOMLoaded', onLogoReady);
+        domLoadedTimer = setTimeout(onLogoReady, 500);
       }
     } catch (e) {}
   }

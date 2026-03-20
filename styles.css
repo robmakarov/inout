@@ -619,6 +619,9 @@ header{
   padding:0;
   background:transparent;
 }
+.logo.logo-lottie-loaded .logo-lottie{
+  z-index:1;
+}
 .logo-lottie svg,
 .logo-lottie canvas{
   width:100% !important;
@@ -645,9 +648,10 @@ header{
   white-space:nowrap;
   font-size:14px;
 }
-/* Keep fallback visible so logo is always shown */
+/* Hide text once Lottie is ready so the animation is visible (fallback stays for no-JS / parse errors) */
 .logo.logo-lottie-loaded .logo-fallback{
-  display:inline;
+  opacity:0;
+  z-index:0;
 }
 
 .header-right{
