@@ -5114,7 +5114,7 @@ function createObjectRow(obj, isNew, options) {
         wrap.style.top = startTop + 'px';
         var clone = row.cloneNode(true);
         clone.classList.remove('dragging', 'obj-drag-group', 'obj-selected', 'new-flash', 'obj-editing', 'obj-drag-over', 'obj-drag-target', 'dragging-in-feed');
-        clone.classList.add('obj', 'obj-drag-spirit', 'obj-drag-spirit-bubble');
+        clone.classList.add('obj', 'obj-drag-spirit', 'obj-drag-spirit-row');
         clone.removeAttribute('draggable');
         clone.querySelectorAll('.obj-checkbox-zone, .obj-actions, .obj-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
         wrap.appendChild(clone);
@@ -5123,7 +5123,7 @@ function createObjectRow(obj, isNew, options) {
       } else {
     dragSpiritEl = row.cloneNode(true);
         dragSpiritEl.classList.remove('dragging', 'obj-drag-group', 'obj-selected', 'new-flash', 'obj-editing', 'obj-drag-over', 'obj-drag-target', 'dragging-in-feed');
-        dragSpiritEl.classList.add('obj', 'obj-drag-spirit', 'obj-drag-spirit-bubble');
+        dragSpiritEl.classList.add('obj', 'obj-drag-spirit', 'obj-drag-spirit-row');
     dragSpiritEl.removeAttribute('draggable');
     dragSpiritEl.setAttribute('aria-hidden', 'true');
         dragSpiritEl.style.width = spiritW + 'px';
