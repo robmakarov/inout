@@ -1939,8 +1939,22 @@ body.select-mode .obj-select-wrap,
   border-radius:4px;
   background:var(--bg2);
   border:1px solid var(--line2);
+  border-left:3px solid hsl(var(--cb-device-hue, 210), 52%, 52%);
   font-size:11px;
   color:var(--soft);
+  --cb-device-hue:210;
+}
+.clipboard-bubble-device{
+  flex-shrink:0;
+  font-family:var(--font-mono, ui-monospace, monospace);
+  font-size:9px;
+  font-weight:600;
+  letter-spacing:0.06em;
+  padding:3px 6px;
+  border-radius:4px;
+  color:var(--text);
+  background:hsla(var(--cb-device-hue, 210), 55%, 48%, 0.28);
+  border:1px solid hsla(var(--cb-device-hue, 210), 50%, 55%, 0.45);
 }
 #clipboard-bubble-text{
   flex:1;

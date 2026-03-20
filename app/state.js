@@ -55,6 +55,7 @@ const umUpgradeBtn   = document.getElementById('um-upgrade-btn');
 const tabsEl     = document.getElementById('tabs');
 const clipboardBubble    = document.getElementById('clipboard-bubble');
 const clipboardBubbleTxt = document.getElementById('clipboard-bubble-text');
+const clipboardBubbleDeviceEl = document.getElementById('clipboard-bubble-device');
 const clipboardPasteBtn  = document.getElementById('clipboard-paste');
 const clipboardDismissBtn= document.getElementById('clipboard-dismiss');
 const clipboardButton    = document.getElementById('clipboard-button');

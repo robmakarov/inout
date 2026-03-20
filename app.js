@@ -181,6 +181,7 @@ const tabsEl     = document.getElementById('tabs');
 const viewsCloseAllBtn = document.getElementById('views-close-all');
 const clipboardBubble    = document.getElementById('clipboard-bubble');
 const clipboardBubbleTxt = document.getElementById('clipboard-bubble-text');
+const clipboardBubbleDeviceEl = document.getElementById('clipboard-bubble-device');
 const clipboardPasteBtn  = document.getElementById('clipboard-paste');
 const clipboardDismissBtn= document.getElementById('clipboard-dismiss');
 const clipboardButton    = document.getElementById('clipboard-button');
@@ -747,7 +748,11 @@ function subscribeTempSessionJoins() {
     else if (key === 'hide') setOpen(false);
     else if (key === 'copy') {
       try {
-        if (navigator.clipboard && input) await navigator.clipboard.writeText(input.value || '');
+        if (navigator.clipboard && input) {
+          var cv = input.value || '';
+          await navigator.clipboard.writeText(cv);
+          if (typeof showClipboardBubble === 'function') showClipboardBubble(cv);
+        }
       } catch (_) {}
     } else if (key === 'paste') {
       try {
@@ -1345,6 +1350,47 @@ function getDeviceId() {
   } catch (_) {
     return 'dev-fallback-' + Date.now().toString(16);
   }
+}
+
+function hueFromStringForClipboardBubble(str) {
+  var h = 2166136261 >>> 0;
+  var s = String(str || '');
+  for (var i = 0; i < s.length; i++) {
+    h = Math.imul(h ^ s.charCodeAt(i), 16777619) >>> 0;
+  }
+  return h % 360;
+}
+
+function clipboardBubbleDeviceLabel(deviceId) {
+  var s = String(deviceId || '').replace(/-/g, '');
+  if (s.length >= 4) return s.slice(0, 4).toUpperCase();
+  return (s || 'DEV').slice(0, 6).toUpperCase();
+}
+
+function applyClipboardBubbleDeviceStyle() {
+  if (!clipboardBubble) return;
+  var id = getDeviceId();
+  var hue = hueFromStringForClipboardBubble(id);
+  clipboardBubble.style.setProperty('--cb-device-hue', String(hue));
+  if (clipboardBubbleDeviceEl) {
+    clipboardBubbleDeviceEl.textContent = clipboardBubbleDeviceLabel(id);
+    clipboardBubbleDeviceEl.setAttribute('title', 'Clipboard on this device (' + id + ')');
+  }
+}
+
+/** Text copied or written to the clipboard while using this app. */
+function getCopiedTextFromCopyEvent(e) {
+  try {
+    if (e && e.clipboardData && e.clipboardData.getData) {
+      var t = e.clipboardData.getData('text/plain');
+      if (t != null && String(t).trim()) return String(t);
+    }
+  } catch (_) {}
+  try {
+    var sel = window.getSelection && window.getSelection();
+    if (sel && sel.toString) return sel.toString();
+  } catch (_) {}
+  return '';
 }
 
 function loadScrollState() {
@@ -4376,7 +4422,12 @@ function hideDraftBubble() {
 
 function showClipboardBubble(text) {
   if (!clipboardBubble || !clipboardBubbleTxt) return;
-  clipboardBubbleTxt.textContent = text;
+  var raw = String(text == null ? '' : text);
+  if (!raw.trim()) return;
+  latestClipboardText = raw;
+  var preview = raw.length > 240 ? raw.slice(0, 240) + '…' : raw;
+  clipboardBubbleTxt.textContent = preview;
+  applyClipboardBubbleDeviceStyle();
   clipboardBubble.style.display = 'flex';
 }
 
@@ -5429,6 +5480,7 @@ function createObjectRow(obj, isNew, options) {
     if (!obj.text) return;
     try {
       navigator.clipboard.writeText(obj.text);
+      if (typeof showClipboardBubble === 'function') showClipboardBubble(obj.text);
       toast('Message copied.');
     } catch (err) {
       console.error(err);
@@ -5447,6 +5499,7 @@ function createObjectRow(obj, isNew, options) {
     if (!obj.id || !obj.text) return;
     try {
       navigator.clipboard.writeText(obj.text);
+      if (typeof showClipboardBubble === 'function') showClipboardBubble(obj.text);
       deleteSingleObject(obj.id);
       toast('Message cut.');
     } catch (err) {
@@ -7085,6 +7138,7 @@ async function copyUserId() {
   }
   try {
     await navigator.clipboard.writeText(currentUser.id);
+    if (typeof showClipboardBubble === 'function') showClipboardBubble(currentUser.id);
     toast('User id copied.');
   } catch (e) {
     console.error(e);
@@ -7400,6 +7454,7 @@ if (draftCopyBtn) {
     if (!latestRemoteDraft) return;
     try {
       navigator.clipboard.writeText(latestRemoteDraft);
+      if (typeof showClipboardBubble === 'function') showClipboardBubble(latestRemoteDraft);
       toast('Draft copied to clipboard.');
     } catch (e) {
       console.error(e);
@@ -7447,14 +7502,23 @@ if (clipboardButton) {
       const text = (await navigator.clipboard.readText()) || '';
       const trimmed = text.trim();
       if (!trimmed) return;
-      latestClipboardText = trimmed;
-      showClipboardBubble(trimmed);
+      showClipboardBubble(text);
     } catch (e) {
       console.error(e);
       toast('Could not read clipboard.');
     }
   });
 }
+
+(function setupClipboardCopyBubbleListeners() {
+  function onCopyOrCut(e) {
+    var txt = getCopiedTextFromCopyEvent(e);
+    if (!txt || !String(txt).trim()) return;
+    if (typeof showClipboardBubble === 'function') showClipboardBubble(txt);
+  }
+  document.addEventListener('copy', onCopyOrCut, true);
+  document.addEventListener('cut', onCopyOrCut, true);
+})();
 
 if (clearInputBtn) {
   clearInputBtn.addEventListener('click', () => {
