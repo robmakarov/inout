@@ -1,3 +1,4 @@
+-- Order: see ../README.md (211800 → 212000 → 212100).
 -- Run this whole file as ONE script (do not paste only the middle of the function).
 -- Pasting `BEGIN … INSERT … EXCEPTION` alone will error: plain SQL `BEGIN` is a transaction, not PL/pgSQL.
 --

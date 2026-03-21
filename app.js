@@ -3925,6 +3925,81 @@ function pickMultiEditPrimaryId(idsToEdit, clickedId, textMap) {
   return candidates[0];
 }
 
+/**
+ * Enter object edit mode for one or more ids (composer + doppelgangers).
+ * @param {Set<number>} idsToEdit
+ * @param {number} primarySeedId  Row used to pick primary when lengths tie (e.g. clicked object id).
+ */
+function applyObjectEditMode(idsToEdit, primarySeedId) {
+  if (!input || !idsToEdit || idsToEdit.size < 1) return;
+  const seed =
+    primarySeedId != null && Number.isFinite(Number(primarySeedId))
+      ? Number(primarySeedId)
+      : Number(Array.from(idsToEdit)[0]);
+
+  var prevIdsForPresence =
+    editingObjectIds && editingObjectIds.size
+      ? Array.from(editingObjectIds)
+      : editingObjectId != null
+        ? [editingObjectId]
+        : [];
+  prevIdsForPresence.forEach(function(oid) {
+    broadcastViewEditingEnd(oid);
+  });
+  restoreEditingRowsOnCancel();
+
+  originalEditTextForCancelMap = {};
+  editingObjectTextMap = {};
+  [feedInner, secondaryFeedInner].forEach(fi => {
+    if (!fi) return;
+    fi.querySelectorAll('.obj').forEach(row => {
+      const id = row.dataset.id != null ? Number(row.dataset.id) : null;
+      if (id == null || !idsToEdit.has(id)) return;
+      const textEl = row.querySelector('.obj-text');
+      let raw = (textEl && textEl.textContent) ? textEl.textContent : '';
+      const badge = textEl && textEl.querySelector('.obj-remote-edit-badge');
+      if (badge && badge.textContent) raw = raw.slice(0, -badge.textContent.length);
+      originalEditTextForCancelMap[id] = raw;
+      editingObjectTextMap[id] = raw;
+    });
+  });
+  editingObjectIds = idsToEdit;
+  const primaryId = pickMultiEditPrimaryId(idsToEdit, seed, editingObjectTextMap);
+  editingObjectId = primaryId;
+  const primaryText =
+    editingObjectTextMap[primaryId] != null ? String(editingObjectTextMap[primaryId]) : '';
+  input.value = primaryText;
+  var len = input.value.length;
+  input.selectionStart = len;
+  input.selectionEnd = len;
+  originalEditTextForCancel = primaryText;
+  editTypingUndoStack = [primaryText];
+  editTypingRedoStack = [];
+  modeState.editing.active = true;
+  modeState.editing.primaryId = primaryId;
+  modeState.editing.ids = idsToEdit;
+  currentMode = Modes.EDIT;
+  document.body.dataset.mode = Modes.EDIT;
+  if (editTypingCommitTimer) {
+    clearTimeout(editTypingCommitTimer);
+    editTypingCommitTimer = null;
+  }
+  try {
+    localStorage.setItem(WAS_EDITING_KEY, '1');
+  } catch (_) {}
+  input.placeholder = idsToEdit.size > 1 ? 'Editing ' + idsToEdit.size + ' objects…' : 'Editing object…';
+  autoResize();
+  sendBtn.disabled = false;
+  updateClearInputBtn();
+  saveInputGlobal();
+  updateEditingRowHighlight();
+  updateEditingRowFromInput();
+  focusMainInput();
+  requestAnimationFrame(updateEditingRowFromInput);
+  broadcastComposerClear();
+  broadcastDraft(input.value);
+}
+
 /** Apply the same edit (inferred from oldPrimary -> newPrimary) to every other id. Only single-character insert or delete is applied to others so each object keeps its own text; larger pastes/replaces only change the primary. */
 function applyPrimaryEditToMultiEdit(newPrimary) {
   if (!editingObjectTextMap || !editingObjectIds || editingObjectIds.size <= 1) return;
@@ -6555,6 +6630,7 @@ function createObjectRow(obj, isNew, options) {
   row.addEventListener('touchstart', e => {
     if (!feedInner) return;
     if (e.target.closest('.obj-checkbox-zone')) return;
+    if (e.target.closest('.obj-actions')) return;
     const contentLeft = row.querySelector('.obj-time') || row.querySelector('.obj-sender') || row.querySelector('.obj-text');
     if (contentLeft && e.touches[0].clientX < contentLeft.getBoundingClientRect().left) return;
     if (!touchDragState || !touchDragState.bound) {
@@ -6677,13 +6753,22 @@ function createObjectRow(obj, isNew, options) {
       dropdown.style.overflowY = 'auto';
     }
   }
+  trigger.addEventListener('mousedown', e => {
+    e.stopPropagation();
+  });
+  dropdown.addEventListener('mousedown', e => {
+    e.stopPropagation();
+  });
   trigger.addEventListener('click', e => {
     e.stopPropagation();
     const isOpen = actions.classList.toggle('obj-actions-open');
     trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
     if (isOpen) {
       positionObjActionsDropdown();
-      document.addEventListener('click', closeDropdown);
+      /* Defer so this same click/tap is not handled as an outside click on document. */
+      setTimeout(function() {
+        document.addEventListener('click', closeDropdown);
+      }, 0);
       var scrollPort = row.closest && row.closest('.visual-feed-stack');
       if (scrollPort) {
         objActionsScrollCloseFn = function() {
@@ -6692,11 +6777,27 @@ function createObjectRow(obj, isNew, options) {
         objActionsScrollCloseEl = scrollPort;
         scrollPort.addEventListener('scroll', objActionsScrollCloseFn, { passive: true });
       }
-    } else document.removeEventListener('click', closeDropdown);
+    } else {
+      document.removeEventListener('click', closeDropdown);
+    }
   });
 
   const menuSingle = document.createElement('div');
   menuSingle.className = 'obj-actions-menu obj-actions-menu-single';
+
+  const actionEdit = document.createElement('button');
+  actionEdit.className = 'obj-action-btn';
+  actionEdit.type = 'button';
+  actionEdit.setAttribute('role', 'menuitem');
+  actionEdit.textContent = 'Edit';
+  actionEdit.addEventListener('click', e => {
+    e.stopPropagation();
+    closeDropdown();
+    if (!obj.id) return;
+    const multi = selectMode && selectedIds.size > 1 && selectedIds.has(obj.id);
+    const idsToEdit = multi ? new Set(selectedIds) : new Set([obj.id]);
+    applyObjectEditMode(idsToEdit, obj.id);
+  });
 
   const actionDelete = document.createElement('button');
   actionDelete.className = 'obj-action-btn';
@@ -6785,6 +6886,7 @@ function createObjectRow(obj, isNew, options) {
     }
   });
 
+  menuSingle.appendChild(actionEdit);
   menuSingle.appendChild(actionDelete);
   menuSingle.appendChild(actionMove);
   menuSingle.appendChild(actionExport);
@@ -6794,6 +6896,18 @@ function createObjectRow(obj, isNew, options) {
 
   const menuBulk = document.createElement('div');
   menuBulk.className = 'obj-actions-menu obj-actions-menu-bulk';
+
+  const actionBulkEdit = document.createElement('button');
+  actionBulkEdit.className = 'obj-action-btn';
+  actionBulkEdit.type = 'button';
+  actionBulkEdit.setAttribute('role', 'menuitem');
+  actionBulkEdit.textContent = 'Edit all';
+  actionBulkEdit.addEventListener('click', e => {
+    e.stopPropagation();
+    closeDropdown();
+    if (!selectedIds.size) return;
+    applyObjectEditMode(new Set(selectedIds), obj.id);
+  });
 
   const actionBulkDelete = document.createElement('button');
   actionBulkDelete.className = 'obj-action-btn';
@@ -6817,6 +6931,7 @@ function createObjectRow(obj, isNew, options) {
     handleMoveSelectedObjects();
   });
 
+  menuBulk.appendChild(actionBulkEdit);
   menuBulk.appendChild(actionBulkDelete);
   menuBulk.appendChild(actionBulkMove);
 
@@ -7158,68 +7273,9 @@ function createObjectRow(obj, isNew, options) {
       cancelEditingMode(true);
       return;
     }
-    var prevIdsForPresence =
-      editingObjectIds && editingObjectIds.size
-        ? Array.from(editingObjectIds)
-        : editingObjectId != null
-          ? [editingObjectId]
-          : [];
-    prevIdsForPresence.forEach(function(oid) {
-      broadcastViewEditingEnd(oid);
-    });
-    /* Restore previous row’s text so its doppelganger doesn’t stay */
-    restoreEditingRowsOnCancel();
     const multi = selectMode && selectedIds.size > 1 && selectedIds.has(obj.id);
     const idsToEdit = multi ? new Set(selectedIds) : new Set([obj.id]);
-    originalEditTextForCancelMap = {};
-    editingObjectTextMap = {};
-    /* Read each row's own text from that row's DOM so every object keeps its own doppelganger. */
-    [feedInner, secondaryFeedInner].forEach(fi => {
-      if (!fi) return;
-      fi.querySelectorAll('.obj').forEach(row => {
-        const id = row.dataset.id != null ? Number(row.dataset.id) : null;
-        if (id == null || !idsToEdit.has(id)) return;
-        const textEl = row.querySelector('.obj-text');
-        let raw = (textEl && textEl.textContent) ? textEl.textContent : '';
-        const badge = textEl && textEl.querySelector('.obj-remote-edit-badge');
-        if (badge && badge.textContent) raw = raw.slice(0, -badge.textContent.length);
-        originalEditTextForCancelMap[id] = raw;
-        editingObjectTextMap[id] = raw;
-      });
-    });
-    editingObjectIds = idsToEdit;
-    const primaryId = pickMultiEditPrimaryId(idsToEdit, obj.id, editingObjectTextMap);
-    editingObjectId = primaryId;
-    const primaryText =
-      editingObjectTextMap[primaryId] != null ? String(editingObjectTextMap[primaryId]) : '';
-    input.value = primaryText;
-    var len = input.value.length;
-    input.selectionStart = len;
-    input.selectionEnd = len;
-    originalEditTextForCancel = primaryText;
-    editTypingUndoStack = [primaryText];
-    editTypingRedoStack = [];
-    modeState.editing.active = true;
-    modeState.editing.primaryId = primaryId;
-    modeState.editing.ids = idsToEdit;
-    currentMode = Modes.EDIT;
-    document.body.dataset.mode = Modes.EDIT;
-    if (editTypingCommitTimer) {
-      clearTimeout(editTypingCommitTimer);
-      editTypingCommitTimer = null;
-    }
-    try { localStorage.setItem(WAS_EDITING_KEY, '1'); } catch (_) {}
-    input.placeholder = idsToEdit.size > 1 ? 'Editing ' + idsToEdit.size + ' objects…' : 'Editing object…';
-    autoResize();
-    sendBtn.disabled = false;
-    updateClearInputBtn();
-    saveInputGlobal();
-    updateEditingRowHighlight();
-    updateEditingRowFromInput();
-    focusMainInput();
-    requestAnimationFrame(updateEditingRowFromInput);
-    broadcastComposerClear();
-    broadcastDraft(input.value);
+    applyObjectEditMode(idsToEdit, obj.id);
   });
 
   const contentWrap = document.createElement('div');
@@ -9424,27 +9480,42 @@ async function copyUserId() {
   }
 }
 
-/** Signed-in entry text save: try filters that match typical RLS (user_id + channel, then fallbacks). */
+/** Signed-in entry text save: try filters that match typical RLS (shared views vs private main, etc.). */
 async function tryUpdateEntryTextRest(entryId, textValue, rowChannel) {
   if (!currentUser || !sb || !sb.from) return false;
   const uid = currentUser.id;
   const id = entryId;
   const tv = String(textValue != null ? textValue : '');
   const ch = String(rowChannel || currentChannel || currentView || 'main');
-  const builders = [
-    function() {
-      return sb.from(OBJECTS_TABLE).update({ text: tv }).eq('id', id).eq('user_id', uid).eq('channel', ch).select('id');
-    },
-    function() {
-      return sb.from(OBJECTS_TABLE).update({ text: tv }).eq('id', id).eq('channel', ch).select('id');
-    },
-    function() {
-      return sb.from(OBJECTS_TABLE).update({ text: tv }).eq('id', id).eq('user_id', uid).select('id');
-    },
-    function() {
-      return sb.from(OBJECTS_TABLE).update({ text: tv }).eq('id', id).select('id');
-    },
-  ];
+  var builders;
+  if (isChannelViewCollaborative(ch)) {
+    builders = [
+      function() {
+        return sb.from(OBJECTS_TABLE).update({ text: tv }).eq('id', id).eq('channel', ch).select('id');
+      },
+      function() {
+        return sb.from(OBJECTS_TABLE).update({ text: tv }).eq('id', id).eq('user_id', uid).eq('channel', ch).select('id');
+      },
+      function() {
+        return sb.from(OBJECTS_TABLE).update({ text: tv }).eq('id', id).select('id');
+      },
+    ];
+  } else {
+    builders = [
+      function() {
+        return sb.from(OBJECTS_TABLE).update({ text: tv }).eq('id', id).eq('user_id', uid).eq('channel', ch).select('id');
+      },
+      function() {
+        return sb.from(OBJECTS_TABLE).update({ text: tv }).eq('id', id).eq('channel', ch).select('id');
+      },
+      function() {
+        return sb.from(OBJECTS_TABLE).update({ text: tv }).eq('id', id).eq('user_id', uid).select('id');
+      },
+      function() {
+        return sb.from(OBJECTS_TABLE).update({ text: tv }).eq('id', id).select('id');
+      },
+    ];
+  }
   for (var bi = 0; bi < builders.length; bi++) {
     var res = await builders[bi]();
     if (!res.error && res.data && res.data.length) return true;
@@ -9564,6 +9635,25 @@ async function sendText(text, options) {
         return;
       }
       if (list) befores.push(...list);
+    }
+    /* Channel label out of sync with DB: still load rows you own (matches typical RLS). */
+    if (befores.length === 0 && currentUser && currentUser.id) {
+      if (idsToSave.length === 1) {
+        const { data: fb, error: fbErr } = await sb
+          .from(OBJECTS_TABLE)
+          .select('id, created_at, text, channel, user_id, author_name')
+          .eq('id', idsToSave[0])
+          .eq('user_id', currentUser.id)
+          .maybeSingle();
+        if (!fbErr && fb) befores.push(fb);
+      } else {
+        const { data: fl, error: flErr } = await sb
+          .from(OBJECTS_TABLE)
+          .select('id, created_at, text, channel, user_id, author_name')
+          .in('id', idsToSave)
+          .eq('user_id', currentUser.id);
+        if (!flErr && fl && fl.length) befores.push(...fl);
+      }
     }
     if (befores.length === 0) {
       input.disabled = false;

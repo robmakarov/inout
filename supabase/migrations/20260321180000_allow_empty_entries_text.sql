@@ -1,5 +1,6 @@
 -- INOUT: allow empty `entries.text` (clear object body) and remove common DB blocks.
--- Apply in Supabase Dashboard → SQL → New query → Run, or: supabase db push
+-- Apply order: see ../README.md (run 211800, then 212000, then 212100).
+-- Supabase Dashboard → SQL → New query → Run, or: supabase db push
 --
 -- If edits still fail, inspect the RPC (section 3) and remove any trim/length guard.
 
