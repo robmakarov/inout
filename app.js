@@ -168,6 +168,7 @@ const customCalcInputEl = document.getElementById('custom-calc-input');
 const customCalcOutputEl = document.getElementById('custom-calc-output');
 const secretControlsBackdrop = document.getElementById('secret-controls-backdrop');
 const secretControlsCloseBtn = document.getElementById('secret-controls-close');
+const secretTogglePinnedRail = document.getElementById('secret-toggle-pinned-rail');
 const secretToggleKbCalc = document.getElementById('secret-toggle-kbcalc');
 const secretToggleGrips = document.getElementById('secret-toggle-grips');
 const secretToggleLayout = document.getElementById('secret-toggle-layout');
@@ -193,6 +194,9 @@ const deleteSelectedBtn = document.getElementById('delete-selected');
 const moveSelectedBtn = document.getElementById('move-selected');
 const moveTargetSelect = document.getElementById('move-target');
 const exportTabBtn   = document.getElementById('export-tab');
+const exportJsonTabBtn = document.getElementById('export-json-tab');
+const importTextTabBtn = document.getElementById('import-text-tab');
+const importTextFileInput = document.getElementById('import-text-file-input');
 const addMembersBtn  = document.getElementById('add-members-btn');
 const addMembersBackdrop = document.getElementById('add-members-modal-backdrop');
 const addMembersChannelEl = document.getElementById('add-members-channel');
@@ -242,6 +246,7 @@ let views = [];
 
 const SECRET_TOGGLES_KEY = 'inout_secret_toggles_v1';
 let secretToggles = {
+  showPinnedRail: false,
   showKbCalc: false,
   showGrips: false,
   enableLayoutEdit: false,
@@ -253,6 +258,7 @@ function loadSecretToggles() {
     if (!raw) return;
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return;
+    secretToggles.showPinnedRail = !!parsed.showPinnedRail;
     secretToggles.showKbCalc = !!parsed.showKbCalc;
     secretToggles.showGrips = !!parsed.showGrips;
     secretToggles.enableLayoutEdit = !!parsed.enableLayoutEdit;
@@ -265,6 +271,7 @@ function saveSecretToggles() {
 
 function applySecretToggles() {
   if (document.body) {
+    document.body.classList.toggle('secret-show-pinned-rail', !!secretToggles.showPinnedRail);
     document.body.classList.toggle('secret-show-kbcalc', !!secretToggles.showKbCalc);
     document.body.classList.toggle('secret-show-grips', !!secretToggles.showGrips);
   }
@@ -282,10 +289,14 @@ function applySecretToggles() {
 
 function openSecretControls() {
   if (!secretControlsBackdrop) return;
+  if (secretTogglePinnedRail) secretTogglePinnedRail.checked = !!secretToggles.showPinnedRail;
   if (secretToggleKbCalc) secretToggleKbCalc.checked = !!secretToggles.showKbCalc;
   if (secretToggleGrips) secretToggleGrips.checked = !!secretToggles.showGrips;
   if (secretToggleLayout) secretToggleLayout.checked = !!secretToggles.enableLayoutEdit;
   secretControlsBackdrop.setAttribute('aria-hidden', 'false');
+  if (typeof INOUT_FOLDER_SYNC !== 'undefined' && INOUT_FOLDER_SYNC.refreshStatus) {
+    INOUT_FOLDER_SYNC.refreshStatus();
+  }
 }
 
 function closeSecretControls() {
@@ -305,6 +316,13 @@ function closeSecretControls() {
 (function setupSecretControls() {
   loadSecretToggles();
   applySecretToggles();
+  if (secretTogglePinnedRail) {
+    secretTogglePinnedRail.addEventListener('change', function() {
+      secretToggles.showPinnedRail = !!secretTogglePinnedRail.checked;
+      saveSecretToggles();
+      applySecretToggles();
+    });
+  }
   if (secretToggleKbCalc) {
     secretToggleKbCalc.addEventListener('change', function() {
       secretToggles.showKbCalc = !!secretToggleKbCalc.checked;
@@ -334,9 +352,10 @@ function closeSecretControls() {
   }
   if (secretControlsResetBtn) {
     secretControlsResetBtn.addEventListener('click', function() {
-      secretToggles = { showKbCalc: false, showGrips: false, enableLayoutEdit: false };
+      secretToggles = { showPinnedRail: false, showKbCalc: false, showGrips: false, enableLayoutEdit: false };
       saveSecretToggles();
       applySecretToggles();
+      if (secretTogglePinnedRail) secretTogglePinnedRail.checked = false;
       if (secretToggleKbCalc) secretToggleKbCalc.checked = false;
       if (secretToggleGrips) secretToggleGrips.checked = false;
       if (secretToggleLayout) secretToggleLayout.checked = false;
@@ -1454,42 +1473,52 @@ async function getLocalObjectByViewMap() {
 }
 
 async function saveLocalObjectByViewMap(objByView) {
-  if (usesIndexedDbForObjectData()) {
+  try {
+    if (usesIndexedDbForObjectData()) {
+      if (typeof indexedDB === 'undefined') {
+        saveLocalObjectsToLocalStorage(objByView);
+        return;
+      }
+      try {
+        const store = getActiveLocalStore();
+        if (store && store.init && store.setByViewMap) {
+          await store.init();
+          await store.setByViewMap(objByView || {});
+          return;
+        }
+      } catch (e) {
+        console.error('saveLocalObjectByViewMap', e);
+      }
+      saveLocalObjectsToLocalStorage(objByView);
+      return;
+    }
+    if (currentUser && currentUser.id) {
+      saveLocalObjectsToLocalStorage(objByView);
+      return;
+    }
     if (typeof indexedDB === 'undefined') {
       saveLocalObjectsToLocalStorage(objByView);
       return;
     }
     try {
-      const store = getActiveLocalStore();
-      if (store && store.init && store.setByViewMap) {
-        await store.init();
-        await store.setByViewMap(objByView || {});
+      if (typeof INOUT_LOCAL_DB !== 'undefined' && INOUT_LOCAL_DB.init && INOUT_LOCAL_DB.setByViewMap) {
+        await INOUT_LOCAL_DB.init();
+        await INOUT_LOCAL_DB.setByViewMap(objByView || {});
         return;
       }
     } catch (e) {
       console.error('saveLocalObjectByViewMap', e);
     }
     saveLocalObjectsToLocalStorage(objByView);
-    return;
+  } finally {
+    try {
+      if (typeof usesIndexedDbForObjectData === 'function' && usesIndexedDbForObjectData() &&
+          typeof INOUT_FOLDER_SYNC !== 'undefined' && INOUT_FOLDER_SYNC &&
+          typeof INOUT_FOLDER_SYNC.scheduleWrite === 'function') {
+        INOUT_FOLDER_SYNC.scheduleWrite();
+      }
+    } catch (_) {}
   }
-  if (currentUser && currentUser.id) {
-    saveLocalObjectsToLocalStorage(objByView);
-    return;
-  }
-  if (typeof indexedDB === 'undefined') {
-    saveLocalObjectsToLocalStorage(objByView);
-    return;
-  }
-  try {
-    if (typeof INOUT_LOCAL_DB !== 'undefined' && INOUT_LOCAL_DB.init && INOUT_LOCAL_DB.setByViewMap) {
-      await INOUT_LOCAL_DB.init();
-      await INOUT_LOCAL_DB.setByViewMap(objByView || {});
-      return;
-    }
-  } catch (e) {
-    console.error('saveLocalObjectByViewMap', e);
-  }
-  saveLocalObjectsToLocalStorage(objByView);
 }
 
 async function upsertLocalObjectForCurrentView(obj) {
@@ -3538,8 +3567,9 @@ function subscribeViewRealtime() {
       payload => {
         try {
           const row = payload.new || payload.old || {};
-          if (!row || !row.channel || !row.config) return;
-          const cfg = row.config || {};
+          if (!row || !row.channel) return;
+          const cfg = normalizeViewConfig(row.config);
+          if (!cfg) return;
           applyRemoteViewTitle(row.channel, cfg.title);
           if (row.channel !== currentChannel) return;
           if (suppressNextViewApply) { suppressNextViewApply = false; return; }
@@ -4589,6 +4619,16 @@ function setupDndBroadcastChannel() {
           remoteDnd = null;
           hideRemoteDndLines();
         }
+      } else if (data.type === 'order_sync') {
+        if (data.from === myId) return;
+        if (String(data.channel) !== String(currentChannel)) return;
+        if (document.body && document.body.classList.contains('dnd-active')) return;
+        var syncOrder = Array.isArray(data.newOrder) ? data.newOrder.map(function(x) { return Number(x); }).filter(function(x) { return Number.isFinite(x); }) : [];
+        if (!syncOrder.length) return;
+        suppressOrderApplyUntil = Date.now() + 600;
+        currentObjectOrder = syncOrder;
+        saveOrderToLocal();
+        applyObjectOrderToDOM();
       } else if (data.type === 'dnd_dropped') {
         if (data.from === myId) return;
         if (String(data.channel) !== String(currentChannel)) return;
@@ -4852,8 +4892,25 @@ function broadcastDndEnd() {
   });
 }
 
+function computeReorderMovedIdsForBroadcast(oldOrder, newOrder) {
+  const oldArr = Array.isArray(oldOrder) ? oldOrder : [];
+  const newArr = Array.isArray(newOrder) ? newOrder : [];
+  if (!newArr.length) return [];
+  if (!oldArr.length) return newArr.slice();
+  if (oldArr.length !== newArr.length) return newArr.slice();
+  const touched = new Set();
+  for (let i = 0; i < newArr.length; i++) {
+    if (oldArr[i] !== newArr[i]) {
+      touched.add(newArr[i]);
+      if (oldArr[i] != null) touched.add(oldArr[i]);
+    }
+  }
+  return touched.size ? Array.from(touched).filter(id => Number.isFinite(Number(id))).map(Number) : newArr.slice();
+}
+
 function broadcastDndDropped(newOrder, movedIds) {
-  if (!dndBroadcastChannel || !dndChannelReady || !newOrder || !movedIds.length) return;
+  if (!dndBroadcastChannel || !dndChannelReady || !newOrder || !newOrder.length) return;
+  const mids = Array.isArray(movedIds) ? movedIds.map(x => Number(x)).filter(x => Number.isFinite(x)) : [];
   dndBroadcastChannel.send({
     type: 'broadcast',
     event: 'dnd',
@@ -4862,9 +4919,42 @@ function broadcastDndDropped(newOrder, movedIds) {
       from: myId,
       channel: String(currentChannel),
       newOrder: newOrder,
-      movedIds: movedIds
+      movedIds: mids.length ? mids : computeReorderMovedIdsForBroadcast(savedOrderBeforeDrag, newOrder),
     }
   });
+}
+
+/** After DB save / any order change — keeps peers in sync when postgres realtime misses updates. */
+function broadcastOrderSyncFromSave() {
+  if (!currentObjectOrder.length) return;
+  if (!shouldUseServerForObjects() || !currentUser || !currentChannel) return;
+  if (!dndBroadcastChannel || !dndChannelReady) return;
+  try {
+    dndBroadcastChannel.send({
+      type: 'broadcast',
+      event: 'dnd',
+      payload: {
+        type: 'order_sync',
+        from: myId,
+        channel: String(currentChannel),
+        newOrder: currentObjectOrder.slice(),
+      },
+    });
+  } catch (_) {}
+}
+
+function maybeBroadcastOrderAfterReorder(savedBefore, movedIds) {
+  if (!dndBroadcastChannel || !dndChannelReady || !currentObjectOrder.length) return;
+  const before = Array.isArray(savedBefore) ? savedBefore : [];
+  const orderChanged =
+    before.length !== currentObjectOrder.length ||
+    currentObjectOrder.some((id, i) => before[i] !== id);
+  if (!orderChanged) return;
+  const mids = Array.isArray(movedIds) ? movedIds.map(x => Number(x)).filter(x => Number.isFinite(x)) : [];
+  broadcastDndDropped(
+    currentObjectOrder.slice(),
+    mids.length ? mids : computeReorderMovedIdsForBroadcast(before, currentObjectOrder)
+  );
 }
 
 function showDraftBubble(text) {
@@ -4888,6 +4978,126 @@ function showClipboardBubble(text) {
   clipboardBubbleTxt.textContent = preview;
   applyClipboardBubbleDeviceStyle();
   clipboardBubble.style.display = 'flex';
+}
+
+function isTextLikeFile(file) {
+  if (!file || !file.name) return false;
+  var n = String(file.name).toLowerCase();
+  return file.type === 'text/plain' || n.endsWith('.txt') || n.endsWith('.md');
+}
+
+function readFileAsText(file) {
+  return new Promise(function(resolve, reject) {
+    var r = new FileReader();
+    r.onload = function() { resolve(String(r.result != null ? r.result : '')); };
+    r.onerror = function() { reject(r.error); };
+    r.readAsText(file);
+  });
+}
+
+/** Dropped .txt / plain text — show above composer like clipboard (full text on Paste). */
+function showTextFileBubble(text, filename) {
+  if (!clipboardBubble || !clipboardBubbleTxt) return;
+  var raw = String(text == null ? '' : text);
+  if (!raw.trim()) {
+    toast('File is empty.');
+    return;
+  }
+  latestClipboardText = raw;
+  var head = filename ? ('📄 ' + filename + '\n') : '📄 ';
+  var body = raw.length > 220 ? raw.slice(0, 220) + '…' : raw;
+  clipboardBubbleTxt.textContent = head + body;
+  if (clipboardBubbleDeviceEl) {
+    clipboardBubbleDeviceEl.textContent = '📄';
+    clipboardBubbleDeviceEl.setAttribute('title', 'Text file — Paste puts full contents into input');
+  }
+  clipboardBubble.style.display = 'flex';
+}
+
+function isFileDragDataTransfer(dt) {
+  if (!dt || !dt.types) return false;
+  try {
+    if (typeof dt.types.contains === 'function' && dt.types.contains('Files')) return true;
+  } catch (_) {}
+  try {
+    for (var i = 0; i < dt.types.length; i++) {
+      if (dt.types[i] === 'Files') return true;
+    }
+  } catch (_) {}
+  return false;
+}
+
+var TEXT_IMPORT_MAX_LINES = 400;
+
+async function importPlainTextLinesAsObjects(text) {
+  var lines = String(text || '').split(/\r?\n/).map(function(l) { return l.trim(); }).filter(Boolean);
+  if (!lines.length) {
+    toast('No non-empty lines to import.');
+    return;
+  }
+  var use = lines.slice(0, TEXT_IMPORT_MAX_LINES);
+  for (var i = 0; i < use.length; i++) {
+    await sendText(use[i]);
+  }
+  if (lines.length > TEXT_IMPORT_MAX_LINES) {
+    toast('Imported ' + TEXT_IMPORT_MAX_LINES + ' lines (cap).');
+  } else {
+    toast('Imported ' + use.length + ' line(s) as objects.');
+  }
+}
+
+function setupTextFileImportDropTargets() {
+  function onDragOverFeed(e) {
+    if (!isFileDragDataTransfer(e.dataTransfer)) return;
+    e.preventDefault();
+    try { e.dataTransfer.dropEffect = 'copy'; } catch (_) {}
+  }
+  function onDropFeed(e) {
+    if (!isFileDragDataTransfer(e.dataTransfer)) return;
+    var f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!f || !isTextLikeFile(f)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    readFileAsText(f)
+      .then(function(t) { return importPlainTextLinesAsObjects(t); })
+      .catch(function(err) {
+        console.error(err);
+        toast('Could not read file.');
+      });
+  }
+  if (feedEl) {
+    feedEl.addEventListener('dragover', onDragOverFeed);
+    feedEl.addEventListener('drop', onDropFeed, true);
+  }
+  var inputArea = document.getElementById('input-area');
+  if (inputArea) {
+    inputArea.addEventListener('dragover', function(e) {
+      if (!isFileDragDataTransfer(e.dataTransfer)) return;
+      var t = e.target;
+      if (t && t.closest && t.closest('.composer-input-wrap')) {
+        e.preventDefault();
+        try { e.dataTransfer.dropEffect = 'copy'; } catch (_) {}
+      }
+    });
+    inputArea.addEventListener('drop', function(e) {
+      if (!isFileDragDataTransfer(e.dataTransfer)) return;
+      var t = e.target;
+      if (!t || !t.closest || !t.closest('.composer-input-wrap')) return;
+      var f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!f || !isTextLikeFile(f)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      readFileAsText(f)
+        .then(function(text) {
+          showTextFileBubble(text, f.name);
+          toast('Text file — use Paste to put it in the input.');
+        })
+        .catch(function(err) {
+          console.error(err);
+          toast('Could not read file.');
+        });
+    }, true);
+  }
 }
 
 function hideClipboardBubble() {
@@ -5287,14 +5497,14 @@ async function loadFieldPrefsForCurrentChannel() {
         .eq('channel', currentChannel)
         .limit(1)
         .maybeSingle();
-      if (!error && data && data.config) {
-        const cfg = data.config || {};
-        applyRemoteViewTitle(currentChannel, cfg.title);
+      const cfgPref = !error && data ? normalizeViewConfig(data.config) : null;
+      if (cfgPref) {
+        applyRemoteViewTitle(currentChannel, cfgPref.title);
         fieldPrefs = {
-          showTime: typeof cfg.showTime === 'boolean' ? cfg.showTime : defTime,
-          showAuthor: typeof cfg.showAuthor === 'boolean' ? cfg.showAuthor : defAuthor,
-          showLabels: typeof cfg.showLabels === 'boolean' ? cfg.showLabels : true,
-          viewMode: (cfg.viewMode === 'table' || cfg.viewMode === 'feed') ? cfg.viewMode : 'feed',
+          showTime: typeof cfgPref.showTime === 'boolean' ? cfgPref.showTime : defTime,
+          showAuthor: typeof cfgPref.showAuthor === 'boolean' ? cfgPref.showAuthor : defAuthor,
+          showLabels: typeof cfgPref.showLabels === 'boolean' ? cfgPref.showLabels : true,
+          viewMode: (cfgPref.viewMode === 'table' || cfgPref.viewMode === 'feed') ? cfgPref.viewMode : 'feed',
         };
         try {
           const raw = localStorage.getItem(FIELD_PREFS_KEY);
@@ -5489,9 +5699,7 @@ function setupTouchDragHandlers() {
     recomputeOrderFromDOM(container);
     applyObjectOrderToDOM();
     saveObjectOrderForCurrentView();
-    if (droppedMovedIdsTouch.length && dndBroadcastChannel && dndChannelReady) {
-      broadcastDndDropped(currentObjectOrder.slice(), droppedMovedIdsTouch);
-    }
+    maybeBroadcastOrderAfterReorder(savedOrderBeforeDrag, droppedMovedIdsTouch);
     lastReorderTarget = null;
     applyFieldPrefsToObjects();
     r.style.pointerEvents = 'none';
@@ -5790,9 +5998,7 @@ function createObjectRow(obj, isNew, options) {
           recomputeOrderFromDOM(container);
           applyObjectOrderToDOM();
           saveObjectOrderForCurrentView();
-          if (droppedMovedIds.length && dndBroadcastChannel && dndChannelReady) {
-            broadcastDndDropped(currentObjectOrder.slice(), droppedMovedIds);
-          }
+          maybeBroadcastOrderAfterReorder(savedOrderBeforeDrag, droppedMovedIds);
         }
         applyFieldPrefsToObjects();
         row.style.pointerEvents = 'none';
@@ -5857,6 +6063,7 @@ function createObjectRow(obj, isNew, options) {
       });
       row.classList.add('dragging');
       if (document.body) document.body.classList.add('dnd-active');
+      savedOrderBeforeDrag = currentObjectOrder.slice();
       hideRemoteDndLines();
       broadcastDndStart();
       /* origin line shown on first touchmove, not here, so it doesn't appear on long-press alone */
@@ -5920,12 +6127,24 @@ function createObjectRow(obj, isNew, options) {
   actionExport.className = 'obj-action-btn';
   actionExport.type = 'button';
   actionExport.setAttribute('role', 'menuitem');
-  actionExport.textContent = 'Exp';
+  actionExport.textContent = 'Txt';
   actionExport.addEventListener('click', e => {
     e.stopPropagation();
     closeDropdown();
     if (!obj.id) return;
     exportSingleObject(obj.id);
+  });
+
+  const actionExportJson = document.createElement('button');
+  actionExportJson.className = 'obj-action-btn';
+  actionExportJson.type = 'button';
+  actionExportJson.setAttribute('role', 'menuitem');
+  actionExportJson.textContent = 'JSON';
+  actionExportJson.addEventListener('click', e => {
+    e.stopPropagation();
+    closeDropdown();
+    if (!obj.id) return;
+    exportSingleObjectJson(obj.id);
   });
 
   const actionCopy = document.createElement('button');
@@ -5970,6 +6189,7 @@ function createObjectRow(obj, isNew, options) {
   dropdown.appendChild(actionDelete);
   dropdown.appendChild(actionMove);
   dropdown.appendChild(actionExport);
+  dropdown.appendChild(actionExportJson);
   dropdown.appendChild(actionCopy);
   dropdown.appendChild(actionCut);
   actions.appendChild(trigger);
@@ -6600,6 +6820,19 @@ function saveChannelsList() {
   } catch (_) {}
 }
 
+function normalizeViewConfig(raw) {
+  if (raw == null) return null;
+  if (typeof raw === 'string') {
+    try {
+      const o = JSON.parse(raw);
+      return o && typeof o === 'object' ? o : null;
+    } catch (_) {
+      return null;
+    }
+  }
+  return typeof raw === 'object' ? raw : null;
+}
+
 async function loadObjectOrderForCurrentChannel() {
   currentObjectOrder = [];
   if (!shouldUseServerForObjects() || !sb) {
@@ -6614,8 +6847,8 @@ async function loadObjectOrderForCurrentChannel() {
       .eq('channel', currentChannel)
       .limit(1)
       .maybeSingle();
-    if (!error && data && data.config) {
-      const cfg = data.config || {};
+    const cfg = !error && data ? normalizeViewConfig(data.config) : null;
+    if (cfg) {
       applyRemoteViewTitle(currentChannel, cfg.title);
       const orderArr = Array.isArray(cfg.order) ? cfg.order : [];
       currentObjectOrder = orderArr
@@ -6695,6 +6928,7 @@ async function saveObjectOrderForCurrentView() {
           { onConflict: 'channel' }
         );
       if (error) console.error(error);
+      else broadcastOrderSyncFromSave();
     } catch (e) { console.error(e); }
   }
 }
@@ -8171,6 +8405,7 @@ if (composerSlotsContainer) {
   renderComposerSlots();
 }
 setupInputAreaDropTarget();
+setupTextFileImportDropTargets();
 attachInputListeners();
 if (typeof initFramesZone === 'function') initFramesZone();
 if (umLayoutSyncChk) {
@@ -8845,21 +9080,63 @@ async function exportSingleObject(id) {
     }
     const d = new Date(data.created_at);
     const timeStr = d.toLocaleString();
-    let line;
+    var line;
     if (data.channel === 'main') {
-      line = `[${timeStr}] ${data.text}`;
+      line = '[' + timeStr + '] ' + data.text;
     } else {
       const author = data.author_name
         ? String(data.author_name)
         : (data.user_id ? String(data.user_id) : 'unknown');
-      line = `[${timeStr}] ${author}: ${data.text}`;
+      line = '[' + timeStr + '] ' + author + ': ' + data.text;
     }
     const blob = new Blob([line + '\n'], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     const name = data.channel === 'main' ? 'feed' : data.channel;
-    a.download = `inout-${name}-msg-${id}.txt`;
+    a.download = 'inout-' + name + '-msg-' + id + '.txt';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error(e);
+    toast('Failed to export — ' + humanError(e.message));
+  }
+}
+
+async function exportSingleObjectJson(id) {
+  if (!currentUser || !id) return;
+  try {
+    const { data, error } = await sb
+      .from('entries')
+      .select('created_at,text,channel,user_id,author_name')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) {
+      console.error(error);
+      toast('Failed to export — ' + humanError(error.message));
+      return;
+    }
+    if (!data) {
+      toast('Nothing to export.');
+      return;
+    }
+    const exportObj = {
+      id: id,
+      created_at: data.created_at,
+      channel: data.channel,
+      text: data.text,
+      user_id: data.user_id,
+      author_name: data.author_name,
+      exportedAt: new Date().toISOString(),
+    };
+    const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const name = data.channel === 'main' ? 'feed' : data.channel;
+    a.download = 'inout-' + name + '-msg-' + id + '.json';
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -8935,21 +9212,20 @@ if (exportTabBtn) {
         const d = new Date(row.created_at);
         const timeStr = d.toLocaleString();
         if (row.channel === 'main') {
-          return `[${timeStr}] ${row.text}`;
+          return '[' + timeStr + '] ' + row.text;
         }
         const author = row.author_name
           ? String(row.author_name)
           : (row.user_id ? String(row.user_id) : 'unknown');
-        return `[${timeStr}] ${author}: ${row.text}`;
+        return '[' + timeStr + '] ' + author + ': ' + row.text;
       });
-
       const content = lines.join('\n');
       const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       const name = currentChannel === 'main' ? 'feed' : currentChannel;
       a.href = url;
-      a.download = `inout-${name}.txt`;
+      a.download = 'inout-' + name + '.txt';
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -8958,6 +9234,101 @@ if (exportTabBtn) {
       console.error(e);
       toast('Failed to export — ' + humanError(e.message));
     }
+  });
+}
+
+if (exportJsonTabBtn) {
+  exportJsonTabBtn.addEventListener('click', async () => {
+    if (!currentUser) {
+      toast('Sign in to export.');
+      return;
+    }
+    try {
+      const boxes = feedInner.querySelectorAll('.obj-select:checked');
+      let orderedIds = [];
+      if (boxes.length) {
+        const selectedIds = new Set(
+          Array.from(boxes)
+            .map(b => { const row = b.closest('.obj'); return row && row.dataset.id ? Number(row.dataset.id) : null; })
+            .filter(id => typeof id === 'number')
+        );
+        orderedIds = Array.from(feedInner.querySelectorAll('.obj'))
+          .map(row => row.dataset.id ? Number(row.dataset.id) : null)
+          .filter(id => Number.isFinite(id) && selectedIds.has(id));
+      } else {
+        orderedIds = currentObjectOrder.length
+          ? currentObjectOrder.slice()
+          : Array.from(feedInner.querySelectorAll('.obj'))
+              .map(row => row.dataset.id ? Number(row.dataset.id) : null)
+              .filter(id => Number.isFinite(id));
+      }
+      let query = sb
+        .from(OBJECTS_TABLE)
+        .select('id,created_at,text,channel,user_id,author_name')
+        .limit(1000);
+      if (orderedIds.length) {
+        query = query.in('id', orderedIds);
+      } else {
+        query = query.eq('channel', currentChannel);
+        if (currentChannel === 'main') {
+          query = query.eq('user_id', currentUser.id);
+        }
+      }
+      const { data, error } = await query;
+      if (error) {
+        console.error(error);
+        toast('Failed to export — ' + humanError(error.message));
+        return;
+      }
+      const rows = data || [];
+      if (!rows.length) {
+        toast('Nothing to export.');
+        return;
+      }
+      const byId = new Map(rows.map(r => [r.id, r]));
+      const ordered = orderedIds.map(id => byId.get(id)).filter(Boolean);
+      byId.forEach((row, id) => { if (!orderedIds.includes(id)) ordered.push(row); });
+      const exportBundle = {
+        version: 1,
+        channel: currentChannel,
+        exportedAt: new Date().toISOString(),
+        entries: ordered,
+      };
+      const blob = new Blob([JSON.stringify(exportBundle, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const name = currentChannel === 'main' ? 'feed' : currentChannel;
+      a.href = url;
+      a.download = 'inout-' + name + '.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      toast('Failed to export — ' + humanError(e.message));
+    }
+  });
+}
+
+if (importTextTabBtn && importTextFileInput) {
+  importTextTabBtn.addEventListener('click', () => {
+    try { importTextFileInput.click(); } catch (_) {}
+  });
+  importTextFileInput.addEventListener('change', function() {
+    var f = this.files && this.files[0];
+    try { this.value = ''; } catch (_) {}
+    if (!f) return;
+    if (!isTextLikeFile(f)) {
+      toast('Choose a .txt or plain text file.');
+      return;
+    }
+    readFileAsText(f)
+      .then(function(t) { return importPlainTextLinesAsObjects(t); })
+      .catch(function(err) {
+        console.error(err);
+        toast('Could not read file.');
+      });
   });
 }
 
@@ -9499,6 +9870,12 @@ function toast(msg, dur = 2800) {
   toastTimer = setTimeout(() => toastEl.classList.remove('show'), dur);
   if (s.toLowerCase().includes('failed') || s.toLowerCase().includes('error')) logError(s);
 }
+
+(function initFolderSyncBridge() {
+  if (typeof INOUT_FOLDER_SYNC === 'undefined' || !INOUT_FOLDER_SYNC) return;
+  INOUT_FOLDER_SYNC.wireSecretPanel(function (m) { toast(m); });
+  INOUT_FOLDER_SYNC.initRestore().catch(function () {});
+})();
 
 function humanError(message) {
   if (!message) return 'Something went wrong.';

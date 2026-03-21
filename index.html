@@ -102,7 +102,10 @@
               </label>
               <button id="move-selected" class="manage-btn" data-bar-id="move-selected" role="menuitem">Move</button>
             </div>
-            <button id="export-tab" class="manage-btn" data-bar-id="export-tab" role="menuitem">Export</button>
+            <button id="export-tab" class="manage-btn" data-bar-id="export-tab" role="menuitem" type="button">Export .txt</button>
+            <button id="export-json-tab" class="manage-btn" data-bar-id="export-json" role="menuitem" type="button">Export JSON</button>
+            <button id="import-text-tab" class="manage-btn" data-bar-id="import-text" role="menuitem" type="button">Import text…</button>
+            <input type="file" id="import-text-file-input" accept=".txt,.md,text/plain" aria-hidden="true" tabindex="-1" style="position:absolute;width:0;height:0;opacity:0;pointer-events:none"/>
             <button id="add-members-btn" class="manage-btn" data-bar-id="add-members" type="button" role="menuitem">Add people</button>
             <div class="manage-subgroup" role="group" aria-label="View options">
               <button id="view-toggle" class="manage-btn" data-bar-id="view-toggle" type="button">View ▾</button>
@@ -408,9 +411,20 @@
       <button id="secret-controls-close" type="button" aria-label="Close secret controls">×</button>
     </div>
     <div class="secret-controls-body">
+      <label class="secret-toggle-row"><input type="checkbox" id="secret-toggle-pinned-rail"> Show pinned rail bar</label>
       <label class="secret-toggle-row"><input type="checkbox" id="secret-toggle-kbcalc"> Show keyboard + calculator UI</label>
       <label class="secret-toggle-row"><input type="checkbox" id="secret-toggle-grips"> Show frame reorder grips</label>
       <label class="secret-toggle-row"><input type="checkbox" id="secret-toggle-layout"> Enable layout edit button</label>
+      <div class="secret-folder-sync-block">
+        <div class="secret-folder-sync-title">Folder sync (local data)</div>
+        <p class="secret-folder-sync-help">Connects the active local database to <code>inout-sync.json</code> in a folder you choose (Chrome/Edge desktop).</p>
+        <p class="secret-folder-sync-status" id="secret-folder-sync-status">Not connected</p>
+        <div class="secret-folder-sync-actions">
+          <button type="button" class="secret-folder-btn" id="secret-folder-choose">Choose folder…</button>
+          <button type="button" class="secret-folder-btn" id="secret-folder-pull">Import from file</button>
+          <button type="button" class="secret-folder-btn" id="secret-folder-disconnect">Disconnect</button>
+        </div>
+      </div>
       <div class="secret-controls-actions">
         <button id="secret-controls-reset" type="button">Reset</button>
       </div>
@@ -480,6 +494,7 @@
 </script>
 <script src="/storage-model.js"></script>
 <script src="/local-store-idb.js"></script>
+<script src="/folder-sync.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

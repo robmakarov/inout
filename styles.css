@@ -134,6 +134,16 @@ header,
 #multiview > #view-pinned-rail{
   flex:0 0 auto;
 }
+/* Pinned rail hidden unless secret toggle enables it */
+body:not(.secret-show-pinned-rail) #view-pinned-rail{
+  display:none !important;
+  width:0 !important;
+  min-width:0 !important;
+  padding:0 !important;
+  margin:0 !important;
+  border:none !important;
+  overflow:hidden !important;
+}
 .multiview-views{
   flex:1 1 0;
   min-width:0;
@@ -2570,6 +2580,52 @@ body:not(.secret-show-kbcalc) #custom-calc{
   cursor:pointer;
 }
 #secret-controls-reset:hover{ background:var(--line); color:var(--text); }
+
+.secret-folder-sync-block{
+  margin-top:14px;
+  padding-top:12px;
+  border-top:1px solid var(--line2);
+}
+.secret-folder-sync-title{
+  font-size:12px;
+  font-weight:600;
+  color:var(--text);
+  margin-bottom:6px;
+}
+.secret-folder-sync-help{
+  font-size:11px;
+  color:var(--dim);
+  line-height:1.35;
+  margin:0 0 8px;
+}
+.secret-folder-sync-help code{
+  font-size:10px;
+  color:var(--soft);
+}
+.secret-folder-sync-status{
+  font-size:11px;
+  color:var(--acc);
+  margin:0 0 10px;
+  word-break:break-word;
+}
+.secret-folder-sync-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}
+.secret-folder-btn{
+  font:inherit;
+  font-size:12px;
+  padding:6px 10px;
+  border-radius:6px;
+  border:1px solid var(--line2);
+  background:var(--bg2);
+  color:var(--text);
+  cursor:pointer;
+}
+.secret-folder-btn:hover{
+  background:var(--line);
+}
 
 /* Reveal frame grips only when secret toggle is on */
 body.secret-show-grips .frame-grip{
