@@ -1995,6 +1995,7 @@ let channelSubs = new Map();
 let membershipRealtimeSub = null;
 let orderSub = null;
 let viewSub  = null;
+var viewRealtimeResubscribeTimer = null;
 let viewEditingChannel = null;
 let composerSyncChannel = null;
 /** @type {Record<string, { objectId: number, authorName: string, ts: number }>} */
@@ -3180,7 +3181,10 @@ function init(done) {
                 }
                 if (!currentUser || !currentChannel || typeof setupDndBroadcastChannel !== 'function') return;
                 /* Brief delay so WebSocket can reconnect (helps web→mobile when mobile was backgrounded) */
-                setTimeout(function() { setupDndBroadcastChannel(); }, 100);
+                setTimeout(function() {
+                  setupDndBroadcastChannel();
+                  if (typeof subscribeViewRealtime === 'function') subscribeViewRealtime();
+                }, 100);
               });
               window.addEventListener('pagehide', function() {
                 if (currentUser && sb && typeof flushPersonalWorkspacePersist === 'function') {
@@ -4055,6 +4059,19 @@ function applyViewsTableConfigToChannel(channel, cfg) {
   }
 }
 
+function scheduleViewRealtimeResubscribe(reason) {
+  if (viewRealtimeResubscribeTimer) clearTimeout(viewRealtimeResubscribeTimer);
+  viewRealtimeResubscribeTimer = setTimeout(function() {
+    viewRealtimeResubscribeTimer = null;
+    if (!currentUser || !sb) return;
+    try {
+      subscribeViewRealtime();
+    } catch (e) {
+      console.error('view realtime resubscribe', e);
+    }
+  }, reason === 'visible' ? 400 : 900);
+}
+
 function subscribeViewRealtime() {
   if (!sb || !sb.channel) return;
   if (viewSub) {
@@ -4104,7 +4121,19 @@ function subscribeViewRealtime() {
         }
       }
     )
-    .subscribe();
+    .subscribe(function(status) {
+      if (status === 'SUBSCRIBED') {
+        if (viewRealtimeResubscribeTimer) {
+          clearTimeout(viewRealtimeResubscribeTimer);
+          viewRealtimeResubscribeTimer = null;
+        }
+        return;
+      }
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        if (typeof console !== 'undefined' && console.warn) console.warn('views-all realtime', status);
+        scheduleViewRealtimeResubscribe(status);
+      }
+    });
   setupWorkspaceUiBroadcast();
 }
 
@@ -7956,10 +7985,7 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
     }
   }
   var revCk = Number(cfg._wsRev);
-  if (Number.isFinite(revCk)) {
-    if (revCk <= lastAppliedWorkspaceRev) return;
-    lastAppliedWorkspaceRev = revCk;
-  }
+  if (Number.isFinite(revCk) && revCk <= lastAppliedWorkspaceRev) return;
   applyingPersonalWorkspaceFromRemote = true;
   try {
   ensureWorkspaceChannelsFromCfg(cfg);
@@ -8061,6 +8087,7 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
     } catch (_) {}
     applyWorkspaceFeedScrollToDom();
   }
+  if (Number.isFinite(revCk) && revCk > lastAppliedWorkspaceRev) lastAppliedWorkspaceRev = revCk;
   } finally {
     applyingPersonalWorkspaceFromRemote = false;
   }

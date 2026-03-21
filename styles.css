@@ -212,7 +212,7 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
   overflow:hidden;
 }
 .visual-feed-stack{
-  flex:1;
+  flex:1 1 0%;
   min-width:0;
   min-height:0;
   display:flex;
@@ -1192,6 +1192,7 @@ header{
 
 /* Live object editing (per view, visible to everyone on this channel) */
 .view-live-editing-bar{
+  flex:0 0 auto;
   flex-shrink:0;
   display:flex;
   flex-wrap:wrap;
@@ -1245,6 +1246,8 @@ header{
   min-height:0;
   min-width:0;
   padding:0;
+  display:flex;
+  flex-direction:column;
   overflow-y:auto;
   overflow-x:hidden;
   -webkit-overflow-scrolling:touch;
@@ -1268,8 +1271,11 @@ header{
   padding:16px;
   display:flex;
   flex-direction:column;
-  justify-content:center;
-  min-height:100%;
+  justify-content:flex-start;
+  flex:1 1 auto;
+  min-height:0;
+  width:100%;
+  box-sizing:border-box;
   gap:0;
 }
 /* Table view: same object params as feed but laid out as table */
