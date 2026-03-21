@@ -2836,6 +2836,15 @@ function reactivateInputMode(opts) {
     updateClearInputBtn();
   }
   updateEditingRowHighlight();
+  if (currentUser && sb && sb.from && getSyncInputPref()) {
+    try {
+      if (inputSaveToDbTimer) {
+        clearTimeout(inputSaveToDbTimer);
+        inputSaveToDbTimer = null;
+      }
+      saveInputToDb();
+    } catch (_) {}
+  }
   focusMainInput();
 }
 
@@ -3189,7 +3198,22 @@ function init(done) {
     } catch (_) {}
     if (typeof done === 'function') done();
   }
-  try { if (localStorage.getItem(WAS_EDITING_KEY)) { try { localStorage.setItem(INPUT_STATE_KEY, ''); localStorage.removeItem(WAS_EDITING_KEY); } catch (_) {} if (input) { input.value = ''; input.placeholder = 'Add object…'; sendBtn.disabled = true; autoResize(); updateClearInputBtn(); } } } catch (_) {}
+  try {
+    var wasEditingFlag = !!localStorage.getItem(WAS_EDITING_KEY);
+    localStorage.removeItem(WAS_EDITING_KEY);
+    if (wasEditingFlag) {
+      try {
+        localStorage.setItem(INPUT_STATE_KEY, '');
+      } catch (_) {}
+      if (input) {
+        input.value = '';
+        input.placeholder = 'Add object…';
+        if (sendBtn) sendBtn.disabled = true;
+        autoResize();
+        updateClearInputBtn();
+      }
+    }
+  } catch (_) {}
   try { loadChannelsList(); } catch (_) {}
   try { loadViewDisplayNames(); } catch (_) {}
   try { loadScrollState(); } catch (_) {}
@@ -4355,6 +4379,8 @@ function mergeInputText(local, remote, localAt, remoteAt) {
 async function saveInputToDb() {
   inputSaveToDbTimer = null;
   if (!currentUser || !sb || !sb.from || !getSyncInputPref()) return;
+  /* Object edit text lives in the composer but must not be written to user_input_state — it would come back after refresh as a fake “still editing” draft. */
+  if (editingObjectId != null) return;
   try {
     var text = input ? (input.value || '') : '';
     await sb.from(USER_INPUT_STATE_TABLE).upsert({
@@ -4368,6 +4394,7 @@ async function saveInputToDb() {
 }
 
 function scheduleSaveInputToDb() {
+  if (editingObjectId != null) return;
   if (inputSaveToDbTimer) clearTimeout(inputSaveToDbTimer);
   if (!currentUser || !getSyncInputPref()) return;
   inputSaveToDbTimer = setTimeout(saveInputToDb, INPUT_SAVE_DEBOUNCE_MS);
@@ -4586,6 +4613,9 @@ async function loadInputFromDbForChannel(ch) {
     }
     const text = capSyncText(data.text);
     input.value = text;
+    if (editingObjectId == null) {
+      input.placeholder = 'Add object…';
+    }
     if (primarySlotAutoTarget && inputSlots && inputSlots.length > 0 && inputSlots[0]) {
       inputSlots[0].value = text;
       try { localStorage.setItem(INPUT_SLOTS_KEY, JSON.stringify(inputSlots)); } catch (_) {}
