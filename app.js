@@ -3059,7 +3059,6 @@ function init(done) {
           }
         });
       });
-      setupFullscreenOnFirstTap();
       setupFocusOnFirstInteraction();
     } catch (_) {}
     if (typeof done === 'function') done();
@@ -3253,6 +3252,8 @@ function setupFocusOnFirstInteraction() {
     const t = e.target;
     if (!t || !t.closest || !t.closest('button')) return;
     if (t.closest('#user-modal') || t.closest('#channel-modal-backdrop')) return;
+    /* View tabs / nav: refocusing composer here caused Chrome to jump into keyboard / pseudo-fullscreen after switches. */
+    if (t.closest('#tabs') || t.closest('#nav')) return;
     if (isMobileOrTouchDevice()) return;
     setTimeout(() => { if (input) input.focus(); }, 0);
   });
@@ -4394,6 +4395,10 @@ async function loadInputFromDbForChannel(ch) {
     }
     const text = capSyncText(data.text);
     input.value = text;
+    if (primarySlotAutoTarget && inputSlots && inputSlots.length > 0 && inputSlots[0]) {
+      inputSlots[0].value = text;
+      try { localStorage.setItem(INPUT_SLOTS_KEY, JSON.stringify(inputSlots)); } catch (_) {}
+    }
     autoResize();
     sendBtn.disabled = !text.trim();
     updateClearInputBtn();
@@ -8372,6 +8377,17 @@ async function switchChannel(ch) {
     }
   }
   teardownDndBroadcastChannel();
+  /* Cancel pending composer DB writes — they would use the NEW channel id with the OLD view's text. */
+  if (inputSaveToDbTimer) {
+    clearTimeout(inputSaveToDbTimer);
+    inputSaveToDbTimer = null;
+  }
+  if (inputSlotsSaveToDbTimer) {
+    clearTimeout(inputSlotsSaveToDbTimer);
+    inputSlotsSaveToDbTimer = null;
+  }
+  lastPrimaryInputEditAt = 0;
+  lastSlotsEditAt = 0;
   if (editingObjectId != null) cancelEditingMode(true);
   if (feedEl) {
     viewScroll.set(currentView, feedEl.scrollTop);
@@ -9246,11 +9262,6 @@ function cleanupAuthHash() {
   try {
     history.replaceState(null, '', location.pathname || '/');
   } catch (_) {}
-}
-
-function setupFullscreenOnFirstTap() {
-  /* Intentionally disabled: programmatic requestFullscreen on narrow desktop/touch Chrome
-     caused spurious fullscreen / history entries without improving PWA behavior reliably. */
 }
 
 /* ═══ SEND ════════════════════════════════════════════════ */
