@@ -224,6 +224,9 @@ header,
   border-color:rgba(232,213,160,0.35);
   box-shadow:0 2px 6px rgba(0,0,0,0.12);
 }
+.view-pinned-rail .obj .obj-leading-col{
+  display:none !important;
+}
 .view-pinned-rail .obj .obj-content{
   pointer-events:none;
   display:flex;
@@ -231,10 +234,12 @@ header,
   justify-content:center;
   text-align:center;
   min-width:0;
+  flex:1;
 }
 .view-pinned-rail .obj .obj-time,
 .view-pinned-rail .obj .obj-sender{ display:none !important }
-.view-pinned-rail .obj .obj-text{
+.view-pinned-rail .obj .obj-text,
+.view-pinned-rail .obj .obj-value-cell{
   font-size:10px;
   line-height:1.3;
   overflow:hidden;
@@ -455,6 +460,28 @@ header{
   flex-shrink:0;
   display:flex;
   align-items:center;
+}
+/* Same column template as .feed-inner.inout-table-split rows (value headers align with cells) */
+#manage-bar.inout-bar-split{
+  display:grid;
+  grid-template-columns:var(--inout-manage-start-w, minmax(100px, 12rem)) repeat(var(--inout-value-cols, 2), minmax(0, 1fr)) auto;
+  gap:10px;
+  align-items:center;
+  justify-items:stretch;
+}
+#manage-bar.inout-bar-split .manage-bar-start{
+  grid-column:1;
+  min-width:0;
+}
+#manage-bar.inout-bar-split .manage-bar-column-headers{
+  display:contents;
+}
+#manage-bar.inout-bar-split .manage-bar-col-head-btn{
+  min-width:0;
+}
+#manage-bar.inout-bar-split .manage-bar-end{
+  grid-column:-1;
+  justify-self:end;
 }
 .manage-bar-trigger{
   border:1px solid var(--line2);
@@ -1408,6 +1435,92 @@ header{
 .feed-inner.view-table .obj:not(.obj-header) .obj-actions,
 .feed-inner.inout-multi-value-cols .obj:not(.obj-header) .obj-actions{ width:1%; }
 
+/* Table + 2+ values: grid layout — meta under Select rail, value columns match manage-bar headers */
+.feed-inner.inout-table-split{
+  display:flex !important;
+  flex-direction:column;
+  width:100%;
+  padding-left:max(20px, var(--safe-left));
+  padding-right:max(20px, var(--safe-right));
+  box-sizing:border-box;
+}
+.feed-inner.inout-table-split .obj{
+  display:grid !important;
+  grid-template-columns:var(--inout-manage-start-w, minmax(100px, 12rem)) repeat(var(--inout-value-cols, 2), minmax(0, 1fr)) auto;
+  column-gap:10px;
+  align-items:start;
+  width:100%;
+  box-sizing:border-box;
+  padding:10px 0;
+  border-bottom:1px solid var(--line2);
+  margin:0;
+}
+.feed-inner.inout-table-split .obj > .obj-leading-col,
+.feed-inner.inout-table-split .obj > .obj-actions{
+  display:block !important;
+}
+.feed-inner.inout-table-split .obj > *{
+  border-bottom:none !important;
+  vertical-align:top;
+}
+.feed-inner.inout-table-split .obj > .obj-content{
+  display:contents !important;
+}
+.feed-inner.inout-table-split .obj > .obj-value-cell,
+.feed-inner.inout-table-split .obj > .obj-text{
+  display:block !important;
+}
+.feed-inner.inout-table-split .obj-leading-col{
+  margin-left:0;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:6px;
+  min-width:0;
+}
+.feed-inner.inout-table-split .obj-checkbox-zone{
+  margin-left:0;
+  margin-top:0;
+  margin-bottom:0;
+  min-height:auto;
+  align-self:flex-start;
+}
+.feed-inner.inout-table-split .obj-leading-meta{
+  flex-direction:column;
+  align-items:flex-start;
+  gap:2px;
+}
+.feed-inner.inout-table-split .obj-time,
+.feed-inner.inout-table-split .obj-sender{
+  font-size:11px;
+  color:var(--dim);
+  white-space:nowrap;
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.feed-inner.inout-table-split .obj-values-wrap{
+  display:contents;
+}
+.feed-inner.inout-table-split .obj-value-cell,
+.feed-inner.inout-table-split .obj-text{
+  margin:0;
+  padding:6px 10px;
+  min-width:0;
+  font-size:14px;
+  line-height:1.45;
+  color:var(--text);
+}
+.feed-inner.inout-table-split .obj-value-cell + .obj-value-cell,
+.feed-inner.inout-table-split .obj-text + .obj-value-cell,
+.feed-inner.inout-table-split .obj-value-cell + .obj-text{
+  border-left:1px solid var(--line2);
+}
+.feed-inner.inout-table-split .obj-actions{
+  padding:6px 0 6px 8px;
+  border-left:1px solid var(--line2);
+  justify-self:end;
+}
+
 /* Object component: property text fields. Feed view only — labels left of values, 20px gap. */
 /* Layout: label left, value right in every cell */
 .feed-inner:not(.view-table):not(.inout-multi-value-cols) .obj .obj-time,
@@ -1604,22 +1717,31 @@ body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .
 .feed-inner:not(.view-table) .obj{
   contain:none;
 }
-/* Default feed: time and author next to each other on first row; value full-width below */
+/* Meta rail (checkbox + time/author) + value stack; table/multi-value uses grid on .obj */
+.obj-leading-col{
+  display:flex;
+  flex-direction:row;
+  align-items:flex-start;
+  gap:8px;
+  flex-shrink:0;
+  margin-left:-48px;
+}
+.obj-leading-meta{
+  display:flex;
+  flex-direction:row;
+  align-items:baseline;
+  gap:8px;
+  flex-wrap:wrap;
+  min-width:0;
+}
 .obj-content{
-  display:grid;
-  grid-template-columns:auto auto 1fr;
-  grid-template-rows:auto auto;
+  display:flex;
+  flex-direction:column;
   flex:1;
   min-width:0;
-  gap:2px 8px;
+  gap:8px;
 }
-.obj-content .obj-time{ grid-column:1; grid-row:1; }
-.obj-content .obj-sender{ grid-column:2; grid-row:1; }
-.obj-content .obj-text{ grid-column:1 / -1; grid-row:2; }
-/* One or more value cells: wrap spans full width under time/author in feed layout */
 .obj-content .obj-values-wrap{
-  grid-column:1 / -1;
-  grid-row:2;
   display:flex;
   flex-direction:column;
   gap:8px;
@@ -1725,20 +1847,27 @@ body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .
 /* DnD reorder spirits: same look as hovered objects — labels left of values, 20px gap */
 .obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content,
 .obj-drag-spirit-table-wrap .obj .obj-content{
-  display:grid;
-  grid-template-columns:auto auto 1fr;
-  grid-template-rows:auto auto;
-  gap:2px 8px;
+  display:flex;
+  flex-direction:column;
+  flex:1;
+  min-width:0;
+  gap:8px;
 }
 .obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content .obj-time,
 .obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content .obj-sender,
 .obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content .obj-text,
+.obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-leading-meta .obj-time,
+.obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-leading-meta .obj-sender,
 .obj-drag-spirit-table-wrap .obj .obj-time,
 .obj-drag-spirit-table-wrap .obj .obj-sender,
 .obj-drag-spirit-table-wrap .obj .obj-text,
+.obj-drag-spirit-table-wrap .obj .obj-leading-meta .obj-time,
+.obj-drag-spirit-table-wrap .obj .obj-leading-meta .obj-sender,
 .obj-drag-spirit-stack .obj-drag-spirit-row .obj-time,
 .obj-drag-spirit-stack .obj-drag-spirit-row .obj-sender,
-.obj-drag-spirit-stack .obj-drag-spirit-row .obj-text{
+.obj-drag-spirit-stack .obj-drag-spirit-row .obj-text,
+.obj-drag-spirit-stack .obj-drag-spirit-row .obj-leading-meta .obj-time,
+.obj-drag-spirit-stack .obj-drag-spirit-row .obj-leading-meta .obj-sender{
   display:flex;
   flex-direction:row;
   align-items:baseline;
@@ -1761,12 +1890,18 @@ body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .
 .obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content .obj-time::before,
 .obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content .obj-sender::before,
 .obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content .obj-text::before,
+.obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-leading-meta .obj-time::before,
+.obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-leading-meta .obj-sender::before,
 .obj-drag-spirit-table-wrap .obj .obj-time::before,
 .obj-drag-spirit-table-wrap .obj .obj-sender::before,
 .obj-drag-spirit-table-wrap .obj .obj-text::before,
+.obj-drag-spirit-table-wrap .obj .obj-leading-meta .obj-time::before,
+.obj-drag-spirit-table-wrap .obj .obj-leading-meta .obj-sender::before,
 .obj-drag-spirit-stack .obj-drag-spirit-row .obj-time::before,
 .obj-drag-spirit-stack .obj-drag-spirit-row .obj-sender::before,
-.obj-drag-spirit-stack .obj-drag-spirit-row .obj-text::before{
+.obj-drag-spirit-stack .obj-drag-spirit-row .obj-text::before,
+.obj-drag-spirit-stack .obj-drag-spirit-row .obj-leading-meta .obj-time::before,
+.obj-drag-spirit-stack .obj-drag-spirit-row .obj-leading-meta .obj-sender::before{
   display:block;
   font-size:10px;
   line-height:12px;
@@ -1782,15 +1917,24 @@ body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .
 .obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content .obj-time::before{ content:'Time'; }
 .obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content .obj-sender::before{ content:'Author'; }
 .obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content .obj-text::before{ content:'Value'; }
+.obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-leading-meta .obj-time::before{ content:'Time'; }
+.obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-leading-meta .obj-sender::before{ content:'Author'; }
 .obj-drag-spirit-table-wrap .obj .obj-time::before{ content:'Time'; }
 .obj-drag-spirit-table-wrap .obj .obj-sender::before{ content:'Author'; }
 .obj-drag-spirit-table-wrap .obj .obj-text::before{ content:'Value'; }
+.obj-drag-spirit-table-wrap .obj .obj-leading-meta .obj-time::before{ content:'Time'; }
+.obj-drag-spirit-table-wrap .obj .obj-leading-meta .obj-sender::before{ content:'Author'; }
 .obj-drag-spirit-stack .obj-drag-spirit-row .obj-time::before{ content:'Time'; }
 .obj-drag-spirit-stack .obj-drag-spirit-row .obj-sender::before{ content:'Author'; }
 .obj-drag-spirit-stack .obj-drag-spirit-row .obj-text::before{ content:'Value'; }
-/* DnD table wrap: keep row/cell structure but obj-content uses grid */
+.obj-drag-spirit-stack .obj-drag-spirit-row .obj-leading-meta .obj-time::before{ content:'Time'; }
+.obj-drag-spirit-stack .obj-drag-spirit-row .obj-leading-meta .obj-sender::before{ content:'Author'; }
+/* DnD table wrap: row/cell structure; hoist value cells from content */
 .obj-drag-spirit-table-wrap .obj .obj-content{
-  display:grid;
+  display:contents;
+}
+.obj-drag-spirit-table-wrap .obj .obj-values-wrap{
+  display:contents;
 }
 .obj-drag-spirit-table-wrap .obj > *{
   display:table-cell;

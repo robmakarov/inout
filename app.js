@@ -1357,12 +1357,20 @@ function syncManageBarValueColumnHeaders(maxCols, hasDataRows, isTableMode) {
     wrap.hidden = true;
     wrap.setAttribute('aria-hidden', 'true');
     wrap.replaceChildren();
-    if (bar) bar.classList.remove('manage-bar-has-value-columns');
+    if (bar) {
+      bar.classList.remove('manage-bar-has-value-columns');
+      bar.classList.remove('inout-bar-split');
+      bar.style.removeProperty('--inout-value-cols');
+    }
     return;
   }
   wrap.hidden = false;
   wrap.setAttribute('aria-hidden', 'false');
-  if (bar) bar.classList.add('manage-bar-has-value-columns');
+  if (bar) {
+    bar.classList.add('manage-bar-has-value-columns');
+    bar.classList.add('inout-bar-split');
+    bar.style.setProperty('--inout-value-cols', String(maxCols));
+  }
   wrap.replaceChildren();
   for (var ci = 0; ci < maxCols; ci++) {
     var b = document.createElement('button');
@@ -1372,6 +1380,9 @@ function syncManageBarValueColumnHeaders(maxCols, hasDataRows, isTableMode) {
     b.textContent = lab;
     b.setAttribute('aria-label', 'Column: ' + lab);
     wrap.appendChild(b);
+  }
+  if (typeof requestAnimationFrame !== 'undefined') {
+    requestAnimationFrame(syncInoutManageRailWidthVar);
   }
 }
 
@@ -1436,8 +1447,10 @@ function syncFeedMultiValueChrome(inner, messagesList) {
     : computeMaxValueColumnsFromFeedInner(inner);
   maxCols = Math.max(1, maxCols);
   inner.dataset.inoutValueCols = String(maxCols);
+  inner.style.setProperty('--inout-value-cols', String(maxCols));
   inner.classList.toggle('inout-multi-value-cols', maxCols > 1);
   var isTable = typeof fieldPrefs !== 'undefined' && fieldPrefs && fieldPrefs.viewMode === 'table';
+  inner.classList.toggle('inout-table-split', !!(isTable && maxCols > 1));
   var hasDataRows = !!inner.querySelector('.obj:not(.obj-header)[data-id]');
   var useBarValueHeaders = isTable && maxCols > 1;
   var wantHeader =
@@ -6098,6 +6111,11 @@ function setSelectMode(on) {
   if (manageActions) {
     manageActions.classList.toggle('visible', selectMode);
   }
+  if (typeof requestAnimationFrame !== 'undefined') {
+    requestAnimationFrame(syncInoutManageRailWidthVar);
+  } else {
+    syncInoutManageRailWidthVar();
+  }
   updateSelectionUI();
 }
 
@@ -6516,6 +6534,14 @@ function createObjectHeaderRow(maxValueCols) {
   const sender = document.createElement('div');
   sender.className = 'obj-sender';
   sender.textContent = 'Author';
+  const leadingMeta = document.createElement('div');
+  leadingMeta.className = 'obj-leading-meta';
+  leadingMeta.appendChild(time);
+  leadingMeta.appendChild(sender);
+  const leadingCol = document.createElement('div');
+  leadingCol.className = 'obj-leading-col';
+  leadingCol.appendChild(checkboxPlaceholder);
+  leadingCol.appendChild(leadingMeta);
   const valuesWrap = document.createElement('div');
   valuesWrap.className = 'obj-values-wrap';
   for (var vi = 0; vi < n; vi++) {
@@ -6528,10 +6554,8 @@ function createObjectHeaderRow(maxValueCols) {
   actions.className = 'obj-actions';
   const contentWrap = document.createElement('div');
   contentWrap.className = 'obj-content';
-  contentWrap.appendChild(time);
-  contentWrap.appendChild(sender);
   contentWrap.appendChild(valuesWrap);
-  row.appendChild(checkboxPlaceholder);
+  row.appendChild(leadingCol);
   row.appendChild(contentWrap);
   row.appendChild(actions);
   return row;
@@ -7514,10 +7538,16 @@ function createObjectRow(obj, isNew, options) {
     applyObjectEditMode(idsToEdit, obj.id);
   });
 
+  const leadingMeta = document.createElement('div');
+  leadingMeta.className = 'obj-leading-meta';
+  leadingMeta.appendChild(time);
+  leadingMeta.appendChild(sender);
+  const leadingCol = document.createElement('div');
+  leadingCol.className = 'obj-leading-col';
+  leadingCol.appendChild(checkboxZone);
+  leadingCol.appendChild(leadingMeta);
   const contentWrap = document.createElement('div');
   contentWrap.className = 'obj-content';
-  contentWrap.appendChild(time);
-  contentWrap.appendChild(sender);
   contentWrap.appendChild(valuesWrap);
 
   row.addEventListener('click', e => {
@@ -7547,7 +7577,7 @@ function createObjectRow(obj, isNew, options) {
     cancelEditingMode(true);
   }, true);
 
-  row.appendChild(checkboxZone);
+  row.appendChild(leadingCol);
   row.appendChild(contentWrap);
   row.appendChild(actions);
   row.addEventListener('mousedown', e => {
@@ -7696,6 +7726,18 @@ function updateObjectCount() {
 }
 
 /* ═══ TABS ════════════════════════════════════════════════ */
+function syncInoutManageRailWidthVar() {
+  try {
+    var start = document.querySelector('.manage-bar-start');
+    var inner = document.getElementById('feed-inner');
+    var bar = document.getElementById('manage-bar');
+    if (!start || !inner) return;
+    var w = Math.ceil(start.getBoundingClientRect().width);
+    inner.style.setProperty('--inout-manage-start-w', w + 'px');
+    if (bar) bar.style.setProperty('--inout-manage-start-w', w + 'px');
+  } catch (_) {}
+}
+
 function setupTabs() {
   renderTabs();
   const manageBar = document.getElementById('manage-bar');
@@ -7716,6 +7758,16 @@ function setupTabs() {
       if (typeof notifyWorkspaceChromeChanged === 'function') notifyWorkspaceChromeChanged();
     });
   }
+  try {
+    var rs = document.querySelector('.manage-bar-start');
+    if (rs && typeof ResizeObserver !== 'undefined') {
+      var ro = new ResizeObserver(function() {
+        syncInoutManageRailWidthVar();
+      });
+      ro.observe(rs);
+    }
+  } catch (_) {}
+  syncInoutManageRailWidthVar();
 }
 
 function updateTabsUI() {
