@@ -3905,11 +3905,33 @@ function findObjectRowEl(objId) {
   return null;
 }
 
+/** For stack edit, diff indices must follow the longest row: if the primary were empty, L=0 would prepend into long rows instead of appending in parallel. Tie → clicked row. */
+function pickMultiEditPrimaryId(idsToEdit, clickedId, textMap) {
+  if (!idsToEdit || idsToEdit.size <= 1) return clickedId;
+  var maxLen = -1;
+  var candidates = [];
+  idsToEdit.forEach(function(selId) {
+    var t = textMap[selId];
+    var L = t != null ? String(t).length : 0;
+    if (L > maxLen) {
+      maxLen = L;
+      candidates = [selId];
+    } else if (L === maxLen) {
+      candidates.push(selId);
+    }
+  });
+  for (var i = 0; i < candidates.length; i++) {
+    if (Number(candidates[i]) === Number(clickedId)) return clickedId;
+  }
+  return candidates[0];
+}
+
 /** Apply the same edit (inferred from oldPrimary -> newPrimary) to every other id. Only single-character insert or delete is applied to others so each object keeps its own text; larger pastes/replaces only change the primary. */
 function applyPrimaryEditToMultiEdit(newPrimary) {
   if (!editingObjectTextMap || !editingObjectIds || editingObjectIds.size <= 1) return;
-  const oldPrimary = editingObjectTextMap[editingObjectId];
-  if (oldPrimary == null || oldPrimary === newPrimary) {
+  const oldPrimary =
+    editingObjectTextMap[editingObjectId] != null ? String(editingObjectTextMap[editingObjectId]) : '';
+  if (oldPrimary === newPrimary) {
     editingObjectTextMap[editingObjectId] = newPrimary;
     return;
   }
@@ -3926,8 +3948,7 @@ function applyPrimaryEditToMultiEdit(newPrimary) {
   if (singleCharEdit) {
     editingObjectIds.forEach(id => {
       if (id === editingObjectId) return;
-      let text = editingObjectTextMap[id];
-      if (text == null) return;
+      let text = editingObjectTextMap[id] != null ? String(editingObjectTextMap[id]) : '';
       let pos = Math.min(L, text.length);
       let removeLen = Math.min(oldMiddle.length, text.length - pos);
       if (removeLen < 1 && oldMiddle.length >= 1 && text.length > 0) {
@@ -7193,17 +7214,20 @@ function createObjectRow(obj, isNew, options) {
         editingObjectTextMap[id] = raw;
       });
     });
-    input.value = obj.text || '';
+    editingObjectIds = idsToEdit;
+    const primaryId = pickMultiEditPrimaryId(idsToEdit, obj.id, editingObjectTextMap);
+    editingObjectId = primaryId;
+    const primaryText =
+      editingObjectTextMap[primaryId] != null ? String(editingObjectTextMap[primaryId]) : '';
+    input.value = primaryText;
     var len = input.value.length;
     input.selectionStart = len;
     input.selectionEnd = len;
-    editingObjectId = obj.id;
-    editingObjectIds = idsToEdit;
-    originalEditTextForCancel = obj.text || '';
-    editTypingUndoStack = [obj.text || ''];
+    originalEditTextForCancel = primaryText;
+    editTypingUndoStack = [primaryText];
     editTypingRedoStack = [];
     modeState.editing.active = true;
-    modeState.editing.primaryId = obj.id;
+    modeState.editing.primaryId = primaryId;
     modeState.editing.ids = idsToEdit;
     currentMode = Modes.EDIT;
     document.body.dataset.mode = Modes.EDIT;
