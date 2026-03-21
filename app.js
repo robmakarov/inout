@@ -3164,8 +3164,7 @@ function closeUserModal() {
   notifyWorkspaceChromeChanged();
 }
 
-if (userBtn) userBtn.addEventListener('click', () => openUserModal());
-if (umClose) umClose.addEventListener('click', closeUserModal);
+/* user-btn / user-close: wired in profileButtonFallback (end of file) so OAuth fallback and workspace sync share one path */
 if (umBackdrop) umBackdrop.addEventListener('click', e => {
   if (e.target === umBackdrop) closeUserModal();
 });
@@ -7617,7 +7616,17 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
     if (nonceM && nonceM === lastMergedWorkspacePushNonce) {
       var wantFcEarly = typeof cfg.focusedChannel === 'string' ? cfg.focusedChannel.trim() : '';
       var haveFcEarly = String(currentView || currentChannel || 'main');
-      if (!wantFcEarly || wantFcEarly === haveFcEarly) return;
+      if (!wantFcEarly || wantFcEarly === haveFcEarly) {
+        /* Full merge was skipped; still apply uiChrome so account drawer / modals sync (e.g. mobile → web). */
+        if (cfg.uiChrome && typeof cfg.uiChrome === 'object') {
+          try {
+            applyWorkspaceUiChrome(cfg.uiChrome);
+          } catch (e) {
+            console.error('workspace uiChrome (deduped nonce)', e);
+          }
+        }
+        return;
+      }
     }
     applyingPersonalWorkspaceFromRemote = true;
     var workspaceMergeApplyOk = true;
@@ -11205,10 +11214,31 @@ function ensureLoaderMinDisplay() {
   var back = document.getElementById('user-modal-backdrop');
   var channelBack = document.getElementById('channel-modal-backdrop');
   var closeBtn = document.getElementById('user-close');
-  function openModal(){ if(channelBack) channelBack.style.display='none'; if(back){ back.style.display='block'; back.setAttribute('aria-hidden','false'); } }
-  function closeModal(){ if(back){ back.style.display='none'; back.setAttribute('aria-hidden','true'); } }
-  if(btn){ btn.onclick = openModal; }
-  if(closeBtn){ closeBtn.onclick = closeModal; }
+  function openModal(){
+    if (typeof openUserModal === 'function') {
+      openUserModal();
+      return;
+    }
+    if (channelBack) channelBack.style.display = 'none';
+    if (back) {
+      back.style.display = 'block';
+      back.setAttribute('aria-hidden', 'false');
+    }
+    if (typeof notifyWorkspaceChromeChanged === 'function') notifyWorkspaceChromeChanged();
+  }
+  function closeModal(){
+    if (typeof closeUserModal === 'function') {
+      closeUserModal();
+      return;
+    }
+    if (back) {
+      back.style.display = 'none';
+      back.setAttribute('aria-hidden', 'true');
+    }
+    if (typeof notifyWorkspaceChromeChanged === 'function') notifyWorkspaceChromeChanged();
+  }
+  if (btn) btn.addEventListener('click', openModal);
+  if (closeBtn) closeBtn.addEventListener('click', closeModal);
   if(back){
     back.onclick = function(e){ if(e.target===back) closeModal(); };
     back.addEventListener('click', function(e){

@@ -1171,10 +1171,11 @@ header{
   -webkit-overflow-scrolling:touch;
   touch-action:pan-y;
   outline:none;
-  contain:layout style;
+  /* layout containment broke wheel/touch scroll in some Chrome builds with fixed app-body */
+  contain:style;
 }
 #feed:focus{outline:none}
-#feed.feed-updating{opacity:0.998;contain:layout style}
+#feed.feed-updating{opacity:0.998;contain:style}
 
 .feed-inner{
   position:relative;
