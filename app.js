@@ -297,11 +297,13 @@ function openSecretControls() {
   if (typeof INOUT_FOLDER_SYNC !== 'undefined' && INOUT_FOLDER_SYNC.refreshStatus) {
     INOUT_FOLDER_SYNC.refreshStatus();
   }
+  notifyWorkspaceChromeChanged();
 }
 
 function closeSecretControls() {
   if (!secretControlsBackdrop) return;
   secretControlsBackdrop.setAttribute('aria-hidden', 'true');
+  notifyWorkspaceChromeChanged();
 }
 
 (function ensureModalsClosedOnLoad() {
@@ -681,6 +683,7 @@ function subscribeTempSessionJoins() {
     else mobileKeyboardEl.setAttribute('hidden', '');
     mobileKbToggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
     try { localStorage.setItem(PREF_KEY, open ? '1' : '0'); } catch (_) {}
+    if (typeof notifyWorkspaceChromeChanged === 'function') notifyWorkspaceChromeChanged();
   }
 
   function applySystemKeyboardMode() {
@@ -955,6 +958,7 @@ function subscribeTempSessionJoins() {
     if (open) customCalcEl.removeAttribute('hidden');
     else customCalcEl.setAttribute('hidden', '');
     calcToggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (typeof notifyWorkspaceChromeChanged === 'function') notifyWorkspaceChromeChanged();
   }
 
   function calcTransform(expr) {
@@ -1209,6 +1213,7 @@ function subscribeTempSessionJoins() {
         const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&color=FFFFFF&bgcolor=000000&data=' + encodeURIComponent(inviteUrl);
         qrModalImg.src = qrUrl;
         qrModalBackdrop.setAttribute('aria-hidden', 'false');
+        if (typeof notifyWorkspaceChromeChanged === 'function') notifyWorkspaceChromeChanged();
       } catch (err) {
         console.error(err);
         toast('Failed to create visit QR.');
@@ -1219,6 +1224,7 @@ function subscribeTempSessionJoins() {
   const closeQrModal = () => {
     stopPolling();
     qrModalBackdrop.setAttribute('aria-hidden', 'true');
+    if (typeof notifyWorkspaceChromeChanged === 'function') notifyWorkspaceChromeChanged();
   };
   if (qrModalClose) {
     qrModalClose.addEventListener('click', (e) => {
@@ -1480,6 +1486,203 @@ function rememberWorkspacePushNonce(n) {
       } catch (_) {}
     }, 15000);
   } catch (_) {}
+}
+
+/** Monotonic workspace config revision (see applyPersonalWorkspaceStateFromServer). */
+var lastAppliedWorkspaceRev = 0;
+
+var workspaceUiBroadcastSub = null;
+function teardownWorkspaceUiBroadcast() {
+  if (workspaceUiBroadcastSub) {
+    try {
+      workspaceUiBroadcastSub.unsubscribe();
+    } catch (_) {}
+    workspaceUiBroadcastSub = null;
+  }
+}
+
+function tryBroadcastWorkspaceConfig(cfgPlain) {
+  if (!workspaceUiBroadcastSub || !cfgPlain || typeof cfgPlain !== 'object') return;
+  try {
+    var payload = JSON.stringify({ config: cfgPlain });
+    if (payload.length > 110000) return;
+    workspaceUiBroadcastSub.send({
+      type: 'broadcast',
+      event: 'workspace_state',
+      payload: { config: cfgPlain },
+    });
+  } catch (e) {
+    console.error('tryBroadcastWorkspaceConfig', e);
+  }
+}
+
+function setupWorkspaceUiBroadcast() {
+  teardownWorkspaceUiBroadcast();
+  if (!sb || !sb.channel || !currentUser || !currentUser.id) return;
+  var uid = String(currentUser.id).replace(/[^a-zA-Z0-9_-]/g, '_');
+  try {
+    workspaceUiBroadcastSub = sb
+      .channel('workspace-ui-' + uid, { config: { broadcast: { self: false } } })
+      .on('broadcast', { event: 'workspace_state' }, function(msg) {
+        try {
+          var data = msg && msg.payload ? msg.payload : {};
+          var cfg = data.config;
+          if (!cfg || typeof cfg !== 'object') return;
+          if (cfg._wsPushNonce && myWorkspacePushNonces.has(cfg._wsPushNonce)) return;
+          applyPersonalWorkspaceStateFromServer(cfg).catch(function(e) {
+            console.error('workspace broadcast apply', e);
+          });
+        } catch (err) {
+          console.error('workspace broadcast', err);
+        }
+      })
+      .subscribe();
+  } catch (e) {
+    console.error('setupWorkspaceUiBroadcast', e);
+  }
+}
+
+/** Add feeds referenced only in workspace (e.g. multiview) so openSecondaryView can run. */
+function ensureWorkspaceChannelsFromCfg(cfg) {
+  if (!cfg || typeof cfg !== 'object') return;
+  var add = [];
+  if (typeof cfg.focusedChannel === 'string' && cfg.focusedChannel.trim()) {
+    add.push(cfg.focusedChannel.trim());
+  }
+  if (Array.isArray(cfg.channelStripOrder)) {
+    cfg.channelStripOrder.forEach(function(c) {
+      add.push(String(c || '').trim());
+    });
+  }
+  if (Array.isArray(cfg.openSecondaryViews)) {
+    cfg.openSecondaryViews.forEach(function(c) {
+      add.push(String(c || '').trim());
+    });
+  }
+  var changed = false;
+  add.forEach(function(ch) {
+    if (!ch || ch === 'main') return;
+    if (viewNames.indexOf(ch) < 0) {
+      viewNames.push(ch);
+      changed = true;
+    }
+  });
+  if (changed) {
+    try {
+      localStorage.setItem(
+        CHANNELS_KEY,
+        JSON.stringify(viewNames.filter(function(c) {
+          return c !== 'main';
+        }))
+      );
+    } catch (_) {}
+    try {
+      renderTabs();
+      refreshMoveTargets();
+      syncComposerTargetSelects();
+    } catch (_) {}
+  }
+}
+
+function gatherUiChromeForWorkspace() {
+  try {
+    return {
+      userModal: !!(umBackdrop && umBackdrop.style.display === 'block'),
+      channelModal: !!(cmBackdrop && cmBackdrop.style.display === 'flex'),
+      addMembersModal: !!(addMembersBackdrop && addMembersBackdrop.style.display === 'flex'),
+      secretControlsOpen: !!(secretControlsBackdrop && secretControlsBackdrop.getAttribute('aria-hidden') === 'false'),
+      qrModalOpen: !!(qrModalBackdrop && qrModalBackdrop.getAttribute('aria-hidden') === 'false'),
+      viewMenuOpen: !!(viewMenu && viewMenu.classList.contains('open')),
+      manageBarOpen: !!(document.getElementById('manage-bar') && document.getElementById('manage-bar').classList.contains('manage-bar-open')),
+      logDropupOpen: !!(logDropupPanel && logDropupPanel.classList.contains('open')),
+      calcOpen: !!(customCalcEl && !customCalcEl.hasAttribute('hidden')),
+      mobileKbOpen: !!(mobileKeyboardEl && !mobileKeyboardEl.hasAttribute('hidden')),
+    };
+  } catch (_) {
+    return {};
+  }
+}
+
+function applyWorkspaceUiChrome(u) {
+  if (!u || typeof u !== 'object') return;
+  try {
+    if (umBackdrop) {
+      if (u.userModal) {
+        umBackdrop.style.display = 'block';
+        umBackdrop.setAttribute('aria-hidden', 'false');
+      } else {
+        umBackdrop.style.display = 'none';
+        umBackdrop.setAttribute('aria-hidden', 'true');
+      }
+    }
+    if (cmBackdrop) {
+      cmBackdrop.style.display = u.channelModal ? 'flex' : 'none';
+    }
+    if (addMembersBackdrop) {
+      addMembersBackdrop.style.display = u.addMembersModal ? 'flex' : 'none';
+    }
+    if (secretControlsBackdrop) {
+      secretControlsBackdrop.setAttribute('aria-hidden', u.secretControlsOpen ? 'false' : 'true');
+    }
+    if (qrModalBackdrop) {
+      qrModalBackdrop.setAttribute('aria-hidden', u.qrModalOpen ? 'false' : 'true');
+    }
+    if (viewMenu && viewToggleBtn) {
+      if (u.viewMenuOpen) {
+        viewMenu.classList.add('open');
+        var r = viewToggleBtn.getBoundingClientRect();
+        viewMenu.style.top = r.bottom + 4 + 'px';
+        viewMenu.style.right = window.innerWidth - r.right + 'px';
+        viewMenu.style.left = 'auto';
+      } else {
+        viewMenu.classList.remove('open');
+      }
+    }
+    var mb = document.getElementById('manage-bar');
+    var mbt = document.getElementById('manage-bar-trigger');
+    if (mb && mbt) {
+      if (u.manageBarOpen) {
+        mb.classList.add('manage-bar-open');
+        mbt.setAttribute('aria-expanded', 'true');
+      } else {
+        if (typeof closeManageBarDropdown === 'function') closeManageBarDropdown();
+      }
+    }
+    if (logDropupPanel) {
+      if (u.logDropupOpen) {
+        if (typeof renderLogDropup === 'function') renderLogDropup();
+        logDropupPanel.classList.add('open');
+      } else {
+        logDropupPanel.classList.remove('open');
+      }
+    }
+    if (customCalcEl && calcToggleBtn) {
+      if (u.calcOpen) {
+        customCalcEl.removeAttribute('hidden');
+        calcToggleBtn.setAttribute('aria-expanded', 'true');
+      } else {
+        customCalcEl.setAttribute('hidden', '');
+        calcToggleBtn.setAttribute('aria-expanded', 'false');
+      }
+    }
+    if (mobileKeyboardEl && mobileKbToggleBtn) {
+      if (u.mobileKbOpen) {
+        mobileKeyboardEl.removeAttribute('hidden');
+        mobileKbToggleBtn.setAttribute('aria-expanded', 'true');
+        try {
+          localStorage.setItem('inout_mobile_kb_open_v1', '1');
+        } catch (_) {}
+      } else {
+        mobileKeyboardEl.setAttribute('hidden', '');
+        mobileKbToggleBtn.setAttribute('aria-expanded', 'false');
+        try {
+          localStorage.setItem('inout_mobile_kb_open_v1', '0');
+        } catch (_) {}
+      }
+    }
+  } catch (e) {
+    console.error('applyWorkspaceUiChrome', e);
+  }
 }
 /** After applying remote feed scroll, ignore briefly so programmatic scroll does not re-broadcast. */
 var suppressScrollWorkspacePersistUntil = 0;
@@ -2292,11 +2495,13 @@ function openLogDropup() {
   renderLogDropup();
   logDropupPanel.classList.add('open');
   console.debug('[inout] Action log opened');
+  notifyWorkspaceChromeChanged();
 }
 
 function closeLogDropup() {
   if (!logDropupPanel) return;
   logDropupPanel.classList.remove('open');
+  notifyWorkspaceChromeChanged();
 }
 
 function pushUndo(action) {
@@ -2908,6 +3113,7 @@ function openUserModal() {
   if (typeof refreshStorageUIPanel === 'function') refreshStorageUIPanel();
   umBackdrop.style.display = 'block';
   umBackdrop.setAttribute('aria-hidden', 'false');
+  notifyWorkspaceChromeChanged();
 }
 
 function closeUserModal() {
@@ -2915,6 +3121,7 @@ function closeUserModal() {
   umBackdrop.style.display = 'none';
   umBackdrop.setAttribute('aria-hidden', 'true');
   requestAnimationFrame(focusMainInput);
+  notifyWorkspaceChromeChanged();
 }
 
 if (userBtn) userBtn.addEventListener('click', () => openUserModal());
@@ -3797,6 +4004,7 @@ function subscribeViewRealtime() {
       }
     )
     .subscribe();
+  setupWorkspaceUiBroadcast();
 }
 
 function subscribeActionLog() {
@@ -7026,6 +7234,7 @@ function setupTabs() {
       manageBar.classList.remove('manage-bar-open');
       manageBarTrigger.setAttribute('aria-expanded', 'false');
       document.removeEventListener('click', closeManageBarDropdown);
+      if (typeof notifyWorkspaceChromeChanged === 'function') notifyWorkspaceChromeChanged();
     }
     manageBarTrigger.addEventListener('click', e => {
       e.stopPropagation();
@@ -7033,6 +7242,7 @@ function setupTabs() {
       manageBarTrigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
       if (isOpen) document.addEventListener('click', closeManageBarDropdown);
       else document.removeEventListener('click', closeManageBarDropdown);
+      if (typeof notifyWorkspaceChromeChanged === 'function') notifyWorkspaceChromeChanged();
     });
   }
 }
@@ -7257,6 +7467,7 @@ function gatherPersonalWorkspaceStateForSave() {
     feedScrollByView: feedScrollByView,
     focusedChannel: String(currentView || currentChannel || 'main'),
     channelStripOrder: channelStripOrder,
+    uiChrome: gatherUiChromeForWorkspace(),
   };
 }
 
@@ -7288,8 +7499,14 @@ function applyWorkspaceFeedScrollToDom() {
 
 async function applyPersonalWorkspaceStateFromServer(cfg) {
   if (!cfg || typeof cfg !== 'object') return;
+  var revCk = Number(cfg._wsRev);
+  if (Number.isFinite(revCk)) {
+    if (revCk <= lastAppliedWorkspaceRev) return;
+    lastAppliedWorkspaceRev = revCk;
+  }
   applyingPersonalWorkspaceFromRemote = true;
   try {
+  ensureWorkspaceChannelsFromCfg(cfg);
   let hadRemoteScroll = false;
   if (cfg.feedScrollByView && typeof cfg.feedScrollByView === 'object') {
     hadRemoteScroll = true;
@@ -7390,6 +7607,9 @@ async function applyPersonalWorkspaceStateFromServer(cfg) {
       localStorage.setItem(INOUT_KB_SETTINGS_KEY, JSON.stringify(cfg.settings));
     } catch (_) {}
   }
+  if (cfg.uiChrome && typeof cfg.uiChrome === 'object') {
+    applyWorkspaceUiChrome(cfg.uiChrome);
+  }
   if (hadRemoteScroll) {
     suppressScrollWorkspacePersistUntil = Date.now() + 650;
     try {
@@ -7413,6 +7633,11 @@ function schedulePersonalWorkspacePersist() {
   }, 200);
 }
 if (typeof window !== 'undefined') window.schedulePersonalWorkspacePersist = schedulePersonalWorkspacePersist;
+
+function notifyWorkspaceChromeChanged() {
+  if (applyingPersonalWorkspaceFromRemote) return;
+  schedulePersonalWorkspacePersist();
+}
 
 function flushPersonalWorkspacePersist() {
   if (applyingPersonalWorkspaceFromRemote) return;
@@ -7457,7 +7682,13 @@ async function persistPersonalWorkspaceToServer() {
         : 'ws' + Date.now() + Math.random().toString(16).slice(2);
     rememberWorkspacePushNonce(wsNonce);
     base._wsPushNonce = wsNonce;
+    base._wsRev = Date.now();
     await upsertViewsConfigForChannel(WORKSPACE_META_VIEW_CHANNEL, base);
+    try {
+      tryBroadcastWorkspaceConfig(JSON.parse(JSON.stringify(base)));
+    } catch (bcErr) {
+      console.error('workspace broadcast clone', bcErr);
+    }
   } catch (e) {
     console.error('persistPersonalWorkspaceToServer', e);
   }
@@ -7984,12 +8215,14 @@ function openChannelModal() {
   cmSelf.textContent = currentUser.id || '';
   cmBackdrop.style.display = 'flex';
   cmName.focus();
+  notifyWorkspaceChromeChanged();
 }
 
 function closeChannelModal() {
   if (!cmBackdrop) return;
   cmBackdrop.style.display = 'none';
   requestAnimationFrame(focusMainInput);
+  notifyWorkspaceChromeChanged();
 }
 
 if (cmCancel) cmCancel.addEventListener('click', closeChannelModal);
@@ -8124,12 +8357,14 @@ function openAddMembersModal() {
   addMembersBackdrop.style.display = 'flex';
   closeManageBarDropdown();
   addMembersIdsInput.focus();
+  notifyWorkspaceChromeChanged();
 }
 
 function closeAddMembersModal() {
   if (!addMembersBackdrop) return;
   addMembersBackdrop.style.display = 'none';
   requestAnimationFrame(focusMainInput);
+  notifyWorkspaceChromeChanged();
 }
 
 async function submitAddMembersToCurrentView() {
@@ -8338,6 +8573,7 @@ async function refreshAuth() {
     teardownDraftChannel();
     teardownInputStateRealtime();
     teardownDndBroadcastChannel();
+    teardownWorkspaceUiBroadcast();
     // When not signed in, hydrate view from local per-device objects (anonymous mode),
     // unless we are in a temp-session guest mode.
     if (tempSessionId) {
@@ -8745,6 +8981,7 @@ async function signOut() {
   clearObjects();
   teardownDraftChannel();
   teardownDndBroadcastChannel();
+  teardownWorkspaceUiBroadcast();
   sharedChannels.clear();
   unreadCounts.clear();
   renderTabs();
@@ -9375,6 +9612,7 @@ if (viewToggleBtn && viewMenu) {
       viewMenu.style.right = (window.innerWidth - r.right) + 'px';
       viewMenu.style.left = 'auto';
     }
+    if (typeof notifyWorkspaceChromeChanged === 'function') notifyWorkspaceChromeChanged();
   });
 
   // Keep clicks inside the dropdown (labels, checkboxes) from closing it.
@@ -9387,6 +9625,7 @@ if (viewToggleBtn && viewMenu) {
     const target = e.target;
     if (target === viewMenu || viewMenu.contains(target) || target === viewToggleBtn) return;
     viewMenu.classList.remove('open');
+    if (typeof notifyWorkspaceChromeChanged === 'function') notifyWorkspaceChromeChanged();
   });
 }
 
