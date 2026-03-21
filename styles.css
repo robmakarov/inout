@@ -2873,6 +2873,11 @@ body.secret-show-grips .frame-grip{
 
 /* No hover state on touch devices: avoid stuck hover and show controls without hover */
 @media (hover: none){
+  /* ≥16px on touch avoids Chrome/Android zoom and aggressive “fullscreen” input mode */
+  #object-input,
+  .composer-slot-input{
+    font-size:16px;
+  }
   .obj:hover{ background:var(--bg) }
   .obj .obj-select-wrap,
   .obj .obj-actions{ opacity:1; pointer-events:auto }

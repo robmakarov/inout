@@ -7614,8 +7614,13 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
   if (!cfg || typeof cfg !== 'object') return;
   if (mergeMultiview) {
     var nonceM = cfg._wsPushNonce;
-    if (nonceM && nonceM === lastMergedWorkspacePushNonce) return;
+    if (nonceM && nonceM === lastMergedWorkspacePushNonce) {
+      var wantFcEarly = typeof cfg.focusedChannel === 'string' ? cfg.focusedChannel.trim() : '';
+      var haveFcEarly = String(currentView || currentChannel || 'main');
+      if (!wantFcEarly || wantFcEarly === haveFcEarly) return;
+    }
     applyingPersonalWorkspaceFromRemote = true;
+    var workspaceMergeApplyOk = true;
     try {
       ensureWorkspaceChannelsFromCfg(cfg);
       if (cfg.feedScrollByView && typeof cfg.feedScrollByView === 'object') {
@@ -7663,6 +7668,7 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
             try {
               await switchChannel(want);
             } catch (e) {
+              workspaceMergeApplyOk = false;
               console.error('apply focusedChannel (merge)', e);
             } finally {
               applyingWorkspaceFocusFromRemote = false;
@@ -7687,7 +7693,7 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
           applyWorkspaceFeedScrollToDom();
         } catch (_) {}
       }
-      if (nonceM) lastMergedWorkspacePushNonce = String(nonceM);
+      if (nonceM && workspaceMergeApplyOk) lastMergedWorkspacePushNonce = String(nonceM);
     } finally {
       applyingPersonalWorkspaceFromRemote = false;
     }
@@ -8439,6 +8445,13 @@ async function switchChannel(ch) {
   updateTabsUI();
   updateTabBadge(ch);
   refreshMoveTargets();
+  if (currentUser && sb && !applyingWorkspaceFocusFromRemote) {
+    try {
+      await flushPersonalWorkspacePersist();
+    } catch (e) {
+      console.error('flush workspace (early, tab switch)', e);
+    }
+  }
   await loadFieldPrefsForCurrentChannel();
   if (getSyncInputPref() && currentUser) {
     await loadInputFromDbForChannel(ch);
@@ -9158,13 +9171,8 @@ async function reloadForUser() {
       scrollBottom();
     }
   }
-      /* Mobile: focusing the composer after every channel load triggers Chrome keyboard / pseudo-fullscreen.
-         Remote tab sync: avoid stealing focus on the following device. */
-      if (
-        input &&
-        !isMobileOrTouchDevice() &&
-        !applyingWorkspaceFocusFromRemote
-      ) {
+      /* Mobile: programmatic focus after load triggers Chrome keyboard / expanded input UI. */
+      if (input && !isMobileOrTouchDevice()) {
         input.focus();
       }
     });
@@ -9564,6 +9572,15 @@ input.addEventListener('keydown', e => {
     }
   });
   input.addEventListener('click', () => {
+    if (!isMobileOrTouchDevice() && document.activeElement !== input) {
+      try {
+        input.focus({ preventScroll: true });
+      } catch (_) {
+        try {
+          input.focus();
+        } catch (_) {}
+      }
+    }
     if (editingObjectId != null) updateEditingRowFromInput();
     else broadcastDraft();
   });
