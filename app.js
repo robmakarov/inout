@@ -5841,7 +5841,11 @@ function setupSecondaryFeedDnd() {
 function closeSecondaryView() {
   const viewsContainer = document.querySelector('.multiview-views');
   if (viewsContainer) {
-    viewsContainer.querySelectorAll('.view').forEach(el => { if (el.parentNode) el.parentNode.removeChild(el); });
+    /* Keep #view-app (primary); only drop extra split panes. */
+    viewsContainer.querySelectorAll('.view').forEach(el => {
+      if (el.id === 'view-app') return;
+      if (el.parentNode) el.parentNode.removeChild(el);
+    });
     if (multiviewResizerEl && multiviewResizerEl.parentNode) multiviewResizerEl.parentNode.removeChild(multiviewResizerEl);
   }
   multiviewResizerEl = null;
