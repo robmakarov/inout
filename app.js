@@ -4898,9 +4898,6 @@ function setupLayoutChannel() {
   } catch (_) {}
 }
 
-var _frameDragId = null;
-var _frameZoneListenersAttached = false;
-
 function initFramesZone() {
   const zone = document.getElementById('frames-zone');
   if (!zone) return;
@@ -4910,70 +4907,11 @@ function initFramesZone() {
     if (frame.querySelector('.frame-grip')) return;
     const grip = document.createElement('div');
     grip.className = 'frame-grip';
-    grip.setAttribute('aria-label', 'Drag to reorder section');
-    grip.draggable = true;
+    grip.setAttribute('aria-hidden', 'true');
+    grip.draggable = false;
     var first = frame.firstChild;
     while (first && first.nodeType !== 1) first = first.nextSibling;
     frame.insertBefore(grip, first || null);
-    grip.addEventListener('dragstart', e => {
-      e.stopPropagation();
-      _frameDragId = frame.getAttribute('data-frame-id') || '';
-      frame.classList.add('frame-dragging');
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', _frameDragId);
-      e.dataTransfer.setData('application/x-inout-frame', _frameDragId);
-    });
-    grip.addEventListener('dragend', () => {
-      frame.classList.remove('frame-dragging');
-      _frameDragId = null;
-    });
-  });
-  if (_frameZoneListenersAttached) return;
-  _frameZoneListenersAttached = true;
-  zone.addEventListener('dragover', e => {
-    e.preventDefault();
-    const id = _frameDragId || e.dataTransfer.getData('application/x-inout-frame');
-    if (!id) return;
-    const fromFrame = zone.querySelector('.frame[data-frame-id="' + CSS.escape(id) + '"]');
-    if (!fromFrame) return;
-    const frames = Array.from(zone.querySelectorAll('.frame'));
-    let target = null;
-    for (let i = 0; i < frames.length; i++) {
-      const r = frames[i].getBoundingClientRect();
-      if (e.clientY <= r.top + r.height / 2) { target = frames[i]; break; }
-      target = frames[i];
-    }
-    frames.forEach(f => f.classList.remove('frame-drop-target'));
-    if (target && target !== fromFrame) target.classList.add('frame-drop-target');
-  });
-  zone.addEventListener('dragleave', e => {
-    if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.querySelectorAll('.frame').forEach(f => f.classList.remove('frame-drop-target'));
-  });
-  zone.addEventListener('drop', e => {
-    e.preventDefault();
-    zone.querySelectorAll('.frame').forEach(f => f.classList.remove('frame-drop-target'));
-    const id = _frameDragId || e.dataTransfer.getData('application/x-inout-frame');
-    if (!id) return;
-    const fromFrame = zone.querySelector('.frame[data-frame-id="' + CSS.escape(id) + '"]');
-    if (!fromFrame) return;
-    const frames = Array.from(zone.querySelectorAll('.frame'));
-    const order = getFrameOrder();
-    const fromIdx = order.indexOf(id);
-    if (fromIdx < 0) return;
-    let target = null;
-    for (let i = 0; i < frames.length; i++) {
-      const r = frames[i].getBoundingClientRect();
-      if (e.clientY <= r.top + r.height / 2) { target = frames[i]; break; }
-      target = frames[i];
-    }
-    const targetId = target ? target.getAttribute('data-frame-id') : null;
-    const toIdx = targetId ? order.indexOf(targetId) : order.length;
-    if (toIdx === fromIdx) return;
-    const next = order.slice();
-    next.splice(fromIdx, 1);
-    next.splice(toIdx, 0, id);
-    applyFrameOrder(next);
-    saveFrameOrder(next);
   });
 }
 
