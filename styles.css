@@ -173,11 +173,11 @@ header,
   align-self:stretch;
   min-height:0;
   min-width:0;
-  overflow-y:scroll;
+  overflow-y:auto;
   overflow-x:hidden;
   -webkit-overflow-scrolling:touch;
-  touch-action:pan-y;
-  overscroll-behavior-y:contain;
+  touch-action:pan-y pinch-zoom;
+  overscroll-behavior-y:auto;
 }
 .view-pinned-rail{
   flex:0 0 auto;
@@ -3036,8 +3036,12 @@ body.secret-show-grips .frame-grip{
     flex-basis:0;
     min-height:0;
     min-width:0;
-    overflow-y:scroll;
+    /* auto + layer: iOS/WKWebView often scrolls more reliably than overflow:scroll in nested flex */
+    overflow-y:auto;
     -webkit-overflow-scrolling:touch;
+    touch-action:pan-y pinch-zoom;
+    overscroll-behavior-y:auto;
+    transform:translateZ(0);
   }
 }
 
