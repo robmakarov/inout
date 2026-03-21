@@ -2886,6 +2886,20 @@ body.secret-show-grips .frame-grip{
   #nav #tabs{
     padding:0 10px;
   }
+  #nav.navigation-bar{
+    --nav-height: 48px;
+    height:var(--nav-height);
+    padding:0 12px;
+  }
+  #tabs .tab{
+    font-size:12px;
+    padding:5px 12px;
+    min-height:34px;
+  }
+  #tabs .tab-shared{
+    width:16px;
+    height:16px;
+  }
   /* prevent iOS Safari zoom-on-focus */
   #object-input{font-size:16px}
   .cm-input{font-size:16px}

@@ -4456,7 +4456,8 @@ async function restoreInputFromDb() {
   }
   await loadInputFromDbForChannel(currentChannel);
   try {
-    inoutChannelInputQuietUntil = Math.max(inoutChannelInputQuietUntil, Date.now() + 550);
+    /* Longer tail: delayed postgres_changes + slot/channel races were merging incremental rows and looked like the composer “typing itself” after refresh. */
+    inoutChannelInputQuietUntil = Math.max(inoutChannelInputQuietUntil, Date.now() + 2800);
   } catch (_) {}
 }
 
@@ -9612,61 +9613,68 @@ function attachInputListeners() {
   if (btn) sendBtn = btn;
   if (!input) return;
   _inputListenersAttached = true;
-input.addEventListener('input', () => {
-  lastPrimaryInputEditAt = Date.now();
-  autoResize();
-    if (sendBtn) sendBtn.disabled = !input.value.trim();
-  saveInputGlobal();
-  updateClearInputBtn();
-  scheduleSaveInputToDb();
-    if (editingObjectId != null) {
-      if (editingObjectIds && editingObjectIds.size > 1) {
-        applyPrimaryEditToMultiEdit(input.value);
-      } else if (editingObjectTextMap && editingObjectId != null) {
-        editingObjectTextMap[editingObjectId] = input.value;
+  var primaryManagedBySlots =
+    composerSlotsContainer && composerSlotsContainer.contains(input);
+
+  if (!primaryManagedBySlots) {
+    input.addEventListener('input', () => {
+      lastPrimaryInputEditAt = Date.now();
+      autoResize();
+      if (sendBtn) sendBtn.disabled = !input.value.trim();
+      saveInputGlobal();
+      updateClearInputBtn();
+      scheduleSaveInputToDb();
+      if (editingObjectId != null) {
+        if (editingObjectIds && editingObjectIds.size > 1) {
+          applyPrimaryEditToMultiEdit(input.value);
+        } else if (editingObjectTextMap && editingObjectId != null) {
+          editingObjectTextMap[editingObjectId] = input.value;
+        }
+        updateEditingRowFromInput();
+        if (editTypingCommitTimer) clearTimeout(editTypingCommitTimer);
+        editTypingCommitTimer = setTimeout(commitTypingSegment, TYPING_COMMIT_MS);
       }
-      updateEditingRowFromInput();
-      if (editTypingCommitTimer) clearTimeout(editTypingCommitTimer);
-      editTypingCommitTimer = setTimeout(commitTypingSegment, TYPING_COMMIT_MS);
-    }
-  broadcastDraft(input.value);
-  updateRemoteSelectionOverlay();
-});
-input.addEventListener('keydown', e => {
-  if (e.key === 'Escape') {
-      if (editingObjectId) cancelEditingMode(true);
-    return;
-  }
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-      if (sendBtn && !sendBtn.disabled) send();
-    }
-  });
-  input.addEventListener('click', () => {
-    if (!isMobileOrTouchDevice() && document.activeElement !== input) {
-      try {
-        input.focus({ preventScroll: true });
-      } catch (_) {
+      broadcastDraft(input.value);
+      updateRemoteSelectionOverlay();
+    });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        if (editingObjectId) cancelEditingMode(true);
+        return;
+      }
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        if (sendBtn && !sendBtn.disabled) send();
+      }
+    });
+    input.addEventListener('click', () => {
+      if (!isMobileOrTouchDevice() && document.activeElement !== input) {
         try {
-          input.focus();
-        } catch (_) {}
+          input.focus({ preventScroll: true });
+        } catch (_) {
+          try {
+            input.focus();
+          } catch (_) {}
+        }
       }
-    }
-    if (editingObjectId != null) updateEditingRowFromInput();
-    else broadcastDraft();
-  });
-  input.addEventListener('keyup', () => {
-    if (editingObjectId != null) updateEditingRowFromInput();
-    else broadcastDraft();
-  });
-  input.addEventListener('select', () => {
-    if (editingObjectId != null) updateEditingRowFromInput();
-    else broadcastDraft();
-  });
-  input.addEventListener('mouseup', () => {
-    if (editingObjectId != null) updateEditingRowFromInput();
-    else broadcastDraft();
-  });
+      if (editingObjectId != null) updateEditingRowFromInput();
+      else broadcastDraft();
+    });
+    input.addEventListener('keyup', () => {
+      if (editingObjectId != null) updateEditingRowFromInput();
+      else broadcastDraft();
+    });
+    input.addEventListener('select', () => {
+      if (editingObjectId != null) updateEditingRowFromInput();
+      else broadcastDraft();
+    });
+    input.addEventListener('mouseup', () => {
+      if (editingObjectId != null) updateEditingRowFromInput();
+      else broadcastDraft();
+    });
+    if (sendBtn) sendBtn.addEventListener('click', send);
+  }
+
   if (!_documentDraftSelectionBound) {
     try {
       document.addEventListener('selectionchange', onDraftSelectionChangeDoc);
@@ -9677,7 +9685,6 @@ input.addEventListener('keydown', e => {
     var ov = document.getElementById('remote-selection-overlay');
     if (ov) { ov.scrollTop = input.scrollTop; ov.scrollLeft = input.scrollLeft; }
   });
-  if (sendBtn) sendBtn.addEventListener('click', send);
 }
 if (composerSlotsContainer) {
   renderComposerSlots();
