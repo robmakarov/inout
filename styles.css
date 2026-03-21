@@ -84,36 +84,39 @@ body{
   scrollbar-width:none;
   -ms-overflow-style:none;
 }
-#feed:hover,
-.multiview-views .view .feed:hover{
-  scrollbar-width:thin;
-  scrollbar-color:var(--line2) transparent;
-}
 #feed::-webkit-scrollbar,
 .multiview-views .view .feed::-webkit-scrollbar{
   width:0;
   height:0;
 }
-#feed:hover::-webkit-scrollbar,
-.multiview-views .view .feed:hover::-webkit-scrollbar{
-  width:8px;
-}
-#feed:hover::-webkit-scrollbar-track,
-.multiview-views .view .feed:hover::-webkit-scrollbar-track{
-  background:rgba(0,0,0,0.35);
-  border-radius:8px 0 0 8px;
-  margin:4px 0;
-}
-#feed:hover::-webkit-scrollbar-thumb,
-.multiview-views .view .feed:hover::-webkit-scrollbar-thumb{
-  background:var(--line);
-  border-radius:8px 0 0 8px;
-  border:1px solid var(--line2);
-  box-shadow:inset 0 0 0 1px rgba(0,0,0,0.2);
-}
-#feed:hover::-webkit-scrollbar-thumb:hover,
-.multiview-views .view .feed:hover::-webkit-scrollbar-thumb:hover{
-  background:var(--line2);
+/* Hover scrollbar polish only when hover is real (avoids stuck/touch :hover on phones) */
+@media (hover: hover){
+  #feed:hover,
+  .multiview-views .view .feed:hover{
+    scrollbar-width:thin;
+    scrollbar-color:var(--line2) transparent;
+  }
+  #feed:hover::-webkit-scrollbar,
+  .multiview-views .view .feed:hover::-webkit-scrollbar{
+    width:8px;
+  }
+  #feed:hover::-webkit-scrollbar-track,
+  .multiview-views .view .feed:hover::-webkit-scrollbar-track{
+    background:rgba(0,0,0,0.35);
+    border-radius:8px 0 0 8px;
+    margin:4px 0;
+  }
+  #feed:hover::-webkit-scrollbar-thumb,
+  .multiview-views .view .feed:hover::-webkit-scrollbar-thumb{
+    background:var(--line);
+    border-radius:8px 0 0 8px;
+    border:1px solid var(--line2);
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,0.2);
+  }
+  #feed:hover::-webkit-scrollbar-thumb:hover,
+  .multiview-views .view .feed:hover::-webkit-scrollbar-thumb:hover{
+    background:var(--line2);
+  }
 }
 
 /* Header and Navigation bar are outside multiview; nav controls which view is shown */
