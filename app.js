@@ -4834,7 +4834,7 @@ function teardownDraftChannel(opts) {
   }
 }
 
-/* ═══ FRAME ORDER (reorderable app zones: nav, multiview, input, scroll-btn) ── */
+/* ═══ FRAME ORDER (fixed: nav → multiview → input; drag may fire but DOM is always canonical) ── */
 function getLayoutSyncPref() {
   try {
     const v = localStorage.getItem(LAYOUT_SYNC_KEY);
@@ -4847,34 +4847,34 @@ function setLayoutSyncPref(on, syncWorkspace) {
 }
 
 function getFrameOrder() {
-  try {
-    const raw = localStorage.getItem(FRAME_ORDER_KEY);
-    if (!raw) return DEFAULT_FRAME_ORDER.slice();
-    const arr = JSON.parse(raw);
-    if (!Array.isArray(arr) || arr.length === 0) return DEFAULT_FRAME_ORDER.slice();
-    const known = new Set(DEFAULT_FRAME_ORDER);
-    const out = arr.filter(id => known.has(id));
-    DEFAULT_FRAME_ORDER.forEach(id => { if (!out.includes(id)) out.push(id); });
-    return out;
-  } catch (_) { return DEFAULT_FRAME_ORDER.slice(); }
+  /* Tabs → feed → composer only; reordering was removed so nav/input never stack above/below the view wrongly. */
+  return DEFAULT_FRAME_ORDER.slice();
 }
 
 function applyFrameOrder(order) {
   const zone = document.getElementById('frames-zone');
-  if (!zone || !Array.isArray(order) || order.length === 0) return;
+  if (!zone) return;
+  const canonical = DEFAULT_FRAME_ORDER.slice();
   const frames = Array.from(zone.querySelectorAll('.frame'));
   const byId = new Map();
-  frames.forEach(f => { const id = f.getAttribute('data-frame-id'); if (id) byId.set(id, f); });
-  const ordered = order.map(id => byId.get(id)).filter(Boolean);
-  ordered.forEach(f => zone.appendChild(f));
+  frames.forEach(f => {
+    const id = f.getAttribute('data-frame-id');
+    if (id) byId.set(id, f);
+  });
+  canonical.forEach(id => {
+    const f = byId.get(id);
+    if (f) zone.appendChild(f);
+  });
 }
 
 function saveFrameOrder(order) {
-  if (!Array.isArray(order) || order.length === 0) return;
-  try { localStorage.setItem(FRAME_ORDER_KEY, JSON.stringify(order)); } catch (_) {}
+  const canonical = DEFAULT_FRAME_ORDER.slice();
+  try {
+    localStorage.setItem(FRAME_ORDER_KEY, JSON.stringify(canonical));
+  } catch (_) {}
   flushPersonalWorkspacePersist();
   if (layoutChannel && getLayoutSyncPref()) {
-    realtimeBroadcastSend(layoutChannel, 'layout', { frameOrder: order });
+    realtimeBroadcastSend(layoutChannel, 'layout', { frameOrder: canonical });
   }
 }
 
@@ -4890,7 +4890,9 @@ function setupLayoutChannel() {
         const order = data.frameOrder;
         if (!Array.isArray(order) || order.length === 0) return;
         applyFrameOrder(order);
-        try { localStorage.setItem(FRAME_ORDER_KEY, JSON.stringify(order)); } catch (_) {}
+        try {
+          localStorage.setItem(FRAME_ORDER_KEY, JSON.stringify(DEFAULT_FRAME_ORDER.slice()));
+        } catch (_) {}
       })
       .subscribe();
   } catch (_) {}

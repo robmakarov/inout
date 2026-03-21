@@ -317,6 +317,10 @@ header,
   flex-grow:0;
   flex-shrink:0;
 }
+/* Never stack tabs or composer on the wrong side of the feed (flex order + canonical DOM in app.js). */
+.frames-zone > .frame[data-frame-id="nav"]{ order:0; }
+.frames-zone > .frame[data-frame-id="multiview"]{ order:1; }
+.frames-zone > .frame[data-frame-id="input"]{ order:2; }
 .frame.frame-fill > #multiview{
   flex:1 1 0%;
   min-height:0;
@@ -3053,7 +3057,7 @@ body.secret-show-grips .frame-grip{
     flex:0 0 auto;
     min-height:0;
     overflow:visible;
-    order:999;
+    order:2;
   }
   #input-area{
     padding:10px 10px calc(14px + env(safe-area-inset-bottom, 0px));
