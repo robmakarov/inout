@@ -1609,16 +1609,32 @@ function teardownWorkspaceUiBroadcast() {
   }
 }
 
+/** Supabase Realtime: use httpSend when present so broadcast does not warn on REST fallback. */
+function realtimeBroadcastSend(channel, eventName, payload) {
+  if (!channel || payload == null || typeof payload !== 'object') return;
+  var ev = String(eventName || '');
+  if (!ev) return;
+  try {
+    if (typeof channel.httpSend === 'function') {
+      channel.httpSend(ev, payload).catch(function() {});
+      return;
+    }
+    channel.send({
+      type: 'broadcast',
+      event: ev,
+      payload: payload,
+    });
+  } catch (e) {
+    console.error('realtimeBroadcastSend', e);
+  }
+}
+
 function tryBroadcastWorkspaceConfig(cfgPlain) {
   if (!workspaceUiBroadcastSub || !cfgPlain || typeof cfgPlain !== 'object') return;
   try {
     var payload = JSON.stringify({ config: cfgPlain });
     if (payload.length > 110000) return;
-    workspaceUiBroadcastSub.send({
-      type: 'broadcast',
-      event: 'workspace_state',
-      payload: { config: cfgPlain },
-    });
+    realtimeBroadcastSend(workspaceUiBroadcastSub, 'workspace_state', { config: cfgPlain });
   } catch (e) {
     console.error('tryBroadcastWorkspaceConfig', e);
   }
@@ -4689,28 +4705,16 @@ function stopViewPresencePruneTimer() {
 /** Stop broadcasting object edit to everyone on this view. */
 function broadcastViewEditingEnd(lastObjectId) {
   if (!viewEditingChannel) return;
-  try {
-    viewEditingChannel.send({
-      type: 'broadcast',
-      event: 'object_edit_end',
-      payload: {
-        from: myId,
-        objectId: lastObjectId != null && Number.isFinite(Number(lastObjectId)) ? Number(lastObjectId) : null,
-      },
-    });
-  } catch (_) {}
+  realtimeBroadcastSend(viewEditingChannel, 'object_edit_end', {
+    from: myId,
+    objectId: lastObjectId != null && Number.isFinite(Number(lastObjectId)) ? Number(lastObjectId) : null,
+  });
 }
 
 /** Tell others to drop composer draft/selection overlay for this user (e.g. switching to object edit). */
 function broadcastComposerClear() {
   if (!composerSyncChannel) return;
-  try {
-    composerSyncChannel.send({
-      type: 'broadcast',
-      event: 'composer_clear',
-      payload: { from: myId },
-    });
-  } catch (_) {}
+  realtimeBroadcastSend(composerSyncChannel, 'composer_clear', { from: myId });
 }
 
 function setupDraftChannel(opts) {
@@ -4876,9 +4880,7 @@ function saveFrameOrder(order) {
   try { localStorage.setItem(FRAME_ORDER_KEY, JSON.stringify(order)); } catch (_) {}
   flushPersonalWorkspacePersist();
   if (layoutChannel && getLayoutSyncPref()) {
-    try {
-      layoutChannel.send({ type: 'broadcast', event: 'layout', payload: { frameOrder: order } });
-    } catch (_) {}
+    realtimeBroadcastSend(layoutChannel, 'layout', { frameOrder: order });
   }
 }
 
@@ -4995,17 +4997,15 @@ function broadcastDraft(text) {
     /* Never broadcast empty object_edit — use cancelEditingMode / object_edit_end so rows restore and remotes clear doppelgangers. */
     if (!String(body).length) return;
     if (!viewEditingChannel) return;
-    try {
-      viewEditingChannel.send({
-        type: 'broadcast',
-        event: 'object_edit',
-        payload: Object.assign({}, payloadBase, {
-          objectId: Number(editingObjectId),
-          text: String(body),
-          ts: Date.now(),
-        }),
-      });
-    } catch (_) {}
+    realtimeBroadcastSend(
+      viewEditingChannel,
+      'object_edit',
+      Object.assign({}, payloadBase, {
+        objectId: Number(editingObjectId),
+        text: String(body),
+        ts: Date.now(),
+      })
+    );
     return;
   }
 
@@ -5015,17 +5015,15 @@ function broadcastDraft(text) {
     selStart = input.selectionStart != null ? input.selectionStart : 0;
     selEnd = input.selectionEnd != null ? input.selectionEnd : selStart;
   }
-  try {
-    composerSyncChannel.send({
-      type: 'broadcast',
-      event: 'input_sync',
-      payload: Object.assign({}, payloadBase, {
-        text: body,
-        selectionStart: selStart,
-        selectionEnd: selEnd,
-      }),
-    });
-  } catch (_) {}
+  realtimeBroadcastSend(
+    composerSyncChannel,
+    'input_sync',
+    Object.assign({}, payloadBase, {
+      text: body,
+      selectionStart: selStart,
+      selectionEnd: selEnd,
+    })
+  );
 }
 
 var lastRemoteEditingId = null;
@@ -5513,17 +5511,13 @@ function broadcastDndStart() {
   var block = (dragSelectedRows && dragSelectedRows.length) ? dragSelectedRows : (typeof row !== 'undefined' && row ? [row] : []);
   var lastDraggedId = block.length ? (block[block.length - 1].dataset && block[block.length - 1].dataset.id ? Number(block[block.length - 1].dataset.id) : null) : null;
   var draggingIds = block.map(function(r) { return Number(r.dataset.id); }).filter(function(id) { return Number.isFinite(id); });
-  dndBroadcastChannel.send({
-    type: 'broadcast',
-    event: 'dnd',
-    payload: {
-      type: 'dnd_start',
-      from: myId,
-      channel: String(currentChannel),
-      draggingIds: draggingIds,
-      origin: { insertBeforeId: insertBeforeId, wantAppend: !!dndOriginWantAppend, lastDraggedId: lastDraggedId },
-      cursorY: typeof lastDragClientY === 'number' ? lastDragClientY : null
-    }
+  realtimeBroadcastSend(dndBroadcastChannel, 'dnd', {
+    type: 'dnd_start',
+    from: myId,
+    channel: String(currentChannel),
+    draggingIds: draggingIds,
+    origin: { insertBeforeId: insertBeforeId, wantAppend: !!dndOriginWantAppend, lastDraggedId: lastDraggedId },
+    cursorY: typeof lastDragClientY === 'number' ? lastDragClientY : null,
   });
 }
 
@@ -5535,26 +5529,22 @@ function broadcastDndMove() {
     if (!dndBroadcastChannel || !dndChannelReady || !lastReorderTarget) return;
     var insertBeforeId = lastReorderTarget.insertBefore && lastReorderTarget.insertBefore.dataset ? Number(lastReorderTarget.insertBefore.dataset.id) : null;
     var y = typeof lastDragClientY === 'number' ? lastDragClientY : null;
-    dndBroadcastChannel.send({
-      type: 'broadcast',
-      event: 'dnd',
-      payload: {
-        type: 'dnd_move',
-        from: myId,
-        channel: String(currentChannel),
-        target: { insertBeforeId: insertBeforeId, wantAppend: !!lastReorderTarget.wantAppend },
-        cursorY: y
-      }
+    realtimeBroadcastSend(dndBroadcastChannel, 'dnd', {
+      type: 'dnd_move',
+      from: myId,
+      channel: String(currentChannel),
+      target: { insertBeforeId: insertBeforeId, wantAppend: !!lastReorderTarget.wantAppend },
+      cursorY: y,
     });
   }, 80);
 }
 
 function broadcastDndEnd() {
   if (!dndBroadcastChannel || !dndChannelReady) return;
-  dndBroadcastChannel.send({
-    type: 'broadcast',
-    event: 'dnd',
-    payload: { type: 'dnd_end', from: myId, channel: String(currentChannel) }
+  realtimeBroadcastSend(dndBroadcastChannel, 'dnd', {
+    type: 'dnd_end',
+    from: myId,
+    channel: String(currentChannel),
   });
 }
 
@@ -5577,16 +5567,12 @@ function computeReorderMovedIdsForBroadcast(oldOrder, newOrder) {
 function broadcastDndDropped(newOrder, movedIds) {
   if (!dndBroadcastChannel || !dndChannelReady || !newOrder || !newOrder.length) return;
   const mids = Array.isArray(movedIds) ? movedIds.map(x => Number(x)).filter(x => Number.isFinite(x)) : [];
-  dndBroadcastChannel.send({
-    type: 'broadcast',
-    event: 'dnd',
-    payload: {
-      type: 'dnd_dropped',
-      from: myId,
-      channel: String(currentChannel),
-      newOrder: newOrder,
-      movedIds: mids.length ? mids : computeReorderMovedIdsForBroadcast(savedOrderBeforeDrag, newOrder),
-    }
+  realtimeBroadcastSend(dndBroadcastChannel, 'dnd', {
+    type: 'dnd_dropped',
+    from: myId,
+    channel: String(currentChannel),
+    newOrder: newOrder,
+    movedIds: mids.length ? mids : computeReorderMovedIdsForBroadcast(savedOrderBeforeDrag, newOrder),
   });
 }
 
@@ -5599,15 +5585,11 @@ function broadcastOrderSyncFromSave() {
     if (!currentObjectOrder.length || attempt > 16) return;
     if (dndBroadcastChannel && dndChannelReady) {
       try {
-        dndBroadcastChannel.send({
-          type: 'broadcast',
-          event: 'dnd',
-          payload: {
-            type: 'order_sync',
-            from: myId,
-            channel: String(currentChannel),
-            newOrder: currentObjectOrder.slice(),
-          },
+        realtimeBroadcastSend(dndBroadcastChannel, 'dnd', {
+          type: 'order_sync',
+          from: myId,
+          channel: String(currentChannel),
+          newOrder: currentObjectOrder.slice(),
         });
       } catch (_) {}
       return;
@@ -6388,16 +6370,12 @@ function setupTouchDragHandlers() {
       dndBroadcastThrottle = setTimeout(function() {
         dndBroadcastThrottle = null;
         if (dndBroadcastChannel && dndChannelReady) {
-          dndBroadcastChannel.send({
-            type: 'broadcast',
-            event: 'dnd',
-            payload: {
-              type: 'dnd_move',
-              from: myId,
-              channel: String(currentChannel),
-              target: { insertBeforeId: insertBeforeId, wantAppend: !insertRef },
-              cursorY: y
-            }
+          realtimeBroadcastSend(dndBroadcastChannel, 'dnd', {
+            type: 'dnd_move',
+            from: myId,
+            channel: String(currentChannel),
+            target: { insertBeforeId: insertBeforeId, wantAppend: !insertRef },
+            cursorY: y,
           });
         }
       }, 80);
