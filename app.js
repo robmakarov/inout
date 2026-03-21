@@ -5948,6 +5948,7 @@ async function openSecondaryView(ch) {
     feedEl = feed;
     visual.appendChild(feed);
   }
+  attachFeedWheelProxy(visual);
   view.appendChild(visual);
   viewsContainer.appendChild(view);
   secondaryViewEl = view;
@@ -7615,6 +7616,21 @@ async function applyWorkspaceOpenSecondaryViews(desired, opts) {
   } catch (_) {}
 }
 
+/** Merge remote feed scroll positions into viewScroll (used by workspace sync + deduped realtime). */
+function mergeWorkspaceFeedScrollFromConfig(cfg) {
+  if (!cfg || !cfg.feedScrollByView || typeof cfg.feedScrollByView !== 'object') return;
+  try {
+    const keys = Object.keys(cfg.feedScrollByView);
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      const top = cfg.feedScrollByView[k];
+      if (typeof top === 'number' && Number.isFinite(top) && top >= 0) {
+        viewScroll.set(String(k), top);
+      }
+    }
+  } catch (_) {}
+}
+
 function gatherPersonalWorkspaceStateForSave() {
   const list = collectOpenSecondaryViewChannels();
   let multiviewSplit = null;
@@ -7685,30 +7701,53 @@ function gatherPersonalWorkspaceStateForSave() {
   };
 }
 
+/** Returns true if layout is not ready yet but we still want a non-zero scroll (retry). */
+function applyWorkspaceFeedScrollToDomOnce() {
+  var needRetry = false;
+  if (feedEl && currentView != null) {
+    const top = viewScroll.get(String(currentView));
+    if (typeof top === 'number' && top >= 0) {
+      const maxScroll = feedEl.scrollHeight - feedEl.clientHeight;
+      if (maxScroll > 0) {
+        feedEl.scrollTop = Math.min(top, Math.max(0, maxScroll));
+      } else if (top > 2) needRetry = true;
+    }
+  }
+  if (typeof views !== 'undefined' && views && views.length) {
+    for (let vi = 0; vi < views.length; vi++) {
+      const v = views[vi];
+      if (!v || v.id === 'view-0') continue;
+      const el = v.rootEl && v.rootEl.querySelector && v.rootEl.querySelector('.feed');
+      if (!el) continue;
+      const t = viewScroll.get(String(v.channel));
+      if (typeof t !== 'number' || t < 0) continue;
+      const ms = el.scrollHeight - el.clientHeight;
+      if (ms > 0) {
+        el.scrollTop = Math.min(t, Math.max(0, ms));
+      } else if (t > 2) needRetry = true;
+    }
+  }
+  return needRetry;
+}
+
+var _workspaceFeedScrollRetryGen = 0;
 function applyWorkspaceFeedScrollToDom() {
-  requestAnimationFrame(function() {
+  var gen = ++_workspaceFeedScrollRetryGen;
+  var attempt = 0;
+  function tick() {
+    if (gen !== _workspaceFeedScrollRetryGen) return;
     requestAnimationFrame(function() {
-      if (feedEl && currentView != null) {
-        const top = viewScroll.get(String(currentView));
-        if (typeof top === 'number' && top >= 0) {
-          const maxScroll = feedEl.scrollHeight - feedEl.clientHeight;
-          if (maxScroll > 0) feedEl.scrollTop = Math.min(top, Math.max(0, maxScroll));
+      requestAnimationFrame(function() {
+        if (gen !== _workspaceFeedScrollRetryGen) return;
+        var needRetry = applyWorkspaceFeedScrollToDomOnce();
+        if (needRetry && attempt < 14) {
+          attempt++;
+          setTimeout(tick, 40);
         }
-      }
-      if (typeof views !== 'undefined' && views && views.length) {
-        for (let vi = 0; vi < views.length; vi++) {
-          const v = views[vi];
-          if (!v || v.id === 'view-0') continue;
-          const el = v.rootEl && v.rootEl.querySelector && v.rootEl.querySelector('.feed');
-          if (!el) continue;
-          const t = viewScroll.get(String(v.channel));
-          if (typeof t !== 'number' || t < 0) continue;
-          const ms = el.scrollHeight - el.clientHeight;
-          if (ms > 0) el.scrollTop = Math.min(t, Math.max(0, ms));
-        }
-      }
+      });
     });
-  });
+  }
+  tick();
 }
 
 async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
@@ -7731,24 +7770,21 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
           console.error('workspace uiChrome (deduped nonce)', e);
         }
       }
+      /* Still merge scroll: duplicate postgres/broadcast can arrive after layout; first pass may have maxScroll 0. */
+      mergeWorkspaceFeedScrollFromConfig(cfg);
+      if (cfg.feedScrollByView && typeof cfg.feedScrollByView === 'object') {
+        suppressScrollWorkspacePersistUntil = Date.now() + 650;
+        try {
+          applyWorkspaceFeedScrollToDom();
+        } catch (_) {}
+      }
       return;
     }
     applyingPersonalWorkspaceFromRemote = true;
     var workspaceMergeApplyOk = true;
     try {
       ensureWorkspaceChannelsFromCfg(cfg);
-      if (cfg.feedScrollByView && typeof cfg.feedScrollByView === 'object') {
-        try {
-          const keys = Object.keys(cfg.feedScrollByView);
-          for (let i = 0; i < keys.length; i++) {
-            const k = keys[i];
-            const top = cfg.feedScrollByView[k];
-            if (typeof top === 'number' && Number.isFinite(top) && top >= 0) {
-              viewScroll.set(String(k), top);
-            }
-          }
-        } catch (_) {}
-      }
+      mergeWorkspaceFeedScrollFromConfig(cfg);
       if (Array.isArray(cfg.channelStripOrder) && cfg.channelStripOrder.length > 0) {
         try {
           const strip = cfg.channelStripOrder
@@ -7828,16 +7864,7 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
   let hadRemoteScroll = false;
   if (cfg.feedScrollByView && typeof cfg.feedScrollByView === 'object') {
     hadRemoteScroll = true;
-    try {
-      const keys = Object.keys(cfg.feedScrollByView);
-      for (let i = 0; i < keys.length; i++) {
-        const k = keys[i];
-        const top = cfg.feedScrollByView[k];
-        if (typeof top === 'number' && Number.isFinite(top) && top >= 0) {
-          viewScroll.set(String(k), top);
-        }
-      }
-    } catch (_) {}
+    mergeWorkspaceFeedScrollFromConfig(cfg);
   }
   if (Array.isArray(cfg.channelStripOrder) && cfg.channelStripOrder.length > 0) {
     try {
@@ -7952,7 +7979,7 @@ function schedulePersonalWorkspacePersist() {
   _personalWorkspacePersistTimer = setTimeout(function() {
     _personalWorkspacePersistTimer = null;
     persistPersonalWorkspaceToServer();
-  }, 120);
+  }, 55);
 }
 if (typeof window !== 'undefined') window.schedulePersonalWorkspacePersist = schedulePersonalWorkspacePersist;
 
@@ -10734,6 +10761,33 @@ function autoResize(el) {
 /* ═══ SCROLL ══════════════════════════════════════════════ */
 var scrollSaveTimer = null;
 
+/** Desktop: wheel over .visual padding / live-editing bar (outside .feed) still scrolls the feed. */
+function attachFeedWheelProxy(visual) {
+  if (!visual || visual.nodeType !== 1 || visual.dataset.inoutWheelProxy === '1') return;
+  visual.dataset.inoutWheelProxy = '1';
+  visual.addEventListener(
+    'wheel',
+    function(e) {
+      var feed = visual.querySelector('.feed');
+      if (!feed) return;
+      if (feed.contains(e.target)) return;
+      var max = feed.scrollHeight - feed.clientHeight;
+      if (max <= 0) return;
+      e.preventDefault();
+      feed.scrollTop = Math.max(0, Math.min(max, feed.scrollTop + e.deltaY));
+    },
+    { passive: false }
+  );
+}
+
+function attachFeedWheelProxiesInMultiview() {
+  try {
+    document.querySelectorAll('.multiview-views .view .visual').forEach(function(v) {
+      attachFeedWheelProxy(v);
+    });
+  } catch (_) {}
+}
+
 function scheduleScrollPersistIfAllowed() {
   if (Date.now() < suppressScrollWorkspacePersistUntil) return;
   if (applyingPersonalWorkspaceFromRemote) return;
@@ -10756,7 +10810,7 @@ function bindFeedScrollWorkspaceSync(scrollEl, channelKeyOrFn, isPrimaryFeed) {
         if (document.body.classList.contains('dnd-active')) updateOriginLinePosition();
       }
       if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
-      scrollSaveTimer = setTimeout(saveScrollState, 200);
+      scrollSaveTimer = setTimeout(saveScrollState, 75);
       scheduleScrollPersistIfAllowed();
     },
     { passive: true }
@@ -10772,6 +10826,7 @@ if (feedEl) {
     true
   );
 }
+attachFeedWheelProxiesInMultiview();
 
 /* FLIP animation: smooth shift of rows when reordering during drag */
 function flipAnimateShift(feedInner, dragging, oldRects, rowsArray) {

@@ -3068,7 +3068,7 @@ body.secret-show-grips .frame-grip{
   background:linear-gradient(90deg, transparent 0%, var(--acc) 45%, var(--acc2) 55%, transparent 100%);
   background-size:45% 100%;
   background-repeat:no-repeat;
-  animation:tab-channel-load-sweep 1s ease-in-out infinite;
+  animation:tab-channel-load-sweep 0.52s ease-in-out infinite;
 }
 @keyframes tab-channel-load-sweep{
   0%{ background-position:-20% 0; opacity:0.55; }
