@@ -2975,44 +2975,28 @@ body.secret-show-grips .frame-grip{
     padding:10px 10px calc(14px + env(safe-area-inset-bottom, 0px));
     background:var(--bg);
   }
-  /* Flex column: multiview must claim remaining height between nav and input (iOS). */
+  /* Multiview column: give the feed column a real flex height (iOS/WebKit) without moving scroll off #feed. */
   .frame.frame-fill{
     flex:1 1 0%;
     min-height:0;
-    max-height:100%;
   }
-  .frame.frame-fill > #multiview{
-    max-height:100%;
-  }
-  /*
-    iOS WebKit: nested flex + overflow on #feed often yields a zero or non-scrolling scrollport.
-    Make .visual-feed-stack the scroll container on small screens; keep live bar visible while scrolling.
-  */
   .multiview-views .view > .visual > .visual-feed-stack{
     flex:1 1 0%;
     min-height:0;
-    max-height:100%;
-    overflow-y:scroll;
-    overflow-x:hidden;
+    min-width:0;
+  }
+  /* Primary #feed has id only; keep it a touch scrollport like .view .feed */
+  .multiview-views .view > .visual > .visual-feed-stack > #feed{
+    flex:1 1 0%;
+    min-height:0;
+    overflow-y:auto;
     -webkit-overflow-scrolling:touch;
     touch-action:pan-y;
     overscroll-behavior-y:contain;
   }
-  .multiview-views .view > .visual > .visual-feed-stack > .view-live-editing-bar{
-    position:sticky;
-    top:0;
-    z-index:3;
-  }
-  .multiview-views .view > .visual > .visual-feed-stack > #feed,
-  .multiview-views .view > .visual > .visual-feed-stack > .feed{
-    overflow-x:hidden;
-    overflow-y:visible;
-    flex:0 0 auto;
-    min-height:0;
-    touch-action:pan-y;
-  }
   /* add bottom space in feed so last messages are not hidden behind input */
-  #feed{
+  #feed,
+  .multiview-views .view .feed{
     padding-bottom:120px;
   }
   #nav #tabs{
