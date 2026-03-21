@@ -1282,8 +1282,33 @@ if (typeof crypto !== 'undefined' && !crypto.randomUUID) {
     });
   };
 }
+/** Stable per-browser tab storage; must survive refresh so realtime input_state ignores our own rows. */
 let myId;
-try { myId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) { var r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16); }); } catch (_) { myId = 'fallback-' + Date.now(); }
+(function initStableDeviceId() {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      var sid = localStorage.getItem(LOCAL_DEVICE_ID_KEY);
+      if (sid && String(sid).length >= 8) {
+        myId = String(sid);
+        return;
+      }
+    }
+  } catch (_) {}
+  try {
+    myId =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            var r = Math.random() * 16 | 0;
+            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+          });
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.setItem(LOCAL_DEVICE_ID_KEY, myId);
+    } catch (_) {}
+  } catch (_) {
+    myId = 'fallback-' + Date.now();
+  }
+})();
 let currentUser    = null;
 let currentView    = 'main';
 let currentChannel = currentView; // temporary alias while migrating off "channel"
@@ -1745,6 +1770,8 @@ function updatePrimaryInputRefs() {
 
 function renderComposerSlots() {
   if (!composerSlotsContainer) return;
+  /* New #object-input / send-btn nodes need attachInputListeners; avoid treating stale DOM as still bound. */
+  _inputListenersAttached = false;
   loadInputSlots();
   const channels = (typeof viewNames !== 'undefined' && Array.isArray(viewNames)) ? viewNames : ['main'];
   composerSlotsContainer.innerHTML = '';
@@ -1902,6 +1929,7 @@ function renderComposerSlots() {
     removeBtn.addEventListener('click', function() { removeComposerSlot(index); });
   });
   updatePrimaryInputRefs();
+  if (typeof attachInputListeners === 'function') attachInputListeners();
 }
 
 function addComposerSlot(opts) {
@@ -1924,8 +1952,6 @@ function removeComposerSlot(index) {
   inputSlots.splice(index, 1);
   saveInputSlots();
   renderComposerSlots();
-  _inputListenersAttached = false;
-  attachInputListeners();
 }
 
 async function sendFromSlot(index) {
@@ -2517,8 +2543,6 @@ function setupInputAreaDropTarget() {
       inputSlots.splice(insertAt, 0, removed);
       saveInputSlots();
       renderComposerSlots();
-      _inputListenersAttached = false;
-      attachInputListeners();
     });
   }
   zone.addEventListener('dragover', function(e) {
@@ -3596,6 +3620,7 @@ function subscribeOrderRealtime() {
           if (suppressNextOrderApply) { suppressNextOrderApply = false; return; }
           if (Date.now() < suppressOrderApplyUntil) return;
           await loadObjectOrderForCurrentChannel();
+          dismissRemoteReorderOverlayForChannel(String(currentChannel || ''));
           applyObjectOrderToDOM();
         } catch (e) {
           if (typeof console !== 'undefined' && console.error) console.error('order realtime', e);
@@ -3663,6 +3688,9 @@ function applyViewsTableConfigToChannel(channel, cfg) {
     if (orderArr.length) applyObjectOrderToFeedInner(view.feedInner, orderArr);
     applyFieldPrefsToFeedInner(view.feedInner, fp);
   });
+  if (orderArr.length) {
+    dismissRemoteReorderOverlayForChannel(ch);
+  }
   if (ch === String(currentChannel || '')) {
     if (orderArr.length) {
       currentObjectOrder = orderArr.slice();
@@ -4749,7 +4777,11 @@ function setupDndBroadcastChannel() {
           });
         }
       } else if (data.type === 'dnd_end') {
-        if (remoteDnd && remoteDnd.from === data.from) {
+        var endCh = String(data.channel || '');
+        if (
+          remoteDnd &&
+          (remoteDnd.from === data.from || String(remoteDnd.channel || '') === endCh)
+        ) {
           remoteDnd = null;
           hideRemoteDndLines();
         }
@@ -4759,6 +4791,7 @@ function setupDndBroadcastChannel() {
         if (document.body && document.body.classList.contains('dnd-active')) return;
         var syncOrder = Array.isArray(data.newOrder) ? data.newOrder.map(function(x) { return Number(x); }).filter(function(x) { return Number.isFinite(x); }) : [];
         if (!syncOrder.length) return;
+        dismissRemoteReorderOverlayForChannel(String(currentChannel));
         suppressOrderApplyUntil = Date.now() + 600;
         currentObjectOrder = syncOrder;
         saveOrderToLocal();
@@ -4769,6 +4802,7 @@ function setupDndBroadcastChannel() {
         var newOrder = Array.isArray(data.newOrder) ? data.newOrder.map(function(x) { return Number(x); }).filter(function(x) { return Number.isFinite(x); }) : [];
         var movedIds = Array.isArray(data.movedIds) ? data.movedIds.map(function(x) { return Number(x); }).filter(function(x) { return Number.isFinite(x); }) : [];
         if (!newOrder.length) return;
+        dismissRemoteReorderOverlayForChannel(String(currentChannel));
         suppressOrderApplyUntil = Date.now() + 800;
         currentObjectOrder = newOrder;
         saveOrderToLocal();
@@ -4973,6 +5007,14 @@ function hideRemoteDndLines() {
   if (remoteDropTargetEl) {
     remoteDropTargetEl.classList.remove('visible');
   }
+}
+
+/** Drop ghost/spirit when order landed via DB or order_sync — dnd_end can be missed if channel was slow. */
+function dismissRemoteReorderOverlayForChannel(channelKey) {
+  var want = String(channelKey != null ? channelKey : '');
+  if (remoteDnd && String(remoteDnd.channel || '') !== want) return;
+  remoteDnd = null;
+  hideRemoteDndLines();
 }
 
 function broadcastDndStart() {
@@ -5577,7 +5619,7 @@ async function openSecondaryView(ch) {
       localStorage.setItem(OPEN_VIEWS_KEY, JSON.stringify(open));
     } catch (_) {}
     updateTabsUI();
-    schedulePersonalWorkspacePersist();
+    flushPersonalWorkspacePersist();
   });
   const list = await fetchObjectsListForChannel(ch);
   await replaceFeedWithListInto(list, feedInner);
@@ -5586,7 +5628,7 @@ async function openSecondaryView(ch) {
     const open = Array.from(new Set(views.filter(v => v && v.id !== 'view-0').map(v => v.channel)));
     localStorage.setItem(OPEN_VIEWS_KEY, JSON.stringify(open));
   } catch (_) {}
-  schedulePersonalWorkspacePersist();
+  flushPersonalWorkspacePersist();
 }
 
 function toggleSecondaryView(ch) {
@@ -7281,17 +7323,27 @@ async function applyPersonalWorkspaceStateFromServer(cfg) {
 }
 
 function schedulePersonalWorkspacePersist() {
-  if (!currentUser || !sb || !shouldUseServerForObjects()) return;
+  /* Workspace UI sync uses Supabase whenever signed in — independent of object storage target (cloud vs local vault). */
+  if (!currentUser || !sb) return;
   if (_personalWorkspacePersistTimer) clearTimeout(_personalWorkspacePersistTimer);
   _personalWorkspacePersistTimer = setTimeout(function() {
     _personalWorkspacePersistTimer = null;
     persistPersonalWorkspaceToServer();
-  }, 450);
+  }, 200);
 }
 if (typeof window !== 'undefined') window.schedulePersonalWorkspacePersist = schedulePersonalWorkspacePersist;
 
+function flushPersonalWorkspacePersist() {
+  if (!currentUser || !sb) return;
+  if (_personalWorkspacePersistTimer) {
+    clearTimeout(_personalWorkspacePersistTimer);
+    _personalWorkspacePersistTimer = null;
+  }
+  persistPersonalWorkspaceToServer();
+}
+
 async function persistPersonalWorkspaceToServer() {
-  if (!currentUser || !sb || !shouldUseServerForObjects()) return;
+  if (!currentUser || !sb) return;
   try {
     const slice = gatherPersonalWorkspaceStateForSave();
     let base = {};
@@ -7324,7 +7376,7 @@ async function persistPersonalWorkspaceToServer() {
 }
 
 async function hydrateWorkspaceOpenViewsForSignedInUser() {
-  if (!currentUser || !sb || !shouldUseServerForObjects()) {
+  if (!currentUser || !sb) {
     await restoreSecondaryView();
     return;
   }
@@ -7795,8 +7847,6 @@ async function switchChannel(ch) {
     try { localStorage.setItem(INPUT_SLOTS_KEY, JSON.stringify(inputSlots)); } catch (_) {}
     if (typeof renderComposerSlots === 'function' && composerSlotsContainer) {
       renderComposerSlots();
-      updatePrimaryInputRefs();
-      if (typeof attachInputListeners === 'function') attachInputListeners();
     }
   }
   // keep main view's View name in sync
@@ -7832,7 +7882,7 @@ async function switchChannel(ch) {
   } else {
     clearObjects();
   }
-  if (!applyingWorkspaceFocusFromRemote) schedulePersonalWorkspacePersist();
+  if (!applyingWorkspaceFocusFromRemote) flushPersonalWorkspacePersist();
 }
 
 function openChannelModal() {
@@ -8874,6 +8924,18 @@ function updateComposerCount() {
 }
 
 var _inputListenersAttached = false;
+var _documentDraftSelectionBound = false;
+var _draftSelChangeTimer = null;
+function onDraftSelectionChangeDoc() {
+  var inp = document.getElementById('object-input');
+  if (!inp) return;
+  if (document.activeElement !== inp || editingObjectId != null) return;
+  if (_draftSelChangeTimer) clearTimeout(_draftSelChangeTimer);
+  _draftSelChangeTimer = setTimeout(function() {
+    _draftSelChangeTimer = null;
+    broadcastDraft();
+  }, 80);
+}
 function attachInputListeners() {
   if (_inputListenersAttached) return;
   var inp = document.getElementById('object-input');
@@ -8928,16 +8990,12 @@ input.addEventListener('keydown', e => {
     if (editingObjectId != null) updateEditingRowFromInput();
     else broadcastDraft();
   });
-  var _selChangeTimer = null;
-  function onSelectionChange() {
-    if (document.activeElement !== input || editingObjectId != null) return;
-    if (_selChangeTimer) clearTimeout(_selChangeTimer);
-    _selChangeTimer = setTimeout(function() {
-      _selChangeTimer = null;
-      broadcastDraft();
-    }, 80);
+  if (!_documentDraftSelectionBound) {
+    try {
+      document.addEventListener('selectionchange', onDraftSelectionChangeDoc);
+      _documentDraftSelectionBound = true;
+    } catch (_) {}
   }
-  try { document.addEventListener('selectionchange', onSelectionChange); } catch (_) {}
   input.addEventListener('scroll', () => {
     var ov = document.getElementById('remote-selection-overlay');
     if (ov) { ov.scrollTop = input.scrollTop; ov.scrollLeft = input.scrollLeft; }
@@ -9898,7 +9956,7 @@ var scrollSaveTimer = null;
 function scheduleScrollPersistIfAllowed() {
   if (Date.now() < suppressScrollWorkspacePersistUntil) return;
   if (applyingWorkspaceFocusFromRemote) return;
-  if (!currentUser || !shouldUseServerForObjects()) return;
+  if (!currentUser || !sb) return;
   schedulePersonalWorkspacePersist();
 }
 
