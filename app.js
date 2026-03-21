@@ -7400,6 +7400,25 @@ function updateTabsUI() {
   });
 }
 
+/** Indeterminate bar on the active tab while channel data loads (local switches only). */
+function setTabChannelLoading(channelKey, on) {
+  if (!tabsEl) return;
+  var want = channelKey != null ? String(channelKey) : '';
+  tabsEl.querySelectorAll('.tab.tab-channel-loading').forEach(function(b) {
+    b.classList.remove('tab-channel-loading');
+  });
+  if (!on || !want) return;
+  var list = tabsEl.querySelectorAll('.tab[data-channel]');
+  for (var i = 0; i < list.length; i++) {
+    var btn = list[i];
+    var ch = btn.getAttribute('data-channel') || 'main';
+    if (ch === want) {
+      btn.classList.add('tab-channel-loading');
+      break;
+    }
+  }
+}
+
 var leftChannels = new Set();
 
 function loadLeftChannelsList() {
@@ -7679,20 +7698,20 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
   if (!cfg || typeof cfg !== 'object') return;
   if (mergeMultiview) {
     var nonceM = cfg._wsPushNonce;
-    if (nonceM && nonceM === lastMergedWorkspacePushNonce) {
-      var wantFcEarly = typeof cfg.focusedChannel === 'string' ? cfg.focusedChannel.trim() : '';
-      var haveFcEarly = String(currentView || currentChannel || 'main');
-      if (!wantFcEarly || wantFcEarly === haveFcEarly) {
-        /* Full merge was skipped; still apply uiChrome so account drawer / modals sync (e.g. mobile → web). */
-        if (cfg.uiChrome && typeof cfg.uiChrome === 'object') {
-          try {
-            applyWorkspaceUiChrome(cfg.uiChrome);
-          } catch (e) {
-            console.error('workspace uiChrome (deduped nonce)', e);
-          }
+    /* Same nonce = duplicate postgres/broadcast delivery. Never re-run focusedChannel (stale payload could revert a tab the user already switched locally). */
+    if (
+      nonceM != null &&
+      lastMergedWorkspacePushNonce != null &&
+      String(nonceM) === String(lastMergedWorkspacePushNonce)
+    ) {
+      if (cfg.uiChrome && typeof cfg.uiChrome === 'object') {
+        try {
+          applyWorkspaceUiChrome(cfg.uiChrome);
+        } catch (e) {
+          console.error('workspace uiChrome (deduped nonce)', e);
         }
-        return;
       }
+      return;
     }
     applyingPersonalWorkspaceFromRemote = true;
     var workspaceMergeApplyOk = true;
@@ -8232,7 +8251,7 @@ function renderTabs() {
       // Touch: no delay so tab switch runs before background/tab close races.
       const viewAtClick = currentView;
       if (clickTimer) clearTimeout(clickTimer);
-      var tabSwitchDelay = typeof isMobileOrTouchDevice === 'function' && isMobileOrTouchDevice() ? 0 : 180;
+      var tabSwitchDelay = typeof isMobileOrTouchDevice === 'function' && isMobileOrTouchDevice() ? 0 : 90;
       clickTimer = setTimeout(function() {
         clickTimer = null;
         if (currentView !== viewAtClick) return;
@@ -8532,39 +8551,54 @@ async function switchChannel(ch) {
       console.error('flush workspace (early, tab switch)', e);
     }
   }
-  await loadFieldPrefsForCurrentChannel();
-  if (getSyncInputPref() && currentUser) {
-    await loadInputFromDbForChannel(ch);
-  }
-  if (currentUser) {
-    setupDndBroadcastChannel();
-    setupDraftChannel();
-    subscribeOrderRealtime();
-    subscribeViewRealtime();
+  var showTabLoad = !applyingWorkspaceFocusFromRemote && !inoutHydratingWorkspace;
+  if (showTabLoad) {
+    setTabChannelLoading(ch, true);
     try {
-      await ensureMembership();
-      await reloadForUser();
-    } catch (e) {
-      console.error('switchChannel reload', e);
-    }
-  } else if (tempSessionId) {
-    setupDraftChannel();
-    subscribeViewRealtime();
-    await loadObjectOrderForCurrentChannel();
-    await loadObjects();
-  } else {
-    clearObjects();
-  }
-  if (!applyingWorkspaceFocusFromRemote && !inoutHydratingWorkspace) {
-    try {
-      await flushPersonalWorkspacePersist();
-    } catch (e) {
-      console.error('flush workspace after switchChannel', e);
-    }
+      await new Promise(function(r) {
+        requestAnimationFrame(function() {
+          requestAnimationFrame(r);
+        });
+      });
+    } catch (_) {}
   }
   try {
-    inoutChannelInputQuietUntil = Math.max(inoutChannelInputQuietUntil, Date.now() + 240);
-  } catch (_) {}
+    await loadFieldPrefsForCurrentChannel();
+    if (getSyncInputPref() && currentUser) {
+      await loadInputFromDbForChannel(ch);
+    }
+    if (currentUser) {
+      setupDndBroadcastChannel();
+      setupDraftChannel();
+      subscribeOrderRealtime();
+      subscribeViewRealtime();
+      try {
+        await ensureMembership();
+        await reloadForUser();
+      } catch (e) {
+        console.error('switchChannel reload', e);
+      }
+    } else if (tempSessionId) {
+      setupDraftChannel();
+      subscribeViewRealtime();
+      await loadObjectOrderForCurrentChannel();
+      await loadObjects();
+    } else {
+      clearObjects();
+    }
+    if (!applyingWorkspaceFocusFromRemote && !inoutHydratingWorkspace) {
+      try {
+        await flushPersonalWorkspacePersist();
+      } catch (e) {
+        console.error('flush workspace after switchChannel', e);
+      }
+    }
+    try {
+      inoutChannelInputQuietUntil = Math.max(inoutChannelInputQuietUntil, Date.now() + 240);
+    } catch (_) {}
+  } finally {
+    if (showTabLoad) setTabChannelLoading(ch, false);
+  }
 }
 
 function openChannelModal() {
