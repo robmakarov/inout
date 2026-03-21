@@ -5992,7 +5992,7 @@ function setupTouchDragHandlers() {
     if (!touchDragState || !touchDragState.started || !touchDragState.row) return;
     const touch = e.touches && e.touches[0];
     if (!touch) return;
-    e.preventDefault();
+    if (e.cancelable) e.preventDefault();
     if (!touchDragState.originLineShown) {
       touchDragState.originLineShown = true;
       showDropOriginLine();
@@ -6067,6 +6067,7 @@ function setupTouchDragHandlers() {
   const end = () => {
     if (!touchDragState || !touchDragState.row) return;
     var r = touchDragState.row;
+    const wasStarted = touchDragState.started;
     var block = (dragSelectedRows && dragSelectedRows.length) ? dragSelectedRows.slice() : [r];
     var droppedMovedIdsTouch = block.map(function(x) { return Number(x.dataset.id); }).filter(function(id) { return Number.isFinite(id); });
     var fromRail = touchDragState.fromRail;
@@ -6081,7 +6082,7 @@ function setupTouchDragHandlers() {
     r.classList.remove('dragging');
     if (document.body) {
       document.body.classList.remove('dnd-active');
-      document.body.classList.add('dnd-just-ended');
+      if (wasStarted) document.body.classList.add('dnd-just-ended');
     }
     touchDragState.started = false;
     touchDragState.row = null;
@@ -6090,6 +6091,12 @@ function setupTouchDragHandlers() {
     dndOriginInsertBefore = null;
     dndOriginWantAppend = false;
     dndOriginLineY = null;
+    if (!wasStarted) {
+      requestAnimationFrame(function() {
+        if (document.body) document.body.classList.remove('dnd-just-ended');
+      });
+      return;
+    }
     broadcastDndEnd();
     if (lastReorderTarget && lastReorderTarget.pinToEdge && railEnd && droppedMovedIdsTouch.length) {
       addPinnedIds(currentView, droppedMovedIdsTouch);
@@ -6452,6 +6459,33 @@ function createObjectRow(obj, isNew, options) {
     const railForTouch = document.getElementById('view-pinned-rail');
     touchDragState.fromRail = !!(railForTouch && railForTouch.contains(row));
     touchDragState.started = false;
+    const dndY0 = e.touches[0].clientY;
+    const dndX0 = e.touches[0].clientX;
+    function cancelLongPressIfScrolled(ev) {
+      if (touchDragState.started || touchDragState.row !== row) return;
+      if (!touchDragState.timer) return;
+      const t = ev.touches && ev.touches[0];
+      if (!t) return;
+      if (Math.abs(t.clientY - dndY0) > 14 || Math.abs(t.clientX - dndX0) > 14) {
+        clearTimeout(touchDragState.timer);
+        touchDragState.timer = null;
+        row.removeEventListener('touchmove', cancelLongPressIfScrolled);
+        row.removeEventListener('touchend', clearLongPressRowListeners);
+        row.removeEventListener('touchcancel', clearLongPressRowListeners);
+      }
+    }
+    function clearLongPressRowListeners() {
+      row.removeEventListener('touchmove', cancelLongPressIfScrolled);
+      row.removeEventListener('touchend', clearLongPressRowListeners);
+      row.removeEventListener('touchcancel', clearLongPressRowListeners);
+      if (touchDragState.row === row && !touchDragState.started && touchDragState.timer) {
+        clearTimeout(touchDragState.timer);
+        touchDragState.timer = null;
+      }
+    }
+    row.addEventListener('touchmove', cancelLongPressIfScrolled, { passive: true });
+    row.addEventListener('touchend', clearLongPressRowListeners, { passive: true });
+    row.addEventListener('touchcancel', clearLongPressRowListeners, { passive: true });
     touchDragState.timer = setTimeout(() => {
       if (!touchDragState || touchDragState.row !== row) return;
       touchDragState.started = true;
@@ -6474,6 +6508,9 @@ function createObjectRow(obj, isNew, options) {
       savedOrderBeforeDrag = currentObjectOrder.slice();
       hideRemoteDndLines();
       broadcastDndStart();
+      row.removeEventListener('touchmove', cancelLongPressIfScrolled);
+      row.removeEventListener('touchend', clearLongPressRowListeners);
+      row.removeEventListener('touchcancel', clearLongPressRowListeners);
       /* origin line shown on first touchmove, not here, so it doesn't appear on long-press alone */
     }, 200); // long press threshold
   }, { passive: true });
@@ -6769,7 +6806,7 @@ function createObjectRow(obj, isNew, options) {
     const state = { started: false, mode: null, startRowStates: null, didWeMove: false };
     const onTouchMove = (ev) => {
       if (!state.started || ev.touches.length !== 1) return;
-      ev.preventDefault();
+      if (ev.cancelable) ev.preventDefault();
       const cy = ev.touches[0].clientY;
       applyDragSelectRect(feedInner, feedEl, state.startYContent, cy, state.mode, state.startRowStates);
       updateEdgeScroll(cy, ev.touches[0].clientX);
@@ -6889,7 +6926,7 @@ function createObjectRow(obj, isNew, options) {
     const state = { started: false, mode: null, startRowStates: null, startYContent: null, didWeMove: false };
     const onTouchMove = (ev) => {
       if (!state.started || ev.touches.length !== 1) return;
-      ev.preventDefault();
+      if (ev.cancelable) ev.preventDefault();
       const cy = ev.touches[0].clientY;
       applyDragSelectRect(feedInner, feedEl, state.startYContent, cy, state.mode, state.startRowStates);
       updateEdgeScroll(cy, ev.touches[0].clientX);
@@ -6927,7 +6964,7 @@ function createObjectRow(obj, isNew, options) {
         const box = r.querySelector('.obj-select');
         if (box) state.startRowStates.set(r, box.checked);
       });
-    }, 200);
+    }, 300);
     const onDocTouchMove = (ev) => {
       if (timer) clearTimeout(timer);
       timer = null;
