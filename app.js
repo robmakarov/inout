@@ -130,7 +130,7 @@ function getFeedScrollSurface(feed) {
   try {
     if (typeof getComputedStyle !== 'undefined') {
       var oy = getComputedStyle(stack).overflowY;
-      if (oy === 'auto' || oy === 'scroll') return stack;
+      if (oy === 'auto' || oy === 'scroll' || oy === 'overlay') return stack;
     }
   } catch (_) {}
   try {
@@ -8684,8 +8684,6 @@ async function refreshSharedFlags() {
 }
 
 async function switchChannelInternal(ch) {
-  /* Drop debounced tab clicks so remote/workspace focus cannot race a stale mobile tap. */
-  clearPendingViewSwitchClick();
   if (ch === currentChannel && ch === currentView) {
     const slot0 = inputSlots && inputSlots[0];
     const slotMismatch =
@@ -8718,6 +8716,8 @@ async function switchChannelInternal(ch) {
       return;
     }
   }
+  /* Only clear debounced tab clicks when we actually change channel — same-tab calls must not cancel a pending tap to another tab. */
+  clearPendingViewSwitchClick();
   teardownDndBroadcastChannel();
   /* Cancel pending composer DB writes — they would use the NEW channel id with the OLD view's text. */
   if (inputSaveToDbTimer) {
