@@ -900,9 +900,7 @@ function subscribeTempSessionJoins() {
       if (typeof localStorage !== 'undefined') {
         try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ kbMode: kbMode, systemKeyboardEnabled: systemKeyboardEnabled, fxEnabled: fxEnabled, vibeEnabled: vibeEnabled })); } catch (_) {}
       }
-      if (typeof window !== 'undefined' && typeof window.schedulePersonalWorkspacePersist === 'function') {
-        window.schedulePersonalWorkspacePersist();
-      }
+      schedulePersonalWorkspacePersist();
       renderKeys();
       return;
     }
@@ -1412,9 +1410,12 @@ const OPEN_VIEWS_KEY     = 'inout_open_views_v1';
 const WORKSPACE_META_VIEW_CHANNEL = '__inout_open_panels__';
 /** Mobile KB / FX prefs (same key as setupCustomMobileKeyboard IIFE). */
 const INOUT_KB_SETTINGS_KEY = 'inout_mobile_kb_settings_v1';
+const MANAGE_BAR_ORDER_KEY = 'inout_manage_bar_order_v1';
 const FRAME_ORDER_KEY    = 'inout_frame_order_v1';
 var _personalWorkspacePersistTimer = null;
 var _channelViewRulesPersistTimer = null;
+/** True while switching tab from personal workspace realtime (skip re-persist). */
+var applyingWorkspaceFocusFromRemote = false;
 const LAYOUT_SYNC_KEY    = 'inout_layout_sync_v1';
 const DEFAULT_FRAME_ORDER = ['nav', 'multiview', 'input'];
 
@@ -3212,7 +3213,7 @@ function subscribeChannelMembershipRealtime() {
       if (beforePanels.includes(ch)) {
         await applyWorkspaceOpenSecondaryViews(beforePanels.filter(c => c !== ch));
       }
-      void persistWorkspaceOpenViewsToServer();
+      schedulePersonalWorkspacePersist();
       if (currentChannel === ch || currentView === ch) {
         try {
           await switchChannel('main');
@@ -3277,9 +3278,6 @@ function subscribeRealtimeAll() {
   }
 
   viewNames.forEach(ch => {
-    try {
-      console.log('[realtime] subscribe', ch);
-    } catch (_) {}
     let filter = 'channel=eq.' + ch;
     // For signed-in users, "main" is per-user; other views rely on RLS.
     if (currentUser && ch === 'main') {
@@ -3782,9 +3780,6 @@ function subscribeActionLog() {
 }
 
 function onInsertForChannel(ch, msg) {
-  try {
-    console.log('[realtime] insert', ch, msg && msg.id);
-  } catch (_) {}
   if (!realtimeInsertBuffer.has(ch)) realtimeInsertBuffer.set(ch, []);
   realtimeInsertBuffer.get(ch).push(msg);
   if (!realtimeInsertFlushTimer) {
@@ -4334,9 +4329,9 @@ function getLayoutSyncPref() {
     return v !== 'false' && v !== '0';
   } catch (_) { return true; }
 }
-function setLayoutSyncPref(on) {
+function setLayoutSyncPref(on, syncWorkspace) {
   try { localStorage.setItem(LAYOUT_SYNC_KEY, on ? '1' : '0'); } catch (_) {}
-  if (typeof schedulePersonalWorkspacePersist === 'function') schedulePersonalWorkspacePersist();
+  if (syncWorkspace !== false) schedulePersonalWorkspacePersist();
 }
 
 function getFrameOrder() {
@@ -4365,7 +4360,7 @@ function applyFrameOrder(order) {
 function saveFrameOrder(order) {
   if (!Array.isArray(order) || order.length === 0) return;
   try { localStorage.setItem(FRAME_ORDER_KEY, JSON.stringify(order)); } catch (_) {}
-  if (typeof schedulePersonalWorkspacePersist === 'function') schedulePersonalWorkspacePersist();
+  schedulePersonalWorkspacePersist();
   if (layoutChannel && getLayoutSyncPref()) {
     try {
       layoutChannel.send({ type: 'broadcast', event: 'layout', payload: { frameOrder: order } });
@@ -5437,16 +5432,16 @@ function closeSecondaryView() {
   try { localStorage.setItem(OPEN_VIEWS_KEY, '[]'); } catch (_) {}
   saveSecondaryViewState();
   updateTabsUI();
-  void persistWorkspaceOpenViewsToServer();
+  schedulePersonalWorkspacePersist();
 }
 
-function applyMultiviewSplit(ratio) {
+function applyMultiviewSplit(ratio, syncWorkspace) {
   const viewsContainer = document.querySelector('.multiview-views');
   if (!viewsContainer) return;
   ratio = Math.max(0.2, Math.min(0.8, ratio));
   viewsContainer.style.setProperty('--multiview-split', String(ratio));
   try { localStorage.setItem(MULTIVIEW_SPLIT_KEY, String(ratio)); } catch (_) {}
-  if (typeof schedulePersonalWorkspacePersist === 'function') schedulePersonalWorkspacePersist();
+  if (syncWorkspace !== false) schedulePersonalWorkspacePersist();
 }
 
 function setupMultiviewResizer(resizerEl, viewsEl) {
@@ -5579,7 +5574,7 @@ async function openSecondaryView(ch) {
       localStorage.setItem(OPEN_VIEWS_KEY, JSON.stringify(open));
     } catch (_) {}
     updateTabsUI();
-    void persistWorkspaceOpenViewsToServer();
+    schedulePersonalWorkspacePersist();
   });
   const list = await fetchObjectsListForChannel(ch);
   await replaceFeedWithListInto(list, feedInner);
@@ -5588,7 +5583,7 @@ async function openSecondaryView(ch) {
     const open = Array.from(new Set(views.filter(v => v && v.id !== 'view-0').map(v => v.channel)));
     localStorage.setItem(OPEN_VIEWS_KEY, JSON.stringify(open));
   } catch (_) {}
-  void persistWorkspaceOpenViewsToServer();
+  schedulePersonalWorkspacePersist();
 }
 
 function toggleSecondaryView(ch) {
@@ -5641,10 +5636,7 @@ async function persistChannelViewRulesForCurrentChannel() {
   try {
     let q = sb.from('views').select('config').eq('channel', ch).limit(1);
     if (!isChannelViewCollaborative(ch) && currentUser.id) q = q.eq('user_id', currentUser.id);
-    const { data, error } = await q.maybeSingle();
-    if (error && error.code && error.code !== 'PGRST116') {
-      /* use empty base */
-    }
+    const { data } = await q.maybeSingle();
     const base = data ? normalizeViewConfig(data.config) : null;
     const cfg = Object.assign({}, base && typeof base === 'object' ? base : {}, {
       order: Array.isArray(currentObjectOrder) ? currentObjectOrder.slice() : [],
@@ -6985,7 +6977,7 @@ function saveLeftChannelsList() {
   try {
     localStorage.setItem(LEFT_CHANNELS_KEY, JSON.stringify(Array.from(leftChannels)));
   } catch (_) {}
-  if (typeof schedulePersonalWorkspacePersist === 'function') schedulePersonalWorkspacePersist();
+  schedulePersonalWorkspacePersist();
 }
 
 function loadChannelsList() {
@@ -7047,15 +7039,9 @@ async function upsertViewsConfigForChannel(channelKey, configObj) {
 function isChannelViewCollaborative(ch) {
   const c = String(ch || '').trim();
   if (!c || c === 'main') return false;
-  try {
-    if (tempSessionId && !currentUser) return true;
-  } catch (_) {}
-  try {
-    if (sharedChannels && sharedChannels.has && sharedChannels.has(c)) return true;
-  } catch (_) {}
-  try {
-    if (tempSessionId && currentUser && c === String(currentChannel || '').trim()) return true;
-  } catch (_) {}
+  if (tempSessionId && !currentUser) return true;
+  if (sharedChannels && sharedChannels.has(c)) return true;
+  if (tempSessionId && currentUser && c === String(currentChannel || '').trim()) return true;
   return false;
 }
 
@@ -7142,8 +7128,7 @@ function gatherPersonalWorkspaceStateForSave() {
   } catch (_) {}
   let manageBarOrder = [];
   try {
-    var mbKey = typeof MANAGE_BAR_ORDER_KEY !== 'undefined' ? MANAGE_BAR_ORDER_KEY : 'inout_manage_bar_order_v1';
-    const raw = localStorage.getItem(mbKey);
+    const raw = localStorage.getItem(MANAGE_BAR_ORDER_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) manageBarOrder = parsed;
@@ -7173,7 +7158,7 @@ async function applyPersonalWorkspaceStateFromServer(cfg) {
   }
   if (typeof cfg.multiviewSplit === 'number' && Number.isFinite(cfg.multiviewSplit)) {
     try {
-      applyMultiviewSplit(cfg.multiviewSplit);
+      applyMultiviewSplit(cfg.multiviewSplit, false);
     } catch (_) {}
   }
   if (Array.isArray(cfg.frameOrder) && cfg.frameOrder.length) {
@@ -7184,36 +7169,48 @@ async function applyPersonalWorkspaceStateFromServer(cfg) {
   }
   if (typeof cfg.layoutSync === 'boolean') {
     try {
-      setLayoutSyncPref(cfg.layoutSync);
-      if (typeof setupLayoutChannel === 'function') setupLayoutChannel();
+      setLayoutSyncPref(cfg.layoutSync, false);
+      setupLayoutChannel();
     } catch (_) {}
   }
   if (cfg.viewDisplayNames && typeof cfg.viewDisplayNames === 'object') {
     try {
       viewDisplayNames = Object.assign({}, cfg.viewDisplayNames);
       saveViewDisplayNames();
-      if (typeof renderTabs === 'function') renderTabs();
-      if (typeof refreshMoveTargets === 'function') refreshMoveTargets();
-      if (typeof syncComposerTargetSelects === 'function') syncComposerTargetSelects();
+      renderTabs();
+      refreshMoveTargets();
+      syncComposerTargetSelects();
     } catch (_) {}
   }
   if (Array.isArray(cfg.leftChannelIds)) {
     try {
       leftChannels = new Set(cfg.leftChannelIds.map(x => String(x || '').trim()).filter(x => x && x !== 'main'));
-      saveLeftChannelsList();
+      localStorage.setItem(LEFT_CHANNELS_KEY, JSON.stringify(Array.from(leftChannels)));
     } catch (_) {}
   }
   if (Array.isArray(cfg.manageBarOrder) && cfg.manageBarOrder.length) {
     try {
-      var mbKey2 = typeof MANAGE_BAR_ORDER_KEY !== 'undefined' ? MANAGE_BAR_ORDER_KEY : 'inout_manage_bar_order_v1';
-      localStorage.setItem(mbKey2, JSON.stringify(cfg.manageBarOrder));
-      if (typeof applyManageBarOrder === 'function') applyManageBarOrder();
+      localStorage.setItem(MANAGE_BAR_ORDER_KEY, JSON.stringify(cfg.manageBarOrder));
+      applyManageBarOrder();
     } catch (_) {}
   }
   if (cfg.settings && typeof cfg.settings === 'object') {
     try {
       localStorage.setItem(INOUT_KB_SETTINGS_KEY, JSON.stringify(cfg.settings));
     } catch (_) {}
+  }
+  if (typeof cfg.focusedChannel === 'string' && cfg.focusedChannel.trim()) {
+    const want = cfg.focusedChannel.trim();
+    if (viewNames.includes(want) && (want !== currentView || want !== currentChannel)) {
+      applyingWorkspaceFocusFromRemote = true;
+      try {
+        await switchChannel(want);
+      } catch (e) {
+        console.error('apply focusedChannel', e);
+      } finally {
+        applyingWorkspaceFocusFromRemote = false;
+      }
+    }
   }
 }
 
@@ -7251,10 +7248,6 @@ async function persistPersonalWorkspaceToServer() {
   } catch (e) {
     console.error('persistPersonalWorkspaceToServer', e);
   }
-}
-
-async function persistWorkspaceOpenViewsToServer() {
-  schedulePersonalWorkspacePersist();
 }
 
 async function hydrateWorkspaceOpenViewsForSignedInUser() {
@@ -7593,13 +7586,13 @@ function renameView(ch, btn) {
       applyRemoteViewTitle(key, null);
       cleanup(getViewDefaultName(key));
       persistViewTitle(key, null);
-      if (typeof schedulePersonalWorkspacePersist === 'function') schedulePersonalWorkspacePersist();
+      schedulePersonalWorkspacePersist();
       return;
     }
     applyRemoteViewTitle(key, cleaned);
     cleanup(cleaned);
     persistViewTitle(key, cleaned);
-    if (typeof schedulePersonalWorkspacePersist === 'function') schedulePersonalWorkspacePersist();
+    schedulePersonalWorkspacePersist();
   }
 
   function cancel() {
@@ -7607,7 +7600,7 @@ function renameView(ch, btn) {
     finished = true;
     applyRemoteViewTitle(key, beforeRaw);
     persistViewTitle(key, beforeRaw);
-    if (typeof schedulePersonalWorkspacePersist === 'function') schedulePersonalWorkspacePersist();
+    schedulePersonalWorkspacePersist();
     cleanup(before);
   }
 
@@ -7727,6 +7720,7 @@ async function switchChannel(ch) {
   if (views[0]) views[0].channel = ch;
   try {
     localStorage.setItem(CURRENT_CHANNEL_KEY, currentChannel);
+    localStorage.setItem(CURRENT_VIEW_KEY, currentView);
   } catch (_) {}
   unreadCounts.set(ch, 0);
   updateTabsUI();
@@ -7750,6 +7744,7 @@ async function switchChannel(ch) {
   } else {
     clearObjects();
   }
+  if (!applyingWorkspaceFocusFromRemote) schedulePersonalWorkspacePersist();
 }
 
 function openChannelModal() {
@@ -9078,7 +9073,6 @@ if (fieldLabelsChk) {
   });
 }
 
-var MANAGE_BAR_ORDER_KEY = 'inout_manage_bar_order_v1';
 var barDndDraggedEl = null;
 var barDndIndicatorEl = null;
 
@@ -9114,7 +9108,7 @@ function saveManageBarOrder() {
     .filter(function(n) { return n.getAttribute && n.getAttribute('data-bar-id'); })
     .map(function(n) { return n.getAttribute('data-bar-id'); });
   try { localStorage.setItem(MANAGE_BAR_ORDER_KEY, JSON.stringify(ids)); } catch (_) {}
-  if (typeof schedulePersonalWorkspacePersist === 'function') schedulePersonalWorkspacePersist();
+  schedulePersonalWorkspacePersist();
 }
 
 function setupBarDndMode(on) {
