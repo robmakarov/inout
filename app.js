@@ -123,11 +123,17 @@ if (window.Stripe && STRIPE_PUBLISHABLE_KEY && !STRIPE_PUBLISHABLE_KEY.includes(
 
 const feedInner  = document.getElementById('feed-inner');
 const feedEl     = document.getElementById('feed');
-/** Primary or secondary .feed: scrollport is the .feed / #feed unless a parent stack is explicitly scrollable. */
+/** Primary or secondary .feed: on narrow viewports CSS scrolls .visual-feed-stack; desktop scrolls #feed. */
 function getFeedScrollSurface(feed) {
   if (!feed || typeof feed.closest !== 'function') return feed;
   var stack = feed.closest('.visual-feed-stack');
-  if (!stack || typeof getComputedStyle === 'undefined') return feed;
+  if (!stack) return feed;
+  try {
+    if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 540px)').matches) {
+      return stack;
+    }
+  } catch (_) {}
+  if (typeof getComputedStyle === 'undefined') return feed;
   var oy = getComputedStyle(stack).overflowY;
   if (oy === 'auto' || oy === 'scroll') return stack;
   return feed;
@@ -10909,25 +10915,26 @@ function scheduleScrollPersistIfAllowed() {
 /** Persist scroll position for cross-device workspace sync (primary + secondary feeds). */
 function bindFeedScrollWorkspaceSync(scrollEl, channelKeyOrFn, isPrimaryFeed) {
   if (!scrollEl) return;
-  scrollEl.addEventListener(
-    'scroll',
-    function() {
-      var surf = getFeedScrollSurface(scrollEl);
-      if (!surf) return;
-      const ch =
-        typeof channelKeyOrFn === 'function' ? String(channelKeyOrFn() || 'main') : String(channelKeyOrFn);
-      viewScroll.set(ch, surf.scrollTop);
-      if (isPrimaryFeed) {
-        atBottom = isNearBottom();
-        if (atBottom && scrollBtn) scrollBtn.classList.remove('visible');
-        if (document.body.classList.contains('dnd-active')) updateOriginLinePosition();
-      }
-      if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
-      scrollSaveTimer = setTimeout(saveScrollState, 75);
-      scheduleScrollPersistIfAllowed();
-    },
-    { passive: true }
-  );
+  var stack = scrollEl.closest && scrollEl.closest('.visual-feed-stack');
+  function onScroll(ev) {
+    var surf = getFeedScrollSurface(scrollEl);
+    var t = ev && ev.currentTarget;
+    if (t && t !== surf) return;
+    if (!surf) return;
+    const ch =
+      typeof channelKeyOrFn === 'function' ? String(channelKeyOrFn() || 'main') : String(channelKeyOrFn);
+    viewScroll.set(ch, surf.scrollTop);
+    if (isPrimaryFeed) {
+      atBottom = isNearBottom();
+      if (atBottom && scrollBtn) scrollBtn.classList.remove('visible');
+      if (document.body.classList.contains('dnd-active')) updateOriginLinePosition();
+    }
+    if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
+    scrollSaveTimer = setTimeout(saveScrollState, 75);
+    scheduleScrollPersistIfAllowed();
+  }
+  scrollEl.addEventListener('scroll', onScroll, { passive: true });
+  if (stack && stack !== scrollEl) stack.addEventListener('scroll', onScroll, { passive: true });
 }
 
 if (feedEl) {

@@ -2994,21 +2994,45 @@ body.secret-show-grips .frame-grip{
     flex:1 1 0%;
     min-height:0;
   }
+  /*
+    iOS/WebKit: inner #feed + height:0 flex often does not scroll; outer .visual-feed-stack scrolls reliably.
+    Desktop (>540px) keeps #feed as scrollport (base rules).
+  */
   .multiview-views .view > .visual > .visual-feed-stack{
     flex:1 1 0%;
     min-height:0;
     min-width:0;
+    overflow-y:auto;
+    overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;
+    touch-action:pan-y;
+    overscroll-behavior-y:contain;
   }
-  /* Primary #feed has id only; same flex scrollport as base #feed rules */
-  .multiview-views .view > .visual > .visual-feed-stack > #feed{
+  .multiview-views .view > .visual > .visual-feed-stack > .view-live-editing-bar{
+    position:sticky;
+    top:0;
+    z-index:3;
+    flex-shrink:0;
+  }
+  .multiview-views .view > .visual > .visual-feed-stack > #feed,
+  .multiview-views .view > .visual > .visual-feed-stack > .feed{
+    flex:0 0 auto;
+    min-height:0;
+    height:auto;
+    overflow-x:hidden;
+    overflow-y:visible;
+    -webkit-overflow-scrolling:auto;
+    touch-action:pan-y;
+  }
+  /* Split panes: .feed is direct under .visual (no stack) — keep #feed-like scroll on the pane */
+  .multiview-views .view > .visual > .feed{
     flex:1 1 0%;
     flex-basis:0;
     min-height:0;
     height:0;
     overflow-y:scroll;
     -webkit-overflow-scrolling:touch;
-    touch-action:pan-y;
-    overscroll-behavior-y:auto;
+    touch-action:pan-x pan-y;
   }
   /* add bottom space in feed so last messages are not hidden behind input */
   #feed,
