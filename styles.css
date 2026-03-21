@@ -3036,24 +3036,26 @@ body.secret-show-grips .frame-grip{
 
 .tab.tab-channel-loading{
   position:relative;
-  overflow:hidden;
+  /* no overflow:hidden — avoids clipping badges and changing perceived tab width */
 }
 .tab.tab-channel-loading::after{
   content:'';
   position:absolute;
   left:0;
+  right:0;
   bottom:0;
   height:2px;
-  width:35%;
-  border-radius:1px;
-  background:linear-gradient(90deg, transparent, var(--acc), transparent);
-  animation:tab-channel-load-sweep 0.9s ease-in-out infinite;
+  border-radius:0 0 999px 999px;
   pointer-events:none;
+  background:linear-gradient(90deg, transparent 0%, var(--acc) 45%, var(--acc2) 55%, transparent 100%);
+  background-size:45% 100%;
+  background-repeat:no-repeat;
+  animation:tab-channel-load-sweep 1s ease-in-out infinite;
 }
 @keyframes tab-channel-load-sweep{
-  0%{ transform:translateX(-30%); opacity:0.5; }
+  0%{ background-position:-20% 0; opacity:0.55; }
   50%{ opacity:1; }
-  100%{ transform:translateX(320%); opacity:0.5; }
+  100%{ background-position:120% 0; opacity:0.55; }
 }
 
 .tab-secondary-open{
