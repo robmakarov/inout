@@ -900,6 +900,9 @@ function subscribeTempSessionJoins() {
       if (typeof localStorage !== 'undefined') {
         try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ kbMode: kbMode, systemKeyboardEnabled: systemKeyboardEnabled, fxEnabled: fxEnabled, vibeEnabled: vibeEnabled })); } catch (_) {}
       }
+      if (typeof window !== 'undefined' && typeof window.schedulePersonalWorkspacePersist === 'function') {
+        window.schedulePersonalWorkspacePersist();
+      }
       renderKeys();
       return;
     }
@@ -1293,6 +1296,7 @@ const VIEW_DISPLAY_NAMES_KEY = 'inout_view_display_names_v1';
 let viewDisplayNames = {};
 const VIEWS_KEY           = 'inout_views_v1';
 const LEFT_VIEWS_KEY      = 'inout_left_views_v1';
+const LEFT_CHANNELS_KEY   = LEFT_VIEWS_KEY; /* alias: left-rail hidden feeds */
 const CURRENT_VIEW_KEY    = 'inout_current_view_v1';
 const SECONDARY_VIEW_KEY  = 'inout_secondary_view_name_v1';
 const MULTIVIEW_SPLIT_KEY = 'inout_multiview_split_v1';
@@ -1406,7 +1410,11 @@ const viewScroll = new Map();
 const OPEN_VIEWS_KEY     = 'inout_open_views_v1';
 /** Reserved `views.channel` for per-user UI state (not a real feed). */
 const WORKSPACE_META_VIEW_CHANNEL = '__inout_open_panels__';
+/** Mobile KB / FX prefs (same key as setupCustomMobileKeyboard IIFE). */
+const INOUT_KB_SETTINGS_KEY = 'inout_mobile_kb_settings_v1';
 const FRAME_ORDER_KEY    = 'inout_frame_order_v1';
+var _personalWorkspacePersistTimer = null;
+var _channelViewRulesPersistTimer = null;
 const LAYOUT_SYNC_KEY    = 'inout_layout_sync_v1';
 const DEFAULT_FRAME_ORDER = ['nav', 'multiview', 'input'];
 
@@ -2703,7 +2711,7 @@ async function persistViewTitle(channel, titleValue) {
     let cfg = {};
     try {
       let q = sb.from('views').select('config').eq('channel', ch).limit(1);
-      if (currentUser && currentUser.id) q = q.eq('user_id', currentUser.id);
+      if (currentUser && currentUser.id && !isChannelViewCollaborative(ch)) q = q.eq('user_id', currentUser.id);
       const { data } = await q.maybeSingle();
       const parsed = data ? normalizeViewConfig(data.config) : null;
       if (parsed && typeof parsed === 'object') cfg = parsed;
@@ -2711,7 +2719,7 @@ async function persistViewTitle(channel, titleValue) {
     const nextCfg = Object.assign({}, cfg);
     if (typeof titleValue === 'string' && titleValue.trim()) nextCfg.title = titleValue.trim();
     else delete nextCfg.title;
-    await upsertViewsConfigForChannel(ch, nextCfg);
+    await upsertChannelViewConfigMerged(ch, nextCfg);
   } catch (e) {
     console.error(e);
   }
@@ -3597,6 +3605,80 @@ function subscribeOrderRealtime() {
     .subscribe();
 }
 
+function applyObjectOrderToFeedInner(inner, orderIds) {
+  if (!inner || !Array.isArray(orderIds) || !orderIds.length) return;
+  const header = inner.querySelector('.obj.obj-header');
+  const rows = Array.from(inner.querySelectorAll('.obj:not(.obj-header)'));
+  if (!rows.length) return;
+  const domOrder = rows.map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id));
+  if (domOrder.length === orderIds.length && domOrder.every((id, i) => id === orderIds[i])) return;
+  const byId = new Map();
+  rows.forEach(row => {
+    const id = Number(row.dataset.id);
+    if (Number.isFinite(id)) byId.set(id, row);
+  });
+  if (!byId.size) return;
+  const order = orderIds.map(Number).filter(id => byId.has(id));
+  const frag = document.createDocumentFragment();
+  order.forEach(id => {
+    const row = byId.get(id);
+    if (row) {
+      frag.appendChild(row);
+      byId.delete(id);
+    }
+  });
+  byId.forEach(row => frag.appendChild(row));
+  if (header && header.parentNode === inner) inner.insertBefore(header, inner.firstChild);
+  inner.appendChild(frag);
+}
+
+function applyFieldPrefsToFeedInner(inner, fp) {
+  if (!inner || !fp) return;
+  inner.querySelectorAll('.obj').forEach(row => {
+    if (row.classList.contains('obj-header')) return;
+    const timeEl = row.querySelector('.obj-time');
+    const senderEl = row.querySelector('.obj-sender');
+    if (timeEl) timeEl.style.setProperty('display', fp.showTime ? 'block' : 'none', 'important');
+    if (senderEl) senderEl.style.setProperty('display', fp.showAuthor ? 'block' : 'none', 'important');
+  });
+  inner.classList.toggle('obj-labels-off', !fp.showLabels);
+}
+
+/** Apply `views.config` to every open feed pane for this channel (primary + multiview). */
+function applyViewsTableConfigToChannel(channel, cfg) {
+  if (!cfg || typeof cfg !== 'object') return;
+  const ch = String(channel || '');
+  applyRemoteViewTitle(ch, cfg.title);
+  const defTime = true;
+  const defAuthor = true;
+  const fp = {
+    showTime: typeof cfg.showTime === 'boolean' ? cfg.showTime : defTime,
+    showAuthor: typeof cfg.showAuthor === 'boolean' ? cfg.showAuthor : defAuthor,
+    showLabels: typeof cfg.showLabels === 'boolean' ? cfg.showLabels : true,
+    viewMode: (cfg.viewMode === 'table' || cfg.viewMode === 'feed') ? cfg.viewMode : 'feed',
+  };
+  const orderArr = Array.isArray(cfg.order) ? cfg.order.map(x => Number(x)).filter(x => Number.isFinite(x)) : [];
+  views.forEach(view => {
+    if (!view || view.channel !== ch || !view.feedInner) return;
+    if (orderArr.length) applyObjectOrderToFeedInner(view.feedInner, orderArr);
+    applyFieldPrefsToFeedInner(view.feedInner, fp);
+  });
+  if (ch === String(currentChannel || '')) {
+    if (orderArr.length) {
+      currentObjectOrder = orderArr.slice();
+      try {
+        saveOrderToLocal();
+      } catch (_) {}
+    }
+    fieldPrefs = fp;
+    try {
+      saveFieldPrefsForCurrentChannel();
+    } catch (_) {}
+    applyFieldPrefsUI();
+    applyFieldPrefsToObjects();
+  }
+}
+
 function subscribeViewRealtime() {
   if (!sb || !sb.channel) return;
   if (viewSub) {
@@ -3617,39 +3699,33 @@ function subscribeViewRealtime() {
         try {
           const row = payload.new || payload.old || {};
           if (!row || !row.channel) return;
-          if (currentUser && row.user_id != null && String(row.user_id) !== String(currentUser.id)) return;
-          if (String(row.channel) === WORKSPACE_META_VIEW_CHANNEL) {
+          const rowCh = String(row.channel);
+          if (rowCh === WORKSPACE_META_VIEW_CHANNEL) {
+            if (currentUser && row.user_id != null && String(row.user_id) !== String(currentUser.id)) return;
+            if (suppressNextPersonalWorkspaceApply) {
+              suppressNextPersonalWorkspaceApply = false;
+              return;
+            }
             const cfgW = normalizeViewConfig(row.config);
-            if (cfgW && Array.isArray(cfgW.openSecondaryViews)) {
-              applyWorkspaceOpenSecondaryViews(cfgW.openSecondaryViews).catch(function(e) {
-                console.error('workspace open views apply', e);
+            if (cfgW && typeof cfgW === 'object') {
+              applyPersonalWorkspaceStateFromServer(cfgW).catch(function(e) {
+                console.error('personal workspace apply', e);
               });
             }
             return;
           }
+          const rowUid = row.user_id != null ? String(row.user_id) : '';
+          const isMine = !!(currentUser && rowUid === String(currentUser.id));
+          const collaborative = isChannelViewCollaborative(rowCh);
+          if (!isMine && !collaborative) return;
           const cfg = normalizeViewConfig(row.config);
           if (!cfg) return;
-          applyRemoteViewTitle(row.channel, cfg.title);
-          if (row.channel !== currentChannel) return;
-          if (suppressNextViewApply) { suppressNextViewApply = false; return; }
-          if (Date.now() < suppressOrderApplyUntil) return;
-          if (Array.isArray(cfg.order)) {
-            currentObjectOrder = cfg.order
-              .map(x => Number(x))
-              .filter(x => Number.isFinite(x));
-            saveOrderToLocal();
-            applyObjectOrderToDOM();
+          if (isMine && suppressNextViewApply) {
+            suppressNextViewApply = false;
+            return;
           }
-          const defTime = true;
-          const defAuthor = true;
-          fieldPrefs = {
-            showTime: typeof cfg.showTime === 'boolean' ? cfg.showTime : defTime,
-            showAuthor: typeof cfg.showAuthor === 'boolean' ? cfg.showAuthor : defAuthor,
-            showLabels: typeof cfg.showLabels === 'boolean' ? cfg.showLabels : true,
-            viewMode: (cfg.viewMode === 'table' || cfg.viewMode === 'feed') ? cfg.viewMode : 'feed',
-          };
-          saveFieldPrefsForCurrentChannel();
-          applyFieldPrefsToObjects();
+          if (isMine && Date.now() < suppressOrderApplyUntil) return;
+          applyViewsTableConfigToChannel(rowCh, cfg);
         } catch (e) {
           if (typeof console !== 'undefined' && console.error) console.error('view realtime', e);
         }
@@ -4260,6 +4336,7 @@ function getLayoutSyncPref() {
 }
 function setLayoutSyncPref(on) {
   try { localStorage.setItem(LAYOUT_SYNC_KEY, on ? '1' : '0'); } catch (_) {}
+  if (typeof schedulePersonalWorkspacePersist === 'function') schedulePersonalWorkspacePersist();
 }
 
 function getFrameOrder() {
@@ -4288,6 +4365,7 @@ function applyFrameOrder(order) {
 function saveFrameOrder(order) {
   if (!Array.isArray(order) || order.length === 0) return;
   try { localStorage.setItem(FRAME_ORDER_KEY, JSON.stringify(order)); } catch (_) {}
+  if (typeof schedulePersonalWorkspacePersist === 'function') schedulePersonalWorkspacePersist();
   if (layoutChannel && getLayoutSyncPref()) {
     try {
       layoutChannel.send({ type: 'broadcast', event: 'layout', payload: { frameOrder: order } });
@@ -5368,6 +5446,7 @@ function applyMultiviewSplit(ratio) {
   ratio = Math.max(0.2, Math.min(0.8, ratio));
   viewsContainer.style.setProperty('--multiview-split', String(ratio));
   try { localStorage.setItem(MULTIVIEW_SPLIT_KEY, String(ratio)); } catch (_) {}
+  if (typeof schedulePersonalWorkspacePersist === 'function') schedulePersonalWorkspacePersist();
 }
 
 function setupMultiviewResizer(resizerEl, viewsEl) {
@@ -5556,18 +5635,60 @@ function applyFieldPrefsUI() {
   if (viewVisualSelect) viewVisualSelect.value = (fieldPrefs.viewMode === 'table' ? 'table' : 'feed');
 }
 
+async function persistChannelViewRulesForCurrentChannel() {
+  if (!currentUser || !shouldUseServerForObjects() || !sb || !sb.from) return;
+  const ch = String(currentChannel || currentView || 'main');
+  try {
+    let q = sb.from('views').select('config').eq('channel', ch).limit(1);
+    if (!isChannelViewCollaborative(ch) && currentUser.id) q = q.eq('user_id', currentUser.id);
+    const { data, error } = await q.maybeSingle();
+    if (error && error.code && error.code !== 'PGRST116') {
+      /* use empty base */
+    }
+    const base = data ? normalizeViewConfig(data.config) : null;
+    const cfg = Object.assign({}, base && typeof base === 'object' ? base : {}, {
+      order: Array.isArray(currentObjectOrder) ? currentObjectOrder.slice() : [],
+      title:
+        viewDisplayNames && typeof viewDisplayNames[ch] === 'string' && viewDisplayNames[ch].trim()
+          ? viewDisplayNames[ch].trim()
+          : base && base.title != null
+            ? base.title
+            : null,
+      showTime: !!fieldPrefs.showTime,
+      showAuthor: !!fieldPrefs.showAuthor,
+      showLabels: !!fieldPrefs.showLabels,
+      viewMode: fieldPrefs.viewMode === 'table' ? 'table' : 'feed',
+    });
+    if (!cfg.title) delete cfg.title;
+    suppressNextViewApply = true;
+    const { error: upErr } = await upsertChannelViewConfigMerged(ch, cfg);
+    if (upErr) console.error(upErr);
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function schedulePersistChannelViewRules() {
+  if (!currentUser || !shouldUseServerForObjects() || !sb) return;
+  if (_channelViewRulesPersistTimer) clearTimeout(_channelViewRulesPersistTimer);
+  _channelViewRulesPersistTimer = setTimeout(function() {
+    _channelViewRulesPersistTimer = null;
+    persistChannelViewRulesForCurrentChannel();
+  }, 400);
+}
+
 async function loadFieldPrefsForCurrentChannel() {
   const defTime = true;
   const defAuthor = true;
   if (currentUser) {
     try {
-      const { data, error } = await sb
+      let q = sb
         .from('views')
         .select('config')
-        .eq('user_id', currentUser.id)
         .eq('channel', currentChannel)
-        .limit(1)
-        .maybeSingle();
+        .limit(1);
+      if (!isChannelViewCollaborative(currentChannel)) q = q.eq('user_id', currentUser.id);
+      const { data, error } = await q.maybeSingle();
       const cfgPref = !error && data ? normalizeViewConfig(data.config) : null;
       if (cfgPref) {
         applyRemoteViewTitle(currentChannel, cfgPref.title);
@@ -5618,7 +5739,6 @@ function saveFieldPrefsForCurrentChannel() {
     };
     localStorage.setItem(FIELD_PREFS_KEY, JSON.stringify(map));
   } catch(_) {}
-  // Skipping remote views upsert for now (table is optional / may not exist).
 }
 
 function applyFieldPrefsToObjects() {
@@ -6865,6 +6985,7 @@ function saveLeftChannelsList() {
   try {
     localStorage.setItem(LEFT_CHANNELS_KEY, JSON.stringify(Array.from(leftChannels)));
   } catch (_) {}
+  if (typeof schedulePersonalWorkspacePersist === 'function') schedulePersonalWorkspacePersist();
 }
 
 function loadChannelsList() {
@@ -6922,6 +7043,32 @@ async function upsertViewsConfigForChannel(channelKey, configObj) {
   return sb.from('views').upsert({ channel: ch, config: cfg }, { onConflict: 'channel' });
 }
 
+/** Shared / guest feeds: one `views` row per channel so all watchers see the same order & layout prefs. */
+function isChannelViewCollaborative(ch) {
+  const c = String(ch || '').trim();
+  if (!c || c === 'main') return false;
+  try {
+    if (tempSessionId && !currentUser) return true;
+  } catch (_) {}
+  try {
+    if (sharedChannels && sharedChannels.has && sharedChannels.has(c)) return true;
+  } catch (_) {}
+  try {
+    if (tempSessionId && currentUser && c === String(currentChannel || '').trim()) return true;
+  } catch (_) {}
+  return false;
+}
+
+async function upsertChannelViewConfigMerged(channelKey, configObj) {
+  const ch = String(channelKey || 'main');
+  const cfg = configObj && typeof configObj === 'object' ? configObj : {};
+  if (!sb || !sb.from) return { error: new Error('no supabase client') };
+  if (isChannelViewCollaborative(ch)) {
+    return sb.from('views').upsert({ channel: ch, config: cfg }, { onConflict: 'channel' });
+  }
+  return upsertViewsConfigForChannel(ch, cfg);
+}
+
 /** Sync legacy message_orders so postgres_changes + other devices pick up order (views realtime can lag). */
 async function syncMessageOrdersFromCurrentOrder(viewChannel) {
   if (!sb || !sb.from || !currentUser || !currentUser.id) return;
@@ -6967,14 +7114,147 @@ async function applyWorkspaceOpenSecondaryViews(desired) {
   } catch (_) {}
 }
 
-async function persistWorkspaceOpenViewsToServer() {
+function gatherPersonalWorkspaceStateForSave() {
+  const list = collectOpenSecondaryViewChannels();
+  let multiviewSplit = null;
+  try {
+    const s = localStorage.getItem(MULTIVIEW_SPLIT_KEY);
+    if (s != null && s !== '') {
+      const n = parseFloat(s);
+      if (Number.isFinite(n)) multiviewSplit = n;
+    }
+  } catch (_) {}
+  let frameOrder = null;
+  try {
+    frameOrder = getFrameOrder();
+  } catch (_) {}
+  let layoutSync = true;
+  try {
+    layoutSync = getLayoutSyncPref();
+  } catch (_) {}
+  let viewDisplayNamesCopy = {};
+  try {
+    viewDisplayNamesCopy = Object.assign({}, viewDisplayNames && typeof viewDisplayNames === 'object' ? viewDisplayNames : {});
+  } catch (_) {}
+  let leftChannelIds = [];
+  try {
+    leftChannelIds = Array.from(leftChannels || []).map(String).filter(Boolean);
+  } catch (_) {}
+  let manageBarOrder = [];
+  try {
+    var mbKey = typeof MANAGE_BAR_ORDER_KEY !== 'undefined' ? MANAGE_BAR_ORDER_KEY : 'inout_manage_bar_order_v1';
+    const raw = localStorage.getItem(mbKey);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) manageBarOrder = parsed;
+    }
+  } catch (_) {}
+  let settings = null;
+  try {
+    const raw = localStorage.getItem(INOUT_KB_SETTINGS_KEY);
+    if (raw) settings = JSON.parse(raw);
+  } catch (_) {}
+  return {
+    openSecondaryViews: list.slice(),
+    multiviewSplit: multiviewSplit,
+    frameOrder: Array.isArray(frameOrder) ? frameOrder.slice() : null,
+    layoutSync: !!layoutSync,
+    viewDisplayNames: viewDisplayNamesCopy,
+    leftChannelIds: leftChannelIds,
+    manageBarOrder: manageBarOrder,
+    settings: settings && typeof settings === 'object' ? settings : null,
+  };
+}
+
+async function applyPersonalWorkspaceStateFromServer(cfg) {
+  if (!cfg || typeof cfg !== 'object') return;
+  if (Array.isArray(cfg.openSecondaryViews)) {
+    await applyWorkspaceOpenSecondaryViews(cfg.openSecondaryViews);
+  }
+  if (typeof cfg.multiviewSplit === 'number' && Number.isFinite(cfg.multiviewSplit)) {
+    try {
+      applyMultiviewSplit(cfg.multiviewSplit);
+    } catch (_) {}
+  }
+  if (Array.isArray(cfg.frameOrder) && cfg.frameOrder.length) {
+    try {
+      applyFrameOrder(cfg.frameOrder);
+      localStorage.setItem(FRAME_ORDER_KEY, JSON.stringify(cfg.frameOrder));
+    } catch (_) {}
+  }
+  if (typeof cfg.layoutSync === 'boolean') {
+    try {
+      setLayoutSyncPref(cfg.layoutSync);
+      if (typeof setupLayoutChannel === 'function') setupLayoutChannel();
+    } catch (_) {}
+  }
+  if (cfg.viewDisplayNames && typeof cfg.viewDisplayNames === 'object') {
+    try {
+      viewDisplayNames = Object.assign({}, cfg.viewDisplayNames);
+      saveViewDisplayNames();
+      if (typeof renderTabs === 'function') renderTabs();
+      if (typeof refreshMoveTargets === 'function') refreshMoveTargets();
+      if (typeof syncComposerTargetSelects === 'function') syncComposerTargetSelects();
+    } catch (_) {}
+  }
+  if (Array.isArray(cfg.leftChannelIds)) {
+    try {
+      leftChannels = new Set(cfg.leftChannelIds.map(x => String(x || '').trim()).filter(x => x && x !== 'main'));
+      saveLeftChannelsList();
+    } catch (_) {}
+  }
+  if (Array.isArray(cfg.manageBarOrder) && cfg.manageBarOrder.length) {
+    try {
+      var mbKey2 = typeof MANAGE_BAR_ORDER_KEY !== 'undefined' ? MANAGE_BAR_ORDER_KEY : 'inout_manage_bar_order_v1';
+      localStorage.setItem(mbKey2, JSON.stringify(cfg.manageBarOrder));
+      if (typeof applyManageBarOrder === 'function') applyManageBarOrder();
+    } catch (_) {}
+  }
+  if (cfg.settings && typeof cfg.settings === 'object') {
+    try {
+      localStorage.setItem(INOUT_KB_SETTINGS_KEY, JSON.stringify(cfg.settings));
+    } catch (_) {}
+  }
+}
+
+function schedulePersonalWorkspacePersist() {
+  if (!currentUser || !sb || !shouldUseServerForObjects()) return;
+  if (_personalWorkspacePersistTimer) clearTimeout(_personalWorkspacePersistTimer);
+  _personalWorkspacePersistTimer = setTimeout(function() {
+    _personalWorkspacePersistTimer = null;
+    persistPersonalWorkspaceToServer();
+  }, 450);
+}
+if (typeof window !== 'undefined') window.schedulePersonalWorkspacePersist = schedulePersonalWorkspacePersist;
+
+async function persistPersonalWorkspaceToServer() {
   if (!currentUser || !sb || !shouldUseServerForObjects()) return;
   try {
-    const list = collectOpenSecondaryViewChannels();
-    await upsertViewsConfigForChannel(WORKSPACE_META_VIEW_CHANNEL, { openSecondaryViews: list.slice() });
+    const slice = gatherPersonalWorkspaceStateForSave();
+    let base = {};
+    try {
+      const { data, error } = await sb
+        .from('views')
+        .select('config')
+        .eq('channel', WORKSPACE_META_VIEW_CHANNEL)
+        .eq('user_id', currentUser.id)
+        .limit(1)
+        .maybeSingle();
+      if (!error && data) {
+        const c = normalizeViewConfig(data.config);
+        if (c && typeof c === 'object') base = Object.assign({}, c);
+      }
+    } catch (_) {}
+    Object.assign(base, slice);
+    suppressNextPersonalWorkspaceApply = true;
+    await upsertViewsConfigForChannel(WORKSPACE_META_VIEW_CHANNEL, base);
   } catch (e) {
-    console.error('persistWorkspaceOpenViewsToServer', e);
+    console.error('persistPersonalWorkspaceToServer', e);
   }
+}
+
+async function persistWorkspaceOpenViewsToServer() {
+  schedulePersonalWorkspacePersist();
 }
 
 async function hydrateWorkspaceOpenViewsForSignedInUser() {
@@ -6982,7 +7262,7 @@ async function hydrateWorkspaceOpenViewsForSignedInUser() {
     await restoreSecondaryView();
     return;
   }
-  let serverList = null;
+  let cfgFull = null;
   try {
     const { data, error } = await sb
       .from('views')
@@ -6991,21 +7271,18 @@ async function hydrateWorkspaceOpenViewsForSignedInUser() {
       .eq('user_id', currentUser.id)
       .limit(1)
       .maybeSingle();
-    if (!error && data) {
-      const cfg = normalizeViewConfig(data.config);
-      if (cfg && Array.isArray(cfg.openSecondaryViews)) {
-        serverList = cfg.openSecondaryViews.map(x => String(x || '').trim()).filter(Boolean);
-      }
+    if (!error && data != null) {
+      cfgFull = normalizeViewConfig(data.config);
     }
   } catch (e) {
     console.error('hydrateWorkspaceOpenViewsForSignedInUser', e);
   }
-  if (serverList !== null) {
-    await applyWorkspaceOpenSecondaryViews(serverList);
+  if (cfgFull && typeof cfgFull === 'object') {
+    await applyPersonalWorkspaceStateFromServer(cfgFull);
     return;
   }
   await restoreSecondaryView();
-  if (collectOpenSecondaryViewChannels().length) await persistWorkspaceOpenViewsToServer();
+  if (collectOpenSecondaryViewChannels().length) await persistPersonalWorkspaceToServer();
 }
 
 async function loadObjectOrderForCurrentChannel() {
@@ -7014,14 +7291,16 @@ async function loadObjectOrderForCurrentChannel() {
     currentObjectOrder = loadOrderFromLocal();
     return;
   }
-  // 1) Try unified view object (channel-owned, not per-user).
+  // 1) Try unified view object (per-user main, or one row per shared/guest channel).
   try {
     let q = sb
       .from('views')
       .select('config')
       .eq('channel', currentChannel)
       .limit(1);
-    if (currentUser && currentUser.id) q = q.eq('user_id', currentUser.id);
+    if (currentUser && currentUser.id && !isChannelViewCollaborative(currentChannel)) {
+      q = q.eq('user_id', currentUser.id);
+    }
     const { data, error } = await q.maybeSingle();
     const cfg = !error && data ? normalizeViewConfig(data.config) : null;
     if (cfg) {
@@ -7073,6 +7352,7 @@ async function loadObjectOrderForCurrentChannel() {
 
 let suppressNextOrderApply = false;
 let suppressNextViewApply = false;
+let suppressNextPersonalWorkspaceApply = false;
 let suppressOrderApplyUntil = 0; /* ignore realtime order/view applies until this timestamp */
 
 async function saveObjectOrderForCurrentView() {
@@ -7098,10 +7378,10 @@ async function saveObjectOrderForCurrentView() {
       };
       suppressNextViewApply = true;
       const viewCh = String(currentChannel || currentView || 'main');
-      const { error } = await upsertViewsConfigForChannel(viewCh, cfg);
+      const { error } = await upsertChannelViewConfigMerged(viewCh, cfg);
       if (error) console.error(error);
       else {
-        await syncMessageOrdersFromCurrentOrder(viewCh);
+        if (!isChannelViewCollaborative(viewCh)) await syncMessageOrdersFromCurrentOrder(viewCh);
         broadcastOrderSyncFromSave();
       }
     } catch (e) { console.error(e); }
@@ -7313,11 +7593,13 @@ function renameView(ch, btn) {
       applyRemoteViewTitle(key, null);
       cleanup(getViewDefaultName(key));
       persistViewTitle(key, null);
+      if (typeof schedulePersonalWorkspacePersist === 'function') schedulePersonalWorkspacePersist();
       return;
     }
     applyRemoteViewTitle(key, cleaned);
     cleanup(cleaned);
     persistViewTitle(key, cleaned);
+    if (typeof schedulePersonalWorkspacePersist === 'function') schedulePersonalWorkspacePersist();
   }
 
   function cancel() {
@@ -7325,6 +7607,7 @@ function renameView(ch, btn) {
     finished = true;
     applyRemoteViewTitle(key, beforeRaw);
     persistViewTitle(key, beforeRaw);
+    if (typeof schedulePersonalWorkspacePersist === 'function') schedulePersonalWorkspacePersist();
     cleanup(before);
   }
 
@@ -7802,6 +8085,7 @@ async function refreshAuth() {
   if (currentUser) {
     try {
       await refreshSharedFlags();
+      await syncChannelsFromServer();
       renderTabs();
       subscribeRealtimeAll();
       setupDraftChannel();
@@ -7863,6 +8147,7 @@ function setupAuthListener() {
     if (!prevUser && currentUser) {
         try {
       await syncChannelsFromServer();
+          await hydrateWorkspaceOpenViewsForSignedInUser();
           await reloadForUser();
           setupDraftChannel();
           setupLayoutChannel();
@@ -8750,6 +9035,7 @@ if (viewVisualSelect) {
     fieldPrefs.viewMode = viewMode;
     logAction('view', { viewMode });
     saveFieldPrefsForCurrentChannel();
+    schedulePersistChannelViewRules();
     applyFieldPrefsUI();
     if (currentUser) {
       loadObjects().catch(() => {});
@@ -8765,6 +9051,7 @@ if (fieldTimeChk) {
     fieldPrefs.showTime = !!fieldTimeChk.checked;
     logAction('view', { showTime: !!fieldTimeChk.checked, showAuthor: fieldPrefs.showAuthor });
     saveFieldPrefsForCurrentChannel();
+    schedulePersistChannelViewRules();
     applyFieldPrefsToObjects();
   });
 }
@@ -8775,6 +9062,7 @@ if (fieldAuthorChk) {
     fieldPrefs.showAuthor = !!fieldAuthorChk.checked;
     logAction('view', { showTime: fieldPrefs.showTime, showAuthor: !!fieldAuthorChk.checked });
     saveFieldPrefsForCurrentChannel();
+    schedulePersistChannelViewRules();
     applyFieldPrefsToObjects();
   });
 }
@@ -8785,6 +9073,7 @@ if (fieldLabelsChk) {
     fieldPrefs.showLabels = !!fieldLabelsChk.checked;
     logAction('view', { showLabels: !!fieldLabelsChk.checked });
     saveFieldPrefsForCurrentChannel();
+    schedulePersistChannelViewRules();
     applyFieldPrefsToObjects();
   });
 }
@@ -8825,6 +9114,7 @@ function saveManageBarOrder() {
     .filter(function(n) { return n.getAttribute && n.getAttribute('data-bar-id'); })
     .map(function(n) { return n.getAttribute('data-bar-id'); });
   try { localStorage.setItem(MANAGE_BAR_ORDER_KEY, JSON.stringify(ids)); } catch (_) {}
+  if (typeof schedulePersonalWorkspacePersist === 'function') schedulePersonalWorkspacePersist();
 }
 
 function setupBarDndMode(on) {
