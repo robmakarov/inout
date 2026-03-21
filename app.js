@@ -421,59 +421,77 @@ function subscribeTempSessionJoins() {
 (function setupLocalDataButtons() {
   if (umExportLocalBtn) {
     umExportLocalBtn.addEventListener('click', () => {
-      try {
-        const key = getLocalObjectsKey();
-        const raw = localStorage.getItem(key) || '{}';
-        const blob = new Blob([raw], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'inout-local-base.json';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-      } catch (e) {
-        console.error(e);
-        toast('Failed to export local base.');
-      }
+      (async function () {
+        try {
+          let raw = '{}';
+          if (currentUser && currentUser.id) {
+            const key = getLocalObjectsKey();
+            raw = localStorage.getItem(key) || '{}';
+          } else if (typeof INOUT_LOCAL_DB !== 'undefined' && INOUT_LOCAL_DB.init && INOUT_LOCAL_DB.exportJsonString) {
+            await INOUT_LOCAL_DB.init();
+            raw = await INOUT_LOCAL_DB.exportJsonString();
+          } else {
+            const key = getLocalObjectsKey();
+            raw = localStorage.getItem(key) || '{}';
+          }
+          const blob = new Blob([raw], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'inout-local-base.json';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        } catch (e) {
+          console.error(e);
+          toast('Failed to export local base.');
+        }
+      })();
     });
   }
 
   if (umClearLocalBtn) {
     umClearLocalBtn.addEventListener('click', () => {
-      try {
-        // 1) Unregister all service workers for this origin (remove shell)
-        if (typeof navigator !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
-          navigator.serviceWorker.getRegistrations().then(regs => {
-            regs.forEach(reg => reg.unregister().catch(() => {}));
-          }).catch(() => {});
+      (async function () {
+        try {
+          // 1) Unregister all service workers for this origin (remove shell)
+          if (typeof navigator !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+            navigator.serviceWorker.getRegistrations().then(regs => {
+              regs.forEach(reg => reg.unregister().catch(() => {}));
+            }).catch(() => {});
+          }
+
+          // 2) Clear all caches used by service workers
+          if (typeof caches !== 'undefined' && caches.keys) {
+            caches.keys().then(keys => {
+              keys.forEach(k => caches.delete(k).catch(() => {}));
+            }).catch(() => {});
+          }
+
+          // 3) Device object database (IndexedDB)
+          if (typeof INOUT_LOCAL_DB !== 'undefined' && INOUT_LOCAL_DB.deleteDatabase) {
+            try { await INOUT_LOCAL_DB.deleteDatabase(); } catch (_) {}
+          }
+
+          // 4) Clear all local/session storage for this origin
+          try { localStorage.clear(); } catch (_) {}
+          try { sessionStorage.clear(); } catch (_) {}
+
+          // 5) Clear current UI
+          clearObjects();
+          if (emptyEl && !emptyEl.parentNode && feedInner) feedInner.appendChild(emptyEl);
+          toast('All local data and shell cleared. Reloading…');
+
+          // 6) Reload page to pick up a clean state
+          setTimeout(() => {
+            if (typeof location !== 'undefined' && location.reload) location.reload();
+          }, 600);
+        } catch (e) {
+          console.error(e);
+          toast('Failed to clear local data.');
         }
-
-        // 2) Clear all caches used by service workers
-        if (typeof caches !== 'undefined' && caches.keys) {
-          caches.keys().then(keys => {
-            keys.forEach(k => caches.delete(k).catch(() => {}));
-          }).catch(() => {});
-        }
-
-        // 3) Clear all local/session storage for this origin
-        try { localStorage.clear(); } catch (_) {}
-        try { sessionStorage.clear(); } catch (_) {}
-
-        // 4) Clear current UI
-        clearObjects();
-        if (emptyEl && !emptyEl.parentNode && feedInner) feedInner.appendChild(emptyEl);
-        toast('All local data and shell cleared. Reloading…');
-
-        // 5) Reload page to pick up a clean state
-        setTimeout(() => {
-          if (typeof location !== 'undefined' && location.reload) location.reload();
-        }, 600);
-      } catch (e) {
-        console.error(e);
-        toast('Failed to clear local data.');
-      }
+      })();
     });
   }
 })();
@@ -1268,7 +1286,8 @@ function getLocalObjectsKey() {
   return LOCAL_ANON_OBJECTS_KEY;
 }
 
-function loadLocalObjects() {
+/** Signed-in: object mirror map in localStorage. Anonymous: IndexedDB (see INOUT_LOCAL_DB). */
+function loadLocalObjectsFromLocalStorage() {
   try {
     const key = getLocalObjectsKey();
     const raw = localStorage.getItem(key);
@@ -1280,27 +1299,70 @@ function loadLocalObjects() {
   }
 }
 
-function saveLocalObjects(objByView) {
+function saveLocalObjectsToLocalStorage(objByView) {
   try {
     const key = getLocalObjectsKey();
     localStorage.setItem(key, JSON.stringify(objByView || {}));
   } catch (_) {}
 }
 
-function upsertLocalObjectForCurrentView(obj) {
+/**
+ * Unified local object map: anon → device DB (IndexedDB); signed-in → per-user JSON cache in localStorage.
+ * Cloud remains authoritative when signed in; this is replica/offline-shaped cache for the device.
+ */
+async function getLocalObjectByViewMap() {
+  if (currentUser && currentUser.id) {
+    return loadLocalObjectsFromLocalStorage();
+  }
+  if (typeof indexedDB === 'undefined') {
+    return loadLocalObjectsFromLocalStorage();
+  }
+  try {
+    if (typeof INOUT_LOCAL_DB !== 'undefined' && INOUT_LOCAL_DB.init && INOUT_LOCAL_DB.getByViewMap) {
+      await INOUT_LOCAL_DB.init();
+      return await INOUT_LOCAL_DB.getByViewMap();
+    }
+  } catch (e) {
+    console.error('getLocalObjectByViewMap', e);
+  }
+  return loadLocalObjectsFromLocalStorage();
+}
+
+async function saveLocalObjectByViewMap(objByView) {
+  if (currentUser && currentUser.id) {
+    saveLocalObjectsToLocalStorage(objByView);
+    return;
+  }
+  if (typeof indexedDB === 'undefined') {
+    saveLocalObjectsToLocalStorage(objByView);
+    return;
+  }
+  try {
+    if (typeof INOUT_LOCAL_DB !== 'undefined' && INOUT_LOCAL_DB.init && INOUT_LOCAL_DB.setByViewMap) {
+      await INOUT_LOCAL_DB.init();
+      await INOUT_LOCAL_DB.setByViewMap(objByView || {});
+      return;
+    }
+  } catch (e) {
+    console.error('saveLocalObjectByViewMap', e);
+  }
+  saveLocalObjectsToLocalStorage(objByView);
+}
+
+async function upsertLocalObjectForCurrentView(obj) {
   if (!obj || typeof obj.id === 'undefined') return;
-  const byView = loadLocalObjects();
+  const byView = await getLocalObjectByViewMap();
   const key = currentView || 'main';
   const list = Array.isArray(byView[key]) ? byView[key] : [];
   const idx = list.findIndex(o => o && o.id === obj.id);
   if (idx >= 0) list[idx] = obj; else list.push(obj);
   byView[key] = list;
-  saveLocalObjects(byView);
+  await saveLocalObjectByViewMap(byView);
 }
 
 async function loadLocalObjectsForCurrentView() {
   try {
-    const byView = loadLocalObjects();
+    const byView = await getLocalObjectByViewMap();
     const key = currentView || 'main';
     let list = Array.isArray(byView[key]) ? byView[key] : [];
 
@@ -1325,15 +1387,15 @@ async function loadLocalObjectsForCurrentView() {
   }
 }
 
-function removeLocalObjectsForCurrentView(ids) {
+async function removeLocalObjectsForCurrentView(ids) {
   if (!ids || !ids.length) return;
-  const byView = loadLocalObjects();
+  const byView = await getLocalObjectByViewMap();
   const key = currentView || 'main';
   let list = Array.isArray(byView[key]) ? byView[key] : [];
   const set = new Set(ids);
   list = list.filter(o => !o || typeof o.id === 'undefined' ? false : !set.has(o.id));
   byView[key] = list;
-  saveLocalObjects(byView);
+  await saveLocalObjectByViewMap(byView);
 }
 function getDeviceId() {
   try {
@@ -2739,10 +2801,10 @@ async function loadObjects() {
   // Mirror current view's objects into local per-device storage so they persist on this device.
   try {
     if (Array.isArray(list)) {
-      const byView = loadLocalObjects();
+      const byView = await getLocalObjectByViewMap();
       const key = currentView || 'main';
       byView[key] = list;
-      saveLocalObjects(byView);
+      await saveLocalObjectByViewMap(byView);
     }
   } catch (_) {}
 }
@@ -6966,7 +7028,7 @@ async function saveNickname() {
 function getStorageLocationMessage() {
   if (currentUser) return 'Your data is stored in the cloud and synced across your devices.';
   if (tempSessionId) return 'You\'re viewing a shared view. Edits sync to the owner\'s cloud; a copy is kept on this device.';
-  return 'Your data is stored only on this device. Sign in to sync across devices.';
+  return 'Objects live in this browser\'s IndexedDB (device database). Sign in to use the shared cloud so others can access what you permit.';
 }
 
 function updateAuthUI() {
@@ -7324,7 +7386,7 @@ async function sendText(text, options) {
       updateObjectCount();
     }
     // Persist locally for this device
-    upsertLocalObjectForCurrentView(data);
+    await upsertLocalObjectForCurrentView(data);
     // Undo/log only for signed-in Supabase sends
     if (currentUser && sb && sb.from) {
       pushUndo({ type: 'send', entries: [data] });

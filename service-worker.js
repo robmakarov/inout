@@ -1,9 +1,11 @@
-const SHELL_CACHE = 'inout-shell-v1';
+const SHELL_CACHE = 'inout-shell-v2';
 const SHELL_FILES = [
   '/',
   '/index.html',
   '/app.js',
   '/styles.css',
+  '/storage-model.js',
+  '/local-store-idb.js',
 ];
 
 self.addEventListener('install', (event) => {

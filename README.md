@@ -67,6 +67,13 @@ INOUT is an **objects app** (not a chat). Users keep and manage objects, collect
   - A normal, owner‑owned View (channel) with cloud objects.
   - Guests granted full rights to that View via a shared key / session, not by being separate “temporary owners”.
 
+### Storage model (unified)
+
+- **Every object row** lives in a real database: **Supabase Postgres** when signed in or in a shared/guest session, and **IndexedDB** (`inout_local_store_v1`) on the device for anonymous-only use (migrated from legacy `localStorage` on first run).
+- **Views** (channels) and titles are stored in the cloud when authenticated; anonymous users keep view names and UI state in `localStorage` as before.
+- **Interoperability**: other users can read/write the same data only when the backend is **shared** (cloud + RLS / visit link / temp session). Local IndexedDB data is **device-private** until exported or synced via sign-in / a future shared “space” API.
+- Runtime helper: `window.INOUT_STORAGE.describeStorageContext({ currentUser, tempSessionId })` summarizes authority and backend.
+
 ### Optimization
 
 - **Realtime insert batching**: Realtime INSERT events are buffered per channel and flushed once per tick. Multiple rapid inserts (e.g. paste or bulk add) cause a single DOM update and reflow per channel instead of one per object.
