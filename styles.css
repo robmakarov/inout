@@ -2975,12 +2975,24 @@ body.secret-show-grips .frame-grip{
     padding:10px 10px calc(14px + env(safe-area-inset-bottom, 0px));
     background:var(--bg);
   }
+  /* Flex column: multiview must claim remaining height between nav and input (iOS). */
+  .frame.frame-fill{
+    flex:1 1 0%;
+    min-height:0;
+    max-height:100%;
+  }
+  .frame.frame-fill > #multiview{
+    max-height:100%;
+  }
   /*
     iOS WebKit: nested flex + overflow on #feed often yields a zero or non-scrolling scrollport.
     Make .visual-feed-stack the scroll container on small screens; keep live bar visible while scrolling.
   */
   .multiview-views .view > .visual > .visual-feed-stack{
-    overflow-y:auto;
+    flex:1 1 0%;
+    min-height:0;
+    max-height:100%;
+    overflow-y:scroll;
     overflow-x:hidden;
     -webkit-overflow-scrolling:touch;
     touch-action:pan-y;

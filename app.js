@@ -127,7 +127,13 @@ const feedEl     = document.getElementById('feed');
 function getFeedScrollSurface(feed) {
   if (!feed || typeof feed.closest !== 'function') return feed;
   var stack = feed.closest('.visual-feed-stack');
-  if (!stack || typeof getComputedStyle === 'undefined') return feed;
+  if (!stack) return feed;
+  try {
+    if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 540px)').matches) {
+      return stack;
+    }
+  } catch (_) {}
+  if (typeof getComputedStyle === 'undefined') return feed;
   var oy = getComputedStyle(stack).overflowY;
   if (oy === 'auto' || oy === 'scroll') return stack;
   return feed;
@@ -7747,11 +7753,9 @@ function gatherPersonalWorkspaceStateForSave() {
   } catch (_) {}
   const feedScrollByView = {};
   try {
-    const chans = new Set([String(currentView || 'main')]);
-    collectOpenSecondaryViewChannels().forEach(c => chans.add(String(c)));
-    chans.forEach(ch => {
-      const v = viewScroll.get(ch);
-      if (typeof v === 'number' && Number.isFinite(v) && v >= 0) feedScrollByView[ch] = Math.round(v);
+    viewScroll.forEach(function(v, k) {
+      if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return;
+      feedScrollByView[String(k)] = Math.round(v);
     });
   } catch (_) {}
   let channelStripOrder = [];
@@ -7836,9 +7840,8 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
     var releaseWsMerge = await acquireWsMergeLock();
     try {
     var revMerge = Number(cfg._wsRev);
-    if (Number.isFinite(revMerge) && lastMergedWorkspaceRevMs > 0 && revMerge < lastMergedWorkspaceRevMs) {
-      return;
-    }
+    /* Do not drop merges when revMerge < lastMergedWorkspaceRevMs: _wsRev is each client’s Date.now(),
+       so another device’s payload often looks “older” and would skip tab + scroll sync entirely. */
     var nonceM = cfg._wsPushNonce;
     /* Same nonce = duplicate postgres/broadcast delivery. Never re-run focusedChannel (stale payload could revert a tab the user already switched locally). */
     if (
@@ -10926,24 +10929,26 @@ function scheduleScrollPersistIfAllowed() {
 /** Persist scroll position for cross-device workspace sync (primary + secondary feeds). */
 function bindFeedScrollWorkspaceSync(scrollEl, channelKeyOrFn, isPrimaryFeed) {
   if (!scrollEl) return;
-  var el = getFeedScrollSurface(scrollEl);
-  el.addEventListener(
-    'scroll',
-    function() {
-      const ch =
-        typeof channelKeyOrFn === 'function' ? String(channelKeyOrFn() || 'main') : String(channelKeyOrFn);
-      viewScroll.set(ch, el.scrollTop);
-      if (isPrimaryFeed) {
-        atBottom = isNearBottom();
-        if (atBottom && scrollBtn) scrollBtn.classList.remove('visible');
-        if (document.body.classList.contains('dnd-active')) updateOriginLinePosition();
-      }
-      if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
-      scrollSaveTimer = setTimeout(saveScrollState, 75);
-      scheduleScrollPersistIfAllowed();
-    },
-    { passive: true }
-  );
+  var stack = scrollEl.closest && scrollEl.closest('.visual-feed-stack');
+  function onScroll(ev) {
+    var surf = getFeedScrollSurface(scrollEl);
+    var t = ev && ev.currentTarget;
+    if (t && t !== surf) return;
+    if (!surf) return;
+    const ch =
+      typeof channelKeyOrFn === 'function' ? String(channelKeyOrFn() || 'main') : String(channelKeyOrFn);
+    viewScroll.set(ch, surf.scrollTop);
+    if (isPrimaryFeed) {
+      atBottom = isNearBottom();
+      if (atBottom && scrollBtn) scrollBtn.classList.remove('visible');
+      if (document.body.classList.contains('dnd-active')) updateOriginLinePosition();
+    }
+    if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
+    scrollSaveTimer = setTimeout(saveScrollState, 75);
+    scheduleScrollPersistIfAllowed();
+  }
+  scrollEl.addEventListener('scroll', onScroll, { passive: true });
+  if (stack && stack !== scrollEl) stack.addEventListener('scroll', onScroll, { passive: true });
 }
 
 if (feedEl) {
