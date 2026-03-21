@@ -4076,6 +4076,7 @@ function applyObjectOrderToFeedInner(inner, orderIds) {
 
 function applyFieldPrefsToFeedInner(inner, fp) {
   if (!inner || !fp) return;
+  inner.classList.toggle('view-table', fp.viewMode === 'table');
   inner.querySelectorAll('.obj').forEach(row => {
     if (row.classList.contains('obj-header')) return;
     const timeEl = row.querySelector('.obj-time');
@@ -4087,8 +4088,10 @@ function applyFieldPrefsToFeedInner(inner, fp) {
 }
 
 /** Apply `views.config` to every open feed pane for this channel (single main feed). */
-function applyViewsTableConfigToChannel(channel, cfg) {
+function applyViewsTableConfigToChannel(channel, cfg, opts) {
   if (!cfg || typeof cfg !== 'object') return;
+  opts = opts || {};
+  const skipOrder = !!opts.skipOrder;
   const ch = String(channel || '');
   applyRemoteViewTitle(ch, cfg.title);
   const defTime = true;
@@ -4099,7 +4102,9 @@ function applyViewsTableConfigToChannel(channel, cfg) {
     showLabels: typeof cfg.showLabels === 'boolean' ? cfg.showLabels : true,
     viewMode: (cfg.viewMode === 'table' || cfg.viewMode === 'feed') ? cfg.viewMode : 'feed',
   };
-  const orderArr = Array.isArray(cfg.order) ? cfg.order.map(x => Number(x)).filter(x => Number.isFinite(x)) : [];
+  const orderArr = skipOrder
+    ? []
+    : (Array.isArray(cfg.order) ? cfg.order.map(x => Number(x)).filter(x => Number.isFinite(x)) : []);
   views.forEach(view => {
     if (!view || view.channel !== ch || !view.feedInner) return;
     if (orderArr.length) applyObjectOrderToFeedInner(view.feedInner, orderArr);
@@ -4137,6 +4142,8 @@ function scheduleViewRealtimeResubscribe(reason) {
   }, reason === 'visible' ? 400 : 900);
 }
 
+/* Cross-device view UI (Time/Author/Labels, grid vs table, order) uses postgres_changes on public.views.
+   Ensure: alter publication supabase_realtime add table views; */
 function subscribeViewRealtime() {
   if (!sb || !sb.channel) return;
   if (viewSub) {
@@ -4180,8 +4187,9 @@ function subscribeViewRealtime() {
             suppressNextViewApply = false;
             return;
           }
-          if (isMine && Date.now() < suppressOrderApplyUntil) return;
-          applyViewsTableConfigToChannel(rowCh, cfg);
+          /* During local reorder, still apply view prefs from other tabs/devices; only skip order. */
+          const skipOrder = isMine && Date.now() < suppressOrderApplyUntil;
+          applyViewsTableConfigToChannel(rowCh, cfg, { skipOrder });
         } catch (e) {
           if (typeof console !== 'undefined' && console.error) console.error('view realtime', e);
         }
@@ -5816,7 +5824,6 @@ function closeSecondaryView() {
   try { localStorage.setItem(OPEN_VIEWS_KEY, '[]'); } catch (_) {}
   saveSecondaryViewState();
   updateTabsUI();
-  flushPersonalWorkspacePersist();
 }
 
 function restoreInputGlobal() {
@@ -5964,6 +5971,7 @@ function saveFieldPrefsForCurrentChannel() {
 
 function applyFieldPrefsToObjects() {
   if (!feedInner || !fieldPrefs) return;
+  feedInner.classList.toggle('view-table', fieldPrefs.viewMode === 'table');
   const rows = feedInner.querySelectorAll('.obj');
   rows.forEach(row => {
     if (row.classList.contains('obj-header')) return;
@@ -7747,6 +7755,7 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
 function schedulePersonalWorkspacePersist() {
   /* Workspace UI sync uses Supabase whenever signed in — independent of object storage target (cloud vs local vault). */
   if (applyingPersonalWorkspaceFromRemote) return;
+  if (inoutHydratingWorkspace) return;
   if (!currentUser || !sb) return;
   if (_personalWorkspacePersistTimer) clearTimeout(_personalWorkspacePersistTimer);
   _personalWorkspacePersistTimer = setTimeout(function() {
@@ -7764,6 +7773,7 @@ function notifyWorkspaceChromeChanged() {
 function flushPersonalWorkspacePersist() {
   /* Never push workspace while merging remote config — partial DOM (e.g. mid–open-secondary) would clobber focusedChannel. */
   if (applyingPersonalWorkspaceFromRemote) return Promise.resolve();
+  if (inoutHydratingWorkspace) return Promise.resolve();
   if (!currentUser || !sb) return Promise.resolve();
   if (_personalWorkspacePersistTimer) {
     clearTimeout(_personalWorkspacePersistTimer);
@@ -7774,6 +7784,7 @@ function flushPersonalWorkspacePersist() {
 
 async function persistPersonalWorkspaceToServer() {
   if (applyingPersonalWorkspaceFromRemote) return;
+  if (inoutHydratingWorkspace) return;
   if (!currentUser || !sb) return;
   try {
     const slice = gatherPersonalWorkspaceStateForSave();
@@ -7817,55 +7828,58 @@ async function persistPersonalWorkspaceToServer() {
   }
 }
 
+/** After loading workspace row: recover last tab when server still says `main` (stale/clobbered) or channel is missing from strip. */
+function resolveHydratedFocusedChannel(cfgFull) {
+  var savedCh = '';
+  try {
+    savedCh = (localStorage.getItem(CURRENT_VIEW_KEY) || '').trim();
+  } catch (_) {}
+  var wf =
+    cfgFull && typeof cfgFull.focusedChannel === 'string' ? cfgFull.focusedChannel.trim() : '';
+  var want = null;
+  if (wf && viewNames.includes(wf)) want = wf;
+  if (!want && savedCh && viewNames.includes(savedCh)) want = savedCh;
+  if (want === 'main' && savedCh && savedCh !== 'main' && viewNames.includes(savedCh)) want = savedCh;
+  if (!want && viewNames.includes('main')) want = 'main';
+  return want || 'main';
+}
+
 async function hydrateWorkspaceOpenViewsForSignedInUser() {
-  closeSecondaryView();
   if (!currentUser || !sb) {
     return;
   }
-  let cfgFull = null;
+  inoutHydratingWorkspace = true;
   try {
-    const { data, error } = await sb
-      .from('views')
-      .select('config')
-      .eq('channel', WORKSPACE_META_VIEW_CHANNEL)
-      .eq('user_id', currentUser.id)
-      .limit(1)
-      .maybeSingle();
-    if (!error && data != null) {
-      cfgFull = normalizeViewConfig(data.config);
-    }
-  } catch (e) {
-    console.error('hydrateWorkspaceOpenViewsForSignedInUser', e);
-  }
-  if (cfgFull && typeof cfgFull === 'object') {
-    inoutHydratingWorkspace = true;
+    closeSecondaryView();
+    let cfgFull = null;
     try {
+      const { data, error } = await sb
+        .from('views')
+        .select('config')
+        .eq('channel', WORKSPACE_META_VIEW_CHANNEL)
+        .eq('user_id', currentUser.id)
+        .limit(1)
+        .maybeSingle();
+      if (!error && data != null) {
+        cfgFull = normalizeViewConfig(data.config);
+      }
+    } catch (e) {
+      console.error('hydrateWorkspaceOpenViewsForSignedInUser', e);
+    }
+    if (cfgFull && typeof cfgFull === 'object') {
       await applyPersonalWorkspaceStateFromServer(cfgFull, { skipApplyFocusedChannel: true });
       try {
         var seedRev = Number(cfgFull._wsRev);
         if (Number.isFinite(seedRev) && seedRev > lastMergedWorkspaceRevMs) lastMergedWorkspaceRevMs = seedRev;
       } catch (_) {}
       try {
-        var wantFocus = null;
-        if (typeof cfgFull.focusedChannel === 'string' && cfgFull.focusedChannel.trim()) {
-          var wf = cfgFull.focusedChannel.trim();
-          if (viewNames.includes(wf)) wantFocus = wf;
-        }
-        if (!wantFocus) {
-          var savedCh = localStorage.getItem(CURRENT_VIEW_KEY);
-          if (savedCh && viewNames.includes(savedCh)) wantFocus = savedCh;
-        }
+        var wantFocus = resolveHydratedFocusedChannel(cfgFull);
         if (wantFocus) await switchChannel(wantFocus);
       } catch (e) {
-        console.error('hydrate restore tab from localStorage', e);
+        console.error('hydrate restore tab', e);
       }
-    } finally {
-      inoutHydratingWorkspace = false;
+      return;
     }
-    return;
-  }
-  inoutHydratingWorkspace = true;
-  try {
     try {
       const saved = localStorage.getItem(CURRENT_VIEW_KEY);
       if (saved && viewNames.includes(saved)) {
@@ -8795,10 +8809,16 @@ async function refreshAuth() {
     try {
       await refreshSharedFlags();
       await syncChannelsFromServer();
+      try {
+        restoreLastChannel();
+      } catch (_) {}
       renderTabs();
       subscribeRealtimeAll();
       setupDraftChannel();
       await hydrateWorkspaceOpenViewsForSignedInUser();
+      try {
+        if (currentUser && sb) schedulePersonalWorkspacePersist();
+      } catch (_) {}
       await loadObjectOrderForCurrentChannel();
       await loadObjects();
       restoreInputGlobal();
@@ -8875,7 +8895,13 @@ function setupAuthListener() {
     if (!prevUser && currentUser) {
         try {
       await syncChannelsFromServer();
+          try {
+            restoreLastChannel();
+          } catch (_) {}
           await hydrateWorkspaceOpenViewsForSignedInUser();
+          try {
+            if (currentUser && sb) schedulePersonalWorkspacePersist();
+          } catch (_) {}
           await reloadForUser();
           setupDraftChannel();
           setupLayoutChannel();
