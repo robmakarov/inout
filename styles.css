@@ -83,18 +83,20 @@ body{
   overscroll-behavior-y:auto;
 }
 
-/* Feed + view clones: scrollable but scrollbar gutter invisible (all devices; wheel/touch still scroll) */
+/* Feed + view clones + outer stack scrollport: invisible scrollbars (wheel/touch still scroll) */
 #feed,
 .multiview-views .view .feed,
 .multiview-views > .visual #feed,
-.multiview-views > .visual .feed{
+.multiview-views > .visual .feed,
+.multiview-views .view > .visual > .visual-feed-stack{
   scrollbar-width:none;
   -ms-overflow-style:none;
 }
 #feed::-webkit-scrollbar,
 .multiview-views .view .feed::-webkit-scrollbar,
 .multiview-views > .visual #feed::-webkit-scrollbar,
-.multiview-views > .visual .feed::-webkit-scrollbar{
+.multiview-views > .visual .feed::-webkit-scrollbar,
+.multiview-views .view > .visual > .visual-feed-stack::-webkit-scrollbar{
   width:0;
   height:0;
   display:none;
@@ -222,12 +224,21 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
   overflow:hidden;
   touch-action:auto;
 }
-/* Primary + split views: keep a definite flex height so #feed’s overflow-y can scroll (avoids 0-height scrollport). */
+/*
+  Primary view: ONE vertical scrollport — .visual-feed-stack (inner #feed is content-only).
+  Use overflow-y:scroll (not auto) for iOS / in-app WebViews; flex-basis:0 on the chain below for bounded height.
+*/
 .multiview-views .view > .visual > .visual-feed-stack{
   flex:1 1 0%;
+  flex-basis:0;
   align-self:stretch;
   min-height:0;
   min-width:0;
+  overflow-y:scroll;
+  overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-y;
+  overscroll-behavior-y:contain;
 }
 .view-pinned-rail{
   flex:0 0 auto;
@@ -309,6 +320,8 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
 #multiview #manage-bar,
 #multiview #feed,
 #multiview .visual,
+#multiview .visual-feed-stack,
+.multiview-views .view > .visual > .visual-feed-stack,
 .multiview-views .view .feed{
   pointer-events:auto;
 }
@@ -1235,6 +1248,11 @@ header{
 .view-live-editing-bar[hidden]{
   display:none !important;
 }
+.multiview-views .view > .visual > .visual-feed-stack > .view-live-editing-bar{
+  position:sticky;
+  top:0;
+  z-index:3;
+}
 .view-live-editing-prefix{
   color:var(--dim);
   text-transform:uppercase;
@@ -1295,6 +1313,49 @@ header{
 #feed.feed-updating,
 .multiview-views .view .feed.feed-updating{
   opacity:0.998;
+}
+
+/* Primary #feed / .feed inside stack: grows with content; stack scrolls (overrides rules above). */
+.multiview-views .view > .visual > .visual-feed-stack > #feed,
+.multiview-views .view > .visual > .visual-feed-stack > .feed{
+  flex:0 0 auto;
+  flex-shrink:0;
+  flex-basis:auto;
+  min-height:0;
+  height:auto;
+  max-height:none;
+  overflow-x:hidden;
+  overflow-y:visible;
+  -webkit-overflow-scrolling:auto;
+  /* auto: iOS/WKWebView delegates vertical pan to the scrolling .visual-feed-stack; pan-y here traps on a non-scroller. */
+  touch-action:auto;
+  overscroll-behavior-y:auto;
+}
+.multiview-views .view > .visual > .visual-feed-stack .feed-inner{
+  touch-action:auto;
+}
+.multiview-views .view > .visual > .visual-feed-stack .obj{
+  touch-action:auto;
+}
+
+/* Split pane: .feed direct under .visual (no stack) — this element is the scrollport. */
+.multiview-views .view > .visual > .feed{
+  flex:1 1 0%;
+  flex-basis:0;
+  min-height:0;
+  height:0;
+  min-width:0;
+  align-self:stretch;
+  padding:0;
+  display:flex;
+  flex-direction:column;
+  overflow-y:scroll;
+  overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-y;
+  overscroll-behavior-y:contain;
+  position:relative;
+  z-index:1;
 }
 
 .feed-inner{
@@ -3023,11 +3084,10 @@ body.secret-show-grips .frame-grip{
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
 /*
-  Feed scrollport: WebKit often fails on inner #feed + flex height:0. Use outer .visual-feed-stack as the
-  scroller for narrow windows, touch-primary devices, and coarse pointers (phone landscape >540px).
-  Keep in sync with viewportUsesStackFeedScroll() in app.js.
+  Touch / narrow / in-app WebView: flex items default to content min-height and never shrink, so the
+  scrollport gets infinite height (scrollHeight === clientHeight). Force flex-basis:0 through the chain.
 */
-@media (max-width: 1024px), (hover: none), (pointer: coarse){
+@media (max-width: 1024px), (hover: none){
   .frame.frame-fill{
     flex:1 1 0%;
     min-height:0;
@@ -3053,45 +3113,7 @@ body.secret-show-grips .frame-grip{
     min-height:0;
     min-width:0;
     overflow-y:scroll;
-    overflow-x:hidden;
     -webkit-overflow-scrolling:touch;
-    /* pan-y: route vertical drags to this scrollport (iOS often ignores auto when children use pan-x pan-y). */
-    touch-action:pan-y;
-    overscroll-behavior-y:contain;
-  }
-  .multiview-views .view > .visual > .visual-feed-stack > .view-live-editing-bar{
-    position:sticky;
-    top:0;
-    z-index:3;
-    flex-shrink:0;
-  }
-  .multiview-views .view > .visual > .visual-feed-stack > #feed,
-  .multiview-views .view > .visual > .visual-feed-stack > .feed{
-    flex:0 0 auto;
-    flex-shrink:0;
-    min-height:0;
-    height:auto;
-    overflow-x:hidden;
-    overflow-y:visible;
-    -webkit-overflow-scrolling:auto;
-    touch-action:pan-y;
-    overscroll-behavior-y:auto;
-  }
-  .multiview-views .view > .visual > .visual-feed-stack .feed-inner{
-    touch-action:pan-y;
-  }
-  .multiview-views .view > .visual > .feed{
-    flex:1 1 0%;
-    flex-basis:0;
-    min-height:0;
-    height:0;
-    overflow-y:scroll;
-    -webkit-overflow-scrolling:touch;
-    touch-action:pan-x pan-y;
-  }
-  #feed,
-  .multiview-views .view .feed{
-    padding-bottom:120px;
   }
 }
 
@@ -3126,6 +3148,13 @@ body.secret-show-grips .frame-grip{
   #input-area{
     padding:10px 10px calc(14px + env(safe-area-inset-bottom, 0px));
     background:var(--bg);
+  }
+  /* Room above the input bar (scrollport is stack or direct .feed — pad that layer only). */
+  .multiview-views .view > .visual > .visual-feed-stack{
+    padding-bottom:120px;
+  }
+  .multiview-views .view > .visual > .feed{
+    padding-bottom:120px;
   }
   #nav #tabs{
     padding:0 10px;

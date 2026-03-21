@@ -122,17 +122,10 @@ if (window.Stripe && STRIPE_PUBLISHABLE_KEY && !STRIPE_PUBLISHABLE_KEY.includes(
 
 const feedInner  = document.getElementById('feed-inner');
 const feedEl     = document.getElementById('feed');
-/** True when CSS uses .visual-feed-stack as the vertical scrollport (must match styles.css). */
-function viewportUsesStackFeedScroll() {
-  try {
-    if (typeof window === 'undefined' || !window.matchMedia) return false;
-    if (window.matchMedia('(max-width: 1024px)').matches) return true;
-    if (window.matchMedia('(hover: none)').matches) return true;
-    if (window.matchMedia('(pointer: coarse)').matches) return true;
-  } catch (_) {}
-  return false;
-}
-/** Primary or secondary .feed: whichever element actually scrolls (stack on mobile/narrow/touch CSS, #feed on desktop). */
+/**
+ * Scroll surface for a feed node: primary layout uses .visual-feed-stack as the scrollport
+ * (#feed is content-only). Split panes use .visual > .feed with no stack — that element scrolls.
+ */
 function getFeedScrollSurface(feed) {
   if (!feed || typeof feed.closest !== 'function') return feed;
   var stack = feed.closest('.visual-feed-stack');
@@ -143,8 +136,7 @@ function getFeedScrollSurface(feed) {
       if (oy === 'auto' || oy === 'scroll' || oy === 'overlay') return stack;
     }
   } catch (_) {}
-  if (viewportUsesStackFeedScroll()) return stack;
-  return feed;
+  return stack;
 }
 function primaryFeedScrollSurface() {
   return feedEl ? getFeedScrollSurface(feedEl) : null;
@@ -6109,6 +6101,7 @@ async function openSecondaryView(ch) {
   if (baseFeed) {
     const feedClone = baseFeed.cloneNode(true);
     feedClone.removeAttribute('id');
+    feedClone.classList.add('feed');
     feedClone.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
     feedInner = feedClone.querySelector('.feed-inner');
     feedEl = feedClone;
