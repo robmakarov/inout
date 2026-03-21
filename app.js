@@ -1496,6 +1496,27 @@ var lastAppliedWorkspaceRev = 0;
 var lastMergedWorkspacePushNonce = null;
 /** True while applying saved workspace on load — lets switchChannel reload data when vars already match. */
 var inoutHydratingWorkspace = false;
+/** Latest applied user_input_state.updated_at (ms) per channel — suppress duplicate PG events after refresh. */
+var lastSeenInputStateTs = Object.create(null);
+function inputStateDedupeKey(row) {
+  if (!row || typeof row !== 'object') return '';
+  return row.channel === SLOTS_SYNC_CHANNEL ? '__slots' : String(row.channel || 'main');
+}
+function shouldSkipStaleInputRealtimeRow(row) {
+  var ra = row && row.updated_at ? new Date(row.updated_at).getTime() : 0;
+  if (!Number.isFinite(ra)) ra = 0;
+  var k = inputStateDedupeKey(row);
+  var prev = lastSeenInputStateTs[k];
+  return prev != null && ra <= prev;
+}
+function markInputRealtimeRowApplied(row) {
+  if (!row || typeof row !== 'object') return;
+  var ra = row.updated_at ? new Date(row.updated_at).getTime() : 0;
+  if (!Number.isFinite(ra)) ra = 0;
+  var k = inputStateDedupeKey(row);
+  var prev = lastSeenInputStateTs[k] || 0;
+  if (ra > prev) lastSeenInputStateTs[k] = ra;
+}
 
 var workspaceUiBroadcastSub = null;
 function teardownWorkspaceUiBroadcast() {
@@ -3092,7 +3113,13 @@ function init(done) {
             if (!window._dndVisibilityBound) {
               window._dndVisibilityBound = true;
               document.addEventListener('visibilitychange', function() {
-                if (document.visibilityState !== 'visible' || !currentUser || !currentChannel || typeof setupDndBroadcastChannel !== 'function') return;
+                if (document.visibilityState === 'hidden') {
+                  if (currentUser && sb && typeof flushPersonalWorkspacePersist === 'function') {
+                    flushPersonalWorkspacePersist().catch(function() {});
+                  }
+                  return;
+                }
+                if (!currentUser || !currentChannel || typeof setupDndBroadcastChannel !== 'function') return;
                 /* Brief delay so WebSocket can reconnect (helps web→mobile when mobile was backgrounded) */
                 setTimeout(function() { setupDndBroadcastChannel(); }, 100);
               });
@@ -4200,6 +4227,7 @@ function setupInputStateRealtime() {
         var row = payload && (payload.new || payload.old);
         if (!row || typeof row !== 'object') return;
         if (String(row.device_id) === String(getInputStateDeviceId())) return;
+        if (shouldSkipStaleInputRealtimeRow(row)) return;
         if (row.channel === SLOTS_SYNC_CHANNEL) {
           try {
             const raw = (row.text != null ? String(row.text) : '') || '[]';
@@ -4315,6 +4343,7 @@ function setupInputStateRealtime() {
                   }
                 }
               }
+              markInputRealtimeRowApplied(row);
             }
           } catch (_) {}
           return;
@@ -4344,6 +4373,7 @@ function setupInputStateRealtime() {
           saveInputGlobal();
           updateRemoteSelectionOverlay();
         }
+        markInputRealtimeRowApplied(row);
         } catch (e) {
           if (typeof console !== 'undefined' && console.error) console.error('input-state realtime', e);
         }
@@ -4356,8 +4386,12 @@ async function loadInputFromDbForChannel(ch) {
   if (!currentUser || !sb || !sb.from || !getSyncInputPref() || !input) return;
   const channel = ch || currentChannel || 'main';
   try {
-    const { data, error } = await sb.from(USER_INPUT_STATE_TABLE).select('text').eq('user_id', currentUser.id).eq('channel', channel).maybeSingle();
+    const { data, error } = await sb.from(USER_INPUT_STATE_TABLE).select('text, updated_at').eq('user_id', currentUser.id).eq('channel', channel).maybeSingle();
     if (error || !data) return;
+    if (data.updated_at) {
+      var tMain = new Date(data.updated_at).getTime();
+      if (Number.isFinite(tMain)) lastSeenInputStateTs[String(channel)] = tMain;
+    }
     const text = capSyncText(data.text);
     input.value = text;
     autoResize();
@@ -4370,8 +4404,12 @@ async function loadInputFromDbForChannel(ch) {
 async function loadSlotsFromDb() {
   if (!currentUser || !sb || !sb.from || !getSyncInputPref()) return false;
   try {
-    const { data, error } = await sb.from(USER_INPUT_STATE_TABLE).select('text').eq('user_id', currentUser.id).eq('channel', SLOTS_SYNC_CHANNEL).maybeSingle();
+    const { data, error } = await sb.from(USER_INPUT_STATE_TABLE).select('text, updated_at').eq('user_id', currentUser.id).eq('channel', SLOTS_SYNC_CHANNEL).maybeSingle();
     if (error || !data || data.text == null) return false;
+    if (data.updated_at) {
+      var tSlots = new Date(data.updated_at).getTime();
+      if (Number.isFinite(tSlots)) lastSeenInputStateTs['__slots'] = tSlots;
+    }
     const raw = String(data.text).trim() || '[]';
     if (raw.length > INPUT_SYNC_MAX_LENGTH * 2) return false;
     const slots = JSON.parse(raw);
@@ -7765,13 +7803,13 @@ function notifyWorkspaceChromeChanged() {
 }
 
 function flushPersonalWorkspacePersist() {
-  if (applyingPersonalWorkspaceFromRemote) return;
-  if (!currentUser || !sb) return;
+  if (applyingPersonalWorkspaceFromRemote) return Promise.resolve();
+  if (!currentUser || !sb) return Promise.resolve();
   if (_personalWorkspacePersistTimer) {
     clearTimeout(_personalWorkspacePersistTimer);
     _personalWorkspacePersistTimer = null;
   }
-  persistPersonalWorkspaceToServer();
+  return persistPersonalWorkspaceToServer();
 }
 
 async function persistPersonalWorkspaceToServer() {
@@ -8074,14 +8112,16 @@ function renderTabs() {
       }
       // Delay single-click switching so dblclick has priority for renaming.
       // (Otherwise the first click may switch views before dblclick fires.)
+      // Touch: no delay so focusedChannel persists before background/tab close races.
       const viewAtClick = currentView;
       if (clickTimer) clearTimeout(clickTimer);
+      var tabSwitchDelay = typeof isMobileOrTouchDevice === 'function' && isMobileOrTouchDevice() ? 0 : 180;
       clickTimer = setTimeout(function() {
         clickTimer = null;
         if (currentView !== viewAtClick) return;
         if (btn.querySelector('.tab-rename-input')) return;
         switchChannel(ch);
-      }, 180);
+      }, tabSwitchDelay);
     });
     btn.addEventListener('dragenter', e => {
       e.preventDefault();
@@ -8379,7 +8419,13 @@ async function switchChannel(ch) {
   } else {
     clearObjects();
   }
-  if (!applyingWorkspaceFocusFromRemote) flushPersonalWorkspacePersist();
+  if (!applyingWorkspaceFocusFromRemote) {
+    try {
+      await flushPersonalWorkspacePersist();
+    } catch (e) {
+      console.error('flush workspace after switchChannel', e);
+    }
+  }
 }
 
 function openChannelModal() {
@@ -9203,16 +9249,8 @@ function cleanupAuthHash() {
 }
 
 function setupFullscreenOnFirstTap() {
-  if (!window.matchMedia('(max-width: 540px)').matches) return;
-  let done = false;
-  function tryFullscreen() {
-    if (done) return;
-    done = true;
-    const el = document.documentElement;
-    if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
-  }
-  document.addEventListener('click', tryFullscreen, { once: true });
-  document.addEventListener('touchstart', tryFullscreen, { once: true });
+  /* Intentionally disabled: programmatic requestFullscreen on narrow desktop/touch Chrome
+     caused spurious fullscreen / history entries without improving PWA behavior reliably. */
 }
 
 /* ═══ SEND ════════════════════════════════════════════════ */
