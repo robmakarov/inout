@@ -2700,18 +2700,16 @@ async function persistViewTitle(channel, titleValue) {
     const ch = String(channel);
     let cfg = {};
     try {
-      const { data } = await sb
-        .from('views')
-        .select('config')
-        .eq('channel', ch)
-        .limit(1)
-        .maybeSingle();
-      if (data && data.config && typeof data.config === 'object') cfg = data.config;
+      let q = sb.from('views').select('config').eq('channel', ch).limit(1);
+      if (currentUser && currentUser.id) q = q.eq('user_id', currentUser.id);
+      const { data } = await q.maybeSingle();
+      const parsed = data ? normalizeViewConfig(data.config) : null;
+      if (parsed && typeof parsed === 'object') cfg = parsed;
     } catch (_) {}
     const nextCfg = Object.assign({}, cfg);
     if (typeof titleValue === 'string' && titleValue.trim()) nextCfg.title = titleValue.trim();
     else delete nextCfg.title;
-    await sb.from('views').upsert({ channel: ch, config: nextCfg }, { onConflict: 'channel' });
+    await upsertViewsConfigForChannel(ch, nextCfg);
   } catch (e) {
     console.error(e);
   }
@@ -3568,6 +3566,7 @@ function subscribeViewRealtime() {
         try {
           const row = payload.new || payload.old || {};
           if (!row || !row.channel) return;
+          if (currentUser && row.user_id != null && String(row.user_id) !== String(currentUser.id)) return;
           const cfg = normalizeViewConfig(row.config);
           if (!cfg) return;
           applyRemoteViewTitle(row.channel, cfg.title);
@@ -4928,19 +4927,28 @@ function broadcastDndDropped(newOrder, movedIds) {
 function broadcastOrderSyncFromSave() {
   if (!currentObjectOrder.length) return;
   if (!shouldUseServerForObjects() || !currentUser || !currentChannel) return;
-  if (!dndBroadcastChannel || !dndChannelReady) return;
-  try {
-    dndBroadcastChannel.send({
-      type: 'broadcast',
-      event: 'dnd',
-      payload: {
-        type: 'order_sync',
-        from: myId,
-        channel: String(currentChannel),
-        newOrder: currentObjectOrder.slice(),
-      },
-    });
-  } catch (_) {}
+  var attempt = 0;
+  function tick() {
+    if (!currentObjectOrder.length || attempt > 16) return;
+    if (dndBroadcastChannel && dndChannelReady) {
+      try {
+        dndBroadcastChannel.send({
+          type: 'broadcast',
+          event: 'dnd',
+          payload: {
+            type: 'order_sync',
+            from: myId,
+            channel: String(currentChannel),
+            newOrder: currentObjectOrder.slice(),
+          },
+        });
+      } catch (_) {}
+      return;
+    }
+    attempt++;
+    setTimeout(tick, 200);
+  }
+  tick();
 }
 
 function maybeBroadcastOrderAfterReorder(savedBefore, movedIds) {
@@ -6833,6 +6841,46 @@ function normalizeViewConfig(raw) {
   return typeof raw === 'object' ? raw : null;
 }
 
+/**
+ * Upsert views row: matches schema where unique is (user_id, channel), with fallback to channel-only.
+ */
+async function upsertViewsConfigForChannel(channelKey, configObj) {
+  const ch = String(channelKey || 'main');
+  const cfg = configObj && typeof configObj === 'object' ? configObj : {};
+  if (!sb || !sb.from) return { error: new Error('no supabase client') };
+  if (currentUser && currentUser.id) {
+    const r1 = await sb
+      .from('views')
+      .upsert({ user_id: currentUser.id, channel: ch, config: cfg }, { onConflict: 'user_id,channel' });
+    if (!r1.error) return r1;
+    const r2 = await sb.from('views').upsert({ channel: ch, config: cfg }, { onConflict: 'channel' });
+    return r2;
+  }
+  return sb.from('views').upsert({ channel: ch, config: cfg }, { onConflict: 'channel' });
+}
+
+/** Sync legacy message_orders so postgres_changes + other devices pick up order (views realtime can lag). */
+async function syncMessageOrdersFromCurrentOrder(viewChannel) {
+  if (!sb || !sb.from || !currentUser || !currentUser.id) return;
+  const ch = String(viewChannel || currentChannel || currentView || 'main');
+  const uid = currentUser.id;
+  const order = Array.isArray(currentObjectOrder) ? currentObjectOrder : [];
+  try {
+    await sb.from('message_orders').delete().eq('user_id', uid).eq('channel', ch);
+    if (!order.length) return;
+    const rows = order.map((entry_id, position) => ({
+      user_id: uid,
+      channel: ch,
+      entry_id,
+      position,
+    }));
+    const { error } = await sb.from('message_orders').insert(rows);
+    if (error) console.error('message_orders sync', error);
+  } catch (e) {
+    console.error('message_orders sync', e);
+  }
+}
+
 async function loadObjectOrderForCurrentChannel() {
   currentObjectOrder = [];
   if (!shouldUseServerForObjects() || !sb) {
@@ -6841,12 +6889,13 @@ async function loadObjectOrderForCurrentChannel() {
   }
   // 1) Try unified view object (channel-owned, not per-user).
   try {
-    const { data, error } = await sb
+    let q = sb
       .from('views')
       .select('config')
       .eq('channel', currentChannel)
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
+    if (currentUser && currentUser.id) q = q.eq('user_id', currentUser.id);
+    const { data, error } = await q.maybeSingle();
     const cfg = !error && data ? normalizeViewConfig(data.config) : null;
     if (cfg) {
       applyRemoteViewTitle(currentChannel, cfg.title);
@@ -6921,14 +6970,13 @@ async function saveObjectOrderForCurrentView() {
           : 'feed',
       };
       suppressNextViewApply = true;
-      const { error } = await sb
-        .from('views')
-        .upsert(
-          { channel: currentView, config: cfg },
-          { onConflict: 'channel' }
-        );
+      const viewCh = String(currentChannel || currentView || 'main');
+      const { error } = await upsertViewsConfigForChannel(viewCh, cfg);
       if (error) console.error(error);
-      else broadcastOrderSyncFromSave();
+      else {
+        await syncMessageOrdersFromCurrentOrder(viewCh);
+        broadcastOrderSyncFromSave();
+      }
     } catch (e) { console.error(e); }
   }
 }
