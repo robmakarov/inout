@@ -800,12 +800,13 @@ header{
   padding:14px 16px;
   padding-bottom:calc(14px + env(safe-area-inset-bottom, 0px));
   display:block;
+  /* Desktop: slide in. Avoid transform on the scrollport on narrow viewports — iOS WebKit often won’t scroll overflow inside transformed ancestors. */
   animation:drawerIn .12s ease both;
   pointer-events:auto;
   overflow-y:auto;
   overflow-x:hidden;
   -webkit-overflow-scrolling:touch;
-  touch-action:pan-y;
+  touch-action:auto;
   overscroll-behavior-y:contain;
   scrollbar-width:none;
   -ms-overflow-style:none;
@@ -1064,12 +1065,30 @@ header{
 .um-btn-primary:hover{background:#f0e0b0;color:var(--bg)}
 
 @media(max-width:540px){
+  #user-modal-backdrop{
+    align-items:stretch;
+    justify-content:flex-end;
+  }
   #user-modal{
     width:100%;
     max-width:100%;
     border-left:none;
+    flex:1 1 0%;
+    flex-basis:0;
+    min-height:0;
+    height:auto;
+    max-height:100vh;
     max-height:100dvh;
+    max-height:100svh;
+    animation:umDrawerFadeOnly .14s ease both;
+    touch-action:auto;
+    -webkit-overflow-scrolling:touch;
+    overflow-y:scroll;
   }
+}
+@keyframes umDrawerFadeOnly{
+  from{ opacity:0; }
+  to{ opacity:1; }
 }
 
 #online-count{
@@ -3051,18 +3070,26 @@ body.secret-show-grips .frame-grip{
     min-height:0;
   }
   .frame.frame-fill > #multiview{
+    flex:1 1 0%;
+    flex-basis:0;
+    min-height:0;
+  }
+  .multiview-views .view > .visual{
+    flex:1 1 0%;
+    flex-basis:0;
     min-height:0;
   }
   .multiview-views .view > .visual > .visual-feed-stack{
     flex:1 1 0%;
+    flex-basis:0;
     min-height:0;
     min-width:0;
-    overflow-y:auto;
+    /* scroll (not auto) + no transform ancestors: more reliable iOS momentum scrolling */
+    overflow-y:scroll;
     overflow-x:hidden;
     -webkit-overflow-scrolling:touch;
-    /* pan-y on the scrollport can steal gestures from nested content on some WebKit builds */
     touch-action:auto;
-    overscroll-behavior-y:contain;
+    overscroll-behavior-y:auto;
   }
   .multiview-views .view > .visual > .visual-feed-stack > .view-live-editing-bar{
     position:sticky;
@@ -3073,13 +3100,15 @@ body.secret-show-grips .frame-grip{
   .multiview-views .view > .visual > .visual-feed-stack > #feed,
   .multiview-views .view > .visual > .visual-feed-stack > .feed{
     flex:0 0 auto;
+    flex-shrink:0;
     min-height:0;
     height:auto;
     overflow-x:hidden;
     overflow-y:visible;
     -webkit-overflow-scrolling:auto;
-    /* pan-y on a non-scrollport blocks iOS from scrolling the outer .visual-feed-stack */
     touch-action:auto;
+    /* Don’t create a competing scroll layer; .visual-feed-stack is the only vertical scroller */
+    overscroll-behavior-y:auto;
   }
   /* Split panes: .feed is direct under .visual (no stack) — keep #feed-like scroll on the pane */
   .multiview-views .view > .visual > .feed{
