@@ -2931,25 +2931,3 @@ body.secret-show-grips .frame-grip{
   color:var(--bg);
   border-color:var(--acc2);
 }
-
-/* =============================================================================
-   Flat chrome: no panel fills, borders, inset strokes, or drop shadows (global)
-   SVG path stroke is kept so icons remain visible. Text color unchanged.
-   ============================================================================= */
-html,
-body{
-  background:transparent !important;
-  background-image:none !important;
-  border:none !important;
-  outline:none !important;
-  box-shadow:none !important;
-}
-body *,
-body *::before,
-body *::after{
-  border:none !important;
-  outline:none !important;
-  box-shadow:none !important;
-  background:transparent !important;
-  background-image:none !important;
-}
