@@ -74,13 +74,10 @@
     <div class="frame" data-frame-id="nav">
 <nav id="nav" class="navigation-bar" role="navigation" aria-label="Views">
   <div id="tabs"></div>
-  <button id="views-close-all" class="manage-btn" type="button" aria-label="Close all views">Close all</button>
 </nav>
     </div>
     <div class="frame frame-fill" data-frame-id="multiview">
-<div id="multiview">
-  <div id="view-pinned-rail" class="view-pinned-rail" aria-label="Pinned objects"></div>
-  <div class="multiview-views">
+<div id="multiview" class="main-view">
     <div class="view" id="view-app">
       <div id="manage-bar">
       <button type="button" id="manage-bar-trigger" class="manage-bar-trigger" aria-label="View actions" aria-haspopup="true" aria-expanded="false">⋮</button>
@@ -88,7 +85,6 @@
         <div class="bar-scroll" id="manage-bar-scroll">
           <div class="bar-group" data-bar-group="left">
             <button id="select-toggle" class="manage-btn" data-bar-id="select-toggle">Select</button>
-            <button class="manage-btn view-close-btn" type="button" aria-label="Close view">×</button>
             <span id="select-extra" class="select-extra">
               <button id="select-all" class="manage-btn">All</button>
               <button id="select-none" class="manage-btn">None</button>
@@ -142,7 +138,6 @@
     </div>
     </div>
     </div>
-  </div>
 </div>
     </div>
     <div class="frame" data-frame-id="input">

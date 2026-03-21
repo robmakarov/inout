@@ -200,7 +200,6 @@ const umLayoutSyncChk = document.getElementById('um-layout-sync');
 const umVersionBadge = document.getElementById('um-version-badge');
 const umUpgradeBtn   = document.getElementById('um-upgrade-btn');
 const tabsEl     = document.getElementById('tabs');
-const viewsCloseAllBtn = document.getElementById('views-close-all');
 const clipboardBubble    = document.getElementById('clipboard-bubble');
 const clipboardBubbleTxt = document.getElementById('clipboard-bubble-text');
 const clipboardBubbleDeviceEl = document.getElementById('clipboard-bubble-device');
@@ -1392,7 +1391,6 @@ const LEFT_VIEWS_KEY      = 'inout_left_views_v1';
 const LEFT_CHANNELS_KEY   = LEFT_VIEWS_KEY; /* alias: left-rail hidden feeds */
 const CURRENT_VIEW_KEY    = 'inout_current_view_v1';
 const SECONDARY_VIEW_KEY  = 'inout_secondary_view_name_v1';
-const MULTIVIEW_SPLIT_KEY = 'inout_multiview_split_v1';
 const INPUT_STATE_KEY      = 'inout_input_state_v2';
 const INPUT_SLOTS_KEY      = 'inout_input_slots_v1';
 const SYNC_INPUT_PREF_KEY  = 'inout_sync_input_v1';
@@ -1666,7 +1664,7 @@ function setupWorkspaceUiBroadcast() {
   }
 }
 
-/** Add feeds referenced only in workspace (e.g. multiview) so openSecondaryView can run. */
+/** Add feeds referenced only in workspace (e.g. legacy openSecondaryViews in saved config). */
 function ensureWorkspaceChannelsFromCfg(cfg) {
   if (!cfg || typeof cfg !== 'object') return;
   var add = [];
@@ -3658,10 +3656,6 @@ function subscribeChannelMembershipRealtime() {
       viewNames = viewNames.filter(x => x !== ch);
       saveChannelsList();
       sharedChannels.delete(ch);
-      const beforePanels = collectOpenSecondaryViewChannels();
-      if (beforePanels.includes(ch)) {
-        await applyWorkspaceOpenSecondaryViews(beforePanels.filter(c => c !== ch));
-      }
       schedulePersonalWorkspacePersist();
       if (currentChannel === ch || currentView === ch) {
         try {
@@ -4092,7 +4086,7 @@ function applyFieldPrefsToFeedInner(inner, fp) {
   inner.classList.toggle('obj-labels-off', !fp.showLabels);
 }
 
-/** Apply `views.config` to every open feed pane for this channel (primary + multiview). */
+/** Apply `views.config` to every open feed pane for this channel (single main feed). */
 function applyViewsTableConfigToChannel(channel, cfg) {
   if (!cfg || typeof cfg !== 'object') return;
   const ch = String(channel || '');
@@ -5855,109 +5849,25 @@ function restoreLastChannel() {
 
 function saveSecondaryViewState() {
   try {
-    if (secondaryViewChannel) localStorage.setItem(SECONDARY_VIEW_KEY, secondaryViewChannel);
-    else localStorage.removeItem(SECONDARY_VIEW_KEY);
+    localStorage.removeItem(SECONDARY_VIEW_KEY);
   } catch (_) {}
 }
-
 
 var secondaryViewEl = null;
 var secondaryFeedInner = null;
 var secondaryFeedEl = null;
-var multiviewResizerEl = null;
 
-function setupSecondaryFeedDnd() {
-  if (!secondaryFeedEl || !secondaryViewEl) return;
-  function handleSecondaryDragover(e) {
-    if (e.dataTransfer.types.includes('application/x-inout-draft')) {
-      e.preventDefault();
-      e.stopPropagation();
-      e.dataTransfer.dropEffect = 'move';
-      secondaryViewEl.classList.add('view-drop-over');
-      return;
-    }
-    const src = getDraggingRowAndSource();
-    if (!src) return;
-    // Dragging inside this view: run full reorder logic for this feed.
-    if (src.channel === secondaryViewChannel) {
-      e.preventDefault();
-      e.stopPropagation();
-      e.dataTransfer.dropEffect = 'move';
-      processFeedDragover(e);
-      return;
-    }
-    // Dragging from another view: just show drop-over highlight.
-    e.preventDefault();
-    e.stopPropagation();
-    e.dataTransfer.dropEffect = 'move';
-    secondaryViewEl.classList.add('view-drop-over');
-  }
-  function handleSecondaryDragleave(e) {
-    if (!secondaryViewEl.contains(e.relatedTarget)) secondaryViewEl.classList.remove('view-drop-over');
-  }
-  secondaryViewEl.addEventListener('dragover', handleSecondaryDragover);
-  secondaryViewEl.addEventListener('dragleave', handleSecondaryDragleave);
-  secondaryFeedEl.addEventListener('dragover', handleSecondaryDragover);
-  secondaryFeedEl.addEventListener('dragleave', handleSecondaryDragleave);
-  function handleSecondaryDrop(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    dragDropHandled = true;
-    secondaryViewEl.classList.remove('view-drop-over');
-    const draftSlotIndex = e.dataTransfer.getData('application/x-inout-draft');
-    if (draftSlotIndex !== '' && draftSlotIndex != null) {
-      const text = (e.dataTransfer.getData('text/plain') || '').trim();
-      const slotIndex = parseInt(draftSlotIndex, 10);
-      if (text && Number.isFinite(slotIndex) && inputSlots[slotIndex] && secondaryViewChannel) {
-        sendText(text, { channel: secondaryViewChannel });
-        inputSlots[slotIndex].value = '';
-        saveInputSlots();
-        const slotRow = composerSlotsContainer && composerSlotsContainer.querySelector('[data-slot-index="' + slotIndex + '"]');
-        if (slotRow) {
-          const ta = slotRow.querySelector('textarea');
-          if (ta) ta.value = '';
-          slotRow.draggable = false;
-          slotRow.classList.remove('composer-slot-draggable');
-          const sendB = slotRow.querySelector('.composer-send');
-          if (sendB) sendB.disabled = true;
-        }
-      }
-      return;
-    }
-    const id = e.dataTransfer.getData('application/x-inout-obj-id') || e.dataTransfer.getData('text/plain');
-    const numId = Number(id);
-    if (!Number.isFinite(numId)) return;
-    const src = getDraggingRowAndSource();
-    if (!src || src.channel === secondaryViewChannel) return;
-    const rowEl = src.row;
-    animateObjectToView(rowEl, secondaryFeedEl, async () => {
-      const ok = await moveSingleObject(numId, secondaryViewChannel);
-      if (src.channel === currentChannel) {
-        currentObjectOrder = currentObjectOrder.filter(x => x !== numId);
-        saveObjectOrderForCurrentView();
-        showEmptyIfNoObjects();
-      }
-      if (ok) {
-        const list = await fetchObjectsListForChannel(secondaryViewChannel);
-        await replaceFeedWithListInto(list, secondaryFeedInner);
-      } else if (rowEl) rowEl.style.visibility = '';
-    });
-  }
-  secondaryViewEl.addEventListener('drop', handleSecondaryDrop, true);
-  secondaryFeedEl.addEventListener('drop', handleSecondaryDrop, true);
-}
+function setupSecondaryFeedDnd() {}
 
+/** Single main feed only: strip any legacy extra `.view` nodes under `#multiview`. */
 function closeSecondaryView() {
-  const viewsContainer = document.querySelector('.multiview-views');
-  if (viewsContainer) {
-    /* Keep #view-app (primary); only drop extra split panes. */
-    viewsContainer.querySelectorAll('.view').forEach(el => {
+  const root = document.getElementById('multiview');
+  if (root) {
+    root.querySelectorAll('.view').forEach(function(el) {
       if (el.id === 'view-app') return;
       if (el.parentNode) el.parentNode.removeChild(el);
     });
-    if (multiviewResizerEl && multiviewResizerEl.parentNode) multiviewResizerEl.parentNode.removeChild(multiviewResizerEl);
   }
-  multiviewResizerEl = null;
   secondaryViewEl = null;
   secondaryFeedInner = null;
   secondaryFeedEl = null;
@@ -5967,189 +5877,6 @@ function closeSecondaryView() {
   saveSecondaryViewState();
   updateTabsUI();
   flushPersonalWorkspacePersist();
-}
-
-/** Remove one split pane (same as its ×); keeps multiview resizer if other secondaries remain. */
-function removeSecondaryViewPane(viewRecord) {
-  if (!viewRecord || !viewRecord.rootEl) return;
-  const view = viewRecord.rootEl;
-  views = views.filter(v => v && v !== viewRecord);
-  if (view.parentNode) view.parentNode.removeChild(view);
-  if (secondaryViewEl === view) {
-    const other = views.find(v => v && v.id !== 'view-0' && v.rootEl && document.body.contains(v.rootEl));
-    if (other) {
-      secondaryViewEl = other.rootEl;
-      secondaryViewChannel = other.channel;
-      secondaryFeedInner = other.feedInner;
-      secondaryFeedEl = other.rootEl && other.rootEl.querySelector && other.rootEl.querySelector('.feed') || null;
-    } else {
-      secondaryViewEl = null;
-      secondaryFeedInner = null;
-      secondaryFeedEl = null;
-      secondaryViewChannel = null;
-      if (multiviewResizerEl && multiviewResizerEl.parentNode) multiviewResizerEl.parentNode.removeChild(multiviewResizerEl);
-      multiviewResizerEl = null;
-    }
-    saveSecondaryViewState();
-  }
-  try {
-    const open = Array.from(new Set(views.filter(v => v && v.id !== 'view-0').map(v => v.channel)));
-    localStorage.setItem(OPEN_VIEWS_KEY, JSON.stringify(open));
-  } catch (_) {}
-  updateTabsUI();
-  flushPersonalWorkspacePersist();
-}
-
-function closeSecondaryPaneForChannel(ch) {
-  const want = String(ch || '').trim();
-  if (!want) return;
-  const rec = views.find(v => v && v.id !== 'view-0' && String(v.channel || '') === want);
-  if (!rec) return;
-  removeSecondaryViewPane(rec);
-}
-
-function applyMultiviewSplit(ratio, syncWorkspace) {
-  const viewsContainer = document.querySelector('.multiview-views');
-  if (!viewsContainer) return;
-  ratio = Math.max(0.2, Math.min(0.8, ratio));
-  viewsContainer.style.setProperty('--multiview-split', String(ratio));
-  try { localStorage.setItem(MULTIVIEW_SPLIT_KEY, String(ratio)); } catch (_) {}
-  if (syncWorkspace !== false) schedulePersonalWorkspacePersist();
-}
-
-function setupMultiviewResizer(resizerEl, viewsEl) {
-  if (!resizerEl || !viewsEl) return;
-  let startX = 0;
-  let startRatio = 0.5;
-  resizerEl.addEventListener('mousedown', e => {
-    e.preventDefault();
-    const rect = viewsEl.getBoundingClientRect();
-    const current = parseFloat(viewsEl.style.getPropertyValue('--multiview-split')) || 0.5;
-    startX = e.clientX;
-    startRatio = current;
-    const onMove = (e2) => {
-      const w = viewsEl.offsetWidth;
-      if (w <= 0) return;
-      const dx = e2.clientX - startX;
-      const ratio = startRatio + dx / w;
-      applyMultiviewSplit(ratio);
-    };
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  });
-}
-
-async function openSecondaryView(ch) {
-  if (!viewNames.includes(ch)) return;
-  if (views.some(v => v && String(v.channel || '') === String(ch))) return;
-  secondaryViewChannel = ch;
-  saveSecondaryViewState();
-  const viewsContainer = document.querySelector('.multiview-views');
-  if (!viewsContainer) return;
-  // Add resizer only once when opening the first secondary view
-  if (!multiviewResizerEl) {
-    const resizer = document.createElement('div');
-    resizer.className = 'multiview-resizer';
-    resizer.setAttribute('aria-label', 'Resize views');
-    try {
-      const saved = localStorage.getItem(MULTIVIEW_SPLIT_KEY);
-      if (saved) applyMultiviewSplit(parseFloat(saved));
-      else viewsContainer.style.setProperty('--multiview-split', '0.5');
-    } catch (_) {
-      viewsContainer.style.setProperty('--multiview-split', '0.5');
-    }
-    setupMultiviewResizer(resizer, viewsContainer);
-    viewsContainer.appendChild(resizer);
-    multiviewResizerEl = resizer;
-  }
-  const view = document.createElement('div');
-  view.className = 'view';
-  view.setAttribute('data-channel', ch);
-  const visual = document.createElement('div');
-  visual.className = 'visual';
-  visual.setAttribute('aria-label', 'View: ' + (ch === 'main' ? 'Feed' : ch));
-  // clone base feed structure so each view has identical markup, including loader/empty classes
-  const baseFeed = document.getElementById('feed');
-  let feedInner = null;
-  let feedEl = null;
-  if (baseFeed) {
-    const feedClone = baseFeed.cloneNode(true);
-    feedClone.removeAttribute('id');
-    feedClone.classList.add('feed');
-    feedClone.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
-    feedInner = feedClone.querySelector('.feed-inner');
-    feedEl = feedClone;
-    visual.appendChild(feedClone);
-  } else {
-    const feed = document.createElement('div');
-    feed.className = 'feed';
-    feedInner = document.createElement('div');
-    feedInner.className = 'feed-inner';
-    const empty = document.createElement('div');
-    empty.className = 'empty-placeholder';
-    empty.textContent = 'Loading…';
-    feedInner.appendChild(empty);
-    feed.appendChild(feedInner);
-    feedEl = feed;
-    visual.appendChild(feed);
-  }
-  view.appendChild(visual);
-  viewsContainer.appendChild(view);
-  secondaryViewEl = view;
-  secondaryFeedEl = feedEl;
-  secondaryFeedInner = feedInner;
-  if (secondaryFeedEl) setupSecondaryFeedDnd();
-  if (feedEl) bindFeedScrollWorkspaceSync(feedEl, ch, false);
-  // register this view in views[] with its own feedInner so realtime/updates target the right feed
-  const viewId = 'view-' + views.length;
-  const viewRecord = {
-    id: viewId,
-    channel: ch,
-    rootEl: view,
-    feedInner: feedInner,
-    objects: [],
-    config: {},
-  };
-  views.push(viewRecord);
-  const closeBtn = document.createElement('button');
-  closeBtn.type = 'button';
-  closeBtn.className = 'view-close-floating';
-  closeBtn.setAttribute('aria-label', 'Close view');
-  closeBtn.textContent = '×';
-  view.appendChild(closeBtn);
-  closeBtn.addEventListener('click', () => {
-    removeSecondaryViewPane(viewRecord);
-  });
-  const list = await fetchObjectsListForChannel(ch);
-  await replaceFeedWithListInto(list, feedInner);
-  updateTabsUI();
-  try {
-    const open = Array.from(new Set(views.filter(v => v && v.id !== 'view-0').map(v => v.channel)));
-    localStorage.setItem(OPEN_VIEWS_KEY, JSON.stringify(open));
-  } catch (_) {}
-  flushPersonalWorkspacePersist();
-}
-
-function hasOpenSecondaryForChannel(ch) {
-  const w = String(ch || '').trim();
-  return views.some(v => v && v.id !== 'view-0' && String(v.channel || '') === w);
-}
-
-/** Shift+click tab: open split for this channel, or close that split if already open. */
-function toggleSecondaryView(ch) {
-  if (hasOpenSecondaryForChannel(ch)) {
-    closeSecondaryPaneForChannel(ch);
-    return;
-  }
-  openSecondaryView(ch);
 }
 
 function restoreInputGlobal() {
@@ -7528,12 +7255,6 @@ function updateObjectCount() {
 /* ═══ TABS ════════════════════════════════════════════════ */
 function setupTabs() {
   renderTabs();
-  if (viewsCloseAllBtn) {
-    viewsCloseAllBtn.addEventListener('click', () => {
-      closeSecondaryView();
-      schedulePersonalWorkspacePersist();
-    });
-  }
   const manageBar = document.getElementById('manage-bar');
   const manageBarTrigger = document.getElementById('manage-bar-trigger');
   if (manageBar && manageBarTrigger) {
@@ -7724,52 +7445,6 @@ async function syncMessageOrdersFromCurrentOrder(viewChannel) {
   }
 }
 
-function collectOpenSecondaryViewChannels() {
-  return views
-    .filter(v => v && v.id !== 'view-0')
-    .map(v => v.channel)
-    .filter(ch => typeof ch === 'string' && ch.trim());
-}
-
-/**
- * Sync open split panes to a list (membership cleanup, etc.). Does not run from workspace/server merge
- * — multiview is only created via Shift+click on a tab.
- */
-async function applyWorkspaceOpenSecondaryViews(desired, opts) {
-  opts = opts || {};
-  const merge = !!opts.merge;
-  const cleaned = (Array.isArray(desired) ? desired : [])
-    .map(c => String(c || '').trim())
-    .filter(Boolean);
-  const wantSet = new Set(cleaned);
-  const cur = collectOpenSecondaryViewChannels();
-
-  if (merge) {
-    for (const ch of cleaned) {
-      if (cur.includes(ch)) continue;
-      if (!viewNames.includes(ch)) continue;
-      await openSecondaryView(ch);
-    }
-    try {
-      localStorage.setItem(OPEN_VIEWS_KEY, JSON.stringify(collectOpenSecondaryViewChannels()));
-    } catch (_) {}
-    return;
-  }
-
-  if (cur.length === cleaned.length && cur.every((c, i) => c === cleaned[i])) return;
-  for (const ch of cur.slice()) {
-    if (!wantSet.has(ch)) closeSecondaryPaneForChannel(ch);
-  }
-  for (const ch of cleaned) {
-    if (!viewNames.includes(ch)) continue;
-    if (collectOpenSecondaryViewChannels().includes(ch)) continue;
-    await openSecondaryView(ch);
-  }
-  try {
-    localStorage.setItem(OPEN_VIEWS_KEY, JSON.stringify(collectOpenSecondaryViewChannels()));
-  } catch (_) {}
-}
-
 /** Merge remote feed scroll positions into viewScroll (used by workspace sync + deduped realtime). */
 function mergeWorkspaceFeedScrollFromConfig(cfg) {
   if (!cfg || !cfg.feedScrollByView || typeof cfg.feedScrollByView !== 'object') return;
@@ -7786,15 +7461,6 @@ function mergeWorkspaceFeedScrollFromConfig(cfg) {
 }
 
 function gatherPersonalWorkspaceStateForSave() {
-  const list = collectOpenSecondaryViewChannels();
-  let multiviewSplit = null;
-  try {
-    const s = localStorage.getItem(MULTIVIEW_SPLIT_KEY);
-    if (s != null && s !== '') {
-      const n = parseFloat(s);
-      if (Number.isFinite(n)) multiviewSplit = n;
-    }
-  } catch (_) {}
   let frameOrder = null;
   try {
     frameOrder = getFrameOrder();
@@ -7838,8 +7504,8 @@ function gatherPersonalWorkspaceStateForSave() {
     });
   } catch (_) {}
   return {
-    openSecondaryViews: list.slice(),
-    multiviewSplit: multiviewSplit,
+    openSecondaryViews: [],
+    multiviewSplit: null,
     frameOrder: Array.isArray(frameOrder) ? frameOrder.slice() : null,
     layoutSync: !!layoutSync,
     viewDisplayNames: viewDisplayNamesCopy,
@@ -7965,7 +7631,7 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
           }
         }
       }
-      /* Multiview split panes: Shift+click tab only — do not open from workspace merge. */
+      /* Single main feed — no split panes from workspace merge. */
       if (cfg.uiChrome && typeof cfg.uiChrome === 'object') {
         applyWorkspaceUiChrome(cfg.uiChrome);
       }
@@ -8040,7 +7706,7 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
       }
     }
   }
-  /* Multiview: not restored from server; use Shift+click on a tab. */
+  /* Single main feed — split panes are not restored from server. */
   if (Array.isArray(cfg.frameOrder) && cfg.frameOrder.length) {
     try {
       applyFrameOrder(cfg.frameOrder);
@@ -8422,11 +8088,6 @@ function renderTabs() {
     });
 
     btn.addEventListener('click', (e) => {
-      if (e.shiftKey) {
-        e.preventDefault();
-        toggleSecondaryView(ch);
-        return;
-      }
       // Delay single-click switching so dblclick has priority for renaming.
       // (Otherwise the first click may switch views before dblclick fires.)
       // Touch: no delay so tab switch runs before background/tab close races.
@@ -10959,7 +10620,6 @@ var scrollSaveTimer = null;
  */
 function bindMultiviewWheelScrollCapture() {
   var mv = document.getElementById('multiview');
-  var viewsRoot = document.querySelector('.multiview-views');
   if (!mv || mv.dataset.inoutWheelCapture === '1') return;
   mv.dataset.inoutWheelCapture = '1';
   function wheelDeltaY(e, refSize) {
@@ -10979,9 +10639,8 @@ function bindMultiviewWheelScrollCapture() {
       if (t.closest('#user-modal-backdrop, #user-modal, #channel-modal-backdrop, #qr-modal-backdrop'))
         return;
       if (t.closest('.manage-bar-dropdown, #log-dropup-panel.open')) return;
-      if (t.closest('#view-pinned-rail')) return;
-      var view = t.closest('.multiview-views .view');
-      if (!view || !viewsRoot || !viewsRoot.contains(view)) return;
+      var view = t.closest('#multiview .view');
+      if (!view || !mv.contains(view)) return;
       var feed = view.querySelector('#feed') || view.querySelector('.feed');
       if (!feed) return;
       var surf = getFeedScrollSurface(feed);

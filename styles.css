@@ -85,18 +85,18 @@ body{
 
 /* Feed + view clones + outer stack scrollport: invisible scrollbars (wheel/touch still scroll) */
 #feed,
-.multiview-views .view .feed,
-.multiview-views > .visual #feed,
-.multiview-views > .visual .feed,
-.multiview-views .view > .visual > .visual-feed-stack{
+#multiview .view .feed,
+#multiview > .visual #feed,
+#multiview > .visual .feed,
+#multiview .view > .visual > .visual-feed-stack{
   scrollbar-width:none;
   -ms-overflow-style:none;
 }
 #feed::-webkit-scrollbar,
-.multiview-views .view .feed::-webkit-scrollbar,
-.multiview-views > .visual #feed::-webkit-scrollbar,
-.multiview-views > .visual .feed::-webkit-scrollbar,
-.multiview-views .view > .visual > .visual-feed-stack::-webkit-scrollbar{
+#multiview .view .feed::-webkit-scrollbar,
+#multiview > .visual #feed::-webkit-scrollbar,
+#multiview > .visual .feed::-webkit-scrollbar,
+#multiview .view > .visual > .visual-feed-stack::-webkit-scrollbar{
   width:0;
   height:0;
   display:none;
@@ -107,40 +107,19 @@ header,
 #nav{
   pointer-events:auto;
 }
-/* Multiview: rail (fixed left) + views; rail stays same when switching view */
-#multiview{
+/* Single main view: one feed column fills space between nav and input */
+#multiview,
+#multiview.main-view{
   flex:1 1 0%;
   display:flex;
-  flex-direction:row;
+  flex-direction:column;
   min-height:0;
   min-width:0;
   overflow:hidden;
   pointer-events:auto;
   touch-action:auto;
 }
-#multiview > #view-pinned-rail{
-  flex:0 0 auto;
-}
-/* Pinned rail hidden unless secret toggle enables it */
-body:not(.secret-show-pinned-rail) #view-pinned-rail{
-  display:none !important;
-  width:0 !important;
-  min-width:0 !important;
-  padding:0 !important;
-  margin:0 !important;
-  border:none !important;
-  overflow:hidden !important;
-}
-.multiview-views{
-  flex:1 1 0;
-  min-width:0;
-  display:flex;
-  flex-direction:row;
-  min-height:0;
-  overflow:hidden;
-  --multiview-split: 0.5;
-}
-.multiview-views .view{
+#multiview .view{
   flex:1 1 0;
   min-width:0;
   display:flex;
@@ -150,62 +129,18 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
   overflow:hidden;
   position:relative;
 }
-/* Keep manage bar full-width above the feed (avoid row layout treating it as a side column). */
-.multiview-views .view > #manage-bar{
+#multiview .view > #manage-bar{
   flex:0 0 auto;
   width:100%;
   min-width:0;
   order:0;
 }
-.multiview-views .view > .visual{
+#multiview .view > .visual{
   flex:1 1 0;
   min-height:0;
   min-width:0;
   order:1;
   touch-action:auto;
-}
-/* If #visual is ever a direct child of .multiview-views (markup mistake), still get a bounded scroll chain */
-.multiview-views > .visual{
-  flex:1 1 0;
-  min-height:0;
-  min-width:0;
-  display:flex;
-  flex-direction:row;
-  overflow:hidden;
-  touch-action:auto;
-}
-.multiview-views > .visual .visual-feed-stack{
-  flex:1;
-  min-width:0;
-  min-height:0;
-}
-.multiview-views > .visual #feed,
-.multiview-views > .visual .feed{
-  flex:1 1 0%;
-  min-height:0;
-  min-width:0;
-  overflow-y:auto;
-  -webkit-overflow-scrolling:touch;
-  touch-action:pan-y;
-  overscroll-behavior:contain;
-}
-.multiview-views .view:only-child{
-  flex:1 1 100%;
-}
-.multiview-resizer{
-  flex:0 0 8px;
-  min-width:8px;
-  cursor:col-resize;
-  background:var(--border);
-  position:relative;
-}
-.multiview-resizer:hover,
-.multiview-resizer:active{
-  background:var(--acc);
-}
-.multiview-resizer:hover::after,
-.multiview-resizer:active::after{
-  opacity:1;
 }
 .view .visual{
   flex:1 1 0%;
@@ -228,7 +163,7 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
   Primary view: ONE vertical scrollport — .visual-feed-stack (inner #feed is content-only).
   Use overflow-y:scroll (not auto) for iOS / in-app WebViews; flex-basis:0 on the chain below for bounded height.
 */
-.multiview-views .view > .visual > .visual-feed-stack{
+#multiview .view > .visual > .visual-feed-stack{
   flex:1 1 0%;
   flex-basis:0;
   align-self:stretch;
@@ -321,8 +256,8 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
 #multiview #feed,
 #multiview .visual,
 #multiview .visual-feed-stack,
-.multiview-views .view > .visual > .visual-feed-stack,
-.multiview-views .view .feed{
+#multiview .view > .visual > .visual-feed-stack,
+#multiview .view .feed{
   pointer-events:auto;
 }
 #input-area{
@@ -435,13 +370,7 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
 }
 #nav #tabs::-webkit-scrollbar{ display:none; }
 
-#views-close-all{
-  margin-left:8px;
-  font-size:10px;
-  padding:2px 6px;
-}
-
-/* multiview height comes from app-body flex chain */
+/* main view height comes from app-body flex chain */
 
 /* ── HEADER: always fixed, nothing moves it; everything under it is App ── */
 header{
@@ -560,24 +489,6 @@ header{
   background:var(--acc);
   color:var(--bg);
   border-color:var(--acc2);
-}
-
-.view-close-floating{
-  position:absolute;
-  top:4px;
-  right:4px;
-  border:1px solid var(--line2);
-  background:rgba(0,0,0,0.6);
-  color:var(--soft);
-  font-family:var(--mono);
-  font-size:10px;
-  padding:2px 6px;
-  border-radius:999px;
-  cursor:pointer;
-  z-index:50;
-}
-.view-close-floating:hover{
-  background:var(--bg2);
 }
 
 .select-extra{
@@ -1248,7 +1159,7 @@ header{
 .view-live-editing-bar[hidden]{
   display:none !important;
 }
-.multiview-views .view > .visual > .visual-feed-stack > .view-live-editing-bar{
+#multiview .view > .visual > .visual-feed-stack > .view-live-editing-bar{
   position:sticky;
   top:0;
   z-index:3;
@@ -1284,7 +1195,7 @@ header{
 /* ── FEED ── */
 /* Primary #feed and multiview clones (.view .feed) share scroll behavior (clones have no id). */
 #feed,
-.multiview-views .view .feed{
+#multiview .view .feed{
   position:relative;
   z-index:1;
   /* flex-basis 0 + min-height 0 + height 0: stable scrollport inside nested flex (WebKit/Firefox). */
@@ -1307,17 +1218,17 @@ header{
   contain:none;
 }
 #feed:focus,
-.multiview-views .view .feed:focus{
+#multiview .view .feed:focus{
   outline:none;
 }
 #feed.feed-updating,
-.multiview-views .view .feed.feed-updating{
+#multiview .view .feed.feed-updating{
   opacity:0.998;
 }
 
 /* Primary #feed / .feed inside stack: grows with content; stack scrolls (overrides rules above). */
-.multiview-views .view > .visual > .visual-feed-stack > #feed,
-.multiview-views .view > .visual > .visual-feed-stack > .feed{
+#multiview .view > .visual > .visual-feed-stack > #feed,
+#multiview .view > .visual > .visual-feed-stack > .feed{
   flex:0 0 auto;
   flex-shrink:0;
   flex-basis:auto;
@@ -1331,15 +1242,15 @@ header{
   touch-action:auto;
   overscroll-behavior-y:auto;
 }
-.multiview-views .view > .visual > .visual-feed-stack .feed-inner{
+#multiview .view > .visual > .visual-feed-stack .feed-inner{
   touch-action:auto;
 }
-.multiview-views .view > .visual > .visual-feed-stack .obj{
+#multiview .view > .visual > .visual-feed-stack .obj{
   touch-action:auto;
 }
 
 /* Split pane: .feed direct under .visual (no stack) — this element is the scrollport. */
-.multiview-views .view > .visual > .feed{
+#multiview .view > .visual > .feed{
   flex:1 1 0%;
   flex-basis:0;
   min-height:0;
@@ -3093,8 +3004,7 @@ body.secret-show-grips .frame-grip{
     min-height:0;
   }
   #multiview,
-  .multiview-views,
-  .multiview-views .view{
+  #multiview .view{
     min-height:0;
   }
   .frame.frame-fill > #multiview{
@@ -3102,12 +3012,12 @@ body.secret-show-grips .frame-grip{
     flex-basis:0;
     min-height:0;
   }
-  .multiview-views .view > .visual{
+  #multiview .view > .visual{
     flex:1 1 0%;
     flex-basis:0;
     min-height:0;
   }
-  .multiview-views .view > .visual > .visual-feed-stack{
+  #multiview .view > .visual > .visual-feed-stack{
     flex:1 1 0%;
     flex-basis:0;
     min-height:0;
@@ -3150,10 +3060,10 @@ body.secret-show-grips .frame-grip{
     background:var(--bg);
   }
   /* Room above the input bar (scrollport is stack or direct .feed — pad that layer only). */
-  .multiview-views .view > .visual > .visual-feed-stack{
+  #multiview .view > .visual > .visual-feed-stack{
     padding-bottom:120px;
   }
-  .multiview-views .view > .visual > .feed{
+  #multiview .view > .visual > .feed{
     padding-bottom:120px;
   }
   #nav #tabs{
