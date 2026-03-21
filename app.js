@@ -1496,6 +1496,8 @@ var lastAppliedWorkspaceRev = 0;
 var lastMergedWorkspacePushNonce = null;
 /** True while applying saved workspace on load — lets switchChannel reload data when vars already match. */
 var inoutHydratingWorkspace = false;
+/** Drop input_state realtime merges for a short window after switching views (stale merge + race with DB load). */
+var inoutChannelInputQuietUntil = 0;
 /** Latest applied user_input_state.updated_at (ms) per channel — suppress duplicate PG events after refresh. */
 var lastSeenInputStateTs = Object.create(null);
 function inputStateDedupeKey(row) {
@@ -3122,6 +3124,11 @@ function init(done) {
                 /* Brief delay so WebSocket can reconnect (helps web→mobile when mobile was backgrounded) */
                 setTimeout(function() { setupDndBroadcastChannel(); }, 100);
               });
+              window.addEventListener('pagehide', function() {
+                if (currentUser && sb && typeof flushPersonalWorkspacePersist === 'function') {
+                  flushPersonalWorkspacePersist().catch(function() {});
+                }
+              });
             }
           }
         })(),
@@ -4229,6 +4236,7 @@ function setupInputStateRealtime() {
         if (!row || typeof row !== 'object') return;
         if (String(row.device_id) === String(getInputStateDeviceId())) return;
         if (shouldSkipStaleInputRealtimeRow(row)) return;
+        if (Date.now() < inoutChannelInputQuietUntil) return;
         if (row.channel === SLOTS_SYNC_CHANNEL) {
           try {
             const raw = (row.text != null ? String(row.text) : '') || '[]';
@@ -8388,6 +8396,7 @@ async function switchChannel(ch) {
   }
   lastPrimaryInputEditAt = 0;
   lastSlotsEditAt = 0;
+  inoutChannelInputQuietUntil = Date.now() + 520;
   if (editingObjectId != null) cancelEditingMode(true);
   if (feedEl) {
     viewScroll.set(currentView, feedEl.scrollTop);
@@ -8442,6 +8451,9 @@ async function switchChannel(ch) {
       console.error('flush workspace after switchChannel', e);
     }
   }
+  try {
+    inoutChannelInputQuietUntil = Math.max(inoutChannelInputQuietUntil, Date.now() + 240);
+  } catch (_) {}
 }
 
 function openChannelModal() {
@@ -9128,7 +9140,15 @@ async function reloadForUser() {
       scrollBottom();
     }
   }
-      if (input) input.focus();
+      /* Mobile: focusing the composer after every channel load triggers Chrome keyboard / pseudo-fullscreen.
+         Remote tab sync: avoid stealing focus on the following device. */
+      if (
+        input &&
+        !isMobileOrTouchDevice() &&
+        !applyingWorkspaceFocusFromRemote
+      ) {
+        input.focus();
+      }
     });
   });
   applyFieldPrefsToObjects();
@@ -11134,8 +11154,9 @@ function ensureLoaderMinDisplay() {
       run();
     }
     document.addEventListener('visibilitychange', function() {
+      if (typeof isMobileOrTouchDevice === 'function' && isMobileOrTouchDevice()) return;
       if (document.visibilityState === 'visible' && typeof input !== 'undefined' && input && document.activeElement && document.activeElement !== input && !/^(INPUT|TEXTAREA|BUTTON|SELECT)$/.test((document.activeElement.tagName || '').toUpperCase())) {
-        setTimeout(function() { input.focus(); }, 0);
+        setTimeout(function() { if (input && !isMobileOrTouchDevice()) input.focus(); }, 0);
       }
     });
   } catch (err) {
