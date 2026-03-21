@@ -5952,7 +5952,6 @@ async function openSecondaryView(ch) {
     feedEl = feed;
     visual.appendChild(feed);
   }
-  attachFeedWheelProxy(visual);
   view.appendChild(visual);
   viewsContainer.appendChild(view);
   secondaryViewEl = view;
@@ -10765,31 +10764,39 @@ function autoResize(el) {
 /* ═══ SCROLL ══════════════════════════════════════════════ */
 var scrollSaveTimer = null;
 
-/** Desktop: wheel over .visual padding / live-editing bar (outside .feed) still scrolls the feed. */
-function attachFeedWheelProxy(visual) {
-  if (!visual || visual.nodeType !== 1 || visual.dataset.inoutWheelProxy === '1') return;
-  visual.dataset.inoutWheelProxy = '1';
-  visual.addEventListener(
+/**
+ * Desktop / trackpad: wheel events that land on .view chrome (live-editing bar, gaps, etc.) still
+ * scroll that pane’s .feed. Capture phase on .multiview-views so we run before children; handles
+ * deltaMode (line/page) which the old per-.visual proxy mishandled.
+ */
+function bindMultiviewWheelScrollCapture() {
+  var root = document.querySelector('.multiview-views');
+  if (!root || root.dataset.inoutWheelCapture === '1') return;
+  root.dataset.inoutWheelCapture = '1';
+  root.addEventListener(
     'wheel',
     function(e) {
-      var feed = visual.querySelector('.feed');
+      var t = e.target;
+      if (t && t.nodeType === 3) t = t.parentElement;
+      if (!t || !t.closest) return;
+      if (t.closest('#user-modal-backdrop, #user-modal, #channel-modal-backdrop, #qr-modal-backdrop'))
+        return;
+      if (t.closest('.manage-bar-dropdown, #log-dropup-panel.open')) return;
+      var view = t.closest('.view');
+      if (!view || !root.contains(view)) return;
+      var feed = view.querySelector('.feed');
       if (!feed) return;
-      if (feed.contains(e.target)) return;
+      if (feed.contains(t)) return;
       var max = feed.scrollHeight - feed.clientHeight;
       if (max <= 0) return;
+      var dy = e.deltaY;
+      if (e.deltaMode === 1) dy *= 16;
+      else if (e.deltaMode === 2) dy *= Math.max(100, feed.clientHeight * 0.9);
       e.preventDefault();
-      feed.scrollTop = Math.max(0, Math.min(max, feed.scrollTop + e.deltaY));
+      feed.scrollTop = Math.max(0, Math.min(max, feed.scrollTop + dy));
     },
-    { passive: false }
+    { capture: true, passive: false }
   );
-}
-
-function attachFeedWheelProxiesInMultiview() {
-  try {
-    document.querySelectorAll('.multiview-views .view .visual').forEach(function(v) {
-      attachFeedWheelProxy(v);
-    });
-  } catch (_) {}
 }
 
 function scheduleScrollPersistIfAllowed() {
@@ -10830,7 +10837,7 @@ if (feedEl) {
     true
   );
 }
-attachFeedWheelProxiesInMultiview();
+bindMultiviewWheelScrollCapture();
 
 /* FLIP animation: smooth shift of rows when reordering during drag */
 function flipAnimateShift(feedInner, dragging, oldRects, rowsArray) {

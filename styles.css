@@ -220,6 +220,13 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
   overflow:hidden;
   touch-action:auto;
 }
+/* Primary + split views: keep a definite flex height so #feed’s overflow-y can scroll (avoids 0-height scrollport). */
+.multiview-views .view > .visual > .visual-feed-stack{
+  flex:1 1 0%;
+  align-self:stretch;
+  min-height:0;
+  min-width:0;
+}
 .view-pinned-rail{
   flex:0 0 auto;
   width:56px;
@@ -1241,7 +1248,8 @@ header{
   overflow-y:auto;
   overflow-x:hidden;
   -webkit-overflow-scrolling:touch;
-  touch-action:pan-y;
+  /* pan-x pan-y: some WebKit builds choke on pan-y-only inside nested flex scrollers */
+  touch-action:pan-x pan-y;
   overscroll-behavior:contain;
   outline:none;
   contain:none;
