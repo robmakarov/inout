@@ -122,19 +122,22 @@ if (window.Stripe && STRIPE_PUBLISHABLE_KEY && !STRIPE_PUBLISHABLE_KEY.includes(
 
 const feedInner  = document.getElementById('feed-inner');
 const feedEl     = document.getElementById('feed');
-/** Primary or secondary .feed: on narrow viewports CSS scrolls .visual-feed-stack; desktop scrolls #feed. */
+/** Primary or secondary .feed: whichever element actually scrolls (stack on mobile CSS, #feed on desktop). */
 function getFeedScrollSurface(feed) {
   if (!feed || typeof feed.closest !== 'function') return feed;
   var stack = feed.closest('.visual-feed-stack');
   if (!stack) return feed;
   try {
+    if (typeof getComputedStyle !== 'undefined') {
+      var oy = getComputedStyle(stack).overflowY;
+      if (oy === 'auto' || oy === 'scroll') return stack;
+    }
+  } catch (_) {}
+  try {
     if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 540px)').matches) {
       return stack;
     }
   } catch (_) {}
-  if (typeof getComputedStyle === 'undefined') return feed;
-  var oy = getComputedStyle(stack).overflowY;
-  if (oy === 'auto' || oy === 'scroll') return stack;
   return feed;
 }
 function primaryFeedScrollSurface() {
@@ -8419,7 +8422,7 @@ function renderTabs() {
       e.preventDefault();
       e.stopPropagation();
       clearPendingViewSwitchClick();
-      if (!applyingWorkspaceFocusFromRemote && !inoutHydratingWorkspace) setTabChannelLoading(ch, false);
+      if (!inoutHydratingWorkspace) setTabChannelLoading(ch, false);
       try {
         if (typeof renameView === 'function') renameView(ch, btn);
       } catch (_) {}
@@ -8438,8 +8441,8 @@ function renderTabs() {
       const channelAtClick = currentChannel;
       clearPendingViewSwitchClick();
       var tabSwitchDelay = typeof isMobileOrTouchDevice === 'function' && isMobileOrTouchDevice() ? 0 : 90;
-      /* Same guards as switchChannel’s tab bar: show load immediately on press, not after debounce / sync work. */
-      if (!applyingWorkspaceFocusFromRemote && !inoutHydratingWorkspace) {
+      /* Same guards as switchChannel’s tab bar: show load immediately on press (including during remote merge). */
+      if (!inoutHydratingWorkspace) {
         var sameTabAtClick = ch === viewAtClick && ch === channelAtClick;
         var slot0AtClick = inputSlots && inputSlots[0];
         var slotMismatchAtClick =
@@ -8459,7 +8462,7 @@ function renderTabs() {
             ? tabsEl.querySelector('.tab[data-channel="' + CSS.escape(String(targetCh)) + '"]')
             : null;
         if (tabBtn && tabBtn.querySelector('.tab-rename-input')) {
-          if (!applyingWorkspaceFocusFromRemote && !inoutHydratingWorkspace) setTabChannelLoading(targetCh, false);
+          if (!inoutHydratingWorkspace) setTabChannelLoading(targetCh, false);
           return;
         }
         switchChannel(targetCh);
@@ -8681,6 +8684,8 @@ async function refreshSharedFlags() {
 }
 
 async function switchChannelInternal(ch) {
+  /* Drop debounced tab clicks so remote/workspace focus cannot race a stale mobile tap. */
+  clearPendingViewSwitchClick();
   if (ch === currentChannel && ch === currentView) {
     const slot0 = inputSlots && inputSlots[0];
     const slotMismatch =
@@ -8766,7 +8771,8 @@ async function switchChannelInternal(ch) {
   if (currentUser && sb && !applyingWorkspaceFocusFromRemote && !inoutHydratingWorkspace) {
     schedulePersonalWorkspacePersist();
   }
-  var showTabLoad = !applyingWorkspaceFocusFromRemote && !inoutHydratingWorkspace;
+  /* Tab bar load: show for local taps and realtime/workspace focus; skip only full workspace hydrate. */
+  var showTabLoad = !inoutHydratingWorkspace;
   if (showTabLoad) setTabChannelLoading(ch, true);
   try {
     await Promise.all([
