@@ -8384,6 +8384,7 @@ function renderTabs() {
       e.preventDefault();
       e.stopPropagation();
       if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
+      if (!applyingWorkspaceFocusFromRemote && !inoutHydratingWorkspace) setTabChannelLoading(ch, false);
       try {
         if (typeof renameView === 'function') renameView(ch, btn);
       } catch (_) {}
@@ -8399,12 +8400,29 @@ function renderTabs() {
       // (Otherwise the first click may switch views before dblclick fires.)
       // Touch: no delay so tab switch runs before background/tab close races.
       const viewAtClick = currentView;
+      const channelAtClick = currentChannel;
       if (clickTimer) clearTimeout(clickTimer);
       var tabSwitchDelay = typeof isMobileOrTouchDevice === 'function' && isMobileOrTouchDevice() ? 0 : 90;
+      /* Same guards as switchChannel’s tab bar: show load immediately on press, not after debounce / sync work. */
+      if (!applyingWorkspaceFocusFromRemote && !inoutHydratingWorkspace) {
+        var sameTabAtClick = ch === viewAtClick && ch === channelAtClick;
+        var slot0AtClick = inputSlots && inputSlots[0];
+        var slotMismatchAtClick =
+          primarySlotAutoTarget && slot0AtClick && String(slot0AtClick.channel || '') !== String(ch);
+        if (!sameTabAtClick || slotMismatchAtClick) {
+          setTabChannelLoading(ch, true);
+        }
+      }
       clickTimer = setTimeout(function() {
         clickTimer = null;
-        if (currentView !== viewAtClick) return;
-        if (btn.querySelector('.tab-rename-input')) return;
+        if (currentView !== viewAtClick) {
+          if (!applyingWorkspaceFocusFromRemote && !inoutHydratingWorkspace) setTabChannelLoading(ch, false);
+          return;
+        }
+        if (btn.querySelector('.tab-rename-input')) {
+          if (!applyingWorkspaceFocusFromRemote && !inoutHydratingWorkspace) setTabChannelLoading(ch, false);
+          return;
+        }
         switchChannel(ch);
       }, tabSwitchDelay);
     });
