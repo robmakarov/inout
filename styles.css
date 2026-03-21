@@ -734,6 +734,11 @@ header{
   gap:12px;
   animation:drawerIn .18s ease both;
   pointer-events:auto;
+  min-height:0;
+  overflow-y:auto;
+  overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-y;
 }
 
 #user-modal button,
@@ -1160,7 +1165,9 @@ header{
 }
 
 /* ── FEED ── */
-#feed{
+/* Primary #feed and multiview clones (.view .feed) share scroll behavior (clones have no id). */
+#feed,
+.multiview-views .view .feed{
   position:relative;
   z-index:1;
   flex:1;
@@ -1171,11 +1178,17 @@ header{
   -webkit-overflow-scrolling:touch;
   touch-action:pan-y;
   outline:none;
-  /* layout containment broke wheel/touch scroll in some Chrome builds with fixed app-body */
-  contain:style;
+  /* Avoid strict/layout containment here — it broke touch/wheel scrolling inside the fixed app shell. */
+  contain:none;
 }
-#feed:focus{outline:none}
-#feed.feed-updating{opacity:0.998;contain:style}
+#feed:focus,
+.multiview-views .view .feed:focus{
+  outline:none;
+}
+#feed.feed-updating,
+.multiview-views .view .feed.feed-updating{
+  opacity:0.998;
+}
 
 .feed-inner{
   position:relative;

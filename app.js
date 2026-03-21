@@ -27,7 +27,8 @@ try {
         flowType: 'pkce',
         persistSession: false,
         autoRefreshToken: false,
-      }
+      },
+      realtime: { params: { eventsPerSecond: 100 } },
     });
     if (typeof window !== 'undefined') window.sb = sb;
   }
@@ -1498,6 +1499,13 @@ var lastMergedWorkspacePushNonce = null;
 var inoutHydratingWorkspace = false;
 /** Drop input_state realtime merges for a short window after switching views (stale merge + race with DB load). */
 var inoutChannelInputQuietUntil = 0;
+/** Briefly ignore user_input_state realtime after composer focus (mobile had no “recent local edit” guard; refocus merged stale rows). */
+var composerRemoteMergeSuppressedUntil = 0;
+function bumpComposerRemoteMergeSuppress(ms) {
+  var add = typeof ms === 'number' ? ms : 750;
+  var t = Date.now() + add;
+  if (t > composerRemoteMergeSuppressedUntil) composerRemoteMergeSuppressedUntil = t;
+}
 /** Latest applied user_input_state.updated_at (ms) per channel — suppress duplicate PG events after refresh. */
 var lastSeenInputStateTs = Object.create(null);
 function inputStateDedupeKey(row) {
@@ -1973,7 +1981,7 @@ let latestClipboardText = '';
 let inputStateSub = null;
 let inputSaveToDbTimer = null;
 let inputSlotsSaveToDbTimer = null;
-const INPUT_SAVE_DEBOUNCE_MS = 75;
+const INPUT_SAVE_DEBOUNCE_MS = 45;
 let lastPrimaryInputEditAt = 0;
 let lastSlotsEditAt = 0;
 const INPUT_SYNC_MAX_LENGTH = 10000;
@@ -4241,6 +4249,7 @@ function setupInputStateRealtime() {
         if (String(row.device_id) === String(getInputStateDeviceId())) return;
         if (shouldSkipStaleInputRealtimeRow(row)) return;
         if (Date.now() < inoutChannelInputQuietUntil) return;
+        if (Date.now() < composerRemoteMergeSuppressedUntil) return;
         if (row.channel === SLOTS_SYNC_CHANNEL) {
           try {
             const raw = (row.text != null ? String(row.text) : '') || '[]';
@@ -4256,15 +4265,13 @@ function setupInputStateRealtime() {
                 inputSlots = slots.map(function(s) {
                   return { id: s.id || '', channel: s.channel || 'main', value: capSyncText(s.value) };
                 });
-                const mobile = isMobileOrTouchDevice();
                 const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
                 var remoteAt = row.updated_at ? new Date(row.updated_at).getTime() : 0;
                 if (!Number.isFinite(remoteAt)) remoteAt = 0;
                 inputSlots.forEach(function(slot, i) {
                   const ta = (i === 0 && input) ? input : composerSlotsContainer.querySelector('.composer-slot[data-slot-index="' + i + '"] textarea');
                   if (!ta) return;
-                  if (mobile && ta === activeEl) return;
-                  if (!mobile && ta === activeEl && Date.now() - lastSlotsEditAt < 1000) return;
+                  if (ta === activeEl && Date.now() - lastSlotsEditAt < 1000) return;
                   const remoteVal = capSyncText(slot.value);
                   const merged = mergeInputText(ta.value, remoteVal, lastSlotsEditAt, remoteAt);
                   if (merged === ta.value) return;
@@ -4363,11 +4370,7 @@ function setupInputStateRealtime() {
         }
         if (row.channel !== (currentChannel || 'main')) return;
         if (!input) return;
-        if (
-          !isMobileOrTouchDevice() &&
-          document.activeElement === input &&
-          Date.now() - lastPrimaryInputEditAt < 1000
-        ) {
+        if (document.activeElement === input && Date.now() - lastPrimaryInputEditAt < 1000) {
           return;
         }
         var remoteText = capSyncText(row.text);
@@ -9273,7 +9276,8 @@ async function signIn() {
           flowType: 'pkce',
           persistSession: false,
           autoRefreshToken: false,
-        }
+        },
+        realtime: { params: { eventsPerSecond: 100 } },
       });
       if (typeof window !== 'undefined') window.sb = sb;
     }
@@ -9688,6 +9692,15 @@ function attachInputListeners() {
 }
 if (composerSlotsContainer) {
   renderComposerSlots();
+  if (!composerSlotsContainer.dataset.inoutComposerFocusSuppress) {
+    composerSlotsContainer.dataset.inoutComposerFocusSuppress = '1';
+    composerSlotsContainer.addEventListener('focusin', function(ev) {
+      var t = ev.target;
+      if (!t || t.tagName !== 'TEXTAREA') return;
+      if (!t.closest || !t.closest('.composer-slot')) return;
+      bumpComposerRemoteMergeSuppress(850);
+    });
+  }
 }
 setupInputAreaDropTarget();
 setupTextFileImportDropTargets();
