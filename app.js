@@ -1404,6 +1404,8 @@ function getScopedViewStorageKey(viewKey) {
 const seenIds       = new Set();
 const viewScroll = new Map();
 const OPEN_VIEWS_KEY     = 'inout_open_views_v1';
+/** Reserved `views.channel` for per-user UI state (not a real feed). */
+const WORKSPACE_META_VIEW_CHANNEL = '__inout_open_panels__';
 const FRAME_ORDER_KEY    = 'inout_frame_order_v1';
 const LAYOUT_SYNC_KEY    = 'inout_layout_sync_v1';
 const DEFAULT_FRAME_ORDER = ['nav', 'multiview', 'input'];
@@ -3165,7 +3167,7 @@ function maybeNotifyGuestMessage(ch, msg) {
   } catch (_) {}
 }
 
-/** Realtime: when another user adds me to a view, show it in the tab bar. */
+/** Realtime: when another device adds/updates membership, show the feed tab; DELETE removes it. */
 function subscribeChannelMembershipRealtime() {
   try {
     if (membershipRealtimeSub) {
@@ -3175,8 +3177,45 @@ function subscribeChannelMembershipRealtime() {
     if (!currentUser || !sb || !sb.channel) return;
     const uid = currentUser.id;
     if (!uid) return;
+    const baseCh = 'inout-memberships-' + String(uid);
+    async function onMembershipUpsert(row, showToast) {
+      if (!row || typeof row.channel !== 'string' || !row.channel.trim()) return;
+      const ch = row.channel.trim();
+      if (leftChannels.has(ch)) return;
+      if (!viewNames.includes(ch)) {
+        viewNames.push(ch);
+        saveChannelsList();
+      }
+      await refreshSharedFlags();
+      subscribeRealtimeAll();
+      renderTabs();
+      refreshMoveTargets();
+      if (showToast) toast('You were added to view "' + ch + '"');
+    }
+    async function onMembershipDelete(row) {
+      if (!row || typeof row.channel !== 'string' || !row.channel.trim()) return;
+      const ch = row.channel.trim();
+      if (ch === 'main') return;
+      if (leftChannels.has(ch)) return;
+      viewNames = viewNames.filter(x => x !== ch);
+      saveChannelsList();
+      sharedChannels.delete(ch);
+      const beforePanels = collectOpenSecondaryViewChannels();
+      if (beforePanels.includes(ch)) {
+        await applyWorkspaceOpenSecondaryViews(beforePanels.filter(c => c !== ch));
+      }
+      void persistWorkspaceOpenViewsToServer();
+      if (currentChannel === ch || currentView === ch) {
+        try {
+          await switchChannel('main');
+        } catch (_) {}
+      }
+      subscribeRealtimeAll();
+      renderTabs();
+      refreshMoveTargets();
+    }
     membershipRealtimeSub = sb
-      .channel('inout-memberships-' + String(uid))
+      .channel(baseCh)
       .on(
         'postgres_changes',
         {
@@ -3186,19 +3225,31 @@ function subscribeChannelMembershipRealtime() {
           filter: 'user_id=eq.' + String(uid),
         },
         async (payload) => {
-          const row = payload.new;
-          if (!row || typeof row.channel !== 'string' || !row.channel.trim()) return;
-          const ch = row.channel.trim();
-          if (leftChannels.has(ch)) return;
-          if (!viewNames.includes(ch)) {
-            viewNames.push(ch);
-            saveChannelsList();
-          }
-          await refreshSharedFlags();
-          subscribeRealtimeAll();
-          renderTabs();
-          refreshMoveTargets();
-          toast('You were added to view "' + ch + '"');
+          await onMembershipUpsert(payload.new, true);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'channel_members',
+          filter: 'user_id=eq.' + String(uid),
+        },
+        async (payload) => {
+          await onMembershipUpsert(payload.new, false);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'channel_members',
+          filter: 'user_id=eq.' + String(uid),
+        },
+        async (payload) => {
+          await onMembershipDelete(payload.old);
         }
       )
       .subscribe();
@@ -3567,6 +3618,15 @@ function subscribeViewRealtime() {
           const row = payload.new || payload.old || {};
           if (!row || !row.channel) return;
           if (currentUser && row.user_id != null && String(row.user_id) !== String(currentUser.id)) return;
+          if (String(row.channel) === WORKSPACE_META_VIEW_CHANNEL) {
+            const cfgW = normalizeViewConfig(row.config);
+            if (cfgW && Array.isArray(cfgW.openSecondaryViews)) {
+              applyWorkspaceOpenSecondaryViews(cfgW.openSecondaryViews).catch(function(e) {
+                console.error('workspace open views apply', e);
+              });
+            }
+            return;
+          }
           const cfg = normalizeViewConfig(row.config);
           if (!cfg) return;
           applyRemoteViewTitle(row.channel, cfg.title);
@@ -5299,6 +5359,7 @@ function closeSecondaryView() {
   try { localStorage.setItem(OPEN_VIEWS_KEY, '[]'); } catch (_) {}
   saveSecondaryViewState();
   updateTabsUI();
+  void persistWorkspaceOpenViewsToServer();
 }
 
 function applyMultiviewSplit(ratio) {
@@ -5439,6 +5500,7 @@ async function openSecondaryView(ch) {
       localStorage.setItem(OPEN_VIEWS_KEY, JSON.stringify(open));
     } catch (_) {}
     updateTabsUI();
+    void persistWorkspaceOpenViewsToServer();
   });
   const list = await fetchObjectsListForChannel(ch);
   await replaceFeedWithListInto(list, feedInner);
@@ -5447,6 +5509,7 @@ async function openSecondaryView(ch) {
     const open = Array.from(new Set(views.filter(v => v && v.id !== 'view-0').map(v => v.channel)));
     localStorage.setItem(OPEN_VIEWS_KEY, JSON.stringify(open));
   } catch (_) {}
+  void persistWorkspaceOpenViewsToServer();
 }
 
 function toggleSecondaryView(ch) {
@@ -6881,6 +6944,70 @@ async function syncMessageOrdersFromCurrentOrder(viewChannel) {
   }
 }
 
+function collectOpenSecondaryViewChannels() {
+  return views
+    .filter(v => v && v.id !== 'view-0')
+    .map(v => v.channel)
+    .filter(ch => typeof ch === 'string' && ch.trim());
+}
+
+async function applyWorkspaceOpenSecondaryViews(desired) {
+  const cleaned = (Array.isArray(desired) ? desired : [])
+    .map(c => String(c || '').trim())
+    .filter(Boolean);
+  const cur = collectOpenSecondaryViewChannels();
+  if (cur.length === cleaned.length && cur.every((c, i) => c === cleaned[i])) return;
+  closeSecondaryView();
+  for (const ch of cleaned) {
+    if (!viewNames.includes(ch)) continue;
+    await openSecondaryView(ch);
+  }
+  try {
+    localStorage.setItem(OPEN_VIEWS_KEY, JSON.stringify(collectOpenSecondaryViewChannels()));
+  } catch (_) {}
+}
+
+async function persistWorkspaceOpenViewsToServer() {
+  if (!currentUser || !sb || !shouldUseServerForObjects()) return;
+  try {
+    const list = collectOpenSecondaryViewChannels();
+    await upsertViewsConfigForChannel(WORKSPACE_META_VIEW_CHANNEL, { openSecondaryViews: list.slice() });
+  } catch (e) {
+    console.error('persistWorkspaceOpenViewsToServer', e);
+  }
+}
+
+async function hydrateWorkspaceOpenViewsForSignedInUser() {
+  if (!currentUser || !sb || !shouldUseServerForObjects()) {
+    await restoreSecondaryView();
+    return;
+  }
+  let serverList = null;
+  try {
+    const { data, error } = await sb
+      .from('views')
+      .select('config')
+      .eq('channel', WORKSPACE_META_VIEW_CHANNEL)
+      .eq('user_id', currentUser.id)
+      .limit(1)
+      .maybeSingle();
+    if (!error && data) {
+      const cfg = normalizeViewConfig(data.config);
+      if (cfg && Array.isArray(cfg.openSecondaryViews)) {
+        serverList = cfg.openSecondaryViews.map(x => String(x || '').trim()).filter(Boolean);
+      }
+    }
+  } catch (e) {
+    console.error('hydrateWorkspaceOpenViewsForSignedInUser', e);
+  }
+  if (serverList !== null) {
+    await applyWorkspaceOpenSecondaryViews(serverList);
+    return;
+  }
+  await restoreSecondaryView();
+  if (collectOpenSecondaryViewChannels().length) await persistWorkspaceOpenViewsToServer();
+}
+
 async function loadObjectOrderForCurrentChannel() {
   currentObjectOrder = [];
   if (!shouldUseServerForObjects() || !sb) {
@@ -7679,7 +7806,7 @@ async function refreshAuth() {
       subscribeRealtimeAll();
       setupDraftChannel();
       restoreLastChannel();
-      await restoreSecondaryView();
+      await hydrateWorkspaceOpenViewsForSignedInUser();
       await loadObjectOrderForCurrentChannel();
       await loadObjects();
       restoreInputGlobal();
