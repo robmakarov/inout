@@ -122,7 +122,17 @@ if (window.Stripe && STRIPE_PUBLISHABLE_KEY && !STRIPE_PUBLISHABLE_KEY.includes(
 
 const feedInner  = document.getElementById('feed-inner');
 const feedEl     = document.getElementById('feed');
-/** Primary or secondary .feed: whichever element actually scrolls (stack on mobile CSS, #feed on desktop). */
+/** True when CSS uses .visual-feed-stack as the vertical scrollport (must match styles.css). */
+function viewportUsesStackFeedScroll() {
+  try {
+    if (typeof window === 'undefined' || !window.matchMedia) return false;
+    if (window.matchMedia('(max-width: 1024px)').matches) return true;
+    if (window.matchMedia('(hover: none)').matches) return true;
+    if (window.matchMedia('(pointer: coarse)').matches) return true;
+  } catch (_) {}
+  return false;
+}
+/** Primary or secondary .feed: whichever element actually scrolls (stack on mobile/narrow/touch CSS, #feed on desktop). */
 function getFeedScrollSurface(feed) {
   if (!feed || typeof feed.closest !== 'function') return feed;
   var stack = feed.closest('.visual-feed-stack');
@@ -133,11 +143,7 @@ function getFeedScrollSurface(feed) {
       if (oy === 'auto' || oy === 'scroll' || oy === 'overlay') return stack;
     }
   } catch (_) {}
-  try {
-    if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 540px)').matches) {
-      return stack;
-    }
-  } catch (_) {}
+  if (viewportUsesStackFeedScroll()) return stack;
   return feed;
 }
 function primaryFeedScrollSurface() {
@@ -1513,6 +1519,9 @@ var _personalWorkspacePersistTimer = null;
 var _channelViewRulesPersistTimer = null;
 /** True while switching tab from personal workspace realtime (skip re-persist). */
 var applyingWorkspaceFocusFromRemote = false;
+/** Ignore personal-workspace `focusedChannel` from realtime briefly after a local tab change (avoids fighting the user). */
+var lastLocalFocusedChannelSwitchAt = 0;
+var REMOTE_FOCUSED_CHANNEL_GRACE_MS = 2200;
 /** True during full applyPersonalWorkspaceStateFromServer (avoid persist/flush feedback loops). */
 var applyingPersonalWorkspaceFromRemote = false;
 /** Nonces from our recent workspace upserts — skip only those realtime echoes (not other devices). */
@@ -4185,13 +4194,22 @@ function subscribeViewRealtime() {
         }
         return;
       }
-      /* CLOSED here is normal when we unsubscribe() to replace the channel; only act for the active generation. */
-      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+      /* CLOSED is common during intentional unsubscribe/reconnect; still schedule resubscribe for real drops. */
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         if (typeof console !== 'undefined' && console.warn) console.warn('views-all realtime', status);
+        scheduleViewRealtimeResubscribe(status);
+      } else if (status === 'CLOSED') {
         scheduleViewRealtimeResubscribe(status);
       }
     });
   setupWorkspaceUiBroadcast();
+}
+
+/** `views` realtime is table-wide — do not tear it down on every tab switch (avoids CLOSED churn + races). */
+function ensureViewRealtimeSubscribed() {
+  if (!sb || !sb.channel) return;
+  if (viewSub) return;
+  subscribeViewRealtime();
 }
 
 function subscribeActionLog() {
@@ -7962,7 +7980,9 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
           const slotMismatch =
             primarySlotAutoTarget && slot0 && String(slot0.channel || '') !== want;
           const needSwitch = want !== currentView || want !== currentChannel || slotMismatch;
-          if (needSwitch) {
+          const remoteFocusOk =
+            Date.now() - lastLocalFocusedChannelSwitchAt >= REMOTE_FOCUSED_CHANNEL_GRACE_MS;
+          if (needSwitch && remoteFocusOk) {
             applyingWorkspaceFocusFromRemote = true;
             try {
               await switchChannel(want);
@@ -8035,7 +8055,9 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
       const slotMismatch =
         primarySlotAutoTarget && slot0 && String(slot0.channel || '') !== want;
       const needSwitch = want !== currentView || want !== currentChannel || slotMismatch;
-      if (needSwitch) {
+      const remoteFocusOk =
+        Date.now() - lastLocalFocusedChannelSwitchAt >= REMOTE_FOCUSED_CHANNEL_GRACE_MS;
+      if (needSwitch && remoteFocusOk) {
         applyingWorkspaceFocusFromRemote = true;
         try {
           await switchChannel(want);
@@ -8718,6 +8740,11 @@ async function switchChannelInternal(ch) {
   }
   /* Only clear debounced tab clicks when we actually change channel — same-tab calls must not cancel a pending tap to another tab. */
   clearPendingViewSwitchClick();
+  if (!applyingWorkspaceFocusFromRemote && !inoutHydratingWorkspace) {
+    try {
+      lastLocalFocusedChannelSwitchAt = Date.now();
+    } catch (_) {}
+  }
   teardownDndBroadcastChannel();
   /* Cancel pending composer DB writes — they would use the NEW channel id with the OLD view's text. */
   if (inputSaveToDbTimer) {
@@ -8786,7 +8813,7 @@ async function switchChannelInternal(ch) {
       setupDndBroadcastChannel();
       setupDraftChannel({ preserveDraftBubble: true });
       subscribeOrderRealtime();
-      subscribeViewRealtime();
+      ensureViewRealtimeSubscribed();
       try {
         await reloadForUser();
       } catch (e) {
@@ -8794,7 +8821,7 @@ async function switchChannelInternal(ch) {
       }
     } else if (tempSessionId) {
       setupDraftChannel({ preserveDraftBubble: true });
-      subscribeViewRealtime();
+      ensureViewRealtimeSubscribed();
       await loadObjectOrderForCurrentChannel();
       await loadObjects();
     } else {
@@ -9185,6 +9212,12 @@ async function refreshAuth() {
     teardownInputStateRealtime();
     teardownDndBroadcastChannel();
     teardownWorkspaceUiBroadcast();
+    if (viewSub) {
+      try {
+        viewSub.unsubscribe();
+      } catch (_) {}
+      viewSub = null;
+    }
     // When not signed in, hydrate view from local per-device objects (anonymous mode),
     // unless we are in a temp-session guest mode.
     if (tempSessionId) {
@@ -9613,6 +9646,12 @@ async function signOut() {
   teardownDraftChannel();
   teardownDndBroadcastChannel();
   teardownWorkspaceUiBroadcast();
+  if (viewSub) {
+    try {
+      viewSub.unsubscribe();
+    } catch (_) {}
+    viewSub = null;
+  }
   sharedChannels.clear();
   unreadCounts.clear();
   renderTabs();
