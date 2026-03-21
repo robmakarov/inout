@@ -1341,6 +1341,40 @@ function computeMaxValueColumnsFromFeedInner(inner) {
   return max;
 }
 
+/** Labels for value columns on the manage bar (table + multi-value): Value 1…n−1, last column "Other". */
+function valueColumnBarLabel(colIndex, totalCols) {
+  if (totalCols <= 1) return 'Value';
+  if (colIndex === totalCols - 1) return 'Other';
+  return 'Value ' + (colIndex + 1);
+}
+
+function syncManageBarValueColumnHeaders(maxCols, hasDataRows, isTableMode) {
+  var wrap = document.getElementById('manage-bar-column-headers');
+  if (!wrap) return;
+  var bar = document.getElementById('manage-bar');
+  var show = !!(isTableMode && maxCols > 1 && hasDataRows);
+  if (!show) {
+    wrap.hidden = true;
+    wrap.setAttribute('aria-hidden', 'true');
+    wrap.replaceChildren();
+    if (bar) bar.classList.remove('manage-bar-has-value-columns');
+    return;
+  }
+  wrap.hidden = false;
+  wrap.setAttribute('aria-hidden', 'false');
+  if (bar) bar.classList.add('manage-bar-has-value-columns');
+  wrap.replaceChildren();
+  for (var ci = 0; ci < maxCols; ci++) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'manage-bar-col-head-btn';
+    var lab = valueColumnBarLabel(ci, maxCols);
+    b.textContent = lab;
+    b.setAttribute('aria-label', 'Column: ' + lab);
+    wrap.appendChild(b);
+  }
+}
+
 function partsFromRowDom(row) {
   var cells = row.querySelectorAll('.obj-value-cell');
   if (!cells.length) {
@@ -1403,12 +1437,15 @@ function syncFeedMultiValueChrome(inner, messagesList) {
   maxCols = Math.max(1, maxCols);
   inner.dataset.inoutValueCols = String(maxCols);
   inner.classList.toggle('inout-multi-value-cols', maxCols > 1);
-  var wantHeader =
-    maxCols > 1 ||
-    (typeof fieldPrefs !== 'undefined' && fieldPrefs && fieldPrefs.viewMode === 'table');
+  var isTable = typeof fieldPrefs !== 'undefined' && fieldPrefs && fieldPrefs.viewMode === 'table';
   var hasDataRows = !!inner.querySelector('.obj:not(.obj-header)[data-id]');
+  var useBarValueHeaders = isTable && maxCols > 1;
+  var wantHeader =
+    hasDataRows &&
+    !useBarValueHeaders &&
+    (maxCols > 1 || isTable);
   var existing = inner.querySelector('.obj.obj-header');
-  if (!wantHeader || !hasDataRows) {
+  if (!wantHeader) {
     if (existing) existing.remove();
   } else {
     var fresh = createObjectHeaderRow(maxCols);
@@ -1422,6 +1459,9 @@ function syncFeedMultiValueChrome(inner, messagesList) {
     if (parts.length > maxCols) parts = parts.slice(0, maxCols);
     ensureRowValueCellCount(row, maxCols, parts);
   });
+  if (inner === feedInner) {
+    syncManageBarValueColumnHeaders(maxCols, hasDataRows, isTable);
+  }
 }
 const USER_INPUT_STATE_TABLE = 'user_input_state';
 const SLOTS_SYNC_CHANNEL = '__slots__';
@@ -6481,7 +6521,7 @@ function createObjectHeaderRow(maxValueCols) {
   for (var vi = 0; vi < n; vi++) {
     const h = document.createElement('div');
     h.className = 'obj-text obj-value-cell obj-header-value-cell';
-    h.textContent = n > 1 ? 'Value ' + (vi + 1) : 'Value';
+    h.textContent = valueColumnBarLabel(vi, n);
     valuesWrap.appendChild(h);
   }
   const actions = document.createElement('div');
