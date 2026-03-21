@@ -1416,6 +1416,8 @@ var _personalWorkspacePersistTimer = null;
 var _channelViewRulesPersistTimer = null;
 /** True while switching tab from personal workspace realtime (skip re-persist). */
 var applyingWorkspaceFocusFromRemote = false;
+/** After applying remote feed scroll, ignore briefly so programmatic scroll does not re-broadcast. */
+var suppressScrollWorkspacePersistUntil = 0;
 const LAYOUT_SYNC_KEY    = 'inout_layout_sync_v1';
 const DEFAULT_FRAME_ORDER = ['nav', 'multiview', 'input'];
 
@@ -5532,6 +5534,7 @@ async function openSecondaryView(ch) {
   secondaryFeedEl = feedEl;
   secondaryFeedInner = feedInner;
   if (secondaryFeedEl) setupSecondaryFeedDnd();
+  if (feedEl) bindFeedScrollWorkspaceSync(feedEl, ch, false);
   // register this view in views[] with its own feedInner so realtime/updates target the right feed
   const viewId = 'view-' + views.length;
   const viewRecord = {
@@ -7139,6 +7142,15 @@ function gatherPersonalWorkspaceStateForSave() {
     const raw = localStorage.getItem(INOUT_KB_SETTINGS_KEY);
     if (raw) settings = JSON.parse(raw);
   } catch (_) {}
+  const feedScrollByView = {};
+  try {
+    const chans = new Set([String(currentView || 'main')]);
+    collectOpenSecondaryViewChannels().forEach(c => chans.add(String(c)));
+    chans.forEach(ch => {
+      const v = viewScroll.get(ch);
+      if (typeof v === 'number' && Number.isFinite(v) && v >= 0) feedScrollByView[ch] = Math.round(v);
+    });
+  } catch (_) {}
   return {
     openSecondaryViews: list.slice(),
     multiviewSplit: multiviewSplit,
@@ -7148,11 +7160,52 @@ function gatherPersonalWorkspaceStateForSave() {
     leftChannelIds: leftChannelIds,
     manageBarOrder: manageBarOrder,
     settings: settings && typeof settings === 'object' ? settings : null,
+    feedScrollByView: feedScrollByView,
   };
+}
+
+function applyWorkspaceFeedScrollToDom() {
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      if (feedEl && currentView != null) {
+        const top = viewScroll.get(String(currentView));
+        if (typeof top === 'number' && top >= 0) {
+          const maxScroll = feedEl.scrollHeight - feedEl.clientHeight;
+          if (maxScroll > 0) feedEl.scrollTop = Math.min(top, Math.max(0, maxScroll));
+        }
+      }
+      if (typeof views !== 'undefined' && views && views.length) {
+        for (let vi = 0; vi < views.length; vi++) {
+          const v = views[vi];
+          if (!v || v.id === 'view-0') continue;
+          const el = v.rootEl && v.rootEl.querySelector && v.rootEl.querySelector('.feed');
+          if (!el) continue;
+          const t = viewScroll.get(String(v.channel));
+          if (typeof t !== 'number' || t < 0) continue;
+          const ms = el.scrollHeight - el.clientHeight;
+          if (ms > 0) el.scrollTop = Math.min(t, Math.max(0, ms));
+        }
+      }
+    });
+  });
 }
 
 async function applyPersonalWorkspaceStateFromServer(cfg) {
   if (!cfg || typeof cfg !== 'object') return;
+  let hadRemoteScroll = false;
+  if (cfg.feedScrollByView && typeof cfg.feedScrollByView === 'object') {
+    hadRemoteScroll = true;
+    try {
+      const keys = Object.keys(cfg.feedScrollByView);
+      for (let i = 0; i < keys.length; i++) {
+        const k = keys[i];
+        const top = cfg.feedScrollByView[k];
+        if (typeof top === 'number' && Number.isFinite(top) && top >= 0) {
+          viewScroll.set(String(k), top);
+        }
+      }
+    } catch (_) {}
+  }
   if (Array.isArray(cfg.openSecondaryViews)) {
     await applyWorkspaceOpenSecondaryViews(cfg.openSecondaryViews);
   }
@@ -7218,6 +7271,13 @@ async function applyPersonalWorkspaceStateFromServer(cfg) {
       localStorage.setItem(INOUT_KB_SETTINGS_KEY, JSON.stringify(cfg.settings));
     } catch (_) {}
   }
+  if (hadRemoteScroll) {
+    suppressScrollWorkspacePersistUntil = Date.now() + 650;
+    try {
+      saveScrollState();
+    } catch (_) {}
+    applyWorkspaceFeedScrollToDom();
+  }
 }
 
 function schedulePersonalWorkspacePersist() {
@@ -7248,6 +7308,13 @@ async function persistPersonalWorkspaceToServer() {
         if (c && typeof c === 'object') base = Object.assign({}, c);
       }
     } catch (_) {}
+    if (slice.feedScrollByView && typeof slice.feedScrollByView === 'object') {
+      const prev =
+        base.feedScrollByView && typeof base.feedScrollByView === 'object' ? base.feedScrollByView : {};
+      slice.feedScrollByView = Object.assign({}, prev, slice.feedScrollByView);
+    } else if (base.feedScrollByView && typeof base.feedScrollByView === 'object') {
+      slice.feedScrollByView = Object.assign({}, base.feedScrollByView);
+    }
     Object.assign(base, slice);
     suppressNextPersonalWorkspaceApply = true;
     await upsertViewsConfigForChannel(WORKSPACE_META_VIEW_CHANNEL, base);
@@ -9827,15 +9894,44 @@ function autoResize(el) {
 
 /* ═══ SCROLL ══════════════════════════════════════════════ */
 var scrollSaveTimer = null;
+
+function scheduleScrollPersistIfAllowed() {
+  if (Date.now() < suppressScrollWorkspacePersistUntil) return;
+  if (applyingWorkspaceFocusFromRemote) return;
+  if (!currentUser || !shouldUseServerForObjects()) return;
+  schedulePersonalWorkspacePersist();
+}
+
+/** Persist scroll position for cross-device workspace sync (primary + secondary feeds). */
+function bindFeedScrollWorkspaceSync(scrollEl, channelKeyOrFn, isPrimaryFeed) {
+  if (!scrollEl) return;
+  scrollEl.addEventListener(
+    'scroll',
+    function() {
+      const ch =
+        typeof channelKeyOrFn === 'function' ? String(channelKeyOrFn() || 'main') : String(channelKeyOrFn);
+      viewScroll.set(ch, scrollEl.scrollTop);
+      if (isPrimaryFeed) {
+        atBottom = isNearBottom();
+        if (atBottom && scrollBtn) scrollBtn.classList.remove('visible');
+        if (document.body.classList.contains('dnd-active')) updateOriginLinePosition();
+      }
+      if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
+      scrollSaveTimer = setTimeout(saveScrollState, 200);
+      scheduleScrollPersistIfAllowed();
+    },
+    { passive: true }
+  );
+}
+
 if (feedEl) {
-feedEl.addEventListener('scroll', () => {
-    atBottom = isNearBottom();
-  if (atBottom) scrollBtn.classList.remove('visible');
-    viewScroll.set(currentView, feedEl.scrollTop);
-    if (scrollSaveTimer) clearTimeout(scrollSaveTimer);
-    scrollSaveTimer = setTimeout(saveScrollState, 200);
-    if (document.body.classList.contains('dnd-active')) updateOriginLinePosition();
-}, { passive: true });
+  bindFeedScrollWorkspaceSync(
+    feedEl,
+    function() {
+      return currentView;
+    },
+    true
+  );
 }
 
 /* FLIP animation: smooth shift of rows when reordering during drag */
