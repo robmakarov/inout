@@ -6077,7 +6077,6 @@ function setupTouchDragHandlers() {
     clearEdgeScrollInterval();
     clearTimeout(touchDragState.timer);
     document.removeEventListener('touchmove', move, { passive: false });
-    document.removeEventListener('touchend', end);
     hideDropOriginLine();
     r.classList.remove('dragging');
     if (document.body) {
@@ -6129,8 +6128,11 @@ function setupTouchDragHandlers() {
       });
     });
   };
-  document.addEventListener('touchmove', move, { passive: false });
-  document.addEventListener('touchend', end);
+  /* Do NOT register non-passive document touchmove here — iOS/WKWebView disables fast scrolling
+   * while any non-passive touchmove exists on document, even if preventDefault is never called.
+   * touchmove/end are attached only when long-press reorder actually starts (see row touchstart). */
+  touchDragState._onTouchMoveForDnD = move;
+  document.addEventListener('touchend', end, { passive: true });
 }
 
 /** Table view: header row (Time, Author, Value, Actions). No dataset.id so it stays first. */
@@ -6482,6 +6484,7 @@ function createObjectRow(obj, isNew, options) {
         clearTimeout(touchDragState.timer);
         touchDragState.timer = null;
       }
+      if (touchDragState.row === row && !touchDragState.started) touchDragState.row = null;
     }
     row.addEventListener('touchmove', cancelLongPressIfScrolled, { passive: true });
     row.addEventListener('touchend', clearLongPressRowListeners, { passive: true });
@@ -6511,6 +6514,8 @@ function createObjectRow(obj, isNew, options) {
       row.removeEventListener('touchmove', cancelLongPressIfScrolled);
       row.removeEventListener('touchend', clearLongPressRowListeners);
       row.removeEventListener('touchcancel', clearLongPressRowListeners);
+      var dndMove = touchDragState && touchDragState._onTouchMoveForDnD;
+      if (dndMove) document.addEventListener('touchmove', dndMove, { passive: false });
       /* origin line shown on first touchmove, not here, so it doesn't appear on long-press alone */
     }, 200); // long press threshold
   }, { passive: true });
@@ -6823,7 +6828,6 @@ function createObjectRow(obj, isNew, options) {
       dragSelectJustEnded = true;
       pointerDownOnSelectArea = false;
     };
-    document.addEventListener('touchmove', onTouchMove, { passive: false });
     document.addEventListener('touchend', onTouchEnd);
     document.addEventListener('touchcancel', onTouchEnd);
     const timer = setTimeout(() => {
@@ -6844,6 +6848,7 @@ function createObjectRow(obj, isNew, options) {
         const box = r.querySelector('.obj-select');
         if (box) state.startRowStates.set(r, box.checked);
       });
+      document.addEventListener('touchmove', onTouchMove, { passive: false });
     }, 200);
     const onDocTouchEnd = () => {
       clearTimeout(timer);
@@ -6935,14 +6940,16 @@ function createObjectRow(obj, isNew, options) {
     const onTouchEnd = () => {
       clearEdgeScrollInterval();
       document.removeEventListener('touchmove', onTouchMove, { passive: false });
+      document.removeEventListener('touchmove', onDocTouchMove, { capture: true, passive: true });
       document.removeEventListener('touchend', onTouchEnd);
       document.removeEventListener('touchcancel', onTouchEnd);
+      document.removeEventListener('touchend', onDocTouchEnd, true);
+      document.removeEventListener('touchcancel', onDocTouchEnd, true);
       if (state.started && !state.didWeMove) toggleRowAtY(feedInner, startY);
       dragSelectActive = false;
       dragSelectStarted = false;
       dragSelectJustEnded = true;
     };
-    document.addEventListener('touchmove', onTouchMove, { passive: false });
     document.addEventListener('touchend', onTouchEnd);
     document.addEventListener('touchcancel', onTouchEnd);
     let timer = setTimeout(() => {
@@ -6964,26 +6971,25 @@ function createObjectRow(obj, isNew, options) {
         const box = r.querySelector('.obj-select');
         if (box) state.startRowStates.set(r, box.checked);
       });
+      document.addEventListener('touchmove', onTouchMove, { passive: false });
     }, 300);
-    const onDocTouchMove = (ev) => {
-      if (timer) clearTimeout(timer);
-      timer = null;
+    const onDocTouchMove = () => {
+      if (timer != null) {
+        clearTimeout(timer);
+        timer = null;
+      }
       document.removeEventListener('touchmove', onTouchMove, { passive: false });
-      document.removeEventListener('touchend', onTouchEnd);
-      document.removeEventListener('touchcancel', onTouchEnd);
-      document.removeEventListener('touchmove', onDocTouchMove, true);
-      document.removeEventListener('touchend', onDocTouchEnd, true);
-      document.removeEventListener('touchcancel', onDocTouchEnd, true);
+      document.removeEventListener('touchmove', onDocTouchMove, { capture: true, passive: true });
     };
     const onDocTouchEnd = () => {
       if (timer) clearTimeout(timer);
       document.removeEventListener('touchend', onDocTouchEnd, true);
       document.removeEventListener('touchcancel', onDocTouchEnd, true);
-      document.removeEventListener('touchmove', onDocTouchMove, true);
+      document.removeEventListener('touchmove', onDocTouchMove, { capture: true, passive: true });
     };
     document.addEventListener('touchend', onDocTouchEnd, true);
     document.addEventListener('touchcancel', onDocTouchEnd, true);
-    document.addEventListener('touchmove', onDocTouchMove, true);
+    document.addEventListener('touchmove', onDocTouchMove, { passive: true, capture: true });
   }, { passive: true });
 
   const time = document.createElement('div');
