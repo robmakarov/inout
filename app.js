@@ -7491,12 +7491,21 @@ function normalizeViewConfig(raw) {
   return typeof raw === 'object' ? raw : null;
 }
 
+/** Clone view config for PostgREST (drops undefined / non-JSON values). */
+function viewConfigJsonSafe(cfg) {
+  try {
+    return JSON.parse(JSON.stringify(cfg && typeof cfg === 'object' ? cfg : {}));
+  } catch (_) {
+    return {};
+  }
+}
+
 /**
  * Save views.config without PostgREST upsert on_conflict (avoids 400 when DB unique/index names differ).
  */
 async function upsertViewsConfigForChannel(channelKey, configObj) {
   const ch = String(channelKey || 'main');
-  const cfg = configObj && typeof configObj === 'object' ? configObj : {};
+  const cfg = viewConfigJsonSafe(configObj);
   if (!sb || !sb.from) return { error: new Error('no supabase client') };
   if (currentUser && currentUser.id) {
     const uid = currentUser.id;
@@ -7508,18 +7517,24 @@ async function upsertViewsConfigForChannel(channelKey, configObj) {
       .maybeSingle();
     if (selErr) return { error: selErr };
     if (row) {
-      return sb.from('views').update({ config: cfg }).eq('user_id', uid).eq('channel', ch);
+      const { error } = await sb.from('views').update({ config: cfg }).eq('user_id', uid).eq('channel', ch);
+      return { error };
     }
     const ins = await sb.from('views').insert({ user_id: uid, channel: ch, config: cfg });
     if (!ins.error) return ins;
-    return sb.from('views').update({ config: cfg }).eq('user_id', uid).eq('channel', ch);
+    const { error: upErr } = await sb.from('views').update({ config: cfg }).eq('user_id', uid).eq('channel', ch);
+    return { error: upErr };
   }
   const { data: row2, error: selErr2 } = await sb.from('views').select('channel').eq('channel', ch).limit(1).maybeSingle();
   if (selErr2) return { error: selErr2 };
   if (row2) {
-    return sb.from('views').update({ config: cfg }).eq('channel', ch);
+    const { error } = await sb.from('views').update({ config: cfg }).eq('channel', ch);
+    return { error };
   }
-  return sb.from('views').insert({ channel: ch, config: cfg });
+  const guestIns = await sb.from('views').insert({ channel: ch, config: cfg });
+  if (!guestIns.error) return guestIns;
+  const { error: gUp } = await sb.from('views').update({ config: cfg }).eq('channel', ch);
+  return { error: gUp };
 }
 
 /** Shared / guest feeds: one `views` row per channel so all watchers see the same order & layout prefs. */
@@ -7534,17 +7549,27 @@ function isChannelViewCollaborative(ch) {
 
 async function upsertChannelViewConfigMerged(channelKey, configObj) {
   const ch = String(channelKey || 'main');
-  const cfg = configObj && typeof configObj === 'object' ? configObj : {};
+  const cfg = viewConfigJsonSafe(configObj);
   if (!sb || !sb.from) return { error: new Error('no supabase client') };
   if (isChannelViewCollaborative(ch)) {
-    const { data: row, error: selErr } = await sb.from('views').select('channel').eq('channel', ch).limit(1).maybeSingle();
+    const { data: row, error: selErr } = await sb
+      .from('views')
+      .select('channel, config')
+      .eq('channel', ch)
+      .limit(1)
+      .maybeSingle();
     if (selErr) return { error: selErr };
+    const merged = Object.assign({}, normalizeViewConfig(row && row.config), cfg);
     if (row) {
-      return sb.from('views').update({ config: cfg }).eq('channel', ch);
+      const { error } = await sb.from('views').update({ config: merged }).eq('channel', ch);
+      return { error };
     }
-    const ins = await sb.from('views').insert({ channel: ch, config: cfg });
+    const insertPayload = { channel: ch, config: merged };
+    if (currentUser && currentUser.id) insertPayload.user_id = currentUser.id;
+    const ins = await sb.from('views').insert(insertPayload);
     if (!ins.error) return ins;
-    return sb.from('views').update({ config: cfg }).eq('channel', ch);
+    const { error: upErr } = await sb.from('views').update({ config: merged }).eq('channel', ch);
+    return { error: upErr };
   }
   return upsertViewsConfigForChannel(ch, cfg);
 }
@@ -8027,14 +8052,14 @@ let suppressNextViewApply = false;
 let suppressOrderApplyUntil = 0; /* ignore realtime order/view applies until this timestamp */
 
 async function saveObjectOrderForCurrentView() {
-  if (!currentObjectOrder.length) return;
   saveOrderToLocal();
   suppressOrderApplyUntil = Date.now() + 350;
   // Persist order into unified views config for this channel (owner writes; guests just read).
   if (currentUser && shouldUseServerForObjects() && sb) {
     try {
+      const orderArr = Array.isArray(currentObjectOrder) ? currentObjectOrder.slice() : [];
       const cfg = {
-        order: currentObjectOrder.slice(),
+        order: orderArr,
         title: (viewDisplayNames && typeof viewDisplayNames[currentView] === 'string' && viewDisplayNames[currentView].trim())
           ? viewDisplayNames[currentView].trim()
           : null,
@@ -9488,6 +9513,12 @@ async function sendText(text, options) {
     }
       if (list) befores.push(...list);
     }
+    if (idsToSave.length === 1 && befores.length === 0) {
+      input.disabled = false;
+      sendBtn.disabled = false;
+      toast('Could not load that object — nothing was saved.');
+      return;
+    }
     let lastError = null;
     for (let i = 0; i < idsToSave.length; i++) {
       const id = idsToSave[i];
@@ -9498,15 +9529,39 @@ async function sendText(text, options) {
       const rowChannel = String(
         beforeRow && beforeRow.channel != null ? beforeRow.channel : currentChannel || 'main'
       );
-      const editPayload = {
-        p_channel: rowChannel,
-        p_entry_id: id,
-        p_action: 'edit',
-        p_payload: { text: textToSave },
-      };
-      if (tempSessionId) editPayload.p_temp_session_id = tempSessionId;
-      const { error } = await sb.rpc('perform_entry_action', editPayload);
-      if (error) lastError = error;
+      var savedOk = false;
+      /* Signed-in: REST update avoids RPC + entry_actions failures and silent 0-row RPC updates. */
+      if (currentUser && sb && sb.from) {
+        var u1 = await sb
+          .from(OBJECTS_TABLE)
+          .update({ text: textToSave })
+          .eq('id', id)
+          .eq('channel', rowChannel)
+          .select('id');
+        if (!u1.error && u1.data && u1.data.length) {
+          savedOk = true;
+        } else {
+          var u2 = await sb
+            .from(OBJECTS_TABLE)
+            .update({ text: textToSave })
+            .eq('id', id)
+            .select('id');
+          if (!u2.error && u2.data && u2.data.length) {
+            savedOk = true;
+          }
+        }
+      }
+      if (!savedOk) {
+        const editPayload = {
+          p_channel: rowChannel,
+          p_entry_id: id,
+          p_action: 'edit',
+          p_payload: { text: textToSave },
+        };
+        if (tempSessionId) editPayload.p_temp_session_id = tempSessionId;
+        const { error } = await sb.rpc('perform_entry_action', editPayload);
+        if (error) lastError = error;
+      }
     }
     input.disabled = false;
     if (lastError) {
@@ -10392,88 +10447,78 @@ async function moveSingleObject(id, targetChannel) {
   if (!target || target === currentChannel) return false;
   if (!sb || !sb.from) return false;
 
-  const useRpc = !!(sb.rpc && (tempSessionId || currentUser));
+  function finishMoveUi() {
+    const el = feedInner && feedInner.querySelector('.obj[data-id="' + CSS.escape(String(id)) + '"]');
+    if (el) el.remove();
+    currentObjectOrder = (currentObjectOrder || []).filter(x => Number(x) !== Number(id));
+    saveObjectOrderForCurrentView();
+    showEmptyIfNoObjects();
+  }
 
-  if (useRpc) {
+  if (currentUser) {
+    try {
+      const { data: before, error: selErr } = await sb
+        .from(OBJECTS_TABLE)
+        .select('id, created_at, text, channel, user_id, author_name')
+        .eq('id', id)
+        .maybeSingle();
+      if (selErr) {
+        console.error(selErr);
+        toast('Failed to move — ' + humanError(selErr.message));
+        return false;
+      }
+      const now = new Date().toISOString();
+      const { data, error } = await sb
+        .from(OBJECTS_TABLE)
+        .update({ channel: target, created_at: now })
+        .eq('user_id', currentUser.id)
+        .eq('id', id)
+        .select('id');
+      if (error) {
+        console.error(error);
+        toast('Failed to move — ' + humanError(error.message));
+        return false;
+      }
+      if (!data || data.length === 0) {
+        toast('Move not allowed — row may be read-only or policy blocks update.');
+        return false;
+      }
+      if (before) {
+        pushUndo({ type: 'move', entries: [before] });
+        logAction('move', { id: before.id, target });
+      }
+      finishMoveUi();
+      return true;
+    } catch (e) {
+      console.error(e);
+      toast('Failed to move — ' + humanError(e.message));
+      return false;
+    }
+  }
+
+  if (tempSessionId && sb.rpc) {
     try {
       const rpcPayload = {
         p_channel: currentChannel,
         p_entry_id: id,
         p_action: 'move',
         p_payload: { target_channel: target },
+        p_temp_session_id: tempSessionId,
       };
-      if (tempSessionId) rpcPayload.p_temp_session_id = tempSessionId;
       const { error } = await sb.rpc('perform_entry_action', rpcPayload);
-      if (!error) {
-        const el = feedInner && feedInner.querySelector('.obj[data-id="' + CSS.escape(String(id)) + '"]');
-        if (el) el.remove();
-        currentObjectOrder = currentObjectOrder.filter(x => x !== id);
-        saveObjectOrderForCurrentView();
-        showEmptyIfNoObjects();
-        return true;
-      }
-      if (tempSessionId) {
+      if (error) {
         toast('Failed to move — ' + humanError(error.message));
         return false;
       }
-      // Owner: fall through to direct update if RPC doesn't support move
-      if (error.code !== 'PGRST202' && error.message && !error.message.includes('move')) {
-        toast('Failed to move — ' + humanError(error.message));
-        return false;
-      }
+      finishMoveUi();
+      return true;
     } catch (e) {
-      if (tempSessionId) {
-        console.error(e);
-        toast('Failed to move — ' + humanError(e.message));
-        return false;
-      }
+      console.error(e);
+      toast('Failed to move — ' + humanError(e.message));
+      return false;
     }
   }
-
-  // Owner-only fallback: direct update (when RPC move not implemented)
-  if (!currentUser) return false;
-  try {
-    const { data: before, error: selErr } = await sb
-      .from(OBJECTS_TABLE)
-      .select('id, created_at, text, channel, user_id, author_name')
-      .eq('id', id)
-      .maybeSingle();
-    if (selErr) {
-      console.error(selErr);
-      toast('Failed to move — ' + humanError(selErr.message));
-      return false;
-    }
-    const now = new Date().toISOString();
-    const { data, error } = await sb
-      .from(OBJECTS_TABLE)
-      .update({ channel: target, created_at: now })
-      .eq('user_id', currentUser.id)
-      .eq('id', id)
-      .select('id');
-    if (error) {
-      console.error(error);
-      toast('Failed to move — ' + humanError(error.message));
-      return false;
-    }
-    if (!data || data.length === 0) {
-      toast('Move not allowed — row may be read-only or policy blocks update.');
-      return false;
-    }
-    if (before) {
-      pushUndo({ type: 'move', entries: [before] });
-      logAction('move', { id: before.id, target });
-    }
-    const el = feedInner.querySelector('.obj[data-id="' + CSS.escape(String(id)) + '"]');
-    if (el) el.remove();
-    currentObjectOrder = currentObjectOrder.filter(x => x !== id);
-    saveObjectOrderForCurrentView();
-    showEmptyIfNoObjects();
-    return true;
-  } catch (e) {
-    console.error(e);
-    toast('Failed to move — ' + humanError(e.message));
-    return false;
-  }
+  return false;
 }
 
 async function exportSingleObject(id) {

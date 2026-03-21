@@ -1,3 +1,6 @@
+-- Run this whole file as ONE script (do not paste only the middle of the function).
+-- Pasting `BEGIN … INSERT … EXCEPTION` alone will error: plain SQL `BEGIN` is a transaction, not PL/pgSQL.
+--
 -- Client sends p_temp_session_id; PostgREST rejects RPC calls with extra keys unless the
 -- function declares that parameter.
 -- Match rows by (id + channel) OR (id + temp_session) so shared/temp rows still update if
@@ -32,6 +35,17 @@ begin
 
   elsif p_action = 'delete' then
     delete from public.entries
+    where id = p_entry_id
+      and (
+        channel = p_channel
+        or (p_temp_session_id is not null and temp_session_id = p_temp_session_id)
+      );
+
+  elsif p_action = 'move' then
+    update public.entries
+      set
+        channel = coalesce(nullif(trim(p_payload->>'target_channel'), ''), channel),
+        created_at = now()
     where id = p_entry_id
       and (
         channel = p_channel
