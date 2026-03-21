@@ -123,6 +123,18 @@ if (window.Stripe && STRIPE_PUBLISHABLE_KEY && !STRIPE_PUBLISHABLE_KEY.includes(
 
 const feedInner  = document.getElementById('feed-inner');
 const feedEl     = document.getElementById('feed');
+/** Primary or secondary .feed: actual scrollport may be .visual-feed-stack (mobile CSS). */
+function getFeedScrollSurface(feed) {
+  if (!feed || typeof feed.closest !== 'function') return feed;
+  var stack = feed.closest('.visual-feed-stack');
+  if (!stack || typeof getComputedStyle === 'undefined') return feed;
+  var oy = getComputedStyle(stack).overflowY;
+  if (oy === 'auto' || oy === 'scroll') return stack;
+  return feed;
+}
+function primaryFeedScrollSurface() {
+  return feedEl ? getFeedScrollSurface(feedEl) : null;
+}
 const inputArea  = document.getElementById('input-area');
 var input       = document.getElementById('object-input');
 var sendBtn     = document.getElementById('send-btn');
@@ -2305,11 +2317,12 @@ function clearEdgeScrollInterval() {
   }
 }
 function scrollFeedAtTouchEdge(clientY, clientX) {
-  if (!feedEl) return false;
-  var feedRect = feedEl.getBoundingClientRect();
+  var surf = primaryFeedScrollSurface();
+  if (!surf) return false;
+  var feedRect = surf.getBoundingClientRect();
   var edgeZone = Math.max(56, feedRect.height * 0.2);
   var baseStep = 6;
-  var maxScroll = feedEl.scrollHeight - feedEl.clientHeight;
+  var maxScroll = surf.scrollHeight - surf.clientHeight;
   var inTop = clientY < feedRect.top + edgeZone;
   var inBottom = clientY > feedRect.bottom - edgeZone;
   if (typeof clientX === 'number') {
@@ -2321,14 +2334,14 @@ function scrollFeedAtTouchEdge(clientY, clientX) {
     if (clientY <= feedRect.top) closeness = 1;
     else closeness = 1 - (clientY - feedRect.top) / edgeZone;
     step = baseStep * (0.5 + 2.5 * Math.min(1, closeness));
-    feedEl.scrollTop = Math.max(0, feedEl.scrollTop - step);
+    surf.scrollTop = Math.max(0, surf.scrollTop - step);
     return true;
   }
   if (inBottom) {
     if (clientY >= feedRect.bottom) closeness = 1;
     else closeness = 1 - (feedRect.bottom - clientY) / edgeZone;
     step = baseStep * (0.5 + 2.5 * Math.min(1, closeness));
-    if (maxScroll > 0) feedEl.scrollTop = Math.min(maxScroll, feedEl.scrollTop + step);
+    if (maxScroll > 0) surf.scrollTop = Math.min(maxScroll, surf.scrollTop + step);
     return true;
   }
   return false;
@@ -2346,8 +2359,10 @@ function updateEdgeScroll(clientY, clientX) {
 
 function applyDragSelectRect(feedInner, feedEl, startYContent, currentYClient, mode, startRowStates) {
   if (!feedInner || !feedEl || startYContent == null || currentYClient == null || !startRowStates) return;
-  const feedRect = feedEl.getBoundingClientRect();
-  const scrollTop = feedEl.scrollTop;
+  const scrollEl = getFeedScrollSurface(feedEl);
+  if (!scrollEl) return;
+  const feedRect = scrollEl.getBoundingClientRect();
+  const scrollTop = scrollEl.scrollTop;
   const currentYContent = currentYClient - feedRect.top + scrollTop;
   const rectTop = Math.min(startYContent, currentYContent);
   const rectBottom = Math.max(startYContent, currentYContent);
@@ -2893,26 +2908,27 @@ var originContentTop = null;
 var originContentHeight = null;
 var originGhostOverlayEl = null;
 function updateOriginLinePosition() {
-  if (!feedEl || !feedInner || !feedDropOriginEl || typeof originContentTop !== 'number' || typeof originContentHeight !== 'number') return;
-  var feedRect = feedEl.getBoundingClientRect();
-  var scrollTop = feedEl.scrollTop;
-  var feedHeight = feedRect.height;
-  var topPx, heightPx;
-  if (originContentTop < scrollTop) {
+  if (!feedEl || !feedInner || !feedDropOriginEl) return;
+  var ghost = originGhostRows && originGhostRows[0];
+  if (!ghost || !ghost.getBoundingClientRect) return;
+  var surf = getFeedScrollSurface(feedEl);
+  if (!surf) return;
+  var surfRect = surf.getBoundingClientRect();
+  var gRect = ghost.getBoundingClientRect();
+  var margin = 2;
+  var topPx, heightPx = 2;
+  if (gRect.bottom < surfRect.top + margin) {
     feedDropOriginEl.classList.add('stuck');
-    topPx = feedRect.top;
-    heightPx = 2;
-  } else if (originContentTop + originContentHeight > scrollTop + feedHeight) {
+    topPx = surfRect.top;
+  } else if (gRect.top > surfRect.bottom - margin) {
     feedDropOriginEl.classList.add('stuck');
-    topPx = feedRect.bottom - 2;
-    heightPx = 2;
+    topPx = surfRect.bottom - 2;
   } else {
     feedDropOriginEl.classList.remove('stuck');
-    topPx = feedRect.top + (originContentTop - scrollTop);
-    heightPx = 2;
+    topPx = gRect.top;
   }
-  feedDropOriginEl.style.left = feedRect.left + 'px';
-  feedDropOriginEl.style.width = feedRect.width + 'px';
+  feedDropOriginEl.style.left = surfRect.left + 'px';
+  feedDropOriginEl.style.width = surfRect.width + 'px';
   feedDropOriginEl.style.top = topPx + 'px';
   feedDropOriginEl.style.height = heightPx + 'px';
   feedDropOriginEl.classList.add('visible');
@@ -2951,7 +2967,8 @@ function insertOriginGhostsAndDetachRows(block) {
 }
 function removeOriginGhostsAndInsertRows() {
   if (!originGhostsActive || !feedInner || !feedEl) return;
-  var scrollTop = feedEl.scrollTop;
+  var surf = getFeedScrollSurface(feedEl);
+  var scrollTop = surf ? surf.scrollTop : 0;
   var insertBefore = lastDropInsertBefore;
   if (!insertBefore && !lastWantAppend && originInsertBefore) insertBefore = originInsertBefore;
   if (draggedRowsStored.length) {
@@ -2969,7 +2986,7 @@ function removeOriginGhostsAndInsertRows() {
   lastDropInsertBefore = null;
   lastWantAppend = false;
   originInsertBefore = null;
-  feedEl.scrollTop = scrollTop;
+  if (surf) surf.scrollTop = scrollTop;
 }
 function focusMainInput() {
   if (input) input.focus();
@@ -3075,7 +3092,9 @@ function isNearBottom() {
   const base = 80;
   const extra = (inputArea && inputArea.offsetHeight) ? inputArea.offsetHeight : 120;
   const threshold = base + extra;
-  return feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < threshold;
+  var surf = primaryFeedScrollSurface();
+  if (!surf) return true;
+  return surf.scrollHeight - surf.scrollTop - surf.clientHeight < threshold;
 }
 
 /* ═══ INIT ═══════════════════════════════════════════════ */
@@ -3087,10 +3106,13 @@ function init(done) {
       requestAnimationFrame(function() {
         requestAnimationFrame(function() {
           if (feedEl) {
-            if (typeof saved === 'number' && saved >= 0) {
-              feedEl.scrollTop = Math.min(saved, Math.max(0, feedEl.scrollHeight - feedEl.clientHeight));
-            } else {
-  scrollBottom();
+            var surfInit = primaryFeedScrollSurface();
+            if (surfInit) {
+              if (typeof saved === 'number' && saved >= 0) {
+                surfInit.scrollTop = Math.min(saved, Math.max(0, surfInit.scrollHeight - surfInit.clientHeight));
+              } else {
+                scrollBottom();
+              }
             }
           }
         });
@@ -3132,8 +3154,10 @@ function init(done) {
               if (feedEl && typeof saved === 'number' && saved >= 0) {
                 requestAnimationFrame(function() {
                   requestAnimationFrame(function() {
-                    var maxScroll = feedEl.scrollHeight - feedEl.clientHeight;
-                    if (maxScroll > 0) feedEl.scrollTop = Math.min(saved, Math.max(0, maxScroll));
+                    var surfL = primaryFeedScrollSurface();
+                    if (!surfL) return;
+                    var maxScroll = surfL.scrollHeight - surfL.clientHeight;
+                    if (maxScroll > 0) surfL.scrollTop = Math.min(saved, Math.max(0, maxScroll));
                   });
                 });
               }
@@ -3419,7 +3443,10 @@ async function replaceFeedWithList(list) {
     }
     updateObjectCount();
     applyFieldPrefsToObjects();
-    if (feedEl) feedEl.scrollTop = 0;
+    if (feedEl) {
+      var ps = primaryFeedScrollSurface();
+      if (ps) ps.scrollTop = 0;
+    }
   });
 }
 
@@ -6960,7 +6987,10 @@ function createObjectRow(obj, isNew, options) {
       dragSelectActive = true;
       state.mode = selectBox.checked ? 'deselect' : 'select';
       state.startRowStates = new Map();
-      if (feedEl) state.startYContent = startY - feedEl.getBoundingClientRect().top + feedEl.scrollTop;
+      if (feedEl) {
+        var se = getFeedScrollSurface(feedEl);
+        state.startYContent = startY - se.getBoundingClientRect().top + se.scrollTop;
+      }
       feedInner.querySelectorAll('.obj').forEach(r => {
         const box = r.querySelector('.obj-select');
         if (box) state.startRowStates.set(r, box.checked);
@@ -7012,7 +7042,10 @@ function createObjectRow(obj, isNew, options) {
       dragSelectActive = true;
       state.mode = selectBox.checked ? 'deselect' : 'select';
       state.startRowStates = new Map();
-      if (feedEl) state.startYContent = startY - feedEl.getBoundingClientRect().top + feedEl.scrollTop;
+      if (feedEl) {
+        var se2 = getFeedScrollSurface(feedEl);
+        state.startYContent = startY - se2.getBoundingClientRect().top + se2.scrollTop;
+      }
       feedInner.querySelectorAll('.obj').forEach(r => {
         const box = r.querySelector('.obj-select');
         if (box) state.startRowStates.set(r, box.checked);
@@ -7067,7 +7100,10 @@ function createObjectRow(obj, isNew, options) {
       dragSelectActive = true;
       state.mode = selectBox.checked ? 'deselect' : 'select';
       state.startRowStates = new Map();
-      if (feedEl) state.startYContent = startY - feedEl.getBoundingClientRect().top + feedEl.scrollTop;
+      if (feedEl) {
+        var se3 = getFeedScrollSurface(feedEl);
+        state.startYContent = startY - se3.getBoundingClientRect().top + se3.scrollTop;
+      }
       feedInner.querySelectorAll('.obj').forEach(r => {
         const box = r.querySelector('.obj-select');
         if (box) state.startRowStates.set(r, box.checked);
@@ -7126,7 +7162,10 @@ function createObjectRow(obj, isNew, options) {
       dragSelectActive = true;
       state.mode = selectBox.checked ? 'deselect' : 'select';
       state.startRowStates = new Map();
-      if (feedEl) state.startYContent = startY - feedEl.getBoundingClientRect().top + feedEl.scrollTop;
+      if (feedEl) {
+        var se4 = getFeedScrollSurface(feedEl);
+        state.startYContent = startY - se4.getBoundingClientRect().top + se4.scrollTop;
+      }
       feedInner.querySelectorAll('.obj').forEach(r => {
         const box = r.querySelector('.obj-select');
         if (box) state.startRowStates.set(r, box.checked);
@@ -7723,9 +7762,10 @@ function applyWorkspaceFeedScrollToDomOnce() {
   if (feedEl && currentView != null) {
     const top = viewScroll.get(String(currentView));
     if (typeof top === 'number' && top >= 0) {
-      const maxScroll = feedEl.scrollHeight - feedEl.clientHeight;
+      const surf = getFeedScrollSurface(feedEl);
+      const maxScroll = surf.scrollHeight - surf.clientHeight;
       if (maxScroll > 0) {
-        feedEl.scrollTop = Math.min(top, Math.max(0, maxScroll));
+        surf.scrollTop = Math.min(top, Math.max(0, maxScroll));
       } else if (top > 2) needRetry = true;
     }
   }
@@ -7737,9 +7777,10 @@ function applyWorkspaceFeedScrollToDomOnce() {
       if (!el) continue;
       const t = viewScroll.get(String(v.channel));
       if (typeof t !== 'number' || t < 0) continue;
-      const ms = el.scrollHeight - el.clientHeight;
+      const scrollEl = getFeedScrollSurface(el);
+      const ms = scrollEl.scrollHeight - scrollEl.clientHeight;
       if (ms > 0) {
-        el.scrollTop = Math.min(t, Math.max(0, ms));
+        scrollEl.scrollTop = Math.min(t, Math.max(0, ms));
       } else if (t > 2) needRetry = true;
     }
   }
@@ -8632,7 +8673,8 @@ async function switchChannel(ch) {
   inoutChannelInputQuietUntil = Date.now() + 520;
   if (editingObjectId != null) cancelEditingMode(true);
   if (feedEl) {
-    viewScroll.set(currentView, feedEl.scrollTop);
+    var surfCh = primaryFeedScrollSurface();
+    if (surfCh) viewScroll.set(currentView, surfCh.scrollTop);
     saveScrollState();
   }
   currentChannel = ch;
@@ -9389,13 +9431,16 @@ async function reloadForUser() {
   var savedScroll = viewScroll.get(currentView);
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-   if (feedEl) {
-        if (typeof savedScroll === 'number' && savedScroll >= 0) {
-          feedEl.scrollTop = Math.min(savedScroll, Math.max(0, feedEl.scrollHeight - feedEl.clientHeight));
-    } else {
-      scrollBottom();
-    }
-  }
+      if (feedEl) {
+        var surfR = primaryFeedScrollSurface();
+        if (surfR) {
+          if (typeof savedScroll === 'number' && savedScroll >= 0) {
+            surfR.scrollTop = Math.min(savedScroll, Math.max(0, surfR.scrollHeight - surfR.clientHeight));
+          } else {
+            scrollBottom();
+          }
+        }
+      }
       /* Mobile: programmatic focus after load triggers Chrome keyboard / expanded input UI. */
       if (input && !isMobileOrTouchDevice()) {
         input.focus();
@@ -10856,11 +10901,12 @@ function bindMultiviewWheelScrollCapture() {
       var feed = view.querySelector('.feed');
       if (!feed) return;
       if (feed.contains(t)) return;
-      var max = feed.scrollHeight - feed.clientHeight;
+      var surf = getFeedScrollSurface(feed);
+      var max = surf.scrollHeight - surf.clientHeight;
       if (max <= 0) return;
-      var dy = wheelDeltaY(e, feed.clientHeight);
+      var dy = wheelDeltaY(e, surf.clientHeight);
       e.preventDefault();
-      feed.scrollTop = Math.max(0, Math.min(max, feed.scrollTop + dy));
+      surf.scrollTop = Math.max(0, Math.min(max, surf.scrollTop + dy));
     },
     { capture: true, passive: false }
   );
@@ -10876,12 +10922,13 @@ function scheduleScrollPersistIfAllowed() {
 /** Persist scroll position for cross-device workspace sync (primary + secondary feeds). */
 function bindFeedScrollWorkspaceSync(scrollEl, channelKeyOrFn, isPrimaryFeed) {
   if (!scrollEl) return;
-  scrollEl.addEventListener(
+  var el = getFeedScrollSurface(scrollEl);
+  el.addEventListener(
     'scroll',
     function() {
       const ch =
         typeof channelKeyOrFn === 'function' ? String(channelKeyOrFn() || 'main') : String(channelKeyOrFn);
-      viewScroll.set(ch, scrollEl.scrollTop);
+      viewScroll.set(ch, el.scrollTop);
       if (isPrimaryFeed) {
         atBottom = isNearBottom();
         if (atBottom && scrollBtn) scrollBtn.classList.remove('visible');
@@ -11300,7 +11347,9 @@ document.addEventListener('drop', e => {
 
 function scrollBottom() {
   if (!feedEl) return;
-  feedEl.scrollTop = feedEl.scrollHeight;
+  var surf = primaryFeedScrollSurface();
+  if (!surf) return;
+  surf.scrollTop = surf.scrollHeight;
   if (scrollBtn) scrollBtn.classList.remove('visible');
   atBottom = true;
 }

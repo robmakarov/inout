@@ -2975,6 +2975,30 @@ body.secret-show-grips .frame-grip{
     padding:10px 10px calc(14px + env(safe-area-inset-bottom, 0px));
     background:var(--bg);
   }
+  /*
+    iOS WebKit: nested flex + overflow on #feed often yields a zero or non-scrolling scrollport.
+    Make .visual-feed-stack the scroll container on small screens; keep live bar visible while scrolling.
+  */
+  .multiview-views .view > .visual > .visual-feed-stack{
+    overflow-y:auto;
+    overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;
+    touch-action:pan-y;
+    overscroll-behavior-y:contain;
+  }
+  .multiview-views .view > .visual > .visual-feed-stack > .view-live-editing-bar{
+    position:sticky;
+    top:0;
+    z-index:3;
+  }
+  .multiview-views .view > .visual > .visual-feed-stack > #feed,
+  .multiview-views .view > .visual > .visual-feed-stack > .feed{
+    overflow-x:hidden;
+    overflow-y:visible;
+    flex:0 0 auto;
+    min-height:0;
+    touch-action:pan-y;
+  }
   /* add bottom space in feed so last messages are not hidden behind input */
   #feed{
     padding-bottom:120px;
