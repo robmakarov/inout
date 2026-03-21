@@ -2847,8 +2847,9 @@ body.secret-show-grips .frame-grip{
   color:var(--bg);
 }
 
-/* ── CHANNEL MODAL ── */
-#channel-modal-backdrop{
+/* ── CHANNEL MODAL + ADD MEMBERS ── */
+#channel-modal-backdrop,
+#add-members-modal-backdrop{
   position:fixed;
   inset:0;
   background:rgba(0,0,0,0.6);
@@ -2858,7 +2859,8 @@ body.secret-show-grips .frame-grip{
   z-index:200;
 }
 
-#channel-modal{
+#channel-modal,
+#add-members-modal{
   background:var(--bg2);
   border:1px solid var(--line2);
   border-radius:8px;

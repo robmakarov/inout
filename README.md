@@ -45,6 +45,12 @@ INOUT is an **objects app** (not a chat). Users keep and manage objects, collect
   - Controls long‑term persistence and visibility in the owner’s nav bar.
   - Allows inviting others into that View.
 
+### Add signed-in collaborators to a view
+
+- From the view **⋮** menu, **Add people** opens a dialog to paste other users’ **INOUT user ids** (comma-separated), same as when creating a new grid.
+- Rows are written to **`channel_members`** (channel + user_id + creator_id). Invited users receive a **realtime** insert and the view appears in their tab bar.
+- **`main`** stays a personal feed: sharing uses **non-main** views or **Visit QR** for anonymous guests.
+
 ### Visit links and guests (QR flow)
 
 - From the account drawer, a signed‑in user can generate a **Visit QR** for a specific View:

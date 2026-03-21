@@ -60,7 +60,7 @@
     <div class="header-right">
       <div id="online-count"><span class="dot"></span><span id="oc-num">—</span></div>
     <div id="object-count"></div>
-    <button id="user-btn" aria-label="Account" onclick="var m=document.getElementById('user-modal-backdrop');var c=document.getElementById('channel-modal-backdrop');if(c)c.style.display='none';if(m){m.style.display='block';m.setAttribute('aria-hidden','false');}">
+    <button id="user-btn" aria-label="Account" onclick="var m=document.getElementById('user-modal-backdrop');var c=document.getElementById('channel-modal-backdrop');var ap=document.getElementById('add-members-modal-backdrop');if(c)c.style.display='none';if(ap)ap.style.display='none';if(m){m.style.display='block';m.setAttribute('aria-hidden','false');}">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5Z" stroke="currentColor" stroke-width="1.8"/>
         <path d="M4 22c0-4.418 3.582-8 8-8s8 3.582 8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -103,6 +103,7 @@
               <button id="move-selected" class="manage-btn" data-bar-id="move-selected" role="menuitem">Move</button>
             </div>
             <button id="export-tab" class="manage-btn" data-bar-id="export-tab" role="menuitem">Export</button>
+            <button id="add-members-btn" class="manage-btn" data-bar-id="add-members" type="button" role="menuitem">Add people</button>
             <div class="manage-subgroup" role="group" aria-label="View options">
               <button id="view-toggle" class="manage-btn" data-bar-id="view-toggle" type="button">View ▾</button>
               <div id="view-menu">
@@ -363,6 +364,26 @@
     <div class="cm-row">
       <button class="cm-btn" id="cm-cancel">Cancel</button>
       <button class="cm-btn cm-btn-primary" id="cm-create">Create</button>
+    </div>
+  </div>
+</div>
+
+<div id="add-members-modal-backdrop" style="display:none">
+  <div id="add-members-modal" role="dialog" aria-modal="true" aria-labelledby="add-members-title">
+    <div class="cm-title" id="add-members-title">Add people to this view</div>
+    <div class="cm-field">
+      <div class="cm-label">View</div>
+      <div class="cm-input" id="add-members-channel" style="font-size:9px;word-break:break-all;">—</div>
+      <div class="cm-hint">They must have an INOUT account. They will see this view in their tabs.</div>
+    </div>
+    <div class="cm-field">
+      <div class="cm-label">User ids</div>
+      <input id="add-members-ids" class="cm-input" placeholder="comma separated user ids" autocomplete="off"/>
+      <div class="cm-hint">Same as when creating a grid — paste Supabase / INOUT user UUIDs.</div>
+    </div>
+    <div class="cm-row">
+      <button class="cm-btn" type="button" id="add-members-cancel">Cancel</button>
+      <button class="cm-btn cm-btn-primary" type="button" id="add-members-save">Add</button>
     </div>
   </div>
 </div>

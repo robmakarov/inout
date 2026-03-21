@@ -194,6 +194,12 @@ const deleteSelectedBtn = document.getElementById('delete-selected');
 const moveSelectedBtn = document.getElementById('move-selected');
 const moveTargetSelect = document.getElementById('move-target');
 const exportTabBtn   = document.getElementById('export-tab');
+const addMembersBtn  = document.getElementById('add-members-btn');
+const addMembersBackdrop = document.getElementById('add-members-modal-backdrop');
+const addMembersChannelEl = document.getElementById('add-members-channel');
+const addMembersIdsInput = document.getElementById('add-members-ids');
+const addMembersCancelBtn = document.getElementById('add-members-cancel');
+const addMembersSaveBtn = document.getElementById('add-members-save');
 const fieldTimeChk   = document.getElementById('field-time');
 const fieldAuthorChk = document.getElementById('field-author');
 const fieldLabelsChk = document.getElementById('field-labels');
@@ -291,6 +297,7 @@ function closeSecretControls() {
 (function ensureModalsClosedOnLoad() {
   if (umBackdrop) { umBackdrop.style.display = 'none'; umBackdrop.setAttribute('aria-hidden', 'true'); }
   if (cmBackdrop) cmBackdrop.style.display = 'none';
+  if (addMembersBackdrop) addMembersBackdrop.style.display = 'none';
   if (logDropupPanel) logDropupPanel.classList.remove('open');
   if (qrModalBackdrop) qrModalBackdrop.setAttribute('aria-hidden', 'true');
   if (secretControlsBackdrop) secretControlsBackdrop.setAttribute('aria-hidden', 'true');
@@ -1475,6 +1482,7 @@ function saveScrollState() {
 const unreadCounts  = new Map();
 const sharedChannels = new Set();
 let channelSubs = new Map();
+let membershipRealtimeSub = null;
 let orderSub = null;
 let viewSub  = null;
 let draftChannel = null;
@@ -2679,6 +2687,10 @@ document.addEventListener('keydown', e => {
       closeChannelModal();
       return;
     }
+    if (addMembersBackdrop && addMembersBackdrop.style.display === 'flex') {
+      closeAddMembersModal();
+      return;
+    }
     if (umBackdrop && umBackdrop.style.display === 'block') {
       closeUserModal();
       return;
@@ -2975,6 +2987,48 @@ function maybeNotifyGuestMessage(ch, msg) {
   } catch (_) {}
 }
 
+/** Realtime: when another user adds me to a view, show it in the tab bar. */
+function subscribeChannelMembershipRealtime() {
+  try {
+    if (membershipRealtimeSub) {
+      try { membershipRealtimeSub.unsubscribe(); } catch (_) {}
+      membershipRealtimeSub = null;
+    }
+    if (!currentUser || !sb || !sb.channel) return;
+    const uid = currentUser.id;
+    if (!uid) return;
+    membershipRealtimeSub = sb
+      .channel('inout-memberships-' + String(uid))
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'channel_members',
+          filter: 'user_id=eq.' + String(uid),
+        },
+        async (payload) => {
+          const row = payload.new;
+          if (!row || typeof row.channel !== 'string' || !row.channel.trim()) return;
+          const ch = row.channel.trim();
+          if (leftChannels.has(ch)) return;
+          if (!viewNames.includes(ch)) {
+            viewNames.push(ch);
+            saveChannelsList();
+          }
+          await refreshSharedFlags();
+          subscribeRealtimeAll();
+          renderTabs();
+          refreshMoveTargets();
+          toast('You were added to view "' + ch + '"');
+        }
+      )
+      .subscribe();
+  } catch (e) {
+    console.error('subscribeChannelMembershipRealtime', e);
+  }
+}
+
 function subscribeRealtimeAll() {
   for (const sub of channelSubs.values()) {
     try { sub.unsubscribe(); } catch (_) {}
@@ -3050,6 +3104,8 @@ function subscribeRealtimeAll() {
       .subscribe();
     channelSubs.set(chName, sub);
   })();
+
+  subscribeChannelMembershipRealtime();
 }
 
 // Anonymous guest realtime for a temp-session shared view.
@@ -6660,6 +6716,7 @@ function openChannelModal() {
     return;
   }
   if (!cmBackdrop || !cmName || !cmSelf || !cmOthers) return;
+  closeAddMembersModal();
   cmName.value = '';
   cmOthers.value = '';
   cmSelf.textContent = currentUser.id || '';
@@ -6677,6 +6734,15 @@ if (cmCancel) cmCancel.addEventListener('click', closeChannelModal);
 if (cmBackdrop) cmBackdrop.addEventListener('click', e => {
   if (e.target === cmBackdrop) closeChannelModal();
 });
+if (addMembersCancelBtn) addMembersCancelBtn.addEventListener('click', closeAddMembersModal);
+if (addMembersSaveBtn) addMembersSaveBtn.addEventListener('click', () => {
+  submitAddMembersToCurrentView().catch(e => console.error(e));
+});
+if (addMembersBackdrop) {
+  addMembersBackdrop.addEventListener('click', e => {
+    if (e.target === addMembersBackdrop) closeAddMembersModal();
+  });
+}
 if (cmCreate) cmCreate.addEventListener('click', createChannelFromModal);
 
 async function createChannelFromModal() {
@@ -6769,6 +6835,86 @@ async function ensureMembership() {
   } catch (e) {
     console.error(e);
   }
+}
+
+function closeManageBarDropdown() {
+  const manageBar = document.getElementById('manage-bar');
+  if (manageBar) manageBar.classList.remove('manage-bar-open');
+  const trig = document.getElementById('manage-bar-trigger');
+  if (trig) trig.setAttribute('aria-expanded', 'false');
+}
+
+function openAddMembersModal() {
+  if (!currentUser) {
+    toast('Sign in to add people.');
+    return;
+  }
+  if (!addMembersBackdrop || !addMembersChannelEl || !addMembersIdsInput) return;
+  if (currentChannel === 'main') {
+    toast('Personal view (main) is not shared this way — create another view or use Visit QR for guests.');
+    return;
+  }
+  closeChannelModal();
+  const label = typeof getViewDisplayName === 'function' ? getViewDisplayName(currentChannel) : currentChannel;
+  addMembersChannelEl.textContent =
+    currentChannel + (label && label !== currentChannel ? ' — ' + label : '');
+  addMembersIdsInput.value = '';
+  addMembersBackdrop.style.display = 'flex';
+  closeManageBarDropdown();
+  addMembersIdsInput.focus();
+}
+
+function closeAddMembersModal() {
+  if (!addMembersBackdrop) return;
+  addMembersBackdrop.style.display = 'none';
+  requestAnimationFrame(focusMainInput);
+}
+
+async function submitAddMembersToCurrentView() {
+  if (!currentUser || !sb || !sb.from) {
+    toast('Sign in to add people.');
+    return;
+  }
+  if (currentChannel === 'main') {
+    toast('Use a non-main view to add signed-in collaborators.');
+    return;
+  }
+  if (!addMembersIdsInput) return;
+  const raw = addMembersIdsInput.value || '';
+  const extraIds = raw
+    .split(',')
+    .map(x => x.trim())
+    .filter(x => x && x !== currentUser.id);
+  if (!extraIds.length) {
+    toast('Enter at least one user id.');
+    return;
+  }
+  const rows = extraIds.map(id => ({
+    channel: currentChannel,
+    user_id: id,
+    creator_id: currentUser.id,
+  }));
+  try {
+    const { error } = await sb.from('channel_members').upsert(rows, { onConflict: 'channel,user_id' });
+    if (error) throw error;
+  } catch (e) {
+    console.error(e);
+    toast('Failed to add people — ' + humanError(e.message));
+    return;
+  }
+  sharedChannels.add(currentChannel);
+  await refreshSharedFlags();
+  renderTabs();
+  subscribeRealtimeAll();
+  refreshMoveTargets();
+  closeAddMembersModal();
+  toast(
+    'Added ' +
+      extraIds.length +
+      ' ' +
+      (extraIds.length === 1 ? 'person' : 'people') +
+      ' to this view.'
+  );
 }
 
 /* ═══ AUTH ════════════════════════════════════════════════ */
@@ -8216,6 +8362,12 @@ if (exportTabBtn) {
       console.error(e);
       toast('Failed to export — ' + humanError(e.message));
     }
+  });
+}
+
+if (addMembersBtn) {
+  addMembersBtn.addEventListener('click', () => {
+    openAddMembersModal();
   });
 }
 
