@@ -10,7 +10,6 @@ try { if (document.body) document.body.classList.add('loaded'); } catch (_) {}
   } catch (_) {}
 })();
 if (document.body) document.body.classList.add('loaded');
-(function(){ var b=document.getElementById('user-btn'); if(b)b.addEventListener('click',function(){ var m=document.getElementById('user-modal-backdrop'); if(m){ m.style.display='block'; m.setAttribute('aria-hidden','false'); } var c=document.getElementById('channel-modal-backdrop'); if(c)c.style.display='none'; }); var x=document.getElementById('user-close'); if(x)x.addEventListener('click',function(){ var m=document.getElementById('user-modal-backdrop'); if(m){ m.style.display='none'; m.setAttribute('aria-hidden','true'); } }); var m=document.getElementById('user-modal-backdrop'); if(m)m.addEventListener('click',function(e){ if(e.target===m){ m.style.display='none'; m.setAttribute('aria-hidden','true'); } }); })();
 /* INOUT – shared state, Supabase client, DOM refs (load first) */
 const SUPABASE_URL  = 'https://tfmbqiwxfgrwtjvoqomf.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_QzPgZBu5XwFXmnvD-DYCRw_EWFuhLn_';
@@ -245,6 +244,26 @@ const cmCreate   = document.getElementById('cm-create');
 const logActionBtn   = document.getElementById('log-action-btn');
 const logDropupPanel = document.getElementById('log-dropup-panel');
 const logDropupBody  = document.getElementById('log-dropup-body');
+
+function isUserModalBackdropOpen() {
+  try {
+    if (!umBackdrop) return false;
+    var d = umBackdrop.style.display;
+    return d === 'flex' || d === 'block';
+  } catch (_) {
+    return false;
+  }
+}
+function showUserModalBackdrop() {
+  if (!umBackdrop) return;
+  umBackdrop.style.display = 'flex';
+  umBackdrop.setAttribute('aria-hidden', 'false');
+}
+function hideUserModalBackdrop() {
+  if (!umBackdrop) return;
+  umBackdrop.style.display = 'none';
+  umBackdrop.setAttribute('aria-hidden', 'true');
+}
 
 // Global interaction modes (kept separate from views/objects).
 const Modes = {
