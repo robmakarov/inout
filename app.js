@@ -1973,7 +1973,7 @@ let latestClipboardText = '';
 let inputStateSub = null;
 let inputSaveToDbTimer = null;
 let inputSlotsSaveToDbTimer = null;
-const INPUT_SAVE_DEBOUNCE_MS = 120;
+const INPUT_SAVE_DEBOUNCE_MS = 75;
 let lastPrimaryInputEditAt = 0;
 let lastSlotsEditAt = 0;
 const INPUT_SYNC_MAX_LENGTH = 10000;
@@ -2023,10 +2023,11 @@ function normalizeSlot(s) {
   return { id: id, channel: ch, value: capSyncText(val) };
 }
 
-function saveInputSlots() {
+function saveInputSlots(opts) {
+  opts = opts || {};
   try {
     localStorage.setItem(INPUT_SLOTS_KEY, JSON.stringify(inputSlots));
-    if (getSyncInputPref()) scheduleSaveSlotsToDb();
+    if (!opts.skipRemote && getSyncInputPref()) scheduleSaveSlotsToDb();
   } catch (_) {}
 }
 
@@ -4099,7 +4100,11 @@ function onInsertForChannel(ch, msg) {
   if (!realtimeInsertBuffer.has(ch)) realtimeInsertBuffer.set(ch, []);
   realtimeInsertBuffer.get(ch).push(msg);
   if (!realtimeInsertFlushTimer) {
-    realtimeInsertFlushTimer = setTimeout(flushRealtimeInsertBuffer, 0);
+    realtimeInsertFlushTimer = 1;
+    queueMicrotask(function() {
+      realtimeInsertFlushTimer = null;
+      flushRealtimeInsertBuffer();
+    });
   }
 }
 
@@ -4369,6 +4374,10 @@ function setupInputStateRealtime() {
         var remoteText = capSyncText(row.text);
         var remoteAt = row.updated_at ? new Date(row.updated_at).getTime() : 0;
         if (!Number.isFinite(remoteAt)) remoteAt = 0;
+        if (remoteText === input.value) {
+          markInputRealtimeRowApplied(row);
+          return;
+        }
         var merged = mergeInputText(input.value, remoteText, lastPrimaryInputEditAt, remoteAt);
         if (merged !== input.value) {
           input.value = merged;
@@ -4410,7 +4419,7 @@ async function loadInputFromDbForChannel(ch) {
     autoResize();
     sendBtn.disabled = !text.trim();
     updateClearInputBtn();
-    saveInputGlobal();
+    saveInputGlobal({ skipRemote: true });
   } catch (_) {}
 }
 
@@ -4435,6 +4444,11 @@ async function loadSlotsFromDb() {
 }
 
 async function restoreInputFromDb() {
+  try {
+    inoutChannelInputQuietUntil = Math.max(inoutChannelInputQuietUntil, Date.now() + 1400);
+  } catch (_) {}
+  lastPrimaryInputEditAt = 0;
+  lastSlotsEditAt = 0;
   const slotsApplied = await loadSlotsFromDb();
   if (slotsApplied && composerSlotsContainer && typeof renderComposerSlots === 'function') {
     renderComposerSlots();
@@ -4442,6 +4456,9 @@ async function restoreInputFromDb() {
     if (typeof attachInputListeners === 'function') attachInputListeners();
   }
   await loadInputFromDbForChannel(currentChannel);
+  try {
+    inoutChannelInputQuietUntil = Math.max(inoutChannelInputQuietUntil, Date.now() + 550);
+  } catch (_) {}
 }
 
 /* ═══ REALTIME: view object editing (everyone) vs composer input (same intent as before) ═══ */
@@ -5961,12 +5978,13 @@ function restoreInputGlobal() {
   } catch (_) {}
 }
 
-function saveInputGlobal() {
+function saveInputGlobal(opts) {
+  opts = opts || {};
   if (!input) return;
   try {
     if (inputSlots.length > 0) {
       inputSlots[0].value = input.value || '';
-      saveInputSlots();
+      saveInputSlots(opts);
     } else {
       localStorage.setItem(INPUT_STATE_KEY, input.value || '');
     }
@@ -7806,7 +7824,7 @@ function schedulePersonalWorkspacePersist() {
   _personalWorkspacePersistTimer = setTimeout(function() {
     _personalWorkspacePersistTimer = null;
     persistPersonalWorkspaceToServer();
-  }, 200);
+  }, 120);
 }
 if (typeof window !== 'undefined') window.schedulePersonalWorkspacePersist = schedulePersonalWorkspacePersist;
 
@@ -9505,7 +9523,7 @@ function onDraftSelectionChangeDoc() {
   _draftSelChangeTimer = setTimeout(function() {
     _draftSelChangeTimer = null;
     broadcastDraft();
-  }, 80);
+  }, 45);
 }
 function attachInputListeners() {
   if (_inputListenersAttached) return;
