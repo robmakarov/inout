@@ -2069,8 +2069,6 @@ const INPUT_SAVE_DEBOUNCE_MS = 45;
 let lastPrimaryInputEditAt = 0;
 let lastSlotsEditAt = 0;
 const INPUT_SYNC_MAX_LENGTH = 10000;
-/** Ignore short strings when detecting composer text that duplicates a feed row (avoids false clears). */
-const INPUT_SYNC_FEED_ECHO_MIN_LEN = 28;
 function capSyncText(s) {
   if (s == null) return '';
   var t = String(s);
@@ -2255,7 +2253,8 @@ function renderComposerSlots() {
         saveInputGlobal();
         updateClearInputBtn();
         scheduleSaveInputToDb();
-        if (sendBtn) sendBtn.disabled = !val.trim();
+        var inObjEdit = editingObjectId != null || (editingObjectIds && editingObjectIds.size > 0);
+        if (sendBtn) sendBtn.disabled = inObjEdit ? false : !val.trim();
         if (editingObjectId != null) {
           if (editingObjectIds && editingObjectIds.size > 1) applyPrimaryEditToMultiEdit(val);
           else if (editingObjectTextMap && editingObjectId != null) { editingObjectTextMap[editingObjectId] = val; }
@@ -3372,7 +3371,7 @@ document.addEventListener('keydown', e => {
     updateEditingRowFromInput();
     saveInputGlobal();
     updateClearInputBtn();
-    sendBtn.disabled = !input.value.trim();
+    if (sendBtn) sendBtn.disabled = false;
     broadcastDraft(input.value);
     return;
   }
@@ -3384,7 +3383,7 @@ document.addEventListener('keydown', e => {
     updateEditingRowFromInput();
     saveInputGlobal();
     updateClearInputBtn();
-    sendBtn.disabled = !input.value.trim();
+    if (sendBtn) sendBtn.disabled = false;
     broadcastDraft(input.value);
     return;
   }
@@ -4016,9 +4015,19 @@ function onUpdateForChannel(ch, row) {
   const text = row.text != null ? row.text : (row.Text != null ? row.Text : '');
   if (id === editingObjectId) {
     originalEditTextForCancel = null;
+    originalEditTextForCancelMap = null;
+    editingObjectTextMap = null;
+    editingObjectIds = null;
     editingObjectId = null;
     try { localStorage.removeItem(WAS_EDITING_KEY); } catch (_) {}
     if (input) input.placeholder = 'Add object…';
+    modeState.editing.active = false;
+    modeState.editing.primaryId = null;
+    modeState.editing.ids = null;
+    if (currentMode === Modes.EDIT) {
+      currentMode = selectMode ? Modes.SELECT : Modes.NORMAL;
+      document.body.dataset.mode = currentMode;
+    }
   }
   // apply update in all views showing this channel
   let anyUpdated = false;
@@ -4633,45 +4642,6 @@ function setupInputStateRealtime() {
   } catch (_) {}
 }
 
-function normalizeComposerEchoCheck(s) {
-  return String(s || '').replace(/\s+/g, ' ').trim();
-}
-
-/** When sync is on, clear composer text that matches a visible primary-feed row (stale object body echoed in user_input_state). */
-async function stripComposerIfEchoesFeedEntryWhenSyncOn() {
-  if (!getSyncInputPref() || !currentUser || !input || editingObjectId != null) return;
-  if (!feedInner) return;
-  const raw = String(input.value || '');
-  const normalized = normalizeComposerEchoCheck(raw);
-  if (normalized.length < INPUT_SYNC_FEED_ECHO_MIN_LEN) return;
-  var match = false;
-  try {
-    feedInner.querySelectorAll('.obj').forEach(function(row) {
-      if (match) return;
-      const te = row.querySelector('.obj-text');
-      if (!te) return;
-      var plain = te.textContent || '';
-      const badge = te.querySelector('.obj-remote-edit-badge');
-      if (badge && badge.textContent) plain = plain.slice(0, -badge.textContent.length);
-      if (normalizeComposerEchoCheck(plain) === normalized) match = true;
-    });
-  } catch (_) {}
-  if (!match) return;
-  input.value = '';
-  if (editingObjectId == null) input.placeholder = 'Add object…';
-  if (primarySlotAutoTarget && inputSlots && inputSlots.length > 0 && inputSlots[0]) {
-    inputSlots[0].value = '';
-    try { localStorage.setItem(INPUT_SLOTS_KEY, JSON.stringify(inputSlots)); } catch (_) {}
-  }
-  if (typeof autoResize === 'function') autoResize();
-  if (sendBtn) sendBtn.disabled = true;
-  if (typeof updateClearInputBtn === 'function') updateClearInputBtn();
-  saveInputGlobal({ skipRemote: true });
-  try {
-    await saveInputToDb();
-  } catch (_) {}
-}
-
 async function loadInputFromDbForChannel(ch) {
   if (!currentUser || !sb || !sb.from || !getSyncInputPref() || !input) return;
   const channel = ch || currentChannel || 'main';
@@ -4755,11 +4725,6 @@ async function restoreInputFromDb() {
     /* Longer tail: delayed postgres_changes + slot/channel races were merging incremental rows and looked like the composer “typing itself” after refresh. */
     inoutChannelInputQuietUntil = Math.max(inoutChannelInputQuietUntil, Date.now() + 2800);
   } catch (_) {}
-  try {
-    await stripComposerIfEchoesFeedEntryWhenSyncOn();
-  } catch (e) {
-    if (typeof console !== 'undefined' && console.error) console.error('stripComposerIfEchoesFeedEntryWhenSyncOn', e);
-  }
 }
 
 /* ═══ REALTIME: view object editing (everyone) vs composer input (same intent as before) ═══ */
@@ -7238,7 +7203,7 @@ function createObjectRow(obj, isNew, options) {
     try { localStorage.setItem(WAS_EDITING_KEY, '1'); } catch (_) {}
     input.placeholder = idsToEdit.size > 1 ? 'Editing ' + idsToEdit.size + ' objects…' : 'Editing object…';
     autoResize();
-    sendBtn.disabled = !input.value.trim();
+    sendBtn.disabled = false;
     updateClearInputBtn();
     saveInputGlobal();
     updateEditingRowHighlight();
@@ -9396,13 +9361,6 @@ async function reloadForUser() {
     });
   });
   applyFieldPrefsToObjects();
-  if (getSyncInputPref() && currentUser && input) {
-    try {
-      await stripComposerIfEchoesFeedEntryWhenSyncOn();
-    } catch (e) {
-      if (typeof console !== 'undefined' && console.error) console.error('stripComposerIfEchoesFeedEntryWhenSyncOn', e);
-    }
-  }
 }
 
 function clearObjects() {
@@ -9544,26 +9502,32 @@ function cleanupAuthHash() {
 
 /* ═══ SEND ════════════════════════════════════════════════ */
 async function send() {
-  const text = input.value.trim();
-  if (!text) return;
-
-  await sendText(text);
+  if (!input) return;
+  const savingObjectEdit =
+    editingObjectId != null || (editingObjectIds != null && editingObjectIds.size > 0);
+  if (!savingObjectEdit && !input.value.trim()) return;
+  await sendText(input.value || '');
 }
 
 async function sendText(text, options) {
-  const trimmed = (text || '').trim();
-  if (!trimmed) return;
   const targetChannel = (options && options.channel != null) ? options.channel : currentChannel;
+  const idsToSave = editingObjectIds && editingObjectIds.size
+    ? Array.from(editingObjectIds)
+    : (editingObjectId != null ? [editingObjectId] : []);
+  const trimmedNewPost = (text || '').trim();
+  if (idsToSave.length === 0 && !trimmedNewPost) return;
 
   if (input) { input.disabled = true; }
   if (sendBtn) sendBtn.disabled = true;
 
   try {
-  const idsToSave = editingObjectIds && editingObjectIds.size
-    ? Array.from(editingObjectIds)
-    : (editingObjectId != null ? [editingObjectId] : []);
   if (idsToSave.length > 0) {
-    const trimmedPerId = idsToSave.map(id => (editingObjectTextMap && editingObjectTextMap[id] != null) ? String(editingObjectTextMap[id]).trim() : trimmed);
+    const trimmedPerId = idsToSave.map(function(id) {
+      if (editingObjectTextMap && editingObjectTextMap[id] != null) {
+        return String(editingObjectTextMap[id]).trim();
+      }
+      return trimmedNewPost;
+    });
     if (!shouldUseServerForObjects()) {
       try {
         const byView = await getLocalObjectByViewMap();
@@ -9579,7 +9543,7 @@ async function sendText(text, options) {
         }
         byView[ch] = list;
         await saveLocalObjectByViewMap(byView);
-        idsToSave.forEach((id, i) => updateObjectRowText(id, trimmedPerId[i] || trimmed));
+        idsToSave.forEach((id, i) => updateObjectRowText(id, trimmedPerId[i] || trimmedNewPost));
         originalEditTextForCancel = null;
         originalEditTextForCancelMap = null;
         editingObjectTextMap = null;
@@ -9644,15 +9608,28 @@ async function sendText(text, options) {
       console.error(lastError);
       toast('Failed to update — ' + humanError(lastError.message));
       sendBtn.disabled = false;
+      const eid = editingObjectId;
+      originalEditTextForCancel = null;
+      originalEditTextForCancelMap = null;
+      editingObjectTextMap = null;
+      editingObjectIds = null;
+      editingObjectId = null;
+      if (eid != null) broadcastViewEditingEnd(eid);
+      try {
+        await loadObjects();
+      } catch (e) {
+        console.error(e);
+      }
+      reactivateInputMode({ clearInput: true });
       return;
     }
     if (befores.length) {
       const afterById = {};
-      idsToSave.forEach((id, i) => { afterById[id] = trimmedPerId[i] || trimmed; });
-      pushUndo({ type: 'edit', entries: befores.map(b => ({ id: b.id, beforeText: b.text, afterText: afterById[b.id] != null ? afterById[b.id] : trimmed })) });
+      idsToSave.forEach((id, i) => { afterById[id] = trimmedPerId[i] || trimmedNewPost; });
+      pushUndo({ type: 'edit', entries: befores.map(b => ({ id: b.id, beforeText: b.text, afterText: afterById[b.id] != null ? afterById[b.id] : trimmedNewPost })) });
       befores.forEach(b => logAction('edit', { id: b.id }));
     }
-    idsToSave.forEach((id, i) => updateObjectRowText(id, trimmedPerId[i] || trimmed));
+    idsToSave.forEach((id, i) => updateObjectRowText(id, trimmedPerId[i] || trimmedNewPost));
     originalEditTextForCancel = null;
     originalEditTextForCancelMap = null;
     editingObjectTextMap = null;
@@ -9667,7 +9644,7 @@ async function sendText(text, options) {
   if (shouldUseServerForObjects() && currentUser && sb && sb.from) {
     // Signed-in path: insert into Supabase as before.
     const payload = {
-      text: trimmed,
+      text: trimmedNewPost,
       user_id: currentUser.id,
       channel: targetChannel,
     };
@@ -9688,7 +9665,7 @@ async function sendText(text, options) {
     const res = await sb
       .from(OBJECTS_TABLE)
       .insert({
-        text: trimmed,
+        text: trimmedNewPost,
         temp_session_id: tempSessionId,
       channel: targetChannel,
     })
@@ -9702,7 +9679,7 @@ async function sendText(text, options) {
     data = {
       id: Date.now(),
       created_at: nowIso,
-      text: trimmed,
+      text: trimmedNewPost,
       channel: targetChannel,
       user_id: getDeviceId(),
       author_name: null,
@@ -9785,7 +9762,8 @@ function attachInputListeners() {
     input.addEventListener('input', () => {
       lastPrimaryInputEditAt = Date.now();
       autoResize();
-      if (sendBtn) sendBtn.disabled = !input.value.trim();
+      var inObjEdit = editingObjectId != null || (editingObjectIds && editingObjectIds.size > 0);
+      if (sendBtn) sendBtn.disabled = inObjEdit ? false : !input.value.trim();
       saveInputGlobal();
       updateClearInputBtn();
       scheduleSaveInputToDb();
