@@ -60,24 +60,26 @@
 .anim-slide-down{ animation:anim-slide-down var(--anim-duration-normal) var(--anim-ease-out) both; }
 .anim-slide-in-right{ animation:anim-slide-in-right 0.18s var(--anim-ease-out) both; }
 
-html,body{
+html{
   height:100%;
   margin:0;
-  /* none on the document broke nested overflow scrolling on some WebKit / touch + trackpad combos */
-  overscroll-behavior:auto;
+  overflow:hidden;
 }
 
 body{
+  height:100%;
+  min-height:100vh;
+  min-height:100dvh;
+  margin:0;
   background:var(--bg);
   color:var(--text);
   font-family:var(--mono);
   font-size:13px;
   line-height:1.6;
   -webkit-font-smoothing:antialiased;
-  min-height:100vh;
   overflow:hidden;
-  /* default: do not restrict — pan-y on ancestors was blocking wheel/touch reaching #feed */
   touch-action:auto;
+  overscroll-behavior-y:auto;
 }
 
 /* feed scrollbars: dark tab from under right edge, visible on hover */
@@ -128,7 +130,7 @@ header,
 }
 /* Multiview: rail (fixed left) + views; rail stays same when switching view */
 #multiview{
-  flex:1;
+  flex:1 1 0%;
   display:flex;
   flex-direction:row;
   min-height:0;
@@ -202,9 +204,11 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
 .multiview-views > .visual .feed{
   flex:1 1 0%;
   min-height:0;
+  min-width:0;
   overflow-y:auto;
   -webkit-overflow-scrolling:touch;
-  touch-action:auto;
+  touch-action:pan-y;
+  overscroll-behavior:contain;
 }
 .multiview-views .view:only-child{
   flex:1 1 100%;
@@ -322,6 +326,7 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
 }
 #input-area{
   pointer-events:auto;
+  touch-action:auto;
 }
 
 /* ── APP BODY: stuck to header (below it) and all sides; fills viewport, resizes with browser ── */
@@ -332,11 +337,14 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
   right:0;
   bottom:0;
   width:100%;
+  max-height:calc(100vh - var(--header-height));
+  max-height:calc(100dvh - var(--header-height));
   display:flex;
   flex-direction:column;
   overflow:hidden;
   background:var(--bg);
   touch-action:auto;
+  pointer-events:auto;
 }
 .frames-zone{
   flex:1 1 0;
@@ -344,6 +352,7 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
   display:flex;
   flex-direction:column;
   overflow:hidden;
+  pointer-events:auto;
 }
 .frame{
   flex:0 0 auto;
@@ -400,6 +409,9 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
   overflow-y:hidden;
   scrollbar-width:none;
   -ms-overflow-style:none;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-x pan-y;
+  overscroll-behavior-x:contain;
 }
 #nav #tabs::-webkit-scrollbar{ display:none; }
 
@@ -747,11 +759,14 @@ header{
   position:fixed;
   inset:0;
   height:100%;
+  height:100dvh;
   background:rgba(0,0,0,0.62);
   display:none;
   z-index:2000; /* above header, nav, multiview panels */
   pointer-events:auto;
-  touch-action:auto;
+  touch-action:none;
+  overflow:hidden;
+  overscroll-behavior:contain;
 }
 
 #user-modal{
@@ -761,19 +776,21 @@ header{
   max-width:92vw;
   height:100%;
   max-height:100%;
+  max-height:100dvh;
   box-sizing:border-box;
   background:var(--bg2);
   border-left:1px solid var(--line2);
   box-shadow:-24px 0 60px rgba(0,0,0,0.55);
   padding:14px 16px;
+  padding-bottom:calc(14px + env(safe-area-inset-bottom, 0px));
   display:block;
   animation:drawerIn .18s ease both;
   pointer-events:auto;
   overflow-y:auto;
   overflow-x:hidden;
   -webkit-overflow-scrolling:touch;
-  touch-action:auto;
-  overscroll-behavior:auto;
+  touch-action:pan-y;
+  overscroll-behavior:contain;
 }
 #user-modal > * + *{
   margin-top:12px;
@@ -1210,13 +1227,13 @@ header{
   z-index:1;
   flex:1 1 0%;
   min-height:0;
+  min-width:0;
   padding:0;
   overflow-y:auto;
   overflow-x:hidden;
   -webkit-overflow-scrolling:touch;
-  /* auto: reliable wheel/trackpad; avoids pan-y + max-height flex bugs that only scrolled a few px */
-  touch-action:auto;
-  overscroll-behavior:auto;
+  touch-action:pan-y;
+  overscroll-behavior:contain;
   outline:none;
   contain:none;
 }
@@ -2905,7 +2922,8 @@ body.secret-show-grips .frame-grip{
   }
   body{
     overflow:hidden;
-    overscroll-behavior:none;
+    /* none here broke nested #feed / drawer scrolling on iOS WebKit and some Android WebViews */
+    overscroll-behavior:auto;
   }
   #feed{
     scrollbar-width:none;
