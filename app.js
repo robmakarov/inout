@@ -1495,6 +1495,19 @@ function rememberWorkspacePushNonce(n) {
 var lastAppliedWorkspaceRev = 0;
 /** Dedupe merge-only workspace applies (realtime / broadcast) without blocking full hydrate by rev. */
 var lastMergedWorkspacePushNonce = null;
+/** Drop merge payloads older than the last applied workspace row (out-of-order realtime). */
+var lastMergedWorkspaceRevMs = 0;
+/** Serialize mergeMultiview applies: postgres + broadcast can arrive together and interleave switchChannel / secondaries. */
+var _wsMergeMutex = Promise.resolve();
+async function acquireWsMergeLock() {
+  var prev = _wsMergeMutex;
+  var release;
+  _wsMergeMutex = new Promise(function(res) {
+    release = res;
+  });
+  await prev;
+  return release;
+}
 /** True while applying saved workspace on load — lets switchChannel reload data when vars already match. */
 var inoutHydratingWorkspace = false;
 /** Drop input_state realtime merges for a short window after switching views (stale merge + race with DB load). */
@@ -7759,6 +7772,12 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
   const skipApplyFocusedChannel = !!opts.skipApplyFocusedChannel;
   if (!cfg || typeof cfg !== 'object') return;
   if (mergeMultiview) {
+    var releaseWsMerge = await acquireWsMergeLock();
+    try {
+    var revMerge = Number(cfg._wsRev);
+    if (Number.isFinite(revMerge) && lastMergedWorkspaceRevMs > 0 && revMerge < lastMergedWorkspaceRevMs) {
+      return;
+    }
     var nonceM = cfg._wsPushNonce;
     /* Same nonce = duplicate postgres/broadcast delivery. Never re-run focusedChannel (stale payload could revert a tab the user already switched locally). */
     if (
@@ -7781,6 +7800,31 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
           applyWorkspaceFeedScrollToDom();
         } catch (_) {}
       }
+      /* Same payload as first delivery; if tab never matched (race / partial apply), align now. */
+      if (
+        !skipApplyFocusedChannel &&
+        typeof cfg.focusedChannel === 'string' &&
+        cfg.focusedChannel.trim()
+      ) {
+        const wantD = cfg.focusedChannel.trim();
+        if (viewNames.includes(wantD)) {
+          const slot0d = inputSlots && inputSlots[0];
+          const slotMismatchD =
+            primarySlotAutoTarget && slot0d && String(slot0d.channel || '') !== wantD;
+          const needSwitchD = wantD !== currentView || wantD !== currentChannel || slotMismatchD;
+          if (needSwitchD) {
+            applyingWorkspaceFocusFromRemote = true;
+            try {
+              await switchChannel(wantD);
+            } catch (e) {
+              console.error('apply focusedChannel (deduped nonce)', e);
+            } finally {
+              applyingWorkspaceFocusFromRemote = false;
+            }
+          }
+        }
+      }
+      if (Number.isFinite(revMerge) && revMerge > lastMergedWorkspaceRevMs) lastMergedWorkspaceRevMs = revMerge;
       return;
     }
     applyingPersonalWorkspaceFromRemote = true;
@@ -7851,10 +7895,14 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
         } catch (_) {}
       }
       if (nonceM && workspaceMergeApplyOk) lastMergedWorkspacePushNonce = String(nonceM);
+      if (Number.isFinite(revMerge) && revMerge > lastMergedWorkspaceRevMs) lastMergedWorkspaceRevMs = revMerge;
     } finally {
       applyingPersonalWorkspaceFromRemote = false;
     }
     return;
+    } finally {
+      releaseWsMerge();
+    }
   }
   var revCk = Number(cfg._wsRev);
   if (Number.isFinite(revCk)) {
@@ -7992,8 +8040,8 @@ function notifyWorkspaceChromeChanged() {
 }
 
 function flushPersonalWorkspacePersist() {
-  /* Block only while applying a remote workspace-driven tab switch (legacy); local tab taps must still persist. */
-  if (applyingPersonalWorkspaceFromRemote && applyingWorkspaceFocusFromRemote) return Promise.resolve();
+  /* Never push workspace while merging remote config — partial DOM (e.g. mid–open-secondary) would clobber focusedChannel. */
+  if (applyingPersonalWorkspaceFromRemote) return Promise.resolve();
   if (!currentUser || !sb) return Promise.resolve();
   if (_personalWorkspacePersistTimer) {
     clearTimeout(_personalWorkspacePersistTimer);
@@ -8003,7 +8051,7 @@ function flushPersonalWorkspacePersist() {
 }
 
 async function persistPersonalWorkspaceToServer() {
-  if (applyingPersonalWorkspaceFromRemote && applyingWorkspaceFocusFromRemote) return;
+  if (applyingPersonalWorkspaceFromRemote) return;
   if (!currentUser || !sb) return;
   try {
     const slice = gatherPersonalWorkspaceStateForSave();
@@ -8072,8 +8120,20 @@ async function hydrateWorkspaceOpenViewsForSignedInUser() {
     try {
       await applyPersonalWorkspaceStateFromServer(cfgFull, { skipApplyFocusedChannel: true });
       try {
-        const saved = localStorage.getItem(CURRENT_VIEW_KEY);
-        if (saved && viewNames.includes(saved)) await switchChannel(saved);
+        var seedRev = Number(cfgFull._wsRev);
+        if (Number.isFinite(seedRev) && seedRev > lastMergedWorkspaceRevMs) lastMergedWorkspaceRevMs = seedRev;
+      } catch (_) {}
+      try {
+        var wantFocus = null;
+        if (typeof cfgFull.focusedChannel === 'string' && cfgFull.focusedChannel.trim()) {
+          var wf = cfgFull.focusedChannel.trim();
+          if (viewNames.includes(wf)) wantFocus = wf;
+        }
+        if (!wantFocus) {
+          var savedCh = localStorage.getItem(CURRENT_VIEW_KEY);
+          if (savedCh && viewNames.includes(savedCh)) wantFocus = savedCh;
+        }
+        if (wantFocus) await switchChannel(wantFocus);
       } catch (e) {
         console.error('hydrate restore tab from localStorage', e);
       }
@@ -10765,33 +10825,40 @@ function autoResize(el) {
 var scrollSaveTimer = null;
 
 /**
- * Desktop / trackpad: wheel events that land on .view chrome (live-editing bar, gaps, etc.) still
- * scroll that pane’s .feed. Capture phase on .multiview-views so we run before children; handles
- * deltaMode (line/page) which the old per-.visual proxy mishandled.
+ * Desktop / trackpad: forward wheel to the correct .feed when the hit target isn’t scrolling (chrome,
+ * gaps, or broken flex scrollport). Listener on #multiview (covers full column) in capture phase.
  */
 function bindMultiviewWheelScrollCapture() {
-  var root = document.querySelector('.multiview-views');
-  if (!root || root.dataset.inoutWheelCapture === '1') return;
-  root.dataset.inoutWheelCapture = '1';
-  root.addEventListener(
+  var mv = document.getElementById('multiview');
+  var viewsRoot = document.querySelector('.multiview-views');
+  if (!mv || mv.dataset.inoutWheelCapture === '1') return;
+  mv.dataset.inoutWheelCapture = '1';
+  function wheelDeltaY(e, refSize) {
+    var dy = e.deltaY;
+    if (e.deltaMode === 1) dy *= 16;
+    else if (e.deltaMode === 2) dy *= Math.max(100, (refSize || 400) * 0.92);
+    return dy;
+  }
+  mv.addEventListener(
     'wheel',
     function(e) {
+      if (e.defaultPrevented) return;
+      if (e.ctrlKey || e.metaKey) return;
       var t = e.target;
       if (t && t.nodeType === 3) t = t.parentElement;
       if (!t || !t.closest) return;
       if (t.closest('#user-modal-backdrop, #user-modal, #channel-modal-backdrop, #qr-modal-backdrop'))
         return;
       if (t.closest('.manage-bar-dropdown, #log-dropup-panel.open')) return;
-      var view = t.closest('.view');
-      if (!view || !root.contains(view)) return;
+      if (t.closest('#view-pinned-rail')) return;
+      var view = t.closest('.multiview-views .view');
+      if (!view || !viewsRoot || !viewsRoot.contains(view)) return;
       var feed = view.querySelector('.feed');
       if (!feed) return;
       if (feed.contains(t)) return;
       var max = feed.scrollHeight - feed.clientHeight;
       if (max <= 0) return;
-      var dy = e.deltaY;
-      if (e.deltaMode === 1) dy *= 16;
-      else if (e.deltaMode === 2) dy *= Math.max(100, feed.clientHeight * 0.9);
+      var dy = wheelDeltaY(e, feed.clientHeight);
       e.preventDefault();
       feed.scrollTop = Math.max(0, Math.min(max, feed.scrollTop + dy));
     },
