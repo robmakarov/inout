@@ -33,6 +33,9 @@ try {
   }
 } catch(e) {}
 
+/* Declared before any setup IIFE that may call notifyWorkspaceChromeChanged → schedulePersonalWorkspacePersist */
+let currentUser = null;
+
 /* Run OAuth callback (code exchange) as soon as client exists so URL is still intact */
 var _oauthCallbackPromise = null;
 if (sb && sb.auth && typeof location !== 'undefined' && location.search && location.search.includes('code=')) {
@@ -1340,7 +1343,6 @@ let inputSyncTabInstanceId;
 function getInputStateDeviceId() {
   return String(myId) + ':' + String(inputSyncTabInstanceId || 'tab');
 }
-let currentUser    = null;
 let currentView    = 'main';
 let currentChannel = currentView; // temporary alias while migrating off "channel"
 let viewNames      = ['main'];
