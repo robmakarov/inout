@@ -2571,19 +2571,7 @@ function logError(message) {
     }
   }
   updateLogBadge();
-  if (currentUser) {
-    try {
-      sb.from('action_log').insert({
-        id: entry.id,
-        user_id: currentUser.id,
-        device_id: myId,
-        type: 'error',
-        action: 'error',
-        details: {},
-        message: entry.message,
-      }).then(() => {}).catch(() => {});
-    } catch (_) {}
-  }
+  /* Remote action_log is optional (same as logAction); skip insert to avoid 404 when table missing. */
 }
 
 function updateLogBadge() {
@@ -9504,8 +9492,14 @@ async function sendText(text, options) {
     for (let i = 0; i < idsToSave.length; i++) {
       const id = idsToSave[i];
       const textToSave = trimmedPerId[i];
+      const beforeRow = befores.find(function(b) {
+        return b && Number(b.id) === Number(id);
+      });
+      const rowChannel = String(
+        beforeRow && beforeRow.channel != null ? beforeRow.channel : currentChannel || 'main'
+      );
       const editPayload = {
-        p_channel: currentChannel,
+        p_channel: rowChannel,
         p_entry_id: id,
         p_action: 'edit',
         p_payload: { text: textToSave },
