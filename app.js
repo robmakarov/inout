@@ -2204,6 +2204,8 @@ function renderComposerSlots() {
       if (sBtn) sBtn.disabled = true;
       clearBtn.disabled = true;
       if (isPrimary) {
+        lastPrimaryInputEditAt = 0;
+        lastSlotsEditAt = 0;
         saveInputGlobal();
         updateClearInputBtn();
         broadcastDraft('');
@@ -2250,8 +2252,11 @@ async function sendFromSlot(index) {
   const sendBtnEl = slotRow ? slotRow.querySelector('.composer-send') : null;
   if (textarea) textarea.disabled = true;
   if (sendBtnEl) sendBtnEl.disabled = true;
-  await sendText(text, { channel: slot.channel });
-  if (textarea) textarea.disabled = false;
+  try {
+    await sendText(text, { channel: slot.channel });
+  } finally {
+    if (textarea) textarea.disabled = false;
+  }
   if (sendBtnEl) sendBtnEl.disabled = true;
   slot.value = '';
   if (textarea) textarea.value = '';
@@ -2735,6 +2740,9 @@ function reactivateInputMode(opts) {
       input.value = '';
       saveInputGlobal();
       broadcastDraft('');
+      /* Cleared composer = no in-flight local typing to protect; allow cross-device slot/input_state merges immediately. */
+      lastPrimaryInputEditAt = 0;
+      lastSlotsEditAt = 0;
     }
     autoResize();
     sendBtn.disabled = !input.value.trim();
@@ -9454,6 +9462,7 @@ async function sendText(text, options) {
   if (input) { input.disabled = true; }
   if (sendBtn) sendBtn.disabled = true;
 
+  try {
   const idsToSave = editingObjectIds && editingObjectIds.size
     ? Array.from(editingObjectIds)
     : (editingObjectId != null ? [editingObjectId] : []);
@@ -9630,6 +9639,10 @@ async function sendText(text, options) {
     reactivateInputMode({ clearInput: targetChannel === currentChannel });
   } else {
     if (sendBtn) sendBtn.disabled = false;
+  }
+  } finally {
+    if (input) input.disabled = false;
+    if (sendBtn && input) sendBtn.disabled = !input.value.trim();
   }
 }
 
@@ -9816,6 +9829,9 @@ if (clipboardPasteBtn) {
   clipboardPasteBtn.addEventListener('click', () => {
     if (!latestClipboardText) return;
     input.value = latestClipboardText;
+    try {
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    } catch (_) {}
     autoResize();
     sendBtn.disabled = !input.value.trim();
     updateClearInputBtn();
@@ -9858,6 +9874,8 @@ if (clearInputBtn) {
   clearInputBtn.addEventListener('click', () => {
     if (!input) return;
     input.value = '';
+    lastPrimaryInputEditAt = 0;
+    lastSlotsEditAt = 0;
     autoResize();
     saveInputGlobal();
     updateClearInputBtn();
