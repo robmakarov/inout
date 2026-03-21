@@ -6478,7 +6478,6 @@ function createObjectHeaderRow(maxValueCols) {
   sender.textContent = 'Author';
   const valuesWrap = document.createElement('div');
   valuesWrap.className = 'obj-values-wrap';
-  valuesWrap.style.display = 'contents';
   for (var vi = 0; vi < n; vi++) {
     const h = document.createElement('div');
     h.className = 'obj-text obj-value-cell obj-header-value-cell';
@@ -7450,7 +7449,6 @@ function createObjectRow(obj, isNew, options) {
   if (valueParts.length > valueColCount) valueParts = valueParts.slice(0, valueColCount);
   const valuesWrap = document.createElement('div');
   valuesWrap.className = 'obj-values-wrap';
-  valuesWrap.style.display = 'contents';
   for (var _vci = 0; _vci < valueColCount; _vci++) {
     const cell = document.createElement('div');
     cell.className = 'obj-text obj-value-cell';

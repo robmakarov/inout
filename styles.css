@@ -400,20 +400,21 @@ header{
   box-sizing:border-box;
 }
 
-/* ── TOP BAR (manage): hidden for now (restore by removing rules below) ── */
+/* ── TOP BAR (manage): view actions (⋮) + dropdown ── */
 #manage-bar{
-  display:none !important;
-  height:0 !important;
-  min-height:0 !important;
-  padding:0 !important;
-  margin:0 !important;
-  border:none !important;
-  overflow:hidden !important;
-  visibility:hidden !important;
-  pointer-events:none !important;
-}
-#manage-bar.manage-bar-open .manage-bar-dropdown{
-  display:none !important;
+  position:relative;
+  flex-shrink:0;
+  width:100%;
+  min-width:0;
+  box-sizing:border-box;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  padding:6px max(20px, var(--safe-right)) 6px max(20px, var(--safe-left));
+  border-bottom:1px solid var(--line2);
+  background:var(--bg2);
+  min-height:40px;
+  gap:8px;
 }
 .manage-bar-trigger{
   border:1px solid var(--line2);
