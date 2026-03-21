@@ -2192,6 +2192,10 @@ function renderComposerSlots() {
       }
     });
     clearBtn.addEventListener('click', function() {
+      if (isPrimary && editingObjectId != null) {
+        cancelEditingMode(true);
+        return;
+      }
       textarea.value = '';
       inputSlots[index].value = '';
       saveInputSlots();
@@ -4565,9 +4569,12 @@ function broadcastComposerClear() {
   } catch (_) {}
 }
 
-function setupDraftChannel() {
-  teardownDraftChannel();
-  latestRemoteDraft = '';
+function setupDraftChannel(opts) {
+  opts = opts || {};
+  teardownDraftChannel({ preserveDraftBubble: !!opts.preserveDraftBubble });
+  if (!opts.preserveDraftBubble) {
+    latestRemoteDraft = '';
+  }
   viewEditingPresence = Object.create(null);
   renderViewLiveEditingBar();
 
@@ -4664,9 +4671,12 @@ function setupDraftChannel() {
   startViewPresencePruneTimer();
 }
 
-function teardownDraftChannel() {
-  latestRemoteDraft = '';
-  hideDraftBubble();
+function teardownDraftChannel(opts) {
+  opts = opts || {};
+  if (!opts.preserveDraftBubble) {
+    latestRemoteDraft = '';
+    hideDraftBubble();
+  }
   remoteSelection = null;
   updateRemoteSelectionOverlay();
   viewEditingPresence = Object.create(null);
@@ -4838,6 +4848,8 @@ function broadcastDraft(text) {
   const body = text != null ? text : (input ? input.value : '');
 
   if (editingObjectId != null && Number.isFinite(Number(editingObjectId))) {
+    /* Never broadcast empty object_edit — use cancelEditingMode / object_edit_end so rows restore and remotes clear doppelgangers. */
+    if (!String(body).length) return;
     if (!viewEditingChannel) return;
     try {
       viewEditingChannel.send({
@@ -8527,13 +8539,25 @@ async function switchChannel(ch) {
   }
   currentChannel = ch;
   currentView = ch;
-  if (primarySlotAutoTarget && inputSlots && inputSlots.length > 0) {
+  var primaryTextTrim = '';
+  try {
+    primaryTextTrim = input && String(input.value || '').trim() ? String(input.value).trim() : '';
+  } catch (_) {}
+  /* Auto-follow tab only when primary is empty; if user is composing, keep slot target. */
+  if (primarySlotAutoTarget && inputSlots && inputSlots.length > 0 && !primaryTextTrim) {
     inputSlots[0].channel = ch;
     try { localStorage.setItem(INPUT_SLOTS_KEY, JSON.stringify(inputSlots)); } catch (_) {}
     if (typeof renderComposerSlots === 'function' && composerSlotsContainer) {
       renderComposerSlots();
     }
   }
+  var syncInputCh = ch;
+  try {
+    if (inputSlots && inputSlots.length > 0 && inputSlots[0] && inputSlots[0].channel != null) {
+      var sc = String(inputSlots[0].channel || '').trim();
+      if (sc) syncInputCh = sc;
+    }
+  } catch (_) {}
   // keep main view's View name in sync
   if (views[0]) views[0].channel = ch;
   try {
@@ -8545,41 +8569,30 @@ async function switchChannel(ch) {
   updateTabBadge(ch);
   refreshMoveTargets();
   if (currentUser && sb && !applyingWorkspaceFocusFromRemote && !inoutHydratingWorkspace) {
-    try {
-      await flushPersonalWorkspacePersist();
-    } catch (e) {
-      console.error('flush workspace (early, tab switch)', e);
-    }
+    schedulePersonalWorkspacePersist();
   }
   var showTabLoad = !applyingWorkspaceFocusFromRemote && !inoutHydratingWorkspace;
-  if (showTabLoad) {
-    setTabChannelLoading(ch, true);
-    try {
-      await new Promise(function(r) {
-        requestAnimationFrame(function() {
-          requestAnimationFrame(r);
-        });
-      });
-    } catch (_) {}
-  }
+  if (showTabLoad) setTabChannelLoading(ch, true);
   try {
-    await loadFieldPrefsForCurrentChannel();
+    await Promise.all([
+      loadFieldPrefsForCurrentChannel(),
+      currentUser ? ensureMembership() : Promise.resolve(),
+    ]);
     if (getSyncInputPref() && currentUser) {
-      await loadInputFromDbForChannel(ch);
+      await loadInputFromDbForChannel(syncInputCh);
     }
     if (currentUser) {
       setupDndBroadcastChannel();
-      setupDraftChannel();
+      setupDraftChannel({ preserveDraftBubble: true });
       subscribeOrderRealtime();
       subscribeViewRealtime();
       try {
-        await ensureMembership();
         await reloadForUser();
       } catch (e) {
         console.error('switchChannel reload', e);
       }
     } else if (tempSessionId) {
-      setupDraftChannel();
+      setupDraftChannel({ preserveDraftBubble: true });
       subscribeViewRealtime();
       await loadObjectOrderForCurrentChannel();
       await loadObjects();
@@ -9789,6 +9802,10 @@ if (draftSendBtn) {
 
 if (draftClearBtn) {
   draftClearBtn.addEventListener('click', () => {
+    if (editingObjectId != null) {
+      cancelEditingMode(true);
+      return;
+    }
     latestRemoteDraft = '';
     hideDraftBubble();
     broadcastDraft('');
