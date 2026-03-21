@@ -492,9 +492,545 @@
   });
 })();
 </script>
-<script src="storage-model.js"></script>
-<script src="local-store-idb.js"></script>
-<script src="folder-sync.js"></script>
+<script>
+/* Inlined: storage-model.js + local-store-idb.js + folder-sync.js (avoids hosts that serve index.html for *.js). Edit those files and re-bundle if needed. */
+/**
+ * INOUT unified storage model (v1)
+ *
+ * Principle: every object and every view has a row in *some* database.
+ * - Cloud: Supabase Postgres (`entries`, `views`, …) is authoritative for signed-in
+ *   and for shared / guest sessions (RLS + temp_session_id).
+ * - Local: IndexedDB (`inout_local_store_v1`) is the device database for anonymous
+ *   users — same logical shape as cloud rows so export/import and future sync stay trivial.
+ *
+ * Interop: other users can only read/write the same logical store when the backend
+ * is shared and ACL allows it (cloud + visit link / membership). Local-only data on
+ * a device is not visible to others until replicated to a shared store (e.g. sign-in
+ * or future “publish space”).
+ */
+(function (global) {
+  var STORAGE_MODEL_VERSION = 1;
+
+  /**
+   * @typedef {'cloud_authoritative'|'cloud_shared_guest'|'local_authoritative'} StorageAuthority
+   */
+
+  /**
+   * @param {{ currentUser: object|null, tempSessionId: string|null }} s
+   * @returns {{ authority: StorageAuthority, backend: string, interoperable: boolean, note: string }}
+   */
+  function describeStorageContext(s) {
+    var u = s && s.currentUser;
+    var t = s && s.tempSessionId;
+    if (t) {
+      return {
+        authority: 'cloud_shared_guest',
+        backend: 'supabase',
+        interoperable: true,
+        note: 'Same Postgres + RLS as owner; guests see channel by temp session.',
+      };
+    }
+    if (u) {
+      return {
+        authority: 'cloud_authoritative',
+        backend: 'supabase',
+        interoperable: true,
+        note: 'Objects/views in Supabase; sharing via views + visit links.',
+      };
+    }
+    return {
+      authority: 'local_authoritative',
+      backend: 'indexeddb',
+      interoperable: false,
+      note: 'Device DB only; export JSON or sign in to share with others.',
+    };
+  }
+
+  global.INOUT_STORAGE = {
+    STORAGE_MODEL_VERSION: STORAGE_MODEL_VERSION,
+    describeStorageContext: describeStorageContext,
+  };
+})(typeof window !== 'undefined' ? window : this);
+
+/**
+ * Local authoritative store: IndexedDB mirror of object-by-view map.
+ * Multiple named databases (vaults) + legacy default `inout_local_store_v1`.
+ * Migrates legacy localStorage `inout_anon_objects_v1` once on the default DB only.
+ */
+(function (global) {
+  var LEGACY_DB_NAME = 'inout_local_store_v1';
+  var DB_VERSION = 1;
+  var LEGACY_LS_KEY = 'inout_anon_objects_v1';
+  var META_MIGRATED = 'anon_migrated_v1';
+
+  function sanitizeVaultId(id) {
+    var s = String(id || 'default').trim().slice(0, 48);
+    if (!s) s = 'default';
+    if (s === 'default') return 'default';
+    s = s.replace(/[^a-zA-Z0-9_-]/g, '_');
+    return s || 'vault';
+  }
+
+  function dbNameForVault(vaultId) {
+    var s = sanitizeVaultId(vaultId);
+    if (s === 'default') return LEGACY_DB_NAME;
+    return 'inout_local_v1__' + s;
+  }
+
+  /**
+   * @param {string} dbName
+   * @param {{ migrateLegacy?: boolean }} opts
+   */
+  function createLocalStore(dbName, opts) {
+    opts = opts || {};
+    var runLegacyMigration = !!opts.migrateLegacy;
+
+    var _dbPromise = null;
+    var _initPromise = null;
+
+    function openDb() {
+      if (_dbPromise) return _dbPromise;
+      _dbPromise = new Promise(function (resolve, reject) {
+        var req = indexedDB.open(dbName, DB_VERSION);
+        req.onerror = function () {
+          reject(req.error);
+        };
+        req.onupgradeneeded = function (e) {
+          var db = e.target.result;
+          if (!db.objectStoreNames.contains('objects')) {
+            var os = db.createObjectStore('objects', { keyPath: 'id' });
+            os.createIndex('channel', 'channel', { unique: false });
+          }
+          if (!db.objectStoreNames.contains('meta')) {
+            db.createObjectStore('meta');
+          }
+        };
+        req.onsuccess = function () {
+          resolve(req.result);
+        };
+      });
+      return _dbPromise;
+    }
+
+    function getByViewMap() {
+      return openDb().then(function (db) {
+        return new Promise(function (resolve, reject) {
+          var tx = db.transaction('objects', 'readonly');
+          var os = tx.objectStore('objects');
+          var req = os.getAll();
+          req.onsuccess = function () {
+            var all = req.result || [];
+            var byView = {};
+            for (var i = 0; i < all.length; i++) {
+              var o = all[i];
+              var ch = o.channel || 'main';
+              if (!byView[ch]) byView[ch] = [];
+              byView[ch].push(o);
+            }
+            var keys = Object.keys(byView);
+            for (var k = 0; k < keys.length; k++) {
+              byView[keys[k]].sort(function (a, b) {
+                return String(a.created_at || '').localeCompare(String(b.created_at || ''));
+              });
+            }
+            resolve(byView);
+          };
+          req.onerror = function () {
+            reject(req.error);
+          };
+        });
+      });
+    }
+
+    function setByViewMap(byView) {
+      return openDb().then(function (db) {
+        return new Promise(function (resolve, reject) {
+          var tx = db.transaction('objects', 'readwrite');
+          var os = tx.objectStore('objects');
+          os.clear();
+          var ch;
+          for (ch in byView) {
+            if (!Object.prototype.hasOwnProperty.call(byView, ch)) continue;
+            var list = byView[ch];
+            if (!Array.isArray(list)) continue;
+            for (var i = 0; i < list.length; i++) {
+              var o = list[i];
+              if (!o || typeof o !== 'object') continue;
+              var row = {};
+              for (var p in o) {
+                if (Object.prototype.hasOwnProperty.call(o, p)) row[p] = o[p];
+              }
+              row.channel = row.channel || ch;
+              if (row.id == null) continue;
+              os.put(row);
+            }
+          }
+          tx.oncomplete = function () {
+            resolve();
+          };
+          tx.onerror = function () {
+            reject(tx.error);
+          };
+        });
+      });
+    }
+
+    function migrateLegacyLocalStorageOnce(db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction('meta', 'readonly');
+        var getReq = tx.objectStore('meta').get(META_MIGRATED);
+        getReq.onsuccess = function () {
+          var already = getReq.result;
+          setTimeout(function () {
+            if (already) {
+              resolve(false);
+              return;
+            }
+            var raw = null;
+            try {
+              raw = localStorage.getItem(LEGACY_LS_KEY);
+            } catch (_) {}
+            if (!raw || !raw.trim()) {
+              var wtx = db.transaction('meta', 'readwrite');
+              wtx.objectStore('meta').put(1, META_MIGRATED);
+              wtx.oncomplete = function () {
+                resolve(false);
+              };
+              wtx.onerror = function () {
+                reject(wtx.error);
+              };
+              return;
+            }
+            try {
+              var byView = JSON.parse(raw);
+              if (!byView || typeof byView !== 'object') byView = {};
+              setByViewMap(byView)
+                .then(function () {
+                  try {
+                    localStorage.removeItem(LEGACY_LS_KEY);
+                  } catch (_) {}
+                  var wtx2 = db.transaction('meta', 'readwrite');
+                  wtx2.objectStore('meta').put(1, META_MIGRATED);
+                  wtx2.oncomplete = function () {
+                    resolve(true);
+                  };
+                  wtx2.onerror = function () {
+                    reject(wtx2.error);
+                  };
+                })
+                .catch(reject);
+            } catch (e) {
+              reject(e);
+            }
+          }, 0);
+        };
+        getReq.onerror = function () {
+          reject(getReq.error);
+        };
+      });
+    }
+
+    function init() {
+      if (_initPromise) return _initPromise;
+      _initPromise = openDb().then(function (db) {
+        if (runLegacyMigration) {
+          return migrateLegacyLocalStorageOnce(db);
+        }
+        return false;
+      }).catch(function (e) {
+        console.error('INOUT_LOCAL_DB.init', dbName, e);
+        _initPromise = null;
+        throw e;
+      });
+      return _initPromise;
+    }
+
+    function exportJsonString() {
+      return getByViewMap().then(function (byView) {
+        return JSON.stringify(byView || {});
+      });
+    }
+
+    function deleteDatabase() {
+      _dbPromise = null;
+      _initPromise = null;
+      return new Promise(function (resolve, reject) {
+        var req = indexedDB.deleteDatabase(dbName);
+        req.onsuccess = function () {
+          resolve();
+        };
+        req.onerror = function () {
+          reject(req.error);
+        };
+        req.onblocked = function () {
+          resolve();
+        };
+      });
+    }
+
+    return {
+      DB_NAME: dbName,
+      init: init,
+      getByViewMap: getByViewMap,
+      setByViewMap: setByViewMap,
+      exportJsonString: exportJsonString,
+      deleteDatabase: deleteDatabase,
+    };
+  }
+
+  var defaultStore = createLocalStore(LEGACY_DB_NAME, { migrateLegacy: true });
+
+  function forVault(vaultId) {
+    var name = dbNameForVault(vaultId);
+    var migrateLegacy = name === LEGACY_DB_NAME;
+    return createLocalStore(name, { migrateLegacy: migrateLegacy });
+  }
+
+  global.INOUT_LOCAL_DB = Object.assign(defaultStore, {
+    forVault: forVault,
+    sanitizeVaultId: sanitizeVaultId,
+    dbNameForVault: dbNameForVault,
+    LEGACY_DB_NAME: LEGACY_DB_NAME,
+    LEGACY_LS_KEY: LEGACY_LS_KEY,
+  });
+})(typeof window !== 'undefined' ? window : this);
+
+/**
+ * Sync active local IndexedDB vault to a user-chosen folder via File System Access API.
+ * Writes inout-sync.json; Import reads it back. Chromium/Edge desktop typically required.
+ */
+(function (global) {
+  var SYNC_FILE = 'inout-sync.json';
+  var DB_NAME = 'inout_folder_sync_v1';
+  var STORE = 'meta';
+  var KEY_DIR = 'directory';
+
+  var dirHandle = null;
+  var writeTimer = null;
+
+  function openDb() {
+    return new Promise(function (resolve, reject) {
+      var r = indexedDB.open(DB_NAME, 1);
+      r.onupgradeneeded = function () {
+        if (!r.result.objectStoreNames.contains(STORE)) r.result.createObjectStore(STORE);
+      };
+      r.onsuccess = function () { resolve(r.result); };
+      r.onerror = function () { reject(r.error); };
+    });
+  }
+
+  function persistHandle(h) {
+    return openDb().then(function (db) {
+      return new Promise(function (res, rej) {
+        var tx = db.transaction(STORE, 'readwrite');
+        tx.objectStore(STORE).put(h, KEY_DIR);
+        tx.oncomplete = res;
+        tx.onerror = function () { rej(tx.error); };
+      });
+    });
+  }
+
+  function loadPersistedHandle() {
+    return openDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(STORE, 'readonly');
+        var req = tx.objectStore(STORE).get(KEY_DIR);
+        req.onsuccess = function () { resolve(req.result || null); };
+        req.onerror = function () { reject(req.error); };
+      });
+    });
+  }
+
+  function clearPersistedHandle() {
+    return openDb().then(function (db) {
+      return new Promise(function (res, rej) {
+        var tx = db.transaction(STORE, 'readwrite');
+        tx.objectStore(STORE).delete(KEY_DIR);
+        tx.oncomplete = res;
+        tx.onerror = function () { rej(tx.error); };
+      });
+    });
+  }
+
+  function getSyncPayload() {
+    var gv = global.getActiveVaultId;
+    var gm = global.getLocalObjectByViewMap;
+    if (typeof gv !== 'function' || typeof gm !== 'function') return Promise.resolve(null);
+    return gm().then(function (byView) {
+      return {
+        version: 1,
+        vaultId: gv(),
+        updatedAt: new Date().toISOString(),
+        objectsByView: byView || {},
+      };
+    });
+  }
+
+  function writeFile() {
+    if (!dirHandle) return Promise.resolve();
+    return getSyncPayload().then(function (payload) {
+      if (!payload) return;
+      return dirHandle.getFileHandle(SYNC_FILE, { create: true }).then(function (fh) {
+        return fh.createWritable().then(function (writable) {
+          return writable.write(JSON.stringify(payload, null, 2)).then(function () {
+            return writable.close();
+          });
+        });
+      });
+    });
+  }
+
+  function scheduleWrite() {
+    if (!dirHandle) return;
+    if (typeof global.usesIndexedDbForObjectData === 'function' && !global.usesIndexedDbForObjectData()) return;
+    clearTimeout(writeTimer);
+    writeTimer = setTimeout(function () {
+      writeFile().catch(function (e) { console.warn('[folder-sync] write', e); });
+    }, 900);
+  }
+
+  function readAndParse() {
+    if (!dirHandle) return Promise.reject(new Error('no dir'));
+    return dirHandle.getFileHandle(SYNC_FILE, { create: false }).then(function (fh) {
+      return fh.getFile().then(function (file) {
+        return file.text().then(function (text) { return JSON.parse(text); });
+      });
+    });
+  }
+
+  function importFromFile(toastFn) {
+    if (!dirHandle) {
+      if (toastFn) toastFn('Choose a folder first.');
+      return Promise.resolve();
+    }
+    return readAndParse()
+      .then(function (data) {
+        if (!data || typeof data.objectsByView !== 'object') {
+          if (toastFn) toastFn('Invalid inout-sync.json');
+          return;
+        }
+        var gv = global.getActiveVaultId;
+        if (typeof gv === 'function' && data.vaultId && data.vaultId !== gv()) {
+          var msg = 'File vault "' + data.vaultId + '" ≠ active "' + gv() + '". Import anyway?';
+          if (global.confirm && !global.confirm(msg)) return;
+        }
+        var save = global.saveLocalObjectByViewMap;
+        if (typeof save !== 'function') return;
+        return save(data.objectsByView).then(function () {
+          if (typeof global.loadObjects === 'function') return global.loadObjects();
+        }).then(function () {
+          if (toastFn) toastFn('Imported from folder.');
+        });
+      })
+      .catch(function () {
+        if (toastFn) toastFn('Could not read inout-sync.json in this folder.');
+      });
+  }
+
+  function updateStatusEl() {
+    var el = document.getElementById('secret-folder-sync-status');
+    if (!el) return;
+    if (!dirHandle || !dirHandle.name) {
+      el.textContent = 'Not connected';
+      return;
+    }
+    el.textContent = 'Folder: ' + dirHandle.name + ' → ' + SYNC_FILE;
+  }
+
+  function connectChooseFolder(toastFn) {
+    if (!global.showDirectoryPicker) {
+      if (toastFn) toastFn('Folder sync needs a supported browser (e.g. Chrome or Edge on desktop).');
+      return Promise.resolve();
+    }
+    return global.showDirectoryPicker()
+      .then(function (h) {
+        return h.requestPermission({ mode: 'readwrite' }).then(function (perm) {
+          if (perm !== 'granted') {
+            if (toastFn) toastFn('Folder access not granted.');
+            return;
+          }
+          dirHandle = h;
+          return persistHandle(h).then(function () {
+            return dirHandle.getFileHandle(SYNC_FILE, { create: false })
+              .then(function () { return true; })
+              .catch(function () { return false; });
+          }).then(function (exists) {
+            if (!exists) {
+              return writeFile().then(function () {
+                if (toastFn) toastFn('Connected. Created ' + SYNC_FILE + ' from this device.');
+              });
+            }
+            if (toastFn) {
+              toastFn('Connected. File exists — use Import to load it, or keep editing; saves update the file.');
+            }
+          });
+        });
+      })
+      .then(function () { updateStatusEl(); })
+      .catch(function (e) {
+        if (e && e.name === 'AbortError') return;
+        console.error(e);
+        if (toastFn) toastFn('Could not open folder.');
+      });
+  }
+
+  function disconnectFolder(toastFn) {
+    dirHandle = null;
+    clearTimeout(writeTimer);
+    return clearPersistedHandle()
+      .then(function () {
+        updateStatusEl();
+        if (toastFn) toastFn('Folder sync disconnected.');
+      })
+      .catch(function (e) {
+        console.warn(e);
+        updateStatusEl();
+      });
+  }
+
+  function initRestore() {
+    if (!global.showDirectoryPicker) return Promise.resolve();
+    return loadPersistedHandle()
+      .then(function (h) {
+        if (!h) return;
+        return h.queryPermission({ mode: 'readwrite' }).then(function (q) {
+          if (q === 'granted') dirHandle = h;
+        });
+      })
+      .catch(function (e) { console.warn('[folder-sync] restore', e); })
+      .then(function () { updateStatusEl(); });
+  }
+
+  function wireSecretPanel(toastFn) {
+    var btnChoose = document.getElementById('secret-folder-choose');
+    var btnPull = document.getElementById('secret-folder-pull');
+    var btnDisc = document.getElementById('secret-folder-disconnect');
+    if (btnChoose) {
+      btnChoose.addEventListener('click', function () {
+        connectChooseFolder(toastFn);
+      });
+    }
+    if (btnPull) {
+      btnPull.addEventListener('click', function () {
+        importFromFile(toastFn);
+      });
+    }
+    if (btnDisc) {
+      btnDisc.addEventListener('click', function () {
+        disconnectFolder(toastFn);
+      });
+    }
+  }
+
+  global.INOUT_FOLDER_SYNC = {
+    scheduleWrite: scheduleWrite,
+    initRestore: initRestore,
+    wireSecretPanel: wireSecretPanel,
+    refreshStatus: updateStatusEl,
+  };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
 <script src="app.js"></script>
 </body>
 </html>
