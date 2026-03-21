@@ -1309,6 +1309,31 @@ let myId;
     myId = 'fallback-' + Date.now();
   }
 })();
+/** Per browser tab — input_state must ignore same-tab echoes but accept other tabs / devices. */
+const INPUT_TAB_INSTANCE_KEY = 'inout_input_tab_inst_v1';
+let inputSyncTabInstanceId;
+(function initInputSyncTabInstance() {
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      var ti = sessionStorage.getItem(INPUT_TAB_INSTANCE_KEY);
+      if (ti && String(ti).length >= 4) {
+        inputSyncTabInstanceId = String(ti);
+        return;
+      }
+      ti =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : 't' + Date.now() + '-' + Math.random().toString(16).slice(2);
+      sessionStorage.setItem(INPUT_TAB_INSTANCE_KEY, ti);
+      inputSyncTabInstanceId = String(ti);
+      return;
+    }
+  } catch (_) {}
+  inputSyncTabInstanceId = 't' + Date.now();
+})();
+function getInputStateDeviceId() {
+  return String(myId) + ':' + String(inputSyncTabInstanceId || 'tab');
+}
 let currentUser    = null;
 let currentView    = 'main';
 let currentChannel = currentView; // temporary alias while migrating off "channel"
@@ -1441,6 +1466,21 @@ var _personalWorkspacePersistTimer = null;
 var _channelViewRulesPersistTimer = null;
 /** True while switching tab from personal workspace realtime (skip re-persist). */
 var applyingWorkspaceFocusFromRemote = false;
+/** True during full applyPersonalWorkspaceStateFromServer (avoid persist/flush feedback loops). */
+var applyingPersonalWorkspaceFromRemote = false;
+/** Nonces from our recent workspace upserts — skip only those realtime echoes (not other devices). */
+var myWorkspacePushNonces = new Set();
+function rememberWorkspacePushNonce(n) {
+  if (!n) return;
+  try {
+    myWorkspacePushNonces.add(n);
+    setTimeout(function() {
+      try {
+        myWorkspacePushNonces.delete(n);
+      } catch (_) {}
+    }, 15000);
+  } catch (_) {}
+}
 /** After applying remote feed scroll, ignore briefly so programmatic scroll does not re-broadcast. */
 var suppressScrollWorkspacePersistUntil = 0;
 const LAYOUT_SYNC_KEY    = 'inout_layout_sync_v1';
@@ -3730,11 +3770,8 @@ function subscribeViewRealtime() {
           const rowCh = String(row.channel);
           if (rowCh === WORKSPACE_META_VIEW_CHANNEL) {
             if (currentUser && row.user_id != null && String(row.user_id) !== String(currentUser.id)) return;
-            if (suppressNextPersonalWorkspaceApply) {
-              suppressNextPersonalWorkspaceApply = false;
-              return;
-            }
             const cfgW = normalizeViewConfig(row.config);
+            if (cfgW && cfgW._wsPushNonce && myWorkspacePushNonces.has(cfgW._wsPushNonce)) return;
             if (cfgW && typeof cfgW === 'object') {
               applyPersonalWorkspaceStateFromServer(cfgW).catch(function(e) {
                 console.error('personal workspace apply', e);
@@ -3892,7 +3929,7 @@ async function saveInputToDb() {
       channel: currentChannel || 'main',
       text: capSyncText(text),
       updated_at: new Date().toISOString(),
-      device_id: myId
+      device_id: getInputStateDeviceId()
     }, { onConflict: 'user_id,channel' });
   } catch (e) { console.error('saveInputToDb', e); }
 }
@@ -3915,7 +3952,7 @@ async function saveSlotsToDb() {
       channel: SLOTS_SYNC_CHANNEL,
       text: JSON.stringify(slotsToSave),
       updated_at: new Date().toISOString(),
-      device_id: myId
+      device_id: getInputStateDeviceId()
     }, { onConflict: 'user_id,channel' });
   } catch (e) { console.error('saveSlotsToDb', e); }
 }
@@ -3948,7 +3985,7 @@ function setupInputStateRealtime() {
         try {
         var row = payload && (payload.new || payload.old);
         if (!row || typeof row !== 'object') return;
-        if (String(row.device_id) === String(myId)) return;
+        if (String(row.device_id) === String(getInputStateDeviceId())) return;
         if (row.channel === SLOTS_SYNC_CHANNEL) {
           try {
             const raw = (row.text != null ? String(row.text) : '') || '[]';
@@ -3972,6 +4009,7 @@ function setupInputStateRealtime() {
                   const ta = (i === 0 && input) ? input : composerSlotsContainer.querySelector('.composer-slot[data-slot-index="' + i + '"] textarea');
                   if (!ta) return;
                   if (mobile && ta === activeEl) return;
+                  if (!mobile && ta === activeEl && Date.now() - lastSlotsEditAt < 1000) return;
                   const remoteVal = capSyncText(slot.value);
                   const merged = mergeInputText(ta.value, remoteVal, lastSlotsEditAt, remoteAt);
                   if (merged === ta.value) return;
@@ -4069,6 +4107,13 @@ function setupInputStateRealtime() {
         }
         if (row.channel !== (currentChannel || 'main')) return;
         if (!input) return;
+        if (
+          !isMobileOrTouchDevice() &&
+          document.activeElement === input &&
+          Date.now() - lastPrimaryInputEditAt < 1000
+        ) {
+          return;
+        }
         var remoteText = capSyncText(row.text);
         var remoteAt = row.updated_at ? new Date(row.updated_at).getTime() : 0;
         if (!Number.isFinite(remoteAt)) remoteAt = 0;
@@ -4390,7 +4435,7 @@ function applyFrameOrder(order) {
 function saveFrameOrder(order) {
   if (!Array.isArray(order) || order.length === 0) return;
   try { localStorage.setItem(FRAME_ORDER_KEY, JSON.stringify(order)); } catch (_) {}
-  schedulePersonalWorkspacePersist();
+  flushPersonalWorkspacePersist();
   if (layoutChannel && getLayoutSyncPref()) {
     try {
       layoutChannel.send({ type: 'broadcast', event: 'layout', payload: { frameOrder: order } });
@@ -5476,7 +5521,7 @@ function closeSecondaryView() {
   try { localStorage.setItem(OPEN_VIEWS_KEY, '[]'); } catch (_) {}
   saveSecondaryViewState();
   updateTabsUI();
-  schedulePersonalWorkspacePersist();
+  flushPersonalWorkspacePersist();
 }
 
 function applyMultiviewSplit(ratio, syncWorkspace) {
@@ -7047,6 +7092,7 @@ function saveChannelsList() {
     const toSave = viewNames.filter(ch => ch !== 'main');
     localStorage.setItem(CHANNELS_KEY, JSON.stringify(toSave));
   } catch (_) {}
+  schedulePersonalWorkspacePersist();
 }
 
 function normalizeViewConfig(raw) {
@@ -7193,6 +7239,12 @@ function gatherPersonalWorkspaceStateForSave() {
       if (typeof v === 'number' && Number.isFinite(v) && v >= 0) feedScrollByView[ch] = Math.round(v);
     });
   } catch (_) {}
+  let channelStripOrder = [];
+  try {
+    channelStripOrder = viewNames.filter(function(c) {
+      return c && c !== 'main';
+    });
+  } catch (_) {}
   return {
     openSecondaryViews: list.slice(),
     multiviewSplit: multiviewSplit,
@@ -7203,6 +7255,8 @@ function gatherPersonalWorkspaceStateForSave() {
     manageBarOrder: manageBarOrder,
     settings: settings && typeof settings === 'object' ? settings : null,
     feedScrollByView: feedScrollByView,
+    focusedChannel: String(currentView || currentChannel || 'main'),
+    channelStripOrder: channelStripOrder,
   };
 }
 
@@ -7234,6 +7288,8 @@ function applyWorkspaceFeedScrollToDom() {
 
 async function applyPersonalWorkspaceStateFromServer(cfg) {
   if (!cfg || typeof cfg !== 'object') return;
+  applyingPersonalWorkspaceFromRemote = true;
+  try {
   let hadRemoteScroll = false;
   if (cfg.feedScrollByView && typeof cfg.feedScrollByView === 'object') {
     hadRemoteScroll = true;
@@ -7248,8 +7304,26 @@ async function applyPersonalWorkspaceStateFromServer(cfg) {
       }
     } catch (_) {}
   }
-  if (Array.isArray(cfg.openSecondaryViews)) {
-    await applyWorkspaceOpenSecondaryViews(cfg.openSecondaryViews);
+  if (Array.isArray(cfg.channelStripOrder) && cfg.channelStripOrder.length > 0) {
+    try {
+      const strip = cfg.channelStripOrder
+        .map(function(x) {
+          return String(x || '').trim();
+        })
+        .filter(Boolean);
+      const srv = strip.filter(function(c) {
+        return c !== 'main';
+      });
+      const localExtras = viewNames.filter(function(c) {
+        return c !== 'main' && srv.indexOf(c) < 0;
+      });
+      viewNames = ['main'].concat(srv).concat(localExtras);
+      viewNames = Array.from(new Set(viewNames));
+      saveChannelsList();
+      renderTabs();
+      refreshMoveTargets();
+      syncComposerTargetSelects();
+    } catch (_) {}
   }
   if (typeof cfg.focusedChannel === 'string' && cfg.focusedChannel.trim()) {
     const want = cfg.focusedChannel.trim();
@@ -7269,6 +7343,9 @@ async function applyPersonalWorkspaceStateFromServer(cfg) {
         }
       }
     }
+  }
+  if (Array.isArray(cfg.openSecondaryViews)) {
+    await applyWorkspaceOpenSecondaryViews(cfg.openSecondaryViews);
   }
   if (typeof cfg.multiviewSplit === 'number' && Number.isFinite(cfg.multiviewSplit)) {
     try {
@@ -7320,10 +7397,14 @@ async function applyPersonalWorkspaceStateFromServer(cfg) {
     } catch (_) {}
     applyWorkspaceFeedScrollToDom();
   }
+  } finally {
+    applyingPersonalWorkspaceFromRemote = false;
+  }
 }
 
 function schedulePersonalWorkspacePersist() {
   /* Workspace UI sync uses Supabase whenever signed in — independent of object storage target (cloud vs local vault). */
+  if (applyingPersonalWorkspaceFromRemote) return;
   if (!currentUser || !sb) return;
   if (_personalWorkspacePersistTimer) clearTimeout(_personalWorkspacePersistTimer);
   _personalWorkspacePersistTimer = setTimeout(function() {
@@ -7334,6 +7415,7 @@ function schedulePersonalWorkspacePersist() {
 if (typeof window !== 'undefined') window.schedulePersonalWorkspacePersist = schedulePersonalWorkspacePersist;
 
 function flushPersonalWorkspacePersist() {
+  if (applyingPersonalWorkspaceFromRemote) return;
   if (!currentUser || !sb) return;
   if (_personalWorkspacePersistTimer) {
     clearTimeout(_personalWorkspacePersistTimer);
@@ -7343,6 +7425,7 @@ function flushPersonalWorkspacePersist() {
 }
 
 async function persistPersonalWorkspaceToServer() {
+  if (applyingPersonalWorkspaceFromRemote) return;
   if (!currentUser || !sb) return;
   try {
     const slice = gatherPersonalWorkspaceStateForSave();
@@ -7368,7 +7451,12 @@ async function persistPersonalWorkspaceToServer() {
       slice.feedScrollByView = Object.assign({}, base.feedScrollByView);
     }
     Object.assign(base, slice);
-    suppressNextPersonalWorkspaceApply = true;
+    var wsNonce =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : 'ws' + Date.now() + Math.random().toString(16).slice(2);
+    rememberWorkspacePushNonce(wsNonce);
+    base._wsPushNonce = wsNonce;
     await upsertViewsConfigForChannel(WORKSPACE_META_VIEW_CHANNEL, base);
   } catch (e) {
     console.error('persistPersonalWorkspaceToServer', e);
@@ -7470,7 +7558,6 @@ async function loadObjectOrderForCurrentChannel() {
 
 let suppressNextOrderApply = false;
 let suppressNextViewApply = false;
-let suppressNextPersonalWorkspaceApply = false;
 let suppressOrderApplyUntil = 0; /* ignore realtime order/view applies until this timestamp */
 
 async function saveObjectOrderForCurrentView() {
@@ -9254,7 +9341,7 @@ function saveManageBarOrder() {
     .filter(function(n) { return n.getAttribute && n.getAttribute('data-bar-id'); })
     .map(function(n) { return n.getAttribute('data-bar-id'); });
   try { localStorage.setItem(MANAGE_BAR_ORDER_KEY, JSON.stringify(ids)); } catch (_) {}
-  schedulePersonalWorkspacePersist();
+  flushPersonalWorkspacePersist();
 }
 
 function setupBarDndMode(on) {
