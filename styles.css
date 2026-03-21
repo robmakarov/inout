@@ -63,7 +63,8 @@
 html,body{
   height:100%;
   margin:0;
-  overscroll-behavior:none;
+  /* none on the document broke nested overflow scrolling on some WebKit / touch + trackpad combos */
+  overscroll-behavior:auto;
 }
 
 body{
@@ -75,8 +76,8 @@ body{
   -webkit-font-smoothing:antialiased;
   min-height:100vh;
   overflow:hidden;
-  /* pan-y: nested feeds/modals scroll; pinch-zoom kept for accessibility */
-  touch-action:pan-y pinch-zoom;
+  /* default: do not restrict — pan-y on ancestors was blocking wheel/touch reaching #feed */
+  touch-action:auto;
 }
 
 /* feed scrollbars: dark tab from under right edge, visible on hover */
@@ -134,7 +135,7 @@ header,
   min-width:0;
   overflow:hidden;
   pointer-events:auto;
-  touch-action:pan-y pinch-zoom;
+  touch-action:auto;
 }
 #multiview > #view-pinned-rail{
   flex:0 0 auto;
@@ -180,7 +181,7 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
   min-height:0;
   min-width:0;
   order:1;
-  touch-action:pan-y;
+  touch-action:auto;
 }
 .multiview-views .view:only-child{
   flex:1 1 100%;
@@ -214,7 +215,7 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
   display:flex;
   flex-direction:column;
   overflow:hidden;
-  touch-action:pan-y;
+  touch-action:auto;
 }
 .view-pinned-rail{
   flex:0 0 auto;
@@ -224,6 +225,9 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
   background:var(--bg2);
   overflow-y:auto;
   overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-y;
+  overscroll-behavior:contain;
   display:flex;
   flex-direction:column;
   align-items:center;
@@ -309,7 +313,7 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
   flex-direction:column;
   overflow:hidden;
   background:var(--bg);
-  touch-action:pan-y pinch-zoom;
+  touch-action:auto;
 }
 .frames-zone{
   flex:1 1 0;
@@ -724,7 +728,7 @@ header{
   display:none;
   z-index:2000; /* above header, nav, multiview panels */
   pointer-events:auto;
-  touch-action:none;
+  touch-action:auto;
 }
 
 #user-modal{
@@ -742,10 +746,10 @@ header{
   display:block;
   animation:drawerIn .18s ease both;
   pointer-events:auto;
-  overflow-y:auto;
+  overflow-y:scroll;
   overflow-x:hidden;
   -webkit-overflow-scrolling:touch;
-  touch-action:pan-y;
+  touch-action:auto;
   overscroll-behavior:contain;
 }
 #user-modal > * + *{
@@ -1181,16 +1185,18 @@ header{
 .multiview-views .view .feed{
   position:relative;
   z-index:1;
-  flex:1;
+  flex:1 1 0%;
   min-height:0;
+  max-height:100%;
   padding:0;
-  overflow-y:auto;
+  /* scroll always establishes a box (Safari flex + overflow quirks) */
+  overflow-y:scroll;
   overflow-x:hidden;
   -webkit-overflow-scrolling:touch;
+  /* pan-y only on the scroller so vertical gestures scroll here, not eaten by shell */
   touch-action:pan-y;
   overscroll-behavior:contain;
   outline:none;
-  /* Avoid strict/layout containment here — it broke touch/wheel scrolling inside the fixed app shell. */
   contain:none;
 }
 #feed:focus,
