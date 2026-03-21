@@ -2069,6 +2069,8 @@ const INPUT_SAVE_DEBOUNCE_MS = 45;
 let lastPrimaryInputEditAt = 0;
 let lastSlotsEditAt = 0;
 const INPUT_SYNC_MAX_LENGTH = 10000;
+/** Ignore short strings when detecting composer text that duplicates a feed row (avoids false clears). */
+const INPUT_SYNC_FEED_ECHO_MIN_LEN = 28;
 function capSyncText(s) {
   if (s == null) return '';
   var t = String(s);
@@ -4352,6 +4354,13 @@ function mergeInputText(local, remote, localAt, remoteAt) {
   local = String(local);
   remote = String(remote);
   if (local === remote) return local;
+  /* '' is a prefix of every string; without this branch, empty local always loses to remote and stale DB rows resurrect after refresh. */
+  if (local === '' && remote !== '') {
+    return capSyncText((remoteAt || 0) > (localAt || 0) ? remote : local);
+  }
+  if (remote === '' && local !== '') {
+    return capSyncText((localAt || 0) > (remoteAt || 0) ? local : remote);
+  }
   if (local.length > INPUT_SYNC_MAX_LENGTH || remote.length > INPUT_SYNC_MAX_LENGTH) {
     return capSyncText((remoteAt || 0) > (localAt || 0) ? remote : local);
   }
@@ -4376,16 +4385,18 @@ function mergeInputText(local, remote, localAt, remoteAt) {
   return capSyncText(merged);
 }
 
-async function saveInputToDb() {
+async function saveInputToDb(opts) {
+  opts = opts && typeof opts === 'object' ? opts : {};
   inputSaveToDbTimer = null;
   if (!currentUser || !sb || !sb.from || !getSyncInputPref()) return;
   /* Object edit text lives in the composer but must not be written to user_input_state — it would come back after refresh as a fake “still editing” draft. */
   if (editingObjectId != null) return;
   try {
     var text = input ? (input.value || '') : '';
+    var targetChannel = opts.channel != null ? String(opts.channel) : (currentChannel || 'main');
     await sb.from(USER_INPUT_STATE_TABLE).upsert({
       user_id: currentUser.id,
-      channel: currentChannel || 'main',
+      channel: targetChannel,
       text: capSyncText(text),
       updated_at: new Date().toISOString(),
       device_id: getInputStateDeviceId()
@@ -4601,12 +4612,71 @@ function setupInputStateRealtime() {
   } catch (_) {}
 }
 
+function normalizeComposerEchoCheck(s) {
+  return String(s || '').replace(/\s+/g, ' ').trim();
+}
+
+/** When sync is on, clear composer text that matches a visible primary-feed row (stale object body echoed in user_input_state). */
+async function stripComposerIfEchoesFeedEntryWhenSyncOn() {
+  if (!getSyncInputPref() || !currentUser || !input || editingObjectId != null) return;
+  if (!feedInner) return;
+  const raw = String(input.value || '');
+  const normalized = normalizeComposerEchoCheck(raw);
+  if (normalized.length < INPUT_SYNC_FEED_ECHO_MIN_LEN) return;
+  var match = false;
+  try {
+    feedInner.querySelectorAll('.obj').forEach(function(row) {
+      if (match) return;
+      const te = row.querySelector('.obj-text');
+      if (!te) return;
+      var plain = te.textContent || '';
+      const badge = te.querySelector('.obj-remote-edit-badge');
+      if (badge && badge.textContent) plain = plain.slice(0, -badge.textContent.length);
+      if (normalizeComposerEchoCheck(plain) === normalized) match = true;
+    });
+  } catch (_) {}
+  if (!match) return;
+  input.value = '';
+  if (editingObjectId == null) input.placeholder = 'Add object…';
+  if (primarySlotAutoTarget && inputSlots && inputSlots.length > 0 && inputSlots[0]) {
+    inputSlots[0].value = '';
+    try { localStorage.setItem(INPUT_SLOTS_KEY, JSON.stringify(inputSlots)); } catch (_) {}
+  }
+  if (typeof autoResize === 'function') autoResize();
+  if (sendBtn) sendBtn.disabled = true;
+  if (typeof updateClearInputBtn === 'function') updateClearInputBtn();
+  saveInputGlobal({ skipRemote: true });
+  try {
+    await saveInputToDb();
+  } catch (_) {}
+}
+
 async function loadInputFromDbForChannel(ch) {
   if (!currentUser || !sb || !sb.from || !getSyncInputPref() || !input) return;
   const channel = ch || currentChannel || 'main';
   try {
     const { data, error } = await sb.from(USER_INPUT_STATE_TABLE).select('text, updated_at').eq('user_id', currentUser.id).eq('channel', channel).maybeSingle();
-    if (error || !data) return;
+    if (error) {
+      restoreInputGlobal();
+      return;
+    }
+    if (!data) {
+      if (editingObjectId != null) return;
+      input.value = '';
+      input.placeholder = 'Add object…';
+      if (primarySlotAutoTarget && inputSlots && inputSlots.length > 0 && inputSlots[0]) {
+        inputSlots[0].value = '';
+        try { localStorage.setItem(INPUT_SLOTS_KEY, JSON.stringify(inputSlots)); } catch (_) {}
+      }
+      autoResize();
+      sendBtn.disabled = true;
+      updateClearInputBtn();
+      saveInputGlobal({ skipRemote: true });
+      try {
+        await saveInputToDb({ channel: channel });
+      } catch (_) {}
+      return;
+    }
     if (data.updated_at) {
       var tMain = new Date(data.updated_at).getTime();
       if (Number.isFinite(tMain)) lastSeenInputStateTs[String(channel)] = tMain;
@@ -4664,6 +4734,11 @@ async function restoreInputFromDb() {
     /* Longer tail: delayed postgres_changes + slot/channel races were merging incremental rows and looked like the composer “typing itself” after refresh. */
     inoutChannelInputQuietUntil = Math.max(inoutChannelInputQuietUntil, Date.now() + 2800);
   } catch (_) {}
+  try {
+    await stripComposerIfEchoesFeedEntryWhenSyncOn();
+  } catch (e) {
+    if (typeof console !== 'undefined' && console.error) console.error('stripComposerIfEchoesFeedEntryWhenSyncOn', e);
+  }
 }
 
 /* ═══ REALTIME: view object editing (everyone) vs composer input (same intent as before) ═══ */
@@ -8922,11 +8997,11 @@ async function refreshAuth() {
       } catch (_) {}
       await loadObjectOrderForCurrentChannel();
       await loadObjects();
-      restoreInputGlobal();
       if (getSyncInputPref()) {
         await restoreInputFromDb();
         setupInputStateRealtime();
       } else {
+        restoreInputGlobal();
         teardownInputStateRealtime();
       }
     } catch (e) {
@@ -9297,6 +9372,13 @@ async function reloadForUser() {
     });
   });
   applyFieldPrefsToObjects();
+  if (getSyncInputPref() && currentUser && input) {
+    try {
+      await stripComposerIfEchoesFeedEntryWhenSyncOn();
+    } catch (e) {
+      if (typeof console !== 'undefined' && console.error) console.error('stripComposerIfEchoesFeedEntryWhenSyncOn', e);
+    }
+  }
 }
 
 function clearObjects() {
