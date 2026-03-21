@@ -2801,9 +2801,15 @@ function restoreEditingRowsOnCancel() {
 /** Input mode is default and reactivates after every operation; only edit mode interrupts it. */
 function reactivateInputMode(opts) {
   opts = opts || {};
-  if (editingObjectId != null) {
-    broadcastViewEditingEnd(editingObjectId);
-  }
+  var idsToEndPresence =
+    editingObjectIds && editingObjectIds.size
+      ? Array.from(editingObjectIds)
+      : editingObjectId != null
+        ? [editingObjectId]
+        : [];
+  idsToEndPresence.forEach(function(oid) {
+    broadcastViewEditingEnd(oid);
+  });
   restoreEditingRowsOnCancel();
   originalEditTextForCancel = null;
   originalEditTextForCancelMap = null;
@@ -7152,7 +7158,15 @@ function createObjectRow(obj, isNew, options) {
       cancelEditingMode(true);
       return;
     }
-    if (editingObjectId != null) broadcastViewEditingEnd(editingObjectId);
+    var prevIdsForPresence =
+      editingObjectIds && editingObjectIds.size
+        ? Array.from(editingObjectIds)
+        : editingObjectId != null
+          ? [editingObjectId]
+          : [];
+    prevIdsForPresence.forEach(function(oid) {
+      broadcastViewEditingEnd(oid);
+    });
     /* Restore previous row’s text so its doppelganger doesn’t stay */
     restoreEditingRowsOnCancel();
     const multi = selectMode && selectedIds.size > 1 && selectedIds.has(obj.id);
@@ -9410,6 +9424,34 @@ async function copyUserId() {
   }
 }
 
+/** Signed-in entry text save: try filters that match typical RLS (user_id + channel, then fallbacks). */
+async function tryUpdateEntryTextRest(entryId, textValue, rowChannel) {
+  if (!currentUser || !sb || !sb.from) return false;
+  const uid = currentUser.id;
+  const id = entryId;
+  const tv = String(textValue != null ? textValue : '');
+  const ch = String(rowChannel || currentChannel || currentView || 'main');
+  const builders = [
+    function() {
+      return sb.from(OBJECTS_TABLE).update({ text: tv }).eq('id', id).eq('user_id', uid).eq('channel', ch).select('id');
+    },
+    function() {
+      return sb.from(OBJECTS_TABLE).update({ text: tv }).eq('id', id).eq('channel', ch).select('id');
+    },
+    function() {
+      return sb.from(OBJECTS_TABLE).update({ text: tv }).eq('id', id).eq('user_id', uid).select('id');
+    },
+    function() {
+      return sb.from(OBJECTS_TABLE).update({ text: tv }).eq('id', id).select('id');
+    },
+  ];
+  for (var bi = 0; bi < builders.length; bi++) {
+    var res = await builders[bi]();
+    if (!res.error && res.data && res.data.length) return true;
+  }
+  return false;
+}
+
 function cleanupAuthHash() {
   var clean = false;
   if (location.hash && (location.hash.includes('access_token=') || location.hash.includes('code='))) {
@@ -9485,38 +9527,48 @@ async function sendText(text, options) {
       }
     }
     const befores = [];
+    const chFilter = String(currentChannel || currentView || 'main');
     if (idsToSave.length === 1) {
-      const { data: before, error: selErr } = await sb
+      let qs = sb
         .from(OBJECTS_TABLE)
         .select('id, created_at, text, channel, user_id, author_name')
         .eq('id', idsToSave[0])
-        .maybeSingle();
-    if (selErr) {
-      input.disabled = false;
-      console.error(selErr);
-      toast('Failed to update — ' + humanError(selErr.message));
-      sendBtn.disabled = false;
-      return;
-    }
-      if (before) befores.push(before);
-    } else {
-      const { data: list, error: selErr } = await sb
-        .from(OBJECTS_TABLE)
-        .select('id, created_at, text, channel, user_id, author_name')
-        .in('id', idsToSave);
+        .eq('channel', chFilter);
+      if (currentUser && currentUser.id && chFilter === 'main') {
+        qs = qs.eq('user_id', currentUser.id);
+      }
+      const { data: before, error: selErr } = await qs.maybeSingle();
       if (selErr) {
-    input.disabled = false;
+        input.disabled = false;
         console.error(selErr);
         toast('Failed to update — ' + humanError(selErr.message));
-      sendBtn.disabled = false;
-      return;
-    }
+        sendBtn.disabled = false;
+        return;
+      }
+      if (before) befores.push(before);
+    } else {
+      let qm = sb
+        .from(OBJECTS_TABLE)
+        .select('id, created_at, text, channel, user_id, author_name')
+        .in('id', idsToSave)
+        .eq('channel', chFilter);
+      if (currentUser && currentUser.id && chFilter === 'main') {
+        qm = qm.eq('user_id', currentUser.id);
+      }
+      const { data: list, error: selErr } = await qm;
+      if (selErr) {
+        input.disabled = false;
+        console.error(selErr);
+        toast('Failed to update — ' + humanError(selErr.message));
+        sendBtn.disabled = false;
+        return;
+      }
       if (list) befores.push(...list);
     }
-    if (idsToSave.length === 1 && befores.length === 0) {
+    if (befores.length === 0) {
       input.disabled = false;
       sendBtn.disabled = false;
-      toast('Could not load that object — nothing was saved.');
+      toast('Could not load those objects — nothing was saved.');
       return;
     }
     let lastError = null;
@@ -9530,26 +9582,9 @@ async function sendText(text, options) {
         beforeRow && beforeRow.channel != null ? beforeRow.channel : currentChannel || 'main'
       );
       var savedOk = false;
-      /* Signed-in: REST update avoids RPC + entry_actions failures and silent 0-row RPC updates. */
+      /* Signed-in: REST update with RLS-friendly filters (see tryUpdateEntryTextRest). */
       if (currentUser && sb && sb.from) {
-        var u1 = await sb
-          .from(OBJECTS_TABLE)
-          .update({ text: textToSave })
-          .eq('id', id)
-          .eq('channel', rowChannel)
-          .select('id');
-        if (!u1.error && u1.data && u1.data.length) {
-          savedOk = true;
-        } else {
-          var u2 = await sb
-            .from(OBJECTS_TABLE)
-            .update({ text: textToSave })
-            .eq('id', id)
-            .select('id');
-          if (!u2.error && u2.data && u2.data.length) {
-            savedOk = true;
-          }
-        }
+        savedOk = await tryUpdateEntryTextRest(id, textToSave, rowChannel);
       }
       if (!savedOk) {
         const editPayload = {
@@ -9568,13 +9603,20 @@ async function sendText(text, options) {
       console.error(lastError);
       toast('Failed to update — ' + humanError(lastError.message));
       sendBtn.disabled = false;
-      const eid = editingObjectId;
+      const idsEndPresence =
+        editingObjectIds && editingObjectIds.size
+          ? Array.from(editingObjectIds)
+          : editingObjectId != null
+            ? [editingObjectId]
+            : [];
       originalEditTextForCancel = null;
       originalEditTextForCancelMap = null;
       editingObjectTextMap = null;
       editingObjectIds = null;
       editingObjectId = null;
-      if (eid != null) broadcastViewEditingEnd(eid);
+      idsEndPresence.forEach(function(oid) {
+        broadcastViewEditingEnd(oid);
+      });
       try {
         await loadObjects();
       } catch (e) {

@@ -5,7 +5,55 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
 <meta name="color-scheme" content="dark"/>
 <title>INOUT</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230a0a09'/%3E%3Cpath d='M18 44V20h6v24h-6Zm22-24v24h-6V20h6Z' fill='%23e8d5a0'/%3E%3Cpath d='M30 20h4v24h-4z' fill='%23f0ece3' opacity='.65'/%3E%3C/svg%3E"/>
+<link rel="icon" id="inout-favicon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230a0a09'/%3E%3Cpath d='M18 44V20h6v24h-6Zm22-24v24h-6V20h6Z' fill='%23e8d5a0'/%3E%3Cpath d='M30 20h4v24h-4z' fill='%23f0ece3' opacity='.65'/%3E%3C/svg%3E"/>
+<script>
+(function(){
+  var link = document.getElementById('inout-favicon');
+  if (!link) return;
+  var c = document.createElement('canvas');
+  var w = 64;
+  c.width = w;
+  c.height = w;
+  var ctx = c.getContext('2d');
+  if (!ctx) return;
+  var step = 0;
+  var r = 14 * w / 64;
+  function drawFrame() {
+    step = (step + 1) % 48;
+    var t = (step / 48) * Math.PI * 2;
+    ctx.fillStyle = '#0a0a09';
+    if (typeof ctx.roundRect === 'function') {
+      ctx.beginPath();
+      ctx.roundRect(0, 0, w, w, r);
+      ctx.fill();
+    } else {
+      ctx.fillRect(0, 0, w, w);
+    }
+    var barW = 6 * w / 64;
+    var gap = 10 * w / 64;
+    var x0 = 16 * w / 64;
+    var y0 = 18 * w / 64;
+    var bh = 28 * w / 64;
+    for (var i = 0; i < 3; i++) {
+      var pulse = 0.38 + 0.62 * (0.5 + 0.5 * Math.sin(t + i * 1.15));
+      var stretch = 1 + 0.12 * Math.sin(t * 1.7 + i * 0.8);
+      var h = bh * stretch;
+      var y = y0 + (bh - h) / 2;
+      if (i === 1) {
+        ctx.fillStyle = 'rgba(240,236,227,' + Math.min(1, pulse * 0.92) + ')';
+      } else {
+        ctx.fillStyle = 'rgba(232,213,160,' + pulse + ')';
+      }
+      ctx.fillRect(x0 + i * gap, y, barW, h);
+    }
+    try {
+      link.href = c.toDataURL('image/png');
+    } catch (e) {}
+  }
+  setInterval(drawFrame, 130);
+  drawFrame();
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Syne:wght@400;500;600;700;800&display=optional" rel="stylesheet"/>
