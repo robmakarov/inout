@@ -2330,6 +2330,12 @@ async function sendFromSlot(index) {
   loadInputSlots();
   const slot = inputSlots[index];
   if (!slot) return;
+  const inObjEdit =
+    editingObjectId != null || (editingObjectIds != null && editingObjectIds.size > 0);
+  if (inObjEdit && index === 0) {
+    await send();
+    return;
+  }
   const text = (slot.value || '').trim();
   if (!text) return;
   const slotRow = composerSlotsContainer && composerSlotsContainer.querySelector('[data-slot-index="' + String(index) + '"]');
@@ -7577,21 +7583,6 @@ async function syncMessageOrdersFromCurrentOrder(viewChannel) {
   }
 }
 
-/** Merge remote feed scroll positions into viewScroll (used by workspace sync + deduped realtime). */
-function mergeWorkspaceFeedScrollFromConfig(cfg) {
-  if (!cfg || !cfg.feedScrollByView || typeof cfg.feedScrollByView !== 'object') return;
-  try {
-    const keys = Object.keys(cfg.feedScrollByView);
-    for (let i = 0; i < keys.length; i++) {
-      const k = keys[i];
-      const top = cfg.feedScrollByView[k];
-      if (typeof top === 'number' && Number.isFinite(top) && top >= 0) {
-        viewScroll.set(String(k), top);
-      }
-    }
-  } catch (_) {}
-}
-
 function gatherPersonalWorkspaceStateForSave() {
   let frameOrder = null;
   try {
@@ -7622,13 +7613,8 @@ function gatherPersonalWorkspaceStateForSave() {
     const raw = localStorage.getItem(INOUT_KB_SETTINGS_KEY);
     if (raw) settings = JSON.parse(raw);
   } catch (_) {}
-  const feedScrollByView = {};
-  try {
-    viewScroll.forEach(function(v, k) {
-      if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return;
-      feedScrollByView[String(k)] = Math.round(v);
-    });
-  } catch (_) {}
+  /* Feed scroll stays on this device only (SCROLL_STATE_KEY). Omitting feedScrollByView from server
+   * workspace prevents one tab’s refresh from pushing scroll onto another device. */
   let channelStripOrder = [];
   try {
     channelStripOrder = viewNames.filter(function(c) {
@@ -7644,62 +7630,10 @@ function gatherPersonalWorkspaceStateForSave() {
     leftChannelIds: leftChannelIds,
     manageBarOrder: manageBarOrder,
     settings: settings && typeof settings === 'object' ? settings : null,
-    feedScrollByView: feedScrollByView,
     focusedChannel: String(currentView || currentChannel || 'main'),
     channelStripOrder: channelStripOrder,
     uiChrome: gatherUiChromeForWorkspace(),
   };
-}
-
-/** Returns true if layout is not ready yet but we still want a non-zero scroll (retry). */
-function applyWorkspaceFeedScrollToDomOnce() {
-  var needRetry = false;
-  if (feedEl && currentView != null) {
-    const top = viewScroll.get(String(currentView));
-    if (typeof top === 'number' && top >= 0) {
-      const surf = getFeedScrollSurface(feedEl);
-      const maxScroll = surf.scrollHeight - surf.clientHeight;
-      if (maxScroll > 0) {
-        surf.scrollTop = Math.min(top, Math.max(0, maxScroll));
-      } else if (top > 2) needRetry = true;
-    }
-  }
-  if (typeof views !== 'undefined' && views && views.length) {
-    for (let vi = 0; vi < views.length; vi++) {
-      const v = views[vi];
-      if (!v || v.id === 'view-0') continue;
-      const el = v.rootEl && v.rootEl.querySelector && v.rootEl.querySelector('.feed');
-      if (!el) continue;
-      const t = viewScroll.get(String(v.channel));
-      if (typeof t !== 'number' || t < 0) continue;
-      const scrollEl = getFeedScrollSurface(el);
-      const ms = scrollEl.scrollHeight - scrollEl.clientHeight;
-      if (ms > 0) {
-        scrollEl.scrollTop = Math.min(t, Math.max(0, ms));
-      } else if (t > 2) needRetry = true;
-    }
-  }
-  return needRetry;
-}
-
-var _workspaceFeedScrollRetryGen = 0;
-function applyWorkspaceFeedScrollToDom() {
-  var gen = ++_workspaceFeedScrollRetryGen;
-  var attempt = 0;
-  function tick() {
-    if (gen !== _workspaceFeedScrollRetryGen) return;
-    requestAnimationFrame(function() {
-      requestAnimationFrame(function() {
-        if (gen !== _workspaceFeedScrollRetryGen) return;
-        var needRetry = applyWorkspaceFeedScrollToDomOnce();
-        if (needRetry && attempt < 14) {
-          attempt++;
-          setTimeout(tick, 40);
-        }
-      });
-    });
-  }
-  tick();
 }
 
 async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
@@ -7712,11 +7646,10 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
     try {
     var revMerge = Number(cfg._wsRev);
     /* Do not drop merges when revMerge < lastMergedWorkspaceRevMs: _wsRev is each client’s Date.now(),
-       so another device’s payload often looks “older” and would skip tab + scroll sync entirely. */
+       so another device’s payload often looks “older” and would skip tab sync entirely. */
     applyingPersonalWorkspaceFromRemote = true;
     try {
       ensureWorkspaceChannelsFromCfg(cfg);
-      mergeWorkspaceFeedScrollFromConfig(cfg);
       if (Array.isArray(cfg.channelStripOrder) && cfg.channelStripOrder.length > 0) {
         try {
           const strip = cfg.channelStripOrder
@@ -7767,12 +7700,6 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
       if (cfg.uiChrome && typeof cfg.uiChrome === 'object') {
         applyWorkspaceUiChrome(cfg.uiChrome);
       }
-      if (cfg.feedScrollByView && typeof cfg.feedScrollByView === 'object') {
-        suppressScrollWorkspacePersistUntil = Date.now() + 650;
-        try {
-          applyWorkspaceFeedScrollToDom();
-        } catch (_) {}
-      }
       if (Number.isFinite(revMerge) && revMerge > lastMergedWorkspaceRevMs) lastMergedWorkspaceRevMs = revMerge;
     } finally {
       applyingPersonalWorkspaceFromRemote = false;
@@ -7787,11 +7714,6 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
   applyingPersonalWorkspaceFromRemote = true;
   try {
   ensureWorkspaceChannelsFromCfg(cfg);
-  let hadRemoteScroll = false;
-  if (cfg.feedScrollByView && typeof cfg.feedScrollByView === 'object') {
-    hadRemoteScroll = true;
-    mergeWorkspaceFeedScrollFromConfig(cfg);
-  }
   if (Array.isArray(cfg.channelStripOrder) && cfg.channelStripOrder.length > 0) {
     try {
       const strip = cfg.channelStripOrder
@@ -7880,13 +7802,6 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
   if (cfg.uiChrome && typeof cfg.uiChrome === 'object') {
     applyWorkspaceUiChrome(cfg.uiChrome);
   }
-  if (hadRemoteScroll) {
-    suppressScrollWorkspacePersistUntil = Date.now() + 650;
-    try {
-      saveScrollState();
-    } catch (_) {}
-    applyWorkspaceFeedScrollToDom();
-  }
   if (Number.isFinite(revCk) && revCk > lastAppliedWorkspaceRev) lastAppliedWorkspaceRev = revCk;
   } finally {
     applyingPersonalWorkspaceFromRemote = false;
@@ -7967,14 +7882,10 @@ async function persistPersonalWorkspaceToServer() {
         if (c && typeof c === 'object') base = Object.assign({}, c);
       }
     } catch (_) {}
-    if (slice.feedScrollByView && typeof slice.feedScrollByView === 'object') {
-      const prev =
-        base.feedScrollByView && typeof base.feedScrollByView === 'object' ? base.feedScrollByView : {};
-      slice.feedScrollByView = Object.assign({}, prev, slice.feedScrollByView);
-    } else if (base.feedScrollByView && typeof base.feedScrollByView === 'object') {
-      slice.feedScrollByView = Object.assign({}, base.feedScrollByView);
-    }
     Object.assign(base, slice);
+    try {
+      delete base.feedScrollByView;
+    } catch (_) {}
     var wsNonce =
       typeof crypto !== 'undefined' && crypto.randomUUID
         ? crypto.randomUUID()
@@ -10906,7 +10817,7 @@ function scheduleScrollPersistIfAllowed() {
   schedulePersonalWorkspacePersist();
 }
 
-/** Persist scroll position for cross-device workspace sync (primary + secondary feeds). */
+/** Track scroll in viewScroll + localStorage; workspace server payload no longer includes scroll (per-device only). */
 function bindFeedScrollWorkspaceSync(scrollEl, channelKeyOrFn, isPrimaryFeed) {
   if (!scrollEl) return;
   var stack = scrollEl.closest && scrollEl.closest('.visual-feed-stack');
