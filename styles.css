@@ -398,21 +398,20 @@ header{
   box-sizing:border-box;
 }
 
-/* ── TOP BAR (manage): single trigger + dropdown (same pattern as object actions) ── */
+/* ── TOP BAR (manage): hidden for now (restore by removing rules below) ── */
 #manage-bar{
-  height:var(--bar-top-height);
-  flex-shrink:0;
-  background:var(--bg2);
-  border-bottom:1px solid var(--line);
-  padding:0 12px;
-  display:flex;
-  align-items:center;
-  justify-content:flex-end;
-  gap:8px;
-  font-size:10px;
-  color:var(--dim);
-  box-sizing:border-box;
-  position:relative;
+  display:none !important;
+  height:0 !important;
+  min-height:0 !important;
+  padding:0 !important;
+  margin:0 !important;
+  border:none !important;
+  overflow:hidden !important;
+  visibility:hidden !important;
+  pointer-events:none !important;
+}
+#manage-bar.manage-bar-open .manage-bar-dropdown{
+  display:none !important;
 }
 .manage-bar-trigger{
   border:1px solid var(--line2);

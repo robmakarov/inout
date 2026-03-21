@@ -1494,6 +1494,8 @@ function rememberWorkspacePushNonce(n) {
 var lastAppliedWorkspaceRev = 0;
 /** Dedupe merge-only workspace applies (realtime / broadcast) without blocking full hydrate by rev. */
 var lastMergedWorkspacePushNonce = null;
+/** True while applying saved workspace on load — lets switchChannel reload data when vars already match. */
+var inoutHydratingWorkspace = false;
 
 var workspaceUiBroadcastSub = null;
 function teardownWorkspaceUiBroadcast() {
@@ -7547,8 +7549,74 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
     applyingPersonalWorkspaceFromRemote = true;
     try {
       ensureWorkspaceChannelsFromCfg(cfg);
+      if (cfg.feedScrollByView && typeof cfg.feedScrollByView === 'object') {
+        try {
+          const keys = Object.keys(cfg.feedScrollByView);
+          for (let i = 0; i < keys.length; i++) {
+            const k = keys[i];
+            const top = cfg.feedScrollByView[k];
+            if (typeof top === 'number' && Number.isFinite(top) && top >= 0) {
+              viewScroll.set(String(k), top);
+            }
+          }
+        } catch (_) {}
+      }
+      if (Array.isArray(cfg.channelStripOrder) && cfg.channelStripOrder.length > 0) {
+        try {
+          const strip = cfg.channelStripOrder
+            .map(function(x) {
+              return String(x || '').trim();
+            })
+            .filter(Boolean);
+          const srv = strip.filter(function(c) {
+            return c !== 'main';
+          });
+          const localExtras = viewNames.filter(function(c) {
+            return c !== 'main' && srv.indexOf(c) < 0;
+          });
+          viewNames = ['main'].concat(srv).concat(localExtras);
+          viewNames = Array.from(new Set(viewNames));
+          saveChannelsList();
+          renderTabs();
+          refreshMoveTargets();
+          syncComposerTargetSelects();
+        } catch (_) {}
+      }
+      if (typeof cfg.focusedChannel === 'string' && cfg.focusedChannel.trim()) {
+        const want = cfg.focusedChannel.trim();
+        if (viewNames.includes(want)) {
+          const slot0 = inputSlots && inputSlots[0];
+          const slotMismatch =
+            primarySlotAutoTarget && slot0 && String(slot0.channel || '') !== want;
+          const needSwitch = want !== currentView || want !== currentChannel || slotMismatch;
+          if (needSwitch) {
+            applyingWorkspaceFocusFromRemote = true;
+            try {
+              await switchChannel(want);
+            } catch (e) {
+              console.error('apply focusedChannel (merge)', e);
+            } finally {
+              applyingWorkspaceFocusFromRemote = false;
+            }
+          }
+        }
+      }
       if (Array.isArray(cfg.openSecondaryViews)) {
         await applyWorkspaceOpenSecondaryViews(cfg.openSecondaryViews, { merge: true });
+      }
+      if (typeof cfg.multiviewSplit === 'number' && Number.isFinite(cfg.multiviewSplit)) {
+        try {
+          applyMultiviewSplit(cfg.multiviewSplit, false);
+        } catch (_) {}
+      }
+      if (cfg.uiChrome && typeof cfg.uiChrome === 'object') {
+        applyWorkspaceUiChrome(cfg.uiChrome);
+      }
+      if (cfg.feedScrollByView && typeof cfg.feedScrollByView === 'object') {
+        suppressScrollWorkspacePersistUntil = Date.now() + 650;
+        try {
+          applyWorkspaceFeedScrollToDom();
+        } catch (_) {}
       }
       if (nonceM) lastMergedWorkspacePushNonce = String(nonceM);
     } finally {
@@ -7772,10 +7840,38 @@ async function hydrateWorkspaceOpenViewsForSignedInUser() {
     console.error('hydrateWorkspaceOpenViewsForSignedInUser', e);
   }
   if (cfgFull && typeof cfgFull === 'object') {
-    await applyPersonalWorkspaceStateFromServer(cfgFull);
+    const hadFocused =
+      typeof cfgFull.focusedChannel === 'string' && cfgFull.focusedChannel.trim().length > 0;
+    inoutHydratingWorkspace = true;
+    try {
+      await applyPersonalWorkspaceStateFromServer(cfgFull);
+      if (!hadFocused) {
+        try {
+          const saved = localStorage.getItem(CURRENT_VIEW_KEY);
+          if (saved && viewNames.includes(saved)) await switchChannel(saved);
+        } catch (e) {
+          console.error('hydrate fallback switchChannel', e);
+        }
+      }
+    } finally {
+      inoutHydratingWorkspace = false;
+    }
     return;
   }
-  await restoreSecondaryView();
+  inoutHydratingWorkspace = true;
+  try {
+    await restoreSecondaryView();
+    try {
+      const saved = localStorage.getItem(CURRENT_VIEW_KEY);
+      if (saved && viewNames.includes(saved)) {
+        await switchChannel(saved);
+      }
+    } catch (e) {
+      console.error('hydrate local channel', e);
+    }
+  } finally {
+    inoutHydratingWorkspace = false;
+  }
   if (collectOpenSecondaryViewChannels().length) await persistPersonalWorkspaceToServer();
 }
 
@@ -8207,7 +8303,33 @@ async function switchChannel(ch) {
     const slot0 = inputSlots && inputSlots[0];
     const slotMismatch =
       primarySlotAutoTarget && slot0 && String(slot0.channel || '') !== String(ch);
-    if (!slotMismatch) return;
+    if (!slotMismatch) {
+      /* Hydrate can set currentView via localStorage before switchChannel runs; same tab must still load data. */
+      if (inoutHydratingWorkspace) {
+        if (currentUser && shouldUseServerForObjects()) {
+          try {
+            await loadObjectOrderForCurrentChannel();
+            await loadObjects();
+          } catch (e) {
+            console.error('switchChannel same-channel reload', e);
+          }
+        } else if (tempSessionId) {
+          try {
+            await loadObjectOrderForCurrentChannel();
+            await loadObjects();
+          } catch (e) {
+            console.error('switchChannel same-channel guest reload', e);
+          }
+        } else if (!currentUser && !tempSessionId) {
+          try {
+            await loadLocalObjectsForCurrentView();
+          } catch (e) {
+            console.error('switchChannel same-channel local reload', e);
+          }
+        }
+      }
+      return;
+    }
   }
   teardownDndBroadcastChannel();
   if (editingObjectId != null) cancelEditingMode(true);
@@ -8601,7 +8723,6 @@ async function refreshAuth() {
       renderTabs();
       subscribeRealtimeAll();
       setupDraftChannel();
-      restoreLastChannel();
       await hydrateWorkspaceOpenViewsForSignedInUser();
       await loadObjectOrderForCurrentChannel();
       await loadObjects();
