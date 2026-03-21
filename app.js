@@ -7156,6 +7156,25 @@ async function applyPersonalWorkspaceStateFromServer(cfg) {
   if (Array.isArray(cfg.openSecondaryViews)) {
     await applyWorkspaceOpenSecondaryViews(cfg.openSecondaryViews);
   }
+  if (typeof cfg.focusedChannel === 'string' && cfg.focusedChannel.trim()) {
+    const want = cfg.focusedChannel.trim();
+    if (viewNames.includes(want)) {
+      const slot0 = inputSlots && inputSlots[0];
+      const slotMismatch =
+        primarySlotAutoTarget && slot0 && String(slot0.channel || '') !== want;
+      const needSwitch = want !== currentView || want !== currentChannel || slotMismatch;
+      if (needSwitch) {
+        applyingWorkspaceFocusFromRemote = true;
+        try {
+          await switchChannel(want);
+        } catch (e) {
+          console.error('apply focusedChannel', e);
+        } finally {
+          applyingWorkspaceFocusFromRemote = false;
+        }
+      }
+    }
+  }
   if (typeof cfg.multiviewSplit === 'number' && Number.isFinite(cfg.multiviewSplit)) {
     try {
       applyMultiviewSplit(cfg.multiviewSplit, false);
@@ -7198,19 +7217,6 @@ async function applyPersonalWorkspaceStateFromServer(cfg) {
     try {
       localStorage.setItem(INOUT_KB_SETTINGS_KEY, JSON.stringify(cfg.settings));
     } catch (_) {}
-  }
-  if (typeof cfg.focusedChannel === 'string' && cfg.focusedChannel.trim()) {
-    const want = cfg.focusedChannel.trim();
-    if (viewNames.includes(want) && (want !== currentView || want !== currentChannel)) {
-      applyingWorkspaceFocusFromRemote = true;
-      try {
-        await switchChannel(want);
-      } catch (e) {
-        console.error('apply focusedChannel', e);
-      } finally {
-        applyingWorkspaceFocusFromRemote = false;
-      }
-    }
   }
 }
 
@@ -7626,14 +7632,19 @@ function renameView(ch, btn) {
 function syncComposerTargetSelects() {
   const channels = (typeof viewNames !== 'undefined' && Array.isArray(viewNames)) ? viewNames : ['main'];
   if (!composerSlotsContainer) return;
-  composerSlotsContainer.querySelectorAll('.composer-slot-target-select').forEach(sel => {
-    const current = sel.value;
+  composerSlotsContainer.querySelectorAll('.composer-slot-target-select').forEach((sel, i) => {
+    let preferred = sel.value;
+    if (i === 0 && typeof currentChannel !== 'undefined' && currentChannel != null && String(currentChannel)) {
+      preferred = String(currentChannel);
+    } else if (inputSlots && inputSlots[i] && inputSlots[i].channel != null) {
+      preferred = String(inputSlots[i].channel);
+    }
     sel.innerHTML = '';
     channels.forEach(ch => {
       const opt = document.createElement('option');
       opt.value = ch;
       opt.textContent = getViewDisplayName(ch);
-      if (ch === current) opt.selected = true;
+      if (ch === preferred) opt.selected = true;
       sel.appendChild(opt);
     });
     if (!sel.value && channels.length) sel.selectedIndex = 0;
@@ -7698,7 +7709,12 @@ async function refreshSharedFlags() {
 }
 
 async function switchChannel(ch) {
-  if (ch === currentChannel && ch === currentView) return;
+  if (ch === currentChannel && ch === currentView) {
+    const slot0 = inputSlots && inputSlots[0];
+    const slotMismatch =
+      primarySlotAutoTarget && slot0 && String(slot0.channel || '') !== String(ch);
+    if (!slotMismatch) return;
+  }
   teardownDndBroadcastChannel();
   if (editingObjectId != null) cancelEditingMode(true);
   if (feedEl) {
@@ -7735,7 +7751,12 @@ async function switchChannel(ch) {
     setupDraftChannel();
     subscribeOrderRealtime();
     subscribeViewRealtime();
-    ensureMembership().then(reloadForUser);
+    try {
+      await ensureMembership();
+      await reloadForUser();
+    } catch (e) {
+      console.error('switchChannel reload', e);
+    }
   } else if (tempSessionId) {
     setupDraftChannel();
     subscribeViewRealtime();
