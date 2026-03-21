@@ -1492,6 +1492,8 @@ function rememberWorkspacePushNonce(n) {
 
 /** Monotonic workspace config revision (see applyPersonalWorkspaceStateFromServer). */
 var lastAppliedWorkspaceRev = 0;
+/** Dedupe merge-only workspace applies (realtime / broadcast) without blocking full hydrate by rev. */
+var lastMergedWorkspacePushNonce = null;
 
 var workspaceUiBroadcastSub = null;
 function teardownWorkspaceUiBroadcast() {
@@ -1531,7 +1533,7 @@ function setupWorkspaceUiBroadcast() {
           var cfg = data.config;
           if (!cfg || typeof cfg !== 'object') return;
           if (cfg._wsPushNonce && myWorkspacePushNonces.has(cfg._wsPushNonce)) return;
-          applyPersonalWorkspaceStateFromServer(cfg).catch(function(e) {
+          applyPersonalWorkspaceStateFromServer(cfg, { mergeMultiview: true }).catch(function(e) {
             console.error('workspace broadcast apply', e);
           });
         } catch (err) {
@@ -3982,7 +3984,7 @@ function subscribeViewRealtime() {
             const cfgW = normalizeViewConfig(row.config);
             if (cfgW && cfgW._wsPushNonce && myWorkspacePushNonces.has(cfgW._wsPushNonce)) return;
             if (cfgW && typeof cfgW === 'object') {
-              applyPersonalWorkspaceStateFromServer(cfgW).catch(function(e) {
+              applyPersonalWorkspaceStateFromServer(cfgW, { mergeMultiview: true }).catch(function(e) {
                 console.error('personal workspace apply', e);
               });
             }
@@ -5775,6 +5777,7 @@ function setupMultiviewResizer(resizerEl, viewsEl) {
 
 async function openSecondaryView(ch) {
   if (!viewNames.includes(ch)) return;
+  if (views.some(v => v && String(v.channel || '') === String(ch))) return;
   secondaryViewChannel = ch;
   saveSecondaryViewState();
   const viewsContainer = document.querySelector('.multiview-views');
@@ -7321,21 +7324,34 @@ function normalizeViewConfig(raw) {
 }
 
 /**
- * Upsert views row: matches schema where unique is (user_id, channel), with fallback to channel-only.
+ * Save views.config without PostgREST upsert on_conflict (avoids 400 when DB unique/index names differ).
  */
 async function upsertViewsConfigForChannel(channelKey, configObj) {
   const ch = String(channelKey || 'main');
   const cfg = configObj && typeof configObj === 'object' ? configObj : {};
   if (!sb || !sb.from) return { error: new Error('no supabase client') };
   if (currentUser && currentUser.id) {
-    const r1 = await sb
+    const uid = currentUser.id;
+    const { data: row, error: selErr } = await sb
       .from('views')
-      .upsert({ user_id: currentUser.id, channel: ch, config: cfg }, { onConflict: 'user_id,channel' });
-    if (!r1.error) return r1;
-    const r2 = await sb.from('views').upsert({ channel: ch, config: cfg }, { onConflict: 'channel' });
-    return r2;
+      .select('channel')
+      .eq('user_id', uid)
+      .eq('channel', ch)
+      .maybeSingle();
+    if (selErr) return { error: selErr };
+    if (row) {
+      return sb.from('views').update({ config: cfg }).eq('user_id', uid).eq('channel', ch);
+    }
+    const ins = await sb.from('views').insert({ user_id: uid, channel: ch, config: cfg });
+    if (!ins.error) return ins;
+    return sb.from('views').update({ config: cfg }).eq('user_id', uid).eq('channel', ch);
   }
-  return sb.from('views').upsert({ channel: ch, config: cfg }, { onConflict: 'channel' });
+  const { data: row2, error: selErr2 } = await sb.from('views').select('channel').eq('channel', ch).limit(1).maybeSingle();
+  if (selErr2) return { error: selErr2 };
+  if (row2) {
+    return sb.from('views').update({ config: cfg }).eq('channel', ch);
+  }
+  return sb.from('views').insert({ channel: ch, config: cfg });
 }
 
 /** Shared / guest feeds: one `views` row per channel so all watchers see the same order & layout prefs. */
@@ -7353,7 +7369,14 @@ async function upsertChannelViewConfigMerged(channelKey, configObj) {
   const cfg = configObj && typeof configObj === 'object' ? configObj : {};
   if (!sb || !sb.from) return { error: new Error('no supabase client') };
   if (isChannelViewCollaborative(ch)) {
-    return sb.from('views').upsert({ channel: ch, config: cfg }, { onConflict: 'channel' });
+    const { data: row, error: selErr } = await sb.from('views').select('channel').eq('channel', ch).limit(1).maybeSingle();
+    if (selErr) return { error: selErr };
+    if (row) {
+      return sb.from('views').update({ config: cfg }).eq('channel', ch);
+    }
+    const ins = await sb.from('views').insert({ channel: ch, config: cfg });
+    if (!ins.error) return ins;
+    return sb.from('views').update({ config: cfg }).eq('channel', ch);
   }
   return upsertViewsConfigForChannel(ch, cfg);
 }
@@ -7387,11 +7410,26 @@ function collectOpenSecondaryViewChannels() {
     .filter(ch => typeof ch === 'string' && ch.trim());
 }
 
-async function applyWorkspaceOpenSecondaryViews(desired) {
+async function applyWorkspaceOpenSecondaryViews(desired, opts) {
+  opts = opts || {};
+  const merge = !!opts.merge;
   const cleaned = (Array.isArray(desired) ? desired : [])
     .map(c => String(c || '').trim())
     .filter(Boolean);
   const cur = collectOpenSecondaryViewChannels();
+  if (merge) {
+    let have = new Set(cur);
+    for (const ch of cleaned) {
+      if (have.has(ch)) continue;
+      if (!viewNames.includes(ch)) continue;
+      await openSecondaryView(ch);
+      have = new Set(collectOpenSecondaryViewChannels());
+    }
+    try {
+      localStorage.setItem(OPEN_VIEWS_KEY, JSON.stringify(collectOpenSecondaryViewChannels()));
+    } catch (_) {}
+    return;
+  }
   if (cur.length === cleaned.length && cur.every((c, i) => c === cleaned[i])) return;
   closeSecondaryView();
   for (const ch of cleaned) {
@@ -7499,8 +7537,25 @@ function applyWorkspaceFeedScrollToDom() {
   });
 }
 
-async function applyPersonalWorkspaceStateFromServer(cfg) {
+async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
+  opts = opts || {};
+  const mergeMultiview = !!opts.mergeMultiview;
   if (!cfg || typeof cfg !== 'object') return;
+  if (mergeMultiview) {
+    var nonceM = cfg._wsPushNonce;
+    if (nonceM && nonceM === lastMergedWorkspacePushNonce) return;
+    applyingPersonalWorkspaceFromRemote = true;
+    try {
+      ensureWorkspaceChannelsFromCfg(cfg);
+      if (Array.isArray(cfg.openSecondaryViews)) {
+        await applyWorkspaceOpenSecondaryViews(cfg.openSecondaryViews, { merge: true });
+      }
+      if (nonceM) lastMergedWorkspacePushNonce = String(nonceM);
+    } finally {
+      applyingPersonalWorkspaceFromRemote = false;
+    }
+    return;
+  }
   var revCk = Number(cfg._wsRev);
   if (Number.isFinite(revCk)) {
     if (revCk <= lastAppliedWorkspaceRev) return;

@@ -161,9 +161,23 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
   min-width:0;
   display:flex;
   flex-direction:column;
+  align-items:stretch;
   min-height:0;
   overflow:hidden;
   position:relative;
+}
+/* Keep manage bar full-width above the feed (avoid row layout treating it as a side column). */
+.multiview-views .view > #manage-bar{
+  flex:0 0 auto;
+  width:100%;
+  min-width:0;
+  order:0;
+}
+.multiview-views .view > .visual{
+  flex:1 1 0;
+  min-height:0;
+  min-width:0;
+  order:1;
 }
 .multiview-views .view:only-child{
   flex:1 1 100%;

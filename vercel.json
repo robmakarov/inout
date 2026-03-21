@@ -2,6 +2,11 @@
   "routes": [
     { "src": "/styles.css", "dest": "/styles.css" },
     { "src": "/app.js", "dest": "/app.js" },
+    { "src": "/storage-model.js", "dest": "/storage-model.js" },
+    { "src": "/local-store-idb.js", "dest": "/local-store-idb.js" },
+    { "src": "/folder-sync.js", "dest": "/folder-sync.js" },
+    { "src": "/service-worker.js", "dest": "/service-worker.js" },
+    { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
