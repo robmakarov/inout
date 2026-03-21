@@ -60,7 +60,7 @@
     <div class="header-right">
       <div id="online-count"><span class="dot"></span><span id="oc-num">—</span></div>
     <div id="object-count"></div>
-    <button id="user-btn" aria-label="Account" onclick="var m=document.getElementById('user-modal-backdrop');var c=document.getElementById('channel-modal-backdrop');var ap=document.getElementById('add-members-modal-backdrop');if(c)c.style.display='none';if(ap)ap.style.display='none';if(m){m.style.display='block';m.setAttribute('aria-hidden','false');}">
+    <button id="user-btn" aria-label="Account" type="button">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5Z" stroke="currentColor" stroke-width="1.8"/>
         <path d="M4 22c0-4.418 3.582-8 8-8s8 3.582 8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -122,9 +122,11 @@
     </div>
 
     <div class="visual" id="visual" aria-label="View content">
-  <div id="feed">
-    <div class="feed-inner" id="feed-inner">
-      <div id="empty">
+  <div class="visual-feed-stack">
+    <div id="view-live-editing-bar" class="view-live-editing-bar" aria-live="polite" hidden></div>
+    <div id="feed">
+      <div class="feed-inner" id="feed-inner">
+        <div id="empty">
             <div class="loader-inner">
               <div class="loader-ring"></div>
               <div class="loader-ring"></div>
@@ -134,6 +136,7 @@
           </div>
         </div>
       </div>
+    </div>
     </div>
     </div>
   </div>
@@ -269,9 +272,27 @@
       </div>
     </div>
 
-    <div class="um-section">
-      <div class="um-label">Where your data is stored</div>
+    <div class="um-section um-storage-section">
+      <div class="um-label">Storage</div>
       <div class="um-value um-storage-info" id="um-storage-info">—</div>
+      <div class="um-storage-target" id="um-storage-target-wrap">
+        <label class="um-radio-row"><input type="radio" name="um-storage-target" value="cloud" id="um-storage-cloud"/> Cloud (server)</label>
+        <label class="um-radio-row"><input type="radio" name="um-storage-target" value="local" id="um-storage-local"/> Local (this device)</label>
+      </div>
+      <p class="um-hint" id="um-storage-hint"></p>
+      <div class="um-vault-panel" id="um-vault-panel">
+        <div class="um-label um-sublabel">Local databases</div>
+        <select id="um-vault-select" class="cm-input um-vault-select" aria-label="Active local database"></select>
+        <div class="um-row um-vault-actions">
+          <button type="button" class="um-btn" id="um-vault-open">Open</button>
+          <button type="button" class="um-btn" id="um-vault-create">New…</button>
+          <button type="button" class="um-btn" id="um-vault-delete">Delete</button>
+        </div>
+      </div>
+      <div class="um-row um-local-data-actions">
+        <button class="um-btn" id="um-export-local" type="button">Export active local base</button>
+        <button class="um-btn" id="um-clear-local" type="button">Clear this device</button>
+      </div>
     </div>
 
     <div class="um-section">
@@ -298,14 +319,6 @@
       </label>
       <div class="um-row">
         <button class="um-btn" id="um-layout-edit" type="button" disabled title="Layout editing is temporarily disabled">Layout edit (coming soon)</button>
-      </div>
-    </div>
-
-    <div class="um-section">
-      <div class="um-label">Local storage</div>
-      <div class="um-row">
-        <button class="um-btn" id="um-export-local" type="button">Export local base</button>
-        <button class="um-btn" id="um-clear-local" type="button">Clear from this device</button>
       </div>
     </div>
 

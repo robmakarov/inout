@@ -146,7 +146,6 @@ const umAuthStatus = document.getElementById('um-auth-status');
   const umAuthBtn    = document.getElementById('um-auth-btn');
   const umStorageInfo = document.getElementById('um-storage-info');
   const umUserId     = document.getElementById('um-user-id');
-  if (userBtn && umStorageInfo) userBtn.addEventListener('click', function() { umStorageInfo.textContent = getStorageLocationMessage(); });
 const umCopyIdBtn  = document.getElementById('um-copy-id');
 const umShowQrBtn  = document.getElementById('um-show-qr');
 const umExportLocalBtn = document.getElementById('um-export-local');
@@ -431,7 +430,13 @@ function subscribeTempSessionJoins() {
       (async function () {
         try {
           let raw = '{}';
-          if (currentUser && currentUser.id) {
+          if (usesIndexedDbForObjectData()) {
+            const store = getActiveLocalStore();
+            if (store && store.init && store.exportJsonString) {
+              await store.init();
+              raw = await store.exportJsonString();
+            }
+          } else if (currentUser && currentUser.id) {
             const key = getLocalObjectsKey();
             raw = localStorage.getItem(key) || '{}';
           } else if (typeof INOUT_LOCAL_DB !== 'undefined' && INOUT_LOCAL_DB.init && INOUT_LOCAL_DB.exportJsonString) {
@@ -476,8 +481,21 @@ function subscribeTempSessionJoins() {
             }).catch(() => {});
           }
 
-          // 3) Device object database (IndexedDB)
-          if (typeof INOUT_LOCAL_DB !== 'undefined' && INOUT_LOCAL_DB.deleteDatabase) {
+          // 3) Device object databases (IndexedDB) — all named vaults
+          if (typeof INOUT_LOCAL_DB !== 'undefined' && INOUT_LOCAL_DB.forVault) {
+            const reg = readVaultRegistry();
+            const seen = new Set();
+            (reg.vaults || []).forEach(v => {
+              if (!v || !v.id || seen.has(v.id)) return;
+              seen.add(v.id);
+            });
+            seen.add('default');
+            for (const vid of seen) {
+              try {
+                await INOUT_LOCAL_DB.forVault(vid).deleteDatabase();
+              } catch (_) {}
+            }
+          } else if (typeof INOUT_LOCAL_DB !== 'undefined' && INOUT_LOCAL_DB.deleteDatabase) {
             try { await INOUT_LOCAL_DB.deleteDatabase(); } catch (_) {}
           }
 
@@ -1202,22 +1220,12 @@ function subscribeTempSessionJoins() {
 })();
 
 (function setupProfileAndModalsEarly() {
-  function openUserModalEarly() {
-    var back = document.getElementById('user-modal-backdrop');
-    if (!back) return;
-    var cm = document.getElementById('channel-modal-backdrop');
-    if (cm) cm.style.display = 'none';
-    back.style.display = 'block';
-    back.setAttribute('aria-hidden', 'false');
-  }
   function closeUserModalEarly() {
     var back = document.getElementById('user-modal-backdrop');
     if (!back) return;
     back.style.display = 'none';
     back.setAttribute('aria-hidden', 'true');
   }
-  var btn = document.getElementById('user-btn');
-  if (btn) btn.addEventListener('click', openUserModalEarly);
   var closeBtn = document.getElementById('user-close');
   if (closeBtn) closeBtn.addEventListener('click', closeUserModalEarly);
   var back = document.getElementById('user-modal-backdrop');
@@ -1278,7 +1286,102 @@ const PINNED_STATE_KEY     = 'inout_pinned_v1';
 const SCROLL_STATE_KEY     = 'inout_scroll_state_v1';
 const WAS_EDITING_KEY      = 'inout_was_editing_v1';
 const AUTH_BACKUP_KEY     = 'inout_auth_user_backup';
+const STORAGE_TARGET_KEY   = 'inout_storage_target_v1';
+const ACTIVE_LOCAL_VAULT_KEY = 'inout_active_local_vault_v1';
+const VAULT_REGISTRY_KEY   = 'inout_local_vault_registry_v1';
 let suppressAutoAuth      = false; // when true, never auto-log user back in this tab
+
+function getStorageTarget() {
+  try {
+    const v = localStorage.getItem(STORAGE_TARGET_KEY);
+    if (v === 'local' || v === 'cloud') return v;
+  } catch (_) {}
+  return 'cloud';
+}
+
+function setStorageTarget(mode) {
+  try {
+    localStorage.setItem(STORAGE_TARGET_KEY, mode === 'local' ? 'local' : 'cloud');
+  } catch (_) {}
+}
+
+function getActiveVaultId() {
+  try {
+    const v = localStorage.getItem(ACTIVE_LOCAL_VAULT_KEY);
+    if (v && String(v).trim()) return String(v).trim();
+  } catch (_) {}
+  return 'default';
+}
+
+function setActiveVaultId(id) {
+  try {
+    const s = (typeof INOUT_LOCAL_DB !== 'undefined' && INOUT_LOCAL_DB.sanitizeVaultId)
+      ? INOUT_LOCAL_DB.sanitizeVaultId(id)
+      : (String(id || 'default').trim() || 'default');
+    localStorage.setItem(ACTIVE_LOCAL_VAULT_KEY, s);
+  } catch (_) {}
+}
+
+function readVaultRegistry() {
+  try {
+    const raw = localStorage.getItem(VAULT_REGISTRY_KEY);
+    const j = raw ? JSON.parse(raw) : null;
+    if (j && Array.isArray(j.vaults)) return j;
+  } catch (_) {}
+  return { vaults: [{ id: 'default', label: 'Default', createdAt: 0 }] };
+}
+
+function writeVaultRegistry(reg) {
+  try {
+    localStorage.setItem(VAULT_REGISTRY_KEY, JSON.stringify(reg || { vaults: [] }));
+  } catch (_) {}
+}
+
+function ensureVaultRegistry() {
+  let reg = readVaultRegistry();
+  if (!reg.vaults || !reg.vaults.length) {
+    reg = { vaults: [{ id: 'default', label: 'Default', createdAt: Date.now() }] };
+    writeVaultRegistry(reg);
+  } else if (!reg.vaults.some(v => v && v.id === 'default')) {
+    reg.vaults.unshift({ id: 'default', label: 'Default', createdAt: 0 });
+    writeVaultRegistry(reg);
+  }
+  return reg;
+}
+
+function getActiveLocalStore() {
+  ensureVaultRegistry();
+  const vid = getActiveVaultId();
+  if (typeof INOUT_LOCAL_DB !== 'undefined' && INOUT_LOCAL_DB.forVault) {
+    return INOUT_LOCAL_DB.forVault(vid);
+  }
+  return INOUT_LOCAL_DB;
+}
+
+function usesIndexedDbForObjectData() {
+  if (tempSessionId) return false;
+  if (getStorageTarget() === 'local') return true;
+  return !currentUser;
+}
+
+function shouldUseServerForObjects() {
+  if (tempSessionId) return true;
+  if (getStorageTarget() === 'local') return false;
+  return !!currentUser;
+}
+
+function getScopedViewStorageKey(viewKey) {
+  const ch = viewKey != null ? viewKey : currentView || 'main';
+  let prefix;
+  if (usesIndexedDbForObjectData()) {
+    prefix = 'vault:' + getActiveVaultId();
+  } else if (currentUser && currentUser.id) {
+    prefix = 'user:' + currentUser.id;
+  } else {
+    prefix = 'anon';
+  }
+  return prefix + '::' + ch;
+}
 const seenIds       = new Set();
 const viewScroll = new Map();
 const OPEN_VIEWS_KEY     = 'inout_open_views_v1';
@@ -1318,6 +1421,21 @@ function saveLocalObjectsToLocalStorage(objByView) {
  * Cloud remains authoritative when signed in; this is replica/offline-shaped cache for the device.
  */
 async function getLocalObjectByViewMap() {
+  if (usesIndexedDbForObjectData()) {
+    if (typeof indexedDB === 'undefined') {
+      return loadLocalObjectsFromLocalStorage();
+    }
+    try {
+      const store = getActiveLocalStore();
+      if (store && store.init && store.getByViewMap) {
+        await store.init();
+        return await store.getByViewMap();
+      }
+    } catch (e) {
+      console.error('getLocalObjectByViewMap', e);
+    }
+    return loadLocalObjectsFromLocalStorage();
+  }
   if (currentUser && currentUser.id) {
     return loadLocalObjectsFromLocalStorage();
   }
@@ -1336,6 +1454,24 @@ async function getLocalObjectByViewMap() {
 }
 
 async function saveLocalObjectByViewMap(objByView) {
+  if (usesIndexedDbForObjectData()) {
+    if (typeof indexedDB === 'undefined') {
+      saveLocalObjectsToLocalStorage(objByView);
+      return;
+    }
+    try {
+      const store = getActiveLocalStore();
+      if (store && store.init && store.setByViewMap) {
+        await store.init();
+        await store.setByViewMap(objByView || {});
+        return;
+      }
+    } catch (e) {
+      console.error('saveLocalObjectByViewMap', e);
+    }
+    saveLocalObjectsToLocalStorage(objByView);
+    return;
+  }
   if (currentUser && currentUser.id) {
     saveLocalObjectsToLocalStorage(objByView);
     return;
@@ -1379,9 +1515,7 @@ async function loadLocalObjectsForCurrentView() {
       if (raw) {
         const map = JSON.parse(raw);
         if (map && typeof map === 'object') {
-          const orderKey = currentUser && currentUser.id
-            ? (currentUser.id + '::' + key)
-            : ('anon::' + key);
+          const orderKey = getScopedViewStorageKey(key);
           const arr = Array.isArray(map[orderKey]) ? map[orderKey] : [];
           if (arr.length) list = sortObjectsByOrder(list, arr);
         }
@@ -1394,15 +1528,19 @@ async function loadLocalObjectsForCurrentView() {
   }
 }
 
-async function removeLocalObjectsForCurrentView(ids) {
+async function removeLocalObjectsFromView(ids, viewKey) {
   if (!ids || !ids.length) return;
   const byView = await getLocalObjectByViewMap();
-  const key = currentView || 'main';
+  const key = viewKey != null ? viewKey : (currentView || 'main');
   let list = Array.isArray(byView[key]) ? byView[key] : [];
-  const set = new Set(ids);
-  list = list.filter(o => !o || typeof o.id === 'undefined' ? false : !set.has(o.id));
+  const set = new Set(ids.map(x => Number(x)).filter(Number.isFinite));
+  list = list.filter(o => !o || o.id == null ? false : !set.has(Number(o.id)));
   byView[key] = list;
   await saveLocalObjectByViewMap(byView);
+}
+
+async function removeLocalObjectsForCurrentView(ids) {
+  return removeLocalObjectsFromView(ids, currentView || 'main');
 }
 function getDeviceId() {
   try {
@@ -1485,7 +1623,11 @@ let channelSubs = new Map();
 let membershipRealtimeSub = null;
 let orderSub = null;
 let viewSub  = null;
-let draftChannel = null;
+let viewEditingChannel = null;
+let composerSyncChannel = null;
+/** @type {Record<string, { objectId: number, authorName: string, ts: number }>} */
+let viewEditingPresence = Object.create(null);
+let viewPresencePruneTimer = null;
 let layoutChannel = null;
 let latestRemoteDraft = '';
 let latestClipboardText = '';
@@ -2056,6 +2198,10 @@ function pushUndo(action) {
 }
 
 async function undoLastAction() {
+  if (!shouldUseServerForObjects()) {
+    toast('Undo isn’t available for local object storage yet.');
+    return;
+  }
   if (!currentUser) {
     toast('Sign in to undo.');
     return;
@@ -2213,6 +2359,9 @@ function restoreEditingRowsOnCancel() {
 /** Input mode is default and reactivates after every operation; only edit mode interrupts it. */
 function reactivateInputMode(opts) {
   opts = opts || {};
+  if (editingObjectId != null) {
+    broadcastViewEditingEnd(editingObjectId);
+  }
   restoreEditingRowsOnCancel();
   originalEditTextForCancel = null;
   originalEditTextForCancelMap = null;
@@ -2650,6 +2799,9 @@ function init(done) {
 function openUserModal() {
   if (!umBackdrop) return;
   if (typeof closeChannelModal === 'function') closeChannelModal();
+  const ap = document.getElementById('add-members-modal-backdrop');
+  if (ap) ap.style.display = 'none';
+  if (typeof refreshStorageUIPanel === 'function') refreshStorageUIPanel();
   umBackdrop.style.display = 'block';
   umBackdrop.setAttribute('aria-hidden', 'false');
 }
@@ -2661,7 +2813,7 @@ function closeUserModal() {
   requestAnimationFrame(focusMainInput);
 }
 
-if (userBtn) userBtn.addEventListener('click', openUserModal);
+if (userBtn) userBtn.addEventListener('click', () => openUserModal());
 if (umClose) umClose.addEventListener('click', closeUserModal);
 if (umBackdrop) umBackdrop.addEventListener('click', e => {
   if (e.target === umBackdrop) closeUserModal();
@@ -2803,8 +2955,7 @@ async function fetchObjectsListForChannel(ch) {
 }
 
 async function loadObjects() {
-  // Anonymous, non-shared: use local per-device store.
-  if (!currentUser && !tempSessionId) {
+  if (!shouldUseServerForObjects()) {
     await loadLocalObjectsForCurrentView();
     return;
   }
@@ -3034,6 +3185,10 @@ function subscribeRealtimeAll() {
     try { sub.unsubscribe(); } catch (_) {}
   }
   channelSubs = new Map();
+
+  if (!shouldUseServerForObjects() || !sb || !sb.channel) {
+    return;
+  }
 
   viewNames.forEach(ch => {
     try {
@@ -3789,56 +3944,221 @@ async function restoreInputFromDb() {
   await loadInputFromDbForChannel(currentChannel);
 }
 
-/* ═══ CROSS-DEVICE DRAFTS (SAME USER) ══════════════════════ */
+/* ═══ REALTIME: view object editing (everyone) vs composer input (same intent as before) ═══ */
+const VIEW_EDIT_PRESENCE_STALE_MS = 14000;
+
+function renderViewLiveEditingBar() {
+  const el = document.getElementById('view-live-editing-bar');
+  if (!el) return;
+  const now = Date.now();
+  const entries = [];
+  Object.keys(viewEditingPresence).forEach(from => {
+    const p = viewEditingPresence[from];
+    if (!p || now - p.ts > VIEW_EDIT_PRESENCE_STALE_MS) {
+      delete viewEditingPresence[from];
+      return;
+    }
+    entries.push({
+      from,
+      objectId: p.objectId,
+      label: from === myId ? 'You' : (p.authorName || 'Someone').trim() || 'Someone',
+    });
+  });
+  if (!entries.length) {
+    el.setAttribute('hidden', '');
+    el.textContent = '';
+    return;
+  }
+  el.removeAttribute('hidden');
+  el.textContent = '';
+  const prefix = document.createElement('span');
+  prefix.className = 'view-live-editing-prefix';
+  prefix.textContent = 'Live editing: ';
+  el.appendChild(prefix);
+  entries.forEach((e, i) => {
+    if (i > 0) {
+      const sep = document.createElement('span');
+      sep.className = 'view-live-editing-sep';
+      sep.textContent = ' · ';
+      el.appendChild(sep);
+    }
+    const pill = document.createElement('span');
+    pill.className = 'view-live-editing-pill';
+    const strong = document.createElement('strong');
+    strong.textContent = e.label;
+    pill.appendChild(strong);
+    pill.appendChild(document.createTextNode(' · object '));
+    const idSpan = document.createElement('span');
+    idSpan.className = 'view-live-editing-id';
+    idSpan.textContent = '#' + String(e.objectId);
+    pill.appendChild(idSpan);
+    el.appendChild(pill);
+  });
+  if (lastRemoteEditingId != null) {
+    var stillRemote = false;
+    Object.keys(viewEditingPresence).forEach(function(f) {
+      var p = viewEditingPresence[f];
+      if (p && Number(p.objectId) === Number(lastRemoteEditingId)) stillRemote = true;
+    });
+    if (!stillRemote) clearRemoteEditingDoppelganger(lastRemoteEditingId, false);
+  }
+}
+
+function startViewPresencePruneTimer() {
+  if (viewPresencePruneTimer) return;
+  viewPresencePruneTimer = setInterval(function() {
+    renderViewLiveEditingBar();
+  }, 900);
+}
+
+function stopViewPresencePruneTimer() {
+  if (viewPresencePruneTimer) {
+    clearInterval(viewPresencePruneTimer);
+    viewPresencePruneTimer = null;
+  }
+}
+
+/** Stop broadcasting object edit to everyone on this view. */
+function broadcastViewEditingEnd(lastObjectId) {
+  if (!viewEditingChannel) return;
+  try {
+    viewEditingChannel.send({
+      type: 'broadcast',
+      event: 'object_edit_end',
+      payload: {
+        from: myId,
+        objectId: lastObjectId != null && Number.isFinite(Number(lastObjectId)) ? Number(lastObjectId) : null,
+      },
+    });
+  } catch (_) {}
+}
+
+/** Tell others to drop composer draft/selection overlay for this user (e.g. switching to object edit). */
+function broadcastComposerClear() {
+  if (!composerSyncChannel) return;
+  try {
+    composerSyncChannel.send({
+      type: 'broadcast',
+      event: 'composer_clear',
+      payload: { from: myId },
+    });
+  } catch (_) {}
+}
+
 function setupDraftChannel() {
   teardownDraftChannel();
   latestRemoteDraft = '';
+  viewEditingPresence = Object.create(null);
+  renderViewLiveEditingBar();
 
-  draftChannel = sb
-    .channel('drafts-' + String(currentChannel || 'global'), {
-      config: {
-        broadcast: { self: true }
+  if (!sb || !sb.channel) return;
+
+  const chSeg = encodeURIComponent(String(currentChannel || 'global')).replace(/%/g, '_');
+
+  viewEditingChannel = sb
+    .channel('inout-view-edit-' + chSeg, {
+      config: { broadcast: { self: true } },
+    })
+    .on('broadcast', { event: 'object_edit' }, payload => {
+      const data = payload.payload || {};
+      const from = data.from != null ? String(data.from) : '';
+      const objectId = data.objectId != null ? Number(data.objectId) : NaN;
+      if (!from || !Number.isFinite(objectId)) return;
+      const authorName = data.authorName != null ? String(data.authorName) : '';
+      const text = data.text != null ? String(data.text) : '';
+      viewEditingPresence[from] = {
+        objectId,
+        authorName: authorName || 'Someone',
+        ts: Date.now(),
+      };
+      renderViewLiveEditingBar();
+      const isSelf = from === myId;
+      showRemoteEditingDoppelganger(
+        objectId,
+        text,
+        authorName || (isSelf ? 'Editing' : 'Someone'),
+        data.deviceId != null ? String(data.deviceId) : '',
+        isSelf
+      );
+    })
+    .on('broadcast', { event: 'object_edit_end' }, payload => {
+      const data = payload.payload || {};
+      const from = data.from != null ? String(data.from) : '';
+      if (!from) return;
+      const prev = viewEditingPresence[from];
+      delete viewEditingPresence[from];
+      const oidRaw = data.objectId != null ? Number(data.objectId) : prev ? prev.objectId : null;
+      const oid = oidRaw != null && Number.isFinite(oidRaw) ? oidRaw : null;
+      renderViewLiveEditingBar();
+      if (oid != null) {
+        const stillEditing = Object.keys(viewEditingPresence).some(function(f) {
+          const p = viewEditingPresence[f];
+          return p && Number(p.objectId) === oid;
+        });
+        if (!stillEditing) {
+          clearRemoteEditingDoppelganger(oid, false);
+        }
       }
     })
-    .on('broadcast', { event: 'draft' }, payload => {
+    .subscribe();
+
+  composerSyncChannel = sb
+    .channel('inout-composer-' + chSeg, {
+      config: { broadcast: { self: true } },
+    })
+    .on('broadcast', { event: 'input_sync' }, payload => {
       const data = payload.payload || {};
-      if (!data) return;
-      const text = (data.text != null ? String(data.text) : '').trim();
-      const editingId = data.editingId != null ? Number(data.editingId) : null;
-      const authorName = data.authorName != null ? String(data.authorName) : '';
-      const deviceId = data.deviceId != null ? String(data.deviceId) : '';
-      latestRemoteDraft = text;
-      const isSelf = (data.from === myId);
-      if (editingId != null && Number.isFinite(editingId)) {
-        showRemoteEditingDoppelganger(editingId, text, authorName || (isSelf ? 'Editing' : 'Someone'), deviceId, isSelf);
-      } else {
-        if (lastRemoteEditingId != null) clearRemoteEditingDoppelganger(lastRemoteEditingId);
-      }
-      if (!isSelf && editingId == null) {
-        var rs = data.selectionStart != null ? Number(data.selectionStart) : null;
-        var re = data.selectionEnd != null ? Number(data.selectionEnd) : null;
+      const isSelf = data.from === myId;
+      const text = data.text != null ? String(data.text) : '';
+      latestRemoteDraft = text.trim();
+      if (!isSelf) {
+        const rs = data.selectionStart != null ? Number(data.selectionStart) : null;
+        const re = data.selectionEnd != null ? Number(data.selectionEnd) : null;
         if (Number.isFinite(rs) && Number.isFinite(re) && rs >= 0 && re >= 0) {
-          remoteSelection = { start: Math.min(rs, re), end: Math.max(rs, re), deviceId: deviceId };
+          remoteSelection = {
+            start: Math.min(rs, re),
+            end: Math.max(rs, re),
+            deviceId: data.deviceId != null ? String(data.deviceId) : '',
+          };
         } else {
           remoteSelection = null;
         }
         updateRemoteSelectionOverlay();
       }
-      if (!isSelf && text && !editingId) {
+      if (!isSelf && text.trim()) {
         showDraftBubble(text);
-      } else if (!text || isSelf) {
+      } else if (!text.trim() || isSelf) {
         hideDraftBubble();
       }
     })
+    .on('broadcast', { event: 'composer_clear' }, payload => {
+      const data = payload.payload || {};
+      if (data.from === myId) return;
+      latestRemoteDraft = '';
+      remoteSelection = null;
+      updateRemoteSelectionOverlay();
+      hideDraftBubble();
+    })
     .subscribe();
+
+  startViewPresencePruneTimer();
 }
 
 function teardownDraftChannel() {
   latestRemoteDraft = '';
   hideDraftBubble();
-  if (draftChannel) {
-    try { draftChannel.unsubscribe(); } catch (_) {}
-    draftChannel = null;
+  remoteSelection = null;
+  updateRemoteSelectionOverlay();
+  viewEditingPresence = Object.create(null);
+  renderViewLiveEditingBar();
+  stopViewPresencePruneTimer();
+  if (viewEditingChannel) {
+    try { viewEditingChannel.unsubscribe(); } catch (_) {}
+    viewEditingChannel = null;
+  }
+  if (composerSyncChannel) {
+    try { composerSyncChannel.unsubscribe(); } catch (_) {}
+    composerSyncChannel = null;
   }
 }
 
@@ -3984,29 +4304,50 @@ function initFramesZone() {
 }
 
 function broadcastDraft(text) {
-  if (!draftChannel) return;
-  var selStart = 0, selEnd = 0;
-  if (input && (editingObjectId == null)) {
-    selStart = input.selectionStart != null ? input.selectionStart : 0;
-    selEnd = input.selectionEnd != null ? input.selectionEnd : selStart;
-  }
   const authorName =
     (currentUser && currentUser.user_metadata && currentUser.user_metadata.full_name) ||
     (currentUser && currentUser.email) ||
     (currentUser && currentUser.id ? String(currentUser.id).slice(0, 8) : (visitInviteNick || 'guest'));
-  draftChannel.send({
-    type: 'broadcast',
-    event: 'draft',
-    payload: {
-      from: myId,
-      text: text != null ? text : (input ? input.value : ''),
-      editingId: editingObjectId != null ? editingObjectId : null,
-      authorName: authorName || undefined,
-      deviceId: myId,
-      selectionStart: selStart,
-      selectionEnd: selEnd
-    }
-  });
+  const payloadBase = {
+    from: myId,
+    authorName: authorName || undefined,
+    deviceId: myId,
+  };
+  const body = text != null ? text : (input ? input.value : '');
+
+  if (editingObjectId != null && Number.isFinite(Number(editingObjectId))) {
+    if (!viewEditingChannel) return;
+    try {
+      viewEditingChannel.send({
+        type: 'broadcast',
+        event: 'object_edit',
+        payload: Object.assign({}, payloadBase, {
+          objectId: Number(editingObjectId),
+          text: String(body),
+          ts: Date.now(),
+        }),
+      });
+    } catch (_) {}
+    return;
+  }
+
+  if (!composerSyncChannel) return;
+  var selStart = 0, selEnd = 0;
+  if (input) {
+    selStart = input.selectionStart != null ? input.selectionStart : 0;
+    selEnd = input.selectionEnd != null ? input.selectionEnd : selStart;
+  }
+  try {
+    composerSyncChannel.send({
+      type: 'broadcast',
+      event: 'input_sync',
+      payload: Object.assign({}, payloadBase, {
+        text: body,
+        selectionStart: selStart,
+        selectionEnd: selEnd,
+      }),
+    });
+  } catch (_) {}
 }
 
 var lastRemoteEditingId = null;
@@ -5954,6 +6295,7 @@ function createObjectRow(obj, isNew, options) {
       cancelEditingMode(true);
       return;
     }
+    if (editingObjectId != null) broadcastViewEditingEnd(editingObjectId);
     /* Restore previous row’s text so its doppelganger doesn’t stay */
     restoreEditingRowsOnCancel();
     const multi = selectMode && selectedIds.size > 1 && selectedIds.has(obj.id);
@@ -6002,6 +6344,8 @@ function createObjectRow(obj, isNew, options) {
     updateEditingRowFromInput();
     focusMainInput();
     requestAnimationFrame(updateEditingRowFromInput);
+    broadcastComposerClear();
+    broadcastDraft(input.value);
   });
 
   const contentWrap = document.createElement('div');
@@ -6104,7 +6448,7 @@ function getPinnedIds(channel) {
     if (!raw) return [];
     const map = JSON.parse(raw);
     if (!map || typeof map !== 'object') return [];
-    const key = currentUser ? (currentUser.id + '::' + (channel || currentView)) : ('anon::' + (channel || currentView));
+    const key = getScopedViewStorageKey(channel || currentView);
     const arr = map[key];
     if (!Array.isArray(arr)) return [];
     return arr.map(x => Number(x)).filter(x => Number.isFinite(x));
@@ -6117,7 +6461,7 @@ function setPinnedIds(channel, ids) {
   try {
     const raw = localStorage.getItem(PINNED_STATE_KEY);
     const map = raw ? JSON.parse(raw) : {};
-    const key = currentUser ? (currentUser.id + '::' + (channel || currentView)) : ('anon::' + (channel || currentView));
+    const key = getScopedViewStorageKey(channel || currentView);
     map[key] = (ids || []).slice();
     localStorage.setItem(PINNED_STATE_KEY, JSON.stringify(map));
   } catch (_) {}
@@ -6143,7 +6487,7 @@ function loadOrderFromLocal() {
     if (!raw) return [];
     const map = JSON.parse(raw);
     if (!map || typeof map !== 'object') return [];
-    const key = currentUser ? (currentUser.id + '::' + currentView) : ('anon::' + currentView);
+    const key = getScopedViewStorageKey(currentView);
     const arr = map[key];
     if (!Array.isArray(arr)) return [];
     return arr
@@ -6158,7 +6502,7 @@ function saveOrderToLocal() {
   try {
     const raw = localStorage.getItem(ORDER_STATE_KEY);
     const map = raw ? JSON.parse(raw) : {};
-    const key = currentUser ? (currentUser.id + '::' + currentView) : ('anon::' + currentView);
+    const key = getScopedViewStorageKey(currentView);
     map[key] = (currentObjectOrder || []).slice();
     localStorage.setItem(ORDER_STATE_KEY, JSON.stringify(map));
   } catch (_) {}
@@ -6258,6 +6602,10 @@ function saveChannelsList() {
 
 async function loadObjectOrderForCurrentChannel() {
   currentObjectOrder = [];
+  if (!shouldUseServerForObjects() || !sb) {
+    currentObjectOrder = loadOrderFromLocal();
+    return;
+  }
   // 1) Try unified view object (channel-owned, not per-user).
   try {
     const { data, error } = await sb
@@ -6323,7 +6671,7 @@ async function saveObjectOrderForCurrentView() {
   saveOrderToLocal();
   suppressOrderApplyUntil = Date.now() + 350;
   // Persist order into unified views config for this channel (owner writes; guests just read).
-  if (currentUser) {
+  if (currentUser && shouldUseServerForObjects() && sb) {
     try {
       const cfg = {
         order: currentObjectOrder.slice(),
@@ -6698,10 +7046,12 @@ async function switchChannel(ch) {
   }
   if (currentUser) {
     setupDndBroadcastChannel();
+    setupDraftChannel();
     subscribeOrderRealtime();
     subscribeViewRealtime();
     ensureMembership().then(reloadForUser);
   } else if (tempSessionId) {
+    setupDraftChannel();
     subscribeViewRealtime();
     await loadObjectOrderForCurrentChannel();
     await loadObjects();
@@ -7035,6 +7385,7 @@ async function refreshAuth() {
     }
     // Anonymous guest in shared view: use channel-based realtime + view (order) realtime.
     subscribeRealtimeAll();
+    setupDraftChannel();
     subscribeViewRealtime();
     return;
   }
@@ -7172,15 +7523,170 @@ async function saveNickname() {
 }
 
 function getStorageLocationMessage() {
-  if (currentUser) return 'Your data is stored in the cloud and synced across your devices.';
-  if (tempSessionId) return 'You\'re viewing a shared view. Edits sync to the owner\'s cloud; a copy is kept on this device.';
-  return 'Objects live in this browser\'s IndexedDB (device database). Sign in to use the shared cloud so others can access what you permit.';
+  if (tempSessionId) {
+    return 'Shared view: objects sync through the server. Local databases below are for other sessions on this device.';
+  }
+  if (getStorageTarget() === 'local') {
+    const reg = ensureVaultRegistry();
+    const v = getActiveVaultId();
+    const ent = reg.vaults.find(x => x && x.id === v);
+    const label = ent && ent.label ? ent.label : v;
+    return 'Local mode: objects live in database "' + label + '" on this device only.';
+  }
+  if (currentUser) return 'Cloud mode: objects use the server and sync where your account allows.';
+  return 'Cloud mode selected but not signed in — objects still use this device until you sign in.';
 }
+
+async function applyStorageModeSideEffects() {
+  try {
+    teardownDraftChannel();
+    subscribeRealtimeAll();
+    if (shouldUseServerForObjects() && sb && sb.channel) {
+      if (currentUser || tempSessionId) setupDraftChannel();
+    }
+    await loadObjectOrderForCurrentChannel();
+    await loadObjects();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function applyActiveVaultSideEffects() {
+  try {
+    await loadObjectOrderForCurrentChannel();
+    await loadObjects();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function refreshStorageUIPanel() {
+  ensureVaultRegistry();
+  const cloud = document.getElementById('um-storage-cloud');
+  const local = document.getElementById('um-storage-local');
+  const hint = document.getElementById('um-storage-hint');
+  const panel = document.getElementById('um-vault-panel');
+  const wrap = document.getElementById('um-storage-target-wrap');
+  if (umStorageInfo) umStorageInfo.textContent = getStorageLocationMessage();
+  const target = getStorageTarget();
+  if (cloud) cloud.checked = target === 'cloud';
+  if (local) local.checked = target === 'local';
+  const guest = !!tempSessionId;
+  if (wrap) {
+    wrap.style.opacity = guest ? '0.55' : '';
+    wrap.querySelectorAll('input').forEach(inp => { inp.disabled = !!guest; });
+  }
+  if (hint) {
+    if (guest) {
+      hint.textContent = 'While visiting a shared view, objects are loaded from the server.';
+    } else if (!currentUser && target === 'cloud') {
+      hint.textContent = 'Sign in to sync objects with the server. Until then, data stays in the active local database.';
+    } else if (currentUser && target === 'local') {
+      hint.textContent = 'Objects are not uploaded to the server while Local is selected.';
+    } else {
+      hint.textContent = '';
+    }
+  }
+  if (panel) panel.style.display = guest ? 'none' : '';
+  const sel = document.getElementById('um-vault-select');
+  if (sel) {
+    const reg = readVaultRegistry();
+    const active = getActiveVaultId();
+    sel.innerHTML = '';
+    reg.vaults.forEach(v => {
+      if (!v || !v.id) return;
+      const opt = document.createElement('option');
+      opt.value = v.id;
+      opt.textContent = (v.label || v.id) + (v.id === 'default' ? '' : ' · ' + v.id);
+      sel.appendChild(opt);
+    });
+    if (!reg.vaults.some(x => x.id === active)) {
+      setActiveVaultId('default');
+    }
+    sel.value = getActiveVaultId();
+  }
+}
+
+(function setupStoragePanelControls() {
+  document.querySelectorAll('input[name="um-storage-target"]').forEach(r => {
+    r.addEventListener('change', async () => {
+      if (tempSessionId) return;
+      setStorageTarget(r.value === 'local' ? 'local' : 'cloud');
+      refreshStorageUIPanel();
+      await applyStorageModeSideEffects();
+      toast(r.value === 'local' ? 'Using local object storage.' : 'Using cloud for objects.');
+    });
+  });
+  const sel = document.getElementById('um-vault-select');
+  if (sel) {
+    sel.addEventListener('change', async () => {
+      setActiveVaultId(sel.value);
+      refreshStorageUIPanel();
+      await applyActiveVaultSideEffects();
+    });
+  }
+  const openBtn = document.getElementById('um-vault-open');
+  if (openBtn && sel) {
+    openBtn.addEventListener('click', async () => {
+      setActiveVaultId(sel.value);
+      refreshStorageUIPanel();
+      await applyActiveVaultSideEffects();
+      toast('Switched active local database.');
+    });
+  }
+  const createBtn = document.getElementById('um-vault-create');
+  if (createBtn) {
+    createBtn.addEventListener('click', async () => {
+      const name = window.prompt('Name for the new local database (this device only):', 'Notebook');
+      if (name == null) return;
+      const slug = (typeof INOUT_LOCAL_DB !== 'undefined' && INOUT_LOCAL_DB.sanitizeVaultId)
+        ? INOUT_LOCAL_DB.sanitizeVaultId(name.trim().replace(/\s+/g, '_'))
+        : (name.trim().replace(/\s+/g, '_').slice(0, 32) || 'notebook');
+      const id = slug + '_' + Math.random().toString(36).slice(2, 6);
+      const reg = ensureVaultRegistry();
+      if (reg.vaults.some(v => v && v.id === id)) {
+        toast('Try a different name.');
+        return;
+      }
+      reg.vaults.push({ id, label: (name.trim() || id).slice(0, 48), createdAt: Date.now() });
+      writeVaultRegistry(reg);
+      setActiveVaultId(id);
+      const store = getActiveLocalStore();
+      if (store && store.init) await store.init();
+      refreshStorageUIPanel();
+      await applyActiveVaultSideEffects();
+      toast('Created and opened new local database.');
+    });
+  }
+  const delBtn = document.getElementById('um-vault-delete');
+  if (delBtn) {
+    delBtn.addEventListener('click', async () => {
+      const vaultSel = document.getElementById('um-vault-select');
+      const id = vaultSel ? vaultSel.value : getActiveVaultId();
+      if (!id || id === 'default') {
+        toast('Can’t delete the default database here — use “Clear this device” for a full wipe.');
+        return;
+      }
+      if (!window.confirm('Delete local database "' + id + '" from this device? This cannot be undone.')) return;
+      const reg = ensureVaultRegistry();
+      reg.vaults = reg.vaults.filter(v => v && v.id !== id);
+      writeVaultRegistry(reg);
+      if (typeof INOUT_LOCAL_DB !== 'undefined' && INOUT_LOCAL_DB.forVault) {
+        const st = INOUT_LOCAL_DB.forVault(id);
+        if (st && st.deleteDatabase) await st.deleteDatabase();
+      }
+      setActiveVaultId('default');
+      refreshStorageUIPanel();
+      await applyActiveVaultSideEffects();
+      toast('Local database deleted.');
+    });
+  }
+})();
 
 function updateAuthUI() {
   if (userBtn) userBtn.classList.toggle('signed-in', !!currentUser);
 
-  if (umStorageInfo) umStorageInfo.textContent = getStorageLocationMessage();
+  refreshStorageUIPanel();
 
   if (umGuestNotifStatus) {
     if (typeof Notification === 'undefined') umGuestNotifStatus.textContent = 'Not supported';
@@ -7220,8 +7726,7 @@ function updateAuthUI() {
 async function reloadForUser() {
   if (editingObjectId != null) cancelEditingMode(true);
   await loadObjectOrderForCurrentChannel();
-  const list = await fetchObjectsList();
-  await replaceFeedWithList(list);
+  await loadObjects();
   subscribeRealtimeAll();
   var savedScroll = viewScroll.get(currentView);
   requestAnimationFrame(() => {
@@ -7402,6 +7907,38 @@ async function sendText(text, options) {
     : (editingObjectId != null ? [editingObjectId] : []);
   if (idsToSave.length > 0) {
     const trimmedPerId = idsToSave.map(id => (editingObjectTextMap && editingObjectTextMap[id] != null) ? String(editingObjectTextMap[id]).trim() : trimmed);
+    if (!shouldUseServerForObjects()) {
+      try {
+        const byView = await getLocalObjectByViewMap();
+        const ch = currentChannel || 'main';
+        const list = Array.isArray(byView[ch]) ? byView[ch].slice() : [];
+        for (let i = 0; i < idsToSave.length; i++) {
+          const id = idsToSave[i];
+          const textToSave = trimmedPerId[i];
+          const idx = list.findIndex(o => o && Number(o.id) === Number(id));
+          if (idx >= 0) {
+            list[idx] = Object.assign({}, list[idx], { text: textToSave });
+          }
+        }
+        byView[ch] = list;
+        await saveLocalObjectByViewMap(byView);
+        idsToSave.forEach((id, i) => updateObjectRowText(id, trimmedPerId[i] || trimmed));
+        originalEditTextForCancel = null;
+        originalEditTextForCancelMap = null;
+        editingObjectTextMap = null;
+        editingObjectIds = null;
+        if (input) input.disabled = false;
+        if (sendBtn) sendBtn.disabled = false;
+        reactivateInputMode({ clearInput: targetChannel === currentChannel });
+        return;
+      } catch (e) {
+        console.error(e);
+        if (input) input.disabled = false;
+        if (sendBtn) sendBtn.disabled = false;
+        toast('Failed to update — ' + humanError(e.message));
+        return;
+      }
+    }
     const befores = [];
     if (idsToSave.length === 1) {
       const { data: before, error: selErr } = await sb
@@ -7470,7 +8007,7 @@ async function sendText(text, options) {
   let data = null;
   let error = null;
 
-  if (currentUser && sb && sb.from) {
+  if (shouldUseServerForObjects() && currentUser && sb && sb.from) {
     // Signed-in path: insert into Supabase as before.
     const payload = {
       text: trimmed,
@@ -7489,7 +8026,7 @@ async function sendText(text, options) {
       .single();
     data = res.data;
     error = res.error;
-  } else if (tempSessionId && sb && sb.from) {
+  } else if (shouldUseServerForObjects() && tempSessionId && sb && sb.from) {
     // Guest in temp session: write to Supabase with temp_session_id
     const res = await sb
       .from(OBJECTS_TABLE)
@@ -7534,7 +8071,7 @@ async function sendText(text, options) {
     // Persist locally for this device
     await upsertLocalObjectForCurrentView(data);
     // Undo/log only for signed-in Supabase sends
-    if (currentUser && sb && sb.from) {
+    if (shouldUseServerForObjects() && currentUser && sb && sb.from) {
       pushUndo({ type: 'send', entries: [data] });
       logAction('send', { channel: currentChannel });
     }
@@ -7928,14 +8465,36 @@ if (viewToggleBtn && viewMenu) {
 
 if (deleteSelectedBtn) {
   deleteSelectedBtn.addEventListener('click', async () => {
-    if (!currentUser) return;
-    // Use global selection union (across all open views).
     let ids = Array.from(modeState.selectedIds || [])
       .map(x => Number(x))
       .filter(id => Number.isFinite(id));
     try {
+      if (!shouldUseServerForObjects()) {
+        const byView = await getLocalObjectByViewMap();
+        const ch = currentChannel || 'main';
+        let list = Array.isArray(byView[ch]) ? byView[ch] : [];
+        if (!ids.length) {
+          ids = list.map(o => o && o.id).filter(id => id != null).map(Number).filter(Number.isFinite);
+        }
+        if (!ids.length) return;
+        await removeLocalObjectsForCurrentView(ids);
+        selectedIds.clear();
+        modeState.selectedIds.clear();
+        try {
+          views.forEach(v => {
+            const inner = v && v.feedInner;
+            if (!inner) return;
+            inner.querySelectorAll('.obj-select:checked').forEach(box => { box.checked = false; });
+            inner.querySelectorAll('.obj.obj-selected').forEach(row => row.classList.remove('obj-selected'));
+          });
+        } catch (_) {}
+        setSelectMode(false);
+        logAction('delete', { count: ids.length, channel: currentChannel });
+        await reloadForUser();
+        return;
+      }
+      if (!currentUser) return;
       let rowsToDelete = [];
-      // If nothing selected, operate on whole tab (for this user).
       if (!ids.length) {
         const { data, error } = await sb
           .from(OBJECTS_TABLE)
@@ -7973,7 +8532,6 @@ if (deleteSelectedBtn) {
       }
       pushUndo({ type: 'delete', entries: rowsToDelete });
       logAction('delete', { count: rowsToDelete.length, channel: currentChannel });
-      // Clear selection across all views.
       selectedIds.clear();
       modeState.selectedIds.clear();
       try {
@@ -7995,7 +8553,7 @@ if (deleteSelectedBtn) {
 
 if (moveSelectedBtn) {
   moveSelectedBtn.addEventListener('click', async () => {
-    if (!currentUser || !moveTargetSelect) return;
+    if (!moveTargetSelect) return;
     const target = moveTargetSelect.value;
     if (!target || target === currentChannel) return;
     const boxes = feedInner.querySelectorAll('.obj-select:checked');
@@ -8007,6 +8565,26 @@ if (moveSelectedBtn) {
       .filter(id => typeof id === 'number');
     if (!ids.length) return;
     try {
+      if (!shouldUseServerForObjects()) {
+        const byView = await getLocalObjectByViewMap();
+        const src = currentChannel || 'main';
+        const srcList = Array.isArray(byView[src]) ? byView[src] : [];
+        const idSet = new Set(ids);
+        const moving = srcList.filter(o => o && idSet.has(Number(o.id)));
+        byView[src] = srcList.filter(o => !o || !idSet.has(Number(o.id)));
+        const destList = Array.isArray(byView[target]) ? byView[target].slice() : [];
+        const nowIso = new Date().toISOString();
+        moving.forEach(o => {
+          destList.push(Object.assign({}, o, { channel: target, created_at: nowIso }));
+        });
+        byView[target] = destList;
+        await saveLocalObjectByViewMap(byView);
+        logAction('move', { count: moving.length, target });
+        setSelectMode(false);
+        await reloadForUser();
+        return;
+      }
+      if (!currentUser) return;
       const now = new Date().toISOString();
       const { data, error } = await sb
         .from(OBJECTS_TABLE)
@@ -8025,8 +8603,8 @@ if (moveSelectedBtn) {
         .eq('user_id', currentUser.id)
         .in('id', ids);
       if (updErr) {
-        console.error(error);
-        toast('Failed to move — ' + humanError(error.message));
+        console.error(updErr);
+        toast('Failed to move — ' + humanError(updErr.message));
         return;
       }
       pushUndo({ type: 'move', entries: rowsBefore });
@@ -8041,8 +8619,26 @@ if (moveSelectedBtn) {
 }
 
 async function deleteSingleObject(id, fromChannel) {
-  if (!id || !sb || !sb.rpc) return;
   const ch = fromChannel != null ? fromChannel : currentChannel;
+  if (!shouldUseServerForObjects()) {
+    try {
+      await removeLocalObjectsFromView([id], ch || 'main');
+      if (ch === currentChannel || ch === currentView) {
+        const row = feedInner && feedInner.querySelector('.obj[data-id="' + CSS.escape(String(id)) + '"]');
+        if (row) row.remove();
+        objectCount = Math.max(0, objectCount - 1);
+        updateObjectCount();
+        showEmptyIfNoObjects();
+        currentObjectOrder = (currentObjectOrder || []).filter(x => Number(x) !== Number(id));
+        saveOrderToLocal();
+      }
+    } catch (e) {
+      console.error(e);
+      toast('Failed to delete — ' + humanError(e.message));
+    }
+    return;
+  }
+  if (!id || !sb || !sb.rpc) return;
   try {
     const payload = {
       p_channel: ch,
