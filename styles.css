@@ -774,17 +774,22 @@ header{
   display:none;
   z-index:2000; /* above header, nav, multiview panels */
   pointer-events:auto;
-  /* pan-y on backdrop lets touch scroll pass to #user-modal (touch-action:none blocked mobile scroll) */
+  /* flex + align end: iOS needs a flex column for the drawer to get a bounded height and scroll */
+  flex-direction:row;
+  justify-content:flex-end;
+  align-items:stretch;
   touch-action:auto;
   overflow:hidden;
   overscroll-behavior:contain;
 }
 
 #user-modal{
-  position:absolute;
-  top:0;right:0;bottom:0;
+  position:relative;
+  flex:0 0 auto;
+  align-self:stretch;
   width:360px;
   max-width:92vw;
+  min-height:0;
   height:100%;
   max-height:100%;
   max-height:100dvh;
@@ -795,13 +800,13 @@ header{
   padding:14px 16px;
   padding-bottom:calc(14px + env(safe-area-inset-bottom, 0px));
   display:block;
-  animation:drawerIn .18s ease both;
+  animation:drawerIn .12s ease both;
   pointer-events:auto;
   overflow-y:auto;
   overflow-x:hidden;
   -webkit-overflow-scrolling:touch;
   touch-action:pan-y;
-  overscroll-behavior:contain;
+  overscroll-behavior-y:contain;
   scrollbar-width:none;
   -ms-overflow-style:none;
 }
@@ -1063,6 +1068,7 @@ header{
     width:100%;
     max-width:100%;
     border-left:none;
+    max-height:100dvh;
   }
 }
 
@@ -3038,6 +3044,15 @@ body.secret-show-grips .frame-grip{
     iOS/WebKit: inner #feed + height:0 flex often does not scroll; outer .visual-feed-stack scrolls reliably.
     Desktop (>540px) keeps #feed as scrollport (base rules).
   */
+  /* min-height:0 on column chain so .visual-feed-stack can shrink and receive touch scroll */
+  #multiview,
+  .multiview-views,
+  .multiview-views .view{
+    min-height:0;
+  }
+  .frame.frame-fill > #multiview{
+    min-height:0;
+  }
   .multiview-views .view > .visual > .visual-feed-stack{
     flex:1 1 0%;
     min-height:0;
@@ -3045,7 +3060,8 @@ body.secret-show-grips .frame-grip{
     overflow-y:auto;
     overflow-x:hidden;
     -webkit-overflow-scrolling:touch;
-    touch-action:pan-y;
+    /* pan-y on the scrollport can steal gestures from nested content on some WebKit builds */
+    touch-action:auto;
     overscroll-behavior-y:contain;
   }
   .multiview-views .view > .visual > .visual-feed-stack > .view-live-editing-bar{

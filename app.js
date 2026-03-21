@@ -348,7 +348,7 @@ function closeSecretControls() {
 }
 
 (function ensureModalsClosedOnLoad() {
-  if (umBackdrop) { umBackdrop.style.display = 'none'; umBackdrop.setAttribute('aria-hidden', 'true'); }
+  hideUserModalBackdrop();
   if (cmBackdrop) cmBackdrop.style.display = 'none';
   if (addMembersBackdrop) addMembersBackdrop.style.display = 'none';
   if (logDropupPanel) logDropupPanel.classList.remove('open');
@@ -1288,10 +1288,8 @@ function subscribeTempSessionJoins() {
 
 (function setupProfileAndModalsEarly() {
   function closeUserModalEarly() {
-    var back = document.getElementById('user-modal-backdrop');
-    if (!back) return;
-    back.style.display = 'none';
-    back.setAttribute('aria-hidden', 'true');
+    if (typeof closeUserModal === 'function') closeUserModal();
+    else hideUserModalBackdrop();
   }
   var closeBtn = document.getElementById('user-close');
   if (closeBtn) closeBtn.addEventListener('click', closeUserModalEarly);
@@ -1693,7 +1691,7 @@ function ensureWorkspaceChannelsFromCfg(cfg) {
 function gatherUiChromeForWorkspace() {
   try {
     return {
-      userModal: !!(umBackdrop && umBackdrop.style.display === 'block'),
+      userModal: isUserModalBackdropOpen(),
       channelModal: !!(cmBackdrop && cmBackdrop.style.display === 'flex'),
       addMembersModal: !!(addMembersBackdrop && addMembersBackdrop.style.display === 'flex'),
       secretControlsOpen: !!(secretControlsBackdrop && secretControlsBackdrop.getAttribute('aria-hidden') === 'false'),
@@ -1713,13 +1711,8 @@ function applyWorkspaceUiChrome(u) {
   if (!u || typeof u !== 'object') return;
   try {
     if (umBackdrop) {
-      if (u.userModal) {
-        umBackdrop.style.display = 'block';
-        umBackdrop.setAttribute('aria-hidden', 'false');
-      } else {
-        umBackdrop.style.display = 'none';
-        umBackdrop.setAttribute('aria-hidden', 'true');
-      }
+      if (u.userModal) showUserModalBackdrop();
+      else hideUserModalBackdrop();
     }
     if (cmBackdrop) {
       cmBackdrop.style.display = u.channelModal ? 'flex' : 'none';
@@ -3266,16 +3259,19 @@ function openUserModal() {
   if (typeof closeChannelModal === 'function') closeChannelModal();
   const ap = document.getElementById('add-members-modal-backdrop');
   if (ap) ap.style.display = 'none';
-  if (typeof refreshStorageUIPanel === 'function') refreshStorageUIPanel();
-  umBackdrop.style.display = 'block';
-  umBackdrop.setAttribute('aria-hidden', 'false');
-  notifyWorkspaceChromeChanged();
+  showUserModalBackdrop();
+  /* Paint the drawer first; vault panel + workspace persist run next frame so realtime work doesn’t delay open. */
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      if (typeof refreshStorageUIPanel === 'function') refreshStorageUIPanel();
+      if (typeof notifyWorkspaceChromeChanged === 'function') notifyWorkspaceChromeChanged();
+    });
+  });
 }
 
 function closeUserModal() {
   if (!umBackdrop) return;
-  umBackdrop.style.display = 'none';
-  umBackdrop.setAttribute('aria-hidden', 'true');
+  hideUserModalBackdrop();
   requestAnimationFrame(focusMainInput);
   notifyWorkspaceChromeChanged();
 }
@@ -3309,7 +3305,7 @@ document.addEventListener('keydown', e => {
       closeAddMembersModal();
       return;
     }
-    if (umBackdrop && umBackdrop.style.display === 'block') {
+    if (isUserModalBackdropOpen()) {
       closeUserModal();
       return;
     }
@@ -11644,18 +11640,25 @@ function ensureLoaderMinDisplay() {
       return;
     }
     if (channelBack) channelBack.style.display = 'none';
-    if (back) {
-      back.style.display = 'block';
+    if (typeof showUserModalBackdrop === 'function') showUserModalBackdrop();
+    else if (back) {
+      back.style.display = 'flex';
       back.setAttribute('aria-hidden', 'false');
     }
-    if (typeof notifyWorkspaceChromeChanged === 'function') notifyWorkspaceChromeChanged();
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        if (typeof refreshStorageUIPanel === 'function') refreshStorageUIPanel();
+        if (typeof notifyWorkspaceChromeChanged === 'function') notifyWorkspaceChromeChanged();
+      });
+    });
   }
   function closeModal(){
     if (typeof closeUserModal === 'function') {
       closeUserModal();
       return;
     }
-    if (back) {
+    if (typeof hideUserModalBackdrop === 'function') hideUserModalBackdrop();
+    else if (back) {
       back.style.display = 'none';
       back.setAttribute('aria-hidden', 'true');
     }
