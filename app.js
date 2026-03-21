@@ -5778,19 +5778,6 @@ function saveSecondaryViewState() {
   } catch (_) {}
 }
 
-async function restoreSecondaryView() {
-  try {
-    const raw = localStorage.getItem(OPEN_VIEWS_KEY);
-    if (!raw) return;
-    const list = JSON.parse(raw);
-    if (!Array.isArray(list) || !list.length) return;
-    for (const name of list) {
-      if (typeof name === 'string' && viewNames.includes(name)) {
-        await openSecondaryView(name);
-      }
-    }
-  } catch (_) {}
-}
 
 var secondaryViewEl = null;
 var secondaryFeedInner = null;
@@ -5898,6 +5885,45 @@ function closeSecondaryView() {
   saveSecondaryViewState();
   updateTabsUI();
   flushPersonalWorkspacePersist();
+}
+
+/** Remove one split pane (same as its ×); keeps multiview resizer if other secondaries remain. */
+function removeSecondaryViewPane(viewRecord) {
+  if (!viewRecord || !viewRecord.rootEl) return;
+  const view = viewRecord.rootEl;
+  views = views.filter(v => v && v !== viewRecord);
+  if (view.parentNode) view.parentNode.removeChild(view);
+  if (secondaryViewEl === view) {
+    const other = views.find(v => v && v.id !== 'view-0' && v.rootEl && document.body.contains(v.rootEl));
+    if (other) {
+      secondaryViewEl = other.rootEl;
+      secondaryViewChannel = other.channel;
+      secondaryFeedInner = other.feedInner;
+      secondaryFeedEl = other.rootEl && other.rootEl.querySelector && other.rootEl.querySelector('.feed') || null;
+    } else {
+      secondaryViewEl = null;
+      secondaryFeedInner = null;
+      secondaryFeedEl = null;
+      secondaryViewChannel = null;
+      if (multiviewResizerEl && multiviewResizerEl.parentNode) multiviewResizerEl.parentNode.removeChild(multiviewResizerEl);
+      multiviewResizerEl = null;
+    }
+    saveSecondaryViewState();
+  }
+  try {
+    const open = Array.from(new Set(views.filter(v => v && v.id !== 'view-0').map(v => v.channel)));
+    localStorage.setItem(OPEN_VIEWS_KEY, JSON.stringify(open));
+  } catch (_) {}
+  updateTabsUI();
+  flushPersonalWorkspacePersist();
+}
+
+function closeSecondaryPaneForChannel(ch) {
+  const want = String(ch || '').trim();
+  if (!want) return;
+  const rec = views.find(v => v && v.id !== 'view-0' && String(v.channel || '') === want);
+  if (!rec) return;
+  removeSecondaryViewPane(rec);
 }
 
 function applyMultiviewSplit(ratio, syncWorkspace) {
@@ -6017,31 +6043,7 @@ async function openSecondaryView(ch) {
   closeBtn.textContent = '×';
   view.appendChild(closeBtn);
   closeBtn.addEventListener('click', () => {
-    views = views.filter(v => v && v !== viewRecord);
-    if (view.parentNode) view.parentNode.removeChild(view);
-    if (secondaryViewEl === view) {
-      const other = views.find(v => v && v.id !== 'view-0' && v.rootEl && document.body.contains(v.rootEl));
-      if (other) {
-        secondaryViewEl = other.rootEl;
-        secondaryViewChannel = other.channel;
-        secondaryFeedInner = other.feedInner;
-        secondaryFeedEl = other.rootEl && other.rootEl.querySelector && other.rootEl.querySelector('.feed') || null;
-      } else {
-        secondaryViewEl = null;
-        secondaryFeedInner = null;
-        secondaryFeedEl = null;
-        secondaryViewChannel = null;
-        if (multiviewResizerEl && multiviewResizerEl.parentNode) multiviewResizerEl.parentNode.removeChild(multiviewResizerEl);
-        multiviewResizerEl = null;
-      }
-      saveSecondaryViewState();
-    }
-    try {
-      const open = Array.from(new Set(views.filter(v => v && v.id !== 'view-0').map(v => v.channel)));
-      localStorage.setItem(OPEN_VIEWS_KEY, JSON.stringify(open));
-    } catch (_) {}
-    updateTabsUI();
-    flushPersonalWorkspacePersist();
+    removeSecondaryViewPane(viewRecord);
   });
   const list = await fetchObjectsListForChannel(ch);
   await replaceFeedWithListInto(list, feedInner);
@@ -6053,8 +6055,17 @@ async function openSecondaryView(ch) {
   flushPersonalWorkspacePersist();
 }
 
+function hasOpenSecondaryForChannel(ch) {
+  const w = String(ch || '').trim();
+  return views.some(v => v && v.id !== 'view-0' && String(v.channel || '') === w);
+}
+
+/** Shift+click tab: open split for this channel, or close that split if already open. */
 function toggleSecondaryView(ch) {
-  // Always open another view for this name; multiview supports many views.
+  if (hasOpenSecondaryForChannel(ch)) {
+    closeSecondaryPaneForChannel(ch);
+    return;
+  }
   openSecondaryView(ch);
 }
 
@@ -7441,6 +7452,7 @@ function setupTabs() {
   if (viewsCloseAllBtn) {
     viewsCloseAllBtn.addEventListener('click', () => {
       closeSecondaryView();
+      schedulePersonalWorkspacePersist();
     });
   }
   const manageBar = document.getElementById('manage-bar');
@@ -7640,30 +7652,38 @@ function collectOpenSecondaryViewChannels() {
     .filter(ch => typeof ch === 'string' && ch.trim());
 }
 
+/**
+ * Sync open split panes to a list (membership cleanup, etc.). Does not run from workspace/server merge
+ * — multiview is only created via Shift+click on a tab.
+ */
 async function applyWorkspaceOpenSecondaryViews(desired, opts) {
   opts = opts || {};
   const merge = !!opts.merge;
   const cleaned = (Array.isArray(desired) ? desired : [])
     .map(c => String(c || '').trim())
     .filter(Boolean);
+  const wantSet = new Set(cleaned);
   const cur = collectOpenSecondaryViewChannels();
+
   if (merge) {
-    let have = new Set(cur);
     for (const ch of cleaned) {
-      if (have.has(ch)) continue;
+      if (cur.includes(ch)) continue;
       if (!viewNames.includes(ch)) continue;
       await openSecondaryView(ch);
-      have = new Set(collectOpenSecondaryViewChannels());
     }
     try {
       localStorage.setItem(OPEN_VIEWS_KEY, JSON.stringify(collectOpenSecondaryViewChannels()));
     } catch (_) {}
     return;
   }
+
   if (cur.length === cleaned.length && cur.every((c, i) => c === cleaned[i])) return;
-  closeSecondaryView();
+  for (const ch of cur.slice()) {
+    if (!wantSet.has(ch)) closeSecondaryPaneForChannel(ch);
+  }
   for (const ch of cleaned) {
     if (!viewNames.includes(ch)) continue;
+    if (collectOpenSecondaryViewChannels().includes(ch)) continue;
     await openSecondaryView(ch);
   }
   try {
@@ -7918,14 +7938,7 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
           }
         }
       }
-      if (Array.isArray(cfg.openSecondaryViews)) {
-        await applyWorkspaceOpenSecondaryViews(cfg.openSecondaryViews, { merge: true });
-      }
-      if (typeof cfg.multiviewSplit === 'number' && Number.isFinite(cfg.multiviewSplit)) {
-        try {
-          applyMultiviewSplit(cfg.multiviewSplit, false);
-        } catch (_) {}
-      }
+      /* Multiview split panes: Shift+click tab only — do not open from workspace merge. */
       if (cfg.uiChrome && typeof cfg.uiChrome === 'object') {
         applyWorkspaceUiChrome(cfg.uiChrome);
       }
@@ -8002,14 +8015,7 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
       }
     }
   }
-  if (Array.isArray(cfg.openSecondaryViews)) {
-    await applyWorkspaceOpenSecondaryViews(cfg.openSecondaryViews);
-  }
-  if (typeof cfg.multiviewSplit === 'number' && Number.isFinite(cfg.multiviewSplit)) {
-    try {
-      applyMultiviewSplit(cfg.multiviewSplit, false);
-    } catch (_) {}
-  }
+  /* Multiview: not restored from server; use Shift+click on a tab. */
   if (Array.isArray(cfg.frameOrder) && cfg.frameOrder.length) {
     try {
       applyFrameOrder(cfg.frameOrder);
@@ -8137,8 +8143,8 @@ async function persistPersonalWorkspaceToServer() {
 }
 
 async function hydrateWorkspaceOpenViewsForSignedInUser() {
+  closeSecondaryView();
   if (!currentUser || !sb) {
-    await restoreSecondaryView();
     return;
   }
   let cfgFull = null;
@@ -8185,7 +8191,6 @@ async function hydrateWorkspaceOpenViewsForSignedInUser() {
   }
   inoutHydratingWorkspace = true;
   try {
-    await restoreSecondaryView();
     try {
       const saved = localStorage.getItem(CURRENT_VIEW_KEY);
       if (saved && viewNames.includes(saved)) {
@@ -8197,7 +8202,6 @@ async function hydrateWorkspaceOpenViewsForSignedInUser() {
   } finally {
     inoutHydratingWorkspace = false;
   }
-  if (collectOpenSecondaryViewChannels().length) await persistPersonalWorkspaceToServer();
 }
 
 async function loadObjectOrderForCurrentChannel() {
@@ -9127,12 +9131,12 @@ async function refreshAuth() {
     // When not signed in, hydrate view from local per-device objects (anonymous mode),
     // unless we are in a temp-session guest mode.
     if (tempSessionId) {
+      closeSecondaryView();
       await loadObjectOrderForCurrentChannel();
       await loadObjects();
       subscribeViewRealtime();
     } else {
-      // Restore multiview layout (open views + split) for anonymous/guest users.
-      await restoreSecondaryView();
+      closeSecondaryView();
       await loadLocalObjectsForCurrentView();
     }
   }
