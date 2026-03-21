@@ -746,11 +746,11 @@ header{
   display:block;
   animation:drawerIn .18s ease both;
   pointer-events:auto;
-  overflow-y:scroll;
+  overflow-y:auto;
   overflow-x:hidden;
   -webkit-overflow-scrolling:touch;
   touch-action:auto;
-  overscroll-behavior:contain;
+  overscroll-behavior:auto;
 }
 #user-modal > * + *{
   margin-top:12px;
@@ -1187,15 +1187,13 @@ header{
   z-index:1;
   flex:1 1 0%;
   min-height:0;
-  max-height:100%;
   padding:0;
-  /* scroll always establishes a box (Safari flex + overflow quirks) */
-  overflow-y:scroll;
+  overflow-y:auto;
   overflow-x:hidden;
   -webkit-overflow-scrolling:touch;
-  /* pan-y only on the scroller so vertical gestures scroll here, not eaten by shell */
-  touch-action:pan-y;
-  overscroll-behavior:contain;
+  /* auto: reliable wheel/trackpad; avoids pan-y + max-height flex bugs that only scrolled a few px */
+  touch-action:auto;
+  overscroll-behavior:auto;
   outline:none;
   contain:none;
 }
