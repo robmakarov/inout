@@ -1296,22 +1296,26 @@ header{
   box-sizing:border-box;
   gap:0;
 }
-/* Table view: same object params as feed but laid out as table */
-.feed-inner.view-table{
+/* Table view + auto table when any object has multiple value columns */
+.feed-inner.view-table,
+.feed-inner.inout-multi-value-cols{
   display:table;
   width:100%;
   border-collapse:collapse;
   table-layout:fixed;
 }
-.feed-inner.view-table .obj{
+.feed-inner.view-table .obj,
+.feed-inner.inout-multi-value-cols .obj{
   display:table-row;
 }
-.feed-inner.view-table .obj > *{
+.feed-inner.view-table .obj > *,
+.feed-inner.inout-multi-value-cols .obj > *{
   display:table-cell;
   vertical-align:top;
   border-bottom:1px solid var(--line2);
 }
-.feed-inner.view-table .obj.obj-header > *{
+.feed-inner.view-table .obj.obj-header > *,
+.feed-inner.inout-multi-value-cols .obj.obj-header > *{
   font-size:11px;
   font-weight:600;
   text-transform:uppercase;
@@ -1321,13 +1325,19 @@ header{
   border-bottom:2px solid var(--line2);
 }
 .feed-inner.view-table .obj:not(.obj-header) .obj-time,
-.feed-inner.view-table .obj:not(.obj-header) .obj-sender{
+.feed-inner.view-table .obj:not(.obj-header) .obj-sender,
+.feed-inner.inout-multi-value-cols .obj:not(.obj-header) .obj-time,
+.feed-inner.inout-multi-value-cols .obj:not(.obj-header) .obj-sender{
   padding:6px 12px;
 }
-.feed-inner.view-table .obj:not(.obj-header) .obj-text{
+.feed-inner.view-table .obj:not(.obj-header) .obj-text,
+.feed-inner.view-table .obj:not(.obj-header) .obj-value-cell,
+.feed-inner.inout-multi-value-cols .obj:not(.obj-header) .obj-text,
+.feed-inner.inout-multi-value-cols .obj:not(.obj-header) .obj-value-cell{
   padding:6px 12px;
 }
-.feed-inner.view-table .obj.obj-header{
+.feed-inner.view-table .obj.obj-header,
+.feed-inner.inout-multi-value-cols .obj.obj-header{
   position:sticky;
   top:0;
   z-index:2;
@@ -1335,20 +1345,32 @@ header{
   pointer-events:none;
   user-select:none;
 }
-.feed-inner.view-table .obj.obj-header .obj-actions{ width:1%; }
-.feed-inner.view-table .obj:not(.obj-header) .obj-actions{
+.feed-inner.view-table .obj.obj-header .obj-actions,
+.feed-inner.inout-multi-value-cols .obj.obj-header .obj-actions{ width:1%; }
+.feed-inner.view-table .obj:not(.obj-header) .obj-actions,
+.feed-inner.inout-multi-value-cols .obj:not(.obj-header) .obj-actions{
   overflow:visible;
 }
-.feed-inner.view-table .obj:not(.obj-header) .obj-time{ width:1%; white-space:nowrap; }
-.feed-inner.view-table .obj:not(.obj-header) .obj-sender{ width:1%; white-space:nowrap; }
-.feed-inner.view-table .obj:not(.obj-header) .obj-text{ width:auto; }
-.feed-inner.view-table .obj:not(.obj-header) .obj-actions{ width:1%; }
+.feed-inner.view-table .obj:not(.obj-header) .obj-time,
+.feed-inner.inout-multi-value-cols .obj:not(.obj-header) .obj-time{ width:1%; white-space:nowrap; }
+.feed-inner.view-table .obj:not(.obj-header) .obj-sender,
+.feed-inner.inout-multi-value-cols .obj:not(.obj-header) .obj-sender{ width:1%; white-space:nowrap; }
+.feed-inner.view-table .obj:not(.obj-header) .obj-text,
+.feed-inner.view-table .obj:not(.obj-header) .obj-value-cell,
+.feed-inner.inout-multi-value-cols .obj:not(.obj-header) .obj-text,
+.feed-inner.inout-multi-value-cols .obj:not(.obj-header) .obj-value-cell{
+  width:auto;
+  min-width:0;
+}
+.feed-inner.view-table .obj:not(.obj-header) .obj-actions,
+.feed-inner.inout-multi-value-cols .obj:not(.obj-header) .obj-actions{ width:1%; }
 
 /* Object component: property text fields. Feed view only — labels left of values, 20px gap. */
 /* Layout: label left, value right in every cell */
-.feed-inner:not(.view-table) .obj .obj-time,
-.feed-inner:not(.view-table) .obj .obj-sender,
-.feed-inner:not(.view-table) .obj .obj-text{
+.feed-inner:not(.view-table):not(.inout-multi-value-cols) .obj .obj-time,
+.feed-inner:not(.view-table):not(.inout-multi-value-cols) .obj .obj-sender,
+.feed-inner:not(.view-table):not(.inout-multi-value-cols) .obj .obj-text,
+.feed-inner:not(.view-table):not(.inout-multi-value-cols) .obj .obj-value-cell{
   display:flex;
   flex-direction:row;
   align-items:baseline;
@@ -1356,9 +1378,10 @@ header{
   min-width:0;
 }
 /* Label (::before) — shared style; fixed width so value aligns at same distance (20px gap) */
-.feed-inner:not(.view-table) .obj .obj-time::before,
-.feed-inner:not(.view-table) .obj .obj-sender::before,
-.feed-inner:not(.view-table) .obj .obj-text::before{
+.feed-inner:not(.view-table):not(.inout-multi-value-cols) .obj .obj-time::before,
+.feed-inner:not(.view-table):not(.inout-multi-value-cols) .obj .obj-sender::before,
+.feed-inner:not(.view-table):not(.inout-multi-value-cols) .obj .obj-text::before,
+.feed-inner:not(.view-table):not(.inout-multi-value-cols) .obj .obj-value-cell::before{
   font-size:10px;
   line-height:12px;
   text-transform:uppercase;
@@ -1369,16 +1392,25 @@ header{
   min-width:3.5em;
 }
 /* Labels ON: label visible in flow */
-.feed-inner:not(.view-table):not(.obj-labels-off) .obj .obj-time::before,
-.feed-inner:not(.view-table):not(.obj-labels-off) .obj .obj-sender::before,
-.feed-inner:not(.view-table):not(.obj-labels-off) .obj .obj-text::before{
+.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-time::before,
+.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-sender::before,
+.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-text::before,
+.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell::before{
   display:block;
   opacity:1;
   transform:none;
 }
-.feed-inner:not(.view-table):not(.obj-labels-off) .obj .obj-time::before{ content:'Time'; }
-.feed-inner:not(.view-table):not(.obj-labels-off) .obj .obj-sender::before{ content:'Author'; }
-.feed-inner:not(.view-table):not(.obj-labels-off) .obj .obj-text::before{ content:'Value'; }
+.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-time::before{ content:'Time'; }
+.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-sender::before{ content:'Author'; }
+.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-text::before{ content:'Value'; }
+.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="0"]::before{ content:'Value'; }
+.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="1"]::before{ content:'Value 2'; }
+.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="2"]::before{ content:'Value 3'; }
+.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="3"]::before{ content:'Value 4'; }
+.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="4"]::before{ content:'Value 5'; }
+.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="5"]::before{ content:'Value 6'; }
+.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="6"]::before{ content:'Value 7'; }
+.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="7"]::before{ content:'Value 8'; }
 
 /* Labels OFF: label out of flow (no space). On hover, show label left of value; same 20px gap, smooth animation */
 .feed-inner:not(.view-table).obj-labels-off .obj .obj-time::before,
@@ -1541,8 +1573,22 @@ body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .
 .obj-content .obj-time{ grid-column:1; grid-row:1; }
 .obj-content .obj-sender{ grid-column:2; grid-row:1; }
 .obj-content .obj-text{ grid-column:1 / -1; grid-row:2; }
-/* Table view: .obj-content is layout-transparent so time/sender/text stay as separate table cells */
-.feed-inner.view-table .obj-content{
+/* One or more value cells: wrap spans full width under time/author in feed layout */
+.obj-content .obj-values-wrap{
+  grid-column:1 / -1;
+  grid-row:2;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  min-width:0;
+}
+/* Table + multi-value: hoist value cells to table row */
+.feed-inner.view-table .obj-content,
+.feed-inner.inout-multi-value-cols .obj-content{
+  display:contents;
+}
+.feed-inner.view-table .obj-values-wrap,
+.feed-inner.inout-multi-value-cols .obj-values-wrap{
   display:contents;
 }
 @keyframes msgin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
@@ -1843,7 +1889,8 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
   display:none; /* JS shows based on view prefs */
 }
 
-.obj-text{
+.obj-text,
+.obj-value-cell{
   flex:1 1 auto;
   font-size:13px;
   color:var(--text);
@@ -1853,7 +1900,8 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
   cursor:pointer;
 }
 /* Editing: doppelganger uses value style only — no background, no stroke */
-.obj-editing .obj-text{
+.obj-editing .obj-text,
+.obj-editing .obj-value-cell{
   font-family:var(--mono);
   font-size:14px;
   line-height:1.5;

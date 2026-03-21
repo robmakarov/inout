@@ -1299,6 +1299,130 @@ function subscribeTempSessionJoins() {
 
 // Supabase table name for stored objects (was 'entries').
 const OBJECTS_TABLE        = 'entries';
+/** Stored in `entries.text`: plain string = one value; multi = prefix + JSON array of strings. */
+const INOUT_MULTI_VALUE_PREFIX = '__INOUT_VALUES_JSON__\n';
+
+function parseObjectTextToParts(raw) {
+  var s = raw == null ? '' : String(raw);
+  if (s.indexOf(INOUT_MULTI_VALUE_PREFIX) === 0) {
+    try {
+      var arr = JSON.parse(s.slice(INOUT_MULTI_VALUE_PREFIX.length));
+      if (Array.isArray(arr)) {
+        return arr.length ? arr.map(function(x) { return String(x); }) : [''];
+      }
+    } catch (e) {}
+  }
+  return [s];
+}
+
+function serializeObjectParts(parts) {
+  if (!parts || !parts.length) return '';
+  if (parts.length === 1) return parts[0] == null ? '' : String(parts[0]);
+  return INOUT_MULTI_VALUE_PREFIX + JSON.stringify(parts.map(function(p) { return String(p); }));
+}
+
+function computeMaxValueColumnsFromMessages(messages) {
+  var m = 1;
+  (messages || []).forEach(function(msg) {
+    if (!msg) return;
+    var n = parseObjectTextToParts(msg.text).length;
+    if (n > m) m = n;
+  });
+  return m;
+}
+
+function computeMaxValueColumnsFromFeedInner(inner) {
+  if (!inner) return 1;
+  var max = 1;
+  inner.querySelectorAll('.obj:not(.obj-header)').forEach(function(row) {
+    var n = row.querySelectorAll('.obj-value-cell').length;
+    if (n > max) max = n;
+  });
+  return max;
+}
+
+function partsFromRowDom(row) {
+  var cells = row.querySelectorAll('.obj-value-cell');
+  if (!cells.length) {
+    var legacy = row.querySelector('.obj-text');
+    return [legacy ? String(legacy.textContent || '') : ''];
+  }
+  return Array.from(cells).map(function(c) { return String(c.textContent || ''); });
+}
+
+function getJoinedRowTextForEdit(row) {
+  var parts = partsFromRowDom(row);
+  if (parts.length <= 1) return parts[0] || '';
+  return parts.join('\n\n');
+}
+
+function mergeComposerIntoParts(prevParts, composerText) {
+  if (!prevParts || prevParts.length <= 1) {
+    return [composerText == null ? '' : String(composerText)];
+  }
+  var N = prevParts.length;
+  var t = composerText == null ? '' : String(composerText);
+  var chunks = t.split(/\n\n/);
+  if (chunks.length === 1) {
+    var o = prevParts.slice();
+    o[0] = chunks[0];
+    return o;
+  }
+  while (chunks.length < N) chunks.push('');
+  if (chunks.length > N) {
+    chunks[N - 1] = chunks.slice(N - 1).join('\n\n');
+    chunks = chunks.slice(0, N);
+  }
+  return chunks;
+}
+
+function ensureRowValueCellCount(row, maxCols, partsForFill) {
+  var wrap = row.querySelector('.obj-values-wrap');
+  if (!wrap) return;
+  partsForFill = partsForFill ? partsForFill.slice() : [];
+  while (partsForFill.length < maxCols) partsForFill.push('');
+  if (partsForFill.length > maxCols) partsForFill = partsForFill.slice(0, maxCols);
+  wrap.querySelectorAll('.obj-value-cell').forEach(function(el) {
+    if (el.parentNode === wrap) wrap.removeChild(el);
+  });
+  for (var i = 0; i < maxCols; i++) {
+    var cell = document.createElement('div');
+    cell.className = 'obj-text obj-value-cell';
+    cell.dataset.valueIndex = String(i);
+    cell.innerHTML = renderVisualOnlyHtml(partsForFill[i] != null ? partsForFill[i] : '');
+    wrap.appendChild(cell);
+  }
+  row.dataset.valueCols = String(maxCols);
+}
+
+function syncFeedMultiValueChrome(inner, messagesList) {
+  if (!inner) return;
+  var maxCols = messagesList && messagesList.length
+    ? computeMaxValueColumnsFromMessages(messagesList)
+    : computeMaxValueColumnsFromFeedInner(inner);
+  maxCols = Math.max(1, maxCols);
+  inner.dataset.inoutValueCols = String(maxCols);
+  inner.classList.toggle('inout-multi-value-cols', maxCols > 1);
+  var wantHeader =
+    maxCols > 1 ||
+    (typeof fieldPrefs !== 'undefined' && fieldPrefs && fieldPrefs.viewMode === 'table');
+  var hasDataRows = !!inner.querySelector('.obj:not(.obj-header)[data-id]');
+  var existing = inner.querySelector('.obj.obj-header');
+  if (!wantHeader || !hasDataRows) {
+    if (existing) existing.remove();
+  } else {
+    var fresh = createObjectHeaderRow(maxCols);
+    if (existing) existing.replaceWith(fresh);
+    else inner.insertBefore(fresh, inner.firstChild);
+  }
+  inner.querySelectorAll('.obj:not(.obj-header)').forEach(function(row) {
+    if (row.dataset.id == null) return;
+    var parts = partsFromRowDom(row);
+    while (parts.length < maxCols) parts.push('');
+    if (parts.length > maxCols) parts = parts.slice(0, maxCols);
+    ensureRowValueCellCount(row, maxCols, parts);
+  });
+}
 const USER_INPUT_STATE_TABLE = 'user_input_state';
 const SLOTS_SYNC_CHANNEL = '__slots__';
 
@@ -2742,6 +2866,7 @@ async function undoLastAction() {
           .eq('id', e.id);
       }));
       rows.forEach(e => { updateObjectRowText(e.id, e.beforeText); });
+      if (typeof syncFeedMultiValueChrome === 'function') syncFeedMultiValueChrome(feedInner);
       toast('Undid last action.');
       return;
     } else if (action.type === 'view' && action.before && action.channel) {
@@ -3514,11 +3639,13 @@ async function replaceFeedWithList(list) {
   seenIds.clear();
   globalObjectNum = 0;
   objectCount = 0;
+  const maxValCols = computeMaxValueColumnsFromMessages(list);
+  feedInner.dataset.inoutValueCols = String(maxValCols);
   const pinnedIds = new Set(getPinnedIds(currentView));
   const railFrag = document.createDocumentFragment();
   const feedFrag = document.createDocumentFragment();
   for (const msg of list) {
-    const row = createObjectRow(msg, false);
+    const row = createObjectRow(msg, false, { valueColumnCount: maxValCols });
     if (!row) continue;
     const id = Number(msg.id);
     if (Number.isFinite(id) && pinnedIds.has(id)) railFrag.appendChild(row);
@@ -3547,6 +3674,7 @@ async function replaceFeedWithList(list) {
     }
     updateObjectCount();
     applyFieldPrefsToObjects();
+    syncFeedMultiValueChrome(feedInner, list);
     if (feedEl) {
       var ps = primaryFeedScrollSurface();
       if (ps) ps.scrollTop = 0;
@@ -3559,9 +3687,11 @@ async function replaceFeedWithListInto(list, targetFeedInner) {
   if (!targetFeedInner) return;
   const savedSeen = new Set(seenIds);
   seenIds.clear();
+  const maxValCols = computeMaxValueColumnsFromMessages(list);
+  targetFeedInner.dataset.inoutValueCols = String(maxValCols);
   const frag = document.createDocumentFragment();
   for (const msg of list) {
-    const row = createObjectRow(msg, false, { skipEmptyRemove: true });
+    const row = createObjectRow(msg, false, { skipEmptyRemove: true, valueColumnCount: maxValCols });
     if (row) frag.appendChild(row);
   }
   seenIds.clear();
@@ -3570,6 +3700,7 @@ async function replaceFeedWithListInto(list, targetFeedInner) {
   if (hasRows) {
     targetFeedInner.classList.remove('view-table');
     targetFeedInner.replaceChildren(frag);
+    syncFeedMultiValueChrome(targetFeedInner, list);
   } else {
     const empty = targetFeedInner.querySelector('.empty-placeholder') || document.createElement('div');
     empty.className = 'empty-placeholder';
@@ -3592,9 +3723,13 @@ function flushRealtimeInsertBuffer() {
     views.forEach(function(view) {
       if (!view || view.channel !== ch || !view.feedInner) return;
       var inner = view.feedInner;
+      var vccInner = parseInt(inner.dataset.inoutValueCols, 10) || 1;
       var frag = document.createDocumentFragment();
       msgs.forEach(function(msg) {
-        var row = createObjectRow(msg, true, { skipEmptyRemove: inner !== feedInner });
+        var row = createObjectRow(msg, true, {
+          skipEmptyRemove: inner !== feedInner,
+          valueColumnCount: vccInner,
+        });
         if (row) frag.appendChild(row);
       });
       if (frag.childNodes.length === 0) return;
@@ -3612,9 +3747,10 @@ function flushRealtimeInsertBuffer() {
     });
     if (!primaryUpdated && ch === currentChannel && feedInner) {
       hideEmpty();
+      var vccP = parseInt(feedInner.dataset.inoutValueCols, 10) || 1;
       var frag = document.createDocumentFragment();
       msgs.forEach(function(msg) {
-        var row = createObjectRow(msg, true, { skipEmptyRemove: false });
+        var row = createObjectRow(msg, true, { skipEmptyRemove: false, valueColumnCount: vccP });
         if (row) frag.appendChild(row);
       });
       if (frag.childNodes.length > 0) {
@@ -3867,25 +4003,31 @@ function subscribeTempSessionRealtimeGuest() {
   } catch (_) {}
 }
 
-/** Update the primary text of an object row. Looks in primary feed, then secondary. */
+/** Update value cell(s) from stored text (plain or multi-value JSON). */
 function updateObjectRowText(objId, textValue) {
   if (objId == null) return;
-  const idStr = String(objId);
-  const textEl = findObjectRowTextEl(objId);
-  if (!textEl) return;
-  textEl.innerHTML = renderVisualOnlyHtml(textValue || '');
+  const row = findObjectRowEl(objId);
+  if (!row) return;
+  var maxCols = parseInt(row.dataset.valueCols, 10) || row.querySelectorAll('.obj-value-cell').length || 1;
+  var parts = parseObjectTextToParts(textValue);
+  while (parts.length < maxCols) parts.push('');
+  if (parts.length > maxCols) parts = parts.slice(0, maxCols);
+  ensureRowValueCellCount(row, maxCols, parts);
 }
 
 function findObjectRowTextEl(objId) {
   if (objId == null) return null;
   const idStr = String(objId);
-  const sel = '.obj[data-id="' + CSS.escape(idStr) + '"] .obj-text';
+  const selMulti = '.obj[data-id="' + CSS.escape(idStr) + '"] .obj-value-cell';
+  const selLegacy = '.obj[data-id="' + CSS.escape(idStr) + '"] .obj-text';
   for (let i = 0; i < views.length; i++) {
     const v = views[i];
     const inner = v && v.feedInner;
     if (!inner) continue;
-    const el = inner.querySelector(sel);
+    const el = inner.querySelector(selMulti);
     if (el) return el;
+    const leg = inner.querySelector(selLegacy);
+    if (leg) return leg;
   }
   return null;
 }
@@ -3955,9 +4097,9 @@ function applyObjectEditMode(idsToEdit, primarySeedId) {
     fi.querySelectorAll('.obj').forEach(row => {
       const id = row.dataset.id != null ? Number(row.dataset.id) : null;
       if (id == null || !idsToEdit.has(id)) return;
-      const textEl = row.querySelector('.obj-text');
-      let raw = (textEl && textEl.textContent) ? textEl.textContent : '';
-      const badge = textEl && textEl.querySelector('.obj-remote-edit-badge');
+      let raw = getJoinedRowTextForEdit(row);
+      const firstCell = row.querySelector('.obj-value-cell') || row.querySelector('.obj-text');
+      const badge = firstCell && firstCell.querySelector('.obj-remote-edit-badge');
       if (badge && badge.textContent) raw = raw.slice(0, -badge.textContent.length);
       originalEditTextForCancelMap[id] = raw;
       editingObjectTextMap[id] = raw;
@@ -4045,9 +4187,10 @@ function updateEditingRowFromInput() {
     fi.querySelectorAll('.obj').forEach(row => {
       const id = row.dataset.id != null ? Number(row.dataset.id) : null;
       if (id != null && editingSet.has(id)) return;
-      const textEl = row.querySelector('.obj-text');
-      if (!textEl || !textEl.querySelector('.obj-edit-caret, .obj-edit-selection')) return;
-      textEl.innerHTML = renderVisualOnlyHtml(textEl.textContent || '');
+      row.querySelectorAll('.obj-value-cell, .obj-text').forEach(function(textEl) {
+        if (!textEl.querySelector('.obj-edit-caret, .obj-edit-selection')) return;
+        textEl.innerHTML = renderVisualOnlyHtml(textEl.textContent || '');
+      });
     });
   });
   const caret = '<span class="obj-edit-caret" aria-hidden="true"></span>';
@@ -4222,6 +4365,7 @@ function applyFieldPrefsToFeedInner(inner, fp) {
     if (senderEl) senderEl.style.setProperty('display', fp.showAuthor ? 'block' : 'none', 'important');
   });
   inner.classList.toggle('obj-labels-off', !fp.showLabels);
+  syncFeedMultiValueChrome(inner);
 }
 
 /** Apply `views.config` to every open feed pane for this channel (single main feed). */
@@ -5206,10 +5350,10 @@ function showRemoteEditingDoppelganger(objId, text, authorName, deviceId, skipEd
   }
   rows.forEach(function(row) {
     if (skipEditingRows && row.classList.contains('obj-editing')) return;
-    const textEl = row.querySelector('.obj-text');
+    const textEl = row.querySelector('.obj-value-cell') || row.querySelector('.obj-text');
     if (!textEl) return;
     if (savedTextForRemote[objId] === undefined) {
-      savedTextForRemote[objId] = textEl.textContent || '';
+      savedTextForRemote[objId] = getJoinedRowTextForEdit(row);
     }
     textEl.innerHTML = renderVisualOnlyHtml(text || '');
     row.classList.add('obj-remote-editing');
@@ -5249,11 +5393,11 @@ function clearRemoteEditingDoppelganger(objId, skipRestore) {
   }
   rows.forEach(function(row) {
     row.classList.remove('obj-remote-editing');
-    const textEl = row.querySelector('.obj-text');
+    const textEl = row.querySelector('.obj-value-cell') || row.querySelector('.obj-text');
     const badge = textEl ? textEl.querySelector('.obj-remote-edit-badge') : row.querySelector('.obj-remote-edit-badge');
     if (badge && badge.parentNode) badge.parentNode.removeChild(badge);
-    if (!skipRestore && savedTextForRemote[objId] !== undefined && textEl) {
-      textEl.innerHTML = renderVisualOnlyHtml(savedTextForRemote[objId] || '');
+    if (!skipRestore && savedTextForRemote[objId] !== undefined) {
+      updateObjectRowText(objId, savedTextForRemote[objId]);
     }
   });
   delete savedTextForRemote[objId];
@@ -6154,6 +6298,8 @@ function applyFieldPrefsToObjects() {
   });
   feedInner.classList.toggle('obj-labels-off', !fieldPrefs.showLabels);
   if (secondaryFeedInner) secondaryFeedInner.classList.toggle('obj-labels-off', !fieldPrefs.showLabels);
+  syncFeedMultiValueChrome(feedInner);
+  if (secondaryFeedInner) syncFeedMultiValueChrome(secondaryFeedInner);
   applyFieldPrefsUI();
 }
 
@@ -6315,8 +6461,9 @@ function setupTouchDragHandlers() {
   document.addEventListener('touchend', end, { passive: true });
 }
 
-/** Table view: header row (Time, Author, Value, Actions). No dataset.id so it stays first. */
-function createObjectHeaderRow() {
+/** Table / multi-value: header row (Time, Author, Value 1…N, Actions). No dataset.id. */
+function createObjectHeaderRow(maxValueCols) {
+  var n = Math.max(1, parseInt(maxValueCols, 10) || 1);
   const row = document.createElement('div');
   row.className = 'obj obj-header';
   row.setAttribute('aria-hidden', 'true');
@@ -6329,16 +6476,22 @@ function createObjectHeaderRow() {
   const sender = document.createElement('div');
   sender.className = 'obj-sender';
   sender.textContent = 'Author';
-  const text = document.createElement('div');
-  text.className = 'obj-text';
-  text.textContent = 'Value';
+  const valuesWrap = document.createElement('div');
+  valuesWrap.className = 'obj-values-wrap';
+  valuesWrap.style.display = 'contents';
+  for (var vi = 0; vi < n; vi++) {
+    const h = document.createElement('div');
+    h.className = 'obj-text obj-value-cell obj-header-value-cell';
+    h.textContent = n > 1 ? 'Value ' + (vi + 1) : 'Value';
+    valuesWrap.appendChild(h);
+  }
   const actions = document.createElement('div');
   actions.className = 'obj-actions';
   const contentWrap = document.createElement('div');
   contentWrap.className = 'obj-content';
   contentWrap.appendChild(time);
   contentWrap.appendChild(sender);
-  contentWrap.appendChild(text);
+  contentWrap.appendChild(valuesWrap);
   row.appendChild(checkboxPlaceholder);
   row.appendChild(contentWrap);
   row.appendChild(actions);
@@ -6358,6 +6511,12 @@ function createObjectRow(obj, isNew, options) {
   const row  = document.createElement('div');
   row.className = 'obj' + (isNew ? ' new-flash' : '');
   if (typeof obj.id !== 'undefined') row.dataset.id = String(obj.id);
+  var valueColCount =
+    (options && options.valueColumnCount) ||
+    (feedInner && parseInt(feedInner.dataset.inoutValueCols, 10)) ||
+    1;
+  valueColCount = Math.max(1, valueColCount);
+  row.dataset.valueCols = String(valueColCount);
   row.draggable = true;
   row.addEventListener('dragstart', e => {
     if (pointerDownOnSelectArea) {
@@ -6631,7 +6790,11 @@ function createObjectRow(obj, isNew, options) {
     if (!feedInner) return;
     if (e.target.closest('.obj-checkbox-zone')) return;
     if (e.target.closest('.obj-actions')) return;
-    const contentLeft = row.querySelector('.obj-time') || row.querySelector('.obj-sender') || row.querySelector('.obj-text');
+    const contentLeft =
+      row.querySelector('.obj-time') ||
+      row.querySelector('.obj-sender') ||
+      row.querySelector('.obj-value-cell') ||
+      row.querySelector('.obj-text');
     if (contentLeft && e.touches[0].clientX < contentLeft.getBoundingClientRect().left) return;
     if (!touchDragState || !touchDragState.bound) {
       setupTouchDragHandlers();
@@ -6799,6 +6962,18 @@ function createObjectRow(obj, isNew, options) {
     applyObjectEditMode(idsToEdit, obj.id);
   });
 
+  const actionAddValue = document.createElement('button');
+  actionAddValue.className = 'obj-action-btn';
+  actionAddValue.type = 'button';
+  actionAddValue.setAttribute('role', 'menuitem');
+  actionAddValue.textContent = 'Add value';
+  actionAddValue.addEventListener('click', e => {
+    e.stopPropagation();
+    closeDropdown();
+    if (!obj.id) return;
+    addValueColumnToObjectFromMenu(obj);
+  });
+
   const actionDelete = document.createElement('button');
   actionDelete.className = 'obj-action-btn';
   actionDelete.type = 'button';
@@ -6855,10 +7030,11 @@ function createObjectRow(obj, isNew, options) {
   actionCopy.addEventListener('click', e => {
     e.stopPropagation();
     closeDropdown();
-    if (!obj.text) return;
+    var joinedCopy = parseObjectTextToParts(obj.text).join('\n\n');
+    if (!joinedCopy) return;
     try {
-      navigator.clipboard.writeText(obj.text);
-      if (typeof showClipboardBubble === 'function') showClipboardBubble(obj.text);
+      navigator.clipboard.writeText(joinedCopy);
+      if (typeof showClipboardBubble === 'function') showClipboardBubble(joinedCopy);
       toast('Message copied.');
     } catch (err) {
       console.error(err);
@@ -6887,6 +7063,7 @@ function createObjectRow(obj, isNew, options) {
   });
 
   menuSingle.appendChild(actionEdit);
+  menuSingle.appendChild(actionAddValue);
   menuSingle.appendChild(actionDelete);
   menuSingle.appendChild(actionMove);
   menuSingle.appendChild(actionExport);
@@ -7129,7 +7306,12 @@ function createObjectRow(obj, isNew, options) {
   /* long-press on object row (anywhere except checkbox-zone/actions/links) starts drag-select */
   row.addEventListener('mousedown', e => {
     if (!obj.id) return;
-    if (e.target.closest('.obj-checkbox-zone, .obj-actions') || (e.target.closest('a') && e.target.closest('.obj-text'))) return;
+    if (
+      e.target.closest('.obj-checkbox-zone, .obj-actions') ||
+      (e.target.closest('a') && e.target.closest('.obj-text, .obj-value-cell'))
+    ) {
+      return;
+    }
     const startY = e.clientY;
     const state = { started: false, mode: null, startRowStates: null, startYContent: null, didWeMove: false };
     const onMove = (ev) => {
@@ -7187,7 +7369,12 @@ function createObjectRow(obj, isNew, options) {
   });
   row.addEventListener('touchstart', e => {
     if (!obj.id || e.touches.length !== 1) return;
-    if (e.target.closest('.obj-checkbox-zone, .obj-actions') || (e.target.closest('a') && e.target.closest('.obj-text'))) return;
+    if (
+      e.target.closest('.obj-checkbox-zone, .obj-actions') ||
+      (e.target.closest('a') && e.target.closest('.obj-text, .obj-value-cell'))
+    ) {
+      return;
+    }
     const startY = e.touches[0].clientY;
     const state = { started: false, mode: null, startRowStates: null, startYContent: null, didWeMove: false };
     const onTouchMove = (ev) => {
@@ -7258,10 +7445,21 @@ function createObjectRow(obj, isNew, options) {
   time.textContent = formatTime(obj.created_at);
   if (fieldPrefs) time.style.setProperty('display', fieldPrefs.showTime ? 'block' : 'none', 'important');
 
-  const text = document.createElement('div');
-  text.className = 'obj-text';
-  text.innerHTML = renderVisualOnlyHtml(obj.text);
-  text.addEventListener('click', e => {
+  var valueParts = parseObjectTextToParts(obj.text);
+  while (valueParts.length < valueColCount) valueParts.push('');
+  if (valueParts.length > valueColCount) valueParts = valueParts.slice(0, valueColCount);
+  const valuesWrap = document.createElement('div');
+  valuesWrap.className = 'obj-values-wrap';
+  valuesWrap.style.display = 'contents';
+  for (var _vci = 0; _vci < valueColCount; _vci++) {
+    const cell = document.createElement('div');
+    cell.className = 'obj-text obj-value-cell';
+    cell.dataset.valueIndex = String(_vci);
+    cell.innerHTML = renderVisualOnlyHtml(valueParts[_vci] != null ? valueParts[_vci] : '');
+    valuesWrap.appendChild(cell);
+  }
+  valuesWrap.addEventListener('click', e => {
+    if (!e.target.closest('.obj-value-cell')) return;
     if (e.target.closest('a')) return;
     e.stopPropagation();
     if (typeof obj.id === 'undefined') return;
@@ -7282,11 +7480,11 @@ function createObjectRow(obj, isNew, options) {
   contentWrap.className = 'obj-content';
   contentWrap.appendChild(time);
   contentWrap.appendChild(sender);
-  contentWrap.appendChild(text);
+  contentWrap.appendChild(valuesWrap);
 
   row.addEventListener('click', e => {
     if (e.target.closest('.obj-checkbox-zone')) return;
-    if (e.target.closest('.obj-text')) return;
+    if (e.target.closest('.obj-values-wrap, .obj-text')) return;
     if (selectMode) {
       if (e.target.closest('.obj-actions')) return;
       if (dragSelectJustEnded || dragSelectToggledByTouch) return;
@@ -7316,7 +7514,11 @@ function createObjectRow(obj, isNew, options) {
   row.appendChild(actions);
   row.addEventListener('mousedown', e => {
     if (e.target.closest('.obj-checkbox-zone')) return;
-    const contentLeft = row.querySelector('.obj-time') || row.querySelector('.obj-sender') || row.querySelector('.obj-text');
+    const contentLeft =
+      row.querySelector('.obj-time') ||
+      row.querySelector('.obj-sender') ||
+      row.querySelector('.obj-value-cell') ||
+      row.querySelector('.obj-text');
     if (contentLeft && e.clientX < contentLeft.getBoundingClientRect().left) {
       pointerDownOnSelectArea = true;
       const clear = () => {
@@ -7330,11 +7532,18 @@ function createObjectRow(obj, isNew, options) {
 }
 
 function appendObject(obj, isNew) {
-  const row = createObjectRow(obj, isNew);
+  var maxValCols = Math.max(
+    computeMaxValueColumnsFromFeedInner(feedInner),
+    parseObjectTextToParts(obj.text).length,
+    1
+  );
+  feedInner.dataset.inoutValueCols = String(maxValCols);
+  const row = createObjectRow(obj, isNew, { valueColumnCount: maxValCols });
   if (!row) return;
   feedInner.appendChild(row);
   // Ensure new messages respect the current view (time/author) settings.
   applyFieldPrefsToObjects();
+  syncFeedMultiValueChrome(feedInner);
   if (typeof obj.id !== 'undefined') {
     const idNum = Number(obj.id);
     if (Number.isFinite(idNum)) {
@@ -9523,6 +9732,69 @@ async function tryUpdateEntryTextRest(entryId, textValue, rowChannel) {
   return false;
 }
 
+/** Save full `entries.text` (plain or multi-value JSON blob). */
+async function persistObjectTextPayload(entryId, serializedText, rowChannel) {
+  const id = Number(entryId);
+  if (!Number.isFinite(id)) return false;
+  const ch = String(rowChannel != null ? rowChannel : currentChannel || 'main');
+  const tv = String(serializedText != null ? serializedText : '');
+  if (!shouldUseServerForObjects()) {
+    try {
+      const byView = await getLocalObjectByViewMap();
+      const list = Array.isArray(byView[ch]) ? byView[ch].slice() : [];
+      const idx = list.findIndex(function(o) { return o && Number(o.id) === id; });
+      if (idx < 0) return false;
+      list[idx] = Object.assign({}, list[idx], { text: tv });
+      byView[ch] = list;
+      await saveLocalObjectByViewMap(byView);
+      updateObjectRowText(id, tv);
+      return true;
+    } catch (e) {
+      console.error(e);
+      return false;
+    }
+  }
+  var savedOk = false;
+  if (currentUser && sb && sb.from) {
+    savedOk = await tryUpdateEntryTextRest(id, tv, ch);
+  }
+  if (!savedOk && sb && sb.rpc) {
+    const editPayload = {
+      p_channel: ch,
+      p_entry_id: id,
+      p_action: 'edit',
+      p_payload: { text: tv },
+    };
+    if (tempSessionId) editPayload.p_temp_session_id = tempSessionId;
+    const { error } = await sb.rpc('perform_entry_action', editPayload);
+    savedOk = !error;
+  }
+  if (savedOk) updateObjectRowText(id, tv);
+  return savedOk;
+}
+
+async function addValueColumnToObjectFromMenu(obj) {
+  if (!obj || obj.id == null) return;
+  const id = Number(obj.id);
+  if (!Number.isFinite(id)) return;
+  var row = findObjectRowEl(id);
+  var parts = row ? partsFromRowDom(row) : parseObjectTextToParts(obj.text);
+  parts.push('');
+  var next = serializeObjectParts(parts);
+  var ch = obj.channel != null ? String(obj.channel) : String(currentChannel || 'main');
+  var ok = await persistObjectTextPayload(id, next, ch);
+  if (!ok) toast('Could not add value.');
+  else {
+    if (feedInner) {
+      var mc = Math.max(computeMaxValueColumnsFromFeedInner(feedInner), parts.length, 1);
+      feedInner.dataset.inoutValueCols = String(mc);
+    }
+    syncFeedMultiValueChrome(feedInner);
+    if (typeof applyFieldPrefsToObjects === 'function') applyFieldPrefsToObjects();
+    toast('Value column added.');
+  }
+}
+
 function cleanupAuthHash() {
   var clean = false;
   if (location.hash && (location.hash.includes('access_token=') || location.hash.includes('code='))) {
@@ -9572,9 +9844,13 @@ async function sendText(text, options) {
         const list = Array.isArray(byView[ch]) ? byView[ch].slice() : [];
         for (let i = 0; i < idsToSave.length; i++) {
           const id = idsToSave[i];
-          const textToSave = trimmedPerId[i];
+          let textToSave = trimmedPerId[i];
           const idx = list.findIndex(o => o && Number(o.id) === Number(id));
           if (idx >= 0) {
+            const prevParts = parseObjectTextToParts(list[idx].text);
+            if (prevParts.length > 1) {
+              textToSave = serializeObjectParts(mergeComposerIntoParts(prevParts, textToSave));
+            }
             list[idx] = Object.assign({}, list[idx], { text: textToSave });
           }
         }
@@ -9662,12 +9938,18 @@ async function sendText(text, options) {
       return;
     }
     let lastError = null;
+    const textSavedById = {};
     for (let i = 0; i < idsToSave.length; i++) {
       const id = idsToSave[i];
-      const textToSave = trimmedPerId[i];
+      let textToSave = trimmedPerId[i];
       const beforeRow = befores.find(function(b) {
         return b && Number(b.id) === Number(id);
       });
+      const prevParts = beforeRow ? parseObjectTextToParts(beforeRow.text) : [''];
+      if (prevParts.length > 1) {
+        textToSave = serializeObjectParts(mergeComposerIntoParts(prevParts, textToSave));
+      }
+      textSavedById[id] = textToSave;
       const rowChannel = String(
         beforeRow && beforeRow.channel != null ? beforeRow.channel : currentChannel || 'main'
       );
@@ -9716,12 +9998,20 @@ async function sendText(text, options) {
       return;
     }
     if (befores.length) {
-      const afterById = {};
-      idsToSave.forEach((id, i) => { afterById[id] = trimmedPerId[i] || trimmedNewPost; });
-      pushUndo({ type: 'edit', entries: befores.map(b => ({ id: b.id, beforeText: b.text, afterText: afterById[b.id] != null ? afterById[b.id] : trimmedNewPost })) });
+      pushUndo({
+        type: 'edit',
+        entries: befores.map(b => ({
+          id: b.id,
+          beforeText: b.text,
+          afterText: textSavedById[b.id] != null ? textSavedById[b.id] : trimmedNewPost,
+        })),
+      });
       befores.forEach(b => logAction('edit', { id: b.id }));
     }
-    idsToSave.forEach((id, i) => updateObjectRowText(id, trimmedPerId[i] || trimmedNewPost));
+    idsToSave.forEach(function(id) {
+      updateObjectRowText(id, textSavedById[id] != null ? textSavedById[id] : trimmedNewPost);
+    });
+    syncFeedMultiValueChrome(feedInner);
     originalEditTextForCancel = null;
     originalEditTextForCancelMap = null;
     editingObjectTextMap = null;
