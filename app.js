@@ -7640,7 +7640,6 @@ function gatherPersonalWorkspaceStateForSave() {
     manageBarOrder: manageBarOrder,
     settings: settings && typeof settings === 'object' ? settings : null,
     feedScrollByView: feedScrollByView,
-    focusedChannel: String(currentView || currentChannel || 'main'),
     channelStripOrder: channelStripOrder,
     uiChrome: gatherUiChromeForWorkspace(),
   };
@@ -7679,19 +7678,15 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
   if (mergeMultiview) {
     var nonceM = cfg._wsPushNonce;
     if (nonceM && nonceM === lastMergedWorkspacePushNonce) {
-      var wantFcEarly = typeof cfg.focusedChannel === 'string' ? cfg.focusedChannel.trim() : '';
-      var haveFcEarly = String(currentView || currentChannel || 'main');
-      if (!wantFcEarly || wantFcEarly === haveFcEarly) {
-        /* Full merge was skipped; still apply uiChrome so account drawer / modals sync (e.g. mobile → web). */
-        if (cfg.uiChrome && typeof cfg.uiChrome === 'object') {
-          try {
-            applyWorkspaceUiChrome(cfg.uiChrome);
-          } catch (e) {
-            console.error('workspace uiChrome (deduped nonce)', e);
-          }
+      /* Full merge was skipped; still apply uiChrome so account drawer / modals sync (e.g. mobile → web). */
+      if (cfg.uiChrome && typeof cfg.uiChrome === 'object') {
+        try {
+          applyWorkspaceUiChrome(cfg.uiChrome);
+        } catch (e) {
+          console.error('workspace uiChrome (deduped nonce)', e);
         }
-        return;
       }
+      return;
     }
     applyingPersonalWorkspaceFromRemote = true;
     var workspaceMergeApplyOk = true;
@@ -7729,26 +7724,6 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
           refreshMoveTargets();
           syncComposerTargetSelects();
         } catch (_) {}
-      }
-      if (typeof cfg.focusedChannel === 'string' && cfg.focusedChannel.trim()) {
-        const want = cfg.focusedChannel.trim();
-        if (viewNames.includes(want)) {
-          const slot0 = inputSlots && inputSlots[0];
-          const slotMismatch =
-            primarySlotAutoTarget && slot0 && String(slot0.channel || '') !== want;
-          const needSwitch = want !== currentView || want !== currentChannel || slotMismatch;
-          if (needSwitch) {
-            applyingWorkspaceFocusFromRemote = true;
-            try {
-              await switchChannel(want);
-            } catch (e) {
-              workspaceMergeApplyOk = false;
-              console.error('apply focusedChannel (merge)', e);
-            } finally {
-              applyingWorkspaceFocusFromRemote = false;
-            }
-          }
-        }
       }
       if (Array.isArray(cfg.openSecondaryViews)) {
         await applyWorkspaceOpenSecondaryViews(cfg.openSecondaryViews, { merge: true });
@@ -7816,25 +7791,6 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
       syncComposerTargetSelects();
     } catch (_) {}
   }
-  if (typeof cfg.focusedChannel === 'string' && cfg.focusedChannel.trim()) {
-    const want = cfg.focusedChannel.trim();
-    if (viewNames.includes(want)) {
-      const slot0 = inputSlots && inputSlots[0];
-      const slotMismatch =
-        primarySlotAutoTarget && slot0 && String(slot0.channel || '') !== want;
-      const needSwitch = want !== currentView || want !== currentChannel || slotMismatch;
-      if (needSwitch) {
-        applyingWorkspaceFocusFromRemote = true;
-        try {
-          await switchChannel(want);
-        } catch (e) {
-          console.error('apply focusedChannel', e);
-        } finally {
-          applyingWorkspaceFocusFromRemote = false;
-        }
-      }
-    }
-  }
   if (Array.isArray(cfg.openSecondaryViews)) {
     await applyWorkspaceOpenSecondaryViews(cfg.openSecondaryViews);
   }
@@ -7898,7 +7854,7 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
 
 function schedulePersonalWorkspacePersist() {
   /* Workspace UI sync uses Supabase whenever signed in — independent of object storage target (cloud vs local vault). */
-  if (applyingPersonalWorkspaceFromRemote && applyingWorkspaceFocusFromRemote) return;
+  if (applyingPersonalWorkspaceFromRemote) return;
   if (!currentUser || !sb) return;
   if (_personalWorkspacePersistTimer) clearTimeout(_personalWorkspacePersistTimer);
   _personalWorkspacePersistTimer = setTimeout(function() {
@@ -7909,12 +7865,12 @@ function schedulePersonalWorkspacePersist() {
 if (typeof window !== 'undefined') window.schedulePersonalWorkspacePersist = schedulePersonalWorkspacePersist;
 
 function notifyWorkspaceChromeChanged() {
-  if (applyingPersonalWorkspaceFromRemote && applyingWorkspaceFocusFromRemote) return;
+  if (applyingPersonalWorkspaceFromRemote) return;
   schedulePersonalWorkspacePersist();
 }
 
 function flushPersonalWorkspacePersist() {
-  /* Block only while applying a *remote* tab switch; local tab taps during other merge work must still persist focusedChannel. */
+  /* Block only while applying a remote workspace-driven tab switch (legacy); local tab taps must still persist. */
   if (applyingPersonalWorkspaceFromRemote && applyingWorkspaceFocusFromRemote) return Promise.resolve();
   if (!currentUser || !sb) return Promise.resolve();
   if (_personalWorkspacePersistTimer) {
@@ -7951,6 +7907,10 @@ async function persistPersonalWorkspaceToServer() {
       slice.feedScrollByView = Object.assign({}, base.feedScrollByView);
     }
     Object.assign(base, slice);
+    /* Tab focus is per-device (localStorage); do not sync — was forcing all clients to the tab last saved on refresh. */
+    try {
+      delete base.focusedChannel;
+    } catch (_) {}
     var wsNonce =
       typeof crypto !== 'undefined' && crypto.randomUUID
         ? crypto.randomUUID()
@@ -7990,18 +7950,14 @@ async function hydrateWorkspaceOpenViewsForSignedInUser() {
     console.error('hydrateWorkspaceOpenViewsForSignedInUser', e);
   }
   if (cfgFull && typeof cfgFull === 'object') {
-    const hadFocused =
-      typeof cfgFull.focusedChannel === 'string' && cfgFull.focusedChannel.trim().length > 0;
     inoutHydratingWorkspace = true;
     try {
       await applyPersonalWorkspaceStateFromServer(cfgFull);
-      if (!hadFocused) {
-        try {
-          const saved = localStorage.getItem(CURRENT_VIEW_KEY);
-          if (saved && viewNames.includes(saved)) await switchChannel(saved);
-        } catch (e) {
-          console.error('hydrate fallback switchChannel', e);
-        }
+      try {
+        const saved = localStorage.getItem(CURRENT_VIEW_KEY);
+        if (saved && viewNames.includes(saved)) await switchChannel(saved);
+      } catch (e) {
+        console.error('hydrate restore tab from localStorage', e);
       }
     } finally {
       inoutHydratingWorkspace = false;
@@ -8224,7 +8180,7 @@ function renderTabs() {
       }
       // Delay single-click switching so dblclick has priority for renaming.
       // (Otherwise the first click may switch views before dblclick fires.)
-      // Touch: no delay so focusedChannel persists before background/tab close races.
+      // Touch: no delay so tab switch runs before background/tab close races.
       const viewAtClick = currentView;
       if (clickTimer) clearTimeout(clickTimer);
       var tabSwitchDelay = typeof isMobileOrTouchDevice === 'function' && isMobileOrTouchDevice() ? 0 : 180;
@@ -10662,7 +10618,7 @@ var scrollSaveTimer = null;
 
 function scheduleScrollPersistIfAllowed() {
   if (Date.now() < suppressScrollWorkspacePersistUntil) return;
-  if (applyingWorkspaceFocusFromRemote) return;
+  if (applyingPersonalWorkspaceFromRemote) return;
   if (!currentUser || !sb) return;
   schedulePersonalWorkspacePersist();
 }

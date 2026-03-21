@@ -75,7 +75,8 @@ body{
   -webkit-font-smoothing:antialiased;
   min-height:100vh;
   overflow:hidden;
-  touch-action:manipulation;
+  /* pan-y: nested feeds/modals scroll; pinch-zoom kept for accessibility */
+  touch-action:pan-y pinch-zoom;
 }
 
 /* feed scrollbars: dark tab from under right edge, visible on hover */
@@ -133,6 +134,7 @@ header,
   min-width:0;
   overflow:hidden;
   pointer-events:auto;
+  touch-action:pan-y pinch-zoom;
 }
 #multiview > #view-pinned-rail{
   flex:0 0 auto;
@@ -178,6 +180,7 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
   min-height:0;
   min-width:0;
   order:1;
+  touch-action:pan-y;
 }
 .multiview-views .view:only-child{
   flex:1 1 100%;
@@ -211,6 +214,7 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
   display:flex;
   flex-direction:column;
   overflow:hidden;
+  touch-action:pan-y;
 }
 .view-pinned-rail{
   flex:0 0 auto;
@@ -305,6 +309,7 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
   flex-direction:column;
   overflow:hidden;
   background:var(--bg);
+  touch-action:pan-y pinch-zoom;
 }
 .frames-zone{
   flex:1 1 0;
@@ -714,10 +719,12 @@ header{
 #user-modal-backdrop{
   position:fixed;
   inset:0;
+  height:100%;
   background:rgba(0,0,0,0.62);
   display:none;
   z-index:2000; /* above header, nav, multiview panels */
   pointer-events:auto;
+  touch-action:none;
 }
 
 #user-modal{
@@ -725,20 +732,24 @@ header{
   top:0;right:0;bottom:0;
   width:360px;
   max-width:92vw;
+  height:100%;
+  max-height:100%;
+  box-sizing:border-box;
   background:var(--bg2);
   border-left:1px solid var(--line2);
   box-shadow:-24px 0 60px rgba(0,0,0,0.55);
   padding:14px 16px;
-  display:flex;
-  flex-direction:column;
-  gap:12px;
+  display:block;
   animation:drawerIn .18s ease both;
   pointer-events:auto;
-  min-height:0;
   overflow-y:auto;
   overflow-x:hidden;
   -webkit-overflow-scrolling:touch;
   touch-action:pan-y;
+  overscroll-behavior:contain;
+}
+#user-modal > * + *{
+  margin-top:12px;
 }
 
 #user-modal button,
@@ -1177,6 +1188,7 @@ header{
   overflow-x:hidden;
   -webkit-overflow-scrolling:touch;
   touch-action:pan-y;
+  overscroll-behavior:contain;
   outline:none;
   /* Avoid strict/layout containment here — it broke touch/wheel scrolling inside the fixed app shell. */
   contain:none;
