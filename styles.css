@@ -1870,6 +1870,26 @@ body.select-mode .obj-select-wrap,
 .obj-actions-open .obj-actions-dropdown{
   display:flex;
 }
+.obj-actions-menu{
+  display:flex;
+  flex-direction:column;
+  width:100%;
+}
+.obj-actions:not(.obj-actions-bulk) .obj-actions-menu-bulk{
+  display:none !important;
+}
+.obj-actions.obj-actions-bulk .obj-actions-menu-single{
+  display:none !important;
+}
+.obj-actions-trigger.obj-actions-trigger-bulk{
+  width:auto;
+  min-width:24px;
+  padding:2px 5px;
+  font-size:11px;
+  font-weight:600;
+  color:var(--text);
+  border-color:var(--acc2);
+}
 .obj-actions-dropdown .obj-action-btn{
   display:block;
   width:100%;

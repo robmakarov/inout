@@ -5666,6 +5666,33 @@ function updateSelectionUI() {
     selectModeAutoOn = false;
     setSelectMode(false);
   }
+  refreshObjectRowBulkActionBars();
+}
+
+function refreshObjectRowBulkActionBars() {
+  const sel = modeState && modeState.selectedIds ? modeState.selectedIds : selectedIds;
+  const n = sel && typeof sel.size === 'number' ? sel.size : 0;
+  try {
+    document.querySelectorAll('.obj').forEach(function(row) {
+      const actions = row.querySelector('.obj-actions');
+      if (!actions) return;
+      const rawId = row.dataset && row.dataset.id;
+      const id = rawId != null && rawId !== '' ? Number(rawId) : NaN;
+      const bulk = n > 1 && Number.isFinite(id) && sel && sel.has(id);
+      actions.classList.toggle('obj-actions-bulk', bulk);
+      const trigger = actions.querySelector('.obj-actions-trigger');
+      if (!trigger) return;
+      if (bulk) {
+        trigger.textContent = String(n);
+        trigger.setAttribute('aria-label', 'Actions for all ' + n + ' selected');
+        trigger.classList.add('obj-actions-trigger-bulk');
+      } else {
+        trigger.textContent = '\u22EE';
+        trigger.setAttribute('aria-label', 'Object actions');
+        trigger.classList.remove('obj-actions-trigger-bulk');
+      }
+    });
+  } catch (_) {}
 }
 
 function restoreLastChannel() {
@@ -6655,6 +6682,9 @@ function createObjectRow(obj, isNew, options) {
     else document.removeEventListener('click', closeDropdown);
   });
 
+  const menuSingle = document.createElement('div');
+  menuSingle.className = 'obj-actions-menu obj-actions-menu-single';
+
   const actionDelete = document.createElement('button');
   actionDelete.className = 'obj-action-btn';
   actionDelete.type = 'button';
@@ -6742,12 +6772,43 @@ function createObjectRow(obj, isNew, options) {
     }
   });
 
-  dropdown.appendChild(actionDelete);
-  dropdown.appendChild(actionMove);
-  dropdown.appendChild(actionExport);
-  dropdown.appendChild(actionExportJson);
-  dropdown.appendChild(actionCopy);
-  dropdown.appendChild(actionCut);
+  menuSingle.appendChild(actionDelete);
+  menuSingle.appendChild(actionMove);
+  menuSingle.appendChild(actionExport);
+  menuSingle.appendChild(actionExportJson);
+  menuSingle.appendChild(actionCopy);
+  menuSingle.appendChild(actionCut);
+
+  const menuBulk = document.createElement('div');
+  menuBulk.className = 'obj-actions-menu obj-actions-menu-bulk';
+
+  const actionBulkDelete = document.createElement('button');
+  actionBulkDelete.className = 'obj-action-btn';
+  actionBulkDelete.type = 'button';
+  actionBulkDelete.setAttribute('role', 'menuitem');
+  actionBulkDelete.textContent = 'Del all';
+  actionBulkDelete.addEventListener('click', e => {
+    e.stopPropagation();
+    closeDropdown();
+    handleDeleteSelectedObjects();
+  });
+
+  const actionBulkMove = document.createElement('button');
+  actionBulkMove.className = 'obj-action-btn';
+  actionBulkMove.type = 'button';
+  actionBulkMove.setAttribute('role', 'menuitem');
+  actionBulkMove.textContent = 'Move all';
+  actionBulkMove.addEventListener('click', e => {
+    e.stopPropagation();
+    closeDropdown();
+    handleMoveSelectedObjects();
+  });
+
+  menuBulk.appendChild(actionBulkDelete);
+  menuBulk.appendChild(actionBulkMove);
+
+  dropdown.appendChild(menuSingle);
+  dropdown.appendChild(menuBulk);
   actions.appendChild(trigger);
   actions.appendChild(dropdown);
 
@@ -7833,7 +7894,7 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
 
 function schedulePersonalWorkspacePersist() {
   /* Workspace UI sync uses Supabase whenever signed in — independent of object storage target (cloud vs local vault). */
-  if (applyingPersonalWorkspaceFromRemote) return;
+  if (applyingPersonalWorkspaceFromRemote && applyingWorkspaceFocusFromRemote) return;
   if (!currentUser || !sb) return;
   if (_personalWorkspacePersistTimer) clearTimeout(_personalWorkspacePersistTimer);
   _personalWorkspacePersistTimer = setTimeout(function() {
@@ -7844,12 +7905,13 @@ function schedulePersonalWorkspacePersist() {
 if (typeof window !== 'undefined') window.schedulePersonalWorkspacePersist = schedulePersonalWorkspacePersist;
 
 function notifyWorkspaceChromeChanged() {
-  if (applyingPersonalWorkspaceFromRemote) return;
+  if (applyingPersonalWorkspaceFromRemote && applyingWorkspaceFocusFromRemote) return;
   schedulePersonalWorkspacePersist();
 }
 
 function flushPersonalWorkspacePersist() {
-  if (applyingPersonalWorkspaceFromRemote) return Promise.resolve();
+  /* Block only while applying a *remote* tab switch; local tab taps during other merge work must still persist focusedChannel. */
+  if (applyingPersonalWorkspaceFromRemote && applyingWorkspaceFocusFromRemote) return Promise.resolve();
   if (!currentUser || !sb) return Promise.resolve();
   if (_personalWorkspacePersistTimer) {
     clearTimeout(_personalWorkspacePersistTimer);
@@ -7859,7 +7921,7 @@ function flushPersonalWorkspacePersist() {
 }
 
 async function persistPersonalWorkspaceToServer() {
-  if (applyingPersonalWorkspaceFromRemote) return;
+  if (applyingPersonalWorkspaceFromRemote && applyingWorkspaceFocusFromRemote) return;
   if (!currentUser || !sb) return;
   try {
     const slice = gatherPersonalWorkspaceStateForSave();
@@ -9920,75 +9982,20 @@ if (viewToggleBtn && viewMenu) {
   });
 }
 
-if (deleteSelectedBtn) {
-  deleteSelectedBtn.addEventListener('click', async () => {
-    let ids = Array.from(modeState.selectedIds || [])
-      .map(x => Number(x))
-      .filter(id => Number.isFinite(id));
-    try {
-      if (!shouldUseServerForObjects()) {
-        const byView = await getLocalObjectByViewMap();
-        const ch = currentChannel || 'main';
-        let list = Array.isArray(byView[ch]) ? byView[ch] : [];
-        if (!ids.length) {
-          ids = list.map(o => o && o.id).filter(id => id != null).map(Number).filter(Number.isFinite);
-        }
-        if (!ids.length) return;
-        await removeLocalObjectsForCurrentView(ids);
-        selectedIds.clear();
-        modeState.selectedIds.clear();
-        try {
-          views.forEach(v => {
-            const inner = v && v.feedInner;
-            if (!inner) return;
-            inner.querySelectorAll('.obj-select:checked').forEach(box => { box.checked = false; });
-            inner.querySelectorAll('.obj.obj-selected').forEach(row => row.classList.remove('obj-selected'));
-          });
-        } catch (_) {}
-        setSelectMode(false);
-        logAction('delete', { count: ids.length, channel: currentChannel });
-        await reloadForUser();
-        return;
-      }
-      if (!currentUser) return;
-      let rowsToDelete = [];
+async function handleDeleteSelectedObjects() {
+  let ids = Array.from(modeState.selectedIds || [])
+    .map(x => Number(x))
+    .filter(id => Number.isFinite(id));
+  try {
+    if (!shouldUseServerForObjects()) {
+      const byView = await getLocalObjectByViewMap();
+      const ch = currentChannel || 'main';
+      let list = Array.isArray(byView[ch]) ? byView[ch] : [];
       if (!ids.length) {
-        const { data, error } = await sb
-          .from(OBJECTS_TABLE)
-          .select('id, created_at, text, channel, user_id, author_name')
-          .eq('channel', currentChannel)
-          .eq('user_id', currentUser.id);
-        if (error) {
-          console.error(error);
-          toast('Failed to delete — ' + humanError(error.message));
-          return;
-        }
-        rowsToDelete = data || [];
-        ids = rowsToDelete.map(r => r.id);
-        if (!ids.length) return;
-      } else {
-        const { data, error } = await sb
-          .from(OBJECTS_TABLE)
-          .select('id, created_at, text, channel, user_id, author_name')
-          .in('id', ids);
-        if (error) {
-          console.error(error);
-          toast('Failed to delete — ' + humanError(error.message));
-          return;
-        }
-        rowsToDelete = data || [];
+        ids = list.map(o => o && o.id).filter(id => id != null).map(Number).filter(Number.isFinite);
       }
-      const { error } = await sb
-        .from(OBJECTS_TABLE)
-        .delete()
-        .in('id', ids);
-      if (error) {
-        console.error(error);
-        toast('Failed to delete — ' + humanError(error.message));
-        return;
-      }
-      pushUndo({ type: 'delete', entries: rowsToDelete });
-      logAction('delete', { count: rowsToDelete.length, channel: currentChannel });
+      if (!ids.length) return;
+      await removeLocalObjectsForCurrentView(ids);
       selectedIds.clear();
       modeState.selectedIds.clear();
       try {
@@ -10000,78 +10007,141 @@ if (deleteSelectedBtn) {
         });
       } catch (_) {}
       setSelectMode(false);
+      logAction('delete', { count: ids.length, channel: currentChannel });
       await reloadForUser();
-    } catch (e) {
-      console.error(e);
-      toast('Failed to delete — ' + humanError(e.message));
+      return;
     }
+    if (!currentUser) return;
+    let rowsToDelete = [];
+    if (!ids.length) {
+      const { data, error } = await sb
+        .from(OBJECTS_TABLE)
+        .select('id, created_at, text, channel, user_id, author_name')
+        .eq('channel', currentChannel)
+        .eq('user_id', currentUser.id);
+      if (error) {
+        console.error(error);
+        toast('Failed to delete — ' + humanError(error.message));
+        return;
+      }
+      rowsToDelete = data || [];
+      ids = rowsToDelete.map(r => r.id);
+      if (!ids.length) return;
+    } else {
+      const { data, error } = await sb
+        .from(OBJECTS_TABLE)
+        .select('id, created_at, text, channel, user_id, author_name')
+        .in('id', ids);
+      if (error) {
+        console.error(error);
+        toast('Failed to delete — ' + humanError(error.message));
+        return;
+      }
+      rowsToDelete = data || [];
+    }
+    const { error } = await sb
+      .from(OBJECTS_TABLE)
+      .delete()
+      .in('id', ids);
+    if (error) {
+      console.error(error);
+      toast('Failed to delete — ' + humanError(error.message));
+      return;
+    }
+    pushUndo({ type: 'delete', entries: rowsToDelete });
+    logAction('delete', { count: rowsToDelete.length, channel: currentChannel });
+    selectedIds.clear();
+    modeState.selectedIds.clear();
+    try {
+      views.forEach(v => {
+        const inner = v && v.feedInner;
+        if (!inner) return;
+        inner.querySelectorAll('.obj-select:checked').forEach(box => { box.checked = false; });
+        inner.querySelectorAll('.obj.obj-selected').forEach(row => row.classList.remove('obj-selected'));
+      });
+    } catch (_) {}
+    setSelectMode(false);
+    await reloadForUser();
+  } catch (e) {
+    console.error(e);
+    toast('Failed to delete — ' + humanError(e.message));
+  }
+}
+
+async function handleMoveSelectedObjects() {
+  if (!moveTargetSelect) return;
+  const target = moveTargetSelect.value;
+  if (!target || target === currentChannel) return;
+  const boxes = feedInner.querySelectorAll('.obj-select:checked');
+  const ids = Array.from(boxes)
+    .map(box => {
+      const row = box.closest('.obj');
+      return row && row.dataset.id ? Number(row.dataset.id) : null;
+    })
+    .filter(id => typeof id === 'number');
+  if (!ids.length) return;
+  try {
+    if (!shouldUseServerForObjects()) {
+      const byView = await getLocalObjectByViewMap();
+      const src = currentChannel || 'main';
+      const srcList = Array.isArray(byView[src]) ? byView[src] : [];
+      const idSet = new Set(ids);
+      const moving = srcList.filter(o => o && idSet.has(Number(o.id)));
+      byView[src] = srcList.filter(o => !o || !idSet.has(Number(o.id)));
+      const destList = Array.isArray(byView[target]) ? byView[target].slice() : [];
+      const nowIso = new Date().toISOString();
+      moving.forEach(o => {
+        destList.push(Object.assign({}, o, { channel: target, created_at: nowIso }));
+      });
+      byView[target] = destList;
+      await saveLocalObjectByViewMap(byView);
+      logAction('move', { count: moving.length, target });
+      setSelectMode(false);
+      await reloadForUser();
+      return;
+    }
+    if (!currentUser) return;
+    const now = new Date().toISOString();
+    const { data, error } = await sb
+      .from(OBJECTS_TABLE)
+      .select('id, created_at, text, channel, user_id, author_name')
+      .eq('user_id', currentUser.id)
+      .in('id', ids);
+    if (error) {
+      console.error(error);
+      toast('Failed to move — ' + humanError(error.message));
+      return;
+    }
+    const rowsBefore = data || [];
+    const { error: updErr } = await sb
+      .from(OBJECTS_TABLE)
+      .update({ channel: target, created_at: now })
+      .eq('user_id', currentUser.id)
+      .in('id', ids);
+    if (updErr) {
+      console.error(updErr);
+      toast('Failed to move — ' + humanError(updErr.message));
+      return;
+    }
+    pushUndo({ type: 'move', entries: rowsBefore });
+    logAction('move', { count: rowsBefore.length, target });
+    setSelectMode(false);
+    await reloadForUser();
+  } catch (e) {
+    console.error(e);
+    toast('Failed to move — ' + humanError(e.message));
+  }
+}
+
+if (deleteSelectedBtn) {
+  deleteSelectedBtn.addEventListener('click', () => {
+    handleDeleteSelectedObjects();
   });
 }
 
 if (moveSelectedBtn) {
-  moveSelectedBtn.addEventListener('click', async () => {
-    if (!moveTargetSelect) return;
-    const target = moveTargetSelect.value;
-    if (!target || target === currentChannel) return;
-    const boxes = feedInner.querySelectorAll('.obj-select:checked');
-    const ids = Array.from(boxes)
-      .map(box => {
-        const row = box.closest('.obj');
-        return row && row.dataset.id ? Number(row.dataset.id) : null;
-      })
-      .filter(id => typeof id === 'number');
-    if (!ids.length) return;
-    try {
-      if (!shouldUseServerForObjects()) {
-        const byView = await getLocalObjectByViewMap();
-        const src = currentChannel || 'main';
-        const srcList = Array.isArray(byView[src]) ? byView[src] : [];
-        const idSet = new Set(ids);
-        const moving = srcList.filter(o => o && idSet.has(Number(o.id)));
-        byView[src] = srcList.filter(o => !o || !idSet.has(Number(o.id)));
-        const destList = Array.isArray(byView[target]) ? byView[target].slice() : [];
-        const nowIso = new Date().toISOString();
-        moving.forEach(o => {
-          destList.push(Object.assign({}, o, { channel: target, created_at: nowIso }));
-        });
-        byView[target] = destList;
-        await saveLocalObjectByViewMap(byView);
-        logAction('move', { count: moving.length, target });
-        setSelectMode(false);
-        await reloadForUser();
-        return;
-      }
-      if (!currentUser) return;
-      const now = new Date().toISOString();
-      const { data, error } = await sb
-        .from(OBJECTS_TABLE)
-        .select('id, created_at, text, channel, user_id, author_name')
-        .eq('user_id', currentUser.id)
-        .in('id', ids);
-      if (error) {
-        console.error(error);
-        toast('Failed to move — ' + humanError(error.message));
-        return;
-      }
-      const rowsBefore = data || [];
-      const { error: updErr } = await sb
-        .from(OBJECTS_TABLE)
-        .update({ channel: target, created_at: now })
-        .eq('user_id', currentUser.id)
-        .in('id', ids);
-      if (updErr) {
-        console.error(updErr);
-        toast('Failed to move — ' + humanError(updErr.message));
-        return;
-      }
-      pushUndo({ type: 'move', entries: rowsBefore });
-      logAction('move', { count: rowsBefore.length, target });
-      setSelectMode(false);
-      await reloadForUser();
-    } catch (e) {
-      console.error(e);
-      toast('Failed to move — ' + humanError(e.message));
-    }
+  moveSelectedBtn.addEventListener('click', () => {
+    handleMoveSelectedObjects();
   });
 }
 
