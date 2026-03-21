@@ -1526,6 +1526,27 @@ async function acquireWsMergeLock() {
 }
 /** True while applying saved workspace on load — lets switchChannel reload data when vars already match. */
 var inoutHydratingWorkspace = false;
+/** One debounced tab switch for the whole strip — per-tab timers never cleared each other, so multiple switchChannel calls could race. */
+var pendingViewSwitchTimer = null;
+var pendingViewSwitchChannel = null;
+function clearPendingViewSwitchClick() {
+  if (pendingViewSwitchTimer) {
+    clearTimeout(pendingViewSwitchTimer);
+    pendingViewSwitchTimer = null;
+  }
+  pendingViewSwitchChannel = null;
+}
+/** Serialize channel switches so a fast tab chain or overlapping realtime + click cannot interleave teardown/subscribe. */
+var switchChannelQueueTail = Promise.resolve();
+function switchChannel(ch) {
+  var run = switchChannelQueueTail.then(function() {
+    return switchChannelInternal(ch);
+  });
+  switchChannelQueueTail = run.catch(function(e) {
+    console.error('switchChannel', e);
+  });
+  return run;
+}
 /** Drop input_state realtime merges for a short window after switching views (stale merge + race with DB load). */
 var inoutChannelInputQuietUntil = 0;
 /** Briefly ignore user_input_state realtime after composer focus (mobile had no “recent local edit” guard; refocus merged stale rows). */
@@ -8379,11 +8400,10 @@ function renderTabs() {
       btn.appendChild(close);
     }
 
-    var clickTimer = null;
     btn.addEventListener('dblclick', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
+      clearPendingViewSwitchClick();
       if (!applyingWorkspaceFocusFromRemote && !inoutHydratingWorkspace) setTabChannelLoading(ch, false);
       try {
         if (typeof renameView === 'function') renameView(ch, btn);
@@ -8401,7 +8421,7 @@ function renderTabs() {
       // Touch: no delay so tab switch runs before background/tab close races.
       const viewAtClick = currentView;
       const channelAtClick = currentChannel;
-      if (clickTimer) clearTimeout(clickTimer);
+      clearPendingViewSwitchClick();
       var tabSwitchDelay = typeof isMobileOrTouchDevice === 'function' && isMobileOrTouchDevice() ? 0 : 90;
       /* Same guards as switchChannel’s tab bar: show load immediately on press, not after debounce / sync work. */
       if (!applyingWorkspaceFocusFromRemote && !inoutHydratingWorkspace) {
@@ -8413,17 +8433,21 @@ function renderTabs() {
           setTabChannelLoading(ch, true);
         }
       }
-      clickTimer = setTimeout(function() {
-        clickTimer = null;
-        if (currentView !== viewAtClick) {
-          if (!applyingWorkspaceFocusFromRemote && !inoutHydratingWorkspace) setTabChannelLoading(ch, false);
+      pendingViewSwitchChannel = ch;
+      pendingViewSwitchTimer = setTimeout(function() {
+        pendingViewSwitchTimer = null;
+        var targetCh = pendingViewSwitchChannel;
+        pendingViewSwitchChannel = null;
+        if (targetCh == null || targetCh === '') return;
+        var tabBtn =
+          tabsEl && tabsEl.querySelector
+            ? tabsEl.querySelector('.tab[data-channel="' + CSS.escape(String(targetCh)) + '"]')
+            : null;
+        if (tabBtn && tabBtn.querySelector('.tab-rename-input')) {
+          if (!applyingWorkspaceFocusFromRemote && !inoutHydratingWorkspace) setTabChannelLoading(targetCh, false);
           return;
         }
-        if (btn.querySelector('.tab-rename-input')) {
-          if (!applyingWorkspaceFocusFromRemote && !inoutHydratingWorkspace) setTabChannelLoading(ch, false);
-          return;
-        }
-        switchChannel(ch);
+        switchChannel(targetCh);
       }, tabSwitchDelay);
     });
     btn.addEventListener('dragenter', e => {
@@ -8641,7 +8665,7 @@ async function refreshSharedFlags() {
   }
 }
 
-async function switchChannel(ch) {
+async function switchChannelInternal(ch) {
   if (ch === currentChannel && ch === currentView) {
     const slot0 = inputSlots && inputSlots[0];
     const slotMismatch =
