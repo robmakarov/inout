@@ -2000,6 +2000,8 @@ let membershipRealtimeSub = null;
 let orderSub = null;
 let viewSub  = null;
 var viewRealtimeResubscribeTimer = null;
+/** Bumps on each subscribeViewRealtime(); stale channel status callbacks (e.g. CLOSED after unsubscribe) are ignored. */
+var viewRealtimeSubscribeGen = 0;
 let viewEditingChannel = null;
 let composerSyncChannel = null;
 /** @type {Record<string, { objectId: number, authorName: string, ts: number }>} */
@@ -2942,7 +2944,16 @@ function showDropOriginLine() {}
 function hideDropOriginLine() { originContentTop = null; originContentHeight = null; }
 function showOriginGhostOverlay(block) {}
 function removeOriginGhostOverlay() { originGhostOverlayEl = null; }
-function createOriginGhostFromRow(row) { return row; }
+function createOriginGhostFromRow(row) {
+  if (!row || typeof row.cloneNode !== 'function') return row;
+  var clone = row.cloneNode(true);
+  clone.classList.remove('dragging', 'obj-drag-group', 'obj-selected', 'new-flash', 'obj-editing', 'obj-drag-over', 'obj-drag-target', 'dragging-in-feed');
+  clone.removeAttribute('draggable');
+  clone.querySelectorAll('.obj-checkbox-zone, .obj-actions, .obj-select-wrap').forEach(function(el) {
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+  });
+  return clone;
+}
 function insertOriginGhostsAndDetachRows(block) {
   if (!feedInner || !block || block.length === 0) return;
   originInsertBefore = block[block.length - 1].nextSibling;
@@ -4082,6 +4093,7 @@ function subscribeViewRealtime() {
     try { viewSub.unsubscribe(); } catch (_) {}
     viewSub = null;
   }
+  var myGen = ++viewRealtimeSubscribeGen;
   const chName = 'views-all';
   viewSub = sb
     .channel(chName)
@@ -4126,6 +4138,7 @@ function subscribeViewRealtime() {
       }
     )
     .subscribe(function(status) {
+      if (myGen !== viewRealtimeSubscribeGen) return;
       if (status === 'SUBSCRIBED') {
         if (viewRealtimeResubscribeTimer) {
           clearTimeout(viewRealtimeResubscribeTimer);
@@ -4133,6 +4146,7 @@ function subscribeViewRealtime() {
         }
         return;
       }
+      /* CLOSED here is normal when we unsubscribe() to replace the channel; only act for the active generation. */
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
         if (typeof console !== 'undefined' && console.warn) console.warn('views-all realtime', status);
         scheduleViewRealtimeResubscribe(status);
@@ -5154,7 +5168,11 @@ function setupDndBroadcastChannel() {
     if (remoteDnd && (remoteDropOriginEl || remoteDropTargetEl || remoteGhostEl || remoteSpiritEl)) applyRemoteDndLines();
   };
   var feedForScroll = document.getElementById('feed');
-  if (feedForScroll) feedForScroll.addEventListener('scroll', remoteDndScrollResize, { passive: true });
+  if (feedForScroll) {
+    feedForScroll.addEventListener('scroll', remoteDndScrollResize, { passive: true });
+    var surfScroll = getFeedScrollSurface(feedForScroll);
+    if (surfScroll && surfScroll !== feedForScroll) surfScroll.addEventListener('scroll', remoteDndScrollResize, { passive: true });
+  }
   window.addEventListener('resize', remoteDndScrollResize);
   var chName = 'dnd-' + String(currentChannel);
   dndBroadcastChannel = sb.channel(chName, { config: { broadcast: { self: false } } })
@@ -5263,7 +5281,11 @@ function teardownDndBroadcastChannel() {
   hideRemoteDndLines();
   if (remoteDndScrollResize) {
     var feedForScroll = document.getElementById('feed');
-    if (feedForScroll) feedForScroll.removeEventListener('scroll', remoteDndScrollResize);
+    if (feedForScroll) {
+      feedForScroll.removeEventListener('scroll', remoteDndScrollResize);
+      var surfScroll = getFeedScrollSurface(feedForScroll);
+      if (surfScroll && surfScroll !== feedForScroll) surfScroll.removeEventListener('scroll', remoteDndScrollResize);
+    }
     window.removeEventListener('resize', remoteDndScrollResize);
     remoteDndScrollResize = null;
   }
@@ -5418,18 +5440,14 @@ function hideRemoteDndLines() {
     clearTimeout(applyRemoteDndLinesRetry);
     applyRemoteDndLinesRetry = null;
   }
-  if (remoteGhostEl) {
-    remoteGhostEl.classList.remove('visible');
-  }
-  if (remoteSpiritEl) {
-    remoteSpiritEl.classList.remove('visible');
-  }
-  if (remoteDropOriginEl) {
-    remoteDropOriginEl.classList.remove('visible');
-  }
-  if (remoteDropTargetEl) {
-    remoteDropTargetEl.classList.remove('visible');
-  }
+  if (remoteGhostEl && remoteGhostEl.parentNode) remoteGhostEl.parentNode.removeChild(remoteGhostEl);
+  remoteGhostEl = null;
+  if (remoteSpiritEl && remoteSpiritEl.parentNode) remoteSpiritEl.parentNode.removeChild(remoteSpiritEl);
+  remoteSpiritEl = null;
+  if (remoteDropOriginEl && remoteDropOriginEl.parentNode) remoteDropOriginEl.parentNode.removeChild(remoteDropOriginEl);
+  remoteDropOriginEl = null;
+  if (remoteDropTargetEl && remoteDropTargetEl.parentNode) remoteDropTargetEl.parentNode.removeChild(remoteDropTargetEl);
+  remoteDropTargetEl = null;
 }
 
 /** Drop ghost/spirit when order landed via DB or order_sync — dnd_end can be missed if channel was slow. */
@@ -10893,8 +10911,8 @@ function bindMultiviewWheelScrollCapture() {
       if (!view || !viewsRoot || !viewsRoot.contains(view)) return;
       var feed = view.querySelector('#feed') || view.querySelector('.feed');
       if (!feed) return;
-      if (feed.contains(t)) return;
       var surf = getFeedScrollSurface(feed);
+      if (surf === feed && feed.contains(t)) return;
       var max = surf.scrollHeight - surf.clientHeight;
       if (max <= 0) return;
       var dy = wheelDeltaY(e, surf.clientHeight);
@@ -11180,6 +11198,10 @@ function onFeedScrollDuringDrag() {
 }
 if (feedEl) {
 feedEl.addEventListener('scroll', onFeedScrollDuringDrag, { passive: true });
+(function() {
+  var stackScroll = feedEl.closest && feedEl.closest('.visual-feed-stack');
+  if (stackScroll && stackScroll !== feedEl) stackScroll.addEventListener('scroll', onFeedScrollDuringDrag, { passive: true });
+})();
 feedEl.addEventListener('dragover', e => {
   if (e.dataTransfer.types.includes('application/x-inout-draft')) {
     e.preventDefault();

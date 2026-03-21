@@ -43,6 +43,7 @@
   --dnd-stack-stagger-step: 0.03s;
   --dnd-spirit-stack-max-visible: 4;
   --dnd-stack-form-duration: 0.3s;
+  --dnd-overlay-z: 9998;
   --bar-top-height: 42px;
   --bar-bottom-min-height: 120px;
   --nav-height: 40px; /* Navigation bar: controls which view is shown in multiview */
@@ -1545,6 +1546,45 @@ body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .
   border:1px solid var(--line);
   box-sizing:border-box;
 }
+/* DnD: drop indicator + origin lines (position/size set in JS) */
+.feed-drop-indicator{
+  position:fixed;
+  z-index:var(--dnd-overlay-z);
+  pointer-events:none;
+  background:var(--dnd-drop-line-color);
+  border-radius:2px;
+  opacity:0;
+  visibility:hidden;
+}
+.feed-drop-indicator.visible{
+  opacity:1;
+  visibility:visible;
+}
+.feed-drop-origin{
+  position:fixed;
+  z-index:calc(var(--dnd-overlay-z) - 1);
+  pointer-events:none;
+  background:var(--dnd-origin-line-color);
+  opacity:0;
+  visibility:hidden;
+}
+.feed-drop-origin.visible{
+  opacity:1;
+  visibility:visible;
+}
+.remote-origin-ghost-container{
+  position:fixed;
+  z-index:calc(var(--dnd-overlay-z) - 2);
+  pointer-events:none;
+  box-sizing:border-box;
+  overflow:hidden;
+  opacity:0;
+  visibility:hidden;
+}
+.remote-origin-ghost-container.visible{
+  opacity:var(--dnd-ghost-opacity);
+  visibility:visible;
+}
 /* DnD: spirit = clone follows cursor along view axis only (vertical feed: fixed X, follow Y) */
 .obj-drag-spirit{
   position:fixed;
@@ -3022,7 +3062,8 @@ body.secret-show-grips .frame-grip{
     overflow-x:hidden;
     overflow-y:visible;
     -webkit-overflow-scrolling:auto;
-    touch-action:pan-y;
+    /* pan-y on a non-scrollport blocks iOS from scrolling the outer .visual-feed-stack */
+    touch-action:auto;
   }
   /* Split panes: .feed is direct under .visual (no stack) — keep #feed-like scroll on the pane */
   .multiview-views .view > .visual > .feed{
