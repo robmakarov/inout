@@ -1505,8 +1505,6 @@ function rememberWorkspacePushNonce(n) {
 
 /** Monotonic workspace config revision (see applyPersonalWorkspaceStateFromServer). */
 var lastAppliedWorkspaceRev = 0;
-/** Dedupe merge-only workspace applies (realtime / broadcast) without blocking full hydrate by rev. */
-var lastMergedWorkspacePushNonce = null;
 /** Drop merge payloads older than the last applied workspace row (out-of-order realtime). */
 var lastMergedWorkspaceRevMs = 0;
 /** Serialize mergeMultiview applies: postgres + broadcast can arrive together and interleave switchChannel / secondaries. */
@@ -7865,57 +7863,7 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
     var revMerge = Number(cfg._wsRev);
     /* Do not drop merges when revMerge < lastMergedWorkspaceRevMs: _wsRev is each client’s Date.now(),
        so another device’s payload often looks “older” and would skip tab + scroll sync entirely. */
-    var nonceM = cfg._wsPushNonce;
-    /* Same nonce = duplicate postgres/broadcast delivery. Never re-run focusedChannel (stale payload could revert a tab the user already switched locally). */
-    if (
-      nonceM != null &&
-      lastMergedWorkspacePushNonce != null &&
-      String(nonceM) === String(lastMergedWorkspacePushNonce)
-    ) {
-      if (cfg.uiChrome && typeof cfg.uiChrome === 'object') {
-        try {
-          applyWorkspaceUiChrome(cfg.uiChrome);
-        } catch (e) {
-          console.error('workspace uiChrome (deduped nonce)', e);
-        }
-      }
-      /* Still merge scroll: duplicate postgres/broadcast can arrive after layout; first pass may have maxScroll 0. */
-      mergeWorkspaceFeedScrollFromConfig(cfg);
-      if (cfg.feedScrollByView && typeof cfg.feedScrollByView === 'object') {
-        suppressScrollWorkspacePersistUntil = Date.now() + 650;
-        try {
-          applyWorkspaceFeedScrollToDom();
-        } catch (_) {}
-      }
-      /* Same payload as first delivery; if tab never matched (race / partial apply), align now. */
-      if (
-        !skipApplyFocusedChannel &&
-        typeof cfg.focusedChannel === 'string' &&
-        cfg.focusedChannel.trim()
-      ) {
-        const wantD = cfg.focusedChannel.trim();
-        if (viewNames.includes(wantD)) {
-          const slot0d = inputSlots && inputSlots[0];
-          const slotMismatchD =
-            primarySlotAutoTarget && slot0d && String(slot0d.channel || '') !== wantD;
-          const needSwitchD = wantD !== currentView || wantD !== currentChannel || slotMismatchD;
-          if (needSwitchD) {
-            applyingWorkspaceFocusFromRemote = true;
-            try {
-              await switchChannel(wantD);
-            } catch (e) {
-              console.error('apply focusedChannel (deduped nonce)', e);
-            } finally {
-              applyingWorkspaceFocusFromRemote = false;
-            }
-          }
-        }
-      }
-      if (Number.isFinite(revMerge) && revMerge > lastMergedWorkspaceRevMs) lastMergedWorkspaceRevMs = revMerge;
-      return;
-    }
     applyingPersonalWorkspaceFromRemote = true;
-    var workspaceMergeApplyOk = true;
     try {
       ensureWorkspaceChannelsFromCfg(cfg);
       mergeWorkspaceFeedScrollFromConfig(cfg);
@@ -7956,7 +7904,6 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
             try {
               await switchChannel(want);
             } catch (e) {
-              workspaceMergeApplyOk = false;
               console.error('apply focusedChannel (merge)', e);
             } finally {
               applyingWorkspaceFocusFromRemote = false;
@@ -7974,7 +7921,6 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
           applyWorkspaceFeedScrollToDom();
         } catch (_) {}
       }
-      if (nonceM && workspaceMergeApplyOk) lastMergedWorkspacePushNonce = String(nonceM);
       if (Number.isFinite(revMerge) && revMerge > lastMergedWorkspaceRevMs) lastMergedWorkspaceRevMs = revMerge;
     } finally {
       applyingPersonalWorkspaceFromRemote = false;
@@ -9172,6 +9118,19 @@ function setupAuthListener() {
   sb.auth.onAuthStateChange(async (event, session) => {
     if (suppressAutoAuth) {
       return;
+    }
+    if (event === 'TOKEN_REFRESHED' && session && session.user && sb) {
+      try {
+        currentUser = session.user;
+      } catch (_) {}
+      setTimeout(function() {
+        if (!currentUser || !sb) return;
+        try {
+          subscribeViewRealtime();
+        } catch (e) {
+          console.error('subscribeViewRealtime after token refresh', e);
+        }
+      }, 200);
     }
     if (session && session.user) {
     const prevUser = currentUser;
