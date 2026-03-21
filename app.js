@@ -1390,6 +1390,7 @@ const VIEWS_KEY           = 'inout_views_v1';
 const LEFT_VIEWS_KEY      = 'inout_left_views_v1';
 const LEFT_CHANNELS_KEY   = LEFT_VIEWS_KEY; /* alias: left-rail hidden feeds */
 const CURRENT_VIEW_KEY    = 'inout_current_view_v1';
+const CURRENT_CHANNEL_KEY = 'inout_current_channel_v1';
 const SECONDARY_VIEW_KEY  = 'inout_secondary_view_name_v1';
 const INPUT_STATE_KEY      = 'inout_input_state_v2';
 const INPUT_SLOTS_KEY      = 'inout_input_slots_v1';
@@ -3210,7 +3211,12 @@ function init(done) {
       if (typeof cleanupAuthHash === 'function') cleanupAuthHash();
       return Promise.race([
         (async function() {
-          if (currentUser) await syncChannelsFromServer();
+          if (currentUser) {
+            await syncChannelsFromServer();
+            try {
+              restoreLastChannel();
+            } catch (_) {}
+          }
           await loadObjectOrderForCurrentChannel();
           await loadFieldPrefsForCurrentChannel();
           refreshMoveTargets();
@@ -6544,17 +6550,58 @@ function createObjectRow(obj, isNew, options) {
   dropdown.className = 'obj-actions-dropdown';
   dropdown.setAttribute('role', 'menu');
 
+  var objActionsScrollCloseEl = null;
+  var objActionsScrollCloseFn = null;
   function closeDropdown() {
     actions.classList.remove('obj-actions-open');
     trigger.setAttribute('aria-expanded', 'false');
     document.removeEventListener('click', closeDropdown);
+    if (objActionsScrollCloseEl && objActionsScrollCloseFn) {
+      try {
+        objActionsScrollCloseEl.removeEventListener('scroll', objActionsScrollCloseFn);
+      } catch (_) {}
+      objActionsScrollCloseEl = null;
+      objActionsScrollCloseFn = null;
+    }
+    dropdown.style.position = '';
+    dropdown.style.top = '';
+    dropdown.style.right = '';
+    dropdown.style.left = '';
+    dropdown.style.bottom = '';
+    dropdown.style.zIndex = '';
+    dropdown.style.maxHeight = '';
+    dropdown.style.overflowY = '';
+  }
+  function positionObjActionsDropdown() {
+    var r = trigger.getBoundingClientRect();
+    dropdown.style.position = 'fixed';
+    dropdown.style.top = Math.round(r.bottom + 2) + 'px';
+    dropdown.style.right = Math.round(window.innerWidth - r.right) + 'px';
+    dropdown.style.left = 'auto';
+    dropdown.style.bottom = 'auto';
+    dropdown.style.zIndex = '3500';
+    var space = window.innerHeight - r.bottom - 12;
+    if (space > 80) {
+      dropdown.style.maxHeight = Math.min(320, space) + 'px';
+      dropdown.style.overflowY = 'auto';
+    }
   }
   trigger.addEventListener('click', e => {
     e.stopPropagation();
     const isOpen = actions.classList.toggle('obj-actions-open');
     trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-    if (isOpen) document.addEventListener('click', closeDropdown);
-    else document.removeEventListener('click', closeDropdown);
+    if (isOpen) {
+      positionObjActionsDropdown();
+      document.addEventListener('click', closeDropdown);
+      var scrollPort = row.closest && row.closest('.visual-feed-stack');
+      if (scrollPort) {
+        objActionsScrollCloseFn = function() {
+          closeDropdown();
+        };
+        objActionsScrollCloseEl = scrollPort;
+        scrollPort.addEventListener('scroll', objActionsScrollCloseFn, { passive: true });
+      }
+    } else document.removeEventListener('click', closeDropdown);
   });
 
   const menuSingle = document.createElement('div');
@@ -7781,6 +7828,30 @@ function flushPersonalWorkspacePersist() {
   }
   return persistPersonalWorkspaceToServer();
 }
+
+(function bindWorkspacePersistOnDocumentHide() {
+  if (typeof document === 'undefined' || typeof window === 'undefined') return;
+  function persistTabBeforeHide(ev) {
+    if (!ev || ev.type !== 'pagehide') {
+      if (document.visibilityState !== 'hidden') return;
+    }
+    try {
+      if (typeof currentView !== 'undefined' && currentView)
+        localStorage.setItem(CURRENT_VIEW_KEY, String(currentView));
+      if (typeof currentChannel !== 'undefined' && currentChannel)
+        localStorage.setItem(CURRENT_CHANNEL_KEY, String(currentChannel));
+    } catch (_) {}
+    if (typeof applyingPersonalWorkspaceFromRemote !== 'undefined' && applyingPersonalWorkspaceFromRemote) return;
+    if (typeof inoutHydratingWorkspace !== 'undefined' && inoutHydratingWorkspace) return;
+    if (typeof currentUser === 'undefined' || !currentUser) return;
+    if (typeof sb === 'undefined' || !sb) return;
+    try {
+      flushPersonalWorkspacePersist();
+    } catch (_) {}
+  }
+  document.addEventListener('visibilitychange', persistTabBeforeHide);
+  window.addEventListener('pagehide', persistTabBeforeHide);
+})();
 
 async function persistPersonalWorkspaceToServer() {
   if (applyingPersonalWorkspaceFromRemote) return;
@@ -10148,22 +10219,72 @@ async function deleteSingleObject(id, fromChannel) {
     }
     return;
   }
-  if (!id || !sb || !sb.rpc) return;
+  const numId = Number(id);
+  if (!Number.isFinite(numId)) return;
+  if (!sb || !sb.from) {
+    toast('Delete not available.');
+    return;
+  }
+  /* Prefer RPC for temp-session guests / shared RLS; fall back to REST like bulk delete when RPC is missing or fails. */
+  if (sb.rpc && (tempSessionId || currentUser)) {
+    try {
+      const payload = {
+        p_channel: ch,
+        p_entry_id: numId,
+        p_action: 'delete',
+        p_payload: {},
+      };
+      if (tempSessionId) payload.p_temp_session_id = tempSessionId;
+      const { error } = await sb.rpc('perform_entry_action', payload);
+      if (!error) return;
+      if (tempSessionId) {
+        console.error(error);
+        toast('Failed to delete — ' + humanError(error.message));
+        return;
+      }
+      var errCode = error && error.code;
+      var errMsg = (error && error.message) || '';
+      if (errCode !== 'PGRST202' && !/function|not found|rpc/i.test(String(errMsg))) {
+        console.error(error);
+        toast('Failed to delete — ' + humanError(error.message));
+        return;
+      }
+    } catch (e) {
+      if (tempSessionId) {
+        console.error(e);
+        toast('Failed to delete — ' + humanError(e.message));
+        return;
+      }
+    }
+  }
+  if (!currentUser) {
+    toast('Sign in to delete.');
+    return;
+  }
   try {
-    const payload = {
-      p_channel: ch,
-      p_entry_id: id,
-      p_action: 'delete',
-      p_payload: {},
-    };
-    if (tempSessionId) payload.p_temp_session_id = tempSessionId;
-    const { error } = await sb.rpc('perform_entry_action', payload);
-    if (error) {
-      console.error(error);
-      toast('Failed to delete — ' + humanError(error.message));
+    const { data: row, error: selErr } = await sb
+      .from(OBJECTS_TABLE)
+      .select('id, created_at, text, channel, user_id, author_name')
+      .eq('id', numId)
+      .maybeSingle();
+    if (selErr) {
+      console.error(selErr);
+      toast('Failed to delete — ' + humanError(selErr.message));
       return;
     }
-    // UI removal will be driven by realtime DELETE events (onDeleteForChannel).
+    if (!row) {
+      toast('Could not find that object.');
+      return;
+    }
+    const { error: delErr } = await sb.from(OBJECTS_TABLE).delete().eq('id', numId);
+    if (delErr) {
+      console.error(delErr);
+      toast('Failed to delete — ' + humanError(delErr.message));
+      return;
+    }
+    pushUndo({ type: 'delete', entries: [row] });
+    logAction('delete', { count: 1, channel: row.channel || ch });
+    onDeleteForChannel(String(row.channel || ch), row);
   } catch (e) {
     console.error(e);
     toast('Failed to delete — ' + humanError(e.message));
@@ -10250,9 +10371,9 @@ async function moveSingleObject(id, targetChannel) {
   if (!id) return false;
   const target = targetChannel != null ? targetChannel : (moveTargetSelect && moveTargetSelect.value);
   if (!target || target === currentChannel) return false;
-  if (!sb || !sb.rpc) return false;
+  if (!sb || !sb.from) return false;
 
-  const useRpc = !!tempSessionId || !!currentUser;
+  const useRpc = !!(sb.rpc && (tempSessionId || currentUser));
 
   if (useRpc) {
     try {
