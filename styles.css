@@ -82,45 +82,21 @@ body{
   overscroll-behavior-y:auto;
 }
 
-/* feed scrollbars: dark tab from under right edge, visible on hover */
+/* Feed + view clones: scrollable but scrollbar gutter invisible (all devices; wheel/touch still scroll) */
 #feed,
-.multiview-views .view .feed{
+.multiview-views .view .feed,
+.multiview-views > .visual #feed,
+.multiview-views > .visual .feed{
   scrollbar-width:none;
   -ms-overflow-style:none;
 }
 #feed::-webkit-scrollbar,
-.multiview-views .view .feed::-webkit-scrollbar{
+.multiview-views .view .feed::-webkit-scrollbar,
+.multiview-views > .visual #feed::-webkit-scrollbar,
+.multiview-views > .visual .feed::-webkit-scrollbar{
   width:0;
   height:0;
-}
-/* Hover scrollbar polish only when hover is real (avoids stuck/touch :hover on phones) */
-@media (hover: hover){
-  #feed:hover,
-  .multiview-views .view .feed:hover{
-    scrollbar-width:thin;
-    scrollbar-color:var(--line2) transparent;
-  }
-  #feed:hover::-webkit-scrollbar,
-  .multiview-views .view .feed:hover::-webkit-scrollbar{
-    width:8px;
-  }
-  #feed:hover::-webkit-scrollbar-track,
-  .multiview-views .view .feed:hover::-webkit-scrollbar-track{
-    background:rgba(0,0,0,0.35);
-    border-radius:8px 0 0 8px;
-    margin:4px 0;
-  }
-  #feed:hover::-webkit-scrollbar-thumb,
-  .multiview-views .view .feed:hover::-webkit-scrollbar-thumb{
-    background:var(--line);
-    border-radius:8px 0 0 8px;
-    border:1px solid var(--line2);
-    box-shadow:inset 0 0 0 1px rgba(0,0,0,0.2);
-  }
-  #feed:hover::-webkit-scrollbar-thumb:hover,
-  .multiview-views .view .feed:hover::-webkit-scrollbar-thumb:hover{
-    background:var(--line2);
-  }
+  display:none;
 }
 
 /* Header and Navigation bar are outside multiview; nav controls which view is shown */
@@ -260,10 +236,13 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
   align-items:center;
   gap:5px;
   padding:6px 4px;
-  scrollbar-width:thin;
+  scrollbar-width:none;
+  -ms-overflow-style:none;
 }
-.view-pinned-rail::-webkit-scrollbar{ width:3px }
-.view-pinned-rail::-webkit-scrollbar-thumb{ background:var(--line2); border-radius:2px }
+.view-pinned-rail::-webkit-scrollbar{
+  width:0;
+  display:none;
+}
 /* Little badges: message value only, clean look */
 .view-pinned-rail .obj{
   display:inline-flex;
@@ -356,6 +335,8 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
 }
 .frame{
   flex:0 0 auto;
+  flex-grow:0;
+  flex-shrink:0;
   display:flex;
   flex-direction:column;
   min-height:0;
@@ -364,9 +345,26 @@ body:not(.secret-show-pinned-rail) #view-pinned-rail{
   padding-left:0;
   box-sizing:border-box;
 }
+/* Only multiview grows; nav + input stay content-sized so they cannot shrink the feed on web */
 .frame.frame-fill{
   flex:1 1 0;
+  flex-grow:1;
+  flex-shrink:1;
   min-height:0;
+  min-width:0;
+  overflow:hidden;
+}
+.frames-zone > .frame[data-frame-id="nav"],
+.frames-zone > .frame[data-frame-id="input"]{
+  flex:0 0 auto;
+  flex-grow:0;
+  flex-shrink:0;
+}
+.frame.frame-fill > #multiview{
+  flex:1 1 0%;
+  min-height:0;
+  min-width:0;
+  width:100%;
 }
 .frame-grip{
   position:absolute;
@@ -506,11 +504,14 @@ header{
   align-items:stretch;
   gap:6px;
   padding:0;
-  scrollbar-width:thin;
+  scrollbar-width:none;
   -ms-overflow-style:none;
 }
-#manage-bar .bar-scroll::-webkit-scrollbar{ width:6px; height:0 }
-#manage-bar .bar-scroll::-webkit-scrollbar-thumb{ background:var(--line2); border-radius:3px }
+#manage-bar .bar-scroll::-webkit-scrollbar{
+  width:0;
+  height:0;
+  display:none;
+}
 #manage-bar .bar-group{
   display:flex;
   flex-wrap:wrap;
@@ -764,7 +765,8 @@ header{
   display:none;
   z-index:2000; /* above header, nav, multiview panels */
   pointer-events:auto;
-  touch-action:none;
+  /* pan-y on backdrop lets touch scroll pass to #user-modal (touch-action:none blocked mobile scroll) */
+  touch-action:auto;
   overflow:hidden;
   overscroll-behavior:contain;
 }
@@ -791,6 +793,13 @@ header{
   -webkit-overflow-scrolling:touch;
   touch-action:pan-y;
   overscroll-behavior:contain;
+  scrollbar-width:none;
+  -ms-overflow-style:none;
+}
+#user-modal::-webkit-scrollbar{
+  width:0;
+  height:0;
+  display:none;
 }
 #user-modal > * + *{
   margin-top:12px;
@@ -2297,6 +2306,11 @@ body.select-mode .obj-select-wrap,
 }
 .composer-slot-input::placeholder{color:var(--dim)}
 .composer-slot-input:focus{outline:none}
+.composer-slot-input::-webkit-scrollbar{
+  width:0;
+  height:0;
+  display:none;
+}
 
 #input-area.input-area-drag-over .input-wrap,
 #input-area.input-area-drag-over .composer-slots-container{
@@ -2825,6 +2839,15 @@ body.secret-show-grips .frame-grip{
   padding:6px;
   flex:1;
   min-height:0;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-y;
+  scrollbar-width:none;
+  -ms-overflow-style:none;
+}
+#log-dropup-panel .log-dropup-body::-webkit-scrollbar{
+  width:0;
+  height:0;
+  display:none;
 }
 .log-event-card{
   display:flex;
@@ -2925,11 +2948,6 @@ body.secret-show-grips .frame-grip{
     /* none here broke nested #feed / drawer scrolling on iOS WebKit and some Android WebViews */
     overscroll-behavior:auto;
   }
-  #feed{
-    scrollbar-width:none;
-    -ms-overflow-style:none;
-  }
-  #feed::-webkit-scrollbar{display:none}
   /* header always fixed; never moved by keyboard or scroll */
   header{
     padding:0 14px 0 8px;
