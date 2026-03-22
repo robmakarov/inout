@@ -1446,6 +1446,9 @@ function ensureRowValueCellCount(row, maxCols, partsForFill) {
     if (c.innerHTML !== html) c.innerHTML = html;
   }
   row.dataset.valueCols = String(maxCols);
+  wrap.querySelectorAll(':scope > .obj-value-cell').forEach(function(c) {
+    applyValueColumnLabelAttrToCell(c);
+  });
 }
 
 function syncFeedMultiValueChrome(inner, messagesList) {
@@ -1474,10 +1477,94 @@ function syncFeedMultiValueChrome(inner, messagesList) {
 
 var inoutMultiValueFilterMode = 'all';
 var inoutMultiValueColumnFilterIndex = null;
+var inoutColHeaderFilterClickTimer = null;
+var INOUT_VALUE_COL_LABELS_KEY = 'inout_value_column_labels_v1';
+var INOUT_VALUE_COL_LABEL_MAX = 72;
 
-function valueColumnHeaderLabel(index) {
+function valueColumnLabelsStorageChannel() {
+  try {
+    if (typeof currentChannel !== 'undefined' && currentChannel != null && String(currentChannel).trim())
+      return String(currentChannel).trim();
+    if (typeof currentView !== 'undefined' && currentView != null && String(currentView).trim())
+      return String(currentView).trim();
+  } catch (_) {}
+  return 'main';
+}
+
+function getValueColumnLabelOverridesForChannel() {
+  try {
+    var raw = localStorage.getItem(INOUT_VALUE_COL_LABELS_KEY);
+    var all = raw ? JSON.parse(raw) : {};
+    var ch = valueColumnLabelsStorageChannel();
+    var m = all[ch];
+    return m && typeof m === 'object' ? m : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function setValueColumnLabelOverrideAt(index, labelOrEmpty) {
+  try {
+    var raw = localStorage.getItem(INOUT_VALUE_COL_LABELS_KEY);
+    var all = raw ? JSON.parse(raw) : {};
+    if (typeof all !== 'object' || all === null) all = {};
+    var ch = valueColumnLabelsStorageChannel();
+    if (!all[ch] || typeof all[ch] !== 'object') all[ch] = {};
+    var k = String(index);
+    if (!labelOrEmpty) delete all[ch][k];
+    else all[ch][k] = labelOrEmpty;
+    if (Object.keys(all[ch]).length === 0) delete all[ch];
+    localStorage.setItem(INOUT_VALUE_COL_LABELS_KEY, JSON.stringify(all));
+  } catch (_) {}
+}
+
+function defaultValueColumnHeaderLabel(index) {
   if (index === 0) return 'Value';
   return 'Value ' + (index + 1);
+}
+
+function valueColumnHeaderLabel(index) {
+  var map = getValueColumnLabelOverridesForChannel();
+  var k = String(index);
+  var o = map[k];
+  if (o != null && String(o).trim()) return String(o).trim().slice(0, INOUT_VALUE_COL_LABEL_MAX);
+  return defaultValueColumnHeaderLabel(index);
+}
+
+function applyValueColumnLabelAttrToCell(cell) {
+  if (!cell || !cell.classList || !cell.classList.contains('obj-value-cell')) return;
+  var vi = parseInt(cell.dataset.valueIndex, 10);
+  if (!Number.isFinite(vi)) return;
+  try {
+    cell.setAttribute('data-value-label', valueColumnHeaderLabel(vi));
+  } catch (_) {}
+}
+
+function syncAllValueColumnLabelAttrs() {
+  try {
+    document.querySelectorAll('.obj-value-cell').forEach(function(c) {
+      applyValueColumnLabelAttrToCell(c);
+    });
+  } catch (_) {}
+}
+
+function promptRenameValueColumnHeader(btn) {
+  if (!btn) return;
+  var idx = parseInt(btn.getAttribute('data-value-index'), 10);
+  if (!Number.isFinite(idx)) return;
+  var cur = valueColumnHeaderLabel(idx);
+  var raw = typeof window !== 'undefined' && window.prompt ? window.prompt('Column header name', cur) : null;
+  if (raw == null) return;
+  var next = String(raw).replace(/\r?\n/g, ' ').trim().slice(0, INOUT_VALUE_COL_LABEL_MAX);
+  var cleared = !next || next === defaultValueColumnHeaderLabel(idx);
+  if (cleared) setValueColumnLabelOverrideAt(idx, '');
+  else setValueColumnLabelOverrideAt(idx, next);
+  rebuildMultiValueColumnLabelButtons();
+  syncAllValueColumnLabelAttrs();
+  try {
+    if (typeof logAction === 'function')
+      logAction('view', { valueColumnHeader: { index: idx, label: cleared ? null : next } });
+  } catch (_) {}
 }
 
 function columnPartNonEmpty(row, idx) {
@@ -1559,11 +1646,16 @@ function rebuildMultiValueColumnLabelButtons() {
   for (var i = 0; i < n; i++) {
     var btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'manage-btn multi-value-col-label-btn';
+    btn.className = 'manage-btn multi-value-col-label-btn multi-value-col-header-btn';
     btn.setAttribute('data-value-index', String(i));
-    btn.textContent = valueColumnHeaderLabel(i);
+    var lab = valueColumnHeaderLabel(i);
+    btn.textContent = lab;
     btn.setAttribute('aria-pressed', 'false');
-    btn.setAttribute('title', 'Show objects with text in ' + valueColumnHeaderLabel(i) + '. Click again to clear.');
+    btn.setAttribute(
+      'title',
+      'Filter by “' + lab + '”. Double-click to rename. Click again to clear filter.'
+    );
+    btn.setAttribute('aria-label', 'Column header: ' + lab + '. Click to filter, double-click to rename.');
     wrap.appendChild(btn);
   }
   updateMultiValueColumnLabelButtonsActive();
@@ -1670,9 +1762,21 @@ function setupMultiValueChromeBar() {
       e.stopPropagation();
       var idx = parseInt(b.getAttribute('data-value-index'), 10);
       if (!Number.isFinite(idx)) return;
-      if (inoutMultiValueColumnFilterIndex === idx) inoutMultiValueColumnFilterIndex = null;
-      else inoutMultiValueColumnFilterIndex = idx;
-      applyInoutMultiValueFilter();
+      if (e.detail >= 2) {
+        if (inoutColHeaderFilterClickTimer) {
+          clearTimeout(inoutColHeaderFilterClickTimer);
+          inoutColHeaderFilterClickTimer = null;
+        }
+        promptRenameValueColumnHeader(b);
+        return;
+      }
+      clearTimeout(inoutColHeaderFilterClickTimer);
+      inoutColHeaderFilterClickTimer = setTimeout(function() {
+        inoutColHeaderFilterClickTimer = null;
+        if (inoutMultiValueColumnFilterIndex === idx) inoutMultiValueColumnFilterIndex = null;
+        else inoutMultiValueColumnFilterIndex = idx;
+        applyInoutMultiValueFilter();
+      }, 300);
     });
   }
 }
@@ -7847,6 +7951,7 @@ function createObjectRow(obj, isNew, options) {
     cell.className = 'obj-text obj-value-cell';
     cell.dataset.valueIndex = String(_vci);
     cell.innerHTML = renderVisualOnlyHtml(valueParts[_vci] != null ? valueParts[_vci] : '');
+    applyValueColumnLabelAttrToCell(cell);
     valuesWrap.appendChild(cell);
   }
   valuesWrap.addEventListener('click', e => {

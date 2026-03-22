@@ -538,7 +538,7 @@ header{
   justify-content:flex-start;
 }
 
-/* Multi-value filter + column labels; hidden when no multi-value objects */
+/* Multi-value filter + column header buttons; hidden when no multi-value objects */
 .multi-value-chrome-middle{
   flex:1 1 0;
   min-width:0;
@@ -561,7 +561,7 @@ header{
   color:var(--bg);
   border-color:var(--acc2);
 }
-/* Mirrors .obj-content .obj-values-wrap + .obj-value-cell flex */
+/* Mirrors .obj-content .obj-values-wrap + .obj-value-cell flex (toolbar column headers) */
 .multi-value-col-labels{
   flex:1 1 0;
   min-width:0;
@@ -1515,14 +1515,7 @@ header{
 .feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-time::before{ content:'Time'; }
 .feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-sender::before{ content:'Author'; }
 .feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-text::before{ content:'Value'; }
-.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="0"]::before{ content:'Value'; }
-.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="1"]::before{ content:'Value 2'; }
-.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="2"]::before{ content:'Value 3'; }
-.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="3"]::before{ content:'Value 4'; }
-.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="4"]::before{ content:'Value 5'; }
-.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="5"]::before{ content:'Value 6'; }
-.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="6"]::before{ content:'Value 7'; }
-.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="7"]::before{ content:'Value 8'; }
+.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell::before{ content:attr(data-value-label); }
 
 /* Multi-value feed: label above value per cell (same gap as single-value) */
 .feed-inner.inout-multi-value-cols .obj .obj-time,
@@ -1553,14 +1546,6 @@ header{
 }
 .feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-time::before{ content:'Time'; }
 .feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-sender::before{ content:'Author'; }
-.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-value-cell[data-value-index="0"]::before{ content:'Value'; }
-.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-value-cell[data-value-index="1"]::before{ content:'Value 2'; }
-.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-value-cell[data-value-index="2"]::before{ content:'Value 3'; }
-.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-value-cell[data-value-index="3"]::before{ content:'Value 4'; }
-.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-value-cell[data-value-index="4"]::before{ content:'Value 5'; }
-.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-value-cell[data-value-index="5"]::before{ content:'Value 6'; }
-.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-value-cell[data-value-index="6"]::before{ content:'Value 7'; }
-.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-value-cell[data-value-index="7"]::before{ content:'Value 8'; }
 .feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-time,
 .feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-sender,
 .feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-value-cell{
@@ -1596,14 +1581,7 @@ body.select-mode .feed-inner.inout-multi-value-cols.obj-labels-off .obj.obj-sele
 .feed-inner.obj-labels-off .obj .obj-time::before{ content:'Time'; }
 .feed-inner.obj-labels-off .obj .obj-sender::before{ content:'Author'; }
 .feed-inner.obj-labels-off .obj .obj-text::before{ content:'Value'; }
-.feed-inner.obj-labels-off .obj .obj-value-cell[data-value-index="0"]::before{ content:'Value'; }
-.feed-inner.obj-labels-off .obj .obj-value-cell[data-value-index="1"]::before{ content:'Value 2'; }
-.feed-inner.obj-labels-off .obj .obj-value-cell[data-value-index="2"]::before{ content:'Value 3'; }
-.feed-inner.obj-labels-off .obj .obj-value-cell[data-value-index="3"]::before{ content:'Value 4'; }
-.feed-inner.obj-labels-off .obj .obj-value-cell[data-value-index="4"]::before{ content:'Value 5'; }
-.feed-inner.obj-labels-off .obj .obj-value-cell[data-value-index="5"]::before{ content:'Value 6'; }
-.feed-inner.obj-labels-off .obj .obj-value-cell[data-value-index="6"]::before{ content:'Value 7'; }
-.feed-inner.obj-labels-off .obj .obj-value-cell[data-value-index="7"]::before{ content:'Value 8'; }
+.feed-inner.obj-labels-off .obj .obj-value-cell::before{ content:attr(data-value-label); }
 .feed-inner.obj-labels-off .obj .obj-time,
 .feed-inner.obj-labels-off .obj .obj-sender,
 .feed-inner.obj-labels-off .obj .obj-text,
