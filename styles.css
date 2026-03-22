@@ -1561,6 +1561,16 @@ header{
   transition:none;
 }
 
+/* Multivalue mode: column headers in manage bar only — never per-row Value / Value N labels */
+.feed-inner.inout-multi-value-cols .obj .obj-value-cell::before{
+  content:none !important;
+  display:none !important;
+}
+.feed-inner.inout-multi-value-cols.obj-labels-off .obj:hover .obj-value-cell,
+body.select-mode .feed-inner.inout-multi-value-cols.obj-labels-off .obj.obj-selected .obj-value-cell{
+  padding-top:0;
+}
+
 /* Labels OFF: label out of flow (no space). On hover, show label above value; same 20px gap */
 .feed-inner.obj-labels-off .obj .obj-time::before,
 .feed-inner.obj-labels-off .obj .obj-sender::before,
@@ -3340,6 +3350,9 @@ body.secret-show-grips .frame-grip{
   .feed-inner.obj-labels-off .obj:hover .obj-value-cell{
     padding-left:0;
     transform:translateX(-20px);
+  }
+  .feed-inner.inout-multi-value-cols.obj-labels-off .obj:hover .obj-value-cell{
+    transform:none;
   }
 }
 
