@@ -461,34 +461,6 @@ header{
   display:flex;
   align-items:center;
 }
-/* Table view: start | value header cells (nested grid, L→R) | ⋮ */
-#manage-bar.inout-bar-split{
-  display:grid;
-  direction:ltr;
-  grid-template-columns:var(--inout-manage-start-w, minmax(100px, 12rem)) minmax(0, 1fr) auto;
-  gap:10px;
-  align-items:center;
-  justify-items:stretch;
-}
-#manage-bar.inout-bar-split .manage-bar-start{
-  grid-column:1;
-  min-width:0;
-}
-#manage-bar.inout-bar-split .manage-bar-column-headers{
-  grid-column:2;
-  min-width:0;
-  display:grid;
-  grid-template-columns:repeat(var(--inout-value-cols, 1), minmax(0, 1fr));
-  gap:6px;
-  align-items:center;
-}
-#manage-bar.inout-bar-split .manage-bar-col-head-btn{
-  min-width:0;
-}
-#manage-bar.inout-bar-split .manage-bar-end{
-  grid-column:3;
-  justify-self:end;
-}
 .manage-bar-trigger{
   border:1px solid var(--line2);
   background:var(--bg);
@@ -1373,214 +1345,17 @@ header{
   gap:0;
 }
 /* Grid feed with multiple value slots: keep normal flex column (no CSS table on .feed-inner) */
-.feed-inner.inout-multi-value-cols:not(.view-table){
+.feed-inner.inout-multi-value-cols{
   display:flex;
   flex-direction:column;
-}
-
-/* Table view: bordered sheet; each row is a 3-column grid — meta | values (L→R in .obj-values-wrap) | actions */
-.feed-inner.view-table{
-  display:flex;
-  flex-direction:column;
-  width:100%;
-  max-width:100%;
-  border:1px solid var(--line2);
-  border-radius:6px;
-  overflow:hidden;
-  background:var(--bg2);
-  box-sizing:border-box;
-}
-/* Column header row: same 3-column grid as .obj; value buttons share width with .obj-value-cell */
-.feed-inner.view-table .inout-table-value-head-row{
-  display:grid !important;
-  grid-template-columns:var(--inout-table-rail-w, auto) minmax(0, 1fr) auto;
-  align-items:stretch;
-  gap:0;
-  width:100%;
-  box-sizing:border-box;
-  border-bottom:2px solid var(--line2);
-  background:var(--bg2);
-  position:sticky;
-  top:0;
-  z-index:4;
-}
-.feed-inner.view-table .inout-table-value-head-rail{
-  border-right:1px solid var(--line2);
-  min-height:1px;
-}
-.feed-inner.view-table .inout-table-value-head-cells{
-  display:grid;
-  grid-template-columns:repeat(var(--inout-value-cols, 1), minmax(0, 1fr));
-  gap:0;
-  align-items:stretch;
-  min-width:0;
-  border-right:1px solid var(--line2);
-}
-.feed-inner.view-table .inout-table-col-head{
-  margin:0;
-  box-sizing:border-box;
-  padding:10px 12px;
-  min-width:0;
-  border:none;
-  border-left:1px solid var(--line2);
-  border-radius:0;
-  background:var(--bg2);
-  color:var(--muted);
-  font-family:var(--mono);
-  font-size:11px;
-  font-weight:600;
-  line-height:1.3;
-  text-transform:uppercase;
-  letter-spacing:0.05em;
-  text-align:left;
-  cursor:default;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-}
-.feed-inner.view-table .inout-table-col-head:first-child{
-  border-left:none;
-}
-.feed-inner.view-table .inout-table-value-head-actions{
-  min-width:40px;
-}
-.feed-inner.view-table .obj{
-  display:grid !important;
-  grid-template-columns:var(--inout-table-rail-w, auto) minmax(0, 1fr) auto;
-  align-items:stretch;
-  gap:0;
-  width:100%;
-  box-sizing:border-box;
-  padding:0;
-  margin:0;
-  border-radius:0;
-  border-bottom:1px solid var(--line2);
-}
-.feed-inner.view-table .obj:last-child{
-  border-bottom:none;
-}
-.feed-inner.view-table .obj > *{
-  display:block !important;
-  vertical-align:top;
-}
-.feed-inner.view-table .obj-leading-col{
-  margin-left:0;
-  padding:10px 12px;
-  border-right:1px solid var(--line2);
-  flex-direction:column;
-  align-items:flex-start;
-  gap:6px;
-  min-width:0;
-}
-.feed-inner.view-table .obj-checkbox-zone{
-  margin-left:0;
-  margin-top:0;
-  margin-bottom:0;
-  min-height:auto;
-  align-self:flex-start;
-}
-.feed-inner.view-table .obj-leading-meta{
-  flex-direction:column;
-  align-items:flex-start;
-  gap:2px;
-}
-.feed-inner.view-table .obj-time-date,
-.feed-inner.view-table .obj-time-clock{
-  font-size:11px;
-  color:var(--dim);
-  white-space:nowrap;
-  max-width:12rem;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-.feed-inner.view-table .obj-time-clock{
-  font-weight:500;
-  color:var(--soft);
-}
-.feed-inner.view-table .obj-sender{
-  font-size:11px;
-  color:var(--dim);
-  white-space:nowrap;
-  max-width:12rem;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-.feed-inner.view-table .obj-content{
-  display:block !important;
-  min-width:0;
-  padding:0;
-  border-right:1px solid var(--line2);
-}
-/* Values sit in one row inside the object: first value, next to the right, same as feed flow */
-.feed-inner.view-table .obj-values-wrap{
-  display:flex !important;
-  flex-direction:row;
-  flex-wrap:nowrap;
-  align-items:stretch;
-  width:100%;
-  min-width:0;
-  min-height:100%;
-  gap:0;
-}
-.feed-inner.view-table .obj-value-cell,
-.feed-inner.view-table .obj-text{
-  flex:1 1 0;
-  min-width:0;
-  margin:0;
-  padding:10px 12px;
-  font-size:14px;
-  line-height:1.45;
-  color:var(--text);
-  border-left:1px solid var(--line2);
-}
-.feed-inner.view-table .obj-value-cell:first-child,
-.feed-inner.view-table .obj-text:first-child{
-  border-left:none;
-}
-.feed-inner.view-table .obj-actions{
-  padding:8px 6px;
-  overflow:visible;
-  border-left:none;
-  align-self:stretch;
-  display:flex !important;
-  align-items:flex-start;
-  justify-content:center;
-}
-.feed-inner.view-table .obj.obj-header .obj-leading-meta .obj-time-date,
-.feed-inner.view-table .obj.obj-header .obj-leading-meta .obj-time-clock,
-.feed-inner.view-table .obj.obj-header .obj-leading-meta .obj-sender{
-  font-size:11px;
-  font-weight:600;
-  text-transform:uppercase;
-  letter-spacing:0.05em;
-  color:var(--muted);
-}
-.feed-inner.view-table .obj.obj-header .obj-value-cell,
-.feed-inner.view-table .obj.obj-header .obj-header-value-cell{
-  font-size:11px;
-  font-weight:600;
-  text-transform:uppercase;
-  letter-spacing:0.05em;
-  color:var(--muted);
-  padding-top:10px;
-  padding-bottom:8px;
-  border-bottom:2px solid var(--line2);
-}
-.feed-inner.view-table .obj.obj-header{
-  position:sticky;
-  top:0;
-  z-index:2;
-  background:var(--bg2);
-  pointer-events:none;
-  user-select:none;
 }
 
 /* Object component: property text fields. Feed view only — labels left of values, 20px gap. */
 /* Layout: label left, value right in every cell */
-.feed-inner:not(.view-table):not(.inout-multi-value-cols) .obj .obj-time,
-.feed-inner:not(.view-table):not(.inout-multi-value-cols) .obj .obj-sender,
-.feed-inner:not(.view-table):not(.inout-multi-value-cols) .obj .obj-text,
-.feed-inner:not(.view-table):not(.inout-multi-value-cols) .obj .obj-value-cell{
+.feed-inner:not(.inout-multi-value-cols) .obj .obj-time,
+.feed-inner:not(.inout-multi-value-cols) .obj .obj-sender,
+.feed-inner:not(.inout-multi-value-cols) .obj .obj-text,
+.feed-inner:not(.inout-multi-value-cols) .obj .obj-value-cell{
   display:flex;
   flex-direction:row;
   align-items:baseline;
@@ -1588,10 +1363,10 @@ header{
   min-width:0;
 }
 /* Label (::before) — shared style; fixed width so value aligns at same distance (20px gap) */
-.feed-inner:not(.view-table):not(.inout-multi-value-cols) .obj .obj-time::before,
-.feed-inner:not(.view-table):not(.inout-multi-value-cols) .obj .obj-sender::before,
-.feed-inner:not(.view-table):not(.inout-multi-value-cols) .obj .obj-text::before,
-.feed-inner:not(.view-table):not(.inout-multi-value-cols) .obj .obj-value-cell::before{
+.feed-inner:not(.inout-multi-value-cols) .obj .obj-time::before,
+.feed-inner:not(.inout-multi-value-cols) .obj .obj-sender::before,
+.feed-inner:not(.inout-multi-value-cols) .obj .obj-text::before,
+.feed-inner:not(.inout-multi-value-cols) .obj .obj-value-cell::before{
   font-size:10px;
   line-height:12px;
   text-transform:uppercase;
@@ -1602,30 +1377,30 @@ header{
   min-width:3.5em;
 }
 /* Labels ON: label visible in flow */
-.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-time::before,
-.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-sender::before,
-.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-text::before,
-.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell::before{
+.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-time::before,
+.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-sender::before,
+.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-text::before,
+.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell::before{
   display:block;
   opacity:1;
   transform:none;
 }
-.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-time::before{ content:'Time'; }
-.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-sender::before{ content:'Author'; }
-.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-text::before{ content:'Value'; }
-.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="0"]::before{ content:'Value'; }
-.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="1"]::before{ content:'Value 2'; }
-.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="2"]::before{ content:'Value 3'; }
-.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="3"]::before{ content:'Value 4'; }
-.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="4"]::before{ content:'Value 5'; }
-.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="5"]::before{ content:'Value 6'; }
-.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="6"]::before{ content:'Value 7'; }
-.feed-inner:not(.view-table):not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="7"]::before{ content:'Value 8'; }
+.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-time::before{ content:'Time'; }
+.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-sender::before{ content:'Author'; }
+.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-text::before{ content:'Value'; }
+.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="0"]::before{ content:'Value'; }
+.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="1"]::before{ content:'Value 2'; }
+.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="2"]::before{ content:'Value 3'; }
+.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="3"]::before{ content:'Value 4'; }
+.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="4"]::before{ content:'Value 5'; }
+.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="5"]::before{ content:'Value 6'; }
+.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="6"]::before{ content:'Value 7'; }
+.feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="7"]::before{ content:'Value 8'; }
 
 /* Labels OFF: label out of flow (no space). On hover, show label left of value; same 20px gap, smooth animation */
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-time::before,
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-sender::before,
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-text::before{
+.feed-inner.obj-labels-off .obj .obj-time::before,
+.feed-inner.obj-labels-off .obj .obj-sender::before,
+.feed-inner.obj-labels-off .obj .obj-text::before{
   display:block;
   position:absolute;
   left:0;
@@ -1636,146 +1411,71 @@ header{
   transition:opacity .22s ease-out, transform .22s ease-out;
   pointer-events:none;
 }
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-time::before{ content:'Time'; }
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-sender::before{ content:'Author'; }
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-text::before{ content:'Value'; }
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-time,
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-sender,
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-text{
+.feed-inner.obj-labels-off .obj .obj-time::before{ content:'Time'; }
+.feed-inner.obj-labels-off .obj .obj-sender::before{ content:'Author'; }
+.feed-inner.obj-labels-off .obj .obj-text::before{ content:'Value'; }
+.feed-inner.obj-labels-off .obj .obj-time,
+.feed-inner.obj-labels-off .obj .obj-sender,
+.feed-inner.obj-labels-off .obj .obj-text{
   position:relative;
   transition:transform .22s ease-out, padding-left .22s ease-out;
   overflow:visible;
 }
-.feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-time::before,
-.feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-sender::before,
-.feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-text::before{
+.feed-inner.obj-labels-off .obj:hover .obj-time::before,
+.feed-inner.obj-labels-off .obj:hover .obj-sender::before,
+.feed-inner.obj-labels-off .obj:hover .obj-text::before{
   opacity:1;
   transform:translateX(0);
 }
 /* Reserve space for label on hover — same distance (3.5em + 20px) so values align */
-.feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-time,
-.feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-sender,
-.feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-text{
+.feed-inner.obj-labels-off .obj:hover .obj-time,
+.feed-inner.obj-labels-off .obj:hover .obj-sender,
+.feed-inner.obj-labels-off .obj:hover .obj-text{
   padding-left:calc(3.5em + 20px);
   transform:translateX(0);
 }
 /* Values slide from left on hover (labels OFF only); rest state */
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-time,
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-sender,
-.feed-inner:not(.view-table).obj-labels-off .obj .obj-text{
+.feed-inner.obj-labels-off .obj .obj-time,
+.feed-inner.obj-labels-off .obj .obj-sender,
+.feed-inner.obj-labels-off .obj .obj-text{
   transform:translateX(-20px);
 }
-.feed-inner:not(.view-table) .obj .obj-content{
+.feed-inner .obj .obj-content{
   overflow:visible;
 }
 /* Labels ON: no slide animation, values stay at fixed 20px from labels */
-.feed-inner:not(.view-table):not(.obj-labels-off) .obj .obj-time,
-.feed-inner:not(.view-table):not(.obj-labels-off) .obj .obj-sender,
-.feed-inner:not(.view-table):not(.obj-labels-off) .obj .obj-text{
+.feed-inner:not(.obj-labels-off) .obj .obj-time,
+.feed-inner:not(.obj-labels-off) .obj .obj-sender,
+.feed-inner:not(.obj-labels-off) .obj .obj-text{
   transform:none;
   transition:none;
 }
 
 /* Select mode: selected objects animate to right from checkboxes (same as hover) */
-body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .obj-time,
-body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .obj-sender,
-body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .obj-text{
+body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-time,
+body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-sender,
+body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-text{
   padding-left:calc(3.5em + 20px);
   transform:translateX(0);
 }
-body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .obj-time::before,
-body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .obj-sender::before,
-body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .obj-text::before{
+body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-time::before,
+body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-sender::before,
+body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-text::before{
   opacity:1;
   transform:translateX(0);
 }
 /* Default feed: time and author font size */
-.feed-inner:not(.view-table) .obj .obj-time,
-.feed-inner:not(.view-table) .obj .obj-sender{
+.feed-inner .obj .obj-time,
+.feed-inner .obj .obj-sender{
   font-size:10px;
   color:var(--dim);
   font-weight:500;
 }
-.feed-inner:not(.view-table) .obj .obj-text{
+.feed-inner .obj .obj-text{
   font-size:12px;
   color:var(--text);
   font-weight:400;
   line-height:1.5;
-}
-
-/* DnD spirit: same row shape as .feed-inner.view-table */
-.obj-drag-spirit-table-wrap{
-  position:fixed;
-  z-index:10000;
-  pointer-events:none;
-  transform:translate(-50%,-50%);
-  display:flex;
-  flex-direction:column;
-  width:100%;
-  max-width:min(100vw - 32px, 720px);
-  border:1px solid var(--line2);
-  border-radius:8px;
-  overflow:hidden;
-  background:var(--bg2);
-  box-shadow:var(--dnd-spirit-shadow);
-  box-sizing:border-box;
-}
-.obj-drag-spirit-table-wrap .obj{
-  display:grid !important;
-  grid-template-columns:auto minmax(0, 1fr) auto;
-  align-items:stretch;
-  gap:0;
-  padding:0;
-  margin:0;
-  border-bottom:1px solid var(--line2);
-}
-.obj-drag-spirit-table-wrap .obj > *{
-  display:block !important;
-  vertical-align:top;
-}
-.obj-drag-spirit-table-wrap .obj:last-child{
-  border-bottom:none;
-}
-.obj-drag-spirit-table-wrap .obj-leading-col{
-  padding:8px 10px;
-  border-right:1px solid var(--line2);
-  margin-left:0;
-}
-.obj-drag-spirit-table-wrap .obj-content{
-  display:block !important;
-  min-width:0;
-  border-right:1px solid var(--line2);
-}
-.obj-drag-spirit-table-wrap .obj-values-wrap{
-  display:flex !important;
-  flex-direction:row;
-  flex-wrap:nowrap;
-  width:100%;
-  min-width:0;
-  gap:0;
-}
-.obj-drag-spirit-table-wrap .obj-value-cell,
-.obj-drag-spirit-table-wrap .obj-text{
-  flex:1 1 0;
-  min-width:0;
-  padding:8px 10px;
-  border-left:1px solid var(--line2);
-}
-.obj-drag-spirit-table-wrap .obj-value-cell:first-child,
-.obj-drag-spirit-table-wrap .obj-text:first-child{
-  border-left:none;
-}
-.obj-drag-spirit-table-wrap .obj-actions{
-  padding:6px 4px;
-}
-.obj-drag-spirit-table-wrap .obj-time,
-.obj-drag-spirit-table-wrap .obj-sender{ white-space:nowrap; }
-.obj-drag-spirit-table-wrap .obj-text{ width:auto; }
-/* When table wrap is inside stack, don't duplicate fixed positioning */
-.obj-drag-spirit-stack .obj-drag-spirit-table-wrap{
-  position:static;
-  transform:none;
-  width:100%;
 }
 
 /* empty state: loader animation (visible on refresh before load) */
@@ -1807,10 +1507,10 @@ body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .
   break-inside:avoid;
   overflow:visible;
 }
-.feed-inner:not(.view-table) .obj{
+.feed-inner .obj{
   contain:none;
 }
-/* Meta rail (checkbox + time/author) + value stack; table/multi-value uses grid on .obj */
+/* Meta rail (checkbox + time/author) + value stack */
 .obj-leading-col{
   display:flex;
   flex-direction:row;
@@ -1826,24 +1526,6 @@ body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .
   gap:8px;
   flex-wrap:wrap;
   min-width:0;
-}
-.obj-time-stack{
-  display:flex;
-  flex-direction:column;
-  align-items:flex-start;
-  gap:2px;
-  min-width:0;
-}
-.obj-time-date,
-.obj-time-clock{
-  font-size:10px;
-  line-height:1.25;
-  color:var(--dim);
-  white-space:nowrap;
-}
-.obj-time-clock{
-  font-weight:500;
-  color:var(--soft);
 }
 .obj-content{
   display:flex;
@@ -3445,15 +3127,15 @@ body.secret-show-grips .frame-grip{
   .obj .obj-actions{ opacity:1; pointer-events:auto }
   .obj:hover .obj-time,
   .obj:hover .obj-sender{ color:var(--dim) }
-  .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-time::before,
-  .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-sender::before,
-  .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-text::before{
+  .feed-inner.obj-labels-off .obj:hover .obj-time::before,
+  .feed-inner.obj-labels-off .obj:hover .obj-sender::before,
+  .feed-inner.obj-labels-off .obj:hover .obj-text::before{
     opacity:0;
     transform:translateX(-6px);
   }
-  .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-time,
-  .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-sender,
-  .feed-inner:not(.view-table).obj-labels-off .obj:hover .obj-text{
+  .feed-inner.obj-labels-off .obj:hover .obj-time,
+  .feed-inner.obj-labels-off .obj:hover .obj-sender,
+  .feed-inner.obj-labels-off .obj:hover .obj-text{
     padding-left:0;
     transform:translateX(-20px);
   }

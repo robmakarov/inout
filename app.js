@@ -227,7 +227,6 @@ const addMembersSaveBtn = document.getElementById('add-members-save');
 const fieldTimeChk   = document.getElementById('field-time');
 const fieldAuthorChk = document.getElementById('field-author');
 const fieldLabelsChk = document.getElementById('field-labels');
-const viewVisualSelect = document.getElementById('view-visual');
 const viewToggleBtn  = document.getElementById('view-toggle');
 const viewMenu       = document.getElementById('view-menu');
 const draftBubble    = document.getElementById('draft-bubble');
@@ -1341,96 +1340,11 @@ function computeMaxValueColumnsFromFeedInner(inner) {
   return max;
 }
 
-/** Labels for value columns on the manage bar in table view (above rows): Value 1…n−1, last column "Other" when n>1. */
+/** Multi-value column labels: Value 1…n−1, last column "Other" when n>1. */
 function valueColumnBarLabel(colIndex, totalCols) {
   if (totalCols <= 1) return 'Value';
   if (colIndex === totalCols - 1) return 'Other';
   return 'Value ' + (colIndex + 1);
-}
-
-/** Value column titles for table view: row inside .feed-inner, same grid as data rows (above cells). */
-function syncFeedTableValueHeadRow(inner, maxCols, isTable, hasDataRows) {
-  if (!inner) return;
-  var row = inner.querySelector('.inout-table-value-head-row');
-  if (!isTable || !hasDataRows || maxCols < 1) {
-    if (row) row.remove();
-    return;
-  }
-  if (!row) {
-    row = document.createElement('div');
-    row.className = 'inout-table-value-head-row';
-    row.setAttribute('role', 'row');
-  }
-  row.style.setProperty('--inout-value-cols', String(maxCols));
-  var rail = row.querySelector('.inout-table-value-head-rail');
-  if (!rail) {
-    rail = document.createElement('div');
-    rail.className = 'inout-table-value-head-rail';
-    rail.setAttribute('aria-hidden', 'true');
-  }
-  var cellsWrap = row.querySelector('.inout-table-value-head-cells');
-  if (!cellsWrap) {
-    cellsWrap = document.createElement('div');
-    cellsWrap.className = 'inout-table-value-head-cells';
-  }
-  cellsWrap.replaceChildren();
-  for (var ci = 0; ci < maxCols; ci++) {
-    var b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'inout-table-col-head';
-    var lab = valueColumnBarLabel(ci, maxCols);
-    b.textContent = lab;
-    b.setAttribute('aria-label', 'Column: ' + lab);
-    cellsWrap.appendChild(b);
-  }
-  var act = row.querySelector('.inout-table-value-head-actions');
-  if (!act) {
-    act = document.createElement('div');
-    act.className = 'inout-table-value-head-actions';
-    act.setAttribute('aria-hidden', 'true');
-  }
-  row.replaceChildren(rail, cellsWrap, act);
-  var firstData = inner.querySelector('.obj:not(.obj-header)');
-  if (!firstData) return;
-  if (row.parentNode !== inner || row.nextSibling !== firstData) {
-    inner.insertBefore(row, firstData);
-  }
-}
-
-function syncTableRailWidthFromDom(inner) {
-  if (!inner || !inner.classList.contains('view-table')) return;
-  var run = function() {
-    var first = inner.querySelector('.obj:not(.obj-header) .obj-leading-col');
-    if (first) {
-      var w = Math.ceil(first.getBoundingClientRect().width);
-      inner.style.setProperty('--inout-table-rail-w', w + 'px');
-    } else {
-      inner.style.removeProperty('--inout-table-rail-w');
-    }
-  };
-  if (typeof requestAnimationFrame !== 'undefined') {
-    requestAnimationFrame(function() {
-      requestAnimationFrame(run);
-    });
-  } else {
-    run();
-  }
-}
-
-/** Table column headers live in the feed above value cells; manage bar strip unused for values. */
-function syncManageBarValueColumnHeaders(maxCols, hasDataRows, isTableMode) {
-  var wrap = document.getElementById('manage-bar-column-headers');
-  if (!wrap) return;
-  var bar = document.getElementById('manage-bar');
-  wrap.hidden = true;
-  wrap.setAttribute('hidden', '');
-  wrap.setAttribute('aria-hidden', 'true');
-  wrap.replaceChildren();
-  if (bar) {
-    bar.classList.remove('manage-bar-has-value-columns');
-    bar.classList.remove('inout-bar-split');
-    bar.style.removeProperty('--inout-value-cols');
-  }
 }
 
 function partsFromRowDom(row) {
@@ -1496,9 +1410,8 @@ function syncFeedMultiValueChrome(inner, messagesList) {
   inner.dataset.inoutValueCols = String(maxCols);
   inner.style.setProperty('--inout-value-cols', String(maxCols));
   inner.classList.toggle('inout-multi-value-cols', maxCols > 1);
-  var isTable = typeof fieldPrefs !== 'undefined' && fieldPrefs && fieldPrefs.viewMode === 'table';
   var hasDataRows = !!inner.querySelector('.obj:not(.obj-header)');
-  var wantHeader = hasDataRows && !isTable && maxCols > 1;
+  var wantHeader = hasDataRows && maxCols > 1;
   var existing = inner.querySelector('.obj.obj-header');
   if (!wantHeader) {
     if (existing) existing.remove();
@@ -1514,15 +1427,6 @@ function syncFeedMultiValueChrome(inner, messagesList) {
     if (parts.length > maxCols) parts = parts.slice(0, maxCols);
     ensureRowValueCellCount(row, maxCols, parts);
   });
-  syncFeedTableValueHeadRow(inner, maxCols, isTable, hasDataRows);
-  if (inner === feedInner) {
-    syncManageBarValueColumnHeaders(maxCols, hasDataRows, isTable);
-  }
-  if (isTable) {
-    syncTableRailWidthFromDom(inner);
-  } else {
-    inner.style.removeProperty('--inout-table-rail-w');
-  }
 }
 const USER_INPUT_STATE_TABLE = 'user_input_state';
 const SLOTS_SYNC_CHANNEL = '__slots__';
@@ -2720,7 +2624,7 @@ var editTypingUndoStack = [];
 var editTypingCommitTimer = null;
 var TYPING_COMMIT_MS = 1800;
 var MAX_TYPING_UNDO = 20;
-let fieldPrefs = { showTime:true, showAuthor:true, showLabels:true, viewMode:'feed' };
+let fieldPrefs = { showTime:true, showAuthor:true, showLabels:true };
 let undoStack = [];
 let actionLog = [];
 let actionLogSub = null;
@@ -2978,7 +2882,6 @@ async function undoLastAction() {
         showTime: !!action.before.showTime,
         showAuthor: !!action.before.showAuthor,
         showLabels: typeof action.before.showLabels === 'boolean' ? action.before.showLabels : true,
-        viewMode: (action.before.viewMode === 'table' || action.before.viewMode === 'feed') ? action.before.viewMode : 'feed',
       };
       saveFieldPrefsForCurrentChannel();
       applyFieldPrefsUI();
@@ -3765,7 +3668,6 @@ async function replaceFeedWithList(list) {
       saveObjectOrderForCurrentView();
     }
   }
-  feedInner.classList.remove('view-table');
   requestAnimationFrame(() => {
     if (rail) rail.replaceChildren(railFrag);
     if (feedInner) {
@@ -3799,7 +3701,6 @@ async function replaceFeedWithListInto(list, targetFeedInner) {
   savedSeen.forEach(function(id) { seenIds.add(id); });
   const hasRows = frag.childNodes.length > 0;
   if (hasRows) {
-    targetFeedInner.classList.remove('view-table');
     targetFeedInner.replaceChildren(frag);
     syncFeedMultiValueChrome(targetFeedInner, list);
   } else {
@@ -4458,7 +4359,6 @@ function applyObjectOrderToFeedInner(inner, orderIds) {
 
 function applyFieldPrefsToFeedInner(inner, fp) {
   if (!inner || !fp) return;
-  inner.classList.toggle('view-table', fp.viewMode === 'table');
   inner.querySelectorAll('.obj').forEach(row => {
     if (row.classList.contains('obj-header')) return;
     const timeEl = row.querySelector('.obj-time');
@@ -4486,7 +4386,6 @@ function applyViewsTableConfigToChannel(channel, cfg, opts) {
     showTime: typeof cfg.showTime === 'boolean' ? cfg.showTime : defTime,
     showAuthor: typeof cfg.showAuthor === 'boolean' ? cfg.showAuthor : defAuthor,
     showLabels: typeof cfg.showLabels === 'boolean' ? cfg.showLabels : true,
-    viewMode: (cfg.viewMode === 'table' || cfg.viewMode === 'feed') ? cfg.viewMode : 'feed',
   };
   const orderArr = skipOrder
     ? []
@@ -4528,7 +4427,7 @@ function scheduleViewRealtimeResubscribe(reason) {
   }, reason === 'visible' ? 400 : 900);
 }
 
-/* Cross-device view UI (Time/Author/Labels, grid vs table, order) uses postgres_changes on public.views.
+/* Cross-device view UI (Time/Author/Labels, order) uses postgres_changes on public.views.
    Ensure: alter publication supabase_realtime add table views; */
 function subscribeViewRealtime() {
   if (!sb || !sb.channel) return;
@@ -6289,7 +6188,6 @@ function applyFieldPrefsUI() {
   if (fieldTimeChk) fieldTimeChk.checked = !!fieldPrefs.showTime;
   if (fieldAuthorChk) fieldAuthorChk.checked = !!fieldPrefs.showAuthor;
   if (fieldLabelsChk) fieldLabelsChk.checked = !!fieldPrefs.showLabels;
-  if (viewVisualSelect) viewVisualSelect.value = (fieldPrefs.viewMode === 'table' ? 'table' : 'feed');
 }
 
 async function persistChannelViewRulesForCurrentChannel() {
@@ -6311,7 +6209,7 @@ async function persistChannelViewRulesForCurrentChannel() {
       showTime: !!fieldPrefs.showTime,
       showAuthor: !!fieldPrefs.showAuthor,
       showLabels: !!fieldPrefs.showLabels,
-      viewMode: fieldPrefs.viewMode === 'table' ? 'table' : 'feed',
+      viewMode: 'feed',
     });
     if (!cfg.title) delete cfg.title;
     suppressNextViewApply = true;
@@ -6350,12 +6248,11 @@ async function loadFieldPrefsForCurrentChannel() {
           showTime: typeof cfgPref.showTime === 'boolean' ? cfgPref.showTime : defTime,
           showAuthor: typeof cfgPref.showAuthor === 'boolean' ? cfgPref.showAuthor : defAuthor,
           showLabels: typeof cfgPref.showLabels === 'boolean' ? cfgPref.showLabels : true,
-          viewMode: (cfgPref.viewMode === 'table' || cfgPref.viewMode === 'feed') ? cfgPref.viewMode : 'feed',
         };
         try {
           const raw = localStorage.getItem(FIELD_PREFS_KEY);
           const map = raw ? JSON.parse(raw) : {};
-          map[currentChannel] = { showTime: !!fieldPrefs.showTime, showAuthor: !!fieldPrefs.showAuthor, showLabels: !!fieldPrefs.showLabels, viewMode: fieldPrefs.viewMode };
+          map[currentChannel] = { showTime: !!fieldPrefs.showTime, showAuthor: !!fieldPrefs.showAuthor, showLabels: !!fieldPrefs.showLabels };
           localStorage.setItem(FIELD_PREFS_KEY, JSON.stringify(map));
         } catch (_) {}
         applyFieldPrefsUI();
@@ -6372,10 +6269,9 @@ async function loadFieldPrefsForCurrentChannel() {
       showTime: typeof prefs.showTime === 'boolean' ? prefs.showTime : defTime,
       showAuthor: typeof prefs.showAuthor === 'boolean' ? prefs.showAuthor : defAuthor,
       showLabels: typeof prefs.showLabels === 'boolean' ? prefs.showLabels : true,
-      viewMode: (prefs.viewMode === 'table' || prefs.viewMode === 'feed') ? prefs.viewMode : 'feed',
     };
   } catch (_) {
-    fieldPrefs = { showTime: true, showAuthor: true, showLabels: true, viewMode: 'feed' };
+    fieldPrefs = { showTime: true, showAuthor: true, showLabels: true };
   }
   applyFieldPrefsUI();
   applyFieldPrefsToObjects();
@@ -6389,7 +6285,6 @@ function saveFieldPrefsForCurrentChannel() {
       showTime: !!fieldPrefs.showTime,
       showAuthor: !!fieldPrefs.showAuthor,
       showLabels: !!fieldPrefs.showLabels,
-      viewMode: fieldPrefs.viewMode === 'table' ? 'table' : 'feed',
     };
     localStorage.setItem(FIELD_PREFS_KEY, JSON.stringify(map));
   } catch(_) {}
@@ -6397,7 +6292,6 @@ function saveFieldPrefsForCurrentChannel() {
 
 function applyFieldPrefsToObjects() {
   if (!feedInner || !fieldPrefs) return;
-  feedInner.classList.toggle('view-table', fieldPrefs.viewMode === 'table');
   const rows = feedInner.querySelectorAll('.obj');
   rows.forEach(row => {
     if (row.classList.contains('obj-header')) return;
@@ -6574,7 +6468,7 @@ function setupTouchDragHandlers() {
   document.addEventListener('touchend', end, { passive: true });
 }
 
-/** Table / multi-value: header row (Time, Author, Value 1…N, Actions). No dataset.id. */
+/** Multi-value: header row (Time, Author, Value 1…N, Actions). No dataset.id. */
 function createObjectHeaderRow(maxValueCols) {
   var n = Math.max(1, parseInt(maxValueCols, 10) || 1);
   const row = document.createElement('div');
@@ -6585,17 +6479,7 @@ function createObjectHeaderRow(maxValueCols) {
   checkboxPlaceholder.setAttribute('aria-hidden', 'true');
   const time = document.createElement('div');
   time.className = 'obj-time';
-  const timeStackH = document.createElement('span');
-  timeStackH.className = 'obj-time-stack';
-  const timeDateLbl = document.createElement('span');
-  timeDateLbl.className = 'obj-time-date';
-  timeDateLbl.textContent = 'Date';
-  const timeClockLbl = document.createElement('span');
-  timeClockLbl.className = 'obj-time-clock';
-  timeClockLbl.textContent = 'Time';
-  timeStackH.appendChild(timeDateLbl);
-  timeStackH.appendChild(timeClockLbl);
-  time.appendChild(timeStackH);
+  time.textContent = 'Time';
   const sender = document.createElement('div');
   sender.className = 'obj-sender';
   sender.textContent = 'Author';
@@ -6663,7 +6547,6 @@ function createObjectRow(obj, isNew, options) {
     var fr0 = feedEl ? feedEl.getBoundingClientRect() : rowRect;
     var margin0 = 24;
     var startTop = Math.max(fr0.top + margin0, Math.min(fr0.bottom - margin0, e.clientY || rowRect.top));
-    var isTableView = !!(feedInner && feedInner.classList.contains('view-table'));
     if (dragSelectedRows.length > 1) {
       var stackContainer = document.createElement('div');
       stackContainer.className = 'obj-drag-spirit obj-drag-spirit-stack';
@@ -6673,30 +6556,14 @@ function createObjectRow(obj, isNew, options) {
       stackContainer.style.top = startTop + 'px';
       var maxVisible = 4;
       var toShow = Math.min(dragSelectedRows.length, maxVisible);
-      if (isTableView) {
-        var tableWrap = document.createElement('div');
-        tableWrap.className = 'obj-drag-spirit-table-wrap';
-        tableWrap.style.width = '100%';
-        for (var si = 0; si < toShow; si++) {
-          var r = dragSelectedRows[si];
-          var clone = r.cloneNode(true);
-          clone.classList.remove('dragging', 'obj-drag-group', 'obj-selected', 'new-flash', 'obj-editing', 'obj-drag-over', 'obj-drag-target', 'dragging-in-feed');
-          clone.classList.add('obj', 'obj-drag-spirit-row');
-          clone.removeAttribute('draggable');
-          clone.querySelectorAll('.obj-checkbox-zone, .obj-actions, .obj-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
-          tableWrap.appendChild(clone);
-        }
-        stackContainer.appendChild(tableWrap);
-      } else {
-        for (var si = 0; si < toShow; si++) {
-          var r = dragSelectedRows[si];
-          var clone = r.cloneNode(true);
-          clone.classList.remove('dragging', 'obj-drag-group', 'obj-selected', 'new-flash', 'obj-editing', 'obj-drag-over', 'obj-drag-target', 'dragging-in-feed');
-          clone.classList.add('obj', 'obj-drag-spirit-row');
-          clone.removeAttribute('draggable');
-          clone.querySelectorAll('.obj-checkbox-zone, .obj-actions, .obj-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
-          stackContainer.appendChild(clone);
-        }
+      for (var si = 0; si < toShow; si++) {
+        var r = dragSelectedRows[si];
+        var clone = r.cloneNode(true);
+        clone.classList.remove('dragging', 'obj-drag-group', 'obj-selected', 'new-flash', 'obj-editing', 'obj-drag-over', 'obj-drag-target', 'dragging-in-feed');
+        clone.classList.add('obj', 'obj-drag-spirit-row');
+        clone.removeAttribute('draggable');
+        clone.querySelectorAll('.obj-checkbox-zone, .obj-actions, .obj-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
+        stackContainer.appendChild(clone);
       }
       if (dragSelectedRows.length > maxVisible) {
         var extra = document.createElement('div');
@@ -6707,33 +6574,16 @@ function createObjectRow(obj, isNew, options) {
       document.body.appendChild(stackContainer);
       dragSpiritEl = stackContainer;
     } else {
-      if (isTableView) {
-        var wrap = document.createElement('div');
-        wrap.className = 'obj-drag-spirit-table-wrap';
-        wrap.setAttribute('aria-hidden', 'true');
-        wrap.style.width = spiritW + 'px';
-        wrap.style.left = (rowRect.left + rowRect.width / 2) + 'px';
-        wrap.style.top = startTop + 'px';
-        var clone = row.cloneNode(true);
-        clone.classList.remove('dragging', 'obj-drag-group', 'obj-selected', 'new-flash', 'obj-editing', 'obj-drag-over', 'obj-drag-target', 'dragging-in-feed');
-        clone.classList.add('obj', 'obj-drag-spirit', 'obj-drag-spirit-row');
-        clone.removeAttribute('draggable');
-        clone.querySelectorAll('.obj-checkbox-zone, .obj-actions, .obj-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
-        wrap.appendChild(clone);
-        document.body.appendChild(wrap);
-        dragSpiritEl = wrap;
-      } else {
-    dragSpiritEl = row.cloneNode(true);
-        dragSpiritEl.classList.remove('dragging', 'obj-drag-group', 'obj-selected', 'new-flash', 'obj-editing', 'obj-drag-over', 'obj-drag-target', 'dragging-in-feed');
-        dragSpiritEl.classList.add('obj', 'obj-drag-spirit', 'obj-drag-spirit-row');
-    dragSpiritEl.removeAttribute('draggable');
-    dragSpiritEl.setAttribute('aria-hidden', 'true');
-        dragSpiritEl.style.width = spiritW + 'px';
-        dragSpiritEl.style.left = (rowRect.left + rowRect.width / 2) + 'px';
-        dragSpiritEl.style.top = startTop + 'px';
-        dragSpiritEl.querySelectorAll('.obj-checkbox-zone, .obj-actions, .obj-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
-    document.body.appendChild(dragSpiritEl);
-      }
+      dragSpiritEl = row.cloneNode(true);
+      dragSpiritEl.classList.remove('dragging', 'obj-drag-group', 'obj-selected', 'new-flash', 'obj-editing', 'obj-drag-over', 'obj-drag-target', 'dragging-in-feed');
+      dragSpiritEl.classList.add('obj', 'obj-drag-spirit', 'obj-drag-spirit-row');
+      dragSpiritEl.removeAttribute('draggable');
+      dragSpiritEl.setAttribute('aria-hidden', 'true');
+      dragSpiritEl.style.width = spiritW + 'px';
+      dragSpiritEl.style.left = (rowRect.left + rowRect.width / 2) + 'px';
+      dragSpiritEl.style.top = startTop + 'px';
+      dragSpiritEl.querySelectorAll('.obj-checkbox-zone, .obj-actions, .obj-select-wrap').forEach(function(el) { if (el && el.parentNode) el.parentNode.removeChild(el); });
+      document.body.appendChild(dragSpiritEl);
     }
     if (!dragImageEl) {
       dragImageEl = document.createElement('div');
@@ -7570,18 +7420,7 @@ function createObjectRow(obj, isNew, options) {
 
   const time = document.createElement('div');
   time.className = 'obj-time';
-  var tp = formatTimePartsForDisplay(obj.created_at);
-  const timeStack = document.createElement('span');
-  timeStack.className = 'obj-time-stack';
-  const timeDateEl = document.createElement('span');
-  timeDateEl.className = 'obj-time-date';
-  timeDateEl.textContent = tp.date || '';
-  const timeClockEl = document.createElement('span');
-  timeClockEl.className = 'obj-time-clock';
-  timeClockEl.textContent = tp.clock || '';
-  timeStack.appendChild(timeDateEl);
-  timeStack.appendChild(timeClockEl);
-  time.appendChild(timeStack);
+  time.textContent = formatTime(obj.created_at);
   if (fieldPrefs) {
     if (!fieldPrefs.showTime) time.style.setProperty('display', 'none', 'important');
     else time.style.removeProperty('display');
@@ -8461,7 +8300,6 @@ async function loadObjectOrderForCurrentChannel() {
         showTime: typeof cfg.showTime === 'boolean' ? cfg.showTime : defTime,
         showAuthor: typeof cfg.showAuthor === 'boolean' ? cfg.showAuthor : defAuthor,
         showLabels: typeof cfg.showLabels === 'boolean' ? cfg.showLabels : true,
-        viewMode: (cfg.viewMode === 'table' || cfg.viewMode === 'feed') ? cfg.viewMode : 'feed',
       };
       saveFieldPrefsForCurrentChannel();
       // also mirror order into local backup
@@ -8516,9 +8354,7 @@ async function saveObjectOrderForCurrentView() {
           ? fieldPrefs.showAuthor
           : (currentView === 'main' ? false : true),
         showLabels: fieldPrefs && typeof fieldPrefs.showLabels === 'boolean' ? fieldPrefs.showLabels : true,
-        viewMode: fieldPrefs && (fieldPrefs.viewMode === 'table' || fieldPrefs.viewMode === 'feed')
-          ? fieldPrefs.viewMode
-          : 'feed',
+        viewMode: 'feed',
       };
       suppressNextViewApply = true;
       const viewCh = String(currentChannel || currentView || 'main');
@@ -10564,27 +10400,9 @@ if (selectNoneBtn) {
   });
 }
 
-if (viewVisualSelect) {
-  viewVisualSelect.addEventListener('change', () => {
-    const viewMode = viewVisualSelect.value === 'table' ? 'table' : 'feed';
-    if (fieldPrefs.viewMode === viewMode) return;
-    pushUndo({ type: 'view', channel: currentChannel, before: { showTime: fieldPrefs.showTime, showAuthor: fieldPrefs.showAuthor, showLabels: fieldPrefs.showLabels, viewMode: fieldPrefs.viewMode } });
-    fieldPrefs.viewMode = viewMode;
-    logAction('view', { viewMode });
-    saveFieldPrefsForCurrentChannel();
-    schedulePersistChannelViewRules();
-    applyFieldPrefsUI();
-    if (currentUser) {
-      loadObjects().catch(() => {});
-    } else {
-      loadLocalObjectsForCurrentView().catch?.(() => {});
-    }
-  });
-}
-
 if (fieldTimeChk) {
   fieldTimeChk.addEventListener('change', () => {
-    pushUndo({ type: 'view', channel: currentChannel, before: { showTime: fieldPrefs.showTime, showAuthor: fieldPrefs.showAuthor, showLabels: fieldPrefs.showLabels, viewMode: fieldPrefs.viewMode } });
+    pushUndo({ type: 'view', channel: currentChannel, before: { showTime: fieldPrefs.showTime, showAuthor: fieldPrefs.showAuthor, showLabels: fieldPrefs.showLabels } });
     fieldPrefs.showTime = !!fieldTimeChk.checked;
     logAction('view', { showTime: !!fieldTimeChk.checked, showAuthor: fieldPrefs.showAuthor });
     saveFieldPrefsForCurrentChannel();
@@ -10595,7 +10413,7 @@ if (fieldTimeChk) {
 
 if (fieldAuthorChk) {
   fieldAuthorChk.addEventListener('change', () => {
-    pushUndo({ type: 'view', channel: currentChannel, before: { showTime: fieldPrefs.showTime, showAuthor: fieldPrefs.showAuthor, showLabels: fieldPrefs.showLabels, viewMode: fieldPrefs.viewMode } });
+    pushUndo({ type: 'view', channel: currentChannel, before: { showTime: fieldPrefs.showTime, showAuthor: fieldPrefs.showAuthor, showLabels: fieldPrefs.showLabels } });
     fieldPrefs.showAuthor = !!fieldAuthorChk.checked;
     logAction('view', { showTime: fieldPrefs.showTime, showAuthor: !!fieldAuthorChk.checked });
     saveFieldPrefsForCurrentChannel();
@@ -10606,7 +10424,7 @@ if (fieldAuthorChk) {
 
 if (fieldLabelsChk) {
   fieldLabelsChk.addEventListener('change', () => {
-    pushUndo({ type: 'view', channel: currentChannel, before: { showTime: fieldPrefs.showTime, showAuthor: fieldPrefs.showAuthor, showLabels: fieldPrefs.showLabels, viewMode: fieldPrefs.viewMode } });
+    pushUndo({ type: 'view', channel: currentChannel, before: { showTime: fieldPrefs.showTime, showAuthor: fieldPrefs.showAuthor, showLabels: fieldPrefs.showLabels } });
     fieldPrefs.showLabels = !!fieldLabelsChk.checked;
     logAction('view', { showLabels: !!fieldLabelsChk.checked });
     saveFieldPrefsForCurrentChannel();
