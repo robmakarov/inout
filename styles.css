@@ -2134,6 +2134,14 @@ body.select-mode .obj-select-wrap,
   pointer-events:auto;
 }
 
+/* Select mode: negative margins pull the checkbox rail past #feed / .visual-feed-stack (overflow-x:hidden) and it gets clipped. Flush layout keeps cb zone + checkbox on-screen. */
+body.select-mode .obj-leading-col{
+  margin-left:0;
+}
+body.select-mode .obj-checkbox-zone{
+  margin-left:0;
+}
+
 .obj-select{
   width:13px;
   height:13px;
