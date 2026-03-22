@@ -1298,26 +1298,106 @@ function subscribeTempSessionJoins() {
 
 // Supabase table name for stored objects (was 'entries').
 const OBJECTS_TABLE        = 'entries';
-/** Stored in `entries.text`: plain string = one value; multi = prefix + JSON array of strings. */
+/** Stored in `entries.text`: plain string = one value; multi = prefix + JSON array of strings, or `{ v, l }` with per-column labels. */
 const INOUT_MULTI_VALUE_PREFIX = '__INOUT_VALUES_JSON__\n';
+var INOUT_VALUE_COL_LABEL_MAX = 72;
 
-function parseObjectTextToParts(raw) {
-  var s = raw == null ? '' : String(raw);
-  if (s.indexOf(INOUT_MULTI_VALUE_PREFIX) === 0) {
-    try {
-      var arr = JSON.parse(s.slice(INOUT_MULTI_VALUE_PREFIX.length));
-      if (Array.isArray(arr)) {
-        return arr.length ? arr.map(function(x) { return String(x); }) : [''];
-      }
-    } catch (e) {}
-  }
-  return [s];
+function defaultValueColumnHeaderLabel(index) {
+  if (index === 0) return 'Value';
+  return 'Value ' + (index + 1);
 }
 
-function serializeObjectParts(parts) {
+var lastKnownEntryTextById = new Map();
+
+function entryTextCacheKey(channel, id) {
+  return String(channel != null && String(channel).trim() !== '' ? channel : 'main') + ':' + String(id);
+}
+
+function rememberEntryText(channel, id, text) {
+  if (id == null || !Number.isFinite(Number(id))) return;
+  lastKnownEntryTextById.set(entryTextCacheKey(channel, id), String(text != null ? text : ''));
+}
+
+function getLastKnownEntryTextForChannel(channel, id) {
+  if (id == null || !Number.isFinite(Number(id))) return null;
+  var v = lastKnownEntryTextById.get(entryTextCacheKey(channel, id));
+  return v != null ? v : null;
+}
+
+function parseObjectTextPayload(raw) {
+  var s = raw == null ? '' : String(raw);
+  if (s.indexOf(INOUT_MULTI_VALUE_PREFIX) !== 0) {
+    return { parts: [s], labels: null };
+  }
+  try {
+    var j = JSON.parse(s.slice(INOUT_MULTI_VALUE_PREFIX.length));
+    if (Array.isArray(j)) {
+      var arr = j.length ? j.map(function(x) { return String(x); }) : [''];
+      return { parts: arr, labels: null };
+    }
+    if (j && typeof j === 'object' && Array.isArray(j.v)) {
+      var v = j.v.length ? j.v.map(function(x) { return String(x); }) : [''];
+      var l = Array.isArray(j.l) ? j.l.map(function(x) { return (x == null ? '' : String(x)); }) : null;
+      return { parts: v, labels: l };
+    }
+  } catch (e) {}
+  return { parts: [s], labels: null };
+}
+
+function parseObjectTextToParts(raw) {
+  return parseObjectTextPayload(raw).parts;
+}
+
+function alignLabelsForResize(labels, partCount) {
+  var n = Math.max(0, Number(partCount) || 0);
+  var out = [];
+  for (var i = 0; i < n; i++) {
+    var from = labels && labels[i];
+    if (from != null && String(from).trim())
+      out.push(String(from).trim().slice(0, INOUT_VALUE_COL_LABEL_MAX));
+    else out.push(defaultValueColumnHeaderLabel(i));
+  }
+  return out;
+}
+
+function labelsAlignedToNewPartCount(prevPayload, newPartCount) {
+  var pay = prevPayload || { parts: [], labels: null };
+  var oldN = pay.parts.length;
+  var labs = alignLabelsForResize(pay.labels, oldN);
+  var n = Math.max(0, Number(newPartCount) || 0);
+  if (n <= labs.length) return labs.slice(0, n);
+  var o = labs.slice();
+  while (o.length < n) o.push(defaultValueColumnHeaderLabel(o.length));
+  return o;
+}
+
+function moveValueSlotInLabels(labels, fromIdx, toIdx) {
+  if (!labels || !labels.length) return labels;
+  var p = labels.map(function(x) { return String(x != null ? x : ''); });
+  if (fromIdx < 0 || fromIdx >= p.length) return p;
+  if (toIdx < 0) toIdx = 0;
+  if (toIdx > p.length) toIdx = p.length;
+  if (fromIdx === toIdx) return p;
+  var x = p.splice(fromIdx, 1)[0];
+  if (fromIdx < toIdx) toIdx--;
+  p.splice(toIdx, 0, x);
+  return p;
+}
+
+function serializeObjectParts(parts, labelsOpt) {
   if (!parts || !parts.length) return '';
-  if (parts.length === 1) return parts[0] == null ? '' : String(parts[0]);
-  return INOUT_MULTI_VALUE_PREFIX + JSON.stringify(parts.map(function(p) { return String(p); }));
+  var pl = parts.map(function(p) { return String(p != null ? p : ''); });
+  var n = pl.length;
+  var labs =
+    labelsOpt !== undefined && labelsOpt !== null
+      ? alignLabelsForResize(labelsOpt, n)
+      : alignLabelsForResize(null, n);
+  if (n === 1) {
+    var def0 = defaultValueColumnHeaderLabel(0);
+    if (labs[0] === def0) return pl[0];
+    return INOUT_MULTI_VALUE_PREFIX + JSON.stringify({ v: pl, l: labs });
+  }
+  return INOUT_MULTI_VALUE_PREFIX + JSON.stringify({ v: pl, l: labs });
 }
 
 function computeMaxValueColumnsFromMessages(messages) {
@@ -1446,8 +1526,11 @@ function ensureRowValueCellCount(row, maxCols, partsForFill) {
     if (c.innerHTML !== html) c.innerHTML = html;
   }
   row.dataset.valueCols = String(maxCols);
+  var ch = channelKeyForRowEl(row);
+  var rid = row.dataset.id != null ? Number(row.dataset.id) : NaN;
+  var entryRaw = Number.isFinite(rid) ? getLastKnownEntryTextForChannel(ch, rid) : null;
   wrap.querySelectorAll(':scope > .obj-value-cell').forEach(function(c) {
-    applyValueColumnLabelAttrToCell(c);
+    applyValueColumnLabelAttrToCell(c, entryRaw);
   });
 }
 
@@ -1479,7 +1562,6 @@ var inoutMultiValueFilterMode = 'all';
 var inoutMultiValueColumnFilterIndex = null;
 var inoutColHeaderFilterClickTimer = null;
 var INOUT_VALUE_COL_LABELS_KEY = 'inout_value_column_labels_v1';
-var INOUT_VALUE_COL_LABEL_MAX = 72;
 
 function valueColumnLabelsStorageChannel() {
   try {
@@ -1518,11 +1600,6 @@ function setValueColumnLabelOverrideAt(index, labelOrEmpty) {
   } catch (_) {}
 }
 
-function defaultValueColumnHeaderLabel(index) {
-  if (index === 0) return 'Value';
-  return 'Value ' + (index + 1);
-}
-
 function valueColumnHeaderLabel(index) {
   var map = getValueColumnLabelOverridesForChannel();
   var k = String(index);
@@ -1531,24 +1608,95 @@ function valueColumnHeaderLabel(index) {
   return defaultValueColumnHeaderLabel(index);
 }
 
-function applyValueColumnLabelAttrToCell(cell) {
+function getDisplayValueLabelForEntryText(entryRawText, colIndex) {
+  var i = Number(colIndex);
+  if (!Number.isFinite(i) || i < 0) return valueColumnHeaderLabel(0);
+  var pay = parseObjectTextPayload(entryRawText);
+  var labs = pay.labels;
+  if (labs && labs[i] != null && String(labs[i]).trim())
+    return String(labs[i]).trim().slice(0, INOUT_VALUE_COL_LABEL_MAX);
+  return valueColumnHeaderLabel(i);
+}
+
+async function fetchEntriesForCurrentViewForLabelSync() {
+  var ch = String(currentChannel || currentView || 'main');
+  if (!shouldUseServerForObjects()) {
+    try {
+      var byView = await getLocalObjectByViewMap();
+      return Array.isArray(byView[ch]) ? byView[ch].slice() : [];
+    } catch (_) {
+      return [];
+    }
+  }
+  if (!sb || !sb.from) return [];
+  if (tempSessionId && currentChannel) {
+    var q = sb
+      .from(OBJECTS_TABLE)
+      .select('id, text, channel, user_id, author_name, temp_session_id')
+      .or('channel.eq.' + currentChannel + ',temp_session_id.eq.' + tempSessionId)
+      .order('created_at', { ascending: true });
+    var res = await q;
+    if (res.error) {
+      console.error(res.error);
+      return [];
+    }
+    return res.data || [];
+  }
+  return fetchObjectsListForChannel(ch);
+}
+
+async function persistValueColumnDisplayNamesToAllEntries(colIndex, nameOrEmpty) {
+  var idx = Number(colIndex);
+  if (!Number.isFinite(idx) || idx < 0) return false;
+  var ch = String(currentChannel || currentView || 'main');
+  var resolvedName =
+    nameOrEmpty && String(nameOrEmpty).trim()
+      ? String(nameOrEmpty).trim().slice(0, INOUT_VALUE_COL_LABEL_MAX)
+      : '';
+  var list = await fetchEntriesForCurrentViewForLabelSync();
+  var okAll = true;
+  for (var i = 0; i < list.length; i++) {
+    var ent = list[i];
+    if (!ent || ent.id == null) continue;
+    var pay = parseObjectTextPayload(ent.text);
+    if (pay.parts.length <= idx) continue;
+    var labs = alignLabelsForResize(pay.labels, pay.parts.length);
+    if (resolvedName) labs[idx] = resolvedName;
+    else labs[idx] = defaultValueColumnHeaderLabel(idx);
+    var ser = serializeObjectParts(pay.parts, labs);
+    var rowCh = ent.channel != null ? String(ent.channel) : ch;
+    var ok = await persistObjectTextPayload(Number(ent.id), ser, rowCh);
+    if (!ok) okAll = false;
+  }
+  return okAll;
+}
+
+function applyValueColumnLabelAttrToCell(cell, entryRawText) {
   if (!cell || !cell.classList || !cell.classList.contains('obj-value-cell')) return;
   var vi = parseInt(cell.dataset.valueIndex, 10);
   if (!Number.isFinite(vi)) return;
+  var raw = entryRawText;
+  if (raw == null) {
+    var row = cell.closest('.obj');
+    if (row && row.dataset.id != null) {
+      var ch = channelKeyForRowEl(row);
+      raw = getLastKnownEntryTextForChannel(ch, Number(row.dataset.id));
+    }
+  }
   try {
-    cell.setAttribute('data-value-label', valueColumnHeaderLabel(vi));
+    cell.setAttribute('data-value-label', getDisplayValueLabelForEntryText(raw, vi));
   } catch (_) {}
 }
 
 function syncAllValueColumnLabelAttrs() {
   try {
     document.querySelectorAll('.obj-value-cell').forEach(function(c) {
-      applyValueColumnLabelAttrToCell(c);
+      applyValueColumnLabelAttrToCell(c, null);
     });
   } catch (_) {}
 }
 
-function promptRenameValueColumnHeader(btn) {
+async function promptRenameValueColumnHeader(btn) {
   if (!btn) return;
   var idx = parseInt(btn.getAttribute('data-value-index'), 10);
   if (!Number.isFinite(idx)) return;
@@ -1559,6 +1707,8 @@ function promptRenameValueColumnHeader(btn) {
   var cleared = !next || next === defaultValueColumnHeaderLabel(idx);
   if (cleared) setValueColumnLabelOverrideAt(idx, '');
   else setValueColumnLabelOverrideAt(idx, next);
+  var ok = await persistValueColumnDisplayNamesToAllEntries(idx, cleared ? '' : next);
+  if (!ok) toast('Some objects could not be updated in the database.');
   rebuildMultiValueColumnLabelButtons();
   syncAllValueColumnLabelAttrs();
   try {
@@ -3463,20 +3613,37 @@ async function performValueSlotDnDDrop(e, rawPayload) {
   if (idS === idT) {
     var parts = partsFromRowDom(srcRow).map(function(x) { return String(x != null ? x : ''); });
     if (viS < 0 || viS >= parts.length) return false;
+    var rawSame = getLastKnownEntryTextForChannel(chS, idS);
+    var paySame =
+      rawSame != null ? parseObjectTextPayload(rawSame) : { parts: parts.slice(), labels: null };
+    var labsSame = labelsAlignedToNewPartCount(paySame, parts.length);
     parts = moveValueSlotInParts(parts, viS, viT);
-    var ok = await persistObjectTextPayload(idS, serializeObjectParts(parts), chS);
+    labsSame = moveValueSlotInLabels(labsSame, viS, viT);
+    var ok = await persistObjectTextPayload(idS, serializeObjectParts(parts, labsSame), chS);
     if (!ok) toast('Could not reorder values.');
   } else {
     var srcParts = partsFromRowDom(srcRow).map(function(x) { return String(x != null ? x : ''); });
     var tgtParts = partsFromRowDom(tgtRow).map(function(x) { return String(x != null ? x : ''); });
     if (viS < 0 || viS >= srcParts.length) return false;
     viT = Math.max(0, Math.min(viT, tgtParts.length));
+    var rawSrc = getLastKnownEntryTextForChannel(chS, idS);
+    var rawTgt = getLastKnownEntryTextForChannel(chT, idT);
+    var paySrc =
+      rawSrc != null ? parseObjectTextPayload(rawSrc) : { parts: srcParts.slice(), labels: null };
+    var payTgt =
+      rawTgt != null ? parseObjectTextPayload(rawTgt) : { parts: tgtParts.slice(), labels: null };
+    var srcLab = labelsAlignedToNewPartCount(paySrc, srcParts.length);
+    var tgtLab = labelsAlignedToNewPartCount(payTgt, tgtParts.length);
+    var movedLab = srcLab[viS];
     var piece = srcParts[viS];
     srcParts.splice(viS, 1);
+    srcLab.splice(viS, 1);
     if (srcParts.length === 0) srcParts = [''];
+    if (srcLab.length === 0) srcLab = [defaultValueColumnHeaderLabel(0)];
     tgtParts.splice(viT, 0, piece);
-    var ok1 = await persistObjectTextPayload(idS, serializeObjectParts(srcParts), chS);
-    var ok2 = await persistObjectTextPayload(idT, serializeObjectParts(tgtParts), chT);
+    tgtLab.splice(viT, 0, movedLab);
+    var ok1 = await persistObjectTextPayload(idS, serializeObjectParts(srcParts, srcLab), chS);
+    var ok2 = await persistObjectTextPayload(idT, serializeObjectParts(tgtParts, tgtLab), chT);
     if (!ok1 || !ok2) toast('Could not move value.');
   }
   if (feedInner) syncFeedMultiValueChrome(feedInner);
@@ -4133,6 +4300,7 @@ async function replaceFeedWithList(list) {
   inoutMultiValueColumnFilterIndex = null;
   closeInoutMultiValueFilterMenu();
   seenIds.clear();
+  lastKnownEntryTextById.clear();
   globalObjectNum = 0;
   objectCount = 0;
   const maxValCols = computeMaxValueColumnsFromMessages(list);
@@ -4501,6 +4669,8 @@ function subscribeTempSessionRealtimeGuest() {
 function updateObjectRowText(objId, textValue) {
   if (objId == null) return;
   const row = findObjectRowEl(objId);
+  var ch = row ? channelKeyForRowEl(row) : String(currentChannel || 'main');
+  rememberEntryText(ch, objId, textValue);
   if (!row) return;
   var maxCols = parseInt(row.dataset.valueCols, 10) || row.querySelectorAll('.obj-value-cell').length || 1;
   var parts = parseObjectTextToParts(textValue);
@@ -6977,6 +7147,13 @@ function createObjectRow(obj, isNew, options) {
   row.dataset.valueCols = String(valueColCount);
   row.draggable = true;
   if (obj.channel != null) row.setAttribute('data-object-channel', String(obj.channel));
+  if (typeof obj.id !== 'undefined') {
+    rememberEntryText(
+      obj.channel != null ? String(obj.channel) : String(currentChannel || 'main'),
+      obj.id,
+      obj.text
+    );
+  }
   row.addEventListener('dragstart', e => {
     if (pointerDownOnSelectArea) {
       e.preventDefault();
@@ -7951,7 +8128,7 @@ function createObjectRow(obj, isNew, options) {
     cell.className = 'obj-text obj-value-cell';
     cell.dataset.valueIndex = String(_vci);
     cell.innerHTML = renderVisualOnlyHtml(valueParts[_vci] != null ? valueParts[_vci] : '');
-    applyValueColumnLabelAttrToCell(cell);
+    applyValueColumnLabelAttrToCell(cell, obj.text);
     valuesWrap.appendChild(cell);
   }
   valuesWrap.addEventListener('click', e => {
@@ -10106,6 +10283,7 @@ function clearObjects() {
   objectCount = 0;
   updateObjectCount();
   seenIds.clear();
+  lastKnownEntryTextById.clear();
   if (emptyEl && !emptyEl.parentNode) {
     feedInner.appendChild(emptyEl);
   }
@@ -10314,7 +10492,8 @@ async function addValueColumnToObjectFromMenu(obj) {
   var row = findObjectRowEl(id);
   var parts = row ? partsFromRowDom(row) : parseObjectTextToParts(obj.text);
   parts.push('');
-  var next = serializeObjectParts(parts);
+  var payAdd = parseObjectTextPayload(obj.text);
+  var next = serializeObjectParts(parts, labelsAlignedToNewPartCount(payAdd, parts.length));
   var ch = obj.channel != null ? String(obj.channel) : String(currentChannel || 'main');
   var ok = await persistObjectTextPayload(id, next, ch);
   if (!ok) toast('Could not add value.');
@@ -10381,9 +10560,11 @@ async function sendText(text, options) {
           let textToSave = trimmedPerId[i];
           const idx = list.findIndex(o => o && Number(o.id) === Number(id));
           if (idx >= 0) {
-            const prevParts = parseObjectTextToParts(list[idx].text);
+            const prevPayload = parseObjectTextPayload(list[idx].text);
+            const prevParts = prevPayload.parts;
             if (prevParts.length > 1) {
-              textToSave = serializeObjectParts(mergeComposerIntoParts(prevParts, textToSave));
+              const merged = mergeComposerIntoParts(prevParts, textToSave);
+              textToSave = serializeObjectParts(merged, labelsAlignedToNewPartCount(prevPayload, merged.length));
             }
             list[idx] = Object.assign({}, list[idx], { text: textToSave });
           }
@@ -10479,9 +10660,11 @@ async function sendText(text, options) {
       const beforeRow = befores.find(function(b) {
         return b && Number(b.id) === Number(id);
       });
-      const prevParts = beforeRow ? parseObjectTextToParts(beforeRow.text) : [''];
+      const prevPayload = beforeRow ? parseObjectTextPayload(beforeRow.text) : { parts: [''], labels: null };
+      const prevParts = prevPayload.parts;
       if (prevParts.length > 1) {
-        textToSave = serializeObjectParts(mergeComposerIntoParts(prevParts, textToSave));
+        const merged = mergeComposerIntoParts(prevParts, textToSave);
+        textToSave = serializeObjectParts(merged, labelsAlignedToNewPartCount(prevPayload, merged.length));
       }
       textSavedById[id] = textToSave;
       const rowChannel = String(

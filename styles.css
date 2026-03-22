@@ -1661,7 +1661,7 @@ body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell::b
   display:flex;
   flex-direction:row;
   align-items:flex-start;
-  gap:6px;
+  gap:20px;
   padding:12px;
   border-bottom:1px solid var(--line);
   transition:background .1s ease-out;
@@ -1679,7 +1679,7 @@ body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell::b
   display:flex;
   flex-direction:row;
   align-items:flex-start;
-  gap:8px;
+  gap:20px;
   flex-shrink:0;
   margin-left:-48px;
 }
@@ -1687,7 +1687,7 @@ body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell::b
   display:flex;
   flex-direction:row;
   align-items:baseline;
-  gap:8px;
+  gap:20px;
   flex-wrap:wrap;
   min-width:0;
 }
@@ -1696,7 +1696,7 @@ body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell::b
   flex-direction:column;
   flex:1;
   min-width:0;
-  gap:8px;
+  gap:20px;
 }
 /* Multiple values in one object: one row, left → right; new columns append on the right (scroll if needed) */
 .obj-content .obj-values-wrap{
@@ -1704,7 +1704,7 @@ body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell::b
   flex-direction:row;
   flex-wrap:nowrap;
   align-items:stretch;
-  gap:8px 12px;
+  gap:20px;
   min-width:0;
   width:100%;
   overflow-x:auto;
@@ -3256,7 +3256,7 @@ body.secret-show-grips .frame-grip{
 /* ── MOBILE ── */
 @media(max-width:540px){
   #scroll-btn{display:none !important;}
-  .obj{gap:8px}
+  .obj{gap:20px}
   .obj-meta{
     min-width:120px;
     max-width:160px;
