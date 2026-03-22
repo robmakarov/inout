@@ -580,6 +580,7 @@ header{
 .multi-value-col-label-btn{
   flex:1 0 12rem;
   min-width:8rem;
+  width:100%;
   box-sizing:border-box;
   font-family:var(--mono);
   font-size:10px;
@@ -591,6 +592,10 @@ header{
   color:var(--soft);
   text-transform:uppercase;
   letter-spacing:0.06em;
+  text-align:left;
+  display:inline-flex;
+  justify-content:flex-start;
+  align-items:center;
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
@@ -703,6 +708,8 @@ header{
   border:none;
   background:transparent;
   box-shadow:none;
+  text-align:left;
+  justify-content:flex-start;
 }
 .manage-btn.multi-value-col-label-btn:hover{
   background:transparent;
