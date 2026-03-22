@@ -1370,13 +1370,23 @@ function resolveValueCellFromPointer(valuesWrap, clientX, clientY, target) {
   return best;
 }
 
+/** Plain value text for a cell (excludes `.obj-remote-edit-badge` and similar injected UI). */
+function valueCellPlainText(cell) {
+  if (!cell) return '';
+  var clone = cell.cloneNode(true);
+  clone.querySelectorAll('.obj-remote-edit-badge').forEach(function(b) {
+    if (b.parentNode) b.parentNode.removeChild(b);
+  });
+  return String(clone.textContent || '');
+}
+
 function partsFromRowDom(row) {
   var cells = row.querySelectorAll('.obj-value-cell');
   if (!cells.length) {
     var legacy = row.querySelector('.obj-text');
-    return [legacy ? String(legacy.textContent || '') : ''];
+    return [legacy ? valueCellPlainText(legacy) : ''];
   }
-  return Array.from(cells).map(function(c) { return String(c.textContent || ''); });
+  return Array.from(cells).map(function(c) { return valueCellPlainText(c); });
 }
 
 function getJoinedRowTextForEdit(row) {
@@ -3034,6 +3044,100 @@ var dndOriginLineY = null;
 var dndStackFormTimer = null;
 let feedDropIndicatorEl = null;
 let feedDropOriginEl = null;
+/** HTML5 drag: reorder/move value slots between objects (same channel / feed pane only). */
+const VALUE_DND_MIME = 'application/x-inout-value-dnd';
+var valueDnDActive = false;
+var valueDnDSourceCell = null;
+var valueDnDHoverCell = null;
+
+function channelKeyForRowEl(row) {
+  if (!row) return String(currentChannel || 'main');
+  var ds = row.getAttribute('data-object-channel');
+  if (ds != null && String(ds) !== '') return String(ds);
+  if (typeof secondaryFeedInner !== 'undefined' && secondaryFeedInner && secondaryFeedInner.contains(row) && secondaryViewChannel != null)
+    return String(secondaryViewChannel);
+  return String(currentChannel || 'main');
+}
+
+function moveValueSlotInParts(parts, fromIdx, toIdx) {
+  var p = parts.map(function(x) { return String(x != null ? x : ''); });
+  if (fromIdx < 0 || fromIdx >= p.length) return p;
+  if (toIdx < 0) toIdx = 0;
+  if (toIdx > p.length) toIdx = p.length;
+  if (fromIdx === toIdx) return p;
+  var x = p.splice(fromIdx, 1)[0];
+  if (fromIdx < toIdx) toIdx--;
+  p.splice(toIdx, 0, x);
+  return p;
+}
+
+function clearValueDnDHoverClass() {
+  if (valueDnDHoverCell) {
+    valueDnDHoverCell.classList.remove('obj-value-dnd-over');
+    valueDnDHoverCell = null;
+  }
+}
+
+function updateValueDnDHoverFromPoint(clientX, clientY) {
+  var el = document.elementFromPoint(clientX, clientY);
+  var cell = el && el.closest && el.closest('.obj-value-cell');
+  if (cell === valueDnDHoverCell) return;
+  clearValueDnDHoverClass();
+  valueDnDHoverCell = cell;
+  if (valueDnDHoverCell) valueDnDHoverCell.classList.add('obj-value-dnd-over');
+}
+
+async function performValueSlotDnDDrop(e, rawPayload) {
+  var src;
+  try {
+    src = JSON.parse(rawPayload);
+  } catch (_) {
+    return false;
+  }
+  var idS = Number(src.id);
+  var viS = parseInt(src.vi, 10);
+  var chS = src.ch != null ? String(src.ch) : String(currentChannel || 'main');
+  if (!Number.isFinite(idS) || !Number.isFinite(viS)) return false;
+  var el = document.elementFromPoint(e.clientX, e.clientY);
+  var tgtCell = el && el.closest && el.closest('.obj-value-cell');
+  if (!tgtCell) return false;
+  var tgtRow = tgtCell.closest('.obj');
+  if (!tgtRow || tgtRow.dataset.id == null) return false;
+  var idT = Number(tgtRow.dataset.id);
+  var viT = parseInt(tgtCell.dataset.valueIndex || '0', 10);
+  if (!Number.isFinite(idT) || !Number.isFinite(viT)) return false;
+  if (idS === idT && viS === viT) return true;
+  var chT = channelKeyForRowEl(tgtRow);
+  if (chS !== chT) {
+    toast('Move values within the same channel only.');
+    return true;
+  }
+  var srcRow = findObjectRowEl(idS);
+  if (!srcRow) return false;
+  if (idS === idT) {
+    var parts = partsFromRowDom(srcRow).map(function(x) { return String(x != null ? x : ''); });
+    if (viS < 0 || viS >= parts.length) return false;
+    parts = moveValueSlotInParts(parts, viS, viT);
+    var ok = await persistObjectTextPayload(idS, serializeObjectParts(parts), chS);
+    if (!ok) toast('Could not reorder values.');
+  } else {
+    var srcParts = partsFromRowDom(srcRow).map(function(x) { return String(x != null ? x : ''); });
+    var tgtParts = partsFromRowDom(tgtRow).map(function(x) { return String(x != null ? x : ''); });
+    if (viS < 0 || viS >= srcParts.length) return false;
+    viT = Math.max(0, Math.min(viT, tgtParts.length));
+    var piece = srcParts[viS];
+    srcParts.splice(viS, 1);
+    if (srcParts.length === 0) srcParts = [''];
+    tgtParts.splice(viT, 0, piece);
+    var ok1 = await persistObjectTextPayload(idS, serializeObjectParts(srcParts), chS);
+    var ok2 = await persistObjectTextPayload(idT, serializeObjectParts(tgtParts), chT);
+    if (!ok1 || !ok2) toast('Could not move value.');
+  }
+  if (feedInner) syncFeedMultiValueChrome(feedInner);
+  if (secondaryFeedInner) syncFeedMultiValueChrome(secondaryFeedInner);
+  if (typeof applyFieldPrefsToObjects === 'function') applyFieldPrefsToObjects(true);
+  return true;
+}
 
 function getDraggingRowAndSource() {
   const fromPrimary = feedInner && feedInner.querySelector('.obj.dragging');
@@ -4129,9 +4233,6 @@ function applyObjectEditMode(idsToEdit, primarySeedId) {
       const id = row.dataset.id != null ? Number(row.dataset.id) : null;
       if (id == null || !idsToEdit.has(id)) return;
       let raw = getJoinedRowTextForEdit(row);
-      const firstCell = row.querySelector('.obj-value-cell') || row.querySelector('.obj-text');
-      const badge = firstCell && firstCell.querySelector('.obj-remote-edit-badge');
-      if (badge && badge.textContent) raw = raw.slice(0, -badge.textContent.length);
       originalEditTextForCancelMap[id] = raw;
       editingObjectTextMap[id] = raw;
     });
@@ -6516,12 +6617,49 @@ function createObjectRow(obj, isNew, options) {
   valueColCount = Math.max(1, valueColCount);
   row.dataset.valueCols = String(valueColCount);
   row.draggable = true;
+  if (obj.channel != null) row.setAttribute('data-object-channel', String(obj.channel));
   row.addEventListener('dragstart', e => {
     if (pointerDownOnSelectArea) {
       e.preventDefault();
       pointerDownOnSelectArea = false;
       return;
     }
+    var valueCellStart = e.target.closest && e.target.closest('.obj-value-cell');
+    if (
+      valueCellStart &&
+      row.contains(valueCellStart) &&
+      !e.target.closest('a') &&
+      !e.target.closest('.obj-remote-edit-badge') &&
+      !selectMode &&
+      !row.classList.contains('obj-editing') &&
+      typeof obj.id !== 'undefined'
+    ) {
+      valueDnDActive = true;
+      valueDnDSourceCell = valueCellStart;
+      valueCellStart.classList.add('obj-value-dnd-source');
+      try {
+        e.dataTransfer.setData(
+          VALUE_DND_MIME,
+          JSON.stringify({
+            id: Number(obj.id),
+            vi: parseInt(valueCellStart.dataset.valueIndex || '0', 10),
+            ch: channelKeyForRowEl(row),
+          })
+        );
+      } catch (_) {}
+      e.dataTransfer.effectAllowed = 'move';
+      if (!dragImageEl) {
+        dragImageEl = document.createElement('div');
+        dragImageEl.setAttribute('aria-hidden', 'true');
+        dragImageEl.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;';
+        document.body.appendChild(dragImageEl);
+      }
+      if (dragImageEl.parentNode !== document.body) document.body.appendChild(dragImageEl);
+      e.dataTransfer.setDragImage(dragImageEl, -9999, -9999);
+      e.stopPropagation();
+      return;
+    }
+    valueDnDActive = false;
     if (dragSpiritEl && dragSpiritEl.parentNode) dragSpiritEl.parentNode.removeChild(dragSpiritEl);
     if (feedInner && selectedIds.has(obj.id) && selectedIds.size > 1) {
       dragSelectedRows = Array.from(feedInner.querySelectorAll('.obj.obj-selected'));
@@ -6617,7 +6755,38 @@ function createObjectRow(obj, isNew, options) {
     broadcastDndStart();
   });
   row.addEventListener('dragend', () => {
+    var wasValueDnD = !!valueDnDActive;
+    if (valueDnDSourceCell) valueDnDSourceCell.classList.remove('obj-value-dnd-source');
+    valueDnDSourceCell = null;
+    clearValueDnDHoverClass();
+    valueDnDActive = false;
     requestAnimationFrame(() => {
+      if (wasValueDnD) {
+        if (dragSpiritEl && dragSpiritEl.parentNode) dragSpiritEl.parentNode.removeChild(dragSpiritEl);
+        dragSpiritEl = null;
+        lastDragClientX = null;
+        lastDragClientY = null;
+        dndOriginInsertBefore = null;
+        dndOriginWantAppend = false;
+        dndOriginLineY = null;
+        if (dndStackFormTimer) { clearTimeout(dndStackFormTimer); dndStackFormTimer = null; }
+        removeOriginGhostOverlay();
+        if (feedInner) feedInner.querySelectorAll('.obj.dragging-in-feed').forEach(r => r.classList.remove('dragging-in-feed'));
+        hideDropOriginLine();
+        if (feedDropIndicatorEl) feedDropIndicatorEl.classList.remove('visible');
+        lastIndicatorStyle = { left: -1, width: -1, top: -1, visible: false };
+        row.style.pointerEvents = 'none';
+        void row.offsetHeight;
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setTimeout(() => {
+              row.style.pointerEvents = '';
+              focusMainInput();
+            }, 120);
+          });
+        });
+        return;
+      }
       var droppedMovedIds = [];
       const rail = document.getElementById('view-pinned-rail');
       try {
@@ -6752,6 +6921,7 @@ function createObjectRow(obj, isNew, options) {
   /* row-level dragover/drop removed: feed is the single drop target for reliable reorder */
   row.addEventListener('touchstart', e => {
     if (!feedInner) return;
+    if (e.target.closest('.obj-value-cell')) return;
     if (e.target.closest('.obj-checkbox-zone')) return;
     if (e.target.closest('.obj-actions')) return;
     const contentLeft =
@@ -11612,6 +11782,38 @@ feedEl.addEventListener('dragleave', e => {
     });
   }
 }
+
+// Value-slot drag: allow drop anywhere we can resolve a target cell under the cursor.
+document.addEventListener(
+  'dragover',
+  function(e) {
+    var dt = e.dataTransfer;
+    if (!dt || !dt.types || Array.from(dt.types).indexOf(VALUE_DND_MIME) < 0) return;
+    e.preventDefault();
+    dt.dropEffect = 'move';
+    lastDragClientX = e.clientX;
+    lastDragClientY = e.clientY;
+    updateValueDnDHoverFromPoint(e.clientX, e.clientY);
+  },
+  true
+);
+
+document.addEventListener(
+  'drop',
+  function(e) {
+    var raw = e.dataTransfer && e.dataTransfer.getData(VALUE_DND_MIME);
+    if (!raw) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragDropHandled = true;
+    clearValueDnDHoverClass();
+    performValueSlotDnDDrop(e, raw).catch(function(err) {
+      console.error(err);
+      toast('Could not move value.');
+    });
+  },
+  true
+);
 
 // Dragover: when over feed, run processFeedDragover (primary reorder) or show indicator (drag from secondary). When outside feed, show indicator at top/bottom.
 document.addEventListener('dragover', e => {

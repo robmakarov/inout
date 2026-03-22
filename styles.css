@@ -1921,6 +1921,20 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
   padding-right:72px; /* reserve space under right-side actions */
   cursor:pointer;
 }
+/* Value-slot reorder: grab affordance (row drag still uses row chrome elsewhere). */
+.obj:not(.obj-editing) .obj-value-cell{
+  cursor:grab;
+}
+.obj:not(.obj-editing) .obj-value-cell:active{
+  cursor:grabbing;
+}
+.obj-value-dnd-source{
+  opacity:0.55;
+}
+.obj-value-dnd-over{
+  outline:2px solid var(--line2);
+  outline-offset:2px;
+}
 /* Editing: doppelganger uses value style only — no background, no stroke */
 .obj-editing .obj-text,
 .obj-editing .obj-value-cell{
