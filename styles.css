@@ -1372,167 +1372,140 @@ header{
   box-sizing:border-box;
   gap:0;
 }
-/* Table view + auto table when any object has multiple value columns */
-.feed-inner.view-table,
-.feed-inner.inout-multi-value-cols{
-  display:table;
-  width:100%;
-  border-collapse:collapse;
-  table-layout:fixed;
+/* Grid feed with multiple value slots: keep normal flex column (no CSS table on .feed-inner) */
+.feed-inner.inout-multi-value-cols:not(.view-table){
+  display:flex;
+  flex-direction:column;
 }
-.feed-inner.view-table .obj,
-.feed-inner.inout-multi-value-cols .obj{
-  display:table-row;
-}
-.feed-inner.view-table .obj > *,
-.feed-inner.inout-multi-value-cols .obj > *{
-  display:table-cell;
-  vertical-align:top;
-  border-bottom:1px solid var(--line2);
-}
-.feed-inner.view-table .obj.obj-header > *,
-.feed-inner.inout-multi-value-cols .obj.obj-header > *{
-  font-size:11px;
-  font-weight:600;
-  text-transform:uppercase;
-  letter-spacing:0.05em;
-  color:var(--muted);
-  padding:8px 12px 6px;
-  border-bottom:2px solid var(--line2);
-}
-.feed-inner.view-table .obj:not(.obj-header) .obj-time,
-.feed-inner.view-table .obj:not(.obj-header) .obj-sender,
-.feed-inner.inout-multi-value-cols .obj:not(.obj-header) .obj-time,
-.feed-inner.inout-multi-value-cols .obj:not(.obj-header) .obj-sender{
-  padding:6px 12px;
-}
-.feed-inner.view-table .obj:not(.obj-header) .obj-text,
-.feed-inner.view-table .obj:not(.obj-header) .obj-value-cell,
-.feed-inner.inout-multi-value-cols .obj:not(.obj-header) .obj-text,
-.feed-inner.inout-multi-value-cols .obj:not(.obj-header) .obj-value-cell{
-  padding:6px 12px;
-}
-.feed-inner.view-table .obj.obj-header,
-.feed-inner.inout-multi-value-cols .obj.obj-header{
-  position:sticky;
-  top:0;
-  z-index:2;
-  background:var(--bg);
-  pointer-events:none;
-  user-select:none;
-}
-.feed-inner.view-table .obj.obj-header .obj-actions,
-.feed-inner.inout-multi-value-cols .obj.obj-header .obj-actions{ width:1%; }
-.feed-inner.view-table .obj:not(.obj-header) .obj-actions,
-.feed-inner.inout-multi-value-cols .obj:not(.obj-header) .obj-actions{
-  overflow:visible;
-}
-.feed-inner.view-table .obj:not(.obj-header) .obj-time,
-.feed-inner.inout-multi-value-cols .obj:not(.obj-header) .obj-time{ width:1%; white-space:nowrap; }
-.feed-inner.view-table .obj:not(.obj-header) .obj-sender,
-.feed-inner.inout-multi-value-cols .obj:not(.obj-header) .obj-sender{ width:1%; white-space:nowrap; }
-.feed-inner.view-table .obj:not(.obj-header) .obj-text,
-.feed-inner.view-table .obj:not(.obj-header) .obj-value-cell,
-.feed-inner.inout-multi-value-cols .obj:not(.obj-header) .obj-text,
-.feed-inner.inout-multi-value-cols .obj:not(.obj-header) .obj-value-cell{
-  width:auto;
-  min-width:0;
-}
-.feed-inner.view-table .obj:not(.obj-header) .obj-actions,
-.feed-inner.inout-multi-value-cols .obj:not(.obj-header) .obj-actions{ width:1%; }
 
-/* Table view: row = rail | value columns (inner grid, L→R) | actions; matches manage-bar header strip */
-.feed-inner.inout-table-split{
-  display:flex !important;
+/* Table view: bordered sheet; each row is a 3-column grid — meta | values (L→R in .obj-values-wrap) | actions */
+.feed-inner.view-table{
+  display:flex;
   flex-direction:column;
   width:100%;
-  direction:ltr;
-  padding-left:max(20px, var(--safe-left));
-  padding-right:max(20px, var(--safe-right));
+  max-width:100%;
+  border:1px solid var(--line2);
+  border-radius:6px;
+  overflow:hidden;
+  background:var(--bg2);
   box-sizing:border-box;
 }
-.feed-inner.inout-table-split .obj{
+.feed-inner.view-table .obj{
   display:grid !important;
-  grid-template-columns:var(--inout-manage-start-w, minmax(100px, 12rem)) minmax(0, 1fr) auto;
-  column-gap:10px;
-  align-items:start;
+  grid-template-columns:auto minmax(0, 1fr) auto;
+  align-items:stretch;
+  gap:0;
   width:100%;
   box-sizing:border-box;
-  padding:10px 0;
-  border-bottom:1px solid var(--line2);
+  padding:0;
   margin:0;
+  border-radius:0;
+  border-bottom:1px solid var(--line2);
 }
-.feed-inner.inout-table-split .obj > .obj-leading-col,
-.feed-inner.inout-table-split .obj > .obj-actions{
+.feed-inner.view-table .obj:last-child{
+  border-bottom:none;
+}
+.feed-inner.view-table .obj > *{
   display:block !important;
-}
-.feed-inner.inout-table-split .obj > .obj-leading-col{
-  grid-column:1;
-}
-.feed-inner.inout-table-split .obj > .obj-actions{
-  grid-column:3;
-}
-.feed-inner.inout-table-split .obj > *{
-  border-bottom:none !important;
   vertical-align:top;
 }
-.feed-inner.inout-table-split .obj > .obj-content{
-  display:grid !important;
-  grid-column:2;
-  min-width:0;
-  grid-template-columns:repeat(var(--inout-value-cols, 1), minmax(0, 1fr));
-  column-gap:10px;
-  align-items:start;
-}
-.feed-inner.inout-table-split .obj-leading-col{
+.feed-inner.view-table .obj-leading-col{
   margin-left:0;
+  padding:10px 12px;
+  border-right:1px solid var(--line2);
   flex-direction:column;
   align-items:flex-start;
   gap:6px;
   min-width:0;
 }
-.feed-inner.inout-table-split .obj-checkbox-zone{
+.feed-inner.view-table .obj-checkbox-zone{
   margin-left:0;
   margin-top:0;
   margin-bottom:0;
   min-height:auto;
   align-self:flex-start;
 }
-.feed-inner.inout-table-split .obj-leading-meta{
+.feed-inner.view-table .obj-leading-meta{
   flex-direction:column;
   align-items:flex-start;
   gap:2px;
 }
-.feed-inner.inout-table-split .obj-time,
-.feed-inner.inout-table-split .obj-sender{
+.feed-inner.view-table .obj-time,
+.feed-inner.view-table .obj-sender{
   font-size:11px;
   color:var(--dim);
   white-space:nowrap;
-  max-width:100%;
+  max-width:12rem;
   overflow:hidden;
   text-overflow:ellipsis;
 }
-.feed-inner.inout-table-split .obj-values-wrap{
-  display:contents;
-}
-.feed-inner.inout-table-split .obj-content .obj-value-cell,
-.feed-inner.inout-table-split .obj-content .obj-text{
-  margin:0;
-  padding:6px 10px;
+.feed-inner.view-table .obj-content{
+  display:block !important;
   min-width:0;
+  padding:0;
+  border-right:1px solid var(--line2);
+}
+/* Values sit in one row inside the object: first value, next to the right, same as feed flow */
+.feed-inner.view-table .obj-values-wrap{
+  display:flex !important;
+  flex-direction:row;
+  flex-wrap:nowrap;
+  align-items:stretch;
+  width:100%;
+  min-width:0;
+  min-height:100%;
+  gap:0;
+}
+.feed-inner.view-table .obj-value-cell,
+.feed-inner.view-table .obj-text{
+  flex:1 1 0;
+  min-width:0;
+  margin:0;
+  padding:10px 12px;
   font-size:14px;
   line-height:1.45;
   color:var(--text);
-}
-.feed-inner.inout-table-split .obj-content .obj-value-cell + .obj-value-cell,
-.feed-inner.inout-table-split .obj-content .obj-text + .obj-value-cell,
-.feed-inner.inout-table-split .obj-content .obj-value-cell + .obj-text{
   border-left:1px solid var(--line2);
 }
-.feed-inner.inout-table-split .obj-actions{
-  padding:6px 0 6px 8px;
-  border-left:1px solid var(--line2);
-  justify-self:end;
+.feed-inner.view-table .obj-value-cell:first-child,
+.feed-inner.view-table .obj-text:first-child{
+  border-left:none;
+}
+.feed-inner.view-table .obj-actions{
+  padding:8px 6px;
+  overflow:visible;
+  border-left:none;
+  align-self:stretch;
+  display:flex !important;
+  align-items:flex-start;
+  justify-content:center;
+}
+.feed-inner.view-table .obj.obj-header .obj-leading-meta .obj-time,
+.feed-inner.view-table .obj.obj-header .obj-leading-meta .obj-sender{
+  font-size:11px;
+  font-weight:600;
+  text-transform:uppercase;
+  letter-spacing:0.05em;
+  color:var(--muted);
+}
+.feed-inner.view-table .obj.obj-header .obj-value-cell,
+.feed-inner.view-table .obj.obj-header .obj-header-value-cell{
+  font-size:11px;
+  font-weight:600;
+  text-transform:uppercase;
+  letter-spacing:0.05em;
+  color:var(--muted);
+  padding-top:10px;
+  padding-bottom:8px;
+  border-bottom:2px solid var(--line2);
+}
+.feed-inner.view-table .obj.obj-header{
+  position:sticky;
+  top:0;
+  z-index:2;
+  background:var(--bg2);
+  pointer-events:none;
+  user-select:none;
 }
 
 /* Object component: property text fields. Feed view only — labels left of values, 20px gap. */
@@ -1663,32 +1636,71 @@ body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .
   line-height:1.5;
 }
 
-/* DnD spirit: table visual — wrap cloned row(s) in table so they render as table row(s). */
+/* DnD spirit: same row shape as .feed-inner.view-table */
 .obj-drag-spirit-table-wrap{
   position:fixed;
   z-index:10000;
   pointer-events:none;
   transform:translate(-50%,-50%);
-  display:table;
+  display:flex;
+  flex-direction:column;
   width:100%;
-  border-collapse:collapse;
-  table-layout:fixed;
-  background:var(--bg2);
+  max-width:min(100vw - 32px, 720px);
   border:1px solid var(--line2);
   border-radius:8px;
+  overflow:hidden;
+  background:var(--bg2);
   box-shadow:var(--dnd-spirit-shadow);
   box-sizing:border-box;
 }
 .obj-drag-spirit-table-wrap .obj{
-  display:table-row;
-}
-.obj-drag-spirit-table-wrap .obj > *{
-  display:table-cell;
-  vertical-align:top;
-  padding:6px 12px;
+  display:grid !important;
+  grid-template-columns:auto minmax(0, 1fr) auto;
+  align-items:stretch;
+  gap:0;
+  padding:0;
+  margin:0;
   border-bottom:1px solid var(--line2);
 }
-.obj-drag-spirit-table-wrap .obj:last-child > *{ border-bottom:none; }
+.obj-drag-spirit-table-wrap .obj > *{
+  display:block !important;
+  vertical-align:top;
+}
+.obj-drag-spirit-table-wrap .obj:last-child{
+  border-bottom:none;
+}
+.obj-drag-spirit-table-wrap .obj-leading-col{
+  padding:8px 10px;
+  border-right:1px solid var(--line2);
+  margin-left:0;
+}
+.obj-drag-spirit-table-wrap .obj-content{
+  display:block !important;
+  min-width:0;
+  border-right:1px solid var(--line2);
+}
+.obj-drag-spirit-table-wrap .obj-values-wrap{
+  display:flex !important;
+  flex-direction:row;
+  flex-wrap:nowrap;
+  width:100%;
+  min-width:0;
+  gap:0;
+}
+.obj-drag-spirit-table-wrap .obj-value-cell,
+.obj-drag-spirit-table-wrap .obj-text{
+  flex:1 1 0;
+  min-width:0;
+  padding:8px 10px;
+  border-left:1px solid var(--line2);
+}
+.obj-drag-spirit-table-wrap .obj-value-cell:first-child,
+.obj-drag-spirit-table-wrap .obj-text:first-child{
+  border-left:none;
+}
+.obj-drag-spirit-table-wrap .obj-actions{
+  padding:6px 4px;
+}
 .obj-drag-spirit-table-wrap .obj-time,
 .obj-drag-spirit-table-wrap .obj-sender{ white-space:nowrap; }
 .obj-drag-spirit-table-wrap .obj-text{ width:auto; }
@@ -1755,20 +1767,23 @@ body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .
   min-width:0;
   gap:8px;
 }
+/* Multiple values in one object: left → right (next value added sits to the right) */
 .obj-content .obj-values-wrap{
   display:flex;
-  flex-direction:column;
-  gap:8px;
+  flex-direction:row;
+  flex-wrap:wrap;
+  align-items:flex-start;
+  gap:8px 12px;
+  min-width:0;
+  width:100%;
+}
+.obj-content .obj-value-cell{
+  flex:1 1 12rem;
   min-width:0;
 }
-/* Table + multi-value: hoist value cells to table row */
-.feed-inner.view-table .obj-content,
-.feed-inner.inout-multi-value-cols .obj-content{
-  display:contents;
-}
-.feed-inner.view-table .obj-values-wrap,
-.feed-inner.inout-multi-value-cols .obj-values-wrap{
-  display:contents;
+/* Single full-width value still grows */
+.obj-content .obj-values-wrap .obj-value-cell:only-child{
+  flex:1 1 auto;
 }
 @keyframes msgin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
 .obj-drag-image-ghost{
@@ -1859,8 +1874,7 @@ body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .
 }
 .obj-drag-spirit-table-wrap .obj-drag-spirit-bubble.obj{ display:flex; }
 /* DnD reorder spirits: same look as hovered objects — labels left of values, 20px gap */
-.obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content,
-.obj-drag-spirit-table-wrap .obj .obj-content{
+.obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content{
   display:flex;
   flex-direction:column;
   flex:1;
@@ -1872,11 +1886,6 @@ body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .
 .obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content .obj-text,
 .obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-leading-meta .obj-time,
 .obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-leading-meta .obj-sender,
-.obj-drag-spirit-table-wrap .obj .obj-time,
-.obj-drag-spirit-table-wrap .obj .obj-sender,
-.obj-drag-spirit-table-wrap .obj .obj-text,
-.obj-drag-spirit-table-wrap .obj .obj-leading-meta .obj-time,
-.obj-drag-spirit-table-wrap .obj .obj-leading-meta .obj-sender,
 .obj-drag-spirit-stack .obj-drag-spirit-row .obj-time,
 .obj-drag-spirit-stack .obj-drag-spirit-row .obj-sender,
 .obj-drag-spirit-stack .obj-drag-spirit-row .obj-text,
@@ -1894,7 +1903,6 @@ body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .
   font-weight:500;
 }
 .obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content .obj-text,
-.obj-drag-spirit-table-wrap .obj .obj-text,
 .obj-drag-spirit-stack .obj-drag-spirit-row .obj-text{
   font-size:12px;
   color:var(--text);
@@ -1906,11 +1914,6 @@ body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .
 .obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content .obj-text::before,
 .obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-leading-meta .obj-time::before,
 .obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-leading-meta .obj-sender::before,
-.obj-drag-spirit-table-wrap .obj .obj-time::before,
-.obj-drag-spirit-table-wrap .obj .obj-sender::before,
-.obj-drag-spirit-table-wrap .obj .obj-text::before,
-.obj-drag-spirit-table-wrap .obj .obj-leading-meta .obj-time::before,
-.obj-drag-spirit-table-wrap .obj .obj-leading-meta .obj-sender::before,
 .obj-drag-spirit-stack .obj-drag-spirit-row .obj-time::before,
 .obj-drag-spirit-stack .obj-drag-spirit-row .obj-sender::before,
 .obj-drag-spirit-stack .obj-drag-spirit-row .obj-text::before,
@@ -1933,27 +1936,11 @@ body.select-mode .feed-inner:not(.view-table).obj-labels-off .obj.obj-selected .
 .obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-content .obj-text::before{ content:'Value'; }
 .obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-leading-meta .obj-time::before{ content:'Time'; }
 .obj-drag-spirit:not(.obj-drag-spirit-bubble) .obj-leading-meta .obj-sender::before{ content:'Author'; }
-.obj-drag-spirit-table-wrap .obj .obj-time::before{ content:'Time'; }
-.obj-drag-spirit-table-wrap .obj .obj-sender::before{ content:'Author'; }
-.obj-drag-spirit-table-wrap .obj .obj-text::before{ content:'Value'; }
-.obj-drag-spirit-table-wrap .obj .obj-leading-meta .obj-time::before{ content:'Time'; }
-.obj-drag-spirit-table-wrap .obj .obj-leading-meta .obj-sender::before{ content:'Author'; }
 .obj-drag-spirit-stack .obj-drag-spirit-row .obj-time::before{ content:'Time'; }
 .obj-drag-spirit-stack .obj-drag-spirit-row .obj-sender::before{ content:'Author'; }
 .obj-drag-spirit-stack .obj-drag-spirit-row .obj-text::before{ content:'Value'; }
 .obj-drag-spirit-stack .obj-drag-spirit-row .obj-leading-meta .obj-time::before{ content:'Time'; }
 .obj-drag-spirit-stack .obj-drag-spirit-row .obj-leading-meta .obj-sender::before{ content:'Author'; }
-/* DnD table wrap: row/cell structure; hoist value cells from content */
-.obj-drag-spirit-table-wrap .obj .obj-content{
-  display:contents;
-}
-.obj-drag-spirit-table-wrap .obj .obj-values-wrap{
-  display:contents;
-}
-.obj-drag-spirit-table-wrap .obj > *{
-  display:table-cell;
-  vertical-align:top;
-}
 /* DnD: stack spirit = multiple rows under cursor, same tokens */
 .obj-drag-spirit-stack{
   position:fixed;

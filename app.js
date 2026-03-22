@@ -1452,7 +1452,6 @@ function syncFeedMultiValueChrome(inner, messagesList) {
   inner.style.setProperty('--inout-value-cols', String(maxCols));
   inner.classList.toggle('inout-multi-value-cols', maxCols > 1);
   var isTable = typeof fieldPrefs !== 'undefined' && fieldPrefs && fieldPrefs.viewMode === 'table';
-  inner.classList.toggle('inout-table-split', !!isTable);
   var hasDataRows = !!inner.querySelector('.obj:not(.obj-header)');
   var useBarValueHeaders = isTable;
   var wantHeader = hasDataRows && !isTable && maxCols > 1;
