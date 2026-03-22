@@ -464,7 +464,7 @@ header{
 /* Same column template as .feed-inner.inout-table-split rows (value headers align with cells) */
 #manage-bar.inout-bar-split{
   display:grid;
-  grid-template-columns:var(--inout-manage-start-w, minmax(100px, 12rem)) repeat(var(--inout-value-cols, 2), minmax(0, 1fr)) auto;
+  grid-template-columns:var(--inout-manage-start-w, minmax(100px, 12rem)) repeat(var(--inout-value-cols, 1), minmax(0, 1fr)) auto;
   gap:10px;
   align-items:center;
   justify-items:stretch;
@@ -1446,7 +1446,7 @@ header{
 }
 .feed-inner.inout-table-split .obj{
   display:grid !important;
-  grid-template-columns:var(--inout-manage-start-w, minmax(100px, 12rem)) repeat(var(--inout-value-cols, 2), minmax(0, 1fr)) auto;
+  grid-template-columns:var(--inout-manage-start-w, minmax(100px, 12rem)) repeat(var(--inout-value-cols, 1), minmax(0, 1fr)) auto;
   column-gap:10px;
   align-items:start;
   width:100%;

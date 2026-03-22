@@ -1341,7 +1341,7 @@ function computeMaxValueColumnsFromFeedInner(inner) {
   return max;
 }
 
-/** Labels for value columns on the manage bar (table + multi-value): Value 1…n−1, last column "Other". */
+/** Labels for value columns on the manage bar in table view (above rows): Value 1…n−1, last column "Other" when n>1. */
 function valueColumnBarLabel(colIndex, totalCols) {
   if (totalCols <= 1) return 'Value';
   if (colIndex === totalCols - 1) return 'Other';
@@ -1352,7 +1352,7 @@ function syncManageBarValueColumnHeaders(maxCols, hasDataRows, isTableMode) {
   var wrap = document.getElementById('manage-bar-column-headers');
   if (!wrap) return;
   var bar = document.getElementById('manage-bar');
-  var show = !!(isTableMode && maxCols > 1 && hasDataRows);
+  var show = !!(isTableMode && hasDataRows);
   if (!show) {
     wrap.hidden = true;
     wrap.setAttribute('aria-hidden', 'true');
@@ -1450,13 +1450,10 @@ function syncFeedMultiValueChrome(inner, messagesList) {
   inner.style.setProperty('--inout-value-cols', String(maxCols));
   inner.classList.toggle('inout-multi-value-cols', maxCols > 1);
   var isTable = typeof fieldPrefs !== 'undefined' && fieldPrefs && fieldPrefs.viewMode === 'table';
-  inner.classList.toggle('inout-table-split', !!(isTable && maxCols > 1));
+  inner.classList.toggle('inout-table-split', !!isTable);
   var hasDataRows = !!inner.querySelector('.obj:not(.obj-header)[data-id]');
-  var useBarValueHeaders = isTable && maxCols > 1;
-  var wantHeader =
-    hasDataRows &&
-    !useBarValueHeaders &&
-    (maxCols > 1 || isTable);
+  var useBarValueHeaders = isTable;
+  var wantHeader = hasDataRows && !isTable && maxCols > 1;
   var existing = inner.querySelector('.obj.obj-header');
   if (!wantHeader) {
     if (existing) existing.remove();
