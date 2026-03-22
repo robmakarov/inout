@@ -127,25 +127,32 @@
     <div class="frame frame-fill" data-frame-id="multiview">
 <div id="multiview" class="main-view">
     <div class="view" id="view-app">
-      <div class="view-top-chrome" id="view-top-chrome">
-      <div id="manage-bar">
+      <div id="manage-bar" class="manage-bar" role="toolbar" aria-label="View toolbar">
       <div class="manage-bar-start">
-        <button type="button" id="select-toggle" class="manage-btn" data-bar-id="select-toggle">Select</button>
+        <button type="button" id="select-toggle" class="manage-btn manage-bar-pill" data-bar-id="select-toggle">Select</button>
         <span id="select-extra" class="select-extra">
-          <button type="button" id="select-all" class="manage-btn">All</button>
-          <button type="button" id="select-none" class="manage-btn">None</button>
+          <button type="button" id="select-all" class="manage-btn manage-bar-pill">All</button>
+          <button type="button" id="select-none" class="manage-btn manage-bar-pill">None</button>
         </span>
       </div>
       <div id="manage-bar-column-headers" class="manage-bar-column-headers" hidden aria-hidden="true"></div>
       <div id="multi-value-chrome-middle" class="multi-value-chrome-middle" hidden aria-hidden="true">
-        <div class="multi-value-chrome-leading">
-          <button type="button" id="multi-value-filter-trigger" class="manage-btn multi-value-filter-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="multi-value-filter-menu">Filter</button>
+        <div class="multi-value-filter-slot">
+          <button type="button" id="multi-value-filter-trigger" class="manage-btn manage-bar-pill multi-value-filter-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="multi-value-filter-menu">Filter</button>
           <div id="multi-value-filter-menu" class="multi-value-filter-menu" role="menu" aria-label="Filter objects" hidden>
             <button type="button" role="menuitemradio" class="manage-btn multi-value-filter-item" data-multi-value-filter="all" aria-checked="true">All objects</button>
             <button type="button" role="menuitemradio" class="manage-btn multi-value-filter-item" data-multi-value-filter="multi" aria-checked="false">Multiple values only</button>
           </div>
         </div>
         <div id="multi-value-col-labels" class="multi-value-col-labels" aria-hidden="true"></div>
+      </div>
+      <div class="manage-bar-log">
+        <div class="log-dropup-wrap">
+          <button id="log-action-btn" type="button" aria-label="Action log">No events</button>
+          <div id="log-dropup-panel" role="dialog" aria-label="Action log">
+            <div class="log-dropup-body" id="log-dropup-body"></div>
+          </div>
+        </div>
       </div>
       <div class="manage-bar-end">
       <button type="button" id="manage-bar-trigger" class="manage-bar-trigger" aria-label="View actions" aria-haspopup="true" aria-expanded="false">⋮</button>
@@ -174,7 +181,6 @@
             </div>
           </div>
         </div>
-      </div>
       </div>
       </div>
       </div>
@@ -225,12 +231,6 @@
       <button id="clipboard-button" class="draft-btn">From clipboard</button>
       <button id="mobile-kb-toggle" class="draft-btn" type="button" aria-expanded="false" aria-controls="mobile-keyboard">Keyboard</button>
       <button id="calc-toggle" class="draft-btn" type="button" aria-expanded="false" aria-controls="custom-calc">Calculator</button>
-      <div class="log-dropup-wrap">
-        <button id="log-action-btn" type="button" aria-label="Action log">No events</button>
-        <div id="log-dropup-panel" role="dialog" aria-label="Action log">
-          <div class="log-dropup-body" id="log-dropup-body"></div>
-        </div>
-      </div>
     </div>
     <div id="custom-calc" class="custom-calc" hidden aria-label="Custom calculator">
       <div class="custom-calc-head">

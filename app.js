@@ -1490,13 +1490,11 @@ function columnPartNonEmpty(row, idx) {
 function syncInoutObjLeadingWidthVar() {
   try {
     var inner = document.getElementById('feed-inner');
-    var mvBar = document.getElementById('multi-value-chrome-middle');
-    var vtc = document.getElementById('view-top-chrome');
     var mbar = document.getElementById('manage-bar');
     if (!inner) return;
     var row = inner.querySelector('.obj[data-id] .obj-leading-col');
     var w = row ? Math.ceil(row.getBoundingClientRect().width) : 0;
-    var props = [inner, mvBar, vtc, mbar];
+    var props = [inner, mbar];
     if (w > 0) {
       props.forEach(function(el) {
         if (el) el.style.setProperty('--inout-obj-leading-w', w + 'px');

@@ -133,19 +133,11 @@ header,
   overflow:hidden;
   position:relative;
 }
-#multiview .view > .view-top-chrome{
+#multiview .view > #manage-bar{
   flex:0 0 auto;
   width:100%;
   min-width:0;
   order:0;
-  display:flex;
-  flex-direction:column;
-  align-items:stretch;
-}
-#multiview .view > .view-top-chrome > #manage-bar{
-  flex:0 0 auto;
-  width:100%;
-  min-width:0;
 }
 #multiview .view > .visual{
   flex:1 1 0;
@@ -413,7 +405,7 @@ header{
   box-sizing:border-box;
 }
 
-/* ── TOP BAR (manage): Select | value column titles (table+multi) | ⋮ menu ── */
+/* ── Manage bar: Select, filters, value labels, action log, ⋮ menu ── */
 #manage-bar{
   position:relative;
   flex-shrink:0;
@@ -422,7 +414,8 @@ header{
   box-sizing:border-box;
   display:flex;
   align-items:center;
-  justify-content:space-between;
+  justify-content:flex-start;
+  flex-wrap:nowrap;
   padding:6px max(20px, var(--safe-right)) 6px max(20px, var(--safe-left));
   border-bottom:1px solid var(--line2);
   background:var(--bg2);
@@ -434,6 +427,18 @@ header{
   align-items:center;
   gap:6px;
   flex-shrink:0;
+}
+.manage-bar-log{
+  margin-left:auto;
+  flex:0 1 12rem;
+  min-width:0;
+  max-width:14rem;
+  display:flex;
+  align-items:center;
+}
+.manage-bar-log .log-dropup-wrap{
+  flex:1 1 auto;
+  min-width:0;
 }
 .manage-bar-column-headers{
   flex:1 1 0;
@@ -535,41 +540,28 @@ header{
 }
 #manage-bar .bar-group[data-bar-group="actions"]{ flex-direction:column; align-items:stretch; }
 
-/* Multi-value filter + column labels (center of #manage-bar); hidden when no multi-value objects */
+/* Multi-value filter + column labels; hidden when no multi-value objects */
 .multi-value-chrome-middle{
   flex:1 1 0;
   min-width:0;
   display:flex;
   flex-direction:row;
   align-items:stretch;
-  gap:6px;
+  gap:8px;
   box-sizing:border-box;
 }
 .multi-value-chrome-middle[hidden]{
   display:none !important;
 }
-/* Same width as .obj-leading-col (checkbox + time + author); set via --inout-obj-leading-w from first row */
-.multi-value-chrome-leading{
+.multi-value-filter-slot{
   position:relative;
   flex:0 0 auto;
-  width:var(--inout-obj-leading-w, calc(56px + 22ch));
-  min-width:0;
-  flex-shrink:0;
-  display:flex;
-  align-items:stretch;
-}
-.multi-value-filter-trigger{
-  width:100%;
-  min-height:28px;
-  box-sizing:border-box;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
+  align-self:center;
 }
 .multi-value-filter-trigger.multi-value-filter-active{
+  background:var(--acc);
+  color:var(--bg);
   border-color:var(--acc2);
-  color:var(--acc);
-  background:rgba(232,213,160,0.08);
 }
 /* Mirrors .obj-content .obj-values-wrap + .obj-value-cell flex */
 .multi-value-col-labels{
@@ -644,7 +636,7 @@ header{
   display:none !important;
 }
 
-#select-toggle{
+.manage-bar-pill{
   border:1px solid var(--line2);
   background:transparent;
   color:var(--soft);
@@ -3046,6 +3038,38 @@ body.secret-show-grips .frame-grip{
   min-width:0;
   display:flex;
   align-items:stretch;
+}
+/* In manage bar: pill style + panel opens downward */
+#manage-bar #log-action-btn{
+  font-family:var(--mono);
+  font-size:10px;
+  padding:3px 8px;
+  border-radius:999px;
+  border:1px solid var(--line2);
+  background:transparent;
+  color:var(--soft);
+  text-transform:uppercase;
+  letter-spacing:0.06em;
+  cursor:default;
+  width:100%;
+  max-width:100%;
+  text-align:center;
+  min-height:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+#manage-bar #log-action-btn:hover{
+  background:var(--line);
+  color:var(--text);
+}
+#manage-bar #log-dropup-panel{
+  top:100%;
+  bottom:auto;
+  left:0;
+  margin-top:4px;
+  margin-bottom:0;
+  box-shadow:0 4px 20px rgba(0,0,0,.35);
 }
 #log-action-btn{
   font-family:var(--mono);
