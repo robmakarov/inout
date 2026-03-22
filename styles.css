@@ -428,18 +428,6 @@ header{
   gap:6px;
   flex-shrink:0;
 }
-.manage-bar-log{
-  margin-left:auto;
-  flex:0 1 12rem;
-  min-width:0;
-  max-width:14rem;
-  display:flex;
-  align-items:center;
-}
-.manage-bar-log .log-dropup-wrap{
-  flex:1 1 auto;
-  min-width:0;
-}
 .manage-bar-column-headers{
   flex:1 1 0;
   min-width:0;
@@ -539,6 +527,16 @@ header{
   flex-shrink:0;
 }
 #manage-bar .bar-group[data-bar-group="actions"]{ flex-direction:column; align-items:stretch; }
+.manage-log-in-menu.log-dropup-wrap{
+  width:100%;
+  flex:0 0 auto;
+  align-self:stretch;
+}
+#manage-bar .manage-log-in-menu #log-action-btn{
+  width:100%;
+  text-align:left;
+  justify-content:flex-start;
+}
 
 /* Multi-value filter + column labels; hidden when no multi-value objects */
 .multi-value-chrome-middle{
@@ -587,9 +585,9 @@ header{
   font-size:10px;
   line-height:1.2;
   padding:4px 6px;
-  border-radius:4px;
-  border:1px solid var(--line2);
-  background:var(--bg);
+  border:none;
+  background:transparent;
+  box-shadow:none;
   color:var(--soft);
   text-transform:uppercase;
   letter-spacing:0.06em;
@@ -599,13 +597,17 @@ header{
   cursor:default;
   min-height:28px;
 }
+.multi-value-col-label-btn:hover{
+  color:var(--text);
+}
 .multi-value-col-labels .multi-value-col-label-btn:only-child{
   flex:1 1 auto;
 }
 .multi-value-col-label-btn.multi-value-col-label-btn-active{
-  border-color:var(--acc2);
+  border:none;
+  background:transparent;
   color:var(--acc);
-  background:rgba(232,213,160,0.08);
+  font-weight:600;
 }
 .multi-value-filter-menu{
   position:absolute;
@@ -696,6 +698,18 @@ header{
 .manage-btn:hover{
   background:var(--line);
   color:var(--text);
+}
+.manage-btn.multi-value-col-label-btn{
+  border:none;
+  background:transparent;
+  box-shadow:none;
+}
+.manage-btn.multi-value-col-label-btn:hover{
+  background:transparent;
+  color:var(--text);
+}
+.manage-btn.multi-value-col-label-btn.multi-value-col-label-btn-active:hover{
+  color:var(--acc);
 }
 #move-target{
   border:1px solid var(--line2);
@@ -3039,37 +3053,15 @@ body.secret-show-grips .frame-grip{
   display:flex;
   align-items:stretch;
 }
-/* In manage bar: pill style + panel opens downward */
-#manage-bar #log-action-btn{
-  font-family:var(--mono);
-  font-size:10px;
-  padding:3px 8px;
-  border-radius:999px;
-  border:1px solid var(--line2);
-  background:transparent;
-  color:var(--soft);
-  text-transform:uppercase;
-  letter-spacing:0.06em;
-  cursor:default;
-  width:100%;
-  max-width:100%;
-  text-align:center;
-  min-height:0;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-}
-#manage-bar #log-action-btn:hover{
-  background:var(--line);
-  color:var(--text);
-}
-#manage-bar #log-dropup-panel{
-  top:100%;
-  bottom:auto;
-  left:0;
-  margin-top:4px;
-  margin-bottom:0;
-  box-shadow:0 4px 20px rgba(0,0,0,.35);
+/* Action log panel when opened from ⋮ menu: fixed so it is not clipped by .bar-scroll */
+#log-dropup-panel.log-dropup-panel-fixed{
+  position:fixed !important;
+  top:auto !important;
+  bottom:auto !important;
+  left:auto !important;
+  margin:0 !important;
+  z-index:1300 !important;
+  box-shadow:0 4px 20px rgba(0,0,0,.35) !important;
 }
 #log-action-btn{
   font-family:var(--mono);

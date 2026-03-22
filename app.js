@@ -2148,8 +2148,12 @@ function applyWorkspaceUiChrome(u) {
       if (u.logDropupOpen) {
         if (typeof renderLogDropup === 'function') renderLogDropup();
         logDropupPanel.classList.add('open');
+        if (typeof positionLogDropupPanelFixed === 'function') positionLogDropupPanelFixed();
+        if (logActionBtn) logActionBtn.setAttribute('aria-expanded', 'true');
       } else {
         logDropupPanel.classList.remove('open');
+        if (typeof clearLogDropupPanelFixed === 'function') clearLogDropupPanelFixed();
+        if (logActionBtn) logActionBtn.setAttribute('aria-expanded', 'false');
       }
     }
     if (customCalcEl && calcToggleBtn) {
@@ -2997,10 +3001,36 @@ function renderLogDropup() {
   });
 }
 
+function positionLogDropupPanelFixed() {
+  if (!logDropupPanel || !logActionBtn) return;
+  if (!logActionBtn.closest || !logActionBtn.closest('.manage-log-in-menu')) return;
+  var r = logActionBtn.getBoundingClientRect();
+  var w = Math.min(320, Math.max(200, window.innerWidth - 16));
+  var left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
+  var top = r.bottom + 4;
+  var maxH = Math.min(280, Math.max(120, window.innerHeight - top - 12));
+  logDropupPanel.classList.add('log-dropup-panel-fixed');
+  logDropupPanel.style.left = left + 'px';
+  logDropupPanel.style.top = top + 'px';
+  logDropupPanel.style.width = w + 'px';
+  logDropupPanel.style.maxHeight = maxH + 'px';
+}
+
+function clearLogDropupPanelFixed() {
+  if (!logDropupPanel) return;
+  logDropupPanel.classList.remove('log-dropup-panel-fixed');
+  logDropupPanel.style.left = '';
+  logDropupPanel.style.top = '';
+  logDropupPanel.style.width = '';
+  logDropupPanel.style.maxHeight = '';
+}
+
 function openLogDropup() {
   if (!logDropupPanel) return;
   renderLogDropup();
   logDropupPanel.classList.add('open');
+  positionLogDropupPanelFixed();
+  if (logActionBtn) logActionBtn.setAttribute('aria-expanded', 'true');
   console.debug('[inout] Action log opened');
   notifyWorkspaceChromeChanged();
 }
@@ -3008,6 +3038,8 @@ function openLogDropup() {
 function closeLogDropup() {
   if (!logDropupPanel) return;
   logDropupPanel.classList.remove('open');
+  clearLogDropupPanelFixed();
+  if (logActionBtn) logActionBtn.setAttribute('aria-expanded', 'false');
   notifyWorkspaceChromeChanged();
 }
 
@@ -3808,6 +3840,16 @@ if (logActionBtn) {
     else openLogDropup();
   });
   updateLogBadge();
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener(
+    'resize',
+    function() {
+      if (logDropupPanel && logDropupPanel.classList.contains('open') && logDropupPanel.classList.contains('log-dropup-panel-fixed'))
+        positionLogDropupPanelFixed();
+    },
+    { passive: true }
+  );
 }
 document.addEventListener('click', e => {
   if (logDropupPanel && logDropupPanel.classList.contains('open') && !logDropupPanel.contains(e.target) && e.target !== logActionBtn) closeLogDropup();
@@ -8036,6 +8078,7 @@ function setupTabs() {
       manageBar.classList.remove('manage-bar-open');
       manageBarTrigger.setAttribute('aria-expanded', 'false');
       document.removeEventListener('click', closeManageBarDropdown);
+      if (typeof closeLogDropup === 'function') closeLogDropup();
       if (typeof notifyWorkspaceChromeChanged === 'function') notifyWorkspaceChromeChanged();
     }
     manageBarTrigger.addEventListener('click', e => {

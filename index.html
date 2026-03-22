@@ -146,19 +146,17 @@
         </div>
         <div id="multi-value-col-labels" class="multi-value-col-labels" aria-hidden="true"></div>
       </div>
-      <div class="manage-bar-log">
-        <div class="log-dropup-wrap">
-          <button id="log-action-btn" type="button" aria-label="Action log">No events</button>
-          <div id="log-dropup-panel" role="dialog" aria-label="Action log">
-            <div class="log-dropup-body" id="log-dropup-body"></div>
-          </div>
-        </div>
-      </div>
       <div class="manage-bar-end">
       <button type="button" id="manage-bar-trigger" class="manage-bar-trigger" aria-label="View actions" aria-haspopup="true" aria-expanded="false">⋮</button>
       <div class="manage-bar-dropdown" role="menu" aria-label="View actions">
         <div class="bar-scroll" id="manage-bar-scroll">
           <div class="bar-group" id="manage-actions" data-bar-group="actions">
+            <div class="manage-log-in-menu log-dropup-wrap">
+              <button id="log-action-btn" type="button" class="manage-btn" role="menuitem" aria-label="Action log" aria-haspopup="dialog" aria-expanded="false">No events</button>
+              <div id="log-dropup-panel" role="dialog" aria-label="Action log">
+                <div class="log-dropup-body" id="log-dropup-body"></div>
+              </div>
+            </div>
             <button id="delete-selected" class="manage-btn manage-select-only" data-bar-id="delete-selected" role="menuitem">Delete</button>
             <div class="manage-subgroup manage-select-only" role="group" aria-label="Move">
               <label>Move to
