@@ -1466,7 +1466,121 @@ function syncFeedMultiValueChrome(inner, messagesList) {
     if (parts.length > maxCols) parts = parts.slice(0, maxCols);
     ensureRowValueCellCount(row, maxCols, parts);
   });
+  try {
+    if (typeof feedInner !== 'undefined' && inner === feedInner && typeof updateMultiValueChromeBar === 'function')
+      updateMultiValueChromeBar();
+  } catch (_) {}
 }
+
+var inoutMultiValueFilterMode = 'all';
+
+function countNonEmptyValuePartsInRow(row) {
+  if (!row) return 0;
+  var parts = partsFromRowDom(row);
+  var n = 0;
+  for (var i = 0; i < parts.length; i++) {
+    if (String(parts[i]).trim()) n++;
+  }
+  return n;
+}
+
+function feedHasAnyObjectWithMultipleMessageValues(inner) {
+  if (!inner) return false;
+  var rows = inner.querySelectorAll('.obj[data-id]');
+  for (var i = 0; i < rows.length; i++) {
+    if (countNonEmptyValuePartsInRow(rows[i]) > 1) return true;
+  }
+  return false;
+}
+
+function closeInoutMultiValueFilterMenu() {
+  var menu = document.getElementById('multi-value-filter-menu');
+  var trig = document.getElementById('multi-value-filter-trigger');
+  if (menu) menu.hidden = true;
+  if (trig) trig.setAttribute('aria-expanded', 'false');
+  document.removeEventListener('click', closeInoutMultiValueFilterMenuOnDoc);
+}
+
+function closeInoutMultiValueFilterMenuOnDoc() {
+  closeInoutMultiValueFilterMenu();
+}
+
+function syncInoutMultiValueFilterMenuAria() {
+  var menu = document.getElementById('multi-value-filter-menu');
+  if (!menu) return;
+  var mode = inoutMultiValueFilterMode;
+  menu.querySelectorAll('[data-multi-value-filter]').forEach(function(b) {
+    var m = b.getAttribute('data-multi-value-filter') || '';
+    b.setAttribute('aria-checked', m === mode ? 'true' : 'false');
+  });
+}
+
+function applyInoutMultiValueFilter() {
+  if (typeof feedInner === 'undefined' || !feedInner) return;
+  var multiONLY = inoutMultiValueFilterMode === 'multi';
+  feedInner.querySelectorAll('.obj[data-id]').forEach(function(row) {
+    var show = !multiONLY || countNonEmptyValuePartsInRow(row) > 1;
+    row.classList.toggle('obj-filtered-out', !show);
+  });
+  var trig = document.getElementById('multi-value-filter-trigger');
+  if (trig) trig.classList.toggle('multi-value-filter-active', multiONLY);
+  syncInoutMultiValueFilterMenuAria();
+}
+
+function updateMultiValueChromeBar() {
+  var bar = document.getElementById('multi-value-chrome-bar');
+  if (typeof feedInner === 'undefined' || !feedInner || !bar) return;
+  var show = feedHasAnyObjectWithMultipleMessageValues(feedInner);
+  if (!show) {
+    bar.hidden = true;
+    bar.setAttribute('aria-hidden', 'true');
+    if (inoutMultiValueFilterMode !== 'all') {
+      inoutMultiValueFilterMode = 'all';
+      applyInoutMultiValueFilter();
+    }
+    closeInoutMultiValueFilterMenu();
+    feedInner.querySelectorAll('.obj.obj-filtered-out').forEach(function(r) {
+      r.classList.remove('obj-filtered-out');
+    });
+    return;
+  }
+  bar.hidden = false;
+  bar.removeAttribute('aria-hidden');
+  applyInoutMultiValueFilter();
+}
+
+function setupMultiValueChromeBar() {
+  var trig = document.getElementById('multi-value-filter-trigger');
+  var menu = document.getElementById('multi-value-filter-menu');
+  if (!trig || !menu) return;
+  trig.addEventListener('click', function(e) {
+    e.stopPropagation();
+    var open = !menu.hidden;
+    if (open) {
+      closeInoutMultiValueFilterMenu();
+      return;
+    }
+    var mb = document.getElementById('manage-bar');
+    var mbt = document.getElementById('manage-bar-trigger');
+    if (mb && mbt && mb.classList.contains('manage-bar-open')) {
+      mb.classList.remove('manage-bar-open');
+      mbt.setAttribute('aria-expanded', 'false');
+    }
+    menu.hidden = false;
+    trig.setAttribute('aria-expanded', 'true');
+    document.addEventListener('click', closeInoutMultiValueFilterMenuOnDoc);
+  });
+  menu.querySelectorAll('[data-multi-value-filter]').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var mode = btn.getAttribute('data-multi-value-filter') === 'multi' ? 'multi' : 'all';
+      inoutMultiValueFilterMode = mode;
+      applyInoutMultiValueFilter();
+      closeInoutMultiValueFilterMenu();
+    });
+  });
+}
+
 const USER_INPUT_STATE_TABLE = 'user_input_state';
 const SLOTS_SYNC_CHANNEL = '__slots__';
 
@@ -3773,6 +3887,8 @@ async function loadObjectsForTempSession() {
 
 async function replaceFeedWithList(list) {
   if (!feedInner) return;
+  inoutMultiValueFilterMode = 'all';
+  closeInoutMultiValueFilterMenu();
   seenIds.clear();
   globalObjectNum = 0;
   objectCount = 0;
@@ -7826,6 +7942,7 @@ function setupTabs() {
     }
     manageBarTrigger.addEventListener('click', e => {
       e.stopPropagation();
+      closeInoutMultiValueFilterMenu();
       const isOpen = manageBar.classList.toggle('manage-bar-open');
       manageBarTrigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
       if (isOpen) document.addEventListener('click', closeManageBarDropdown);
@@ -7843,6 +7960,10 @@ function setupTabs() {
     }
   } catch (_) {}
   syncInoutManageRailWidthVar();
+  try {
+    setupMultiValueChromeBar();
+    if (typeof updateMultiValueChromeBar === 'function') updateMultiValueChromeBar();
+  } catch (_) {}
 }
 
 function updateTabsUI() {
@@ -11396,7 +11517,7 @@ function bindMultiviewWheelScrollCapture() {
       if (!t || !t.closest) return;
       if (t.closest('#user-modal-backdrop, #user-modal, #channel-modal-backdrop, #qr-modal-backdrop'))
         return;
-      if (t.closest('.manage-bar-dropdown, #log-dropup-panel.open')) return;
+      if (t.closest('.manage-bar-dropdown, #log-dropup-panel.open, .multi-value-filter-menu')) return;
       var view = t.closest('#multiview .view');
       if (!view || !mv.contains(view)) return;
       var feed = view.querySelector('#feed') || view.querySelector('.feed');

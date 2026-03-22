@@ -127,6 +127,7 @@
     <div class="frame frame-fill" data-frame-id="multiview">
 <div id="multiview" class="main-view">
     <div class="view" id="view-app">
+      <div class="view-top-chrome" id="view-top-chrome">
       <div id="manage-bar">
       <div class="manage-bar-start">
         <button type="button" id="select-toggle" class="manage-btn" data-bar-id="select-toggle">Select</button>
@@ -164,6 +165,19 @@
           </div>
         </div>
       </div>
+      </div>
+      </div>
+      <div id="multi-value-chrome-bar" class="multi-value-chrome-bar" hidden aria-hidden="true">
+        <div class="multi-value-chrome-row">
+          <span class="multi-value-chrome-label">Multiple message values in this view</span>
+          <div class="multi-value-chrome-end">
+            <button type="button" id="multi-value-filter-trigger" class="manage-btn multi-value-filter-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="multi-value-filter-menu">Filter</button>
+            <div id="multi-value-filter-menu" class="multi-value-filter-menu" role="menu" aria-label="Filter objects" hidden>
+              <button type="button" role="menuitemradio" class="manage-btn multi-value-filter-item" data-multi-value-filter="all" aria-checked="true">All objects</button>
+              <button type="button" role="menuitemradio" class="manage-btn multi-value-filter-item" data-multi-value-filter="multi" aria-checked="false">Multiple values only</button>
+            </div>
+          </div>
+        </div>
       </div>
       </div>
 

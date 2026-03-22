@@ -133,11 +133,19 @@ header,
   overflow:hidden;
   position:relative;
 }
-#multiview .view > #manage-bar{
+#multiview .view > .view-top-chrome{
   flex:0 0 auto;
   width:100%;
   min-width:0;
   order:0;
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+}
+#multiview .view > .view-top-chrome > #manage-bar{
+  flex:0 0 auto;
+  width:100%;
+  min-width:0;
 }
 #multiview .view > .visual{
   flex:1 1 0;
@@ -262,6 +270,7 @@ header,
   border-radius:6px;
 }
 #multiview #manage-bar,
+#multiview #multi-value-chrome-bar,
 #multiview #feed,
 #multiview .visual,
 #multiview .visual-feed-stack,
@@ -526,6 +535,73 @@ header{
   flex-shrink:0;
 }
 #manage-bar .bar-group[data-bar-group="actions"]{ flex-direction:column; align-items:stretch; }
+
+/* Secondary bar: shown when any object has 2+ non-empty value fields (multi-value) */
+.multi-value-chrome-bar{
+  flex:0 0 auto;
+  width:100%;
+  min-width:0;
+  box-sizing:border-box;
+  padding:5px max(20px, var(--safe-right)) 6px max(20px, var(--safe-left));
+  border-bottom:1px solid var(--line2);
+  background:var(--bg2);
+}
+.multi-value-chrome-bar[hidden]{
+  display:none !important;
+}
+.multi-value-chrome-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  min-width:0;
+}
+.multi-value-chrome-label{
+  font-family:var(--mono);
+  font-size:10px;
+  letter-spacing:0.05em;
+  text-transform:uppercase;
+  color:var(--muted);
+  flex:1 1 auto;
+  min-width:0;
+}
+.multi-value-chrome-end{
+  position:relative;
+  flex-shrink:0;
+}
+.multi-value-filter-trigger.multi-value-filter-active{
+  border-color:var(--acc2);
+  color:var(--acc);
+  background:rgba(232,213,160,0.08);
+}
+.multi-value-filter-menu{
+  position:absolute;
+  top:100%;
+  right:0;
+  margin-top:4px;
+  background:var(--bg);
+  border:1px solid var(--line2);
+  border-radius:6px;
+  box-shadow:0 4px 16px rgba(0,0,0,.3);
+  padding:6px;
+  min-width:200px;
+  max-width:min(280px, calc(100vw - 24px));
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  z-index:1190;
+}
+.multi-value-filter-menu[hidden]{
+  display:none !important;
+}
+.multi-value-filter-item{
+  width:100%;
+  text-align:left;
+  justify-content:flex-start;
+}
+.feed-inner .obj.obj-filtered-out{
+  display:none !important;
+}
 
 #select-toggle{
   border:1px solid var(--line2);
