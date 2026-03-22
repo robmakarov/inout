@@ -1333,18 +1333,11 @@ function computeMaxValueColumnsFromMessages(messages) {
 function computeMaxValueColumnsFromFeedInner(inner) {
   if (!inner) return 1;
   var max = 1;
-  inner.querySelectorAll('.obj:not(.obj-header)').forEach(function(row) {
+  inner.querySelectorAll('.obj').forEach(function(row) {
     var n = row.querySelectorAll('.obj-value-cell').length;
     if (n > max) max = n;
   });
   return max;
-}
-
-/** Multi-value column labels: Value 1…n−1, last column "Other" when n>1. */
-function valueColumnBarLabel(colIndex, totalCols) {
-  if (totalCols <= 1) return 'Value';
-  if (colIndex === totalCols - 1) return 'Other';
-  return 'Value ' + (colIndex + 1);
 }
 
 function partsFromRowDom(row) {
@@ -1410,17 +1403,9 @@ function syncFeedMultiValueChrome(inner, messagesList) {
   inner.dataset.inoutValueCols = String(maxCols);
   inner.style.setProperty('--inout-value-cols', String(maxCols));
   inner.classList.toggle('inout-multi-value-cols', maxCols > 1);
-  var hasDataRows = !!inner.querySelector('.obj:not(.obj-header)');
-  var wantHeader = hasDataRows && maxCols > 1;
-  var existing = inner.querySelector('.obj.obj-header');
-  if (!wantHeader) {
-    if (existing) existing.remove();
-  } else {
-    var fresh = createObjectHeaderRow(maxCols);
-    if (existing) existing.replaceWith(fresh);
-    else inner.insertBefore(fresh, inner.firstChild);
-  }
-  inner.querySelectorAll('.obj:not(.obj-header)').forEach(function(row) {
+  var staleHeader = inner.querySelector('.obj.obj-header');
+  if (staleHeader) staleHeader.remove();
+  inner.querySelectorAll('.obj').forEach(function(row) {
     if (row.dataset.id == null) return;
     var parts = partsFromRowDom(row);
     while (parts.length < maxCols) parts.push('');
@@ -4331,8 +4316,7 @@ function subscribeOrderRealtime() {
 
 function applyObjectOrderToFeedInner(inner, orderIds) {
   if (!inner || !Array.isArray(orderIds) || !orderIds.length) return;
-  const header = inner.querySelector('.obj.obj-header');
-  const rows = Array.from(inner.querySelectorAll('.obj:not(.obj-header)'));
+  const rows = Array.from(inner.querySelectorAll('.obj'));
   if (!rows.length) return;
   const domOrder = rows.map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id));
   if (domOrder.length === orderIds.length && domOrder.every((id, i) => id === orderIds[i])) return;
@@ -4352,7 +4336,6 @@ function applyObjectOrderToFeedInner(inner, orderIds) {
     }
   });
   byId.forEach(row => frag.appendChild(row));
-  if (header && header.parentNode === inner) inner.insertBefore(header, inner.firstChild);
   inner.appendChild(frag);
   if (typeof syncFeedMultiValueChrome === 'function') syncFeedMultiValueChrome(inner);
 }
@@ -4360,7 +4343,6 @@ function applyObjectOrderToFeedInner(inner, orderIds) {
 function applyFieldPrefsToFeedInner(inner, fp) {
   if (!inner || !fp) return;
   inner.querySelectorAll('.obj').forEach(row => {
-    if (row.classList.contains('obj-header')) return;
     const timeEl = row.querySelector('.obj-time');
     const senderEl = row.querySelector('.obj-sender');
     if (timeEl) {
@@ -6294,7 +6276,6 @@ function applyFieldPrefsToObjects() {
   if (!feedInner || !fieldPrefs) return;
   const rows = feedInner.querySelectorAll('.obj');
   rows.forEach(row => {
-    if (row.classList.contains('obj-header')) return;
     const timeEl = row.querySelector('.obj-time');
     const senderEl = row.querySelector('.obj-sender');
     if (timeEl) {
@@ -6466,48 +6447,6 @@ function setupTouchDragHandlers() {
    * touchmove/end are attached only when long-press reorder actually starts (see row touchstart). */
   touchDragState._onTouchMoveForDnD = move;
   document.addEventListener('touchend', end, { passive: true });
-}
-
-/** Multi-value: header row (Time, Author, Value 1…N, Actions). No dataset.id. */
-function createObjectHeaderRow(maxValueCols) {
-  var n = Math.max(1, parseInt(maxValueCols, 10) || 1);
-  const row = document.createElement('div');
-  row.className = 'obj obj-header';
-  row.setAttribute('aria-hidden', 'true');
-  const checkboxPlaceholder = document.createElement('div');
-  checkboxPlaceholder.className = 'obj-checkbox-zone';
-  checkboxPlaceholder.setAttribute('aria-hidden', 'true');
-  const time = document.createElement('div');
-  time.className = 'obj-time';
-  time.textContent = 'Time';
-  const sender = document.createElement('div');
-  sender.className = 'obj-sender';
-  sender.textContent = 'Author';
-  const leadingMeta = document.createElement('div');
-  leadingMeta.className = 'obj-leading-meta';
-  leadingMeta.appendChild(time);
-  leadingMeta.appendChild(sender);
-  const leadingCol = document.createElement('div');
-  leadingCol.className = 'obj-leading-col';
-  leadingCol.appendChild(checkboxPlaceholder);
-  leadingCol.appendChild(leadingMeta);
-  const valuesWrap = document.createElement('div');
-  valuesWrap.className = 'obj-values-wrap';
-  for (var vi = 0; vi < n; vi++) {
-    const h = document.createElement('div');
-    h.className = 'obj-text obj-value-cell obj-header-value-cell';
-    h.textContent = valueColumnBarLabel(vi, n);
-    valuesWrap.appendChild(h);
-  }
-  const actions = document.createElement('div');
-  actions.className = 'obj-actions';
-  const contentWrap = document.createElement('div');
-  contentWrap.className = 'obj-content';
-  contentWrap.appendChild(valuesWrap);
-  row.appendChild(leadingCol);
-  row.appendChild(contentWrap);
-  row.appendChild(actions);
-  return row;
 }
 
 /** Create one object row (DOM) from object data; primary value is obj.text. options.skipEmptyRemove: true when building for a non-primary feed. */
@@ -8385,8 +8324,7 @@ function applyObjectOrderToDOM() {
   views.forEach(view => {
     if (!view || view.channel !== currentView || !view.feedInner) return;
     const inner = view.feedInner;
-    const header = inner.querySelector('.obj.obj-header');
-    const rows = Array.from(inner.querySelectorAll('.obj:not(.obj-header)'));
+    const rows = Array.from(inner.querySelectorAll('.obj'));
   if (!rows.length) return;
   const domOrder = rows.map(r => Number(r.dataset.id)).filter(id => Number.isFinite(id));
     if (domOrder.length === currentObjectOrder.length &&
@@ -8407,7 +8345,6 @@ function applyObjectOrderToDOM() {
     }
   });
   byId.forEach(row => frag.appendChild(row));
-    if (header && header.parentNode === inner) inner.insertBefore(header, inner.firstChild);
     inner.appendChild(frag);
   });
 }
