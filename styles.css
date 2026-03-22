@@ -2149,12 +2149,18 @@ body.select-mode .obj-select-wrap,
   pointer-events:auto;
 }
 
-/* Select mode: negative margins pull the checkbox rail past #feed / .visual-feed-stack (overflow-x:hidden) and it gets clipped. Flush layout keeps cb zone + checkbox on-screen. */
+/* Negative margins tuck the rail into the gutter; overflow-x on the feed can clip it. Select mode flushes on desktop; narrow viewports and touch always flush so the rail is usable without toggling select. */
 body.select-mode .obj-leading-col{
   margin-left:0;
 }
 body.select-mode .obj-checkbox-zone{
   margin-left:0;
+}
+@media (max-width:540px), (hover: none){
+  .obj-leading-col,
+  .obj-checkbox-zone{
+    margin-left:0;
+  }
 }
 
 .obj-select{
