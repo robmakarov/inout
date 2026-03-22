@@ -1397,10 +1397,57 @@ header{
 .feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="6"]::before{ content:'Value 7'; }
 .feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="7"]::before{ content:'Value 8'; }
 
+/* Multi-value feed: same label row layout (single-value rules above are gated with :not(.inout-multi-value-cols)) */
+.feed-inner.inout-multi-value-cols .obj .obj-time,
+.feed-inner.inout-multi-value-cols .obj .obj-sender,
+.feed-inner.inout-multi-value-cols .obj .obj-value-cell{
+  display:flex;
+  flex-direction:row;
+  align-items:baseline;
+  gap:20px;
+  min-width:0;
+}
+.feed-inner.inout-multi-value-cols .obj .obj-time::before,
+.feed-inner.inout-multi-value-cols .obj .obj-sender::before,
+.feed-inner.inout-multi-value-cols .obj .obj-value-cell::before{
+  font-size:10px;
+  line-height:12px;
+  text-transform:uppercase;
+  letter-spacing:0.05em;
+  color:var(--muted);
+  flex-shrink:0;
+  width:3.5em;
+  min-width:3.5em;
+}
+.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-time::before,
+.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-sender::before,
+.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-value-cell::before{
+  display:block;
+  opacity:1;
+  transform:none;
+}
+.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-time::before{ content:'Time'; }
+.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-sender::before{ content:'Author'; }
+.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-value-cell[data-value-index="0"]::before{ content:'Value'; }
+.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-value-cell[data-value-index="1"]::before{ content:'Value 2'; }
+.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-value-cell[data-value-index="2"]::before{ content:'Value 3'; }
+.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-value-cell[data-value-index="3"]::before{ content:'Value 4'; }
+.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-value-cell[data-value-index="4"]::before{ content:'Value 5'; }
+.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-value-cell[data-value-index="5"]::before{ content:'Value 6'; }
+.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-value-cell[data-value-index="6"]::before{ content:'Value 7'; }
+.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-value-cell[data-value-index="7"]::before{ content:'Value 8'; }
+.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-time,
+.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-sender,
+.feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-value-cell{
+  transform:none;
+  transition:none;
+}
+
 /* Labels OFF: label out of flow (no space). On hover, show label left of value; same 20px gap, smooth animation */
 .feed-inner.obj-labels-off .obj .obj-time::before,
 .feed-inner.obj-labels-off .obj .obj-sender::before,
-.feed-inner.obj-labels-off .obj .obj-text::before{
+.feed-inner.obj-labels-off .obj .obj-text::before,
+.feed-inner.obj-labels-off .obj .obj-value-cell::before{
   display:block;
   position:absolute;
   left:0;
@@ -1414,30 +1461,42 @@ header{
 .feed-inner.obj-labels-off .obj .obj-time::before{ content:'Time'; }
 .feed-inner.obj-labels-off .obj .obj-sender::before{ content:'Author'; }
 .feed-inner.obj-labels-off .obj .obj-text::before{ content:'Value'; }
+.feed-inner.obj-labels-off .obj .obj-value-cell[data-value-index="0"]::before{ content:'Value'; }
+.feed-inner.obj-labels-off .obj .obj-value-cell[data-value-index="1"]::before{ content:'Value 2'; }
+.feed-inner.obj-labels-off .obj .obj-value-cell[data-value-index="2"]::before{ content:'Value 3'; }
+.feed-inner.obj-labels-off .obj .obj-value-cell[data-value-index="3"]::before{ content:'Value 4'; }
+.feed-inner.obj-labels-off .obj .obj-value-cell[data-value-index="4"]::before{ content:'Value 5'; }
+.feed-inner.obj-labels-off .obj .obj-value-cell[data-value-index="5"]::before{ content:'Value 6'; }
+.feed-inner.obj-labels-off .obj .obj-value-cell[data-value-index="6"]::before{ content:'Value 7'; }
+.feed-inner.obj-labels-off .obj .obj-value-cell[data-value-index="7"]::before{ content:'Value 8'; }
 .feed-inner.obj-labels-off .obj .obj-time,
 .feed-inner.obj-labels-off .obj .obj-sender,
-.feed-inner.obj-labels-off .obj .obj-text{
+.feed-inner.obj-labels-off .obj .obj-text,
+.feed-inner.obj-labels-off .obj .obj-value-cell{
   position:relative;
   transition:transform .22s ease-out, padding-left .22s ease-out;
   overflow:visible;
 }
 .feed-inner.obj-labels-off .obj:hover .obj-time::before,
 .feed-inner.obj-labels-off .obj:hover .obj-sender::before,
-.feed-inner.obj-labels-off .obj:hover .obj-text::before{
+.feed-inner.obj-labels-off .obj:hover .obj-text::before,
+.feed-inner.obj-labels-off .obj:hover .obj-value-cell::before{
   opacity:1;
   transform:translateX(0);
 }
 /* Reserve space for label on hover — same distance (3.5em + 20px) so values align */
 .feed-inner.obj-labels-off .obj:hover .obj-time,
 .feed-inner.obj-labels-off .obj:hover .obj-sender,
-.feed-inner.obj-labels-off .obj:hover .obj-text{
+.feed-inner.obj-labels-off .obj:hover .obj-text,
+.feed-inner.obj-labels-off .obj:hover .obj-value-cell{
   padding-left:calc(3.5em + 20px);
   transform:translateX(0);
 }
 /* Values slide from left on hover (labels OFF only); rest state */
 .feed-inner.obj-labels-off .obj .obj-time,
 .feed-inner.obj-labels-off .obj .obj-sender,
-.feed-inner.obj-labels-off .obj .obj-text{
+.feed-inner.obj-labels-off .obj .obj-text,
+.feed-inner.obj-labels-off .obj .obj-value-cell{
   transform:translateX(-20px);
 }
 .feed-inner .obj .obj-content{
@@ -1446,7 +1505,8 @@ header{
 /* Labels ON: no slide animation, values stay at fixed 20px from labels */
 .feed-inner:not(.obj-labels-off) .obj .obj-time,
 .feed-inner:not(.obj-labels-off) .obj .obj-sender,
-.feed-inner:not(.obj-labels-off) .obj .obj-text{
+.feed-inner:not(.obj-labels-off) .obj .obj-text,
+.feed-inner:not(.obj-labels-off) .obj .obj-value-cell{
   transform:none;
   transition:none;
 }
@@ -1454,13 +1514,15 @@ header{
 /* Select mode: selected objects animate to right from checkboxes (same as hover) */
 body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-time,
 body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-sender,
-body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-text{
+body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-text,
+body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell{
   padding-left:calc(3.5em + 20px);
   transform:translateX(0);
 }
 body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-time::before,
 body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-sender::before,
-body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-text::before{
+body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-text::before,
+body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell::before{
   opacity:1;
   transform:translateX(0);
 }
@@ -3129,13 +3191,15 @@ body.secret-show-grips .frame-grip{
   .obj:hover .obj-sender{ color:var(--dim) }
   .feed-inner.obj-labels-off .obj:hover .obj-time::before,
   .feed-inner.obj-labels-off .obj:hover .obj-sender::before,
-  .feed-inner.obj-labels-off .obj:hover .obj-text::before{
+  .feed-inner.obj-labels-off .obj:hover .obj-text::before,
+  .feed-inner.obj-labels-off .obj:hover .obj-value-cell::before{
     opacity:0;
     transform:translateX(-6px);
   }
   .feed-inner.obj-labels-off .obj:hover .obj-time,
   .feed-inner.obj-labels-off .obj:hover .obj-sender,
-  .feed-inner.obj-labels-off .obj:hover .obj-text{
+  .feed-inner.obj-labels-off .obj:hover .obj-text,
+  .feed-inner.obj-labels-off .obj:hover .obj-value-cell{
     padding-left:0;
     transform:translateX(-20px);
   }
