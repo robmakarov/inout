@@ -1512,16 +1512,10 @@ body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell::b
   opacity:1;
   transform:translateY(0);
 }
-/* Default feed: time and author font size; column label-above layout */
+/* Feed: column label-above layout for author */
 .feed-inner .obj .obj-sender{
   justify-content:flex-start;
   text-align:left;
-}
-.feed-inner .obj .obj-time,
-.feed-inner .obj .obj-sender{
-  font-size:10px;
-  color:var(--dim);
-  font-weight:500;
 }
 .feed-inner .obj .obj-text{
   font-size:12px;
@@ -1875,30 +1869,31 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
   white-space:nowrap;
 }
 
-/* Object row: meta (time, author) = secondary; message = primary. */
+/* Object row: meta (time, author) — one type style */
+.obj-time,
 .obj-sender{
   font-size:10px;
+  line-height:1.35;
   color:var(--dim);
   font-weight:500;
+  letter-spacing:0.03em;
+  white-space:nowrap;
+  display:none; /* JS shows based on view prefs */
+}
+
+.obj-sender{
   flex:0 0 10ch;
   max-width:10ch;
-  white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
-  display:none; /* JS shows based on view prefs + non-main channel */
   justify-content:flex-end;
   text-align:right;
 }
 
 .obj-time{
-  font-size:7px;
-  color:var(--dim);
-  letter-spacing:0.04em;
   flex:0 0 auto;
   max-width:none;
-  white-space:nowrap;
   text-align:left;
-  display:none; /* JS shows based on view prefs */
 }
 
 .obj-text,
