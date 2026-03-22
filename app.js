@@ -1411,15 +1411,29 @@ function ensureRowValueCellCount(row, maxCols, partsForFill) {
   partsForFill = partsForFill ? partsForFill.slice() : [];
   while (partsForFill.length < maxCols) partsForFill.push('');
   if (partsForFill.length > maxCols) partsForFill = partsForFill.slice(0, maxCols);
-  wrap.querySelectorAll('.obj-value-cell').forEach(function(el) {
-    if (el.parentNode === wrap) wrap.removeChild(el);
-  });
-  for (var i = 0; i < maxCols; i++) {
+  var editing = row.classList.contains('obj-editing');
+  var cells = Array.from(wrap.querySelectorAll(':scope > .obj-value-cell'));
+  while (cells.length > maxCols) {
+    var rem = cells.pop();
+    if (rem && rem.parentNode === wrap) wrap.removeChild(rem);
+  }
+  while (cells.length < maxCols) {
+    var idx = cells.length;
     var cell = document.createElement('div');
     cell.className = 'obj-text obj-value-cell';
-    cell.dataset.valueIndex = String(i);
-    cell.innerHTML = renderVisualOnlyHtml(partsForFill[i] != null ? partsForFill[i] : '');
+    cell.dataset.valueIndex = String(idx);
+    cell.innerHTML = renderVisualOnlyHtml(partsForFill[idx] != null ? partsForFill[idx] : '');
     wrap.appendChild(cell);
+    cells.push(cell);
+  }
+  for (var i = 0; i < maxCols; i++) {
+    var c = cells[i];
+    c.dataset.valueIndex = String(i);
+    if (editing) continue;
+    if (c.querySelector('.obj-remote-edit-badge')) continue;
+    var want = partsForFill[i] != null ? partsForFill[i] : '';
+    var html = renderVisualOnlyHtml(want);
+    if (c.innerHTML !== html) c.innerHTML = html;
   }
   row.dataset.valueCols = String(maxCols);
 }
@@ -3691,7 +3705,7 @@ async function replaceFeedWithList(list) {
       else feedInner.replaceChildren();
     }
     updateObjectCount();
-    applyFieldPrefsToObjects();
+    applyFieldPrefsToObjects(true);
     syncFeedMultiValueChrome(feedInner, list);
     if (feedEl) {
       var ps = primaryFeedScrollSurface();
@@ -6302,7 +6316,8 @@ function saveFieldPrefsForCurrentChannel() {
   } catch(_) {}
 }
 
-function applyFieldPrefsToObjects() {
+/** @param {boolean} [skipMultiValueChrome] True when caller runs syncFeedMultiValueChrome right after (avoids a second full pass). */
+function applyFieldPrefsToObjects(skipMultiValueChrome) {
   if (!feedInner || !fieldPrefs) return;
   const rows = feedInner.querySelectorAll('.obj');
   rows.forEach(row => {
@@ -6316,8 +6331,10 @@ function applyFieldPrefsToObjects() {
   });
   feedInner.classList.toggle('obj-labels-off', !fieldPrefs.showLabels);
   if (secondaryFeedInner) secondaryFeedInner.classList.toggle('obj-labels-off', !fieldPrefs.showLabels);
-  syncFeedMultiValueChrome(feedInner);
-  if (secondaryFeedInner) syncFeedMultiValueChrome(secondaryFeedInner);
+  if (!skipMultiValueChrome) {
+    syncFeedMultiValueChrome(feedInner);
+    if (secondaryFeedInner) syncFeedMultiValueChrome(secondaryFeedInner);
+  }
   applyFieldPrefsUI();
 }
 
@@ -7498,7 +7515,7 @@ function appendObject(obj, isNew) {
   if (!row) return;
   feedInner.appendChild(row);
   // Ensure new messages respect the current view (time/author) settings.
-  applyFieldPrefsToObjects();
+  applyFieldPrefsToObjects(true);
   syncFeedMultiValueChrome(feedInner);
   if (typeof obj.id !== 'undefined') {
     const idNum = Number(obj.id);
@@ -9763,7 +9780,7 @@ async function addValueColumnToObjectFromMenu(obj) {
       feedInner.dataset.inoutValueCols = String(mc);
     }
     syncFeedMultiValueChrome(feedInner);
-    if (typeof applyFieldPrefsToObjects === 'function') applyFieldPrefsToObjects();
+    if (typeof applyFieldPrefsToObjects === 'function') applyFieldPrefsToObjects(true);
     toast('Value column added.');
   }
 }
