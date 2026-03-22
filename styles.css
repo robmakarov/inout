@@ -1596,19 +1596,24 @@ body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell::b
   min-width:0;
   gap:8px;
 }
-/* Multiple values in one object: left → right (next value added sits to the right) */
+/* Multiple values in one object: one row, left → right; new columns append on the right (scroll if needed) */
 .obj-content .obj-values-wrap{
   display:flex;
   flex-direction:row;
-  flex-wrap:wrap;
-  align-items:flex-start;
+  flex-wrap:nowrap;
+  align-items:stretch;
   gap:8px 12px;
   min-width:0;
   width:100%;
+  overflow-x:auto;
+  overflow-y:visible;
+  -webkit-overflow-scrolling:touch;
 }
 .obj-content .obj-value-cell{
-  flex:1 1 12rem;
-  min-width:0;
+  flex:1 0 12rem;
+  min-width:8rem;
+  min-height:1.5em;
+  box-sizing:border-box;
 }
 /* Single full-width value still grows */
 .obj-content .obj-values-wrap .obj-value-cell:only-child{

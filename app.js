@@ -1340,6 +1340,36 @@ function computeMaxValueColumnsFromFeedInner(inner) {
   return max;
 }
 
+/** Which value cell was clicked; empty cells often have no inner nodes so target may be the wrap. */
+function resolveValueCellFromPointer(valuesWrap, clientX, clientY, target) {
+  if (!valuesWrap) return null;
+  var cell = target && target.closest && target.closest('.obj-value-cell');
+  if (cell && valuesWrap.contains(cell)) return cell;
+  var cells = valuesWrap.querySelectorAll(':scope > .obj-value-cell');
+  if (!cells.length) return null;
+  var x = clientX;
+  var y = clientY;
+  var i;
+  for (i = 0; i < cells.length; i++) {
+    var r = cells[i].getBoundingClientRect();
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return cells[i];
+  }
+  var wr = valuesWrap.getBoundingClientRect();
+  if (x < wr.left || x > wr.right || y < wr.top || y > wr.bottom) return null;
+  var best = null;
+  var bestDx = Infinity;
+  for (i = 0; i < cells.length; i++) {
+    var r2 = cells[i].getBoundingClientRect();
+    var mid = (r2.left + r2.right) / 2;
+    var dx = Math.abs(x - mid);
+    if (dx < bestDx) {
+      bestDx = dx;
+      best = cells[i];
+    }
+  }
+  return best;
+}
+
 function partsFromRowDom(row) {
   var cells = row.querySelectorAll('.obj-value-cell');
   if (!cells.length) {
@@ -7378,7 +7408,8 @@ function createObjectRow(obj, isNew, options) {
     valuesWrap.appendChild(cell);
   }
   valuesWrap.addEventListener('click', e => {
-    if (!e.target.closest('.obj-value-cell')) return;
+    var clickedCell = resolveValueCellFromPointer(valuesWrap, e.clientX, e.clientY, e.target);
+    if (!clickedCell) return;
     if (e.target.closest('a')) return;
     e.stopPropagation();
     if (typeof obj.id === 'undefined') return;
