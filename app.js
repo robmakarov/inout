@@ -1490,7 +1490,7 @@ function columnPartNonEmpty(row, idx) {
 function syncInoutObjLeadingWidthVar() {
   try {
     var inner = document.getElementById('feed-inner');
-    var mvBar = document.getElementById('multi-value-chrome-bar');
+    var mvBar = document.getElementById('multi-value-chrome-middle');
     var vtc = document.getElementById('view-top-chrome');
     var mbar = document.getElementById('manage-bar');
     if (!inner) return;
@@ -1599,7 +1599,7 @@ function applyInoutMultiValueFilter() {
 }
 
 function updateMultiValueChromeBar() {
-  var bar = document.getElementById('multi-value-chrome-bar');
+  var bar = document.getElementById('multi-value-chrome-middle');
   if (typeof feedInner === 'undefined' || !feedInner || !bar) return;
   var show = feedHasAnyObjectWithMultipleMessageValues(feedInner);
   if (!show) {
