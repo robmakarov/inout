@@ -1348,43 +1348,88 @@ function valueColumnBarLabel(colIndex, totalCols) {
   return 'Value ' + (colIndex + 1);
 }
 
+/** Value column titles for table view: row inside .feed-inner, same grid as data rows (above cells). */
+function syncFeedTableValueHeadRow(inner, maxCols, isTable, hasDataRows) {
+  if (!inner) return;
+  var row = inner.querySelector('.inout-table-value-head-row');
+  if (!isTable || !hasDataRows || maxCols < 1) {
+    if (row) row.remove();
+    return;
+  }
+  if (!row) {
+    row = document.createElement('div');
+    row.className = 'inout-table-value-head-row';
+    row.setAttribute('role', 'row');
+  }
+  row.style.setProperty('--inout-value-cols', String(maxCols));
+  var rail = row.querySelector('.inout-table-value-head-rail');
+  if (!rail) {
+    rail = document.createElement('div');
+    rail.className = 'inout-table-value-head-rail';
+    rail.setAttribute('aria-hidden', 'true');
+  }
+  var cellsWrap = row.querySelector('.inout-table-value-head-cells');
+  if (!cellsWrap) {
+    cellsWrap = document.createElement('div');
+    cellsWrap.className = 'inout-table-value-head-cells';
+  }
+  cellsWrap.replaceChildren();
+  for (var ci = 0; ci < maxCols; ci++) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'inout-table-col-head';
+    var lab = valueColumnBarLabel(ci, maxCols);
+    b.textContent = lab;
+    b.setAttribute('aria-label', 'Column: ' + lab);
+    cellsWrap.appendChild(b);
+  }
+  var act = row.querySelector('.inout-table-value-head-actions');
+  if (!act) {
+    act = document.createElement('div');
+    act.className = 'inout-table-value-head-actions';
+    act.setAttribute('aria-hidden', 'true');
+  }
+  row.replaceChildren(rail, cellsWrap, act);
+  var firstData = inner.querySelector('.obj:not(.obj-header)');
+  if (!firstData) return;
+  if (row.parentNode !== inner || row.nextSibling !== firstData) {
+    inner.insertBefore(row, firstData);
+  }
+}
+
+function syncTableRailWidthFromDom(inner) {
+  if (!inner || !inner.classList.contains('view-table')) return;
+  var run = function() {
+    var first = inner.querySelector('.obj:not(.obj-header) .obj-leading-col');
+    if (first) {
+      var w = Math.ceil(first.getBoundingClientRect().width);
+      inner.style.setProperty('--inout-table-rail-w', w + 'px');
+    } else {
+      inner.style.removeProperty('--inout-table-rail-w');
+    }
+  };
+  if (typeof requestAnimationFrame !== 'undefined') {
+    requestAnimationFrame(function() {
+      requestAnimationFrame(run);
+    });
+  } else {
+    run();
+  }
+}
+
+/** Table column headers live in the feed above value cells; manage bar strip unused for values. */
 function syncManageBarValueColumnHeaders(maxCols, hasDataRows, isTableMode) {
   var wrap = document.getElementById('manage-bar-column-headers');
   if (!wrap) return;
   var bar = document.getElementById('manage-bar');
-  var show = !!(isTableMode && hasDataRows);
-  if (!show) {
-    wrap.hidden = true;
-    wrap.setAttribute('hidden', '');
-    wrap.setAttribute('aria-hidden', 'true');
-    wrap.replaceChildren();
-    if (bar) {
-      bar.classList.remove('manage-bar-has-value-columns');
-      bar.classList.remove('inout-bar-split');
-      bar.style.removeProperty('--inout-value-cols');
-    }
-    return;
-  }
-  wrap.hidden = false;
-  wrap.removeAttribute('hidden');
-  wrap.setAttribute('aria-hidden', 'false');
-  if (bar) {
-    bar.classList.add('manage-bar-has-value-columns');
-    bar.classList.add('inout-bar-split');
-    bar.style.setProperty('--inout-value-cols', String(maxCols));
-  }
+  wrap.hidden = true;
+  wrap.setAttribute('hidden', '');
+  wrap.setAttribute('aria-hidden', 'true');
   wrap.replaceChildren();
-  for (var ci = 0; ci < maxCols; ci++) {
-    var b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'manage-bar-col-head-btn';
-    var lab = valueColumnBarLabel(ci, maxCols);
-    b.textContent = lab;
-    b.setAttribute('aria-label', 'Column: ' + lab);
-    wrap.appendChild(b);
-  }
-  if (typeof requestAnimationFrame !== 'undefined') {
-    requestAnimationFrame(syncInoutManageRailWidthVar);
+  if (bar) {
+    bar.classList.remove('manage-bar-has-value-columns');
+    bar.classList.remove('inout-bar-split');
+    bar.style.removeProperty('--inout-value-cols');
   }
 }
 
@@ -1453,7 +1498,6 @@ function syncFeedMultiValueChrome(inner, messagesList) {
   inner.classList.toggle('inout-multi-value-cols', maxCols > 1);
   var isTable = typeof fieldPrefs !== 'undefined' && fieldPrefs && fieldPrefs.viewMode === 'table';
   var hasDataRows = !!inner.querySelector('.obj:not(.obj-header)');
-  var useBarValueHeaders = isTable;
   var wantHeader = hasDataRows && !isTable && maxCols > 1;
   var existing = inner.querySelector('.obj.obj-header');
   if (!wantHeader) {
@@ -1470,8 +1514,14 @@ function syncFeedMultiValueChrome(inner, messagesList) {
     if (parts.length > maxCols) parts = parts.slice(0, maxCols);
     ensureRowValueCellCount(row, maxCols, parts);
   });
+  syncFeedTableValueHeadRow(inner, maxCols, isTable, hasDataRows);
   if (inner === feedInner) {
     syncManageBarValueColumnHeaders(maxCols, hasDataRows, isTable);
+  }
+  if (isTable) {
+    syncTableRailWidthFromDom(inner);
+  } else {
+    inner.style.removeProperty('--inout-table-rail-w');
   }
 }
 const USER_INPUT_STATE_TABLE = 'user_input_state';
@@ -4403,6 +4453,7 @@ function applyObjectOrderToFeedInner(inner, orderIds) {
   byId.forEach(row => frag.appendChild(row));
   if (header && header.parentNode === inner) inner.insertBefore(header, inner.firstChild);
   inner.appendChild(frag);
+  if (typeof syncFeedMultiValueChrome === 'function') syncFeedMultiValueChrome(inner);
 }
 
 function applyFieldPrefsToFeedInner(inner, fp) {
@@ -4412,7 +4463,10 @@ function applyFieldPrefsToFeedInner(inner, fp) {
     if (row.classList.contains('obj-header')) return;
     const timeEl = row.querySelector('.obj-time');
     const senderEl = row.querySelector('.obj-sender');
-    if (timeEl) timeEl.style.setProperty('display', fp.showTime ? 'block' : 'none', 'important');
+    if (timeEl) {
+      if (!fp.showTime) timeEl.style.setProperty('display', 'none', 'important');
+      else timeEl.style.removeProperty('display');
+    }
     if (senderEl) senderEl.style.setProperty('display', fp.showAuthor ? 'block' : 'none', 'important');
   });
   inner.classList.toggle('obj-labels-off', !fp.showLabels);
@@ -6349,7 +6403,10 @@ function applyFieldPrefsToObjects() {
     if (row.classList.contains('obj-header')) return;
     const timeEl = row.querySelector('.obj-time');
     const senderEl = row.querySelector('.obj-sender');
-    if (timeEl) timeEl.style.setProperty('display', fieldPrefs.showTime ? 'block' : 'none', 'important');
+    if (timeEl) {
+      if (!fieldPrefs.showTime) timeEl.style.setProperty('display', 'none', 'important');
+      else timeEl.style.removeProperty('display');
+    }
     if (senderEl) senderEl.style.setProperty('display', fieldPrefs.showAuthor ? 'block' : 'none', 'important');
   });
   feedInner.classList.toggle('obj-labels-off', !fieldPrefs.showLabels);
@@ -6528,7 +6585,17 @@ function createObjectHeaderRow(maxValueCols) {
   checkboxPlaceholder.setAttribute('aria-hidden', 'true');
   const time = document.createElement('div');
   time.className = 'obj-time';
-  time.textContent = 'Time';
+  const timeStackH = document.createElement('span');
+  timeStackH.className = 'obj-time-stack';
+  const timeDateLbl = document.createElement('span');
+  timeDateLbl.className = 'obj-time-date';
+  timeDateLbl.textContent = 'Date';
+  const timeClockLbl = document.createElement('span');
+  timeClockLbl.className = 'obj-time-clock';
+  timeClockLbl.textContent = 'Time';
+  timeStackH.appendChild(timeDateLbl);
+  timeStackH.appendChild(timeClockLbl);
+  time.appendChild(timeStackH);
   const sender = document.createElement('div');
   sender.className = 'obj-sender';
   sender.textContent = 'Author';
@@ -7503,8 +7570,22 @@ function createObjectRow(obj, isNew, options) {
 
   const time = document.createElement('div');
   time.className = 'obj-time';
-  time.textContent = formatTime(obj.created_at);
-  if (fieldPrefs) time.style.setProperty('display', fieldPrefs.showTime ? 'block' : 'none', 'important');
+  var tp = formatTimePartsForDisplay(obj.created_at);
+  const timeStack = document.createElement('span');
+  timeStack.className = 'obj-time-stack';
+  const timeDateEl = document.createElement('span');
+  timeDateEl.className = 'obj-time-date';
+  timeDateEl.textContent = tp.date || '';
+  const timeClockEl = document.createElement('span');
+  timeClockEl.className = 'obj-time-clock';
+  timeClockEl.textContent = tp.clock || '';
+  timeStack.appendChild(timeDateEl);
+  timeStack.appendChild(timeClockEl);
+  time.appendChild(timeStack);
+  if (fieldPrefs) {
+    if (!fieldPrefs.showTime) time.style.setProperty('display', 'none', 'important');
+    else time.style.removeProperty('display');
+  }
 
   var valueParts = parseObjectTextToParts(obj.text);
   while (valueParts.length < valueColCount) valueParts.push('');
@@ -11838,21 +11919,33 @@ function toggleIdInSet(set, id, on) {
     if (set.has(id)) set.delete(id); else set.add(id);
   }
 }
-var formatTimeCache = new Map();
-var formatTimeCacheMax = 200;
-function formatTime(iso) {
-  var cached = formatTimeCache.get(iso);
-  if (cached !== undefined) return cached;
+var formatTimePartsCache = new Map();
+var formatTimePartsCacheMax = 200;
+function formatTimePartsForDisplay(iso) {
+  var key = String(iso);
+  var hit = formatTimePartsCache.get(key);
+  if (hit !== undefined) return hit;
   const d = new Date(iso);
-  const date = d.toLocaleDateString([], { month: 'short', day: '2-digit' });
-  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-  const s = date + ' ' + time;
-  if (formatTimeCache.size >= formatTimeCacheMax) {
-    var first = formatTimeCache.keys().next().value;
-    if (first !== undefined) formatTimeCache.delete(first);
+  var o;
+  if (Number.isNaN(d.getTime())) {
+    o = { date: '', clock: '' };
+  } else {
+    o = {
+      date: d.toLocaleDateString([], { month: 'short', day: '2-digit' }),
+      clock: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+    };
   }
-  formatTimeCache.set(iso, s);
-  return s;
+  if (formatTimePartsCache.size >= formatTimePartsCacheMax) {
+    var firstK = formatTimePartsCache.keys().next().value;
+    if (firstK !== undefined) formatTimePartsCache.delete(firstK);
+  }
+  formatTimePartsCache.set(key, o);
+  return o;
+}
+function formatTime(iso) {
+  var p = formatTimePartsForDisplay(iso);
+  if (!p.date && !p.clock) return '';
+  return p.date + (p.date && p.clock ? ' ' : '') + p.clock;
 }
 
 function escapeHtml(s) {
