@@ -1355,6 +1355,7 @@ function syncManageBarValueColumnHeaders(maxCols, hasDataRows, isTableMode) {
   var show = !!(isTableMode && hasDataRows);
   if (!show) {
     wrap.hidden = true;
+    wrap.setAttribute('hidden', '');
     wrap.setAttribute('aria-hidden', 'true');
     wrap.replaceChildren();
     if (bar) {
@@ -1365,6 +1366,7 @@ function syncManageBarValueColumnHeaders(maxCols, hasDataRows, isTableMode) {
     return;
   }
   wrap.hidden = false;
+  wrap.removeAttribute('hidden');
   wrap.setAttribute('aria-hidden', 'false');
   if (bar) {
     bar.classList.add('manage-bar-has-value-columns');
@@ -1451,7 +1453,7 @@ function syncFeedMultiValueChrome(inner, messagesList) {
   inner.classList.toggle('inout-multi-value-cols', maxCols > 1);
   var isTable = typeof fieldPrefs !== 'undefined' && fieldPrefs && fieldPrefs.viewMode === 'table';
   inner.classList.toggle('inout-table-split', !!isTable);
-  var hasDataRows = !!inner.querySelector('.obj:not(.obj-header)[data-id]');
+  var hasDataRows = !!inner.querySelector('.obj:not(.obj-header)');
   var useBarValueHeaders = isTable;
   var wantHeader = hasDataRows && !isTable && maxCols > 1;
   var existing = inner.querySelector('.obj.obj-header');
