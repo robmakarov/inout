@@ -214,7 +214,7 @@ header,
   border-radius:8px;
   border:1px solid rgba(232,213,160,0.2);
   background:rgba(232,213,160,0.06);
-  cursor:grab;
+  cursor:default;
   flex-shrink:0;
   transition:background .2s ease, border-color .2s ease, box-shadow .2s ease;
   box-shadow:0 1px 2px rgba(0,0,0,0.08);
@@ -470,7 +470,7 @@ header{
   line-height:1;
   padding:2px 8px;
   border-radius:4px;
-  cursor:pointer;
+  cursor:default;
   width:32px;
   height:28px;
   display:inline-flex;
@@ -535,7 +535,7 @@ header{
   font-size:10px;
   padding:3px 8px;
   border-radius:999px;
-  cursor:pointer;
+  cursor:default;
   text-transform:uppercase;
   letter-spacing:0.06em;
 }
@@ -580,7 +580,7 @@ header{
   font-size:10px;
   padding:3px 8px;
   border-radius:4px;
-  cursor:pointer;
+  cursor:default;
   text-transform:uppercase;
   letter-spacing:0.06em;
 }
@@ -632,7 +632,7 @@ header{
   display:inline-flex;
   align-items:center;
   gap:4px;
-  cursor:pointer;
+  cursor:default;
 }
 #view-menu input[type="checkbox"]{
   width:13px;
@@ -642,7 +642,7 @@ header{
   border:1px solid var(--line2);
   border-radius:3px;
   background:var(--bg);
-  cursor:pointer;
+  cursor:default;
 }
 #view-menu input[type="checkbox"]:checked{
   background:var(--acc);
@@ -738,7 +738,7 @@ header{
   background:transparent;
   color:var(--soft);
   border-radius:999px;
-  cursor:pointer;
+  cursor:default;
   transition:background .12s, border-color .12s, color .12s;
 }
 #user-btn:hover{background:var(--line);color:var(--text)}
@@ -831,7 +831,7 @@ header{
   color:var(--soft);
   width:28px;height:28px;
   border-radius:6px;
-  cursor:pointer;
+  cursor:default;
 }
 #user-close:hover{background:var(--line);color:var(--text)}
 
@@ -943,7 +943,7 @@ header{
   display:flex;
   align-items:center;
   justify-content:center;
-  cursor:pointer;
+  cursor:default;
 }
 .qr-modal-close-btn:hover{
   background:var(--line);
@@ -969,7 +969,7 @@ header{
   display:flex;
   align-items:center;
   gap:8px;
-  cursor:pointer;
+  cursor:default;
   font-size:13px;
   color:var(--text);
 }
@@ -1036,7 +1036,7 @@ header{
   font-size:10px;
   padding:6px 10px;
   border-radius:6px;
-  cursor:pointer;
+  cursor:default;
   text-transform:uppercase;
   letter-spacing:0.06em;
 }
@@ -1350,19 +1350,18 @@ header{
   flex-direction:column;
 }
 
-/* Object component: property text fields. Feed view only — labels left of values, 20px gap. */
-/* Layout: label left, value right in every cell */
+/* Object component: property text fields. Feed view only — label above value, 20px gap. */
 .feed-inner:not(.inout-multi-value-cols) .obj .obj-time,
 .feed-inner:not(.inout-multi-value-cols) .obj .obj-sender,
 .feed-inner:not(.inout-multi-value-cols) .obj .obj-text,
 .feed-inner:not(.inout-multi-value-cols) .obj .obj-value-cell{
   display:flex;
-  flex-direction:row;
-  align-items:baseline;
+  flex-direction:column;
+  align-items:flex-start;
   gap:20px;
   min-width:0;
 }
-/* Label (::before) — shared style; fixed width so value aligns at same distance (20px gap) */
+/* Label (::before) — shared style; sits above value via column flex order */
 .feed-inner:not(.inout-multi-value-cols) .obj .obj-time::before,
 .feed-inner:not(.inout-multi-value-cols) .obj .obj-sender::before,
 .feed-inner:not(.inout-multi-value-cols) .obj .obj-text::before,
@@ -1373,8 +1372,6 @@ header{
   letter-spacing:0.05em;
   color:var(--muted);
   flex-shrink:0;
-  width:3.5em;
-  min-width:3.5em;
 }
 /* Labels ON: label visible in flow */
 .feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-time::before,
@@ -1397,13 +1394,13 @@ header{
 .feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="6"]::before{ content:'Value 7'; }
 .feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-value-cell[data-value-index="7"]::before{ content:'Value 8'; }
 
-/* Multi-value feed: same label row layout (single-value rules above are gated with :not(.inout-multi-value-cols)) */
+/* Multi-value feed: label above value per cell (same gap as single-value) */
 .feed-inner.inout-multi-value-cols .obj .obj-time,
 .feed-inner.inout-multi-value-cols .obj .obj-sender,
 .feed-inner.inout-multi-value-cols .obj .obj-value-cell{
   display:flex;
-  flex-direction:row;
-  align-items:baseline;
+  flex-direction:column;
+  align-items:flex-start;
   gap:20px;
   min-width:0;
 }
@@ -1416,8 +1413,6 @@ header{
   letter-spacing:0.05em;
   color:var(--muted);
   flex-shrink:0;
-  width:3.5em;
-  min-width:3.5em;
 }
 .feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-time::before,
 .feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-sender::before,
@@ -1443,7 +1438,7 @@ header{
   transition:none;
 }
 
-/* Labels OFF: label out of flow (no space). On hover, show label left of value; same 20px gap, smooth animation */
+/* Labels OFF: label out of flow (no space). On hover, show label above value; same 20px gap */
 .feed-inner.obj-labels-off .obj .obj-time::before,
 .feed-inner.obj-labels-off .obj .obj-sender::before,
 .feed-inner.obj-labels-off .obj .obj-text::before,
@@ -1454,7 +1449,7 @@ header{
   top:0;
   white-space:nowrap;
   opacity:0;
-  transform:translateX(-6px);
+  transform:translateY(-6px);
   transition:opacity .22s ease-out, transform .22s ease-out;
   pointer-events:none;
 }
@@ -1474,7 +1469,7 @@ header{
 .feed-inner.obj-labels-off .obj .obj-text,
 .feed-inner.obj-labels-off .obj .obj-value-cell{
   position:relative;
-  transition:transform .22s ease-out, padding-left .22s ease-out;
+  transition:padding-top .22s ease-out;
   overflow:visible;
 }
 .feed-inner.obj-labels-off .obj:hover .obj-time::before,
@@ -1482,27 +1477,19 @@ header{
 .feed-inner.obj-labels-off .obj:hover .obj-text::before,
 .feed-inner.obj-labels-off .obj:hover .obj-value-cell::before{
   opacity:1;
-  transform:translateX(0);
+  transform:translateY(0);
 }
-/* Reserve space for label on hover — same distance (3.5em + 20px) so values align */
+/* Reserve space for label on hover — label line (12px) + 20px gap */
 .feed-inner.obj-labels-off .obj:hover .obj-time,
 .feed-inner.obj-labels-off .obj:hover .obj-sender,
 .feed-inner.obj-labels-off .obj:hover .obj-text,
 .feed-inner.obj-labels-off .obj:hover .obj-value-cell{
-  padding-left:calc(3.5em + 20px);
-  transform:translateX(0);
-}
-/* Values slide from left on hover (labels OFF only); rest state */
-.feed-inner.obj-labels-off .obj .obj-time,
-.feed-inner.obj-labels-off .obj .obj-sender,
-.feed-inner.obj-labels-off .obj .obj-text,
-.feed-inner.obj-labels-off .obj .obj-value-cell{
-  transform:translateX(-20px);
+  padding-top:32px;
 }
 .feed-inner .obj .obj-content{
   overflow:visible;
 }
-/* Labels ON: no slide animation, values stay at fixed 20px from labels */
+/* Labels ON: no extra animation */
 .feed-inner:not(.obj-labels-off) .obj .obj-time,
 .feed-inner:not(.obj-labels-off) .obj .obj-sender,
 .feed-inner:not(.obj-labels-off) .obj .obj-text,
@@ -1511,22 +1498,25 @@ header{
   transition:none;
 }
 
-/* Select mode: selected objects animate to right from checkboxes (same as hover) */
+/* Select mode: selected objects show labels above (same as hover) */
 body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-time,
 body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-sender,
 body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-text,
 body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell{
-  padding-left:calc(3.5em + 20px);
-  transform:translateX(0);
+  padding-top:32px;
 }
 body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-time::before,
 body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-sender::before,
 body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-text::before,
 body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell::before{
   opacity:1;
-  transform:translateX(0);
+  transform:translateY(0);
 }
-/* Default feed: time and author font size */
+/* Default feed: time and author font size; column label-above layout */
+.feed-inner .obj .obj-sender{
+  justify-content:flex-start;
+  text-align:left;
+}
 .feed-inner .obj .obj-time,
 .feed-inner .obj .obj-sender{
   font-size:10px;
@@ -1919,14 +1909,7 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
   line-height:1.55;
   white-space:pre-wrap;
   padding-right:72px; /* reserve space under right-side actions */
-  cursor:pointer;
-}
-/* Value-slot reorder: grab affordance (row drag still uses row chrome elsewhere). */
-.obj:not(.obj-editing) .obj-value-cell{
-  cursor:grab;
-}
-.obj:not(.obj-editing) .obj-value-cell:active{
-  cursor:grabbing;
+  cursor:default;
 }
 .obj-value-dnd-source{
   opacity:0.55;
@@ -2039,7 +2022,7 @@ body.select-mode .obj-select-wrap,
   border:1px solid var(--line2);
   border-radius:3px;
   background:var(--bg);
-  cursor:pointer;
+  cursor:default;
 }
 .obj-select:checked{
   background:var(--acc);
@@ -2078,7 +2061,7 @@ body.select-mode .obj-select-wrap,
   line-height:1;
   padding:2px 6px;
   border-radius:3px;
-  cursor:pointer;
+  cursor:default;
   width:24px;
   height:24px;
   display:inline-flex;
@@ -2149,7 +2132,7 @@ body.select-mode .obj-select-wrap,
   font-size:9px;
   padding:1px 4px;
   border-radius:3px;
-  cursor:pointer;
+  cursor:default;
 }
 .obj-action-btn:hover{
   background:var(--line);
@@ -2234,7 +2217,7 @@ body.select-mode .obj-select-wrap,
   border:none;
   border-radius:0;
   padding:0 14px 0 0;
-  cursor:pointer;
+  cursor:default;
   min-width:0;
   max-width:100px;
   appearance:none;
@@ -2256,7 +2239,7 @@ body.select-mode .obj-select-wrap,
   color:var(--muted);
   font-size:18px;
   line-height:1;
-  cursor:pointer;
+  cursor:default;
   padding:0;
   display:inline-flex;
   align-items:center;
@@ -2384,7 +2367,7 @@ body.select-mode .obj-select-wrap,
   font-size:9px;
   padding:3px 6px;
   border-radius:3px;
-  cursor:pointer;
+  cursor:default;
   text-transform:uppercase;
   letter-spacing:0.06em;
 }
@@ -2479,10 +2462,10 @@ body.select-mode .obj-select-wrap,
   border-radius:14px;
 }
 .composer-slot-draggable{
-  cursor:grab;
+  cursor:default;
 }
 .composer-slot-draggable:active{
-  cursor:grabbing;
+  cursor:default;
 }
 
 /* Slot as bubble (chip) style */
@@ -2553,7 +2536,7 @@ body.select-mode .obj-select-wrap,
   font-weight:600;
   letter-spacing:0.08em;
   text-transform:uppercase;
-  cursor:pointer;
+  cursor:default;
   transition:background .2s var(--anim-ease-smooth), color .2s ease, transform .12s ease;
   white-space:nowrap;
 }
@@ -2666,7 +2649,7 @@ body:not(.secret-show-kbcalc) #custom-calc{
   min-height:26px;
   box-shadow:0 2px 8px rgba(0,0,0,0.14);
   transition:transform .14s ease, background .2s ease, border-color .2s ease, color .2s ease;
-  cursor:pointer;
+  cursor:default;
 }
 .mobile-kb-tool:hover{
   transform:translateY(-1px);
@@ -2713,7 +2696,7 @@ body:not(.secret-show-kbcalc) #custom-calc{
   font-family:var(--mono);
   font-size:10px;
   padding:5px 9px;
-  cursor:pointer;
+  cursor:default;
   max-width:42%;
   white-space:nowrap;
   overflow:hidden;
@@ -2781,7 +2764,7 @@ body:not(.secret-show-kbcalc) #custom-calc{
   font-size:11px;
   min-height:30px;
   padding:6px 8px;
-  cursor:pointer;
+  cursor:default;
 }
 .custom-calc-btn:hover{
   background:rgba(255,255,255,0.12);
@@ -2828,7 +2811,7 @@ body:not(.secret-show-kbcalc) #custom-calc{
   color:var(--soft);
   font-size:18px;
   line-height:1;
-  cursor:pointer;
+  cursor:default;
 }
 .secret-controls-body{
   margin-top:8px;
@@ -2857,7 +2840,7 @@ body:not(.secret-show-kbcalc) #custom-calc{
   font-size:10px;
   padding:4px 8px;
   border-radius:4px;
-  cursor:pointer;
+  cursor:default;
 }
 #secret-controls-reset:hover{ background:var(--line); color:var(--text); }
 
@@ -2901,7 +2884,7 @@ body:not(.secret-show-kbcalc) #custom-calc{
   border:1px solid var(--line2);
   background:var(--bg2);
   color:var(--text);
-  cursor:pointer;
+  cursor:default;
 }
 .secret-folder-btn:hover{
   background:var(--line);
@@ -2955,7 +2938,7 @@ body.secret-show-grips .frame-grip{
   background:transparent;
   color:var(--muted);
   border-radius:3px;
-  cursor:pointer;
+  cursor:default;
   transition:background .15s, color .15s;
   overflow:hidden;
   text-overflow:ellipsis;
@@ -3058,7 +3041,7 @@ body.secret-show-grips .frame-grip{
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  cursor:pointer;
+  cursor:default;
   opacity:0;
   pointer-events:none;
   transition:opacity .2s ease, background .2s ease, color .2s ease;
@@ -3239,7 +3222,7 @@ body.secret-show-grips .frame-grip{
   font-size:11px;
   padding:3px 8px;
   border-radius:999px;
-  cursor:pointer;
+  cursor:default;
   letter-spacing:0.04em;
   text-transform:uppercase;
   display:inline-flex;
@@ -3453,7 +3436,7 @@ body.secret-show-grips .frame-grip{
   font-size:10px;
   padding:4px 10px;
   border-radius:3px;
-  cursor:pointer;
+  cursor:default;
   text-transform:uppercase;
   letter-spacing:0.06em;
 }
