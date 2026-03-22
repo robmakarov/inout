@@ -1,0 +1,13 @@
+# Keep Cursor / AI index light — add folders here as the repo grows.
+
+node_modules/
+.pnpm-store/
+dist/
+build/
+.next/
+.cache/
+.vercel/
+.turbo/
+
+.DS_Store
+*.log
