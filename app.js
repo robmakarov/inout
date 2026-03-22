@@ -1473,6 +1473,41 @@ function syncFeedMultiValueChrome(inner, messagesList) {
 }
 
 var inoutMultiValueFilterMode = 'all';
+var inoutMultiValueColumnFilterIndex = null;
+
+function valueColumnHeaderLabel(index) {
+  if (index === 0) return 'Value';
+  return 'Value ' + (index + 1);
+}
+
+function columnPartNonEmpty(row, idx) {
+  if (!row || idx == null || !Number.isFinite(Number(idx))) return true;
+  var i = Number(idx);
+  var parts = partsFromRowDom(row);
+  return i >= 0 && i < parts.length && String(parts[i]).trim().length > 0;
+}
+
+function syncInoutObjLeadingWidthVar() {
+  try {
+    var inner = document.getElementById('feed-inner');
+    var mvBar = document.getElementById('multi-value-chrome-bar');
+    var vtc = document.getElementById('view-top-chrome');
+    var mbar = document.getElementById('manage-bar');
+    if (!inner) return;
+    var row = inner.querySelector('.obj[data-id] .obj-leading-col');
+    var w = row ? Math.ceil(row.getBoundingClientRect().width) : 0;
+    var props = [inner, mvBar, vtc, mbar];
+    if (w > 0) {
+      props.forEach(function(el) {
+        if (el) el.style.setProperty('--inout-obj-leading-w', w + 'px');
+      });
+    } else {
+      props.forEach(function(el) {
+        if (el) el.style.removeProperty('--inout-obj-leading-w');
+      });
+    }
+  } catch (_) {}
+}
 
 function countNonEmptyValuePartsInRow(row) {
   if (!row) return 0;
@@ -1515,15 +1550,51 @@ function syncInoutMultiValueFilterMenuAria() {
   });
 }
 
+function rebuildMultiValueColumnLabelButtons() {
+  var wrap = document.getElementById('multi-value-col-labels');
+  if (!wrap || typeof feedInner === 'undefined' || !feedInner) return;
+  var n = parseInt(feedInner.dataset.inoutValueCols, 10) || 1;
+  if (inoutMultiValueColumnFilterIndex != null && inoutMultiValueColumnFilterIndex >= n)
+    inoutMultiValueColumnFilterIndex = null;
+  wrap.replaceChildren();
+  if (n < 2) return;
+  for (var i = 0; i < n; i++) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'manage-btn multi-value-col-label-btn';
+    btn.setAttribute('data-value-index', String(i));
+    btn.textContent = valueColumnHeaderLabel(i);
+    btn.setAttribute('aria-pressed', 'false');
+    btn.setAttribute('title', 'Show objects with text in ' + valueColumnHeaderLabel(i) + '. Click again to clear.');
+    wrap.appendChild(btn);
+  }
+  updateMultiValueColumnLabelButtonsActive();
+}
+
+function updateMultiValueColumnLabelButtonsActive() {
+  var wrap = document.getElementById('multi-value-col-labels');
+  if (!wrap) return;
+  var idx = inoutMultiValueColumnFilterIndex;
+  wrap.querySelectorAll('.multi-value-col-label-btn').forEach(function(b) {
+    var i = parseInt(b.getAttribute('data-value-index'), 10);
+    var on = Number.isFinite(i) && i === idx;
+    b.classList.toggle('multi-value-col-label-btn-active', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+
 function applyInoutMultiValueFilter() {
   if (typeof feedInner === 'undefined' || !feedInner) return;
   var multiONLY = inoutMultiValueFilterMode === 'multi';
+  var colIdx = inoutMultiValueColumnFilterIndex;
   feedInner.querySelectorAll('.obj[data-id]').forEach(function(row) {
-    var show = !multiONLY || countNonEmptyValuePartsInRow(row) > 1;
-    row.classList.toggle('obj-filtered-out', !show);
+    var passesMulti = !multiONLY || countNonEmptyValuePartsInRow(row) > 1;
+    var passesCol = colIdx == null || columnPartNonEmpty(row, colIdx);
+    row.classList.toggle('obj-filtered-out', !(passesMulti && passesCol));
   });
   var trig = document.getElementById('multi-value-filter-trigger');
-  if (trig) trig.classList.toggle('multi-value-filter-active', multiONLY);
+  if (trig) trig.classList.toggle('multi-value-filter-active', multiONLY || colIdx != null);
+  updateMultiValueColumnLabelButtonsActive();
   syncInoutMultiValueFilterMenuAria();
 }
 
@@ -1534,6 +1605,7 @@ function updateMultiValueChromeBar() {
   if (!show) {
     bar.hidden = true;
     bar.setAttribute('aria-hidden', 'true');
+    inoutMultiValueColumnFilterIndex = null;
     if (inoutMultiValueFilterMode !== 'all') {
       inoutMultiValueFilterMode = 'all';
       applyInoutMultiValueFilter();
@@ -1542,10 +1614,21 @@ function updateMultiValueChromeBar() {
     feedInner.querySelectorAll('.obj.obj-filtered-out').forEach(function(r) {
       r.classList.remove('obj-filtered-out');
     });
+    var lw = document.getElementById('multi-value-col-labels');
+    if (lw) {
+      lw.replaceChildren();
+      lw.setAttribute('aria-hidden', 'true');
+    }
+    var trig = document.getElementById('multi-value-filter-trigger');
+    if (trig) trig.classList.remove('multi-value-filter-active');
     return;
   }
   bar.hidden = false;
   bar.removeAttribute('aria-hidden');
+  syncInoutObjLeadingWidthVar();
+  var labelsWrap = document.getElementById('multi-value-col-labels');
+  if (labelsWrap) labelsWrap.setAttribute('aria-hidden', 'false');
+  rebuildMultiValueColumnLabelButtons();
   applyInoutMultiValueFilter();
 }
 
@@ -1575,10 +1658,25 @@ function setupMultiValueChromeBar() {
       e.stopPropagation();
       var mode = btn.getAttribute('data-multi-value-filter') === 'multi' ? 'multi' : 'all';
       inoutMultiValueFilterMode = mode;
+      if (mode === 'all') inoutMultiValueColumnFilterIndex = null;
       applyInoutMultiValueFilter();
       closeInoutMultiValueFilterMenu();
     });
   });
+  var colWrap = document.getElementById('multi-value-col-labels');
+  if (colWrap && !colWrap.dataset.inoutColFilterBound) {
+    colWrap.dataset.inoutColFilterBound = '1';
+    colWrap.addEventListener('click', function(e) {
+      var b = e.target && e.target.closest && e.target.closest('.multi-value-col-label-btn');
+      if (!b || !colWrap.contains(b)) return;
+      e.stopPropagation();
+      var idx = parseInt(b.getAttribute('data-value-index'), 10);
+      if (!Number.isFinite(idx)) return;
+      if (inoutMultiValueColumnFilterIndex === idx) inoutMultiValueColumnFilterIndex = null;
+      else inoutMultiValueColumnFilterIndex = idx;
+      applyInoutMultiValueFilter();
+    });
+  }
 }
 
 const USER_INPUT_STATE_TABLE = 'user_input_state';
@@ -3888,6 +3986,7 @@ async function loadObjectsForTempSession() {
 async function replaceFeedWithList(list) {
   if (!feedInner) return;
   inoutMultiValueFilterMode = 'all';
+  inoutMultiValueColumnFilterIndex = null;
   closeInoutMultiValueFilterMenu();
   seenIds.clear();
   globalObjectNum = 0;
@@ -7926,6 +8025,7 @@ function syncInoutManageRailWidthVar() {
     var w = Math.ceil(start.getBoundingClientRect().width);
     inner.style.setProperty('--inout-manage-start-w', w + 'px');
     if (bar) bar.style.setProperty('--inout-manage-start-w', w + 'px');
+    if (typeof syncInoutObjLeadingWidthVar === 'function') syncInoutObjLeadingWidthVar();
   } catch (_) {}
 }
 
@@ -7957,6 +8057,13 @@ function setupTabs() {
         syncInoutManageRailWidthVar();
       });
       ro.observe(rs);
+    }
+    var fi = document.getElementById('feed-inner');
+    if (fi && typeof ResizeObserver !== 'undefined') {
+      var roFeed = new ResizeObserver(function() {
+        if (typeof syncInoutObjLeadingWidthVar === 'function') syncInoutObjLeadingWidthVar();
+      });
+      roFeed.observe(fi);
     }
   } catch (_) {}
   syncInoutManageRailWidthVar();

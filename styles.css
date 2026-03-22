@@ -542,7 +542,8 @@ header{
   width:100%;
   min-width:0;
   box-sizing:border-box;
-  padding:5px max(20px, var(--safe-right)) 6px max(20px, var(--safe-left));
+  /* Match .feed-inner horizontal padding + .obj horizontal padding so columns align with rows */
+  padding:5px calc(max(16px, var(--safe-right)) + 12px) 6px calc(max(16px, var(--safe-left)) + 12px);
   border-bottom:1px solid var(--line2);
   background:var(--bg2);
 }
@@ -551,25 +552,73 @@ header{
 }
 .multi-value-chrome-row{
   display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
+  align-items:stretch;
+  gap:6px;
   min-width:0;
 }
-.multi-value-chrome-label{
-  font-family:var(--mono);
-  font-size:10px;
-  letter-spacing:0.05em;
-  text-transform:uppercase;
-  color:var(--muted);
-  flex:1 1 auto;
-  min-width:0;
-}
-.multi-value-chrome-end{
+/* Same width as .obj-leading-col (checkbox + time + author); set via --inout-obj-leading-w from first row */
+.multi-value-chrome-leading{
   position:relative;
+  flex:0 0 auto;
+  width:var(--inout-obj-leading-w, calc(56px + 22ch));
+  min-width:0;
   flex-shrink:0;
+  display:flex;
+  align-items:stretch;
+}
+.multi-value-filter-trigger{
+  width:100%;
+  min-height:28px;
+  box-sizing:border-box;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
 }
 .multi-value-filter-trigger.multi-value-filter-active{
+  border-color:var(--acc2);
+  color:var(--acc);
+  background:rgba(232,213,160,0.08);
+}
+/* Mirrors .obj-content .obj-values-wrap + .obj-value-cell flex */
+.multi-value-col-labels{
+  flex:1 1 0;
+  min-width:0;
+  display:flex;
+  flex-direction:row;
+  flex-wrap:nowrap;
+  align-items:stretch;
+  gap:8px 12px;
+  overflow-x:auto;
+  overflow-y:visible;
+  -webkit-overflow-scrolling:touch;
+}
+.multi-value-col-labels[aria-hidden="true"]:empty{
+  min-height:0;
+}
+.multi-value-col-label-btn{
+  flex:1 0 12rem;
+  min-width:8rem;
+  box-sizing:border-box;
+  font-family:var(--mono);
+  font-size:10px;
+  line-height:1.2;
+  padding:4px 6px;
+  border-radius:4px;
+  border:1px solid var(--line2);
+  background:var(--bg);
+  color:var(--soft);
+  text-transform:uppercase;
+  letter-spacing:0.06em;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  cursor:default;
+  min-height:28px;
+}
+.multi-value-col-labels .multi-value-col-label-btn:only-child{
+  flex:1 1 auto;
+}
+.multi-value-col-label-btn.multi-value-col-label-btn-active{
   border-color:var(--acc2);
   color:var(--acc);
   background:rgba(232,213,160,0.08);
@@ -577,7 +626,7 @@ header{
 .multi-value-filter-menu{
   position:absolute;
   top:100%;
-  right:0;
+  left:0;
   margin-top:4px;
   background:var(--bg);
   border:1px solid var(--line2);
