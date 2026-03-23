@@ -188,6 +188,8 @@ header,
   align-self:stretch;
   min-height:0;
   min-width:0;
+  width:100%;
+  background:var(--bg);
   overflow-y:auto;
   overflow-x:hidden;
   -webkit-overflow-scrolling:touch;
@@ -1450,8 +1452,10 @@ header{
   min-height:0;
   width:100%;
   max-width:100%;
+  min-width:0;
   height:auto;
   max-height:none;
+  background:var(--bg);
   overflow-x:hidden;
   overflow-y:visible;
   -webkit-overflow-scrolling:auto;
@@ -1496,8 +1500,12 @@ header{
 
 .feed-inner{
   position:relative;
-  /* Extra left inset so checkbox rail stays inside #feed (overflow-x:hidden) without negative margins clipping it */
-  padding:16px max(16px, var(--safe-left)) 20px calc(max(16px, var(--safe-right)) + 48px);
+  background:var(--bg);
+  /* Safe-area + checkbox rail (48px); use correct left/right env vars so content spans full width */
+  padding-top:10px;
+  padding-bottom:16px;
+  padding-right:max(10px, var(--safe-right));
+  padding-left:calc(max(10px, var(--safe-left)) + 48px);
   display:flex;
   flex-direction:column;
   justify-content:flex-start;
@@ -1505,6 +1513,7 @@ header{
   flex:0 0 auto;
   flex-grow:0;
   min-height:0;
+  min-width:0;
   width:100%;
   max-width:100%;
   box-sizing:border-box;
