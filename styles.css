@@ -1614,6 +1614,11 @@ header{
   content:none !important;
   display:none !important;
 }
+/* Align value text with Time/Author value lines (those columns still have label + gap above the value) */
+.feed-inner.inout-multi-value-cols .obj .obj-value-cell{
+  padding-top:calc(12px + var(--obj-label-value-gap));
+  box-sizing:border-box;
+}
 /* Labels OFF: ::before out of flow; padding-top on fields reserves label+gap (see below). Hover reveals label. */
 .feed-inner.obj-labels-off .obj .obj-time::before,
 .feed-inner.obj-labels-off .obj .obj-sender::before,
@@ -1648,10 +1653,6 @@ header{
 .feed-inner.obj-labels-off .obj:hover .obj-value-cell::before{
   opacity:1;
   transform:translateY(0);
-}
-/* Multi-value: per-row value labels are hidden; do not reserve label rail on value cells */
-.feed-inner.inout-multi-value-cols.obj-labels-off .obj .obj-value-cell{
-  padding-top:0;
 }
 .feed-inner .obj .obj-content{
   overflow:visible;
@@ -3446,18 +3447,20 @@ body.secret-show-grips .frame-grip{
   z-index:0;
   /* no overflow:hidden — avoids clipping badges and changing perceived tab width */
 }
-/* Top edge: .tab-active’s inset box-shadow covers a bottom-edge bar on some engines */
-.tab.tab-channel-loading::after{
+/*
+  Loading sweep uses ::before so it does not clash with .tab-secondary-open::after (only one ::after per element).
+  Top edge: .tab-active’s inset box-shadow can cover a bottom-edge bar on some engines — bar stays at top.
+*/
+.tab.tab-channel-loading::before{
   content:'';
   position:absolute;
   left:0;
   right:0;
   top:0;
-  bottom:auto;
   height:3px;
   border-radius:999px 999px 0 0;
   pointer-events:none;
-  z-index:2;
+  z-index:3;
   background:linear-gradient(90deg, transparent 0%, var(--acc) 45%, var(--acc2) 55%, transparent 100%);
   background-size:45% 100%;
   background-repeat:no-repeat;
