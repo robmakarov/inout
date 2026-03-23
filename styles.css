@@ -1605,12 +1605,7 @@ header{
   content:none !important;
   display:none !important;
 }
-.feed-inner.inout-multi-value-cols.obj-labels-off .obj:hover .obj-value-cell,
-body.select-mode .feed-inner.inout-multi-value-cols.obj-labels-off .obj.obj-selected .obj-value-cell{
-  padding-top:0;
-}
-
-/* Labels OFF: label out of flow (no space). On hover, show label above value; same 20px gap */
+/* Labels OFF: ::before out of flow; padding-top on fields reserves label+gap (see below). Hover reveals label. */
 .feed-inner.obj-labels-off .obj .obj-time::before,
 .feed-inner.obj-labels-off .obj .obj-sender::before,
 .feed-inner.obj-labels-off .obj .obj-text::before,
@@ -1634,8 +1629,9 @@ body.select-mode .feed-inner.inout-multi-value-cols.obj-labels-off .obj.obj-sele
 .feed-inner.obj-labels-off .obj .obj-text,
 .feed-inner.obj-labels-off .obj .obj-value-cell{
   position:relative;
-  transition:padding-top .22s ease-out;
   overflow:visible;
+  /* ::before is position:absolute — out of flex flow, so gap does not separate label from value. Reserve the same space as “labels on” + hover, always. */
+  padding-top:calc(12px + var(--obj-label-value-gap));
 }
 .feed-inner.obj-labels-off .obj:hover .obj-time::before,
 .feed-inner.obj-labels-off .obj:hover .obj-sender::before,
@@ -1644,12 +1640,9 @@ body.select-mode .feed-inner.inout-multi-value-cols.obj-labels-off .obj.obj-sele
   opacity:1;
   transform:translateY(0);
 }
-/* Reserve space for label on hover — label line (12px) + same gap as label-on layout */
-.feed-inner.obj-labels-off .obj:hover .obj-time,
-.feed-inner.obj-labels-off .obj:hover .obj-sender,
-.feed-inner.obj-labels-off .obj:hover .obj-text,
-.feed-inner.obj-labels-off .obj:hover .obj-value-cell{
-  padding-top:calc(12px + var(--obj-label-value-gap));
+/* Multi-value: per-row value labels are hidden; do not reserve label rail on value cells */
+.feed-inner.inout-multi-value-cols.obj-labels-off .obj .obj-value-cell{
+  padding-top:0;
 }
 .feed-inner .obj .obj-content{
   overflow:visible;
@@ -1664,12 +1657,6 @@ body.select-mode .feed-inner.inout-multi-value-cols.obj-labels-off .obj.obj-sele
 }
 
 /* Select mode: selected objects show labels above (same as hover) */
-body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-time,
-body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-sender,
-body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-text,
-body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell{
-  padding-top:calc(12px + var(--obj-label-value-gap));
-}
 body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-time::before,
 body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-sender::before,
 body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-text::before,
@@ -3417,6 +3404,25 @@ body.secret-show-grips .frame-grip{
   gap:6px;
   transition:background .15s, color .15s, border-color .15s, box-shadow .15s, transform .15s;
   white-space:nowrap;
+}
+.tab:hover:not(:disabled):not(.tab-drop-target){
+  background:rgba(232,213,160,0.08);
+  color:var(--text);
+  border-color:rgba(184,160,96,0.42);
+}
+.tab.tab-active:hover:not(:disabled):not(.tab-drop-target){
+  background:rgba(232,213,160,0.11);
+  color:var(--bright);
+  border-color:var(--acc2);
+  box-shadow:inset 0 0 0 1px rgba(184,160,96,0.38);
+}
+.tab.tab-new:hover:not(:disabled):not(.tab-drop-target){
+  border-color:rgba(184,160,96,0.55);
+  color:var(--soft);
+}
+.tab:focus-visible{
+  outline:2px solid var(--acc2);
+  outline-offset:2px;
 }
 
 .tab-active{
