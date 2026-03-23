@@ -8866,11 +8866,23 @@ function setupWindowsRevealEffects() {
   var selector = '.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn, #nav, #manage-bar, #input-area, .input-wrap, .composer-slot, .view, .visual, .visual-feed-stack, #feed, .obj';
   var activeEl = null;
   var activeLabelObj = null;
+  var cursorEl = document.getElementById('win10-reveal-cursor');
+  if (!cursorEl) {
+    cursorEl = document.createElement('div');
+    cursorEl.id = 'win10-reveal-cursor';
+    cursorEl.className = 'win10-reveal-cursor';
+    cursorEl.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(cursorEl);
+  }
   function clearReveal(el) {
     if (!el) return;
     el.classList.remove('win10-reveal-active');
     el.style.removeProperty('--reveal-x');
     el.style.removeProperty('--reveal-y');
+  }
+  function hideRevealCursor() {
+    if (!cursorEl) return;
+    cursorEl.classList.remove('active');
   }
   document.addEventListener('pointermove', function(e) {
     var t = e && e.target && e.target.nodeType === 1
@@ -8888,6 +8900,7 @@ function setupWindowsRevealEffects() {
         activeLabelObj.style.removeProperty('--reveal-y');
         activeLabelObj = null;
       }
+      hideRevealCursor();
       return;
     }
     if (activeEl && activeEl !== el) clearReveal(activeEl);
@@ -8897,6 +8910,11 @@ function setupWindowsRevealEffects() {
     el.style.setProperty('--reveal-x', (e.clientX - r.left) + 'px');
     el.style.setProperty('--reveal-y', (e.clientY - r.top) + 'px');
     el.classList.add('win10-reveal-active');
+    if (cursorEl) {
+      cursorEl.style.setProperty('--cursor-x', e.clientX + 'px');
+      cursorEl.style.setProperty('--cursor-y', e.clientY + 'px');
+      cursorEl.classList.add('active');
+    }
     var row = t && t.closest ? t.closest('.feed-inner.obj-labels-off .obj') : null;
     if (activeLabelObj && activeLabelObj !== row) {
       activeLabelObj.classList.remove('win10-label-reveal');
@@ -8922,6 +8940,7 @@ function setupWindowsRevealEffects() {
       activeLabelObj.style.removeProperty('--reveal-y');
       activeLabelObj = null;
     }
+    hideRevealCursor();
   }, { passive: true });
 }
 
