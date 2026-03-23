@@ -2017,7 +2017,10 @@ function bindVerticalWheelToHorizontalScroll(el) {
       var canY = yScrollableByStyle && (el.scrollHeight - el.clientHeight > 1);
       if (canY) return;
       var canX = xScrollableByStyle && (el.scrollWidth - el.clientWidth > 1);
-      if (!canX) return;
+      if (!canX) {
+        if (routeWheelToPrimaryView(e.deltaY, interactionId)) e.preventDefault();
+        return;
+      }
       if (Math.abs(e.deltaY) < 0.01) return;
       if (advanceScrollEdgeThenWrap(el, 'x', e.deltaY, interactionId)) {
         e.preventDefault();
