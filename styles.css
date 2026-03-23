@@ -2176,8 +2176,8 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
   z-index:2;
 }
 .obj-checkbox-zone-left{
-  width:48px;
-  min-width:48px;
+  width:0;
+  min-width:0;
   flex-shrink:0;
   align-self:stretch;
   min-height:100%;
