@@ -2127,10 +2127,10 @@ function syncHeaderScrollFromPrimaryFeed() {
 function syncManageBarLabelButtonWidthsFromFeed() {
   var labelsWrap = document.getElementById('multi-value-col-labels');
   if (!labelsWrap || typeof feedInner === 'undefined' || !feedInner) return;
-  var firstWrap = feedInner.querySelector('.obj[data-id] .obj-values-wrap');
   var btns = labelsWrap.querySelectorAll('.multi-value-col-label-btn');
   if (!btns.length) return;
-  if (!firstWrap) {
+  var wraps = Array.from(feedInner.querySelectorAll('.obj[data-id] .obj-values-wrap'));
+  if (!wraps.length) {
     btns.forEach(function(btn) {
       btn.style.removeProperty('flex-basis');
       btn.style.removeProperty('min-width');
@@ -2138,16 +2138,44 @@ function syncManageBarLabelButtonWidthsFromFeed() {
     });
     return;
   }
-  var cells = firstWrap.querySelectorAll(':scope > .obj-value-cell');
-  btns.forEach(function(btn, i) {
-    var cell = cells[i];
-    if (!cell) {
-      btn.style.removeProperty('flex-basis');
-      btn.style.removeProperty('min-width');
-      btn.style.removeProperty('max-width');
-      return;
+  var colCount = btns.length;
+  var widths = new Array(colCount).fill(1);
+  wraps.forEach(function(wrap) {
+    var cells = wrap.querySelectorAll(':scope > .obj-value-cell');
+    for (var i = 0; i < colCount; i++) {
+      var cell = cells[i];
+      if (!cell) continue;
+      var cw = Math.max(1, Math.ceil(cell.getBoundingClientRect().width));
+      if (cw > widths[i]) widths[i] = cw;
     }
-    var w = Math.max(1, Math.round(cell.getBoundingClientRect().width));
+  });
+  var cs = null;
+  try { cs = window.getComputedStyle(labelsWrap); } catch (_) {}
+  var gapPx = 0;
+  if (cs) {
+    var g = parseFloat(cs.columnGap || cs.gap || '0');
+    if (Number.isFinite(g)) gapPx = Math.max(0, g);
+  }
+  var total = widths.reduce(function(a, b) { return a + b; }, 0) + Math.max(0, colCount - 1) * gapPx;
+  var avail = Math.max(0, Math.floor(labelsWrap.clientWidth || 0));
+  if (avail > total && colCount > 0) {
+    var extra = avail - total;
+    var add = extra / colCount;
+    for (var j = 0; j < colCount; j++) widths[j] += add;
+  }
+  wraps.forEach(function(wrap) {
+    var cells = wrap.querySelectorAll(':scope > .obj-value-cell');
+    for (var i = 0; i < colCount; i++) {
+      var cell = cells[i];
+      if (!cell) continue;
+      var w = Math.max(1, Math.round(widths[i]));
+      cell.style.flexBasis = w + 'px';
+      cell.style.minWidth = w + 'px';
+      cell.style.maxWidth = w + 'px';
+    }
+  });
+  btns.forEach(function(btn, i) {
+    var w = Math.max(1, Math.round(widths[i] || 1));
     btn.style.flexBasis = w + 'px';
     btn.style.minWidth = w + 'px';
     btn.style.maxWidth = w + 'px';
@@ -5276,8 +5304,9 @@ function pickMultiEditPrimaryId(idsToEdit, clickedId, textMap) {
  * Enter object edit mode for one or more ids (composer + doppelgangers).
  * @param {Set<number>} idsToEdit
  * @param {number} primarySeedId  Row used to pick primary when lengths tie (e.g. clicked object id).
+ * @param {number|null} clickedValueIndex Preferred value index where caret should start.
  */
-function applyObjectEditMode(idsToEdit, primarySeedId) {
+function applyObjectEditMode(idsToEdit, primarySeedId, clickedValueIndex) {
   if (!input || !idsToEdit || idsToEdit.size < 1) return;
   const seed =
     primarySeedId != null && Number.isFinite(Number(primarySeedId))
@@ -5310,12 +5339,26 @@ function applyObjectEditMode(idsToEdit, primarySeedId) {
   editingObjectIds = idsToEdit;
   const primaryId = pickMultiEditPrimaryId(idsToEdit, seed, editingObjectTextMap);
   editingObjectId = primaryId;
-  const primaryText =
+  var primaryText =
     editingObjectTextMap[primaryId] != null ? String(editingObjectTextMap[primaryId]) : '';
+  var caretPos = null;
+  var prefIdx = Number(clickedValueIndex);
+  if (Number.isFinite(prefIdx) && prefIdx >= 0) {
+    var p = parseObjectTextToParts(primaryText);
+    while (p.length <= prefIdx) p.push('');
+    if (p.length > 1) {
+      primaryText = p.join('\n\n');
+      editingObjectTextMap[primaryId] = primaryText;
+      var pos = 0;
+      for (var pi = 0; pi < prefIdx; pi++) pos += String(p[pi] || '').length + 2;
+      caretPos = Math.max(0, Math.min(primaryText.length, pos));
+    }
+  }
   input.value = primaryText;
   var len = input.value.length;
-  input.selectionStart = len;
-  input.selectionEnd = len;
+  var sel = Number.isFinite(caretPos) ? Math.max(0, Math.min(len, caretPos)) : len;
+  input.selectionStart = sel;
+  input.selectionEnd = sel;
   originalEditTextForCancel = primaryText;
   editTypingUndoStack = [primaryText];
   editTypingRedoStack = [];
@@ -8175,7 +8218,7 @@ function createObjectRow(obj, isNew, options) {
     if (!obj.id) return;
     const multi = selectMode && selectedIds.size > 1 && selectedIds.has(obj.id);
     const idsToEdit = multi ? new Set(selectedIds) : new Set([obj.id]);
-    applyObjectEditMode(idsToEdit, obj.id);
+    applyObjectEditMode(idsToEdit, obj.id, null);
   });
 
   const actionAddValue = document.createElement('button');
@@ -8299,7 +8342,7 @@ function createObjectRow(obj, isNew, options) {
     e.stopPropagation();
     closeDropdown();
     if (!selectedIds.size) return;
-    applyObjectEditMode(new Set(selectedIds), obj.id);
+    applyObjectEditMode(new Set(selectedIds), obj.id, null);
   });
 
   const actionBulkDelete = document.createElement('button');
@@ -8692,7 +8735,8 @@ function createObjectRow(obj, isNew, options) {
     }
     const multi = selectMode && selectedIds.size > 1 && selectedIds.has(obj.id);
     const idsToEdit = multi ? new Set(selectedIds) : new Set([obj.id]);
-    applyObjectEditMode(idsToEdit, obj.id);
+    var valueIndex = parseInt(clickedCell.getAttribute('data-value-index'), 10);
+    applyObjectEditMode(idsToEdit, obj.id, Number.isFinite(valueIndex) ? valueIndex : null);
   });
 
   const leadingMeta = document.createElement('div');
