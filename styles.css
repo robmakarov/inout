@@ -3507,11 +3507,11 @@ body.secret-show-grips .frame-grip{
     inset:-1px;
     border-radius:inherit;
     background:radial-gradient(
-      120px circle at var(--reveal-x, -1000px) var(--reveal-y, -1000px),
-      rgba(255,255,255,0.20) 0%,
-      rgba(245,245,245,0.10) 34%,
-      rgba(220,220,220,0.04) 52%,
-      transparent 74%
+      82px circle at var(--reveal-x, -1000px) var(--reveal-y, -1000px),
+      rgba(255,255,255,0.11) 0%,
+      rgba(245,245,245,0.052) 34%,
+      rgba(220,220,220,0.018) 52%,
+      transparent 72%
     );
     opacity:0;
     transition:opacity .12s ease;
@@ -3525,18 +3525,18 @@ body.secret-show-grips .frame-grip{
     border-radius:inherit;
     padding:1px;
     background:radial-gradient(
-      90px circle at var(--reveal-x, -1000px) var(--reveal-y, -1000px),
-      rgba(255,255,255,0.92) 0%,
-      rgba(245,245,245,0.52) 34%,
-      rgba(210,210,210,0.12) 56%,
-      transparent 74%
+      64px circle at var(--reveal-x, -1000px) var(--reveal-y, -1000px),
+      rgba(255,255,255,0.34) 0%,
+      rgba(245,245,245,0.17) 34%,
+      rgba(210,210,210,0.045) 56%,
+      transparent 72%
     );
     mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     -webkit-mask-composite:xor;
     mask-composite:exclude;
     opacity:0;
-    transition:opacity .12s ease;
+    transition:opacity .14s ease;
     pointer-events:none;
     z-index:0;
   }
