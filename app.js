@@ -8867,6 +8867,10 @@ function setupWindowsRevealEffects() {
   var selector = '.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn, #nav, #manage-bar, #input-area, .input-wrap, .composer-slot, .view, .visual, .visual-feed-stack, #feed, .obj';
   var activeEl = null;
   var activeLabelObj = null;
+  var pointerOutsideWindow = false;
+  var lastCursorX = null;
+  var lastCursorY = null;
+  var strikeTimer = null;
   var cursorEl = document.getElementById('win10-reveal-cursor');
   if (!cursorEl) {
     cursorEl = document.createElement('div');
@@ -8884,6 +8888,37 @@ function setupWindowsRevealEffects() {
   function hideRevealCursor() {
     if (!cursorEl) return;
     cursorEl.classList.remove('active');
+  }
+  function setCursorPosition(x, y) {
+    if (!cursorEl) return;
+    cursorEl.style.setProperty('--cursor-x', x + 'px');
+    cursorEl.style.setProperty('--cursor-y', y + 'px');
+    lastCursorX = x;
+    lastCursorY = y;
+  }
+  function runCursorStrikeTo(x, y) {
+    if (!cursorEl) return;
+    if (strikeTimer) {
+      clearTimeout(strikeTimer);
+      strikeTimer = null;
+    }
+    if (lastCursorX == null || lastCursorY == null) {
+      setCursorPosition(x, y);
+      return;
+    }
+    cursorEl.classList.remove('strike');
+    setCursorPosition(lastCursorX, lastCursorY);
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        if (!cursorEl) return;
+        cursorEl.classList.add('strike');
+        setCursorPosition(x, y);
+        strikeTimer = setTimeout(function() {
+          if (cursorEl) cursorEl.classList.remove('strike');
+          strikeTimer = null;
+        }, 120);
+      });
+    });
   }
   function setRevealCursorMode(targetEl) {
     if (!cursorEl) return;
@@ -8914,10 +8949,10 @@ function setupWindowsRevealEffects() {
     var el = t && t.closest ? t.closest(selector) : null;
     setRevealCursorMode(t);
     if (cursorEl) {
-      cursorEl.style.setProperty('--cursor-x', e.clientX + 'px');
-      cursorEl.style.setProperty('--cursor-y', e.clientY + 'px');
+      setCursorPosition(e.clientX, e.clientY);
       cursorEl.classList.add('active');
     }
+    pointerOutsideWindow = false;
     if (!el) {
       if (activeEl) {
         clearReveal(activeEl);
@@ -8964,7 +8999,28 @@ function setupWindowsRevealEffects() {
       activeLabelObj.style.removeProperty('--reveal-y');
       activeLabelObj = null;
     }
-    hideRevealCursor();
+  }, { passive: true });
+  window.addEventListener('mouseleave', function() {
+    pointerOutsideWindow = true;
+    if (activeEl) {
+      clearReveal(activeEl);
+      activeEl = null;
+    }
+    if (activeLabelObj) {
+      activeLabelObj.classList.remove('win10-label-reveal');
+      activeLabelObj.style.removeProperty('--reveal-x');
+      activeLabelObj.style.removeProperty('--reveal-y');
+      activeLabelObj = null;
+    }
+  }, { passive: true });
+  window.addEventListener('mouseenter', function(e) {
+    if (!pointerOutsideWindow) return;
+    pointerOutsideWindow = false;
+    var x = Number(e && e.clientX);
+    var y = Number(e && e.clientY);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    if (cursorEl) cursorEl.classList.add('active');
+    runCursorStrikeTo(x, y);
   }, { passive: true });
 }
 
