@@ -12916,6 +12916,9 @@ function bindMultiviewWheelScrollCapture() {
       if (t.closest('#user-modal-backdrop, #user-modal, #channel-modal-backdrop, #qr-modal-backdrop'))
         return;
       if (t.closest('.manage-bar-dropdown, #log-dropup-panel.open, .multi-value-filter-menu')) return;
+      /* Let bindVerticalWheelToHorizontalScroll handle value columns / tabs / column headers (capture runs first). */
+      if (t.closest('[data-inout-wheel-horiz-bound="1"]')) return;
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
       var view = t.closest('#multiview .view');
       if (!view || !mv.contains(view)) return;
       var feed = view.querySelector('#feed') || view.querySelector('.feed');
