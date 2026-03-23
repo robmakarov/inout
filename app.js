@@ -1313,7 +1313,7 @@ function entryTextCacheKey(channel, id) {
   return String(channel != null && String(channel).trim() !== '' ? channel : 'main') + ':' + String(id);
 }
 
-/** Secondary key so label sync can resolve text when channel inferred for the row differs from the key used at remember time (e.g. after move or primary vs secondary pane). */
+/** Fallback id-only key so label sync still resolves text when a row channel key differs from remember-time key. */
 function entryTextCacheKeyIdOnly(id) {
   return 'id:' + String(id);
 }
@@ -1819,9 +1819,14 @@ function syncInoutObjLeadingWidthVar() {
   try {
     var inner = document.getElementById('feed-inner');
     var mbar = document.getElementById('manage-bar');
-    if (!inner) return;
+    if (!inner || !mbar) return;
     var row = inner.querySelector('.obj[data-id] .obj-leading-col');
-    var w = row ? Math.ceil(row.getBoundingClientRect().width) : 0;
+    var rowW = row ? Math.ceil(row.getBoundingClientRect().width) : 0;
+    var start = mbar.querySelector('.manage-bar-start');
+    var filterSlot = mbar.querySelector('.multi-value-filter-slot');
+    var startW = start ? Math.ceil(start.getBoundingClientRect().width) : 0;
+    var filterW = filterSlot ? Math.ceil(filterSlot.getBoundingClientRect().width) : 0;
+    var w = Math.max(rowW, startW, filterW);
     var props = [inner, mbar];
     if (w > 0) {
       props.forEach(function(el) {
@@ -1888,6 +1893,28 @@ function syncInoutMultiValueFilterMenuAria() {
 
 var inoutColScrollSyncing = false;
 
+function bindVerticalWheelToHorizontalScroll(el) {
+  if (!el || el.dataset.inoutWheelHorizBound === '1') return;
+  el.dataset.inoutWheelHorizBound = '1';
+  el.addEventListener(
+    'wheel',
+    function(e) {
+      // Keep native behavior when user intentionally scrolls horizontally.
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      // Exception: if this element has vertical scrolling, keep wheel vertical.
+      var canY = el.scrollHeight > el.clientHeight + 1;
+      if (canY) return;
+      var canX = el.scrollWidth > el.clientWidth + 1;
+      if (!canX) return;
+      if (Math.abs(e.deltaY) < 0.01) return;
+      var prev = el.scrollLeft;
+      el.scrollLeft = prev + e.deltaY;
+      if (Math.abs(el.scrollLeft - prev) > 0.01) e.preventDefault();
+    },
+    { passive: false }
+  );
+}
+
 function syncValueWrapsToHeaderScroll(scrollLeft, sourceWrap) {
   if (typeof feedInner === 'undefined' || !feedInner) return;
   var rows = feedInner.querySelectorAll('.obj .obj-values-wrap');
@@ -1908,6 +1935,7 @@ function syncHeaderScrollToValueWrap(scrollLeft) {
 function bindValueWrapScrollSync(wrap) {
   if (!wrap || wrap.dataset.inoutColSyncBound === '1') return;
   wrap.dataset.inoutColSyncBound = '1';
+  bindVerticalWheelToHorizontalScroll(wrap);
   wrap.addEventListener('scroll', function() {
     if (inoutColScrollSyncing) return;
     inoutColScrollSyncing = true;
@@ -2085,6 +2113,7 @@ function setupMultiValueChromeBar() {
   var colWrap = document.getElementById('multi-value-col-labels');
   if (colWrap && !colWrap.dataset.inoutColFilterBound) {
     colWrap.dataset.inoutColFilterBound = '1';
+    bindVerticalWheelToHorizontalScroll(colWrap);
     colWrap.addEventListener('scroll', function() {
       if (inoutColScrollSyncing) return;
       inoutColScrollSyncing = true;
@@ -2206,8 +2235,6 @@ function getInputStateDeviceId() {
 let currentView    = 'main';
 let currentChannel = currentView; // temporary alias while migrating off "channel"
 let viewNames      = ['main'];
-let secondaryViewName = null; /* legacy; will be removed when views[] fully replaces secondary. Persisted to device (localStorage). */
-let secondaryViewChannel = null; // temporary alias during migration
 const VIEW_DISPLAY_NAMES_KEY = 'inout_view_display_names_v1';
 let viewDisplayNames = {};
 const VIEWS_KEY           = 'inout_views_v1';
@@ -2215,7 +2242,6 @@ const LEFT_VIEWS_KEY      = 'inout_left_views_v1';
 const LEFT_CHANNELS_KEY   = LEFT_VIEWS_KEY; /* alias: left-rail hidden feeds */
 const CURRENT_VIEW_KEY    = 'inout_current_view_v1';
 const CURRENT_CHANNEL_KEY = 'inout_current_channel_v1';
-const SECONDARY_VIEW_KEY  = 'inout_secondary_view_name_v1';
 const INPUT_STATE_KEY      = 'inout_input_state_v2';
 const INPUT_SLOTS_KEY      = 'inout_input_slots_v1';
 const SYNC_INPUT_PREF_KEY  = 'inout_sync_input_v1';
@@ -2489,7 +2515,7 @@ function setupWorkspaceUiBroadcast() {
   }
 }
 
-/** Add feeds referenced only in workspace (e.g. legacy openSecondaryViews in saved config). */
+/** Add feeds referenced only in workspace config. */
 function ensureWorkspaceChannelsFromCfg(cfg) {
   if (!cfg || typeof cfg !== 'object') return;
   var add = [];
@@ -2498,11 +2524,6 @@ function ensureWorkspaceChannelsFromCfg(cfg) {
   }
   if (Array.isArray(cfg.channelStripOrder)) {
     cfg.channelStripOrder.forEach(function(c) {
-      add.push(String(c || '').trim());
-    });
-  }
-  if (Array.isArray(cfg.openSecondaryViews)) {
-    cfg.openSecondaryViews.forEach(function(c) {
       add.push(String(c || '').trim());
     });
   }
@@ -3902,8 +3923,6 @@ function channelKeyForRowEl(row) {
   if (!row) return String(currentChannel || 'main');
   var ds = row.getAttribute('data-object-channel');
   if (ds != null && String(ds) !== '') return String(ds);
-  if (typeof secondaryFeedInner !== 'undefined' && secondaryFeedInner && secondaryFeedInner.contains(row) && secondaryViewChannel != null)
-    return String(secondaryViewChannel);
   return String(currentChannel || 'main');
 }
 
@@ -3999,7 +4018,6 @@ async function performValueSlotDnDDrop(e, rawPayload) {
     if (!ok1 || !ok2) toast('Could not move value.');
   }
   if (feedInner) syncFeedMultiValueChrome(feedInner);
-  if (secondaryFeedInner) syncFeedMultiValueChrome(secondaryFeedInner);
   if (typeof applyFieldPrefsToObjects === 'function') applyFieldPrefsToObjects(true);
   return true;
 }
@@ -4007,8 +4025,6 @@ async function performValueSlotDnDDrop(e, rawPayload) {
 function getDraggingRowAndSource() {
   const fromPrimary = feedInner && feedInner.querySelector('.obj.dragging');
   if (fromPrimary) return { row: fromPrimary, feedInner: feedInner, channel: currentChannel };
-  const fromSecondary = secondaryFeedInner && secondaryFeedInner.querySelector('.obj.dragging');
-  if (fromSecondary) return { row: fromSecondary, feedInner: secondaryFeedInner, channel: secondaryViewChannel };
   return null;
 }
 
@@ -4702,7 +4718,7 @@ async function replaceFeedWithList(list) {
   });
 }
 
-/** Render a message list into a given feed-inner element (e.g. secondary view). Does not update global objectCount. */
+/** Render a message list into a given feed-inner element. Does not update global objectCount. */
 async function replaceFeedWithListInto(list, targetFeedInner) {
   if (!targetFeedInner) return;
   const savedSeen = new Set(seenIds);
@@ -5114,7 +5130,7 @@ function applyObjectEditMode(idsToEdit, primarySeedId) {
 
   originalEditTextForCancelMap = {};
   editingObjectTextMap = {};
-  [feedInner, secondaryFeedInner].forEach(fi => {
+  [feedInner].forEach(fi => {
     if (!fi) return;
     fi.querySelectorAll('.obj').forEach(row => {
       const id = row.dataset.id != null ? Number(row.dataset.id) : null;
@@ -5201,7 +5217,7 @@ function updateEditingRowFromInput() {
   const ids = editingObjectIds && editingObjectIds.size ? Array.from(editingObjectIds) : (editingObjectId != null ? [editingObjectId] : []);
   if (ids.length === 0 || !input) return;
   const editingSet = new Set(ids);
-  [feedInner, secondaryFeedInner].forEach(fi => {
+  [feedInner].forEach(fi => {
     if (!fi) return;
     fi.querySelectorAll('.obj').forEach(row => {
       const id = row.dataset.id != null ? Number(row.dataset.id) : null;
@@ -6359,9 +6375,6 @@ function showRemoteEditingDoppelganger(objId, text, authorName, deviceId, skipEd
   if (feedInner) {
     rows.push.apply(rows, Array.from(feedInner.querySelectorAll('.obj[data-id="' + CSS.escape(idStr) + '"]')));
   }
-  if (secondaryFeedInner) {
-    rows.push.apply(rows, Array.from(secondaryFeedInner.querySelectorAll('.obj[data-id="' + CSS.escape(idStr) + '"]')));
-  }
   if (!rows.length) return;
   if (lastRemoteEditingId != null && lastRemoteEditingId !== objId) {
     clearRemoteEditingDoppelganger(lastRemoteEditingId);
@@ -6405,9 +6418,6 @@ function clearRemoteEditingDoppelganger(objId, skipRestore) {
   const rows = [];
   if (feedInner) {
     rows.push.apply(rows, Array.from(feedInner.querySelectorAll('.obj[data-id="' + CSS.escape(idStr) + '"]')));
-  }
-  if (secondaryFeedInner) {
-    rows.push.apply(rows, Array.from(secondaryFeedInner.querySelectorAll('.obj[data-id="' + CSS.escape(idStr) + '"]')));
   }
   rows.forEach(function(row) {
     row.classList.remove('obj-remote-editing');
@@ -7160,20 +7170,8 @@ function restoreLastChannel() {
   } catch (_) {}
 }
 
-function saveSecondaryViewState() {
-  try {
-    localStorage.removeItem(SECONDARY_VIEW_KEY);
-  } catch (_) {}
-}
-
-var secondaryViewEl = null;
-var secondaryFeedInner = null;
-var secondaryFeedEl = null;
-
-function setupSecondaryFeedDnd() {}
-
 /** Single main feed only: strip any legacy extra `.view` nodes under `#multiview`. */
-function closeSecondaryView() {
+function closeExtraViews() {
   const root = document.getElementById('multiview');
   if (root) {
     root.querySelectorAll('.view').forEach(function(el) {
@@ -7181,13 +7179,8 @@ function closeSecondaryView() {
       if (el.parentNode) el.parentNode.removeChild(el);
     });
   }
-  secondaryViewEl = null;
-  secondaryFeedInner = null;
-  secondaryFeedEl = null;
-  secondaryViewChannel = null;
   views = views.filter(v => v && v.id === 'view-0');
   try { localStorage.setItem(OPEN_VIEWS_KEY, '[]'); } catch (_) {}
-  saveSecondaryViewState();
   updateTabsUI();
 }
 
@@ -7344,11 +7337,9 @@ function applyFieldPrefsToObjects(skipMultiValueChrome) {
     if (senderEl) senderEl.style.setProperty('display', fieldPrefs.showAuthor ? 'block' : 'none', 'important');
   });
   feedInner.classList.toggle('obj-labels-off', !fieldPrefs.showLabels);
-  if (secondaryFeedInner) secondaryFeedInner.classList.toggle('obj-labels-off', !fieldPrefs.showLabels);
   if (!skipMultiValueChrome) {
     syncFeedMultiValueChrome(feedInner);
-    if (secondaryFeedInner) syncFeedMultiValueChrome(secondaryFeedInner);
-  }
+    }
   applyFieldPrefsUI();
 }
 
@@ -8724,13 +8715,6 @@ function updateObjectCount() {
 /* ═══ TABS ════════════════════════════════════════════════ */
 function syncInoutManageRailWidthVar() {
   try {
-    var start = document.querySelector('.manage-bar-start');
-    var inner = document.getElementById('feed-inner');
-    var bar = document.getElementById('manage-bar');
-    if (!start || !inner) return;
-    var w = Math.ceil(start.getBoundingClientRect().width);
-    inner.style.setProperty('--inout-manage-start-w', w + 'px');
-    if (bar) bar.style.setProperty('--inout-manage-start-w', w + 'px');
     if (typeof syncInoutObjLeadingWidthVar === 'function') syncInoutObjLeadingWidthVar();
   } catch (_) {}
 }
@@ -9029,7 +9013,6 @@ function gatherPersonalWorkspaceStateForSave() {
     });
   } catch (_) {}
   return {
-    openSecondaryViews: [],
     multiviewSplit: null,
     frameOrder: Array.isArray(frameOrder) ? frameOrder.slice() : null,
     layoutSync: !!layoutSync,
@@ -9234,7 +9217,7 @@ function notifyWorkspaceChromeChanged() {
 }
 
 function flushPersonalWorkspacePersist() {
-  /* Never push workspace while merging remote config — partial DOM (e.g. mid–open-secondary) would clobber focusedChannel. */
+  /* Never push workspace while merging remote config — partial DOM can clobber focusedChannel. */
   if (applyingPersonalWorkspaceFromRemote) return Promise.resolve();
   if (inoutHydratingWorkspace) return Promise.resolve();
   if (!currentUser || !sb) return Promise.resolve();
@@ -9333,7 +9316,7 @@ async function hydrateWorkspaceOpenViewsForSignedInUser() {
   }
   inoutHydratingWorkspace = true;
   try {
-    closeSecondaryView();
+    closeExtraViews();
     let cfgFull = null;
     try {
       const { data, error } = await sb
@@ -10336,12 +10319,12 @@ async function refreshAuth() {
     // When not signed in, hydrate view from local per-device objects (anonymous mode),
     // unless we are in a temp-session guest mode.
     if (tempSessionId) {
-      closeSecondaryView();
+      closeExtraViews();
       await loadObjectOrderForCurrentChannel();
       await loadObjects();
       subscribeViewRealtime();
     } else {
-      closeSecondaryView();
+      closeExtraViews();
       await loadLocalObjectsForCurrentView();
     }
   }
@@ -12653,8 +12636,7 @@ feedEl.addEventListener('dragover', e => {
   }
   const railForFeed = document.getElementById('view-pinned-rail');
   const dragging = feedInner ? (feedInner.querySelector('.obj.dragging') || (railForFeed && railForFeed.querySelector('.obj.dragging'))) : null;
-  const draggingFromSecondary = secondaryFeedInner && secondaryFeedInner.querySelector('.obj.dragging');
-  if (!feedInner || (!dragging && !draggingFromSecondary && !originGhostsActive)) return;
+  if (!feedInner || (!dragging && !originGhostsActive)) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
   if (dragging || originGhostsActive) processFeedDragover(e);
@@ -12680,26 +12662,6 @@ feedEl.addEventListener('drop', e => {
         const sendB = slotRow.querySelector('.composer-send');
         if (sendB) sendB.disabled = true;
       }
-    }
-    return;
-  }
-  const fromSecondary = secondaryFeedInner && secondaryFeedInner.querySelector('.obj.dragging');
-  if (fromSecondary && secondaryViewChannel && currentChannel !== secondaryViewChannel) {
-    e.preventDefault();
-    e.stopPropagation();
-    dragDropHandled = true;
-    const id = e.dataTransfer.getData('application/x-inout-obj-id') || e.dataTransfer.getData('text/plain');
-    const numId = Number(id);
-    if (Number.isFinite(numId)) {
-      const rowEl = fromSecondary;
-      animateObjectToView(rowEl, feedEl, async () => {
-        const ok = await moveSingleObject(numId, currentChannel);
-        if (rowEl.parentNode) rowEl.parentNode.removeChild(rowEl);
-        if (ok) {
-          if (currentUser) await loadObjects();
-          else await loadLocalObjectsForCurrentView();
-        } else if (rowEl) rowEl.style.visibility = '';
-      });
     }
     return;
   }
@@ -12768,13 +12730,12 @@ document.addEventListener(
   true
 );
 
-// Dragover: when over feed, run processFeedDragover (primary reorder) or show indicator (drag from secondary). When outside feed, show indicator at top/bottom.
+// Dragover: when over feed, run processFeedDragover (primary reorder). When outside feed, show indicator at top/bottom.
 document.addEventListener('dragover', e => {
   if (!feedEl || !feedInner) return;
   const rail = document.getElementById('view-pinned-rail');
   const draggingPrimary = feedInner.querySelector('.obj.dragging') || (rail && rail.querySelector('.obj.dragging'));
-  const draggingSecondary = secondaryFeedInner && secondaryFeedInner.querySelector('.obj.dragging');
-  if (!draggingPrimary && !draggingSecondary && !originGhostsActive) return;
+  if (!draggingPrimary && !originGhostsActive) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
   lastDragClientX = e.clientX;
@@ -12790,21 +12751,7 @@ document.addEventListener('dragover', e => {
     overRail = x >= rr.left && x <= rr.right && y >= rr.top && y <= rr.bottom;
   }
   if (inFeed || overRail) {
-    if (draggingPrimary || originGhostsActive) {
-    processFeedDragover(e);
-    } else if (draggingSecondary && inFeed) {
-      if (!feedDropIndicatorEl) {
-        feedDropIndicatorEl = document.createElement('div');
-        feedDropIndicatorEl.className = 'feed-drop-indicator';
-        document.body.appendChild(feedDropIndicatorEl);
-      }
-      feedDropIndicatorEl.style.left = feedRect.left + 'px';
-      feedDropIndicatorEl.style.width = feedRect.width + 'px';
-      feedDropIndicatorEl.style.height = '4px';
-      feedDropIndicatorEl.style.top = (feedRect.bottom - 2) + 'px';
-      feedDropIndicatorEl.classList.add('visible');
-      lastIndicatorStyle = { left: feedRect.left, width: feedRect.width, top: feedRect.bottom - 2, visible: true };
-    }
+    if (draggingPrimary || originGhostsActive) processFeedDragover(e);
     return;
   }
   if (lastDragTargetRow && lastDragTargetRow.classList) {

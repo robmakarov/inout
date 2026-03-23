@@ -451,7 +451,9 @@ header{
   display:flex;
   align-items:center;
   gap:6px;
-  flex-shrink:0;
+  flex:0 0 var(--inout-obj-leading-w, auto);
+  width:var(--inout-obj-leading-w, auto);
+  min-width:0;
 }
 .manage-bar-column-headers{
   flex:1 1 0;
@@ -579,8 +581,14 @@ header{
 }
 .multi-value-filter-slot{
   position:relative;
-  flex:0 0 auto;
+  flex:0 0 var(--inout-obj-leading-w, auto);
+  width:var(--inout-obj-leading-w, auto);
+  min-width:0;
   align-self:center;
+}
+.multi-value-filter-slot .multi-value-filter-trigger{
+  width:100%;
+  justify-content:flex-start;
 }
 .multi-value-filter-trigger.multi-value-filter-active{
   background:var(--acc);
@@ -1738,7 +1746,9 @@ body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell::b
   flex-direction:row;
   align-items:flex-start;
   gap:20px;
-  flex-shrink:0;
+  flex:0 0 var(--inout-obj-leading-w, auto);
+  width:var(--inout-obj-leading-w, auto);
+  min-width:var(--inout-obj-leading-w, 0);
   margin-left:0;
 }
 .obj-leading-meta{
@@ -3471,7 +3481,7 @@ body.secret-show-grips .frame-grip{
   /* no overflow:hidden — avoids clipping badges and changing perceived tab width */
 }
 /*
-  Loading sweep uses ::before so it does not clash with .tab-secondary-open::after (only one ::after per element).
+  Loading sweep uses ::before.
   Top edge: .tab-active’s inset box-shadow can cover a bottom-edge bar on some engines — bar stays at top.
 */
 .tab.tab-channel-loading::before{
@@ -3494,23 +3504,6 @@ body.secret-show-grips .frame-grip{
   50%{ opacity:1; }
   100%{ background-position:120% 0; opacity:0.55; }
 }
-
-.tab-secondary-open{
-  position:relative;
-}
-.tab-secondary-open::after{
-  content:'';
-  position:absolute;
-  right:6px;
-  top:50%;
-  transform:translateY(-50%);
-  width:6px;
-  height:6px;
-  border-radius:50%;
-  background:var(--acc);
-  opacity:0.9;
-}
-.tab-active.tab-secondary-open::after{ background:var(--bg); }
 
 .tab-shared{
   display:inline-flex;
