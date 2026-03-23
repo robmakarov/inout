@@ -1901,7 +1901,9 @@ function bindVerticalWheelToHorizontalScroll(el) {
   var suspendY = 0;
   var suspendTimer = null;
   var MOVE_TO_REENABLE_PX = 8;
-  var CLICK_GRACE_MS = 1400;
+  var CLICK_GRACE_MS = 2500;
+  var suspendWheelAccum = 0;
+  var SUSPEND_WHEEL_RELEASE_DELTA = 180;
 
   function clearSuspendTimer() {
     if (suspendTimer != null) {
@@ -1911,6 +1913,7 @@ function bindVerticalWheelToHorizontalScroll(el) {
   }
   function enterSuspendFromPointer(e) {
     suspendAfterClick = true;
+    suspendWheelAccum = 0;
     suspendX = Number(e && e.clientX) || 0;
     suspendY = Number(e && e.clientY) || 0;
     clearSuspendTimer();
@@ -1939,7 +1942,22 @@ function bindVerticalWheelToHorizontalScroll(el) {
   el.addEventListener(
     'wheel',
     function(e) {
-      if (suspendAfterClick) return;
+      if (suspendAfterClick) {
+        // During grace period, wheel should scroll the main view vertically.
+        if (Math.abs(e.deltaY) >= Math.abs(e.deltaX) && Math.abs(Number(e.deltaY) || 0) > 0.01) {
+          var surf = typeof primaryFeedScrollSurface === 'function' ? primaryFeedScrollSurface() : null;
+          if (surf && surf.scrollHeight - surf.clientHeight > 1) {
+            surf.scrollTop = (surf.scrollTop || 0) + e.deltaY;
+            e.preventDefault();
+          }
+        }
+        suspendWheelAccum += Math.abs(Number(e.deltaY) || 0);
+        if (suspendWheelAccum >= SUSPEND_WHEEL_RELEASE_DELTA) {
+          suspendAfterClick = false;
+          clearSuspendTimer();
+        }
+        return;
+      }
       // Keep native behavior when user intentionally scrolls horizontally.
       if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
       var cs = null;
