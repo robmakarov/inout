@@ -3366,12 +3366,12 @@ body.secret-show-grips .frame-grip{
     padding:10px max(10px, var(--safe-right)) calc(14px + var(--safe-bottom)) max(10px, var(--safe-left));
     background:var(--bg);
   }
-  /* Room above the input bar (scrollport is stack or direct .feed — pad that layer only). */
+  /* Input is in normal flow on mobile; keep feed flush to avoid fake gap above composer. */
   #multiview .view > .visual > .visual-feed-stack{
-    padding-bottom:120px;
+    padding-bottom:0;
   }
   #multiview .view > .visual > .feed{
-    padding-bottom:120px;
+    padding-bottom:0;
   }
   #nav #tabs{
     padding:0 10px;
@@ -3402,6 +3402,19 @@ body.secret-show-grips .frame-grip{
   #object-input,
   .composer-slot-input{
     font-size:16px;
+  }
+  /* Touch browsers can leave :hover stuck after tap; neutralize tab hover in nav strip. */
+  #tabs .tab:hover:not(:disabled):not(.tab-drop-target){
+    background:transparent;
+    color:var(--soft);
+    border-color:var(--line2);
+    box-shadow:none;
+  }
+  #tabs .tab.tab-active:hover:not(:disabled):not(.tab-drop-target){
+    background:rgba(232,213,160,0.07);
+    color:var(--bright);
+    border-color:var(--acc2);
+    box-shadow:inset 0 0 0 1px rgba(184,160,96,0.35);
   }
   .obj:hover{ background:var(--bg) }
   .obj .obj-actions{ opacity:1; pointer-events:auto }
