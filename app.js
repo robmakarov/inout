@@ -1989,7 +1989,9 @@ var inoutColScrollSyncing = false;
 var inoutWheelViewLockUntil = 0;
 var INOUT_WHEEL_VIEW_LOCK_MS = 1200;
 
-function bindVerticalWheelToHorizontalScroll(el) {
+function bindVerticalWheelToHorizontalScroll(el, opts) {
+  opts = opts || {};
+  var enablePostClickSuspend = opts.enablePostClickSuspend !== false;
   if (!el || el.dataset.inoutWheelHorizBound === '1') return;
   el.dataset.inoutWheelHorizBound = '1';
   var suspendAfterClick = false;
@@ -2037,13 +2039,15 @@ function bindVerticalWheelToHorizontalScroll(el) {
     }
   }
 
-  el.addEventListener('pointerdown', enterSuspendFromPointer, { passive: true });
-  el.addEventListener('pointermove', maybeExitSuspendOnMove, { passive: true });
-  el.addEventListener('pointerleave', maybeExitSuspendOnMove, { passive: true });
-  el.addEventListener('blur', function() {
-    suspendAfterClick = false;
-    clearSuspendTimer();
-  });
+  if (enablePostClickSuspend) {
+    el.addEventListener('pointerdown', enterSuspendFromPointer, { passive: true });
+    el.addEventListener('pointermove', maybeExitSuspendOnMove, { passive: true });
+    el.addEventListener('pointerleave', maybeExitSuspendOnMove, { passive: true });
+    el.addEventListener('blur', function() {
+      suspendAfterClick = false;
+      clearSuspendTimer();
+    });
+  }
   el.addEventListener(
     'wheel',
     function(e) {
@@ -2057,7 +2061,7 @@ function bindVerticalWheelToHorizontalScroll(el) {
         if (movedLocked) e.preventDefault();
         return;
       }
-      if (suspendAfterClick) {
+      if (enablePostClickSuspend && suspendAfterClick) {
         if (Math.abs(e.deltaY) >= Math.abs(e.deltaX)) {
           var moved = routeWheelToPrimaryView(e.deltaY, interactionId);
           inoutWheelViewLockUntil = Date.now() + INOUT_WHEEL_VIEW_LOCK_MS;
@@ -8906,13 +8910,18 @@ function syncInoutManageRailWidthVar() {
 
 function setupTabs() {
   renderTabs();
-  if (tabsEl) bindVerticalWheelToHorizontalScroll(tabsEl);
+  if (tabsEl) bindVerticalWheelToHorizontalScroll(tabsEl, { enablePostClickSuspend: false });
   if (!document.body.dataset.inoutGlobalWheelFallbackBound) {
     document.body.dataset.inoutGlobalWheelFallbackBound = '1';
     document.addEventListener('wheel', function(e) {
       if (Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
       var dy = Number(e.deltaY) || 0;
       if (Math.abs(dy) < 0.01) return;
+      // Let dedicated horizontal-wheel zones handle wheel fully (avoid double handling/jumps).
+      var horizZone = e.target && e.target.closest
+        ? e.target.closest('[data-inout-wheel-horiz-bound="1"]')
+        : null;
+      if (horizZone) return;
       var nowAt = Date.now();
       if (nowAt - inoutLastWheelAt > INOUT_WHEEL_INTERACTION_GAP_MS) inoutWheelInteractionId++;
       inoutLastWheelAt = nowAt;
