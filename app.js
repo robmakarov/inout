@@ -1587,18 +1587,12 @@ function resolveValueCellFromPointer(valuesWrap, clientX, clientY, target) {
   }
   var wr = valuesWrap.getBoundingClientRect();
   if (x < wr.left || x > wr.right || y < wr.top || y > wr.bottom) return null;
-  var best = null;
-  var bestDx = Infinity;
+  // In gaps between columns, choose the next column to the right so "under header" clicks map predictably.
   for (i = 0; i < cells.length; i++) {
     var r2 = cells[i].getBoundingClientRect();
-    var mid = (r2.left + r2.right) / 2;
-    var dx = Math.abs(x - mid);
-    if (dx < bestDx) {
-      bestDx = dx;
-      best = cells[i];
-    }
+    if (x <= r2.right) return cells[i];
   }
-  return best;
+  return cells[cells.length - 1] || null;
 }
 
 /** Plain value text for a cell (excludes `.obj-remote-edit-badge` and similar injected UI). */
@@ -1633,6 +1627,7 @@ function getJoinedRowTextForEdit(row) {
   }
   if (raw != null) {
     var rawParts = parseObjectTextToParts(raw);
+    while (rawParts.length > 1 && !String(rawParts[rawParts.length - 1] || '').trim()) rawParts.pop();
     if (rawParts.length <= 1) return rawParts[0] || '';
     return rawParts.join('\n\n');
   }
