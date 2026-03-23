@@ -142,6 +142,16 @@ function primaryFeedScrollSurface() {
   return feedEl ? getFeedScrollSurface(feedEl) : null;
 }
 
+/** Scroll surface for the feed that contains `node` (for wheel routing from chrome / value strips). */
+function getFeedScrollSurfaceForElement(node) {
+  if (!node || typeof node.closest !== 'function') return primaryFeedScrollSurface();
+  var view = node.closest('#multiview .view');
+  if (!view) return primaryFeedScrollSurface();
+  var feed = view.querySelector('#feed') || view.querySelector('.feed');
+  if (!feed) return primaryFeedScrollSurface();
+  return getFeedScrollSurface(feed);
+}
+
 var inoutScrollWrapState = new WeakMap();
 var inoutWheelInteractionId = 0;
 var inoutLastWheelAt = 0;
@@ -1959,6 +1969,50 @@ function columnPartNonEmpty(row, idx) {
   return i >= 0 && i < parts.length && String(parts[i]).trim().length > 0;
 }
 
+/**
+ * When filtering by column index, ensure every object has at least that many value slots in stored text
+ * (pad with empty strings + persist) so rows aren’t dropped just because the slot was missing from JSON.
+ */
+function expandStoredColumnSlotsForFilter(colIdx) {
+  if (typeof feedInner === 'undefined' || !feedInner) return;
+  if (colIdx == null || !Number.isFinite(Number(colIdx))) return;
+  var idx = Number(colIdx);
+  if (idx < 0) return;
+  var minNeed = idx + 1;
+  var feedMax = Math.max(minNeed, parseInt(feedInner.dataset.inoutValueCols, 10) || minNeed);
+  feedInner.querySelectorAll('.obj[data-id]').forEach(function(row) {
+    var id = row.dataset.id != null ? Number(row.dataset.id) : NaN;
+    if (!Number.isFinite(id)) return;
+    var raw = Object.prototype.hasOwnProperty.call(row, '__inoutEntryTextRaw')
+      ? row.__inoutEntryTextRaw
+      : null;
+    if (raw == null) {
+      var ch0 = channelKeyForRowEl(row);
+      raw = getLastKnownEntryTextForChannel(ch0, id);
+    }
+    if (raw == null) return;
+    var pay = parseObjectTextPayload(String(raw));
+    var parts = pay.parts.slice();
+    var domParts = partsFromRowDom(row);
+    if (domParts.length > parts.length) {
+      for (var d = 0; d < domParts.length; d++) {
+        if (d >= parts.length) parts.push(String(domParts[d] != null ? domParts[d] : ''));
+      }
+    }
+    var rowCols = parseInt(row.dataset.valueCols, 10) || 0;
+    var targetLen = Math.max(minNeed, feedMax, rowCols);
+    if (parts.length >= targetLen) return;
+    while (parts.length < targetLen) parts.push('');
+    var next = serializeObjectParts(parts, labelsAlignedToNewPartCount(pay, parts.length));
+    if (String(next) === String(raw)) return;
+    row.__inoutEntryTextRaw = next;
+    var ch = channelKeyForRowEl(row);
+    rememberEntryText(ch, id, next);
+    updateObjectRowText(id, next);
+    persistObjectTextPayload(id, next, ch).catch(function() {});
+  });
+}
+
 function syncInoutObjLeadingWidthVar() {
   try {
     var inner = document.getElementById('feed-inner');
@@ -2042,9 +2096,9 @@ function bindVerticalWheelToHorizontalScroll(el) {
   el.dataset.inoutWheelHorizBound = '1';
   var disableWrap = el.id === 'tabs';
 
-  function routeWheelToPrimaryView(deltaY) {
+  function routeWheelToFeed(deltaY) {
     if (Math.abs(Number(deltaY) || 0) < 0.01) return false;
-    var surf = typeof primaryFeedScrollSurface === 'function' ? primaryFeedScrollSurface() : null;
+    var surf = getFeedScrollSurfaceForElement(el);
     if (!surf || surf.scrollHeight - surf.clientHeight <= 1) return false;
     var prev = surf.scrollTop || 0;
     surf.scrollTop = prev + deltaY;
@@ -2060,6 +2114,21 @@ function bindVerticalWheelToHorizontalScroll(el) {
       var interactionId = inoutWheelInteractionId;
       // Keep native behavior when user intentionally scrolls horizontally.
       if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      /* Prefer vertical feed scroll when the feed can still move; avoids mapping wheel to horizontal columns mid-view. */
+      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) {
+        var surfV = getFeedScrollSurfaceForElement(el);
+        if (surfV && surfV.scrollHeight - surfV.clientHeight > 1) {
+          var atTop = (surfV.scrollTop || 0) <= 1;
+          var atBottom = (surfV.scrollTop || 0) >= surfV.scrollHeight - surfV.clientHeight - 1;
+          var dy0 = e.deltaY;
+          if ((dy0 < 0 && !atTop) || (dy0 > 0 && !atBottom)) {
+            if (routeWheelToFeed(dy0)) {
+              e.preventDefault();
+              return;
+            }
+          }
+        }
+      }
       var cs = null;
       try { cs = window.getComputedStyle(el); } catch (_) {}
       var oy = cs ? String(cs.overflowY || cs.overflow || '') : '';
@@ -2071,7 +2140,7 @@ function bindVerticalWheelToHorizontalScroll(el) {
       if (canY) return;
       var canX = xScrollableByStyle && (el.scrollWidth - el.clientWidth > 1);
       if (!canX) {
-        if (routeWheelToPrimaryView(e.deltaY, interactionId)) e.preventDefault();
+        if (routeWheelToFeed(e.deltaY)) e.preventDefault();
         return;
       }
       if (Math.abs(e.deltaY) < 0.01) return;
@@ -2084,7 +2153,7 @@ function bindVerticalWheelToHorizontalScroll(el) {
           e.preventDefault();
           return;
         }
-        if (routeWheelToPrimaryView(e.deltaY, interactionId)) e.preventDefault();
+        if (routeWheelToFeed(e.deltaY)) e.preventDefault();
         return;
       }
       if (advanceScrollEdgeThenWrap(el, 'x', e.deltaY, interactionId)) {
@@ -2097,7 +2166,7 @@ function bindVerticalWheelToHorizontalScroll(el) {
         return;
       }
       // If this zone cannot move, hand wheel to main view.
-      if (routeWheelToPrimaryView(e.deltaY, interactionId)) e.preventDefault();
+      if (routeWheelToFeed(e.deltaY)) e.preventDefault();
     },
     { passive: false }
   );
@@ -2247,6 +2316,7 @@ function applyInoutMultiValueFilter() {
   if (typeof feedInner === 'undefined' || !feedInner) return;
   var multiONLY = inoutMultiValueFilterMode === 'multi';
   var colIdx = inoutMultiValueColumnFilterIndex;
+  if (colIdx != null) expandStoredColumnSlotsForFilter(colIdx);
   feedInner.querySelectorAll('.obj[data-id]').forEach(function(row) {
     var passesMulti = !multiONLY || countNonEmptyValuePartsInRow(row) > 1;
     var passesCol = colIdx == null || columnPartNonEmpty(row, colIdx);
