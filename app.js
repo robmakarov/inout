@@ -143,8 +143,11 @@ function primaryFeedScrollSurface() {
 }
 
 var inoutScrollWrapState = new WeakMap();
+var inoutWheelInteractionId = 0;
+var inoutLastWheelAt = 0;
+var INOUT_WHEEL_INTERACTION_GAP_MS = 180;
 
-function advanceScrollEdgeThenWrap(el, axis, delta) {
+function advanceScrollEdgeThenWrap(el, axis, delta, interactionId) {
   if (!el) return false;
   var d = Number(delta) || 0;
   if (Math.abs(d) < 0.01) return false;
@@ -155,7 +158,7 @@ function advanceScrollEdgeThenWrap(el, axis, delta) {
   var prev = axis === 'x' ? (el.scrollLeft || 0) : (el.scrollTop || 0);
   var dir = d > 0 ? 1 : -1;
   var edgeKey = axis + ':' + String(dir);
-  var state = inoutScrollWrapState.get(el) || '';
+  var state = inoutScrollWrapState.get(el) || null;
   var atMin = prev <= 1;
   var atMax = prev >= max - 1;
 
@@ -164,17 +167,17 @@ function advanceScrollEdgeThenWrap(el, axis, delta) {
       var toMax = Math.min(max, prev + d);
       if (axis === 'x') el.scrollLeft = toMax;
       else el.scrollTop = toMax;
-      if (toMax >= max - 1) inoutScrollWrapState.set(el, edgeKey);
+      if (toMax >= max - 1) inoutScrollWrapState.set(el, { key: edgeKey, interactionId: interactionId });
       else inoutScrollWrapState.delete(el);
       return Math.abs(toMax - prev) > 0.01;
     }
-    if (state === edgeKey) {
+    if (state && state.key === edgeKey && state.interactionId !== interactionId) {
       if (axis === 'x') el.scrollLeft = 0;
       else el.scrollTop = 0;
       inoutScrollWrapState.delete(el);
       return true;
     }
-    inoutScrollWrapState.set(el, edgeKey);
+    inoutScrollWrapState.set(el, { key: edgeKey, interactionId: interactionId });
     return false;
   }
 
@@ -182,23 +185,23 @@ function advanceScrollEdgeThenWrap(el, axis, delta) {
     var toMin = Math.max(0, prev + d);
     if (axis === 'x') el.scrollLeft = toMin;
     else el.scrollTop = toMin;
-    if (toMin <= 1) inoutScrollWrapState.set(el, edgeKey);
+    if (toMin <= 1) inoutScrollWrapState.set(el, { key: edgeKey, interactionId: interactionId });
     else inoutScrollWrapState.delete(el);
     return Math.abs(toMin - prev) > 0.01;
   }
-  if (state === edgeKey) {
+  if (state && state.key === edgeKey && state.interactionId !== interactionId) {
     if (axis === 'x') el.scrollLeft = max;
     else el.scrollTop = max;
     inoutScrollWrapState.delete(el);
     return true;
   }
-  inoutScrollWrapState.set(el, edgeKey);
+  inoutScrollWrapState.set(el, { key: edgeKey, interactionId: interactionId });
   return false;
 }
 
-function routeWheelDeltaToPrimaryView(deltaY) {
+function routeWheelDeltaToPrimaryView(deltaY, interactionId) {
   var surf = primaryFeedScrollSurface();
-  return advanceScrollEdgeThenWrap(surf, 'y', deltaY);
+  return advanceScrollEdgeThenWrap(surf, 'y', deltaY, interactionId);
 }
 
 function nearestVerticalScrollableAncestor(node) {
@@ -2029,15 +2032,19 @@ function bindVerticalWheelToHorizontalScroll(el) {
   el.addEventListener(
     'wheel',
     function(e) {
+      var nowAt = Date.now();
+      if (nowAt - inoutLastWheelAt > INOUT_WHEEL_INTERACTION_GAP_MS) inoutWheelInteractionId++;
+      inoutLastWheelAt = nowAt;
+      var interactionId = inoutWheelInteractionId;
       var now = Date.now();
       if (now < inoutWheelViewLockUntil) {
-        var movedLocked = routeWheelToPrimaryView(e.deltaY);
+        var movedLocked = routeWheelToPrimaryView(e.deltaY, interactionId);
         if (movedLocked) e.preventDefault();
         return;
       }
       if (suspendAfterClick) {
         if (Math.abs(e.deltaY) >= Math.abs(e.deltaX)) {
-          var moved = routeWheelToPrimaryView(e.deltaY);
+          var moved = routeWheelToPrimaryView(e.deltaY, interactionId);
           inoutWheelViewLockUntil = Date.now() + INOUT_WHEEL_VIEW_LOCK_MS;
           if (moved) e.preventDefault();
         }
@@ -2062,12 +2069,12 @@ function bindVerticalWheelToHorizontalScroll(el) {
       var canX = xScrollableByStyle && (el.scrollWidth - el.clientWidth > 1);
       if (!canX) return;
       if (Math.abs(e.deltaY) < 0.01) return;
-      if (advanceScrollEdgeThenWrap(el, 'x', e.deltaY)) {
+      if (advanceScrollEdgeThenWrap(el, 'x', e.deltaY, interactionId)) {
         e.preventDefault();
         return;
       }
       // If this zone cannot move, hand wheel to main view.
-      if (routeWheelToPrimaryView(e.deltaY)) e.preventDefault();
+      if (routeWheelToPrimaryView(e.deltaY, interactionId)) e.preventDefault();
     },
     { passive: false }
   );
@@ -8886,12 +8893,16 @@ function setupTabs() {
       if (Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
       var dy = Number(e.deltaY) || 0;
       if (Math.abs(dy) < 0.01) return;
+      var nowAt = Date.now();
+      if (nowAt - inoutLastWheelAt > INOUT_WHEEL_INTERACTION_GAP_MS) inoutWheelInteractionId++;
+      inoutLastWheelAt = nowAt;
+      var interactionId = inoutWheelInteractionId;
       var verticalTarget = nearestVerticalScrollableAncestor(e.target);
       if (verticalTarget) {
-        if (advanceScrollEdgeThenWrap(verticalTarget, 'y', dy)) e.preventDefault();
+        if (advanceScrollEdgeThenWrap(verticalTarget, 'y', dy, interactionId)) e.preventDefault();
         return;
       }
-      if (routeWheelDeltaToPrimaryView(dy)) e.preventDefault();
+      if (routeWheelDeltaToPrimaryView(dy, interactionId)) e.preventDefault();
     }, { passive: false, capture: true });
   }
   const manageBar = document.getElementById('manage-bar');
