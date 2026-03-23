@@ -4498,6 +4498,7 @@ function init(done) {
   try { loadViewDisplayNames(); } catch (_) {}
   try { loadScrollState(); } catch (_) {}
   try { setupTabs(); } catch (_) {}
+  try { setupWindowsRevealEffects(); } catch (_) {}
   try { restoreLastChannel(); } catch (_) {}
   try { refreshMoveTargets(); } catch (_) {}
   try {
@@ -8853,6 +8854,47 @@ function syncInoutManageRailWidthVar() {
   try {
     if (typeof syncInoutObjLeadingWidthVar === 'function') syncInoutObjLeadingWidthVar();
   } catch (_) {}
+}
+
+function setupWindowsRevealEffects() {
+  if (typeof window === 'undefined' || typeof document === 'undefined' || !document.body) return;
+  if (document.body.dataset.inoutRevealBound === '1') return;
+  var mq = null;
+  try { mq = window.matchMedia('(hover: hover) and (pointer: fine)'); } catch (_) {}
+  if (!mq || !mq.matches) return;
+  document.body.dataset.inoutRevealBound = '1';
+  var selector = '.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn';
+  var activeEl = null;
+  function clearReveal(el) {
+    if (!el) return;
+    el.classList.remove('win10-reveal-active');
+    el.style.removeProperty('--reveal-x');
+    el.style.removeProperty('--reveal-y');
+  }
+  document.addEventListener('pointermove', function(e) {
+    var t = e && e.target && e.target.nodeType === 1
+      ? e.target
+      : (e && e.target && e.target.parentElement ? e.target.parentElement : null);
+    var el = t && t.closest ? t.closest(selector) : null;
+    if (!el) {
+      if (activeEl) {
+        clearReveal(activeEl);
+        activeEl = null;
+      }
+      return;
+    }
+    if (activeEl && activeEl !== el) clearReveal(activeEl);
+    activeEl = el;
+    var r = el.getBoundingClientRect();
+    el.style.setProperty('--reveal-x', (e.clientX - r.left) + 'px');
+    el.style.setProperty('--reveal-y', (e.clientY - r.top) + 'px');
+    el.classList.add('win10-reveal-active');
+  }, { passive: true });
+  document.addEventListener('pointerleave', function() {
+    if (!activeEl) return;
+    clearReveal(activeEl);
+    activeEl = null;
+  }, { passive: true });
 }
 
 function setupTabs() {

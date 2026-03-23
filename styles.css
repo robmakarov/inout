@@ -3490,6 +3490,62 @@ body.secret-show-grips .frame-grip{
   box-shadow:inset 0 0 0 1px rgba(184,160,96,0.35);
 }
 
+/* Desktop pointer reveal effect (Windows 10 Calendar-style cursor light + border stroke). */
+@media (hover: hover) and (pointer: fine){
+  :is(.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn){
+    position:relative;
+    isolation:isolate;
+    overflow:hidden;
+  }
+  :is(.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn) > *{
+    position:relative;
+    z-index:1;
+  }
+  :is(.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn)::before{
+    content:'';
+    position:absolute;
+    inset:-1px;
+    border-radius:inherit;
+    background:radial-gradient(
+      120px circle at var(--reveal-x, -1000px) var(--reveal-y, -1000px),
+      rgba(232,213,160,0.24) 0%,
+      rgba(184,160,96,0.14) 34%,
+      rgba(184,160,96,0.05) 52%,
+      transparent 74%
+    );
+    opacity:0;
+    transition:opacity .12s ease;
+    pointer-events:none;
+    z-index:0;
+  }
+  :is(.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn)::after{
+    content:'';
+    position:absolute;
+    inset:0;
+    border-radius:inherit;
+    padding:1px;
+    background:radial-gradient(
+      90px circle at var(--reveal-x, -1000px) var(--reveal-y, -1000px),
+      rgba(240,236,227,0.95) 0%,
+      rgba(232,213,160,0.65) 34%,
+      rgba(184,160,96,0.16) 56%,
+      transparent 74%
+    );
+    mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor;
+    mask-composite:exclude;
+    opacity:0;
+    transition:opacity .12s ease;
+    pointer-events:none;
+    z-index:0;
+  }
+  :is(.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn).win10-reveal-active::before,
+  :is(.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn).win10-reveal-active::after{
+    opacity:1;
+  }
+}
+
 .tab.tab-channel-loading{
   position:relative;
   z-index:0;
