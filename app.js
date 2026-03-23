@@ -8838,13 +8838,12 @@ function setupTabs() {
   if (!document.body.dataset.inoutGlobalWheelFallbackBound) {
     document.body.dataset.inoutGlobalWheelFallbackBound = '1';
     document.addEventListener('wheel', function(e) {
-      if (e.defaultPrevented) return;
       if (Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
       var dy = Number(e.deltaY) || 0;
       if (Math.abs(dy) < 0.01) return;
       if (nearestVerticalScrollableAncestorForDelta(e.target, dy)) return;
       if (routeWheelDeltaToPrimaryView(dy)) e.preventDefault();
-    }, { passive: false });
+    }, { passive: false, capture: true });
   }
   const manageBar = document.getElementById('manage-bar');
   const manageBarTrigger = document.getElementById('manage-bar-trigger');
