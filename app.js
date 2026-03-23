@@ -1542,6 +1542,11 @@ function mergeComposerIntoParts(prevParts, composerText) {
 function ensureRowValueCellCount(row, maxCols, partsForFill) {
   var wrap = row.querySelector('.obj-values-wrap');
   if (!wrap) return;
+  bindValueWrapScrollSync(wrap);
+  var colWrap = document.getElementById('multi-value-col-labels');
+  if (colWrap && Math.abs((wrap.scrollLeft || 0) - (colWrap.scrollLeft || 0)) >= 1) {
+    wrap.scrollLeft = colWrap.scrollLeft || 0;
+  }
   partsForFill = partsForFill ? partsForFill.slice() : [];
   while (partsForFill.length < maxCols) partsForFill.push('');
   if (partsForFill.length > maxCols) partsForFill = partsForFill.slice(0, maxCols);
@@ -1881,6 +1886,79 @@ function syncInoutMultiValueFilterMenuAria() {
   });
 }
 
+var inoutColScrollSyncing = false;
+
+function syncValueWrapsToHeaderScroll(scrollLeft, sourceWrap) {
+  if (typeof feedInner === 'undefined' || !feedInner) return;
+  var rows = feedInner.querySelectorAll('.obj .obj-values-wrap');
+  rows.forEach(function(w) {
+    if (!w || w === sourceWrap) return;
+    if (Math.abs((w.scrollLeft || 0) - scrollLeft) < 1) return;
+    w.scrollLeft = scrollLeft;
+  });
+}
+
+function syncHeaderScrollToValueWrap(scrollLeft) {
+  var colWrap = document.getElementById('multi-value-col-labels');
+  if (!colWrap) return;
+  if (Math.abs((colWrap.scrollLeft || 0) - scrollLeft) < 1) return;
+  colWrap.scrollLeft = scrollLeft;
+}
+
+function bindValueWrapScrollSync(wrap) {
+  if (!wrap || wrap.dataset.inoutColSyncBound === '1') return;
+  wrap.dataset.inoutColSyncBound = '1';
+  wrap.addEventListener('scroll', function() {
+    if (inoutColScrollSyncing) return;
+    inoutColScrollSyncing = true;
+    var left = wrap.scrollLeft || 0;
+    syncHeaderScrollToValueWrap(left);
+    syncValueWrapsToHeaderScroll(left, wrap);
+    inoutColScrollSyncing = false;
+  }, { passive: true });
+}
+
+function syncHeaderScrollFromPrimaryFeed() {
+  if (typeof feedInner === 'undefined' || !feedInner) return;
+  var firstWrap = feedInner.querySelector('.obj .obj-values-wrap');
+  if (!firstWrap) {
+    syncHeaderScrollToValueWrap(0);
+    return;
+  }
+  bindValueWrapScrollSync(firstWrap);
+  syncHeaderScrollToValueWrap(firstWrap.scrollLeft || 0);
+}
+
+function syncManageBarLabelButtonWidthsFromFeed() {
+  var labelsWrap = document.getElementById('multi-value-col-labels');
+  if (!labelsWrap || typeof feedInner === 'undefined' || !feedInner) return;
+  var firstWrap = feedInner.querySelector('.obj[data-id] .obj-values-wrap');
+  var btns = labelsWrap.querySelectorAll('.multi-value-col-label-btn');
+  if (!btns.length) return;
+  if (!firstWrap) {
+    btns.forEach(function(btn) {
+      btn.style.removeProperty('flex-basis');
+      btn.style.removeProperty('min-width');
+      btn.style.removeProperty('max-width');
+    });
+    return;
+  }
+  var cells = firstWrap.querySelectorAll(':scope > .obj-value-cell');
+  btns.forEach(function(btn, i) {
+    var cell = cells[i];
+    if (!cell) {
+      btn.style.removeProperty('flex-basis');
+      btn.style.removeProperty('min-width');
+      btn.style.removeProperty('max-width');
+      return;
+    }
+    var w = Math.max(1, Math.round(cell.getBoundingClientRect().width));
+    btn.style.flexBasis = w + 'px';
+    btn.style.minWidth = w + 'px';
+    btn.style.maxWidth = w + 'px';
+  });
+}
+
 function rebuildMultiValueColumnLabelButtons() {
   var wrap = document.getElementById('multi-value-col-labels');
   if (!wrap || typeof feedInner === 'undefined' || !feedInner) return;
@@ -1906,6 +1984,7 @@ function rebuildMultiValueColumnLabelButtons() {
     wrap.appendChild(btn);
   }
   updateMultiValueColumnLabelButtonsActive();
+  syncManageBarLabelButtonWidthsFromFeed();
 }
 
 function updateMultiValueColumnLabelButtonsActive() {
@@ -1966,6 +2045,8 @@ function updateMultiValueChromeBar() {
   var labelsWrap = document.getElementById('multi-value-col-labels');
   if (labelsWrap) labelsWrap.setAttribute('aria-hidden', 'false');
   rebuildMultiValueColumnLabelButtons();
+  syncHeaderScrollFromPrimaryFeed();
+  syncManageBarLabelButtonWidthsFromFeed();
   applyInoutMultiValueFilter();
 }
 
@@ -2004,6 +2085,12 @@ function setupMultiValueChromeBar() {
   var colWrap = document.getElementById('multi-value-col-labels');
   if (colWrap && !colWrap.dataset.inoutColFilterBound) {
     colWrap.dataset.inoutColFilterBound = '1';
+    colWrap.addEventListener('scroll', function() {
+      if (inoutColScrollSyncing) return;
+      inoutColScrollSyncing = true;
+      syncValueWrapsToHeaderScroll(colWrap.scrollLeft || 0, null);
+      inoutColScrollSyncing = false;
+    }, { passive: true });
     colWrap.addEventListener('click', function(e) {
       var b = e.target && e.target.closest && e.target.closest('.multi-value-col-label-btn');
       if (!b || !colWrap.contains(b)) return;
@@ -2026,6 +2113,13 @@ function setupMultiValueChromeBar() {
         applyInoutMultiValueFilter();
       }, 300);
     });
+  }
+  if (typeof window !== 'undefined' && !document.body.dataset.inoutColResizeBound) {
+    document.body.dataset.inoutColResizeBound = '1';
+    window.addEventListener('resize', function() {
+      syncManageBarLabelButtonWidthsFromFeed();
+      syncHeaderScrollFromPrimaryFeed();
+    }, { passive: true });
   }
 }
 

@@ -599,6 +599,18 @@ header{
   overflow-x:auto;
   overflow-y:visible;
   -webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+  scrollbar-color:transparent transparent;
+  -ms-overflow-style:none;
+}
+.multi-value-col-labels::-webkit-scrollbar{
+  width:0;
+  height:0;
+  display:none;
+}
+.multi-value-col-labels::-webkit-scrollbar-thumb,
+.multi-value-col-labels::-webkit-scrollbar-track{
+  background:transparent;
 }
 .multi-value-col-labels[aria-hidden="true"]:empty{
   min-height:0;
