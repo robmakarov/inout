@@ -1535,9 +1535,14 @@ function ensureRowValueCellCount(row, maxCols, partsForFill) {
     if (c.innerHTML !== html) c.innerHTML = html;
   }
   row.dataset.valueCols = String(maxCols);
-  var ch = channelKeyForRowEl(row);
-  var rid = row.dataset.id != null ? Number(row.dataset.id) : NaN;
-  var entryRaw = Number.isFinite(rid) ? getLastKnownEntryTextForChannel(ch, rid) : null;
+  var entryRaw = row && Object.prototype.hasOwnProperty.call(row, '__inoutEntryTextRaw')
+    ? row.__inoutEntryTextRaw
+    : null;
+  if (entryRaw == null) {
+    var ch = channelKeyForRowEl(row);
+    var rid = row.dataset.id != null ? Number(row.dataset.id) : NaN;
+    entryRaw = Number.isFinite(rid) ? getLastKnownEntryTextForChannel(ch, rid) : null;
+  }
   wrap.querySelectorAll(':scope > .obj-value-cell').forEach(function(c) {
     applyValueColumnLabelAttrToCell(c, entryRaw);
   });
@@ -1687,7 +1692,10 @@ function applyValueColumnLabelAttrToCell(cell, entryRawText) {
   var raw = entryRawText;
   if (raw == null) {
     var row = cell.closest('.obj');
-    if (row && row.dataset.id != null) {
+    if (row && Object.prototype.hasOwnProperty.call(row, '__inoutEntryTextRaw')) {
+      raw = row.__inoutEntryTextRaw;
+    }
+    if (raw == null && row && row.dataset.id != null) {
       var ch = channelKeyForRowEl(row);
       raw = getLastKnownEntryTextForChannel(ch, Number(row.dataset.id));
     }
@@ -4849,6 +4857,7 @@ function updateObjectRowText(objId, textValue) {
   var ch = row ? channelKeyForRowEl(row) : String(currentChannel || 'main');
   rememberEntryText(ch, objId, textValue);
   if (!row) return;
+  row.__inoutEntryTextRaw = String(textValue != null ? textValue : '');
   var maxCols = parseInt(row.dataset.valueCols, 10) || row.querySelectorAll('.obj-value-cell').length || 1;
   var parts = parseObjectTextToParts(textValue);
   while (parts.length < maxCols) parts.push('');
@@ -7357,6 +7366,7 @@ function createObjectRow(obj, isNew, options) {
       obj.text
     );
   }
+  row.__inoutEntryTextRaw = String(obj && obj.text != null ? obj.text : '');
   row.addEventListener('dragstart', e => {
     if (pointerDownOnSelectArea) {
       e.preventDefault();
