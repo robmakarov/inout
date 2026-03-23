@@ -1766,7 +1766,17 @@ function feedHasAnyObjectWithMultipleMessageValues(inner) {
 function closeInoutMultiValueFilterMenu() {
   var menu = document.getElementById('multi-value-filter-menu');
   var trig = document.getElementById('multi-value-filter-trigger');
-  if (menu) menu.hidden = true;
+  if (menu) {
+    menu.hidden = true;
+    menu.style.position = '';
+    menu.style.top = '';
+    menu.style.left = '';
+    menu.style.right = '';
+    menu.style.bottom = '';
+    menu.style.zIndex = '';
+    menu.style.maxHeight = '';
+    menu.style.overflowY = '';
+  }
   if (trig) trig.setAttribute('aria-expanded', 'false');
   document.removeEventListener('click', closeInoutMultiValueFilterMenuOnDoc);
 }
@@ -1891,6 +1901,7 @@ function setupMultiValueChromeBar() {
     }
     menu.hidden = false;
     trig.setAttribute('aria-expanded', 'true');
+    if (typeof positionMultiValueFilterMenuClamp === 'function') positionMultiValueFilterMenuClamp();
     document.addEventListener('click', closeInoutMultiValueFilterMenuOnDoc);
   });
   menu.querySelectorAll('[data-multi-value-filter]').forEach(function(btn) {
@@ -2380,12 +2391,10 @@ function applyWorkspaceUiChrome(u) {
     if (viewMenu && viewToggleBtn) {
       if (u.viewMenuOpen) {
         viewMenu.classList.add('open');
-        var r = viewToggleBtn.getBoundingClientRect();
-        viewMenu.style.top = r.bottom + 4 + 'px';
-        viewMenu.style.right = window.innerWidth - r.right + 'px';
-        viewMenu.style.left = 'auto';
+        if (typeof positionViewMenuClamp === 'function') positionViewMenuClamp();
       } else {
         viewMenu.classList.remove('open');
+        if (typeof clearViewMenuInlinePosition === 'function') clearViewMenuInlinePosition();
       }
     }
     var mb = document.getElementById('manage-bar');
@@ -2394,6 +2403,7 @@ function applyWorkspaceUiChrome(u) {
       if (u.manageBarOpen) {
         mb.classList.add('manage-bar-open');
         mbt.setAttribute('aria-expanded', 'true');
+        if (typeof positionManageBarDropdownClamp === 'function') positionManageBarDropdownClamp();
       } else {
         if (typeof closeManageBarDropdown === 'function') closeManageBarDropdown();
       }
@@ -3250,6 +3260,167 @@ function renderLogDropup() {
       '</div>';
     logDropupBody.appendChild(card);
   });
+}
+
+var VIEWPORT_MARGIN = 8;
+
+/**
+ * Position a fixed panel (right- or left-aligned to anchor), clamped inside the viewport.
+ * @param {DOMRect} anchorRect
+ * @param {HTMLElement} el
+ * @param {{ gap?: number, margin?: number, maxHeightCap?: number, zIndex?: number, allowFlip?: boolean, align?: 'left'|'right' }} [options]
+ */
+function positionFixedDropdownClamped(anchorRect, el, options) {
+  options = options || {};
+  var margin = options.margin != null ? options.margin : VIEWPORT_MARGIN;
+  var gap = options.gap != null ? options.gap : 4;
+  var maxHeightCap = options.maxHeightCap != null ? options.maxHeightCap : 320;
+  var zIndex = options.zIndex != null ? options.zIndex : 3500;
+  var allowFlip = options.allowFlip !== false;
+  var align = options.align === 'left' ? 'left' : 'right';
+  if (!el || !anchorRect) return;
+  el.style.position = 'fixed';
+  el.style.zIndex = String(zIndex);
+  el.style.right = 'auto';
+  el.style.bottom = 'auto';
+  var top = Math.round(anchorRect.bottom + gap);
+  el.style.top = top + 'px';
+  el.style.left = 'auto';
+  function apply() {
+    var er = el.getBoundingClientRect();
+    var ew = er.width;
+    var eh = er.height;
+    var left = align === 'left' ? anchorRect.left : anchorRect.right - ew;
+    left = Math.max(margin, Math.min(left, window.innerWidth - margin - ew));
+    el.style.left = Math.round(left) + 'px';
+    var y = top;
+    var spaceBelow = window.innerHeight - y - margin;
+    var spaceAbove = anchorRect.top - margin;
+    if (allowFlip && spaceBelow < Math.min(96, eh) && spaceAbove > spaceBelow) {
+      y = Math.round(anchorRect.top - gap - eh);
+      if (y < margin) y = margin;
+    }
+    el.style.top = y + 'px';
+    var avail = window.innerHeight - margin - y;
+    avail = Math.min(maxHeightCap, Math.max(40, avail));
+    el.style.maxHeight = Math.floor(avail) + 'px';
+    el.style.overflowY = 'auto';
+  }
+  requestAnimationFrame(apply);
+}
+
+function clearViewMenuInlinePosition() {
+  if (!viewMenu) return;
+  viewMenu.style.top = '';
+  viewMenu.style.left = '';
+  viewMenu.style.right = '';
+  viewMenu.style.bottom = '';
+  viewMenu.style.maxHeight = '';
+  viewMenu.style.overflowY = '';
+}
+
+function positionViewMenuClamp() {
+  if (!viewToggleBtn || !viewMenu) return;
+  positionFixedDropdownClamped(viewToggleBtn.getBoundingClientRect(), viewMenu, {
+    gap: 4,
+    maxHeightCap: 320,
+    zIndex: 130
+  });
+}
+
+function clearManageBarDropdownPosition() {
+  var dd = document.querySelector('.manage-bar-dropdown');
+  if (!dd) return;
+  dd.style.position = '';
+  dd.style.top = '';
+  dd.style.left = '';
+  dd.style.right = '';
+  dd.style.bottom = '';
+  dd.style.zIndex = '';
+  dd.style.maxHeight = '';
+  dd.style.overflowY = '';
+  var bs = dd.querySelector('.bar-scroll');
+  if (bs) bs.style.maxHeight = '';
+}
+
+function positionManageBarDropdownClamp() {
+  var mb = document.getElementById('manage-bar');
+  var mbt = document.getElementById('manage-bar-trigger');
+  var dd = mb && mb.querySelector('.manage-bar-dropdown');
+  if (!mb || !mbt || !dd || !mb.classList.contains('manage-bar-open')) return;
+  var r = mbt.getBoundingClientRect();
+  var m = VIEWPORT_MARGIN;
+  dd.style.position = 'fixed';
+  dd.style.zIndex = '1200';
+  dd.style.right = 'auto';
+  dd.style.bottom = 'auto';
+  var top = Math.round(r.bottom + 4);
+  dd.style.top = top + 'px';
+  dd.style.left = 'auto';
+  requestAnimationFrame(function() {
+    var dr = dd.getBoundingClientRect();
+    var dw = dr.width;
+    var left = r.right - dw;
+    left = Math.max(m, Math.min(left, window.innerWidth - m - dw));
+    dd.style.left = Math.round(left) + 'px';
+    var y = top;
+    var eh = dr.height;
+    var spaceBelow = window.innerHeight - y - m;
+    var spaceAbove = r.top - m;
+    if (spaceBelow < Math.min(96, eh) && spaceAbove > spaceBelow) {
+      y = Math.round(r.top - 4 - eh);
+      if (y < m) y = m;
+    }
+    dd.style.top = y + 'px';
+    var avail = window.innerHeight - m - y;
+    var cap = Math.min(0.7 * window.innerHeight, Math.max(120, avail));
+    var barScroll = dd.querySelector('.bar-scroll');
+    if (barScroll) barScroll.style.maxHeight = Math.floor(cap) + 'px';
+  });
+}
+
+function positionMultiValueFilterMenuClamp() {
+  var trig = document.getElementById('multi-value-filter-trigger');
+  var menu = document.getElementById('multi-value-filter-menu');
+  if (!trig || !menu || menu.hidden) return;
+  positionFixedDropdownClamped(trig.getBoundingClientRect(), menu, {
+    align: 'left',
+    gap: 4,
+    maxHeightCap: 280,
+    zIndex: 1190
+  });
+}
+
+function repositionOpenDropdownsToViewport() {
+  try {
+    if (viewMenu && viewMenu.classList.contains('open') && viewToggleBtn) {
+      positionViewMenuClamp();
+    }
+    var mb = document.getElementById('manage-bar');
+    var mbt = document.getElementById('manage-bar-trigger');
+    if (mb && mbt && mb.classList.contains('manage-bar-open')) {
+      positionManageBarDropdownClamp();
+    }
+    var mv = document.getElementById('multi-value-filter-menu');
+    var mvt = document.getElementById('multi-value-filter-trigger');
+    if (mv && mvt && !mv.hidden) {
+      positionMultiValueFilterMenuClamp();
+    }
+    document.querySelectorAll('.obj-actions.obj-actions-open').forEach(function(actions) {
+      var trig = actions.querySelector('.obj-actions-trigger');
+      var dd = actions.querySelector('.obj-actions-dropdown');
+      if (trig && dd) {
+        positionFixedDropdownClamped(trig.getBoundingClientRect(), dd, {
+          gap: 2,
+          maxHeightCap: 320,
+          zIndex: 3500
+        });
+      }
+    });
+    if (logDropupPanel && logDropupPanel.classList.contains('open') && logActionBtn) {
+      positionLogDropupPanelFixed();
+    }
+  } catch (_) {}
 }
 
 function positionLogDropupPanelFixed() {
@@ -7596,18 +7767,11 @@ function createObjectRow(obj, isNew, options) {
     dropdown.style.overflowY = '';
   }
   function positionObjActionsDropdown() {
-    var r = trigger.getBoundingClientRect();
-    dropdown.style.position = 'fixed';
-    dropdown.style.top = Math.round(r.bottom + 2) + 'px';
-    dropdown.style.right = Math.round(window.innerWidth - r.right) + 'px';
-    dropdown.style.left = 'auto';
-    dropdown.style.bottom = 'auto';
-    dropdown.style.zIndex = '3500';
-    var space = window.innerHeight - r.bottom - 12;
-    if (space > 80) {
-      dropdown.style.maxHeight = Math.min(320, space) + 'px';
-      dropdown.style.overflowY = 'auto';
-    }
+    positionFixedDropdownClamped(trigger.getBoundingClientRect(), dropdown, {
+      gap: 2,
+      maxHeightCap: 320,
+      zIndex: 3500
+    });
   }
   trigger.addEventListener('mousedown', e => {
     e.stopPropagation();
@@ -8376,6 +8540,7 @@ function setupTabs() {
   const manageBarTrigger = document.getElementById('manage-bar-trigger');
   if (manageBar && manageBarTrigger) {
     function closeManageBarDropdown() {
+      if (typeof clearManageBarDropdownPosition === 'function') clearManageBarDropdownPosition();
       manageBar.classList.remove('manage-bar-open');
       manageBarTrigger.setAttribute('aria-expanded', 'false');
       document.removeEventListener('click', closeManageBarDropdown);
@@ -8387,8 +8552,13 @@ function setupTabs() {
       closeInoutMultiValueFilterMenu();
       const isOpen = manageBar.classList.toggle('manage-bar-open');
       manageBarTrigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-      if (isOpen) document.addEventListener('click', closeManageBarDropdown);
-      else document.removeEventListener('click', closeManageBarDropdown);
+      if (isOpen) {
+        document.addEventListener('click', closeManageBarDropdown);
+        if (typeof positionManageBarDropdownClamp === 'function') positionManageBarDropdownClamp();
+      } else {
+        document.removeEventListener('click', closeManageBarDropdown);
+        if (typeof clearManageBarDropdownPosition === 'function') clearManageBarDropdownPosition();
+      }
       if (typeof notifyWorkspaceChromeChanged === 'function') notifyWorkspaceChromeChanged();
     });
   }
@@ -8413,6 +8583,15 @@ function setupTabs() {
     setupMultiValueChromeBar();
     if (typeof updateMultiValueChromeBar === 'function') updateMultiValueChromeBar();
   } catch (_) {}
+  var dropdownResizeTimer = 0;
+  function onDropdownViewportResize() {
+    clearTimeout(dropdownResizeTimer);
+    dropdownResizeTimer = setTimeout(function() {
+      if (typeof repositionOpenDropdownsToViewport === 'function') repositionOpenDropdownsToViewport();
+    }, 50);
+  }
+  window.addEventListener('resize', onDropdownViewportResize);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', onDropdownViewportResize);
 }
 
 function updateTabsUI() {
@@ -9700,6 +9879,7 @@ async function ensureMembership() {
 }
 
 function closeManageBarDropdown() {
+  if (typeof clearManageBarDropdownPosition === 'function') clearManageBarDropdownPosition();
   const manageBar = document.getElementById('manage-bar');
   if (manageBar) manageBar.classList.remove('manage-bar-open');
   const trig = document.getElementById('manage-bar-trigger');
@@ -11226,10 +11406,9 @@ if (viewToggleBtn && viewMenu) {
     e.stopPropagation();
     viewMenu.classList.toggle('open');
     if (viewMenu.classList.contains('open')) {
-      const r = viewToggleBtn.getBoundingClientRect();
-      viewMenu.style.top = (r.bottom + 4) + 'px';
-      viewMenu.style.right = (window.innerWidth - r.right) + 'px';
-      viewMenu.style.left = 'auto';
+      if (typeof positionViewMenuClamp === 'function') positionViewMenuClamp();
+    } else if (typeof clearViewMenuInlinePosition === 'function') {
+      clearViewMenuInlinePosition();
     }
     if (typeof notifyWorkspaceChromeChanged === 'function') notifyWorkspaceChromeChanged();
   });
@@ -11244,6 +11423,7 @@ if (viewToggleBtn && viewMenu) {
     const target = e.target;
     if (target === viewMenu || viewMenu.contains(target) || target === viewToggleBtn) return;
     viewMenu.classList.remove('open');
+    if (typeof clearViewMenuInlinePosition === 'function') clearViewMenuInlinePosition();
     if (typeof notifyWorkspaceChromeChanged === 'function') notifyWorkspaceChromeChanged();
   });
 }

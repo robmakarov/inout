@@ -493,7 +493,8 @@ header{
   box-shadow:0 4px 16px rgba(0,0,0,.3);
   padding:8px;
   min-width:180px;
-  max-width:min(320px, calc(100vw - 24px));
+  max-width:min(320px, calc(100vw - 16px));
+  box-sizing:border-box;
   display:none;
   flex-direction:column;
   z-index:1200;
@@ -748,6 +749,8 @@ header{
   position:fixed;
   /* top/left set by JS so menu is not clipped by overflow */
   display:flex;
+  max-width:min(320px, calc(100vw - 16px));
+  box-sizing:border-box;
 }
 
 .manage-subgroup{
