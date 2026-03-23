@@ -1896,9 +1896,50 @@ var inoutColScrollSyncing = false;
 function bindVerticalWheelToHorizontalScroll(el) {
   if (!el || el.dataset.inoutWheelHorizBound === '1') return;
   el.dataset.inoutWheelHorizBound = '1';
+  var suspendAfterClick = false;
+  var suspendX = 0;
+  var suspendY = 0;
+  var suspendTimer = null;
+  var MOVE_TO_REENABLE_PX = 8;
+  var CLICK_GRACE_MS = 1400;
+
+  function clearSuspendTimer() {
+    if (suspendTimer != null) {
+      clearTimeout(suspendTimer);
+      suspendTimer = null;
+    }
+  }
+  function enterSuspendFromPointer(e) {
+    suspendAfterClick = true;
+    suspendX = Number(e && e.clientX) || 0;
+    suspendY = Number(e && e.clientY) || 0;
+    clearSuspendTimer();
+    suspendTimer = setTimeout(function() {
+      suspendAfterClick = false;
+      suspendTimer = null;
+    }, CLICK_GRACE_MS);
+  }
+  function maybeExitSuspendOnMove(e) {
+    if (!suspendAfterClick) return;
+    var x = Number(e && e.clientX) || 0;
+    var y = Number(e && e.clientY) || 0;
+    if (Math.abs(x - suspendX) >= MOVE_TO_REENABLE_PX || Math.abs(y - suspendY) >= MOVE_TO_REENABLE_PX) {
+      suspendAfterClick = false;
+      clearSuspendTimer();
+    }
+  }
+
+  el.addEventListener('pointerdown', enterSuspendFromPointer, { passive: true });
+  el.addEventListener('pointermove', maybeExitSuspendOnMove, { passive: true });
+  el.addEventListener('pointerleave', maybeExitSuspendOnMove, { passive: true });
+  el.addEventListener('blur', function() {
+    suspendAfterClick = false;
+    clearSuspendTimer();
+  });
   el.addEventListener(
     'wheel',
     function(e) {
+      if (suspendAfterClick) return;
       // Keep native behavior when user intentionally scrolls horizontally.
       if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
       var cs = null;
