@@ -1464,7 +1464,8 @@ header{
 
 .feed-inner{
   position:relative;
-  padding:16px max(16px, var(--safe-left)) 20px max(16px, var(--safe-right));
+  /* Extra left inset so checkbox rail stays inside #feed (overflow-x:hidden) without negative margins clipping it */
+  padding:16px max(16px, var(--safe-left)) 20px calc(max(16px, var(--safe-right)) + 48px);
   display:flex;
   flex-direction:column;
   justify-content:flex-start;
@@ -1476,6 +1477,7 @@ header{
   max-width:100%;
   box-sizing:border-box;
   gap:0;
+  --obj-label-value-gap:20px;
 }
 /* Grid feed with multiple value slots: keep normal flex column (no CSS table on .feed-inner) */
 .feed-inner.inout-multi-value-cols{
@@ -1483,7 +1485,7 @@ header{
   flex-direction:column;
 }
 
-/* Object component: property text fields. Feed view only — label above value, 20px gap. */
+/* Object component: property text fields. Feed view only — label above value, same gap for time / author / value. */
 .feed-inner:not(.inout-multi-value-cols) .obj .obj-time,
 .feed-inner:not(.inout-multi-value-cols) .obj .obj-sender,
 .feed-inner:not(.inout-multi-value-cols) .obj .obj-text,
@@ -1491,20 +1493,25 @@ header{
   display:flex;
   flex-direction:column;
   align-items:flex-start;
-  gap:20px;
+  justify-content:flex-start;
+  gap:var(--obj-label-value-gap);
   min-width:0;
 }
-/* Label (::before) — shared style; sits above value via column flex order */
+/* Label (::before) — shared metrics so label→value spacing matches across fields */
 .feed-inner:not(.inout-multi-value-cols) .obj .obj-time::before,
 .feed-inner:not(.inout-multi-value-cols) .obj .obj-sender::before,
 .feed-inner:not(.inout-multi-value-cols) .obj .obj-text::before,
 .feed-inner:not(.inout-multi-value-cols) .obj .obj-value-cell::before{
   font-size:10px;
   line-height:12px;
+  min-height:12px;
   text-transform:uppercase;
   letter-spacing:0.05em;
   color:var(--muted);
   flex-shrink:0;
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
 }
 /* Labels ON: label visible in flow */
 .feed-inner:not(.inout-multi-value-cols):not(.obj-labels-off) .obj .obj-time::before,
@@ -1527,7 +1534,8 @@ header{
   display:flex;
   flex-direction:column;
   align-items:flex-start;
-  gap:20px;
+  justify-content:flex-start;
+  gap:var(--obj-label-value-gap);
   min-width:0;
 }
 .feed-inner.inout-multi-value-cols .obj .obj-time::before,
@@ -1535,10 +1543,14 @@ header{
 .feed-inner.inout-multi-value-cols .obj .obj-value-cell::before{
   font-size:10px;
   line-height:12px;
+  min-height:12px;
   text-transform:uppercase;
   letter-spacing:0.05em;
   color:var(--muted);
   flex-shrink:0;
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
 }
 .feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-time::before,
 .feed-inner.inout-multi-value-cols:not(.obj-labels-off) .obj .obj-sender::before,
@@ -1600,12 +1612,12 @@ body.select-mode .feed-inner.inout-multi-value-cols.obj-labels-off .obj.obj-sele
   opacity:1;
   transform:translateY(0);
 }
-/* Reserve space for label on hover — label line (12px) + 20px gap */
+/* Reserve space for label on hover — label line (12px) + same gap as label-on layout */
 .feed-inner.obj-labels-off .obj:hover .obj-time,
 .feed-inner.obj-labels-off .obj:hover .obj-sender,
 .feed-inner.obj-labels-off .obj:hover .obj-text,
 .feed-inner.obj-labels-off .obj:hover .obj-value-cell{
-  padding-top:32px;
+  padding-top:calc(12px + var(--obj-label-value-gap));
 }
 .feed-inner .obj .obj-content{
   overflow:visible;
@@ -1624,7 +1636,7 @@ body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-time,
 body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-sender,
 body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-text,
 body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell{
-  padding-top:32px;
+  padding-top:calc(12px + var(--obj-label-value-gap));
 }
 body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-time::before,
 body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-sender::before,
@@ -1638,11 +1650,13 @@ body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell::b
   justify-content:flex-start;
   text-align:left;
 }
-.feed-inner .obj .obj-text{
-  font-size:12px;
+/* Value text: same size/line-height for .obj-text and .obj-value-cell so label→value rhythm matches */
+.feed-inner .obj:not(.obj-editing) .obj-text,
+.feed-inner .obj:not(.obj-editing) .obj-value-cell{
+  font-size:13px;
   color:var(--text);
   font-weight:400;
-  line-height:1.5;
+  line-height:1.55;
 }
 
 /* empty state: loader animation (visible on refresh before load) */
@@ -1684,12 +1698,12 @@ body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell::b
   align-items:flex-start;
   gap:20px;
   flex-shrink:0;
-  margin-left:-48px;
+  margin-left:0;
 }
 .obj-leading-meta{
   display:flex;
   flex-direction:row;
-  align-items:baseline;
+  align-items:flex-start;
   gap:20px;
   flex-wrap:wrap;
   min-width:0;
@@ -2026,6 +2040,7 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
   white-space:pre-wrap;
   padding-right:72px; /* reserve space under right-side actions */
   cursor:default;
+  justify-content:flex-start;
 }
 .obj-value-dnd-source{
   opacity:0.55;
@@ -2097,13 +2112,13 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
   flex:0 0 auto;
   display:flex;
   align-items:center;
-  margin-left:-48px;
+  margin-left:0;
   margin-top:-4px;
   margin-bottom:-4px;
   min-height:calc(100% + 8px);
   align-self:stretch;
   position:relative;
-  z-index:1;
+  z-index:2;
 }
 .obj-checkbox-zone-left{
   width:48px;
@@ -2122,7 +2137,7 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
   transition:opacity .12s ease;
 }
 
-/* Negative margins tuck the rail into the gutter; overflow-x on the feed can clip it. Select mode flushes on desktop; narrow viewports and touch always flush so the rail is usable without toggling select. */
+/* Checkbox rail sits in extra .feed-inner left padding (see .feed-inner); keep above row content */
 body.select-mode .obj-leading-col{
   margin-left:0;
 }
