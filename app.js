@@ -1313,15 +1313,24 @@ function entryTextCacheKey(channel, id) {
   return String(channel != null && String(channel).trim() !== '' ? channel : 'main') + ':' + String(id);
 }
 
+/** Secondary key so label sync can resolve text when channel inferred for the row differs from the key used at remember time (e.g. after move or primary vs secondary pane). */
+function entryTextCacheKeyIdOnly(id) {
+  return 'id:' + String(id);
+}
+
 function rememberEntryText(channel, id, text) {
   if (id == null || !Number.isFinite(Number(id))) return;
-  lastKnownEntryTextById.set(entryTextCacheKey(channel, id), String(text != null ? text : ''));
+  var t = String(text != null ? text : '');
+  lastKnownEntryTextById.set(entryTextCacheKey(channel, id), t);
+  lastKnownEntryTextById.set(entryTextCacheKeyIdOnly(id), t);
 }
 
 function getLastKnownEntryTextForChannel(channel, id) {
   if (id == null || !Number.isFinite(Number(id))) return null;
   var v = lastKnownEntryTextById.get(entryTextCacheKey(channel, id));
-  return v != null ? v : null;
+  if (v != null) return v;
+  var v2 = lastKnownEntryTextById.get(entryTextCacheKeyIdOnly(id));
+  return v2 != null ? v2 : null;
 }
 
 function parseObjectTextPayload(raw) {

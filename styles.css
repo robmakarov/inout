@@ -1756,6 +1756,10 @@ body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell::b
   overflow-x:auto;
   overflow-y:visible;
   -webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+}
+.obj-content .obj-values-wrap::-webkit-scrollbar{
+  display:none;
 }
 .obj-content .obj-value-cell{
   flex:1 0 12rem;
