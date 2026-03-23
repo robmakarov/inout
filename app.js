@@ -8863,8 +8863,9 @@ function setupWindowsRevealEffects() {
   try { mq = window.matchMedia('(hover: hover) and (pointer: fine)'); } catch (_) {}
   if (!mq || !mq.matches) return;
   document.body.dataset.inoutRevealBound = '1';
-  var selector = '.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn, #nav, #manage-bar, #input-area, .input-wrap, .composer-slot, .view, .visual, .visual-feed-stack, #feed, .obj, .obj-content, .obj-values-wrap';
+  var selector = '.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn, #nav, #manage-bar, #input-area, .input-wrap, .composer-slot, .view, .visual, .visual-feed-stack, #feed, .obj';
   var activeEl = null;
+  var activeLabelObj = null;
   function clearReveal(el) {
     if (!el) return;
     el.classList.remove('win10-reveal-active');
@@ -8881,6 +8882,12 @@ function setupWindowsRevealEffects() {
         clearReveal(activeEl);
         activeEl = null;
       }
+      if (activeLabelObj) {
+        activeLabelObj.classList.remove('win10-label-reveal');
+        activeLabelObj.style.removeProperty('--reveal-x');
+        activeLabelObj.style.removeProperty('--reveal-y');
+        activeLabelObj = null;
+      }
       return;
     }
     if (activeEl && activeEl !== el) clearReveal(activeEl);
@@ -8890,11 +8897,31 @@ function setupWindowsRevealEffects() {
     el.style.setProperty('--reveal-x', (e.clientX - r.left) + 'px');
     el.style.setProperty('--reveal-y', (e.clientY - r.top) + 'px');
     el.classList.add('win10-reveal-active');
+    var row = t && t.closest ? t.closest('.feed-inner.obj-labels-off .obj') : null;
+    if (activeLabelObj && activeLabelObj !== row) {
+      activeLabelObj.classList.remove('win10-label-reveal');
+      activeLabelObj.style.removeProperty('--reveal-x');
+      activeLabelObj.style.removeProperty('--reveal-y');
+      activeLabelObj = null;
+    }
+    if (row) {
+      var rr = row.getBoundingClientRect();
+      row.style.setProperty('--reveal-x', (e.clientX - rr.left) + 'px');
+      row.style.setProperty('--reveal-y', (e.clientY - rr.top) + 'px');
+      row.classList.add('win10-label-reveal');
+      activeLabelObj = row;
+    }
   }, { passive: true });
   document.addEventListener('pointerleave', function() {
     if (!activeEl) return;
     clearReveal(activeEl);
     activeEl = null;
+    if (activeLabelObj) {
+      activeLabelObj.classList.remove('win10-label-reveal');
+      activeLabelObj.style.removeProperty('--reveal-x');
+      activeLabelObj.style.removeProperty('--reveal-y');
+      activeLabelObj = null;
+    }
   }, { passive: true });
 }
 

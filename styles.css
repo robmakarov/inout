@@ -3495,6 +3495,8 @@ body.secret-show-grips .frame-grip{
   .win10-reveal-target{
     position:relative;
     isolation:isolate;
+  }
+  :is(.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn, #input-area, .input-wrap, .composer-slot){
     overflow:hidden;
   }
   .win10-reveal-target > *{
@@ -3543,6 +3545,15 @@ body.secret-show-grips .frame-grip{
   .win10-reveal-target.win10-reveal-active::before,
   .win10-reveal-target.win10-reveal-active::after{
     opacity:1;
+  }
+  /* Labels-off mode: pointer acts like a soft flashlight that reveals hidden labels. */
+  .feed-inner.obj-labels-off .obj.win10-label-reveal .obj-time::before,
+  .feed-inner.obj-labels-off .obj.win10-label-reveal .obj-sender::before,
+  .feed-inner.obj-labels-off .obj.win10-label-reveal .obj-text::before,
+  .feed-inner.obj-labels-off .obj.win10-label-reveal .obj-value-cell::before{
+    opacity:1;
+    transform:translateY(0);
+    text-shadow:0 0 8px rgba(255,255,255,0.22);
   }
 }
 
