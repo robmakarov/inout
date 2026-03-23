@@ -7843,10 +7843,15 @@ function createObjectRow(obj, isNew, options) {
 
   var objActionsScrollCloseEl = null;
   var objActionsScrollCloseFn = null;
+  var objActionsScrollAttachTimer = null;
   function closeDropdown() {
     actions.classList.remove('obj-actions-open');
     trigger.setAttribute('aria-expanded', 'false');
     document.removeEventListener('click', closeDropdown);
+    if (objActionsScrollAttachTimer != null) {
+      clearTimeout(objActionsScrollAttachTimer);
+      objActionsScrollAttachTimer = null;
+    }
     if (objActionsScrollCloseEl && objActionsScrollCloseFn) {
       try {
         objActionsScrollCloseEl.removeEventListener('scroll', objActionsScrollCloseFn);
@@ -7891,11 +7896,16 @@ function createObjectRow(obj, isNew, options) {
         objActionsScrollCloseFn = function() {
           closeDropdown();
         };
-        objActionsScrollCloseEl = scrollPort;
-        scrollPort.addEventListener('scroll', objActionsScrollCloseFn, { passive: true });
+        /* Defer: opening can reflow/scroll the stack once; immediate scroll would close before the menu appears. */
+        objActionsScrollAttachTimer = setTimeout(function() {
+          objActionsScrollAttachTimer = null;
+          if (!actions.classList.contains('obj-actions-open')) return;
+          objActionsScrollCloseEl = scrollPort;
+          scrollPort.addEventListener('scroll', objActionsScrollCloseFn, { passive: true });
+        }, 100);
       }
     } else {
-      document.removeEventListener('click', closeDropdown);
+      closeDropdown();
     }
   });
 

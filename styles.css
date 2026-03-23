@@ -1744,6 +1744,11 @@ body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell::b
   min-width:0;
   gap:20px;
 }
+/* Absolute .obj-actions does not take flex space; reserve space so value cells don’t cover the ⋮ hit target */
+.feed-inner .obj .obj-content{
+  padding-right:48px;
+  box-sizing:border-box;
+}
 /* Multiple values in one object: one row, left → right; new columns append on the right (scroll if needed) */
 .obj-content .obj-values-wrap{
   display:flex;
@@ -2214,7 +2219,7 @@ body.select-mode .obj-checkbox-zone{
   transition:opacity .15s ease;
   flex-direction:column;
   align-items:flex-end;
-  z-index:5;
+  z-index:30;
 }
 .obj:hover .obj-actions,
 .obj.obj-drag-over .obj-actions,
@@ -2223,6 +2228,8 @@ body.select-mode .obj-checkbox-zone{
   pointer-events:auto;
 }
 .obj-actions-trigger{
+  pointer-events:auto;
+  touch-action:manipulation;
   border:1px solid var(--line2);
   background:var(--bg);
   color:var(--soft);
