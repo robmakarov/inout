@@ -141,6 +141,35 @@ function getFeedScrollSurface(feed) {
 function primaryFeedScrollSurface() {
   return feedEl ? getFeedScrollSurface(feedEl) : null;
 }
+
+function routeWheelDeltaToPrimaryView(deltaY) {
+  if (Math.abs(Number(deltaY) || 0) < 0.01) return false;
+  var surf = primaryFeedScrollSurface();
+  if (!surf || surf.scrollHeight - surf.clientHeight <= 1) return false;
+  var prev = surf.scrollTop || 0;
+  surf.scrollTop = prev + deltaY;
+  return Math.abs((surf.scrollTop || 0) - prev) > 0.01;
+}
+
+function nearestVerticalScrollableAncestorForDelta(node, deltaY) {
+  var el = node && node.nodeType === 1 ? node : (node && node.parentElement ? node.parentElement : null);
+  while (el && el !== document.body && el !== document.documentElement) {
+    try {
+      var cs = window.getComputedStyle(el);
+      var oy = String(cs.overflowY || cs.overflow || '');
+      var verticalByStyle = /(auto|scroll|overlay)/.test(oy);
+      if (verticalByStyle) {
+        var max = el.scrollHeight - el.clientHeight;
+        if (max > 1) {
+          var st = el.scrollTop || 0;
+          if ((deltaY > 0 && st < max - 1) || (deltaY < 0 && st > 1)) return el;
+        }
+      }
+    } catch (_) {}
+    el = el.parentElement;
+  }
+  return null;
+}
 const inputArea  = document.getElementById('input-area');
 var input       = document.getElementById('object-input');
 var sendBtn     = document.getElementById('send-btn');
@@ -8806,6 +8835,17 @@ function syncInoutManageRailWidthVar() {
 function setupTabs() {
   renderTabs();
   if (tabsEl) bindVerticalWheelToHorizontalScroll(tabsEl);
+  if (!document.body.dataset.inoutGlobalWheelFallbackBound) {
+    document.body.dataset.inoutGlobalWheelFallbackBound = '1';
+    document.addEventListener('wheel', function(e) {
+      if (e.defaultPrevented) return;
+      if (Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
+      var dy = Number(e.deltaY) || 0;
+      if (Math.abs(dy) < 0.01) return;
+      if (nearestVerticalScrollableAncestorForDelta(e.target, dy)) return;
+      if (routeWheelDeltaToPrimaryView(dy)) e.preventDefault();
+    }, { passive: false });
+  }
   const manageBar = document.getElementById('manage-bar');
   const manageBarTrigger = document.getElementById('manage-bar-trigger');
   if (manageBar && manageBarTrigger) {
