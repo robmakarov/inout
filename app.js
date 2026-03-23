@@ -146,6 +146,7 @@ var inoutScrollWrapState = new WeakMap();
 var inoutWheelInteractionId = 0;
 var inoutLastWheelAt = 0;
 var INOUT_WHEEL_INTERACTION_GAP_MS = 180;
+var INOUT_EDGE_BUMP_MIN_MS = 120;
 
 function advanceScrollEdgeThenWrap(el, axis, delta, interactionId) {
   if (!el) return false;
@@ -160,6 +161,10 @@ function advanceScrollEdgeThenWrap(el, axis, delta, interactionId) {
   var edgeKey = axis + ':' + String(dir);
   var state = inoutScrollWrapState.get(el) || null;
   var stateKey = state && typeof state === 'object' ? state.key : state;
+  var stateArmedAt = state && typeof state === 'object' && Number.isFinite(Number(state.armedAt))
+    ? Number(state.armedAt)
+    : 0;
+  var now = Date.now();
   var atMin = prev <= 1;
   var atMax = prev >= max - 1;
 
@@ -168,18 +173,18 @@ function advanceScrollEdgeThenWrap(el, axis, delta, interactionId) {
       var toMax = Math.min(max, prev + d);
       if (axis === 'x') el.scrollLeft = toMax;
       else el.scrollTop = toMax;
-      if (toMax >= max - 1) inoutScrollWrapState.set(el, edgeKey);
+      if (toMax >= max - 1) inoutScrollWrapState.set(el, { key: edgeKey, armedAt: now });
       else inoutScrollWrapState.delete(el);
       return Math.abs(toMax - prev) > 0.01;
     }
-    if (stateKey === edgeKey) {
+    if (stateKey === edgeKey && now - stateArmedAt >= INOUT_EDGE_BUMP_MIN_MS) {
       var carryFwd = Math.min(max, Math.max(0, Math.abs(d)));
       if (axis === 'x') el.scrollLeft = carryFwd;
       else el.scrollTop = carryFwd;
       inoutScrollWrapState.delete(el);
       return true;
     }
-    inoutScrollWrapState.set(el, edgeKey);
+    inoutScrollWrapState.set(el, { key: edgeKey, armedAt: stateArmedAt || now });
     return false;
   }
 
@@ -187,11 +192,11 @@ function advanceScrollEdgeThenWrap(el, axis, delta, interactionId) {
     var toMin = Math.max(0, prev + d);
     if (axis === 'x') el.scrollLeft = toMin;
     else el.scrollTop = toMin;
-    if (toMin <= 1) inoutScrollWrapState.set(el, edgeKey);
+    if (toMin <= 1) inoutScrollWrapState.set(el, { key: edgeKey, armedAt: now });
     else inoutScrollWrapState.delete(el);
     return Math.abs(toMin - prev) > 0.01;
   }
-  if (stateKey === edgeKey) {
+  if (stateKey === edgeKey && now - stateArmedAt >= INOUT_EDGE_BUMP_MIN_MS) {
     var carryBack = Math.min(max, Math.max(0, Math.abs(d)));
     var to = Math.max(0, max - carryBack);
     if (axis === 'x') el.scrollLeft = to;
@@ -199,7 +204,7 @@ function advanceScrollEdgeThenWrap(el, axis, delta, interactionId) {
     inoutScrollWrapState.delete(el);
     return true;
   }
-  inoutScrollWrapState.set(el, edgeKey);
+  inoutScrollWrapState.set(el, { key: edgeKey, armedAt: stateArmedAt || now });
   return false;
 }
 
