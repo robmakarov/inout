@@ -1957,7 +1957,6 @@ function bindVerticalWheelToHorizontalScroll(el) {
       if (now < inoutWheelViewLockUntil) {
         var movedLocked = routeWheelToPrimaryView(e.deltaY);
         if (movedLocked) e.preventDefault();
-        else e.preventDefault(); // keep non-view scrollers ignored during lock window
         return;
       }
       if (suspendAfterClick) {
@@ -1965,7 +1964,6 @@ function bindVerticalWheelToHorizontalScroll(el) {
           var moved = routeWheelToPrimaryView(e.deltaY);
           inoutWheelViewLockUntil = Date.now() + INOUT_WHEEL_VIEW_LOCK_MS;
           if (moved) e.preventDefault();
-          else e.preventDefault();
         }
         suspendWheelAccum += Math.abs(Number(e.deltaY) || 0);
         if (suspendWheelAccum >= SUSPEND_WHEEL_RELEASE_DELTA) {
@@ -1990,7 +1988,12 @@ function bindVerticalWheelToHorizontalScroll(el) {
       if (Math.abs(e.deltaY) < 0.01) return;
       var prev = el.scrollLeft;
       el.scrollLeft = prev + e.deltaY;
-      if (Math.abs(el.scrollLeft - prev) > 0.01) e.preventDefault();
+      if (Math.abs(el.scrollLeft - prev) > 0.01) {
+        e.preventDefault();
+        return;
+      }
+      // If this horizontal zone cannot move further, hand wheel to main view.
+      if (routeWheelToPrimaryView(e.deltaY)) e.preventDefault();
     },
     { passive: false }
   );
