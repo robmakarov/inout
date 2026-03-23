@@ -2114,17 +2114,9 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
   display:flex;
   align-items:center;
   justify-content:center;
-  opacity:0;
-  pointer-events:none;
-  transition:opacity .12s ease;
-}
-
-body.select-mode .obj-select-wrap,
-.obj:hover .obj-select-wrap,
-.obj.obj-drag-over .obj-select-wrap,
-.obj.obj-selected .obj-select-wrap{
   opacity:1;
   pointer-events:auto;
+  transition:opacity .12s ease;
 }
 
 /* Negative margins tuck the rail into the gutter; overflow-x on the feed can clip it. Select mode flushes on desktop; narrow viewports and touch always flush so the rail is usable without toggling select. */
@@ -3324,7 +3316,6 @@ body.secret-show-grips .frame-grip{
     font-size:16px;
   }
   .obj:hover{ background:var(--bg) }
-  .obj .obj-select-wrap,
   .obj .obj-actions{ opacity:1; pointer-events:auto }
   .obj:hover .obj-time,
   .obj:hover .obj-sender{ color:var(--dim) }

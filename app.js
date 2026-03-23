@@ -2999,7 +2999,8 @@ async function sendFromSlot(index) {
 
 let selectMode = false;
 let selectModeAutoOn = false;
-const selectedIds = new Set();
+/** Same Set as modeState.selectedIds — single source of truth for selection. */
+const selectedIds = modeState.selectedIds;
 let dragSelectActive = false;
 let dragSelectStarted = false;
 let dragSelectJustEnded = false;
@@ -3083,11 +3084,9 @@ function applyDragSelectRect(feedInner, feedEl, startYContent, currentYClient, m
     box.checked = desired;
     if (box.checked) {
       selectedIds.add(id);
-      modeState.selectedIds.add(id);
       r.classList.add('obj-selected');
     } else {
       selectedIds.delete(id);
-      modeState.selectedIds.delete(id);
       r.classList.remove('obj-selected');
     }
     changed = true;
@@ -3107,11 +3106,9 @@ function toggleRowAtY(feedInner, clientY) {
       box.checked = !box.checked;
       if (box.checked) {
         selectedIds.add(id);
-        modeState.selectedIds.add(id);
         r.classList.add('obj-selected');
       } else {
         selectedIds.delete(id);
-        modeState.selectedIds.delete(id);
         r.classList.remove('obj-selected');
       }
       updateSelectionUI();
@@ -6699,6 +6696,24 @@ function showEmptyIfNoObjects() {
   }
 }
 
+/** Clear selection when switching primary tab/view so counts don’t accumulate across channels. */
+function clearSelectionOnPrimaryViewSwitch() {
+  selectModeAutoOn = false;
+  selectedIds.clear();
+  try {
+    document.querySelectorAll('.obj .obj-select').forEach(function(box) {
+      box.checked = false;
+    });
+    document.querySelectorAll('.obj.obj-selected').forEach(function(row) {
+      row.classList.remove('obj-selected');
+    });
+  } catch (_) {}
+  if (selectMode) setSelectMode(false);
+  else {
+    refreshObjectRowBulkActionBars();
+  }
+}
+
 function setSelectMode(on) {
   selectMode = !!on;
   currentMode = selectMode ? Modes.SELECT : Modes.NORMAL;
@@ -6706,7 +6721,15 @@ function setSelectMode(on) {
     document.body.dataset.mode = Modes.SELECT;
   } else {
     document.body.dataset.mode = Modes.NORMAL;
-    modeState.selectedIds.clear();
+    selectedIds.clear();
+    try {
+      document.querySelectorAll('.obj .obj-select').forEach(function(box) {
+        box.checked = false;
+      });
+      document.querySelectorAll('.obj.obj-selected').forEach(function(row) {
+        row.classList.remove('obj-selected');
+      });
+    } catch (_) {}
   }
   if (selectToggle) {
     selectToggle.classList.toggle('active', selectMode);
@@ -6727,7 +6750,7 @@ function setSelectMode(on) {
 }
 
 function updateSelectionUI() {
-  const count = (modeState && modeState.selectedIds) ? modeState.selectedIds.size : selectedIds.size;
+  const count = selectedIds.size;
   if (count > 0 && !selectMode) {
     selectModeAutoOn = true;
     setSelectMode(true);
@@ -6739,7 +6762,7 @@ function updateSelectionUI() {
 }
 
 function refreshObjectRowBulkActionBars() {
-  const sel = modeState && modeState.selectedIds ? modeState.selectedIds : selectedIds;
+  const sel = selectedIds;
   const n = sel && typeof sel.size === 'number' ? sel.size : 0;
   try {
     document.querySelectorAll('.obj').forEach(function(row) {
@@ -7818,11 +7841,9 @@ function createObjectRow(obj, isNew, options) {
     if (!obj.id) return;
     if (selectBox.checked) {
       selectedIds.add(obj.id);
-      modeState.selectedIds.add(obj.id);
       row.classList.add('obj-selected');
     } else {
       selectedIds.delete(obj.id);
-      modeState.selectedIds.delete(obj.id);
       row.classList.remove('obj-selected');
     }
     updateSelectionUI();
@@ -7846,11 +7867,9 @@ function createObjectRow(obj, isNew, options) {
     selectBox.checked = !selectBox.checked;
     if (selectBox.checked) {
       selectedIds.add(obj.id);
-      modeState.selectedIds.add(obj.id);
       row.classList.add('obj-selected');
     } else {
       selectedIds.delete(obj.id);
-      modeState.selectedIds.delete(obj.id);
       row.classList.remove('obj-selected');
     }
     if (!selectMode) {
@@ -9474,6 +9493,7 @@ async function switchChannelInternal(ch) {
   }
   currentChannel = ch;
   currentView = ch;
+  clearSelectionOnPrimaryViewSwitch();
   var primaryTextTrim = '';
   try {
     primaryTextTrim = input && String(input.value || '').trim() ? String(input.value).trim() : '';
@@ -11068,7 +11088,6 @@ if (selectToggle) {
   selectToggle.addEventListener('click', () => {
     if (selectMode) {
       selectedIds.clear();
-      modeState.selectedIds.clear();
       selectModeAutoOn = false;
       if (feedInner) {
         feedInner.querySelectorAll('.obj-select').forEach(box => { box.checked = false; });
@@ -11091,7 +11110,6 @@ if (selectAllBtn) {
       if (id) {
         const n = Number(id);
         selectedIds.add(n);
-        modeState.selectedIds.add(n);
       }
     });
     updateSelectionUI();
@@ -11106,7 +11124,6 @@ if (selectNoneBtn) {
       box.checked = false;
     });
     selectedIds.clear();
-    modeState.selectedIds.clear();
     feedInner.querySelectorAll('.obj.obj-selected').forEach(row => row.classList.remove('obj-selected'));
     updateSelectionUI();
   });
@@ -11232,7 +11249,7 @@ if (viewToggleBtn && viewMenu) {
 }
 
 async function handleDeleteSelectedObjects() {
-  let ids = Array.from(modeState.selectedIds || [])
+  let ids = Array.from(selectedIds)
     .map(x => Number(x))
     .filter(id => Number.isFinite(id));
   try {
@@ -11246,7 +11263,6 @@ async function handleDeleteSelectedObjects() {
       if (!ids.length) return;
       await removeLocalObjectsForCurrentView(ids);
       selectedIds.clear();
-      modeState.selectedIds.clear();
       try {
         views.forEach(v => {
           const inner = v && v.feedInner;
@@ -11300,7 +11316,6 @@ async function handleDeleteSelectedObjects() {
     pushUndo({ type: 'delete', entries: rowsToDelete });
     logAction('delete', { count: rowsToDelete.length, channel: currentChannel });
     selectedIds.clear();
-    modeState.selectedIds.clear();
     try {
       views.forEach(v => {
         const inner = v && v.feedInner;
