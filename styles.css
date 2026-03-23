@@ -580,13 +580,11 @@ header{
 }
 .multi-value-filter-slot{
   position:relative;
-  flex:0 1 auto;
-  min-width:var(--inout-obj-leading-w, 0);
+  flex:0 0 0;
+  width:0;
+  min-width:0;
   align-self:center;
-}
-.multi-value-filter-slot .multi-value-filter-trigger{
-  min-width:100%;
-  justify-content:center;
+  overflow:visible;
 }
 .multi-value-filter-trigger.multi-value-filter-active{
   background:var(--acc);
