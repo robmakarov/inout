@@ -8916,7 +8916,7 @@ function setupWindowsRevealEffects() {
         strikeTimer = setTimeout(function() {
           if (cursorEl) cursorEl.classList.remove('strike');
           strikeTimer = null;
-        }, 120);
+        }, 180);
       });
     });
   }
@@ -8948,11 +8948,13 @@ function setupWindowsRevealEffects() {
       : (e && e.target && e.target.parentElement ? e.target.parentElement : null);
     var el = t && t.closest ? t.closest(selector) : null;
     setRevealCursorMode(t);
+    var reentered = pointerOutsideWindow;
+    if (reentered) pointerOutsideWindow = false;
     if (cursorEl) {
-      setCursorPosition(e.clientX, e.clientY);
       cursorEl.classList.add('active');
+      if (reentered) runCursorStrikeTo(e.clientX, e.clientY);
+      else setCursorPosition(e.clientX, e.clientY);
     }
-    pointerOutsideWindow = false;
     if (!el) {
       if (activeEl) {
         clearReveal(activeEl);
@@ -9012,15 +9014,6 @@ function setupWindowsRevealEffects() {
       activeLabelObj.style.removeProperty('--reveal-y');
       activeLabelObj = null;
     }
-  }, { passive: true });
-  window.addEventListener('mouseenter', function(e) {
-    if (!pointerOutsideWindow) return;
-    pointerOutsideWindow = false;
-    var x = Number(e && e.clientX);
-    var y = Number(e && e.clientY);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-    if (cursorEl) cursorEl.classList.add('active');
-    runCursorStrikeTo(x, y);
   }, { passive: true });
 }
 

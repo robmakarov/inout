@@ -3578,8 +3578,8 @@ body.secret-show-grips .frame-grip{
     opacity:0.78;
   }
   .win10-reveal-cursor.strike{
-    transition:transform .09s cubic-bezier(.18,.88,.28,1), opacity .08s linear, filter .09s ease;
-    filter:drop-shadow(0 0 7px rgba(255,255,255,0.56)) drop-shadow(0 0 12px rgba(255,255,255,0.28));
+    transition:transform .15s cubic-bezier(.14,.9,.24,1), opacity .12s linear, filter .14s ease;
+    filter:drop-shadow(0 0 10px rgba(255,255,255,0.72)) drop-shadow(0 0 18px rgba(255,255,255,0.36));
   }
   .win10-reveal-cursor::before{
     content:'';
