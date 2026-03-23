@@ -1621,7 +1621,23 @@ function partsFromRowDom(row) {
 }
 
 function getJoinedRowTextForEdit(row) {
+  if (!row) return '';
+  var raw = null;
+  if (Object.prototype.hasOwnProperty.call(row, '__inoutEntryTextRaw')) {
+    raw = row.__inoutEntryTextRaw;
+  }
+  if (raw == null) {
+    var ch = channelKeyForRowEl(row);
+    var rid = row.dataset && row.dataset.id != null ? Number(row.dataset.id) : NaN;
+    if (Number.isFinite(rid)) raw = getLastKnownEntryTextForChannel(ch, rid);
+  }
+  if (raw != null) {
+    var rawParts = parseObjectTextToParts(raw);
+    if (rawParts.length <= 1) return rawParts[0] || '';
+    return rawParts.join('\n\n');
+  }
   var parts = partsFromRowDom(row);
+  while (parts.length > 1 && !String(parts[parts.length - 1] || '').trim()) parts.pop();
   if (parts.length <= 1) return parts[0] || '';
   return parts.join('\n\n');
 }
@@ -8659,7 +8675,10 @@ function createObjectRow(obj, isNew, options) {
   }
   valuesWrap.addEventListener('click', e => {
     var clickedCell = resolveValueCellFromPointer(valuesWrap, e.clientX, e.clientY, e.target);
-    if (!clickedCell) return;
+    if (!clickedCell) {
+      clickedCell = valuesWrap.querySelector(':scope > .obj-value-cell:last-child');
+      if (!clickedCell) return;
+    }
     if (e.target.closest('a')) return;
     e.stopPropagation();
     if (typeof obj.id === 'undefined') return;
