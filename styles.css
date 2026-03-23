@@ -3492,23 +3492,23 @@ body.secret-show-grips .frame-grip{
 
 /* Desktop pointer reveal effect (monochrome, light-on-dark). */
 @media (hover: hover) and (pointer: fine){
-  html.win10-cursor-hide,
-  html.win10-cursor-hide body,
-  html.win10-cursor-hide *{
+  html.win10-cursor-fx-on.win10-cursor-hide,
+  html.win10-cursor-fx-on.win10-cursor-hide body,
+  html.win10-cursor-fx-on.win10-cursor-hide *{
     cursor:none !important;
   }
-  .win10-reveal-target{
+  html.win10-cursor-fx-on .win10-reveal-target{
     position:relative;
     isolation:isolate;
   }
-  :is(.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn, #input-area, .input-wrap, .composer-slot){
+  html.win10-cursor-fx-on :is(.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn, #input-area, .input-wrap, .composer-slot){
     overflow:hidden;
   }
-  .win10-reveal-target > *{
+  html.win10-cursor-fx-on .win10-reveal-target > *{
     position:relative;
     z-index:1;
   }
-  .win10-reveal-target::before{
+  html.win10-cursor-fx-on .win10-reveal-target::before{
     content:'';
     position:absolute;
     inset:-1px;
@@ -3525,7 +3525,7 @@ body.secret-show-grips .frame-grip{
     pointer-events:none;
     z-index:0;
   }
-  .win10-reveal-target::after{
+  html.win10-cursor-fx-on .win10-reveal-target::after{
     content:'';
     position:absolute;
     inset:0;
@@ -3547,20 +3547,20 @@ body.secret-show-grips .frame-grip{
     pointer-events:none;
     z-index:0;
   }
-  .win10-reveal-target.win10-reveal-active::before,
-  .win10-reveal-target.win10-reveal-active::after{
+  html.win10-cursor-fx-on .win10-reveal-target.win10-reveal-active::before,
+  html.win10-cursor-fx-on .win10-reveal-target.win10-reveal-active::after{
     opacity:1;
   }
   /* Labels-off mode: pointer acts like a soft flashlight that reveals hidden labels. */
-  .feed-inner.obj-labels-off .obj.win10-label-reveal .obj-time::before,
-  .feed-inner.obj-labels-off .obj.win10-label-reveal .obj-sender::before,
-  .feed-inner.obj-labels-off .obj.win10-label-reveal .obj-text::before,
-  .feed-inner.obj-labels-off .obj.win10-label-reveal .obj-value-cell::before{
+  html.win10-cursor-fx-on .feed-inner.obj-labels-off .obj.win10-label-reveal .obj-time::before,
+  html.win10-cursor-fx-on .feed-inner.obj-labels-off .obj.win10-label-reveal .obj-sender::before,
+  html.win10-cursor-fx-on .feed-inner.obj-labels-off .obj.win10-label-reveal .obj-text::before,
+  html.win10-cursor-fx-on .feed-inner.obj-labels-off .obj.win10-label-reveal .obj-value-cell::before{
     opacity:1;
     transform:translateY(0);
     text-shadow:0 0 5px rgba(255,255,255,0.16);
   }
-  .win10-reveal-cursor{
+  html.win10-cursor-fx-on .win10-reveal-cursor{
     position:fixed;
     left:0;
     top:0;
@@ -3574,10 +3574,10 @@ body.secret-show-grips .frame-grip{
     filter:drop-shadow(0 0 4px rgba(255,255,255,0.24));
     will-change:transform, opacity, filter;
   }
-  .win10-reveal-cursor.active{
+  html.win10-cursor-fx-on .win10-reveal-cursor.active{
     opacity:0.78;
   }
-  .win10-reveal-bolt{
+  html.win10-cursor-fx-on .win10-reveal-bolt{
     position:fixed;
     left:0;
     top:0;
@@ -3593,7 +3593,7 @@ body.secret-show-grips .frame-grip{
       repeating-linear-gradient(90deg, rgba(255,255,255,0.95) 0 6px, rgba(255,255,255,0.12) 6px 10px);
     filter:drop-shadow(0 0 7px rgba(255,255,255,0.7)) drop-shadow(0 0 14px rgba(255,255,255,0.34));
   }
-  .win10-reveal-bolt.active{
+  html.win10-cursor-fx-on .win10-reveal-bolt.active{
     animation:win10-bolt-flash .17s ease-out both;
   }
   @keyframes win10-bolt-flash{
@@ -3601,11 +3601,11 @@ body.secret-show-grips .frame-grip{
     16%{ opacity:1; }
     100%{ opacity:0; }
   }
-  .win10-reveal-cursor.strike{
+  html.win10-cursor-fx-on .win10-reveal-cursor.strike{
     transition:transform .15s cubic-bezier(.14,.9,.24,1), opacity .12s linear, filter .14s ease;
     filter:drop-shadow(0 0 10px rgba(255,255,255,0.72)) drop-shadow(0 0 18px rgba(255,255,255,0.36));
   }
-  .win10-reveal-cursor::before{
+  html.win10-cursor-fx-on .win10-reveal-cursor::before{
     content:'';
     position:absolute;
     left:50%;
@@ -3619,18 +3619,18 @@ body.secret-show-grips .frame-grip{
     text-shadow:0 0 6px rgba(255,255,255,0.26), 0 0 10px rgba(255,255,255,0.14);
     white-space:pre;
   }
-  .win10-reveal-cursor::after{
+  html.win10-cursor-fx-on .win10-reveal-cursor::after{
     content:none;
   }
-  .win10-reveal-cursor[data-mode="cross"]::before{ content:'+'; }
-  .win10-reveal-cursor[data-mode="text"]::before{ content:'I'; }
-  .win10-reveal-cursor[data-mode="pointer"]::before{ content:'o'; }
-  .win10-reveal-cursor[data-mode="move"]::before{ content:'+'; }
-  .win10-reveal-cursor[data-mode="ew"]::before{ content:'<>'; }
-  .win10-reveal-cursor[data-mode="ns"]::before{ content:'^v'; }
-  .win10-reveal-cursor[data-mode="nwse"]::before{ content:'/\\'; }
-  .win10-reveal-cursor[data-mode="nesw"]::before{ content:'\\/'; }
-  .win10-reveal-cursor[data-mode="blocked"]::before{
+  html.win10-cursor-fx-on .win10-reveal-cursor[data-mode="cross"]::before{ content:'+'; }
+  html.win10-cursor-fx-on .win10-reveal-cursor[data-mode="text"]::before{ content:'I'; }
+  html.win10-cursor-fx-on .win10-reveal-cursor[data-mode="pointer"]::before{ content:'o'; }
+  html.win10-cursor-fx-on .win10-reveal-cursor[data-mode="move"]::before{ content:'+'; }
+  html.win10-cursor-fx-on .win10-reveal-cursor[data-mode="ew"]::before{ content:'<>'; }
+  html.win10-cursor-fx-on .win10-reveal-cursor[data-mode="ns"]::before{ content:'^v'; }
+  html.win10-cursor-fx-on .win10-reveal-cursor[data-mode="nwse"]::before{ content:'/\\'; }
+  html.win10-cursor-fx-on .win10-reveal-cursor[data-mode="nesw"]::before{ content:'\\/'; }
+  html.win10-cursor-fx-on .win10-reveal-cursor[data-mode="blocked"]::before{
     content:'x';
     color:rgba(255,255,255,0.78);
   }

@@ -8875,11 +8875,16 @@ function setWindowsRevealEffectsEnabled(on) {
   inoutRevealFxEnabled = !!on;
   if (inoutRevealFxEnabled) {
     try { setupWindowsRevealEffects(); } catch (_) {}
+    try { document.documentElement.classList.add('win10-cursor-fx-on'); } catch (_) {}
     try { document.documentElement.classList.add('win10-cursor-hide'); } catch (_) {}
     return;
   }
+  try { document.documentElement.classList.remove('win10-cursor-fx-on'); } catch (_) {}
   try { document.documentElement.classList.remove('win10-cursor-hide'); } catch (_) {}
   try {
+    document.querySelectorAll('.win10-reveal-target').forEach(function(el) {
+      el.classList.remove('win10-reveal-target');
+    });
     document.querySelectorAll('.win10-reveal-active').forEach(function(el) {
       el.classList.remove('win10-reveal-active');
       el.style.removeProperty('--reveal-x');
