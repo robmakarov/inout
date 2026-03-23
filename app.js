@@ -1892,6 +1892,8 @@ function syncInoutMultiValueFilterMenuAria() {
 }
 
 var inoutColScrollSyncing = false;
+var inoutWheelViewLockUntil = 0;
+var INOUT_WHEEL_VIEW_LOCK_MS = 1200;
 
 function bindVerticalWheelToHorizontalScroll(el) {
   if (!el || el.dataset.inoutWheelHorizBound === '1') return;
@@ -1904,6 +1906,15 @@ function bindVerticalWheelToHorizontalScroll(el) {
   var CLICK_GRACE_MS = 2500;
   var suspendWheelAccum = 0;
   var SUSPEND_WHEEL_RELEASE_DELTA = 180;
+
+  function routeWheelToPrimaryView(deltaY) {
+    if (Math.abs(Number(deltaY) || 0) < 0.01) return false;
+    var surf = typeof primaryFeedScrollSurface === 'function' ? primaryFeedScrollSurface() : null;
+    if (!surf || surf.scrollHeight - surf.clientHeight <= 1) return false;
+    var prev = surf.scrollTop || 0;
+    surf.scrollTop = prev + deltaY;
+    return Math.abs((surf.scrollTop || 0) - prev) > 0.01;
+  }
 
   function clearSuspendTimer() {
     if (suspendTimer != null) {
@@ -1942,14 +1953,19 @@ function bindVerticalWheelToHorizontalScroll(el) {
   el.addEventListener(
     'wheel',
     function(e) {
+      var now = Date.now();
+      if (now < inoutWheelViewLockUntil) {
+        var movedLocked = routeWheelToPrimaryView(e.deltaY);
+        if (movedLocked) e.preventDefault();
+        else e.preventDefault(); // keep non-view scrollers ignored during lock window
+        return;
+      }
       if (suspendAfterClick) {
-        // During grace period, wheel should scroll the main view vertically.
-        if (Math.abs(e.deltaY) >= Math.abs(e.deltaX) && Math.abs(Number(e.deltaY) || 0) > 0.01) {
-          var surf = typeof primaryFeedScrollSurface === 'function' ? primaryFeedScrollSurface() : null;
-          if (surf && surf.scrollHeight - surf.clientHeight > 1) {
-            surf.scrollTop = (surf.scrollTop || 0) + e.deltaY;
-            e.preventDefault();
-          }
+        if (Math.abs(e.deltaY) >= Math.abs(e.deltaX)) {
+          var moved = routeWheelToPrimaryView(e.deltaY);
+          inoutWheelViewLockUntil = Date.now() + INOUT_WHEEL_VIEW_LOCK_MS;
+          if (moved) e.preventDefault();
+          else e.preventDefault();
         }
         suspendWheelAccum += Math.abs(Number(e.deltaY) || 0);
         if (suspendWheelAccum >= SUSPEND_WHEEL_RELEASE_DELTA) {
