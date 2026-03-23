@@ -142,16 +142,30 @@ function primaryFeedScrollSurface() {
   return feedEl ? getFeedScrollSurface(feedEl) : null;
 }
 
-function routeWheelDeltaToPrimaryView(deltaY) {
-  if (Math.abs(Number(deltaY) || 0) < 0.01) return false;
-  var surf = primaryFeedScrollSurface();
-  if (!surf || surf.scrollHeight - surf.clientHeight <= 1) return false;
-  var prev = surf.scrollTop || 0;
-  surf.scrollTop = prev + deltaY;
-  return Math.abs((surf.scrollTop || 0) - prev) > 0.01;
+function circularAdvanceScroll(el, axis, delta) {
+  if (!el) return false;
+  var d = Number(delta) || 0;
+  if (Math.abs(d) < 0.01) return false;
+  var max = axis === 'x'
+    ? (el.scrollWidth - el.clientWidth)
+    : (el.scrollHeight - el.clientHeight);
+  if (!(max > 1)) return false;
+  var prev = axis === 'x' ? (el.scrollLeft || 0) : (el.scrollTop || 0);
+  var next = prev + d;
+  if (next > max) next = 0;
+  else if (next < 0) next = max;
+  if (axis === 'x') el.scrollLeft = next;
+  else el.scrollTop = next;
+  var now = axis === 'x' ? (el.scrollLeft || 0) : (el.scrollTop || 0);
+  return Math.abs(now - prev) > 0.01 || Math.abs(next - prev) > 0.01;
 }
 
-function nearestVerticalScrollableAncestorForDelta(node, deltaY) {
+function routeWheelDeltaToPrimaryView(deltaY) {
+  var surf = primaryFeedScrollSurface();
+  return circularAdvanceScroll(surf, 'y', deltaY);
+}
+
+function nearestVerticalScrollableAncestor(node) {
   var el = node && node.nodeType === 1 ? node : (node && node.parentElement ? node.parentElement : null);
   while (el && el !== document.body && el !== document.documentElement) {
     try {
@@ -160,10 +174,7 @@ function nearestVerticalScrollableAncestorForDelta(node, deltaY) {
       var verticalByStyle = /(auto|scroll|overlay)/.test(oy);
       if (verticalByStyle) {
         var max = el.scrollHeight - el.clientHeight;
-        if (max > 1) {
-          var st = el.scrollTop || 0;
-          if ((deltaY > 0 && st < max - 1) || (deltaY < 0 && st > 1)) return el;
-        }
+        if (max > 1) return el;
       }
     } catch (_) {}
     el = el.parentElement;
@@ -2015,13 +2026,11 @@ function bindVerticalWheelToHorizontalScroll(el) {
       var canX = xScrollableByStyle && (el.scrollWidth - el.clientWidth > 1);
       if (!canX) return;
       if (Math.abs(e.deltaY) < 0.01) return;
-      var prev = el.scrollLeft;
-      el.scrollLeft = prev + e.deltaY;
-      if (Math.abs(el.scrollLeft - prev) > 0.01) {
+      if (circularAdvanceScroll(el, 'x', e.deltaY)) {
         e.preventDefault();
         return;
       }
-      // If this horizontal zone cannot move further, hand wheel to main view.
+      // If this zone cannot move, hand wheel to main view.
       if (routeWheelToPrimaryView(e.deltaY)) e.preventDefault();
     },
     { passive: false }
@@ -8841,7 +8850,11 @@ function setupTabs() {
       if (Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
       var dy = Number(e.deltaY) || 0;
       if (Math.abs(dy) < 0.01) return;
-      if (nearestVerticalScrollableAncestorForDelta(e.target, dy)) return;
+      var verticalTarget = nearestVerticalScrollableAncestor(e.target);
+      if (verticalTarget) {
+        if (circularAdvanceScroll(verticalTarget, 'y', dy)) e.preventDefault();
+        return;
+      }
       if (routeWheelDeltaToPrimaryView(dy)) e.preventDefault();
     }, { passive: false, capture: true });
   }
