@@ -203,6 +203,17 @@ function advanceScrollEdgeThenWrap(el, axis, delta, interactionId) {
   return false;
 }
 
+function isWrapArmedForDirection(el, axis, delta) {
+  if (!el) return false;
+  var d = Number(delta) || 0;
+  if (Math.abs(d) < 0.01) return false;
+  var dir = d > 0 ? 1 : -1;
+  var wantKey = axis + ':' + String(dir);
+  var state = inoutScrollWrapState.get(el) || null;
+  var stateKey = state && typeof state === 'object' ? state.key : state;
+  return stateKey === wantKey;
+}
+
 function routeWheelDeltaToPrimaryView(deltaY, interactionId) {
   var surf = primaryFeedScrollSurface();
   return advanceScrollEdgeThenWrap(surf, 'y', deltaY, interactionId);
@@ -2074,6 +2085,11 @@ function bindVerticalWheelToHorizontalScroll(el) {
       if (!canX) return;
       if (Math.abs(e.deltaY) < 0.01) return;
       if (advanceScrollEdgeThenWrap(el, 'x', e.deltaY, interactionId)) {
+        e.preventDefault();
+        return;
+      }
+      // Keep wheel in this zone when wrap is armed (first edge bump happened).
+      if (isWrapArmedForDirection(el, 'x', e.deltaY)) {
         e.preventDefault();
         return;
       }
