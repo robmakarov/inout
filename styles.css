@@ -115,17 +115,23 @@ header,
 #multiview,
 #multiview.main-view{
   flex:1 1 0%;
+  flex-basis:0;
   display:flex;
   flex-direction:column;
   min-height:0;
   min-width:0;
+  width:100%;
+  max-width:100%;
   overflow:hidden;
   pointer-events:auto;
   touch-action:auto;
 }
 #multiview .view{
   flex:1 1 0;
+  flex-basis:0;
   min-width:0;
+  width:100%;
+  max-width:100%;
   display:flex;
   flex-direction:column;
   align-items:stretch;
@@ -141,23 +147,32 @@ header,
 }
 #multiview .view > .visual{
   flex:1 1 0;
+  flex-basis:0;
   min-height:0;
   min-width:0;
+  width:100%;
+  max-width:100%;
   order:1;
   touch-action:auto;
 }
 .view .visual{
   flex:1 1 0%;
+  flex-basis:0;
   min-height:0;
   min-width:0;
+  width:100%;
+  max-width:100%;
   display:flex;
   flex-direction:row;
   overflow:hidden;
 }
 .visual-feed-stack{
   flex:1 1 0%;
+  flex-basis:0;
   min-width:0;
   min-height:0;
+  width:100%;
+  max-width:100%;
   display:flex;
   flex-direction:column;
   overflow:hidden;
@@ -280,8 +295,13 @@ header,
   top:calc(var(--header-height) + var(--safe-top));
   left:0;
   right:0;
-  bottom:0;
   width:100%;
+  box-sizing:border-box;
+  /* Explicit height so nested flex (% / fill) chains get a definite size (avoids dead space under nav/input) */
+  height:calc(100vh - var(--header-height) - var(--safe-top));
+  height:calc(100dvh - var(--header-height) - var(--safe-top));
+  min-height:calc(100vh - var(--header-height) - var(--safe-top));
+  min-height:calc(100dvh - var(--header-height) - var(--safe-top));
   max-height:calc(100vh - var(--header-height) - var(--safe-top));
   max-height:calc(100dvh - var(--header-height) - var(--safe-top));
   display:flex;
@@ -293,7 +313,10 @@ header,
 }
 .frames-zone{
   flex:1 1 0;
+  flex-basis:0;
   min-height:0;
+  width:100%;
+  max-width:100%;
   display:flex;
   flex-direction:column;
   overflow:hidden;
@@ -1419,13 +1442,14 @@ header{
   opacity:0.998;
 }
 
-/* Primary #feed / .feed inside stack: grows with content; stack scrolls (overrides rules above). */
+/* Primary #feed / .feed inside stack: fill remaining height under live bar; stack is the scrollport; feed grows with long content */
 #multiview .view > .visual > .visual-feed-stack > #feed,
 #multiview .view > .visual > .visual-feed-stack > .feed{
-  flex:0 0 auto;
-  flex-shrink:0;
-  flex-basis:auto;
+  flex:1 1 auto;
+  align-self:stretch;
   min-height:0;
+  width:100%;
+  max-width:100%;
   height:auto;
   max-height:none;
   overflow-x:hidden;
@@ -1434,6 +1458,14 @@ header{
   /* auto: iOS/WKWebView delegates vertical pan to the scrolling .visual-feed-stack; pan-y here traps on a non-scroller. */
   touch-action:auto;
   overscroll-behavior-y:auto;
+}
+#multiview .view > .visual > .visual-feed-stack > #feed > .feed-inner,
+#multiview .view > .visual > .visual-feed-stack > .feed > .feed-inner{
+  flex:1 1 auto;
+  min-height:100%;
+  width:100%;
+  max-width:100%;
+  box-sizing:border-box;
 }
 #multiview .view > .visual > .visual-feed-stack .feed-inner{
   touch-action:auto;
@@ -3260,6 +3292,12 @@ body.secret-show-grips .frame-grip{
     touch-action:pan-y pinch-zoom;
     overscroll-behavior-y:auto;
     transform:translateZ(0);
+  }
+  #multiview .view > .visual > .visual-feed-stack > #feed,
+  #multiview .view > .visual > .visual-feed-stack > .feed{
+    flex:1 1 0%;
+    flex-basis:0;
+    min-height:0;
   }
 }
 
