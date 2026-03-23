@@ -8863,7 +8863,7 @@ function setupWindowsRevealEffects() {
   try { mq = window.matchMedia('(hover: hover) and (pointer: fine)'); } catch (_) {}
   if (!mq || !mq.matches) return;
   document.body.dataset.inoutRevealBound = '1';
-  var selector = '.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn';
+  var selector = '.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn, #nav, #manage-bar, #input-area, .input-wrap, .composer-slot, .view, .visual, .visual-feed-stack, #feed, .obj, .obj-content, .obj-values-wrap';
   var activeEl = null;
   function clearReveal(el) {
     if (!el) return;
@@ -8885,6 +8885,7 @@ function setupWindowsRevealEffects() {
     }
     if (activeEl && activeEl !== el) clearReveal(activeEl);
     activeEl = el;
+    el.classList.add('win10-reveal-target');
     var r = el.getBoundingClientRect();
     el.style.setProperty('--reveal-x', (e.clientX - r.left) + 'px');
     el.style.setProperty('--reveal-y', (e.clientY - r.top) + 'px');

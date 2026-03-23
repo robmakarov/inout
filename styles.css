@@ -3490,27 +3490,27 @@ body.secret-show-grips .frame-grip{
   box-shadow:inset 0 0 0 1px rgba(184,160,96,0.35);
 }
 
-/* Desktop pointer reveal effect (Windows 10 Calendar-style cursor light + border stroke). */
+/* Desktop pointer reveal effect (monochrome, light-on-dark). */
 @media (hover: hover) and (pointer: fine){
-  :is(.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn){
+  .win10-reveal-target{
     position:relative;
     isolation:isolate;
     overflow:hidden;
   }
-  :is(.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn) > *{
+  .win10-reveal-target > *{
     position:relative;
     z-index:1;
   }
-  :is(.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn)::before{
+  .win10-reveal-target::before{
     content:'';
     position:absolute;
     inset:-1px;
     border-radius:inherit;
     background:radial-gradient(
       120px circle at var(--reveal-x, -1000px) var(--reveal-y, -1000px),
-      rgba(232,213,160,0.24) 0%,
-      rgba(184,160,96,0.14) 34%,
-      rgba(184,160,96,0.05) 52%,
+      rgba(255,255,255,0.20) 0%,
+      rgba(245,245,245,0.10) 34%,
+      rgba(220,220,220,0.04) 52%,
       transparent 74%
     );
     opacity:0;
@@ -3518,7 +3518,7 @@ body.secret-show-grips .frame-grip{
     pointer-events:none;
     z-index:0;
   }
-  :is(.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn)::after{
+  .win10-reveal-target::after{
     content:'';
     position:absolute;
     inset:0;
@@ -3526,9 +3526,9 @@ body.secret-show-grips .frame-grip{
     padding:1px;
     background:radial-gradient(
       90px circle at var(--reveal-x, -1000px) var(--reveal-y, -1000px),
-      rgba(240,236,227,0.95) 0%,
-      rgba(232,213,160,0.65) 34%,
-      rgba(184,160,96,0.16) 56%,
+      rgba(255,255,255,0.92) 0%,
+      rgba(245,245,245,0.52) 34%,
+      rgba(210,210,210,0.12) 56%,
       transparent 74%
     );
     mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
@@ -3540,8 +3540,8 @@ body.secret-show-grips .frame-grip{
     pointer-events:none;
     z-index:0;
   }
-  :is(.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn).win10-reveal-active::before,
-  :is(.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn).win10-reveal-active::after{
+  .win10-reveal-target.win10-reveal-active::before,
+  .win10-reveal-target.win10-reveal-active::after{
     opacity:1;
   }
 }
