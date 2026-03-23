@@ -142,7 +142,9 @@ function primaryFeedScrollSurface() {
   return feedEl ? getFeedScrollSurface(feedEl) : null;
 }
 
-function circularAdvanceScroll(el, axis, delta) {
+var inoutScrollWrapState = new WeakMap();
+
+function advanceScrollEdgeThenWrap(el, axis, delta) {
   if (!el) return false;
   var d = Number(delta) || 0;
   if (Math.abs(d) < 0.01) return false;
@@ -151,18 +153,52 @@ function circularAdvanceScroll(el, axis, delta) {
     : (el.scrollHeight - el.clientHeight);
   if (!(max > 1)) return false;
   var prev = axis === 'x' ? (el.scrollLeft || 0) : (el.scrollTop || 0);
-  var next = prev + d;
-  if (next > max) next = 0;
-  else if (next < 0) next = max;
-  if (axis === 'x') el.scrollLeft = next;
-  else el.scrollTop = next;
-  var now = axis === 'x' ? (el.scrollLeft || 0) : (el.scrollTop || 0);
-  return Math.abs(now - prev) > 0.01 || Math.abs(next - prev) > 0.01;
+  var dir = d > 0 ? 1 : -1;
+  var edgeKey = axis + ':' + String(dir);
+  var state = inoutScrollWrapState.get(el) || '';
+  var atMin = prev <= 1;
+  var atMax = prev >= max - 1;
+
+  if (dir > 0) {
+    if (!atMax) {
+      var toMax = Math.min(max, prev + d);
+      if (axis === 'x') el.scrollLeft = toMax;
+      else el.scrollTop = toMax;
+      if (toMax >= max - 1) inoutScrollWrapState.set(el, edgeKey);
+      else inoutScrollWrapState.delete(el);
+      return Math.abs(toMax - prev) > 0.01;
+    }
+    if (state === edgeKey) {
+      if (axis === 'x') el.scrollLeft = 0;
+      else el.scrollTop = 0;
+      inoutScrollWrapState.delete(el);
+      return true;
+    }
+    inoutScrollWrapState.set(el, edgeKey);
+    return false;
+  }
+
+  if (!atMin) {
+    var toMin = Math.max(0, prev + d);
+    if (axis === 'x') el.scrollLeft = toMin;
+    else el.scrollTop = toMin;
+    if (toMin <= 1) inoutScrollWrapState.set(el, edgeKey);
+    else inoutScrollWrapState.delete(el);
+    return Math.abs(toMin - prev) > 0.01;
+  }
+  if (state === edgeKey) {
+    if (axis === 'x') el.scrollLeft = max;
+    else el.scrollTop = max;
+    inoutScrollWrapState.delete(el);
+    return true;
+  }
+  inoutScrollWrapState.set(el, edgeKey);
+  return false;
 }
 
 function routeWheelDeltaToPrimaryView(deltaY) {
   var surf = primaryFeedScrollSurface();
-  return circularAdvanceScroll(surf, 'y', deltaY);
+  return advanceScrollEdgeThenWrap(surf, 'y', deltaY);
 }
 
 function nearestVerticalScrollableAncestor(node) {
@@ -2026,7 +2062,7 @@ function bindVerticalWheelToHorizontalScroll(el) {
       var canX = xScrollableByStyle && (el.scrollWidth - el.clientWidth > 1);
       if (!canX) return;
       if (Math.abs(e.deltaY) < 0.01) return;
-      if (circularAdvanceScroll(el, 'x', e.deltaY)) {
+      if (advanceScrollEdgeThenWrap(el, 'x', e.deltaY)) {
         e.preventDefault();
         return;
       }
@@ -8852,7 +8888,7 @@ function setupTabs() {
       if (Math.abs(dy) < 0.01) return;
       var verticalTarget = nearestVerticalScrollableAncestor(e.target);
       if (verticalTarget) {
-        if (circularAdvanceScroll(verticalTarget, 'y', dy)) e.preventDefault();
+        if (advanceScrollEdgeThenWrap(verticalTarget, 'y', dy)) e.preventDefault();
         return;
       }
       if (routeWheelDeltaToPrimaryView(dy)) e.preventDefault();
