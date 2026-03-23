@@ -1501,11 +1501,11 @@ header{
 .feed-inner{
   position:relative;
   background:var(--bg);
-  /* Safe-area + checkbox rail (48px); use correct left/right env vars so content spans full width */
+  /* Match left/right inset; checkbox rail lives inside each .obj row (not extra padding here) */
   padding-top:10px;
   padding-bottom:16px;
+  padding-left:max(10px, var(--safe-left));
   padding-right:max(10px, var(--safe-right));
-  padding-left:calc(max(10px, var(--safe-left)) + 48px);
   display:flex;
   flex-direction:column;
   justify-content:flex-start;
