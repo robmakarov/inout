@@ -1401,12 +1401,47 @@ function serializeObjectParts(parts, labelsOpt) {
     labelsOpt !== undefined && labelsOpt !== null
       ? alignLabelsForResize(labelsOpt, n)
       : alignLabelsForResize(null, n);
-  if (n === 1) {
-    var def0 = defaultValueColumnHeaderLabel(0);
-    if (labs[0] === def0) return pl[0];
-    return INOUT_MULTI_VALUE_PREFIX + JSON.stringify({ v: pl, l: labs });
-  }
+  /* Always store { v, l } so per-column labels live in DB (plain single-line would drop labels and break labels after view change). */
   return INOUT_MULTI_VALUE_PREFIX + JSON.stringify({ v: pl, l: labs });
+}
+
+/** Legacy rows stored plain text with no `l` array; upgrade in memory using current view header names so DB can be migrated. */
+function normalizeEntryTextToJsonIfPlain(ent) {
+  if (!ent || ent.text == null) return ent;
+  var s = String(ent.text);
+  if (s.indexOf(INOUT_MULTI_VALUE_PREFIX) === 0) return ent;
+  var parts = parseObjectTextToParts(s);
+  if (!parts.length) parts.push('');
+  var labs = [];
+  for (var c = 0; c < parts.length; c++) labs.push(valueColumnHeaderLabel(c));
+  var next = serializeObjectParts(parts, labs);
+  if (next === s) return ent;
+  return Object.assign({}, ent, { text: next });
+}
+
+/** Persist rows whose text was upgraded from plain to JSON (fire-and-forget; idempotent after first success). */
+function schedulePersistNormalizedEntries(originalList, normalizedList) {
+  if (!originalList || !normalizedList || originalList.length !== normalizedList.length) return;
+  var pending = [];
+  for (var i = 0; i < normalizedList.length; i++) {
+    var o = originalList[i];
+    var n = normalizedList[i];
+    if (!o || !n || o.id == null || n.id == null || Number(o.id) !== Number(n.id)) continue;
+    if (String(o.text) === String(n.text)) continue;
+    pending.push(n);
+  }
+  if (!pending.length) return;
+  (async function() {
+    for (var j = 0; j < pending.length; j++) {
+      var ent = pending[j];
+      try {
+        var ch = ent.channel != null ? String(ent.channel) : String(currentChannel || 'main');
+        await persistObjectTextPayload(Number(ent.id), ent.text, ch);
+      } catch (e) {
+        console.error('migrate plain entry text', e);
+      }
+    }
+  })();
 }
 
 function computeMaxValueColumnsFromMessages(messages) {
@@ -1622,13 +1657,42 @@ function valueColumnHeaderLabel(index) {
   return defaultValueColumnHeaderLabel(index);
 }
 
+/** Column titles shown in manage bar: prefer labels stored on objects in the feed; fallback to view localStorage defaults. */
+function getColumnHeaderLabelsForFeed(inner) {
+  if (!inner) return [];
+  var maxCols = parseInt(inner.dataset.inoutValueCols, 10) || 1;
+  maxCols = Math.max(1, maxCols);
+  var out = [];
+  for (var c = 0; c < maxCols; c++) out.push('');
+  var rows = inner.querySelectorAll('.obj[data-id]');
+  for (var r = 0; r < rows.length; r++) {
+    var row = rows[r];
+    var raw = row.__inoutEntryTextRaw;
+    if (raw == null || raw === '') continue;
+    var pay = parseObjectTextPayload(raw);
+    var labsAligned = alignLabelsForResize(pay.labels, pay.parts.length);
+    for (var i = 0; i < maxCols && i < labsAligned.length; i++) {
+      if (out[i]) continue;
+      var t = labsAligned[i] != null ? String(labsAligned[i]).trim() : '';
+      if (t) out[i] = t.slice(0, INOUT_VALUE_COL_LABEL_MAX);
+    }
+  }
+  for (var j = 0; j < maxCols; j++) {
+    if (!out[j]) out[j] = valueColumnHeaderLabel(j);
+  }
+  return out;
+}
+
 function getDisplayValueLabelForEntryText(entryRawText, colIndex) {
   var i = Number(colIndex);
   if (!Number.isFinite(i) || i < 0) return valueColumnHeaderLabel(0);
+  var s = entryRawText == null ? '' : String(entryRawText);
+  /* Legacy plain string (no JSON payload): only view-level header overrides apply. */
+  if (s.indexOf(INOUT_MULTI_VALUE_PREFIX) !== 0) return valueColumnHeaderLabel(i);
   var pay = parseObjectTextPayload(entryRawText);
-  var labs = pay.labels;
-  if (labs && labs[i] != null && String(labs[i]).trim())
-    return String(labs[i]).trim().slice(0, INOUT_VALUE_COL_LABEL_MAX);
+  var labsAligned = alignLabelsForResize(pay.labels, pay.parts.length);
+  if (i < labsAligned.length && labsAligned[i] != null && String(labsAligned[i]).trim())
+    return String(labsAligned[i]).trim().slice(0, INOUT_VALUE_COL_LABEL_MAX);
   return valueColumnHeaderLabel(i);
 }
 
@@ -1717,7 +1781,12 @@ async function promptRenameValueColumnHeader(btn) {
   if (!btn) return;
   var idx = parseInt(btn.getAttribute('data-value-index'), 10);
   if (!Number.isFinite(idx)) return;
-  var cur = valueColumnHeaderLabel(idx);
+  var fromFeed =
+    typeof feedInner !== 'undefined' && feedInner ? getColumnHeaderLabelsForFeed(feedInner) : [];
+  var cur =
+    fromFeed.length > idx && String(fromFeed[idx] || '').trim()
+      ? String(fromFeed[idx]).trim()
+      : valueColumnHeaderLabel(idx);
   var raw = typeof window !== 'undefined' && window.prompt ? window.prompt('Column header name', cur) : null;
   if (raw == null) return;
   var next = String(raw).replace(/\r?\n/g, ' ').trim().slice(0, INOUT_VALUE_COL_LABEL_MAX);
@@ -1820,12 +1889,13 @@ function rebuildMultiValueColumnLabelButtons() {
     inoutMultiValueColumnFilterIndex = null;
   wrap.replaceChildren();
   if (n < 2) return;
+  var headerLabs = getColumnHeaderLabelsForFeed(feedInner);
   for (var i = 0; i < n; i++) {
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'manage-btn multi-value-col-label-btn multi-value-col-header-btn';
     btn.setAttribute('data-value-index', String(i));
-    var lab = valueColumnHeaderLabel(i);
+    var lab = headerLabs.length > i && String(headerLabs[i] || '').trim() ? headerLabs[i] : valueColumnHeaderLabel(i);
     btn.textContent = lab;
     btn.setAttribute('aria-pressed', 'false');
     btn.setAttribute(
@@ -2613,6 +2683,9 @@ async function loadLocalObjectsForCurrentView() {
       }
     } catch (_) {}
 
+    const rawList = list.slice();
+    list = list.map(normalizeEntryTextToJsonIfPlain);
+    schedulePersistNormalizedEntries(rawList, list);
     await replaceFeedWithList(list);
   } catch (_) {
     // ignore local load errors; show empty state
@@ -4442,7 +4515,9 @@ async function loadObjects() {
     await loadLocalObjectsForCurrentView();
     return;
   }
-  const list = await fetchObjectsList();
+  const raw = await fetchObjectsList();
+  const list = raw.map(normalizeEntryTextToJsonIfPlain);
+  schedulePersistNormalizedEntries(raw, list);
   await replaceFeedWithList(list);
   // Mirror current view's objects into local per-device storage so they persist on this device.
   try {
@@ -4476,7 +4551,10 @@ async function loadObjectsForTempSession() {
     console.error(error);
     return;
   }
-  await replaceFeedWithList(data || []);
+  const raw = data || [];
+  const list = raw.map(normalizeEntryTextToJsonIfPlain);
+  schedulePersistNormalizedEntries(raw, list);
+  await replaceFeedWithList(list);
 }
 
 async function replaceFeedWithList(list) {
