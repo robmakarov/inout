@@ -286,6 +286,7 @@ const secretTogglePinnedRail = document.getElementById('secret-toggle-pinned-rai
 const secretToggleKbCalc = document.getElementById('secret-toggle-kbcalc');
 const secretToggleGrips = document.getElementById('secret-toggle-grips');
 const secretToggleLayout = document.getElementById('secret-toggle-layout');
+const secretToggleCursorFx = document.getElementById('secret-toggle-cursor-fx');
 const secretControlsResetBtn = document.getElementById('secret-controls-reset');
 const umSyncInputChk = document.getElementById('um-sync-input');
 const umLayoutSyncChk = document.getElementById('um-layout-sync');
@@ -382,6 +383,7 @@ let secretToggles = {
   showKbCalc: false,
   showGrips: false,
   enableLayoutEdit: false,
+  enableCursorFx: false,
 };
 
 function loadSecretToggles() {
@@ -394,6 +396,7 @@ function loadSecretToggles() {
     secretToggles.showKbCalc = !!parsed.showKbCalc;
     secretToggles.showGrips = !!parsed.showGrips;
     secretToggles.enableLayoutEdit = !!parsed.enableLayoutEdit;
+    secretToggles.enableCursorFx = !!parsed.enableCursorFx;
   } catch (_) {}
 }
 
@@ -406,6 +409,9 @@ function applySecretToggles() {
     document.body.classList.toggle('secret-show-pinned-rail', !!secretToggles.showPinnedRail);
     document.body.classList.toggle('secret-show-kbcalc', !!secretToggles.showKbCalc);
     document.body.classList.toggle('secret-show-grips', !!secretToggles.showGrips);
+  }
+  if (typeof setWindowsRevealEffectsEnabled === 'function') {
+    setWindowsRevealEffectsEnabled(!!secretToggles.enableCursorFx);
   }
   if (umLayoutEditBtn) {
     umLayoutEditBtn.disabled = !secretToggles.enableLayoutEdit;
@@ -425,6 +431,7 @@ function openSecretControls() {
   if (secretToggleKbCalc) secretToggleKbCalc.checked = !!secretToggles.showKbCalc;
   if (secretToggleGrips) secretToggleGrips.checked = !!secretToggles.showGrips;
   if (secretToggleLayout) secretToggleLayout.checked = !!secretToggles.enableLayoutEdit;
+  if (secretToggleCursorFx) secretToggleCursorFx.checked = !!secretToggles.enableCursorFx;
   secretControlsBackdrop.setAttribute('aria-hidden', 'false');
   if (typeof INOUT_FOLDER_SYNC !== 'undefined' && INOUT_FOLDER_SYNC.refreshStatus) {
     INOUT_FOLDER_SYNC.refreshStatus();
@@ -478,6 +485,13 @@ function closeSecretControls() {
       applySecretToggles();
     });
   }
+  if (secretToggleCursorFx) {
+    secretToggleCursorFx.addEventListener('change', function() {
+      secretToggles.enableCursorFx = !!secretToggleCursorFx.checked;
+      saveSecretToggles();
+      applySecretToggles();
+    });
+  }
   if (secretControlsCloseBtn) secretControlsCloseBtn.addEventListener('click', closeSecretControls);
   if (secretControlsBackdrop) {
     secretControlsBackdrop.addEventListener('click', function(e) {
@@ -486,13 +500,14 @@ function closeSecretControls() {
   }
   if (secretControlsResetBtn) {
     secretControlsResetBtn.addEventListener('click', function() {
-      secretToggles = { showPinnedRail: false, showKbCalc: false, showGrips: false, enableLayoutEdit: false };
+      secretToggles = { showPinnedRail: false, showKbCalc: false, showGrips: false, enableLayoutEdit: false, enableCursorFx: false };
       saveSecretToggles();
       applySecretToggles();
       if (secretTogglePinnedRail) secretTogglePinnedRail.checked = false;
       if (secretToggleKbCalc) secretToggleKbCalc.checked = false;
       if (secretToggleGrips) secretToggleGrips.checked = false;
       if (secretToggleLayout) secretToggleLayout.checked = false;
+      if (secretToggleCursorFx) secretToggleCursorFx.checked = false;
       if (typeof toast === 'function') toast('Secret toggles reset.');
     });
   }
@@ -4498,7 +4513,6 @@ function init(done) {
   try { loadViewDisplayNames(); } catch (_) {}
   try { loadScrollState(); } catch (_) {}
   try { setupTabs(); } catch (_) {}
-  try { setupWindowsRevealEffects(); } catch (_) {}
   try { restoreLastChannel(); } catch (_) {}
   try { refreshMoveTargets(); } catch (_) {}
   try {
@@ -8856,6 +8870,35 @@ function syncInoutManageRailWidthVar() {
   } catch (_) {}
 }
 
+var inoutRevealFxEnabled = false;
+function setWindowsRevealEffectsEnabled(on) {
+  inoutRevealFxEnabled = !!on;
+  if (inoutRevealFxEnabled) {
+    try { setupWindowsRevealEffects(); } catch (_) {}
+    try { document.documentElement.classList.add('win10-cursor-hide'); } catch (_) {}
+    return;
+  }
+  try { document.documentElement.classList.remove('win10-cursor-hide'); } catch (_) {}
+  try {
+    document.querySelectorAll('.win10-reveal-active').forEach(function(el) {
+      el.classList.remove('win10-reveal-active');
+      el.style.removeProperty('--reveal-x');
+      el.style.removeProperty('--reveal-y');
+    });
+    document.querySelectorAll('.win10-label-reveal').forEach(function(el) {
+      el.classList.remove('win10-label-reveal');
+      el.style.removeProperty('--reveal-x');
+      el.style.removeProperty('--reveal-y');
+    });
+  } catch (_) {}
+  try {
+    var c = document.getElementById('win10-reveal-cursor');
+    if (c) c.classList.remove('active', 'strike');
+    var b = document.getElementById('win10-reveal-bolt');
+    if (b) b.classList.remove('active');
+  } catch (_) {}
+}
+
 function setupWindowsRevealEffects() {
   if (typeof window === 'undefined' || typeof document === 'undefined' || !document.body) return;
   if (document.body.dataset.inoutRevealBound === '1') return;
@@ -8863,7 +8906,6 @@ function setupWindowsRevealEffects() {
   try { mq = window.matchMedia('(hover: hover) and (pointer: fine)'); } catch (_) {}
   if (!mq || !mq.matches) return;
   document.body.dataset.inoutRevealBound = '1';
-  try { document.documentElement.classList.add('win10-cursor-hide'); } catch (_) {}
   var selector = '.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn, #nav, #manage-bar, #input-area, .input-wrap, .composer-slot, .view, .visual, .visual-feed-stack, #feed, .obj';
   var activeEl = null;
   var activeLabelObj = null;
@@ -8968,6 +9010,7 @@ function setupWindowsRevealEffects() {
     cursorEl.setAttribute('data-mode', mode);
   }
   document.addEventListener('pointermove', function(e) {
+    if (!inoutRevealFxEnabled) return;
     var t = e && e.target && e.target.nodeType === 1
       ? e.target
       : (e && e.target && e.target.parentElement ? e.target.parentElement : null);
