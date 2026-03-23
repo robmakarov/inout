@@ -3492,10 +3492,14 @@ body.secret-show-grips .frame-grip{
 
 /* Desktop pointer reveal effect (monochrome, light-on-dark). */
 @media (hover: hover) and (pointer: fine){
+  html.win10-cursor-hide,
+  html.win10-cursor-hide body,
+  html.win10-cursor-hide *{
+    cursor:none !important;
+  }
   .win10-reveal-target{
     position:relative;
     isolation:isolate;
-    cursor:none;
   }
   :is(.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn, #input-area, .input-wrap, .composer-slot){
     overflow:hidden;
@@ -3560,36 +3564,46 @@ body.secret-show-grips .frame-grip{
     position:fixed;
     left:0;
     top:0;
-    width:18px;
-    height:18px;
-    transform:translate(calc(var(--cursor-x, -1000px) - 9px), calc(var(--cursor-y, -1000px) - 9px));
+    width:22px;
+    height:22px;
+    transform:translate(calc(var(--cursor-x, -1000px) - 11px), calc(var(--cursor-y, -1000px) - 11px));
     pointer-events:none;
     z-index:99999;
     opacity:0;
     transition:opacity .14s ease;
-    filter:drop-shadow(0 0 5px rgba(255,255,255,0.30));
+    filter:drop-shadow(0 0 4px rgba(255,255,255,0.24));
   }
   .win10-reveal-cursor.active{
-    opacity:0.85;
+    opacity:0.78;
   }
-  .win10-reveal-cursor::before,
-  .win10-reveal-cursor::after{
+  .win10-reveal-cursor::before{
     content:'';
     position:absolute;
     left:50%;
     top:50%;
     transform:translate(-50%, -50%);
-    background:linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.92), rgba(255,255,255,0));
-    border-radius:999px;
-  }
-  .win10-reveal-cursor::before{
-    width:16px;
-    height:1px;
+    color:rgba(255,255,255,0.94);
+    font-family:var(--mono);
+    font-size:13px;
+    line-height:1;
+    letter-spacing:0;
+    text-shadow:0 0 6px rgba(255,255,255,0.26), 0 0 10px rgba(255,255,255,0.14);
+    white-space:pre;
   }
   .win10-reveal-cursor::after{
-    width:1px;
-    height:16px;
-    background:linear-gradient(180deg, rgba(255,255,255,0), rgba(255,255,255,0.92), rgba(255,255,255,0));
+    content:none;
+  }
+  .win10-reveal-cursor[data-mode="cross"]::before{ content:'+'; }
+  .win10-reveal-cursor[data-mode="text"]::before{ content:'I'; }
+  .win10-reveal-cursor[data-mode="pointer"]::before{ content:'o'; }
+  .win10-reveal-cursor[data-mode="move"]::before{ content:'+'; }
+  .win10-reveal-cursor[data-mode="ew"]::before{ content:'<>'; }
+  .win10-reveal-cursor[data-mode="ns"]::before{ content:'^v'; }
+  .win10-reveal-cursor[data-mode="nwse"]::before{ content:'/\\'; }
+  .win10-reveal-cursor[data-mode="nesw"]::before{ content:'\\/'; }
+  .win10-reveal-cursor[data-mode="blocked"]::before{
+    content:'x';
+    color:rgba(255,255,255,0.78);
   }
 }
 

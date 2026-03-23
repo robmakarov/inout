@@ -8863,6 +8863,7 @@ function setupWindowsRevealEffects() {
   try { mq = window.matchMedia('(hover: hover) and (pointer: fine)'); } catch (_) {}
   if (!mq || !mq.matches) return;
   document.body.dataset.inoutRevealBound = '1';
+  try { document.documentElement.classList.add('win10-cursor-hide'); } catch (_) {}
   var selector = '.tab, .manage-btn, .manage-bar-trigger, #send-btn, .draft-btn, #user-btn, #nav, #manage-bar, #input-area, .input-wrap, .composer-slot, .view, .visual, .visual-feed-stack, #feed, .obj';
   var activeEl = null;
   var activeLabelObj = null;
@@ -8884,11 +8885,39 @@ function setupWindowsRevealEffects() {
     if (!cursorEl) return;
     cursorEl.classList.remove('active');
   }
+  function setRevealCursorMode(targetEl) {
+    if (!cursorEl) return;
+    var t = targetEl && targetEl.nodeType === 1 ? targetEl : null;
+    var mode = 'cross';
+    if (t) {
+      var editable = t.closest && t.closest('input, textarea, [contenteditable="true"], [contenteditable=""], [contenteditable]:not([contenteditable="false"])');
+      if (editable && !editable.hasAttribute('disabled') && !editable.readOnly) {
+        mode = 'text';
+      } else {
+        var c = '';
+        try { c = String(window.getComputedStyle(t).cursor || '').toLowerCase(); } catch (_) {}
+        if (c.indexOf('not-allowed') >= 0 || c.indexOf('no-drop') >= 0) mode = 'blocked';
+        else if (c.indexOf('ew-resize') >= 0 || c.indexOf('col-resize') >= 0 || c.indexOf('e-resize') >= 0 || c.indexOf('w-resize') >= 0) mode = 'ew';
+        else if (c.indexOf('ns-resize') >= 0 || c.indexOf('row-resize') >= 0 || c.indexOf('n-resize') >= 0 || c.indexOf('s-resize') >= 0) mode = 'ns';
+        else if (c.indexOf('nwse-resize') >= 0 || c.indexOf('se-resize') >= 0 || c.indexOf('nw-resize') >= 0) mode = 'nwse';
+        else if (c.indexOf('nesw-resize') >= 0 || c.indexOf('sw-resize') >= 0 || c.indexOf('ne-resize') >= 0) mode = 'nesw';
+        else if (c.indexOf('move') >= 0 || c.indexOf('grab') >= 0 || c.indexOf('grabbing') >= 0 || c.indexOf('all-scroll') >= 0) mode = 'move';
+        else if (c.indexOf('pointer') >= 0) mode = 'pointer';
+      }
+    }
+    cursorEl.setAttribute('data-mode', mode);
+  }
   document.addEventListener('pointermove', function(e) {
     var t = e && e.target && e.target.nodeType === 1
       ? e.target
       : (e && e.target && e.target.parentElement ? e.target.parentElement : null);
     var el = t && t.closest ? t.closest(selector) : null;
+    setRevealCursorMode(t);
+    if (cursorEl) {
+      cursorEl.style.setProperty('--cursor-x', e.clientX + 'px');
+      cursorEl.style.setProperty('--cursor-y', e.clientY + 'px');
+      cursorEl.classList.add('active');
+    }
     if (!el) {
       if (activeEl) {
         clearReveal(activeEl);
@@ -8900,7 +8929,6 @@ function setupWindowsRevealEffects() {
         activeLabelObj.style.removeProperty('--reveal-y');
         activeLabelObj = null;
       }
-      hideRevealCursor();
       return;
     }
     if (activeEl && activeEl !== el) clearReveal(activeEl);
@@ -8910,11 +8938,6 @@ function setupWindowsRevealEffects() {
     el.style.setProperty('--reveal-x', (e.clientX - r.left) + 'px');
     el.style.setProperty('--reveal-y', (e.clientY - r.top) + 'px');
     el.classList.add('win10-reveal-active');
-    if (cursorEl) {
-      cursorEl.style.setProperty('--cursor-x', e.clientX + 'px');
-      cursorEl.style.setProperty('--cursor-y', e.clientY + 'px');
-      cursorEl.classList.add('active');
-    }
     var row = t && t.closest ? t.closest('.feed-inner.obj-labels-off .obj') : null;
     if (activeLabelObj && activeLabelObj !== row) {
       activeLabelObj.classList.remove('win10-label-reveal');
@@ -8931,9 +8954,10 @@ function setupWindowsRevealEffects() {
     }
   }, { passive: true });
   document.addEventListener('pointerleave', function() {
-    if (!activeEl) return;
-    clearReveal(activeEl);
-    activeEl = null;
+    if (activeEl) {
+      clearReveal(activeEl);
+      activeEl = null;
+    }
     if (activeLabelObj) {
       activeLabelObj.classList.remove('win10-label-reveal');
       activeLabelObj.style.removeProperty('--reveal-x');
