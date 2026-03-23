@@ -8915,16 +8915,19 @@ function setupTabs() {
       if (Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
       var dy = Number(e.deltaY) || 0;
       if (Math.abs(dy) < 0.01) return;
+      var targetEl = e.target && e.target.nodeType === 1
+        ? e.target
+        : (e.target && e.target.parentElement ? e.target.parentElement : null);
       // Let dedicated horizontal-wheel zones handle wheel fully (avoid double handling/jumps).
-      var horizZone = e.target && e.target.closest
-        ? e.target.closest('[data-inout-wheel-horiz-bound="1"]')
+      var horizZone = targetEl && targetEl.closest
+        ? targetEl.closest('[data-inout-wheel-horiz-bound="1"]')
         : null;
       if (horizZone) return;
       var nowAt = Date.now();
       if (nowAt - inoutLastWheelAt > INOUT_WHEEL_INTERACTION_GAP_MS) inoutWheelInteractionId++;
       inoutLastWheelAt = nowAt;
       var interactionId = inoutWheelInteractionId;
-      var verticalTarget = nearestVerticalScrollableAncestor(e.target);
+      var verticalTarget = nearestVerticalScrollableAncestor(targetEl || e.target);
       if (verticalTarget) {
         if (advanceScrollEdgeThenWrap(verticalTarget, 'y', dy, interactionId)) e.preventDefault();
         return;
