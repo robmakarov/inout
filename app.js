@@ -8871,7 +8871,15 @@ function setupWindowsRevealEffects() {
   var lastCursorX = null;
   var lastCursorY = null;
   var strikeTimer = null;
+  var boltEl = document.getElementById('win10-reveal-bolt');
   var cursorEl = document.getElementById('win10-reveal-cursor');
+  if (!boltEl) {
+    boltEl = document.createElement('div');
+    boltEl.id = 'win10-reveal-bolt';
+    boltEl.className = 'win10-reveal-bolt';
+    boltEl.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(boltEl);
+  }
   if (!cursorEl) {
     cursorEl = document.createElement('div');
     cursorEl.id = 'win10-reveal-cursor';
@@ -8905,6 +8913,23 @@ function setupWindowsRevealEffects() {
     if (lastCursorX == null || lastCursorY == null) {
       setCursorPosition(x, y);
       return;
+    }
+    if (boltEl) {
+      var dx = x - lastCursorX;
+      var dy = y - lastCursorY;
+      var dist = Math.sqrt(dx * dx + dy * dy);
+      var angle = Math.atan2(dy, dx) * (180 / Math.PI);
+      boltEl.classList.remove('active');
+      boltEl.style.setProperty('--bolt-x', lastCursorX + 'px');
+      boltEl.style.setProperty('--bolt-y', lastCursorY + 'px');
+      boltEl.style.setProperty('--bolt-len', Math.max(0, dist) + 'px');
+      boltEl.style.setProperty('--bolt-angle', angle + 'deg');
+      requestAnimationFrame(function() {
+        if (boltEl) boltEl.classList.add('active');
+      });
+      setTimeout(function() {
+        if (boltEl) boltEl.classList.remove('active');
+      }, 170);
     }
     cursorEl.classList.remove('strike');
     setCursorPosition(lastCursorX, lastCursorY);

@@ -3577,6 +3577,30 @@ body.secret-show-grips .frame-grip{
   .win10-reveal-cursor.active{
     opacity:0.78;
   }
+  .win10-reveal-bolt{
+    position:fixed;
+    left:0;
+    top:0;
+    width:var(--bolt-len, 0px);
+    height:2px;
+    transform-origin:0 50%;
+    transform:translate(var(--bolt-x, -1000px), var(--bolt-y, -1000px)) rotate(var(--bolt-angle, 0deg));
+    pointer-events:none;
+    z-index:99998;
+    opacity:0;
+    background:
+      linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.95), rgba(255,255,255,0)),
+      repeating-linear-gradient(90deg, rgba(255,255,255,0.95) 0 6px, rgba(255,255,255,0.12) 6px 10px);
+    filter:drop-shadow(0 0 7px rgba(255,255,255,0.7)) drop-shadow(0 0 14px rgba(255,255,255,0.34));
+  }
+  .win10-reveal-bolt.active{
+    animation:win10-bolt-flash .17s ease-out both;
+  }
+  @keyframes win10-bolt-flash{
+    0%{ opacity:0; }
+    16%{ opacity:1; }
+    100%{ opacity:0; }
+  }
   .win10-reveal-cursor.strike{
     transition:transform .15s cubic-bezier(.14,.9,.24,1), opacity .12s linear, filter .14s ease;
     filter:drop-shadow(0 0 10px rgba(255,255,255,0.72)) drop-shadow(0 0 18px rgba(255,255,255,0.36));
