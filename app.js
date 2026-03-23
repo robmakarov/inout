@@ -1988,6 +1988,7 @@ var inoutColScrollSyncing = false;
 function bindVerticalWheelToHorizontalScroll(el) {
   if (!el || el.dataset.inoutWheelHorizBound === '1') return;
   el.dataset.inoutWheelHorizBound = '1';
+  var disableWrap = el.id === 'tabs';
 
   function routeWheelToPrimaryView(deltaY) {
     if (Math.abs(Number(deltaY) || 0) < 0.01) return false;
@@ -2022,6 +2023,18 @@ function bindVerticalWheelToHorizontalScroll(el) {
         return;
       }
       if (Math.abs(e.deltaY) < 0.01) return;
+      if (disableWrap) {
+        var prevLeft = el.scrollLeft || 0;
+        var maxLeft = Math.max(0, (el.scrollWidth || 0) - (el.clientWidth || 0));
+        var nextLeft = Math.max(0, Math.min(maxLeft, prevLeft + e.deltaY));
+        if (Math.abs(nextLeft - prevLeft) > 0.01) {
+          el.scrollLeft = nextLeft;
+          e.preventDefault();
+          return;
+        }
+        if (routeWheelToPrimaryView(e.deltaY, interactionId)) e.preventDefault();
+        return;
+      }
       if (advanceScrollEdgeThenWrap(el, 'x', e.deltaY, interactionId)) {
         e.preventDefault();
         return;
