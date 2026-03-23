@@ -16,6 +16,8 @@
   --mono:   'DM Mono', monospace;
   --sans:   'Syne', sans-serif;
   --vv-top: 0px; /* visual viewport top offset (iOS keyboard) */
+  /* Default before app.js runs; JS overwrites with visualViewport.height (px). */
+  --vv-height: 100dvh;
   /* Animation rules: use these so different parts of the UI stay consistent */
   --anim-duration-fast:   0.1s;
   --anim-duration-normal: 0.2s;
@@ -297,15 +299,13 @@ header,
   top:calc(var(--header-height) + var(--safe-top));
   left:0;
   right:0;
+  bottom:0;
   width:100%;
   box-sizing:border-box;
-  /* Explicit height so nested flex (% / fill) chains get a definite size (avoids dead space under nav/input) */
-  height:calc(100vh - var(--header-height) - var(--safe-top));
-  height:calc(100dvh - var(--header-height) - var(--safe-top));
-  min-height:calc(100vh - var(--header-height) - var(--safe-top));
-  min-height:calc(100dvh - var(--header-height) - var(--safe-top));
-  max-height:calc(100vh - var(--header-height) - var(--safe-top));
-  max-height:calc(100dvh - var(--header-height) - var(--safe-top));
+  /* top+bottom stretch fixes mobile gaps where 100dvh/100vh ≠ visible area (Safari toolbar, WKWebView). */
+  height:auto;
+  min-height:0;
+  max-height:none;
   display:flex;
   flex-direction:column;
   overflow:hidden;
@@ -3333,6 +3333,13 @@ body.secret-show-grips .frame-grip{
   .obj-meta{
     min-width:120px;
     max-width:160px;
+  }
+  /* Match visual viewport (see --vv-height in app.js); avoids empty band when dvh ≠ visible area. */
+  .app-body{
+    bottom:auto;
+    height:calc(var(--vv-height) - var(--header-height) - var(--safe-top));
+    min-height:calc(var(--vv-height) - var(--header-height) - var(--safe-top));
+    max-height:calc(var(--vv-height) - var(--header-height) - var(--safe-top));
   }
   body{
     overflow:hidden;
