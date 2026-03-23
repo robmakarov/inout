@@ -1637,6 +1637,32 @@ function getJoinedRowTextForEdit(row) {
   return parts.join('\n\n');
 }
 
+/**
+ * Split composer / `editingObjectTextMap` text into per-column parts for inline edit UI.
+ * Stored DB text uses PREFIX + JSON; the textarea and map use `parts.join('\\n\\n')` without
+ * a prefix — `parseObjectTextToParts` would treat that as a single column, so we split on
+ * `\\n\\n` when the row has multiple value cells (same convention as mergeComposerIntoParts).
+ * Single-column rows never split so a value may contain `\\n\\n` literally.
+ */
+function parsePartsForEditingDisplay(joinedText, valueCellCount) {
+  var n = Math.max(1, Math.floor(Number(valueCellCount) || 0));
+  var s = String(joinedText != null ? joinedText : '');
+  if (s.indexOf(INOUT_MULTI_VALUE_PREFIX) === 0) {
+    var pr = parseObjectTextToParts(s);
+    while (pr.length < n) pr.push('');
+    if (pr.length > n) pr = pr.slice(0, n);
+    return pr;
+  }
+  if (n <= 1) return [s];
+  var chunks = s.split(/\n\n/);
+  while (chunks.length < n) chunks.push('');
+  if (chunks.length > n) {
+    chunks[n - 1] = chunks.slice(n - 1).join('\n\n');
+    chunks = chunks.slice(0, n);
+  }
+  return chunks;
+}
+
 function mergeComposerIntoParts(prevParts, composerText) {
   if (!prevParts || prevParts.length <= 1) {
     return [composerText == null ? '' : String(composerText)];
@@ -5260,6 +5286,76 @@ function findObjectRowTextEl(objId) {
   return null;
 }
 
+/** [start,end) offsets of each part inside joined `parts.join('\\n\\n')`. */
+function partOffsetsInJoinedText(parts) {
+  var out = [];
+  var pos = 0;
+  var p = parts || [];
+  for (var i = 0; i < p.length; i++) {
+    var plen = String(p[i] != null ? p[i] : '').length;
+    out.push({ start: pos, end: pos + plen });
+    pos += plen;
+    if (i < p.length - 1) pos += 2;
+  }
+  return out;
+}
+
+function trimTrailingEmptyPartsArray(parts) {
+  var arr = (parts || []).map(function(x) { return String(x != null ? x : ''); });
+  while (arr.length > 1 && !String(arr[arr.length - 1] || '').trim()) arr.pop();
+  return arr;
+}
+
+function trimTrailingEmptyPartsArrayWithMin(parts, minLen) {
+  var arr = (parts || []).map(function(x) { return String(x != null ? x : ''); });
+  var m = Math.max(0, Math.floor(Number(minLen) || 0));
+  while (arr.length > m && !String(arr[arr.length - 1] || '').trim()) arr.pop();
+  return arr;
+}
+
+/**
+ * Escape + caret/selection for one value column.
+ * partStart / partEndEx: global offsets in joined text; partEndEx is exclusive (slice(partStart, partEndEx) === part).
+ * Textarea selection is [selStart, selEnd) with selEnd exclusive.
+ */
+function renderObjValuePartEditHtml(partText, partStart, partEndEx, selStart, selEnd) {
+  var caret = '<span class="obj-edit-caret" aria-hidden="true"></span>';
+  var selCls = 'obj-edit-selection';
+  var pt = String(partText != null ? partText : '');
+  var g0 = partStart;
+  var g1 = partEndEx;
+  var hasRange = selStart !== selEnd;
+  var os = Math.max(selStart, g0);
+  var oe = Math.min(selEnd, g1);
+  var caretAfterInThisPart = selEnd > g0 && selEnd <= g1;
+  if (!hasRange) {
+    var cp = selStart;
+    if (cp < g0 || cp > g1) {
+      return '<span class="obj-edit-value">' + escapeHtml(pt) + '</span>';
+    }
+    var off = Math.max(0, Math.min(pt.length, cp - g0));
+    var html =
+      escapeHtml(pt.slice(0, off)) + caret + escapeHtml(pt.slice(off));
+    return '<span class="obj-edit-value">' + html + '</span>';
+  }
+  if (oe <= os) {
+    if (caretAfterInThisPart) {
+      return '<span class="obj-edit-value">' + escapeHtml(pt) + caret + '</span>';
+    }
+    return '<span class="obj-edit-value">' + escapeHtml(pt) + '</span>';
+  }
+  var ls = os - g0;
+  var le = oe - g0;
+  var before = escapeHtml(pt.slice(0, ls));
+  var mid = escapeHtml(pt.slice(ls, le));
+  var after = escapeHtml(pt.slice(le));
+  var midHtml = '<span class="' + selCls + '">' + mid + '</span>';
+  if (caretAfterInThisPart) {
+    return '<span class="obj-edit-value">' + before + midHtml + caret + after + '</span>';
+  }
+  return '<span class="obj-edit-value">' + before + midHtml + after + '</span>';
+}
+
 function findObjectRowEl(objId) {
   if (objId == null) return null;
   const idStr = String(objId);
@@ -5338,14 +5434,23 @@ function applyObjectEditMode(idsToEdit, primarySeedId, clickedValueIndex) {
     editingObjectTextMap[primaryId] != null ? String(editingObjectTextMap[primaryId]) : '';
   var caretPos = null;
   var prefIdx = Number(clickedValueIndex);
+  var primaryRowForCols = findObjectRowEl(primaryId);
+  var cellCountForPrimary = primaryRowForCols
+    ? primaryRowForCols.querySelectorAll('.obj-value-cell').length
+    : 1;
   if (Number.isFinite(prefIdx) && prefIdx >= 0) {
-    var p = parseObjectTextToParts(primaryText);
+    var parseCols = Math.max(cellCountForPrimary, prefIdx + 1);
+    var p = trimTrailingEmptyPartsArray(parsePartsForEditingDisplay(primaryText, parseCols));
     while (p.length <= prefIdx) p.push('');
-    if (p.length > 1) {
-      primaryText = p.join('\n\n');
-      editingObjectTextMap[primaryId] = primaryText;
-      var pos = 0;
-      for (var pi = 0; pi < prefIdx; pi++) pos += String(p[pi] || '').length + 2;
+    var minCols = Math.max(prefIdx + 1, cellCountForPrimary);
+    p = trimTrailingEmptyPartsArrayWithMin(p, minCols);
+    primaryText = p.length > 1 ? p.join('\n\n') : (p[0] || '');
+    editingObjectTextMap[primaryId] = primaryText;
+    var pos = 0;
+    for (var pi = 0; pi < prefIdx; pi++) pos += String(p[pi] || '').length + 2;
+    if (prefIdx === 0 && p.length === 1) {
+      caretPos = primaryText.length;
+    } else {
       caretPos = Math.max(0, Math.min(primaryText.length, pos));
     }
   }
@@ -5433,8 +5538,6 @@ function updateEditingRowFromInput() {
       });
     });
   });
-  const caret = '<span class="obj-edit-caret" aria-hidden="true"></span>';
-  const selCls = 'obj-edit-selection';
   const cursorStart = input.selectionStart || 0;
   const cursorEnd = input.selectionEnd != null ? input.selectionEnd : cursorStart;
   ids.forEach(id => {
@@ -5442,16 +5545,40 @@ function updateEditingRowFromInput() {
     const len = text.length;
     const start = Math.min(cursorStart, len);
     const end = Math.min(Math.max(cursorEnd, start), len);
-    const before = text.slice(0, start);
-    const sel = text.slice(start, end);
-    const after = text.slice(end);
-    const html =
-      escapeHtml(before) +
-      (sel ? '<span class="' + selCls + '">' + escapeHtml(sel) + '</span>' : '') +
-      caret +
-      escapeHtml(after);
-    const textEl = findObjectRowTextEl(id);
-    if (textEl) textEl.innerHTML = '<span class="obj-edit-value">' + (html || caret) + '</span>';
+    const row = findObjectRowEl(id);
+    if (!row) return;
+    var valuesWrap = row.querySelector('.obj-values-wrap');
+    var cells = valuesWrap ? valuesWrap.querySelectorAll(':scope > .obj-value-cell') : [];
+    if (!cells.length) {
+      var legacy = row.querySelector('.obj-text');
+      if (!legacy) return;
+      const caret = '<span class="obj-edit-caret" aria-hidden="true"></span>';
+      const selCls = 'obj-edit-selection';
+      const before = text.slice(0, start);
+      const sel = text.slice(start, end);
+      const after = text.slice(end);
+      const html =
+        escapeHtml(before) +
+        (sel ? '<span class="' + selCls + '">' + escapeHtml(sel) + '</span>' : '') +
+        caret +
+        escapeHtml(after);
+      legacy.innerHTML = '<span class="obj-edit-value">' + (html || caret) + '</span>';
+      return;
+    }
+    var n = cells.length;
+    var parts = parsePartsForEditingDisplay(text, n);
+    if (parts.length > n) parts = parts.slice(0, n);
+    var offs = partOffsetsInJoinedText(parts);
+    for (var i = 0; i < n; i++) {
+      var o = offs[i] || { start: 0, end: 0 };
+      cells[i].innerHTML = renderObjValuePartEditHtml(
+        parts[i] != null ? parts[i] : '',
+        o.start,
+        o.end,
+        start,
+        end
+      );
+    }
   });
 }
 
