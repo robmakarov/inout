@@ -1984,22 +1984,10 @@ function syncInoutMultiValueFilterMenuAria() {
 }
 
 var inoutColScrollSyncing = false;
-var inoutWheelViewLockUntil = 0;
-var INOUT_WHEEL_VIEW_LOCK_MS = 1200;
 
-function bindVerticalWheelToHorizontalScroll(el, opts) {
-  opts = opts || {};
-  var enablePostClickSuspend = opts.enablePostClickSuspend !== false;
+function bindVerticalWheelToHorizontalScroll(el) {
   if (!el || el.dataset.inoutWheelHorizBound === '1') return;
   el.dataset.inoutWheelHorizBound = '1';
-  var suspendAfterClick = false;
-  var suspendX = 0;
-  var suspendY = 0;
-  var suspendTimer = null;
-  var MOVE_TO_REENABLE_PX = 8;
-  var CLICK_GRACE_MS = 2500;
-  var suspendWheelAccum = 0;
-  var SUSPEND_WHEEL_RELEASE_DELTA = 180;
 
   function routeWheelToPrimaryView(deltaY) {
     if (Math.abs(Number(deltaY) || 0) < 0.01) return false;
@@ -2010,42 +1998,6 @@ function bindVerticalWheelToHorizontalScroll(el, opts) {
     return Math.abs((surf.scrollTop || 0) - prev) > 0.01;
   }
 
-  function clearSuspendTimer() {
-    if (suspendTimer != null) {
-      clearTimeout(suspendTimer);
-      suspendTimer = null;
-    }
-  }
-  function enterSuspendFromPointer(e) {
-    suspendAfterClick = true;
-    suspendWheelAccum = 0;
-    suspendX = Number(e && e.clientX) || 0;
-    suspendY = Number(e && e.clientY) || 0;
-    clearSuspendTimer();
-    suspendTimer = setTimeout(function() {
-      suspendAfterClick = false;
-      suspendTimer = null;
-    }, CLICK_GRACE_MS);
-  }
-  function maybeExitSuspendOnMove(e) {
-    if (!suspendAfterClick) return;
-    var x = Number(e && e.clientX) || 0;
-    var y = Number(e && e.clientY) || 0;
-    if (Math.abs(x - suspendX) >= MOVE_TO_REENABLE_PX || Math.abs(y - suspendY) >= MOVE_TO_REENABLE_PX) {
-      suspendAfterClick = false;
-      clearSuspendTimer();
-    }
-  }
-
-  if (enablePostClickSuspend) {
-    el.addEventListener('pointerdown', enterSuspendFromPointer, { passive: true });
-    el.addEventListener('pointermove', maybeExitSuspendOnMove, { passive: true });
-    el.addEventListener('pointerleave', maybeExitSuspendOnMove, { passive: true });
-    el.addEventListener('blur', function() {
-      suspendAfterClick = false;
-      clearSuspendTimer();
-    });
-  }
   el.addEventListener(
     'wheel',
     function(e) {
@@ -2053,25 +2005,6 @@ function bindVerticalWheelToHorizontalScroll(el, opts) {
       if (nowAt - inoutLastWheelAt > INOUT_WHEEL_INTERACTION_GAP_MS) inoutWheelInteractionId++;
       inoutLastWheelAt = nowAt;
       var interactionId = inoutWheelInteractionId;
-      var now = Date.now();
-      if (now < inoutWheelViewLockUntil) {
-        var movedLocked = routeWheelToPrimaryView(e.deltaY, interactionId);
-        if (movedLocked) e.preventDefault();
-        return;
-      }
-      if (enablePostClickSuspend && suspendAfterClick) {
-        if (Math.abs(e.deltaY) >= Math.abs(e.deltaX)) {
-          var moved = routeWheelToPrimaryView(e.deltaY, interactionId);
-          inoutWheelViewLockUntil = Date.now() + INOUT_WHEEL_VIEW_LOCK_MS;
-          if (moved) e.preventDefault();
-        }
-        suspendWheelAccum += Math.abs(Number(e.deltaY) || 0);
-        if (suspendWheelAccum >= SUSPEND_WHEEL_RELEASE_DELTA) {
-          suspendAfterClick = false;
-          clearSuspendTimer();
-        }
-        return;
-      }
       // Keep native behavior when user intentionally scrolls horizontally.
       if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
       var cs = null;
@@ -8908,7 +8841,7 @@ function syncInoutManageRailWidthVar() {
 
 function setupTabs() {
   renderTabs();
-  if (tabsEl) bindVerticalWheelToHorizontalScroll(tabsEl, { enablePostClickSuspend: false });
+  if (tabsEl) bindVerticalWheelToHorizontalScroll(tabsEl);
   if (!document.body.dataset.inoutGlobalWheelFallbackBound) {
     document.body.dataset.inoutGlobalWheelFallbackBound = '1';
     document.addEventListener('wheel', function(e) {
