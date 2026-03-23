@@ -1377,9 +1377,9 @@ header{
 
 /* Live object editing (per view, visible to everyone on this channel) */
 .view-live-editing-bar{
+  display:none !important;
   flex:0 0 auto;
   flex-shrink:0;
-  display:flex;
   flex-wrap:wrap;
   align-items:center;
   gap:6px 10px;

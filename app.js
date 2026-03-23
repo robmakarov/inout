@@ -1901,10 +1901,16 @@ function bindVerticalWheelToHorizontalScroll(el) {
     function(e) {
       // Keep native behavior when user intentionally scrolls horizontally.
       if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
-      // Exception: if this element has vertical scrolling, keep wheel vertical.
-      var canY = el.scrollHeight > el.clientHeight + 1;
+      var cs = null;
+      try { cs = window.getComputedStyle(el); } catch (_) {}
+      var oy = cs ? String(cs.overflowY || cs.overflow || '') : '';
+      var ox = cs ? String(cs.overflowX || cs.overflow || '') : '';
+      var yScrollableByStyle = /(auto|scroll|overlay)/.test(oy);
+      var xScrollableByStyle = /(auto|scroll|overlay)/.test(ox);
+      // Exception: if this element can actually scroll vertically, keep wheel vertical.
+      var canY = yScrollableByStyle && (el.scrollHeight - el.clientHeight > 1);
       if (canY) return;
-      var canX = el.scrollWidth > el.clientWidth + 1;
+      var canX = xScrollableByStyle && (el.scrollWidth - el.clientWidth > 1);
       if (!canX) return;
       if (Math.abs(e.deltaY) < 0.01) return;
       var prev = el.scrollLeft;
