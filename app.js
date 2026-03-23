@@ -8721,6 +8721,7 @@ function syncInoutManageRailWidthVar() {
 
 function setupTabs() {
   renderTabs();
+  if (tabsEl) bindVerticalWheelToHorizontalScroll(tabsEl);
   const manageBar = document.getElementById('manage-bar');
   const manageBarTrigger = document.getElementById('manage-bar-trigger');
   if (manageBar && manageBarTrigger) {
