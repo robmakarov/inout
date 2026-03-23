@@ -172,8 +172,9 @@ function advanceScrollEdgeThenWrap(el, axis, delta, interactionId) {
       return Math.abs(toMax - prev) > 0.01;
     }
     if (state && state.key === edgeKey && state.interactionId !== interactionId) {
-      if (axis === 'x') el.scrollLeft = 0;
-      else el.scrollTop = 0;
+      var carryFwd = Math.min(max, Math.max(0, Math.abs(d)));
+      if (axis === 'x') el.scrollLeft = carryFwd;
+      else el.scrollTop = carryFwd;
       inoutScrollWrapState.delete(el);
       return true;
     }
@@ -190,8 +191,10 @@ function advanceScrollEdgeThenWrap(el, axis, delta, interactionId) {
     return Math.abs(toMin - prev) > 0.01;
   }
   if (state && state.key === edgeKey && state.interactionId !== interactionId) {
-    if (axis === 'x') el.scrollLeft = max;
-    else el.scrollTop = max;
+    var carryBack = Math.min(max, Math.max(0, Math.abs(d)));
+    var to = Math.max(0, max - carryBack);
+    if (axis === 'x') el.scrollLeft = to;
+    else el.scrollTop = to;
     inoutScrollWrapState.delete(el);
     return true;
   }
