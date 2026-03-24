@@ -12326,16 +12326,15 @@ function renderVisualOnlyHtml(input) {
   const src = String(input == null ? '' : input);
   if (!src) return '';
   if (typeof document === 'undefined' || !document.implementation) {
-    return escapeHtml(src);
+    return '<span class="obj-value-render">' + escapeHtml(src) + '</span>';
   }
   const doc = document.implementation.createHTMLDocument('');
   const root = doc.createElement('div');
   root.innerHTML = src;
   const allowed = new Set([
     'B', 'STRONG', 'I', 'EM', 'U', 'S', 'SMALL',
-    'SUB', 'SUP', 'BR', 'P', 'DIV', 'SPAN',
-    'UL', 'OL', 'LI', 'BLOCKQUOTE', 'CODE', 'PRE',
-    'H1', 'H2', 'H3', 'H4', 'H5', 'H6'
+    'SUB', 'SUP', 'BR', 'SPAN',
+    'CODE'
   ]);
 
   function sanitizeNode(node) {
@@ -12347,9 +12346,10 @@ function renderVisualOnlyHtml(input) {
     }
     const tag = node.tagName ? node.tagName.toUpperCase() : '';
     if (!allowed.has(tag)) {
-      const raw = node.outerHTML || node.textContent || '';
-      const asText = doc.createTextNode(raw);
-      if (node.parentNode) node.parentNode.replaceChild(asText, node);
+      const asSpan = doc.createElement('span');
+      while (node.firstChild) asSpan.appendChild(node.firstChild);
+      if (node.parentNode) node.parentNode.replaceChild(asSpan, node);
+      sanitizeNode(asSpan);
       return;
     }
     if (node.attributes && node.attributes.length) {
@@ -12361,7 +12361,7 @@ function renderVisualOnlyHtml(input) {
   }
 
   Array.from(root.childNodes).forEach(sanitizeNode);
-  return root.innerHTML;
+  return '<span class="obj-value-render">' + root.innerHTML + '</span>';
 }
 
 function toast(msg, dur = 2800) {

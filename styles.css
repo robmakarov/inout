@@ -2132,6 +2132,18 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
   cursor:default;
   justify-content:flex-start;
 }
+.obj-value-render{
+  display:block;
+  min-width:0;
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.obj-value-render *{
+  max-width:100%;
+  white-space:nowrap !important;
+}
 .obj-value-dnd-source{
   opacity:0.55;
 }
