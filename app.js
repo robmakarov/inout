@@ -8943,11 +8943,13 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
   }
 }
 
+function canSyncPersonalWorkspaceNow() {
+  return !applyingPersonalWorkspaceFromRemote && !inoutHydratingWorkspace && !!currentUser && !!sb;
+}
+
 function schedulePersonalWorkspacePersist() {
   /* Workspace UI sync uses Supabase whenever signed in — independent of object storage target (cloud vs local vault). */
-  if (applyingPersonalWorkspaceFromRemote) return;
-  if (inoutHydratingWorkspace) return;
-  if (!currentUser || !sb) return;
+  if (!canSyncPersonalWorkspaceNow()) return;
   if (_personalWorkspacePersistTimer) clearTimeout(_personalWorkspacePersistTimer);
   _personalWorkspacePersistTimer = setTimeout(function() {
     _personalWorkspacePersistTimer = null;
@@ -8957,15 +8959,13 @@ function schedulePersonalWorkspacePersist() {
 if (typeof window !== 'undefined') window.schedulePersonalWorkspacePersist = schedulePersonalWorkspacePersist;
 
 function notifyWorkspaceChromeChanged() {
-  if (applyingPersonalWorkspaceFromRemote) return;
+  if (!canSyncPersonalWorkspaceNow()) return;
   schedulePersonalWorkspacePersist();
 }
 
 function flushPersonalWorkspacePersist() {
   /* Never push workspace while merging remote config — partial DOM can clobber focusedChannel. */
-  if (applyingPersonalWorkspaceFromRemote) return Promise.resolve();
-  if (inoutHydratingWorkspace) return Promise.resolve();
-  if (!currentUser || !sb) return Promise.resolve();
+  if (!canSyncPersonalWorkspaceNow()) return Promise.resolve();
   if (_personalWorkspacePersistTimer) {
     clearTimeout(_personalWorkspacePersistTimer);
     _personalWorkspacePersistTimer = null;
@@ -8985,10 +8985,7 @@ function flushPersonalWorkspacePersist() {
       if (typeof currentChannel !== 'undefined' && currentChannel)
         localStorage.setItem(CURRENT_CHANNEL_KEY, String(currentChannel));
     } catch (_) {}
-    if (typeof applyingPersonalWorkspaceFromRemote !== 'undefined' && applyingPersonalWorkspaceFromRemote) return;
-    if (typeof inoutHydratingWorkspace !== 'undefined' && inoutHydratingWorkspace) return;
-    if (typeof currentUser === 'undefined' || !currentUser) return;
-    if (typeof sb === 'undefined' || !sb) return;
+    if (!canSyncPersonalWorkspaceNow()) return;
     try {
       flushPersonalWorkspacePersist();
     } catch (_) {}
@@ -8998,9 +8995,7 @@ function flushPersonalWorkspacePersist() {
 })();
 
 async function persistPersonalWorkspaceToServer() {
-  if (applyingPersonalWorkspaceFromRemote) return;
-  if (inoutHydratingWorkspace) return;
-  if (!currentUser || !sb) return;
+  if (!canSyncPersonalWorkspaceNow()) return;
   try {
     const slice = gatherPersonalWorkspaceStateForSave();
     let base = {};
@@ -11794,8 +11789,7 @@ function bindMultiviewWheelScrollCapture() {
 
 function scheduleScrollPersistIfAllowed() {
   if (Date.now() < suppressScrollWorkspacePersistUntil) return;
-  if (applyingPersonalWorkspaceFromRemote) return;
-  if (!currentUser || !sb) return;
+  if (!canSyncPersonalWorkspaceNow()) return;
   schedulePersonalWorkspacePersist();
 }
 
