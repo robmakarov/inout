@@ -7906,8 +7906,8 @@ function createObjectRow(obj, isNew, options) {
   }
   trigger.addEventListener('pointerup', function(e) {
     var pt = e && e.pointerType;
-    if (pt && pt !== 'touch' && pt !== 'mouse' && pt !== 'pen') return;
-    if (pt === 'touch') objActionsLastTouchUpAt = Date.now();
+    if (pt !== 'touch') return;
+    objActionsLastTouchUpAt = Date.now();
     toggleObjActionsDropdown(e);
   });
   trigger.addEventListener('click', toggleObjActionsDropdown);
@@ -8897,12 +8897,13 @@ function inoutTabsUiCtx() {
       viewNames = ['main'].concat(list);
       saveChannelsList();
       renderTabs();
-      if (canSyncPersonalWorkspaceNow()) {
-        try {
-          var wsNow = gatherPersonalWorkspaceStateForSave();
-          tryBroadcastWorkspaceConfig(JSON.parse(JSON.stringify(wsNow)));
-        } catch (_) {}
-      }
+      try {
+        var wsNow = gatherPersonalWorkspaceStateForSave();
+        tryBroadcastWorkspaceConfig(JSON.parse(JSON.stringify(wsNow)));
+        if (currentUser && sb) {
+          upsertViewsConfigForChannel(WORKSPACE_META_VIEW_CHANNEL, wsNow).catch(function() {});
+        }
+      } catch (_) {}
       schedulePersonalWorkspacePersist();
       flushPersonalWorkspacePersist().catch(function() {});
     },
