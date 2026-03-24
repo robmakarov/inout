@@ -2022,6 +2022,7 @@ const VIEW_DISPLAY_NAMES_KEY = 'inout_view_display_names_v1';
 let viewDisplayNames = {};
 const VIEWS_KEY           = 'inout_views_v1';
 const VIEWS_ORDER_REV_KEY = 'inout_views_order_rev_v1';
+const CHANNELS_KEY        = VIEWS_KEY;
 const LEFT_VIEWS_KEY      = 'inout_left_views_v1';
 const LEFT_CHANNELS_KEY   = LEFT_VIEWS_KEY; /* alias: left-rail hidden feeds */
 const CURRENT_VIEW_KEY    = 'inout_current_view_v1';
