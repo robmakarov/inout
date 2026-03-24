@@ -1114,6 +1114,7 @@ function syncFeedMultiValueChrome(inner, messagesList) {
 var inoutMultiValueFilterMode = 'all';
 var inoutMultiValueColumnFilterIndex = null;
 var inoutColHeaderFilterClickTimer = null;
+var inoutColHeaderDndJustHandled = false;
 var INOUT_VALUE_COL_LABELS_KEY = 'inout_value_column_labels_v1';
 
 function valueColumnLabelsStorageChannel() {
@@ -1151,6 +1152,93 @@ function setValueColumnLabelOverrideAt(index, labelOrEmpty) {
     if (Object.keys(all[ch]).length === 0) delete all[ch];
     localStorage.setItem(INOUT_VALUE_COL_LABELS_KEY, JSON.stringify(all));
   } catch (_) {}
+}
+
+function moveArrayItem(arr, fromIdx, toIdx) {
+  var a = Array.isArray(arr) ? arr.slice() : [];
+  var from = Number(fromIdx);
+  var to = Number(toIdx);
+  if (!Number.isFinite(from) || !Number.isFinite(to)) return a;
+  from = Math.max(0, Math.min(a.length - 1, from));
+  to = Math.max(0, Math.min(a.length - 1, to));
+  if (from === to) return a;
+  var it = a.splice(from, 1)[0];
+  a.splice(to, 0, it);
+  return a;
+}
+
+function reorderValueColumnLabelOverrides(fromIdx, toIdx) {
+  try {
+    var raw = localStorage.getItem(INOUT_VALUE_COL_LABELS_KEY);
+    var all = raw ? JSON.parse(raw) : {};
+    if (!all || typeof all !== 'object') return;
+    var ch = valueColumnLabelsStorageChannel();
+    var cur = all[ch];
+    if (!cur || typeof cur !== 'object') return;
+    var maxI = -1;
+    Object.keys(cur).forEach(function(k) {
+      var n = parseInt(k, 10);
+      if (Number.isFinite(n) && n > maxI) maxI = n;
+    });
+    if (maxI < 0) return;
+    var arr = [];
+    for (var i = 0; i <= maxI; i++) arr.push(cur[String(i)] || '');
+    var moved = moveArrayItem(arr, fromIdx, toIdx);
+    var out = {};
+    for (var j = 0; j < moved.length; j++) {
+      var v = String(moved[j] || '').trim();
+      if (v) out[String(j)] = v;
+    }
+    if (Object.keys(out).length) all[ch] = out;
+    else delete all[ch];
+    localStorage.setItem(INOUT_VALUE_COL_LABELS_KEY, JSON.stringify(all));
+  } catch (_) {}
+}
+
+async function reorderValueColumnsInCurrentView(fromIdx, toIdx) {
+  if (typeof feedInner === 'undefined' || !feedInner) return;
+  var from = Number(fromIdx);
+  var to = Number(toIdx);
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from < 0 || to < 0 || from === to) return;
+  var rows = Array.from(feedInner.querySelectorAll('.obj[data-id]'));
+  var maxCols = Math.max(1, parseInt(feedInner.dataset.inoutValueCols, 10) || 1);
+  if (from >= maxCols || to >= maxCols) return;
+  var widths = getManualValueColumnWidths();
+  if (Array.isArray(widths) && widths.length) setManualValueColumnWidths(moveArrayItem(widths, from, to));
+  reorderValueColumnLabelOverrides(from, to);
+  var ch = String(currentChannel || currentView || 'main');
+  for (var r = 0; r < rows.length; r++) {
+    var row = rows[r];
+    var id = row.dataset.id != null ? Number(row.dataset.id) : NaN;
+    if (!Number.isFinite(id)) continue;
+    var raw = Object.prototype.hasOwnProperty.call(row, '__inoutEntryTextRaw') ? row.__inoutEntryTextRaw : null;
+    if (raw == null) raw = getLastKnownEntryTextForChannel(ch, id);
+    if (raw == null) continue;
+    var pay = parseObjectTextPayload(String(raw));
+    var parts = pay.parts.slice();
+    while (parts.length < maxCols) parts.push('');
+    var labels = labelsAlignedToNewPartCount(pay, parts.length);
+    var movedParts = moveArrayItem(parts, from, to);
+    var movedLabels = moveArrayItem(labels, from, to);
+    var next = serializeObjectParts(movedParts, movedLabels);
+    row.__inoutEntryTextRaw = next;
+    rememberEntryText(ch, id, next);
+    updateObjectRowText(id, next);
+    await persistObjectTextPayload(id, next, ch);
+  }
+  if (inoutMultiValueColumnFilterIndex != null) {
+    if (inoutMultiValueColumnFilterIndex === from) inoutMultiValueColumnFilterIndex = to;
+    else if (from < to && inoutMultiValueColumnFilterIndex > from && inoutMultiValueColumnFilterIndex <= to)
+      inoutMultiValueColumnFilterIndex -= 1;
+    else if (to < from && inoutMultiValueColumnFilterIndex >= to && inoutMultiValueColumnFilterIndex < from)
+      inoutMultiValueColumnFilterIndex += 1;
+  }
+  syncFeedMultiValueChrome(feedInner, null);
+  rebuildMultiValueColumnLabelButtons();
+  syncManageBarLabelButtonWidthsFromFeed();
+  syncAllValueColumnLabelAttrs();
+  applyInoutMultiValueFilter();
+  if (canSyncPersonalWorkspaceNow()) schedulePersonalWorkspacePersist();
 }
 
 function valueColumnHeaderLabel(index) {
@@ -1682,9 +1770,54 @@ function setupMultiValueChromeBar() {
       syncValueWrapsToHeaderScroll(colWrap.scrollLeft || 0, null);
       inoutColScrollSyncing = false;
     }, { passive: true });
+    colWrap.addEventListener('dragstart', function(e) {
+      var b = e.target && e.target.closest && e.target.closest('.multi-value-col-label-btn');
+      if (!b || !colWrap.contains(b)) return;
+      var idx = parseInt(b.getAttribute('data-value-index'), 10);
+      if (!Number.isFinite(idx)) return;
+      b.classList.add('multi-value-col-label-dragging');
+      colWrap.dataset.inoutColDragFrom = String(idx);
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', String(idx)); } catch (_) {}
+      }
+    });
+    colWrap.addEventListener('dragend', function() {
+      colWrap.querySelectorAll('.multi-value-col-label-dragging,.multi-value-col-label-drop-target').forEach(function(el) {
+        el.classList.remove('multi-value-col-label-dragging', 'multi-value-col-label-drop-target');
+      });
+      delete colWrap.dataset.inoutColDragFrom;
+    });
+    colWrap.addEventListener('dragover', function(e) {
+      var b = e.target && e.target.closest && e.target.closest('.multi-value-col-label-btn');
+      if (!b || !colWrap.contains(b)) return;
+      e.preventDefault();
+      colWrap.querySelectorAll('.multi-value-col-label-drop-target').forEach(function(el) {
+        el.classList.remove('multi-value-col-label-drop-target');
+      });
+      b.classList.add('multi-value-col-label-drop-target');
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    });
+    colWrap.addEventListener('drop', function(e) {
+      var b = e.target && e.target.closest && e.target.closest('.multi-value-col-label-btn');
+      if (!b || !colWrap.contains(b)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var from = parseInt(colWrap.dataset.inoutColDragFrom || '', 10);
+      var to = parseInt(b.getAttribute('data-value-index'), 10);
+      colWrap.querySelectorAll('.multi-value-col-label-dragging,.multi-value-col-label-drop-target').forEach(function(el) {
+        el.classList.remove('multi-value-col-label-dragging', 'multi-value-col-label-drop-target');
+      });
+      delete colWrap.dataset.inoutColDragFrom;
+      if (!Number.isFinite(from) || !Number.isFinite(to) || from === to) return;
+      inoutColHeaderDndJustHandled = true;
+      setTimeout(function() { inoutColHeaderDndJustHandled = false; }, 220);
+      reorderValueColumnsInCurrentView(from, to).catch(function(e2) { console.error('reorder value columns', e2); });
+    });
     colWrap.addEventListener('click', function(e) {
       var b = e.target && e.target.closest && e.target.closest('.multi-value-col-label-btn');
       if (!b || !colWrap.contains(b)) return;
+      if (inoutColHeaderDndJustHandled) return;
       e.stopPropagation();
       var idx = parseInt(b.getAttribute('data-value-index'), 10);
       if (!Number.isFinite(idx)) return;

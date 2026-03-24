@@ -661,6 +661,12 @@ header{
   color:var(--acc);
   font-weight:600;
 }
+.multi-value-col-label-btn.multi-value-col-label-dragging{
+  opacity:0.55;
+}
+.multi-value-col-label-btn.multi-value-col-label-drop-target{
+  box-shadow:inset -2px 0 0 rgba(232,213,160,0.95);
+}
 .multi-value-col-resize-handle{
   position:absolute;
   top:0;

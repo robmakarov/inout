@@ -206,6 +206,7 @@
       btn.type = 'button';
       btn.className = 'manage-btn multi-value-col-label-btn multi-value-col-header-btn';
       btn.setAttribute('data-value-index', String(i));
+      btn.setAttribute('draggable', 'true');
       var lab = headerLabs.length > i && String(headerLabs[i] || '').trim() ? headerLabs[i] : ctx.valueColumnHeaderLabel(i);
       btn.textContent = lab;
       btn.setAttribute('aria-pressed', 'false');
