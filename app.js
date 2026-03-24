@@ -2037,11 +2037,7 @@ function ensureWorkspaceChannelsFromCfg(cfg) {
         }))
       );
     } catch (_) {}
-    try {
-      renderTabs();
-      refreshMoveTargets();
-      syncComposerTargetSelects();
-    } catch (_) {}
+    refreshWorkspaceChannelUi();
   }
 }
 
@@ -8825,6 +8821,51 @@ function gatherPersonalWorkspaceStateForSave() {
   };
 }
 
+function refreshWorkspaceChannelUi() {
+  try {
+    renderTabs();
+    refreshMoveTargets();
+    syncComposerTargetSelects();
+  } catch (_) {}
+}
+
+function applyChannelStripOrderFromCfg(cfg) {
+  if (!Array.isArray(cfg && cfg.channelStripOrder) || cfg.channelStripOrder.length === 0) return;
+  try {
+    var strip = cfg.channelStripOrder
+      .map(function(x) { return String(x || '').trim(); })
+      .filter(Boolean);
+    var srv = strip.filter(function(c) { return c !== 'main'; });
+    var localExtras = viewNames.filter(function(c) { return c !== 'main' && srv.indexOf(c) < 0; });
+    viewNames = ['main'].concat(srv).concat(localExtras);
+    viewNames = Array.from(new Set(viewNames));
+    saveChannelsList();
+    refreshWorkspaceChannelUi();
+  } catch (_) {}
+}
+
+async function applyFocusedChannelFromCfg(cfg, skipApplyFocusedChannel, errorTag) {
+  if (skipApplyFocusedChannel) return;
+  if (typeof cfg.focusedChannel !== 'string' || !cfg.focusedChannel.trim()) return;
+  var want = cfg.focusedChannel.trim();
+  if (!viewNames.includes(want)) return;
+  var slot0 = inputSlots && inputSlots[0];
+  var slotMismatch =
+    primarySlotAutoTarget && slot0 && String(slot0.channel || '') !== want;
+  var needSwitch = want !== currentView || want !== currentChannel || slotMismatch;
+  var remoteFocusOk =
+    Date.now() - lastLocalFocusedChannelSwitchAt >= REMOTE_FOCUSED_CHANNEL_GRACE_MS;
+  if (!needSwitch || !remoteFocusOk) return;
+  applyingWorkspaceFocusFromRemote = true;
+  try {
+    await switchChannel(want);
+  } catch (e) {
+    console.error(errorTag || 'apply focusedChannel', e);
+  } finally {
+    applyingWorkspaceFocusFromRemote = false;
+  }
+}
+
 async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
   opts = opts || {};
   const mergeMultiview = !!opts.mergeMultiview;
@@ -8839,52 +8880,8 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
     applyingPersonalWorkspaceFromRemote = true;
     try {
       ensureWorkspaceChannelsFromCfg(cfg);
-      if (Array.isArray(cfg.channelStripOrder) && cfg.channelStripOrder.length > 0) {
-        try {
-          const strip = cfg.channelStripOrder
-            .map(function(x) {
-              return String(x || '').trim();
-            })
-            .filter(Boolean);
-          const srv = strip.filter(function(c) {
-            return c !== 'main';
-          });
-          const localExtras = viewNames.filter(function(c) {
-            return c !== 'main' && srv.indexOf(c) < 0;
-          });
-          viewNames = ['main'].concat(srv).concat(localExtras);
-          viewNames = Array.from(new Set(viewNames));
-          saveChannelsList();
-          renderTabs();
-          refreshMoveTargets();
-          syncComposerTargetSelects();
-        } catch (_) {}
-      }
-      if (
-        !skipApplyFocusedChannel &&
-        typeof cfg.focusedChannel === 'string' &&
-        cfg.focusedChannel.trim()
-      ) {
-        const want = cfg.focusedChannel.trim();
-        if (viewNames.includes(want)) {
-          const slot0 = inputSlots && inputSlots[0];
-          const slotMismatch =
-            primarySlotAutoTarget && slot0 && String(slot0.channel || '') !== want;
-          const needSwitch = want !== currentView || want !== currentChannel || slotMismatch;
-          const remoteFocusOk =
-            Date.now() - lastLocalFocusedChannelSwitchAt >= REMOTE_FOCUSED_CHANNEL_GRACE_MS;
-          if (needSwitch && remoteFocusOk) {
-            applyingWorkspaceFocusFromRemote = true;
-            try {
-              await switchChannel(want);
-            } catch (e) {
-              console.error('apply focusedChannel (merge)', e);
-            } finally {
-              applyingWorkspaceFocusFromRemote = false;
-            }
-          }
-        }
-      }
+      applyChannelStripOrderFromCfg(cfg);
+      await applyFocusedChannelFromCfg(cfg, skipApplyFocusedChannel, 'apply focusedChannel (merge)');
       /* Single main feed — no split panes from workspace merge. */
       if (cfg.uiChrome && typeof cfg.uiChrome === 'object') {
         applyWorkspaceUiChrome(cfg.uiChrome);
@@ -8903,52 +8900,8 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
   applyingPersonalWorkspaceFromRemote = true;
   try {
   ensureWorkspaceChannelsFromCfg(cfg);
-  if (Array.isArray(cfg.channelStripOrder) && cfg.channelStripOrder.length > 0) {
-    try {
-      const strip = cfg.channelStripOrder
-        .map(function(x) {
-          return String(x || '').trim();
-        })
-        .filter(Boolean);
-      const srv = strip.filter(function(c) {
-        return c !== 'main';
-      });
-      const localExtras = viewNames.filter(function(c) {
-        return c !== 'main' && srv.indexOf(c) < 0;
-      });
-      viewNames = ['main'].concat(srv).concat(localExtras);
-      viewNames = Array.from(new Set(viewNames));
-      saveChannelsList();
-      renderTabs();
-      refreshMoveTargets();
-      syncComposerTargetSelects();
-    } catch (_) {}
-  }
-  if (
-    !skipApplyFocusedChannel &&
-    typeof cfg.focusedChannel === 'string' &&
-    cfg.focusedChannel.trim()
-  ) {
-    const want = cfg.focusedChannel.trim();
-    if (viewNames.includes(want)) {
-      const slot0 = inputSlots && inputSlots[0];
-      const slotMismatch =
-        primarySlotAutoTarget && slot0 && String(slot0.channel || '') !== want;
-      const needSwitch = want !== currentView || want !== currentChannel || slotMismatch;
-      const remoteFocusOk =
-        Date.now() - lastLocalFocusedChannelSwitchAt >= REMOTE_FOCUSED_CHANNEL_GRACE_MS;
-      if (needSwitch && remoteFocusOk) {
-        applyingWorkspaceFocusFromRemote = true;
-        try {
-          await switchChannel(want);
-        } catch (e) {
-          console.error('apply focusedChannel', e);
-        } finally {
-          applyingWorkspaceFocusFromRemote = false;
-        }
-      }
-    }
-  }
+  applyChannelStripOrderFromCfg(cfg);
+  await applyFocusedChannelFromCfg(cfg, skipApplyFocusedChannel, 'apply focusedChannel');
   /* Single main feed — split panes are not restored from server. */
   if (Array.isArray(cfg.frameOrder) && cfg.frameOrder.length) {
     try {
@@ -8966,9 +8919,7 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
     try {
       viewDisplayNames = Object.assign({}, cfg.viewDisplayNames);
       saveViewDisplayNames();
-      renderTabs();
-      refreshMoveTargets();
-      syncComposerTargetSelects();
+      refreshWorkspaceChannelUi();
     } catch (_) {}
   }
   if (Array.isArray(cfg.leftChannelIds)) {
