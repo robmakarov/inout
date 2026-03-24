@@ -690,9 +690,12 @@ header{
   bottom:2px;
   left:5px;
   width:1px;
-  background:rgba(150,150,150,0.28);
+  background:transparent;
 }
 .multi-value-col-label-btn:hover .multi-value-col-resize-handle::before{
+  background:rgba(180,180,180,0.5);
+}
+.multi-value-col-label-btn:focus-within .multi-value-col-resize-handle::before{
   background:rgba(180,180,180,0.5);
 }
 .multi-value-col-labels-dragging .multi-value-col-label-btn{
@@ -2318,11 +2321,16 @@ body.select-mode .obj-checkbox-zone{
   bottom:2px;
   left:5px;
   width:1px;
-  background:rgba(150,150,150,0.28);
+  background:transparent;
 }
 .obj-select-wrap:hover .obj-col-resize-handle::before,
 .obj-time:hover .obj-col-resize-handle::before,
 .obj-sender:hover .obj-col-resize-handle::before{
+  background:rgba(180,180,180,0.5);
+}
+.obj-select-wrap:focus-within .obj-col-resize-handle::before,
+.obj-time:focus-within .obj-col-resize-handle::before,
+.obj-sender:focus-within .obj-col-resize-handle::before{
   background:rgba(180,180,180,0.5);
 }
 .obj-select:checked{

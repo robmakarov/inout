@@ -5312,7 +5312,10 @@ function applyFieldPrefsToFeedInner(inner, fp) {
       if (!fp.showTime) timeEl.style.setProperty('display', 'none', 'important');
       else timeEl.style.removeProperty('display');
     }
-    if (senderEl) senderEl.style.setProperty('display', fp.showAuthor ? 'block' : 'none', 'important');
+    if (senderEl) {
+      if (!fp.showAuthor) senderEl.style.setProperty('display', 'none', 'important');
+      else senderEl.style.removeProperty('display');
+    }
   });
   inner.classList.toggle('obj-labels-off', !fp.showLabels);
   syncFeedMultiValueChrome(inner);
@@ -7236,7 +7239,10 @@ function applyFieldPrefsToObjects(skipMultiValueChrome) {
       if (!fieldPrefs.showTime) timeEl.style.setProperty('display', 'none', 'important');
       else timeEl.style.removeProperty('display');
     }
-    if (senderEl) senderEl.style.setProperty('display', fieldPrefs.showAuthor ? 'block' : 'none', 'important');
+    if (senderEl) {
+      if (!fieldPrefs.showAuthor) senderEl.style.setProperty('display', 'none', 'important');
+      else senderEl.style.removeProperty('display');
+    }
   });
   feedInner.classList.toggle('obj-labels-off', !fieldPrefs.showLabels);
   if (!skipMultiValueChrome) {
@@ -7828,6 +7834,7 @@ function createObjectRow(obj, isNew, options) {
   dropdown.className = 'obj-actions-dropdown';
   dropdown.setAttribute('role', 'menu');
   var objActionsOutsideCloseHandler = null;
+  var objActionsOpenedAt = 0;
 
   function closeDropdown() {
     actions.classList.remove('obj-actions-open');
@@ -7876,14 +7883,19 @@ function createObjectRow(obj, isNew, options) {
     const isOpen = actions.classList.toggle('obj-actions-open');
     trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
     if (isOpen) {
+      objActionsOpenedAt = Date.now();
       positionObjActionsDropdown();
       document.removeEventListener('click', closeDropdown);
       objActionsOutsideCloseHandler = function(ev) {
+        if (Date.now() - objActionsOpenedAt < 80) return;
         var t = ev && ev.target;
         if (t && actions.contains && actions.contains(t)) return;
         closeDropdown();
       };
-      document.addEventListener('pointerdown', objActionsOutsideCloseHandler, true);
+      setTimeout(function() {
+        if (!actions.classList.contains('obj-actions-open')) return;
+        document.addEventListener('pointerdown', objActionsOutsideCloseHandler, true);
+      }, 0);
     } else {
       closeDropdown();
     }
@@ -8093,7 +8105,8 @@ function createObjectRow(obj, isNew, options) {
     sender.textContent = 'unknown';
   }
   const wantAuthor = !!fieldPrefs ? !!fieldPrefs.showAuthor : true;
-  sender.style.setProperty('display', wantAuthor ? 'block' : 'none', 'important');
+  if (!wantAuthor) sender.style.setProperty('display', 'none', 'important');
+  else sender.style.removeProperty('display');
   makeObjColumnResizeHandle('sender', sender);
 
   const selectWrap = document.createElement('div');
