@@ -1994,14 +1994,12 @@ function expandStoredColumnSlotsForFilter(colIdx) {
     var pay = parseObjectTextPayload(String(raw));
     var parts = pay.parts.slice();
     var domParts = partsFromRowDom(row);
-    if (domParts.length > parts.length) {
-      for (var d = 0; d < domParts.length; d++) {
-        if (d >= parts.length) parts.push(String(domParts[d] != null ? domParts[d] : ''));
-      }
+    var dlen = domParts.length;
+    for (var d = 0; d < dlen; d++) {
+      if (d >= parts.length) parts.push(String(domParts[d] != null ? domParts[d] : ''));
     }
     var rowCols = parseInt(row.dataset.valueCols, 10) || 0;
     var targetLen = Math.max(minNeed, feedMax, rowCols);
-    if (parts.length >= targetLen) return;
     while (parts.length < targetLen) parts.push('');
     var next = serializeObjectParts(parts, labelsAlignedToNewPartCount(pay, parts.length));
     if (String(next) === String(raw)) return;
@@ -2114,18 +2112,25 @@ function bindVerticalWheelToHorizontalScroll(el) {
       var interactionId = inoutWheelInteractionId;
       // Keep native behavior when user intentionally scrolls horizontally.
       if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
-      /* Prefer vertical feed scroll when the feed can still move; avoids mapping wheel to horizontal columns mid-view. */
-      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) {
+      /*
+       * Value strips: vertical wheel scrolls the feed stack — never map deltaY → horizontal columns
+       * unless Shift+wheel (or fall through at vertical min/max when columns can scroll sideways).
+       * Tabs keep horizontal wheel mapping without this feed-first path.
+       */
+      var isColStrip =
+        (el.classList && el.classList.contains('obj-values-wrap')) || el.id === 'multi-value-col-labels';
+      if (isColStrip && !e.shiftKey) {
         var surfV = getFeedScrollSurfaceForElement(el);
-        if (surfV && surfV.scrollHeight - surfV.clientHeight > 1) {
+        var maxS = surfV ? surfV.scrollHeight - surfV.clientHeight : 0;
+        if (surfV && maxS > 1) {
           var atTop = (surfV.scrollTop || 0) <= 1;
-          var atBottom = (surfV.scrollTop || 0) >= surfV.scrollHeight - surfV.clientHeight - 1;
+          var atBottom = (surfV.scrollTop || 0) >= maxS - 1;
           var dy0 = e.deltaY;
           if ((dy0 < 0 && !atTop) || (dy0 > 0 && !atBottom)) {
-            if (routeWheelToFeed(dy0)) {
-              e.preventDefault();
-              return;
-            }
+            var prevS = surfV.scrollTop || 0;
+            surfV.scrollTop = Math.max(0, Math.min(maxS, prevS + dy0));
+            e.preventDefault();
+            return;
           }
         }
       }
