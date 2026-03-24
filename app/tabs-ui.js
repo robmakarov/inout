@@ -236,6 +236,7 @@
     var manageBar = document.getElementById('manage-bar');
     var manageBarTrigger = document.getElementById('manage-bar-trigger');
     if (manageBar && manageBarTrigger) {
+      var manageBarLastTouchToggleAt = 0;
       function closeManageBarDropdown() {
         if (typeof ctx.clearManageBarDropdownPosition === 'function') ctx.clearManageBarDropdownPosition();
         manageBar.classList.remove('manage-bar-open');
@@ -244,7 +245,9 @@
         if (typeof ctx.closeLogDropup === 'function') ctx.closeLogDropup();
         if (typeof ctx.notifyWorkspaceChromeChanged === 'function') ctx.notifyWorkspaceChromeChanged();
       }
-      manageBarTrigger.addEventListener('click', function(e) {
+      function toggleManageBarDropdown(e) {
+        var nowAt = Date.now();
+        if (e && e.type === 'click' && nowAt - manageBarLastTouchToggleAt < 350) return;
         e.stopPropagation();
         ctx.closeInoutMultiValueFilterMenu();
         var isOpen = manageBar.classList.toggle('manage-bar-open');
@@ -257,6 +260,13 @@
           if (typeof ctx.clearManageBarDropdownPosition === 'function') ctx.clearManageBarDropdownPosition();
         }
         if (typeof ctx.notifyWorkspaceChromeChanged === 'function') ctx.notifyWorkspaceChromeChanged();
+      }
+      manageBarTrigger.addEventListener('click', toggleManageBarDropdown);
+      manageBarTrigger.addEventListener('pointerdown', function(e) {
+        if (e.pointerType !== 'touch') return;
+        e.preventDefault();
+        manageBarLastTouchToggleAt = Date.now();
+        toggleManageBarDropdown(e);
       });
     }
     try {

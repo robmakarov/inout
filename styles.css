@@ -489,6 +489,7 @@ header{
   flex-shrink:0;
   display:flex;
   align-items:center;
+  z-index:4;
 }
 .manage-bar-trigger{
   border:1px solid var(--line2);
@@ -506,6 +507,10 @@ header{
   display:inline-flex;
   align-items:center;
   justify-content:center;
+  pointer-events:auto;
+  touch-action:manipulation;
+  position:relative;
+  z-index:5;
 }
 .manage-bar-trigger:hover{
   background:var(--line);
@@ -681,8 +686,8 @@ header{
 .multi-value-col-resize-handle::before{
   content:'';
   position:absolute;
-  top:4px;
-  bottom:4px;
+  top:2px;
+  bottom:2px;
   left:5px;
   width:1px;
   background:rgba(150,150,150,0.28);
@@ -1794,7 +1799,7 @@ body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell::b
 .obj-leading-col{
   display:flex;
   flex-direction:row;
-  align-items:flex-start;
+  align-items:stretch;
   gap:20px;
   flex:0 1 auto;
   min-width:var(--inout-obj-leading-w, 0);
@@ -1803,7 +1808,7 @@ body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell::b
 .obj-leading-meta{
   display:flex;
   flex-direction:row;
-  align-items:center;
+  align-items:stretch;
   gap:20px;
   flex-wrap:nowrap;
   min-width:0;
@@ -2118,15 +2123,16 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
 .obj-time,
 .obj-sender{
   font-size:10px;
-  line-height:1.35;
+  line-height:1.55;
   color:var(--dim);
   font-weight:500;
   letter-spacing:0.03em;
   white-space:nowrap;
   display:none; /* JS shows based on view prefs */
   position:relative;
-  align-items:center;
+  align-items:flex-start;
   min-height:1.35em;
+  align-self:stretch;
 }
 
 .obj-sender{
@@ -2308,8 +2314,8 @@ body.select-mode .obj-checkbox-zone{
 .obj-col-resize-handle::before{
   content:'';
   position:absolute;
-  top:0;
-  bottom:0;
+  top:2px;
+  bottom:2px;
   left:5px;
   width:1px;
   background:rgba(150,150,150,0.28);
@@ -3604,6 +3610,9 @@ body.secret-show-grips .frame-grip{
 
 .tab.tab-drop-target{
   position:relative;
+}
+.tab.tab-dragging{
+  opacity:0.32;
 }
 .tab.tab-drop-target::after{
   content:'';

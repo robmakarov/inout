@@ -7895,6 +7895,10 @@ function createObjectRow(obj, isNew, options) {
     if (e.pointerType === 'touch') objActionsLastTouchToggleAt = at;
     toggleObjActionsDropdown(e);
   });
+  trigger.addEventListener('click', function(e) {
+    if (Date.now() - objActionsLastToggleAt < 200) return;
+    toggleObjActionsDropdown(e);
+  });
   trigger.addEventListener('keydown', function(e) {
     var k = e && (e.key || '');
     if (k !== 'Enter' && k !== ' ') return;
