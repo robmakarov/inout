@@ -2245,6 +2245,9 @@ body.select-mode .obj-checkbox-zone{
   opacity:1;
   pointer-events:auto;
 }
+.obj-actions.obj-actions-open{
+  visibility:visible;
+}
 .obj-actions-trigger{
   pointer-events:auto;
   touch-action:manipulation;

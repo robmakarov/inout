@@ -7514,11 +7514,16 @@ function createObjectRow(obj, isNew, options) {
   const dropdown = document.createElement('div');
   dropdown.className = 'obj-actions-dropdown';
   dropdown.setAttribute('role', 'menu');
+  var objActionsOutsideCloseHandler = null;
 
   function closeDropdown() {
     actions.classList.remove('obj-actions-open');
     trigger.setAttribute('aria-expanded', 'false');
     document.removeEventListener('click', closeDropdown);
+    if (objActionsOutsideCloseHandler) {
+      document.removeEventListener('pointerdown', objActionsOutsideCloseHandler, true);
+      objActionsOutsideCloseHandler = null;
+    }
     dropdown.style.position = '';
     dropdown.style.top = '';
     dropdown.style.right = '';
@@ -7548,15 +7553,19 @@ function createObjectRow(obj, isNew, options) {
     e.stopPropagation();
   }, { passive: true });
   trigger.addEventListener('click', e => {
+    e.preventDefault();
     e.stopPropagation();
     const isOpen = actions.classList.toggle('obj-actions-open');
     trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
     if (isOpen) {
       positionObjActionsDropdown();
-      /* Defer so this same click/tap is not handled as an outside click on document. */
-      setTimeout(function() {
-        document.addEventListener('click', closeDropdown);
-      }, 0);
+      document.removeEventListener('click', closeDropdown);
+      objActionsOutsideCloseHandler = function(ev) {
+        var t = ev && ev.target;
+        if (t && actions.contains && actions.contains(t)) return;
+        closeDropdown();
+      };
+      document.addEventListener('pointerdown', objActionsOutsideCloseHandler, true);
     } else {
       closeDropdown();
     }
