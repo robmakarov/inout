@@ -152,12 +152,11 @@ function getFeedScrollSurfaceForElement(node) {
   return getFeedScrollSurface(feed);
 }
 
-var inoutWheelInteractionId = 0;
 var inoutLastWheelAt = 0;
 var INOUT_WHEEL_INTERACTION_GAP_MS = 180;
 
 
-function routeWheelDeltaToPrimaryView(deltaY, interactionId) {
+function routeWheelDeltaToPrimaryView(deltaY) {
   var surf = primaryFeedScrollSurface();
   if (!surf) return false;
   var max = surf.scrollHeight - surf.clientHeight;
@@ -169,10 +168,6 @@ function routeWheelDeltaToPrimaryView(deltaY, interactionId) {
   return true;
 }
 
-function nearestVerticalScrollableAncestor(node) {
-  if (!window.InoutScroll || !window.InoutScroll.nearestVerticalScrollableAncestor) return null;
-  return window.InoutScroll.nearestVerticalScrollableAncestor(node);
-}
 const inputArea  = document.getElementById('input-area');
 var input       = document.getElementById('object-input');
 var sendBtn     = document.getElementById('send-btn');
@@ -1483,8 +1478,6 @@ function bindVerticalWheelToHorizontalScroll(el) {
   if (!window.InoutScroll || !window.InoutScroll.bindVerticalWheelToHorizontalScroll) return;
   window.InoutScroll.bindVerticalWheelToHorizontalScroll(el, {
     wheelState: {
-      get interactionId() { return inoutWheelInteractionId; },
-      set interactionId(v) { inoutWheelInteractionId = v; },
       get lastWheelAt() { return inoutLastWheelAt; },
       set lastWheelAt(v) { inoutLastWheelAt = v; },
       get gapMs() { return INOUT_WHEEL_INTERACTION_GAP_MS; },
@@ -8584,13 +8577,15 @@ function inoutTabsUiCtx() {
     syncComposerTargetSelects: syncComposerTargetSelects,
     bindVerticalWheelToHorizontalScroll: bindVerticalWheelToHorizontalScroll,
     wheelState: {
-      interactionId: function() { return inoutWheelInteractionId; },
-      interactionInc: function() { inoutWheelInteractionId++; },
       lastWheelAt: function() { return inoutLastWheelAt; },
       setLastWheelAt: function(v) { inoutLastWheelAt = v; },
       gapMs: function() { return INOUT_WHEEL_INTERACTION_GAP_MS; },
     },
-    nearestVerticalScrollableAncestor: nearestVerticalScrollableAncestor,
+    nearestVerticalScrollableAncestor: function(node) {
+      return window.InoutScroll && window.InoutScroll.nearestVerticalScrollableAncestor
+        ? window.InoutScroll.nearestVerticalScrollableAncestor(node)
+        : null;
+    },
     routeWheelDeltaToPrimaryView: routeWheelDeltaToPrimaryView,
     clearManageBarDropdownPosition: (typeof clearManageBarDropdownPosition === 'function' ? clearManageBarDropdownPosition : null),
     closeLogDropup: (typeof closeLogDropup === 'function' ? closeLogDropup : null),

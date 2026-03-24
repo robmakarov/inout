@@ -40,7 +40,6 @@
       function(e) {
         var nowAt = Date.now();
         if (wheelState) {
-          if (nowAt - wheelState.lastWheelAt > wheelState.gapMs) wheelState.interactionId++;
           wheelState.lastWheelAt = nowAt;
         }
         if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;

@@ -194,7 +194,6 @@
           : null;
         if (horizZone) return;
         var nowAt = Date.now();
-        if (nowAt - ctx.wheelState.lastWheelAt() > ctx.wheelState.gapMs()) ctx.wheelState.interactionInc();
         ctx.wheelState.setLastWheelAt(nowAt);
         var verticalTarget = ctx.nearestVerticalScrollableAncestor(targetEl || e.target);
         if (verticalTarget) {
@@ -207,7 +206,7 @@
           }
           return;
         }
-        if (ctx.routeWheelDeltaToPrimaryView(dy, ctx.wheelState.interactionId())) e.preventDefault();
+        if (ctx.routeWheelDeltaToPrimaryView(dy)) e.preventDefault();
       }, { passive: false, capture: true });
     }
     var manageBar = document.getElementById('manage-bar');
