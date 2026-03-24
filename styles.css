@@ -2373,7 +2373,7 @@ body.select-mode .obj-checkbox-zone{
   transition:opacity .15s ease;
   flex-direction:column;
   align-items:flex-end;
-  z-index:120;
+  z-index:10050;
 }
 .obj:hover .obj-actions,
 .obj.obj-drag-over .obj-actions,
@@ -2412,7 +2412,8 @@ body.select-mode .obj-checkbox-zone{
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  opacity:0;
+  /* Never use opacity:0 — some WebKit builds drop hit-testing; keep faint but always clickable */
+  opacity:0.38;
   transition:opacity .15s ease, background .15s ease, color .15s ease;
 }
 .obj:hover .obj-actions-trigger,

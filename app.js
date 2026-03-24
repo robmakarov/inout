@@ -7874,24 +7874,22 @@ function createObjectRow(obj, isNew, options) {
   dropdown.addEventListener('touchstart', e => {
     e.stopPropagation();
   }, { passive: true });
-  var objActionsLastToggleAt = 0;
-  var objActionsLastTouchUpAt = 0;
   function toggleObjActionsDropdown(e) {
     if (e) {
       e.stopPropagation();
     }
-    var nowAt = Date.now();
-    if (e && e.type === 'click' && nowAt - objActionsLastTouchUpAt < 360) return;
-    if (nowAt - objActionsLastToggleAt < 120) return;
-    objActionsLastToggleAt = nowAt;
     const isOpen = actions.classList.toggle('obj-actions-open');
     trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
     if (isOpen) {
       objActionsOpenedAt = Date.now();
       positionObjActionsDropdown();
       document.removeEventListener('click', closeDropdown);
+      if (objActionsOutsideCloseHandler) {
+        document.removeEventListener('pointerdown', objActionsOutsideCloseHandler, true);
+        objActionsOutsideCloseHandler = null;
+      }
       objActionsOutsideCloseHandler = function(ev) {
-        if (Date.now() - objActionsOpenedAt < 80) return;
+        if (Date.now() - objActionsOpenedAt < 220) return;
         var t = ev && ev.target;
         if (t && actions.contains && actions.contains(t)) return;
         closeDropdown();
@@ -7904,12 +7902,6 @@ function createObjectRow(obj, isNew, options) {
       closeDropdown();
     }
   }
-  trigger.addEventListener('pointerup', function(e) {
-    var pt = e && e.pointerType;
-    if (pt !== 'touch') return;
-    objActionsLastTouchUpAt = Date.now();
-    toggleObjActionsDropdown(e);
-  });
   trigger.addEventListener('click', toggleObjActionsDropdown);
   trigger.addEventListener('keydown', function(e) {
     var k = e && (e.key || '');
@@ -8897,13 +8889,7 @@ function inoutTabsUiCtx() {
       viewNames = ['main'].concat(list);
       saveChannelsList();
       renderTabs();
-      try {
-        var wsNow = gatherPersonalWorkspaceStateForSave();
-        tryBroadcastWorkspaceConfig(JSON.parse(JSON.stringify(wsNow)));
-        if (currentUser && sb) {
-          upsertViewsConfigForChannel(WORKSPACE_META_VIEW_CHANNEL, wsNow).catch(function() {});
-        }
-      } catch (_) {}
+      /* Single path: nonce + _wsRev + upsert + broadcast (same as other workspace saves) */
       schedulePersonalWorkspacePersist();
       flushPersonalWorkspacePersist().catch(function() {});
     },
