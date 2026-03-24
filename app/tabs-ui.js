@@ -196,13 +196,18 @@
         var nowAt = Date.now();
         if (nowAt - ctx.wheelState.lastWheelAt() > ctx.wheelState.gapMs()) ctx.wheelState.interactionInc();
         ctx.wheelState.setLastWheelAt(nowAt);
-        var interactionId = ctx.wheelState.interactionId();
         var verticalTarget = ctx.nearestVerticalScrollableAncestor(targetEl || e.target);
         if (verticalTarget) {
-          if (ctx.advanceScrollEdgeThenWrap(verticalTarget, 'y', dy, interactionId)) e.preventDefault();
+          var prevTop = verticalTarget.scrollTop || 0;
+          var maxTop = Math.max(0, (verticalTarget.scrollHeight || 0) - (verticalTarget.clientHeight || 0));
+          var nextTop = Math.max(0, Math.min(maxTop, prevTop + dy));
+          if (Math.abs(nextTop - prevTop) > 0.01) {
+            verticalTarget.scrollTop = nextTop;
+            e.preventDefault();
+          }
           return;
         }
-        if (ctx.routeWheelDeltaToPrimaryView(dy, interactionId)) e.preventDefault();
+        if (ctx.routeWheelDeltaToPrimaryView(dy, ctx.wheelState.interactionId())) e.preventDefault();
       }, { passive: false, capture: true });
     }
     var manageBar = document.getElementById('manage-bar');

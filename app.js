@@ -152,15 +152,10 @@ function getFeedScrollSurfaceForElement(node) {
   return getFeedScrollSurface(feed);
 }
 
-var inoutScrollWrapState = new WeakMap();
 var inoutWheelInteractionId = 0;
 var inoutLastWheelAt = 0;
 var INOUT_WHEEL_INTERACTION_GAP_MS = 180;
 
-function advanceScrollEdgeThenWrap(el, axis, delta, interactionId) {
-  if (!window.InoutScroll || !window.InoutScroll.advanceScrollEdgeThenWrap) return false;
-  return window.InoutScroll.advanceScrollEdgeThenWrap(el, axis, delta, interactionId, inoutScrollWrapState);
-}
 
 function routeWheelDeltaToPrimaryView(deltaY, interactionId) {
   var surf = primaryFeedScrollSurface();
@@ -217,18 +212,9 @@ const qrModalClose = document.getElementById('qr-modal-close');
 const umNickname   = document.getElementById('um-nickname');
 const umNickSave   = document.getElementById('um-nick-save');
 const umLayoutEditBtn = document.getElementById('um-layout-edit');
-const mobileKbToggleBtn = document.getElementById('mobile-kb-toggle');
-const mobileKeyboardEl = document.getElementById('mobile-keyboard');
-const mobileKeyboardRowsEl = document.getElementById('mobile-keyboard-rows');
-const mobileKeyboardSmartEl = document.getElementById('mobile-kb-smart');
-const calcToggleBtn = document.getElementById('calc-toggle');
-const customCalcEl = document.getElementById('custom-calc');
-const customCalcInputEl = document.getElementById('custom-calc-input');
-const customCalcOutputEl = document.getElementById('custom-calc-output');
 const secretControlsBackdrop = document.getElementById('secret-controls-backdrop');
 const secretControlsCloseBtn = document.getElementById('secret-controls-close');
 const secretTogglePinnedRail = document.getElementById('secret-toggle-pinned-rail');
-const secretToggleKbCalc = document.getElementById('secret-toggle-kbcalc');
 const secretToggleGrips = document.getElementById('secret-toggle-grips');
 const secretToggleLayout = document.getElementById('secret-toggle-layout');
 const secretToggleCursorFx = document.getElementById('secret-toggle-cursor-fx');
@@ -325,7 +311,6 @@ let views = [];
 const SECRET_TOGGLES_KEY = 'inout_secret_toggles_v1';
 let secretToggles = {
   showPinnedRail: false,
-  showKbCalc: false,
   showGrips: false,
   enableLayoutEdit: false,
   enableCursorFx: false,
@@ -338,7 +323,6 @@ function loadSecretToggles() {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return;
     secretToggles.showPinnedRail = !!parsed.showPinnedRail;
-    secretToggles.showKbCalc = !!parsed.showKbCalc;
     secretToggles.showGrips = !!parsed.showGrips;
     secretToggles.enableLayoutEdit = !!parsed.enableLayoutEdit;
     secretToggles.enableCursorFx = !!parsed.enableCursorFx;
@@ -352,7 +336,6 @@ function saveSecretToggles() {
 function applySecretToggles() {
   if (document.body) {
     document.body.classList.toggle('secret-show-pinned-rail', !!secretToggles.showPinnedRail);
-    document.body.classList.toggle('secret-show-kbcalc', !!secretToggles.showKbCalc);
     document.body.classList.toggle('secret-show-grips', !!secretToggles.showGrips);
   }
   if (typeof setWindowsRevealEffectsEnabled === 'function') {
@@ -373,7 +356,6 @@ function applySecretToggles() {
 function openSecretControls() {
   if (!secretControlsBackdrop) return;
   if (secretTogglePinnedRail) secretTogglePinnedRail.checked = !!secretToggles.showPinnedRail;
-  if (secretToggleKbCalc) secretToggleKbCalc.checked = !!secretToggles.showKbCalc;
   if (secretToggleGrips) secretToggleGrips.checked = !!secretToggles.showGrips;
   if (secretToggleLayout) secretToggleLayout.checked = !!secretToggles.enableLayoutEdit;
   if (secretToggleCursorFx) secretToggleCursorFx.checked = !!secretToggles.enableCursorFx;
@@ -409,13 +391,6 @@ function closeSecretControls() {
       applySecretToggles();
     });
   }
-  if (secretToggleKbCalc) {
-    secretToggleKbCalc.addEventListener('change', function() {
-      secretToggles.showKbCalc = !!secretToggleKbCalc.checked;
-      saveSecretToggles();
-      applySecretToggles();
-    });
-  }
   if (secretToggleGrips) {
     secretToggleGrips.addEventListener('change', function() {
       secretToggles.showGrips = !!secretToggleGrips.checked;
@@ -445,11 +420,10 @@ function closeSecretControls() {
   }
   if (secretControlsResetBtn) {
     secretControlsResetBtn.addEventListener('click', function() {
-      secretToggles = { showPinnedRail: false, showKbCalc: false, showGrips: false, enableLayoutEdit: false, enableCursorFx: false };
+      secretToggles = { showPinnedRail: false, showGrips: false, enableLayoutEdit: false, enableCursorFx: false };
       saveSecretToggles();
       applySecretToggles();
       if (secretTogglePinnedRail) secretTogglePinnedRail.checked = false;
-      if (secretToggleKbCalc) secretToggleKbCalc.checked = false;
       if (secretToggleGrips) secretToggleGrips.checked = false;
       if (secretToggleLayout) secretToggleLayout.checked = false;
       if (secretToggleCursorFx) secretToggleCursorFx.checked = false;
@@ -654,541 +628,7 @@ function subscribeTempSessionJoins() {
   });
 })();
 
-(function setupCustomMobileKeyboard() {
-  if (!mobileKbToggleBtn || !mobileKeyboardEl || !mobileKeyboardRowsEl) return;
-  const PREF_KEY = 'inout_mobile_kb_open_v1';
-  const SETTINGS_KEY = 'inout_mobile_kb_settings_v1';
-  const RECENT_WORDS_KEY = 'inout_mobile_kb_recent_words_v1';
-  let currentLang = 'en';
-  let kbMode = 'compact'; /* compact | full */
-  let systemKeyboardEnabled = true;
-  let fxEnabled = true;
-  let vibeEnabled = true;
-  let audioCtx = null;
-  let recentWords = [];
-  const emojiQuick = ['😊', '😂', '❤️', '🔥', '🚀', '🙏', '👍', '🌙', '🎉', '🤖'];
-  const keysets = {
-    en: [
-      ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
-      ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', '.'],
-      ['z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '?', '!']
-    ],
-    ru: [
-      ['й', 'ц', 'у', 'к', 'е', 'н', 'г', 'ш', 'щ', 'з'],
-      ['ф', 'ы', 'в', 'а', 'п', 'р', 'о', 'л', 'д', 'ж'],
-      ['я', 'ч', 'с', 'м', 'и', 'т', 'ь', 'б', 'ю', 'э']
-    ]
-  };
 
-  const keysetsFull = {
-    en: [
-      ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
-      ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', '.'],
-      ['z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '?', '!'],
-      ['@', '#', '$', '%', '&', '*', '(', ')', '-', '_'],
-      emojiQuick,
-    ],
-    ru: [
-      ['й', 'ц', 'у', 'к', 'е', 'н', 'г', 'ш', 'щ', 'з'],
-      ['ф', 'ы', 'в', 'а', 'п', 'р', 'о', 'л', 'д', 'ж'],
-      ['я', 'ч', 'с', 'м', 'и', 'т', 'ь', 'б', 'ю', 'э'],
-      ['@', '#', '$', '%', '&', '*', '(', ')', '-', '_'],
-      emojiQuick,
-    ]
-  };
-
-  function normalizeWord(w) {
-    return String(w || '').trim().toLowerCase();
-  }
-
-  function recordWordsFromText(text) {
-    const src = String(text || '');
-    const found = src.match(/[\p{L}\p{N}_-]{2,}/gu) || [];
-    if (!found.length) return;
-    const next = recentWords.slice();
-    found.forEach(function(w) {
-      const n = normalizeWord(w);
-      if (!n) return;
-      const idx = next.indexOf(n);
-      if (idx >= 0) next.splice(idx, 1);
-      next.unshift(n);
-    });
-    recentWords = next.slice(0, 120);
-    try { localStorage.setItem(RECENT_WORDS_KEY, JSON.stringify(recentWords)); } catch (_) {}
-  }
-
-  function getCurrentWordPrefix() {
-    if (!input) return '';
-    const val = String(input.value || '');
-    const pos = Number.isFinite(input.selectionStart) ? input.selectionStart : val.length;
-    const left = val.slice(0, pos);
-    const m = left.match(/[\p{L}\p{N}_-]{1,}$/u);
-    return m ? m[0] : '';
-  }
-
-  function replaceCurrentWord(replacement) {
-    if (!input) return;
-    const val = String(input.value || '');
-    const pos = Number.isFinite(input.selectionStart) ? input.selectionStart : val.length;
-    const left = val.slice(0, pos);
-    const right = val.slice(pos);
-    const m = left.match(/[\p{L}\p{N}_-]{1,}$/u);
-    const start = m ? (pos - m[0].length) : pos;
-    const next = val.slice(0, start) + replacement + ' ' + right;
-    applyInputValue(next);
-    const caret = start + replacement.length + 1;
-    input.selectionStart = caret;
-    input.selectionEnd = caret;
-    input.focus();
-  }
-
-  function renderSmartChips() {
-    if (!mobileKeyboardSmartEl) return;
-    const prefix = normalizeWord(getCurrentWordPrefix());
-    const source = prefix
-      ? recentWords.filter(function(w) { return w.indexOf(prefix) === 0 && w !== prefix; })
-      : recentWords.slice();
-    const picks = source.slice(0, 6);
-    mobileKeyboardSmartEl.innerHTML = '';
-    if (!picks.length) {
-      const hint = document.createElement('button');
-      hint.type = 'button';
-      hint.className = 'mobile-kb-smart-chip';
-      hint.dataset.key = 'smart-hint';
-      hint.textContent = 'Type to get smart suggestions';
-      mobileKeyboardSmartEl.appendChild(hint);
-      return;
-    }
-    picks.forEach(function(w) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'mobile-kb-smart-chip';
-      b.dataset.key = 'smart-word';
-      b.dataset.value = w;
-      b.textContent = w;
-      mobileKeyboardSmartEl.appendChild(b);
-    });
-  }
-
-  function setOpen(open) {
-    if (open) mobileKeyboardEl.removeAttribute('hidden');
-    else mobileKeyboardEl.setAttribute('hidden', '');
-    mobileKbToggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    try { localStorage.setItem(PREF_KEY, open ? '1' : '0'); } catch (_) {}
-    if (typeof notifyWorkspaceChromeChanged === 'function') notifyWorkspaceChromeChanged();
-  }
-
-  function applySystemKeyboardMode() {
-    try {
-      if (!input) return;
-      input.readOnly = !systemKeyboardEnabled;
-      if (!systemKeyboardEnabled && document.activeElement === input) {
-        // Drop OS keyboard when the user switches this off mid-focus.
-        input.blur();
-      }
-    } catch (_) {}
-  }
-
-  function maybeVibrate() {
-    try {
-      if (!vibeEnabled) return;
-      if (typeof navigator === 'undefined' || !navigator.vibrate) return;
-      navigator.vibrate(10);
-    } catch (_) {}
-  }
-
-  function maybePlayFx() {
-    try {
-      if (!fxEnabled) return;
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const t0 = audioCtx.currentTime;
-      const o = audioCtx.createOscillator();
-      const g = audioCtx.createGain();
-      o.type = 'sine';
-      o.frequency.value = 680;
-      g.gain.value = 0.05;
-      o.connect(g);
-      g.connect(audioCtx.destination);
-      o.start(t0);
-      o.stop(t0 + 0.025);
-    } catch (_) {}
-  }
-
-  function pressFxOn(el, e) {
-    try {
-      if (el && el.classList && el.classList.contains('mobile-kb-key')) {
-        if (e && typeof e.clientX === 'number' && typeof e.clientY === 'number' && el.getBoundingClientRect) {
-          const r = el.getBoundingClientRect();
-          const x = ((e.clientX - r.left) / Math.max(1, r.width)) * 100;
-          const y = ((e.clientY - r.top) / Math.max(1, r.height)) * 100;
-          el.style.setProperty('--kb-press-x', String(x) + '%');
-          el.style.setProperty('--kb-press-y', String(y) + '%');
-        }
-        el.classList.add('kb-pressed');
-        setTimeout(function() {
-          try { el.classList.remove('kb-pressed'); } catch (_) {}
-        }, 260);
-      }
-    } catch (_) {}
-    maybeVibrate();
-    maybePlayFx();
-  }
-
-  function applyInputValue(v) {
-    if (!input) return;
-    input.value = v;
-    try { autoResize(); } catch (_) {}
-    if (sendBtn) sendBtn.disabled = !String(v || '').trim();
-    try { updateClearInputBtn(); } catch (_) {}
-    try { saveInputGlobal(); } catch (_) {}
-    try { updateEditingRowFromInput(); } catch (_) {}
-    renderSmartChips();
-  }
-
-  function insertAtCaret(text) {
-    if (!input) return;
-    const val = input.value || '';
-    const start = Number.isFinite(input.selectionStart) ? input.selectionStart : val.length;
-    const end = Number.isFinite(input.selectionEnd) ? input.selectionEnd : start;
-    const next = val.slice(0, start) + text + val.slice(end);
-    applyInputValue(next);
-    const pos = start + text.length;
-    input.selectionStart = pos;
-    input.selectionEnd = pos;
-    input.focus();
-  }
-
-  function backspaceAtCaret() {
-    if (!input) return;
-    const val = input.value || '';
-    const start = Number.isFinite(input.selectionStart) ? input.selectionStart : val.length;
-    const end = Number.isFinite(input.selectionEnd) ? input.selectionEnd : start;
-    if (start !== end) {
-      const next = val.slice(0, start) + val.slice(end);
-      applyInputValue(next);
-      input.selectionStart = start;
-      input.selectionEnd = start;
-      input.focus();
-      return;
-    }
-    if (start <= 0) return;
-    const next = val.slice(0, start - 1) + val.slice(start);
-    applyInputValue(next);
-    input.selectionStart = start - 1;
-    input.selectionEnd = start - 1;
-    input.focus();
-  }
-
-  async function handleFn(key) {
-    if (key === 'space') insertAtCaret(' ');
-    else if (key === 'enter') insertAtCaret('\n');
-    else if (key === 'left') {
-      if (!input) return;
-      const p = Number.isFinite(input.selectionStart) ? input.selectionStart : 0;
-      const n = Math.max(0, p - 1);
-      input.selectionStart = n; input.selectionEnd = n; input.focus();
-    }
-    else if (key === 'right') {
-      if (!input) return;
-      const p = Number.isFinite(input.selectionStart) ? input.selectionStart : 0;
-      const len = String(input.value || '').length;
-      const n = Math.min(len, p + 1);
-      input.selectionStart = n; input.selectionEnd = n; input.focus();
-    }
-    else if (key === 'backspace') backspaceAtCaret();
-    else if (key === 'clear') applyInputValue('');
-    else if (key === 'emoji') {
-      const em = emojiQuick[Math.floor(Math.random() * emojiQuick.length)] || '😊';
-      insertAtCaret(em);
-    }
-    else if (key === 'send') { if (typeof send === 'function' && sendBtn && !sendBtn.disabled) send(); }
-    else if (key === 'hide') setOpen(false);
-    else if (key === 'copy') {
-      try {
-        if (navigator.clipboard && input) {
-          var cv = input.value || '';
-          await navigator.clipboard.writeText(cv);
-          if (typeof showClipboardBubble === 'function') showClipboardBubble(cv);
-        }
-      } catch (_) {}
-    } else if (key === 'paste') {
-      try {
-        if (navigator.clipboard) {
-          const txt = await navigator.clipboard.readText();
-          if (txt) insertAtCaret(txt);
-        }
-      } catch (_) {}
-    }
-  }
-
-  function renderKeys() {
-    const src = (kbMode === 'full' ? keysetsFull : keysets);
-    const rows = src[currentLang] || src.en;
-    mobileKeyboardRowsEl.innerHTML = '';
-    rows.forEach(function(chars) {
-      const row = document.createElement('div');
-      row.className = 'mobile-kb-row';
-      chars.forEach(function(ch) {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'mobile-kb-key';
-        b.textContent = ch;
-        b.dataset.key = ch;
-        row.appendChild(b);
-      });
-      mobileKeyboardRowsEl.appendChild(row);
-    });
-    mobileKeyboardEl.querySelectorAll('.mobile-kb-lang').forEach(function(btn) {
-      btn.classList.toggle('active', btn.dataset.lang === currentLang);
-    });
-
-    mobileKeyboardEl.querySelectorAll('.mobile-kb-tool[data-ui="mode"]').forEach(function(btn) {
-      btn.classList.toggle('active', btn.dataset.mode === kbMode);
-    });
-    mobileKeyboardEl.querySelectorAll('.mobile-kb-tool[data-ui="syskb"]').forEach(function(btn) {
-      btn.classList.toggle('active', systemKeyboardEnabled);
-    });
-    mobileKeyboardEl.querySelectorAll('.mobile-kb-tool[data-ui="fx"]').forEach(function(btn) {
-      btn.classList.toggle('active', fxEnabled);
-    });
-    mobileKeyboardEl.querySelectorAll('.mobile-kb-tool[data-ui="vibe"]').forEach(function(btn) {
-      btn.classList.toggle('active', vibeEnabled);
-    });
-    renderSmartChips();
-  }
-
-  mobileKbToggleBtn.addEventListener('click', function() {
-    const open = mobileKeyboardEl.hasAttribute('hidden');
-    setOpen(open);
-  });
-
-  mobileKeyboardEl.addEventListener('click', function(e) {
-    const t = e.target && e.target.closest ? e.target.closest('button') : null;
-    if (!t) return;
-    pressFxOn(t, e);
-    if (t.dataset.key === 'smart-hint') return;
-    if (t.dataset.key === 'smart-word') {
-      replaceCurrentWord(t.dataset.value || '');
-      return;
-    }
-    const lang = t.dataset.lang;
-    if (lang) {
-      currentLang = (lang === 'ru') ? 'ru' : 'en';
-      renderKeys();
-      return;
-    }
-    const ui = t.dataset.ui;
-    if (ui) {
-      if (ui === 'mode') {
-        kbMode = t.dataset.mode === 'full' ? 'full' : 'compact';
-      } else if (ui === 'syskb') {
-        systemKeyboardEnabled = !(t.dataset.on === '1');
-        t.dataset.on = systemKeyboardEnabled ? '1' : '0';
-        applySystemKeyboardMode();
-      } else if (ui === 'fx') {
-        fxEnabled = !(t.dataset.on === '1');
-        t.dataset.on = fxEnabled ? '1' : '0';
-      } else if (ui === 'vibe') {
-        vibeEnabled = !(t.dataset.on === '1');
-        t.dataset.on = vibeEnabled ? '1' : '0';
-      }
-      if (typeof localStorage !== 'undefined') {
-        try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ kbMode: kbMode, systemKeyboardEnabled: systemKeyboardEnabled, fxEnabled: fxEnabled, vibeEnabled: vibeEnabled })); } catch (_) {}
-      }
-      schedulePersonalWorkspacePersist();
-      renderKeys();
-      return;
-    }
-    const key = t.dataset.key;
-    if (!key) return;
-    const fnKeys = new Set(['space', 'enter', 'backspace', 'clear', 'copy', 'paste', 'emoji', 'hide', 'send']);
-    if (fnKeys.has(key)) handleFn(key);
-    else insertAtCaret(key);
-  });
-
-  try {
-    const saved = localStorage.getItem(PREF_KEY);
-    setOpen(saved === '1');
-  } catch (_) { setOpen(false); }
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    if (raw) {
-      const s = JSON.parse(raw);
-      if (s && (s.kbMode === 'compact' || s.kbMode === 'full')) kbMode = s.kbMode;
-      if (s && typeof s.systemKeyboardEnabled === 'boolean') systemKeyboardEnabled = s.systemKeyboardEnabled;
-      if (s && typeof s.fxEnabled === 'boolean') fxEnabled = s.fxEnabled;
-      if (s && typeof s.vibeEnabled === 'boolean') vibeEnabled = s.vibeEnabled;
-    }
-  } catch (_) {}
-  try {
-    const rw = localStorage.getItem(RECENT_WORDS_KEY);
-    if (rw) {
-      const arr = JSON.parse(rw);
-      if (Array.isArray(arr)) recentWords = arr.map(normalizeWord).filter(Boolean).slice(0, 120);
-    }
-  } catch (_) {}
-  mobileKeyboardEl.querySelectorAll('.mobile-kb-tool[data-ui="syskb"], .mobile-kb-tool[data-ui="fx"], .mobile-kb-tool[data-ui="vibe"]').forEach(function(btn) {
-    const ui = btn.dataset.ui;
-    const on = ui === 'syskb' ? systemKeyboardEnabled : (ui === 'fx' ? fxEnabled : vibeEnabled);
-    btn.dataset.on = on ? '1' : '0';
-    btn.classList.toggle('active', on);
-  });
-  applySystemKeyboardMode();
-  if (input) {
-    input.addEventListener('input', function() {
-      recordWordsFromText(input.value || '');
-      renderSmartChips();
-    });
-  }
-  renderKeys();
-})();
-
-(function setupCustomCalculator() {
-  if (!calcToggleBtn || !customCalcEl || !customCalcInputEl || !customCalcOutputEl) return;
-
-  function setCalcOpen(open) {
-    if (open) customCalcEl.removeAttribute('hidden');
-    else customCalcEl.setAttribute('hidden', '');
-    calcToggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    if (typeof notifyWorkspaceChromeChanged === 'function') notifyWorkspaceChromeChanged();
-  }
-
-  function calcTransform(expr) {
-    let s = String(expr || '');
-    s = s.replace(/\^/g, '**');
-    s = s.replace(/\bpi\b/gi, 'PI');
-    s = s.replace(/\be\b/g, 'E');
-    s = s.replace(/\bln\s*\(/gi, 'ln(');
-    return s;
-  }
-
-  function safeCalcEval(expr) {
-    const raw = String(expr || '').trim();
-    if (!raw) return '';
-    const allowed = /^[0-9+\-*/%^().,!<>=&| \t\nA-Za-z_]+$/;
-    if (!allowed.test(raw)) throw new Error('Unsupported symbol');
-    const code = calcTransform(raw);
-    const fn = new Function(
-      '"use strict";' +
-      'const {sin,cos,tan,asin,acos,atan,sqrt,abs,log,exp,pow,round,floor,ceil,min,max,PI,E}=Math;' +
-      'const ln=(x)=>Math.log(x);' +
-      'return (' + code + ');'
-    );
-    const result = fn();
-    if (typeof result === 'number' && Number.isFinite(result)) return String(result);
-    if (typeof result === 'boolean') return result ? 'true' : 'false';
-    if (result == null) return '';
-    return String(result);
-  }
-
-  function updateCalcResult() {
-    try {
-      const out = safeCalcEval(customCalcInputEl.value || '');
-      customCalcOutputEl.textContent = out === '' ? '=' : ('= ' + out);
-      customCalcOutputEl.dataset.ok = '1';
-      return out;
-    } catch (e) {
-      customCalcOutputEl.textContent = '= error';
-      customCalcOutputEl.dataset.ok = '0';
-      return '';
-    }
-  }
-
-  function insertCalcAtCursor(text) {
-    const val = customCalcInputEl.value || '';
-    const start = Number.isFinite(customCalcInputEl.selectionStart) ? customCalcInputEl.selectionStart : val.length;
-    const end = Number.isFinite(customCalcInputEl.selectionEnd) ? customCalcInputEl.selectionEnd : start;
-    const next = val.slice(0, start) + text + val.slice(end);
-    customCalcInputEl.value = next;
-    const pos = start + text.length;
-    customCalcInputEl.selectionStart = pos;
-    customCalcInputEl.selectionEnd = pos;
-    updateCalcResult();
-    customCalcInputEl.focus();
-  }
-
-  function backspaceCalc() {
-    const val = customCalcInputEl.value || '';
-    const start = Number.isFinite(customCalcInputEl.selectionStart) ? customCalcInputEl.selectionStart : val.length;
-    const end = Number.isFinite(customCalcInputEl.selectionEnd) ? customCalcInputEl.selectionEnd : start;
-    if (start !== end) {
-      customCalcInputEl.value = val.slice(0, start) + val.slice(end);
-      customCalcInputEl.selectionStart = start;
-      customCalcInputEl.selectionEnd = start;
-      updateCalcResult();
-      customCalcInputEl.focus();
-      return;
-    }
-    if (start <= 0) return;
-    customCalcInputEl.value = val.slice(0, start - 1) + val.slice(start);
-    customCalcInputEl.selectionStart = start - 1;
-    customCalcInputEl.selectionEnd = start - 1;
-    updateCalcResult();
-    customCalcInputEl.focus();
-  }
-
-  calcToggleBtn.addEventListener('click', function() {
-    const open = customCalcEl.hasAttribute('hidden');
-    setCalcOpen(open);
-    if (open) customCalcInputEl.focus();
-  });
-
-  customCalcInputEl.addEventListener('input', updateCalcResult);
-  customCalcInputEl.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      updateCalcResult();
-    }
-  });
-
-  customCalcEl.addEventListener('click', function(e) {
-    const btn = e.target && e.target.closest ? e.target.closest('[data-calc-key]') : null;
-    if (!btn) return;
-    const key = btn.dataset.calcKey;
-    if (!key) return;
-    if (key === 'hide') {
-      setCalcOpen(false);
-      return;
-    }
-    if (key === 'clear') {
-      customCalcInputEl.value = '';
-      updateCalcResult();
-      customCalcInputEl.focus();
-      return;
-    }
-    if (key === 'backspace') {
-      backspaceCalc();
-      return;
-    }
-    if (key === 'eval') {
-      updateCalcResult();
-      return;
-    }
-    if (key === 'use') {
-      const out = updateCalcResult();
-      if (!out || customCalcOutputEl.dataset.ok !== '1') return;
-      if (!input) return;
-      const src = input.value || '';
-      const start = Number.isFinite(input.selectionStart) ? input.selectionStart : src.length;
-      const end = Number.isFinite(input.selectionEnd) ? input.selectionEnd : start;
-      const next = src.slice(0, start) + out + src.slice(end);
-      input.value = next;
-      if (typeof autoResize === 'function') autoResize();
-      if (sendBtn) sendBtn.disabled = !next.trim();
-      try { updateClearInputBtn(); } catch (_) {}
-      try { saveInputGlobal(); } catch (_) {}
-      try { updateEditingRowFromInput(); } catch (_) {}
-      input.selectionStart = start + out.length;
-      input.selectionEnd = start + out.length;
-      input.focus();
-      return;
-    }
-    insertCalcAtCursor(key);
-  });
-
-  setCalcOpen(false);
-  updateCalcResult();
-})();
 
 (function setupQrModal() {
   if (!qrModalBackdrop || !qrModalImg) return;
@@ -2414,8 +1854,6 @@ const viewScroll = new Map();
 const OPEN_VIEWS_KEY     = 'inout_open_views_v1';
 /** Reserved `views.channel` for per-user UI state (not a real feed). */
 const WORKSPACE_META_VIEW_CHANNEL = '__inout_open_panels__';
-/** Mobile KB / FX prefs (same key as setupCustomMobileKeyboard IIFE). */
-const INOUT_KB_SETTINGS_KEY = 'inout_mobile_kb_settings_v1';
 const MANAGE_BAR_ORDER_KEY = 'inout_manage_bar_order_v1';
 const FRAME_ORDER_KEY    = 'inout_frame_order_v1';
 var _personalWorkspacePersistTimer = null;
@@ -2625,8 +2063,6 @@ function gatherUiChromeForWorkspace() {
       viewMenuOpen: !!(viewMenu && viewMenu.classList.contains('open')),
       manageBarOpen: !!(document.getElementById('manage-bar') && document.getElementById('manage-bar').classList.contains('manage-bar-open')),
       logDropupOpen: !!(logDropupPanel && logDropupPanel.classList.contains('open')),
-      calcOpen: !!(customCalcEl && !customCalcEl.hasAttribute('hidden')),
-      mobileKbOpen: !!(mobileKeyboardEl && !mobileKeyboardEl.hasAttribute('hidden')),
     };
   } catch (_) {
     return {};
@@ -2682,30 +2118,6 @@ function applyWorkspaceUiChrome(u) {
         logDropupPanel.classList.remove('open');
         if (typeof clearLogDropupPanelFixed === 'function') clearLogDropupPanelFixed();
         if (logActionBtn) logActionBtn.setAttribute('aria-expanded', 'false');
-      }
-    }
-    if (customCalcEl && calcToggleBtn) {
-      if (u.calcOpen) {
-        customCalcEl.removeAttribute('hidden');
-        calcToggleBtn.setAttribute('aria-expanded', 'true');
-      } else {
-        customCalcEl.setAttribute('hidden', '');
-        calcToggleBtn.setAttribute('aria-expanded', 'false');
-      }
-    }
-    if (mobileKeyboardEl && mobileKbToggleBtn) {
-      if (u.mobileKbOpen) {
-        mobileKeyboardEl.removeAttribute('hidden');
-        mobileKbToggleBtn.setAttribute('aria-expanded', 'true');
-        try {
-          localStorage.setItem('inout_mobile_kb_open_v1', '1');
-        } catch (_) {}
-      } else {
-        mobileKeyboardEl.setAttribute('hidden', '');
-        mobileKbToggleBtn.setAttribute('aria-expanded', 'false');
-        try {
-          localStorage.setItem('inout_mobile_kb_open_v1', '0');
-        } catch (_) {}
       }
     }
   } catch (e) {
@@ -9179,7 +8591,6 @@ function inoutTabsUiCtx() {
       gapMs: function() { return INOUT_WHEEL_INTERACTION_GAP_MS; },
     },
     nearestVerticalScrollableAncestor: nearestVerticalScrollableAncestor,
-    advanceScrollEdgeThenWrap: advanceScrollEdgeThenWrap,
     routeWheelDeltaToPrimaryView: routeWheelDeltaToPrimaryView,
     clearManageBarDropdownPosition: (typeof clearManageBarDropdownPosition === 'function' ? clearManageBarDropdownPosition : null),
     closeLogDropup: (typeof closeLogDropup === 'function' ? closeLogDropup : null),
@@ -9398,11 +8809,6 @@ function gatherPersonalWorkspaceStateForSave() {
       if (Array.isArray(parsed)) manageBarOrder = parsed;
     }
   } catch (_) {}
-  let settings = null;
-  try {
-    const raw = localStorage.getItem(INOUT_KB_SETTINGS_KEY);
-    if (raw) settings = JSON.parse(raw);
-  } catch (_) {}
   /* Feed scroll stays on this device only (SCROLL_STATE_KEY). Omitting feedScrollByView from server
    * workspace prevents one tab’s refresh from pushing scroll onto another device. */
   let channelStripOrder = [];
@@ -9418,7 +8824,6 @@ function gatherPersonalWorkspaceStateForSave() {
     viewDisplayNames: viewDisplayNamesCopy,
     leftChannelIds: leftChannelIds,
     manageBarOrder: manageBarOrder,
-    settings: settings && typeof settings === 'object' ? settings : null,
     focusedChannel: String(currentView || currentChannel || 'main'),
     channelStripOrder: channelStripOrder,
     uiChrome: gatherUiChromeForWorkspace(),
@@ -9581,11 +8986,6 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
     try {
       localStorage.setItem(MANAGE_BAR_ORDER_KEY, JSON.stringify(cfg.manageBarOrder));
       applyManageBarOrder();
-    } catch (_) {}
-  }
-  if (cfg.settings && typeof cfg.settings === 'object') {
-    try {
-      localStorage.setItem(INOUT_KB_SETTINGS_KEY, JSON.stringify(cfg.settings));
     } catch (_) {}
   }
   if (cfg.uiChrome && typeof cfg.uiChrome === 'object') {

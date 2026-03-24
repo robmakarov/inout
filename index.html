@@ -227,84 +227,6 @@
     <div class="input-tools">
       <button type="button" id="composer-add-slot" class="draft-btn composer-add-slot">+ Add input</button>
       <button id="clipboard-button" class="draft-btn">From clipboard</button>
-      <button id="mobile-kb-toggle" class="draft-btn" type="button" aria-expanded="false" aria-controls="mobile-keyboard">Keyboard</button>
-      <button id="calc-toggle" class="draft-btn" type="button" aria-expanded="false" aria-controls="custom-calc">Calculator</button>
-    </div>
-    <div id="custom-calc" class="custom-calc" hidden aria-label="Custom calculator">
-      <div class="custom-calc-head">
-        <input id="custom-calc-input" class="custom-calc-input" placeholder="e.g. (2 + 2) * 5 > 10 && 1" />
-        <button type="button" class="custom-calc-btn custom-calc-close" data-calc-key="hide">×</button>
-      </div>
-      <div class="custom-calc-output" id="custom-calc-output">=</div>
-      <div class="custom-calc-grid" id="custom-calc-grid">
-        <button type="button" class="custom-calc-btn" data-calc-key="7">7</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="8">8</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="9">9</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="/">/</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="(">(</button>
-        <button type="button" class="custom-calc-btn" data-calc-key=")">)</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="4">4</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="5">5</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="6">6</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="*">*</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="%">%</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="^">^</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="1">1</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="2">2</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="3">3</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="-">-</button>
-        <button type="button" class="custom-calc-btn" data-calc-key=">=">>=</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="<="><=</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="0">0</button>
-        <button type="button" class="custom-calc-btn" data-calc-key=".">.</button>
-        <button type="button" class="custom-calc-btn" data-calc-key=",">,</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="+">+</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="==">==</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="!=">!=</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="&&">&amp;&amp;</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="||">||</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="!">!</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="pi">pi</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="e">e</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="sqrt(">sqrt</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="abs(">abs</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="min(">min</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="max(">max</button>
-      </div>
-      <div class="custom-calc-actions">
-        <button type="button" class="custom-calc-btn" data-calc-key="backspace">⌫</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="clear">Clear</button>
-        <button type="button" class="custom-calc-btn" data-calc-key="eval">=</button>
-        <button type="button" class="custom-calc-btn custom-calc-use" data-calc-key="use">Use in input</button>
-      </div>
-    </div>
-    <div id="mobile-keyboard" class="mobile-keyboard" aria-label="Custom mobile keyboard" hidden>
-      <div class="mobile-keyboard-top">
-        <button type="button" class="mobile-kb-lang active" data-lang="en">EN</button>
-        <button type="button" class="mobile-kb-lang" data-lang="ru">RU</button>
-        <button type="button" class="mobile-kb-key mobile-kb-key-fn" data-key="hide">Hide</button>
-      </div>
-      <div class="mobile-keyboard-tools">
-        <button type="button" class="mobile-kb-tool mobile-kb-tool-mode active" data-ui="mode" data-mode="compact">Compact</button>
-        <button type="button" class="mobile-kb-tool mobile-kb-tool-mode" data-ui="mode" data-mode="full">Full</button>
-        <button type="button" class="mobile-kb-tool mobile-kb-tool-syskb active" data-ui="syskb" data-on="1">System KB</button>
-        <button type="button" class="mobile-kb-tool mobile-kb-tool-fx" data-ui="fx" data-on="1">FX</button>
-        <button type="button" class="mobile-kb-tool mobile-kb-tool-vibe" data-ui="vibe" data-on="1">Vibe</button>
-      </div>
-      <div class="mobile-kb-smart" id="mobile-kb-smart" aria-label="Smart suggestions"></div>
-      <div class="mobile-keyboard-rows" id="mobile-keyboard-rows"></div>
-      <div class="mobile-keyboard-fns">
-        <button type="button" class="mobile-kb-key mobile-kb-key-fn" data-key="backspace">⌫</button>
-        <button type="button" class="mobile-kb-key mobile-kb-key-fn" data-key="left">←</button>
-        <button type="button" class="mobile-kb-key mobile-kb-key-fn" data-key="right">→</button>
-        <button type="button" class="mobile-kb-key mobile-kb-key-fn" data-key="space">Space</button>
-        <button type="button" class="mobile-kb-key mobile-kb-key-fn" data-key="enter">↵</button>
-        <button type="button" class="mobile-kb-key mobile-kb-key-fn" data-key="clear">Clear</button>
-        <button type="button" class="mobile-kb-key mobile-kb-key-fn" data-key="copy">Copy</button>
-        <button type="button" class="mobile-kb-key mobile-kb-key-fn" data-key="paste">Paste</button>
-        <button type="button" class="mobile-kb-key mobile-kb-key-fn" data-key="emoji">😊</button>
-        <button type="button" class="mobile-kb-key mobile-kb-key-send" data-key="send">Send</button>
-      </div>
     </div>
   </div>
     </div>
@@ -464,7 +386,6 @@
     </div>
     <div class="secret-controls-body">
       <label class="secret-toggle-row"><input type="checkbox" id="secret-toggle-pinned-rail"> Show pinned rail bar</label>
-      <label class="secret-toggle-row"><input type="checkbox" id="secret-toggle-kbcalc"> Show keyboard + calculator UI</label>
       <label class="secret-toggle-row"><input type="checkbox" id="secret-toggle-grips"> Show frame reorder grips</label>
       <label class="secret-toggle-row"><input type="checkbox" id="secret-toggle-layout"> Enable layout edit button</label>
       <label class="secret-toggle-row"><input type="checkbox" id="secret-toggle-cursor-fx"> Enable cursor + glow effects</label>

@@ -1,60 +1,6 @@
 ;(function(global) {
   'use strict';
 
-  function advanceScrollEdgeThenWrap(el, axis, delta, _interactionId, stateMap) {
-    if (!el) return false;
-    var d = Number(delta) || 0;
-    if (Math.abs(d) < 0.01) return false;
-    var max = axis === 'x'
-      ? (el.scrollWidth - el.clientWidth)
-      : (el.scrollHeight - el.clientHeight);
-    if (!(max > 1)) return false;
-    var prev = axis === 'x' ? (el.scrollLeft || 0) : (el.scrollTop || 0);
-    var dir = d > 0 ? 1 : -1;
-    var edgeKey = axis + ':' + String(dir);
-    var state = stateMap.get(el) || null;
-    var stateKey = state && typeof state === 'object' ? state.key : state;
-    var now = Date.now();
-    var atMin = prev <= 1;
-    var atMax = prev >= max - 1;
-
-    if (dir > 0) {
-      if (!atMax) {
-        var toMax = Math.min(max, prev + d);
-        if (axis === 'x') el.scrollLeft = toMax;
-        else el.scrollTop = toMax;
-        if (toMax >= max - 1) stateMap.set(el, { key: edgeKey, armedAt: now });
-        else stateMap.delete(el);
-        return Math.abs(toMax - prev) > 0.01;
-      }
-      if (stateKey === edgeKey) {
-        if (axis === 'x') el.scrollLeft = 0;
-        else el.scrollTop = 0;
-        stateMap.delete(el);
-        return true;
-      }
-      stateMap.set(el, { key: edgeKey, armedAt: now });
-      return false;
-    }
-
-    if (!atMin) {
-      var toMin = Math.max(0, prev + d);
-      if (axis === 'x') el.scrollLeft = toMin;
-      else el.scrollTop = toMin;
-      if (toMin <= 1) stateMap.set(el, { key: edgeKey, armedAt: now });
-      else stateMap.delete(el);
-      return Math.abs(toMin - prev) > 0.01;
-    }
-    if (stateKey === edgeKey) {
-      if (axis === 'x') el.scrollLeft = max;
-      else el.scrollTop = max;
-      stateMap.delete(el);
-      return true;
-    }
-    stateMap.set(el, { key: edgeKey, armedAt: now });
-    return false;
-  }
-
   function nearestVerticalScrollableAncestor(node) {
     var el = node && node.nodeType === 1 ? node : (node && node.parentElement ? node.parentElement : null);
     while (el && el !== document.body && el !== document.documentElement) {
@@ -75,7 +21,6 @@
   function bindVerticalWheelToHorizontalScroll(el, ctx) {
     if (!el || el.dataset.inoutWheelHorizBound === '1') return;
     el.dataset.inoutWheelHorizBound = '1';
-    var disableWrap = el.id === 'tabs';
     var wheelState = ctx && ctx.wheelState ? ctx.wheelState : null;
     var getFeedScrollSurfaceForElement = ctx && ctx.getFeedScrollSurfaceForElement
       ? ctx.getFeedScrollSurfaceForElement
@@ -119,18 +64,6 @@
           return;
         }
         if (Math.abs(e.deltaY) < 0.01) return;
-        if (disableWrap) {
-          var prevLeft = el.scrollLeft || 0;
-          var maxLeft = Math.max(0, (el.scrollWidth || 0) - (el.clientWidth || 0));
-          var nextLeft = Math.max(0, Math.min(maxLeft, prevLeft + e.deltaY));
-          if (Math.abs(nextLeft - prevLeft) > 0.01) {
-            el.scrollLeft = nextLeft;
-            e.preventDefault();
-            return;
-          }
-          if (routeWheelToFeed(e.deltaY)) e.preventDefault();
-          return;
-        }
         var prevLeft2 = el.scrollLeft || 0;
         var maxLeft2 = Math.max(0, (el.scrollWidth || 0) - (el.clientWidth || 0));
         var nextLeft2 = Math.max(0, Math.min(maxLeft2, prevLeft2 + e.deltaY));
@@ -188,7 +121,6 @@
   }
 
   global.InoutScroll = global.InoutScroll || {};
-  global.InoutScroll.advanceScrollEdgeThenWrap = advanceScrollEdgeThenWrap;
   global.InoutScroll.nearestVerticalScrollableAncestor = nearestVerticalScrollableAncestor;
   global.InoutScroll.bindVerticalWheelToHorizontalScroll = bindVerticalWheelToHorizontalScroll;
   global.InoutScroll.bindMultiviewWheelScrollCapture = bindMultiviewWheelScrollCapture;
