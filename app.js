@@ -1480,7 +1480,7 @@ function syncInoutObjLeadingWidthVar() {
     var filterSlot = mbar.querySelector('.multi-value-filter-slot');
     var startW = start ? Math.ceil(start.getBoundingClientRect().width) : 0;
     var filterW = filterSlot ? Math.ceil(filterSlot.getBoundingClientRect().width) : 0;
-    var w = rowW > 0 ? rowW : Math.max(startW, filterW);
+    var w = rowW > 0 ? rowW : 0;
     var props = [inner, mbar];
     if (w > 0) {
       props.forEach(function(el) {
@@ -7886,8 +7886,9 @@ function createObjectRow(obj, isNew, options) {
     }
   }
   trigger.addEventListener('click', toggleObjActionsDropdown);
-  trigger.addEventListener('pointerup', function(e) {
+  trigger.addEventListener('pointerdown', function(e) {
     if (e.pointerType !== 'touch') return;
+    e.preventDefault();
     objActionsLastTouchToggleAt = Date.now();
     toggleObjActionsDropdown(e);
   });
@@ -8865,6 +8866,8 @@ function inoutTabsUiCtx() {
       viewNames = ['main'].concat(list);
       saveChannelsList();
       renderTabs();
+      schedulePersonalWorkspacePersist();
+      flushPersonalWorkspacePersist().catch(function() {});
     },
     refreshMoveTargets: refreshMoveTargets,
     syncComposerTargetSelects: syncComposerTargetSelects,

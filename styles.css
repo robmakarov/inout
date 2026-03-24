@@ -500,7 +500,9 @@ header{
   padding:3px 8px;
   border-radius:4px;
   cursor:default;
-  min-height:24px;
+  min-height:0;
+  width:auto;
+  height:auto;
   display:inline-flex;
   align-items:center;
   justify-content:center;
@@ -1797,7 +1799,7 @@ body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell::b
 .obj-leading-meta{
   display:flex;
   flex-direction:row;
-  align-items:flex-start;
+  align-items:center;
   gap:20px;
   flex-wrap:nowrap;
   min-width:0;
@@ -2119,6 +2121,8 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
   white-space:nowrap;
   display:none; /* JS shows based on view prefs */
   position:relative;
+  align-items:center;
+  min-height:1.35em;
 }
 
 .obj-sender{
