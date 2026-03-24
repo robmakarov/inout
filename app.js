@@ -7875,12 +7875,13 @@ function createObjectRow(obj, isNew, options) {
     e.stopPropagation();
   }, { passive: true });
   var objActionsLastToggleAt = 0;
+  var objActionsLastTouchUpAt = 0;
   function toggleObjActionsDropdown(e) {
     if (e) {
-      e.preventDefault();
       e.stopPropagation();
     }
     var nowAt = Date.now();
+    if (e && e.type === 'click' && nowAt - objActionsLastTouchUpAt < 360) return;
     if (nowAt - objActionsLastToggleAt < 120) return;
     objActionsLastToggleAt = nowAt;
     const isOpen = actions.classList.toggle('obj-actions-open');
@@ -7906,8 +7907,10 @@ function createObjectRow(obj, isNew, options) {
   trigger.addEventListener('pointerup', function(e) {
     var pt = e && e.pointerType;
     if (pt && pt !== 'touch' && pt !== 'mouse' && pt !== 'pen') return;
+    if (pt === 'touch') objActionsLastTouchUpAt = Date.now();
     toggleObjActionsDropdown(e);
   });
+  trigger.addEventListener('click', toggleObjActionsDropdown);
   trigger.addEventListener('keydown', function(e) {
     var k = e && (e.key || '');
     if (k !== 'Enter' && k !== ' ') return;
@@ -8894,6 +8897,12 @@ function inoutTabsUiCtx() {
       viewNames = ['main'].concat(list);
       saveChannelsList();
       renderTabs();
+      if (canSyncPersonalWorkspaceNow()) {
+        try {
+          var wsNow = gatherPersonalWorkspaceStateForSave();
+          tryBroadcastWorkspaceConfig(JSON.parse(JSON.stringify(wsNow)));
+        } catch (_) {}
+      }
       schedulePersonalWorkspacePersist();
       flushPersonalWorkspacePersist().catch(function() {});
     },
