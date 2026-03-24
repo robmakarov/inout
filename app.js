@@ -158,68 +158,13 @@ var inoutLastWheelAt = 0;
 var INOUT_WHEEL_INTERACTION_GAP_MS = 180;
 
 function advanceScrollEdgeThenWrap(el, axis, delta, interactionId) {
-  if (!el) return false;
-  var d = Number(delta) || 0;
-  if (Math.abs(d) < 0.01) return false;
-  var max = axis === 'x'
-    ? (el.scrollWidth - el.clientWidth)
-    : (el.scrollHeight - el.clientHeight);
-  if (!(max > 1)) return false;
-  var prev = axis === 'x' ? (el.scrollLeft || 0) : (el.scrollTop || 0);
-  var dir = d > 0 ? 1 : -1;
-  var edgeKey = axis + ':' + String(dir);
-  var state = inoutScrollWrapState.get(el) || null;
-  var stateKey = state && typeof state === 'object' ? state.key : state;
-  var now = Date.now();
-  var atMin = prev <= 1;
-  var atMax = prev >= max - 1;
-
-  if (dir > 0) {
-    if (!atMax) {
-      var toMax = Math.min(max, prev + d);
-      if (axis === 'x') el.scrollLeft = toMax;
-      else el.scrollTop = toMax;
-      if (toMax >= max - 1) inoutScrollWrapState.set(el, { key: edgeKey, armedAt: now });
-      else inoutScrollWrapState.delete(el);
-      return Math.abs(toMax - prev) > 0.01;
-    }
-    if (stateKey === edgeKey) {
-      if (axis === 'x') el.scrollLeft = 0;
-      else el.scrollTop = 0;
-      inoutScrollWrapState.delete(el);
-      return true;
-    }
-    inoutScrollWrapState.set(el, { key: edgeKey, armedAt: now });
-    return false;
-  }
-
-  if (!atMin) {
-    var toMin = Math.max(0, prev + d);
-    if (axis === 'x') el.scrollLeft = toMin;
-    else el.scrollTop = toMin;
-    if (toMin <= 1) inoutScrollWrapState.set(el, { key: edgeKey, armedAt: now });
-    else inoutScrollWrapState.delete(el);
-    return Math.abs(toMin - prev) > 0.01;
-  }
-  if (stateKey === edgeKey) {
-    if (axis === 'x') el.scrollLeft = max;
-    else el.scrollTop = max;
-    inoutScrollWrapState.delete(el);
-    return true;
-  }
-  inoutScrollWrapState.set(el, { key: edgeKey, armedAt: now });
-  return false;
+  if (!window.InoutScroll || !window.InoutScroll.advanceScrollEdgeThenWrap) return false;
+  return window.InoutScroll.advanceScrollEdgeThenWrap(el, axis, delta, interactionId, inoutScrollWrapState);
 }
 
 function isWrapArmedForDirection(el, axis, delta) {
-  if (!el) return false;
-  var d = Number(delta) || 0;
-  if (Math.abs(d) < 0.01) return false;
-  var dir = d > 0 ? 1 : -1;
-  var wantKey = axis + ':' + String(dir);
-  var state = inoutScrollWrapState.get(el) || null;
-  var stateKey = state && typeof state === 'object' ? state.key : state;
-  return stateKey === wantKey;
+  if (!window.InoutScroll || !window.InoutScroll.isWrapArmedForDirection) return false;
+  return window.InoutScroll.isWrapArmedForDirection(el, axis, delta, inoutScrollWrapState);
 }
 
 function routeWheelDeltaToPrimaryView(deltaY, interactionId) {
@@ -235,20 +180,8 @@ function routeWheelDeltaToPrimaryView(deltaY, interactionId) {
 }
 
 function nearestVerticalScrollableAncestor(node) {
-  var el = node && node.nodeType === 1 ? node : (node && node.parentElement ? node.parentElement : null);
-  while (el && el !== document.body && el !== document.documentElement) {
-    try {
-      var cs = window.getComputedStyle(el);
-      var oy = String(cs.overflowY || cs.overflow || '');
-      var verticalByStyle = /(auto|scroll|overlay)/.test(oy);
-      if (verticalByStyle) {
-        var max = el.scrollHeight - el.clientHeight;
-        if (max > 1) return el;
-      }
-    } catch (_) {}
-    el = el.parentElement;
-  }
-  return null;
+  if (!window.InoutScroll || !window.InoutScroll.nearestVerticalScrollableAncestor) return null;
+  return window.InoutScroll.nearestVerticalScrollableAncestor(node);
 }
 const inputArea  = document.getElementById('input-area');
 var input       = document.getElementById('object-input');
@@ -2097,80 +2030,17 @@ function syncInoutMultiValueFilterMenuAria() {
 var inoutColScrollSyncing = false;
 
 function bindVerticalWheelToHorizontalScroll(el) {
-  if (!el || el.dataset.inoutWheelHorizBound === '1') return;
-  el.dataset.inoutWheelHorizBound = '1';
-  var disableWrap = el.id === 'tabs';
-
-  function routeWheelToFeed(deltaY) {
-    if (Math.abs(Number(deltaY) || 0) < 0.01) return false;
-    var surf = getFeedScrollSurfaceForElement(el);
-    if (!surf || surf.scrollHeight - surf.clientHeight <= 1) return false;
-    var prev = surf.scrollTop || 0;
-    surf.scrollTop = prev + deltaY;
-    return Math.abs((surf.scrollTop || 0) - prev) > 0.01;
-  }
-
-  el.addEventListener(
-    'wheel',
-    function(e) {
-      var nowAt = Date.now();
-      if (nowAt - inoutLastWheelAt > INOUT_WHEEL_INTERACTION_GAP_MS) inoutWheelInteractionId++;
-      inoutLastWheelAt = nowAt;
-      // Keep native behavior when user intentionally scrolls horizontally.
-      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
-      /*
-       * Value strips: vertical wheel scrolls the feed stack — never map deltaY → horizontal columns
-       * unless Shift+wheel (or fall through at vertical min/max when columns can scroll sideways).
-       * Tabs keep horizontal wheel mapping without this feed-first path.
-       */
-      var isColStrip =
-        (el.classList && el.classList.contains('obj-values-wrap')) || el.id === 'multi-value-col-labels';
-      if (isColStrip && !e.shiftKey) {
-        // Vertical wheel over values/header always drives the view vertical scroll first.
-        if (routeWheelToFeed(e.deltaY)) e.preventDefault();
-        return;
-      }
-      var cs = null;
-      try { cs = window.getComputedStyle(el); } catch (_) {}
-      var oy = cs ? String(cs.overflowY || cs.overflow || '') : '';
-      var ox = cs ? String(cs.overflowX || cs.overflow || '') : '';
-      var yScrollableByStyle = /(auto|scroll|overlay)/.test(oy);
-      var xScrollableByStyle = /(auto|scroll|overlay)/.test(ox);
-      // Exception: if this element can actually scroll vertically, keep wheel vertical.
-      var canY = yScrollableByStyle && (el.scrollHeight - el.clientHeight > 1);
-      if (canY) return;
-      var canX = xScrollableByStyle && (el.scrollWidth - el.clientWidth > 1);
-      if (!canX) {
-        if (routeWheelToFeed(e.deltaY)) e.preventDefault();
-        return;
-      }
-      if (Math.abs(e.deltaY) < 0.01) return;
-      if (disableWrap) {
-        var prevLeft = el.scrollLeft || 0;
-        var maxLeft = Math.max(0, (el.scrollWidth || 0) - (el.clientWidth || 0));
-        var nextLeft = Math.max(0, Math.min(maxLeft, prevLeft + e.deltaY));
-        if (Math.abs(nextLeft - prevLeft) > 0.01) {
-          el.scrollLeft = nextLeft;
-          e.preventDefault();
-          return;
-        }
-        if (routeWheelToFeed(e.deltaY)) e.preventDefault();
-        return;
-      }
-      // Horizontal zones should stop at edges (no wrap jump from end to start).
-      var prevLeft2 = el.scrollLeft || 0;
-      var maxLeft2 = Math.max(0, (el.scrollWidth || 0) - (el.clientWidth || 0));
-      var nextLeft2 = Math.max(0, Math.min(maxLeft2, prevLeft2 + e.deltaY));
-      if (Math.abs(nextLeft2 - prevLeft2) > 0.01) {
-        el.scrollLeft = nextLeft2;
-        e.preventDefault();
-        return;
-      }
-      // If this zone cannot move horizontally, hand wheel to vertical feed.
-      if (routeWheelToFeed(e.deltaY)) e.preventDefault();
+  if (!window.InoutScroll || !window.InoutScroll.bindVerticalWheelToHorizontalScroll) return;
+  window.InoutScroll.bindVerticalWheelToHorizontalScroll(el, {
+    wheelState: {
+      get interactionId() { return inoutWheelInteractionId; },
+      set interactionId(v) { inoutWheelInteractionId = v; },
+      get lastWheelAt() { return inoutLastWheelAt; },
+      set lastWheelAt(v) { inoutLastWheelAt = v; },
+      get gapMs() { return INOUT_WHEEL_INTERACTION_GAP_MS; },
     },
-    { passive: false }
-  );
+    getFeedScrollSurfaceForElement: getFeedScrollSurfaceForElement,
+  });
 }
 
 function syncValueWrapsToHeaderScroll(scrollLeft, sourceWrap) {
@@ -13114,43 +12984,10 @@ var scrollSaveTimer = null;
  * gaps, or broken flex scrollport). Listener on #multiview (covers full column) in capture phase.
  */
 function bindMultiviewWheelScrollCapture() {
-  var mv = document.getElementById('multiview');
-  if (!mv || mv.dataset.inoutWheelCapture === '1') return;
-  mv.dataset.inoutWheelCapture = '1';
-  function wheelDeltaY(e, refSize) {
-    var dy = e.deltaY;
-    if (e.deltaMode === 1) dy *= 16;
-    else if (e.deltaMode === 2) dy *= Math.max(100, (refSize || 400) * 0.92);
-    return dy;
-  }
-  mv.addEventListener(
-    'wheel',
-    function(e) {
-      if (e.defaultPrevented) return;
-      if (e.ctrlKey || e.metaKey) return;
-      var t = e.target;
-      if (t && t.nodeType === 3) t = t.parentElement;
-      if (!t || !t.closest) return;
-      if (t.closest('#user-modal-backdrop, #user-modal, #channel-modal-backdrop, #qr-modal-backdrop'))
-        return;
-      if (t.closest('.manage-bar-dropdown, #log-dropup-panel.open, .multi-value-filter-menu')) return;
-      /* Let bindVerticalWheelToHorizontalScroll handle value columns / tabs / column headers (capture runs first). */
-      if (t.closest('[data-inout-wheel-horiz-bound="1"]')) return;
-      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
-      var view = t.closest('#multiview .view');
-      if (!view || !mv.contains(view)) return;
-      var feed = view.querySelector('#feed') || view.querySelector('.feed');
-      if (!feed) return;
-      var surf = getFeedScrollSurface(feed);
-      if (surf === feed && feed.contains(t)) return;
-      var max = surf.scrollHeight - surf.clientHeight;
-      if (max <= 0) return;
-      var dy = wheelDeltaY(e, surf.clientHeight);
-      e.preventDefault();
-      surf.scrollTop = Math.max(0, Math.min(max, surf.scrollTop + dy));
-    },
-    { capture: true, passive: false }
-  );
+  if (!window.InoutScroll || !window.InoutScroll.bindMultiviewWheelScrollCapture) return;
+  window.InoutScroll.bindMultiviewWheelScrollCapture({
+    getFeedScrollSurface: getFeedScrollSurface,
+  });
 }
 
 function scheduleScrollPersistIfAllowed() {
