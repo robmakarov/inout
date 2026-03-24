@@ -2300,16 +2300,16 @@ body.select-mode .obj-checkbox-zone{
 .obj-col-resize-handle::before{
   content:'';
   position:absolute;
-  top:2px;
-  bottom:2px;
+  top:4px;
+  bottom:4px;
   left:5px;
   width:1px;
-  background:rgba(184,160,96,0.55);
+  background:rgba(150,150,150,0.28);
 }
 .obj-select-wrap:hover .obj-col-resize-handle::before,
 .obj-time:hover .obj-col-resize-handle::before,
 .obj-sender:hover .obj-col-resize-handle::before{
-  background:rgba(232,213,160,0.9);
+  background:rgba(180,180,180,0.5);
 }
 .obj-select:checked{
   background:var(--acc);
