@@ -7874,7 +7874,6 @@ function createObjectRow(obj, isNew, options) {
   dropdown.addEventListener('touchstart', e => {
     e.stopPropagation();
   }, { passive: true });
-  var objActionsLastTouchToggleAt = 0;
   function toggleObjActionsDropdown(e) {
     e.stopPropagation();
     const isOpen = actions.classList.toggle('obj-actions-open');
@@ -7900,7 +7899,6 @@ function createObjectRow(obj, isNew, options) {
   trigger.addEventListener('pointerdown', function(e) {
     if (e.pointerType !== 'touch') return;
     e.preventDefault();
-    objActionsLastTouchToggleAt = Date.now();
     toggleObjActionsDropdown(e);
   });
   trigger.addEventListener('click', toggleObjActionsDropdown);
