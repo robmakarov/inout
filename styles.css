@@ -2291,8 +2291,6 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
   display:flex;
   align-items:center;
   justify-content:center;
-  align-self:stretch;
-  min-height:100%;
   opacity:1;
   pointer-events:auto;
   transition:opacity .12s ease;
@@ -2341,6 +2339,10 @@ body.select-mode .obj-checkbox-zone{
   width:1px;
   background:transparent;
 }
+.obj-select-wrap .obj-col-resize-handle::before{
+  top:8px;
+  bottom:8px;
+}
 .obj-select-wrap:hover .obj-col-resize-handle::before,
 .obj-time:hover .obj-col-resize-handle::before,
 .obj-sender:hover .obj-col-resize-handle::before{
@@ -2366,8 +2368,8 @@ body.select-mode .obj-checkbox-zone{
   top:50%;
   transform:translateY(-50%);
   margin:0;
-  opacity:1;
-  pointer-events:auto;
+  opacity:0;
+  pointer-events:none;
   transition:opacity .15s ease;
   flex-direction:column;
   align-items:flex-end;
@@ -2381,6 +2383,12 @@ body.select-mode .obj-checkbox-zone{
 }
 .obj-actions.obj-actions-open{
   visibility:visible;
+}
+@media (hover: none), (pointer: coarse){
+  .obj .obj-actions{
+    opacity:1;
+    pointer-events:auto;
+  }
 }
 .obj-actions-trigger{
   pointer-events:auto;

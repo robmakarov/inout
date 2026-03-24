@@ -7873,12 +7873,9 @@ function createObjectRow(obj, isNew, options) {
     e.stopPropagation();
   }, { passive: true });
   var objActionsLastTouchToggleAt = 0;
-  var objActionsLastToggleAt = 0;
   function toggleObjActionsDropdown(e) {
     var nowAt = Date.now();
     if (e && e.type === 'click' && nowAt - objActionsLastTouchToggleAt < 350) return;
-    if (nowAt - objActionsLastToggleAt < 120) return;
-    objActionsLastToggleAt = nowAt;
     e.stopPropagation();
     const isOpen = actions.classList.toggle('obj-actions-open');
     trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
@@ -7901,16 +7898,12 @@ function createObjectRow(obj, isNew, options) {
     }
   }
   trigger.addEventListener('pointerdown', function(e) {
-    if (e.pointerType !== 'touch' && e.pointerType !== 'mouse' && e.pointerType !== 'pen') return;
+    if (e.pointerType !== 'touch') return;
     e.preventDefault();
-    var at = Date.now();
-    if (e.pointerType === 'touch') objActionsLastTouchToggleAt = at;
+    objActionsLastTouchToggleAt = Date.now();
     toggleObjActionsDropdown(e);
   });
-  trigger.addEventListener('click', function(e) {
-    if (Date.now() - objActionsLastToggleAt < 200) return;
-    toggleObjActionsDropdown(e);
-  });
+  trigger.addEventListener('click', toggleObjActionsDropdown);
   trigger.addEventListener('keydown', function(e) {
     var k = e && (e.key || '');
     if (k !== 'Enter' && k !== ' ') return;
