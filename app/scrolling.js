@@ -55,17 +55,6 @@
     return false;
   }
 
-  function isWrapArmedForDirection(el, axis, delta, stateMap) {
-    if (!el) return false;
-    var d = Number(delta) || 0;
-    if (Math.abs(d) < 0.01) return false;
-    var dir = d > 0 ? 1 : -1;
-    var wantKey = axis + ':' + String(dir);
-    var state = stateMap.get(el) || null;
-    var stateKey = state && typeof state === 'object' ? state.key : state;
-    return stateKey === wantKey;
-  }
-
   function nearestVerticalScrollableAncestor(node) {
     var el = node && node.nodeType === 1 ? node : (node && node.parentElement ? node.parentElement : null);
     while (el && el !== document.body && el !== document.documentElement) {
@@ -200,7 +189,6 @@
 
   global.InoutScroll = global.InoutScroll || {};
   global.InoutScroll.advanceScrollEdgeThenWrap = advanceScrollEdgeThenWrap;
-  global.InoutScroll.isWrapArmedForDirection = isWrapArmedForDirection;
   global.InoutScroll.nearestVerticalScrollableAncestor = nearestVerticalScrollableAncestor;
   global.InoutScroll.bindVerticalWheelToHorizontalScroll = bindVerticalWheelToHorizontalScroll;
   global.InoutScroll.bindMultiviewWheelScrollCapture = bindMultiviewWheelScrollCapture;

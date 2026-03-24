@@ -162,11 +162,6 @@ function advanceScrollEdgeThenWrap(el, axis, delta, interactionId) {
   return window.InoutScroll.advanceScrollEdgeThenWrap(el, axis, delta, interactionId, inoutScrollWrapState);
 }
 
-function isWrapArmedForDirection(el, axis, delta) {
-  if (!window.InoutScroll || !window.InoutScroll.isWrapArmedForDirection) return false;
-  return window.InoutScroll.isWrapArmedForDirection(el, axis, delta, inoutScrollWrapState);
-}
-
 function routeWheelDeltaToPrimaryView(deltaY, interactionId) {
   var surf = primaryFeedScrollSurface();
   if (!surf) return false;
@@ -4227,33 +4222,6 @@ function createOriginGhostFromRow(row) {
   });
   return clone;
 }
-function insertOriginGhostsAndDetachRows(block) {
-  if (!feedInner || !block || block.length === 0) return;
-  originInsertBefore = block[block.length - 1].nextSibling;
-  var ghosts = [];
-  for (var i = 0; i < block.length; i++) ghosts.push(createOriginGhostFromRow(block[i]));
-  for (var j = 0; j < block.length; j++) feedInner.insertBefore(ghosts[j], block[j]);
-  for (var k = block.length - 1; k >= 0; k--) block[k].parentNode && block[k].parentNode.removeChild(block[k]);
-  originGhostRows = ghosts;
-  draggedRowsStored = block.slice();
-  originGhostsActive = true;
-  lastDropInsertBefore = ghosts[0];
-  lastWantAppend = false;
-  if (ghosts.length && ghosts[0].offsetTop !== undefined) {
-    originContentTop = ghosts[0].offsetTop;
-    var lastG = ghosts[ghosts.length - 1];
-    originContentHeight = (lastG.offsetTop || 0) + (lastG.offsetHeight || 0) - originContentTop;
-    if (originContentHeight < 2) originContentHeight = 2;
-    if (!feedDropOriginEl) {
-      feedDropOriginEl = document.createElement('div');
-      feedDropOriginEl.className = 'feed-drop-origin';
-      feedDropOriginEl.setAttribute('aria-hidden', 'true');
-      document.body.appendChild(feedDropOriginEl);
-    }
-    if (feedDropOriginEl.parentNode !== document.body) document.body.appendChild(feedDropOriginEl);
-    updateOriginLinePosition();
-  }
-}
 function removeOriginGhostsAndInsertRows() {
   if (!originGhostsActive || !feedInner || !feedEl) return;
   var surf = getFeedScrollSurface(feedEl);
@@ -5181,52 +5149,6 @@ function subscribeRealtimeAll() {
   subscribeChannelMembershipRealtime();
 }
 
-// Anonymous guest realtime for a temp-session shared view.
-function subscribeTempSessionRealtimeGuest() {
-  if (!sb || sb === null || currentUser || !tempSessionId || !sb.channel) return;
-  try {
-    const chName = 'entries-temp-session-' + String(tempSessionId);
-    const orFilter = 'channel.eq.' + String(currentChannel) + ',temp_session_id.eq.' + String(tempSessionId);
-    const sub = sb
-      .channel(chName)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'entries', filter: orFilter },
-        (payload) => {
-          const row = payload.new;
-          if (!row) return;
-          const ch = row.channel || currentChannel;
-          if (!ch) return;
-          if (!viewNames.includes(ch)) {
-            viewNames.push(ch);
-            if (typeof saveChannelsList === 'function') saveChannelsList();
-          }
-          currentView = ch;
-          currentChannel = ch;
-          if (typeof renderTabs === 'function') renderTabs();
-          if (typeof onInsertForChannel === 'function') {
-            onInsertForChannel(ch, row);
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'entries', filter: orFilter },
-        (payload) => {
-          const row = payload.new;
-          if (!row) return;
-          const ch = row.channel || currentChannel;
-          if (!ch) return;
-          if (typeof onUpdateForChannel === 'function') {
-            onUpdateForChannel(ch, row);
-          }
-        }
-      )
-      .subscribe();
-    channelSubs.set(chName, sub);
-  } catch (_) {}
-}
-
 /** Update value cell(s) from stored text (plain or multi-value JSON). */
 function updateObjectRowText(objId, textValue) {
   if (objId == null) return;
@@ -5242,22 +5164,6 @@ function updateObjectRowText(objId, textValue) {
   ensureRowValueCellCount(row, maxCols, parts);
 }
 
-function findObjectRowTextEl(objId) {
-  if (objId == null) return null;
-  const idStr = String(objId);
-  const selMulti = '.obj[data-id="' + CSS.escape(idStr) + '"] .obj-value-cell';
-  const selLegacy = '.obj[data-id="' + CSS.escape(idStr) + '"] .obj-text';
-  for (let i = 0; i < views.length; i++) {
-    const v = views[i];
-    const inner = v && v.feedInner;
-    if (!inner) continue;
-    const el = inner.querySelector(selMulti);
-    if (el) return el;
-    const leg = inner.querySelector(selLegacy);
-    if (leg) return leg;
-  }
-  return null;
-}
 
 /** [start,end) offsets of each part inside joined `parts.join('\\n\\n')`. */
 function partOffsetsInJoinedText(parts) {
@@ -5946,9 +5852,6 @@ function setupPresence() {
 function getSyncInputPref() {
   return true;
 }
-function setSyncInputPref(on) {
-  // Sync is always on; ignore UI toggles.
-}
 
 /** Merge so both typists appear; deletions sync by taking newer when one is prefix of the other. localAt/remoteAt = ms. */
 function mergeInputText(local, remote, localAt, remoteAt) {
@@ -6545,16 +6448,6 @@ function applyFrameOrder(order) {
   });
 }
 
-function saveFrameOrder(order) {
-  const canonical = DEFAULT_FRAME_ORDER.slice();
-  try {
-    localStorage.setItem(FRAME_ORDER_KEY, JSON.stringify(canonical));
-  } catch (_) {}
-  flushPersonalWorkspacePersist();
-  if (layoutChannel && getLayoutSyncPref()) {
-    realtimeBroadcastSend(layoutChannel, 'layout', { frameOrder: canonical });
-  }
-}
 
 function setupLayoutChannel() {
   if (layoutChannel) { try { layoutChannel.unsubscribe(); } catch (_) {} layoutChannel = null; }
@@ -8947,19 +8840,6 @@ function sortObjectsByOrder(list, order) {
   return out.length ? out : list;
 }
 
-function renderInitialObjects(list) {
-  if (!Array.isArray(list) || list.length === 0) return;
-  hideEmpty();
-  const frag = document.createDocumentFragment();
-  for (const msg of list) {
-    const row = createObjectRow(msg, false);
-    if (row) frag.appendChild(row);
-  }
-  requestAnimationFrame(() => {
-    if (feedInner) feedInner.appendChild(frag);
-  });
-}
-
 function getPinnedIds(channel) {
   try {
     const raw = localStorage.getItem(PINNED_STATE_KEY);
@@ -10726,83 +10606,6 @@ async function refreshAuth() {
 }
 
 var explicitSignOut = false;
-function setupAuthListener() {
-  if (!sb || !sb.auth || typeof sb.auth.onAuthStateChange !== 'function') return;
-  sb.auth.onAuthStateChange(async (event, session) => {
-    if (suppressAutoAuth) {
-      return;
-    }
-    if (event === 'TOKEN_REFRESHED' && session && session.user && sb) {
-      try {
-        currentUser = session.user;
-      } catch (_) {}
-      setTimeout(function() {
-        if (!currentUser || !sb) return;
-        try {
-          subscribeViewRealtime();
-        } catch (e) {
-          console.error('subscribeViewRealtime after token refresh', e);
-        }
-      }, 200);
-    }
-    if (session && session.user) {
-    const prevUser = currentUser;
-      currentUser = session.user;
-      try { sessionStorage.setItem(AUTH_BACKUP_KEY, JSON.stringify(currentUser)); } catch (_) {}
-    updateAuthUI();
-    if (!prevUser && currentUser) {
-        try {
-      await syncChannelsFromServer();
-          try {
-            restoreLastChannel();
-          } catch (_) {}
-          await hydrateWorkspaceOpenViewsForSignedInUser();
-          try {
-            if (currentUser && sb) schedulePersonalWorkspacePersist();
-          } catch (_) {}
-          await reloadForUser();
-          setupDraftChannel();
-          setupLayoutChannel();
-          setupDndBroadcastChannel();
-        } catch (e) {
-          console.error(e);
-          renderTabs();
-          try { await loadObjects(); } catch (_) {}
-          if (feedInner && emptyEl && !emptyEl.parentNode) feedInner.appendChild(emptyEl);
-        }
-      }
-      return;
-    }
-    if (explicitSignOut) {
-      explicitSignOut = false;
-      try { sessionStorage.removeItem(AUTH_BACKUP_KEY); } catch (_) {}
-      return;
-    }
-    try {
-      const { data } = await sb.auth.getSession();
-      if (data?.session?.user) {
-        currentUser = data.session.user;
-        try { sessionStorage.setItem(AUTH_BACKUP_KEY, JSON.stringify(currentUser)); } catch (_) {}
-        updateAuthUI();
-        return;
-      }
-    } catch (_) {}
-  });
-
-  if (umAuthBtn) umAuthBtn.addEventListener('click', () => {
-    if (currentUser) {
-      signOut();
-    } else {
-      signIn();
-    }
-  });
-
-  if (umCopyIdBtn) umCopyIdBtn.addEventListener('click', copyUserId);
-
-  if (umNickSave && umNickname) {
-    umNickSave.addEventListener('click', saveNickname);
-  }
-}
 
 async function saveNickname() {
   if (!currentUser || !umNickname) return;
@@ -11949,37 +11752,6 @@ function applyManageBarOrder() {
   }
 }
 
-function saveManageBarOrder() {
-  var actions = document.getElementById('manage-actions');
-  if (!actions) return;
-  var ids = Array.from(actions.children)
-    .filter(function(n) { return n.getAttribute && n.getAttribute('data-bar-id'); })
-    .map(function(n) { return n.getAttribute('data-bar-id'); });
-  try { localStorage.setItem(MANAGE_BAR_ORDER_KEY, JSON.stringify(ids)); } catch (_) {}
-  flushPersonalWorkspacePersist();
-}
-
-function setupBarDndMode(on) {
-  var scroll = document.getElementById('manage-bar-scroll');
-  var actions = document.getElementById('manage-actions');
-  if (!scroll || !actions) return;
-  var buttons = Array.from(actions.querySelectorAll('[data-bar-id]'));
-  if (on) {
-    buttons.forEach(function(btn) {
-      btn.setAttribute('draggable', 'true');
-      btn.classList.remove('bar-dragging');
-    });
-    if (barDndIndicatorEl && barDndIndicatorEl.parentNode) barDndIndicatorEl.remove();
-    barDndIndicatorEl = null;
-    barDndDraggedEl = null;
-  } else {
-    buttons.forEach(function(btn) { btn.setAttribute('draggable', 'false'); });
-    if (barDndIndicatorEl && barDndIndicatorEl.parentNode) barDndIndicatorEl.remove();
-    barDndIndicatorEl = null;
-    barDndDraggedEl = null;
-  }
-}
-
 if (viewToggleBtn && viewMenu) {
   viewToggleBtn.addEventListener('click', e => {
     e.stopPropagation();
@@ -12282,46 +12054,6 @@ function animateObjectToTab(rowEl, tabEl, onDone) {
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       clone.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(0.25)';
-      clone.style.opacity = '0';
-    });
-  });
-  let done = false;
-  const finish = () => {
-    if (done) return;
-    done = true;
-    clone.remove();
-    if (typeof onDone === 'function') onDone();
-  };
-  clone.addEventListener('transitionend', finish);
-  setTimeout(finish, 500);
-}
-
-function animateObjectToView(rowEl, targetFeedEl, onDone) {
-  if (!rowEl || !targetFeedEl) {
-    if (typeof onDone === 'function') onDone();
-    return;
-  }
-  const from = rowEl.getBoundingClientRect();
-  const clone = rowEl.cloneNode(true);
-  clone.classList.add('obj-fly-clone');
-  clone.style.left = from.left + 'px';
-  clone.style.top = from.top + 'px';
-  clone.style.width = from.width + 'px';
-  clone.style.height = from.height + 'px';
-  clone.style.transform = 'translate(0,0) scale(1)';
-  clone.style.opacity = '1';
-  document.body.appendChild(clone);
-  rowEl.style.visibility = 'hidden';
-  const to = targetFeedEl.getBoundingClientRect();
-  const toCenterX = to.left + to.width / 2;
-  const toCenterY = to.top + to.height / 2;
-  const fromCenterX = from.left + from.width / 2;
-  const fromCenterY = from.top + from.height / 2;
-  const dx = toCenterX - fromCenterX;
-  const dy = toCenterY - fromCenterY;
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      clone.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(0.4)';
       clone.style.opacity = '0';
     });
   });
@@ -12757,12 +12489,6 @@ if (feedEl) {
 }
 bindMultiviewWheelScrollCapture();
 
-/* FLIP animation: smooth shift of rows when reordering during drag */
-function flipAnimateShift(feedInner, dragging, oldRects, rowsArray) {
-  // FLIP animation disabled to avoid extra ghost line at previous position.
-  // Keep function for API compatibility; no-op for now.
-}
-
 /* Single feed-level DnD: only the feed handles dragover/drop so drop always fires reliably */
 var feedDragoverRaf = null;
 var feedDragoverLast = null;
@@ -13160,35 +12886,6 @@ function scrollBottom() {
 
 /* ═══ UTILS ═══════════════════════════════════════════════ */
 
-// Pure helpers for view state (order, selection) – safe to reuse across controllers.
-function normalizeOrder(list, order) {
-  if (!Array.isArray(list) || !list.length) return [];
-  if (!Array.isArray(order) || !order.length) return list
-    .map(m => (m && typeof m.id !== 'undefined') ? Number(m.id) : null)
-    .filter(id => Number.isFinite(id));
-  const byId = new Set(list.map(m => (m && typeof m.id !== 'undefined') ? Number(m.id) : null).filter(id => Number.isFinite(id)));
-  const out = [];
-  order.forEach(id => {
-    id = Number(id);
-    if (Number.isFinite(id) && byId.has(id)) {
-      out.push(id);
-      byId.delete(id);
-    }
-  });
-  byId.forEach(id => out.push(id));
-  return out;
-}
-
-function toggleIdInSet(set, id, on) {
-  if (!set || !Number.isFinite(id)) return;
-  if (on === true) {
-    set.add(id);
-  } else if (on === false) {
-    set.delete(id);
-  } else {
-    if (set.has(id)) set.delete(id); else set.add(id);
-  }
-}
 var formatTimePartsCache = new Map();
 var formatTimePartsCacheMax = 200;
 function formatTimePartsForDisplay(iso) {
@@ -13224,13 +12921,6 @@ function escapeHtml(s) {
     .replace(/</g,'&lt;')
     .replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;');
-}
-
-function linkify(s) {
-  return s.replace(
-    /(https?:\/\/[^\s<>"']+)/g,
-    '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
-  );
 }
 
 function renderVisualOnlyHtml(input) {
@@ -13316,11 +13006,6 @@ function markLoaded() {
   } catch (_) {}
 }
 var loaderMinUntil = 0;
-function ensureLoaderMinDisplay() {
-  var w = loaderMinUntil - Date.now();
-  if (w > 0) return new Promise(function(r) { setTimeout(r, w); });
-  return Promise.resolve();
-}
 (function go() {
   loaderMinUntil = 0;
   var loadTimeout = setTimeout(markLoaded, 4000);
