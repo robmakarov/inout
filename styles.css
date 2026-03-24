@@ -55,7 +55,7 @@
   --safe-left: env(safe-area-inset-left, 0px);
   --inout-cbzone-w: 24px;
   --inout-time-w: 64px;
-  --inout-sender-w: 10ch;
+  --inout-sender-w: 64px;
 }
 
 /* Reusable animation keyframes (use with var(--anim-duration-*) and var(--anim-ease-*) for rules) */
@@ -1800,7 +1800,7 @@ body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell::b
   flex-direction:row;
   align-items:flex-start;
   gap:20px;
-  flex-wrap:wrap;
+  flex-wrap:nowrap;
   min-width:0;
 }
 .obj-content{
@@ -2123,12 +2123,13 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
 }
 
 .obj-sender{
-  flex:0 0 var(--inout-sender-w, 10ch);
-  max-width:var(--inout-sender-w, 10ch);
+  flex:0 0 var(--inout-sender-w, 64px);
+  min-width:var(--inout-sender-w, 64px);
+  max-width:var(--inout-sender-w, 64px);
   overflow:hidden;
   text-overflow:ellipsis;
-  justify-content:flex-end;
-  text-align:right;
+  justify-content:flex-start;
+  text-align:left;
 }
 
 .obj-time{

@@ -1460,7 +1460,7 @@ function syncInoutObjLeadingWidthVar() {
     var filterSlot = mbar.querySelector('.multi-value-filter-slot');
     var startW = start ? Math.ceil(start.getBoundingClientRect().width) : 0;
     var filterW = filterSlot ? Math.ceil(filterSlot.getBoundingClientRect().width) : 0;
-    var w = Math.max(rowW, startW, filterW);
+    var w = rowW > 0 ? rowW : Math.max(startW, filterW);
     var props = [inner, mbar];
     if (w > 0) {
       props.forEach(function(el) {
@@ -1503,6 +1503,7 @@ function makeObjColumnResizeHandle(kind, hostEl) {
       window.removeEventListener('pointerup', onUp, true);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
+      saveInoutLeftColumnWidthsLocal();
       if (canSyncPersonalWorkspaceNow()) schedulePersonalWorkspacePersist();
     }
     window.addEventListener('pointermove', onMove, true);
@@ -1563,6 +1564,7 @@ function syncInoutMultiValueFilterMenuAria() {
 
 var inoutColScrollSyncing = false;
 var inoutLeftColumnWidths = { cb: null, time: null, sender: null };
+var INOUT_LEFT_COL_WIDTHS_KEY = 'inout_left_column_widths_v1';
 
 function getManualValueColumnWidths() {
   if (!window.InoutMultiValueLayout || !window.InoutMultiValueLayout.getManualColumnWidths) return [];
@@ -1590,6 +1592,29 @@ function applyInoutLeftColumnWidthsVars() {
   });
 }
 
+function saveInoutLeftColumnWidthsLocal() {
+  try {
+    localStorage.setItem(INOUT_LEFT_COL_WIDTHS_KEY, JSON.stringify({
+      cb: inoutLeftColumnWidths.cb,
+      time: inoutLeftColumnWidths.time,
+      sender: inoutLeftColumnWidths.sender,
+    }));
+  } catch (_) {}
+}
+
+function loadInoutLeftColumnWidthsLocal() {
+  try {
+    var raw = localStorage.getItem(INOUT_LEFT_COL_WIDTHS_KEY);
+    if (!raw) return;
+    var x = JSON.parse(raw);
+    if (!x || typeof x !== 'object') return;
+    inoutLeftColumnWidths.cb = Number.isFinite(Number(x.cb)) ? Number(x.cb) : null;
+    inoutLeftColumnWidths.time = Number.isFinite(Number(x.time)) ? Number(x.time) : null;
+    inoutLeftColumnWidths.sender = Number.isFinite(Number(x.sender)) ? Number(x.sender) : null;
+    applyInoutLeftColumnWidthsVars();
+  } catch (_) {}
+}
+
 function captureInoutColumnWidthsForWorkspace() {
   return {
     value: getManualValueColumnWidths(),
@@ -1612,9 +1637,12 @@ function applyInoutColumnWidthsFromWorkspace(cfg) {
     inoutLeftColumnWidths.time = Number.isFinite(Number(left.time)) ? Number(left.time) : null;
     inoutLeftColumnWidths.sender = Number.isFinite(Number(left.sender)) ? Number(left.sender) : null;
     applyInoutLeftColumnWidthsVars();
+    saveInoutLeftColumnWidthsLocal();
     syncInoutObjLeadingWidthVar();
   } catch (_) {}
 }
+
+loadInoutLeftColumnWidthsLocal();
 
 function inoutMultiValueLayoutCtx() {
   return {
