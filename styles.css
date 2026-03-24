@@ -2373,7 +2373,7 @@ body.select-mode .obj-checkbox-zone{
   transition:opacity .15s ease;
   flex-direction:column;
   align-items:flex-end;
-  z-index:30;
+  z-index:120;
 }
 .obj:hover .obj-actions,
 .obj.obj-drag-over .obj-actions,
@@ -2393,6 +2393,8 @@ body.select-mode .obj-checkbox-zone{
 .obj-actions-trigger{
   pointer-events:auto;
   touch-action:manipulation;
+  position:relative;
+  z-index:121;
   border:1px solid var(--line2);
   background:var(--bg);
   color:var(--soft);
@@ -2425,7 +2427,7 @@ body.select-mode .obj-checkbox-zone{
   min-width:88px;
   display:none;
   flex-direction:column;
-  z-index:60;
+  z-index:122;
 }
 .obj-actions-open .obj-actions-dropdown{
   display:flex;

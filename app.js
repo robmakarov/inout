@@ -2021,6 +2021,7 @@ let viewNames      = ['main'];
 const VIEW_DISPLAY_NAMES_KEY = 'inout_view_display_names_v1';
 let viewDisplayNames = {};
 const VIEWS_KEY           = 'inout_views_v1';
+const VIEWS_ORDER_REV_KEY = 'inout_views_order_rev_v1';
 const LEFT_VIEWS_KEY      = 'inout_left_views_v1';
 const LEFT_CHANNELS_KEY   = LEFT_VIEWS_KEY; /* alias: left-rail hidden feeds */
 const CURRENT_VIEW_KEY    = 'inout_current_view_v1';
@@ -7874,8 +7875,6 @@ function createObjectRow(obj, isNew, options) {
   }, { passive: true });
   var objActionsLastTouchToggleAt = 0;
   function toggleObjActionsDropdown(e) {
-    var nowAt = Date.now();
-    if (e && e.type === 'click' && nowAt - objActionsLastTouchToggleAt < 350) return;
     e.stopPropagation();
     const isOpen = actions.classList.toggle('obj-actions-open');
     trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
@@ -8977,6 +8976,7 @@ function saveChannelsList() {
   try {
     const toSave = viewNames.filter(ch => ch !== 'main');
     localStorage.setItem(CHANNELS_KEY, JSON.stringify(toSave));
+    localStorage.setItem(VIEWS_ORDER_REV_KEY, String(Date.now()));
   } catch (_) {}
   schedulePersonalWorkspacePersist();
 }
@@ -9161,6 +9161,12 @@ function refreshWorkspaceChannelUi() {
 function applyChannelStripOrderFromCfg(cfg) {
   if (!Array.isArray(cfg && cfg.channelStripOrder) || cfg.channelStripOrder.length === 0) return;
   try {
+    var cfgRev = Number(cfg && cfg._wsRev) || 0;
+    var localRev = 0;
+    try {
+      localRev = Number(localStorage.getItem(VIEWS_ORDER_REV_KEY) || 0) || 0;
+    } catch (_) {}
+    if (localRev > cfgRev) return;
     var strip = cfg.channelStripOrder
       .map(function(x) { return String(x || '').trim(); })
       .filter(Boolean);
