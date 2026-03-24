@@ -1381,6 +1381,42 @@ function syncInoutObjLeadingWidthVar() {
   } catch (_) {}
 }
 
+function makeObjColumnResizeHandle(kind, hostEl) {
+  if (!hostEl) return;
+  var h = document.createElement('span');
+  h.className = 'obj-col-resize-handle';
+  h.setAttribute('data-resize-kind', kind);
+  h.setAttribute('aria-hidden', 'true');
+  hostEl.style.position = hostEl.style.position || 'relative';
+  hostEl.appendChild(h);
+  h.addEventListener('pointerdown', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    var startX = Number(e.clientX) || 0;
+    var startW = Math.max(24, Math.round(hostEl.getBoundingClientRect().width || 0));
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    function onMove(ev) {
+      var dx = (Number(ev.clientX) || startX) - startX;
+      var next = Math.max(24, Math.round(startW + dx));
+      if (kind === 'cb') inoutLeftColumnWidths.cb = next;
+      else if (kind === 'time') inoutLeftColumnWidths.time = next;
+      else if (kind === 'sender') inoutLeftColumnWidths.sender = next;
+      applyInoutLeftColumnWidthsVars();
+      syncInoutObjLeadingWidthVar();
+    }
+    function onUp() {
+      window.removeEventListener('pointermove', onMove, true);
+      window.removeEventListener('pointerup', onUp, true);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      if (canSyncPersonalWorkspaceNow()) schedulePersonalWorkspacePersist();
+    }
+    window.addEventListener('pointermove', onMove, true);
+    window.addEventListener('pointerup', onUp, true);
+  });
+}
+
 function countNonEmptyValuePartsInRow(row) {
   if (!row) return 0;
   var parts = partsFromRowDom(row);
@@ -1433,6 +1469,59 @@ function syncInoutMultiValueFilterMenuAria() {
 }
 
 var inoutColScrollSyncing = false;
+var inoutLeftColumnWidths = { cb: null, time: null, sender: null };
+
+function getManualValueColumnWidths() {
+  if (!window.InoutMultiValueLayout || !window.InoutMultiValueLayout.getManualColumnWidths) return [];
+  try { return window.InoutMultiValueLayout.getManualColumnWidths(); } catch (_) { return []; }
+}
+
+function setManualValueColumnWidths(widths) {
+  if (!window.InoutMultiValueLayout || !window.InoutMultiValueLayout.setManualColumnWidths) return;
+  try { window.InoutMultiValueLayout.setManualColumnWidths(widths, inoutMultiValueLayoutCtx()); } catch (_) {}
+}
+
+function applyInoutLeftColumnWidthsVars() {
+  var inner = document.getElementById('feed-inner');
+  if (!inner) return;
+  var map = [
+    ['--inout-cbzone-w', inoutLeftColumnWidths.cb],
+    ['--inout-time-w', inoutLeftColumnWidths.time],
+    ['--inout-sender-w', inoutLeftColumnWidths.sender],
+  ];
+  map.forEach(function(pair) {
+    var key = pair[0];
+    var val = pair[1];
+    if (val == null || !Number.isFinite(Number(val))) inner.style.removeProperty(key);
+    else inner.style.setProperty(key, Math.max(24, Math.round(Number(val))) + 'px');
+  });
+}
+
+function captureInoutColumnWidthsForWorkspace() {
+  return {
+    value: getManualValueColumnWidths(),
+    left: {
+      cb: inoutLeftColumnWidths.cb,
+      time: inoutLeftColumnWidths.time,
+      sender: inoutLeftColumnWidths.sender,
+    },
+  };
+}
+
+function applyInoutColumnWidthsFromWorkspace(cfg) {
+  if (!cfg || typeof cfg !== 'object') return;
+  try {
+    if (Array.isArray(cfg.value)) setManualValueColumnWidths(cfg.value);
+  } catch (_) {}
+  try {
+    var left = cfg.left && typeof cfg.left === 'object' ? cfg.left : {};
+    inoutLeftColumnWidths.cb = Number.isFinite(Number(left.cb)) ? Number(left.cb) : null;
+    inoutLeftColumnWidths.time = Number.isFinite(Number(left.time)) ? Number(left.time) : null;
+    inoutLeftColumnWidths.sender = Number.isFinite(Number(left.sender)) ? Number(left.sender) : null;
+    applyInoutLeftColumnWidthsVars();
+    syncInoutObjLeadingWidthVar();
+  } catch (_) {}
+}
 
 function inoutMultiValueLayoutCtx() {
   return {
@@ -1440,6 +1529,9 @@ function inoutMultiValueLayoutCtx() {
     bindVerticalWheelToHorizontalScroll: bindVerticalWheelToHorizontalScroll,
     getColumnHeaderLabelsForFeed: getColumnHeaderLabelsForFeed,
     valueColumnHeaderLabel: valueColumnHeaderLabel,
+    onColumnWidthsChanged: function() {
+      if (canSyncPersonalWorkspaceNow()) schedulePersonalWorkspacePersist();
+    },
     state: {
       getInoutColScrollSyncing: function() { return inoutColScrollSyncing; },
       setInoutColScrollSyncing: function(v) { inoutColScrollSyncing = !!v; },
@@ -7764,6 +7856,7 @@ function createObjectRow(obj, isNew, options) {
 
   const wantAuthor = !!fieldPrefs ? !!fieldPrefs.showAuthor : true;
   sender.style.setProperty('display', wantAuthor ? 'block' : 'none', 'important');
+  makeObjColumnResizeHandle('sender', sender);
 
   const selectWrap = document.createElement('div');
   selectWrap.className = 'obj-select-wrap';
@@ -7782,6 +7875,7 @@ function createObjectRow(obj, isNew, options) {
     updateSelectionUI();
   });
   selectWrap.appendChild(selectBox);
+  makeObjColumnResizeHandle('cb', selectWrap);
   const checkboxZone = document.createElement('div');
   checkboxZone.className = 'obj-checkbox-zone';
   const zoneLeft = document.createElement('div');
@@ -8069,6 +8163,7 @@ function createObjectRow(obj, isNew, options) {
     if (!fieldPrefs.showTime) time.style.setProperty('display', 'none', 'important');
     else time.style.removeProperty('display');
   }
+  makeObjColumnResizeHandle('time', time);
 
   var valueParts = parseObjectTextToParts(obj.text);
   while (valueParts.length < valueColCount) valueParts.push('');
@@ -8763,6 +8858,10 @@ function gatherPersonalWorkspaceStateForSave() {
       if (Array.isArray(parsed)) manageBarOrder = parsed;
     }
   } catch (_) {}
+  var columnWidths = null;
+  try {
+    columnWidths = captureInoutColumnWidthsForWorkspace();
+  } catch (_) {}
   /* Feed scroll stays on this device only (SCROLL_STATE_KEY). Omitting feedScrollByView from server
    * workspace prevents one tab’s refresh from pushing scroll onto another device. */
   let channelStripOrder = [];
@@ -8778,6 +8877,7 @@ function gatherPersonalWorkspaceStateForSave() {
     viewDisplayNames: viewDisplayNamesCopy,
     leftChannelIds: leftChannelIds,
     manageBarOrder: manageBarOrder,
+    columnWidths: columnWidths && typeof columnWidths === 'object' ? columnWidths : null,
     focusedChannel: String(currentView || currentChannel || 'main'),
     channelStripOrder: channelStripOrder,
     uiChrome: gatherUiChromeForWorkspace(),
@@ -8846,6 +8946,11 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
       applyChannelStripOrderFromCfg(cfg);
       await applyFocusedChannelFromCfg(cfg, skipApplyFocusedChannel, 'apply focusedChannel (merge)');
       /* Single main feed — no split panes from workspace merge. */
+      if (cfg.columnWidths && typeof cfg.columnWidths === 'object') {
+        try {
+          applyInoutColumnWidthsFromWorkspace(cfg.columnWidths);
+        } catch (_) {}
+      }
       if (cfg.uiChrome && typeof cfg.uiChrome === 'object') {
         applyWorkspaceUiChrome(cfg.uiChrome);
       }
@@ -8895,6 +9000,11 @@ async function applyPersonalWorkspaceStateFromServer(cfg, opts) {
     try {
       localStorage.setItem(MANAGE_BAR_ORDER_KEY, JSON.stringify(cfg.manageBarOrder));
       applyManageBarOrder();
+    } catch (_) {}
+  }
+  if (cfg.columnWidths && typeof cfg.columnWidths === 'object') {
+    try {
+      applyInoutColumnWidthsFromWorkspace(cfg.columnWidths);
     } catch (_) {}
   }
   if (cfg.uiChrome && typeof cfg.uiChrome === 'object') {
