@@ -2029,6 +2029,21 @@ function syncInoutMultiValueFilterMenuAria() {
 
 var inoutColScrollSyncing = false;
 
+function inoutMultiValueLayoutCtx() {
+  return {
+    feedInner: (typeof feedInner !== 'undefined' ? feedInner : null),
+    bindVerticalWheelToHorizontalScroll: bindVerticalWheelToHorizontalScroll,
+    getColumnHeaderLabelsForFeed: getColumnHeaderLabelsForFeed,
+    valueColumnHeaderLabel: valueColumnHeaderLabel,
+    state: {
+      getInoutColScrollSyncing: function() { return inoutColScrollSyncing; },
+      setInoutColScrollSyncing: function(v) { inoutColScrollSyncing = !!v; },
+      getInoutMultiValueColumnFilterIndex: function() { return inoutMultiValueColumnFilterIndex; },
+      setInoutMultiValueColumnFilterIndex: function(v) { inoutMultiValueColumnFilterIndex = v; },
+    },
+  };
+}
+
 function bindVerticalWheelToHorizontalScroll(el) {
   if (!window.InoutScroll || !window.InoutScroll.bindVerticalWheelToHorizontalScroll) return;
   window.InoutScroll.bindVerticalWheelToHorizontalScroll(el, {
@@ -2044,143 +2059,38 @@ function bindVerticalWheelToHorizontalScroll(el) {
 }
 
 function syncValueWrapsToHeaderScroll(scrollLeft, sourceWrap) {
-  if (typeof feedInner === 'undefined' || !feedInner) return;
-  var rows = feedInner.querySelectorAll('.obj .obj-values-wrap');
-  rows.forEach(function(w) {
-    if (!w || w === sourceWrap) return;
-    if (Math.abs((w.scrollLeft || 0) - scrollLeft) < 1) return;
-    w.scrollLeft = scrollLeft;
-  });
+  if (!window.InoutMultiValueLayout || !window.InoutMultiValueLayout.syncValueWrapsToHeaderScroll) return;
+  window.InoutMultiValueLayout.syncValueWrapsToHeaderScroll(scrollLeft, sourceWrap, inoutMultiValueLayoutCtx());
 }
 
 function syncHeaderScrollToValueWrap(scrollLeft) {
-  var colWrap = document.getElementById('multi-value-col-labels');
-  if (!colWrap) return;
-  if (Math.abs((colWrap.scrollLeft || 0) - scrollLeft) < 1) return;
-  colWrap.scrollLeft = scrollLeft;
+  if (!window.InoutMultiValueLayout || !window.InoutMultiValueLayout.syncHeaderScrollToValueWrap) return;
+  window.InoutMultiValueLayout.syncHeaderScrollToValueWrap(scrollLeft);
 }
 
 function bindValueWrapScrollSync(wrap) {
-  if (!wrap || wrap.dataset.inoutColSyncBound === '1') return;
-  wrap.dataset.inoutColSyncBound = '1';
-  bindVerticalWheelToHorizontalScroll(wrap);
-  wrap.addEventListener('scroll', function() {
-    if (inoutColScrollSyncing) return;
-    inoutColScrollSyncing = true;
-    var left = wrap.scrollLeft || 0;
-    syncHeaderScrollToValueWrap(left);
-    syncValueWrapsToHeaderScroll(left, wrap);
-    inoutColScrollSyncing = false;
-  }, { passive: true });
+  if (!window.InoutMultiValueLayout || !window.InoutMultiValueLayout.bindValueWrapScrollSync) return;
+  window.InoutMultiValueLayout.bindValueWrapScrollSync(wrap, inoutMultiValueLayoutCtx());
 }
 
 function syncHeaderScrollFromPrimaryFeed() {
-  if (typeof feedInner === 'undefined' || !feedInner) return;
-  var firstWrap = feedInner.querySelector('.obj .obj-values-wrap');
-  if (!firstWrap) {
-    syncHeaderScrollToValueWrap(0);
-    return;
-  }
-  bindValueWrapScrollSync(firstWrap);
-  syncHeaderScrollToValueWrap(firstWrap.scrollLeft || 0);
+  if (!window.InoutMultiValueLayout || !window.InoutMultiValueLayout.syncHeaderScrollFromPrimaryFeed) return;
+  window.InoutMultiValueLayout.syncHeaderScrollFromPrimaryFeed(inoutMultiValueLayoutCtx());
 }
 
 function syncManageBarLabelButtonWidthsFromFeed() {
-  var labelsWrap = document.getElementById('multi-value-col-labels');
-  if (!labelsWrap || typeof feedInner === 'undefined' || !feedInner) return;
-  var btns = labelsWrap.querySelectorAll('.multi-value-col-label-btn');
-  if (!btns.length) return;
-  var wraps = Array.from(feedInner.querySelectorAll('.obj[data-id] .obj-values-wrap'));
-  if (!wraps.length) {
-    btns.forEach(function(btn) {
-      btn.style.removeProperty('flex-basis');
-      btn.style.removeProperty('min-width');
-      btn.style.removeProperty('max-width');
-    });
-    return;
-  }
-  var colCount = btns.length;
-  var widths = new Array(colCount).fill(1);
-  wraps.forEach(function(wrap) {
-    var cells = wrap.querySelectorAll(':scope > .obj-value-cell');
-    for (var i = 0; i < colCount; i++) {
-      var cell = cells[i];
-      if (!cell) continue;
-      var cw = Math.max(1, Math.ceil(cell.getBoundingClientRect().width));
-      if (cw > widths[i]) widths[i] = cw;
-    }
-  });
-  var cs = null;
-  try { cs = window.getComputedStyle(labelsWrap); } catch (_) {}
-  var gapPx = 0;
-  if (cs) {
-    var g = parseFloat(cs.columnGap || cs.gap || '0');
-    if (Number.isFinite(g)) gapPx = Math.max(0, g);
-  }
-  var total = widths.reduce(function(a, b) { return a + b; }, 0) + Math.max(0, colCount - 1) * gapPx;
-  var avail = Math.max(0, Math.floor(labelsWrap.clientWidth || 0));
-  if (avail > total && colCount > 0) {
-    var extra = avail - total;
-    var add = extra / colCount;
-    for (var j = 0; j < colCount; j++) widths[j] += add;
-  }
-  wraps.forEach(function(wrap) {
-    var cells = wrap.querySelectorAll(':scope > .obj-value-cell');
-    for (var i = 0; i < colCount; i++) {
-      var cell = cells[i];
-      if (!cell) continue;
-      var w = Math.max(1, Math.round(widths[i]));
-      cell.style.flexBasis = w + 'px';
-      cell.style.minWidth = w + 'px';
-      cell.style.maxWidth = w + 'px';
-    }
-  });
-  btns.forEach(function(btn, i) {
-    var w = Math.max(1, Math.round(widths[i] || 1));
-    btn.style.flexBasis = w + 'px';
-    btn.style.minWidth = w + 'px';
-    btn.style.maxWidth = w + 'px';
-  });
+  if (!window.InoutMultiValueLayout || !window.InoutMultiValueLayout.syncManageBarLabelButtonWidthsFromFeed) return;
+  window.InoutMultiValueLayout.syncManageBarLabelButtonWidthsFromFeed(inoutMultiValueLayoutCtx());
 }
 
 function rebuildMultiValueColumnLabelButtons() {
-  var wrap = document.getElementById('multi-value-col-labels');
-  if (!wrap || typeof feedInner === 'undefined' || !feedInner) return;
-  var n = parseInt(feedInner.dataset.inoutValueCols, 10) || 1;
-  if (inoutMultiValueColumnFilterIndex != null && inoutMultiValueColumnFilterIndex >= n)
-    inoutMultiValueColumnFilterIndex = null;
-  wrap.replaceChildren();
-  if (n < 2) return;
-  var headerLabs = getColumnHeaderLabelsForFeed(feedInner);
-  for (var i = 0; i < n; i++) {
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'manage-btn multi-value-col-label-btn multi-value-col-header-btn';
-    btn.setAttribute('data-value-index', String(i));
-    var lab = headerLabs.length > i && String(headerLabs[i] || '').trim() ? headerLabs[i] : valueColumnHeaderLabel(i);
-    btn.textContent = lab;
-    btn.setAttribute('aria-pressed', 'false');
-    btn.setAttribute(
-      'title',
-      'Filter by “' + lab + '”. Double-click to rename. Click again to clear filter.'
-    );
-    btn.setAttribute('aria-label', 'Column header: ' + lab + '. Click to filter, double-click to rename.');
-    wrap.appendChild(btn);
-  }
-  updateMultiValueColumnLabelButtonsActive();
-  syncManageBarLabelButtonWidthsFromFeed();
+  if (!window.InoutMultiValueLayout || !window.InoutMultiValueLayout.rebuildMultiValueColumnLabelButtons) return;
+  window.InoutMultiValueLayout.rebuildMultiValueColumnLabelButtons(inoutMultiValueLayoutCtx());
 }
 
 function updateMultiValueColumnLabelButtonsActive() {
-  var wrap = document.getElementById('multi-value-col-labels');
-  if (!wrap) return;
-  var idx = inoutMultiValueColumnFilterIndex;
-  wrap.querySelectorAll('.multi-value-col-label-btn').forEach(function(b) {
-    var i = parseInt(b.getAttribute('data-value-index'), 10);
-    var on = Number.isFinite(i) && i === idx;
-    b.classList.toggle('multi-value-col-label-btn-active', on);
-    b.setAttribute('aria-pressed', on ? 'true' : 'false');
-  });
+  if (!window.InoutMultiValueLayout || !window.InoutMultiValueLayout.updateMultiValueColumnLabelButtonsActive) return;
+  window.InoutMultiValueLayout.updateMultiValueColumnLabelButtonsActive(inoutMultiValueLayoutCtx());
 }
 
 function applyInoutMultiValueFilter() {
@@ -4503,23 +4413,13 @@ function renderMultiValueObjectEditInputs(joinedText, focusIndex) {
 }
 
 function updateTabBadge(ch) {
-  if (!tabsEl) return;
-  const btn = tabsEl.querySelector('.tab[data-channel="' + CSS.escape(ch) + '"]');
-  if (!btn) return;
-  const badge = btn.querySelector('.tab-badge');
-  if (!badge) return;
-  const n = unreadCounts.get(ch) || 0;
-  if (n > 0) {
-    badge.textContent = String(n);
-    badge.classList.add('show');
-  } else {
-    badge.textContent = '';
-    badge.classList.remove('show');
-  }
+  if (!window.InoutTabsUi || !window.InoutTabsUi.updateTabBadge) return;
+  window.InoutTabsUi.updateTabBadge(ch, inoutTabsUiCtx());
 }
 
 function updateAllTabBadges() {
-  viewNames.forEach(ch => updateTabBadge(ch));
+  if (!window.InoutTabsUi || !window.InoutTabsUi.updateAllTabBadges) return;
+  window.InoutTabsUi.updateAllTabBadges(inoutTabsUiCtx());
 }
 
 function loadViewDisplayNames() {
@@ -9363,123 +9263,71 @@ function setupWindowsRevealEffects() {
   }, { passive: true });
 }
 
+function inoutTabsUiCtx() {
+  return {
+    tabsEl: tabsEl,
+    feedInner: feedInner,
+    unreadCounts: unreadCounts,
+    sharedChannels: sharedChannels,
+    inputSlots: inputSlots,
+    viewNames: function() { return viewNames; },
+    currentView: function() { return currentView; },
+    currentChannel: function() { return currentChannel; },
+    primarySlotAutoTarget: function() { return primarySlotAutoTarget; },
+    inoutHydratingWorkspace: function() { return inoutHydratingWorkspace; },
+    getViewDisplayName: getViewDisplayName,
+    deleteChannel: deleteChannel,
+    renameView: renameView,
+    clearPendingViewSwitchClick: clearPendingViewSwitchClick,
+    pendingViewSwitchChannel: function() { return pendingViewSwitchChannel; },
+    setPendingViewSwitchChannel: function(v) { pendingViewSwitchChannel = v; },
+    setPendingViewSwitchTimer: function(v) { pendingViewSwitchTimer = v; },
+    switchChannel: switchChannel,
+    isMobileOrTouchDevice: (typeof isMobileOrTouchDevice === 'function' ? isMobileOrTouchDevice : function() { return false; }),
+    setDragDropHandled: function(v) { dragDropHandled = !!v; },
+    animateObjectToTab: animateObjectToTab,
+    moveSingleObject: moveSingleObject,
+    openChannelModal: openChannelModal,
+    refreshMoveTargets: refreshMoveTargets,
+    syncComposerTargetSelects: syncComposerTargetSelects,
+    bindVerticalWheelToHorizontalScroll: bindVerticalWheelToHorizontalScroll,
+    wheelState: {
+      interactionId: function() { return inoutWheelInteractionId; },
+      interactionInc: function() { inoutWheelInteractionId++; },
+      lastWheelAt: function() { return inoutLastWheelAt; },
+      setLastWheelAt: function(v) { inoutLastWheelAt = v; },
+      gapMs: function() { return INOUT_WHEEL_INTERACTION_GAP_MS; },
+    },
+    nearestVerticalScrollableAncestor: nearestVerticalScrollableAncestor,
+    advanceScrollEdgeThenWrap: advanceScrollEdgeThenWrap,
+    routeWheelDeltaToPrimaryView: routeWheelDeltaToPrimaryView,
+    clearManageBarDropdownPosition: (typeof clearManageBarDropdownPosition === 'function' ? clearManageBarDropdownPosition : null),
+    closeLogDropup: (typeof closeLogDropup === 'function' ? closeLogDropup : null),
+    notifyWorkspaceChromeChanged: (typeof notifyWorkspaceChromeChanged === 'function' ? notifyWorkspaceChromeChanged : null),
+    closeInoutMultiValueFilterMenu: closeInoutMultiValueFilterMenu,
+    positionManageBarDropdownClamp: (typeof positionManageBarDropdownClamp === 'function' ? positionManageBarDropdownClamp : null),
+    syncInoutManageRailWidthVar: syncInoutManageRailWidthVar,
+    syncInoutObjLeadingWidthVar: syncInoutObjLeadingWidthVar,
+    setupMultiValueChromeBar: setupMultiValueChromeBar,
+    updateMultiValueChromeBar: updateMultiValueChromeBar,
+    repositionOpenDropdownsToViewport: (typeof repositionOpenDropdownsToViewport === 'function' ? repositionOpenDropdownsToViewport : null),
+  };
+}
+
 function setupTabs() {
-  renderTabs();
-  if (tabsEl) bindVerticalWheelToHorizontalScroll(tabsEl);
-  if (!document.body.dataset.inoutGlobalWheelFallbackBound) {
-    document.body.dataset.inoutGlobalWheelFallbackBound = '1';
-    document.addEventListener('wheel', function(e) {
-      if (Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
-      var dy = Number(e.deltaY) || 0;
-      if (Math.abs(dy) < 0.01) return;
-      var targetEl = e.target && e.target.nodeType === 1
-        ? e.target
-        : (e.target && e.target.parentElement ? e.target.parentElement : null);
-      // Let dedicated horizontal-wheel zones handle wheel fully (avoid double handling/jumps).
-      var horizZone = targetEl && targetEl.closest
-        ? targetEl.closest('[data-inout-wheel-horiz-bound="1"]')
-        : null;
-      if (horizZone) return;
-      var nowAt = Date.now();
-      if (nowAt - inoutLastWheelAt > INOUT_WHEEL_INTERACTION_GAP_MS) inoutWheelInteractionId++;
-      inoutLastWheelAt = nowAt;
-      var interactionId = inoutWheelInteractionId;
-      var verticalTarget = nearestVerticalScrollableAncestor(targetEl || e.target);
-      if (verticalTarget) {
-        if (advanceScrollEdgeThenWrap(verticalTarget, 'y', dy, interactionId)) e.preventDefault();
-        return;
-      }
-      if (routeWheelDeltaToPrimaryView(dy, interactionId)) e.preventDefault();
-    }, { passive: false, capture: true });
-  }
-  const manageBar = document.getElementById('manage-bar');
-  const manageBarTrigger = document.getElementById('manage-bar-trigger');
-  if (manageBar && manageBarTrigger) {
-    function closeManageBarDropdown() {
-      if (typeof clearManageBarDropdownPosition === 'function') clearManageBarDropdownPosition();
-      manageBar.classList.remove('manage-bar-open');
-      manageBarTrigger.setAttribute('aria-expanded', 'false');
-      document.removeEventListener('click', closeManageBarDropdown);
-      if (typeof closeLogDropup === 'function') closeLogDropup();
-      if (typeof notifyWorkspaceChromeChanged === 'function') notifyWorkspaceChromeChanged();
-    }
-    manageBarTrigger.addEventListener('click', e => {
-      e.stopPropagation();
-      closeInoutMultiValueFilterMenu();
-      const isOpen = manageBar.classList.toggle('manage-bar-open');
-      manageBarTrigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-      if (isOpen) {
-        document.addEventListener('click', closeManageBarDropdown);
-        if (typeof positionManageBarDropdownClamp === 'function') positionManageBarDropdownClamp();
-      } else {
-        document.removeEventListener('click', closeManageBarDropdown);
-        if (typeof clearManageBarDropdownPosition === 'function') clearManageBarDropdownPosition();
-      }
-      if (typeof notifyWorkspaceChromeChanged === 'function') notifyWorkspaceChromeChanged();
-    });
-  }
-  try {
-    var rs = document.querySelector('.manage-bar-start');
-    if (rs && typeof ResizeObserver !== 'undefined') {
-      var ro = new ResizeObserver(function() {
-        syncInoutManageRailWidthVar();
-      });
-      ro.observe(rs);
-    }
-    var fi = document.getElementById('feed-inner');
-    if (fi && typeof ResizeObserver !== 'undefined') {
-      var roFeed = new ResizeObserver(function() {
-        if (typeof syncInoutObjLeadingWidthVar === 'function') syncInoutObjLeadingWidthVar();
-      });
-      roFeed.observe(fi);
-    }
-  } catch (_) {}
-  syncInoutManageRailWidthVar();
-  try {
-    setupMultiValueChromeBar();
-    if (typeof updateMultiValueChromeBar === 'function') updateMultiValueChromeBar();
-  } catch (_) {}
-  var dropdownResizeTimer = 0;
-  function onDropdownViewportResize() {
-    clearTimeout(dropdownResizeTimer);
-    dropdownResizeTimer = setTimeout(function() {
-      if (typeof repositionOpenDropdownsToViewport === 'function') repositionOpenDropdownsToViewport();
-    }, 50);
-  }
-  window.addEventListener('resize', onDropdownViewportResize);
-  if (window.visualViewport) window.visualViewport.addEventListener('resize', onDropdownViewportResize);
+  if (!window.InoutTabsUi || !window.InoutTabsUi.setupTabs) return;
+  window.InoutTabsUi.setupTabs(inoutTabsUiCtx());
 }
 
 function updateTabsUI() {
-  if (!tabsEl) return;
-  const buttons = tabsEl.querySelectorAll('.tab[data-channel]');
-  buttons.forEach(btn => {
-    const ch = btn.getAttribute('data-channel') || 'main';
-    if (ch === currentView) {
-      btn.classList.add('tab-active');
-    } else {
-      btn.classList.remove('tab-active');
-    }
-  });
+  if (!window.InoutTabsUi || !window.InoutTabsUi.updateTabsUI) return;
+  window.InoutTabsUi.updateTabsUI(inoutTabsUiCtx());
 }
 
 /** Indeterminate bar on the active tab while channel data loads (local switches only). */
 function setTabChannelLoading(channelKey, on) {
-  if (!tabsEl) return;
-  var want = channelKey != null ? String(channelKey) : '';
-  tabsEl.querySelectorAll('.tab.tab-channel-loading').forEach(function(b) {
-    b.classList.remove('tab-channel-loading');
-  });
-  if (!on || !want) return;
-  var list = tabsEl.querySelectorAll('.tab[data-channel]');
-  for (var i = 0; i < list.length; i++) {
-    var btn = list[i];
-    var ch = btn.getAttribute('data-channel') || 'main';
-    if (ch === want) {
-      btn.classList.add('tab-channel-loading');
-      break;
-    }
-  }
+  if (!window.InoutTabsUi || !window.InoutTabsUi.setTabChannelLoading) return;
+  window.InoutTabsUi.setTabChannelLoading(channelKey, on, inoutTabsUiCtx());
 }
 
 var leftChannels = new Set();
@@ -10172,132 +10020,8 @@ function applyObjectOrderToDOM() {
 }
 
 function renderTabs() {
-  if (!tabsEl) return;
-  tabsEl.innerHTML = '';
-
-  viewNames.forEach(ch => {
-    const btn = document.createElement('button');
-    btn.className = 'tab';
-    btn.setAttribute('data-channel', ch);
-    const label = document.createElement('span');
-    label.className = 'tab-label';
-    label.textContent = getViewDisplayName(ch);
-    btn.appendChild(label);
-
-    if (sharedChannels.has(ch) && ch !== 'main') {
-      const shared = document.createElement('span');
-      shared.className = 'tab-shared';
-      shared.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M16 11c1.657 0 3-1.567 3-3.5S17.657 4 16 4s-3 1.567-3 3.5S14.343 11 16 11Z" stroke="currentColor" stroke-width="1.6"/><path d="M8 11c1.657 0 3-1.567 3-3.5S9.657 4 8 4 5 5.567 5 7.5 6.343 11 8 11Z" stroke="currentColor" stroke-width="1.6"/><path d="M4 20c0-3.314 2.686-6 6-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M14 14c3.314 0 6 2.686 6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M10 14c1.7 0 3.24.71 4.33 1.85" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
-      btn.appendChild(shared);
-    }
-
-    const badge = document.createElement('span');
-    badge.className = 'tab-badge';
-    btn.appendChild(badge);
-
-    if (ch !== 'main') {
-      const close = document.createElement('span');
-      close.className = 'tab-close';
-      close.textContent = '×';
-      close.addEventListener('click', e => {
-        e.stopPropagation();
-        deleteChannel(ch);
-      });
-      btn.appendChild(close);
-    }
-
-    btn.addEventListener('dblclick', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      clearPendingViewSwitchClick();
-      if (!inoutHydratingWorkspace) setTabChannelLoading(ch, false);
-      try {
-        if (typeof renameView === 'function') renameView(ch, btn);
-      } catch (_) {}
-    });
-
-    btn.addEventListener('click', (e) => {
-      // Delay single-click switching so dblclick has priority for renaming.
-      // (Otherwise the first click may switch views before dblclick fires.)
-      // Touch: no delay so tab switch runs before background/tab close races.
-      const viewAtClick = currentView;
-      const channelAtClick = currentChannel;
-      clearPendingViewSwitchClick();
-      var tabSwitchDelay = typeof isMobileOrTouchDevice === 'function' && isMobileOrTouchDevice() ? 0 : 90;
-      /* Same guards as switchChannel’s tab bar: show load immediately on press (including during remote merge). */
-      if (!inoutHydratingWorkspace) {
-        var sameTabAtClick = ch === viewAtClick && ch === channelAtClick;
-        var slot0AtClick = inputSlots && inputSlots[0];
-        var slotMismatchAtClick =
-          primarySlotAutoTarget && slot0AtClick && String(slot0AtClick.channel || '') !== String(ch);
-        if (!sameTabAtClick || slotMismatchAtClick) {
-          setTabChannelLoading(ch, true);
-        }
-      }
-      pendingViewSwitchChannel = ch;
-      pendingViewSwitchTimer = setTimeout(function() {
-        pendingViewSwitchTimer = null;
-        var targetCh = pendingViewSwitchChannel;
-        pendingViewSwitchChannel = null;
-        if (targetCh == null || targetCh === '') return;
-        var tabBtn =
-          tabsEl && tabsEl.querySelector
-            ? tabsEl.querySelector('.tab[data-channel="' + CSS.escape(String(targetCh)) + '"]')
-            : null;
-        if (tabBtn && tabBtn.querySelector('.tab-rename-input')) {
-          if (!inoutHydratingWorkspace) setTabChannelLoading(targetCh, false);
-          return;
-        }
-        switchChannel(targetCh);
-      }, tabSwitchDelay);
-    });
-    btn.addEventListener('dragenter', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      e.dataTransfer.dropEffect = 'move';
-      tabsEl.querySelectorAll('.tab.tab-drop-target').forEach(t => t.classList.remove('tab-drop-target'));
-      btn.classList.add('tab-drop-target');
-    });
-    btn.addEventListener('dragover', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      e.dataTransfer.dropEffect = 'move';
-      btn.classList.add('tab-drop-target');
-    });
-    btn.addEventListener('dragleave', e => {
-      if (!btn.contains(e.relatedTarget)) btn.classList.remove('tab-drop-target');
-    });
-    btn.addEventListener('drop', e => {
-      e.preventDefault();
-      dragDropHandled = true;
-      btn.classList.remove('tab-drop-target');
-      const id = e.dataTransfer.getData('application/x-inout-obj-id') || e.dataTransfer.getData('text/plain');
-      if (!id || ch === currentChannel) return;
-      const numId = Number(id);
-      if (!Number.isFinite(numId)) return;
-      const rowEl = feedInner.querySelector('.obj[data-id="' + CSS.escape(String(numId)) + '"]');
-      if (rowEl) {
-        animateObjectToTab(rowEl, btn, async () => {
-          const ok = await moveSingleObject(numId, ch);
-          if (!ok) rowEl.style.visibility = '';
-        });
-      } else {
-        moveSingleObject(numId, ch);
-      }
-    });
-    tabsEl.appendChild(btn);
-  });
-
-  const addBtn = document.createElement('button');
-  addBtn.className = 'tab tab-new';
-  addBtn.textContent = '+';
-  addBtn.addEventListener('click', openChannelModal);
-  tabsEl.appendChild(addBtn);
-
-  updateTabsUI();
-  updateAllTabBadges();
-  refreshMoveTargets();
-  syncComposerTargetSelects();
+  if (!window.InoutTabsUi || !window.InoutTabsUi.renderTabs) return;
+  window.InoutTabsUi.renderTabs(inoutTabsUiCtx());
 }
 
 function renameView(ch, btn) {
