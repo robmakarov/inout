@@ -1454,8 +1454,28 @@ function syncInoutObjLeadingWidthVar() {
     var inner = document.getElementById('feed-inner');
     var mbar = document.getElementById('manage-bar');
     if (!inner || !mbar) return;
-    var row = inner.querySelector('.obj[data-id] .obj-leading-col');
-    var rowW = row ? Math.ceil(row.getBoundingClientRect().width) : 0;
+    var row = inner.querySelector('.obj[data-id]');
+    var cbEl = row ? row.querySelector('.obj-select-wrap') : null;
+    var timeEl = row ? row.querySelector('.obj-time') : null;
+    var senderEl = row ? row.querySelector('.obj-sender') : null;
+    var leadEl = row ? row.querySelector('.obj-leading-col') : null;
+    var metaEl = row ? row.querySelector('.obj-leading-meta') : null;
+    var cbW = cbEl ? Math.ceil(cbEl.getBoundingClientRect().width) : 0;
+    var timeW = timeEl ? Math.ceil(timeEl.getBoundingClientRect().width) : 0;
+    var senderW = senderEl ? Math.ceil(senderEl.getBoundingClientRect().width) : 0;
+    var gLead = 0;
+    var gMeta = 0;
+    try {
+      if (leadEl) {
+        var csLead = getComputedStyle(leadEl);
+        gLead = Math.max(0, Math.round(parseFloat(csLead.columnGap || csLead.gap || '0') || 0));
+      }
+      if (metaEl) {
+        var csMeta = getComputedStyle(metaEl);
+        gMeta = Math.max(0, Math.round(parseFloat(csMeta.columnGap || csMeta.gap || '0') || 0));
+      }
+    } catch (_) {}
+    var rowW = cbW + timeW + senderW + gLead + gMeta;
     var start = mbar.querySelector('.manage-bar-start');
     var filterSlot = mbar.querySelector('.multi-value-filter-slot');
     var startW = start ? Math.ceil(start.getBoundingClientRect().width) : 0;
@@ -1565,6 +1585,7 @@ function syncInoutMultiValueFilterMenuAria() {
 var inoutColScrollSyncing = false;
 var inoutLeftColumnWidths = { cb: null, time: null, sender: null };
 var INOUT_LEFT_COL_WIDTHS_KEY = 'inout_left_column_widths_v1';
+var INOUT_VALUE_COL_WIDTHS_KEY = 'inout_value_column_widths_v1';
 
 function getManualValueColumnWidths() {
   if (!window.InoutMultiValueLayout || !window.InoutMultiValueLayout.getManualColumnWidths) return [];
@@ -1574,6 +1595,21 @@ function getManualValueColumnWidths() {
 function setManualValueColumnWidths(widths) {
   if (!window.InoutMultiValueLayout || !window.InoutMultiValueLayout.setManualColumnWidths) return;
   try { window.InoutMultiValueLayout.setManualColumnWidths(widths, inoutMultiValueLayoutCtx()); } catch (_) {}
+}
+
+function saveInoutValueColumnWidthsLocal() {
+  try {
+    localStorage.setItem(INOUT_VALUE_COL_WIDTHS_KEY, JSON.stringify(getManualValueColumnWidths() || []));
+  } catch (_) {}
+}
+
+function loadInoutValueColumnWidthsLocal() {
+  try {
+    var raw = localStorage.getItem(INOUT_VALUE_COL_WIDTHS_KEY);
+    if (!raw) return;
+    var arr = JSON.parse(raw);
+    if (Array.isArray(arr)) setManualValueColumnWidths(arr);
+  } catch (_) {}
 }
 
 function applyInoutLeftColumnWidthsVars() {
@@ -1643,6 +1679,7 @@ function applyInoutColumnWidthsFromWorkspace(cfg) {
 }
 
 loadInoutLeftColumnWidthsLocal();
+loadInoutValueColumnWidthsLocal();
 
 function inoutMultiValueLayoutCtx() {
   return {
@@ -1651,6 +1688,7 @@ function inoutMultiValueLayoutCtx() {
     getColumnHeaderLabelsForFeed: getColumnHeaderLabelsForFeed,
     valueColumnHeaderLabel: valueColumnHeaderLabel,
     onColumnWidthsChanged: function() {
+      saveInoutValueColumnWidthsLocal();
       if (canSyncPersonalWorkspaceNow()) schedulePersonalWorkspacePersist();
     },
     state: {
@@ -7827,8 +7865,10 @@ function createObjectRow(obj, isNew, options) {
   dropdown.addEventListener('touchstart', e => {
     e.stopPropagation();
   }, { passive: true });
-  trigger.addEventListener('click', e => {
-    e.preventDefault();
+  var objActionsLastTouchToggleAt = 0;
+  function toggleObjActionsDropdown(e) {
+    var nowAt = Date.now();
+    if (e && e.type === 'click' && nowAt - objActionsLastTouchToggleAt < 350) return;
     e.stopPropagation();
     const isOpen = actions.classList.toggle('obj-actions-open');
     trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
@@ -7844,6 +7884,12 @@ function createObjectRow(obj, isNew, options) {
     } else {
       closeDropdown();
     }
+  }
+  trigger.addEventListener('click', toggleObjActionsDropdown);
+  trigger.addEventListener('pointerup', function(e) {
+    if (e.pointerType !== 'touch') return;
+    objActionsLastTouchToggleAt = Date.now();
+    toggleObjActionsDropdown(e);
   });
 
   const menuSingle = document.createElement('div');
@@ -8032,11 +8078,6 @@ function createObjectRow(obj, isNew, options) {
   } else {
     sender.textContent = 'unknown';
   }
-  const fullLabel = sender.textContent;
-  if (fullLabel.length > 10) {
-    sender.textContent = fullLabel.slice(0, 10) + '…';
-  }
-
   const wantAuthor = !!fieldPrefs ? !!fieldPrefs.showAuthor : true;
   sender.style.setProperty('display', wantAuthor ? 'block' : 'none', 'important');
   makeObjColumnResizeHandle('sender', sender);
@@ -8810,6 +8851,21 @@ function inoutTabsUiCtx() {
     animateObjectToTab: animateObjectToTab,
     moveSingleObject: moveSingleObject,
     openChannelModal: openChannelModal,
+    reorderTabChannels: function(fromCh, toCh) {
+      var from = String(fromCh || '');
+      var to = String(toCh || '');
+      if (!from || !to || from === to) return;
+      if (from === 'main' || to === 'main') return;
+      var list = viewNames.filter(function(ch) { return ch !== 'main'; });
+      var fromIdx = list.indexOf(from);
+      var toIdx = list.indexOf(to);
+      if (fromIdx < 0 || toIdx < 0) return;
+      var moved = list.splice(fromIdx, 1)[0];
+      list.splice(toIdx, 0, moved);
+      viewNames = ['main'].concat(list);
+      saveChannelsList();
+      renderTabs();
+    },
     refreshMoveTargets: refreshMoveTargets,
     syncComposerTargetSelects: syncComposerTargetSelects,
     bindVerticalWheelToHorizontalScroll: bindVerticalWheelToHorizontalScroll,

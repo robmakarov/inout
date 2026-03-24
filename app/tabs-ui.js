@@ -61,6 +61,7 @@
       var btn = document.createElement('button');
       btn.className = 'tab';
       btn.setAttribute('data-channel', ch);
+      if (ch !== 'main') btn.setAttribute('draggable', 'true');
       var label = document.createElement('span');
       label.className = 'tab-label';
       label.textContent = ctx.getViewDisplayName(ch);
@@ -127,6 +128,18 @@
         tabsEl.querySelectorAll('.tab.tab-drop-target').forEach(function(t) { t.classList.remove('tab-drop-target'); });
         btn.classList.add('tab-drop-target');
       });
+      btn.addEventListener('dragstart', function(e) {
+        if (ch === 'main') return;
+        btn.classList.add('tab-dragging');
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move';
+          try { e.dataTransfer.setData('application/x-inout-tab-channel', String(ch)); } catch (_) {}
+        }
+      });
+      btn.addEventListener('dragend', function() {
+        btn.classList.remove('tab-dragging');
+        tabsEl.querySelectorAll('.tab.tab-drop-target').forEach(function(t) { t.classList.remove('tab-drop-target'); });
+      });
       btn.addEventListener('dragover', function(e) {
         e.preventDefault();
         e.stopPropagation();
@@ -140,6 +153,11 @@
         e.preventDefault();
         ctx.setDragDropHandled(true);
         btn.classList.remove('tab-drop-target');
+        var tabFrom = e.dataTransfer.getData('application/x-inout-tab-channel');
+        if (tabFrom) {
+          if (typeof ctx.reorderTabChannels === 'function') ctx.reorderTabChannels(tabFrom, ch);
+          return;
+        }
         var id = e.dataTransfer.getData('application/x-inout-obj-id') || e.dataTransfer.getData('text/plain');
         if (!id || ch === ctx.currentChannel()) return;
         var numId = Number(id);

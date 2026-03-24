@@ -495,13 +495,12 @@ header{
   background:var(--bg);
   color:var(--soft);
   font-family:var(--mono);
-  font-size:14px;
-  line-height:1;
-  padding:2px 8px;
+  font-size:10px;
+  line-height:1.2;
+  padding:3px 8px;
   border-radius:4px;
   cursor:default;
-  width:32px;
-  height:28px;
+  min-height:24px;
   display:inline-flex;
   align-items:center;
   justify-content:center;
