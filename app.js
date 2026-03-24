@@ -224,7 +224,14 @@ function isWrapArmedForDirection(el, axis, delta) {
 
 function routeWheelDeltaToPrimaryView(deltaY, interactionId) {
   var surf = primaryFeedScrollSurface();
-  return advanceScrollEdgeThenWrap(surf, 'y', deltaY, interactionId);
+  if (!surf) return false;
+  var max = surf.scrollHeight - surf.clientHeight;
+  if (!(max > 1)) return false;
+  var prev = surf.scrollTop || 0;
+  var next = Math.max(0, Math.min(max, prev + (Number(deltaY) || 0)));
+  if (Math.abs(next - prev) < 0.01) return false;
+  surf.scrollTop = next;
+  return true;
 }
 
 function nearestVerticalScrollableAncestor(node) {
@@ -2109,7 +2116,6 @@ function bindVerticalWheelToHorizontalScroll(el) {
       var nowAt = Date.now();
       if (nowAt - inoutLastWheelAt > INOUT_WHEEL_INTERACTION_GAP_MS) inoutWheelInteractionId++;
       inoutLastWheelAt = nowAt;
-      var interactionId = inoutWheelInteractionId;
       // Keep native behavior when user intentionally scrolls horizontally.
       if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
       /*
@@ -2120,19 +2126,9 @@ function bindVerticalWheelToHorizontalScroll(el) {
       var isColStrip =
         (el.classList && el.classList.contains('obj-values-wrap')) || el.id === 'multi-value-col-labels';
       if (isColStrip && !e.shiftKey) {
-        var surfV = getFeedScrollSurfaceForElement(el);
-        var maxS = surfV ? surfV.scrollHeight - surfV.clientHeight : 0;
-        if (surfV && maxS > 1) {
-          var atTop = (surfV.scrollTop || 0) <= 1;
-          var atBottom = (surfV.scrollTop || 0) >= maxS - 1;
-          var dy0 = e.deltaY;
-          if ((dy0 < 0 && !atTop) || (dy0 > 0 && !atBottom)) {
-            var prevS = surfV.scrollTop || 0;
-            surfV.scrollTop = Math.max(0, Math.min(maxS, prevS + dy0));
-            e.preventDefault();
-            return;
-          }
-        }
+        // Vertical wheel over values/header always drives the view vertical scroll first.
+        if (routeWheelToFeed(e.deltaY)) e.preventDefault();
+        return;
       }
       var cs = null;
       try { cs = window.getComputedStyle(el); } catch (_) {}
@@ -2161,16 +2157,16 @@ function bindVerticalWheelToHorizontalScroll(el) {
         if (routeWheelToFeed(e.deltaY)) e.preventDefault();
         return;
       }
-      if (advanceScrollEdgeThenWrap(el, 'x', e.deltaY, interactionId)) {
+      // Horizontal zones should stop at edges (no wrap jump from end to start).
+      var prevLeft2 = el.scrollLeft || 0;
+      var maxLeft2 = Math.max(0, (el.scrollWidth || 0) - (el.clientWidth || 0));
+      var nextLeft2 = Math.max(0, Math.min(maxLeft2, prevLeft2 + e.deltaY));
+      if (Math.abs(nextLeft2 - prevLeft2) > 0.01) {
+        el.scrollLeft = nextLeft2;
         e.preventDefault();
         return;
       }
-      // Keep wheel in this zone when wrap is armed (first edge bump happened).
-      if (isWrapArmedForDirection(el, 'x', e.deltaY)) {
-        e.preventDefault();
-        return;
-      }
-      // If this zone cannot move, hand wheel to main view.
+      // If this zone cannot move horizontally, hand wheel to vertical feed.
       if (routeWheelToFeed(e.deltaY)) e.preventDefault();
     },
     { passive: false }
