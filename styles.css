@@ -1745,6 +1745,10 @@ body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell::b
   justify-content:flex-start;
   text-align:left;
 }
+.feed-inner .obj .obj-time{
+  justify-content:flex-start;
+  text-align:left;
+}
 /* Value text: same size/line-height for .obj-text and .obj-value-cell so label→value rhythm matches */
 .feed-inner .obj:not(.obj-editing) .obj-text,
 .feed-inner .obj:not(.obj-editing) .obj-value-cell{
@@ -2293,9 +2297,9 @@ body.select-mode .obj-checkbox-zone{
 }
 .obj-col-resize-handle{
   position:absolute;
-  top:-2px;
+  top:0;
   right:-6px;
-  bottom:-2px;
+  bottom:0;
   width:12px;
   cursor:col-resize;
   touch-action:none;
@@ -2304,8 +2308,8 @@ body.select-mode .obj-checkbox-zone{
 .obj-col-resize-handle::before{
   content:'';
   position:absolute;
-  top:4px;
-  bottom:4px;
+  top:0;
+  bottom:0;
   left:5px;
   width:1px;
   background:rgba(150,150,150,0.28);
@@ -3599,14 +3603,25 @@ body.secret-show-grips .frame-grip{
 }
 
 .tab.tab-drop-target{
-  background:var(--acc) !important;
-  color:var(--bg) !important;
-  border-color:var(--acc) !important;
-  box-shadow:0 0 0 2px var(--bg);
-  transform:scale(1.06);
+  position:relative;
 }
-.tab.tab-drop-target .tab-shared{color:rgba(10,10,9,0.8)}
-.tab.tab-drop-target .tab-close{color:var(--bg);opacity:1}
+.tab.tab-drop-target::after{
+  content:'';
+  position:absolute;
+  top:2px;
+  bottom:2px;
+  width:2px;
+  border-radius:2px;
+  background:var(--acc2);
+  box-shadow:0 0 0 1px rgba(0,0,0,0.35);
+  pointer-events:none;
+}
+.tab.tab-drop-target.tab-drop-before::after{
+  left:-5px;
+}
+.tab.tab-drop-target.tab-drop-after::after{
+  right:-5px;
+}
 
 .tab-new{
   border-style:dashed;

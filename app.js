@@ -7866,9 +7866,12 @@ function createObjectRow(obj, isNew, options) {
     e.stopPropagation();
   }, { passive: true });
   var objActionsLastTouchToggleAt = 0;
+  var objActionsLastToggleAt = 0;
   function toggleObjActionsDropdown(e) {
     var nowAt = Date.now();
     if (e && e.type === 'click' && nowAt - objActionsLastTouchToggleAt < 350) return;
+    if (nowAt - objActionsLastToggleAt < 120) return;
+    objActionsLastToggleAt = nowAt;
     e.stopPropagation();
     const isOpen = actions.classList.toggle('obj-actions-open');
     trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
@@ -7885,11 +7888,17 @@ function createObjectRow(obj, isNew, options) {
       closeDropdown();
     }
   }
-  trigger.addEventListener('click', toggleObjActionsDropdown);
   trigger.addEventListener('pointerdown', function(e) {
-    if (e.pointerType !== 'touch') return;
+    if (e.pointerType !== 'touch' && e.pointerType !== 'mouse' && e.pointerType !== 'pen') return;
     e.preventDefault();
-    objActionsLastTouchToggleAt = Date.now();
+    var at = Date.now();
+    if (e.pointerType === 'touch') objActionsLastTouchToggleAt = at;
+    toggleObjActionsDropdown(e);
+  });
+  trigger.addEventListener('keydown', function(e) {
+    var k = e && (e.key || '');
+    if (k !== 'Enter' && k !== ' ') return;
+    e.preventDefault();
     toggleObjActionsDropdown(e);
   });
 
@@ -8852,7 +8861,7 @@ function inoutTabsUiCtx() {
     animateObjectToTab: animateObjectToTab,
     moveSingleObject: moveSingleObject,
     openChannelModal: openChannelModal,
-    reorderTabChannels: function(fromCh, toCh) {
+    reorderTabChannels: function(fromCh, toCh, placeAfter) {
       var from = String(fromCh || '');
       var to = String(toCh || '');
       if (!from || !to || from === to) return;
@@ -8862,7 +8871,12 @@ function inoutTabsUiCtx() {
       var toIdx = list.indexOf(to);
       if (fromIdx < 0 || toIdx < 0) return;
       var moved = list.splice(fromIdx, 1)[0];
-      list.splice(toIdx, 0, moved);
+      var targetIdx = list.indexOf(to);
+      if (targetIdx < 0) return;
+      var insertIdx = placeAfter ? targetIdx + 1 : targetIdx;
+      if (insertIdx < 0) insertIdx = 0;
+      if (insertIdx > list.length) insertIdx = list.length;
+      list.splice(insertIdx, 0, moved);
       viewNames = ['main'].concat(list);
       saveChannelsList();
       renderTabs();
