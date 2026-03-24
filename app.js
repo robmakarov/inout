@@ -7515,24 +7515,10 @@ function createObjectRow(obj, isNew, options) {
   dropdown.className = 'obj-actions-dropdown';
   dropdown.setAttribute('role', 'menu');
 
-  var objActionsScrollCloseEl = null;
-  var objActionsScrollCloseFn = null;
-  var objActionsScrollAttachTimer = null;
   function closeDropdown() {
     actions.classList.remove('obj-actions-open');
     trigger.setAttribute('aria-expanded', 'false');
     document.removeEventListener('click', closeDropdown);
-    if (objActionsScrollAttachTimer != null) {
-      clearTimeout(objActionsScrollAttachTimer);
-      objActionsScrollAttachTimer = null;
-    }
-    if (objActionsScrollCloseEl && objActionsScrollCloseFn) {
-      try {
-        objActionsScrollCloseEl.removeEventListener('scroll', objActionsScrollCloseFn);
-      } catch (_) {}
-      objActionsScrollCloseEl = null;
-      objActionsScrollCloseFn = null;
-    }
     dropdown.style.position = '';
     dropdown.style.top = '';
     dropdown.style.right = '';
@@ -7552,9 +7538,15 @@ function createObjectRow(obj, isNew, options) {
   trigger.addEventListener('mousedown', e => {
     e.stopPropagation();
   });
+  trigger.addEventListener('touchstart', e => {
+    e.stopPropagation();
+  }, { passive: true });
   dropdown.addEventListener('mousedown', e => {
     e.stopPropagation();
   });
+  dropdown.addEventListener('touchstart', e => {
+    e.stopPropagation();
+  }, { passive: true });
   trigger.addEventListener('click', e => {
     e.stopPropagation();
     const isOpen = actions.classList.toggle('obj-actions-open');
@@ -7565,19 +7557,6 @@ function createObjectRow(obj, isNew, options) {
       setTimeout(function() {
         document.addEventListener('click', closeDropdown);
       }, 0);
-      var scrollPort = row.closest && row.closest('.visual-feed-stack');
-      if (scrollPort) {
-        objActionsScrollCloseFn = function() {
-          closeDropdown();
-        };
-        /* Defer: opening can reflow/scroll the stack once; immediate scroll would close before the menu appears. */
-        objActionsScrollAttachTimer = setTimeout(function() {
-          objActionsScrollAttachTimer = null;
-          if (!actions.classList.contains('obj-actions-open')) return;
-          objActionsScrollCloseEl = scrollPort;
-          scrollPort.addEventListener('scroll', objActionsScrollCloseFn, { passive: true });
-        }, 100);
-      }
     } else {
       closeDropdown();
     }
@@ -11741,6 +11720,7 @@ var scrollSaveTimer = null;
  * gaps, or broken flex scrollport). Listener on #multiview (covers full column) in capture phase.
  */
 function bindMultiviewWheelScrollCapture() {
+  if (isMobileOrTouchDevice()) return;
   if (!window.InoutScroll || !window.InoutScroll.bindMultiviewWheelScrollCapture) return;
   window.InoutScroll.bindMultiviewWheelScrollCapture({
     getFeedScrollSurface: getFeedScrollSurface,
