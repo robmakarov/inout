@@ -2393,6 +2393,31 @@ body.select-mode .obj-checkbox-zone{
   gap:8px;
   min-width:0;
 }
+.composer-slots-container.object-edit-multi-inputs .composer-slot-target,
+.composer-slots-container.object-edit-multi-inputs .composer-slot-remove{
+  display:none !important;
+}
+.composer-slots-container.object-edit-multi-inputs .composer-slot{
+  border-radius:14px;
+}
+.composer-slots-container.object-edit-multi-inputs .composer-send-label{
+  display:none;
+}
+.object-edit-multi-inputs{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  width:100%;
+  padding:8px 10px;
+  box-sizing:border-box;
+}
+.object-edit-part-input{
+  padding:10px 12px !important;
+  min-height:40px !important;
+  border:1px solid var(--line2);
+  border-radius:10px;
+  background:rgba(255,255,255,0.02);
+}
 .composer-slot{
   display:flex;
   align-items:stretch;

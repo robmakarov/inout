@@ -4129,6 +4129,7 @@ function restoreEditingRowsOnCancel() {
 /** Input mode is default and reactivates after every operation; only edit mode interrupts it. */
 function reactivateInputMode(opts) {
   opts = opts || {};
+  teardownMultiValueObjectEditInputs();
   var idsToEndPresence =
     editingObjectIds && editingObjectIds.size
       ? Array.from(editingObjectIds)
@@ -4501,7 +4502,138 @@ function removeOriginGhostsAndInsertRows() {
   if (surf) surf.scrollTop = scrollTop;
 }
 function focusMainInput() {
+  if (multiValueEditInputs && multiValueEditInputs.active) {
+    var list = multiValueEditInputs.textareas || [];
+    var idx = Math.max(0, Math.min(list.length - 1, multiValueEditInputs.focusIndex || 0));
+    var ta = list[idx] || list[0];
+    if (ta) {
+      try { ta.focus({ preventScroll: true }); } catch (_) { try { ta.focus(); } catch (_) {} }
+      return;
+    }
+  }
   if (input) input.focus();
+}
+
+var multiValueEditInputs = {
+  active: false,
+  container: null,
+  textareas: [],
+  focusIndex: 0,
+};
+
+function teardownMultiValueObjectEditInputs() {
+  if (input) input.style.removeProperty('display');
+  if (multiValueEditInputs.container && multiValueEditInputs.container.parentNode) {
+    multiValueEditInputs.container.parentNode.removeChild(multiValueEditInputs.container);
+  }
+  multiValueEditInputs.active = false;
+  multiValueEditInputs.container = null;
+  multiValueEditInputs.textareas = [];
+  multiValueEditInputs.focusIndex = 0;
+  if (composerSlotsContainer) composerSlotsContainer.classList.remove('object-edit-multi-inputs');
+}
+
+function joinedTextFromMultiValueEditInputs() {
+  if (!multiValueEditInputs.active) return input ? String(input.value || '') : '';
+  var list = multiValueEditInputs.textareas || [];
+  if (!list.length) return '';
+  return list.map(function(ta) { return String(ta && ta.value != null ? ta.value : ''); }).join('\n\n');
+}
+
+function setHiddenInputSelectionFromMultiValueEditor(idx, ta) {
+  if (!input || !ta) return;
+  var i = Math.max(0, Math.floor(Number(idx) || 0));
+  var list = multiValueEditInputs.textareas || [];
+  var pos = 0;
+  for (var p = 0; p < i; p++) pos += String(list[p] && list[p].value != null ? list[p].value : '').length + 2;
+  var ss = Number(ta.selectionStart || 0);
+  var se = ta.selectionEnd != null ? Number(ta.selectionEnd) : ss;
+  input.selectionStart = Math.max(0, pos + ss);
+  input.selectionEnd = Math.max(input.selectionStart, pos + Math.max(ss, se));
+}
+
+function applyObjectEditTextFromPartsEditor() {
+  if (!input || editingObjectId == null || !multiValueEditInputs.active) return;
+  var joined = joinedTextFromMultiValueEditInputs();
+  input.value = joined;
+  if (editingObjectIds && editingObjectIds.size > 1) {
+    applyPrimaryEditToMultiEdit(joined);
+  } else if (editingObjectTextMap && editingObjectId != null) {
+    editingObjectTextMap[editingObjectId] = joined;
+  }
+  saveInputGlobal();
+  updateClearInputBtn();
+  scheduleSaveInputToDb();
+  if (sendBtn) sendBtn.disabled = false;
+  updateEditingRowFromInput();
+  if (editTypingCommitTimer) clearTimeout(editTypingCommitTimer);
+  editTypingCommitTimer = setTimeout(commitTypingSegment, TYPING_COMMIT_MS);
+  broadcastDraft(input.value);
+}
+
+function renderMultiValueObjectEditInputs(joinedText, focusIndex) {
+  teardownMultiValueObjectEditInputs();
+  if (!input || editingObjectId == null) return false;
+  var row = findObjectRowEl(editingObjectId);
+  var count = row ? row.querySelectorAll('.obj-value-cell').length : 1;
+  if (!(count > 1)) return false;
+  var parts = parsePartsForEditingDisplay(joinedText, count);
+  while (parts.length < count) parts.push('');
+  if (parts.length > count) parts = parts.slice(0, count);
+  var wrap = input.closest('.composer-input-wrap');
+  if (!wrap) return false;
+  var box = document.createElement('div');
+  box.className = 'object-edit-multi-inputs';
+  box.setAttribute('role', 'group');
+  box.setAttribute('aria-label', 'Edit object values');
+  var textareas = [];
+  for (var i = 0; i < parts.length; i++) {
+    var ta = document.createElement('textarea');
+    ta.className = 'composer-slot-input object-edit-part-input';
+    ta.rows = 1;
+    ta.maxLength = 2000;
+    ta.autocomplete = 'off';
+    ta.spellcheck = false;
+    ta.setAttribute('spellcheck', 'false');
+    ta.setAttribute('autocorrect', 'off');
+    ta.setAttribute('autocapitalize', 'off');
+    ta.setAttribute('data-part-index', String(i));
+    ta.setAttribute('aria-label', 'Object value ' + (i + 1));
+    ta.placeholder = valueColumnHeaderLabel(i);
+    ta.value = String(parts[i] != null ? parts[i] : '');
+    ta.addEventListener('input', function(e) {
+      var idx = parseInt(e.target.getAttribute('data-part-index'), 10);
+      multiValueEditInputs.focusIndex = Number.isFinite(idx) ? idx : 0;
+      setHiddenInputSelectionFromMultiValueEditor(idx, e.target);
+      applyObjectEditTextFromPartsEditor();
+      if (typeof autoResize === 'function') autoResize(e.target);
+    });
+    var syncSel = function(ev) {
+      var idx = parseInt(ev.target.getAttribute('data-part-index'), 10);
+      multiValueEditInputs.focusIndex = Number.isFinite(idx) ? idx : 0;
+      setHiddenInputSelectionFromMultiValueEditor(idx, ev.target);
+      updateEditingRowFromInput();
+    };
+    ta.addEventListener('click', syncSel);
+    ta.addEventListener('keyup', syncSel);
+    ta.addEventListener('select', syncSel);
+    ta.addEventListener('mouseup', syncSel);
+    ta.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        cancelEditingMode(true);
+      }
+    });
+    box.appendChild(ta);
+    textareas.push(ta);
+  }
+  input.style.display = 'none';
+  wrap.appendChild(box);
+  multiValueEditInputs.active = true;
+  multiValueEditInputs.container = box;
+  multiValueEditInputs.textareas = textareas;
+  multiValueEditInputs.focusIndex = Math.max(0, Math.min(textareas.length - 1, Number(focusIndex) || 0));
+  if (composerSlotsContainer) composerSlotsContainer.classList.add('object-edit-multi-inputs');
+  return true;
 }
 
 function updateTabBadge(ch) {
@@ -5550,7 +5682,21 @@ function applyObjectEditMode(idsToEdit, primarySeedId, clickedValueIndex) {
     localStorage.setItem(WAS_EDITING_KEY, '1');
   } catch (_) {}
   input.placeholder = idsToEdit.size > 1 ? 'Editing ' + idsToEdit.size + ' objects…' : 'Editing object…';
+  var wantedFocusPart = Number.isFinite(prefIdx) && prefIdx >= 0 ? prefIdx : 0;
+  var hasMultiEditInputs = renderMultiValueObjectEditInputs(primaryText, wantedFocusPart);
   autoResize();
+  if (hasMultiEditInputs) {
+    (multiValueEditInputs.textareas || []).forEach(function(ta) {
+      if (typeof autoResize === 'function') autoResize(ta);
+    });
+    var ta = multiValueEditInputs.textareas[wantedFocusPart] || multiValueEditInputs.textareas[0];
+    if (ta) {
+      var ts = ta.value != null ? String(ta.value).length : 0;
+      ta.selectionStart = ts;
+      ta.selectionEnd = ts;
+      setHiddenInputSelectionFromMultiValueEditor(wantedFocusPart, ta);
+    }
+  }
   sendBtn.disabled = false;
   updateClearInputBtn();
   saveInputGlobal();
@@ -5674,6 +5820,7 @@ function onUpdateForChannel(ch, row) {
   if (id == null) return;
   const text = row.text != null ? row.text : (row.Text != null ? row.Text : '');
   if (id === editingObjectId) {
+    teardownMultiValueObjectEditInputs();
     originalEditTextForCancel = null;
     originalEditTextForCancelMap = null;
     editingObjectTextMap = null;
