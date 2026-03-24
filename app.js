@@ -1115,6 +1115,7 @@ var inoutMultiValueFilterMode = 'all';
 var inoutMultiValueColumnFilterIndex = null;
 var inoutColHeaderFilterClickTimer = null;
 var inoutColHeaderDndJustHandled = false;
+var inoutColHeaderDragGhostEl = null;
 var INOUT_VALUE_COL_LABELS_KEY = 'inout_value_column_labels_v1';
 
 function valueColumnLabelsStorageChannel() {
@@ -1195,7 +1196,7 @@ function reorderValueColumnLabelOverrides(fromIdx, toIdx) {
   } catch (_) {}
 }
 
-async function reorderValueColumnsInCurrentView(fromIdx, toIdx) {
+function reorderValueColumnsInCurrentView(fromIdx, toIdx) {
   if (typeof feedInner === 'undefined' || !feedInner) return;
   var from = Number(fromIdx);
   var to = Number(toIdx);
@@ -1207,6 +1208,7 @@ async function reorderValueColumnsInCurrentView(fromIdx, toIdx) {
   if (Array.isArray(widths) && widths.length) setManualValueColumnWidths(moveArrayItem(widths, from, to));
   reorderValueColumnLabelOverrides(from, to);
   var ch = String(currentChannel || currentView || 'main');
+  var persistJobs = [];
   for (var r = 0; r < rows.length; r++) {
     var row = rows[r];
     var id = row.dataset.id != null ? Number(row.dataset.id) : NaN;
@@ -1224,7 +1226,7 @@ async function reorderValueColumnsInCurrentView(fromIdx, toIdx) {
     row.__inoutEntryTextRaw = next;
     rememberEntryText(ch, id, next);
     updateObjectRowText(id, next);
-    await persistObjectTextPayload(id, next, ch);
+    persistJobs.push(persistObjectTextPayload(id, next, ch));
   }
   if (inoutMultiValueColumnFilterIndex != null) {
     if (inoutMultiValueColumnFilterIndex === from) inoutMultiValueColumnFilterIndex = to;
@@ -1239,6 +1241,9 @@ async function reorderValueColumnsInCurrentView(fromIdx, toIdx) {
   syncAllValueColumnLabelAttrs();
   applyInoutMultiValueFilter();
   if (canSyncPersonalWorkspaceNow()) schedulePersonalWorkspacePersist();
+  if (persistJobs.length) {
+    Promise.allSettled(persistJobs).catch(function() {});
+  }
 }
 
 function valueColumnHeaderLabel(index) {
@@ -1776,17 +1781,34 @@ function setupMultiValueChromeBar() {
       var idx = parseInt(b.getAttribute('data-value-index'), 10);
       if (!Number.isFinite(idx)) return;
       b.classList.add('multi-value-col-label-dragging');
+      colWrap.classList.add('multi-value-col-labels-dragging');
       colWrap.dataset.inoutColDragFrom = String(idx);
       if (e.dataTransfer) {
         e.dataTransfer.effectAllowed = 'move';
         try { e.dataTransfer.setData('text/plain', String(idx)); } catch (_) {}
+        try {
+          var g = document.createElement('div');
+          g.className = 'multi-value-col-dnd-spirit';
+          g.textContent = b.textContent || '';
+          g.style.position = 'fixed';
+          g.style.top = '-9999px';
+          g.style.left = '-9999px';
+          document.body.appendChild(g);
+          inoutColHeaderDragGhostEl = g;
+          e.dataTransfer.setDragImage(g, 14, 10);
+        } catch (_) {}
       }
     });
     colWrap.addEventListener('dragend', function() {
       colWrap.querySelectorAll('.multi-value-col-label-dragging,.multi-value-col-label-drop-target').forEach(function(el) {
         el.classList.remove('multi-value-col-label-dragging', 'multi-value-col-label-drop-target');
       });
+      colWrap.classList.remove('multi-value-col-labels-dragging');
       delete colWrap.dataset.inoutColDragFrom;
+      if (inoutColHeaderDragGhostEl && inoutColHeaderDragGhostEl.parentNode) {
+        inoutColHeaderDragGhostEl.parentNode.removeChild(inoutColHeaderDragGhostEl);
+      }
+      inoutColHeaderDragGhostEl = null;
     });
     colWrap.addEventListener('dragover', function(e) {
       var b = e.target && e.target.closest && e.target.closest('.multi-value-col-label-btn');
@@ -1812,7 +1834,7 @@ function setupMultiValueChromeBar() {
       if (!Number.isFinite(from) || !Number.isFinite(to) || from === to) return;
       inoutColHeaderDndJustHandled = true;
       setTimeout(function() { inoutColHeaderDndJustHandled = false; }, 220);
-      reorderValueColumnsInCurrentView(from, to).catch(function(e2) { console.error('reorder value columns', e2); });
+      reorderValueColumnsInCurrentView(from, to);
     });
     colWrap.addEventListener('click', function(e) {
       var b = e.target && e.target.closest && e.target.closest('.multi-value-col-label-btn');

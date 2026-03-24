@@ -662,10 +662,10 @@ header{
   font-weight:600;
 }
 .multi-value-col-label-btn.multi-value-col-label-dragging{
-  opacity:0.55;
+  opacity:0.35;
 }
 .multi-value-col-label-btn.multi-value-col-label-drop-target{
-  box-shadow:inset -2px 0 0 rgba(232,213,160,0.95);
+  box-shadow:inset -2px 0 0 rgba(170,170,170,0.55);
 }
 .multi-value-col-resize-handle{
   position:absolute;
@@ -684,10 +684,26 @@ header{
   bottom:4px;
   left:5px;
   width:1px;
-  background:rgba(184,160,96,0.55);
+  background:rgba(150,150,150,0.28);
 }
 .multi-value-col-label-btn:hover .multi-value-col-resize-handle::before{
-  background:rgba(232,213,160,0.9);
+  background:rgba(180,180,180,0.5);
+}
+.multi-value-col-labels-dragging .multi-value-col-label-btn{
+  transition:none !important;
+}
+.multi-value-col-dnd-spirit{
+  pointer-events:none;
+  border:1px solid rgba(140,140,140,0.45);
+  background:rgba(20,20,20,0.92);
+  color:rgba(225,225,225,0.9);
+  border-radius:6px;
+  padding:4px 8px;
+  font-family:var(--mono);
+  font-size:10px;
+  letter-spacing:0.04em;
+  text-transform:uppercase;
+  box-shadow:0 4px 14px rgba(0,0,0,0.35);
 }
 .multi-value-filter-menu{
   position:absolute;
