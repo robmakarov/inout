@@ -7874,8 +7874,15 @@ function createObjectRow(obj, isNew, options) {
   dropdown.addEventListener('touchstart', e => {
     e.stopPropagation();
   }, { passive: true });
+  var objActionsLastToggleAt = 0;
   function toggleObjActionsDropdown(e) {
-    e.stopPropagation();
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    var nowAt = Date.now();
+    if (nowAt - objActionsLastToggleAt < 120) return;
+    objActionsLastToggleAt = nowAt;
     const isOpen = actions.classList.toggle('obj-actions-open');
     trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
     if (isOpen) {
@@ -7896,12 +7903,11 @@ function createObjectRow(obj, isNew, options) {
       closeDropdown();
     }
   }
-  trigger.addEventListener('pointerdown', function(e) {
-    if (e.pointerType !== 'touch') return;
-    e.preventDefault();
+  trigger.addEventListener('pointerup', function(e) {
+    var pt = e && e.pointerType;
+    if (pt && pt !== 'touch' && pt !== 'mouse' && pt !== 'pen') return;
     toggleObjActionsDropdown(e);
   });
-  trigger.addEventListener('click', toggleObjActionsDropdown);
   trigger.addEventListener('keydown', function(e) {
     var k = e && (e.key || '');
     if (k !== 'Enter' && k !== ' ') return;
@@ -9160,18 +9166,11 @@ function refreshWorkspaceChannelUi() {
 function applyChannelStripOrderFromCfg(cfg) {
   if (!Array.isArray(cfg && cfg.channelStripOrder) || cfg.channelStripOrder.length === 0) return;
   try {
-    var cfgRev = Number(cfg && cfg._wsRev) || 0;
-    var localRev = 0;
-    try {
-      localRev = Number(localStorage.getItem(VIEWS_ORDER_REV_KEY) || 0) || 0;
-    } catch (_) {}
-    if (localRev > cfgRev) return;
     var strip = cfg.channelStripOrder
       .map(function(x) { return String(x || '').trim(); })
       .filter(Boolean);
     var srv = strip.filter(function(c) { return c !== 'main'; });
-    var localExtras = viewNames.filter(function(c) { return c !== 'main' && srv.indexOf(c) < 0; });
-    viewNames = ['main'].concat(srv).concat(localExtras);
+    viewNames = ['main'].concat(srv);
     viewNames = Array.from(new Set(viewNames));
     saveChannelsList();
     refreshWorkspaceChannelUi();
