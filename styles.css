@@ -15,7 +15,6 @@
   --acc2:   #b8a060;
   --mono:   'DM Mono', monospace;
   --sans:   'Syne', sans-serif;
-  --vv-top: 0px; /* visual viewport top offset (iOS keyboard) */
   /* Default before app.js runs; JS overwrites with visualViewport.height (px). */
   --vv-height: 100dvh;
   /* Animation rules: use these so different parts of the UI stay consistent */

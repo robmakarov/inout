@@ -78,46 +78,21 @@ if (window.Stripe && STRIPE_PUBLISHABLE_KEY && !STRIPE_PUBLISHABLE_KEY.includes(
   const vv = window.visualViewport;
   if (!vv) return;
   let raf = 0;
-  let currentTop = 0;
   let currentHeight = 0;
-  let pendingTop = 0;
   let pendingHeight = 0;
   const read = () => {
-    pendingTop = Math.max(0, Math.round((typeof vv.offsetTop === 'number') ? vv.offsetTop : 0));
     pendingHeight = Math.max(100, Math.round((typeof vv.height === 'number') ? vv.height : window.innerHeight));
   };
   const apply = () => {
     raf = 0;
-    if (Math.abs(pendingTop - currentTop) < 2 && Math.abs(pendingHeight - currentHeight) < 2) return;
-    currentTop = pendingTop;
+    if (Math.abs(pendingHeight - currentHeight) < 2) return;
     currentHeight = pendingHeight;
-    document.documentElement.style.setProperty('--vv-top', currentTop + 'px');
     document.documentElement.style.setProperty('--vv-height', currentHeight + 'px');
   };
   const schedule = () => { read(); if (!raf) raf = requestAnimationFrame(apply); };
   vv.addEventListener('resize', schedule);
-  vv.addEventListener('scroll', schedule);
   window.addEventListener('orientationchange', schedule);
   schedule();
-})();
-
-(function setupMobileInputScrollIntoView() {
-  const vv = window.visualViewport;
-  const inputArea = document.getElementById('input-area');
-  if (!vv || !inputArea) return;
-  let lastHeight = vv.height;
-  const onResize = () => {
-    if (window.innerWidth > 540) return;
-    const shrank = vv.height < lastHeight;
-    lastHeight = vv.height;
-    if (!shrank) return;
-    const active = document.activeElement;
-    if (!active || !inputArea.contains(active)) return;
-    requestAnimationFrame(() => {
-      inputArea.scrollIntoView({ block: 'end', behavior: 'smooth' });
-    });
-  };
-  vv.addEventListener('resize', onResize);
 })();
 
 const feedInner  = document.getElementById('feed-inner');
