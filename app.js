@@ -8954,7 +8954,7 @@ function schedulePersonalWorkspacePersist() {
   _personalWorkspacePersistTimer = setTimeout(function() {
     _personalWorkspacePersistTimer = null;
     persistPersonalWorkspaceToServer();
-  }, 55);
+  }, 10);
 }
 if (typeof window !== 'undefined') window.schedulePersonalWorkspacePersist = schedulePersonalWorkspacePersist;
 
@@ -8997,22 +8997,7 @@ function flushPersonalWorkspacePersist() {
 async function persistPersonalWorkspaceToServer() {
   if (!canSyncPersonalWorkspaceNow()) return;
   try {
-    const slice = gatherPersonalWorkspaceStateForSave();
-    let base = {};
-    try {
-      const { data, error } = await sb
-        .from('views')
-        .select('config')
-        .eq('channel', WORKSPACE_META_VIEW_CHANNEL)
-        .eq('user_id', currentUser.id)
-        .limit(1)
-        .maybeSingle();
-      if (!error && data) {
-        const c = normalizeViewConfig(data.config);
-        if (c && typeof c === 'object') base = Object.assign({}, c);
-      }
-    } catch (_) {}
-    Object.assign(base, slice);
+    const base = gatherPersonalWorkspaceStateForSave();
     try {
       delete base.feedScrollByView;
     } catch (_) {}
