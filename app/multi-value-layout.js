@@ -1,5 +1,122 @@
 ;(function(global) {
   'use strict';
+  var manualColumnWidths = [];
+  var MIN_COL_WIDTH = 56;
+  var MAX_COL_WIDTH = 1400;
+
+  function clampColWidth(w) {
+    var n = Math.round(Number(w) || 0);
+    if (n < MIN_COL_WIDTH) return MIN_COL_WIDTH;
+    if (n > MAX_COL_WIDTH) return MAX_COL_WIDTH;
+    return n;
+  }
+
+  function applyColumnWidths(widths, ctx) {
+    var labelsWrap = document.getElementById('multi-value-col-labels');
+    var feedInner = ctx.feedInner;
+    if (!labelsWrap || !feedInner) return;
+    var btns = labelsWrap.querySelectorAll('.multi-value-col-label-btn');
+    var wraps = Array.from(feedInner.querySelectorAll('.obj[data-id] .obj-values-wrap'));
+    wraps.forEach(function(wrap) {
+      var cells = wrap.querySelectorAll(':scope > .obj-value-cell');
+      for (var i = 0; i < widths.length; i++) {
+        var cell = cells[i];
+        if (!cell) continue;
+        var w = clampColWidth(widths[i]);
+        cell.style.flexBasis = w + 'px';
+        cell.style.minWidth = w + 'px';
+        cell.style.maxWidth = w + 'px';
+      }
+    });
+    btns.forEach(function(btn, i) {
+      var w = clampColWidth(widths[i] || 1);
+      btn.style.flexBasis = w + 'px';
+      btn.style.minWidth = w + 'px';
+      btn.style.maxWidth = w + 'px';
+    });
+  }
+
+  function computeResolvedWidths(ctx, colCount) {
+    var labelsWrap = document.getElementById('multi-value-col-labels');
+    var feedInner = ctx.feedInner;
+    var wraps = Array.from(feedInner.querySelectorAll('.obj[data-id] .obj-values-wrap'));
+    var widths = new Array(colCount).fill(1);
+    if (wraps.length) {
+      wraps.forEach(function(wrap) {
+        var cells = wrap.querySelectorAll(':scope > .obj-value-cell');
+        for (var i = 0; i < colCount; i++) {
+          var cell = cells[i];
+          if (!cell) continue;
+          var cw = Math.max(1, Math.ceil(cell.getBoundingClientRect().width));
+          if (cw > widths[i]) widths[i] = cw;
+        }
+      });
+      var cs = null;
+      try { cs = window.getComputedStyle(labelsWrap); } catch (_) {}
+      var gapPx = 0;
+      if (cs) {
+        var g = parseFloat(cs.columnGap || cs.gap || '0');
+        if (Number.isFinite(g)) gapPx = Math.max(0, g);
+      }
+      var total = widths.reduce(function(a, b) { return a + b; }, 0) + Math.max(0, colCount - 1) * gapPx;
+      var avail = Math.max(0, Math.floor(labelsWrap.clientWidth || 0));
+      if (avail > total && colCount > 0) {
+        var extra = avail - total;
+        var add = extra / colCount;
+        for (var j = 0; j < colCount; j++) widths[j] += add;
+      }
+    }
+    for (var k = 0; k < colCount; k++) {
+      if (manualColumnWidths[k] != null) widths[k] = clampColWidth(manualColumnWidths[k]);
+      else widths[k] = clampColWidth(widths[k]);
+    }
+    return widths;
+  }
+
+  function bindColumnResizeHandle(btn, colIdx, ctx) {
+    if (!btn || btn.dataset.inoutResizeBound === '1') return;
+    btn.dataset.inoutResizeBound = '1';
+    var handle = document.createElement('span');
+    handle.className = 'multi-value-col-resize-handle';
+    handle.setAttribute('aria-hidden', 'true');
+    btn.appendChild(handle);
+    handle.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    handle.addEventListener('pointerdown', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var startX = Number(e.clientX) || 0;
+      var startW = Math.ceil(btn.getBoundingClientRect().width || 0);
+      if (!(startW > 0)) startW = manualColumnWidths[colIdx] || 120;
+      var active = true;
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      function onMove(ev) {
+        if (!active) return;
+        var x = Number(ev.clientX) || startX;
+        var next = clampColWidth(startW + (x - startX));
+        manualColumnWidths[colIdx] = next;
+        var labelsWrap = document.getElementById('multi-value-col-labels');
+        var count = labelsWrap ? labelsWrap.querySelectorAll('.multi-value-col-label-btn').length : 0;
+        if (count > 0) {
+          var widths = computeResolvedWidths(ctx, count);
+          applyColumnWidths(widths, ctx);
+        }
+      }
+      function onUp() {
+        if (!active) return;
+        active = false;
+        window.removeEventListener('pointermove', onMove, true);
+        window.removeEventListener('pointerup', onUp, true);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+      window.addEventListener('pointermove', onMove, true);
+      window.addEventListener('pointerup', onUp, true);
+    });
+  }
 
   function syncValueWrapsToHeaderScroll(scrollLeft, sourceWrap, ctx) {
     var feedInner = ctx.feedInner;
@@ -53,57 +170,9 @@
     if (!labelsWrap || !feedInner) return;
     var btns = labelsWrap.querySelectorAll('.multi-value-col-label-btn');
     if (!btns.length) return;
-    var wraps = Array.from(feedInner.querySelectorAll('.obj[data-id] .obj-values-wrap'));
-    if (!wraps.length) {
-      btns.forEach(function(btn) {
-        btn.style.removeProperty('flex-basis');
-        btn.style.removeProperty('min-width');
-        btn.style.removeProperty('max-width');
-      });
-      return;
-    }
     var colCount = btns.length;
-    var widths = new Array(colCount).fill(1);
-    wraps.forEach(function(wrap) {
-      var cells = wrap.querySelectorAll(':scope > .obj-value-cell');
-      for (var i = 0; i < colCount; i++) {
-        var cell = cells[i];
-        if (!cell) continue;
-        var cw = Math.max(1, Math.ceil(cell.getBoundingClientRect().width));
-        if (cw > widths[i]) widths[i] = cw;
-      }
-    });
-    var cs = null;
-    try { cs = window.getComputedStyle(labelsWrap); } catch (_) {}
-    var gapPx = 0;
-    if (cs) {
-      var g = parseFloat(cs.columnGap || cs.gap || '0');
-      if (Number.isFinite(g)) gapPx = Math.max(0, g);
-    }
-    var total = widths.reduce(function(a, b) { return a + b; }, 0) + Math.max(0, colCount - 1) * gapPx;
-    var avail = Math.max(0, Math.floor(labelsWrap.clientWidth || 0));
-    if (avail > total && colCount > 0) {
-      var extra = avail - total;
-      var add = extra / colCount;
-      for (var j = 0; j < colCount; j++) widths[j] += add;
-    }
-    wraps.forEach(function(wrap) {
-      var cells = wrap.querySelectorAll(':scope > .obj-value-cell');
-      for (var i = 0; i < colCount; i++) {
-        var cell = cells[i];
-        if (!cell) continue;
-        var w = Math.max(1, Math.round(widths[i]));
-        cell.style.flexBasis = w + 'px';
-        cell.style.minWidth = w + 'px';
-        cell.style.maxWidth = w + 'px';
-      }
-    });
-    btns.forEach(function(btn, i) {
-      var w = Math.max(1, Math.round(widths[i] || 1));
-      btn.style.flexBasis = w + 'px';
-      btn.style.minWidth = w + 'px';
-      btn.style.maxWidth = w + 'px';
-    });
+    var widths = computeResolvedWidths(ctx, colCount);
+    applyColumnWidths(widths, ctx);
   }
 
   function updateMultiValueColumnLabelButtonsActive(ctx) {
@@ -140,7 +209,9 @@
       btn.setAttribute('title', 'Filter by "' + lab + '". Double-click to rename. Click again to clear filter.');
       btn.setAttribute('aria-label', 'Column header: ' + lab + '. Click to filter, double-click to rename.');
       wrap.appendChild(btn);
+      bindColumnResizeHandle(btn, i, ctx);
     }
+    if (manualColumnWidths.length > n) manualColumnWidths = manualColumnWidths.slice(0, n);
     updateMultiValueColumnLabelButtonsActive(ctx);
     syncManageBarLabelButtonWidthsFromFeed(ctx);
   }

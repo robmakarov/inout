@@ -643,6 +643,8 @@ header{
   white-space:nowrap;
   cursor:default;
   min-height:28px;
+  position:relative;
+  padding-right:14px;
 }
 .multi-value-col-label-btn:hover{
   color:var(--text);
@@ -655,6 +657,28 @@ header{
   background:transparent;
   color:var(--acc);
   font-weight:600;
+}
+.multi-value-col-resize-handle{
+  position:absolute;
+  top:0;
+  right:-6px;
+  bottom:0;
+  width:12px;
+  cursor:col-resize;
+  touch-action:none;
+  z-index:2;
+}
+.multi-value-col-resize-handle::before{
+  content:'';
+  position:absolute;
+  top:4px;
+  bottom:4px;
+  left:5px;
+  width:1px;
+  background:rgba(184,160,96,0.55);
+}
+.multi-value-col-label-btn:hover .multi-value-col-resize-handle::before{
+  background:rgba(232,213,160,0.9);
 }
 .multi-value-filter-menu{
   position:absolute;
