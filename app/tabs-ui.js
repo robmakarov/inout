@@ -102,7 +102,6 @@
         var viewAtClick = ctx.currentView();
         var channelAtClick = ctx.currentChannel();
         ctx.clearPendingViewSwitchClick();
-        var tabSwitchDelay = ctx.isMobileOrTouchDevice() ? 0 : 90;
         if (!ctx.inoutHydratingWorkspace()) {
           var sameTabAtClick = ch === viewAtClick && ch === channelAtClick;
           var slot0AtClick = ctx.inputSlots && ctx.inputSlots[0];
@@ -110,22 +109,15 @@
             ctx.primarySlotAutoTarget() && slot0AtClick && String(slot0AtClick.channel || '') !== String(ch);
           if (!sameTabAtClick || slotMismatchAtClick) setTabChannelLoading(ch, true, ctx);
         }
-        ctx.setPendingViewSwitchChannel(ch);
-        ctx.setPendingViewSwitchTimer(setTimeout(function() {
-          ctx.setPendingViewSwitchTimer(null);
-          var targetCh = ctx.pendingViewSwitchChannel();
-          ctx.setPendingViewSwitchChannel(null);
-          if (targetCh == null || targetCh === '') return;
-          var tabBtn =
-            tabsEl && tabsEl.querySelector
-              ? tabsEl.querySelector('.tab[data-channel="' + CSS.escape(String(targetCh)) + '"]')
-              : null;
-          if (tabBtn && tabBtn.querySelector('.tab-rename-input')) {
-            if (!ctx.inoutHydratingWorkspace()) setTabChannelLoading(targetCh, false, ctx);
-            return;
-          }
-          ctx.switchChannel(targetCh);
-        }, tabSwitchDelay));
+        var tabBtn =
+          tabsEl && tabsEl.querySelector
+            ? tabsEl.querySelector('.tab[data-channel="' + CSS.escape(String(ch)) + '"]')
+            : null;
+        if (tabBtn && tabBtn.querySelector('.tab-rename-input')) {
+          if (!ctx.inoutHydratingWorkspace()) setTabChannelLoading(ch, false, ctx);
+          return;
+        }
+        ctx.switchChannel(ch);
       });
 
       btn.addEventListener('dragenter', function(e) {

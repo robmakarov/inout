@@ -1855,7 +1855,7 @@ var _channelViewRulesPersistTimer = null;
 var applyingWorkspaceFocusFromRemote = false;
 /** Ignore personal-workspace `focusedChannel` from realtime briefly after a local tab change (avoids fighting the user). */
 var lastLocalFocusedChannelSwitchAt = 0;
-var REMOTE_FOCUSED_CHANNEL_GRACE_MS = 2200;
+var REMOTE_FOCUSED_CHANNEL_GRACE_MS = 700;
 /** True during full applyPersonalWorkspaceStateFromServer (avoid persist/flush feedback loops). */
 var applyingPersonalWorkspaceFromRemote = false;
 /** Nonces from our recent workspace upserts — skip only those realtime echoes (not other devices). */
