@@ -7846,6 +7846,12 @@ function createObjectRow(obj, isNew, options) {
       document.removeEventListener('pointerdown', objActionsOutsideCloseHandler, true);
       objActionsOutsideCloseHandler = null;
     }
+    try {
+      actions.style.opacity = '';
+      actions.style.pointerEvents = '';
+      dropdown.style.display = '';
+      dropdown.style.visibility = '';
+    } catch (_) {}
     dropdown.style.position = '';
     dropdown.style.top = '';
     dropdown.style.right = '';
@@ -7882,6 +7888,12 @@ function createObjectRow(obj, isNew, options) {
     trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
     if (isOpen) {
       objActionsOpenedAt = Date.now();
+      try {
+        actions.style.opacity = '1';
+        actions.style.pointerEvents = 'auto';
+        dropdown.style.display = 'flex';
+        dropdown.style.visibility = 'visible';
+      } catch (_) {}
       positionObjActionsDropdown();
       document.removeEventListener('click', closeDropdown);
       if (objActionsOutsideCloseHandler) {
