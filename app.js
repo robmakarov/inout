@@ -1543,8 +1543,12 @@ function countNonEmptyValuePartsInRow(row) {
 
 function feedHasAnyObjectWithMultipleMessageValues(inner) {
   if (!inner) return false;
+  var feedMc = parseInt(inner.dataset.inoutValueCols, 10) || 1;
+  if (feedMc > 1) return true;
   var rows = inner.querySelectorAll('.obj[data-id]');
   for (var i = 0; i < rows.length; i++) {
+    var cells = rows[i].querySelectorAll('.obj-value-cell');
+    if (cells.length > 1) return true;
     if (countNonEmptyValuePartsInRow(rows[i]) > 1) return true;
   }
   return false;
@@ -4855,6 +4859,7 @@ function updateObjectRowText(objId, textValue) {
   row.__inoutEntryTextRaw = String(textValue != null ? textValue : '');
   var maxCols = parseInt(row.dataset.valueCols, 10) || row.querySelectorAll('.obj-value-cell').length || 1;
   var parts = parseObjectTextToParts(textValue);
+  if (parts.length > maxCols) maxCols = parts.length;
   while (parts.length < maxCols) parts.push('');
   if (parts.length > maxCols) parts = parts.slice(0, maxCols);
   ensureRowValueCellCount(row, maxCols, parts);
@@ -9217,8 +9222,14 @@ function applyChannelStripOrderFromCfg(cfg) {
     var strip = cfg.channelStripOrder
       .map(function(x) { return String(x || '').trim(); })
       .filter(Boolean);
-    var srv = strip.filter(function(c) { return c !== 'main'; });
-    viewNames = ['main'].concat(srv);
+    var ordered = strip.filter(function(c) { return c !== 'main'; });
+    var inOrder = new Set(ordered);
+    var prevNonMain = viewNames.filter(function(c) { return c && c !== 'main'; });
+    var extras = [];
+    for (var ei = 0; ei < prevNonMain.length; ei++) {
+      if (!inOrder.has(prevNonMain[ei])) extras.push(prevNonMain[ei]);
+    }
+    viewNames = ['main'].concat(ordered.concat(extras));
     viewNames = Array.from(new Set(viewNames));
     saveChannelsList();
     refreshWorkspaceChannelUi();
