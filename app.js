@@ -2657,6 +2657,52 @@ function saveScrollState() {
 }
 const unreadCounts  = new Map();
 const sharedChannels = new Set();
+/** Persisted so tab strip can show shared icons on first paint before network (see load/save helpers). */
+const INOUT_SHARED_CHANNELS_CACHE_KEY = 'inout_shared_channels_v1';
+
+function loadSharedChannelsFromLocalCache() {
+  try {
+    var raw = localStorage.getItem(INOUT_SHARED_CHANNELS_CACHE_KEY);
+    if (!raw) return;
+    var o = JSON.parse(raw);
+    if (!o || typeof o !== 'object' || !o.userId) return;
+    var ch = o.channels;
+    if (!Array.isArray(ch)) return;
+    ch.forEach(function(c) {
+      if (typeof c === 'string' && c.trim() && c !== 'main') sharedChannels.add(c.trim());
+    });
+  } catch (_) {}
+}
+
+function saveSharedChannelsToLocalCache() {
+  if (!currentUser || !currentUser.id) return;
+  try {
+    var payload = {
+      userId: String(currentUser.id),
+      channels: Array.from(sharedChannels).filter(function(c) {
+        return c && c !== 'main';
+      }),
+    };
+    localStorage.setItem(INOUT_SHARED_CHANNELS_CACHE_KEY, JSON.stringify(payload));
+  } catch (_) {}
+}
+
+/** @returns {boolean} True if the in-memory set was cleared (caller may renderTabs). */
+function invalidateSharedChannelsCacheIfDifferentUser() {
+  if (!currentUser || !currentUser.id) return false;
+  try {
+    var raw = localStorage.getItem(INOUT_SHARED_CHANNELS_CACHE_KEY);
+    if (!raw) return false;
+    var o = JSON.parse(raw);
+    if (!o || typeof o !== 'object' || !o.userId) return false;
+    if (String(o.userId) === String(currentUser.id)) return false;
+    sharedChannels.clear();
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 let channelSubs = new Map();
 let membershipRealtimeSub = null;
 let orderSub = null;
@@ -4218,6 +4264,7 @@ function init(done) {
   try { loadChannelsList(); } catch (_) {}
   try { loadViewDisplayNames(); } catch (_) {}
   try { loadScrollState(); } catch (_) {}
+  try { loadSharedChannelsFromLocalCache(); } catch (_) {}
   try { setupTabs(); } catch (_) {}
   try { restoreLastChannel(); } catch (_) {}
   try { refreshMoveTargets(); } catch (_) {}
@@ -9796,6 +9843,7 @@ async function refreshSharedFlags() {
   } catch (e) {
     console.error(e);
   }
+  saveSharedChannelsToLocalCache();
 }
 
 async function switchChannelInternal(ch) {
@@ -10193,6 +10241,9 @@ async function refreshAuth() {
     currentUser = null;
     updateAuthUI();
     sharedChannels.clear();
+    try {
+      localStorage.removeItem(INOUT_SHARED_CHANNELS_CACHE_KEY);
+    } catch (_) {}
     unreadCounts.clear();
     renderTabs();
     subscribeRealtimeAll();
@@ -10215,6 +10266,14 @@ async function refreshAuth() {
   }
 
   updateAuthUI();
+
+  if (currentUser) {
+    if (invalidateSharedChannelsCacheIfDifferentUser()) {
+      try {
+        renderTabs();
+      } catch (_) {}
+    }
+  }
 
   // Guest temp-session mode: no account, but URL has ?tempSession=...
   if (!currentUser && tempSessionId && sb && sb.rpc) {
@@ -10306,6 +10365,9 @@ async function refreshAuth() {
     subscribeViewRealtime();
   } else {
     sharedChannels.clear();
+    try {
+      localStorage.removeItem(INOUT_SHARED_CHANNELS_CACHE_KEY);
+    } catch (_) {}
     unreadCounts.clear();
     renderTabs();
     subscribeRealtimeAll();
