@@ -1771,7 +1771,12 @@ function updateMultiValueChromeBar() {
   var bar = document.getElementById('multi-value-chrome-middle');
   if (typeof feedInner === 'undefined' || !feedInner || !bar) return;
   var show = feedHasAnyObjectWithMultipleMessageValues(feedInner);
+  var addValBtn = document.getElementById('manage-bar-add-value');
   if (!show) {
+    if (addValBtn) {
+      addValBtn.hidden = true;
+      addValBtn.setAttribute('aria-hidden', 'true');
+    }
     bar.hidden = true;
     bar.setAttribute('aria-hidden', 'true');
     inoutMultiValueColumnFilterIndex = null;
@@ -1791,6 +1796,10 @@ function updateMultiValueChromeBar() {
     var trig = document.getElementById('multi-value-filter-trigger');
     if (trig) trig.classList.remove('multi-value-filter-active');
     return;
+  }
+  if (addValBtn) {
+    addValBtn.hidden = false;
+    addValBtn.removeAttribute('aria-hidden');
   }
   bar.hidden = false;
   bar.removeAttribute('aria-hidden');
@@ -1936,6 +1945,16 @@ function setupMultiValueChromeBar() {
       syncManageBarLabelButtonWidthsFromFeed();
       syncHeaderScrollFromPrimaryFeed();
     }, { passive: true });
+  }
+  var addValBarBtn = document.getElementById('manage-bar-add-value');
+  if (addValBarBtn && !addValBarBtn.dataset.inoutAddValueBound) {
+    addValBarBtn.dataset.inoutAddValueBound = '1';
+    addValBarBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      addValueColumnToAllObjectsInFeed().catch(function(err) {
+        console.error(err);
+      });
+    });
   }
 }
 
@@ -10855,6 +10874,45 @@ async function persistObjectTextPayload(entryId, serializedText, rowChannel) {
   }
   if (savedOk) updateObjectRowText(id, tv);
   return savedOk;
+}
+
+/** Append one empty value column to every object in the primary feed (multi-value views). */
+async function addValueColumnToAllObjectsInFeed() {
+  if (typeof feedInner === 'undefined' || !feedInner) return;
+  var rows = Array.from(feedInner.querySelectorAll('.obj[data-id]'));
+  if (!rows.length) {
+    toast('No objects to update.');
+    return;
+  }
+  var ch = String(currentChannel || currentView || 'main');
+  var okCount = 0;
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var id = row.dataset.id != null ? Number(row.dataset.id) : NaN;
+    if (!Number.isFinite(id)) continue;
+    var raw = Object.prototype.hasOwnProperty.call(row, '__inoutEntryTextRaw')
+      ? row.__inoutEntryTextRaw
+      : null;
+    if (raw == null) raw = getLastKnownEntryTextForChannel(ch, id);
+    if (raw == null) continue;
+    var parts = parseObjectTextToParts(String(raw));
+    parts.push('');
+    var payAdd = parseObjectTextPayload(String(raw));
+    var next = serializeObjectParts(parts, labelsAlignedToNewPartCount(payAdd, parts.length));
+    var ok = await persistObjectTextPayload(id, next, ch);
+    if (ok) okCount++;
+  }
+  if (okCount === 0) {
+    toast('Could not add value column.');
+    return;
+  }
+  if (feedInner) {
+    var mc = Math.max(computeMaxValueColumnsFromFeedInner(feedInner), 1);
+    feedInner.dataset.inoutValueCols = String(mc);
+  }
+  syncFeedMultiValueChrome(feedInner);
+  if (typeof applyFieldPrefsToObjects === 'function') applyFieldPrefsToObjects(true);
+  toast(okCount === 1 ? 'Value column added.' : 'Value column added to ' + okCount + ' objects.');
 }
 
 async function addValueColumnToObjectFromMenu(obj) {
