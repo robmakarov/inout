@@ -1374,30 +1374,96 @@ function syncAllValueColumnLabelAttrs() {
   } catch (_) {}
 }
 
-async function promptRenameValueColumnHeader(btn) {
+function beginInlineRenameValueColumnHeader(btn) {
   if (!btn) return;
+  if (document.querySelector('.multi-value-col-label-rename-input')) return;
   var idx = parseInt(btn.getAttribute('data-value-index'), 10);
   if (!Number.isFinite(idx)) return;
+  var span = btn.querySelector('.multi-value-col-label-text');
+  if (!span) return;
   var fromFeed =
     typeof feedInner !== 'undefined' && feedInner ? getColumnHeaderLabelsForFeed(feedInner) : [];
   var cur =
     fromFeed.length > idx && String(fromFeed[idx] || '').trim()
       ? String(fromFeed[idx]).trim()
       : valueColumnHeaderLabel(idx);
-  var raw = typeof window !== 'undefined' && window.prompt ? window.prompt('Column header name', cur) : null;
-  if (raw == null) return;
-  var next = String(raw).replace(/\r?\n/g, ' ').trim().slice(0, INOUT_VALUE_COL_LABEL_MAX);
-  var cleared = !next || next === defaultValueColumnHeaderLabel(idx);
-  if (cleared) setValueColumnLabelOverrideAt(idx, '');
-  else setValueColumnLabelOverrideAt(idx, next);
-  var ok = await persistValueColumnDisplayNamesToAllEntries(idx, cleared ? '' : next);
-  if (!ok) toast('Some objects could not be updated in the database.');
-  rebuildMultiValueColumnLabelButtons();
-  syncAllValueColumnLabelAttrs();
-  try {
-    if (typeof logAction === 'function')
-      logAction('view', { valueColumnHeader: { index: idx, label: cleared ? null : next } });
-  } catch (_) {}
+  var input = document.createElement('input');
+  input.className = 'multi-value-col-label-rename-input';
+  input.type = 'text';
+  input.value = cur;
+  input.setAttribute('aria-label', 'Rename column header');
+  input.maxLength = INOUT_VALUE_COL_LABEL_MAX;
+  input.autocomplete = 'off';
+  span.style.display = 'none';
+  btn.classList.add('multi-value-col-label-renaming');
+  btn.setAttribute('draggable', 'false');
+  var handle = btn.querySelector('.multi-value-col-resize-handle');
+  if (handle) handle.style.visibility = 'hidden';
+  btn.insertBefore(input, span);
+  input.focus();
+  input.select();
+
+  var finished = false;
+  function cleanupDom() {
+    if (input.parentNode) input.parentNode.removeChild(input);
+    span.style.display = '';
+    btn.classList.remove('multi-value-col-label-renaming');
+    btn.setAttribute('draggable', 'true');
+    if (handle) handle.style.visibility = '';
+  }
+
+  async function commit() {
+    if (finished) return;
+    finished = true;
+    var next = String(input.value || '').replace(/\r?\n/g, ' ').trim().slice(0, INOUT_VALUE_COL_LABEL_MAX);
+    var cleared = !next || next === defaultValueColumnHeaderLabel(idx);
+    if (cleared) setValueColumnLabelOverrideAt(idx, '');
+    else setValueColumnLabelOverrideAt(idx, next);
+    var ok = await persistValueColumnDisplayNamesToAllEntries(idx, cleared ? '' : next);
+    if (!ok) toast('Some objects could not be updated in the database.');
+    cleanupDom();
+    rebuildMultiValueColumnLabelButtons();
+    syncAllValueColumnLabelAttrs();
+    try {
+      if (typeof logAction === 'function')
+        logAction('view', { valueColumnHeader: { index: idx, label: cleared ? null : next } });
+    } catch (_) {}
+  }
+
+  function cancel() {
+    if (finished) return;
+    finished = true;
+    cleanupDom();
+  }
+
+  input.addEventListener('keydown', function(e) {
+    var k = e && (e.key || '');
+    if (k === 'Enter') {
+      e.preventDefault();
+      commit().catch(function(err) {
+        console.error(err);
+      });
+      return;
+    }
+    if (k === 'Escape') {
+      e.preventDefault();
+      cancel();
+    }
+  });
+  input.addEventListener('blur', function() {
+    window.setTimeout(function() {
+      if (finished) return;
+      commit().catch(function(err) {
+        console.error(err);
+      });
+    }, 0);
+  });
+  input.addEventListener('click', function(e) {
+    e.stopPropagation();
+  });
+  input.addEventListener('pointerdown', function(e) {
+    e.stopPropagation();
+  });
 }
 
 function columnPartNonEmpty(row, idx) {
@@ -1927,7 +1993,7 @@ function setupMultiValueChromeBar() {
           clearTimeout(inoutColHeaderFilterClickTimer);
           inoutColHeaderFilterClickTimer = null;
         }
-        promptRenameValueColumnHeader(b);
+        beginInlineRenameValueColumnHeader(b);
         return;
       }
       clearTimeout(inoutColHeaderFilterClickTimer);

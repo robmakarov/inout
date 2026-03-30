@@ -456,6 +456,13 @@ header{
   flex:0 1 auto;
   min-width:var(--inout-obj-leading-w, 0);
 }
+.manage-bar-trailing{
+  margin-left:auto;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-shrink:0;
+}
 .manage-bar-column-headers{
   flex:1 1 0;
   min-width:0;
@@ -489,7 +496,6 @@ header{
   flex-shrink:0;
   display:flex;
   align-items:center;
-  gap:6px;
   z-index:4;
 }
 .manage-bar-trigger{
@@ -667,6 +673,35 @@ header{
   background:transparent;
   color:var(--acc);
   font-weight:600;
+}
+.multi-value-col-label-text{
+  flex:1 1 auto;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  text-align:left;
+}
+.multi-value-col-label-btn.multi-value-col-label-renaming{
+  padding-left:4px;
+  padding-right:4px;
+}
+.multi-value-col-label-rename-input{
+  flex:1 1 auto;
+  min-width:48px;
+  max-width:100%;
+  border:1px solid var(--acc2);
+  background:var(--bg);
+  color:var(--text);
+  border-radius:4px;
+  font-family:var(--mono);
+  font-size:10px;
+  line-height:1.2;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  padding:2px 6px;
+  outline:none;
+  box-sizing:border-box;
 }
 .multi-value-col-label-btn.multi-value-col-label-dragging{
   opacity:0.35;

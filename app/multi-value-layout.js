@@ -208,7 +208,10 @@
       btn.setAttribute('data-value-index', String(i));
       btn.setAttribute('draggable', 'true');
       var lab = headerLabs.length > i && String(headerLabs[i] || '').trim() ? headerLabs[i] : ctx.valueColumnHeaderLabel(i);
-      btn.textContent = lab;
+      var labSpan = document.createElement('span');
+      labSpan.className = 'multi-value-col-label-text';
+      labSpan.textContent = lab;
+      btn.appendChild(labSpan);
       btn.setAttribute('aria-pressed', 'false');
       btn.setAttribute('title', 'Filter by "' + lab + '". Double-click to rename. Click again to clear filter.');
       btn.setAttribute('aria-label', 'Column header: ' + lab + '. Click to filter, double-click to rename.');
