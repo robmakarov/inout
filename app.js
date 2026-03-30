@@ -7868,6 +7868,38 @@ function createObjectRow(obj, isNew, options) {
       zIndex: 3500
     });
   }
+  function wireObjActionsOutsideClose() {
+    document.removeEventListener('click', closeDropdown);
+    if (objActionsOutsideCloseHandler) {
+      document.removeEventListener('pointerdown', objActionsOutsideCloseHandler, true);
+      objActionsOutsideCloseHandler = null;
+    }
+    objActionsOutsideCloseHandler = function(ev) {
+      if (Date.now() - objActionsOpenedAt < 220) return;
+      var t = ev && ev.target;
+      if (t && actions.contains && actions.contains(t)) return;
+      closeDropdown();
+    };
+    setTimeout(function() {
+      if (!actions.classList.contains('obj-actions-open')) return;
+      document.addEventListener('pointerdown', objActionsOutsideCloseHandler, true);
+    }, 0);
+  }
+  function openObjActionsMenu(anchorRect, posOpts) {
+    if (!anchorRect) return;
+    actions.classList.add('obj-actions-open');
+    trigger.setAttribute('aria-expanded', 'true');
+    objActionsOpenedAt = Date.now();
+    try {
+      actions.style.opacity = '1';
+      actions.style.pointerEvents = 'auto';
+      dropdown.style.display = 'flex';
+      dropdown.style.visibility = 'visible';
+    } catch (_) {}
+    var po = Object.assign({ gap: 2, maxHeightCap: 320, zIndex: 3500 }, posOpts || {});
+    positionFixedDropdownClamped(anchorRect, dropdown, po);
+    wireObjActionsOutsideClose();
+  }
   trigger.addEventListener('mousedown', e => {
     e.stopPropagation();
   });
@@ -7881,38 +7913,12 @@ function createObjectRow(obj, isNew, options) {
     e.stopPropagation();
   }, { passive: true });
   function toggleObjActionsDropdown(e) {
-    if (e) {
-      e.stopPropagation();
-    }
-    const isOpen = actions.classList.toggle('obj-actions-open');
-    trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-    if (isOpen) {
-      objActionsOpenedAt = Date.now();
-      try {
-        actions.style.opacity = '1';
-        actions.style.pointerEvents = 'auto';
-        dropdown.style.display = 'flex';
-        dropdown.style.visibility = 'visible';
-      } catch (_) {}
-      positionObjActionsDropdown();
-      document.removeEventListener('click', closeDropdown);
-      if (objActionsOutsideCloseHandler) {
-        document.removeEventListener('pointerdown', objActionsOutsideCloseHandler, true);
-        objActionsOutsideCloseHandler = null;
-      }
-      objActionsOutsideCloseHandler = function(ev) {
-        if (Date.now() - objActionsOpenedAt < 220) return;
-        var t = ev && ev.target;
-        if (t && actions.contains && actions.contains(t)) return;
-        closeDropdown();
-      };
-      setTimeout(function() {
-        if (!actions.classList.contains('obj-actions-open')) return;
-        document.addEventListener('pointerdown', objActionsOutsideCloseHandler, true);
-      }, 0);
-    } else {
+    if (e) e.stopPropagation();
+    if (actions.classList.contains('obj-actions-open')) {
       closeDropdown();
+      return;
     }
+    openObjActionsMenu(trigger.getBoundingClientRect());
   }
   trigger.addEventListener('click', toggleObjActionsDropdown);
   trigger.addEventListener('keydown', function(e) {
@@ -8498,6 +8504,16 @@ function createObjectRow(obj, isNew, options) {
   row.appendChild(leadingCol);
   row.appendChild(contentWrap);
   row.appendChild(actions);
+  row.addEventListener('contextmenu', function(ev) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    var cx = Number(ev.clientX) || 0;
+    var cy = Number(ev.clientY) || 0;
+    openObjActionsMenu(
+      { left: cx, top: cy, right: cx, bottom: cy, width: 0, height: 0 },
+      { align: 'left' }
+    );
+  });
   row.addEventListener('mousedown', e => {
     if (e.target.closest('.obj-checkbox-zone')) return;
     const contentLeft =
