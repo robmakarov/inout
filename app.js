@@ -2040,6 +2040,8 @@ const STORAGE_TARGET_KEY   = 'inout_storage_target_v1';
 const ACTIVE_LOCAL_VAULT_KEY = 'inout_active_local_vault_v1';
 const VAULT_REGISTRY_KEY   = 'inout_local_vault_registry_v1';
 let suppressAutoAuth      = false; // when true, never auto-log user back in this tab
+/** Close fn for whichever object actions menu is open (dropdown may be portaled to body). */
+var lastOpenObjActionsClose = null;
 
 function getStorageTarget() {
   try {
@@ -3367,6 +3369,9 @@ function repositionOpenDropdownsToViewport() {
     document.querySelectorAll('.obj-actions.obj-actions-open').forEach(function(actions) {
       var trig = actions.querySelector('.obj-actions-trigger');
       var dd = actions.querySelector('.obj-actions-dropdown');
+      if (!dd && trig) {
+        dd = document.body.querySelector('.obj-actions-dropdown[data-inout-portal="1"]');
+      }
       if (trig && dd) {
         positionFixedDropdownClamped(trig.getBoundingClientRect(), dd, {
           gap: 2,
@@ -7835,10 +7840,12 @@ function createObjectRow(obj, isNew, options) {
   const dropdown = document.createElement('div');
   dropdown.className = 'obj-actions-dropdown';
   dropdown.setAttribute('role', 'menu');
+  if (typeof obj.id !== 'undefined') dropdown.dataset.inoutObjRowId = String(obj.id);
   var objActionsOutsideCloseHandler = null;
   var objActionsOpenedAt = 0;
 
   function closeDropdown() {
+    if (lastOpenObjActionsClose === closeDropdown) lastOpenObjActionsClose = null;
     actions.classList.remove('obj-actions-open');
     trigger.setAttribute('aria-expanded', 'false');
     document.removeEventListener('click', closeDropdown);
@@ -7846,6 +7853,12 @@ function createObjectRow(obj, isNew, options) {
       document.removeEventListener('pointerdown', objActionsOutsideCloseHandler, true);
       objActionsOutsideCloseHandler = null;
     }
+    try {
+      if (dropdown.parentNode === document.body) {
+        dropdown.removeAttribute('data-inout-portal');
+        actions.appendChild(dropdown);
+      }
+    } catch (_) {}
     try {
       actions.style.opacity = '';
       actions.style.pointerEvents = '';
@@ -7875,9 +7888,10 @@ function createObjectRow(obj, isNew, options) {
       objActionsOutsideCloseHandler = null;
     }
     objActionsOutsideCloseHandler = function(ev) {
-      if (Date.now() - objActionsOpenedAt < 220) return;
+      if (Date.now() - objActionsOpenedAt < 420) return;
       var t = ev && ev.target;
       if (t && actions.contains && actions.contains(t)) return;
+      if (t && dropdown.contains && dropdown.contains(t)) return;
       closeDropdown();
     };
     setTimeout(function() {
@@ -7887,6 +7901,12 @@ function createObjectRow(obj, isNew, options) {
   }
   function openObjActionsMenu(anchorRect, posOpts) {
     if (!anchorRect) return;
+    if (lastOpenObjActionsClose && lastOpenObjActionsClose !== closeDropdown) {
+      try {
+        lastOpenObjActionsClose();
+      } catch (_) {}
+    }
+    lastOpenObjActionsClose = closeDropdown;
     actions.classList.add('obj-actions-open');
     trigger.setAttribute('aria-expanded', 'true');
     objActionsOpenedAt = Date.now();
@@ -7895,6 +7915,10 @@ function createObjectRow(obj, isNew, options) {
       actions.style.pointerEvents = 'auto';
       dropdown.style.display = 'flex';
       dropdown.style.visibility = 'visible';
+    } catch (_) {}
+    try {
+      if (dropdown.parentNode !== document.body) document.body.appendChild(dropdown);
+      dropdown.dataset.inoutPortal = '1';
     } catch (_) {}
     var po = Object.assign({ gap: 2, maxHeightCap: 320, zIndex: 3500 }, posOpts || {});
     positionFixedDropdownClamped(anchorRect, dropdown, po);

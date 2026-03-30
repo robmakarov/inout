@@ -2437,6 +2437,12 @@ body.select-mode .obj-checkbox-zone{
 .obj-actions-open .obj-actions-dropdown{
   display:flex;
 }
+/* Portaled to body so position:fixed is viewport-correct (parent .obj-actions uses transform) */
+.obj-actions-dropdown[data-inout-portal="1"]{
+  display:flex !important;
+  flex-direction:column;
+  z-index:10060;
+}
 .obj-actions-menu{
   display:flex;
   flex-direction:column;
