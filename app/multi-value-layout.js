@@ -230,6 +230,22 @@
     handle.setAttribute('aria-hidden', 'true');
     btn.appendChild(handle);
     function applyAutoFitForColumn() {
+      // Toggle behavior: if this column is already in auto-hug mode,
+      // next double-click returns it to normal fill distribution.
+      if (autoHugColumns[colIdx]) {
+        autoHugColumns[colIdx] = false;
+        manualColumnWidths[colIdx] = null;
+        var labelsWrapOff = document.getElementById('multi-value-col-labels');
+        var countOff = labelsWrapOff ? labelsWrapOff.querySelectorAll('.multi-value-col-label-btn').length : 0;
+        if (countOff > 0) {
+          var resolvedOff = computeResolvedWidths(ctx, countOff);
+          applyColumnWidths(resolvedOff, ctx);
+        }
+        if (ctx && typeof ctx.onColumnWidthsChanged === 'function') {
+          try { ctx.onColumnWidthsChanged(); } catch (_) {}
+        }
+        return;
+      }
       var width = measureIntrinsicHeaderButtonWidth(btn);
       var feedInner = ctx && ctx.feedInner;
       if (feedInner) {
