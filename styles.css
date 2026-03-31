@@ -2295,9 +2295,9 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
 /* Editing: doppelganger uses value style only — no background, no stroke */
 .obj-editing .obj-text,
 .obj-editing .obj-value-cell{
-  font-family:var(--mono);
-  font-size:14px;
-  line-height:1.5;
+  font-family:inherit;
+  font-size:13px;
+  line-height:1.55;
   color:var(--text);
   background:transparent;
   border:none;
