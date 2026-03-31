@@ -10946,12 +10946,9 @@ async function persistObjectTextPayload(entryId, serializedText, rowChannel) {
 async function addValueColumnToAllObjectsInFeed() {
   if (typeof feedInner === 'undefined' || !feedInner) return;
   var rows = Array.from(feedInner.querySelectorAll('.obj[data-id]'));
-  if (!rows.length) {
-    toast('No objects to update.');
-    return;
-  }
+  if (!rows.length) return;
   var ch = String(currentChannel || currentView || 'main');
-  var okCount = 0;
+  var persistJobs = [];
   for (var i = 0; i < rows.length; i++) {
     var row = rows[i];
     var id = row.dataset.id != null ? Number(row.dataset.id) : NaN;
@@ -10965,20 +10962,20 @@ async function addValueColumnToAllObjectsInFeed() {
     parts.push('');
     var payAdd = parseObjectTextPayload(String(raw));
     var next = serializeObjectParts(parts, labelsAlignedToNewPartCount(payAdd, parts.length));
-    var ok = await persistObjectTextPayload(id, next, ch);
-    if (ok) okCount++;
+    row.__inoutEntryTextRaw = next;
+    rememberEntryText(ch, id, next);
+    updateObjectRowText(id, next);
+    persistJobs.push(persistObjectTextPayload(id, next, ch));
   }
-  if (okCount === 0) {
-    toast('Could not add value column.');
-    return;
-  }
+  if (!persistJobs.length) return;
   if (feedInner) {
     var mc = Math.max(computeMaxValueColumnsFromFeedInner(feedInner), 1);
     feedInner.dataset.inoutValueCols = String(mc);
   }
   syncFeedMultiValueChrome(feedInner);
   if (typeof applyFieldPrefsToObjects === 'function') applyFieldPrefsToObjects(true);
-  toast(okCount === 1 ? 'Value column added.' : 'Value column added to ' + okCount + ' objects.');
+  if (canSyncPersonalWorkspaceNow()) schedulePersonalWorkspacePersist();
+  Promise.allSettled(persistJobs).catch(function() {});
 }
 
 async function addValueColumnToObjectFromMenu(obj) {
@@ -10992,15 +10989,13 @@ async function addValueColumnToObjectFromMenu(obj) {
   var next = serializeObjectParts(parts, labelsAlignedToNewPartCount(payAdd, parts.length));
   var ch = obj.channel != null ? String(obj.channel) : String(currentChannel || 'main');
   var ok = await persistObjectTextPayload(id, next, ch);
-  if (!ok) toast('Could not add value.');
-  else {
+  if (ok) {
     if (feedInner) {
       var mc = Math.max(computeMaxValueColumnsFromFeedInner(feedInner), parts.length, 1);
       feedInner.dataset.inoutValueCols = String(mc);
     }
     syncFeedMultiValueChrome(feedInner);
     if (typeof applyFieldPrefsToObjects === 'function') applyFieldPrefsToObjects(true);
-    toast('Value column added.');
   }
 }
 
