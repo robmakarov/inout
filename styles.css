@@ -2264,13 +2264,8 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
   bottom:4px;
   right:-1px;
   width:1px;
-  background:transparent;
+  background:transparent !important;
   pointer-events:none;
-}
-.obj:hover .obj-values-wrap .obj-value-cell:not(:last-child)::after,
-.obj.obj-drag-over .obj-values-wrap .obj-value-cell:not(:last-child)::after,
-.obj-values-wrap .obj-value-cell:hover::after{
-  background:rgba(180,180,180,0.35);
 }
 .obj-value-render{
   display:block;
