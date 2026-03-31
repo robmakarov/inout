@@ -13007,7 +13007,8 @@ function escapeHtml(s) {
 
 function renderVisualOnlyHtml(input) {
   const src = String(input == null ? '' : input);
-  if (!src) return '';
+  /* Empty slot: keep a hook span so hover can show edit caret preview (CSS :empty on .obj-value-render). */
+  if (!src) return '<span class="obj-value-render"></span>';
   if (typeof document === 'undefined' || !document.implementation) {
     return '<span class="obj-value-render">' + escapeHtml(src) + '</span>';
   }

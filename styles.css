@@ -2324,6 +2324,22 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
   margin-left:-1px;
   animation:obj-edit-caret-blink 1s step-end infinite;
 }
+/* Empty value (not editing): show same caret spirit at text start on hover */
+.feed-inner .obj:not(.obj-editing) .obj-text > .obj-value-render:empty,
+.feed-inner .obj:not(.obj-editing) .obj-value-cell > .obj-value-render:empty{
+  min-height:1.55em;
+}
+.feed-inner .obj:not(.obj-editing) .obj-text > .obj-value-render:empty:hover::before,
+.feed-inner .obj:not(.obj-editing) .obj-value-cell > .obj-value-render:empty:hover::before{
+  content:'';
+  display:inline-block;
+  width:0;
+  height:1em;
+  vertical-align:text-bottom;
+  border-left:2px solid var(--acc);
+  margin-left:-1px;
+  animation:obj-edit-caret-blink 1s step-end infinite;
+}
 @keyframes obj-edit-caret-blink{
   50%{ opacity:0; }
 }
