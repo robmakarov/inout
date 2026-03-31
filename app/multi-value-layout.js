@@ -205,28 +205,12 @@
     }
 
     if (flexCols.length && containerW > 0 && colCount > 1) {
-      var remaining = available - fixedSum;
-      var pending = flexCols.slice();
-      while (pending.length) {
-        var share = remaining / pending.length;
-        var moved = false;
-        for (var pi = pending.length - 1; pi >= 0; pi--) {
-          var idx = pending[pi];
-          var need = clampColWidth(widths[idx]);
-          if (need > share) {
-            resolved[idx] = need; // overflowing column hugs content
-            remaining -= need;
-            pending.splice(pi, 1);
-            moved = true;
-          }
-        }
-        if (!moved) break;
-      }
-      if (pending.length) {
-        var equal = Math.max(MIN_COL_WIDTH, Math.floor(remaining / pending.length));
-        for (var qi = 0; qi < pending.length; qi++) {
-          resolved[pending[qi]] = clampColWidth(equal);
-        }
+      // Default behavior: regular columns always share width equally.
+      // Hug widths are only for manual resize or explicit auto-hug columns.
+      var remaining = Math.max(0, available - fixedSum);
+      var equal = Math.max(MIN_COL_WIDTH, Math.floor(remaining / flexCols.length));
+      for (var qi = 0; qi < flexCols.length; qi++) {
+        resolved[flexCols[qi]] = clampColWidth(equal);
       }
     } else {
       for (var ri = 0; ri < flexCols.length; ri++) {

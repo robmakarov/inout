@@ -1673,6 +1673,9 @@ function syncInoutObjLeadingWidthVar() {
     var inner = document.getElementById('feed-inner');
     var mbar = document.getElementById('manage-bar');
     if (!inner || !mbar) return;
+    // Avoid circular measurement: previous var can inflate .obj-leading-col min-width.
+    inner.style.removeProperty('--inout-obj-leading-w');
+    mbar.style.removeProperty('--inout-obj-leading-w');
     var row = inner.querySelector('.obj[data-id]');
     var leadEl = row ? row.querySelector('.obj-leading-col') : null;
     // Use rendered leading column width directly so hidden time/author states stay perfectly aligned.
