@@ -1115,6 +1115,7 @@ function syncFeedMultiValueChrome(inner, messagesList) {
     if (typeof feedInner !== 'undefined' && inner === feedInner && typeof updateMultiValueChromeBar === 'function')
       updateMultiValueChromeBar();
   } catch (_) {}
+  try { normalizeEmptyValueRenderSpans(); } catch (_) {}
 }
 
 var inoutMultiValueFilterMode = 'all';
@@ -13046,6 +13047,18 @@ function renderVisualOnlyHtml(input) {
 
   Array.from(root.childNodes).forEach(sanitizeNode);
   return '<span class="obj-value-render">' + root.innerHTML + '</span>';
+}
+
+function normalizeEmptyValueRenderSpans() {
+  try {
+    document.querySelectorAll('.obj-value-cell, .obj-text').forEach(function(cell) {
+      if (!cell) return;
+      var txt = String(cell.textContent || '').trim();
+      if (txt) return;
+      if (cell.querySelector(':scope > .obj-value-render')) return;
+      cell.innerHTML = '<span class="obj-value-render"></span>';
+    });
+  } catch (_) {}
 }
 
 function toast(msg, dur = 2800) {

@@ -2327,10 +2327,13 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
 /* Empty value (not editing): show same caret spirit at text start on hover */
 .feed-inner .obj:not(.obj-editing) .obj-text > .obj-value-render:empty,
 .feed-inner .obj:not(.obj-editing) .obj-value-cell > .obj-value-render:empty{
+  display:inline-block;
+  width:0;
   min-height:1.55em;
+  pointer-events:none;
 }
-.feed-inner .obj:not(.obj-editing) .obj-text > .obj-value-render:empty:hover::before,
-.feed-inner .obj:not(.obj-editing) .obj-value-cell > .obj-value-render:empty:hover::before{
+.feed-inner .obj:not(.obj-editing) .obj-text:hover > .obj-value-render:empty::before,
+.feed-inner .obj:not(.obj-editing) .obj-value-cell:hover > .obj-value-render:empty::before{
   content:'';
   display:inline-block;
   width:0;
