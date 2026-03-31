@@ -2,6 +2,7 @@
   'use strict';
   var manualColumnWidths = [];
   var autoHugColumns = [];
+  var lastColumnCount = 1;
   var MIN_COL_WIDTH = 56;
   var MAX_COL_WIDTH = 1400;
 
@@ -405,10 +406,17 @@
     var feedInner = ctx.feedInner;
     if (!wrap || !feedInner) return;
     var n = parseInt(feedInner.dataset.inoutValueCols, 10) || 1;
+    var prevN = Math.max(1, Number(lastColumnCount) || 1);
+    if (n > 1 && prevN <= 1) {
+      // New second column should start in equal-fill mode (no stale first-column hug/manual width).
+      manualColumnWidths = [];
+      autoHugColumns = [];
+    }
     if (ctx.state.getInoutMultiValueColumnFilterIndex() != null && ctx.state.getInoutMultiValueColumnFilterIndex() >= n) {
       ctx.state.setInoutMultiValueColumnFilterIndex(null);
     }
     wrap.replaceChildren();
+    lastColumnCount = n;
     if (n < 2) return;
     var headerLabs = ctx.getColumnHeaderLabelsForFeed(feedInner);
     for (var i = 0; i < n; i++) {
@@ -429,6 +437,7 @@
       bindColumnResizeHandle(btn, i, ctx);
     }
     if (manualColumnWidths.length > n) manualColumnWidths = manualColumnWidths.slice(0, n);
+    if (autoHugColumns.length > n) autoHugColumns = autoHugColumns.slice(0, n);
     updateMultiValueColumnLabelButtonsActive(ctx);
     syncManageBarLabelButtonWidthsFromFeed(ctx);
   }
