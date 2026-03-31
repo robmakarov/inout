@@ -85,9 +85,38 @@
     handle.className = 'multi-value-col-resize-handle';
     handle.setAttribute('aria-hidden', 'true');
     btn.appendChild(handle);
+    function applyAutoFitForColumn() {
+      var width = measureHeaderButtonContentWidth(btn);
+      var feedInner = ctx && ctx.feedInner;
+      if (feedInner) {
+        var wraps = Array.from(feedInner.querySelectorAll('.obj[data-id] .obj-values-wrap'));
+        wraps.forEach(function(wrap) {
+          var cells = wrap.querySelectorAll(':scope > .obj-value-cell');
+          var cell = cells[colIdx];
+          if (!cell) return;
+          var cw = measureValueCellContentWidth(cell);
+          if (cw > width) width = cw;
+        });
+      }
+      manualColumnWidths[colIdx] = clampColWidth(width);
+      var labelsWrap = document.getElementById('multi-value-col-labels');
+      var count = labelsWrap ? labelsWrap.querySelectorAll('.multi-value-col-label-btn').length : 0;
+      if (count > 0) {
+        var resolved = computeResolvedWidths(ctx, count);
+        applyColumnWidths(resolved, ctx);
+      }
+      if (ctx && typeof ctx.onColumnWidthsChanged === 'function') {
+        try { ctx.onColumnWidthsChanged(); } catch (_) {}
+      }
+    }
     handle.addEventListener('click', function(e) {
       e.preventDefault();
       e.stopPropagation();
+    });
+    handle.addEventListener('dblclick', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      applyAutoFitForColumn();
     });
     handle.addEventListener('pointerdown', function(e) {
       e.preventDefault();
