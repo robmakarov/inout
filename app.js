@@ -3945,6 +3945,14 @@ function cancelEditingMode(clearInput) {
   }
   reactivateInputMode({ clearInput: !!clearInput });
 }
+
+function saveEditingModeFromOutsideClick() {
+  var inEdit = editingObjectId != null || (editingObjectIds && editingObjectIds.size > 0);
+  if (!inEdit) return;
+  send().catch(function(err) {
+    console.error(err);
+  });
+}
 let currentObjectOrder = [];
 let touchDragState = null; // for mobile long-press drag
 let dragDropHandled = false;
@@ -8765,11 +8773,11 @@ function createObjectRow(obj, isNew, options) {
     e.stopPropagation();
     if (typeof obj.id === 'undefined') return;
     if (selectMode && editingObjectId) {
-      cancelEditingMode(true);
+      saveEditingModeFromOutsideClick();
       return;
     }
     if (Number(obj.id) === Number(editingObjectId)) {
-      cancelEditingMode(true);
+      saveEditingModeFromOutsideClick();
       return;
     }
     const multi = selectMode && selectedIds.size > 1 && selectedIds.has(obj.id);
@@ -8814,7 +8822,7 @@ function createObjectRow(obj, isNew, options) {
     if (e.target.closest('button, a, .obj-actions, .obj-select, .obj-select-wrap')) return;
     e.stopPropagation();
     e.preventDefault();
-    cancelEditingMode(true);
+    saveEditingModeFromOutsideClick();
   }, true);
 
   row.appendChild(leadingCol);
