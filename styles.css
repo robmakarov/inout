@@ -580,7 +580,7 @@ header{
   justify-content:flex-start;
 }
 
-/* Multi-value filter + column header buttons; hidden when no multi-value objects */
+/* Multi-value filter + column header buttons in #manage-bar row */
 .multi-value-chrome-middle{
   flex:1 1 0;
   min-width:0;
