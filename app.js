@@ -1792,6 +1792,14 @@ function syncHeaderScrollToValueWrap(scrollLeft) {
   window.InoutMultiValueLayout.syncHeaderScrollToValueWrap(scrollLeft);
 }
 
+function scrollMultiValueColumnsToEnd() {
+  var colWrap = document.getElementById('multi-value-col-labels');
+  if (!colWrap) return;
+  var maxLeft = Math.max(0, (colWrap.scrollWidth || 0) - (colWrap.clientWidth || 0));
+  colWrap.scrollLeft = maxLeft;
+  syncValueWrapsToHeaderScroll(maxLeft, null);
+}
+
 function bindValueWrapScrollSync(wrap) {
   if (!window.InoutMultiValueLayout || !window.InoutMultiValueLayout.bindValueWrapScrollSync) return;
   window.InoutMultiValueLayout.bindValueWrapScrollSync(wrap, inoutMultiValueLayoutCtx());
@@ -10974,6 +10982,11 @@ async function addValueColumnToAllObjectsInFeed() {
   }
   syncFeedMultiValueChrome(feedInner);
   if (typeof applyFieldPrefsToObjects === 'function') applyFieldPrefsToObjects(true);
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      scrollMultiValueColumnsToEnd();
+    });
+  });
   if (canSyncPersonalWorkspaceNow()) schedulePersonalWorkspacePersist();
   Promise.allSettled(persistJobs).catch(function() {});
 }
@@ -10996,6 +11009,11 @@ async function addValueColumnToObjectFromMenu(obj) {
     }
     syncFeedMultiValueChrome(feedInner);
     if (typeof applyFieldPrefsToObjects === 'function') applyFieldPrefsToObjects(true);
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        scrollMultiValueColumnsToEnd();
+      });
+    });
   }
 }
 
