@@ -1253,19 +1253,24 @@ async function deleteValueColumnInCurrentView(colIdx) {
     if (!Number.isFinite(id)) continue;
     var raw = Object.prototype.hasOwnProperty.call(row, '__inoutEntryTextRaw') ? row.__inoutEntryTextRaw : null;
     if (raw == null) raw = getLastKnownEntryTextForChannel(ch, id);
-    if (raw == null) continue;
-    var pay = parseObjectTextPayload(String(raw));
-    var parts = pay.parts.slice();
+    var pay = raw == null
+      ? { parts: partsFromRowDom(row), labels: [] }
+      : parseObjectTextPayload(String(raw));
+    var parts = Array.isArray(pay.parts) ? pay.parts.slice() : [];
     while (parts.length < maxCols) parts.push('');
     var labels = labelsAlignedToNewPartCount(pay, parts.length);
     parts.splice(idx, 1);
     labels.splice(idx, 1);
     if (!parts.length) parts.push('');
     var next = serializeObjectParts(parts, labels);
-    row.__inoutEntryTextRaw = next;
-    rememberEntryText(ch, id, next);
-    updateObjectRowText(id, next);
-    persistJobs.push(persistObjectTextPayload(id, next, ch));
+    // Apply DOM shape immediately so the deleted column disappears without refresh.
+    ensureRowValueCellCount(row, Math.max(1, parts.length), parts);
+    if (raw != null) {
+      row.__inoutEntryTextRaw = next;
+      rememberEntryText(ch, id, next);
+      updateObjectRowText(id, next);
+      persistJobs.push(persistObjectTextPayload(id, next, ch));
+    }
   }
 
   feedInner.dataset.inoutValueCols = String(Math.max(1, maxCols - 1));
