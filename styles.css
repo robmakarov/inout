@@ -2300,14 +2300,18 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
   padding-right:72px;
   min-height:0;
   max-height:none;
-  overflow-y:visible;
+  overflow:hidden;
   box-sizing:border-box;
   cursor:default;
 }
 /* Doppelganger: wrap value so one flex item (cursor not split by .obj-text gap) */
 .obj-edit-value{
-  display:inline;
+  display:block;
   min-width:0;
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
 }
 /* Doppelganger: cursor and selection mirror main input */
 .obj-edit-caret{
