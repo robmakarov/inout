@@ -1674,27 +1674,9 @@ function syncInoutObjLeadingWidthVar() {
     var mbar = document.getElementById('manage-bar');
     if (!inner || !mbar) return;
     var row = inner.querySelector('.obj[data-id]');
-    var cbEl = row ? row.querySelector('.obj-select-wrap') : null;
-    var timeEl = row ? row.querySelector('.obj-time') : null;
-    var senderEl = row ? row.querySelector('.obj-sender') : null;
     var leadEl = row ? row.querySelector('.obj-leading-col') : null;
-    var metaEl = row ? row.querySelector('.obj-leading-meta') : null;
-    var cbW = cbEl ? Math.ceil(cbEl.getBoundingClientRect().width) : 0;
-    var timeW = timeEl ? Math.ceil(timeEl.getBoundingClientRect().width) : 0;
-    var senderW = senderEl ? Math.ceil(senderEl.getBoundingClientRect().width) : 0;
-    var gLead = 0;
-    var gMeta = 0;
-    try {
-      if (leadEl) {
-        var csLead = getComputedStyle(leadEl);
-        gLead = Math.max(0, Math.round(parseFloat(csLead.columnGap || csLead.gap || '0') || 0));
-      }
-      if (metaEl) {
-        var csMeta = getComputedStyle(metaEl);
-        gMeta = Math.max(0, Math.round(parseFloat(csMeta.columnGap || csMeta.gap || '0') || 0));
-      }
-    } catch (_) {}
-    var rowW = cbW + timeW + senderW + gLead + gMeta;
+    // Use rendered leading column width directly so hidden time/author states stay perfectly aligned.
+    var rowW = leadEl ? Math.ceil(leadEl.getBoundingClientRect().width) : 0;
     var start = mbar.querySelector('.manage-bar-start');
     var filterSlot = mbar.querySelector('.multi-value-filter-slot');
     var startW = start ? Math.ceil(start.getBoundingClientRect().width) : 0;
