@@ -13,6 +13,21 @@
     return n;
   }
 
+  function measureHorizontalBoxExtras(el) {
+    if (!el) return 0;
+    try {
+      var cs = getComputedStyle(el);
+      var pl = parseFloat(cs.paddingLeft || '0') || 0;
+      var pr = parseFloat(cs.paddingRight || '0') || 0;
+      var bl = parseFloat(cs.borderLeftWidth || '0') || 0;
+      var br = parseFloat(cs.borderRightWidth || '0') || 0;
+      // Small safety pixel avoids ellipsis from sub-pixel/font rounding.
+      return Math.ceil(pl + pr + bl + br + 1);
+    } catch (_) {
+      return 1;
+    }
+  }
+
   function applyColumnWidths(widths, ctx) {
     var labelsWrap = document.getElementById('multi-value-col-labels');
     var feedInner = ctx.feedInner;
@@ -69,7 +84,8 @@
       }
       if (!(sw > 0) || !Number.isFinite(sw)) sw = cell.scrollWidth;
       if (!(sw > 0) || !Number.isFinite(sw)) sw = cell.getBoundingClientRect().width || 0;
-      return Math.max(MIN_COL_WIDTH, Math.ceil(sw));
+      var extra = measureHorizontalBoxExtras(cell);
+      return Math.max(MIN_COL_WIDTH, Math.ceil(sw + extra));
     } finally {
       cell.style.flexBasis = prev.flexBasis;
       cell.style.minWidth = prev.minWidth;
@@ -107,7 +123,8 @@
       void btn.offsetWidth;
       var sw = btn.scrollWidth;
       if (!(sw > 0) || !Number.isFinite(sw)) sw = btn.getBoundingClientRect().width || 0;
-      return Math.max(MIN_COL_WIDTH, Math.ceil(sw));
+      var extra = measureHorizontalBoxExtras(btn);
+      return Math.max(MIN_COL_WIDTH, Math.ceil(sw + extra));
     } finally {
       btn.style.flexBasis = prev.flexBasis;
       btn.style.minWidth = prev.minWidth;
@@ -130,14 +147,16 @@
     }
     if (!(sw > 0) || !Number.isFinite(sw)) sw = cell.scrollWidth;
     if (!(sw > 0) || !Number.isFinite(sw)) sw = cell.getBoundingClientRect().width || 0;
-    return Math.max(MIN_COL_WIDTH, Math.ceil(sw));
+    var extra = measureHorizontalBoxExtras(cell);
+    return Math.max(MIN_COL_WIDTH, Math.ceil(sw + extra));
   }
 
   function measureHeaderButtonContentWidth(btn) {
     if (!btn) return MIN_COL_WIDTH;
     var sw = btn.scrollWidth;
     if (!(sw > 0) || !Number.isFinite(sw)) sw = btn.getBoundingClientRect().width || 0;
-    return Math.max(MIN_COL_WIDTH, Math.ceil(sw));
+    var extra = measureHorizontalBoxExtras(btn);
+    return Math.max(MIN_COL_WIDTH, Math.ceil(sw + extra));
   }
 
   function computeResolvedWidths(ctx, colCount) {
