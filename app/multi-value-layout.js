@@ -36,34 +36,39 @@
     });
   }
 
+  function measureValueCellContentWidth(cell) {
+    if (!cell) return MIN_COL_WIDTH;
+    var sw = cell.scrollWidth;
+    if (!(sw > 0) || !Number.isFinite(sw)) sw = cell.getBoundingClientRect().width || 0;
+    return Math.max(MIN_COL_WIDTH, Math.ceil(sw));
+  }
+
+  function measureHeaderButtonContentWidth(btn) {
+    if (!btn) return MIN_COL_WIDTH;
+    var sw = btn.scrollWidth;
+    if (!(sw > 0) || !Number.isFinite(sw)) sw = btn.getBoundingClientRect().width || 0;
+    return Math.max(MIN_COL_WIDTH, Math.ceil(sw));
+  }
+
   function computeResolvedWidths(ctx, colCount) {
     var labelsWrap = document.getElementById('multi-value-col-labels');
     var feedInner = ctx.feedInner;
+    var widths = new Array(colCount).fill(MIN_COL_WIDTH);
     var wraps = Array.from(feedInner.querySelectorAll('.obj[data-id] .obj-values-wrap'));
-    var widths = new Array(colCount).fill(1);
-    if (wraps.length) {
-      wraps.forEach(function(wrap) {
-        var cells = wrap.querySelectorAll(':scope > .obj-value-cell');
-        for (var i = 0; i < colCount; i++) {
-          var cell = cells[i];
-          if (!cell) continue;
-          var cw = Math.max(1, Math.ceil(cell.getBoundingClientRect().width));
-          if (cw > widths[i]) widths[i] = cw;
-        }
-      });
-      var cs = null;
-      try { cs = window.getComputedStyle(labelsWrap); } catch (_) {}
-      var gapPx = 0;
-      if (cs) {
-        var g = parseFloat(cs.columnGap || cs.gap || '0');
-        if (Number.isFinite(g)) gapPx = Math.max(0, g);
+    wraps.forEach(function(wrap) {
+      var cells = wrap.querySelectorAll(':scope > .obj-value-cell');
+      for (var i = 0; i < colCount; i++) {
+        var cell = cells[i];
+        if (!cell) continue;
+        var cw = measureValueCellContentWidth(cell);
+        if (cw > widths[i]) widths[i] = cw;
       }
-      var total = widths.reduce(function(a, b) { return a + b; }, 0) + Math.max(0, colCount - 1) * gapPx;
-      var avail = Math.max(0, Math.floor(labelsWrap.clientWidth || 0));
-      if (avail > total && colCount > 0) {
-        var extra = avail - total;
-        var add = extra / colCount;
-        for (var j = 0; j < colCount; j++) widths[j] += add;
+    });
+    if (labelsWrap) {
+      var btns = labelsWrap.querySelectorAll('.multi-value-col-label-btn');
+      for (var b = 0; b < btns.length && b < colCount; b++) {
+        var bw = measureHeaderButtonContentWidth(btns[b]);
+        if (bw > widths[b]) widths[b] = bw;
       }
     }
     for (var k = 0; k < colCount; k++) {

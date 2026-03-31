@@ -635,10 +635,11 @@ header{
   min-height:0;
 }
 .multi-value-col-label-btn{
-  /* Hug label text by default; if extra room exists, share it evenly. */
-  flex:1 0 max-content;
+  /* Hug header label until JS/manual resize sets explicit width */
+  flex:0 0 auto;
+  width:max-content;
   min-width:0;
-  width:auto;
+  max-width:none;
   box-sizing:border-box;
   font-family:var(--mono);
   font-size:10px;
@@ -666,7 +667,8 @@ header{
   color:var(--text);
 }
 .multi-value-col-labels .multi-value-col-label-btn:only-child{
-  flex:1 1 auto;
+  flex:0 0 auto;
+  width:max-content;
 }
 .multi-value-col-label-btn.multi-value-col-label-btn-active{
   border:none;
@@ -675,12 +677,13 @@ header{
   font-weight:600;
 }
 .multi-value-col-label-text{
-  flex:1 1 auto;
+  flex:0 1 auto;
   min-width:0;
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
   text-align:left;
+  align-self:center;
 }
 .multi-value-col-label-btn.multi-value-col-label-renaming{
   padding-left:4px;
@@ -1888,6 +1891,15 @@ body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell::b
   min-height:1.5em;
   box-sizing:border-box;
 }
+.feed-inner.inout-multi-value-cols .obj-content .obj-values-wrap .obj-value-cell{
+  flex:0 0 auto;
+  width:max-content;
+  max-width:none;
+  min-width:56px;
+  align-items:flex-start;
+  justify-content:flex-start;
+  text-align:left;
+}
 /* Single full-width value still grows */
 .obj-content .obj-values-wrap .obj-value-cell:only-child{
   flex:1 1 auto;
@@ -2230,6 +2242,7 @@ body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transiti
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
+  text-align:left;
 }
 .obj-value-render *{
   max-width:100%;
