@@ -1897,9 +1897,15 @@ body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell::b
   width:max-content;
   max-width:none;
   min-width:56px;
+  /* Keep text reaching the column edge; actions live on the row right side. */
+  padding-right:0;
   align-items:flex-start;
   justify-content:flex-start;
   text-align:left;
+}
+/* Reserve actions overlap space only on the last visible value column. */
+.feed-inner.inout-multi-value-cols .obj-content .obj-values-wrap .obj-value-cell:last-child{
+  padding-right:72px;
 }
 /* Single full-width value still grows */
 .obj-content .obj-values-wrap .obj-value-cell:only-child{

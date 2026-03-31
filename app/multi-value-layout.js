@@ -1,6 +1,7 @@
 ;(function(global) {
   'use strict';
   var manualColumnWidths = [];
+  var autoHugColumns = [];
   var MIN_COL_WIDTH = 56;
   var MAX_COL_WIDTH = 1400;
 
@@ -147,9 +148,25 @@
         var bw = measureHeaderButtonContentWidth(btns[b]);
         if (bw > widths[b]) widths[b] = bw;
       }
+      // Auto-hug columns keep tracking intrinsic (untruncated) content width.
+      for (var ai = 0; ai < colCount; ai++) {
+        if (!autoHugColumns[ai]) continue;
+        var want = 0;
+        var hdrBtn = btns[ai];
+        if (hdrBtn) want = Math.max(want, measureIntrinsicHeaderButtonWidth(hdrBtn));
+        wraps.forEach(function(wrap) {
+          var cells = wrap.querySelectorAll(':scope > .obj-value-cell');
+          var cell = cells[ai];
+          if (!cell) return;
+          var cw = measureIntrinsicObjValueCellWidth(cell);
+          if (cw > want) want = cw;
+        });
+        widths[ai] = Math.max(widths[ai], clampColWidth(want));
+      }
     }
     for (var k = 0; k < colCount; k++) {
-      if (manualColumnWidths[k] != null) widths[k] = clampColWidth(manualColumnWidths[k]);
+      if (autoHugColumns[k]) widths[k] = clampColWidth(widths[k]);
+      else if (manualColumnWidths[k] != null) widths[k] = clampColWidth(manualColumnWidths[k]);
       else widths[k] = clampColWidth(widths[k]);
     }
     return widths;
@@ -176,6 +193,7 @@
         });
       }
       manualColumnWidths[colIdx] = clampColWidth(width);
+      autoHugColumns[colIdx] = true;
       var labelsWrap = document.getElementById('multi-value-col-labels');
       var count = labelsWrap ? labelsWrap.querySelectorAll('.multi-value-col-label-btn').length : 0;
       if (count > 0) {
@@ -198,6 +216,8 @@
     handle.addEventListener('pointerdown', function(e) {
       e.preventDefault();
       e.stopPropagation();
+      // Manual drag-resize disables auto-hug for this column.
+      autoHugColumns[colIdx] = false;
       var startX = Number(e.clientX) || 0;
       var startW = Math.ceil(btn.getBoundingClientRect().width || 0);
       if (!(startW > 0)) startW = manualColumnWidths[colIdx] || 120;
@@ -348,12 +368,14 @@
   global.InoutMultiValueLayout.setManualColumnWidths = function(widths, ctx) {
     if (!Array.isArray(widths)) {
       manualColumnWidths = [];
+      autoHugColumns = [];
       return;
     }
     manualColumnWidths = widths.map(function(w) {
       if (w == null || w === '') return null;
       return clampColWidth(w);
     });
+    autoHugColumns = manualColumnWidths.map(function() { return false; });
     if (ctx && ctx.feedInner) {
       var labelsWrap = document.getElementById('multi-value-col-labels');
       var count = labelsWrap ? labelsWrap.querySelectorAll('.multi-value-col-label-btn').length : 0;
