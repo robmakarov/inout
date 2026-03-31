@@ -169,6 +169,39 @@
       else if (manualColumnWidths[k] != null) widths[k] = clampColWidth(manualColumnWidths[k]);
       else widths[k] = clampColWidth(widths[k]);
     }
+    // Fill available viewport width before introducing horizontal scroll.
+    var containerW = labelsWrap ? Math.max(0, Math.floor(labelsWrap.clientWidth || 0)) : 0;
+    if (containerW > 0 && colCount > 0) {
+      var gap = 0;
+      try {
+        var cs = getComputedStyle(labelsWrap);
+        gap = Math.max(
+          0,
+          Math.round(parseFloat(cs.columnGap || cs.gap || '0') || 0)
+        );
+      } catch (_) {}
+      var gapsTotal = gap * Math.max(0, colCount - 1);
+      var used = gapsTotal;
+      for (var wi = 0; wi < colCount; wi++) used += clampColWidth(widths[wi]);
+      if (used < containerW) {
+        var extra = containerW - used;
+        var flexCols = [];
+        for (var fi = 0; fi < colCount; fi++) {
+          if (!autoHugColumns[fi] && manualColumnWidths[fi] == null) flexCols.push(fi);
+        }
+        if (!flexCols.length) {
+          for (var fa = 0; fa < colCount; fa++) flexCols.push(fa);
+        }
+        if (flexCols.length) {
+          var per = Math.floor(extra / flexCols.length);
+          var rem = extra % flexCols.length;
+          for (var fj = 0; fj < flexCols.length; fj++) {
+            var idx = flexCols[fj];
+            widths[idx] = clampColWidth(widths[idx] + per + (fj < rem ? 1 : 0));
+          }
+        }
+      }
+    }
     return widths;
   }
 
@@ -216,18 +249,29 @@
     handle.addEventListener('pointerdown', function(e) {
       e.preventDefault();
       e.stopPropagation();
-      // Manual drag-resize disables auto-hug for this column.
-      autoHugColumns[colIdx] = false;
+      // Second click of a double-click should always trigger hug, not resize drag.
+      if ((e.detail || 0) >= 2) {
+        applyAutoFitForColumn();
+        return;
+      }
       var startX = Number(e.clientX) || 0;
       var startW = Math.ceil(btn.getBoundingClientRect().width || 0);
       if (!(startW > 0)) startW = manualColumnWidths[colIdx] || 120;
       var active = true;
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
+      var dragStarted = false;
       function onMove(ev) {
         if (!active) return;
         var x = Number(ev.clientX) || startX;
-        var next = clampColWidth(startW + (x - startX));
+        var dx = x - startX;
+        if (!dragStarted) {
+          if (Math.abs(dx) < 2) return;
+          dragStarted = true;
+          // Manual drag-resize disables auto-hug for this column.
+          autoHugColumns[colIdx] = false;
+          document.body.style.cursor = 'col-resize';
+          document.body.style.userSelect = 'none';
+        }
+        var next = clampColWidth(startW + dx);
         manualColumnWidths[colIdx] = next;
         var labelsWrap = document.getElementById('multi-value-col-labels');
         var count = labelsWrap ? labelsWrap.querySelectorAll('.multi-value-col-label-btn').length : 0;
@@ -241,9 +285,11 @@
         active = false;
         window.removeEventListener('pointermove', onMove, true);
         window.removeEventListener('pointerup', onUp, true);
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-        if (ctx && typeof ctx.onColumnWidthsChanged === 'function') {
+        if (dragStarted) {
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
+        }
+        if (dragStarted && ctx && typeof ctx.onColumnWidthsChanged === 'function') {
           try { ctx.onColumnWidthsChanged(); } catch (_) {}
         }
       }
