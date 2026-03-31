@@ -1067,6 +1067,12 @@ function ensureRowValueCellCount(row, maxCols, partsForFill) {
   for (var i = 0; i < maxCols; i++) {
     var c = cells[i];
     c.dataset.valueIndex = String(i);
+    if (maxCols <= 1) {
+      // Clear multi-column fixed widths so single-value rows can use full line width.
+      c.style.flexBasis = '';
+      c.style.minWidth = '';
+      c.style.maxWidth = '';
+    }
     if (editing) continue;
     if (c.querySelector('.obj-remote-edit-badge')) continue;
     var want = partsForFill[i] != null ? partsForFill[i] : '';
