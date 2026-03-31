@@ -61,7 +61,12 @@
         inner.style.overflow = 'visible';
       }
       void cell.offsetWidth;
-      var sw = cell.scrollWidth;
+      var sw = 0;
+      if (inner) {
+        sw = inner.scrollWidth;
+        if (!(sw > 0) || !Number.isFinite(sw)) sw = inner.getBoundingClientRect().width || 0;
+      }
+      if (!(sw > 0) || !Number.isFinite(sw)) sw = cell.scrollWidth;
       if (!(sw > 0) || !Number.isFinite(sw)) sw = cell.getBoundingClientRect().width || 0;
       return Math.max(MIN_COL_WIDTH, Math.ceil(sw));
     } finally {
@@ -116,7 +121,13 @@
 
   function measureValueCellContentWidth(cell) {
     if (!cell) return MIN_COL_WIDTH;
-    var sw = cell.scrollWidth;
+    var inner = cell.querySelector('.obj-value-render');
+    var sw = 0;
+    if (inner) {
+      sw = inner.scrollWidth;
+      if (!(sw > 0) || !Number.isFinite(sw)) sw = inner.getBoundingClientRect().width || 0;
+    }
+    if (!(sw > 0) || !Number.isFinite(sw)) sw = cell.scrollWidth;
     if (!(sw > 0) || !Number.isFinite(sw)) sw = cell.getBoundingClientRect().width || 0;
     return Math.max(MIN_COL_WIDTH, Math.ceil(sw));
   }
@@ -171,7 +182,7 @@
     }
     // Fill available viewport width before introducing horizontal scroll.
     var containerW = labelsWrap ? Math.max(0, Math.floor(labelsWrap.clientWidth || 0)) : 0;
-    if (containerW > 0 && colCount > 0) {
+    if (containerW > 0 && colCount > 1) {
       var gap = 0;
       try {
         var cs = getComputedStyle(labelsWrap);
