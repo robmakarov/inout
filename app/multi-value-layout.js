@@ -175,45 +175,67 @@
         widths[ai] = clampColWidth(want);
       }
     }
-    for (var k = 0; k < colCount; k++) {
-      if (autoHugColumns[k]) widths[k] = clampColWidth(widths[k]);
-      else if (manualColumnWidths[k] != null) widths[k] = clampColWidth(manualColumnWidths[k]);
-      else widths[k] = clampColWidth(widths[k]);
-    }
-    // Fill available viewport width before introducing horizontal scroll.
     var containerW = labelsWrap ? Math.max(0, Math.floor(labelsWrap.clientWidth || 0)) : 0;
-    if (containerW > 0 && colCount > 1) {
-      var gap = 0;
-      try {
+    var gap = 0;
+    try {
+      if (labelsWrap) {
         var cs = getComputedStyle(labelsWrap);
-        gap = Math.max(
-          0,
-          Math.round(parseFloat(cs.columnGap || cs.gap || '0') || 0)
-        );
-      } catch (_) {}
-      var gapsTotal = gap * Math.max(0, colCount - 1);
-      var used = gapsTotal;
-      for (var wi = 0; wi < colCount; wi++) used += clampColWidth(widths[wi]);
-      if (used < containerW) {
-        var extra = containerW - used;
-        var flexCols = [];
-        for (var fi = 0; fi < colCount; fi++) {
-          if (!autoHugColumns[fi] && manualColumnWidths[fi] == null) flexCols.push(fi);
-        }
-        if (!flexCols.length) {
-          for (var fa = 0; fa < colCount; fa++) flexCols.push(fa);
-        }
-        if (flexCols.length) {
-          var per = Math.floor(extra / flexCols.length);
-          var rem = extra % flexCols.length;
-          for (var fj = 0; fj < flexCols.length; fj++) {
-            var idx = flexCols[fj];
-            widths[idx] = clampColWidth(widths[idx] + per + (fj < rem ? 1 : 0));
-          }
-        }
+        gap = Math.max(0, Math.round(parseFloat(cs.columnGap || cs.gap || '0') || 0));
+      }
+    } catch (_) {}
+    var gapsTotal = gap * Math.max(0, colCount - 1);
+    var available = Math.max(0, containerW - gapsTotal);
+
+    var resolved = new Array(colCount).fill(MIN_COL_WIDTH);
+    var fixedSum = 0;
+    var flexCols = [];
+    for (var k = 0; k < colCount; k++) {
+      var intrinsic = clampColWidth(widths[k]);
+      if (manualColumnWidths[k] != null) {
+        resolved[k] = clampColWidth(manualColumnWidths[k]);
+        fixedSum += resolved[k];
+      } else if (autoHugColumns[k] || colCount <= 1 || containerW <= 0) {
+        resolved[k] = intrinsic;
+        fixedSum += resolved[k];
+      } else {
+        // Candidate for equal fill until its text no longer fits.
+        flexCols.push(k);
+        resolved[k] = intrinsic;
       }
     }
-    return widths;
+
+    if (flexCols.length && containerW > 0 && colCount > 1) {
+      var remaining = available - fixedSum;
+      var pending = flexCols.slice();
+      while (pending.length) {
+        var share = remaining / pending.length;
+        var moved = false;
+        for (var pi = pending.length - 1; pi >= 0; pi--) {
+          var idx = pending[pi];
+          var need = clampColWidth(widths[idx]);
+          if (need > share) {
+            resolved[idx] = need; // overflowing column hugs content
+            remaining -= need;
+            pending.splice(pi, 1);
+            moved = true;
+          }
+        }
+        if (!moved) break;
+      }
+      if (pending.length) {
+        var equal = Math.max(MIN_COL_WIDTH, Math.floor(remaining / pending.length));
+        for (var qi = 0; qi < pending.length; qi++) {
+          resolved[pending[qi]] = clampColWidth(equal);
+        }
+      }
+    } else {
+      for (var ri = 0; ri < flexCols.length; ri++) {
+        var fi = flexCols[ri];
+        resolved[fi] = clampColWidth(widths[fi]);
+      }
+    }
+
+    return resolved;
   }
 
   function bindColumnResizeHandle(btn, colIdx, ctx) {
