@@ -614,7 +614,8 @@ header{
   flex-direction:row;
   flex-wrap:nowrap;
   align-items:stretch;
-  gap:8px 12px;
+  /* Match .obj-values-wrap column gap so headers line up with value columns */
+  gap:20px;
   overflow-x:auto;
   overflow-y:visible;
   -webkit-overflow-scrolling:touch;
@@ -644,7 +645,8 @@ header{
   font-family:var(--mono);
   font-size:10px;
   line-height:1.2;
-  padding:4px 6px;
+  /* Align label text with .obj-value-cell content (no left inset; right padding for resize handle) */
+  padding:4px 14px 4px 0;
   border:none;
   background:transparent;
   box-shadow:none;
@@ -661,7 +663,6 @@ header{
   cursor:default;
   min-height:28px;
   position:relative;
-  padding-right:14px;
 }
 .multi-value-col-label-btn:hover{
   color:var(--text);

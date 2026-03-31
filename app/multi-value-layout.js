@@ -36,6 +36,83 @@
     });
   }
 
+  /** True width of value text: scrollWidth lies when cells are max-width constrained + ellipsis. */
+  function measureIntrinsicObjValueCellWidth(cell) {
+    if (!cell) return MIN_COL_WIDTH;
+    var inner = cell.querySelector('.obj-value-render');
+    var prev = {
+      flexBasis: cell.style.flexBasis,
+      minWidth: cell.style.minWidth,
+      maxWidth: cell.style.maxWidth,
+      overflow: cell.style.overflow,
+      textOverflow: cell.style.textOverflow,
+      innerMax: inner ? inner.style.maxWidth : '',
+      innerOv: inner ? inner.style.overflow : '',
+    };
+    try {
+      cell.style.flexBasis = 'auto';
+      cell.style.minWidth = 'min-content';
+      cell.style.maxWidth = 'none';
+      cell.style.overflow = 'visible';
+      cell.style.textOverflow = 'clip';
+      if (inner) {
+        inner.style.maxWidth = 'none';
+        inner.style.overflow = 'visible';
+      }
+      void cell.offsetWidth;
+      var sw = cell.scrollWidth;
+      if (!(sw > 0) || !Number.isFinite(sw)) sw = cell.getBoundingClientRect().width || 0;
+      return Math.max(MIN_COL_WIDTH, Math.ceil(sw));
+    } finally {
+      cell.style.flexBasis = prev.flexBasis;
+      cell.style.minWidth = prev.minWidth;
+      cell.style.maxWidth = prev.maxWidth;
+      cell.style.overflow = prev.overflow;
+      cell.style.textOverflow = prev.textOverflow;
+      if (inner) {
+        inner.style.maxWidth = prev.innerMax;
+        inner.style.overflow = prev.innerOv;
+      }
+    }
+  }
+
+  /** Header label width when not squeezed by applied column widths. */
+  function measureIntrinsicHeaderButtonWidth(btn) {
+    if (!btn) return MIN_COL_WIDTH;
+    var span = btn.querySelector('.multi-value-col-label-text');
+    var prev = {
+      flexBasis: btn.style.flexBasis,
+      minWidth: btn.style.minWidth,
+      maxWidth: btn.style.maxWidth,
+      overflow: btn.style.overflow,
+      spanMax: span ? span.style.maxWidth : '',
+      spanOv: span ? span.style.overflow : '',
+    };
+    try {
+      btn.style.flexBasis = 'auto';
+      btn.style.minWidth = 'min-content';
+      btn.style.maxWidth = 'none';
+      btn.style.overflow = 'visible';
+      if (span) {
+        span.style.maxWidth = 'none';
+        span.style.overflow = 'visible';
+      }
+      void btn.offsetWidth;
+      var sw = btn.scrollWidth;
+      if (!(sw > 0) || !Number.isFinite(sw)) sw = btn.getBoundingClientRect().width || 0;
+      return Math.max(MIN_COL_WIDTH, Math.ceil(sw));
+    } finally {
+      btn.style.flexBasis = prev.flexBasis;
+      btn.style.minWidth = prev.minWidth;
+      btn.style.maxWidth = prev.maxWidth;
+      btn.style.overflow = prev.overflow;
+      if (span) {
+        span.style.maxWidth = prev.spanMax;
+        span.style.overflow = prev.spanOv;
+      }
+    }
+  }
+
   function measureValueCellContentWidth(cell) {
     if (!cell) return MIN_COL_WIDTH;
     var sw = cell.scrollWidth;
@@ -86,7 +163,7 @@
     handle.setAttribute('aria-hidden', 'true');
     btn.appendChild(handle);
     function applyAutoFitForColumn() {
-      var width = measureHeaderButtonContentWidth(btn);
+      var width = measureIntrinsicHeaderButtonWidth(btn);
       var feedInner = ctx && ctx.feedInner;
       if (feedInner) {
         var wraps = Array.from(feedInner.querySelectorAll('.obj[data-id] .obj-values-wrap'));
@@ -94,7 +171,7 @@
           var cells = wrap.querySelectorAll(':scope > .obj-value-cell');
           var cell = cells[colIdx];
           if (!cell) return;
-          var cw = measureValueCellContentWidth(cell);
+          var cw = measureIntrinsicObjValueCellWidth(cell);
           if (cw > width) width = cw;
         });
       }
