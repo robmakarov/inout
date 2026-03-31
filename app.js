@@ -1259,7 +1259,8 @@ async function deleteValueColumnInCurrentView(colIdx) {
     var id = row.dataset.id != null ? Number(row.dataset.id) : NaN;
     if (!Number.isFinite(id)) continue;
     var raw = Object.prototype.hasOwnProperty.call(row, '__inoutEntryTextRaw') ? row.__inoutEntryTextRaw : null;
-    if (raw == null) raw = getLastKnownEntryTextForChannel(ch, id);
+    var rowCh = channelKeyForRowEl(row);
+    if (raw == null) raw = getLastKnownEntryTextForChannel(rowCh, id);
     var pay = raw == null
       ? { parts: partsFromRowDom(row), labels: [] }
       : parseObjectTextPayload(String(raw));
@@ -1272,12 +1273,10 @@ async function deleteValueColumnInCurrentView(colIdx) {
     var next = serializeObjectParts(parts, labels);
     // Apply DOM shape immediately so the deleted column disappears without refresh.
     ensureRowValueCellCount(row, Math.max(1, parts.length), parts);
-    if (raw != null) {
-      row.__inoutEntryTextRaw = next;
-      rememberEntryText(ch, id, next);
-      updateObjectRowText(id, next);
-      persistJobs.push(persistObjectTextPayload(id, next, ch));
-    }
+    row.__inoutEntryTextRaw = next;
+    rememberEntryText(rowCh, id, next);
+    updateObjectRowText(id, next);
+    persistJobs.push(persistObjectTextPayload(id, next, rowCh));
   }
 
   feedInner.dataset.inoutValueCols = String(Math.max(1, maxCols - 1));
