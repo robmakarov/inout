@@ -148,7 +148,7 @@
         var bw = measureHeaderButtonContentWidth(btns[b]);
         if (bw > widths[b]) widths[b] = bw;
       }
-      // Auto-hug columns keep tracking intrinsic (untruncated) content width.
+      // Auto-hug columns track the exact intrinsic width (grow and shrink).
       for (var ai = 0; ai < colCount; ai++) {
         if (!autoHugColumns[ai]) continue;
         var want = 0;
@@ -161,7 +161,7 @@
           var cw = measureIntrinsicObjValueCellWidth(cell);
           if (cw > want) want = cw;
         });
-        widths[ai] = Math.max(widths[ai], clampColWidth(want));
+        widths[ai] = clampColWidth(want);
       }
     }
     for (var k = 0; k < colCount; k++) {
