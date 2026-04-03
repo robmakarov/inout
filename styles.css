@@ -175,6 +175,13 @@ html.inout-theme-light .obj.new-flash{
   background:color-mix(in srgb, var(--acc) 11%, var(--bg2));
 }
 
+html.inout-theme-light .feed-inner.obj-labels-off .obj .obj-time::before,
+html.inout-theme-light .feed-inner.obj-labels-off .obj .obj-sender::before,
+html.inout-theme-light .feed-inner.obj-labels-off .obj .obj-text::before,
+html.inout-theme-light .feed-inner.obj-labels-off .obj .obj-value-cell::before{
+  box-shadow:0 2px 14px rgba(15, 23, 42, 0.1);
+}
+
 html.inout-theme-light #toast{
   background:var(--bg2);
   box-shadow:0 4px 20px rgba(15, 23, 42, 0.1);
@@ -1975,20 +1982,45 @@ header{
   padding-top:calc(12px + var(--obj-label-value-gap));
   box-sizing:border-box;
 }
-/* Labels OFF: ::before out of flow; padding-top on fields reserves label+gap (see below). Hover reveals label. */
+.feed-inner.inout-multi-value-cols.obj-labels-off .obj .obj-value-cell{
+  padding-top:0;
+}
+/* Labels OFF: collapsed rows; label chip floats just left of each value (superposition in the gutter). */
+.feed-inner.obj-labels-off .obj{
+  padding-top:8px;
+  padding-bottom:10px;
+}
+.feed-inner.obj-labels-off .obj .obj-leading-meta{
+  overflow:visible;
+}
 .feed-inner.obj-labels-off .obj .obj-time::before,
 .feed-inner.obj-labels-off .obj .obj-sender::before,
 .feed-inner.obj-labels-off .obj .obj-text::before,
 .feed-inner.obj-labels-off .obj .obj-value-cell::before{
   display:block;
   position:absolute;
-  left:0;
-  top:0;
+  right:100%;
+  margin-right:8px;
+  top:3px;
   white-space:nowrap;
+  max-width:min(132px,38vw);
+  overflow:hidden;
+  text-overflow:ellipsis;
   opacity:0;
-  transform:translateY(-6px);
-  transition:opacity .22s ease-out, transform .22s ease-out;
+  transform:translateX(6px);
+  transition:opacity .18s var(--anim-ease-out), transform .18s var(--anim-ease-out);
   pointer-events:none;
+  z-index:4;
+  font-size:9px;
+  line-height:1.2;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--muted);
+  padding:2px 6px;
+  border-radius:4px;
+  background:var(--bg2);
+  border:1px solid var(--line2);
+  box-shadow:0 2px 14px rgba(0,0,0,0.22);
 }
 .feed-inner.obj-labels-off .obj .obj-time::before{ content:'Time'; }
 .feed-inner.obj-labels-off .obj .obj-sender::before{ content:'Author'; }
@@ -2000,15 +2032,15 @@ header{
 .feed-inner.obj-labels-off .obj .obj-value-cell{
   position:relative;
   overflow:visible;
-  /* ::before is position:absolute — out of flex flow, so gap does not separate label from value. Reserve the same space as “labels on” + hover, always. */
-  padding-top:calc(12px + var(--obj-label-value-gap));
+  padding-top:0;
+  gap:0;
 }
 .feed-inner.obj-labels-off .obj:hover .obj-time::before,
 .feed-inner.obj-labels-off .obj:hover .obj-sender::before,
 .feed-inner.obj-labels-off .obj:hover .obj-text::before,
 .feed-inner.obj-labels-off .obj:hover .obj-value-cell::before{
   opacity:1;
-  transform:translateY(0);
+  transform:translateX(0);
 }
 .feed-inner .obj .obj-content{
   overflow:visible;
@@ -2028,7 +2060,7 @@ body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-sender::befor
 body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-text::before,
 body.select-mode .feed-inner.obj-labels-off .obj.obj-selected .obj-value-cell::before{
   opacity:1;
-  transform:translateY(0);
+  transform:translateX(0);
 }
 /* Feed: column label-above layout for author */
 .feed-inner .obj .obj-sender{
@@ -2379,6 +2411,16 @@ body.dnd-active .obj:hover .obj-time,
 body.dnd-active .obj:hover .obj-sender,
 body.dnd-active .obj.obj-drag-over .obj-time,
 body.dnd-active .obj.obj-drag-over .obj-sender{color:var(--dim) !important}
+body.dnd-active .feed-inner.obj-labels-off .obj:hover .obj-time::before,
+body.dnd-active .feed-inner.obj-labels-off .obj:hover .obj-sender::before,
+body.dnd-active .feed-inner.obj-labels-off .obj:hover .obj-text::before,
+body.dnd-active .feed-inner.obj-labels-off .obj:hover .obj-value-cell::before,
+body.dnd-active .feed-inner.obj-labels-off .obj.obj-drag-over .obj-time::before,
+body.dnd-active .feed-inner.obj-labels-off .obj.obj-drag-over .obj-sender::before,
+body.dnd-active .feed-inner.obj-labels-off .obj.obj-drag-over .obj-text::before,
+body.dnd-active .feed-inner.obj-labels-off .obj.obj-drag-over .obj-value-cell::before{
+  opacity:0 !important;
+}
 body.dnd-active .obj.obj-drag-spirit{opacity:1;background:var(--dnd-spirit-bg);transition:none}
 body.dnd-active .obj-drag-spirit-stack{opacity:1;background:transparent;transition:none}
 .obj.obj-editing{
@@ -3700,22 +3742,13 @@ body.secret-show-grips .frame-grip{
   .obj .obj-actions{ opacity:1; pointer-events:auto }
   .obj:hover .obj-time,
   .obj:hover .obj-sender{ color:var(--dim) }
+  /* Touch: :hover can stick — keep label chips hidden on spurious row hover (select mode still shows via rules above). */
   .feed-inner.obj-labels-off .obj:hover .obj-time::before,
   .feed-inner.obj-labels-off .obj:hover .obj-sender::before,
   .feed-inner.obj-labels-off .obj:hover .obj-text::before,
   .feed-inner.obj-labels-off .obj:hover .obj-value-cell::before{
     opacity:0;
-    transform:translateX(-6px);
-  }
-  .feed-inner.obj-labels-off .obj:hover .obj-time,
-  .feed-inner.obj-labels-off .obj:hover .obj-sender,
-  .feed-inner.obj-labels-off .obj:hover .obj-text,
-  .feed-inner.obj-labels-off .obj:hover .obj-value-cell{
-    padding-left:0;
-    transform:translateX(-20px);
-  }
-  .feed-inner.inout-multi-value-cols.obj-labels-off .obj:hover .obj-value-cell{
-    transform:none;
+    transform:translateX(6px);
   }
 }
 
@@ -3837,8 +3870,8 @@ body.secret-show-grips .frame-grip{
   html.win10-cursor-fx-on .feed-inner.obj-labels-off .obj.win10-label-reveal .obj-text::before,
   html.win10-cursor-fx-on .feed-inner.obj-labels-off .obj.win10-label-reveal .obj-value-cell::before{
     opacity:1;
-    transform:translateY(0);
-    text-shadow:0 0 5px rgba(255,255,255,0.16);
+    transform:translateX(0);
+    text-shadow:none;
   }
   html.win10-cursor-fx-on .win10-reveal-cursor{
     position:fixed;
