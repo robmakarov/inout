@@ -3,7 +3,18 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
-<meta name="color-scheme" content="dark"/>
+<meta id="inout-color-scheme-meta" name="color-scheme" content="dark light"/>
+<script>
+(function(){
+  try {
+    if (localStorage.getItem('inout_theme_v1') === 'light') {
+      document.documentElement.classList.add('inout-theme-light');
+      var m = document.getElementById('inout-color-scheme-meta');
+      if (m) m.setAttribute('content', 'light dark');
+    }
+  } catch (e) {}
+})();
+</script>
 <title>INOUT</title>
 <link rel="icon" id="inout-favicon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230a0a09'/%3E%3Cpath d='M18 44V20h6v24h-6Zm22-24v24h-6V20h6Z' fill='%23e8d5a0'/%3E%3Cpath d='M30 20h4v24h-4z' fill='%23f0ece3' opacity='.65'/%3E%3C/svg%3E"/>
 <script>
@@ -287,6 +298,14 @@
       <div class="um-row" style="justify-content:space-between;align-items:center;">
         <span class="um-value" id="um-version-badge">Free</span>
         <button class="um-btn" id="um-upgrade-btn">Get Pro</button>
+      </div>
+    </div>
+
+    <div class="um-section">
+      <div class="um-label">Appearance</div>
+      <div class="um-row um-theme-row">
+        <span class="um-value">Light mode</span>
+        <button type="button" id="um-theme-toggle" class="um-theme-switch" role="switch" aria-checked="false" aria-label="Light mode" title="Dark appearance"></button>
       </div>
     </div>
 

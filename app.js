@@ -191,6 +191,7 @@ const secretToggleCursorFx = document.getElementById('secret-toggle-cursor-fx');
 const secretControlsResetBtn = document.getElementById('secret-controls-reset');
 const umSyncInputChk = document.getElementById('um-sync-input');
 const umLayoutSyncChk = document.getElementById('um-layout-sync');
+const umThemeToggle = document.getElementById('um-theme-toggle');
 const umVersionBadge = document.getElementById('um-version-badge');
 const umUpgradeBtn   = document.getElementById('um-upgrade-btn');
 const tabsEl     = document.getElementById('tabs');
@@ -4607,6 +4608,7 @@ function openUserModal() {
   /* Paint the drawer first; vault panel + workspace persist run next frame so realtime work doesn’t delay open. */
   requestAnimationFrame(function() {
     requestAnimationFrame(function() {
+      if (typeof applyInoutTheme === 'function') applyInoutTheme(getThemePref(), false);
       if (typeof refreshStorageUIPanel === 'function') refreshStorageUIPanel();
       if (typeof notifyWorkspaceChromeChanged === 'function') notifyWorkspaceChromeChanged();
     });
@@ -6424,6 +6426,38 @@ function getLayoutSyncPref() {
 function setLayoutSyncPref(on, syncWorkspace) {
   try { localStorage.setItem(LAYOUT_SYNC_KEY, on ? '1' : '0'); } catch (_) {}
   if (syncWorkspace !== false) schedulePersonalWorkspacePersist();
+}
+
+const INOUT_THEME_KEY = 'inout_theme_v1';
+
+function getThemePref() {
+  try {
+    return localStorage.getItem(INOUT_THEME_KEY) === 'light' ? 'light' : 'dark';
+  } catch (_) {
+    return 'dark';
+  }
+}
+
+function applyInoutTheme(mode, writeStorage) {
+  const light = mode === 'light';
+  const root = document.documentElement;
+  if (light) root.classList.add('inout-theme-light');
+  else root.classList.remove('inout-theme-light');
+  try {
+    const meta = document.getElementById('inout-color-scheme-meta');
+    if (meta) meta.setAttribute('content', light ? 'light dark' : 'dark light');
+  } catch (_) {}
+  if (writeStorage) {
+    try {
+      localStorage.setItem(INOUT_THEME_KEY, light ? 'light' : 'dark');
+    } catch (_) {}
+  }
+  const tgl = document.getElementById('um-theme-toggle');
+  if (tgl) {
+    tgl.setAttribute('aria-checked', light ? 'true' : 'false');
+    tgl.setAttribute('aria-label', light ? 'Light mode on' : 'Light mode off');
+    tgl.setAttribute('title', light ? 'Using light appearance — tap for dark' : 'Using dark appearance — tap for light');
+  }
 }
 
 function getFrameOrder() {
@@ -11614,6 +11648,13 @@ if (umLayoutSyncChk) {
     setLayoutSyncPref(umLayoutSyncChk.checked);
     if (umLayoutSyncChk.checked && typeof setupLayoutChannel === 'function') setupLayoutChannel();
     else if (layoutChannel) { try { layoutChannel.unsubscribe(); } catch (_) {} layoutChannel = null; }
+  });
+}
+applyInoutTheme(getThemePref(), false);
+if (umThemeToggle) {
+  umThemeToggle.addEventListener('click', function() {
+    const next = getThemePref() === 'light' ? 'dark' : 'light';
+    applyInoutTheme(next, true);
   });
 }
 if (!input && typeof document !== 'undefined' && document.readyState === 'loading') {
