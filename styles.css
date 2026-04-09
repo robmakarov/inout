@@ -4603,7 +4603,7 @@ body.is-arming #snipe.rec-go:not(:disabled) {
   box-sizing: border-box;
   /* Keep resize grip + recording glow inside the rounded frame (no paint past border) */
   overflow: hidden;
-  background: #000;
+  background: transparent;
   transform-origin: center center;
 }
 
@@ -4620,7 +4620,7 @@ body.is-arming #snipe.rec-go:not(:disabled) {
   /* Top corners track card; bottom corners square when review strip sits below */
   border-radius: var(--studio-r-inner) var(--studio-r-inner) 0 0;
   overflow: visible;
-  background: #000;
+  background: transparent;
   box-shadow: inset 0 0 0 1px rgba(0, 240, 255, 0.15);
 }
 
@@ -4637,7 +4637,6 @@ body.is-arming #snipe.rec-go:not(:disabled) {
 
 .capture-studio.capture-studio--live-preview.capture-studio--empty-preview .studio-deck__stroked {
   flex: 0 0 auto;
-  background: transparent;
 }
 
 .capture-studio.capture-studio--live-preview.capture-studio--empty-preview .studio-deck__video-stage {
@@ -4646,7 +4645,6 @@ body.is-arming #snipe.rec-go:not(:disabled) {
   height: auto;
   min-height: 0;
   max-height: none;
-  background: transparent;
 }
 
 .capture-studio.capture-studio--live-preview.capture-studio--empty-preview .capture-studio__preview-stack {
@@ -4655,7 +4653,6 @@ body.is-arming #snipe.rec-go:not(:disabled) {
 
 .capture-studio.capture-studio--live-preview.capture-studio--empty-preview .capture-studio__await-placeholder {
   padding: clamp(0.2rem, 1.6vmin, 0.55rem);
-  background: transparent;
 }
 
 .capture-studio--live-preview .capture-studio__video-wrap {
@@ -4668,11 +4665,16 @@ body.is-arming #snipe.rec-go:not(:disabled) {
   border-radius: var(--studio-r-inner) var(--studio-r-inner) 0 0;
   border: none;
   box-shadow: none;
+  background: transparent;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   container-type: size;
   container-name: studio-preview;
+}
+
+.capture-studio--live-preview .capture-studio__await-placeholder {
+  background: transparent;
 }
 
 .capture-studio--live-preview .capture-studio__preview-stack {
@@ -6148,7 +6150,7 @@ body.is-recording-paused .studio-deck__sig.is-on:not(.studio-deck__sig--blocked)
   max-height: 12rem;
   border-radius: 8px;
   overflow: visible;
-  background: #000;
+  background: transparent;
 }
 
 .studio-deck__btn {
@@ -6487,6 +6489,10 @@ body.is-recording-paused
   object-fit: cover;
   object-position: center;
   background: #000;
+}
+
+.capture-studio--live-preview .capture-studio__video {
+  background: transparent;
 }
 
 /* Paused recording: blob playback with native controls — fill frame */
