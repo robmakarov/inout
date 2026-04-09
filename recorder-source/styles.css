@@ -256,20 +256,6 @@ body.is-recording .rec-go.rec-go--studio-start {
   }
 }
 
-@keyframes studioDeckFrameRec {
-  0%,
-  100% {
-    box-shadow:
-      0 0 0 1px rgba(72, 220, 190, 0.4),
-      0 0 12px rgba(0, 255, 200, 0.14);
-  }
-  50% {
-    box-shadow:
-      0 0 0 1px rgba(150, 255, 230, 0.85),
-      0 0 22px rgba(90, 255, 215, 0.38);
-  }
-}
-
 @keyframes studioDeckVideoInsetRec {
   0%,
   100% {
@@ -625,12 +611,6 @@ body.is-recording
 }
 
 body.is-recording:not(.is-recording-paused)
-  .capture-studio.capture-studio--live-preview:not(.hidden):not(.capture-studio--review):not(.capture-studio--starting)
-  .studio-deck__preview {
-  animation: studioDeckFrameRec var(--ui-blink-sync) var(--ui-blink-ease) infinite;
-}
-
-body.is-recording:not(.is-recording-paused)
   .capture-studio--live-preview:not(.capture-studio--review):not(.capture-studio--starting)
   .studio-deck__video-stage {
   animation: studioDeckVideoInsetRec var(--ui-blink-sync) var(--ui-blink-ease) infinite;
@@ -708,12 +688,6 @@ body.is-recording
 }
 
 /* Recording paused: same hub control, frozen frame chrome (MediaRecorder.pause). */
-body.is-recording-paused
-  .capture-studio.capture-studio--live-preview:not(.hidden):not(.capture-studio--review):not(.capture-studio--starting)
-  .studio-deck__preview {
-  animation: none;
-}
-
 body.is-recording-paused
   .capture-studio--live-preview:not(.capture-studio--review):not(.capture-studio--starting)
   .studio-deck__video-stage {
@@ -3346,6 +3320,8 @@ main.wrap:has(#capture-studio.capture-studio--pump-only:not(.hidden)) #studio-de
   padding: calc(0.2rem * var(--device-ui-scale, 1)) calc(0.2rem * var(--device-ui-scale, 1));
   min-height: calc(2.6rem * var(--device-ui-scale, 1) / 1.06);
   box-sizing: border-box;
+  overflow-x: clip;
+  overflow-y: visible;
 }
 
 .scada-cluster:has(#capture-studio:not(.hidden)) .hub-control-bar__cell--left {
