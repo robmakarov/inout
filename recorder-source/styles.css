@@ -424,6 +424,7 @@ body.is-arming #snipe.rec-go:not(:disabled) {
   --studio-r-outer: 10px;
   --studio-r-inner: 9px;
   --studio-stroke: rgba(255, 255, 255, 0.12);
+  --studio-preview-veil: rgba(5, 11, 20, 0.17);
   /* Toolbar + gap show body grid; video frame uses .studio-deck__stroked */
   background: transparent;
   border: none;
@@ -458,7 +459,7 @@ body.is-arming #snipe.rec-go:not(:disabled) {
   overflow: visible;
   aspect-ratio: unset;
   max-height: none;
-  background: transparent;
+  background: var(--studio-preview-veil);
   border-radius: var(--studio-r-outer);
 }
 
@@ -473,7 +474,7 @@ body.is-arming #snipe.rec-go:not(:disabled) {
   box-sizing: border-box;
   /* Keep resize grip + recording glow inside the rounded frame (no paint past border) */
   overflow: hidden;
-  background: transparent;
+  background: var(--studio-preview-veil);
   transform-origin: center center;
 }
 
@@ -490,7 +491,7 @@ body.is-arming #snipe.rec-go:not(:disabled) {
   /* Top corners track card; bottom corners square when review strip sits below */
   border-radius: var(--studio-r-inner) var(--studio-r-inner) 0 0;
   overflow: visible;
-  background: transparent;
+  background: var(--studio-preview-veil);
   box-shadow: inset 0 0 0 1px rgba(0, 240, 255, 0.15);
 }
 
@@ -535,7 +536,7 @@ body.is-arming #snipe.rec-go:not(:disabled) {
   border-radius: var(--studio-r-inner) var(--studio-r-inner) 0 0;
   border: none;
   box-shadow: none;
-  background: transparent;
+  background: var(--studio-preview-veil);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -544,7 +545,7 @@ body.is-arming #snipe.rec-go:not(:disabled) {
 }
 
 .capture-studio--live-preview .capture-studio__await-placeholder {
-  background: transparent;
+  background: var(--studio-preview-veil);
 }
 
 .capture-studio--live-preview .capture-studio__preview-stack {
@@ -2020,7 +2021,7 @@ body.is-recording-paused .studio-deck__sig.is-on:not(.studio-deck__sig--blocked)
   max-height: 12rem;
   border-radius: 8px;
   overflow: visible;
-  background: transparent;
+  background: var(--studio-preview-veil, transparent);
 }
 
 .studio-deck__btn {
@@ -2362,7 +2363,7 @@ body.is-recording-paused
 }
 
 .capture-studio--live-preview .capture-studio__video {
-  background: transparent;
+  background: var(--studio-preview-veil);
 }
 
 /* Paused recording: blob playback with native controls — fill frame */
