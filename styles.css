@@ -7451,9 +7451,6 @@ main.wrap:has(#capture-studio.capture-studio--pump-only:not(.hidden)) #studio-de
   padding: calc(0.2rem * var(--device-ui-scale, 1)) calc(0.2rem * var(--device-ui-scale, 1));
   min-height: calc(2.6rem * var(--device-ui-scale, 1) / 1.06);
   box-sizing: border-box;
-  /* Keep grid readouts (e.g. REC status) inside the studio column — no paint past the card edge */
-  overflow-x: clip;
-  overflow-y: visible;
 }
 
 .scada-cluster:has(#capture-studio:not(.hidden)) .hub-control-bar__cell--left {
@@ -7747,6 +7744,25 @@ body.is-recording-paused
   .hub-control-bar__status:not(:empty) {
   background: transparent !important;
   border: none !important;
+}
+
+/* Studio dock: LED on the right edge of the message (text left, dot right) — avoids half-dot clip at column edge */
+body.is-recording:not(.is-recording-paused)
+  .scada-cluster:has(#capture-studio:not(.hidden))
+  #hub-control-bar.hub-control-bar--studio-dock
+  .hub-control-bar__status:not(:empty) {
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+  align-items: center;
+}
+
+body.is-recording-paused
+  .scada-cluster:has(#capture-studio:not(.hidden))
+  #hub-control-bar.hub-control-bar--studio-dock
+  .hub-control-bar__status:not(:empty) {
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+  align-items: center;
 }
 
 body.is-recording:not(.is-recording-paused)
