@@ -7481,8 +7481,8 @@ main.wrap:has(#capture-studio.capture-studio--pump-only:not(.hidden)) #studio-de
 
 .hub-control-bar .hub-control-bar__status--grow:not(:empty) {
   flex: 0 1 auto;
-  /* ~10 characters minimum measure per line when the cluster allows */
-  min-width: min(10ch, 100%);
+  /* ~15 characters minimum measure per line when the cluster allows */
+  min-width: min(15ch, 100%);
   max-width: 100%;
 }
 
@@ -7647,8 +7647,8 @@ body:not(.is-live-capture):not(.is-recording) .hub-control-bar .hub-control-bar_
   align-items: flex-start;
   gap: calc(0.3rem * var(--device-ui-scale, 1));
   max-width: 100%;
-  /* Prefer at least ~10 character widths per line before wrapping into a narrower column */
-  min-width: min(10ch, 100%);
+  /* Prefer at least ~15 character widths per line before wrapping into a narrower column */
+  min-width: min(15ch, 100%);
   margin: 0;
   padding: calc(0.12rem * var(--device-ui-scale, 1)) calc(0.22rem * var(--device-ui-scale, 1));
   text-align: left;
