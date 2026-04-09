@@ -1,0 +1,8 @@
+{
+  "name": "screen-record",
+  "private": true,
+  "scripts": {
+    "start": "node dev-server.js",
+    "serve": "node dev-server.js"
+  }
+}

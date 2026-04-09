@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Record</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="file-protocol-gate" class="file-protocol-gate" hidden>
+      <div class="file-protocol-gate__panel">
+        <h1 class="file-protocol-gate__title">Open this app over HTTP</h1>
+        <p class="file-protocol-gate__text">
+          Browsers treat <code>file://</code> as a restricted origin. Screen capture, recording, and some loads fail with errors like “Unsafe attempt to load URL … from frame”.
+        </p>
+        <p class="file-protocol-gate__text file-protocol-gate__text--small">
+          If the address bar already shows <code>http://</code> but you still see a <code>file://</code> error, you are not using the page from the dev server: close the tab that opened this file from disk, run <code class="file-protocol-gate__cmd">npm start</code>, then open only the URL it prints (use normal Chrome, not an editor preview).
+        </p>
+        <ol class="file-protocol-gate__steps">
+          <li>Open a terminal in this project folder.</li>
+          <li>Run <code class="file-protocol-gate__cmd">npm start</code></li>
+          <li>Open <a class="file-protocol-gate__link" href="http://127.0.0.1:8765/">http://127.0.0.1:8765/</a> in the browser.</li>
+        </ol>
+      </div>
+    </div>
+    <script>
+      (function () {
+        if (location.protocol !== "file:") return;
+        var g = document.getElementById("file-protocol-gate");
+        if (g) {
+          g.hidden = false;
+          document.documentElement.classList.add("file-protocol-gate-active");
+        }
+      })();
+    </script>
+    <main class="wrap">
+      <div class="scada-cluster" id="scada-cluster">
+        <!-- Menu “lift” animates this wrapper only (avoids fighting .scada-cluster’s translateZ + flex). -->
+        <div id="scada-column-mass" class="scada-column-mass">
+        <!-- Live preview: device strip is first child of #capture-studio so its width cannot expand the card -->
+        <div
+          id="capture-studio"
+          class="capture-studio capture-studio--live-preview capture-studio--empty-preview"
+          aria-hidden="false"
+        >
+          <div
+            id="studio-device-bar"
+            class="studio-deck__hud-top studio-device-bar"
+            role="toolbar"
+            aria-label="Recording status"
+          >
+            <div class="studio-deck__hud-top-inner studio-deck__hud-top-inner--device-row">
+              <div
+                id="studio-device-signals-scroll"
+                class="studio-deck__signals"
+                role="group"
+                aria-label="Capture inputs — click to toggle"
+              >
+                <div class="studio-deck__signals-row">
+                  <div class="studio-deck__sig-group" role="group" aria-label="Screen and shared sound">
+                    <div
+                      class="studio-deck__sig-wrap studio-deck__sig-wrap--with-settings"
+                      data-device-bar-group="video"
+                    >
+                      <button
+                        type="button"
+                        class="studio-deck__sig studio-deck__sig--btn"
+                        data-studio-signal="video"
+                        id="studio-sig-video"
+                        aria-expanded="false"
+                        aria-label="Screen share: click to toggle"
+                      >
+                        <span class="studio-deck__sig-led" aria-hidden="true"></span>
+                        <svg class="studio-deck__sig-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                          <rect x="5" y="4.5" width="14" height="10" rx="1.25" fill="currentColor" />
+                          <rect x="2" y="15.25" width="20" height="3.25" rx="1" fill="currentColor" />
+                        </svg>
+                        <span class="studio-deck__sig-name" aria-hidden="true">Screen</span>
+                      </button>
+                      <button
+                        type="button"
+                        class="studio-deck__device-settings-btn"
+                        data-studio-settings-scroll="studio-menu-video"
+                        aria-label="Screen settings"
+                        aria-expanded="false"
+                        aria-controls="studio-device-settings"
+                      >
+                        <svg class="studio-deck__device-settings-btn__icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                          <path
+                            fill="currentColor"
+                            d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58a.5.5 0 00.12-.64l-1.92-3.32a.488.488 0 00-.6-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.488.488 0 00-.6.22l-1.92 3.32c-.13.22-.07.49.12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 00-.12.64l1.92 3.32c.12.22.37.29.6.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.48 0 .6-.22l1.92-3.32a.5.5 0 00-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 018.5 12 3.5 3.5 0 0112 8.5a3.5 3.5 0 013.5 3.5 3.5 3.5 0 01-3.5 3.5z"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                    <div
+                      class="studio-deck__sig-wrap studio-deck__sig-wrap--with-settings"
+                      data-device-bar-group="sys"
+                    >
+                      <button
+                        type="button"
+                        class="studio-deck__sig studio-deck__sig--btn"
+                        data-studio-signal="sys"
+                        id="studio-sig-sys"
+                        aria-expanded="false"
+                        aria-label="Tab or system audio: click to toggle"
+                      >
+                        <span class="studio-deck__sig-led" aria-hidden="true"></span>
+                        <svg class="studio-deck__sig-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                          <path
+                            fill="currentColor"
+                            d="M3 10v4h4l5 5V5L7 10H3zm13.5 2a4.5 4.5 0 00-2.5-4.03v8.05a4.5 4.5 0 002.5-4.02zM14 5.29v2.13a6.99 6.99 0 010 9.16v2.13A9 9 0 0014 5.29z"
+                          />
+                        </svg>
+                        <span class="studio-deck__sig-name" aria-hidden="true">Sound</span>
+                      </button>
+                      <button
+                        type="button"
+                        class="studio-deck__device-settings-btn"
+                        data-studio-settings-scroll="studio-menu-sys"
+                        aria-label="Sound settings"
+                        aria-expanded="false"
+                        aria-controls="studio-device-settings"
+                      >
+                        <svg class="studio-deck__device-settings-btn__icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                          <path
+                            fill="currentColor"
+                            d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58a.5.5 0 00.12-.64l-1.92-3.32a.488.488 0 00-.6-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.488.488 0 00-.6.22l-1.92 3.32c-.13.22-.07.49.12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 00-.12.64l1.92 3.32c.12.22.37.29.6.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.48 0 .6-.22l1.92-3.32a.5.5 0 00-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 018.5 12 3.5 3.5 0 0112 8.5a3.5 3.5 0 013.5 3.5 3.5 3.5 0 01-3.5 3.5z"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="studio-deck__sig-group studio-deck__sig-group--mics" role="group" aria-label="Microphones">
+                    <div id="studio-mic-device-row" class="studio-deck__mic-device-row"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div id="studio-device-settings" class="studio-device-settings" hidden>
+            <div id="studio-menu-video" class="studio-deck__sig-menu studio-device-settings__section" role="group" aria-labelledby="studio-sig-video">
+                                <div class="studio-deck__sig-menu-inner">
+                                  <div class="studio-deck__sig-menu-col studio-deck__sig-menu-col--left">
+                                    <p class="studio-deck__sig-menu-hint">
+                                      Screen video comes from the browser share dialog. In Chrome, enable “Share tab audio” or system audio in the same dialog when you pick a tab or screen.
+                                    </p>
+                                    <div class="studio-deck__menu-field studio-deck__menu-field--names">
+                                      <label class="studio-deck__menu-label" for="studio-custom-name-video">Custom name</label>
+                                      <div class="studio-deck__menu-name-row">
+                                        <input
+                                          id="studio-custom-name-video"
+                                          type="text"
+                                          class="studio-deck__menu-input js-device-custom-name"
+                                          data-custom-kind="video"
+                                          maxlength="64"
+                                          spellcheck="false"
+                                          autocomplete="off"
+                                        />
+                                        <div class="studio-deck__menu-meta studio-deck__menu-meta--beside-input">
+                                          <span class="studio-deck__menu-meta-label">System name</span>
+                                          <span id="studio-real-name-video" class="studio-deck__menu-real">—</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <button type="button" class="studio-deck__menu-item" data-studio-menu-action="screen-replace">
+                                      Replace screen share…
+                                    </button>
+                                    <button type="button" class="studio-deck__menu-item" data-studio-menu-action="screen-info">
+                                      Show source details
+                                    </button>
+                                    <button type="button" class="studio-deck__menu-item" data-studio-menu-action="region-toggle">
+                                      Crop mode — draw on preview
+                                    </button>
+                                    <button type="button" class="studio-deck__menu-item" data-studio-menu-action="region-clear">
+                                      Clear crop (full frame)
+                                    </button>
+                                  </div>
+                                  <div class="studio-deck__sig-menu-col studio-deck__sig-menu-col--right">
+                                    <div class="studio-deck__menu-field studio-deck__menu-field--right">
+                                      <label class="studio-deck__menu-label" for="studio-quality-video">Recording quality</label>
+                                      <select id="studio-quality-video" class="studio-deck__quality-select js-studio-quality" aria-label="Recording quality for video">
+                                        <option value="high">High — best detail, larger files</option>
+                                        <option value="balanced">Balanced</option>
+                                        <option value="data">Smaller files</option>
+                                      </select>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              <div id="studio-menu-mic" class="studio-deck__sig-menu studio-device-settings__section" role="group" aria-labelledby="studio-menu-mic-heading">
+                                <div class="studio-deck__sig-menu-inner">
+                                  <div class="studio-deck__sig-menu-col studio-deck__sig-menu-col--left">
+                                    <h2 id="studio-menu-mic-heading" class="sr-only">Microphone options</h2>
+                                    <p class="studio-deck__sig-menu-hint">Turn each mic on or off in the bar above. iPhone / Continuity mics stay off until you enable them.</p>
+                                    <div id="studio-mic-names-settings" class="studio-deck__mic-names-settings"></div>
+                                    <button type="button" class="studio-deck__menu-item" data-studio-menu-action="mic-permission">
+                                      Request microphone access…
+                                    </button>
+                                    <button
+                                      type="button"
+                                      class="studio-deck__menu-item"
+                                      id="studio-menu-mic-toggle"
+                                      data-studio-menu-action="mic-toggle-mix"
+                                    >
+                                      Add microphone to recording
+                                    </button>
+                                    <button type="button" class="studio-deck__menu-item" data-studio-menu-action="mic-test">
+                                      Test level (3s)
+                                    </button>
+                                    <div class="studio-deck__menu-meter" id="studio-mic-meter" aria-hidden="true">
+                                      <div class="studio-deck__menu-meter-fill" id="studio-mic-meter-fill"></div>
+                                    </div>
+                                  </div>
+                                  <div class="studio-deck__sig-menu-col studio-deck__sig-menu-col--right">
+                                    <div class="studio-deck__menu-field studio-deck__menu-field--right">
+                                      <label class="studio-deck__menu-label" for="studio-quality-mic">Recording quality</label>
+                                      <select id="studio-quality-mic" class="studio-deck__quality-select js-studio-quality" aria-label="Recording quality">
+                                        <option value="high">High — best detail, larger files</option>
+                                        <option value="balanced">Balanced</option>
+                                        <option value="data">Smaller files</option>
+                                      </select>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              <div id="studio-menu-sys" class="studio-deck__sig-menu studio-device-settings__section" role="group" aria-labelledby="studio-sig-sys">
+                                <div class="studio-deck__sig-menu-inner">
+                                  <div class="studio-deck__sig-menu-col studio-deck__sig-menu-col--left">
+                                    <p class="studio-deck__sig-menu-hint">
+                                      Tab or system sound is chosen in the share dialog. Use the button below to pick again and enable “Share audio”.
+                                    </p>
+                                    <div class="studio-deck__menu-field studio-deck__menu-field--names">
+                                      <label class="studio-deck__menu-label" for="studio-custom-name-sys">Custom name</label>
+                                      <div class="studio-deck__menu-name-row">
+                                        <input
+                                          id="studio-custom-name-sys"
+                                          type="text"
+                                          class="studio-deck__menu-input js-device-custom-name"
+                                          data-custom-kind="sys"
+                                          maxlength="64"
+                                          spellcheck="false"
+                                          autocomplete="off"
+                                        />
+                                        <div class="studio-deck__menu-meta studio-deck__menu-meta--beside-input">
+                                          <span class="studio-deck__menu-meta-label">System name</span>
+                                          <span id="studio-real-name-sys" class="studio-deck__menu-real">—</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <button type="button" class="studio-deck__menu-item" data-studio-menu-action="screen-replace">
+                                      Pick share again with tab or system audio…
+                                    </button>
+                                    <button type="button" class="studio-deck__menu-item" data-studio-menu-action="sys-test">
+                                      Test level (3s)
+                                    </button>
+                                    <div class="studio-deck__menu-meter" id="studio-sys-meter" aria-hidden="true">
+                                      <div class="studio-deck__menu-meter-fill" id="studio-sys-meter-fill"></div>
+                                    </div>
+                                  </div>
+                                  <div class="studio-deck__sig-menu-col studio-deck__sig-menu-col--right">
+                                    <div class="studio-deck__menu-field studio-deck__menu-field--right">
+                                      <label class="studio-deck__menu-label" for="studio-quality-sys">Recording quality</label>
+                                      <select id="studio-quality-sys" class="studio-deck__quality-select js-studio-quality" aria-label="Recording quality">
+                                        <option value="high">High — best detail, larger files</option>
+                                        <option value="balanced">Balanced</option>
+                                        <option value="data">Smaller files</option>
+                                      </select>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+          </div>
+          <div class="studio-deck">
+            <div class="studio-deck__preview">
+              <div class="studio-deck__stroked">
+                <div class="studio-deck__video-stage">
+                  <div id="studio-video-wrap" class="capture-studio__video-wrap">
+                    <div id="studio-await-placeholder" class="capture-studio__await-placeholder">
+                      <p class="capture-studio__await-placeholder__text">Choose input</p>
+                    </div>
+                    <div class="capture-studio__preview-stack">
+                      <div id="studio-video-frame" class="capture-studio__video-frame">
+                        <video id="studio-video" class="capture-studio__video" muted playsinline webkit-playsinline autoplay></video>
+                        <div id="studio-overlay" class="capture-studio__overlay" aria-hidden="true"></div>
+                        <div id="studio-region" class="capture-studio__region" hidden aria-hidden="true"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="studio-deck__hud">
+                    <div id="studio-hud-stack" class="studio-deck__hud-stack"></div>
+                  </div>
+                  <button
+                    type="button"
+                    id="studio-resize-handle"
+                    class="capture-studio__resize"
+                    aria-label="Resize preview — double-click for minimum or maximum width"
+                    hidden
+                  ></button>
+                </div>
+              </div>
+              <div
+                id="studio-review"
+                class="studio-deck__review"
+                hidden
+                aria-hidden="true"
+                role="region"
+                aria-label="Trim timeline and save recording"
+              >
+                <div class="preview-trim preview-trim--chromeless">
+                  <div id="preview-trim-track" class="preview-trim__track">
+                    <div id="preview-trim-splits" class="preview-trim__splits"></div>
+                    <div id="preview-trim-range" class="preview-trim__range" aria-hidden="true"></div>
+                    <button
+                      type="button"
+                      id="preview-trim-in"
+                      class="preview-trim__handle preview-trim__handle--in"
+                      aria-label="Trim start — drag horizontally"
+                    ></button>
+                    <button
+                      type="button"
+                      id="preview-trim-out"
+                      class="preview-trim__handle preview-trim__handle--out"
+                      aria-label="Trim end — drag horizontally"
+                    ></button>
+                  </div>
+                </div>
+                <footer class="preview-screen__foot studio-review__foot studio-review__foot--icons">
+                  <input
+                    type="text"
+                    id="preview-filename"
+                    class="preview-screen__filename"
+                    autocomplete="off"
+                    spellcheck="false"
+                    aria-label="Download file name"
+                  />
+                  <div class="preview-screen__row">
+                    <button
+                      type="button"
+                      id="preview-discard"
+                      class="preview-screen__btn preview-screen__btn--ghost preview-screen__btn--icon"
+                      aria-label="Discard recording"
+                    >
+                      <svg class="preview-screen__btn-icon" viewBox="0 0 24 24" width="1.15em" height="1.15em" aria-hidden="true">
+                        <path
+                          d="M6 7h12M9 7V5h6v2m-7 4v8m4-8v8M8 7v12a1 1 0 001 1h6a1 1 0 001-1V7"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.75"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      id="preview-save"
+                      class="preview-screen__btn preview-screen__btn--primary preview-screen__btn--icon"
+                      aria-label="Save file"
+                    >
+                      <svg class="preview-screen__btn-icon" viewBox="0 0 24 24" width="1.15em" height="1.15em" aria-hidden="true">
+                        <path
+                          d="M12 3v12m0 0l4-4m-4 4l-4-4M5 19h14"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                </footer>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Shown on start screen (studio hidden); hidden while live preview has its own signal row -->
+        <div id="hub-input-row" class="hub-input-row" role="group" aria-label="Capture inputs">
+          <div class="hub-input-row__signals studio-deck__signals-row">
+            <div class="studio-deck__sig-group" role="group" aria-label="Screen and shared sound">
+              <div class="studio-deck__sig-wrap">
+                <button
+                  type="button"
+                  class="studio-deck__sig studio-deck__sig--hub is-off"
+                  data-signal="video"
+                >
+                  <span class="studio-deck__sig-led" aria-hidden="true"></span>
+                  <svg class="studio-deck__sig-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                    <rect x="5" y="4.5" width="14" height="10" rx="1.25" fill="currentColor" />
+                    <rect x="2" y="15.25" width="20" height="3.25" rx="1" fill="currentColor" />
+                  </svg>
+                  <span class="studio-deck__sig-name">Screen</span>
+                </button>
+              </div>
+              <div class="studio-deck__sig-wrap">
+                <button
+                  type="button"
+                  class="studio-deck__sig studio-deck__sig--hub is-off"
+                  data-signal="sys"
+                >
+                  <span class="studio-deck__sig-led" aria-hidden="true"></span>
+                  <svg class="studio-deck__sig-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                    <path
+                      fill="currentColor"
+                      d="M3 10v4h4l5 5V5L7 10H3zm13.5 2a4.5 4.5 0 00-2.5-4.03v8.05a4.5 4.5 0 002.5-4.02zM14 5.29v2.13a6.99 6.99 0 010 9.16v2.13A9 9 0 0014 5.29z"
+                    />
+                  </svg>
+                  <span class="studio-deck__sig-name">Sound</span>
+                </button>
+              </div>
+            </div>
+            <div class="studio-deck__sig-group studio-deck__sig-group--mics hub-mic-devices" role="group" aria-label="Microphones">
+              <div id="hub-mic-device-row" class="studio-deck__mic-device-row"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="hub-control-bar" class="hub-control-bar hub-control-bar--studio-dock" role="group" aria-label="Recording controls">
+          <div class="hub-control-bar__cell hub-control-bar__cell--left">
+            <div class="hub-control-bar__cluster">
+              <button
+                type="button"
+                id="hub-record-cancel"
+                class="hub-record-cancel"
+                hidden
+                aria-label="Cancel recording without saving"
+              >
+                Cancel
+              </button>
+              <div class="hub-control-bar__rec-metrics" id="record-metrics" hidden>
+                <time
+                  id="record-elapsed"
+                  class="studio-deck__record-elapsed hub-control-bar__elapsed"
+                  datetime="PT0S"
+                  aria-label="Recording duration"
+                  >0:00</time>
+                <span id="record-bytes" class="hub-control-bar__bytes" aria-label="Recording file size">0 B</span>
+              </div>
+            </div>
+          </div>
+          <div id="hub-snipe-slot" class="hub-control-bar__cell hub-control-bar__cell--center">
+            <button type="button" id="snipe" class="rec-go" aria-label="Start screen capture">
+              <span class="rec-go__glyph rec-go__glyph--idle" aria-hidden="true">
+                <svg class="rec-go__rec-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" fill="currentColor" />
+                </svg>
+                <span class="rec-go__label">Record</span>
+              </span>
+              <span class="rec-go__glyph rec-go__glyph--studio" hidden aria-hidden="true">
+                <svg class="rec-go__rec-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" fill="currentColor" />
+                </svg>
+                <span class="rec-go__label">Record</span>
+              </span>
+              <span class="rec-go__glyph rec-go__glyph--stop" hidden aria-hidden="true">
+                <span class="rec-go__pulse-dot" aria-hidden="true"></span>
+                <svg class="rec-go__stop-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor" />
+                </svg>
+                <span class="rec-go__label">Stop</span>
+              </span>
+            </button>
+          </div>
+          <div class="hub-control-bar__cell hub-control-bar__cell--right">
+            <div class="hub-control-bar__cluster">
+              <p id="status" class="app-status hub-control-bar__status hub-control-bar__status--grow" role="status" aria-live="polite"></p>
+              <button
+                type="button"
+                id="hub-record-save"
+                class="hub-record-save"
+                hidden
+                aria-label="Save recording and stop"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+        </div>
+
+        <div id="record-panel" class="record-panel hidden" role="region" aria-label="Capture controls">
+          <div class="record-panel__inner">
+            <span class="record-panel__live" aria-hidden="true"></span>
+            <div class="record-panel__signals studio-deck__signals-row" role="group" aria-label="Incoming capture">
+              <div class="studio-deck__sig-group" role="group" aria-label="Screen and shared sound">
+                <div class="studio-deck__sig-wrap">
+                  <div class="studio-deck__sig studio-deck__sig--display" data-signal="video" aria-label="Screen">
+                    <span class="studio-deck__sig-led" aria-hidden="true"></span>
+                    <svg class="studio-deck__sig-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                      <rect x="5" y="4.5" width="14" height="10" rx="1.25" fill="currentColor" />
+                      <rect x="2" y="15.25" width="20" height="3.25" rx="1" fill="currentColor" />
+                    </svg>
+                    <span class="studio-deck__sig-name" aria-hidden="true">Screen</span>
+                  </div>
+                </div>
+                <div class="studio-deck__sig-wrap">
+                  <div class="studio-deck__sig studio-deck__sig--display" data-signal="sys" aria-label="Sound">
+                    <span class="studio-deck__sig-led" aria-hidden="true"></span>
+                    <svg class="studio-deck__sig-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                      <path
+                        fill="currentColor"
+                        d="M3 10v4h4l5 5V5L7 10H3zm13.5 2a4.5 4.5 0 00-2.5-4.03v8.05a4.5 4.5 0 002.5-4.02zM14 5.29v2.13a6.99 6.99 0 010 9.16v2.13A9 9 0 0014 5.29z"
+                      />
+                    </svg>
+                    <span class="studio-deck__sig-name" aria-hidden="true">Sound</span>
+                  </div>
+                </div>
+              </div>
+              <div class="studio-deck__sig-group studio-deck__sig-group--mics" role="group" aria-label="Microphones">
+                <div id="record-mic-device-row" class="studio-deck__mic-device-row studio-deck__mic-device-row--record"></div>
+              </div>
+            </div>
+            <button type="button" id="record-stop" class="record-panel__stop" aria-label="Stop recording">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <rect x="5" y="5" width="14" height="14" rx="1" fill="currentColor" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      (function () {
+        if (location.protocol === "file:") return;
+        var s = document.createElement("script");
+        s.src = new URL("app.js", document.baseURI || location.href).href;
+        s.defer = true;
+        document.body.appendChild(s);
+      })();
+    </script>
+  </body>
+</html>
