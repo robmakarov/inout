@@ -507,6 +507,7 @@ body.is-arming #snipe.rec-go:not(:disabled) {
 
 .capture-studio.capture-studio--live-preview.capture-studio--empty-preview .studio-deck__stroked {
   flex: 0 0 auto;
+  background: transparent;
 }
 
 .capture-studio.capture-studio--live-preview.capture-studio--empty-preview .studio-deck__video-stage {
@@ -515,6 +516,7 @@ body.is-arming #snipe.rec-go:not(:disabled) {
   height: auto;
   min-height: 0;
   max-height: none;
+  background: transparent;
 }
 
 .capture-studio.capture-studio--live-preview.capture-studio--empty-preview .capture-studio__preview-stack {
@@ -523,6 +525,7 @@ body.is-arming #snipe.rec-go:not(:disabled) {
 
 .capture-studio.capture-studio--live-preview.capture-studio--empty-preview .capture-studio__await-placeholder {
   padding: clamp(0.2rem, 1.6vmin, 0.55rem);
+  background: transparent;
 }
 
 .capture-studio--live-preview .capture-studio__video-wrap {
