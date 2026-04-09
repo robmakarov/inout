@@ -953,85 +953,65 @@
     </div>
 
     <div class="plans-region-section">
-      <div class="plans-section-label">Server region</div>
-      <div class="plans-region-grid" role="radiogroup" aria-label="Server region">
-        <label class="plans-region-card" data-region="us-east">
-          <input type="radio" name="plans-region" value="us-east" checked/>
+      <div class="plans-section-label">Server</div>
+      <div class="plans-region-grid" role="radiogroup" aria-label="Server">
+        <label class="plans-region-card" data-region="nyc1">
+          <input type="radio" name="plans-region" value="nyc1" checked/>
           <span class="plans-region-flag">🇺🇸</span>
-          <span class="plans-region-name">US East</span>
-          <span class="plans-region-sub">Virginia</span>
+          <span class="plans-region-name">NYC1</span>
+          <span class="plans-region-sub">New York</span>
         </label>
-        <label class="plans-region-card" data-region="eu-west">
-          <input type="radio" name="plans-region" value="eu-west"/>
+        <label class="plans-region-card" data-region="lax1">
+          <input type="radio" name="plans-region" value="lax1"/>
+          <span class="plans-region-flag">🇺🇸</span>
+          <span class="plans-region-name">LAX1</span>
+          <span class="plans-region-sub">Los Angeles</span>
+        </label>
+        <label class="plans-region-card" data-region="fra1">
+          <input type="radio" name="plans-region" value="fra1"/>
           <span class="plans-region-flag">🇩🇪</span>
-          <span class="plans-region-name">EU West</span>
+          <span class="plans-region-name">FRA1</span>
           <span class="plans-region-sub">Frankfurt</span>
         </label>
-        <label class="plans-region-card" data-region="ap-south">
-          <input type="radio" name="plans-region" value="ap-south"/>
+        <label class="plans-region-card" data-region="ams1">
+          <input type="radio" name="plans-region" value="ams1"/>
+          <span class="plans-region-flag">🇳🇱</span>
+          <span class="plans-region-name">AMS1</span>
+          <span class="plans-region-sub">Amsterdam</span>
+        </label>
+        <label class="plans-region-card" data-region="sgp1">
+          <input type="radio" name="plans-region" value="sgp1"/>
           <span class="plans-region-flag">🇸🇬</span>
-          <span class="plans-region-name">Asia Pacific</span>
+          <span class="plans-region-name">SGP1</span>
           <span class="plans-region-sub">Singapore</span>
+        </label>
+        <label class="plans-region-card" data-region="nrt1">
+          <input type="radio" name="plans-region" value="nrt1"/>
+          <span class="plans-region-flag">🇯🇵</span>
+          <span class="plans-region-name">NRT1</span>
+          <span class="plans-region-sub">Tokyo</span>
         </label>
       </div>
     </div>
 
     <div class="plans-cards-section">
-      <div class="plans-section-label">Plan</div>
-      <div class="plans-cards" role="radiogroup" aria-label="Storage plan">
-
-        <label class="plans-card" data-plan="free">
-          <input type="radio" name="plans-plan" value="free" checked/>
-          <div class="plans-card-inner">
-            <div class="plans-card-head">
-              <span class="plans-card-name">Free</span>
-              <span class="plans-card-price">$0<span class="plans-card-per">/mo</span></span>
-            </div>
-            <div class="plans-card-storage">5 GB</div>
-            <ul class="plans-card-features">
-              <li>Local + basic cloud sync</li>
-              <li>1 active view</li>
-              <li>US East region only</li>
-            </ul>
-          </div>
-        </label>
-
-        <label class="plans-card plans-card-featured" data-plan="pro">
-          <input type="radio" name="plans-plan" value="pro"/>
-          <div class="plans-card-badge">Popular</div>
-          <div class="plans-card-inner">
-            <div class="plans-card-head">
-              <span class="plans-card-name">Pro</span>
-              <span class="plans-card-price">$8<span class="plans-card-per">/mo</span></span>
-            </div>
-            <div class="plans-card-storage">100 GB</div>
-            <ul class="plans-card-features">
-              <li>All regions</li>
-              <li>Unlimited views</li>
-              <li>Priority sync</li>
-              <li>Version history (30 days)</li>
-            </ul>
-          </div>
-        </label>
-
-        <label class="plans-card" data-plan="team">
-          <input type="radio" name="plans-plan" value="team"/>
-          <div class="plans-card-inner">
-            <div class="plans-card-head">
-              <span class="plans-card-name">Team</span>
-              <span class="plans-card-price">$24<span class="plans-card-per">/mo</span></span>
-            </div>
-            <div class="plans-card-storage">1 TB</div>
-            <ul class="plans-card-features">
-              <li>All regions</li>
-              <li>Shared workspace</li>
-              <li>Up to 10 members</li>
-              <li>Version history (90 days)</li>
-              <li>Priority support</li>
-            </ul>
-          </div>
-        </label>
-
+      <div class="plans-section-label">Storage</div>
+      <div class="plans-storage-hero">
+        <span class="plans-storage-size" id="plans-storage-size">5 GB</span>
+        <span class="plans-storage-dot">·</span>
+        <span class="plans-storage-price" id="plans-storage-price">Free</span>
+      </div>
+      <div class="plans-slider-wrap">
+        <input type="range" id="plans-storage-slider" min="0" max="6" step="1" value="0" class="plans-slider" aria-label="Storage size"/>
+        <div class="plans-slider-labels" aria-hidden="true">
+          <span>5 GB</span>
+          <span>25 GB</span>
+          <span>100 GB</span>
+          <span>250 GB</span>
+          <span>500 GB</span>
+          <span>1 TB</span>
+          <span>2 TB</span>
+        </div>
       </div>
     </div>
 

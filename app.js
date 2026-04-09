@@ -69,8 +69,9 @@ try {
 } catch (_) {}
 const STRIPE_PUBLISHABLE_KEY = 'pk_live_xxx_replace_me';
 const STRIPE_PRICE_IDS = {
-  pro:  'price_pro_replace_me',
-  team: 'price_team_replace_me',
+  starter: 'price_starter_replace_me',
+  pro:     'price_pro_replace_me',
+  team:    'price_team_replace_me',
 };
 let stripe = null;
 if (window.Stripe && STRIPE_PUBLISHABLE_KEY && !STRIPE_PUBLISHABLE_KEY.includes('replace_me')) {
@@ -11774,11 +11775,47 @@ if (clearInputBtn) {
   const footerNote = document.getElementById('plans-footer-note');
   if (!backdrop) return;
 
-  const PLAN_LABELS = { free: 'Free', pro: 'Pro', team: 'Team' };
+  const STORAGE_STEPS = [
+    { label: '5 GB',   price: 0,  priceLabel: 'Free',   plan: 'free'    },
+    { label: '25 GB',  price: 2,  priceLabel: '$2/mo',  plan: 'starter' },
+    { label: '100 GB', price: 8,  priceLabel: '$8/mo',  plan: 'pro'     },
+    { label: '250 GB', price: 15, priceLabel: '$15/mo', plan: 'pro'     },
+    { label: '500 GB', price: 22, priceLabel: '$22/mo', plan: 'pro'     },
+    { label: '1 TB',   price: 32, priceLabel: '$32/mo', plan: 'team'    },
+    { label: '2 TB',   price: 55, priceLabel: '$55/mo', plan: 'team'    },
+  ];
+
+  const SERVER_LABELS = {
+    nyc1: 'NYC1 · New York',
+    lax1: 'LAX1 · Los Angeles',
+    fra1: 'FRA1 · Frankfurt',
+    ams1: 'AMS1 · Amsterdam',
+    sgp1: 'SGP1 · Singapore',
+    nrt1: 'NRT1 · Tokyo',
+  };
+
+  const slider  = document.getElementById('plans-storage-slider');
+  const sizeEl  = document.getElementById('plans-storage-size');
+  const priceEl = document.getElementById('plans-storage-price');
+
+  function selectedStep() {
+    return STORAGE_STEPS[parseInt(slider ? slider.value : '0', 10)] || STORAGE_STEPS[0];
+  }
+  function selectedRegion() {
+    const r = backdrop.querySelector('input[name="plans-region"]:checked');
+    return r ? r.value : 'nyc1';
+  }
+
+  function updateSliderFill() {
+    if (!slider) return;
+    const pct = (parseInt(slider.value, 10) / (STORAGE_STEPS.length - 1)) * 100;
+    slider.style.setProperty('--slider-fill', pct + '%');
+  }
 
   function openPlans() {
     backdrop.setAttribute('aria-hidden', 'false');
     backdrop.style.display = 'flex';
+    updateSliderFill();
     syncCTA();
   }
   function closePlans() {
@@ -11786,47 +11823,42 @@ if (clearInputBtn) {
     backdrop.style.display = 'none';
   }
 
-  function selectedPlan() {
-    const r = backdrop.querySelector('input[name="plans-plan"]:checked');
-    return r ? r.value : 'free';
-  }
-  function selectedRegion() {
-    const r = backdrop.querySelector('input[name="plans-region"]:checked');
-    return r ? r.value : 'us-east';
-  }
-
-  const REGION_LABELS = { 'us-east': 'US East', 'eu-west': 'EU West', 'ap-south': 'Asia Pacific' };
-
   function syncCTA() {
-    const plan   = selectedPlan();
+    const step   = selectedStep();
     const region = selectedRegion();
-    if (plan === 'free') {
-      cta.textContent = 'Current plan';
-      cta.disabled = true;
-      footerNote.textContent = 'You are on the Free plan.';
-    } else {
-      cta.disabled = false;
-      const prices = { pro: '$8', team: '$24' };
-      cta.textContent = `Subscribe to ${PLAN_LABELS[plan]}`;
-      footerNote.textContent = `${PLAN_LABELS[plan]} · ${REGION_LABELS[region]} · ${prices[plan]}/mo`;
-    }
-    // Disable region cards on free plan (free = US East only)
+
+    if (sizeEl)  sizeEl.textContent  = step.label;
+    if (priceEl) priceEl.textContent = step.priceLabel;
+
+    // On free/starter only US servers are available
     backdrop.querySelectorAll('.plans-region-card').forEach(card => {
       const input = card.querySelector('input');
       if (!input) return;
-      const locked = plan === 'free' && input.value !== 'us-east';
-      input.disabled = locked;
-      card.style.opacity = locked ? '0.35' : '';
+      const usOnly = step.price < 8;
+      const isUS   = input.value === 'nyc1' || input.value === 'lax1';
+      const locked = usOnly && !isUS;
+      input.disabled           = locked;
+      card.style.opacity       = locked ? '0.35' : '';
       card.style.pointerEvents = locked ? 'none' : '';
     });
+
+    if (step.plan === 'free') {
+      cta.textContent = 'Current plan';
+      cta.disabled    = true;
+      footerNote.textContent = 'You are on the Free plan.';
+    } else {
+      cta.disabled    = false;
+      cta.textContent = `Get ${step.label} — ${step.priceLabel}`;
+      footerNote.textContent = `${step.label} · ${SERVER_LABELS[region] || region} · ${step.priceLabel}`;
+    }
   }
 
-  // Radio change listeners
-  backdrop.querySelectorAll('input[name="plans-plan"]').forEach(r => r.addEventListener('change', syncCTA));
-  backdrop.querySelectorAll('input[name="plans-region"]').forEach(r => r.addEventListener('change', syncCTA));
+  if (slider) {
+    slider.addEventListener('input', () => { updateSliderFill(); syncCTA(); });
+  }
 
-  // Clicking a card selects its radio
-  backdrop.querySelectorAll('.plans-card, .plans-region-card').forEach(card => {
+  backdrop.querySelectorAll('input[name="plans-region"]').forEach(r => r.addEventListener('change', syncCTA));
+  backdrop.querySelectorAll('.plans-region-card').forEach(card => {
     card.addEventListener('click', () => {
       const radio = card.querySelector('input[type=radio]');
       if (radio && !radio.disabled) { radio.checked = true; syncCTA(); }
@@ -11835,13 +11867,13 @@ if (clearInputBtn) {
 
   // CTA — Stripe checkout
   cta.addEventListener('click', async () => {
-    const plan   = selectedPlan();
+    const step   = selectedStep();
     const region = selectedRegion();
-    if (plan === 'free') return;
+    if (step.plan === 'free') return;
 
-    const priceId = STRIPE_PRICE_IDS[plan];
+    const priceId = STRIPE_PRICE_IDS[step.plan];
     if (!stripe || !priceId || priceId.includes('replace_me')) {
-      toast(`Stripe not configured — set STRIPE_PRICE_IDS.${plan} in app.js`);
+      toast(`Stripe not configured — set STRIPE_PRICE_IDS.${step.plan} in app.js`);
       return;
     }
     const user = typeof currentUser !== 'undefined' ? currentUser : null;
@@ -11853,16 +11885,16 @@ if (clearInputBtn) {
       return;
     }
 
-    cta.disabled = true;
+    cta.disabled    = true;
     cta.textContent = 'Redirecting…';
     try {
       const { error } = await stripe.redirectToCheckout({
         lineItems: [{ price: priceId, quantity: 1 }],
-        mode: 'subscription',
+        mode:      'subscription',
         successUrl: window.location.origin + '/?plans_success=1&region=' + region,
         cancelUrl:  window.location.origin + '/?plans_cancel=1',
         customerEmail: user.email || undefined,
-        metadata: { region },
+        metadata: { region, storage: step.label },
       });
       if (error) { toast('Checkout error: ' + error.message); syncCTA(); }
     } catch (e) {
@@ -11871,26 +11903,22 @@ if (clearInputBtn) {
     }
   });
 
-  // Close
   closeBtn && closeBtn.addEventListener('click', closePlans);
   backdrop.addEventListener('click', e => { if (e.target === backdrop) closePlans(); });
 
-  // Open from upgrade button
   if (umUpgradeBtn) {
     umUpgradeBtn.addEventListener('click', () => {
-      // Close account modal first
       const accountBackdrop = document.getElementById('user-modal-backdrop');
       if (accountBackdrop) { accountBackdrop.style.display = 'none'; accountBackdrop.setAttribute('aria-hidden', 'true'); }
       openPlans();
     });
   }
 
-  // Handle post-checkout redirect
   try {
     const sp = new URLSearchParams(window.location.search);
     if (sp.get('plans_success') === '1') {
       history.replaceState(null, '', window.location.pathname);
-      setTimeout(() => toast('Subscription active — welcome to Pro!'), 600);
+      setTimeout(() => toast('Subscription active — welcome!'), 600);
     } else if (sp.get('plans_cancel') === '1') {
       history.replaceState(null, '', window.location.pathname);
     }
