@@ -427,6 +427,104 @@
   </div>
 </div>
 
+<!-- Plans / upgrade modal -->
+<div id="plans-modal-backdrop" aria-hidden="true">
+  <div id="plans-modal" role="dialog" aria-modal="true" aria-label="Upgrade storage plan">
+    <div class="plans-top">
+      <div class="plans-title">Cloud Storage</div>
+      <button id="plans-close" type="button" aria-label="Close">×</button>
+    </div>
+
+    <div class="plans-region-section">
+      <div class="plans-section-label">Server region</div>
+      <div class="plans-region-grid" role="radiogroup" aria-label="Server region">
+        <label class="plans-region-card" data-region="us-east">
+          <input type="radio" name="plans-region" value="us-east" checked/>
+          <span class="plans-region-flag">🇺🇸</span>
+          <span class="plans-region-name">US East</span>
+          <span class="plans-region-sub">Virginia</span>
+        </label>
+        <label class="plans-region-card" data-region="eu-west">
+          <input type="radio" name="plans-region" value="eu-west"/>
+          <span class="plans-region-flag">🇩🇪</span>
+          <span class="plans-region-name">EU West</span>
+          <span class="plans-region-sub">Frankfurt</span>
+        </label>
+        <label class="plans-region-card" data-region="ap-south">
+          <input type="radio" name="plans-region" value="ap-south"/>
+          <span class="plans-region-flag">🇸🇬</span>
+          <span class="plans-region-name">Asia Pacific</span>
+          <span class="plans-region-sub">Singapore</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="plans-cards-section">
+      <div class="plans-section-label">Plan</div>
+      <div class="plans-cards" role="radiogroup" aria-label="Storage plan">
+
+        <label class="plans-card" data-plan="free">
+          <input type="radio" name="plans-plan" value="free" checked/>
+          <div class="plans-card-inner">
+            <div class="plans-card-head">
+              <span class="plans-card-name">Free</span>
+              <span class="plans-card-price">$0<span class="plans-card-per">/mo</span></span>
+            </div>
+            <div class="plans-card-storage">5 GB</div>
+            <ul class="plans-card-features">
+              <li>Local + basic cloud sync</li>
+              <li>1 active view</li>
+              <li>US East region only</li>
+            </ul>
+          </div>
+        </label>
+
+        <label class="plans-card plans-card-featured" data-plan="pro">
+          <input type="radio" name="plans-plan" value="pro"/>
+          <div class="plans-card-badge">Popular</div>
+          <div class="plans-card-inner">
+            <div class="plans-card-head">
+              <span class="plans-card-name">Pro</span>
+              <span class="plans-card-price">$8<span class="plans-card-per">/mo</span></span>
+            </div>
+            <div class="plans-card-storage">100 GB</div>
+            <ul class="plans-card-features">
+              <li>All regions</li>
+              <li>Unlimited views</li>
+              <li>Priority sync</li>
+              <li>Version history (30 days)</li>
+            </ul>
+          </div>
+        </label>
+
+        <label class="plans-card" data-plan="team">
+          <input type="radio" name="plans-plan" value="team"/>
+          <div class="plans-card-inner">
+            <div class="plans-card-head">
+              <span class="plans-card-name">Team</span>
+              <span class="plans-card-price">$24<span class="plans-card-per">/mo</span></span>
+            </div>
+            <div class="plans-card-storage">1 TB</div>
+            <ul class="plans-card-features">
+              <li>All regions</li>
+              <li>Shared workspace</li>
+              <li>Up to 10 members</li>
+              <li>Version history (90 days)</li>
+              <li>Priority support</li>
+            </ul>
+          </div>
+        </label>
+
+      </div>
+    </div>
+
+    <div class="plans-footer">
+      <div class="plans-footer-note" id="plans-footer-note">You are on the Free plan.</div>
+      <button class="plans-cta" id="plans-cta" type="button" disabled>Current plan</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function(){
   var logoAnim = null;

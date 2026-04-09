@@ -68,7 +68,10 @@ try {
   }
 } catch (_) {}
 const STRIPE_PUBLISHABLE_KEY = 'pk_live_xxx_replace_me';
-const STRIPE_PRICE_ID        = 'price_xxx_replace_me';
+const STRIPE_PRICE_IDS = {
+  pro:  'price_pro_replace_me',
+  team: 'price_team_replace_me',
+};
 let stripe = null;
 if (window.Stripe && STRIPE_PUBLISHABLE_KEY && !STRIPE_PUBLISHABLE_KEY.includes('replace_me')) {
   stripe = Stripe(STRIPE_PUBLISHABLE_KEY);
@@ -11763,11 +11766,136 @@ if (clearInputBtn) {
   });
 }
 
-if (umUpgradeBtn) {
-  umUpgradeBtn.addEventListener('click', () => {
-    toast('Pro version coming soon — payment provider not selected yet.');
+// ── Plans modal ──────────────────────────────────────────────────────────────
+(function setupPlansModal() {
+  const backdrop   = document.getElementById('plans-modal-backdrop');
+  const closeBtn   = document.getElementById('plans-close');
+  const cta        = document.getElementById('plans-cta');
+  const footerNote = document.getElementById('plans-footer-note');
+  if (!backdrop) return;
+
+  const PLAN_LABELS = { free: 'Free', pro: 'Pro', team: 'Team' };
+
+  function openPlans() {
+    backdrop.setAttribute('aria-hidden', 'false');
+    backdrop.style.display = 'flex';
+    syncCTA();
+  }
+  function closePlans() {
+    backdrop.setAttribute('aria-hidden', 'true');
+    backdrop.style.display = 'none';
+  }
+
+  function selectedPlan() {
+    const r = backdrop.querySelector('input[name="plans-plan"]:checked');
+    return r ? r.value : 'free';
+  }
+  function selectedRegion() {
+    const r = backdrop.querySelector('input[name="plans-region"]:checked');
+    return r ? r.value : 'us-east';
+  }
+
+  const REGION_LABELS = { 'us-east': 'US East', 'eu-west': 'EU West', 'ap-south': 'Asia Pacific' };
+
+  function syncCTA() {
+    const plan   = selectedPlan();
+    const region = selectedRegion();
+    if (plan === 'free') {
+      cta.textContent = 'Current plan';
+      cta.disabled = true;
+      footerNote.textContent = 'You are on the Free plan.';
+    } else {
+      cta.disabled = false;
+      const prices = { pro: '$8', team: '$24' };
+      cta.textContent = `Subscribe to ${PLAN_LABELS[plan]}`;
+      footerNote.textContent = `${PLAN_LABELS[plan]} · ${REGION_LABELS[region]} · ${prices[plan]}/mo`;
+    }
+    // Disable region cards on free plan (free = US East only)
+    backdrop.querySelectorAll('.plans-region-card').forEach(card => {
+      const input = card.querySelector('input');
+      if (!input) return;
+      const locked = plan === 'free' && input.value !== 'us-east';
+      input.disabled = locked;
+      card.style.opacity = locked ? '0.35' : '';
+      card.style.pointerEvents = locked ? 'none' : '';
+    });
+  }
+
+  // Radio change listeners
+  backdrop.querySelectorAll('input[name="plans-plan"]').forEach(r => r.addEventListener('change', syncCTA));
+  backdrop.querySelectorAll('input[name="plans-region"]').forEach(r => r.addEventListener('change', syncCTA));
+
+  // Clicking a card selects its radio
+  backdrop.querySelectorAll('.plans-card, .plans-region-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const radio = card.querySelector('input[type=radio]');
+      if (radio && !radio.disabled) { radio.checked = true; syncCTA(); }
+    });
   });
-}
+
+  // CTA — Stripe checkout
+  cta.addEventListener('click', async () => {
+    const plan   = selectedPlan();
+    const region = selectedRegion();
+    if (plan === 'free') return;
+
+    const priceId = STRIPE_PRICE_IDS[plan];
+    if (!stripe || !priceId || priceId.includes('replace_me')) {
+      toast(`Stripe not configured — set STRIPE_PRICE_IDS.${plan} in app.js`);
+      return;
+    }
+    const user = typeof currentUser !== 'undefined' ? currentUser : null;
+    if (!user) {
+      toast('Sign in first to subscribe.');
+      closePlans();
+      const authBtn = document.getElementById('um-auth-btn');
+      if (authBtn) authBtn.click();
+      return;
+    }
+
+    cta.disabled = true;
+    cta.textContent = 'Redirecting…';
+    try {
+      const { error } = await stripe.redirectToCheckout({
+        lineItems: [{ price: priceId, quantity: 1 }],
+        mode: 'subscription',
+        successUrl: window.location.origin + '/?plans_success=1&region=' + region,
+        cancelUrl:  window.location.origin + '/?plans_cancel=1',
+        customerEmail: user.email || undefined,
+        metadata: { region },
+      });
+      if (error) { toast('Checkout error: ' + error.message); syncCTA(); }
+    } catch (e) {
+      toast('Checkout failed — ' + (e.message || 'unknown error'));
+      syncCTA();
+    }
+  });
+
+  // Close
+  closeBtn && closeBtn.addEventListener('click', closePlans);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) closePlans(); });
+
+  // Open from upgrade button
+  if (umUpgradeBtn) {
+    umUpgradeBtn.addEventListener('click', () => {
+      // Close account modal first
+      const accountBackdrop = document.getElementById('user-modal-backdrop');
+      if (accountBackdrop) { accountBackdrop.style.display = 'none'; accountBackdrop.setAttribute('aria-hidden', 'true'); }
+      openPlans();
+    });
+  }
+
+  // Handle post-checkout redirect
+  try {
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get('plans_success') === '1') {
+      history.replaceState(null, '', window.location.pathname);
+      setTimeout(() => toast('Subscription active — welcome to Pro!'), 600);
+    } else if (sp.get('plans_cancel') === '1') {
+      history.replaceState(null, '', window.location.pathname);
+    }
+  } catch (_) {}
+})();
 
 if (selectToggle) {
   selectToggle.addEventListener('click', () => {
