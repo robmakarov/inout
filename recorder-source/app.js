@@ -420,13 +420,8 @@
       document.documentElement.style.removeProperty("--studio-hub-width");
     } else {
       const compact = studioCompactMaxPx();
-      let w = NaN;
-      if (captureStudio.style.width && String(captureStudio.style.width).trim() !== "") {
-        w = parseFloat(captureStudio.style.width);
-      }
-      if (!Number.isFinite(w) || w <= 0) {
-        w = captureStudio.getBoundingClientRect().width;
-      }
+      /* Match hub strip to the painted #capture-studio width (not only style.width — avoids subpixel / layout drift vs max-width). */
+      const w = captureStudio.getBoundingClientRect().width;
       scadaCluster.classList.toggle("scada-cluster--studio-wide", Number.isFinite(w) && w > compact + 0.5);
       /* Smooth scroll fights every width keyframe during animateStudioWidthTo — defer until rAF idle */
       if (
@@ -439,7 +434,7 @@
       }
       if (Number.isFinite(w)) deviceBarStudioWidthAnchor = w;
       if (Number.isFinite(w) && w > 0) {
-        document.documentElement.style.setProperty("--studio-hub-width", `${Math.round(w)}px`);
+        document.documentElement.style.setProperty("--studio-hub-width", `${w}px`);
       }
     }
     syncDeviceUiScale();
