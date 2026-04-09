@@ -4372,13 +4372,21 @@ body.is-recording .rec-go.rec-go--studio-start {
     box-shadow:
       inset 0 0 0 1px rgba(95, 255, 212, 0.45),
       inset 0 0 12px rgba(0, 255, 200, 0.14),
-      inset 0 -22px 28px rgba(0, 0, 0, 0.42);
+      inset 0 -22px 28px rgba(0, 0, 0, 0.42),
+      0 0 14px rgba(0, 255, 210, 0.12);
   }
   50% {
     box-shadow:
       inset 0 0 0 1px rgba(95, 255, 212, 0.72),
       inset 0 0 18px rgba(0, 255, 200, 0.22),
-      inset 0 -22px 28px rgba(0, 0, 0, 0.44);
+      inset 0 -22px 28px rgba(0, 0, 0, 0.44),
+      0 0 22px rgba(120, 255, 230, 0.22);
+  }
+}
+
+@keyframes studioStrokeShineSpin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
@@ -4715,6 +4723,46 @@ body.is-recording
   .studio-deck__stroked {
   border-color: rgba(95, 255, 212, 0.88);
   animation: studioStrokeRec var(--ui-blink-sync) var(--ui-blink-ease) infinite;
+}
+
+/* Rotating highlight on the frame edge while actively recording (paused uses static chrome below). */
+body.is-recording:not(.is-recording-paused)
+  .capture-studio.capture-studio--live-preview:not(.hidden):not(.capture-studio--review):not(.capture-studio--starting)
+  .studio-deck__stroked::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* Above in-frame HUD (6), below resize grip (60) */
+  z-index: 55;
+  border-radius: inherit;
+  box-sizing: border-box;
+  padding: 2px;
+  pointer-events: none;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    transparent 262deg,
+    rgba(140, 255, 228, 0.35) 292deg,
+    rgba(255, 255, 255, 0.95) 305deg,
+    rgba(200, 255, 240, 0.55) 318deg,
+    transparent 338deg,
+    transparent 360deg
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  transform-origin: 50% 50%;
+  animation: studioStrokeShineSpin 2.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.is-recording:not(.is-recording-paused)
+    .capture-studio.capture-studio--live-preview:not(.hidden):not(.capture-studio--review):not(.capture-studio--starting)
+    .studio-deck__stroked::after {
+    animation: none;
+    opacity: 0;
+  }
 }
 
 body.is-recording
