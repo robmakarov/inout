@@ -4554,7 +4554,7 @@ body.is-arming #snipe.rec-go:not(:disabled) {
   --studio-r-inner: 9px;
   --studio-stroke: rgba(255, 255, 255, 0.12);
   /* Barely-there fill: grid stays visible, frame reads as a soft pane */
-  --studio-preview-veil: rgba(5, 11, 20, 0.17);
+  --studio-preview-veil: rgba(2, 6, 14, 0.42);
   /* Toolbar + gap show body grid; video frame uses .studio-deck__stroked */
   background: transparent;
   border: none;
