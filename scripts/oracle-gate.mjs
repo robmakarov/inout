@@ -13,6 +13,15 @@ const MAX_SYNC_ABS_MS = 60
 const MAX_BOUNDARY_JUMP = 0.1
 const MAX_SPUR_DB = -40
 
+/** True when gate metrics are missing/NaN — must not pass CI under load. */
+export function oracleMetricsIncomplete(metrics) {
+  const required = ['syncMeanMs', 'syncMaxAbsMs', 'maxBoundaryJump', 'spurPeakDb']
+  return required.some((k) => {
+    const v = metrics[k]
+    return v === null || v === undefined || (typeof v === 'number' && !Number.isFinite(v))
+  })
+}
+
 export function gateOracleReport(report) {
   const failures = []
   const metrics = {}
@@ -63,6 +72,10 @@ export function gateOracleReport(report) {
     if (integrity.spurPeakDb !== null && integrity.spurPeakDb > MAX_SPUR_DB) {
       failures.push(`spur ${integrity.spurPeakDb.toFixed(1)} dB > ${MAX_SPUR_DB} dB`)
     }
+  }
+
+  if (oracleMetricsIncomplete(metrics)) {
+    failures.push('oracle metrics incomplete (null/NaN — machine load or decode failure)')
   }
 
   return { pass: failures.length === 0, failures, metrics }
