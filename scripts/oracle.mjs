@@ -16,7 +16,7 @@ import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { gateOracleReport } from './oracle-gate.mjs'
+import { gateOracleReport, oracleMetricsIncomplete } from './oracle-gate.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const HOST = 'localhost'
@@ -112,6 +112,46 @@ async function runOracleOnce(port, headed) {
   }
 }
 
+const METRIC_RETRY_COOLDOWN_MS = 5000
+const METRIC_RETRY_MAX = 2
+
+/** Retry when CDP/oracle returns null metrics (load flake) — never exit 0 on all-null. */
+async function runOracleOnceGated(port, headed) {
+  let last = { error: 'no attempt', report: null, gate: null }
+  for (let attempt = 1; attempt <= METRIC_RETRY_MAX; attempt++) {
+    const t0 = Date.now()
+    const { error, report } = await runOracleOnce(port, headed)
+    const elapsed = Date.now() - t0
+    if (error || !report) {
+      last = { error: error ?? 'no report', report, gate: null, elapsedMs: elapsed, attempt }
+      if (attempt < METRIC_RETRY_MAX) {
+        console.error(
+          `[oracle] attempt ${attempt}/${METRIC_RETRY_MAX} error: ${last.error} — retry in ${METRIC_RETRY_COOLDOWN_MS}ms`,
+        )
+        await sleep(METRIC_RETRY_COOLDOWN_MS)
+        continue
+      }
+      return last
+    }
+    const gate = gateOracleReport(report)
+    if (!oracleMetricsIncomplete(gate.metrics)) {
+      return { error: null, report, gate, elapsedMs: elapsed, attempt }
+    }
+    const why = gate.failures.join('; ')
+    last = { error: `incomplete metrics: ${why}`, report, gate, elapsedMs: elapsed, attempt }
+    if (attempt < METRIC_RETRY_MAX) {
+      console.error(
+        `[oracle] attempt ${attempt}/${METRIC_RETRY_MAX} all-null/incomplete metrics — retry in ${METRIC_RETRY_COOLDOWN_MS}ms`,
+      )
+      await sleep(METRIC_RETRY_COOLDOWN_MS)
+      continue
+    }
+    console.error(`[oracle] FAIL LOUD: incomplete metrics after ${METRIC_RETRY_MAX} attempts — ${why}`)
+    return last
+  }
+  return last
+}
+
 async function main() {
   const { cold, headed } = parseArgs(process.argv.slice(2))
 
@@ -139,21 +179,20 @@ async function main() {
     await waitForHttp(`http://${HOST}:${port}/experimental.html`, Date.now() + 60_000)
 
     for (let i = 0; i < cold; i++) {
-      const t0 = Date.now()
-      const { error, report } = await runOracleOnce(port, headed)
-      const elapsed = Date.now() - t0
-      if (error || !report) {
+      const run = await runOracleOnceGated(port, headed)
+      const elapsed = run.elapsedMs ?? 0
+      if (run.error || !run.report || !run.gate) {
         results.push({
           run: i + 1,
           elapsedMs: elapsed,
-          error,
-          gate: { pass: false, failures: [error ?? 'no report'], metrics: {} },
+          error: run.error,
+          gate: run.gate ?? { pass: false, failures: [run.error ?? 'no report'], metrics: {} },
         })
-        console.error(`[${i + 1}/${cold}] ERROR ${error ?? 'no report'} (${elapsed}ms)`)
+        console.error(`[${i + 1}/${cold}] ERROR ${run.error ?? 'no report'} (${elapsed}ms)`)
         continue
       }
-      const gate = gateOracleReport(report)
-      results.push({ run: i + 1, elapsedMs: elapsed, gate, report })
+      const gate = run.gate
+      results.push({ run: i + 1, elapsedMs: elapsed, gate, report: run.report })
       const m = gate.metrics
       const sync = m.syncMeanMs?.toFixed?.(1) ?? 'n/a'
       const max = m.syncMaxAbsMs?.toFixed?.(1) ?? 'n/a'
@@ -178,6 +217,9 @@ async function main() {
       passed,
       failed: cold - passed,
       aliased: results.filter((r) => r.gate.metrics.aliased).length,
+      incompleteMetrics: results.filter((r) =>
+        oracleMetricsIncomplete(r.gate.metrics ?? {}),
+      ).length,
       syncMeans: results.map((r) => r.gate.metrics.syncMeanMs),
       syncMaxAbs: results.map((r) => r.gate.metrics.syncMaxAbsMs),
       spurPeakDb: results.map((r) => r.gate.metrics.spurPeakDb),
