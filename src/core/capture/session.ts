@@ -24,6 +24,11 @@ import {
   startMeasuredAudioCapture,
   type MeasuredAudioHandle,
 } from './measuredAudio'
+import {
+  canMeasureVideoCapture,
+  startMeasuredVideoCapture,
+  type MeasuredVideoHandle,
+} from './measuredVideo'
 import { canLiveComposite, startLiveComposite, type LiveCompositeHandle } from './liveComposite'
 import { clearPendingManifest, writePendingManifest } from './recovery'
 import { createSyntheticChannelsProgressive, isSyntheticMode } from './synthetic'
@@ -60,11 +65,14 @@ interface ChannelRuntime {
   media: MediaKind
   stream: MediaStream
   track: MediaStreamTrack
-  /** MediaRecorder path (video, or audio fallback). */
+  /** MediaRecorder path (fallback for video / audio). */
   recorder: MediaRecorder | null
   /** Measured AudioWorklet→WebCodecs path (audio preferred). */
   measured: MeasuredAudioHandle | null
   useMeasured: boolean
+  /** Measured MediaStreamTrackProcessor→VideoEncoder path (video preferred). */
+  measuredVideo: MeasuredVideoHandle | null
+  useMeasuredVideo: boolean
   /** Pre-warmed during arm() so start() only connects the graph. */
   audioCtx: AudioContext | null
   measuredStarting: Promise<void> | null
@@ -220,8 +228,9 @@ class Session implements CaptureSession {
 
   private async armChannel(acq: AcquiredChannel): Promise<ChannelRuntime> {
     const id = newId('ch')
-    const blobKey = `${this.recordingId}_${id}.webm`
     const useMeasured = acq.media === 'audio' && canMeasureAudioCapture()
+    const useMeasuredVideo = acq.media === 'video' && canMeasureVideoCapture()
+    const blobKey = `${this.recordingId}_${id}.${useMeasuredVideo ? 'mp4' : 'webm'}`
 
     let resolveStopped!: () => void
     const stopped = new Promise<void>((resolve) => {
@@ -237,9 +246,15 @@ class Session implements CaptureSession {
       recorder: null,
       measured: null,
       useMeasured,
+      measuredVideo: null,
+      useMeasuredVideo,
       audioCtx: null,
       measuredStarting: null,
-      mimeType: useMeasured ? 'audio/webm;codecs=opus' : pickMimeType(acq.media),
+      mimeType: useMeasured
+        ? 'audio/webm;codecs=opus'
+        : useMeasuredVideo
+          ? 'video/mp4'
+          : pickMimeType(acq.media),
       blobKey,
       writer: null,
       writeChain: Promise.resolve(),
@@ -257,6 +272,8 @@ class Session implements CaptureSession {
       } catch (err) {
         console.warn('[capture] measured audio prewarm failed, will init at start', err)
       }
+    } else if (useMeasuredVideo) {
+      // Encoder starts at start() — arm only reserves the blob key / mime.
     } else {
       const writable = await blobStore.createWriteStream(blobKey)
       const writer = writable.getWriter()
@@ -329,6 +346,12 @@ class Session implements CaptureSession {
     if (ch.ended) return
     if (ch.useMeasured) {
       ch.measuredStarting = this.startMeasured(ch, startT0)
+      return
+    }
+    if (ch.useMeasuredVideo) {
+      // Measured WebCodecs video — holds for late joins too: first-frame wall
+      // clock dates the channel against the session epoch.
+      ch.measuredStarting = this.startMeasuredVideo(ch, startT0)
       return
     }
     if (!ch.recorder) return
@@ -460,6 +483,36 @@ class Session implements CaptureSession {
     }
   }
 
+  private async startMeasuredVideo(ch: ChannelRuntime, startT0: number): Promise<void> {
+    try {
+      const writer = await createDurablePositionedWriter(ch.blobKey)
+      const kind = ch.kind === 'camera' ? 'camera' : 'screen'
+      const handle = await startMeasuredVideoCapture({
+        track: ch.track,
+        kind,
+        epoch: this.epoch,
+        writer,
+      })
+      ch.measuredVideo = handle
+      ch.mimeType = handle.mimeType
+      ch.recorderStarted = true
+      const offset = await handle.firstOffset
+      ch.startOffsetMs = offset
+      ch.startAbs = this.epoch + offset
+      console.info(
+        `[capture:arming] measured video ${ch.kind} first-frame +${(performance.now() - startT0).toFixed(0)}ms offset=${offset.toFixed(1)}ms`,
+      )
+    } catch (err) {
+      // Arm-time / start-time failure → channel error. MediaRecorder fallback is
+      // selected at arm when canMeasureVideoCapture() is false; a late configure
+      // failure cannot swap recorders mid-start without losing the epoch.
+      ch.ended = true
+      console.error('[capture] measured video failed for', ch.kind, err)
+      this.emit({ type: 'channel-error', kind: ch.kind, message: errMessage(err) })
+      ch.resolveStopped()
+    }
+  }
+
   stop(): Promise<Recording> {
     if (this.cancelled) return Promise.reject(new Error('capture session was cancelled'))
     if (!this.stopPromise) this.stopPromise = this.doStop()
@@ -531,6 +584,15 @@ class Session implements CaptureSession {
         rt.startOffsetMs = r.startOffsetMs
         rt.resolveStopped()
       })
+    } else if (rt.useMeasuredVideo && rt.measuredVideo) {
+      void rt.measuredVideo.stop().then((r) => {
+        rt.bytes = r.bytes
+        rt.durationMs = r.durationMs
+        rt.startOffsetMs = r.startOffsetMs
+        if (r.width) rt.width = r.width
+        if (r.height) rt.height = r.height
+        rt.resolveStopped()
+      })
     } else if (rt.recorder) {
       if (rt.startAbs !== undefined && rt.durationMs === undefined) {
         rt.durationMs = performance.now() - rt.startAbs
@@ -560,7 +622,7 @@ class Session implements CaptureSession {
 
   private stopRecorders(flush: boolean): void {
     for (const ch of this.channels) {
-      if (ch.useMeasured) {
+      if (ch.useMeasured || ch.useMeasuredVideo) {
         if (this.cancelled) continue
         void (async () => {
           try {
@@ -570,6 +632,13 @@ class Session implements CaptureSession {
               ch.bytes = r.bytes
               ch.durationMs = r.durationMs
               ch.startOffsetMs = r.startOffsetMs
+            } else if (ch.measuredVideo) {
+              const r = await ch.measuredVideo.stop()
+              ch.bytes = r.bytes
+              ch.durationMs = r.durationMs
+              ch.startOffsetMs = r.startOffsetMs
+              if (r.width) ch.width = r.width
+              if (r.height) ch.height = r.height
             }
           } catch (err) {
             console.error('[capture] measured stop failed', ch.kind, err)
@@ -609,7 +678,7 @@ class Session implements CaptureSession {
   }
 
   private async closeWriter(ch: ChannelRuntime): Promise<void> {
-    if (ch.useMeasured) return // measured path closes its own file writable
+    if (ch.useMeasured || ch.useMeasuredVideo) return // measured paths close their own writers
     await ch.writeChain
     if (!ch.writer) return
     try {
@@ -705,11 +774,12 @@ class Session implements CaptureSession {
     })().catch(() => undefined)
     this.setState('stopping')
     for (const ch of this.channels) {
-      if (ch.useMeasured) {
+      if (ch.useMeasured || ch.useMeasuredVideo) {
         void (async () => {
           try {
             if (ch.measuredStarting) await ch.measuredStarting
             if (ch.measured) await ch.measured.cancel()
+            if (ch.measuredVideo) await ch.measuredVideo.cancel()
           } catch {
             /* discarding */
           } finally {

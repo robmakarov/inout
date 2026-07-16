@@ -52,7 +52,7 @@ function syntheticScreen(): Generated {
   const g = get2d(canvas)
   const startedAt = performance.now()
   let frame = 0
-  let raf = 0
+  // setInterval: headless throttles rAF; captureStream needs steady paints.
   const draw = (): void => {
     const t = (performance.now() - startedAt) / 1000
     const hue = (t * 6) % 360
@@ -71,10 +71,20 @@ function syntheticScreen(): Generated {
     const x = (t * 240) % (1280 + 160) - 160
     g.fillStyle = `hsl(${(hue + 180) % 360}, 80%, 60%)`
     g.fillRect(x, 560, 160, 40)
-    raf = requestAnimationFrame(draw)
   }
-  draw()
-  return { stream: canvas.captureStream(30), stop: () => cancelAnimationFrame(raf) }
+  const stream = canvas.captureStream(0)
+  const track = stream.getVideoTracks()[0]!
+  const tick = (): void => {
+    draw()
+    try {
+      ;(track as MediaStreamTrack & { requestFrame?: () => void }).requestFrame?.()
+    } catch {
+      /* */
+    }
+  }
+  tick()
+  const timer = setInterval(tick, 1000 / 60)
+  return { stream, stop: () => clearInterval(timer) }
 }
 
 function syntheticCamera(): Generated {
@@ -87,7 +97,6 @@ function syntheticCamera(): Generated {
   let y = 240
   let vx = 4.2
   let vy = 3.1
-  let raf = 0
   const draw = (): void => {
     g.fillStyle = '#7f7f7f'
     g.fillRect(0, 0, 640, 480)
@@ -105,10 +114,20 @@ function syntheticCamera(): Generated {
     g.beginPath()
     g.arc(x, y, r, 0, Math.PI * 2)
     g.fill()
-    raf = requestAnimationFrame(draw)
   }
-  draw()
-  return { stream: canvas.captureStream(30), stop: () => cancelAnimationFrame(raf) }
+  const stream = canvas.captureStream(0)
+  const track = stream.getVideoTracks()[0]!
+  const tick = (): void => {
+    draw()
+    try {
+      ;(track as MediaStreamTrack & { requestFrame?: () => void }).requestFrame?.()
+    } catch {
+      /* */
+    }
+  }
+  tick()
+  const timer = setInterval(tick, 1000 / 60)
+  return { stream, stop: () => clearInterval(timer) }
 }
 
 function syntheticMic(ctx: AudioContext): Generated {

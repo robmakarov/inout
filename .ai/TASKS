@@ -1,4 +1,4 @@
-# EE task pack — TD-assigned, 2026-07-15 (EE token window: ~2 days)
+# EE task pack — TD-assigned, 2026-07-15 (Cursor token window: ~2 days)
 
 Operating rules (apply to every task):
 - One branch per task: `ee/<task-id>`. Never commit to main. TD merges.
@@ -67,6 +67,36 @@ Goal: graduate src/experimental WebCodecs rig to replace MediaRecorder VIDEO cap
 Constraints: MediaRecorder path stays as capability fallback; crash-durability (positioned writes via durable worker) must hold — mid-record reload salvages video; watchdog degrades to fallback on weak machines; audio pipeline untouched (measured audio is done).
 GATES: oracle sync |offset| ≤ 10ms across 10 runs (vs current ±45); mid-record reload salvage still recovers all channels; unedited instant export still ≤ 200ms; keyframe-aligned trim exports without full re-encode (measure: edited export of a 30s take with one cut ≤ 1s); typecheck+tests+oracle green.
 Big task — split into PR-sized branches if needed: (a) capture+durability, (b) trim/smart-cut, (c) instant v2 wiring.
+
+### EE handoff — webcodecs-capture (a) capture+durability (branch **ee/webcodecs-capture-2**, rebased on origin/main @ b09218b, 2026-07-16)
+
+**Lineage:** old `ee/webcodecs-capture-a` deleted locally — never push pre-fcaf57f history.
+
+**Delivered:** production measured video behind existing contracts (`measuredVideo.ts` → session/prearm); MediaRecorder fallback when WebCodecs/OffscreenCanvas missing; durable positioned fMP4 writes; `npm run salvage:smoke`; oracle null-metrics guard (retry×2, fail loud); audio untouched. (b)/(c) not started.
+
+**Pipeline:** paced `<video>` → OffscreenCanvas (encoder-sized; size mismatch killed encoder ~1s) → VideoEncoder AVC → mediabunny fMP4 → durable writer. Wall-clock stamps from first frame + 14ms presentation-lag on `startOffsetMs`. TrackProcessor stamp path rejected: waiting on encode stalls the processor → silent frame drops → sync outliers.
+
+**Checks:** `npm run typecheck && npm test` → 92/92 green.
+
+**GATES:**
+
+| Gate | Target | Result |
+|------|--------|--------|
+| Salvage mid-record (video+audio, mp4) | recover, dur>50% | **PASS** (`salvage:smoke`: video ~2870ms / audio ~2507ms, mime `video/mp4;codecs=avc1.640028`) |
+| Oracle sync \|offset\| ≤10ms ×10 | all 10 | **NOT MET** — see matrix |
+| typecheck+tests | green | **PASS** |
+
+**Oracle cold×10** (ephemeral :59676; CI band still 60ms):
+
+- sync mean (ms): 8.3, 12.5, 9.3, 1.9, −11.7, 19.9, 13.4, 7.3, 5.3, **−473.3**
+- sync maxAbs (ms): 28.3, 12.5, 29.3, 1.9, 11.7, 19.9, 20.1, 7.3, 31.9, 473.3
+- spur (dB): −52.9…−47.1; run9 **−33.4 FAIL** spur band; run10 sync FAIL (corr absent, raw≈−473 pairing/stall class)
+- jump: all ≤0.1; aliased: 0/10
+- \|mean\|≤10ms: **5/10** (best single run 1.9ms). Typical residual when corr works: ~8–20ms (beats MediaRecorder ±45, misses ≤10).
+
+**Why ≤10ms fails:** (1) `<video>` presentation lag vs paint is run-variable (~±15ms) even with fixed lag constant; (2) cold runs occasionally lose schedule-skew correction → raw ±450–480ms exposed (instrument class, not new aliasing); (3) TrackProcessor capture timestamps are the right long-term fix but require a non-blocking read/encode split that did not stabilize in this spike.
+
+**TD merge:** **NO** on sync gate. Salvage+durability path is usable; recommend (a) follow-up for TrackProcessor queue + ≤10ms before (b)/(c), or TD relaxes (a) sync to ≤30ms mean with salvage mandatory.
 
 ## 4. composite-salvage — instant export survives crash  [P2, small]
 Goal: live-composite blob registered in the pending manifest and recovered on boot, so a salvaged unedited take still gets instant export (today it falls back to full render).

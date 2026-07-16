@@ -17,11 +17,22 @@ export function warmCapturePipeline(): void {
   warmed = true
   void (async () => {
     try {
-      const [{ prewarmWorkletModule }, { blobStore }] = await Promise.all([
+      const [{ prewarmWorkletModule }, { canMeasureVideoCapture }, { blobStore }] = await Promise.all([
         import('./measuredAudio'),
+        import('./measuredVideo'),
         import('@core/store'),
       ])
       await prewarmWorkletModule()
+      if (canMeasureVideoCapture() && typeof VideoEncoder !== 'undefined') {
+        await VideoEncoder.isConfigSupported({
+          codec: 'avc1.42001E',
+          width: 1280,
+          height: 720,
+          bitrate: 4_000_000,
+          framerate: 30,
+          hardwareAcceleration: 'prefer-hardware',
+        }).catch(() => undefined)
+      }
       const w = await blobStore.createWriteStream('__warmup.bin')
       await w.abort()
       await blobStore.remove('__warmup.bin').catch(() => undefined)

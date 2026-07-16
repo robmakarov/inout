@@ -30,6 +30,7 @@
 
 import { blobStore, createDurablePositionedWriter } from '@core/store'
 import { canMeasureAudioCapture, startMeasuredAudioCapture } from '@core/capture/measuredAudio'
+import { canMeasureVideoCapture, startMeasuredVideoCapture } from '@core/capture/measuredVideo'
 import type { ChannelKind, ChannelRecording, MediaKind, Recording } from '@core/types'
 import { listProductionBlobs } from '../shared/opfs'
 import { encodeBits, FID_BLOCK, FID_BLOCK_COUNT, FID_MARGIN } from './fiducial'
@@ -139,6 +140,41 @@ async function recordStream(
       stopCallAbsMs,
       stopFinishAbsMs,
       dataEvents: [{ atMs: startAbs, bytes: result.bytes }],
+    }
+  }
+
+  // Video: production measured path (TrackProcessor → VideoEncoder → fMP4).
+  if (media === 'video' && canMeasureVideoCapture()) {
+    const startCallAbsMs = performance.now()
+    const track = stream.getVideoTracks()[0]
+    if (!track) throw new Error('rig: video stream has no track')
+    const writer = await createDurablePositionedWriter(blobKey)
+    const handle = await startMeasuredVideoCapture({
+      track,
+      kind: kind === 'camera' ? 'camera' : 'screen',
+      epoch,
+      writer,
+    })
+    const firstOffset = await handle.firstOffset
+    const startAbs = epoch + firstOffset
+    await stopSignal
+    const stopCallAbsMs = performance.now()
+    const result = await handle.stop()
+    const stopFinishAbsMs = performance.now()
+    return {
+      kind,
+      media,
+      blobKey,
+      mimeType: handle.mimeType,
+      onstartAbsMs: startAbs,
+      rawStartOffsetMs: result.startOffsetMs,
+      durationMs: result.durationMs,
+      startCallAbsMs,
+      stopCallAbsMs,
+      stopFinishAbsMs,
+      dataEvents: [{ atMs: startAbs, bytes: result.bytes }],
+      width: result.width || RIG_WIDTH,
+      height: result.height || RIG_HEIGHT,
     }
   }
 
@@ -348,9 +384,12 @@ function makeFiducialCanvas(kind: 'screen' | 'camera', rigEpoch: number, flashCl
   const canvas = document.createElement('canvas')
   canvas.width = RIG_WIDTH
   canvas.height = RIG_HEIGHT
-  const g = canvas.getContext('2d')
+  // Headless captureStream emits almost no frames for detached canvases.
+  canvas.style.cssText = 'position:fixed;left:0;top:0;width:16px;height:9px;opacity:0.01;pointer-events:none'
+  document.body.appendChild(canvas)
+  const g = canvas.getContext('2d', { willReadFrequently: false })
   if (!g) throw new Error('2d context unavailable')
-  let raf = 0
+  // setInterval not rAF: headless Chrome throttles rAF to ~1–3fps.
   const draw = (): void => {
     const rigMs = performance.now() - rigEpoch
     if (flashClick && flashActiveAt(rigMs)) {
@@ -365,10 +404,28 @@ function makeFiducialCanvas(kind: 'screen' | 'camera', rigEpoch: number, flashCl
     g.fillStyle = `hsl(${(rigMs / 4) % 360}, 80%, 60%)`
     g.fillRect(((rigMs / 4) % (RIG_WIDTH + 160)) - 160, 560, 160, 40)
     drawFiducialStrip(g, rigMs)
-    raf = requestAnimationFrame(draw)
   }
-  draw()
-  return { stream: canvas.captureStream(30), stop: () => cancelAnimationFrame(raf) }
+  // captureStream(0) + requestFrame: explicit 30fps drive. captureStream(30)
+  // under-delivers to MediaStreamTrackProcessor (~8fps → short measured mp4).
+  const stream = canvas.captureStream(0)
+  const track = stream.getVideoTracks()[0]!
+  const tick = (): void => {
+    draw()
+    try {
+      ;(track as MediaStreamTrack & { requestFrame?: () => void }).requestFrame?.()
+    } catch {
+      /* requestFrame optional on some builds */
+    }
+  }
+  tick()
+  const timer = setInterval(tick, 1000 / 60)
+  return {
+    stream,
+    stop: () => {
+      clearInterval(timer)
+      canvas.remove()
+    },
+  }
 }
 
 export interface RecordOptions {
@@ -472,7 +529,13 @@ export async function recordFiducialSession(durationMs: number, opts?: RecordOpt
 
     const jobs: Promise<RecordedChannel>[] = []
     const enqueue = (stream: MediaStream, kind: ChannelKind, media: MediaKind): void => {
-      const key = `${runId}_${kind}.webm`
+      const ext =
+        media === 'video' && canMeasureVideoCapture()
+          ? 'mp4'
+          : media === 'audio' && canMeasureAudioCapture()
+            ? 'webm'
+            : 'webm'
+      const key = `${runId}_${kind}.${ext}`
       blobKeys.push(key)
       jobs.push(recordStream(stream, kind, media, key, epoch, stopSignal))
     }

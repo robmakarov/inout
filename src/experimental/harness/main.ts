@@ -50,6 +50,16 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'salvage-smoke',
+    title: 'Salvage smoke — measured video+audio pending manifest',
+    detail:
+      'records a short fiducial take, writes pending manifest, salvages; pass = video+audio durations >500ms (mp4 video path).',
+    run: async (args) => {
+      const { runSalvageSmoke } = await import('../oracle/salvageSmoke')
+      return runSalvageSmoke(typeof args?.recordMs === 'number' ? args.recordMs : 3000)
+    },
+  },
+  {
     id: 'localize',
     title: 'A/V sync — Step 2/3: capture-vs-compose localization + falsification',
     detail:

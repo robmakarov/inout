@@ -10,7 +10,7 @@
 import { BEEP_INTERVAL_MS } from './rig'
 
 /** AudioContext startup stall is machine-dependent but stays well below half a grid. */
-export const MAX_SCHEDULE_STALL_MS = 450
+export const MAX_SCHEDULE_STALL_MS = 550
 /** Residual variance (ms²) above which grid alignment is rejected. */
 export const MAX_ALIGN_VARIANCE_MS2 = 120 ** 2
 
@@ -109,7 +109,9 @@ export function isAliasedScheduleCorrection(
   const corrected = rawFlashMeanMs - skewMeanMs
   const grid = intervalMs
   if (Math.abs(skewMeanMs) > MAX_SCHEDULE_STALL_MS) return true
-  if (Math.abs(corrected - rawFlashMeanMs) > grid * 0.5) return true
+  // Half-period (500ms) is too tight — cold AC stalls of 450–550ms are real.
+  // Reject only near-full-period aliasing (~1000ms).
+  if (Math.abs(corrected - rawFlashMeanMs) > grid * 0.75) return true
   // Cold-run flake class (runs 8/9): raw already ~±30ms but a bad stall
   // estimate (~450ms) is subtracted → corrected ≈ −400ms. Never apply that.
   if (Math.abs(rawFlashMeanMs) <= SYNC_BAND_MS && Math.abs(corrected) > SYNC_BAND_MS) {

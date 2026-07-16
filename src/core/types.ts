@@ -85,8 +85,10 @@ export interface EditState {
 //       onArming reports which permission is pending. Rejects with CaptureError
 //       only when nothing could be acquired. Failures emit 'channel-error'.
 //     - audio channels (mic/system-audio): AudioWorklet → WebCodecs opus →
-//       mediabunny webm with startOffsetMs from getOutputTimestamp (measured).
-//     - video channels: MediaRecorder (unchanged; file epoch ≈ startCall).
+//       mediabunny webm with startOffsetMs from first-sample wall (measured).
+//     - video channels: MediaStreamTrackProcessor → VideoEncoder AVC →
+//       fragmented MP4 with startOffsetMs from first-frame wall (measured);
+//       MediaRecorder webm remains the capability fallback (file epoch ≈ startCall).
 
 //   isSyntheticMode(): boolean  — true when location.search contains 'synthetic';
 //     in that mode streams are generated (canvas animations + oscillators), no
