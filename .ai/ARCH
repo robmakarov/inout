@@ -1,0 +1,9 @@
+web SPA: vite+react19+ts-strict+zustand. chromium-first, capability-gated degradation (src/core/capabilities.ts).
+src/core = framework-free engine; src/app = react UI (imports @core/* only via module indexes). contracts: src/core/types.ts (authoritative).
+capture: screen first (selfBrowserSurface:exclude), then camera+mic parallel w/ 15s timeout. video=MediaRecorder webm (startOffset≈startCall); audio=AudioWorklet→WebCodecs opus→mediabunny webm (startOffset=first-sample wall). durable OPFS writer worker for MediaRecorder path. no full-bleed screen preview while recording. 30min cap. ?synthetic=1 = generated streams.
+store: OPFS blobs (blobStore + SyncAccessHandle durable worker) + IndexedDB metadata (recordingsRepo).
+timeline: pure trim math, unit-tested. channel trims blank (no time shift); global trim = output bounds.
+compose: mediabunny + WebCodecs. sample channels per frame -> canvas layout -> encode. mp4 avc+aac, fallback avc+opus, then vp9+opus webm. layout: 1080p30; screen letterboxed; cam PiP BR 24%w; audio-only=waveform. audio: Hermite resample to 48kHz, soft-limit, seam-safe 1s chunks.
+share: saveToFile + ShareTarget list. cloud: supabase adapter behind CloudProvider iface (google oauth, private bucket, signed URL, quota+ttl); null when env unset. E2EE-compatible: provider never requires plaintext metadata beyond size/name.
+analytics: event bus, console dev / noop prod.
+UI flow: capture -> editor -> exporting -> share (zustand state machine, no router). editor preview = DOM-synced <video>s mirroring compositor layout via timeline fns.

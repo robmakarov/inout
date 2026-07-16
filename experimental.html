@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>INOUT — experimental research harness</title>
+    <style>
+      /* Minimal technical-demo chrome only; deliberately not product UI. */
+      body { font: 14px/1.5 ui-monospace, monospace; background: #0a0a0c; color: #d5d5da; margin: 24px; }
+      h1 { font-size: 16px; } h1 em { color: #e2554f; font-style: normal; }
+      p.warn { color: #c9a227; }
+      section { border: 1px solid #26262c; border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+      button { background: #1d1d24; color: #d5d5da; border: 1px solid #3a3a44; border-radius: 6px;
+               padding: 6px 12px; cursor: pointer; font: inherit; }
+      button:disabled { opacity: .4; cursor: wait; }
+      pre { background: #101014; border-radius: 6px; padding: 10px; overflow: auto; max-height: 320px; white-space: pre-wrap; }
+      .pass { color: #5fbf77; } .fail { color: #e2554f; } .info { color: #8888aa; }
+    </style>
+  </head>
+  <body>
+    <h1><em>experimental</em> — INOUT research harness (dev-only, branch exp/research)</h1>
+    <p class="warn">
+      Not part of the product build. Serve with <code>npm run dev</code> and open
+      <code>/experimental.html?synthetic=1</code>. Nothing here is loaded by the production app.
+    </p>
+    <div id="root"></div>
+    <script type="module" src="/src/experimental/harness/main.ts"></script>
+  </body>
+</html>

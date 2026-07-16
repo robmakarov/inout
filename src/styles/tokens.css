@@ -1,0 +1,42 @@
+:root {
+  /* surfaces */
+  --bg: #0a0a0c;
+  --surface: #151518;
+  --surface-2: #1e1e23;
+  --surface-3: #2a2a31;
+  --overlay: rgba(10, 10, 12, 0.72);
+
+  /* text */
+  --text: #f5f5f7;
+  --text-dim: #98989f;
+  --text-faint: #5c5c66;
+
+  /* accents */
+  --record: #ff3b30;
+  --record-soft: rgba(255, 59, 48, 0.16);
+  --accent: #0a84ff;
+  --accent-soft: rgba(10, 132, 255, 0.16);
+  --ok: #30d158;
+  --warn: #ffd60a;
+
+  /* channel lane colors */
+  --ch-screen: #0a84ff;
+  --ch-camera: #bf5af2;
+  --ch-mic: #30d158;
+  --ch-sysaudio: #ff9f0a;
+
+  /* geometry */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-full: 999px;
+
+  /* type */
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+
+  /* motion */
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --t-fast: 140ms;
+  --t-med: 240ms;
+}

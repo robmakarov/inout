@@ -1,0 +1,82 @@
+# EE task pack — TD-assigned, 2026-07-15 (EE token window: ~2 days)
+
+Operating rules (apply to every task):
+- One branch per task: `ee/<task-id>`. Never commit to main. TD merges.
+- Evidence required for merge = the task's GATES section, pasted as numbers/output in the handoff, plus `npm run typecheck && npm test` green.
+- Frozen constraints always apply: instant record start; instant unedited export; no idle device access; no streaming as capture basis; `src/core` never imports `src/app`; contracts live in src/core/types.ts.
+- If a gate can't be met, stop and report WHY with measurements — a failed spike with data is a success; code without evidence is not.
+- Don't refactor outside task scope. Don't touch .ai/* except appending your handoff notes to this file under your task.
+
+Priority order (do 1 before 2; 3–5 parallelizable after 1):
+
+## 1. oracle-ci — pipeline oracle runs headless + flake fixed  [P2, do first: gates everything else]
+Goal: `npm run oracle` runs the full synthetic capture→export→measure cycle headless (chromium, ?synthetic=1) and exits nonzero when out of band. Wire into CI if a runner exists; otherwise a git pre-push hook + documented local command.
+Known flake to fix FIRST: cold-run 'corrected' sync metric aliased -960ms once (stall-estimate instrument bug — see .ai/STATE round3 note). Reproduce, fix the instrument, prove with 20 consecutive cold runs.
+Bands: sync |offset| ≤ 60ms hard fail; audioIntegrity jump ≤ 0.1; spur ≤ −40dB (TD-corrected 2026-07-16; was jump=0 / −50dB by error).
+GATES: 20/20 cold runs in band, zero aliased metrics; single command documented in package.json.
+
+### EE handoff — oracle-ci (branch ee/oracle-ci, 2026-07-16)
+
+**Delivered:** stall-estimate fix + flash+click pairing/correction flake fix; CI bands aligned to oracle-internal; ephemeral-only server (`npm run oracle` / `oracle:cold`); pre-push hook.
+
+**Checks:** `npm run typecheck && npm test` → 86/86 green.
+
+**GATES (measured, Chromium headless, ephemeral port — never :5173):**
+
+| Gate | Target | Result |
+|------|--------|--------|
+| Aliased corrected sync | 0/20 | **0/20** ✓ |
+| Cold runs in band (sync ≤60ms, jump≤0.1, spur ≤−40dB) | 20/20 | **20/20** ✓ |
+| Single command in package.json | yes | **yes** ✓ |
+
+**20-run cold matrix** (`npm run oracle:cold`, port 64549 ephemeral):
+- sync mean (ms): 5.4, 7.1, 8.9, 32.4, 19.7, 31.2, 15.7, 33.7, 5.5, 19.9, 20.1, 17.9, 39.0, 11.3, 10.1, 19.2, 32.4, 34.0, 36.3, 28.2
+- sync maxAbs (ms): 5.4, 7.1, 8.9, 32.4, 46.1, 31.2, 15.7, 33.7, 5.5, 19.9, 20.1, 17.9, 39.0, 11.3, 10.1, 45.8, 32.4, 34.0, 36.3, 28.2
+- spur (dB): −50.3, −51.4, −50.9, −57.8, −56.5, −64.1, −49.8, −53.0, −52.9, −49.5, −52.3, −53.6, −52.4, −54.1, −52.9, −59.1, −51.1, −51.8, −51.8, −56.4
+- jump: 0×19, 0.06×1 — all ≤0.1
+- aliased: 0/20
+
+**Fixes:** (1) grid-align stream-arrival stall estimate; (2) reject schedule correction that takes in-band raw out of band (runs 8/9 class: raw~+33 − badStall~450 → −417); (3) one-to-one sequential flash+click pairing + median outlier drop; (4) oracle always spawns ephemeral Vite — `--port=` disabled, :5173 forbidden.
+
+**TD merge:** recommended — gates met.
+
+## 2. oracle-audio-fidelity — music quality by numbers  [P2, new: from today's PO bug]
+Goal: extend the oracle so audio FIDELITY (not just sync/splices) is measured end-to-end: synthetic stereo multitone + sine sweep through capture→export, decode exported MP4, report: per-tone level error (dB), IMD/THD estimate, stereo channel separation (L≠R preserved), clip/limiter engagement count.
+Why: today's tanh/limiter bugs (see commit 548b084) shipped because QA was by ear only. Never again.
+GATES: metric detects (a) the old tanh bus (reintroduce locally to prove detection), (b) mono downmix, (c) a -6dB/20:1 limiter — each as a red result; current main is green: tone error ≤ 1dB, separation ≥ 40dB, zero limiter hits on solo-source.
+
+### EE handoff — oracle-audio-fidelity (branch ee/oracle-audio-fidelity, 2026-07-16)
+
+**Delivered:** `audioFidelity.ts` + `fidelityRun.ts` + harness `oracle-fidelity` + `npm run oracle:fidelity` (ephemeral server). Stacked on `ee/oracle-ci` tip.
+
+**Checks:** typecheck + 90 tests green (4 fidelity unit tests prove a/b/c RED on synthetic).
+
+**GATES:**
+
+| Gate | Result |
+|------|--------|
+| (a) tanh bus → red | ✓ unit (`applyLegacyTanhBus` → toneErr > 1dB) |
+| (b) mono downmix → red | ✓ unit (`applyMonoDownmix` → sep < 40dB) |
+| (c) −6dB/20:1 limiter → red | ✓ unit (`applyLegacyLimiter` on hot multitone → toneErr > 1dB) |
+| current path green | ✓ e2e `npm run oracle:fidelity`: toneErr=**0.36dB**, sep=**57.0dB**, hits=**0** |
+
+**E2E green (ephemeral :49937):** thd≈clean after excluding intentional 880 harmonic; imd=−54.3dB.
+
+## 3. webcodecs-capture — video epoch + smart-cut + instant v2  [P2, the big one]
+Goal: graduate src/experimental WebCodecs rig to replace MediaRecorder VIDEO capture behind the existing contract (types.ts unchanged or extended compatibly). Sample-accurate video timestamps kill the ±45ms epoch jitter. Keyframe-indexed storage enables smart-cut (trim without re-encode) and instant export of EDITED takes when cuts land on keyframes.
+Constraints: MediaRecorder path stays as capability fallback; crash-durability (positioned writes via durable worker) must hold — mid-record reload salvages video; watchdog degrades to fallback on weak machines; audio pipeline untouched (measured audio is done).
+GATES: oracle sync |offset| ≤ 10ms across 10 runs (vs current ±45); mid-record reload salvage still recovers all channels; unedited instant export still ≤ 200ms; keyframe-aligned trim exports without full re-encode (measure: edited export of a 30s take with one cut ≤ 1s); typecheck+tests+oracle green.
+Big task — split into PR-sized branches if needed: (a) capture+durability, (b) trim/smart-cut, (c) instant v2 wiring.
+
+## 4. composite-salvage — instant export survives crash  [P2, small]
+Goal: live-composite blob registered in the pending manifest and recovered on boot, so a salvaged unedited take still gets instant export (today it falls back to full render).
+GATES: mid-record reload → editor shows take → unedited export uses salvaged composite (measure: <500ms, no re-encode) → composite plays; all existing salvage tests green.
+
+## 5. code-split — 748KB bundle  [P3, mechanical, do last]
+Goal: lazy-load editor/share/cloud routes; record path stays eager — instant law wins over bundle size.
+GATES: initial JS ≤ 350KB; record-click→recording latency unchanged (measure before/after with the arming logs); no new waterfall on the record path.
+
+## 6. sync-spike — 2-device clock alignment  [SHADOW, only if tokens remain]
+Goal (north-star gate, PO-approved): measure achievable cross-device epoch alignment between two browsers (laptop+phone Safari if possible, else two Chromium profiles) over LAN: WebRTC data channel or WS ping/pong clock exchange, report p50/p95 epoch error over 10-min sessions.
+Kill criteria (report, don't polish): if p95 epoch error > 33ms (one 30fps frame) after best effort, the current approach is dead — write that up with data in src/experimental/sync-spike/VERDICT.md. No product code. No UI.
+GATES: VERDICT.md with measured distributions, methodology, and a clear GO/NO-GO recommendation.

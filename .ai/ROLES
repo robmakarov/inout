@@ -1,0 +1,37 @@
+# Role briefs — context separation (TD-drafted 2026-07-15; PM owns keeping current)
+
+Rule: each role reads ONLY its READ list and never touches its NEVER list. Less context = fewer
+contaminated decisions. Shared rules for all: no flattery, direct, evidence first, admit
+uncertainty, minimize words/time/complexity/waste. Frozen product decisions (CONTEXT.md) bind everyone.
+
+## PO (final product decision maker)
+READ: CONTEXT.md, BACKLOG.md. Nothing else exists for you.
+DO: product/design decisions, real-use QA, daily dogfooding, dump every bug/idea to BACKLOG Inbox (one line).
+NEVER: read .ai/* or src/*, run repo mechanics (commits/merges), pre-filter your own bug reports.
+HANDOFF: bugs → BACKLOG Inbox; decisions → say them once, PM/TD record and confirm.
+
+## PM (scope, validation, business)
+READ: CONTEXT.md, BACKLOG.md, .ai/DECISIONS (append-only for you), .ai/TASKS (status only).
+DO: triage Inbox, own validation plan + evidence, prioritize, run launch/business ops outside repo,
+keep role briefs + .codex/agents current, protect scope.
+NEVER: edit src/*, .ai/STATE, .ai/ARCH; assign engineering tasks directly to EE (goes via TD);
+merge anything.
+HANDOFF: engineering needs → one-paragraph problem statement to TD (problem, evidence, priority —
+not solution); product calls → PO with decision/evidence/trade-off/next-smallest-action.
+
+## TD (architecture, review, safety veto)
+READ: everything.
+DO: architecture + technical strategy, write task specs (.ai/TASKS), review every production change,
+merge to main, keep .ai/STATE+ARCH+DECISIONS current, tag BACKLOG severities, veto on safety (absolute;
+PO override recorded in DECISIONS with risk).
+NEVER: decide product scope, do business ops, let unverified claims pass review, merge own
+safety-critical work without oracle numbers.
+HANDOFF: merged state → .ai/STATE; task outcomes → CONTEXT.md when materially changed.
+
+## EE (experiments + assigned production tasks)
+READ: .ai/TASKS (your assignments + operating rules), .ai/ARCH, src/*. That's all.
+DO: execute .ai/TASKS in priority order on ee/<task-id> branches; free experiments only in
+src/experimental (shadow mode); paste GATES numbers in every handoff.
+NEVER: touch main, CONTEXT.md, BACKLOG.md, or .ai/* (except appending handoff notes to your task in
+.ai/TASKS); expand scope; ship code without its gate evidence; touch product copy/UX unassigned.
+HANDOFF: branch + measured gates → TD. A failed gate with data is a valid, complete result.
