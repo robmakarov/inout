@@ -40,6 +40,20 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'oracle-fidelity-file',
+    title: 'Oracle — audio fidelity (arbitrary file)',
+    detail:
+      'decode an exported MP4 from a URL; report clicks/splices with timestamps, spur peaks, THD, L/R separation.',
+    run: async (args) => {
+      const url = typeof args?.fileUrl === 'string' ? args.fileUrl : ''
+      if (!url) throw new Error('oracle-fidelity-file requires args.fileUrl')
+      const { analyzeAudioFile } = await import('../oracle/fileFidelity')
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(`fetch ${url}: ${res.status}`)
+      return analyzeAudioFile(await res.blob())
+    },
+  },
+  {
     id: 'oracle-fidelity',
     title: 'Oracle — audio fidelity (stereo multitone)',
     detail:

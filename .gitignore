@@ -5,4 +5,4 @@ dist/
 !.env.example
 *.local
 .DS_Store
-preview.log
+/inout-*.mp4

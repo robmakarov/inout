@@ -70,33 +70,27 @@ Big task — split into PR-sized branches if needed: (a) capture+durability, (b)
 
 ### EE handoff — webcodecs-capture (a) capture+durability (branch **ee/webcodecs-capture-2**, rebased on origin/main @ b09218b, 2026-07-16)
 
-**Lineage:** old `ee/webcodecs-capture-a` deleted locally — never push pre-fcaf57f history.
+**Lineage:** old `ee/webcodecs-capture-a` deleted locally — never push pre-fcaf57f history. **Split:** `ee/oracle-nullfix` @ `86ed200` pushed — TD merge immediately (null/NaN+retry only).
 
-**Delivered:** production measured video behind existing contracts (`measuredVideo.ts` → session/prearm); MediaRecorder fallback when WebCodecs/OffscreenCanvas missing; durable positioned fMP4 writes; `npm run salvage:smoke`; oracle null-metrics guard (retry×2, fail loud); audio untouched. (b)/(c) not started.
+**Delivered (a):** measured video fMP4 + durable writes + MR fallback; `salvage:smoke` PASS; file-mode fidelity analyzer; sync outlier diagnostics. (b)/(c) parked.
 
-**Pipeline:** paced `<video>` → OffscreenCanvas (encoder-sized; size mismatch killed encoder ~1s) → VideoEncoder AVC → mediabunny fMP4 → durable writer. Wall-clock stamps from first frame + 14ms presentation-lag on `startOffsetMs`. TrackProcessor stamp path rejected: waiting on encode stalls the processor → silent frame drops → sync outliers.
+**PO export analysis** (`npm run oracle:fidelity -- --file=./inout-20260716-101732.mp4` — file gitignored, not committed):
+- duration ~23s stereo; **5 clicks** at 17.8s, 21.0s, 22.1s, 22.9s (|Δ| 0.12–0.15)
+- 0 splice seams above threshold; correlation **0.79**; band separation **4.2 dB**
+- **Read:** noise is **transient boundary clicks** (chunk/encode seams), not sustained clipping or mono collapse. Spur scanner reads hot on program material (80 dB vs RMS — metric not calibrated for music); trust click timestamps over spur peak for this file.
 
-**Checks:** `npm run typecheck && npm test` → 92/92 green.
+**−473 ms outlier (root cause):** **instrument**, not capture. When schedule-skew correction drops (`corr=n`), raw flash+click exposes ~±450–480 ms — same class as pre-oracle-ci aliasing. `syncDiagnostics.ts` classifies: no skew estimate or stall>550ms → `verdict=instrument`. Unit proof: raw −473 + null skew → instrument. **No capture code change warranted for that outlier.**
 
-**GATES:**
+**Oracle cold×10** (latest :65129, measured video path):
+- sync mean (ms): −1.5, 4.6, −2.2, −3.5, 3.4, **14.0**, **17.5**, 7.9, 5.1, 7.8 → **8/10 |mean|≤10ms**
+- sync maxAbs (ms): 34.8, 32.4, 22.2, 30.2, 3.4, 34.0, 24.1, 34.5, 32.9, 7.8
+- 10/10 pass @ 60 ms CI band; incompleteMetrics 0
 
-| Gate | Target | Result |
-|------|--------|--------|
-| Salvage mid-record (video+audio, mp4) | recover, dur>50% | **PASS** (`salvage:smoke`: video ~2870ms / audio ~2507ms, mime `video/mp4;codecs=avc1.640028`) |
-| Oracle sync \|offset\| ≤10ms ×10 | all 10 | **NOT MET** — see matrix |
-| typecheck+tests | green | **PASS** |
+**GATES (a):** salvage **PASS**; sync ≤10ms×10 **NOT MET** (8/10); typecheck+98 tests **PASS**.
 
-**Oracle cold×10** (ephemeral :59676; CI band still 60ms):
+**Next (a):** non-blocking TrackProcessor refactor → re-run sync ×10 for merge candidate.
 
-- sync mean (ms): 8.3, 12.5, 9.3, 1.9, −11.7, 19.9, 13.4, 7.3, 5.3, **−473.3**
-- sync maxAbs (ms): 28.3, 12.5, 29.3, 1.9, 11.7, 19.9, 20.1, 7.3, 31.9, 473.3
-- spur (dB): −52.9…−47.1; run9 **−33.4 FAIL** spur band; run10 sync FAIL (corr absent, raw≈−473 pairing/stall class)
-- jump: all ≤0.1; aliased: 0/10
-- \|mean\|≤10ms: **5/10** (best single run 1.9ms). Typical residual when corr works: ~8–20ms (beats MediaRecorder ±45, misses ≤10).
-
-**Why ≤10ms fails:** (1) `<video>` presentation lag vs paint is run-variable (~±15ms) even with fixed lag constant; (2) cold runs occasionally lose schedule-skew correction → raw ±450–480ms exposed (instrument class, not new aliasing); (3) TrackProcessor capture timestamps are the right long-term fix but require a non-blocking read/encode split that did not stabilize in this spike.
-
-**TD merge:** **NO** on sync gate. Salvage+durability path is usable; recommend (a) follow-up for TrackProcessor queue + ≤10ms before (b)/(c), or TD relaxes (a) sync to ≤30ms mean with salvage mandatory.
+**TD merge:** **NO** on (a) sync gate; **YES** on `ee/oracle-nullfix`.
 
 ## 4. composite-salvage — instant export survives crash  [P2, small]
 Goal: live-composite blob registered in the pending manifest and recovered on boot, so a salvaged unedited take still gets instant export (today it falls back to full render).

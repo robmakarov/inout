@@ -22,6 +22,7 @@ import { analyzeAudioIntegrity, type AudioIntegrityReport } from './audioIntegri
 import { analyzeExport, type ExportAnalysis } from './analyze'
 import { recordFiducialSession, sweepStaleOracleBlobs, type RecordOptions } from './rig'
 import { resolveScheduleSkewMeanMs } from './scheduleSkew'
+import { diagnoseSyncOutlier, type SyncDiagnostics } from './syncDiagnostics'
 
 export interface OracleVerdict {
   metric: string
@@ -42,6 +43,8 @@ export interface OracleReport {
   exportFullMs: number
   exportTrimmedMs: number
   verdicts: OracleVerdict[]
+  /** Instrument vs product classification for flash+click outliers. */
+  syncDiagnostics: SyncDiagnostics
 }
 
 /** Instrument gates — TD sync-fix review: flash+click is the sync verdict. */
@@ -112,6 +115,7 @@ export async function runOracle(
       exportFullMs,
       audioIntegrity,
     })
+    const syncDiagnostics = diagnoseSyncOutlier(full, rig.debug, skewMean)
     return {
       recordMs,
       trimStartMs,
@@ -123,6 +127,7 @@ export async function runOracle(
       exportFullMs,
       exportTrimmedMs,
       verdicts,
+      syncDiagnostics,
     }
   } finally {
     await rig.cleanup()

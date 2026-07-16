@@ -203,6 +203,9 @@ async function main() {
       )
       if (!gate.pass) {
         console.error('  failures:', gate.failures.join('; '))
+        if (run.report?.syncDiagnostics?.verdict === 'instrument') {
+          console.error('  syncDiag:', run.report.syncDiagnostics.note)
+        }
         if (cold === 1) {
           process.stdout.write(JSON.stringify({ gate, report }, null, 2) + '\n')
           process.exitCode = 1
