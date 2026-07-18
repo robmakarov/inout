@@ -116,3 +116,17 @@ salvage must include late-joined channels; composite handles late audio join (or
 GATES: synthetic harness with an artificially 3s-delayed camera: click→recording-state ≤ 250ms after
 display resolves ×10 runs; late channel startOffsetMs correct (oracle sync bands hold for late-join);
 device never arriving → take completes + loud warning; salvage smoke PASS; typecheck+tests+oracle green.
+
+### TD handoff — webcodecs-capture-2 continuation (branch td/webcodecs-rebase, 2026-07-16, EE unavailable)
+Done by TD: rebased onto post-instant-arm main (conflict: session.ts start() — measured-video branch folded
+into activateChannel, so LATE-JOINING cameras also get the WebCodecs path); oracle.mjs single-run failure
+crash fixed (report→run.report); encoder-busy now DROPS frames instead of blocking the sampler; sampling
+cadence now rVFC-driven with paced watchdog fallback. typecheck+106 tests+salvage PASS.
+Sync ×10 (wall stamps + rVFC cadence): means −3.6, 13.4, 13.2, 13.1, 18.9, 0.6, 0.6, 14.7, 17.4, 12.6 —
+9/10 CI band, ~4/10 at the ≤10ms task gate. NEW EVIDENCE: distribution is BIMODAL (~0.6ms perfect runs vs
+~+13–18ms mode ≈ one 60fps frame period). A captureTime-anchored variant measured WORSE (+25ms uniform
+bias) — reverted; do not retry it (comment in measuredVideo.ts).
+Next (whoever picks up): (1) instrument the anchor — log rVFC now/presentationTime/captureTime deltas for
+the first ~20 frames per run, correlate with which mode the run lands in; the bimodality is a first-frame
+staleness race, fix follows the data. (2) spur gate saw −32.7/−35.0 outliers under back-to-back matrix
+load (worse than the known −44 tail) — calibrate or isolate. (3) then (b) smart-cut / (c) instant v2.

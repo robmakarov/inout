@@ -6,12 +6,15 @@
  * VideoEncoder (AVC, 2s keyframes) → mediabunny EncodedVideoPacketSource →
  * fragmented MP4 → durable positioned OPFS writer.
  *
- * Packet timestamps follow wall clock from the first frame (µs).
- * startOffsetMs = performance.now() at first frame − session epoch.
+ * Sampling cadence comes from requestVideoFrameCallback (fires per presented
+ * frame — no poll quantization), with a paced watchdog for static content /
+ * rVFC silence. Stamps stay wall-clock-at-sample + PRESENTATION_LAG_MS anchor:
+ * empirically correct per the oracle (a captureTime anchor measured +25ms
+ * biased — see comment at encodeOne).
  *
  * Why not MediaStreamTrackProcessor for stamps: waiting on VideoEncoder stalls
- * the processor (silent frame drops → sync outliers). A paced <video> sampler
- * with wall-clock stamps keeps duration and flash timing stable; encoder size
+ * the processor (silent frame drops → sync outliers). Encoder-busy now DROPS
+ * the frame instead of blocking the sampler for the same reason; encoder size
  * must match the VideoFrame (OffscreenCanvas) or the encoder dies ~1s in.
  *
  * MediaRecorder remains the capability fallback (session.ts).
@@ -34,11 +37,21 @@ const FRAME_PERIOD_MS = 1000 / TARGET_FPS
 const FRAME_DURATION_US = Math.round(1e6 / TARGET_FPS)
 const CODEC_CANDIDATES = ['avc1.640028', 'avc1.4D401F', 'avc1.42E01E'] as const
 /**
- * <video> presents canvas.captureStream frames ~1–2 ticks late vs wall stamp.
- * Shift the channel later on the session timeline so flash onset matches click
- * (positive flash+click residual ≈ this lag before correction).
+ * Fallback stamp only (no rVFC metadata): <video> presents frames ~1–2 ticks
+ * late vs wall stamp. The primary path uses metadata.captureTime and needs no
+ * constant.
  */
 const PRESENTATION_LAG_MS = 14
+
+/** rVFC types incl. captureTime (present for capture-backed tracks in Chromium). */
+interface FrameMetadata {
+  captureTime?: DOMHighResTimeStamp
+  presentationTime?: DOMHighResTimeStamp
+}
+type RvfcVideo = HTMLVideoElement & {
+  requestVideoFrameCallback?: (cb: (now: number, meta: FrameMetadata) => void) => number
+  cancelVideoFrameCallback?: (id: number) => void
+}
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
@@ -168,14 +181,20 @@ export async function startMeasuredVideoCapture(opts: {
   })
   encoder.configure(config)
 
-  const encodeOne = async (): Promise<boolean> => {
-    if (encodeError || encoder.state !== 'configured') return false
-    if (videoEl.readyState < 2 || videoEl.videoWidth === 0) return false
-
-    while (!stopped && !encodeError && encoder.encodeQueueSize >= MAX_ENCODER_QUEUE) {
-      await sleep(1)
-    }
+  // Timing model (EMPIRICAL — measured by the oracle, do not "improve" from
+  // first principles): stamp at drawImage sampling wall time; anchor shifted
+  // +PRESENTATION_LAG_MS. An rVFC captureTime anchor measured WORSE (+25ms
+  // mean bias, 2026-07-16 ×10 matrix) because drawImage samples the PRESENTED
+  // frame, not the captured one. rVFC's value here is cadence, not stamps.
+  const encodeOne = (): boolean => {
     if (stopped || encodeError || encoder.state !== 'configured') return false
+    if (videoEl.readyState < 2 || videoEl.videoWidth === 0) return false
+    // Never block the sampler on the encoder (that stall was the sync-outlier
+    // source) — drop this frame and let the next one carry the timeline.
+    if (encoder.encodeQueueSize >= MAX_ENCODER_QUEUE) {
+      framesDropped++
+      return false
+    }
 
     const now = performance.now()
     if (firstWallMs === null) {
@@ -211,27 +230,47 @@ export async function startMeasuredVideoCapture(opts: {
     return true
   }
 
+  // Primary sampler: rVFC fires per PRESENTED frame with measured captureTime.
+  const rvfcEl = videoEl as RvfcVideo
+  const hasRvfc = typeof rvfcEl.requestVideoFrameCallback === 'function'
+  let rvfcId = 0
+  // Head start: let rVFC deliver the anchor frame (measured captureTime)
+  // before the wall-stamp watchdog is allowed to.
+  let lastSampleAt = performance.now()
+  const onFrame = (): void => {
+    if (stopped) return
+    lastSampleAt = performance.now()
+    try {
+      encodeOne()
+    } catch (err) {
+      if (!encodeError) encodeError = err instanceof Error ? err : new Error(String(err))
+    }
+    if (!stopped && rvfcEl.requestVideoFrameCallback) {
+      rvfcId = rvfcEl.requestVideoFrameCallback(onFrame)
+    }
+  }
+  if (hasRvfc && rvfcEl.requestVideoFrameCallback) {
+    rvfcId = rvfcEl.requestVideoFrameCallback(onFrame)
+  }
+
+  // Watchdog pacer: keeps cadence when rVFC is silent (static screen content,
+  // no-rVFC browsers) by duplicating the last frame with a wall-clock stamp.
   const pump = (async () => {
     try {
       for (let i = 0; i < 100 && videoEl.videoWidth === 0 && !stopped; i++) await sleep(20)
-      while (!stopped && framesIn === 0) {
-        const ok = await encodeOne()
-        if (!ok) {
-          if (encodeError) throw encodeError
-          await sleep(10)
-        }
-      }
       let nextDue = performance.now()
       while (!stopped) {
         nextDue += FRAME_PERIOD_MS
-        try {
-          const ok = await encodeOne()
-          if (!ok && encodeError) break
-          if (!ok) framesDropped++
-        } catch (err) {
-          encodeError = err instanceof Error ? err : new Error(String(err))
-          break
+        const sinceSample = performance.now() - lastSampleAt
+        if (!hasRvfc || sinceSample >= 2 * FRAME_PERIOD_MS) {
+          try {
+            encodeOne()
+          } catch (err) {
+            if (!encodeError) encodeError = err instanceof Error ? err : new Error(String(err))
+            break
+          }
         }
+        if (encodeError) break
         const delay = nextDue - performance.now()
         if (!stopped && delay > 0) await sleep(delay)
         if (performance.now() > nextDue + FRAME_PERIOD_MS) nextDue = performance.now()
@@ -254,12 +293,13 @@ export async function startMeasuredVideoCapture(opts: {
   }> => {
     if (!cancel && !encodeError && encoder.state === 'configured' && firstWallMs !== null) {
       try {
-        await encodeOne()
+        encodeOne()
       } catch (err) {
         if (!encodeError) encodeError = err instanceof Error ? err : new Error(String(err))
       }
     }
     stopped = true
+    if (rvfcId && rvfcEl.cancelVideoFrameCallback) rvfcEl.cancelVideoFrameCallback(rvfcId)
     await pump.catch(() => undefined)
 
     try {
