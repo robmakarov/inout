@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   createCaptureSession,
+  isSyntheticMode,
   loadCapturePrefs,
   warmCapturePipeline,
   saveCapturePrefs,
@@ -177,9 +178,18 @@ export function CaptureScreen() {
   const cameraStream = session?.previewStreams.camera
   const audioStream = session?.previewStreams.mic ?? session?.previewStreams['system-audio']
   const audioOnly = !!session && !screenStream && !cameraStream
-  // During recording, never paint the screen stream full-bleed — capturing our
-  // own window would recurse into a hall of mirrors (and burn it into the file).
   const recording = !!session
+  // Live preview is SAFE only for window/tab captures. For full-MONITOR capture
+  // the preview shows the monitor inside itself → infinite compositor recursion
+  // → machine-wide slowdown and starved capture (PO-hit 2026-07-16). Synthetic
+  // canvas streams report no displaySurface and cannot recurse.
+  const displaySurface = screenStream
+    ?.getVideoTracks()[0]
+    ?.getSettings()
+    .displaySurface as string | undefined
+  const livePreviewSafe =
+    !!screenStream &&
+    (displaySurface === 'window' || displaySurface === 'browser' || isSyntheticMode())
 
   return (
     <div className={`capture${recording ? ' capture--recording' : ''}`}>
@@ -191,17 +201,28 @@ export function CaptureScreen() {
       {session && <TimerPill elapsedMs={elapsedMs} remainingMs={remainingMs} />}
 
       <div className="capture__stage">
-        {/* PO 2026-07-16: live screen preview stays visible WHILE recording
-            (single preview = what the file will look like). selfBrowserSurface
-            'exclude' prevents tab self-capture; monitor capture can mirror
-            this window if the user watches it — accepted trade-off. */}
-        {screenStream && (
+        {/* PO 2026-07-16: single live preview while recording — but ONLY for
+            window/tab surfaces (livePreviewSafe). Monitor capture falls back
+            to the indicator state: previewing a monitor inside itself recurses
+            the compositor and starves capture. */}
+        {screenStream && (!recording || livePreviewSafe) && (
           <StreamVideo
             stream={screenStream}
             className={`capture__screen${recording ? ' capture__screen--live' : ''}`}
           />
         )}
-        {recording && screenStream && !cameraStream && audioStream && (
+        {recording && screenStream && !livePreviewSafe && (
+          <div className="capture__rec-state" aria-live="polite">
+            <div className="capture__rec-dot" />
+            <div className="capture__rec-label">Recording screen</div>
+            {cameraStream ? null : audioStream ? (
+              <div className="capture__rec-audio">
+                <AudioLevelRing stream={audioStream} />
+              </div>
+            ) : null}
+          </div>
+        )}
+        {recording && screenStream && livePreviewSafe && !cameraStream && audioStream && (
           <div className="capture__rec-audio capture__rec-audio--overlay">
             <AudioLevelRing stream={audioStream} />
           </div>

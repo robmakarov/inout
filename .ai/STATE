@@ -22,5 +22,5 @@ gaps / in flight:
 - instant-arm SHIPPED (c8424a5): start gates only on primary channel, slow devices late-join (verified: armed 269ms w/ 3s-cold camera), 5s device budget, missing channel = loud banner + Recording.missing; late join → composite invalidated → render path. Await PO recheck of device-wait on live site.
 - awaiting PO: camera-light-at-load repro? + tab-music listen test (fix shipped 548b084; residual = 5 boundary clicks late in take, EE analyzing)
 
-process: QA on prod-build port only, never dev server; EE load tests spawn own server. Roles .ai/ROLES ·
+process: QA on prod-build port only, never dev server; EE load tests spawn own server. HEAVY RUNS (oracle matrices/fleets) are announced first and never run while PO is actively using the machine — CPU contention starves real capture (bit PO twice: EE 07-15, TD 07-16). Roles .ai/ROLES ·
 tasks+gates .ai/TASKS · decisions ledger .ai/DECISIONS (append-only) · bugs BACKLOG.md (done = deleted).
