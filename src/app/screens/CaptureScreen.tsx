@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   createCaptureSession,
-  isSyntheticMode,
   loadCapturePrefs,
   warmCapturePipeline,
   saveCapturePrefs,
@@ -179,17 +178,6 @@ export function CaptureScreen() {
   const audioStream = session?.previewStreams.mic ?? session?.previewStreams['system-audio']
   const audioOnly = !!session && !screenStream && !cameraStream
   const recording = !!session
-  // Live preview is SAFE only for window/tab captures. For full-MONITOR capture
-  // the preview shows the monitor inside itself → infinite compositor recursion
-  // → machine-wide slowdown and starved capture (PO-hit 2026-07-16). Synthetic
-  // canvas streams report no displaySurface and cannot recurse.
-  const displaySurface = screenStream
-    ?.getVideoTracks()[0]
-    ?.getSettings()
-    .displaySurface as string | undefined
-  const livePreviewSafe =
-    !!screenStream &&
-    (displaySurface === 'window' || displaySurface === 'browser' || isSyntheticMode())
 
   return (
     <div className={`capture${recording ? ' capture--recording' : ''}`}>
@@ -201,28 +189,16 @@ export function CaptureScreen() {
       {session && <TimerPill elapsedMs={elapsedMs} remainingMs={remainingMs} />}
 
       <div className="capture__stage">
-        {/* PO 2026-07-16: single live preview while recording — but ONLY for
-            window/tab surfaces (livePreviewSafe). Monitor capture falls back
-            to the indicator state: previewing a monitor inside itself recurses
-            the compositor and starves capture. */}
-        {screenStream && (!recording || livePreviewSafe) && (
+        {/* PO 2026-07-16: single live preview while recording, ALL surfaces.
+            Full-monitor capture shows a mirror tunnel if this window is on the
+            captured screen — cosmetic, standard (OBS does the same), PO-accepted. */}
+        {screenStream && (
           <StreamVideo
             stream={screenStream}
             className={`capture__screen${recording ? ' capture__screen--live' : ''}`}
           />
         )}
-        {recording && screenStream && !livePreviewSafe && (
-          <div className="capture__rec-state" aria-live="polite">
-            <div className="capture__rec-dot" />
-            <div className="capture__rec-label">Recording screen</div>
-            {cameraStream ? null : audioStream ? (
-              <div className="capture__rec-audio">
-                <AudioLevelRing stream={audioStream} />
-              </div>
-            ) : null}
-          </div>
-        )}
-        {recording && screenStream && livePreviewSafe && !cameraStream && audioStream && (
+        {recording && screenStream && !cameraStream && audioStream && (
           <div className="capture__rec-audio capture__rec-audio--overlay">
             <AudioLevelRing stream={audioStream} />
           </div>
