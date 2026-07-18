@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { ACQUIRE_TIMEOUT_MS, primaryKindFor } from './acquire'
+import { describe, expect, it, vi } from 'vitest'
+import { ACQUIRE_TIMEOUT_MS, PROMPT_TIMEOUT_MS, primaryKindFor, withTimeout } from './acquire'
 import { parseSlowChannels } from './synthetic'
 
 describe('instant-arm primary channel selection', () => {
@@ -35,8 +35,40 @@ describe('instant-arm harness knobs', () => {
   })
 })
 
-describe('acquire budget', () => {
-  it('device budget is 5s — a hung device must not hold the take hostage', () => {
+describe('acquire budgets', () => {
+  it('granted-device budget is short; human (prompt/picker) budget is not', () => {
     expect(ACQUIRE_TIMEOUT_MS).toBe(5000)
+    // Never time a person: prompts and pickers took >5s and produced takes
+    // without screen (PO-hit 2026-07-16).
+    expect(PROMPT_TIMEOUT_MS).toBeGreaterThanOrEqual(60_000)
+  })
+
+  it('a stream resolving AFTER timeout is released, never leaked', async () => {
+    vi.useFakeTimers()
+    const stop = vi.fn()
+    class FakeMediaStream {
+      getTracks() {
+        return [{ stop }]
+      }
+    }
+    vi.stubGlobal('MediaStream', FakeMediaStream)
+    try {
+      const fakeStream = new FakeMediaStream() as unknown as MediaStream
+      let resolveLate!: (v: MediaStream) => void
+      const late = new Promise<MediaStream>((r) => {
+        resolveLate = r
+      })
+      const guarded = withTimeout(late, 1000, 'test')
+      const rejection = expect(guarded).rejects.toThrow(/timed out/)
+      await vi.advanceTimersByTimeAsync(1001)
+      await rejection
+      // The user answers the prompt AFTER the deadline — light must go off.
+      resolveLate(fakeStream)
+      await Promise.resolve()
+      expect(stop).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.unstubAllGlobals()
+      vi.useRealTimers()
+    }
   })
 })

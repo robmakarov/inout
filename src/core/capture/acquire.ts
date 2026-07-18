@@ -33,10 +33,14 @@ export interface ArmingTimelineEntry {
   message?: string
 }
 
-/** Per-device acquisition budget — degrade to succeeded channels rather than
- * hang. 5s (was 15s): a hung device must not hold a take hostage; the take
- * starts without it and the loss is surfaced loudly. */
+/** Budget for a GRANTED device (no prompt can appear) — hardware spin-up only.
+ * A hung device must not hold a take hostage. */
 export const ACQUIRE_TIMEOUT_MS = 5_000
+/** Budget when a HUMAN is in the loop (permission prompt, screen picker).
+ * Never time a person: 5s here recorded takes without screen while the PO was
+ * still reading Chrome's picker (2026-07-16), and the post-timeout stream
+ * arrival leaked live camera/mic tracks. */
+export const PROMPT_TIMEOUT_MS = 120_000
 
 /** The channel whose readiness gates recording start (instant is law: we start
  * the moment this one is live and let slower devices late-join). */
@@ -88,19 +92,29 @@ async function isGranted(name: 'camera' | 'microphone'): Promise<boolean> {
   }
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+/** Timeout that can NEVER leak a live device: if the media promise resolves
+ * after the deadline already fired (user answered a prompt late), the stream's
+ * tracks are stopped immediately — otherwise the camera/mic light stays on
+ * with no owner (PO-hit 2026-07-16). Exported for tests. */
+export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
+    let timedOut = false
     const timer = setTimeout(() => {
+      timedOut = true
       reject(new DOMException(`${label} timed out after ${ms}ms`, 'TimeoutError'))
     }, ms)
     promise.then(
       (v) => {
+        if (timedOut) {
+          if (v instanceof MediaStream) for (const t of v.getTracks()) t.stop()
+          return
+        }
         clearTimeout(timer)
         resolve(v)
       },
       (err) => {
         clearTimeout(timer)
-        reject(err)
+        if (!timedOut) reject(err)
       },
     )
   })
@@ -155,14 +169,14 @@ export function acquireChannelsProgressive(
     )
   }
 
-  const startCamera = async (): Promise<void> => {
+  const startCamera = async (granted: boolean): Promise<void> => {
     mark('camera', 'start')
     try {
       const video: MediaTrackConstraints = { width: { ideal: 1280 }, height: { ideal: 720 } }
       if (config.cameraDeviceId) video.deviceId = config.cameraDeviceId
       const stream = await withTimeout(
         navigator.mediaDevices.getUserMedia({ video }),
-        ACQUIRE_TIMEOUT_MS,
+        granted ? ACQUIRE_TIMEOUT_MS : PROMPT_TIMEOUT_MS,
         'getUserMedia(camera)',
       )
       deliver({ kind: 'camera', media: 'video', stream, track: stream.getVideoTracks()[0] })
@@ -174,7 +188,7 @@ export function acquireChannelsProgressive(
     }
   }
 
-  const startMic = async (): Promise<void> => {
+  const startMic = async (granted: boolean): Promise<void> => {
     mark('mic', 'start')
     try {
       const audio: MediaTrackConstraints = {
@@ -185,7 +199,7 @@ export function acquireChannelsProgressive(
       if (config.micDeviceId) audio.deviceId = config.micDeviceId
       const stream = await withTimeout(
         navigator.mediaDevices.getUserMedia({ audio }),
-        ACQUIRE_TIMEOUT_MS,
+        granted ? ACQUIRE_TIMEOUT_MS : PROMPT_TIMEOUT_MS,
         'getUserMedia(mic)',
       )
       deliver({ kind: 'mic', media: 'audio', stream, track: stream.getAudioTracks()[0] })
@@ -208,11 +222,11 @@ export function acquireChannelsProgressive(
   let micEarly = false
   if (config.camera && (await isGranted('camera'))) {
     camEarly = true
-    early.push(startCamera())
+    early.push(startCamera(true))
   }
   if (config.mic && (await isGranted('microphone'))) {
     micEarly = true
-    early.push(startMic())
+    early.push(startMic(true))
   }
 
   if (config.screen) {
@@ -229,9 +243,10 @@ export function acquireChannelsProgressive(
         surfaceSwitching: 'include',
         systemAudio: config.systemAudio ? 'include' : 'exclude',
       }
+      // The picker is a human interaction — human budget, never device budget.
       const display = await withTimeout(
         navigator.mediaDevices.getDisplayMedia(opts),
-        ACQUIRE_TIMEOUT_MS,
+        PROMPT_TIMEOUT_MS,
         'getDisplayMedia',
       )
       const video = display.getVideoTracks()[0]
@@ -275,9 +290,10 @@ export function acquireChannelsProgressive(
     mark('system-audio', 'skipped', 'requires screen sharing')
   }
 
+  // Not pre-granted → a permission prompt will appear → human budget.
   const parallel: Promise<void>[] = [...early]
-  if (config.camera && !camEarly) parallel.push(startCamera())
-  if (config.mic && !micEarly) parallel.push(startMic())
+  if (config.camera && !camEarly) parallel.push(startCamera(false))
+  if (config.mic && !micEarly) parallel.push(startMic(false))
 
   if (parallel.length) await Promise.all(parallel)
 
