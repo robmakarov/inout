@@ -80,3 +80,15 @@ GATES: initial JS ≤ 350KB; record-click→recording latency unchanged (measure
 Goal (north-star gate, PO-approved): measure achievable cross-device epoch alignment between two browsers (laptop+phone Safari if possible, else two Chromium profiles) over LAN: WebRTC data channel or WS ping/pong clock exchange, report p50/p95 epoch error over 10-min sessions.
 Kill criteria (report, don't polish): if p95 epoch error > 33ms (one 30fps frame) after best effort, the current approach is dead — write that up with data in src/experimental/sync-spike/VERDICT.md. No product code. No UI.
 GATES: VERDICT.md with measured distributions, methodology, and a clear GO/NO-GO recommendation.
+
+## 7. instant-arm — start never waits for slow devices  [P1, PO: 'waiting for device very long']
+Goal: record click → recording state begins the moment the FIRST video stream resolves (screen right
+after picker close; camera-only = camera). Slower granted devices JOIN the take mid-flight with correct
+startOffsetMs (timeline already supports it). Cut ACQUIRE_TIMEOUT_MS 15s→5s; a device that misses the
+take start shows a live in-take indicator ('mic joining…' → 'mic missing') and an unmissable post-record
+warning (closes the silent-channel-loss P2).
+Constraints: no idle device access unchanged; concurrent-with-picker acquisition unchanged; crash
+salvage must include late-joined channels; composite handles late audio join (or falls back to render).
+GATES: synthetic harness with an artificially 3s-delayed camera: click→recording-state ≤ 250ms after
+display resolves ×10 runs; late channel startOffsetMs correct (oracle sync bands hold for late-join);
+device never arriving → take completes + loud warning; salvage smoke PASS; typecheck+tests+oracle green.
