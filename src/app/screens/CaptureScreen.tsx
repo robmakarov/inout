@@ -191,19 +191,20 @@ export function CaptureScreen() {
       {session && <TimerPill elapsedMs={elapsedMs} remainingMs={remainingMs} />}
 
       <div className="capture__stage">
-        {recording && screenStream && (
-          <div className="capture__rec-state" aria-live="polite">
-            <div className="capture__rec-dot" />
-            <div className="capture__rec-label">Recording screen</div>
-            {cameraStream ? null : audioStream ? (
-              <div className="capture__rec-audio">
-                <AudioLevelRing stream={audioStream} />
-              </div>
-            ) : null}
-          </div>
+        {/* PO 2026-07-16: live screen preview stays visible WHILE recording
+            (single preview = what the file will look like). selfBrowserSurface
+            'exclude' prevents tab self-capture; monitor capture can mirror
+            this window if the user watches it — accepted trade-off. */}
+        {screenStream && (
+          <StreamVideo
+            stream={screenStream}
+            className={`capture__screen${recording ? ' capture__screen--live' : ''}`}
+          />
         )}
-        {!recording && screenStream && (
-          <StreamVideo stream={screenStream} className="capture__screen" />
+        {recording && screenStream && !cameraStream && audioStream && (
+          <div className="capture__rec-audio capture__rec-audio--overlay">
+            <AudioLevelRing stream={audioStream} />
+          </div>
         )}
         {cameraStream && (
           <StreamVideo
