@@ -15,7 +15,7 @@ jump 0 (≤0.1); fidelity toneErr 0.40dB, THD −71dB, IMD −60dB, separation 5
 tanh-bus / mono-downmix / hard-limiter regressions as red (injection-proven).
 
 gaps / in flight:
-- sync jitter ±45ms (video epoch) → EE task 3 webcodecs-capture IN PROGRESS (gate: ≤10ms x10 runs)
+- sync jitter: webcodecs branch (ee/webcodecs-capture-2) at TrackProcessor architecture, 10/10 CI band; task ≤10ms gate blocked by a PROVEN cross-architecture +15-25ms systematic (NOT video-side — audit audio anchor + oracle flash model next; .ai/TASKS handoff 2). Production stays on MediaRecorder ±45ms until root-caused.
 - composite blob absent from crash salvage → EE task 4
 - bundle 748KB → EE task 5 · dev-mode first-record compile latency (prod unaffected)
 - PUBLIC DEPLOY LIVE: inout-kappa.vercel.app serves current main (verified, bundle-hash match). GitHub main = single depersonalized commit; full history local-only (branch local-history-backup). Remaining cloud reset: PO runs docs/CLOUD_RESET.md steps 2-3 (Vercel env+old deployments, Supabase wipe+key rotation; auth users kept)
