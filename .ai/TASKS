@@ -130,3 +130,16 @@ Next (whoever picks up): (1) instrument the anchor — log rVFC now/presentation
 the first ~20 frames per run, correlate with which mode the run lands in; the bimodality is a first-frame
 staleness race, fix follows the data. (2) spur gate saw −32.7/−35.0 outliers under back-to-back matrix
 load (worse than the known −44 tail) — calibrate or isolate. (3) then (b) smart-cut / (c) instant v2.
+
+### TD handoff 2 — webcodecs sync investigation result (2026-07-16, decisive)
+Instrumentation (videoDiag in oracle report, per-frame rVFC/TP deltas) KILLED the first-frame-staleness
+hypothesis: all anchors deliver in 0–6ms uniformly. Three sampling architectures then measured ×10 each:
+rVFC+wall −7..+22 (two 0.6ms runs) · TrackProcessor+wall +20±9 · TP+min-filter +26±8 (sign OPPOSITE to
+theory — increasing video offset DECREASES measured mean). EE's polled loop needed +14 hard const.
+CONCLUSION: a ~+15–25ms POSITIVE residual is common to every video architecture ⇒ the systematic is NOT
+in video sampling. Next investigator: audit (a) measured-AUDIO placement (min-filter anchor may date
+sample 0 early by ~15–20ms — one-sided-min bias under load?) and (b) the oracle flash/skew correction
+model (tuned on the old pipeline). Do NOT add video-side constants until (a)/(b) are excluded — three
+matrices say that's curve-fitting the wrong stage. Branch left at TP+min-filter (architecturally best:
+real capture timestamps, no compositor dependence, drop-not-block). 106 tests + salvage PASS; CI band
+10/10; task ≤10ms gate unmet pending the cross-cutting bias root cause.

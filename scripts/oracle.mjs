@@ -227,6 +227,7 @@ async function main() {
       syncMaxAbs: results.map((r) => r.gate.metrics.syncMaxAbsMs),
       spurPeakDb: results.map((r) => r.gate.metrics.spurPeakDb),
       maxBoundaryJump: results.map((r) => r.gate.metrics.maxBoundaryJump),
+      videoDiag: results.map((r) => r.report?.videoDiag ?? null),
       port,
     }
     process.stdout.write(JSON.stringify(summary, null, 2) + '\n')

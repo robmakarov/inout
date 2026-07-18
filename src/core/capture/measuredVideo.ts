@@ -53,7 +53,35 @@ type RvfcVideo = HTMLVideoElement & {
   cancelVideoFrameCallback?: (id: number) => void
 }
 
+/**
+ * Anchor diagnostics (oracle instrumentation for the bimodal ~0.6/+13ms sync
+ * modes): per encoded frame i<20 — [source 'r'|'w', cb-dispatch delay ms
+ * (now−presentationTime), presentation pipeline age ms
+ * (presentationTime−captureTime)], null where metadata is absent.
+ * Exposed at globalThis.__inoutVideoDiag[kind]; read by the oracle rig.
+ */
+interface AnchorDiag {
+  offsetMs: number
+  frames: [string, number | null, number | null][]
+}
+const DIAG_FRAMES = 20
+function diagSink(): Record<string, AnchorDiag> {
+  const g = globalThis as { __inoutVideoDiag?: Record<string, AnchorDiag> }
+  return (g.__inoutVideoDiag ??= {})
+}
+
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
+/** MediaStreamTrackProcessor (Chromium) — not yet in TS DOM libs. */
+interface TrackProcessorLike {
+  readable: ReadableStream<VideoFrame>
+}
+type TrackProcessorCtor = new (init: { track: MediaStreamTrack }) => TrackProcessorLike
+
+function trackProcessorCtor(): TrackProcessorCtor | null {
+  const g = globalThis as { MediaStreamTrackProcessor?: TrackProcessorCtor }
+  return typeof g.MediaStreamTrackProcessor === 'function' ? g.MediaStreamTrackProcessor : null
+}
 
 export function canMeasureVideoCapture(): boolean {
   return (
@@ -181,6 +209,19 @@ export async function startMeasuredVideoCapture(opts: {
   })
   encoder.configure(config)
 
+  const diag: AnchorDiag = { offsetMs: NaN, frames: [] }
+  diagSink()[opts.kind] = diag
+  const recordDiag = (src: string, now: number, meta?: FrameMetadata): void => {
+    if (diag.frames.length >= DIAG_FRAMES) return
+    diag.frames.push([
+      src,
+      meta?.presentationTime !== undefined ? Math.round((now - meta.presentationTime) * 10) / 10 : null,
+      meta?.presentationTime !== undefined && meta?.captureTime !== undefined
+        ? Math.round((meta.presentationTime - meta.captureTime) * 10) / 10
+        : null,
+    ])
+  }
+
   // Timing model (EMPIRICAL — measured by the oracle, do not "improve" from
   // first principles): stamp at drawImage sampling wall time; anchor shifted
   // +PRESENTATION_LAG_MS. An rVFC captureTime anchor measured WORSE (+25ms
@@ -200,6 +241,7 @@ export async function startMeasuredVideoCapture(opts: {
     if (firstWallMs === null) {
       firstWallMs = now
       startOffsetMs = now - opts.epoch + PRESENTATION_LAG_MS
+      diag.offsetMs = Math.round(startOffsetMs * 10) / 10
       resolveFirst(startOffsetMs)
       console.info(
         `[capture] measured video ${opts.kind} first-frame offset=${startOffsetMs.toFixed(1)}ms ` +
@@ -230,55 +272,142 @@ export async function startMeasuredVideoCapture(opts: {
     return true
   }
 
-  // Primary sampler: rVFC fires per PRESENTED frame with measured captureTime.
-  const rvfcEl = videoEl as RvfcVideo
-  const hasRvfc = typeof rvfcEl.requestVideoFrameCallback === 'function'
-  let rvfcId = 0
-  // Head start: let rVFC deliver the anchor frame (measured captureTime)
-  // before the wall-stamp watchdog is allowed to.
-  let lastSampleAt = performance.now()
-  const onFrame = (): void => {
-    if (stopped) return
-    lastSampleAt = performance.now()
+  // PRIMARY: MediaStreamTrackProcessor — frames arrive straight off the
+  // capture path carrying their own µs timestamps: no <video> presentation
+  // pipeline (whose 0–2-frame depth was the unobservable ±15ms sync variance),
+  // no compositor throttling. Encoder-busy drops the frame (never blocks the
+  // reader — EE's original stall objection). Per-frame ts = source-clock delta
+  // from frame 0; anchor = wall clock at first frame read (delivery ≈ instant).
+  const TP = trackProcessorCtor()
+  let firstSrcTsUs: number | null = null
+  let cancelReader: (() => void) | null = null
+  /**
+   * Min-filter anchor (the measured-audio trick): the first frame read may
+   * have been CAPTURED long before we read it (queued during setup), so
+   * readWall anchors late → uniform positive sync bias. Delivery can only be
+   * late, never early, so candidates (readWall − srcClockDelta) are one-sided
+   * and their MIN converges on the true capture wall of frame 0.
+   */
+  const ANCHOR_WINDOW_US = 3_000_000
+  let anchorWallMs = Infinity
+
+  const handleTpFrame = (frame: VideoFrame): void => {
     try {
-      encodeOne()
-    } catch (err) {
-      if (!encodeError) encodeError = err instanceof Error ? err : new Error(String(err))
+      if (stopped || encodeError || encoder.state !== 'configured') return
+      if (encoder.encodeQueueSize >= MAX_ENCODER_QUEUE) {
+        framesDropped++
+        return
+      }
+      const readWall = performance.now()
+      if (firstWallMs === null || firstSrcTsUs === null) {
+        firstWallMs = readWall
+        firstSrcTsUs = frame.timestamp
+        startOffsetMs = readWall - opts.epoch
+        diag.offsetMs = Math.round(startOffsetMs * 10) / 10
+        resolveFirst(startOffsetMs)
+        console.info(
+          `[capture] measured video ${opts.kind} first-frame offset=${startOffsetMs.toFixed(1)}ms ` +
+            `path=trackprocessor size=${frame.displayWidth}x${frame.displayHeight}→${width}x${height} ` +
+            `codec=${config.codec}`,
+        )
+      }
+      const srcTs = Math.max(0, frame.timestamp - firstSrcTsUs)
+      if (srcTs <= ANCHOR_WINDOW_US) {
+        const cand = readWall - srcTs / 1000
+        if (cand < anchorWallMs) anchorWallMs = cand
+      }
+      const timestampUs = Math.max(lastEncodedTsUs + 1, srcTs)
+      lastEncodedTsUs = timestampUs
+      framesIn++
+      // Diag second column = delivery jitter: read wall vs source-clock position.
+      recordDiag('t', readWall, { presentationTime: firstWallMs + timestampUs / 1000 })
+
+      const tSec = timestampUs / 1e6
+      const keyFrame = tSec - lastKeySec >= KEYFRAME_INTERVAL_S
+      if (keyFrame) lastKeySec = tSec
+
+      ctx.drawImage(frame, 0, 0, width, height)
+      const scaled = new VideoFrame(canvas, { timestamp: timestampUs, duration: FRAME_DURATION_US })
+      try {
+        encoder.encode(scaled, { keyFrame })
+      } finally {
+        scaled.close()
+      }
+    } finally {
+      frame.close()
     }
-    if (!stopped && rvfcEl.requestVideoFrameCallback) {
-      rvfcId = rvfcEl.requestVideoFrameCallback(onFrame)
-    }
-  }
-  if (hasRvfc && rvfcEl.requestVideoFrameCallback) {
-    rvfcId = rvfcEl.requestVideoFrameCallback(onFrame)
   }
 
-  // Watchdog pacer: keeps cadence when rVFC is silent (static screen content,
-  // no-rVFC browsers) by duplicating the last frame with a wall-clock stamp.
-  const pump = (async () => {
-    try {
-      for (let i = 0; i < 100 && videoEl.videoWidth === 0 && !stopped; i++) await sleep(20)
-      let nextDue = performance.now()
-      while (!stopped) {
-        nextDue += FRAME_PERIOD_MS
-        const sinceSample = performance.now() - lastSampleAt
-        if (!hasRvfc || sinceSample >= 2 * FRAME_PERIOD_MS) {
-          try {
-            encodeOne()
-          } catch (err) {
-            if (!encodeError) encodeError = err instanceof Error ? err : new Error(String(err))
+  const rvfcEl = videoEl as RvfcVideo
+  let rvfcId = 0
+  let pump: Promise<void>
+  if (TP) {
+    const reader = new TP({ track: opts.track }).readable.getReader()
+    cancelReader = () => void reader.cancel().catch(() => undefined)
+    pump = (async () => {
+      try {
+        for (;;) {
+          const { value, done } = await reader.read()
+          if (done || stopped) {
+            value?.close()
             break
           }
+          try {
+            handleTpFrame(value)
+          } catch (err) {
+            if (!encodeError) encodeError = err instanceof Error ? err : new Error(String(err))
+          }
         }
-        if (encodeError) break
-        const delay = nextDue - performance.now()
-        if (!stopped && delay > 0) await sleep(delay)
-        if (performance.now() > nextDue + FRAME_PERIOD_MS) nextDue = performance.now()
+      } catch (err) {
+        if (!encodeError) encodeError = err instanceof Error ? err : new Error(String(err))
       }
-    } catch (err) {
-      if (!encodeError) encodeError = err instanceof Error ? err : new Error(String(err))
+    })()
+  } else {
+    // FALLBACK: rVFC-cadenced <video> sampler + paced watchdog (wall stamps).
+    const hasRvfc = typeof rvfcEl.requestVideoFrameCallback === 'function'
+    // Head start: let rVFC deliver the anchor frame before the watchdog may.
+    let lastSampleAt = performance.now()
+    const onFrame = (now: number, meta: FrameMetadata): void => {
+      if (stopped) return
+      lastSampleAt = performance.now()
+      try {
+        if (encodeOne()) recordDiag('r', now, meta)
+      } catch (err) {
+        if (!encodeError) encodeError = err instanceof Error ? err : new Error(String(err))
+      }
+      if (!stopped && rvfcEl.requestVideoFrameCallback) {
+        rvfcId = rvfcEl.requestVideoFrameCallback(onFrame)
+      }
     }
-  })()
+    if (hasRvfc && rvfcEl.requestVideoFrameCallback) {
+      rvfcId = rvfcEl.requestVideoFrameCallback(onFrame)
+    }
+
+    pump = (async () => {
+      try {
+        for (let i = 0; i < 100 && videoEl.videoWidth === 0 && !stopped; i++) await sleep(20)
+        let nextDue = performance.now()
+        while (!stopped) {
+          nextDue += FRAME_PERIOD_MS
+          const sinceSample = performance.now() - lastSampleAt
+          if (!hasRvfc || sinceSample >= 2 * FRAME_PERIOD_MS) {
+            try {
+              if (encodeOne()) recordDiag('w', performance.now())
+            } catch (err) {
+              if (!encodeError) encodeError = err instanceof Error ? err : new Error(String(err))
+              break
+            }
+          }
+          if (encodeError) break
+          const delay = nextDue - performance.now()
+          if (!stopped && delay > 0) await sleep(delay)
+          if (performance.now() > nextDue + FRAME_PERIOD_MS) nextDue = performance.now()
+        }
+      } catch (err) {
+        if (!encodeError) encodeError = err instanceof Error ? err : new Error(String(err))
+      }
+    })()
+  }
 
   await firstOffset
 
@@ -291,7 +420,7 @@ export async function startMeasuredVideoCapture(opts: {
     framesEncoded: number
     framesDropped: number
   }> => {
-    if (!cancel && !encodeError && encoder.state === 'configured' && firstWallMs !== null) {
+    if (!TP && !cancel && !encodeError && encoder.state === 'configured' && firstWallMs !== null) {
       try {
         encodeOne()
       } catch (err) {
@@ -300,6 +429,7 @@ export async function startMeasuredVideoCapture(opts: {
     }
     stopped = true
     if (rvfcId && rvfcEl.cancelVideoFrameCallback) rvfcEl.cancelVideoFrameCallback(rvfcId)
+    cancelReader?.()
     await pump.catch(() => undefined)
 
     try {
@@ -348,6 +478,9 @@ export async function startMeasuredVideoCapture(opts: {
     if (startOffsetMs === null) {
       startOffsetMs = 0
       resolveFirst(0)
+    } else if (TP && anchorWallMs !== Infinity) {
+      // Refined min-filter anchor beats the provisional first-read value.
+      startOffsetMs = Math.max(0, anchorWallMs - opts.epoch)
     }
     const durationMs = lastPacketTimestampUs / 1000
     console.info(

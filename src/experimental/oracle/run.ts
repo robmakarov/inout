@@ -45,6 +45,8 @@ export interface OracleReport {
   verdicts: OracleVerdict[]
   /** Instrument vs product classification for flash+click outliers. */
   syncDiagnostics: SyncDiagnostics
+  /** Measured-video anchor diagnostics (bimodal-sync investigation). */
+  videoDiag?: unknown
 }
 
 /** Instrument gates — TD sync-fix review: flash+click is the sync verdict. */
@@ -128,6 +130,7 @@ export async function runOracle(
       exportTrimmedMs,
       verdicts,
       syncDiagnostics,
+      videoDiag: (globalThis as { __inoutVideoDiag?: unknown }).__inoutVideoDiag,
     }
   } finally {
     await rig.cleanup()
