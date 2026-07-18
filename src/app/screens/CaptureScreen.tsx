@@ -66,9 +66,16 @@ export function CaptureScreen() {
         setSession(null)
       } else {
         const edit = clampEditState(rec, defaultEditState(rec))
+        if (rec.missing?.length) {
+          toast(
+            `Missing from this take: ${rec.missing.map((k) => CHANNEL_META[k].label).join(', ')}`,
+            'error',
+          )
+        }
         analytics.track('record_complete', {
           durationMs: Math.round(rec.durationMs),
           channels: rec.channels.length,
+          missing: rec.missing?.length ?? 0,
         })
         useAppStore.setState({
           session: null,
@@ -107,6 +114,9 @@ export function CaptureScreen() {
           break
         case 'channel-error':
           toast(e.message, 'error')
+          break
+        case 'channel-late-join':
+          toast(`${CHANNEL_META[e.kind].label} joined late — this take will use full render on export`)
           break
         case 'state':
           break

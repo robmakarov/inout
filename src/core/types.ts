@@ -50,6 +50,8 @@ export interface Recording {
   channels: ChannelRecording[]
   /** Present when the live composite succeeded; unedited export = this file. */
   composite?: CompositeRecording
+  /** Requested channels that never delivered media — surface loudly in the UI. */
+  missing?: ChannelKind[]
 }
 
 export interface ChannelEdit {
@@ -73,10 +75,15 @@ export interface EditState {
 //   loadCapturePrefs(): CaptureConfig
 //   saveCapturePrefs(c: CaptureConfig): void
 //   createCaptureSession(config: CaptureConfig, opts?: { onArming? }): Promise<CaptureSession>
-//     - acquires streams up-front (arming). Screen first (picker), then camera+mic
-//       in parallel with per-step ~15s timeout; degrades to succeeded channels.
+//     - PROGRESSIVE arming (instant is law): resolves as soon as the PRIMARY
+//       channel is armed (screen when requested, else camera, else first audio).
+//       Remaining devices acquire in the background (per-step ~5s timeout) and
+//       late-join the running take with correct startOffsetMs, emitting
+//       'channel-late-join'. A late join invalidates the live composite (unedited
+//       export falls back to render — correctness over instant). Requested
+//       channels that never deliver are listed in Recording.missing.
 //       onArming reports which permission is pending. Rejects with CaptureError
-//       if no channels remain. Optional failures emit 'channel-error'.
+//       only when nothing could be acquired. Failures emit 'channel-error'.
 //     - audio channels (mic/system-audio): AudioWorklet → WebCodecs opus →
 //       mediabunny webm with startOffsetMs from getOutputTimestamp (measured).
 //     - video channels: MediaRecorder (unchanged; file epoch ≈ startCall).
@@ -103,6 +110,8 @@ export type CaptureEvent =
   /** A channel died mid-flight (e.g. user hit the browser's "stop sharing"). */
   | { type: 'channel-ended'; kind: ChannelKind }
   | { type: 'channel-error'; kind: ChannelKind; message: string }
+  /** A slow device delivered media after recording had already begun. */
+  | { type: 'channel-late-join'; kind: ChannelKind }
   /** Session hit MAX_RECORDING_MS (or lost its last channel) and began stopping
    *  itself. UI should call stop() to collect the Recording — stop() is
    *  idempotent and always returns the same promise. */

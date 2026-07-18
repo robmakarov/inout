@@ -6,6 +6,7 @@ import { blobStore } from '@core/store'
 import { recordingsRepo } from '@core/store'
 import { analytics } from '@core/analytics'
 import { useAppStore } from '@app/state/store'
+import { CHANNEL_META } from '@app/lib/channels'
 import { usePlayback } from '@app/hooks/usePlayback'
 import { Player } from '@app/components/Player'
 import { Timeline } from '@app/components/Timeline'
@@ -151,6 +152,13 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
           Export
         </button>
       </header>
+
+      {recording.missing?.length ? (
+        <div className="editor__missing" role="alert">
+          Missing from this take: {recording.missing.map((k) => CHANNEL_META[k].label).join(', ')} —
+          the device never connected.
+        </div>
+      ) : null}
 
       <div className="editor__player">
         <Player recording={recording} edit={edit} pb={pb} />

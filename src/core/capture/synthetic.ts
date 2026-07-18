@@ -1,8 +1,32 @@
-import type { CaptureConfig } from '@core/types'
-import type { AcquiredChannel } from './acquire'
+import type { CaptureConfig, ChannelKind } from '@core/types'
+import type { AcquiredChannel, ProgressiveAcquire, ProgressiveHandlers } from './acquire'
+import { primaryKindFor } from './acquire'
 
 export function isSyntheticMode(): boolean {
   return typeof location !== 'undefined' && location.search.includes('synthetic')
+}
+
+/**
+ * Test harness knob: ?synthetic=1&slow=camera:3000,mic:8000 delays channel
+ * delivery, simulating cold devices — the acceptance rig for instant-arm.
+ * A delay beyond ACQUIRE_TIMEOUT_MS effectively simulates a dead device.
+ */
+export function parseSlowChannels(search: string): Map<ChannelKind, number> {
+  const out = new Map<ChannelKind, number>()
+  const raw = new URLSearchParams(search).get('slow')
+  if (!raw) return out
+  for (const part of raw.split(',')) {
+    const [kind, ms] = part.split(':')
+    const delay = Number(ms)
+    if (
+      (kind === 'screen' || kind === 'camera' || kind === 'mic' || kind === 'system-audio') &&
+      Number.isFinite(delay) &&
+      delay > 0
+    ) {
+      out.set(kind, delay)
+    }
+  }
+  return out
 }
 
 export interface SyntheticRig {
@@ -157,4 +181,55 @@ export function createSyntheticChannels(config: CaptureConfig): SyntheticRig {
   }
 
   return { channels, dispose }
+}
+
+export interface SyntheticProgressiveRig extends ProgressiveAcquire {
+  dispose: () => void
+}
+
+/** Progressive synthetic source — mirrors acquireChannelsProgressive semantics,
+ * with per-channel delivery delays from the `slow=` URL param. */
+export function createSyntheticChannelsProgressive(
+  config: CaptureConfig,
+  handlers: ProgressiveHandlers,
+): SyntheticProgressiveRig {
+  const rig = createSyntheticChannels(config)
+  const delays =
+    typeof location !== 'undefined' ? parseSlowChannels(location.search) : new Map<ChannelKind, number>()
+  const primary = primaryKindFor(config)
+  let primaryResolve!: () => void
+  const primaryReady = new Promise<void>((r) => {
+    primaryResolve = r
+  })
+  let disposed = false
+  const timers: ReturnType<typeof setTimeout>[] = []
+
+  const deliveries = rig.channels.map(
+    (ch) =>
+      new Promise<void>((resolve) => {
+        const emit = (): void => {
+          if (!disposed) {
+            handlers.onChannel(ch)
+            if (ch.kind === primary) primaryResolve()
+          }
+          resolve()
+        }
+        const delay = delays.get(ch.kind) ?? 0
+        if (delay > 0) timers.push(setTimeout(emit, delay))
+        else queueMicrotask(emit)
+      }),
+  )
+
+  const settled = Promise.all(deliveries).then(() => undefined)
+  void settled.then(() => primaryResolve())
+
+  return {
+    primaryReady,
+    settled,
+    dispose: (): void => {
+      disposed = true
+      for (const t of timers) clearTimeout(t)
+      rig.dispose()
+    },
+  }
 }

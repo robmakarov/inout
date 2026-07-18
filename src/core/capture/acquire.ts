@@ -33,8 +33,36 @@ export interface ArmingTimelineEntry {
   message?: string
 }
 
-/** Per-device acquisition budget — degrade to succeeded channels rather than hang. */
-export const ACQUIRE_TIMEOUT_MS = 15_000
+/** Per-device acquisition budget — degrade to succeeded channels rather than
+ * hang. 5s (was 15s): a hung device must not hold a take hostage; the take
+ * starts without it and the loss is surfaced loudly. */
+export const ACQUIRE_TIMEOUT_MS = 5_000
+
+/** The channel whose readiness gates recording start (instant is law: we start
+ * the moment this one is live and let slower devices late-join). */
+export function primaryKindFor(config: CaptureConfig): ChannelKind | null {
+  if (config.screen) return 'screen'
+  if (config.camera) return 'camera'
+  if (config.mic) return 'mic'
+  if (config.systemAudio) return 'system-audio'
+  return null
+}
+
+export interface ProgressiveHandlers {
+  /** Fired per channel the moment its stream is live. */
+  onChannel: (ch: AcquiredChannel) => void
+  onFailure: (f: AcquireFailure) => void
+  onProgress?: ArmingProgressHandler
+}
+
+export interface ProgressiveAcquire {
+  /** Resolves the moment recording may begin: the primary channel is live — or,
+   * when the primary failed, once every acquisition settled (degraded start,
+   * same behavior as the old all-at-once arming). */
+  primaryReady: Promise<void>
+  /** Every requested acquisition settled (success or failure). */
+  settled: Promise<void>
+}
 
 export type ArmingProgressHandler = (e: ArmingTimelineEntry) => void
 
@@ -88,14 +116,30 @@ type DisplayMediaOptions = DisplayMediaStreamOptions & {
   systemAudio?: 'include' | 'exclude'
 }
 
-export async function acquireRealChannels(
+export function acquireChannelsProgressive(
   config: CaptureConfig,
-  onProgress?: ArmingProgressHandler,
-): Promise<AcquireResult> {
-  const channels: AcquiredChannel[] = []
-  const failures: AcquireFailure[] = []
+  handlers: ProgressiveHandlers,
+): ProgressiveAcquire {
   const timeline: ArmingTimelineEntry[] = []
   const t0 = performance.now()
+  const primary = primaryKindFor(config)
+  let primaryResolve!: () => void
+  const primaryReady = new Promise<void>((r) => {
+    primaryResolve = r
+  })
+  let channelCount = 0
+  let failureCount = 0
+
+  const deliver = (ch: AcquiredChannel): void => {
+    channelCount++
+    handlers.onChannel(ch)
+    if (ch.kind === primary) primaryResolve()
+  }
+  const fail = (f: AcquireFailure): void => {
+    failureCount++
+    handlers.onFailure(f)
+  }
+  const onProgress = handlers.onProgress
 
   const mark = (
     step: ArmingStep,
@@ -121,11 +165,11 @@ export async function acquireRealChannels(
         ACQUIRE_TIMEOUT_MS,
         'getUserMedia(camera)',
       )
-      channels.push({ kind: 'camera', media: 'video', stream, track: stream.getVideoTracks()[0] })
+      deliver({ kind: 'camera', media: 'video', stream, track: stream.getVideoTracks()[0] })
       mark('camera', 'done', stream.getVideoTracks()[0]?.label)
     } catch (err) {
       const timedOut = err instanceof DOMException && err.name === 'TimeoutError'
-      failures.push(toFailure('camera', err, timedOut))
+      fail(toFailure('camera', err, timedOut))
       mark('camera', timedOut ? 'timeout' : 'failed', err instanceof Error ? err.message : String(err))
     }
   }
@@ -144,11 +188,11 @@ export async function acquireRealChannels(
         ACQUIRE_TIMEOUT_MS,
         'getUserMedia(mic)',
       )
-      channels.push({ kind: 'mic', media: 'audio', stream, track: stream.getAudioTracks()[0] })
+      deliver({ kind: 'mic', media: 'audio', stream, track: stream.getAudioTracks()[0] })
       mark('mic', 'done', stream.getAudioTracks()[0]?.label)
     } catch (err) {
       const timedOut = err instanceof DOMException && err.name === 'TimeoutError'
-      failures.push(toFailure('mic', err, timedOut))
+      fail(toFailure('mic', err, timedOut))
       mark('mic', timedOut ? 'timeout' : 'failed', err instanceof Error ? err.message : String(err))
     }
   }
@@ -158,6 +202,7 @@ export async function acquireRealChannels(
   // appear), camera/mic start CONCURRENTLY with the screen picker and resolve
   // while the user is choosing a surface: instant start without idle access.
   // Without permission they run after the picker so prompts never hide.
+  const run = async (): Promise<void> => {
   const early: Promise<void>[] = []
   let camEarly = false
   let micEarly = false
@@ -190,13 +235,10 @@ export async function acquireRealChannels(
         'getDisplayMedia',
       )
       const video = display.getVideoTracks()[0]
-      if (video) {
-        channels.push({ kind: 'screen', media: 'video', stream: new MediaStream([video]), track: video })
-      }
       if (config.systemAudio) {
         const audio = display.getAudioTracks()[0]
         if (audio) {
-          channels.push({
+          deliver({
             kind: 'system-audio',
             media: 'audio',
             stream: new MediaStream([audio]),
@@ -204,22 +246,27 @@ export async function acquireRealChannels(
           })
           mark('system-audio', 'done')
         } else {
-          failures.push({ kind: 'system-audio', message: 'System audio was not shared', denied: false })
+          fail({ kind: 'system-audio', message: 'System audio was not shared', denied: false })
           mark('system-audio', 'failed', 'System audio was not shared')
         }
+      }
+      // Screen delivered LAST from the display result: it is the primary, and
+      // delivering it resolves primaryReady — system audio must already be in.
+      if (video) {
+        deliver({ kind: 'screen', media: 'video', stream: new MediaStream([video]), track: video })
       }
       mark('display', 'done', video ? `track=${video.label || video.id}` : 'no video track')
     } catch (err) {
       const timedOut = err instanceof DOMException && err.name === 'TimeoutError'
-      failures.push(toFailure('screen', err, timedOut))
-      if (config.systemAudio) failures.push(toFailure('system-audio', err, timedOut))
+      fail(toFailure('screen', err, timedOut))
+      if (config.systemAudio) fail(toFailure('system-audio', err, timedOut))
       mark('display', timedOut ? 'timeout' : 'failed', err instanceof Error ? err.message : String(err))
       if (config.systemAudio) {
         mark('system-audio', timedOut ? 'timeout' : 'failed')
       }
     }
   } else if (config.systemAudio) {
-    failures.push({ kind: 'system-audio', message: 'System audio requires screen sharing', denied: false })
+    fail({ kind: 'system-audio', message: 'System audio requires screen sharing', denied: false })
     mark('system-audio', 'skipped', 'requires screen sharing')
   }
 
@@ -230,10 +277,35 @@ export async function acquireRealChannels(
   if (parallel.length) await Promise.all(parallel)
 
   console.info(
-    `[capture:arming] acquire done +${(performance.now() - t0).toFixed(0)}ms — ` +
-      `${channels.length} channel(s), ${failures.length} failure(s)`,
-    { timeline, kinds: channels.map((c) => c.kind) },
+    `[capture:arming] acquire settled +${(performance.now() - t0).toFixed(0)}ms — ` +
+      `${channelCount} channel(s), ${failureCount} failure(s)`,
+    { timeline },
   )
+  }
 
+  const settled = run()
+  // Primary failed or was never requested: recording may start (degraded) only
+  // once everything settled — the old all-at-once behavior.
+  void settled.then(() => primaryResolve())
+  return { primaryReady, settled }
+}
+
+/** Legacy all-at-once acquisition — collects the progressive stream. */
+export async function acquireRealChannels(
+  config: CaptureConfig,
+  onProgress?: ArmingProgressHandler,
+): Promise<AcquireResult> {
+  const channels: AcquiredChannel[] = []
+  const failures: AcquireFailure[] = []
+  const timeline: ArmingTimelineEntry[] = []
+  const acq = acquireChannelsProgressive(config, {
+    onChannel: (ch) => channels.push(ch),
+    onFailure: (f) => failures.push(f),
+    onProgress: (e) => {
+      timeline.push(e)
+      onProgress?.(e)
+    },
+  })
+  await acq.settled
   return { channels, failures, timeline }
 }

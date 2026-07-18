@@ -11,8 +11,13 @@ import type {
   Recording,
 } from '@core/types'
 import { CaptureError, MAX_RECORDING_MS } from '@core/types'
-import type { AcquiredChannel, AcquireFailure, ArmingProgressHandler } from './acquire'
-import { acquireRealChannels } from './acquire'
+import type {
+  AcquiredChannel,
+  AcquireFailure,
+  ArmingProgressHandler,
+  ProgressiveAcquire,
+} from './acquire'
+import { acquireChannelsProgressive } from './acquire'
 import {
   canMeasureAudioCapture,
   prewarmMeasuredAudio,
@@ -21,7 +26,7 @@ import {
 } from './measuredAudio'
 import { canLiveComposite, startLiveComposite, type LiveCompositeHandle } from './liveComposite'
 import { clearPendingManifest, writePendingManifest } from './recovery'
-import { createSyntheticChannels, isSyntheticMode } from './synthetic'
+import { createSyntheticChannelsProgressive, isSyntheticMode } from './synthetic'
 
 export type { ArmingProgressHandler, ArmingTimelineEntry, ArmingStep } from './acquire'
 
@@ -94,6 +99,7 @@ class Session implements CaptureSession {
   private manifestTimer: ReturnType<typeof setTimeout> | null = null
   private composite: LiveCompositeHandle | null = null
   private compositeStarting: Promise<void> | null = null
+  private compositeInvalid = false
   private stopPromise: Promise<Recording> | null = null
   private cancelPromise: Promise<void> | null = null
   private cancelled = false
@@ -109,40 +115,80 @@ class Session implements CaptureSession {
     return this.stateInternal
   }
 
+  /**
+   * PROGRESSIVE arming (instant is law): returns the moment the primary
+   * channel is armed. Remaining devices keep acquiring in the background and
+   * late-join the running take via lateJoin(); a device failing after start
+   * emits 'channel-error' immediately instead of queueing.
+   */
   async arm(): Promise<void> {
     const armT0 = performance.now()
-    let acquired: AcquiredChannel[]
     const failures: AcquireFailure[] = []
+    const armPromises: Promise<void>[] = []
 
-    if (isSyntheticMode()) {
-      const rig = createSyntheticChannels(this.config)
-      this.disposeSynthetic = rig.dispose
-      acquired = rig.channels
-    } else {
-      const res = await acquireRealChannels(this.config, this.onArming)
-      acquired = res.channels
-      failures.push(...res.failures)
+    const handleAcquired = (acq: AcquiredChannel): void => {
+      if (this.cancelled || this.stateInternal === 'stopping' || this.stateInternal === 'stopped') {
+        for (const t of acq.stream.getTracks()) t.stop()
+        return
+      }
+      armPromises.push(
+        (async () => {
+          try {
+            const rt = await this.armChannel(acq)
+            if (this.cancelled || this.stateInternal === 'stopping' || this.stateInternal === 'stopped') {
+              this.discardRuntime(rt)
+            } else if (this.stateInternal === 'recording') {
+              this.lateJoin(rt)
+            }
+          } catch (err) {
+            for (const t of acq.stream.getTracks()) t.stop()
+            const f = { kind: acq.kind, message: errMessage(err), denied: false } satisfies AcquireFailure
+            if (this.stateInternal === 'recording') {
+              this.emit({ type: 'channel-error', kind: f.kind, message: f.message })
+            } else {
+              failures.push(f)
+            }
+          }
+        })(),
+      )
+    }
+    const handleFailure = (f: AcquireFailure): void => {
+      if (this.stateInternal === 'recording') {
+        this.emit({ type: 'channel-error', kind: f.kind, message: f.message })
+      } else {
+        failures.push(f)
+      }
     }
 
-    const writerT0 = performance.now()
+    let src: ProgressiveAcquire
+    if (isSyntheticMode()) {
+      const rig = createSyntheticChannelsProgressive(this.config, {
+        onChannel: handleAcquired,
+        onFailure: handleFailure,
+      })
+      this.disposeSynthetic = rig.dispose
+      src = rig
+    } else {
+      src = acquireChannelsProgressive(this.config, {
+        onChannel: handleAcquired,
+        onFailure: handleFailure,
+        onProgress: this.onArming,
+      })
+    }
+
+    await src.primaryReady
+    // Arm everything already delivered; later arrivals late-join on their own.
+    await Promise.all([...armPromises])
+
+    if (this.channels.length === 0) {
+      // Primary failed → degraded path: wait for everything (old behavior).
+      await src.settled
+      await Promise.all([...armPromises])
+    }
+
     console.info(
-      `[capture:arming] writers start +${(writerT0 - armT0).toFixed(0)}ms (${acquired.length} channels)`,
-    )
-    const armed = await Promise.all(
-      acquired.map(async (acq) => {
-        try {
-          await this.armChannel(acq)
-          return null
-        } catch (err) {
-          for (const t of acq.stream.getTracks()) t.stop()
-          return { kind: acq.kind, message: errMessage(err), denied: false } satisfies AcquireFailure
-        }
-      }),
-    )
-    for (const f of armed) if (f) failures.push(f)
-    console.info(
-      `[capture:arming] writers done +${(performance.now() - armT0).toFixed(0)}ms ` +
-        `(writer phase ${(performance.now() - writerT0).toFixed(0)}ms)`,
+      `[capture:arming] armed +${(performance.now() - armT0).toFixed(0)}ms ` +
+        `(${this.channels.length} channel(s) ready, rest join late)`,
     )
 
     if (this.channels.length === 0) {
@@ -160,7 +206,19 @@ class Session implements CaptureSession {
     this.pendingErrors = failures.map((f) => ({ kind: f.kind, message: f.message }))
   }
 
-  private async armChannel(acq: AcquiredChannel): Promise<void> {
+  /** A channel armed after stop/cancel raced the take end: release everything it holds. */
+  private discardRuntime(rt: ChannelRuntime): void {
+    for (const t of rt.stream.getTracks()) t.stop()
+    if (rt.audioCtx && rt.audioCtx.state !== 'closed') void rt.audioCtx.close().catch(() => undefined)
+    if (rt.writer) {
+      void rt.writer.abort().catch(() => undefined)
+      void blobStore.remove(rt.blobKey).catch(() => undefined)
+    }
+    rt.ended = true
+    rt.resolveStopped()
+  }
+
+  private async armChannel(acq: AcquiredChannel): Promise<ChannelRuntime> {
     const id = newId('ch')
     const blobKey = `${this.recordingId}_${id}.webm`
     const useMeasured = acq.media === 'audio' && canMeasureAudioCapture()
@@ -264,6 +322,57 @@ class Session implements CaptureSession {
 
     this.channels.push(rt)
     this.previewStreams[acq.kind] = acq.stream
+    return rt
+  }
+
+  private activateChannel(ch: ChannelRuntime, startT0: number): void {
+    if (ch.ended) return
+    if (ch.useMeasured) {
+      ch.measuredStarting = this.startMeasured(ch, startT0)
+      return
+    }
+    if (!ch.recorder) return
+    try {
+      const tCall = performance.now()
+      // Video file epoch ≈ startCall (MEASURED) — not onstart. Using onstart
+      // made video startOffset ~76ms late vs audio and showed up as +150ms
+      // flash+click (audio late). Holds for late joins too: offset = call − epoch.
+      ch.startAbs = tCall
+      ch.startOffsetMs = tCall - this.epoch
+      ch.recorder.start(TIMESLICE_MS)
+      ch.recorderStarted = true
+      console.info(
+        `[capture:arming] recorder.start ${ch.kind} call +${(tCall - startT0).toFixed(0)}ms`,
+      )
+    } catch (err) {
+      ch.ended = true
+      if (this.stateInternal === 'recording') {
+        this.emit({ type: 'channel-error', kind: ch.kind, message: errMessage(err) })
+      } else {
+        this.pendingErrors.push({ kind: ch.kind, message: errMessage(err) })
+      }
+    }
+  }
+
+  /** A device delivered after the take began: record it from now, flagged loudly. */
+  private lateJoin(ch: ChannelRuntime): void {
+    const t0 = performance.now()
+    this.activateChannel(ch, t0)
+    // The composite was mixed without this channel — an unedited instant export
+    // would silently lack it. Correctness beats instant: fall back to render.
+    this.invalidateComposite(`late join: ${ch.kind}`)
+    this.writeManifest()
+    this.emit({ type: 'channel-late-join', kind: ch.kind })
+    console.info(`[capture:arming] late join ${ch.kind} +${(t0 - this.epoch).toFixed(0)}ms into take`)
+  }
+
+  private invalidateComposite(reason: string): void {
+    if (this.compositeInvalid) return
+    this.compositeInvalid = true
+    console.info(`[capture] composite invalidated (${reason}) — unedited export will render`)
+    const c = this.composite
+    this.composite = null
+    if (c) void c.cancel().catch(() => undefined)
   }
 
   start(): void {
@@ -271,30 +380,7 @@ class Session implements CaptureSession {
     this.epoch = performance.now()
     const startT0 = performance.now()
 
-    for (const ch of this.channels) {
-      if (ch.ended) continue
-      if (ch.useMeasured) {
-        ch.measuredStarting = this.startMeasured(ch, startT0)
-        continue
-      }
-      if (!ch.recorder) continue
-      try {
-        const tCall = performance.now()
-        // Video file epoch ≈ startCall (MEASURED) — not onstart. Using onstart
-        // made video startOffset ~76ms late vs audio and showed up as +150ms
-        // flash+click (audio late).
-        ch.startAbs = tCall
-        ch.startOffsetMs = tCall - this.epoch
-        ch.recorder.start(TIMESLICE_MS)
-        ch.recorderStarted = true
-        console.info(
-          `[capture:arming] recorder.start ${ch.kind} call +${(tCall - startT0).toFixed(0)}ms`,
-        )
-      } catch (err) {
-        ch.ended = true
-        this.pendingErrors.push({ kind: ch.kind, message: errMessage(err) })
-      }
-    }
+    for (const ch of this.channels) this.activateChannel(ch, startT0)
     console.info(
       `[capture:arming] all start calls kicked +${(performance.now() - startT0).toFixed(0)}ms`,
     )
@@ -319,7 +405,7 @@ class Session implements CaptureSession {
     if (!canLiveComposite(inputs)) return
     this.compositeStarting = startLiveComposite(inputs, `${this.recordingId}_composite.webm`)
       .then((h) => {
-        if (this.stateInternal === 'recording') this.composite = h
+        if (this.stateInternal === 'recording' && !this.compositeInvalid) this.composite = h
         else void h.cancel()
       })
       .catch((err) => {
@@ -578,9 +664,20 @@ class Session implements CaptureSession {
       channels,
     }
 
+    // Requested channels that never delivered media — the UI must say so
+    // loudly; a silently mic-less take is how trust dies.
+    const requested: ChannelKind[] = []
+    if (this.config.screen) requested.push('screen')
+    if (this.config.camera) requested.push('camera')
+    if (this.config.mic) requested.push('mic')
+    if (this.config.systemAudio) requested.push('system-audio')
+    const keptKinds = new Set(channels.map((c) => c.kind))
+    const missing = requested.filter((k) => !keptKinds.has(k))
+    if (missing.length) recording.missing = missing
+
     try {
       if (this.compositeStarting) await this.compositeStarting
-      const composite = await this.composite?.stop()
+      const composite = this.compositeInvalid ? undefined : await this.composite?.stop()
       if (composite) recording.composite = composite
     } catch (err) {
       console.warn('[capture] live composite stop failed', err)
