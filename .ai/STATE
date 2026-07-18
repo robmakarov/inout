@@ -19,7 +19,8 @@ gaps / in flight:
 - composite blob absent from crash salvage → EE task 4
 - bundle 748KB → EE task 5 · dev-mode first-record compile latency (prod unaffected)
 - PUBLIC DEPLOY LIVE: inout-kappa.vercel.app serves current main (verified, bundle-hash match). GitHub main = single depersonalized commit; full history local-only (branch local-history-backup). Remaining cloud reset: PO runs docs/CLOUD_RESET.md steps 2-3 (Vercel env+old deployments, Supabase wipe+key rotation; auth users kept)
-- awaiting PO on clean prod build :4173: camera-light-at-load repro? + tab-music listen test (fix shipped 548b084)
+- instant-arm SHIPPED (c8424a5): start gates only on primary channel, slow devices late-join (verified: armed 269ms w/ 3s-cold camera), 5s device budget, missing channel = loud banner + Recording.missing; late join → composite invalidated → render path. Await PO recheck of device-wait on live site.
+- awaiting PO: camera-light-at-load repro? + tab-music listen test (fix shipped 548b084; residual = 5 boundary clicks late in take, EE analyzing)
 
 process: QA on prod-build port only, never dev server; EE load tests spawn own server. Roles .ai/ROLES ·
 tasks+gates .ai/TASKS · decisions ledger .ai/DECISIONS (append-only) · bugs BACKLOG.md (done = deleted).
