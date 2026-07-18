@@ -246,7 +246,12 @@ export function acquireChannelsProgressive(
           })
           mark('system-audio', 'done')
         } else {
-          fail({ kind: 'system-audio', message: 'System audio was not shared', denied: false })
+          fail({
+            kind: 'system-audio',
+            message:
+              'System audio was not shared — tick “Also share system audio” in the screen picker',
+            denied: false,
+          })
           mark('system-audio', 'failed', 'System audio was not shared')
         }
       }

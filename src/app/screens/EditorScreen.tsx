@@ -158,7 +158,7 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
           {recording.missing.includes('system-audio')
             ? `Missing from this take: ${recording.missing
                 .map((k) => CHANNEL_META[k].label)
-                .join(', ')}. Tab Audio only works when you share a Chrome tab — sharing a window or the whole screen has no audio on this platform.`
+                .join(', ')}. Audio wasn't shared — next time tick “Also share system audio” in the screen picker (tab shares always include it; window shares can't).`
             : `Missing from this take: ${recording.missing
                 .map((k) => CHANNEL_META[k].label)
                 .join(', ')} — the device never connected.`}
