@@ -92,3 +92,22 @@ salvage must include late-joined channels; composite handles late audio join (or
 GATES: synthetic harness with an artificially 3s-delayed camera: click→recording-state ≤ 250ms after
 display resolves ×10 runs; late channel startOffsetMs correct (oracle sync bands hold for late-join);
 device never arriving → take completes + loud warning; salvage smoke PASS; typecheck+tests+oracle green.
+
+## 8. audio-perfection — real-device sound certified, not argued  [P1, PO: 'sound must be perfect']
+Composite export shortcut is REMOVED (TD 2026-07-16) — all exports render through the certified mixer.
+Remaining: (a) fidelity runner needs the same incomplete-metrics retry as oracle.mjs (cold-start flake:
+toneErr 394dB/silence on run 1, green on rerun); (b) real-device residual: PO exports had 5 boundary
+clicks (composite-era) — obtain ONE post-change PO export, run file-mode fidelity, close or re-open;
+(c) add export-path marker to file metadata so any PO complaint self-identifies its pipeline.
+GATES: fidelity e2e green ×10 consecutive (with retry guard); post-change PO file analyzed with zero
+clicks above threshold, or a new red finding with numbers.
+
+## 9. safari-compat — every capable browser works  [P1, PO override of Chromium-first]
+Goal: capture+edit+export works on macOS Safari 17+ (getDisplayMedia window/screen, getUserMedia,
+MediaRecorder mp4/aac fallbacks — current VIDEO_MIMES/AUDIO_MIMES are webm-only and construct-throw on
+Safari), and camera/mic/audio-only takes work on iOS Safari (no screen capture exists on iOS, any
+browser — Apple native-only). Feature-detect per capability, degrade per-channel with honest UI copy
+(no system audio on Safari — platform limit, say so in the picker hint).
+GATES: macOS Safari real-device: screen+camera+mic take → edit → export plays in QuickTime; iOS Safari
+real-device: camera+mic take → export plays; Chromium suite unchanged (typecheck+tests+oracle+fidelity
+green); capability matrix documented in CONTEXT.md.

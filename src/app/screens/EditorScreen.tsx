@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { EditState, Recording } from '@core/types'
-import { clampEditState, isDefaultEdit } from '@core/timeline'
+import { clampEditState } from '@core/timeline'
 import { exportRecording } from '@core/compose'
-import { blobStore } from '@core/store'
 import { recordingsRepo } from '@core/store'
 import { analytics } from '@core/analytics'
 import { useAppStore } from '@app/state/store'
@@ -62,34 +61,12 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
     if (store.mode === 'exporting') return
     pb.pause()
 
-    // Instant path: untouched edit + live composite recorded during capture.
-    const currentEdit = store.editState ?? edit
-    if (recording.composite && isDefaultEdit(recording, currentEdit)) {
-      try {
-        const blob = await blobStore.read(recording.composite.blobKey)
-        if (blob.size > 0) {
-          const d = new Date(recording.createdAt)
-          const pad = (n: number) => String(n).padStart(2, '0')
-          const ext = recording.composite.mimeType.includes('mp4') ? 'mp4' : 'webm'
-          const fileName = `inout-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.${ext}`
-          analytics.track('export_complete', { durationMs: 0, sizeBytes: blob.size, instant: true })
-          useAppStore.setState({
-            exportResult: {
-              blob,
-              mimeType: recording.composite.mimeType,
-              fileName,
-              durationMs: recording.composite.durationMs,
-              width: recording.composite.width,
-              height: recording.composite.height,
-            },
-            mode: 'share',
-          })
-          return
-        }
-      } catch (err) {
-        console.warn('instant export unavailable, falling back to render', err)
-      }
-    }
+    // PO 2026-07-16: sound must be perfect > instant. The live-composite
+    // shortcut shipped MediaRecorder-mixed audio that our fidelity instrument
+    // does NOT certify — every PO noise report traced to it. Exports now ALWAYS
+    // go through the measured render mixer (instrument-certified: THD −71dB).
+    // The composite stays for crash salvage; instant unedited export returns
+    // with WebCodecs v2 once its audio is certified too.
 
     const ac = new AbortController()
     store.setExportAbort(ac)
