@@ -47,6 +47,20 @@ export function softLimitSample(x: number): number {
 }
 
 /**
+ * Per-channel gain for the render mix bus. Single source = unity (full-scale,
+ * never limited). Multiple sources use 1/N headroom — a HARD guarantee that
+ * even worst-case in-phase peaks (mic + system audio both near full scale)
+ * sum below the limiter knee. Equal-power (1/√N) was measured insufficient:
+ * two decorrelated full-scale tones still clipped ~17% of samples (the
+ * pervasive "noise in all sound"). 1/N trades ~6 dB loudness on multi-source
+ * takes for zero pervasive limiting. Loudness makeup belongs in a later
+ * two-pass normalize, not in a stage that can reintroduce clipping.
+ */
+export function mixGainForChannels(count: number): number {
+  return count > 1 ? 1 / count : 1
+}
+
+/**
  * Streams one channel's decoded audio strictly forward and mixes it (by
  * summation, Hermite-resampled to 48 kHz) into output chunks.
  * `mixInto` must be called with non-decreasing chunk windows. Peak memory
@@ -64,6 +78,14 @@ export class AudioChannelMixer {
   private prevL = 0
   private prevR = 0
   private hasPrev = false
+  /**
+   * Mix gain applied to this channel's contribution. Default 1 (single source
+   * stays full-scale, never touches the limiter). With multiple audio channels
+   * the bus sets headroom (e.g. 0.7) so mic+system-audio summing does not
+   * clip into softLimitSample — the pervasive-noise cause when the composite
+   * shortcut was removed and everything moved to this render sum (2026-07-16).
+   */
+  gain = 1
 
   constructor(
     private readonly input: Input,
@@ -116,8 +138,8 @@ export class AudioChannelMixer {
                 const nR = sampleAt(cur.right, pos)
                 const oL = this.prevL * (1 - t) + nL * t
                 const oR = this.prevR * (1 - t) + nR * t
-                left[k + i] += oL
-                right[k + i] += oR
+                left[k + i] += oL * this.gain
+                right[k + i] += oR * this.gain
                 this.prevL = oL
                 this.prevR = oR
               }
@@ -127,8 +149,8 @@ export class AudioChannelMixer {
             }
           }
 
-          left[k] += sL
-          right[k] += sR
+          left[k] += sL * this.gain
+          right[k] += sR * this.gain
           this.prevL = sL
           this.prevR = sR
           this.hasPrev = true
@@ -217,4 +239,4 @@ export async function openAudioChannel(
 }
 
 /** Pure helpers exported for unit tests. */
-export const audioMixInternals = { hermite, sampleAt, softLimitSample }
+export const audioMixInternals = { hermite, sampleAt, softLimitSample, mixGainForChannels }

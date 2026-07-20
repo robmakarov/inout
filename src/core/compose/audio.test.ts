@@ -2,7 +2,56 @@ import { describe, expect, it } from 'vitest'
 import { audioMixInternals } from './audio'
 import { AUDIO_SAMPLE_RATE } from './codecs'
 
-const { hermite, sampleAt, softLimitSample } = audioMixInternals
+const { hermite, sampleAt, softLimitSample, mixGainForChannels } = audioMixInternals
+
+describe('render mix-bus headroom (pervasive-noise fix 2026-07-16)', () => {
+  // Reproduces the exact export sum: N sources summed with the bus gain, then
+  // softLimitSample. Two loud sources (mic + system audio) at unity clip into
+  // the limiter across the whole signal — that was the "noise in all sound".
+  function summedPeakAndLimiterHits(sources: Float32Array[], gain: number) {
+    const n = sources[0]!.length
+    let peak = 0
+    let limiterHits = 0
+    for (let k = 0; k < n; k++) {
+      let s = 0
+      for (const src of sources) s += src[k]! * gain
+      if (Math.abs(s) > 0.95) limiterHits++
+      const out = softLimitSample(s)
+      peak = Math.max(peak, Math.abs(out))
+    }
+    return { peak, limiterHits }
+  }
+
+  // Two decorrelated full-scale tones = worst realistic mic+music overlap.
+  const N = 48_000
+  const a = new Float32Array(N)
+  const b = new Float32Array(N)
+  for (let i = 0; i < N; i++) {
+    a[i] = 0.9 * Math.sin((2 * Math.PI * 440 * i) / 48_000)
+    b[i] = 0.9 * Math.sin((2 * Math.PI * 587 * i) / 48_000)
+  }
+
+  it('single source is untouched — unity gain, never limited', () => {
+    expect(mixGainForChannels(1)).toBe(1)
+    const { limiterHits } = summedPeakAndLimiterHits([a], mixGainForChannels(1))
+    expect(limiterHits).toBe(0)
+  })
+
+  it('unity-summing two loud sources hammers the limiter (the bug)', () => {
+    const { limiterHits } = summedPeakAndLimiterHits([a, b], 1)
+    expect(limiterHits).toBeGreaterThan(N / 10) // pervasive, not occasional
+  })
+
+  it('1/N headroom eliminates limiting entirely for two full-scale sources', () => {
+    const g = mixGainForChannels(2)
+    expect(g).toBe(0.5)
+    const { peak, limiterHits } = summedPeakAndLimiterHits([a, b], g)
+    // Hard guarantee: worst-case in-phase sum stays under the knee. Zero
+    // limiter engagement = zero pervasive distortion.
+    expect(limiterHits).toBe(0)
+    expect(peak).toBeLessThan(0.95)
+  })
+})
 
 describe('compose audio resampling', () => {
   it('hermite is exact at endpoints and continuous mid-point', () => {

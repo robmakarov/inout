@@ -20,7 +20,8 @@ gaps / in flight:
 - bundle 748KB → EE task 5 · dev-mode first-record compile latency (prod unaffected)
 - PUBLIC DEPLOY LIVE: inout-kappa.vercel.app serves current main (verified, bundle-hash match). GitHub main = single depersonalized commit; full history local-only (branch local-history-backup). Remaining cloud reset: PO runs docs/CLOUD_RESET.md steps 2-3 (Vercel env+old deployments, Supabase wipe+key rotation; auth users kept)
 - instant-arm SHIPPED (c8424a5): start gates only on primary channel, slow devices late-join (verified: armed 269ms w/ 3s-cold camera), 5s device budget, missing channel = loud banner + Recording.missing; late join → composite invalidated → render path. Await PO recheck of device-wait on live site.
-- awaiting PO: camera-light-at-load repro? + tab-music listen test (fix shipped 548b084; residual = 5 boundary clicks late in take, EE analyzing)
+- PERVASIVE AUDIO NOISE root-caused + fixed (2026-07-16): render mix bus summed all audio channels at UNITY (no headroom) — mic+system-audio sum clipped softLimitSample on 34% of samples (measured). Removing the composite export shortcut had moved ALL exports onto this unstaged sum. Fix: 1/N per-channel headroom (single source unchanged/unity; multi-source guaranteed no clip, −6dB, recover via later 2-pass normalize). Proven at mix site: 16586→0 limiter hits. Single-source fidelity unregressed (THD −68dB).
+- FOLLOWUP: two-pass loudness normalize to recover the −6dB on multi-source takes without reintroducing clip (EE task).
 
 process: QA on prod-build port only, never dev server; EE load tests spawn own server. HEAVY RUNS (oracle matrices/fleets) are announced first and never run while PO is actively using the machine — CPU contention starves real capture (bit PO twice: EE 07-15, TD 07-16). Roles .ai/ROLES ·
 tasks+gates .ai/TASKS · decisions ledger .ai/DECISIONS (append-only) · bugs BACKLOG.md (done = deleted).

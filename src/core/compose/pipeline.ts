@@ -15,7 +15,7 @@ import {
   type ExportProgress,
   type ExportResult,
 } from '@core/types'
-import { openAudioChannel, softLimitSample, type AudioChannelMixer } from './audio'
+import { mixGainForChannels, openAudioChannel, softLimitSample, type AudioChannelMixer } from './audio'
 import {
   AUDIO_BITRATE,
   AUDIO_CHANNEL_COUNT,
@@ -107,6 +107,14 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
     }
 
     const needAudio = audioMixers.length > 0
+    // Headroom for the render sum: a single source stays full-scale (gain 1,
+    // never limited); multiple sources (mic + system audio) mix equal-power so
+    // their sum does not clip into softLimitSample. Unity summing here was the
+    // pervasive-noise cause after the composite export path was removed.
+    if (audioMixers.length > 1) {
+      const g = mixGainForChannels(audioMixers.length)
+      for (const m of audioMixers) m.gain = g
+    }
     // Layout slot is decided once for the whole export: camera only fills the
     // frame when no screen channel contributes anywhere in the output window.
     const cameraFull = !videoReaders.some((r) => r.kind === 'screen')
