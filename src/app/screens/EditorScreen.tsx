@@ -10,8 +10,6 @@ import { usePlayback } from '@app/hooks/usePlayback'
 import { Player } from '@app/components/Player'
 import { Timeline } from '@app/components/Timeline'
 import { ConfirmDialog } from '@app/components/ConfirmDialog'
-import { Icon } from '@app/components/Icon'
-import { formatClock } from '@app/lib/format'
 
 export function EditorScreen() {
   const recording = useAppStore((s) => s.recording)
@@ -116,20 +114,6 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
 
   return (
     <div className="editor">
-      <header className="editor__header">
-        <button
-          className="editor__back"
-          onClick={() => setConfirmOpen(true)}
-          aria-label="Back to capture"
-        >
-          <Icon name="chevron-left" size={20} />
-        </button>
-        <div className="editor__duration">{formatClock(pb.durationMs)}</div>
-        <button className="btn btn--primary" onClick={() => void onExport()}>
-          Export
-        </button>
-      </header>
-
       {recording.missing?.length ? (
         <div className="editor__missing" role="alert">
           {recording.missing.includes('system-audio')
@@ -143,7 +127,13 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
       ) : null}
 
       <div className="editor__player">
-        <Player recording={recording} edit={edit} pb={pb} />
+        <Player
+          recording={recording}
+          edit={edit}
+          pb={pb}
+          onBack={() => setConfirmOpen(true)}
+          onExport={() => void onExport()}
+        />
       </div>
 
       <Timeline

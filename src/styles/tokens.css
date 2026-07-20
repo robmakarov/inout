@@ -25,6 +25,9 @@
   --ch-mic: #30d158;
   --ch-sysaudio: #ff9f0a;
 
+  /* timeline playhead */
+  --playhead: #6969cb;
+
   /* geometry */
   --r-sm: 8px;
   --r-md: 12px;

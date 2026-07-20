@@ -119,22 +119,6 @@ export function Timeline({
 
   return (
     <div className="tl">
-      <div className="tl__row tl__row--ruler">
-        <div className="tl__gutter" />
-        <div
-          ref={trackRef}
-          className="tl__ruler"
-          onPointerDown={(e) => startDrag(e, seekAtClient)}
-        >
-          {width > 0 &&
-            ticks.map((t) => (
-              <div key={t} className="tl__tick" style={{ left: x(t) }}>
-                <span className="tl__tick-label">{formatClock(t)}</span>
-              </div>
-            ))}
-        </div>
-      </div>
-
       <div className="tl__lanes">
         {recording.channels.map((ch) => {
           const meta = CHANNEL_META[ch.kind]
@@ -199,6 +183,22 @@ export function Timeline({
         })}
       </div>
 
+      <div className="tl__row tl__row--ruler">
+        <div className="tl__gutter" />
+        <div
+          ref={trackRef}
+          className="tl__ruler"
+          onPointerDown={(e) => startDrag(e, seekAtClient)}
+        >
+          {width > 0 &&
+            ticks.map((t) => (
+              <div key={t} className="tl__tick" style={{ left: x(t) }}>
+                <span className="tl__tick-label">{formatClock(t)}</span>
+              </div>
+            ))}
+        </div>
+      </div>
+
       {width > 0 && (
         <div className="tl__overlay">
           <div className="tl__dim" style={{ left: 0, width: x(gStart) }} />
@@ -221,9 +221,7 @@ export function Timeline({
             className="tl__playhead"
             style={{ left: x(playheadRecMs) }}
             onPointerDown={(e) => startDrag(e, seekAtClient)}
-          >
-            <span className="tl__playhead-cap" />
-          </div>
+          />
         </div>
       )}
     </div>

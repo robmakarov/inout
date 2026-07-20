@@ -69,10 +69,14 @@ export function Player({
   recording,
   edit,
   pb,
+  onBack,
+  onExport,
 }: {
   recording: Recording
   edit: EditState
   pb: Playback
+  onBack: () => void
+  onExport: () => void
 }) {
   const active = activeChannelsAt(recording, edit, pb.timeMs)
   // Slot is decided per composition, not per instant, so the camera never
@@ -119,18 +123,28 @@ export function Player({
       </div>
       <div className="transport">
         <button
+          className="transport__back"
+          onClick={onBack}
+          aria-label="Back to capture"
+        >
+          <Icon name="chevron-left" size={20} />
+        </button>
+        <button
           className="transport__play"
           onClick={pb.toggle}
           disabled={!pb.ready}
           aria-label={pb.playing ? 'Pause' : 'Play'}
         >
-          <Icon name={pb.playing ? 'pause' : 'play'} size={20} />
+          <Icon name={pb.playing ? 'pause' : 'play'} size={18} />
         </button>
         <span className="transport__time">
           {formatClock(pb.timeMs)} <span className="transport__time-sep">/</span>{' '}
           {formatClock(pb.durationMs)}
         </span>
         <Scrubber value={pb.timeMs} max={pb.durationMs} onSeek={pb.seek} />
+        <button className="btn btn--primary transport__export" onClick={onExport}>
+          Export
+        </button>
       </div>
     </div>
   )
