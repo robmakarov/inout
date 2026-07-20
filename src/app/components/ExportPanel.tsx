@@ -7,50 +7,73 @@ import { analytics } from '@core/analytics'
 import { useAppStore } from '@app/state/store'
 import { formatClock, humanBytes } from '@app/lib/format'
 import { Icon } from '@app/components/Icon'
+import { ProgressRing } from '@app/components/ProgressRing'
 
-export function ShareScreen() {
-  const result = useAppStore((s) => s.exportResult)
-  if (!result) return null
-  return <Share result={result} />
+const PHASE_LABEL = {
+  preparing: 'Preparing…',
+  rendering: 'Rendering…',
+  finalizing: 'Finalizing…',
+} as const
+
+/**
+ * The export flow lives in the editor's bottom slot, replacing the timeline —
+ * the player above stays put so the frame never moves. Progress while the MP4
+ * renders, then the result actions; Back returns to the timeline.
+ */
+export function ExportPanel({ onBack }: { onBack: () => void }) {
+  const mode = useAppStore((s) => s.mode)
+  if (mode === 'exporting') return <Progress />
+  return <Result onBack={onBack} />
 }
 
-function Share({ result }: { result: ExportResult }) {
-  // Created and revoked in the same effect: StrictMode's mount/cleanup/remount
-  // cycle would permanently revoke a useMemo-created URL.
-  const [url, setUrl] = useState<string>()
-  useEffect(() => {
-    const u = URL.createObjectURL(result.blob)
-    setUrl(u)
-    return () => URL.revokeObjectURL(u)
-  }, [result])
-
+function Progress() {
+  const progress = useAppStore((s) => s.exportProgress)
+  const abort = useAppStore((s) => s.exportAbort)
+  const ratio = progress?.ratio ?? 0
   return (
-    <div className="share">
-      <div className="share__col">
-        <h1 className="share__title">Ready</h1>
-        <video className="share__video" src={url} controls playsInline />
-        <div className="share__meta">
+    <div className="xp xp--progress">
+      <ProgressRing ratio={ratio} />
+      <div className="xp__pct">{Math.round(ratio * 100)}%</div>
+      <div className="xp__phase">{PHASE_LABEL[progress?.phase ?? 'preparing']}</div>
+      <button className="btn btn--ghost" onClick={() => abort?.abort()}>
+        Cancel
+      </button>
+    </div>
+  )
+}
+
+function Result({ onBack }: { onBack: () => void }) {
+  const result = useAppStore((s) => s.exportResult)
+  if (!result) return null
+  return (
+    <div className="xp">
+      <div className="xp__head">
+        <button className="xp__back" onClick={onBack} aria-label="Back to editing">
+          <Icon name="chevron-left" size={18} />
+          <span>Editing</span>
+        </button>
+        <span className="xp__meta">
           {formatClock(result.durationMs)} · {humanBytes(result.blob.size)} · {result.width}×
           {result.height}
-        </div>
-        <div className="share__actions">
-          <button className="btn btn--primary btn--wide" onClick={() => saveToFile(result)}>
-            <Icon name="download" size={16} />
-            <span>Save file</span>
-          </button>
-        </div>
-        <CloudCard result={result} />
-        <button
-          className="btn btn--ghost share__new"
-          onClick={() => {
-            const rec = useAppStore.getState().recording
-            if (rec) markRecordingDismissed(rec.id)
-            useAppStore.getState().resetToCapture()
-          }}
-        >
-          New recording
+        </span>
+      </div>
+      <div className="xp__actions">
+        <button className="btn btn--primary btn--wide" onClick={() => saveToFile(result)}>
+          <Icon name="download" size={16} />
+          <span>Save file</span>
         </button>
       </div>
+      <CloudCard result={result} />
+      <button
+        className="btn btn--ghost xp__new"
+        onClick={() => {
+          const rec = useAppStore.getState().recording
+          if (rec) markRecordingDismissed(rec.id)
+          useAppStore.getState().resetToCapture()
+        }}
+      >
+        New recording
+      </button>
     </div>
   )
 }

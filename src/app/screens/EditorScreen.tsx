@@ -9,6 +9,7 @@ import { CHANNEL_META } from '@app/lib/channels'
 import { usePlayback } from '@app/hooks/usePlayback'
 import { Player } from '@app/components/Player'
 import { Timeline } from '@app/components/Timeline'
+import { ExportPanel } from '@app/components/ExportPanel'
 import { ConfirmDialog } from '@app/components/ConfirmDialog'
 
 export function EditorScreen() {
@@ -20,8 +21,10 @@ export function EditorScreen() {
 
 function Editor({ recording, edit }: { recording: Recording; edit: EditState }) {
   const setEditState = useAppStore((s) => s.setEditState)
+  const mode = useAppStore((s) => s.mode)
   const pb = usePlayback(recording, edit)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const exporting = mode === 'exporting' || mode === 'share'
 
   const { toggle, seekBy } = pb
   useEffect(() => {
@@ -59,29 +62,37 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
     if (store.mode === 'exporting') return
     pb.pause()
 
-    // PO 2026-07-16: sound must be perfect > instant. The live-composite
-    // shortcut shipped MediaRecorder-mixed audio that our fidelity instrument
-    // does NOT certify — every PO noise report traced to it. Exports now ALWAYS
-    // go through the measured render mixer (instrument-certified: THD −71dB).
-    // The composite stays for crash salvage; instant unedited export returns
-    // with WebCodecs v2 once its audio is certified too.
+    // Instant + certified: an unedited take with a live composite copies that
+    // composite's H.264 straight into MP4 (no re-encode) and muxes it with audio
+    // mixed through the SAME certified mixer the render uses — instant again,
+    // without the MediaRecorder audio that 4637bca removed as the noise cause.
+    // Any edit, or any failure of the fast path, falls back to the full render.
 
     const ac = new AbortController()
     store.setExportAbort(ac)
     store.setExportProgress({ phase: 'preparing', ratio: 0 })
     store.setMode('exporting')
+    const effectiveEdit = useAppStore.getState().editState ?? edit
+    const onProgress = (p: Parameters<typeof store.setExportProgress>[0]) =>
+      useAppStore.getState().setExportProgress(p)
     analytics.track('export_start')
     const t0 = performance.now()
     try {
+      // Every export renders through the certified mixer (PO: sound > instant).
+      // The instant composite shortcut serves live-mixed audio that skips both
+      // the fidelity mixer AND the loudness rescue — without which a faint
+      // capture (e.g. a Safari mic) exports almost inaudible. It returns only
+      // once its audio path is certified too.
       const result = await exportRecording({
         recording,
-        edit: useAppStore.getState().editState ?? edit,
-        onProgress: (p) => useAppStore.getState().setExportProgress(p),
+        edit: effectiveEdit,
+        onProgress,
         signal: ac.signal,
       })
       analytics.track('export_complete', {
         durationMs: Math.round(performance.now() - t0),
         sizeBytes: result.blob.size,
+        instant: false,
       })
       if (import.meta.env.DEV) {
         ;(window as unknown as Record<string, unknown>).__lastExport = result
@@ -133,17 +144,22 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
           pb={pb}
           onBack={() => setConfirmOpen(true)}
           onExport={() => void onExport()}
+          showExport={!exporting}
         />
       </div>
 
-      <Timeline
-        recording={recording}
-        edit={edit}
-        timeMs={pb.timeMs}
-        durationMs={pb.durationMs}
-        onSeek={pb.seek}
-        onEdit={(next) => setEditState(clampEditState(recording, next))}
-      />
+      {exporting ? (
+        <ExportPanel onBack={() => useAppStore.getState().setMode('editor')} />
+      ) : (
+        <Timeline
+          recording={recording}
+          edit={edit}
+          timeMs={pb.timeMs}
+          durationMs={pb.durationMs}
+          onSeek={pb.seek}
+          onEdit={(next) => setEditState(clampEditState(recording, next))}
+        />
+      )}
 
       <ConfirmDialog
         open={confirmOpen}

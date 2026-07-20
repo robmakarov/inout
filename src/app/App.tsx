@@ -6,8 +6,6 @@ import { ErrorBoundary } from '@app/components/ErrorBoundary'
 import { Toasts } from '@app/components/Toasts'
 import { CaptureScreen } from '@app/screens/CaptureScreen'
 import { EditorScreen } from '@app/screens/EditorScreen'
-import { ExportingOverlay } from '@app/screens/ExportingOverlay'
-import { ShareScreen } from '@app/screens/ShareScreen'
 import './app.css'
 
 function Main() {
@@ -29,9 +27,7 @@ function Main() {
   return (
     <div className="app">
       {mode === 'capture' && <CaptureScreen />}
-      {(mode === 'editor' || mode === 'exporting') && <EditorScreen />}
-      {mode === 'exporting' && <ExportingOverlay />}
-      {mode === 'share' && <ShareScreen />}
+      {(mode === 'editor' || mode === 'exporting' || mode === 'share') && <EditorScreen />}
       <Toasts />
     </div>
   )

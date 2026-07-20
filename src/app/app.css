@@ -704,71 +704,65 @@
   background: var(--playhead);
 }
 
-/* ---------- exporting overlay ---------- */
+/* ---------- export panel (in the editor's timeline slot) ---------- */
 
-.exporting {
-  position: fixed;
-  inset: 0;
-  background: var(--overlay);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  display: grid;
-  place-items: center;
-  z-index: 50;
-}
-.exporting__card {
+.xp {
+  flex: none;
+  width: 100%;
+  max-width: min(100%, calc((100dvh - 300px) * 16 / 9));
+  align-self: center;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 10px;
+  gap: 12px;
+  overflow-y: auto;
+  max-height: 48vh;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
 }
-.exporting__pct {
+.xp--progress {
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 160px;
+}
+.xp__pct {
   font-family: var(--font-mono);
   font-size: 15px;
   font-variant-numeric: tabular-nums;
 }
-.exporting__phase {
+.xp__phase {
   font-size: 13px;
   color: var(--text-dim);
 }
-
-/* ---------- share ---------- */
-
-.share {
-  height: 100%;
-  overflow-y: auto;
+.xp__head {
   display: flex;
-  justify-content: center;
-  padding: 32px 20px calc(24px + env(safe-area-inset-bottom));
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
-.share__col {
-  width: 100%;
-  max-width: 560px;
-  margin: auto 0;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+.xp__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 10px 6px 4px;
+  border-radius: var(--r-sm);
+  color: var(--text-dim);
+  font-size: 13px;
+  transition:
+    background var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease);
 }
-.share__title {
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+.xp__back:hover {
+  background: var(--surface-2);
+  color: var(--text);
 }
-.share__video {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  border-radius: var(--r-lg);
-  background: var(--bg);
-  object-fit: contain;
-}
-.share__meta {
+.xp__meta {
   font-size: 13px;
   color: var(--text-dim);
 }
-.share__actions {
+.xp__actions {
   display: flex;
 }
-.share__new {
+.xp__new {
   align-self: center;
   margin-top: 2px;
 }

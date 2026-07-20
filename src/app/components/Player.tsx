@@ -71,12 +71,15 @@ export function Player({
   pb,
   onBack,
   onExport,
+  showExport,
 }: {
   recording: Recording
   edit: EditState
   pb: Playback
   onBack: () => void
   onExport: () => void
+  /** Hidden while the export panel owns the bottom slot. */
+  showExport: boolean
 }) {
   const active = activeChannelsAt(recording, edit, pb.timeMs)
   // Slot is decided per composition, not per instant, so the camera never
@@ -142,9 +145,11 @@ export function Player({
           {formatClock(pb.durationMs)}
         </span>
         <Scrubber value={pb.timeMs} max={pb.durationMs} onSeek={pb.seek} />
-        <button className="btn btn--primary transport__export" onClick={onExport}>
-          Export
-        </button>
+        {showExport && (
+          <button className="btn btn--primary transport__export" onClick={onExport}>
+            Export
+          </button>
+        )}
       </div>
     </div>
   )
