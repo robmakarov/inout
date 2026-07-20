@@ -223,7 +223,13 @@ export async function startMeasuredAudioCapture(opts: {
   const sourceNode = audioCtx.createMediaStreamSource(opts.stream)
   const worklet = new AudioWorkletNode(audioCtx, WORKLET_NAME, {
     numberOfInputs: 1,
-    numberOfOutputs: 0,
+    // Safari stops rendering any capture subgraph that never reaches the
+    // destination: with numberOfOutputs:0 the worklet ran ~1s then went idle,
+    // truncating audio to a second while MediaRecorder video stayed full
+    // length. Give it a (silent) output so it can be routed to the destination
+    // through a zero-gain node below — keeps every browser pulling the graph.
+    numberOfOutputs: 1,
+    outputChannelCount: [numberOfChannels],
     channelCount: numberOfChannels,
   })
 
@@ -308,6 +314,13 @@ export async function startMeasuredAudioCapture(opts: {
   }
 
   sourceNode.connect(worklet)
+  // Silent keep-alive: routes the (empty) worklet output to the destination at
+  // zero gain. Nothing is audible, but the graph now reaches destination, so
+  // Safari keeps pulling the worklet for the whole take (see note above).
+  const keepAlive = audioCtx.createGain()
+  keepAlive.gain.value = 0
+  worklet.connect(keepAlive)
+  keepAlive.connect(audioCtx.destination)
   await audioCtx.resume()
 
   const teardownGraph = async (): Promise<void> => {
@@ -327,6 +340,7 @@ export async function startMeasuredAudioCapture(opts: {
     try {
       sourceNode.disconnect()
       worklet.disconnect()
+      keepAlive.disconnect()
     } catch {
       /* already disconnected */
     }
