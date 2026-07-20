@@ -36,11 +36,13 @@ describe('instant-arm harness knobs', () => {
 })
 
 describe('acquire budgets', () => {
-  it('granted-device budget is short; human (prompt/picker) budget is not', () => {
-    expect(ACQUIRE_TIMEOUT_MS).toBe(5000)
-    // Never time a person: prompts and pickers took >5s and produced takes
-    // without screen (PO-hit 2026-07-16).
-    expect(PROMPT_TIMEOUT_MS).toBeGreaterThanOrEqual(60_000)
+  it('device budget is generous enough for real hardware; humans get even longer', () => {
+    // 5s falsely killed slow-but-alive granted inputs (loaded Mac mic, mobile
+    // Safari getUserMedia) as "timeout connecting input" — the budget is only a
+    // dead-device backstop, not a speed lever (primaryReady gates start).
+    expect(ACQUIRE_TIMEOUT_MS).toBeGreaterThanOrEqual(20_000)
+    // Never time a person: prompts and pickers get longer still.
+    expect(PROMPT_TIMEOUT_MS).toBeGreaterThan(ACQUIRE_TIMEOUT_MS)
   })
 
   it('a stream resolving AFTER timeout is released, never leaked', async () => {

@@ -34,8 +34,12 @@ export interface ArmingTimelineEntry {
 }
 
 /** Budget for a GRANTED device (no prompt can appear) — hardware spin-up only.
- * A hung device must not hold a take hostage. */
-export const ACQUIRE_TIMEOUT_MS = 5_000
+ * NOT a speed lever: instant start is gated by the PRIMARY channel delivering
+ * (a fast device delivers fast whatever this ceiling is), so this only bounds a
+ * genuinely dead device. 5s falsely killed slow-but-alive inputs — a granted
+ * mic on a loaded Mac, any getUserMedia on mobile Safari — as "timeout
+ * connecting input", and when that input was primary the take never started. */
+export const ACQUIRE_TIMEOUT_MS = 30_000
 /** Budget when a HUMAN is in the loop (permission prompt, screen picker).
  * Never time a person: 5s here recorded takes without screen while the PO was
  * still reading Chrome's picker (2026-07-16), and the post-timeout stream
@@ -76,7 +80,7 @@ function toFailure(kind: ChannelKind, err: unknown, timedOut = false): AcquireFa
     err instanceof DOMException &&
     (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')
   const message = timedOut
-    ? `Timed out after ${ACQUIRE_TIMEOUT_MS}ms`
+    ? 'Device did not respond in time'
     : err instanceof Error
       ? err.message || err.name
       : String(err)
