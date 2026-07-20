@@ -2,7 +2,30 @@ import { describe, expect, it } from 'vitest'
 import { audioMixInternals } from './audio'
 import { AUDIO_SAMPLE_RATE } from './codecs'
 
-const { hermite, sampleAt, softLimitSample, mixGainForChannels } = audioMixInternals
+const { hermite, sampleAt, softLimitSample, mixGainForChannels, makeupGainForPeak } =
+  audioMixInternals
+
+describe('loudness rescue (quiet Safari-mic / -6dB multi-source fix)', () => {
+  it('boosts a faint capture toward the target, without clipping', () => {
+    const peak = 0.05 // near-silent Safari mic
+    const g = makeupGainForPeak(peak)
+    expect(g).toBeGreaterThan(1)
+    expect(peak * g).toBeLessThanOrEqual(0.45 + 1e-9) // lands at/below target
+    expect(peak * g).toBeLessThan(0.95) // never into the limiter knee
+  })
+
+  it('leaves a healthy mix at unity — the fidelity oracle must not move', () => {
+    // Fidelity rig tones sum to ~0.6 peak; that must pass through untouched.
+    expect(makeupGainForPeak(0.6)).toBe(1)
+    expect(makeupGainForPeak(0.45)).toBe(1)
+    expect(makeupGainForPeak(0.9)).toBe(1)
+  })
+
+  it('caps makeup so near-silence (and its noise) is not blown up unbounded', () => {
+    expect(makeupGainForPeak(1e-6)).toBe(1) // treated as silence → no gain
+    expect(makeupGainForPeak(0.0001)).toBeLessThanOrEqual(12)
+  })
+})
 
 describe('render mix-bus headroom (pervasive-noise fix 2026-07-16)', () => {
   // Reproduces the exact export sum: N sources summed with the bus gain, then

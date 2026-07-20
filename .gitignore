@@ -6,3 +6,5 @@ dist/
 *.local
 .DS_Store
 preview.log
+.claude/settings.local.json
+inout-*.mp4

@@ -60,6 +60,25 @@ export function mixGainForChannels(count: number): number {
   return count > 1 ? 1 / count : 1
 }
 
+/** Target peak for loudness rescue. Below the fidelity rig's summed tone peak
+ * (~0.6) so a healthy mix is never touched — the oracle stays green — while a
+ * faint capture is lifted to a clearly audible level. */
+export const NORMALIZE_TARGET_PEAK = 0.45
+/** Cap so near-silence (and its noise floor) is not amplified without bound. */
+export const NORMALIZE_MAX_MAKEUP = 12
+
+/**
+ * Makeup gain that rescues a quiet mix. Faint captures — a Safari mic recorded
+ * via MediaRecorder, or the −6 dB left on multi-source takes by 1/N headroom —
+ * come out "almost non-hearable"; this lifts the measured peak toward
+ * NORMALIZE_TARGET_PEAK. ONLY ever boosts (never ducks a healthy take) and is
+ * capped, so a mix already at/above target passes through at unity (1.0).
+ */
+export function makeupGainForPeak(peak: number): number {
+  if (!(peak > 1e-4)) return 1
+  return Math.max(1, Math.min(NORMALIZE_MAX_MAKEUP, NORMALIZE_TARGET_PEAK / peak))
+}
+
 /**
  * Streams one channel's decoded audio strictly forward and mixes it (by
  * summation, Hermite-resampled to 48 kHz) into output chunks.
@@ -238,5 +257,49 @@ export async function openAudioChannel(
   }
 }
 
+/**
+ * Peak |sample| of the full mix at a given per-channel gain — the loudness
+ * analysis pre-pass. Streams forward exactly like the render (O(one decoded
+ * buffer) memory) so the measured peak matches what will be encoded. Shared by
+ * the full render AND the instant path, so a faint capture is rescued whichever
+ * export runs. Pass a THROWAWAY mixer set: mixing consumes it.
+ */
+export async function measureMixPeak(
+  mixers: AudioChannelMixer[],
+  gain: number,
+  totalAudioFrames: number,
+  throwIfAborted: () => void,
+  onProgress?: (ratio: number) => void,
+): Promise<number> {
+  for (const m of mixers) m.gain = gain
+  let peak = 0
+  const chunks = Math.max(1, Math.ceil(totalAudioFrames / AUDIO_SAMPLE_RATE))
+  for (let c = 0; c < chunks; c++) {
+    throwIfAborted()
+    const startFrame = c * AUDIO_SAMPLE_RATE
+    const frames = Math.min(AUDIO_SAMPLE_RATE, totalAudioFrames - startFrame)
+    if (frames <= 0) break
+    const left = new Float32Array(frames)
+    const right = new Float32Array(frames)
+    const chunkOutStartSec = startFrame / AUDIO_SAMPLE_RATE
+    for (const m of mixers) await m.mixInto(left, right, chunkOutStartSec)
+    for (let k = 0; k < frames; k++) {
+      const a = Math.abs(left[k])
+      const b = Math.abs(right[k])
+      const s = a > b ? a : b
+      if (s > peak) peak = s
+    }
+    onProgress?.((c + 1) / chunks)
+    await new Promise((r) => setTimeout(r, 0))
+  }
+  return peak
+}
+
 /** Pure helpers exported for unit tests. */
-export const audioMixInternals = { hermite, sampleAt, softLimitSample, mixGainForChannels }
+export const audioMixInternals = {
+  hermite,
+  sampleAt,
+  softLimitSample,
+  mixGainForChannels,
+  makeupGainForPeak,
+}

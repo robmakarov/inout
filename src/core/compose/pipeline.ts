@@ -15,7 +15,14 @@ import {
   type ExportProgress,
   type ExportResult,
 } from '@core/types'
-import { mixGainForChannels, openAudioChannel, softLimitSample, type AudioChannelMixer } from './audio'
+import {
+  makeupGainForPeak,
+  measureMixPeak,
+  mixGainForChannels,
+  openAudioChannel,
+  softLimitSample,
+  type AudioChannelMixer,
+} from './audio'
 import {
   AUDIO_BITRATE,
   AUDIO_CHANNEL_COUNT,
@@ -52,6 +59,33 @@ function activeOutputWindowMs(edit: EditState, channel: ChannelRecording): Activ
   return outEndMs > outStartMs ? { outStartMs, outEndMs, localEndMs } : null
 }
 
+/** Open a mixer per enabled audio channel (used for both the analysis pre-pass
+ * and the real render — kept identical so the measured peak matches the mix). */
+async function openAudioMixers(
+  recording: ExportOptions['recording'],
+  edit: EditState,
+  throwIfAborted: () => void,
+): Promise<AudioChannelMixer[]> {
+  const mixers: AudioChannelMixer[] = []
+  for (const channel of recording.channels) {
+    if (channel.media !== 'audio') continue
+    throwIfAborted()
+    const window = activeOutputWindowMs(edit, channel)
+    if (!window) continue
+    const blob = await blobStore.read(channel.blobKey)
+    const localOffsetSec = (edit.globalTrimStartMs - channel.startOffsetMs) / 1000
+    const mixer = await openAudioChannel(
+      blob,
+      channel.id,
+      window.outStartMs / 1000,
+      window.outEndMs / 1000,
+      localOffsetSec,
+    )
+    if (mixer) mixers.push(mixer)
+  }
+  return mixers
+}
+
 function exportFileName(createdAt: number, fileExtension: string): string {
   const d = new Date(createdAt)
   const p = (n: number) => String(n).padStart(2, '0')
@@ -85,35 +119,44 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
 
   try {
     for (const channel of recording.channels) {
+      if (channel.media !== 'video' || waveformMode) continue
       throwIfAborted()
       const window = activeOutputWindowMs(edit, channel)
       if (!window) continue
       const blob = await blobStore.read(channel.blobKey)
-      if (channel.media === 'video') {
-        if (waveformMode) continue
-        const reader = await openVideoChannel(blob, channel.id, channel.kind, window.localEndMs / 1000)
-        if (reader) videoReaders.push(reader)
-      } else {
-        const localOffsetSec = (edit.globalTrimStartMs - channel.startOffsetMs) / 1000
-        const mixer = await openAudioChannel(
-          blob,
-          channel.id,
-          window.outStartMs / 1000,
-          window.outEndMs / 1000,
-          localOffsetSec,
-        )
-        if (mixer) audioMixers.push(mixer)
-      }
+      const reader = await openVideoChannel(blob, channel.id, channel.kind, window.localEndMs / 1000)
+      if (reader) videoReaders.push(reader)
     }
 
+    audioMixers.push(...(await openAudioMixers(recording, edit, throwIfAborted)))
     const needAudio = audioMixers.length > 0
+    const totalAudioFrames = Math.round(durationSec * AUDIO_SAMPLE_RATE)
     // Headroom for the render sum: a single source stays full-scale (gain 1,
     // never limited); multiple sources (mic + system audio) mix equal-power so
     // their sum does not clip into softLimitSample. Unity summing here was the
     // pervasive-noise cause after the composite export path was removed.
-    if (audioMixers.length > 1) {
-      const g = mixGainForChannels(audioMixers.length)
-      for (const m of audioMixers) m.gain = g
+    const baseGain = audioMixers.length > 1 ? mixGainForChannels(audioMixers.length) : 1
+    for (const m of audioMixers) m.gain = baseGain
+
+    // Loudness rescue: a faint capture (Safari mic via MediaRecorder, or the
+    // −6 dB left on multi-source takes) exports "almost non-hearable". Measure
+    // the mix peak on a throwaway mixer set — the render streams forward and
+    // can't rewind — then boost the real mixers toward a target. No-op for a
+    // healthy mix (makeup clamps to 1), so the fidelity oracle is untouched.
+    if (needAudio) {
+      const probe = await openAudioMixers(recording, edit, throwIfAborted)
+      try {
+        const peak = await measureMixPeak(probe, baseGain, totalAudioFrames, throwIfAborted, (r) =>
+          report('preparing', 0.04 * r),
+        )
+        const makeup = makeupGainForPeak(peak)
+        if (makeup !== 1) for (const m of audioMixers) m.gain = baseGain * makeup
+        console.info(
+          `compose: audio mix peak ${peak.toFixed(3)} → loudness makeup ${makeup.toFixed(2)}×`,
+        )
+      } finally {
+        for (const m of probe) m.dispose()
+      }
     }
     // Layout slot is decided once for the whole export: camera only fills the
     // frame when no screen channel contributes anywhere in the output window.
@@ -139,7 +182,6 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
     report('preparing', 0.05)
 
     const totalFrames = Math.max(1, Math.ceil(durationSec * fps - 1e-9))
-    const totalAudioFrames = Math.round(durationSec * AUDIO_SAMPLE_RATE)
     const audioChunks = Math.ceil(totalAudioFrames / AUDIO_SAMPLE_RATE)
     const peaks = createPeakBuffer(waveformMode ? durationSec : 0)
 
