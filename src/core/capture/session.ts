@@ -30,24 +30,43 @@ import { createSyntheticChannelsProgressive, isSyntheticMode } from './synthetic
 
 export type { ArmingProgressHandler, ArmingTimelineEntry, ArmingStep } from './acquire'
 
-const VIDEO_MIMES = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
-const AUDIO_MIMES = ['audio/webm;codecs=opus', 'audio/webm']
+// WebM (Chromium/Firefox) first; MP4/H.264/AAC for Apple WebKit, whose
+// MediaRecorder rejects every WebM type — forcing one there threw NotSupported
+// and killed the take (no Safari recording at all). Demux is container-agnostic
+// (compose opens blobs with mediabunny ALL_FORMATS), so a mixed-format take composes fine.
+const VIDEO_MIMES = [
+  'video/webm;codecs=vp9',
+  'video/webm;codecs=vp8',
+  'video/webm',
+  'video/mp4;codecs=avc1.640028',
+  'video/mp4;codecs=avc1',
+  'video/mp4',
+]
+const AUDIO_MIMES = [
+  'audio/webm;codecs=opus',
+  'audio/webm',
+  'audio/mp4;codecs=mp4a.40.2',
+  'audio/mp4',
+]
 const TICK_MS = 250
 const TIMESLICE_MS = 1000
 
+/** First MIME this browser's MediaRecorder accepts, or '' to let it choose its
+ * own default (never force an unsupported type — that throws at construction). */
 function pickMimeType(media: MediaKind): string {
   const candidates = media === 'video' ? VIDEO_MIMES : AUDIO_MIMES
   for (const c of candidates) {
     if (MediaRecorder.isTypeSupported(c)) return c
   }
-  return candidates[candidates.length - 1]
+  return ''
 }
 
 function recorderOptions(kind: ChannelKind, media: MediaKind, mimeType: string): MediaRecorderOptions {
-  if (media === 'video') {
-    return { mimeType, videoBitsPerSecond: kind === 'screen' ? 8_000_000 : 4_000_000 }
-  }
-  return { mimeType, audioBitsPerSecond: 128_000 }
+  const bits =
+    media === 'video'
+      ? { videoBitsPerSecond: kind === 'screen' ? 8_000_000 : 4_000_000 }
+      : { audioBitsPerSecond: 128_000 }
+  return mimeType ? { mimeType, ...bits } : bits
 }
 
 function errMessage(err: unknown): string {

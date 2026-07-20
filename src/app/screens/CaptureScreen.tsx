@@ -124,11 +124,22 @@ export function CaptureScreen() {
     })
   }, [session])
 
+  // Never ask the engine for a channel this browser can't deliver: on iOS that
+  // means screen + tab-audio are dropped (Apple exposes no screen capture to
+  // browsers), on Safari it drops tab audio. Prevents a doomed primary channel.
+  const effectiveConfig = useMemo<CaptureConfig>(() => {
+    const eff = { ...prefs }
+    for (const k of CHANNEL_KINDS) {
+      if (!isKindSupported(k, caps)) eff[CONFIG_KEY[k]] = false
+    }
+    return eff
+  }, [prefs, caps])
+
   const startRecording = async () => {
     setArming(true)
     setArmingLabel('Starting…')
     try {
-      const s = await createCaptureSession(prefs, {
+      const s = await createCaptureSession(effectiveConfig, {
         onArming: (e) => {
           if (e.status === 'start') setArmingLabel(ARMING_LABEL[e.step])
           else if (e.status === 'timeout') {
@@ -172,6 +183,15 @@ export function CaptureScreen() {
 
   const anyOn = CHANNEL_KINDS.some((k) => prefs[CONFIG_KEY[k]] && isKindSupported(k, caps))
   const degraded = !caps.screenCapture || !caps.webCodecs
+  // Platform-honest, actionable copy — no vague "use Chrome" when the real
+  // limit is Apple's (and screen capture on iOS is a native-app-only feature).
+  const platformNotice = caps.ios
+    ? 'On iPhone & iPad, Apple allows screen recording only to native apps — camera, mic and audio-only work here.'
+    : caps.appleWebKit && !caps.systemAudioCapture
+      ? 'Safari can’t capture tab or system audio (Apple limit) — screen, camera and mic work. Use Chrome for tab audio.'
+      : degraded
+        ? 'Best experienced in Chrome'
+        : null
 
   const screenStream = session?.previewStreams.screen
   const cameraStream = session?.previewStreams.camera
@@ -182,8 +202,8 @@ export function CaptureScreen() {
   return (
     <div className={`capture${recording ? ' capture--recording' : ''}`}>
       {!session && <div className="capture__wordmark">INOUT</div>}
-      {!session && degraded && (
-        <div className="capture__notice">Best experienced in Chrome</div>
+      {!session && platformNotice && (
+        <div className="capture__notice">{platformNotice}</div>
       )}
       {arming && armingLabel && <div className="capture__arming">{armingLabel}</div>}
       {session && <TimerPill elapsedMs={elapsedMs} remainingMs={remainingMs} />}

@@ -221,21 +221,25 @@ export function acquireChannelsProgressive(
   // while the user is choosing a surface: instant start without idle access.
   // Without permission they run after the picker so prompts never hide.
   const run = async (): Promise<void> => {
-  const early: Promise<void>[] = []
-  let camEarly = false
-  let micEarly = false
-  if (config.camera && (await isGranted('camera'))) {
-    camEarly = true
-    early.push(startCamera(true))
-  }
-  if (config.mic && (await isGranted('microphone'))) {
-    micEarly = true
-    early.push(startMic(true))
-  }
-
+  // getDisplayMedia MUST be dispatched synchronously inside the user gesture:
+  // WebKit consumes the click's transient activation on the first await, so any
+  // await before this (e.g. probing permissions) made Safari reject the call
+  // with NotAllowedError and show NO picker at all. Fire it first, await later.
+  let displayPromise: Promise<MediaStream> | null = null
+  const canDisplay = typeof navigator.mediaDevices?.getDisplayMedia === 'function'
   if (config.screen) {
     mark('display', 'start')
-    try {
+    if (!canDisplay) {
+      // iOS/iPadOS: Apple exposes no screen capture to any browser (native-only,
+      // via ReplayKit). Fail loud instead of hanging on an undefined call.
+      const msg = 'Screen recording is not available in this browser'
+      fail({ kind: 'screen', message: msg, denied: false })
+      mark('display', 'failed', 'getDisplayMedia unavailable')
+      if (config.systemAudio) {
+        fail({ kind: 'system-audio', message: msg, denied: false })
+        mark('system-audio', 'failed', 'getDisplayMedia unavailable')
+      }
+    } else {
       const opts: DisplayMediaOptions = {
         video: { frameRate: { ideal: 30 } },
         // Chromium defaults AEC/NS/AGC ON for display audio — voice processing
@@ -248,11 +252,38 @@ export function acquireChannelsProgressive(
         systemAudio: config.systemAudio ? 'include' : 'exclude',
       }
       // The picker is a human interaction — human budget, never device budget.
-      const display = await withTimeout(
+      displayPromise = withTimeout(
         navigator.mediaDevices.getDisplayMedia(opts),
         PROMPT_TIMEOUT_MS,
         'getDisplayMedia',
       )
+    }
+  } else if (config.systemAudio) {
+    fail({ kind: 'system-audio', message: 'System audio requires screen sharing', denied: false })
+    mark('system-audio', 'skipped', 'requires screen sharing')
+  }
+
+  // The granted-concurrent-with-picker optimization only helps while a picker
+  // is open. With no screen there's nothing to overlap, and probing
+  // permissions.query adds await hops that are unreliable on Safari — so skip
+  // straight to acquisition below.
+  const early: Promise<void>[] = []
+  let camEarly = false
+  let micEarly = false
+  if (displayPromise) {
+    if (config.camera && (await isGranted('camera'))) {
+      camEarly = true
+      early.push(startCamera(true))
+    }
+    if (config.mic && (await isGranted('microphone'))) {
+      micEarly = true
+      early.push(startMic(true))
+    }
+  }
+
+  if (displayPromise) {
+    try {
+      const display = await displayPromise
       const video = display.getVideoTracks()[0]
       if (config.systemAudio) {
         const audio = display.getAudioTracks()[0]
@@ -289,9 +320,6 @@ export function acquireChannelsProgressive(
         mark('system-audio', timedOut ? 'timeout' : 'failed')
       }
     }
-  } else if (config.systemAudio) {
-    fail({ kind: 'system-audio', message: 'System audio requires screen sharing', denied: false })
-    mark('system-audio', 'skipped', 'requires screen sharing')
   }
 
   // Not pre-granted → a permission prompt will appear → human budget.

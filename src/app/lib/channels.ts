@@ -25,6 +25,8 @@ export const CONFIG_KEY: Record<
 }
 
 export function isKindSupported(kind: ChannelKind, caps: Capabilities): boolean {
-  if (kind === 'screen' || kind === 'system-audio') return caps.screenCapture
+  if (kind === 'screen') return caps.screenCapture
+  // Tab/system audio rides on display capture — unavailable on Apple WebKit.
+  if (kind === 'system-audio') return caps.systemAudioCapture
   return caps.camera
 }
