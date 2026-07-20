@@ -1,4 +1,5 @@
 import { newId } from '@core/id'
+import { isAppleWebKit } from '@core/capabilities'
 import { blobStore, createDurablePositionedWriter, recordingsRepo } from '@core/store'
 import type {
   CaptureConfig,
@@ -195,19 +196,16 @@ class Session implements CaptureSession {
       })
     }
 
-    await src.primaryReady
-    // Arm everything already delivered; later arrivals late-join on their own.
+    // PO 2026-07-20: every input starts together. Wait for ALL devices — every
+    // permission prompt answered, every stream delivered — before arming, so
+    // start() activates them at a single epoch. No primary-gated early start,
+    // no late-join: all channels share one start and one length.
+    await src.settled
     await Promise.all([...armPromises])
-
-    if (this.channels.length === 0) {
-      // Primary failed → degraded path: wait for everything (old behavior).
-      await src.settled
-      await Promise.all([...armPromises])
-    }
 
     console.info(
       `[capture:arming] armed +${(performance.now() - armT0).toFixed(0)}ms ` +
-        `(${this.channels.length} channel(s) ready, rest join late)`,
+        `(${this.channels.length} channel(s), all start together)`,
     )
 
     if (this.channels.length === 0) {
@@ -240,7 +238,11 @@ class Session implements CaptureSession {
   private async armChannel(acq: AcquiredChannel): Promise<ChannelRuntime> {
     const id = newId('ch')
     const blobKey = `${this.recordingId}_${id}.webm`
-    const useMeasured = acq.media === 'audio' && canMeasureAudioCapture()
+    // Apple WebKit: the WebCodecs measured-audio path (AudioWorklet→opus)
+    // captures only ~1s on Safari then goes silent, truncating the take. Record
+    // audio with MediaRecorder (mp4/aac) there — the very path that already
+    // captures Safari VIDEO full-length. Chromium keeps the measured path (sync).
+    const useMeasured = acq.media === 'audio' && canMeasureAudioCapture() && !isAppleWebKit()
 
     let resolveStopped!: () => void
     const stopped = new Promise<void>((resolve) => {

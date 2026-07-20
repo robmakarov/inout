@@ -33,6 +33,14 @@ function detectAppleWebKit(nav: Navigator, ios: boolean): boolean {
   return isWebKit && !isChromiumOrGecko
 }
 
+/** Apple WebKit (desktop Safari or any iOS browser) — runtime check for the
+ * capture engine, which has no Capabilities object on hand. */
+export function isAppleWebKit(): boolean {
+  const nav = typeof navigator !== 'undefined' ? navigator : undefined
+  if (!nav) return false
+  return detectAppleWebKit(nav, detectIOS(nav))
+}
+
 export function detectCapabilities(): Capabilities {
   const nav = typeof navigator !== 'undefined' ? navigator : undefined
   const chromium = !!(nav && 'userAgentData' in nav)
