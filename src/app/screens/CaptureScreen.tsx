@@ -12,7 +12,13 @@ import { clampEditState, defaultEditState } from '@core/timeline'
 import { detectCapabilities } from '@core/capabilities'
 import { analytics } from '@core/analytics'
 import { useAppStore } from '@app/state/store'
-import { CHANNEL_KINDS, CHANNEL_META, CONFIG_KEY, isKindSupported } from '@app/lib/channels'
+import {
+  CHANNEL_KINDS,
+  CHANNEL_META,
+  CONFIG_KEY,
+  isKindSupported,
+  unsupportedReason,
+} from '@app/lib/channels'
 import { ChannelChips } from '@app/components/ChannelChips'
 import { RecordButton } from '@app/components/RecordButton'
 import { TimerPill } from '@app/components/TimerPill'
@@ -169,6 +175,12 @@ export function CaptureScreen() {
   }
 
   const toggleChip = (kind: ChannelKind) => {
+    // Unusable input: don't toggle — explain why, only now that it was pressed.
+    const reason = unsupportedReason(kind, caps)
+    if (reason) {
+      toast(reason, 'error')
+      return
+    }
     if (session) {
       const nextMuted = !muted[kind]
       session.setAudioEnabled(kind, !nextMuted)
@@ -182,16 +194,6 @@ export function CaptureScreen() {
   }
 
   const anyOn = CHANNEL_KINDS.some((k) => prefs[CONFIG_KEY[k]] && isKindSupported(k, caps))
-  const degraded = !caps.screenCapture || !caps.webCodecs
-  // Platform-honest, actionable copy — no vague "use Chrome" when the real
-  // limit is Apple's (and screen capture on iOS is a native-app-only feature).
-  const platformNotice = caps.ios
-    ? 'On iPhone & iPad, Apple allows screen recording only to native apps — camera, mic and audio-only work here.'
-    : caps.appleWebKit && !caps.systemAudioCapture
-      ? 'Safari can’t capture tab or system audio (Apple limit) — screen, camera and mic work. Use Chrome for tab audio.'
-      : degraded
-        ? 'Best experienced in Chrome'
-        : null
 
   const screenStream = session?.previewStreams.screen
   const cameraStream = session?.previewStreams.camera
@@ -202,42 +204,41 @@ export function CaptureScreen() {
   return (
     <div className={`capture${recording ? ' capture--recording' : ''}`}>
       {!session && <div className="capture__wordmark">INOUT</div>}
-      {!session && platformNotice && (
-        <div className="capture__notice">{platformNotice}</div>
-      )}
       {arming && armingLabel && <div className="capture__arming">{armingLabel}</div>}
       {session && <TimerPill elapsedMs={elapsedMs} remainingMs={remainingMs} />}
 
-      <div className="capture__stage">
-        {/* PO 2026-07-16: single live preview while recording, ALL surfaces.
-            Full-monitor capture shows a mirror tunnel if this window is on the
-            captured screen — cosmetic, standard (OBS does the same), PO-accepted. */}
-        {screenStream && (
-          <StreamVideo
-            stream={screenStream}
-            className={`capture__screen${recording ? ' capture__screen--live' : ''}`}
-          />
-        )}
-        {recording && screenStream && !cameraStream && audioStream && (
-          <div className="capture__rec-audio capture__rec-audio--overlay">
-            <AudioLevelRing stream={audioStream} />
+      {recording && (
+        <div className="capture__preview">
+          {/* Live WYSIWYG of the final 16:9 composition — the very same stage
+              the editor and export use, so the frame the user sees while
+              recording is exactly where the editable video lands next.
+              Full-monitor capture can show a mirror tunnel if this window is on
+              the captured screen — cosmetic, standard (OBS does the same). */}
+          <div className="stage">
+            {screenStream && <StreamVideo stream={screenStream} className="stage__screen" />}
+            {cameraStream && (
+              <StreamVideo
+                stream={cameraStream}
+                className={screenStream ? 'stage__pip' : 'stage__full'}
+              />
+            )}
+            {screenStream && !cameraStream && audioStream && (
+              <div className="stage__audio-badge">
+                <AudioLevelRing stream={audioStream} />
+              </div>
+            )}
+            {audioOnly && (
+              <div className="stage__audio">
+                {audioStream ? (
+                  <AudioLevelRing stream={audioStream} />
+                ) : (
+                  <div className="audio-pill">Recording audio</div>
+                )}
+              </div>
+            )}
           </div>
-        )}
-        {cameraStream && (
-          <StreamVideo
-            stream={cameraStream}
-            className={
-              recording || screenStream ? 'capture__pip' : 'capture__camera-full'
-            }
-          />
-        )}
-        {audioOnly &&
-          (audioStream ? (
-            <AudioLevelRing stream={audioStream} />
-          ) : (
-            <div className="audio-pill">Recording audio</div>
-          ))}
-      </div>
+        </div>
+      )}
 
       <div className="controlbar">
         <ChannelChips

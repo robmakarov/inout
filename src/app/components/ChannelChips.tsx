@@ -24,15 +24,17 @@ export function ChannelChips({
         const on = prefs[CONFIG_KEY[kind]]
         const isAudio = kind === 'mic' || kind === 'system-audio'
         const unsupported = !isKindSupported(kind, caps)
+        // Unavailable inputs stay clickable so a press can explain WHY (red +
+        // slashed icon signals it up front); never show them as "on".
         // While recording, video chips are locked; audio chips live-mute,
         // but only if that channel was on at arm time (a stream exists).
-        const locked = recording && (!isAudio || !on)
-        const isMuted = recording && isAudio && !!muted[kind]
+        const locked = !unsupported && recording && (!isAudio || !on)
+        const isMuted = !unsupported && recording && isAudio && !!muted[kind]
         const cls = [
           'chip',
-          on && !isMuted ? 'chip--on' : '',
+          unsupported ? 'chip--unavailable' : '',
+          !unsupported && on && !isMuted ? 'chip--on' : '',
           isMuted ? 'chip--muted' : '',
-          unsupported ? 'chip--unsupported' : '',
         ]
           .filter(Boolean)
           .join(' ')
@@ -40,12 +42,12 @@ export function ChannelChips({
           <button
             key={kind}
             className={cls}
-            disabled={unsupported || locked}
-            title={unsupported ? 'Not supported in this browser' : meta.label}
-            aria-pressed={on && !isMuted}
+            disabled={locked}
+            title={meta.label}
+            aria-pressed={!unsupported && on && !isMuted}
             onClick={() => onToggle(kind)}
           >
-            <Icon name={meta.icon} size={16} slash={isMuted} />
+            <Icon name={meta.icon} size={16} slash={isMuted || unsupported} />
             <span>{meta.label}</span>
           </button>
         )
