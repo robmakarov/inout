@@ -78,21 +78,29 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
     analytics.track('export_start')
     const t0 = performance.now()
     try {
-      // Every export renders through the certified mixer (PO: sound > instant).
-      // The instant composite shortcut serves live-mixed audio that skips both
-      // the fidelity mixer AND the loudness rescue — without which a faint
-      // capture (e.g. a Safari mic) exports almost inaudible. It returns only
-      // once its audio path is certified too.
-      const result = await exportRecording({
-        recording,
-        edit: effectiveEdit,
-        onProgress,
-        signal: ac.signal,
-      })
+      // Unedited + composite → instant certified path (copies the composite
+      // H.264, muxes certified-mixer audio). Any edit or fast-path failure falls
+      // back to the full render. BOTH paths now carry the loudness rescue, so a
+      // faint capture (e.g. a Safari mic) exports audible either way.
+      let result: Awaited<ReturnType<typeof exportRecording>> | undefined
+      let instant = false
+      if (recording.composite && isDefaultEdit(recording, effectiveEdit)) {
+        try {
+          result = await exportInstant({ recording, edit: effectiveEdit, onProgress, signal: ac.signal })
+          instant = true
+        } catch (err) {
+          if (err instanceof Error && err.name === 'AbortError') throw err
+          // Fast path unusable (codec/track) — never fail an export over it.
+          console.warn('instant export unavailable, falling back to render', err)
+        }
+      }
+      if (!result) {
+        result = await exportRecording({ recording, edit: effectiveEdit, onProgress, signal: ac.signal })
+      }
       analytics.track('export_complete', {
         durationMs: Math.round(performance.now() - t0),
         sizeBytes: result.blob.size,
-        instant: false,
+        instant,
       })
       if (import.meta.env.DEV) {
         ;(window as unknown as Record<string, unknown>).__lastExport = result
