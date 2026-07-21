@@ -133,56 +133,6 @@ export function isNarrowband(track: MediaStreamTrack | undefined): boolean {
   return typeof rate === 'number' && rate > 0 && rate < 32_000
 }
 
-/** Labels that identify the machine's own microphone across platforms. */
-const BUILT_IN_MIC = /built-?in|internal|macbook|imac|studio display/i
-
-/**
- * If the delivered mic is narrowband (Bluetooth headset in HFP mode), try the
- * machine's built-in mic instead: full-band voice AND the headset's playback
- * comes back to A2DP quality. Returns the replacement (old track stopped) or
- * null to keep the original. Never throws — a failed rescue keeps the take.
- */
-async function rescueNarrowbandMic(
-  stream: MediaStream,
-): Promise<{ stream: MediaStream; label: string } | null> {
-  try {
-    const track = stream.getAudioTracks()[0]
-    if (!track || !isNarrowband(track)) return null
-    const devices = await navigator.mediaDevices.enumerateDevices()
-    const current = track.getSettings().deviceId
-    const builtIn = devices.find(
-      (d) => d.kind === 'audioinput' && d.deviceId !== current && BUILT_IN_MIC.test(d.label),
-    )
-    if (!builtIn) return null
-    const replacement = await withTimeout(
-      navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          sampleRate: { ideal: 48_000 },
-          deviceId: { exact: builtIn.deviceId },
-        },
-      }),
-      ACQUIRE_TIMEOUT_MS,
-      'getUserMedia(built-in mic)',
-    )
-    const newTrack = replacement.getAudioTracks()[0]
-    if (!newTrack || isNarrowband(newTrack)) {
-      for (const t of replacement.getTracks()) t.stop()
-      return null
-    }
-    for (const t of stream.getTracks()) t.stop()
-    console.info(
-      `[capture] narrowband mic rescued: ${track.label || 'headset'} (${track.getSettings().sampleRate} Hz) → ${newTrack.label} (${newTrack.getSettings().sampleRate} Hz)`,
-    )
-    return { stream: replacement, label: newTrack.label }
-  } catch (err) {
-    console.warn('[capture] narrowband mic rescue failed, keeping original', err)
-    return null
-  }
-}
-
 /**
  * Chromium DisplayMedia options that prevent capturing our own tab
  * (hall-of-mirrors) and keep surface-switch UX. Not yet in all TS DOM libs.
@@ -263,31 +213,21 @@ export function acquireChannelsProgressive(
         sampleRate: { ideal: 48000 },
       }
       if (config.micDeviceId) audio.deviceId = config.micDeviceId
-      let stream = await withTimeout(
+      const stream = await withTimeout(
         navigator.mediaDevices.getUserMedia({ audio }),
         granted ? ACQUIRE_TIMEOUT_MS : PROMPT_TIMEOUT_MS,
         'getUserMedia(mic)',
       )
-      // NARROWBAND RESCUE (measured on the PO's real take: 99.7% of energy
-      // below 4 kHz — telephone quality). A Bluetooth headset mic flips macOS
-      // into HFP: the mic captures at 8–16 kHz AND the whole headset's playback
-      // degrades. If the delivered track is narrowband and the user didn't
-      // explicitly pick this device, swap to the machine's built-in mic.
-      if (!config.micDeviceId) {
-        const swapped = await rescueNarrowbandMic(stream)
-        if (swapped) {
-          stream = swapped.stream
-          handlers.onNotice?.(
-            'mic',
-            `Bluetooth headset mic is telephone-quality — switched to ${swapped.label || 'the built-in mic'}`,
-          )
-          mark('mic', 'start', `narrowband rescue → ${swapped.label}`)
-        } else if (isNarrowband(stream.getAudioTracks()[0])) {
-          handlers.onNotice?.(
-            'mic',
-            'This mic is capturing in telephone quality (Bluetooth headset mode) — for clear audio use the built-in mic or a wired one',
-          )
-        }
+      // NARROWBAND WARNING only (PO rule 2026-07-21: never override the user's
+      // device — an earlier auto-swap to the built-in mic broke AirPods takes).
+      // A Bluetooth headset mic in HFP mode captures 8–16 kHz telephone
+      // quality (measured on a real take: 99.7% of energy below 4 kHz).
+      // The take records exactly as the user chose; we just say so.
+      if (isNarrowband(stream.getAudioTracks()[0])) {
+        handlers.onNotice?.(
+          'mic',
+          'Heads-up: this mic is in Bluetooth phone-quality mode. Recording continues — for full quality choose the built-in or a wired mic in system sound settings.',
+        )
       }
       deliver({ kind: 'mic', media: 'audio', stream, track: stream.getAudioTracks()[0] })
       mark('mic', 'done', stream.getAudioTracks()[0]?.label)
