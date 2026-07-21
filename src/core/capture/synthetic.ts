@@ -111,12 +111,24 @@ function syntheticCamera(): Generated {
   return { stream: canvas.captureStream(30), stop: () => cancelAnimationFrame(raf) }
 }
 
+/** Harness knob: `&quiet=0.05` scales synthetic audio down to e2e-test the
+ * loudness normalization (reproduces a faint real-world mic capture). */
+export function parseQuietScale(search: string): number {
+  const raw = Number(new URLSearchParams(search).get('quiet'))
+  return Number.isFinite(raw) && raw > 0 && raw <= 1 ? raw : 1
+}
+
+function quietScale(): number {
+  return typeof location !== 'undefined' ? parseQuietScale(location.search) : 1
+}
+
 function syntheticMic(ctx: AudioContext): Generated {
+  const q = quietScale()
   const osc = new OscillatorNode(ctx, { frequency: 440 })
   // gain pulses 0..0.5 at ~2Hz: base 0.25 + 0.25 LFO
-  const gain = new GainNode(ctx, { gain: 0.25 })
+  const gain = new GainNode(ctx, { gain: 0.25 * q })
   const lfo = new OscillatorNode(ctx, { frequency: 2 })
-  const lfoGain = new GainNode(ctx, { gain: 0.25 })
+  const lfoGain = new GainNode(ctx, { gain: 0.25 * q })
   const dest = ctx.createMediaStreamDestination()
   osc.connect(gain).connect(dest)
   lfo.connect(lfoGain).connect(gain.gain)
@@ -135,7 +147,7 @@ function syntheticMic(ctx: AudioContext): Generated {
 
 function syntheticSystemAudio(ctx: AudioContext): Generated {
   const osc = new OscillatorNode(ctx, { frequency: 220 })
-  const gain = new GainNode(ctx, { gain: 0.2 })
+  const gain = new GainNode(ctx, { gain: 0.2 * quietScale() })
   const dest = ctx.createMediaStreamDestination()
   osc.connect(gain).connect(dest)
   osc.start()

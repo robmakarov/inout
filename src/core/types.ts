@@ -110,6 +110,9 @@ export type CaptureEvent =
   /** A channel died mid-flight (e.g. user hit the browser's "stop sharing"). */
   | { type: 'channel-ended'; kind: ChannelKind }
   | { type: 'channel-error'; kind: ChannelKind; message: string }
+  /** Non-fatal quality warning for a live channel (e.g. Bluetooth headset mic
+   *  captured in telephone-quality HFP mode). Channel still records. */
+  | { type: 'channel-notice'; kind: ChannelKind; message: string }
   /** A slow device delivered media after recording had already begun. */
   | { type: 'channel-late-join'; kind: ChannelKind }
   /** Session hit MAX_RECORDING_MS (or lost its last channel) and began stopping

@@ -34,8 +34,8 @@ import type {
   Recording,
 } from '@core/types'
 import {
-  makeupGainForPeak,
-  measureMixPeak,
+  makeupGainForLoudness,
+  measureMixLoudness,
   mixGainForChannels,
   openAudioChannel,
   softLimitSample,
@@ -146,18 +146,18 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
     const baseGain = audioMixers.length > 1 ? mixGainForChannels(audioMixers.length) : 1
     for (const m of audioMixers) m.gain = baseGain
 
-    // Loudness rescue — identical to the full render: measure the mix peak on a
-    // throwaway set, then boost a faint capture (e.g. a Safari mic) toward
-    // target. No-op for a healthy mix. Without this the instant path would ship
-    // the same "almost non-hearable" audio the render path already fixes.
+    // Loudness normalize — identical to the full render: measure SPEECH
+    // loudness (p90 window RMS, transient-proof) on a throwaway set and drive
+    // it to target. Without this the instant path would ship the same
+    // near-inaudible voice the render path fixes.
     if (needAudio) {
       const probe = await openAudioMixers(recording, edit)
       try {
-        const peak = await measureMixPeak(probe, baseGain, totalAudioFrames, throwIfAborted)
-        const makeup = makeupGainForPeak(peak)
+        const loud = await measureMixLoudness(probe, baseGain, totalAudioFrames, throwIfAborted)
+        const makeup = makeupGainForLoudness(loud)
         if (makeup !== 1) for (const m of audioMixers) m.gain = baseGain * makeup
         console.info(
-          `instant: audio mix peak ${peak.toFixed(3)} → loudness makeup ${makeup.toFixed(2)}×`,
+          `instant: audio loudness p90rms ${loud.loudRms.toFixed(4)} peak ${loud.peak.toFixed(3)} → makeup ${makeup.toFixed(2)}×`,
         )
       } finally {
         for (const m of probe) m.dispose()

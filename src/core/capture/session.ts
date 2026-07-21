@@ -113,6 +113,8 @@ class Session implements CaptureSession {
   private readonly listeners = new Set<(e: CaptureEvent) => void>()
   private readonly channels: ChannelRuntime[] = []
   private pendingErrors: { kind: ChannelKind; message: string }[] = []
+  /** Quality warnings raised during arming, emitted once the UI listens. */
+  private pendingNotices: { kind: ChannelKind; message: string }[] = []
   private readonly recordingId = newId('rec')
   private epoch = 0
   private tickTimer: ReturnType<typeof setInterval> | null = null
@@ -179,6 +181,13 @@ class Session implements CaptureSession {
         failures.push(f)
       }
     }
+    const handleNotice = (kind: ChannelKind, message: string): void => {
+      if (this.stateInternal === 'recording') {
+        this.emit({ type: 'channel-notice', kind, message })
+      } else {
+        this.pendingNotices.push({ kind, message })
+      }
+    }
 
     let src: ProgressiveAcquire
     if (isSyntheticMode()) {
@@ -192,6 +201,7 @@ class Session implements CaptureSession {
       src = acquireChannelsProgressive(this.config, {
         onChannel: handleAcquired,
         onFailure: handleFailure,
+        onNotice: handleNotice,
         onProgress: this.onArming,
       })
     }
@@ -409,6 +419,9 @@ class Session implements CaptureSession {
     const queued = this.pendingErrors
     this.pendingErrors = []
     for (const e of queued) this.emit({ type: 'channel-error', kind: e.kind, message: e.message })
+    const notices = this.pendingNotices
+    this.pendingNotices = []
+    for (const n of notices) this.emit({ type: 'channel-notice', kind: n.kind, message: n.message })
     this.tickTimer = setInterval(() => this.onTick(), TICK_MS)
     this.startComposite()
     this.writeManifest()

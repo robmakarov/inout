@@ -6,7 +6,13 @@ import {
   type VideoSample,
 } from 'mediabunny'
 import { blobStore } from '@core/store'
-import { channelSourceTimeAt, hasEnabledVideo, outputDurationMs } from '@core/timeline'
+import {
+  channelSourceTimeAt,
+  clampEditState,
+  defaultEditState,
+  hasEnabledVideo,
+  outputDurationMs,
+} from '@core/timeline'
 import {
   DEFAULT_EXPORT_SETTINGS,
   type ChannelRecording,
@@ -16,8 +22,8 @@ import {
   type ExportResult,
 } from '@core/types'
 import {
-  makeupGainForPeak,
-  measureMixPeak,
+  makeupGainForLoudness,
+  measureMixLoudness,
   mixGainForChannels,
   openAudioChannel,
   softLimitSample,
@@ -86,6 +92,36 @@ async function openAudioMixers(
   return mixers
 }
 
+/**
+ * Loudness makeup the export will apply to this recording (default edit) —
+ * used by the editor preview for parity: what you hear while editing is the
+ * loudness the exported file will have. Safe fallback: unity on any failure.
+ */
+export async function measureRecordingMakeup(
+  recording: ExportOptions['recording'],
+): Promise<number> {
+  try {
+    const edit = clampEditState(recording, defaultEditState(recording))
+    const probe = await openAudioMixers(recording, edit, () => {})
+    if (probe.length === 0) return 1
+    const baseGain = probe.length > 1 ? mixGainForChannels(probe.length) : 1
+    try {
+      const totalAudioFrames = Math.round((outputDurationMs(edit) / 1000) * AUDIO_SAMPLE_RATE)
+      const loud = await measureMixLoudness(probe, baseGain, totalAudioFrames, () => {})
+      const makeup = makeupGainForLoudness(loud)
+      console.info(
+        `preview: loudness p90rms ${loud.loudRms.toFixed(4)} peak ${loud.peak.toFixed(3)} → makeup ${makeup.toFixed(2)}×`,
+      )
+      return makeup
+    } finally {
+      for (const m of probe) m.dispose()
+    }
+  } catch (err) {
+    console.warn('preview loudness measurement failed, using unity', err)
+    return 1
+  }
+}
+
 function exportFileName(createdAt: number, fileExtension: string): string {
   const d = new Date(createdAt)
   const p = (n: number) => String(n).padStart(2, '0')
@@ -138,21 +174,22 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
     const baseGain = audioMixers.length > 1 ? mixGainForChannels(audioMixers.length) : 1
     for (const m of audioMixers) m.gain = baseGain
 
-    // Loudness rescue: a faint capture (Safari mic via MediaRecorder, or the
-    // −6 dB left on multi-source takes) exports "almost non-hearable". Measure
-    // the mix peak on a throwaway mixer set — the render streams forward and
-    // can't rewind — then boost the real mixers toward a target. No-op for a
-    // healthy mix (makeup clamps to 1), so the fidelity oracle is untouched.
+    // Loudness normalize: quiet captures (real case: PO's take had voice at
+    // −25 dB window-RMS under a 0.77 transient peak) export near-inaudible.
+    // Measure SPEECH loudness (p90 window RMS) on a throwaway mixer set — the
+    // render streams forward and can't rewind — and drive it to target. Peak
+    // targeting was defeated by a single mic bump; percentile loudness isn't.
+    // No-op for a healthy mix, so the fidelity oracle is untouched.
     if (needAudio) {
       const probe = await openAudioMixers(recording, edit, throwIfAborted)
       try {
-        const peak = await measureMixPeak(probe, baseGain, totalAudioFrames, throwIfAborted, (r) =>
+        const loud = await measureMixLoudness(probe, baseGain, totalAudioFrames, throwIfAborted, (r) =>
           report('preparing', 0.04 * r),
         )
-        const makeup = makeupGainForPeak(peak)
+        const makeup = makeupGainForLoudness(loud)
         if (makeup !== 1) for (const m of audioMixers) m.gain = baseGain * makeup
         console.info(
-          `compose: audio mix peak ${peak.toFixed(3)} → loudness makeup ${makeup.toFixed(2)}×`,
+          `compose: audio loudness p90rms ${loud.loudRms.toFixed(4)} peak ${loud.peak.toFixed(3)} → makeup ${makeup.toFixed(2)}×`,
         )
       } finally {
         for (const m of probe) m.dispose()

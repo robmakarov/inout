@@ -121,6 +121,9 @@ export function CaptureScreen() {
         case 'channel-error':
           toast(e.message, 'error')
           break
+        case 'channel-notice':
+          toast(e.message)
+          break
         case 'channel-late-join':
           toast(`${CHANNEL_META[e.kind].label} joined late — this take will use full render on export`)
           break

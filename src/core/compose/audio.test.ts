@@ -2,28 +2,40 @@ import { describe, expect, it } from 'vitest'
 import { audioMixInternals } from './audio'
 import { AUDIO_SAMPLE_RATE } from './codecs'
 
-const { hermite, sampleAt, softLimitSample, mixGainForChannels, makeupGainForPeak } =
+const { hermite, sampleAt, softLimitSample, mixGainForChannels, makeupGainForLoudness } =
   audioMixInternals
 
-describe('loudness rescue (quiet Safari-mic / -6dB multi-source fix)', () => {
-  it('boosts a faint capture toward the target, without clipping', () => {
-    const peak = 0.05 // near-silent Safari mic
-    const g = makeupGainForPeak(peak)
-    expect(g).toBeGreaterThan(1)
-    expect(peak * g).toBeLessThanOrEqual(0.45 + 1e-9) // lands at/below target
-    expect(peak * g).toBeLessThan(0.95) // never into the limiter knee
+describe('speech-loudness normalization (replaces peak rescue a real take defeated)', () => {
+  it("PO's real take: voice at −24.7 dB under a 0.77 transient peak gets boosted to target", () => {
+    // Measured from inout-20260716-101732.mp4: p90 window RMS 0.058, peak 0.7725
+    // (one 3-sample mic bump). Peak-targeting returned 1 here — inaudible voice
+    // shipped. Loudness targeting must boost ~2× and land near −18 dB RMS.
+    const g = makeupGainForLoudness({ loudRms: 0.058, peak: 0.7725 })
+    expect(g).toBeGreaterThan(1.8)
+    expect(g * 0.058).toBeGreaterThan(0.1) // voice reaches ~target
+    expect(g * 0.058).toBeLessThanOrEqual(0.125 + 1e-9)
   })
 
-  it('leaves a healthy mix at unity — the fidelity oracle must not move', () => {
-    // Fidelity rig tones sum to ~0.6 peak; that must pass through untouched.
-    expect(makeupGainForPeak(0.6)).toBe(1)
-    expect(makeupGainForPeak(0.45)).toBe(1)
-    expect(makeupGainForPeak(0.9)).toBe(1)
+  it('healthy speech at target stays at unity — the fidelity oracle must not move', () => {
+    expect(makeupGainForLoudness({ loudRms: 0.125, peak: 0.6 })).toBe(1)
+    expect(makeupGainForLoudness({ loudRms: 0.3, peak: 0.7 })).toBe(1) // hot mix: never duck
   })
 
-  it('caps makeup so near-silence (and its noise) is not blown up unbounded', () => {
-    expect(makeupGainForPeak(1e-6)).toBe(1) // treated as silence → no gain
-    expect(makeupGainForPeak(0.0001)).toBeLessThanOrEqual(12)
+  it('noise-only takes are gated, never blown up', () => {
+    // Room tone at −55 dB with no program: boosting it 8× would ship pure hiss.
+    expect(makeupGainForLoudness({ loudRms: 0.0018, peak: 0.01 })).toBe(1)
+    expect(makeupGainForLoudness({ loudRms: 0, peak: 0 })).toBe(1)
+  })
+
+  it('peak bound stops sustained program being driven deep into the limiter', () => {
+    // Loud-crest music: quiet RMS but peaks already at 0.9. Unbounded loudness
+    // gain (×4) would shape most samples; the bound keeps overdrive ≤ 2× knee.
+    const g = makeupGainForLoudness({ loudRms: 0.03, peak: 0.9 })
+    expect(g * 0.9).toBeLessThanOrEqual(2 * 0.95 + 1e-9)
+  })
+
+  it('boost is capped for heavily-AGCd-but-real signals', () => {
+    expect(makeupGainForLoudness({ loudRms: 0.004, peak: 0.02 })).toBeLessThanOrEqual(8)
   })
 })
 

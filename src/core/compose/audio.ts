@@ -60,23 +60,47 @@ export function mixGainForChannels(count: number): number {
   return count > 1 ? 1 / count : 1
 }
 
-/** Target peak for loudness rescue. Below the fidelity rig's summed tone peak
- * (~0.6) so a healthy mix is never touched — the oracle stays green — while a
- * faint capture is lifted to a clearly audible level. */
-export const NORMALIZE_TARGET_PEAK = 0.45
-/** Cap so near-silence (and its noise floor) is not amplified without bound. */
-export const NORMALIZE_MAX_MAKEUP = 12
+/**
+ * SPEECH-LOUDNESS normalization (replaces the peak-based rescue, which a real
+ * take defeated: PO's 31s export had voice at −25 dB RMS but one 3-sample mic
+ * bump peaking at 0.77 — peak-targeting saw "loud enough" and did nothing).
+ *
+ * Loudness is measured as the p90 of 100 ms window RMS: robust to silence
+ * (windows during pauses land in the lower percentiles) and to transients
+ * (3 loud samples cannot own a percentile). Gain drives that level to
+ * NORMALIZE_TARGET_RMS; brief overs from boosted transients fold into the
+ * soft limiter — 3 shaped samples beat a whole take of inaudible voice.
+ */
+/** Speech target: −18 dBFS window-RMS — clearly audible on laptop speakers,
+ * ~4 dB below broadcast hot so music mixes keep headroom. */
+export const NORMALIZE_TARGET_RMS = 0.125
+/** Cap (+18 dB): a heavily AGC'd HFP mic still reaches target; pure noise
+ * floors (gated below) never get blown up unbounded. */
+export const NORMALIZE_MAX_MAKEUP = 8
+/** Loudness gate: takes whose p90 window-RMS sits at/below this are treated as
+ * having no real program (room tone only) and are left untouched. −50 dBFS. */
+export const NORMALIZE_GATE_RMS = 0.0032
+/** Bound on pervasive limiting: gain may push the true peak at most this far
+ * past the knee (brief transients get shaped; sustained program does not). */
+export const NORMALIZE_PEAK_OVERDRIVE = 2
+
+export interface MixLoudness {
+  /** Max |sample| across the mix. */
+  peak: number
+  /** p90 of 100 ms window RMS — the "speech level". */
+  loudRms: number
+}
 
 /**
- * Makeup gain that rescues a quiet mix. Faint captures — a Safari mic recorded
- * via MediaRecorder, or the −6 dB left on multi-source takes by 1/N headroom —
- * come out "almost non-hearable"; this lifts the measured peak toward
- * NORMALIZE_TARGET_PEAK. ONLY ever boosts (never ducks a healthy take) and is
- * capped, so a mix already at/above target passes through at unity (1.0).
+ * Makeup gain that drives speech-level loudness to target. Only ever boosts
+ * (a healthy or hot mix passes at 1.0); gated so noise-only takes stay put;
+ * peak-bounded so sustained program cannot be driven deep into the limiter.
  */
-export function makeupGainForPeak(peak: number): number {
-  if (!(peak > 1e-4)) return 1
-  return Math.max(1, Math.min(NORMALIZE_MAX_MAKEUP, NORMALIZE_TARGET_PEAK / peak))
+export function makeupGainForLoudness(m: MixLoudness): number {
+  if (!(m.loudRms > NORMALIZE_GATE_RMS)) return 1
+  const wanted = NORMALIZE_TARGET_RMS / m.loudRms
+  const peakBound = m.peak > 0 ? (NORMALIZE_PEAK_OVERDRIVE * LIMIT_KNEE) / m.peak : Infinity
+  return Math.max(1, Math.min(NORMALIZE_MAX_MAKEUP, wanted, peakBound))
 }
 
 /**
@@ -257,22 +281,28 @@ export async function openAudioChannel(
   }
 }
 
+/** 100 ms loudness window at 48 kHz. */
+const LOUDNESS_WINDOW_FRAMES = 4800
+
 /**
- * Peak |sample| of the full mix at a given per-channel gain — the loudness
- * analysis pre-pass. Streams forward exactly like the render (O(one decoded
- * buffer) memory) so the measured peak matches what will be encoded. Shared by
- * the full render AND the instant path, so a faint capture is rescued whichever
- * export runs. Pass a THROWAWAY mixer set: mixing consumes it.
+ * Loudness analysis pre-pass over the full mix at a given per-channel gain:
+ * true peak + p90 of 100 ms window RMS (the "speech level"). Streams forward
+ * exactly like the render (O(one decoded buffer) memory) so the measurement
+ * matches what will be encoded. Shared by the full render AND the instant
+ * path. Pass a THROWAWAY mixer set: mixing consumes it.
  */
-export async function measureMixPeak(
+export async function measureMixLoudness(
   mixers: AudioChannelMixer[],
   gain: number,
   totalAudioFrames: number,
   throwIfAborted: () => void,
   onProgress?: (ratio: number) => void,
-): Promise<number> {
+): Promise<MixLoudness> {
   for (const m of mixers) m.gain = gain
   let peak = 0
+  const windowRms: number[] = []
+  let winSumSq = 0
+  let winCount = 0
   const chunks = Math.max(1, Math.ceil(totalAudioFrames / AUDIO_SAMPLE_RATE))
   for (let c = 0; c < chunks; c++) {
     throwIfAborted()
@@ -288,11 +318,24 @@ export async function measureMixPeak(
       const b = Math.abs(right[k])
       const s = a > b ? a : b
       if (s > peak) peak = s
+      // Mono-fold energy for the loudness windows (mid signal).
+      const mid = 0.5 * (left[k] + right[k])
+      winSumSq += mid * mid
+      if (++winCount === LOUDNESS_WINDOW_FRAMES) {
+        windowRms.push(Math.sqrt(winSumSq / winCount))
+        winSumSq = 0
+        winCount = 0
+      }
     }
     onProgress?.((c + 1) / chunks)
     await new Promise((r) => setTimeout(r, 0))
   }
-  return peak
+  if (winCount > 0) windowRms.push(Math.sqrt(winSumSq / winCount))
+  windowRms.sort((a, b) => a - b)
+  const loudRms = windowRms.length
+    ? windowRms[Math.min(windowRms.length - 1, Math.floor(0.9 * windowRms.length))]
+    : 0
+  return { peak, loudRms }
 }
 
 /** Pure helpers exported for unit tests. */
@@ -301,5 +344,5 @@ export const audioMixInternals = {
   sampleAt,
   softLimitSample,
   mixGainForChannels,
-  makeupGainForPeak,
+  makeupGainForLoudness,
 }
