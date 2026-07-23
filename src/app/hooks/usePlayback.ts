@@ -5,7 +5,14 @@ import { channelSourceTimeAt, outputDurationMs } from '@core/timeline'
 import { measureRecordingMakeup, mixGainForChannels, softLimitSample } from '@core/compose'
 import { isAppleWebKit } from '@core/capabilities'
 
-const RESYNC_THRESHOLD_MS = 120
+/** Beyond this the element is lost — hard seek (audible/visible jump). */
+const RESYNC_HARD_MS = 250
+/** Inside this the element counts as in sync — no correction (avoids hunting). */
+const SYNC_DEADBAND_MS = 15
+/** Drift is closed over ~this horizon via playbackRate slewing. */
+const SLEW_HORIZON_MS = 500
+/** Paused/scrub seeks snap the frame once drift exceeds this. */
+const PAUSED_SEEK_MS = 40
 /** ~10ms gain ramps — no zipper noise when loudness lands. */
 const GAIN_RAMP_S = 0.01
 
@@ -172,13 +179,27 @@ export function usePlayback(recording: Recording, edit: EditState): Playback {
           if (!el.paused) el.pause()
         } else {
           el.muted = false
-          if (Math.abs(el.currentTime * 1000 - src) > RESYNC_THRESHOLD_MS) {
-            el.currentTime = src / 1000
-          }
+          const drift = el.currentTime * 1000 - src
           if (playingRef.current) {
+            // A/V sync: hard-seeking only past a ±120ms deadband let audio and
+            // video elements sit up to ~240ms APART (the reported "audio not
+            // synced"). Instead every element is continuously slewed onto the
+            // master clock via playbackRate — inaudible, no seek stutter —
+            // with hard seeks reserved for genuine jumps.
+            if (Math.abs(drift) > RESYNC_HARD_MS) {
+              el.currentTime = src / 1000
+              el.playbackRate = 1
+            } else if (Math.abs(drift) <= SYNC_DEADBAND_MS) {
+              el.playbackRate = 1
+            } else {
+              const rate = 1 - drift / SLEW_HORIZON_MS
+              el.playbackRate = Math.min(1.25, Math.max(0.8, rate))
+            }
             if (el.paused) void el.play().catch(() => {})
-          } else if (!el.paused) {
-            el.pause()
+          } else {
+            el.playbackRate = 1
+            if (Math.abs(drift) > PAUSED_SEEK_MS) el.currentTime = src / 1000
+            if (!el.paused) el.pause()
           }
         }
       }
@@ -222,12 +243,16 @@ export function usePlayback(recording: Recording, edit: EditState): Playback {
     sync(timeRef.current)
   }, [edit, sync])
 
-  // Master clock.
+  // Master clock. rAF alone FREEZES in a hidden tab while the audio elements
+  // play on — the clock and the sync loop stop, audio walks many seconds ahead
+  // of the frozen video, and on return everything is hard-yanked back ("audio
+  // not synced", "playback stops"). A parallel interval (throttled to ~1 Hz
+  // when hidden — enough) keeps the clock true whenever rAF is not ticking.
   useEffect(() => {
     if (!playing) return
     let raf = 0
     let last = performance.now()
-    const step = (now: number) => {
+    const step = (now: number): boolean => {
       const t = Math.min(durRef.current, timeRef.current + (now - last))
       last = now
       timeRef.current = t
@@ -236,12 +261,23 @@ export function usePlayback(recording: Recording, edit: EditState): Playback {
       if (t >= durRef.current) {
         playingRef.current = false
         setPlaying(false)
-        return
+        return false
       }
-      raf = requestAnimationFrame(step)
+      return true
     }
-    raf = requestAnimationFrame(step)
-    return () => cancelAnimationFrame(raf)
+    const loop = (now: number) => {
+      if (step(now)) raf = requestAnimationFrame(loop)
+    }
+    raf = requestAnimationFrame(loop)
+    const iv = setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState === 'hidden') {
+        if (!step(performance.now())) clearInterval(iv)
+      }
+    }, 500)
+    return () => {
+      cancelAnimationFrame(raf)
+      clearInterval(iv)
+    }
   }, [playing, sync])
 
   const play = useCallback(() => {

@@ -37,6 +37,22 @@ describe('speech-loudness normalization (replaces peak rescue a real take defeat
   it('boost is capped for heavily-AGCd-but-real signals', () => {
     expect(makeupGainForLoudness({ loudRms: 0.004, peak: 0.02 })).toBeLessThanOrEqual(8)
   })
+
+  it('noise-floor bound: a hissy take is not boosted into audible hiss', () => {
+    // Faint speech (−30 dB) over a high floor (−46 dB, HFP mic hiss). Unbounded
+    // rescue (×4) would lift the floor to −34 dB — "still some noises". The
+    // floor bound keeps post-gain floor at ≤ −40 dBFS.
+    const g = makeupGainForLoudness({ loudRms: 0.03, peak: 0.2, floorRms: 0.005 })
+    expect(g * 0.005).toBeLessThanOrEqual(0.01 + 1e-9)
+    expect(g).toBeGreaterThanOrEqual(1)
+  })
+
+  it('noise-floor bound: a clean-floor take still gets the full rescue', () => {
+    // Same faint speech over near-digital-silence floor: full boost applies.
+    const clean = makeupGainForLoudness({ loudRms: 0.03, peak: 0.2, floorRms: 0.0001 })
+    const legacy = makeupGainForLoudness({ loudRms: 0.03, peak: 0.2 })
+    expect(clean).toBeCloseTo(legacy, 10)
+  })
 })
 
 describe('render mix-bus headroom (pervasive-noise fix 2026-07-16)', () => {

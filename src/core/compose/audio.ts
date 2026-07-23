@@ -83,24 +83,35 @@ export const NORMALIZE_GATE_RMS = 0.0032
 /** Bound on pervasive limiting: gain may push the true peak at most this far
  * past the knee (brief transients get shaped; sustained program does not). */
 export const NORMALIZE_PEAK_OVERDRIVE = 2
+/** Post-gain ceiling for the take's noise floor (p20 window RMS): −40 dBFS.
+ * Boosting speech must not boost room hiss into audibility — a +18 dB rescue
+ * of a faint take was reported back as "still some noises". A clean floor
+ * (near digital silence) leaves this bound at ∞ and full rescue applies. */
+export const NORMALIZE_FLOOR_CEILING_RMS = 0.01
 
 export interface MixLoudness {
   /** Max |sample| across the mix. */
   peak: number
   /** p90 of 100 ms window RMS — the "speech level". */
   loudRms: number
+  /** p20 of 100 ms window RMS — the noise floor (room tone between speech).
+   * Optional: older callers/tests omit it; the floor bound then stays off. */
+  floorRms?: number
 }
 
 /**
  * Makeup gain that drives speech-level loudness to target. Only ever boosts
  * (a healthy or hot mix passes at 1.0); gated so noise-only takes stay put;
- * peak-bounded so sustained program cannot be driven deep into the limiter.
+ * peak-bounded so sustained program cannot be driven deep into the limiter;
+ * floor-bounded so the boost cannot raise the noise floor into audibility.
  */
 export function makeupGainForLoudness(m: MixLoudness): number {
   if (!(m.loudRms > NORMALIZE_GATE_RMS)) return 1
   const wanted = NORMALIZE_TARGET_RMS / m.loudRms
   const peakBound = m.peak > 0 ? (NORMALIZE_PEAK_OVERDRIVE * LIMIT_KNEE) / m.peak : Infinity
-  return Math.max(1, Math.min(NORMALIZE_MAX_MAKEUP, wanted, peakBound))
+  const floorBound =
+    m.floorRms && m.floorRms > 0 ? NORMALIZE_FLOOR_CEILING_RMS / m.floorRms : Infinity
+  return Math.max(1, Math.min(NORMALIZE_MAX_MAKEUP, wanted, peakBound, floorBound))
 }
 
 /**
@@ -335,7 +346,10 @@ export async function measureMixLoudness(
   const loudRms = windowRms.length
     ? windowRms[Math.min(windowRms.length - 1, Math.floor(0.9 * windowRms.length))]
     : 0
-  return { peak, loudRms }
+  const floorRms = windowRms.length
+    ? windowRms[Math.min(windowRms.length - 1, Math.floor(0.2 * windowRms.length))]
+    : 0
+  return { peak, loudRms, floorRms }
 }
 
 /** Pure helpers exported for unit tests. */

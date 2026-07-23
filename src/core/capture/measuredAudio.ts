@@ -33,6 +33,9 @@ class InoutPcmCapture extends AudioWorkletProcessor {
     this.frames = 0
     this.channels = 1
     this.sawLive = false
+    // Whether the last sample emitted by the previous flush was inserted
+    // silence — lets fades span batch boundaries.
+    this.prevSilent = false
     // ~21ms per post instead of 2.7ms: 8x less main-thread churn.
     this.batchFrames = 1024
     this.port.onmessage = (e) => {
@@ -72,12 +75,35 @@ class InoutPcmCapture extends AudioWorkletProcessor {
     const ch = this.channels
     const planar = new Float32Array(ch * total)
     let off = 0
+    // Silence splices (starved quanta become zeros) are step discontinuities —
+    // each live→silence→live edge is an audible click. Ramp ~1.3ms on both
+    // sides of every splice so the timeline stays sample-counted but seamless.
+    const FADE = 64
+    let prevSilent = this.prevSilent
     for (const q of this.buf) {
       if (q.data) {
         for (let c = 0; c < ch && c < q.data.length; c++) planar.set(q.data[c], c * total + off)
+        if (prevSilent) {
+          const n = Math.min(FADE, q.n)
+          for (let c = 0; c < ch; c++) {
+            const base = c * total + off
+            for (let i = 0; i < n; i++) planar[base + i] *= i / n
+          }
+        }
+        prevSilent = false
+      } else {
+        if (!prevSilent && off > 0) {
+          const n = Math.min(FADE, off)
+          for (let c = 0; c < ch; c++) {
+            const base = c * total + off
+            for (let i = 1; i <= n; i++) planar[base - i] *= (i - 1) / n
+          }
+        }
+        prevSilent = true
       }
       off += q.n
     }
+    this.prevSilent = prevSilent
     this.port.postMessage({ frames: total, channels: ch, currentTime, planar }, [planar.buffer])
     this.buf = []
     this.frames = 0
@@ -151,6 +177,10 @@ export async function startMeasuredAudioCapture(opts: {
   writer: import('@core/store').PositionedDurableWriter
   /** Optional pre-warmed context from prewarmMeasuredAudio (arm phase). */
   audioCtx?: AudioContext
+  /** Fired ONCE if capture dies mid-take (storage write / encoder failure).
+   * Without it the take keeps "recording" while every later sample is lost —
+   * the file just stops partway with no signal to the user. */
+  onFatal?: (err: Error) => void
 }): Promise<MeasuredAudioHandle> {
   const track = opts.stream.getAudioTracks()[0]
   if (!track) throw new Error('measured audio: no audio track')
@@ -179,10 +209,26 @@ export async function startMeasuredAudioCapture(opts: {
   }
 
   let bytesWritten = 0
+  let fatalError: Error | null = null
+  const fatal = (err: unknown): void => {
+    if (fatalError) return
+    fatalError = err instanceof Error ? err : new Error(String(err))
+    console.error('[capture] measured audio fatal', fatalError)
+    try {
+      opts.onFatal?.(fatalError)
+    } catch {
+      /* listener threw */
+    }
+  }
   const sinkStream = new WritableStream<StreamTargetChunk>({
     async write(chunk) {
-      await opts.writer.write(chunk.data, chunk.position)
-      bytesWritten = Math.max(bytesWritten, chunk.position + chunk.data.byteLength)
+      try {
+        await opts.writer.write(chunk.data, chunk.position)
+        bytesWritten = Math.max(bytesWritten, chunk.position + chunk.data.byteLength)
+      } catch (err) {
+        fatal(err)
+        throw err
+      }
     },
   })
 
@@ -216,6 +262,7 @@ export async function startMeasuredAudioCapture(opts: {
     error: (err) => {
       encodeError = err instanceof Error ? err : new Error(String(err))
       console.error('[capture] AudioEncoder error', err)
+      fatal(err)
     },
   })
   encoder.configure(config)
@@ -238,7 +285,7 @@ export async function startMeasuredAudioCapture(opts: {
       flushResolve?.()
       return
     }
-    if (stopped) return
+    if (stopped || fatalError) return
     const { frames, channels, currentTime, planar } = ev.data as {
       frames: number
       channels: number
@@ -367,8 +414,14 @@ export async function startMeasuredAudioCapture(opts: {
     firstOffset,
     async stop() {
       await teardownGraph()
-      await finishEncode()
-      if (encodeError) throw encodeError
+      // A take that died mid-flight keeps everything durably written up to the
+      // failure — never throw the whole channel away for a partial loss.
+      try {
+        await finishEncode()
+      } catch (err) {
+        fatal(err)
+      }
+      if (encodeError) fatal(encodeError)
       // Refined min-filter anchor beats the provisional first-arrival value.
       const offset =
         anchorWallMs !== Infinity ? Math.max(0, anchorWallMs - opts.epoch) : (startOffsetMs ?? 0)

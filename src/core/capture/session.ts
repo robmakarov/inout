@@ -127,6 +127,11 @@ class Session implements CaptureSession {
   private cancelled = false
   private disposeSynthetic: (() => void) | null = null
   private readonly onArming: ArmingProgressHandler | undefined
+  /** Screen wake lock while recording: display sleep mid-take ends capture
+   * tracks in Chrome ("after a while screen and audio stop"). Best-effort —
+   * the platform auto-releases it when the tab hides; we reacquire on return. */
+  private wakeLock: { release(): Promise<void> } | null = null
+  private wakeLockVisHandler: (() => void) | null = null
 
   constructor(config: CaptureConfig, onArming?: ArmingProgressHandler) {
     this.config = { ...config }
@@ -145,6 +150,13 @@ class Session implements CaptureSession {
    */
   async arm(): Promise<void> {
     const armT0 = performance.now()
+    // Long takes write GBs to OPFS; ask the browser never to evict us mid-take
+    // (silent eviction truncates the recording). Best-effort, never blocks arming.
+    try {
+      void navigator.storage?.persist?.().catch(() => undefined)
+    } catch {
+      /* unsupported */
+    }
     const failures: AcquireFailure[] = []
     const armPromises: Promise<void>[] = []
 
@@ -325,6 +337,15 @@ class Session implements CaptureSession {
           } catch (err) {
             rt.writeFailed = true
             console.error('[capture] blob write failed for', rt.kind, err)
+            // Storage died mid-take: every later chunk would be lost while the
+            // UI keeps counting — the take would silently "stop after a while".
+            // End this channel loudly; what's on disk stays salvageable.
+            this.emit({
+              type: 'channel-error',
+              kind: rt.kind,
+              message: `Recording storage failed — ${rt.kind} saved up to this point only`,
+            })
+            this.onTrackEnded(rt)
           }
         })
       }
@@ -424,9 +445,48 @@ class Session implements CaptureSession {
     for (const n of notices) this.emit({ type: 'channel-notice', kind: n.kind, message: n.message })
     this.tickTimer = setInterval(() => this.onTick(), TICK_MS)
     this.startComposite()
+    this.acquireWakeLock()
     this.writeManifest()
     // Offsets settle within the first seconds; refresh so a salvage keeps sync.
     this.manifestTimer = setTimeout(() => this.writeManifest(), 2500)
+  }
+
+  private acquireWakeLock(): void {
+    type WakeLockNav = Navigator & {
+      wakeLock?: { request(type: 'screen'): Promise<{ release(): Promise<void> }> }
+    }
+    const wl = (navigator as WakeLockNav).wakeLock
+    if (!wl) return
+    void wl
+      .request('screen')
+      .then((sentinel) => {
+        if (this.stateInternal !== 'recording') {
+          void sentinel.release().catch(() => undefined)
+          return
+        }
+        this.wakeLock = sentinel
+      })
+      .catch(() => undefined)
+    if (!this.wakeLockVisHandler && typeof document !== 'undefined') {
+      // The lock auto-releases whenever the tab is hidden (recording another
+      // app IS the normal case) — retake it the moment the user comes back.
+      this.wakeLockVisHandler = () => {
+        if (document.visibilityState === 'visible' && this.stateInternal === 'recording') {
+          this.acquireWakeLock()
+        }
+      }
+      document.addEventListener('visibilitychange', this.wakeLockVisHandler)
+    }
+  }
+
+  private releaseWakeLock(): void {
+    if (this.wakeLockVisHandler) {
+      document.removeEventListener('visibilitychange', this.wakeLockVisHandler)
+      this.wakeLockVisHandler = null
+    }
+    const s = this.wakeLock
+    this.wakeLock = null
+    if (s) void s.release().catch(() => undefined)
   }
 
   private startComposite(): void {
@@ -475,6 +535,14 @@ class Session implements CaptureSession {
         epoch: this.epoch,
         writer,
         audioCtx: ch.audioCtx ?? undefined,
+        onFatal: (err) => {
+          if (this.stateInternal !== 'recording') return
+          this.emit({
+            type: 'channel-error',
+            kind: ch.kind,
+            message: `${ch.kind} recording failed mid-take (${err.message}) — audio saved up to this point only`,
+          })
+        },
       })
       ch.audioCtx = null // ownership transferred; stop/cancel closes it
       ch.measured = handle
@@ -559,12 +627,16 @@ class Session implements CaptureSession {
     if (rt.ended) return
     rt.ended = true
     if (rt.useMeasured && rt.measured) {
-      void rt.measured.stop().then((r) => {
-        rt.bytes = r.bytes
-        rt.durationMs = r.durationMs
-        rt.startOffsetMs = r.startOffsetMs
-        rt.resolveStopped()
-      })
+      void rt.measured
+        .stop()
+        .then((r) => {
+          rt.bytes = r.bytes
+          rt.durationMs = r.durationMs
+          rt.startOffsetMs = r.startOffsetMs
+        })
+        .catch((err) => console.error('[capture] measured stop failed', rt.kind, err))
+        // resolveStopped must run even on failure or doStop() hangs forever.
+        .finally(() => rt.resolveStopped())
     } else if (rt.recorder) {
       if (rt.startAbs !== undefined && rt.durationMs === undefined) {
         rt.durationMs = performance.now() - rt.startAbs
@@ -655,6 +727,7 @@ class Session implements CaptureSession {
 
   private async doStop(): Promise<Recording> {
     this.clearTick()
+    this.releaseWakeLock()
     this.setState('stopping')
     this.stopRecorders(true)
     await Promise.all(this.channels.map((c) => c.stopped))
@@ -731,6 +804,7 @@ class Session implements CaptureSession {
     }
     this.cancelled = true
     this.clearTick()
+    this.releaseWakeLock()
     if (this.manifestTimer) clearTimeout(this.manifestTimer)
     clearPendingManifest(this.recordingId)
     void (async () => {
