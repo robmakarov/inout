@@ -74,6 +74,32 @@ function errMessage(err: unknown): string {
   return err instanceof Error ? err.message || err.name : String(err)
 }
 
+/** prewarmMeasuredAudio with a deadline. A context that resolves AFTER the
+ * deadline is closed immediately — never leak a running AudioContext. */
+function boundedPrewarm(track: MediaStreamTrack, ms: number): Promise<AudioContext> {
+  return new Promise((resolve, reject) => {
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      reject(new Error(`audio prewarm timed out after ${ms}ms`))
+    }, ms)
+    prewarmMeasuredAudio(track).then(
+      (ctx) => {
+        if (timedOut) {
+          void ctx.close().catch(() => undefined)
+          return
+        }
+        clearTimeout(timer)
+        resolve(ctx)
+      },
+      (err) => {
+        clearTimeout(timer)
+        if (!timedOut) reject(err)
+      },
+    )
+  })
+}
+
 interface ChannelRuntime {
   id: string
   kind: ChannelKind
@@ -296,7 +322,11 @@ class Session implements CaptureSession {
 
     if (useMeasured) {
       try {
-        rt.audioCtx = await prewarmMeasuredAudio(acq.track)
+        // BOUNDED: AudioContext.resume() on wedged audio hardware can pend
+        // forever, and arm() awaits this — an unbounded wait here froze the
+        // whole start on "waiting for mic" (PO 2026-07-23). On timeout the
+        // channel still records: startMeasured brings its own context.
+        rt.audioCtx = await boundedPrewarm(acq.track, 3000)
       } catch (err) {
         console.warn('[capture] measured audio prewarm failed, will init at start', err)
       }

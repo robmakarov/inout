@@ -22,6 +22,11 @@ gaps / in flight:
 - PUBLIC DEPLOY LIVE: inout-kappa.vercel.app serves current main (verified, bundle-hash match). GitHub main = single depersonalized commit; full history local-only (branch local-history-backup). Remaining cloud reset: PO runs docs/CLOUD_RESET.md steps 2-3 (Vercel env+old deployments, Supabase wipe+key rotation; auth users kept)
 - instant-arm SHIPPED (c8424a5): start gates only on primary channel, slow devices late-join (verified: armed 269ms w/ 3s-cold camera), 5s device budget, missing channel = loud banner + Recording.missing; late join → composite invalidated → render path. Await PO recheck of device-wait on live site.
 - PERVASIVE AUDIO NOISE root-caused + fixed (2026-07-16): render mix bus summed all audio channels at UNITY (no headroom) — mic+system-audio sum clipped softLimitSample on 34% of samples (measured). Removing the composite export shortcut had moved ALL exports onto this unstaged sum. Fix: 1/N per-channel headroom (single source unchanged/unity; multi-source guaranteed no clip, −6dB, recover via later 2-pass normalize). Proven at mix site: 16586→0 limiter hits. Single-source fidelity unregressed (THD −68dB).
+- STUCK "waiting for mic" (PO 2026-07-24) root-caused + fixed: synchronized start means EVERY device gates the take, and (a) the
+  granted-device budget was 30s of frozen UI (now 8s → take starts without the device + loud missing warning), (b) the measured-audio
+  prewarm (AudioContext create/resume on wedged hardware) had NO timeout — an unbounded await inside arm() could hang start forever,
+  and the same unbounded init inside startMeasuredAudioCapture could hang stop() (now: 3s/5s deadlines, late contexts closed, resume
+  raced at 2s). Synthetic e2e re-verified post-change. Await PO recheck with the real wedged-mic scenario.
 - PO 2026-07-23 triple report (Chrome capture stops after a while / AV desync / noises) → TD same-day fixes, awaiting PO recheck:
   capture hardened (screen wake lock while recording, storage.persist, mid-take storage/encoder death emits channel-error and keeps
   the durable partial instead of silently truncating — measured stop() no longer throws away a partial channel, and a failed measured

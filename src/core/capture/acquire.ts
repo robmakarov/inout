@@ -34,12 +34,13 @@ export interface ArmingTimelineEntry {
 }
 
 /** Budget for a GRANTED device (no prompt can appear) — hardware spin-up only.
- * NOT a speed lever: instant start is gated by the PRIMARY channel delivering
- * (a fast device delivers fast whatever this ceiling is), so this only bounds a
- * genuinely dead device. 5s falsely killed slow-but-alive inputs — a granted
- * mic on a loaded Mac, any getUserMedia on mobile Safari — as "timeout
- * connecting input", and when that input was primary the take never started. */
-export const ACQUIRE_TIMEOUT_MS = 30_000
+ * Since synchronized start (2026-07-20) EVERY device gates the take start, so
+ * this ceiling is exactly how long the UI can freeze on one wedged device
+ * ("stuck waiting for mic", PO 2026-07-23: the old 30s read as hung). 8s:
+ * above real slow-but-alive spin-ups (5s falsely killed a granted mic on a
+ * loaded Mac), far below "the app is stuck". On timeout the take starts
+ * without the device + loud missing-channel warning. */
+export const ACQUIRE_TIMEOUT_MS = 8_000
 /** Budget when a HUMAN is in the loop (permission prompt, screen picker).
  * Never time a person: 5s here recorded takes without screen while the PO was
  * still reading Chrome's picker (2026-07-16), and the post-timeout stream

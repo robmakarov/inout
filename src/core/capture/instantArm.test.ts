@@ -36,11 +36,13 @@ describe('instant-arm harness knobs', () => {
 })
 
 describe('acquire budgets', () => {
-  it('device budget is generous enough for real hardware; humans get even longer', () => {
-    // 5s falsely killed slow-but-alive granted inputs (loaded Mac mic, mobile
-    // Safari getUserMedia) as "timeout connecting input" — the budget is only a
-    // dead-device backstop, not a speed lever (primaryReady gates start).
-    expect(ACQUIRE_TIMEOUT_MS).toBeGreaterThanOrEqual(20_000)
+  it('device budget: above real spin-ups, but bounded — every device gates start', () => {
+    // Since synchronized start (2026-07-20) EVERY device blocks the take start,
+    // so this budget is exactly how long the UI can freeze on one wedged device
+    // ("stuck waiting for mic", PO 2026-07-23). Lower bound: 5s falsely killed
+    // slow-but-alive granted inputs (loaded Mac mic, mobile Safari getUserMedia).
+    expect(ACQUIRE_TIMEOUT_MS).toBeGreaterThan(5_000)
+    expect(ACQUIRE_TIMEOUT_MS).toBeLessThanOrEqual(10_000)
     // Never time a person: prompts and pickers get longer still.
     expect(PROMPT_TIMEOUT_MS).toBeGreaterThan(ACQUIRE_TIMEOUT_MS)
   })

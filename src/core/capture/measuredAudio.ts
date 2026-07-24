@@ -185,10 +185,33 @@ export async function startMeasuredAudioCapture(opts: {
   const track = opts.stream.getAudioTracks()[0]
   if (!track) throw new Error('measured audio: no audio track')
 
+  // BOUNDED init: AudioContext setup on wedged hardware can pend forever, and
+  // session.stop() awaits this whole function — an unbounded hang here wedges
+  // both start AND stop. Fail the channel loudly instead.
   const audioCtx =
     opts.audioCtx && opts.audioCtx.state !== 'closed'
       ? opts.audioCtx
-      : await prewarmMeasuredAudio(track)
+      : await new Promise<AudioContext>((resolve, reject) => {
+          let late = false
+          const timer = setTimeout(() => {
+            late = true
+            reject(new Error('measured audio: context init timed out after 5000ms'))
+          }, 5000)
+          prewarmMeasuredAudio(track).then(
+            (ctx) => {
+              if (late) {
+                void ctx.close().catch(() => undefined)
+                return
+              }
+              clearTimeout(timer)
+              resolve(ctx)
+            },
+            (err) => {
+              clearTimeout(timer)
+              if (!late) reject(err)
+            },
+          )
+        })
 
   const sampleRate = audioCtx.sampleRate
   // Unreported channelCount (Chromium often omits it for display/system audio)
@@ -368,7 +391,12 @@ export async function startMeasuredAudioCapture(opts: {
   keepAlive.gain.value = 0
   worklet.connect(keepAlive)
   keepAlive.connect(audioCtx.destination)
-  await audioCtx.resume()
+  // resume() on an already-running (prewarmed) context is a no-op; on wedged
+  // hardware it can pend — never let it block the take, proceed regardless.
+  await Promise.race([
+    audioCtx.resume().catch(() => undefined),
+    new Promise<void>((r) => setTimeout(r, 2000)),
+  ])
 
   const teardownGraph = async (): Promise<void> => {
     if (!stopped) {
