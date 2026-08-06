@@ -144,6 +144,30 @@ type DisplayMediaOptions = DisplayMediaStreamOptions & {
   systemAudio?: 'include' | 'exclude'
 }
 
+/** What the user actually picked in the screen picker. Not in every TS DOM lib. */
+type DisplaySurface = 'monitor' | 'window' | 'browser'
+function displaySurfaceOf(track: MediaStreamTrack | undefined): DisplaySurface | undefined {
+  const s = track?.getSettings() as (MediaTrackSettings & { displaySurface?: string }) | undefined
+  const v = s?.displaySurface
+  return v === 'monitor' || v === 'window' || v === 'browser' ? v : undefined
+}
+
+/**
+ * Anything but a whole monitor records ONE surface: switch to another tab or
+ * app and the file keeps showing the surface that was shared — which reads as
+ * "nothing was recorded, just a frozen frame" (PO 2026-08-06). Say it up front;
+ * the picker's own indicator is easy to miss.
+ */
+export function surfaceNotice(surface: DisplaySurface | undefined): string | null {
+  if (surface === 'browser') {
+    return 'Heads-up: you shared ONE browser tab. Other tabs, apps and your desktop will not appear — switch to sharing your whole screen to record them.'
+  }
+  if (surface === 'window') {
+    return 'Heads-up: you shared ONE app window. Anything outside it will not appear, and if that window gets hidden or another app goes full-screen the picture freezes.'
+  }
+  return null
+}
+
 export function acquireChannelsProgressive(
   config: CaptureConfig,
   handlers: ProgressiveHandlers,
@@ -265,7 +289,10 @@ export function acquireChannelsProgressive(
       }
     } else {
       const opts: DisplayMediaOptions = {
-        video: { frameRate: { ideal: 30 } },
+        // displaySurface is a HINT, not a constraint: it opens Chrome's picker
+        // on the Entire-Screen pane instead of the tab list, so the default
+        // choice records everything the user does. Any surface stays pickable.
+        video: { frameRate: { ideal: 30 }, displaySurface: 'monitor' } as MediaTrackConstraints,
         // Chromium defaults AEC/NS/AGC ON for display audio — voice processing
         // mangles music into warble and downmixes to mono. Capture it raw.
         audio: config.systemAudio
@@ -329,12 +356,19 @@ export function acquireChannelsProgressive(
           mark('system-audio', 'failed', 'System audio was not shared')
         }
       }
+      const surface = displaySurfaceOf(video)
+      const notice = surfaceNotice(surface)
+      if (notice) handlers.onNotice?.('screen', notice)
       // Screen delivered LAST from the display result: it is the primary, and
       // delivering it resolves primaryReady — system audio must already be in.
       if (video) {
         deliver({ kind: 'screen', media: 'video', stream: new MediaStream([video]), track: video })
       }
-      mark('display', 'done', video ? `track=${video.label || video.id}` : 'no video track')
+      mark(
+        'display',
+        'done',
+        video ? `surface=${surface ?? 'unknown'} track=${video.label || video.id}` : 'no video track',
+      )
     } catch (err) {
       const timedOut = err instanceof DOMException && err.name === 'TimeoutError'
       fail(toFailure('screen', err, timedOut))

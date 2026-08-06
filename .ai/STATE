@@ -27,6 +27,20 @@ gaps / in flight:
   prewarm (AudioContext create/resume on wedged hardware) had NO timeout — an unbounded await inside arm() could hang start forever,
   and the same unbounded init inside startMeasuredAudioCapture could hang stop() (now: 3s/5s deadlines, late contexts closed, resume
   raced at 2s). Synthetic e2e re-verified post-change. Await PO recheck with the real wedged-mic scenario.
+- FROZEN-SOURCE TAKES (PO 2026-08-06 "switched to a tab with a game, nothing recorded, just frozen frame") — fixed +
+  measured. Evidence first (real Chrome 150 / macOS 26, genuinely backgrounded tab, rAF==0): AudioWorklet tick 63/s,
+  canvas.captureStream 30fps, <video>→drawImage ~56/s, MediaRecorder ~110KB/s all UNAFFECTED by hidden — the composite
+  pipeline does not freeze, so a frozen file means the SOURCE stopped. Also measured: a tab under capture never goes
+  hidden (Chrome force-renders it), and a static surface still yields ~1 keep-alive frame/s — so "no frame for 3s" = dead,
+  not idle. Ship: src/core/capture/sourceLiveness.ts (pure, unit-tested) sampled from the composite's worklet tick →
+  channel-stalled/channel-resumed events + sticky red capture banner (a toast is unseen — the user is in another tab) +
+  Recording.stalled; composite marked UNUSABLE (kept running so it keeps watching; cancelled at stop) so an unedited
+  export renders from the raw channels instead of copying still frames. Same treatment when a video track ENDS mid-take —
+  previously readyState stayed 2, the composite repainted the last frame forever and instant export copied it (real bug).
+  getDisplayMedia now hints displaySurface:'monitor' (picker opens on Entire Screen) and a tab/window pick raises a notice
+  that other tabs/apps won't appear. Verified in-browser against the real module: freeze at 2.6s → stalled 5.7s, resume
+  8.6s → resumed 8.7s; synthetic 4-lane take persisted stalled:[screen,camera] with composite dropped. STILL NEEDS: PO
+  says which surface was shared (screen / window / one tab) — a single-tab share explains the report with no freeze at all.
 - PO 2026-07-23 triple report (Chrome capture stops after a while / AV desync / noises) → TD same-day fixes, awaiting PO recheck:
   capture hardened (screen wake lock while recording, storage.persist, mid-take storage/encoder death emits channel-error and keeps
   the durable partial instead of silently truncating — measured stop() no longer throws away a partial channel, and a failed measured

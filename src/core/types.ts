@@ -52,6 +52,11 @@ export interface Recording {
   composite?: CompositeRecording
   /** Requested channels that never delivered media — surface loudly in the UI. */
   missing?: ChannelKind[]
+  /** Video channels whose source froze for seconds mid-take (shared window
+   * hidden / on another Space, full-screen app took over, track died). Those
+   * stretches are a still image in the file — say so instead of shipping it
+   * silently. */
+  stalled?: ChannelKind[]
 }
 
 export interface ChannelEdit {
@@ -115,6 +120,12 @@ export type CaptureEvent =
   | { type: 'channel-notice'; kind: ChannelKind; message: string }
   /** A slow device delivered media after recording had already begun. */
   | { type: 'channel-late-join'; kind: ChannelKind }
+  /** A live video source stopped delivering frames — everything recorded from
+   *  here is a still image until 'channel-resumed'. The take keeps running (the
+   *  audio and the other channels are still good) but the UI must say so, and
+   *  it must stay said: the user is in another tab when this happens. */
+  | { type: 'channel-stalled'; kind: ChannelKind }
+  | { type: 'channel-resumed'; kind: ChannelKind }
   /** Session hit MAX_RECORDING_MS (or lost its last channel) and began stopping
    *  itself. UI should call stop() to collect the Recording — stop() is
    *  idempotent and always returns the same promise. */

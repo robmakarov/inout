@@ -148,6 +148,11 @@ class Session implements CaptureSession {
   private composite: LiveCompositeHandle | null = null
   private compositeStarting: Promise<void> | null = null
   private compositeInvalid = false
+  /** compositeInvalid AND torn down — nothing left to keep or stop. */
+  private compositeHardInvalid = false
+  /** Video sources frozen right now, and every one that froze at any point. */
+  private readonly stalledNow = new Set<ChannelKind>()
+  private readonly stalledEver = new Set<ChannelKind>()
   private stopPromise: Promise<Recording> | null = null
   private cancelPromise: Promise<void> | null = null
   private cancelled = false
@@ -449,12 +454,42 @@ class Session implements CaptureSession {
   }
 
   private invalidateComposite(reason: string): void {
-    if (this.compositeInvalid) return
+    this.compositeHardInvalid = true
     this.compositeInvalid = true
     console.info(`[capture] composite invalidated (${reason}) — unedited export will render`)
     const c = this.composite
     this.composite = null
     if (c) void c.cancel().catch(() => undefined)
+  }
+
+  /**
+   * Same verdict as invalidateComposite — an unedited export must render
+   * instead of copying the composite — but the composite keeps RUNNING so its
+   * worklet tick keeps watching the sources. That tick is the only hidden-tab-
+   * proof clock we have; killing it here would blind us to the source coming
+   * back. doStop/doCancel cancel it.
+   */
+  private markCompositeUnusable(reason: string): void {
+    if (this.compositeInvalid) return
+    this.compositeInvalid = true
+    console.info(`[capture] composite unusable (${reason}) — unedited export will render`)
+  }
+
+  /** A video source froze (or came back). The take continues — audio and the
+   * other channels are unaffected — but the frozen stretch is a still image, so
+   * the composite can't be copied and the user has to be told. */
+  private onSourceLiveness(kind: ChannelKind, event: 'stalled' | 'resumed'): void {
+    if (this.stateInternal !== 'recording') return
+    if (event === 'stalled') {
+      if (this.stalledNow.has(kind)) return
+      this.stalledNow.add(kind)
+      this.stalledEver.add(kind)
+      this.markCompositeUnusable(`${kind} source stalled`)
+      this.emit({ type: 'channel-stalled', kind })
+    } else {
+      if (!this.stalledNow.delete(kind)) return
+      this.emit({ type: 'channel-resumed', kind })
+    }
   }
 
   start(): void {
@@ -527,9 +562,14 @@ class Session implements CaptureSession {
     )
     const inputs = { screen, camera, audio }
     if (!canLiveComposite(inputs)) return
-    this.compositeStarting = startLiveComposite(inputs, `${this.recordingId}_composite.webm`)
+    this.compositeStarting = startLiveComposite(inputs, `${this.recordingId}_composite.webm`, {
+      onSourceLiveness: (kind, event) => this.onSourceLiveness(kind, event),
+    })
       .then((h) => {
-        if (this.stateInternal === 'recording' && !this.compositeInvalid) this.composite = h
+        // Keep the handle even when the composite is already unusable: it owns
+        // the source-liveness tick, and doStop/doCancel release it. A HARD
+        // invalidation (late join) already tore it down — don't resurrect it.
+        if (this.stateInternal === 'recording' && !this.compositeHardInvalid) this.composite = h
         else void h.cancel()
       })
       .catch((err) => {
@@ -656,6 +696,14 @@ class Session implements CaptureSession {
   private onTrackEnded(rt: ChannelRuntime): void {
     if (rt.ended) return
     rt.ended = true
+    // A dead VIDEO track keeps its <video> element at readyState 2 forever, so
+    // the live composite goes on repainting its last frame — and an unedited
+    // export would copy that still image for the whole remaining take while the
+    // channel's own file correctly stopped. Render from the channels instead.
+    if (rt.media === 'video' && this.stateInternal === 'recording') {
+      this.markCompositeUnusable(`${rt.kind} track ended`)
+      this.stalledEver.add(rt.kind)
+    }
     if (rt.useMeasured && rt.measured) {
       void rt.measured
         .stop()
@@ -812,10 +860,19 @@ class Session implements CaptureSession {
     const missing = requested.filter((k) => !keptKinds.has(k))
     if (missing.length) recording.missing = missing
 
+    if (this.stalledEver.size) recording.stalled = [...this.stalledEver]
+
     try {
       if (this.compositeStarting) await this.compositeStarting
-      const composite = this.compositeInvalid ? undefined : await this.composite?.stop()
-      if (composite) recording.composite = composite
+      if (this.compositeInvalid) {
+        // Unusable but still running (it was holding the liveness tick):
+        // release the encoder, audio context and orphan blob.
+        await this.composite?.cancel()
+        this.composite = null
+      } else {
+        const composite = await this.composite?.stop()
+        if (composite) recording.composite = composite
+      }
     } catch (err) {
       console.warn('[capture] live composite stop failed', err)
     }

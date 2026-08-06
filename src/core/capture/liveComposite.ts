@@ -8,6 +8,7 @@
  */
 import { blobStore } from '@core/store'
 import type { CompositeRecording } from '../types'
+import { SourceLiveness, type LivenessEvent } from './sourceLiveness'
 
 /**
  * Draw ticks come from an AudioWorklet, NOT requestAnimationFrame: rAF is
@@ -45,6 +46,17 @@ export interface LiveCompositeInputs {
   screen?: MediaStream
   camera?: MediaStream
   audio: MediaStream[]
+}
+
+export interface LiveCompositeOptions {
+  /**
+   * A video source stopped (or resumed) delivering frames mid-take. The
+   * composite keeps running — the session decides what to do — but a stalled
+   * source means the composite is painting the same frame over and over, so an
+   * unedited export must NOT copy it. Driven by the worklet tick, so it keeps
+   * firing while the tab is in the background (which is the normal case).
+   */
+  onSourceLiveness?: (kind: 'screen' | 'camera', event: LivenessEvent) => void
 }
 
 export interface LiveCompositeHandle {
@@ -128,6 +140,7 @@ function videoFor(stream: MediaStream): HTMLVideoElement {
 export async function startLiveComposite(
   inputs: LiveCompositeInputs,
   blobKey: string,
+  options: LiveCompositeOptions = {},
 ): Promise<LiveCompositeHandle> {
   const canvas = document.createElement('canvas')
   canvas.width = W
@@ -207,12 +220,27 @@ export async function startLiveComposite(
   const gaps: number[] = []
   let aborted = false
 
+  // Frozen-source watch: a dead track keeps readyState >= 2 forever, so
+  // drawImage happily repaints its last frame for the rest of the take and the
+  // file ends up a still image. The media clock is the only honest signal.
+  const liveness: { kind: 'screen' | 'camera'; el: HTMLVideoElement; det: SourceLiveness }[] = []
+  if (screenEl) liveness.push({ kind: 'screen', el: screenEl, det: new SourceLiveness() })
+  if (cameraEl) liveness.push({ kind: 'camera', el: cameraEl, det: new SourceLiveness() })
+
   const draw = (): void => {
     const now = performance.now()
     if (now - lastDraw < 1000 / FPS - 3) return
     lastDraw = now
     gaps.push(now - lastFrame)
     lastFrame = now
+    for (const s of liveness) {
+      if (s.el.readyState < 2) continue
+      const ev = s.det.sample(now, s.el.currentTime)
+      if (ev) {
+        console.warn(`[capture] ${s.kind} source ${ev}`)
+        options.onSourceLiveness?.(s.kind, ev)
+      }
+    }
     // Watchdog: median frame gap over the warmup window decides viability.
     if (!aborted && now - startedAt > WATCHDOG_AFTER_MS && gaps.length > 30) {
       const sorted = [...gaps].sort((a, b) => a - b)

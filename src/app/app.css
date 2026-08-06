@@ -103,6 +103,26 @@
   white-space: nowrap;
 }
 
+/* Frozen source: the take is still running but the picture is a still image.
+   Sticky (not a toast) — this happens while the user is in another tab, so it
+   has to still be on screen when they come back. */
+.capture__stalled {
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(520px, calc(100% - 32px));
+  background: var(--danger, #b3261e);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: center;
+  padding: 10px 16px;
+  border-radius: var(--r-md, 12px);
+  z-index: 7;
+}
+
 .capture--recording {
   background: #0a0a0a;
 }

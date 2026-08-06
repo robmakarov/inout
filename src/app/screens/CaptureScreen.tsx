@@ -59,6 +59,9 @@ export function CaptureScreen() {
   const [elapsedMs, setElapsedMs] = useState(0)
   const [remainingMs, setRemainingMs] = useState(MAX_RECORDING_MS)
   const [muted, setMuted] = useState<Partial<Record<ChannelKind, boolean>>>({})
+  /** Sources frozen right now — a toast is useless here, the user is in
+   * another tab while it happens and only sees this screen on the way back. */
+  const [stalled, setStalled] = useState<ChannelKind[]>([])
   const finishingRef = useRef(false)
 
   const finishRecording = async () => {
@@ -101,6 +104,7 @@ export function CaptureScreen() {
       setElapsedMs(0)
       setRemainingMs(MAX_RECORDING_MS)
       setMuted({})
+      setStalled([])
     }
   }
 
@@ -126,6 +130,14 @@ export function CaptureScreen() {
           break
         case 'channel-late-join':
           toast(`${CHANNEL_META[e.kind].label} joined late — this take will use full render on export`)
+          break
+        case 'channel-stalled':
+          setStalled((s) => (s.includes(e.kind) ? s : [...s, e.kind]))
+          toast(`${CHANNEL_META[e.kind].label} froze — recording a still image`, 'error')
+          break
+        case 'channel-resumed':
+          setStalled((s) => s.filter((k) => k !== e.kind))
+          toast(`${CHANNEL_META[e.kind].label} is live again`)
           break
         case 'state':
           break
@@ -161,6 +173,7 @@ export function CaptureScreen() {
       setElapsedMs(0)
       setRemainingMs(MAX_RECORDING_MS)
       setMuted({})
+      setStalled([])
       setSession(s)
       analytics.track('record_start', {
         screen: prefs.screen,
@@ -209,6 +222,12 @@ export function CaptureScreen() {
       {!session && <div className="capture__wordmark">INOUT</div>}
       {arming && armingLabel && <div className="capture__arming">{armingLabel}</div>}
       {session && <TimerPill elapsedMs={elapsedMs} remainingMs={remainingMs} />}
+      {recording && stalled.length > 0 && (
+        <div className="capture__stalled" role="alert">
+          {stalled.map((k) => CHANNEL_META[k].label).join(' & ')} frozen — recording a still image.
+          Re-share your whole screen to fix it.
+        </div>
+      )}
 
       {recording && (
         <div className="capture__preview">

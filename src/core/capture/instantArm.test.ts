@@ -1,6 +1,29 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ACQUIRE_TIMEOUT_MS, PROMPT_TIMEOUT_MS, primaryKindFor, withTimeout } from './acquire'
+import {
+  ACQUIRE_TIMEOUT_MS,
+  PROMPT_TIMEOUT_MS,
+  primaryKindFor,
+  surfaceNotice,
+  withTimeout,
+} from './acquire'
 import { parseSlowChannels } from './synthetic'
+
+describe('shared-surface notice', () => {
+  it('warns that a single tab records nothing else', () => {
+    expect(surfaceNotice('browser')).toMatch(/ONE browser tab/)
+    expect(surfaceNotice('browser')).toMatch(/whole screen/)
+  })
+  it('warns that a single window can freeze', () => {
+    expect(surfaceNotice('window')).toMatch(/ONE app window/)
+    expect(surfaceNotice('window')).toMatch(/freezes/)
+  })
+  it('stays quiet for a whole monitor — that records everything', () => {
+    expect(surfaceNotice('monitor')).toBeNull()
+  })
+  it('stays quiet when the browser does not report a surface', () => {
+    expect(surfaceNotice(undefined)).toBeNull()
+  })
+})
 
 describe('instant-arm primary channel selection', () => {
   const base = { screen: false, camera: false, mic: false, systemAudio: false }
