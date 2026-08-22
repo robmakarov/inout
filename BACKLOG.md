@@ -12,7 +12,7 @@ TD tags technical defects by severity. Done items get deleted, not archived.
 
 ### Now
 
-- [P2] Oracle returns ALL-NULL metrics (and exit 0!) under machine contention (parallel EE oracle runs + preview server) — instrument must retry or fail loudly with a reason, never emit null-as-result; pre-push gate blocked a docs-only push on it. EE: harden as part of task 3 gate work.
+- [P2] Oracle returns ALL-NULL metrics (and exit 0!) under machine contention (parallel EE oracle runs + preview server) — instrument must retry or fail loudly with a reason, never emit null-as-result; pre-push gate blocked a docs-only push on it. EE: branch ee/oracle-nullfix exists unmerged — TD review/merge; remainder folds into TASKS O8.
 
 - [P1] PO QA 2026-07-15 evening ran against the SHARED DEV SERVER while EE's 20-run headless oracle matrix hammered it — slow load / unresponsive modal / "waiting to connect" / mic-timeout likely environment artifacts. RETEST on clean prod build (TD serves main at localhost:4173). Rule going forward: PO QA only on a dedicated prod-build port; EE load tests spawn their own ephemeral server, never 5173.
 - [P1] Camera light at app load (PO report, pre-any-click?) — if reproduced on the clean 4173 build this violates 'no idle device access, ever'. Note: light DURING the screen picker (after record click) is the approved concurrent-acquisition design; need PO to distinguish which they saw.
@@ -21,9 +21,10 @@ TD tags technical defects by severity. Done items get deleted, not archived.
 
 ### Next
 
-- [P2] WebCodecs video capture spike/implementation: remove the known ±45 ms video-epoch sync jitter, enable smart cuts, and replace composite v1 without breaking instant export. (EE task 3, in progress)
-- [P2] Add the composite blob to crash-salvage manifests.
-- [P3] Code-split the 748 KB bundle; do not trade instant start for a theoretical bundle gain.
+Roadmap task pack (PO-approved 2026-08-22): `.ai/TASKS` v2 — optimization O1–O8, then features F1–F7.
+- [P1] O1 stream-to-disk exports + O3 chromium mp4 capture — small, unblocked, start here.
+- [P2] O4 WebCodecs engine (continues ee/webcodecs-capture-2; absorbs the old composite-salvage item) → then O5 export engine v2, O6 native-res, O7 bundle split (748 KB), O8 perf bands.
+- [P2] O2 capture-time loudness · features F1–F7 follow per pack order (F7 quality slider may run any time).
 
 ### Later — deliberately inactive
 
@@ -35,7 +36,7 @@ TD tags technical defects by severity. Done items get deleted, not archived.
 
 ### Now
 
-- [P2] Oracle returns ALL-NULL metrics (and exit 0!) under machine contention (parallel EE oracle runs + preview server) — instrument must retry or fail loudly with a reason, never emit null-as-result; pre-push gate blocked a docs-only push on it. EE: harden as part of task 3 gate work.
+- [P2] Oracle returns ALL-NULL metrics (and exit 0!) under machine contention (parallel EE oracle runs + preview server) — instrument must retry or fail loudly with a reason, never emit null-as-result; pre-push gate blocked a docs-only push on it. EE: branch ee/oracle-nullfix exists unmerged — TD review/merge; remainder folds into TASKS O8.
 
 - [P1] Provision Supabase + Google OAuth, then verify login → upload → signed-link view in a second browser. Required before public cloud sharing; local download already works.
 - [P2] Daily real use: collect only concrete friction/defects. PM turns evidence into a bounded decision; PO decides any resulting UX change.

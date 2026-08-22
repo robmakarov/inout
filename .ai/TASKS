@@ -1,113 +1,191 @@
-# EE task pack — TD-assigned, 2026-07-15 (EE token window: ~2 days)
+# EE task pack v2 — TD-authored 2026-08-22. PO-approved roadmap: OPTIMIZATION first (O), then FEATURES (F).
+# Executor: Opus agent sessions in the EE seat. Read .ai/ROLES + this file; nothing else is assignment.
+# Supersedes pack v1 (git history archives it): v1 tasks 1,2 merged · 7 obsolete (synchronized start
+# superseded instant-arm) · 9 shipped (awaits PO real-Safari recheck, tracked in STATE) · 3 → O4 ·
+# 4 → absorbed by O4 · 5 → O7 · 8 residual → BACKLOG P2 (fidelity-runner retry; ee/oracle-nullfix exists, unmerged).
 
-Operating rules (apply to every task):
+Operating rules (every task):
 - One branch per task: `ee/<task-id>`. Never commit to main. TD merges.
-- Evidence required for merge = the task's GATES section, pasted as numbers/output in the handoff, plus `npm run typecheck && npm test` green.
-- Frozen constraints always apply: instant record start; instant unedited export; no idle device access; no streaming as capture basis; `src/core` never imports `src/app`; contracts live in src/core/types.ts.
-- If a gate can't be met, stop and report WHY with measurements — a failed spike with data is a success; code without evidence is not.
-- Don't refactor outside task scope. Don't touch .ai/* except appending your handoff notes to this file under your task.
+- Evidence required for merge = the task's GATES pasted as numbers/output in a handoff appended under
+  the task, plus `npm run typecheck && npm test` green, plus the named oracles green.
+- PO FROZEN RULE (2026-07-21): never break a working path. Every new engine ships capability-gated
+  with the current path as runtime fallback; defaults unchanged unless the task says otherwise.
+- Frozen constraints: instant record start · instant default export · no idle device access ·
+  no streaming-as-capture · src/core never imports src/app · contracts live in src/core/types.ts.
+- A gate you cannot meet = stop and report WHY with measurements. A failed spike with data is a
+  success; code without evidence is not.
+- No refactors outside task scope. Don't touch .ai/* except appending your handoff under your task.
+- HEAVY RUNS (oracle matrices, load rigs) are announced first and never run while PO is using the machine.
+- Order is dependency order within each phase. O-phase before F-phase, except F7 (independent, any time).
 
-Priority order (do 1 before 2; 3–5 parallelizable after 1):
+═══ PHASE O — OPTIMIZATION ═══
 
-## 1. oracle-ci — pipeline oracle runs headless + flake fixed  [P2, do first: gates everything else]
-Goal: `npm run oracle` runs the full synthetic capture→export→measure cycle headless (chromium, ?synthetic=1) and exits nonzero when out of band. Wire into CI if a runner exists; otherwise a git pre-push hook + documented local command.
-Known flake to fix FIRST: cold-run 'corrected' sync metric aliased -960ms once (stall-estimate instrument bug — see .ai/STATE round3 note). Reproduce, fix the instrument, prove with 20 consecutive cold runs.
-Bands: sync |offset| ≤ 60ms hard fail; audioIntegrity jump ≤ 0.1; spur ≤ −40dB (TD-corrected 2026-07-16; was jump=0 / −50dB by error).
-GATES: 20/20 cold runs in band, zero aliased metrics; single command documented in package.json.
+## O1. export-stream-to-disk — O(1)-memory exports  [P1, small, do first]
+Why: both export paths buffer the entire MP4 in RAM (BufferTarget — pipeline.ts:209, instant.ts:177).
+A 30-min take at 8 Mbps ≈ 1.8 GB contiguous ArrayBuffer → tab OOM. The 30-min cap is what hides this.
+Goal: mediabunny StreamTarget (chunked/positioned) → OPFS scratch file via the existing positioned
+durable writer; final ExportResult.blob = disk-backed File from OPFS. Both pipeline.ts and instant.ts.
+Constraints: ExportResult contract unchanged; abort removes the scratch file; Safari path included.
+GATES: (a) 30-min synthetic export: peak JS heap < 300 MB, before/after numbers; (b) short-take A/B:
+plays, equal duration/tracks/dimensions; (c) abort mid-export leaves no orphan OPFS file (listing);
+(d) typecheck+test+oracle+fidelity green.
 
-### EE handoff — oracle-ci (branch ee/oracle-ci, 2026-07-16)
+## O2. capture-time-loudness — kill the probe double-decode  [P2, small]
+Why: every export (incl. instant) decodes ALL audio twice — a throwaway mixer pass for loudness, then
+the render. "Instant" export is O(duration) because of this.
+Goal: accumulate MixLoudness (p90/p20 window-RMS + true peak, same math as measureMixLoudness) DURING
+capture on the certified-gain sum (tap the measured-audio PCM per channel, sum at 1/N in a lightweight
+accumulator), persist on Recording. Instant path consumes stored stats and drops its probe pass.
+Render path keeps its probe for edited windows (trims change the mix).
+Constraints: decision math unchanged (makeupGainForLoudness); takes without stats (old takes,
+MediaRecorder-audio browsers) fall back to the probe. Strictly additive.
+GATES: (a) same-take A/B: stored-stats makeup within ±0.5 dB of probe-based; (b) 10-min take instant
+export: measure phase ≈ 0 decode, report seconds saved; (c) fidelity green; (d) fallback path proven
+(spoofed-UA smoke).
 
-**Delivered:** stall-estimate fix + flash+click pairing/correction flake fix; CI bands aligned to oracle-internal; ephemeral-only server (`npm run oracle` / `oracle:cold`); pre-push hook.
+## O3. chromium-mp4-capture — hardware encode + single-generation exports  [P1, two branches, (a) before (b)]
+Why: Chromium channel recording is webm (VP8/VP9 = SOFTWARE encode, ×2 streams) while the composite
+runs a third (hardware) encode — the biggest capture CPU burn. And unedited exports ship the composite,
+i.e. a SECOND lossy generation of an already-encoded source.
+(a) ee/o3-mp4-recorder: Chromium MediaRecorder MIME preference gains mp4(h264+aac) FIRST when
+    isTypeSupported (webm stays in the list as fallback — additive); track.contentHint='text' (screen)
+    / 'motion' (camera) at acquire; camera requests 1920×1080 ideal when the config has no screen
+    channel (camera-full takes currently upscale 720p — a real, visible defect).
+(b) ee/o3-single-gen: a take with exactly ONE video channel whose dims == export dims and codec is
+    mp4-compatible h264 → skip the live composite entirely (audio mix graph still runs); unedited
+    export = packet-copy the RAW channel (extend instant.ts source selection). Composite continues for
+    multi-video and letterboxed cases.
+GATES (a): oracle sync 10/10 in band · capture CPU before/after on the 08-22 rig (report %, expect a
+large drop, software VP→hardware h264) · Safari spoofed-UA smoke unchanged · salvage smoke green.
+GATES (b): screen-only 1080p take: console proves no composite recorder · instant export ≤ current ·
+PSNR/visual evidence that single-generation ≥ composite-generation quality · capture write bandwidth
+~halved (bytes/s logged) · all oracles green.
 
-**Checks:** `npm run typecheck && npm test` → 86/86 green.
+## O4. webcodecs-engine — the keystone  [P1, big; CONTINUES ee/webcodecs-capture-2 (on origin, behind main — rebase first)]
+Why: the pixel path (MediaRecorder + <video> + main-thread 2D canvas) forces 4–6 redundant decodes
+during capture, fixed-tick redraws of static frames, no keyframe control, ±45 ms epoch jitter, and the
+1080p capture ceiling.
+Step 1 (gate to proceed): root-cause the PROVEN +15–25 ms cross-architecture systematic blocking the
+≤10 ms sync gate. Per STATE it is NOT video-side — audit the audio anchor (min-filter and catch-up
+rejection in measuredAudio.ts) and the oracle's flash model. Fix instrument or anchor; prove ×10 runs.
+Step 2: MediaStreamTrackProcessor → VideoFrames transferred to a WORKER compositor (OffscreenCanvas;
+WebGPU importExternalTexture preferred, WebGL then 2D fallback) → VideoEncoder (prefer-hardware,
+realtime, keyframe cadence ≤2 s — the smart-cut prerequisite) → fMP4 mux → positioned durable OPFS
+writer. Frame-driven draw (encode on frame arrival, ~1 fps keep-alive when static), not a fixed 30 Hz
+tick. The on-screen recording preview renders the compositor's own output — zero extra <video>
+decodes. SourceLiveness feeds from frame arrivals (worklet tick remains the clock). Raw channel
+capture may also move to VideoEncoder on Chromium in the same worker — optional, evidence decides.
+Constraints: MediaRecorder path stays as capability/watchdog fallback (weak machine degrades, proven);
+crash-salvage must recover the fMP4 composite mid-write (ABSORBS v1 task 4 — composite salvage becomes
+free); measured-audio pipeline untouched; instant export contract unchanged.
+GATES: oracle sync ≤10 ms 10/10 · 08-22 4K rig: delivered ≥28 fps at 1080p output (baseline 21.5/11.9)
+· mid-record tab-kill salvages composite + all channels · forced-slow harness proves watchdog fallback
+· capture CPU ≤ O3 baseline (report) · unedited instant export ≤ 200 ms · all oracles green.
 
-**GATES (measured, Chromium headless, ephemeral port — never :5173):**
+## O5. export-engine-v2 — worker, pipelined, smart-cut, codec ladder  [P1, after O4]
+Why: the render is main-thread and strictly serial (decode awaits draw awaits encode), sleeps every
+8 frames, tops out near realtime. Hardware decode+encode overlapped → multi-× realtime.
+Goal: (a) exportRecording moves to a dedicated worker (already OffscreenCanvas-based; progress via
+postMessage); yield hacks deleted. (b) stage pipelining with small ring buffers + encodeQueueSize
+backpressure (decode-ahead 4–8 frames per source). (c) SMART-CUT: packet-copy full GOPs between cut
+points, re-encode only boundary GOPs (needs O4 keyframe cadence; full render remains for old takes).
+(d) codec ladder above avc: probe hevc/av1 hardware encode (isConfigSupported, mp4 container); avc
+floor, vp9/webm last (codecs.ts FALLBACK_CHAINS is the seam).
+Constraints: certified audio path behavior identical (fidelity oracle is the proof); progress UI keeps
+working; abort works mid-pipeline.
+GATES: 60 s 1080p30 edited synthetic take ≥5× realtime on the TD machine (report ×; stretch 8×) ·
+trim-only edit of a 30 s take ≤1 s · zero main-thread long tasks >50 ms during export (trace) · every
+ladder rung's file plays (Chrome + Safari where the codec applies) · fidelity+sync green.
 
-| Gate | Target | Result |
-|------|--------|--------|
-| Aliased corrected sync | 0/20 | **0/20** ✓ |
-| Cold runs in band (sync ≤60ms, jump≤0.1, spur ≤−40dB) | 20/20 | **20/20** ✓ |
-| Single command in package.json | yes | **yes** ✓ |
+## O6. native-res-capture — lift the ceiling the right way  [P2, after O4]
+Why: CAPTURE_MAX_* (1080p30) was correct for the old engine; the product bar is "no visual
+compromises" — a 4K screen should be recordable at native res once the engine affords it.
+Goal: raise capture caps to source-native (+ optional 60 fps) BEHIND measured backpressure: the O4
+compositor watches encoder queue/frame delivery and degrades stepwise (native → 1440p → 1080p) BEFORE
+delivery collapses, console-evidenced. Export resolution options tie into F7.
+Constraints: NEVER regress the 08-22 4K-freeze fix — degradation engages before starvation; default
+export stays 1080p30 unless the user chooses higher (F7).
+GATES: 4K rig on a capable machine sustains ≥25 fps at 4K encode OR degrades stepwise with console
+evidence and zero freeze · PO's real 4K-game-tab scenario re-verified · oracles green.
 
-**20-run cold matrix** (`npm run oracle:cold`, port 64549 ephemeral):
-- sync mean (ms): 5.4, 7.1, 8.9, 32.4, 19.7, 31.2, 15.7, 33.7, 5.5, 19.9, 20.1, 17.9, 39.0, 11.3, 10.1, 19.2, 32.4, 34.0, 36.3, 28.2
-- sync maxAbs (ms): 5.4, 7.1, 8.9, 32.4, 46.1, 31.2, 15.7, 33.7, 5.5, 19.9, 20.1, 17.9, 39.0, 11.3, 10.1, 45.8, 32.4, 34.0, 36.3, 28.2
-- spur (dB): −50.3, −51.4, −50.9, −57.8, −56.5, −64.1, −49.8, −53.0, −52.9, −49.5, −52.3, −53.6, −52.4, −54.1, −52.9, −59.1, −51.1, −51.8, −51.8, −56.4
-- jump: 0×19, 0.06×1 — all ≤0.1
-- aliased: 0/20
+## O7. bundle-split — smaller first paint, instant start intact  [P2, mechanical; absorbs v1 task 5]
+Goal: record path eager; editor/export/cloud lazy; supabase-js lazy; PREFETCH the editor chunk the
+moment recording starts (user is guaranteed busy — chunk is warm before stop). vite manualChunks.
+GATES: initial JS ≤ 300 KB (baseline 748) · record-click→recording latency unchanged (arming logs
+before/after) · network log proves the editor chunk loads during a 10 s take, before stop · no new
+waterfall on the record path.
 
-**Fixes:** (1) grid-align stream-arrival stall estimate; (2) reject schedule correction that takes in-band raw out of band (runs 8/9 class: raw~+33 − badStall~450 → −417); (3) one-to-one sequential flash+click pairing + median outlier drop; (4) oracle always spawns ephemeral Vite — `--port=` disabled, :5173 forbidden.
+## O8. perf-oracle — performance regressions gate like sync ones  [P2, lands with O4/O5]
+Goal: extend the oracle suite with perf bands: export ×realtime floor · capture delivered-fps under
+the synthetic 4K load · export peak memory. Wire into pre-push like sync/fidelity.
+GATES: bands enforced (prove red once by injecting a regression, e.g. restoring the yield sleep) ·
+main green · headless + ephemeral server like existing oracles.
 
-**TD merge:** recommended — gates met.
+═══ PHASE F — FEATURES (PO-approved 2026-08-22; order below; F7 independent) ═══
 
-## 2. oracle-audio-fidelity — music quality by numbers  [P2, new: from today's PO bug]
-Goal: extend the oracle so audio FIDELITY (not just sync/splices) is measured end-to-end: synthetic stereo multitone + sine sweep through capture→export, decode exported MP4, report: per-tone level error (dB), IMD/THD estimate, stereo channel separation (L≠R preserved), clip/limiter engagement count.
-Why: today's tanh/limiter bugs (see commit 548b084) shipped because QA was by ear only. Never again.
-GATES: metric detects (a) the old tanh bus (reintroduce locally to prove detection), (b) mono downmix, (c) a -6dB/20:1 limiter — each as a red result; current main is green: tone error ≤ 1dB, separation ≥ 40dB, zero limiter hits on solo-source.
+## F1. mid-take-cuts  [P1, first feature]
+PO: yes. Cut mistakes out of the MIDDLE, not just trim ends.
+Goal: EditState gains an ordered kept-segment list on the output timeline (types.ts — compatible
+extension: absent list = today's behavior). Timeline UI: split-at-playhead, delete segment, drag cut
+boundaries. Engine: output-time→source-time generalized over segments (channelSourceTimeAt); audio
+reuses the existing seam-fade at every join; smart-cut (O5) keeps cut exports ~instant on new takes.
+GATES: oracle cut-matrix (≥3 cuts at arbitrary offsets): sync bands hold across EVERY joint · fidelity
+finds zero clicks at joins · 30 s take + 3 cuts exports ≤2 s (post-O5) · preview honors cuts (parity)
+· takes with no cuts behave byte-identically to today.
 
-### EE handoff — oracle-audio-fidelity (branch ee/oracle-audio-fidelity, 2026-07-16)
+## F2. zoom-pan  [P1, after F4; PO: "i think so" — reconfirm scope with PO before building]
+Goal: keyframed viewport track (time→rect, cubic ease). Editor: direct manipulation on the stage
+(drag to pan when zoomed, handles/wheel to zoom) + markers on the timeline. Export: compositor samples
+the viewport per frame with proper filtering (no shimmer). Preview parity via shared interp fns
+(CSS transform mirror).
+GATES: preview↔export geometry parity ≤1 px at 3 sampled times · no aliasing shimmer vs 1:1 (visual
+evidence) · sync+fidelity green · zero cost when the track is absent.
 
-**Delivered:** `audioFidelity.ts` + `fidelityRun.ts` + harness `oracle-fidelity` + `npm run oracle:fidelity` (ephemeral server). Stacked on `ee/oracle-ci` tip.
+## F3. background-frame  [P2]
+PO: okay.
+Goal: background layer (color/gradient/wallpaper presets) + padding + rounded corners + shadow on the
+screen surface. Default remains current full-bleed (frozen rule: nothing changes without user action).
+GATES: preview↔export parity · export time delta <10 % · defaults render identical to today (A/B) ·
+oracles green.
 
-**Checks:** typecheck + 90 tests green (4 fidelity unit tests prove a/b/c RED on synthetic).
+## F4. movable-camera  [P1; PO spec 2026-08-22 — the emphasized feature]
+PO spec: the camera PiP is movable DIRECTLY ON THE VIDEO — the user drags it on the stage, and the
+movement is TIMED: the export moves it exactly WHEN the user moved it. Drags at playhead time T write
+position keyframes at T; playback and export replay the motion (eased interpolation, edge-clamped).
+Also resizable (corner handle).
+Scope v1: editor-time motion only. Live-drag DURING recording is OUT (the burned-in composite would
+disagree with the edit) — revisit after O4 makes the live compositor edit-aware.
+Constraints: untouched takes keep the default BR-24% PiP and their instant packet-copy path
+(never-break); position track lives in EditState (persisted, survives reload); the camera-full rule
+(no screen → cover) unchanged unless a track exists.
+GATES: scripted drags at t=2 s and t=5 s → exported frames show the PiP at those positions at those
+times (frame-sample evidence) · untouched take still takes the instant path (logs) · preview↔export
+parity · edit persists across reload · oracles green.
 
-**GATES:**
+## F5. silence-speed  [P2, two branches; (a) rides F1]
+PO: okay. Deterministic DSP only — NO transcript, NO ML, ever.
+(a) silence tightening: detect via the existing window-RMS analysis (threshold / min-gap / padding
+params) → a PROPOSED cut list the user previews and toggles; applying uses F1 machinery.
+(b) per-segment speed ×1.25–3, pitch preserved (WSOLA time-stretch on the mix), video retimed to match.
+GATES (a): synthetic take with a known silence map: ≥95 % recall on gaps ≥800 ms, ZERO cuts inside
+speech · joins click-free (fidelity) · proposal stays preview-only until applied.
+GATES (b): a tone through a 2× segment holds pitch within 10 cents · sync bands hold at segment
+boundaries · export time impact reported.
 
-| Gate | Result |
-|------|--------|
-| (a) tanh bus → red | ✓ unit (`applyLegacyTanhBus` → toneErr > 1dB) |
-| (b) mono downmix → red | ✓ unit (`applyMonoDownmix` → sep < 40dB) |
-| (c) −6dB/20:1 limiter → red | ✓ unit (`applyLegacyLimiter` on hot multitone → toneErr > 1dB) |
-| current path green | ✓ e2e `npm run oracle:fidelity`: toneErr=**0.36dB**, sep=**57.0dB**, hits=**0** |
+## F6. pause-retake  [P1, after O4 — build segments on the new engine once, not twice]
+PO: yes. Pause/resume + retake-from-here.
+Goal: the recording session gains segments: pause stops feeding recorders (devices STAY armed — no new
+permission or idle-access surface), resume opens segment N+1 with its own epoch anchor; per-segment
+durable blobs; the timeline concatenates segments; retake = drop the tail segment and re-record it.
+Salvage covers every segment.
+GATES: pause/resume take: lane-length equality bands hold per segment · cross-segment sync in oracle
+bands (multi-segment matrix) · tab-kill mid-segment-2 salvages segment 1 fully + segment 2 partial ·
+retake leaves prior segments intact · paused state visible + wake lock held while paused.
 
-**E2E green (ephemeral :49937):** thd≈clean after excluding intentional 880 harmonic; imd=−54.3dB.
-
-## 3. webcodecs-capture — video epoch + smart-cut + instant v2  [P2, the big one]
-Goal: graduate src/experimental WebCodecs rig to replace MediaRecorder VIDEO capture behind the existing contract (types.ts unchanged or extended compatibly). Sample-accurate video timestamps kill the ±45ms epoch jitter. Keyframe-indexed storage enables smart-cut (trim without re-encode) and instant export of EDITED takes when cuts land on keyframes.
-Constraints: MediaRecorder path stays as capability fallback; crash-durability (positioned writes via durable worker) must hold — mid-record reload salvages video; watchdog degrades to fallback on weak machines; audio pipeline untouched (measured audio is done).
-GATES: oracle sync |offset| ≤ 10ms across 10 runs (vs current ±45); mid-record reload salvage still recovers all channels; unedited instant export still ≤ 200ms; keyframe-aligned trim exports without full re-encode (measure: edited export of a 30s take with one cut ≤ 1s); typecheck+tests+oracle green.
-Big task — split into PR-sized branches if needed: (a) capture+durability, (b) trim/smart-cut, (c) instant v2 wiring.
-
-## 4. composite-salvage — instant export survives crash  [P2, small]
-Goal: live-composite blob registered in the pending manifest and recovered on boot, so a salvaged unedited take still gets instant export (today it falls back to full render).
-GATES: mid-record reload → editor shows take → unedited export uses salvaged composite (measure: <500ms, no re-encode) → composite plays; all existing salvage tests green.
-
-## 5. code-split — 748KB bundle  [P3, mechanical, do last]
-Goal: lazy-load editor/share/cloud routes; record path stays eager — instant law wins over bundle size.
-GATES: initial JS ≤ 350KB; record-click→recording latency unchanged (measure before/after with the arming logs); no new waterfall on the record path.
-
-## 6. sync-spike — 2-device clock alignment  [SHADOW, only if tokens remain]
-Goal (north-star gate, PO-approved): measure achievable cross-device epoch alignment between two browsers (laptop+phone Safari if possible, else two Chromium profiles) over LAN: WebRTC data channel or WS ping/pong clock exchange, report p50/p95 epoch error over 10-min sessions.
-Kill criteria (report, don't polish): if p95 epoch error > 33ms (one 30fps frame) after best effort, the current approach is dead — write that up with data in src/experimental/sync-spike/VERDICT.md. No product code. No UI.
-GATES: VERDICT.md with measured distributions, methodology, and a clear GO/NO-GO recommendation.
-
-## 7. instant-arm — start never waits for slow devices  [P1, PO: 'waiting for device very long']
-Goal: record click → recording state begins the moment the FIRST video stream resolves (screen right
-after picker close; camera-only = camera). Slower granted devices JOIN the take mid-flight with correct
-startOffsetMs (timeline already supports it). Cut ACQUIRE_TIMEOUT_MS 15s→5s; a device that misses the
-take start shows a live in-take indicator ('mic joining…' → 'mic missing') and an unmissable post-record
-warning (closes the silent-channel-loss P2).
-Constraints: no idle device access unchanged; concurrent-with-picker acquisition unchanged; crash
-salvage must include late-joined channels; composite handles late audio join (or falls back to render).
-GATES: synthetic harness with an artificially 3s-delayed camera: click→recording-state ≤ 250ms after
-display resolves ×10 runs; late channel startOffsetMs correct (oracle sync bands hold for late-join);
-device never arriving → take completes + loud warning; salvage smoke PASS; typecheck+tests+oracle green.
-
-## 8. audio-perfection — real-device sound certified, not argued  [P1, PO: 'sound must be perfect']
-Composite export shortcut is REMOVED (TD 2026-07-16) — all exports render through the certified mixer.
-Remaining: (a) fidelity runner needs the same incomplete-metrics retry as oracle.mjs (cold-start flake:
-toneErr 394dB/silence on run 1, green on rerun); (b) real-device residual: PO exports had 5 boundary
-clicks (composite-era) — obtain ONE post-change PO export, run file-mode fidelity, close or re-open;
-(c) add export-path marker to file metadata so any PO complaint self-identifies its pipeline.
-GATES: fidelity e2e green ×10 consecutive (with retry guard); post-change PO file analyzed with zero
-clicks above threshold, or a new red finding with numbers.
-
-## 9. safari-compat — every capable browser works  [P1, PO override of Chromium-first]
-Goal: capture+edit+export works on macOS Safari 17+ (getDisplayMedia window/screen, getUserMedia,
-MediaRecorder mp4/aac fallbacks — current VIDEO_MIMES/AUDIO_MIMES are webm-only and construct-throw on
-Safari), and camera/mic/audio-only takes work on iOS Safari (no screen capture exists on iOS, any
-browser — Apple native-only). Feature-detect per capability, degrade per-channel with honest UI copy
-(no system audio on Safari — platform limit, say so in the picker hint).
-GATES: macOS Safari real-device: screen+camera+mic take → edit → export plays in QuickTime; iOS Safari
-real-device: camera+mic take → export plays; Chromium suite unchanged (typecheck+tests+oracle+fidelity
-green); capability matrix documented in CONTEXT.md.
+## F7. quality-slider  [P2, independent — may ship any time; PO: "we need quality slider before export"]
+Goal: ExportPanel gains a quality slider BEFORE export: tiers map resolution × bitrate (720p / 1080p /
+1440p / source-native once O6 lands; bitrate scales per tier) + estimated file size + an honest time
+hint. Default tier = current settings and KEEPS the instant packet-copy path; other tiers route to the
+render path and say so.
+GATES: size estimate within ±20 % across 3 tiers (synthetic) · default tier provably still instant
+(logs) · every tier's file plays · slider choice persisted (prefs).

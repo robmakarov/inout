@@ -30,11 +30,14 @@ Audio-only becomes visualized video. UI: iOS-Camera simplicity, Final Cut timeli
 
 - **Instant is law**: instant record start, instant default export. Slow = dead product.
 - **No idle device access, ever**: camera/mic activate only after the record click.
-- Chromium-first · offline/local-first · fixed composition layout (screen + cam PiP BR; audio → waveform)
-- 30-min cap · channels recorded separately (per-channel trim) · export always a real file
+- Every capable browser (Chromium-first unfrozen 2026-07-16) · offline/local-first
+- Composition: screen + cam PiP BR default; audio → waveform. Fixed-layout UNFROZEN 2026-08-22:
+  user-movable TIMED camera, zoom/pan, backgrounds approved on the roadmap; untouched takes keep the default.
+- 30-min cap (until stream-to-disk exports land — TASKS O1) · channels recorded separately (per-channel trim) · export always a real file
 - Cloud optional: Google login, free tier, finished exports only, 512 MB/user, 7-day links (Supabase behind swappable interface)
 - Security: TLS + at-rest + signed links, minimal data, E2EE-compatible architecture
-- MVP excludes: AI, native apps, advanced editor, P2P, collaboration, social, permanent free storage
+- Excluded permanently: AI/transcripts. MVP excluded: native apps, P2P, collaboration, social, permanent
+  free storage. Editor expansion is now the approved post-MVP roadmap (2026-08-22, see Roadmap below)
 - Backlog (approved): **instant link mode** — opt-in progressive upload + cloud assembly, OFF by default
 - North star: **distributed multi-device capture** (phone camera + laptop screen, one time model). Shapes time/session/format decisions now; product work gated on a 2-device sync spike with kill criteria. iOS = Safari capture node first; thin native node later; never a separate editor.
 - Never: real-time streaming as the capture basis · closed project format · sub-ms multi-mic mixing promises · silent background capture · deterministic replay of live media
@@ -50,13 +53,31 @@ audio noise fixes (worklet splicing, mixer limiter, raw system audio for music).
 Known gaps: ±45 ms sync jitter (video epoch — next task), composite absent from crash salvage,
 bundle 748 KB (code-split later), cloud unprovisioned.
 
+## Roadmap (PO-approved 2026-08-22 — executable plan in .ai/TASKS)
+
+Optimization first, then features. Ordering is dependency order; every task evidence-gated.
+
+1. **Optimization O1–O8**: exports stream to disk (removes the RAM ceiling on long takes) · loudness
+   measured during capture (makes instant export truly O(1)) · Chromium capture moves to hardware
+   mp4/h264 with single-generation packet-copy exports · WebCodecs worker compositor (the keystone:
+   sub-frame sync, zero redundant decodes, smart-cut prerequisite) · pipelined worker export with
+   smart-cut + HEVC/AV1 ladder · native-resolution capture behind measured backpressure · bundle split ·
+   performance oracle bands.
+2. **Features F1–F7**: mid-take cuts · zoom/pan (soft-yes, reconfirm) · background/frame ·
+   movable camera (draggable on the stage, movement is TIMED and replayed in the export) ·
+   silence tightening + per-segment speed (deterministic DSP, no transcript) · pause/resume + retake ·
+   quality slider before export.
+
+Competitive stance: the empty quadrant is no-install + local-first + world-class output — vs Loom's
+network (mediocre tool), Screen Studio's Mac-only polish, Cap's required install, Tella's cloud-bound
+browser. Share loop stays the minimal signed-link cloud already scoped.
+
 ## Next
 
 Validated: PO completed a real Chrome full-flow QA and judged the MVP acceptable; bugs were
 reported to the TD for triage. Next: (1) provision Supabase + Google OAuth (~15 min,
 docs/CLOUD_SETUP.md) then e2e login→upload→share→view; (2) PO uses INOUT daily, collects pain points.
-Engineering (EE, TD-gated): (4) WebCodecs video capture — sync jitter + smart-cut + instant v2;
-(5) oracle in CI; (6) code-split.
+Engineering (EE, TD-gated): the Roadmap above — .ai/TASKS O1–O8 then F1–F7 (oracle-in-CI done).
 Ship: (7) domain + email (no payments yet); (8) public deploy; (9) UX pass from pain points (PO);
 (10) first users + feedback channel.
 After real usage data: next milestone · business model · validation approach · launch path.
