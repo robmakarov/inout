@@ -1,4 +1,4 @@
-import type { CaptureConfig, ChannelKind, MediaKind } from '@core/types'
+import { DEFAULT_EXPORT_SETTINGS, type CaptureConfig, type ChannelKind, type MediaKind } from '@core/types'
 
 export interface AcquiredChannel {
   kind: ChannelKind
@@ -132,6 +132,86 @@ export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): 
 export function isNarrowband(track: MediaStreamTrack | undefined): boolean {
   const rate = track?.getSettings().sampleRate
   return typeof rate === 'number' && rate > 0 && rate < 32_000
+}
+
+/**
+ * CAPTURE CEILING — never pull more pixels than the product can ever emit.
+ *
+ * Everything downstream is 1920×1080@30: the live composite canvas, the editor
+ * stage, and BOTH export paths (DEFAULT_EXPORT_SETTINGS). Capturing a 4K
+ * surface therefore buys nothing and is paid for four times over, all on the
+ * one GPU that is also drawing the shared surface:
+ *   1. Chrome's capture pipeline reads back 3840×2160 frames (~12 MB each)
+ *   2. the raw screen MediaRecorder H.264-encodes them at 8 Mbps (≈0.03 bpp)
+ *   3. the live composite decodes them into a <video> and downscales to 1080p
+ *      on every one of its 30 ticks per second
+ *   4. the on-screen preview decodes the same 4K stream a second time
+ * Saturate that and Chrome's frame-sink capturer runs out of in-flight buffers
+ * and simply stops delivering — the take is a frozen picture with a live clock
+ * (PO 2026-08-22: shared a Chrome tab rendering a 4K game, "video freezes").
+ *
+ * Capping at the export size makes the whole chain 1:1 and costs nothing in
+ * quality: the 4K frames were being thrown away at export anyway.
+ */
+export const CAPTURE_MAX_WIDTH = DEFAULT_EXPORT_SETTINGS.width
+export const CAPTURE_MAX_HEIGHT = DEFAULT_EXPORT_SETTINGS.height
+export const CAPTURE_MAX_FPS = DEFAULT_EXPORT_SETTINGS.fps
+
+/** Upper bounds only — a smaller surface satisfies them untouched, so this can
+ * never overconstrain a source and cost the user their screen capture. */
+export function displayVideoConstraints(): MediaTrackConstraints {
+  return {
+    width: { max: CAPTURE_MAX_WIDTH },
+    height: { max: CAPTURE_MAX_HEIGHT },
+    // max, not just ideal: a 60 fps game tab hands over 60 fps otherwise, and
+    // every frame above 30 is encoded twice and then dropped at export.
+    frameRate: { ideal: CAPTURE_MAX_FPS, max: CAPTURE_MAX_FPS },
+    // displaySurface is a HINT, not a constraint: it opens Chrome's picker
+    // on the Entire-Screen pane instead of the tab list, so the default
+    // choice records everything the user does. Any surface stays pickable.
+    displaySurface: 'monitor',
+  } as MediaTrackConstraints
+}
+
+export function exceedsCaptureCeiling(s: MediaTrackSettings): boolean {
+  return (
+    (s.width ?? 0) > CAPTURE_MAX_WIDTH ||
+    (s.height ?? 0) > CAPTURE_MAX_HEIGHT ||
+    // +1 fps slack: capturers report 30.000001 / 29.97 style values.
+    (s.frameRate ?? 0) > CAPTURE_MAX_FPS + 1
+  )
+}
+
+/**
+ * Second line of defence for the ceiling: a browser may ignore the constraints
+ * passed to getDisplayMedia (they are advisory for display surfaces in some
+ * engines), and a tab can grow mid-pick. Applied BEFORE the channel is
+ * delivered — i.e. before its MediaRecorder exists — because a resolution
+ * change after recorder.start() reinitialises the encoder mid-file.
+ * Bounded and failure-tolerant: an oversized take beats no take.
+ */
+export async function capDisplayTrack(track: MediaStreamTrack | undefined): Promise<void> {
+  if (!track) return
+  const before = track.getSettings()
+  if (!exceedsCaptureCeiling(before)) return
+  try {
+    await withTimeout(
+      track.applyConstraints({
+        width: { max: CAPTURE_MAX_WIDTH },
+        height: { max: CAPTURE_MAX_HEIGHT },
+        frameRate: { max: CAPTURE_MAX_FPS },
+      }),
+      1500,
+      'applyConstraints(display)',
+    )
+    const after = track.getSettings()
+    console.info(
+      `[capture] display capped ${before.width}×${before.height}@${before.frameRate ?? '?'} → ` +
+        `${after.width}×${after.height}@${after.frameRate ?? '?'}`,
+    )
+  } catch (err) {
+    console.warn('[capture] display cap failed — recording at source resolution', err)
+  }
 }
 
 /**
@@ -289,10 +369,7 @@ export function acquireChannelsProgressive(
       }
     } else {
       const opts: DisplayMediaOptions = {
-        // displaySurface is a HINT, not a constraint: it opens Chrome's picker
-        // on the Entire-Screen pane instead of the tab list, so the default
-        // choice records everything the user does. Any surface stays pickable.
-        video: { frameRate: { ideal: 30 }, displaySurface: 'monitor' } as MediaTrackConstraints,
+        video: displayVideoConstraints(),
         // Chromium defaults AEC/NS/AGC ON for display audio — voice processing
         // mangles music into warble and downmixes to mono. Capture it raw.
         audio: config.systemAudio
@@ -359,6 +436,9 @@ export function acquireChannelsProgressive(
       const surface = displaySurfaceOf(video)
       const notice = surfaceNotice(surface)
       if (notice) handlers.onNotice?.('screen', notice)
+      // Enforce the capture ceiling before anything consumes the track (see
+      // capDisplayTrack): a few ms here, and only when the surface is oversized.
+      await capDisplayTrack(video)
       // Screen delivered LAST from the display result: it is the primary, and
       // delivering it resolves primaryReady — system audio must already be in.
       if (video) {

@@ -38,6 +38,8 @@ const FPS = 30
 const W = 1920
 const H = 1080
 const VIDEO_BITS = 8_000_000
+/** How often each source's delivered frame rate is logged (evidence only). */
+const FPS_LOG_MS = 10_000
 /** rAF cadence watchdog: give up silently rather than tax a weak machine. */
 const WATCHDOG_AFTER_MS = 5000
 const WATCHDOG_MAX_GAP_P50_MS = 50
@@ -126,6 +128,14 @@ function drawPip(ctx: CanvasRenderingContext2D, v: HTMLVideoElement): void {
   ctx.lineWidth = 1.5 * scale
   ctx.stroke()
   ctx.restore()
+}
+
+/** Frames the source has actually handed this element, or null where the
+ * browser doesn't expose the counter. Exact — unlike inferring cadence from
+ * the media clock, which only tells us "advanced since last tick". */
+function deliveredFrames(el: HTMLVideoElement): number | null {
+  if (typeof el.getVideoPlaybackQuality !== 'function') return null
+  return el.getVideoPlaybackQuality().totalVideoFrames
 }
 
 function videoFor(stream: MediaStream): HTMLVideoElement {
@@ -223,9 +233,18 @@ export async function startLiveComposite(
   // Frozen-source watch: a dead track keeps readyState >= 2 forever, so
   // drawImage happily repaints its last frame for the rest of the take and the
   // file ends up a still image. The media clock is the only honest signal.
-  const liveness: { kind: 'screen' | 'camera'; el: HTMLVideoElement; det: SourceLiveness }[] = []
-  if (screenEl) liveness.push({ kind: 'screen', el: screenEl, det: new SourceLiveness() })
-  if (cameraEl) liveness.push({ kind: 'camera', el: cameraEl, det: new SourceLiveness() })
+  const liveness: {
+    kind: 'screen' | 'camera'
+    el: HTMLVideoElement
+    det: SourceLiveness
+    /** Frame counter at the last cadence log — see the FPS_LOG_MS block. */
+    framesAtLog: number | null
+  }[] = []
+  if (screenEl)
+    liveness.push({ kind: 'screen', el: screenEl, det: new SourceLiveness(), framesAtLog: null })
+  if (cameraEl)
+    liveness.push({ kind: 'camera', el: cameraEl, det: new SourceLiveness(), framesAtLog: null })
+  let lastFpsLog = startedAt
 
   const draw = (): void => {
     const now = performance.now()
@@ -239,6 +258,25 @@ export async function startLiveComposite(
       if (ev) {
         console.warn(`[capture] ${s.kind} source ${ev}`)
         options.onSourceLiveness?.(s.kind, ev)
+      }
+    }
+    // Cadence evidence, console only — deliberately NOT a warning: a static
+    // screen legitimately delivers ~1 keep-alive fps, so low cadence alone
+    // can't be judged here. Full freezes are the detector's job above; this
+    // is what turns the next "it stutters" report into a number.
+    if (now - lastFpsLog >= FPS_LOG_MS) {
+      const windowSec = (now - lastFpsLog) / 1000
+      lastFpsLog = now
+      for (const s of liveness) {
+        const frames = deliveredFrames(s.el)
+        if (frames === null) continue
+        const prev = s.framesAtLog
+        s.framesAtLog = frames
+        if (prev === null) continue
+        console.info(
+          `[capture] ${s.kind} ${s.el.videoWidth}×${s.el.videoHeight} ` +
+            `delivering ${((frames - prev) / windowSec).toFixed(1)} fps`,
+        )
       }
     }
     // Watchdog: median frame gap over the warmup window decides viability.
