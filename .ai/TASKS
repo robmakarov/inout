@@ -110,6 +110,9 @@ Goal: (a) exportRecording moves to a dedicated worker (already OffscreenCanvas-b
 postMessage); yield hacks deleted. (b) stage pipelining with small ring buffers + encodeQueueSize
 backpressure (decode-ahead 4–8 frames per source). (c) SMART-CUT: packet-copy full GOPs between cut
 points, re-encode only boundary GOPs (needs O4 keyframe cadence; full render remains for old takes).
+Generalize to DIRTY-SEGMENT rendering: only spans whose PIXELS an edit changed re-encode (zoom/camera
+move during minute 2 → render minute 2, packet-copy the rest) — this is what keeps even visual edits
+near-instant; F2/F4 tracks must expose per-span dirty ranges for it.
 (d) codec ladder above avc: probe hevc/av1 hardware encode (isConfigSupported, mp4 container); avc
 floor, vp9/webm last (codecs.ts FALLBACK_CHAINS is the seam).
 Constraints: certified audio path behavior identical (fidelity oracle is the proof); progress UI keeps
