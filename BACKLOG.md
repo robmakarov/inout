@@ -29,7 +29,9 @@ PO protocol: say "roadmap" in any session → READY map menu → "go <id>". READ
 
 ### Later — deliberately inactive
 
-- [P3] Distributed multi-device capture: run the gated two-device sync spike with kill criteria before product work. One authoritative mic/scene; no sub-ms mixing claim.
+- [P3] Distributed multi-device capture: run the gated two-device sync spike with kill criteria before product work. One authoritative mic/scene; no sub-ms mixing claim. PO 2026-08-22: "we'll need it eventually" — gating unchanged.
+- [P3] Cursor-excluded capture + vector cursor re-render (sharp at any zoom, click ripples) — PO "maybe someday"; P4 designs the metadata track for it, builds nothing.
+- [P3] Local quality models (camera background blur, ML denoise) — PO "maybe later". Boundary (ledger 08-22(3)): no AI product features ever; local quality models allowed when revisited; deterministic DSP ships first.
 - [P3] Server-side auth-user deletion hook (the client already deletes user-owned objects/rows).
 - [P3] Image/screenshot capture channel.
 
@@ -52,6 +54,7 @@ PO protocol: say "roadmap" in any session → READY map menu → "go <id>". READ
 ### Later — approved, but intentionally inactive
 
 - [P3] Instant link mode: opt-in progressive raw upload and cloud assembly. Depends on durable chunk boundaries, sync work, real QA, and a cloud-compose decision; OFF by default with explicit privacy copy.
+- [P3] Design-later pack (PO 2026-08-22, "we will build, design later"): brand templates on F3 · link-unfurl page so shared links show a thumbnail · local library search · keyboard-first editing pass.
 
 ## Bugs
 

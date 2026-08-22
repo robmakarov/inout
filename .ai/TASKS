@@ -37,7 +37,11 @@ CONFLICT RULES: O1↔O2 both edit instant.ts — never simultaneously · O3b nee
 (instant.ts + session.ts) · F7 coordinates with O5 if both active · O7 is broad-touch — solo lane,
 announce, TD call on timing.
 BLOCKED (dep → unblocks): O2←O1 · O3b←O3a+O1 · O4←O3 · O5←O4 · O6←O4 · O8←O4/O5 ·
-F1–F6←O5/O4 per pack (F4 also ←F1 UI seam; F2←F4) · P4←O4/O5 · P5b←P5a · P6←P5b.
+O9←O4+O5 · O10←O2 (its AEC part ←P4) · F1–F6←O5/O4 per pack (F4 also ←F1 UI seam; F2←F4) ·
+F8←O4 · P4←O4/O5 · P5b←P5a · P6←P5b · P7←P4.
+REJECTED (do not resurrect): pre-roll rolling buffer — no capture before the record press, ever
+(PO 2026-08-22; extends "no idle device access"). The related HARD requirement lives in O4/O8:
+zero tail loss at stop.
 
 ═══ PHASE O — OPTIMIZATION ═══
 
@@ -101,7 +105,8 @@ crash-salvage must recover the fMP4 composite mid-write (ABSORBS v1 task 4 — c
 free); measured-audio pipeline untouched; instant export contract unchanged.
 GATES: oracle sync ≤10 ms 10/10 · 08-22 4K rig: delivered ≥28 fps at 1080p output (baseline 21.5/11.9)
 · mid-record tab-kill salvages composite + all channels · forced-slow harness proves watchdog fallback
-· capture CPU ≤ O3 baseline (report) · unedited instant export ≤ 200 ms · all oracles green.
+· capture CPU ≤ O3 baseline (report) · unedited instant export ≤ 200 ms · ZERO TAIL LOSS at stop
+(distinctive final-second event present in export, drain-verified — PO hard requirement) · all oracles green.
 
 ## O5. export-engine-v2 — worker, pipelined, smart-cut, codec ladder  [P1, after O4]
 Why: the render is main-thread and strictly serial (decode awaits draw awaits encode), sleeps every
@@ -114,7 +119,9 @@ Generalize to DIRTY-SEGMENT rendering: only spans whose PIXELS an edit changed r
 move during minute 2 → render minute 2, packet-copy the rest) — this is what keeps even visual edits
 near-instant; F2/F4 tracks must expose per-span dirty ranges for it.
 (d) codec ladder above avc: probe hevc/av1 hardware encode (isConfigSupported, mp4 container); avc
-floor, vp9/webm last (codecs.ts FALLBACK_CHAINS is the seam).
+floor, vp9/webm last (codecs.ts FALLBACK_CHAINS is the seam). (e) VFR option (PO-approved): preserve
+source presentation timestamps from frame-driven takes instead of CFR resampling — high-Hz scrolls
+stay smooth; CFR 30 stays the default.
 Constraints: certified audio path behavior identical (fidelity oracle is the proof); progress UI keeps
 working; abort works mid-pipeline.
 GATES: 60 s 1080p30 edited synthetic take ≥5× realtime on the TD machine (report ×; stretch 8×) ·
@@ -124,7 +131,8 @@ ladder rung's file plays (Chrome + Safari where the codec applies) · fidelity+s
 ## O6. native-res-capture — lift the ceiling the right way  [P2, after O4]
 Why: CAPTURE_MAX_* (1080p30) was correct for the old engine; the product bar is "no visual
 compromises" — a 4K screen should be recordable at native res once the engine affords it.
-Goal: raise capture caps to source-native (+ optional 60 fps) BEHIND measured backpressure: the O4
+Goal: raise capture caps to source-native (+ optional 60 fps, TRUE VFR timestamps end-to-end —
+pairs with O5(e)) BEHIND measured backpressure: the O4
 compositor watches encoder queue/frame delivery and degrades stepwise (native → 1440p → 1080p) BEFORE
 delivery collapses, console-evidenced. Export resolution options tie into F7.
 Constraints: NEVER regress the 08-22 4K-freeze fix — degradation engages before starvation; default
@@ -141,9 +149,33 @@ waterfall on the record path.
 
 ## O8. perf-oracle — performance regressions gate like sync ones  [P2, lands with O4/O5]
 Goal: extend the oracle suite with perf bands: export ×realtime floor · capture delivered-fps under
-the synthetic 4K load · export peak memory. Wire into pre-push like sync/fidelity.
+the synthetic 4K load · export peak memory · TAIL-INTEGRITY band (PO 2026-08-22: "Loom cuts last
+seconds — we don't do that shit"): a distinctive final-500 ms event must appear in the export and
+duration must match wall clock within band. Also productize the numbers (PO-approved):
+CERTIFIED-EXPORT metadata — measured sync bound, loudness, dropped-frame count embedded in each
+exported file. Wire into pre-push like sync/fidelity.
 GATES: bands enforced (prove red once by injecting a regression, e.g. restoring the yield sleep) ·
-main green · headless + ephemeral server like existing oracles.
+tail band red when final 500 ms is dropped (prove by injection) · metadata present in exported file
+(probe evidence) · main green · headless + ephemeral server like existing oracles.
+
+## O9. text-perfect — screen text without smear  [P2, after O4+O5; PO: "text is important"]
+Why: 4:2:0 chroma subsampling + generic encoder tuning fringes and smears colored text — the visible
+difference between a mushy Loom and a crisp file. Frame-driven capture makes static text cheap.
+Goal: (a) 4:4:4 encode where hardware supports it (probe); (b) AV1 screen-content tools (palette/IBC)
+on hardware AV1 encoders; (c) near-lossless mode for static screen spans (bitrate spent only when
+frames change); (d) synthetic text rig — code-editor frame, colored-on-colored text — with a
+measurable text-edge/chroma-fringe metric added to the oracle.
+GATES: text metric improves vs baseline (numbers) · static-screen file size does not balloon (report)
+· every mode plays cross-browser per ladder · perf bands hold.
+
+## O10. audio-depth — beyond certified  [P2, after O2; (d) lands with P4; PO: "quality all doing"]
+Goal: (a) EBU R128 loudness targeting (−14 LUFS integrated) as an ADDITIVE mode first — fidelity
+oracle updated in the same branch, current behavior stays until parity proven; (b) multitrack export
+option: mic + system audio as separate mp4 tracks, default stays flattened; (c) deterministic
+spectral-gating noise reduction (DSP, not ML), opt-in; (d) cross-channel AEC (system-audio bleed
+removed from mic) — in the P4 shell where a proper reference signal exists.
+GATES: R128 integrated −14 ±0.5 LUFS on the synthetic set · multitrack file: tracks separate, default
+unchanged · gating: zero triggers on the clean-speech fidelity set · fidelity oracle green throughout.
 
 ═══ PHASE F — FEATURES (PO-approved 2026-08-22; order below; F7 independent) ═══
 
@@ -215,6 +247,14 @@ render path and say so.
 GATES: size estimate within ±20 % across 3 tiers (synthetic) · default tier provably still instant
 (logs) · every tier's file plays · slider choice persisted (prefs).
 
+## F8. nle-scrub — frame-exact editor feel  [P2, after O4; PO-approved]
+Goal: keyframe-index-driven preview — scrub decodes the EXACT frame (WebCodecs random access) instead
+of <video> seek granularity; filmstrip thumbnails from the keyframe index; GPU-rendered waveforms.
+This is the "Final Cut timeline feel" the product statement names.
+GATES: scrub shows the index-verified exact frame at 5 sampled times · timeline holds 60 fps with a
+30-min take loaded (trace) · thumbnail/waveform generation budget reported · zero preview-parity
+regression.
+
 ═══ PHASE P — PORTS (PO-approved direction 2026-08-22; P1/P2/P3/P5a may run parallel with O-phase) ═══
 
 ## P1. browser-breadth — Firefox + OS-aware capabilities + 3-engine oracle  [P2, medium, parallel-safe]
@@ -255,7 +295,8 @@ Safari-grade exactly where it matters most; Electron = engine parity everywhere.
 Goal: shell + a bridge contract feeding the O4 worker compositor: macOS ScreenCaptureKit (screen +
 system audio + cursor data), Windows Graphics Capture + WASAPI loopback, Linux PipeWire. Cursor/click
 event stream as a metadata track (schema in types.ts, compatible extension). Global hotkey record,
-tray controls. Distribution: notarized DMG (+ MAS later), Windows installer + winget, Flatpak.
+tray controls. PO "maybe someday" (design for, do NOT build): cursor-EXCLUDED capture + vector cursor
+re-render (sharp at any zoom, click ripples) — the metadata track schema must make it possible later. Distribution: notarized DMG (+ MAS later), Windows installer + winget, Flatpak.
 GATES: macOS screen+system-audio+mic take → export, all lanes in sync bands · click-metadata aligns
 to video ≤50 ms (oracle extension) · Windows equivalent with loopback audio · engine parity: same
 oracle numbers inside the shell as in Chrome · fallback/watchdog behavior preserved.
@@ -286,3 +327,11 @@ type) → h264 mp4 file → shared engine, same file-handoff shape as P5b. Distr
 (RU market) + direct APK.
 GATES: screen+internal-audio take → shared-engine export plays · survives app-switch/background ·
 RuStore + Play listing drafts · zero editor code duplicated.
+
+## P7. hdr — capture→export HDR  [P3, after P4, heavy horizon; PO-approved]
+Why: SCK (macOS/iOS 27) and Windows Graphics Capture deliver HDR; nobody in the product class ships
+HDR screen recording end-to-end.
+Goal: HDR capture in the P4 shell → HDR10/HLG export with a tone-mapped SDR fallback; browsers stay
+SDR until WebCodecs HDR hardens.
+GATES: HDR take on an HDR display → file carries HDR metadata (probe evidence) and plays · SDR
+fallback renders correctly · zero SDR-path regression.
