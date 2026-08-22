@@ -18,6 +18,27 @@ Operating rules (every task):
 - HEAVY RUNS (oracle matrices, load rigs) are announced first and never run while PO is using the machine.
 - Order is dependency order within each phase. O-phase before F-phase, except F7 (independent, any time).
 
+── ROADMAP PROTOCOL (PO 2026-08-22) ──
+PO says "roadmap" → the session prints the READY map below (unblocked tasks, parallel-safe combos,
+cost bands) and WAITS. PO answers "go <id>". One task per session (one branch per task); if PO names
+several ids, take the first and tell PO to open parallel sessions for the rest. Whoever MERGES a task
+updates the READY map (move newly-unblocked dependents in, remove the done task).
+
+── READY MAP — current truth, updated on every merge (last: 2026-08-22, nothing started) ──
+READY NOW — parallel-safe, any subset concurrently (one session each):
+  O1   stream-to-disk exports      [light]   touches compose/pipeline.ts, compose/instant.ts, store
+  O3a  chromium mp4 recorder       [light]   touches capture/session.ts, capture/acquire.ts
+  P1   firefox + 3-engine oracle   [medium]  touches capabilities.ts, oracle scripts
+  P2   pwa install                 [light]   touches index.html, vite config, service worker
+  P3   ru-pack part 1              [light]   touches docs, cloud stubs
+  P5a  iOS SCK spike               [light]   touches nothing in repo (separate Xcode proj) — TIME-SENSITIVE: iOS 27 beta window, ships ~Sept
+  F7   quality slider              [medium]  touches ExportPanel, export settings in types.ts
+CONFLICT RULES: O1↔O2 both edit instant.ts — never simultaneously · O3b needs O3a+O1 merged
+(instant.ts + session.ts) · F7 coordinates with O5 if both active · O7 is broad-touch — solo lane,
+announce, TD call on timing.
+BLOCKED (dep → unblocks): O2←O1 · O3b←O3a+O1 · O4←O3 · O5←O4 · O6←O4 · O8←O4/O5 ·
+F1–F6←O5/O4 per pack (F4 also ←F1 UI seam; F2←F4) · P4←O4/O5 · P5b←P5a · P6←P5b.
+
 ═══ PHASE O — OPTIMIZATION ═══
 
 ## O1. export-stream-to-disk — O(1)-memory exports  [P1, small, do first]
@@ -137,7 +158,8 @@ finds zero clicks at joins · 30 s take + 3 cuts exports ≤2 s (post-O5) · pre
 Goal: keyframed viewport track (time→rect, cubic ease). Editor: direct manipulation on the stage
 (drag to pan when zoomed, handles/wheel to zoom) + markers on the timeline. Export: compositor samples
 the viewport per frame with proper filtering (no shimmer). Preview parity via shared interp fns
-(CSS transform mirror).
+(CSS transform mirror). Upgrade path: P4's cursor/click metadata track later turns manual zoom into
+Screen-Studio-class AUTO-zoom — design the viewport track so keyframes can be machine-generated.
 GATES: preview↔export geometry parity ≤1 px at 3 sampled times · no aliasing shimmer vs 1:1 (visual
 evidence) · sync+fidelity green · zero cost when the track is absent.
 
@@ -189,3 +211,75 @@ hint. Default tier = current settings and KEEPS the instant packet-copy path; ot
 render path and say so.
 GATES: size estimate within ±20 % across 3 tiers (synthetic) · default tier provably still instant
 (logs) · every tier's file plays · slider choice persisted (prefs).
+
+═══ PHASE P — PORTS (PO-approved direction 2026-08-22; P1/P2/P3/P5a may run parallel with O-phase) ═══
+
+## P1. browser-breadth — Firefox + OS-aware capabilities + 3-engine oracle  [P2, medium, parallel-safe]
+Why: PO override "every capable browser". Verified 2026-08: Firefox 130+ has full desktop WebCodecs
+incl. Opus AudioEncoder → our MEASURED audio path runs as-is; getDisplayMedia AUDIO is silently
+ignored (tracking bug unassigned) → drop the channel with honest copy (Safari machinery exists);
+no AAC encoder → export lands on the existing avc+opus / vp9+opus chains. Also: Chromium on WINDOWS
+gives FULL system audio on monitor share (better than macOS tab-only) — the capability gate must
+become engine×OS aware, not engine-only.
+Goal: capabilities.ts engine×OS matrix (probe-first, UA-sniff last); Firefox mapped + QA'd; oracle
+runner extended to Playwright's three engines (chromium/gecko headless gated; webkit best-effort on
+synthetic).
+GATES: real-Firefox take (screen+mic) → edit → export plays · per-platform capability copy honest ·
+oracle green on chromium AND gecko · zero Chromium regression (existing bands).
+
+## P2. pwa-install  [P3, light, parallel-safe]
+Goal: manifest + service worker (scope-limited cache) + install prompt; offline start for the
+local-first flow. Precache manifest refined later by O7.
+GATES: installable on Chrome desktop/Android + Edge (Lighthouse PWA pass) · offline reload reaches
+the capture screen · SW provably never interferes with capture permissions or dev flow.
+
+## P3. ru-pack part 1 — Yandex QA + reachability + auth alternatives  [P3, light, parallel-safe]
+Why: RU market ≈ 75 % Chromium (Chrome ~53 % + Yandex ~18 %, current Chromium base, verified 2026-08).
+The real risks are infra and auth, not the engine.
+Goal: Yandex Browser slot in the QA matrix + version-floor probe · reachability test of app + Supabase
+from RU networks without VPN, documented with evidence · auth alternatives designed (Yandex ID / VK ID /
+email-OTP) as an adapter behind the existing swappable cloud/auth seam — design + compiling stub now,
+implementation when cloud provisioning lands · i18n approach DECIDED only (string extraction scheme),
+no mass string churn yet (avoids F-phase conflicts). Aurora OS: explicitly out (no modern engine).
+GATES: Yandex smoke capture→edit→export documented with version · reachability report · auth-alt
+design in ARCH + stub compiles · zero behavior change for current users.
+
+## P4. desktop-shell — Electron + native capture bridges  [P1 of phase, heavy, AFTER O4/O5]
+Why: what no browser can give: FULL system audio on macOS (ScreenCaptureKit), global cursor/click
+events recorded as a metadata track (→ true auto-zoom, upgrades F2), global hotkeys, tray, background
+reliability, 4K60 headroom. Electron NOT Tauri: Tauri's macOS WKWebView would downgrade the engine to
+Safari-grade exactly where it matters most; Electron = engine parity everywhere.
+Goal: shell + a bridge contract feeding the O4 worker compositor: macOS ScreenCaptureKit (screen +
+system audio + cursor data), Windows Graphics Capture + WASAPI loopback, Linux PipeWire. Cursor/click
+event stream as a metadata track (schema in types.ts, compatible extension). Global hotkey record,
+tray controls. Distribution: notarized DMG (+ MAS later), Windows installer + winget, Flatpak.
+GATES: macOS screen+system-audio+mic take → export, all lanes in sync bands · click-metadata aligns
+to video ≤50 ms (oracle extension) · Windows equivalent with loopback audio · engine parity: same
+oracle numbers inside the shell as in Chrome · fallback/watchdog behavior preserved.
+
+## P5. ios-node — (a) ScreenCaptureKit spike NOW, (b) node build  [(a) light + TIME-SENSITIVE, (b) heavy after (a)]
+Fact (verified from Apple docs metadata 2026-08-22): ScreenCaptureKit is on iOS 27.0 / iPadOS 27.0
+(beta; ships ~Sept 2026) — "replaces ReplayKit for screen streaming, no broadcast extensions". This
+retires the planned Broadcast-Upload-Extension architecture (50 MB cap, awkward picker) before it was
+ever built. Safari 27 does NOT add getDisplayMedia on iPhone (checked) — native app remains the only
+iPhone screen path.
+(a) ee/p5-sck-spike — separate Xcode 27 project, real device, NO repo code. Answer with measurements:
+    (1) capturesAudio (system/app audio) on iOS? (2) SCRecordingOutput straight-to-file on iOS?
+    (3) AVCaptureSession camera CONCURRENT with SCStream — screen+camera PiP on phone (market first
+    if yes)? (4) system-wide vs app-scoped + picker/background UX; (5) entitlements + review posture.
+    Deliverable: VERDICT.md with numbers. GATES: all five answered with evidence.
+(b) node: SCK → hardware h264 → mp4 file → the file IS a ChannelRecording blob → the SHARED engine
+    (wrapped) edits/exports — never a separate editor (frozen). iOS 27+ only; older devices keep the
+    Safari camera/mic node; NO ReplayKit legacy build, ever. The distributed-node role stays gated on
+    the 2-device sync spike (ledger); the standalone recorder role is not.
+GATES (b): record iPhone screen → edit → export ON DEVICE, file plays · capture timestamps within a
+band vs wall clock (spike-informed) · TestFlight review pass · zero editor code duplicated.
+
+## P6. android-node  [heavy, after P5b]
+Why: NO mobile browser has getDisplayMedia (verified 2026-08, Chromium hides it on Android) —
+MediaProjection is the only Android screen path. Android web already serves the camera/mic node + PWA.
+Goal: MediaProjection screen + internal audio (Android 10+) + foreground service (Android 14 manifest
+type) → h264 mp4 file → shared engine, same file-handoff shape as P5b. Distribution: Play + RuStore
+(RU market) + direct APK.
+GATES: screen+internal-audio take → shared-engine export plays · survives app-switch/background ·
+RuStore + Play listing drafts · zero editor code duplicated.
