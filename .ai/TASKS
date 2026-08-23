@@ -24,7 +24,7 @@ cost bands) and WAITS. PO answers "go <id>". One task per session (one branch pe
 several ids, take the first and tell PO to open parallel sessions for the rest. Whoever MERGES a task
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
-── READY MAP — current truth, updated on every merge (last: 2026-08-23, O1+O2+O3a+O7+O4step1+O4b+F7+F1+O8(partial) merged; P0 mic-hang fixed) ──
+── READY MAP — current truth, updated on every merge (last: 2026-08-23, O1+O2+O3a+O7+O4step1+O4b+F7+F1+O8(partial)+P2 merged; P0 mic-hang fixed) ──
 READY NOW — parallel-safe, any subset concurrently (one session each):
   O3b  single-generation export    [light]   touches compose/instant.ts, capture/session.ts — RE-SCOPE first
   O4b  sync-rig fix + gate re-spec  [medium]  REQUIRED before O4 step 2 — see O4 step 1b
@@ -32,7 +32,6 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
   P2   pwa install                 [light]   touches index.html, vite config, service worker
   P3   ru-pack part 1              [light]   touches docs, cloud stubs
   P5a  iOS SCK spike               [light]   touches nothing in repo (separate Xcode proj) — TIME-SENSITIVE: iOS 27 beta window, ships ~Sept
-  P2   pwa install                  [light]   touches index.html, vite config, service worker
   F3   background frame             [medium]  touches compose/layout.ts, editor UI
 CONFLICT RULES: F7 coordinates with O5 if both active · O4 is the keystone — solo lane.
 BLOCKED (dep → unblocks): O4 (independent of O3b) · O5←O4 · O6←O4 · O8←O4/O5 ·
@@ -270,11 +269,12 @@ synthetic).
 GATES: real-Firefox take (screen+mic) → edit → export plays · per-platform capability copy honest ·
 oracle green on chromium AND gecko · zero Chromium regression (existing bands).
 
-## P2. pwa-install  [P3, light, parallel-safe]
-Goal: manifest + service worker (scope-limited cache) + install prompt; offline start for the
-local-first flow. Precache manifest refined later by O7.
-GATES: installable on Chrome desktop/Android + Edge (Lighthouse PWA pass) · offline reload reaches
-the capture screen · SW provably never interferes with capture permissions or dev flow.
+## P2. pwa-install — DONE 2026-08-23, merged (evidence in DECISIONS)
+Manifest + generated icons (scripts/make-icons.mjs, no image dep) + minimal service worker (same-origin
+GET only, range requests ignored, assets cache-first, document network-first, PROD-only registration) +
+beforeinstallprompt affordance with remembered dismissal. Offline reload reaches the capture screen with
+the network provably blocked; capture verified unaffected under a controlling worker.
+Gate script: `node scripts/pwa-check.mjs`. Lighthouse itself not run (not installed).
 
 ## P3. ru-pack part 1 — Yandex QA + reachability + auth alternatives  [P3, light, parallel-safe]
 Why: RU market ≈ 75 % Chromium (Chrome ~53 % + Yandex ~18 %, current Chromium base, verified 2026-08).
