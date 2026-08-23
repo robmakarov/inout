@@ -3134,10 +3134,9 @@ function setPhase(next, jump) {
    now rides the opening instead of standing in front of it. */
 recBtn.addEventListener('click', () => {
   if (capture.dataset.phase === 'live') { holdTake(capture.dataset.take !== 'held'); return }
+  setPhase('live')                      // first, because setPhase clears the pulse
   recBtn.classList.add('recbtn--arming')
-  clearTimeout(armTimer)
   armTimer = setTimeout(() => recBtn.classList.remove('recbtn--arming'), TAKE_MS)
-  setPhase('live')
 })
 
 /* Cancel: the take is dropped and the screen folds back to the button it came
