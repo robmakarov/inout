@@ -16,7 +16,10 @@ Operating rules (every task):
   success; code without evidence is not.
 - No refactors outside task scope. Don't touch .ai/* except appending your handoff under your task.
 - HEAVY RUNS (oracle matrices, load rigs) are announced first and never run while PO is using the machine.
-- Order is dependency order within each phase. O-phase before F-phase, except F7 (independent, any time).
+- Order is dependency order WITHIN each phase, not between them: the O-phase-before-F-phase rule was
+  about not building features on an engine that was about to change. O1/O2/O3a/O7 shipped and F1/F7
+  landed on top of them, so F3/F4/F5a can now run in parallel with O4 — they touch compose/layout and
+  the timeline, not the capture engine O4 replaces.
 
 ── ROADMAP PROTOCOL (PO 2026-08-22) ──
 PO says "roadmap" → the session prints the READY map below (unblocked tasks, parallel-safe combos,
@@ -24,22 +27,71 @@ cost bands) and WAITS. PO answers "go <id>". One task per session (one branch pe
 several ids, take the first and tell PO to open parallel sessions for the rest. Whoever MERGES a task
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
-── READY MAP — current truth, updated on every merge (last: 2026-08-23, O1+O2+O3a+O7+O4step1+O4b+F7+F1+O8(partial)+P2 merged; P0 mic-hang fixed) ──
+── READY MAP — current truth, updated on every merge ──
+Last update 2026-08-23. Merged that day: O1 · O2 · O3a · O7 · O4 step1 · O4b · F7 · F1 · O8(partial)
+· P2 · a P0 mic-hang fix (PO-verified: "record seems to be okay").
+
 READY NOW — parallel-safe, any subset concurrently (one session each):
-  O3b  single-generation export    [light]   touches compose/instant.ts, capture/session.ts — RE-SCOPE first
-  O4b  sync-rig fix + gate re-spec  [medium]  REQUIRED before O4 step 2 — see O4 step 1b
-  P1   firefox + 3-engine oracle   [medium]  touches capabilities.ts, oracle scripts
-  P2   pwa install                 [light]   touches index.html, vite config, service worker
-  P3   ru-pack part 1              [light]   touches docs, cloud stubs
-  P5a  iOS SCK spike               [light]   touches nothing in repo (separate Xcode proj) — TIME-SENSITIVE: iOS 27 beta window, ships ~Sept
-  F3   background frame             [medium]  touches compose/layout.ts, editor UI
-CONFLICT RULES: F7 coordinates with O5 if both active · O4 is the keystone — solo lane.
-BLOCKED (dep → unblocks): O4 (independent of O3b) · O5←O4 · O6←O4 · O8←O4/O5 ·
-O9←O4+O5 · O10 (its AEC part ←P4) · F1–F6←O5/O4 per pack (F4 also ←F1 UI seam; F2←F4) ·
-F8←O4 · P4←O4/O5 · P5b←P5a · P6←P5b · P7←P4.
+  O4   webcodecs engine, STEP 2    [heavy]   THE KEYSTONE. Step 1+1b done, gate re-specced. Solo lane.
+                                             Continues ee/webcodecs-capture-2 (on origin, behind main
+                                             — REBASE FIRST). Unblocks O5/O6/O9, F6, F8, P4.
+  F3   background frame            [medium]  compose/layout.ts + editor UI. No engine dependency.
+  F4   movable camera (TIMED)      [medium]  PO's emphasized feature. F1 shipped the timeline/UI seam
+                                             it was waiting on, so this is unblocked NOW.
+  F5a  silence tightening          [medium]  rides F1's cut machinery (shipped). DSP only, no ML ever.
+  P1   firefox + 3-engine oracle   [medium]  capabilities.ts engine×OS matrix + Playwright gecko run
+  P3   ru-pack part 1              [light]   Yandex QA slot, RU reachability report, auth-alt design
+  P5a  iOS SCK spike               [light]   separate Xcode proj, no repo code — TIME-SENSITIVE
+                                             (iOS 27 ships ~Sept 2026; answer the 5 questions)
+NEEDS PO INPUT BEFORE BUILDING:
+  F2   zoom-pan — PO said "i think so"; reconfirm scope first (and it wants F4's viewport seam)
+CONFLICT RULES: O4 is the keystone — solo lane, nothing else touching capture/* while it runs ·
+F4 and F3 both touch compose/layout.ts — never simultaneously · F5a extends F1's segment list.
+BLOCKED (dep → unblocks): O5←O4 · O6←O4 · O9←O4+O5 · O8 remainder←O4/O5 · F6←O4 · F8←O4 ·
+P4←O4/O5 · P5b←P5a · P6←P5b · P7←P4 · O10 (AEC part only)←P4 · O3b←O4 (see below).
 REJECTED (do not resurrect): pre-roll rolling buffer — no capture before the record press, ever
-(PO 2026-08-22; extends "no idle device access"). The related HARD requirement lives in O4/O8:
-zero tail loss at stop.
+(PO 2026-08-22; extends "no idle device access"). MP4 MediaRecorder capture — measured 2026-08-23,
+Chrome does not stream it and a tab kill loses the whole take (O3a). The related HARD requirement
+lives in O4/O8: zero tail loss at stop, now gated.
+
+── WHAT A FRESH SESSION MUST KNOW ──
+1. SYNC IS WORSE THAN OLD NOTES SAY, and the instrument was why. Every sync number quoted before
+   2026-08-23 was ~31 ms optimistic: the oracle carried an exact +18.00 ms detection bias (half a
+   30 fps frame + half a 128-sample envelope window) and never measured the VIDEO reference at all
+   (13.5 ms) while correcting the audio one. CI now gates the SYMMETRIC metric at ≤90 ms and reads
+   40-66 ms. The instrument's own noise floor is ~8-9 ms 1σ — no band below that is measurable.
+   O4's job is to bring this to ≤20 ms; re-tighten the band then.
+2. THE AUDIO ANCHOR CANNOT SEE INPUT LATENCY. It dates sample 0 from when a worklet batch ARRIVES,
+   so device/stream buffering is invisible and audio lands late. Loopback-measured at +128.7 ms
+   (sd 0.70); dating from the audio clock instead changes it by 1.1 ms, so this is signal-path, not
+   messaging. Production now subtracts the platform-reported track latency (bounded, logged, never a
+   fitted constant — a 90 ms fallback was rejected on those grounds in 2026-07).
+3. NOTHING IN ARMING MAY AWAIT WITHOUT A DEADLINE. Each step was bounded but the joins were not, and
+   that froze recording with a stale "Waiting for microphone…" label. Budgets now bound the joins,
+   every durable-worker round trip has a deadline, the record button cancels an arm, and a pagehide
+   guard releases devices. Keep it that way.
+4. EVIDENCE IS BROWSER-SIDE. Unit tests cover pure logic only; anything about capture, export,
+   memory or bundles must be measured in a real browser on the PRODUCTION build. QA on the prod-build
+   port only, never the dev server.
+
+── TOOLING (built 2026-08-23; all spawn their own ephemeral server + throwaway Chrome profile) ──
+  npm run exp -- <id> [json] [--rss] [--query=k=v] [--ua=...]   generic experiment driver
+     o1        export memory / parity / orphan sweep         o2       capture-loudness vs probe
+     o3a       MediaRecorder container + mid-take salvage    o4step1  sync residual decomposition
+     audiolat  measured-audio anchor latency (loopback)      armcancel arming cancel + device release
+     f1        mid-take cuts: sync + joint discontinuity     f7       quality tiers + certification
+     oracle    accepts {"injectTailLossMs":N} to prove the tail band red
+  node scripts/o7-measure.mjs      first-paint bytes, record-click latency, editor prefetch (prod build)
+  node scripts/ui-shot.mjs --flow=quality|cuts    screenshots a flow on the prod build
+  node scripts/pwa-check.mjs       manifest/SW/offline/capture-under-worker gates
+  node scripts/make-icons.mjs      regenerates PWA icons (deterministic, no image dep)
+  npm run oracle | oracle:cold | oracle:fidelity  merge gates (pre-push hook runs typecheck+test+oracle)
+
+── AWAITING PO (carried forward) ──
+  · camera-only take on a REAL camera should now record 1080p, not upscaled 720p (O3a; synthetic mode
+    bypasses getUserMedia so it cannot be verified headlessly)
+  · real Safari + iOS Safari recheck of the MediaRecorder-audio path (long-standing)
+  · real 4K game-tab recheck of the capture ceiling (2026-08-22 fix)
 
 ═══ PHASE O — OPTIMIZATION ═══
 
@@ -65,11 +117,14 @@ MediaRecorder does not stream mp4 — 753 B on disk halfway through an 8 s take 
 decodable webm — so it would trade crash salvage for CPU. Hardware encode moves to O4, which owns
 its own fragmented-MP4 muxer. Standing re-test: `npm run exp -- o3a`.
 NEEDS PO RECHECK: camera-only take on a real camera should now record 1080p, not 720p.
-(b) ee/o3-single-gen — UNBLOCKED, still to do: a take with exactly ONE video channel whose dims ==
+(b) ee/o3-single-gen — BLOCKED ON O4 (re-scoped 2026-08-23), still to do: a take with exactly ONE video channel whose dims ==
 export dims and codec is mp4-compatible → skip the live composite entirely (audio mix graph still
-runs); unedited export = packet-copy the RAW channel. NOTE: with (a)'s mp4 flip rejected, Chromium
-raw channels stay VP9, so single-generation packet-copy applies to the composite-free case only —
-re-scope against O4 before building.
+runs); unedited export = packet-copy the RAW channel. RE-SCOPE RESULT: with (a)'s mp4 flip rejected on
+evidence, Chromium raw channels stay VP9, so a single-generation packet copy into MP4 is impossible
+there — the only raw channels that could be copied are Apple WebKit's (already mp4/h264). The CPU
+half of the idea (skip the live composite when one video channel already matches the export) survives
+but costs the instant path unless the raw channel is copyable. Both halves become straightforward
+once O4 owns the encoder and the muxer, so this waits for O4 rather than being built twice.
 GATES (b): screen-only 1080p take: console proves no composite recorder · instant export ≤ current ·
 PSNR/visual evidence that single-generation ≥ composite-generation quality · capture write bandwidth
 ~halved (bytes/s logged) · all oracles green.

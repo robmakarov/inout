@@ -4,48 +4,83 @@ phase: MVP validation (2026-07-16)
 
 works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → export → share-as-file.
 - SYNCHRONIZED START (PO 2026-07-20, supersedes instant-arm/late-join): arm() waits for src.settled — ALL devices acquired, every permission prompt answered — before start() activates them at one epoch. All channels share one start + one length (verified: 4 lanes 100% ±0.3%); no primary-gated early start, no late-join staggering. pipeline prewarm at mount; devices touched only after record click
-- instant unedited export ~105ms (live composite, mp4 h264+aac, worklet-ticker drawn); edited takes → full render
+- instant unedited export ~60-105ms (live composite packet-copied, mp4 h264+aac); edited takes → full render
+- exports STREAM TO DISK (O1): the muxer holds 4 MB regardless of length — a 30-min export peaks at
+  39 MB live memory instead of 294 MB. ExportResult.blob is a disk-backed OPFS file.
 - crash-durable: mid-record reload salvages all channels (video + positioned-write audio), boots into editor
+- editor: trim, per-channel enable/trim, MID-TAKE CUTS (F1: split at playhead, delete clip, drag cut
+  edges), quality tiers before export (F7: 720p/1080p-instant/1440p with size estimate)
+- installable PWA, starts offline (P2); first paint 219 KB (O7, was 803)
+- every exported file carries a certification in its comment tag (O8): path, output settings, loudness
+  makeup + source, stalled/missing channels, cut count, CI sync bound
 - audio: measured pipeline (sample-counted PCM, min-filter anchor), raw system audio, post-capture fidelity fixed
   (knee-limiter replaces tanh bus; composite dynamics bypassed for single source; stereo default on unreported channelCount)
 
-oracle = merge gate (TD-verified 2026-07-16): npm run oracle / oracle:cold / oracle:fidelity + pre-push hook
-(typecheck+test+oracle), always spawns own server. Current numbers: sync 31.5ms (band ≤60), spur −51.8dB (≥−40),
-jump 0 (≤0.1); fidelity toneErr 0.40dB, THD −71dB, IMD −60dB, separation 54dB, 0 limiter hits — detects
-tanh-bus / mono-downmix / hard-limiter regressions as red (injection-proven).
+oracle = merge gate: npm run oracle / oracle:cold / oracle:fidelity + pre-push hook (typecheck+test+
+oracle), always spawns its own server. Bands as of 2026-08-23: sync ≤90 ms on the SYMMETRIC flash+click
+metric (see below — the old ≤60 ms band measured a different, ~31 ms optimistic quantity), spur ≥−40 dB,
+boundary jump ≤0.1, TAIL LOSS ≤400 ms with the last flash AND last click within 2000 ms of the end,
+export throughput ≥1× realtime. Typical run: sync 40-66 ms, tail 68-76 ms, export 5.0-5.2×, spur −50 dB.
+Fidelity: toneErr ~0.02-0.05 dB, THD −71 dB, IMD −60 dB, separation 51-60 dB, 0 limiter hits. Every band
+is injection-proven red (tanh-bus / mono-downmix / hard-limiter for fidelity; a 900 ms tail chop and a
+0.7× export for the O8 bands).
+NOTE the fidelity oracle reads RED (toneErr 1.1-2.3 dB) when the machine is loaded — it is capture
+starvation, not a mix regression. Re-run on a settled machine before believing it.
 
 gaps / in flight:
 - CROSS-BROWSER (PO override 2026-07-16 "every capable browser"): implemented + Chromium-verified (synthetic e2e + regression green, 105 tests). Four root-caused fixes: (1) getDisplayMedia now fires synchronously in the click gesture — the old permissions.query awaits burned WebKit transient activation → Safari showed NO picker; (2) MediaRecorder gained mp4(h264+aac) fallback — webm-only list threw NotSupported on Safari → zero recording there; (3) capabilities gain ios/appleWebKit/systemAudioCapture, UI strips unsupported channels + shows honest per-platform copy; (4) Safari audio truncated to ~1s: the WebCodecs measured-audio path is broken on Safari (worklet keep-alive worklet→zero-gain→destination did NOT fix it). Real fix: on Apple WebKit, audio records via MediaRecorder (mp4/aac) — the same path that captures Safari VIDEO full-length — gated by isAppleWebKit() in session.ts armChannel useMeasured. Chromium keeps the measured path (sync precision). Verified code-path on spoofed Safari UA: mic → recorder.start (not measured), 100% full-length lane, tab-audio auto-dropped. STILL NEEDS: PO recheck of (4) on real Safari + iOS Safari (cam/mic/audio-only). iOS screen capture stays impossible in-browser (Safari 27 adds no getDisplayMedia, checked 2026-08-22); native path UPGRADED: ScreenCaptureKit is on iOS 27 (beta, ships ~Sept 2026, verified from Apple docs — replaces ReplayKit, no broadcast extensions) = native-node milestone via SCK, spike = TASKS P5a (time-sensitive).
-- sync jitter: ROOT-CAUSED 2026-08-23 (O4 step 1, ×10 runs) — the residual is the INSTRUMENT, not the
-  engine. Exact +18.00 ms detection bias (half a 30fps frame + half a 128-sample envelope window;
-  predicted 18.00, measured 18.00 sd 0.00) plus a 13.22 ms video reference delay the oracle assumed to
-  be zero while measuring the audio side. CI's metric read 31.55 ms (sd 7.86); the same exports fully
-  referenced read 62.77 ms (sd 8.73) — so the TRUE offset is ~45-63 ms and every past sync number is
-  ~31 ms optimistic. The ≤10 ms gate is NOT measurable on this rig (1σ ≈ 8-9 ms). O4 step 2 is BLOCKED
-  on O4b: fix the rig (one detection convention both sides, subtract the video reference, shrink the
-  AudioContext-stall variance) and re-specify the band — which will turn the current ≤60 ms gate red
-  and needs a PO/TD call. ee/webcodecs-capture-2 untouched; production stays on MediaRecorder.
-- O-PHASE PROGRESS 2026-08-23 (one session, five merges): O1 stream-to-disk exports (30-min export
-  peak live memory 39.2 vs 294.2 MB; muxer holds 4.0 MB flat from 120 s to 1800 s of output) · O2
-  capture-time loudness (probe cost 145-156 ms/min eliminated for takes needing no boost; floor-bound
-  takes still probe — capture measures PCM, export measures the decoded file) · O3a contentHint +
-  full-size camera, with the MP4-capture flip REJECTED on evidence (Chrome's MediaRecorder does not
-  stream mp4: 753 B on disk mid-take vs 1.09 MB webm — would trade crash salvage for CPU; hardware
-  encode moves to O4's own fMP4 muxer) · O7 bundle split · O4 step 1 (above). REMAINING: O3b (re-scope),
-  O4b→O4 step 2, then O5/O6/O8/O9/O10 which are all gated behind O4.
-- ROADMAP v2 (PO-approved 2026-08-22): .ai/TASKS rewritten — optimization O1–O8 (stream-to-disk exports, capture-time loudness, chromium mp4 capture + single-generation, webcodecs keystone, worker export + smart-cut + hevc/av1, native-res post-keystone, bundle split, perf bands) then features F1–F7 (mid-take cuts, zoom/pan soft-yes, background, TIMED movable camera [fixed-layout unfrozen], silence/speed DSP-only, pause/retake, quality slider) + PORTS P1–P6 (firefox/3-engine oracle, PWA, RU pack [Yandex QA+reachability+auth-alts], Electron shell w/ native bridges + cursor metadata, iOS SCK node, Android MediaProjection node). Opus-executor packs, gates mandatory. Quality frontier added per PO rulings 08-22(3): O9 text-perfect, O10 audio-depth, F8 nle-scrub, P7 hdr; tail-integrity band in O4/O8 (never lose final seconds); pre-roll REJECTED (no capture before press); "no AI" = no AI features ever, local quality models deferred PO-gated. ROADMAP PROTOCOL: PO says "roadmap" → session prints TASKS READY map (parallel-safe menu), PO says "go <id>". READY now: O1 O3a P1 P2 P3 P5a F7.
+- A/V SYNC — the honest picture (O4 step 1 + O4b, 2026-08-23, ×10 runs). PO felt it on a real take
+  ("maybe a little unsynchron"). TWO instrument faults made every previous number ~31 ms optimistic:
+  an EXACT +18.00 ms detection bias (half a 30 fps frame + half a 128-sample envelope window; predicted
+  18.00, measured 18.00 sd 0.00) and a 13.5 ms VIDEO reference delay the oracle never measured while
+  faithfully correcting the audio one. True offset is ~45-63 ms, audio late. CI now gates the symmetric
+  metric at ≤90 ms (5/5 cold pass, 40.5-66.2 ms). The instrument's noise floor is ~8-9 ms 1σ, so no
+  band below that is measurable and the old ≤10 ms O4 gate was never achievable on this rig.
+  CAUSE, measured by loopback: the measured-audio anchor dates sample 0 from when a worklet batch
+  ARRIVES, so everything upstream (device + stream buffering) is invisible and audio lands late —
+  +128.7 ms on the synthetic rig, sd 0.70. Dating from the audio clock instead moved it 1.1 ms, so the
+  delay is signal-path, not messaging, and no anchor cleverness can see it. Production now subtracts the
+  platform-reported track latency (bounded, logged; never a fitted constant). REFUTED and kept so nobody
+  retries it: switching the oracle's audio reference from a track-processor clone to the production
+  capture path moved it 2-5 ms, not the ~60 ms the loopback suggested.
+  O4 step 2's job is to bring the symmetric metric to ≤20 ms, then re-tighten the band.
+  ee/webcodecs-capture-2 is untouched and behind main — REBASE before continuing it.
+- SHIPPED 2026-08-23 (one session, eleven merges — details in DECISIONS, task state in TASKS):
+  O1 stream-to-disk exports · O2 capture-time loudness (145-156 ms/min of decode removed for takes
+  needing no boost; floor-bound takes still probe, because capture measures PCM and export measures the
+  decoded file and they disagree on p20 below the codec floor) · O3a contentHint + full-size camera
+  (MP4 capture REJECTED on evidence) · O7 bundle split · O4 step1 + O4b (sync, above) · F7 quality
+  slider · F1 mid-take cuts · O8 partial (tail + throughput bands, certified exports) · P2 PWA ·
+  P0 mic-hang fix. NEXT: O4 step 2 is the keystone; F3/F4/F5a and P1/P3/P5a run in parallel.
+- ROADMAP: .ai/TASKS is authoritative — it carries the READY map, per-task state, what a fresh session
+  must know, and the tooling index. PO-approved shape (2026-08-22): optimization O1-O10, features
+  F1-F8, ports P1-P7; rulings — pre-roll REJECTED (no capture before the press), tail integrity is a
+  HARD requirement (now gated), "no AI" means no AI product features ever (local quality models are
+  merely deferred and PO-gated per instance), fixed composition layout unfrozen for F4's timed camera.
+  PROTOCOL: PO says "roadmap" → print the TASKS READY map and WAIT; PO says "go <id>" → one task,
+  own branch, gates, TD merge, then update the READY map.
 - composite blob absent from crash salvage → absorbed by TASKS O4 (fMP4-on-disk makes it free)
-- bundle: O7 SHIPPED — first paint 802,975 B → 218,793 B; editor/cloud/capture-engine split, engine
-  prewarmed at mount so record latency is unchanged (282 → 296 ms). dev-mode first-record compile
-  latency remains (prod unaffected).
+- bundle: O7 SHIPPED — first paint 802,975 B → ~221,000 B; editor/cloud/capture-engine split, engine
+  prewarmed at mount so record latency is unchanged (282 → 296 ms). Enforcement is the capture barrel:
+  re-exporting session.ts/recovery.ts VALUES from @core/capture pulls the whole engine back into first
+  paint — reach them through loadCaptureEngine()/loadRecovery(). dev-mode first-record compile latency
+  remains (prod unaffected).
 - PUBLIC DEPLOY LIVE: inout-kappa.vercel.app serves current main (verified, bundle-hash match). GitHub main = single depersonalized commit; full history local-only (branch local-history-backup). Remaining cloud reset: PO runs docs/CLOUD_RESET.md steps 2-3 (Vercel env+old deployments, Supabase wipe+key rotation; auth users kept)
 - instant-arm SHIPPED (c8424a5): start gates only on primary channel, slow devices late-join (verified: armed 269ms w/ 3s-cold camera), 5s device budget, missing channel = loud banner + Recording.missing; late join → composite invalidated → render path. Await PO recheck of device-wait on live site.
 - PERVASIVE AUDIO NOISE root-caused + fixed (2026-07-16): render mix bus summed all audio channels at UNITY (no headroom) — mic+system-audio sum clipped softLimitSample on 34% of samples (measured). Removing the composite export shortcut had moved ALL exports onto this unstaged sum. Fix: 1/N per-channel headroom (single source unchanged/unity; multi-source guaranteed no clip, −6dB, recover via later 2-pass normalize). Proven at mix site: 16586→0 limiter hits. Single-source fidelity unregressed (THD −68dB).
-- STUCK "waiting for mic" (PO 2026-07-24) root-caused + fixed: synchronized start means EVERY device gates the take, and (a) the
-  granted-device budget was 30s of frozen UI (now 8s → take starts without the device + loud missing warning), (b) the measured-audio
-  prewarm (AudioContext create/resume on wedged hardware) had NO timeout — an unbounded await inside arm() could hang start forever,
-  and the same unbounded init inside startMeasuredAudioCapture could hang stop() (now: 3s/5s deadlines, late contexts closed, resume
-  raced at 2s). Synthetic e2e re-verified post-change. Await PO recheck with the real wedged-mic scenario.
+- STUCK "waiting for mic" — hit AGAIN 2026-08-23 (PO: unresponsive, mic indicator still lit after
+  refresh), fixed and PO-VERIFIED ("record seems to be okay"). The 2026-07-24 fix bounded each arming
+  STEP; what hung was the JOINS between them (`await src.settled`, `await Promise.all(armPromises)`),
+  which had no deadline — so the arming label, which only updates when a step STARTS, sat on
+  "Waiting for microphone…" wherever the hang actually was. Four fixes, all additive: budgets on both
+  joins (take starts with whatever is ready); a deadline on every durable-worker round trip (a worker
+  that never answered hung arm(), which opens a write stream per channel); createCaptureSession takes
+  an AbortSignal and the record button becomes CANCEL while arming (it used to be disabled — that is
+  what "unresponsive" meant); and a pagehide guard that stops tracks, because nothing released devices
+  when the page went away. Measured: cancel returns in 416 ms, pre-aborted in 1 ms, a normal take arms
+  in 228 ms with zero live tracks after stop. Regression cover: `npm run exp -- armcancel`.
+  WHICH step originally wedged is still unknown — the label could not say. The failure MODE is gone,
+  not the specific wedge; if it recurs the arming timeline + budget warnings will name it.
 - FROZEN-SOURCE TAKES (PO 2026-08-06 "switched to a tab with a game, nothing recorded, just frozen frame") — fixed +
   measured. Evidence first (real Chrome 150 / macOS 26, genuinely backgrounded tab, rAF==0): AudioWorklet tick 63/s,
   canvas.captureStream 30fps, <video>→drawImage ~56/s, MediaRecorder ~110KB/s all UNAFFECTED by hidden — the composite

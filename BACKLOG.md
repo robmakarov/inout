@@ -12,7 +12,9 @@ TD tags technical defects by severity. Done items get deleted, not archived.
 
 ### Now
 
-- [P2] Oracle returns ALL-NULL metrics (and exit 0!) under machine contention (parallel EE oracle runs + preview server) — instrument must retry or fail loudly with a reason, never emit null-as-result; pre-push gate blocked a docs-only push on it. EE: branch ee/oracle-nullfix exists unmerged — TD review/merge; remainder folds into TASKS O8.
+- [P2] Oracle returns ALL-NULL metrics (and exit 0!) under machine contention — instrument must retry or fail loudly, never emit null-as-result. PARTLY ADDRESSED: oracle.mjs retries and fails loud on incomplete metrics. Still open: branch ee/oracle-nullfix unmerged (TD review), and the fidelity runner has no equivalent retry — it reads RED (toneErr 1.1-2.3 dB) purely from machine load, which is capture starvation and not a mix regression. Needs the same retry/quiet-machine guard.
+
+- [P2] Sync is ~45-63 ms audio-late, not the ~30 ms previously believed (2026-08-23: the oracle was ~31 ms optimistic — exact 18 ms detection bias + an unmeasured 13.5 ms video reference). PO can feel it. Cause understood and partly compensated; closing it is TASKS O4's job (target ≤20 ms). Not a new regression — it was always there, we were measuring it wrong.
 
 - [P1] PO QA 2026-07-15 evening ran against the SHARED DEV SERVER while EE's 20-run headless oracle matrix hammered it — slow load / unresponsive modal / "waiting to connect" / mic-timeout likely environment artifacts. RETEST on clean prod build (TD serves main at localhost:4173). Rule going forward: PO QA only on a dedicated prod-build port; EE load tests spawn their own ephemeral server, never 5173.
 - [P1] Camera light at app load (PO report, pre-any-click?) — if reproduced on the clean 4173 build this violates 'no idle device access, ever'. Note: light DURING the screen picker (after record click) is the approved concurrent-acquisition design; need PO to distinguish which they saw.
@@ -39,7 +41,9 @@ PO protocol: say "roadmap" in any session → READY map menu → "go <id>". READ
 
 ### Now
 
-- [P2] Oracle returns ALL-NULL metrics (and exit 0!) under machine contention (parallel EE oracle runs + preview server) — instrument must retry or fail loudly with a reason, never emit null-as-result; pre-push gate blocked a docs-only push on it. EE: branch ee/oracle-nullfix exists unmerged — TD review/merge; remainder folds into TASKS O8.
+- [P2] Oracle returns ALL-NULL metrics (and exit 0!) under machine contention — instrument must retry or fail loudly, never emit null-as-result. PARTLY ADDRESSED: oracle.mjs retries and fails loud on incomplete metrics. Still open: branch ee/oracle-nullfix unmerged (TD review), and the fidelity runner has no equivalent retry — it reads RED (toneErr 1.1-2.3 dB) purely from machine load, which is capture starvation and not a mix regression. Needs the same retry/quiet-machine guard.
+
+- [P2] Sync is ~45-63 ms audio-late, not the ~30 ms previously believed (2026-08-23: the oracle was ~31 ms optimistic — exact 18 ms detection bias + an unmeasured 13.5 ms video reference). PO can feel it. Cause understood and partly compensated; closing it is TASKS O4's job (target ≤20 ms). Not a new regression — it was always there, we were measuring it wrong.
 
 - [P1] Provision Supabase + Google OAuth, then verify login → upload → signed-link view in a second browser. Required before public cloud sharing; local download already works.
 - [P2] Daily real use: collect only concrete friction/defects. PM turns evidence into a bounded decision; PO decides any resulting UX change.

@@ -43,52 +43,125 @@ body {
 button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
 select { font: inherit; }
 
-.bar {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 10px 16px;
-  background: #101012;
-  border-bottom: 1px solid #232327;
+/* squeeze-panels — desktop side panels that take REAL width: the centre column shrinks and the
+   whole cluster (header + columns) stays centred and grows outward. No overlay, no floating.
+   Sibling of notice-band (same principle, vertical); the opposite of push-drawer (which floats).
+   Contract: .cluster wraps the page header AND .row; body gets .f / .d when a panel opens.
+   Widths below came off one three-column desktop layout — retune --list per project, keep the shape.
+   [adapted: the centre here is a viewport-filling stage, not a fixed list column, so --list is
+    `auto` and .cluster is width:100% — the f/d contract and the column shape are untouched] */
+:root {
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur: 0.34s;
+  --fw: 0px;       /* left panel  + its gap, 0 when closed */
+  --dw: 0px;       /* right panel + its gap, 0 when closed */
 }
-.bar__title {
+body.f { --fw: 228px; }
+body.d { --dw: 268px; }
+
+.cluster {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.row { flex: 1; min-height: 0; display: flex; align-items: stretch; }
+.col { min-height: 0; overflow: hidden; }
+.col-list { flex: 1; min-width: 0; }
+.col-filters { width: var(--fw); flex: none; transition: width var(--dur) var(--ease); }
+.col-detail { width: var(--dw); flex: none; transition: width var(--dur) var(--ease); }
+/* panels keep their own fixed width so the content never squishes */
+.col-filters .panel { width: 228px; }
+.col-detail .panel { width: 268px; }
+.panel {
+  height: 100%;
+  overflow-y: auto;
+  opacity: 0;
+  transition: opacity 0.2s var(--ease);
+  background: #101012;
+  padding: 14px 14px 20px;
+}
+.col-filters .panel { border-right: 1px solid #232327; }
+.col-detail .panel { border-left: 1px solid #232327; }
+body.f .filters, body.d .detail { opacity: 1; }
+
+.panel__title {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: #6a6a74;
   white-space: nowrap;
+  margin-bottom: 12px;
 }
-.bar__title em { font-style: normal; color: #d8d8dc; }
-.bar__tabs { display: flex; gap: 2px; background: #17171a; border-radius: 8px; padding: 2px; }
-.bar__tab {
-  padding: 5px 12px;
+.panel__title em { font-style: normal; color: #d8d8dc; }
+.panel__group { margin-bottom: 18px; }
+.panel__label {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #55555e;
+  margin-bottom: 6px;
+}
+.panel select,
+.panel .btn-h {
+  width: 100%;
+  background: #17171a;
+  color: #d8d8dc;
+  border: 1px solid #2b2b31;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  text-align: left;
+}
+.panel .btn-h { text-align: center; cursor: pointer; }
+.panel .btn-h:hover { background: #212126; color: #fff; }
+.tab {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
   border-radius: 6px;
   color: #85858f;
   font-size: 12px;
   transition: background 120ms, color 120ms;
 }
-.bar__tab:hover { color: #d8d8dc; }
-.bar__tab[aria-selected='true'] { background: #2b2b31; color: #fff; }
-.bar__spacer { flex: 1; }
-.bar__field { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #85858f; }
-.bar__field select {
-  background: #17171a;
-  color: #d8d8dc;
-  border: 1px solid #2b2b31;
-  border-radius: 6px;
-  padding: 4px 8px;
+.tab:hover { color: #d8d8dc; background: #17171a; }
+.tab[aria-selected='true'] { background: #2b2b31; color: #fff; }
+.readout {
+  font: 11px/1.5 ui-monospace, monospace;
+  color: #55555e;
+  white-space: pre-line;
 }
-.bar__note { font-size: 11px; color: #55555e; white-space: nowrap; }
+
+/* edge handles — the only chrome left when both panels are shut */
+.edge {
+  position: absolute;
+  top: 50%;
+  z-index: 20;
+  width: 16px;
+  height: 54px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  background: #1b1b20;
+  border: 1px solid #2b2b31;
+  color: #85858f;
+  font-size: 10px;
+  transition: background 140ms, color 140ms;
+}
+.edge:hover { background: #2b2b31; color: #fff; }
+.edge--l { left: 0; border-left: none; border-radius: 0 8px 8px 0; }
+.edge--r { right: 0; border-right: none; border-radius: 8px 0 0 8px; }
 
 .canvas {
-  flex: 1;
-  min-height: 0;
+  position: relative;
+  height: 100%;
   display: grid;
   place-items: center;
   padding: 24px;
-  overflow: auto;
+  overflow: hidden;
   background:
     repeating-conic-gradient(#141416 0% 25%, #17171a 0% 50%) 50% / 22px 22px;
 }
@@ -105,6 +178,84 @@ select { font: inherit; }
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
 }
 [data-frame='phone'] .frame { border-radius: 36px; }
+
+/* capture-studio__resize, lifted from inout copy 2 — 44px corner hit target,
+   corner-weighted glow, three-dot grip, aqua on hover / white while dragging.
+   It sits on .slot (the scaled box) so the grip keeps its size at any zoom. */
+.fresize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 9px 0 0 0;
+  z-index: 60;
+  cursor: nwse-resize;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  background: radial-gradient(
+    ellipse 115% 115% at 100% 100%,
+    rgba(95, 255, 212, 0.14) 0%,
+    rgba(120, 200, 255, 0.06) 42%,
+    transparent 68%
+  );
+  opacity: 0.5;
+  transition:
+    opacity 0.2s var(--ease),
+    background 0.22s ease,
+    transform 0.2s var(--ease);
+}
+.fresize:hover:not(.fresize--dragging),
+.fresize:focus-visible:not(.fresize--dragging) {
+  opacity: 0.92;
+  background: radial-gradient(
+    ellipse 115% 115% at 100% 100%,
+    rgba(80, 220, 255, 0.28) 0%,
+    rgba(120, 175, 255, 0.16) 46%,
+    transparent 74%
+  );
+  outline: none;
+}
+.fresize:active,
+.fresize--dragging {
+  opacity: 1;
+  transition-duration: 0.1s;
+  background: radial-gradient(
+    ellipse 115% 115% at 100% 100%,
+    rgba(255, 255, 255, 0.42) 0%,
+    rgba(235, 242, 255, 0.2) 48%,
+    transparent 78%
+  );
+}
+.fresize::after {
+  content: '';
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 3.5px;
+  height: 3.5px;
+  border-radius: 50%;
+  background: rgba(230, 245, 255, 0.92);
+  box-shadow:
+    -5px 0 0 0 rgba(230, 245, 255, 0.72),
+    0 -5px 0 0 rgba(230, 245, 255, 0.52);
+  pointer-events: none;
+  transition: transform 0.2s var(--ease), opacity 0.2s ease;
+}
+.fresize:hover::after,
+.fresize:focus-visible::after { transform: scale(1.08); }
+.fresize--dragging::after {
+  opacity: 1;
+  transition: none;
+  animation: resizeDotsBreathe 1.15s ease-in-out infinite;
+}
+@keyframes resizeDotsBreathe {
+  0%, 100% { opacity: 0.82; transform: scale(1.06); }
+  50% { opacity: 1; transform: scale(1.13); }
+}
 
 /* ==========================================================================
    1. THEMES — the whole point. Each block is one style. Same token names.
@@ -382,27 +533,19 @@ select { font: inherit; }
   display: grid;
   place-items: center;
 }
+/* orbit offset lives in left/top so transform stays free for hover feedback */
 .ring .chip {
   position: absolute;
-  left: 50%;
-  top: 50%;
+  transform: translate(-50%, -50%);
 }
+.ring .chip:hover { transform: translate(-50%, -50%) scale(1.06); }
+.ring .chip:active { transform: translate(-50%, -50%) scale(0.97); transition-duration: 80ms; }
 .cluster__hint {
   margin-top: -34px;
   text-align: center;
   font-size: 12px;
   color: var(--text-faint);
   min-height: 17px;
-}
-.capture__wordmark {
-  position: absolute;
-  top: 20px;
-  left: 24px;
-  font-size: var(--wordmark-size);
-  font-weight: 700;
-  letter-spacing: var(--wordmark-track);
-  color: var(--text-faint);
-  z-index: 5;
 }
 /* Framed exactly where the editor puts its stage — same width, same centre —
    so the picture does not move on the hand-off from recording to editing. */
@@ -471,14 +614,34 @@ select { font: inherit; }
   font-size: 13px;
   font-weight: 500;
   letter-spacing: var(--label-track);
-  transition: background 140ms, color 140ms;
+  white-space: nowrap; /* orbit chips are absolutely placed — they must not wrap */
+  transition:
+    background 140ms,
+    color 140ms,
+    box-shadow 180ms,
+    transform 140ms var(--ease);
 }
-.chip:hover { background: var(--surface-3); }
 .chip[aria-pressed='true'] {
   background: var(--accent-soft);
   border-color: color-mix(in srgb, var(--accent), transparent 65%);
   color: var(--accent);
 }
+/* Hover used to grey an on-chip out — it beat the pressed rule and threw away
+   the accent. Off and on now each keep their own identity and just gain a step:
+   off lifts to the next surface, on brightens its own tint. Nothing swaps colour. */
+.chip:hover:not([aria-pressed='true']) {
+  background: var(--surface-3);
+  color: var(--text);
+}
+.chip[aria-pressed='true']:hover {
+  background: color-mix(in srgb, var(--accent-soft), var(--accent) 14%);
+  border-color: color-mix(in srgb, var(--accent), transparent 45%);
+}
+[data-neon='on'] .chip:hover {
+  box-shadow: 0 0 0 1px rgba(var(--neon), 0.28), 0 0 16px rgba(var(--neon), 0.16);
+}
+.chips .chip:hover { transform: scale(1.05); }
+.chips .chip:active { transform: scale(0.97); transition-duration: 80ms; }
 .chip--unavailable { background: var(--record-soft); color: var(--record); }
 
 /* Look is untouched. Behaviour is the studio's rec-go: no hover scale — a neon
@@ -936,7 +1099,7 @@ select { font: inherit; }
   opacity: 0;
   pointer-events: none;
 }
-#logomark {
+#splash svg {
   position: relative;
   /* cqw, not vw: the frame is the viewport here (see .app container-type) */
   width: min(58cqw, 232px);
@@ -944,42 +1107,61 @@ select { font: inherit; }
   display: block;
   overflow: visible;
 }
-#logomark .lm {
+#splash .lm {
   opacity: 0;
   transform-box: fill-box;
   transform-origin: 50% 100%;
 }
-#splash .tag {
-  text-align: center;
-  font-size: 11.5px;
-  color: #6e6a5f;
-  margin-top: 14px;
-  letter-spacing: 0.03em;
-  opacity: 0;
-}
+/* one svg per shape of animation: five letter paths, or the five original frames */
+#splash[data-variant='frames'] #mark-letters { display: none; }
+#splash:not([data-variant='frames']) #mark-frames { display: none; }
+#splash:not([data-variant='frames']) .glow { display: block; }
+#splash[data-variant='frames'] .glow { display: none; }
+#mark-frames .fr { opacity: 0; }
+#mark-frames .fr.on { opacity: 1; }
 
-.splash-play .lm { animation: lmIn 0.42s cubic-bezier(0.16, 1, 0.3, 1) both; }
-.splash-play .lm--i { animation-delay: 0.06s; }
-.splash-play .lm--n { animation-delay: 0.105s; }
-.splash-play .lm--o { animation-delay: 0.15s; }
-.splash-play .lm--u { animation-delay: 0.195s; }
-.splash-play .lm--t { animation-delay: 0.24s; }
+/* --- variant: letters — each letter rises on its own delay (the one you have) --- */
+#splash[data-variant='letters'].splash-play .lm { animation: lmIn 0.42s cubic-bezier(0.16, 1, 0.3, 1) both; }
+#splash[data-variant='letters'].splash-play .lm--i { animation-delay: 0.06s; }
+#splash[data-variant='letters'].splash-play .lm--n { animation-delay: 0.105s; }
+#splash[data-variant='letters'].splash-play .lm--o { animation-delay: 0.15s; }
+#splash[data-variant='letters'].splash-play .lm--u { animation-delay: 0.195s; }
+#splash[data-variant='letters'].splash-play .lm--t { animation-delay: 0.24s; }
+
+/* --- variant: aperture — a shutter opens on the mark, then light runs through
+       the letters left to right. Reveal is one clip-path, shimmer is brightness
+       on each path: both compositor-cheap, nothing reflows. --- */
+#splash[data-variant='aperture'] .lm { opacity: 1; }
+#splash[data-variant='aperture'].splash-play #mark-letters {
+  animation: apertureIn 0.54s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+#splash[data-variant='aperture'].splash-play .lm { animation: lmShimmer 0.44s ease both; }
+#splash[data-variant='aperture'].splash-play .lm--i { animation-delay: 0.3s; }
+#splash[data-variant='aperture'].splash-play .lm--n { animation-delay: 0.36s; }
+#splash[data-variant='aperture'].splash-play .lm--o { animation-delay: 0.42s; }
+#splash[data-variant='aperture'].splash-play .lm--u { animation-delay: 0.48s; }
+#splash[data-variant='aperture'].splash-play .lm--t { animation-delay: 0.54s; }
+
 .splash-play .glow { animation: glowIn 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both; }
-.splash-play .tag { animation: tagIn 0.5s ease 0.4s both; }
 .splash-out { animation: splashOut 0.38s cubic-bezier(0.2, 1, 0.3, 1) both; }
 
 @keyframes lmIn {
   from { opacity: 0; transform: translateY(26px) scaleY(0.82); }
   to { opacity: 1; transform: none; }
 }
+@keyframes apertureIn {
+  from { clip-path: inset(48% 0 48% 0); transform: scale(1.06); opacity: 0.35; }
+  to { clip-path: inset(0 0 0 0); transform: none; opacity: 1; }
+}
+@keyframes lmShimmer {
+  0% { filter: brightness(1); }
+  45% { filter: brightness(2.2); }
+  100% { filter: brightness(1); }
+}
 @keyframes glowIn {
   0% { opacity: 0; transform: translate(-50%, -60%) scale(0.6); }
   45% { opacity: 1; }
   100% { opacity: 0.55; transform: translate(-50%, -60%) scale(1); }
-}
-@keyframes tagIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: none; }
 }
 @keyframes splashOut {
   to { opacity: 0; transform: scale(1.05); }
@@ -1024,60 +1206,158 @@ select { font: inherit; }
 </head>
 <body>
 
-<header class="bar">
-  <div class="bar__title"><em>INOUT</em> style prototype</div>
+<div class="cluster">
+ <div class="row">
 
-  <div class="bar__tabs" role="tablist">
-    <button class="bar__tab" role="tab" data-tab="idle" aria-selected="true">Idle</button>
-    <button class="bar__tab" role="tab" data-tab="recording" aria-selected="false">Recording</button>
-    <button class="bar__tab" role="tab" data-tab="editor" aria-selected="false">Editor</button>
-    <button class="bar__tab" role="tab" data-tab="exporting" aria-selected="false">Exporting</button>
-    <button class="bar__tab" role="tab" data-tab="share" aria-selected="false">Share</button>
+  <!-- left panel: what you're looking at -->
+  <div class="col col-filters">
+    <aside class="panel filters">
+      <div class="panel__title"><em>INOUT</em> proto</div>
+      <div class="panel__group" role="tablist">
+        <div class="panel__label">Screen</div>
+        <button class="tab" role="tab" data-tab="idle" aria-selected="true">Idle</button>
+        <button class="tab" role="tab" data-tab="recording" aria-selected="false">Recording</button>
+        <button class="tab" role="tab" data-tab="editor" aria-selected="false">Editor</button>
+        <button class="tab" role="tab" data-tab="exporting" aria-selected="false">Exporting</button>
+        <button class="tab" role="tab" data-tab="share" aria-selected="false">Share</button>
+      </div>
+      <div class="panel__group">
+        <div class="panel__label">Keys</div>
+        <div class="readout">1–5  screen
+0    replay splash
+T F N  theme · frame · neon
+[ ]  panels</div>
+      </div>
+    </aside>
   </div>
 
-  <div class="bar__spacer"></div>
-
-  <label class="bar__field">Theme
-    <select id="theme">
-      <option value="baseline">baseline — today</option>
-      <option value="graphite">graphite</option>
-      <option value="paper">paper</option>
-    </select>
-  </label>
-  <label class="bar__field">Frame
-    <select id="frame">
-      <option value="desktop">desktop 1040</option>
-      <option value="laptop">laptop 820</option>
-      <option value="phone">phone 390</option>
-    </select>
-  </label>
-  <label class="bar__field">Neon
-    <select id="neon">
-      <option value="on">on</option>
-      <option value="off">off</option>
-    </select>
-  </label>
-  <button class="bar__tab" id="replay">Replay splash</button>
-  <div class="bar__note" id="note">1–5 · T · F</div>
-</header>
-
-<main class="canvas" id="canvas">
-  <div class="slot" id="slot">
-  <div class="frame" id="frameEl">
+  <!-- centre: the screen zone -->
+  <div class="col col-list">
+    <main class="canvas" id="canvas">
+      <button class="edge edge--l" id="tgl-l" aria-label="Toggle left panel">◧</button>
+      <button class="edge edge--r" id="tgl-r" aria-label="Toggle right panel">◨</button>
+      <div class="slot" id="slot">
+      <button class="fresize" id="resize" aria-label="Resize the screen zone — double-click for min or max"></button>
+      <div class="frame" id="frameEl">
     <div class="app" id="app">
 
       <!-- ============ splash — the mark, straight out of inout proto ============ -->
-      <div id="splash" hidden>
+      <div id="splash" hidden data-variant="aperture">
         <div class="swrap">
           <div class="glow"></div>
-          <svg id="logomark" viewBox="247.85 256.76 362.93 43.52" xmlns="http://www.w3.org/2000/svg" aria-label="INOUT">
+          <!-- the original five frames, verbatim from inout proto — used by the
+               "frames" variant, which steps them at 105ms exactly as it shipped -->
+          <svg id="mark-frames" viewBox="247.85 256.76 362.93 43.52" xmlns="http://www.w3.org/2000/svg" aria-label="INOUT">
+            <g class="fr" data-fr="0" transform="translate(0,0)">
+<g id="IN">
+<g id="IN_2">
+<path d="M247.845 258.156H263.845V299.116H247.845V258.156Z" fill="#F0ECE3"/>
+<path d="M334.907 286.572L328.955 289.964V258.156H344.955V299.116H328.955L280.763 271.212L286.715 267.756V299.116H270.715V258.156H286.715L334.907 286.572Z" fill="#F0ECE3"/>
+</g>
+</g>
+<g id="OUT">
+<g id="OUT_2">
+<path d="M391.56 300.28C382.259 300.28 374.771 299.469 369.096 297.848C363.421 296.184 359.283 293.752 356.68 290.552C354.12 287.309 352.84 283.299 352.84 278.52C352.84 273.741 354.12 269.752 356.68 266.552C359.283 263.309 363.421 260.877 369.096 259.256C374.771 257.592 382.259 256.76 391.56 256.76C400.861 256.76 408.349 257.592 414.024 259.256C419.699 260.877 423.816 263.309 426.376 266.552C428.979 269.752 430.28 273.741 430.28 278.52C430.28 283.299 428.979 287.309 426.376 290.552C423.816 293.752 419.699 296.184 414.024 297.848C408.349 299.469 400.861 300.28 391.56 300.28ZM391.56 288.12C395.955 288.12 399.752 287.864 402.952 287.352C406.152 286.797 408.627 285.837 410.376 284.472C412.125 283.064 413 281.08 413 278.52C413 275.96 412.125 273.997 410.376 272.632C408.627 271.224 406.152 270.264 402.952 269.752C399.752 269.197 395.955 268.92 391.56 268.92C387.165 268.92 383.304 269.197 379.976 269.752C376.691 270.264 374.109 271.224 372.232 272.632C370.397 273.997 369.48 275.96 369.48 278.52C369.48 281.08 370.397 283.064 372.232 284.472C374.109 285.837 376.691 286.797 379.976 287.352C383.304 287.864 387.165 288.12 391.56 288.12Z" fill="#E8D5A0"/>
+<path d="M496.141 275.64V258.04H512.141V278.52C512.141 282.147 511.458 285.24 510.093 287.8C508.77 290.317 506.914 292.408 504.525 294.072C502.136 295.693 499.384 296.952 496.269 297.848C493.154 298.744 489.805 299.363 486.221 299.704C482.68 300.088 479.074 300.28 475.405 300.28C471.522 300.28 467.768 300.088 464.141 299.704C460.514 299.363 457.144 298.744 454.029 297.848C450.957 296.952 448.269 295.693 445.965 294.072C443.661 292.408 441.848 290.317 440.525 287.8C439.245 285.24 438.605 282.147 438.605 278.52V258.04H454.605V275.64C454.605 279.053 455.437 281.656 457.101 283.448C458.765 285.24 461.133 286.477 464.205 287.16C467.32 287.8 471.053 288.12 475.405 288.12C479.629 288.12 483.298 287.8 486.413 287.16C489.528 286.477 491.917 285.24 493.581 283.448C495.288 281.656 496.141 279.053 496.141 275.64Z" fill="#E8D5A0"/>
+<path d="M518.545 258.04H585.105V270.2H518.545V258.04ZM543.825 269.368H559.825V299H543.825V269.368Z" fill="#E8D5A0"/>
+</g>
+</g>
+</g>
+<g class="fr" data-fr="1" transform="translate(0,-257)">
+<g id="IN_3">
+<g id="IN_4">
+<path d="M247.845 515.156H263.845V556.116H247.845V515.156Z" fill="#F0ECE3"/>
+<path d="M334.907 543.572L328.955 546.964V515.156H344.955V556.116H328.955L280.763 528.212L286.715 524.756V556.116H270.715V515.156H286.715L334.907 543.572Z" fill="#F0ECE3"/>
+</g>
+</g>
+<g id="Frame 9">
+<g id="|||">
+<path id="I" d="M349 517.985C349 517.433 349.448 516.985 350 516.985H356C356.552 516.985 357 517.433 357 517.985V553.015C357 553.567 356.552 554.015 356 554.015H350C349.448 554.015 349 553.567 349 553.015V517.985Z" fill="#C5C0B6"/>
+</g>
+</g>
+<g id="OUT_3">
+<g id="OUT_4">
+<path d="M399.56 557.28C390.259 557.28 382.771 556.469 377.096 554.848C371.421 553.184 367.283 550.752 364.68 547.552C362.12 544.309 360.84 540.299 360.84 535.52C360.84 530.741 362.12 526.752 364.68 523.552C367.283 520.309 371.421 517.877 377.096 516.256C382.771 514.592 390.259 513.76 399.56 513.76C408.861 513.76 416.349 514.592 422.024 516.256C427.699 517.877 431.816 520.309 434.376 523.552C436.979 526.752 438.28 530.741 438.28 535.52C438.28 540.299 436.979 544.309 434.376 547.552C431.816 550.752 427.699 553.184 422.024 554.848C416.349 556.469 408.861 557.28 399.56 557.28ZM399.56 545.12C403.955 545.12 407.752 544.864 410.952 544.352C414.152 543.797 416.627 542.837 418.376 541.472C420.125 540.064 421 538.08 421 535.52C421 532.96 420.125 530.997 418.376 529.632C416.627 528.224 414.152 527.264 410.952 526.752C407.752 526.197 403.955 525.92 399.56 525.92C395.165 525.92 391.304 526.197 387.976 526.752C384.691 527.264 382.109 528.224 380.232 529.632C378.397 530.997 377.48 532.96 377.48 535.52C377.48 538.08 378.397 540.064 380.232 541.472C382.109 542.837 384.691 543.797 387.976 544.352C391.304 544.864 395.165 545.12 399.56 545.12Z" fill="#E8D5A0"/>
+<path d="M504.141 532.64V515.04H520.141V535.52C520.141 539.147 519.458 542.24 518.093 544.8C516.77 547.317 514.914 549.408 512.525 551.072C510.136 552.693 507.384 553.952 504.269 554.848C501.154 555.744 497.805 556.363 494.221 556.704C490.68 557.088 487.074 557.28 483.405 557.28C479.522 557.28 475.768 557.088 472.141 556.704C468.514 556.363 465.144 555.744 462.029 554.848C458.957 553.952 456.269 552.693 453.965 551.072C451.661 549.408 449.848 547.317 448.525 544.8C447.245 542.24 446.605 539.147 446.605 535.52V515.04H462.605V532.64C462.605 536.053 463.437 538.656 465.101 540.448C466.765 542.24 469.133 543.477 472.205 544.16C475.32 544.8 479.053 545.12 483.405 545.12C487.629 545.12 491.298 544.8 494.413 544.16C497.528 543.477 499.917 542.24 501.581 540.448C503.288 538.656 504.141 536.053 504.141 532.64Z" fill="#E8D5A0"/>
+<path d="M526.545 515.04H593.105V527.2H526.545V515.04ZM551.825 526.368H567.825V556H551.825V526.368Z" fill="#E8D5A0"/>
+</g>
+</g>
+</g>
+<g class="fr" data-fr="2" transform="translate(0,-514)">
+<g id="IN_5">
+<g id="IN_6">
+<path d="M247.845 772.156H263.845V813.116H247.845V772.156Z" fill="#F0ECE3"/>
+<path d="M334.907 800.572L328.955 803.964V772.156H344.955V813.116H328.955L280.763 785.212L286.715 781.756V813.116H270.715V772.156H286.715L334.907 800.572Z" fill="#F0ECE3"/>
+</g>
+</g>
+<g id="Frame 9_2">
+<g id="|||_2">
+<path id="I_2" d="M349 774.985C349 774.433 349.448 773.985 350 773.985H356C356.552 773.985 357 774.433 357 774.985V810.015C357 810.567 356.552 811.015 356 811.015H350C349.448 811.015 349 810.567 349 810.015V774.985Z" fill="#C5C0B6"/>
+<path id="I_3" d="M361 777.52C361 776.967 361.448 776.52 362 776.52H365.81C366.362 776.52 366.81 776.967 366.81 777.52V807.48C366.81 808.033 366.362 808.48 365.81 808.48H362C361.448 808.48 361 808.033 361 807.48V777.52Z" fill="url(#paint0_linear_0_1)"/>
+</g>
+</g>
+<g id="OUT_5">
+<g id="OUT_6">
+<path d="M409.37 814.28C400.069 814.28 392.581 813.469 386.906 811.848C381.231 810.184 377.093 807.752 374.49 804.552C371.93 801.309 370.65 797.299 370.65 792.52C370.65 787.741 371.93 783.752 374.49 780.552C377.093 777.309 381.231 774.877 386.906 773.256C392.581 771.592 400.069 770.76 409.37 770.76C418.671 770.76 426.159 771.592 431.834 773.256C437.509 774.877 441.626 777.309 444.186 780.552C446.789 783.752 448.09 787.741 448.09 792.52C448.09 797.299 446.789 801.309 444.186 804.552C441.626 807.752 437.509 810.184 431.834 811.848C426.159 813.469 418.671 814.28 409.37 814.28ZM409.37 802.12C413.765 802.12 417.562 801.864 420.762 801.352C423.962 800.797 426.437 799.837 428.186 798.472C429.935 797.064 430.81 795.08 430.81 792.52C430.81 789.96 429.935 787.997 428.186 786.632C426.437 785.224 423.962 784.264 420.762 783.752C417.562 783.197 413.765 782.92 409.37 782.92C404.975 782.92 401.114 783.197 397.786 783.752C394.501 784.264 391.919 785.224 390.042 786.632C388.207 787.997 387.29 789.96 387.29 792.52C387.29 795.08 388.207 797.064 390.042 798.472C391.919 799.837 394.501 800.797 397.786 801.352C401.114 801.864 404.975 802.12 409.37 802.12Z" fill="#E8D5A0"/>
+<path d="M513.951 789.64V772.04H529.951V792.52C529.951 796.147 529.268 799.24 527.903 801.8C526.58 804.317 524.724 806.408 522.335 808.072C519.946 809.693 517.194 810.952 514.079 811.848C510.964 812.744 507.615 813.363 504.031 813.704C500.49 814.088 496.884 814.28 493.215 814.28C489.332 814.28 485.578 814.088 481.951 813.704C478.324 813.363 474.954 812.744 471.839 811.848C468.767 810.952 466.079 809.693 463.775 808.072C461.471 806.408 459.658 804.317 458.335 801.8C457.055 799.24 456.415 796.147 456.415 792.52V772.04H472.415V789.64C472.415 793.053 473.247 795.656 474.911 797.448C476.575 799.24 478.943 800.477 482.015 801.16C485.13 801.8 488.863 802.12 493.215 802.12C497.439 802.12 501.108 801.8 504.223 801.16C507.338 800.477 509.727 799.24 511.391 797.448C513.098 795.656 513.951 793.053 513.951 789.64Z" fill="#E8D5A0"/>
+<path d="M536.355 772.04H602.915V784.2H536.355V772.04ZM561.635 783.368H577.635V813H561.635V783.368Z" fill="#E8D5A0"/>
+</g>
+</g>
+</g>
+<g class="fr" data-fr="3" transform="translate(0,-771)">
+<g id="IN_7">
+<g id="IN_8">
+<path d="M247.845 1029.16H263.845V1070.12H247.845V1029.16Z" fill="#F0ECE3"/>
+<path d="M334.907 1057.57L328.955 1060.96V1029.16H344.955V1070.12H328.955L280.763 1042.21L286.715 1038.76V1070.12H270.715V1029.16H286.715L334.907 1057.57Z" fill="#F0ECE3"/>
+</g>
+</g>
+<g id="Frame 9_3">
+<g id="|||_3">
+<path id="I_4" d="M349 1031.98C349 1031.43 349.448 1030.98 350 1030.98H356C356.552 1030.98 357 1031.43 357 1031.98V1067.02C357 1067.57 356.552 1068.02 356 1068.02H350C349.448 1068.02 349 1067.57 349 1067.02V1031.98Z" fill="#C5C0B6"/>
+<path id="I_5" d="M361 1034.52C361 1033.97 361.448 1033.52 362 1033.52H365.81C366.362 1033.52 366.81 1033.97 366.81 1034.52V1064.48C366.81 1065.03 366.362 1065.48 365.81 1065.48H362C361.448 1065.48 361 1065.03 361 1064.48V1034.52Z" fill="url(#paint1_linear_0_1)"/>
+<path id="I_6" d="M370.81 1035.95C370.81 1035.4 371.258 1034.95 371.81 1034.95H373.666C374.218 1034.95 374.666 1035.4 374.666 1035.95V1063.05C374.666 1063.6 374.218 1064.05 373.666 1064.05H371.81C371.258 1064.05 370.81 1063.6 370.81 1063.05V1035.95Z" fill="#69614A"/>
+</g>
+</g>
+<g id="OUT_7">
+<g id="OUT_8">
+<path d="M417.226 1071.28C407.924 1071.28 400.436 1070.47 394.762 1068.85C389.087 1067.18 384.948 1064.75 382.346 1061.55C379.786 1058.31 378.506 1054.3 378.506 1049.52C378.506 1044.74 379.786 1040.75 382.346 1037.55C384.948 1034.31 389.087 1031.88 394.762 1030.26C400.436 1028.59 407.924 1027.76 417.226 1027.76C426.527 1027.76 434.015 1028.59 439.69 1030.26C445.364 1031.88 449.482 1034.31 452.042 1037.55C454.644 1040.75 455.946 1044.74 455.946 1049.52C455.946 1054.3 454.644 1058.31 452.042 1061.55C449.482 1064.75 445.364 1067.18 439.69 1068.85C434.015 1070.47 426.527 1071.28 417.226 1071.28ZM417.226 1059.12C421.62 1059.12 425.418 1058.86 428.618 1058.35C431.818 1057.8 434.292 1056.84 436.042 1055.47C437.791 1054.06 438.666 1052.08 438.666 1049.52C438.666 1046.96 437.791 1045 436.042 1043.63C434.292 1042.22 431.818 1041.26 428.618 1040.75C425.418 1040.2 421.62 1039.92 417.226 1039.92C412.831 1039.92 408.97 1040.2 405.642 1040.75C402.356 1041.26 399.775 1042.22 397.898 1043.63C396.063 1045 395.146 1046.96 395.146 1049.52C395.146 1052.08 396.063 1054.06 397.898 1055.47C399.775 1056.84 402.356 1057.8 405.642 1058.35C408.97 1058.86 412.831 1059.12 417.226 1059.12Z" fill="#E8D5A0"/>
+<path d="M521.807 1046.64V1029.04H537.807V1049.52C537.807 1053.15 537.124 1056.24 535.759 1058.8C534.436 1061.32 532.58 1063.41 530.191 1065.07C527.801 1066.69 525.049 1067.95 521.935 1068.85C518.82 1069.74 515.471 1070.36 511.887 1070.7C508.345 1071.09 504.74 1071.28 501.071 1071.28C497.188 1071.28 493.433 1071.09 489.807 1070.7C486.18 1070.36 482.809 1069.74 479.695 1068.85C476.623 1067.95 473.935 1066.69 471.631 1065.07C469.327 1063.41 467.513 1061.32 466.191 1058.8C464.911 1056.24 464.271 1053.15 464.271 1049.52V1029.04H480.271V1046.64C480.271 1050.05 481.103 1052.66 482.767 1054.45C484.431 1056.24 486.799 1057.48 489.871 1058.16C492.985 1058.8 496.719 1059.12 501.071 1059.12C505.295 1059.12 508.964 1058.8 512.079 1058.16C515.193 1057.48 517.583 1056.24 519.247 1054.45C520.953 1052.66 521.807 1050.05 521.807 1046.64Z" fill="#E8D5A0"/>
+<path d="M544.211 1029.04H610.771V1041.2H544.211V1029.04ZM569.491 1040.37H585.491V1070H569.491V1040.37Z" fill="#E8D5A0"/>
+</g>
+</g>
+</g>
+<g class="fr" data-fr="4" transform="translate(0,-1028)">
+<g id="IN_9">
+<g id="IN_10">
+<path d="M247.845 1286.16H263.845V1327.12H247.845V1286.16Z" fill="#F0ECE3"/>
+<path d="M334.907 1314.57L328.955 1317.96V1286.16H344.955V1327.12H328.955L280.763 1299.21L286.715 1295.76V1327.12H270.715V1286.16H286.715L334.907 1314.57Z" fill="#F0ECE3"/>
+</g>
+</g>
+<g id="OUT_9">
+<g id="OUT_10">
+<path d="M391.56 1328.28C382.259 1328.28 374.771 1327.47 369.096 1325.85C363.421 1324.18 359.283 1321.75 356.68 1318.55C354.12 1315.31 352.84 1311.3 352.84 1306.52C352.84 1301.74 354.12 1297.75 356.68 1294.55C359.283 1291.31 363.421 1288.88 369.096 1287.26C374.771 1285.59 382.259 1284.76 391.56 1284.76C400.861 1284.76 408.349 1285.59 414.024 1287.26C419.699 1288.88 423.816 1291.31 426.376 1294.55C428.979 1297.75 430.28 1301.74 430.28 1306.52C430.28 1311.3 428.979 1315.31 426.376 1318.55C423.816 1321.75 419.699 1324.18 414.024 1325.85C408.349 1327.47 400.861 1328.28 391.56 1328.28ZM391.56 1316.12C395.955 1316.12 399.752 1315.86 402.952 1315.35C406.152 1314.8 408.627 1313.84 410.376 1312.47C412.125 1311.06 413 1309.08 413 1306.52C413 1303.96 412.125 1302 410.376 1300.63C408.627 1299.22 406.152 1298.26 402.952 1297.75C399.752 1297.2 395.955 1296.92 391.56 1296.92C387.165 1296.92 383.304 1297.2 379.976 1297.75C376.691 1298.26 374.109 1299.22 372.232 1300.63C370.397 1302 369.48 1303.96 369.48 1306.52C369.48 1309.08 370.397 1311.06 372.232 1312.47C374.109 1313.84 376.691 1314.8 379.976 1315.35C383.304 1315.86 387.165 1316.12 391.56 1316.12Z" fill="#E8D5A0"/>
+<path d="M496.141 1303.64V1286.04H512.141V1306.52C512.141 1310.15 511.458 1313.24 510.093 1315.8C508.77 1318.32 506.914 1320.41 504.525 1322.07C502.136 1323.69 499.384 1324.95 496.269 1325.85C493.154 1326.74 489.805 1327.36 486.221 1327.7C482.68 1328.09 479.074 1328.28 475.405 1328.28C471.522 1328.28 467.768 1328.09 464.141 1327.7C460.514 1327.36 457.144 1326.74 454.029 1325.85C450.957 1324.95 448.269 1323.69 445.965 1322.07C443.661 1320.41 441.848 1318.32 440.525 1315.8C439.245 1313.24 438.605 1310.15 438.605 1306.52V1286.04H454.605V1303.64C454.605 1307.05 455.437 1309.66 457.101 1311.45C458.765 1313.24 461.133 1314.48 464.205 1315.16C467.32 1315.8 471.053 1316.12 475.405 1316.12C479.629 1316.12 483.298 1315.8 486.413 1315.16C489.528 1314.48 491.917 1313.24 493.581 1311.45C495.288 1309.66 496.141 1307.05 496.141 1303.64Z" fill="#E8D5A0"/>
+<path d="M518.545 1286.04H585.105V1298.2H518.545V1286.04ZM543.825 1297.37H559.825V1327H543.825V1297.37Z" fill="#E8D5A0"/>
+</g>
+</g>
+</g><defs>
+<linearGradient id="paint0_linear_0_1" x1="361.677" y1="792.5" x2="365.577" y2="792.5" gradientUnits="userSpaceOnUse">
+<stop stop-color="#A29E92"/>
+<stop offset="1" stop-color="#837B67"/>
+</linearGradient>
+<linearGradient id="paint1_linear_0_1" x1="361.677" y1="1049.5" x2="365.577" y2="1049.5" gradientUnits="userSpaceOnUse">
+<stop stop-color="#A29E92"/>
+<stop offset="1" stop-color="#837B67"/>
+</linearGradient>
+</defs>
+          </svg>
+          <svg id="mark-letters" viewBox="247.85 256.76 362.93 43.52" xmlns="http://www.w3.org/2000/svg" aria-label="INOUT">
             <path class="lm lm--i" fill="#F0ECE3" d="M247.845 258.156H263.845V299.116H247.845V258.156Z"/>
             <path class="lm lm--n" fill="#F0ECE3" d="M334.907 286.572L328.955 289.964V258.156H344.955V299.116H328.955L280.763 271.212L286.715 267.756V299.116H270.715V258.156H286.715L334.907 286.572Z"/>
             <path class="lm lm--o" fill="#E8D5A0" d="M391.56 300.28C382.259 300.28 374.771 299.469 369.096 297.848C363.421 296.184 359.283 293.752 356.68 290.552C354.12 287.309 352.84 283.299 352.84 278.52C352.84 273.741 354.12 269.752 356.68 266.552C359.283 263.309 363.421 260.877 369.096 259.256C374.771 257.592 382.259 256.76 391.56 256.76C400.861 256.76 408.349 257.592 414.024 259.256C419.699 260.877 423.816 263.309 426.376 266.552C428.979 269.752 430.28 273.741 430.28 278.52C430.28 283.299 428.979 287.309 426.376 290.552C423.816 293.752 419.699 296.184 414.024 297.848C408.349 299.469 400.861 300.28 391.56 300.28ZM391.56 288.12C395.955 288.12 399.752 287.864 402.952 287.352C406.152 286.797 408.627 285.837 410.376 284.472C412.125 283.064 413 281.08 413 278.52C413 275.96 412.125 273.997 410.376 272.632C408.627 271.224 406.152 270.264 402.952 269.752C399.752 269.197 395.955 268.92 391.56 268.92C387.165 268.92 383.304 269.197 379.976 269.752C376.691 270.264 374.109 271.224 372.232 272.632C370.397 273.997 369.48 275.96 369.48 278.52C369.48 281.08 370.397 283.064 372.232 284.472C374.109 285.837 376.691 286.797 379.976 287.352C383.304 287.864 387.165 288.12 391.56 288.12Z"/>
             <path class="lm lm--u" fill="#E8D5A0" d="M496.141 275.64V258.04H512.141V278.52C512.141 282.147 511.458 285.24 510.093 287.8C508.77 290.317 506.914 292.408 504.525 294.072C502.136 295.693 499.384 296.952 496.269 297.848C493.154 298.744 489.805 299.363 486.221 299.704C482.68 300.088 479.074 300.28 475.405 300.28C471.522 300.28 467.768 300.088 464.141 299.704C460.514 299.363 457.144 298.744 454.029 297.848C450.957 296.952 448.269 295.693 445.965 294.072C443.661 292.408 441.848 290.317 440.525 287.8C439.245 285.24 438.605 282.147 438.605 278.52V258.04H454.605V275.64C454.605 279.053 455.437 281.656 457.101 283.448C458.765 285.24 461.133 286.477 464.205 287.16C467.32 287.8 471.053 288.12 475.405 288.12C479.629 288.12 483.298 287.8 486.413 287.16C489.528 286.477 491.917 285.24 493.581 283.448C495.288 281.656 496.141 279.053 496.141 275.64Z"/>
             <path class="lm lm--t" fill="#E8D5A0" d="M518.545 258.04H585.105V270.2H518.545V258.04ZM543.825 269.368H559.825V299H543.825V269.368Z"/>
           </svg>
-          <div class="tag">Capture · trim · one file</div>
         </div>
       </div>
 
@@ -1087,7 +1367,6 @@ select { font: inherit; }
         <div class="capture">
           <div class="capture__grid"></div>
           <div class="capture__vignette"></div>
-          <div class="capture__wordmark">INOUT</div>
           <!-- anchor holds the centring; .cluster is the spring's to move -->
           <div class="cluster-anchor">
             <div class="cluster" data-cluster>
@@ -1207,8 +1486,52 @@ select { font: inherit; }
 
     </div>
   </div>
+      </div>
+    </main>
   </div>
-</main>
+
+  <!-- right panel: the style knobs -->
+  <div class="col col-detail">
+    <aside class="panel detail">
+      <div class="panel__title">Style</div>
+      <div class="panel__group">
+        <div class="panel__label">Theme</div>
+        <select id="theme">
+          <option value="baseline">baseline — today</option>
+          <option value="graphite">graphite</option>
+          <option value="paper">paper</option>
+        </select>
+      </div>
+      <div class="panel__group">
+        <div class="panel__label">Neon</div>
+        <select id="neon">
+          <option value="on">on</option>
+          <option value="off">off</option>
+        </select>
+      </div>
+      <div class="panel__group">
+        <div class="panel__label">Splash animation</div>
+        <select id="splashvar">
+          <option value="aperture">aperture — shutter + light</option>
+          <option value="letters">letters — staggered rise</option>
+          <option value="frames">frames — the original flipbook</option>
+        </select>
+        <button class="btn-h" id="replay" style="margin-top: 8px">Replay splash</button>
+      </div>
+      <div class="panel__group">
+        <div class="panel__label">Screen zone</div>
+        <select id="frame">
+          <option value="desktop">desktop 1040 × 660</option>
+          <option value="laptop">laptop 820 × 520</option>
+          <option value="phone">phone 390 × 800</option>
+        </select>
+        <div class="readout" id="note" style="margin-top: 8px"></div>
+      </div>
+    </aside>
+  </div>
+
+ </div>
+</div>
 
 <script>
 /* ---------- icons (same paths as src/app/components/Icon.tsx) ---------- */
@@ -1284,8 +1607,8 @@ CHANNELS.forEach((c) => {
   const a = (RING_ANGLE[c.key] * Math.PI) / 180
   ring.insertAdjacentHTML('beforeend', chipHTML(c))
   const el = ring.lastElementChild
-  el.style.transform =
-    `translate(-50%, -50%) translate(${(Math.cos(a) * RING_R).toFixed(1)}px, ${(Math.sin(a) * RING_R).toFixed(1)}px)`
+  el.style.left = `calc(50% + ${(Math.cos(a) * RING_R).toFixed(1)}px)`
+  el.style.top = `calc(50% + ${(Math.sin(a) * RING_R).toFixed(1)}px)`
 })
 
 document.querySelector('[data-timeline]').innerHTML = `
@@ -1328,13 +1651,13 @@ const SCREENS = ['idle', 'recording', 'editor', 'exporting', 'share']
 
 function show(name) {
   app.querySelectorAll('.screen').forEach((s) => (s.hidden = s.dataset.screen !== name))
-  document.querySelectorAll('.bar__tab[data-tab]').forEach((t) =>
+  document.querySelectorAll('.tab[data-tab]').forEach((t) =>
     t.setAttribute('aria-selected', String(t.dataset.tab === name)))
   stopPlay()
   clearInterval(expTimer)
   if (name === 'exporting') runExport()
 }
-document.querySelectorAll('.bar__tab[data-tab]').forEach((t) => t.addEventListener('click', () => show(t.dataset.tab)))
+document.querySelectorAll('.tab[data-tab]').forEach((t) => t.addEventListener('click', () => show(t.dataset.tab)))
 app.addEventListener('click', (e) => {
   const go = e.target.closest('[data-go]')
   if (go) show(go.dataset.go)
@@ -1375,24 +1698,44 @@ recBtn.addEventListener('click', () => {
   }, 900)
 })
 
-/* splash */
+/* splash — three variants, chosen in the right panel.
+   frames:   the original, stepped at 105ms from 260ms, out at 1500 (as it shipped)
+   letters:  staggered rise, settles at 660ms
+   aperture: shutter reveal, then light runs through the letters, settles at 980ms */
 const splash = document.getElementById('splash')
+const splashSel = document.getElementById('splashvar')
+const OUT_AT = { frames: 1500, letters: 950, aperture: 1080 }
 let splashOut = null
 let splashEnd = null
+let frameTimers = []
 function playSplash() {
+  const v = splashSel.value
   clearTimeout(splashOut)
   clearTimeout(splashEnd)
+  frameTimers.forEach(clearTimeout)
+  frameTimers = []
+  const fr = [...document.querySelectorAll('#mark-frames .fr')]
+  fr.forEach((g) => g.classList.remove('on'))
+
+  splash.dataset.variant = v
   splash.hidden = false
   splash.classList.remove('splash-play', 'splash-out')
   void splash.offsetWidth // restart the keyframes
   splash.classList.add('splash-play')
-  splashOut = setTimeout(() => splash.classList.add('splash-out'), 950)
+
+  if (v === 'frames') {
+    fr.forEach((_, k) =>
+      frameTimers.push(setTimeout(() => fr.forEach((g, j) => g.classList.toggle('on', j === k)), 260 + k * 105)))
+  }
+  const out = OUT_AT[v]
+  splashOut = setTimeout(() => splash.classList.add('splash-out'), out)
   splashEnd = setTimeout(() => {
     splash.hidden = true
     splash.classList.remove('splash-play', 'splash-out')
-  }, 1340)
+  }, out + 400)
 }
 document.getElementById('replay').addEventListener('click', playSplash)
+splashSel.addEventListener('change', playSplash)
 
 /* ---- studio motion, lifted from inout copy 2 ----
    initBgGridPointerTilt: grid leans toward the pointer (lerp .11, ±10px shift).
@@ -1579,28 +1922,88 @@ const slot = document.getElementById('slot')
 const frameEl = document.getElementById('frameEl')
 const note = document.getElementById('note')
 
-/* true pixel size, scaled to fit the pane — never a reflowed approximation */
+/* true pixel size, scaled to fit the pane — never a reflowed approximation.
+   The size is free now: presets seed it, the corner grip drags it. */
 const SIZES = { desktop: [1040, 660], laptop: [820, 520], phone: [390, 800] }
+const MIN_W = 320, MIN_H = 360, MAX_W = 2560, MAX_H = 1600
+let FRAME_W = 1040, FRAME_H = 660, SCALE = 1
 function fit() {
-  const [w, h] = SIZES[document.documentElement.dataset.frame]
   const box = canvas.getBoundingClientRect()
-  const s = Math.min(1, (box.width - 48) / w, (box.height - 48) / h)
-  frameEl.style.width = w + 'px'
-  frameEl.style.height = h + 'px'
+  const s = Math.min(1, (box.width - 48) / FRAME_W, (box.height - 48) / FRAME_H)
+  SCALE = s
+  frameEl.style.width = FRAME_W + 'px'
+  frameEl.style.height = FRAME_H + 'px'
   frameEl.style.transform = `scale(${s})`
-  slot.style.width = w * s + 'px'
-  slot.style.height = h * s + 'px'
-  note.textContent = `${w}×${h} · ${Math.round(s * 100)}% · 0 splash · 1–5 · T · F · N`
+  slot.style.width = FRAME_W * s + 'px'
+  slot.style.height = FRAME_H * s + 'px'
+  note.textContent = `${FRAME_W} × ${FRAME_H}\n${Math.round(s * 100)}% · drag the corner`
 }
 addEventListener('resize', fit)
+new ResizeObserver(fit).observe(canvas) // keeps the fit honest while a panel slides
+
+/* corner grip — capture-studio__resize's drag, adapted to two axes.
+   Scale is snapshotted at pointerdown for the same reason the source snapshots
+   its cap: the frame rescales as it grows, and reading it per move fights the drag. */
+const grip = document.getElementById('resize')
+let gripId = null, gx = 0, gy = 0, gw = 0, gh = 0, gs = 1, gRaf = null, gPend = null
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
+grip.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return
+  e.preventDefault()
+  e.stopPropagation()
+  gripId = e.pointerId
+  gx = e.clientX; gy = e.clientY
+  gw = FRAME_W; gh = FRAME_H; gs = SCALE || 1
+  grip.classList.add('fresize--dragging')
+  try { grip.setPointerCapture(e.pointerId) } catch { /* synthetic pointer */ }
+})
+grip.addEventListener('pointermove', (e) => {
+  if (e.pointerId !== gripId) return
+  gPend = [
+    clamp(Math.round(gw + (e.clientX - gx) / gs), MIN_W, MAX_W),
+    clamp(Math.round(gh + (e.clientY - gy) / gs), MIN_H, MAX_H),
+  ]
+  if (gRaf != null) return
+  gRaf = requestAnimationFrame(() => {
+    gRaf = null
+    if (!gPend) return
+    ;[FRAME_W, FRAME_H] = gPend
+    gPend = null
+    fit()
+  })
+})
+function endGrip(e) {
+  if (gripId == null || e.pointerId !== gripId) return
+  gripId = null
+  grip.classList.remove('fresize--dragging')
+  try { grip.releasePointerCapture(e.pointerId) } catch { /* already released */ }
+}
+grip.addEventListener('pointerup', endGrip)
+grip.addEventListener('pointercancel', endGrip)
+grip.addEventListener('dblclick', (e) => {
+  e.preventDefault()
+  const box = canvas.getBoundingClientRect()
+  const maxW = Math.round(box.width - 48)
+  const big = FRAME_W > (MIN_W + maxW) / 2
+  FRAME_W = big ? MIN_W : clamp(maxW, MIN_W, MAX_W)
+  FRAME_H = big ? MIN_H : clamp(Math.round(box.height - 48), MIN_H, MAX_H)
+  fit()
+})
 
 const neonSel = document.getElementById('neon')
 themeSel.addEventListener('change', () => (document.documentElement.dataset.theme = themeSel.value))
 neonSel.addEventListener('change', () => (document.documentElement.dataset.neon = neonSel.value))
 frameSel.addEventListener('change', () => {
   document.documentElement.dataset.frame = frameSel.value
+  ;[FRAME_W, FRAME_H] = SIZES[frameSel.value]
   fit()
 })
+
+/* panels: squeeze-panels' whole JS contract is body.classList.toggle('f' | 'd') */
+document.body.classList.add('f', 'd')
+document.getElementById('tgl-l').addEventListener('click', () => document.body.classList.toggle('f'))
+document.getElementById('tgl-r').addEventListener('click', () => document.body.classList.toggle('d'))
+
 fit()
 playSplash()
 
@@ -1617,6 +2020,8 @@ addEventListener('keydown', (e) => {
   else if (e.key.toLowerCase() === 't') cycle(themeSel, ['baseline', 'graphite', 'paper'])
   else if (e.key.toLowerCase() === 'f') cycle(frameSel, ['desktop', 'laptop', 'phone'])
   else if (e.key.toLowerCase() === 'n') cycle(neonSel, ['on', 'off'])
+  else if (e.key === '[') document.body.classList.toggle('f')
+  else if (e.key === ']') document.body.classList.toggle('d')
 })
 </script>
 </body>
