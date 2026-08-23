@@ -563,7 +563,9 @@ self.onmessage = async (ev: MessageEvent<CompositorMsg>) => {
           numberOfFrames: msg.frames,
           numberOfChannels: msg.channels,
           timestamp: timestampUs,
-          data: msg.planar,
+          // The transferred view is always a plain ArrayBuffer here; TS widens
+          // it to ArrayBufferLike because a SharedArrayBuffer is conceivable.
+          data: msg.planar as unknown as BufferSource,
         })
         try {
           audioEncoder.encode(data)

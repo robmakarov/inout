@@ -232,6 +232,19 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'o4step2',
+    title: 'O4 step 2 — worker/WebCodecs compositor vs the MediaRecorder path',
+    detail:
+      'drives BOTH live-composite engines from the same synthetic sources at 1080p and 4K, and measures what decides the task: frames that actually reach the file, main-thread long-task time during capture, and the gap between the take length and the last decodable frame (the tail).',
+    run: async (args) => {
+      const { runCompositorEngine } = await import('../perf/compositorEngine')
+      return runCompositorEngine({
+        takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined,
+        sizes: Array.isArray(args?.sizes) ? (args.sizes as [number, number][]) : undefined,
+      })
+    },
+  },
+  {
     id: 'f4',
     title: 'F4 — movable, timed camera',
     detail:
