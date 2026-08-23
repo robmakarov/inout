@@ -94,8 +94,11 @@ const THROTTLE_BUDGET_MS = 400
  * Deadlines on the stop path, for the same reason arming has them (note 3): a
  * recorder that never answers must not be able to freeze a finished take.
  */
-const STOP_BUDGET_MS = 8000
+const STOP_BUDGET_MS = 5000
 const COMPOSITE_START_BUDGET_MS = 4000
+/** The composite drains for up to 2 s and then waits on its own recorder's
+ *  onstop — which, if that recorder never answers, used to be forever. */
+const COMPOSITE_STOP_BUDGET_MS = 5000
 /**
  * Hard ceilings on arming. ACQUIRE/PROMPT timeouts bound each device; these
  * bound the WAIT ITSELF, so a step that never settles cannot freeze the take.
@@ -918,8 +921,14 @@ class Session implements CaptureSession {
     }
   }
 
-  private stopRecorders(flush: boolean): void {
+  /**
+   * `only` exists for the tail drain: the AUDIO channels have to stop at the
+   * press, and the VIDEO ones a drain later. Left out, this stops everything,
+   * which is what cancel wants.
+   */
+  private stopRecorders(flush: boolean, only?: (ch: ChannelRuntime) => boolean): void {
     for (const ch of this.channels) {
+      if (only && !only(ch)) continue
       if (ch.useMeasured) {
         if (this.cancelled) continue
         void (async () => {
@@ -1071,11 +1080,19 @@ class Session implements CaptureSession {
         if (this.compositeInvalid) {
           // Unusable but still running (it was holding the liveness tick):
           // release the encoder, audio context and orphan blob.
-          await this.composite?.cancel()
+          await withTimeout(
+            this.composite?.cancel() ?? Promise.resolve(),
+            COMPOSITE_STOP_BUDGET_MS,
+            'composite cancel',
+          )
           this.composite = null
           return
         }
-        const composite = await this.composite?.stop()
+        const composite = await withTimeout(
+          this.composite?.stop() ?? Promise.resolve(null),
+          COMPOSITE_STOP_BUDGET_MS,
+          'composite stop',
+        )
         if (composite) this.compositeResult = composite
       } catch (err) {
         console.warn('[capture] live composite stop failed', err)
@@ -1088,8 +1105,13 @@ class Session implements CaptureSession {
     this.releaseWakeLock()
     this.setState('stopping')
     const compositeStopped = this.stopCompositeEarly()
+    // AUDIO ends at the press. Only the video channels need a drain, and if the
+    // audio waited for one the take would end with seconds of soundtrack over a
+    // motionless picture — measured before this line existed: mic 11947 ms
+    // against a screen channel of 10059 ms on the same take.
+    this.stopRecorders(true, (c) => c.media === 'audio')
     await this.drainRawVideo()
-    this.stopRecorders(true)
+    this.stopRecorders(true, (c) => c.media === 'video')
     // Bounded, for the same reason arming's joins are (note 3): a recorder that
     // never fires onstop must not be able to hold a finished take open. What is
     // already on disk is kept — a channel that never answered simply reports

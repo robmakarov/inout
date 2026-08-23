@@ -145,9 +145,17 @@ export interface FileProbe {
   height: number | null
   /** Presentation time of the LAST decodable frame — the tail evidence. */
   lastFrameSec: number | null
+  /**
+   * Presentation time of the last decodable frame AT OR BEFORE `cutoffSec`.
+   * A file may legitimately run past the length its channel declares (P0-tail-raw
+   * drains at 1 fps, and those frames carry real timestamps), and then
+   * `lastFrameSec` answers a different question than "did the take keep its
+   * ending". Only set when a cutoff was asked for.
+   */
+  lastFrameBeforeCutoffSec?: number | null
 }
 
-export async function probeComposite(blob: Blob): Promise<FileProbe | null> {
+export async function probeComposite(blob: Blob, cutoffSec?: number): Promise<FileProbe | null> {
   const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS })
   try {
     const track = await input.getPrimaryVideoTrack()
@@ -165,12 +173,14 @@ export async function probeComposite(blob: Blob): Promise<FileProbe | null> {
     // Walk to the end for the true last frame and an exact frame count.
     let frameCount = 0
     let lastFrameSec: number | null = null
+    let lastBeforeCutoff: number | null = null
     for await (const sample of sink.samples()) {
       frameCount++
       lastFrameSec = sample.timestamp
+      if (cutoffSec !== undefined && sample.timestamp <= cutoffSec) lastBeforeCutoff = sample.timestamp
       sample.close()
     }
-    return {
+    const probe: FileProbe = {
       durationSec: Math.round(duration * 1000) / 1000,
       decodedAt,
       frameCount,
@@ -178,6 +188,11 @@ export async function probeComposite(blob: Blob): Promise<FileProbe | null> {
       height: track.displayHeight,
       lastFrameSec: lastFrameSec === null ? null : Math.round(lastFrameSec * 1000) / 1000,
     }
+    if (cutoffSec !== undefined) {
+      probe.lastFrameBeforeCutoffSec =
+        lastBeforeCutoff === null ? null : Math.round(lastBeforeCutoff * 1000) / 1000
+    }
+    return probe
   } finally {
     input.dispose()
   }

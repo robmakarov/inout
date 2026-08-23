@@ -8,6 +8,15 @@
  * SAME shipped engine was losing 2734 ms and no gate could see it. This runs
  * the band where it can fail.
  *
+ * TWO PHASES, because a take has two kinds of file in it (task P0-tail-raw):
+ *   composite — the instant path's file, measured through the o4step2 rig;
+ *   raw       — what an EDITED take renders from, measured through the REAL
+ *               createCaptureSession by the p0tailraw rig.
+ * The composite phase can come back INCONCLUSIVE when the watchdog gives up
+ * under load (that is the fallback working, not a tail failure) and it has
+ * always been reported rather than counted. The raw phase does not depend on
+ * the composite surviving, so it is the one that can always answer.
+ *
  * HEAVY: it pegs the GPU for the duration. Announce it before running, and
  * never run it while the PO is using the machine (TD hygiene). It is
  * deliberately NOT in the pre-push hook for that reason.
@@ -27,6 +36,32 @@ for (const a of process.argv.slice(2)) {
   if (a.startsWith('--runs=')) runs = Number(a.slice(7))
   else if (a.startsWith('--takeMs=')) takeMs = Number(a.slice(9))
   else if (a.startsWith('--band=')) band = Number(a.slice(7))
+}
+
+function runExp(id, args, marker) {
+  return new Promise((resolve, reject) => {
+    const argv = [
+      join(ROOT, 'scripts/exp.mjs'),
+      id,
+      JSON.stringify(args),
+      '--timeout=900',
+    ]
+    const child = spawn(process.execPath, argv, { cwd: ROOT, stdio: ['ignore', 'pipe', 'inherit'] })
+    let out = ''
+    child.stdout.on('data', (d) => {
+      out += String(d)
+    })
+    child.on('error', reject)
+    child.on('close', () => {
+      const start = out.indexOf(marker)
+      if (start < 0) return reject(new Error(`no report in ${id} output`))
+      try {
+        resolve(JSON.parse(out.slice(start)))
+      } catch (err) {
+        reject(err)
+      }
+    })
+  })
 }
 
 function runOnce() {
@@ -85,7 +120,46 @@ for (let i = 0; i < runs; i++) {
 const measured = results.filter((r) => r.tailGapMs !== null)
 const failed = measured.filter((r) => r.tailGapMs > band)
 const verdict = measured.length > 0 && failed.length === 0 ? 'PASS' : measured.length === 0 ? 'INCONCLUSIVE' : 'FAIL'
-console.log(
-  JSON.stringify({ gate: 'tail-under-load', band, takeMs, runs, results, measured: measured.length, verdict }, null, 2),
+
+// PHASE 2 — the RAW channels, through the production stop path (P0-tail-raw).
+// An edited take renders from these, so their ending is the ending of every
+// take the instant path cannot serve.
+const rawReport = await runExp(
+  'p0tailraw',
+  { takeMs, size: [3840, 2160], procedures: Array.from({ length: runs }, () => 'production') },
+  '{\n  "takeMs"',
 )
-process.exitCode = verdict === 'PASS' ? 0 : 1
+const rawRuns = (rawReport.runs ?? []).map((r) => ({
+  tailGapMs: r.tailGapMs,
+  overrunMs: r.overrunMs,
+  deliveredFps: r.deliveredFps,
+  stopMs: r.procedureMs,
+  error: r.error ?? null,
+}))
+for (const [i, r] of rawRuns.entries()) {
+  console.error(
+    `[raw ${i + 1}/${rawRuns.length}] tail=${r.tailGapMs}ms overrun=${r.overrunMs}ms ` +
+      `fps=${r.deliveredFps} stop=${r.stopMs}ms` + (r.error ? ` ERROR ${r.error}` : ''),
+  )
+}
+const rawMeasured = rawRuns.filter((r) => r.tailGapMs !== null)
+const rawFailed = rawMeasured.filter((r) => r.tailGapMs > band)
+const rawVerdict =
+  rawMeasured.length > 0 && rawFailed.length === 0 ? 'PASS' : rawMeasured.length === 0 ? 'INCONCLUSIVE' : 'FAIL'
+
+console.log(
+  JSON.stringify(
+    {
+      gate: 'tail-under-load',
+      band,
+      takeMs,
+      runs,
+      composite: { results, measured: measured.length, verdict },
+      raw: { results: rawRuns, measured: rawMeasured.length, verdict: rawVerdict },
+      verdict: verdict === 'PASS' && rawVerdict === 'PASS' ? 'PASS' : `composite ${verdict} · raw ${rawVerdict}`,
+    },
+    null,
+    2,
+  ),
+)
+process.exitCode = verdict === 'PASS' && rawVerdict === 'PASS' ? 0 : 1

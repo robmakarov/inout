@@ -257,7 +257,7 @@ const runners: Runner[] = [
         takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined,
         size: Array.isArray(args?.size) ? (args.size as [number, number]) : undefined,
         procedures: Array.isArray(args?.procedures)
-          ? (args.procedures as ('shipped' | 'slice250' | 'cut' | 'throttle')[])
+          ? (args.procedures as ('shipped' | 'slice250' | 'cut' | 'throttle' | 'production' | 'wedged')[])
           : undefined,
         repeats: typeof args?.repeats === 'number' ? args.repeats : undefined,
       })

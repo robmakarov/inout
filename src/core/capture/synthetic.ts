@@ -45,32 +45,48 @@ function get2d(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
   return g
 }
 
+const DEFAULT_SCREEN = { width: 1280, height: 720 }
+let screenSize = DEFAULT_SCREEN
+
+/**
+ * Harness knob, same family as `slow=` and `quiet=`: how big the synthetic
+ * screen is. The load rigs (P0-tail, P0-tail-raw) need a source large enough to
+ * genuinely starve an encoder — a 4K surface is PO's own failing scenario — and
+ * the harness page is loaded once per experiment, so this has to be settable
+ * from the runner rather than from the URL. Production never calls it.
+ */
+export function setSyntheticScreenSize(size: { width: number; height: number } | null): void {
+  screenSize = size ?? DEFAULT_SCREEN
+}
+
 function syntheticScreen(): Generated {
+  const { width: W, height: H } = screenSize
   const canvas = document.createElement('canvas')
-  canvas.width = 1280
-  canvas.height = 720
+  canvas.width = W
+  canvas.height = H
   const g = get2d(canvas)
   const startedAt = performance.now()
+  const s = W / 1280
   let frame = 0
   let raf = 0
   const draw = (): void => {
     const t = (performance.now() - startedAt) / 1000
     const hue = (t * 6) % 360
-    const grad = g.createLinearGradient(0, 0, 1280, 720)
+    const grad = g.createLinearGradient(0, 0, W, H)
     grad.addColorStop(0, `hsl(${hue}, 45%, 10%)`)
     grad.addColorStop(1, `hsl(${(hue + 60) % 360}, 45%, 22%)`)
     g.fillStyle = grad
-    g.fillRect(0, 0, 1280, 720)
+    g.fillRect(0, 0, W, H)
     frame += 1
     g.fillStyle = '#ffffff'
     g.textAlign = 'center'
-    g.font = 'bold 120px monospace'
-    g.fillText(String(frame), 640, 320)
-    g.font = '48px monospace'
-    g.fillText(`${t.toFixed(1)}s`, 640, 410)
-    const x = (t * 240) % (1280 + 160) - 160
+    g.font = `bold ${Math.round(120 * s)}px monospace`
+    g.fillText(String(frame), W / 2, H * (320 / 720))
+    g.font = `${Math.round(48 * s)}px monospace`
+    g.fillText(`${t.toFixed(1)}s`, W / 2, H * (410 / 720))
+    const x = ((t * 240 * s) % (W + 160 * s)) - 160 * s
     g.fillStyle = `hsl(${(hue + 180) % 360}, 80%, 60%)`
-    g.fillRect(x, 560, 160, 40)
+    g.fillRect(x, H * (560 / 720), 160 * s, 40 * s)
     raf = requestAnimationFrame(draw)
   }
   draw()
