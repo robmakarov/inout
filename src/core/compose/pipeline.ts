@@ -148,6 +148,7 @@ function exportFileName(createdAt: number, fileExtension: string): string {
 export async function exportRecording(opts: ExportOptions): Promise<ExportResult> {
   const { recording, edit, settings = DEFAULT_EXPORT_SETTINGS, onProgress, signal } = opts
   const { width, height, fps } = settings
+  const videoBitrate = settings.videoBitrate ?? VIDEO_BITRATE
 
   const report = (phase: ExportProgress['phase'], ratio: number): void => {
     onProgress?.({ phase, ratio: Math.min(1, Math.max(0, ratio)) })
@@ -232,7 +233,7 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
     // Layout slot is decided once for the whole export: camera only fills the
     // frame when no screen channel contributes anywhere in the output window.
     const cameraFull = !videoReaders.some((r) => r.kind === 'screen')
-    const target = await pickEncodingTarget(width, height, needAudio)
+    const target = await pickEncodingTarget(width, height, needAudio, videoBitrate)
     throwIfAborted()
 
     const canvas = new OffscreenCanvas(width, height)
@@ -249,7 +250,7 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
       target: scratch ? scratch.target : bufferTarget!,
     })
     output = out
-    const videoSource = new CanvasSource(canvas, { codec: target.videoCodec, bitrate: VIDEO_BITRATE })
+    const videoSource = new CanvasSource(canvas, { codec: target.videoCodec, bitrate: videoBitrate })
     out.addVideoTrack(videoSource, { frameRate: fps })
     let audioSource: AudioBufferSource | null = null
     if (needAudio) {

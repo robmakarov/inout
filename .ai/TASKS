@@ -24,7 +24,7 @@ cost bands) and WAITS. PO answers "go <id>". One task per session (one branch pe
 several ids, take the first and tell PO to open parallel sessions for the rest. Whoever MERGES a task
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
-── READY MAP — current truth, updated on every merge (last: 2026-08-23, O1+O2+O3a+O7+O4step1 merged) ──
+── READY MAP — current truth, updated on every merge (last: 2026-08-23, O1+O2+O3a+O7+O4step1+O4b+F7 merged; P0 mic-hang fixed) ──
 READY NOW — parallel-safe, any subset concurrently (one session each):
   O3b  single-generation export    [light]   touches compose/instant.ts, capture/session.ts — RE-SCOPE first
   O4b  sync-rig fix + gate re-spec  [medium]  REQUIRED before O4 step 2 — see O4 step 1b
@@ -32,7 +32,7 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
   P2   pwa install                 [light]   touches index.html, vite config, service worker
   P3   ru-pack part 1              [light]   touches docs, cloud stubs
   P5a  iOS SCK spike               [light]   touches nothing in repo (separate Xcode proj) — TIME-SENSITIVE: iOS 27 beta window, ships ~Sept
-  F7   quality slider              [medium]  touches ExportPanel, export settings in types.ts
+  F1   mid-take cuts               [medium]  touches types.ts EditState, timeline, Timeline UI
 CONFLICT RULES: F7 coordinates with O5 if both active · O4 is the keystone — solo lane.
 BLOCKED (dep → unblocks): O4 (independent of O3b) · O5←O4 · O6←O4 · O8←O4/O5 ·
 O9←O4+O5 · O10 (its AEC part ←P4) · F1–F6←O5/O4 per pack (F4 also ←F1 UI seam; F2←F4) ·
@@ -243,13 +243,11 @@ GATES: pause/resume take: lane-length equality bands hold per segment · cross-s
 bands (multi-segment matrix) · tab-kill mid-segment-2 salvages segment 1 fully + segment 2 partial ·
 retake leaves prior segments intact · paused state visible + wake lock held while paused.
 
-## F7. quality-slider  [P2, independent — may ship any time; PO: "we need quality slider before export"]
-Goal: ExportPanel gains a quality slider BEFORE export: tiers map resolution × bitrate (720p / 1080p /
-1440p / source-native once O6 lands; bitrate scales per tier) + estimated file size + an honest time
-hint. Default tier = current settings and KEEPS the instant packet-copy path; other tiers route to the
-render path and say so.
-GATES: size estimate within ±20 % across 3 tiers (synthetic) · default tier provably still instant
-(logs) · every tier's file plays · slider choice persisted (prefs).
+## F7. quality-slider — DONE 2026-08-23, merged (evidence in DECISIONS)
+Three tiers before export (720p/1080p default/1440p) + size estimate + honest path label + persisted
+choice. Default tier provably still instant (59-66 ms vs 1219-1641 ms render). Size estimate inside
+±20 % twice over (√pixel-ratio scaling off the take's own composite size; linear scaling failed at
+−40/+36 %). Source-native tier waits for O6.
 
 ## F8. nle-scrub — frame-exact editor feel  [P2, after O4; PO-approved]
 Goal: keyframe-index-driven preview — scrub decodes the EXACT frame (WebCodecs random access) instead

@@ -40,6 +40,9 @@ export interface CompositeRecording {
   durationMs: number
   width: number
   height: number
+  /** Encoded size. Lets the export size estimate use THIS take's own
+   *  compressibility instead of guessing from the bitrate target. */
+  bytes?: number
 }
 
 /**
@@ -222,6 +225,8 @@ export interface ExportSettings {
   width: number
   height: number
   fps: number
+  /** Video bitrate target; falls back to the compose default when absent. */
+  videoBitrate?: number
 }
 
 export const DEFAULT_EXPORT_SETTINGS: ExportSettings = { width: 1920, height: 1080, fps: 30 }

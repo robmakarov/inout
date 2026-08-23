@@ -207,6 +207,16 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'f7',
+    title: 'F7 — export quality tiers',
+    detail:
+      'records a take, exports it at every tier through the same decision EditorScreen makes, and reports estimate-vs-actual size, which path each tier took, whether each file decodes, and whether the choice persists.',
+    run: async (args) => {
+      const { runQualityTiers } = await import('../perf/qualityTiers')
+      return runQualityTiers({ takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined })
+    },
+  },
+  {
     id: 'datachan',
     title: 'Experiment 6 — Timed data channels (live capture demo)',
     detail:

@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { EditState, Recording } from '@core/types'
-import { clampEditState, isDefaultEdit } from '@core/timeline'
+import { clampEditState, isDefaultEdit, outputDurationMs } from '@core/timeline'
+import {
+  isDefaultTier,
+  loadQualityTier,
+  saveQualityTier,
+  settingsForTier,
+  type QualityTier,
+} from '@core/compose/quality'
 import { exportInstant, exportRecording } from '@core/compose'
 import { recordingsRepo } from '@core/store'
 import { analytics } from '@core/analytics'
@@ -10,6 +17,7 @@ import { usePlayback } from '@app/hooks/usePlayback'
 import { Player } from '@app/components/Player'
 import { Timeline } from '@app/components/Timeline'
 import { ExportPanel } from '@app/components/ExportPanel'
+import { QualityPanel } from '@app/components/QualityPanel'
 import { ConfirmDialog } from '@app/components/ConfirmDialog'
 
 export function EditorScreen() {
@@ -24,6 +32,9 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
   const mode = useAppStore((s) => s.mode)
   const pb = usePlayback(recording, edit)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  // F7: quality is chosen BEFORE the export runs, in the timeline slot.
+  const [choosing, setChoosing] = useState(false)
+  const [tier, setTier] = useState<QualityTier>(() => loadQualityTier())
   const exporting = mode === 'exporting' || mode === 'share'
 
   const { toggle, seekBy } = pb
@@ -57,10 +68,15 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
     useAppStore.getState().resetToCapture()
   }
 
-  const onExport = async () => {
+  const onExport = async (chosen: QualityTier) => {
     const store = useAppStore.getState()
     if (store.mode === 'exporting') return
+    setChoosing(false)
     pb.pause()
+    // Only the default tier can take the packet-copy path: any other tier is a
+    // different resolution or bitrate, so the recorded composite is not it.
+    const defaultTier = isDefaultTier(chosen)
+    const settings = settingsForTier(chosen)
 
     // Instant + certified: an unedited take with a live composite copies that
     // composite's H.264 straight into MP4 (no re-encode) and muxes it with audio
@@ -84,7 +100,7 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
       // faint capture (e.g. a Safari mic) exports audible either way.
       let result: Awaited<ReturnType<typeof exportRecording>> | undefined
       let instant = false
-      if (recording.composite && isDefaultEdit(recording, effectiveEdit)) {
+      if (defaultTier && recording.composite && isDefaultEdit(recording, effectiveEdit)) {
         try {
           result = await exportInstant({ recording, edit: effectiveEdit, onProgress, signal: ac.signal })
           instant = true
@@ -95,12 +111,19 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
         }
       }
       if (!result) {
-        result = await exportRecording({ recording, edit: effectiveEdit, onProgress, signal: ac.signal })
+        result = await exportRecording({
+          recording,
+          edit: effectiveEdit,
+          settings,
+          onProgress,
+          signal: ac.signal,
+        })
       }
       analytics.track('export_complete', {
         durationMs: Math.round(performance.now() - t0),
         sizeBytes: result.blob.size,
         instant,
+        tier: chosen.id,
       })
       if (import.meta.env.DEV) {
         ;(window as unknown as Record<string, unknown>).__lastExport = result
@@ -151,13 +174,25 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
           edit={edit}
           pb={pb}
           onBack={() => setConfirmOpen(true)}
-          onExport={() => void onExport()}
-          showExport={!exporting}
+          onExport={() => setChoosing(true)}
+          showExport={!exporting && !choosing}
         />
       </div>
 
       {exporting ? (
         <ExportPanel onBack={() => useAppStore.getState().setMode('editor')} />
+      ) : choosing ? (
+        <QualityPanel
+          recording={recording}
+          outputDurationMs={outputDurationMs(edit)}
+          tier={tier}
+          onTier={(t) => {
+            setTier(t)
+            saveQualityTier(t)
+          }}
+          onExport={() => void onExport(tier)}
+          onCancel={() => setChoosing(false)}
+        />
       ) : (
         <Timeline
           recording={recording}
