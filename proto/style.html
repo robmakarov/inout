@@ -531,8 +531,13 @@ body.f .filters, body.d .detail { opacity: 1; }
      where the bar it is straightening into actually lands. --take-w and
      --take-h are written in pixels by the resize observer — see .take__screen
      on why an animated height may not be a container-query length. */
-  /* the take's one curve — easeInOutCubic, matched in JS by smooth() */
+  /* the take's one curve — easeInOutCubic, matched in JS by smooth() — and its
+     two beats. Nothing but the wedges moves during the gather: the picture, the
+     rows and the control bar all wait for the wedges to be standing in one
+     place, and then everything unfolds together. */
   --swing: cubic-bezier(0.65, 0, 0.35, 1);
+  --take-gather: 222ms;
+  --take-unfold: 378ms;
   --take-gap: 14px;
   --take-ctrl-h: 52px;
   --take-bar-h: 64px;
@@ -1156,8 +1161,8 @@ body.f .filters, body.d .detail { opacity: 1; }
   height: var(--take-h);
   opacity: 1;
   transition:
-    height 520ms var(--swing),
-    opacity 260ms var(--ease);
+    height var(--take-unfold) var(--swing) var(--take-gather),
+    opacity 220ms var(--ease) var(--take-gather);
 }
 
 /* ---------- control row: no plate, ever ----------
@@ -1176,25 +1181,37 @@ body.f .filters, body.d .detail { opacity: 1; }
   transition: height 520ms var(--swing);
 }
 [data-phase='live'] .take__ctrl { height: var(--take-ctrl-h); }
-.cluster-seat { transition: width 520ms var(--swing), height 520ms var(--swing); }
+.cluster-seat { transition: width var(--take-unfold) var(--swing) var(--take-gather), height var(--take-unfold) var(--swing) var(--take-gather); }
 [data-phase='live'] .cluster-seat { width: 52px; height: 52px; }
 
 /* the disc keeps the centre; the readouts hang off the ends, so nothing the
    row gains can push the button off the line it started on */
+/* The control bar unfolds out of the record button rather than appearing round
+   it. Both ends start stacked at the middle, where the button is, and walk out
+   to the edges on the same beat the wedges walk out to theirs — which is what
+   makes the two rows read as one thing opening rather than two things arriving. */
 .take__end {
   position: absolute;
   top: 50%;
-  transform: translateY(-50%);
   display: flex;
   align-items: center;
   gap: 10px;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 200ms var(--ease);
+  transition:
+    opacity 160ms var(--ease),
+    transform var(--take-unfold) var(--swing);
 }
-.take__end--l { left: 0; }
-.take__end--r { right: 0; }
-[data-phase='live'] .take__end { opacity: 1; pointer-events: auto; transition-delay: 240ms; }
+.take__end--l { left: 0; transform: translateY(-50%) translateX(calc(var(--take-w, 600px) / 2 - 46px)); }
+.take__end--r { right: 0; transform: translateY(-50%) translateX(calc(var(--take-w, 600px) / -2 + 46px)); }
+[data-phase='live'] .take__end {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(-50%) translateX(0);
+  transition:
+    opacity 200ms var(--ease) var(--take-gather),
+    transform var(--take-unfold) var(--swing) var(--take-gather);
+}
 
 /* ---------- readouts and verbs, lifted from the deprecated recorder ----------
    inout copy 2's hub control bar: the metrics plate with the duration leading
@@ -1371,7 +1388,7 @@ body.f .filters, body.d .detail { opacity: 1; }
 }
 [data-phase='live'] .take__inputs {
   height: var(--take-bar-h);
-  transition: height 520ms var(--swing);
+  transition: height var(--take-unfold) var(--swing) var(--take-gather);
 }
 
 /* live, the orbit is over: the pills have nothing left to orbit and the halo
@@ -1476,9 +1493,9 @@ body.f .filters, body.d .detail { opacity: 1; }
     filter 0.22s ease,
     opacity 0.2s ease,
     /* the disc comes down to control size on the same curve as everything else */
-    width 520ms var(--swing),
-    height 520ms var(--swing),
-    border-radius 520ms var(--swing);
+    width var(--take-unfold) var(--swing) var(--take-gather),
+    height var(--take-unfold) var(--swing) var(--take-gather),
+    border-radius var(--take-unfold) var(--swing) var(--take-gather);
 }
 [data-neon='off'] .recbtn:hover { transform: scale(1.05); }
 [data-neon='on'] .recbtn:hover {
@@ -2620,44 +2637,40 @@ let R_OUT = 100, R_IN = 41 // driven by the size and gap sliders
 let ICO_K = 0.86 // glyph scale — the 24px icon box, scaled about its own centre
 const PAD = 0.014 // radians of gap between wedges
 
-/* ---------- the circle becomes a line ----------
-   Not four wedges flying to four places. One band, and its curvature runs out.
-   A point on it is (σ, d): σ the arc distance from the band's middle, d the
-   depth inward from the rim. Straightening is κ going to nothing:
+/* ---------- gather, then unfold ----------
+   Two beats, and the second one carries everything else with it.
 
-     θ = σ·κ + ρ      r = 1/κ − d      (x, y) = (r·sin θ, yRim + 1/κ − r·cos θ)
+   First the wedges slide round the ring, under one another, until all of them
+   are standing in the bottom one's place: what is left is the shape of a single
+   wedge at the foot of the record button. Only the one already down there stays
+   lit; the others go out as they arrive, so four stacked shapes read as one.
 
-   At κ = 1/R_OUT that is the ring, to the pixel, in the coordinates pol() used.
-   At κ = 0 it collapses to (σ, yRim + d): the line. Every point goes outward
-   and down and nowhere else — nothing crosses, nothing folds, and the rim stays
-   the rim the whole way, which is why the lit edge ends up along the top of
-   every segment without anyone arranging it.
+   Then that one shape opens. The wedges walk back out to either side of it, the
+   band under them straightens as they go, and the whole row drops into place —
+   while the control bar unfolds sideways out of the record button on the same
+   beat, and the picture comes up from behind it.
 
-   ρ is the only turn there is, and it is forced. A closed ring has to part
-   somewhere, and where it parts must be a separator or a wedge tears in half.
-   With four inputs at twelve, three, six and nine the nearest separator to the
-   bottom is half a wedge away, so the band carries that much twist at rest —
-   cancelled in σ, so the ring you see is unmoved — and unwinds it as it
-   flattens. Forty-five degrees on four inputs, twenty-two on eight, none at all
-   when a separator already sits at the bottom.
+   Gathering first is what makes the rest of it simple. A closed ring cannot be
+   unrolled without tearing whichever wedge is at the seam, which is why there
+   was a twist to argue with; four wedges standing in one place have no seam to
+   tear, so they can walk out in whatever order they like. They walk out in the
+   ring's own order, which is the one the row wants.
 
-   Curvature leaves sooner than the rest. Length, depth and descent ride the
-   shared curve; κ is that curve to the power of two and a half. A ring that
-   gives up its bend at the same rate it gives up everything else is still most
-   of a circle at halfway, and hangs well below the frame while it decides. */
+   The band itself is still one object with one number: κ, going to nothing.
+
+     θ = σ·κ      r = 1/κ − d      (x, y) = (r·sin θ, yBase − 2R·sin²(θ/2) − d·cos θ)
+
+   σ is the arc distance from the bottom of the ring, d the depth inward from
+   the rim. At κ = 1/R_OUT that is the ring, to the pixel. At κ = 0 it is the
+   line. The arc's centre of curvature is above it, so the band's middle is the
+   ring's floor — which is already where the row is going, and why nothing ever
+   travels down through the controls to get there. */
+const GATHER = 0.37       // of the window: gather, then unfold
 const KAPPA_POW = 3       // how much sooner the bend goes than everything else
-/* The twist has to be spent while the ring is still a ring. Unwound at the same
-   rate as everything else it is still worth twenty degrees when the band is six
-   hundred pixels wide, and a twenty-degree lean on a nearly-straight bar throws
-   its ends a hundred and eighty pixels out of level — which is the lurch. Spent
-   to the tenth power it is gone by the time there is anything long enough to
-   lean: what is left is the menu turning a little on the spot as it opens. */
-const RHO_POW = 10
 const SEG_RAD = 0.045     // ~2.5° of arc per chord — polylines, never arcs
-const DETAIL_DIP = 2.0    // how hard the captions and the hover arc duck out
 const CAP_OUT = 26        // captions live this far outside the rim, as before
 const CAP_LEAD = 14
-let UNROLL = 0            // 0 = ring · 1 = line
+let UNROLL = 0            // 0 = ring · GATHER = one wedge · 1 = row
 
 /* where the row lands, in the record button's own coordinates. The numbers are
    CSS's — see --take-gap and friends on .app — so the layout and the band can
@@ -2671,80 +2684,71 @@ function barRect() {
     top: px('--take-ctrl-h', 52) / 2 + px('--take-gap', 14),
   }
 }
-/* One curve, in and out of rest, and the same one the CSS uses on the picture
-   and the rows. Two clocks read as two things happening. */
 const smooth = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2)
 const RING_L = () => 2 * Math.PI * R_OUT
-
-/* the twist the band carries at rest, so that when it parts it parts on a
-   separator. Zero when one already sits at the top. */
-function seamTwist() {
-  const step = (2 * Math.PI) / RING_ORDER.length
-  const first = ((RING_ROT * Math.PI) / 180) - step / 2 // a separator, from the top
-  return first - Math.round(first / step) * step
+/* the wedge already standing at the foot of the ring — the one the others go
+   and stand behind, and the only one that stays lit while they do */
+function anchorKey() {
+  let best = RING_ORDER[0], d = Infinity
+  RING_ORDER.forEach((k, i) => {
+    const a = Math.abs(((((RING_ROT * Math.PI) / 180 + i * ((2 * Math.PI) / RING_ORDER.length)) - Math.PI) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI)
+    if (a < d) { d = a; best = k }
+  })
+  return best
 }
 function morphEnv(t) {
   const bar = barRect()
-  const p = smooth(t)
+  const n = RING_ORDER.length
+  const g = smooth(Math.min(1, t / GATHER))
+  const u = smooth(Math.max(0, (t - GATHER) / (1 - GATHER)))
   const L0 = RING_L()
   const h0 = R_OUT - R_IN
-  const twist = seamTwist()
-  const L = L0 + (bar.w - L0) * p
-  const k = p >= 1 ? 0 : Math.pow(1 - p, KAPPA_POW) / R_OUT
-  const h = h0 + (bar.h - h0) * p
-  /* The band is hung by its lowest point, not by its rim. Hung by the rim it
-     dipped a hundred and thirty pixels below the row on the way there and came
-     back up — because a wide shallow arc carries its own sag, and lerping the
-     rim from the top of the ring to the top of the row ignores it. Measure the
-     sag and subtract it, and the bottom of the band travels from where the ring
-     already ends to where the row ends: four pixels, in a straight line. All
-     the descent anybody sees is the top of it coming down. */
-  /* The band's middle is the bottom of the ring, and the bottom of the ring is
-     already where the row is going. So the middle barely moves — a hundred to a
-     hundred and four — and no sag has to be measured out of anything: the arc
-     opens upward from it, and the only thing that travels is the part of the
-     ring that was above the button, coming down the outside. */
+  /* the rim, the hover arc and the captions belong to a menu you are reading,
+     and nobody reads anything through the middle of this. They go out with the
+     gather and come back once the row has found its width. */
+  const gone = Math.max(0, 1 - t / (GATHER * 0.6))
+  const detail = Math.min(1, Math.max(gone, Math.max(0, (t - 0.68) / 0.32)))
+  /* the glyphs go with them: four marks stacked in one place is a smudge, and
+     what is meant to be standing there is a shape, not an input. They come back
+     ahead of the captions, as soon as the wedges have somewhere of their own. */
+  const mark = Math.min(1, Math.max(gone, Math.max(0, (t - 0.5) / 0.28)))
   return {
-    bar, p, twist, L, k, h,
-    n: RING_ORDER.length,
-    yBase: R_OUT + (bar.top + bar.h - R_OUT) * p,
-    rho: twist * Math.pow(1 - p, RHO_POW),
-    detail: Math.max(0, 1 - DETAIL_DIP * Math.sin(Math.PI * t)),
+    bar, n, g, u, detail, mark,
+    anchor: anchorKey(),
+    L: L0 + (bar.w - L0) * u,
+    k: u >= 1 ? 0 : Math.pow(1 - u, KAPPA_POW) / R_OUT,
+    h: h0 + (bar.h - h0) * u,
+    yBase: R_OUT + (bar.top + bar.h - R_OUT) * u,
   }
 }
-/* σ = 0 is the middle of the band — the point that ends up in the middle of the
-   row. Fixed by the ring once and only scaled after, so no wedge ever slides
-   along the band; the band itself is the only thing that moves. */
+/* Where a wedge stands on the band. Its place on the ring, pulled in to the
+   foot of it, then walked back out to its slot in the row — and the row's order
+   is the ring's own, because after the gather there is nothing stopping it. */
 function wedgeSigma(e, key) {
+  const i = RING_ORDER.indexOf(key)
   const L0 = RING_L()
-  const fromTop = ((RING_ROT * Math.PI) / 180) + RING_ORDER.indexOf(key) * ((2 * Math.PI) / e.n)
-  let s = (Math.PI - fromTop + e.twist) * R_OUT
-  s = ((s % L0) + L0) % L0
-  if (s > L0 / 2) s -= L0
-  return (s / L0) * e.L
+  const fromTop = ((RING_ROT * Math.PI) / 180) + i * ((2 * Math.PI) / e.n)
+  let ringS = (Math.PI - fromTop) * R_OUT
+  ringS = ((ringS % L0) + L0) % L0
+  if (ringS > L0 / 2) ringS -= L0           // whichever way round is shorter
+  const rowS = (i - (e.n - 1) / 2) * (e.L / e.n)
+  return ringS * (1 - e.g) + rowS * e.u
 }
-/* The arc is always drawn symmetric about the vertical, and the twist is put
-   back afterwards as a plain rotation of the finished point about the button.
-   That matters twice over. It keeps the radius out of the sums that decide the
-   answer — the naive form asks for yRim + R − cos θ·(R − d), and once R is a
-   few hundred thousand pixels that is two enormous numbers differing by fifty,
-   which a double cannot tell you; the half-angle form, 1 − cos θ = 2·sin²(θ/2),
-   never divides by the curvature at all, so it can go flat exactly rather than
-   nearly. And rotating the point rather than the angle leaves the glyphs and
-   the captions upright while the band they sit on leans. */
+/* one lit shape while they are stacked: the others put themselves out as they
+   arrive behind it, and come back as they walk out again */
+const wedgeBody = (e, key) =>
+  key === e.anchor ? 1 : Math.max(1 - e.g, Math.min(1, e.u / 0.45))
+
 function bandPt(e, d, s) {
-  let x, y
-  if (e.k <= 0) { x = s; y = e.yBase - d }
-  else {
-    const R = 1 / e.k
-    const th = s * e.k
-    const sh = Math.sin(th / 2)
-    x = Math.sin(th) * (R - d)
-    y = e.yBase - 2 * R * sh * sh - d * Math.cos(th)
-  }
-  if (!e.rho) return [x, y]
-  const c = Math.cos(e.rho), n = Math.sin(e.rho)
-  return [x * c - y * n, x * n + y * c]
+  if (e.k <= 0) return [s, e.yBase - d]
+  /* The radius never appears alone in a sum: yBase − R + cos θ·(R − d) is two
+     enormous numbers differing by fifty once R is large, and a double has
+     nothing to say about the difference. Half-angle instead, so κ can reach
+     zero exactly rather than nearly. */
+  const R = 1 / e.k
+  const th = s * e.k
+  const sh = Math.sin(th / 2)
+  return [Math.sin(th) * (R - d), e.yBase - 2 * R * sh * sh - d * Math.cos(th)]
 }
 function bandChain(e, d, s0, s1) {
   const segs = Math.max(1, Math.ceil(Math.abs((s1 - s0) * e.k) / SEG_RAD))
@@ -2802,14 +2806,16 @@ function buildRadial() {
     const st = PERM[c.key] || 'ok'
     return `
       <g class="wedge" data-wedge="${c.key}" data-on="${st === 'ok' && !!c.on}" data-state="${st}" style="--d:${i * 30}ms" role="button" aria-label="${c.label}, ${subFor(c.key)}">
-        <path class="wedge__base"/>
-        <path class="wedge__fill"/>
-        <g class="wedge__ico">${WEDGE_ICON[c.key] || WEDGE_ICON.screen}</g>
-        <g class="wedge__detail">
-          <path class="wedge__edge"/>
-          <path class="wedge__arc"/>
-          <text class="wedge__cap"></text>
-          <text class="wedge__cap2"></text>
+        <g class="wedge__body">
+          <path class="wedge__base"/>
+          <path class="wedge__fill"/>
+          <g class="wedge__mark"><g class="wedge__ico">${WEDGE_ICON[c.key] || WEDGE_ICON.screen}</g></g>
+          <g class="wedge__detail">
+            <path class="wedge__edge"/>
+            <path class="wedge__arc"/>
+            <text class="wedge__cap"></text>
+            <text class="wedge__cap2"></text>
+          </g>
         </g>
       </g>`
   }).join('')
@@ -2850,7 +2856,7 @@ function drawBand() {
      Capped at twenty thousand, because the stops of a gradient with an infinite
      radius all sit at the same offset; the price is a four-pixel bow across the
      width of the row, which under a five-stop fade nobody can see. */
-  const Rg = Math.min(e.k > 1e-9 ? 1 / e.k : Infinity, 20000)
+  const Rg = Math.min(e.k > 0 ? 1 / e.k : Infinity, 20000)
   GRADS.forEach(([id]) => {
     const g = svg.querySelector('#' + id)
     // depth, not height: the centre of the ramp sits a full radius *inward*
@@ -2868,13 +2874,14 @@ function drawBand() {
   // still a ring for the button to sit in the middle of
   const hub = svg.querySelector('.radial__hub')
   hub.setAttribute('r', Math.max(0, R_IN - 3).toFixed(2))
-  hub.setAttribute('opacity', Math.max(0, 1 - e.p * 2.4).toFixed(3))
+  hub.setAttribute('opacity', Math.max(0, 1 - e.u * 2.4).toFixed(3))
 
   const seps = []
   CHANNELS.forEach((c) => {
     const g = svg.querySelector(`.wedge[data-wedge="${c.key}"]`)
     if (!g) return
     const f = wedgeFrame(e, c.key)
+    g.querySelector('.wedge__body').setAttribute('opacity', wedgeBody(e, c.key).toFixed(3))
     const face = faceD(f, e)
     g.querySelector('.wedge__base').setAttribute('d', face)
     g.querySelector('.wedge__fill').setAttribute('d', face)
@@ -2889,10 +2896,11 @@ function drawBand() {
 
     // the captions swing with the band and settle above the row; they are dimmed
     // through the middle, where they would otherwise be reading sideways
+    g.querySelector('.wedge__mark').setAttribute('opacity', e.mark.toFixed(3))
     const detail = g.querySelector('.wedge__detail')
     detail.setAttribute('opacity', e.detail.toFixed(3))
     const cp = f.at(-CAP_OUT, 0.5)
-    const th = f.mid * e.k - e.rho
+    const th = f.mid * e.k
     const nx = Math.sin(th), ny = Math.cos(th)
     const anchor = nx > 0.3 ? 'start' : nx < -0.3 ? 'end' : 'middle'
     const baseline = ny > 0.3 ? 'hanging' : ny < -0.3 ? 'auto' : 'middle'
@@ -2914,7 +2922,7 @@ function drawBand() {
   svg.querySelector('.radial__seps').innerHTML =
     seps.map((d) => `<path class="radial__sep" d="${d}" fill="none"/>`).join('')
 
-  host.style.setProperty('--unroll', e.p.toFixed(3))
+  host.style.setProperty('--unroll', e.u.toFixed(3))
 }
 
 buildRadial()
@@ -3054,7 +3062,7 @@ syncHint()
    is not, and the control that made the take is the right one to interrupt it —
    so the same disc runs it, holds it and picks it up again. Cancel is the other
    ending, and it is a separate word because it is a separate act. */
-const TAKE_MS = 520 // the one window: wedges, picture, rows, controls
+const TAKE_MS = 600 // the whole window: 222ms gathering, 378ms unfolding
 let armTimer = null
 let takeT = 0, takeRaf = null, takeLast = 0
 
