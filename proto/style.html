@@ -134,6 +134,44 @@ body.f .filters, body.d .detail { opacity: 1; }
   color: #55555e;
   white-space: pre-line;
 }
+.slider {
+  display: grid;
+  grid-template-columns: 52px 1fr 34px;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  font: 10px/1 ui-monospace, monospace;
+  color: #6a6a74;
+}
+.slider output { text-align: right; color: #a8a8b2; }
+.slider input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  background: #2b2b31;
+  outline: none;
+}
+.slider input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: hsl(var(--neon-h) var(--neon-s) var(--neon-l));
+  cursor: pointer;
+}
+.params {
+  width: 100%;
+  margin-top: 8px;
+  resize: vertical;
+  background: #17171a;
+  color: #8fd8e4;
+  border: 1px solid #2b2b31;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: 10px/1.45 ui-monospace, monospace;
+}
 
 /* edge handles — the only chrome left when both panels are shut */
 .edge {
@@ -158,13 +196,46 @@ body.f .filters, body.d .detail { opacity: 1; }
 .canvas {
   position: relative;
   height: 100%;
-  display: grid;
-  place-items: center;
-  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px 24px 24px;
   overflow: hidden;
   background:
     repeating-conic-gradient(#141416 0% 25%, #17171a 0% 50%) 50% / 22px 22px;
 }
+
+/* screen-zone controls sit on the zone itself, not in a panel — the thing they
+   size is directly under them, so the number and the picture read as one. */
+.zonebar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: 11px/1 ui-monospace, monospace;
+  color: #6a6a74;
+}
+.zonebar select {
+  background: #17171a;
+  color: #d8d8dc;
+  border: 1px solid #2b2b31;
+  border-radius: 6px;
+  padding: 4px 7px;
+  font: inherit;
+}
+.zonebar__size { color: #d8d8dc; }
+.zonebar__size b { font-weight: 600; }
+.zonebar__hint { color: #4b4b54; }
+.zonebar__step {
+  border: 1px solid #2b2b31;
+  border-radius: 5px;
+  padding: 3px 7px;
+  color: #85858f;
+  font: inherit;
+}
+.zonebar__step:hover { background: #212126; color: #fff; }
 /* The frame keeps its true pixel size and is scaled to fit the pane, so a
    layout is always judged at the size it will really have. */
 .slot { position: relative; flex: none; }
@@ -191,7 +262,9 @@ body.f .filters, body.d .detail { opacity: 1; }
   padding: 0;
   margin: 0;
   border: none;
-  border-radius: 9px 0 0 0;
+  /* bottom-right follows the screen's own corner (scaled, set in fit()) so the
+     grip hugs the rounding instead of poking a square out of it */
+  border-radius: 10px 0 var(--corner, 14px) 0;
   z-index: 60;
   cursor: nwse-resize;
   touch-action: none;
@@ -472,12 +545,28 @@ body.f .filters, body.d .detail { opacity: 1; }
    bumped by the elastic scroll spring. Same values, one layer instead of two
    pseudo-elements. Neon on every theme, by decision; the four vars below are
    the whole look, so retuning it per theme is a four-line job. */
+/* Neon is four numbers, all live on :root so the panel sliders can drive them.
+   Everything that shines derives from these — grid, record glow, chip edge, the
+   electric fx — so one slider moves the whole language at once. */
+:root {
+  --neon-h: 186;   /* hue        — 0..360 */
+  --neon-s: 100%;
+  --neon-l: 60%;
+  --neon-k: 1;     /* strength   — multiplies every alpha */
+  --neon-r: 26px;  /* radius     — outer glow blur */
+  --neon-t: 1.4s;  /* period     — electric / breathe speed */
+}
 .app {
   --grid-ink: #050810;
-  --grid-line: rgba(0, 240, 255, 0.03);
-  --grid-glow: rgba(0, 255, 200, 0.08);
   --grid-cell: 24px;
-  --neon: 0, 240, 255;
+  --neon-c: hsl(var(--neon-h) var(--neon-s) var(--neon-l));
+  --neon-38: hsl(var(--neon-h) var(--neon-s) var(--neon-l) / calc(0.38 * var(--neon-k)));
+  --neon-28: hsl(var(--neon-h) var(--neon-s) var(--neon-l) / calc(0.28 * var(--neon-k)));
+  --neon-22: hsl(var(--neon-h) var(--neon-s) var(--neon-l) / calc(0.22 * var(--neon-k)));
+  --neon-16: hsl(var(--neon-h) var(--neon-s) var(--neon-l) / calc(0.16 * var(--neon-k)));
+  --neon-45: hsl(var(--neon-h) var(--neon-s) var(--neon-l) / calc(0.45 * var(--neon-k)));
+  --grid-line: hsl(var(--neon-h) 100% 50% / calc(0.03 * var(--neon-k)));
+  --grid-glow: hsl(calc(var(--neon-h) + 14) 100% 45% / calc(0.08 * var(--neon-k)));
 }
 .capture { position: relative; height: 100%; background: var(--grid-ink); }
 .capture--recording { background: var(--grid-ink); }
@@ -536,10 +625,42 @@ body.f .filters, body.d .detail { opacity: 1; }
 /* orbit offset lives in left/top so transform stays free for hover feedback */
 .ring .chip {
   position: absolute;
+  left: var(--cx);
+  top: var(--cy);
   transform: translate(-50%, -50%);
 }
 .ring .chip:hover { transform: translate(-50%, -50%) scale(1.06); }
 .ring .chip:active { transform: translate(-50%, -50%) scale(0.97); transition-duration: 80ms; }
+
+/* ---------- inputs as a command menu ----------
+   The ring only exists while the record button is under the pointer: chips fly
+   out from under it on their own delay and collapse back into it. Opening is
+   the button's job; staying open belongs to the whole ring, or the chips would
+   vanish the moment you set off toward one (JS holds .is-open for that reason). */
+[data-inputs='hover'] .ring .chip {
+  left: 50%;
+  top: 50%;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.6);
+  pointer-events: none;
+  transition:
+    opacity 0.16s var(--ease),
+    transform 0.24s var(--ease),
+    left 0.24s var(--ease),
+    top 0.24s var(--ease),
+    background 140ms,
+    color 140ms,
+    box-shadow 180ms;
+}
+[data-inputs='hover'] .ring.is-open .chip {
+  left: var(--cx);
+  top: var(--cy);
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, -50%) scale(1);
+  transition-delay: var(--d), var(--d), var(--d), var(--d), 0s, 0s, 0s;
+}
+[data-inputs='hover'] .ring.is-open .chip:hover { transform: translate(-50%, -50%) scale(1.06); }
 .cluster__hint {
   margin-top: -34px;
   text-align: center;
@@ -638,7 +759,7 @@ body.f .filters, body.d .detail { opacity: 1; }
   border-color: color-mix(in srgb, var(--accent), transparent 45%);
 }
 [data-neon='on'] .chip:hover {
-  box-shadow: 0 0 0 1px rgba(var(--neon), 0.28), 0 0 16px rgba(var(--neon), 0.16);
+  box-shadow: 0 0 0 1px var(--neon-28), 0 0 calc(var(--neon-r) * 0.62) var(--neon-16);
 }
 .chips .chip:hover { transform: scale(1.05); }
 .chips .chip:active { transform: scale(0.97); transition-duration: 80ms; }
@@ -661,8 +782,8 @@ body.f .filters, body.d .detail { opacity: 1; }
 [data-neon='off'] .recbtn:hover { transform: scale(1.05); }
 [data-neon='on'] .recbtn:hover {
   filter:
-    drop-shadow(0 0 8px rgba(var(--neon), 0.38))
-    drop-shadow(0 0 26px rgba(var(--neon), 0.22));
+    drop-shadow(0 0 calc(var(--neon-r) * 0.32) var(--neon-38))
+    drop-shadow(0 0 var(--neon-r) var(--neon-22));
 }
 .recbtn:active {
   transform: scale(0.97);
@@ -672,9 +793,67 @@ body.f .filters, body.d .detail { opacity: 1; }
   animation: recArming 1.2s cubic-bezier(0.45, 0, 0.35, 1) infinite;
   cursor: wait;
 }
+
+/* ---------- record button fx: an aura around the untouched button ----------
+   The ring and the red disc are not styled here at all — the fx is a sibling
+   layer behind them, so switching it off leaves the button exactly as it was.
+   electric: two counter-rotating arc rings pushed through a turbulence
+             displacement (SMIL animates the noise) + a rotating plasma halo
+   breathe:  one slow halo swell, no arcs — the calm option */
+.rec-fx {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 210%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s var(--ease);
+  color: var(--neon-c);
+}
+[data-recfx='electric'] .rec-fx,
+[data-recfx='breathe'] .rec-fx { opacity: 1; }
+[data-recfx='none'] .rec-fx__arcs,
+[data-recfx='breathe'] .rec-fx__arcs { display: none; }
+.rec-fx svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.rec-fx__halo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 62%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    var(--neon-38) 70deg,
+    transparent 150deg,
+    var(--neon-22) 240deg,
+    transparent 330deg
+  );
+  filter: blur(9px);
+  animation: fxSpin calc(var(--neon-t) * 3) linear infinite;
+}
+[data-recfx='breathe'] .rec-fx__halo {
+  background: radial-gradient(circle, var(--neon-38) 0%, transparent 62%);
+  filter: blur(7px);
+  animation: fxBreathe calc(var(--neon-t) * 2.4) ease-in-out infinite;
+}
+.rec-fx__arcs g { transform-origin: 50% 50%; }
+.rec-fx__arcs .a1 { animation: fxSpin calc(var(--neon-t) * 2.2) linear infinite; }
+.rec-fx__arcs .a2 { animation: fxSpinBack calc(var(--neon-t) * 3.1) linear infinite; }
+.rec-fx__arcs circle { fill: none; stroke: var(--neon-c); }
+@keyframes fxSpin { to { transform: rotate(360deg); } }
+@keyframes fxSpinBack { to { transform: rotate(-360deg); } }
+@keyframes fxBreathe {
+  0%, 100% { opacity: 0.45; transform: translate(-50%, -50%) scale(0.86); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
+}
 @keyframes recArming {
-  0%, 100% { filter: drop-shadow(0 0 0 rgba(var(--neon), 0)); }
-  50% { filter: drop-shadow(0 0 14px rgba(var(--neon), 0.45)); }
+  0%, 100% { filter: drop-shadow(0 0 0 transparent); }
+  50% { filter: drop-shadow(0 0 calc(var(--neon-r) * 0.54) var(--neon-45)); }
 }
 .recbtn__inner {
   width: 56px; height: 56px;
@@ -1086,19 +1265,6 @@ body.f .filters, body.d .detail { opacity: 1; }
   flex-direction: column;
   align-items: center;
 }
-#splash .glow {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 130%;
-  aspect-ratio: 2.4 / 1;
-  transform: translate(-50%, -60%) scale(0.6);
-  border-radius: 50%;
-  background: radial-gradient(ellipse at center, rgba(232, 213, 160, 0.26), transparent 68%);
-  filter: blur(16px);
-  opacity: 0;
-  pointer-events: none;
-}
 #splash svg {
   position: relative;
   /* cqw, not vw: the frame is the viewport here (see .app container-type) */
@@ -1115,8 +1281,6 @@ body.f .filters, body.d .detail { opacity: 1; }
 /* one svg per shape of animation: five letter paths, or the five original frames */
 #splash[data-variant='frames'] #mark-letters { display: none; }
 #splash:not([data-variant='frames']) #mark-frames { display: none; }
-#splash:not([data-variant='frames']) .glow { display: block; }
-#splash[data-variant='frames'] .glow { display: none; }
 #mark-frames .fr { opacity: 0; }
 #mark-frames .fr.on { opacity: 1; }
 
@@ -1142,7 +1306,6 @@ body.f .filters, body.d .detail { opacity: 1; }
 #splash[data-variant='aperture'].splash-play .lm--u { animation-delay: 0.48s; }
 #splash[data-variant='aperture'].splash-play .lm--t { animation-delay: 0.54s; }
 
-.splash-play .glow { animation: glowIn 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both; }
 .splash-out { animation: splashOut 0.38s cubic-bezier(0.2, 1, 0.3, 1) both; }
 
 @keyframes lmIn {
@@ -1158,11 +1321,6 @@ body.f .filters, body.d .detail { opacity: 1; }
   45% { filter: brightness(2.2); }
   100% { filter: brightness(1); }
 }
-@keyframes glowIn {
-  0% { opacity: 0; transform: translate(-50%, -60%) scale(0.6); }
-  45% { opacity: 1; }
-  100% { opacity: 0.55; transform: translate(-50%, -60%) scale(1); }
-}
 @keyframes splashOut {
   to { opacity: 0; transform: scale(1.05); }
 }
@@ -1171,20 +1329,41 @@ body.f .filters, body.d .detail { opacity: 1; }
    3. THEME FLAVOUR — what tokens alone cannot say.
    ========================================================================== */
 
-/* graphite: colour is a marker beside neutral type, never the type itself. */
+/* graphite: colour is a marker beside neutral type, never the type itself.
+   On/off was one 2px tick and a barely different surface — not enough to read
+   at a glance. Now the state is carried by four things at once, all monochrome
+   except the marker: a lit LED, a full-strength label, a raised surface and a
+   lit edge. Off is explicitly dark: an unlit lamp, not just a missing one. */
+[data-theme='graphite'] .chip {
+  text-transform: uppercase;
+  font-size: 11px;
+  padding: 8px 12px 8px 10px;
+  gap: 7px;
+}
+[data-theme='graphite'] .chip::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: #17171c;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  transition: background 140ms, box-shadow 180ms;
+}
 [data-theme='graphite'] .chip[aria-pressed='true'] {
   background: var(--surface-3);
   color: var(--text);
-  border-color: var(--edge);
+  border-color: color-mix(in srgb, var(--accent), var(--edge) 55%);
 }
 [data-theme='graphite'] .chip[aria-pressed='true']::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 2px;
   background: var(--accent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent), transparent 55%),
+    0 0 7px color-mix(in srgb, var(--accent), transparent 25%);
 }
-[data-theme='graphite'] .chip { text-transform: uppercase; font-size: 11px; padding: 8px 12px; }
+[data-theme='graphite'] .chip[aria-pressed='true'] .lbl { color: var(--text); }
+[data-theme='graphite'] .chip[aria-pressed='false'] { color: var(--text-faint); }
+[data-theme='graphite'] .chip[aria-pressed='false'] svg { opacity: 0.6; }
 [data-theme='graphite'] .timer__text,
 [data-theme='graphite'] .transport__time,
 [data-theme='graphite'] .xp__pct { letter-spacing: 0.02em; }
@@ -1236,15 +1415,28 @@ T F N  theme · frame · neon
     <main class="canvas" id="canvas">
       <button class="edge edge--l" id="tgl-l" aria-label="Toggle left panel">◧</button>
       <button class="edge edge--r" id="tgl-r" aria-label="Toggle right panel">◨</button>
+
+      <!-- screen-zone info + controls, on the zone rather than in a panel -->
+      <div class="zonebar">
+        <select id="frame">
+          <option value="desktop">desktop</option>
+          <option value="laptop">laptop</option>
+          <option value="phone">phone</option>
+        </select>
+        <span class="zonebar__size" id="zsize">1040 × 660</span>
+        <span class="zonebar__hint" id="zfit">100%</span>
+        <button class="zonebar__step" id="zfill">fill</button>
+        <span class="zonebar__hint">drag the corner</span>
+      </div>
+
       <div class="slot" id="slot">
       <button class="fresize" id="resize" aria-label="Resize the screen zone — double-click for min or max"></button>
       <div class="frame" id="frameEl">
     <div class="app" id="app">
 
       <!-- ============ splash — the mark, straight out of inout proto ============ -->
-      <div id="splash" hidden data-variant="aperture">
+      <div id="splash" hidden data-variant="letters">
         <div class="swrap">
-          <div class="glow"></div>
           <!-- the original five frames, verbatim from inout proto — used by the
                "frames" variant, which steps them at 105ms exactly as it shipped -->
           <svg id="mark-frames" viewBox="247.85 256.76 362.93 43.52" xmlns="http://www.w3.org/2000/svg" aria-label="INOUT">
@@ -1372,6 +1564,29 @@ T F N  theme · frame · neon
             <div class="cluster" data-cluster>
               <div class="ring" data-ring>
                 <button class="recbtn" data-rec aria-label="Start recording">
+                  <span class="rec-fx" aria-hidden="true">
+                    <span class="rec-fx__halo"></span>
+                    <svg viewBox="0 0 100 100" class="rec-fx__arcs">
+                      <defs>
+                        <filter id="fxturb" x="-40%" y="-40%" width="180%" height="180%">
+                          <feTurbulence type="fractalNoise" baseFrequency="0.022 0.055" numOctaves="2" seed="7" result="n">
+                            <animate attributeName="baseFrequency" dur="2.6s" values="0.022 0.055;0.04 0.09;0.022 0.055" repeatCount="indefinite"/>
+                          </feTurbulence>
+                          <feDisplacementMap in="SourceGraphic" in2="n" scale="7" xChannelSelector="R" yChannelSelector="G"/>
+                        </filter>
+                      </defs>
+                      <g filter="url(#fxturb)">
+                        <g class="a1">
+                          <circle cx="50" cy="50" r="31" stroke-width="1.1" stroke-dasharray="14 30" stroke-linecap="round" opacity="0.85"/>
+                          <circle cx="50" cy="50" r="36" stroke-width="0.8" stroke-dasharray="6 34" stroke-linecap="round" opacity="0.6"/>
+                        </g>
+                        <g class="a2">
+                          <circle cx="50" cy="50" r="34" stroke-width="1" stroke-dasharray="9 40" stroke-linecap="round" opacity="0.7"/>
+                          <circle cx="50" cy="50" r="27" stroke-width="0.7" stroke-dasharray="4 26" stroke-linecap="round" opacity="0.5"/>
+                        </g>
+                      </g>
+                    </svg>
+                  </span>
                   <span class="recbtn__inner"></span>
                 </button>
               </div>
@@ -1503,29 +1718,44 @@ T F N  theme · frame · neon
         </select>
       </div>
       <div class="panel__group">
+        <div class="panel__label">Inputs</div>
+        <select id="inputs">
+          <option value="always">always on the ring</option>
+          <option value="hover">command menu — on button hover</option>
+        </select>
+      </div>
+      <div class="panel__group">
+        <div class="panel__label">Record button fx</div>
+        <select id="recfx">
+          <option value="none">none</option>
+          <option value="electric">electric sphere</option>
+          <option value="breathe">breathe</option>
+        </select>
+      </div>
+      <div class="panel__group">
         <div class="panel__label">Neon</div>
         <select id="neon">
           <option value="on">on</option>
           <option value="off">off</option>
         </select>
+        <div class="slider"><label>hue</label><input type="range" id="s-hue" min="0" max="360" step="1" value="186"><output id="o-hue">186</output></div>
+        <div class="slider"><label>strength</label><input type="range" id="s-k" min="0" max="3" step="0.05" value="1"><output id="o-k">1.00</output></div>
+        <div class="slider"><label>radius</label><input type="range" id="s-r" min="0" max="80" step="1" value="26"><output id="o-r">26</output></div>
+        <div class="slider"><label>speed</label><input type="range" id="s-t" min="0.3" max="4" step="0.1" value="1.4"><output id="o-t">1.4</output></div>
       </div>
       <div class="panel__group">
         <div class="panel__label">Splash animation</div>
         <select id="splashvar">
-          <option value="aperture">aperture — shutter + light</option>
           <option value="letters">letters — staggered rise</option>
+          <option value="aperture">aperture — shutter + light</option>
           <option value="frames">frames — the original flipbook</option>
         </select>
         <button class="btn-h" id="replay" style="margin-top: 8px">Replay splash</button>
       </div>
       <div class="panel__group">
-        <div class="panel__label">Screen zone</div>
-        <select id="frame">
-          <option value="desktop">desktop 1040 × 660</option>
-          <option value="laptop">laptop 820 × 520</option>
-          <option value="phone">phone 390 × 800</option>
-        </select>
-        <div class="readout" id="note" style="margin-top: 8px"></div>
+        <div class="panel__label">Send me your settings</div>
+        <button class="btn-h" id="copyparams">Copy parameters</button>
+        <textarea class="params" id="paramsout" readonly rows="3"></textarea>
       </div>
     </aside>
   </div>
@@ -1592,7 +1822,7 @@ document.querySelectorAll('[data-icon]').forEach((el) => (el.innerHTML = icon(el
 document.querySelectorAll('[data-icon-before]').forEach((el) => el.insertAdjacentHTML('afterbegin', icon(el.dataset.iconBefore, 16)))
 
 const chipHTML = (c) =>
-  `<button class="chip" aria-pressed="${c.on}" data-chip="${c.key}">${icon(c.ic, 15)}<span>${c.label}</span></button>`
+  `<button class="chip" aria-pressed="${c.on}" data-chip="${c.key}">${icon(c.ic, 15)}<span class="lbl">${c.label}</span></button>`
 
 document.querySelectorAll('[data-chips]').forEach((row) => {
   row.innerHTML = CHANNELS.map(chipHTML).join('')

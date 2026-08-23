@@ -106,7 +106,79 @@ try {
   await sleep(2500)
   let opened
   let text
-  if (flow === 'cuts') {
+  let cameraReport = null
+  if (flow === 'camera') {
+    // F4: measure the PiP the way the export measures it — as FRACTIONS of the
+    // stage — so the preview number and the exported-frame number are directly
+    // comparable. Then drag it, reload, and see whether the work survived.
+    const readPip = `(() => {
+      const st = document.querySelector('.stage'); const p = document.querySelector('.pip');
+      if (!st || !p) return null;
+      const s = st.getBoundingClientRect(), r = p.getBoundingClientRect();
+      const round = (n) => Math.round(n * 1e4) / 1e4;
+      return {
+        stageAspect: round(s.width / s.height),
+        leftFrac: round((r.left - s.left) / s.width),
+        topFrac: round((r.top - s.top) / s.height),
+        widthFrac: round(r.width / s.width),
+        heightFrac: round(r.height / s.height),
+        centreXFrac: round((r.left + r.width / 2 - s.left) / s.width),
+        centreYFrac: round((r.top + r.height / 2 - s.top) / s.height),
+      };
+    })()`
+    const seekToEnd = `(() => { const sc=document.querySelector('.scrubber'); if(!sc) return false;
+      const b=sc.getBoundingClientRect(); const x=b.left+b.width*0.92, y=b.top+b.height/2;
+      sc.dispatchEvent(new PointerEvent('pointerdown',{clientX:x,clientY:y,bubbles:true,pointerId:1}));
+      sc.dispatchEvent(new PointerEvent('pointerup',{clientX:x,clientY:y,bubbles:true,pointerId:1}));
+      return true })()`
+
+    const beforeDrag = await evaluate(readPip)
+    await evaluate(seekToEnd)
+    await sleep(400)
+    const dragged = await evaluate(`(() => {
+      const p = document.querySelector('.pip'); if (!p) return null;
+      const r = p.getBoundingClientRect();
+      const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
+      const dx = -320, dy = -190;
+      const opt = (x, y) => ({ clientX: x, clientY: y, bubbles: true, pointerId: 1, buttons: 1 });
+      p.dispatchEvent(new PointerEvent('pointerdown', opt(x0, y0)));
+      p.dispatchEvent(new PointerEvent('pointermove', opt(x0 + dx / 2, y0 + dy / 2)));
+      p.dispatchEvent(new PointerEvent('pointermove', opt(x0 + dx, y0 + dy)));
+      p.dispatchEvent(new PointerEvent('pointerup', opt(x0 + dx, y0 + dy)));
+      return { dx, dy };
+    })()`)
+    await sleep(300)
+    const afterDrag = await evaluate(readPip)
+    // The debounced persist is 400 ms; give it room before pulling the rug.
+    await sleep(1200)
+    await evaluate(`location.reload()`)
+    await sleep(6000)
+    await evaluate(seekToEnd)
+    await sleep(600)
+    const afterReload = await evaluate(readPip)
+    const drift =
+      afterDrag && afterReload
+        ? {
+            centreXFrac: Math.round((afterReload.centreXFrac - afterDrag.centreXFrac) * 1e4) / 1e4,
+            centreYFrac: Math.round((afterReload.centreYFrac - afterDrag.centreYFrac) * 1e4) / 1e4,
+            widthFrac: Math.round((afterReload.widthFrac - afterDrag.widthFrac) * 1e4) / 1e4,
+          }
+        : null
+    cameraReport = {
+      flow,
+      beforeDrag,
+      dragged,
+      afterDrag,
+      afterReload,
+      persistedAcrossReload:
+        !!drift &&
+        Math.abs(drift.centreXFrac) <= 0.005 &&
+        Math.abs(drift.centreYFrac) <= 0.005 &&
+        Math.abs(drift.widthFrac) <= 0.005,
+      reloadDrift: drift,
+      screenshot: out,
+    }
+  } else if (flow === 'cuts') {
     // Seek to the middle of the take, split, then split again further along.
     await evaluate(
       `(() => { const r=document.querySelector('.tl__ruler'); if(!r) return false;
@@ -149,7 +221,9 @@ try {
   }
   const shot = await send('Page.captureScreenshot', { format: 'png' })
   writeFileSync(out, Buffer.from(shot.data, 'base64'))
-  console.log(JSON.stringify({ flow, actionOk: opened, panelText: text, screenshot: out }, null, 2))
+  console.log(
+    JSON.stringify(cameraReport ?? { flow, actionOk: opened, panelText: text, screenshot: out }, null, 2),
+  )
 } finally {
   try { chrome?.kill('SIGKILL') } catch {}
   try { rmSync(profile, { recursive: true, force: true }) } catch {}

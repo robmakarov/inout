@@ -1,6 +1,17 @@
-import { useRef } from 'react'
-import type { EditState, Recording } from '@core/types'
-import { activeChannelsAt, channelHasOutputWindow, hasEnabledVideo } from '@core/timeline'
+import { useRef, useState } from 'react'
+import type { CameraPose, ChannelRecording, EditState, Recording } from '@core/types'
+import {
+  activeChannelsAt,
+  cameraPoseAt,
+  cameraTrackIsActive,
+  channelHasOutputWindow,
+  clampPose,
+  hasEnabledVideo,
+  outputToRecordingMs,
+  poseToRect,
+  writeCameraKeyframe,
+  type CameraGeometry,
+} from '@core/timeline'
 import type { Playback } from '@app/hooks/usePlayback'
 import { formatClock } from '@app/lib/format'
 import { Icon } from '@app/components/Icon'
@@ -65,12 +76,177 @@ function WaveGlyph() {
   )
 }
 
+/** 16:9, matching .stage's aspect-ratio and every export tier. */
+const STAGE_ASPECT = 16 / 9
+
+/**
+ * The camera PiP, movable directly on the stage (task F4). Drag it and the
+ * export moves it AT the playhead instant you dragged it — the pose the
+ * compositor samples is the same function this box is positioned by, which is
+ * what makes preview↔export parity a property instead of a coincidence.
+ */
+function CameraPip({
+  channel,
+  videoRef,
+  url,
+  hidden,
+  edit,
+  recording,
+  playheadMs,
+  onEdit,
+}: {
+  channel: ChannelRecording
+  videoRef: (el: HTMLVideoElement | null) => void
+  url: string
+  hidden: boolean
+  edit: EditState
+  recording: Recording
+  playheadMs: number
+  onEdit: (next: EditState) => void
+}) {
+  const boxRef = useRef<HTMLDivElement>(null)
+  // The source aspect decides the box's height. Older takes have no dimensions
+  // stored, so the element itself reports them once it has metadata.
+  const [aspect, setAspect] = useState<number>(() =>
+    channel.width && channel.height ? channel.width / channel.height : 4 / 3,
+  )
+  /** Live pose while a gesture is in flight — committed on release.
+   * The REF is the source of truth and the state only exists to re-render:
+   * a drag whose move and up land in the same task (a fast flick, or a
+   * scripted gesture) never lets React re-render in between, so reading the
+   * state in the release handler would read a stale closure and silently
+   * commit nothing. */
+  const [, setDragTick] = useState(0)
+  const gesture = useRef<{
+    kind: 'move' | 'resize'
+    startX: number
+    startY: number
+    from: CameraPose
+    /** Recording-timeline instant the gesture began at — a playhead that keeps
+     * running must not smear where the move lands. */
+    atMs: number
+    stageW: number
+    stageH: number
+    live: CameraPose | null
+  } | null>(null)
+  const dragPose = gesture.current?.live ?? null
+
+  const geometry: CameraGeometry = { frameAspect: STAGE_ASPECT, cameraAspect: aspect }
+  const recordingMs = outputToRecordingMs(edit, playheadMs) ?? edit.globalTrimStartMs
+  const committed = cameraPoseAt(edit.camera, recordingMs, geometry)
+  const pose = dragPose ?? committed
+  const rect = poseToRect(pose, geometry)
+  const moved = cameraTrackIsActive(edit.camera)
+
+  const begin = (kind: 'move' | 'resize') => (e: React.PointerEvent) => {
+    const stage = boxRef.current?.parentElement
+    if (!stage) return
+    e.preventDefault()
+    e.stopPropagation()
+    const r = stage.getBoundingClientRect()
+    gesture.current = {
+      kind,
+      startX: e.clientX,
+      startY: e.clientY,
+      from: committed,
+      atMs: recordingMs,
+      stageW: Math.max(1, r.width),
+      stageH: Math.max(1, r.height),
+      live: null,
+    }
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {
+      // synthetic pointer — capture is a nicety, the gesture still works
+    }
+  }
+
+  const move = (e: React.PointerEvent) => {
+    const g = gesture.current
+    if (!g) return
+    const dx = (e.clientX - g.startX) / g.stageW
+    const dy = (e.clientY - g.startY) / g.stageH
+    const next =
+      g.kind === 'move'
+        ? { ...g.from, xFrac: g.from.xFrac + dx, yFrac: g.from.yFrac + dy }
+        : // Resize from the corner: the far edges stay put, so the box grows
+          // away from the handle and the centre moves half as far.
+          {
+            widthFrac: g.from.widthFrac - dx * 2,
+            xFrac: g.from.xFrac,
+            yFrac: g.from.yFrac,
+          }
+    g.live = clampPose(next, geometry)
+    setDragTick((n) => n + 1)
+  }
+
+  const end = () => {
+    const g = gesture.current
+    gesture.current = null
+    setDragTick((n) => n + 1)
+    if (!g?.live) return
+    onEdit({
+      ...edit,
+      camera: writeCameraKeyframe(edit.camera, g.atMs, g.live, geometry, recording.durationMs),
+    })
+  }
+
+  const reset = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const { camera: _dropped, ...rest } = edit
+    onEdit(rest)
+  }
+
+  return (
+    <div
+      ref={boxRef}
+      className={`pip${hidden ? ' is-hidden' : ''}${dragPose ? ' pip--dragging' : ''}`}
+      style={{
+        left: `${rect.leftFrac * 100}%`,
+        top: `${rect.topFrac * 100}%`,
+        width: `${rect.widthFrac * 100}%`,
+        height: `${rect.heightFrac * 100}%`,
+      }}
+      onPointerDown={begin('move')}
+      onPointerMove={move}
+      onPointerUp={end}
+      onPointerCancel={end}
+    >
+      <video
+        ref={videoRef}
+        className="pip__video"
+        src={url}
+        preload="auto"
+        playsInline
+        onLoadedMetadata={(e) => {
+          const v = e.currentTarget
+          if (v.videoWidth > 0 && v.videoHeight > 0) setAspect(v.videoWidth / v.videoHeight)
+        }}
+      />
+      <div
+        className="pip__grip"
+        onPointerDown={begin('resize')}
+        onPointerMove={move}
+        onPointerUp={end}
+        onPointerCancel={end}
+        aria-label="Resize camera"
+      />
+      {moved && (
+        <button className="pip__reset" onClick={reset} aria-label="Reset camera position">
+          <Icon name="x" size={11} />
+        </button>
+      )}
+    </div>
+  )
+}
+
 export function Player({
   recording,
   edit,
   pb,
   onBack,
   onExport,
+  onEdit,
   showExport,
 }: {
   recording: Recording
@@ -78,6 +254,7 @@ export function Player({
   pb: Playback
   onBack: () => void
   onExport: () => void
+  onEdit: (next: EditState) => void
   /** Hidden while the export panel owns the bottom slot. */
   showExport: boolean
 }) {
@@ -100,9 +277,26 @@ export function Player({
             return <audio key={ch.id} ref={pb.elementRef(ch.id)} src={url} preload="auto" />
           }
           const isActive = active.some((c) => c.id === ch.id)
+          // The PiP is the one surface the user can move (F4). Camera-full has
+          // no PiP to grab, and that rule is unchanged.
+          if (ch.kind === 'camera' && screenInComposition) {
+            return (
+              <CameraPip
+                key={ch.id}
+                channel={ch}
+                videoRef={pb.elementRef(ch.id)}
+                url={url}
+                hidden={!isActive}
+                edit={edit}
+                recording={recording}
+                playheadMs={pb.timeMs}
+                onEdit={onEdit}
+              />
+            )
+          }
           let cls: string
           if (ch.kind === 'camera') {
-            cls = screenInComposition ? 'stage__pip' : 'stage__full'
+            cls = 'stage__full'
           } else {
             cls = 'stage__screen'
           }

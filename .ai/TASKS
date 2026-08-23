@@ -29,16 +29,18 @@ updates the READY map (move newly-unblocked dependents in, remove the done task)
 
 ── READY MAP — current truth, updated on every merge ──
 Last update 2026-08-23. Merged that day: O1 · O2 · O3a · O7 · O4 step1 · O4b · F7 · F1 · O8(partial)
-· P2 · a P0 mic-hang fix (PO-verified: "record seems to be okay").
+· P2 · P3 · F4 · a P0 mic-hang fix (PO-verified: "record seems to be okay").
 
 READY NOW — parallel-safe, any subset concurrently (one session each):
   O4   webcodecs engine, STEP 2    [heavy]   THE KEYSTONE. Step 1+1b done, gate re-specced. Solo lane.
                                              Continues ee/webcodecs-capture-2 (on origin, behind main
                                              — REBASE FIRST). Unblocks O5/O6/O9, F6, F8, P4.
   F3   background frame            [medium]  compose/layout.ts + editor UI. No engine dependency.
-  F4   movable camera (TIMED)      [medium]  PO's emphasized feature. F1 shipped the timeline/UI seam
-                                             it was waiting on, so this is unblocked NOW.
+                                             NOTE: F4 changed drawVideoFrame's signature (optional pose)
+                                             and moved the PiP rect into timeline/cameraTrack.ts — build
+                                             the background layer around that, don't re-derive the rect.
   F5a  silence tightening          [medium]  rides F1's cut machinery (shipped). DSP only, no ML ever.
+  O11  bits audit + codec ladder   [see O11] planned by a parallel session 2026-08-23.
   P1   firefox + 3-engine oracle   [medium]  capabilities.ts engine×OS matrix + Playwright gecko run.
                                              NOW EASIER: P3 shipped core/platform.ts (engine+browser+OS,
                                              probe-first) and scripts/browser-check.mjs — consume them,
@@ -46,9 +48,11 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
   P5a  iOS SCK spike               [light]   separate Xcode proj, no repo code — TIME-SENSITIVE
                                              (iOS 27 ships ~Sept 2026; answer the 5 questions)
 NEEDS PO INPUT BEFORE BUILDING:
-  F2   zoom-pan — PO said "i think so"; reconfirm scope first (and it wants F4's viewport seam)
+  F2   zoom-pan — PO said "i think so"; reconfirm scope first. The seam it was waiting on now EXISTS:
+       F4's cameraTrack is the same shape a viewport track wants (keyframes on the recording timeline,
+       eased sampling, one function shared by preview and export). Copy it, don't invent a second one.
 CONFLICT RULES: O4 is the keystone — solo lane, nothing else touching capture/* while it runs ·
-F4 and F3 both touch compose/layout.ts — never simultaneously · F5a extends F1's segment list.
+F3 now owns compose/layout.ts alone (F4 merged) · F5a extends F1's segment list.
 BLOCKED (dep → unblocks): O5←O4 · O6←O4 · O9←O4+O5 · O8 remainder←O4/O5 · F6←O4 · F8←O4 ·
 P4←O4/O5 · P5b←P5a · P6←P5b · P7←P4 · O10 (AEC part only)←P4 · O3b←O4 (see below).
 REJECTED (do not resurrect): pre-roll rolling buffer — no capture before the record press, ever
@@ -82,9 +86,14 @@ lives in O4/O8: zero tail loss at stop, now gated.
      o3a       MediaRecorder container + mid-take salvage    o4step1  sync residual decomposition
      audiolat  measured-audio anchor latency (loopback)      armcancel arming cancel + device release
      f1        mid-take cuts: sync + joint discontinuity     f7       quality tiers + certification
+     f4        camera pose LOCATED in decoded export frames vs the pose function
      oracle    accepts {"injectTailLossMs":N} to prove the tail band red
   node scripts/o7-measure.mjs      first-paint bytes, record-click latency, editor prefetch (prod build)
-  node scripts/ui-shot.mjs --flow=quality|cuts    screenshots a flow on the prod build
+  node scripts/ui-shot.mjs --flow=quality|cuts|camera   screenshots a flow on the prod build
+     (camera also drags the PiP, reloads the page, and reports preview↔export fractions + reload drift)
+  node scripts/browser-check.mjs --list | --browser=<name> [--ua-of=yandex]   QA matrix, real browser,
+     prod build, record→edit→export, 8 gates → docs/qa/*.json (see docs/QA_MATRIX.md)
+  node scripts/ru-reachability.mjs --label="<ISP>, no VPN"   DNS/TLS/HTTP from the network under test
   node scripts/pwa-check.mjs       manifest/SW/offline/capture-under-worker gates
   node scripts/make-icons.mjs      regenerates PWA icons (deterministic, no image dep)
   npm run oracle | oracle:cold | oracle:fidelity  merge gates (pre-push hook runs typecheck+test+oracle)
@@ -299,20 +308,18 @@ screen surface. Default remains current full-bleed (frozen rule: nothing changes
 GATES: preview↔export parity · export time delta <10 % · defaults render identical to today (A/B) ·
 oracles green.
 
-## F4. movable-camera  [P1; PO spec 2026-08-22 — the emphasized feature]
-PO spec: the camera PiP is movable DIRECTLY ON THE VIDEO — the user drags it on the stage, and the
-movement is TIMED: the export moves it exactly WHEN the user moved it. Drags at playhead time T write
-position keyframes at T; playback and export replay the motion (eased interpolation, edge-clamped).
-Also resizable (corner handle). TD proposal: resize ceiling 50 % of frame width — keeps the 720p
-camera capture transparent at every export tier (0.5 × 2560 = 1280); bigger wants O6 native camera.
-Scope v1: editor-time motion only. Live-drag DURING recording is OUT (the burned-in composite would
-disagree with the edit) — revisit after O4 makes the live compositor edit-aware.
-Constraints: untouched takes keep the default BR-24% PiP and their instant packet-copy path
-(never-break); position track lives in EditState (persisted, survives reload); the camera-full rule
-(no screen → cover) unchanged unless a track exists.
-GATES: scripted drags at t=2 s and t=5 s → exported frames show the PiP at those positions at those
-times (frame-sample evidence) · untouched take still takes the instant path (logs) · preview↔export
-parity · edit persists across reload · oracles green.
+## F4. movable-camera — DONE 2026-08-23, merged (evidence in DECISIONS)
+Shipped: timeline/cameraTrack.ts (pure pose math in frame FRACTIONS, one function sampled by both the
+export compositor and the editor stage) + EditState.camera keyframes on the RECORDING timeline +
+drag/resize directly on the PiP + edit persistence (editsRepo, IndexedDB v2 — trims and F1 cuts now
+survive a refresh too, which they never did). MEASURED, by locating the PiP in decoded exported frames:
+drags at t=2 s and t=5 s land at (0.179,0.200) and (0.221,0.737)w0.342 against requests of (0.18,0.20)
+and (0.22,0.74)w0.34 — ~2 px at 1080p, band 0.02. Samples at 1 s / 3.5 s / 8 s prove it holds instead of
+drifting. Untouched take: isDefaultEdit true, instant packet copy, PiP within 0.001 of its historical
+slot. Preview↔export parity: DOM 0.8667/0.8165/w0.2395 vs exported 0.867/0.819/w0.242. Reload drift 0.
+Harness: `npm run exp -- f4`, `node scripts/ui-shot.mjs --flow=camera`.
+DEFERRED: live-drag DURING recording (out of scope v1, revisit after O4 makes the live compositor
+edit-aware); F2 will reuse the same track shape for a viewport.
 
 ## F5. silence-speed  [P2, two branches; (a) rides F1]
 PO: okay. Deterministic DSP only — NO transcript, NO ML, ever.
@@ -399,12 +406,12 @@ GATE 2 reachability — report written (docs/RU_REACHABILITY.md) with a non-RU B
   India blocked it at Jio/Airtel/ACT on 2026-02-24), and Vercel shared-IP collateral blocks (#3,
   reports 2021→Jan 2026; *.vercel.app keeps working while custom domains die, so the custom domain
   we don't have yet is the exposure). Nothing threatens a RECORDING — capture/edit/export are local.
-GATE 3 auth-alt design — DONE. In ARCH + docs. types.ts gained OPTIONAL authMethods()/signIn()/
-  verifyOtp(); signInWithGoogle() stays required. core/cloud/ruAuth.ts holds the pure, tested half
-  (PKCE pinned to the RFC 7636 vector, authorize-URL builder that REFUSES a VK ID URL without PKCE);
-  the token exchange is deliberately absent because both providers return their own tokens, Supabase
-  won't accept them, and minting a session needs the JWT secret — which a browser must never hold.
-  email-OTP is Supabase-native, needs no server function, and is the cheapest RU unblock: ship first.
+GATE 3 auth-alt design — BUILT, THEN REMOVED ON PO INSTRUCTION 2026-08-23: "dont do auth alternatives
+  for rus, just prepare it to work in yandex browser." The Yandex ID / VK ID / email-OTP adapter and
+  the optional CloudProvider members are gone; the contract is exactly what it was. Consequence,
+  recorded so it is a decision and not a surprise: where accounts.google.com is unreachable, cloud
+  sharing is simply unavailable there — capture, edit and export are local and keep working, so the
+  user still gets their file, just not a link. Do not re-add without PO asking.
 GATE 4 zero behavior change — held. typecheck clean · 181/181 tests (28 new) · oracle PASS
   (sync 36.2 ms, spur −52.4 dB, jump 0, tail 70 ms, export 5.04×) · first paint 225,689 B vs the
   ≤300 KB O7 gate. The below-floor notice is the only new UI and it is silent on every browser that

@@ -341,33 +341,8 @@ export interface CloudUploadProgress {
   ratio: number
 }
 
-/**
- * Sign-in methods (task P3). Google is the only one implemented and the only
- * one any current user sees; the rest exist because RU users frequently cannot
- * reach accounts.google.com at all, which makes cloud sharing unusable there
- * even when Supabase itself is reachable.
- */
-export type AuthMethod = 'google' | 'yandex' | 'vk' | 'email-otp'
-
-export interface AuthMethodInfo {
-  id: AuthMethod
-  label: string
-  available: boolean
-  /** Why it is unavailable, for honest UI copy. */
-  reason?: string
-}
-
 export interface CloudProvider {
   signInWithGoogle(): Promise<void>
-  /**
-   * OPTIONAL and additive — a provider that implements none of these behaves
-   * exactly as before. `signInWithGoogle()` stays required so no existing
-   * caller can break.
-   */
-  authMethods?(): AuthMethodInfo[]
-  signIn?(method: AuthMethod, opts?: { email?: string }): Promise<void>
-  /** Second leg of email-OTP; the code arrives out of band. */
-  verifyOtp?(email: string, code: string): Promise<void>
   signOut(): Promise<void>
   getUser(): Promise<CloudUser | null>
   onAuthChange(cb: (u: CloudUser | null) => void): () => void
