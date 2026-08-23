@@ -104,6 +104,9 @@ interface RecordedChannel {
   stopFinishAbsMs: number
   /** ondataavailable arrivals: wall time + slice bytes (mechanism probe). */
   dataEvents: { atMs: number; bytes: number }[]
+  /** Measured-audio only: beep onsets placed on the session timeline by the
+   *  production anchor — the reference that shares the anchor's blind spot. */
+  anchorOnsetSessionMs?: number[]
   width?: number
   height?: number
 }
@@ -120,7 +123,39 @@ async function recordStream(
   if (media === 'audio' && canMeasureAudioCapture()) {
     const startCallAbsMs = performance.now()
     const writer = await createDurablePositionedWriter(blobKey)
-    const handle = await startMeasuredAudioCapture({ stream, epoch, writer })
+    // Beep onsets read off the PRODUCTION capture path itself (O4b). The old
+    // reference watched a track-processor CLONE, which is a shorter path than
+    // the one the anchor sees — so it under-measured the delay the anchor
+    // cannot observe, and the difference surfaced as "audio late" in every
+    // sync number. Measuring on the same path removes the rig from the result.
+    const onsetFrames: number[] = []
+    let prevEnv = 0
+    let refractoryUntil = -Infinity
+    let pcmRate = 48_000
+    const handle = await startMeasuredAudioCapture({
+      stream,
+      epoch,
+      writer,
+      onPcm: (left, _right, startFrame, _off, rate) => {
+        pcmRate = rate
+        const ENV = 128
+        const REFRACTORY = 0.2 * rate
+        for (let i = 0; i < left.length; i += ENV) {
+          const end = Math.min(left.length, i + ENV)
+          let peak = 0
+          for (let k = i; k < end; k++) {
+            const a = Math.abs(left[k]!)
+            if (a > peak) peak = a
+          }
+          const frame = startFrame + i
+          if (peak > 0.1 && prevEnv <= 0.1 && frame >= refractoryUntil) {
+            onsetFrames.push(frame)
+            refractoryUntil = frame + REFRACTORY
+          }
+          prevEnv = peak
+        }
+      },
+    })
     const firstOffset = await handle.firstOffset
     const startAbs = epoch + firstOffset
     await stopSignal
@@ -139,6 +174,10 @@ async function recordStream(
       stopCallAbsMs,
       stopFinishAbsMs,
       dataEvents: [{ atMs: startAbs, bytes: result.bytes }],
+      // Where each beep sits on the SESSION timeline according to the anchor.
+      anchorOnsetSessionMs: onsetFrames.map(
+        (f) => result.startOffsetMs + (f / pcmRate) * 1000,
+      ),
     }
   }
 
@@ -236,6 +275,13 @@ export interface RigDebug {
    * nominal k·interval grid, the SOURCE is late, not the pipeline.
    */
   beepStreamArrivalsRigMs: number[]
+  /**
+   * Beep onsets as the PRODUCTION ANCHOR places them, on the rig clock. Unlike
+   * beepStreamArrivalsRigMs (a track-processor clone — a shorter path) this
+   * shares the anchor's blind spot, so subtracting it removes the rig's own
+   * transport delay instead of a smaller proxy for it.
+   */
+  beepAnchorRigMs: number[]
   /**
    * Rig-clock times at which each FLASH actually surfaced on the video track.
    * The audio equivalent has always been measured; assuming this one lands on
@@ -632,6 +678,12 @@ export async function recordFiducialSession(durationMs: number, opts?: RecordOpt
       beepIntervalMs: BEEP_INTERVAL_MS,
       flashClick,
       beepStreamArrivalsRigMs,
+      beepAnchorRigMs: (() => {
+        const mic = recorded.find((c) => c.kind === 'mic')
+        if (!mic?.anchorOnsetSessionMs?.length) return []
+        // session ms → rig ms (both are performance.now() based).
+        return mic.anchorOnsetSessionMs.map((ms) => epoch + ms - rigEpoch)
+      })(),
       flashStreamArrivalsRigMs,
       clockPairs,
       beepCtxSecs,

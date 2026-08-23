@@ -48,6 +48,10 @@ export interface SyncResidualRun {
   flashRefSkewMs: number | null
   flashArrivals: number
   beepArrivals: number
+  beepAnchorCount: number
+  beepCloneCount: number
+  beepAnchorFirst: number[]
+  beepCloneFirst: number[]
   flashes: number
   onsets: number
 }
@@ -104,6 +108,10 @@ export async function runSyncResidual(
       flashRefSkewMs: rig.flashSkewMeanMs === null ? null : Math.round(rig.flashSkewMeanMs * 100) / 100,
       flashArrivals: rig.flashStreamArrivalsRigMs.length,
       beepArrivals: rig.beepStreamArrivalsRigMs.length,
+      beepAnchorCount: rig.beepAnchorRigMs.length,
+      beepCloneCount: rig.beepCloneArrivalsRigMs.length,
+      beepAnchorFirst: rig.beepAnchorRigMs.slice(0, 4).map((x) => Math.round(x)),
+      beepCloneFirst: rig.beepCloneArrivalsRigMs.slice(0, 4).map((x) => Math.round(x)),
       flashes: full.flashOnsetsSec.length,
       onsets: full.onsetsSec.length,
     })

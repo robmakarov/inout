@@ -130,6 +130,7 @@ export interface ExportAnalysis {
   flashSyncUnbiasedCorrectedMeanMs: number | null
   /** Unbiased detection AND both reference skews measured — the honest number. */
   flashSyncSymmetricMeanMs: number | null
+  flashSyncSymmetricMaxAbsMs: number | null
   /**
    * flashSync corrected for the beep schedule skew (flashes paint on the
    * nominal grid; beeps sound on the true grid). Comparable to `sync`.
@@ -224,6 +225,14 @@ export async function analyzeExport(blob: Blob, opts?: AnalyzeOptions): Promise<
       flashSyncSymmetricMeanMs:
         skewOk && flashSyncUnbiased && flashSkewMean !== undefined && flashSkewMean !== null
           ? flashSyncUnbiased.meanOffsetMs - ((skewMean as number) - flashSkewMean)
+          : null,
+      flashSyncSymmetricMaxAbsMs:
+        skewOk && flashSyncUnbiased && flashSkewMean !== undefined && flashSkewMean !== null
+          ? Math.abs(flashSyncUnbiased.meanOffsetMs - ((skewMean as number) - flashSkewMean)) +
+            Math.max(
+              0,
+              flashSyncUnbiased.maxAbsOffsetMs - Math.abs(flashSyncUnbiased.meanOffsetMs),
+            )
           : null,
       flashSyncCorrectedMeanMs: correctedMean,
       flashSyncCorrectedMaxAbsMs: correctedMaxAbs,
