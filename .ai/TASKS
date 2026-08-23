@@ -28,8 +28,11 @@ several ids, take the first and tell PO to open parallel sessions for the rest. 
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
 ── READY MAP — current truth, updated on every merge ──
-Last update 2026-08-23. Merged that day: O1 · O2 · O3a · O7 · O4 step1 · O4b · F7 · F1 · O8(partial)
-· P2 · P3 · F4 · a P0 mic-hang fix (PO-verified: "record seems to be okay").
+Last update 2026-08-23 (end of the second session). Merged that day: O1 · O2 · O3a · O7 · O4 step1 ·
+O4b · F7 · F1 · O8(partial) · P2 · P3 · F4 · O4 step2 (DORMANT) · O11a capture half · a P0 mic-hang
+fix (PO-verified: "record seems to be okay"). Pushed to origin/main.
+START HERE IF YOU ARE FRESH: read notes 5-8 below, then take P0-tail. It is the only item that is a
+live defect rather than an improvement.
 
 READY NOW — parallel-safe, any subset concurrently (one session each):
   P0-tail  v1 loses the tail at 4K   [light-medium]  FOUND 2026-08-23 WITH NUMBERS, NOT FIXED. The
@@ -61,8 +64,12 @@ NEEDS PO INPUT BEFORE BUILDING:
   F2   zoom-pan — PO said "i think so"; reconfirm scope first. The seam it was waiting on now EXISTS:
        F4's cameraTrack is the same shape a viewport track wants (keyframes on the recording timeline,
        eased sampling, one function shared by preview and export). Copy it, don't invent a second one.
-CONFLICT RULES: O4 is the keystone — solo lane, nothing else touching capture/* while it runs ·
-F3 now owns compose/layout.ts alone (F4 merged) · F5a extends F1's segment list.
+CONFLICT RULES (all of capture/* is now shared by TWO engines — keep both working):
+· P0-tail and the O4 remainder BOTH touch capture/* — never simultaneously. P0-tail goes first.
+· F3 owns compose/layout.ts alone (F4 merged), but the composite geometry now lives in THREE places
+  that must agree — layout.ts, compositor.worker.ts and liveComposite.ts. cameraTrack.ts owns the rect.
+· F5a extends F1's segment list · O11a's render half touches compose/pipeline.ts, which F3 does not.
+· Any capture/* change must run BOTH `npm run oracle` and `npm run oracle --engine=v2`.
 BLOCKED (dep → unblocks): O5←O4 · O6←O4 · O9←O4+O5 · O8 remainder←O4/O5 · F6←O4 · F8←O4 ·
 P4←O4/O5 · P5b←P5a · P6←P5b · P7←P4 · O10 (AEC part only)←P4 · O3b←O4 (see below).
 REJECTED (do not resurrect): pre-roll rolling buffer — no capture before the record press, ever
@@ -89,6 +96,22 @@ lives in O4/O8: zero tail loss at stop, now gated.
 4. EVIDENCE IS BROWSER-SIDE. Unit tests cover pure logic only; anything about capture, export,
    memory or bundles must be measured in a real browser on the PRODUCTION build. QA on the prod-build
    port only, never the dev server.
+5. THE SHIPPED COMPOSITE LOSES ITS TAIL UNDER LOAD, and no gate sees it yet. 4K source: 13.3 fps and
+   the last decodable frame 3769 ms before the end. 1080p: 65 ms. The O8 tail band is fine — the RIG
+   is too gentle. Task P0-tail, first on the READY map. Do not write a new tail claim without running
+   `npm run exp -- o4step2`.
+6. THERE ARE TWO LIVE-COMPOSITE ENGINES NOW. v1 (MediaRecorder) is the DEFAULT; v2 (worker + WebCodecs
+   + WebGL2 + fMP4) is merged but DORMANT behind ?engine=v2, because WebCodecs' AVC encoder delivers
+   ~10 fps at 1080p here against v1's 30. v2 is otherwise better on every axis measured (main-thread
+   cost 131 ms → 0, oracle sync 40.0 vs 58.8 ms, it drains its own encoder at stop). Anything touching
+   capture/* must keep BOTH working, and `npm run oracle --engine=v2` gates the second one.
+7. THE EDIT IS PERSISTED NOW (F4, editsRepo, IndexedDB v2). Before that a refresh silently threw away
+   every trim and cut while faithfully restoring the recording. If you add a field to EditState, it is
+   automatically persisted — make sure it survives a round trip through structured clone.
+8. THE COMPOSITE'S GEOMETRY LIVES IN THREE PLACES and they must agree, because an unedited export
+   packet-copies the composite: compose/layout.ts (render), capture/compositor.worker.ts (v2 live) and
+   liveComposite.ts (v1 live). timeline/cameraTrack.ts owns the PiP rect for the first two; a unit test
+   pins the default pose against the editor's historical CSS numbers.
 
 ── TOOLING (built 2026-08-23; all spawn their own ephemeral server + throwaway Chrome profile) ──
   npm run exp -- <id> [json] [--rss] [--query=k=v] [--ua=...]   generic experiment driver

@@ -9,8 +9,13 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   39 MB live memory instead of 294 MB. ExportResult.blob is a disk-backed OPFS file.
 - crash-durable: mid-record reload salvages all channels (video + positioned-write audio), boots into editor
 - editor: trim, per-channel enable/trim, MID-TAKE CUTS (F1: split at playhead, delete clip, drag cut
-  edges), quality tiers before export (F7: 720p/1080p-instant/1440p with size estimate)
-- installable PWA, starts offline (P2); first paint 219 KB (O7, was 803)
+  edges), quality tiers before export (F7: 720p/1080p-instant/1440p with size estimate), MOVABLE TIMED
+  CAMERA (F4: drag/resize the PiP on the stage; the export moves it AT the instant you moved it)
+- THE EDIT SURVIVES A REFRESH (F4, editsRepo IndexedDB v2). It never did before: recovery restored the
+  recording and handed the editor a fresh default, so trims and cuts evaporated on every reload.
+- installable PWA, starts offline (P2); first paint 227.7 KB (O7 gate ≤300 KB; was 803)
+- knows WHICH browser it is running in (P3, core/platform.ts): Yandex is named as Yandex and not
+  Chrome, and a below-floor build gets an honest "update" line instead of a silent failure
 - every exported file carries a certification in its comment tag (O8): path, output settings, loudness
   makeup + source, stalled/missing channels, cut count, CI sync bound
 - audio: measured pipeline (sample-counted PCM, min-filter anchor), raw system audio, post-capture fidelity fixed
@@ -57,6 +62,13 @@ gaps / in flight:
   seconds missing. At 1080p it is 65 ms, which is why the O8 tail band never caught it: that band only
   ever runs on the light rig. This is "Loom cuts last seconds" happening in what users run today.
   Task P0-tail in .ai/TASKS; it is first on the READY map.
+- SHIPPED 2026-08-23, SECOND SESSION (three more merges): P3 ru-pack part 1 (core/platform.ts +
+  scripts/browser-check.mjs QA runner + scripts/ru-reachability.mjs + docs/QA_MATRIX.md +
+  docs/RU_REACHABILITY.md; RU auth alternatives were built and then REMOVED on PO instruction —
+  Google stays the only door) · F4 movable timed camera + edit persistence · O4 step 2 (above).
+  OPEN FOR PO from P3: install Yandex Browser and run
+  `node scripts/browser-check.mjs --browser=yandex --out=docs/qa/yandex.json`; run
+  `node scripts/ru-reachability.mjs --label="<ISP>, no VPN" --supabase=<url>` from an RU connection.
 - SHIPPED 2026-08-23 (one session, eleven merges — details in DECISIONS, task state in TASKS):
   O1 stream-to-disk exports · O2 capture-time loudness (145-156 ms/min of decode removed for takes
   needing no boost; floor-bound takes still probe, because capture measures PCM and export measures the
