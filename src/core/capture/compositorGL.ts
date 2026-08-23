@@ -92,6 +92,10 @@ export interface GLCompositor {
     radiusPx: number,
     borderPx: number,
   ): void
+  /** Blocks until the GPU has finished the drawing issued so far. Measurement
+   *  only — every draw call above is asynchronous, so timing the JS call times
+   *  nothing but the enqueue. */
+  finish(): void
   dispose(): void
 }
 
@@ -192,6 +196,9 @@ export function createGLCompositor(width: number, height: number): GLCompositor 
       gl.bindBuffer(gl.ARRAY_BUFFER, quad)
       gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0)
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+    },
+    finish() {
+      gl.finish()
     },
     dispose() {
       gl.deleteTexture(texture)

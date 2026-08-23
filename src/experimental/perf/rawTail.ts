@@ -91,6 +91,12 @@ export interface RawTailRun {
     missing: string[]
     stalled: string[]
     hasComposite: boolean
+    /** The composite's OWN delivery, read out of its file. The o4step2 rig
+     *  drives the two engines directly; this reads what the REAL session
+     *  produced, which is the only way to tell an engine apart from a rig. */
+    compositeFps: number | null
+    compositeFrames: number | null
+    compositeBytes: number | null
     captureEvents: string[]
     /** Every `[capture]` line the session printed while stopping. */
     captureLog: string[]
@@ -309,6 +315,19 @@ async function runProduction(
     recordingId = recording.id
     blobKeys = recording.channels.map((c) => c.blobKey)
     if (recording.composite) blobKeys.push(recording.composite.blobKey)
+    let compositeFps: number | null = null
+    let compositeFrames: number | null = null
+    let compositeBytes: number | null = null
+    if (recording.composite) {
+      const cf = await blobStore.read(recording.composite.blobKey)
+      const cp = await probeComposite(cf)
+      compositeBytes = cf.size
+      compositeFrames = cp?.frameCount ?? null
+      compositeFps =
+        cp && recording.composite.durationMs > 0
+          ? Math.round((cp.frameCount / (recording.composite.durationMs / 1000)) * 10) / 10
+          : null
+    }
     base.take = {
       channels: recording.channels.map((c) => ({
         kind: c.kind,
@@ -318,6 +337,9 @@ async function runProduction(
       missing: recording.missing ?? [],
       stalled: recording.stalled ?? [],
       hasComposite: !!recording.composite,
+      compositeFps,
+      compositeFrames,
+      compositeBytes,
       captureEvents: [...new Set(captureEvents)],
       captureLog,
     }

@@ -48,6 +48,13 @@ const MAX_ENCODER_QUEUE = 6
 /** A static composition still needs a frame occasionally or the timeline
  * stalls and players show nothing between events. */
 const KEEPALIVE_MS = 1000
+/**
+ * A GPU barrier after the draw, so that paint timing measures the GPU rather
+ * than the enqueue. OFF by default — the barrier itself serialises the pipeline,
+ * so it is an instrument, not a setting. Measured with it on, 2026-08-23: 2.05
+ * and 2.84 ms of real GPU per composited frame at 1080p, which is not the wall.
+ */
+const PROBE_GPU = false
 
 interface SyncAccessHandle {
   write(buffer: ArrayBuffer | ArrayBufferView, options?: { at?: number }): number
@@ -177,6 +184,9 @@ export interface CompositorStats {
   outputs: number
   /** Synchronous time spent INSIDE the encoders' output callbacks. */
   outputMs: number
+  /** GPU time behind the draw, measured with a barrier rather than by timing
+   *  the JS enqueue (which times nothing). Only accumulated when probing. */
+  gpuMs: number
 }
 
 export type CompositorReply =
@@ -315,6 +325,7 @@ const stats: CompositorStats = {
   encodeLatencyMs: 0,
   outputs: 0,
   outputMs: 0,
+  gpuMs: 0,
   framesStale: 0,
 }
 
@@ -457,7 +468,9 @@ function encodeComposite(atMs: number, keepAlive: boolean): void {
 
   const tPaint = performance.now()
   paint()
+  if (PROBE_GPU) gl?.finish()
   const tFrame = performance.now()
+  if (PROBE_GPU) stats.gpuMs += tFrame - tPaint
   stats.paintMs += tFrame - tPaint
   const frame = new VideoFrame(canvas, {
     timestamp: timestampUs,

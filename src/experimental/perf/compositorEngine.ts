@@ -256,6 +256,7 @@ export interface EngineRun {
     configJson: string | null
     msPerEncodeLatency: number
     outputMs: number
+    msPerGpu: number
   } | null
   error?: string
 }
@@ -415,6 +416,7 @@ async function runEngine(
       encodeLatencyMs: number
       outputs: number
       outputMs: number
+      gpuMs: number
     } | null
     if (s) {
       const seconds = Math.max(0.001, takeMs / 1000)
@@ -448,6 +450,7 @@ async function runEngine(
         configJson: s.configJson ?? null,
         msPerEncodeLatency: Math.round((s.encodeLatencyMs ?? 0) / Math.max(1, s.outputs ?? 1)),
         outputMs: Math.round(s.outputMs ?? 0),
+        msPerGpu: Math.round(((s.gpuMs ?? 0) / Math.max(1, s.framesEncoded)) * 100) / 100,
       }
     }
     if (!composite) {
