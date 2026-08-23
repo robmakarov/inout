@@ -2098,6 +2098,10 @@ T F N  theme · frame · neon
         <div class="slider"><label>fill</label><input type="range" id="m-fill" min="0" max="2" step="0.05" value="0.15"><output id="o-mfill">0.15</output></div>
         <div class="slider"><label>tint</label><input type="range" id="m-tint" min="0" max="100" step="1" value="0"><output id="o-mtint">0</output></div>
         <div class="slider"><label>bright</label><input type="range" id="m-bright" min="0.4" max="1.6" step="0.02" value="0.78"><output id="o-mbright">0.78</output></div>
+        <div class="rowbtns">
+          <button class="btn-h" id="rot-l">↺ 45°</button>
+          <button class="btn-h" id="rot-r">↻ 45°</button>
+        </div>
         <div class="panel__label" style="margin: 10px 0 2px">Glyphs</div>
         <div class="slider"><label>size</label><input type="range" id="m-isize" min="0.5" max="1.8" step="0.02" value="0.86"><output id="o-misize">0.86</output></div>
         <select id="m-ico" style="margin-top: 8px">
@@ -2180,8 +2184,14 @@ const CHANNELS = [
    so the menu takes any number of inputs — see the add/delete buttons in the
    panel. With the four defaults it lands exactly where the hardcoded map did. */
 let RING_ORDER = ['screen', 'sys', 'camera', 'mic']
+/* One offset for the whole ring, in degrees. Four wedges put a separator dead
+   on the vertical and horizontal, which is either the point or the problem
+   depending on what is behind the menu — so it turns, rather than being
+   argued about. The captions follow: their anchor and baseline come off the
+   mid angle, so a wedge that has moved to the side gets a side caption. */
+let RING_ROT = 0
 const midAngle = (key) =>
-  ((-90 + RING_ORDER.indexOf(key) * (360 / RING_ORDER.length)) * Math.PI) / 180
+  ((-90 + RING_ROT + RING_ORDER.indexOf(key) * (360 / RING_ORDER.length)) * Math.PI) / 180
 
 /* lanes: [channel, startOffset%, width%, keptFrom%, keptTo%] — of the lane bar */
 const LANES = [
@@ -2952,6 +2962,12 @@ function delInput() {
 }
 document.getElementById('addinput').addEventListener('click', addInput)
 document.getElementById('delinput').addEventListener('click', delInput)
+const rotate = (deg) => {
+  RING_ROT = (RING_ROT + deg + 360) % 360
+  rebuildInputs()
+}
+document.getElementById('rot-l').addEventListener('click', () => rotate(-45))
+document.getElementById('rot-r').addEventListener('click', () => rotate(45))
 
 /* bounce sliders — same idea, but these land on PHYS instead of CSS. Changing
    them mid-flight is intentional: you feel the difference on the next throw. */
@@ -2994,7 +3010,7 @@ function paramString() {
     `skin=${skinSel.value}`,
     `splash=${splashSel.value}`,
     `perm=${CHANNELS.filter((c) => PERM[c.key] !== 'ok').map((c) => c.key + ':' + PERM[c.key]).join(',') || '-'}`,
-    `menu=size${R_OUT}/gap${R_IN}/fill${mFill.value}/tint${mTint.value}/bright${mBright.value}/ico${mIsize.value}`,
+    `menu=size${R_OUT}/gap${R_IN}/fill${mFill.value}/tint${mTint.value}/bright${mBright.value}/ico${mIsize.value}/rot${RING_ROT}`,
     `glyphs=${mIco.value}`,
     `bounce=k${PHYS.k}/c${PHYS.c}/imp${PHYS.imp}/follow${PHYS.follow}/wall${PHYS.wall}`,
     `zone=${FRAME_W}x${FRAME_H}`,
@@ -3117,6 +3133,7 @@ function restoreState() {
   if (mg('tint') != null) mTint.value = mg('tint')
   if (mg('bright') != null) mBright.value = mg('bright')
   if (mg('ico') != null) mIsize.value = mg('ico')
+  if (mg('rot') != null) RING_ROT = mg('rot')
   if (m) syncMenu()
 
   const zone = (st.zone || '').match(/^(\d+)x(\d+)$/)
