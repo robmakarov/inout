@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "oracle": "node scripts/oracle.mjs",
     "oracle:cold": "node scripts/oracle.mjs --cold=20",
-    "oracle:fidelity": "node scripts/oracle-fidelity.mjs"
+    "oracle:fidelity": "node scripts/oracle-fidelity.mjs",
+    "exp": "node scripts/exp.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.0",

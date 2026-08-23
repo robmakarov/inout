@@ -24,19 +24,18 @@ cost bands) and WAITS. PO answers "go <id>". One task per session (one branch pe
 several ids, take the first and tell PO to open parallel sessions for the rest. Whoever MERGES a task
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
-── READY MAP — current truth, updated on every merge (last: 2026-08-22, nothing started) ──
+── READY MAP — current truth, updated on every merge (last: 2026-08-23, O1 merged) ──
 READY NOW — parallel-safe, any subset concurrently (one session each):
-  O1   stream-to-disk exports      [light]   touches compose/pipeline.ts, compose/instant.ts, store
+  O2   capture-time loudness       [light]   touches capture/session.ts, compose/instant.ts, types
   O3a  chromium mp4 recorder       [light]   touches capture/session.ts, capture/acquire.ts
   P1   firefox + 3-engine oracle   [medium]  touches capabilities.ts, oracle scripts
   P2   pwa install                 [light]   touches index.html, vite config, service worker
   P3   ru-pack part 1              [light]   touches docs, cloud stubs
   P5a  iOS SCK spike               [light]   touches nothing in repo (separate Xcode proj) — TIME-SENSITIVE: iOS 27 beta window, ships ~Sept
   F7   quality slider              [medium]  touches ExportPanel, export settings in types.ts
-CONFLICT RULES: O1↔O2 both edit instant.ts — never simultaneously · O3b needs O3a+O1 merged
-(instant.ts + session.ts) · F7 coordinates with O5 if both active · O7 is broad-touch — solo lane,
-announce, TD call on timing.
-BLOCKED (dep → unblocks): O2←O1 · O3b←O3a+O1 · O4←O3 · O5←O4 · O6←O4 · O8←O4/O5 ·
+CONFLICT RULES: O2↔O3b both edit instant.ts — never simultaneously · O3b needs O3a merged ·
+F7 coordinates with O5 if both active · O7 is broad-touch — solo lane, announce, TD call on timing.
+BLOCKED (dep → unblocks): O3b←O3a · O4←O3 · O5←O4 · O6←O4 · O8←O4/O5 ·
 O9←O4+O5 · O10←O2 (its AEC part ←P4) · F1–F6←O5/O4 per pack (F4 also ←F1 UI seam; F2←F4) ·
 F8←O4 · P4←O4/O5 · P5b←P5a · P6←P5b · P7←P4.
 REJECTED (do not resurrect): pre-roll rolling buffer — no capture before the record press, ever
@@ -45,15 +44,11 @@ zero tail loss at stop.
 
 ═══ PHASE O — OPTIMIZATION ═══
 
-## O1. export-stream-to-disk — O(1)-memory exports  [P1, small, do first]
-Why: both export paths buffer the entire MP4 in RAM (BufferTarget — pipeline.ts:209, instant.ts:177).
-A 30-min take at 8 Mbps ≈ 1.8 GB contiguous ArrayBuffer → tab OOM. The 30-min cap is what hides this.
-Goal: mediabunny StreamTarget (chunked/positioned) → OPFS scratch file via the existing positioned
-durable writer; final ExportResult.blob = disk-backed File from OPFS. Both pipeline.ts and instant.ts.
-Constraints: ExportResult contract unchanged; abort removes the scratch file; Safari path included.
-GATES: (a) 30-min synthetic export: peak JS heap < 300 MB, before/after numbers; (b) short-take A/B:
-plays, equal duration/tracks/dimensions; (c) abort mid-export leaves no orphan OPFS file (listing);
-(d) typecheck+test+oracle+fidelity green.
+## O1. export-stream-to-disk — DONE 2026-08-23, merged (evidence in DECISIONS)
+Shipped: compose/scratch.ts (StreamTarget → OPFS scratch via blobStore.createPositionedWriter),
+wired into pipeline.ts + instant.ts, BufferTarget kept as fallback. Gates green — 30-min export
+peak live memory 39.2 MB vs 294.2 MB (target held 4.0 MB vs 253.4 MB), parity equal, zero orphans,
+oracle 39.5 ms + fidelity 0.019 dB. Evidence harness: `npm run exp -- o1` (src/experimental/perf).
 
 ## O2. capture-time-loudness — kill the probe double-decode  [P2, small]
 Why: every export (incl. instant) decodes ALL audio twice — a throwaway mixer pass for loudness, then

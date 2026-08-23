@@ -37,6 +37,7 @@ import {
   pickEncodingTarget,
 } from './codecs'
 import { drawVideoFrame, type FrameCanvas } from './layout'
+import { createExportScratch, type ExportScratch } from './scratch'
 import { collectPeaks, createPeakBuffer, createWaveformRenderer } from './waveform'
 import { openVideoChannel, type VideoChannelReader } from './video'
 
@@ -152,6 +153,7 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
   const videoReaders: VideoChannelReader[] = []
   const audioMixers: AudioChannelMixer[] = []
   let output: Output | null = null
+  let scratch: ExportScratch | null = null
 
   try {
     for (const channel of recording.channels) {
@@ -206,7 +208,14 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
     if (!ctx) throw new Error('Canvas 2D context unavailable')
     const frame: FrameCanvas = { ctx, width, height, scale: width / 1920 }
 
-    const out = new Output({ format: target.format, target: new BufferTarget() })
+    // O(1) memory: mux straight to an OPFS scratch file. BufferTarget stays as
+    // the fallback for platforms where the scratch can't be opened.
+    scratch = await createExportScratch()
+    const bufferTarget = scratch ? null : new BufferTarget()
+    const out = new Output({
+      format: target.format,
+      target: scratch ? scratch.target : bufferTarget!,
+    })
     output = out
     const videoSource = new CanvasSource(canvas, { codec: target.videoCodec, bitrate: VIDEO_BITRATE })
     out.addVideoTrack(videoSource, { frameRate: fps })
@@ -312,12 +321,18 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
 
     report('finalizing', 0.95)
     await out.finalize()
-    const buffer = out.target.buffer
-    if (!buffer) throw new Error('Muxer produced no output')
+    let blob: Blob
+    if (scratch) {
+      blob = await scratch.finish(target.mimeType)
+    } else {
+      const buffer = bufferTarget?.buffer
+      if (!buffer) throw new Error('Muxer produced no output')
+      blob = new Blob([buffer], { type: target.mimeType })
+    }
     report('finalizing', 1)
 
     return {
-      blob: new Blob([buffer], { type: target.mimeType }),
+      blob,
       mimeType: target.mimeType,
       fileName: exportFileName(recording.createdAt, target.fileExtension),
       durationMs: Math.round(durationMs),
@@ -328,6 +343,8 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
     if (output && output.state !== 'finalized' && output.state !== 'canceled') {
       await output.cancel().catch(() => undefined)
     }
+    // Aborted or failed export leaves nothing behind on disk.
+    await scratch?.discard().catch(() => undefined)
     throw err
   } finally {
     for (const reader of videoReaders) reader.dispose()

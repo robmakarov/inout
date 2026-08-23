@@ -11,7 +11,20 @@ export default defineConfig({
       '@app': fileURLToPath(new URL('./src/app', import.meta.url)),
     },
   },
-  server: { port: 5173 },
+  server: {
+    port: 5173,
+    // Cross-origin isolation unlocks performance.measureUserAgentSpecificMemory(),
+    // the only instrument that counts ArrayBuffer backing stores (performance.memory
+    // does not). Opt-in via env so normal dev and prod are untouched — set by
+    // scripts/exp.mjs for memory experiments only.
+    headers:
+      process.env.INOUT_COI === '1'
+        ? {
+            'Cross-Origin-Opener-Policy': 'same-origin',
+            'Cross-Origin-Embedder-Policy': 'require-corp',
+          }
+        : undefined,
+  },
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
