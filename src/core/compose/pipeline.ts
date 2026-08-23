@@ -11,6 +11,7 @@ import {
   clampEditState,
   defaultEditState,
   hasEnabledVideo,
+  isDefaultEdit,
   outputDurationMs,
 } from '@core/timeline'
 import {
@@ -22,6 +23,7 @@ import {
   type ExportResult,
 } from '@core/types'
 import {
+  loudnessFromCaptureStats,
   makeupGainForLoudness,
   measureMixLoudness,
   mixGainForChannels,
@@ -103,6 +105,18 @@ export async function measureRecordingMakeup(
 ): Promise<number> {
   try {
     const edit = clampEditState(recording, defaultEditState(recording))
+    // O2: capture-time stats describe exactly this (default-edit) mix, so the
+    // editor no longer decodes the whole take on open to set preview loudness.
+    const audioIds = recording.channels.filter((c) => c.media === 'audio').map((c) => c.id)
+    const storedGain = audioIds.length > 1 ? mixGainForChannels(audioIds.length) : 1
+    const stored = loudnessFromCaptureStats(recording.loudness, audioIds, storedGain)
+    if (stored) {
+      const makeup = makeupGainForLoudness(stored)
+      console.info(
+        `preview: loudness from capture stats p90rms ${stored.loudRms.toFixed(4)} peak ${stored.peak.toFixed(3)} → makeup ${makeup.toFixed(2)}×`,
+      )
+      return makeup
+    }
     const probe = await openAudioMixers(recording, edit, () => {})
     if (probe.length === 0) return 1
     const baseGain = probe.length > 1 ? mixGainForChannels(probe.length) : 1
@@ -183,18 +197,36 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
     // targeting was defeated by a single mic bump; percentile loudness isn't.
     // No-op for a healthy mix, so the fidelity oracle is untouched.
     if (needAudio) {
-      const probe = await openAudioMixers(recording, edit, throwIfAborted)
-      try {
-        const loud = await measureMixLoudness(probe, baseGain, totalAudioFrames, throwIfAborted, (r) =>
-          report('preparing', 0.04 * r),
-        )
-        const makeup = makeupGainForLoudness(loud)
+      // O2: an UNEDITED window is exactly the mix capture measured, so the
+      // probe pass can be skipped here too. Any trim changes the mix — those
+      // render paths still probe.
+      const stored = isDefaultEdit(recording, edit)
+        ? loudnessFromCaptureStats(
+            recording.loudness,
+            audioMixers.map((m) => m.channelId),
+            baseGain,
+          )
+        : null
+      if (stored) {
+        const makeup = makeupGainForLoudness(stored)
         if (makeup !== 1) for (const m of audioMixers) m.gain = baseGain * makeup
         console.info(
-          `compose: audio loudness p90rms ${loud.loudRms.toFixed(4)} peak ${loud.peak.toFixed(3)} → makeup ${makeup.toFixed(2)}×`,
+          `compose: audio loudness from capture stats p90rms ${stored.loudRms.toFixed(4)} peak ${stored.peak.toFixed(3)} → makeup ${makeup.toFixed(2)}× (no probe decode)`,
         )
-      } finally {
-        for (const m of probe) m.dispose()
+      } else {
+        const probe = await openAudioMixers(recording, edit, throwIfAborted)
+        try {
+          const loud = await measureMixLoudness(probe, baseGain, totalAudioFrames, throwIfAborted, (r) =>
+            report('preparing', 0.04 * r),
+          )
+          const makeup = makeupGainForLoudness(loud)
+          if (makeup !== 1) for (const m of audioMixers) m.gain = baseGain * makeup
+          console.info(
+            `compose: audio loudness p90rms ${loud.loudRms.toFixed(4)} peak ${loud.peak.toFixed(3)} → makeup ${makeup.toFixed(2)}×`,
+          )
+        } finally {
+          for (const m of probe) m.dispose()
+        }
       }
     }
     // Layout slot is decided once for the whole export: camera only fills the

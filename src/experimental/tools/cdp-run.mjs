@@ -30,9 +30,13 @@ function parseArgs(argv) {
   let devPort = 5199
   let timeoutSec = 1800
   let headed = false
+  let query = ''
+  let ua = ''
   for (const a of argv) {
     if (a.startsWith('--port=')) devPort = Number(a.slice(7))
     else if (a.startsWith('--timeout=')) timeoutSec = Number(a.slice(10))
+    else if (a.startsWith('--query=')) query = a.slice(8)
+    else if (a.startsWith('--ua=')) ua = a.slice(5)
     else if (a === '--headed') headed = true
     else positional.push(a)
   }
@@ -41,7 +45,15 @@ function parseArgs(argv) {
     console.error('usage: cdp-run.mjs <experiment> [jsonArgs] [--port=5199] [--timeout=1800] [--headed]')
     process.exit(2)
   }
-  return { experiment, args: jsonArgs ? JSON.parse(jsonArgs) : undefined, devPort, timeoutSec, headed }
+  return {
+    experiment,
+    args: jsonArgs ? JSON.parse(jsonArgs) : undefined,
+    devPort,
+    timeoutSec,
+    headed,
+    query,
+    ua,
+  }
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -86,8 +98,10 @@ class Cdp {
 }
 
 async function main() {
-  const { experiment, args, devPort, timeoutSec, headed } = parseArgs(process.argv.slice(2))
-  const pageUrl = `http://localhost:${devPort}/experimental.html?synthetic=1`
+  const { experiment, args, devPort, timeoutSec, headed, query, ua } = parseArgs(process.argv.slice(2))
+  // Extra query params reach the page's own knobs (e.g. `quiet=0.05`, the
+  // synthetic-audio level used to exercise the loudness rescue).
+  const pageUrl = `http://localhost:${devPort}/experimental.html?synthetic=1${query ? `&${query}` : ''}`
   const profile = mkdtempSync(join(tmpdir(), 'inout-oracle-profile-'))
   const deadline = Date.now() + timeoutSec * 1000
 
@@ -111,6 +125,9 @@ async function main() {
       // unquantized performance.memory. Harmless for the other runners.
       '--js-flags=--expose-gc',
       '--enable-precise-memory-info',
+      // Capability-gate smokes (e.g. the Apple WebKit audio path) need the UA
+      // set before the page loads, so it is a launch flag, not a CDP override.
+      ...(ua ? [`--user-agent=${ua}`] : []),
       pageUrl,
     ],
     { stdio: ['ignore', 'ignore', 'pipe'] },

@@ -1,4 +1,5 @@
 import { ALL_FORMATS, AudioBufferSink, BlobSource, Input, type WrappedAudioBuffer } from 'mediabunny'
+import type { CaptureLoudness } from '@core/types'
 import { AUDIO_SAMPLE_RATE } from './codecs'
 
 interface CurrentBuffer {
@@ -100,6 +101,53 @@ export interface MixLoudness {
 }
 
 /**
+ * Capture-time stats (Recording.loudness) → the MixLoudness the probe pass
+ * would have produced, for a mix of EXACTLY those channels at `gain`.
+ *
+ * The stats are taken on the unity sum, and every mixer applies the same
+ * constant `gain`, so peak and both RMS percentiles scale linearly by it.
+ *
+ * Returns null — caller probes — in three cases:
+ *  1. the stats do not describe this mix (channel disabled or failed to open,
+ *     take predates O2, browser records audio via MediaRecorder);
+ *  2. the take delivered no frames;
+ *  3. the FLOOR bound could decide the makeup. Capture measures the PCM while
+ *     export measures the decoded file, and a lossy codec discards content
+ *     below its perceptual floor — measured at up to 15 dB apart on a source
+ *     whose quiet passages fall below opus's floor, which is exactly what p20
+ *     samples. A codec only ever removes such content, so the captured floor
+ *     is an UPPER estimate of the file's, and floorBound(captured) is a LOWER
+ *     bound on floorBound(file): when the captured floor bound does not bind,
+ *     the file's cannot either and the shortcut is provably equivalent. When
+ *     it could bind, the probe decides — correctness over speed.
+ */
+export function loudnessFromCaptureStats(
+  stats: CaptureLoudness | undefined,
+  channelIds: string[],
+  gain: number,
+): MixLoudness | null {
+  if (!stats || stats.frames <= 0) return null
+  if (stats.channelIds.length !== channelIds.length) return null
+  if (!channelIds.every((id) => stats.channelIds.includes(id))) return null
+  const m: MixLoudness = {
+    peak: stats.peak * gain,
+    loudRms: stats.loudRms * gain,
+    floorRms: stats.floorRms * gain,
+  }
+  if (!(m.loudRms > NORMALIZE_GATE_RMS)) return m // makeup is 1 either way
+  const nonFloor = Math.min(
+    NORMALIZE_MAX_MAKEUP,
+    NORMALIZE_TARGET_RMS / m.loudRms,
+    m.peak > 0 ? (NORMALIZE_PEAK_OVERDRIVE * LIMIT_KNEE) / m.peak : Infinity,
+  )
+  // A healthy mix needs no boost, so the floor cannot change the answer.
+  if (nonFloor <= 1) return m
+  const floorBound = m.floorRms && m.floorRms > 0 ? NORMALIZE_FLOOR_CEILING_RMS / m.floorRms : Infinity
+  if (floorBound < nonFloor) return null
+  return m
+}
+
+/**
  * Makeup gain that drives speech-level loudness to target. Only ever boosts
  * (a healthy or hot mix passes at 1.0); gated so noise-only takes stay put;
  * peak-bounded so sustained program cannot be driven deep into the limiter;
@@ -144,6 +192,8 @@ export class AudioChannelMixer {
   constructor(
     private readonly input: Input,
     sink: AudioBufferSink,
+    /** Which ChannelRecording this mixes — matched against Recording.loudness. */
+    readonly channelId: string,
     /** Channel's active window on the output timeline, seconds. */
     private readonly outStartSec: number,
     private readonly outEndSec: number,
@@ -282,6 +332,7 @@ export async function openAudioChannel(
     return new AudioChannelMixer(
       input,
       new AudioBufferSink(track),
+      channelId,
       outStartSec,
       outEndSec,
       localOffsetSec,

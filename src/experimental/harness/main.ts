@@ -144,6 +144,19 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'o2',
+    title: 'O2 — capture-time loudness vs the probe pass',
+    detail:
+      'records takes through the production createCaptureSession (synthetic), compares the makeup gain derived from capture-time stats against the probe pass in dB, times the probe by take length to price what every export used to pay, A/Bs an instant export with and without stats, and proves the stats-less fallback still exports.',
+    run: async (args) => {
+      const { runO2Evidence } = await import('../perf/captureLoudness')
+      return runO2Evidence({
+        takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined,
+        probeSecs: Array.isArray(args?.probeSecs) ? (args.probeSecs as number[]) : undefined,
+      })
+    },
+  },
+  {
     id: 'datachan',
     title: 'Experiment 6 — Timed data channels (live capture demo)',
     detail:

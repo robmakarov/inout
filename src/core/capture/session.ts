@@ -26,6 +26,7 @@ import {
   type MeasuredAudioHandle,
 } from './measuredAudio'
 import { canLiveComposite, startLiveComposite, type LiveCompositeHandle } from './liveComposite'
+import { MixLoudnessAccumulator } from './loudnessAccumulator'
 import { clearPendingManifest, writePendingManifest } from './recovery'
 import { createSyntheticChannelsProgressive, isSyntheticMode } from './synthetic'
 
@@ -153,6 +154,8 @@ class Session implements CaptureSession {
   /** Video sources frozen right now, and every one that froze at any point. */
   private readonly stalledNow = new Set<ChannelKind>()
   private readonly stalledEver = new Set<ChannelKind>()
+  /** Certified-mix loudness accumulated live (O2) — created on first PCM. */
+  private loudness: MixLoudnessAccumulator | null = null
   private stopPromise: Promise<Recording> | null = null
   private cancelPromise: Promise<void> | null = null
   private cancelled = false
@@ -613,6 +616,20 @@ class Session implements CaptureSession {
             message: `${ch.kind} recording failed mid-take (${err.message}) — audio saved up to this point only`,
           })
         },
+        onPcm: (left, right, startFrame, startOffsetMs, sampleRate) => {
+          // The accumulator is created by whichever channel delivers first;
+          // every measured channel shares it, so the statistic is taken on the
+          // SUM the way the export mixes it (see loudnessAccumulator.ts).
+          if (!this.loudness) {
+            this.loudness = new MixLoudnessAccumulator({ sampleRate })
+            // Register every measured channel up front: the fold must wait for
+            // all of them from frame 0, or a slower channel's opening audio
+            // would be summed after its window had already been folded.
+            for (const c of this.channels) if (c.useMeasured) this.loudness.register(c.id)
+          }
+          const offsetFrames = Math.round((startOffsetMs * sampleRate) / 1000)
+          this.loudness.add(ch.id, left, right, startFrame + offsetFrames)
+        },
       })
       ch.audioCtx = null // ownership transferred; stop/cancel closes it
       ch.measured = handle
@@ -861,6 +878,33 @@ class Session implements CaptureSession {
     if (missing.length) recording.missing = missing
 
     if (this.stalledEver.size) recording.stalled = [...this.stalledEver]
+
+    // Capture-time loudness (O2): only valid when the stats cover EXACTLY the
+    // audio channels the export will mix — otherwise the sum is a different
+    // signal and export must fall back to its probe pass.
+    const acc = this.loudness?.finish()
+    if (acc && acc.frames > 0) {
+      const keptAudio = channels.filter((c) => c.media === 'audio').map((c) => c.id)
+      const same =
+        keptAudio.length === acc.channelIds.length && keptAudio.every((id) => acc.channelIds.includes(id))
+      if (same) {
+        recording.loudness = {
+          channelIds: acc.channelIds,
+          peak: acc.peak,
+          loudRms: acc.loudRms,
+          floorRms: acc.floorRms,
+          frames: acc.frames,
+        }
+        console.info(
+          `[capture] mix loudness measured live: peak ${acc.peak.toFixed(3)} p90rms ${acc.loudRms.toFixed(4)} ` +
+            `p20rms ${acc.floorRms.toFixed(4)} over ${acc.frames} frames${acc.degraded ? ' (degraded alignment)' : ''}`,
+        )
+      } else {
+        console.info(
+          `[capture] mix loudness discarded: measured [${acc.channelIds.join(',')}] but take kept [${keptAudio.join(',')}]`,
+        )
+      }
+    }
 
     try {
       if (this.compositeStarting) await this.compositeStarting
