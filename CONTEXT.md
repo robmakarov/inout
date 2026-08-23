@@ -110,25 +110,35 @@ what a fresh session must know first, and an index of the measurement tooling.
 split · sync root-cause + honest gate · quality steps · mid-take cuts · tail/throughput bands +
 certified exports · PWA install · movable timed camera + edit persistence · Yandex/RU pack part 1 ·
 WebCodecs capture engine (merged dormant, see below) · the bits audit and the two size levers it
-priced · background frame · silence tightening · timed zoom/pan · the composite tail fix.
+priced · background frame · silence tightening · timed zoom/pan · **the tail fix, now on both files a
+take produces** · **per-clip speed** · **draggable zoom markers** · **the engine × OS capability
+matrix**.
 
-**Next, and it is a bug, not a feature.** The *raw* channels still lose up to three quarters of a
-second off the end of a take under heavy load. The composite — the file you get when you export
-without editing — was losing nearly three seconds and is fixed; the channels an EDITED take renders
-from are not. Task `P0-tail-raw`. It is small in code and delicate in placement: the fix touches the
-stop path that once left the record button wedged, so it wants its own session.
+**The ending of your take is safe now, on both paths.** The composite — the file you get when you
+export without editing — was losing nearly three seconds off a heavy take and was fixed last session.
+The channels an EDITED take renders from were still losing up to three quarters of a second, and now
+lose 7–216 ms under the same load. The fix is not the same one, and the difference is worth knowing:
+the composite could simply stop drawing, but a camera or a screen is a live device, and *ending* it
+makes the browser throw away whatever it had not finished compressing. So the source is slowed to one
+frame a second instead — nothing new to compress, everything already queued still comes out. The stop
+path also grew a deadline everywhere it did not have one: a take whose recorders all refuse to answer
+now comes back in five seconds with the files intact, where it used to hang forever.
 
 **O4, the WebCodecs engine: built, measured, switched off — and we now know we were blaming the wrong
 thing.** Capture *can* run in a worker feeding our own encoder and fragmented-MP4 muxer, and on every
 axis but one it is better: capture leaves the main thread entirely (131 ms of blocking work per take
 becomes zero), sync is tighter (40 ms vs 59), and because it owns the encoder it can drain it at stop
-instead of asking a black box to stop. The one bad axis is throughput — 7.5 frames a second at 1080p
-where the old path does 30 — and that was blamed on the browser's video encoder. Measured properly
-this session, that encoder does 150–190 frames a second in isolation and 169 even inside a worker, and
-the full compositor path does 59 with the encoder never once waiting. Nine candidate causes are now
-eliminated with numbers and one suspect remains. **The keystone is still only half placed** —
-smart-cut exports, native-resolution capture, pause/retake and frame-exact scrubbing wait on it — but
-it is waiting on a bug we can find rather than on hardware we cannot buy.
+instead of asking a black box to stop. The one bad axis is throughput — a few frames a second at
+1080p where the old path does 30 — and it was blamed first on the browser's encoder and then on how
+we feed it. **Both are now disproven, and the search has one file left in it.** We built a test rig
+that reproduces the new engine's entire pipeline — the same two camera and screen feeds handed across
+to the same background worker, the same compositor, the same picture-in-picture, the same timestamps,
+the same file writer, over a full ten-second take — and it runs at sixty frames a second with nothing
+dropped. The real engine, doing what looks like the same work, is fifty times slower. Eight theories
+are now buried with numbers next to them so nobody spends another day on any of them. **The keystone
+is still only half placed** — smart-cut exports, native-resolution capture, pause/retake and
+frame-exact scrubbing wait on it — but what is left is a difference between two files of our own,
+not a limit of the browser.
 
 **Shipped alongside it:** the **timed movable camera** — drag the picture-in-picture on the stage and
 the export moves it at the moment you moved it (PO's emphasized feature). And, found while building it,
@@ -142,7 +152,11 @@ priced. (An "in-shot" notice shipped the same day and was pulled on PO's call �
 One gate was NOT met and is a task rather than a footnote: the per-step
 size number cannot be honest to ±20 % on every kind of content, because it is predicted from a file a
 DIFFERENT encoder made — on text-heavy screen content the two encoders disagree by nearly 2×. The fix
-is to measure rather than model (encode one frame per step and calibrate), and it is task F7c.
+is to measure rather than model, and it is task F7c. **Attempt 4 halved the error and got ordinary
+screen recordings inside the ±20 % promise for the first time** (7–15 % out), by measuring a whole
+five-second stretch instead of half a second — the half-second sample turned out to be wrong in
+*opposite directions* depending on the content, which is why no single correction had ever fixed it.
+Full-motion content is still 30–40 % low, so the number shown to you is unchanged for now.
 
 **Also shipped 2026-08-23, on "go p0-tail and others":** the composite tail fix · timed zoom and pan
 (you chose timed zooms over a static reframe) · the O4 re-diagnosis. And one thing deliberately NOT
@@ -150,11 +164,27 @@ shipped: three attempts to measure export sizes instead of predicting them, all 
 than the model they would have replaced. The spike is kept with its numbers so the next attempt starts
 from the fourth idea.
 
-**Runs in parallel now:** P0-tail-raw (the live defect) · the O4 hunt · the size-number probe, attempt
-4 · Firefox + 3-engine oracle · per-segment speed · the codec ladder · the iOS ScreenCaptureKit spike
-(time-sensitive: iOS 27 ships ~Sept 2026).
+**Also shipped 2026-08-23, on "go finish roadmap":** the raw-channel tail fix (above) · **per-clip
+speed** — pick any clip and play it at 1.25× to 3×, with the voice held at its own pitch rather than
+turned into a chipmunk, measured at eight hundredths of a semitone in the exported file · **zoom
+markers you can drag in time**, which were read-only before, so changing *when* a zoom happened meant
+redoing the zoom · and the capability matrix that finally tells the truth per platform: on Windows a
+whole-screen share carries the machine's audio and the channel says "System Audio"; on a Mac it only
+ever carries a tab's; and Firefox, which quietly accepts the request and hands back a silent track, now
+has that channel removed with copy that says exactly what Firefox does.
 
-**Waiting on PO:** install Yandex Browser and run the one-command QA smoke.
+Two real bugs surfaced on the way and were fixed, both caught by the new gates rather than by a user:
+a take with cuts in it was exporting **9.5 dB quieter than it should**, and the loudness step was
+spending itself hiding that; and a whole-take speed change could be silently discarded when the edit
+was saved.
+
+**Runs in parallel now:** the O4 hunt (now a two-file diff) · the size-number probe, attempt 5 · the
+codec ladder and the real Firefox run, both waiting on one install (below) · the iOS ScreenCaptureKit
+spike (time-sensitive: iOS 27 ships ~Sept 2026, and it needs a device we do not have).
+
+**Waiting on PO:** approve one dependency install — `npm i -D playwright && npx playwright install
+firefox` — which unblocks both the real Firefox run and the codec ladder that needs three engines to
+test against. Install Yandex Browser and run the one-command QA smoke.
 Run the RU reachability probe from a Russian connection without a VPN. And two rechecks on real
 hardware — a camera-only take should now record 1080p rather than upscaled 720p, and the Safari audio
 path has never been verified on a real Apple device.

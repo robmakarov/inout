@@ -22,7 +22,10 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   from one geometry function), SILENCE TIGHTENING (F5a: "Tighten" proposes cuts from the audio's own
   window-RMS envelope; a proposal until you press Apply, then ordinary F1 segments), TIMED ZOOM/PAN
   (F2: wheel on the stage zooms about the cursor, drag pans, the export zooms AT the instant you did
-  it; max 2.5x because every zoom upscales a 1080p capture — more wants O6)
+  it; max 2.5x because every zoom upscales a 1080p capture — more wants O6; F2b: a zoom marker can be
+  DRAGGED in time and the whole move goes with it, keeping its duration), PER-CLIP SPEED (F5b:
+  1.25-3x on any clip, pitch preserved by WSOLA rather than resampling — measured −0.08 cents at 2x
+  IN THE EXPORTED FILE — and the video retimed to match)
 - THE EDIT SURVIVES A REFRESH (F4, editsRepo IndexedDB v2). It never did before: recovery restored the
   recording and handed the editor a fresh default, so trims and cuts evaporated on every reload.
 - installable PWA, starts offline (P2); first paint 233.9 KB (O7 gate ≤300 KB; was 803)
@@ -31,6 +34,14 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   nothing in the UI reads it. Do not reintroduce a notice here without PO asking for one.
 - knows WHICH browser it is running in (P3, core/platform.ts): Yandex is named as Yandex and not
   Chrome, and a below-floor build gets an honest "update" line instead of a silent failure
+- CAPABILITY GATING IS ENGINE × OS, NOT ENGINE (P1): Chromium on WINDOWS carries the machine's audio
+  on a monitor share and the channel is named "System Audio"; on macOS/Linux only a tab or window
+  share carries audio and it is "Tab Audio"; Firefox ACCEPTS the audio constraint and returns video
+  only, so the channel is dropped with copy that says exactly that; Apple never offers it. Gecko also
+  has no AAC encoder, so exports there land on the avc+opus / vp9+opus chains (advisory — codecs.ts
+  still probes). Proven end-to-end on the prod build under a spoofed Firefox 131 UA: engine reads
+  gecko, channels come back Screen/Camera/Mic, all 8 QA gates pass. The Windows row CANNOT be spoofed
+  (userAgentData beats the UA string, which is correct) and is unit-tested only.
 - every exported file carries a certification in its comment tag (O8): path, output settings, loudness
   makeup + source, stalled/missing channels, cut count, CI sync bound
 - audio: measured pipeline (sample-counted PCM, min-filter anchor), raw system audio, post-capture fidelity fixed
@@ -68,27 +79,42 @@ gaps / in flight:
 - LIVE COMPOSITE ENGINES (O4 step 2): v2 (worker + WebCodecs + WebGL2 + fMP4 to its own
   SyncAccessHandle) is MERGED BUT DORMANT — default stays v1, opt in with ?engine=v2. It does what it
   was built for (main-thread capture cost 131 ms → 0; oracle sync 40.0 vs v1's 58.8 ms; it drains an
-  encoder it owns at stop) but delivers 6.7-10 fps at 1080p against v1's 29.7.
-  THE DIAGNOSIS CHANGED 2026-08-23 AND THE OLD ONE IS WRONG: "WebCodecs' encoder is the wall" is
-  FALSIFIED. `npm run exp -- encprobe` measures, on this machine, a bare encoder at 142-191 fps
-  (2D canvas), 105-155 fps (WebGL2 canvas), 169 fps INSIDE A WORKER, and the production GL compositor
-  fed real capture frames at 59-60 fps with the encoder never blocking. Also eliminated with numbers:
-  codec, hardwareAcceleration, latencyMode, the queue cap, and the mux/write/flush path (now timed in
-  the worker: 39 ms total across a 10 s take). Counted in the worker: of 452 arrivals, 39 encoded,
-  101 dropped on a full queue, 315 rejected by the cadence gate, 0 stale. The one untested difference
-  left is WHAT IT IS FED — frames transferred across the thread boundary and uploaded as GL textures.
-  Next steps, cheapest first, are in the O4 handoff in .ai/TASKS.
-- P0-TAIL FIXED (2026-08-23): the composite used to lose 2734 ms off the end of a 4K take; it now
-  loses 43-320 ms. stop() kills the painting first, then PROBES the encoder with requestData() until it
+  encoder it owns at stop) but delivers 2-10 fps at 1080p against v1's 29.7.
+  THE WORKER IS NOW EXONERATED, AND THE SEARCH SPACE IS ONE FILE WIDE. A probe that reproduces v2's
+  ENTIRE data path — two transferred capture sources, the production GL compositor and its PiP,
+  production's wall-clock timestamps, the mediabunny fragmented MP4 through an OPFS SyncAccessHandle
+  flushed per chunk, a full 10 s take, all inside a worker — runs at 60.1 fps with ZERO drops and
+  13 ms of encoder latency. v2 in situ: 850-4665 ms of encoder latency, with our own code accounting
+  for ~280 ms of the whole 10 s. EIGHT hypotheses are refuted with numbers (the texture re-spec, the
+  thread crossing, GL-in-worker, the second source, the timestamps, take duration, the muxer and the
+  OPFS handle, and audio), plus three A/Bs inside the engine itself (a byte-identical encoder config,
+  the cadence gate and drop policy bypassed, and the GPU finally measured with a barrier: 2-2.8 ms
+  per frame). The difference is in the FILE, not in Chrome — next session diffs compositor.worker.ts
+  against encoderProbe.worker.ts. Full table in the O4 handoff in .ai/TASKS.
+- THE TAIL IS KEPT, ON BOTH FILES A TAKE PRODUCES (2026-08-23). The composite used to lose 2734 ms
+  off the end of a 4K take; it now loses 43-320 ms. stop() kills the painting first, then PROBES the encoder with requestData() until it
   answers empty (waiting for the byte flow to go quiet looks equivalent and is not — under load this
   recorder emits four chunks in ten seconds, so silence is its normal state and proves nothing). The
   drain recovers 1.0-1.1 MB per take that used to be discarded; a healthy 1080p take is unchanged
   (tail 71/80 ms, 29.7 fps) and pays 242 ms at stop. `npm run oracle:load` runs O8's 400 ms band under
   the 4K rig — HEAVY, announce it, not in the pre-push hook. A drain that runs out of budget marks the
   composite tailIncomplete and the instant path refuses to copy it.
-  STILL OPEN — the RAW channels lose 203-753 ms of tail under the same load (task P0-tail-raw). An
-  edited take renders from those. The rig feeds them the uncapped 4K source, which production never
-  does, and the fix needs a reorder of session.doStop — the path that wedged arming two sessions ago.
+  THE RAW CHANNELS ARE FIXED TOO (P0-tail-raw), and their fix is the OPPOSITE of the composite's.
+  The composite could stop painting; a raw channel's source is a live device, and ending its TRACK
+  makes Chrome stop the recorder itself and discard the backlog (measured: 622 ms still missing). So
+  the source is STARVED — 1 fps, same frame size — and then drained: 1344 ms missing → 7-216 ms at
+  4K, 7-27 ms at 1080p, twice each. `npm run oracle:load` now runs both phases. The stop path also
+  grew deadlines everywhere, including the composite's own stop: a take whose recorders are all deaf
+  to stop() now comes back in 5.6 s with every channel on disk, where it used to hang forever.
+  Audio stops at the press rather than after the drain — with it stopping late, one take measured
+  mic 11947 ms against a screen channel of 10059 ms.
+- SHIPPED 2026-08-23, FIFTH SESSION (PO: "go finish roadmap"): P0-tail-raw (above) · F5b per-clip
+  speed · F2b draggable zoom markers · P1's code half (above) · the O4 exoneration (above) · F7c
+  attempt 4 (not shipped; the error is halved and screen content is inside ±20 % for the first time,
+  motion is still 30-40 % low). Two live defects fixed on the way, both found by their own gates: the
+  render's mix bus counted MIXERS rather than CHANNELS, so a cut take exported 9.5 dB down; and
+  clampEditState dropped a whole-take span as "the same as no cuts", which would have discarded a
+  speed change.
 - SHIPPED 2026-08-23, FOURTH SESSION (PO: "go p0-tail and others"): F2 timed zoom/pan (PO confirmed
   timed zooms over a static reframe) · P0-tail (above) · the O4
   re-diagnosis (above) · F7c attempted and NOT shipped (three probe designs, all measured, none beat
@@ -120,8 +146,10 @@ gaps / in flight:
   merely deferred and PO-gated per instance), fixed composition layout unfrozen for F4's timed camera.
   PROTOCOL: PO says "roadmap" → print the TASKS READY map and WAIT; PO says "go <id>" → one task,
   own branch, gates, TD merge, then update the READY map.
-  READY NOW: P0-tail-raw (the live defect) · O4 step 2 remainder (re-diagnosed, see above) · F7c
-  (attempt 4) · P1 · P5a · F5b · O11d · F2b (draggable zoom markers, only if PO asks).
+  READY NOW: O4 step 2 remainder (the worker is exonerated — see above) · F7c (attempt 5: motion is
+  a uniform 1.44x under, which is a countable question) · P5a (BLOCKED on Xcode 27 + an iOS 27
+  device) · O11d (blocked on P1's Playwright install) · P1's two remaining gates (both need
+  downloads PO must approve).
 - composite blob absent from crash salvage → absorbed by TASKS O4 (fMP4-on-disk makes it free)
 - bundle: O7 SHIPPED — first paint 802,975 B → ~221,000 B; editor/cloud/capture-engine split, engine
   prewarmed at mount so record latency is unchanged (282 → 296 ms). Enforcement is the capture barrel:

@@ -29,62 +29,70 @@ several ids, take the first and tell PO to open parallel sessions for the rest. 
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
 ── READY MAP — current truth, updated on every merge ──
-Last update 2026-08-23, end of the FOURTH session ("go p0-tail and others"). Everything merged and
-pushed to origin/main; working tree clean.
-Merged on 2026-08-23 across four sessions: O1 · O2 · O3a · O7 · O4 step1 · O4b · F1 · F7 · O8(partial)
-· P2 · P3 · F4 · O4 step2 (DORMANT) · a P0 mic-hang fix (PO-verified) · the IN-SHOT notice · O11a ·
-O11b · O11c · F7b · F3 · F5a · P0-tail · F2 · the O4 RE-DIAGNOSIS · F7c attempted and not shipped.
+Last update 2026-08-23, end of the FIFTH session ("go finish roadmap"). Everything merged and pushed
+to origin/main.
+Merged on 2026-08-23 across five sessions: O1 · O2 · O3a · O7 · O4 step1 · O4b · F1 · F7 · O8(partial)
+· P2 · P3 · F4 · O4 step2 (DORMANT) · a P0 mic-hang fix (PO-verified) · O11a · O11b · O11c · F7b · F3
+· F5a · P0-tail · F2 · the O4 RE-DIAGNOSIS · P0-TAIL-RAW · F5B · F2B · P1 (code half) · the O4
+EXONERATION OF THE WORKER · F7c attempt 4 (not shipped, error halved).
 START HERE IF YOU ARE FRESH:
   1. read notes 5, 6, 9, 10, 11 below — they are the ones that will bite you today;
-  2. `npm run typecheck && npm test` (237 tests) and `npm run oracle` should be green before you
+  2. `npm run typecheck && npm test` (281 tests) and `npm run oracle` should be green before you
      change anything, so a red gate later is yours and not inherited;
-  3. take one task from READY NOW. P0-tail-raw is the only LIVE DEFECT on the map; O4 is the keystone
-     and now has a real next step instead of "wait for hardware".
+  3. take one task from READY NOW. There is no LIVE DEFECT on the map any more; O4 is the keystone
+     and its search space is now down to one file.
 
 READY NOW — parallel-safe, any subset concurrently (one session each):
-  P0-tail-raw  raw channels lose tail  [medium]  FOUND 2026-08-23 while fixing P0-tail: 203-753 ms
-                                             missing from a RAW channel under 4K load, which is what
-                                             an EDITED take renders from. Needs a stop-path reorder,
-                                             so it wants its own session (see the task).
   O4   webcodecs engine, STEP 2    [heavy]   ENGINE MERGED BUT DORMANT (default v1). Throughput gate
-                                             still NOT met (6.7-10 fps at 1080p vs v1's 29.7) BUT THE
-                                             DIAGNOSIS CHANGED 2026-08-23: "WebCodecs' encoder is the
-                                             wall" is FALSIFIED. Measured on this machine: a bare
-                                             encoder does 187 fps on the main thread, 169 fps IN A
-                                             WORKER, 155 fps from a WebGL2 canvas, and the production
-                                             GL compositor fed real capture frames does 60 fps with
-                                             the encoder never once blocking. The wall is in the
-                                             ASSEMBLY. Start from the counters, not from a rewrite —
-                                             see the handoff. Still the keystone for O5/O6/O9, F6, F8, P4.
-  F7c  the size number, calibrated [medium]  ATTEMPTED 2026-08-23, NOT SHIPPED — three designs, all
-                                             measured, none good enough (see the task). The spike is
-                                             src/experimental/perf/sizeProbe.ts and `npm run exp --
-                                             o11` scores any candidate against real rendered sizes on
-                                             BOTH content types. Start from attempt 4, not attempt 1.
-  P1   firefox + 3-engine oracle   [medium]  capabilities.ts engine×OS matrix + Playwright gecko run.
-                                             NOW EASIER: P3 shipped core/platform.ts (engine+browser+OS,
-                                             probe-first) and scripts/browser-check.mjs — consume them,
-                                             don't rebuild them.
-  P5a  iOS SCK spike               [light]   separate Xcode proj, no repo code — TIME-SENSITIVE
-                                             (iOS 27 ships ~Sept 2026; answer the 5 questions)
-  F5b  per-segment speed           [medium]  WSOLA time-stretch, pitch preserved, video retimed. F5a
-                                             shipped the cut machinery it rides on.
-  O11d codec ladder, probed        [medium]  needs P1's 3-engine rig. (a)(b)(c) are shipped.
-  F2b  zoom polish                 [light]   drag a zoom marker in time on the timeline; v1 markers
-                                             are read-only. Only worth doing if PO asks.
+                                             still NOT met (2-4 fps at 1080p vs v1's 29.7) and the
+                                             search space is now ONE FILE WIDE. A probe that
+                                             reproduces v2's ENTIRE data path — two transferred
+                                             capture sources, the production GL compositor and its
+                                             PiP, wall-clock timestamps, the mediabunny fragmented
+                                             MP4 through an OPFS SyncAccessHandle, a full 10 s take,
+                                             in a worker — runs at 60.1 fps with ZERO drops and 13 ms
+                                             of encoder latency. v2 in situ: 850-4665 ms of encoder
+                                             latency. Eight hypotheses are refuted with numbers in
+                                             the handoff; do not re-test them. Diff the two WORKER
+                                             FILES against each other. Keystone for O5/O6/O9, F6,
+                                             F8, P4.
+  F7c  the size number, calibrated [medium]  ATTEMPT 4 done 2026-08-23, NOT SHIPPED but the error is
+                                             HALVED and SCREEN content is inside ±20 % for the first
+                                             time (−6.7 to −15.4 %). Motion is a uniform 1.44× under
+                                             at every step. Attempt 5 has a countable question, not a
+                                             modelling one — see the task.
+  P5a  iOS SCK spike               [light]   BLOCKED ON HARDWARE, not on us: needs Xcode 27 and a
+                                             real iOS 27 device, neither on the TD machine. STILL
+                                             TIME-SENSITIVE (iOS 27 ships ~Sept 2026).
+  O11d codec ladder, probed        [medium]  needs P1's 3-engine rig, which needs a Playwright
+                                             install (PO's to run — see P1). (a)(b)(c) are shipped.
+  P1   firefox + 3-engine oracle   [medium]  CODE HALF SHIPPED 2026-08-23 (engine×OS matrix, Firefox
+                                             mapped and proven by UA spoof, honest copy). What is
+                                             left needs downloads PO must approve: Playwright's
+                                             gecko driver for the real Firefox run and the oracle's
+                                             third engine, and a Windows machine for the one row that
+                                             cannot be spoofed. See the handoff.
+FOLLOW-UP FOUND WHILE FIXING P0-tail-raw, not fixed and not urgent: `setChannelActive(kind, false)`
+stops a channel mid-take through onTrackEnded, which does NOT drain — so a channel the user switches
+off loses whatever the encoder had not caught up on, exactly the defect P0-tail-raw fixed for the END
+of a take. It needs onTrackEnded to become async (throttle, drain, then stop), which is the same
+stop-path surgery and wants its own session. Under load it is the same 200-1300 ms.
+
 CONFLICT RULES (all of capture/* is now shared by TWO engines — keep both working):
-· P0-tail-raw and the O4 remainder BOTH touch capture/* — never simultaneously.
 · The composite geometry lives in THREE places that must agree — compose/layout.ts, capture/
   compositor.worker.ts and capture/liveComposite.ts. cameraTrack.ts owns the PiP rect; F3's frame is
   an EDIT (render path only), so the two live composites deliberately do not know about it.
-· F5b extends F5a's proposal machinery · F7c touches compose/quality.ts, which nothing else does.
-· Any capture/* change must run BOTH `npm run oracle` and `npm run oracle --engine=v2`.
+· F7c touches compose/quality.ts and the sizeProbe spike, which nothing else does.
+· Any capture/* change must run BOTH `npm run oracle` and `npm run oracle --engine=v2`, and any
+  change to the STOP path must run `npm run oracle:load` (both phases) and `npm run exp -- armcancel`.
 BLOCKED (dep → unblocks): O5←O4 · O6←O4 · O9←O4+O5 · O8 remainder←O4/O5 · F6←O4 · F8←O4 ·
 P4←O4/O5 · P5b←P5a · P6←P5b · P7←P4 · O10 (AEC part only)←P4 · O3b←O4 (see below).
 REJECTED (do not resurrect): pre-roll rolling buffer — no capture before the record press, ever
 (PO 2026-08-22; extends "no idle device access"). MP4 MediaRecorder capture — measured 2026-08-23,
-Chrome does not stream it and a tab kill loses the whole take (O3a). The related HARD requirement
-lives in O4/O8: zero tail loss at stop, now gated.
+Chrome does not stream it and a tab kill loses the whole take (O3a). Ending a raw channel's TRACK to
+drain its encoder — measured 2026-08-23, Chrome stops the recorder itself and takes the backlog with
+it (P0-tail-raw). The related HARD requirement lives in O4/O8: zero tail loss at stop, now gated on
+BOTH the composite and the raw channels.
 
 ── WHAT A FRESH SESSION MUST KNOW ──
 1. SYNC IS WORSE THAN OLD NOTES SAY, and the instrument was why. Every sync number quoted before
@@ -110,16 +118,21 @@ lives in O4/O8: zero tail loss at stop, now gated.
    PROBES the encoder with requestData() until it answers empty. Waiting for the byte flow to go quiet
    instead looks equivalent and is not — under load this recorder emits four chunks in ten seconds, so
    silence is the normal state and means nothing. Anything that stops a MediaRecorder in this codebase
-   should assume the same. The band now runs where it can fail: `npm run oracle:load` (HEAVY). The RAW
-   channels still lose 203-753 ms under the same load — task P0-tail-raw. Do not write a new tail
-   claim without running `npm run exp -- o4step2`.
+   should assume the same. The band now runs where it can fail: `npm run oracle:load` (HEAVY, two
+   phases). THE RAW HALF IS ALSO FIXED (P0-tail-raw) AND ITS LESSON IS THE OPPOSITE ONE: you cannot
+   drain a raw channel by ending its track, because Chrome stops a MediaRecorder whose stream has
+   gone inactive and takes the backlog with it. Starve the source instead — 1 fps, same frame size —
+   and drain. Do not write a new tail claim without running `npm run exp -- o4step2` and
+   `npm run exp -- p0tailraw`.
 6. THERE ARE TWO LIVE-COMPOSITE ENGINES, AND THE REASON THE SECOND IS OFF IS NOT WHAT THE OLD NOTES
    SAID. v1 (MediaRecorder) is the DEFAULT; v2 (worker + WebCodecs + WebGL2 + fMP4) is merged but
    DORMANT behind ?engine=v2 because it delivers 6.7-10 fps at 1080p against v1's 29.7. It was
-   believed that "WebCodecs' AVC encoder is the wall". That is FALSIFIED (2026-08-23): a bare encoder
-   does 142-191 fps on this machine, 169 fps INSIDE A WORKER, and the production GL compositor fed
-   real capture frames does 59 fps with the encoder never blocking. Nine candidates are eliminated
-   with numbers in the O4 handoff; one suspect is left. v2 is better on every other axis measured
+   believed that "WebCodecs' AVC encoder is the wall". That is FALSIFIED, and so is everything that
+   replaced it: a probe that reproduces v2's ENTIRE data path — two transferred capture sources, the
+   production GL compositor and its PiP, wall-clock timestamps, the mediabunny fragmented MP4 through
+   an OPFS SyncAccessHandle, a full 10 s take, in a worker — runs at 60.1 fps with zero drops and
+   13 ms of encoder latency, against v2's 850-4665 ms in situ. EIGHT hypotheses are refuted with
+   numbers in the O4 handoff. The difference is in the FILE, not in Chrome. v2 is better on every other axis measured
    (main-thread cost 131 ms → 0, oracle sync 40.0 vs 58.8 ms, it drains its own encoder at stop).
    Anything touching capture/* must keep BOTH working, and `npm run oracle --engine=v2` gates the
    second one. DO NOT repeat the elimination work — read the handoff first.
@@ -147,6 +160,12 @@ lives in O4/O8: zero tail loss at stop, now gated.
    TO main. Sessions that cannot merge inside one turn should work on main and carry the reasoning in
    the commit message (see the F3 record commit for the shape).
 
+12. THE UI RIG SERVES dist/, AND DOES NOT BUILD IT. `scripts/ui-shot.mjs` runs `vite preview`, so a
+   flow that "does not work" may simply be yesterday's bundle. Run `npm run build` first. The same
+   file is also where a synthetic drag goes wrong: `startDrag` listens on the ELEMENT and leans on
+   pointer capture, which a synthetic pointer id never gets, so pointermove has to be dispatched on
+   the element rather than the window.
+
 ── TOOLING (built 2026-08-23; all spawn their own ephemeral server + throwaway Chrome profile) ──
   npm run exp -- <id> [json] [--rss] [--query=k=v] [--ua=...]   generic experiment driver
      o1        export memory / parity / orphan sweep         o2       capture-loudness vs probe
@@ -161,17 +180,27 @@ lives in O4/O8: zero tail loss at stop, now gated.
      f3        background frame LOCATED in decoded export frames vs the pure geometry
      encprobe  is WebCodecs the wall, or is our config? main thread vs worker vs GL, per config
      f5a       silence tightening against a known map: recall, cuts-in-speech, join clicks
+     f5b       per-segment speed: pitch of a known tone IN THE EXPORT, sync across the boundaries,
+               output length vs arithmetic, cost per second of output
+     f7c       delta cost by DISTANCE FROM THE KEYFRAME, both content types (F7c attempt 4)
+     p0tailraw does a RAW channel keep its ending? four stop procedures under 4K load, plus a
+               `production` run through the real createCaptureSession and a `wedged` forced case
      oracle    accepts {"injectTailLossMs":N} to prove the tail band red
   node scripts/o7-measure.mjs      first-paint bytes, record-click latency, editor prefetch (prod build)
-  node scripts/ui-shot.mjs --flow=quality|cuts|camera|frame|tighten|zoom   screenshots a flow, prod build
+  node scripts/ui-shot.mjs --flow=quality|cuts|camera|frame|tighten|zoom|speed|zoomdrag
+     screenshots a flow on the PROD BUILD. It serves dist/ and does NOT rebuild — run `npm run build`
+     first or you will screenshot yesterday's bundle
      (camera also drags the PiP, reloads the page, and reports preview↔export fractions + reload drift)
   node scripts/browser-check.mjs --list | --browser=<name> [--ua-of=yandex]   QA matrix, real browser,
      prod build, record→edit→export, 8 gates → docs/qa/*.json (see docs/QA_MATRIX.md)
   node scripts/ru-reachability.mjs --label="<ISP>, no VPN"   DNS/TLS/HTTP from the network under test
   node scripts/pwa-check.mjs       manifest/SW/offline/capture-under-worker gates
   node scripts/make-icons.mjs      regenerates PWA icons (deterministic, no image dep)
-  npm run oracle:load   the O8 tail band UNDER 4K LOAD (P0-tail). HEAVY: announce it, keep it out of
-     the pre-push hook, never run it while the PO is using the machine.
+  npm run oracle:load   the O8 tail band UNDER 4K LOAD, in TWO phases (P0-tail and P0-tail-raw): the
+     composite through the o4step2 rig, and the RAW channels through the real createCaptureSession.
+     HEAVY: announce it, keep it out of the pre-push hook, never run it while the PO is using the
+     machine. The composite phase may read INCONCLUSIVE when its watchdog gives up under load — that
+     is the fallback working; the raw phase does not depend on the composite surviving.
   npm run oracle | oracle:cold | oracle:fidelity  merge gates (pre-push hook runs typecheck+test+oracle)
      `node scripts/oracle.mjs --engine=v2` gates the WebCodecs composite instead of the shipped one
 
@@ -217,18 +246,37 @@ only matter to an edited take. The fix is not the same one: a raw channel's sour
 is no "stop painting" — it needs track.stop() before recorder.stop(), which is a reorder of the stop
 path that produced a P0 hang two sessions ago and wants its own session with a deadline around it.
 
-## P0-tail-raw. the raw channels lose their tail too  [P1, medium; READY]
-MEASURED 2026-08-23 alongside P0-tail (`npm run exp -- o4step2` now records a raw lane off the same
-source): 203, 252, 319, 439, 734, 753 ms of tail missing from a raw channel under 4K load, against
--231 ms (i.e. none) at 1080p. An EDITED take renders from these channels, so this is the tail of every
-take the instant path cannot serve.
-WHY IT IS NOT JUST THE SAME FIX: the composite could stop painting; a raw channel's source is a live
-device. The equivalent is stopping the TRACK first and letting the recorder drain the finite backlog,
-then stopping it — a reorder of session.doStop, which is the exact path that wedged arming in the
-2026-08-23 P0 (see note 3). Every wait added there needs a deadline.
-GATES: raw-channel tail ≤400 ms under the 4K load rig, twice · `npm run exp -- armcancel` still green ·
-a take whose recorder never fires onstop after its track ends must still stop within a bounded time
-(prove it with a forced case) · oracles green on both engines.
+## P0-tail-raw. the raw channels lose their tail too — DONE 2026-08-23, merged
+MEASURED FIRST (`npm run exp -- p0tailraw`, 4K source with the live composite running alongside,
+tail = the lane's own length minus its last decodable frame):
+    shipped   requestData() + stop(), 1000 ms slice    1344 ms missing
+    slice250  the same at a 250 ms timeslice           1222 ms
+    cut       end the TRACK, drain, then stop           622 ms
+    throttle  drop the source to 1 fps, drain, stop      59 ms   <- shipped
+The interesting loser is `cut`, because it is P0-tail's own fix ported literally: the rig reports
+selfStoppedOnTrackEnd, i.e. CHROME STOPS A MEDIARECORDER WHOSE STREAM HAS GONE INACTIVE and takes the
+backlog with it. So the source is STARVED instead — applyConstraints to 1 fps, keeping the frame SIZE
+exactly as it is — and the recorder stays alive with almost nothing new to encode while the same
+probe drain the composite uses recovers the rest.
+SHIPPED: capture/recorderDrain.ts (one drain, both MediaRecorder paths, unit-tested; a self-stop is a
+finished drain and NOT a timeout, or healthy takes get marked tailIncomplete) · session.doStop
+reordered — composite stop kicked FIRST so its painting stops before anything throttles the tracks it
+draws from, then the AUDIO channels stop at the press, then the video channels throttle and drain ·
+every wait on the stop path now has a deadline, including the composite's own stop, which was
+unbounded · synthetic.ts gains setSyntheticScreenSize so a rig can drive the REAL createCaptureSession
+at 4K · scripts/oracle-load.mjs gained a RAW phase.
+AUDIO HAD TO BE SPLIT OUT and the number says why: with the audio stopping after the drain, one take
+measured mic 11947 ms against a screen channel of 10059 ms — nearly two seconds of soundtrack over a
+motionless picture.
+GATES, all green: production path at 4K twice — tail 7 and 216 ms (also 96 ms, and 7/27 ms at 1080p)
+against the 400 ms band, `npm run oracle:load` PASS on both phases · healthy 1080p unchanged
+(27.8-30.3 fps delivered, composite drain 241-243 ms recovering 0 B, whole stop 505-554 ms) · the
+forced case, every recorder made deaf to stop(): the take still comes back, in 5569 ms, with all
+three channels on disk, where it used to hang forever · `npm run exp -- armcancel` green · oracle
+PASS on v1 and v2 · 236 tests.
+KNOWN AND DELIBERATE: the throttled source keeps delivering ~1 fps during the drain, so the file runs
+6-855 ms PAST the length the channel declares. Those frames are bytes, not tail — the timeline never
+reads past durationMs.
 
 ═══ PHASE O — OPTIMIZATION ═══
 
@@ -347,6 +395,48 @@ THREE BUGS THE HARNESS CAUGHT that reasoning had not: audio anchored at message-
 NOT DONE: WebGPU backend · raw channels still MediaRecorder (measuredVideo.ts on ee/webcodecs-capture-2
    remains unmerged) · tab-kill salvage of the fMP4 not yet verified · the on-screen preview does not
    yet render the compositor's own output.
+
+── HANDOFF 2026-08-23 (FIFTH session) — THE WORKER IS EXONERATED. EIGHT REFUTATIONS AND A 100x GAP.
+   The previous handoff said the one untested difference left was WHAT IT IS FED: frames transferred
+   across the thread boundary and uploaded as GL textures. It is now tested, with everything else.
+   `npm run exp -- encprobe` grew cells that reproduce v2's data path piece by piece. 1080p, 600
+   frames (a full 10 s take):
+     worker:transfer                           60.7 fps   0.05 ms per post
+     worker:composite                          60.2 fps   0 dropped, encoder latency 12 ms
+     worker:composite+camera                   60.1 fps   two sizes through one texture
+     worker:composite+camera+wallclock         60.1 fps   production's own timestamps
+     worker:composite+camera+wallclock+MUX     60.1 fps   latency 13 ms — mediabunny fragmented MP4
+                                                          through an OPFS SyncAccessHandle, flushed
+                                                          per chunk, mux 45 ms / write 4.7 / flush 9.9
+     v2 IN SITU                                 2-4 fps   encoder latency 850-4665 ms
+   REFUTED, each with numbers — DO NOT SPEND ANOTHER SESSION ON THESE:
+     · the texture re-spec between two differently-sized sources (59.8 vs 59.2 fps on the main thread)
+     · the thread crossing itself (0.05 ms per frame)
+     · GL compositing in a worker off transferred capture frames (60 fps)
+     · the second source and the PiP shader path (60 fps)
+     · production's uneven wall-clock timestamps (60 fps)
+     · take DURATION — the probe holds 60 fps for a full 10 s, not just 2.5 s
+     · the muxer and the OPFS handle (60 fps, and its mux/write/flush match what the engine reports)
+     · audio: a SILENT take (no AudioEncoder, no second muxer track) still ran ~4 fps
+       (`npm run exp -- o4step2 {"noAudio":true}`)
+   AND, A/B'd DIRECTLY IN THE ENGINE:
+     · the encoder config made BYTE-IDENTICAL to the probe's (no codec ladder, no avc:{format}, no
+       isConfigSupported-normalised spread): still 4665 ms of latency
+     · the cadence gate and the drop policy bypassed, every arrival encoded with regular i/30
+       timestamps: still 29 encoded of 450
+     · the GPU finally measured with a BARRIER instead of by timing the enqueue (the old handoff's
+       own step 1): 2.05 and 2.84 ms per composited frame
+   WHERE THAT LEAVES IT: our code in the worker accounts for ~280 ms of a 10 s take — onmessage
+   192-326 ms, output callbacks 1 ms, mux 26, write 1, flush 8. The encoder holds ~6 frames and
+   returns each one 850-4665 ms after encode(), while the same encoder, same config, same frames,
+   same compositor and same muxer returns them in 13 ms ONE FILE OVER. The wall is not the platform
+   and not the shape of the work. Next session: diff compositor.worker.ts against
+   encoderProbe.worker.ts structurally, or move the probe's loop INTO compositor.worker.ts behind a
+   command — the difference is in the file, not in Chrome.
+   NEW INSTRUMENTS, all cheap and left on: handlerMs/idleMs/maxIdleMs (which side of the boundary is
+   busy — and idleMs is NOT proof of an idle thread, it counts microtasks too, which is why outputMs
+   exists), encodeLatencyMs/outputs, outputMs, configJson (the config AFTER normalisation), and gpuMs
+   behind PROBE_GPU (off by default: the barrier serialises the pipeline, so it is an instrument).
 
 ── HANDOFF 2026-08-23 (third session) — THE THROUGHPUT DIAGNOSIS IS WRONG, AND HERE IS WHAT IS LEFT.
    The previous handoff concluded "WebCodecs AVC on this machine simply drains at ~10 fps while
@@ -539,8 +629,18 @@ a PiP that grows by exactly 1.82 — the same transform, measured on the prod bu
 MAX ZOOM IS 2.5x AND THAT IS A CONSEQUENCE, NOT A TASTE: capture is capped at 1080p and the default
 export is 1080p, so every zoom is an upscale. Past 2.5x a screen recording is mush, and the honest fix
 is native-resolution capture (O6), not a bigger multiplier.
-DEFERRED: dragging a zoom marker in time (v1 markers are read-only); auto-zoom stays gated on P4's
-cursor metadata, which can generate exactly these keyframes when it exists.
+F2b DONE 2026-08-23: a zoom can be moved in time, and it moves AS A WHOLE. A zoom is not one
+keyframe, it is a move — anchor and target ZOOM_MOVE_MS apart — so dragging either marker drags the
+group and keeps its duration; leaving the anchor behind would stretch the ease, which is a different
+edit. The group slides up to its neighbours and no further, so a drag can never reorder the track.
+timeline/moveViewportKeyframe is pure with 6 unit tests; the dot carried pointer-events:none and 7 px
+is not a drag target, so it has an invisible grip. MEASURED on the prod build
+(`node scripts/ui-shot.mjs --flow=zoomdrag`): the pair sits at x=515 and 647, dragging the target
+120 px lands them at 635.5 and 767.5 — both moved, gap unchanged. The rig needed fixing before the
+product did: it dispatched pointermove on the window, and startDrag listens on the element via
+pointer capture, which a synthetic pointer id never gets.
+STILL DEFERRED: auto-zoom stays gated on P4's cursor metadata, which can generate exactly these
+keyframes when it exists.
 
 ## F3. background-frame — DONE 2026-08-23, merged (evidence in DECISIONS)
 Shipped: compose/background.ts (presets as DATA — a solid or a gradient angle plus stops — plus the
@@ -571,7 +671,7 @@ Harness: `npm run exp -- f4`, `node scripts/ui-shot.mjs --flow=camera`.
 DEFERRED: live-drag DURING recording (out of scope v1, revisit after O4 makes the live compositor
 edit-aware); F2 will reuse the same track shape for a viewport.
 
-## F5. silence-speed — (a) DONE 2026-08-23, merged (evidence in DECISIONS); (b) READY
+## F5. silence-speed — (a) and (b) BOTH DONE 2026-08-23, merged (evidence in DECISIONS)
 PO: okay. Deterministic DSP only — NO transcript, NO ML, ever.
 (a) DONE. timeline/silence.ts (pure: envelope -> quiet stretches -> padded cuts -> F1 segments) +
 compose/analyzeSilence.ts (opens exactly the mixers the export would, over exactly the current edit;
@@ -586,11 +686,33 @@ the detector was right — the answer key and the file disagreed about t=0 by th
 write stream. Schedule the envelope AFTER the recorder is running.
 (a-original spec) silence tightening: detect via the existing window-RMS analysis (threshold / min-gap
 / padding params) → a PROPOSED cut list the user previews and toggles; applying uses F1 machinery.
-(b) per-segment speed ×1.25–3, pitch preserved (WSOLA time-stretch on the mix), video retimed to match.
+(b) DONE. KeptSegment.speed makes every mapping affine inside a span instead of an identity; video
+came free (it is sampled through outputToRecordingMs per frame). compose/timeStretch.ts is a
+streaming WSOLA — hold the tail the sound naturally continues into, search ±5 ms for the window that
+best matches it, cross-fade — with the correlation on the MONO SUM so the channels cannot choose
+different offsets, and SpeedSpanMixer stretches the SUM of a span's channels rather than each one
+(separate searches would slide mic against system audio inside the span). Three rules worth keeping:
+adjacent spans merge only at the SAME speed; `speed: 1` is stored as ABSENCE; and clampEditState used
+to drop a lone whole-take span as "the same as no cuts", which discarded the edit — a test caught it.
+A speed change makes isDefaultEdit false (note 9).
+MEASURED IN THE EXPORTED FILE (`npm run exp -- f5b`): pitch 439.98 Hz against a 440 Hz source at 2×
+= −0.08 cents, +0.20 cents at 3× (gate 10; a resampling regression reads ~1200, and the unsped export
+measures 440.00 so the instrument is exact) · output length 9600 ms against 9600 of arithmetic ·
+sync across both boundaries, three runs: every flash/click pair survives (11/11), maxAbs moves ≤2.7 ms
+and the mean −8 to −25 ms, which is INSIDE the plain baseline's own spread in the same three runs
+(93.7 / 113.6 / 155.6 ms) · cost 0.97-1.03× per second of output. UI verified on the prod build
+(`node scripts/ui-shot.mjs --flow=speed`): stepped 1×/1.25×/1.5×/2×/3× acting on the clip under the
+playhead, a badge on the sped clip, duration 0:04 → 0:03.
+FIXED ALONG THE WAY, a live defect: the render's mix bus counted MIXERS, and F1 had made those
+different from CHANNELS — one mic cut into three spans exported at 1/3 gain, 9.5 dB down, with the
+loudness normalizer spending its makeup budget undoing it. busGainFor counts distinct channels now.
+Also deleted a second copy of the mixer construction (analyzeSilence had its own, and F5b had just
+made the two capable of disagreeing about how long a span lasts).
 GATES (a): synthetic take with a known silence map: ≥95 % recall on gaps ≥800 ms, ZERO cuts inside
 speech · joins click-free (fidelity) · proposal stays preview-only until applied.
-GATES (b): a tone through a 2× segment holds pitch within 10 cents · sync bands hold at segment
-boundaries · export time impact reported.
+GATES (b) — MET: pitch within 10 cents (measured −0.08 / +0.20) · sync bands hold at the boundaries
+(pairs preserved, maxAbs ≤2.7 ms, mean shift inside the baseline's own spread) · export time impact
+reported (0.97-1.03×).
 
 ## F6. pause-retake  [P1, after O4 — build segments on the new engine once, not twice]
 PO: yes. Pause/resume + retake-from-here.
@@ -639,7 +761,28 @@ GATES: measured size within ±20 % of the shown number on EVERY step, twice over
 differ ≥25 % predicted · default step still instant (logs) · lowest step visual-diff evidence ·
 `node scripts/ui-shot.mjs --flow=quality` updated · oracles green.
 
-## F7c. the size number, calibrated — ATTEMPTED 2026-08-23, NOT SHIPPED  [P2, medium; READY]
+## F7c. the size number, calibrated — ATTEMPT 4 done 2026-08-23, STILL NOT SHIPPED  [P2, medium; READY]
+ATTEMPT 4 (fifth session). The task named one suspect — "rate control has not settled in the short
+encode, an unexplained factor of three". `npm run exp -- f7c` measured it instead: 180 frames behind
+ONE keyframe, 45 warm-up frames discarded (without them the first bucket measures the RIG waking up),
+mean delta bytes by DISTANCE FROM THE KEYFRAME:
+           1-14    15-29    30-59   60-119  120-179   GOP mean   ratio
+  screen   6386     2087     1127     2239     1715       2039     0.32
+  motion   4775     4373     6043    10348    16356       9486     1.99
+It is not a factor of three and not one direction: a 15-frame window is three times too EXPENSIVE on
+screen content and twice too CHEAP on motion. The error FLIPS SIGN with content — attempt 1's tell
+again — and no single correction can fix a sign flip, which kills the whole short-window-plus-
+correction family rather than one member of it. (On screen the shape is worth naming: the encoder
+spends 11-19 KB on each of the ~7 deltas after a keyframe, then collapses to ~200 B once the picture
+holds still. The warm-up proves that is the ENCODER settling, not the content starting.)
+So the window became the GOP — one window, 150 frames, exactly what the shipped 5 s cadence produces.
+Scored on both rigs: screen −6.7 / −7.3 / −12.9 / −15.4 % (was −7 to −43), motion −39.9 / −36.2 /
+−31.2 / −30.5 % (was −59 to −69). SCREEN IS INSIDE THE ±20 % GATE FOR THE FIRST TIME; motion is not,
+so it is not shipped and the panel keeps F7's estimate. Probe cost went 1.7-2.5 s → 5.6-6.0 s.
+ATTEMPT 5 HAS A COUNTABLE QUESTION, NOT A MODELLING ONE: motion is a UNIFORM 1.44× under at every
+step, including 1080p where the probe draws the composed frame 1:1 and rescaling cannot be blamed.
+One number, not a curve, means something countable is missing — a keyframe the render emits and the
+model does not, a first GOP costing more than a middle one, or the audio term. Count them first.
 WHY IT EXISTS: F7b's per-step size is predicted from the composite, and the composite's encoder is not
 the export's encoder — 0.97 vs 1.84 Mbps on the same text pixels, so the prediction lands 47 % low at
 1440p. The idea was to stop predicting and measure: encode a bit of the take at each step through the
@@ -687,6 +830,31 @@ runner extended to Playwright's three engines (chromium/gecko headless gated; we
 synthetic).
 GATES: real-Firefox take (screen+mic) → edit → export plays · per-platform capability copy honest ·
 oracle green on chromium AND gecko · zero Chromium regression (existing bands).
+── HANDOFF 2026-08-23 (fifth session) — CODE HALF DONE. The two remaining gates need downloads.
+The thing that was wrong was not coverage but SHAPE: capabilities.ts asked what ENGINE this is, and
+the answer depends on the OS too. Chromium on WINDOWS hands over the machine's audio for a monitor
+share; the same Chromium on macOS and Linux only ever gives audio for a tab or window. Calling both
+"Tab Audio" is wrong on one of them.
+And Gecko is a case that reads like a bug report: Firefox ACCEPTS `audio: true` on getDisplayMedia
+and returns video only — no error, no track. Offering the channel there records a silent take and
+says nothing. Dropped, with copy that says what Firefox DOES rather than "not available".
+SHIPPED: capabilities.ts consumes core/platform.ts instead of sniffing again, and gains
+displayAudioScope ('none' | 'tab' | 'system'), engine, os and aacEncode. displayAudioScopeFor is pure
+and the PROBE VETOES THE TABLE (no getDisplayMedia beats any row). aacEncode is advisory — Gecko has
+no AAC encoder so exports land on the avc+opus / vp9+opus chains, but codecs.ts keeps probing,
+because the encoder is a better authority than a table. channels.ts gained channelLabel() and its own
+Firefox copy. browser-check.mjs gained Firefox (declared noCdp, so `--list` says WHY) and UA rows for
+Firefox macOS/Windows/old and Chrome on Windows. 12 unit tests cover every cell.
+EVIDENCE: spoofed Firefox 131 through the whole flow on the production build — engine reads `gecko`
+and the channel list comes back ["Screen","Camera","Mic"], Tab Audio dropped by the matrix, all 8
+gates PASS (export 1.5 MB 1920×1080 in 507 ms). docs/qa/firefox-ua.json. Real Chrome unregressed.
+OPEN FOR PO, one command each:
+  (a) real Firefox needs Playwright's gecko driver — this runner speaks CDP, which Firefox does not:
+      npm i -D playwright && npx playwright install firefox
+      after which the oracle's third engine can be wired to it (and O11d unblocks).
+  (b) the chromium × windows row CANNOT be spoofed, and that is CORRECT: navigator.userAgentData
+      wins over the UA string, so a Windows UA on a Mac still reports macOS. Proven by unit test;
+      closed for real only by running browser-check.mjs on Windows.
 
 ## P2. pwa-install — DONE 2026-08-23, merged (evidence in DECISIONS)
 Manifest + generated icons (scripts/make-icons.mjs, no image dep) + minimal service worker (same-origin
