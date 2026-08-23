@@ -39,6 +39,36 @@ type DurableWorkerReply =
   | { ok: false; cmd: string; error: string }
 
 /**
+ * A worker that never answers used to hang its caller forever — and since
+ * arm() awaits a write-stream open, that froze recording with no error and no
+ * way out (PO-hit 2026-08-23, "stuck on waiting for microphone"). Every worker
+ * round-trip is now bounded; a timeout surfaces as a normal rejection, which
+ * callers already handle by falling back or failing the channel loudly.
+ */
+const WORKER_OPEN_TIMEOUT_MS = 5_000
+const WORKER_WRITE_TIMEOUT_MS = 15_000
+
+function withDeadline<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+    promise.then(
+      (v) => {
+        clearTimeout(timer)
+        resolve(v)
+      },
+      (e) => {
+        clearTimeout(timer)
+        reject(e instanceof Error ? e : new Error(String(e)))
+      },
+    )
+  })
+}
+
+function callTimeoutFor(cmd: DurableWorkerMsg['cmd']): number {
+  return cmd === 'write' ? WORKER_WRITE_TIMEOUT_MS : WORKER_OPEN_TIMEOUT_MS
+}
+
+/**
  * Durable OPFS writer via SyncAccessHandle + flush (TD-VERDICT item 2).
  * Survives hard tab kill; createWritable swap-file does not.
  * Same WritableStream<Uint8Array | Blob> contract as the legacy path.
@@ -63,21 +93,34 @@ function createDurableWritable(key: string): WritableStream<Uint8Array | Blob> {
   }
 
   const call = (msg: DurableWorkerMsg): Promise<DurableWorkerReply> =>
-    new Promise((resolve, reject) => {
-      const id = ++seq
-      pending.set(id, { resolve, reject })
-      if (msg.cmd === 'write') {
-        worker.postMessage({ id, ...msg }, [msg.bytes])
-      } else {
-        worker.postMessage({ id, ...msg })
-      }
-    })
+    withDeadline(
+      new Promise<DurableWorkerReply>((resolve, reject) => {
+        const id = ++seq
+        pending.set(id, { resolve, reject })
+        if (msg.cmd === 'write') {
+          worker.postMessage({ id, ...msg }, [msg.bytes])
+        } else {
+          worker.postMessage({ id, ...msg })
+        }
+      }),
+      callTimeoutFor(msg.cmd),
+      `durable writer ${msg.cmd}`,
+    )
 
   let opened = false
   return new WritableStream<Uint8Array | Blob>({
     async start() {
-      const reply = await call({ cmd: 'open', name: key })
-      if (!reply.ok) throw new Error(reply.error)
+      let reply: DurableWorkerReply
+      try {
+        reply = await call({ cmd: 'open', name: key })
+      } catch (err) {
+        worker.terminate()
+        throw err instanceof Error ? err : new Error(String(err))
+      }
+      if (!reply.ok) {
+        worker.terminate()
+        throw new Error(reply.error)
+      }
       opened = true
     },
     async write(chunk) {
@@ -174,12 +217,23 @@ export async function createDurablePositionedWriter(key: string): Promise<Positi
     pending.clear()
   }
   const call = (msg: DurableWorkerMsg, transfer?: Transferable[]): Promise<DurableWorkerReply> =>
-    new Promise((resolve, reject) => {
-      const id = ++seq
-      pending.set(id, { resolve, reject })
-      worker.postMessage({ id, ...msg }, transfer ?? [])
-    })
-  const open = await call({ cmd: 'open', name: key })
+    withDeadline(
+      new Promise<DurableWorkerReply>((resolve, reject) => {
+        const id = ++seq
+        pending.set(id, { resolve, reject })
+        worker.postMessage({ id, ...msg }, transfer ?? [])
+      }),
+      callTimeoutFor(msg.cmd),
+      `durable writer ${msg.cmd}`,
+    )
+  let open: DurableWorkerReply
+  try {
+    open = await call({ cmd: 'open', name: key })
+  } catch (err) {
+    // Timed out or errored: never leave the worker running behind a failure.
+    worker.terminate()
+    throw err instanceof Error ? err : new Error(String(err))
+  }
   if (!open.ok) {
     worker.terminate()
     throw new Error(open.error)

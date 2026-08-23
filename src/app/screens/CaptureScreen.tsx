@@ -57,6 +57,8 @@ export function CaptureScreen() {
 
   const [arming, setArming] = useState(false)
   const [armingLabel, setArmingLabel] = useState<string | null>(null)
+  /** Lets the record button cancel a start that is taking too long. */
+  const armAbortRef = useRef<AbortController | null>(null)
   const [elapsedMs, setElapsedMs] = useState(0)
   const [remainingMs, setRemainingMs] = useState(MAX_RECORDING_MS)
   const [muted, setMuted] = useState<Partial<Record<ChannelKind, boolean>>>({})
@@ -157,7 +159,14 @@ export function CaptureScreen() {
     return eff
   }, [prefs, caps])
 
+  const cancelArming = () => {
+    armAbortRef.current?.abort()
+    setArmingLabel('Cancelling…')
+  }
+
   const startRecording = async () => {
+    const ac = new AbortController()
+    armAbortRef.current = ac
     setArming(true)
     setArmingLabel('Starting…')
     try {
@@ -165,6 +174,7 @@ export function CaptureScreen() {
       // the module cache, so the click path gains no network round-trip (O7).
       const { createCaptureSession } = await loadCaptureEngine()
       const s = await createCaptureSession(effectiveConfig, {
+        signal: ac.signal,
         onArming: (e) => {
           if (e.status === 'start') setArmingLabel(ARMING_LABEL[e.step])
           else if (e.status === 'timeout') {
@@ -189,9 +199,12 @@ export function CaptureScreen() {
         systemAudio: prefs.systemAudio,
       })
     } catch (err) {
-      if (err instanceof CaptureError) toast(err.message, 'error')
+      const cancelled = err instanceof Error && err.name === 'AbortError'
+      if (cancelled) toast('Recording start cancelled')
+      else if (err instanceof CaptureError) toast(err.message, 'error')
       else toast('Could not start recording', 'error')
     } finally {
+      armAbortRef.current = null
       setArming(false)
       setArmingLabel(null)
     }
@@ -281,7 +294,13 @@ export function CaptureScreen() {
           recording={!!session}
           arming={arming}
           disabled={!session && !anyOn}
-          onClick={() => (session ? void finishRecording() : void startRecording())}
+          onClick={() =>
+            arming
+              ? cancelArming()
+              : session
+                ? void finishRecording()
+                : void startRecording()
+          }
         />
         {!session && !anyOn && <div className="controlbar__hint">Turn on an input to record</div>}
       </div>

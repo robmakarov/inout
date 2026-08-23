@@ -18,7 +18,7 @@ import type {
   ArmingProgressHandler,
   ProgressiveAcquire,
 } from './acquire'
-import { acquireChannelsProgressive } from './acquire'
+import { acquireChannelsProgressive, withTimeout } from './acquire'
 import {
   canMeasureAudioCapture,
   prewarmMeasuredAudio,
@@ -62,6 +62,14 @@ const AUDIO_MIMES = [
 ]
 const TICK_MS = 250
 const TIMESLICE_MS = 1000
+/**
+ * Hard ceilings on arming. ACQUIRE/PROMPT timeouts bound each device; these
+ * bound the WAIT ITSELF, so a step that never settles cannot freeze the take.
+ * Generous enough to sit above the 120 s permission-prompt budget plus slack —
+ * this is a deadlock breaker, not a device budget.
+ */
+const SETTLE_BUDGET_MS = 130_000
+const ARM_BUDGET_MS = 15_000
 
 /** A/B hook for the O3a evidence run (kept so the MP4 rejection stays
  *  re-testable). Production stays on 'auto'. */
@@ -185,6 +193,14 @@ class Session implements CaptureSession {
   private cancelPromise: Promise<void> | null = null
   private cancelled = false
   private disposeSynthetic: (() => void) | null = null
+  /**
+   * A refresh mid-take used to leave Chrome's microphone indicator lit with no
+   * owner (PO-hit 2026-08-23): nothing stopped the tracks on the way out, and
+   * a wedged page never reached doStop. Track stopping is synchronous, so it
+   * is safe to do in pagehide — the durable writer has already flushed
+   * everything it acknowledged, so the take still salvages on reload.
+   */
+  private unloadHandler: (() => void) | null = null
   private readonly onArming: ArmingProgressHandler | undefined
   /** Screen wake lock while recording: display sleep mid-take ends capture
    * tracks in Chrome ("after a while screen and audio stop"). Best-effort —
@@ -281,8 +297,26 @@ class Session implements CaptureSession {
     // permission prompt answered, every stream delivered — before arming, so
     // start() activates them at a single epoch. No primary-gated early start,
     // no late-join: all channels share one start and one length.
-    await src.settled
-    await Promise.all([...armPromises])
+    //
+    // BUT: waiting for all devices means ANY device can hold the take hostage.
+    // Each individual step is bounded, yet a step that never settles at all —
+    // wedged audio hardware, a worker that never answers, an acquisition that
+    // neither resolves nor rejects — used to leave arm() awaiting forever, and
+    // the UI frozen on "Waiting for microphone…" with no way out (PO-hit
+    // 2026-08-23). Nothing may await without a deadline here. On expiry the
+    // take starts with whatever IS ready; the rest is reported as missing.
+    try {
+      await withTimeout(src.settled, SETTLE_BUDGET_MS, 'device acquisition')
+    } catch (err) {
+      // No synthetic failure entry needed: requested-but-absent channels are
+      // already reported through Recording.missing at stop.
+      console.warn('[capture] acquisition did not settle in budget — arming with what is ready', err)
+    }
+    try {
+      await withTimeout(Promise.all([...armPromises]), ARM_BUDGET_MS, 'channel arm')
+    } catch (err) {
+      console.warn('[capture] channel arming exceeded budget — starting without the slow ones', err)
+    }
 
     console.info(
       `[capture:arming] armed +${(performance.now() - armT0).toFixed(0)}ms ` +
@@ -302,6 +336,9 @@ class Session implements CaptureSession {
     }
 
     this.pendingErrors = failures.map((f) => ({ kind: f.kind, message: f.message }))
+    // Devices are live from here on — guarantee they are released even if the
+    // page goes away without reaching stop()/cancel().
+    this.installUnloadGuard()
   }
 
   /** A channel armed after stop/cancel raced the take end: release everything it holds. */
@@ -824,7 +861,26 @@ class Session implements CaptureSession {
     }
   }
 
+  private installUnloadGuard(): void {
+    if (this.unloadHandler || typeof window === 'undefined') return
+    this.unloadHandler = () => {
+      try {
+        this.releaseMedia()
+      } catch {
+        /* teardown is best-effort on the way out */
+      }
+    }
+    window.addEventListener('pagehide', this.unloadHandler)
+  }
+
+  private removeUnloadGuard(): void {
+    if (!this.unloadHandler || typeof window === 'undefined') return
+    window.removeEventListener('pagehide', this.unloadHandler)
+    this.unloadHandler = null
+  }
+
   private releaseMedia(): void {
+    this.removeUnloadGuard()
     for (const ch of this.channels) {
       for (const t of ch.stream.getTracks()) t.stop()
     }
@@ -1005,6 +1061,13 @@ class Session implements CaptureSession {
 export interface CreateCaptureSessionOptions {
   /** Fired for each permission / device step during arming (UI pending state). */
   onArming?: ArmingProgressHandler
+  /**
+   * Abort arming. Until this existed the user had no way out of a slow or
+   * wedged device: the record button is disabled while arming, so a step that
+   * never returned read as "the app is frozen" (PO-hit 2026-08-23). Aborting
+   * releases every device the attempt had already taken.
+   */
+  signal?: AbortSignal
 }
 
 export async function createCaptureSession(
@@ -1012,6 +1075,29 @@ export async function createCaptureSession(
   opts?: CreateCaptureSessionOptions,
 ): Promise<CaptureSession> {
   const session = new Session(config, opts?.onArming)
-  await session.arm()
+  const signal = opts?.signal
+  if (!signal) {
+    await session.arm()
+    return session
+  }
+  if (signal.aborted) throw new DOMException('Recording start cancelled', 'AbortError')
+  const aborted = new Promise<never>((_, reject) => {
+    signal.addEventListener(
+      'abort',
+      () => reject(new DOMException('Recording start cancelled', 'AbortError')),
+      { once: true },
+    )
+  })
+  try {
+    await Promise.race([session.arm(), aborted])
+  } catch (err) {
+    // Whether arm() failed or the user cancelled, nothing may keep a device.
+    await session.cancel().catch(() => undefined)
+    throw err
+  }
+  if (signal.aborted) {
+    await session.cancel().catch(() => undefined)
+    throw new DOMException('Recording start cancelled', 'AbortError')
+  }
   return session
 }
