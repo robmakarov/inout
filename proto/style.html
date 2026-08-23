@@ -520,6 +520,12 @@ body.f .filters, body.d .detail { opacity: 1; }
      timeline and panels size off the frame exactly as they do off a window. */
   container-type: size;
   --col: min(100%, calc((100cqh - 300px) * 16 / 9));
+  /* the same column, resolved without a percentage, so it can be asked for as a
+     height as well as a width — the take's picture animates its height open and
+     a % there would measure the wrong axis. Container units resolve where the
+     var is used, which is always inside .app, so the two agree to the pixel. */
+  --colw: min(calc(100cqw - 32px), calc((100cqh - 300px) * 16 / 9));
+  --colh: calc(var(--colw) * 9 / 16);
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
@@ -597,7 +603,6 @@ body.f .filters, body.d .detail { opacity: 1; }
   --grid-glow: hsl(var(--neon-h) 60% 50% / calc(0.06 * var(--grid-k)));
 }
 .capture { position: relative; height: 100%; background: var(--grid-ink); }
-.capture--recording { background: var(--grid-ink); }
 .capture__grid {
   position: absolute;
   inset: -14%;
@@ -635,16 +640,21 @@ body.f .filters, body.d .detail { opacity: 1; }
   );
 }
 
-/* ---------- centre cluster: record button with the inputs in orbit ---------- */
-.cluster-anchor {
+/* ---------- centre cluster: record button with the inputs in orbit ----------
+   The cluster is seated in the control bar rather than on the screen. While the
+   take is closed that bar is 72px square and centred, so "centred in the bar"
+   and "centred on the screen" are the same place — and when the bar unrolls the
+   disc is already where it must end up, carried there by the layout instead of
+   by a transform of its own. The seat is the disc's size; the ring hangs off it
+   on margins, because the spring owns transform and may share it with nobody. */
+.cluster-seat { position: relative; width: 72px; height: 72px; flex: none; }
+.rec-cluster {
   position: absolute;
   left: 50%;
   top: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 6;
+  margin: -170px 0 0 -170px; /* half the ring */
+  will-change: transform;    /* the spring writes translate3d here */
 }
-/* the spring writes translate3d here — nothing else may own this transform */
-.cluster { will-change: transform; }
 .ring {
   position: relative;
   width: 340px;
@@ -652,6 +662,9 @@ body.f .filters, body.d .detail { opacity: 1; }
   display: grid;
   place-items: center;
 }
+/* the orbit is a hit-test hole: only what is drawn in it takes the pointer */
+.ring { pointer-events: none; }
+.ring > * { pointer-events: auto; }
 /* orbit offset lives in left/top so transform stays free for hover feedback */
 .ring .chip {
   position: absolute;
@@ -1034,60 +1047,329 @@ body.f .filters, body.d .detail { opacity: 1; }
   background: color-mix(in srgb, var(--record), #000 30%);
   border-color: color-mix(in srgb, var(--record), transparent 40%);
 }
-/* Framed exactly where the editor puts its stage — same width, same centre —
-   so the picture does not move on the hand-off from recording to editing. */
-.capture__preview {
+/* ==========================================================================
+   THE TAKE — idle and recording are one screen, because the objects are the
+   same objects. Press record and nothing is swapped out: the button widens
+   into the control bar, the radial menu folds down into the input bar, and the
+   picture unrolls upward out of the same seam. Three moves, one seed.
+
+   The column is the editor's own — same --col, same 16:9 stage, same 14px gap
+   — so the hand-off to editing has nothing left to move but the two bars.
+
+   Rest and live differ in four heights, one width and a gap. Every bit of the
+   travel is the flex column's doing: with the picture and the input bar at zero
+   the only thing in the column is a 72px bar, which centres, so the disc sits
+   dead centre; open them and it settles under the picture on its own. Nothing
+   here animates a transform, so the spring keeps sole ownership of that.
+   ========================================================================== */
+.take {
   position: absolute;
   inset: 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px 16px 194px;
+  flex-direction: column;
+  padding: 0 16px;
+  z-index: 6;
 }
-/* the editor's transport height + gap, so the stage centres on the same line */
-.capture__preview .player { padding-bottom: 52px; }
-
-.timer {
-  position: absolute;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
+.take__top {
+  flex: 1;
+  min-height: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: var(--surface-2);
-  border: var(--edge-w) solid var(--edge);
-  padding: 6px 13px;
-  border-radius: var(--r-full);
-  box-shadow: var(--shadow-1);
-  z-index: 5;
+  justify-content: center;
+  padding: 16px 0;
 }
-.timer__dot {
+.take__col {
+  width: 100%;
+  max-width: var(--colw);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  transition: gap 460ms var(--ease);
+}
+[data-phase='live'] .take__col { gap: 14px; }
+
+/* the picture: its box opens from zero while the stage inside keeps full size
+   and stays pinned to the bottom, so the frame is revealed bottom edge first —
+   it comes up out of the bar rather than fading in over it */
+.take__screen {
+  width: 100%;
+  height: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  opacity: 0;
+  transition:
+    height 300ms var(--ease),
+    opacity 160ms var(--ease);
+}
+[data-phase='live'] .take__screen {
+  height: var(--colh);
+  opacity: 1;
+  transition:
+    height 540ms cubic-bezier(0.2, 0.72, 0.18, 1) 260ms,
+    opacity 200ms var(--ease) 260ms;
+}
+
+/* ---------- control bar: the record button, unrolled ----------
+   At rest it is the button and nothing else — no plate, no border, 72px square.
+   Live it is a bar the width of the picture with the disc still at its centre,
+   which is what makes the widening read as the button opening out rather than
+   a bar arriving. The plate fades in a beat behind the width so the edge is
+   never seen travelling. */
+.take__ctrl {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: transparent;
+  border: var(--edge-w) solid transparent;
+  transition:
+    width 300ms var(--ease) 60ms,
+    height 300ms var(--ease) 60ms,
+    background 160ms var(--ease),
+    border-color 160ms var(--ease),
+    border-radius 300ms var(--ease);
+}
+[data-phase='live'] .take__ctrl {
+  width: 100%;
+  height: 64px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border-color: var(--edge);
+  box-shadow: var(--shadow-1);
+  transition:
+    width 460ms cubic-bezier(0.2, 0.72, 0.18, 1) 140ms,
+    height 460ms cubic-bezier(0.2, 0.72, 0.18, 1) 140ms,
+    background 240ms var(--ease) 300ms,
+    border-color 240ms var(--ease) 300ms,
+    border-radius 380ms var(--ease) 140ms;
+}
+/* the disc keeps the centre; the readouts hang off the ends, so nothing the
+   bar gains can push the button off the line it unrolled from */
+.take__end {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms var(--ease);
+}
+.take__end--l { left: 16px; }
+.take__end--r { right: 16px; }
+[data-phase='live'] .take__end { opacity: 1; pointer-events: auto; transition-delay: 420ms; }
+
+.take__clock {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.take__dot {
   width: 8px; height: 8px;
+  flex: none;
   border-radius: 50%;
   background: var(--record);
   animation: pulse 1.2s cubic-bezier(.25,.1,.25,1) infinite;
 }
-.timer__text {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-}
+/* stopped: the take is holding, not running — the light stops blinking and the
+   clock steps back, so a frozen number never reads as a live one */
+[data-take='held'] .take__dot { animation: none; opacity: 0.45; }
+[data-take='held'] .take__clock { color: var(--text-dim); }
 @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.35 } }
 
-.controlbar {
-  position: absolute;
-  left: 0; right: 0; bottom: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  padding: 0 16px 28px;
-  z-index: 10;
+/* Done only exists once there is something to be done with: it appears on the
+   first stop and leaves again if the take is picked back up. */
+.take__done {
+  padding: 7px 17px;
+  font-size: 13px;
+  opacity: 0;
+  transform: translateX(6px);
+  pointer-events: none;
+  transition: opacity 180ms var(--ease), transform 220ms var(--ease);
 }
-.controlbar__hint { font-size: 12px; color: var(--text-faint); min-height: 17px; }
+[data-phase='live'][data-take='held'] .take__done {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
 
-.chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+/* ---------- input bar: the radial menu, unrolled ----------
+   One plate cut into segments by hairlines, in the ring's own order, so what
+   was clockwise round the donut is left-to-right along the bar. Every state the
+   wedges carry is carried here in the same terms: on is tinted and lit along
+   its top edge, refused is loud, unavailable is flat and stops asking. */
+.take__inputs {
+  width: 100%;
+  height: 0;
+  flex: none;
+  display: flex;
+  overflow: hidden;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: var(--edge-w) solid transparent;
+  opacity: 0;
+  transition:
+    height 280ms var(--ease),
+    opacity 160ms var(--ease),
+    border-color 200ms var(--ease);
+}
+[data-phase='live'] .take__inputs {
+  height: 64px;
+  opacity: 1;
+  border-color: var(--edge);
+  box-shadow: var(--shadow-1);
+  transition:
+    height 420ms cubic-bezier(0.2, 0.72, 0.18, 1) 300ms,
+    opacity 220ms var(--ease) 300ms,
+    border-color 220ms var(--ease) 420ms;
+}
+.inseg {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 0 10px;
+  cursor: pointer;
+  color: var(--text-dim);
+  background: transparent;
+  transition: background 140ms var(--ease), color 140ms var(--ease);
+}
+.inseg + .inseg::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 1px;
+  background: color-mix(in srgb, var(--text), transparent 88%);
+}
+/* the wedge's rim arc, straightened: a lit line along the top of the segment */
+.inseg::after {
+  content: '';
+  position: absolute;
+  left: 10px; right: 10px;
+  top: 0;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity 160ms var(--ease);
+}
+.inseg:hover { background: var(--surface-3); color: var(--text); }
+.inseg[data-on='true'] {
+  background: color-mix(in srgb, var(--surface-3), var(--on-c) 16%);
+  color: hsl(var(--on-h) calc(var(--on-s) * 0.9) 62%);
+}
+.inseg[data-on='true']::after { opacity: 0.8; }
+.inseg[data-on='true']:hover { background: color-mix(in srgb, var(--surface-3), var(--on-c) 26%); }
+.inseg__ico { flex: none; display: grid; place-items: center; opacity: 0.92; }
+.inseg__ico .f, .inseg__ico .s { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.inseg__txt { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.inseg__cap {
+  font-size: 12px;
+  font-weight: 560;
+  letter-spacing: var(--label-track);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* the wedge's second line, unchanged in job: the state, never welded to the name */
+.inseg__sub {
+  font-size: 10px;
+  font-weight: 300;
+  letter-spacing: 0.015em;
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.inseg[data-on='true'] .inseg__sub { color: hsl(var(--on-h) calc(var(--on-s) * 0.8) 56%); }
+.inseg[data-state='denied'] {
+  cursor: not-allowed;
+  color: hsl(var(--no-h) var(--no-s) 64%);
+  background: color-mix(in srgb, var(--surface-2), var(--record) 14%);
+}
+.inseg[data-state='denied']::after { opacity: 0.7; }
+.inseg[data-state='denied'] .inseg__sub { color: hsl(var(--no-h) calc(var(--no-s) * 0.85) 58%); }
+.inseg[data-state='blocked'] { cursor: not-allowed; }
+.inseg[data-state='blocked'] .inseg__ico { opacity: 0.34; }
+.inseg[data-state='blocked'] .inseg__cap { color: var(--text-faint); }
+/* the segments arrive one after another, in ring order — the donut unrolling */
+.inseg > * { opacity: 0; transition: opacity 160ms var(--ease); }
+[data-phase='live'] .inseg > * { opacity: 1; transition-delay: calc(460ms + var(--d, 0ms)); }
+
+/* live, the orbit is over: the menu has become the bar, the pills have nothing
+   left to orbit, and the halo belongs to a button that is no longer waiting */
+[data-phase='live'] .radial,
+[data-phase='live'] .ring .chip,
+[data-phase='live'] .rec-fx { opacity: 0; pointer-events: none; }
+/* folding: the donut squashes flat and drops toward the bar it becomes */
+[data-phase='live'] .radial {
+  transform: translate(-50%, calc(-50% + 84px)) scale(1.12, 0.05);
+  transition: opacity 200ms var(--ease), transform 300ms cubic-bezier(0.5, 0, 0.75, 0);
+}
+[data-phase='live'] .ring .chip { transform: translate(-50%, -50%) scale(0.6); }
+
+/* the disc, live: the graphite shape on every theme — a round button is the
+   invitation to start, and once a take is running it is a control among
+   controls, so it takes the squarer form the bar around it is drawn in */
+[data-phase='live'] .recbtn {
+  width: 52px;
+  height: 52px;
+  border-radius: 11px;
+}
+[data-phase='live'] .recbtn__inner { width: 22px; height: 22px; border-radius: 4px; }
+/* held: the square goes back to being a disc — press it and the take runs on */
+[data-phase='live'][data-take='held'] .recbtn__inner {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+}
+
+/* ---------- the hand-off to editing ----------
+   Done does not cut. The control bar thins to the transport's height, the input
+   bar grows to the timeline's, and the picture rises the difference — which is
+   the editor's own geometry, arrived at by the same three objects. The editor
+   screen then cross-fades in behind a stage that is already in its place, so
+   the only thing the swap has left to do is change what is written on the bars.
+   170px, not the timeline's 184: the take centres its column while the editor
+   pins its timeline to the floor, and this is the height at which the two put
+   the stage on the same line. */
+[data-hand='on'] .take__ctrl { height: 38px; }
+[data-hand='on'] .take__inputs { height: 170px; }
+[data-hand='on'] .take__ctrl,
+[data-hand='on'] .take__inputs {
+  transition:
+    height 420ms cubic-bezier(0.3, 0.7, 0.2, 1),
+    background 300ms var(--ease),
+    border-color 300ms var(--ease);
+}
+[data-hand='on'] .take__end,
+[data-hand='on'] .inseg > *,
+[data-hand='on'] .recbtn { opacity: 0; transition: opacity 200ms var(--ease); }
+[data-hand='on'] .inseg + .inseg::before,
+[data-hand='on'] .inseg::after { opacity: 0; }
+
+/* jumping straight to a phase (the tabs, the number keys) must not play the
+   whole unroll — the harness is for looking at states, not at transitions */
+.take--jump .take__col,
+.take--jump .take__col * { transition: none !important; }
+
 .chip {
   position: relative;
   display: inline-flex;
@@ -1127,8 +1409,6 @@ body.f .filters, body.d .detail { opacity: 1; }
 [data-neon='on'] .chip:hover {
   box-shadow: 0 0 0 1px var(--neon-28), 0 0 calc(var(--neon-r) * 0.62) var(--neon-16);
 }
-.chips .chip:hover { transform: scale(1.05); }
-.chips .chip:active { transform: scale(0.97); transition-duration: 80ms; }
 .chip--unavailable { background: var(--record-soft); color: var(--record); }
 
 /* Look is untouched. Behaviour is the studio's rec-go: no hover scale — a neon
@@ -1144,7 +1424,11 @@ body.f .filters, body.d .detail { opacity: 1; }
   transition:
     transform 0.2s cubic-bezier(0.34, 1.2, 0.64, 1),
     filter 0.22s ease,
-    opacity 0.2s ease;
+    opacity 0.2s ease,
+    /* the unroll takes the disc down to control size on the bar's own curve */
+    width 380ms var(--ease) 140ms,
+    height 380ms var(--ease) 140ms,
+    border-radius 380ms var(--ease) 140ms;
 }
 [data-neon='off'] .recbtn:hover { transform: scale(1.05); }
 [data-neon='on'] .recbtn:hover {
@@ -1709,7 +1993,7 @@ body.f .filters, body.d .detail { opacity: 1; }
 [data-theme='graphite'] .chip[aria-pressed='true'] .lbl { color: var(--text); }
 [data-theme='graphite'] .chip[aria-pressed='false'] { color: var(--text-faint); }
 [data-theme='graphite'] .chip[aria-pressed='false'] svg { opacity: 0.6; }
-[data-theme='graphite'] .timer__text,
+[data-theme='graphite'] .take__clock,
 [data-theme='graphite'] .transport__time,
 [data-theme='graphite'] .xp__pct { letter-spacing: 0.02em; }
 [data-theme='graphite'] .recbtn { border-radius: 8px; }
@@ -1722,7 +2006,11 @@ body.f .filters, body.d .detail { opacity: 1; }
    have to hold their own contrast on it — opaque surface, not a tint. */
 [data-theme='paper'] .chip { box-shadow: var(--shadow-1); background: var(--surface); }
 [data-theme='paper'] .chip[aria-pressed='true'] { background: var(--accent-soft); }
-[data-theme='paper'] .timer { background: var(--surface); }
+/* live only — closed, both bars are nothing but the button, and a plate that
+   shows up before the bar does gives the whole move away */
+[data-theme='paper'] [data-phase='live'] .take__ctrl,
+[data-theme='paper'] [data-phase='live'] .take__inputs { background: var(--surface); }
+[data-theme='paper'] .inseg:hover { background: var(--surface-2); }
 [data-theme='paper'] .transport__play { background: var(--surface); }
 [data-theme='paper'] .lane__edge::after,
 [data-theme='paper'] .tl__trim span { background: #1b1915; }
@@ -1915,45 +2203,48 @@ T F N  theme · frame · neon
       </div>
 
 
-      <!-- ============ idle ============ -->
+      <!-- ============ capture — idle and the take, one screen ============
+           Recording is not a screen you go to. It is this screen open: the
+           column below holds the picture, the control bar and the input bar,
+           and at rest the first and last of those are zero tall, which leaves
+           the record button alone in the middle of the frame. -->
       <section class="screen" data-screen="idle">
-        <div class="capture">
+        <div class="capture" data-capture data-phase="rest" data-take="rec">
           <div class="capture__grid"></div>
           <div class="capture__vignette"></div>
           <div class="notice" data-hint></div>
-          <!-- anchor holds the centring; .cluster is the spring's to move -->
-          <div class="cluster-anchor">
-            <div class="cluster" data-cluster>
-              <div class="ring" data-ring>
-                <button class="recbtn" data-rec aria-label="Start recording">
-                  <span class="rec-fx" aria-hidden="true"><span class="rec-fx__halo"></span></span>
-                  <span class="recbtn__inner"></span>
-                </button>
+
+          <div class="take">
+            <div class="take__top">
+              <div class="take__col">
+                <div class="take__screen"><div class="stage" data-stage></div></div>
+
+                <div class="take__ctrl">
+                  <div class="take__end take__end--l">
+                    <span class="take__clock"><span class="take__dot"></span><span data-clock-take>00:00</span></span>
+                  </div>
+
+                  <!-- the seat holds the centring; the cluster is the spring's
+                       to move, and it may own no other transform -->
+                  <div class="cluster-seat">
+                    <div class="rec-cluster" data-cluster>
+                      <div class="ring" data-ring>
+                        <button class="recbtn" data-rec aria-label="Start recording">
+                          <span class="rec-fx" aria-hidden="true"><span class="rec-fx__halo"></span></span>
+                          <span class="recbtn__inner"></span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="take__end take__end--r">
+                    <button class="btn btn--primary take__done" data-done>Done</button>
+                  </div>
+                </div>
+
+                <div class="take__inputs" data-inbar></div>
               </div>
-
             </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ============ recording ============ -->
-      <section class="screen" data-screen="recording" hidden>
-        <div class="capture capture--recording">
-          <div class="capture__grid"></div>
-          <div class="capture__vignette"></div>
-          <div class="timer">
-            <span class="timer__dot"></span>
-            <span class="timer__text">00:42</span>
-          </div>
-          <div class="capture__preview">
-            <div class="player"><div class="stage" data-stage></div></div>
-          </div>
-          <div class="controlbar">
-            <div class="chips" data-chips></div>
-            <button class="recbtn recbtn--stop" data-go="editor" aria-label="Stop recording">
-              <span class="recbtn__inner"></span>
-            </button>
-            <div class="controlbar__hint"></div>
           </div>
         </div>
       </section>

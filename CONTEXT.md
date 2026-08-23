@@ -111,26 +111,28 @@ Every task is evidence-gated. `.ai/TASKS` is authoritative: it carries the READY
 what a fresh session must know first, and an index of the measurement tooling.
 
 **Done:** exports stream to disk · capture-time loudness · content hints + full-size camera · bundle
-split · sync root-cause + honest gate · quality slider · mid-take cuts · tail/throughput bands +
+split · sync root-cause + honest gate · quality steps · mid-take cuts · tail/throughput bands +
 certified exports · PWA install · movable timed camera + edit persistence · Yandex/RU pack part 1 ·
-WebCodecs capture engine (merged dormant, see below).
+WebCodecs capture engine (merged dormant, see below) · the bits audit and the two size levers it
+priced · background frame · silence tightening · timed zoom/pan · the composite tail fix.
 
-**Next, and it is a bug, not a feature.** The composite we ship today loses the end of a take when the
-machine is under load: on a 4K source it delivered 13.3 fps and the last frame in the file sat **3.8
-seconds before the end of the recording**. At 1080p the same measurement is 65 ms, which is why nobody
-had seen it — our tail gate only ever ran on a gentle test rig. This is the thing PO named as
-unacceptable in a competitor, happening in our own product. Task `P0-tail`.
+**Next, and it is a bug, not a feature.** The *raw* channels still lose up to three quarters of a
+second off the end of a take under heavy load. The composite — the file you get when you export
+without editing — was losing nearly three seconds and is fixed; the channels an EDITED take renders
+from are not. Task `P0-tail-raw`. It is small in code and delicate in placement: the fix touches the
+stop path that once left the record button wedged, so it wants its own session.
 
-**O4, the WebCodecs engine: built, measured, and deliberately switched off.** Capture now *can* run in
-a worker compositor feeding our own encoder and fragmented-MP4 muxer, and on every axis but one it is
-better — it takes capture off the main thread completely (131 ms of blocking work per take becomes
-zero), it syncs tighter (40 ms vs 59), and because it owns the encoder it can drain it at stop instead
-of asking a black box to stop. The one axis is the one that matters most right now: the browser's own
-video encoder delivers ~10 frames per second at 1080p where the old path delivers 30, and the
-measurement isolates that to the encoder rather than to anything we wrote. So it ships dormant behind a
-switch, with the harness that will say when to turn it on. **The keystone is therefore only half
-placed** — smart-cut exports, native-resolution capture, pause/retake and frame-exact scrubbing still
-wait on it.
+**O4, the WebCodecs engine: built, measured, switched off — and we now know we were blaming the wrong
+thing.** Capture *can* run in a worker feeding our own encoder and fragmented-MP4 muxer, and on every
+axis but one it is better: capture leaves the main thread entirely (131 ms of blocking work per take
+becomes zero), sync is tighter (40 ms vs 59), and because it owns the encoder it can drain it at stop
+instead of asking a black box to stop. The one bad axis is throughput — 7.5 frames a second at 1080p
+where the old path does 30 — and that was blamed on the browser's video encoder. Measured properly
+this session, that encoder does 150–190 frames a second in isolation and 169 even inside a worker, and
+the full compositor path does 59 with the encoder never once waiting. Nine candidate causes are now
+eliminated with numbers and one suspect remains. **The keystone is still only half placed** —
+smart-cut exports, native-resolution capture, pause/retake and frame-exact scrubbing wait on it — but
+it is waiting on a bug we can find rather than on hardware we cannot buy.
 
 **Shipped alongside it:** the **timed movable camera** — drag the picture-in-picture on the stage and
 the export moves it at the moment you moved it (PO's emphasized feature). And, found while building it,
@@ -145,9 +147,15 @@ size number cannot be honest to ±20 % on every kind of content, because it is p
 DIFFERENT encoder made — on text-heavy screen content the two encoders disagree by nearly 2×. The fix
 is to measure rather than model (encode one frame per step and calibrate), and it is task F7c.
 
-**Runs in parallel now:** P0-tail (the live defect) · the O4 remainder · F7c · Firefox + 3-engine
-oracle · per-segment speed · the codec ladder · the iOS ScreenCaptureKit spike (time-sensitive: iOS 27
-ships ~Sept 2026).
+**Also shipped 2026-08-23, on "go p0-tail and others":** the composite tail fix · timed zoom and pan
+(you chose timed zooms over a static reframe) · the O4 re-diagnosis. And one thing deliberately NOT
+shipped: three attempts to measure export sizes instead of predicting them, all measured, none better
+than the model they would have replaced. The spike is kept with its numbers so the next attempt starts
+from the fourth idea.
+
+**Runs in parallel now:** P0-tail-raw (the live defect) · the O4 hunt · the size-number probe, attempt
+4 · Firefox + 3-engine oracle · per-segment speed · the codec ladder · the iOS ScreenCaptureKit spike
+(time-sensitive: iOS 27 ships ~Sept 2026).
 
 **Waiting on PO:** install Yandex Browser and run the one-command QA smoke.
 Run the RU reachability probe from a Russian connection without a VPN. And two rechecks on real

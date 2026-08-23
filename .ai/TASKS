@@ -17,9 +17,10 @@ Operating rules (every task):
 - No refactors outside task scope. Don't touch .ai/* except appending your handoff under your task.
 - HEAVY RUNS (oracle matrices, load rigs) are announced first and never run while PO is using the machine.
 - Order is dependency order WITHIN each phase, not between them: the O-phase-before-F-phase rule was
-  about not building features on an engine that was about to change. O1/O2/O3a/O7 shipped and F1/F7
-  landed on top of them, so F3/F4/F5a can now run in parallel with O4 — they touch compose/layout and
-  the timeline, not the capture engine O4 replaces.
+  about not building features on an engine that was about to change. In practice the whole F phase
+  except F6/F8 landed on top of the shipped engine while O4 stayed dormant, because features that
+  touch compose/* and the timeline do not touch the capture engine O4 replaces. What is left in F
+  (F5b, F2b) is the same shape; F6 and F8 genuinely need O4.
 
 ── ROADMAP PROTOCOL (PO 2026-08-22) ──
 PO says "roadmap" → the session prints the READY map below (unblocked tasks, parallel-safe combos,
@@ -28,12 +29,17 @@ several ids, take the first and tell PO to open parallel sessions for the rest. 
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
 ── READY MAP — current truth, updated on every merge ──
-Last update 2026-08-23 (end of the THIRD session, PO asked for "roadmap o/f, all in one session").
-Merged that day across all three sessions: O1 · O2 · O3a · O7 · O4 step1 · O4b · F7 · F1 · O8(partial) ·
-P2 · P3 · F4 · O4 step2 (DORMANT) · a P0 mic-hang fix (PO-verified) · and, this session,
-IN-SHOT notice · O11a · O11b · O11c · F7b · F3 · F5a. Pushed to origin/main.
-START HERE IF YOU ARE FRESH: read notes 5-9 below. P0-tail is FIXED (the composite keeps its ending
-now, measured); its sibling P0-tail-raw is the remaining live defect.
+Last update 2026-08-23, end of the FOURTH session ("go p0-tail and others"). Everything merged and
+pushed to origin/main; working tree clean.
+Merged on 2026-08-23 across four sessions: O1 · O2 · O3a · O7 · O4 step1 · O4b · F1 · F7 · O8(partial)
+· P2 · P3 · F4 · O4 step2 (DORMANT) · a P0 mic-hang fix (PO-verified) · the IN-SHOT notice · O11a ·
+O11b · O11c · F7b · F3 · F5a · P0-tail · F2 · the O4 RE-DIAGNOSIS · F7c attempted and not shipped.
+START HERE IF YOU ARE FRESH:
+  1. read notes 5, 6, 9, 10, 11 below — they are the ones that will bite you today;
+  2. `npm run typecheck && npm test` (237 tests) and `npm run oracle` should be green before you
+     change anything, so a red gate later is yours and not inherited;
+  3. take one task from READY NOW. P0-tail-raw is the only LIVE DEFECT on the map; O4 is the keystone
+     and now has a real next step instead of "wait for hardware".
 
 READY NOW — parallel-safe, any subset concurrently (one session each):
   P0-tail-raw  raw channels lose tail  [medium]  FOUND 2026-08-23 while fixing P0-tail: 203-753 ms
@@ -107,11 +113,16 @@ lives in O4/O8: zero tail loss at stop, now gated.
    should assume the same. The band now runs where it can fail: `npm run oracle:load` (HEAVY). The RAW
    channels still lose 203-753 ms under the same load — task P0-tail-raw. Do not write a new tail
    claim without running `npm run exp -- o4step2`.
-6. THERE ARE TWO LIVE-COMPOSITE ENGINES NOW. v1 (MediaRecorder) is the DEFAULT; v2 (worker + WebCodecs
-   + WebGL2 + fMP4) is merged but DORMANT behind ?engine=v2, because WebCodecs' AVC encoder delivers
-   ~10 fps at 1080p here against v1's 30. v2 is otherwise better on every axis measured (main-thread
-   cost 131 ms → 0, oracle sync 40.0 vs 58.8 ms, it drains its own encoder at stop). Anything touching
-   capture/* must keep BOTH working, and `npm run oracle --engine=v2` gates the second one.
+6. THERE ARE TWO LIVE-COMPOSITE ENGINES, AND THE REASON THE SECOND IS OFF IS NOT WHAT THE OLD NOTES
+   SAID. v1 (MediaRecorder) is the DEFAULT; v2 (worker + WebCodecs + WebGL2 + fMP4) is merged but
+   DORMANT behind ?engine=v2 because it delivers 6.7-10 fps at 1080p against v1's 29.7. It was
+   believed that "WebCodecs' AVC encoder is the wall". That is FALSIFIED (2026-08-23): a bare encoder
+   does 142-191 fps on this machine, 169 fps INSIDE A WORKER, and the production GL compositor fed
+   real capture frames does 59 fps with the encoder never blocking. Nine candidates are eliminated
+   with numbers in the O4 handoff; one suspect is left. v2 is better on every other axis measured
+   (main-thread cost 131 ms → 0, oracle sync 40.0 vs 58.8 ms, it drains its own encoder at stop).
+   Anything touching capture/* must keep BOTH working, and `npm run oracle --engine=v2` gates the
+   second one. DO NOT repeat the elimination work — read the handoff first.
 7. THE EDIT IS PERSISTED NOW (F4, editsRepo, IndexedDB v2). Before that a refresh silently threw away
    every trim and cut while faithfully restoring the recording. If you add a field to EditState, it is
    automatically persisted — make sure it survives a round trip through structured clone.
@@ -121,9 +132,20 @@ lives in O4/O8: zero tail loss at stop, now gated.
    pins the default pose against the editor's historical CSS numbers.
 9. ANYTHING THAT CHANGES PIXELS IS AN EDIT, AND MUST SAY SO. isDefaultEdit is what decides whether the
    export may packet-copy the composite, so every new visual feature has to make it false: F4's camera
-   track and F3's background frame both do. The other half of the same rule is that an INACTIVE style
-   must be dropped rather than stored (clampEditState deletes a background that paints and insets
-   nothing), or an untouched take silently loses the instant path.
+   track, F3's background frame and F2's viewport all do. The other half of the same rule is that an
+   INACTIVE style must be dropped rather than stored (clampEditState deletes a background that paints
+   and insets nothing), or an untouched take silently loses the instant path.
+10. THE RIG IS WRONG BEFORE THE PRODUCT IS — three times in one day. A 450 px zoom "error" was an
+   expectation that had not been clipped to the canvas. A 9851 ms "tail gap" was a measurement lane
+   started at stop instead of at the beginning. A 16.2 fps "config catastrophe" was the first row of a
+   matrix paying for cold start. Before reporting an alarming number, check the instrument: add the
+   warm-up, print the intermediate quantities, and make the rig prove itself on a case whose answer
+   you already know.
+11. THE ONE-BRANCH-PER-TASK RULE COLLIDES WITH THE AUTO-COMMIT HOOK. A Stop hook runs
+   `git add -A && git commit && git push origin HEAD:main` after every turn, so work is on main
+   before a session can open its own branch, and a branch left checked out at the end would be pushed
+   TO main. Sessions that cannot merge inside one turn should work on main and carry the reasoning in
+   the commit message (see the F3 record commit for the shape).
 
 ── TOOLING (built 2026-08-23; all spawn their own ephemeral server + throwaway Chrome profile) ──
   npm run exp -- <id> [json] [--rss] [--query=k=v] [--ua=...]   generic experiment driver

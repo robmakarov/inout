@@ -23,7 +23,7 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   window-RMS envelope; a proposal until you press Apply, then ordinary F1 segments)
 - THE EDIT SURVIVES A REFRESH (F4, editsRepo IndexedDB v2). It never did before: recovery restored the
   recording and handed the editor a fresh default, so trims and cuts evaporated on every reload.
-- installable PWA, starts offline (P2); first paint 232.0 KB (O7 gate ≤300 KB; was 803)
+- installable PWA, starts offline (P2); first paint 233.9 KB (O7 gate ≤300 KB; was 803)
 - YOU ARE IN THE SHOT (2026-08-23): pressing HIDE on the browser's screen-sharing bar activates this
   window — browser security UI, unfixable from a page (no API dismisses it, and none moves OS focus
   back to another app). So the LANDING is handled instead: a whole-screen take with this window in

@@ -23,11 +23,10 @@ TD tags technical defects by severity. Done items get deleted, not archived.
 
 ### Next
 
-Roadmap task pack (PO-approved 2026-08-22): `.ai/TASKS` v2 — optimization O1–O8, features F1–F7, ports P1–P6.
-PO protocol: say "roadmap" in any session → READY map menu → "go <id>". READY now: O1 · O3a · P1 · P2 · P3 · P5a (iOS SCK spike, TIME-SENSITIVE — beta window) · F7.
-- [P1] O1 stream-to-disk exports + O3 chromium mp4 capture — small, unblocked.
-- [P2] O4 WebCodecs engine (continues ee/webcodecs-capture-2; absorbs the old composite-salvage item) → then O5 export engine v2, O6 native-res, O7 bundle split (748 KB), O8 perf bands.
-- [P2] O2 capture-time loudness · F1–F7 per pack order · P4 desktop shell after O4/O5 · P5b/P6 mobile nodes after the SCK spike.
+THE ROADMAP LIVES IN `.ai/TASKS` — not here. That file carries the READY map, every task with its
+gates, what a fresh session must know first, and the tooling index; it is rewritten on every merge.
+Duplicating it here is how the two go out of step, so this section is a pointer on purpose.
+PO protocol: say "roadmap" in any session → READY map → "go <id>".
 
 ### Later — deliberately inactive
 
