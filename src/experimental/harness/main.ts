@@ -195,6 +195,18 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'armcancel',
+    title: 'Regression — cancel a start, leave no device live',
+    detail:
+      'covers the 2026-08-23 report (stuck on "waiting for microphone", unresponsive, mic indicator still lit after refresh): arming must be cancellable and prompt, a pre-aborted signal must fail before touching a device, and a normal take must still arm and release everything at stop.',
+    run: async (args) => {
+      const { runArmCancel } = await import('../perf/armCancel')
+      return runArmCancel({
+        abortAfterMs: typeof args?.abortAfterMs === 'number' ? args.abortAfterMs : undefined,
+      })
+    },
+  },
+  {
     id: 'datachan',
     title: 'Experiment 6 — Timed data channels (live capture demo)',
     detail:
