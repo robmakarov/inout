@@ -178,6 +178,52 @@ try {
       reloadDrift: drift,
       screenshot: out,
     }
+  } else if (flow === 'frame') {
+    // F3: pick a backdrop in the editor and measure where the PREVIEW puts the
+    // screen surface, as fractions of the stage — directly comparable with the
+    // numbers `npm run exp -- f3` reads out of decoded exported frames.
+    const readSurface = `(() => {
+      const st = document.querySelector('.stage');
+      const v = document.querySelector('.stage__screen');
+      if (!st || !v) return null;
+      const s = st.getBoundingClientRect(), r = v.getBoundingClientRect();
+      const round = (n) => Math.round(n * 1e4) / 1e4;
+      return {
+        leftFrac: round((r.left - s.left) / s.width),
+        topFrac: round((r.top - s.top) / s.height),
+        widthFrac: round(r.width / s.width),
+        heightFrac: round(r.height / s.height),
+        radiusPx: Math.round(parseFloat(getComputedStyle(v).borderTopLeftRadius) || 0),
+        stageBackground: getComputedStyle(st).backgroundImage,
+      };
+    })()`
+    const before = await evaluate(readSurface)
+    opened = await evaluate(
+      `(() => { const b=document.querySelector('button[aria-label="Slate"]'); if(!b) return false; b.click(); return true })()`,
+    )
+    await sleep(400)
+    const afterPreset = await evaluate(readSurface)
+    await evaluate(
+      `(() => { const b=[...document.querySelectorAll('.frame-bar__step')].find(x=>x.textContent==='L'); if(!b) return false; b.click(); return true })()`,
+    )
+    await sleep(400)
+    const afterLarge = await evaluate(readSurface)
+    cameraReport = {
+      flow,
+      before,
+      afterPreset,
+      afterLarge,
+      // The medium step is padFrac 0.06 and the large one 0.1 — same numbers the
+      // export compositor insets by.
+      matchesGeometry:
+        !!afterPreset &&
+        Math.abs(afterPreset.leftFrac - 0.06) <= 0.004 &&
+        Math.abs(afterPreset.widthFrac - 0.88) <= 0.008 &&
+        !!afterLarge &&
+        Math.abs(afterLarge.leftFrac - 0.1) <= 0.004 &&
+        Math.abs(afterLarge.widthFrac - 0.8) <= 0.008,
+      screenshot: out,
+    }
   } else if (flow === 'cuts') {
     // Seek to the middle of the take, split, then split again further along.
     await evaluate(

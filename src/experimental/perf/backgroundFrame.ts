@@ -150,6 +150,12 @@ export async function runBackgroundFrame(opts: { takeMs?: number } = {}): Promis
         background: { preset: 'mint', padFrac: 0.06, radiusFrac: 0.022, shadow: true },
       },
     ]
+    // Warm-up render, thrown away: the FIRST export of a session pays for
+    // encoder setup and JIT, and charging that to whichever case happens to run
+    // first would make the cost comparison meaningless (it read -21.8% before
+    // this existed — the framed render "faster" than the plain one).
+    await exportRecording({ recording, edit: base, settings: { width: W, height: H, fps: 30 } })
+
     for (const v of variants) {
       const edit: EditState = v.background ? { ...base, background: v.background } : base
       const t0 = performance.now()
