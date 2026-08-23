@@ -34,9 +34,32 @@ node scripts/browser-check.mjs --browser=yandex --out=docs/qa/yandex.json
 | Yandex Browser (desktop) | — | **NOT RUN — not installed on the TD machine** | ⛔ open | — |
 | Yandex Browser (UA only, engine = Chrome 151) | UA 24.10.0.0 / Chromium 128 | 2026-08-23 | PASS *detection only* | [yandex-ua-spoof.json](qa/yandex-ua-spoof.json) |
 | Yandex Browser 2021 (UA only, engine = Chrome 151) | UA 21.11 / Chromium 94 | 2026-08-23 | PASS, `belowFloor: true` and correctly NOT blocked | [yandex-old-ua-spoof.json](qa/yandex-old-ua-spoof.json) |
-| Firefox | — | not run — task **P1** owns it | — | — |
+| Firefox (real gecko) | — | **NOT RUN — not installed, and this runner speaks CDP** | ⛔ open | — |
+| Firefox 131 (UA only, engine = Chrome 151) | UA 131.0 / Gecko | 2026-08-23 | PASS *detection only* — engine `gecko`, and **Tab Audio correctly dropped** | [firefox-ua.json](qa/firefox-ua.json) |
+| Chrome on Windows (UA only) | UA 151 / Win64 | 2026-08-23 | PASS, but see below — the OS did **not** spoof | [chrome-windows-ua.json](qa/chrome-windows-ua.json) |
 | Safari / iOS Safari | — | not run — long-standing PO recheck | — | — |
 | Edge, Opera, Brave | — | not installed here; the runner knows their paths | — | — |
+
+### The engine × OS matrix (P1)
+
+What display capture can carry alongside the picture is decided by engine AND
+OS, not by engine — `displayAudioScopeFor` in `src/core/capabilities.ts`:
+
+| engine | OS | display audio | what the user sees |
+|---|---|---|---|
+| chromium | windows | `system` — a monitor share carries the machine's audio | channel named **System Audio** |
+| chromium | macOS / Linux | `tab` — only a tab or window share carries audio | channel named **Tab Audio** |
+| gecko | any | `none` — Firefox ACCEPTS `audio: true` and returns video only | channel dropped, copy says why |
+| webkit | any | `none` — Apple does not offer it at all | channel dropped, copy says why |
+
+Gecko is the case worth spelling out: it does not refuse, it silently succeeds
+with no audio track. Offering the channel there would record a silent take and
+say nothing, so the channel is dropped and the copy says what Firefox actually
+does rather than "not available".
+
+Gecko also has no AAC encoder (`aacEncode: false`), so an export there lands on
+the existing avc+opus / vp9+opus chains. That flag is ADVISORY — `codecs.ts`
+still probes, because the encoder is a better authority than a table.
 
 ### What the spoofed rows do and do not prove
 
@@ -47,7 +70,25 @@ about Yandex's engine — the engine under those runs was Chrome 151. Only the
 real-browser row can close that, and it is deliberately left open above rather
 than quietly filled in.
 
-**To close it:** install Yandex Browser, then
+**The Windows row cannot be spoofed at all, and that is correct.** The Chrome
+on Windows run above reports `os: macos`, because `navigator.userAgentData`
+wins over the UA string (probe-first, UA-sniff last) and CDP's UA override does
+not touch it. So the `chromium × windows → System Audio` row is proven by unit
+test only, and can be closed for real only by running the checker on Windows.
+
+**To close Firefox:** it needs Playwright's gecko driver — this runner drives
+browsers over CDP, which Firefox does not speak. That is a dependency install,
+so it is PO's to run:
+
+```bash
+npm i -D playwright && npx playwright install firefox
+```
+
+after which the oracle's third-engine run (task P1) can be wired to it. Until
+then `--list` reports Firefox as `unsupported` with that reason rather than
+pretending it is simply missing.
+
+**To close Yandex:** install Yandex Browser, then
 
 ```bash
 node scripts/browser-check.mjs --browser=yandex --out=docs/qa/yandex.json

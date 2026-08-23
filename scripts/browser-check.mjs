@@ -73,6 +73,17 @@ const BROWSERS = {
     linux: ['opera'],
     win32: [],
   },
+  // Firefox is driven by CDP here like the rest, which it does NOT speak. It is
+  // listed so `--list` tells the truth about what is installed, and so the
+  // failure names the reason instead of "browser not found" (task P1: the real
+  // Firefox gate needs Playwright's gecko driver, not this runner).
+  firefox: {
+    label: 'Mozilla Firefox',
+    darwin: ['/Applications/Firefox.app/Contents/MacOS/firefox'],
+    linux: ['firefox'],
+    win32: ['C:/Program Files/Mozilla Firefox/firefox.exe'],
+    noCdp: true,
+  },
 }
 
 /** UA strings for `--ua-of` — spoofing proves OUR detection, never their engine. */
@@ -83,6 +94,19 @@ const UA_OF = {
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 YaBrowser/21.11.0.1996 Yowser/2.5 Safari/537.36',
   'yandex-android':
     'Mozilla/5.0 (Linux; arm_64; Android 13; RMX3710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.91 YaBrowser/24.1.1.91.00 SA/3 Mobile Safari/537.36',
+  // P1: current Firefox on each desktop OS. Spoofing these proves OUR engine x
+  // OS matrix picks the right row — it proves NOTHING about Gecko itself, and
+  // the QA matrix has to say so wherever these rows appear.
+  firefox:
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:131.0) Gecko/20100101 Firefox/131.0',
+  'firefox-windows':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0',
+  'firefox-old':
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:98.0) Gecko/20100101 Firefox/98.0',
+  // …and Chromium on WINDOWS, the row that differs from macOS: a monitor share
+  // there carries the machine's audio, so the channel is named differently.
+  'chrome-windows':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36',
 }
 
 function which(cmd) {
@@ -96,6 +120,15 @@ function which(cmd) {
 function resolveBrowser(key) {
   const spec = BROWSERS[key]
   if (!spec) return null
+  if (spec.noCdp) {
+    return {
+      key,
+      label: spec.label,
+      bin: null,
+      unsupported:
+        'this runner drives browsers over CDP, which Firefox does not speak — the real gecko run needs Playwright (task P1)',
+    }
+  }
   const candidates = spec[process.platform] ?? []
   for (const c of candidates) {
     if (c.includes('/') || c.includes('\\')) {
@@ -149,7 +182,14 @@ const opts = parseArgs(process.argv.slice(2))
 if (opts.list) {
   const rows = Object.keys(BROWSERS).map((k) => {
     const r = resolveBrowser(k)
-    return { browser: k, label: BROWSERS[k].label, installed: !!r, bin: r?.bin ?? null, version: r ? binaryVersion(r.bin) : null }
+    return {
+      browser: k,
+      label: BROWSERS[k].label,
+      installed: !!r?.bin,
+      bin: r?.bin ?? null,
+      version: r?.bin ? binaryVersion(r.bin) : null,
+      ...(r?.unsupported ? { unsupported: r.unsupported } : {}),
+    }
   })
   console.log(JSON.stringify({ platform: process.platform, browsers: rows }, null, 2))
   process.exit(0)
@@ -163,7 +203,9 @@ if (!resolved) {
   console.error(
     JSON.stringify(
       {
-        error: `${BROWSERS[opts.browser]?.label ?? opts.browser} is not installed on this machine`,
+        error:
+          resolved?.unsupported ??
+          `${BROWSERS[opts.browser]?.label ?? opts.browser} is not installed on this machine`,
         hint: 'install it, or pass --bin=/path/to/binary. `--list` shows what is here.',
         browser: opts.browser,
       },

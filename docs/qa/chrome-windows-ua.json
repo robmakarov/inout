@@ -3,7 +3,7 @@
   "label": "Google Chrome",
   "binary": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
   "binaryVersion": "Google Chrome 151.0.7922.170",
-  "uaSpoofedAs": null,
+  "uaSpoofedAs": "chrome-windows",
   "takeMs": 6000,
   "gates": {
     "boots": true,
@@ -17,7 +17,7 @@
   },
   "consoleErrors": [],
   "cdpProduct": "Chrome/151.0.7922.170",
-  "cdpUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+  "cdpUserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
   "inoutSupport": {
     "platform": {
       "engine": "chromium",
@@ -25,8 +25,8 @@
       "browserVersion": "151.0.0.0",
       "chromiumMajor": 151,
       "os": "macos",
-      "osVersion": "10.15.7",
-      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+      "osVersion": null,
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
     },
     "missing": [],
     "support": {
@@ -43,7 +43,7 @@
     "Mic",
     "Tab Audio"
   ],
-  "exportMs": 506,
+  "exportMs": 508,
   "exportMeta": "0:06 · 1.6 MB · 1920×1080",
   "failed": [],
   "verdict": "PASS"
