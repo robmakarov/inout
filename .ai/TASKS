@@ -28,11 +28,12 @@ several ids, take the first and tell PO to open parallel sessions for the rest. 
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
 ── READY MAP — current truth, updated on every merge ──
-Last update 2026-08-23 (end of the second session). Merged that day: O1 · O2 · O3a · O7 · O4 step1 ·
-O4b · F7 · F1 · O8(partial) · P2 · P3 · F4 · O4 step2 (DORMANT) · O11a capture half · a P0 mic-hang
-fix (PO-verified: "record seems to be okay"). Pushed to origin/main.
-START HERE IF YOU ARE FRESH: read notes 5-8 below, then take P0-tail. It is the only item that is a
-live defect rather than an improvement.
+Last update 2026-08-23 (end of the THIRD session, PO asked for "roadmap o/f, all in one session").
+Merged that day across all three sessions: O1 · O2 · O3a · O7 · O4 step1 · O4b · F7 · F1 · O8(partial) ·
+P2 · P3 · F4 · O4 step2 (DORMANT) · a P0 mic-hang fix (PO-verified) · and, this session,
+IN-SHOT notice · O11a · O11b · O11c · F7b · F3 · F5a. Pushed to origin/main.
+START HERE IF YOU ARE FRESH: read notes 5-9 below, then take P0-tail. It is still the only item on
+this map that is a live defect rather than an improvement.
 
 READY NOW — parallel-safe, any subset concurrently (one session each):
   P0-tail  v1 loses the tail at 4K   [light-medium]  FOUND 2026-08-23 WITH NUMBERS, NOT FIXED. The
@@ -45,30 +46,32 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
                                              (ee/webcodecs-capture-2, still unmerged) · fMP4 tab-kill
                                              salvage · preview from the compositor's own output.
                                              Still the keystone for O5/O6/O9, F6, F8, P4.
-  F3   background frame            [medium]  compose/layout.ts + editor UI. No engine dependency.
-                                             NOTE: F4 changed drawVideoFrame's signature (optional pose)
-                                             and moved the PiP rect into timeline/cameraTrack.ts — build
-                                             the background layer around that, don't re-derive the rect.
-  F5a  silence tightening          [medium]  rides F1's cut machinery (shipped). DSP only, no ML ever.
-  O11  bits audit + codec ladder   [see O11] planned by a parallel session 2026-08-23.
-  F7b  quality slider v2           [light-med] AFTER O11a (audit picks the steps) — per-step size
-                                             numbers on a finer ladder; natural same-branch follow-on
-                                             to an O11 a-c session.
+  F7c  the size number, calibrated [medium]  F7b's ±20 % gate is UNMET in general and the reason is
+                                             measured (see F7b): the composite's encoder is not the
+                                             export's encoder — 0.97 vs 1.84 Mbps on the same text
+                                             pixels. Designed remedy: encode ONE frame of the take at
+                                             each step and compare it with the composite's mean
+                                             keyframe (O11a already counts that), then scale. Gate:
+                                             ±20 % on every step for BOTH content types, twice over.
   P1   firefox + 3-engine oracle   [medium]  capabilities.ts engine×OS matrix + Playwright gecko run.
                                              NOW EASIER: P3 shipped core/platform.ts (engine+browser+OS,
                                              probe-first) and scripts/browser-check.mjs — consume them,
                                              don't rebuild them.
   P5a  iOS SCK spike               [light]   separate Xcode proj, no repo code — TIME-SENSITIVE
                                              (iOS 27 ships ~Sept 2026; answer the 5 questions)
+  F5b  per-segment speed           [medium]  WSOLA time-stretch, pitch preserved, video retimed. F5a
+                                             shipped the cut machinery it rides on.
+  O11d codec ladder, probed        [medium]  needs P1's 3-engine rig. (a)(b)(c) are shipped.
 NEEDS PO INPUT BEFORE BUILDING:
   F2   zoom-pan — PO said "i think so"; reconfirm scope first. The seam it was waiting on now EXISTS:
        F4's cameraTrack is the same shape a viewport track wants (keyframes on the recording timeline,
        eased sampling, one function shared by preview and export). Copy it, don't invent a second one.
 CONFLICT RULES (all of capture/* is now shared by TWO engines — keep both working):
 · P0-tail and the O4 remainder BOTH touch capture/* — never simultaneously. P0-tail goes first.
-· F3 owns compose/layout.ts alone (F4 merged), but the composite geometry now lives in THREE places
-  that must agree — layout.ts, compositor.worker.ts and liveComposite.ts. cameraTrack.ts owns the rect.
-· F5a extends F1's segment list · O11a's render half touches compose/pipeline.ts, which F3 does not.
+· The composite geometry lives in THREE places that must agree — compose/layout.ts, capture/
+  compositor.worker.ts and capture/liveComposite.ts. cameraTrack.ts owns the PiP rect; F3's frame is
+  an EDIT (render path only), so the two live composites deliberately do not know about it.
+· F5b extends F5a's proposal machinery · F7c touches compose/quality.ts, which nothing else does.
 · Any capture/* change must run BOTH `npm run oracle` and `npm run oracle --engine=v2`.
 BLOCKED (dep → unblocks): O5←O4 · O6←O4 · O9←O4+O5 · O8 remainder←O4/O5 · F6←O4 · F8←O4 ·
 P4←O4/O5 · P5b←P5a · P6←P5b · P7←P4 · O10 (AEC part only)←P4 · O3b←O4 (see below).
@@ -112,6 +115,11 @@ lives in O4/O8: zero tail loss at stop, now gated.
    packet-copies the composite: compose/layout.ts (render), capture/compositor.worker.ts (v2 live) and
    liveComposite.ts (v1 live). timeline/cameraTrack.ts owns the PiP rect for the first two; a unit test
    pins the default pose against the editor's historical CSS numbers.
+9. ANYTHING THAT CHANGES PIXELS IS AN EDIT, AND MUST SAY SO. isDefaultEdit is what decides whether the
+   export may packet-copy the composite, so every new visual feature has to make it false: F4's camera
+   track and F3's background frame both do. The other half of the same rule is that an INACTIVE style
+   must be dropped rather than stored (clampEditState deletes a background that paints and insets
+   nothing), or an untouched take silently loses the instant path.
 
 ── TOOLING (built 2026-08-23; all spawn their own ephemeral server + throwaway Chrome profile) ──
   npm run exp -- <id> [json] [--rss] [--query=k=v] [--ua=...]   generic experiment driver
@@ -121,9 +129,12 @@ lives in O4/O8: zero tail loss at stop, now gated.
      f1        mid-take cuts: sync + joint discontinuity     f7       quality tiers + certification
      f4        camera pose LOCATED in decoded export frames vs the pose function
      o4step2   v1 vs v2 live composite: delivered fps, main-thread long tasks, tail gap, bits audit
+     o11       bits audit: GOP ladder + quality steps + camera-PiP bitrate, all demuxed from the file
+     f3        background frame LOCATED in decoded export frames vs the pure geometry
+     f5a       silence tightening against a known map: recall, cuts-in-speech, join clicks
      oracle    accepts {"injectTailLossMs":N} to prove the tail band red
   node scripts/o7-measure.mjs      first-paint bytes, record-click latency, editor prefetch (prod build)
-  node scripts/ui-shot.mjs --flow=quality|cuts|camera   screenshots a flow on the prod build
+  node scripts/ui-shot.mjs --flow=quality|cuts|camera|frame|tighten   screenshots a flow, prod build
      (camera also drags the PiP, reloads the page, and reports preview↔export fractions + reload drift)
   node scripts/browser-check.mjs --list | --browser=<name> [--ua-of=yandex]   QA matrix, real browser,
      prod build, record→edit→export, 8 gates → docs/qa/*.json (see docs/QA_MATRIX.md)
@@ -344,7 +355,7 @@ removed from mic) — in the P4 shell where a proper reference signal exists.
 GATES: R128 integrated −14 ±0.5 LUFS on the synthetic set · multitrack file: tracks separate, default
 unchanged · gating: zero triggers on the clean-speech fidelity set · fidelity oracle green throughout.
 
-## O11. bits-audit + codec-autoswitch — smaller files, zero quality loss, per-browser  [P2; (a-c) light, parallel-safe NOW; (d) medium, rides P1's 3-engine rig]
+## O11. bits-audit + codec-autoswitch — (a)(b)(c) DONE 2026-08-23, (d) BLOCKED ON P1's 3-engine rig
 PO 2026-08-23: "top shit; auto-switch per browser, invisible; never make it worse for everyone
 because one system can't; camera-with-screen is a small rectangle anyway."
 Why: file size is set by flat 8 Mbps ceilings chosen blind — nobody has measured where the bits go.
@@ -374,6 +385,21 @@ codec; av1+hevc pair covers 99.7 % of sessions).
 GATES: (a) numbers in console + tag, probed back out of a real export · (b/c) size delta reported +
 SSIM/visual-diff evidence of no loss + instant path untouched (logs) · (d) every rung's file plays in
 current Chrome + Safari + Firefox (P1 rig) · export throughput ≥1× realtime holds · oracles green.
+── HANDOFF 2026-08-23 (third session) — (a)(b)(c) SHIPPED AND MERGED.
+   (a) RENDER HALF DONE: compose/bits.ts counts every encoded packet on the render path AND the
+   packets the instant path copies (video/audio bytes, keyframe count and SHARE, achieved vs
+   requested bitrate, mean keyframe vs mean delta) — one console line per export. The certification
+   tag carries the codec rung (container/video/audio/GOP). Harness `npm run exp -- o11`.
+   (b) GOP 2 s -> 5 s ON EVIDENCE. Screen-like content, 12 s take, sizes demuxed out of the file:
+   1 s +41.6 % · 2 s baseline · 3 s -10.9 % · 5 s -23.8 % · 8 s -24.4 %; keyframes were 43.5 % of
+   video bytes at the old default (229 KB per keyframe against a 5 KB delta). Motion content moves
+   0.3 % across the whole ladder. PSNR vs the 2 s render 82-83 dB to 5 s, 65 dB at 8 s. 5 s beats 8 s
+   because 8 s adds 0.6 pp and doubles a player's seek granularity. Reproduced on a second run
+   (-22.4 %). OUTPUT cadence only — smart cut needs the CAPTURE encoder's, which is O4's.
+   (c) CAMERA-WHEN-PiP DONE: raw camera channel 4 -> 2.5 Mbps when a screen is in the take. One camera
+   stream recorded into two files at once: -29.3 % on disk (1,910,497 -> 1,350,135 B), +0.2 % on the
+   exported file, PiP-region PSNR 52.1 dB. Camera-only takes keep 4 Mbps (they are captured at 1080p).
+   (d) REMAINS, and still wants P1: the ladder only flips where the recipient is known.
 ── HANDOFF 2026-08-23 — (a) PARTIALLY DONE on the CAPTURE side, folded into O4 step 2 because owning
    the encoder makes the telemetry free. CompositorStats now counts, per take: video and audio bytes,
    keyframe count and the keyframe SHARE of video bytes, achieved vs requested bitrate, frames encoded
@@ -405,12 +431,21 @@ Screen-Studio-class AUTO-zoom — design the viewport track so keyframes can be 
 GATES: preview↔export geometry parity ≤1 px at 3 sampled times · no aliasing shimmer vs 1:1 (visual
 evidence) · sync+fidelity green · zero cost when the track is absent.
 
-## F3. background-frame  [P2]
-PO: okay.
-Goal: background layer (color/gradient/wallpaper presets) + padding + rounded corners + shadow on the
-screen surface. Default remains current full-bleed (frozen rule: nothing changes without user action).
-GATES: preview↔export parity · export time delta <10 % · defaults render identical to today (A/B) ·
-oracles green.
+## F3. background-frame — DONE 2026-08-23, merged (evidence in DECISIONS)
+Shipped: compose/background.ts (presets as DATA — a solid or a gradient angle plus stops — plus the
+geometry, painted into the canvas by the export and into CSS by the editor, with the stage's <video>
+positioned on the same contain box the compositor draws into) + EditState.background + a Frame control
+in the timeline tools row (swatches · Flush/S/M/L · Shadow), screen takes only.
+MEASURED by LOCATING the surface in decoded exported frames (`npm run exp -- f3`): inset M rounded
+0.4 px off the pure geometry, inset L flush 0.0 px (band 3 px), the unframed default shows no inset
+band at all, the shadowed case renders with a 22.6 px reach. Preview (`ui-shot --flow=frame`)
+0.061/0.878 at M and 0.101/0.798 at L against the compositor's 0.060/0.880 and 0.100/0.800. Export
+cost +4.4 % (gate <10 %) — and the harness needed a warm-up render first, or the framed case measured
+21.8 % FASTER than the plain one.
+The inset is a UNIFORM SCALE (a unit test refused "equal visual gap": under a uniform scale a 16:9
+picture in a 16:9 frame always leaves margins in the ratio 16:9). No image wallpapers, deliberately.
+DEFERRED: the background is a render-path EDIT, so the two live composites do not know about it —
+a framed take cannot take the instant path, by design (see note 9).
 
 ## F4. movable-camera — DONE 2026-08-23, merged (evidence in DECISIONS)
 Shipped: timeline/cameraTrack.ts (pure pose math in frame FRACTIONS, one function sampled by both the
@@ -425,10 +460,21 @@ Harness: `npm run exp -- f4`, `node scripts/ui-shot.mjs --flow=camera`.
 DEFERRED: live-drag DURING recording (out of scope v1, revisit after O4 makes the live compositor
 edit-aware); F2 will reuse the same track shape for a viewport.
 
-## F5. silence-speed  [P2, two branches; (a) rides F1]
+## F5. silence-speed — (a) DONE 2026-08-23, merged (evidence in DECISIONS); (b) READY
 PO: okay. Deterministic DSP only — NO transcript, NO ML, ever.
-(a) silence tightening: detect via the existing window-RMS analysis (threshold / min-gap / padding
-params) → a PROPOSED cut list the user previews and toggles; applying uses F1 machinery.
+(a) DONE. timeline/silence.ts (pure: envelope -> quiet stretches -> padded cuts -> F1 segments) +
+compose/analyzeSilence.ts (opens exactly the mixers the export would, over exactly the current edit;
+code-split so the decoder loads only when the button is pressed) + a Tighten button, a proposal bar
+and ghost spans on the timeline. The proposal is DATA until Apply, and any other edit discards it.
+MEASURED against a known silence map (`npm run exp -- f5a`, 13 s): 100 % recall on gaps >=800 ms,
+0 ms of the proposal inside speech, the deliberate 500 ms gap preserved, 2800 ms removed, and the
+applied joins measure a 0.021 max sample step against a 0.116 baseline (joins QUIETER than the file —
+F1's fade through zero). A take whose loud level is under 3x its own floor is refused honestly.
+The RIG had to be fixed before it could be believed: the first run reported 760 ms of "speech" cut and
+the detector was right — the answer key and the file disagreed about t=0 by the time it took to open a
+write stream. Schedule the envelope AFTER the recorder is running.
+(a-original spec) silence tightening: detect via the existing window-RMS analysis (threshold / min-gap
+/ padding params) → a PROPOSED cut list the user previews and toggles; applying uses F1 machinery.
 (b) per-segment speed ×1.25–3, pitch preserved (WSOLA time-stretch on the mix), video retimed to match.
 GATES (a): synthetic take with a known silence map: ≥95 % recall on gaps ≥800 ms, ZERO cuts inside
 speech · joins click-free (fidelity) · proposal stays preview-only until applied.
@@ -451,7 +497,21 @@ choice. Default tier provably still instant (59-66 ms vs 1219-1641 ms render). S
 ±20 % twice over (√pixel-ratio scaling off the take's own composite size; linear scaling failed at
 −40/+36 %). Source-native tier waits for O6.
 
-## F7b. quality-slider v2 — finer steps, a size number on every step  [P2, light-medium; AFTER O11a — the audit picks the steps; PO 2026-08-23]
+## F7b. quality-slider v2 — DONE 2026-08-23, merged, WITH ONE GATE REPORTED UNMET (now task F7c)
+SHIPPED: 540p · 720p · 1080p (default, instant) · 1440p. Steps are RESOLUTION; bitrate rungs at a
+fixed resolution were measured and rejected (1080p: 2.77 MB at the 8 Mbps ceiling, 2.20 at 3 Mbps,
+1.72 at 1.5 Mbps, with only 1.84 Mbps achieved at the top — those are quality levers, not size steps,
+and O9 owns them). 900p was a fifth step, dropped because it is the one rung the estimator misses
+(+29.0 % / +30.5 % against ±20 % on the others, twice). Two production-rig runs: -15.9/+12.1/-3.1/-11.9
+and -15.5/+13.8/-3.3/-9.6; adjacent steps 31/47/32 % apart predicted; default step still instant at
+82 and 86 ms against 1.6-2.2 s renders.
+NOT MET, WITH NUMBERS -> F7c: ±20 % does not hold in general. The estimate is anchored on the
+composite and the composite's encoder is not the export's — 0.97 vs 1.84 Mbps on the same text pixels,
+so the prediction lands 47 % low at 1440p; and the size-vs-resolution shape is content-dependent (text
+~linear, motion ~sqrt; composite keyframe share separates them 68.8 % vs 1.1 %). The default step's
+number is EXACT (it is the file); everything else is marked "~".
+
+## F7b (original spec, kept for the follow-on)  [PO 2026-08-23]
 PO: slider before export with SIZES shown per step; "step is whatever optimal" — TD picks from
 evidence. UI REFERENCE (PO): "like claude code / chatgpt effort level" — a discrete stepped control
 with a handful of NAMED levels, not a continuous slider; selecting a level shows its predicted MB.
@@ -467,6 +527,24 @@ stays invisible (O11d decides it, never the slider) · honest path label kept (r
 GATES: measured size within ±20 % of the shown number on EVERY step, twice over · adjacent steps
 differ ≥25 % predicted · default step still instant (logs) · lowest step visual-diff evidence ·
 `node scripts/ui-shot.mjs --flow=quality` updated · oracles green.
+
+## F7c. the size number, calibrated — meet the gate F7b could not  [P2, medium; READY]
+WHY: F7b's per-step size is anchored on the composite, and the composite's encoder is not the export's
+encoder. Measured: on still text-heavy content MediaRecorder's AVC spends 0.97 Mbps where the export's
+AVC spends 1.84 Mbps for the same pixels (prediction 47 % low at 1440p); on full-motion content they
+agree within 7 %. And the size-vs-resolution shape is content-dependent too — text scales about
+linearly with pixel count, motion about as √ — with the composite's keyframe share separating the two
+cases 68.8 % vs 1.1 %. No exponent fixes both, because the missing quantity is what the EXPORT encoder
+charges for THIS content.
+GOAL: measure the missing quantity instead of modelling it. Encode ONE frame of the take at each step
+through the production encoder and compare it against the composite's mean keyframe size (O11a's audit
+already counts keyframe bytes and count on the copy path); the ratio is the cross-encoder calibration,
+and the per-step ratios are the resolution shape. Budget it: the probe runs when the quality panel
+opens, must stay under ~500 ms for all steps together, must not leave scratch files behind, and must
+degrade to today's estimate on any failure. Show the number as soon as it lands, never block the panel.
+GATES: measured size within ±20 % of the shown number on EVERY step, on BOTH the text rig and the
+motion rig, twice over · panel opens in under 100 ms with the probe still running · zero orphan
+scratch files after 20 opens · default step still exact and still instant.
 
 ## F8. nle-scrub — frame-exact editor feel  [P2, after O4; PO-approved]
 Goal: keyframe-index-driven preview — scrub decodes the EXACT frame (WebCodecs random access) instead

@@ -7,13 +7,29 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
 - instant unedited export ~60-105ms (live composite packet-copied, mp4 h264+aac); edited takes → full render
 - exports STREAM TO DISK (O1): the muxer holds 4 MB regardless of length — a 30-min export peaks at
   39 MB live memory instead of 294 MB. ExportResult.blob is a disk-backed OPFS file.
+- WHERE THE BYTES GO IS MEASURED, NOT GUESSED (O11a): both export paths count every encoded packet
+  (keyframe share, achieved vs requested bitrate, mean keyframe vs mean delta) and log one line; the
+  certification tag names the codec rung. Two levers priced and shipped off it: render keyframe cadence
+  2 s → 5 s (−23.8 % on screen content, 0 % on motion, PSNR 83 dB — no pixel changes, O11b) and the raw
+  camera channel 4 → 2.5 Mbps when it is only a PiP (−29.3 % on disk, +0.2 % on the file, PiP PSNR
+  52.1 dB, O11c). Harness: `npm run exp -- o11`.
 - crash-durable: mid-record reload salvages all channels (video + positioned-write audio), boots into editor
 - editor: trim, per-channel enable/trim, MID-TAKE CUTS (F1: split at playhead, delete clip, drag cut
-  edges), quality tiers before export (F7: 720p/1080p-instant/1440p with size estimate), MOVABLE TIMED
-  CAMERA (F4: drag/resize the PiP on the stage; the export moves it AT the instant you moved it)
+  edges), quality steps before export (F7+F7b: 540p/720p/1080p-instant/1440p, each with a size number —
+  the default step's is EXACT because it is the file, the rest are marked "~"), MOVABLE TIMED CAMERA
+  (F4: drag/resize the PiP on the stage; the export moves it AT the instant you moved it), BACKGROUND
+  FRAME (F3: backdrop + inset + rounded corners + shadow around the screen surface, preview and export
+  from one geometry function), SILENCE TIGHTENING (F5a: "Tighten" proposes cuts from the audio's own
+  window-RMS envelope; a proposal until you press Apply, then ordinary F1 segments)
 - THE EDIT SURVIVES A REFRESH (F4, editsRepo IndexedDB v2). It never did before: recovery restored the
   recording and handed the editor a fresh default, so trims and cuts evaporated on every reload.
-- installable PWA, starts offline (P2); first paint 227.7 KB (O7 gate ≤300 KB; was 803)
+- installable PWA, starts offline (P2); first paint 232.0 KB (O7 gate ≤300 KB; was 803)
+- YOU ARE IN THE SHOT (2026-08-23): pressing HIDE on the browser's screen-sharing bar activates this
+  window — browser security UI, unfixable from a page (no API dismisses it, and none moves OS focus
+  back to another app). So the LANDING is handled instead: a whole-screen take with this window in
+  front replaces the self-filming preview with one card that says so (and a "Show preview anyway"), a
+  window/tab take gets a band saying the shared surface is now behind us. Needs the picked surface,
+  which the session now carries (CaptureSession.displaySurface; null in synthetic mode).
 - knows WHICH browser it is running in (P3, core/platform.ts): Yandex is named as Yandex and not
   Chrome, and a below-floor build gets an honest "update" line instead of a silent failure
 - every exported file carries a certification in its comment tag (O8): path, output settings, loudness
@@ -62,6 +78,11 @@ gaps / in flight:
   seconds missing. At 1080p it is 65 ms, which is why the O8 tail band never caught it: that band only
   ever runs on the light rig. This is "Loom cuts last seconds" happening in what users run today.
   Task P0-tail in .ai/TASKS; it is first on the READY map.
+- SHIPPED 2026-08-23, THIRD SESSION (PO: "roadmap o/f, all in one session"): the in-shot notice ·
+  O11a bits audit (render half + codec rung in the tag) · O11b GOP 2→5 s · O11c camera-when-PiP ·
+  F7b finer export ladder (with its ±20 % gate reported UNMET and the reason measured — new task F7c) ·
+  F3 background frame · F5a silence tightening. Full QA green on the prod build in real Chrome 151
+  (record→edit→export, 4 channels, export 505 ms, zero console errors).
 - SHIPPED 2026-08-23, SECOND SESSION (three more merges): P3 ru-pack part 1 (core/platform.ts +
   scripts/browser-check.mjs QA runner + scripts/ru-reachability.mjs + docs/QA_MATRIX.md +
   docs/RU_REACHABILITY.md; RU auth alternatives were built and then REMOVED on PO instruction —
@@ -83,6 +104,7 @@ gaps / in flight:
   merely deferred and PO-gated per instance), fixed composition layout unfrozen for F4's timed camera.
   PROTOCOL: PO says "roadmap" → print the TASKS READY map and WAIT; PO says "go <id>" → one task,
   own branch, gates, TD merge, then update the READY map.
+  READY NOW: P0-tail (the only live defect) · O4 step 2 remainder · F7c · P1 · P5a · F5b · O11d.
 - composite blob absent from crash salvage → absorbed by TASKS O4 (fMP4-on-disk makes it free)
 - bundle: O7 SHIPPED — first paint 802,975 B → ~221,000 B; editor/cloud/capture-engine split, engine
   prewarmed at mount so record latency is unchanged (282 → 296 ms). Enforcement is the capture barrel:

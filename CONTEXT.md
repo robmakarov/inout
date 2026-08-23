@@ -60,12 +60,22 @@ Shipped 2026-08-23 (eleven merges; engineering detail in `.ai/DECISIONS`, task s
   mount, not fetched on click).
 - **Mid-take cuts** — split at the playhead, delete a clip, drag cut edges. Sync holds across joints
   and joins are click-free.
-- **Quality slider before export** — 720p / 1080p / 1440p with an honest size estimate; the default
-  tier still exports instantly.
+- **Quality steps before export** — 540p / 720p / 1080p / 1440p, each with a size number; the default
+  step still exports instantly and its number is the file itself rather than a prediction.
 - **Installable, and it starts offline.**
 - **Every export now carries a record of how it was made** (path, settings, what the loudness
   normalizer did, anything capture knew was wrong).
 - **The tail of a take is now gated**: CI fails if an export is short or loses its final events.
+- **A frame around the screen** — backdrop, inset, rounded corners, shadow. Off by default; what you
+  see in the editor is what the file gets, measured to under a pixel.
+- **Tighten** — one press finds the silent stretches in a take and proposes the cuts. It stays a
+  proposal until you apply it, it leaves the short pauses that make speech sound like speech, and it
+  is pure signal processing: no transcript, no model, ever.
+- **Files got smaller for free** — 20–24 % off a screen recording's export and 29 % off what the
+  camera writes to disk while recording, with the picture measurably unchanged in both cases.
+- **You are in the shot** — hiding the browser's "you are sharing your screen" bar yanks you back to
+  INOUT, and no web page can prevent that. What INOUT can do, and now does, is stop filming itself and
+  tell you what happened.
 
 Known gaps, honestly stated:
 
@@ -119,8 +129,16 @@ the export moves it at the moment you moved it (PO's emphasized feature). And, f
 every trim and cut you had made. **Yandex Browser preparation** landed too: the app can now tell Yandex
 from Chrome, and there is a one-command QA runner and an RU network probe.
 
-**Runs in parallel:** background/frame · silence tightening · Firefox + 3-engine oracle · the bits
-audit and codec ladder · the iOS ScreenCaptureKit spike (time-sensitive: iOS 27 ships ~Sept 2026).
+**Shipped 2026-08-23 in one session, on PO's "roadmap o/f, all in one session":** the background
+frame · silence tightening · the finer export ladder · the whole bits audit and the two size levers it
+priced · the in-shot notice. One gate was NOT met and is a task rather than a footnote: the per-step
+size number cannot be honest to ±20 % on every kind of content, because it is predicted from a file a
+DIFFERENT encoder made — on text-heavy screen content the two encoders disagree by nearly 2×. The fix
+is to measure rather than model (encode one frame per step and calibrate), and it is task F7c.
+
+**Runs in parallel now:** P0-tail (the live defect) · the O4 remainder · F7c · Firefox + 3-engine
+oracle · per-segment speed · the codec ladder · the iOS ScreenCaptureKit spike (time-sensitive: iOS 27
+ships ~Sept 2026).
 
 **Waiting on PO:** zoom/pan scope reconfirm. Install Yandex Browser and run the one-command QA smoke.
 Run the RU reachability probe from a Russian connection without a VPN. And two rechecks on real
