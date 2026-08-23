@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CloudProvider, CloudShare, CloudUser, ExportResult } from '@core/types'
-import { markRecordingDismissed } from '@core/capture'
+import { loadRecovery } from '@core/capture'
 import { saveToFile } from '@core/share'
 import { getCloudProvider } from '@core/cloud'
 import { analytics } from '@core/analytics'
@@ -68,7 +68,7 @@ function Result({ onBack }: { onBack: () => void }) {
         className="btn btn--ghost xp__new"
         onClick={() => {
           const rec = useAppStore.getState().recording
-          if (rec) markRecordingDismissed(rec.id)
+          if (rec) void loadRecovery().then((m) => m.markRecordingDismissed(rec.id))
           useAppStore.getState().resetToCapture()
         }}
       >

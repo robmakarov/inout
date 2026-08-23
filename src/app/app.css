@@ -6,6 +6,13 @@
   overflow: hidden;
 }
 
+/* Editor chunk not resolved yet. Prefetched at record start, so in the normal
+   flow this never shows; it exists for the boot-into-editor recovery path.
+   Deliberately empty — a spinner that flashes for one frame reads as a fault. */
+.app__loading {
+  height: 100%;
+}
+
 /* ---------- buttons ---------- */
 
 .btn {

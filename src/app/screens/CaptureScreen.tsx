@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  createCaptureSession,
+  loadCaptureEngine,
   loadCapturePrefs,
   warmCapturePipeline,
   saveCapturePrefs,
@@ -11,6 +11,7 @@ import type { CaptureConfig, ChannelKind } from '@core/types'
 import { clampEditState, defaultEditState } from '@core/timeline'
 import { detectCapabilities } from '@core/capabilities'
 import { analytics } from '@core/analytics'
+import { prefetchEditorChunk } from '@app/editorChunk'
 import { useAppStore } from '@app/state/store'
 import {
   CHANNEL_KINDS,
@@ -160,6 +161,9 @@ export function CaptureScreen() {
     setArming(true)
     setArmingLabel('Starting…')
     try {
+      // Already fetched by warmCapturePipeline() at mount — this resolves from
+      // the module cache, so the click path gains no network round-trip (O7).
+      const { createCaptureSession } = await loadCaptureEngine()
       const s = await createCaptureSession(effectiveConfig, {
         onArming: (e) => {
           if (e.status === 'start') setArmingLabel(ARMING_LABEL[e.step])
@@ -175,6 +179,9 @@ export function CaptureScreen() {
       setMuted({})
       setStalled([])
       setSession(s)
+      // Recording is live and the user is committed for at least a few
+      // seconds — warm the editor chunk now so stop() lands on parsed code.
+      prefetchEditorChunk()
       analytics.track('record_start', {
         screen: prefs.screen,
         camera: prefs.camera,

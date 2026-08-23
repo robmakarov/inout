@@ -24,16 +24,16 @@ cost bands) and WAITS. PO answers "go <id>". One task per session (one branch pe
 several ids, take the first and tell PO to open parallel sessions for the rest. Whoever MERGES a task
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
-── READY MAP — current truth, updated on every merge (last: 2026-08-23, O1+O2+O3a merged) ──
+── READY MAP — current truth, updated on every merge (last: 2026-08-23, O1+O2+O3a+O7 merged) ──
 READY NOW — parallel-safe, any subset concurrently (one session each):
   O3b  single-generation export    [light]   touches compose/instant.ts, capture/session.ts — RE-SCOPE first
+  O4   webcodecs engine (KEYSTONE) [heavy]   continues ee/webcodecs-capture-2 — rebase first
   P1   firefox + 3-engine oracle   [medium]  touches capabilities.ts, oracle scripts
   P2   pwa install                 [light]   touches index.html, vite config, service worker
   P3   ru-pack part 1              [light]   touches docs, cloud stubs
   P5a  iOS SCK spike               [light]   touches nothing in repo (separate Xcode proj) — TIME-SENSITIVE: iOS 27 beta window, ships ~Sept
   F7   quality slider              [medium]  touches ExportPanel, export settings in types.ts
-CONFLICT RULES: F7 coordinates with O5 if both active · O7 is broad-touch —
-solo lane, announce, TD call on timing.
+CONFLICT RULES: F7 coordinates with O5 if both active · O4 is the keystone — solo lane.
 BLOCKED (dep → unblocks): O4 (independent of O3b) · O5←O4 · O6←O4 · O8←O4/O5 ·
 O9←O4+O5 · O10 (its AEC part ←P4) · F1–F6←O5/O4 per pack (F4 also ←F1 UI seam; F2←F4) ·
 F8←O4 · P4←O4/O5 · P5b←P5a · P6←P5b · P7←P4.
@@ -128,12 +128,12 @@ export stays 1080p30 unless the user chooses higher (F7).
 GATES: 4K rig on a capable machine sustains ≥25 fps at 4K encode OR degrades stepwise with console
 evidence and zero freeze · PO's real 4K-game-tab scenario re-verified · oracles green.
 
-## O7. bundle-split — smaller first paint, instant start intact  [P2, mechanical; absorbs v1 task 5]
-Goal: record path eager; editor/export/cloud lazy; supabase-js lazy; PREFETCH the editor chunk the
-moment recording starts (user is guaranteed busy — chunk is warm before stop). vite manualChunks.
-GATES: initial JS ≤ 300 KB (baseline 748) · record-click→recording latency unchanged (arming logs
-before/after) · network log proves the editor chunk loads during a 10 s take, before stop · no new
-waterfall on the record path.
+## O7. bundle-split — DONE 2026-08-23, merged (evidence in DECISIONS)
+First paint 802,975 B → 218,793 B (gate ≤300 KB). Editor lazy behind app/editorChunk.ts + prefetch at
+record start (chunk ready ~3.3 s into a 6 s take); capture engine + recovery behind core/capture/lazy.ts
+and warmed at mount (record latency unchanged: 282 ms → 296 ms, armed +212 → +215 ms); supabase-js in
+its own 216 KB chunk behind a lazy provider that still warms eagerly on an OAuth callback URL.
+Evidence: `node scripts/o7-measure.mjs` (prod build + CDP).
 
 ## O8. perf-oracle — performance regressions gate like sync ones  [P2, lands with O4/O5]
 Goal: extend the oracle suite with perf bands: export ×realtime floor · capture delivered-fps under

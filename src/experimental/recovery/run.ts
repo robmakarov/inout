@@ -15,7 +15,8 @@
  */
 
 import { blobStore } from '@core/store'
-import { createCaptureSession, isSyntheticMode } from '@core/capture'
+import { isSyntheticMode } from '@core/capture'
+import { createCaptureSession } from '@core/capture/session'
 import { recordingsRepo } from '@core/store'
 import { expReadFile, expRemove } from '../shared/opfs'
 import { attachJournal, clearJournal, readJournal, type JournalEntry } from './journal'
