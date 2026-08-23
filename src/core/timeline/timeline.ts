@@ -1,6 +1,14 @@
-import type { ChannelEdit, ChannelRecording, EditState, Recording } from '../types'
+import type {
+  ChannelEdit,
+  ChannelRecording,
+  EditState,
+  KeptSegment,
+  Recording,
+} from '../types'
 
 const MIN_SPAN_MS = 100
+/** A cut may not leave a segment shorter than this. */
+export const MIN_SEGMENT_MS = 200
 
 export function defaultEditState(r: Recording): EditState {
   return {
@@ -35,11 +43,167 @@ export function clampEditState(r: Recording, e: EditState): EditState {
     const [ts, te] = clampSpan(prev.trimStartMs, prev.trimEndMs, c.durationMs)
     return { channelId: c.id, enabled: prev.enabled, trimStartMs: ts, trimEndMs: te }
   })
-  return { recordingId: r.id, globalTrimStartMs: gs, globalTrimEndMs: ge, channels }
+  const base: EditState = {
+    recordingId: r.id,
+    globalTrimStartMs: gs,
+    globalTrimEndMs: ge,
+    channels,
+  }
+  if (!e.segments || e.segments.length === 0) return base
+  const segments = normalizeSegments(base, e.segments)
+  // A single span covering the whole trim is the same as no cuts; keep the
+  // field absent so untouched takes stay byte-identical to before F1.
+  if (
+    segments.length === 0 ||
+    (segments.length === 1 && segments[0]!.startMs <= gs && segments[0]!.endMs >= ge)
+  ) {
+    return base
+  }
+  return { ...base, segments }
+}
+
+/**
+ * The spans as the EDITOR holds them — a split the user made is two adjacent
+ * spans even though nothing has been removed yet, because the marker has to
+ * survive until they delete or drag it.
+ */
+export function editSegments(e: EditState): KeptSegment[] {
+  if (!e.segments || e.segments.length === 0) {
+    return [{ startMs: e.globalTrimStartMs, endMs: e.globalTrimEndMs }]
+  }
+  return e.segments
+}
+
+/**
+ * The spans as the ENGINE sees them: adjacent spans merged, because material
+ * that is still contiguous is not a cut. This is what keeps a split-with-
+ * nothing-deleted free — no extra mixers, no seam fade, and the take still
+ * qualifies for the instant packet-copy path.
+ */
+export function keptSegments(e: EditState): KeptSegment[] {
+  const raw = editSegments(e)
+  const out: KeptSegment[] = []
+  for (const s of raw) {
+    const last = out[out.length - 1]
+    if (last && s.startMs <= last.endMs) last.endMs = Math.max(last.endMs, s.endMs)
+    else out.push({ ...s })
+  }
+  return out
 }
 
 export function outputDurationMs(e: EditState): number {
-  return e.globalTrimEndMs - e.globalTrimStartMs
+  let total = 0
+  for (const s of keptSegments(e)) total += Math.max(0, s.endMs - s.startMs)
+  return total
+}
+
+/**
+ * Output time → recording time. With cuts the mapping is piecewise: walk the
+ * kept spans accumulating their lengths until the requested output time falls
+ * inside one. Returns null past the end of the output.
+ */
+export function outputToRecordingMs(e: EditState, outputMs: number): number | null {
+  if (outputMs < 0) return null
+  let acc = 0
+  for (const s of keptSegments(e)) {
+    const len = Math.max(0, s.endMs - s.startMs)
+    if (outputMs < acc + len) return s.startMs + (outputMs - acc)
+    acc += len
+  }
+  return null
+}
+
+/**
+ * Recording time → output time, or null when that instant was cut out.
+ * Used by the editor to keep the playhead where the user left it after a cut.
+ */
+export function recordingToOutputMs(e: EditState, recordingMs: number): number | null {
+  let acc = 0
+  for (const s of keptSegments(e)) {
+    const len = Math.max(0, s.endMs - s.startMs)
+    if (recordingMs >= s.startMs && recordingMs < s.endMs) return acc + (recordingMs - s.startMs)
+    acc += len
+  }
+  return null
+}
+
+/**
+ * Output-time positions where material was actually REMOVED. Uses the merged
+ * view, so a split with nothing deleted contributes no join — fading a seam
+ * that has continuous audio either side would put a notch where none belongs.
+ */
+export function segmentJoinsMs(e: EditState): number[] {
+  const joins: number[] = []
+  let acc = 0
+  const segs = keptSegments(e)
+  for (let i = 0; i < segs.length; i++) {
+    acc += Math.max(0, segs[i]!.endMs - segs[i]!.startMs)
+    if (i < segs.length - 1) joins.push(acc)
+  }
+  return joins
+}
+
+/**
+ * Normalize: clip to the trim, drop empties, sort, merge OVERLAPPING spans.
+ * Only overlaps merge — adjacent spans are left alone, because that is exactly
+ * what a fresh split looks like and collapsing it would undo the user's edit
+ * the instant they made it.
+ */
+export function normalizeSegments(e: EditState, segments: KeptSegment[]): KeptSegment[] {
+  const clipped = segments
+    .map((s) => ({
+      startMs: Math.max(e.globalTrimStartMs, Math.min(s.startMs, s.endMs)),
+      endMs: Math.min(e.globalTrimEndMs, Math.max(s.startMs, s.endMs)),
+    }))
+    .filter((s) => s.endMs - s.startMs > 0)
+    .sort((a, b) => a.startMs - b.startMs)
+  const out: KeptSegment[] = []
+  for (const s of clipped) {
+    const last = out[out.length - 1]
+    if (last && s.startMs < last.endMs) last.endMs = Math.max(last.endMs, s.endMs)
+    else out.push({ ...s })
+  }
+  return out
+}
+
+/** Split the segment containing this OUTPUT time into two, at that point. */
+export function splitAtOutputMs(e: EditState, outputMs: number): EditState {
+  const recordingMs = outputToRecordingMs(e, outputMs)
+  if (recordingMs === null) return e
+  const segs = editSegments(e)
+  const next: KeptSegment[] = []
+  for (const s of segs) {
+    if (
+      recordingMs > s.startMs + MIN_SEGMENT_MS &&
+      recordingMs < s.endMs - MIN_SEGMENT_MS
+    ) {
+      next.push({ startMs: s.startMs, endMs: recordingMs })
+      next.push({ startMs: recordingMs, endMs: s.endMs })
+    } else {
+      next.push({ ...s })
+    }
+  }
+  if (next.length === segs.length) return e
+  return { ...e, segments: next }
+}
+
+/** Remove one kept span. The last remaining span is never removed. */
+export function removeSegment(e: EditState, index: number): EditState {
+  const segs = editSegments(e)
+  if (segs.length <= 1 || index < 0 || index >= segs.length) return e
+  return { ...e, segments: segs.filter((_, i) => i !== index) }
+}
+
+/**
+ * True when the kept material is NOT simply the whole global trim — i.e. the
+ * output really differs from "everything". A split with nothing deleted is not
+ * a cut; deleting the tail clip is, even though it leaves one span.
+ */
+export function hasCuts(e: EditState): boolean {
+  const segs = keptSegments(e)
+  if (segs.length !== 1) return true
+  const only = segs[0]!
+  return only.startMs > e.globalTrimStartMs || only.endMs < e.globalTrimEndMs
 }
 
 export function channelSourceTimeAt(
@@ -54,7 +218,8 @@ export function channelSourceTimeAt(
   const edit = e.channels.find((ce) => ce.channelId === channelId) ?? defaultChannelEdit(channel)
   if (!edit.enabled) return null
   if (outputMs < 0 || outputMs >= outputDurationMs(e)) return null
-  const recordingT = outputMs + e.globalTrimStartMs
+  const recordingT = outputToRecordingMs(e, outputMs)
+  if (recordingT === null) return null
   if (recordingT < channel.startOffsetMs || recordingT >= channel.startOffsetMs + channel.durationMs) {
     return null
   }
@@ -73,10 +238,13 @@ export function channelHasOutputWindow(r: Recording, e: EditState, channelId: st
   if (!c) return false
   const edit = e.channels.find((ce) => ce.channelId === c.id) ?? defaultChannelEdit(c)
   if (!edit.enabled) return false
-  // Channel's kept window on the recording timeline, intersected with the global trim.
+  // Channel's kept window on the recording timeline, intersected with the
+  // global trim AND with at least one kept span (a channel can be cut away
+  // entirely by the segment list even though its trim still overlaps).
   const start = Math.max(c.startOffsetMs + Math.max(edit.trimStartMs, 0), e.globalTrimStartMs)
   const end = Math.min(c.startOffsetMs + Math.min(edit.trimEndMs, c.durationMs), e.globalTrimEndMs)
-  return end > start
+  if (end <= start) return false
+  return keptSegments(e).some((s) => Math.min(end, s.endMs) > Math.max(start, s.startMs))
 }
 
 export function hasEnabledVideo(r: Recording, e: EditState): boolean {
@@ -85,6 +253,7 @@ export function hasEnabledVideo(r: Recording, e: EditState): boolean {
 
 /** True when the edit changes nothing: instant-export can use the live composite. */
 export function isDefaultEdit(r: Recording, e: EditState): boolean {
+  if (hasCuts(e)) return false
   if (e.globalTrimStartMs > 0 || e.globalTrimEndMs < r.durationMs) return false
   for (const c of r.channels) {
     const edit = e.channels.find((x) => x.channelId === c.id)

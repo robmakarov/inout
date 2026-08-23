@@ -9,6 +9,12 @@
  *   (video: not drawn; audio: silent).
  * - Global trim [globalTrimStartMs, globalTrimEndMs) is on the RECORDING timeline and
  *   defines the output bounds. Output t=0 corresponds to recording t=globalTrimStartMs.
+ * - KEPT SEGMENTS (optional, task F1) cut material out of the MIDDLE. When
+ *   `segments` is present the output timeline is the ordered concatenation of
+ *   those recording-timeline spans, so output time maps piecewise rather than
+ *   by a single offset. Absent (or a single span covering the whole global
+ *   trim) is exactly the old behaviour, which is why every take recorded
+ *   before F1 keeps behaving identically.
  * - A channel is active at output time t iff:
  *     enabled
  *     && recordingT = t + globalTrimStartMs is within the channel's span
@@ -96,12 +102,23 @@ export interface ChannelEdit {
   trimEndMs: number
 }
 
+/** A kept span of the RECORDING timeline. Ordered, disjoint, ascending. */
+export interface KeptSegment {
+  startMs: number
+  endMs: number
+}
+
 export interface EditState {
   recordingId: string
   /** Recording-timeline, ms. Output covers [globalTrimStartMs, globalTrimEndMs). */
   globalTrimStartMs: number
   globalTrimEndMs: number
   channels: ChannelEdit[]
+  /**
+   * Kept spans inside the global trim, in order. Absent = one span covering
+   * the whole trim (today's behaviour). Output duration is their total length.
+   */
+  segments?: KeptSegment[]
 }
 
 // ---------------------------------------------------------------------------

@@ -24,7 +24,7 @@ cost bands) and WAITS. PO answers "go <id>". One task per session (one branch pe
 several ids, take the first and tell PO to open parallel sessions for the rest. Whoever MERGES a task
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
-── READY MAP — current truth, updated on every merge (last: 2026-08-23, O1+O2+O3a+O7+O4step1+O4b+F7 merged; P0 mic-hang fixed) ──
+── READY MAP — current truth, updated on every merge (last: 2026-08-23, O1+O2+O3a+O7+O4step1+O4b+F7+F1 merged; P0 mic-hang fixed) ──
 READY NOW — parallel-safe, any subset concurrently (one session each):
   O3b  single-generation export    [light]   touches compose/instant.ts, capture/session.ts — RE-SCOPE first
   O4b  sync-rig fix + gate re-spec  [medium]  REQUIRED before O4 step 2 — see O4 step 1b
@@ -32,7 +32,8 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
   P2   pwa install                 [light]   touches index.html, vite config, service worker
   P3   ru-pack part 1              [light]   touches docs, cloud stubs
   P5a  iOS SCK spike               [light]   touches nothing in repo (separate Xcode proj) — TIME-SENSITIVE: iOS 27 beta window, ships ~Sept
-  F1   mid-take cuts               [medium]  touches types.ts EditState, timeline, Timeline UI
+  O8   perf-oracle bands           [medium]  tail-integrity + export bands; touches oracle scripts
+  P2   pwa install                  [light]   touches index.html, vite config, service worker
 CONFLICT RULES: F7 coordinates with O5 if both active · O4 is the keystone — solo lane.
 BLOCKED (dep → unblocks): O4 (independent of O3b) · O5←O4 · O6←O4 · O8←O4/O5 ·
 O9←O4+O5 · O10 (its AEC part ←P4) · F1–F6←O5/O4 per pack (F4 also ←F1 UI seam; F2←F4) ·
@@ -183,15 +184,13 @@ unchanged · gating: zero triggers on the clean-speech fidelity set · fidelity 
 
 ═══ PHASE F — FEATURES (PO-approved 2026-08-22; order below; F7 independent) ═══
 
-## F1. mid-take-cuts  [P1, first feature]
-PO: yes. Cut mistakes out of the MIDDLE, not just trim ends.
-Goal: EditState gains an ordered kept-segment list on the output timeline (types.ts — compatible
-extension: absent list = today's behavior). Timeline UI: split-at-playhead, delete segment, drag cut
-boundaries. Engine: output-time→source-time generalized over segments (channelSourceTimeAt); audio
-reuses the existing seam-fade at every join; smart-cut (O5) keeps cut exports ~instant on new takes.
-GATES: oracle cut-matrix (≥3 cuts at arbitrary offsets): sync bands hold across EVERY joint · fidelity
-finds zero clicks at joins · 30 s take + 3 cuts exports ≤2 s (post-O5) · preview honors cuts (parity)
-· takes with no cuts behave byte-identically to today.
+## F1. mid-take-cuts — DONE 2026-08-23, merged (evidence in DECISIONS)
+EditState.segments (optional KeptSegment[]) + piecewise output→recording mapping; video and preview
+came free through channelSourceTimeAt, audio uses one mixer per (channel × span) with a ±3 ms fade
+through zero at every real join. Split is an EDITOR concept (adjacent spans) and only a real gap is a
+cut, so a split with nothing deleted keeps the instant path. Measured: sync delta 2.17 ms across 3
+cuts, joint discontinuity 0.000 vs 0.168 baseline, no-op segment lists dropped.
+Deferred to O5: smart-cut so cut exports are duration-independent (12 s take + 3 cuts = 1473 ms today).
 
 ## F2. zoom-pan  [P1, after F4; PO: "i think so" — reconfirm scope with PO before building]
 Goal: keyframed viewport track (time→rect, cubic ease). Editor: direct manipulation on the stage

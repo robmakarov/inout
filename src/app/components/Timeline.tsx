@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChannelEdit, ChannelRecording, EditState, Recording } from '@core/types'
+import {
+  MIN_SEGMENT_MS,
+  editSegments,
+  normalizeSegments,
+  removeSegment,
+  splitAtOutputMs,
+} from '@core/timeline'
 import { CHANNEL_META } from '@app/lib/channels'
 import { formatClock } from '@app/lib/format'
 import { Icon } from '@app/components/Icon'
@@ -109,6 +116,43 @@ export function Timeline({
       })
     }
 
+  // ---- mid-take cuts (F1) ----
+  const segments = editSegments(edit)
+  const canSplit = (() => {
+    const recMs = edit.globalTrimStartMs + Math.min(timeMs, durationMs)
+    return segments.some(
+      (sg) => recMs > sg.startMs + MIN_SEGMENT_MS && recMs < sg.endMs - MIN_SEGMENT_MS,
+    )
+  })()
+  const splitHere = () => {
+    onEdit(splitAtOutputMs(editRef.current, Math.min(timeMs, durationMs)))
+  }
+  const dropSegment = (index: number) => {
+    onEdit(removeSegment(editRef.current, index))
+  }
+  /** Drag the boundary between two kept spans — i.e. move the cut. */
+  const dragCutEdge = (index: number, side: 'end' | 'start') => (e: React.PointerEvent) => {
+    e.stopPropagation()
+    startDrag(e, (clientX) => {
+      const cur = editRef.current
+      const segs = editSegments(cur).map((sg) => ({ ...sg }))
+      const target = segs[index]
+      if (!target) return
+      const ms = msAtClient(clientX)
+      if (side === 'end') {
+        target.endMs = Math.max(target.startMs + MIN_SEGMENT_MS, Math.min(ms, target.endMs + totalMs))
+      } else {
+        target.startMs = Math.min(target.endMs - MIN_SEGMENT_MS, Math.max(ms, 0))
+      }
+      // Never let a drag swallow a neighbour: clamp against the adjacent spans.
+      const prev = segs[index - 1]
+      const next = segs[index + 1]
+      if (prev) target.startMs = Math.max(target.startMs, prev.endMs)
+      if (next) target.endMs = Math.min(target.endMs, next.startMs)
+      onEdit({ ...cur, segments: normalizeSegments(cur, segs) })
+    })
+  }
+
   const step = TICK_STEPS_MS.find((s) => (s / totalMs) * width >= MIN_TICK_PX) ?? 900000
   const ticks: number[] = []
   for (let t = 0; t <= totalMs; t += step) ticks.push(t)
@@ -183,6 +227,26 @@ export function Timeline({
         })}
       </div>
 
+      <div className="tl__row tl__row--tools">
+        <div className="tl__gutter" />
+        <div className="tl__tools">
+          <button
+            className="tl__tool"
+            onClick={splitHere}
+            disabled={!canSplit}
+            title={canSplit ? 'Split at playhead' : 'Move the playhead inside a clip to split'}
+          >
+            <Icon name="scissors" size={14} />
+            <span>Split</span>
+          </button>
+          {segments.length > 1 && (
+            <span className="tl__tools-hint">
+              {segments.length} clips — drag a cut edge to move it, × to delete a clip
+            </span>
+          )}
+        </div>
+      </div>
+
       <div className="tl__row tl__row--ruler">
         <div className="tl__gutter" />
         <div
@@ -203,6 +267,49 @@ export function Timeline({
         <div className="tl__overlay">
           <div className="tl__dim" style={{ left: 0, width: x(gStart) }} />
           <div className="tl__dim" style={{ left: x(gEnd), right: 0 }} />
+          {/* Material cut out of the middle, plus the handles that move each cut. */}
+          {segments.length > 1 &&
+            segments.slice(0, -1).map((sg, i) => (
+              <div
+                key={`gap-${sg.endMs}`}
+                className="tl__gap"
+                style={{ left: x(sg.endMs), width: Math.max(1, x(segments[i + 1]!.startMs - sg.endMs)) }}
+              />
+            ))}
+          {segments.length > 1 &&
+            segments.map((sg, i) => (
+              <div key={`seg-${sg.startMs}`}>
+                {i > 0 && (
+                  <div
+                    className="tl__cut tl__cut--l"
+                    style={{ left: x(sg.startMs) }}
+                    onPointerDown={dragCutEdge(i, 'start')}
+                    title="Move this cut"
+                  />
+                )}
+                {i < segments.length - 1 && (
+                  <div
+                    className="tl__cut tl__cut--r"
+                    style={{ left: x(sg.endMs) }}
+                    onPointerDown={dragCutEdge(i, 'end')}
+                    title="Move this cut"
+                  />
+                )}
+                <button
+                  className="tl__seg-del"
+                  style={{ left: x((sg.startMs + sg.endMs) / 2) }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    dropSegment(i)
+                  }}
+                  title="Delete this clip"
+                  aria-label={`Delete clip ${i + 1}`}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
           <div
             className="tl__trim tl__trim--l"
             style={{ left: x(gStart) }}
