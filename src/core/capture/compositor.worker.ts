@@ -149,6 +149,22 @@ export interface CompositorStats {
   /** Arrivals stamped BEFORE the last encode — i.e. the gate was closed against
    *  frames that were already in the worker's message queue. */
   framesStale: number
+  /**
+   * WHICH SIDE OF THE THREAD BOUNDARY IS SLOW (2026-08-23). Everything inside
+   * this worker has now been cleared by probe: a bare encoder does 169 fps
+   * here, and the FULL v2 shape — transferred capture frames, the production GL
+   * compositor, the same encoder, the same backpressure — does 59.7 fps with
+   * zero drops (`npm run exp -- encprobe`, rows worker:transfer and
+   * worker:composite). So the question is no longer "what costs so much" but
+   * "is this worker even busy". handlerMs is time spent INSIDE onmessage;
+   * idleMs is the wall clock between one message finishing and the next
+   * arriving. If idle dominates, the worker is starved and the wall is on the
+   * main thread that feeds it.
+   */
+  handlerMs: number
+  idleMs: number
+  /** Longest single starve — one long main-thread task shows up here. */
+  maxIdleMs: number
 }
 
 export type CompositorReply =
@@ -280,6 +296,9 @@ const stats: CompositorStats = {
   flushMs: 0,
   writeCalls: 0,
   framesGated: 0,
+  handlerMs: 0,
+  idleMs: 0,
+  maxIdleMs: 0,
   framesStale: 0,
 }
 
@@ -650,8 +669,17 @@ async function cancel(): Promise<void> {
   handle = null
 }
 
+/** When the previous message handler finished — the other end of an idle gap. */
+let lastHandlerEndedAt = 0
+
 self.onmessage = async (ev: MessageEvent<CompositorMsg>) => {
   const msg = ev.data
+  const handlerStart = performance.now()
+  if (lastHandlerEndedAt > 0) {
+    const idle = handlerStart - lastHandlerEndedAt
+    stats.idleMs += idle
+    if (idle > stats.maxIdleMs) stats.maxIdleMs = idle
+  }
   try {
     switch (msg.cmd) {
       case 'start':
@@ -739,5 +767,9 @@ self.onmessage = async (ev: MessageEvent<CompositorMsg>) => {
     }
   } catch (err) {
     post({ ok: false, cmd: msg.cmd, error: err instanceof Error ? err.message : String(err) })
+  } finally {
+    const end = performance.now()
+    stats.handlerMs += end - handlerStart
+    lastHandlerEndedAt = end
   }
 }

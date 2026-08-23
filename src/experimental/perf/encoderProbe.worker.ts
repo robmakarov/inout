@@ -20,6 +20,24 @@ interface RunMsg {
   hardwareAcceleration: 'no-preference' | 'prefer-hardware' | 'prefer-software'
   latencyMode: 'quality' | 'realtime'
   queueCap: number
+  /**
+   * 'paint'    — the worker paints its own canvas (the original probe)
+   * 'transfer' — frames arrive TRANSFERRED from the main thread and are only
+   *              counted and closed: the cost of the crossing, alone
+   * 'composite'— transferred frames go through the PRODUCTION GL compositor and
+   *              the encoder, i.e. everything v2 does except the muxer and disk
+   */
+  mode?: 'paint' | 'transfer' | 'composite'
+}
+
+interface FrameMsg {
+  cmd: 'frame'
+  frame: VideoFrame
+  i: number
+}
+
+interface EndMsg {
+  cmd: 'end'
 }
 
 function paint(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, i: number): void {
@@ -107,8 +125,127 @@ async function run(msg: RunMsg): Promise<unknown> {
   }
 }
 
+/**
+ * THE FED MODES. The main thread reads a real capture track and transfers each
+ * VideoFrame here; this side either drops it on the floor ('transfer') or does
+ * exactly what the production compositor does with it ('composite'). Between
+ * the two, and against the 'paint' mode above, the crossing is priced on its
+ * own instead of being the last unexamined suspect.
+ */
+async function runFed(msg: RunMsg): Promise<unknown> {
+  const composite = msg.mode === 'composite'
+  let comp: import('@core/capture/compositorGL').GLCompositor | null = null
+  if (composite) {
+    const { createGLCompositor } = await import('@core/capture/compositorGL')
+    comp = createGLCompositor(msg.width, msg.height)
+    if (!comp) return { error: 'no WebGL2 compositor in worker' }
+  }
+  let out = 0
+  let bytes = 0
+  let error: string | undefined
+  let encoder: VideoEncoder | null = null
+  if (composite) {
+    encoder = new VideoEncoder({
+      output: (chunk) => {
+        out++
+        bytes += chunk.byteLength
+      },
+      error: (err) => {
+        error = String(err)
+      },
+    })
+    encoder.configure({
+      codec: 'avc1.4D402A',
+      width: msg.width,
+      height: msg.height,
+      bitrate: 8_000_000,
+      framerate: 30,
+      hardwareAcceleration: msg.hardwareAcceleration,
+      latencyMode: msg.latencyMode,
+    })
+  }
+
+  let framesIn = 0
+  let peakQueue = 0
+  let dropped = 0
+  let t0 = 0
+  let tLast = 0
+  /** Wall time from the frame ARRIVING to this side being done with it. */
+  let handleMs = 0
+
+  return new Promise((resolve) => {
+    const finish = async (): Promise<void> => {
+      if (encoder) await encoder.flush().catch(() => undefined)
+      const wallMs = Math.round(tLast - t0)
+      try {
+        encoder?.close()
+      } catch {
+        /* already closed */
+      }
+      comp?.dispose()
+      resolve({
+        where: `worker:${msg.mode}`,
+        hardwareAcceleration: msg.hardwareAcceleration,
+        latencyMode: msg.latencyMode,
+        framesIn,
+        framesOut: composite ? out : framesIn,
+        framesDropped: dropped,
+        bytes,
+        wallMs,
+        msPerFrameHandled: framesIn > 0 ? Math.round((handleMs / framesIn) * 100) / 100 : 0,
+        queueWaitMs: 0,
+        peakQueue,
+        fps: wallMs > 0 ? Math.round(((composite ? out : framesIn) / (wallMs / 1000)) * 10) / 10 : 0,
+        error,
+      })
+    }
+    self.onmessage = (ev: MessageEvent<FrameMsg | EndMsg>) => {
+      const m = ev.data
+      if (m.cmd === 'end') {
+        void finish()
+        return
+      }
+      const arrived = performance.now()
+      if (t0 === 0) t0 = arrived
+      tLast = arrived
+      framesIn++
+      if (!composite || !comp || !encoder) {
+        m.frame.close()
+        handleMs += performance.now() - arrived
+        return
+      }
+      if (encoder.encodeQueueSize > peakQueue) peakQueue = encoder.encodeQueueSize
+      if (encoder.encodeQueueSize >= msg.queueCap + 1) {
+        // Same backpressure rule the production worker uses.
+        dropped++
+        m.frame.close()
+        handleMs += performance.now() - arrived
+        return
+      }
+      comp.begin(true)
+      comp.draw(m.frame, 0, 0, msg.width, msg.height, 0, 0)
+      m.frame.close()
+      const frame = new VideoFrame(comp.canvas, {
+        timestamp: Math.round((framesIn * 1e6) / 30),
+        duration: Math.round(1e6 / 30),
+      })
+      try {
+        encoder.encode(frame, { keyFrame: framesIn % 60 === 1 })
+      } catch (err) {
+        error = String(err)
+      } finally {
+        frame.close()
+      }
+      handleMs += performance.now() - arrived
+    }
+    self.postMessage({ ready: true })
+  })
+}
+
 self.onmessage = (e: MessageEvent<RunMsg>) => {
-  run(e.data).then(
+  const mode = e.data.mode ?? 'paint'
+  const job = mode === 'paint' ? run(e.data) : runFed(e.data)
+  job.then(
     (result) => self.postMessage(result),
     (err) => self.postMessage({ error: err instanceof Error ? err.message : String(err) }),
   )

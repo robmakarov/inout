@@ -194,9 +194,13 @@ export async function probeCompositorPath(
   frames: number,
   width: number,
   height: number,
+  opts: { camera?: boolean } = {},
 ): Promise<ProbeResult> {
+  const withCamera = opts.camera === true
   const base: ProbeResult = {
-    label: 'production GL compositor + real capture frames',
+    label: withCamera
+      ? 'production GL compositor + screen AND camera (two frame sizes)'
+      : 'production GL compositor + real capture frames',
     source: 'webgl2+texImage2D',
     codec: 'avc1.4D402A',
     hardwareAcceleration: 'prefer-hardware',
@@ -243,6 +247,52 @@ export async function probeCompositorPath(
   const track = stream.getVideoTracks()[0]!
   const reader = new TP({ track }).readable.getReader()
 
+  /**
+   * The SECOND source, and the reason this variant exists. Production
+   * composites a 1920×1080 screen and a 640×480 camera through ONE compositor,
+   * i.e. through one texture that gets re-specified to a different size twice
+   * per composited frame. Every probe before this one fed a single source at a
+   * constant size, which is the one case where that costs nothing.
+   */
+  const CAM_W = 640
+  const CAM_H = 480
+  let camTrack: MediaStreamTrack | null = null
+  let camReader: ReadableStreamDefaultReader<VideoFrame> | null = null
+  let camRaf = 0
+  // A holder, not a bare `let`: TypeScript narrows a variable only this
+  // function's own flow assigns, and the camera pump assigns from a closure.
+  const camHolder = { latest: null as VideoFrame | null }
+  if (withCamera) {
+    const cam = document.createElement('canvas')
+    cam.width = CAM_W
+    cam.height = CAM_H
+    const cctx = cam.getContext('2d', { alpha: false })!
+    let j = 0
+    const camTick = (): void => {
+      cctx.fillStyle = '#7f7f7f'
+      cctx.fillRect(0, 0, CAM_W, CAM_H)
+      cctx.fillStyle = '#e2554f'
+      cctx.beginPath()
+      cctx.arc(320 + Math.sin(j / 12) * 200, 240 + Math.cos(j / 18) * 150, 48, 0, Math.PI * 2)
+      cctx.fill()
+      j++
+      camRaf = requestAnimationFrame(camTick)
+    }
+    camTick()
+    const camStream = cam.captureStream(30)
+    camTrack = camStream.getVideoTracks()[0]!
+    camReader = new TP({ track: camTrack }).readable.getReader()
+    // Pumped independently, exactly as the worker receives two source streams.
+    void (async () => {
+      for (;;) {
+        const { value, done } = await camReader.read()
+        if (done || !value) break
+        camHolder.latest?.close()
+        camHolder.latest = value
+      }
+    })().catch(() => undefined)
+  }
+
   let out = 0
   let bytes = 0
   const encoder = new VideoEncoder({
@@ -272,6 +322,22 @@ export async function probeCompositorPath(
       comp.begin(true)
       comp.draw(value, 0, 0, width, height, 0, 0)
       value.close()
+      if (camHolder.latest) {
+        // The production PiP: 24 % of the width, bottom right, rounded with a
+        // hairline border — the same draw call, at a different texture size.
+        const pipW = 0.24 * width
+        const pipH = (pipW * CAM_H) / CAM_W
+        const margin = 24 * (width / 1920)
+        comp.draw(
+          camHolder.latest,
+          width - pipW - margin,
+          height - pipH - margin,
+          pipW,
+          pipH,
+          16 * (width / 1920),
+          1.5 * (width / 1920),
+        )
+      }
       const frame = new VideoFrame(comp.canvas, {
         timestamp: Math.round((base.framesIn * 1e6) / 30),
         duration: Math.round(1e6 / 30),
@@ -303,14 +369,124 @@ export async function probeCompositorPath(
     return base
   } finally {
     cancelAnimationFrame(raf)
+    cancelAnimationFrame(camRaf)
     try {
       encoder.close()
     } catch {
       /* already closed */
     }
     await reader.cancel().catch(() => undefined)
+    await camReader?.cancel().catch(() => undefined)
+    camHolder.latest?.close()
     track.stop()
+    camTrack?.stop()
     comp.dispose()
+  }
+}
+
+/**
+ * THE LAST UNTESTED CELL: frames that CROSS THE THREAD BOUNDARY.
+ *
+ * Everything else is eliminated with numbers. A bare encoder does 169 fps in a
+ * worker; the production GL compositor fed real capture frames does 59 fps on
+ * the main thread, with or without a second differently-sized source. v2 does
+ * 6.7-10 fps. The one difference left is that its frames are read on the main
+ * thread and TRANSFERRED in.
+ *
+ * So this reads a real capture track here and posts each frame across, in two
+ * modes: 'transfer' (the worker only closes them — the crossing, priced alone)
+ * and 'composite' (the worker composites and encodes them, i.e. all of v2 minus
+ * the muxer and the disk).
+ */
+async function probeTransfer(
+  frames: number,
+  width: number,
+  height: number,
+  mode: 'transfer' | 'composite',
+): Promise<Record<string, unknown>> {
+  const TP = (globalThis as { MediaStreamTrackProcessor?: new (i: { track: MediaStreamTrack }) => { readable: ReadableStream<VideoFrame> } })
+    .MediaStreamTrackProcessor
+  if (!TP) return { where: `worker:${mode}`, error: 'MediaStreamTrackProcessor unavailable' }
+  const src = new OffscreenCanvas(width, height)
+  const sctx = src.getContext('2d', { alpha: false })!
+  const bridge = document.createElement('canvas')
+  bridge.width = width
+  bridge.height = height
+  const bctx = bridge.getContext('2d', { alpha: false })!
+  let raf = 0
+  let i = 0
+  const tick = (): void => {
+    paint(sctx, width, height, i++)
+    bctx.drawImage(src, 0, 0)
+    raf = requestAnimationFrame(tick)
+  }
+  tick()
+  const stream = bridge.captureStream(60)
+  const track = stream.getVideoTracks()[0]!
+  const reader = new TP({ track }).readable.getReader()
+  const worker = new Worker(new URL('./encoderProbe.worker.ts', import.meta.url), { type: 'module' })
+  try {
+    const ready = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('worker never signalled ready')), 20_000)
+      worker.onmessage = (e: MessageEvent<{ ready?: boolean; error?: string }>) => {
+        if (e.data.error) {
+          clearTimeout(timer)
+          reject(new Error(e.data.error))
+        } else if (e.data.ready) {
+          clearTimeout(timer)
+          resolve()
+        }
+      }
+      worker.onerror = (e) => {
+        clearTimeout(timer)
+        reject(new Error(e.message))
+      }
+    })
+    worker.postMessage({
+      frames,
+      width,
+      height,
+      hardwareAcceleration: 'prefer-hardware',
+      latencyMode: 'realtime',
+      queueCap: 5,
+      mode,
+    })
+    await ready
+    const done = new Promise<Record<string, unknown>>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('worker probe timed out')), 120_000)
+      worker.onmessage = (e: MessageEvent<Record<string, unknown>>) => {
+        clearTimeout(timer)
+        resolve(e.data)
+      }
+    })
+    const t0 = performance.now()
+    let sent = 0
+    let postMs = 0
+    while (sent < frames) {
+      const { value, done: end } = await reader.read()
+      if (end || !value) break
+      const p0 = performance.now()
+      // Transferred, exactly as liveCompositeV2 posts them.
+      worker.postMessage({ cmd: 'frame', frame: value, i: sent }, [value as unknown as Transferable])
+      postMs += performance.now() - p0
+      sent++
+    }
+    const feedMs = Math.round(performance.now() - t0)
+    worker.postMessage({ cmd: 'end' })
+    const result = await done
+    return {
+      ...result,
+      feedMs,
+      feedFps: feedMs > 0 ? Math.round((sent / (feedMs / 1000)) * 10) / 10 : 0,
+      msPerPost: sent > 0 ? Math.round((postMs / sent) * 100) / 100 : 0,
+    }
+  } catch (err) {
+    return { where: `worker:${mode}`, error: err instanceof Error ? err.message : String(err) }
+  } finally {
+    cancelAnimationFrame(raf)
+    await reader.cancel().catch(() => undefined)
+    track.stop()
+    worker.terminate()
   }
 }
 
@@ -435,6 +611,11 @@ export async function runEncoderProbe(
   }
 
   results.push(await probeCompositorPath(frames, width, height))
+  // The same path with the second source production always has. If this one
+  // collapses while the single-source one flies, the wall is the compositor's
+  // one-texture-for-both-sources upload, not the encoder.
+  await new Promise((r) => setTimeout(r, 300))
+  results.push(await probeCompositorPath(frames, width, height, { camera: true }))
 
   // Warm-up in the worker too, for the same reason it exists on this thread.
   await probeInWorker(Math.min(30, frames), width, height, 'prefer-hardware', 'realtime').catch(
@@ -449,6 +630,11 @@ export async function runEncoderProbe(
         error: err instanceof Error ? err.message : String(err),
       })),
     )
+  }
+  // The crossing, priced alone and then in full production shape.
+  for (const mode of ['transfer', 'composite'] as const) {
+    await new Promise((r) => setTimeout(r, 300))
+    worker.push(await probeTransfer(frames, width, height, mode))
   }
 
   const ok = results.filter((r) => r.supported && !r.error && r.fps > 0)
@@ -485,6 +671,7 @@ export async function runEncoderProbe(
     notes: [
       'this feeds the same shape of work the v2 compositor does — paint, make a VideoFrame, encode — with the same backpressure ceiling, so its fps is directly comparable with the compositor deliveredFps',
       'hardwareOverSoftware ~1.0 means prefer-hardware and prefer-software landed on the SAME encoder: nothing here is accelerated, and the remedy is a config or a platform, not patience',
+      'the two compositor rows differ ONLY in whether a second, differently-sized source is composited — production always has one',
       'isConfigSupported says nothing about hardware — Chrome accepts these configs either way, which is exactly why this measurement exists',
     ],
   }

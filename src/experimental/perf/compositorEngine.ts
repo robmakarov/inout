@@ -249,6 +249,10 @@ export interface EngineRun {
     writeCalls: number
     framesGated: number
     framesStale: number
+    /** Which side of the thread boundary is slow — see the worker's stats. */
+    handlerMs: number
+    idleMs: number
+    maxIdleMs: number
   } | null
   error?: string
 }
@@ -398,6 +402,9 @@ async function runEngine(
       writeCalls: number
       framesGated: number
       framesStale: number
+      handlerMs: number
+      idleMs: number
+      maxIdleMs: number
     } | null
     if (s) {
       const seconds = Math.max(0.001, takeMs / 1000)
@@ -425,6 +432,9 @@ async function runEngine(
         writeCalls: s.writeCalls ?? 0,
         framesGated: s.framesGated ?? 0,
         framesStale: s.framesStale ?? 0,
+        handlerMs: Math.round(s.handlerMs ?? 0),
+        idleMs: Math.round(s.idleMs ?? 0),
+        maxIdleMs: Math.round(s.maxIdleMs ?? 0),
       }
     }
     if (!composite) {
