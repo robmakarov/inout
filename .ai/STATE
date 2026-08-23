@@ -66,18 +66,33 @@ gaps / in flight:
   capture path moved it 2-5 ms, not the ~60 ms the loopback suggested.
   O4 step 2's job is to bring the symmetric metric to ≤20 ms, then re-tighten the band.
   ee/webcodecs-capture-2 is untouched and behind main — REBASE before continuing it.
-- LIVE COMPOSITE ENGINES (O4 step 2, 2026-08-23): v2 (worker + WebCodecs + WebGL2 + fMP4 to its own
+- LIVE COMPOSITE ENGINES (O4 step 2): v2 (worker + WebCodecs + WebGL2 + fMP4 to its own
   SyncAccessHandle) is MERGED BUT DORMANT — default stays v1, opt in with ?engine=v2. It does what it
   was built for (main-thread capture cost 131 ms → 0; oracle sync 40.0 vs v1's 58.8 ms; it drains an
-  encoder it owns at stop) but delivers ~10 fps at 1080p against v1's 30, because WebCodecs' own AVC
-  encoder is the wall — the worker spends 0.86 ms compositing, 0.05 ms making the VideoFrame and
-  0.03 ms in the encode call, with the queue pinned at 5 of 6. Flip the default when a machine gives
-  WebCodecs a hardware encoder: `npm run exp -- o4step2` prints the deciding number.
-- P0 FOUND, NOT FIXED (2026-08-23): v1 LOSES THE TAIL UNDER LOAD. On a 4K source the shipped composite
-  delivered 13.3 fps and its last decodable frame sat 3769 ms before the end of the take — nearly four
-  seconds missing. At 1080p it is 65 ms, which is why the O8 tail band never caught it: that band only
-  ever runs on the light rig. This is "Loom cuts last seconds" happening in what users run today.
-  Task P0-tail in .ai/TASKS; it is first on the READY map.
+  encoder it owns at stop) but delivers 6.7-10 fps at 1080p against v1's 29.7.
+  THE DIAGNOSIS CHANGED 2026-08-23 AND THE OLD ONE IS WRONG: "WebCodecs' encoder is the wall" is
+  FALSIFIED. `npm run exp -- encprobe` measures, on this machine, a bare encoder at 142-191 fps
+  (2D canvas), 105-155 fps (WebGL2 canvas), 169 fps INSIDE A WORKER, and the production GL compositor
+  fed real capture frames at 59-60 fps with the encoder never blocking. Also eliminated with numbers:
+  codec, hardwareAcceleration, latencyMode, the queue cap, and the mux/write/flush path (now timed in
+  the worker: 39 ms total across a 10 s take). Counted in the worker: of 452 arrivals, 39 encoded,
+  101 dropped on a full queue, 315 rejected by the cadence gate, 0 stale. The one untested difference
+  left is WHAT IT IS FED — frames transferred across the thread boundary and uploaded as GL textures.
+  Next steps, cheapest first, are in the O4 handoff in .ai/TASKS.
+- P0-TAIL FIXED (2026-08-23): the composite used to lose 2734 ms off the end of a 4K take; it now
+  loses 43-320 ms. stop() kills the painting first, then PROBES the encoder with requestData() until it
+  answers empty (waiting for the byte flow to go quiet looks equivalent and is not — under load this
+  recorder emits four chunks in ten seconds, so silence is its normal state and proves nothing). The
+  drain recovers 1.0-1.1 MB per take that used to be discarded; a healthy 1080p take is unchanged
+  (tail 71/80 ms, 29.7 fps) and pays 242 ms at stop. `npm run oracle:load` runs O8's 400 ms band under
+  the 4K rig — HEAVY, announce it, not in the pre-push hook. A drain that runs out of budget marks the
+  composite tailIncomplete and the instant path refuses to copy it.
+  STILL OPEN — the RAW channels lose 203-753 ms of tail under the same load (task P0-tail-raw). An
+  edited take renders from those. The rig feeds them the uncapped 4K source, which production never
+  does, and the fix needs a reorder of session.doStop — the path that wedged arming two sessions ago.
+- SHIPPED 2026-08-23, FOURTH SESSION (PO: "go p0-tail and others"): P0-tail (above) · the O4
+  re-diagnosis (above) · F7c attempted and NOT shipped (three probe designs, all measured, none beat
+  the model it would replace — spike kept at src/experimental/perf/sizeProbe.ts).
 - SHIPPED 2026-08-23, THIRD SESSION (PO: "roadmap o/f, all in one session"): the in-shot notice ·
   O11a bits audit (render half + codec rung in the tag) · O11b GOP 2→5 s · O11c camera-when-PiP ·
   F7b finer export ladder (with its ±20 % gate reported UNMET and the reason measured — new task F7c) ·
@@ -104,7 +119,8 @@ gaps / in flight:
   merely deferred and PO-gated per instance), fixed composition layout unfrozen for F4's timed camera.
   PROTOCOL: PO says "roadmap" → print the TASKS READY map and WAIT; PO says "go <id>" → one task,
   own branch, gates, TD merge, then update the READY map.
-  READY NOW: P0-tail (the only live defect) · O4 step 2 remainder · F7c · P1 · P5a · F5b · O11d.
+  READY NOW: P0-tail-raw (the live defect) · O4 step 2 remainder (re-diagnosed, see above) · F7c
+  (attempt 4) · P1 · P5a · F5b · O11d. F2 needs PO scope confirmation.
 - composite blob absent from crash salvage → absorbed by TASKS O4 (fMP4-on-disk makes it free)
 - bundle: O7 SHIPPED — first paint 802,975 B → ~221,000 B; editor/cloud/capture-engine split, engine
   prewarmed at mount so record latency is unchanged (282 → 296 ms). Enforcement is the capture barrel:

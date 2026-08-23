@@ -716,7 +716,7 @@ body.f .filters, body.d .detail { opacity: 1; }
   pointer-events: none;
 }
 .radial__hub { fill: var(--bg); stroke: var(--edge); stroke-width: var(--edge-w); }
-.radial__sep { stroke: color-mix(in srgb, var(--text), transparent 88%); stroke-width: 1; }
+.radial__sep { stroke: color-mix(in srgb, var(--text), transparent 88%); stroke-width: 0.5; }
 
 .wedge { cursor: pointer; opacity: 0; transition: opacity 0.18s var(--ease); }
 [data-inputs='menu'] .wedge,
@@ -2271,7 +2271,7 @@ const WHY = {
 }
 let R_OUT = 100, R_IN = 41 // driven by the size and gap sliders
 let ICO_K = 0.86 // glyph scale — the 24px icon box, scaled about its own centre
-const PAD = 0.018 // radians of gap between wedges
+const PAD = 0.014 // radians of gap between wedges
 const pol = (r, a) => [(200 + r * Math.cos(a)).toFixed(2), (200 + r * Math.sin(a)).toFixed(2)]
 function sector(r1, r2, a0, a1) {
   const [x1, y1] = pol(r2, a0), [x2, y2] = pol(r2, a1)

@@ -79,13 +79,18 @@ Shipped 2026-08-23 (eleven merges; engineering detail in `.ai/DECISIONS`, task s
 
 Known gaps, honestly stated:
 
-- **The end of a take can go missing under load.** Newly measured, not yet fixed: 3.8 seconds lost off
-  a 4K recording. The gate that was supposed to catch exactly this only ever ran on a gentle rig.
-  First item on the engineering roadmap.
-- **The new capture engine is off.** It is faster where it counts for the interface and tighter on
-  sync, but the browser's video encoder gives it 10 fps at 1080p against the old path's 30. Turning it
-  on would trade a working recording for a stuttering one, so it waits for a machine or a browser
-  version that hands WebCodecs a real hardware encoder.
+- **The end of a take going missing under load is FIXED for the composite** — 2.7 seconds lost off a
+  4K recording became 0.04-0.3 seconds, and the recording now recovers about a megabyte at every stop
+  that used to be thrown away. A take whose encoder never catches up says so, and the fast export
+  path refuses to ship it. **The raw channels still lose up to 0.75 seconds** under the same
+  artificial load; that is the next item, and it needs care because it touches the code that once
+  wedged the record button.
+- **The new capture engine is off, and we now know we were blaming the wrong thing.** It was deferred
+  on "the browser's video encoder is too slow here". That is measurably false: the same encoder does
+  150-190 frames a second in isolation, and 169 even inside a worker, while the engine delivers 7.5.
+  Nine candidate causes are eliminated with numbers and one suspect is left — how frames are handed
+  across the thread boundary. This is good news: it is a bug we can find rather than hardware we have
+  to wait for.
 - **A/V sync is worse than we thought, and the instrument was why.** Every sync number quoted before
   2026-08-23 was ~31 ms optimistic: the oracle carried an exact 18 ms detection bias and never
   measured the video reference at all. The true offset is ~45–63 ms, audio late — which is what PO
