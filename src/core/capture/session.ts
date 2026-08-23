@@ -99,11 +99,33 @@ function pickMimeType(media: MediaKind): string {
   return ''
 }
 
-function recorderOptions(kind: ChannelKind, media: MediaKind, mimeType: string): MediaRecorderOptions {
+/**
+ * Raw-channel bitrates. The camera one is conditional (task O11c):
+ *
+ * with a screen in the take the camera is a PiP at ~24 % of the frame width, so
+ * the raw 720p channel is recorded far finer than anything the export will ever
+ * show. MEASURED 2026-08-23 (`npm run exp -- o11`, one camera stream recorded
+ * into two files at once): 4 → 2.5 Mbps takes 29.3 % off the raw channel on
+ * disk, moves the exported file by 0.2 % (the PiP is ~8 % of the frame) and
+ * leaves the PiP itself at 52.1 dB PSNR against the 4 Mbps take — the same
+ * picture. What it buys is disk and write bandwidth during capture, which is
+ * exactly where a long take hurts.
+ *
+ * A camera-only take is a different thing: the camera fills the frame and is
+ * captured at 1080p (O3a), so it keeps the full rate. Keyed to the REQUESTED
+ * config, exactly like O3a's capture resolution, so the resolution and the
+ * bitrate can never disagree about which take this is.
+ */
+function recorderOptions(
+  kind: ChannelKind,
+  media: MediaKind,
+  mimeType: string,
+  cameraIsPip: boolean,
+): MediaRecorderOptions {
+  const videoBits =
+    kind === 'screen' ? 8_000_000 : kind === 'camera' && cameraIsPip ? 2_500_000 : 4_000_000
   const bits =
-    media === 'video'
-      ? { videoBitsPerSecond: kind === 'screen' ? 8_000_000 : 4_000_000 }
-      : { audioBitsPerSecond: 128_000 }
+    media === 'video' ? { videoBitsPerSecond: videoBits } : { audioBitsPerSecond: 128_000 }
   return mimeType ? { mimeType, ...bits } : bits
 }
 
@@ -411,7 +433,10 @@ class Session implements CaptureSession {
       rt.writer = writer
       let recorder: MediaRecorder
       try {
-        recorder = new MediaRecorder(acq.stream, recorderOptions(acq.kind, acq.media, rt.mimeType))
+        recorder = new MediaRecorder(
+          acq.stream,
+          recorderOptions(acq.kind, acq.media, rt.mimeType, this.config.screen),
+        )
       } catch (err) {
         void writer.abort().catch(() => undefined)
         void blobStore.remove(blobKey).catch(() => undefined)
