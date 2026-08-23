@@ -9,17 +9,23 @@ let warmed = false
 
 /**
  * Compile-and-spin the capture pipeline before the first record click:
- * worklet module + durable writer worker + OPFS dir. Kills the first-use
- * stall (worker/worklet compilation, dev-server transform latency).
+ * capture-engine chunk + worklet module + durable writer worker + OPFS dir.
+ * Kills the first-use stall (chunk fetch, worker/worklet compilation,
+ * dev-server transform latency). Called at mount; touches no device.
  */
 export function warmCapturePipeline(): void {
   if (warmed) return
   warmed = true
   void (async () => {
     try {
+      const { loadCaptureEngine, loadRecovery } = await import('./lazy')
+      // Fetch the split chunks now so the record click never waits on a
+      // network round-trip (O7).
+      void loadRecovery()
       const [{ prewarmWorkletModule }, { blobStore }] = await Promise.all([
         import('./measuredAudio'),
         import('@core/store'),
+        loadCaptureEngine(),
       ])
       await prewarmWorkletModule()
       const w = await blobStore.createWriteStream('__warmup.bin')

@@ -18,7 +18,8 @@ import {
   StreamTarget,
   type StreamTargetChunk,
 } from 'mediabunny'
-import { createCaptureSession, isSyntheticMode } from '@core/capture'
+import { isSyntheticMode } from '@core/capture'
+import { createCaptureSession } from '@core/capture/session'
 import { canMeasureAudioCapture } from '@core/capture/measuredAudio'
 import { isAppleWebKit } from '@core/capabilities'
 import {

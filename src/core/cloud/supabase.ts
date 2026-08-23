@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js'
 import type { CloudProvider, CloudShare, CloudUploadProgress, CloudUser, ExportResult } from '../types'
+import { CLOUD_QUOTA } from './quota'
 
 const BUCKET = 'exports'
 const DAY_MS = 86_400_000
@@ -37,7 +38,7 @@ function formatBytes(n: number): string {
 }
 
 export class SupabaseCloudProvider implements CloudProvider {
-  readonly quota = { maxTotalBytes: 512 * 1024 * 1024, shareTtlDays: 7 }
+  readonly quota = CLOUD_QUOTA
   private readonly supabase: SupabaseClient
 
   constructor(url: string, anonKey: string) {
