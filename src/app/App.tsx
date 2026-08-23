@@ -23,12 +23,23 @@ function Main() {
   useEffect(() => {
     void loadRecovery()
       .then((m) => m.recoverRecordingToEdit())
-      .then((rec) => {
+      .then(async (rec) => {
         if (!rec) return
         const s = useAppStore.getState()
         if (s.mode !== 'capture' || s.session) return
+        // The edit is restored too (F4) — a refresh used to hand back the take
+        // with every trim, cut and camera move silently reset to default.
+        // Imported here rather than at module scope so the store stays out of
+        // the first-paint chunk (O7). Best-effort: a failed read must never
+        // keep a recovered take out of the editor.
+        let saved: import('@core/types').EditState | undefined
+        try {
+          saved = await (await import('@core/store')).editsRepo.get(rec.id)
+        } catch {
+          saved = undefined
+        }
         s.setRecording(rec)
-        s.setEditState(clampEditState(rec, defaultEditState(rec)))
+        s.setEditState(clampEditState(rec, saved ?? defaultEditState(rec)))
         s.setMode('editor')
       })
   }, [])

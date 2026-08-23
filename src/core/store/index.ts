@@ -5,4 +5,4 @@ export {
   createPositionedWriter,
   type PositionedDurableWriter,
 } from './blobStore'
-export { recordingsRepo } from './recordingsRepo'
+export { editsRepo, recordingsRepo } from './recordingsRepo'

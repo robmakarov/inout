@@ -9,7 +9,7 @@ import {
   type QualityTier,
 } from '@core/compose/quality'
 import { exportInstant, exportRecording } from '@core/compose'
-import { recordingsRepo } from '@core/store'
+import { editsRepo, recordingsRepo } from '@core/store'
 import { analytics } from '@core/analytics'
 import { useAppStore } from '@app/state/store'
 import { CHANNEL_META } from '@app/lib/channels'
@@ -57,6 +57,16 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [toggle, seekBy])
+
+  // Persist the edit so a refresh gives the work back (F4). Debounced: a drag
+  // produces one commit, but a trim handle produces a stream of them, and the
+  // durable writer is busy enough during a take.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      void editsRepo.save(edit).catch((err) => console.warn('failed to persist edit', err))
+    }, 400)
+    return () => clearTimeout(t)
+  }, [edit])
 
   const discard = async () => {
     setConfirmOpen(false)
@@ -175,6 +185,7 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
           pb={pb}
           onBack={() => setConfirmOpen(true)}
           onExport={() => setChoosing(true)}
+          onEdit={(next) => setEditState(clampEditState(recording, next))}
           showExport={!exporting && !choosing}
         />
       </div>

@@ -21,6 +21,14 @@ import {
 const G = { frameAspect: 16 / 9, cameraAspect: 4 / 3 }
 const TAKE_MS = 10_000
 
+/** Poses are lerped, so a boundary sample can land 1 ulp away from its
+ * keyframe — compare numerically rather than by identity. */
+function expectPose(actual: { xFrac: number; yFrac: number; widthFrac: number }, expected: { xFrac: number; yFrac: number; widthFrac: number }): void {
+  expect(actual.xFrac).toBeCloseTo(expected.xFrac, 10)
+  expect(actual.yFrac).toBeCloseTo(expected.yFrac, 10)
+  expect(actual.widthFrac).toBeCloseTo(expected.widthFrac, 10)
+}
+
 describe('the default pose reproduces the pre-F4 layout exactly', () => {
   it('is the bottom-right slot the fixed layout always drew', () => {
     const rect = poseToRect(defaultCameraPose(G), G)
@@ -49,9 +57,9 @@ describe('the default pose reproduces the pre-F4 layout exactly', () => {
 
   it('is what an absent or empty track samples to at any time', () => {
     const d = defaultCameraPose(G)
-    expect(cameraPoseAt(undefined, 0, G)).toEqual(d)
-    expect(cameraPoseAt(undefined, 99_999, G)).toEqual(d)
-    expect(cameraPoseAt({ keyframes: [] }, 5000, G)).toEqual(d)
+    expectPose(cameraPoseAt(undefined, 0, G), d)
+    expectPose(cameraPoseAt(undefined, 99_999, G), d)
+    expectPose(cameraPoseAt({ keyframes: [] }, 5000, G), d)
     expect(cameraTrackIsActive(undefined)).toBe(false)
     expect(cameraTrackIsActive({ keyframes: [] })).toBe(false)
   })
@@ -97,29 +105,34 @@ describe('easing', () => {
   })
 })
 
-describe('a drag moves the camera WHEN the user moved it, not before', () => {
+describe('a drag lands the camera exactly ON the instant it was dragged at', () => {
   const target = { xFrac: 0.2, yFrac: 0.25, widthFrac: 0.3 }
 
-  it('writes an anchor at the playhead and the new pose one move later', () => {
+  it('writes an anchor one move BEFORE the playhead and the new pose at it', () => {
     const t = writeCameraKeyframe(undefined, 2000, target, G, TAKE_MS)
-    expect(t.keyframes.map((k) => k.atMs)).toEqual([2000, 2000 + CAMERA_MOVE_MS])
+    expect(t.keyframes.map((k) => k.atMs)).toEqual([2000 - CAMERA_MOVE_MS, 2000])
     // The anchor holds the pose the camera already had.
     expect(t.keyframes[0]).toMatchObject(defaultCameraPose(G))
     expect(t.keyframes[1]).toMatchObject(clampPose(target, G))
   })
 
-  it('holds the old pose right up to the drag instant', () => {
+  it('is AT the dropped pose at the playhead — the stage must not spring back', () => {
+    // This is the property the first implementation got wrong: it started the
+    // move at the playhead, so releasing a drag snapped the box back to where
+    // it had been and the edit looked like it had failed.
+    const t = writeCameraKeyframe(undefined, 2000, target, G, TAKE_MS)
+    expectPose(cameraPoseAt(t, 2000, G), clampPose(target, G))
+  })
+
+  it('holds the old pose until the move begins, then eases in', () => {
     const t = writeCameraKeyframe(undefined, 2000, target, G, TAKE_MS)
     const d = defaultCameraPose(G)
-    expect(cameraPoseAt(t, 0, G)).toEqual(d)
-    expect(cameraPoseAt(t, 1999, G)).toEqual(d)
-    expect(cameraPoseAt(t, 2000, G)).toEqual(d)
-    // ...then travels, and has arrived by the end of the move.
-    const mid = cameraPoseAt(t, 2000 + CAMERA_MOVE_MS / 2, G)
+    expectPose(cameraPoseAt(t, 0, G), d)
+    expectPose(cameraPoseAt(t, 2000 - CAMERA_MOVE_MS, G), d)
+    const mid = cameraPoseAt(t, 2000 - CAMERA_MOVE_MS / 2, G)
     expect(mid.xFrac).toBeLessThan(d.xFrac)
     expect(mid.xFrac).toBeGreaterThan(target.xFrac)
-    expect(cameraPoseAt(t, 2000 + CAMERA_MOVE_MS, G)).toEqual(clampPose(target, G))
-    expect(cameraPoseAt(t, 9000, G)).toEqual(clampPose(target, G))
+    expectPose(cameraPoseAt(t, 9000, G), clampPose(target, G))
   })
 
   it('replays two drags as two separate moves, each at its own instant', () => {
@@ -127,11 +140,11 @@ describe('a drag moves the camera WHEN the user moved it, not before', () => {
     const b = { xFrac: 0.8, yFrac: 0.75, widthFrac: 0.24 }
     let t = writeCameraKeyframe(undefined, 2000, a, G, TAKE_MS)
     t = writeCameraKeyframe(t, 5000, b, G, TAKE_MS)
+    expectPose(cameraPoseAt(t, 2000, G), clampPose(a, G))
     // Still at A for the whole span between the drags — no slow drift.
-    expect(cameraPoseAt(t, 3000, G)).toEqual(clampPose(a, G))
-    expect(cameraPoseAt(t, 4999, G)).toEqual(clampPose(a, G))
-    expect(cameraPoseAt(t, 5000, G)).toEqual(clampPose(a, G))
-    expect(cameraPoseAt(t, 5000 + CAMERA_MOVE_MS, G)).toEqual(clampPose(b, G))
+    expectPose(cameraPoseAt(t, 3000, G), clampPose(a, G))
+    expectPose(cameraPoseAt(t, 5000 - CAMERA_MOVE_MS, G), clampPose(a, G))
+    expectPose(cameraPoseAt(t, 5000, G), clampPose(b, G))
   })
 
   it('replaces a move when the same instant is dragged twice', () => {
@@ -140,20 +153,27 @@ describe('a drag moves the camera WHEN the user moved it, not before', () => {
     let t = writeCameraKeyframe(undefined, 2000, a, G, TAKE_MS)
     t = writeCameraKeyframe(t, 2000, b, G, TAKE_MS)
     expect(t.keyframes).toHaveLength(2)
-    expect(cameraPoseAt(t, 2000 + CAMERA_MOVE_MS, G)).toEqual(clampPose(b, G))
+    expectPose(cameraPoseAt(t, 2000, G), clampPose(b, G))
   })
 
   it('clamps a drag that lands off-frame instead of refusing it', () => {
     const t = writeCameraKeyframe(undefined, 1000, { xFrac: 2, yFrac: 2, widthFrac: 0.24 }, G, TAKE_MS)
-    const landed = cameraPoseAt(t, 1000 + CAMERA_MOVE_MS, G)
+    const landed = cameraPoseAt(t, 1000, G)
     expect(landed.xFrac).toBeCloseTo(1 - 0.12, 12)
     expect(landed.yFrac).toBeLessThan(1)
   })
 
-  it('a drag at the very end is a single keyframe, not a move off the end', () => {
-    const t = writeCameraKeyframe(undefined, TAKE_MS, target, G, TAKE_MS)
+  it('a drag at t=0 sets the camera for the whole take, with no run-up', () => {
+    const t = writeCameraKeyframe(undefined, 0, target, G, TAKE_MS)
     expect(t.keyframes).toHaveLength(1)
-    expect(t.keyframes[0]!.atMs).toBe(TAKE_MS)
+    expectPose(cameraPoseAt(t, 0, G), clampPose(target, G))
+    expectPose(cameraPoseAt(t, TAKE_MS, G), clampPose(target, G))
+  })
+
+  it('a drag at the very end still lands there', () => {
+    const t = writeCameraKeyframe(undefined, TAKE_MS, target, G, TAKE_MS)
+    expect(t.keyframes.map((k) => k.atMs)).toEqual([TAKE_MS - CAMERA_MOVE_MS, TAKE_MS])
+    expectPose(cameraPoseAt(t, TAKE_MS, G), clampPose(target, G))
   })
 })
 
