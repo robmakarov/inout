@@ -262,7 +262,8 @@ export type CaptureState = 'armed' | 'recording' | 'stopping' | 'stopped'
 export type DisplaySurfaceKind = 'monitor' | 'window' | 'browser'
 
 export type CaptureEvent =
-  | { type: 'tick'; elapsedMs: number; remainingMs: number }
+  /** `remainingMs` is null when the take is uncapped, which it is by default. */
+  | { type: 'tick'; elapsedMs: number; remainingMs: number | null }
   | { type: 'state'; state: CaptureState }
   /** A channel died mid-flight (e.g. user hit the browser's "stop sharing"). */
   | { type: 'channel-ended'; kind: ChannelKind }
@@ -278,9 +279,9 @@ export type CaptureEvent =
    *  it must stay said: the user is in another tab when this happens. */
   | { type: 'channel-stalled'; kind: ChannelKind }
   | { type: 'channel-resumed'; kind: ChannelKind }
-  /** Session hit MAX_RECORDING_MS (or lost its last channel) and began stopping
-   *  itself. UI should call stop() to collect the Recording — stop() is
-   *  idempotent and always returns the same promise. */
+  /** Session lost its last channel (or hit MAX_RECORDING_MS, if a cap is ever
+   *  set again) and began stopping itself. UI should call stop() to collect the
+   *  Recording — stop() is idempotent and always returns the same promise. */
   | { type: 'auto-stopped' }
 
 export interface CaptureSession {
@@ -300,8 +301,15 @@ export interface CaptureSession {
   on(cb: (e: CaptureEvent) => void): () => void
 }
 
-/** Hard cap per product decision. */
-export const MAX_RECORDING_MS = 30 * 60 * 1000
+/**
+ * Duration cap, or null for none. PO 2026-08-23: NONE — takes run until the
+ * user stops them or the last channel dies. The 30-min cap of 2026-07-13 was
+ * retired once the two things it was hiding were gone: capture already streams
+ * every channel to OPFS as it records (no RAM growth with length), and O1 put
+ * export on a chunked disk target (flat 4 MB held by the muxer at any length).
+ * What length costs now is DISK, and nothing here guards that — see BACKLOG.
+ */
+export const MAX_RECORDING_MS: number | null = null
 
 // ---------------------------------------------------------------------------
 // store (src/core/store) — required exports:

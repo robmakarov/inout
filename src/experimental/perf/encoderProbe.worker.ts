@@ -28,6 +28,13 @@ interface RunMsg {
    *              the encoder, i.e. everything v2 does except the muxer and disk
    */
   mode?: 'paint' | 'transfer' | 'composite'
+  /**
+   * How the composite frame is STAMPED. 'regular' is i/30, which is what every
+   * probe has used. 'wallclock' is what production does: the arrival time of
+   * the source frame, relative to the first one — so the steps are uneven and,
+   * once the encoder falls behind, large.
+   */
+  timestamps?: 'regular' | 'wallclock'
 }
 
 interface FrameMsg {
@@ -172,6 +179,8 @@ async function runFed(msg: RunMsg): Promise<unknown> {
   let framesIn = 0
   let peakQueue = 0
   let dropped = 0
+  let firstArrivalAt = 0
+  let lastTsUs = -1
   let t0 = 0
   let tLast = 0
   /** Wall time from the frame ARRIVING to this side being done with it. */
@@ -256,8 +265,14 @@ async function runFed(msg: RunMsg): Promise<unknown> {
           1.5 * (msg.width / 1920),
         )
       }
+      if (firstArrivalAt === 0) firstArrivalAt = arrived
+      const tsUs =
+        msg.timestamps === 'wallclock'
+          ? Math.max(lastTsUs + 1, Math.round((arrived - firstArrivalAt) * 1000))
+          : Math.round((framesIn * 1e6) / 30)
+      lastTsUs = tsUs
       const frame = new VideoFrame(comp.canvas, {
-        timestamp: Math.round((framesIn * 1e6) / 30),
+        timestamp: tsUs,
         duration: Math.round(1e6 / 30),
       })
       try {

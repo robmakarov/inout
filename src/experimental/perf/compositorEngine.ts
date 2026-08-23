@@ -253,6 +253,9 @@ export interface EngineRun {
     handlerMs: number
     idleMs: number
     maxIdleMs: number
+    configJson: string | null
+    msPerEncodeLatency: number
+    outputMs: number
   } | null
   error?: string
 }
@@ -408,6 +411,10 @@ async function runEngine(
       handlerMs: number
       idleMs: number
       maxIdleMs: number
+      configJson: string | null
+      encodeLatencyMs: number
+      outputs: number
+      outputMs: number
     } | null
     if (s) {
       const seconds = Math.max(0.001, takeMs / 1000)
@@ -438,6 +445,9 @@ async function runEngine(
         handlerMs: Math.round(s.handlerMs ?? 0),
         idleMs: Math.round(s.idleMs ?? 0),
         maxIdleMs: Math.round(s.maxIdleMs ?? 0),
+        configJson: s.configJson ?? null,
+        msPerEncodeLatency: Math.round((s.encodeLatencyMs ?? 0) / Math.max(1, s.outputs ?? 1)),
+        outputMs: Math.round(s.outputMs ?? 0),
       }
     }
     if (!composite) {

@@ -404,6 +404,7 @@ async function probeTransfer(
   height: number,
   mode: 'transfer' | 'composite',
   twoSources = false,
+  timestamps: 'regular' | 'wallclock' = 'regular',
 ): Promise<Record<string, unknown>> {
   const TP = (globalThis as { MediaStreamTrackProcessor?: new (i: { track: MediaStreamTrack }) => { readable: ReadableStream<VideoFrame> } })
     .MediaStreamTrackProcessor
@@ -451,9 +452,16 @@ async function probeTransfer(
     const camStream = cam.captureStream(30)
     camTrack = camStream.getVideoTracks()[0]!
     camReader = new TP({ track: camTrack }).readable.getReader()
+  }
+  // Started only once the worker has its RunMsg: the worker dispatches on the
+  // FIRST message it sees, so a camera frame arriving ahead of the run message
+  // is read as a malformed run (it constructed an OffscreenCanvas of undefined).
+  const startCamPump = (): void => {
+    const r = camReader
+    if (!r) return
     void (async () => {
       for (;;) {
-        const { value, done } = await camReader.read()
+        const { value, done } = await r.read()
         if (done || !value) break
         worker.postMessage({ cmd: 'frame', frame: value, i: -1, kind: 'camera' }, [
           value as unknown as Transferable,
@@ -486,8 +494,10 @@ async function probeTransfer(
       latencyMode: 'realtime',
       queueCap: 5,
       mode,
+      timestamps,
     })
     await ready
+    startCamPump()
     const done = new Promise<Record<string, unknown>>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('worker probe timed out')), 120_000)
       worker.onmessage = (e: MessageEvent<Record<string, unknown>>) => {
@@ -680,6 +690,10 @@ export async function runEncoderProbe(
   await new Promise((r) => setTimeout(r, 300))
   const two = await probeTransfer(frames, width, height, 'composite', true)
   worker.push({ ...two, where: 'worker:composite+camera' })
+  // Identical cell, stamped the way production stamps: wall clock, uneven.
+  await new Promise((r) => setTimeout(r, 300))
+  const wall = await probeTransfer(frames, width, height, 'composite', true, 'wallclock')
+  worker.push({ ...wall, where: 'worker:composite+camera+wallclock-timestamps' })
 
   const ok = results.filter((r) => r.supported && !r.error && r.fps > 0)
   const worstOf = (r: ProbeResult): number => r.fpsWorst ?? r.fps

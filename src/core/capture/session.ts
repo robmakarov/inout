@@ -861,9 +861,9 @@ class Session implements CaptureSession {
   private onTick(): void {
     if (this.stateInternal !== 'recording') return
     const elapsedMs = performance.now() - this.epoch
-    const remainingMs = Math.max(0, MAX_RECORDING_MS - elapsedMs)
+    const remainingMs = MAX_RECORDING_MS === null ? null : Math.max(0, MAX_RECORDING_MS - elapsedMs)
     this.emit({ type: 'tick', elapsedMs, remainingMs })
-    if (remainingMs <= 0) this.autoStop()
+    if (remainingMs !== null && remainingMs <= 0) this.autoStop()
   }
 
   private autoStop(): void {

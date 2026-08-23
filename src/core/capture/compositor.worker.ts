@@ -158,13 +158,25 @@ export interface CompositorStats {
    * worker:composite). So the question is no longer "what costs so much" but
    * "is this worker even busy". handlerMs is time spent INSIDE onmessage;
    * idleMs is the wall clock between one message finishing and the next
-   * arriving. If idle dominates, the worker is starved and the wall is on the
-   * main thread that feeds it.
+   * arriving. CAREFUL WITH idleMs: it is "not inside onmessage", which also
+   * covers the encoder's own output callbacks and every promise continuation,
+   * so it is NOT proof the thread is free. outputMs is what separates them —
+   * the synchronous cost of the encoder's output callback, which is where the
+   * packet copy, the mux hand-off and the disk barrier all live.
    */
   handlerMs: number
   idleMs: number
   /** Longest single starve — one long main-thread task shows up here. */
   maxIdleMs: number
+  /** The config the encoder was ACTUALLY configured with, after
+   *  isConfigSupported normalised it. Evidence, not decoration: every probe
+   *  that reaches 60 fps builds its own config by hand. */
+  configJson: string | null
+  /** Encoder latency: encode() call → the matching output callback. */
+  encodeLatencyMs: number
+  outputs: number
+  /** Synchronous time spent INSIDE the encoders' output callbacks. */
+  outputMs: number
 }
 
 export type CompositorReply =
@@ -299,6 +311,10 @@ const stats: CompositorStats = {
   handlerMs: 0,
   idleMs: 0,
   maxIdleMs: 0,
+  configJson: null,
+  encodeLatencyMs: 0,
+  outputs: 0,
+  outputMs: 0,
   framesStale: 0,
 }
 
@@ -450,6 +466,7 @@ function encodeComposite(atMs: number, keepAlive: boolean): void {
   const tEncode = performance.now()
   stats.frameMs += tEncode - tFrame
   try {
+    submittedAt.push(performance.now())
     enc.encode(frame, { keyFrame })
     if (keepAlive) stats.keepAliveFrames++
   } catch (err) {
@@ -489,6 +506,7 @@ async function start(msg: CompositorStartMsg): Promise<void> {
   const { config, hardware } = await pickVideoConfig(W, H, msg.videoBitrate, msg.fps)
   stats.codec = config.codec
   stats.hardware = hardware
+  stats.configJson = JSON.stringify(config)
   stats.backend = gl ? 'webgl2' : '2d'
 
   /**
@@ -534,7 +552,11 @@ async function start(msg: CompositorStartMsg): Promise<void> {
   stats.requestedVideoBitrate = msg.videoBitrate
   videoEncoder = new VideoEncoder({
     output: (chunk, meta) => {
+      const tOut = performance.now()
       stats.framesEncoded++
+      stats.outputs++
+      const submitted = submittedAt.shift()
+      if (submitted !== undefined) stats.encodeLatencyMs += tOut - submitted
       stats.videoBytes += chunk.byteLength
       if (chunk.type === 'key') {
         stats.keyframeCount++
@@ -548,6 +570,7 @@ async function start(msg: CompositorStartMsg): Promise<void> {
           stats.muxMs += performance.now() - t0
         })
         .catch(fail)
+      stats.outputMs += performance.now() - tOut
     },
     error: fail,
   })
@@ -671,6 +694,8 @@ async function cancel(): Promise<void> {
 
 /** When the previous message handler finished — the other end of an idle gap. */
 let lastHandlerEndedAt = 0
+/** When each submitted frame entered the encoder, FIFO — paired with outputs. */
+const submittedAt: number[] = []
 
 self.onmessage = async (ev: MessageEvent<CompositorMsg>) => {
   const msg = ev.data

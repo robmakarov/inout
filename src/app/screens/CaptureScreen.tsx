@@ -68,7 +68,7 @@ export function CaptureScreen() {
   /** Lets the record button cancel a start that is taking too long. */
   const armAbortRef = useRef<AbortController | null>(null)
   const [elapsedMs, setElapsedMs] = useState(0)
-  const [remainingMs, setRemainingMs] = useState(MAX_RECORDING_MS)
+  const [remainingMs, setRemainingMs] = useState<number | null>(MAX_RECORDING_MS)
   const [muted, setMuted] = useState<Partial<Record<ChannelKind, boolean>>>({})
   /** Sources frozen right now — a toast is useless here, the user is in
    * another tab while it happens and only sees this screen on the way back. */
