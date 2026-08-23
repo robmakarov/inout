@@ -2503,10 +2503,6 @@ document.querySelectorAll('[data-icon-before]').forEach((el) => el.insertAdjacen
 const chipHTML = (c) =>
   `<button class="chip" aria-pressed="${c.on}" data-chip="${c.key}">${icon(c.ic, 15)}<span class="lbl">${c.label}</span></button>`
 
-document.querySelectorAll('[data-chips]').forEach((row) => {
-  row.innerHTML = CHANNELS.map(chipHTML).join('')
-})
-
 /* Inputs in orbit: same chips, unchanged, placed on a circle around the button.
    Screen top-left · Camera top-right · Mic bottom-left · System audio bottom-right. */
 const RING_R = 132
@@ -2672,6 +2668,33 @@ function buildRadial() {
 }
 buildRadial()
 
+/* ---------- the input bar: the same menu, unrolled ----------
+   Built from RING_ORDER, not from CHANNELS, so clockwise round the donut and
+   left-to-right along the bar are the same sequence — the fold has to look like
+   a fold, and it cannot if the inputs land in a different order on the other
+   side of it. Everything else about an input is the wedge's: its glyph, its
+   three states, its quiet second line. One control, two shapes. */
+const inbar = app.querySelector('[data-inbar]')
+const wedgeGlyph = (key) =>
+  `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">${WEDGE_ICON[key] || WEDGE_ICON.screen}</svg>`
+function buildInputBar() {
+  inbar.innerHTML = RING_ORDER.map((key, i) => {
+    const c = CHANNELS.find((x) => x.key === key)
+    if (!c) return ''
+    const st = PERM[key] || 'ok'
+    return `
+      <button class="inseg" data-wedge="${key}" data-on="${st === 'ok' && !!c.on}" data-state="${st}"
+              style="--d:${i * 45}ms" aria-label="${c.label}">
+        <span class="inseg__ico">${wedgeGlyph(key)}</span>
+        <span class="inseg__txt">
+          <span class="inseg__cap">${c.label}</span>
+          <span class="inseg__sub">${subFor(key)}</span>
+        </span>
+      </button>`
+  }).join('')
+}
+buildInputBar()
+
 document.querySelector('[data-timeline]').innerHTML = `
   <div class="tl__lanes">
     ${LANES.map((l) => `
@@ -2757,6 +2780,14 @@ function setChannel(key, on) {
     w.dataset.state = PERM[key]
     const cap2 = w.querySelector('.wedge__cap2')
     if (cap2) cap2.textContent = subFor(key)
+  }
+  // three faces now, and the bar is the one you look at during a take
+  const seg = inbar.querySelector(`.inseg[data-wedge="${key}"]`)
+  if (seg) {
+    seg.dataset.on = String(on)
+    seg.dataset.state = PERM[key]
+    const sub = seg.querySelector('.inseg__sub')
+    if (sub) sub.textContent = subFor(key)
   }
   syncHint()
 }
