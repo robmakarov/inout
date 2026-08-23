@@ -114,6 +114,14 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
   const { recording, edit, onProgress, signal } = opts
   const composite = recording.composite
   if (!composite) throw new Error('instant export: no composite')
+  // P0-tail: the composite's encoder was still behind when capture stopped, so
+  // this file is missing an unknown amount of its end. Copying it would ship a
+  // take that ends early — the exact thing PO named as unacceptable. The caller
+  // falls back to the full render from the raw channels: slower, and correct.
+  // Same call the liveness work made for a frozen source.
+  if (composite.tailIncomplete) {
+    throw new Error('instant export: composite tail incomplete (encoder did not drain)')
+  }
 
   const throwIfAborted = (): void => {
     if (signal?.aborted) throw new DOMException('Export aborted', 'AbortError')

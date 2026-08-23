@@ -49,6 +49,13 @@ export interface CompositeRecording {
   /** Encoded size. Lets the export size estimate use THIS take's own
    *  compressibility instead of guessing from the bitrate target. */
   bytes?: number
+  /**
+   * The composite's encoder was STILL behind when the drain budget ran out at
+   * stop (task P0-tail), so this file is missing an unknown amount of its end.
+   * An unedited export must not packet-copy it — the raw channels are rendered
+   * instead, which is slower and correct. Absent on every healthy take.
+   */
+  tailIncomplete?: boolean
 }
 
 /**

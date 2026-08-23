@@ -44,6 +44,57 @@ const FPS_LOG_MS = 10_000
 const WATCHDOG_AFTER_MS = 5000
 const WATCHDOG_MAX_GAP_P50_MS = 50
 
+/**
+ * TAIL DRAIN (task P0-tail). MEASURED 2026-08-23: on a 4K source this recorder
+ * put 140 frames into a 10 s file and its last decodable frame sat 2734 ms
+ * before the end — nearly three seconds of the take simply absent, which is
+ * PO's "Loom cuts last seconds" happening in our own product.
+ *
+ * MediaRecorder is a black box at stop: whatever it has not encoded is gone.
+ * So stop() now stops PAINTING first and gives the encoder a bounded, quiet
+ * window to catch up before it is asked to stop. On a healthy take the flow of
+ * chunks goes quiet almost immediately and this costs one QUIET_MS; on a
+ * starved one it buys back whatever the budget allows, and — just as
+ * important — the fact that it ran out of patience is REPORTED rather than
+ * silently shipped.
+ *
+ * The timeslice is what makes the drain observable at all: at 1 s the "is it
+ * still emitting?" question cannot be answered inside a sensible budget.
+ */
+const CHUNK_MS = 250
+/**
+ * The drain PROBES with requestData() rather than waiting for the byte flow to
+ * go quiet, and that distinction is the whole fix. Measured: under 4K load this
+ * recorder emits about four chunks in ten seconds — bursts ~2.6 s apart — so
+ * "no bytes for 200 ms" is true almost immediately and means nothing. A
+ * requestData() flushes whatever has been encoded so far, so an EMPTY answer is
+ * real evidence that there is nothing left in the queue.
+ */
+const DRAIN_POLL_MS = 120
+/** Consecutive empty probes that count as caught up. */
+const DRAIN_IDLE_PROBES = 2
+/** Never wait longer than this at stop, however far behind the encoder is. */
+const DRAIN_BUDGET_MS = 2000
+
+/** What the composite actually did — evidence at stop, and the tail verdict. */
+export interface LiveCompositeStats {
+  /** Frames the compositor painted (what a perfect encoder would have taken). */
+  drawnFrames: number
+  /** ms since start of the last paint. */
+  lastDrawMs: number
+  chunks: number
+  bytes: number
+  /** ms since start of the last chunk that carried bytes. */
+  lastChunkMs: number
+  /** How long the post-paint drain waited. */
+  drainMs: number
+  /** Bytes that arrived during the drain — the tail this fix bought back. */
+  drainedBytes: number
+  /** True when the encoder was STILL emitting when the budget ran out: the
+   *  file is missing an unknown amount of its end. */
+  drainTimedOut: boolean
+}
+
 export interface LiveCompositeInputs {
   screen?: MediaStream
   camera?: MediaStream
@@ -65,6 +116,13 @@ export interface LiveCompositeHandle {
   /** Resolves at stop: null when the composite was aborted by the watchdog. */
   stop(): Promise<CompositeRecording | null>
   cancel(): Promise<void>
+}
+
+/** v1 also reports what it did. Kept off the shared handle so the engine
+ *  switch in session.ts stays a plain union of two interchangeable things. */
+export interface LiveCompositeV1Handle extends LiveCompositeHandle {
+  /** Only meaningful after stop() — the drain fields are filled there. */
+  stats(): LiveCompositeStats
 }
 
 /**
@@ -151,7 +209,7 @@ export async function startLiveComposite(
   inputs: LiveCompositeInputs,
   blobKey: string,
   options: LiveCompositeOptions = {},
-): Promise<LiveCompositeHandle> {
+): Promise<LiveCompositeV1Handle> {
   const canvas = document.createElement('canvas')
   canvas.width = W
   canvas.height = H
@@ -210,8 +268,17 @@ export async function startLiveComposite(
     videoBitsPerSecond: VIDEO_BITS,
     audioBitsPerSecond: 128_000,
   })
+  let chunks = 0
+  let lastChunkAt = 0
+  /** Bytes the recorder has HANDED US, counted synchronously. `bytes` only
+   *  moves once the durable write resolves, which is too late to steer the
+   *  drain by. */
+  let emittedBytes = 0
   recorder.ondataavailable = (e) => {
     if (!e.data.size || writeFailed) return
+    chunks++
+    emittedBytes += e.data.size
+    lastChunkAt = performance.now()
     writeChain = writeChain.then(() =>
       writer.write(e.data).then(
         () => {
@@ -246,10 +313,12 @@ export async function startLiveComposite(
     liveness.push({ kind: 'camera', el: cameraEl, det: new SourceLiveness(), framesAtLog: null })
   let lastFpsLog = startedAt
 
+  let drawnFrames = 0
   const draw = (): void => {
     const now = performance.now()
     if (now - lastDraw < 1000 / FPS - 3) return
     lastDraw = now
+    drawnFrames++
     gaps.push(now - lastFrame)
     lastFrame = now
     for (const s of liveness) {
@@ -308,7 +377,49 @@ export async function startLiveComposite(
   ticker.port.onmessage = () => {
     if (!torndown && !aborted) draw()
   }
-  recorder.start(1000)
+  recorder.start(CHUNK_MS)
+
+  const stats: LiveCompositeStats = {
+    drawnFrames: 0,
+    lastDrawMs: 0,
+    chunks: 0,
+    bytes: 0,
+    lastChunkMs: 0,
+    drainMs: 0,
+    drainedBytes: 0,
+    drainTimedOut: false,
+  }
+
+  /**
+   * Painting has stopped; let the encoder catch up before asking it to stop.
+   * Resolves as soon as the chunk flow goes quiet, and never later than the
+   * budget. `drainTimedOut` is the honest signal that the file is short.
+   */
+  const drainEncoder = async (): Promise<void> => {
+    if (recorder.state !== 'recording') return
+    const t0 = performance.now()
+    const bytesAtStart = emittedBytes
+    let idle = 0
+    while (performance.now() - t0 < DRAIN_BUDGET_MS) {
+      const before = emittedBytes
+      try {
+        recorder.requestData()
+      } catch {
+        break
+      }
+      await new Promise((r) => setTimeout(r, DRAIN_POLL_MS))
+      if (emittedBytes === before) {
+        if (++idle >= DRAIN_IDLE_PROBES) break
+      } else {
+        idle = 0
+      }
+    }
+    // Still producing when the budget ran out ⇒ the encoder never caught up and
+    // the end of this take is not in the file. Say so; do not ship it silently.
+    stats.drainTimedOut = idle < DRAIN_IDLE_PROBES
+    stats.drainMs = Math.round(performance.now() - t0)
+    stats.drainedBytes = emittedBytes - bytesAtStart
+  }
 
   const teardown = async (discard: boolean): Promise<void> => {
     if (torndown) return
@@ -319,6 +430,11 @@ export async function startLiveComposite(
     } catch {
       /* already gone */
     }
+    // Stop painting FIRST, then drain: every frame painted after this point is
+    // a frame the encoder has to get through before it can reach the ones the
+    // user actually wants at the end of their take. Discarding takes never
+    // wait — there is nothing to save.
+    if (!discard) await drainEncoder()
     if (recorder.state !== 'inactive') {
       await new Promise<void>((resolve) => {
         recorder.onstop = () => resolve()
@@ -341,11 +457,30 @@ export async function startLiveComposite(
     if (discard) await blobStore.remove(blobKey).catch(() => undefined)
   }
 
+  const snapshotStats = (): LiveCompositeStats => {
+    stats.drawnFrames = drawnFrames
+    stats.lastDrawMs = Math.round(lastDraw ? lastDraw - startedAt : 0)
+    stats.chunks = chunks
+    stats.bytes = bytes
+    stats.lastChunkMs = Math.round(lastChunkAt ? lastChunkAt - startedAt : 0)
+    return stats
+  }
+
   return {
     async stop() {
       const durationMs = performance.now() - startedAt
       if (aborted) return null
       await teardown(false)
+      snapshotStats()
+      // One line, always: this is how a short tail becomes loud instead of
+      // silent. drainTimedOut means the encoder was still behind when we ran
+      // out of patience, i.e. the end of this take did not make it into the file.
+      const level = stats.drainTimedOut ? console.warn : console.info
+      level(
+        `[capture] composite drained in ${stats.drainMs}ms (+${stats.drainedBytes} B)` +
+          `${stats.drainTimedOut ? ' — TIMED OUT, the end of this take is missing' : ''} · ` +
+          `${stats.drawnFrames} frames painted, ${stats.chunks} chunks, ${stats.bytes} B`,
+      )
       if (writeFailed || bytes === 0) {
         await blobStore.remove(blobKey).catch(() => undefined)
         return null
@@ -357,11 +492,14 @@ export async function startLiveComposite(
         width: W,
         height: H,
         bytes,
+        tailIncomplete: stats.drainTimedOut || undefined,
       }
     },
     async cancel() {
       aborted = true
       await teardown(true)
+      snapshotStats()
     },
+    stats: snapshotStats,
   }
 }

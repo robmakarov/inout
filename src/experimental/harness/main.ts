@@ -241,6 +241,7 @@ const runners: Runner[] = [
       return runCompositorEngine({
         takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined,
         sizes: Array.isArray(args?.sizes) ? (args.sizes as [number, number][]) : undefined,
+        engines: Array.isArray(args?.engines) ? (args.engines as ('v1' | 'v2')[]) : undefined,
       })
     },
   },

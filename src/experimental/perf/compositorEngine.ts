@@ -16,7 +16,7 @@
 
 import { ALL_FORMATS, BlobSource, Input, VideoSampleSink } from 'mediabunny'
 import { blobStore } from '@core/store'
-import { startLiveComposite } from '@core/capture/liveComposite'
+import { startLiveComposite, type LiveCompositeStats } from '@core/capture/liveComposite'
 import { canLiveCompositeV2, startLiveCompositeV2 } from '@core/capture/liveCompositeV2'
 import type { CompositeRecording } from '@core/types'
 
@@ -100,6 +100,9 @@ function makeRig(width: number, height: number, audioCtx: AudioContext | null): 
     },
   }
 }
+
+/** O8's shipped tail band, in ms. Kept in step with scripts/oracle-gate.mjs. */
+export const TAIL_BAND_MS = 400
 
 interface LongTasks {
   count: number
@@ -195,6 +198,14 @@ export interface EngineRun {
   file: FileProbe | null
   /** Take length minus the last decodable frame. Small = the tail survived. */
   tailGapMs: number | null
+  /** O8's tail band (≤400 ms), evaluated HERE — under load, which is the only
+   *  place it has ever been able to fail. */
+  tailBandPass: boolean | null
+  /** v1 only — what the compositor itself saw, including the stop drain. */
+  v1Stats: LiveCompositeStats | null
+  /** The SAME source recorded as a plain raw channel, for its own tail gap:
+   *  refusing the instant path only helps if the fallback still has an ending. */
+  rawChannel: { bytes: number; frameCount: number; lastFrameSec: number | null; tailGapMs: number | null } | null
   /** Why the watchdog gave up, when it did. */
   degradeReason?: string
   /** v2 only — what the encoder itself reported. */
@@ -220,6 +231,69 @@ export interface EngineRun {
   error?: string
 }
 
+interface RawLane {
+  stop(takeMs: number): Promise<EngineRun['rawChannel']>
+}
+
+/** A plain MediaRecorder on the same source, i.e. exactly what a raw channel is. */
+function startRawLane(stream: MediaStream, key: string): RawLane {
+  const mime = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find((m) =>
+    MediaRecorder.isTypeSupported(m),
+  )
+  if (!mime) return { stop: async () => null }
+  let bytes = 0
+  let chain = Promise.resolve()
+  const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8_000_000 })
+  const opened = blobStore.createWriteStream(key).then((w) => {
+    const writer = w.getWriter()
+    recorder.ondataavailable = (e) => {
+      if (!e.data.size) return
+      chain = chain.then(() =>
+        writer.write(e.data).then(
+          () => {
+            bytes += e.data.size
+          },
+          () => undefined,
+        ),
+      )
+    }
+    recorder.start(1000)
+    return writer
+  })
+  return {
+    async stop(takeMs: number) {
+      const writer = await opened
+      if (recorder.state !== 'inactive') {
+        await new Promise<void>((resolve) => {
+          recorder.onstop = () => resolve()
+          try {
+            recorder.requestData()
+            recorder.stop()
+          } catch {
+            resolve()
+          }
+        })
+      }
+      await chain
+      await writer.close().catch(() => undefined)
+      try {
+        const probe = await probeComposite(await blobStore.read(key))
+        return {
+          bytes,
+          frameCount: probe?.frameCount ?? 0,
+          lastFrameSec: probe?.lastFrameSec ?? null,
+          tailGapMs:
+            probe?.lastFrameSec == null ? null : Math.round(takeMs - probe.lastFrameSec * 1000),
+        }
+      } catch {
+        return null
+      } finally {
+        await blobStore.remove(key).catch(() => undefined)
+      }
+    },
+  }
+}
+
 async function runEngine(
   engine: 'v1' | 'v2',
   width: number,
@@ -243,6 +317,9 @@ async function runEngine(
     longTasks: { count: 0, totalMs: 0, maxMs: 0 },
     file: null,
     tailGapMs: null,
+    tailBandPass: null,
+    v1Stats: null,
+    rawChannel: null,
     encoder: null,
   }
   try {
@@ -255,11 +332,22 @@ async function runEngine(
             },
           })
         : await startLiveComposite(inputs, key)
+    // A raw channel of the SAME source, recorded ALONGSIDE for the whole take:
+    // the composite is not the only MediaRecorder in a take, and if the raw
+    // channels lose their tails too then refusing the instant path buys
+    // nothing. Started here, with the composite — a lane started at stop
+    // records nothing, which is how the first version of this measured a
+    // 9851 ms "tail gap" on a 149 ms file.
+    const raw = startRawLane(rig.screen, `exp-o4-raw-${engine}-${width}-${Date.now()}.webm`)
     await new Promise((r) => setTimeout(r, takeMs))
     const composite: CompositeRecording | null = await handle.stop()
+    base.rawChannel = await raw.stop(takeMs).catch(() => null)
     // Read AFTER stop: the final stats only exist once the encoder drained.
     const stats =
       engine === 'v2' ? (handle as unknown as { stats(): unknown }).stats() : null
+    if (engine === 'v1') {
+      base.v1Stats = (handle as unknown as { stats(): LiveCompositeStats }).stats()
+    }
     base.sourceFrames = rig.sourceFrames()
     base.longTasks = watcher.stop()
     const s = stats as {
@@ -314,6 +402,7 @@ async function runEngine(
       base.deliveredFps = Math.round((base.file.frameCount / (takeMs / 1000)) * 10) / 10
       if (base.file.lastFrameSec !== null) {
         base.tailGapMs = Math.round(takeMs - base.file.lastFrameSec * 1000)
+        base.tailBandPass = base.tailGapMs <= TAIL_BAND_MS
       }
     }
     return base
@@ -341,12 +430,17 @@ export interface O4Step2Report {
     v2MainThreadMs: number
     v1TailGapMs: number | null
     v2TailGapMs: number | null
+    v1TailBandPass: boolean | null
+    v1RawTailGapMs: number | null
   }[]
+  /** The whole point of the load rig: does O8's tail band hold under it? */
+  tailBandMs: number
+  tailBandPass: boolean
   notes: string[]
 }
 
 export async function runCompositorEngine(
-  opts: { takeMs?: number; sizes?: [number, number][] } = {},
+  opts: { takeMs?: number; sizes?: [number, number][]; engines?: ('v1' | 'v2')[] } = {},
 ): Promise<O4Step2Report> {
   const takeMs = opts.takeMs ?? 8000
   const sizes: [number, number][] = opts.sizes ?? [
@@ -358,14 +452,17 @@ export async function runCompositorEngine(
     camera: new MediaStream(),
     audio: [],
   })
+  // One engine at a time is a real option, not a convenience: an A/B of a v1
+  // change must not share a machine with a v2 run that loads it differently.
+  const engines = opts.engines ?? ['v1', 'v2']
   const runs: EngineRun[] = []
   for (const [w, h] of sizes) {
     // v1 first each round: it is the incumbent, and running it on the colder
     // machine is the conservative order for a claim that v2 is faster.
-    runs.push(await runEngine('v1', w, h, takeMs))
-    await new Promise((r) => setTimeout(r, 1500))
-    runs.push(await runEngine('v2', w, h, takeMs))
-    await new Promise((r) => setTimeout(r, 1500))
+    for (const engine of engines) {
+      runs.push(await runEngine(engine, w, h, takeMs))
+      await new Promise((r) => setTimeout(r, 1500))
+    }
   }
   const comparison = sizes.map(([w, h]) => {
     const v1 = runs.find((r) => r.engine === 'v1' && r.sourceWidth === w)
@@ -378,6 +475,8 @@ export async function runCompositorEngine(
       v2MainThreadMs: v2?.longTasks.totalMs ?? 0,
       v1TailGapMs: v1?.tailGapMs ?? null,
       v2TailGapMs: v2?.tailGapMs ?? null,
+      v1TailBandPass: v1?.tailBandPass ?? null,
+      v1RawTailGapMs: v1?.rawChannel?.tailGapMs ?? null,
     }
   })
   return {
@@ -385,11 +484,17 @@ export async function runCompositorEngine(
     takeMs,
     runs,
     comparison,
+    tailBandMs: TAIL_BAND_MS,
+    // The band is only meaningful where it was measured: a run that produced no
+    // file cannot pass it.
+    tailBandPass: runs.every((r) => r.tailBandPass !== false),
     notes: [
       'deliveredFps counts frames IN THE FILE, not frames offered to the encoder — a frame the encoder dropped is a frame the viewer never sees',
       'longTasks totalMs is main-thread time spent in tasks over 50 ms during the take; v1 composites there, v2 does not',
       'tailGapMs is take length minus the last decodable frame: v1 can only ask MediaRecorder to stop, v2 drains its own encoder',
       'the 4K row is the 2026-08-22 PO scenario (a 4K game tab) reproduced with a canvas that genuinely repaints every frame',
+      'tailBandPass is O8 \u2264400 ms evaluated HERE, under load — the band has always existed, it had just never been run anywhere it could fail',
+      'rawChannel records the SAME source through a plain MediaRecorder: if the raw channels lose their tails too, refusing the instant path buys nothing',
     ],
   }
 }
