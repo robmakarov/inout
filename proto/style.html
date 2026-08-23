@@ -2784,6 +2784,11 @@ app.addEventListener('click', (e) => {
 
 /* chips + hint */
 const recBtn = app.querySelector('[data-rec]')
+/* declared up here, not down with the take: syncHint runs during this script's
+   own evaluation and has to be able to ask whether the take is open */
+const capture = app.querySelector('[data-capture]')
+const takeEl = app.querySelector('.take')
+const takeClock = app.querySelector('[data-clock-take]')
 const hintEl = app.querySelector('[data-hint]')
 function anyInputOn() {
   return CHANNELS.some((c) => PERM[c.key] === 'ok' && ring.querySelector(`.chip[data-chip="${c.key}"]`)?.getAttribute('aria-pressed') === 'true')
@@ -2795,6 +2800,10 @@ function say(text, warn) {
 }
 function syncHint() {
   if (recBtn.classList.contains('recbtn--arming')) return
+  // mid-take there is nothing to advise: turning the last input off during a
+  // take is a choice, not a mistake, and "turn on inputs to record" is answering
+  // a question nobody asked once the thing is already running
+  if (capture.dataset.phase === 'live') { say(''); return }
   // the button is never disabled — with nothing on it still records, it just
   // says what it will get. A dead primary control is worse than an empty take.
   // (It also owns no inline opacity: the hand-off fades the disc out in CSS,
@@ -2855,9 +2864,6 @@ syncHint()
    the clock stops, and Done appears. Ending is a decision, stopping is not, and
    the control that made the take is the right one to interrupt it — so the same
    disc runs it, holds it and picks it up again. */
-const capture = app.querySelector('[data-capture]')
-const takeEl = app.querySelector('.take')
-const takeClock = app.querySelector('[data-clock-take]')
 let armTimer = null
 let takeT = 0, takeRaf = null, takeLast = 0
 
