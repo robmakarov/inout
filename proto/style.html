@@ -568,6 +568,10 @@ body.f .filters, body.d .detail { opacity: 1; }
   --neon-t: 2.2s;  /* period     — electric / breathe speed */
   --wedge-k: 0.25; /* radial menu fill intensity */
   --wedge-s: 40%;  /* radial menu tint — 0% is white, 100% is full hue */
+  --wedge-b: 1;    /* radial menu brightness — multiplies the lightness of every
+                      ramp stop and rim, so all four states move together and
+                      keep their relationship. Opacity is the `fill` knob; this
+                      one is how light the colours themselves are. */
   --grid-k: 1;     /* background grid intensity — its own knob, see below */
   --on-h: 148;     /* live input  — neon green, kept off the top end */
   --on-s: 58%;
@@ -730,24 +734,23 @@ body.f .filters, body.d .detail { opacity: 1; }
   fill: color-mix(in srgb, var(--surface-3), var(--accent) 14%);
   fill-opacity: 1;
 }
+/* The glyph is white in every state. State is the wedge's job — it has a whole
+   ramp, a rim and a caption to say it with — and a glyph that changes colour
+   with it was saying the same thing a second time, in a fourth hue. The one
+   exception is an input this browser cannot deliver: that glyph is turned
+   down, because there is nothing there to name. */
 .wedge__ico {
-  color: var(--text-dim);
+  color: #fff;
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
-  opacity: 0.8;
+  opacity: 0.92;
   pointer-events: none;
   transition: color 140ms var(--ease), opacity 140ms var(--ease);
 }
 .wedge__ico .f,
 .wedge__ico .s { fill: none; stroke: currentColor; }
-/* the strike sits on the glyph of an input this browser cannot deliver — drawn
-   twice, a dark casing first, so it stays legible over the glyph's own strokes */
-.wedge__cut { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
-.wedge__cut--under { stroke: #05070a; stroke-width: 3.8; opacity: 0.9; }
-.wedge[data-on='true'] .wedge__ico { color: var(--on-c); opacity: 1; }
-.wedge:hover .wedge__ico { color: var(--text); opacity: 0.85; }
-.wedge[data-on='true']:hover .wedge__ico { color: hsl(var(--on-h) var(--on-s) 80%); opacity: 1; }
+.wedge:hover .wedge__ico { opacity: 1; }
 
 /* ---------- volume skin ----------
    Both references say the same thing in two places: light comes from somewhere,
@@ -762,55 +765,54 @@ body.f .filters, body.d .detail { opacity: 1; }
   pointer-events: none;
   transition: stroke 140ms var(--ease), opacity 140ms var(--ease);
 }
-/* The hub end of the ramp used to start at 0.1 over black, which is nothing:
-   an off wedge read as a hole in the menu rather than as a surface that is off.
-   The whole ramp is lifted, most at the dark end, so the shape is always there. */
-[data-skin='volume'] .wg-in  { stop-color: hsl(var(--neon-h) var(--wedge-s) 34%); stop-opacity: 0.22; }
-[data-skin='volume'] .wg-a   { stop-color: hsl(var(--neon-h) var(--wedge-s) 46%); stop-opacity: 0.32; }
-[data-skin='volume'] .wg-b   { stop-color: hsl(var(--neon-h) var(--wedge-s) 62%); stop-opacity: 0.46; }
-[data-skin='volume'] .wg-c   { stop-color: hsl(var(--neon-h) var(--wedge-s) 76%); stop-opacity: 0.62; }
-[data-skin='volume'] .wg-out { stop-color: hsl(var(--neon-h) var(--wedge-s) 88%); stop-opacity: 0.84; }
+/* The ramp used to start at 0.1 alpha over black and top out at 0.78, then get
+   multiplied down again by the fill knob: the menu was a ghost. It is a solid
+   object now — the ramp still runs dark-to-lit across the band, but every stop
+   is opaque enough to be a surface, not a suggestion of one. */
+[data-skin='volume'] .wg-in  { stop-color: hsl(var(--neon-h) var(--wedge-s) calc(34% * var(--wedge-b))); stop-opacity: 0.45; }
+[data-skin='volume'] .wg-a   { stop-color: hsl(var(--neon-h) var(--wedge-s) calc(46% * var(--wedge-b))); stop-opacity: 0.58; }
+[data-skin='volume'] .wg-b   { stop-color: hsl(var(--neon-h) var(--wedge-s) calc(62% * var(--wedge-b))); stop-opacity: 0.7; }
+[data-skin='volume'] .wg-c   { stop-color: hsl(var(--neon-h) var(--wedge-s) calc(76% * var(--wedge-b))); stop-opacity: 0.83; }
+[data-skin='volume'] .wg-out { stop-color: hsl(var(--neon-h) var(--wedge-s) calc(88% * var(--wedge-b))); stop-opacity: 0.95; }
 /* live input — neon green, held back: saturation is real but the ramp tops out
    lower than the idle one, so it reads lit rather than lurid */
-[data-skin='volume'] .wn-in  { stop-color: hsl(var(--on-h) calc(var(--on-s) * 0.8) 26%); stop-opacity: 0.12; }
-[data-skin='volume'] .wn-a   { stop-color: hsl(var(--on-h) calc(var(--on-s) * 0.9) 38%); stop-opacity: 0.22; }
-[data-skin='volume'] .wn-b   { stop-color: hsl(var(--on-h) var(--on-s) 48%); stop-opacity: 0.38; }
-[data-skin='volume'] .wn-c   { stop-color: hsl(var(--on-h) var(--on-s) 58%); stop-opacity: 0.54; }
-[data-skin='volume'] .wn-out { stop-color: hsl(var(--on-h) var(--on-s) 66%); stop-opacity: 0.72; }
+[data-skin='volume'] .wn-in  { stop-color: hsl(var(--on-h) calc(var(--on-s) * 0.8) calc(26% * var(--wedge-b))); stop-opacity: 0.48; }
+[data-skin='volume'] .wn-a   { stop-color: hsl(var(--on-h) calc(var(--on-s) * 0.9) calc(38% * var(--wedge-b))); stop-opacity: 0.6; }
+[data-skin='volume'] .wn-b   { stop-color: hsl(var(--on-h) var(--on-s) calc(48% * var(--wedge-b))); stop-opacity: 0.72; }
+[data-skin='volume'] .wn-c   { stop-color: hsl(var(--on-h) var(--on-s) calc(58% * var(--wedge-b))); stop-opacity: 0.84; }
+[data-skin='volume'] .wn-out { stop-color: hsl(var(--on-h) var(--on-s) calc(66% * var(--wedge-b))); stop-opacity: 0.95; }
 /* refused — same ramp on the warn hue */
-[data-skin='volume'] .wr-in  { stop-color: hsl(var(--no-h) calc(var(--no-s) * 0.8) 26%); stop-opacity: 0.12; }
-[data-skin='volume'] .wr-a   { stop-color: hsl(var(--no-h) calc(var(--no-s) * 0.9) 38%); stop-opacity: 0.22; }
-[data-skin='volume'] .wr-b   { stop-color: hsl(var(--no-h) var(--no-s) 47%); stop-opacity: 0.36; }
-[data-skin='volume'] .wr-c   { stop-color: hsl(var(--no-h) var(--no-s) 55%); stop-opacity: 0.5; }
-[data-skin='volume'] .wr-out { stop-color: hsl(var(--no-h) var(--no-s) 62%); stop-opacity: 0.66; }
-/* unavailable — not a dimmer version of off. Off and unavailable were both
-   "a quiet wedge" separated only by how much hue was left in them, and once
-   off stopped being nearly invisible the two collapsed into each other. The
-   difference is now light, not amount: every live wedge is a ramp — dark at
-   the hub, lit at the rim — and this one takes no light at all. Flat, even,
-   hueless, no lit rim, and the glyph is struck through. */
+[data-skin='volume'] .wr-in  { stop-color: hsl(var(--no-h) calc(var(--no-s) * 0.8) calc(26% * var(--wedge-b))); stop-opacity: 0.46; }
+[data-skin='volume'] .wr-a   { stop-color: hsl(var(--no-h) calc(var(--no-s) * 0.9) calc(38% * var(--wedge-b))); stop-opacity: 0.58; }
+[data-skin='volume'] .wr-b   { stop-color: hsl(var(--no-h) var(--no-s) calc(47% * var(--wedge-b))); stop-opacity: 0.7; }
+[data-skin='volume'] .wr-c   { stop-color: hsl(var(--no-h) var(--no-s) calc(55% * var(--wedge-b))); stop-opacity: 0.82; }
+[data-skin='volume'] .wr-out { stop-color: hsl(var(--no-h) var(--no-s) calc(62% * var(--wedge-b))); stop-opacity: 0.94; }
+/* unavailable — the same volume, drained of hue. It was flat, which is why it
+   looked like a hole rather than a wedge that happens to be dead. It stays
+   where it was while off lifts: the gap between them IS the ladder. */
+[data-skin='volume'] .wy-in  { stop-color: hsl(var(--neon-h) 6% calc(30% * var(--wedge-b))); stop-opacity: 0.26; }
+[data-skin='volume'] .wy-a   { stop-color: hsl(var(--neon-h) 6% calc(42% * var(--wedge-b))); stop-opacity: 0.34; }
+[data-skin='volume'] .wy-b   { stop-color: hsl(var(--neon-h) 5% calc(54% * var(--wedge-b))); stop-opacity: 0.44; }
+[data-skin='volume'] .wy-c   { stop-color: hsl(var(--neon-h) 5% calc(64% * var(--wedge-b))); stop-opacity: 0.55; }
+[data-skin='volume'] .wy-out { stop-color: hsl(var(--neon-h) 4% calc(72% * var(--wedge-b))); stop-opacity: 0.66; }
 [data-skin='volume'] .wedge .wedge__fill {
   fill: url(#wgrad);
-  fill-opacity: clamp(0, calc(1.5 * var(--wedge-k)), 0.8);
+  fill-opacity: clamp(0.62, calc(3 * var(--wedge-k)), 1);
 }
-[data-skin='volume'] .wedge[data-on='true'] .wedge__fill { fill: url(#wgreen); fill-opacity: clamp(0, calc(3.2 * var(--wedge-k)), 0.92); }
+[data-skin='volume'] .wedge[data-on='true'] .wedge__fill { fill: url(#wgreen); fill-opacity: clamp(0.72, calc(3.4 * var(--wedge-k)), 1); }
 [data-skin='volume'] .wedge:hover .wedge__fill { fill: url(#wgrad); fill-opacity: 1; }
 [data-skin='volume'] .wedge[data-on='true']:hover .wedge__fill { fill: url(#wgreen); fill-opacity: 1; }
 [data-skin='volume'] .wedge .wedge__edge {
-  stroke: hsl(var(--neon-h) var(--wedge-s) 86% / 0.6);
+  stroke: hsl(var(--neon-h) var(--wedge-s) calc(86% * var(--wedge-b)) / 0.6);
   opacity: 0.32;
 }
-[data-skin='volume'] .wedge[data-on='true'] .wedge__edge { stroke: hsl(var(--on-h) var(--on-s) 66% / 0.95); opacity: 1; }
+[data-skin='volume'] .wedge[data-on='true'] .wedge__edge { stroke: hsl(var(--on-h) var(--on-s) calc(66% * var(--wedge-b)) / 0.95); opacity: 1; }
 [data-skin='volume'] .wedge:hover .wedge__edge {
-  stroke: hsl(var(--neon-h) calc(var(--wedge-s) + 22%) 88%);
+  stroke: hsl(var(--neon-h) calc(var(--wedge-s) + 22%) calc(88% * var(--wedge-b)));
   opacity: 1;
   filter: drop-shadow(0 0 calc(var(--neon-r) * 0.35) hsl(var(--neon-h) 100% 60% / 0.7));
 }
-[data-skin='volume'] .radial__sep { stroke: hsl(var(--neon-h) var(--wedge-s) 88% / 0.34); }
-[data-skin='volume'] .wedge .wedge__ico { color: #c6d2e0; opacity: 0.85; }
-[data-skin='volume'] .wedge[data-on='true'] .wedge__ico { color: hsl(var(--on-h) var(--on-s) 78%); opacity: 1; }
-[data-skin='volume'] .wedge:hover .wedge__ico { color: #dbe6f5; opacity: 0.85; }
-[data-skin='volume'] .wedge[data-on='true']:hover .wedge__ico { color: hsl(var(--on-h) var(--on-s) 86%); opacity: 1; }
+[data-skin='volume'] .radial__sep { stroke: hsl(var(--neon-h) var(--wedge-s) calc(88% * var(--wedge-b)) / 0.34); }
 [data-skin='volume'] .radial__hub {
   fill: #08090c;
   stroke: hsl(var(--neon-h) 40% 60% / 0.16);
@@ -886,46 +888,32 @@ body.f .filters, body.d .detail { opacity: 1; }
 .wedge[data-state='denied'] .wedge__fill,
 [data-skin='volume'] .wedge[data-state='denied'] .wedge__fill {
   fill: url(#wred);
-  fill-opacity: clamp(0, calc(2.2 * var(--wedge-k)), 0.7);
+  fill-opacity: clamp(0.7, calc(3.2 * var(--wedge-k)), 1);
 }
 .wedge[data-state='denied']:hover .wedge__fill,
 [data-skin='volume'] .wedge[data-state='denied']:hover .wedge__fill {
-  fill-opacity: clamp(0.28, calc(2.4 * var(--wedge-k)), 0.5);
+  fill-opacity: 1;
 }
-.wedge[data-state='denied'] .wedge__ico,
-[data-skin='volume'] .wedge[data-state='denied'] .wedge__ico { color: hsl(var(--no-h) var(--no-s) 74%); opacity: 0.95; }
 .wedge[data-state='denied'] .wedge__edge,
-[data-skin='volume'] .wedge[data-state='denied'] .wedge__edge { stroke: hsl(var(--no-h) var(--no-s) 64%); opacity: 0.75; }
+[data-skin='volume'] .wedge[data-state='denied'] .wedge__edge { stroke: hsl(var(--no-h) var(--no-s) calc(64% * var(--wedge-b))); opacity: 0.75; }
 
 .wedge[data-state='blocked'] { cursor: not-allowed; }
+/* the one glyph that is not full white */
+.wedge[data-state='blocked'] .wedge__ico,
+.wedge[data-state='blocked']:hover .wedge__ico { opacity: 0.34; }
 .wedge[data-state='blocked'] .wedge__fill,
 [data-skin='volume'] .wedge[data-state='blocked'] .wedge__fill {
-  fill: #838a94;
-  fill-opacity: clamp(0.2, calc(1.05 * var(--wedge-k)), 0.42);
+  fill: url(#wgrey);
+  fill-opacity: clamp(0.34, calc(1.4 * var(--wedge-k)), 0.72);
 }
-.wedge[data-state='blocked'] .wedge__ico,
-[data-skin='volume'] .wedge[data-state='blocked'] .wedge__ico { color: #9aa2ad; opacity: 0.42; }
-/* no lit rim, and the rim it keeps is broken — a live wedge has a continuous
-   edge that light runs along, this one cannot */
 .wedge[data-state='blocked'] .wedge__edge,
 [data-skin='volume'] .wedge[data-state='blocked'] .wedge__edge {
-  stroke: color-mix(in srgb, var(--text), transparent 74%);
-  stroke-dasharray: 3 4;
-  opacity: 0.45;
+  stroke: color-mix(in srgb, var(--text), transparent 78%);
+  opacity: 0.5;
 }
-[data-skin='volume'] .wedge[data-state='blocked']:hover .wedge__edge {
-  stroke: color-mix(in srgb, var(--text), transparent 62%);
-  opacity: 0.55;
-  filter: none;
-}
-/* hover acknowledges the pointer and stops there — no lift, no light: the arc
-   outside the rim is the menu's "this one is live" flare, and a dead wedge
-   must not get one */
-.wedge[data-state='blocked']:hover .wedge__arc { opacity: 0; }
 .wedge[data-state='blocked']:hover .wedge__fill,
 [data-skin='volume'] .wedge[data-state='blocked']:hover .wedge__fill {
-  fill: #838a94;
-  fill-opacity: clamp(0.26, calc(1.3 * var(--wedge-k)), 0.5);
+  fill-opacity: clamp(0.42, calc(1.7 * var(--wedge-k)), 0.8);
 }
 
 /* same three states on the pills */
@@ -2077,6 +2065,7 @@ T F N  theme · frame · neon
         <div class="slider"><label>gap</label><input type="range" id="m-gap" min="40" max="110" step="1" value="41"><output id="o-mgap">41</output></div>
         <div class="slider"><label>fill</label><input type="range" id="m-fill" min="0" max="2" step="0.05" value="0.25"><output id="o-mfill">0.25</output></div>
         <div class="slider"><label>tint</label><input type="range" id="m-tint" min="0" max="100" step="1" value="40"><output id="o-mtint">40</output></div>
+        <div class="slider"><label>bright</label><input type="range" id="m-bright" min="0.4" max="1.6" step="0.02" value="1"><output id="o-mbright">1.00</output></div>
       </div>
       <div class="panel__group">
         <div class="panel__label">Scroll bounce</div>
@@ -2281,11 +2270,7 @@ function buildRadial() {
       <g class="wedge" data-wedge="${c.key}" data-on="${st === 'ok' && onNow(c.key)}" data-state="${st}" style="--d:${i * 30}ms" role="button" aria-label="${c.label}${sub ? ', ' + sub : ''}">
         <path class="wedge__fill" d="${sector(R_IN, R_OUT, a0, a1)}"/>
         <path class="wedge__edge" d="${arc(R_OUT - 0.6, a0, a1)}"/>
-        <g class="wedge__ico" transform="translate(${ix - 11} ${iy - 11}) scale(0.92)">${WEDGE_ICON[c.key]}${
-          st === 'blocked'
-            ? '<path class="wedge__cut wedge__cut--under" d="M4.2 19.8 19.8 4.2"/><path class="wedge__cut" d="M4.2 19.8 19.8 4.2"/>'
-            : ''
-        }</g>
+        <g class="wedge__ico" transform="translate(${ix - 11} ${iy - 11}) scale(0.92)">${WEDGE_ICON[c.key]}</g>
         <path class="wedge__arc" d="${arc(R_OUT + 8, a0 + 0.06, a1 - 0.06)}"/>
         <text class="wedge__cap" x="${cx}" y="${y1}" text-anchor="${anchor}" dominant-baseline="${baseline}">${c.label}</text>
         <text class="wedge__cap2" x="${cx}" y="${y1 + LEAD}" text-anchor="${anchor}" dominant-baseline="${baseline}">${sub}</text>
@@ -2827,6 +2812,7 @@ const mSize = document.getElementById('m-size')
 const mGap = document.getElementById('m-gap')
 const mFill = document.getElementById('m-fill')
 const mTint = document.getElementById('m-tint')
+const mBright = document.getElementById('m-bright')
 function syncMenu() {
   R_OUT = +mSize.value
   R_IN = Math.min(+mGap.value, R_OUT - 24)
@@ -2834,12 +2820,14 @@ function syncMenu() {
   document.getElementById('o-mgap').textContent = R_IN
   document.documentElement.style.setProperty('--wedge-k', mFill.value)
   document.documentElement.style.setProperty('--wedge-s', mTint.value + '%')
+  document.documentElement.style.setProperty('--wedge-b', mBright.value)
   document.documentElement.style.setProperty('--menu-d', `${R_OUT * 2}px`)
   document.getElementById('o-mtint').textContent = mTint.value
+  document.getElementById('o-mbright').textContent = (+mBright.value).toFixed(2)
   document.getElementById('o-mfill').textContent = (+mFill.value).toFixed(2)
   buildRadial()
 }
-;[mSize, mGap, mFill, mTint].forEach((el) => el.addEventListener('input', syncMenu))
+;[mSize, mGap, mFill, mTint, mBright].forEach((el) => el.addEventListener('input', syncMenu))
 syncMenu()
 
 /* availability simulation */
@@ -2894,7 +2882,7 @@ function paramString() {
     `skin=${skinSel.value}`,
     `splash=${splashSel.value}`,
     `perm=${CHANNELS.filter((c) => PERM[c.key] !== 'ok').map((c) => c.key + ':' + PERM[c.key]).join(',') || '-'}`,
-    `menu=size${R_OUT}/gap${R_IN}/fill${mFill.value}/tint${mTint.value}`,
+    `menu=size${R_OUT}/gap${R_IN}/fill${mFill.value}/tint${mTint.value}/bright${mBright.value}`,
     `bounce=k${PHYS.k}/c${PHYS.c}/imp${PHYS.imp}/follow${PHYS.follow}/wall${PHYS.wall}`,
     `zone=${FRAME_W}x${FRAME_H}`,
     `on=${on.map((c) => c.key).join(',') || '-'}`,
@@ -3013,6 +3001,7 @@ function restoreState() {
   if (mg('gap') != null) mGap.value = mg('gap')
   if (mg('fill') != null) mFill.value = mg('fill')
   if (mg('tint') != null) mTint.value = mg('tint')
+  if (mg('bright') != null) mBright.value = mg('bright')
   if (m) syncMenu()
 
   const zone = (st.zone || '').match(/^(\d+)x(\d+)$/)
@@ -3033,7 +3022,7 @@ function restoreState() {
 // every control that can change the look also records it
 ;[themeSel, neonSel, inputsSel, recfxSel, skinSel, splashSel, frameSel].forEach((el) => el.addEventListener('change', saveState))
 ;[...SLIDERS, ...PHYS_SLIDERS].forEach((s) => document.getElementById(s.el).addEventListener('change', saveState))
-;[mSize, mGap, mFill, mTint].forEach((el) => el.addEventListener('change', saveState))
+;[mSize, mGap, mFill, mTint, mBright].forEach((el) => el.addEventListener('change', saveState))
 app.addEventListener('click', (e) => { if (e.target.closest('[data-chip], [data-wedge]')) saveState() })
 grip.addEventListener('pointerup', saveState)
 grip.addEventListener('dblclick', () => setTimeout(saveState, 0))
