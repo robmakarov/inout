@@ -26,9 +26,21 @@ export const CONFIG_KEY: Record<
 
 export function isKindSupported(kind: ChannelKind, caps: Capabilities): boolean {
   if (kind === 'screen') return caps.screenCapture
-  // Tab/system audio rides on display capture — unavailable on Apple WebKit.
+  // Tab/system audio rides on display capture — unavailable on Apple WebKit
+  // AND on Firefox, which accepts the constraint and returns video only (P1).
   if (kind === 'system-audio') return caps.systemAudioCapture
   return caps.camera
+}
+
+/**
+ * What to CALL this channel here (task P1). On Chromium/Windows a whole-monitor
+ * share carries the machine's audio, so "Tab Audio" is simply the wrong word;
+ * everywhere else it is exactly the right one. The label follows the platform
+ * rather than promising the same thing everywhere and being wrong on one.
+ */
+export function channelLabel(kind: ChannelKind, caps: Capabilities): string {
+  if (kind === 'system-audio' && caps.displayAudioScope === 'system') return 'System Audio'
+  return CHANNEL_META[kind].label
 }
 
 /** Why this input can't be used here — shown on press, null when it works. */
@@ -43,6 +55,11 @@ export function unsupportedReason(kind: ChannelKind, caps: Capabilities): string
     if (caps.ios) return 'Tab audio isn’t available on iPhone or iPad — Apple blocks it in the browser.'
     if (caps.appleWebKit)
       return 'Safari can’t capture tab or system audio — it’s an Apple limitation. Use Chrome for tab audio.'
+    // Firefox does not refuse — it accepts `audio: true` and hands back video
+    // only. Saying "not available" would be true but useless; saying what it
+    // actually does is what stops someone recording a silent take twice.
+    if (caps.engine === 'gecko')
+      return 'Firefox accepts the request and records video only — it can’t capture tab or system audio yet. Use Chrome or Edge for tab audio.'
     return 'Tab audio isn’t available in this browser. Use Chrome for tab audio.'
   }
   return 'Camera and mic access isn’t available in this browser.'

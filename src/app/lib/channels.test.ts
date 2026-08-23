@@ -1,16 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import type { Capabilities } from '@core/capabilities'
-import { CHANNEL_KINDS, isKindSupported, unsupportedReason } from './channels'
+import { aacEncodeFor, displayAudioScopeFor } from '@core/capabilities'
+import { CHANNEL_KINDS, channelLabel, isKindSupported, unsupportedReason } from './channels'
 
 const base: Capabilities = {
   chromium: true,
   screenCapture: true,
   systemAudioCapture: true,
+  displayAudioScope: 'tab',
   camera: true,
   webCodecs: true,
   opfs: true,
   ios: false,
   appleWebKit: false,
+  engine: 'chromium',
+  os: 'macos',
+  aacEncode: true,
   full: true,
 }
 
@@ -19,7 +24,9 @@ const safariDesktop: Capabilities = {
   ...base,
   chromium: false,
   systemAudioCapture: false, // Apple: no tab/system audio
+  displayAudioScope: 'none',
   appleWebKit: true,
+  engine: 'webkit',
   full: false,
 }
 const ios: Capabilities = {
@@ -27,9 +34,29 @@ const ios: Capabilities = {
   chromium: false,
   screenCapture: false, // no getDisplayMedia on any iOS browser
   systemAudioCapture: false,
+  displayAudioScope: 'none',
   appleWebKit: true,
+  engine: 'webkit',
+  os: 'ios',
   ios: true,
   full: false,
+}
+
+/** Firefox: screen yes, display AUDIO silently absent, no AAC encoder (P1). */
+const firefox: Capabilities = {
+  ...base,
+  chromium: false,
+  systemAudioCapture: false,
+  displayAudioScope: 'none',
+  engine: 'gecko',
+  aacEncode: false,
+}
+
+/** Chromium on Windows: a monitor share carries the machine's audio (P1). */
+const chromiumWindows: Capabilities = {
+  ...base,
+  displayAudioScope: 'system',
+  os: 'windows',
 }
 
 describe('isKindSupported', () => {
@@ -47,6 +74,43 @@ describe('isKindSupported', () => {
     expect(isKindSupported('system-audio', ios)).toBe(false)
     expect(isKindSupported('camera', ios)).toBe(true)
     expect(isKindSupported('mic', ios)).toBe(true)
+  })
+})
+
+describe('engine x OS matrix (P1)', () => {
+  it('Firefox keeps screen and camera but drops display audio', () => {
+    expect(isKindSupported('screen', firefox)).toBe(true)
+    expect(isKindSupported('camera', firefox)).toBe(true)
+    expect(isKindSupported('mic', firefox)).toBe(true)
+    expect(isKindSupported('system-audio', firefox)).toBe(false)
+  })
+  it('the Firefox copy says what it DOES, not just that it cannot', () => {
+    const r = unsupportedReason('system-audio', firefox)
+    expect(r).toMatch(/Firefox/i)
+    expect(r).toMatch(/video only/i)
+    expect(r).toMatch(/Chrome|Edge/i)
+  })
+  it('Windows Chromium calls it System Audio, macOS calls it Tab Audio', () => {
+    expect(channelLabel('system-audio', chromiumWindows)).toBe('System Audio')
+    expect(channelLabel('system-audio', chromium)).toBe('Tab Audio')
+    // Every other channel is named the same everywhere.
+    expect(channelLabel('screen', chromiumWindows)).toBe(channelLabel('screen', chromium))
+  })
+  it('the scope table is engine x OS, and a probe can veto it', () => {
+    expect(displayAudioScopeFor('chromium', 'windows', true, false)).toBe('system')
+    expect(displayAudioScopeFor('chromium', 'macos', true, false)).toBe('tab')
+    expect(displayAudioScopeFor('chromium', 'linux', true, false)).toBe('tab')
+    expect(displayAudioScopeFor('gecko', 'windows', true, false)).toBe('none')
+    expect(displayAudioScopeFor('webkit', 'macos', true, true)).toBe('none')
+    // No getDisplayMedia at all beats anything the table would say.
+    expect(displayAudioScopeFor('chromium', 'windows', false, false)).toBe('none')
+    // An engine we do not know, but which can share a screen: assume the
+    // conservative case rather than promising the machine's audio.
+    expect(displayAudioScopeFor('unknown', 'linux', true, false)).toBe('tab')
+  })
+  it('only Gecko lacks an AAC encoder', () => {
+    expect(aacEncodeFor('gecko')).toBe(false)
+    for (const e of ['chromium', 'webkit', 'unknown'] as const) expect(aacEncodeFor(e)).toBe(true)
   })
 })
 
