@@ -402,7 +402,7 @@ async function probeTransfer(
   frames: number,
   width: number,
   height: number,
-  mode: 'transfer' | 'composite',
+  mode: 'transfer' | 'composite' | 'composite+mux',
   twoSources = false,
   timestamps: 'regular' | 'wallclock' = 'regular',
 ): Promise<Record<string, unknown>> {
@@ -694,6 +694,11 @@ export async function runEncoderProbe(
   await new Promise((r) => setTimeout(r, 300))
   const wall = await probeTransfer(frames, width, height, 'composite', true, 'wallclock')
   worker.push({ ...wall, where: 'worker:composite+camera+wallclock-timestamps' })
+  // ...and with the muxer and the OPFS handle production holds open. This is
+  // the last structural difference between this probe and the engine.
+  await new Promise((r) => setTimeout(r, 300))
+  const muxed = await probeTransfer(frames, width, height, 'composite+mux', true, 'wallclock')
+  worker.push({ ...muxed, where: 'worker:composite+camera+wallclock+MUX' })
 
   const ok = results.filter((r) => r.supported && !r.error && r.fps > 0)
   const worstOf = (r: ProbeResult): number => r.fpsWorst ?? r.fps

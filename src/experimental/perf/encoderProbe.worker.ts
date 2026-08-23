@@ -27,7 +27,7 @@ interface RunMsg {
    * 'composite'— transferred frames go through the PRODUCTION GL compositor and
    *              the encoder, i.e. everything v2 does except the muxer and disk
    */
-  mode?: 'paint' | 'transfer' | 'composite'
+  mode?: 'paint' | 'transfer' | 'composite' | 'composite+mux'
   /**
    * How the composite frame is STAMPED. 'regular' is i/30, which is what every
    * probe has used. 'wallclock' is what production does: the arrival time of
@@ -142,8 +142,88 @@ async function run(msg: RunMsg): Promise<unknown> {
  * the two, and against the 'paint' mode above, the crossing is priced on its
  * own instead of being the last unexamined suspect.
  */
+/**
+ * The muxer half of production, and the LAST structural difference between this
+ * probe and the engine: a mediabunny fragmented-MP4 Output writing through an
+ * OPFS SyncAccessHandle that this worker holds open, flushed per chunk.
+ */
+async function openMux(
+  width: number,
+  fps: number,
+): Promise<{
+  add(chunk: EncodedVideoChunk, meta: EncodedVideoChunkMetadata | undefined): void
+  close(): Promise<void>
+  stats: { muxMs: number; writeMs: number; flushMs: number; writeCalls: number }
+} | null> {
+  const {
+    EncodedPacket,
+    EncodedVideoPacketSource,
+    Mp4OutputFormat,
+    Output,
+    StreamTarget,
+  } = await import('mediabunny')
+  const root = await navigator.storage.getDirectory()
+  const dir = await root.getDirectoryHandle('blobs', { create: true })
+  const file = await dir.getFileHandle(`encprobe-mux-${fps}-${width}.mp4`, { create: true })
+  const handle = await (
+    file as FileSystemFileHandle & {
+      createSyncAccessHandle(): Promise<{
+        write(b: ArrayBuffer | ArrayBufferView, o?: { at?: number }): number
+        flush(): void
+        close(): void
+        truncate(n: number): void
+      }>
+    }
+  ).createSyncAccessHandle()
+  handle.truncate(0)
+  const stats = { muxMs: 0, writeMs: 0, flushMs: 0, writeCalls: 0 }
+  const sink = new WritableStream<{ data: Uint8Array; position: number }>({
+    write(chunk) {
+      const t0 = performance.now()
+      handle.write(chunk.data, { at: chunk.position })
+      const t1 = performance.now()
+      handle.flush()
+      stats.writeMs += t1 - t0
+      stats.flushMs += performance.now() - t1
+      stats.writeCalls++
+    },
+  })
+  const output = new Output({
+    format: new Mp4OutputFormat({ fastStart: 'fragmented' }),
+    target: new StreamTarget(sink as never),
+  })
+  const source = new EncodedVideoPacketSource('avc')
+  output.addVideoTrack(source, { frameRate: fps })
+  await output.start()
+  let chain = Promise.resolve()
+  return {
+    add(chunk, meta) {
+      const packet = EncodedPacket.fromEncodedChunk(chunk)
+      chain = chain
+        .then(async () => {
+          const t0 = performance.now()
+          await source.add(packet, meta)
+          stats.muxMs += performance.now() - t0
+        })
+        .catch(() => undefined)
+    },
+    async close() {
+      await chain
+      await output.finalize().catch(() => undefined)
+      try {
+        handle.close()
+      } catch {
+        /* already closed */
+      }
+      await dir.removeEntry(`encprobe-mux-${fps}-${width}.mp4`).catch(() => undefined)
+    },
+    stats,
+  }
+}
+
 async function runFed(msg: RunMsg): Promise<unknown> {
-  const composite = msg.mode === 'composite'
+  const composite = msg.mode === 'composite' || msg.mode === 'composite+mux'
+  const mux = msg.mode === 'composite+mux' ? await openMux(msg.width, 30) : null
   let comp: import('@core/capture/compositorGL').GLCompositor | null = null
   if (composite) {
     const { createGLCompositor } = await import('@core/capture/compositorGL')
@@ -156,9 +236,11 @@ async function runFed(msg: RunMsg): Promise<unknown> {
   let encoder: VideoEncoder | null = null
   if (composite) {
     encoder = new VideoEncoder({
-      output: (chunk) => {
+      output: (chunk, meta) => {
         out++
         bytes += chunk.byteLength
+        encodeLatencyMs += performance.now() - (submittedAt.shift() ?? performance.now())
+        mux?.add(chunk, meta)
       },
       error: (err) => {
         error = String(err)
@@ -181,6 +263,8 @@ async function runFed(msg: RunMsg): Promise<unknown> {
   let dropped = 0
   let firstArrivalAt = 0
   let lastTsUs = -1
+  const submittedAt: number[] = []
+  let encodeLatencyMs = 0
   let t0 = 0
   let tLast = 0
   /** Wall time from the frame ARRIVING to this side being done with it. */
@@ -189,6 +273,7 @@ async function runFed(msg: RunMsg): Promise<unknown> {
   return new Promise((resolve) => {
     const finish = async (): Promise<void> => {
       if (encoder) await encoder.flush().catch(() => undefined)
+      await mux?.close()
       const wallMs = Math.round(tLast - t0)
       try {
         encoder?.close()
@@ -207,6 +292,8 @@ async function runFed(msg: RunMsg): Promise<unknown> {
         bytes,
         wallMs,
         msPerFrameHandled: framesIn > 0 ? Math.round((handleMs / framesIn) * 100) / 100 : 0,
+        msPerEncodeLatency: out > 0 ? Math.round(encodeLatencyMs / out) : 0,
+        mux: mux?.stats ?? null,
         queueWaitMs: 0,
         peakQueue,
         fps: wallMs > 0 ? Math.round(((composite ? out : framesIn) / (wallMs / 1000)) * 10) / 10 : 0,
@@ -276,6 +363,7 @@ async function runFed(msg: RunMsg): Promise<unknown> {
         duration: Math.round(1e6 / 30),
       })
       try {
+        submittedAt.push(performance.now())
         encoder.encode(frame, { keyFrame: framesIn % 60 === 1 })
       } catch (err) {
         error = String(err)
