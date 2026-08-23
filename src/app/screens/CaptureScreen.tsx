@@ -276,37 +276,13 @@ export function CaptureScreen() {
         </div>
       )}
 
-      {shotNotice && shotNotice.kind === 'covering' && (
-        <div className="capture__inshot-band" role="status">
-          <strong>{shotNotice.title}</strong> {shotNotice.body}
-        </div>
-      )}
-
-      {recording && mirrors && (
-        // The whole screen is being recorded and this window is in front, so
-        // the preview below would be filming itself. Say what happened instead.
-        <div className="capture__backstage">
-          <div className="capture__backstage-card" role="status">
-            <div className="capture__backstage-title">{shotNotice?.title}</div>
-            <div className="capture__backstage-body">{shotNotice?.body}</div>
-            {shotNotice?.foot && <div className="capture__backstage-foot">{shotNotice.foot}</div>}
-            <button
-              className="capture__backstage-show"
-              onClick={() => setShowPreviewAnyway(true)}
-            >
-              Show preview anyway
-            </button>
-          </div>
-        </div>
-      )}
-
-      {recording && !mirrors && (
+      {recording && (
         <div className="capture__preview">
           {/* Live WYSIWYG of the final 16:9 composition — the very same stage
               the editor and export use, so the frame the user sees while
               recording is exactly where the editable video lands next.
-              Full-monitor capture would show a mirror tunnel while this window
-              is in front, which is why that case renders the card above. */}
+              Full-monitor capture can show a mirror tunnel if this window is on
+              the captured screen — cosmetic, standard (OBS does the same). */}
           <div className="stage">
             {screenStream && <StreamVideo stream={screenStream} className="stage__screen" />}
             {cameraStream && (

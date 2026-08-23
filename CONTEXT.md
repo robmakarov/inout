@@ -77,10 +77,6 @@ Shipped 2026-08-23 (eleven merges; engineering detail in `.ai/DECISIONS`, task s
   is pure signal processing: no transcript, no model, ever.
 - **Files got smaller for free** — 20–24 % off a screen recording's export and 29 % off what the
   camera writes to disk while recording, with the picture measurably unchanged in both cases.
-- **You are in the shot** — hiding the browser's "you are sharing your screen" bar yanks you back to
-  INOUT, and no web page can prevent that. What INOUT can do, and now does, is stop filming itself and
-  tell you what happened.
-
 Known gaps, honestly stated:
 
 - **The end of a take going missing under load is FIXED for the composite** — 2.7 seconds lost off a
@@ -142,7 +138,8 @@ from Chrome, and there is a one-command QA runner and an RU network probe.
 
 **Shipped 2026-08-23 in one session, on PO's "roadmap o/f, all in one session":** the background
 frame · silence tightening · the finer export ladder · the whole bits audit and the two size levers it
-priced · the in-shot notice. One gate was NOT met and is a task rather than a footnote: the per-step
+priced. (An "in-shot" notice shipped the same day and was pulled on PO's call — see DECISIONS.)
+One gate was NOT met and is a task rather than a footnote: the per-step
 size number cannot be honest to ±20 % on every kind of content, because it is predicted from a file a
 DIFFERENT encoder made — on text-heavy screen content the two encoders disagree by nearly 2×. The fix
 is to measure rather than model (encode one frame per step and calibrate), and it is task F7c.

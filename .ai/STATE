@@ -26,12 +26,9 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
 - THE EDIT SURVIVES A REFRESH (F4, editsRepo IndexedDB v2). It never did before: recovery restored the
   recording and handed the editor a fresh default, so trims and cuts evaporated on every reload.
 - installable PWA, starts offline (P2); first paint 233.9 KB (O7 gate ≤300 KB; was 803)
-- YOU ARE IN THE SHOT (2026-08-23): pressing HIDE on the browser's screen-sharing bar activates this
-  window — browser security UI, unfixable from a page (no API dismisses it, and none moves OS focus
-  back to another app). So the LANDING is handled instead: a whole-screen take with this window in
-  front replaces the self-filming preview with one card that says so (and a "Show preview anyway"), a
-  window/tab take gets a band saying the shared surface is now behind us. Needs the picked surface,
-  which the session now carries (CaptureSession.displaySurface; null in synthetic mode).
+- IN-SHOT NOTICE: REMOVED 2026-08-23 on PO's call. The live preview runs on every take again, mirror
+  tunnel included. CaptureSession.displaySurface stays (acquire fills it; null in synthetic mode) but
+  nothing in the UI reads it. Do not reintroduce a notice here without PO asking for one.
 - knows WHICH browser it is running in (P3, core/platform.ts): Yandex is named as Yandex and not
   Chrome, and a below-floor build gets an honest "update" line instead of a silent failure
 - every exported file carries a certification in its comment tag (O8): path, output settings, loudness
@@ -96,7 +93,8 @@ gaps / in flight:
   timed zooms over a static reframe) · P0-tail (above) · the O4
   re-diagnosis (above) · F7c attempted and NOT shipped (three probe designs, all measured, none beat
   the model it would replace — spike kept at src/experimental/perf/sizeProbe.ts).
-- SHIPPED 2026-08-23, THIRD SESSION (PO: "roadmap o/f, all in one session"): the in-shot notice ·
+- SHIPPED 2026-08-23, THIRD SESSION (PO: "roadmap o/f, all in one session"): the in-shot notice
+  (SINCE REMOVED — see above) ·
   O11a bits audit (render half + codec rung in the tag) · O11b GOP 2→5 s · O11c camera-when-PiP ·
   F7b finer export ladder (with its ±20 % gate reported UNMET and the reason measured — new task F7c) ·
   F3 background frame · F5a silence tightening. Full QA green on the prod build in real Chrome 151
