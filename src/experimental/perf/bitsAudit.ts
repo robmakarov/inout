@@ -27,6 +27,8 @@ import { newId } from '@core/id'
 import { blobStore } from '@core/store'
 import { exportRecording } from '@core/compose'
 import { startLiveComposite } from '@core/capture/liveComposite'
+import { calibrateSteps, estimateFromCalibration } from '@core/compose/calibrate'
+import { QUALITY_TIERS } from '@core/compose/quality'
 import { readCertification } from '@core/compose/certify'
 import { defaultEditState } from '@core/timeline'
 import { defaultCameraPose, poseToRect } from '@core/timeline/cameraTrack'
@@ -34,6 +36,9 @@ import type { ChannelRecording, Recording } from '@core/types'
 
 /** The shipped raw-camera bitrate, and the O11c candidate. */
 const CAMERA_BITRATES = [4_000_000, 2_500_000]
+
+/** The shipped ladder, matched to this rig's step labels by name. */
+const CALIBRATION_TIERS = QUALITY_TIERS
 
 // ---------------------------------------------------------------------------
 // sources
@@ -390,6 +395,7 @@ async function captureCompositeShape(source: Source, takeMs: number): Promise<Co
       }
       const total = keyframeBytes + deltaBytes
       return {
+        key,
         bytes: blob.size,
         keyframeBytes,
         deltaBytes,
@@ -405,7 +411,8 @@ async function captureCompositeShape(source: Source, takeMs: number): Promise<Co
     return null
   } finally {
     for (const t of stream.getTracks()) t.stop()
-    await blobStore.remove(key).catch(() => undefined)
+    // NOT removed here: the F7c calibration probe reads this very file. The
+    // caller sweeps it once the content's measurements are done.
   }
 }
 
@@ -452,7 +459,9 @@ export interface ContentReport {
   /** The live composite of this content, and what each estimator model makes of it. */
   composite: CompositeShape | null
   estimates: EstimateRow[]
-  worstErrorPct: { sqrt: number; piecewise: number } | null
+  worstErrorPct: { sqrt: number; piecewise: number; calibrated: number | null } | null
+  /** What the F7c probe cost, and what it measured. */
+  calibration: { wallMs: number; steps: Record<string, { key: number; delta: number }> } | null
 }
 
 /**
@@ -462,6 +471,8 @@ export interface ContentReport {
  * time — barely scales with pixels). F7b lives or dies on that split.
  */
 export interface CompositeShape {
+  /** Blob key of the composite, kept alive for the F7c calibration probe. */
+  key?: string
   bytes: number
   keyframeBytes: number
   deltaBytes: number
@@ -485,6 +496,9 @@ export interface EstimateRow {
   /** ln(actual/source) / ln(pixelRatio): the exponent this content actually
    *  obeys. 1 = size follows pixels, 0.5 = the shipped √ model, 0 = flat. */
   impliedExponent: number | null
+  /** F7c: the size predicted from a MEASURED key+delta pair at this step. */
+  calibratedPredicted: number | null
+  calibratedErrorPct: number | null
 }
 
 export interface CameraRung {
@@ -530,6 +544,7 @@ export async function runBitsAudit(
   for (const kind of ['screen', 'motion'] as const) {
     const source = kind === 'screen' ? screenLikeSource(1920, 1080) : motionSource(1920, 1080)
     let channel: ChannelRecording | null = null
+    let compositeKey: string | null = null
     try {
       channel = (await recordChannels(source, 'screen', takeMs, [8_000_000]))[0]!
       const recording: Recording = {
@@ -698,6 +713,35 @@ export async function runBitsAudit(
       // It reads the take's own live composite, so the composite has to exist:
       // record one over the same source and then price every step against it.
       const shape = await captureCompositeShape(source, takeMs)
+      compositeKey = shape?.key ?? null
+      // F7c: the same composite the shipped panel would calibrate from.
+      let calibration: Awaited<ReturnType<typeof calibrateSteps>> = null
+      let calibrationOut: ContentReport['calibration'] = null
+      if (shape?.key) {
+        const recWithComposite: Recording = {
+          ...recording,
+          composite: {
+            blobKey: shape.key,
+            mimeType: 'video/mp4',
+            durationMs: Math.round(shape.durationSec * 1000),
+            width: shape.width,
+            height: shape.height,
+            bytes: shape.bytes,
+          },
+        }
+        calibration = await calibrateSteps(recWithComposite, CALIBRATION_TIERS)
+        if (calibration) {
+          calibrationOut = {
+            wallMs: calibration.wallMs,
+            steps: Object.fromEntries(
+              Object.entries(calibration.steps).map(([id, m]) => [
+                id,
+                { key: m.meanKeyframeBytes, delta: m.meanDeltaBytes },
+              ]),
+            ),
+          }
+        }
+      }
       const estimates: EstimateRow[] = []
       if (shape && shape.durationSec > 0) {
         const srcPixels = shape.width * shape.height
@@ -712,6 +756,11 @@ export async function runBitsAudit(
             Math.min(ceiling, srcRate * (r <= 1 ? r : Math.sqrt(r)) * seconds),
           )
           const ratio = rung.bytes / (srcRate * seconds)
+          const tier = CALIBRATION_TIERS.find((t) => t.label === rung.label)
+          const calibrated =
+            tier && calibration
+              ? estimateFromCalibration(recording, tier, takeMs, calibration)
+              : null
           estimates.push({
             label: rung.label,
             pixelRatio: Math.round(r * 1000) / 1000,
@@ -725,6 +774,10 @@ export async function runBitsAudit(
               r > 0 && r !== 1 && ratio > 0
                 ? Math.round((Math.log(ratio) / Math.log(r)) * 100) / 100
                 : null,
+            calibratedPredicted: calibrated ? calibrated.bytes : null,
+            calibratedErrorPct: calibrated
+              ? Math.round(((calibrated.bytes - rung.bytes) / rung.bytes) * 1000) / 10
+              : null,
           })
         }
       }
@@ -737,16 +790,21 @@ export async function runBitsAudit(
         minPsnrDb: psnrs.length ? Math.min(...psnrs) : null,
         composite: shape,
         estimates,
+        calibration: calibrationOut,
         worstErrorPct: estimates.length
           ? {
               sqrt: Math.max(...estimates.map((e) => Math.abs(e.sqrtErrorPct))),
               piecewise: Math.max(...estimates.map((e) => Math.abs(e.piecewiseErrorPct))),
+              calibrated: estimates.every((e) => e.calibratedErrorPct !== null)
+                ? Math.max(...estimates.map((e) => Math.abs(e.calibratedErrorPct!)))
+                : null,
             }
           : null,
       })
     } finally {
       source.stop()
       if (channel) await blobStore.remove(channel.blobKey).catch(() => undefined)
+      if (compositeKey) await blobStore.remove(compositeKey).catch(() => undefined)
     }
   }
 
