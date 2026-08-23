@@ -22,7 +22,6 @@ import {
   isKindSupported,
   unsupportedReason,
 } from '@app/lib/channels'
-import { inShotNotice, previewWouldMirror } from '@app/lib/inShot'
 import { ChannelChips } from '@app/components/ChannelChips'
 import { RecordButton } from '@app/components/RecordButton'
 import { TimerPill } from '@app/components/TimerPill'
@@ -36,35 +35,6 @@ function StreamVideo({ stream, className }: { stream: MediaStream; className: st
     if (el && el.srcObject !== stream) el.srcObject = stream
   }, [stream])
   return <video ref={ref} className={className} autoPlay muted playsInline />
-}
-
-/**
- * Is the user looking at THIS window right now?
- *
- * Visibility alone is not the question: on macOS a Chrome window that is merely
- * behind another app stays `visible` until it is fully occluded. Focus alone is
- * not either — a background tab in a focused window has none of the screen.
- * Both together is "the user is here", which is what decides whether the
- * preview is filming itself. Listeners only while `active` (a take is running).
- */
-function useInFront(active: boolean): boolean {
-  const read = (): boolean =>
-    typeof document !== 'undefined' && document.visibilityState === 'visible' && document.hasFocus()
-  const [inFront, setInFront] = useState(read)
-  useEffect(() => {
-    if (!active) return
-    const onChange = () => setInFront(read())
-    onChange()
-    window.addEventListener('focus', onChange)
-    window.addEventListener('blur', onChange)
-    document.addEventListener('visibilitychange', onChange)
-    return () => {
-      window.removeEventListener('focus', onChange)
-      window.removeEventListener('blur', onChange)
-      document.removeEventListener('visibilitychange', onChange)
-    }
-  }, [active])
-  return inFront
 }
 
 const ARMING_LABEL: Record<ArmingTimelineEntry['step'], string> = {
@@ -103,9 +73,6 @@ export function CaptureScreen() {
   /** Sources frozen right now — a toast is useless here, the user is in
    * another tab while it happens and only sees this screen on the way back. */
   const [stalled, setStalled] = useState<ChannelKind[]>([])
-  /** Opt back into the WYSIWYG preview even while it films itself (never
-   * removes a working affordance — the mirror tunnel is only hidden by default). */
-  const [showPreviewAnyway, setShowPreviewAnyway] = useState(false)
   const finishingRef = useRef(false)
 
   const finishRecording = async () => {
@@ -149,7 +116,6 @@ export function CaptureScreen() {
       setRemainingMs(MAX_RECORDING_MS)
       setMuted({})
       setStalled([])
-      setShowPreviewAnyway(false)
     }
   }
 
@@ -278,15 +244,6 @@ export function CaptureScreen() {
   const audioStream = session?.previewStreams.mic ?? session?.previewStreams['system-audio']
   const audioOnly = !!session && !screenStream && !cameraStream
   const recording = !!session
-
-  // Landing back here mid-take is usually not the user's doing: hiding the
-  // browser's screen-sharing bar activates this window. We cannot stop that (it
-  // is browser chrome, and no web API moves OS focus back), so we make the
-  // landing cheap — see @app/lib/inShot.
-  const inFront = useInFront(recording)
-  const surface = session?.displaySurface ?? null
-  const shotNotice = recording ? inShotNotice(surface, inFront) : null
-  const mirrors = recording && previewWouldMirror(surface, inFront) && !showPreviewAnyway
 
   return (
     <div className={`capture${recording ? ' capture--recording' : ''}`}>

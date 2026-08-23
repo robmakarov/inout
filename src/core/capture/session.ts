@@ -27,6 +27,7 @@ import {
   type MeasuredAudioHandle,
 } from './measuredAudio'
 import { canLiveComposite, startLiveComposite, type LiveCompositeHandle } from './liveComposite'
+import { drainRecorder } from './recorderDrain'
 import { canLiveCompositeV2, startLiveCompositeV2 } from './liveCompositeV2'
 import { preferredCompositeEngine } from './engine'
 import { MixLoudnessAccumulator } from './loudnessAccumulator'
