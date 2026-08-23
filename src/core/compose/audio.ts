@@ -171,7 +171,22 @@ export function makeupGainForLoudness(m: MixLoudness): number {
  * Sample indices use floor/ceil (not round) so adjacent 1 s mix chunks share
  * no skipped/duplicated frame — the classic click source at chunk seams.
  */
-export class AudioChannelMixer {
+/**
+ * Anything that can add its contribution to an output chunk. Two implement it:
+ * one channel over one kept span at natural rate, and a whole SPED span whose
+ * channels are summed and then time-stretched together (task F5b).
+ */
+export interface MixSource {
+  gain: number
+  /** Channels this source contributes — the mix bus counts DISTINCT ones. */
+  readonly channelIds: string[]
+  /** '' when the source is not a single channel; see loudnessFromCaptureStats. */
+  readonly channelId: string
+  mixInto(left: Float32Array, right: Float32Array, chunkOutStartSec: number): Promise<void>
+  dispose(): void
+}
+
+export class AudioChannelMixer implements MixSource {
   private readonly iter: AsyncGenerator<WrappedAudioBuffer, void, unknown>
   private curr: CurrentBuffer | null = null
   private pending: WrappedAudioBuffer | null = null
@@ -188,6 +203,10 @@ export class AudioChannelMixer {
    * shortcut was removed and everything moved to this render sum (2026-07-16).
    */
   gain = 1
+
+  get channelIds(): string[] {
+    return [this.channelId]
+  }
 
   constructor(
     private readonly input: Input,
@@ -354,7 +373,7 @@ const LOUDNESS_WINDOW_FRAMES = 4800
  * path. Pass a THROWAWAY mixer set: mixing consumes it.
  */
 export async function measureMixLoudness(
-  mixers: AudioChannelMixer[],
+  mixers: MixSource[],
   gain: number,
   totalAudioFrames: number,
   throwIfAborted: () => void,
@@ -383,7 +402,7 @@ export interface MixEnvelope extends MixLoudness {
  * normalizer makes, or the two would disagree about what "quiet" means.
  */
 export async function measureMixEnvelope(
-  mixers: AudioChannelMixer[],
+  mixers: MixSource[],
   gain: number,
   totalAudioFrames: number,
   throwIfAborted: () => void,
@@ -437,6 +456,123 @@ export async function measureMixEnvelope(
     floorRms,
     windowRms: inOrder,
     windowMs: (LOUDNESS_WINDOW_FRAMES / AUDIO_SAMPLE_RATE) * 1000,
+  }
+}
+
+/**
+ * A whole kept span played faster (task F5b), summed and time-stretched.
+ *
+ * The channels are mixed at NATURAL rate in RECORDING time — each of its inner
+ * mixers is opened with an identity mapping, so `mixInto(_, _, recSec)` hands
+ * back the material exactly as recorded — and the sum then goes through one
+ * WSOLA stretcher. Summing BEFORE stretching is not an optimisation: stretching
+ * each channel separately would let the two searches choose different offsets,
+ * and mic and system audio would slide apart inside the span.
+ */
+export class SpeedSpanMixer implements MixSource {
+  private readonly stretcher: TimeStretcher
+  /** Next RECORDING second to pull from the channels. */
+  private srcCursorSec: number
+  private readonly srcL = new Float32Array(AUDIO_SAMPLE_RATE)
+  private readonly srcR = new Float32Array(AUDIO_SAMPLE_RATE)
+  private outL = new Float32Array(AUDIO_SAMPLE_RATE)
+  private outR = new Float32Array(AUDIO_SAMPLE_RATE)
+  private ended = false
+
+  constructor(
+    private readonly mixers: AudioChannelMixer[],
+    private readonly outStartSec: number,
+    private readonly outEndSec: number,
+    recStartSec: number,
+    private readonly recEndSec: number,
+    readonly speed: number,
+  ) {
+    this.stretcher = new TimeStretcher(speed)
+    this.srcCursorSec = recStartSec
+  }
+
+  get channelIds(): string[] {
+    return this.mixers.map((m) => m.channelId)
+  }
+
+  /** Deliberately not a channel id: a span is several channels, and the only
+   *  consumer of channelId (the capture-stats loudness match) must MISS rather
+   *  than match a span — it describes a 1x mix that this is not. */
+  get channelId(): string {
+    return ''
+  }
+
+  get gain(): number {
+    return this.mixers[0]?.gain ?? 1
+  }
+
+  set gain(g: number) {
+    for (const m of this.mixers) m.gain = g
+  }
+
+  async mixInto(left: Float32Array, right: Float32Array, chunkOutStartSec: number): Promise<void> {
+    const sr = AUDIO_SAMPLE_RATE
+    const frames = left.length
+    const overlapStart = Math.max(chunkOutStartSec, this.outStartSec)
+    const overlapEnd = Math.min(chunkOutStartSec + frames / sr, this.outEndSec)
+    if (overlapEnd <= overlapStart) return
+    const at = Math.max(0, Math.round((overlapStart - chunkOutStartSec) * sr))
+    const need = Math.min(frames - at, Math.max(0, Math.round((overlapEnd - overlapStart) * sr)))
+    if (need <= 0) return
+    if (this.outL.length < need) {
+      this.outL = new Float32Array(need)
+      this.outR = new Float32Array(need)
+    }
+    this.outL.fill(0, 0, need)
+    this.outR.fill(0, 0, need)
+
+    let done = 0
+    while (done < need) {
+      const want = this.stretcher.wants(need - done)
+      if (want > 0 && !(await this.feed(want))) this.finish()
+      const got = this.stretcher.pull(this.outL, this.outR, done, need - done)
+      if (got === 0) {
+        // Nothing more will come: leave the rest silent rather than spin. The
+        // span is bounded by its own output window, so this is at most the
+        // last partial synthesis block.
+        if (this.ended) break
+        this.finish()
+        continue
+      }
+      done += got
+    }
+    // The mixer contract is to ADD, so the stretcher's output is staged and
+    // summed rather than written over whatever the other sources put there.
+    for (let i = 0; i < done; i++) {
+      left[at + i] += this.outL[i]!
+      right[at + i] += this.outR[i]!
+    }
+  }
+
+  /** Pull up to `frames` of source into the stretcher. False when exhausted. */
+  private async feed(frames: number): Promise<boolean> {
+    const sr = AUDIO_SAMPLE_RATE
+    const remaining = Math.max(0, Math.round((this.recEndSec - this.srcCursorSec) * sr))
+    const n = Math.min(frames, remaining, this.srcL.length)
+    if (n <= 0) return false
+    const l = this.srcL.subarray(0, n)
+    const r = this.srcR.subarray(0, n)
+    l.fill(0)
+    r.fill(0)
+    for (const m of this.mixers) await m.mixInto(l, r, this.srcCursorSec)
+    this.stretcher.push(l, r, n)
+    this.srcCursorSec += n / sr
+    return true
+  }
+
+  private finish(): void {
+    if (this.ended) return
+    this.ended = true
+    this.stretcher.end()
+  }
+
+  dispose(): void {
+    for (const m of this.mixers) m.dispose()
   }
 }
 
