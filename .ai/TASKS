@@ -352,7 +352,9 @@ choice. Default tier provably still instant (59-66 ms vs 1219-1641 ms render). S
 
 ## F7b. quality-slider v2 — finer steps, a size number on every step  [P2, light-medium; AFTER O11a — the audit picks the steps; PO 2026-08-23]
 PO: slider before export with SIZES shown per step; "step is whatever optimal" — TD picks from
-evidence. Builds on F7's shipped slider + estimator; this is more rungs, not a new control.
+evidence. UI REFERENCE (PO): "like claude code / chatgpt effort level" — a discrete stepped control
+with a handful of NAMED levels, not a continuous slider; selecting a level shows its predicted MB.
+Builds on F7's shipped slider + estimator; this is more rungs, not a new control.
 Goal: the ladder becomes size-ordered steps mixing resolution AND bitrate (e.g. 720p-lean · 720p ·
 1080p-lean · 1080p default · 1440p — final set from O11a's achieved-bitrate numbers), every step
 labelled with its predicted MB (F7 estimator extended per-step: min(step ceiling, √pixel-scaled
