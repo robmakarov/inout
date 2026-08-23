@@ -164,6 +164,11 @@ capture may also move to VideoEncoder on Chromium in the same worker — optiona
 Constraints: MediaRecorder path stays as capability/watchdog fallback (weak machine degrades, proven);
 crash-salvage must recover the fMP4 composite mid-write (ABSORBS v1 task 4 — composite salvage becomes
 free); measured-audio pipeline untouched; instant export contract unchanged.
+Size notes (O11): encode geometry follows RENDER geometry — the camera channel encodes at its PiP
+max-render size (O11c), not its capture size. Frame-driven draw is the single biggest size lever for
+screen takes (static spans cost ~1 fps). Keyframe cadence: ≤2 s is the smart-cut default, but GOP
+length is also bytes — O11a's audit prices the trade (cut granularity vs size), decide on evidence.
+The COMPOSITE stays avc: it is what instant export packet-copies into the blind-shared file (O11d).
 GATES: oracle sync ≤10 ms 10/10 · 08-22 4K rig: delivered ≥28 fps at 1080p output (baseline 21.5/11.9)
 · mid-record tab-kill salvages composite + all channels · forced-slow harness proves watchdog fallback
 · capture CPU ≤ O3 baseline (report) · unedited instant export ≤ 200 ms · ZERO TAIL LOSS at stop
@@ -237,6 +242,37 @@ removed from mic) — in the P4 shell where a proper reference signal exists.
 GATES: R128 integrated −14 ±0.5 LUFS on the synthetic set · multitrack file: tracks separate, default
 unchanged · gating: zero triggers on the clean-speech fidelity set · fidelity oracle green throughout.
 
+## O11. bits-audit + codec-autoswitch — smaller files, zero quality loss, per-browser  [P2; (a-c) light, parallel-safe NOW; (d) medium, rides P1's 3-engine rig]
+PO 2026-08-23: "top shit; auto-switch per browser, invisible; never make it worse for everyone
+because one system can't; camera-with-screen is a small rectangle anyway."
+Why: file size is set by flat 8 Mbps ceilings chosen blind — nobody has measured where the bits go.
+The autoswitch PO asked for is already the house pattern (recorder mime probe, WebKit audio path,
+encoder fallback chains, capability gating); this extends it to the codec rung, evidence first.
+(a) BITS AUDIT (light, FIRST — prices every other lever): onEncodedPacket telemetry on the render
+path + composite stats — keyframe share of bytes, achieved-vs-ceiling bitrate, per-channel bytes/s —
+console-logged; certification tag gains the codec rung. No lever below ships without its number.
+(b) GOP STRETCH (light): render-path keyFrameInterval 2 s (mediabunny default, never overridden) →
+~5 s. Identical pixels; only player seek granularity coarsens. Expected 10-30 % off static-screen
+exports — (a) decides. The instant path gets GOP control only when O4 owns the capture encoder.
+(c) CAMERA-WHEN-PIP (light): capture side ALREADY rightsized by O3a (720p ideal + 4 Mbps + motion
+hint when screen present) — PO's instinct, half shipped. Remaining now: raw camera channel
+4 → ~2.5 Mbps, visual-evidence gated (saves disk + write bandwidth only; the exported PiP already
+costs ~7.7 % of frame area so the file barely changes). Post-O4: encode the camera channel at its MAX
+RENDER size exactly (default PiP 461 px wide @1080p; F4 resize ceiling × largest tier = 1280 px, so
+720p capture stays transparent).
+(d) CODEC LADDER, probed (medium): extend codecs.ts FALLBACK_CHAINS to hevc-hw → avc floor (av1
+where hw encode exists), hardware-only above the floor, probed per browser, invisible; certification
+tag says which rung ran; savings MEASURED on our own takes (expect 25-40 %). DEFAULT FILE STAYS AVC —
+verified 2026-08-23: encode side is broad (Chrome 130+ hw, VideoToolbox, Safari) but real-world
+DECODE of hevc is near-absent on Firefox/Edge (950k-session 2026 dataset) and av1 absent on pre-M3
+Safari — a blind-shared non-avc file WILL fail for some recipients, and no invisible rule can probe
+the recipient of a file. The rung flips where the recipient IS known: raw channels post-O4 (internal,
+no recipient — free ~40 % disk) and the cloud-player milestone (we control playback → per-session
+codec; av1+hevc pair covers 99.7 % of sessions).
+GATES: (a) numbers in console + tag, probed back out of a real export · (b/c) size delta reported +
+SSIM/visual-diff evidence of no loss + instant path untouched (logs) · (d) every rung's file plays in
+current Chrome + Safari + Firefox (P1 rig) · export throughput ≥1× realtime holds · oracles green.
+
 ═══ PHASE F — FEATURES (PO-approved 2026-08-22; order below; F7 independent) ═══
 
 ## F1. mid-take-cuts — DONE 2026-08-23, merged (evidence in DECISIONS)
@@ -267,7 +303,8 @@ oracles green.
 PO spec: the camera PiP is movable DIRECTLY ON THE VIDEO — the user drags it on the stage, and the
 movement is TIMED: the export moves it exactly WHEN the user moved it. Drags at playhead time T write
 position keyframes at T; playback and export replay the motion (eased interpolation, edge-clamped).
-Also resizable (corner handle).
+Also resizable (corner handle). TD proposal: resize ceiling 50 % of frame width — keeps the 720p
+camera capture transparent at every export tier (0.5 × 2560 = 1280); bigger wants O6 native camera.
 Scope v1: editor-time motion only. Live-drag DURING recording is OUT (the burned-in composite would
 disagree with the edit) — revisit after O4 makes the live compositor edit-aware.
 Constraints: untouched takes keep the default BR-24% PiP and their instant packet-copy path
