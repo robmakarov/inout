@@ -111,23 +111,46 @@ async function isGranted(name: 'camera' | 'microphone'): Promise<boolean> {
  * after the deadline already fired (user answered a prompt late), the stream's
  * tracks are stopped immediately — otherwise the camera/mic light stays on
  * with no owner (PO-hit 2026-07-16). Exported for tests. */
-export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+export function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+  /**
+   * Hold the clock until this settles. A DEVICE budget measures hardware
+   * spin-up, so it must not run while a HUMAN is still in the loop: the mic
+   * and camera start concurrently with the screen picker, and counting their
+   * 8 s against the time the user spends choosing a surface dropped the mic
+   * from every take where that took longer (PO 2026-08-23, "why the fuck mic
+   * dont connects"). Starting the clock when the picker closes keeps the
+   * ceiling meaningful without ever timing a person.
+   */
+  startAfter?: Promise<unknown>,
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     let timedOut = false
-    const timer = setTimeout(() => {
-      timedOut = true
-      reject(new DOMException(`${label} timed out after ${ms}ms`, 'TimeoutError'))
-    }, ms)
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const startClock = (): void => {
+      if (settledEarly) return
+      timer = setTimeout(() => {
+        timedOut = true
+        reject(new DOMException(`${label} timed out after ${ms}ms`, 'TimeoutError'))
+      }, ms)
+    }
+    let settledEarly = false
+    if (startAfter) void startAfter.then(startClock, startClock)
+    else startClock()
     promise.then(
       (v) => {
         if (timedOut) {
           if (v instanceof MediaStream) for (const t of v.getTracks()) t.stop()
           return
         }
+        settledEarly = true
         clearTimeout(timer)
         resolve(v)
       },
       (err) => {
+        settledEarly = true
         clearTimeout(timer)
         if (!timedOut) reject(err)
       },
@@ -325,7 +348,7 @@ export function acquireChannelsProgressive(
     )
   }
 
-  const startCamera = async (granted: boolean): Promise<void> => {
+  const startCamera = async (granted: boolean, afterPicker?: Promise<unknown>): Promise<void> => {
     mark('camera', 'start')
     try {
       const video = cameraVideoConstraints(config)
@@ -334,6 +357,7 @@ export function acquireChannelsProgressive(
         navigator.mediaDevices.getUserMedia({ video }),
         granted ? ACQUIRE_TIMEOUT_MS : PROMPT_TIMEOUT_MS,
         'getUserMedia(camera)',
+        afterPicker,
       )
       hintTrackContent(stream.getVideoTracks()[0], 'camera')
       deliver({ kind: 'camera', media: 'video', stream, track: stream.getVideoTracks()[0] })
@@ -345,7 +369,7 @@ export function acquireChannelsProgressive(
     }
   }
 
-  const startMic = async (granted: boolean): Promise<void> => {
+  const startMic = async (granted: boolean, afterPicker?: Promise<unknown>): Promise<void> => {
     mark('mic', 'start')
     try {
       const audio: MediaTrackConstraints = {
@@ -361,6 +385,7 @@ export function acquireChannelsProgressive(
         navigator.mediaDevices.getUserMedia({ audio }),
         granted ? ACQUIRE_TIMEOUT_MS : PROMPT_TIMEOUT_MS,
         'getUserMedia(mic)',
+        afterPicker,
       )
       // NARROWBAND WARNING only (PO rule 2026-07-21: never override the user's
       // device — an earlier auto-swap to the built-in mic broke AirPods takes).
@@ -438,13 +463,16 @@ export function acquireChannelsProgressive(
   let camEarly = false
   let micEarly = false
   if (displayPromise) {
+    // Pre-granted devices overlap the picker — that is the instant-start win.
+    // Their 8s ceiling is HARDWARE budget, so it may only start counting once
+    // the picker is gone; otherwise the user's own deliberation kills them.
     if (config.camera && (await isGranted('camera'))) {
       camEarly = true
-      early.push(startCamera(true))
+      early.push(startCamera(true, displayPromise))
     }
     if (config.mic && (await isGranted('microphone'))) {
       micEarly = true
-      early.push(startMic(true))
+      early.push(startMic(true, displayPromise))
     }
   }
 
@@ -472,6 +500,18 @@ export function acquireChannelsProgressive(
           mark('system-audio', 'failed', 'System audio was not shared')
         }
       }
+      // Anything the picker handed back that we do NOT deliver must be stopped
+      // right here. Only the first video track and (when asked for) the first
+      // audio track become channels; the rest used to stay live with no owner,
+      // which on macOS keeps the screen-recording indicator lit after the take
+      // is gone (PO 2026-08-23: "indicators of mic and screen still there").
+      const delivered = new Set<MediaStreamTrack>()
+      if (video) delivered.add(video)
+      if (config.systemAudio && display.getAudioTracks()[0]) {
+        delivered.add(display.getAudioTracks()[0]!)
+      }
+      for (const t of display.getTracks()) if (!delivered.has(t)) t.stop()
+
       const surface = displaySurfaceOf(video)
       const notice = surfaceNotice(surface)
       if (notice) handlers.onNotice?.('screen', notice)

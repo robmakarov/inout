@@ -289,6 +289,20 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'f7c',
+    title: 'F7c attempt 4 — is a delta cheaper the closer it is to its keyframe?',
+    detail:
+      'encodes 180 consecutive frames of screen-like and full-motion content behind ONE keyframe and reports every delta by distance from it. Attempt 3 measured a 15-frame window and predicted files 60 % too small; if delta cost grows with distance, that is the factor of three and the ratio is the correction. If it is flat, the hypothesis is dead.',
+    run: async (args) => {
+      const { runDeltaGrowth } = await import('../perf/deltaGrowth')
+      return runDeltaGrowth({
+        width: typeof args?.width === 'number' ? args.width : undefined,
+        height: typeof args?.height === 'number' ? args.height : undefined,
+        bitrate: typeof args?.bitrate === 'number' ? args.bitrate : undefined,
+      })
+    },
+  },
+  {
     id: 'f5b',
     title: 'F5b — per-segment speed',
     detail:

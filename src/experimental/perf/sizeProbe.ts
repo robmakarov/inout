@@ -102,8 +102,22 @@ export interface Calibration {
  * settled by then. So each window encodes one keyframe and a run of deltas, and
  * the mean delta comes from the run.
  */
-const WINDOW_COUNT = 2
-const WINDOW_FRAMES = 15
+/**
+ * ATTEMPT 4: one window, a WHOLE GOP long.
+ *
+ * MEASURED 2026-08-23 (`npm run exp -- f7c`), 180 frames behind one keyframe,
+ * mean delta bytes by distance from it:
+ *              1-14    15-29    30-59   60-119  120-179   GOP mean   ratio
+ *   screen     6386     2087     1127     2239     1715       2039   0.32
+ *   motion     4775     4373     6043    10348    16356       9486   1.99
+ * A 15-frame window is not a cheap approximation of a GOP, it is a different
+ * quantity — three times too EXPENSIVE on screen content and twice too CHEAP on
+ * motion. The error flips sign with content, which is the same tell attempt 1
+ * had, and no single correction factor can fix a sign flip. So the window stops
+ * being a sample of the GOP and becomes the GOP.
+ */
+const WINDOW_COUNT = 1
+const WINDOW_FRAMES = 150
 
 interface Window {
   /** Consecutive composed OUTPUT frames, 1/30 s apart, at 1920×1080. */

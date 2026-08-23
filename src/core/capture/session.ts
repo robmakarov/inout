@@ -247,6 +247,9 @@ class Session implements CaptureSession {
   /** Kinds with a re-acquire in flight — a second press must not open a second
    * picker, and the UI reads this state through 'channel-late-join'/'error'. */
   private readonly resuming = new Set<ChannelKind>()
+  /** EVERY stream handed to this session, recorded on arrival rather than on
+   * successful arm. The only structure release can trust — see releaseMedia. */
+  private readonly acquiredStreams = new Set<MediaStream>()
   private composite: LiveCompositeHandle | null = null
   /** Filled by stopCompositeEarly, read once the raw channels have drained. */
   private compositeResult: CompositeRecording | null = null
@@ -306,8 +309,12 @@ class Session implements CaptureSession {
     const armPromises: Promise<void>[] = []
 
     const handleAcquired = (acq: AcquiredChannel): void => {
+      // Register BEFORE the cancelled check and before any await: from here on
+      // release can find this device no matter where arming gets interrupted.
+      this.acquiredStreams.add(acq.stream)
       if (this.cancelled || this.stateInternal === 'stopping' || this.stateInternal === 'stopped') {
         for (const t of acq.stream.getTracks()) t.stop()
+        this.acquiredStreams.delete(acq.stream)
         return
       }
       armPromises.push(
@@ -874,6 +881,7 @@ class Session implements CaptureSession {
       micDeviceId: this.config.micDeviceId,
     }
     const onChannel = (acq: AcquiredChannel): void => {
+      this.acquiredStreams.add(acq.stream)
       void (async () => {
         try {
           // The take may have ended while the picker or permission prompt was
@@ -1078,6 +1086,17 @@ class Session implements CaptureSession {
     for (const ch of this.channels) {
       for (const t of ch.stream.getTracks()) t.stop()
     }
+    // Channels only enter this.channels at the END of armChannel, after awaits
+    // that can take seconds (measured-audio prewarm is bounded at 3s, the OPFS
+    // write stream is unbounded). A cancel landing inside that window found an
+    // empty list and released nothing, while the device was already live — the
+    // macOS mic and screen-recording indicators then stayed lit with no owner
+    // (PO 2026-08-23). Every stream the session has ever been handed is
+    // tracked from the instant it arrives, so release cannot miss one.
+    for (const s of this.acquiredStreams) {
+      for (const t of s.getTracks()) t.stop()
+    }
+    this.acquiredStreams.clear()
     if (this.disposeSynthetic) {
       this.disposeSynthetic()
       this.disposeSynthetic = null

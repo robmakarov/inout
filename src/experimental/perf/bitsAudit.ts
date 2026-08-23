@@ -44,7 +44,7 @@ const CALIBRATION_TIERS = QUALITY_TIERS
 // sources
 // ---------------------------------------------------------------------------
 
-interface Source {
+export interface Source {
   canvas: HTMLCanvasElement
   stop: () => void
 }
@@ -55,7 +55,7 @@ interface Source {
  * caret. Sharp glyph edges, tiny inter-frame change — the content the whole
  * bits audit exists to price.
  */
-function screenLikeSource(width: number, height: number): Source {
+export function screenLikeSource(width: number, height: number): Source {
   const canvas = document.createElement('canvas')
   canvas.width = width
   canvas.height = height
@@ -97,7 +97,7 @@ function screenLikeSource(width: number, height: number): Source {
 }
 
 /** The opposite extreme: every pixel changes every frame (a game tab). */
-function motionSource(width: number, height: number): Source {
+export function motionSource(width: number, height: number): Source {
   const canvas = document.createElement('canvas')
   canvas.width = width
   canvas.height = height

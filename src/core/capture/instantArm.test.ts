@@ -161,4 +161,76 @@ describe('acquire budgets', () => {
       vi.useRealTimers()
     }
   })
+
+  /**
+   * PO 2026-08-23, "why the fuck mic dont connects". A pre-granted mic starts
+   * CONCURRENTLY with the screen picker — that overlap is the instant-start
+   * win — but it carried ACQUIRE_TIMEOUT_MS, which is a HARDWARE budget. So
+   * the 8 s ran while the user was reading Chrome's picker, and any take where
+   * choosing a surface took longer than that lost its microphone. Every time,
+   * deterministically, with a mic that was working perfectly.
+   */
+  describe('a device budget never counts time a human is spending', () => {
+    it('does not fire while the picker is still open', async () => {
+      vi.useFakeTimers()
+      try {
+        let closePicker!: () => void
+        const picker = new Promise<void>((r) => {
+          closePicker = r
+        })
+        const device = new Promise<string>(() => {}) // never resolves
+        const guarded = withTimeout(device, 8_000, 'getUserMedia(mic)', picker)
+        let settled = false
+        void guarded.catch(() => {
+          settled = true
+        })
+        // Thirty seconds of picker time — four budgets' worth.
+        await vi.advanceTimersByTimeAsync(30_000)
+        expect(settled).toBe(false)
+        // Picker closes: NOW the hardware has its 8 s, and not a moment before.
+        closePicker()
+        await vi.advanceTimersByTimeAsync(7_000)
+        expect(settled).toBe(false)
+        await vi.advanceTimersByTimeAsync(1_500)
+        expect(settled).toBe(true)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('a device that arrives during the picker is kept, however long it took', async () => {
+      vi.useFakeTimers()
+      try {
+        let closePicker!: () => void
+        const picker = new Promise<void>((r) => {
+          closePicker = r
+        })
+        let deliver!: (v: string) => void
+        const device = new Promise<string>((r) => {
+          deliver = r
+        })
+        const guarded = withTimeout(device, 8_000, 'getUserMedia(mic)', picker)
+        await vi.advanceTimersByTimeAsync(60_000)
+        deliver('mic-stream')
+        closePicker()
+        await expect(guarded).resolves.toBe('mic-stream')
+        // And no stray timer may fire afterwards and reject a resolved promise.
+        await vi.advanceTimersByTimeAsync(20_000)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('still times out normally when no human is in the loop', async () => {
+      vi.useFakeTimers()
+      try {
+        const guarded = withTimeout(new Promise<string>(() => {}), 8_000, 'getUserMedia(mic)')
+        const rejection = expect(guarded).rejects.toThrow(/timed out/)
+        await vi.advanceTimersByTimeAsync(8_001)
+        await rejection
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+  })
 })

@@ -27,6 +27,13 @@ const GOP_FRAMES = 150
 /** Long enough to cover a whole GOP and then some. */
 const FRAMES = 180
 const FPS = 30
+/**
+ * Frames of source animation to run and DISCARD before the encode starts.
+ * Without it the first bucket measures the rig waking up — the screen source's
+ * first scroll and caret blink land inside it — and that would be read as the
+ * encoder settling. (TASKS note 10: the rig is wrong before the product is.)
+ */
+const WARMUP_FRAMES = 45
 
 interface Bucket {
   from: number
@@ -81,6 +88,8 @@ async function measure(
     },
   })
   output.addVideoTrack(encoder, { frameRate: FPS })
+  // Let the source reach its steady state before anything is measured.
+  for (let i = 0; i < WARMUP_FRAMES; i++) await new Promise((r) => setTimeout(r, 1000 / FPS))
   const t0 = performance.now()
   try {
     await output.start()
@@ -156,6 +165,7 @@ export async function runDeltaGrowth(
       'the source animates between captures at 33 ms, exactly what a 30 fps capture sees — encoding as fast as the CPU allows would sample one still picture 180 times',
       'shortWindowMeanBytes is what F7c attempt 3 measured; gopMeanBytes is what a shipped 5 s GOP actually averages; ratio is the correction attempt 4 would need',
       'a ratio near 1 kills the hypothesis: the factor of three would then be somewhere other than distance from the keyframe',
+      `the source animates for ${WARMUP_FRAMES} frames before the encode starts: without that warm-up the first bucket measures the RIG waking up, not the encoder settling`,
     ],
   }
 }
