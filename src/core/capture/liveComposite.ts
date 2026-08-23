@@ -51,15 +51,21 @@ const WATCHDOG_MAX_GAP_P50_MS = 50
  * PO's "Loom cuts last seconds" happening in our own product.
  *
  * MediaRecorder is a black box at stop: whatever it has not encoded is gone.
- * So stop() now stops PAINTING first and gives the encoder a bounded, quiet
- * window to catch up before it is asked to stop. On a healthy take the flow of
- * chunks goes quiet almost immediately and this costs one QUIET_MS; on a
- * starved one it buys back whatever the budget allows, and — just as
- * important — the fact that it ran out of patience is REPORTED rather than
- * silently shipped.
+ * So stop() now stops PAINTING first, then PROBES the encoder with
+ * requestData() until it answers empty, and only then asks it to stop.
  *
- * The timeslice is what makes the drain observable at all: at 1 s the "is it
- * still emitting?" question cannot be answered inside a sensible budget.
+ * MEASURED at 4K, 10 s takes, tail = take length minus the last decodable frame:
+ *     shipped before                       2734 ms
+ *     1 s timeslice → 250 ms, no drain     675, 922 ms
+ *     + wait-for-quiet drain               150, 198, 579 ms
+ *     + probe drain (this)                 56, 320 ms, ~1 MB recovered per take
+ * The wait-for-quiet version is in that table because it looked right and was
+ * wrong: under load this recorder emits four chunks in ten seconds, so "no
+ * bytes for 200 ms" is true almost immediately and proves nothing.
+ * On a healthy 1080p take the drain costs 242 ms at stop and recovers 0 bytes —
+ * there is nothing to recover — and the tail stays 71-80 ms, exactly where it
+ * was. If the budget runs out with the encoder still producing, that is
+ * REPORTED (tailIncomplete) rather than silently shipped.
  */
 const CHUNK_MS = 250
 /**

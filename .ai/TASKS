@@ -32,13 +32,14 @@ Last update 2026-08-23 (end of the THIRD session, PO asked for "roadmap o/f, all
 Merged that day across all three sessions: O1 · O2 · O3a · O7 · O4 step1 · O4b · F7 · F1 · O8(partial) ·
 P2 · P3 · F4 · O4 step2 (DORMANT) · a P0 mic-hang fix (PO-verified) · and, this session,
 IN-SHOT notice · O11a · O11b · O11c · F7b · F3 · F5a. Pushed to origin/main.
-START HERE IF YOU ARE FRESH: read notes 5-9 below, then take P0-tail. It is still the only item on
-this map that is a live defect rather than an improvement.
+START HERE IF YOU ARE FRESH: read notes 5-9 below. P0-tail is FIXED (the composite keeps its ending
+now, measured); its sibling P0-tail-raw is the remaining live defect.
 
 READY NOW — parallel-safe, any subset concurrently (one session each):
-  P0-tail  v1 loses the tail at 4K   [light-medium]  FOUND 2026-08-23 WITH NUMBERS, NOT FIXED. The
-                                             SHIPPED engine drops 3769 ms off the end of a 4K take.
-                                             Take this first — it is live for users today.
+  P0-tail-raw  raw channels lose tail  [medium]  FOUND 2026-08-23 while fixing P0-tail: 203-753 ms
+                                             missing from a RAW channel under 4K load, which is what
+                                             an EDITED take renders from. Needs a stop-path reorder,
+                                             so it wants its own session (see the task).
   O4   webcodecs engine, STEP 2    [heavy]   ENGINE MERGED BUT DORMANT (default v1). Throughput gate
                                              NOT met: ~10 fps at 1080p vs v1's 30, and the bottleneck
                                              is WebCodecs' own encoder, not our code — see the handoff.
@@ -67,7 +68,7 @@ NEEDS PO INPUT BEFORE BUILDING:
        F4's cameraTrack is the same shape a viewport track wants (keyframes on the recording timeline,
        eased sampling, one function shared by preview and export). Copy it, don't invent a second one.
 CONFLICT RULES (all of capture/* is now shared by TWO engines — keep both working):
-· P0-tail and the O4 remainder BOTH touch capture/* — never simultaneously. P0-tail goes first.
+· P0-tail-raw and the O4 remainder BOTH touch capture/* — never simultaneously.
 · The composite geometry lives in THREE places that must agree — compose/layout.ts, capture/
   compositor.worker.ts and capture/liveComposite.ts. cameraTrack.ts owns the PiP rect; F3's frame is
   an EDIT (render path only), so the two live composites deliberately do not know about it.
@@ -99,10 +100,14 @@ lives in O4/O8: zero tail loss at stop, now gated.
 4. EVIDENCE IS BROWSER-SIDE. Unit tests cover pure logic only; anything about capture, export,
    memory or bundles must be measured in a real browser on the PRODUCTION build. QA on the prod-build
    port only, never the dev server.
-5. THE SHIPPED COMPOSITE LOSES ITS TAIL UNDER LOAD, and no gate sees it yet. 4K source: 13.3 fps and
-   the last decodable frame 3769 ms before the end. 1080p: 65 ms. The O8 tail band is fine — the RIG
-   is too gentle. Task P0-tail, first on the READY map. Do not write a new tail claim without running
-   `npm run exp -- o4step2`.
+5. THE TAIL IS A DRAIN PROBLEM, AND MediaRecorder LIES ABOUT BEING IDLE. The shipped composite used to
+   lose 2734 ms off a 4K take; it now loses 43-320 ms, because stop() kills the painting and then
+   PROBES the encoder with requestData() until it answers empty. Waiting for the byte flow to go quiet
+   instead looks equivalent and is not — under load this recorder emits four chunks in ten seconds, so
+   silence is the normal state and means nothing. Anything that stops a MediaRecorder in this codebase
+   should assume the same. The band now runs where it can fail: `npm run oracle:load` (HEAVY). The RAW
+   channels still lose 203-753 ms under the same load — task P0-tail-raw. Do not write a new tail
+   claim without running `npm run exp -- o4step2`.
 6. THERE ARE TWO LIVE-COMPOSITE ENGINES NOW. v1 (MediaRecorder) is the DEFAULT; v2 (worker + WebCodecs
    + WebGL2 + fMP4) is merged but DORMANT behind ?engine=v2, because WebCodecs' AVC encoder delivers
    ~10 fps at 1080p here against v1's 30. v2 is otherwise better on every axis measured (main-thread
@@ -130,6 +135,7 @@ lives in O4/O8: zero tail loss at stop, now gated.
      f4        camera pose LOCATED in decoded export frames vs the pose function
      o4step2   v1 vs v2 live composite: delivered fps, main-thread long tasks, tail gap, bits audit
      o11       bits audit: GOP ladder + quality steps + camera-PiP bitrate, all demuxed from the file
+     o4step2   also takes {"engines":["v1"]} and reports the tail band + a raw-channel lane
      f3        background frame LOCATED in decoded export frames vs the pure geometry
      f5a       silence tightening against a known map: recall, cuts-in-speech, join clicks
      oracle    accepts {"injectTailLossMs":N} to prove the tail band red
@@ -141,6 +147,8 @@ lives in O4/O8: zero tail loss at stop, now gated.
   node scripts/ru-reachability.mjs --label="<ISP>, no VPN"   DNS/TLS/HTTP from the network under test
   node scripts/pwa-check.mjs       manifest/SW/offline/capture-under-worker gates
   node scripts/make-icons.mjs      regenerates PWA icons (deterministic, no image dep)
+  npm run oracle:load   the O8 tail band UNDER 4K LOAD (P0-tail). HEAVY: announce it, keep it out of
+     the pre-push hook, never run it while the PO is using the machine.
   npm run oracle | oracle:cold | oracle:fidelity  merge gates (pre-push hook runs typecheck+test+oracle)
      `node scripts/oracle.mjs --engine=v2` gates the WebCodecs composite instead of the shipped one
 
@@ -152,22 +160,52 @@ lives in O4/O8: zero tail loss at stop, now gated.
 
 ═══ P0 — FOUND 2026-08-23, NOT FIXED ═══
 
-## P0-tail. v1 LOSES THE TAIL UNDER LOAD — the shipped engine, right now  [P0, light-to-medium]
-MEASURED (O4 step 2's A/B harness, `npm run exp -- o4step2`): on a 4K source the SHIPPED composite
-delivered 13.3 fps and its LAST DECODABLE FRAME sat 3769 ms before the end of the take. Nearly four
-seconds of a 4K take are not in the file. At 1080p the same measurement is 65 ms, which is why nobody
-has seen it: O8's tail band has only ever run on the light synthetic rig.
-This is PO's own requirement failing in production — "Loom cuts last seconds, we don't do that shit".
-Why it happens: MediaRecorder is a black box at stop. v1 asks it to stop and waits for onstop; whatever
-it had not yet encoded under load is gone. v2 does not have this problem (it drains an encoder it owns)
-but v2 is not the default and cannot be until its throughput gate is met.
-GOAL: (a) extend the O8 TAIL BAND to run under the 4K synthetic load, so the gate can see what it
-exists for — the band already exists and is injection-proven, it is the RIG that is too gentle;
-(b) bound and instrument v1's stop drain — requestData() before stop, and report the gap so a bad take
-is loud instead of silent; (c) decide with PO whether a take that loses >400 ms of tail should refuse
-the instant path outright (correctness over instant, the same call F1 and the liveness work made).
-GATES: the 4K-load tail band is RED before the fix and green after, with numbers · 1080p tail unchanged
-· no change to a healthy take's path (logs).
+## P0-tail. v1 LOSES THE TAIL UNDER LOAD — FIXED 2026-08-23, merged (evidence in DECISIONS)
+WAS: on a 4K source the shipped composite delivered 13.3 fps and its last decodable frame sat 3769 ms
+before the end of the take (re-measured at the start of the fix session: 2734 ms on a 10 s take).
+"Loom cuts last seconds, we don't do that shit" — happening in our own engine.
+FIX, in the order the evidence forced:
+  1. TIMESLICE 1000 -> 250 ms. 2734 -> 675/922 ms on its own.
+  2. STOP PAINTING BEFORE STOPPING. The compositor kills its tick, then lets the encoder work.
+  3. PROBE THE ENCODER with requestData() instead of waiting for the byte flow to go quiet. This is
+     the fix: under load the recorder emits FOUR chunks in ten seconds, so "no bytes for 200 ms" is
+     true immediately and proves nothing (that version measured 150/198/579 ms — better, and wrong).
+     A requestData() flushes what has been encoded, so an EMPTY answer is real evidence.
+MEASURED at 4K, 10 s takes: tail 43, 56, 167, 320 ms — all inside O8's 400 ms band, with ~1.0-1.1 MB
+per take recovered by the drain that used to be discarded. Healthy 1080p: tail 71/80 ms (was 65-76 —
+unchanged), delivered 29.7/29.9 fps (unchanged), drain costs 242 ms at stop and recovers 0 bytes,
+because there is nothing to recover.
+(a) THE GATE CAN NOW SEE IT: `npm run oracle:load` (scripts/oracle-load.mjs) runs the band under the
+4K load and exits non-zero when it is red. HEAVY — announce it, never run it under the PO's feet, and
+it is deliberately NOT in the pre-push hook. Proven red before the fix by the same harness (675/922 ms
+with the drain disabled, 2734 ms as shipped); reproduce by setting DRAIN_BUDGET_MS = 0.
+(b) INSTRUMENTED: LiveCompositeStats (frames painted, chunks, drain ms, bytes recovered, timed out) in
+one console line at every stop, warn-level when the drain timed out.
+(c) DECIDED, per the precedent F1 and the liveness work set: a composite whose drain TIMED OUT is
+marked CompositeRecording.tailIncomplete, and exportInstant refuses to packet-copy it — the export
+falls back to the full render from the raw channels. Correctness over instant. Note the signal is
+conservative: it means "the encoder never caught up in 2 s", not "the tail is short by >400 ms",
+because nothing cheap can measure the latter at stop.
+FOUND ALONGSIDE, and it is now task P0-tail-raw: the RAW channels lose tail too. Same rig, same take:
+203-753 ms depending on load. Two caveats keep it off P0: the rig records the UNCAPPED 4K source
+straight into a raw channel, which production never does (capDisplayTrack pins the display track to
+1080p before any recorder exists), and the composite carries the instant path while the raw channels
+only matter to an edited take. The fix is not the same one: a raw channel's source is live, so there
+is no "stop painting" — it needs track.stop() before recorder.stop(), which is a reorder of the stop
+path that produced a P0 hang two sessions ago and wants its own session with a deadline around it.
+
+## P0-tail-raw. the raw channels lose their tail too  [P1, medium; READY]
+MEASURED 2026-08-23 alongside P0-tail (`npm run exp -- o4step2` now records a raw lane off the same
+source): 203, 252, 319, 439, 734, 753 ms of tail missing from a raw channel under 4K load, against
+-231 ms (i.e. none) at 1080p. An EDITED take renders from these channels, so this is the tail of every
+take the instant path cannot serve.
+WHY IT IS NOT JUST THE SAME FIX: the composite could stop painting; a raw channel's source is a live
+device. The equivalent is stopping the TRACK first and letting the recorder drain the finite backlog,
+then stopping it — a reorder of session.doStop, which is the exact path that wedged arming in the
+2026-08-23 P0 (see note 3). Every wait added there needs a deadline.
+GATES: raw-channel tail ≤400 ms under the 4K load rig, twice · `npm run exp -- armcancel` still green ·
+a take whose recorder never fires onstop after its track ends must still stop within a bounded time
+(prove it with a forced case) · oracles green on both engines.
 
 ═══ PHASE O — OPTIMIZATION ═══
 

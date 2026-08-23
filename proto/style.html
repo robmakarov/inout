@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="baseline" data-frame="desktop" data-neon="on" data-inputs="menu" data-recfx="breathe" data-skin="volume">
+<html lang="en" data-theme="baseline" data-frame="desktop" data-neon="on" data-inputs="menu" data-recfx="breathe" data-skin="volume" data-ico="white">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -567,7 +567,9 @@ body.f .filters, body.d .detail { opacity: 1; }
   --neon-r: 80px;  /* radius     — outer glow blur */
   --neon-t: 2.2s;  /* period     — electric / breathe speed */
   --wedge-k: 0.25; /* radial menu fill intensity */
-  --wedge-s: 40%;  /* radial menu tint — 0% is white, 100% is full hue */
+  --wedge-s: 0%;   /* hover-flare tint — 0% is white, 100% is the full neon hue.
+                      The resting wedges are hueless on purpose: green means live,
+                      red means refused, and off is not a colour. */
   --wedge-b: 1;    /* radial menu brightness — multiplies the lightness of every
                       ramp stop and rim, so all four states move together and
                       keep their relationship. Opacity is the `fill` knob; this
@@ -752,6 +754,20 @@ body.f .filters, body.d .detail { opacity: 1; }
 .wedge__ico .s { fill: none; stroke: currentColor; }
 .wedge:hover .wedge__ico { opacity: 1; }
 
+/* --- glyphs: match the wedge stroke (harness switch) ---------------------
+   The other reading of the same question: instead of one white for all of
+   them, each glyph takes the colour of its own wedge's rim, so the outline of
+   the wedge and the mark inside it are one drawing. Same hues, same
+   brightness knob — these are literally the rim's own values, minus the
+   alpha the rim carries. Off is the tinted rim, on is the live green, refused
+   is the warn red, unavailable stays the dead neutral. */
+[data-ico='stroke'] .wedge__ico { color: hsl(0 0% calc(86% * var(--wedge-b))); }
+[data-ico='stroke'] .wedge[data-on='true'] .wedge__ico { color: hsl(var(--on-h) var(--on-s) calc(66% * var(--wedge-b))); }
+[data-ico='stroke'] .wedge:hover .wedge__ico { color: hsl(var(--neon-h) calc(var(--wedge-s) + 22%) calc(88% * var(--wedge-b))); }
+[data-ico='stroke'] .wedge[data-on='true']:hover .wedge__ico { color: hsl(var(--on-h) var(--on-s) calc(78% * var(--wedge-b))); }
+[data-ico='stroke'] .wedge[data-state='denied'] .wedge__ico { color: hsl(var(--no-h) var(--no-s) calc(64% * var(--wedge-b))); }
+[data-ico='stroke'] .wedge[data-state='blocked'] .wedge__ico { color: color-mix(in srgb, var(--text), transparent 40%); }
+
 /* ---------- volume skin ----------
    Both references say the same thing in two places: light comes from somewhere,
    so surfaces have a near side and a far side. The wedge ramps from dark at the
@@ -769,11 +785,11 @@ body.f .filters, body.d .detail { opacity: 1; }
    under every wedge is a black plate, so the grid stops showing through and
    the menu is an object instead of a stain. The ramp itself is untouched. */
 .wedge__base { fill: #000; fill-opacity: 0.93; }
-[data-skin='volume'] .wg-in  { stop-color: hsl(var(--neon-h) var(--wedge-s) calc(34% * var(--wedge-b))); stop-opacity: 0.1; }
-[data-skin='volume'] .wg-a   { stop-color: hsl(var(--neon-h) var(--wedge-s) calc(46% * var(--wedge-b))); stop-opacity: 0.2; }
-[data-skin='volume'] .wg-b   { stop-color: hsl(var(--neon-h) var(--wedge-s) calc(62% * var(--wedge-b))); stop-opacity: 0.36; }
-[data-skin='volume'] .wg-c   { stop-color: hsl(var(--neon-h) var(--wedge-s) calc(76% * var(--wedge-b))); stop-opacity: 0.55; }
-[data-skin='volume'] .wg-out { stop-color: hsl(var(--neon-h) var(--wedge-s) calc(88% * var(--wedge-b))); stop-opacity: 0.78; }
+[data-skin='volume'] .wg-in  { stop-color: hsl(0 0% calc(34% * var(--wedge-b))); stop-opacity: 0.1; }
+[data-skin='volume'] .wg-a   { stop-color: hsl(0 0% calc(46% * var(--wedge-b))); stop-opacity: 0.2; }
+[data-skin='volume'] .wg-b   { stop-color: hsl(0 0% calc(62% * var(--wedge-b))); stop-opacity: 0.36; }
+[data-skin='volume'] .wg-c   { stop-color: hsl(0 0% calc(76% * var(--wedge-b))); stop-opacity: 0.55; }
+[data-skin='volume'] .wg-out { stop-color: hsl(0 0% calc(88% * var(--wedge-b))); stop-opacity: 0.78; }
 /* live input — neon green, held back: saturation is real but the ramp tops out
    lower than the idle one, so it reads lit rather than lurid */
 [data-skin='volume'] .wn-in  { stop-color: hsl(var(--on-h) calc(var(--on-s) * 0.8) calc(26% * var(--wedge-b))); stop-opacity: 0.12; }
@@ -806,7 +822,7 @@ body.f .filters, body.d .detail { opacity: 1; }
 [data-skin='volume'] .wedge:hover .wedge__fill { fill: url(#wgrad); fill-opacity: 1; }
 [data-skin='volume'] .wedge[data-on='true']:hover .wedge__fill { fill: url(#wgreen); fill-opacity: 1; }
 [data-skin='volume'] .wedge .wedge__edge {
-  stroke: hsl(var(--neon-h) var(--wedge-s) calc(86% * var(--wedge-b)) / 0.6);
+  stroke: hsl(0 0% calc(86% * var(--wedge-b)) / 0.6);
   opacity: 0.32;
 }
 [data-skin='volume'] .wedge[data-on='true'] .wedge__edge { stroke: hsl(var(--on-h) var(--on-s) calc(66% * var(--wedge-b)) / 0.95); opacity: 1; }
@@ -815,10 +831,10 @@ body.f .filters, body.d .detail { opacity: 1; }
   opacity: 1;
   filter: drop-shadow(0 0 calc(var(--neon-r) * 0.35) hsl(var(--neon-h) 100% 60% / 0.7));
 }
-[data-skin='volume'] .radial__sep { stroke: hsl(var(--neon-h) var(--wedge-s) calc(88% * var(--wedge-b)) / 0.34); }
+[data-skin='volume'] .radial__sep { stroke: hsl(0 0% calc(88% * var(--wedge-b)) / 0.34); }
 [data-skin='volume'] .radial__hub {
   fill: #08090c;
-  stroke: hsl(var(--neon-h) 40% 60% / 0.16);
+  stroke: hsl(0 0% 60% / 0.16);
   stroke-width: 1;
 }
 
@@ -2067,8 +2083,14 @@ T F N  theme · frame · neon
         <div class="slider"><label>size</label><input type="range" id="m-size" min="80" max="170" step="1" value="107"><output id="o-msize">107</output></div>
         <div class="slider"><label>gap</label><input type="range" id="m-gap" min="40" max="110" step="1" value="41"><output id="o-mgap">41</output></div>
         <div class="slider"><label>fill</label><input type="range" id="m-fill" min="0" max="2" step="0.05" value="0.25"><output id="o-mfill">0.25</output></div>
-        <div class="slider"><label>tint</label><input type="range" id="m-tint" min="0" max="100" step="1" value="40"><output id="o-mtint">40</output></div>
+        <div class="slider"><label>tint</label><input type="range" id="m-tint" min="0" max="100" step="1" value="0"><output id="o-mtint">0</output></div>
         <div class="slider"><label>bright</label><input type="range" id="m-bright" min="0.4" max="1.6" step="0.02" value="1"><output id="o-mbright">1.00</output></div>
+        <div class="panel__label" style="margin: 10px 0 2px">Glyphs</div>
+        <div class="slider"><label>size</label><input type="range" id="m-isize" min="0.5" max="1.8" step="0.02" value="0.92"><output id="o-misize">0.92</output></div>
+        <select id="m-ico" style="margin-top: 8px">
+          <option value="white">white — one colour, every state</option>
+          <option value="stroke">match the wedge stroke</option>
+        </select>
       </div>
       <div class="panel__group">
         <div class="panel__label">Scroll bounce</div>
@@ -2210,6 +2232,7 @@ const WHY = {
   },
 }
 let R_OUT = 107, R_IN = 41 // driven by the size and gap sliders
+let ICO_K = 0.92 // glyph scale — the 24px icon box, scaled about its own centre
 const PAD = 0.018 // radians of gap between wedges
 const WEDGE_AT = { screen: -90, sys: 0, camera: 90, mic: 180 } // clockwise from the top
 const pol = (r, a) => [(200 + r * Math.cos(a)).toFixed(2), (200 + r * Math.sin(a)).toFixed(2)]
@@ -2274,7 +2297,7 @@ function buildRadial() {
         <path class="wedge__base" d="${sector(R_IN, R_OUT, a0, a1)}"/>
         <path class="wedge__fill" d="${sector(R_IN, R_OUT, a0, a1)}"/>
         <path class="wedge__edge" d="${arc(R_OUT - 0.6, a0, a1)}"/>
-        <g class="wedge__ico" transform="translate(${ix - 11} ${iy - 11}) scale(0.92)">${WEDGE_ICON[c.key]}</g>
+        <g class="wedge__ico" transform="translate(${ix - 12 * ICO_K} ${iy - 12 * ICO_K}) scale(${ICO_K})">${WEDGE_ICON[c.key]}</g>
         <path class="wedge__arc" d="${arc(R_OUT + 8, a0 + 0.06, a1 - 0.06)}"/>
         <text class="wedge__cap" x="${cx}" y="${y1}" text-anchor="${anchor}" dominant-baseline="${baseline}">${c.label}</text>
         <text class="wedge__cap2" x="${cx}" y="${y1 + LEAD}" text-anchor="${anchor}" dominant-baseline="${baseline}">${sub}</text>
@@ -2817,6 +2840,8 @@ const mGap = document.getElementById('m-gap')
 const mFill = document.getElementById('m-fill')
 const mTint = document.getElementById('m-tint')
 const mBright = document.getElementById('m-bright')
+const mIsize = document.getElementById('m-isize')
+const mIco = document.getElementById('m-ico')
 function syncMenu() {
   R_OUT = +mSize.value
   R_IN = Math.min(+mGap.value, R_OUT - 24)
@@ -2825,13 +2850,19 @@ function syncMenu() {
   document.documentElement.style.setProperty('--wedge-k', mFill.value)
   document.documentElement.style.setProperty('--wedge-s', mTint.value + '%')
   document.documentElement.style.setProperty('--wedge-b', mBright.value)
+  ICO_K = +mIsize.value
+  document.getElementById('o-misize').textContent = (+mIsize.value).toFixed(2)
   document.documentElement.style.setProperty('--menu-d', `${R_OUT * 2}px`)
   document.getElementById('o-mtint').textContent = mTint.value
   document.getElementById('o-mbright').textContent = (+mBright.value).toFixed(2)
   document.getElementById('o-mfill').textContent = (+mFill.value).toFixed(2)
   buildRadial()
 }
-;[mSize, mGap, mFill, mTint, mBright].forEach((el) => el.addEventListener('input', syncMenu))
+;[mSize, mGap, mFill, mTint, mBright, mIsize].forEach((el) => el.addEventListener('input', syncMenu))
+mIco.addEventListener('change', () => {
+  document.documentElement.dataset.ico = mIco.value
+  saveState()
+})
 syncMenu()
 
 /* availability simulation */
@@ -2886,7 +2917,8 @@ function paramString() {
     `skin=${skinSel.value}`,
     `splash=${splashSel.value}`,
     `perm=${CHANNELS.filter((c) => PERM[c.key] !== 'ok').map((c) => c.key + ':' + PERM[c.key]).join(',') || '-'}`,
-    `menu=size${R_OUT}/gap${R_IN}/fill${mFill.value}/tint${mTint.value}/bright${mBright.value}`,
+    `menu=size${R_OUT}/gap${R_IN}/fill${mFill.value}/tint${mTint.value}/bright${mBright.value}/ico${mIsize.value}`,
+    `glyphs=${mIco.value}`,
     `bounce=k${PHYS.k}/c${PHYS.c}/imp${PHYS.imp}/follow${PHYS.follow}/wall${PHYS.wall}`,
     `zone=${FRAME_W}x${FRAME_H}`,
     `on=${on.map((c) => c.key).join(',') || '-'}`,
@@ -2963,6 +2995,7 @@ function restoreState() {
   pick(inputsSel, st.inputs, 'inputs')
   pick(recfxSel, st.recfx, 'recfx')
   pick(skinSel, st.skin, 'skin')
+  pick(mIco, st.glyphs, 'ico')
   pick(splashSel, st.splash)
 
   const setSlider = (id, v, s) => {
@@ -3006,6 +3039,7 @@ function restoreState() {
   if (mg('fill') != null) mFill.value = mg('fill')
   if (mg('tint') != null) mTint.value = mg('tint')
   if (mg('bright') != null) mBright.value = mg('bright')
+  if (mg('ico') != null) mIsize.value = mg('ico')
   if (m) syncMenu()
 
   const zone = (st.zone || '').match(/^(\d+)x(\d+)$/)
@@ -3026,7 +3060,7 @@ function restoreState() {
 // every control that can change the look also records it
 ;[themeSel, neonSel, inputsSel, recfxSel, skinSel, splashSel, frameSel].forEach((el) => el.addEventListener('change', saveState))
 ;[...SLIDERS, ...PHYS_SLIDERS].forEach((s) => document.getElementById(s.el).addEventListener('change', saveState))
-;[mSize, mGap, mFill, mTint, mBright].forEach((el) => el.addEventListener('change', saveState))
+;[mSize, mGap, mFill, mTint, mBright, mIsize].forEach((el) => el.addEventListener('change', saveState))
 app.addEventListener('click', (e) => { if (e.target.closest('[data-chip], [data-wedge]')) saveState() })
 grip.addEventListener('pointerup', saveState)
 grip.addEventListener('dblclick', () => setTimeout(saveState, 0))
