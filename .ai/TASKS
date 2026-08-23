@@ -24,10 +24,10 @@ cost bands) and WAITS. PO answers "go <id>". One task per session (one branch pe
 several ids, take the first and tell PO to open parallel sessions for the rest. Whoever MERGES a task
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
-── READY MAP — current truth, updated on every merge (last: 2026-08-23, O1+O2+O3a+O7 merged) ──
+── READY MAP — current truth, updated on every merge (last: 2026-08-23, O1+O2+O3a+O7+O4step1 merged) ──
 READY NOW — parallel-safe, any subset concurrently (one session each):
   O3b  single-generation export    [light]   touches compose/instant.ts, capture/session.ts — RE-SCOPE first
-  O4   webcodecs engine (KEYSTONE) [heavy]   continues ee/webcodecs-capture-2 — rebase first
+  O4b  sync-rig fix + gate re-spec  [medium]  REQUIRED before O4 step 2 — see O4 step 1b
   P1   firefox + 3-engine oracle   [medium]  touches capabilities.ts, oracle scripts
   P2   pwa install                 [light]   touches index.html, vite config, service worker
   P3   ru-pack part 1              [light]   touches docs, cloud stubs
@@ -78,9 +78,19 @@ PSNR/visual evidence that single-generation ≥ composite-generation quality · 
 Why: the pixel path (MediaRecorder + <video> + main-thread 2D canvas) forces 4–6 redundant decodes
 during capture, fixed-tick redraws of static frames, no keyframe control, ±45 ms epoch jitter, and the
 1080p capture ceiling.
-Step 1 (gate to proceed): root-cause the PROVEN +15–25 ms cross-architecture systematic blocking the
-≤10 ms sync gate. Per STATE it is NOT video-side — audit the audio anchor (min-filter and catch-up
-rejection in measuredAudio.ts) and the oracle's flash model. Fix instrument or anchor; prove ×10 runs.
+Step 1 DONE 2026-08-23 (×10 runs, evidence in DECISIONS): the residual is the INSTRUMENT.
+Measured: an exact +18.00 ms detection bias (half a 30 fps frame + half a 128-sample envelope window;
+predicted 18.00, measured 18.00 sd 0.00, 10/10) plus a video reference delay of 13.22 ms that the
+oracle had always assumed to be zero while measuring the audio side (new probeFlashArrivals). CI's
+metric read 31.55 ms (sd 7.86) over 10 runs; the same exports fully referenced read 62.77 ms (sd 8.73).
+So the true offset is ~45–63 ms, every past sync number is ~31 ms optimistic, and the ≤10 ms gate is
+NOT measurable here: 1σ is ~8–9 ms, so 10/10 under 10 ms would fail on noise even with a perfect engine.
+STEP 1b — REQUIRED BEFORE STEP 2: fix the rig, then re-specify the sync gate against a measured noise
+floor. (a) one detection convention on both export and reference sides; (b) subtract the video reference
+skew in the gated metric (this turns CI red at the current ≤60 band — PO/TD call on the new band);
+(c) shrink the AudioContext-stall variance (audioRefSkew ranged 40.4–129.0 ms over 10 runs) with longer
+takes / more beeps / a stall-independent reference. Only then can an engine change be attributed.
+Harness: `npm run exp -- o4step1`.
 Step 2: MediaStreamTrackProcessor → VideoFrames transferred to a WORKER compositor (OffscreenCanvas;
 WebGPU importExternalTexture preferred, WebGL then 2D fallback) → VideoEncoder (prefer-hardware,
 realtime, keyframe cadence ≤2 s — the smart-cut prerequisite) → fMP4 mux → positioned durable OPFS

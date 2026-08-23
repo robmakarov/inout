@@ -236,6 +236,13 @@ export interface RigDebug {
    * nominal k·interval grid, the SOURCE is late, not the pipeline.
    */
   beepStreamArrivalsRigMs: number[]
+  /**
+   * Rig-clock times at which each FLASH actually surfaced on the video track.
+   * The audio equivalent has always been measured; assuming this one lands on
+   * the nominal grid folds the rAF + captureStream sampling delay straight
+   * into the reported A/V offset.
+   */
+  flashStreamArrivalsRigMs: number[]
   /** Continuously sampled (rigMs, audioCtx.currentTime) pairs. */
   clockPairs: { rigMs: number; ctxSec: number }[]
   /** Scheduled beep positions on the AudioContext clock, seconds. */
@@ -289,6 +296,83 @@ interface VideoRig {
 /** Minimal typing for the Chromium-only audio-track processor (probe only). */
 interface AudioTrackProcessorCtor {
   new (init: { track: MediaStreamTrack }): { readable: ReadableStream<AudioData> }
+}
+
+interface VideoTrackProcessorCtor {
+  new (init: { track: MediaStreamTrack }): { readable: ReadableStream<VideoFrame> }
+}
+
+/**
+ * Video-side twin of probeBeepArrivals (task O4 step 1).
+ *
+ * The audio reference has always been MEASURED (when beep samples actually
+ * surface on the track); the video reference was ASSUMED to be the nominal rig
+ * instant. It is not: the rig paints from a rAF loop and the canvas is sampled
+ * by captureStream(30), so a flash surfaces on the track up to a rAF plus a
+ * frame interval after the instant it nominally belongs to. Correcting only
+ * the audio side leaves that whole delay inside the reported A/V offset.
+ *
+ * So watch a CLONE of the video track and record the wall (rig) time at which
+ * each flash actually arrives, exactly as the audio probe does.
+ */
+function probeFlashArrivals(
+  track: MediaStreamTrack,
+  rigEpoch: number,
+): { stop: () => Promise<number[]>; dispose: () => void } {
+  const Ctor = (globalThis as Record<string, unknown>).MediaStreamTrackProcessor as
+    | VideoTrackProcessorCtor
+    | undefined
+  const onsets: number[] = []
+  if (typeof Ctor !== 'function') {
+    return { stop: () => Promise.resolve(onsets), dispose: () => undefined }
+  }
+  const clone = track.clone()
+  const reader = new Ctor({ track: clone }).readable.getReader()
+  // Same background region analyze.ts reads, at a size cheap enough to pull
+  // off every frame: away from the fiducial strip and the moving bar.
+  const RECT = { x: 400, y: 300, width: 32, height: 16 }
+  const buf = new Uint8Array(RECT.width * RECT.height * 4)
+  let above = false
+  let running = true
+  const loop = (async () => {
+    try {
+      while (running) {
+        const { value, done } = await reader.read()
+        if (done || !value) break
+        const nowRig = performance.now() - rigEpoch
+        let luma = 0
+        try {
+          await value.copyTo(buf, {
+            rect: RECT,
+            format: 'RGBA',
+            colorSpace: 'srgb',
+          } as VideoFrameCopyToOptions)
+          let sum = 0
+          for (let p = 0; p < buf.length; p += 4) {
+            sum += 0.299 * buf[p]! + 0.587 * buf[p + 1]! + 0.114 * buf[p + 2]!
+          }
+          luma = sum / (buf.length / 4)
+        } catch {
+          /* copyTo unsupported for this frame format — leave luma 0 */
+        }
+        const bright = luma > 180
+        if (bright && !above) onsets.push(nowRig)
+        above = bright
+        value.close()
+      }
+    } catch {
+      /* track ended */
+    }
+  })()
+  return {
+    stop: async () => {
+      running = false
+      await reader.cancel().catch(() => undefined)
+      await loop
+      return onsets
+    },
+    dispose: () => clone.stop(),
+  }
 }
 
 /**
@@ -460,6 +544,13 @@ export async function recordFiducialSession(durationMs: number, opts?: RecordOpt
     if (micStream) {
       beepProbe = probeBeepArrivals(micStream.getAudioTracks()[0], rigEpoch)
     }
+    // Symmetric video-side probe: the flash reference must be measured too,
+    // not assumed to land on the nominal grid (O4 step 1).
+    let flashProbe: { stop: () => Promise<number[]>; dispose: () => void } | null = null
+    if (flashClick && videoRigs.length) {
+      const vt = videoRigs[0]!.rig.stream.getVideoTracks()[0]
+      if (vt) flashProbe = probeFlashArrivals(vt, rigEpoch)
+    }
 
     // -- record all channels with the production epoch heuristic ----------------
     if (opts?.armDelayMs) await new Promise((r) => setTimeout(r, opts.armDelayMs))
@@ -483,6 +574,7 @@ export async function recordFiducialSession(durationMs: number, opts?: RecordOpt
 
     let recorded: RecordedChannel[]
     let beepStreamArrivalsRigMs: number[] = []
+    let flashStreamArrivalsRigMs: number[] = []
     try {
       recorded = await Promise.all(jobs)
     } finally {
@@ -491,6 +583,10 @@ export async function recordFiducialSession(durationMs: number, opts?: RecordOpt
       if (beepProbe) {
         beepStreamArrivalsRigMs = await beepProbe.stop()
         beepProbe.dispose()
+      }
+      if (flashProbe) {
+        flashStreamArrivalsRigMs = await flashProbe.stop()
+        flashProbe.dispose()
       }
       for (const t of teardowns) {
         try {
@@ -536,6 +632,7 @@ export async function recordFiducialSession(durationMs: number, opts?: RecordOpt
       beepIntervalMs: BEEP_INTERVAL_MS,
       flashClick,
       beepStreamArrivalsRigMs,
+      flashStreamArrivalsRigMs,
       clockPairs,
       beepCtxSecs,
       beepTrueRigMs: beepCtxSecs

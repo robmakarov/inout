@@ -42,6 +42,14 @@ export interface OracleReport {
   exportFullMs: number
   exportTrimmedMs: number
   verdicts: OracleVerdict[]
+  /** Rig-side reference measurements (O4 step 1 residual decomposition). */
+  rigDebug: {
+    beepStreamArrivalsRigMs: number[]
+    flashStreamArrivalsRigMs: number[]
+    beepTrueRigMs: number[]
+    audioSkewMeanMs: number | null
+    flashSkewMeanMs: number | null
+  }
 }
 
 /** Instrument gates — TD sync-fix review: flash+click is the sync verdict. */
@@ -79,9 +87,20 @@ export async function runOracle(
       scheduleSkewSamplesMs: rig.debug.beepScheduleSkewMs,
       intervalMs: rig.debug.beepIntervalMs,
     })
+    // O4 step 1: the video reference is now MEASURED too. Correcting only the
+    // audio side left the rig's own rAF + captureStream(30) delay inside the
+    // reported A/V offset — a systematic that no amount of engine work can
+    // remove, because it never happened in the engine.
+    const flashArrivals = rig.debug.flashStreamArrivalsRigMs
+    const flashSkew = resolveScheduleSkewMeanMs({
+      streamArrivalsRigMs: flashArrivals,
+      scheduleSkewSamplesMs: [],
+      intervalMs: rig.debug.beepIntervalMs,
+    })
     const analyzeOpts = {
       beepGridRigMs: streamArrivals.length ? streamArrivals : rig.debug.beepTrueRigMs,
       beepScheduleSkewMeanMs: skewMean,
+      flashScheduleSkewMeanMs: flashSkew,
     }
 
     const t0 = performance.now()
@@ -123,6 +142,13 @@ export async function runOracle(
       exportFullMs,
       exportTrimmedMs,
       verdicts,
+      rigDebug: {
+        beepStreamArrivalsRigMs: streamArrivals,
+        flashStreamArrivalsRigMs: flashArrivals,
+        beepTrueRigMs: rig.debug.beepTrueRigMs,
+        audioSkewMeanMs: skewMean ?? null,
+        flashSkewMeanMs: flashSkew ?? null,
+      },
     }
   } finally {
     await rig.cleanup()

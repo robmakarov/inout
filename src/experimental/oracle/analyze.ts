@@ -107,6 +107,8 @@ export interface AnalyzeOptions {
   beepGridRigMs?: number[]
   /** Mean schedule skew (rig.debug.beepScheduleSkewMs) to correct flashSync. */
   beepScheduleSkewMeanMs?: number
+  /** Mean rig-clock skew of FLASH arrivals (video-side reference). */
+  flashScheduleSkewMeanMs?: number | null
 }
 
 export interface ExportAnalysis {
@@ -120,7 +122,14 @@ export interface ExportAnalysis {
   gridCorrected: boolean
   /** Barcode-free cross-check; null unless the rig ran with flashClick. */
   flashOnsetsSec: number[]
+  /** Flash onsets dated at the midpoint of the sampling interval (unbiased). */
+  flashOnsetsMidSec: number[]
   flashSync: FlashSync | null
+  /** flashSync with the video-quantisation and audio-window biases removed. */
+  flashSyncUnbiased: FlashSync | null
+  flashSyncUnbiasedCorrectedMeanMs: number | null
+  /** Unbiased detection AND both reference skews measured — the honest number. */
+  flashSyncSymmetricMeanMs: number | null
   /**
    * flashSync corrected for the beep schedule skew (flashes paint on the
    * nominal grid; beeps sound on the true grid). Comparable to `sync`.
@@ -137,6 +146,7 @@ export async function analyzeExport(blob: Blob, opts?: AnalyzeOptions): Promise<
   try {
     const frames: FrameReading[] = []
     const flashOnsetsSec: number[] = []
+    const flashOnsetsMidSec: number[] = []
     const videoTrack = await input.getPrimaryVideoTrack()
     if (videoTrack && (await videoTrack.canDecode())) {
       // fit is mandatory when both dimensions are set; rig and export are both
@@ -146,13 +156,24 @@ export async function analyzeExport(blob: Blob, opts?: AnalyzeOptions): Promise<
       const sg = scratch.getContext('2d', { willReadFrequently: true })
       if (!sg) throw new Error('2d context unavailable')
       let prevFlash = false
+      let prevTs: number | null = null
       for await (const wrapped of sink.canvases()) {
         sg.drawImage(wrapped.canvas, 0, 0)
         const data = sg.getImageData(0, 0, RIG_WIDTH, RIG_HEIGHT)
         frames.push({ outSec: wrapped.timestamp, rigMs: decodeBits(blockReaderFor(data)) })
         const flash = backgroundLuma(data) > FLASH_LUMA_THRESHOLD
-        if (flash && !prevFlash) flashOnsetsSec.push(wrapped.timestamp)
+        if (flash && !prevFlash) {
+          flashOnsetsSec.push(wrapped.timestamp)
+          // The rig flashes the canvas from a rAF loop, but the canvas is
+          // sampled by captureStream(30). The true flash instant therefore lies
+          // uniformly in (previous frame, this frame] — dating it at THIS
+          // frame is late by half a frame interval on average (16.7 ms at
+          // 30 fps), which is inside the very band O4 step 1 is chasing.
+          // The midpoint is the unbiased estimator.
+          flashOnsetsMidSec.push(prevTs === null ? wrapped.timestamp : (prevTs + wrapped.timestamp) / 2)
+        }
         prevFlash = flash
+        prevTs = wrapped.timestamp
       }
     }
 
@@ -167,7 +188,12 @@ export async function analyzeExport(blob: Blob, opts?: AnalyzeOptions): Promise<
 
     const fit = fitClock(frames)
     const flashSync = flashSyncStats(onsets.onsetsSec, flashOnsetsSec)
+    // Same statistic with BOTH detection biases removed — reported alongside
+    // so the instrument's own contribution to the residual is visible as a
+    // number instead of an assumption.
+    const flashSyncUnbiased = flashSyncStats(onsets.onsetsCenteredSec, flashOnsetsMidSec)
     const skewMean = opts?.beepScheduleSkewMeanMs
+    const flashSkewMean = opts?.flashScheduleSkewMeanMs
     const skewOk =
       flashSync &&
       skewMean !== undefined &&
@@ -188,7 +214,17 @@ export async function analyzeExport(blob: Blob, opts?: AnalyzeOptions): Promise<
       sync: fit ? syncStats(onsets.onsetsSec, fit, BEEP_INTERVAL_MS, opts?.beepGridRigMs) : null,
       gridCorrected: !!opts?.beepGridRigMs?.length,
       flashOnsetsSec,
+      flashOnsetsMidSec,
       flashSync,
+      flashSyncUnbiased,
+      flashSyncUnbiasedCorrectedMeanMs:
+        skewOk && flashSyncUnbiased ? flashSyncUnbiased.meanOffsetMs - (skewMean as number) : null,
+      // Symmetric correction: subtract the rig's audio-vs-video reference skew,
+      // not just its audio half.
+      flashSyncSymmetricMeanMs:
+        skewOk && flashSyncUnbiased && flashSkewMean !== undefined && flashSkewMean !== null
+          ? flashSyncUnbiased.meanOffsetMs - ((skewMean as number) - flashSkewMean)
+          : null,
       flashSyncCorrectedMeanMs: correctedMean,
       flashSyncCorrectedMaxAbsMs: correctedMaxAbs,
       decodeMs: performance.now() - t0,
