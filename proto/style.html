@@ -1141,12 +1141,16 @@ body.f .filters, body.d .detail { opacity: 1; }
     height 300ms var(--ease),
     opacity 160ms var(--ease);
 }
+/* One window for the whole thing. The picture, the row and the controls used
+   to arrive on staggered delays, which read as three things happening near each
+   other rather than one screen opening. They now start together and land
+   together, and the wedges run on the same 460ms. */
 [data-phase='live'] .take__screen {
   height: var(--take-h);
   opacity: 1;
   transition:
-    height 520ms cubic-bezier(0.22, 0.68, 0.16, 1) 60ms,
-    opacity 240ms var(--ease) 60ms;
+    height 460ms cubic-bezier(0.22, 0.68, 0.16, 1),
+    opacity 220ms var(--ease);
 }
 
 /* ---------- control row: no plate, ever ----------
@@ -1162,10 +1166,10 @@ body.f .filters, body.d .detail { opacity: 1; }
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: height 380ms var(--ease);
+  transition: height 460ms var(--ease);
 }
 [data-phase='live'] .take__ctrl { height: var(--take-ctrl-h); }
-.cluster-seat { transition: width 380ms var(--ease), height 380ms var(--ease); }
+.cluster-seat { transition: width 460ms var(--ease), height 460ms var(--ease); }
 [data-phase='live'] .cluster-seat { width: 52px; height: 52px; }
 
 /* the disc keeps the centre; the readouts hang off the ends, so nothing the
@@ -1183,7 +1187,7 @@ body.f .filters, body.d .detail { opacity: 1; }
 }
 .take__end--l { left: 0; }
 .take__end--r { right: 0; }
-[data-phase='live'] .take__end { opacity: 1; pointer-events: auto; transition-delay: 340ms; }
+[data-phase='live'] .take__end { opacity: 1; pointer-events: auto; transition-delay: 200ms; }
 
 /* ---------- readouts and verbs, lifted from the deprecated recorder ----------
    inout copy 2's hub control bar: the metrics plate with the duration leading
@@ -1245,6 +1249,53 @@ body.f .filters, body.d .detail { opacity: 1; }
    like one that is */
 [data-take='held'] .rec-elapsed { animation: none; opacity: 0.9; }
 @keyframes recTimeGlow { 0%, 100% { opacity: 1 } 50% { opacity: 0.94 } }
+
+/* the status line, also the deprecated recorder's: a plate the same weight as
+   the metrics one, with a red REC dot that blinks in front of the word while
+   the take is running and goes when it is held */
+.rec-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.318rem;
+  margin: 0;
+  padding: 0.127rem 0.233rem;
+  min-width: 15ch;
+  white-space: nowrap;
+  border-radius: 6.4px;
+  font-family: var(--font);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.18;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid hsl(var(--neon-h) 100% 50% / 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  color: hsl(var(--neon-h) 22% 73% / 0.92);
+}
+[data-take='rec'] .rec-status::before {
+  content: '';
+  display: block;
+  flex-shrink: 0;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--record);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.5) inset,
+    0 0 5px color-mix(in srgb, var(--record), transparent 45%);
+  animation: recStatusDot 4s cubic-bezier(0.45, 0, 0.35, 1) infinite;
+}
+@keyframes recStatusDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.38; transform: scale(0.82); }
+}
+[data-take='held'] .rec-status { color: var(--text-faint); }
+[data-theme='paper'] .rec-status {
+  background: var(--surface);
+  border-color: var(--edge);
+  box-shadow: var(--shadow-1);
+  color: var(--text-dim);
+}
 
 .rec-cancel,
 .rec-save {
@@ -1313,7 +1364,7 @@ body.f .filters, body.d .detail { opacity: 1; }
 }
 [data-phase='live'] .take__inputs {
   height: var(--take-bar-h);
-  transition: height 420ms cubic-bezier(0.22, 0.68, 0.16, 1) 60ms;
+  transition: height 460ms cubic-bezier(0.22, 0.68, 0.16, 1);
 }
 
 /* live, the orbit is over: the pills have nothing left to orbit and the halo
@@ -1417,10 +1468,10 @@ body.f .filters, body.d .detail { opacity: 1; }
     transform 0.2s cubic-bezier(0.34, 1.2, 0.64, 1),
     filter 0.22s ease,
     opacity 0.2s ease,
-    /* the unroll takes the disc down to control size on the bar's own curve */
-    width 380ms var(--ease) 140ms,
-    height 380ms var(--ease) 140ms,
-    border-radius 380ms var(--ease) 140ms;
+    /* the disc comes down to control size on the same curve as everything else */
+    width 460ms var(--ease),
+    height 460ms var(--ease),
+    border-radius 460ms var(--ease);
 }
 [data-neon='off'] .recbtn:hover { transform: scale(1.05); }
 [data-neon='on'] .recbtn:hover {
@@ -2234,7 +2285,10 @@ T F N  theme · frame · neon
                     </div>
                   </div>
 
+                  <!-- right end, same order the deprecated recorder had it in:
+                       the status line, then the verb -->
                   <div class="take__end take__end--r">
+                    <p class="rec-status" data-status role="status" aria-live="polite">Recording.</p>
                     <button class="rec-save" data-done aria-label="Finish the take and edit it">Done</button>
                   </div>
                 </div>
@@ -2559,49 +2613,30 @@ let R_OUT = 100, R_IN = 41 // driven by the size and gap sliders
 let ICO_K = 0.86 // glyph scale — the 24px icon box, scaled about its own centre
 const PAD = 0.014 // radians of gap between wedges
 
-/* ---------- the band: one menu, from ring to bar ----------
-   The wedges are not swapped for something bar-shaped when the take opens. The
-   band they sit on straightens, and they ride it. One number does the whole
-   move.
+/* ---------- ring to row: every wedge goes straight to its slot ----------
+   A wedge is a quad in (u, v): u runs along its span, v runs inward from the
+   rim. The ring gives one reading of that quad and the row gives another, and
+   the move is the straight line between them — corner to corner, nothing
+   travelling round anything. Each wedge leaves where it is and arrives where it
+   belongs, in the order the ring has always held them in.
 
-   A point on the band is (depth, s): depth measured inward from the rim, s the
-   arc length along the rim from the band's origin. Straightening is curvature
-   going to nothing:
+   Shape and place are on separate clocks, and only just: the quad is a
+   rectangle by two fifths of the way across, so what you see almost at once is
+   four horizontal pieces, and the rest of the move is them closing on the row
+   while the controls settle in above. One gesture, one window.
 
-     θ = s·κ      ρ = 1/κ − depth      (x, y) = (ρ·sin θ,  yRim + 1/κ − ρ·cos θ)
-
-   At κ = 1/R_OUT that is the donut, to the pixel, in the coordinates the old
-   pol() used — the origin is the record button's centre and s = 0 is the top.
-   At κ = 0 it collapses to (s, yRim + depth): the bar. Nothing about a wedge
-   changes on the way across — same fill, same rim, same glyph, same state, same
-   hover arc, same two caption lines outside the rim. It is the same menu, at a
-   different radius.
-
-   Edges come out as polylines, not arcs. An arc of radius 10^5 is a precision
-   trap in every renderer, and a chord every two degrees is off the true curve
-   by under a hundredth of a pixel at any size this menu is drawn at.
-
-   The ring's rotation is unwound as it opens: a ring has a rotation and a bar
-   does not, so RING_ROT is worth what it is worth at κ = 1/R_OUT and nothing at
-   κ = 0. The whole band slides round by half its own length in the same breath,
-   which is what puts the first wedge at the top when it is a ring and at the
-   left end when it is a bar. */
-const SEG_RAD = 0.035     // ~2° of arc per chord
-/* The ramp's radius is capped, and once the band is nearly straight it stops
-   following the geometry. It has to stop somewhere: the band's own radius runs
-   away to infinity, and a gradient of infinite radius has all five of its stops
-   at the same offset. Twenty thousand keeps them spread over eight thousandths
-   of the radius, which every renderer resolves cleanly, and costs a four-pixel
-   bow in the ramp's contours across the full width of the bar — under a
-   five-stop fade on a sixty-four pixel band, not a thing anyone can see. */
-const R_GRAD_MAX = 20000
+   The wedge is drawn against its own centre rather than in absolute terms, so
+   the flattening happens where the wedge is standing instead of dragging it
+   through the middle of the frame on the way. */
+const STRAIGHTEN = 0.4    // the shape is a row of rectangles by here
 const CAP_OUT = 26        // captions live this far outside the rim, as before
 const CAP_LEAD = 14
-let UNROLL = 0            // 0 = ring · 1 = bar
+const U_SEGS = 20         // chords along a wedge's span — 4.5° each on the ring
+let UNROLL = 0            // 0 = ring · 1 = row
 
-/* where the bar lands, in the record button's own coordinates. The three
-   numbers are CSS's — see --take-gap and friends on .app — so the layout and
-   the band can never disagree about where the input row is. */
+/* where the row lands, in the record button's own coordinates. The numbers are
+   CSS's — see --take-gap and friends on .app — so the layout and the wedges can
+   never disagree about where the input row is. */
 function barRect() {
   const cs = getComputedStyle(app)
   const px = (n, d) => parseFloat(cs.getPropertyValue(n)) || d
@@ -2611,59 +2646,81 @@ function barRect() {
     top: px('--take-ctrl-h', 52) / 2 + px('--take-gap', 14),
   }
 }
-/* Curvature and placement do not run on the same clock, and the difference is
-   the whole feel of the move. A ring whose radius grows at a constant rate
-   balloons: halfway through it is still most of a circle, only twice as wide,
-   and it swings a long way below the frame before it ever looks like a bar. So
-   the curve goes out of it first — cubically, most of the straightening in the
-   first third — and only then does the band travel down to the row and stretch
-   to the row's width. Two schedules, one gesture: it flattens where it stands,
-   then lies down. */
-const flatten = (t) => Math.pow(1 - t, 3)      // curvature, gone early
-const settle = (t) => t * t * (3 - 2 * t) * t  // placement, held back
-function bandEnv(t) {
+const easeOut3 = (p) => 1 - Math.pow(1 - p, 3)
+function morphEnv(t) {
   const n = RING_ORDER.length
   const bar = barRect()
-  const p = settle(t)
-  const h0 = R_OUT - R_IN
-  const L0 = 2 * Math.PI * R_OUT
-  /* Length has its own rule, and it is not symmetric. Whatever else it does on
-     the way across, the band passes through the moment its arc is half a circle
-     — and there it is exactly twice as wide as its own radius, which is the
-     widest it will ever be. That width is set by how long the band is at that
-     moment, so: give up length early, take it late. On a narrow frame the ring
-     is longer than the row it is becoming and contracts at once, which is what
-     keeps it inside the frame; on a wide one it holds its ring length until the
-     curve has gone and only then stretches out to fill the row. */
-  const q = bar.w < L0 ? Math.min(1, t * 3.5) : p
-  const L = L0 + (bar.w - L0) * q
   return {
-    n, L, bar,
-    k: flatten(t) / R_OUT,
-    h: h0 + (bar.h - h0) * q,
-    yRim: -R_OUT + (bar.top + R_OUT) * p,
-    shift: (1 - t) * ((RING_ROT * Math.PI) / 180) * R_OUT - t * ((n - 1) / 2) * (L / n),
-    w: L / n,
-    pad: PAD * R_OUT, // a gap in pixels, so it stays the gap it was
+    n, bar,
+    span: (2 * Math.PI) / n,
+    depth: R_OUT - R_IN,
+    gap: PAD * R_OUT * 2, // the ring's gap in pixels, kept as the row's gap
+    slot: bar.w / n,
+    // shape, slot and the coming-together into one level line, all on the
+    // fast clock; only the line's own descent takes the whole window
+    ts: easeOut3(Math.min(1, t / STRAIGHTEN)),
+    tp: easeOut3(t),
   }
 }
-function bandPt(e, depth, s) {
-  if (e.k < 1e-9) return [s, e.yRim + depth]
-  const R = 1 / e.k
-  const rho = R - depth
-  return [Math.sin(s * e.k) * rho, e.yRim + R - Math.cos(s * e.k) * rho]
+/* Both readings of one point, and the blend between them. Place is the centre's
+   business and shape is everything measured from it — which is what stops a
+   wedge sliding to its slot before it has finished being a wedge. */
+function morphPair(e, ring, bar, ringC, barC, c) {
+  return [
+    c[0] + (ring[0] - ringC[0]) + ((bar[0] - barC[0]) - (ring[0] - ringC[0])) * e.ts,
+    c[1] + (ring[1] - ringC[1]) + ((bar[1] - barC[1]) - (ring[1] - ringC[1])) * e.ts,
+  ]
 }
-function bandChain(e, depth, s0, s1) {
-  const segs = Math.max(1, Math.ceil(Math.abs((s1 - s0) * e.k) / SEG_RAD))
-  const out = []
-  for (let i = 0; i <= segs; i++) out.push(bandPt(e, depth, s0 + ((s1 - s0) * i) / segs))
-  return out
+function wedgeFrame(e, key) {
+  const i = RING_ORDER.indexOf(key)
+  const mid = midAngle(key)
+  const a0 = mid - e.span / 2 + PAD
+  const a1 = mid + e.span / 2 - PAD
+  const x0 = -e.bar.w / 2 + i * e.slot + e.gap / 2
+  const x1 = x0 + e.slot - e.gap
+  const yT = e.bar.top
+  const yB = e.bar.top + e.bar.h
+  const ringP = (u, v) => {
+    const a = a0 + u * (a1 - a0)
+    const r = R_OUT - v * e.depth
+    return [r * Math.cos(a), r * Math.sin(a)]
+  }
+  const barP = (u, v) => [x0 + u * (x1 - x0), yT + v * (yB - yT)]
+  const ringC = ringP(0.5, 0.5)
+  const barC = barP(0.5, 0.5)
+  /* Sideways, every wedge goes straight to its slot on the fast clock, so what
+     forms almost at once is a row. Vertically it converges on one line — and
+     that line is itself still on its way down to the row's place, which is what
+     it means for the inputs to arrive under the picture just as the controls
+     finish settling in above them. The wedges pass behind the record button on
+     the way, because the menu has always been drawn behind it. */
+  const yLine = (e.bar.top + e.bar.h / 2) * e.tp
+  const c = [
+    ringC[0] + (barC[0] - ringC[0]) * e.ts,
+    ringC[1] + (yLine - ringC[1]) * e.ts,
+  ]
+  const at = (u, v) => morphPair(e, ringP(u, v), barP(u, v), ringC, barC, c)
+  // the separator sits in the gap on the wedge's leading side, and travels with
+  // the wedge rather than with the ring, so it never parts company with it
+  const b = mid - e.span / 2
+  const sepRing = [
+    [R_OUT * Math.cos(b), R_OUT * Math.sin(b)],
+    [R_IN * Math.cos(b), R_IN * Math.sin(b)],
+  ]
+  const sepBar = [[x0 - e.gap / 2, yT], [x0 - e.gap / 2, yB]]
+  const sep = [
+    morphPair(e, sepRing[0], sepBar[0], ringC, barC, c),
+    morphPair(e, sepRing[1], sepBar[1], ringC, barC, c),
+  ]
+  return { at, sep }
 }
 const chainD = (pts) => 'M' + pts.map((p) => p[0].toFixed(2) + ' ' + p[1].toFixed(2)).join('L')
-const faceD = (e, s0, s1) => chainD(bandChain(e, 0, s0, s1).concat(bandChain(e, e.h, s1, s0))) + 'Z'
-/* position on the band comes from the ring's order, never from the order the
-   channels happen to be declared in — that is the whole job RING_ORDER has */
-const wedgeS = (e, key) => RING_ORDER.indexOf(key) * e.w + e.shift
+const spanChain = (at, v) => {
+  const out = []
+  for (let i = 0; i <= U_SEGS; i++) out.push(at(i / U_SEGS, v))
+  return out
+}
+const faceD = (at, vIn) => chainD(spanChain(at, 0).concat(spanChain(at, vIn).reverse())) + 'Z'
 
 /* Menu glyphs, fourth pass — solid, not outlined. Outlines were the problem:
    at ~20px a 1.4px stroke on a translucent gradient is four hairlines fighting
@@ -2728,78 +2785,84 @@ function drawBand() {
   if (!host) return
   const svg = host.querySelector('svg')
   const t = UNROLL
-  const e = bandEnv(t)
+  const e = morphEnv(t)
+  const bar = e.bar
 
   // one box for the whole move, symmetric about the button so the container's
   // own centring transform keeps holding — a viewBox that changed per frame
   // would rescale the drawing under the reader
-  const bar = e.bar
   const hw = Math.max(R_OUT, bar.w / 2) + 66
   const hh = Math.max(R_OUT, bar.top + bar.h) + 66
   svg.setAttribute('viewBox', `${-hw} ${-hh} ${hw * 2} ${hh * 2}`)
   svg.setAttribute('width', hw * 2)
   svg.setAttribute('height', hh * 2)
 
-  // the ramp follows the band: centred where the band is centred, reaching as
-  // far as the band's own radius, until that radius stops meaning anything
-  const Rg = Math.min(e.k < 1e-9 ? R_GRAD_MAX : 1 / e.k, R_GRAD_MAX)
+  /* The ramp is the ring's, and it goes where the shape goes: centred on the
+     button while the wedges are still a ring, and by the time they are
+     rectangles, centred far below the row — which is a vertical fade. Capped at
+     twenty thousand, because the stops of a gradient with an infinite radius
+     all sit at the same offset; the price is a four-pixel bow across the width
+     of the row, which under a five-stop fade nobody can see. */
+  const Rg = R_OUT + (20000 - R_OUT) * e.ts
+  const depth = e.depth + (bar.h - e.depth) * e.ts
   GRADS.forEach(([id]) => {
     const g = svg.querySelector('#' + id)
     g.setAttribute('cx', 0)
-    g.setAttribute('cy', (e.yRim + Rg).toFixed(2))
+    g.setAttribute('cy', (Rg - R_OUT + (bar.top + R_OUT) * e.ts).toFixed(2))
     g.setAttribute('r', Rg.toFixed(2))
     ;[...g.children].forEach((stop, j) =>
-      stop.setAttribute('offset', ((Rg - U_STOPS[j] * e.h) / Rg).toFixed(6)))
+      stop.setAttribute('offset', ((Rg - U_STOPS[j] * depth) / Rg).toFixed(6)))
   })
 
   // the hub is the button's backing, and it only means anything while there is
-  // a hole for the button to sit in
+  // still a ring for the button to sit in the middle of
   const hub = svg.querySelector('.radial__hub')
   hub.setAttribute('r', Math.max(0, R_IN - 3).toFixed(2))
-  hub.setAttribute('opacity', Math.max(0, 1 - t * 3).toFixed(3))
+  hub.setAttribute('opacity', Math.max(0, 1 - e.ts * 2).toFixed(3))
 
+  const vEdge = 0.6 / e.depth   // the rim stroke, a hair inside the outer edge
+  const vArc = -8 / e.depth     // the hover arc, outside it
+  const vCap = -CAP_OUT / e.depth
   const seps = []
-  CHANNELS.forEach((c, i) => {
+  CHANNELS.forEach((c) => {
     const g = svg.querySelector(`.wedge[data-wedge="${c.key}"]`)
     if (!g) return
-    const mid = wedgeS(e, c.key)
-    const s0 = mid - e.w / 2 + e.pad
-    const s1 = mid + e.w / 2 - e.pad
-    const face = faceD(e, s0, s1)
+    const { at, sep } = wedgeFrame(e, c.key)
+    const face = faceD(at, 1)
     g.querySelector('.wedge__base').setAttribute('d', face)
     g.querySelector('.wedge__fill').setAttribute('d', face)
-    g.querySelector('.wedge__edge').setAttribute('d', chainD(bandChain(e, 0.6, s0, s1)))
-    g.querySelector('.wedge__arc').setAttribute('d', chainD(bandChain(e, -8, s0 + e.pad * 4, s1 - e.pad * 4)))
+    g.querySelector('.wedge__edge').setAttribute('d', chainD(spanChain(at, vEdge)))
+    g.querySelector('.wedge__arc').setAttribute('d', chainD(spanChain(at, vArc).slice(2, -2)))
 
-    const [ix, iy] = bandPt(e, e.h * 0.58, mid)
+    const ic = at(0.5, 0.58)
     g.querySelector('.wedge__ico').setAttribute(
-      'transform', `translate(${(ix - 12 * ICO_K).toFixed(2)} ${(iy - 12 * ICO_K).toFixed(2)}) scale(${ICO_K})`)
+      'transform', `translate(${(ic[0] - 12 * ICO_K).toFixed(2)} ${(ic[1] - 12 * ICO_K).toFixed(2)}) scale(${ICO_K})`)
 
-    // the caption pair sits outside the rim on the wedge's own side, anchored
-    // off the outward normal — which at κ = 0 points straight up, so the bar
-    // gets captions over it without a word of special-casing
-    const [cx, cy] = bandPt(e, -CAP_OUT, mid)
-    const th = mid * e.k
-    const nx = Math.sin(th), ny = -Math.cos(th)
+    /* The caption pair sits outside the rim on the wedge's own side, anchored
+       off the direction the wedge faces — taken from the wedge itself rather
+       than from an angle, so it holds all the way across and ends up pointing
+       straight up once the wedge is lying in the row. */
+    const cp = at(0.5, vCap)
+    const inw = at(0.5, vCap + 0.2)
+    let nx = cp[0] - inw[0], ny = cp[1] - inw[1]
+    const len = Math.hypot(nx, ny) || 1
+    nx /= len; ny /= len
     const anchor = nx > 0.3 ? 'start' : nx < -0.3 ? 'end' : 'middle'
     const baseline = ny > 0.3 ? 'hanging' : ny < -0.3 ? 'auto' : 'middle'
     const dy = ny > 0.3 ? 2 : ny < -0.3 ? -2 : 0
     const lift = ny < -0.3 ? -CAP_LEAD : ny > 0.3 ? 0 : -CAP_LEAD / 2
-    const y1 = cy + dy + lift
+    const y1 = cp[1] + dy + lift
     const cap = g.querySelector('.wedge__cap')
     const cap2 = g.querySelector('.wedge__cap2')
-    cap.setAttribute('x', cx.toFixed(2)); cap.setAttribute('y', y1.toFixed(2))
+    cap.setAttribute('x', cp[0].toFixed(2)); cap.setAttribute('y', y1.toFixed(2))
     cap.setAttribute('text-anchor', anchor); cap.setAttribute('dominant-baseline', baseline)
-    cap2.setAttribute('x', cx.toFixed(2)); cap2.setAttribute('y', (y1 + CAP_LEAD).toFixed(2))
+    cap2.setAttribute('x', cp[0].toFixed(2)); cap2.setAttribute('y', (y1 + CAP_LEAD).toFixed(2))
     cap2.setAttribute('text-anchor', anchor); cap2.setAttribute('dominant-baseline', baseline)
     if (cap.textContent !== c.label) cap.textContent = c.label
     const sub = subFor(c.key)
     if (cap2.textContent !== sub) cap2.textContent = sub
 
-    // the separator is the band's own thickness, drawn at the wedge's leading
-    // boundary — a radius on the ring, a plain upright on the bar
-    const b = mid - e.w / 2
-    seps.push(chainD([bandPt(e, 0, b), bandPt(e, e.h, b)]))
+    seps.push(chainD(sep))
   })
   svg.querySelector('.radial__seps').innerHTML =
     seps.map((d) => `<path class="radial__sep" d="${d}" fill="none"/>`).join('')
@@ -2874,6 +2937,7 @@ const capture = app.querySelector('[data-capture]')
 const takeEl = app.querySelector('.take')
 const takeClock = app.querySelector('[data-clock-take]')
 const takeBytes = app.querySelector('[data-bytes-take]')
+const takeStatus = app.querySelector('[data-status]')
 const hintEl = app.querySelector('[data-hint]')
 function anyInputOn() {
   return CHANNELS.some((c) => PERM[c.key] === 'ok' && ring.querySelector(`.chip[data-chip="${c.key}"]`)?.getAttribute('aria-pressed') === 'true')
@@ -2983,6 +3047,7 @@ function holdTake(on) {
   takeRaf = null
   takeLast = 0
   capture.dataset.take = on ? 'held' : 'rec'
+  takeStatus.textContent = on ? 'Stopped.' : 'Recording.'
   if (!on) takeRaf = requestAnimationFrame(takeTick)
 }
 
@@ -2992,7 +3057,9 @@ function holdTake(on) {
    picture's box does, so the two read as one move rather than two that happen
    to overlap. */
 let bandRaf = null
-const easeInOut = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2)
+/* The driver feeds a linear parameter and nothing else. The shaping is already
+   in the wedges' two schedules — easing here as well would ease it twice, and
+   the second one is the one nobody can see and everybody feels. */
 function unrollTo(to, ms) {
   cancelAnimationFrame(bandRaf)
   bandRaf = null
@@ -3003,7 +3070,7 @@ function unrollTo(to, ms) {
   const step = (now) => {
     if (!t0) t0 = now
     const p = Math.min(1, (now - t0) / ms)
-    UNROLL = from + (to - from) * easeInOut(p)
+    UNROLL = from + (to - from) * p
     drawBand()
     if (p < 1) bandRaf = requestAnimationFrame(step)
     else { bandRaf = null; takeEl.classList.remove('take--moving') }
@@ -3025,9 +3092,10 @@ function setPhase(next, jump) {
   takeT = 0
   paintTake()
   capture.dataset.take = 'rec'
+  takeStatus.textContent = 'Recording.'
   if (next === 'live') { takeRaf = requestAnimationFrame(takeTick); say('') }
   else syncHint()
-  unrollTo(next === 'live' ? 1 : 0, jump || was === next ? 0 : next === 'live' ? 560 : 420)
+  unrollTo(next === 'live' ? 1 : 0, jump || was === next ? 0 : 460)
   app.dispatchEvent(new CustomEvent('takephase'))
   if (jump) { void takeEl.offsetWidth; takeEl.classList.remove('take--jump') }
 }
