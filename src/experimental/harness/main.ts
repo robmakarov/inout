@@ -157,6 +157,21 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'o3a',
+    title: 'O3a — Chromium MP4/H.264 capture',
+    detail:
+      'reports which MediaRecorder video MIMEs the engine accepts, records takes under each container preference through the production session, demuxes what actually landed on disk, truncates each channel to 60% to prove crash salvage still recovers it, and checks a camera-only take is no longer 720p.',
+    run: async (args) => {
+      const { runO3aEvidence } = await import('../perf/mp4Capture')
+      return runO3aEvidence({
+        takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined,
+        preferences: Array.isArray(args?.preferences)
+          ? (args.preferences as ('auto' | 'mp4' | 'webm')[])
+          : undefined,
+      })
+    },
+  },
+  {
     id: 'datachan',
     title: 'Experiment 6 — Timed data channels (live capture demo)',
     detail:

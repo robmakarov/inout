@@ -24,17 +24,17 @@ cost bands) and WAITS. PO answers "go <id>". One task per session (one branch pe
 several ids, take the first and tell PO to open parallel sessions for the rest. Whoever MERGES a task
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
-── READY MAP — current truth, updated on every merge (last: 2026-08-23, O1+O2 merged) ──
+── READY MAP — current truth, updated on every merge (last: 2026-08-23, O1+O2+O3a merged) ──
 READY NOW — parallel-safe, any subset concurrently (one session each):
-  O3a  chromium mp4 recorder       [light]   touches capture/session.ts, capture/acquire.ts
+  O3b  single-generation export    [light]   touches compose/instant.ts, capture/session.ts — RE-SCOPE first
   P1   firefox + 3-engine oracle   [medium]  touches capabilities.ts, oracle scripts
   P2   pwa install                 [light]   touches index.html, vite config, service worker
   P3   ru-pack part 1              [light]   touches docs, cloud stubs
   P5a  iOS SCK spike               [light]   touches nothing in repo (separate Xcode proj) — TIME-SENSITIVE: iOS 27 beta window, ships ~Sept
   F7   quality slider              [medium]  touches ExportPanel, export settings in types.ts
-CONFLICT RULES: O3b needs O3a merged · F7 coordinates with O5 if both active · O7 is broad-touch —
+CONFLICT RULES: F7 coordinates with O5 if both active · O7 is broad-touch —
 solo lane, announce, TD call on timing.
-BLOCKED (dep → unblocks): O3b←O3a · O4←O3 · O5←O4 · O6←O4 · O8←O4/O5 ·
+BLOCKED (dep → unblocks): O4 (independent of O3b) · O5←O4 · O6←O4 · O8←O4/O5 ·
 O9←O4+O5 · O10 (its AEC part ←P4) · F1–F6←O5/O4 per pack (F4 also ←F1 UI seam; F2←F4) ·
 F8←O4 · P4←O4/O5 · P5b←P5a · P6←P5b · P7←P4.
 REJECTED (do not resurrect): pre-roll rolling buffer — no capture before the record press, ever
@@ -58,20 +58,18 @@ on p20 by up to 15 dB below the codec floor); healthy mixes skip it entirely. Fa
 stripped stats AND spoofed Apple WebKit UA. Harness: `npm run exp -- o2`.
 OPEN for O10: re-measure p20 agreement on a realistic room-tone rig; if it holds, drop the floor guard.
 
-## O3. chromium-mp4-capture — hardware encode + single-generation exports  [P1, two branches, (a) before (b)]
-Why: Chromium channel recording is webm (VP8/VP9 = SOFTWARE encode, ×2 streams) while the composite
-runs a third (hardware) encode — the biggest capture CPU burn. And unedited exports ship the composite,
-i.e. a SECOND lossy generation of an already-encoded source.
-(a) ee/o3-mp4-recorder: Chromium MediaRecorder MIME preference gains mp4(h264+aac) FIRST when
-    isTypeSupported (webm stays in the list as fallback — additive); track.contentHint='text' (screen)
-    / 'motion' (camera) at acquire; camera requests 1920×1080 ideal when the config has no screen
-    channel (camera-full takes currently upscale 720p — a real, visible defect).
-(b) ee/o3-single-gen: a take with exactly ONE video channel whose dims == export dims and codec is
-    mp4-compatible h264 → skip the live composite entirely (audio mix graph still runs); unedited
-    export = packet-copy the RAW channel (extend instant.ts source selection). Composite continues for
-    multi-video and letterboxed cases.
-GATES (a): oracle sync 10/10 in band · capture CPU before/after on the 08-22 rig (report %, expect a
-large drop, software VP→hardware h264) · Safari spoofed-UA smoke unchanged · salvage smoke green.
+## O3. chromium-mp4-capture — (a) DONE 2026-08-23 with the MP4 flip REJECTED on evidence
+(a) shipped: contentHint text/motion at acquire + camera 1920×1080 ideal when the config has no
+screen channel (camera-full takes were upscaling 720p). MP4 preference REJECTED: Chrome's
+MediaRecorder does not stream mp4 — 753 B on disk halfway through an 8 s take vs 1.09 MB of
+decodable webm — so it would trade crash salvage for CPU. Hardware encode moves to O4, which owns
+its own fragmented-MP4 muxer. Standing re-test: `npm run exp -- o3a`.
+NEEDS PO RECHECK: camera-only take on a real camera should now record 1080p, not 720p.
+(b) ee/o3-single-gen — UNBLOCKED, still to do: a take with exactly ONE video channel whose dims ==
+export dims and codec is mp4-compatible → skip the live composite entirely (audio mix graph still
+runs); unedited export = packet-copy the RAW channel. NOTE: with (a)'s mp4 flip rejected, Chromium
+raw channels stay VP9, so single-generation packet-copy applies to the composite-free case only —
+re-scope against O4 before building.
 GATES (b): screen-only 1080p take: console proves no composite recorder · instant export ≤ current ·
 PSNR/visual evidence that single-generation ≥ composite-generation quality · capture write bandwidth
 ~halved (bytes/s logged) · all oracles green.

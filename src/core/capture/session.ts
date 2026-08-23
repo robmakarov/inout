@@ -36,14 +36,24 @@ export type { ArmingProgressHandler, ArmingTimelineEntry, ArmingStep } from './a
 // MediaRecorder rejects every WebM type — forcing one there threw NotSupported
 // and killed the take (no Safari recording at all). Demux is container-agnostic
 // (compose opens blobs with mediabunny ALL_FORMATS), so a mixed-format take composes fine.
-const VIDEO_MIMES = [
-  'video/webm;codecs=vp9',
-  'video/webm;codecs=vp8',
-  'video/webm',
+//
+// O3a MEASURED AND REJECTED (2026-08-23): preferring MP4/H.264 on Chromium
+// would move the raw channels from software VP8/VP9 to the hardware H.264
+// encoder — but Chrome's MediaRecorder does NOT stream MP4. Halfway through an
+// 8 s take only 753 bytes (the init box) had reached disk, against 1.09 MB of
+// decodable WebM; the whole file arrives at stop. A tab kill would therefore
+// lose the ENTIRE take instead of salvaging it, so the CPU win costs a shipped
+// feature. The hardware encode belongs to O4, which muxes fragmented MP4
+// through our own positioned writer and keeps the bytes on disk as they land.
+// Re-check with `npm run exp -- o3a` if Chrome ever streams MP4.
+const MP4_VIDEO_MIMES = [
   'video/mp4;codecs=avc1.640028',
+  'video/mp4;codecs=avc1.42E01E',
   'video/mp4;codecs=avc1',
   'video/mp4',
 ]
+const WEBM_VIDEO_MIMES = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
+const VIDEO_MIMES = [...WEBM_VIDEO_MIMES, ...MP4_VIDEO_MIMES]
 const AUDIO_MIMES = [
   'audio/webm;codecs=opus',
   'audio/webm',
@@ -53,10 +63,25 @@ const AUDIO_MIMES = [
 const TICK_MS = 250
 const TIMESLICE_MS = 1000
 
+/** A/B hook for the O3a evidence run (kept so the MP4 rejection stays
+ *  re-testable). Production stays on 'auto'. */
+type ContainerPreference = 'auto' | 'mp4' | 'webm'
+let containerPreference: ContainerPreference = 'auto'
+
+export function setVideoContainerPreference(pref: ContainerPreference): void {
+  containerPreference = pref
+}
+
 /** First MIME this browser's MediaRecorder accepts, or '' to let it choose its
  * own default (never force an unsupported type — that throws at construction). */
 function pickMimeType(media: MediaKind): string {
-  const candidates = media === 'video' ? VIDEO_MIMES : AUDIO_MIMES
+  const video =
+    containerPreference === 'mp4'
+      ? MP4_VIDEO_MIMES
+      : containerPreference === 'webm'
+        ? WEBM_VIDEO_MIMES
+        : VIDEO_MIMES
+  const candidates = media === 'video' ? video : AUDIO_MIMES
   for (const c of candidates) {
     if (MediaRecorder.isTypeSupported(c)) return c
   }
