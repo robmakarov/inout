@@ -8,6 +8,7 @@ import type {
   CaptureState,
   ChannelKind,
   ChannelRecording,
+  CompositeRecording,
   DisplaySurfaceKind,
   MediaKind,
   Recording,
@@ -66,6 +67,35 @@ const AUDIO_MIMES = [
 ]
 const TICK_MS = 250
 const TIMESLICE_MS = 1000
+/**
+ * TAIL DRAIN for the RAW channels (task P0-tail-raw). An EDITED take is
+ * rendered from these, so their ending is the ending of every take the instant
+ * path cannot serve — and under load they were losing it.
+ *
+ * MEASURED 2026-08-23, `npm run exp -- p0tailraw`, 4K source with the live
+ * composite running alongside (tail = the lane's own length minus its last
+ * decodable frame):
+ *     shipped: requestData() + stop(), 1000 ms slice     1344 ms missing
+ *     the same at a 250 ms timeslice                     1222 ms
+ *     end the TRACK, drain, then stop                     622 ms
+ *     drop the source to 1 fps, drain, then stop           59 ms   ← shipped
+ *
+ * The interesting loser is the third one, because it is the composite's own fix
+ * ported over literally, and it does not work here: the rig reports
+ * selfStoppedOnTrackEnd, i.e. Chrome stops a MediaRecorder whose stream has
+ * gone inactive, and it takes the backlog with it. So the source is STARVED
+ * rather than ended — the recorder stays alive with almost nothing new to
+ * encode, and the same probe drain the composite uses recovers the rest.
+ */
+const TAIL_THROTTLE_FPS = 1
+/** applyConstraints on a wedged device must not hold the take open. */
+const THROTTLE_BUDGET_MS = 400
+/**
+ * Deadlines on the stop path, for the same reason arming has them (note 3): a
+ * recorder that never answers must not be able to freeze a finished take.
+ */
+const STOP_BUDGET_MS = 8000
+const COMPOSITE_START_BUDGET_MS = 4000
 /**
  * Hard ceilings on arming. ACQUIRE/PROMPT timeouts bound each device; these
  * bound the WAIT ITSELF, so a step that never settles cannot freeze the take.
@@ -180,6 +210,10 @@ interface ChannelRuntime {
   writeChain: Promise<void>
   writeFailed: boolean
   bytes: number
+  /** Bytes the recorder has HANDED OVER, counted synchronously. `bytes` only
+   *  moves once the durable write resolves, which is too late to steer the
+   *  tail drain by (see recorderDrain.ts). */
+  emitted: number
   recorderStarted: boolean
   ended: boolean
   startAbs?: number
@@ -208,6 +242,8 @@ class Session implements CaptureSession {
   private tickTimer: ReturnType<typeof setInterval> | null = null
   private manifestTimer: ReturnType<typeof setTimeout> | null = null
   private composite: LiveCompositeHandle | null = null
+  /** Filled by stopCompositeEarly, read once the raw channels have drained. */
+  private compositeResult: CompositeRecording | null = null
   private compositeStarting: Promise<void> | null = null
   private compositeInvalid = false
   /** compositeInvalid AND torn down — nothing left to keep or stop. */
@@ -412,6 +448,7 @@ class Session implements CaptureSession {
       writeChain: Promise.resolve(),
       writeFailed: false,
       bytes: 0,
+      emitted: 0,
       recorderStarted: false,
       ended: false,
       stopped,
@@ -460,6 +497,7 @@ class Session implements CaptureSession {
       recorder.ondataavailable = (ev: BlobEvent) => {
         const data = ev.data
         if (!data || data.size === 0) return
+        rt.emitted += data.size
         rt.writeChain = rt.writeChain.then(async () => {
           if (rt.writeFailed || !rt.writer) return
           try {
@@ -960,12 +998,111 @@ class Session implements CaptureSession {
     }
   }
 
+  /**
+   * Starve a raw video channel's source and let its encoder catch up before
+   * anything asks it to stop (task P0-tail-raw — the table is at TAIL_THROTTLE_FPS).
+   * A channel whose source refuses the constraint simply keeps the old path.
+   */
+  private async drainRawVideo(): Promise<void> {
+    const lanes = this.channels.filter(
+      (c) =>
+        c.media === 'video' &&
+        !c.ended &&
+        c.recorderStarted &&
+        c.recorder !== null &&
+        c.recorder.state === 'recording',
+    )
+    if (lanes.length === 0) return
+    await Promise.all(
+      lanes.map(async (ch) => {
+        const recorder = ch.recorder
+        if (!recorder) return
+        // Pin the channel's LENGTH here, at the last live frame — not at
+        // whenever the recorder finally answers. The drain must lengthen the
+        // file, never the timeline: a duration inflated by the wait would slide
+        // every other channel against this one.
+        if (ch.startAbs !== undefined && ch.durationMs === undefined) {
+          ch.durationMs = performance.now() - ch.startAbs
+        }
+        const settings = ch.track.getSettings()
+        let throttled = false
+        for (const t of ch.stream.getVideoTracks()) {
+          try {
+            // Keep the frame SIZE exactly as it is — only the rate drops.
+            // Re-constraining the resolution mid-file would change it mid-file.
+            await withTimeout(
+              t.applyConstraints({
+                ...(settings.width ? { width: { max: settings.width } } : {}),
+                ...(settings.height ? { height: { max: settings.height } } : {}),
+                frameRate: { max: TAIL_THROTTLE_FPS },
+              }),
+              THROTTLE_BUDGET_MS,
+              `${ch.kind} tail throttle`,
+            )
+            throttled = true
+          } catch (err) {
+            console.warn('[capture] could not throttle', ch.kind, 'for the tail drain', err)
+          }
+        }
+        if (!throttled) return
+        const stats = await drainRecorder(recorder, () => ch.emitted)
+        const level = stats.timedOut ? console.warn : console.info
+        level(
+          `[capture] ${ch.kind} drained in ${stats.drainMs}ms (+${stats.drainedBytes} B)` +
+            `${stats.timedOut ? ' — TIMED OUT, the end of this channel is missing' : ''}`,
+        )
+      }),
+    )
+  }
+
+  /**
+   * The composite's own stop, started EARLY. Its teardown kills painting before
+   * it does anything else, so kicking it off first means the frames it encodes
+   * while the raw channels drain are not a second and a half of a source that
+   * has been throttled to 1 fps. Both encoders then drain at once — which is
+   * also how `npm run exp -- p0tailraw` measured them.
+   */
+  private stopCompositeEarly(): Promise<void> {
+    return (async () => {
+      try {
+        if (this.compositeStarting) {
+          await withTimeout(this.compositeStarting, COMPOSITE_START_BUDGET_MS, 'composite start')
+        }
+        if (this.compositeInvalid) {
+          // Unusable but still running (it was holding the liveness tick):
+          // release the encoder, audio context and orphan blob.
+          await this.composite?.cancel()
+          this.composite = null
+          return
+        }
+        const composite = await this.composite?.stop()
+        if (composite) this.compositeResult = composite
+      } catch (err) {
+        console.warn('[capture] live composite stop failed', err)
+      }
+    })()
+  }
+
   private async doStop(): Promise<Recording> {
     this.clearTick()
     this.releaseWakeLock()
     this.setState('stopping')
+    const compositeStopped = this.stopCompositeEarly()
+    await this.drainRawVideo()
     this.stopRecorders(true)
-    await Promise.all(this.channels.map((c) => c.stopped))
+    // Bounded, for the same reason arming's joins are (note 3): a recorder that
+    // never fires onstop must not be able to hold a finished take open. What is
+    // already on disk is kept — a channel that never answered simply reports
+    // the length it had when its source stopped.
+    try {
+      await withTimeout(
+        Promise.all(this.channels.map((c) => c.stopped)),
+        STOP_BUDGET_MS,
+        'recorder stop',
+      )
+    } catch (err) {
+      console.warn('[capture] a recorder did not stop in budget — keeping what reached disk', err)
+    }
     await Promise.all(this.channels.map((c) => this.closeWriter(c)))
     this.releaseMedia()
 
@@ -1046,20 +1183,8 @@ class Session implements CaptureSession {
       }
     }
 
-    try {
-      if (this.compositeStarting) await this.compositeStarting
-      if (this.compositeInvalid) {
-        // Unusable but still running (it was holding the liveness tick):
-        // release the encoder, audio context and orphan blob.
-        await this.composite?.cancel()
-        this.composite = null
-      } else {
-        const composite = await this.composite?.stop()
-        if (composite) recording.composite = composite
-      }
-    } catch (err) {
-      console.warn('[capture] live composite stop failed', err)
-    }
+    await compositeStopped
+    if (this.compositeResult) recording.composite = this.compositeResult
 
     await recordingsRepo.save(recording)
     if (this.manifestTimer) clearTimeout(this.manifestTimer)
