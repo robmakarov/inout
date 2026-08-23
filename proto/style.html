@@ -556,6 +556,7 @@ body.f .filters, body.d .detail { opacity: 1; }
   --neon-k: 1;     /* strength   — multiplies every alpha */
   --neon-r: 26px;  /* radius     — outer glow blur */
   --neon-t: 1.4s;  /* period     — electric / breathe speed */
+  --wedge-k: 1;    /* radial menu fill intensity */
 }
 .app {
   --grid-ink: #050810;
@@ -668,7 +669,6 @@ body.f .filters, body.d .detail { opacity: 1; }
 
 .radial svg { display: block; overflow: visible; }
 .radial__hub { fill: var(--bg); stroke: var(--edge); stroke-width: var(--edge-w); }
-.radial__rim { fill: none; stroke: color-mix(in srgb, var(--text), transparent 90%); stroke-width: 1; }
 .radial__sep { stroke: color-mix(in srgb, var(--text), transparent 88%); stroke-width: 1; }
 
 .wedge { cursor: pointer; opacity: 0; transition: opacity 0.18s var(--ease); }
@@ -679,14 +679,14 @@ body.f .filters, body.d .detail { opacity: 1; }
    two so it still reads without hovering, now that the lamps are gone. */
 .wedge__fill {
   fill: var(--surface);
-  fill-opacity: 0.26;
+  fill-opacity: clamp(0, calc(0.26 * var(--wedge-k)), 1);
   transition: fill 140ms var(--ease), fill-opacity 140ms var(--ease);
 }
 .wedge[data-on='true'] .wedge__fill {
   fill: color-mix(in srgb, var(--surface), var(--accent) 14%);
-  fill-opacity: 0.5;
+  fill-opacity: clamp(0, calc(0.5 * var(--wedge-k)), 1);
 }
-.wedge:hover .wedge__fill { fill: var(--surface-3); fill-opacity: 1; }
+.wedge:hover .wedge__fill { fill: var(--surface-3); fill-opacity: clamp(0, var(--wedge-k), 1); }
 .wedge[data-on='true']:hover .wedge__fill {
   fill: color-mix(in srgb, var(--surface-3), var(--accent) 14%);
   fill-opacity: 1;
@@ -723,9 +723,9 @@ body.f .filters, body.d .detail { opacity: 1; }
 [data-skin='volume'] #wg-out { stop-color: hsl(var(--neon-h) 95% 58%); stop-opacity: 0.72; }
 [data-skin='volume'] .wedge .wedge__fill {
   fill: url(#wgrad);
-  fill-opacity: 0.55;
+  fill-opacity: clamp(0, calc(0.55 * var(--wedge-k)), 1);
 }
-[data-skin='volume'] .wedge[data-on='true'] .wedge__fill { fill: url(#wgrad); fill-opacity: 0.82; }
+[data-skin='volume'] .wedge[data-on='true'] .wedge__fill { fill: url(#wgrad); fill-opacity: clamp(0, calc(0.82 * var(--wedge-k)), 1); }
 [data-skin='volume'] .wedge:hover .wedge__fill,
 [data-skin='volume'] .wedge[data-on='true']:hover .wedge__fill {
   fill: url(#wgrad);
@@ -742,7 +742,6 @@ body.f .filters, body.d .detail { opacity: 1; }
   filter: drop-shadow(0 0 calc(var(--neon-r) * 0.35) hsl(var(--neon-h) 100% 60% / 0.7));
 }
 [data-skin='volume'] .radial__sep { stroke: hsl(var(--neon-h) 40% 70% / 0.22); }
-[data-skin='volume'] .radial__rim { stroke: hsl(var(--neon-h) 50% 60% / 0.18); }
 [data-skin='volume'] .wedge .wedge__ico { stroke: #dbe6f5; opacity: 0.78; }
 [data-skin='volume'] .wedge:hover .wedge__ico,
 [data-skin='volume'] .wedge[data-on='true'] .wedge__ico { stroke: #fff; opacity: 1; }
@@ -755,8 +754,8 @@ body.f .filters, body.d .detail { opacity: 1; }
 /* the button: a plate with a domed disc, not a ring with a flat dot */
 [data-skin='volume'] .recbtn {
   border: none;
-  border-radius: 21px;
-  background: linear-gradient(180deg, #1a1b1f 0%, #0c0d10 62%, #08090b 100%);
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 22%, #141518 0%, #08090b 62%, #000 100%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.11),
     inset 0 -1px 0 rgba(0, 0, 0, 0.7),
@@ -1854,6 +1853,12 @@ T F N  theme · frame · neon
         <div class="slider"><label>speed</label><input type="range" id="s-t" min="0.3" max="4" step="0.1" value="1.4"><output id="o-t">1.4</output></div>
       </div>
       <div class="panel__group">
+        <div class="panel__label">Radial menu</div>
+        <div class="slider"><label>size</label><input type="range" id="m-size" min="80" max="170" step="1" value="118"><output id="o-msize">118</output></div>
+        <div class="slider"><label>gap</label><input type="range" id="m-gap" min="40" max="110" step="1" value="54"><output id="o-mgap">54</output></div>
+        <div class="slider"><label>fill</label><input type="range" id="m-fill" min="0" max="2" step="0.05" value="1"><output id="o-mfill">1.00</output></div>
+      </div>
+      <div class="panel__group">
         <div class="panel__label">Scroll bounce</div>
         <div class="slider"><label>stiffness</label><input type="range" id="p-k" min="20" max="400" step="2" value="118"><output id="o-pk">118</output></div>
         <div class="slider"><label>damping</label><input type="range" id="p-c" min="2" max="60" step="0.5" value="17"><output id="o-pc">17</output></div>
@@ -1964,7 +1969,8 @@ CHANNELS.forEach((c, i) => {
    Wedges are annulus sectors: out along the outer radius, back along the inner.
    Everything is one SVG so the geometry, the hover target and the icon can
    never drift apart; the icons are the product's own paths, scaled into place. */
-const R_OUT = 148, R_IN = 66, R_HUB = 62, PAD = 0.018 // pad = radians of gap between wedges
+let R_OUT = 118, R_IN = 54 // driven by the size and gap sliders
+const PAD = 0.018 // radians of gap between wedges
 const WEDGE_AT = { screen: -90, camera: 0, sys: 90, mic: 180 } // clockwise from the top
 const pol = (r, a) => [(200 + r * Math.cos(a)).toFixed(2), (200 + r * Math.sin(a)).toFixed(2)]
 function sector(r1, r2, a0, a1) {
@@ -1977,45 +1983,50 @@ function arc(r, a0, a1) {
   const [x1, y1] = pol(r, a0), [x2, y2] = pol(r, a1)
   return `M${x1} ${y1}A${r} ${r} 0 0 1 ${x2} ${y2}`
 }
-/* Menu-scale glyphs: the product's 24px icons are drawn for a 15px chip and go
-   weak at this size. Same subjects, fewer strokes, heavier weight. */
+/* Menu glyphs, third pass: one closed shape plus at most two marks each, drawn
+   on the 24 grid with flat sides on the pixel. The earlier set was fussy at
+   this size — too many strokes competing inside a small wedge. */
 const WEDGE_ICON = {
-  screen: '<rect x="2.5" y="4" width="19" height="13" rx="2.5"/><path d="M12 17v3.5M8.5 20.5h7"/>',
-  camera: '<rect x="2.5" y="6" width="13.5" height="12" rx="3"/><path d="M16 11.2l5.5-3.4v8.4L16 12.8z"/>',
-  mic: '<rect x="9" y="2.5" width="6" height="11.5" rx="3"/><path d="M5 11.5a7 7 0 0 0 14 0M12 18.5v3"/>',
-  sys: '<path d="M3.5 9h4L12 5v14l-4.5-4h-4z"/><path d="M15.6 9.6a4.2 4.2 0 0 1 0 4.8M18.6 7a8 8 0 0 1 0 10"/>',
+  screen: '<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M12 17v2.5M9 20h6"/>',
+  camera: '<rect x="3" y="7" width="12" height="10" rx="2"/><path d="M15 11l6-3v8l-6-3z"/>',
+  mic: '<rect x="9.5" y="3" width="5" height="10" rx="2.5"/><path d="M6 11.5a6 6 0 0 0 12 0M12 17.5v3"/>',
+  sys: '<path d="M4 9.5h3.5L12 6v12L7.5 14.5H4z"/><path d="M16 10a4 4 0 0 1 0 4"/>',
 }
 const span = (2 * Math.PI) / CHANNELS.length
-const wedges = CHANNELS.map((c, i) => {
-  const mid = (WEDGE_AT[c.key] * Math.PI) / 180
-  const a0 = mid - span / 2 + PAD
-  const a1 = mid + span / 2 - PAD
-  const [ix, iy] = pol((R_IN + R_OUT) / 2, mid)
-  // caption goes outside, on this wedge's own side — anchor/baseline from the
-  // angle alone, so adding wedges later needs no per-item placement
-  const [cx, cy] = pol(R_OUT + 24, mid)
-  const cosm = Math.cos(mid), sinm = Math.sin(mid)
-  const anchor = cosm > 0.3 ? 'start' : cosm < -0.3 ? 'end' : 'middle'
-  const baseline = sinm > 0.3 ? 'hanging' : sinm < -0.3 ? 'auto' : 'middle'
-  const dy = sinm > 0.3 ? 2 : sinm < -0.3 ? -2 : 0
-  return `
-    <g class="wedge" data-wedge="${c.key}" data-on="${c.on}" style="--d:${i * 30}ms" role="button" aria-label="${c.label}">
-      <path class="wedge__fill" d="${sector(R_IN, R_OUT, a0, a1)}"/>
-      <path class="wedge__edge" d="${arc(R_OUT - 0.6, a0, a1)}"/>
-      <g class="wedge__ico" transform="translate(${ix - 15} ${iy - 15}) scale(1.25)">${WEDGE_ICON[c.key]}</g>
-      <path class="wedge__arc" d="${arc(R_OUT + 9, a0 + 0.06, a1 - 0.06)}"/>
-      <text class="wedge__cap" x="${cx}" y="${+cy + dy}" text-anchor="${anchor}" dominant-baseline="${baseline}">${c.label}</text>
-    </g>`
-}).join('')
-const seps = CHANNELS.map((c) => {
-  const b = ((WEDGE_AT[c.key] - 180 / CHANNELS.length) * Math.PI) / 180
-  const [x1, y1] = pol(R_IN, b), [x2, y2] = pol(R_OUT, b)
-  return `<line class="radial__sep" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`
-}).join('')
-ring.insertAdjacentHTML(
-  'afterbegin',
-  `<div class="radial" data-radial>
-     <svg width="${(R_OUT + 66) * 2}" height="${(R_OUT + 66) * 2}" viewBox="${200 - R_OUT - 66} ${200 - R_OUT - 66} ${(R_OUT + 66) * 2} ${(R_OUT + 66) * 2}">
+/* Rebuilt whole whenever size or gap moves — the geometry is the truth, not a
+   scale transform, so strokes and captions keep their real weight at any size. */
+function buildRadial() {
+  const onNow = (k) => ring.querySelector(`.chip[data-chip="${k}"]`)?.getAttribute('aria-pressed') === 'true'
+  const M = 62 // margin for the captions living outside the donut
+  const wedges = CHANNELS.map((c, i) => {
+    const mid = (WEDGE_AT[c.key] * Math.PI) / 180
+    const a0 = mid - span / 2 + PAD
+    const a1 = mid + span / 2 - PAD
+    const [ix, iy] = pol((R_IN + R_OUT) / 2, mid)
+    // caption goes outside, on this wedge's own side — anchor/baseline from the
+    // angle alone, so adding wedges later needs no per-item placement
+    const [cx, cy] = pol(R_OUT + 22, mid)
+    const cosm = Math.cos(mid), sinm = Math.sin(mid)
+    const anchor = cosm > 0.3 ? 'start' : cosm < -0.3 ? 'end' : 'middle'
+    const baseline = sinm > 0.3 ? 'hanging' : sinm < -0.3 ? 'auto' : 'middle'
+    const dy = sinm > 0.3 ? 2 : sinm < -0.3 ? -2 : 0
+    return `
+      <g class="wedge" data-wedge="${c.key}" data-on="${onNow(c.key)}" style="--d:${i * 30}ms" role="button" aria-label="${c.label}">
+        <path class="wedge__fill" d="${sector(R_IN, R_OUT, a0, a1)}"/>
+        <path class="wedge__edge" d="${arc(R_OUT - 0.6, a0, a1)}"/>
+        <g class="wedge__ico" transform="translate(${ix - 11} ${iy - 11}) scale(0.92)">${WEDGE_ICON[c.key]}</g>
+        <path class="wedge__arc" d="${arc(R_OUT + 8, a0 + 0.06, a1 - 0.06)}"/>
+        <text class="wedge__cap" x="${cx}" y="${+cy + dy}" text-anchor="${anchor}" dominant-baseline="${baseline}">${c.label}</text>
+      </g>`
+  }).join('')
+  const seps = CHANNELS.map((c) => {
+    const b = ((WEDGE_AT[c.key] - 180 / CHANNELS.length) * Math.PI) / 180
+    const [x1, y1] = pol(R_IN, b), [x2, y2] = pol(R_OUT, b)
+    return `<line class="radial__sep" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`
+  }).join('')
+  const box = (R_OUT + M) * 2
+  const svg = `
+     <svg width="${box}" height="${box}" viewBox="${200 - R_OUT - M} ${200 - R_OUT - M} ${box} ${box}">
        <defs>
          <!-- volume skin: dark at the hub, lit at the rim. userSpaceOnUse so the
               ramp follows the donut's radius, not each wedge's bounding box. -->
@@ -2025,13 +2036,15 @@ ring.insertAdjacentHTML(
            <stop id="wg-out" offset="1"/>
          </radialGradient>
        </defs>
-       <circle class="radial__hub" cx="200" cy="200" r="${R_HUB}"/>
+       <circle class="radial__hub" cx="200" cy="200" r="${R_IN - 3}"/>
        ${wedges}
        ${seps}
-       <circle class="radial__rim" cx="200" cy="200" r="${R_OUT + 9}"/>
-     </svg>
-   </div>`,
-)
+     </svg>`
+  const existing = ring.querySelector('[data-radial]')
+  if (existing) existing.innerHTML = svg
+  else ring.insertAdjacentHTML('afterbegin', `<div class="radial" data-radial>${svg}</div>`)
+}
+buildRadial()
 
 document.querySelector('[data-timeline]').innerHTML = `
   <div class="tl__lanes">
@@ -2483,6 +2496,23 @@ SLIDERS.forEach((s) => {
   syncSlider(s)
 })
 
+/* radial menu sliders — size and gap are geometry, so they rebuild the donut;
+   fill is a var. Gap is clamped under size so the ring can never invert. */
+const mSize = document.getElementById('m-size')
+const mGap = document.getElementById('m-gap')
+const mFill = document.getElementById('m-fill')
+function syncMenu() {
+  R_OUT = +mSize.value
+  R_IN = Math.min(+mGap.value, R_OUT - 24)
+  document.getElementById('o-msize').textContent = R_OUT
+  document.getElementById('o-mgap').textContent = R_IN
+  document.documentElement.style.setProperty('--wedge-k', mFill.value)
+  document.getElementById('o-mfill').textContent = (+mFill.value).toFixed(2)
+  buildRadial()
+}
+;[mSize, mGap, mFill].forEach((el) => el.addEventListener('input', syncMenu))
+syncMenu()
+
 /* bounce sliders — same idea, but these land on PHYS instead of CSS. Changing
    them mid-flight is intentional: you feel the difference on the next throw. */
 const PHYS_SLIDERS = [
@@ -2522,6 +2552,7 @@ function paramString() {
     `recfx=${recfxSel.value}`,
     `skin=${skinSel.value}`,
     `splash=${splashSel.value}`,
+    `menu=size${R_OUT}/gap${R_IN}/fill${mFill.value}`,
     `bounce=k${PHYS.k}/c${PHYS.c}/imp${PHYS.imp}/follow${PHYS.follow}/wall${PHYS.wall}`,
     `zone=${FRAME_W}x${FRAME_H}`,
     `on=${on.map((c) => c.key).join(',') || '-'}`,
@@ -2617,6 +2648,13 @@ function restoreState() {
     document.getElementById(PHYS_SLIDERS[i].out).textContent = v.toFixed(PHYS_SLIDERS[i].dp)
   })
 
+  const m = st.menu || ''
+  const mg = (name) => { const r = m.match(new RegExp(name + '([\\d.]+)')); return r ? +r[1] : null }
+  if (mg('size') != null) mSize.value = mg('size')
+  if (mg('gap') != null) mGap.value = mg('gap')
+  if (mg('fill') != null) mFill.value = mg('fill')
+  if (m) syncMenu()
+
   const zone = (st.zone || '').match(/^(\d+)x(\d+)$/)
   if (zone) { FRAME_W = +zone[1]; FRAME_H = +zone[2] }
   // the preset only decides the corner radius once a custom size is in play
@@ -2635,6 +2673,7 @@ function restoreState() {
 // every control that can change the look also records it
 ;[themeSel, neonSel, inputsSel, recfxSel, skinSel, splashSel, frameSel].forEach((el) => el.addEventListener('change', saveState))
 ;[...SLIDERS, ...PHYS_SLIDERS].forEach((s) => document.getElementById(s.el).addEventListener('change', saveState))
+;[mSize, mGap, mFill].forEach((el) => el.addEventListener('change', saveState))
 app.addEventListener('click', (e) => { if (e.target.closest('[data-chip], [data-wedge]')) saveState() })
 grip.addEventListener('pointerup', saveState)
 grip.addEventListener('dblclick', () => setTimeout(saveState, 0))
