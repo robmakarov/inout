@@ -89,7 +89,16 @@ gaps / in flight:
   re-exporting session.ts/recovery.ts VALUES from @core/capture pulls the whole engine back into first
   paint — reach them through loadCaptureEngine()/loadRecovery(). dev-mode first-record compile latency
   remains (prod unaffected).
-- PUBLIC DEPLOY LIVE: inout-kappa.vercel.app serves current main (verified, bundle-hash match). GitHub main = single depersonalized commit; full history local-only (branch local-history-backup). Remaining cloud reset: PO runs docs/CLOUD_RESET.md steps 2-3 (Vercel env+old deployments, Supabase wipe+key rotation; auth users kept)
+- PUBLIC DEPLOY LIVE: inout-kappa.vercel.app serves current main (verified, bundle-hash match).
+  CLARIFIED 2026-08-23 (the old wording read as if main were still ONE commit, and a session acted on
+  that by refusing to push): GitHub main is ROOTED in the depersonalized commit fcaf57f — which is also
+  what the `publish` branch points at — and carries ordinary post-publication work on top, pushed every
+  turn by the auto-commit hook. Verified: `git rev-list --max-parents=0 main` = fcaf57f, and
+  local-history-backup's root (dac00a1) is NOT an ancestor of main. That is the property that matters
+  and it holds; pushing main is normal. What must never happen is grafting local-history-backup onto
+  main. Remaining cloud reset:
+  PO runs docs/CLOUD_RESET.md steps 2-3 (Vercel env+old deployments, Supabase wipe+key rotation; auth
+  users kept)
 - instant-arm SHIPPED (c8424a5): start gates only on primary channel, slow devices late-join (verified: armed 269ms w/ 3s-cold camera), 5s device budget, missing channel = loud banner + Recording.missing; late join → composite invalidated → render path. Await PO recheck of device-wait on live site.
 - PERVASIVE AUDIO NOISE root-caused + fixed (2026-07-16): render mix bus summed all audio channels at UNITY (no headroom) — mic+system-audio sum clipped softLimitSample on 34% of samples (measured). Removing the composite export shortcut had moved ALL exports onto this unstaged sum. Fix: 1/N per-channel headroom (single source unchanged/unity; multi-source guaranteed no clip, −6dB, recover via later 2-pass normalize). Proven at mix site: 16586→0 limiter hits. Single-source fidelity unregressed (THD −68dB).
 - STUCK "waiting for mic" — hit AGAIN 2026-08-23 (PO: unresponsive, mic indicator still lit after
