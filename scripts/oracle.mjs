@@ -27,15 +27,17 @@ const FORBIDDEN_PORTS = new Set([5173])
 function parseArgs(argv) {
   let cold = 1
   let headed = false
+  let engine = ''
   for (const a of argv) {
     if (a.startsWith('--cold=')) cold = Number(a.slice(7))
     else if (a === '--headed') headed = true
+    else if (a.startsWith('--engine=')) engine = a.slice(9)
     else if (a.startsWith('--port=')) {
       console.error('oracle: --port is disabled (ephemeral server only; never share with PO QA)')
       process.exit(2)
     }
   }
-  return { cold, headed }
+  return { cold, headed, engine }
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -91,13 +93,17 @@ function run(cmd, args, opts = {}) {
   })
 }
 
-async function runOracleOnce(port, headed) {
+async function runOracleOnce(port, headed, engine) {
   const cdpArgs = [
     join(ROOT, 'src/experimental/tools/cdp-run.mjs'),
     'oracle',
     `--port=${port}`,
   ]
   if (headed) cdpArgs.push('--headed')
+  // Which live-composite engine made the file under test (O4 step 2). An
+  // unedited take IS the composite, so this is the one knob that changes what
+  // the sync and tail bands are actually measuring.
+  if (engine) cdpArgs.push(`--query=engine=${engine}`)
   const result = await run(process.execPath, cdpArgs, { quiet: true })
   if (!result.ok) {
     return {
@@ -116,11 +122,11 @@ const METRIC_RETRY_COOLDOWN_MS = 5000
 const METRIC_RETRY_MAX = 2
 
 /** Retry when CDP/oracle returns null metrics (load flake) — never exit 0 on all-null. */
-async function runOracleOnceGated(port, headed) {
+async function runOracleOnceGated(port, headed, engine) {
   let last = { error: 'no attempt', report: null, gate: null }
   for (let attempt = 1; attempt <= METRIC_RETRY_MAX; attempt++) {
     const t0 = Date.now()
-    const { error, report } = await runOracleOnce(port, headed)
+    const { error, report } = await runOracleOnce(port, headed, engine)
     const elapsed = Date.now() - t0
     if (error || !report) {
       last = { error: error ?? 'no report', report, gate: null, elapsedMs: elapsed, attempt }
@@ -153,7 +159,7 @@ async function runOracleOnceGated(port, headed) {
 }
 
 async function main() {
-  const { cold, headed } = parseArgs(process.argv.slice(2))
+  const { cold, headed, engine } = parseArgs(process.argv.slice(2))
 
   try {
     await run(CHROME, ['--version'], { stdio: 'pipe' })
@@ -179,7 +185,7 @@ async function main() {
     await waitForHttp(`http://${HOST}:${port}/experimental.html`, Date.now() + 60_000)
 
     for (let i = 0; i < cold; i++) {
-      const run = await runOracleOnceGated(port, headed)
+      const run = await runOracleOnceGated(port, headed, engine)
       const elapsed = run.elapsedMs ?? 0
       if (run.error || !run.report || !run.gate) {
         results.push({

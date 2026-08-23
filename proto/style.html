@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="baseline" data-frame="desktop" data-neon="on">
+<html lang="en" data-theme="baseline" data-frame="desktop" data-neon="on" data-inputs="always" data-recfx="none">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -11,7 +11,8 @@
   vite's build input (only index.html is) and it is outside tsconfig's `include`,
   so `npm run build`, `npm run typecheck` and `npm test` never see it.
 
-    npm run dev  →  http://localhost:5173/proto/style.html
+    Open the file. Double-click it, or drag it onto a browser window. No server,
+    no build step, nothing to install — everything it needs is in this one file.
 
   WHAT IT IS
   Every INOUT surface (idle · recording · editor · exporting · share) rendered as
@@ -134,6 +135,44 @@ body.f .filters, body.d .detail { opacity: 1; }
   color: #55555e;
   white-space: pre-line;
 }
+.slider {
+  display: grid;
+  grid-template-columns: 52px 1fr 34px;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  font: 10px/1 ui-monospace, monospace;
+  color: #6a6a74;
+}
+.slider output { text-align: right; color: #a8a8b2; }
+.slider input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  background: #2b2b31;
+  outline: none;
+}
+.slider input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: hsl(var(--neon-h) var(--neon-s) var(--neon-l));
+  cursor: pointer;
+}
+.params {
+  width: 100%;
+  margin-top: 8px;
+  resize: vertical;
+  background: #17171a;
+  color: #8fd8e4;
+  border: 1px solid #2b2b31;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: 10px/1.45 ui-monospace, monospace;
+}
 
 /* edge handles — the only chrome left when both panels are shut */
 .edge {
@@ -158,13 +197,46 @@ body.f .filters, body.d .detail { opacity: 1; }
 .canvas {
   position: relative;
   height: 100%;
-  display: grid;
-  place-items: center;
-  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px 24px 24px;
   overflow: hidden;
   background:
     repeating-conic-gradient(#141416 0% 25%, #17171a 0% 50%) 50% / 22px 22px;
 }
+
+/* screen-zone controls sit on the zone itself, not in a panel — the thing they
+   size is directly under them, so the number and the picture read as one. */
+.zonebar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: 11px/1 ui-monospace, monospace;
+  color: #6a6a74;
+}
+.zonebar select {
+  background: #17171a;
+  color: #d8d8dc;
+  border: 1px solid #2b2b31;
+  border-radius: 6px;
+  padding: 4px 7px;
+  font: inherit;
+}
+.zonebar__size { color: #d8d8dc; }
+.zonebar__size b { font-weight: 600; }
+.zonebar__hint { color: #4b4b54; }
+.zonebar__step {
+  border: 1px solid #2b2b31;
+  border-radius: 5px;
+  padding: 3px 7px;
+  color: #85858f;
+  font: inherit;
+}
+.zonebar__step:hover { background: #212126; color: #fff; }
 /* The frame keeps its true pixel size and is scaled to fit the pane, so a
    layout is always judged at the size it will really have. */
 .slot { position: relative; flex: none; }
@@ -191,7 +263,9 @@ body.f .filters, body.d .detail { opacity: 1; }
   padding: 0;
   margin: 0;
   border: none;
-  border-radius: 9px 0 0 0;
+  /* bottom-right follows the screen's own corner (scaled, set in fit()) so the
+     grip hugs the rounding instead of poking a square out of it */
+  border-radius: 10px 0 var(--corner, 14px) 0;
   z-index: 60;
   cursor: nwse-resize;
   touch-action: none;
@@ -472,12 +546,28 @@ body.f .filters, body.d .detail { opacity: 1; }
    bumped by the elastic scroll spring. Same values, one layer instead of two
    pseudo-elements. Neon on every theme, by decision; the four vars below are
    the whole look, so retuning it per theme is a four-line job. */
+/* Neon is four numbers, all live on :root so the panel sliders can drive them.
+   Everything that shines derives from these — grid, record glow, chip edge, the
+   electric fx — so one slider moves the whole language at once. */
+:root {
+  --neon-h: 186;   /* hue        — 0..360 */
+  --neon-s: 100%;
+  --neon-l: 60%;
+  --neon-k: 1;     /* strength   — multiplies every alpha */
+  --neon-r: 26px;  /* radius     — outer glow blur */
+  --neon-t: 1.4s;  /* period     — electric / breathe speed */
+}
 .app {
   --grid-ink: #050810;
-  --grid-line: rgba(0, 240, 255, 0.03);
-  --grid-glow: rgba(0, 255, 200, 0.08);
   --grid-cell: 24px;
-  --neon: 0, 240, 255;
+  --neon-c: hsl(var(--neon-h) var(--neon-s) var(--neon-l));
+  --neon-38: hsl(var(--neon-h) var(--neon-s) var(--neon-l) / calc(0.38 * var(--neon-k)));
+  --neon-28: hsl(var(--neon-h) var(--neon-s) var(--neon-l) / calc(0.28 * var(--neon-k)));
+  --neon-22: hsl(var(--neon-h) var(--neon-s) var(--neon-l) / calc(0.22 * var(--neon-k)));
+  --neon-16: hsl(var(--neon-h) var(--neon-s) var(--neon-l) / calc(0.16 * var(--neon-k)));
+  --neon-45: hsl(var(--neon-h) var(--neon-s) var(--neon-l) / calc(0.45 * var(--neon-k)));
+  --grid-line: hsl(var(--neon-h) 100% 50% / calc(0.03 * var(--neon-k)));
+  --grid-glow: hsl(calc(var(--neon-h) + 14) 100% 45% / calc(0.08 * var(--neon-k)));
 }
 .capture { position: relative; height: 100%; background: var(--grid-ink); }
 .capture--recording { background: var(--grid-ink); }
@@ -536,10 +626,111 @@ body.f .filters, body.d .detail { opacity: 1; }
 /* orbit offset lives in left/top so transform stays free for hover feedback */
 .ring .chip {
   position: absolute;
+  left: var(--cx);
+  top: var(--cy);
   transform: translate(-50%, -50%);
 }
 .ring .chip:hover { transform: translate(-50%, -50%) scale(1.06); }
 .ring .chip:active { transform: translate(-50%, -50%) scale(0.97); transition-duration: 80ms; }
+
+/* ---------- inputs as a radial command menu ----------
+   A segmented donut: wedges in a band around a solid hub, hairline separators,
+   a thin outer rim, and the wedge under the pointer lit with a heavy arc on the
+   rim outside it. The record button sits in the hole and is untouched.
+   Opening is the button's job; staying open belongs to the whole ring, or the
+   menu would vanish the moment you set off toward a wedge. */
+.radial {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: none;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.93);
+  transform-origin: center;
+  pointer-events: none;
+  transition: opacity 0.16s var(--ease), transform 0.26s var(--ease);
+}
+[data-inputs='menu'] .radial,
+[data-inputs='hover'] .radial { display: block; }
+[data-inputs='menu'] .radial,
+[data-inputs='hover'] .ring.is-open .radial {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+/* only the wedges take the pointer — the svg box reaches past the donut to give
+   the captions room, and that empty margin must stay transparent to the mouse */
+[data-inputs='menu'] .wedge,
+[data-inputs='hover'] .ring.is-open .wedge { pointer-events: auto; }
+.wedge { pointer-events: none; }
+/* in menu modes the pills are gone — the wedges are the inputs */
+[data-inputs='menu'] .ring .chip,
+[data-inputs='hover'] .ring .chip { display: none; }
+
+.radial svg { display: block; overflow: visible; }
+.radial__hub { fill: var(--bg); stroke: var(--edge); stroke-width: var(--edge-w); }
+.radial__rim { fill: none; stroke: color-mix(in srgb, var(--text), transparent 90%); stroke-width: 1; }
+.radial__sep { stroke: color-mix(in srgb, var(--text), transparent 88%); stroke-width: 1; }
+
+.wedge { cursor: pointer; opacity: 0; transition: opacity 0.18s var(--ease); }
+[data-inputs='menu'] .wedge,
+[data-inputs='hover'] .ring.is-open .wedge { opacity: 1; transition-delay: var(--d); }
+/* At rest the wedges are barely there — the menu is a hint of structure, and
+   only the one you point at becomes a solid surface. On-state sits between the
+   two so it still reads without hovering, now that the lamps are gone. */
+.wedge__fill {
+  fill: var(--surface);
+  fill-opacity: 0.26;
+  transition: fill 140ms var(--ease), fill-opacity 140ms var(--ease);
+}
+.wedge[data-on='true'] .wedge__fill {
+  fill: color-mix(in srgb, var(--surface), var(--accent) 14%);
+  fill-opacity: 0.5;
+}
+.wedge:hover .wedge__fill { fill: var(--surface-3); fill-opacity: 1; }
+.wedge[data-on='true']:hover .wedge__fill {
+  fill: color-mix(in srgb, var(--surface-3), var(--accent) 14%);
+  fill-opacity: 1;
+}
+.wedge__ico {
+  fill: none;
+  stroke: var(--text-faint);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.7;
+  pointer-events: none;
+  transition: stroke 140ms var(--ease), opacity 140ms var(--ease);
+}
+.wedge[data-on='true'] .wedge__ico { stroke: var(--accent); opacity: 1; }
+.wedge:hover .wedge__ico { stroke: var(--text); opacity: 1; }
+.wedge[data-on='true']:hover .wedge__ico { stroke: var(--accent); }
+
+/* Caption sits outside the wedge, on the wedge's own side: anchor and baseline
+   are derived from the mid angle, so this holds for any number of wedges. */
+.wedge__cap {
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  fill: var(--text-dim);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms var(--ease);
+}
+.wedge:hover .wedge__cap { opacity: 1; fill: var(--text); }
+/* the lit arc outside the rim, on the hovered wedge only */
+.wedge__arc {
+  fill: none;
+  stroke: var(--text-dim);
+  stroke-width: 4;
+  stroke-linecap: round;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms var(--ease);
+}
+.wedge:hover .wedge__arc { opacity: 1; }
+.wedge[data-on='true'] .wedge__arc { stroke: var(--accent); }
+[data-neon='on'] .wedge:hover .wedge__arc { filter: drop-shadow(0 0 calc(var(--neon-r) * 0.4) var(--neon-38)); }
 .cluster__hint {
   margin-top: -34px;
   text-align: center;
@@ -638,7 +829,7 @@ body.f .filters, body.d .detail { opacity: 1; }
   border-color: color-mix(in srgb, var(--accent), transparent 45%);
 }
 [data-neon='on'] .chip:hover {
-  box-shadow: 0 0 0 1px rgba(var(--neon), 0.28), 0 0 16px rgba(var(--neon), 0.16);
+  box-shadow: 0 0 0 1px var(--neon-28), 0 0 calc(var(--neon-r) * 0.62) var(--neon-16);
 }
 .chips .chip:hover { transform: scale(1.05); }
 .chips .chip:active { transform: scale(0.97); transition-duration: 80ms; }
@@ -648,6 +839,7 @@ body.f .filters, body.d .detail { opacity: 1; }
    shine instead, a 0.97 press with a short transition, and an arming pulse on
    the source's blink easing. Toggle "Neon" off to fall back to the plain hover. */
 .recbtn {
+  position: relative; /* the fx layer sizes off the button, not off the ring */
   width: 72px; height: 72px;
   border-radius: var(--r-btn);
   border: var(--rec-ring);
@@ -661,8 +853,8 @@ body.f .filters, body.d .detail { opacity: 1; }
 [data-neon='off'] .recbtn:hover { transform: scale(1.05); }
 [data-neon='on'] .recbtn:hover {
   filter:
-    drop-shadow(0 0 8px rgba(var(--neon), 0.38))
-    drop-shadow(0 0 26px rgba(var(--neon), 0.22));
+    drop-shadow(0 0 calc(var(--neon-r) * 0.32) var(--neon-38))
+    drop-shadow(0 0 var(--neon-r) var(--neon-22));
 }
 .recbtn:active {
   transform: scale(0.97);
@@ -672,9 +864,44 @@ body.f .filters, body.d .detail { opacity: 1; }
   animation: recArming 1.2s cubic-bezier(0.45, 0, 0.35, 1) infinite;
   cursor: wait;
 }
+
+/* ---------- record button fx: an aura around the untouched button ----------
+   The ring and the red disc are not styled here at all — the fx is a sibling
+   layer behind them, so switching it off leaves the button exactly as it was.
+   breathe: one slow halo swell. (The electric arc version was tried and cut.) */
+.rec-fx {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 210%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0;
+  z-index: -1; /* behind the ring and the disc — the button itself stays untouched */
+  transition: opacity 0.3s var(--ease);
+  color: var(--neon-c);
+}
+[data-recfx='breathe'] .rec-fx { opacity: 1; }
+.rec-fx__halo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 62%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--neon-38) 0%, transparent 62%);
+  filter: blur(7px);
+  animation: fxBreathe calc(var(--neon-t) * 2.4) ease-in-out infinite;
+}
+@keyframes fxBreathe {
+  0%, 100% { opacity: 0.45; transform: translate(-50%, -50%) scale(0.86); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
+}
 @keyframes recArming {
-  0%, 100% { filter: drop-shadow(0 0 0 rgba(var(--neon), 0)); }
-  50% { filter: drop-shadow(0 0 14px rgba(var(--neon), 0.45)); }
+  0%, 100% { filter: drop-shadow(0 0 0 transparent); }
+  50% { filter: drop-shadow(0 0 calc(var(--neon-r) * 0.54) var(--neon-45)); }
 }
 .recbtn__inner {
   width: 56px; height: 56px;
@@ -1086,19 +1313,6 @@ body.f .filters, body.d .detail { opacity: 1; }
   flex-direction: column;
   align-items: center;
 }
-#splash .glow {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 130%;
-  aspect-ratio: 2.4 / 1;
-  transform: translate(-50%, -60%) scale(0.6);
-  border-radius: 50%;
-  background: radial-gradient(ellipse at center, rgba(232, 213, 160, 0.26), transparent 68%);
-  filter: blur(16px);
-  opacity: 0;
-  pointer-events: none;
-}
 #splash svg {
   position: relative;
   /* cqw, not vw: the frame is the viewport here (see .app container-type) */
@@ -1115,8 +1329,6 @@ body.f .filters, body.d .detail { opacity: 1; }
 /* one svg per shape of animation: five letter paths, or the five original frames */
 #splash[data-variant='frames'] #mark-letters { display: none; }
 #splash:not([data-variant='frames']) #mark-frames { display: none; }
-#splash:not([data-variant='frames']) .glow { display: block; }
-#splash[data-variant='frames'] .glow { display: none; }
 #mark-frames .fr { opacity: 0; }
 #mark-frames .fr.on { opacity: 1; }
 
@@ -1142,7 +1354,6 @@ body.f .filters, body.d .detail { opacity: 1; }
 #splash[data-variant='aperture'].splash-play .lm--u { animation-delay: 0.48s; }
 #splash[data-variant='aperture'].splash-play .lm--t { animation-delay: 0.54s; }
 
-.splash-play .glow { animation: glowIn 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both; }
 .splash-out { animation: splashOut 0.38s cubic-bezier(0.2, 1, 0.3, 1) both; }
 
 @keyframes lmIn {
@@ -1158,11 +1369,6 @@ body.f .filters, body.d .detail { opacity: 1; }
   45% { filter: brightness(2.2); }
   100% { filter: brightness(1); }
 }
-@keyframes glowIn {
-  0% { opacity: 0; transform: translate(-50%, -60%) scale(0.6); }
-  45% { opacity: 1; }
-  100% { opacity: 0.55; transform: translate(-50%, -60%) scale(1); }
-}
 @keyframes splashOut {
   to { opacity: 0; transform: scale(1.05); }
 }
@@ -1171,20 +1377,41 @@ body.f .filters, body.d .detail { opacity: 1; }
    3. THEME FLAVOUR — what tokens alone cannot say.
    ========================================================================== */
 
-/* graphite: colour is a marker beside neutral type, never the type itself. */
+/* graphite: colour is a marker beside neutral type, never the type itself.
+   On/off was one 2px tick and a barely different surface — not enough to read
+   at a glance. Now the state is carried by four things at once, all monochrome
+   except the marker: a lit LED, a full-strength label, a raised surface and a
+   lit edge. Off is explicitly dark: an unlit lamp, not just a missing one. */
+[data-theme='graphite'] .chip {
+  text-transform: uppercase;
+  font-size: 11px;
+  padding: 8px 12px 8px 10px;
+  gap: 7px;
+}
+[data-theme='graphite'] .chip::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: #17171c;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  transition: background 140ms, box-shadow 180ms;
+}
 [data-theme='graphite'] .chip[aria-pressed='true'] {
   background: var(--surface-3);
   color: var(--text);
-  border-color: var(--edge);
+  border-color: color-mix(in srgb, var(--accent), var(--edge) 55%);
 }
 [data-theme='graphite'] .chip[aria-pressed='true']::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 2px;
   background: var(--accent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent), transparent 55%),
+    0 0 7px color-mix(in srgb, var(--accent), transparent 25%);
 }
-[data-theme='graphite'] .chip { text-transform: uppercase; font-size: 11px; padding: 8px 12px; }
+[data-theme='graphite'] .chip[aria-pressed='true'] .lbl { color: var(--text); }
+[data-theme='graphite'] .chip[aria-pressed='false'] { color: var(--text-faint); }
+[data-theme='graphite'] .chip[aria-pressed='false'] svg { opacity: 0.6; }
 [data-theme='graphite'] .timer__text,
 [data-theme='graphite'] .transport__time,
 [data-theme='graphite'] .xp__pct { letter-spacing: 0.02em; }
@@ -1236,15 +1463,28 @@ T F N  theme · frame · neon
     <main class="canvas" id="canvas">
       <button class="edge edge--l" id="tgl-l" aria-label="Toggle left panel">◧</button>
       <button class="edge edge--r" id="tgl-r" aria-label="Toggle right panel">◨</button>
+
+      <!-- screen-zone info + controls, on the zone rather than in a panel -->
+      <div class="zonebar">
+        <select id="frame">
+          <option value="desktop">desktop</option>
+          <option value="laptop">laptop</option>
+          <option value="phone">phone</option>
+        </select>
+        <span class="zonebar__size" id="zsize">1040 × 660</span>
+        <span class="zonebar__hint" id="zfit">100%</span>
+        <button class="zonebar__step" id="zfill">fill</button>
+        <span class="zonebar__hint">drag the corner</span>
+      </div>
+
       <div class="slot" id="slot">
       <button class="fresize" id="resize" aria-label="Resize the screen zone — double-click for min or max"></button>
       <div class="frame" id="frameEl">
     <div class="app" id="app">
 
       <!-- ============ splash — the mark, straight out of inout proto ============ -->
-      <div id="splash" hidden data-variant="aperture">
+      <div id="splash" hidden data-variant="letters">
         <div class="swrap">
-          <div class="glow"></div>
           <!-- the original five frames, verbatim from inout proto — used by the
                "frames" variant, which steps them at 105ms exactly as it shipped -->
           <svg id="mark-frames" viewBox="247.85 256.76 362.93 43.52" xmlns="http://www.w3.org/2000/svg" aria-label="INOUT">
@@ -1372,6 +1612,7 @@ T F N  theme · frame · neon
             <div class="cluster" data-cluster>
               <div class="ring" data-ring>
                 <button class="recbtn" data-rec aria-label="Start recording">
+                  <span class="rec-fx" aria-hidden="true"><span class="rec-fx__halo"></span></span>
                   <span class="recbtn__inner"></span>
                 </button>
               </div>
@@ -1503,29 +1744,52 @@ T F N  theme · frame · neon
         </select>
       </div>
       <div class="panel__group">
+        <div class="panel__label">Inputs</div>
+        <select id="inputs">
+          <option value="always">pills — always on the ring</option>
+          <option value="hover">radial menu — on button hover</option>
+          <option value="menu">radial menu — always</option>
+        </select>
+      </div>
+      <div class="panel__group">
+        <div class="panel__label">Record button fx</div>
+        <select id="recfx">
+          <option value="none">none</option>
+          <option value="breathe">breathe</option>
+        </select>
+      </div>
+      <div class="panel__group">
         <div class="panel__label">Neon</div>
         <select id="neon">
           <option value="on">on</option>
           <option value="off">off</option>
         </select>
+        <div class="slider"><label>hue</label><input type="range" id="s-hue" min="0" max="360" step="1" value="186"><output id="o-hue">186</output></div>
+        <div class="slider"><label>strength</label><input type="range" id="s-k" min="0" max="3" step="0.05" value="1"><output id="o-k">1.00</output></div>
+        <div class="slider"><label>radius</label><input type="range" id="s-r" min="0" max="80" step="1" value="26"><output id="o-r">26</output></div>
+        <div class="slider"><label>speed</label><input type="range" id="s-t" min="0.3" max="4" step="0.1" value="1.4"><output id="o-t">1.4</output></div>
+      </div>
+      <div class="panel__group">
+        <div class="panel__label">Scroll bounce</div>
+        <div class="slider"><label>stiffness</label><input type="range" id="p-k" min="20" max="400" step="2" value="118"><output id="o-pk">118</output></div>
+        <div class="slider"><label>damping</label><input type="range" id="p-c" min="2" max="60" step="0.5" value="17"><output id="o-pc">17</output></div>
+        <div class="slider"><label>impulse</label><input type="range" id="p-i" min="1" max="30" step="0.2" value="10.2"><output id="o-pi">10.2</output></div>
+        <div class="slider"><label>bg follow</label><input type="range" id="p-f" min="0" max="0.6" step="0.01" value="0.1"><output id="o-pf">0.10</output></div>
+        <div class="slider"><label>wall</label><input type="range" id="p-w" min="0" max="0.8" step="0.02" value="0.14"><output id="o-pw">0.14</output></div>
       </div>
       <div class="panel__group">
         <div class="panel__label">Splash animation</div>
         <select id="splashvar">
-          <option value="aperture">aperture — shutter + light</option>
           <option value="letters">letters — staggered rise</option>
+          <option value="aperture">aperture — shutter + light</option>
           <option value="frames">frames — the original flipbook</option>
         </select>
         <button class="btn-h" id="replay" style="margin-top: 8px">Replay splash</button>
       </div>
       <div class="panel__group">
-        <div class="panel__label">Screen zone</div>
-        <select id="frame">
-          <option value="desktop">desktop 1040 × 660</option>
-          <option value="laptop">laptop 820 × 520</option>
-          <option value="phone">phone 390 × 800</option>
-        </select>
-        <div class="readout" id="note" style="margin-top: 8px"></div>
+        <div class="panel__label">Send me your settings</div>
+        <button class="btn-h" id="copyparams">Copy parameters</button>
+        <textarea class="params" id="paramsout" readonly rows="3"></textarea>
       </div>
     </aside>
   </div>
@@ -1592,7 +1856,7 @@ document.querySelectorAll('[data-icon]').forEach((el) => (el.innerHTML = icon(el
 document.querySelectorAll('[data-icon-before]').forEach((el) => el.insertAdjacentHTML('afterbegin', icon(el.dataset.iconBefore, 16)))
 
 const chipHTML = (c) =>
-  `<button class="chip" aria-pressed="${c.on}" data-chip="${c.key}">${icon(c.ic, 15)}<span>${c.label}</span></button>`
+  `<button class="chip" aria-pressed="${c.on}" data-chip="${c.key}">${icon(c.ic, 15)}<span class="lbl">${c.label}</span></button>`
 
 document.querySelectorAll('[data-chips]').forEach((row) => {
   row.innerHTML = CHANNELS.map(chipHTML).join('')
@@ -1603,13 +1867,77 @@ document.querySelectorAll('[data-chips]').forEach((row) => {
 const RING_R = 132
 const RING_ANGLE = { screen: -135, camera: -45, mic: 135, sys: 45 }
 const ring = document.querySelector('[data-ring]')
-CHANNELS.forEach((c) => {
+CHANNELS.forEach((c, i) => {
   const a = (RING_ANGLE[c.key] * Math.PI) / 180
   ring.insertAdjacentHTML('beforeend', chipHTML(c))
   const el = ring.lastElementChild
-  el.style.left = `calc(50% + ${(Math.cos(a) * RING_R).toFixed(1)}px)`
-  el.style.top = `calc(50% + ${(Math.sin(a) * RING_R).toFixed(1)}px)`
+  el.style.setProperty('--cx', `calc(50% + ${(Math.cos(a) * RING_R).toFixed(1)}px)`)
+  el.style.setProperty('--cy', `calc(50% + ${(Math.sin(a) * RING_R).toFixed(1)}px)`)
+  el.style.setProperty('--d', `${i * 34}ms`)
 })
+
+/* ---------- radial menu: a segmented donut around the record button ----------
+   Wedges are annulus sectors: out along the outer radius, back along the inner.
+   Everything is one SVG so the geometry, the hover target and the icon can
+   never drift apart; the icons are the product's own paths, scaled into place. */
+const R_OUT = 148, R_IN = 66, R_HUB = 62, PAD = 0.018 // pad = radians of gap between wedges
+const WEDGE_AT = { screen: -90, camera: 0, sys: 90, mic: 180 } // clockwise from the top
+const pol = (r, a) => [(200 + r * Math.cos(a)).toFixed(2), (200 + r * Math.sin(a)).toFixed(2)]
+function sector(r1, r2, a0, a1) {
+  const [x1, y1] = pol(r2, a0), [x2, y2] = pol(r2, a1)
+  const [x3, y3] = pol(r1, a1), [x4, y4] = pol(r1, a0)
+  const big = a1 - a0 > Math.PI ? 1 : 0
+  return `M${x1} ${y1}A${r2} ${r2} 0 ${big} 1 ${x2} ${y2}L${x3} ${y3}A${r1} ${r1} 0 ${big} 0 ${x4} ${y4}Z`
+}
+function arc(r, a0, a1) {
+  const [x1, y1] = pol(r, a0), [x2, y2] = pol(r, a1)
+  return `M${x1} ${y1}A${r} ${r} 0 0 1 ${x2} ${y2}`
+}
+/* Menu-scale glyphs: the product's 24px icons are drawn for a 15px chip and go
+   weak at this size. Same subjects, fewer strokes, heavier weight. */
+const WEDGE_ICON = {
+  screen: '<rect x="2.5" y="4" width="19" height="13" rx="2.5"/><path d="M12 17v3.5M8.5 20.5h7"/>',
+  camera: '<rect x="2.5" y="6" width="13.5" height="12" rx="3"/><path d="M16 11.2l5.5-3.4v8.4L16 12.8z"/>',
+  mic: '<rect x="9" y="2.5" width="6" height="11.5" rx="3"/><path d="M5 11.5a7 7 0 0 0 14 0M12 18.5v3"/>',
+  sys: '<path d="M3.5 9h4L12 5v14l-4.5-4h-4z"/><path d="M15.6 9.6a4.2 4.2 0 0 1 0 4.8M18.6 7a8 8 0 0 1 0 10"/>',
+}
+const span = (2 * Math.PI) / CHANNELS.length
+const wedges = CHANNELS.map((c, i) => {
+  const mid = (WEDGE_AT[c.key] * Math.PI) / 180
+  const a0 = mid - span / 2 + PAD
+  const a1 = mid + span / 2 - PAD
+  const [ix, iy] = pol((R_IN + R_OUT) / 2, mid)
+  // caption goes outside, on this wedge's own side — anchor/baseline from the
+  // angle alone, so adding wedges later needs no per-item placement
+  const [cx, cy] = pol(R_OUT + 24, mid)
+  const cosm = Math.cos(mid), sinm = Math.sin(mid)
+  const anchor = cosm > 0.3 ? 'start' : cosm < -0.3 ? 'end' : 'middle'
+  const baseline = sinm > 0.3 ? 'hanging' : sinm < -0.3 ? 'auto' : 'middle'
+  const dy = sinm > 0.3 ? 2 : sinm < -0.3 ? -2 : 0
+  return `
+    <g class="wedge" data-wedge="${c.key}" data-on="${c.on}" style="--d:${i * 30}ms" role="button" aria-label="${c.label}">
+      <path class="wedge__fill" d="${sector(R_IN, R_OUT, a0, a1)}"/>
+      <g class="wedge__ico" transform="translate(${ix - 15} ${iy - 15}) scale(1.25)">${WEDGE_ICON[c.key]}</g>
+      <path class="wedge__arc" d="${arc(R_OUT + 9, a0 + 0.06, a1 - 0.06)}"/>
+      <text class="wedge__cap" x="${cx}" y="${+cy + dy}" text-anchor="${anchor}" dominant-baseline="${baseline}">${c.label}</text>
+    </g>`
+}).join('')
+const seps = CHANNELS.map((c) => {
+  const b = ((WEDGE_AT[c.key] - 180 / CHANNELS.length) * Math.PI) / 180
+  const [x1, y1] = pol(R_IN, b), [x2, y2] = pol(R_OUT, b)
+  return `<line class="radial__sep" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`
+}).join('')
+ring.insertAdjacentHTML(
+  'afterbegin',
+  `<div class="radial" data-radial>
+     <svg width="${(R_OUT + 66) * 2}" height="${(R_OUT + 66) * 2}" viewBox="${200 - R_OUT - 66} ${200 - R_OUT - 66} ${(R_OUT + 66) * 2} ${(R_OUT + 66) * 2}">
+       <circle class="radial__hub" cx="200" cy="200" r="${R_HUB}"/>
+       ${wedges}
+       ${seps}
+       <circle class="radial__rim" cx="200" cy="200" r="${R_OUT + 9}"/>
+     </svg>
+   </div>`,
+)
 
 document.querySelector('[data-timeline]').innerHTML = `
   <div class="tl__lanes">
@@ -1675,11 +2003,19 @@ function syncHint() {
   hintEl.textContent = any ? '' : 'Turn on an input to record'
   recBtn.style.opacity = any ? '1' : '0.4'
 }
+/* one state, two faces: the pills and the wedges must never disagree */
+function setChannel(key, on) {
+  ring.querySelectorAll(`.chip[data-chip="${key}"]`).forEach((c) => c.setAttribute('aria-pressed', String(on)))
+  app.querySelectorAll(`.chips .chip[data-chip="${key}"]`).forEach((c) => c.setAttribute('aria-pressed', String(on)))
+  const w = ring.querySelector(`.wedge[data-wedge="${key}"]`)
+  if (w) w.dataset.on = String(on)
+  syncHint()
+}
 app.addEventListener('click', (e) => {
   const chip = e.target.closest('[data-chip]')
-  if (!chip) return
-  chip.setAttribute('aria-pressed', String(chip.getAttribute('aria-pressed') !== 'true'))
-  syncHint()
+  if (chip) return setChannel(chip.dataset.chip, chip.getAttribute('aria-pressed') !== 'true')
+  const wedge = e.target.closest('[data-wedge]')
+  if (wedge) setChannel(wedge.dataset.wedge, wedge.dataset.on !== 'true')
 })
 syncHint()
 
@@ -1740,8 +2076,16 @@ splashSel.addEventListener('change', playSplash)
 /* ---- studio motion, lifted from inout copy 2 ----
    initBgGridPointerTilt: grid leans toward the pointer (lerp .11, ±10px shift).
    initElasticHubScroll:  wheel injects velocity into a damped spring that moves
-   the cluster and drags the grid at 10% of it; walls bounce at 0.14. Same
-   constants; the frame is the viewport instead of the window. */
+   the cluster and drags the grid behind it. The four numbers that decide how it
+   feels are live on PHYS so the panel sliders can move them mid-flight; the
+   source's values are the defaults here. */
+const PHYS = {
+  k: 118,        // stiffness — how hard it pulls back to centre
+  c: 17,         // damping   — low overshoots and wobbles, high arrives dead
+  imp: 10.2,     // impulse   — velocity a wheel notch injects
+  follow: 0.1,   // bg follow — fraction of the cluster's travel the grid takes
+  wall: 0.14,    // restitution at the edge clamp
+}
 ;(function studioMotion() {
   const BG_LERP = 0.11
   const BG_SHIFT_MAX_PX = 10
@@ -1767,13 +2111,8 @@ splashSel.addEventListener('change', playSplash)
   }, { passive: true })
 
   const cluster = app.querySelector('[data-cluster]')
-  const stiffness = 118
-  const damping = 17
-  const wheelImpulse = 10.2
   const velCap = 5200
   const pixelDeltaBoost = 1.72
-  const wallRestitution = 0.14
-  const bgFollow = 0.1
   const edgePad = 2
   let posX = 0, posY = 0, velX = 0, velY = 0, physRaf = null, lastT = 0
 
@@ -1794,8 +2133,8 @@ splashSel.addEventListener('change', playSplash)
       app.style.removeProperty('--bump-y')
     } else {
       cluster.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0)`
-      app.style.setProperty('--bump-x', `${(x * bgFollow).toFixed(2)}px`)
-      app.style.setProperty('--bump-y', `${(y * bgFollow).toFixed(2)}px`)
+      app.style.setProperty('--bump-x', `${(x * PHYS.follow).toFixed(2)}px`)
+      app.style.setProperty('--bump-y', `${(y * PHYS.follow).toFixed(2)}px`)
     }
   }
   function rest() {
@@ -1813,16 +2152,16 @@ splashSel.addEventListener('change', playSplash)
     if (dt > 0.055) dt = 0.055
     if (dt <= 0) dt = 1 / 60
 
-    velX += (-stiffness * posX - damping * velX) * dt
-    velY += (-stiffness * posY - damping * velY) * dt
+    velX += (-PHYS.k * posX - PHYS.c * velX) * dt
+    velY += (-PHYS.k * posY - PHYS.c * velY) * dt
     posX += velX * dt
     posY += velY * dt
 
     const { maxX, maxY } = bounds()
-    if (posX > maxX) { posX = maxX; velX *= -wallRestitution }
-    else if (posX < -maxX) { posX = -maxX; velX *= -wallRestitution }
-    if (posY > maxY) { posY = maxY; velY *= -wallRestitution }
-    else if (posY < -maxY) { posY = -maxY; velY *= -wallRestitution }
+    if (posX > maxX) { posX = maxX; velX *= -PHYS.wall }
+    else if (posX < -maxX) { posX = -maxX; velX *= -PHYS.wall }
+    if (posY > maxY) { posY = maxY; velY *= -PHYS.wall }
+    else if (posY < -maxY) { posY = -maxY; velY *= -PHYS.wall }
 
     if (Math.hypot(posX, posY) < 0.55 && Math.hypot(velX, velY) < 6) return rest()
     apply(posX, posY)
@@ -1839,8 +2178,8 @@ splashSel.addEventListener('change', playSplash)
     if (!dx && !dy) return
     e.preventDefault()
     e.stopPropagation()
-    velX += -dx * wheelImpulse
-    velY += -dy * wheelImpulse
+    velX += -dx * PHYS.imp
+    velY += -dy * PHYS.imp
     const sp = Math.hypot(velX, velY)
     if (sp > velCap) { velX *= velCap / sp; velY *= velCap / sp }
     kick()
@@ -1920,23 +2259,33 @@ const frameSel = document.getElementById('frame')
 const canvas = document.getElementById('canvas')
 const slot = document.getElementById('slot')
 const frameEl = document.getElementById('frameEl')
-const note = document.getElementById('note')
 
 /* true pixel size, scaled to fit the pane — never a reflowed approximation.
    The size is free now: presets seed it, the corner grip drags it. */
 const SIZES = { desktop: [1040, 660], laptop: [820, 520], phone: [390, 800] }
 const MIN_W = 320, MIN_H = 360, MAX_W = 2560, MAX_H = 1600
 let FRAME_W = 1040, FRAME_H = 660, SCALE = 1
-function fit() {
+const zsize = document.getElementById('zsize')
+const zfit = document.getElementById('zfit')
+function fitBox() {
   const box = canvas.getBoundingClientRect()
-  const s = Math.min(1, (box.width - 48) / FRAME_W, (box.height - 48) / FRAME_H)
+  // never negative: a collapsed pane must not flip or zero the frame
+  return { w: Math.max(120, box.width - 48), h: Math.max(120, box.height - 76) } // 76 = padding + zone bar
+}
+function fit() {
+  const { w, h } = fitBox()
+  const s = Math.min(1, w / FRAME_W, h / FRAME_H)
   SCALE = s
   frameEl.style.width = FRAME_W + 'px'
   frameEl.style.height = FRAME_H + 'px'
   frameEl.style.transform = `scale(${s})`
   slot.style.width = FRAME_W * s + 'px'
   slot.style.height = FRAME_H * s + 'px'
-  note.textContent = `${FRAME_W} × ${FRAME_H}\n${Math.round(s * 100)}% · drag the corner`
+  // the grip's corner must match the screen's rounding as drawn, i.e. scaled
+  const r = document.documentElement.dataset.frame === 'phone' ? 36 : 14
+  slot.style.setProperty('--corner', `${(r * s).toFixed(1)}px`)
+  zsize.textContent = `${FRAME_W} × ${FRAME_H}`
+  zfit.textContent = `${Math.round(s * 100)}%`
 }
 addEventListener('resize', fit)
 new ResizeObserver(fit).observe(canvas) // keeps the fit honest while a panel slides
@@ -1980,15 +2329,22 @@ function endGrip(e) {
 }
 grip.addEventListener('pointerup', endGrip)
 grip.addEventListener('pointercancel', endGrip)
+function fillZone() {
+  const { w, h } = fitBox()
+  FRAME_W = clamp(Math.round(w), MIN_W, MAX_W)
+  FRAME_H = clamp(Math.round(h), MIN_H, MAX_H)
+  fit()
+}
 grip.addEventListener('dblclick', (e) => {
   e.preventDefault()
-  const box = canvas.getBoundingClientRect()
-  const maxW = Math.round(box.width - 48)
-  const big = FRAME_W > (MIN_W + maxW) / 2
-  FRAME_W = big ? MIN_W : clamp(maxW, MIN_W, MAX_W)
-  FRAME_H = big ? MIN_H : clamp(Math.round(box.height - 48), MIN_H, MAX_H)
-  fit()
+  const { w } = fitBox()
+  if (FRAME_W > (MIN_W + w) / 2) {
+    FRAME_W = MIN_W
+    FRAME_H = MIN_H
+    fit()
+  } else fillZone()
 })
+document.getElementById('zfill').addEventListener('click', fillZone)
 
 const neonSel = document.getElementById('neon')
 themeSel.addEventListener('change', () => (document.documentElement.dataset.theme = themeSel.value))
@@ -1999,11 +2355,196 @@ frameSel.addEventListener('change', () => {
   fit()
 })
 
+/* mode switches */
+const inputsSel = document.getElementById('inputs')
+const recfxSel = document.getElementById('recfx')
+inputsSel.addEventListener('change', () => {
+  document.documentElement.dataset.inputs = inputsSel.value
+  ring.classList.remove('is-open')
+})
+recfxSel.addEventListener('change', () => (document.documentElement.dataset.recfx = recfxSel.value))
+
+/* command menu: the button opens it, the ring holds it open — leaving the button
+   for a chip must not close it, or the menu is unusable. */
+recBtn.addEventListener('pointerenter', () => ring.classList.add('is-open'))
+ring.addEventListener('pointerleave', () => ring.classList.remove('is-open'))
+
+/* neon sliders — every shining thing reads these four vars */
+const SLIDERS = [
+  { el: 's-hue', out: 'o-hue', prop: '--neon-h', unit: '', fmt: (v) => v },
+  { el: 's-k', out: 'o-k', prop: '--neon-k', unit: '', fmt: (v) => (+v).toFixed(2) },
+  { el: 's-r', out: 'o-r', prop: '--neon-r', unit: 'px', fmt: (v) => v },
+  { el: 's-t', out: 'o-t', prop: '--neon-t', unit: 's', fmt: (v) => (+v).toFixed(1) },
+]
+function syncSlider(s) {
+  const input = document.getElementById(s.el)
+  document.documentElement.style.setProperty(s.prop, input.value + s.unit)
+  document.getElementById(s.out).textContent = s.fmt(input.value)
+}
+SLIDERS.forEach((s) => {
+  const input = document.getElementById(s.el)
+  input.addEventListener('input', () => syncSlider(s))
+  syncSlider(s)
+})
+
+/* bounce sliders — same idea, but these land on PHYS instead of CSS. Changing
+   them mid-flight is intentional: you feel the difference on the next throw. */
+const PHYS_SLIDERS = [
+  { el: 'p-k', out: 'o-pk', key: 'k', dp: 0 },
+  { el: 'p-c', out: 'o-pc', key: 'c', dp: 1 },
+  { el: 'p-i', out: 'o-pi', key: 'imp', dp: 1 },
+  { el: 'p-f', out: 'o-pf', key: 'follow', dp: 2 },
+  { el: 'p-w', out: 'o-pw', key: 'wall', dp: 2 },
+]
+PHYS_SLIDERS.forEach((s) => {
+  const input = document.getElementById(s.el)
+  const apply = () => {
+    PHYS[s.key] = +input.value
+    document.getElementById(s.out).textContent = (+input.value).toFixed(s.dp)
+  }
+  input.addEventListener('input', apply)
+  apply()
+})
+
+/* copy parameters — one line to paste back at me instead of typing it out.
+   The same line is the persistence format (see saveState), so what you copy is
+   literally the state, and pasting a line back into the hash restores it. */
+const copyBtn = document.getElementById('copyparams')
+const paramsOut = document.getElementById('paramsout')
+const val = (id) => document.getElementById(id).value
+function paramString() {
+  const on = CHANNELS.filter((c) => ring.querySelector(`.chip[data-chip="${c.key}"]`).getAttribute('aria-pressed') === 'true')
+  const panels = (document.body.classList.contains('f') ? 'f' : '') + (document.body.classList.contains('d') ? 'd' : '')
+  return [
+    `theme=${themeSel.value}`,
+    `neon=${neonSel.value}`,
+    `hue=${val('s-hue')}`,
+    `strength=${val('s-k')}`,
+    `radius=${val('s-r')}`,
+    `speed=${val('s-t')}`,
+    `inputs=${inputsSel.value}`,
+    `recfx=${recfxSel.value}`,
+    `splash=${splashSel.value}`,
+    `bounce=k${PHYS.k}/c${PHYS.c}/imp${PHYS.imp}/follow${PHYS.follow}/wall${PHYS.wall}`,
+    `zone=${FRAME_W}x${FRAME_H}`,
+    `on=${on.map((c) => c.key).join(',') || '-'}`,
+    `panels=${panels || '-'}`,
+  ].join(' ')
+}
+/* This file is opened straight off disk, so navigator.clipboard is not there:
+   file:// is not a secure context. execCommand('copy') still is — it only needs
+   a real selection inside a user gesture, which a click on this button is. The
+   textarea keeps the text selected either way, so ⌘C always works as a backstop. */
+copyBtn.addEventListener('click', () => {
+  const text = paramString()
+  paramsOut.value = text
+  paramsOut.focus()
+  paramsOut.setSelectionRange(0, text.length)
+  let ok = false
+  try { ok = document.execCommand('copy') } catch { ok = false }
+  if (!ok && navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(
+      () => (copyBtn.textContent = 'Copied ✓'),
+      () => (copyBtn.textContent = 'Selected — press ⌘C'),
+    )
+  }
+  copyBtn.textContent = ok ? 'Copied ✓' : 'Selected — press ⌘C'
+  setTimeout(() => (copyBtn.textContent = 'Copy parameters'), 1800)
+})
+
 /* panels: squeeze-panels' whole JS contract is body.classList.toggle('f' | 'd') */
 document.body.classList.add('f', 'd')
 document.getElementById('tgl-l').addEventListener('click', () => document.body.classList.toggle('f'))
 document.getElementById('tgl-r').addEventListener('click', () => document.body.classList.toggle('d'))
 
+/* ---------- remember every choice across a refresh ----------
+   localStorage works on file:// in Chrome and Safari, but it is not guaranteed
+   (private windows, some sandboxes) — every touch is wrapped, and a failure
+   just means the prototype opens at defaults instead of throwing. */
+const STORE = 'inout-proto/style/v1'
+function saveState() {
+  const s = paramString()
+  // The hash is the real store: this file is opened off disk, and on a file://
+  // or opaque origin localStorage can be refused outright, while the fragment
+  // survives a refresh everywhere. Three ways in, because which one is allowed
+  // depends on how the file got opened — replaceState is the one that works
+  // even when the page is a data: URL, where assigning location.hash is a no-op.
+  let wrote = false
+  try { history.replaceState(null, '', '#' + s); wrote = true } catch { /* try the next one */ }
+  if (!wrote) { try { location.hash = s } catch { /* fragment refused — storage only */ } }
+  try { localStorage.setItem(STORE, s) } catch { /* storage off — hash only */ }
+}
+function restoreState() {
+  let raw = ''
+  try { raw = decodeURIComponent(location.hash.slice(1)) } catch { raw = '' }
+  if (!raw) { try { raw = localStorage.getItem(STORE) || '' } catch { raw = '' } }
+  if (!raw) return
+  const st = {}
+  raw.split(/[\s&]+/).forEach((pair) => {
+    const i = pair.indexOf('=')
+    if (i > 0) st[pair.slice(0, i)] = pair.slice(i + 1)
+  })
+  const d = document.documentElement.dataset
+  const pick = (sel, v, ds) => {
+    if (v && [...sel.options].some((o) => o.value === v)) sel.value = v
+    if (ds) d[ds] = sel.value
+  }
+  pick(themeSel, st.theme, 'theme')
+  pick(neonSel, st.neon, 'neon')
+  pick(inputsSel, st.inputs, 'inputs')
+  pick(recfxSel, st.recfx, 'recfx')
+  pick(splashSel, st.splash)
+
+  const setSlider = (id, v, s) => {
+    if (v == null || v === '' || Number.isNaN(+v)) return
+    document.getElementById(id).value = v
+    syncSlider(s)
+  }
+  setSlider('s-hue', st.hue, SLIDERS[0])
+  setSlider('s-k', st.strength, SLIDERS[1])
+  setSlider('s-r', st.radius, SLIDERS[2])
+  setSlider('s-t', st.speed, SLIDERS[3])
+
+  const b = st.bounce || ''
+  const grab = (name) => {
+    const m = b.match(new RegExp(name + '([\\d.]+)'))
+    return m ? +m[1] : null
+  }
+  ;[['k', 'p-k', 0], ['c', 'p-c', 1], ['imp', 'p-i', 2], ['follow', 'p-f', 3], ['wall', 'p-w', 4]].forEach(([n, id, i]) => {
+    const v = grab(n)
+    if (v == null) return
+    const input = document.getElementById(id)
+    input.value = v
+    PHYS[PHYS_SLIDERS[i].key] = v
+    document.getElementById(PHYS_SLIDERS[i].out).textContent = v.toFixed(PHYS_SLIDERS[i].dp)
+  })
+
+  const zone = (st.zone || '').match(/^(\d+)x(\d+)$/)
+  if (zone) { FRAME_W = +zone[1]; FRAME_H = +zone[2] }
+  // the preset only decides the corner radius once a custom size is in play
+  if (st.zone && SIZES[frameSel.value] && !zone) [FRAME_W, FRAME_H] = SIZES[frameSel.value]
+
+  if (st.on) {
+    const on = st.on === '-' ? [] : st.on.split(',')
+    CHANNELS.forEach((c) => setChannel(c.key, on.includes(c.key)))
+  }
+  if (st.panels) {
+    document.body.classList.toggle('f', st.panels.includes('f'))
+    document.body.classList.toggle('d', st.panels.includes('d'))
+  }
+}
+
+// every control that can change the look also records it
+;[themeSel, neonSel, inputsSel, recfxSel, splashSel, frameSel].forEach((el) => el.addEventListener('change', saveState))
+;[...SLIDERS, ...PHYS_SLIDERS].forEach((s) => document.getElementById(s.el).addEventListener('change', saveState))
+app.addEventListener('click', (e) => { if (e.target.closest('[data-chip], [data-wedge]')) saveState() })
+grip.addEventListener('pointerup', saveState)
+grip.addEventListener('dblclick', () => setTimeout(saveState, 0))
+document.getElementById('zfill').addEventListener('click', saveState)
+document.getElementById('tgl-l').addEventListener('click', saveState)
+document.getElementById('tgl-r').addEventListener('click', saveState)
+
+restoreState()
 fit()
 playSplash()
 
@@ -2020,8 +2561,8 @@ addEventListener('keydown', (e) => {
   else if (e.key.toLowerCase() === 't') cycle(themeSel, ['baseline', 'graphite', 'paper'])
   else if (e.key.toLowerCase() === 'f') cycle(frameSel, ['desktop', 'laptop', 'phone'])
   else if (e.key.toLowerCase() === 'n') cycle(neonSel, ['on', 'off'])
-  else if (e.key === '[') document.body.classList.toggle('f')
-  else if (e.key === ']') document.body.classList.toggle('d')
+  else if (e.key === '[') { document.body.classList.toggle('f'); saveState() }
+  else if (e.key === ']') { document.body.classList.toggle('d'); saveState() }
 })
 </script>
 </body>

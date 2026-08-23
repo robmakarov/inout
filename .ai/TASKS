@@ -32,9 +32,16 @@ Last update 2026-08-23. Merged that day: O1 · O2 · O3a · O7 · O4 step1 · O4
 · P2 · P3 · F4 · a P0 mic-hang fix (PO-verified: "record seems to be okay").
 
 READY NOW — parallel-safe, any subset concurrently (one session each):
-  O4   webcodecs engine, STEP 2    [heavy]   THE KEYSTONE. Step 1+1b done, gate re-specced. Solo lane.
-                                             Continues ee/webcodecs-capture-2 (on origin, behind main
-                                             — REBASE FIRST). Unblocks O5/O6/O9, F6, F8, P4.
+  P0-tail  v1 loses the tail at 4K   [light-medium]  FOUND 2026-08-23 WITH NUMBERS, NOT FIXED. The
+                                             SHIPPED engine drops 3769 ms off the end of a 4K take.
+                                             Take this first — it is live for users today.
+  O4   webcodecs engine, STEP 2    [heavy]   ENGINE MERGED BUT DORMANT (default v1). Throughput gate
+                                             NOT met: ~10 fps at 1080p vs v1's 30, and the bottleneck
+                                             is WebCodecs' own encoder, not our code — see the handoff.
+                                             REMAINING: WebGPU backend · raw channels → VideoEncoder
+                                             (ee/webcodecs-capture-2, still unmerged) · fMP4 tab-kill
+                                             salvage · preview from the compositor's own output.
+                                             Still the keystone for O5/O6/O9, F6, F8, P4.
   F3   background frame            [medium]  compose/layout.ts + editor UI. No engine dependency.
                                              NOTE: F4 changed drawVideoFrame's signature (optional pose)
                                              and moved the PiP rect into timeline/cameraTrack.ts — build
@@ -90,6 +97,7 @@ lives in O4/O8: zero tail loss at stop, now gated.
      audiolat  measured-audio anchor latency (loopback)      armcancel arming cancel + device release
      f1        mid-take cuts: sync + joint discontinuity     f7       quality tiers + certification
      f4        camera pose LOCATED in decoded export frames vs the pose function
+     o4step2   v1 vs v2 live composite: delivered fps, main-thread long tasks, tail gap, bits audit
      oracle    accepts {"injectTailLossMs":N} to prove the tail band red
   node scripts/o7-measure.mjs      first-paint bytes, record-click latency, editor prefetch (prod build)
   node scripts/ui-shot.mjs --flow=quality|cuts|camera   screenshots a flow on the prod build
@@ -100,12 +108,32 @@ lives in O4/O8: zero tail loss at stop, now gated.
   node scripts/pwa-check.mjs       manifest/SW/offline/capture-under-worker gates
   node scripts/make-icons.mjs      regenerates PWA icons (deterministic, no image dep)
   npm run oracle | oracle:cold | oracle:fidelity  merge gates (pre-push hook runs typecheck+test+oracle)
+     `node scripts/oracle.mjs --engine=v2` gates the WebCodecs composite instead of the shipped one
 
 ── AWAITING PO (carried forward) ──
   · camera-only take on a REAL camera should now record 1080p, not upscaled 720p (O3a; synthetic mode
     bypasses getUserMedia so it cannot be verified headlessly)
   · real Safari + iOS Safari recheck of the MediaRecorder-audio path (long-standing)
   · real 4K game-tab recheck of the capture ceiling (2026-08-22 fix)
+
+═══ P0 — FOUND 2026-08-23, NOT FIXED ═══
+
+## P0-tail. v1 LOSES THE TAIL UNDER LOAD — the shipped engine, right now  [P0, light-to-medium]
+MEASURED (O4 step 2's A/B harness, `npm run exp -- o4step2`): on a 4K source the SHIPPED composite
+delivered 13.3 fps and its LAST DECODABLE FRAME sat 3769 ms before the end of the take. Nearly four
+seconds of a 4K take are not in the file. At 1080p the same measurement is 65 ms, which is why nobody
+has seen it: O8's tail band has only ever run on the light synthetic rig.
+This is PO's own requirement failing in production — "Loom cuts last seconds, we don't do that shit".
+Why it happens: MediaRecorder is a black box at stop. v1 asks it to stop and waits for onstop; whatever
+it had not yet encoded under load is gone. v2 does not have this problem (it drains an encoder it owns)
+but v2 is not the default and cannot be until its throughput gate is met.
+GOAL: (a) extend the O8 TAIL BAND to run under the 4K synthetic load, so the gate can see what it
+exists for — the band already exists and is injection-proven, it is the RIG that is too gentle;
+(b) bound and instrument v1's stop drain — requestData() before stop, and report the gap so a bad take
+is loud instead of silent; (c) decide with PO whether a take that loses >400 ms of tail should refuse
+the instant path outright (correctness over instant, the same call F1 and the liveness work made).
+GATES: the 4K-load tail band is RED before the fix and green after, with numbers · 1080p tail unchanged
+· no change to a healthy take's path (logs).
 
 ═══ PHASE O — OPTIMIZATION ═══
 
@@ -185,6 +213,45 @@ GATES: oracle sync ≤10 ms 10/10 · 08-22 4K rig: delivered ≥28 fps at 1080p 
 · mid-record tab-kill salvages composite + all channels · forced-slow harness proves watchdog fallback
 · capture CPU ≤ O3 baseline (report) · unedited instant export ≤ 200 ms · ZERO TAIL LOSS at stop
 (distinctive final-second event present in export, drain-verified — PO hard requirement) · all oracles green.
+── HANDOFF 2026-08-23 (ee/o4-step2) — ENGINE BUILT AND MERGED, DORMANT. THE THROUGHPUT GATE IS NOT MET
+   AND THE REASON IS MEASURED. Per the operating rule (a gate you cannot meet = stop and report why
+   with measurements), v2 ships behind `?engine=v2` / localStorage with the DEFAULT ON v1.
+SHIPPED: capture/compositor.worker.ts (OffscreenCanvas + VideoEncoder + AudioEncoder + fragmented MP4
+   + its OWN SyncAccessHandle, flushed per chunk) · capture/compositorGL.ts (WebGL2 backend, 2D kept as
+   fallback) · capture/liveCompositeV2.ts (TrackProcessor pumps, the v1 audio mix tapped as PCM, the
+   liveness tick, the watchdog) · capture/engine.ts (the switch) · session.ts picks an engine and falls
+   back to v1 if v2 cannot start · `npm run exp -- o4step2` and `npm run oracle --engine=v2`.
+WHAT v2 DOES DELIVER, measured back-to-back against v1 on the same rig:
+   · MAIN THREAD: 131 ms of long tasks during a 1080p take → 0 ms. Capture no longer competes with the UI.
+   · SYNC: oracle 40.0/44.3 ms against v1's 58.8/67.4 ms — frame-driven timestamps beat MediaRecorder's.
+     Tail 70 ms, spur −51.3 dB, export 4.93×. Both engines PASS; v2 is the better number.
+   · It owns the encoder, so stop() DRAINS instead of asking a black box to stop.
+WHY IT IS NOT THE DEFAULT: 1080p delivered ~10 fps against v1's 30. The bottleneck is isolated and it
+   is NOT our code — per frame the worker spends 0.86 ms compositing, 0.05 ms making the VideoFrame and
+   0.03 ms in the encode CALL, with the encoder queue pinned at 5 of 6. WebCodecs AVC on this machine
+   simply drains at ~10 fps while MediaRecorder's internal path does 30. Profile is not the lever (Main
+   and High both ~10 fps; note avc1.42E01E is level 3.0 and cannot do 1080p at all). Flush batching is
+   not the lever (250 ms batching measured 6.5 fps vs 10.5 per-chunk — inside the noise, so the
+   per-chunk flush stayed for the salvage guarantee). At 4K the WebGL texture upload also becomes real
+   at 35.6 ms/frame, which would need WebGPU importExternalTexture — but that is second-order behind
+   the encoder.
+   TO FLIP THE DEFAULT: run `npm run exp -- o4step2` on a machine (or a Chrome) that gives WebCodecs a
+   real hardware encoder and read deliveredFps. Nothing else needs to change.
+FOUND ALONG THE WAY, AND IT MATTERS MORE THAN THE ABOVE — v1 LOSES THE TAIL UNDER LOAD. On the 4K rig
+   the SHIPPED engine delivered 13.3 fps and its last decodable frame sat 3769 ms before the end of the
+   take. Nearly four seconds of a 4K take are simply not in the file. O8's tail band never caught this
+   because it only ever ran on the light synthetic rig. THIS IS A P0-SHAPED BUG IN WHAT USERS RUN TODAY
+   and it is exactly PO's "Loom cuts last seconds — we don't do that shit". It needs its own task:
+   either bound MediaRecorder's stop drain, or extend the O8 tail band to run under the 4K load so the
+   gate can see it.
+THREE BUGS THE HARNESS CAUGHT that reasoning had not: audio anchored at message-DELIVERY time placed
+   the whole track ~430 ms late (the port queues during worker start — it now stamps from the
+   AudioContext clock); starved audio quanta were skipped rather than filled with silence, splicing the
+   sample-counted timeline (−33 dB spur); and audio that begins before the first video frame produced a
+   NEGATIVE timestamp the muxer refused (the lead is now trimmed, not shifted).
+NOT DONE: WebGPU backend · raw channels still MediaRecorder (measuredVideo.ts on ee/webcodecs-capture-2
+   remains unmerged) · tab-kill salvage of the fMP4 not yet verified · the on-screen preview does not
+   yet render the compositor's own output.
 
 ## O5. export-engine-v2 — worker, pipelined, smart-cut, codec ladder  [P1, after O4]
 Why: the render is main-thread and strictly serial (decode awaits draw awaits encode), sleeps every
@@ -284,6 +351,17 @@ codec; av1+hevc pair covers 99.7 % of sessions).
 GATES: (a) numbers in console + tag, probed back out of a real export · (b/c) size delta reported +
 SSIM/visual-diff evidence of no loss + instant path untouched (logs) · (d) every rung's file plays in
 current Chrome + Safari + Firefox (P1 rig) · export throughput ≥1× realtime holds · oracles green.
+── HANDOFF 2026-08-23 — (a) PARTIALLY DONE on the CAPTURE side, folded into O4 step 2 because owning
+   the encoder makes the telemetry free. CompositorStats now counts, per take: video and audio bytes,
+   keyframe count and the keyframe SHARE of video bytes, achieved vs requested bitrate, frames encoded
+   vs dropped, peak encoder queue, and the per-frame cost split (paint / VideoFrame / encode call).
+   Logged in one console line at stop and returned by `npm run exp -- o4step2`.
+   FIRST NUMBERS (v2, 1080p synthetic, 8 Mbps requested): achieved 0.36-0.69 Mbps, keyframes 2.5-5.6 %
+   of video bytes at a 2 s cadence. The 8 Mbps ceiling is nowhere near binding on this content, which
+   is the first hard evidence for (b)'s premise — but synthetic canvas content compresses unrealistically
+   well, so a REAL screen take has to be measured before GOP stretch is priced.
+   STILL TO DO for (a): the same telemetry on the RENDER path (compose/pipeline.ts), and the codec rung
+   in the certification tag. Both are independent of O4 and can be done in any session.
 
 ═══ PHASE F — FEATURES (PO-approved 2026-08-22; order below; F7 independent) ═══
 

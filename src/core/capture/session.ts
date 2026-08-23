@@ -26,6 +26,8 @@ import {
   type MeasuredAudioHandle,
 } from './measuredAudio'
 import { canLiveComposite, startLiveComposite, type LiveCompositeHandle } from './liveComposite'
+import { canLiveCompositeV2, startLiveCompositeV2 } from './liveCompositeV2'
+import { preferredCompositeEngine } from './engine'
 import { MixLoudnessAccumulator } from './loudnessAccumulator'
 import { clearPendingManifest, writePendingManifest } from './recovery'
 import { createSyntheticChannelsProgressive, isSyntheticMode } from './synthetic'
@@ -626,10 +628,37 @@ class Session implements CaptureSession {
       (x): x is MediaStream => !!x,
     )
     const inputs = { screen, camera, audio }
-    if (!canLiveComposite(inputs)) return
-    this.compositeStarting = startLiveComposite(inputs, `${this.recordingId}_composite.webm`, {
-      onSourceLiveness: (kind, event) => this.onSourceLiveness(kind, event),
-    })
+    const key = `${this.recordingId}_composite.webm`
+    const onSourceLiveness = (kind: 'screen' | 'camera', event: 'stalled' | 'resumed'): void =>
+      this.onSourceLiveness(kind, event)
+
+    // v1 is the capability fallback and stays the whole story on Apple WebKit
+    // and anywhere without MediaStreamTrackProcessor (O4 step 2).
+    const startV1 = (): Promise<LiveCompositeHandle> | null =>
+      canLiveComposite(inputs) ? startLiveComposite(inputs, key, { onSourceLiveness }) : null
+
+    const wantV2 = preferredCompositeEngine() === 'v2' && canLiveCompositeV2(inputs)
+    let start: Promise<LiveCompositeHandle> | null
+    if (wantV2) {
+      console.info('[capture] live composite engine v2 (worker + WebCodecs)')
+      start = startLiveCompositeV2(inputs, key, {
+        onSourceLiveness,
+        // A machine that cannot keep pace stops being copied, exactly as v1's
+        // watchdog did: the take is unharmed, the unedited export renders.
+        onDegrade: (reason) => this.markCompositeUnusable(`compositor v2: ${reason}`),
+      }).catch((err: unknown) => {
+        // Could not even start (no AAC encoder, OPFS refused, worker blocked):
+        // this is precisely what the fallback is for.
+        console.warn('[capture] composite v2 unavailable, falling back to v1', err)
+        const v1 = startV1()
+        if (!v1) throw err instanceof Error ? err : new Error(String(err))
+        return v1
+      })
+    } else {
+      start = startV1()
+    }
+    if (!start) return
+    this.compositeStarting = start
       .then((h) => {
         // Keep the handle even when the composite is already unusable: it owns
         // the source-liveness tick, and doStop/doCancel release it. A HARD
