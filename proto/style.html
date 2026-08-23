@@ -526,6 +526,14 @@ body.f .filters, body.d .detail { opacity: 1; }
      var is used, which is always inside .app, so the two agree to the pixel. */
   --colw: min(calc(100cqw - 32px), calc((100cqh - 300px) * 16 / 9));
   --colh: calc(var(--colw) * 9 / 16);
+  /* The take's own three numbers. They are here rather than buried in a rule
+     because the band's geometry needs them too: JS reads them back to know
+     where the bar it is straightening into actually lands. --take-w and
+     --take-h are written in pixels by the resize observer — see .take__screen
+     on why an animated height may not be a container-query length. */
+  --take-gap: 14px;
+  --take-ctrl-h: 52px;
+  --take-bar-h: 64px;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
@@ -707,6 +715,18 @@ body.f .filters, body.d .detail { opacity: 1; }
 /* in menu modes the pills are gone — the wedges are the inputs */
 [data-inputs='menu'] .ring .chip,
 [data-inputs='hover'] .ring .chip { display: none; }
+/* Once a take is open the band is the input row, and an input row cannot be a
+   thing you have to hover to find — so it is present and live in every mode,
+   including the two where the ring itself is hidden at rest. */
+[data-phase='live'] .radial {
+  display: block;
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+[data-phase='live'] .wedge { pointer-events: auto; }
+/* mid-flight nothing is clickable: the wedge under the pointer is not where it
+   looks like it is, and a menu you can miss is worse than one you must wait for */
+.take--moving .wedge { pointer-events: none !important; }
 
 .radial svg { display: block; overflow: visible; position: relative; }
 /* the menu should sit in its own pool of light, not float on the grid */
@@ -1055,18 +1075,21 @@ body.f .filters, body.d .detail { opacity: 1; }
 }
 /* ==========================================================================
    THE TAKE — idle and recording are one screen, because the objects are the
-   same objects. Press record and nothing is swapped out: the button widens
-   into the control bar, the radial menu folds down into the input bar, and the
-   picture unrolls upward out of the same seam. Three moves, one seed.
+   same objects. Press record and nothing is swapped out for something that
+   resembles it: the picture unrolls upward out of the middle of the frame, the
+   readouts arrive either side of the record button, and the menu straightens.
 
    The column is the editor's own — same --col, same 16:9 stage, same 14px gap
-   — so the hand-off to editing has nothing left to move but the two bars.
+   — so the hand-off to editing has nothing left to move but the two rows.
 
-   Rest and live differ in four heights, one width and a gap. Every bit of the
-   travel is the flex column's doing: with the picture and the input bar at zero
-   the only thing in the column is a 72px bar, which centres, so the disc sits
-   dead centre; open them and it settles under the picture on its own. Nothing
-   here animates a transform, so the spring keeps sole ownership of that.
+   Rest and live differ in three heights and nothing else. The travel is the
+   flex column's doing: with the picture and the input row at zero the only
+   thing in the column is the button's own seat, which centres, so the disc
+   sits dead centre closed and lands under the picture open. The gap is a
+   constant 14px either way — it sits symmetrically above and below the seat,
+   so it costs the centring nothing and saves a layout-animated property.
+
+   Nothing here animates a transform: the spring owns that alone.
    ========================================================================== */
 .take {
   position: absolute;
@@ -1075,6 +1098,9 @@ body.f .filters, body.d .detail { opacity: 1; }
   flex-direction: column;
   padding: 0 16px;
   z-index: 6;
+  /* the column is a hit-test hole — only what is drawn in it takes the pointer,
+     or the empty half of the frame would swallow clicks meant for the band */
+  pointer-events: none;
 }
 .take__top {
   flex: 1;
@@ -1086,18 +1112,23 @@ body.f .filters, body.d .detail { opacity: 1; }
 }
 .take__col {
   width: 100%;
-  max-width: var(--colw);
+  max-width: var(--take-w, var(--col));
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0;
-  transition: gap 460ms var(--ease);
+  gap: var(--take-gap);
 }
-[data-phase='live'] .take__col { gap: 14px; }
+/* while anything is moving, hint the two boxes whose height is animating —
+   and only then, because a permanent will-change on a full-frame picture is a
+   layer you pay for the whole session */
+.take--moving .take__screen,
+.take--moving .take__inputs { will-change: height; }
 
 /* the picture: its box opens from zero while the stage inside keeps full size
    and stays pinned to the bottom, so the frame is revealed bottom edge first —
-   it comes up out of the bar rather than fading in over it */
+   it comes up out of the middle rather than fading in over it. The height is a
+   plain pixel value written by the resize observer: a container-query length
+   here has to be re-resolved every frame, and that is what made it stutter. */
 .take__screen {
   width: 100%;
   height: 0;
@@ -1105,58 +1136,40 @@ body.f .filters, body.d .detail { opacity: 1; }
   display: flex;
   align-items: flex-end;
   opacity: 0;
+  contain: layout paint;
   transition:
     height 300ms var(--ease),
     opacity 160ms var(--ease);
 }
 [data-phase='live'] .take__screen {
-  height: var(--colh);
+  height: var(--take-h);
   opacity: 1;
   transition:
-    height 540ms cubic-bezier(0.2, 0.72, 0.18, 1) 260ms,
-    opacity 200ms var(--ease) 260ms;
+    height 520ms cubic-bezier(0.22, 0.68, 0.16, 1) 60ms,
+    opacity 240ms var(--ease) 60ms;
 }
 
-/* ---------- control bar: the record button, unrolled ----------
-   At rest it is the button and nothing else — no plate, no border, 72px square.
-   Live it is a bar the width of the picture with the disc still at its centre,
-   which is what makes the widening read as the button opening out rather than
-   a bar arriving. The plate fades in a beat behind the width so the edge is
-   never seen travelling. */
+/* ---------- control row: no plate, ever ----------
+   The record button is the control. A bar drawn around it would be a surface
+   that says nothing the button and the two readouts either side of it do not
+   already say, and it would put an edge between the picture and the menu that
+   belongs to neither. The row is a line of controls on the ground. */
 .take__ctrl {
   position: relative;
-  width: 72px;
+  width: 100%;
   height: 72px;
   flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  background: transparent;
-  border: var(--edge-w) solid transparent;
-  transition:
-    width 300ms var(--ease) 60ms,
-    height 300ms var(--ease) 60ms,
-    background 160ms var(--ease),
-    border-color 160ms var(--ease),
-    border-radius 300ms var(--ease);
+  transition: height 380ms var(--ease);
 }
-[data-phase='live'] .take__ctrl {
-  width: 100%;
-  height: 64px;
-  border-radius: var(--r-md);
-  background: var(--surface-2);
-  border-color: var(--edge);
-  box-shadow: var(--shadow-1);
-  transition:
-    width 460ms cubic-bezier(0.2, 0.72, 0.18, 1) 140ms,
-    height 460ms cubic-bezier(0.2, 0.72, 0.18, 1) 140ms,
-    background 240ms var(--ease) 300ms,
-    border-color 240ms var(--ease) 300ms,
-    border-radius 380ms var(--ease) 140ms;
-}
+[data-phase='live'] .take__ctrl { height: var(--take-ctrl-h); }
+.cluster-seat { transition: width 380ms var(--ease), height 380ms var(--ease); }
+[data-phase='live'] .cluster-seat { width: 52px; height: 52px; }
+
 /* the disc keeps the centre; the readouts hang off the ends, so nothing the
-   bar gains can push the button off the line it unrolled from */
+   row gains can push the button off the line it started on */
 .take__end {
   position: absolute;
   top: 50%;
@@ -1168,190 +1181,153 @@ body.f .filters, body.d .detail { opacity: 1; }
   pointer-events: none;
   transition: opacity 200ms var(--ease);
 }
-.take__end--l { left: 16px; }
-.take__end--r { right: 16px; }
-[data-phase='live'] .take__end { opacity: 1; pointer-events: auto; transition-delay: 420ms; }
+.take__end--l { left: 0; }
+.take__end--r { right: 0; }
+[data-phase='live'] .take__end { opacity: 1; pointer-events: auto; transition-delay: 340ms; }
 
-.take__clock {
-  display: flex;
+/* ---------- readouts and verbs, lifted from the deprecated recorder ----------
+   inout copy 2's hub control bar: the metrics plate with the duration leading
+   and the file size trailing it, and a text verb either side of the disc —
+   uppercase, tracked out, no chrome at all, lighting up on hover. Geometry,
+   weight, tracking, case and sizes are verbatim. The two hardcoded hues there
+   are the one thing adapted: cancel's cyan and save's green come off this
+   prototype's own neon and accent tokens instead, so the hue slider and the
+   three themes still reach them. */
+.rec-metrics {
+  display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 0.53rem;
+  flex: 0 0 auto;
+  width: fit-content;
+  padding: 0.148rem 0.297rem;
+  border-radius: 8.5px;
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.rec-elapsed {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 0.954rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.05;
   font-variant-numeric: tabular-nums;
-  color: var(--text);
+  color: hsl(var(--neon-h) 90% 92%);
+  text-shadow:
+    0 0 20px hsl(var(--neon-h) 100% 60% / 0.45),
+    0 0 36px hsl(var(--neon-h) 100% 55% / 0.18),
+    0 1px 2px rgba(0, 0, 0, 0.92);
 }
-.take__dot {
-  width: 8px; height: 8px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--record);
-  animation: pulse 1.2s cubic-bezier(.25,.1,.25,1) infinite;
+.rec-bytes {
+  font-family: var(--font);
+  font-size: 0.551rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  margin-left: auto;
+  color: hsl(var(--neon-h) 22% 46% / 0.52);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
 }
-/* stopped: the take is holding, not running — the light stops blinking and the
-   clock steps back, so a frozen number never reads as a live one */
-[data-take='held'] .take__dot { animation: none; opacity: 0.45; }
-[data-take='held'] .take__clock { color: var(--text-dim); }
-@keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.35 } }
+/* running: the duration goes green and breathes on the studio's own blink */
+[data-take='rec'] .rec-elapsed {
+  color: hsl(var(--on-h) 60% 94%);
+  letter-spacing: 0.09em;
+  text-shadow:
+    0 0 10px hsl(var(--on-h) var(--on-s) 50% / 0.35),
+    0 0 18px hsl(var(--on-h) var(--on-s) 45% / 0.18),
+    0 1px 2px rgba(0, 0, 0, 0.94);
+  animation: recTimeGlow 4s cubic-bezier(0.45, 0, 0.35, 1) infinite;
+}
+[data-take='rec'] .rec-bytes { color: hsl(var(--on-h) 24% 48% / 0.72); font-size: 0.53rem; }
+/* held: it stops breathing, because a number that is not moving must not look
+   like one that is */
+[data-take='held'] .rec-elapsed { animation: none; opacity: 0.9; }
+@keyframes recTimeGlow { 0%, 100% { opacity: 1 } 50% { opacity: 0.94 } }
 
-/* Done only exists once there is something to be done with: it appears on the
-   first stop and leaves again if the take is picked back up. */
-.take__done {
-  padding: 7px 17px;
-  font-size: 13px;
-  opacity: 0;
-  transform: translateX(6px);
-  pointer-events: none;
-  transition: opacity 180ms var(--ease), transform 220ms var(--ease);
+.rec-cancel,
+.rec-save {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0.233rem 0.689rem;
+  font-family: var(--font);
+  font-size: 0.551rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.1;
+  text-transform: uppercase;
+  background: transparent;
+  border: none;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: color 0.2s ease, text-shadow 0.22s ease, filter 0.22s ease, transform 0.1s ease;
 }
-[data-phase='live'][data-take='held'] .take__done {
-  opacity: 1;
-  transform: none;
-  pointer-events: auto;
+.rec-cancel { color: hsl(var(--neon-h) 60% 88% / 0.94); }
+.rec-cancel:hover {
+  color: hsl(var(--neon-h) 80% 97%);
+  text-shadow:
+    0 0 10px hsl(var(--neon-h) 100% 55% / 0.45),
+    0 0 26px hsl(var(--neon-h) 100% 52% / 0.32),
+    0 0 40px hsl(var(--neon-h) 100% 50% / 0.16);
+  filter: drop-shadow(0 0 8px hsl(var(--neon-h) 100% 55% / 0.35));
 }
+.rec-cancel:active, .rec-save:active { transform: scale(0.98); }
+.rec-save { color: hsl(var(--on-h) 100% 85% / 0.95); }
+.rec-save:hover {
+  color: hsl(var(--on-h) 100% 93%);
+  text-shadow:
+    0 0 10px hsl(var(--on-h) 100% 50% / 0.5),
+    0 0 28px hsl(var(--on-h) 100% 47% / 0.35),
+    0 0 44px hsl(var(--on-h) 100% 44% / 0.18);
+  filter: drop-shadow(0 0 8px hsl(var(--on-h) 100% 50% / 0.4));
+}
+/* Done exists only once there is something to be done with: it appears on the
+   first stop and leaves again if the take is picked back up */
+.rec-save { opacity: 0; pointer-events: none; transition: opacity 180ms var(--ease); }
+[data-phase='live'][data-take='held'] .rec-save { opacity: 1; pointer-events: auto; }
+/* paper puts these on a light ground, where a black plate and a neon glow are
+   both wrong — the plate becomes a surface and the glow becomes weight */
+[data-theme='paper'] .rec-metrics {
+  background: var(--surface);
+  border-color: var(--edge);
+  box-shadow: var(--shadow-1);
+}
+[data-theme='paper'] .rec-elapsed,
+[data-theme='paper'] [data-take='rec'] .rec-elapsed { color: var(--text); text-shadow: none; }
+[data-theme='paper'] .rec-bytes { color: var(--text-faint); text-shadow: none; }
+[data-theme='paper'] .rec-cancel { color: var(--text-dim); }
+[data-theme='paper'] .rec-cancel:hover { color: var(--text); text-shadow: none; filter: none; }
+[data-theme='paper'] .rec-save { color: var(--accent); }
+[data-theme='paper'] .rec-save:hover { color: var(--accent); text-shadow: none; filter: none; }
 
-/* ---------- input bar: the radial menu, unrolled ----------
-   One plate cut into segments by hairlines, in the ring's own order, so what
-   was clockwise round the donut is left-to-right along the bar. Every state the
-   wedges carry is carried here in the same terms: on is tinted and lit along
-   its top edge, refused is loud, unavailable is flat and stops asking. */
+/* ---------- input row ----------
+   No fill and no frame: the row is a hole in the layout the height of the band,
+   and the band draws itself into it. The wedges are the surface. */
 .take__inputs {
   width: 100%;
   height: 0;
   flex: none;
-  display: flex;
-  overflow: hidden;
-  border-radius: var(--r-md);
-  background: var(--surface-2);
-  border: var(--edge-w) solid transparent;
-  opacity: 0;
-  transition:
-    height 280ms var(--ease),
-    opacity 160ms var(--ease),
-    border-color 200ms var(--ease);
+  pointer-events: none;
+  transition: height 300ms var(--ease);
 }
 [data-phase='live'] .take__inputs {
-  height: 64px;
-  opacity: 1;
-  border-color: var(--edge);
-  box-shadow: var(--shadow-1);
-  transition:
-    height 420ms cubic-bezier(0.2, 0.72, 0.18, 1) 300ms,
-    opacity 220ms var(--ease) 300ms,
-    border-color 220ms var(--ease) 420ms;
-}
-.inseg {
-  position: relative;
-  flex: 1 1 0;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  padding: 0 10px;
-  cursor: pointer;
-  color: var(--text-dim);
-  background: transparent;
-  transition: background 140ms var(--ease), color 140ms var(--ease);
-}
-/* the donut's separator, straightened. Brighter than the one on the ring by a
-   step: there the wedges are dark and a hairline at 12% is plenty, here four
-   lit inputs sit side by side and a slab of green with no cuts in it is one
-   input, not four. */
-.inseg + .inseg::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 12px;
-  bottom: 12px;
-  width: 1px;
-  background: color-mix(in srgb, var(--text), transparent 80%);
-}
-/* the wedge's rim arc, straightened: a lit line along the top of the segment */
-.inseg::after {
-  content: '';
-  position: absolute;
-  left: 10px; right: 10px;
-  top: 0;
-  height: 2px;
-  border-radius: 0 0 2px 2px;
-  background: currentColor;
-  opacity: 0;
-  transition: opacity 160ms var(--ease);
-}
-.inseg:hover { background: var(--surface-3); color: var(--text); }
-/* on is a tint and a lit edge, not a colour field: with every input running the
-   bar would otherwise be a green slab, and the one thing it has to stay is a
-   row of four things you can tell apart */
-.inseg[data-on='true'] {
-  background: color-mix(in srgb, var(--surface-3), var(--on-c) 10%);
-  color: hsl(var(--on-h) calc(var(--on-s) * 0.9) 62%);
-}
-.inseg[data-on='true']::after { opacity: 0.8; }
-.inseg[data-on='true']:hover { background: color-mix(in srgb, var(--surface-3), var(--on-c) 20%); }
-.inseg__ico { flex: none; display: grid; place-items: center; opacity: 0.92; }
-.inseg__ico .f, .inseg__ico .s { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-.inseg__txt { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.inseg__cap {
-  font-size: 12px;
-  font-weight: 560;
-  letter-spacing: var(--label-track);
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* the wedge's second line, unchanged in job: the state, never welded to the name */
-.inseg__sub {
-  font-size: 10px;
-  font-weight: 300;
-  letter-spacing: 0.015em;
-  color: var(--text-faint);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.inseg[data-on='true'] .inseg__sub { color: hsl(var(--on-h) calc(var(--on-s) * 0.8) 56%); }
-.inseg[data-state='denied'] {
-  cursor: not-allowed;
-  color: hsl(var(--no-h) var(--no-s) 64%);
-  background: color-mix(in srgb, var(--surface-2), var(--record) 14%);
-}
-.inseg[data-state='denied']::after { opacity: 0.7; }
-.inseg[data-state='denied'] .inseg__sub { color: hsl(var(--no-h) calc(var(--no-s) * 0.85) 58%); }
-.inseg[data-state='blocked'] { cursor: not-allowed; }
-.inseg[data-state='blocked'] .inseg__ico { opacity: 0.34; }
-.inseg[data-state='blocked'] .inseg__cap { color: var(--text-faint); }
-/* the segments arrive one after another, in ring order — the donut unrolling */
-.inseg > * { opacity: 0; transition: opacity 160ms var(--ease); }
-[data-phase='live'] .inseg > * { opacity: 1; transition-delay: calc(460ms + var(--d, 0ms)); }
-/* A segment gets thinner as the frame does and as inputs are added, and words
-   that have gone to an ellipsis are worse than no words: the state line goes
-   first, then the name, and what is left is the glyph — which is the wedge's
-   own answer, since a wedge only ever showed its caption on hover. */
-@container (max-width: 780px) {
-  .inseg__sub { display: none; }
-}
-@container (max-width: 560px) {
-  .inseg__txt { display: none; }
-  .inseg { gap: 0; }
+  height: var(--take-bar-h);
+  transition: height 420ms cubic-bezier(0.22, 0.68, 0.16, 1) 60ms;
 }
 
-/* live, the orbit is over: the menu has become the bar, the pills have nothing
-   left to orbit, and the halo belongs to a button that is no longer waiting */
-[data-phase='live'] .radial,
+/* live, the orbit is over: the pills have nothing left to orbit and the halo
+   belongs to a button that is no longer waiting. The menu itself is not hidden
+   — it is the input row now, and it got there by straightening. */
 [data-phase='live'] .ring .chip,
 [data-phase='live'] .rec-fx { opacity: 0; pointer-events: none; }
-/* folding: the donut squashes flat and drops toward the bar it becomes */
-[data-phase='live'] .radial {
-  transform: translate(-50%, calc(-50% + 84px)) scale(1.12, 0.05);
-  transition: opacity 200ms var(--ease), transform 300ms cubic-bezier(0.5, 0, 0.75, 0);
-}
 [data-phase='live'] .ring .chip { transform: translate(-50%, -50%) scale(0.6); }
+/* the menu's pool of light belongs to the ring; a bar does not stand in one */
+.radial::before { opacity: calc(1 - var(--unroll, 0)); }
 
 /* the disc, live: the graphite shape on every theme — a round button is the
    invitation to start, and once a take is running it is a control among
-   controls, so it takes the squarer form the bar around it is drawn in */
+   controls, so it takes the squarer form */
 [data-phase='live'] .recbtn {
   width: 52px;
   height: 52px;
@@ -1366,35 +1342,20 @@ body.f .filters, body.d .detail { opacity: 1; }
 }
 
 /* ---------- the hand-off to editing ----------
-   Done does not cut. The control bar thins to the transport's height, the input
-   bar grows to the timeline's, and the picture rises the difference — which is
-   the editor's own geometry, arrived at by the same three objects. The editor
-   screen then cross-fades in behind a stage that is already in its place, so
-   the only thing the swap has left to do is change what is written on the bars.
-   170px, not the timeline's 184: the take centres its column while the editor
-   pins its timeline to the floor, and this is the height at which the two put
-   the stage on the same line. */
+   Done does not cut. The input row grows to the timeline's height and the
+   picture rises the difference, which is the editor's own geometry arrived at
+   by the same objects. The editor then fades up behind a stage already in its
+   place, so the only thing the swap has left to do is change what is on the
+   rows. 170px, not the timeline's 184: the take centres its column while the
+   editor pins its timeline to the floor, and this is the height at which the
+   two put the stage on the same line. */
 [data-hand='on'] .take__ctrl { height: 38px; }
-[data-hand='on'] .take__inputs { height: 170px; }
-[data-hand='on'] .take__ctrl,
 [data-hand='on'] .take__inputs {
-  transition:
-    height 420ms cubic-bezier(0.3, 0.7, 0.2, 1),
-    background 300ms var(--ease),
-    border-color 300ms var(--ease);
+  height: 170px;
+  transition: height 420ms cubic-bezier(0.3, 0.7, 0.2, 1);
 }
 [data-hand='on'] .take__end,
-[data-hand='on'] .inseg > *,
 [data-hand='on'] .recbtn { opacity: 0; transition: opacity 200ms var(--ease); }
-[data-hand='on'] .inseg + .inseg::before,
-[data-hand='on'] .inseg::after { opacity: 0; }
-/* the tints go too: for those two hundred milliseconds the bars are bare
-   plates the right size, which is the only thing they still have to say */
-[data-hand='on'] .inseg {
-  background: transparent;
-  pointer-events: none;
-  transition: background 200ms var(--ease);
-}
 
 /* jumping straight to a phase (the tabs, the number keys) must not play the
    whole unroll — the harness is for looking at states, not at transitions */
@@ -2023,7 +1984,7 @@ body.f .filters, body.d .detail { opacity: 1; }
 [data-theme='graphite'] .chip[aria-pressed='true'] .lbl { color: var(--text); }
 [data-theme='graphite'] .chip[aria-pressed='false'] { color: var(--text-faint); }
 [data-theme='graphite'] .chip[aria-pressed='false'] svg { opacity: 0.6; }
-[data-theme='graphite'] .take__clock,
+[data-theme='graphite'] .rec-elapsed,
 [data-theme='graphite'] .transport__time,
 [data-theme='graphite'] .xp__pct { letter-spacing: 0.02em; }
 [data-theme='graphite'] .recbtn { border-radius: 8px; }
@@ -2040,7 +2001,6 @@ body.f .filters, body.d .detail { opacity: 1; }
    shows up before the bar does gives the whole move away */
 [data-theme='paper'] [data-phase='live'] .take__ctrl,
 [data-theme='paper'] [data-phase='live'] .take__inputs { background: var(--surface); }
-[data-theme='paper'] .inseg:hover { background: var(--surface-2); }
 [data-theme='paper'] .transport__play { background: var(--surface); }
 [data-theme='paper'] .lane__edge::after,
 [data-theme='paper'] .tl__trim span { background: #1b1915; }
@@ -2250,8 +2210,15 @@ T F N  theme · frame · neon
                 <div class="take__screen"><div class="stage" data-stage></div></div>
 
                 <div class="take__ctrl">
+                  <!-- left end, straight off the deprecated recorder's hub bar:
+                       the verb, then the metrics plate with the duration
+                       leading and the file size trailing it -->
                   <div class="take__end take__end--l">
-                    <span class="take__clock"><span class="take__dot"></span><span data-clock-take>00:00</span></span>
+                    <button class="rec-cancel" data-cancel aria-label="Cancel recording without saving">Cancel</button>
+                    <div class="rec-metrics">
+                      <time class="rec-elapsed" data-clock-take datetime="PT0S" aria-label="Recording duration">0:00</time>
+                      <span class="rec-bytes" data-bytes-take aria-label="Recording file size">0 B</span>
+                    </div>
                   </div>
 
                   <!-- the seat holds the centring; the cluster is the spring's
@@ -2268,11 +2235,13 @@ T F N  theme · frame · neon
                   </div>
 
                   <div class="take__end take__end--r">
-                    <button class="btn btn--primary take__done" data-done>Done</button>
+                    <button class="rec-save" data-done aria-label="Finish the take and edit it">Done</button>
                   </div>
                 </div>
 
-                <div class="take__inputs" data-inbar></div>
+                <!-- no fill and no frame: a hole the height of the band, which
+                     the menu draws itself into once it has finished straightening -->
+                <div class="take__inputs"></div>
               </div>
             </div>
           </div>
@@ -2589,17 +2558,113 @@ const WHY = {
 let R_OUT = 100, R_IN = 41 // driven by the size and gap sliders
 let ICO_K = 0.86 // glyph scale — the 24px icon box, scaled about its own centre
 const PAD = 0.014 // radians of gap between wedges
-const pol = (r, a) => [(200 + r * Math.cos(a)).toFixed(2), (200 + r * Math.sin(a)).toFixed(2)]
-function sector(r1, r2, a0, a1) {
-  const [x1, y1] = pol(r2, a0), [x2, y2] = pol(r2, a1)
-  const [x3, y3] = pol(r1, a1), [x4, y4] = pol(r1, a0)
-  const big = a1 - a0 > Math.PI ? 1 : 0
-  return `M${x1} ${y1}A${r2} ${r2} 0 ${big} 1 ${x2} ${y2}L${x3} ${y3}A${r1} ${r1} 0 ${big} 0 ${x4} ${y4}Z`
+
+/* ---------- the band: one menu, from ring to bar ----------
+   The wedges are not swapped for something bar-shaped when the take opens. The
+   band they sit on straightens, and they ride it. One number does the whole
+   move.
+
+   A point on the band is (depth, s): depth measured inward from the rim, s the
+   arc length along the rim from the band's origin. Straightening is curvature
+   going to nothing:
+
+     θ = s·κ      ρ = 1/κ − depth      (x, y) = (ρ·sin θ,  yRim + 1/κ − ρ·cos θ)
+
+   At κ = 1/R_OUT that is the donut, to the pixel, in the coordinates the old
+   pol() used — the origin is the record button's centre and s = 0 is the top.
+   At κ = 0 it collapses to (s, yRim + depth): the bar. Nothing about a wedge
+   changes on the way across — same fill, same rim, same glyph, same state, same
+   hover arc, same two caption lines outside the rim. It is the same menu, at a
+   different radius.
+
+   Edges come out as polylines, not arcs. An arc of radius 10^5 is a precision
+   trap in every renderer, and a chord every two degrees is off the true curve
+   by under a hundredth of a pixel at any size this menu is drawn at.
+
+   The ring's rotation is unwound as it opens: a ring has a rotation and a bar
+   does not, so RING_ROT is worth what it is worth at κ = 1/R_OUT and nothing at
+   κ = 0. The whole band slides round by half its own length in the same breath,
+   which is what puts the first wedge at the top when it is a ring and at the
+   left end when it is a bar. */
+const SEG_RAD = 0.035     // ~2° of arc per chord
+/* The ramp's radius is capped, and once the band is nearly straight it stops
+   following the geometry. It has to stop somewhere: the band's own radius runs
+   away to infinity, and a gradient of infinite radius has all five of its stops
+   at the same offset. Twenty thousand keeps them spread over eight thousandths
+   of the radius, which every renderer resolves cleanly, and costs a four-pixel
+   bow in the ramp's contours across the full width of the bar — under a
+   five-stop fade on a sixty-four pixel band, not a thing anyone can see. */
+const R_GRAD_MAX = 20000
+const CAP_OUT = 26        // captions live this far outside the rim, as before
+const CAP_LEAD = 14
+let UNROLL = 0            // 0 = ring · 1 = bar
+
+/* where the bar lands, in the record button's own coordinates. The three
+   numbers are CSS's — see --take-gap and friends on .app — so the layout and
+   the band can never disagree about where the input row is. */
+function barRect() {
+  const cs = getComputedStyle(app)
+  const px = (n, d) => parseFloat(cs.getPropertyValue(n)) || d
+  return {
+    w: px('--take-w', 0) || Math.max(240, app.clientWidth - 32),
+    h: px('--take-bar-h', 64),
+    top: px('--take-ctrl-h', 52) / 2 + px('--take-gap', 14),
+  }
 }
-function arc(r, a0, a1) {
-  const [x1, y1] = pol(r, a0), [x2, y2] = pol(r, a1)
-  return `M${x1} ${y1}A${r} ${r} 0 0 1 ${x2} ${y2}`
+/* Curvature and placement do not run on the same clock, and the difference is
+   the whole feel of the move. A ring whose radius grows at a constant rate
+   balloons: halfway through it is still most of a circle, only twice as wide,
+   and it swings a long way below the frame before it ever looks like a bar. So
+   the curve goes out of it first — cubically, most of the straightening in the
+   first third — and only then does the band travel down to the row and stretch
+   to the row's width. Two schedules, one gesture: it flattens where it stands,
+   then lies down. */
+const flatten = (t) => Math.pow(1 - t, 3)      // curvature, gone early
+const settle = (t) => t * t * (3 - 2 * t) * t  // placement, held back
+function bandEnv(t) {
+  const n = RING_ORDER.length
+  const bar = barRect()
+  const p = settle(t)
+  const h0 = R_OUT - R_IN
+  const L0 = 2 * Math.PI * R_OUT
+  /* Length has its own rule, and it is not symmetric. Whatever else it does on
+     the way across, the band passes through the moment its arc is half a circle
+     — and there it is exactly twice as wide as its own radius, which is the
+     widest it will ever be. That width is set by how long the band is at that
+     moment, so: give up length early, take it late. On a narrow frame the ring
+     is longer than the row it is becoming and contracts at once, which is what
+     keeps it inside the frame; on a wide one it holds its ring length until the
+     curve has gone and only then stretches out to fill the row. */
+  const q = bar.w < L0 ? Math.min(1, t * 3.5) : p
+  const L = L0 + (bar.w - L0) * q
+  return {
+    n, L, bar,
+    k: flatten(t) / R_OUT,
+    h: h0 + (bar.h - h0) * q,
+    yRim: -R_OUT + (bar.top + R_OUT) * p,
+    shift: (1 - t) * ((RING_ROT * Math.PI) / 180) * R_OUT - t * ((n - 1) / 2) * (L / n),
+    w: L / n,
+    pad: PAD * R_OUT, // a gap in pixels, so it stays the gap it was
+  }
 }
+function bandPt(e, depth, s) {
+  if (e.k < 1e-9) return [s, e.yRim + depth]
+  const R = 1 / e.k
+  const rho = R - depth
+  return [Math.sin(s * e.k) * rho, e.yRim + R - Math.cos(s * e.k) * rho]
+}
+function bandChain(e, depth, s0, s1) {
+  const segs = Math.max(1, Math.ceil(Math.abs((s1 - s0) * e.k) / SEG_RAD))
+  const out = []
+  for (let i = 0; i <= segs; i++) out.push(bandPt(e, depth, s0 + ((s1 - s0) * i) / segs))
+  return out
+}
+const chainD = (pts) => 'M' + pts.map((p) => p[0].toFixed(2) + ' ' + p[1].toFixed(2)).join('L')
+const faceD = (e, s0, s1) => chainD(bandChain(e, 0, s0, s1).concat(bandChain(e, e.h, s1, s0))) + 'Z'
+/* position on the band comes from the ring's order, never from the order the
+   channels happen to be declared in — that is the whole job RING_ORDER has */
+const wedgeS = (e, key) => RING_ORDER.indexOf(key) * e.w + e.shift
+
 /* Menu glyphs, fourth pass — solid, not outlined. Outlines were the problem:
    at ~20px a 1.4px stroke on a translucent gradient is four hairlines fighting
    for the same pixels, and it reads as fuzz. A silhouette has one edge, holds
@@ -2619,111 +2684,130 @@ const WEDGE_ICON = {
     '<path class="s" d="M4.4 9.4h3.2l4.5-3.7v12.6l-4.5-3.7H4.4a.9.9 0 0 1-.9-.9v-3.4a.9.9 0 0 1 .9-.9z"/>' +
     '<path class="s" d="M16.2 9.9a4.5 4.5 0 0 1 0 4.2M19.1 7.5a8.2 8.2 0 0 1 0 9"/>',
 }
-/* Rebuilt whole whenever size or gap moves — the geometry is the truth, not a
-   scale transform, so strokes and captions keep their real weight at any size. */
+
+/* The ramp is five stops from the hub to the rim. Written as depth rather than
+   as radius, it survives the straightening: a radial gradient centred on the
+   band's own centre of curvature is the ring's ramp at κ = 1/R_OUT and, once
+   that centre is sixty thousand pixels below the bar, a vertical one. */
+const U_STOPS = [1, 0.7, 0.42, 0.18, 0]
+const GRADS = [['wgrad', 'wg'], ['wgreen', 'wn'], ['wred', 'wr']]
+
+/* Built once, then moved. Redrawing this markup sixty times a second is what a
+   fold looks like when it stutters; the fold updates attributes only. */
 function buildRadial() {
-  const span = (2 * Math.PI) / RING_ORDER.length
-  const onNow = (k) => ring.querySelector(`.chip[data-chip="${k}"]`)?.getAttribute('aria-pressed') === 'true'
-  const M = 62 // margin for the captions living outside the donut
   const wedges = CHANNELS.map((c, i) => {
-    const mid = midAngle(c.key)
-    const a0 = mid - span / 2 + PAD
-    const a1 = mid + span / 2 - PAD
-    const [ix, iy] = pol(R_IN + (R_OUT - R_IN) * 0.42, mid)
-    // caption goes outside, on this wedge's own side — anchor/baseline from the
-    // angle alone, so adding wedges later needs no per-item placement
-    const [cx, cy] = pol(R_OUT + 26, mid)
-    const cosm = Math.cos(mid), sinm = Math.sin(mid)
-    const anchor = cosm > 0.3 ? 'start' : cosm < -0.3 ? 'end' : 'middle'
-    const baseline = sinm > 0.3 ? 'hanging' : sinm < -0.3 ? 'auto' : 'middle'
-    const dy = sinm > 0.3 ? 2 : sinm < -0.3 ? -2 : 0
-    // Name and state are two lines, not one block of text: 13px of lead under a
-    // 12px name had them touching. The pair is also placed as a pair — above the
-    // anchor at the top, below it at the bottom, straddling it at the sides — so
-    // widening the gap grows the block away from the donut, never into it.
-    const LEAD = 14
-    const lift = sinm < -0.3 ? -LEAD : sinm > 0.3 ? 0 : -LEAD / 2
-    const y1 = +cy + dy + lift
     const st = PERM[c.key] || 'ok'
-    const sub = subFor(c.key)
     return `
-      <g class="wedge" data-wedge="${c.key}" data-on="${st === 'ok' && onNow(c.key)}" data-state="${st}" style="--d:${i * 30}ms" role="button" aria-label="${c.label}${sub ? ', ' + sub : ''}">
-        <path class="wedge__base" d="${sector(R_IN, R_OUT, a0, a1)}"/>
-        <path class="wedge__fill" d="${sector(R_IN, R_OUT, a0, a1)}"/>
-        <path class="wedge__edge" d="${arc(R_OUT - 0.6, a0, a1)}"/>
-        <g class="wedge__ico" transform="translate(${ix - 12 * ICO_K} ${iy - 12 * ICO_K}) scale(${ICO_K})">${WEDGE_ICON[c.key] || WEDGE_ICON.screen}</g>
-        <path class="wedge__arc" d="${arc(R_OUT + 8, a0 + 0.06, a1 - 0.06)}"/>
-        <text class="wedge__cap" x="${cx}" y="${y1}" text-anchor="${anchor}" dominant-baseline="${baseline}">${c.label}</text>
-        <text class="wedge__cap2" x="${cx}" y="${y1 + LEAD}" text-anchor="${anchor}" dominant-baseline="${baseline}">${sub}</text>
+      <g class="wedge" data-wedge="${c.key}" data-on="${st === 'ok' && !!c.on}" data-state="${st}" style="--d:${i * 30}ms" role="button" aria-label="${c.label}, ${subFor(c.key)}">
+        <path class="wedge__base"/>
+        <path class="wedge__fill"/>
+        <path class="wedge__edge"/>
+        <g class="wedge__ico">${WEDGE_ICON[c.key] || WEDGE_ICON.screen}</g>
+        <path class="wedge__arc"/>
+        <text class="wedge__cap"></text>
+        <text class="wedge__cap2"></text>
       </g>`
   }).join('')
-  const seps = CHANNELS.map((c) => {
-    const b = midAngle(c.key) - span / 2
-    const [x1, y1] = pol(R_IN, b), [x2, y2] = pol(R_OUT, b)
-    return `<line class="radial__sep" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`
-  }).join('')
-  const box = (R_OUT + M) * 2
-  const svg = `
-     <svg width="${box}" height="${box}" viewBox="${200 - R_OUT - M} ${200 - R_OUT - M} ${box} ${box}">
-       <defs>
-         <!-- volume skin: dark at the hub, lit at the rim. userSpaceOnUse so the
-              ramp follows the donut's radius, not each wedge's bounding box. -->
-         <!-- five stops, eased: three made a visible band where the ramp
-              turned. The green twin is the same ramp on the live-input hue. -->
-         <radialGradient id="wgrad" gradientUnits="userSpaceOnUse" cx="200" cy="200" r="${R_OUT}">
-           <stop class="wg-in" offset="${(R_IN / R_OUT).toFixed(3)}"/>
-           <stop class="wg-a" offset="${(R_IN / R_OUT + (1 - R_IN / R_OUT) * 0.3).toFixed(3)}"/>
-           <stop class="wg-b" offset="${(R_IN / R_OUT + (1 - R_IN / R_OUT) * 0.58).toFixed(3)}"/>
-           <stop class="wg-c" offset="${(R_IN / R_OUT + (1 - R_IN / R_OUT) * 0.82).toFixed(3)}"/>
-           <stop class="wg-out" offset="1"/>
-         </radialGradient>
-         ${['wgreen:wn', 'wred:wr'].map((pair) => {
-           const [id, k] = pair.split(':')
-           return `<radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="200" cy="200" r="${R_OUT}">
-             <stop class="${k}-in" offset="${(R_IN / R_OUT).toFixed(3)}"/>
-             <stop class="${k}-a" offset="${(R_IN / R_OUT + (1 - R_IN / R_OUT) * 0.3).toFixed(3)}"/>
-             <stop class="${k}-b" offset="${(R_IN / R_OUT + (1 - R_IN / R_OUT) * 0.58).toFixed(3)}"/>
-             <stop class="${k}-c" offset="${(R_IN / R_OUT + (1 - R_IN / R_OUT) * 0.82).toFixed(3)}"/>
-             <stop class="${k}-out" offset="1"/>
-           </radialGradient>`
-         }).join('')}
-       </defs>
-       <circle class="radial__hub" cx="200" cy="200" r="${R_IN - 3}"/>
-       ${wedges}
-       ${seps}
-     </svg>`
-  const existing = ring.querySelector('[data-radial]')
-  if (existing) existing.innerHTML = svg
+  const defs = GRADS.map(([id, k]) =>
+    `<radialGradient id="${id}" gradientUnits="userSpaceOnUse">${
+      U_STOPS.map((u, j) => `<stop class="${k}-${['in', 'a', 'b', 'c', 'out'][j]}"/>`).join('')
+    }</radialGradient>`).join('')
+  const svg =
+    `<svg><defs>${defs}</defs>` +
+    `<circle class="radial__hub" cx="0" cy="0"/>${wedges}<g class="radial__seps"></g></svg>`
+  const host = ring.querySelector('[data-radial]')
+  if (host) host.innerHTML = svg
   else ring.insertAdjacentHTML('afterbegin', `<div class="radial" data-radial>${svg}</div>`)
+  drawBand()
+}
+
+/* One frame of the move. Everything below is attribute writes on nodes that
+   already exist — no parsing, no layout, no allocation worth the name. */
+function drawBand() {
+  const host = ring.querySelector('[data-radial]')
+  if (!host) return
+  const svg = host.querySelector('svg')
+  const t = UNROLL
+  const e = bandEnv(t)
+
+  // one box for the whole move, symmetric about the button so the container's
+  // own centring transform keeps holding — a viewBox that changed per frame
+  // would rescale the drawing under the reader
+  const bar = e.bar
+  const hw = Math.max(R_OUT, bar.w / 2) + 66
+  const hh = Math.max(R_OUT, bar.top + bar.h) + 66
+  svg.setAttribute('viewBox', `${-hw} ${-hh} ${hw * 2} ${hh * 2}`)
+  svg.setAttribute('width', hw * 2)
+  svg.setAttribute('height', hh * 2)
+
+  // the ramp follows the band: centred where the band is centred, reaching as
+  // far as the band's own radius, until that radius stops meaning anything
+  const Rg = Math.min(e.k < 1e-9 ? R_GRAD_MAX : 1 / e.k, R_GRAD_MAX)
+  GRADS.forEach(([id]) => {
+    const g = svg.querySelector('#' + id)
+    g.setAttribute('cx', 0)
+    g.setAttribute('cy', (e.yRim + Rg).toFixed(2))
+    g.setAttribute('r', Rg.toFixed(2))
+    ;[...g.children].forEach((stop, j) =>
+      stop.setAttribute('offset', ((Rg - U_STOPS[j] * e.h) / Rg).toFixed(6)))
+  })
+
+  // the hub is the button's backing, and it only means anything while there is
+  // a hole for the button to sit in
+  const hub = svg.querySelector('.radial__hub')
+  hub.setAttribute('r', Math.max(0, R_IN - 3).toFixed(2))
+  hub.setAttribute('opacity', Math.max(0, 1 - t * 3).toFixed(3))
+
+  const seps = []
+  CHANNELS.forEach((c, i) => {
+    const g = svg.querySelector(`.wedge[data-wedge="${c.key}"]`)
+    if (!g) return
+    const mid = wedgeS(e, c.key)
+    const s0 = mid - e.w / 2 + e.pad
+    const s1 = mid + e.w / 2 - e.pad
+    const face = faceD(e, s0, s1)
+    g.querySelector('.wedge__base').setAttribute('d', face)
+    g.querySelector('.wedge__fill').setAttribute('d', face)
+    g.querySelector('.wedge__edge').setAttribute('d', chainD(bandChain(e, 0.6, s0, s1)))
+    g.querySelector('.wedge__arc').setAttribute('d', chainD(bandChain(e, -8, s0 + e.pad * 4, s1 - e.pad * 4)))
+
+    const [ix, iy] = bandPt(e, e.h * 0.58, mid)
+    g.querySelector('.wedge__ico').setAttribute(
+      'transform', `translate(${(ix - 12 * ICO_K).toFixed(2)} ${(iy - 12 * ICO_K).toFixed(2)}) scale(${ICO_K})`)
+
+    // the caption pair sits outside the rim on the wedge's own side, anchored
+    // off the outward normal — which at κ = 0 points straight up, so the bar
+    // gets captions over it without a word of special-casing
+    const [cx, cy] = bandPt(e, -CAP_OUT, mid)
+    const th = mid * e.k
+    const nx = Math.sin(th), ny = -Math.cos(th)
+    const anchor = nx > 0.3 ? 'start' : nx < -0.3 ? 'end' : 'middle'
+    const baseline = ny > 0.3 ? 'hanging' : ny < -0.3 ? 'auto' : 'middle'
+    const dy = ny > 0.3 ? 2 : ny < -0.3 ? -2 : 0
+    const lift = ny < -0.3 ? -CAP_LEAD : ny > 0.3 ? 0 : -CAP_LEAD / 2
+    const y1 = cy + dy + lift
+    const cap = g.querySelector('.wedge__cap')
+    const cap2 = g.querySelector('.wedge__cap2')
+    cap.setAttribute('x', cx.toFixed(2)); cap.setAttribute('y', y1.toFixed(2))
+    cap.setAttribute('text-anchor', anchor); cap.setAttribute('dominant-baseline', baseline)
+    cap2.setAttribute('x', cx.toFixed(2)); cap2.setAttribute('y', (y1 + CAP_LEAD).toFixed(2))
+    cap2.setAttribute('text-anchor', anchor); cap2.setAttribute('dominant-baseline', baseline)
+    if (cap.textContent !== c.label) cap.textContent = c.label
+    const sub = subFor(c.key)
+    if (cap2.textContent !== sub) cap2.textContent = sub
+
+    // the separator is the band's own thickness, drawn at the wedge's leading
+    // boundary — a radius on the ring, a plain upright on the bar
+    const b = mid - e.w / 2
+    seps.push(chainD([bandPt(e, 0, b), bandPt(e, e.h, b)]))
+  })
+  svg.querySelector('.radial__seps').innerHTML =
+    seps.map((d) => `<path class="radial__sep" d="${d}" fill="none"/>`).join('')
+
+  host.style.setProperty('--unroll', t.toFixed(3))
 }
 buildRadial()
 
-/* ---------- the input bar: the same menu, unrolled ----------
-   Built from RING_ORDER, not from CHANNELS, so clockwise round the donut and
-   left-to-right along the bar are the same sequence — the fold has to look like
-   a fold, and it cannot if the inputs land in a different order on the other
-   side of it. Everything else about an input is the wedge's: its glyph, its
-   three states, its quiet second line. One control, two shapes. */
-const inbar = app.querySelector('[data-inbar]')
-const wedgeGlyph = (key) =>
-  `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">${WEDGE_ICON[key] || WEDGE_ICON.screen}</svg>`
-function buildInputBar() {
-  inbar.innerHTML = RING_ORDER.map((key, i) => {
-    const c = CHANNELS.find((x) => x.key === key)
-    if (!c) return ''
-    const st = PERM[key] || 'ok'
-    return `
-      <button class="inseg" data-wedge="${key}" data-on="${st === 'ok' && !!c.on}" data-state="${st}"
-              style="--d:${i * 45}ms" aria-label="${c.label}">
-        <span class="inseg__ico">${wedgeGlyph(key)}</span>
-        <span class="inseg__txt">
-          <span class="inseg__cap">${c.label}</span>
-          <span class="inseg__sub">${subFor(key)}</span>
-        </span>
-      </button>`
-  }).join('')
-}
-buildInputBar()
 
 document.querySelector('[data-timeline]').innerHTML = `
   <div class="tl__lanes">
@@ -2789,6 +2873,7 @@ const recBtn = app.querySelector('[data-rec]')
 const capture = app.querySelector('[data-capture]')
 const takeEl = app.querySelector('.take')
 const takeClock = app.querySelector('[data-clock-take]')
+const takeBytes = app.querySelector('[data-bytes-take]')
 const hintEl = app.querySelector('[data-hint]')
 function anyInputOn() {
   return CHANNELS.some((c) => PERM[c.key] === 'ok' && ring.querySelector(`.chip[data-chip="${c.key}"]`)?.getAttribute('aria-pressed') === 'true')
@@ -2826,14 +2911,6 @@ function setChannel(key, on) {
     const cap2 = w.querySelector('.wedge__cap2')
     if (cap2) cap2.textContent = subFor(key)
   }
-  // three faces now, and the bar is the one you look at during a take
-  const seg = inbar.querySelector(`.inseg[data-wedge="${key}"]`)
-  if (seg) {
-    seg.dataset.on = String(on)
-    seg.dataset.state = PERM[key]
-    const sub = seg.querySelector('.inseg__sub')
-    if (sub) sub.textContent = subFor(key)
-  }
   syncHint()
 }
 let whyTimer = null
@@ -2857,17 +2934,43 @@ syncHint()
 
 /* ---------- the take ----------
    Press arms; arming pulses on the studio's blink; then the screen opens. There
-   is no second screen to go to — one attribute moves and the CSS spends the
-   next second turning a button into three bars.
+   is no second screen to go to — one attribute moves, the picture unrolls out
+   of the middle of the frame, and the menu straightens into the row under it.
 
    Stop holds the take rather than ending it: the square goes back to a disc,
-   the clock stops, and Done appears. Ending is a decision, stopping is not, and
-   the control that made the take is the right one to interrupt it — so the same
-   disc runs it, holds it and picks it up again. */
+   the clock stops breathing, and Done appears. Ending is a decision, stopping
+   is not, and the control that made the take is the right one to interrupt it —
+   so the same disc runs it, holds it and picks it up again. Cancel is the other
+   ending, and it is a separate word because it is a separate act. */
 let armTimer = null
 let takeT = 0, takeRaf = null, takeLast = 0
 
-function paintTake() { takeClock.textContent = clockText(takeT) }
+/* the deprecated recorder's own two formatters, verbatim */
+const takeClockText = (ms) => {
+  const sec = Math.floor(ms / 1000)
+  return `${Math.floor(sec / 60)}:${(sec % 60).toString().padStart(2, '0')}`
+}
+function formatRecordingSize(bytes) {
+  const n = Math.max(0, Math.floor(Number(bytes) || 0))
+  if (n < 1024) return `${n} B`
+  if (n < 1048576) {
+    const kb = n / 1024
+    const s = kb >= 100 ? kb.toFixed(0) : kb.toFixed(1)
+    return `${s.replace(/\.0$/, '')} KB`
+  }
+  const mb = n / 1048576
+  let s = mb >= 10 ? mb.toFixed(1) : mb.toFixed(2)
+  s = s.replace(/\.0+$/, '').replace(/\.$/, '')
+  return `${s} MB`
+}
+const TAKE_BITRATE = 640000 // bytes a second — a 1080p screen take, near enough
+
+function paintTake() {
+  const ms = takeT * 1000
+  takeClock.textContent = takeClockText(ms)
+  takeClock.setAttribute('datetime', `PT${Math.floor(takeT)}S`)
+  takeBytes.textContent = formatRecordingSize(takeT * TAKE_BITRATE)
+}
 function takeTick(now) {
   takeRaf = requestAnimationFrame(takeTick)
   if (!takeLast) takeLast = now
@@ -2882,10 +2985,37 @@ function holdTake(on) {
   capture.dataset.take = on ? 'held' : 'rec'
   if (!on) takeRaf = requestAnimationFrame(takeTick)
 }
-/* jump skips the unroll: the tabs and the number keys are for looking at
+
+/* ---------- driving the band ----------
+   The unroll is not a CSS transition, because what is moving is geometry: every
+   frame is the same band at a smaller curvature. It runs on the same curve the
+   picture's box does, so the two read as one move rather than two that happen
+   to overlap. */
+let bandRaf = null
+const easeInOut = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2)
+function unrollTo(to, ms) {
+  cancelAnimationFrame(bandRaf)
+  bandRaf = null
+  if (!ms) { UNROLL = to; drawBand(); return }
+  const from = UNROLL
+  let t0 = 0
+  takeEl.classList.add('take--moving')
+  const step = (now) => {
+    if (!t0) t0 = now
+    const p = Math.min(1, (now - t0) / ms)
+    UNROLL = from + (to - from) * easeInOut(p)
+    drawBand()
+    if (p < 1) bandRaf = requestAnimationFrame(step)
+    else { bandRaf = null; takeEl.classList.remove('take--moving') }
+  }
+  bandRaf = requestAnimationFrame(step)
+}
+
+/* jump skips the whole move: the tabs and the number keys are for looking at
    states, not at transitions, and a harness that animates on every click is a
    harness you cannot compare two states in */
 function setPhase(next, jump) {
+  const was = capture.dataset.phase
   if (jump) takeEl.classList.add('take--jump')
   capture.dataset.phase = next
   capture.dataset.hand = 'off'
@@ -2897,6 +3027,7 @@ function setPhase(next, jump) {
   capture.dataset.take = 'rec'
   if (next === 'live') { takeRaf = requestAnimationFrame(takeTick); say('') }
   else syncHint()
+  unrollTo(next === 'live' ? 1 : 0, jump || was === next ? 0 : next === 'live' ? 560 : 420)
   app.dispatchEvent(new CustomEvent('takephase'))
   if (jump) { void takeEl.offsetWidth; takeEl.classList.remove('take--jump') }
 }
@@ -2913,21 +3044,43 @@ recBtn.addEventListener('click', () => {
   }, 900)
 })
 
-/* Done: the bars go on to be the editor's. The control bar thins to the
-   transport's height and the input bar grows to the timeline's, which puts the
-   stage on the editor's own line — so when the editor fades up behind it the
-   picture is the one thing that does not move. */
+/* Cancel: the take is dropped and the screen folds back to the button it came
+   out of — the same move, run backwards, because nothing was ever swapped. */
+app.addEventListener('click', (e) => {
+  if (!e.target.closest('[data-cancel]')) return
+  setPhase('rest')
+})
+
+/* Done: the input row goes on to be the timeline. It grows to the timeline's
+   height and the picture rises the difference, which puts the stage on the
+   editor's own line — so when the editor fades up behind it the picture is the
+   one thing that does not move. */
 app.addEventListener('click', (e) => {
   if (!e.target.closest('[data-done]')) return
   capture.dataset.hand = 'on'
   cancelAnimationFrame(takeRaf)
   takeRaf = null
+  unrollTo(1, 0)
   setTimeout(() => {
     const ed = app.querySelector('[data-screen="editor"]')
     show('editor')
     ed.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 240, easing: 'cubic-bezier(.25,.1,.25,1)' })
   }, 430)
 })
+
+/* ---------- the take's two pixel numbers ----------
+   The column's width and the picture's height are written here, in pixels,
+   rather than left as the container-query expression they are derived from. A
+   height that has to re-resolve 100cqh every frame is a height that stutters,
+   and the picture opening is the one move in this screen you actually watch. */
+function sizeTake() {
+  const w = Math.max(0, Math.min(app.clientWidth - 32, ((app.clientHeight - 300) * 16) / 9))
+  app.style.setProperty('--take-w', `${w.toFixed(1)}px`)
+  app.style.setProperty('--take-h', `${((w * 9) / 16).toFixed(1)}px`)
+  drawBand() // the band's box is cut from the same cloth
+}
+new ResizeObserver(sizeTake).observe(app)
+sizeTake()
 
 /* splash — three variants, chosen in the right panel.
    frames:   the original, stepped at 105ms from 260ms, out at 1500 (as it shipped)
@@ -3363,7 +3516,6 @@ const PERM_OPTS = '<option value="ok">ok</option><option value="denied">denied</
 function rebuildInputs() {
   placeRingChips()
   buildRadial()
-  buildInputBar()
   CHANNELS.forEach((c) => setChannel(c.key, c.on))
   syncHint()
   saveState()
