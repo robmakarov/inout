@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="baseline" data-frame="desktop" data-neon="on" data-inputs="always" data-recfx="none">
+<html lang="en" data-theme="baseline" data-frame="desktop" data-neon="on" data-inputs="always" data-recfx="none" data-skin="flat">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -704,6 +704,83 @@ body.f .filters, body.d .detail { opacity: 1; }
 .wedge[data-on='true'] .wedge__ico { stroke: var(--accent); opacity: 1; }
 .wedge:hover .wedge__ico { stroke: var(--text); opacity: 1; }
 .wedge[data-on='true']:hover .wedge__ico { stroke: var(--accent); }
+
+/* ---------- volume skin ----------
+   Both references say the same thing in two places: light comes from somewhere,
+   so surfaces have a near side and a far side. The wedge ramps from dark at the
+   hub to lit at the rim and carries a glowing outer edge; the record button
+   stops being a flat ring and becomes a plate with a domed disc sitting in it.
+   Everything still reads from --neon-h, so the hue slider drives this too. */
+.wedge__edge {
+  fill: none;
+  stroke: none;
+  stroke-width: 1.4;
+  pointer-events: none;
+  transition: stroke 140ms var(--ease), opacity 140ms var(--ease);
+}
+[data-skin='volume'] #wg-in { stop-color: hsl(var(--neon-h) 65% 16%); stop-opacity: 0.1; }
+[data-skin='volume'] #wg-mid { stop-color: hsl(var(--neon-h) 82% 36%); stop-opacity: 0.3; }
+[data-skin='volume'] #wg-out { stop-color: hsl(var(--neon-h) 95% 58%); stop-opacity: 0.72; }
+[data-skin='volume'] .wedge .wedge__fill {
+  fill: url(#wgrad);
+  fill-opacity: 0.55;
+}
+[data-skin='volume'] .wedge[data-on='true'] .wedge__fill { fill: url(#wgrad); fill-opacity: 0.82; }
+[data-skin='volume'] .wedge:hover .wedge__fill,
+[data-skin='volume'] .wedge[data-on='true']:hover .wedge__fill {
+  fill: url(#wgrad);
+  fill-opacity: 1;
+}
+[data-skin='volume'] .wedge .wedge__edge {
+  stroke: hsl(var(--neon-h) 95% 68% / 0.5);
+  opacity: 0.7;
+}
+[data-skin='volume'] .wedge[data-on='true'] .wedge__edge { stroke: hsl(var(--neon-h) 95% 72% / 0.85); opacity: 1; }
+[data-skin='volume'] .wedge:hover .wedge__edge {
+  stroke: hsl(var(--neon-h) 100% 82%);
+  opacity: 1;
+  filter: drop-shadow(0 0 calc(var(--neon-r) * 0.35) hsl(var(--neon-h) 100% 60% / 0.7));
+}
+[data-skin='volume'] .radial__sep { stroke: hsl(var(--neon-h) 40% 70% / 0.22); }
+[data-skin='volume'] .radial__rim { stroke: hsl(var(--neon-h) 50% 60% / 0.18); }
+[data-skin='volume'] .wedge .wedge__ico { stroke: #dbe6f5; opacity: 0.78; }
+[data-skin='volume'] .wedge:hover .wedge__ico,
+[data-skin='volume'] .wedge[data-on='true'] .wedge__ico { stroke: #fff; opacity: 1; }
+[data-skin='volume'] .radial__hub {
+  fill: #08090c;
+  stroke: hsl(var(--neon-h) 40% 60% / 0.16);
+  stroke-width: 1;
+}
+
+/* the button: a plate with a domed disc, not a ring with a flat dot */
+[data-skin='volume'] .recbtn {
+  border: none;
+  border-radius: 21px;
+  background: linear-gradient(180deg, #1a1b1f 0%, #0c0d10 62%, #08090b 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.11),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.7),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.045),
+    0 8px 20px rgba(0, 0, 0, 0.55),
+    0 2px 5px rgba(0, 0, 0, 0.5);
+}
+[data-skin='volume'] .recbtn__inner {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 36% 28%, #ff7a5f 0%, #f8492f 44%, #e0341f 72%, #b82414 100%);
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.34),
+    inset 0 -3px 7px rgba(110, 12, 0, 0.6),
+    0 3px 9px rgba(0, 0, 0, 0.55);
+}
+[data-skin='volume'] .recbtn--stop .recbtn__inner {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+}
+[data-skin='volume'] .recbtn:active { transform: scale(0.97) translateY(1px); }
 
 /* Caption sits outside the wedge, on the wedge's own side: anchor and baseline
    are derived from the mid angle, so this holds for any number of wedges. */
@@ -1752,6 +1829,13 @@ T F N  theme · frame · neon
         </select>
       </div>
       <div class="panel__group">
+        <div class="panel__label">Skin</div>
+        <select id="skin">
+          <option value="flat">flat — today</option>
+          <option value="volume">volume — plate + lit wedges</option>
+        </select>
+      </div>
+      <div class="panel__group">
         <div class="panel__label">Record button fx</div>
         <select id="recfx">
           <option value="none">none</option>
@@ -1917,6 +2001,7 @@ const wedges = CHANNELS.map((c, i) => {
   return `
     <g class="wedge" data-wedge="${c.key}" data-on="${c.on}" style="--d:${i * 30}ms" role="button" aria-label="${c.label}">
       <path class="wedge__fill" d="${sector(R_IN, R_OUT, a0, a1)}"/>
+      <path class="wedge__edge" d="${arc(R_OUT - 0.6, a0, a1)}"/>
       <g class="wedge__ico" transform="translate(${ix - 15} ${iy - 15}) scale(1.25)">${WEDGE_ICON[c.key]}</g>
       <path class="wedge__arc" d="${arc(R_OUT + 9, a0 + 0.06, a1 - 0.06)}"/>
       <text class="wedge__cap" x="${cx}" y="${+cy + dy}" text-anchor="${anchor}" dominant-baseline="${baseline}">${c.label}</text>
@@ -1931,6 +2016,15 @@ ring.insertAdjacentHTML(
   'afterbegin',
   `<div class="radial" data-radial>
      <svg width="${(R_OUT + 66) * 2}" height="${(R_OUT + 66) * 2}" viewBox="${200 - R_OUT - 66} ${200 - R_OUT - 66} ${(R_OUT + 66) * 2} ${(R_OUT + 66) * 2}">
+       <defs>
+         <!-- volume skin: dark at the hub, lit at the rim. userSpaceOnUse so the
+              ramp follows the donut's radius, not each wedge's bounding box. -->
+         <radialGradient id="wgrad" gradientUnits="userSpaceOnUse" cx="200" cy="200" r="${R_OUT}">
+           <stop id="wg-in" offset="${(R_IN / R_OUT).toFixed(3)}"/>
+           <stop id="wg-mid" offset="0.82"/>
+           <stop id="wg-out" offset="1"/>
+         </radialGradient>
+       </defs>
        <circle class="radial__hub" cx="200" cy="200" r="${R_HUB}"/>
        ${wedges}
        ${seps}
@@ -2358,11 +2452,13 @@ frameSel.addEventListener('change', () => {
 /* mode switches */
 const inputsSel = document.getElementById('inputs')
 const recfxSel = document.getElementById('recfx')
+const skinSel = document.getElementById('skin')
 inputsSel.addEventListener('change', () => {
   document.documentElement.dataset.inputs = inputsSel.value
   ring.classList.remove('is-open')
 })
 recfxSel.addEventListener('change', () => (document.documentElement.dataset.recfx = recfxSel.value))
+skinSel.addEventListener('change', () => (document.documentElement.dataset.skin = skinSel.value))
 
 /* command menu: the button opens it, the ring holds it open — leaving the button
    for a chip must not close it, or the menu is unusable. */
@@ -2424,6 +2520,7 @@ function paramString() {
     `speed=${val('s-t')}`,
     `inputs=${inputsSel.value}`,
     `recfx=${recfxSel.value}`,
+    `skin=${skinSel.value}`,
     `splash=${splashSel.value}`,
     `bounce=k${PHYS.k}/c${PHYS.c}/imp${PHYS.imp}/follow${PHYS.follow}/wall${PHYS.wall}`,
     `zone=${FRAME_W}x${FRAME_H}`,
@@ -2493,6 +2590,7 @@ function restoreState() {
   pick(neonSel, st.neon, 'neon')
   pick(inputsSel, st.inputs, 'inputs')
   pick(recfxSel, st.recfx, 'recfx')
+  pick(skinSel, st.skin, 'skin')
   pick(splashSel, st.splash)
 
   const setSlider = (id, v, s) => {
@@ -2535,7 +2633,7 @@ function restoreState() {
 }
 
 // every control that can change the look also records it
-;[themeSel, neonSel, inputsSel, recfxSel, splashSel, frameSel].forEach((el) => el.addEventListener('change', saveState))
+;[themeSel, neonSel, inputsSel, recfxSel, skinSel, splashSel, frameSel].forEach((el) => el.addEventListener('change', saveState))
 ;[...SLIDERS, ...PHYS_SLIDERS].forEach((s) => document.getElementById(s.el).addEventListener('change', saveState))
 app.addEventListener('click', (e) => { if (e.target.closest('[data-chip], [data-wedge]')) saveState() })
 grip.addEventListener('pointerup', saveState)
