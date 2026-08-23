@@ -109,6 +109,16 @@ export interface CompositorStats {
   hardware: string | null
   /** Largest number of frames the encoder was behind at any point. */
   peakQueue: number
+  /**
+   * Where the bits actually went (task O11a). Owning the encoder makes this
+   * free: every packet is already in hand, so the keyframe share and the
+   * achieved-vs-requested bitrate are counted rather than guessed.
+   */
+  videoBytes: number
+  audioBytes: number
+  keyframeBytes: number
+  keyframeCount: number
+  requestedVideoBitrate: number
 }
 
 export type CompositorReply =
@@ -117,6 +127,9 @@ export type CompositorReply =
   | { ok: true; cmd: 'cancel' }
   | { ok: false; cmd: string; error: string }
   | { event: 'error'; error: string }
+  /** Pushed once a second so the watchdog on the main thread can see the
+   * encoder falling behind while there is still time to degrade. */
+  | { event: 'stats'; stats: CompositorStats }
 
 const CODEC_CANDIDATES = ['avc1.640028', 'avc1.4D402A', 'avc1.42E01E'] as const
 
@@ -191,6 +204,7 @@ let lastEncodedMs = -Infinity
 let lastEncodedTsUs = -1
 let lastKeySec = -Infinity
 let keepAliveTimer: ReturnType<typeof setInterval> | null = null
+let statsTimer: ReturnType<typeof setInterval> | null = null
 let stopped = false
 
 /** Newest frame per source; the composite always paints the latest of each. */
@@ -210,6 +224,11 @@ const stats: CompositorStats = {
   codec: null,
   hardware: null,
   peakQueue: 0,
+  videoBytes: 0,
+  audioBytes: 0,
+  keyframeBytes: 0,
+  keyframeCount: 0,
+  requestedVideoBitrate: 0,
 }
 
 function post(reply: CompositorReply): void {
@@ -382,9 +401,15 @@ async function start(msg: CompositorStartMsg): Promise<void> {
   }
   await output.start()
 
+  stats.requestedVideoBitrate = msg.videoBitrate
   videoEncoder = new VideoEncoder({
     output: (chunk, meta) => {
       stats.framesEncoded++
+      stats.videoBytes += chunk.byteLength
+      if (chunk.type === 'key') {
+        stats.keyframeCount++
+        stats.keyframeBytes += chunk.byteLength
+      }
       const packet = EncodedPacket.fromEncodedChunk(chunk)
       muxChain = muxChain.then(() => videoSource?.add(packet, meta)).catch(fail)
     },
@@ -396,6 +421,7 @@ async function start(msg: CompositorStartMsg): Promise<void> {
     const audioConfig = await pickAudioConfig(msg.sampleRate, msg.channelCount, msg.audioBitrate)
     audioEncoder = new AudioEncoder({
       output: (chunk, meta) => {
+        stats.audioBytes += chunk.byteLength
         const packet = EncodedPacket.fromEncodedChunk(chunk)
         muxChain = muxChain.then(() => audioSource?.add(packet, meta)).catch(fail)
       },
@@ -403,6 +429,12 @@ async function start(msg: CompositorStartMsg): Promise<void> {
     })
     audioEncoder.configure(audioConfig)
   }
+
+  // Push stats so the main-thread watchdog can see the encoder falling behind
+  // while degrading is still possible, rather than discovering it at stop.
+  statsTimer = setInterval(() => {
+    if (!stopped) post({ event: 'stats', stats: { ...stats } })
+  }, 1000)
 
   // Keep-alive: a composition nobody is changing still needs a frame per
   // second. Cheap by construction — it repaints the same latest frames.
@@ -436,7 +468,9 @@ function noteOrigin(mainMs: number): void {
 async function stop(): Promise<CompositorStats> {
   stopped = true
   if (keepAliveTimer) clearInterval(keepAliveTimer)
+  if (statsTimer) clearInterval(statsTimer)
   keepAliveTimer = null
+  statsTimer = null
   // DRAIN, in order: this is the tail the product promises. flush() returns
   // only once every queued frame has been encoded and handed to the muxer.
   try {
@@ -473,7 +507,9 @@ async function stop(): Promise<CompositorStats> {
 async function cancel(): Promise<void> {
   stopped = true
   if (keepAliveTimer) clearInterval(keepAliveTimer)
+  if (statsTimer) clearInterval(statsTimer)
   keepAliveTimer = null
+  statsTimer = null
   releaseLatest()
   try {
     videoEncoder?.close()
