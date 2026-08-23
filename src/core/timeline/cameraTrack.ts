@@ -19,7 +19,14 @@ export const PIP_MARGIN_X_FRAC = 24 / 1920
 export const PIP_MARGIN_Y_FRAC = 24 / 1080
 
 export const PIP_MIN_WIDTH_FRAC = 0.08
-export const PIP_MAX_WIDTH_FRAC = 0.6
+/**
+ * 50 % of frame width, and the number is not arbitrary: the camera is captured
+ * at 720p when a screen is present (O3a), and half of the widest export tier
+ * (0.5 × 2560 = 1280) is exactly that. So every size the user can choose stays
+ * inside the captured resolution — no upscaled, soft PiP at any tier. A bigger
+ * ceiling wants native-resolution camera capture (O6).
+ */
+export const PIP_MAX_WIDTH_FRAC = 0.5
 
 /**
  * How long the camera takes to travel to a newly dropped position.
@@ -28,9 +35,15 @@ export const PIP_MAX_WIDTH_FRAC = 0.6
  * "the export moves it exactly WHEN the user moved it". Interpolating straight
  * between two drops would instead have the camera drifting for the whole span
  * between them — moving long before the user did. So a drop writes a PAIR of
- * keyframes: an anchor holding the previous pose at the playhead instant, and
- * the new pose CAMERA_MOVE_MS later. The camera therefore sits perfectly still
- * until the moment the user moved it, then eases across in a beat you can see.
+ * keyframes and the camera holds perfectly still between moves.
+ *
+ * The pair LANDS on the playhead: anchor at (T − CAMERA_MOVE_MS) holding the
+ * old pose, target at T holding the new one. The alternative — starting the
+ * move at T — was built first and is wrong on the stage: the user scrubs to the
+ * moment they want the camera somewhere, drags it there, and on release it
+ * springs back, because at that exact instant the camera has not travelled yet.
+ * Landing on T means the frame under the playhead is the frame they just
+ * composed, and the motion eases in over the beat before it.
  */
 export const CAMERA_MOVE_MS = 450
 
@@ -152,12 +165,13 @@ export function writeCameraKeyframe(
   maxMs: number,
 ): CameraTrack {
   const at = clamp(atMs, 0, Math.max(0, maxMs))
-  const anchor: CameraKeyframe = { atMs: at, ...cameraPoseAt(track, at, g) }
-  const landAt = Math.min(Math.max(0, maxMs), at + CAMERA_MOVE_MS)
-  const target: CameraKeyframe = { atMs: landAt, ...clampPose(pose, g) }
-  const kept = (track?.keyframes ?? []).filter((k) => k.atMs < at || k.atMs > landAt)
-  // A zero-length move (the playhead is at the very end) is just the target.
-  const next = landAt <= at ? [...kept, target] : [...kept, anchor, target]
+  const startAt = Math.max(0, at - CAMERA_MOVE_MS)
+  const anchor: CameraKeyframe = { atMs: startAt, ...cameraPoseAt(track, startAt, g) }
+  const target: CameraKeyframe = { atMs: at, ...clampPose(pose, g) }
+  const kept = (track?.keyframes ?? []).filter((k) => k.atMs < startAt || k.atMs > at)
+  // Dropped at the very start there is no room to ease in — the camera simply
+  // begins there, which is also how "set the camera for the whole take" works.
+  const next = startAt >= at ? [...kept, target] : [...kept, anchor, target]
   return normalizeCameraTrack({ keyframes: next }, maxMs)
 }
 

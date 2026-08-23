@@ -13,7 +13,7 @@ Ranked by what it costs us if it goes red:
 
 | # | risk | blast radius | status |
 |---|---|---|---|
-| 1 | **Google sign-in unreachable** | cloud sharing entirely unusable; capture/edit/export unaffected | designed around — see auth alternatives |
+| 1 | **Google sign-in unreachable** | cloud sharing entirely unusable; capture/edit/export unaffected | ACCEPTED — alternatives ruled out by PO |
 | 2 | **`*.supabase.co` blocked platform-wide** | no sign-in, no share links | mitigation known, not applied |
 | 3 | **Vercel shared IP blocked** | the app does not open at all | mitigation known, not applied |
 | 4 | Yandex Browser engine incompatibility | — | **not the risk** (Chromium; QA row still open) |
@@ -85,43 +85,25 @@ one order can take the backend away, and keep the product useful without it.
 
 ## Mitigations, in the order they should be done
 
-1. **Ship email-OTP sign-in** (Supabase native, no new provider, no server
-   function). Removes the #1 risk outright for anyone who can reach the
-   backend. Open question is RU mailbox deliverability of the sending domain —
-   provisioning, not code.
-2. **Custom domain for Supabase** when cloud provisioning lands, so an
+1. **Custom domain for Supabase** when cloud provisioning lands, so an
    `*.supabase.co` order does not take us with it. Costs a paid plan.
-3. **Keep `*.vercel.app` as a working address** even after a custom domain
+2. **Keep `*.vercel.app` as a working address** even after a custom domain
    exists, and say so in support copy. It is the documented escape hatch.
-4. **Yandex ID / VK ID** as additional doors — designed in
-   `src/core/cloud/ruAuth.ts`, blocked on the server-side token exchange.
-5. Do **not** ship a VPN recommendation as product copy.
+3. Do **not** ship a VPN recommendation as product copy.
 
-## Auth alternatives — design
+Sign-in is not on this list any more — see the ruling below.
 
-Full rationale and the compiling stub: `src/core/cloud/ruAuth.ts`. Summary:
+## Auth alternatives — RULED OUT (PO, 2026-08-23)
 
-- **email-OTP** — Supabase implements it natively (`signInWithOtp` +
-  `verifyOtp`). No new provider, no server function. Ship first.
-- **Yandex ID** — OAuth 2.0, authorize `oauth.yandex.ru/authorize`, userinfo
-  `login.yandex.ru/info`. The account an RU user already has.
-- **VK ID** — OAuth 2.1 on `id.vk.ru`, PKCE S256 **mandatory**, no client
-  secret, and not compatible with the legacy `oauth.vk.com` endpoints. Signs
-  the flow against an exact `redirect_uri`.
+Yandex ID / VK ID / email-OTP were designed and built as a compiling stub, and
+then removed on PO instruction: *"dont do auth alternatives for rus, just
+prepare it to work in yandex browser."* `CloudProvider` is unchanged — Google is
+the only door, and no optional members or adapters remain in the tree.
 
-Both OAuth providers hand back *their own* tokens, which Supabase will not
-accept — `signInWithIdToken` only speaks to providers it knows. A session has to
-be minted server-side against the project's JWT secret, and a browser holding
-that secret would hand every visitor an admin key. So the token exchange is one
-server function per provider, deployed with the project, and it does not exist
-yet because cloud provisioning is still pending (`docs/CLOUD_RESET.md` steps
-2–3). What is built and tested now is the pure half: PKCE pair generation
-(pinned to the RFC 7636 test vector) and the authorize-URL builder that refuses
-to produce a VK ID URL without PKCE.
-
-`CloudProvider` gained three OPTIONAL members (`authMethods`, `signIn`,
-`verifyOtp`); `signInWithGoogle()` stays required, so nothing that exists today
-changes.
+What that means for risk #1 above: where `accounts.google.com` is unreachable,
+cloud sharing is simply unavailable. Capture, editing and export keep working,
+because they are local — the user still gets their file, they just cannot get a
+link. Do not re-add an alternative without PO asking for it.
 
 ## i18n — decided, not started
 

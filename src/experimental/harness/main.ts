@@ -232,6 +232,16 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'f4',
+    title: 'F4 — movable, timed camera',
+    detail:
+      'records a screen+camera take, drags the PiP at 2 s and 5 s exactly as the editor does, exports, then LOCATES the PiP in decoded frames and compares it against the pose function — including samples between the drags, which prove the camera holds instead of drifting. Also checks the untouched take still takes the instant path with the PiP in its historical slot.',
+    run: async (args) => {
+      const { runCameraMove } = await import('../perf/cameraMove')
+      return runCameraMove({ takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined })
+    },
+  },
+  {
     id: 'datachan',
     title: 'Experiment 6 — Timed data channels (live capture demo)',
     detail:
