@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="baseline" data-frame="desktop" data-neon="on" data-inputs="always" data-recfx="none" data-skin="flat">
+<html lang="en" data-theme="baseline" data-frame="desktop" data-neon="on" data-inputs="menu" data-recfx="breathe" data-skin="volume">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -550,13 +550,13 @@ body.f .filters, body.d .detail { opacity: 1; }
    Everything that shines derives from these — grid, record glow, chip edge, the
    electric fx — so one slider moves the whole language at once. */
 :root {
-  --neon-h: 186;   /* hue        — 0..360 */
+  --neon-h: 205;   /* hue        — 0..360 */
   --neon-s: 100%;
   --neon-l: 60%;
-  --neon-k: 1;     /* strength   — multiplies every alpha */
-  --neon-r: 26px;  /* radius     — outer glow blur */
-  --neon-t: 1.4s;  /* period     — electric / breathe speed */
-  --wedge-k: 1;    /* radial menu fill intensity */
+  --neon-k: 0.65;  /* strength   — multiplies every alpha */
+  --neon-r: 80px;  /* radius     — outer glow blur */
+  --neon-t: 2.2s;  /* period     — electric / breathe speed */
+  --wedge-k: 0.25; /* radial menu fill intensity */
 }
 .app {
   --grid-ink: #050810;
@@ -679,12 +679,12 @@ body.f .filters, body.d .detail { opacity: 1; }
    two so it still reads without hovering, now that the lamps are gone. */
 .wedge__fill {
   fill: var(--surface);
-  fill-opacity: clamp(0, calc(0.26 * var(--wedge-k)), 1);
+  fill-opacity: clamp(0, calc(0.12 * var(--wedge-k)), 1);
   transition: fill 140ms var(--ease), fill-opacity 140ms var(--ease);
 }
 .wedge[data-on='true'] .wedge__fill {
   fill: color-mix(in srgb, var(--surface), var(--accent) 14%);
-  fill-opacity: clamp(0, calc(0.5 * var(--wedge-k)), 1);
+  fill-opacity: clamp(0, calc(0.62 * var(--wedge-k)), 1);
 }
 .wedge:hover .wedge__fill { fill: var(--surface-3); fill-opacity: clamp(0, var(--wedge-k), 1); }
 .wedge[data-on='true']:hover .wedge__fill {
@@ -692,18 +692,19 @@ body.f .filters, body.d .detail { opacity: 1; }
   fill-opacity: 1;
 }
 .wedge__ico {
-  fill: none;
-  stroke: var(--text-faint);
-  stroke-width: 1.6;
+  color: var(--text-faint);
+  stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
-  opacity: 0.7;
+  opacity: 0.34;
   pointer-events: none;
-  transition: stroke 140ms var(--ease), opacity 140ms var(--ease);
+  transition: color 140ms var(--ease), opacity 140ms var(--ease);
 }
-.wedge[data-on='true'] .wedge__ico { stroke: var(--accent); opacity: 1; }
-.wedge:hover .wedge__ico { stroke: var(--text); opacity: 1; }
-.wedge[data-on='true']:hover .wedge__ico { stroke: var(--accent); }
+.wedge__ico .f { fill: currentColor; stroke: none; }
+.wedge__ico .s { fill: none; stroke: currentColor; }
+.wedge[data-on='true'] .wedge__ico { color: var(--accent); opacity: 1; }
+.wedge:hover .wedge__ico { color: var(--text); opacity: 0.85; }
+.wedge[data-on='true']:hover .wedge__ico { color: var(--accent); opacity: 1; }
 
 /* ---------- volume skin ----------
    Both references say the same thing in two places: light comes from somewhere,
@@ -723,9 +724,9 @@ body.f .filters, body.d .detail { opacity: 1; }
 [data-skin='volume'] #wg-out { stop-color: hsl(var(--neon-h) 95% 58%); stop-opacity: 0.72; }
 [data-skin='volume'] .wedge .wedge__fill {
   fill: url(#wgrad);
-  fill-opacity: clamp(0, calc(0.55 * var(--wedge-k)), 1);
+  fill-opacity: clamp(0, calc(0.22 * var(--wedge-k)), 1);
 }
-[data-skin='volume'] .wedge[data-on='true'] .wedge__fill { fill: url(#wgrad); fill-opacity: clamp(0, calc(0.82 * var(--wedge-k)), 1); }
+[data-skin='volume'] .wedge[data-on='true'] .wedge__fill { fill: url(#wgrad); fill-opacity: clamp(0, calc(1.15 * var(--wedge-k)), 1); }
 [data-skin='volume'] .wedge:hover .wedge__fill,
 [data-skin='volume'] .wedge[data-on='true']:hover .wedge__fill {
   fill: url(#wgrad);
@@ -733,18 +734,19 @@ body.f .filters, body.d .detail { opacity: 1; }
 }
 [data-skin='volume'] .wedge .wedge__edge {
   stroke: hsl(var(--neon-h) 95% 68% / 0.5);
-  opacity: 0.7;
+  opacity: 0.12;
 }
-[data-skin='volume'] .wedge[data-on='true'] .wedge__edge { stroke: hsl(var(--neon-h) 95% 72% / 0.85); opacity: 1; }
+[data-skin='volume'] .wedge[data-on='true'] .wedge__edge { stroke: hsl(var(--neon-h) 95% 72% / 0.95); opacity: 1; }
 [data-skin='volume'] .wedge:hover .wedge__edge {
   stroke: hsl(var(--neon-h) 100% 82%);
   opacity: 1;
   filter: drop-shadow(0 0 calc(var(--neon-r) * 0.35) hsl(var(--neon-h) 100% 60% / 0.7));
 }
 [data-skin='volume'] .radial__sep { stroke: hsl(var(--neon-h) 40% 70% / 0.22); }
-[data-skin='volume'] .wedge .wedge__ico { stroke: #dbe6f5; opacity: 0.78; }
-[data-skin='volume'] .wedge:hover .wedge__ico,
-[data-skin='volume'] .wedge[data-on='true'] .wedge__ico { stroke: #fff; opacity: 1; }
+[data-skin='volume'] .wedge .wedge__ico { color: #93a6bd; opacity: 0.32; }
+[data-skin='volume'] .wedge[data-on='true'] .wedge__ico { color: #fff; opacity: 1; }
+[data-skin='volume'] .wedge:hover .wedge__ico { color: #dbe6f5; opacity: 0.85; }
+[data-skin='volume'] .wedge[data-on='true']:hover .wedge__ico { color: #fff; opacity: 1; }
 [data-skin='volume'] .radial__hub {
   fill: #08090c;
   stroke: hsl(var(--neon-h) 40% 60% / 0.16);
@@ -798,13 +800,13 @@ body.f .filters, body.d .detail { opacity: 1; }
 .wedge__arc {
   fill: none;
   stroke: var(--text-dim);
-  stroke-width: 4;
+  stroke-width: 1.4;
   stroke-linecap: round;
   opacity: 0;
   pointer-events: none;
   transition: opacity 140ms var(--ease);
 }
-.wedge:hover .wedge__arc { opacity: 1; }
+.wedge:hover .wedge__arc { opacity: 0.55; }
 .wedge[data-on='true'] .wedge__arc { stroke: var(--accent); }
 [data-neon='on'] .wedge:hover .wedge__arc { filter: drop-shadow(0 0 calc(var(--neon-r) * 0.4) var(--neon-38)); }
 .cluster__hint {
@@ -1822,23 +1824,23 @@ T F N  theme · frame · neon
       <div class="panel__group">
         <div class="panel__label">Inputs</div>
         <select id="inputs">
-          <option value="always">pills — always on the ring</option>
-          <option value="hover">radial menu — on button hover</option>
           <option value="menu">radial menu — always</option>
+          <option value="hover">radial menu — on button hover</option>
+          <option value="always">pills — always on the ring</option>
         </select>
       </div>
       <div class="panel__group">
         <div class="panel__label">Skin</div>
         <select id="skin">
-          <option value="flat">flat — today</option>
           <option value="volume">volume — plate + lit wedges</option>
+          <option value="flat">flat — today</option>
         </select>
       </div>
       <div class="panel__group">
         <div class="panel__label">Record button fx</div>
         <select id="recfx">
-          <option value="none">none</option>
           <option value="breathe">breathe</option>
+          <option value="none">none</option>
         </select>
       </div>
       <div class="panel__group">
@@ -1847,16 +1849,16 @@ T F N  theme · frame · neon
           <option value="on">on</option>
           <option value="off">off</option>
         </select>
-        <div class="slider"><label>hue</label><input type="range" id="s-hue" min="0" max="360" step="1" value="186"><output id="o-hue">186</output></div>
-        <div class="slider"><label>strength</label><input type="range" id="s-k" min="0" max="3" step="0.05" value="1"><output id="o-k">1.00</output></div>
-        <div class="slider"><label>radius</label><input type="range" id="s-r" min="0" max="80" step="1" value="26"><output id="o-r">26</output></div>
-        <div class="slider"><label>speed</label><input type="range" id="s-t" min="0.3" max="4" step="0.1" value="1.4"><output id="o-t">1.4</output></div>
+        <div class="slider"><label>hue</label><input type="range" id="s-hue" min="0" max="360" step="1" value="205"><output id="o-hue">205</output></div>
+        <div class="slider"><label>strength</label><input type="range" id="s-k" min="0" max="3" step="0.05" value="0.65"><output id="o-k">0.65</output></div>
+        <div class="slider"><label>radius</label><input type="range" id="s-r" min="0" max="120" step="1" value="80"><output id="o-r">80</output></div>
+        <div class="slider"><label>speed</label><input type="range" id="s-t" min="0.3" max="4" step="0.1" value="2.2"><output id="o-t">2.2</output></div>
       </div>
       <div class="panel__group">
         <div class="panel__label">Radial menu</div>
-        <div class="slider"><label>size</label><input type="range" id="m-size" min="80" max="170" step="1" value="118"><output id="o-msize">118</output></div>
-        <div class="slider"><label>gap</label><input type="range" id="m-gap" min="40" max="110" step="1" value="54"><output id="o-mgap">54</output></div>
-        <div class="slider"><label>fill</label><input type="range" id="m-fill" min="0" max="2" step="0.05" value="1"><output id="o-mfill">1.00</output></div>
+        <div class="slider"><label>size</label><input type="range" id="m-size" min="80" max="170" step="1" value="107"><output id="o-msize">107</output></div>
+        <div class="slider"><label>gap</label><input type="range" id="m-gap" min="40" max="110" step="1" value="41"><output id="o-mgap">41</output></div>
+        <div class="slider"><label>fill</label><input type="range" id="m-fill" min="0" max="2" step="0.05" value="0.25"><output id="o-mfill">0.25</output></div>
       </div>
       <div class="panel__group">
         <div class="panel__label">Scroll bounce</div>
@@ -1925,7 +1927,7 @@ const CHANNELS = [
   { key: 'screen', label: 'Screen', ic: 'display', on: true },
   { key: 'camera', label: 'Camera', ic: 'camera', on: true },
   { key: 'mic', label: 'Mic', ic: 'mic', on: true },
-  { key: 'sys', label: 'System audio', ic: 'waves', on: false },
+  { key: 'sys', label: 'System audio', ic: 'waves', on: true },
 ]
 
 /* lanes: [channel, startOffset%, width%, keptFrom%, keptTo%] — of the lane bar */
@@ -1969,7 +1971,7 @@ CHANNELS.forEach((c, i) => {
    Wedges are annulus sectors: out along the outer radius, back along the inner.
    Everything is one SVG so the geometry, the hover target and the icon can
    never drift apart; the icons are the product's own paths, scaled into place. */
-let R_OUT = 118, R_IN = 54 // driven by the size and gap sliders
+let R_OUT = 107, R_IN = 41 // driven by the size and gap sliders
 const PAD = 0.018 // radians of gap between wedges
 const WEDGE_AT = { screen: -90, camera: 0, sys: 90, mic: 180 } // clockwise from the top
 const pol = (r, a) => [(200 + r * Math.cos(a)).toFixed(2), (200 + r * Math.sin(a)).toFixed(2)]
@@ -1983,14 +1985,25 @@ function arc(r, a0, a1) {
   const [x1, y1] = pol(r, a0), [x2, y2] = pol(r, a1)
   return `M${x1} ${y1}A${r} ${r} 0 0 1 ${x2} ${y2}`
 }
-/* Menu glyphs, third pass: one closed shape plus at most two marks each, drawn
-   on the 24 grid with flat sides on the pixel. The earlier set was fussy at
-   this size — too many strokes competing inside a small wedge. */
+/* Menu glyphs, fourth pass — solid, not outlined. Outlines were the problem:
+   at ~20px a 1.4px stroke on a translucent gradient is four hairlines fighting
+   for the same pixels, and it reads as fuzz. A silhouette has one edge, holds
+   its shape at any size, and stays legible when the fill behind it moves.
+   `.f` shapes are filled, `.s` are the few strokes worth keeping. */
 const WEDGE_ICON = {
-  screen: '<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M12 17v2.5M9 20h6"/>',
-  camera: '<rect x="3" y="7" width="12" height="10" rx="2"/><path d="M15 11l6-3v8l-6-3z"/>',
-  mic: '<rect x="9.5" y="3" width="5" height="10" rx="2.5"/><path d="M6 11.5a6 6 0 0 0 12 0M12 17.5v3"/>',
-  sys: '<path d="M4 9.5h3.5L12 6v12L7.5 14.5H4z"/><path d="M16 10a4 4 0 0 1 0 4"/>',
+  screen:
+    '<path class="f" d="M4.2 4.6h15.6c1.2 0 2.2 1 2.2 2.2v7.9c0 1.2-1 2.2-2.2 2.2H4.2c-1.2 0-2.2-1-2.2-2.2V6.8c0-1.2 1-2.2 2.2-2.2Z"/>' +
+    '<path class="f" d="M11.1 17.4h1.8v2.1h-1.8zM8.4 19.2h7.2v1.5H8.4z"/>',
+  camera:
+    '<rect class="f" x="2.2" y="6.6" width="12" height="10.8" rx="2.4"/>' +
+    '<path class="f" d="M15.4 11.1l5.3-3a.7.7 0 0 1 1.1.6v6.6a.7.7 0 0 1-1.1.6l-5.3-3z"/>',
+  mic:
+    '<rect class="f" x="9.2" y="2.6" width="5.6" height="11" rx="2.8"/>' +
+    '<path class="s" d="M5.8 11.2a6.2 6.2 0 0 0 12.4 0"/>' +
+    '<path class="f" d="M11.1 17.6h1.8v3.1h-1.8z"/>',
+  sys:
+    '<path class="f" d="M4.4 9.2h3.2l4.3-3.6a.75.75 0 0 1 1.25.58v11.6a.75.75 0 0 1-1.25.58L7.6 14.8H4.4a1 1 0 0 1-1-1v-3.6a1 1 0 0 1 1-1Z"/>' +
+    '<path class="s" d="M16.4 9.8a4.6 4.6 0 0 1 0 4.4M19.3 7.4a8.4 8.4 0 0 1 0 9.2"/>',
 }
 const span = (2 * Math.PI) / CHANNELS.length
 /* Rebuilt whole whenever size or gap moves — the geometry is the truth, not a
@@ -2371,7 +2384,7 @@ const frameEl = document.getElementById('frameEl')
    The size is free now: presets seed it, the corner grip drags it. */
 const SIZES = { desktop: [1040, 660], laptop: [820, 520], phone: [390, 800] }
 const MIN_W = 320, MIN_H = 360, MAX_W = 2560, MAX_H = 1600
-let FRAME_W = 1040, FRAME_H = 660, SCALE = 1
+let FRAME_W = 968, FRAME_H = 785, SCALE = 1
 const zsize = document.getElementById('zsize')
 const zfit = document.getElementById('zfit')
 function fitBox() {
