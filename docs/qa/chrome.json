@@ -1,0 +1,50 @@
+{
+  "browser": "chrome",
+  "label": "Google Chrome",
+  "binary": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "binaryVersion": "Google Chrome 151.0.7922.170",
+  "uaSpoofedAs": null,
+  "takeMs": 6000,
+  "gates": {
+    "boots": true,
+    "identifiedBrowser": true,
+    "supported": true,
+    "recorded": true,
+    "reachedEditor": true,
+    "exported": true,
+    "exportNonEmpty": true,
+    "noConsoleErrors": true
+  },
+  "consoleErrors": [],
+  "cdpProduct": "Chrome/151.0.7922.170",
+  "cdpUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+  "inoutSupport": {
+    "platform": {
+      "engine": "chromium",
+      "browser": "chrome",
+      "browserVersion": "151.0.0.0",
+      "chromiumMajor": 151,
+      "os": "macos",
+      "osVersion": "10.15.7",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+    },
+    "missing": [],
+    "support": {
+      "ok": true,
+      "missing": [],
+      "belowFloor": false,
+      "message": null,
+      "action": "none"
+    }
+  },
+  "channels": [
+    "Screen",
+    "Camera",
+    "Mic",
+    "Tab Audio"
+  ],
+  "exportMs": 508,
+  "exportMeta": "0:06 · 1.6 MB · 1920×1080",
+  "failed": [],
+  "verdict": "PASS"
+}

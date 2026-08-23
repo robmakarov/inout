@@ -39,8 +39,10 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
   F4   movable camera (TIMED)      [medium]  PO's emphasized feature. F1 shipped the timeline/UI seam
                                              it was waiting on, so this is unblocked NOW.
   F5a  silence tightening          [medium]  rides F1's cut machinery (shipped). DSP only, no ML ever.
-  P1   firefox + 3-engine oracle   [medium]  capabilities.ts engine×OS matrix + Playwright gecko run
-  P3   ru-pack part 1              [light]   Yandex QA slot, RU reachability report, auth-alt design
+  P1   firefox + 3-engine oracle   [medium]  capabilities.ts engine×OS matrix + Playwright gecko run.
+                                             NOW EASIER: P3 shipped core/platform.ts (engine+browser+OS,
+                                             probe-first) and scripts/browser-check.mjs — consume them,
+                                             don't rebuild them.
   P5a  iOS SCK spike               [light]   separate Xcode proj, no repo code — TIME-SENSITIVE
                                              (iOS 27 ships ~Sept 2026; answer the 5 questions)
 NEEDS PO INPUT BEFORE BUILDING:
@@ -331,7 +333,7 @@ beforeinstallprompt affordance with remembered dismissal. Offline reload reaches
 the network provably blocked; capture verified unaffected under a controlling worker.
 Gate script: `node scripts/pwa-check.mjs`. Lighthouse itself not run (not installed).
 
-## P3. ru-pack part 1 — Yandex QA + reachability + auth alternatives  [P3, light, parallel-safe]
+## P3. ru-pack part 1 — DONE 2026-08-23, merged (2 gates await PO hardware/network — see handoff)
 Why: RU market ≈ 75 % Chromium (Chrome ~53 % + Yandex ~18 %, current Chromium base, verified 2026-08).
 The real risks are infra and auth, not the engine.
 Goal: Yandex Browser slot in the QA matrix + version-floor probe · reachability test of app + Supabase
@@ -341,6 +343,46 @@ implementation when cloud provisioning lands · i18n approach DECIDED only (stri
 no mass string churn yet (avoids F-phase conflicts). Aurora OS: explicitly out (no modern engine).
 GATES: Yandex smoke capture→edit→export documented with version · reachability report · auth-alt
 design in ARCH + stub compiles · zero behavior change for current users.
+── HANDOFF 2026-08-23 (ee/p3) — DONE except the two gates that need hardware/network we don't have.
+GATE 1 Yandex smoke — PARTIAL, honestly. Yandex Browser is NOT installed on the TD machine and
+  installing it is a download, which is PO's to run. So the gate was turned into ONE command:
+  `node scripts/browser-check.mjs --browser=yandex --out=docs/qa/yandex.json` — it finds Yandex at
+  both macOS app spellings, drives the PRODUCTION build through record→stop→editor→export in the
+  real browser, and writes the row's evidence. What IS measured: Chrome 151.0.7922.170 PASS on all
+  8 gates (4 channels, export 1.6 MB 1920×1080 in 508 ms, zero console errors), plus two UA-spoofed
+  runs that prove OUR detection — a YaBrowser UA is named yandex (not chrome) with Chromium 128 read
+  correctly, and a 2021 Yandex UA reports belowFloor:true while still being allowed to run. Those
+  spoof runs prove nothing about Yandex's engine and docs/QA_MATRIX.md says so in the table.
+GATE 2 reachability — report written (docs/RU_REACHABILITY.md) with a non-RU BASELINE measured
+  (docs/qa/reachability-baseline.json: app 200, supabase-platform 307, google-oauth 200, yandex-id
+  302, login.yandex 401, vk-id 200). The RU run itself is NOT done and cannot be faked from here —
+  a VPN run measures the VPN. `node scripts/ru-reachability.mjs --label="<ISP>, no VPN" --supabase=<url>`
+  from an RU connection closes it. Ranked finding: the engine is a non-issue (Chromium), the risks
+  are Google-sign-in unreachability (#1), a platform-wide *.supabase.co order (#2, proven shape —
+  India blocked it at Jio/Airtel/ACT on 2026-02-24), and Vercel shared-IP collateral blocks (#3,
+  reports 2021→Jan 2026; *.vercel.app keeps working while custom domains die, so the custom domain
+  we don't have yet is the exposure). Nothing threatens a RECORDING — capture/edit/export are local.
+GATE 3 auth-alt design — DONE. In ARCH + docs. types.ts gained OPTIONAL authMethods()/signIn()/
+  verifyOtp(); signInWithGoogle() stays required. core/cloud/ruAuth.ts holds the pure, tested half
+  (PKCE pinned to the RFC 7636 vector, authorize-URL builder that REFUSES a VK ID URL without PKCE);
+  the token exchange is deliberately absent because both providers return their own tokens, Supabase
+  won't accept them, and minting a session needs the JWT secret — which a browser must never hold.
+  email-OTP is Supabase-native, needs no server function, and is the cheapest RU unblock: ship first.
+GATE 4 zero behavior change — held. typecheck clean · 181/181 tests (28 new) · oracle PASS
+  (sync 36.2 ms, spur −52.4 dB, jump 0, tail 70 ms, export 5.04×) · first paint 225,689 B vs the
+  ≤300 KB O7 gate. The below-floor notice is the only new UI and it is silent on every browser that
+  passes the probes.
+CAUGHT A BUG IN ITSELF: the first probe list included createSyncAccessHandle, which is
+  [Exposed=DedicatedWorker] — invisible from the main thread — so Chrome 151 declared ITSELF
+  unsupported and every user would have seen a "switch browsers" banner. browser-check.mjs caught it
+  on its first run; platform.test.ts now fails if anything worker-only is re-added to the list.
+i18n DECIDED, not started (docs/RU_REACHABILITY.md): flat typed catalog in src/app/i18n/en.ts, ~20-line
+  t() and no library (first paint budget), lazy locale packs, Intl.PluralRules for RU's three forms,
+  format.ts as the number/date seam, and EXTRACTION IS MANUAL-ON-TOUCH — a mass string rewrite now
+  would collide with F2/F3/F4/F5, all of which are editing UI files.
+Aurora OS: OUT, decided, not a backlog item — no modern engine ships on it.
+STILL OPEN for PO: (a) install Yandex Browser + run the one command above; (b) run the reachability
+  probe from an RU connection without a VPN.
 
 ## P4. desktop-shell — Electron + native capture bridges  [P1 of phase, heavy, AFTER O4/O5]
 Why: what no browser can give: FULL system audio on macOS (ScreenCaptureKit), global cursor/click

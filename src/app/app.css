@@ -130,6 +130,29 @@
   z-index: 7;
 }
 
+/* Below-floor / missing-API notice (P3). Same geometry as the stalled band, but
+   it is a standing condition rather than a live failure — so it sits on a
+   neutral surface with a marker, not on danger red (org style rule 2: colour
+   says WHERE to look, type says what). */
+.capture__unsupported {
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(520px, calc(100% - 32px));
+  background: var(--surface-2);
+  border: 1px solid var(--surface-3);
+  border-left: 3px solid var(--warn);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 450;
+  line-height: 1.45;
+  text-align: left;
+  padding: 10px 14px;
+  border-radius: var(--r-md, 12px);
+  z-index: 7;
+}
+
 .capture--recording {
   background: #0a0a0a;
 }

@@ -1,0 +1,272 @@
+{
+  "runAt": "2026-08-23T14:18:05.942Z",
+  "label": "TD machine, non-RU baseline",
+  "node": "v24.11.1",
+  "platform": "darwin",
+  "targets": [
+    {
+      "id": "app",
+      "host": "inout-kappa.vercel.app",
+      "url": "https://inout-kappa.vercel.app",
+      "why": "The app itself. Red = nobody in RU can open INOUT at all.",
+      "critical": true,
+      "dns": {
+        "system": {
+          "addresses": [
+            "64.29.17.195",
+            "216.198.79.195"
+          ],
+          "ms": 37
+        },
+        "public": {
+          "addresses": [
+            "216.198.79.67",
+            "64.29.17.67"
+          ],
+          "ms": 27
+        },
+        "divergent": true,
+        "systemBlockedOnly": false
+      },
+      "tls": {
+        "ok": true,
+        "protocol": "TLSv1.3",
+        "issuer": "Google Trust Services",
+        "subject": "*.vercel.app",
+        "ms": 496
+      },
+      "http": {
+        "status": 200,
+        "ms": 739,
+        "location": null,
+        "server": "Vercel",
+        "bytes": 887,
+        "looksLikeBlockPage": false
+      },
+      "reachable": true
+    },
+    {
+      "id": "vercel-apex",
+      "host": "76.76.21.21",
+      "url": null,
+      "why": "The shared Vercel apex IP custom domains point at. Historically blocked in RU as collateral damage from other tenants; the block moves between IPs over time.",
+      "critical": false,
+      "dns": {
+        "skipped": "target is a literal IP"
+      },
+      "tls": {
+        "ok": false,
+        "error": "ECONNRESET",
+        "ms": 1041
+      },
+      "http": {
+        "skipped": "no URL for this target"
+      },
+      "reachable": false
+    },
+    {
+      "id": "supabase-api",
+      "skipped": "no VITE_SUPABASE_URL configured — pass --supabase=",
+      "why": "This project’s Supabase. Red = no sign-in and no share links; local capture/edit/export still work (they are offline by design)."
+    },
+    {
+      "id": "supabase-platform",
+      "host": "supabase.co",
+      "url": "https://supabase.co/",
+      "why": "The whole multi-tenant domain. India blocked *.supabase.co DNS wholesale in Feb 2026 — one order takes every project down, so this is the shape of the risk, not just our project.",
+      "critical": false,
+      "dns": {
+        "system": {
+          "addresses": [
+            "76.76.21.21"
+          ],
+          "ms": 84
+        },
+        "public": {
+          "addresses": [
+            "76.76.21.21"
+          ],
+          "ms": 27
+        },
+        "divergent": false,
+        "systemBlockedOnly": false
+      },
+      "tls": {
+        "ok": true,
+        "protocol": "TLSv1.3",
+        "issuer": "Let's Encrypt",
+        "subject": "supabase.co",
+        "ms": 195
+      },
+      "http": {
+        "status": 307,
+        "ms": 165,
+        "location": "https://supabase.com/",
+        "server": "Vercel",
+        "bytes": 15,
+        "looksLikeBlockPage": false
+      },
+      "reachable": true
+    },
+    {
+      "id": "google-oauth",
+      "host": "accounts.google.com",
+      "url": "https://accounts.google.com/.well-known/openid-configuration",
+      "why": "The ONLY sign-in we ship today. Red = cloud sharing is unusable in RU even if Supabase itself is reachable. This is what the auth alternatives exist for.",
+      "critical": true,
+      "dns": {
+        "system": {
+          "addresses": [
+            "142.251.10.84"
+          ],
+          "ms": 6
+        },
+        "public": {
+          "addresses": [
+            "173.194.174.84"
+          ],
+          "ms": 30
+        },
+        "divergent": true,
+        "systemBlockedOnly": false
+      },
+      "tls": {
+        "ok": true,
+        "protocol": "TLSv1.3",
+        "issuer": "Google Trust Services",
+        "subject": "accounts.google.com",
+        "ms": 117
+      },
+      "http": {
+        "status": 200,
+        "ms": 164,
+        "location": null,
+        "server": "sffe",
+        "bytes": 1399,
+        "looksLikeBlockPage": false
+      },
+      "reachable": true
+    },
+    {
+      "id": "yandex-id",
+      "host": "oauth.yandex.ru",
+      "url": "https://oauth.yandex.ru/authorize",
+      "why": "Yandex ID authorize endpoint — auth alternative #1, and the one an RU user already has an account for.",
+      "critical": false,
+      "dns": {
+        "system": {
+          "addresses": [
+            "87.250.251.227"
+          ],
+          "ms": 8
+        },
+        "public": {
+          "addresses": [
+            "87.250.251.227"
+          ],
+          "ms": 31
+        },
+        "divergent": false,
+        "systemBlockedOnly": false
+      },
+      "tls": {
+        "ok": true,
+        "protocol": "TLSv1.3",
+        "issuer": "GlobalSign nv-sa",
+        "subject": "*.oauth.yandex.ru",
+        "ms": 707
+      },
+      "http": {
+        "status": 302,
+        "ms": 922,
+        "location": "https://passport.yandex.ru/auth?retpath=https%3A%2F%2Foauth.yandex.ru%2Fauthorize&noreturn=1&origin=oauth",
+        "server": null,
+        "bytes": 127,
+        "looksLikeBlockPage": false
+      },
+      "reachable": true
+    },
+    {
+      "id": "yandex-login",
+      "host": "login.yandex.ru",
+      "url": "https://login.yandex.ru/info",
+      "why": "Yandex ID userinfo endpoint (the token exchange target).",
+      "critical": false,
+      "dns": {
+        "system": {
+          "addresses": [
+            "87.250.254.120"
+          ],
+          "ms": 406
+        },
+        "public": {
+          "addresses": [
+            "87.250.254.120"
+          ],
+          "ms": 30
+        },
+        "divergent": false,
+        "systemBlockedOnly": false
+      },
+      "tls": {
+        "ok": true,
+        "protocol": "TLSv1.2",
+        "issuer": "GlobalSign nv-sa",
+        "subject": "login.yandex.ru",
+        "ms": 857
+      },
+      "http": {
+        "status": 401,
+        "ms": 1099,
+        "location": null,
+        "server": null,
+        "bytes": 113,
+        "looksLikeBlockPage": false
+      },
+      "reachable": true
+    },
+    {
+      "id": "vk-id",
+      "host": "id.vk.ru",
+      "url": "https://id.vk.ru/authorize",
+      "why": "VK ID authorize endpoint — auth alternative #2 (OAuth 2.1 + PKCE).",
+      "critical": false,
+      "dns": {
+        "system": {
+          "addresses": [
+            "93.186.237.1",
+            "95.213.56.1"
+          ],
+          "ms": 7
+        },
+        "public": {
+          "addresses": [
+            "93.186.237.1",
+            "95.213.56.1"
+          ],
+          "ms": 42
+        },
+        "divergent": false,
+        "systemBlockedOnly": false
+      },
+      "tls": {
+        "ok": true,
+        "protocol": "TLSv1.3",
+        "issuer": "Let's Encrypt",
+        "subject": "vkontakte.ru",
+        "ms": 1043
+      },
+      "http": {
+        "status": 200,
+        "ms": 1609,
+        "location": null,
+        "server": "kittenx",
+        "bytes": 145401,
+        "looksLikeBlockPage": false
+      },
+      "reachable": true
+    }
+  ],
+  "unreachableCritical": [],
+  "verdict": "ALL-CRITICAL-REACHABLE"
+}

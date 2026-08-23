@@ -10,6 +10,7 @@ import { CaptureError, MAX_RECORDING_MS } from '@core/types'
 import type { CaptureConfig, ChannelKind } from '@core/types'
 import { clampEditState, defaultEditState } from '@core/timeline'
 import { detectCapabilities } from '@core/capabilities'
+import { evaluateSupport } from '@core/platform'
 import { analytics } from '@core/analytics'
 import { prefetchEditorChunk } from '@app/editorChunk'
 import { useInstallPrompt } from '@app/hooks/useInstallPrompt'
@@ -45,6 +46,10 @@ const ARMING_LABEL: Record<ArmingTimelineEntry['step'], string> = {
 
 export function CaptureScreen() {
   const caps = useMemo(() => detectCapabilities(), [])
+  /** Silent on every browser that passes the probes — a below-floor build is
+   * the only case that gets a line, because it fails in ways an error toast
+   * cannot explain ("nothing happened"). P3. */
+  const support = useMemo(() => evaluateSupport(), [])
   const session = useAppStore((s) => s.session)
   const setSession = useAppStore((s) => s.setSession)
   const toast = useAppStore((s) => s.toast)
@@ -255,6 +260,11 @@ export function CaptureScreen() {
           >
             <Icon name="x" size={13} />
           </button>
+        </div>
+      )}
+      {!session && !support.ok && support.message && (
+        <div className="capture__unsupported" role="alert">
+          {support.message}
         </div>
       )}
       {arming && armingLabel && <div className="capture__arming">{armingLabel}</div>}
