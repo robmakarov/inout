@@ -570,7 +570,7 @@ body.f .filters, body.d .detail { opacity: 1; }
   --wedge-s: 40%;  /* radial menu tint — 0% is white, 100% is full hue */
 }
 .app {
-  --grid-ink: #050810;
+  --grid-ink: #000;
   --grid-cell: 24px;
   --neon-c: hsl(var(--neon-h) var(--neon-s) var(--neon-l));
   --neon-38: hsl(var(--neon-h) var(--neon-s) var(--neon-l) / calc(0.38 * var(--neon-k)));
@@ -579,7 +579,7 @@ body.f .filters, body.d .detail { opacity: 1; }
   --neon-16: hsl(var(--neon-h) var(--neon-s) var(--neon-l) / calc(0.16 * var(--neon-k)));
   --neon-45: hsl(var(--neon-h) var(--neon-s) var(--neon-l) / calc(0.45 * var(--neon-k)));
   --grid-line: hsl(var(--neon-h) 100% 50% / calc(0.03 * var(--neon-k)));
-  --grid-glow: hsl(calc(var(--neon-h) + 14) 100% 45% / calc(0.08 * var(--neon-k)));
+  --grid-glow: hsl(var(--neon-h) 60% 45% / calc(0.028 * var(--neon-k)));
 }
 .capture { position: relative; height: 100%; background: var(--grid-ink); }
 .capture--recording { background: var(--grid-ink); }
@@ -613,7 +613,7 @@ body.f .filters, body.d .detail { opacity: 1; }
     90deg,
     rgba(0, 0, 0, 0) 0%,
     rgba(0, 0, 0, 0) 44%,
-    rgba(2, 3, 8, 0.38) 78%,
+    rgba(0, 0, 0, 0.38) 78%,
     rgba(0, 0, 0, 0.52) 100%
   );
 }
@@ -711,7 +711,7 @@ body.f .filters, body.d .detail { opacity: 1; }
   pointer-events: none;
   transition: color 140ms var(--ease), opacity 140ms var(--ease);
 }
-.wedge__ico .f { fill: currentColor; stroke: none; }
+.wedge__ico .f,
 .wedge__ico .s { fill: none; stroke: currentColor; }
 .wedge[data-on='true'] .wedge__ico { color: #fff; opacity: 1; }
 .wedge:hover .wedge__ico { color: var(--text); opacity: 0.85; }
@@ -747,9 +747,9 @@ body.f .filters, body.d .detail { opacity: 1; }
   stroke: hsl(var(--neon-h) var(--wedge-s) 86% / 0.5);
   opacity: 0.12;
 }
-[data-skin='volume'] .wedge[data-on='true'] .wedge__edge { stroke: hsl(var(--neon-h) var(--wedge-s) 92% / 0.95); opacity: 1; }
+[data-skin='volume'] .wedge[data-on='true'] .wedge__edge { stroke: hsl(var(--neon-h) calc(var(--wedge-s) + 32%) 78% / 0.95); opacity: 1; }
 [data-skin='volume'] .wedge:hover .wedge__edge {
-  stroke: hsl(var(--neon-h) var(--wedge-s) 96%);
+  stroke: hsl(var(--neon-h) calc(var(--wedge-s) + 22%) 88%);
   opacity: 1;
   filter: drop-shadow(0 0 calc(var(--neon-r) * 0.35) hsl(var(--neon-h) 100% 60% / 0.7));
 }
@@ -776,6 +776,11 @@ body.f .filters, body.d .detail { opacity: 1; }
     0 8px 20px rgba(0, 0, 0, 0.55),
     0 2px 5px rgba(0, 0, 0, 0.5);
 }
+/* The disc idles muted and comes up to full on hover — the plate and its ring
+   are left alone, so only the colour moves, not the shape. */
+.recbtn__inner { filter: saturate(0.5) brightness(0.6); }
+.recbtn:hover .recbtn__inner,
+.recbtn--arming .recbtn__inner { filter: none; }
 [data-skin='volume'] .recbtn__inner {
   width: 48px;
   height: 48px;
@@ -823,7 +828,6 @@ body.f .filters, body.d .detail { opacity: 1; }
 [data-skin='volume'] .wedge[data-state='denied'] .wedge__ico { color: var(--record); opacity: 0.95; }
 .wedge[data-state='denied'] .wedge__edge,
 [data-skin='volume'] .wedge[data-state='denied'] .wedge__edge { stroke: var(--record); opacity: 0.7; }
-.wedge[data-state='denied'] .wedge__cap { fill: var(--record); }
 
 .wedge[data-state='blocked'] { cursor: not-allowed; }
 .wedge[data-state='blocked'] .wedge__fill,
@@ -835,7 +839,6 @@ body.f .filters, body.d .detail { opacity: 1; }
 [data-skin='volume'] .wedge[data-state='blocked'] .wedge__ico { color: var(--text-faint); opacity: 0.3; }
 .wedge[data-state='blocked'] .wedge__edge,
 [data-skin='volume'] .wedge[data-state='blocked'] .wedge__edge { opacity: 0; }
-.wedge[data-state='blocked'] .wedge__cap { fill: var(--text-faint); }
 .wedge[data-state='blocked']:hover .wedge__fill,
 [data-skin='volume'] .wedge[data-state='blocked']:hover .wedge__fill {
   fill-opacity: clamp(0, calc(0.3 * var(--wedge-k)), 1);
@@ -864,6 +867,20 @@ body.f .filters, body.d .detail { opacity: 1; }
   transition: opacity 140ms var(--ease);
 }
 .wedge:hover .wedge__cap { opacity: 1; fill: var(--text); }
+/* the state is a second, quieter line — never welded onto the name */
+.wedge__cap2 {
+  font-family: var(--font);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  fill: var(--text-faint);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms var(--ease);
+}
+.wedge:hover .wedge__cap2 { opacity: 1; }
+.wedge[data-state='denied'] .wedge__cap2 { fill: var(--record); }
 /* the lit arc outside the rim, on the hovered wedge only */
 .wedge__arc {
   fill: none;
@@ -877,24 +894,37 @@ body.f .filters, body.d .detail { opacity: 1; }
 .wedge:hover .wedge__arc { opacity: 0.55; }
 .wedge[data-on='true'] .wedge__arc { stroke: var(--accent); }
 [data-neon='on'] .wedge:hover .wedge__arc { filter: drop-shadow(0 0 calc(var(--neon-r) * 0.4) var(--neon-38)); }
-/* Sits a fixed distance under whatever is actually drawn — the donut's outer
-   radius, or the pill orbit — instead of a negative margin guessing at it. */
 .cluster { position: relative; }
-.cluster__hint {
+/* One notice slot, top centre, where the product already puts arming and
+   stalled messages. It had been chasing the cluster around the middle of the
+   screen; a message that moves with what it is about is a message you have to
+   find. Fixed place, appears and clears in it, collides with nothing. */
+.notice {
   position: absolute;
+  top: 18px;
   left: 50%;
-  top: calc(50% + var(--hint-y, 150px));
-  transform: translateX(-50%);
+  transform: translateX(-50%) translateY(-6px);
+  z-index: 12;
+  max-width: min(340px, 78%);
+  padding: 8px 15px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  border: var(--edge-w) solid var(--edge);
+  box-shadow: var(--shadow-1);
+  color: var(--text-dim);
+  font-size: 12.5px;
+  line-height: 1.4;
   text-align: center;
-  font-size: 12px;
-  line-height: 1.35;
-  color: var(--text-faint);
-  min-height: 17px;
-  max-width: 260px;
-  white-space: normal;
-  transition: color 160ms var(--ease);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms var(--ease), transform 220ms var(--ease);
 }
-.cluster__hint--warn { color: var(--record); }
+.notice--on { opacity: 1; transform: translateX(-50%) translateY(0); }
+.notice--warn {
+  color: #fff;
+  background: color-mix(in srgb, var(--record), #000 30%);
+  border-color: color-mix(in srgb, var(--record), transparent 40%);
+}
 /* Framed exactly where the editor puts its stage — same width, same centre —
    so the picture does not move on the hand-off from recording to editing. */
 .capture__preview {
@@ -1606,6 +1636,13 @@ body.f .filters, body.d .detail { opacity: 1; }
         <button class="tab" role="tab" data-tab="share" aria-selected="false">Share</button>
       </div>
       <div class="panel__group">
+        <div class="panel__label">Simulate availability</div>
+        <div class="perm"><label>screen</label><select data-perm="screen"><option value="ok">ok</option><option value="denied">denied</option><option value="blocked">unavailable</option></select></div>
+        <div class="perm"><label>camera</label><select data-perm="camera"><option value="ok">ok</option><option value="denied">denied</option><option value="blocked">unavailable</option></select></div>
+        <div class="perm"><label>mic</label><select data-perm="mic"><option value="ok">ok</option><option value="denied">denied</option><option value="blocked">unavailable</option></select></div>
+        <div class="perm"><label>sound</label><select data-perm="sys"><option value="ok">ok</option><option value="denied">denied</option><option value="blocked">unavailable</option></select></div>
+      </div>
+      <div class="panel__group">
         <div class="panel__label">Keys</div>
         <div class="readout">1–5  screen
 0    replay splash
@@ -1764,6 +1801,7 @@ T F N  theme · frame · neon
         <div class="capture">
           <div class="capture__grid"></div>
           <div class="capture__vignette"></div>
+          <div class="notice" data-hint></div>
           <!-- anchor holds the centring; .cluster is the spring's to move -->
           <div class="cluster-anchor">
             <div class="cluster" data-cluster>
@@ -1773,7 +1811,7 @@ T F N  theme · frame · neon
                   <span class="recbtn__inner"></span>
                 </button>
               </div>
-              <div class="cluster__hint" data-hint></div>
+
             </div>
           </div>
         </div>
@@ -1934,13 +1972,6 @@ T F N  theme · frame · neon
         <div class="slider"><label>speed</label><input type="range" id="s-t" min="0.3" max="4" step="0.1" value="2.2"><output id="o-t">2.2</output></div>
       </div>
       <div class="panel__group">
-        <div class="panel__label">Simulate availability</div>
-        <div class="perm"><label>screen</label><select data-perm="screen"><option value="ok">ok</option><option value="denied">denied</option><option value="blocked">unavailable</option></select></div>
-        <div class="perm"><label>camera</label><select data-perm="camera"><option value="ok">ok</option><option value="denied">denied</option><option value="blocked">unavailable</option></select></div>
-        <div class="perm"><label>mic</label><select data-perm="mic"><option value="ok">ok</option><option value="denied">denied</option><option value="blocked">unavailable</option></select></div>
-        <div class="perm"><label>sound</label><select data-perm="sys"><option value="ok">ok</option><option value="denied">denied</option><option value="blocked">unavailable</option></select></div>
-      </div>
-      <div class="panel__group">
         <div class="panel__label">Radial menu</div>
         <div class="slider"><label>size</label><input type="range" id="m-size" min="80" max="170" step="1" value="107"><output id="o-msize">107</output></div>
         <div class="slider"><label>gap</label><input type="range" id="m-gap" min="40" max="110" step="1" value="41"><output id="o-mgap">41</output></div>
@@ -1967,6 +1998,7 @@ T F N  theme · frame · neon
       <div class="panel__group">
         <div class="panel__label">Send me your settings</div>
         <button class="btn-h" id="copyparams">Copy parameters</button>
+        <button class="btn-h" id="resetparams" style="margin-top: 6px">Reset to defaults</button>
         <textarea class="params" id="paramsout" readonly rows="3"></textarea>
       </div>
     </aside>
@@ -2096,18 +2128,17 @@ function arc(r, a0, a1) {
    `.f` shapes are filled, `.s` are the few strokes worth keeping. */
 const WEDGE_ICON = {
   screen:
-    '<path class="f" d="M4.2 4.6h15.6c1.2 0 2.2 1 2.2 2.2v7.9c0 1.2-1 2.2-2.2 2.2H4.2c-1.2 0-2.2-1-2.2-2.2V6.8c0-1.2 1-2.2 2.2-2.2Z"/>' +
-    '<path class="f" d="M11.1 17.4h1.8v2.1h-1.8zM8.4 19.2h7.2v1.5H8.4z"/>',
+    '<rect class="s" x="2.6" y="4.8" width="18.8" height="12.4" rx="2.4"/>' +
+    '<path class="s" d="M12 17.2v2.6M8.6 19.8h6.8"/>',
   camera:
-    '<rect class="f" x="2.2" y="6.6" width="12" height="10.8" rx="2.4"/>' +
-    '<path class="f" d="M15.4 11.1l5.3-3a.7.7 0 0 1 1.1.6v6.6a.7.7 0 0 1-1.1.6l-5.3-3z"/>',
+    '<rect class="s" x="2.6" y="6.9" width="11.6" height="10.2" rx="2.4"/>' +
+    '<path class="s" d="M15.4 11.2l5.6-3v7.6l-5.6-3z"/>',
   mic:
-    '<rect class="f" x="9.2" y="2.6" width="5.6" height="11" rx="2.8"/>' +
-    '<path class="s" d="M5.8 11.2a6.2 6.2 0 0 0 12.4 0"/>' +
-    '<path class="f" d="M11.1 17.6h1.8v3.1h-1.8z"/>',
+    '<rect class="s" x="9.3" y="2.8" width="5.4" height="10.6" rx="2.7"/>' +
+    '<path class="s" d="M5.9 11.2a6.1 6.1 0 0 0 12.2 0M12 17.6v3"/>',
   sys:
-    '<path class="f" d="M4.4 9.2h3.2l4.3-3.6a.75.75 0 0 1 1.25.58v11.6a.75.75 0 0 1-1.25.58L7.6 14.8H4.4a1 1 0 0 1-1-1v-3.6a1 1 0 0 1 1-1Z"/>' +
-    '<path class="s" d="M16.4 9.8a4.6 4.6 0 0 1 0 4.4M19.3 7.4a8.4 8.4 0 0 1 0 9.2"/>',
+    '<path class="s" d="M4.4 9.4h3.2l4.5-3.7v12.6l-4.5-3.7H4.4a.9.9 0 0 1-.9-.9v-3.4a.9.9 0 0 1 .9-.9z"/>' +
+    '<path class="s" d="M16.2 9.9a4.5 4.5 0 0 1 0 4.2M19.1 7.5a8.2 8.2 0 0 1 0 9"/>',
 }
 const span = (2 * Math.PI) / CHANNELS.length
 /* Rebuilt whole whenever size or gap moves — the geometry is the truth, not a
@@ -2128,16 +2159,17 @@ function buildRadial() {
     const baseline = sinm > 0.3 ? 'hanging' : sinm < -0.3 ? 'auto' : 'middle'
     const dy = sinm > 0.3 ? 2 : sinm < -0.3 ? -2 : 0
     const st = PERM[c.key] || 'ok'
-    const cap = st === 'denied' ? `${c.label} · denied` : st === 'blocked' ? `${c.label} · unavailable` : c.label
+    const sub = st === 'denied' ? 'permission denied' : st === 'blocked' ? 'unavailable here' : ''
     return `
-      <g class="wedge" data-wedge="${c.key}" data-on="${st === 'ok' && onNow(c.key)}" data-state="${st}" style="--d:${i * 30}ms" role="button" aria-label="${cap}">
+      <g class="wedge" data-wedge="${c.key}" data-on="${st === 'ok' && onNow(c.key)}" data-state="${st}" style="--d:${i * 30}ms" role="button" aria-label="${c.label}${sub ? ', ' + sub : ''}">
         <path class="wedge__fill" d="${sector(R_IN, R_OUT, a0, a1)}"/>
         <path class="wedge__edge" d="${arc(R_OUT - 0.6, a0, a1)}"/>
         <g class="wedge__ico" transform="translate(${ix - 11} ${iy - 11}) scale(0.92)">${WEDGE_ICON[c.key]}
           <path class="wedge__cutbg" d="M3.4 3.4L20.6 20.6"/><path class="wedge__cut" d="M3.4 3.4L20.6 20.6"/>
         </g>
         <path class="wedge__arc" d="${arc(R_OUT + 8, a0 + 0.06, a1 - 0.06)}"/>
-        <text class="wedge__cap" x="${cx}" y="${+cy + dy}" text-anchor="${anchor}" dominant-baseline="${baseline}">${cap}</text>
+        <text class="wedge__cap" x="${cx}" y="${+cy + dy}" text-anchor="${anchor}" dominant-baseline="${baseline}">${c.label}</text>
+        ${sub ? `<text class="wedge__cap2" x="${cx}" y="${+cy + dy + 12}" text-anchor="${anchor}" dominant-baseline="${baseline}">${sub}</text>` : ''}
       </g>`
   }).join('')
   const seps = CHANNELS.map((c) => {
@@ -2225,11 +2257,16 @@ const hintEl = app.querySelector('[data-hint]')
 function anyInputOn() {
   return CHANNELS.some((c) => PERM[c.key] === 'ok' && ring.querySelector(`.chip[data-chip="${c.key}"]`)?.getAttribute('aria-pressed') === 'true')
 }
+function say(text, warn) {
+  hintEl.textContent = text || ''
+  hintEl.classList.toggle('notice--on', !!text)
+  hintEl.classList.toggle('notice--warn', !!warn)
+}
 function syncHint() {
   if (recBtn.classList.contains('recbtn--arming')) return
   // the button is never disabled — with nothing on it still records, it just
   // says what it will get. A dead primary control is worse than an empty take.
-  hintEl.textContent = anyInputOn() ? '' : 'Nothing on — this take will be empty'
+  say(anyInputOn() ? '' : 'Turn on inputs to record')
   recBtn.style.opacity = '1'
 }
 /* one state, two faces: the pills and the wedges must never disagree */
@@ -2247,10 +2284,9 @@ let whyTimer = null
 function explain(key) {
   const st = PERM[key]
   if (st === 'ok') return false
-  hintEl.textContent = WHY[st][key]
-  hintEl.classList.toggle('cluster__hint--warn', st === 'denied')
+  say(WHY[st][key], st === 'denied')
   clearTimeout(whyTimer)
-  whyTimer = setTimeout(() => { hintEl.classList.remove('cluster__hint--warn'); syncHint() }, 4200)
+  whyTimer = setTimeout(syncHint, 5000)
   return true
 }
 app.addEventListener('click', (e) => {
@@ -2269,7 +2305,7 @@ let armTimer = null
 recBtn.addEventListener('click', () => {
   if (armTimer) return
   recBtn.classList.add('recbtn--arming')
-  hintEl.textContent = 'Starting…'
+  say('Starting…')
   armTimer = setTimeout(() => {
     armTimer = null
     recBtn.classList.remove('recbtn--arming')
@@ -2599,14 +2635,6 @@ frameSel.addEventListener('change', () => {
   fit()
 })
 
-/* the hint sits below whatever is actually drawn — donut rim or pill orbit */
-function positionHint() {
-  const pills = document.documentElement.dataset.inputs === 'always'
-  // clear of the bottom wedge's own caption, which already sits at R_OUT + 22
-  const r = pills ? RING_R + 34 : R_OUT + 56
-  document.querySelector('.cluster').style.setProperty('--hint-y', `${r}px`)
-}
-
 /* mode switches */
 const inputsSel = document.getElementById('inputs')
 const recfxSel = document.getElementById('recfx')
@@ -2614,7 +2642,6 @@ const skinSel = document.getElementById('skin')
 inputsSel.addEventListener('change', () => {
   document.documentElement.dataset.inputs = inputsSel.value
   ring.classList.remove('is-open')
-  positionHint()
 })
 recfxSel.addEventListener('change', () => (document.documentElement.dataset.recfx = recfxSel.value))
 skinSel.addEventListener('change', () => (document.documentElement.dataset.skin = skinSel.value))
@@ -2656,7 +2683,6 @@ function syncMenu() {
   document.documentElement.style.setProperty('--wedge-k', mFill.value)
   document.documentElement.style.setProperty('--wedge-s', mTint.value + '%')
   document.getElementById('o-mtint').textContent = mTint.value
-  positionHint()
   document.getElementById('o-mfill').textContent = (+mFill.value).toFixed(2)
   buildRadial()
 }
@@ -2740,6 +2766,13 @@ copyBtn.addEventListener('click', () => {
   }
   copyBtn.textContent = ok ? 'Copied ✓' : 'Selected — press ⌘C'
   setTimeout(() => (copyBtn.textContent = 'Copy parameters'), 1800)
+})
+
+/* state is sticky now, so there has to be a way back out of it */
+document.getElementById('resetparams').addEventListener('click', () => {
+  try { localStorage.removeItem(STORE) } catch { /* nothing stored */ }
+  try { history.replaceState(null, '', location.pathname + location.search) } catch { location.hash = '' }
+  location.reload()
 })
 
 /* panels: squeeze-panels' whole JS contract is body.classList.toggle('f' | 'd') */
