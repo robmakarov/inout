@@ -876,8 +876,11 @@ class Session implements CaptureSession {
     const onChannel = (acq: AcquiredChannel): void => {
       void (async () => {
         try {
-          // The take may have ended while the picker was open — never leave a
-          // live device behind, and never attach to a finished session.
+          // The take may have ended while the picker or permission prompt was
+          // open. EVERY track must be stopped, not just the one we would have
+          // used: a display resume also yields a system-audio track, and a
+          // device left running here holds its claim in the browser — which is
+          // how the NEXT take sat on "Waiting for microphone…" (PO 2026-08-23).
           if (this.stateInternal !== 'recording' || this.cancelled) {
             for (const t of acq.stream.getTracks()) t.stop()
             return
@@ -1188,7 +1191,13 @@ class Session implements CaptureSession {
   private async doStop(): Promise<Recording> {
     this.clearTick()
     this.releaseWakeLock()
+    // Before anything else: leave 'recording', because that is the flag every
+    // in-flight resume checks when its device finally arrives. A resume whose
+    // permission prompt or picker is still open outlives this call by up to its
+    // acquisition budget, and the moment it lands it must find a session that
+    // is no longer recording so it stops the device instead of attaching it.
     this.setState('stopping')
+    this.resuming.clear()
     const compositeStopped = this.stopCompositeEarly()
     // AUDIO ends at the press. Only the video channels need a drain, and if the
     // audio waited for one the take would end with seconds of soundtrack over a
@@ -1306,6 +1315,7 @@ class Session implements CaptureSession {
       return
     }
     this.cancelled = true
+    this.resuming.clear()
     this.clearTick()
     this.releaseWakeLock()
     if (this.manifestTimer) clearTimeout(this.manifestTimer)

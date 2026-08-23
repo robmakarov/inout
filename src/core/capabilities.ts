@@ -1,17 +1,43 @@
+import { detectPlatform, type BrowserEngine, type OSName, type PlatformInfo } from './platform'
+
+/**
+ * What display capture can carry ALONGSIDE the picture (task P1).
+ *
+ * This is engine × OS, not engine, and that distinction is the whole reason the
+ * type exists. Chromium on WINDOWS hands over the machine's audio when the user
+ * shares a whole monitor; the same Chromium on macOS and Linux only ever gives
+ * audio for a tab or window share. Gecko is a third case that reads like a
+ * fourth: it ACCEPTS `audio: true` and silently returns video only, so a UI
+ * that trusts the constraint shows a channel that records nothing.
+ */
+export type DisplayAudioScope = 'none' | 'tab' | 'system'
+
 export interface Capabilities {
   chromium: boolean
   screenCapture: boolean
-  /** Display capture can also carry tab/system audio. Apple (Safari + every iOS
-   * browser) does not — getDisplayMedia there yields video only. */
+  /** Display capture can also carry tab/system audio. See DisplayAudioScope —
+   * false on Apple WebKit AND on Gecko, for two different reasons. */
   systemAudioCapture: boolean
+  /** WHICH audio a display share can carry here. */
+  displayAudioScope: DisplayAudioScope
   camera: boolean
   webCodecs: boolean
   opfs: boolean
   /** Any iOS/iPadOS browser: no getDisplayMedia at all (Apple restricts screen
-   * capture to native apps via ReplayKit). Camera/mic/audio-only still work. */
+   * capture to native apps). Camera/mic/audio-only still work. */
   ios: boolean
   /** Apple WebKit: desktop Safari or any iOS browser. Drives honest messaging. */
   appleWebKit: boolean
+  /** Engine and OS, from core/platform.ts — probe-first, UA-sniff last. */
+  engine: BrowserEngine
+  os: OSName
+  /**
+   * The platform has an AAC encoder, so the export can mux mp4/aac. Gecko does
+   * not, and lands on the avc+opus / vp9+opus chains instead. ADVISORY: the
+   * codec chains in compose/codecs.ts still probe for themselves, because a
+   * capability table is a worse authority than the encoder itself.
+   */
+  aacEncode: boolean
   /** Full support = every capture + compose feature works. */
   full: boolean
 }
@@ -41,8 +67,37 @@ export function isAppleWebKit(): boolean {
   return detectAppleWebKit(nav, detectIOS(nav))
 }
 
-export function detectCapabilities(): Capabilities {
+/**
+ * The engine × OS matrix, pure so it can be tested without a browser.
+ *
+ * `hasDisplayMedia` comes from a PROBE, not from the table: a platform that
+ * cannot share a screen at all cannot carry its audio either, whatever the
+ * matrix says about the engine.
+ */
+export function displayAudioScopeFor(
+  engine: BrowserEngine,
+  os: OSName,
+  hasDisplayMedia: boolean,
+  appleWebKit: boolean,
+): DisplayAudioScope {
+  if (!hasDisplayMedia || appleWebKit) return 'none'
+  // Verified 2026-08: Firefox accepts `audio: true` on getDisplayMedia and
+  // returns video only — no error, no track. The channel has to be dropped
+  // with honest copy rather than offered and left silent.
+  if (engine === 'gecko') return 'none'
+  if (engine === 'chromium') return os === 'windows' ? 'system' : 'tab'
+  // An engine we do not recognise but which HAS getDisplayMedia: assume the
+  // conservative Chromium case rather than promising the machine's audio.
+  return 'tab'
+}
+
+export function aacEncodeFor(engine: BrowserEngine): boolean {
+  return engine !== 'gecko'
+}
+
+export function detectCapabilities(platform?: PlatformInfo): Capabilities {
   const nav = typeof navigator !== 'undefined' ? navigator : undefined
+  const p = platform ?? detectPlatform()
   const chromium = !!(nav && 'userAgentData' in nav)
   const screenCapture = !!nav?.mediaDevices?.getDisplayMedia
   const camera = !!nav?.mediaDevices?.getUserMedia
@@ -50,16 +105,20 @@ export function detectCapabilities(): Capabilities {
   const opfs = !!nav?.storage?.getDirectory
   const ios = nav ? detectIOS(nav) : false
   const appleWebKit = nav ? detectAppleWebKit(nav, ios) : false
-  const systemAudioCapture = screenCapture && !appleWebKit
+  const displayAudioScope = displayAudioScopeFor(p.engine, p.os, screenCapture, appleWebKit)
   return {
     chromium,
     screenCapture,
-    systemAudioCapture,
+    systemAudioCapture: displayAudioScope !== 'none',
+    displayAudioScope,
     camera,
     webCodecs,
     opfs,
     ios,
     appleWebKit,
+    engine: p.engine,
+    os: p.os,
+    aacEncode: aacEncodeFor(p.engine),
     full: screenCapture && camera && webCodecs && opfs,
   }
 }

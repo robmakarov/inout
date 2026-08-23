@@ -22,6 +22,7 @@ import {
   isKindSupported,
   unsupportedReason,
 } from '@app/lib/channels'
+import { armingLabel as armingLabelFor, foldWaiting } from '@app/lib/arming'
 import { ChannelChips } from '@app/components/ChannelChips'
 import { RecordButton } from '@app/components/RecordButton'
 import { TimerPill } from '@app/components/TimerPill'
@@ -37,11 +38,11 @@ function StreamVideo({ stream, className }: { stream: MediaStream; className: st
   return <video ref={ref} className={className} autoPlay muted playsInline />
 }
 
-const ARMING_LABEL: Record<ArmingTimelineEntry['step'], string> = {
-  display: 'Waiting for screen…',
-  camera: 'Waiting for camera…',
-  mic: 'Waiting for microphone…',
-  'system-audio': 'Waiting for system audio…',
+const STEP_NOUN: Record<ArmingTimelineEntry['step'], string> = {
+  display: 'screen',
+  camera: 'camera',
+  mic: 'microphone',
+  'system-audio': 'system audio',
 }
 
 export function CaptureScreen() {
@@ -67,6 +68,9 @@ export function CaptureScreen() {
   const [armingLabel, setArmingLabel] = useState<string | null>(null)
   /** Lets the record button cancel a start that is taking too long. */
   const armAbortRef = useRef<AbortController | null>(null)
+  /** Devices still outstanding this arm, in start order — a ref, because the
+   *  acquisition callback fires faster than a render and must not miss edges. */
+  const waitingRef = useRef<ArmingTimelineEntry['step'][]>([])
   const [elapsedMs, setElapsedMs] = useState(0)
   const [remainingMs, setRemainingMs] = useState<number | null>(MAX_RECORDING_MS)
   /** Inputs turned off mid-take — by the user's chip OR by the browser's own
@@ -191,6 +195,7 @@ export function CaptureScreen() {
   const startRecording = async () => {
     const ac = new AbortController()
     armAbortRef.current = ac
+    waitingRef.current = []
     setArming(true)
     setArmingLabel('Starting…')
     try {
@@ -199,11 +204,17 @@ export function CaptureScreen() {
       const { createCaptureSession } = await loadCaptureEngine()
       const s = await createCaptureSession(effectiveConfig, {
         signal: ac.signal,
+        // Devices acquire concurrently, so the line has to name what is STILL
+        // outstanding — setting it on 'start' alone showed whichever step
+        // began last and never cleared, which is how "Waiting for microphone…"
+        // stayed on screen for the whole settle budget with a live microphone.
         onArming: (e) => {
-          if (e.status === 'start') setArmingLabel(ARMING_LABEL[e.step])
-          else if (e.status === 'timeout') {
-            setArmingLabel(`${ARMING_LABEL[e.step].replace('…', '')} timed out`)
+          waitingRef.current = foldWaiting(waitingRef.current, e)
+          if (e.status === 'timeout') {
+            setArmingLabel(`${STEP_NOUN[e.step]} timed out`)
+            return
           }
+          setArmingLabel(armingLabelFor(waitingRef.current) ?? 'Starting recorders…')
         },
       })
       setArmingLabel('Starting recorders…')
