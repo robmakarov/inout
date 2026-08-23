@@ -1126,17 +1126,20 @@ body.f .filters, body.d .detail { opacity: 1; }
 .take--moving .take__screen,
 .take--moving .take__inputs { will-change: height; }
 
-/* the picture: its box opens from zero while the stage inside keeps full size
-   and stays pinned to the bottom, so the frame is revealed bottom edge first —
-   it comes up out of the middle rather than fading in over it. The height is a
-   plain pixel value written by the resize observer: a container-query length
-   here has to be re-resolved every frame, and that is what made it stutter. */
+/* The picture slides up into place rather than being wiped open. Pinned to the
+   bottom of a growing box it was uncovered from its own bottom edge upward,
+   which is a reveal, not a move — the picture never went anywhere. Pinned to
+   the top, the box's top edge is what rises, and the picture rides it up out of
+   the middle of the frame. The height is a plain pixel value written by the
+   resize observer: a container-query length here has to be re-resolved every
+   frame, and that is what made it stutter. */
 .take__screen {
   width: 100%;
   height: 0;
   overflow: hidden;
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
+  justify-content: center;
   opacity: 0;
   contain: layout paint;
   transition:
@@ -2615,35 +2618,47 @@ let R_OUT = 100, R_IN = 41 // driven by the size and gap sliders
 let ICO_K = 0.86 // glyph scale — the 24px icon box, scaled about its own centre
 const PAD = 0.014 // radians of gap between wedges
 
-/* ---------- ring to row ----------
-   A wedge is a quad in (u, v): u along its span, v inward from the rim. The
-   ring gives one reading of that quad, the row gives another, and the move is
-   the straight line between them — every corner travelling to its corner, one
-   curve, one clock.
+/* ---------- the circle becomes a line ----------
+   Not four wedges flying to four places. One band, and its curvature runs out.
+   A point on it is (σ, d): σ the arc distance from the band's middle, d the
+   depth inward from the rim. Straightening is κ going to nothing:
 
-   Which corner goes to which is the whole question, and getting it wrong is
-   what made the wedges fold through themselves. A quad and a mirrored copy of
-   the same quad cannot be blended without passing through nothing at all: the
-   shape has to collapse to a line and come back out inside itself. So the
-   correspondence is chosen from the four rotations only — never a reflection —
-   and among those, the one that leaves the corners with the least distance to
-   cover. The wedge at the top of the ring finds it already lines up with its
-   slot. The one at the bottom takes the half turn. The two at the sides are
-   tall where the slot is wide and turn a quarter, which is the only way a
-   standing shape becomes a lying one without folding.
+     θ = σ·κ + ρ      r = 1/κ − d      (x, y) = (r·sin θ, yRim + 1/κ − r·cos θ)
 
-   The rim stroke, the hover arc and the captions do not travel. They belong to
-   an edge, and which edge that is changes on the way over; rather than drag a
-   lit line across a wedge's face, they dim out over the first sixth of the move
-   and come back over the last, in the place the row wants them. */
-const DETAIL_DIP = 2.4    // how hard the rim, arc and captions duck out
+   At κ = 1/R_OUT that is the ring, to the pixel, in the coordinates pol() used.
+   At κ = 0 it collapses to (σ, yRim + d): the line. Every point goes outward
+   and down and nowhere else — nothing crosses, nothing folds, and the rim stays
+   the rim the whole way, which is why the lit edge ends up along the top of
+   every segment without anyone arranging it.
+
+   ρ is the only turn there is, and it is forced. A closed ring has to part
+   somewhere, and where it parts must be a separator or a wedge tears in half.
+   With four inputs at twelve, three, six and nine the nearest separator to the
+   bottom is half a wedge away, so the band carries that much twist at rest —
+   cancelled in σ, so the ring you see is unmoved — and unwinds it as it
+   flattens. Forty-five degrees on four inputs, twenty-two on eight, none at all
+   when a separator already sits at the bottom.
+
+   Curvature leaves sooner than the rest. Length, depth and descent ride the
+   shared curve; κ is that curve to the power of two and a half. A ring that
+   gives up its bend at the same rate it gives up everything else is still most
+   of a circle at halfway, and hangs well below the frame while it decides. */
+const KAPPA_POW = 3       // how much sooner the bend goes than everything else
+/* The twist has to be spent while the ring is still a ring. Unwound at the same
+   rate as everything else it is still worth twenty degrees when the band is six
+   hundred pixels wide, and a twenty-degree lean on a nearly-straight bar throws
+   its ends a hundred and eighty pixels out of level — which is the lurch. Spent
+   to the tenth power it is gone by the time there is anything long enough to
+   lean: what is left is the menu turning a little on the spot as it opens. */
+const RHO_POW = 10
+const SEG_RAD = 0.045     // ~2.5° of arc per chord — polylines, never arcs
+const DETAIL_DIP = 2.0    // how hard the captions and the hover arc duck out
 const CAP_OUT = 26        // captions live this far outside the rim, as before
 const CAP_LEAD = 14
-const U_SEGS = 20         // chords along a wedge's span — 4.5° each on the ring
-let UNROLL = 0            // 0 = ring · 1 = row
+let UNROLL = 0            // 0 = ring · 1 = line
 
 /* where the row lands, in the record button's own coordinates. The numbers are
-   CSS's — see --take-gap and friends on .app — so the layout and the wedges can
+   CSS's — see --take-gap and friends on .app — so the layout and the band can
    never disagree about where the input row is. */
 function barRect() {
   const cs = getComputedStyle(app)
@@ -2654,89 +2669,104 @@ function barRect() {
     top: px('--take-ctrl-h', 52) / 2 + px('--take-gap', 14),
   }
 }
-/* One curve for everything, in and out of rest, and the same one the CSS uses
-   on the picture and the rows. Two clocks read as two things happening; the
-   move is one thing. */
+/* One curve, in and out of rest, and the same one the CSS uses on the picture
+   and the rows. Two clocks read as two things happening. */
 const smooth = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2)
-/* the four rotations of a quad — reflections are left out on purpose */
-const TURNS = [
-  (u, v) => [u, v],
-  (u, v) => [1 - u, 1 - v],
-  (u, v) => [1 - v, u],
-  (u, v) => [v, 1 - u],
-]
-const CORNERS = [[0, 0], [1, 0], [1, 1], [0, 1]]
+const RING_L = () => 2 * Math.PI * R_OUT
 
+/* the twist the band carries at rest, so that when it parts it parts on a
+   separator. Zero when one already sits at the bottom. */
+function seamTwist() {
+  const step = (2 * Math.PI) / RING_ORDER.length
+  const first = ((RING_ROT * Math.PI) / 180) - step / 2 // a separator, from the top
+  return first + Math.round((Math.PI - first) / step) * step - Math.PI
+}
 function morphEnv(t) {
   const bar = barRect()
+  const p = smooth(t)
+  const L0 = RING_L()
+  const h0 = R_OUT - R_IN
+  const twist = seamTwist()
+  const L = L0 + (bar.w - L0) * p
+  const k = p >= 1 ? 0 : Math.pow(1 - p, KAPPA_POW) / R_OUT
+  const h = h0 + (bar.h - h0) * p
+  /* The band is hung by its lowest point, not by its rim. Hung by the rim it
+     dipped a hundred and thirty pixels below the row on the way there and came
+     back up — because a wide shallow arc carries its own sag, and lerping the
+     rim from the top of the ring to the top of the row ignores it. Measure the
+     sag and subtract it, and the bottom of the band travels from where the ring
+     already ends to where the row ends: four pixels, in a straight line. All
+     the descent anybody sees is the top of it coming down. */
+  const phi = L * k
+  // how far the band's own lowest point falls below its rim's midpoint: the
+  // rim's sag at the arc's end, plus the inner edge where it still hangs lower
+  const sag = k > 0
+    ? (2 / k) * Math.pow(Math.sin(phi / 4), 2) + h * Math.max(0, Math.cos(phi / 2))
+    : h
+  const floor = R_OUT + (bar.top + bar.h - R_OUT) * p
   return {
-    bar,
+    bar, p, twist, L, k, h,
     n: RING_ORDER.length,
-    span: (2 * Math.PI) / RING_ORDER.length,
-    depth: R_OUT - R_IN,
-    gap: PAD * R_OUT * 2, // the ring's gap in pixels, kept as the row's gap
-    slot: bar.w / RING_ORDER.length,
-    p: smooth(t),
+    yRim: floor - sag,
+    rho: twist * Math.pow(1 - p, RHO_POW),
     detail: Math.max(0, 1 - DETAIL_DIP * Math.sin(Math.PI * t)),
   }
 }
-function wedgeFrame(e, key) {
-  const i = RING_ORDER.indexOf(key)
-  const mid = midAngle(key)
-  const a0 = mid - e.span / 2 + PAD
-  const a1 = mid + e.span / 2 - PAD
-  const x0 = -e.bar.w / 2 + i * e.slot + e.gap / 2
-  const x1 = x0 + e.slot - e.gap
-  const yT = e.bar.top
-  const yB = e.bar.top + e.bar.h
-  const ringP = (u, v) => {
-    const a = a0 + u * (a1 - a0)
-    const r = R_OUT - v * e.depth
-    return [r * Math.cos(a), r * Math.sin(a)]
-  }
-  const barP = (u, v) => [x0 + u * (x1 - x0), yT + v * (yB - yT)]
-
-  let turn = TURNS[0], best = Infinity
-  for (const T of TURNS) {
-    let d = 0
-    for (const [u, v] of CORNERS) {
-      const A = ringP(u, v)
-      const B = barP.apply(null, T(u, v))
-      d += (A[0] - B[0]) ** 2 + (A[1] - B[1]) ** 2
-    }
-    if (d < best) { best = d; turn = T }
-  }
-  const at = (u, v) => {
-    const A = ringP(u, v)
-    const B = barP.apply(null, turn(u, v))
-    return [A[0] + (B[0] - A[0]) * e.p, A[1] + (B[1] - A[1]) * e.p]
-  }
-  // the row's own frame, for the things that belong to an edge rather than to
-  // the wedge: they end up where the row wants them, not where the ring left them
-  const rowAt = (u, v) => {
-    const A = ringP(u, v)
-    const B = barP(u, v)
-    return [A[0] + (B[0] - A[0]) * e.p, A[1] + (B[1] - A[1]) * e.p]
-  }
-  const b = mid - e.span / 2
-  const sepRing = [
-    [R_OUT * Math.cos(b), R_OUT * Math.sin(b)],
-    [R_IN * Math.cos(b), R_IN * Math.sin(b)],
-  ]
-  const sepBar = [[x0 - e.gap / 2, yT], [x0 - e.gap / 2, yB]]
-  const sep = sepRing.map((A, j) => [
-    A[0] + (sepBar[j][0] - A[0]) * e.p,
-    A[1] + (sepBar[j][1] - A[1]) * e.p,
-  ])
-  return { at, rowAt, sep }
+/* σ = 0 is the middle of the band — the point that ends up in the middle of the
+   row. Fixed by the ring once and only scaled after, so no wedge ever slides
+   along the band; the band itself is the only thing that moves. */
+function wedgeSigma(e, key) {
+  const L0 = RING_L()
+  const fromTop = ((RING_ROT * Math.PI) / 180) + RING_ORDER.indexOf(key) * ((2 * Math.PI) / e.n)
+  let s = (fromTop - e.twist) * R_OUT
+  s = ((s % L0) + L0) % L0
+  if (s > L0 / 2) s -= L0
+  return (s / L0) * e.L
 }
-const chainD = (pts) => 'M' + pts.map((p) => p[0].toFixed(2) + ' ' + p[1].toFixed(2)).join('L')
-const spanChain = (at, v) => {
+/* The arc is always drawn symmetric about the vertical, and the twist is put
+   back afterwards as a plain rotation of the finished point about the button.
+   That matters twice over. It keeps the radius out of the sums that decide the
+   answer — the naive form asks for yRim + R − cos θ·(R − d), and once R is a
+   few hundred thousand pixels that is two enormous numbers differing by fifty,
+   which a double cannot tell you; the half-angle form, 1 − cos θ = 2·sin²(θ/2),
+   never divides by the curvature at all, so it can go flat exactly rather than
+   nearly. And rotating the point rather than the angle leaves the glyphs and
+   the captions upright while the band they sit on leans. */
+function bandPt(e, d, s) {
+  let x, y
+  if (e.k <= 0) { x = s; y = e.yRim + d }
+  else {
+    const R = 1 / e.k
+    const th = s * e.k
+    const sh = Math.sin(th / 2)
+    x = Math.sin(th) * (R - d)
+    y = e.yRim + 2 * R * sh * sh + d * Math.cos(th)
+  }
+  if (!e.rho) return [x, y]
+  const c = Math.cos(e.rho), n = Math.sin(e.rho)
+  return [x * c - y * n, x * n + y * c]
+}
+function bandChain(e, d, s0, s1) {
+  const segs = Math.max(1, Math.ceil(Math.abs((s1 - s0) * e.k) / SEG_RAD))
   const out = []
-  for (let i = 0; i <= U_SEGS; i++) out.push(at(i / U_SEGS, v))
+  for (let i = 0; i <= segs; i++) out.push(bandPt(e, d, s0 + ((s1 - s0) * i) / segs))
   return out
 }
-const faceD = (at, vIn) => chainD(spanChain(at, 0).concat(spanChain(at, vIn).reverse())) + 'Z'
+function wedgeFrame(e, key) {
+  const half = e.L / e.n / 2
+  const mid = wedgeSigma(e, key)
+  const pad = PAD * R_OUT * (e.L / RING_L())
+  const s0 = mid - half + pad
+  const s1 = mid + half - pad
+  return {
+    mid, s0, s1,
+    at: (d, u) => bandPt(e, d, s0 + u * (s1 - s0)),
+    chain: (d) => bandChain(e, d, s0, s1),
+    sep: [bandPt(e, 0, mid - half), bandPt(e, e.h, mid - half)],
+  }
+}
+const chainD = (pts) => 'M' + pts.map((p) => p[0].toFixed(2) + ' ' + p[1].toFixed(2)).join('L')
+const faceD = (f, e) => chainD(f.chain(0).concat(f.chain(e.h).reverse())) + 'Z'
 
 /* Menu glyphs, fourth pass — solid, not outlined. Outlines were the problem:
    at ~20px a 1.4px stroke on a translucent gradient is four hairlines fighting
@@ -2796,82 +2826,74 @@ function buildRadial() {
   drawBand()
 }
 
+
 /* One frame of the move. Everything below is attribute writes on nodes that
    already exist — no parsing, no layout, no allocation worth the name. */
 function drawBand() {
   const host = ring.querySelector('[data-radial]')
   if (!host) return
   const svg = host.querySelector('svg')
-  const t = UNROLL
-  const e = morphEnv(t)
+  const e = morphEnv(UNROLL)
   const bar = e.bar
 
   // one box for the whole move, symmetric about the button so the container's
   // own centring transform keeps holding — a viewBox that changed per frame
   // would rescale the drawing under the reader
-  const hw = Math.max(R_OUT, bar.w / 2) + 66
-  const hh = Math.max(R_OUT, bar.top + bar.h) + 66
+  const hw = Math.max(R_OUT, bar.w / 2, e.k > 1e-9 ? 1 / e.k : 0) + 66
+  const hh = Math.max(R_OUT, bar.top + bar.h) * 1.9 + 66
   svg.setAttribute('viewBox', `${-hw} ${-hh} ${hw * 2} ${hh * 2}`)
   svg.setAttribute('width', hw * 2)
   svg.setAttribute('height', hh * 2)
 
-  /* The ramp is the ring's, and it goes where the shape goes: centred on the
-     button while the wedges are still a ring, and by the time they are
-     rectangles, centred far below the row — which is a vertical fade. Capped at
-     twenty thousand, because the stops of a gradient with an infinite radius
-     all sit at the same offset; the price is a four-pixel bow across the width
-     of the row, which under a five-stop fade nobody can see. */
-  const Rg = R_OUT + (20000 - R_OUT) * e.p
-  const depth = e.depth + (bar.h - e.depth) * e.p
+  /* The ramp follows the band: centred where the band is centred, reaching as
+     far as the band's own radius, until that radius stops meaning anything.
+     Capped at twenty thousand, because the stops of a gradient with an infinite
+     radius all sit at the same offset; the price is a four-pixel bow across the
+     width of the row, which under a five-stop fade nobody can see. */
+  const Rg = Math.min(e.k > 1e-9 ? 1 / e.k : Infinity, 20000)
   GRADS.forEach(([id]) => {
     const g = svg.querySelector('#' + id)
-    g.setAttribute('cx', 0)
-    g.setAttribute('cy', (Rg - R_OUT + (bar.top + R_OUT) * e.p).toFixed(2))
+    // depth, not height: the centre of the ramp sits a full radius *inward*
+    // from the rim, which is the button at rest and far below the row at the
+    // end — so the lit stop lands on the rim either way
+    const c = bandPt(e, Rg, 0)
+    g.setAttribute('cx', c[0].toFixed(2))
+    g.setAttribute('cy', c[1].toFixed(2))
     g.setAttribute('r', Rg.toFixed(2))
     ;[...g.children].forEach((stop, j) =>
-      stop.setAttribute('offset', ((Rg - U_STOPS[j] * depth) / Rg).toFixed(6)))
+      stop.setAttribute('offset', ((Rg - U_STOPS[j] * e.h) / Rg).toFixed(6)))
   })
 
-  // the hub is the button's backing, and it only means anything while there is
+  // the hub is the button's backing, and it means something only while there is
   // still a ring for the button to sit in the middle of
   const hub = svg.querySelector('.radial__hub')
   hub.setAttribute('r', Math.max(0, R_IN - 3).toFixed(2))
-  hub.setAttribute('opacity', Math.max(0, 1 - e.p * 2).toFixed(3))
+  hub.setAttribute('opacity', Math.max(0, 1 - e.p * 2.4).toFixed(3))
 
-  const vEdge = 0.6 / e.depth   // the rim stroke, a hair inside the outer edge
-  const vArc = -8 / e.depth     // the hover arc, outside it
-  const vCap = -CAP_OUT / e.depth
   const seps = []
   CHANNELS.forEach((c) => {
     const g = svg.querySelector(`.wedge[data-wedge="${c.key}"]`)
     if (!g) return
-    const { at, rowAt, sep } = wedgeFrame(e, c.key)
-    const face = faceD(at, 1)
+    const f = wedgeFrame(e, c.key)
+    const face = faceD(f, e)
     g.querySelector('.wedge__base').setAttribute('d', face)
     g.querySelector('.wedge__fill').setAttribute('d', face)
+    // the rim is the rim the whole way across, so the lit edge arrives along the
+    // top of the row without a word of arranging
+    g.querySelector('.wedge__edge').setAttribute('d', chainD(f.chain(0.6)))
+    g.querySelector('.wedge__arc').setAttribute('d', chainD(bandChain(e, -8, f.s0 + 6, f.s1 - 6)))
 
-    /* The glyph is the row's too, not the wedge's. Carried on the wedge it
-       would land wherever that wedge's quarter or half turn put it, and four
-       marks at four different heights is the one thing a row of inputs cannot
-       be. It drifts off the ring's 58% depth to the segment's middle. */
-    const ic = rowAt(0.5, 0.58 - 0.08 * e.p)
+    const ic = f.at(e.h * 0.58, 0.5)
     g.querySelector('.wedge__ico').setAttribute(
       'transform', `translate(${(ic[0] - 12 * ICO_K).toFixed(2)} ${(ic[1] - 12 * ICO_K).toFixed(2)}) scale(${ICO_K})`)
 
-    /* Everything that belongs to the rim is drawn in the row's frame, so it
-       ends up along the top of the segment however the wedge itself got there.
-       It is dimmed to nothing through the middle of the move, which is the part
-       where those two frames disagree, and nobody sees it cross. */
+    // the captions swing with the band and settle above the row; they are dimmed
+    // through the middle, where they would otherwise be reading sideways
     const detail = g.querySelector('.wedge__detail')
     detail.setAttribute('opacity', e.detail.toFixed(3))
-    g.querySelector('.wedge__edge').setAttribute('d', chainD(spanChain(rowAt, vEdge)))
-    g.querySelector('.wedge__arc').setAttribute('d', chainD(spanChain(rowAt, vArc).slice(2, -2)))
-
-    const cp = rowAt(0.5, vCap)
-    const inw = rowAt(0.5, vCap + 0.2)
-    let nx = cp[0] - inw[0], ny = cp[1] - inw[1]
-    const len = Math.hypot(nx, ny) || 1
-    nx /= len; ny /= len
+    const cp = f.at(-CAP_OUT, 0.5)
+    const th = f.mid * e.k + e.rho
+    const nx = Math.sin(th), ny = -Math.cos(th)
     const anchor = nx > 0.3 ? 'start' : nx < -0.3 ? 'end' : 'middle'
     const baseline = ny > 0.3 ? 'hanging' : ny < -0.3 ? 'auto' : 'middle'
     const dy = ny > 0.3 ? 2 : ny < -0.3 ? -2 : 0
@@ -2887,13 +2909,14 @@ function drawBand() {
     const sub = subFor(c.key)
     if (cap2.textContent !== sub) cap2.textContent = sub
 
-    seps.push(chainD(sep))
+    seps.push(chainD(f.sep))
   })
   svg.querySelector('.radial__seps').innerHTML =
     seps.map((d) => `<path class="radial__sep" d="${d}" fill="none"/>`).join('')
 
-  host.style.setProperty('--unroll', t.toFixed(3))
+  host.style.setProperty('--unroll', e.p.toFixed(3))
 }
+
 buildRadial()
 
 
