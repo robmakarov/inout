@@ -155,6 +155,8 @@ body.f .filters, body.d .detail { opacity: 1; }
   color: #6a6a74;
 }
 .perm select { padding: 3px 6px; font: 10px/1.4 ui-monospace, monospace; }
+.rowbtns { display: flex; gap: 6px; margin-top: 9px; }
+.rowbtns .btn-h { padding: 5px 6px; font: 11px/1.3 ui-monospace, monospace; }
 .slider input[type='range'] {
   -webkit-appearance: none;
   appearance: none;
@@ -999,7 +1001,7 @@ body.f .filters, body.d .detail { opacity: 1; }
   pointer-events: none;
   transition: opacity 140ms var(--ease);
 }
-.wedge:hover .wedge__arc { opacity: 0.8; }
+.wedge:hover .wedge__arc { opacity: 0.4; }
 [data-neon='on'] .wedge:hover .wedge__arc { filter: drop-shadow(0 0 calc(var(--neon-r) * 0.4) var(--neon-38)); }
 .cluster { position: relative; }
 /* One notice slot, top centre, where the product already puts arming and
@@ -1745,10 +1747,16 @@ body.f .filters, body.d .detail { opacity: 1; }
       </div>
       <div class="panel__group">
         <div class="panel__label">Simulate availability</div>
+        <div data-perms>
         <div class="perm"><label>screen</label><select data-perm="screen"><option value="ok">ok</option><option value="denied">denied</option><option value="blocked">unavailable</option></select></div>
         <div class="perm"><label>camera</label><select data-perm="camera"><option value="ok">ok</option><option value="denied">denied</option><option value="blocked">unavailable</option></select></div>
         <div class="perm"><label>mic</label><select data-perm="mic"><option value="ok">ok</option><option value="denied">denied</option><option value="blocked">unavailable</option></select></div>
         <div class="perm"><label>sound</label><select data-perm="sys"><option value="ok">ok</option><option value="denied">denied</option><option value="blocked">unavailable</option></select></div>
+        </div>
+        <div class="rowbtns">
+          <button class="btn-h" id="addinput">+ input</button>
+          <button class="btn-h" id="delinput">− input</button>
+        </div>
       </div>
       <div class="panel__group">
         <div class="panel__label">Keys</div>
@@ -2168,6 +2176,13 @@ const CHANNELS = [
   { key: 'sys', label: 'System audio', ic: 'waves', on: false },
 ]
 
+/* Clockwise from the top. Wedge angles come from this order and nothing else,
+   so the menu takes any number of inputs — see the add/delete buttons in the
+   panel. With the four defaults it lands exactly where the hardcoded map did. */
+let RING_ORDER = ['screen', 'sys', 'camera', 'mic']
+const midAngle = (key) =>
+  ((-90 + RING_ORDER.indexOf(key) * (360 / RING_ORDER.length)) * Math.PI) / 180
+
 /* lanes: [channel, startOffset%, width%, keptFrom%, keptTo%] — of the lane bar */
 const LANES = [
   { key: 'screen', label: 'Screen', ic: 'display', left: 0, width: 100, kept: [6, 92], on: true },
@@ -2196,14 +2211,22 @@ document.querySelectorAll('[data-chips]').forEach((row) => {
 const RING_R = 132
 const RING_ANGLE = { screen: -135, sys: -45, mic: 135, camera: 45 }
 const ring = document.querySelector('[data-ring]')
-CHANNELS.forEach((c, i) => {
-  const a = (RING_ANGLE[c.key] * Math.PI) / 180
-  ring.insertAdjacentHTML('beforeend', chipHTML(c))
-  const el = ring.lastElementChild
-  el.style.setProperty('--cx', `calc(50% + ${(Math.cos(a) * RING_R).toFixed(1)}px)`)
-  el.style.setProperty('--cy', `calc(50% + ${(Math.sin(a) * RING_R).toFixed(1)}px)`)
-  el.style.setProperty('--d', `${i * 34}ms`)
-})
+/* the four defaults keep their diagonals; anything added takes the angle its
+   wedge has, so the pills and the menu never disagree about where an input is */
+function placeRingChips() {
+  ring.querySelectorAll('.chip').forEach((c) => c.remove())
+  CHANNELS.forEach((c, i) => {
+    const a = RING_ANGLE[c.key] != null && CHANNELS.length === 4
+      ? (RING_ANGLE[c.key] * Math.PI) / 180
+      : midAngle(c.key)
+    ring.insertAdjacentHTML('beforeend', chipHTML(c))
+    const el = ring.lastElementChild
+    el.style.setProperty('--cx', `calc(50% + ${(Math.cos(a) * RING_R).toFixed(1)}px)`)
+    el.style.setProperty('--cy', `calc(50% + ${(Math.sin(a) * RING_R).toFixed(1)}px)`)
+    el.style.setProperty('--d', `${i * 34}ms`)
+  })
+}
+placeRingChips()
 
 /* ---------- radial menu: a segmented donut around the record button ----------
    Wedges are annulus sectors: out along the outer radius, back along the inner.
@@ -2239,7 +2262,6 @@ const WHY = {
 let R_OUT = 100, R_IN = 41 // driven by the size and gap sliders
 let ICO_K = 0.86 // glyph scale — the 24px icon box, scaled about its own centre
 const PAD = 0.018 // radians of gap between wedges
-const WEDGE_AT = { screen: -90, sys: 0, camera: 90, mic: 180 } // clockwise from the top
 const pol = (r, a) => [(200 + r * Math.cos(a)).toFixed(2), (200 + r * Math.sin(a)).toFixed(2)]
 function sector(r1, r2, a0, a1) {
   const [x1, y1] = pol(r2, a0), [x2, y2] = pol(r2, a1)
@@ -2270,20 +2292,20 @@ const WEDGE_ICON = {
     '<path class="s" d="M4.4 9.4h3.2l4.5-3.7v12.6l-4.5-3.7H4.4a.9.9 0 0 1-.9-.9v-3.4a.9.9 0 0 1 .9-.9z"/>' +
     '<path class="s" d="M16.2 9.9a4.5 4.5 0 0 1 0 4.2M19.1 7.5a8.2 8.2 0 0 1 0 9"/>',
 }
-const span = (2 * Math.PI) / CHANNELS.length
 /* Rebuilt whole whenever size or gap moves — the geometry is the truth, not a
    scale transform, so strokes and captions keep their real weight at any size. */
 function buildRadial() {
+  const span = (2 * Math.PI) / RING_ORDER.length
   const onNow = (k) => ring.querySelector(`.chip[data-chip="${k}"]`)?.getAttribute('aria-pressed') === 'true'
   const M = 62 // margin for the captions living outside the donut
   const wedges = CHANNELS.map((c, i) => {
-    const mid = (WEDGE_AT[c.key] * Math.PI) / 180
+    const mid = midAngle(c.key)
     const a0 = mid - span / 2 + PAD
     const a1 = mid + span / 2 - PAD
     const [ix, iy] = pol(R_IN + (R_OUT - R_IN) * 0.42, mid)
     // caption goes outside, on this wedge's own side — anchor/baseline from the
     // angle alone, so adding wedges later needs no per-item placement
-    const [cx, cy] = pol(R_OUT + 22, mid)
+    const [cx, cy] = pol(R_OUT + 26, mid)
     const cosm = Math.cos(mid), sinm = Math.sin(mid)
     const anchor = cosm > 0.3 ? 'start' : cosm < -0.3 ? 'end' : 'middle'
     const baseline = sinm > 0.3 ? 'hanging' : sinm < -0.3 ? 'auto' : 'middle'
@@ -2302,14 +2324,14 @@ function buildRadial() {
         <path class="wedge__base" d="${sector(R_IN, R_OUT, a0, a1)}"/>
         <path class="wedge__fill" d="${sector(R_IN, R_OUT, a0, a1)}"/>
         <path class="wedge__edge" d="${arc(R_OUT - 0.6, a0, a1)}"/>
-        <g class="wedge__ico" transform="translate(${ix - 12 * ICO_K} ${iy - 12 * ICO_K}) scale(${ICO_K})">${WEDGE_ICON[c.key]}</g>
+        <g class="wedge__ico" transform="translate(${ix - 12 * ICO_K} ${iy - 12 * ICO_K}) scale(${ICO_K})">${WEDGE_ICON[c.key] || WEDGE_ICON.screen}</g>
         <path class="wedge__arc" d="${arc(R_OUT + 8, a0 + 0.06, a1 - 0.06)}"/>
         <text class="wedge__cap" x="${cx}" y="${y1}" text-anchor="${anchor}" dominant-baseline="${baseline}">${c.label}</text>
         <text class="wedge__cap2" x="${cx}" y="${y1 + LEAD}" text-anchor="${anchor}" dominant-baseline="${baseline}">${sub}</text>
       </g>`
   }).join('')
   const seps = CHANNELS.map((c) => {
-    const b = ((WEDGE_AT[c.key] - 180 / CHANNELS.length) * Math.PI) / 180
+    const b = midAngle(c.key) - span / 2
     const [x1, y1] = pol(R_IN, b), [x2, y2] = pol(R_OUT, b)
     return `<line class="radial__sep" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`
   }).join('')
@@ -2422,6 +2444,8 @@ function syncHint() {
 /* one state, two faces: the pills and the wedges must never disagree */
 function setChannel(key, on) {
   if (PERM[key] !== 'ok') on = false // an input you cannot have is never on
+  const ch = CHANNELS.find((c) => c.key === key)
+  if (ch) ch.on = on // the pills are rebuilt when inputs are added or dropped
   app.querySelectorAll(`.chip[data-chip="${key}"]`).forEach((c) => {
     c.setAttribute('aria-pressed', String(on))
     c.dataset.state = PERM[key]
@@ -2870,16 +2894,64 @@ mIco.addEventListener('change', () => {
 })
 syncMenu()
 
-/* availability simulation */
-const permSels = [...document.querySelectorAll('[data-perm]')]
-permSels.forEach((sel) => {
-  sel.addEventListener('change', () => {
-    PERM[sel.dataset.perm] = sel.value
-    setChannel(sel.dataset.perm, sel.value === 'ok') // refusing an input turns it off
-    buildRadial()
-    saveState()
-  })
+/* availability simulation — delegated, because the rows are not fixed */
+const permBox = document.querySelector('[data-perms]')
+permBox.addEventListener('change', (e) => {
+  const sel = e.target.closest('[data-perm]')
+  if (!sel) return
+  PERM[sel.dataset.perm] = sel.value
+  setChannel(sel.dataset.perm, sel.value === 'ok') // refusing an input turns it off
+  buildRadial()
+  saveState()
 })
+
+/* ---------- add / drop an input ----------
+   Everything about the menu is generated from CHANNELS and RING_ORDER, so a
+   fifth wedge is a push and a rebuild: the angles, the separators, the caption
+   anchors and the pill ring all re-derive. This is the point of the harness —
+   four is what the product ships, not something the layout is allowed to
+   assume. Nothing here is persisted: reload comes back to the four. */
+const SPARE = [
+  { label: 'Second screen', ic: 'display', like: 'screen', short: 'screen 2' },
+  { label: 'Second camera', ic: 'camera', like: 'camera', short: 'camera 2' },
+  { label: 'Second mic', ic: 'mic', like: 'mic', short: 'mic 2' },
+  { label: 'Music', ic: 'waves', like: 'sys', short: 'music' },
+]
+const PERM_OPTS = '<option value="ok">ok</option><option value="denied">denied</option><option value="blocked">unavailable</option>'
+function rebuildInputs() {
+  document.querySelectorAll('[data-chips]').forEach((row) => (row.innerHTML = CHANNELS.map(chipHTML).join('')))
+  placeRingChips()
+  buildRadial()
+  CHANNELS.forEach((c) => setChannel(c.key, c.on))
+  syncHint()
+  saveState()
+}
+let AUX_N = 0 // its own counter: dropping below four and adding again must
+                // not reuse a key, and (n - 4) goes negative down there
+function addInput() {
+  if (CHANNELS.length >= 8) return
+  const spare = SPARE[AUX_N % SPARE.length]
+  const key = `aux${++AUX_N}`
+  CHANNELS.push({ key, label: spare.label, ic: spare.ic, on: false })
+  RING_ORDER.push(key)
+  PERM[key] = 'ok'
+  WEDGE_ICON[key] = WEDGE_ICON[spare.like]
+  WHY.denied[key] = `${spare.label} was refused. Allow it in the browser’s site settings, then try again.`
+  WHY.blocked[key] = `No ${spare.label.toLowerCase()} is connected, so there’s nothing to capture.`
+  permBox.insertAdjacentHTML('beforeend', `<div class="perm"><label>${spare.short}</label><select data-perm="${key}">${PERM_OPTS}</select></div>`)
+  rebuildInputs()
+}
+function delInput() {
+  if (CHANNELS.length <= 2) return
+  const gone = CHANNELS.pop()
+  RING_ORDER = RING_ORDER.filter((k) => k !== gone.key)
+  delete PERM[gone.key]
+  if (gone.key.startsWith('aux')) delete WEDGE_ICON[gone.key]
+  permBox.querySelector(`[data-perm="${gone.key}"]`)?.closest('.perm')?.remove()
+  rebuildInputs()
+}
+document.getElementById('addinput').addEventListener('click', addInput)
+document.getElementById('delinput').addEventListener('click', delInput)
 
 /* bounce sliders — same idea, but these land on PHYS instead of CSS. Changing
    them mid-flight is intentional: you feel the difference on the next throw. */
@@ -3034,7 +3106,7 @@ function restoreState() {
       const [k, v] = pair.split(':')
       if (PERM[k] !== undefined && ['ok', 'denied', 'blocked'].includes(v)) PERM[k] = v
     })
-    permSels.forEach((sel) => (sel.value = PERM[sel.dataset.perm]))
+    permBox.querySelectorAll('[data-perm]').forEach((sel) => (sel.value = PERM[sel.dataset.perm]))
   }
 
   const m = st.menu || ''
