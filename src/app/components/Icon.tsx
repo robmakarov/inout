@@ -16,6 +16,7 @@ export type IconName =
   | 'chevron-left'
   | 'x'
   | 'scissors'
+  | 'gauge'
   | 'google'
 
 const PATHS: Record<Exclude<IconName, 'google'>, ReactNode> = {
@@ -90,6 +91,14 @@ const PATHS: Record<Exclude<IconName, 'google'>, ReactNode> = {
   ),
   'chevron-left': <path d="M14.5 5.5L8 12l6.5 6.5" />,
   x: <path d="M6 6l12 12M18 6L6 18" />,
+  // A speedometer: dial arc, needle, hub — the clip-speed control (F5b).
+  gauge: (
+    <>
+      <path d="M4 17a8 8 0 1 1 16 0" />
+      <path d="M12 17l4.2-4.8" />
+      <circle cx="12" cy="17" r="1.4" fill="currentColor" strokeWidth="0" />
+    </>
+  ),
 }
 
 export function Icon({

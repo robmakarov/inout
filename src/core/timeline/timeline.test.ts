@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ChannelEdit, EditState, Recording } from '../types'
+import type { ChannelEdit, EditState, KeptSegment, Recording } from '../types'
 import {
   activeChannelsAt,
   channelHasOutputWindow,
@@ -15,7 +15,11 @@ import {
   outputToRecordingMs,
   recordingToOutputMs,
   removeSegment,
+  hasSpeedChange,
   segmentJoinsMs,
+  segmentSpeed,
+  setSegmentSpeed,
+  speedAtOutputMs,
   splitAtOutputMs,
 } from './timeline'
 
@@ -494,5 +498,109 @@ describe('kept segments', () => {
     // The mic only exists inside the cut-out span.
     expect(channelHasOutputWindow(twoCh, e, 'a')).toBe(false)
     expect(channelHasOutputWindow(twoCh, e, 'v')).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Per-segment speed (F5b)
+// ---------------------------------------------------------------------------
+
+describe('per-segment speed', () => {
+  // The module-level `rec` (10 s, screen + camera + mic) — the same take the
+  // rest of this file uses, so a speed result is comparable with a cut result.
+  const base = (segments: KeptSegment[]): EditState => ({
+    ...defaultEditState(rec),
+    segments,
+  })
+
+  it('a span at 2x occupies half the output time', () => {
+    const e = base([{ startMs: 0, endMs: 4000, speed: 2 }, { startMs: 4000, endMs: 10_000 }])
+    expect(outputDurationMs(e)).toBe(2000 + 6000)
+  })
+
+  it('output time maps into a sped span at the span rate', () => {
+    const e = base([{ startMs: 0, endMs: 4000, speed: 2 }, { startMs: 4000, endMs: 10_000 }])
+    expect(outputToRecordingMs(e, 0)).toBe(0)
+    expect(outputToRecordingMs(e, 1000)).toBe(2000)
+    // The span ends at output 2000; the next one starts there at 1x.
+    expect(outputToRecordingMs(e, 2000)).toBe(4000)
+    expect(outputToRecordingMs(e, 3000)).toBe(5000)
+  })
+
+  it('round-trips recording time back through the sped span', () => {
+    const e = base([{ startMs: 0, endMs: 4000, speed: 2 }, { startMs: 4000, endMs: 10_000 }])
+    for (const rms of [0, 500, 1999, 3999, 4000, 7000]) {
+      const out = recordingToOutputMs(e, rms)
+      expect(out).not.toBeNull()
+      expect(outputToRecordingMs(e, out!)).toBeCloseTo(rms, 6)
+    }
+  })
+
+  it('a join sits at the SPED span’s end, not the raw one’s', () => {
+    const e = base([{ startMs: 0, endMs: 4000, speed: 2 }, { startMs: 6000, endMs: 10_000 }])
+    expect(segmentJoinsMs(e)).toEqual([2000])
+  })
+
+  it('never merges adjacent spans that play at different speeds', () => {
+    const e = base([{ startMs: 0, endMs: 4000, speed: 2 }, { startMs: 4000, endMs: 10_000 }])
+    expect(keptSegments(e)).toHaveLength(2)
+    // …but identical speeds still merge, so a split with nothing deleted is free.
+    const same = base([{ startMs: 0, endMs: 4000 }, { startMs: 4000, endMs: 10_000 }])
+    expect(keptSegments(same)).toHaveLength(1)
+  })
+
+  it('a speed change is an edit — the packet copy must not ship 1x', () => {
+    const plain = clampEditState(rec, defaultEditState(rec))
+    expect(isDefaultEdit(rec, plain)).toBe(true)
+    const sped = clampEditState(rec, base([{ startMs: 0, endMs: 10_000, speed: 2 }]))
+    expect(hasSpeedChange(sped)).toBe(true)
+    expect(isDefaultEdit(rec, sped)).toBe(false)
+  })
+
+  it('speed 1 is stored as absence, so an untouched take stays untouched', () => {
+    const e = clampEditState(rec, base([{ startMs: 0, endMs: 10_000, speed: 1 }]))
+    expect(e.segments).toBeUndefined()
+    expect(isDefaultEdit(rec, e)).toBe(true)
+  })
+
+  it('clamps to the offered range and survives nonsense', () => {
+    expect(segmentSpeed({ startMs: 0, endMs: 1, speed: 99 })).toBe(3)
+    expect(segmentSpeed({ startMs: 0, endMs: 1, speed: 0 })).toBe(1)
+    expect(segmentSpeed({ startMs: 0, endMs: 1, speed: NaN })).toBe(1)
+    expect(segmentSpeed({ startMs: 0, endMs: 1 })).toBe(1)
+  })
+
+  it('splitting a sped clip leaves both halves sped', () => {
+    const e = base([{ startMs: 0, endMs: 8000, speed: 2 }])
+    const split = splitAtOutputMs(e, 2000)
+    expect(split.segments).toHaveLength(2)
+    for (const sg of split.segments!) expect(segmentSpeed(sg)).toBe(2)
+  })
+
+  it('speedAtOutputMs reports the rate in force, and 1 past the end', () => {
+    const e = base([{ startMs: 0, endMs: 4000, speed: 2 }, { startMs: 4000, endMs: 10_000 }])
+    expect(speedAtOutputMs(e, 0)).toBe(2)
+    expect(speedAtOutputMs(e, 1999)).toBe(2)
+    expect(speedAtOutputMs(e, 2001)).toBe(1)
+    expect(speedAtOutputMs(e, 999_999)).toBe(1)
+  })
+
+  it('setSegmentSpeed sets one clip and leaves its neighbours alone', () => {
+    const e = base([{ startMs: 0, endMs: 4000 }, { startMs: 5000, endMs: 10_000 }])
+    const next = setSegmentSpeed(e, 1, 1.5)
+    expect(segmentSpeed(next.segments![0]!)).toBe(1)
+    expect(segmentSpeed(next.segments![1]!)).toBe(1.5)
+    // …and back to 1 drops the field rather than storing it.
+    const off = setSegmentSpeed(next, 1, 1)
+    expect(off.segments![1]!.speed).toBeUndefined()
+  })
+
+  it('a channel’s source time follows the sped mapping', () => {
+    const e = base([{ startMs: 0, endMs: 4000, speed: 2 }, { startMs: 4000, endMs: 10_000 }])
+    // The screen channel starts at recording t=0, so its local time IS the
+    // recording time — which makes the sped mapping readable here.
+    const id = 'ch-screen'
+    expect(channelSourceTimeAt(rec, e, id, 1000)).toBe(2000)
+    expect(channelSourceTimeAt(rec, e, id, 3000)).toBe(5000)
   })
 })

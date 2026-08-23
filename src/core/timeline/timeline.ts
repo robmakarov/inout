@@ -40,6 +40,23 @@ export function segmentOutputMs(s: KeptSegment): number {
   return Math.max(0, s.endMs - s.startMs) / segmentSpeed(s)
 }
 
+/**
+ * The speed in force at an OUTPUT instant — 1 outside any sped span, and 1 past
+ * the end. The editor preview needs it because an element's playbackRate is its
+ * base rate, not a correction: slewing a 2x span around 1.0 would fall a second
+ * behind per second and hard-seek forever.
+ */
+export function speedAtOutputMs(e: EditState, outputMs: number): number {
+  if (outputMs < 0) return 1
+  let acc = 0
+  for (const s of keptSegments(e)) {
+    const len = segmentOutputMs(s)
+    if (outputMs < acc + len) return segmentSpeed(s)
+    acc += len
+  }
+  return 1
+}
+
 /** True when any kept span plays at a speed other than 1. */
 export function hasSpeedChange(e: EditState): boolean {
   return keptSegments(e).some((s) => segmentSpeed(s) !== 1)
@@ -105,10 +122,15 @@ export function clampEditState(r: Recording, e: EditState): EditState {
   if (!e.segments || e.segments.length === 0) return base
   const segments = normalizeSegments(base, e.segments)
   // A single span covering the whole trim is the same as no cuts; keep the
-  // field absent so untouched takes stay byte-identical to before F1.
+  // field absent so untouched takes stay byte-identical to before F1. UNLESS it
+  // carries a speed (F5b): then it is not "no cuts", it is the whole take
+  // played faster, and dropping it here would silently discard the edit.
   if (
     segments.length === 0 ||
-    (segments.length === 1 && segments[0]!.startMs <= gs && segments[0]!.endMs >= ge)
+    (segments.length === 1 &&
+      segments[0]!.startMs <= gs &&
+      segments[0]!.endMs >= ge &&
+      segmentSpeed(segments[0]!) === 1)
   ) {
     return base
   }

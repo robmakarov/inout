@@ -4,13 +4,16 @@ import {
   MIN_SEGMENT_MS,
   editSegments,
   normalizeSegments,
+  outputToRecordingMs,
   removeSegment,
+  segmentSpeed,
   splitAtOutputMs,
   ZOOM_MOVE_MS,
   type TightenProposal,
 } from '@core/timeline'
 import { CHANNEL_META } from '@app/lib/channels'
 import { FrameBar } from '@app/components/FrameBar'
+import { SpeedBar } from '@app/components/SpeedBar'
 import { formatClock } from '@app/lib/format'
 import { Icon } from '@app/components/Icon'
 
@@ -130,12 +133,26 @@ export function Timeline({
 
   // ---- mid-take cuts (F1) ----
   const segments = editSegments(edit)
-  const canSplit = (() => {
-    const recMs = edit.globalTrimStartMs + Math.min(timeMs, durationMs)
-    return segments.some(
-      (sg) => recMs > sg.startMs + MIN_SEGMENT_MS && recMs < sg.endMs - MIN_SEGMENT_MS,
+  /**
+   * The clip under the playhead, and the recording instant it sits at. Both
+   * Split and the speed steps act on THIS clip, so they can never mean
+   * different things. Via outputToRecordingMs, not trimStart + t: with cuts (and
+   * now speed) output time is not an offset of recording time, and the old
+   * arithmetic was quietly wrong on any take with a cut in it.
+   */
+  const playheadAt = outputToRecordingMs(edit, Math.min(timeMs, durationMs))
+  /** Never null for DRAWING: past the last frame the playhead sits at the end. */
+  const playheadRecMs = playheadAt ?? edit.globalTrimEndMs
+  const playheadSegment =
+    playheadAt === null
+      ? null
+      : segments.findIndex((sg) => playheadAt >= sg.startMs && playheadAt < sg.endMs)
+  const activeSegment = playheadSegment === null || playheadSegment < 0 ? null : playheadSegment
+  const canSplit =
+    playheadAt !== null &&
+    segments.some(
+      (sg) => playheadAt > sg.startMs + MIN_SEGMENT_MS && playheadAt < sg.endMs - MIN_SEGMENT_MS,
     )
-  })()
   const splitHere = () => {
     onEdit(splitAtOutputMs(editRef.current, Math.min(timeMs, durationMs)))
   }
@@ -175,7 +192,6 @@ export function Timeline({
 
   const gStart = edit.globalTrimStartMs
   const gEnd = edit.globalTrimEndMs
-  const playheadRecMs = gStart + Math.min(timeMs, durationMs)
 
   return (
     <div className="tl">
@@ -285,6 +301,8 @@ export function Timeline({
               {segments.length} clips — drag a cut edge to move it, × to delete a clip
             </span>
           )}
+          {/* F5b: per-clip speed, acting on the clip under the playhead. */}
+          {!proposal && <SpeedBar edit={edit} onEdit={onEdit} index={activeSegment} />}
           {/* F3: the frame only exists around a screen surface, so a
               camera-only take never shows a control that would do nothing. */}
           {hasScreen && <FrameBar edit={edit} onEdit={onEdit} />}
@@ -341,6 +359,19 @@ export function Timeline({
               style={{ left: x(sp.startMs), width: Math.max(2, x(sp.endMs - sp.startMs)) }}
             />
           ))}
+          {/* F5b: which clips are sped up, said on the clip itself — the tools
+              row shows the playhead's clip, and a take can have several. */}
+          {segments.map((sg, i) =>
+            segmentSpeed(sg) === 1 ? null : (
+              <div
+                key={`speed-${i}-${sg.startMs}`}
+                className="tl__seg-speed"
+                style={{ left: x((sg.startMs + sg.endMs) / 2) }}
+              >
+                {segmentSpeed(sg)}×
+              </div>
+            ),
+          )}
           {/* Material cut out of the middle, plus the handles that move each cut. */}
           {segments.length > 1 &&
             segments.slice(0, -1).map((sg, i) => (

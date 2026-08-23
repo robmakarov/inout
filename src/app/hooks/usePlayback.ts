@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { EditState, Recording } from '@core/types'
 import { blobStore } from '@core/store'
-import { channelSourceTimeAt, outputDurationMs } from '@core/timeline'
+import { channelSourceTimeAt, outputDurationMs, speedAtOutputMs } from '@core/timeline'
 import { measureRecordingMakeup, mixGainForChannels, softLimitSample } from '@core/compose'
 import { isAppleWebKit } from '@core/capabilities'
 
@@ -170,6 +170,11 @@ export function usePlayback(recording: Recording, edit: EditState): Playback {
 
   const sync = useCallback(
     (outMs: number) => {
+      // F5b: inside a sped span the element's BASE rate is the span's speed —
+      // the slew below is a correction around it, not a replacement for it.
+      // Browsers preserve pitch on playbackRate by default, so the preview
+      // sounds like the export's WSOLA stretch without reimplementing it here.
+      const base = speedAtOutputMs(editRef.current, outMs)
       for (const ch of recording.channels) {
         const el = els.current.get(ch.id)
         if (!el) continue
@@ -188,16 +193,16 @@ export function usePlayback(recording: Recording, edit: EditState): Playback {
             // with hard seeks reserved for genuine jumps.
             if (Math.abs(drift) > RESYNC_HARD_MS) {
               el.currentTime = src / 1000
-              el.playbackRate = 1
+              el.playbackRate = base
             } else if (Math.abs(drift) <= SYNC_DEADBAND_MS) {
-              el.playbackRate = 1
+              el.playbackRate = base
             } else {
-              const rate = 1 - drift / SLEW_HORIZON_MS
-              el.playbackRate = Math.min(1.25, Math.max(0.8, rate))
+              const rate = base * (1 - drift / SLEW_HORIZON_MS)
+              el.playbackRate = Math.min(base * 1.25, Math.max(base * 0.8, rate))
             }
             if (el.paused) void el.play().catch(() => {})
           } else {
-            el.playbackRate = 1
+            el.playbackRate = base
             if (Math.abs(drift) > PAUSED_SEEK_MS) el.currentTime = src / 1000
             if (!el.paused) el.pause()
           }

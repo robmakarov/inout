@@ -289,6 +289,19 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'f5b',
+    title: 'F5b — per-segment speed',
+    detail:
+      'speeds a MIDDLE span up and measures what it must not break: the pitch of a known tone in the DECODED export inside the sped stretch (against the same measurement on the unsped export), the oracle’s flash+click sync across both boundaries, the output length against the arithmetic, and what it costs per second of output.',
+    run: async (args) => {
+      const { runSegmentSpeed } = await import('../perf/segmentSpeed')
+      return runSegmentSpeed({
+        takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined,
+        speed: typeof args?.speed === 'number' ? args.speed : undefined,
+      })
+    },
+  },
+  {
     id: 'f2',
     title: 'F2 — timed zoom and pan',
     detail:

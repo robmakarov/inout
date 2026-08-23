@@ -23,6 +23,7 @@ export {
   segmentOutputMs,
   segmentSpeed,
   setSegmentSpeed,
+  speedAtOutputMs,
   MAX_SEGMENT_SPEED,
   MIN_SEGMENT_SPEED,
 } from './timeline'

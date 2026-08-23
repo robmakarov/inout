@@ -1,6 +1,9 @@
 import { ALL_FORMATS, AudioBufferSink, BlobSource, Input, type WrappedAudioBuffer } from 'mediabunny'
-import type { CaptureLoudness } from '@core/types'
+import { blobStore } from '@core/store'
+import type { CaptureLoudness, EditState, Recording } from '@core/types'
+import { keptSegments, segmentOutputMs, segmentSpeed } from '@core/timeline'
 import { AUDIO_SAMPLE_RATE } from './codecs'
+import { TimeStretcher } from './timeStretch'
 
 interface CurrentBuffer {
   startSec: number
@@ -35,17 +38,47 @@ function sampleAt(chan: Float32Array, pos: number): number {
  * Soft-knee limiter used at the final mix bus. Hard clamp (±1) turns mic+
  * system-audio double-capture into harsh clipping buzz — but shaping EVERY
  * sample (the old plain tanh) audibly distorts music at normal levels
- * (tanh(0.7)≈0.60). Identity below the knee; only overs get tanh-folded
- * into the remaining headroom, C1-continuous at the knee.
+ * (tanh(0.7)≈0.60). Identity below the knee; only overs get folded into the
+ * remaining headroom, C1-continuous at the knee.
+ *
+ * THE FOLD IS ALGEBRAIC (u/(1+u)), NOT tanh, and that is the whole point.
+ * tanh saturates EXPONENTIALLY: with the argument scaled by (1-knee)=0.05 it
+ * was numerically pinned to full scale by an input of 1.152, while
+ * makeupGainForLoudness is licensed to drive true peaks to
+ * NORMALIZE_PEAK_OVERDRIVE × knee = 1.9. Every sample in that 1.66:1 range
+ * landed on the SAME output code, so a boosted transient lost its shape and
+ * came out as an impulse — measured as 217 full-scale ~0.25 ms spikes from
+ * t≈12.5s in PO's 2026-08-23 take, out of a −40 dBFS background. Audible as
+ * crackle, and reported as "sound broke into lag sounds".
+ *
+ * u/(1+u) has the same three properties that made tanh the choice — f(0)=0,
+ * f′(0)=1 (so the knee stays C1-continuous and normal program is untouched),
+ * f(∞)=1 (so the output never reaches full scale) — but it approaches the
+ * ceiling POLYNOMIALLY, so it stays distinguishable out to LIMIT_USABLE_MAX
+ * ≈ 82, i.e. ~43× past anything the normalizer can ask for. Below the knee
+ * nothing changed at all: takes without overs are bit-identical.
  */
 const LIMIT_KNEE = 0.95
 
 export function softLimitSample(x: number): number {
   const a = Math.abs(x)
   if (a <= LIMIT_KNEE) return x
-  const shaped = LIMIT_KNEE + (1 - LIMIT_KNEE) * Math.tanh((a - LIMIT_KNEE) / (1 - LIMIT_KNEE))
+  const u = (a - LIMIT_KNEE) / (1 - LIMIT_KNEE)
+  const shaped = LIMIT_KNEE + (1 - LIMIT_KNEE) * (u / (1 + u))
   return x < 0 ? -shaped : shaped
 }
+
+/**
+ * Largest input the limiter still renders as something OTHER than full scale
+ * at 16-bit output — i.e. the honest top of its working range. Derived from
+ * the curve in closed form rather than asserted, so the limiter and the gain
+ * bound that feeds it cannot drift apart again; a test pins the relationship.
+ *
+ * 1 − shaped ≥ step  ⟺  (1−knee)/(1+u) ≥ step  ⟺  u ≤ (1−knee)/step − 1.
+ */
+const OUTPUT_STEP = 1 / 32768
+export const LIMIT_USABLE_MAX =
+  LIMIT_KNEE + (1 - LIMIT_KNEE) * ((1 - LIMIT_KNEE) / OUTPUT_STEP - 1)
 
 /**
  * Per-channel gain for the render mix bus. Single source = unity (full-scale,
@@ -81,9 +114,25 @@ export const NORMALIZE_MAX_MAKEUP = 8
 /** Loudness gate: takes whose p90 window-RMS sits at/below this are treated as
  * having no real program (room tone only) and are left untouched. −50 dBFS. */
 export const NORMALIZE_GATE_RMS = 0.0032
-/** Bound on pervasive limiting: gain may push the true peak at most this far
- * past the knee (brief transients get shaped; sustained program does not). */
-export const NORMALIZE_PEAK_OVERDRIVE = 2
+/**
+ * Bound on pervasive limiting: gain may push the true peak at most this far
+ * past the knee (brief transients get shaped; sustained program does not).
+ *
+ * 2 → 4 on 2026-08-23, and the reason is measured rather than taste. On PO's
+ * take this bound was the one that BOUND: the floor bound was nowhere near
+ * (p20 0.0062 against a 0.01 ceiling) and the target was never reached — p90
+ * landed at 0.1063, i.e. 1.4 dB short of the 0.125 target — because one sharp
+ * transient set `peak` and capped the gain for the whole take. So a single
+ * click both crackled AND held everything else quiet ("sound was not loud").
+ *
+ * 2 could not be raised while the limiter was a tanh that went numerically
+ * dead at 1.152 — the extra range would have been spent flattening transients.
+ * With the algebraic fold the curve stays resolved to LIMIT_USABLE_MAX ≈ 82,
+ * so 4 × knee = 3.8 is deep inside its working range and a test pins that.
+ * The honest cost: peaks are now squashed up to ~11.6 dB rather than ~5.6 dB,
+ * which is what loudness always costs. Raise no further without a listen test.
+ */
+export const NORMALIZE_PEAK_OVERDRIVE = 4
 /** Post-gain ceiling for the take's noise floor (p20 window RMS): −40 dBFS.
  * Boosting speech must not boost room hiss into audibility — a +18 dB rescue
  * of a faint take was reported back as "still some noises". A clean floor
@@ -574,6 +623,88 @@ export class SpeedSpanMixer implements MixSource {
   dispose(): void {
     for (const m of this.mixers) m.dispose()
   }
+}
+
+export async function openAudioMixers(
+  recording: Recording,
+  edit: EditState,
+  throwIfAborted: () => void,
+): Promise<MixSource[]> {
+  const out: MixSource[] = []
+  let outCursor = 0
+  for (const seg of keptSegments(edit)) {
+    const speed = segmentSpeed(seg)
+    const segOutLen = segmentOutputMs(seg)
+    // Channels of a SPED span are collected and handed to one stretcher, so the
+    // two searches cannot pick different offsets and slide mic against system
+    // audio inside the span (F5b).
+    const spanMixers: AudioChannelMixer[] = []
+    for (const channel of recording.channels) {
+      if (channel.media !== 'audio') continue
+      throwIfAborted()
+      const ce = edit.channels.find((c) => c.channelId === channel.id)
+      if (!ce || !ce.enabled) continue
+      const recStart = channel.startOffsetMs + Math.max(0, ce.trimStartMs)
+      const recEnd = channel.startOffsetMs + Math.min(channel.durationMs, ce.trimEndMs)
+      const from = Math.max(recStart, seg.startMs)
+      const to = Math.min(recEnd, seg.endMs)
+      if (to <= from) continue
+      const blob = await blobStore.read(channel.blobKey)
+      if (speed === 1) {
+        // One mixer per (channel x kept segment): each streams forward over its
+        // own output span with its own source offset, so the existing
+        // forward-only mixer needs no change to support cuts.
+        const m = await openAudioChannel(
+          blob,
+          channel.id,
+          (outCursor + (from - seg.startMs)) / 1000,
+          (outCursor + (to - seg.startMs)) / 1000,
+          (seg.startMs - outCursor - channel.startOffsetMs) / 1000,
+        )
+        if (m) out.push(m)
+      } else {
+        // IDENTITY mapping, in RECORDING seconds: the span's stretcher is what
+        // turns recording time into output time, so the mixer must hand over
+        // the material exactly as recorded.
+        const m = await openAudioChannel(
+          blob,
+          channel.id,
+          from / 1000,
+          to / 1000,
+          -channel.startOffsetMs / 1000,
+        )
+        if (m) spanMixers.push(m)
+      }
+    }
+    if (speed !== 1 && spanMixers.length > 0) {
+      out.push(
+        new SpeedSpanMixer(
+          spanMixers,
+          outCursor / 1000,
+          (outCursor + segOutLen) / 1000,
+          seg.startMs / 1000,
+          seg.endMs / 1000,
+          speed,
+        ),
+      )
+    }
+    outCursor += segOutLen
+  }
+  return out
+}
+
+/**
+ * Headroom for the render sum, counted in DISTINCT CHANNELS.
+ *
+ * It used to count MIXERS, and F1 had quietly made those different things: one
+ * mic cut into three spans opens three mixers, so a cut take exported at 1/3
+ * gain — 9.5 dB down — with the loudness normalizer silently spending its
+ * makeup budget undoing it. Mixers for different spans never overlap in output
+ * time, so they cannot sum and must not be staged against each other.
+ */
+export function busGainFor(sources: MixSource[]): number {
+  const distinct = new Set(sources.flatMap((m) => m.channelIds)).size
+  return distinct > 1 ? mixGainForChannels(distinct) : 1
 }
 
 /** Pure helpers exported for unit tests. */

@@ -13,6 +13,8 @@ import {
   hasEnabledVideo,
   isDefaultEdit,
   keptSegments,
+  segmentOutputMs,
+  segmentSpeed,
   outputDurationMs,
   outputToRecordingMs,
   segmentJoinsMs,
@@ -29,10 +31,11 @@ import {
   loudnessFromCaptureStats,
   makeupGainForLoudness,
   measureMixLoudness,
+  busGainFor,
   mixGainForChannels,
-  openAudioChannel,
+  openAudioMixers,
+  type MixSource,
   softLimitSample,
-  type AudioChannelMixer,
 } from './audio'
 import {
   AUDIO_BITRATE,
@@ -67,7 +70,9 @@ interface ActiveWindow {
   outEndMs: number
   /** Channel-local end of the kept region, ms. */
   localEndMs: number
-  /** channel-local ms = output ms + this. Differs per kept segment. */
+  /** channel-local ms = output ms + this. Differs per kept segment. Only
+   *  meaningful at speed 1 — a sped span is not an affine shift of output time
+   *  onto source time with slope 1, and its audio goes through SpeedSpanMixer. */
   localOffsetMs: number
 }
 
@@ -88,54 +93,26 @@ function activeOutputWindowsMs(edit: EditState, channel: ChannelRecording): Acti
   const out: ActiveWindow[] = []
   let outCursor = 0
   for (const seg of keptSegments(edit)) {
-    const segLen = Math.max(0, seg.endMs - seg.startMs)
+    const speed = segmentSpeed(seg)
+    const segOutLen = segmentOutputMs(seg)
     const from = Math.max(recStart, seg.startMs)
     const to = Math.min(recEnd, seg.endMs)
     if (to > from) {
       out.push({
-        outStartMs: outCursor + (from - seg.startMs),
-        outEndMs: outCursor + (to - seg.startMs),
+        outStartMs: outCursor + (from - seg.startMs) / speed,
+        outEndMs: outCursor + (to - seg.startMs) / speed,
         localEndMs,
         // localSec = outSec + localOffsetSec, per segment.
         localOffsetMs: seg.startMs - outCursor - channel.startOffsetMs,
       })
     }
-    outCursor += segLen
+    outCursor += segOutLen
   }
   return out
 }
 
 /** Open a mixer per enabled audio channel (used for both the analysis pre-pass
  * and the real render — kept identical so the measured peak matches the mix). */
-async function openAudioMixers(
-  recording: ExportOptions['recording'],
-  edit: EditState,
-  throwIfAborted: () => void,
-): Promise<AudioChannelMixer[]> {
-  const mixers: AudioChannelMixer[] = []
-  for (const channel of recording.channels) {
-    if (channel.media !== 'audio') continue
-    throwIfAborted()
-    const windows = activeOutputWindowsMs(edit, channel)
-    if (windows.length === 0) continue
-    // One mixer per (channel × kept segment): each streams forward over its own
-    // output span with its own source offset, so the existing forward-only
-    // mixer needs no change to support cuts.
-    for (const window of windows) {
-      const blob = await blobStore.read(channel.blobKey)
-      const mixer = await openAudioChannel(
-        blob,
-        channel.id,
-        window.outStartMs / 1000,
-        window.outEndMs / 1000,
-        window.localOffsetMs / 1000,
-      )
-      if (mixer) mixers.push(mixer)
-    }
-  }
-  return mixers
-}
-
 /**
  * Loudness makeup the export will apply to this recording (default edit) —
  * used by the editor preview for parity: what you hear while editing is the
@@ -160,7 +137,7 @@ export async function measureRecordingMakeup(
     }
     const probe = await openAudioMixers(recording, edit, () => {})
     if (probe.length === 0) return 1
-    const baseGain = probe.length > 1 ? mixGainForChannels(probe.length) : 1
+    const baseGain = busGainFor(probe)
     try {
       const totalAudioFrames = Math.round((outputDurationMs(edit) / 1000) * AUDIO_SAMPLE_RATE)
       const loud = await measureMixLoudness(probe, baseGain, totalAudioFrames, () => {})
@@ -208,7 +185,7 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
 
   const waveformMode = !hasEnabledVideo(recording, edit)
   const videoReaders: VideoChannelReader[] = []
-  const audioMixers: AudioChannelMixer[] = []
+  const audioMixers: MixSource[] = []
   let output: Output | null = null
   let scratch: ExportScratch | null = null
   let certified: {
@@ -244,7 +221,7 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
     // never limited); multiple sources (mic + system audio) mix equal-power so
     // their sum does not clip into softLimitSample. Unity summing here was the
     // pervasive-noise cause after the composite export path was removed.
-    const baseGain = audioMixers.length > 1 ? mixGainForChannels(audioMixers.length) : 1
+    const baseGain = busGainFor(audioMixers)
     for (const m of audioMixers) m.gain = baseGain
 
     // Loudness normalize: quiet captures (real case: PO's take had voice at

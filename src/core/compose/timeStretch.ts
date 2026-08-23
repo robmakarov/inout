@@ -107,7 +107,6 @@ export class TimeStretcher {
   /** Synthesis step counter — the analysis position is derived from it. */
   private step = 0
   /** Output frames produced but not yet pulled. */
-  private readonly outL: number[] = []
   private ready = new Float32Array(0)
   private readyR = new Float32Array(0)
   private readyLen = 0
