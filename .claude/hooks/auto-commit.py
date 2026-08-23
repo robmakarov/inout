@@ -29,6 +29,7 @@ INOUT_AUTOCOMMIT_NO_PUSH.
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -150,6 +151,18 @@ def touched_files(transcript, cache_dir):
     except OSError:
         pass
     return found
+
+
+def project_transcript_dir(repo):
+    """~/.claude/projects/<slug>, where the slug is cwd with non-alphanumerics dashed.
+
+    Only needed when the payload omits transcript_path: without the project dir we
+    could not see other sessions' claims and would fall back to sweeping everything,
+    which is the bug this hook exists to fix.
+    """
+    slug = re.sub(r"[^a-zA-Z0-9]", "-", os.path.realpath(repo))
+    path = os.path.join(os.path.expanduser("~"), ".claude", "projects", slug)
+    return path if os.path.isdir(path) else ""
 
 
 def other_session_claims(project_dir, my_session, state_dir, cache_dir):
@@ -311,7 +324,8 @@ def main():
     except (ValueError, OSError):
         payload = {}
 
-    session_id = payload.get("session_id") or "unknown"
+    # session_id becomes a filename under .git/, so keep it to a safe alphabet.
+    session_id = re.sub(r"[^A-Za-z0-9._-]", "_", payload.get("session_id") or "") or "unknown"
     transcript = payload.get("transcript_path") or ""
     repo = os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or os.getcwd()
 
@@ -335,14 +349,24 @@ def main():
         print(log(state_dir, "skip: %s in progress" % blocker))
         return 0
 
+    project_dir = os.path.dirname(transcript) if transcript else ""
+    if not project_dir or not os.path.isdir(project_dir):
+        project_dir = project_transcript_dir(repo)
+        if project_dir and not transcript and session_id != "unknown":
+            guess = os.path.join(project_dir, session_id + ".jsonl")
+            if os.path.exists(guess):
+                transcript = guess
+
     mine = set()
     if transcript and os.path.exists(transcript):
         for abs_path in touched_files(transcript, cache_dir):
             rel = rel_to_repo(repo, abs_path)
             if rel:
                 mine.add(rel)
+    elif project_dir:
+        log(state_dir, "warning: no transcript for %s; claiming nothing, "
+                       "sweeping only unclaimed files" % session_id)
 
-    project_dir = os.path.dirname(transcript) if transcript else ""
     theirs = set()
     for abs_path in other_session_claims(project_dir, session_id, state_dir, cache_dir):
         rel = rel_to_repo(repo, abs_path)
@@ -370,13 +394,21 @@ def main():
         message, authored = build_message(state_dir, session_id, to_commit)
 
         spec = "\0".join(to_commit)
-        add = subprocess.run(
-            ["git", "-C", repo, "add", "--pathspec-from-file=-",
-             "--pathspec-file-nul", "--"],
-            input=spec, capture_output=True, text=True)
-        if add.returncode != 0:
-            print(log(state_dir, "git add failed: %s" % add.stderr.strip()))
-            return 0
+        # `git add` errors out on a pathspec matching neither the worktree nor the
+        # index — a fully staged `git rm`/`git mv` source — and one such path would
+        # abort the whole commit. Those are already staged, and `git commit --only`
+        # carries them by itself, so only feed `add` the paths it can match.
+        indexed = set(git(repo, "ls-files", "-z").stdout.split("\0"))
+        addable = [p for p in to_commit
+                   if p in indexed or os.path.lexists(os.path.join(repo, p))]
+        if addable:
+            add = subprocess.run(
+                ["git", "-C", repo, "add", "-A", "--pathspec-from-file=-",
+                 "--pathspec-file-nul", "--"],
+                input="\0".join(addable), capture_output=True, text=True)
+            if add.returncode != 0:
+                # Not fatal: commit --only may still capture what is already staged.
+                log(state_dir, "git add warning: %s" % add.stderr.strip())
 
         # --only keeps another session's staged-but-uncommitted files out of this commit.
         commit = subprocess.run(

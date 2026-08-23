@@ -9,6 +9,13 @@ Doc rule: every doc holds CURRENT truth only — when state changes, rewrite/del
 - `src/core` never imports from `src/app`.
 - Dev: `npm run dev` · check: `npm run typecheck && npm test` · e2e without permissions: append `?synthetic=1`.
 
+Auto-commit: a Stop hook (`.claude/hooks/auto-commit.py`) commits and pushes when a session ends.
+It commits only the files this session edited, plus files no other live session claims — a second
+session in the same worktree keeps its own. **Name your own commit** before you finish:
+`printf 'subject\n\nbody\n' | .claude/hooks/commit-msg.sh`. Skip it and you get a
+`wip: unattributed sweep …` placeholder, which is a bug to fix, not a default to live with.
+Committing by hand also works — the hook then only sweeps what you left behind.
+
 Roadmap protocol: PO saying `roadmap` = print the READY map from `.ai/TASKS` (unblocked tasks,
 parallel-safe combos, cost bands) and wait — do not start anything. PO answers `go <id>` → execute
 that ONE task per the TASKS operating rules (own branch, gates, TD merge). If PO names several ids,
