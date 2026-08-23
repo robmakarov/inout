@@ -1,4 +1,6 @@
 import type { VideoSample } from 'mediabunny'
+import type { CameraPose } from '../types'
+import { defaultCameraPose, poseToRect } from '../timeline/cameraTrack'
 
 export interface FrameCanvas {
   ctx: OffscreenCanvasRenderingContext2D
@@ -39,40 +41,50 @@ export function drawEmptyFrame(f: FrameCanvas): void {
 
 /**
  * Fixed layout: screen letterboxed full-frame on black with optional camera
- * PiP bottom-right; camera covers the frame only when the composition has no
- * screen at all (cameraFull) — momentary screen gaps keep the camera in the
- * PiP slot over the empty background so the layout never jumps mid-video.
+ * PiP; camera covers the frame only when the composition has no screen at all
+ * (cameraFull) — momentary screen gaps keep the camera in the PiP slot over the
+ * empty background so the layout never jumps mid-video.
+ *
+ * `pose` (task F4) is where the PiP sits at THIS instant. Omitted = the fixed
+ * bottom-right slot, byte-identical to every take made before F4.
  */
 export function drawVideoFrame(
   f: FrameCanvas,
   screen: VideoSample | null,
   camera: VideoSample | null,
   cameraFull: boolean,
+  pose?: CameraPose,
 ): void {
   if (screen) {
     f.ctx.fillStyle = '#000000'
     f.ctx.fillRect(0, 0, f.width, f.height)
     screen.drawWithFit(f.ctx, { fit: 'contain' })
-    if (camera) drawCameraPip(f, camera)
+    if (camera) drawCameraPip(f, camera, pose)
   } else if (camera && cameraFull) {
     camera.drawWithFit(f.ctx, { fit: 'cover' })
   } else if (camera) {
     drawEmptyFrame(f)
-    drawCameraPip(f, camera)
+    drawCameraPip(f, camera, pose)
   } else {
     drawEmptyFrame(f)
   }
 }
 
-function drawCameraPip(f: FrameCanvas, camera: VideoSample): void {
+function drawCameraPip(f: FrameCanvas, camera: VideoSample, pose?: CameraPose): void {
   if (camera.displayWidth <= 0 || camera.displayHeight <= 0) return
-  const { ctx, width, scale } = f
-  const pipW = 0.24 * width
-  const pipH = pipW * (camera.displayHeight / camera.displayWidth)
-  const margin = 24 * scale
+  const { ctx, width, height, scale } = f
+  const geometry = {
+    frameAspect: width / height,
+    cameraAspect: camera.displayWidth / camera.displayHeight,
+  }
+  const rect = poseToRect(pose ?? defaultCameraPose(geometry), geometry)
+  const pipW = rect.widthFrac * width
+  const pipH = rect.heightFrac * height
+  const x = rect.leftFrac * width
+  const y = rect.topFrac * height
+  // The corner radius belongs to the PiP, not to the frame — it must not grow
+  // when the user makes the PiP bigger, so it stays keyed to the layout scale.
   const radius = 16 * scale
-  const x = width - margin - pipW
-  const y = f.height - margin - pipH
   ctx.save()
   roundedRectPath(ctx, x, y, pipW, pipH, radius)
   ctx.clip()

@@ -14,6 +14,7 @@ import {
   isDefaultEdit,
   keptSegments,
   outputDurationMs,
+  outputToRecordingMs,
   segmentJoinsMs,
 } from '@core/timeline'
 import {
@@ -41,6 +42,7 @@ import {
   pickEncodingTarget,
 } from './codecs'
 import { drawVideoFrame, type FrameCanvas } from './layout'
+import { cameraPoseAt, cameraTrackIsActive } from '@core/timeline'
 import { buildCertification, certificationComment } from './certify'
 import { createExportScratch, type ExportScratch } from './scratch'
 import { collectPeaks, createPeakBuffer, createWaveformRenderer } from './waveform'
@@ -286,6 +288,8 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
     // Layout slot is decided once for the whole export: camera only fills the
     // frame when no screen channel contributes anywhere in the output window.
     const cameraFull = !videoReaders.some((r) => r.kind === 'screen')
+    // Zero cost when the track is absent: no per-frame pose work at all.
+    const cameraMoves = !cameraFull && cameraTrackIsActive(edit.camera)
     const target = await pickEncodingTarget(width, height, needAudio, videoBitrate)
     throwIfAborted()
 
@@ -391,7 +395,19 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
           if (reader.kind === 'screen') screen = sample
           else camera = sample
         }
-        drawVideoFrame(frame, screen, camera, cameraFull)
+        // F4: the camera track is keyed to RECORDING time, so a cut made later
+        // never drags the motion away from the moment it belongs to.
+        let pose
+        if (cameraMoves && camera && camera.displayWidth > 0 && camera.displayHeight > 0) {
+          const recMs = outputToRecordingMs(edit, tSec * 1000)
+          if (recMs !== null) {
+            pose = cameraPoseAt(edit.camera, recMs, {
+              frameAspect: width / height,
+              cameraAspect: camera.displayWidth / camera.displayHeight,
+            })
+          }
+        }
+        drawVideoFrame(frame, screen, camera, cameraFull, pose)
       }
       await videoSource.add(tSec, 1 / fps)
     }

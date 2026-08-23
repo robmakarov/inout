@@ -5,6 +5,7 @@ import type {
   KeptSegment,
   Recording,
 } from '../types'
+import { cameraTrackIsActive, normalizeCameraTrack } from './cameraTrack'
 
 const MIN_SPAN_MS = 100
 /** A cut may not leave a segment shorter than this. */
@@ -48,6 +49,13 @@ export function clampEditState(r: Recording, e: EditState): EditState {
     globalTrimStartMs: gs,
     globalTrimEndMs: ge,
     channels,
+  }
+  // F4: keyframes are RECORDING-timeline instants, so they are bounded by the
+  // take, not by the trim — trimming must not silently delete camera motion
+  // that reappears the moment the user drags the trim handle back.
+  if (cameraTrackIsActive(e.camera)) {
+    const camera = normalizeCameraTrack(e.camera!, r.durationMs)
+    if (camera.keyframes.length > 0) base.camera = camera
   }
   if (!e.segments || e.segments.length === 0) return base
   const segments = normalizeSegments(base, e.segments)
@@ -254,6 +262,9 @@ export function hasEnabledVideo(r: Recording, e: EditState): boolean {
 /** True when the edit changes nothing: instant-export can use the live composite. */
 export function isDefaultEdit(r: Recording, e: EditState): boolean {
   if (hasCuts(e)) return false
+  // A camera track means the PIXELS differ from the burned-in composite, so the
+  // packet copy would silently ship a video that ignores the user's move (F4).
+  if (cameraTrackIsActive(e.camera)) return false
   if (e.globalTrimStartMs > 0 || e.globalTrimEndMs < r.durationMs) return false
   for (const c of r.channels) {
     const edit = e.channels.find((x) => x.channelId === c.id)

@@ -108,6 +108,34 @@ export interface KeptSegment {
   endMs: number
 }
 
+/**
+ * Where the camera PiP sits, as fractions of the output frame (task F4).
+ * Centre-anchored so a resize keeps the box where the user put it, and
+ * resolution-independent so the same pose renders identically at 720p and
+ * 1440p — and identically in the editor preview, which is the parity gate.
+ */
+export interface CameraPose {
+  /** Centre of the PiP, 0..1 across the frame. */
+  xFrac: number
+  yFrac: number
+  /** PiP width as a fraction of frame width; height follows the camera aspect. */
+  widthFrac: number
+}
+
+/** A pose the camera holds at a RECORDING-timeline instant (task F4). */
+export interface CameraKeyframe extends CameraPose {
+  atMs: number
+}
+
+/**
+ * Timed camera motion. On the RECORDING timeline, like KeptSegment — so a cut
+ * made later never drags the motion out from under the moment it belongs to.
+ * Absent (or empty) = the fixed bottom-right PiP every take had before F4.
+ */
+export interface CameraTrack {
+  keyframes: CameraKeyframe[]
+}
+
 export interface EditState {
   recordingId: string
   /** Recording-timeline, ms. Output covers [globalTrimStartMs, globalTrimEndMs). */
@@ -119,6 +147,11 @@ export interface EditState {
    * the whole trim (today's behaviour). Output duration is their total length.
    */
   segments?: KeptSegment[]
+  /**
+   * Timed camera motion (F4). Absent = the fixed bottom-right PiP, which is
+   * what every take recorded before F4 keeps doing.
+   */
+  camera?: CameraTrack
 }
 
 // ---------------------------------------------------------------------------

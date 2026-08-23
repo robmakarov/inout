@@ -19,3 +19,22 @@ export {
   hasCuts,
   MIN_SEGMENT_MS,
 } from './timeline'
+
+export {
+  // Timed camera motion (F4 — movable camera).
+  cameraPoseAt,
+  cameraTrackIsActive,
+  clampPose,
+  defaultCameraPose,
+  easeInOut,
+  normalizeCameraTrack,
+  pipHeightFrac,
+  poseToRect,
+  writeCameraKeyframe,
+  CAMERA_MOVE_MS,
+  PIP_MAX_WIDTH_FRAC,
+  PIP_MIN_WIDTH_FRAC,
+  PIP_WIDTH_FRAC,
+  type CameraGeometry,
+  type PipRect,
+} from './cameraTrack'
