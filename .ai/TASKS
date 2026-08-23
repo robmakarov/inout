@@ -24,7 +24,7 @@ cost bands) and WAITS. PO answers "go <id>". One task per session (one branch pe
 several ids, take the first and tell PO to open parallel sessions for the rest. Whoever MERGES a task
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
-── READY MAP — current truth, updated on every merge (last: 2026-08-23, O1+O2+O3a+O7+O4step1+O4b+F7+F1 merged; P0 mic-hang fixed) ──
+── READY MAP — current truth, updated on every merge (last: 2026-08-23, O1+O2+O3a+O7+O4step1+O4b+F7+F1+O8(partial) merged; P0 mic-hang fixed) ──
 READY NOW — parallel-safe, any subset concurrently (one session each):
   O3b  single-generation export    [light]   touches compose/instant.ts, capture/session.ts — RE-SCOPE first
   O4b  sync-rig fix + gate re-spec  [medium]  REQUIRED before O4 step 2 — see O4 step 1b
@@ -32,8 +32,8 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
   P2   pwa install                 [light]   touches index.html, vite config, service worker
   P3   ru-pack part 1              [light]   touches docs, cloud stubs
   P5a  iOS SCK spike               [light]   touches nothing in repo (separate Xcode proj) — TIME-SENSITIVE: iOS 27 beta window, ships ~Sept
-  O8   perf-oracle bands           [medium]  tail-integrity + export bands; touches oracle scripts
   P2   pwa install                  [light]   touches index.html, vite config, service worker
+  F3   background frame             [medium]  touches compose/layout.ts, editor UI
 CONFLICT RULES: F7 coordinates with O5 if both active · O4 is the keystone — solo lane.
 BLOCKED (dep → unblocks): O4 (independent of O3b) · O5←O4 · O6←O4 · O8←O4/O5 ·
 O9←O4+O5 · O10 (its AEC part ←P4) · F1–F6←O5/O4 per pack (F4 also ←F1 UI seam; F2←F4) ·
@@ -152,16 +152,15 @@ and warmed at mount (record latency unchanged: 282 ms → 296 ms, armed +212 →
 its own 216 KB chunk behind a lazy provider that still warms eagerly on an OAuth callback URL.
 Evidence: `node scripts/o7-measure.mjs` (prod build + CDP).
 
-## O8. perf-oracle — performance regressions gate like sync ones  [P2, lands with O4/O5]
-Goal: extend the oracle suite with perf bands: export ×realtime floor · capture delivered-fps under
-the synthetic 4K load · export peak memory · TAIL-INTEGRITY band (PO 2026-08-22: "Loom cuts last
-seconds — we don't do that shit"): a distinctive final-500 ms event must appear in the export and
-duration must match wall clock within band. Also productize the numbers (PO-approved):
-CERTIFIED-EXPORT metadata — measured sync bound, loudness, dropped-frame count embedded in each
-exported file. Wire into pre-push like sync/fidelity.
-GATES: bands enforced (prove red once by injecting a regression, e.g. restoring the yield sleep) ·
-tail band red when final 500 ms is dropped (prove by injection) · metadata present in exported file
-(probe evidence) · main green · headless + ephemeral server like existing oracles.
+## O8. perf-oracle — PARTIALLY DONE 2026-08-23 (evidence in DECISIONS)
+SHIPPED: tail-integrity band (export ≥ take − 400 ms; last flash AND last click within 2000 ms of the
+end) proven red by injection (900 ms chop → −822 ms → FAIL); export throughput band ≥1× realtime
+(currently 5.0-5.2×), proven red at 0.7×; certified-export metadata in every file's comment tag (path,
+output settings, loudness makeup/p90/peak/source, stalled+missing channels, cut count, CI sync bound),
+probed back out of real exports on both paths and all three tiers.
+REMAINING (lands with O4/O5 as specced): capture delivered-fps band under the synthetic 4K load; export
+peak-memory band (the number already exists — compose/scratch.ts maxOutstandingBytes — it needs a
+threshold and a slot in the gate).
 
 ## O9. text-perfect — screen text without smear  [P2, after O4+O5; PO: "text is important"]
 Why: 4:2:0 chroma subsampling + generic encoder tuning fringes and smears colored text — the visible
