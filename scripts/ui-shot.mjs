@@ -278,6 +278,49 @@ try {
     text = await evaluate(
       `JSON.stringify({ tools: document.querySelector('.tl__tools')?.innerText ?? 'NO TOOLS', toast: document.querySelector('.toasts')?.innerText ?? '', proposed: document.querySelectorAll('.tl__propose-span').length })`,
     )
+  } else if (flow === 'speed') {
+    // F5b: split the take so there is a middle clip, park the playhead in it,
+    // then press 2x. The badge on the clip and the duration in the tools row
+    // are the proof — a speed that only changed the button's colour would show
+    // the same clip length.
+    const clickRuler = (fx) =>
+      evaluate(
+        `(() => { const r=document.querySelector('.tl__ruler'); if(!r) return false;
+          const b=r.getBoundingClientRect();
+          const x=b.left+b.width*${fx},y=b.top+b.height/2;
+          r.dispatchEvent(new PointerEvent('pointerdown',{clientX:x,clientY:y,bubbles:true,pointerId:1}));
+          r.dispatchEvent(new PointerEvent('pointerup',{clientX:x,clientY:y,bubbles:true,pointerId:1}));
+          return true })()`,
+      )
+    const pressSplit = () =>
+      evaluate(
+        `(() => { const b=[...document.querySelectorAll('button')].find(x=>/split/i.test(x.textContent||'')); if(!b||b.disabled) return false; b.click(); return true })()`,
+      )
+    await clickRuler(0.3)
+    await sleep(300)
+    await pressSplit()
+    await sleep(300)
+    await clickRuler(0.7)
+    await sleep(300)
+    await pressSplit()
+    await sleep(300)
+    // Playhead into the MIDDLE clip, then 2x.
+    await clickRuler(0.5)
+    await sleep(300)
+    const before = await evaluate(`document.querySelector('.transport__time')?.innerText ?? ''`)
+    opened = await evaluate(
+      `(() => { const b=[...document.querySelectorAll('.tl__speed-step')].find(x=>x.textContent==='2×'); if(!b||b.disabled) return false; b.click(); return true })()`,
+    )
+    await sleep(600)
+    text = await evaluate(
+      `JSON.stringify({
+        before: ${JSON.stringify(before)},
+        badges: [...document.querySelectorAll('.tl__seg-speed')].map(e=>e.textContent),
+        selected: [...document.querySelectorAll('.tl__speed-step.is-on')].map(e=>e.textContent),
+        tools: document.querySelector('.tl__tools')?.innerText ?? 'NO TOOLS',
+        duration: document.querySelector('.transport__time')?.innerText ?? '',
+      })`,
+    )
   } else if (flow === 'cuts') {
     // Seek to the middle of the take, split, then split again further along.
     await evaluate(

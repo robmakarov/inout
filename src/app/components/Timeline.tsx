@@ -5,6 +5,7 @@ import {
   editSegments,
   normalizeSegments,
   outputToRecordingMs,
+  recordingToOutputMs,
   removeSegment,
   segmentSpeed,
   splitAtOutputMs,
@@ -302,7 +303,24 @@ export function Timeline({
             </span>
           )}
           {/* F5b: per-clip speed, acting on the clip under the playhead. */}
-          {!proposal && <SpeedBar edit={edit} onEdit={onEdit} index={activeSegment} />}
+          {!proposal && (
+            <SpeedBar
+              edit={edit}
+              onEdit={(next) => {
+                onEdit(next)
+                // Hold the RECORDING instant, not the output one: compressing
+                // the clip under the playhead moves every later output time, so
+                // keeping the output number would slide the playhead off the
+                // clip the user just changed — and the control would light up
+                // for a different clip than the one it acted on.
+                if (playheadAt !== null) {
+                  const at = recordingToOutputMs(next, playheadAt)
+                  if (at !== null) onSeek(at)
+                }
+              }}
+              index={activeSegment}
+            />
+          )}
           {/* F3: the frame only exists around a screen surface, so a
               camera-only take never shows a control that would do nothing. */}
           {hasScreen && <FrameBar edit={edit} onEdit={onEdit} />}
