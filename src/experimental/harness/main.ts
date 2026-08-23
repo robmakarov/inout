@@ -185,6 +185,16 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'audiolat',
+    title: 'O4b — measured-audio anchor latency (loopback)',
+    detail:
+      'schedules impulses at exact positions on a source AudioContext clock, runs the stream through the PRODUCTION measured-audio capture path, and reports how far the anchor misplaces them — plus what the platform reports for track/context latency.',
+    run: async (args) => {
+      const { runAudioLatency } = await import('../perf/audioLatency')
+      return runAudioLatency({ seconds: typeof args?.seconds === 'number' ? args.seconds : undefined })
+    },
+  },
+  {
     id: 'datachan',
     title: 'Experiment 6 — Timed data channels (live capture demo)',
     detail:

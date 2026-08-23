@@ -194,6 +194,8 @@ export async function startMeasuredAudioCapture(opts: {
     startFrame: number,
     startOffsetMs: number,
     sampleRate: number,
+    /** AudioContext currentTime the worklet reported for this batch. */
+    contextTime: number,
   ) => void
 }): Promise<MeasuredAudioHandle> {
   const track = opts.stream.getAudioTracks()[0]
@@ -228,6 +230,27 @@ export async function startMeasuredAudioCapture(opts: {
         })
 
   const sampleRate = audioCtx.sampleRate
+  /**
+   * The anchor dates sample 0 from when its batch ARRIVES. Everything upstream
+   * — device capture buffer, stream transport — happened before that and is
+   * invisible to it, so the anchor is late by exactly the input latency and the
+   * export places audio that much late. Measured on a loopback rig: impulses
+   * landed +128.7 ms late with sd 0.70, and dating sample 0 from the audio
+   * clock instead of message arrival changed it by 1.1 ms — the delay is in the
+   * signal path, not the messaging, so no amount of anchor cleverness sees it.
+   *
+   * The platform does report the part it knows: the track's own latency. Use
+   * that, bounded, and log it — never a fitted constant (a 90 ms fallback was
+   * rejected on exactly those grounds in the 2026-07 sync work).
+   */
+  // `latency` is in MediaTrackSupportedConstraints but not in this TS lib's
+  // MediaTrackSettings; Chrome reports it for audio input tracks.
+  const reportedLatencySec = (track.getSettings() as MediaTrackSettings & { latency?: number })
+    .latency
+  const inputLatencyMs =
+    typeof reportedLatencySec === 'number' && reportedLatencySec > 0
+      ? Math.min(200, reportedLatencySec * 1000)
+      : 0
   // Unreported channelCount (Chromium often omits it for display/system audio)
   // must default to STEREO: assuming mono downmixes tab music irreversibly,
   // while assuming stereo on a true mono source just duplicates the channel.
@@ -386,7 +409,7 @@ export async function startMeasuredAudioCapture(opts: {
       try {
         const L = planar.subarray(0, frames)
         const R = channels >= 2 ? planar.subarray(frames, frames * 2) : L
-        opts.onPcm(L, R, framesWritten, startOffsetMs ?? 0, sampleRate)
+        opts.onPcm(L, R, framesWritten, startOffsetMs ?? 0, sampleRate, currentTime)
       } catch (err) {
         console.warn('[capture] loudness tap threw (ignored)', err)
       }
@@ -476,9 +499,17 @@ export async function startMeasuredAudioCapture(opts: {
         fatal(err)
       }
       if (encodeError) fatal(encodeError)
-      // Refined min-filter anchor beats the provisional first-arrival value.
-      const offset =
+      // Refined min-filter anchor beats the provisional first-arrival value,
+      // then step back by the input latency the anchor structurally cannot see.
+      const rawOffset =
         anchorWallMs !== Infinity ? Math.max(0, anchorWallMs - opts.epoch) : (startOffsetMs ?? 0)
+      const offset = Math.max(0, rawOffset - inputLatencyMs)
+      if (inputLatencyMs > 0) {
+        console.info(
+          `[capture] audio anchor ${rawOffset.toFixed(1)}ms − ${inputLatencyMs.toFixed(1)}ms reported input latency → ${offset.toFixed(1)}ms ` +
+            `(baseLatency ${((audioCtx as AudioContext & { baseLatency?: number }).baseLatency ?? 0) * 1000}ms)`,
+        )
+      }
       if (startOffsetMs === null) resolveFirst(offset)
       return {
         bytes: bytesWritten,

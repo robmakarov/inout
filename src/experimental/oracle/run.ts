@@ -45,6 +45,8 @@ export interface OracleReport {
   /** Rig-side reference measurements (O4 step 1 residual decomposition). */
   rigDebug: {
     beepStreamArrivalsRigMs: number[]
+    beepAnchorRigMs: number[]
+    beepCloneArrivalsRigMs: number[]
     flashStreamArrivalsRigMs: number[]
     beepTrueRigMs: number[]
     audioSkewMeanMs: number | null
@@ -81,7 +83,14 @@ export async function runOracle(
     // Prefer MediaStream arrival skew (when beeps hit the mic track) over
     // AudioContext schedule mapping — the latter was swinging 100–400ms/run
     // and poisoning the flash+click gate after a correct capture path.
-    const streamArrivals = rig.debug.beepStreamArrivalsRigMs
+    // O4b: prefer the anchor-path beep reference. The track-processor clone
+    // under-measures the delay the anchor cannot see (measured: 67 ms clone vs
+    // 129 ms anchor path on the same rig), and that 60 ms gap was the bulk of
+    // the "audio late" residual. Fall back to the clone when unavailable.
+    const anchorArrivals = rig.debug.beepAnchorRigMs
+    const streamArrivals = anchorArrivals.length
+      ? anchorArrivals
+      : rig.debug.beepStreamArrivalsRigMs
     const skewMean = resolveScheduleSkewMeanMs({
       streamArrivalsRigMs: streamArrivals,
       scheduleSkewSamplesMs: rig.debug.beepScheduleSkewMs,
@@ -144,6 +153,8 @@ export async function runOracle(
       verdicts,
       rigDebug: {
         beepStreamArrivalsRigMs: streamArrivals,
+        beepAnchorRigMs: anchorArrivals,
+        beepCloneArrivalsRigMs: rig.debug.beepStreamArrivalsRigMs,
         flashStreamArrivalsRigMs: flashArrivals,
         beepTrueRigMs: rig.debug.beepTrueRigMs,
         audioSkewMeanMs: skewMean ?? null,
