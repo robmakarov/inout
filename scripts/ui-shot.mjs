@@ -224,6 +224,18 @@ try {
         Math.abs(afterLarge.widthFrac - 0.8) <= 0.008,
       screenshot: out,
     }
+  } else if (flow === 'tighten') {
+    // F5a: press Tighten and see what comes back. The synthetic rig records a
+    // CONSTANT tone, so the honest answer here is "nothing to tighten" — this
+    // flow proves the control exists and that the refusal is visible, not that
+    // detection works (that is `npm run exp -- f5a`, against a known map).
+    opened = await evaluate(
+      `(() => { const b=[...document.querySelectorAll('button')].find(x=>/tighten/i.test(x.textContent||'')); if(!b||b.disabled) return false; b.click(); return true })()`,
+    )
+    await sleep(4000)
+    text = await evaluate(
+      `JSON.stringify({ tools: document.querySelector('.tl__tools')?.innerText ?? 'NO TOOLS', toast: document.querySelector('.toasts')?.innerText ?? '', proposed: document.querySelectorAll('.tl__propose-span').length })`,
+    )
   } else if (flow === 'cuts') {
     // Seek to the middle of the take, split, then split again further along.
     await evaluate(

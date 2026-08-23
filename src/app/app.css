@@ -1388,6 +1388,36 @@
   font-size: 11px;
   color: var(--text-dim);
 }
+
+/* Silence tightening (F5a): a PROPOSAL. It is drawn over the timeline in the
+   accent colour rather than in the cut colour, because nothing has been cut —
+   the user still has to press Apply. */
+.tl__propose {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.tl__propose-text {
+  font-size: 11px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.tl__tool--go {
+  background: color-mix(in srgb, var(--accent), transparent 82%);
+  color: var(--accent);
+}
+.tl__tool--go:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent), transparent 70%);
+}
+.tl__propose-span {
+  position: absolute;
+  top: 0;
+  bottom: 26px;
+  background: color-mix(in srgb, var(--accent), transparent 78%);
+  border-left: 1px solid var(--accent);
+  border-right: 1px solid var(--accent);
+  pointer-events: none;
+}
 /* Cut-out material: dimmed and struck through, so it reads as removed rather
    than merely deselected. */
 .tl__gap {

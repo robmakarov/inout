@@ -21,6 +21,19 @@ export {
 } from './timeline'
 
 export {
+  // Silence tightening (F5a) — pure analysis and proposal, no I/O.
+  SILENCE_DEFAULTS,
+  analyzeEnvelope,
+  outputSpanToRecordingSpans,
+  proposeTightening,
+  removeRecordingSpans,
+  type SilenceAnalysis,
+  type SilenceParams,
+  type Span,
+  type TightenProposal,
+} from './silence'
+
+export {
   // Timed camera motion (F4 — movable camera).
   cameraPoseAt,
   cameraTrackIsActive,

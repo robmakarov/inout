@@ -245,6 +245,16 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'f5a',
+    title: 'F5a — silence tightening against a known map',
+    detail:
+      'builds an audio take whose silences are known to the millisecond (speech bursts over room tone, including one deliberately short gap), runs the production analyser, and reports recall on the long gaps, how much of the proposal lands inside speech, whether the short gap survived, and whether the applied joins click.',
+    run: async (args) => {
+      const { runSilenceTighten } = await import('../perf/silenceTighten')
+      return runSilenceTighten({ takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined })
+    },
+  },
+  {
     id: 'f3',
     title: 'F3 — background frame',
     detail:

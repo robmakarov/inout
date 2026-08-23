@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { EditState, Recording } from '@core/types'
 import { clampEditState, isDefaultEdit, outputDurationMs } from '@core/timeline'
+import type { TightenProposal } from '@core/timeline'
 import {
   isDefaultTier,
   loadQualityTier,
@@ -36,6 +37,40 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
   const [choosing, setChoosing] = useState(false)
   const [tier, setTier] = useState<QualityTier>(() => loadQualityTier())
   const exporting = mode === 'exporting' || mode === 'share'
+  // F5a: a PROPOSED cut list. It is preview-only until the user applies it, and
+  // any other edit invalidates it — a proposal computed against a timeline that
+  // has since moved would cut the wrong places.
+  const [proposal, setProposal] = useState<TightenProposal | null>(null)
+  const [analysing, setAnalysing] = useState(false)
+  useEffect(() => {
+    setProposal(null)
+  }, [edit])
+
+  const runTighten = async () => {
+    if (analysing) return
+    setAnalysing(true)
+    const snapshot = useAppStore.getState().editState ?? edit
+    try {
+      // Split out of the editor chunk too: the decoder only loads if asked for.
+      const { analyzeSilence } = await import('@core/compose/analyzeSilence')
+      const result = await analyzeSilence(recording, snapshot)
+      // The timeline may have moved while we were decoding.
+      if (useAppStore.getState().editState !== snapshot) return
+      if (result.proposal) setProposal(result.proposal)
+      else useAppStore.getState().toast(result.reason ?? 'Nothing to tighten')
+    } catch (err) {
+      console.error('silence analysis failed', err)
+      useAppStore.getState().toast('Could not analyse this take’s audio', 'error')
+    } finally {
+      setAnalysing(false)
+    }
+  }
+
+  const applyTighten = () => {
+    if (!proposal) return
+    setEditState(clampEditState(recording, { ...edit, segments: proposal.segments }))
+    setProposal(null)
+  }
 
   const { toggle, seekBy } = pb
   useEffect(() => {
@@ -212,6 +247,13 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
           durationMs={pb.durationMs}
           onSeek={pb.seek}
           onEdit={(next) => setEditState(clampEditState(recording, next))}
+          tighten={{
+            analysing,
+            proposal,
+            onRun: () => void runTighten(),
+            onApply: applyTighten,
+            onDismiss: () => setProposal(null),
+          }}
         />
       )}
 

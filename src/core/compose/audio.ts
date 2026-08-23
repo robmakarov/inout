@@ -360,6 +360,35 @@ export async function measureMixLoudness(
   throwIfAborted: () => void,
   onProgress?: (ratio: number) => void,
 ): Promise<MixLoudness> {
+  const { peak, loudRms, floorRms } = await measureMixEnvelope(
+    mixers,
+    gain,
+    totalAudioFrames,
+    throwIfAborted,
+    onProgress,
+  )
+  return { peak, loudRms, floorRms }
+}
+
+export interface MixEnvelope extends MixLoudness {
+  /** 100 ms window RMS of the mid signal, IN TIME ORDER. */
+  windowRms: Float32Array
+  windowMs: number
+}
+
+/**
+ * The same pass, keeping the envelope instead of only its percentiles (task
+ * F5a). Silence detection needs to know WHERE the quiet is, not just how quiet
+ * the take is on average — and it must be the same measurement the loudness
+ * normalizer makes, or the two would disagree about what "quiet" means.
+ */
+export async function measureMixEnvelope(
+  mixers: AudioChannelMixer[],
+  gain: number,
+  totalAudioFrames: number,
+  throwIfAborted: () => void,
+  onProgress?: (ratio: number) => void,
+): Promise<MixEnvelope> {
   for (const m of mixers) m.gain = gain
   let peak = 0
   const windowRms: number[] = []
@@ -393,6 +422,8 @@ export async function measureMixLoudness(
     await new Promise((r) => setTimeout(r, 0))
   }
   if (winCount > 0) windowRms.push(Math.sqrt(winSumSq / winCount))
+  // Percentiles need it sorted; the caller needs it in time order. Sort a copy.
+  const inOrder = Float32Array.from(windowRms)
   windowRms.sort((a, b) => a - b)
   const loudRms = windowRms.length
     ? windowRms[Math.min(windowRms.length - 1, Math.floor(0.9 * windowRms.length))]
@@ -400,7 +431,13 @@ export async function measureMixLoudness(
   const floorRms = windowRms.length
     ? windowRms[Math.min(windowRms.length - 1, Math.floor(0.2 * windowRms.length))]
     : 0
-  return { peak, loudRms, floorRms }
+  return {
+    peak,
+    loudRms,
+    floorRms,
+    windowRms: inOrder,
+    windowMs: (LOUDNESS_WINDOW_FRAMES / AUDIO_SAMPLE_RATE) * 1000,
+  }
 }
 
 /** Pure helpers exported for unit tests. */

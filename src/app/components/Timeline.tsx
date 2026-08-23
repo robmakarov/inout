@@ -6,6 +6,7 @@ import {
   normalizeSegments,
   removeSegment,
   splitAtOutputMs,
+  type TightenProposal,
 } from '@core/timeline'
 import { CHANNEL_META } from '@app/lib/channels'
 import { FrameBar } from '@app/components/FrameBar'
@@ -47,6 +48,7 @@ export function Timeline({
   durationMs,
   onSeek,
   onEdit,
+  tighten,
 }: {
   recording: Recording
   edit: EditState
@@ -57,6 +59,14 @@ export function Timeline({
   onSeek: (outputMs: number) => void
   /** Parent clamps via clampEditState. */
   onEdit: (next: EditState) => void
+  /** Silence tightening (F5a). The proposal is preview-only until onApply. */
+  tighten?: {
+    analysing: boolean
+    proposal: TightenProposal | null
+    onRun: () => void
+    onApply: () => void
+    onDismiss: () => void
+  }
 }) {
   const trackRef = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(0)
@@ -155,6 +165,8 @@ export function Timeline({
   }
 
   const hasScreen = recording.channels.some((c) => c.kind === 'screen' && c.media === 'video')
+  const hasAudio = recording.channels.some((c) => c.media === 'audio')
+  const proposal = tighten?.proposal ?? null
 
   const step = TICK_STEPS_MS.find((s) => (s / totalMs) * width >= MIN_TICK_PX) ?? 900000
   const ticks: number[] = []
@@ -242,7 +254,32 @@ export function Timeline({
             <Icon name="scissors" size={14} />
             <span>Split</span>
           </button>
-          {segments.length > 1 && (
+          {tighten && hasAudio && !proposal && (
+            <button
+              className="tl__tool"
+              onClick={tighten.onRun}
+              disabled={tighten.analysing}
+              title="Find the silent stretches and propose cuts"
+            >
+              <Icon name="waves" size={14} />
+              <span>{tighten.analysing ? 'Listening…' : 'Tighten'}</span>
+            </button>
+          )}
+          {tighten && proposal && (
+            <span className="tl__propose">
+              <span className="tl__propose-text">
+                {proposal.cutSpans.length} silence{proposal.cutSpans.length === 1 ? '' : 's'} ·{' '}
+                −{formatClock(proposal.removedMs)}
+              </span>
+              <button className="tl__tool tl__tool--go" onClick={tighten.onApply}>
+                Apply
+              </button>
+              <button className="tl__tool" onClick={tighten.onDismiss}>
+                Dismiss
+              </button>
+            </span>
+          )}
+          {segments.length > 1 && !proposal && (
             <span className="tl__tools-hint">
               {segments.length} clips — drag a cut edge to move it, × to delete a clip
             </span>
@@ -273,6 +310,14 @@ export function Timeline({
         <div className="tl__overlay">
           <div className="tl__dim" style={{ left: 0, width: x(gStart) }} />
           <div className="tl__dim" style={{ left: x(gEnd), right: 0 }} />
+          {/* Proposed cuts (F5a): shown, never applied. */}
+          {proposal?.cutSpans.map((sp) => (
+            <div
+              key={`prop-${sp.startMs}`}
+              className="tl__propose-span"
+              style={{ left: x(sp.startMs), width: Math.max(2, x(sp.endMs - sp.startMs)) }}
+            />
+          ))}
           {/* Material cut out of the middle, plus the handles that move each cut. */}
           {segments.length > 1 &&
             segments.slice(0, -1).map((sg, i) => (

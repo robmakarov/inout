@@ -569,6 +569,12 @@ body.f .filters, body.d .detail { opacity: 1; }
   --wedge-k: 0.25; /* radial menu fill intensity */
   --wedge-s: 40%;  /* radial menu tint — 0% is white, 100% is full hue */
   --grid-k: 1;     /* background grid intensity — its own knob, see below */
+  --on-h: 148;     /* live input  — neon green, kept off the top end */
+  --on-s: 58%;
+  --on-c: hsl(var(--on-h) var(--on-s) 62%);
+  --no-h: 356;     /* refused input — neon red, same restraint */
+  --no-s: 62%;
+  --no-c: hsl(var(--no-h) var(--no-s) 60%);
 }
 .app {
   --grid-ink: #000;
@@ -589,16 +595,18 @@ body.f .filters, body.d .detail { opacity: 1; }
   inset: -14%;
   z-index: 0;
   pointer-events: none;
+  /* One stroked path per tile, not two crossing gradients: two gradient layers
+     composite over each other, so every intersection carried double alpha and
+     the grid read as a field of dots. A single paint has no such seam. */
   background-image:
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
+    var(--grid-img),
     radial-gradient(ellipse 100% 80% at 50% 120%, var(--grid-glow), transparent 50%);
-  background-size: var(--grid-cell) var(--grid-cell), var(--grid-cell) var(--grid-cell), 100% 100%;
+  background-size: var(--grid-cell) var(--grid-cell), 100% 100%;
   /* pointer parallax + hub bump, exactly as the source composes them */
   background-position:
     calc(50% + var(--bg-shift-x, 0px) + var(--bump-x, 0px))
     calc(50% + var(--bg-shift-y, 0px) + var(--bump-y, 0px));
-  background-repeat: repeat, repeat, no-repeat;
+  background-repeat: repeat, no-repeat;
   transform-origin: 50% 50%;
   transform: perspective(1600px)
     rotateX(calc(var(--tilt-y, 0) * -3deg))
@@ -679,7 +687,26 @@ body.f .filters, body.d .detail { opacity: 1; }
 [data-inputs='menu'] .ring .chip,
 [data-inputs='hover'] .ring .chip { display: none; }
 
-.radial svg { display: block; overflow: visible; }
+.radial svg { display: block; overflow: visible; position: relative; }
+/* the menu should sit in its own pool of light, not float on the grid */
+.radial::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--menu-d, 214px) * 1.75);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    hsl(var(--neon-h) 55% 60% / 0.1) 0%,
+    hsl(var(--neon-h) 55% 60% / 0.045) 42%,
+    transparent 68%
+  );
+  filter: blur(14px);
+  pointer-events: none;
+}
 .radial__hub { fill: var(--bg); stroke: var(--edge); stroke-width: var(--edge-w); }
 .radial__sep { stroke: color-mix(in srgb, var(--text), transparent 88%); stroke-width: 1; }
 
@@ -691,14 +718,14 @@ body.f .filters, body.d .detail { opacity: 1; }
    two so it still reads without hovering, now that the lamps are gone. */
 .wedge__fill {
   fill: var(--surface);
-  fill-opacity: clamp(0, calc(0.12 * var(--wedge-k)), 1);
+  fill-opacity: clamp(0, calc(0.4 * var(--wedge-k)), 0.5);
   transition: fill 140ms var(--ease), fill-opacity 140ms var(--ease);
 }
 .wedge[data-on='true'] .wedge__fill {
-  fill: color-mix(in srgb, var(--surface), #fff 16%);
-  fill-opacity: clamp(0, calc(0.62 * var(--wedge-k)), 1);
+  fill: color-mix(in srgb, var(--surface), var(--on-c) 16%);
+  fill-opacity: clamp(0, calc(2.4 * var(--wedge-k)), 0.8);
 }
-.wedge:hover .wedge__fill { fill: var(--surface-3); fill-opacity: clamp(0, var(--wedge-k), 1); }
+.wedge:hover .wedge__fill { fill: var(--surface-3); fill-opacity: clamp(0.5, calc(3.6 * var(--wedge-k)), 1); }
 .wedge[data-on='true']:hover .wedge__fill {
   fill: color-mix(in srgb, var(--surface-3), var(--accent) 14%);
   fill-opacity: 1;
@@ -708,15 +735,15 @@ body.f .filters, body.d .detail { opacity: 1; }
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
-  opacity: 0.34;
+  opacity: 0.55;
   pointer-events: none;
   transition: color 140ms var(--ease), opacity 140ms var(--ease);
 }
 .wedge__ico .f,
 .wedge__ico .s { fill: none; stroke: currentColor; }
-.wedge[data-on='true'] .wedge__ico { color: #fff; opacity: 1; }
+.wedge[data-on='true'] .wedge__ico { color: var(--on-c); opacity: 1; }
 .wedge:hover .wedge__ico { color: var(--text); opacity: 0.85; }
-.wedge[data-on='true']:hover .wedge__ico { color: #fff; opacity: 1; }
+.wedge[data-on='true']:hover .wedge__ico { color: hsl(var(--on-h) var(--on-s) 80%); opacity: 1; }
 
 /* ---------- volume skin ----------
    Both references say the same thing in two places: light comes from somewhere,
@@ -731,34 +758,53 @@ body.f .filters, body.d .detail { opacity: 1; }
   pointer-events: none;
   transition: stroke 140ms var(--ease), opacity 140ms var(--ease);
 }
-[data-skin='volume'] #wg-in { stop-color: hsl(var(--neon-h) var(--wedge-s) 30%); stop-opacity: 0.1; }
-[data-skin='volume'] #wg-mid { stop-color: hsl(var(--neon-h) var(--wedge-s) 62%); stop-opacity: 0.3; }
-[data-skin='volume'] #wg-out { stop-color: hsl(var(--neon-h) var(--wedge-s) 88%); stop-opacity: 0.72; }
+[data-skin='volume'] .wg-in  { stop-color: hsl(var(--neon-h) var(--wedge-s) 34%); stop-opacity: 0.1; }
+[data-skin='volume'] .wg-a   { stop-color: hsl(var(--neon-h) var(--wedge-s) 46%); stop-opacity: 0.2; }
+[data-skin='volume'] .wg-b   { stop-color: hsl(var(--neon-h) var(--wedge-s) 62%); stop-opacity: 0.36; }
+[data-skin='volume'] .wg-c   { stop-color: hsl(var(--neon-h) var(--wedge-s) 76%); stop-opacity: 0.55; }
+[data-skin='volume'] .wg-out { stop-color: hsl(var(--neon-h) var(--wedge-s) 88%); stop-opacity: 0.78; }
+/* live input — neon green, held back: saturation is real but the ramp tops out
+   lower than the idle one, so it reads lit rather than lurid */
+[data-skin='volume'] .wn-in  { stop-color: hsl(var(--on-h) calc(var(--on-s) * 0.8) 26%); stop-opacity: 0.12; }
+[data-skin='volume'] .wn-a   { stop-color: hsl(var(--on-h) calc(var(--on-s) * 0.9) 38%); stop-opacity: 0.22; }
+[data-skin='volume'] .wn-b   { stop-color: hsl(var(--on-h) var(--on-s) 48%); stop-opacity: 0.38; }
+[data-skin='volume'] .wn-c   { stop-color: hsl(var(--on-h) var(--on-s) 58%); stop-opacity: 0.54; }
+[data-skin='volume'] .wn-out { stop-color: hsl(var(--on-h) var(--on-s) 66%); stop-opacity: 0.72; }
+/* refused — same ramp on the warn hue */
+[data-skin='volume'] .wr-in  { stop-color: hsl(var(--no-h) calc(var(--no-s) * 0.8) 26%); stop-opacity: 0.12; }
+[data-skin='volume'] .wr-a   { stop-color: hsl(var(--no-h) calc(var(--no-s) * 0.9) 38%); stop-opacity: 0.22; }
+[data-skin='volume'] .wr-b   { stop-color: hsl(var(--no-h) var(--no-s) 47%); stop-opacity: 0.36; }
+[data-skin='volume'] .wr-c   { stop-color: hsl(var(--no-h) var(--no-s) 55%); stop-opacity: 0.5; }
+[data-skin='volume'] .wr-out { stop-color: hsl(var(--no-h) var(--no-s) 62%); stop-opacity: 0.66; }
+/* unavailable — the same volume, drained of hue. It was flat, which is why it
+   looked like a hole rather than a wedge that happens to be dead. */
+[data-skin='volume'] .wy-in  { stop-color: hsl(var(--neon-h) 6% 30%); stop-opacity: 0.1; }
+[data-skin='volume'] .wy-a   { stop-color: hsl(var(--neon-h) 6% 42%); stop-opacity: 0.18; }
+[data-skin='volume'] .wy-b   { stop-color: hsl(var(--neon-h) 5% 54%); stop-opacity: 0.28; }
+[data-skin='volume'] .wy-c   { stop-color: hsl(var(--neon-h) 5% 64%); stop-opacity: 0.4; }
+[data-skin='volume'] .wy-out { stop-color: hsl(var(--neon-h) 4% 72%); stop-opacity: 0.52; }
 [data-skin='volume'] .wedge .wedge__fill {
   fill: url(#wgrad);
-  fill-opacity: clamp(0, calc(0.22 * var(--wedge-k)), 1);
+  fill-opacity: clamp(0, calc(0.7 * var(--wedge-k)), 0.55);
 }
-[data-skin='volume'] .wedge[data-on='true'] .wedge__fill { fill: url(#wgrad); fill-opacity: clamp(0, calc(1.15 * var(--wedge-k)), 1); }
-[data-skin='volume'] .wedge:hover .wedge__fill,
-[data-skin='volume'] .wedge[data-on='true']:hover .wedge__fill {
-  fill: url(#wgrad);
-  fill-opacity: 1;
-}
+[data-skin='volume'] .wedge[data-on='true'] .wedge__fill { fill: url(#wgreen); fill-opacity: clamp(0, calc(2.8 * var(--wedge-k)), 0.85); }
+[data-skin='volume'] .wedge:hover .wedge__fill { fill: url(#wgrad); fill-opacity: 1; }
+[data-skin='volume'] .wedge[data-on='true']:hover .wedge__fill { fill: url(#wgreen); fill-opacity: 1; }
 [data-skin='volume'] .wedge .wedge__edge {
   stroke: hsl(var(--neon-h) var(--wedge-s) 86% / 0.5);
   opacity: 0.12;
 }
-[data-skin='volume'] .wedge[data-on='true'] .wedge__edge { stroke: hsl(var(--neon-h) calc(var(--wedge-s) + 32%) 78% / 0.95); opacity: 1; }
+[data-skin='volume'] .wedge[data-on='true'] .wedge__edge { stroke: hsl(var(--on-h) var(--on-s) 66% / 0.95); opacity: 1; }
 [data-skin='volume'] .wedge:hover .wedge__edge {
   stroke: hsl(var(--neon-h) calc(var(--wedge-s) + 22%) 88%);
   opacity: 1;
   filter: drop-shadow(0 0 calc(var(--neon-r) * 0.35) hsl(var(--neon-h) 100% 60% / 0.7));
 }
 [data-skin='volume'] .radial__sep { stroke: hsl(var(--neon-h) var(--wedge-s) 88% / 0.22); }
-[data-skin='volume'] .wedge .wedge__ico { color: #93a6bd; opacity: 0.32; }
-[data-skin='volume'] .wedge[data-on='true'] .wedge__ico { color: #fff; opacity: 1; }
+[data-skin='volume'] .wedge .wedge__ico { color: #aebdd0; opacity: 0.6; }
+[data-skin='volume'] .wedge[data-on='true'] .wedge__ico { color: hsl(var(--on-h) var(--on-s) 78%); opacity: 1; }
 [data-skin='volume'] .wedge:hover .wedge__ico { color: #dbe6f5; opacity: 0.85; }
-[data-skin='volume'] .wedge[data-on='true']:hover .wedge__ico { color: #fff; opacity: 1; }
+[data-skin='volume'] .wedge[data-on='true']:hover .wedge__ico { color: hsl(var(--on-h) var(--on-s) 86%); opacity: 1; }
 [data-skin='volume'] .radial__hub {
   fill: #08090c;
   stroke: hsl(var(--neon-h) 40% 60% / 0.16);
@@ -806,43 +852,37 @@ body.f .filters, body.d .detail { opacity: 1; }
    deliver it at all. Refused is loud — it is a thing you can fix. Unavailable
    is quiet — nothing you press will change it, so it should stop asking for
    attention, but it must still be visible or the input looks merely off. */
-.wedge__cut,
-.wedge__cutbg { opacity: 0; pointer-events: none; transition: opacity 140ms var(--ease); }
-.wedge__cutbg { stroke: #05070b; stroke-width: 3.4; stroke-linecap: round; fill: none; }
-.wedge__cut { stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; fill: none; }
-.wedge[data-state='denied'] .wedge__cut,
-.wedge[data-state='denied'] .wedge__cutbg,
-.wedge[data-state='blocked'] .wedge__cut,
-.wedge[data-state='blocked'] .wedge__cutbg { opacity: 1; }
-
 .wedge[data-state='denied'] { cursor: not-allowed; }
 .wedge[data-state='denied'] .wedge__fill,
 [data-skin='volume'] .wedge[data-state='denied'] .wedge__fill {
-  fill: var(--record);
-  fill-opacity: clamp(0, calc(0.55 * var(--wedge-k)), 0.4);
+  fill: url(#wred);
+  fill-opacity: clamp(0, calc(2.2 * var(--wedge-k)), 0.7);
 }
 .wedge[data-state='denied']:hover .wedge__fill,
 [data-skin='volume'] .wedge[data-state='denied']:hover .wedge__fill {
-  fill-opacity: clamp(0, calc(1.6 * var(--wedge-k)), 0.62);
+  fill-opacity: clamp(0.28, calc(2.4 * var(--wedge-k)), 0.5);
 }
 .wedge[data-state='denied'] .wedge__ico,
-[data-skin='volume'] .wedge[data-state='denied'] .wedge__ico { color: var(--record); opacity: 0.95; }
+[data-skin='volume'] .wedge[data-state='denied'] .wedge__ico { color: hsl(var(--no-h) var(--no-s) 74%); opacity: 0.95; }
 .wedge[data-state='denied'] .wedge__edge,
-[data-skin='volume'] .wedge[data-state='denied'] .wedge__edge { stroke: var(--record); opacity: 0.7; }
+[data-skin='volume'] .wedge[data-state='denied'] .wedge__edge { stroke: hsl(var(--no-h) var(--no-s) 64%); opacity: 0.75; }
 
 .wedge[data-state='blocked'] { cursor: not-allowed; }
 .wedge[data-state='blocked'] .wedge__fill,
 [data-skin='volume'] .wedge[data-state='blocked'] .wedge__fill {
-  fill: var(--surface);
-  fill-opacity: clamp(0, calc(0.14 * var(--wedge-k)), 1);
+  fill: url(#wgrey);
+  fill-opacity: clamp(0, calc(0.75 * var(--wedge-k)), 0.42);
 }
 .wedge[data-state='blocked'] .wedge__ico,
 [data-skin='volume'] .wedge[data-state='blocked'] .wedge__ico { color: var(--text-faint); opacity: 0.3; }
 .wedge[data-state='blocked'] .wedge__edge,
-[data-skin='volume'] .wedge[data-state='blocked'] .wedge__edge { opacity: 0; }
+[data-skin='volume'] .wedge[data-state='blocked'] .wedge__edge {
+  stroke: color-mix(in srgb, var(--text), transparent 78%);
+  opacity: 0.5;
+}
 .wedge[data-state='blocked']:hover .wedge__fill,
 [data-skin='volume'] .wedge[data-state='blocked']:hover .wedge__fill {
-  fill-opacity: clamp(0, calc(0.3 * var(--wedge-k)), 1);
+  fill-opacity: clamp(0.22, calc(1.4 * var(--wedge-k)), 0.6);
 }
 
 /* same three states on the pills */
@@ -859,29 +899,38 @@ body.f .filters, body.d .detail { opacity: 1; }
    are derived from the mid angle, so this holds for any number of wedges. */
 .wedge__cap {
   font-family: var(--font);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  fill: var(--text-dim);
+  font-size: 12px;
+  font-weight: 560;
+  letter-spacing: 0.005em;
+  fill: var(--text);
+  /* a dark casing behind the glyphs so a caption stays readable wherever the
+     grid, the glow or a lit wedge happens to be under it */
+  paint-order: stroke;
+  stroke: #000;
+  stroke-width: 3.5px;
+  stroke-linejoin: round;
   opacity: 0;
   pointer-events: none;
   transition: opacity 140ms var(--ease);
 }
-.wedge:hover .wedge__cap { opacity: 1; fill: var(--text); }
+.wedge:hover .wedge__cap { opacity: 1; }
 /* the state is a second, quieter line — never welded onto the name */
 .wedge__cap2 {
   font-family: var(--font);
-  font-size: 9.5px;
+  font-size: 10px;
   font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  fill: var(--text-faint);
+  letter-spacing: 0.01em;
+  fill: var(--text-dim);
+  paint-order: stroke;
+  stroke: #000;
+  stroke-width: 3px;
+  stroke-linejoin: round;
   opacity: 0;
   pointer-events: none;
   transition: opacity 140ms var(--ease);
 }
 .wedge:hover .wedge__cap2 { opacity: 1; }
-.wedge[data-state='denied'] .wedge__cap2 { fill: var(--record); }
+.wedge[data-state='denied'] .wedge__cap2 { fill: hsl(var(--no-h) var(--no-s) 74%); }
 /* the lit arc outside the rim, on the hovered wedge only */
 .wedge__arc {
   fill: none;
@@ -1489,7 +1538,8 @@ body.f .filters, body.d .detail { opacity: 1; }
   position: absolute;
   inset: 0;
   z-index: 99;
-  background: #000;
+  overflow: hidden;
+  background: var(--grid-ink);
   display: grid;
   place-items: center;
   will-change: opacity, transform;
@@ -1679,6 +1729,9 @@ T F N  theme · frame · neon
 
       <!-- ============ splash — the mark, straight out of inout proto ============ -->
       <div id="splash" hidden data-variant="letters">
+        <!-- same ground as the app behind it, so the splash is the app's first
+             frame rather than a black card that cuts to something else -->
+        <div class="capture__grid"></div>
         <div class="swrap">
           <!-- the original five frames, verbatim from inout proto — used by the
                "frames" variant, which steps them at 105ms exactly as it shipped -->
@@ -2047,7 +2100,7 @@ const STAGE = `
 const CHANNELS = [
   { key: 'screen', label: 'Screen', ic: 'display', on: true },
   { key: 'camera', label: 'Camera', ic: 'camera', on: true },
-  { key: 'mic', label: 'Mic', ic: 'mic', on: true },
+  { key: 'mic', label: 'Microphone', ic: 'mic', on: true },
   { key: 'sys', label: 'System audio', ic: 'waves', on: true },
 ]
 
@@ -2161,14 +2214,12 @@ function buildRadial() {
     const baseline = sinm > 0.3 ? 'hanging' : sinm < -0.3 ? 'auto' : 'middle'
     const dy = sinm > 0.3 ? 2 : sinm < -0.3 ? -2 : 0
     const st = PERM[c.key] || 'ok'
-    const sub = st === 'denied' ? 'permission denied' : st === 'blocked' ? 'unavailable here' : ''
+    const sub = st === 'denied' ? 'Permission denied' : st === 'blocked' ? 'Not available' : ''
     return `
       <g class="wedge" data-wedge="${c.key}" data-on="${st === 'ok' && onNow(c.key)}" data-state="${st}" style="--d:${i * 30}ms" role="button" aria-label="${c.label}${sub ? ', ' + sub : ''}">
         <path class="wedge__fill" d="${sector(R_IN, R_OUT, a0, a1)}"/>
         <path class="wedge__edge" d="${arc(R_OUT - 0.6, a0, a1)}"/>
-        <g class="wedge__ico" transform="translate(${ix - 11} ${iy - 11}) scale(0.92)">${WEDGE_ICON[c.key]}
-          <path class="wedge__cutbg" d="M3.4 3.4L20.6 20.6"/><path class="wedge__cut" d="M3.4 3.4L20.6 20.6"/>
-        </g>
+        <g class="wedge__ico" transform="translate(${ix - 11} ${iy - 11}) scale(0.92)">${WEDGE_ICON[c.key]}</g>
         <path class="wedge__arc" d="${arc(R_OUT + 8, a0 + 0.06, a1 - 0.06)}"/>
         <text class="wedge__cap" x="${cx}" y="${+cy + dy}" text-anchor="${anchor}" dominant-baseline="${baseline}">${c.label}</text>
         ${sub ? `<text class="wedge__cap2" x="${cx}" y="${+cy + dy + 12}" text-anchor="${anchor}" dominant-baseline="${baseline}">${sub}</text>` : ''}
@@ -2185,11 +2236,25 @@ function buildRadial() {
        <defs>
          <!-- volume skin: dark at the hub, lit at the rim. userSpaceOnUse so the
               ramp follows the donut's radius, not each wedge's bounding box. -->
+         <!-- five stops, eased: three made a visible band where the ramp
+              turned. The green twin is the same ramp on the live-input hue. -->
          <radialGradient id="wgrad" gradientUnits="userSpaceOnUse" cx="200" cy="200" r="${R_OUT}">
-           <stop id="wg-in" offset="${(R_IN / R_OUT).toFixed(3)}"/>
-           <stop id="wg-mid" offset="0.82"/>
-           <stop id="wg-out" offset="1"/>
+           <stop class="wg-in" offset="${(R_IN / R_OUT).toFixed(3)}"/>
+           <stop class="wg-a" offset="${(R_IN / R_OUT + (1 - R_IN / R_OUT) * 0.3).toFixed(3)}"/>
+           <stop class="wg-b" offset="${(R_IN / R_OUT + (1 - R_IN / R_OUT) * 0.58).toFixed(3)}"/>
+           <stop class="wg-c" offset="${(R_IN / R_OUT + (1 - R_IN / R_OUT) * 0.82).toFixed(3)}"/>
+           <stop class="wg-out" offset="1"/>
          </radialGradient>
+         ${['wgreen:wn', 'wred:wr', 'wgrey:wy'].map((pair) => {
+           const [id, k] = pair.split(':')
+           return `<radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="200" cy="200" r="${R_OUT}">
+             <stop class="${k}-in" offset="${(R_IN / R_OUT).toFixed(3)}"/>
+             <stop class="${k}-a" offset="${(R_IN / R_OUT + (1 - R_IN / R_OUT) * 0.3).toFixed(3)}"/>
+             <stop class="${k}-b" offset="${(R_IN / R_OUT + (1 - R_IN / R_OUT) * 0.58).toFixed(3)}"/>
+             <stop class="${k}-c" offset="${(R_IN / R_OUT + (1 - R_IN / R_OUT) * 0.82).toFixed(3)}"/>
+             <stop class="${k}-out" offset="1"/>
+           </radialGradient>`
+         }).join('')}
        </defs>
        <circle class="radial__hub" cx="200" cy="200" r="${R_IN - 3}"/>
        ${wedges}
@@ -2661,10 +2726,23 @@ const SLIDERS = [
   { el: 's-t', out: 'o-t', prop: '--neon-t', unit: 's', fmt: (v) => (+v).toFixed(1) },
   { el: 's-g', out: 'o-g', prop: '--grid-k', unit: '', fmt: (v) => (+v).toFixed(2) },
 ]
+function gridImage() {
+  // one path, stroked once per tile — see the note on .capture__grid
+  const hue = document.getElementById('s-hue').value
+  const a = (0.075 * +document.getElementById('s-g').value).toFixed(4)
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">` +
+    // half-pixel offsets: a stroke centred on the tile edge is half-covered, so
+    // the corner ends up the union of two half-covered bands and reads brighter
+    // than the lines. Inset to 23.5 and every pixel gets full coverage.
+    `<path d="M23.5 0V24M0 23.5H24" fill="none" stroke="hsl(${hue} 55% 62% / ${a})" stroke-width="1"/></svg>`
+  document.documentElement.style.setProperty('--grid-img', `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}")`)
+}
 function syncSlider(s) {
   const input = document.getElementById(s.el)
   document.documentElement.style.setProperty(s.prop, input.value + s.unit)
   document.getElementById(s.out).textContent = s.fmt(input.value)
+  if (s.el === 's-g' || s.el === 's-hue') gridImage()
 }
 SLIDERS.forEach((s) => {
   const input = document.getElementById(s.el)
@@ -2685,6 +2763,7 @@ function syncMenu() {
   document.getElementById('o-mgap').textContent = R_IN
   document.documentElement.style.setProperty('--wedge-k', mFill.value)
   document.documentElement.style.setProperty('--wedge-s', mTint.value + '%')
+  document.documentElement.style.setProperty('--menu-d', `${R_OUT * 2}px`)
   document.getElementById('o-mtint').textContent = mTint.value
   document.getElementById('o-mfill').textContent = (+mFill.value).toFixed(2)
   buildRadial()
