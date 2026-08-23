@@ -656,8 +656,12 @@ body.f .filters, body.d .detail { opacity: 1; }
 [data-inputs='hover'] .ring.is-open .radial {
   opacity: 1;
   transform: translate(-50%, -50%) scale(1);
-  pointer-events: auto;
 }
+/* only the wedges take the pointer — the svg box reaches past the donut to give
+   the captions room, and that empty margin must stay transparent to the mouse */
+[data-inputs='menu'] .wedge,
+[data-inputs='hover'] .ring.is-open .wedge { pointer-events: auto; }
+.wedge { pointer-events: none; }
 /* in menu modes the pills are gone — the wedges are the inputs */
 [data-inputs='menu'] .ring .chip,
 [data-inputs='hover'] .ring .chip { display: none; }
@@ -670,24 +674,50 @@ body.f .filters, body.d .detail { opacity: 1; }
 .wedge { cursor: pointer; opacity: 0; transition: opacity 0.18s var(--ease); }
 [data-inputs='menu'] .wedge,
 [data-inputs='hover'] .ring.is-open .wedge { opacity: 1; transition-delay: var(--d); }
+/* At rest the wedges are barely there — the menu is a hint of structure, and
+   only the one you point at becomes a solid surface. On-state sits between the
+   two so it still reads without hovering, now that the lamps are gone. */
 .wedge__fill {
   fill: var(--surface);
-  transition: fill 140ms var(--ease);
+  fill-opacity: 0.26;
+  transition: fill 140ms var(--ease), fill-opacity 140ms var(--ease);
 }
-.wedge:hover .wedge__fill { fill: var(--surface-3); }
-.wedge[data-on='true'] .wedge__fill { fill: color-mix(in srgb, var(--surface), var(--accent) 9%); }
-.wedge[data-on='true']:hover .wedge__fill { fill: color-mix(in srgb, var(--surface-3), var(--accent) 12%); }
+.wedge[data-on='true'] .wedge__fill {
+  fill: color-mix(in srgb, var(--surface), var(--accent) 14%);
+  fill-opacity: 0.5;
+}
+.wedge:hover .wedge__fill { fill: var(--surface-3); fill-opacity: 1; }
+.wedge[data-on='true']:hover .wedge__fill {
+  fill: color-mix(in srgb, var(--surface-3), var(--accent) 14%);
+  fill-opacity: 1;
+}
 .wedge__ico {
   fill: none;
   stroke: var(--text-faint);
-  stroke-width: 1.5;
+  stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
+  opacity: 0.7;
   pointer-events: none;
-  transition: stroke 140ms var(--ease);
+  transition: stroke 140ms var(--ease), opacity 140ms var(--ease);
 }
-.wedge[data-on='true'] .wedge__ico { stroke: var(--accent); }
-.wedge:hover .wedge__ico { stroke: var(--text); }
+.wedge[data-on='true'] .wedge__ico { stroke: var(--accent); opacity: 1; }
+.wedge:hover .wedge__ico { stroke: var(--text); opacity: 1; }
+.wedge[data-on='true']:hover .wedge__ico { stroke: var(--accent); }
+
+/* Caption sits outside the wedge, on the wedge's own side: anchor and baseline
+   are derived from the mid angle, so this holds for any number of wedges. */
+.wedge__cap {
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  fill: var(--text-dim);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms var(--ease);
+}
+.wedge:hover .wedge__cap { opacity: 1; fill: var(--text); }
 /* the lit arc outside the rim, on the hovered wedge only */
 .wedge__arc {
   fill: none;
@@ -701,9 +731,6 @@ body.f .filters, body.d .detail { opacity: 1; }
 .wedge:hover .wedge__arc { opacity: 1; }
 .wedge[data-on='true'] .wedge__arc { stroke: var(--accent); }
 [data-neon='on'] .wedge:hover .wedge__arc { filter: drop-shadow(0 0 calc(var(--neon-r) * 0.4) var(--neon-38)); }
-/* state lamp on the inner edge of each wedge — on/off readable without hover */
-.wedge__led { fill: var(--surface-3); transition: fill 140ms var(--ease); }
-.wedge[data-on='true'] .wedge__led { fill: var(--accent); }
 .cluster__hint {
   margin-top: -34px;
   text-align: center;
@@ -1866,19 +1893,33 @@ function arc(r, a0, a1) {
   const [x1, y1] = pol(r, a0), [x2, y2] = pol(r, a1)
   return `M${x1} ${y1}A${r} ${r} 0 0 1 ${x2} ${y2}`
 }
+/* Menu-scale glyphs: the product's 24px icons are drawn for a 15px chip and go
+   weak at this size. Same subjects, fewer strokes, heavier weight. */
+const WEDGE_ICON = {
+  screen: '<rect x="2.5" y="4" width="19" height="13" rx="2.5"/><path d="M12 17v3.5M8.5 20.5h7"/>',
+  camera: '<rect x="2.5" y="6" width="13.5" height="12" rx="3"/><path d="M16 11.2l5.5-3.4v8.4L16 12.8z"/>',
+  mic: '<rect x="9" y="2.5" width="6" height="11.5" rx="3"/><path d="M5 11.5a7 7 0 0 0 14 0M12 18.5v3"/>',
+  sys: '<path d="M3.5 9h4L12 5v14l-4.5-4h-4z"/><path d="M15.6 9.6a4.2 4.2 0 0 1 0 4.8M18.6 7a8 8 0 0 1 0 10"/>',
+}
 const span = (2 * Math.PI) / CHANNELS.length
 const wedges = CHANNELS.map((c, i) => {
   const mid = (WEDGE_AT[c.key] * Math.PI) / 180
   const a0 = mid - span / 2 + PAD
   const a1 = mid + span / 2 - PAD
-  const [ix, iy] = pol((R_IN + R_OUT) / 2 + 4, mid)
-  const [lx, ly] = pol(R_IN + 11, mid)
+  const [ix, iy] = pol((R_IN + R_OUT) / 2, mid)
+  // caption goes outside, on this wedge's own side — anchor/baseline from the
+  // angle alone, so adding wedges later needs no per-item placement
+  const [cx, cy] = pol(R_OUT + 24, mid)
+  const cosm = Math.cos(mid), sinm = Math.sin(mid)
+  const anchor = cosm > 0.3 ? 'start' : cosm < -0.3 ? 'end' : 'middle'
+  const baseline = sinm > 0.3 ? 'hanging' : sinm < -0.3 ? 'auto' : 'middle'
+  const dy = sinm > 0.3 ? 2 : sinm < -0.3 ? -2 : 0
   return `
     <g class="wedge" data-wedge="${c.key}" data-on="${c.on}" style="--d:${i * 30}ms" role="button" aria-label="${c.label}">
       <path class="wedge__fill" d="${sector(R_IN, R_OUT, a0, a1)}"/>
-      <circle class="wedge__led" cx="${lx}" cy="${ly}" r="3.2"/>
-      <g class="wedge__ico" transform="translate(${ix - 13} ${iy - 13}) scale(1.08)">${P[c.ic]}</g>
+      <g class="wedge__ico" transform="translate(${ix - 15} ${iy - 15}) scale(1.25)">${WEDGE_ICON[c.key]}</g>
       <path class="wedge__arc" d="${arc(R_OUT + 9, a0 + 0.06, a1 - 0.06)}"/>
+      <text class="wedge__cap" x="${cx}" y="${+cy + dy}" text-anchor="${anchor}" dominant-baseline="${baseline}">${c.label}</text>
     </g>`
 }).join('')
 const seps = CHANNELS.map((c) => {
@@ -1889,7 +1930,7 @@ const seps = CHANNELS.map((c) => {
 ring.insertAdjacentHTML(
   'afterbegin',
   `<div class="radial" data-radial>
-     <svg width="${(R_OUT + 14) * 2}" height="${(R_OUT + 14) * 2}" viewBox="${200 - R_OUT - 14} ${200 - R_OUT - 14} ${(R_OUT + 14) * 2} ${(R_OUT + 14) * 2}">
+     <svg width="${(R_OUT + 66) * 2}" height="${(R_OUT + 66) * 2}" viewBox="${200 - R_OUT - 66} ${200 - R_OUT - 66} ${(R_OUT + 66) * 2} ${(R_OUT + 66) * 2}">
        <circle class="radial__hub" cx="200" cy="200" r="${R_HUB}"/>
        ${wedges}
        ${seps}
@@ -1975,12 +2016,6 @@ app.addEventListener('click', (e) => {
   if (chip) return setChannel(chip.dataset.chip, chip.getAttribute('aria-pressed') !== 'true')
   const wedge = e.target.closest('[data-wedge]')
   if (wedge) setChannel(wedge.dataset.wedge, wedge.dataset.on !== 'true')
-})
-/* the hub belongs to the record button, so the wedge's name lands in the hint */
-ring.querySelectorAll('.wedge').forEach((w) => {
-  const label = CHANNELS.find((c) => c.key === w.dataset.wedge).label
-  w.addEventListener('pointerenter', () => (hintEl.textContent = label))
-  w.addEventListener('pointerleave', syncHint)
 })
 syncHint()
 
@@ -2371,23 +2406,29 @@ PHYS_SLIDERS.forEach((s) => {
   apply()
 })
 
-/* copy parameters — one line to paste back at me instead of typing it out */
+/* copy parameters — one line to paste back at me instead of typing it out.
+   The same line is the persistence format (see saveState), so what you copy is
+   literally the state, and pasting a line back into the hash restores it. */
 const copyBtn = document.getElementById('copyparams')
 const paramsOut = document.getElementById('paramsout')
+const val = (id) => document.getElementById(id).value
 function paramString() {
-  const d = document.documentElement.dataset
+  const on = CHANNELS.filter((c) => ring.querySelector(`.chip[data-chip="${c.key}"]`).getAttribute('aria-pressed') === 'true')
+  const panels = (document.body.classList.contains('f') ? 'f' : '') + (document.body.classList.contains('d') ? 'd' : '')
   return [
     `theme=${themeSel.value}`,
     `neon=${neonSel.value}`,
-    `hue=${document.getElementById('s-hue').value}`,
-    `strength=${document.getElementById('s-k').value}`,
-    `radius=${document.getElementById('s-r').value}`,
-    `speed=${document.getElementById('s-t').value}`,
-    `inputs=${d.inputs}`,
-    `recfx=${d.recfx}`,
+    `hue=${val('s-hue')}`,
+    `strength=${val('s-k')}`,
+    `radius=${val('s-r')}`,
+    `speed=${val('s-t')}`,
+    `inputs=${inputsSel.value}`,
+    `recfx=${recfxSel.value}`,
     `splash=${splashSel.value}`,
     `bounce=k${PHYS.k}/c${PHYS.c}/imp${PHYS.imp}/follow${PHYS.follow}/wall${PHYS.wall}`,
     `zone=${FRAME_W}x${FRAME_H}`,
+    `on=${on.map((c) => c.key).join(',') || '-'}`,
+    `panels=${panels || '-'}`,
   ].join(' ')
 }
 /* This file is opened straight off disk, so navigator.clipboard is not there:
@@ -2416,6 +2457,94 @@ document.body.classList.add('f', 'd')
 document.getElementById('tgl-l').addEventListener('click', () => document.body.classList.toggle('f'))
 document.getElementById('tgl-r').addEventListener('click', () => document.body.classList.toggle('d'))
 
+/* ---------- remember every choice across a refresh ----------
+   localStorage works on file:// in Chrome and Safari, but it is not guaranteed
+   (private windows, some sandboxes) — every touch is wrapped, and a failure
+   just means the prototype opens at defaults instead of throwing. */
+const STORE = 'inout-proto/style/v1'
+function saveState() {
+  const s = paramString()
+  // The hash is the real store: this file is opened off disk, and on a file://
+  // or opaque origin localStorage can be refused outright, while the fragment
+  // survives a refresh everywhere. Three ways in, because which one is allowed
+  // depends on how the file got opened — replaceState is the one that works
+  // even when the page is a data: URL, where assigning location.hash is a no-op.
+  let wrote = false
+  try { history.replaceState(null, '', '#' + s); wrote = true } catch { /* try the next one */ }
+  if (!wrote) { try { location.hash = s } catch { /* fragment refused — storage only */ } }
+  try { localStorage.setItem(STORE, s) } catch { /* storage off — hash only */ }
+}
+function restoreState() {
+  let raw = ''
+  try { raw = decodeURIComponent(location.hash.slice(1)) } catch { raw = '' }
+  if (!raw) { try { raw = localStorage.getItem(STORE) || '' } catch { raw = '' } }
+  if (!raw) return
+  const st = {}
+  raw.split(/[\s&]+/).forEach((pair) => {
+    const i = pair.indexOf('=')
+    if (i > 0) st[pair.slice(0, i)] = pair.slice(i + 1)
+  })
+  const d = document.documentElement.dataset
+  const pick = (sel, v, ds) => {
+    if (v && [...sel.options].some((o) => o.value === v)) sel.value = v
+    if (ds) d[ds] = sel.value
+  }
+  pick(themeSel, st.theme, 'theme')
+  pick(neonSel, st.neon, 'neon')
+  pick(inputsSel, st.inputs, 'inputs')
+  pick(recfxSel, st.recfx, 'recfx')
+  pick(splashSel, st.splash)
+
+  const setSlider = (id, v, s) => {
+    if (v == null || v === '' || Number.isNaN(+v)) return
+    document.getElementById(id).value = v
+    syncSlider(s)
+  }
+  setSlider('s-hue', st.hue, SLIDERS[0])
+  setSlider('s-k', st.strength, SLIDERS[1])
+  setSlider('s-r', st.radius, SLIDERS[2])
+  setSlider('s-t', st.speed, SLIDERS[3])
+
+  const b = st.bounce || ''
+  const grab = (name) => {
+    const m = b.match(new RegExp(name + '([\\d.]+)'))
+    return m ? +m[1] : null
+  }
+  ;[['k', 'p-k', 0], ['c', 'p-c', 1], ['imp', 'p-i', 2], ['follow', 'p-f', 3], ['wall', 'p-w', 4]].forEach(([n, id, i]) => {
+    const v = grab(n)
+    if (v == null) return
+    const input = document.getElementById(id)
+    input.value = v
+    PHYS[PHYS_SLIDERS[i].key] = v
+    document.getElementById(PHYS_SLIDERS[i].out).textContent = v.toFixed(PHYS_SLIDERS[i].dp)
+  })
+
+  const zone = (st.zone || '').match(/^(\d+)x(\d+)$/)
+  if (zone) { FRAME_W = +zone[1]; FRAME_H = +zone[2] }
+  // the preset only decides the corner radius once a custom size is in play
+  if (st.zone && SIZES[frameSel.value] && !zone) [FRAME_W, FRAME_H] = SIZES[frameSel.value]
+
+  if (st.on) {
+    const on = st.on === '-' ? [] : st.on.split(',')
+    CHANNELS.forEach((c) => setChannel(c.key, on.includes(c.key)))
+  }
+  if (st.panels) {
+    document.body.classList.toggle('f', st.panels.includes('f'))
+    document.body.classList.toggle('d', st.panels.includes('d'))
+  }
+}
+
+// every control that can change the look also records it
+;[themeSel, neonSel, inputsSel, recfxSel, splashSel, frameSel].forEach((el) => el.addEventListener('change', saveState))
+;[...SLIDERS, ...PHYS_SLIDERS].forEach((s) => document.getElementById(s.el).addEventListener('change', saveState))
+app.addEventListener('click', (e) => { if (e.target.closest('[data-chip], [data-wedge]')) saveState() })
+grip.addEventListener('pointerup', saveState)
+grip.addEventListener('dblclick', () => setTimeout(saveState, 0))
+document.getElementById('zfill').addEventListener('click', saveState)
+document.getElementById('tgl-l').addEventListener('click', saveState)
+document.getElementById('tgl-r').addEventListener('click', saveState)
+
+restoreState()
 fit()
 playSplash()
 
@@ -2432,8 +2561,8 @@ addEventListener('keydown', (e) => {
   else if (e.key.toLowerCase() === 't') cycle(themeSel, ['baseline', 'graphite', 'paper'])
   else if (e.key.toLowerCase() === 'f') cycle(frameSel, ['desktop', 'laptop', 'phone'])
   else if (e.key.toLowerCase() === 'n') cycle(neonSel, ['on', 'off'])
-  else if (e.key === '[') document.body.classList.toggle('f')
-  else if (e.key === ']') document.body.classList.toggle('d')
+  else if (e.key === '[') { document.body.classList.toggle('f'); saveState() }
+  else if (e.key === ']') { document.body.classList.toggle('d'); saveState() }
 })
 </script>
 </body>
