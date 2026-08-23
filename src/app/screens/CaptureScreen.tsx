@@ -22,6 +22,7 @@ import {
   isKindSupported,
   unsupportedReason,
 } from '@app/lib/channels'
+import { inShotNotice, previewWouldMirror } from '@app/lib/inShot'
 import { ChannelChips } from '@app/components/ChannelChips'
 import { RecordButton } from '@app/components/RecordButton'
 import { TimerPill } from '@app/components/TimerPill'
@@ -35,6 +36,35 @@ function StreamVideo({ stream, className }: { stream: MediaStream; className: st
     if (el && el.srcObject !== stream) el.srcObject = stream
   }, [stream])
   return <video ref={ref} className={className} autoPlay muted playsInline />
+}
+
+/**
+ * Is the user looking at THIS window right now?
+ *
+ * Visibility alone is not the question: on macOS a Chrome window that is merely
+ * behind another app stays `visible` until it is fully occluded. Focus alone is
+ * not either — a background tab in a focused window has none of the screen.
+ * Both together is "the user is here", which is what decides whether the
+ * preview is filming itself. Listeners only while `active` (a take is running).
+ */
+function useInFront(active: boolean): boolean {
+  const read = (): boolean =>
+    typeof document !== 'undefined' && document.visibilityState === 'visible' && document.hasFocus()
+  const [inFront, setInFront] = useState(read)
+  useEffect(() => {
+    if (!active) return
+    const onChange = () => setInFront(read())
+    onChange()
+    window.addEventListener('focus', onChange)
+    window.addEventListener('blur', onChange)
+    document.addEventListener('visibilitychange', onChange)
+    return () => {
+      window.removeEventListener('focus', onChange)
+      window.removeEventListener('blur', onChange)
+      document.removeEventListener('visibilitychange', onChange)
+    }
+  }, [active])
+  return inFront
 }
 
 const ARMING_LABEL: Record<ArmingTimelineEntry['step'], string> = {
@@ -73,6 +103,9 @@ export function CaptureScreen() {
   /** Sources frozen right now — a toast is useless here, the user is in
    * another tab while it happens and only sees this screen on the way back. */
   const [stalled, setStalled] = useState<ChannelKind[]>([])
+  /** Opt back into the WYSIWYG preview even while it films itself (never
+   * removes a working affordance — the mirror tunnel is only hidden by default). */
+  const [showPreviewAnyway, setShowPreviewAnyway] = useState(false)
   const finishingRef = useRef(false)
 
   const finishRecording = async () => {
@@ -116,6 +149,7 @@ export function CaptureScreen() {
       setRemainingMs(MAX_RECORDING_MS)
       setMuted({})
       setStalled([])
+      setShowPreviewAnyway(false)
     }
   }
 
@@ -245,6 +279,15 @@ export function CaptureScreen() {
   const audioOnly = !!session && !screenStream && !cameraStream
   const recording = !!session
 
+  // Landing back here mid-take is usually not the user's doing: hiding the
+  // browser's screen-sharing bar activates this window. We cannot stop that (it
+  // is browser chrome, and no web API moves OS focus back), so we make the
+  // landing cheap — see @app/lib/inShot.
+  const inFront = useInFront(recording)
+  const surface = session?.displaySurface ?? null
+  const shotNotice = recording ? inShotNotice(surface, inFront) : null
+  const mirrors = recording && previewWouldMirror(surface, inFront) && !showPreviewAnyway
+
   return (
     <div className={`capture${recording ? ' capture--recording' : ''}`}>
       {!session && <div className="capture__wordmark">INOUT</div>}
@@ -276,13 +319,37 @@ export function CaptureScreen() {
         </div>
       )}
 
-      {recording && (
+      {shotNotice && shotNotice.kind === 'covering' && (
+        <div className="capture__inshot-band" role="status">
+          <strong>{shotNotice.title}</strong> {shotNotice.body}
+        </div>
+      )}
+
+      {recording && mirrors && (
+        // The whole screen is being recorded and this window is in front, so
+        // the preview below would be filming itself. Say what happened instead.
+        <div className="capture__backstage">
+          <div className="capture__backstage-card" role="status">
+            <div className="capture__backstage-title">{shotNotice?.title}</div>
+            <div className="capture__backstage-body">{shotNotice?.body}</div>
+            {shotNotice?.foot && <div className="capture__backstage-foot">{shotNotice.foot}</div>}
+            <button
+              className="capture__backstage-show"
+              onClick={() => setShowPreviewAnyway(true)}
+            >
+              Show preview anyway
+            </button>
+          </div>
+        </div>
+      )}
+
+      {recording && !mirrors && (
         <div className="capture__preview">
           {/* Live WYSIWYG of the final 16:9 composition — the very same stage
               the editor and export use, so the frame the user sees while
               recording is exactly where the editable video lands next.
-              Full-monitor capture can show a mirror tunnel if this window is on
-              the captured screen — cosmetic, standard (OBS does the same). */}
+              Full-monitor capture would show a mirror tunnel while this window
+              is in front, which is why that case renders the card above. */}
           <div className="stage">
             {screenStream && <StreamVideo stream={screenStream} className="stage__screen" />}
             {cameraStream && (
