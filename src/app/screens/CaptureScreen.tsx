@@ -69,7 +69,14 @@ export function CaptureScreen() {
   const armAbortRef = useRef<AbortController | null>(null)
   const [elapsedMs, setElapsedMs] = useState(0)
   const [remainingMs, setRemainingMs] = useState<number | null>(MAX_RECORDING_MS)
-  const [muted, setMuted] = useState<Partial<Record<ChannelKind, boolean>>>({})
+  /** Inputs turned off mid-take — by the user's chip OR by the browser's own
+   *  "Stop sharing", which lands here through the same 'channel-ended' event. */
+  const [off, setOff] = useState<Partial<Record<ChannelKind, boolean>>>({})
+  /** Inputs being re-acquired right now (the screen picker may be open). */
+  const [pending, setPending] = useState<Partial<Record<ChannelKind, boolean>>>({})
+  /** previewStreams is a live object on the session, so React needs a nudge
+   *  when a channel comes or goes — the ticks would get there, a beat late. */
+  const [, bumpStreams] = useState(0)
   /** Sources frozen right now — a toast is useless here, the user is in
    * another tab while it happens and only sees this screen on the way back. */
   const [stalled, setStalled] = useState<ChannelKind[]>([])
@@ -114,7 +121,8 @@ export function CaptureScreen() {
       setArmingLabel(null)
       setElapsedMs(0)
       setRemainingMs(MAX_RECORDING_MS)
-      setMuted({})
+      setOff({})
+      setPending({})
       setStalled([])
     }
   }
@@ -130,17 +138,25 @@ export function CaptureScreen() {
         case 'auto-stopped':
           void finishRecording()
           break
+        // No toast on either edge: the chip IS the readout, and it stays put
+        // instead of flashing past. This is also how the browser's own "Stop
+        // sharing" shows up, so that case now darkens the chip too.
         case 'channel-ended':
-          toast(`${CHANNEL_META[e.kind].label} ended`)
+          setOff((s) => ({ ...s, [e.kind]: true }))
+          setPending((s) => ({ ...s, [e.kind]: false }))
+          bumpStreams((n) => n + 1)
+          break
+        case 'channel-late-join':
+          setOff((s) => ({ ...s, [e.kind]: false }))
+          setPending((s) => ({ ...s, [e.kind]: false }))
+          bumpStreams((n) => n + 1)
           break
         case 'channel-error':
+          setPending((s) => ({ ...s, [e.kind]: false }))
           toast(e.message, 'error')
           break
         case 'channel-notice':
           toast(e.message)
-          break
-        case 'channel-late-join':
-          toast(`${CHANNEL_META[e.kind].label} joined late — this take will use full render on export`)
           break
         case 'channel-stalled':
           setStalled((s) => (s.includes(e.kind) ? s : [...s, e.kind]))
@@ -194,7 +210,8 @@ export function CaptureScreen() {
       s.start()
       setElapsedMs(0)
       setRemainingMs(MAX_RECORDING_MS)
-      setMuted({})
+      setOff({})
+      setPending({})
       setStalled([])
       setSession(s)
       // Recording is live and the user is committed for at least a few
@@ -226,9 +243,16 @@ export function CaptureScreen() {
       return
     }
     if (session) {
-      const nextMuted = !muted[kind]
-      session.setAudioEnabled(kind, !nextMuted)
-      setMuted((m) => ({ ...m, [kind]: nextMuted }))
+      // Mid-take this is a real stop/start of the device, not a mute: off
+      // releases the hardware and ends that channel's file here, on re-acquires
+      // and late-joins a fresh segment. The 'off' flag is set by the resulting
+      // 'channel-ended' event rather than optimistically, so the chip always
+      // reports what the engine actually did.
+      // A kind never armed for this take counts as off, so it can be ADDED
+      // mid-take by the same press — it is the same late-join either way.
+      const turningOn = off[kind] ?? !prefs[CONFIG_KEY[kind]]
+      if (turningOn) setPending((p) => ({ ...p, [kind]: true }))
+      session.setChannelActive(kind, turningOn)
     } else {
       const key = CONFIG_KEY[kind]
       const next = { ...prefs, [key]: !prefs[key] }
@@ -314,7 +338,8 @@ export function CaptureScreen() {
           prefs={prefs}
           caps={caps}
           recording={!!session}
-          muted={muted}
+          off={off}
+          pending={pending}
           onToggle={toggleChip}
         />
         <RecordButton

@@ -270,18 +270,19 @@ function displaySurfaceOf(track: MediaStreamTrack | undefined): DisplaySurface |
 }
 
 /**
- * Anything but a whole monitor records ONE surface: switch to another tab or
- * app and the file keeps showing the surface that was shared — which reads as
- * "nothing was recorded, just a frozen frame" (PO 2026-08-06). Say it up front;
- * the picker's own indicator is easy to miss.
+ * Anything but a whole monitor records ONE surface. That used to raise a
+ * two-line "Heads-up:" toast on every tab/window share; PO 2026-08-23 killed
+ * it ("fix it without stupid texts") and the call is right — the user picked
+ * that surface a second earlier in Chrome's own picker, which shows what it
+ * is, so the toast told them what they had just chosen. The failure it was
+ * guarding against is covered where it actually shows: the frozen-source
+ * detector raises the sticky banner if the surface really does stop
+ * delivering (2026-08-06), and that fires on evidence rather than on a guess.
+ *
+ * Kept as a function returning null so the surface plumbing stays wired and a
+ * later, better-targeted notice has somewhere to live.
  */
-export function surfaceNotice(surface: DisplaySurface | undefined): string | null {
-  if (surface === 'browser') {
-    return 'Heads-up: you shared ONE browser tab. Other tabs, apps and your desktop will not appear — switch to sharing your whole screen to record them.'
-  }
-  if (surface === 'window') {
-    return 'Heads-up: you shared ONE app window. Anything outside it will not appear, and if that window gets hidden or another app goes full-screen the picture freezes.'
-  }
+export function surfaceNotice(_surface: DisplaySurface | undefined): string | null {
   return null
 }
 

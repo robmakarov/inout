@@ -196,6 +196,50 @@ describe('activeChannelsAt', () => {
     ])
     expect(activeChannelsAt(rec, e, 3_000).map((c) => c.id)).toEqual(['ch-mic'])
   })
+
+  /**
+   * Turning an input off and back on mid-take (setChannelActive) records the
+   * kind as SEVERAL non-overlapping segments rather than one padded channel.
+   * The whole design rests on one invariant: at any instant at most one segment
+   * of a kind is active, so every consumer that resolves "the screen sample" or
+   * "the mic mixer" by kind keeps working untouched. Pin it here.
+   */
+  describe('a kind recorded as several segments (mid-take off/on)', () => {
+    const split: Recording = {
+      id: 'rec-split',
+      createdAt: 1_700_000_000_000,
+      durationMs: 10_000,
+      channels: [
+        // Mic ran 0-3s, was turned off, came back at 6s and ran to 10s.
+        { ...rec.channels[0]!, id: 'mic-a', kind: 'mic', media: 'audio', startOffsetMs: 0, durationMs: 3_000 },
+        { ...rec.channels[0]!, id: 'mic-b', kind: 'mic', media: 'audio', startOffsetMs: 6_000, durationMs: 4_000 },
+      ],
+    }
+
+    it('never has two segments of the kind active at once', () => {
+      const e = defaultEditState(split)
+      for (let t = 0; t < 10_000; t += 50) {
+        const mics = activeChannelsAt(split, e, t).filter((c) => c.kind === 'mic')
+        expect(mics.length).toBeLessThanOrEqual(1)
+      }
+    })
+
+    it('leaves the off stretch genuinely empty instead of padding it', () => {
+      const e = defaultEditState(split)
+      expect(activeChannelsAt(split, e, 1_000).map((c) => c.id)).toEqual(['mic-a'])
+      expect(activeChannelsAt(split, e, 4_500).map((c) => c.id)).toEqual([])
+      expect(activeChannelsAt(split, e, 7_000).map((c) => c.id)).toEqual(['mic-b'])
+    })
+
+    it('maps output time into the right segment’s local time', () => {
+      const e = defaultEditState(split)
+      expect(channelSourceTimeAt(split, e, 'mic-a', 1_000)).toBe(1_000)
+      expect(channelSourceTimeAt(split, e, 'mic-b', 1_000)).toBeNull()
+      // 7s of recording time is 1s into the second segment, not 7s into it.
+      expect(channelSourceTimeAt(split, e, 'mic-b', 7_000)).toBe(1_000)
+      expect(channelSourceTimeAt(split, e, 'mic-a', 7_000)).toBeNull()
+    })
+  })
 })
 
 describe('hasEnabledVideo', () => {

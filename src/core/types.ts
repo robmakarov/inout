@@ -113,6 +113,15 @@ export interface ChannelEdit {
 export interface KeptSegment {
   startMs: number
   endMs: number
+  /**
+   * Playback rate for this span (task F5b). Absent or 1 = normal, which is what
+   * every take recorded before F5b has and what an untouched take must keep —
+   * a span carrying `speed: 1` and one carrying nothing have to be the same
+   * thing to every consumer, or an untouched take loses the instant path.
+   * Above 1 the span plays FASTER and occupies proportionally less output time;
+   * the audio is time-stretched (pitch preserved), never resampled.
+   */
+  speed?: number
 }
 
 /**
@@ -296,8 +305,33 @@ export interface CaptureSession {
   stop(): Promise<Recording>
   /** Abort and discard everything. */
   cancel(): Promise<void>
-  /** Live-mute/unmute an audio channel while recording (mic / system-audio only). */
+  /** Live-mute/unmute an audio channel while recording (mic / system-audio only).
+   *  Reversible, and the channel keeps recording — silence, at full length. */
   setAudioEnabled(kind: ChannelKind, enabled: boolean): void
+  /**
+   * Turn ONE input off, or back on, mid-take. This is a real stop, not a mute:
+   *
+   *  OFF — the device is released (camera light out, mic handle returned) and
+   *    that channel's file closes at this instant, so its timeline bar ENDS
+   *    here instead of running frozen (video) or silent (audio) to the end of
+   *    the take. Same teardown the browser's own "Stop sharing" takes, so a
+   *    user-stopped channel and a browser-stopped one are one code path and
+   *    one file shape. Turning off the last live channel auto-stops the
+   *    session, exactly as losing it would.
+   *
+   *  ON — the device is re-acquired and late-joins as a NEW channel of the
+   *    same kind, with its own startOffsetMs. The off stretch therefore stays
+   *    a real hole on the timeline rather than being papered over, and a kind
+   *    can appear as several non-overlapping segments in Recording.channels.
+   *    Every consumer already resolves channels by id and window, so exactly
+   *    one segment of a kind is ever active at a given instant.
+   *
+   * Asynchronous by nature: success arrives as 'channel-late-join', failure as
+   * 'channel-error'. Screen resume re-opens the browser's picker — no API can
+   * re-share a surface silently, and pretending otherwise would be a lie.
+   * A kind that was never armed can be turned on the same way.
+   */
+  setChannelActive(kind: ChannelKind, active: boolean): void
   on(cb: (e: CaptureEvent) => void): () => void
 }
 

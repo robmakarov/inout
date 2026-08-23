@@ -15,6 +15,36 @@ const MIN_SPAN_MS = 100
 /** A cut may not leave a segment shorter than this. */
 export const MIN_SEGMENT_MS = 200
 
+/**
+ * Speed bounds for a span (task F5b). The floor is 1 — F5b is "tighten the
+ * boring parts", not a slow-motion tool, and slowing a 30 fps capture down
+ * invents frames that were never recorded. The ceiling is 3, where a
+ * pitch-preserved voice stops being intelligible.
+ */
+export const MIN_SEGMENT_SPEED = 1
+export const MAX_SEGMENT_SPEED = 3
+
+/**
+ * A span's speed, normalised. Absent, 1, NaN and out-of-range all mean "no
+ * speed change", so a segment list written before F5b behaves exactly as it
+ * did — and a rounding artefact can never make an untouched take non-default.
+ */
+export function segmentSpeed(s: KeptSegment): number {
+  const v = s.speed
+  if (typeof v !== 'number' || !Number.isFinite(v)) return 1
+  return Math.min(MAX_SEGMENT_SPEED, Math.max(MIN_SEGMENT_SPEED, v))
+}
+
+/** How much OUTPUT time a span occupies: its length divided by its speed. */
+export function segmentOutputMs(s: KeptSegment): number {
+  return Math.max(0, s.endMs - s.startMs) / segmentSpeed(s)
+}
+
+/** True when any kept span plays at a speed other than 1. */
+export function hasSpeedChange(e: EditState): boolean {
+  return keptSegments(e).some((s) => segmentSpeed(s) !== 1)
+}
+
 export function defaultEditState(r: Recording): EditState {
   return {
     recordingId: r.id,
@@ -108,15 +138,21 @@ export function keptSegments(e: EditState): KeptSegment[] {
   const out: KeptSegment[] = []
   for (const s of raw) {
     const last = out[out.length - 1]
-    if (last && s.startMs <= last.endMs) last.endMs = Math.max(last.endMs, s.endMs)
-    else out.push({ ...s })
+    // Adjacent spans merge only when they play at the SAME speed: fusing a 2x
+    // span into the 1x one beside it would silently discard the speed change
+    // the user just made (F5b).
+    if (last && s.startMs <= last.endMs && segmentSpeed(last) === segmentSpeed(s)) {
+      last.endMs = Math.max(last.endMs, s.endMs)
+    } else {
+      out.push({ ...s })
+    }
   }
   return out
 }
 
 export function outputDurationMs(e: EditState): number {
   let total = 0
-  for (const s of keptSegments(e)) total += Math.max(0, s.endMs - s.startMs)
+  for (const s of keptSegments(e)) total += segmentOutputMs(s)
   return total
 }
 
@@ -129,8 +165,9 @@ export function outputToRecordingMs(e: EditState, outputMs: number): number | nu
   if (outputMs < 0) return null
   let acc = 0
   for (const s of keptSegments(e)) {
-    const len = Math.max(0, s.endMs - s.startMs)
-    if (outputMs < acc + len) return s.startMs + (outputMs - acc)
+    const len = segmentOutputMs(s)
+    // Affine inside the span: at 2x, one output ms covers two recording ms.
+    if (outputMs < acc + len) return s.startMs + (outputMs - acc) * segmentSpeed(s)
     acc += len
   }
   return null
@@ -143,8 +180,10 @@ export function outputToRecordingMs(e: EditState, outputMs: number): number | nu
 export function recordingToOutputMs(e: EditState, recordingMs: number): number | null {
   let acc = 0
   for (const s of keptSegments(e)) {
-    const len = Math.max(0, s.endMs - s.startMs)
-    if (recordingMs >= s.startMs && recordingMs < s.endMs) return acc + (recordingMs - s.startMs)
+    const len = segmentOutputMs(s)
+    if (recordingMs >= s.startMs && recordingMs < s.endMs) {
+      return acc + (recordingMs - s.startMs) / segmentSpeed(s)
+    }
     acc += len
   }
   return null
@@ -160,7 +199,7 @@ export function segmentJoinsMs(e: EditState): number[] {
   let acc = 0
   const segs = keptSegments(e)
   for (let i = 0; i < segs.length; i++) {
-    acc += Math.max(0, segs[i]!.endMs - segs[i]!.startMs)
+    acc += segmentOutputMs(segs[i]!)
     if (i < segs.length - 1) joins.push(acc)
   }
   return joins
@@ -174,17 +213,27 @@ export function segmentJoinsMs(e: EditState): number[] {
  */
 export function normalizeSegments(e: EditState, segments: KeptSegment[]): KeptSegment[] {
   const clipped = segments
-    .map((s) => ({
-      startMs: Math.max(e.globalTrimStartMs, Math.min(s.startMs, s.endMs)),
-      endMs: Math.min(e.globalTrimEndMs, Math.max(s.startMs, s.endMs)),
-    }))
+    .map((s) => {
+      const span: KeptSegment = {
+        startMs: Math.max(e.globalTrimStartMs, Math.min(s.startMs, s.endMs)),
+        endMs: Math.min(e.globalTrimEndMs, Math.max(s.startMs, s.endMs)),
+      }
+      // Stored only when it MEANS something: a span carrying speed 1 must be
+      // indistinguishable from one carrying nothing (see KeptSegment.speed).
+      const speed = segmentSpeed(s)
+      if (speed !== 1) span.speed = speed
+      return span
+    })
     .filter((s) => s.endMs - s.startMs > 0)
     .sort((a, b) => a.startMs - b.startMs)
   const out: KeptSegment[] = []
   for (const s of clipped) {
     const last = out[out.length - 1]
-    if (last && s.startMs < last.endMs) last.endMs = Math.max(last.endMs, s.endMs)
-    else out.push({ ...s })
+    if (last && s.startMs < last.endMs && segmentSpeed(last) === segmentSpeed(s)) {
+      last.endMs = Math.max(last.endMs, s.endMs)
+    } else {
+      out.push({ ...s })
+    }
   }
   return out
 }
@@ -200,8 +249,10 @@ export function splitAtOutputMs(e: EditState, outputMs: number): EditState {
       recordingMs > s.startMs + MIN_SEGMENT_MS &&
       recordingMs < s.endMs - MIN_SEGMENT_MS
     ) {
-      next.push({ startMs: s.startMs, endMs: recordingMs })
-      next.push({ startMs: recordingMs, endMs: s.endMs })
+      const speed = segmentSpeed(s)
+      const carry = speed !== 1 ? { speed } : {}
+      next.push({ startMs: s.startMs, endMs: recordingMs, ...carry })
+      next.push({ startMs: recordingMs, endMs: s.endMs, ...carry })
     } else {
       next.push({ ...s })
     }
@@ -227,6 +278,20 @@ export function hasCuts(e: EditState): boolean {
   if (segs.length !== 1) return true
   const only = segs[0]!
   return only.startMs > e.globalTrimStartMs || only.endMs < e.globalTrimEndMs
+}
+
+/** Set (or clear) the speed of one kept span, by its index in editSegments. */
+export function setSegmentSpeed(e: EditState, index: number, speed: number): EditState {
+  const segs = editSegments(e)
+  if (index < 0 || index >= segs.length) return e
+  const clamped = Math.min(MAX_SEGMENT_SPEED, Math.max(MIN_SEGMENT_SPEED, speed))
+  const next = segs.map((s, i) => {
+    if (i !== index) return { ...s }
+    const span: KeptSegment = { startMs: s.startMs, endMs: s.endMs }
+    if (clamped !== 1) span.speed = clamped
+    return span
+  })
+  return { ...e, segments: next }
 }
 
 export function channelSourceTimeAt(
@@ -284,6 +349,10 @@ export function isDefaultEdit(r: Recording, e: EditState): boolean {
   if (backgroundIsActive(e.background)) return false
   // …and for a zoom (F2): the composite is the whole frame.
   if (viewportTrackIsActive(e.viewport)) return false
+  // …and for a speed change (F5b): the composite plays at 1x, so a packet copy
+  // would ship a file that ignores it. hasCuts already rejects multi-span
+  // edits; this covers the single span the user sped up without cutting.
+  if (hasSpeedChange(e)) return false
   if (e.globalTrimStartMs > 0 || e.globalTrimEndMs < r.durationMs) return false
   for (const c of r.channels) {
     const edit = e.channels.find((x) => x.channelId === c.id)

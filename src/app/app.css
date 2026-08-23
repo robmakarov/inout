@@ -300,12 +300,35 @@
 .chip--unavailable:hover:not(:disabled) {
   background: var(--record-soft);
 }
+/* Re-acquiring this input right now — the screen picker may be open in front
+   of everything. Breathe rather than spin: one more spinner on a screen that
+   already has a running timer reads as an error state. */
+.chip--pending {
+  animation: chip-pending 1.1s var(--ease) infinite;
+}
+@keyframes chip-pending {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chip--pending {
+    animation: none;
+    opacity: 0.6;
+  }
+}
 .chip:disabled {
   cursor: default;
 }
-/* audio chips stay clickable while recording */
+/* every chip stays clickable while recording — each one stops and restarts
+   its own input, so none of them may look inert */
 .chip--on:disabled,
-.chip--muted:disabled {
+.chip--muted:disabled,
+.chip--pending:disabled {
   opacity: 1;
 }
 

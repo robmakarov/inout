@@ -7,14 +7,17 @@ export function ChannelChips({
   prefs,
   caps,
   recording,
-  muted,
+  off,
+  pending,
   onToggle,
 }: {
   prefs: CaptureConfig
   caps: Capabilities
   recording: boolean
-  /** During recording: live-muted audio kinds. */
-  muted: Partial<Record<ChannelKind, boolean>>
+  /** During recording: kinds currently stopped (device released, file closed). */
+  off: Partial<Record<ChannelKind, boolean>>
+  /** During recording: kinds being re-acquired (the picker may be open). */
+  pending: Partial<Record<ChannelKind, boolean>>
   onToggle: (kind: ChannelKind) => void
 }) {
   return (
@@ -22,19 +25,25 @@ export function ChannelChips({
       {CHANNEL_KINDS.map((kind) => {
         const meta = CHANNEL_META[kind]
         const on = prefs[CONFIG_KEY[kind]]
-        const isAudio = kind === 'mic' || kind === 'system-audio'
         const unsupported = !isKindSupported(kind, caps)
         // Unavailable inputs stay clickable so a press can explain WHY (red +
         // slashed icon signals it up front); never show them as "on".
-        // While recording, video chips are locked; audio chips live-mute,
-        // but only if that channel was on at arm time (a stream exists).
-        const locked = !unsupported && recording && (!isAudio || !on)
-        const isMuted = !unsupported && recording && isAudio && !!muted[kind]
+        // While recording EVERY supported input toggles: off releases the
+        // device and ends its file, on re-acquires and late-joins. Only a
+        // re-acquire already in flight locks the chip, so a second press
+        // cannot open a second picker.
+        const busy = recording && !unsupported && !!pending[kind]
+        const locked = unsupported ? false : busy
+        // Mid-take the engine's own 'off' set is the truth (the browser's "Stop
+        // sharing" darkens the chip through it too); before the take, prefs are.
+        const isOff = recording && !unsupported ? (off[kind] ?? !on) : !on
+        const lit = !unsupported && !isOff
         const cls = [
           'chip',
           unsupported ? 'chip--unavailable' : '',
-          !unsupported && on && !isMuted ? 'chip--on' : '',
-          isMuted ? 'chip--muted' : '',
+          lit ? 'chip--on' : '',
+          recording && !unsupported && isOff ? 'chip--muted' : '',
+          busy ? 'chip--pending' : '',
         ]
           .filter(Boolean)
           .join(' ')
@@ -44,10 +53,11 @@ export function ChannelChips({
             className={cls}
             disabled={locked}
             title={meta.label}
-            aria-pressed={!unsupported && on && !isMuted}
+            aria-pressed={lit}
+            aria-busy={busy || undefined}
             onClick={() => onToggle(kind)}
           >
-            <Icon name={meta.icon} size={16} slash={isMuted || unsupported} />
+            <Icon name={meta.icon} size={16} slash={isOff || unsupported} />
             <span>{meta.label}</span>
           </button>
         )

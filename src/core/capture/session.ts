@@ -244,6 +244,9 @@ class Session implements CaptureSession {
   private epoch = 0
   private tickTimer: ReturnType<typeof setInterval> | null = null
   private manifestTimer: ReturnType<typeof setTimeout> | null = null
+  /** Kinds with a re-acquire in flight — a second press must not open a second
+   * picker, and the UI reads this state through 'channel-late-join'/'error'. */
+  private readonly resuming = new Set<ChannelKind>()
   private composite: LiveCompositeHandle | null = null
   /** Filled by stopCompositeEarly, read once the raw channels have drained. */
   private compositeResult: CompositeRecording | null = null
@@ -826,6 +829,88 @@ class Session implements CaptureSession {
     if (kind !== 'mic' && kind !== 'system-audio') return
     const ch = this.channels.find((c) => c.kind === kind)
     if (ch) ch.track.enabled = enabled
+  }
+
+  setChannelActive(kind: ChannelKind, active: boolean): void {
+    if (this.stateInternal !== 'recording') return
+    if (active) this.resumeChannel(kind)
+    else this.stopChannelNow(kind)
+  }
+
+  private stopChannelNow(kind: ChannelKind): void {
+    const ch = this.channels.find((c) => c.kind === kind && !c.ended)
+    if (!ch) return
+    // The preview must let go FIRST: the UI reads previewStreams to decide what
+    // to paint, so leaving a dead stream here shows the user a frozen picture of
+    // the very channel they just turned off — the confusion this method ends.
+    delete this.previewStreams[kind]
+    // track.stop() does not fire 'ended' (per spec), so drive the same teardown
+    // the browser's "Stop sharing" would: duration stamped here, writer closed,
+    // composite invalidated for video, auto-stop if this was the last one.
+    try {
+      ch.track.stop()
+    } catch {
+      /* already stopped */
+    }
+    this.onTrackEnded(ch)
+  }
+
+  /**
+   * Re-acquire one kind and late-join it. Reuses the progressive acquirer with
+   * a config enabling only this kind, so a resumed channel walks the exact path
+   * a slow device walks at arm time — same constraints, same notices, same
+   * failure reporting — rather than a second, subtly different acquisition.
+   */
+  private resumeChannel(kind: ChannelKind): void {
+    if (this.channels.some((c) => c.kind === kind && !c.ended)) return // already live
+    if (this.resuming.has(kind)) return // one attempt at a time
+    this.resuming.add(kind)
+    const only: CaptureConfig = {
+      screen: kind === 'screen',
+      camera: kind === 'camera',
+      mic: kind === 'mic',
+      systemAudio: kind === 'system-audio',
+      cameraDeviceId: this.config.cameraDeviceId,
+      micDeviceId: this.config.micDeviceId,
+    }
+    const onChannel = (acq: AcquiredChannel): void => {
+      void (async () => {
+        try {
+          // The take may have ended while the picker was open — never leave a
+          // live device behind, and never attach to a finished session.
+          if (this.stateInternal !== 'recording' || this.cancelled) {
+            for (const t of acq.stream.getTracks()) t.stop()
+            return
+          }
+          const rt = await this.armChannel(acq)
+          if (this.stateInternal !== 'recording' || this.cancelled) this.discardRuntime(rt)
+          else this.lateJoin(rt)
+        } catch (err) {
+          for (const t of acq.stream.getTracks()) t.stop()
+          this.emit({ type: 'channel-error', kind: acq.kind, message: errMessage(err) })
+        } finally {
+          this.resuming.delete(kind)
+        }
+      })()
+    }
+    const onFailure = (f: AcquireFailure): void => {
+      this.resuming.delete(kind)
+      this.emit({ type: 'channel-error', kind: f.kind, message: f.message })
+    }
+    try {
+      if (isSyntheticMode()) {
+        createSyntheticChannelsProgressive(only, { onChannel, onFailure })
+      } else {
+        acquireChannelsProgressive(only, {
+          onChannel,
+          onFailure,
+          onNotice: (k, message) => this.emit({ type: 'channel-notice', kind: k, message }),
+        })
+      }
+    } catch (err) {
+      this.resuming.delete(kind)
+      this.emit({ type: 'channel-error', kind, message: errMessage(err) })
+    }
   }
 
   on(cb: (e: CaptureEvent) => void): () => void {

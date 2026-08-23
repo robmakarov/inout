@@ -18,6 +18,13 @@ export {
   removeSegment,
   hasCuts,
   MIN_SEGMENT_MS,
+  // Per-segment speed (F5b).
+  hasSpeedChange,
+  segmentOutputMs,
+  segmentSpeed,
+  setSegmentSpeed,
+  MAX_SEGMENT_SPEED,
+  MIN_SEGMENT_SPEED,
 } from './timeline'
 
 export {

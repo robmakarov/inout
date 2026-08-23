@@ -15,19 +15,16 @@ import {
 import { DEFAULT_EXPORT_SETTINGS } from '@core/types'
 import { parseSlowChannels } from './synthetic'
 
+// PO 2026-08-23 removed the tab/window "Heads-up:" toasts. The picker the user
+// just used already shows which surface they chose, so the notice narrated
+// their own click; the frozen-source banner still covers the case where the
+// surface really does stop delivering, and it fires on measurement. The test
+// stays, inverted, so a well-meaning re-introduction has to argue with it.
 describe('shared-surface notice', () => {
-  it('warns that a single tab records nothing else', () => {
-    expect(surfaceNotice('browser')).toMatch(/ONE browser tab/)
-    expect(surfaceNotice('browser')).toMatch(/whole screen/)
-  })
-  it('warns that a single window can freeze', () => {
-    expect(surfaceNotice('window')).toMatch(/ONE app window/)
-    expect(surfaceNotice('window')).toMatch(/freezes/)
-  })
-  it('stays quiet for a whole monitor — that records everything', () => {
+  it('says nothing for any surface — the picker already showed the user their choice', () => {
+    expect(surfaceNotice('browser')).toBeNull()
+    expect(surfaceNotice('window')).toBeNull()
     expect(surfaceNotice('monitor')).toBeNull()
-  })
-  it('stays quiet when the browser does not report a surface', () => {
     expect(surfaceNotice(undefined)).toBeNull()
   })
 })
