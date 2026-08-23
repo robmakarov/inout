@@ -51,11 +51,34 @@
  * 60 % out on one content type is not an improvement on a model that is 20-45 %
  * out on the other.
  *
- * WHAT THE FOURTH ATTEMPT MUST HANDLE: measure a long enough stretch that rate
- * control settles (the gap between a 30-frame and a 360-frame encode is the
- * unexplained factor of three), and prove it on BOTH content types before it
- * touches the panel. `npm run exp -- o11` already scores any candidate against
- * real rendered sizes on both — use it.
+ *   4. ONE window, a WHOLE GOP long (150 frames), because the "factor of three"
+ *      turned out not to be a factor at all.        −6.7 to −15.4 / −30.5 to −39.9 %
+ *      `npm run exp -- f7c` measured delta cost against DISTANCE FROM THE
+ *      KEYFRAME, 180 frames behind one key, warm-up discarded:
+ *              1-14    15-29    30-59   60-119  120-179   GOP mean   ratio
+ *        screen 6386     2087     1127     2239     1715       2039   0.32
+ *        motion 4775     4373     6043    10348    16356       9486   1.99
+ *      A short window is not a cheap sample of a GOP, it is a different
+ *      quantity — three times too EXPENSIVE on screen and twice too CHEAP on
+ *      motion. The error flips sign with content, which is attempt 1's tell
+ *      again, and no single correction can fix a sign flip. So the window
+ *      became the GOP, and that HALVED the error and put SCREEN content inside
+ *      the ±20 % gate for the first time (−6.7 / −7.3 / −12.9 / −15.4 %).
+ *
+ * STILL NOT SHIPPED, and the gate says every step on BOTH rigs. Motion content
+ * stays 30-40 % low, and suspiciously UNIFORMLY so: predicted ÷ actual is
+ * ~1.44 at every step, including 1080p, where the probe draws the composed
+ * frame 1:1 and cannot be blamed on rescaling. The probe now costs 5.6-6.0 s
+ * (attempt 3 cost 1.7-2.5 s), which the panel can absorb — it opens instantly
+ * and the number lands late — but not for an answer that is still wrong on one
+ * content type.
+ *
+ * WHAT THE FIFTH ATTEMPT MUST HANDLE: why a probe that encodes EXACTLY the GOP
+ * the render encodes, from the same pixels, at the same bitrate, comes out a
+ * uniform 1.44× under on motion content. It is one number, not a curve, which
+ * is a strong hint that something countable is missing — a keyframe the render
+ * emits and the model does not, the first GOP of a file costing more than a
+ * middle one, or the audio term. Count them before modelling anything.
  *
  * Everything is in memory (BufferTarget), so a probe leaves nothing on disk.
  */
