@@ -41,6 +41,28 @@ export interface OracleReport {
   trimErrorMs: number | null
   exportFullMs: number
   exportTrimmedMs: number
+  /**
+   * TAIL INTEGRITY (task O8, PO 2026-08-22: "Loom cuts last seconds — we don't
+   * do that shit"). Everything needed to prove the END of the take survived:
+   * the exported file's own duration against what was recorded, and the last
+   * fiducial event actually present in it. A pipeline that silently drops its
+   * final buffer shows up here and nowhere else.
+   */
+  tail: {
+    recordedMs: number
+    exportedMs: number
+    /** exported − recorded. Negative = the end was cut off. */
+    durationDeltaMs: number
+    /** Output time of the last flash the export still contains, ms. */
+    lastFlashMs: number | null
+    /** Gap between that flash and the end of the file, ms. */
+    lastFlashToEndMs: number | null
+    /** Same for audio. */
+    lastOnsetMs: number | null
+    lastOnsetToEndMs: number | null
+  }
+  /** Export throughput: recorded ms per ms of export wall time. */
+  exportRealtimeFactor: number
   verdicts: OracleVerdict[]
   /** Rig-side reference measurements (O4 step 1 residual decomposition). */
   rigDebug: {
@@ -66,10 +88,19 @@ export const MIN_READABLE_RATIO = 0.9
 /** Non-frame-aligned default (30 fps => 33.33 ms frames; 1483 ≈ 44.49 frames). */
 export const DEFAULT_TRIM_MS = 1483
 
+export interface OracleRunOptions extends RecordOptions {
+  /**
+   * Injection knob for the O8 tail band: export the take with this many ms
+   * chopped off the end, i.e. simulate the pipeline dropping its final buffer.
+   * A band nobody has seen go red is not a band.
+   */
+  injectTailLossMs?: number
+}
+
 export async function runOracle(
   recordMs = 6000,
   trimStartMs: number = DEFAULT_TRIM_MS,
-  opts?: RecordOptions,
+  opts?: OracleRunOptions,
 ): Promise<OracleReport> {
   const sweptStaleKeys = await sweepStaleOracleBlobs()
   // flash+click is the sync gate — default on unless explicitly disabled.
@@ -79,7 +110,11 @@ export async function runOracle(
     ...(opts && 'flashClick' in opts ? { flashClick: opts.flashClick } : {}),
   })
   try {
-    const edit = defaultEditState(rig.recording)
+    const baseEdit = defaultEditState(rig.recording)
+    const injectTailLossMs = Math.max(0, opts?.injectTailLossMs ?? 0)
+    const edit: EditState = injectTailLossMs
+      ? { ...baseEdit, globalTrimEndMs: Math.max(0, baseEdit.globalTrimEndMs - injectTailLossMs) }
+      : baseEdit
     // Prefer MediaStream arrival skew (when beeps hit the mic track) over
     // AudioContext schedule mapping — the latter was swinging 100–400ms/run
     // and poisoning the flash+click gate after a correct capture path.
@@ -150,6 +185,27 @@ export async function runOracle(
       trimErrorMs,
       exportFullMs,
       exportTrimmedMs,
+      tail: (() => {
+        const recordedMs = rig.recording.durationMs
+        const exportedMs = full.durationSec * 1000
+        const lastFlash = full.flashOnsetsSec.length
+          ? full.flashOnsetsSec[full.flashOnsetsSec.length - 1]! * 1000
+          : null
+        const lastOnset = full.onsetsSec.length
+          ? full.onsetsSec[full.onsetsSec.length - 1]! * 1000
+          : null
+        return {
+          recordedMs: Math.round(recordedMs),
+          exportedMs: Math.round(exportedMs),
+          durationDeltaMs: Math.round(exportedMs - recordedMs),
+          lastFlashMs: lastFlash === null ? null : Math.round(lastFlash),
+          lastFlashToEndMs: lastFlash === null ? null : Math.round(exportedMs - lastFlash),
+          lastOnsetMs: lastOnset === null ? null : Math.round(lastOnset),
+          lastOnsetToEndMs: lastOnset === null ? null : Math.round(exportedMs - lastOnset),
+        }
+      })(),
+      exportRealtimeFactor:
+        exportFullMs > 0 ? Math.round((rig.recording.durationMs / exportFullMs) * 100) / 100 : 0,
       verdicts,
       rigDebug: {
         beepStreamArrivalsRigMs: streamArrivals,

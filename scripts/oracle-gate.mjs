@@ -16,10 +16,24 @@
  *  - zero aliased schedule corrections
  *  - audioIntegrity max boundary jump ≤ 0.1
  *  - spur peak ≤ −40 dB
+ *  - TAIL INTEGRITY (O8): the exported file must not be shorter than what was
+ *    recorded by more than MAX_TAIL_LOSS_MS, and the last fiducial event must
+ *    sit within MAX_LAST_EVENT_GAP_MS of the end. PO 2026-08-22: "Loom cuts
+ *    last seconds — we don't do that shit". A pipeline that drops its final
+ *    buffer passes every other gate in this file.
+ *  - export throughput ≥ MIN_EXPORT_REALTIME (recorded ms per ms of export)
  */
 
 const MAX_SYNC_ABS_MS = 60
 const MAX_SYNC_ABS_SYMMETRIC_MS = 90
+/** How much shorter than the take the export may be. */
+const MAX_TAIL_LOSS_MS = 400
+/** The rig fires a flash+beep every second, so the last one is at most ~1 s
+ *  plus a flash duration from the end; 2000 ms leaves room without hiding a
+ *  dropped tail. */
+const MAX_LAST_EVENT_GAP_MS = 2000
+/** Export must not be slower than this multiple of realtime. */
+const MIN_EXPORT_REALTIME = 1.0
 const MAX_BOUNDARY_JUMP = 0.1
 const MAX_SPUR_DB = -40
 
@@ -35,6 +49,37 @@ export function oracleMetricsIncomplete(metrics) {
 export function gateOracleReport(report) {
   const failures = []
   const metrics = {}
+
+  // ---- tail integrity + throughput (O8) ----
+  const tail = report.tail
+  if (tail) {
+    metrics.tailDurationDeltaMs = tail.durationDeltaMs
+    metrics.tailLastFlashToEndMs = tail.lastFlashToEndMs
+    metrics.tailLastOnsetToEndMs = tail.lastOnsetToEndMs
+    if (tail.durationDeltaMs < -MAX_TAIL_LOSS_MS) {
+      failures.push(
+        `tail loss: export is ${-tail.durationDeltaMs}ms shorter than the take (> ${MAX_TAIL_LOSS_MS}ms)`,
+      )
+    }
+    for (const [label, gap] of [
+      ['flash', tail.lastFlashToEndMs],
+      ['click', tail.lastOnsetToEndMs],
+    ]) {
+      if (gap === null || gap === undefined) {
+        failures.push(`tail: no ${label} found in the export`)
+      } else if (gap > MAX_LAST_EVENT_GAP_MS) {
+        failures.push(`tail: last ${label} is ${gap}ms before the end (> ${MAX_LAST_EVENT_GAP_MS}ms)`)
+      }
+    }
+  }
+  if (typeof report.exportRealtimeFactor === 'number') {
+    metrics.exportRealtimeFactor = report.exportRealtimeFactor
+    if (report.exportRealtimeFactor < MIN_EXPORT_REALTIME) {
+      failures.push(
+        `export throughput ${report.exportRealtimeFactor}× < ${MIN_EXPORT_REALTIME}× realtime`,
+      )
+    }
+  }
 
   const full = report.full ?? {}
   const flash = full.flashSync

@@ -43,6 +43,7 @@ import {
   type AudioChannelMixer,
 } from './audio'
 import { AUDIO_BITRATE, AUDIO_CHANNEL_COUNT, AUDIO_SAMPLE_RATE } from './codecs'
+import { buildCertification, certificationComment } from './certify'
 import { createExportScratch, type ExportScratch } from './scratch'
 
 /**
@@ -130,6 +131,12 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
   const audioMixers: AudioChannelMixer[] = []
   let output: Output | null = null
   let scratch: ExportScratch | null = null
+  let certified: {
+    makeup: number
+    loudRms: number
+    peak: number
+    fromCaptureStats: boolean
+  } | null = null
   try {
     // ---- video: copy the composite's encoded packets, no re-encode ----
     const videoTrack = await input.getPrimaryVideoTrack()
@@ -166,6 +173,7 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
       if (stored) {
         const makeup = makeupGainForLoudness(stored)
         if (makeup !== 1) for (const m of audioMixers) m.gain = baseGain * makeup
+        certified = { makeup, loudRms: stored.loudRms, peak: stored.peak, fromCaptureStats: true }
         console.info(
           `instant: audio loudness from capture stats p90rms ${stored.loudRms.toFixed(4)} peak ${stored.peak.toFixed(3)} → makeup ${makeup.toFixed(2)}× (no probe decode)`,
         )
@@ -175,6 +183,7 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
           const loud = await measureMixLoudness(probe, baseGain, totalAudioFrames, throwIfAborted)
           const makeup = makeupGainForLoudness(loud)
           if (makeup !== 1) for (const m of audioMixers) m.gain = baseGain * makeup
+          certified = { makeup, loudRms: loud.loudRms, peak: loud.peak, fromCaptureStats: false }
           console.info(
             `instant: audio loudness p90rms ${loud.loudRms.toFixed(4)} peak ${loud.peak.toFixed(3)} → makeup ${makeup.toFixed(2)}×`,
           )
@@ -200,6 +209,21 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
     const bufferTarget = scratch ? null : new BufferTarget()
     const out = new Output({ format, target: scratch ? scratch.target : bufferTarget! })
     output = out
+    out.setMetadataTags({
+      title: 'INOUT recording',
+      comment: certificationComment(
+        buildCertification({
+          recording,
+          path: 'instant',
+          settings: { width: composite.width, height: composite.height },
+          audioChannels: audioMixers.length,
+          makeup: certified?.makeup,
+          loudRms: certified?.loudRms,
+          peak: certified?.peak,
+          fromCaptureStats: certified?.fromCaptureStats,
+        }),
+      ),
+    })
     const videoSource = new EncodedVideoPacketSource(videoCodec)
     out.addVideoTrack(videoSource)
     let audioSource: AudioBufferSource | null = null
