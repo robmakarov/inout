@@ -6,6 +6,7 @@ import {
   normalizeSegments,
   removeSegment,
   splitAtOutputMs,
+  ZOOM_MOVE_MS,
   type TightenProposal,
 } from '@core/timeline'
 import { CHANNEL_META } from '@app/lib/channels'
@@ -310,6 +311,28 @@ export function Timeline({
         <div className="tl__overlay">
           <div className="tl__dim" style={{ left: 0, width: x(gStart) }} />
           <div className="tl__dim" style={{ left: x(gEnd), right: 0 }} />
+          {/* Timed zooms (F2): a dot where the view lands, and a bar showing
+              the move it eased through. Read-only in v1 — the gesture on the
+              stage is what writes them. */}
+          {(edit.viewport?.keyframes ?? []).map((k, i, all) => {
+            const prev = all[i - 1]
+            const moved = prev && k.atMs - prev.atMs <= ZOOM_MOVE_MS + 1
+            return (
+              <div key={`zoom-${k.atMs}`}>
+                {moved && (
+                  <div
+                    className="tl__zoom-move"
+                    style={{ left: x(prev.atMs), width: Math.max(2, x(k.atMs - prev.atMs)) }}
+                  />
+                )}
+                <div
+                  className="tl__zoom-dot"
+                  style={{ left: x(k.atMs) }}
+                  title={`Zoom ${Math.round((1 / k.widthFrac) * 10) / 10}×`}
+                />
+              </div>
+            )
+          })}
           {/* Proposed cuts (F5a): shown, never applied. */}
           {proposal?.cutSpans.map((sp) => (
             <div

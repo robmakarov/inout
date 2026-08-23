@@ -1,6 +1,7 @@
 import type { VideoSample } from 'mediabunny'
-import type { BackgroundStyle, CameraPose } from '../types'
+import type { BackgroundStyle, CameraPose, Viewport } from '../types'
 import { defaultCameraPose, poseToRect } from '../timeline/cameraTrack'
+import { viewportIsActive, viewportToRect } from '../timeline/viewportTrack'
 import {
   backgroundIsActive,
   containRect,
@@ -58,8 +59,47 @@ export function drawEmptyFrame(f: FrameCanvas): void {
  * `background` (task F3) frames the screen surface. Omitted or inactive takes
  * the exact code path this function had before F3 — the frozen rule is that
  * nothing changes without the user asking for it.
+ *
+ * `viewport` (task F2) is what part of the finished frame is visible. It is a
+ * TRANSFORM around everything below rather than a step in the composition:
+ * a zoom magnifies the picture the user already composed — background, screen
+ * and PiP together — instead of re-laying it out. Costs one save/restore when
+ * present and nothing at all when absent.
  */
 export function drawVideoFrame(
+  f: FrameCanvas,
+  screen: VideoSample | null,
+  camera: VideoSample | null,
+  cameraFull: boolean,
+  pose?: CameraPose,
+  background?: BackgroundStyle,
+  viewport?: Viewport,
+): void {
+  if (viewportIsActive(viewport)) {
+    const rect = viewportToRect(viewport!)
+    const scale = 1 / rect.widthFrac
+    f.ctx.save()
+    // Frame space -> canvas space. Everything drawn below is authored against
+    // the full frame and lands inside the visible rect.
+    f.ctx.setTransform(
+      scale,
+      0,
+      0,
+      scale,
+      -rect.leftFrac * f.width * scale,
+      -rect.topFrac * f.height * scale,
+    )
+    try {
+      drawComposition(f, screen, camera, cameraFull, pose, background)
+    } finally {
+      f.ctx.restore()
+    }
+    return
+  }
+  drawComposition(f, screen, camera, cameraFull, pose, background)
+}
+
+function drawComposition(
   f: FrameCanvas,
   screen: VideoSample | null,
   camera: VideoSample | null,

@@ -90,7 +90,8 @@ gaps / in flight:
   STILL OPEN — the RAW channels lose 203-753 ms of tail under the same load (task P0-tail-raw). An
   edited take renders from those. The rig feeds them the uncapped 4K source, which production never
   does, and the fix needs a reorder of session.doStop — the path that wedged arming two sessions ago.
-- SHIPPED 2026-08-23, FOURTH SESSION (PO: "go p0-tail and others"): P0-tail (above) · the O4
+- SHIPPED 2026-08-23, FOURTH SESSION (PO: "go p0-tail and others"): F2 timed zoom/pan (PO confirmed
+  timed zooms over a static reframe) · P0-tail (above) · the O4
   re-diagnosis (above) · F7c attempted and NOT shipped (three probe designs, all measured, none beat
   the model it would replace — spike kept at src/experimental/perf/sizeProbe.ts).
 - SHIPPED 2026-08-23, THIRD SESSION (PO: "roadmap o/f, all in one session"): the in-shot notice ·
@@ -120,7 +121,7 @@ gaps / in flight:
   PROTOCOL: PO says "roadmap" → print the TASKS READY map and WAIT; PO says "go <id>" → one task,
   own branch, gates, TD merge, then update the READY map.
   READY NOW: P0-tail-raw (the live defect) · O4 step 2 remainder (re-diagnosed, see above) · F7c
-  (attempt 4) · P1 · P5a · F5b · O11d. F2 needs PO scope confirmation.
+  (attempt 4) · P1 · P5a · F5b · O11d · F2b (draggable zoom markers, only if PO asks).
 - composite blob absent from crash salvage → absorbed by TASKS O4 (fMP4-on-disk makes it free)
 - bundle: O7 SHIPPED — first paint 802,975 B → ~221,000 B; editor/cloud/capture-engine split, engine
   prewarmed at mount so record latency is unchanged (282 → 296 ms). Enforcement is the capture barrel:

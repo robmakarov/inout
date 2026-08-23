@@ -178,6 +178,48 @@ try {
       reloadDrift: drift,
       screenshot: out,
     }
+  } else if (flow === 'zoom') {
+    // F2: wheel on the stage, then check the PREVIEW scaled the composition by
+    // exactly the factor the badge reports. The export side of the parity claim
+    // is measured separately in `npm run exp -- f2`, against decoded frames.
+    const readPip = `(() => {
+      const st = document.querySelector('.stage'); const p = document.querySelector('.pip');
+      if (!st || !p) return null;
+      const s = st.getBoundingClientRect(), r = p.getBoundingClientRect();
+      const round = (n) => Math.round(n * 1e4) / 1e4;
+      return {
+        leftFrac: round((r.left - s.left) / s.width),
+        topFrac: round((r.top - s.top) / s.height),
+        widthFrac: round(r.width / s.width),
+        badge: document.querySelector('.stage__zoom-reset')?.textContent?.trim() ?? null,
+        transform: getComputedStyle(document.querySelector('.stage__view')).transform,
+      };
+    })()`
+    const before = await evaluate(readPip)
+    opened = await evaluate(
+      `(() => { const st=document.querySelector('.stage'); if(!st) return false;
+        const b=st.getBoundingClientRect();
+        st.dispatchEvent(new WheelEvent('wheel',{clientX:b.left+b.width*0.7,clientY:b.top+b.height*0.7,deltaY:-400,bubbles:true,cancelable:true}));
+        return true })()`,
+    )
+    // The wheel commit is debounced at 180 ms; give it room plus a frame.
+    await sleep(900)
+    const after = await evaluate(readPip)
+    const factor = after?.badge ? Number(after.badge.replace(/[^0-9.]/g, '')) : null
+    const ratio = before && after && before.widthFrac > 0
+      ? Math.round((after.widthFrac / before.widthFrac) * 100) / 100
+      : null
+    cameraReport = {
+      flow,
+      before,
+      after,
+      badgeFactor: factor,
+      pipWidthRatio: ratio,
+      // Under a pure scale about the viewport origin, every length in the
+      // composition scales by the same factor the badge reports.
+      matchesScale: !!factor && !!ratio && Math.abs(ratio - factor) <= 0.06,
+      screenshot: out,
+    }
   } else if (flow === 'frame') {
     // F3: pick a backdrop in the editor and measure where the PREVIEW puts the
     // screen surface, as fractions of the stage — directly comparable with the

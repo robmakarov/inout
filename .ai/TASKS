@@ -64,10 +64,8 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
   F5b  per-segment speed           [medium]  WSOLA time-stretch, pitch preserved, video retimed. F5a
                                              shipped the cut machinery it rides on.
   O11d codec ladder, probed        [medium]  needs P1's 3-engine rig. (a)(b)(c) are shipped.
-NEEDS PO INPUT BEFORE BUILDING:
-  F2   zoom-pan — PO said "i think so"; reconfirm scope first. The seam it was waiting on now EXISTS:
-       F4's cameraTrack is the same shape a viewport track wants (keyframes on the recording timeline,
-       eased sampling, one function shared by preview and export). Copy it, don't invent a second one.
+  F2b  zoom polish                 [light]   drag a zoom marker in time on the timeline; v1 markers
+                                             are read-only. Only worth doing if PO asks.
 CONFLICT RULES (all of capture/* is now shared by TWO engines — keep both working):
 · P0-tail-raw and the O4 remainder BOTH touch capture/* — never simultaneously.
 · The composite geometry lives in THREE places that must agree — compose/layout.ts, capture/
@@ -137,11 +135,13 @@ lives in O4/O8: zero tail loss at stop, now gated.
      o4step2   v1 vs v2 live composite: delivered fps, main-thread long tasks, tail gap, bits audit
      o11       bits audit: GOP ladder + quality steps + camera-PiP bitrate, all demuxed from the file
      o4step2   also takes {"engines":["v1"]} and reports the tail band + a raw-channel lane
+     f2        timed zoom LOCATED in decoded export frames, via the PiP as a fiducial
      f3        background frame LOCATED in decoded export frames vs the pure geometry
+     encprobe  is WebCodecs the wall, or is our config? main thread vs worker vs GL, per config
      f5a       silence tightening against a known map: recall, cuts-in-speech, join clicks
      oracle    accepts {"injectTailLossMs":N} to prove the tail band red
   node scripts/o7-measure.mjs      first-paint bytes, record-click latency, editor prefetch (prod build)
-  node scripts/ui-shot.mjs --flow=quality|cuts|camera|frame|tighten   screenshots a flow, prod build
+  node scripts/ui-shot.mjs --flow=quality|cuts|camera|frame|tighten|zoom   screenshots a flow, prod build
      (camera also drags the PiP, reloads the page, and reports preview↔export fractions + reload drift)
   node scripts/browser-check.mjs --list | --browser=<name> [--ua-of=yandex]   QA matrix, real browser,
      prod build, record→edit→export, 8 gates → docs/qa/*.json (see docs/QA_MATRIX.md)
@@ -498,14 +498,27 @@ cut, so a split with nothing deleted keeps the instant path. Measured: sync delt
 cuts, joint discontinuity 0.000 vs 0.168 baseline, no-op segment lists dropped.
 Deferred to O5: smart-cut so cut exports are duration-independent (12 s take + 3 cuts = 1473 ms today).
 
-## F2. zoom-pan  [P1, after F4; PO: "i think so" — reconfirm scope with PO before building]
-Goal: keyframed viewport track (time→rect, cubic ease). Editor: direct manipulation on the stage
-(drag to pan when zoomed, handles/wheel to zoom) + markers on the timeline. Export: compositor samples
-the viewport per frame with proper filtering (no shimmer). Preview parity via shared interp fns
-(CSS transform mirror). Upgrade path: P4's cursor/click metadata track later turns manual zoom into
-Screen-Studio-class AUTO-zoom — design the viewport track so keyframes can be machine-generated.
-GATES: preview↔export geometry parity ≤1 px at 3 sampled times · no aliasing shimmer vs 1:1 (visual
-evidence) · sync+fidelity green · zero cost when the track is absent.
+## F2. zoom-pan — DONE 2026-08-23, merged (evidence in DECISIONS)
+PO confirmed the scope this session: TIMED zooms, not a static reframe.
+Shipped: timeline/viewportTrack.ts — F4's camera track with a different subject, deliberately (the
+roadmap said copy it, do not invent a second one). Fractions of the frame, keyframes on the RECORDING
+timeline, a gesture writes the anchor/target PAIR that LANDS on the playhead. The viewport is a
+TRANSFORM around the whole composition rather than a step in it: one setTransform in the export
+(drawVideoFrame), one CSS transform on the stage, same arithmetic. Wheel zooms about the cursor
+(zoomAround keeps the point under it fixed), drag pans when zoomed, a badge shows the factor and
+resets, and the timeline marks each move.
+MEASURED (`npm run exp -- f2`, viewport read off the camera PiP as a FIDUCIAL in decoded frames):
+geometry error 2.2 / 2.2 / 1.6 px at 1080p across three sampled instants (band 10 px = the locator's
+own 8 px blocks), including one BETWEEN the two moves, which is what proves the view holds instead of
+drifting. Zoomed take: isDefaultEdit false, so the packet copy can never ship a video that ignores the
+zoom. Untouched take: still instant, PiP still 3.2 px from its historical slot. Export cost +2.5 %.
+PREVIEW (`node scripts/ui-shot.mjs --flow=zoom`): the stage scales by 1.82 against a badge of 1.8 and
+a PiP that grows by exactly 1.82 — the same transform, measured on the prod build.
+MAX ZOOM IS 2.5x AND THAT IS A CONSEQUENCE, NOT A TASTE: capture is capped at 1080p and the default
+export is 1080p, so every zoom is an upscale. Past 2.5x a screen recording is mush, and the honest fix
+is native-resolution capture (O6), not a bigger multiplier.
+DEFERRED: dragging a zoom marker in time (v1 markers are read-only); auto-zoom stays gated on P4's
+cursor metadata, which can generate exactly these keyframes when it exists.
 
 ## F3. background-frame — DONE 2026-08-23, merged (evidence in DECISIONS)
 Shipped: compose/background.ts (presets as DATA — a solid or a gradient angle plus stops — plus the

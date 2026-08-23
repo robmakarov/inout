@@ -44,7 +44,7 @@ import {
 } from './codecs'
 import { BitsAudit, formatBits } from './bits'
 import { drawVideoFrame, type FrameCanvas } from './layout'
-import { cameraPoseAt, cameraTrackIsActive } from '@core/timeline'
+import { cameraPoseAt, cameraTrackIsActive, viewportAt, viewportTrackIsActive } from '@core/timeline'
 import { buildCertification, certificationComment } from './certify'
 import { createExportScratch, type ExportScratch } from './scratch'
 import { collectPeaks, createPeakBuffer, createWaveformRenderer } from './waveform'
@@ -293,6 +293,8 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
     const cameraFull = !videoReaders.some((r) => r.kind === 'screen')
     // Zero cost when the track is absent: no per-frame pose work at all.
     const cameraMoves = !cameraFull && cameraTrackIsActive(edit.camera)
+    // F2: same zero-cost rule as the camera track — no track, no per-frame work.
+    const viewportMoves = viewportTrackIsActive(edit.viewport)
     const target = await pickEncodingTarget(width, height, needAudio, videoBitrate)
     throwIfAborted()
 
@@ -428,7 +430,12 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
             })
           }
         }
-        drawVideoFrame(frame, screen, camera, cameraFull, pose, edit.background)
+        let view
+        if (viewportMoves) {
+          const recMs = outputToRecordingMs(edit, tSec * 1000)
+          if (recMs !== null) view = viewportAt(edit.viewport, recMs)
+        }
+        drawVideoFrame(frame, screen, camera, cameraFull, pose, edit.background, view)
       }
       await videoSource.add(tSec, 1 / fps)
     }

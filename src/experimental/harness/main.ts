@@ -271,6 +271,16 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'f2',
+    title: 'F2 — timed zoom and pan',
+    detail:
+      'records a screen+camera take, writes viewport keyframes exactly as the stage commits them, exports, then LOCATES the camera PiP in decoded frames and reads the viewport transform off it. Also checks that the view HOLDS between moves, that a zoomed take loses the packet-copy path, and that an untouched take does not.',
+    run: async (args) => {
+      const { runZoomPan } = await import('../perf/zoomPan')
+      return runZoomPan({ takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined })
+    },
+  },
+  {
     id: 'f3',
     title: 'F3 — background frame',
     detail:

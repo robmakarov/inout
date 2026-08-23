@@ -1,15 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
-import type { CameraPose, ChannelRecording, EditState, Recording } from '@core/types'
+import type { CameraPose, ChannelRecording, EditState, Recording, Viewport } from '@core/types'
 import {
   activeChannelsAt,
   cameraPoseAt,
   cameraTrackIsActive,
   channelHasOutputWindow,
   clampPose,
+  clampViewport,
   hasEnabledVideo,
   outputToRecordingMs,
   poseToRect,
+  viewportAt,
+  viewportToRect,
+  viewportTrackIsActive,
   writeCameraKeyframe,
+  writeViewportKeyframe,
+  zoomAround,
   type CameraGeometry,
 } from '@core/timeline'
 import {
@@ -101,6 +107,7 @@ function CameraPip({
   recording,
   playheadMs,
   onEdit,
+  zoomWidthFrac,
 }: {
   channel: ChannelRecording
   videoRef: (el: HTMLVideoElement | null) => void
@@ -110,6 +117,9 @@ function CameraPip({
   recording: Recording
   playheadMs: number
   onEdit: (next: EditState) => void
+  /** Visible fraction of the frame (F2). A drag of N stage pixels moves the PiP
+   *  by fewer FRAME fractions when the view is zoomed in. */
+  zoomWidthFrac: number
 }) {
   const boxRef = useRef<HTMLDivElement>(null)
   // The source aspect decides the box's height. Older takes have no dimensions
@@ -171,8 +181,10 @@ function CameraPip({
   const move = (e: React.PointerEvent) => {
     const g = gesture.current
     if (!g) return
-    const dx = (e.clientX - g.startX) / g.stageW
-    const dy = (e.clientY - g.startY) / g.stageH
+    // Stage pixels -> FRAME fractions. Under a zoom the stage shows only
+    // zoomWidthFrac of the frame, so the same gesture is a smaller move.
+    const dx = ((e.clientX - g.startX) / g.stageW) * zoomWidthFrac
+    const dy = ((e.clientY - g.startY) / g.stageH) * zoomWidthFrac
     const next =
       g.kind === 'move'
         ? { ...g.from, xFrac: g.from.xFrac + dx, yFrac: g.from.yFrac + dy }
@@ -311,6 +323,141 @@ function StageScreen({
   )
 }
 
+/**
+ * Timed zoom and pan on the stage (task F2).
+ *
+ * The stage shows the visible rect by applying the SAME transform the export
+ * compositor applies — one scale about the frame's top-left — so the preview is
+ * not an approximation of the file, it is the same arithmetic. Gestures write
+ * keyframes through the same writeViewportKeyframe the pure module exposes.
+ */
+function useViewportGesture(
+  edit: EditState,
+  recording: Recording,
+  playheadMs: number,
+  onEdit: (next: EditState) => void,
+  stageRef: React.RefObject<HTMLDivElement | null>,
+) {
+  const [, tick] = useState(0)
+  /** Live view during a gesture; the ref is the truth, the state only redraws
+   *  (same reason CameraPip keeps one: a flick can move and release inside a
+   *  single task, and a state read would be stale). */
+  const live = useRef<Viewport | null>(null)
+  const pan = useRef<{ startX: number; startY: number; from: Viewport; atMs: number; w: number; h: number } | null>(null)
+  const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const recordingMs = outputToRecordingMs(edit, playheadMs) ?? edit.globalTrimStartMs
+  const committed = viewportAt(edit.viewport, recordingMs)
+  const view = live.current ?? committed
+
+  const commit = (next: Viewport, atMs: number): void => {
+    onEdit({
+      ...edit,
+      viewport: writeViewportKeyframe(edit.viewport, atMs, next, recording.durationMs),
+    })
+  }
+
+  /** Stage-relative pointer -> FRAME fractions, through the current view. */
+  const toFrameFrac = (clientX: number, clientY: number): { x: number; y: number } => {
+    const el = stageRef.current
+    if (!el) return { x: 0.5, y: 0.5 }
+    const r = el.getBoundingClientRect()
+    const rect = viewportToRect(view)
+    return {
+      x: rect.leftFrac + ((clientX - r.left) / Math.max(1, r.width)) * rect.widthFrac,
+      y: rect.topFrac + ((clientY - r.top) / Math.max(1, r.height)) * rect.heightFrac,
+    }
+  }
+
+  const onWheel = (e: React.WheelEvent): void => {
+    // Wheel-to-zoom only makes sense on a composition with pixels in it.
+    if (!recording.channels.some((c) => c.media === 'video')) return
+    e.preventDefault()
+    const anchor = toFrameFrac(e.clientX, e.clientY)
+    // Exponential in the wheel delta: the same flick zooms by the same RATIO
+    // whether the view is wide or tight.
+    const next = zoomAround(view, view.widthFrac * Math.exp(e.deltaY * 0.0015), anchor.x, anchor.y)
+    live.current = next
+    tick((n) => n + 1)
+    // A wheel has no release, so the commit is debounced — and because a commit
+    // replaces the keyframes it travels through, the last one wins cleanly.
+    if (commitTimer.current) clearTimeout(commitTimer.current)
+    commitTimer.current = setTimeout(() => {
+      const settled = live.current
+      live.current = null
+      if (settled) commit(settled, recordingMs)
+    }, 180)
+  }
+
+  const onPointerDown = (e: React.PointerEvent): void => {
+    if (view.widthFrac >= 1) return
+    const el = stageRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    e.preventDefault()
+    pan.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      from: view,
+      atMs: recordingMs,
+      w: Math.max(1, r.width),
+      h: Math.max(1, r.height),
+    }
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {
+      // synthetic pointer — capture is a nicety, the gesture still works
+    }
+  }
+
+  const onPointerMove = (e: React.PointerEvent): void => {
+    const g = pan.current
+    if (!g) return
+    // Dragging moves the PICTURE, so the view moves the other way.
+    const dx = ((e.clientX - g.startX) / g.w) * g.from.widthFrac
+    const dy = ((e.clientY - g.startY) / g.h) * g.from.widthFrac
+    live.current = clampViewport({
+      widthFrac: g.from.widthFrac,
+      xFrac: g.from.xFrac - dx,
+      yFrac: g.from.yFrac - dy,
+    })
+    tick((n) => n + 1)
+  }
+
+  const onPointerUp = (): void => {
+    const g = pan.current
+    pan.current = null
+    const settled = live.current
+    live.current = null
+    tick((n) => n + 1)
+    if (g && settled) commit(settled, g.atMs)
+  }
+
+  const reset = (): void => {
+    live.current = null
+    if (commitTimer.current) clearTimeout(commitTimer.current)
+    const { viewport: _dropped, ...rest } = edit
+    onEdit(rest)
+  }
+
+  useEffect(
+    () => () => {
+      if (commitTimer.current) clearTimeout(commitTimer.current)
+    },
+    [],
+  )
+
+  const rect = viewportToRect(view)
+  return {
+    view,
+    rect,
+    active: viewportTrackIsActive(edit.viewport) || view.widthFrac < 1,
+    zoomed: view.widthFrac < 0.999,
+    handlers: { onWheel, onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp },
+    reset,
+  }
+}
+
 export function Player({
   recording,
   edit,
@@ -340,6 +487,7 @@ export function Player({
     return () => ro.disconnect()
   }, [])
 
+  const zoom = useViewportGesture(edit, recording, pb.timeMs, onEdit, stageRef)
   const active = activeChannelsAt(recording, edit, pb.timeMs)
   // Slot is decided per composition, not per instant, so the camera never
   // jumps between PiP and full-frame across momentary screen gaps.
@@ -351,7 +499,25 @@ export function Player({
 
   return (
     <div className="player">
-      <div ref={stageRef} className="stage" style={{ background: backgroundCss(edit.background) }}>
+      <div
+        ref={stageRef}
+        className={`stage${zoom.zoomed ? ' stage--zoomed' : ''}`}
+        style={{ background: backgroundCss(edit.background) }}
+        {...zoom.handlers}
+      >
+        {/* F2: one transform, the same arithmetic the export compositor uses —
+            scale about the frame's top-left, so a preview pixel and an exported
+            pixel are the same pixel. */}
+        <div
+          className="stage__view"
+          style={
+            zoom.zoomed
+              ? {
+                  transform: `scale(${1 / zoom.rect.widthFrac}) translate(${-zoom.rect.leftFrac * 100}%, ${-zoom.rect.topFrac * 100}%)`,
+                }
+              : undefined
+          }
+        >
         {recording.channels.map((ch) => {
           const url = pb.urls[ch.id]
           if (!url) return null
@@ -373,6 +539,7 @@ export function Player({
                 recording={recording}
                 playheadMs={pb.timeMs}
                 onEdit={onEdit}
+                zoomWidthFrac={zoom.rect.widthFrac}
               />
             )
           }
@@ -404,6 +571,20 @@ export function Player({
           <div className="stage__audio">
             <WaveGlyph />
           </div>
+        )}
+        </div>
+        {zoom.active && (
+          <button
+            className="stage__zoom-reset"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              zoom.reset()
+            }}
+            title="Reset zoom"
+          >
+            {Math.round((1 / zoom.rect.widthFrac) * 10) / 10}× <Icon name="x" size={11} />
+          </button>
         )}
       </div>
       <div className="transport">

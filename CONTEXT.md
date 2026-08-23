@@ -66,6 +66,10 @@ Shipped 2026-08-23 (eleven merges; engineering detail in `.ai/DECISIONS`, task s
 - **Every export now carries a record of how it was made** (path, settings, what the loudness
   normalizer did, anything capture knew was wrong).
 - **The tail of a take is now gated**: CI fails if an export is short or loses its final events.
+- **Zoom and pan, timed** — wheel on the stage to zoom into what matters, drag to pan, and the export
+  zooms at the moment you did it. Reset with one click. It tops out at 2.5×, because a 1080p recording
+  cannot be magnified past that without turning to mush; going further needs native-resolution
+  capture, which is on the roadmap.
 - **A frame around the screen** — backdrop, inset, rounded corners, shadow. Off by default; what you
   see in the editor is what the file gets, measured to under a pixel.
 - **Tighten** — one press finds the silent stretches in a take and proposes the cuts. It stays a
@@ -145,7 +149,7 @@ is to measure rather than model (encode one frame per step and calibrate), and i
 oracle · per-segment speed · the codec ladder · the iOS ScreenCaptureKit spike (time-sensitive: iOS 27
 ships ~Sept 2026).
 
-**Waiting on PO:** zoom/pan scope reconfirm. Install Yandex Browser and run the one-command QA smoke.
+**Waiting on PO:** install Yandex Browser and run the one-command QA smoke.
 Run the RU reachability probe from a Russian connection without a VPN. And two rechecks on real
 hardware — a camera-only take should now record 1080p rather than upscaled 720p, and the Safari audio
 path has never been verified on a real Apple device.

@@ -144,6 +144,37 @@ export interface CameraTrack {
 }
 
 /**
+ * The visible region of the composed frame (task F2) — a camera on the output,
+ * not on any one channel. Everything the frame contains (screen, camera PiP,
+ * background) is inside it, so a zoom magnifies the composition rather than
+ * re-laying it out.
+ *
+ * Fractions of the frame, centre-anchored, exactly like CameraPose. The visible
+ * region always keeps the output's aspect, which is why one number describes
+ * its size: a rect of the same aspect has heightFrac === widthFrac in FRACTION
+ * terms. widthFrac 1 = the whole frame = no zoom.
+ */
+export interface Viewport {
+  xFrac: number
+  yFrac: number
+  widthFrac: number
+}
+
+/** A viewport the output holds at a RECORDING-timeline instant (task F2). */
+export interface ViewportKeyframe extends Viewport {
+  atMs: number
+}
+
+/**
+ * Timed zoom/pan. On the RECORDING timeline like CameraTrack and KeptSegment,
+ * so a cut made later never drags a zoom off the moment it belongs to. Absent
+ * (or empty) = the whole frame, which is what every take did before F2.
+ */
+export interface ViewportTrack {
+  keyframes: ViewportKeyframe[]
+}
+
+/**
  * The frame around the screen surface (task F3): a painted background, an inset,
  * rounded corners and a drop shadow.
  *
@@ -182,6 +213,10 @@ export interface EditState {
    * Background frame (F3). Absent = full bleed on black, today's default.
    */
   background?: BackgroundStyle
+  /**
+   * Timed zoom/pan (F2). Absent = the whole frame, always.
+   */
+  viewport?: ViewportTrack
 }
 
 // ---------------------------------------------------------------------------
