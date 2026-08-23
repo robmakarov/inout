@@ -8,6 +8,7 @@ import {
   splitAtOutputMs,
 } from '@core/timeline'
 import { CHANNEL_META } from '@app/lib/channels'
+import { FrameBar } from '@app/components/FrameBar'
 import { formatClock } from '@app/lib/format'
 import { Icon } from '@app/components/Icon'
 
@@ -153,6 +154,8 @@ export function Timeline({
     })
   }
 
+  const hasScreen = recording.channels.some((c) => c.kind === 'screen' && c.media === 'video')
+
   const step = TICK_STEPS_MS.find((s) => (s / totalMs) * width >= MIN_TICK_PX) ?? 900000
   const ticks: number[] = []
   for (let t = 0; t <= totalMs; t += step) ticks.push(t)
@@ -244,6 +247,9 @@ export function Timeline({
               {segments.length} clips — drag a cut edge to move it, × to delete a clip
             </span>
           )}
+          {/* F3: the frame only exists around a screen surface, so a
+              camera-only take never shows a control that would do nothing. */}
+          {hasScreen && <FrameBar edit={edit} onEdit={onEdit} />}
         </div>
       </div>
 

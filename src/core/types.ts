@@ -136,6 +136,25 @@ export interface CameraTrack {
   keyframes: CameraKeyframe[]
 }
 
+/**
+ * The frame around the screen surface (task F3): a painted background, an inset,
+ * rounded corners and a drop shadow.
+ *
+ * Fractions, never pixels, so the frame renders identically at 540p and 1440p
+ * and identically in the editor preview, which is the parity gate. Absent =
+ * full-bleed, which is what every take did before F3 and what an untouched take
+ * keeps doing.
+ */
+export interface BackgroundStyle {
+  /** Which painted backdrop; 'none' paints nothing (the old black frame). */
+  preset: string
+  /** Inset of the screen surface, fraction of each axis. 0 = full bleed. */
+  padFrac: number
+  /** Corner radius of the screen surface, fraction of frame HEIGHT. */
+  radiusFrac: number
+  shadow: boolean
+}
+
 export interface EditState {
   recordingId: string
   /** Recording-timeline, ms. Output covers [globalTrimStartMs, globalTrimEndMs). */
@@ -152,6 +171,10 @@ export interface EditState {
    * what every take recorded before F4 keeps doing.
    */
   camera?: CameraTrack
+  /**
+   * Background frame (F3). Absent = full bleed on black, today's default.
+   */
+  background?: BackgroundStyle
 }
 
 // ---------------------------------------------------------------------------

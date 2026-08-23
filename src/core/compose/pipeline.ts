@@ -428,7 +428,7 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
             })
           }
         }
-        drawVideoFrame(frame, screen, camera, cameraFull, pose)
+        drawVideoFrame(frame, screen, camera, cameraFull, pose, edit.background)
       }
       await videoSource.add(tSec, 1 / fps)
     }

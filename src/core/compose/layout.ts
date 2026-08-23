@@ -1,6 +1,13 @@
 import type { VideoSample } from 'mediabunny'
-import type { CameraPose } from '../types'
+import type { BackgroundStyle, CameraPose } from '../types'
 import { defaultCameraPose, poseToRect } from '../timeline/cameraTrack'
+import {
+  backgroundIsActive,
+  containRect,
+  paintBackground,
+  screenInsetRect,
+  shadowFor,
+} from './background'
 
 export interface FrameCanvas {
   ctx: OffscreenCanvasRenderingContext2D
@@ -47,6 +54,10 @@ export function drawEmptyFrame(f: FrameCanvas): void {
  *
  * `pose` (task F4) is where the PiP sits at THIS instant. Omitted = the fixed
  * bottom-right slot, byte-identical to every take made before F4.
+ *
+ * `background` (task F3) frames the screen surface. Omitted or inactive takes
+ * the exact code path this function had before F3 — the frozen rule is that
+ * nothing changes without the user asking for it.
  */
 export function drawVideoFrame(
   f: FrameCanvas,
@@ -54,8 +65,15 @@ export function drawVideoFrame(
   camera: VideoSample | null,
   cameraFull: boolean,
   pose?: CameraPose,
+  background?: BackgroundStyle,
 ): void {
-  if (screen) {
+  if (screen && backgroundIsActive(background)) {
+    drawFramedScreen(f, screen, background!)
+    // The PiP stays keyed to the FRAME, not to the inset surface: F4's poses are
+    // frame fractions the user placed by eye, and re-anchoring them to a
+    // background they add later would move the camera behind their back.
+    if (camera) drawCameraPip(f, camera, pose)
+  } else if (screen) {
     f.ctx.fillStyle = '#000000'
     f.ctx.fillRect(0, 0, f.width, f.height)
     screen.drawWithFit(f.ctx, { fit: 'contain' })
@@ -68,6 +86,47 @@ export function drawVideoFrame(
   } else {
     drawEmptyFrame(f)
   }
+}
+
+/**
+ * The screen surface inside a background frame: paint the backdrop, then draw
+ * the picture inset, rounded and shadowed. The rounded rect follows the PICTURE
+ * (the contain box), not the padding box — rounding empty letterbox space would
+ * look like a bug, and it is also what the editor's <video> element does.
+ */
+function drawFramedScreen(f: FrameCanvas, screen: VideoSample, bg: BackgroundStyle): void {
+  const { ctx, width, height } = f
+  paintBackground(ctx, width, height, bg)
+  const frameAspect = width / height
+  const sourceAspect =
+    screen.displayWidth > 0 && screen.displayHeight > 0
+      ? screen.displayWidth / screen.displayHeight
+      : frameAspect
+  const picture = containRect(screenInsetRect(bg, frameAspect), frameAspect, sourceAspect)
+  const x = picture.leftFrac * width
+  const y = picture.topFrac * height
+  const w = picture.widthFrac * width
+  const h = picture.heightFrac * height
+  const radius = Math.min(bg.radiusFrac * height, w / 2, h / 2)
+
+  const shadow = shadowFor(bg, height)
+  if (shadow) {
+    ctx.save()
+    ctx.shadowColor = shadow.color
+    ctx.shadowBlur = shadow.blur
+    ctx.shadowOffsetY = shadow.offsetY
+    // Fill the plate the shadow is cast by; the picture covers it immediately.
+    ctx.fillStyle = '#000000'
+    roundedRectPath(ctx, x, y, w, h, radius)
+    ctx.fill()
+    ctx.restore()
+  }
+
+  ctx.save()
+  roundedRectPath(ctx, x, y, w, h, radius)
+  ctx.clip()
+  screen.draw(ctx, x, y, w, h)
+  ctx.restore()
 }
 
 function drawCameraPip(f: FrameCanvas, camera: VideoSample, pose?: CameraPose): void {

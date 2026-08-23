@@ -245,6 +245,16 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'f3',
+    title: 'F3 — background frame',
+    detail:
+      'exports the same take plain and framed, then LOCATES the screen surface in decoded exported frames and compares it against the pure geometry the editor stage is positioned by. Also checks the unframed default still fills the frame edge to edge, and prices the extra painting.',
+    run: async (args) => {
+      const { runBackgroundFrame } = await import('../perf/backgroundFrame')
+      return runBackgroundFrame({ takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined })
+    },
+  },
+  {
     id: 'o11',
     title: 'O11 — bits audit: where the bytes go, and what each lever is worth',
     detail:

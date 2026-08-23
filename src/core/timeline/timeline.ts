@@ -6,6 +6,9 @@ import type {
   Recording,
 } from '../types'
 import { cameraTrackIsActive, normalizeCameraTrack } from './cameraTrack'
+// Direct module path, never the compose barrel: this file is in the first-paint
+// bundle and the barrel would drag the whole export engine in with it (O7).
+import { backgroundIsActive, clampBackground } from '../compose/background'
 
 const MIN_SPAN_MS = 100
 /** A cut may not leave a segment shorter than this. */
@@ -57,6 +60,11 @@ export function clampEditState(r: Recording, e: EditState): EditState {
     const camera = normalizeCameraTrack(e.camera!, r.durationMs)
     if (camera.keyframes.length > 0) base.camera = camera
   }
+  // F3: a background that paints and insets nothing is the old full-bleed
+  // frame, so it is dropped rather than stored — an untouched take must stay
+  // indistinguishable from one recorded before F3.
+  const background = clampBackground(e.background)
+  if (backgroundIsActive(background)) base.background = background
   if (!e.segments || e.segments.length === 0) return base
   const segments = normalizeSegments(base, e.segments)
   // A single span covering the whole trim is the same as no cuts; keep the
@@ -265,6 +273,8 @@ export function isDefaultEdit(r: Recording, e: EditState): boolean {
   // A camera track means the PIXELS differ from the burned-in composite, so the
   // packet copy would silently ship a video that ignores the user's move (F4).
   if (cameraTrackIsActive(e.camera)) return false
+  // Same reasoning for a background frame (F3): the composite is full bleed.
+  if (backgroundIsActive(e.background)) return false
   if (e.globalTrimStartMs > 0 || e.globalTrimEndMs < r.durationMs) return false
   for (const c of r.channels) {
     const edit = e.channels.find((x) => x.channelId === c.id)

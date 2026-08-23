@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CameraPose, ChannelRecording, EditState, Recording } from '@core/types'
 import {
   activeChannelsAt,
@@ -12,6 +12,13 @@ import {
   writeCameraKeyframe,
   type CameraGeometry,
 } from '@core/timeline'
+import {
+  backgroundCss,
+  backgroundIsActive,
+  containRect,
+  screenInsetRect,
+  shadowFor,
+} from '@core/compose/background'
 import type { Playback } from '@app/hooks/usePlayback'
 import { formatClock } from '@app/lib/format'
 import { Icon } from '@app/components/Icon'
@@ -240,6 +247,70 @@ function CameraPip({
   )
 }
 
+/**
+ * The screen surface, framed (task F3).
+ *
+ * Without a background this is exactly the old element: inset 0, object-fit
+ * contain, no radius. With one, the element is positioned ON the picture — the
+ * contain box computed by the same function the export compositor uses — so the
+ * rounded corners hug the video rather than the letterbox, in both renderers.
+ * Falling back to the padding box until the source aspect is known keeps the
+ * first frame sane rather than exact for a few milliseconds.
+ */
+function StageScreen({
+  channel,
+  videoRef,
+  url,
+  hidden,
+  background,
+  stageHeightPx,
+}: {
+  channel: ChannelRecording
+  videoRef: (el: HTMLVideoElement | null) => void
+  url: string
+  hidden: boolean
+  background: EditState['background']
+  /** Measured, because radius and shadow are fractions of frame HEIGHT and a
+   *  CSS percentage would resolve them per-axis into an ellipse. */
+  stageHeightPx: number
+}) {
+  const [aspect, setAspect] = useState<number | null>(() =>
+    channel.width && channel.height ? channel.width / channel.height : null,
+  )
+  const framed = backgroundIsActive(background)
+  let style: React.CSSProperties | undefined
+  if (framed) {
+    const box = screenInsetRect(background, STAGE_ASPECT)
+    const rect = aspect ? containRect(box, STAGE_ASPECT, aspect) : box
+    const shadow = shadowFor(background, stageHeightPx)
+    style = {
+      left: `${rect.leftFrac * 100}%`,
+      top: `${rect.topFrac * 100}%`,
+      width: `${rect.widthFrac * 100}%`,
+      height: `${rect.heightFrac * 100}%`,
+      borderRadius: `${(background?.radiusFrac ?? 0) * stageHeightPx}px`,
+      boxShadow: shadow
+        ? `0 ${shadow.offsetY}px ${shadow.blur}px ${shadow.color}`
+        : undefined,
+      objectFit: aspect ? 'fill' : 'contain',
+    }
+  }
+  return (
+    <video
+      ref={videoRef}
+      className={`stage__screen${hidden ? ' is-hidden' : ''}${framed ? ' stage__screen--framed' : ''}`}
+      src={url}
+      preload="auto"
+      playsInline
+      style={style}
+      onLoadedMetadata={(e) => {
+        const v = e.currentTarget
+        if (v.videoWidth > 0 && v.videoHeight > 0) setAspect(v.videoWidth / v.videoHeight)
+      }}
+    />
+  )
+}
+
 export function Player({
   recording,
   edit,
@@ -258,6 +329,17 @@ export function Player({
   /** Hidden while the export panel owns the bottom slot. */
   showExport: boolean
 }) {
+  const stageRef = useRef<HTMLDivElement>(null)
+  const [stageHeight, setStageHeight] = useState(0)
+  useEffect(() => {
+    const el = stageRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setStageHeight(el.clientHeight))
+    ro.observe(el)
+    setStageHeight(el.clientHeight)
+    return () => ro.disconnect()
+  }, [])
+
   const active = activeChannelsAt(recording, edit, pb.timeMs)
   // Slot is decided per composition, not per instant, so the camera never
   // jumps between PiP and full-frame across momentary screen gaps.
@@ -269,7 +351,7 @@ export function Player({
 
   return (
     <div className="player">
-      <div className="stage">
+      <div ref={stageRef} className="stage" style={{ background: backgroundCss(edit.background) }}>
         {recording.channels.map((ch) => {
           const url = pb.urls[ch.id]
           if (!url) return null
@@ -294,18 +376,24 @@ export function Player({
               />
             )
           }
-          let cls: string
-          if (ch.kind === 'camera') {
-            cls = 'stage__full'
-          } else {
-            cls = 'stage__screen'
+          if (ch.kind === 'screen') {
+            return (
+              <StageScreen
+                key={ch.id}
+                channel={ch}
+                videoRef={pb.elementRef(ch.id)}
+                url={url}
+                hidden={!isActive}
+                background={edit.background}
+                stageHeightPx={stageHeight}
+              />
+            )
           }
-          if (!isActive) cls += ' is-hidden'
           return (
             <video
               key={ch.id}
               ref={pb.elementRef(ch.id)}
-              className={cls}
+              className={`stage__full${isActive ? '' : ' is-hidden'}`}
               src={url}
               preload="auto"
               playsInline

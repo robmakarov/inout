@@ -510,6 +510,12 @@
 .stage__full {
   object-fit: cover;
 }
+/* Framed screen surface (F3): every geometry value is set inline from the
+   functions the export compositor uses, so this rule only says "stop filling
+   the stage" — inset, radius and shadow all arrive as inline style. */
+.stage__screen--framed {
+  inset: auto;
+}
 .stage__pip {
   position: absolute;
   width: 24%;
@@ -1297,7 +1303,69 @@
   flex: 1;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
+}
+
+/* Background frame (F3). Nothing about the RENDERED geometry lives here — the
+   stage reads it from the same functions the export compositor does. */
+.frame-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.frame-bar__label {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.frame-bar__swatches,
+.frame-bar__steps {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.frame-bar__swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--surface-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  transition:
+    transform var(--t-fast) var(--ease),
+    box-shadow var(--t-fast) var(--ease);
+}
+.frame-bar__swatch--none {
+  background: var(--surface);
+}
+.frame-bar__swatch--on {
+  box-shadow: 0 0 0 2px var(--accent);
+  transform: scale(1.08);
+}
+.frame-bar__step {
+  min-width: 24px;
+  padding: 4px 7px;
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1;
+  transition:
+    background var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease);
+}
+.frame-bar__step:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.frame-bar__step--on {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.frame-bar__step:disabled {
+  opacity: 0.35;
 }
 .tl__tool {
   display: inline-flex;
