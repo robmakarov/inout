@@ -145,6 +145,16 @@ body.f .filters, body.d .detail { opacity: 1; }
   color: #6a6a74;
 }
 .slider output { text-align: right; color: #a8a8b2; }
+.perm {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font: 10px/1 ui-monospace, monospace;
+  color: #6a6a74;
+}
+.perm select { padding: 3px 6px; font: 10px/1.4 ui-monospace, monospace; }
 .slider input[type='range'] {
   -webkit-appearance: none;
   appearance: none;
@@ -557,6 +567,7 @@ body.f .filters, body.d .detail { opacity: 1; }
   --neon-r: 80px;  /* radius     — outer glow blur */
   --neon-t: 2.2s;  /* period     — electric / breathe speed */
   --wedge-k: 0.25; /* radial menu fill intensity */
+  --wedge-s: 40%;  /* radial menu tint — 0% is white, 100% is full hue */
 }
 .app {
   --grid-ink: #050810;
@@ -683,7 +694,7 @@ body.f .filters, body.d .detail { opacity: 1; }
   transition: fill 140ms var(--ease), fill-opacity 140ms var(--ease);
 }
 .wedge[data-on='true'] .wedge__fill {
-  fill: color-mix(in srgb, var(--surface), var(--accent) 14%);
+  fill: color-mix(in srgb, var(--surface), #fff 16%);
   fill-opacity: clamp(0, calc(0.62 * var(--wedge-k)), 1);
 }
 .wedge:hover .wedge__fill { fill: var(--surface-3); fill-opacity: clamp(0, var(--wedge-k), 1); }
@@ -702,9 +713,9 @@ body.f .filters, body.d .detail { opacity: 1; }
 }
 .wedge__ico .f { fill: currentColor; stroke: none; }
 .wedge__ico .s { fill: none; stroke: currentColor; }
-.wedge[data-on='true'] .wedge__ico { color: var(--accent); opacity: 1; }
+.wedge[data-on='true'] .wedge__ico { color: #fff; opacity: 1; }
 .wedge:hover .wedge__ico { color: var(--text); opacity: 0.85; }
-.wedge[data-on='true']:hover .wedge__ico { color: var(--accent); opacity: 1; }
+.wedge[data-on='true']:hover .wedge__ico { color: #fff; opacity: 1; }
 
 /* ---------- volume skin ----------
    Both references say the same thing in two places: light comes from somewhere,
@@ -719,9 +730,9 @@ body.f .filters, body.d .detail { opacity: 1; }
   pointer-events: none;
   transition: stroke 140ms var(--ease), opacity 140ms var(--ease);
 }
-[data-skin='volume'] #wg-in { stop-color: hsl(var(--neon-h) 65% 16%); stop-opacity: 0.1; }
-[data-skin='volume'] #wg-mid { stop-color: hsl(var(--neon-h) 82% 36%); stop-opacity: 0.3; }
-[data-skin='volume'] #wg-out { stop-color: hsl(var(--neon-h) 95% 58%); stop-opacity: 0.72; }
+[data-skin='volume'] #wg-in { stop-color: hsl(var(--neon-h) var(--wedge-s) 30%); stop-opacity: 0.1; }
+[data-skin='volume'] #wg-mid { stop-color: hsl(var(--neon-h) var(--wedge-s) 62%); stop-opacity: 0.3; }
+[data-skin='volume'] #wg-out { stop-color: hsl(var(--neon-h) var(--wedge-s) 88%); stop-opacity: 0.72; }
 [data-skin='volume'] .wedge .wedge__fill {
   fill: url(#wgrad);
   fill-opacity: clamp(0, calc(0.22 * var(--wedge-k)), 1);
@@ -733,16 +744,16 @@ body.f .filters, body.d .detail { opacity: 1; }
   fill-opacity: 1;
 }
 [data-skin='volume'] .wedge .wedge__edge {
-  stroke: hsl(var(--neon-h) 95% 68% / 0.5);
+  stroke: hsl(var(--neon-h) var(--wedge-s) 86% / 0.5);
   opacity: 0.12;
 }
-[data-skin='volume'] .wedge[data-on='true'] .wedge__edge { stroke: hsl(var(--neon-h) 95% 72% / 0.95); opacity: 1; }
+[data-skin='volume'] .wedge[data-on='true'] .wedge__edge { stroke: hsl(var(--neon-h) var(--wedge-s) 92% / 0.95); opacity: 1; }
 [data-skin='volume'] .wedge:hover .wedge__edge {
-  stroke: hsl(var(--neon-h) 100% 82%);
+  stroke: hsl(var(--neon-h) var(--wedge-s) 96%);
   opacity: 1;
   filter: drop-shadow(0 0 calc(var(--neon-r) * 0.35) hsl(var(--neon-h) 100% 60% / 0.7));
 }
-[data-skin='volume'] .radial__sep { stroke: hsl(var(--neon-h) 40% 70% / 0.22); }
+[data-skin='volume'] .radial__sep { stroke: hsl(var(--neon-h) var(--wedge-s) 88% / 0.22); }
 [data-skin='volume'] .wedge .wedge__ico { color: #93a6bd; opacity: 0.32; }
 [data-skin='volume'] .wedge[data-on='true'] .wedge__ico { color: #fff; opacity: 1; }
 [data-skin='volume'] .wedge:hover .wedge__ico { color: #dbe6f5; opacity: 0.85; }
@@ -783,6 +794,63 @@ body.f .filters, body.d .detail { opacity: 1; }
 }
 [data-skin='volume'] .recbtn:active { transform: scale(0.97) translateY(1px); }
 
+/* ---------- input availability ----------
+   Three things can be true of an input, and they must not look alike: it is
+   available (and on or off), the user refused it, or this browser/OS cannot
+   deliver it at all. Refused is loud — it is a thing you can fix. Unavailable
+   is quiet — nothing you press will change it, so it should stop asking for
+   attention, but it must still be visible or the input looks merely off. */
+.wedge__cut,
+.wedge__cutbg { opacity: 0; pointer-events: none; transition: opacity 140ms var(--ease); }
+.wedge__cutbg { stroke: #05070b; stroke-width: 3.4; stroke-linecap: round; fill: none; }
+.wedge__cut { stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; fill: none; }
+.wedge[data-state='denied'] .wedge__cut,
+.wedge[data-state='denied'] .wedge__cutbg,
+.wedge[data-state='blocked'] .wedge__cut,
+.wedge[data-state='blocked'] .wedge__cutbg { opacity: 1; }
+
+.wedge[data-state='denied'] { cursor: not-allowed; }
+.wedge[data-state='denied'] .wedge__fill,
+[data-skin='volume'] .wedge[data-state='denied'] .wedge__fill {
+  fill: var(--record);
+  fill-opacity: clamp(0, calc(0.55 * var(--wedge-k)), 0.4);
+}
+.wedge[data-state='denied']:hover .wedge__fill,
+[data-skin='volume'] .wedge[data-state='denied']:hover .wedge__fill {
+  fill-opacity: clamp(0, calc(1.6 * var(--wedge-k)), 0.62);
+}
+.wedge[data-state='denied'] .wedge__ico,
+[data-skin='volume'] .wedge[data-state='denied'] .wedge__ico { color: var(--record); opacity: 0.95; }
+.wedge[data-state='denied'] .wedge__edge,
+[data-skin='volume'] .wedge[data-state='denied'] .wedge__edge { stroke: var(--record); opacity: 0.7; }
+.wedge[data-state='denied'] .wedge__cap { fill: var(--record); }
+
+.wedge[data-state='blocked'] { cursor: not-allowed; }
+.wedge[data-state='blocked'] .wedge__fill,
+[data-skin='volume'] .wedge[data-state='blocked'] .wedge__fill {
+  fill: var(--surface);
+  fill-opacity: clamp(0, calc(0.14 * var(--wedge-k)), 1);
+}
+.wedge[data-state='blocked'] .wedge__ico,
+[data-skin='volume'] .wedge[data-state='blocked'] .wedge__ico { color: var(--text-faint); opacity: 0.3; }
+.wedge[data-state='blocked'] .wedge__edge,
+[data-skin='volume'] .wedge[data-state='blocked'] .wedge__edge { opacity: 0; }
+.wedge[data-state='blocked'] .wedge__cap { fill: var(--text-faint); }
+.wedge[data-state='blocked']:hover .wedge__fill,
+[data-skin='volume'] .wedge[data-state='blocked']:hover .wedge__fill {
+  fill-opacity: clamp(0, calc(0.3 * var(--wedge-k)), 1);
+}
+
+/* same three states on the pills */
+.chip[data-state='denied'] {
+  background: var(--record-soft);
+  border-color: color-mix(in srgb, var(--record), transparent 55%);
+  color: var(--record);
+}
+.chip[data-state='denied']:hover { background: color-mix(in srgb, var(--record-soft), var(--record) 12%); }
+.chip[data-state='blocked'] { opacity: 0.4; }
+.chip[data-state='blocked']:hover { background: var(--surface-2); color: var(--text-dim); }
+
 /* Caption sits outside the wedge, on the wedge's own side: anchor and baseline
    are derived from the mid angle, so this holds for any number of wedges. */
 .wedge__cap {
@@ -809,13 +877,24 @@ body.f .filters, body.d .detail { opacity: 1; }
 .wedge:hover .wedge__arc { opacity: 0.55; }
 .wedge[data-on='true'] .wedge__arc { stroke: var(--accent); }
 [data-neon='on'] .wedge:hover .wedge__arc { filter: drop-shadow(0 0 calc(var(--neon-r) * 0.4) var(--neon-38)); }
+/* Sits a fixed distance under whatever is actually drawn — the donut's outer
+   radius, or the pill orbit — instead of a negative margin guessing at it. */
+.cluster { position: relative; }
 .cluster__hint {
-  margin-top: -34px;
+  position: absolute;
+  left: 50%;
+  top: calc(50% + var(--hint-y, 150px));
+  transform: translateX(-50%);
   text-align: center;
   font-size: 12px;
+  line-height: 1.35;
   color: var(--text-faint);
   min-height: 17px;
+  max-width: 260px;
+  white-space: normal;
+  transition: color 160ms var(--ease);
 }
+.cluster__hint--warn { color: var(--record); }
 /* Framed exactly where the editor puts its stage — same width, same centre —
    so the picture does not move on the hand-off from recording to editing. */
 .capture__preview {
@@ -1855,17 +1934,25 @@ T F N  theme · frame · neon
         <div class="slider"><label>speed</label><input type="range" id="s-t" min="0.3" max="4" step="0.1" value="2.2"><output id="o-t">2.2</output></div>
       </div>
       <div class="panel__group">
+        <div class="panel__label">Simulate availability</div>
+        <div class="perm"><label>screen</label><select data-perm="screen"><option value="ok">ok</option><option value="denied">denied</option><option value="blocked">unavailable</option></select></div>
+        <div class="perm"><label>camera</label><select data-perm="camera"><option value="ok">ok</option><option value="denied">denied</option><option value="blocked">unavailable</option></select></div>
+        <div class="perm"><label>mic</label><select data-perm="mic"><option value="ok">ok</option><option value="denied">denied</option><option value="blocked">unavailable</option></select></div>
+        <div class="perm"><label>sound</label><select data-perm="sys"><option value="ok">ok</option><option value="denied">denied</option><option value="blocked">unavailable</option></select></div>
+      </div>
+      <div class="panel__group">
         <div class="panel__label">Radial menu</div>
         <div class="slider"><label>size</label><input type="range" id="m-size" min="80" max="170" step="1" value="107"><output id="o-msize">107</output></div>
         <div class="slider"><label>gap</label><input type="range" id="m-gap" min="40" max="110" step="1" value="41"><output id="o-mgap">41</output></div>
         <div class="slider"><label>fill</label><input type="range" id="m-fill" min="0" max="2" step="0.05" value="0.25"><output id="o-mfill">0.25</output></div>
+        <div class="slider"><label>tint</label><input type="range" id="m-tint" min="0" max="100" step="1" value="40"><output id="o-mtint">40</output></div>
       </div>
       <div class="panel__group">
         <div class="panel__label">Scroll bounce</div>
-        <div class="slider"><label>stiffness</label><input type="range" id="p-k" min="20" max="400" step="2" value="118"><output id="o-pk">118</output></div>
-        <div class="slider"><label>damping</label><input type="range" id="p-c" min="2" max="60" step="0.5" value="17"><output id="o-pc">17</output></div>
-        <div class="slider"><label>impulse</label><input type="range" id="p-i" min="1" max="30" step="0.2" value="10.2"><output id="o-pi">10.2</output></div>
-        <div class="slider"><label>bg follow</label><input type="range" id="p-f" min="0" max="0.6" step="0.01" value="0.1"><output id="o-pf">0.10</output></div>
+        <div class="slider"><label>stiffness</label><input type="range" id="p-k" min="20" max="400" step="2" value="344"><output id="o-pk">344</output></div>
+        <div class="slider"><label>damping</label><input type="range" id="p-c" min="2" max="60" step="0.5" value="25.5"><output id="o-pc">25.5</output></div>
+        <div class="slider"><label>impulse</label><input type="range" id="p-i" min="1" max="30" step="0.2" value="4.4"><output id="o-pi">4.4</output></div>
+        <div class="slider"><label>bg follow</label><input type="range" id="p-f" min="0" max="0.6" step="0.01" value="0.31"><output id="o-pf">0.31</output></div>
         <div class="slider"><label>wall</label><input type="range" id="p-w" min="0" max="0.8" step="0.02" value="0.14"><output id="o-pw">0.14</output></div>
       </div>
       <div class="panel__group">
@@ -1956,7 +2043,7 @@ document.querySelectorAll('[data-chips]').forEach((row) => {
 /* Inputs in orbit: same chips, unchanged, placed on a circle around the button.
    Screen top-left · Camera top-right · Mic bottom-left · System audio bottom-right. */
 const RING_R = 132
-const RING_ANGLE = { screen: -135, camera: -45, mic: 135, sys: 45 }
+const RING_ANGLE = { screen: -135, sys: -45, mic: 135, camera: 45 }
 const ring = document.querySelector('[data-ring]')
 CHANNELS.forEach((c, i) => {
   const a = (RING_ANGLE[c.key] * Math.PI) / 180
@@ -1971,9 +2058,26 @@ CHANNELS.forEach((c, i) => {
    Wedges are annulus sectors: out along the outer radius, back along the inner.
    Everything is one SVG so the geometry, the hover target and the icon can
    never drift apart; the icons are the product's own paths, scaled into place. */
+/* Simulated availability per input — 'ok' | 'denied' (user refused) |
+   'blocked' (browser/OS cannot deliver it). Driven from the panel. */
+const PERM = { screen: 'ok', camera: 'ok', mic: 'ok', sys: 'ok' }
+const WHY = {
+  denied: {
+    screen: 'Screen sharing was refused. Allow it in the browser’s site settings, then try again.',
+    camera: 'Camera permission was refused. Allow it in the browser’s site settings, then try again.',
+    mic: 'Microphone permission was refused. Allow it in the browser’s site settings, then try again.',
+    sys: 'System audio was refused. Re-share the screen and tick “Also share tab audio”.',
+  },
+  blocked: {
+    screen: 'This browser can’t capture the screen — Safari on iOS gives no screen access.',
+    camera: 'No camera is connected, so there’s nothing to capture.',
+    mic: 'No microphone is connected, so there’s nothing to capture.',
+    sys: 'This browser can’t capture system audio — window shares never include it.',
+  },
+}
 let R_OUT = 107, R_IN = 41 // driven by the size and gap sliders
 const PAD = 0.018 // radians of gap between wedges
-const WEDGE_AT = { screen: -90, camera: 0, sys: 90, mic: 180 } // clockwise from the top
+const WEDGE_AT = { screen: -90, sys: 0, camera: 90, mic: 180 } // clockwise from the top
 const pol = (r, a) => [(200 + r * Math.cos(a)).toFixed(2), (200 + r * Math.sin(a)).toFixed(2)]
 function sector(r1, r2, a0, a1) {
   const [x1, y1] = pol(r2, a0), [x2, y2] = pol(r2, a1)
@@ -2023,13 +2127,17 @@ function buildRadial() {
     const anchor = cosm > 0.3 ? 'start' : cosm < -0.3 ? 'end' : 'middle'
     const baseline = sinm > 0.3 ? 'hanging' : sinm < -0.3 ? 'auto' : 'middle'
     const dy = sinm > 0.3 ? 2 : sinm < -0.3 ? -2 : 0
+    const st = PERM[c.key] || 'ok'
+    const cap = st === 'denied' ? `${c.label} · denied` : st === 'blocked' ? `${c.label} · unavailable` : c.label
     return `
-      <g class="wedge" data-wedge="${c.key}" data-on="${onNow(c.key)}" style="--d:${i * 30}ms" role="button" aria-label="${c.label}">
+      <g class="wedge" data-wedge="${c.key}" data-on="${st === 'ok' && onNow(c.key)}" data-state="${st}" style="--d:${i * 30}ms" role="button" aria-label="${cap}">
         <path class="wedge__fill" d="${sector(R_IN, R_OUT, a0, a1)}"/>
         <path class="wedge__edge" d="${arc(R_OUT - 0.6, a0, a1)}"/>
-        <g class="wedge__ico" transform="translate(${ix - 11} ${iy - 11}) scale(0.92)">${WEDGE_ICON[c.key]}</g>
+        <g class="wedge__ico" transform="translate(${ix - 11} ${iy - 11}) scale(0.92)">${WEDGE_ICON[c.key]}
+          <path class="wedge__cutbg" d="M3.4 3.4L20.6 20.6"/><path class="wedge__cut" d="M3.4 3.4L20.6 20.6"/>
+        </g>
         <path class="wedge__arc" d="${arc(R_OUT + 8, a0 + 0.06, a1 - 0.06)}"/>
-        <text class="wedge__cap" x="${cx}" y="${+cy + dy}" text-anchor="${anchor}" dominant-baseline="${baseline}">${c.label}</text>
+        <text class="wedge__cap" x="${cx}" y="${+cy + dy}" text-anchor="${anchor}" dominant-baseline="${baseline}">${cap}</text>
       </g>`
   }).join('')
   const seps = CHANNELS.map((c) => {
@@ -2115,27 +2223,43 @@ app.addEventListener('click', (e) => {
 const recBtn = app.querySelector('[data-rec]')
 const hintEl = app.querySelector('[data-hint]')
 function anyInputOn() {
-  return [...ring.querySelectorAll('.chip')].some((c) => c.getAttribute('aria-pressed') === 'true')
+  return CHANNELS.some((c) => PERM[c.key] === 'ok' && ring.querySelector(`.chip[data-chip="${c.key}"]`)?.getAttribute('aria-pressed') === 'true')
 }
 function syncHint() {
   if (recBtn.classList.contains('recbtn--arming')) return
-  const any = anyInputOn()
-  hintEl.textContent = any ? '' : 'Turn on an input to record'
-  recBtn.style.opacity = any ? '1' : '0.4'
+  // the button is never disabled — with nothing on it still records, it just
+  // says what it will get. A dead primary control is worse than an empty take.
+  hintEl.textContent = anyInputOn() ? '' : 'Nothing on — this take will be empty'
+  recBtn.style.opacity = '1'
 }
 /* one state, two faces: the pills and the wedges must never disagree */
 function setChannel(key, on) {
-  ring.querySelectorAll(`.chip[data-chip="${key}"]`).forEach((c) => c.setAttribute('aria-pressed', String(on)))
-  app.querySelectorAll(`.chips .chip[data-chip="${key}"]`).forEach((c) => c.setAttribute('aria-pressed', String(on)))
+  if (PERM[key] !== 'ok') on = false // an input you cannot have is never on
+  app.querySelectorAll(`.chip[data-chip="${key}"]`).forEach((c) => {
+    c.setAttribute('aria-pressed', String(on))
+    c.dataset.state = PERM[key]
+  })
   const w = ring.querySelector(`.wedge[data-wedge="${key}"]`)
-  if (w) w.dataset.on = String(on)
+  if (w) { w.dataset.on = String(on); w.dataset.state = PERM[key] }
   syncHint()
+}
+let whyTimer = null
+function explain(key) {
+  const st = PERM[key]
+  if (st === 'ok') return false
+  hintEl.textContent = WHY[st][key]
+  hintEl.classList.toggle('cluster__hint--warn', st === 'denied')
+  clearTimeout(whyTimer)
+  whyTimer = setTimeout(() => { hintEl.classList.remove('cluster__hint--warn'); syncHint() }, 4200)
+  return true
 }
 app.addEventListener('click', (e) => {
   const chip = e.target.closest('[data-chip]')
-  if (chip) return setChannel(chip.dataset.chip, chip.getAttribute('aria-pressed') !== 'true')
   const wedge = e.target.closest('[data-wedge]')
-  if (wedge) setChannel(wedge.dataset.wedge, wedge.dataset.on !== 'true')
+  const key = chip ? chip.dataset.chip : wedge ? wedge.dataset.wedge : null
+  if (!key) return
+  if (explain(key)) return // refused or unavailable — pressing it cannot help
+  setChannel(key, chip ? chip.getAttribute('aria-pressed') !== 'true' : wedge.dataset.on !== 'true')
 })
 syncHint()
 
@@ -2143,7 +2267,7 @@ syncHint()
    take starts. Look untouched; only the states and their timing are borrowed. */
 let armTimer = null
 recBtn.addEventListener('click', () => {
-  if (armTimer || !anyInputOn()) return
+  if (armTimer) return
   recBtn.classList.add('recbtn--arming')
   hintEl.textContent = 'Starting…'
   armTimer = setTimeout(() => {
@@ -2200,10 +2324,10 @@ splashSel.addEventListener('change', playSplash)
    feels are live on PHYS so the panel sliders can move them mid-flight; the
    source's values are the defaults here. */
 const PHYS = {
-  k: 118,        // stiffness — how hard it pulls back to centre
-  c: 17,         // damping   — low overshoots and wobbles, high arrives dead
-  imp: 10.2,     // impulse   — velocity a wheel notch injects
-  follow: 0.1,   // bg follow — fraction of the cluster's travel the grid takes
+  k: 344,        // stiffness — how hard it pulls back to centre
+  c: 25.5,       // damping   — low overshoots and wobbles, high arrives dead
+  imp: 4.4,      // impulse   — velocity a wheel notch injects
+  follow: 0.31,  // bg follow — fraction of the cluster's travel the grid takes
   wall: 0.14,    // restitution at the edge clamp
 }
 ;(function studioMotion() {
@@ -2475,6 +2599,14 @@ frameSel.addEventListener('change', () => {
   fit()
 })
 
+/* the hint sits below whatever is actually drawn — donut rim or pill orbit */
+function positionHint() {
+  const pills = document.documentElement.dataset.inputs === 'always'
+  // clear of the bottom wedge's own caption, which already sits at R_OUT + 22
+  const r = pills ? RING_R + 34 : R_OUT + 56
+  document.querySelector('.cluster').style.setProperty('--hint-y', `${r}px`)
+}
+
 /* mode switches */
 const inputsSel = document.getElementById('inputs')
 const recfxSel = document.getElementById('recfx')
@@ -2482,6 +2614,7 @@ const skinSel = document.getElementById('skin')
 inputsSel.addEventListener('change', () => {
   document.documentElement.dataset.inputs = inputsSel.value
   ring.classList.remove('is-open')
+  positionHint()
 })
 recfxSel.addEventListener('change', () => (document.documentElement.dataset.recfx = recfxSel.value))
 skinSel.addEventListener('change', () => (document.documentElement.dataset.skin = skinSel.value))
@@ -2514,17 +2647,32 @@ SLIDERS.forEach((s) => {
 const mSize = document.getElementById('m-size')
 const mGap = document.getElementById('m-gap')
 const mFill = document.getElementById('m-fill')
+const mTint = document.getElementById('m-tint')
 function syncMenu() {
   R_OUT = +mSize.value
   R_IN = Math.min(+mGap.value, R_OUT - 24)
   document.getElementById('o-msize').textContent = R_OUT
   document.getElementById('o-mgap').textContent = R_IN
   document.documentElement.style.setProperty('--wedge-k', mFill.value)
+  document.documentElement.style.setProperty('--wedge-s', mTint.value + '%')
+  document.getElementById('o-mtint').textContent = mTint.value
+  positionHint()
   document.getElementById('o-mfill').textContent = (+mFill.value).toFixed(2)
   buildRadial()
 }
-;[mSize, mGap, mFill].forEach((el) => el.addEventListener('input', syncMenu))
+;[mSize, mGap, mFill, mTint].forEach((el) => el.addEventListener('input', syncMenu))
 syncMenu()
+
+/* availability simulation */
+const permSels = [...document.querySelectorAll('[data-perm]')]
+permSels.forEach((sel) => {
+  sel.addEventListener('change', () => {
+    PERM[sel.dataset.perm] = sel.value
+    setChannel(sel.dataset.perm, sel.value === 'ok') // refusing an input turns it off
+    buildRadial()
+    saveState()
+  })
+})
 
 /* bounce sliders — same idea, but these land on PHYS instead of CSS. Changing
    them mid-flight is intentional: you feel the difference on the next throw. */
@@ -2565,7 +2713,8 @@ function paramString() {
     `recfx=${recfxSel.value}`,
     `skin=${skinSel.value}`,
     `splash=${splashSel.value}`,
-    `menu=size${R_OUT}/gap${R_IN}/fill${mFill.value}`,
+    `perm=${CHANNELS.filter((c) => PERM[c.key] !== 'ok').map((c) => c.key + ':' + PERM[c.key]).join(',') || '-'}`,
+    `menu=size${R_OUT}/gap${R_IN}/fill${mFill.value}/tint${mTint.value}`,
     `bounce=k${PHYS.k}/c${PHYS.c}/imp${PHYS.imp}/follow${PHYS.follow}/wall${PHYS.wall}`,
     `zone=${FRAME_W}x${FRAME_H}`,
     `on=${on.map((c) => c.key).join(',') || '-'}`,
@@ -2661,11 +2810,21 @@ function restoreState() {
     document.getElementById(PHYS_SLIDERS[i].out).textContent = v.toFixed(PHYS_SLIDERS[i].dp)
   })
 
+  if (st.perm) {
+    CHANNELS.forEach((c) => (PERM[c.key] = 'ok'))
+    if (st.perm !== '-') st.perm.split(',').forEach((pair) => {
+      const [k, v] = pair.split(':')
+      if (PERM[k] !== undefined && ['ok', 'denied', 'blocked'].includes(v)) PERM[k] = v
+    })
+    permSels.forEach((sel) => (sel.value = PERM[sel.dataset.perm]))
+  }
+
   const m = st.menu || ''
   const mg = (name) => { const r = m.match(new RegExp(name + '([\\d.]+)')); return r ? +r[1] : null }
   if (mg('size') != null) mSize.value = mg('size')
   if (mg('gap') != null) mGap.value = mg('gap')
   if (mg('fill') != null) mFill.value = mg('fill')
+  if (mg('tint') != null) mTint.value = mg('tint')
   if (m) syncMenu()
 
   const zone = (st.zone || '').match(/^(\d+)x(\d+)$/)
@@ -2686,7 +2845,7 @@ function restoreState() {
 // every control that can change the look also records it
 ;[themeSel, neonSel, inputsSel, recfxSel, skinSel, splashSel, frameSel].forEach((el) => el.addEventListener('change', saveState))
 ;[...SLIDERS, ...PHYS_SLIDERS].forEach((s) => document.getElementById(s.el).addEventListener('change', saveState))
-;[mSize, mGap, mFill].forEach((el) => el.addEventListener('change', saveState))
+;[mSize, mGap, mFill, mTint].forEach((el) => el.addEventListener('change', saveState))
 app.addEventListener('click', (e) => { if (e.target.closest('[data-chip], [data-wedge]')) saveState() })
 grip.addEventListener('pointerup', saveState)
 grip.addEventListener('dblclick', () => setTimeout(saveState, 0))
