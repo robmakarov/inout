@@ -41,6 +41,9 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
                                              the background layer around that, don't re-derive the rect.
   F5a  silence tightening          [medium]  rides F1's cut machinery (shipped). DSP only, no ML ever.
   O11  bits audit + codec ladder   [see O11] planned by a parallel session 2026-08-23.
+  F7b  quality slider v2           [light-med] AFTER O11a (audit picks the steps) — per-step size
+                                             numbers on a finer ladder; natural same-branch follow-on
+                                             to an O11 a-c session.
   P1   firefox + 3-engine oracle   [medium]  capabilities.ts engine×OS matrix + Playwright gecko run.
                                              NOW EASIER: P3 shipped core/platform.ts (engine+browser+OS,
                                              probe-first) and scripts/browser-check.mjs — consume them,
@@ -346,6 +349,21 @@ Three tiers before export (720p/1080p default/1440p) + size estimate + honest pa
 choice. Default tier provably still instant (59-66 ms vs 1219-1641 ms render). Size estimate inside
 ±20 % twice over (√pixel-ratio scaling off the take's own composite size; linear scaling failed at
 −40/+36 %). Source-native tier waits for O6.
+
+## F7b. quality-slider v2 — finer steps, a size number on every step  [P2, light-medium; AFTER O11a — the audit picks the steps; PO 2026-08-23]
+PO: slider before export with SIZES shown per step; "step is whatever optimal" — TD picks from
+evidence. Builds on F7's shipped slider + estimator; this is more rungs, not a new control.
+Goal: the ladder becomes size-ordered steps mixing resolution AND bitrate (e.g. 720p-lean · 720p ·
+1080p-lean · 1080p default · 1440p — final set from O11a's achieved-bitrate numbers), every step
+labelled with its predicted MB (F7 estimator extended per-step: min(step ceiling, √pixel-scaled
+source term)). STEP RULE (what "optimal" means): adjacent steps must differ by MORE than the
+estimator's ±20 % error band (else the number shown is noise) and must be visually transparent at
+intended viewing — steps failing either get dropped, however nice the round number.
+Constraints: default step stays the instant packet-copy path, untouched (F7 frozen rule) · codec
+stays invisible (O11d decides it, never the slider) · honest path label kept (re-encode steps say so).
+GATES: measured size within ±20 % of the shown number on EVERY step, twice over · adjacent steps
+differ ≥25 % predicted · default step still instant (logs) · lowest step visual-diff evidence ·
+`node scripts/ui-shot.mjs --flow=quality` updated · oracles green.
 
 ## F8. nle-scrub — frame-exact editor feel  [P2, after O4; PO-approved]
 Goal: keyframe-index-driven preview — scrub decodes the EXACT frame (WebCodecs random access) instead
