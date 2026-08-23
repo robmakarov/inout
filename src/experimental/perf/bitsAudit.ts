@@ -28,7 +28,11 @@ import { blobStore } from '@core/store'
 import { exportRecording } from '@core/compose'
 import { readCertification } from '@core/compose/certify'
 import { defaultEditState } from '@core/timeline'
+import { defaultCameraPose, poseToRect } from '@core/timeline/cameraTrack'
 import type { ChannelRecording, Recording } from '@core/types'
+
+/** The shipped raw-camera bitrate, and the O11c candidate. */
+const CAMERA_BITRATES = [4_000_000, 2_500_000]
 
 // ---------------------------------------------------------------------------
 // sources
@@ -111,47 +115,101 @@ function motionSource(width: number, height: number): Source {
   return { canvas, stop: () => cancelAnimationFrame(raf) }
 }
 
+/** A webcam: a head-and-shoulders blob that drifts, on a flat backdrop. */
+function cameraSource(): Source {
+  const canvas = document.createElement('canvas')
+  canvas.width = 1280
+  canvas.height = 720
+  const g = canvas.getContext('2d')!
+  const t0 = performance.now()
+  let raf = 0
+  const draw = (): void => {
+    const t = (performance.now() - t0) / 1000
+    g.fillStyle = '#20242b'
+    g.fillRect(0, 0, 1280, 720)
+    const cx = 640 + Math.sin(t * 0.9) * 60
+    const cy = 420 + Math.cos(t * 0.7) * 30
+    g.fillStyle = '#c78e6a'
+    g.beginPath()
+    g.ellipse(cx, cy - 120, 130, 165, 0, 0, Math.PI * 2)
+    g.fill()
+    g.fillStyle = '#2f6f4f'
+    g.beginPath()
+    g.ellipse(cx, cy + 220, 290, 200, 0, 0, Math.PI * 2)
+    g.fill()
+    g.fillStyle = '#12151a'
+    g.beginPath()
+    g.ellipse(cx - 45, cy - 150, 14, 9 + 5 * Math.abs(Math.sin(t * 2.3)), 0, 0, Math.PI * 2)
+    g.ellipse(cx + 45, cy - 150, 14, 9 + 5 * Math.abs(Math.sin(t * 2.3)), 0, 0, Math.PI * 2)
+    g.fill()
+    raf = requestAnimationFrame(draw)
+  }
+  draw()
+  return { canvas, stop: () => cancelAnimationFrame(raf) }
+}
+
 const RAW_MIMES = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
 
 /**
- * Record a canvas the way production records a RAW screen channel (MediaRecorder
- * → durable blob), then describe it as a ChannelRecording so the production
+ * Record a canvas the way production records a RAW channel (MediaRecorder →
+ * durable blob), then describe it as a ChannelRecording so the production
  * exporter can render it with no special casing at all.
+ *
+ * Several bitrates at once, off ONE stream: an A/B of encoder settings must not
+ * also be an A/B of what happened to be on screen at the time.
  */
-async function recordChannel(source: Source, takeMs: number): Promise<ChannelRecording> {
+async function recordChannels(
+  source: Source,
+  kind: 'screen' | 'camera',
+  takeMs: number,
+  bitrates: number[],
+): Promise<ChannelRecording[]> {
   const mime = RAW_MIMES.find((m) => MediaRecorder.isTypeSupported(m))
   if (!mime) throw new Error('no supported raw recorder mime')
-  const blobKey = `exp-o11-${newId('src')}.webm`
-  const writable = await blobStore.createWriteStream(blobKey)
-  const writer = writable.getWriter()
-  let chain = Promise.resolve()
   const stream = source.canvas.captureStream(30)
-  const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8_000_000 })
-  recorder.ondataavailable = (e) => {
-    if (!e.data.size) return
-    chain = chain.then(() => writer.write(e.data).catch(() => undefined))
-  }
-  recorder.start(1000)
+  const lanes = await Promise.all(
+    bitrates.map(async (videoBitsPerSecond) => {
+      const blobKey = `exp-o11-${newId('src')}.webm`
+      const writer = (await blobStore.createWriteStream(blobKey)).getWriter()
+      let chain = Promise.resolve()
+      const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond })
+      recorder.ondataavailable = (e) => {
+        if (!e.data.size) return
+        chain = chain.then(() => writer.write(e.data).catch(() => undefined))
+      }
+      return { blobKey, writer, recorder, videoBitsPerSecond, chain: () => chain }
+    }),
+  )
+  for (const lane of lanes) lane.recorder.start(1000)
   await new Promise((r) => setTimeout(r, takeMs))
-  await new Promise<void>((resolve) => {
-    recorder.onstop = () => resolve()
-    recorder.requestData()
-    recorder.stop()
-  })
-  await chain
-  await writer.close().catch(() => undefined)
-  for (const t of stream.getTracks()) t.stop()
-  return {
-    id: newId('ch'),
-    kind: 'screen',
-    media: 'video',
-    mimeType: mime,
-    blobKey,
-    startOffsetMs: 0,
-    durationMs: takeMs,
-    width: source.canvas.width,
-    height: source.canvas.height,
+  await Promise.all(
+    lanes.map(
+      (lane) =>
+        new Promise<void>((resolve) => {
+          lane.recorder.onstop = () => resolve()
+          lane.recorder.requestData()
+          lane.recorder.stop()
+        }),
+    ),
+  )
+  const out: ChannelRecording[] = []
+  for (const lane of lanes) {
+    await lane.chain()
+    await lane.writer.close().catch(() => undefined)
+    out.push({
+      id: newId('ch'),
+      kind,
+      media: 'video',
+      mimeType: mime,
+      blobKey: lane.blobKey,
+      startOffsetMs: 0,
+      durationMs: takeMs,
+      width: source.canvas.width,
+      height: source.canvas.height,
+    })
   }
+  for (const t of stream.getTracks()) t.stop()
+  return out
 }
 
 // ---------------------------------------------------------------------------
@@ -244,6 +302,45 @@ async function framesAt(blob: Blob, times: number[]): Promise<(ImageData | null)
   }
 }
 
+/**
+ * Frames decoded at full output size, cropped to a rect given in FRACTIONS of
+ * the frame. The camera lever only touches the PiP, and a PSNR over the whole
+ * frame would be dominated by the ~92 % of pixels the lever cannot reach.
+ */
+async function cropFramesAt(
+  blob: Blob,
+  times: number[],
+  rect: { leftFrac: number; topFrac: number; widthFrac: number; heightFrac: number },
+): Promise<(ImageData | null)[]> {
+  const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS })
+  const canvas = new OffscreenCanvas(1920, 1080)
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+  const x = Math.round(rect.leftFrac * 1920)
+  const y = Math.round(rect.topFrac * 1080)
+  const w = Math.max(1, Math.round(rect.widthFrac * 1920))
+  const h = Math.max(1, Math.round(rect.heightFrac * 1080))
+  try {
+    const track = await input.getPrimaryVideoTrack()
+    if (!track) return times.map(() => null)
+    const sink = new VideoSampleSink(track)
+    const out: (ImageData | null)[] = []
+    for (const t of times) {
+      const s = await sink.getSample(t)
+      if (!s) {
+        out.push(null)
+        continue
+      }
+      ctx.clearRect(0, 0, 1920, 1080)
+      s.draw(ctx, 0, 0, 1920, 1080)
+      s.close()
+      out.push(ctx.getImageData(x, y, w, h))
+    }
+    return out
+  } finally {
+    input.dispose()
+  }
+}
+
 /** dB against the baseline render, sampled at the same instants. ∞ = identical. */
 function psnr(a: ImageData, b: ImageData): number {
   let sum = 0
@@ -302,10 +399,22 @@ export interface ContentReport {
   minPsnrDb: number | null
 }
 
+export interface CameraRung {
+  requestedMbps: number
+  /** What the RAW camera channel cost on disk — the only thing this lever saves. */
+  channelBytes: number
+  channelSavingPct: number | null
+  /** Size of the export that used this channel (the PiP is ~8 % of the frame). */
+  exportBytes: number
+  /** PSNR inside the PiP rect against the 4 Mbps channel's export. */
+  pipPsnrDb: number | null
+}
+
 export interface O11Report {
   takeMs: number
   contents: ContentReport[]
   steps: StepRung[]
+  camera: CameraRung[]
   codecTag: FileBits['codecTag']
   notes: string[]
 }
@@ -327,13 +436,14 @@ export async function runBitsAudit(
   const gops = opts.gops ?? [1, 2, 3, 5, 8]
   const contents: ContentReport[] = []
   const steps: StepRung[] = []
+  const camera: CameraRung[] = []
   let codecTag: FileBits['codecTag'] = null
 
   for (const kind of ['screen', 'motion'] as const) {
     const source = kind === 'screen' ? screenLikeSource(1920, 1080) : motionSource(1920, 1080)
     let channel: ChannelRecording | null = null
     try {
-      channel = await recordChannel(source, takeMs)
+      channel = (await recordChannels(source, 'screen', takeMs, [8_000_000]))[0]!
       const recording: Recording = {
         id: newId('rec'),
         createdAt: Date.now(),
@@ -440,6 +550,63 @@ export async function runBitsAudit(
           if (c.role === 'ladder') prevLadder = rung
           steps.push(rung)
         }
+
+        // (c) camera-when-PiP: the raw camera channel is recorded at 4 Mbps and
+        // then drawn at ~24 % of the frame width. Record the SAME camera at two
+        // bitrates off one stream, export each as a PiP over this screen
+        // channel, and compare inside the PiP rect — where the lever lives.
+        const cam = cameraSource()
+        const camChannels: ChannelRecording[] = []
+        try {
+          camChannels.push(...(await recordChannels(cam, 'camera', takeMs, CAMERA_BITRATES)))
+          const geometry = { frameAspect: 16 / 9, cameraAspect: 1280 / 720 }
+          const pipRect = poseToRect(defaultCameraPose(geometry), geometry)
+          let baseFrames: (ImageData | null)[] = []
+          let baseChannelBytes = 0
+          for (const camChannel of camChannels) {
+            const rec: Recording = {
+              id: newId('rec'),
+              createdAt: Date.now(),
+              durationMs: takeMs,
+              channels: [channel, camChannel],
+            }
+            const { blob } = await renderAt(rec, {
+              width: 1920,
+              height: 1080,
+              fps: 30,
+              videoBitrate: 8_000_000,
+            })
+            const channelBytes = (await blobStore.read(camChannel.blobKey)).size
+            const frames = await cropFramesAt(blob, sampleTimes, pipRect)
+            const isBase = camera.length === 0
+            if (isBase) {
+              baseFrames = frames
+              baseChannelBytes = channelBytes
+            }
+            const vals: number[] = []
+            if (!isBase) {
+              for (let i = 0; i < frames.length; i++) {
+                const a = frames[i]
+                const b = baseFrames[i]
+                if (a && b) vals.push(Math.min(99, psnr(a, b)))
+              }
+            }
+            camera.push({
+              requestedMbps: CAMERA_BITRATES[camera.length]! / 1e6,
+              channelBytes,
+              channelSavingPct: isBase
+                ? null
+                : Math.round(((channelBytes - baseChannelBytes) / baseChannelBytes) * 1000) / 10,
+              exportBytes: blob.size,
+              pipPsnrDb: vals.length
+                ? Math.round((vals.reduce((x, v) => x + v, 0) / vals.length) * 10) / 10
+                : null,
+            })
+          }
+        } finally {
+          cam.stop()
+          for (const c of camChannels) await blobStore.remove(c.blobKey).catch(() => undefined)
+        }
       }
     } finally {
       source.stop()
@@ -451,11 +618,13 @@ export async function runBitsAudit(
     takeMs,
     contents,
     steps,
+    camera,
     codecTag,
     notes: [
       'every byte count is demuxed back out of the exported file, not reported by the encoder under test',
       'screen content = a still editor page that scrolls one line every 2.5 s; motion content = a full-frame gradient that changes everywhere every frame. Real takes sit between them and much closer to the first',
       'PSNR is measured against the 2 s-GOP render at three instants, downscaled to 960x540; above ~45 dB the two files are visually the same picture',
+      'the camera rungs record ONE camera stream into two files at once, so an A/B of the encoder setting is not also an A/B of what the camera happened to be doing',
       'outputDurationMs of these takes is short, so a single keyframe is a big share of a small file — read the SHARE and the mean sizes, not the absolute bytes',
     ],
   }
