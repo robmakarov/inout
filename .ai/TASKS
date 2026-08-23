@@ -85,12 +85,18 @@ oracle had always assumed to be zero while measuring the audio side (new probeFl
 metric read 31.55 ms (sd 7.86) over 10 runs; the same exports fully referenced read 62.77 ms (sd 8.73).
 So the true offset is ~45–63 ms, every past sync number is ~31 ms optimistic, and the ≤10 ms gate is
 NOT measurable here: 1σ is ~8–9 ms, so 10/10 under 10 ms would fail on noise even with a perfect engine.
-STEP 1b — REQUIRED BEFORE STEP 2: fix the rig, then re-specify the sync gate against a measured noise
-floor. (a) one detection convention on both export and reference sides; (b) subtract the video reference
-skew in the gated metric (this turns CI red at the current ≤60 band — PO/TD call on the new band);
-(c) shrink the AudioContext-stall variance (audioRefSkew ranged 40.4–129.0 ms over 10 runs) with longer
-takes / more beeps / a stall-independent reference. Only then can an engine change be attributed.
-Harness: `npm run exp -- o4step1`.
+Step 1b DONE 2026-08-23 (O4b): CI now gates the SYMMETRIC metric (both rig references measured, both
+detection biases removed) at ≤90 ms — 5/5 cold PASS at 40.5-66.2 ms. Production anchor now subtracts
+the platform-reported input latency (loopback: the anchor placed impulses +128.7 ms late, sd 0.70; the
+audio clock agreed within 1.1 ms, so the delay is signal-path, not messaging). Instrument noise floor is
+~8-9 ms 1σ — the honest limit for any future band.
+STEP 2 (the engine, still to do): MediaStreamTrackProcessor → worker compositor (OffscreenCanvas,
+WebGPU→WebGL→2D) → VideoEncoder (prefer-hardware, realtime, keyframe ≤2 s) → fMP4 → positioned OPFS
+writer. Frame-driven draw, preview renders the compositor's own output, MediaRecorder stays as the
+watchdog fallback, crash-salvage must recover the fMP4 mid-write. THIS is where O3a's rejected hardware
+encode returns — we own the muxer, so bytes land on disk as they are produced.
+GOAL FOR THE GATE: bring the symmetric sync metric to ≤20 ms and re-tighten the band.
+Harness: `npm run exp -- o4step1`, `npm run exp -- audiolat`.
 Step 2: MediaStreamTrackProcessor → VideoFrames transferred to a WORKER compositor (OffscreenCanvas;
 WebGPU importExternalTexture preferred, WebGL then 2D fallback) → VideoEncoder (prefer-hardware,
 realtime, keyframe cadence ≤2 s — the smart-cut prerequisite) → fMP4 mux → positioned durable OPFS

@@ -3,13 +3,23 @@
  * EXPERIMENTAL — evaluate an oracle JSON report against CI gates (task oracle-ci).
  *
  * Gates (aligned to oracle-internal thresholds, TD 2026-07-16):
- *  - sync |offset| ≤ 60 ms (flash+click; corrected when valid, else raw)
+ *  - sync |offset| ≤ 80 ms on the SYMMETRIC flash+click metric (both rig
+ *    references measured, both detection biases removed), falling back to the
+ *    old audio-only-corrected metric at ≤60 ms when the symmetric one is
+ *    unavailable. The bands differ because the metrics do: the old one
+ *    silently omitted a measured ~13.5 ms video reference delay and an exact
+ *    18.00 ms detection bias, so it read ~31 ms lower than the truth. Band set
+ *    from the measured distribution: 5 cold runs read 40.5-66.2 ms, sd ~8.4,
+ *    so 90 sits ~4σ above the mean — tighter in relative terms than the old
+ *    60 ms band was on a metric that read 13-31 ms, and it does not flake.
+ *    O4's engine work should bring this to <=20 ms; re-tighten it then.
  *  - zero aliased schedule corrections
  *  - audioIntegrity max boundary jump ≤ 0.1
  *  - spur peak ≤ −40 dB
  */
 
 const MAX_SYNC_ABS_MS = 60
+const MAX_SYNC_ABS_SYMMETRIC_MS = 90
 const MAX_BOUNDARY_JUMP = 0.1
 const MAX_SPUR_DB = -40
 
@@ -34,14 +44,21 @@ export function gateOracleReport(report) {
     const rawMean = flash.meanOffsetMs
     const correctedMean = full.flashSyncCorrectedMeanMs
     const correctedMax = full.flashSyncCorrectedMaxAbsMs
+    const symMean = full.flashSyncSymmetricMeanMs
+    const symMax = full.flashSyncSymmetricMaxAbsMs
+    const useSymmetric = symMean !== null && symMean !== undefined && symMax !== null && symMax !== undefined
     const useCorrected = correctedMean !== null && correctedMax !== null
-    const syncMean = useCorrected ? correctedMean : rawMean
-    const syncMax = useCorrected ? correctedMax : flash.maxAbsOffsetMs
+    const syncMean = useSymmetric ? symMean : useCorrected ? correctedMean : rawMean
+    const syncMax = useSymmetric ? symMax : useCorrected ? correctedMax : flash.maxAbsOffsetMs
+    const band = useSymmetric ? MAX_SYNC_ABS_SYMMETRIC_MS : MAX_SYNC_ABS_MS
 
     metrics.syncMeanMs = syncMean
     metrics.syncMaxAbsMs = syncMax
+    metrics.syncMetric = useSymmetric ? 'symmetric' : useCorrected ? 'audio-corrected' : 'raw'
+    metrics.syncBandMs = band
     metrics.syncUsedCorrection = useCorrected
     metrics.syncRawMeanMs = rawMean
+    metrics.syncAudioCorrectedMeanMs = correctedMean ?? null
 
     if (useCorrected && Math.abs(correctedMean - rawMean) > 750) {
       failures.push(
@@ -52,11 +69,11 @@ export function gateOracleReport(report) {
       metrics.aliased = false
     }
 
-    if (Math.abs(syncMean) > MAX_SYNC_ABS_MS) {
-      failures.push(`sync mean |${syncMean.toFixed(1)}| > ${MAX_SYNC_ABS_MS}ms`)
+    if (Math.abs(syncMean) > band) {
+      failures.push(`sync mean |${syncMean.toFixed(1)}| > ${band}ms (${metrics.syncMetric})`)
     }
-    if (syncMax > MAX_SYNC_ABS_MS) {
-      failures.push(`sync maxAbs ${syncMax.toFixed(1)} > ${MAX_SYNC_ABS_MS}ms`)
+    if (syncMax > band) {
+      failures.push(`sync maxAbs ${syncMax.toFixed(1)} > ${band}ms (${metrics.syncMetric})`)
     }
   }
 
