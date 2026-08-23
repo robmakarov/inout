@@ -9,6 +9,7 @@
  */
 
 import { ALL_FORMATS, BlobSource, Input, VideoSampleSink } from 'mediabunny'
+import { readCertification } from '@core/compose/certify'
 import { createCaptureSession } from '@core/capture/session'
 import { exportInstant } from '@core/compose/instant'
 import { exportRecording } from '@core/compose'
@@ -29,6 +30,7 @@ async function probe(blob: Blob): Promise<{
   height: number | null
   durationSec: number
   decodedFrames: number
+  certified: ReturnType<typeof readCertification>
 }> {
   const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS })
   try {
@@ -45,11 +47,13 @@ async function probe(blob: Blob): Promise<{
         }
       }
     }
+    const tags = await input.getMetadataTags()
     return {
       width: video?.displayWidth ?? null,
       height: video?.displayHeight ?? null,
       durationSec: Math.round(duration * 1000) / 1000,
       decodedFrames,
+      certified: readCertification(tags.comment),
     }
   } finally {
     input.dispose()
@@ -69,6 +73,7 @@ export interface TierResult {
   durationSec: number
   decodedFrames: number
   plays: boolean
+  certified: ReturnType<typeof readCertification>
 }
 
 export interface F7Report {

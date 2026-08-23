@@ -198,8 +198,11 @@ async function main() {
       const max = m.syncMaxAbsMs?.toFixed?.(1) ?? 'n/a'
       const spur = m.spurPeakDb?.toFixed?.(1) ?? 'n/a'
       const status = gate.pass ? 'PASS' : 'FAIL'
+      const tail = m.tailDurationDeltaMs ?? 'n/a'
+      const rt = m.exportRealtimeFactor ?? 'n/a'
       console.error(
-        `[${i + 1}/${cold}] ${status} sync=${sync}/${max}ms spur=${spur}dB jump=${m.maxBoundaryJump ?? 'n/a'} aliased=${m.aliased ?? false} (${elapsed}ms)`,
+        `[${i + 1}/${cold}] ${status} sync=${sync}/${max}ms spur=${spur}dB jump=${m.maxBoundaryJump ?? 'n/a'} ` +
+          `tail=${tail}ms export=${rt}x aliased=${m.aliased ?? false} (${elapsed}ms)`,
       )
       if (!gate.pass) {
         console.error('  failures:', gate.failures.join('; '))
@@ -224,6 +227,9 @@ async function main() {
       syncMaxAbs: results.map((r) => r.gate.metrics.syncMaxAbsMs),
       spurPeakDb: results.map((r) => r.gate.metrics.spurPeakDb),
       maxBoundaryJump: results.map((r) => r.gate.metrics.maxBoundaryJump),
+      tailDurationDeltaMs: results.map((r) => r.gate.metrics.tailDurationDeltaMs),
+      tailLastFlashToEndMs: results.map((r) => r.gate.metrics.tailLastFlashToEndMs),
+      exportRealtimeFactor: results.map((r) => r.gate.metrics.exportRealtimeFactor),
       port,
     }
     process.stdout.write(JSON.stringify(summary, null, 2) + '\n')

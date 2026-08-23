@@ -113,6 +113,8 @@ export interface AnalyzeOptions {
 
 export interface ExportAnalysis {
   fileBytes: number
+  /** Decoded duration of the exported file, seconds. */
+  durationSec: number
   frames: FrameReading[]
   fit: ClockFit | null
   flow: FrameFlowStats
@@ -208,6 +210,7 @@ export async function analyzeExport(blob: Blob, opts?: AnalyzeOptions): Promise<
         : null
     return {
       fileBytes: blob.size,
+      durationSec: await input.computeDuration(),
       frames,
       fit,
       flow: frameFlowStats(frames),

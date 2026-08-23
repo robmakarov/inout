@@ -41,6 +41,7 @@ import {
   pickEncodingTarget,
 } from './codecs'
 import { drawVideoFrame, type FrameCanvas } from './layout'
+import { buildCertification, certificationComment } from './certify'
 import { createExportScratch, type ExportScratch } from './scratch'
 import { collectPeaks, createPeakBuffer, createWaveformRenderer } from './waveform'
 import { openVideoChannel, type VideoChannelReader } from './video'
@@ -205,6 +206,12 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
   const audioMixers: AudioChannelMixer[] = []
   let output: Output | null = null
   let scratch: ExportScratch | null = null
+  let certified: {
+    makeup: number
+    loudRms: number
+    peak: number
+    fromCaptureStats: boolean
+  } | null = null
 
   try {
     for (const channel of recording.channels) {
@@ -255,6 +262,7 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
       if (stored) {
         const makeup = makeupGainForLoudness(stored)
         if (makeup !== 1) for (const m of audioMixers) m.gain = baseGain * makeup
+        certified = { makeup, loudRms: stored.loudRms, peak: stored.peak, fromCaptureStats: true }
         console.info(
           `compose: audio loudness from capture stats p90rms ${stored.loudRms.toFixed(4)} peak ${stored.peak.toFixed(3)} → makeup ${makeup.toFixed(2)}× (no probe decode)`,
         )
@@ -266,6 +274,7 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
           )
           const makeup = makeupGainForLoudness(loud)
           if (makeup !== 1) for (const m of audioMixers) m.gain = baseGain * makeup
+          certified = { makeup, loudRms: loud.loudRms, peak: loud.peak, fromCaptureStats: false }
           console.info(
             `compose: audio loudness p90rms ${loud.loudRms.toFixed(4)} peak ${loud.peak.toFixed(3)} → makeup ${makeup.toFixed(2)}×`,
           )
@@ -294,6 +303,23 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
       target: scratch ? scratch.target : bufferTarget!,
     })
     output = out
+    // Certified-export metadata (O8): how this file was actually made.
+    out.setMetadataTags({
+      title: 'INOUT recording',
+      comment: certificationComment(
+        buildCertification({
+          recording,
+          path: 'render',
+          settings: { width, height, fps, videoBitrate },
+          audioChannels: audioMixers.length,
+          makeup: certified?.makeup,
+          loudRms: certified?.loudRms,
+          peak: certified?.peak,
+          fromCaptureStats: certified?.fromCaptureStats,
+          cuts: Math.max(0, keptSegments(edit).length - 1),
+        }),
+      ),
+    })
     const videoSource = new CanvasSource(canvas, { codec: target.videoCodec, bitrate: videoBitrate })
     out.addVideoTrack(videoSource, { frameRate: fps })
     let audioSource: AudioBufferSource | null = null

@@ -36,6 +36,9 @@ const runners: Runner[] = [
       return runOracle(
         typeof args?.recordMs === 'number' ? args.recordMs : 6000,
         typeof args?.trimMs === 'number' ? args.trimMs : undefined,
+        typeof args?.injectTailLossMs === 'number'
+          ? { injectTailLossMs: args.injectTailLossMs }
+          : undefined,
       )
     },
   },
