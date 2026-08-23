@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="baseline" data-frame="desktop" data-neon="on" data-inputs="menu" data-recfx="breathe" data-skin="volume" data-ico="white">
+<html lang="en" data-theme="baseline" data-frame="desktop" data-neon="on" data-inputs="menu" data-recfx="breathe" data-skin="volume" data-ico="stroke">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -560,21 +560,21 @@ body.f .filters, body.d .detail { opacity: 1; }
    Everything that shines derives from these — grid, record glow, chip edge, the
    electric fx — so one slider moves the whole language at once. */
 :root {
-  --neon-h: 205;   /* hue        — 0..360 */
+  --neon-h: 197;   /* hue        — 0..360 */
   --neon-s: 100%;
   --neon-l: 60%;
   --neon-k: 0.65;  /* strength   — multiplies every alpha */
   --neon-r: 80px;  /* radius     — outer glow blur */
   --neon-t: 2.2s;  /* period     — electric / breathe speed */
-  --wedge-k: 0.25; /* radial menu fill intensity */
+  --wedge-k: 0.15; /* radial menu fill intensity */
   --wedge-s: 0%;   /* hover-flare tint — 0% is white, 100% is the full neon hue.
                       The resting wedges are hueless on purpose: green means live,
                       red means refused, and off is not a colour. */
-  --wedge-b: 1;    /* radial menu brightness — multiplies the lightness of every
+  --wedge-b: 0.78; /* radial menu brightness — multiplies the lightness of every
                       ramp stop and rim, so all four states move together and
                       keep their relationship. Opacity is the `fill` knob; this
                       one is how light the colours themselves are. */
-  --grid-k: 1;     /* background grid intensity — its own knob, see below */
+  --grid-k: 0.7;   /* background grid intensity — its own knob, see below */
   --on-h: 148;     /* live input  — neon green, kept off the top end */
   --on-s: 58%;
   --on-c: hsl(var(--on-h) var(--on-s) 62%);
@@ -2077,24 +2077,24 @@ T F N  theme · frame · neon
           <option value="on">on</option>
           <option value="off">off</option>
         </select>
-        <div class="slider"><label>hue</label><input type="range" id="s-hue" min="0" max="360" step="1" value="205"><output id="o-hue">205</output></div>
+        <div class="slider"><label>hue</label><input type="range" id="s-hue" min="0" max="360" step="1" value="197"><output id="o-hue">197</output></div>
         <div class="slider"><label>strength</label><input type="range" id="s-k" min="0" max="3" step="0.05" value="0.65"><output id="o-k">0.65</output></div>
         <div class="slider"><label>radius</label><input type="range" id="s-r" min="0" max="120" step="1" value="80"><output id="o-r">80</output></div>
         <div class="slider"><label>speed</label><input type="range" id="s-t" min="0.3" max="4" step="0.1" value="2.2"><output id="o-t">2.2</output></div>
-        <div class="slider"><label>grid</label><input type="range" id="s-g" min="0" max="3" step="0.05" value="1"><output id="o-g">1.00</output></div>
+        <div class="slider"><label>grid</label><input type="range" id="s-g" min="0" max="3" step="0.05" value="0.7"><output id="o-g">0.70</output></div>
       </div>
       <div class="panel__group">
         <div class="panel__label">Radial menu</div>
-        <div class="slider"><label>size</label><input type="range" id="m-size" min="80" max="170" step="1" value="107"><output id="o-msize">107</output></div>
+        <div class="slider"><label>size</label><input type="range" id="m-size" min="80" max="170" step="1" value="100"><output id="o-msize">100</output></div>
         <div class="slider"><label>gap</label><input type="range" id="m-gap" min="40" max="110" step="1" value="41"><output id="o-mgap">41</output></div>
-        <div class="slider"><label>fill</label><input type="range" id="m-fill" min="0" max="2" step="0.05" value="0.25"><output id="o-mfill">0.25</output></div>
+        <div class="slider"><label>fill</label><input type="range" id="m-fill" min="0" max="2" step="0.05" value="0.15"><output id="o-mfill">0.15</output></div>
         <div class="slider"><label>tint</label><input type="range" id="m-tint" min="0" max="100" step="1" value="0"><output id="o-mtint">0</output></div>
-        <div class="slider"><label>bright</label><input type="range" id="m-bright" min="0.4" max="1.6" step="0.02" value="1"><output id="o-mbright">1.00</output></div>
+        <div class="slider"><label>bright</label><input type="range" id="m-bright" min="0.4" max="1.6" step="0.02" value="0.78"><output id="o-mbright">0.78</output></div>
         <div class="panel__label" style="margin: 10px 0 2px">Glyphs</div>
-        <div class="slider"><label>size</label><input type="range" id="m-isize" min="0.5" max="1.8" step="0.02" value="0.92"><output id="o-misize">0.92</output></div>
+        <div class="slider"><label>size</label><input type="range" id="m-isize" min="0.5" max="1.8" step="0.02" value="0.86"><output id="o-misize">0.86</output></div>
         <select id="m-ico" style="margin-top: 8px">
-          <option value="white">white — one colour, every state</option>
           <option value="stroke">match the wedge stroke</option>
+          <option value="white">white — one colour, every state</option>
         </select>
       </div>
       <div class="panel__group">
@@ -2162,10 +2162,10 @@ const STAGE = `
   <div class="pip"></div>`
 
 const CHANNELS = [
-  { key: 'screen', label: 'Screen', ic: 'display', on: true },
-  { key: 'camera', label: 'Camera', ic: 'camera', on: true },
-  { key: 'mic', label: 'Microphone', ic: 'mic', on: true },
-  { key: 'sys', label: 'System audio', ic: 'waves', on: true },
+  { key: 'screen', label: 'Screen', ic: 'display', on: false },
+  { key: 'camera', label: 'Camera', ic: 'camera', on: false },
+  { key: 'mic', label: 'Microphone', ic: 'mic', on: false },
+  { key: 'sys', label: 'System audio', ic: 'waves', on: false },
 ]
 
 /* lanes: [channel, startOffset%, width%, keptFrom%, keptTo%] — of the lane bar */
@@ -2236,8 +2236,8 @@ const WHY = {
     sys: 'This browser can’t capture system audio — window shares never include it.',
   },
 }
-let R_OUT = 107, R_IN = 41 // driven by the size and gap sliders
-let ICO_K = 0.92 // glyph scale — the 24px icon box, scaled about its own centre
+let R_OUT = 100, R_IN = 41 // driven by the size and gap sliders
+let ICO_K = 0.86 // glyph scale — the 24px icon box, scaled about its own centre
 const PAD = 0.018 // radians of gap between wedges
 const WEDGE_AT = { screen: -90, sys: 0, camera: 90, mic: 180 } // clockwise from the top
 const pol = (r, a) => [(200 + r * Math.cos(a)).toFixed(2), (200 + r * Math.sin(a)).toFixed(2)]
