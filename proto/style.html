@@ -568,6 +568,7 @@ body.f .filters, body.d .detail { opacity: 1; }
   --neon-t: 2.2s;  /* period     — electric / breathe speed */
   --wedge-k: 0.25; /* radial menu fill intensity */
   --wedge-s: 40%;  /* radial menu tint — 0% is white, 100% is full hue */
+  --grid-k: 1;     /* background grid intensity — its own knob, see below */
 }
 .app {
   --grid-ink: #000;
@@ -578,8 +579,8 @@ body.f .filters, body.d .detail { opacity: 1; }
   --neon-22: hsl(var(--neon-h) var(--neon-s) var(--neon-l) / calc(0.22 * var(--neon-k)));
   --neon-16: hsl(var(--neon-h) var(--neon-s) var(--neon-l) / calc(0.16 * var(--neon-k)));
   --neon-45: hsl(var(--neon-h) var(--neon-s) var(--neon-l) / calc(0.45 * var(--neon-k)));
-  --grid-line: hsl(var(--neon-h) 100% 50% / calc(0.03 * var(--neon-k)));
-  --grid-glow: hsl(var(--neon-h) 60% 45% / calc(0.028 * var(--neon-k)));
+  --grid-line: hsl(var(--neon-h) 55% 62% / calc(0.075 * var(--grid-k)));
+  --grid-glow: hsl(var(--neon-h) 60% 50% / calc(0.06 * var(--grid-k)));
 }
 .capture { position: relative; height: 100%; background: var(--grid-ink); }
 .capture--recording { background: var(--grid-ink); }
@@ -1970,6 +1971,7 @@ T F N  theme · frame · neon
         <div class="slider"><label>strength</label><input type="range" id="s-k" min="0" max="3" step="0.05" value="0.65"><output id="o-k">0.65</output></div>
         <div class="slider"><label>radius</label><input type="range" id="s-r" min="0" max="120" step="1" value="80"><output id="o-r">80</output></div>
         <div class="slider"><label>speed</label><input type="range" id="s-t" min="0.3" max="4" step="0.1" value="2.2"><output id="o-t">2.2</output></div>
+        <div class="slider"><label>grid</label><input type="range" id="s-g" min="0" max="3" step="0.05" value="1"><output id="o-g">1.00</output></div>
       </div>
       <div class="panel__group">
         <div class="panel__label">Radial menu</div>
@@ -2657,6 +2659,7 @@ const SLIDERS = [
   { el: 's-k', out: 'o-k', prop: '--neon-k', unit: '', fmt: (v) => (+v).toFixed(2) },
   { el: 's-r', out: 'o-r', prop: '--neon-r', unit: 'px', fmt: (v) => v },
   { el: 's-t', out: 'o-t', prop: '--neon-t', unit: 's', fmt: (v) => (+v).toFixed(1) },
+  { el: 's-g', out: 'o-g', prop: '--grid-k', unit: '', fmt: (v) => (+v).toFixed(2) },
 ]
 function syncSlider(s) {
   const input = document.getElementById(s.el)
@@ -2735,6 +2738,7 @@ function paramString() {
     `strength=${val('s-k')}`,
     `radius=${val('s-r')}`,
     `speed=${val('s-t')}`,
+    `grid=${val('s-g')}`,
     `inputs=${inputsSel.value}`,
     `recfx=${recfxSel.value}`,
     `skin=${skinSel.value}`,
@@ -2828,6 +2832,7 @@ function restoreState() {
   setSlider('s-k', st.strength, SLIDERS[1])
   setSlider('s-r', st.radius, SLIDERS[2])
   setSlider('s-t', st.speed, SLIDERS[3])
+  setSlider('s-g', st.grid, SLIDERS[4])
 
   const b = st.bounce || ''
   const grab = (name) => {
