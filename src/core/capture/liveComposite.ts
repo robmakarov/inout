@@ -356,6 +356,7 @@ export async function startLiveComposite(
         durationMs: Math.round(durationMs),
         width: W,
         height: H,
+        bytes,
       }
     },
     async cancel() {

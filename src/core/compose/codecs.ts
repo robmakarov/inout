@@ -39,12 +39,13 @@ export async function pickEncodingTarget(
   width: number,
   height: number,
   needAudio: boolean,
+  videoBitrate: number = VIDEO_BITRATE,
 ): Promise<EncodingTarget> {
   for (const chain of FALLBACK_CHAINS) {
     const video = await getFirstEncodableVideoCodec([chain.video], {
       width,
       height,
-      bitrate: VIDEO_BITRATE,
+      bitrate: videoBitrate,
     })
     if (!video) continue
     if (needAudio) {

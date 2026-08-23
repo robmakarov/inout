@@ -1,0 +1,1238 @@
+<!doctype html>
+<html lang="en" data-theme="baseline" data-frame="desktop">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>INOUT — style prototype</title>
+<!--
+  STYLE PROTOTYPE — not part of the product.
+
+  One self-contained file. No imports from src/, nothing imports it, it is not in
+  vite's build input (only index.html is) and it is outside tsconfig's `include`,
+  so `npm run build`, `npm run typecheck` and `npm test` never see it.
+
+    npm run dev  →  http://localhost:5173/proto/style.html
+
+  WHAT IT IS
+  Every INOUT surface (idle · recording · editor · exporting · share) rendered as
+  static mock content, so a style can be judged on the real thing instead of on
+  swatches. The captured video content deliberately does NOT change with the
+  theme — only the chrome around it does. That is the thing being tried.
+
+  HOW TO TRY A STYLE
+  1. Copy a block in "1. THEMES" (e.g. baseline), rename it, change the values.
+  2. Add one <option> to the theme <select> in the harness bar below.
+  3. Anything a token cannot express — a chip growing a colour tick, a squarer
+     record button — goes in "3. THEME FLAVOUR" scoped to [data-theme="yours"].
+  Keys: 1–5 switch screen, T cycles theme, F cycles frame.
+-->
+<style>
+/* ==========================================================================
+   0. HARNESS CHROME — always dark, never themed. This is the tool, not the app.
+   ========================================================================== */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  background: #141416;
+  color: #d8d8dc;
+  font: 13px/1.45 ui-sans-serif, -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+select { font: inherit; }
+
+.bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 16px;
+  background: #101012;
+  border-bottom: 1px solid #232327;
+}
+.bar__title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #6a6a74;
+  white-space: nowrap;
+}
+.bar__title em { font-style: normal; color: #d8d8dc; }
+.bar__tabs { display: flex; gap: 2px; background: #17171a; border-radius: 8px; padding: 2px; }
+.bar__tab {
+  padding: 5px 12px;
+  border-radius: 6px;
+  color: #85858f;
+  font-size: 12px;
+  transition: background 120ms, color 120ms;
+}
+.bar__tab:hover { color: #d8d8dc; }
+.bar__tab[aria-selected='true'] { background: #2b2b31; color: #fff; }
+.bar__spacer { flex: 1; }
+.bar__field { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #85858f; }
+.bar__field select {
+  background: #17171a;
+  color: #d8d8dc;
+  border: 1px solid #2b2b31;
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+.bar__note { font-size: 11px; color: #55555e; white-space: nowrap; }
+
+.canvas {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  overflow: auto;
+  background:
+    repeating-conic-gradient(#141416 0% 25%, #17171a 0% 50%) 50% / 22px 22px;
+}
+/* The frame keeps its true pixel size and is scaled to fit the pane, so a
+   layout is always judged at the size it will really have. */
+.slot { position: relative; flex: none; }
+.frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: top left;
+  overflow: hidden;
+  border-radius: 14px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+}
+[data-frame='phone'] .frame { border-radius: 36px; }
+
+/* ==========================================================================
+   1. THEMES — the whole point. Each block is one style. Same token names.
+   ========================================================================== */
+
+/* --- baseline: today's product, value-for-value from src/styles/tokens.css --- */
+[data-theme='baseline'] {
+  --bg: #0a0a0c;
+  --ground: radial-gradient(120% 90% at 50% 30%, #101013 0%, #0a0a0c 70%);
+  --surface: #151518;
+  --surface-2: #1e1e23;
+  --surface-3: #2a2a31;
+  --overlay: rgba(10, 10, 12, 0.72);
+  --edge: transparent;
+  --edge-w: 0px;
+  --stage-edge: #1e1e23;
+
+  --text: #f5f5f7;
+  --text-dim: #98989f;
+  --text-faint: #5c5c66;
+
+  --record: #ff3b30;
+  --record-soft: rgba(255, 59, 48, 0.16);
+  --accent: #0a84ff;
+  --accent-soft: rgba(10, 132, 255, 0.16);
+  --on-accent: #f5f5f7;
+  --ok: #30d158;
+  --warn: #ffd60a;
+
+  --ch-screen: #0a84ff;
+  --ch-camera: #bf5af2;
+  --ch-mic: #30d158;
+  --ch-sys: #ff9f0a;
+  --playhead: #6969cb;
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-full: 999px;
+  --r-chip: 999px;
+  --r-btn: 999px;
+  --r-bar: 3px;
+  --gutter: 100px;
+
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+  --wordmark-size: 12px;
+  --wordmark-track: 0.24em;
+  --label-track: 0;
+  --label-transform: none;
+  --weight-strong: 600;
+
+  --shadow-1: none;
+  --rec-ring: 3px solid var(--text);
+  --kept-alpha: 0.42;
+  --cut-alpha: 0.14;
+}
+
+/* --- graphite: same dark, but structural. Edges you can see, tight radii,
+       numbers in mono everywhere, colour only as a marker beside neutral type. */
+[data-theme='graphite'] {
+  --bg: #0d0d0f;
+  --ground: linear-gradient(180deg, #121215 0%, #0d0d0f 100%);
+  --surface: #16161a;
+  --surface-2: #1b1b20;
+  --surface-3: #24242b;
+  --overlay: rgba(13, 13, 15, 0.78);
+  --edge: #2e2e37;
+  --edge-w: 1px;
+  --stage-edge: #34343f;
+
+  --text: #ececed;
+  --text-dim: #9a9aa4;
+  --text-faint: #63636e;
+
+  --record: #f2564b;
+  --record-soft: rgba(242, 86, 75, 0.14);
+  --accent: #5b9dff;
+  --accent-soft: rgba(91, 157, 255, 0.14);
+  --on-accent: #08080a;
+  --ok: #4bd07a;
+  --warn: #e8c34a;
+
+  --ch-screen: #5b9dff;
+  --ch-camera: #c17ef0;
+  --ch-mic: #4bd07a;
+  --ch-sys: #eda54a;
+  --playhead: #ececed;
+
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 8px;
+  --r-full: 4px;
+  --r-chip: 4px;
+  --r-btn: 5px;
+  --r-bar: 1px;
+  --gutter: 116px;
+
+  --font: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+  --wordmark-size: 11px;
+  --wordmark-track: 0.34em;
+  --label-track: 0.06em;
+  --label-transform: uppercase;
+  --weight-strong: 500;
+
+  --shadow-1: none;
+  --rec-ring: 2px solid var(--text-faint);
+  --kept-alpha: 0.62;
+  --cut-alpha: 0.1;
+}
+
+/* --- paper: warm light. Surfaces separate by a small step, never by luminance
+       extremes; the stage stays dark because video needs a dark ground. --- */
+[data-theme='paper'] {
+  --bg: #efece5;
+  --ground: linear-gradient(180deg, #f5f2ec 0%, #e9e5dc 100%);
+  --surface: #ffffff;
+  --surface-2: #e6e1d7;
+  --surface-3: #d8d2c5;
+  --overlay: rgba(239, 236, 229, 0.78);
+  --edge: #d9d3c7;
+  --edge-w: 1px;
+  --stage-edge: #cdc6b8;
+
+  --text: #1b1915;
+  --text-dim: #6b655a;
+  --text-faint: #9a9387;
+
+  --record: #c8352b;
+  --record-soft: rgba(200, 53, 43, 0.12);
+  --accent: #1f5fd0;
+  --accent-soft: rgba(31, 95, 208, 0.12);
+  --on-accent: #ffffff;
+  --ok: #2f8f4e;
+  --warn: #b07d10;
+
+  --ch-screen: #1f5fd0;
+  --ch-camera: #8a44c4;
+  --ch-mic: #2f8f4e;
+  --ch-sys: #c9791a;
+  --playhead: #1b1915;
+
+  --r-sm: 8px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-full: 999px;
+  --r-chip: 999px;
+  --r-btn: 999px;
+  --r-bar: 3px;
+  --gutter: 100px;
+
+  --font: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+  --wordmark-size: 12px;
+  --wordmark-track: 0.26em;
+  --label-track: 0;
+  --label-transform: none;
+  --weight-strong: 600;
+
+  --shadow-1: 0 1px 2px rgba(30, 24, 12, 0.07), 0 6px 18px rgba(30, 24, 12, 0.06);
+  --rec-ring: 3px solid var(--text);
+  --kept-alpha: 0.55;
+  --cut-alpha: 0.13;
+}
+
+/* ==========================================================================
+   2. APP — layout shared by every theme. Mirrors src/app/app.css structure.
+   ========================================================================== */
+.app {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  /* The frame is the viewport: cqh replaces the product's dvh, so the stage,
+     timeline and panels size off the frame exactly as they do off a window. */
+  container-type: size;
+  --col: min(100%, calc((100cqh - 300px) * 16 / 9));
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+.screen { position: absolute; inset: 0; }
+.screen[hidden] { display: none; }
+
+/* ---------- buttons ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: var(--r-btn);
+  font-size: 14px;
+  font-weight: var(--weight-strong);
+  border: var(--edge-w) solid transparent;
+  white-space: nowrap;
+  transition: background 140ms, color 140ms, transform 140ms;
+}
+.btn:active { transform: scale(0.98); }
+.btn--primary { background: var(--accent); color: var(--on-accent); }
+.btn--surface { background: var(--surface-2); color: var(--text); border-color: var(--edge); }
+.btn--surface:hover { background: var(--surface-3); }
+.btn--ghost { color: var(--text-dim); }
+.btn--ghost:hover { color: var(--text); background: var(--surface-2); }
+.btn--wide { width: 100%; }
+
+/* ---------- capture ---------- */
+.capture { position: relative; height: 100%; background: var(--ground); }
+.capture--recording { background: var(--bg); }
+.capture__wordmark {
+  position: absolute;
+  top: 20px;
+  left: 24px;
+  font-size: var(--wordmark-size);
+  font-weight: 700;
+  letter-spacing: var(--wordmark-track);
+  color: var(--text-faint);
+  z-index: 5;
+}
+/* Framed exactly where the editor puts its stage — same width, same centre —
+   so the picture does not move on the hand-off from recording to editing. */
+.capture__preview {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 16px 194px;
+}
+/* the editor's transport height + gap, so the stage centres on the same line */
+.capture__preview .player { padding-bottom: 52px; }
+
+.timer {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-2);
+  border: var(--edge-w) solid var(--edge);
+  padding: 6px 13px;
+  border-radius: var(--r-full);
+  box-shadow: var(--shadow-1);
+  z-index: 5;
+}
+.timer__dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--record);
+  animation: pulse 1.2s cubic-bezier(.25,.1,.25,1) infinite;
+}
+.timer__text {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+@keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.35 } }
+
+.controlbar {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px 28px;
+  z-index: 10;
+}
+.controlbar__hint { font-size: 12px; color: var(--text-faint); min-height: 17px; }
+
+.chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: var(--r-chip);
+  background: var(--surface-2);
+  border: var(--edge-w) solid var(--edge);
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: var(--label-track);
+  transition: background 140ms, color 140ms;
+}
+.chip:hover { background: var(--surface-3); }
+.chip[aria-pressed='true'] {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent), transparent 65%);
+  color: var(--accent);
+}
+.chip--unavailable { background: var(--record-soft); color: var(--record); }
+
+.recbtn {
+  width: 72px; height: 72px;
+  border-radius: var(--r-btn);
+  border: var(--rec-ring);
+  display: grid;
+  place-items: center;
+  transition: transform 140ms;
+}
+.recbtn:hover { transform: scale(1.05); }
+.recbtn__inner {
+  width: 56px; height: 56px;
+  border-radius: var(--r-btn);
+  background: var(--record);
+  transition: all 240ms cubic-bezier(.25,.1,.25,1);
+}
+.recbtn--stop .recbtn__inner { width: 26px; height: 26px; border-radius: max(4px, calc(var(--r-btn) / 140)); }
+
+/* ---------- stage (the composed 16:9 frame) ---------- */
+.stage {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  background: #08080a;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  border: 1px solid var(--stage-edge);
+  box-shadow: var(--shadow-1);
+}
+/* Mock captured pixels. Fixed colours on purpose: the video does not change
+   when the chrome does, so themes are compared on chrome alone. */
+.mock { position: absolute; inset: 0; background: #16181d; display: flex; flex-direction: column; }
+.mock__bar {
+  flex: none;
+  height: 9%;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  background: #1e2128;
+  border-bottom: 1px solid #272b34;
+}
+.mock__bar i { width: 7px; height: 7px; border-radius: 50%; background: #3a3f4b; }
+.mock__url {
+  margin-left: 8px;
+  font: 500 9px/1 ui-monospace, monospace;
+  color: #6d7480;
+  background: #171a20;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.mock__body { flex: 1; display: flex; gap: 12px; padding: 14px; }
+.mock__side { flex: none; width: 22%; display: flex; flex-direction: column; gap: 7px; }
+.mock__side span { height: 7px; border-radius: 3px; background: #232830; }
+.mock__side span:nth-child(2) { width: 78%; background: #2c3542; }
+.mock__side span:nth-child(4) { width: 60%; }
+.mock__main { flex: 1; display: flex; flex-direction: column; gap: 9px; }
+.mock__h { height: 12px; width: 46%; border-radius: 4px; background: #39414f; }
+.mock__l { height: 7px; border-radius: 3px; background: #232830; }
+.mock__l:nth-of-type(3) { width: 88%; }
+.mock__l:nth-of-type(4) { width: 71%; }
+.mock__chart { margin-top: auto; display: flex; align-items: flex-end; gap: 6px; height: 38%; }
+.mock__chart i { flex: 1; border-radius: 2px 2px 0 0; background: #2b3340; }
+.mock__chart i:nth-child(3) { background: #3d5273; }
+.mock__chart i:nth-child(6) { background: #3d5273; }
+
+.pip {
+  position: absolute;
+  width: 24%;
+  right: 1.25%;
+  bottom: 2.2%;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--r-lg);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  overflow: hidden;
+  background: linear-gradient(165deg, #3c3550 0%, #211d2c 100%);
+  z-index: 2;
+}
+.pip::before {
+  content: '';
+  position: absolute;
+  left: 50%; top: 26%;
+  width: 26%; aspect-ratio: 1;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: #8a7fa8;
+}
+.pip::after {
+  content: '';
+  position: absolute;
+  left: 50%; bottom: -14%;
+  width: 62%; aspect-ratio: 1.5;
+  transform: translateX(-50%);
+  border-radius: 50% 50% 0 0;
+  background: #6f6690;
+}
+.stage__badge {
+  position: absolute;
+  top: 10px; right: 10px;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 34px; height: 34px;
+}
+.stage__badge span {
+  position: absolute;
+  width: 30px; height: 30px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  opacity: 0.45;
+  animation: ring 1.6s cubic-bezier(.25,.1,.25,1) infinite;
+}
+.stage__badge b { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+@keyframes ring { 0%, 100% { transform: scale(0.8) } 50% { transform: scale(1.1) } }
+
+/* ---------- editor ---------- */
+.editor { height: 100%; display: flex; flex-direction: column; padding: 0 16px; }
+.editor__player {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 0;
+}
+.player {
+  width: 100%;
+  max-width: var(--col);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.transport { display: flex; align-items: center; gap: 14px; }
+.transport__back, .transport__play {
+  flex: none;
+  display: grid;
+  place-items: center;
+  transition: background 140ms, color 140ms;
+}
+.transport__back {
+  width: 30px; height: 30px;
+  border-radius: var(--r-sm);
+  color: var(--text-dim);
+}
+.transport__back:hover { background: var(--surface-2); color: var(--text); }
+.transport__play {
+  width: 38px; height: 38px;
+  border-radius: var(--r-btn);
+  background: var(--surface-3);
+  color: var(--text);
+  border: var(--edge-w) solid var(--edge);
+}
+.transport__play:hover { background: color-mix(in srgb, var(--surface-3), var(--text) 12%); }
+.transport__time {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.transport__time span { color: var(--text-faint); }
+.transport__export { flex: none; padding: 8px 20px; }
+
+.scrubber { position: relative; flex: 1; height: 20px; cursor: pointer; }
+.scrubber::before {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; top: 8px;
+  height: 4px;
+  border-radius: var(--r-bar);
+  background: var(--surface-3);
+}
+.scrubber__fill {
+  position: absolute;
+  left: 0; top: 8px;
+  height: 4px;
+  border-radius: var(--r-bar);
+  background: var(--accent);
+}
+
+/* ---------- timeline ---------- */
+.tl {
+  position: relative;
+  flex: none;
+  width: 100%;
+  max-width: var(--col);
+  align-self: center;
+  height: 184px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 10px;
+}
+.tl__lanes {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 0;
+}
+.lane { flex: none; height: 24px; display: flex; align-items: stretch; }
+.lane__gutter {
+  width: var(--gutter);
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 2px;
+  color: var(--text-dim);
+}
+.lane__icon { display: grid; place-items: center; flex: none; }
+.lane__label {
+  flex: 1;
+  font-size: 12px;
+  letter-spacing: var(--label-track);
+  text-transform: var(--label-transform);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lane__eye {
+  flex: none;
+  width: 22px; height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-sm);
+  color: var(--text-dim);
+}
+.lane__eye[aria-pressed='false'] { color: var(--text-faint); }
+.lane__eye:hover { background: var(--surface-2); color: var(--text); }
+.lane__track { position: relative; flex: 1; }
+.lane__bar { position: absolute; top: 1px; bottom: 1px; border-radius: var(--r-bar); overflow: hidden; }
+.lane__seg { position: absolute; top: 0; bottom: 0; }
+.lane__seg--kept { opacity: var(--kept-alpha); }
+.lane__seg--cut { opacity: var(--cut-alpha); }
+.lane--off .lane__bar { border: 1px dashed color-mix(in srgb, var(--text), transparent 70%); }
+.lane--off .lane__seg--kept { opacity: calc(var(--kept-alpha) * 0.6); }
+.lane__edge { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; z-index: 2; }
+.lane__edge::after {
+  content: '';
+  position: absolute;
+  left: 2px; top: 4px; bottom: 4px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--text);
+  opacity: 0.45;
+}
+.lane__edge:hover::after { opacity: 1; }
+
+.tl__ruler-row { flex: none; height: 26px; display: flex; }
+.tl__ruler { position: relative; flex: 1; overflow: hidden; }
+.tl__tick { position: absolute; top: 0; height: 5px; width: 1px; background: var(--surface-3); }
+.tl__tick span {
+  position: absolute;
+  top: 8px; left: 3px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.tl__overlay { position: absolute; left: var(--gutter); right: 0; top: 0; bottom: 0; pointer-events: none; }
+.tl__dim { position: absolute; top: 0; bottom: 26px; background: var(--overlay); }
+.tl__trim {
+  position: absolute;
+  top: 0; bottom: 26px;
+  width: 14px;
+  margin-left: -7px;
+  display: flex;
+  justify-content: center;
+  pointer-events: auto;
+  cursor: ew-resize;
+}
+.tl__trim span {
+  width: 3px;
+  border-radius: 2px;
+  background: var(--text);
+  opacity: 0.75;
+}
+.tl__trim:hover span { opacity: 1; }
+.tl__playhead {
+  position: absolute;
+  top: 0; bottom: 20px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--playhead);
+  border-radius: 1px;
+}
+.tl__playhead::before {
+  content: '';
+  position: absolute;
+  top: -1px; left: 50%;
+  width: 9px; height: 9px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: var(--playhead);
+}
+
+/* ---------- export / share panel ---------- */
+.xp {
+  flex: none;
+  width: 100%;
+  max-width: var(--col);
+  align-self: center;
+  min-height: 184px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 10px;
+}
+.xp--progress { height: 184px; align-items: center; justify-content: center; gap: 8px; }
+.xp__pct {
+  font-family: var(--font-mono);
+  font-size: 34px;
+  font-weight: var(--weight-strong);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.xp__phase {
+  font-size: 13px;
+  color: var(--text-dim);
+  letter-spacing: var(--label-track);
+  text-transform: var(--label-transform);
+}
+.xp__meter {
+  width: 240px;
+  height: 3px;
+  border-radius: var(--r-bar);
+  background: var(--surface-3);
+  overflow: hidden;
+  margin: 4px 0 8px;
+}
+.xp__meter i { display: block; height: 100%; background: var(--accent); border-radius: var(--r-bar); }
+.xp__head { display: flex; align-items: center; gap: 10px; }
+.xp__back {
+  width: 30px; height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-sm);
+  color: var(--text-dim);
+}
+.xp__back:hover { background: var(--surface-2); color: var(--text); }
+.xp__meta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.xp__actions { display: flex; gap: 10px; }
+.cloud {
+  background: var(--surface);
+  border: var(--edge-w) solid var(--edge);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: var(--shadow-1);
+}
+.cloud__user { display: flex; align-items: center; gap: 8px; }
+.cloud__avatar {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 600;
+}
+.cloud__email { flex: 1; font-size: 12px; color: var(--text-dim); }
+.cloud__signout { font-size: 12px; color: var(--text-faint); }
+.cloud__signout:hover { color: var(--text); }
+.cloud__link-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-2);
+  border: var(--edge-w) solid var(--edge);
+  border-radius: var(--r-sm);
+  padding: 7px 10px;
+}
+.cloud__url {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cloud__copy { display: grid; place-items: center; color: var(--text-dim); }
+.cloud__copy:hover { color: var(--text); }
+.cloud__copy[data-copied='1'] { color: var(--ok); }
+.cloud__expiry { font-size: 11px; color: var(--text-faint); }
+
+/* ==========================================================================
+   3. THEME FLAVOUR — what tokens alone cannot say.
+   ========================================================================== */
+
+/* graphite: colour is a marker beside neutral type, never the type itself. */
+[data-theme='graphite'] .chip[aria-pressed='true'] {
+  background: var(--surface-3);
+  color: var(--text);
+  border-color: var(--edge);
+}
+[data-theme='graphite'] .chip[aria-pressed='true']::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 2px;
+  background: var(--accent);
+}
+[data-theme='graphite'] .chip { text-transform: uppercase; font-size: 11px; padding: 8px 12px; }
+[data-theme='graphite'] .timer__text,
+[data-theme='graphite'] .transport__time,
+[data-theme='graphite'] .xp__pct { letter-spacing: 0.02em; }
+[data-theme='graphite'] .recbtn { border-radius: 8px; }
+[data-theme='graphite'] .recbtn__inner { border-radius: 5px; }
+[data-theme='graphite'] .btn--primary { background: var(--accent); color: #08080a; }
+[data-theme='graphite'] .lane__label { font-size: 10px; }
+
+/* paper: light ground, so lifted surfaces carry a shadow instead of a fill step. */
+[data-theme='paper'] .controlbar { background: linear-gradient(180deg, transparent, #e9e5dc 62%); }
+[data-theme='paper'] .chip { box-shadow: var(--shadow-1); background: var(--surface); }
+[data-theme='paper'] .chip[aria-pressed='true'] { background: var(--accent-soft); }
+[data-theme='paper'] .timer { background: var(--surface); }
+[data-theme='paper'] .transport__play { background: var(--surface); }
+[data-theme='paper'] .lane__edge::after,
+[data-theme='paper'] .tl__trim span { background: #1b1915; }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="bar__title"><em>INOUT</em> style prototype</div>
+
+  <div class="bar__tabs" role="tablist">
+    <button class="bar__tab" role="tab" data-tab="idle" aria-selected="true">Idle</button>
+    <button class="bar__tab" role="tab" data-tab="recording" aria-selected="false">Recording</button>
+    <button class="bar__tab" role="tab" data-tab="editor" aria-selected="false">Editor</button>
+    <button class="bar__tab" role="tab" data-tab="exporting" aria-selected="false">Exporting</button>
+    <button class="bar__tab" role="tab" data-tab="share" aria-selected="false">Share</button>
+  </div>
+
+  <div class="bar__spacer"></div>
+
+  <label class="bar__field">Theme
+    <select id="theme">
+      <option value="baseline">baseline — today</option>
+      <option value="graphite">graphite</option>
+      <option value="paper">paper</option>
+    </select>
+  </label>
+  <label class="bar__field">Frame
+    <select id="frame">
+      <option value="desktop">desktop 1040</option>
+      <option value="laptop">laptop 820</option>
+      <option value="phone">phone 390</option>
+    </select>
+  </label>
+  <div class="bar__note" id="note">1–5 · T · F</div>
+</header>
+
+<main class="canvas" id="canvas">
+  <div class="slot" id="slot">
+  <div class="frame" id="frameEl">
+    <div class="app" id="app">
+
+      <!-- ============ idle ============ -->
+      <section class="screen" data-screen="idle">
+        <div class="capture">
+          <div class="capture__wordmark">INOUT</div>
+          <div class="controlbar">
+            <div class="chips" data-chips></div>
+            <button class="recbtn" data-go="recording" aria-label="Start recording">
+              <span class="recbtn__inner"></span>
+            </button>
+            <div class="controlbar__hint" data-hint></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ recording ============ -->
+      <section class="screen" data-screen="recording" hidden>
+        <div class="capture capture--recording">
+          <div class="timer">
+            <span class="timer__dot"></span>
+            <span class="timer__text">00:42</span>
+          </div>
+          <div class="capture__preview">
+            <div class="player"><div class="stage" data-stage></div></div>
+          </div>
+          <div class="controlbar">
+            <div class="chips" data-chips></div>
+            <button class="recbtn recbtn--stop" data-go="editor" aria-label="Stop recording">
+              <span class="recbtn__inner"></span>
+            </button>
+            <div class="controlbar__hint"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ editor ============ -->
+      <section class="screen" data-screen="editor" hidden>
+        <div class="editor">
+          <div class="editor__player">
+            <div class="player">
+              <div class="stage" data-stage></div>
+              <div class="transport">
+                <button class="transport__back" data-go="idle" aria-label="Back to capture" data-icon="chevron-left"></button>
+                <button class="transport__play" data-play aria-label="Play" data-icon="play"></button>
+                <span class="transport__time"><b data-clock>00:12</b> <span>/</span> 01:07</span>
+                <div class="scrubber" data-scrubber><div class="scrubber__fill" style="width: 18%"></div></div>
+                <button class="btn btn--primary transport__export" data-go="exporting">Export</button>
+              </div>
+            </div>
+          </div>
+          <div class="tl" data-timeline></div>
+        </div>
+      </section>
+
+      <!-- ============ exporting ============ -->
+      <section class="screen" data-screen="exporting" hidden>
+        <div class="editor">
+          <div class="editor__player">
+            <div class="player">
+              <div class="stage" data-stage></div>
+              <div class="transport">
+                <button class="transport__back" data-go="editor" aria-label="Back" data-icon="chevron-left"></button>
+                <button class="transport__play" aria-label="Play" data-icon="play"></button>
+                <span class="transport__time"><b>00:00</b> <span>/</span> 01:07</span>
+                <div class="scrubber"><div class="scrubber__fill" style="width: 0%"></div></div>
+              </div>
+            </div>
+          </div>
+          <div class="xp xp--progress">
+            <div class="xp__pct" data-pct>48%</div>
+            <div class="xp__meter"><i data-meter style="width: 48%"></i></div>
+            <div class="xp__phase">Encoding video</div>
+            <button class="btn btn--ghost" data-go="editor">Cancel</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ share ============ -->
+      <section class="screen" data-screen="share" hidden>
+        <div class="editor">
+          <div class="editor__player">
+            <div class="player">
+              <div class="stage" data-stage></div>
+              <div class="transport">
+                <button class="transport__back" data-go="editor" aria-label="Back to editing" data-icon="chevron-left"></button>
+                <button class="transport__play" data-play aria-label="Play" data-icon="play"></button>
+                <span class="transport__time"><b>00:00</b> <span>/</span> 01:07</span>
+                <div class="scrubber"><div class="scrubber__fill" style="width: 0%"></div></div>
+              </div>
+            </div>
+          </div>
+          <div class="xp">
+            <div class="xp__head">
+              <button class="xp__back" data-go="editor" aria-label="Back to editing" data-icon="chevron-left"></button>
+              <span class="xp__meta">01:07 · 18.4 MB · 1920×1080</span>
+            </div>
+            <div class="xp__actions">
+              <button class="btn btn--primary btn--wide" data-icon-before="download">Save to file</button>
+              <button class="btn btn--ghost" data-go="idle">New recording</button>
+            </div>
+            <div class="cloud">
+              <div class="cloud__user">
+                <span class="cloud__avatar">R</span>
+                <span class="cloud__email">robmakarov23@gmail.com</span>
+                <button class="cloud__signout">Sign out</button>
+              </div>
+              <div class="cloud__link-row">
+                <span class="cloud__url">https://inout.link/r/9f3c2a11</span>
+                <button class="cloud__copy" data-copy aria-label="Copy link" data-icon="copy"></button>
+              </div>
+              <div class="cloud__expiry">Expires in 30 days</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+  </div>
+</main>
+
+<script>
+/* ---------- icons (same paths as src/app/components/Icon.tsx) ---------- */
+const P = {
+  display: '<rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M12 16.5v3M8.5 19.5h7"/>',
+  camera: '<rect x="2.5" y="6.5" width="12.5" height="11" rx="2.5"/><path d="M15 10.5l6-3.5v10l-6-3.5"/>',
+  mic: '<rect x="9.25" y="3" width="5.5" height="11" rx="2.75"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3"/>',
+  waves: '<path d="M4 9.5v5h3l4.5 4v-13l-4.5 4H4z"/><path d="M15 9.5a4 4 0 0 1 0 5M17.8 7a7.5 7.5 0 0 1 0 10"/>',
+  eye: '<path d="M2.5 12S6 5.75 12 5.75 21.5 12 21.5 12 18 18.25 12 18.25 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
+  'eye-off': '<path d="M4.5 8.2C3.2 9.9 2.5 12 2.5 12s3.5 6.25 9.5 6.25c1.5 0 2.87-.39 4.07-.98M9.9 6.06A8.9 8.9 0 0 1 12 5.75c6 0 9.5 6.25 9.5 6.25a16.7 16.7 0 0 1-2.6 3.34"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M4 3.5l16 17"/>',
+  download: '<path d="M12 4v11M7 10.5l5 5 5-5M5 19.5h14"/>',
+  copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4.5A2.5 2.5 0 0 1 2 12.5v-8A2.5 2.5 0 0 1 4.5 2h8A2.5 2.5 0 0 1 15 4.5V5"/>',
+  check: '<path d="M4.5 12.5l5 5.5L19.5 6"/>',
+  play: '<path d="M8 5.4v13.2L19 12 8 5.4z" fill="currentColor" stroke-width="1"/>',
+  pause: '<rect x="6.5" y="5" width="4" height="14" rx="1" fill="currentColor" stroke-width="1"/><rect x="13.5" y="5" width="4" height="14" rx="1" fill="currentColor" stroke-width="1"/>',
+  'chevron-left': '<path d="M14.5 5.5L8 12l6.5 6.5"/>',
+}
+const icon = (name, size = 18) =>
+  `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name]}</svg>`
+
+/* ---------- mock content ---------- */
+const STAGE = `
+  <div class="mock">
+    <div class="mock__bar"><i></i><i></i><i></i><span class="mock__url">inout.app/record</span></div>
+    <div class="mock__body">
+      <div class="mock__side"><span></span><span></span><span></span><span></span><span></span></div>
+      <div class="mock__main">
+        <div class="mock__h"></div>
+        <div class="mock__l"></div><div class="mock__l"></div><div class="mock__l"></div>
+        <div class="mock__chart"><i style="height:40%"></i><i style="height:62%"></i><i style="height:88%"></i><i style="height:54%"></i><i style="height:71%"></i><i style="height:96%"></i><i style="height:47%"></i><i style="height:66%"></i></div>
+      </div>
+    </div>
+  </div>
+  <div class="pip"></div>`
+
+const CHANNELS = [
+  { key: 'screen', label: 'Screen', ic: 'display', on: true },
+  { key: 'camera', label: 'Camera', ic: 'camera', on: true },
+  { key: 'mic', label: 'Mic', ic: 'mic', on: true },
+  { key: 'sys', label: 'System audio', ic: 'waves', on: false },
+]
+
+/* lanes: [channel, startOffset%, width%, keptFrom%, keptTo%] — of the lane bar */
+const LANES = [
+  { key: 'screen', label: 'Screen', ic: 'display', left: 0, width: 100, kept: [6, 92], on: true },
+  { key: 'camera', label: 'Camera', ic: 'camera', left: 4, width: 96, kept: [2, 90], on: true },
+  { key: 'mic', label: 'Mic', ic: 'mic', left: 0, width: 100, kept: [6, 100], on: false },
+]
+const TRIM = { start: 6, end: 92 }
+const PLAYHEAD = 24
+
+/* ---------- build ---------- */
+const app = document.getElementById('app')
+
+document.querySelectorAll('[data-stage]').forEach((el) => (el.innerHTML = STAGE))
+document.querySelectorAll('[data-icon]').forEach((el) => (el.innerHTML = icon(el.dataset.icon, el.classList.contains('transport__play') ? 18 : 20)))
+document.querySelectorAll('[data-icon-before]').forEach((el) => el.insertAdjacentHTML('afterbegin', icon(el.dataset.iconBefore, 16)))
+
+document.querySelectorAll('[data-chips]').forEach((row) => {
+  row.innerHTML = CHANNELS.map(
+    (c) => `<button class="chip" aria-pressed="${c.on}" data-chip="${c.key}">${icon(c.ic, 15)}<span>${c.label}</span></button>`,
+  ).join('')
+})
+
+document.querySelector('[data-timeline]').innerHTML = `
+  <div class="tl__lanes">
+    ${LANES.map((l) => `
+      <div class="lane${l.on ? '' : ' lane--off'}" data-lane="${l.key}">
+        <div class="lane__gutter">
+          <span class="lane__icon" style="color: var(--ch-${l.key})">${icon(l.ic, 14)}</span>
+          <span class="lane__label">${l.label}</span>
+          <button class="lane__eye" aria-pressed="${l.on}" aria-label="Toggle ${l.label}">${icon(l.on ? 'eye' : 'eye-off', 14)}</button>
+        </div>
+        <div class="lane__track">
+          <div class="lane__bar" style="left:${l.left}%; width:${l.width}%">
+            <div class="lane__seg lane__seg--cut"  style="left:0; width:${l.kept[0]}%; background: var(--ch-${l.key})"></div>
+            <div class="lane__seg lane__seg--kept" style="left:${l.kept[0]}%; width:${l.kept[1] - l.kept[0]}%; background: var(--ch-${l.key})"></div>
+            <div class="lane__seg lane__seg--cut"  style="left:${l.kept[1]}%; right:0; background: var(--ch-${l.key})"></div>
+            <div class="lane__edge" style="left:calc(${l.kept[0]}% - 3px)"></div>
+            <div class="lane__edge" style="left:calc(${l.kept[1]}% - 3px)"></div>
+          </div>
+        </div>
+      </div>`).join('')}
+  </div>
+  <div class="tl__ruler-row">
+    <div class="lane__gutter"></div>
+    <div class="tl__ruler">
+      ${[0, 15, 30, 45, 60].map((s, i) => `
+        <div class="tl__tick" style="left:${(i / 5) * 100}%"><span>${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}</span></div>`).join('')}
+    </div>
+  </div>
+  <div class="tl__overlay">
+    <div class="tl__dim" style="left:0; width:${TRIM.start}%"></div>
+    <div class="tl__dim" style="left:${TRIM.end}%; right:0"></div>
+    <div class="tl__trim" style="left:${TRIM.start}%"><span></span></div>
+    <div class="tl__trim" style="left:${TRIM.end}%"><span></span></div>
+    <div class="tl__playhead" data-playhead style="left:${PLAYHEAD}%"></div>
+  </div>`
+
+/* ---------- interaction (just enough to feel the style, no product logic) ---------- */
+const SCREENS = ['idle', 'recording', 'editor', 'exporting', 'share']
+
+function show(name) {
+  app.querySelectorAll('.screen').forEach((s) => (s.hidden = s.dataset.screen !== name))
+  document.querySelectorAll('.bar__tab').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.tab === name)))
+  stopPlay()
+  clearInterval(expTimer)
+  if (name === 'exporting') runExport()
+}
+document.querySelectorAll('.bar__tab').forEach((t) => t.addEventListener('click', () => show(t.dataset.tab)))
+app.addEventListener('click', (e) => {
+  const go = e.target.closest('[data-go]')
+  if (go) show(go.dataset.go)
+})
+
+/* chips + hint */
+function syncHint() {
+  const row = app.querySelector('[data-screen="idle"] [data-chips]')
+  const any = [...row.querySelectorAll('.chip')].some((c) => c.getAttribute('aria-pressed') === 'true')
+  app.querySelector('[data-hint]').textContent = any ? '' : 'Turn on an input to record'
+  app.querySelector('[data-screen="idle"] .recbtn').style.opacity = any ? '1' : '0.4'
+}
+app.addEventListener('click', (e) => {
+  const chip = e.target.closest('[data-chip]')
+  if (!chip) return
+  chip.setAttribute('aria-pressed', String(chip.getAttribute('aria-pressed') !== 'true'))
+  syncHint()
+})
+syncHint()
+
+/* lane eye */
+app.addEventListener('click', (e) => {
+  const eye = e.target.closest('.lane__eye')
+  if (!eye) return
+  const on = eye.getAttribute('aria-pressed') !== 'true'
+  eye.setAttribute('aria-pressed', String(on))
+  eye.innerHTML = icon(on ? 'eye' : 'eye-off', 14)
+  eye.closest('.lane').classList.toggle('lane--off', !on)
+})
+
+/* copy */
+app.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-copy]')
+  if (!btn) return
+  btn.dataset.copied = '1'
+  btn.innerHTML = icon('check', 18)
+  setTimeout(() => {
+    btn.dataset.copied = '0'
+    btn.innerHTML = icon('copy', 18)
+  }, 1200)
+})
+
+/* play — moves the scrubber, clock and playhead so motion can be judged too */
+let raf = null
+let t = 12
+const DUR = 67
+const clockText = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`
+function stopPlay() {
+  if (raf) cancelAnimationFrame(raf)
+  raf = null
+  app.querySelectorAll('[data-play]').forEach((b) => (b.innerHTML = icon('play', 18)))
+}
+app.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-play]')
+  if (!btn) return
+  if (raf) return stopPlay()
+  btn.innerHTML = icon('pause', 18)
+  let last = performance.now()
+  const tick = (now) => {
+    t = (t + (now - last) / 1000) % DUR
+    last = now
+    const f = t / DUR
+    const screen = btn.closest('.screen')
+    screen.querySelector('.scrubber__fill').style.width = `${f * 100}%`
+    const clock = screen.querySelector('[data-clock]')
+    if (clock) clock.textContent = clockText(t)
+    const ph = app.querySelector('[data-playhead]')
+    if (ph) ph.style.left = `${TRIM.start + f * (TRIM.end - TRIM.start)}%`
+    raf = requestAnimationFrame(tick)
+  }
+  raf = requestAnimationFrame(tick)
+})
+
+/* export progress */
+let expTimer = null
+function runExport() {
+  clearInterval(expTimer)
+  let p = 0
+  const pct = app.querySelector('[data-pct]')
+  const meter = app.querySelector('[data-meter]')
+  expTimer = setInterval(() => {
+    p = p >= 100 ? 0 : Math.min(100, p + 2)
+    pct.textContent = `${p}%`
+    meter.style.width = `${p}%`
+  }, 90)
+}
+
+/* harness controls */
+const themeSel = document.getElementById('theme')
+const frameSel = document.getElementById('frame')
+const canvas = document.getElementById('canvas')
+const slot = document.getElementById('slot')
+const frameEl = document.getElementById('frameEl')
+const note = document.getElementById('note')
+
+/* true pixel size, scaled to fit the pane — never a reflowed approximation */
+const SIZES = { desktop: [1040, 660], laptop: [820, 520], phone: [390, 800] }
+function fit() {
+  const [w, h] = SIZES[document.documentElement.dataset.frame]
+  const box = canvas.getBoundingClientRect()
+  const s = Math.min(1, (box.width - 48) / w, (box.height - 48) / h)
+  frameEl.style.width = w + 'px'
+  frameEl.style.height = h + 'px'
+  frameEl.style.transform = `scale(${s})`
+  slot.style.width = w * s + 'px'
+  slot.style.height = h * s + 'px'
+  note.textContent = `${w}×${h} · ${Math.round(s * 100)}% · 1–5 · T · F`
+}
+addEventListener('resize', fit)
+
+themeSel.addEventListener('change', () => (document.documentElement.dataset.theme = themeSel.value))
+frameSel.addEventListener('change', () => {
+  document.documentElement.dataset.frame = frameSel.value
+  fit()
+})
+fit()
+
+const cycle = (sel, list) => {
+  const next = list[(list.indexOf(sel.value) + 1) % list.length]
+  sel.value = next
+  sel.dispatchEvent(new Event('change'))
+}
+addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'SELECT') return
+  const n = Number(e.key)
+  if (n >= 1 && n <= SCREENS.length) show(SCREENS[n - 1])
+  else if (e.key.toLowerCase() === 't') cycle(themeSel, ['baseline', 'graphite', 'paper'])
+  else if (e.key.toLowerCase() === 'f') cycle(frameSel, ['desktop', 'laptop', 'phone'])
+})
+</script>
+</body>
+</html>
