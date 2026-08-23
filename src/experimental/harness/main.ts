@@ -247,6 +247,23 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'p0tailraw',
+    title: 'P0-tail-raw — does a RAW channel keep its ending?',
+    detail:
+      'runs a 4K load take with the live composite alongside (as production does) and stops the raw lane four different ways — shipped, a finer timeslice, cutting the track then draining, and throttling the source then draining. Reports the gap between the lane’s length and its last decodable frame for each, plus whether the recorder stops itself when its track ends.',
+    run: async (args) => {
+      const { runRawTail } = await import('../perf/rawTail')
+      return runRawTail({
+        takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined,
+        size: Array.isArray(args?.size) ? (args.size as [number, number]) : undefined,
+        procedures: Array.isArray(args?.procedures)
+          ? (args.procedures as ('shipped' | 'slice250' | 'cut' | 'throttle')[])
+          : undefined,
+        repeats: typeof args?.repeats === 'number' ? args.repeats : undefined,
+      })
+    },
+  },
+  {
     id: 'encprobe',
     title: 'O4 — is WebCodecs the wall, or is our config the wall?',
     detail:

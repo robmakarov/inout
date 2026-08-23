@@ -20,7 +20,7 @@ import { startLiveComposite, type LiveCompositeStats } from '@core/capture/liveC
 import { canLiveCompositeV2, startLiveCompositeV2 } from '@core/capture/liveCompositeV2'
 import type { CompositeRecording } from '@core/types'
 
-interface Rig {
+export interface Rig {
   screen: MediaStream
   camera: MediaStream
   audio: MediaStream[]
@@ -34,7 +34,7 @@ interface Rig {
  * canvas would let both engines look perfect: the capturer would emit ~1 fps
  * and there would be nothing to keep up with.
  */
-function makeRig(width: number, height: number, audioCtx: AudioContext | null): Rig {
+export function makeRig(width: number, height: number, audioCtx: AudioContext | null): Rig {
   const screen = document.createElement('canvas')
   screen.width = width
   screen.height = height
@@ -137,7 +137,7 @@ function watchLongTasks(): { stop: () => LongTasks } {
   }
 }
 
-interface FileProbe {
+export interface FileProbe {
   durationSec: number
   decodedAt: number[]
   frameCount: number
@@ -147,7 +147,7 @@ interface FileProbe {
   lastFrameSec: number | null
 }
 
-async function probeComposite(blob: Blob): Promise<FileProbe | null> {
+export async function probeComposite(blob: Blob): Promise<FileProbe | null> {
   const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS })
   try {
     const track = await input.getPrimaryVideoTrack()

@@ -909,10 +909,16 @@ body.f .filters, body.d .detail { opacity: 1; }
     inset 0 2px 3px rgba(255, 255, 255, 0.34),
     inset 0 -3px 7px rgba(110, 12, 0, 0.6);
 }
-[data-skin='volume'] .recbtn--stop .recbtn__inner {
-  width: 22px;
-  height: 22px;
+/* the take running is the stop face — the skin keeps its own softer square */
+[data-skin='volume'] [data-phase='live'] .recbtn__inner {
+  width: 20px;
+  height: 20px;
   border-radius: 6px;
+}
+[data-skin='volume'] [data-phase='live'][data-take='held'] .recbtn__inner {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
 }
 [data-skin='volume'] .recbtn:active { transform: scale(0.97) translateY(1px); }
 
@@ -1248,6 +1254,10 @@ body.f .filters, body.d .detail { opacity: 1; }
   background: transparent;
   transition: background 140ms var(--ease), color 140ms var(--ease);
 }
+/* the donut's separator, straightened. Brighter than the one on the ring by a
+   step: there the wedges are dark and a hairline at 12% is plenty, here four
+   lit inputs sit side by side and a slab of green with no cuts in it is one
+   input, not four. */
 .inseg + .inseg::before {
   content: '';
   position: absolute;
@@ -1255,7 +1265,7 @@ body.f .filters, body.d .detail { opacity: 1; }
   top: 12px;
   bottom: 12px;
   width: 1px;
-  background: color-mix(in srgb, var(--text), transparent 88%);
+  background: color-mix(in srgb, var(--text), transparent 80%);
 }
 /* the wedge's rim arc, straightened: a lit line along the top of the segment */
 .inseg::after {
@@ -1270,12 +1280,15 @@ body.f .filters, body.d .detail { opacity: 1; }
   transition: opacity 160ms var(--ease);
 }
 .inseg:hover { background: var(--surface-3); color: var(--text); }
+/* on is a tint and a lit edge, not a colour field: with every input running the
+   bar would otherwise be a green slab, and the one thing it has to stay is a
+   row of four things you can tell apart */
 .inseg[data-on='true'] {
-  background: color-mix(in srgb, var(--surface-3), var(--on-c) 16%);
+  background: color-mix(in srgb, var(--surface-3), var(--on-c) 10%);
   color: hsl(var(--on-h) calc(var(--on-s) * 0.9) 62%);
 }
 .inseg[data-on='true']::after { opacity: 0.8; }
-.inseg[data-on='true']:hover { background: color-mix(in srgb, var(--surface-3), var(--on-c) 26%); }
+.inseg[data-on='true']:hover { background: color-mix(in srgb, var(--surface-3), var(--on-c) 20%); }
 .inseg__ico { flex: none; display: grid; place-items: center; opacity: 0.92; }
 .inseg__ico .f, .inseg__ico .s { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .inseg__txt { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
@@ -1312,6 +1325,17 @@ body.f .filters, body.d .detail { opacity: 1; }
 /* the segments arrive one after another, in ring order — the donut unrolling */
 .inseg > * { opacity: 0; transition: opacity 160ms var(--ease); }
 [data-phase='live'] .inseg > * { opacity: 1; transition-delay: calc(460ms + var(--d, 0ms)); }
+/* A segment gets thinner as the frame does and as inputs are added, and words
+   that have gone to an ellipsis are worse than no words: the state line goes
+   first, then the name, and what is left is the glyph — which is the wedge's
+   own answer, since a wedge only ever showed its caption on hover. */
+@container (max-width: 780px) {
+  .inseg__sub { display: none; }
+}
+@container (max-width: 560px) {
+  .inseg__txt { display: none; }
+  .inseg { gap: 0; }
+}
 
 /* live, the orbit is over: the menu has become the bar, the pills have nothing
    left to orbit, and the halo belongs to a button that is no longer waiting */
@@ -1364,6 +1388,13 @@ body.f .filters, body.d .detail { opacity: 1; }
 [data-hand='on'] .recbtn { opacity: 0; transition: opacity 200ms var(--ease); }
 [data-hand='on'] .inseg + .inseg::before,
 [data-hand='on'] .inseg::after { opacity: 0; }
+/* the tints go too: for those two hundred milliseconds the bars are bare
+   plates the right size, which is the only thing they still have to say */
+[data-hand='on'] .inseg {
+  background: transparent;
+  pointer-events: none;
+  transition: background 200ms var(--ease);
+}
 
 /* jumping straight to a phase (the tabs, the number keys) must not play the
    whole unroll — the harness is for looking at states, not at transitions */
@@ -1489,7 +1520,6 @@ body.f .filters, body.d .detail { opacity: 1; }
   background: var(--record);
   transition: all 240ms cubic-bezier(.25,.1,.25,1);
 }
-.recbtn--stop .recbtn__inner { width: 26px; height: 26px; border-radius: max(4px, calc(var(--r-btn) / 140)); }
 
 /* ---------- stage (the composed 16:9 frame) ---------- */
 .stage {
@@ -2733,10 +2763,15 @@ document.querySelector('[data-timeline]').innerHTML = `
 /* ---------- interaction (just enough to feel the style, no product logic) ---------- */
 const SCREENS = ['idle', 'recording', 'editor', 'exporting', 'share']
 
+/* Recording is not a section any more — it is the capture screen, open. The
+   tab and the number key still name it, and land on the same screen with the
+   stack unrolled, because from the panel's side nothing about that changed. */
 function show(name) {
-  app.querySelectorAll('.screen').forEach((s) => (s.hidden = s.dataset.screen !== name))
+  const section = name === 'recording' ? 'idle' : name
+  app.querySelectorAll('.screen').forEach((s) => (s.hidden = s.dataset.screen !== section))
   document.querySelectorAll('.tab[data-tab]').forEach((t) =>
     t.setAttribute('aria-selected', String(t.dataset.tab === name)))
+  if (section === 'idle') setPhase(name === 'recording' ? 'live' : 'rest', true)
   stopPlay()
   clearInterval(expTimer)
   if (name === 'exporting') runExport()
@@ -2762,8 +2797,9 @@ function syncHint() {
   if (recBtn.classList.contains('recbtn--arming')) return
   // the button is never disabled — with nothing on it still records, it just
   // says what it will get. A dead primary control is worse than an empty take.
+  // (It also owns no inline opacity: the hand-off fades the disc out in CSS,
+  // and an inline 1 here beat every rule that tried to.)
   say(anyInputOn() ? '' : 'Turn on inputs to record')
-  recBtn.style.opacity = '1'
 }
 /* one state, two faces: the pills and the wedges must never disagree */
 function setChannel(key, on) {
@@ -2810,19 +2846,81 @@ app.addEventListener('click', (e) => {
 })
 syncHint()
 
-/* record button: the studio's state walk — press arms, arming pulses, then the
-   take starts. Look untouched; only the states and their timing are borrowed. */
+/* ---------- the take ----------
+   Press arms; arming pulses on the studio's blink; then the screen opens. There
+   is no second screen to go to — one attribute moves and the CSS spends the
+   next second turning a button into three bars.
+
+   Stop holds the take rather than ending it: the square goes back to a disc,
+   the clock stops, and Done appears. Ending is a decision, stopping is not, and
+   the control that made the take is the right one to interrupt it — so the same
+   disc runs it, holds it and picks it up again. */
+const capture = app.querySelector('[data-capture]')
+const takeEl = app.querySelector('.take')
+const takeClock = app.querySelector('[data-clock-take]')
 let armTimer = null
+let takeT = 0, takeRaf = null, takeLast = 0
+
+function paintTake() { takeClock.textContent = clockText(takeT) }
+function takeTick(now) {
+  takeRaf = requestAnimationFrame(takeTick)
+  if (!takeLast) takeLast = now
+  takeT += (now - takeLast) / 1000
+  takeLast = now
+  paintTake()
+}
+function holdTake(on) {
+  cancelAnimationFrame(takeRaf)
+  takeRaf = null
+  takeLast = 0
+  capture.dataset.take = on ? 'held' : 'rec'
+  if (!on) takeRaf = requestAnimationFrame(takeTick)
+}
+/* jump skips the unroll: the tabs and the number keys are for looking at
+   states, not at transitions, and a harness that animates on every click is a
+   harness you cannot compare two states in */
+function setPhase(next, jump) {
+  if (jump) takeEl.classList.add('take--jump')
+  capture.dataset.phase = next
+  capture.dataset.hand = 'off'
+  cancelAnimationFrame(takeRaf)
+  takeRaf = null
+  takeLast = 0
+  takeT = 0
+  paintTake()
+  capture.dataset.take = 'rec'
+  if (next === 'live') { takeRaf = requestAnimationFrame(takeTick); say('') }
+  else syncHint()
+  app.dispatchEvent(new CustomEvent('takephase'))
+  if (jump) { void takeEl.offsetWidth; takeEl.classList.remove('take--jump') }
+}
+
 recBtn.addEventListener('click', () => {
   if (armTimer) return
+  if (capture.dataset.phase === 'live') { holdTake(capture.dataset.take !== 'held'); return }
   recBtn.classList.add('recbtn--arming')
   say('Starting…')
   armTimer = setTimeout(() => {
     armTimer = null
     recBtn.classList.remove('recbtn--arming')
-    show('recording')
-    syncHint()
+    setPhase('live')
   }, 900)
+})
+
+/* Done: the bars go on to be the editor's. The control bar thins to the
+   transport's height and the input bar grows to the timeline's, which puts the
+   stage on the editor's own line — so when the editor fades up behind it the
+   picture is the one thing that does not move. */
+app.addEventListener('click', (e) => {
+  if (!e.target.closest('[data-done]')) return
+  capture.dataset.hand = 'on'
+  cancelAnimationFrame(takeRaf)
+  takeRaf = null
+  setTimeout(() => {
+    const ed = app.querySelector('[data-screen="editor"]')
+    show('editor')
+    ed.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 240, easing: 'cubic-bezier(.25,.1,.25,1)' })
+  }, 430)
 })
 
 /* splash — three variants, chosen in the right panel.
@@ -2907,7 +3005,11 @@ const PHYS = {
   const edgePad = 2
   let posX = 0, posY = 0, velX = 0, velY = 0, physRaf = null, lastT = 0
 
-  const live = () => !app.querySelector('[data-screen="idle"]').hidden
+  // the spring belongs to the waiting button, not to a running take: once the
+  // stack is open the disc is a control on a bar and must not drift off it
+  const live = () =>
+    !app.querySelector('[data-screen="idle"]').hidden &&
+    app.querySelector('[data-capture]').dataset.phase === 'rest'
 
   function bounds() {
     // cluster is centred, so travel is symmetric — no rect maths, scale-proof
@@ -2959,6 +3061,8 @@ const PHYS = {
     physRaf = requestAnimationFrame(step)
   }
   const kick = () => { if (physRaf == null) physRaf = requestAnimationFrame(step) }
+  // opening or closing the take puts the disc back on its seat, mid-flight
+  app.addEventListener('takephase', () => { cancelAnimationFrame(physRaf); physRaf = null; rest() })
   const norm = (d, mode) =>
     mode === 1 ? d * 16 : mode === 2 ? d * Math.min(900, app.clientHeight * 0.85) : d * pixelDeltaBoost
 
@@ -3251,9 +3355,9 @@ const SPARE = [
 ]
 const PERM_OPTS = '<option value="ok">ok</option><option value="denied">denied</option><option value="blocked">unavailable</option>'
 function rebuildInputs() {
-  document.querySelectorAll('[data-chips]').forEach((row) => (row.innerHTML = CHANNELS.map(chipHTML).join('')))
   placeRingChips()
   buildRadial()
+  buildInputBar()
   CHANNELS.forEach((c) => setChannel(c.key, c.on))
   syncHint()
   saveState()
