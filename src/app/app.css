@@ -1235,15 +1235,17 @@
 }
 .quality__tiers {
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }
 .quality__tier {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  padding: 12px 8px;
+  /* Five steps (F7b) share the row the three tiers used to have. */
+  padding: 10px 4px;
   border-radius: var(--r-md);
   background: var(--surface);
   border: 1px solid transparent;
@@ -1267,8 +1269,12 @@
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
+/* Always rendered, even when empty: it reserves the line so picking a step
+   never makes the row of steps change height. */
 .quality__tier-tag {
   font-size: 10px;
+  line-height: 13px;
+  min-height: 13px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--accent);

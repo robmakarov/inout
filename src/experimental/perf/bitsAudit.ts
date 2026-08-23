@@ -26,6 +26,7 @@ import { ALL_FORMATS, BlobSource, EncodedPacketSink, Input, VideoSampleSink } fr
 import { newId } from '@core/id'
 import { blobStore } from '@core/store'
 import { exportRecording } from '@core/compose'
+import { startLiveComposite } from '@core/capture/liveComposite'
 import { readCertification } from '@core/compose/certify'
 import { defaultEditState } from '@core/timeline'
 import { defaultCameraPose, poseToRect } from '@core/timeline/cameraTrack'
@@ -357,6 +358,57 @@ function psnr(a: ImageData, b: ImageData): number {
   return Math.round(10 * Math.log10((255 * 255) / mse) * 10) / 10
 }
 
+/** Control-flow marker: this content has no camera half to run. */
+class SkipCamera extends Error {}
+
+/**
+ * Record a LIVE COMPOSITE over the same source and describe its shape. This is
+ * the input the shipped size estimator actually gets, so a claim about the
+ * estimator has to be made against a real composite, not against a raw channel.
+ * The packet walk is metadata-only — byte lengths and types, no sample data.
+ */
+async function captureCompositeShape(source: Source, takeMs: number): Promise<CompositeShape | null> {
+  const stream = source.canvas.captureStream(30)
+  const key = `exp-o11-comp-${newId('c')}.mp4`
+  try {
+    const handle = await startLiveComposite({ screen: stream, audio: [] }, key)
+    await new Promise((r) => setTimeout(r, takeMs))
+    const composite = await handle.stop()
+    if (!composite) return null
+    const blob = await blobStore.read(key)
+    const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS })
+    try {
+      const track = await input.getPrimaryVideoTrack()
+      if (!track) return null
+      const duration = await input.computeDuration()
+      let keyframeBytes = 0
+      let deltaBytes = 0
+      const sink = new EncodedPacketSink(track)
+      for await (const p of sink.packets(undefined, undefined, { metadataOnly: true })) {
+        if (p.type === 'key') keyframeBytes += p.byteLength
+        else deltaBytes += p.byteLength
+      }
+      const total = keyframeBytes + deltaBytes
+      return {
+        bytes: blob.size,
+        keyframeBytes,
+        deltaBytes,
+        keyframeSharePct: total > 0 ? Math.round((keyframeBytes / total) * 1000) / 10 : 0,
+        durationSec: Math.round(duration * 1000) / 1000,
+        width: composite.width,
+        height: composite.height,
+      }
+    } finally {
+      input.dispose()
+    }
+  } catch {
+    return null
+  } finally {
+    for (const t of stream.getTracks()) t.stop()
+    await blobStore.remove(key).catch(() => undefined)
+  }
+}
+
 // ---------------------------------------------------------------------------
 // the run
 // ---------------------------------------------------------------------------
@@ -397,6 +449,42 @@ export interface ContentReport {
   bestGopSec: number
   savingAtBestPct: number
   minPsnrDb: number | null
+  /** The live composite of this content, and what each estimator model makes of it. */
+  composite: CompositeShape | null
+  estimates: EstimateRow[]
+  worstErrorPct: { sqrt: number; piecewise: number } | null
+}
+
+/**
+ * The take's own composite, described the way a size estimator can use it:
+ * how many bytes per second it cost, and how those bytes split between
+ * keyframes (spatial detail — scales with pixels) and deltas (change over
+ * time — barely scales with pixels). F7b lives or dies on that split.
+ */
+export interface CompositeShape {
+  bytes: number
+  keyframeBytes: number
+  deltaBytes: number
+  keyframeSharePct: number
+  durationSec: number
+  width: number
+  height: number
+}
+
+/** Predicted vs actual for one candidate step, under each candidate model. */
+export interface EstimateRow {
+  label: string
+  pixelRatio: number
+  actualBytes: number
+  /** √(pixel ratio) — what F7 ships today. */
+  sqrtPredicted: number
+  sqrtErrorPct: number
+  /** Linear below the source resolution, √ above it. */
+  piecewisePredicted: number
+  piecewiseErrorPct: number
+  /** ln(actual/source) / ln(pixelRatio): the exponent this content actually
+   *  obeys. 1 = size follows pixels, 0.5 = the shipped √ model, 0 = flat. */
+  impliedExponent: number | null
 }
 
 export interface CameraRung {
@@ -504,18 +592,12 @@ export async function runBitsAudit(
       }
       const best = rungs.reduce((a, b) => (b.bytes < a.bytes ? b : a), rungs[0]!)
       const psnrs = rungs.map((r) => r.psnrDb).filter((v): v is number => v !== null)
-      contents.push({
-        content: kind,
-        sourceChannelBytes: sourceBlob.size,
-        gopLadder: rungs,
-        bestGopSec: best.gopSec,
-        savingAtBestPct: best.deltaVsDefaultPct,
-        minPsnrDb: psnrs.length ? Math.min(...psnrs) : null,
-      })
+      const ladderRows: StepRung[] = []
 
-      // (b) candidate quality steps — only on the screen-like content, which is
-      // what the slider will be used on.
-      if (kind === 'screen') {
+      // (b) candidate quality steps. Run on BOTH contents: the step sizes
+      // themselves are a screen-content question, but whether a size ESTIMATOR
+      // can be honest is exactly a question about content differences.
+      {
         // Bitrate ceilings scale with pixel count, as QUALITY_TIERS already
         // does. The two PROBE rungs answer the question that decides the shape
         // of the ladder: is bitrate a step at all, or only resolution?
@@ -548,17 +630,19 @@ export async function runBitsAudit(
             wallMs,
           }
           if (c.role === 'ladder') prevLadder = rung
-          steps.push(rung)
+          ladderRows.push(rung)
+          if (kind === 'screen') steps.push(rung)
         }
 
         // (c) camera-when-PiP: the raw camera channel is recorded at 4 Mbps and
         // then drawn at ~24 % of the frame width. Record the SAME camera at two
         // bitrates off one stream, export each as a PiP over this screen
         // channel, and compare inside the PiP rect — where the lever lives.
-        const cam = cameraSource()
+        const cam = kind === 'screen' ? cameraSource() : null
         const camChannels: ChannelRecording[] = []
         try {
-          camChannels.push(...(await recordChannels(cam, 'camera', takeMs, CAMERA_BITRATES)))
+          if (!cam) throw new SkipCamera()
+          camChannels.push(...(await recordChannels(cam!, 'camera', takeMs, CAMERA_BITRATES)))
           const geometry = { frameAspect: 16 / 9, cameraAspect: 1280 / 720 }
           const pipRect = poseToRect(defaultCameraPose(geometry), geometry)
           let baseFrames: (ImageData | null)[] = []
@@ -603,11 +687,63 @@ export async function runBitsAudit(
                 : null,
             })
           }
+        } catch (err) {
+          if (!(err instanceof SkipCamera)) throw err
         } finally {
-          cam.stop()
+          cam?.stop()
           for (const c of camChannels) await blobStore.remove(c.blobKey).catch(() => undefined)
         }
       }
+      // (d) the size ESTIMATOR, which is what F7b actually promises the user.
+      // It reads the take's own live composite, so the composite has to exist:
+      // record one over the same source and then price every step against it.
+      const shape = await captureCompositeShape(source, takeMs)
+      const estimates: EstimateRow[] = []
+      if (shape && shape.durationSec > 0) {
+        const srcPixels = shape.width * shape.height
+        const srcRate = shape.bytes / shape.durationSec
+        const seconds = takeMs / 1000
+        for (const rung of ladderRows) {
+          if (rung.role !== 'ladder') continue
+          const r = (rung.width * rung.height) / srcPixels
+          const ceiling = (rung.videoBitrate / 8) * seconds
+          const sqrtPredicted = Math.round(Math.min(ceiling, srcRate * Math.sqrt(r) * seconds))
+          const piecewisePredicted = Math.round(
+            Math.min(ceiling, srcRate * (r <= 1 ? r : Math.sqrt(r)) * seconds),
+          )
+          const ratio = rung.bytes / (srcRate * seconds)
+          estimates.push({
+            label: rung.label,
+            pixelRatio: Math.round(r * 1000) / 1000,
+            actualBytes: rung.bytes,
+            sqrtPredicted,
+            sqrtErrorPct: Math.round(((sqrtPredicted - rung.bytes) / rung.bytes) * 1000) / 10,
+            piecewisePredicted,
+            piecewiseErrorPct:
+              Math.round(((piecewisePredicted - rung.bytes) / rung.bytes) * 1000) / 10,
+            impliedExponent:
+              r > 0 && r !== 1 && ratio > 0
+                ? Math.round((Math.log(ratio) / Math.log(r)) * 100) / 100
+                : null,
+          })
+        }
+      }
+      contents.push({
+        content: kind,
+        sourceChannelBytes: sourceBlob.size,
+        gopLadder: rungs,
+        bestGopSec: best.gopSec,
+        savingAtBestPct: best.deltaVsDefaultPct,
+        minPsnrDb: psnrs.length ? Math.min(...psnrs) : null,
+        composite: shape,
+        estimates,
+        worstErrorPct: estimates.length
+          ? {
+              sqrt: Math.max(...estimates.map((e) => Math.abs(e.sqrtErrorPct))),
+              piecewise: Math.max(...estimates.map((e) => Math.abs(e.piecewiseErrorPct))),
+            }
+          : null,
+      })
     } finally {
       source.stop()
       if (channel) await blobStore.remove(channel.blobKey).catch(() => undefined)

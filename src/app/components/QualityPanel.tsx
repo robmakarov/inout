@@ -6,12 +6,18 @@ import { humanBytes } from '@app/lib/format'
 import { Icon } from '@app/components/Icon'
 
 /**
- * Quality choice, before the export starts (task F7).
+ * Quality choice, before the export starts (tasks F7 + F7b).
  *
  * The default tier keeps the instant packet-copy path, so it is labelled
  * "Instant" and everything else says plainly that it re-renders — a 1440p
  * export of a long take is minutes of work, and finding that out afterwards is
  * how a fast tool starts feeling slow.
+ *
+ * F7b made the ladder finer (five steps, each measured to sit 35–95 % apart in
+ * size) and made the numbers honest about themselves: the default step's size
+ * is the file, every other one is a prediction from a composite a DIFFERENT
+ * encoder made, and that prediction was measured 47 % low on text-heavy takes.
+ * So it is shown as "about", and the exact step says so plainly.
  */
 export function QualityPanel({
   recording,
@@ -36,7 +42,10 @@ export function QualityPanel({
       })),
     [recording, outputDurationMs],
   )
-  const current = estimates.find((e) => e.tier.id === tier.id) ?? estimates[1]!
+  const current =
+    estimates.find((e) => e.tier.id === tier.id) ??
+    estimates.find((e) => isDefaultTier(e.tier)) ??
+    estimates[0]!
   const instant = isDefaultTier(tier)
 
   return (
@@ -59,16 +68,19 @@ export function QualityPanel({
             onClick={() => onTier(t)}
           >
             <span className="quality__tier-label">{t.label}</span>
-            <span className="quality__tier-size">~{humanBytes(size.bytes)}</span>
-            {isDefaultTier(t) ? <span className="quality__tier-tag">Instant</span> : null}
+            <span className="quality__tier-size">
+              {size.exact ? '' : '~'}
+              {humanBytes(size.bytes)}
+            </span>
+            <span className="quality__tier-tag">{isDefaultTier(t) ? 'Instant' : ''}</span>
           </button>
         ))}
       </div>
 
       <div className="quality__hint">
         {instant
-          ? 'Copies the video as recorded — no re-encode, ready in about a second.'
-          : `Re-renders the whole video at ${tier.width}×${tier.height}. Longer takes take a while.`}
+          ? 'Copies the video as recorded — no re-encode, ready in about a second. That size is the file, not a guess.'
+          : `${tier.note ? `${tier.note} ` : ''}Re-renders the whole video at ${tier.width}×${tier.height}, so the size is an estimate. Longer takes take a while.`}
       </div>
 
       <button className="btn btn--primary btn--wide" onClick={onExport}>
