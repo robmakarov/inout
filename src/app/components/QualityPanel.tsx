@@ -3,7 +3,7 @@ import type { QualityTier } from '@core/compose/quality'
 import { QUALITY_TIERS, estimateExportBytes, isDefaultTier } from '@core/compose/quality'
 import type { Calibration } from '@core/compose/calibrate'
 import { estimateFromCalibration } from '@core/compose/calibrate'
-import type { Recording } from '@core/types'
+import type { EditState, Recording } from '@core/types'
 import { humanBytes } from '@app/lib/format'
 import { Icon } from '@app/components/Icon'
 
@@ -27,6 +27,7 @@ import { Icon } from '@app/components/Icon'
  */
 export function QualityPanel({
   recording,
+  edit,
   outputDurationMs,
   tier,
   onTier,
@@ -34,6 +35,8 @@ export function QualityPanel({
   onCancel,
 }: {
   recording: Recording
+  /** The edit being exported — the calibration composes THROUGH it. */
+  edit: EditState
   outputDurationMs: number
   tier: QualityTier
   onTier: (t: QualityTier) => void
@@ -49,7 +52,7 @@ export function QualityPanel({
     void (async () => {
       try {
         const { calibrateSteps } = await import('@core/compose/calibrate')
-        const cal = await calibrateSteps(recording, QUALITY_TIERS, { signal: ac.signal })
+        const cal = await calibrateSteps(recording, edit, QUALITY_TIERS, { signal: ac.signal })
         if (live && cal) {
           setCalibration(cal)
           console.info(
@@ -64,7 +67,7 @@ export function QualityPanel({
       live = false
       ac.abort()
     }
-  }, [recording])
+  }, [recording, edit])
 
   const estimates = useMemo(
     () =>

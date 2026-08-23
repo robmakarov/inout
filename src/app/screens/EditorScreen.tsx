@@ -230,6 +230,7 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
       ) : choosing ? (
         <QualityPanel
           recording={recording}
+          edit={edit}
           outputDurationMs={outputDurationMs(edit)}
           tier={tier}
           onTier={(t) => {

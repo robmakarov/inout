@@ -2,34 +2,47 @@
  * THE SIZE NUMBER, MEASURED INSTEAD OF MODELLED (task F7c).
  *
  * F7b shipped a finer export ladder and reported its own gate unmet: the
- * per-step size is predicted from the composite, and the composite's encoder is
- * not the export's encoder. On still text-heavy screen content MediaRecorder's
- * AVC spends 0.97 Mbps where the export's AVC spends 1.84 Mbps for the same
- * pixels, so the prediction landed 47 % low at 1440p; on full-motion content
- * the two agree within 7 %. No exponent fixes both, because the missing
- * quantity is what the EXPORT encoder charges for THIS content — and nothing
- * short of encoding it can know that.
+ * per-step size was predicted from the composite, and the composite's encoder
+ * is not the export's encoder. On still text-heavy screen content MediaRecorder
+ * spends 0.97 Mbps where the export spends 1.84 Mbps for the same pixels, so
+ * the prediction landed 47 % low at 1440p; on full-motion content the two agree
+ * within 7 %. No exponent fixes both, because the missing quantity is what the
+ * EXPORT encoder charges for THIS content — and nothing short of encoding it
+ * can know that.
  *
- * So encode it. Take a few instants of the take, and at every step encode a
- * KEYFRAME and the DELTA that follows it, through the same mediabunny encoder
- * the export uses, at that step's resolution and bitrate. That gives the two
- * numbers a file is made of, measured rather than scaled:
+ * So encode it: a two-frame MINIATURE OF THE RENDER at every step. Sample a few
+ * instants of the take, compose each through the very same drawVideoFrame the
+ * exporter uses (so the camera pose and the background frame are in the
+ * picture), and encode a KEYFRAME plus the DELTA that follows it at that step's
+ * resolution and bitrate. A file is made of exactly those two things:
  *
  *     bytes/s = keyframes/s · meanKeyframeBytes + (fps − keyframes/s) · meanDeltaBytes
  *
- * Sanity check on the numbers F7b already had: the 1080p screen render measured
- * 2.73 MB over 12 s with a 235 KB keyframe and 5.7 KB deltas, and this formula
- * predicts 2.60 MB — 4.6 % out, against the 47 % the scaling model managed.
+ * IT READS THE RAW CHANNELS, NOT THE COMPOSITE, and that is the whole point. A
+ * first version sampled the composite and was wrong in OPPOSITE DIRECTIONS by
+ * content — +136 % on screen, −68 % on motion — because a composite frame is
+ * not the frame the render encodes: on text it carries MediaRecorder's ringing,
+ * which costs bits to re-encode, and on motion it has already been smoothed,
+ * which does not. The render decodes the raw channels; so does this.
  *
- * Everything here is in memory (BufferTarget), so a probe leaves nothing on
- * disk, and every failure path returns null so the caller falls back to F7's
- * estimate rather than showing nothing.
+ * Everything is in memory (BufferTarget), so a probe leaves nothing on disk,
+ * and every failure path returns null so the caller falls back to F7's estimate
+ * rather than showing nothing.
  */
-import { ALL_FORMATS, BlobSource, BufferTarget, CanvasSource, Input, Mp4OutputFormat, Output, VideoSampleSink } from 'mediabunny'
+import { BufferTarget, CanvasSource, Mp4OutputFormat, Output, type VideoSample } from 'mediabunny'
 import { blobStore } from '@core/store'
-import type { Recording } from '@core/types'
+import {
+  cameraPoseAt,
+  cameraTrackIsActive,
+  channelSourceTimeAt,
+  outputDurationMs as outputDurationOf,
+  outputToRecordingMs,
+} from '@core/timeline'
+import type { EditState, Recording } from '@core/types'
 import { AUDIO_BITRATE, KEYFRAME_INTERVAL_SEC } from './codecs'
+import { drawVideoFrame, type FrameCanvas } from './layout'
 import { isDefaultTier, type QualityTier, type SizeEstimate } from './quality'
+import { openVideoChannel, type VideoChannelReader } from './video'
 
 export interface StepMeasurement {
   tierId: string
@@ -43,62 +56,85 @@ export interface StepMeasurement {
 export interface Calibration {
   /** Keyed by tier id. */
   steps: Record<string, StepMeasurement>
-  /** Instants of the take that were sampled, seconds. */
+  /** Instants of the OUTPUT that were sampled, seconds. */
   sampledAtSec: number[]
   /** What the probe cost, ms — this is a budget, and budgets get measured. */
   wallMs: number
 }
 
-/** Instants to sample. Three is enough to notice that a take has a busy half. */
-const SAMPLE_COUNT = 3
-
 /**
- * Decode a pair of adjacent frames at each sampled instant, and encode both at
- * every step. The pair matters: a delta frame is only meaningful against the
- * keyframe it refers to, so each pair is encoded key-then-delta in order.
+ * Two WINDOWS of consecutive output frames, not two isolated pairs.
+ *
+ * A single delta measured right after a fresh keyframe is not what a file is
+ * made of, and the first version of this probe proved it: +128 % on screen
+ * content and −64 % on motion, from the same code. A delta in a real file
+ * references a frame that is itself a delta, and the rate controller has
+ * settled by then. So each window encodes one keyframe and a run of deltas, and
+ * the mean delta comes from the run.
  */
+const WINDOW_COUNT = 2
+const WINDOW_FRAMES = 15
+
+interface Window {
+  /** Consecutive composed OUTPUT frames, 1/30 s apart, at 1920×1080. */
+  frames: ImageBitmap[]
+}
+
 export async function calibrateSteps(
   recording: Recording,
+  edit: EditState,
   tiers: QualityTier[],
   opts: { signal?: AbortSignal } = {},
 ): Promise<Calibration | null> {
-  const composite = recording.composite
-  if (!composite || !composite.width || !composite.height) return null
   const t0 = performance.now()
   const aborted = (): boolean => !!opts.signal?.aborted
-
-  let input: Input | null = null
-  const pairs: { key: VideoFrameLike; delta: VideoFrameLike }[] = []
+  const readers: VideoChannelReader[] = []
+  const windows: Window[] = []
   const sampledAtSec: number[] = []
   try {
-    const blob = await blobStore.read(composite.blobKey)
-    if (blob.size === 0) return null
-    input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS })
-    const track = await input.getPrimaryVideoTrack()
-    if (!track || !(await track.canDecode())) return null
-    const durationSec = Math.max(0.2, composite.durationMs / 1000)
-    const sink = new VideoSampleSink(track)
-    for (let i = 0; i < SAMPLE_COUNT; i++) {
+    for (const channel of recording.channels) {
+      if (channel.media !== 'video') continue
+      if (aborted()) return null
+      const blob = await blobStore.read(channel.blobKey)
+      const reader = await openVideoChannel(blob, channel.id, channel.kind, channel.durationMs / 1000)
+      if (reader) readers.push(reader)
+    }
+    if (readers.length === 0) return null
+
+    // Compose at the take's own geometry; every step is a scale of this.
+    const canvas = new OffscreenCanvas(1920, 1080)
+    const ctx = canvas.getContext('2d', { alpha: false })
+    if (!ctx) return null
+    const frame: FrameCanvas = { ctx, width: 1920, height: 1080, scale: 1 }
+    const cameraFull = !readers.some((r) => r.kind === 'screen')
+    const cameraMoves = !cameraFull && cameraTrackIsActive(edit.camera)
+    const durationSec = Math.max(0.2, outputDurationOf(edit) / 1000)
+
+    for (let i = 0; i < WINDOW_COUNT; i++) {
       if (aborted()) return null
       // Spread across the take, avoiding both ends: the first frames of a
       // capture are often a blank surface and the last are the stop itself.
-      const at = durationSec * ((i + 1) / (SAMPLE_COUNT + 1))
-      const key = await sink.getSample(at)
-      const delta = await sink.getSample(Math.min(durationSec - 0.01, at + 1 / 30))
-      if (!key || !delta) {
-        key?.close()
-        delta?.close()
+      const atSec = durationSec * ((i + 1) / (WINDOW_COUNT + 1))
+      const frames: ImageBitmap[] = []
+      for (let f = 0; f < WINDOW_FRAMES; f++) {
+        const t = Math.min(durationSec - 0.01, atSec + f / 30)
+        const bitmap = await composeAt(frame, readers, recording, edit, t, cameraFull, cameraMoves)
+        if (!bitmap) break
+        frames.push(bitmap)
+      }
+      if (frames.length < 2) {
+        for (const b of frames) b.close()
         continue
       }
-      sampledAtSec.push(Math.round(at * 100) / 100)
-      pairs.push({ key, delta })
+      sampledAtSec.push(Math.round(atSec * 100) / 100)
+      windows.push({ frames })
     }
-    if (pairs.length === 0) return null
+    if (windows.length === 0) return null
 
     const steps: Record<string, StepMeasurement> = {}
     for (const tier of tiers) {
       if (aborted()) return null
-      const measured = await measureTier(tier, pairs)
+      const measured = await measureTier(tier, windows)
       if (measured) steps[tier.id] = measured
     }
     if (Object.keys(steps).length === 0) return null
@@ -107,60 +143,81 @@ export async function calibrateSteps(
     console.warn('[quality] size calibration failed, falling back to the estimate', err)
     return null
   } finally {
-    for (const p of pairs) {
-      p.key.close()
-      p.delta.close()
-    }
-    input?.dispose()
+    for (const w of windows) for (const b of w.frames) b.close()
+    for (const r of readers) r.dispose()
   }
 }
 
-/** Only what this module needs from a decoded sample. */
-interface VideoFrameLike {
-  displayWidth: number
-  displayHeight: number
-  draw(
-    ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
-    dx: number,
-    dy: number,
-    dw?: number,
-    dh?: number,
-  ): void
-  close(): void
+/** One output frame, composed exactly as pipeline.renderFrame composes it. */
+async function composeAt(
+  frame: FrameCanvas,
+  readers: VideoChannelReader[],
+  recording: Recording,
+  edit: EditState,
+  atSec: number,
+  cameraFull: boolean,
+  cameraMoves: boolean,
+): Promise<ImageBitmap | null> {
+  let screen: VideoSample | null = null
+  let camera: VideoSample | null = null
+  for (const reader of readers) {
+    const localMs = channelSourceTimeAt(recording, edit, reader.channelId, atSec * 1000)
+    if (localMs === null) continue
+    const sample = await reader.sampleAt(localMs / 1000)
+    if (!sample) continue
+    if (reader.kind === 'screen') screen = sample
+    else camera = sample
+  }
+  if (!screen && !camera) return null
+  let pose
+  if (cameraMoves && camera && camera.displayWidth > 0 && camera.displayHeight > 0) {
+    const recMs = outputToRecordingMs(edit, atSec * 1000)
+    if (recMs !== null) {
+      pose = cameraPoseAt(edit.camera, recMs, {
+        frameAspect: frame.width / frame.height,
+        cameraAspect: camera.displayWidth / camera.displayHeight,
+      })
+    }
+  }
+  drawVideoFrame(frame, screen, camera, cameraFull, pose, edit.background)
+  // A bitmap, because the readers are about to be asked for the next instant
+  // and their samples do not outlive that.
+  return createImageBitmap(frame.ctx.canvas)
 }
 
-async function measureTier(
-  tier: QualityTier,
-  pairs: { key: VideoFrameLike; delta: VideoFrameLike }[],
-): Promise<StepMeasurement | null> {
+async function measureTier(tier: QualityTier, windows: Window[]): Promise<StepMeasurement | null> {
   const canvas = new OffscreenCanvas(tier.width, tier.height)
   const ctx = canvas.getContext('2d', { alpha: false })
   if (!ctx) return null
   const keyBytes: number[] = []
   const deltaBytes: number[] = []
-  let expectKey = true
+  let nextIsKey = true
   const output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() })
   const source = new CanvasSource(canvas, {
     codec: 'avc',
     bitrate: tier.videoBitrate,
     // Never let the encoder insert a keyframe of its own: this measurement
-    // depends on knowing exactly which packet is which.
-    keyFrameInterval: Number.POSITIVE_INFINITY,
+    // depends on knowing exactly which packet is which. A finite number, not
+    // Infinity — mediabunny validates the field and throws on non-finite, which
+    // is how the first version of this probe returned null every time.
+    keyFrameInterval: 1e6,
     onEncodedPacket: (p) => {
-      if (expectKey) keyBytes.push(p.byteLength)
+      // Packets come back in encode order, and the first of every window is the
+      // only forced keyframe in it.
+      if (p.type === 'key' || nextIsKey) keyBytes.push(p.byteLength)
       else deltaBytes.push(p.byteLength)
-      expectKey = !expectKey
+      nextIsKey = false
     },
   })
   output.addVideoTrack(source, { frameRate: tier.fps })
   try {
     await output.start()
     let seq = 0
-    for (const pair of pairs) {
-      drawFit(ctx, pair.key, tier.width, tier.height)
-      await source.add(seq++ / tier.fps, 1 / tier.fps, { keyFrame: true })
-      drawFit(ctx, pair.delta, tier.width, tier.height)
-      await source.add(seq++ / tier.fps, 1 / tier.fps, { keyFrame: false })
+    for (const window of windows) {
+      for (let i = 0; i < window.frames.length; i++) {
+        ctx.drawImage(window.frames[i]!, 0, 0, tier.width, tier.height)
+        await source.add(seq++ / tier.fps, 1 / tier.fps, { keyFrame: i === 0 })
+      }
     }
     source.close()
     await output.finalize()
@@ -177,23 +234,6 @@ async function measureTier(
     meanDeltaBytes: mean(deltaBytes),
     samples: Math.min(keyBytes.length, deltaBytes.length),
   }
-}
-
-/** Contain-fit, the same way the export's layout draws a screen surface. */
-function drawFit(
-  ctx: OffscreenCanvasRenderingContext2D,
-  frame: VideoFrameLike,
-  width: number,
-  height: number,
-): void {
-  ctx.fillStyle = '#000000'
-  ctx.fillRect(0, 0, width, height)
-  const sw = frame.displayWidth || width
-  const sh = frame.displayHeight || height
-  const s = Math.min(width / sw, height / sh)
-  const dw = sw * s
-  const dh = sh * s
-  frame.draw(ctx, (width - dw) / 2, (height - dh) / 2, dw, dh)
 }
 
 /**

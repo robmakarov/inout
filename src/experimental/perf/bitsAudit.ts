@@ -714,22 +714,16 @@ export async function runBitsAudit(
       // record one over the same source and then price every step against it.
       const shape = await captureCompositeShape(source, takeMs)
       compositeKey = shape?.key ?? null
-      // F7c: the same composite the shipped panel would calibrate from.
+      // F7c: exactly what the shipped panel does — compose from the RAW
+      // channels through the production layout and encode two frames per step.
       let calibration: Awaited<ReturnType<typeof calibrateSteps>> = null
       let calibrationOut: ContentReport['calibration'] = null
-      if (shape?.key) {
-        const recWithComposite: Recording = {
-          ...recording,
-          composite: {
-            blobKey: shape.key,
-            mimeType: 'video/mp4',
-            durationMs: Math.round(shape.durationSec * 1000),
-            width: shape.width,
-            height: shape.height,
-            bytes: shape.bytes,
-          },
-        }
-        calibration = await calibrateSteps(recWithComposite, CALIBRATION_TIERS)
+      {
+        calibration = await calibrateSteps(
+          recording,
+          defaultEditState(recording),
+          CALIBRATION_TIERS,
+        )
         if (calibration) {
           calibrationOut = {
             wallMs: calibration.wallMs,
