@@ -12,6 +12,7 @@ import { clampEditState, defaultEditState } from '@core/timeline'
 import { detectCapabilities } from '@core/capabilities'
 import { analytics } from '@core/analytics'
 import { prefetchEditorChunk } from '@app/editorChunk'
+import { useInstallPrompt } from '@app/hooks/useInstallPrompt'
 import { useAppStore } from '@app/state/store'
 import {
   CHANNEL_KINDS,
@@ -24,6 +25,7 @@ import { ChannelChips } from '@app/components/ChannelChips'
 import { RecordButton } from '@app/components/RecordButton'
 import { TimerPill } from '@app/components/TimerPill'
 import { AudioLevelRing } from '@app/components/AudioLevelRing'
+import { Icon } from '@app/components/Icon'
 
 function StreamVideo({ stream, className }: { stream: MediaStream; className: string }) {
   const ref = useRef<HTMLVideoElement>(null)
@@ -48,6 +50,7 @@ export function CaptureScreen() {
   const toast = useAppStore((s) => s.toast)
 
   const [prefs, setPrefs] = useState<CaptureConfig>(() => loadCapturePrefs())
+  const installer = useInstallPrompt()
 
   // Warm compilers/workers only — devices must NOT activate before the
   // record click (acquire.ts starts them concurrently with the picker).
@@ -240,6 +243,20 @@ export function CaptureScreen() {
   return (
     <div className={`capture${recording ? ' capture--recording' : ''}`}>
       {!session && <div className="capture__wordmark">INOUT</div>}
+      {!session && !arming && installer.canInstall && (
+        <div className="capture__install">
+          <button className="capture__install-btn" onClick={installer.install}>
+            Install INOUT
+          </button>
+          <button
+            className="capture__install-x"
+            onClick={installer.dismiss}
+            aria-label="Don't ask again"
+          >
+            <Icon name="x" size={13} />
+          </button>
+        </div>
+      )}
       {arming && armingLabel && <div className="capture__arming">{armingLabel}</div>}
       {session && <TimerPill elapsedMs={elapsedMs} remainingMs={remainingMs} />}
       {recording && stalled.length > 0 && (
