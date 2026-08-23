@@ -38,9 +38,11 @@ import {
   AUDIO_BITRATE,
   AUDIO_CHANNEL_COUNT,
   AUDIO_SAMPLE_RATE,
+  KEYFRAME_INTERVAL_SEC,
   VIDEO_BITRATE,
   pickEncodingTarget,
 } from './codecs'
+import { BitsAudit, formatBits } from './bits'
 import { drawVideoFrame, type FrameCanvas } from './layout'
 import { cameraPoseAt, cameraTrackIsActive } from '@core/timeline'
 import { buildCertification, certificationComment } from './certify'
@@ -188,6 +190,7 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
   const { recording, edit, settings = DEFAULT_EXPORT_SETTINGS, onProgress, signal } = opts
   const { width, height, fps } = settings
   const videoBitrate = settings.videoBitrate ?? VIDEO_BITRATE
+  const gopSec = settings.keyFrameIntervalSec ?? KEYFRAME_INTERVAL_SEC
 
   const report = (phase: ExportProgress['phase'], ratio: number): void => {
     onProgress?.({ phase, ratio: Math.min(1, Math.max(0, ratio)) })
@@ -321,14 +324,32 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
           peak: certified?.peak,
           fromCaptureStats: certified?.fromCaptureStats,
           cuts: Math.max(0, keptSegments(edit).length - 1),
+          codec: {
+            container: target.mimeType,
+            video: target.videoCodec,
+            audio: needAudio ? target.audioCodec : undefined,
+            gopSec,
+          },
         }),
       ),
     })
-    const videoSource = new CanvasSource(canvas, { codec: target.videoCodec, bitrate: videoBitrate })
+    // O11a: every encoded packet is handed back anyway — count it. Costs one
+    // addition per packet and turns "where do the bytes go" into a number.
+    const bits = new BitsAudit(videoBitrate, gopSec)
+    const videoSource = new CanvasSource(canvas, {
+      codec: target.videoCodec,
+      bitrate: videoBitrate,
+      keyFrameInterval: gopSec,
+      onEncodedPacket: (p) => bits.video(p.byteLength, p.type),
+    })
     out.addVideoTrack(videoSource, { frameRate: fps })
     let audioSource: AudioBufferSource | null = null
     if (needAudio) {
-      audioSource = new AudioBufferSource({ codec: target.audioCodec, bitrate: AUDIO_BITRATE })
+      audioSource = new AudioBufferSource({
+        codec: target.audioCodec,
+        bitrate: AUDIO_BITRATE,
+        onEncodedPacket: (p) => bits.audio(p.byteLength),
+      })
       out.addAudioTrack(audioSource)
     }
     await out.start()
@@ -458,6 +479,7 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
 
     report('finalizing', 0.95)
     await out.finalize()
+    console.info(formatBits(bits.summarize(durationSec), `render ${width}×${height} ${target.videoCodec}`))
     let blob: Blob
     if (scratch) {
       blob = await scratch.finish(target.mimeType)

@@ -245,6 +245,19 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'o11',
+    title: 'O11 — bits audit: where the bytes go, and what each lever is worth',
+    detail:
+      'records two 1080p sources (a still editor page that scrolls, and a full-frame gradient), renders each through the PRODUCTION exporter across a keyframe-cadence ladder, and demuxes every output file back to count keyframe bytes vs delta bytes. Reports the size delta per cadence with a PSNR against the 2 s default, plus a candidate quality-step ladder for F7b.',
+    run: async (args) => {
+      const { runBitsAudit } = await import('../perf/bitsAudit')
+      return runBitsAudit({
+        takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined,
+        gops: Array.isArray(args?.gops) ? (args.gops as number[]) : undefined,
+      })
+    },
+  },
+  {
     id: 'f4',
     title: 'F4 — movable, timed camera',
     detail:

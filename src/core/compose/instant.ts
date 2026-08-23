@@ -42,7 +42,8 @@ import {
   softLimitSample,
   type AudioChannelMixer,
 } from './audio'
-import { AUDIO_BITRATE, AUDIO_CHANNEL_COUNT, AUDIO_SAMPLE_RATE } from './codecs'
+import { AUDIO_BITRATE, AUDIO_CHANNEL_COUNT, AUDIO_SAMPLE_RATE, VIDEO_BITRATE } from './codecs'
+import { BitsAudit, formatBits } from './bits'
 import { buildCertification, certificationComment } from './certify'
 import { createExportScratch, type ExportScratch } from './scratch'
 
@@ -221,14 +222,29 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
           loudRms: certified?.loudRms,
           peak: certified?.peak,
           fromCaptureStats: certified?.fromCaptureStats,
+          codec: {
+            container: format.mimeType,
+            video: videoCodec,
+            audio: needAudio && audioCodec ? audioCodec : undefined,
+            // The composite's GOP is MediaRecorder's to choose until O4's
+            // engine owns the capture encoder — recorded as absent, not as 2 s.
+          },
         }),
       ),
     })
+    // O11a on the path users actually take: the packets are already in hand
+    // here, so the composite's real keyframe share and achieved bitrate come
+    // out of a real screen take instead of a synthetic render.
+    const bits = new BitsAudit(VIDEO_BITRATE, 0)
     const videoSource = new EncodedVideoPacketSource(videoCodec)
     out.addVideoTrack(videoSource)
     let audioSource: AudioBufferSource | null = null
     if (needAudio && audioCodec) {
-      audioSource = new AudioBufferSource({ codec: audioCodec, bitrate: AUDIO_BITRATE })
+      audioSource = new AudioBufferSource({
+        codec: audioCodec,
+        bitrate: AUDIO_BITRATE,
+        onEncodedPacket: (p) => bits.audio(p.byteLength),
+      })
       out.addAudioTrack(audioSource)
     }
     await out.start()
@@ -239,6 +255,7 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
     let first = true
     for await (const packet of packetSink.packets()) {
       throwIfAborted()
+      bits.video(packet.byteLength, packet.type)
       await videoSource.add(packet, first && decoderConfig ? { decoderConfig } : undefined)
       first = false
     }
@@ -276,6 +293,7 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
 
     report('finalizing', 0.97)
     await out.finalize()
+    console.info(formatBits(bits.summarize(durationSec), `instant copy ${videoCodec}`))
     let blob: Blob
     if (scratch) {
       blob = await scratch.finish(format.mimeType)

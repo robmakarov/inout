@@ -13,6 +13,21 @@ export const AUDIO_BITRATE = 128_000
 export const AUDIO_SAMPLE_RATE = 48_000
 export const AUDIO_CHANNEL_COUNT = 2
 
+/**
+ * Keyframe cadence of the RENDER path, seconds (task O11b).
+ *
+ * mediabunny's default is 2 s and nothing had ever overridden it, so this was
+ * an unpriced choice. Keyframes are the one part of a video track that pays
+ * full price for pixels that did not change, which is why they dominate a
+ * static screen recording — and stretching the GOP changes no pixel, only how
+ * coarsely a player can seek.
+ *
+ * The number below is set from measurement, not taste: `npm run exp -- o11`
+ * renders the same take across a cadence ladder and reports the size delta and
+ * the keyframe share behind it. Raise it only with a fresh run in hand.
+ */
+export const KEYFRAME_INTERVAL_SEC = 2
+
 export interface EncodingTarget {
   format: OutputFormat
   videoCodec: VideoCodec

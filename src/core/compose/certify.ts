@@ -15,11 +15,28 @@ import type { ExportSettings, Recording } from '@core/types'
 /** Kept in step with scripts/oracle-gate.mjs MAX_SYNC_ABS_SYMMETRIC_MS. */
 export const CERTIFIED_SYNC_BOUND_MS = 90
 
+/**
+ * Which rung of the codec ladder produced this file (task O11a/O11d).
+ *
+ * The ladder is invisible to the user by design — it is probed per browser and
+ * never a setting — so the file itself has to say which rung ran, or a size or
+ * playback report from the field is unattributable.
+ */
+export interface CertifiedCodec {
+  /** Container mime, e.g. video/mp4. */
+  container: string
+  video: string
+  audio?: string
+  /** Keyframe cadence in seconds, where we control it (render path). */
+  gopSec?: number
+}
+
 export interface CertifiedExport {
   app: 'inout'
   v: 1
   path: 'instant' | 'render'
   output: { width: number; height: number; fps?: number; videoBitrate?: number }
+  codec?: CertifiedCodec
   audio: {
     channels: number
     /** Makeup gain the loudness normalizer applied (1 = untouched). */
@@ -43,6 +60,7 @@ export function buildCertification(args: {
   peak?: number
   fromCaptureStats?: boolean
   cuts?: number
+  codec?: CertifiedCodec
 }): CertifiedExport {
   const { recording } = args
   return {
@@ -55,6 +73,7 @@ export function buildCertification(args: {
       fps: args.settings.fps,
       videoBitrate: args.settings.videoBitrate,
     },
+    codec: args.codec,
     audio: {
       channels: args.audioChannels,
       makeup: args.makeup === undefined ? undefined : Math.round(args.makeup * 1000) / 1000,

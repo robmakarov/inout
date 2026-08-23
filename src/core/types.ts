@@ -287,6 +287,12 @@ export interface ExportSettings {
   fps: number
   /** Video bitrate target; falls back to the compose default when absent. */
   videoBitrate?: number
+  /**
+   * Keyframe cadence in seconds (task O11b). Absent = the compose default.
+   * Changes no pixel — only how coarsely a player can seek — but keyframes are
+   * where a static screen recording spends most of its bytes.
+   */
+  keyFrameIntervalSec?: number
 }
 
 export const DEFAULT_EXPORT_SETTINGS: ExportSettings = { width: 1920, height: 1080, fps: 30 }
