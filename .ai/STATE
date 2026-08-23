@@ -20,7 +20,9 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   (F4: drag/resize the PiP on the stage; the export moves it AT the instant you moved it), BACKGROUND
   FRAME (F3: backdrop + inset + rounded corners + shadow around the screen surface, preview and export
   from one geometry function), SILENCE TIGHTENING (F5a: "Tighten" proposes cuts from the audio's own
-  window-RMS envelope; a proposal until you press Apply, then ordinary F1 segments)
+  window-RMS envelope; a proposal until you press Apply, then ordinary F1 segments), TIMED ZOOM/PAN
+  (F2: wheel on the stage zooms about the cursor, drag pans, the export zooms AT the instant you did
+  it; max 2.5x because every zoom upscales a 1080p capture — more wants O6)
 - THE EDIT SURVIVES A REFRESH (F4, editsRepo IndexedDB v2). It never did before: recovery restored the
   recording and handed the editor a fresh default, so trims and cuts evaporated on every reload.
 - installable PWA, starts offline (P2); first paint 233.9 KB (O7 gate ≤300 KB; was 803)
