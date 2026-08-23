@@ -722,12 +722,12 @@ body.f .filters, body.d .detail { opacity: 1; }
    two so it still reads without hovering, now that the lamps are gone. */
 .wedge__fill {
   fill: var(--surface);
-  fill-opacity: clamp(0, calc(1.1 * var(--wedge-k)), 0.62);
+  fill-opacity: clamp(0, calc(0.4 * var(--wedge-k)), 0.5);
   transition: fill 140ms var(--ease), fill-opacity 140ms var(--ease);
 }
 .wedge[data-on='true'] .wedge__fill {
   fill: color-mix(in srgb, var(--surface), var(--on-c) 16%);
-  fill-opacity: clamp(0, calc(2.8 * var(--wedge-k)), 0.88);
+  fill-opacity: clamp(0, calc(2.4 * var(--wedge-k)), 0.8);
 }
 .wedge:hover .wedge__fill { fill: var(--surface-3); fill-opacity: clamp(0.5, calc(3.6 * var(--wedge-k)), 1); }
 .wedge[data-on='true']:hover .wedge__fill {
@@ -765,41 +765,44 @@ body.f .filters, body.d .detail { opacity: 1; }
   pointer-events: none;
   transition: stroke 140ms var(--ease), opacity 140ms var(--ease);
 }
-/* The ramp used to start at 0.1 alpha over black and top out at 0.78, then get
-   multiplied down again by the fill knob: the menu was a ghost. It is a solid
-   object now — the ramp still runs dark-to-lit across the band, but every stop
-   is opaque enough to be a surface, not a suggestion of one. */
-[data-skin='volume'] .wg-in  { stop-color: hsl(var(--neon-h) var(--wedge-s) calc(34% * var(--wedge-b))); stop-opacity: 0.45; }
-[data-skin='volume'] .wg-a   { stop-color: hsl(var(--neon-h) var(--wedge-s) calc(46% * var(--wedge-b))); stop-opacity: 0.58; }
-[data-skin='volume'] .wg-b   { stop-color: hsl(var(--neon-h) var(--wedge-s) calc(62% * var(--wedge-b))); stop-opacity: 0.7; }
-[data-skin='volume'] .wg-c   { stop-color: hsl(var(--neon-h) var(--wedge-s) calc(76% * var(--wedge-b))); stop-opacity: 0.83; }
-[data-skin='volume'] .wg-out { stop-color: hsl(var(--neon-h) var(--wedge-s) calc(88% * var(--wedge-b))); stop-opacity: 0.95; }
+/* The ramp is a light falling on a surface, and the surface has to be there:
+   under every wedge is a black plate, so the grid stops showing through and
+   the menu is an object instead of a stain. The ramp itself is untouched. */
+.wedge__base { fill: #000; fill-opacity: 0.93; }
+[data-skin='volume'] .wg-in  { stop-color: hsl(var(--neon-h) var(--wedge-s) calc(34% * var(--wedge-b))); stop-opacity: 0.1; }
+[data-skin='volume'] .wg-a   { stop-color: hsl(var(--neon-h) var(--wedge-s) calc(46% * var(--wedge-b))); stop-opacity: 0.2; }
+[data-skin='volume'] .wg-b   { stop-color: hsl(var(--neon-h) var(--wedge-s) calc(62% * var(--wedge-b))); stop-opacity: 0.36; }
+[data-skin='volume'] .wg-c   { stop-color: hsl(var(--neon-h) var(--wedge-s) calc(76% * var(--wedge-b))); stop-opacity: 0.55; }
+[data-skin='volume'] .wg-out { stop-color: hsl(var(--neon-h) var(--wedge-s) calc(88% * var(--wedge-b))); stop-opacity: 0.78; }
 /* live input — neon green, held back: saturation is real but the ramp tops out
    lower than the idle one, so it reads lit rather than lurid */
-[data-skin='volume'] .wn-in  { stop-color: hsl(var(--on-h) calc(var(--on-s) * 0.8) calc(26% * var(--wedge-b))); stop-opacity: 0.48; }
-[data-skin='volume'] .wn-a   { stop-color: hsl(var(--on-h) calc(var(--on-s) * 0.9) calc(38% * var(--wedge-b))); stop-opacity: 0.6; }
-[data-skin='volume'] .wn-b   { stop-color: hsl(var(--on-h) var(--on-s) calc(48% * var(--wedge-b))); stop-opacity: 0.72; }
-[data-skin='volume'] .wn-c   { stop-color: hsl(var(--on-h) var(--on-s) calc(58% * var(--wedge-b))); stop-opacity: 0.84; }
-[data-skin='volume'] .wn-out { stop-color: hsl(var(--on-h) var(--on-s) calc(66% * var(--wedge-b))); stop-opacity: 0.95; }
+[data-skin='volume'] .wn-in  { stop-color: hsl(var(--on-h) calc(var(--on-s) * 0.8) calc(26% * var(--wedge-b))); stop-opacity: 0.12; }
+[data-skin='volume'] .wn-a   { stop-color: hsl(var(--on-h) calc(var(--on-s) * 0.9) calc(38% * var(--wedge-b))); stop-opacity: 0.22; }
+[data-skin='volume'] .wn-b   { stop-color: hsl(var(--on-h) var(--on-s) calc(48% * var(--wedge-b))); stop-opacity: 0.38; }
+[data-skin='volume'] .wn-c   { stop-color: hsl(var(--on-h) var(--on-s) calc(58% * var(--wedge-b))); stop-opacity: 0.54; }
+[data-skin='volume'] .wn-out { stop-color: hsl(var(--on-h) var(--on-s) calc(66% * var(--wedge-b))); stop-opacity: 0.72; }
 /* refused — same ramp on the warn hue */
-[data-skin='volume'] .wr-in  { stop-color: hsl(var(--no-h) calc(var(--no-s) * 0.8) calc(26% * var(--wedge-b))); stop-opacity: 0.46; }
-[data-skin='volume'] .wr-a   { stop-color: hsl(var(--no-h) calc(var(--no-s) * 0.9) calc(38% * var(--wedge-b))); stop-opacity: 0.58; }
-[data-skin='volume'] .wr-b   { stop-color: hsl(var(--no-h) var(--no-s) calc(47% * var(--wedge-b))); stop-opacity: 0.7; }
-[data-skin='volume'] .wr-c   { stop-color: hsl(var(--no-h) var(--no-s) calc(55% * var(--wedge-b))); stop-opacity: 0.82; }
-[data-skin='volume'] .wr-out { stop-color: hsl(var(--no-h) var(--no-s) calc(62% * var(--wedge-b))); stop-opacity: 0.94; }
+[data-skin='volume'] .wr-in  { stop-color: hsl(var(--no-h) calc(var(--no-s) * 0.8) calc(26% * var(--wedge-b))); stop-opacity: 0.12; }
+[data-skin='volume'] .wr-a   { stop-color: hsl(var(--no-h) calc(var(--no-s) * 0.9) calc(38% * var(--wedge-b))); stop-opacity: 0.22; }
+[data-skin='volume'] .wr-b   { stop-color: hsl(var(--no-h) var(--no-s) calc(47% * var(--wedge-b))); stop-opacity: 0.36; }
+[data-skin='volume'] .wr-c   { stop-color: hsl(var(--no-h) var(--no-s) calc(55% * var(--wedge-b))); stop-opacity: 0.5; }
+[data-skin='volume'] .wr-out { stop-color: hsl(var(--no-h) var(--no-s) calc(62% * var(--wedge-b))); stop-opacity: 0.66; }
 /* unavailable — the same volume, drained of hue. It was flat, which is why it
    looked like a hole rather than a wedge that happens to be dead. It stays
    where it was while off lifts: the gap between them IS the ladder. */
-[data-skin='volume'] .wy-in  { stop-color: hsl(var(--neon-h) 6% calc(30% * var(--wedge-b))); stop-opacity: 0.26; }
-[data-skin='volume'] .wy-a   { stop-color: hsl(var(--neon-h) 6% calc(42% * var(--wedge-b))); stop-opacity: 0.34; }
-[data-skin='volume'] .wy-b   { stop-color: hsl(var(--neon-h) 5% calc(54% * var(--wedge-b))); stop-opacity: 0.44; }
-[data-skin='volume'] .wy-c   { stop-color: hsl(var(--neon-h) 5% calc(64% * var(--wedge-b))); stop-opacity: 0.55; }
-[data-skin='volume'] .wy-out { stop-color: hsl(var(--neon-h) 4% calc(72% * var(--wedge-b))); stop-opacity: 0.66; }
+[data-skin='volume'] .wy-in  { stop-color: hsl(var(--neon-h) 6% calc(30% * var(--wedge-b))); stop-opacity: 0.1; }
+[data-skin='volume'] .wy-a   { stop-color: hsl(var(--neon-h) 6% calc(42% * var(--wedge-b))); stop-opacity: 0.18; }
+[data-skin='volume'] .wy-b   { stop-color: hsl(var(--neon-h) 5% calc(54% * var(--wedge-b))); stop-opacity: 0.28; }
+[data-skin='volume'] .wy-c   { stop-color: hsl(var(--neon-h) 5% calc(64% * var(--wedge-b))); stop-opacity: 0.4; }
+[data-skin='volume'] .wy-out { stop-color: hsl(var(--neon-h) 4% calc(72% * var(--wedge-b))); stop-opacity: 0.52; }
 [data-skin='volume'] .wedge .wedge__fill {
   fill: url(#wgrad);
-  fill-opacity: clamp(0.62, calc(3 * var(--wedge-k)), 1);
+  /* off is the one state that gets a lift over its original weight — it was
+     the darkest thing in the ring and read as an empty slot. The ramp is
+     untouched; this is how much of it lands. */
+  fill-opacity: clamp(0, calc(1.2 * var(--wedge-k)), 0.7);
 }
-[data-skin='volume'] .wedge[data-on='true'] .wedge__fill { fill: url(#wgreen); fill-opacity: clamp(0.72, calc(3.4 * var(--wedge-k)), 1); }
+[data-skin='volume'] .wedge[data-on='true'] .wedge__fill { fill: url(#wgreen); fill-opacity: clamp(0, calc(2.8 * var(--wedge-k)), 0.85); }
 [data-skin='volume'] .wedge:hover .wedge__fill { fill: url(#wgrad); fill-opacity: 1; }
 [data-skin='volume'] .wedge[data-on='true']:hover .wedge__fill { fill: url(#wgreen); fill-opacity: 1; }
 [data-skin='volume'] .wedge .wedge__edge {
@@ -888,11 +891,11 @@ body.f .filters, body.d .detail { opacity: 1; }
 .wedge[data-state='denied'] .wedge__fill,
 [data-skin='volume'] .wedge[data-state='denied'] .wedge__fill {
   fill: url(#wred);
-  fill-opacity: clamp(0.7, calc(3.2 * var(--wedge-k)), 1);
+  fill-opacity: clamp(0, calc(2.2 * var(--wedge-k)), 0.7);
 }
 .wedge[data-state='denied']:hover .wedge__fill,
 [data-skin='volume'] .wedge[data-state='denied']:hover .wedge__fill {
-  fill-opacity: 1;
+  fill-opacity: clamp(0.28, calc(2.4 * var(--wedge-k)), 0.5);
 }
 .wedge[data-state='denied'] .wedge__edge,
 [data-skin='volume'] .wedge[data-state='denied'] .wedge__edge { stroke: hsl(var(--no-h) var(--no-s) calc(64% * var(--wedge-b))); opacity: 0.75; }
@@ -904,7 +907,7 @@ body.f .filters, body.d .detail { opacity: 1; }
 .wedge[data-state='blocked'] .wedge__fill,
 [data-skin='volume'] .wedge[data-state='blocked'] .wedge__fill {
   fill: url(#wgrey);
-  fill-opacity: clamp(0.34, calc(1.4 * var(--wedge-k)), 0.72);
+  fill-opacity: clamp(0, calc(0.75 * var(--wedge-k)), 0.42);
 }
 .wedge[data-state='blocked'] .wedge__edge,
 [data-skin='volume'] .wedge[data-state='blocked'] .wedge__edge {
@@ -913,7 +916,7 @@ body.f .filters, body.d .detail { opacity: 1; }
 }
 .wedge[data-state='blocked']:hover .wedge__fill,
 [data-skin='volume'] .wedge[data-state='blocked']:hover .wedge__fill {
-  fill-opacity: clamp(0.42, calc(1.7 * var(--wedge-k)), 0.8);
+  fill-opacity: clamp(0.22, calc(1.4 * var(--wedge-k)), 0.6);
 }
 
 /* same three states on the pills */
@@ -2268,6 +2271,7 @@ function buildRadial() {
     const sub = subFor(c.key)
     return `
       <g class="wedge" data-wedge="${c.key}" data-on="${st === 'ok' && onNow(c.key)}" data-state="${st}" style="--d:${i * 30}ms" role="button" aria-label="${c.label}${sub ? ', ' + sub : ''}">
+        <path class="wedge__base" d="${sector(R_IN, R_OUT, a0, a1)}"/>
         <path class="wedge__fill" d="${sector(R_IN, R_OUT, a0, a1)}"/>
         <path class="wedge__edge" d="${arc(R_OUT - 0.6, a0, a1)}"/>
         <g class="wedge__ico" transform="translate(${ix - 11} ${iy - 11}) scale(0.92)">${WEDGE_ICON[c.key]}</g>
