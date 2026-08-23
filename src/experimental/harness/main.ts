@@ -172,6 +172,19 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'o4step1',
+    title: 'O4 step 1 — decompose the residual A/V offset',
+    detail:
+      'runs the oracle N times and reports, per run, what CI gates on today against the same export measured with both detection biases removed AND both rig references (audio beep arrivals, video flash arrivals) measured rather than assumed. Prices how much of the residual is the instrument.',
+    run: async (args) => {
+      const { runSyncResidual } = await import('../perf/syncResidual')
+      return runSyncResidual({
+        runs: typeof args?.runs === 'number' ? args.runs : undefined,
+        recordMs: typeof args?.recordMs === 'number' ? args.recordMs : undefined,
+      })
+    },
+  },
+  {
     id: 'datachan',
     title: 'Experiment 6 — Timed data channels (live capture demo)',
     detail:

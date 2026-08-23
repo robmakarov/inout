@@ -199,10 +199,18 @@ export interface OnsetDetectorState {
   /** Time until which new onsets are suppressed, sec. */
   refractoryUntilSec: number
   onsetsSec: number[]
+  /**
+   * Same onsets dated at the CENTRE of the envelope window instead of its
+   * start. The true onset lies uniformly inside the window, so the start is
+   * biased early by half a window (~1.33 ms at 48 kHz) — small next to the
+   * video-side quantisation, but it is a bias, and O4's ≤10 ms gate has no
+   * room for free ones. Reported alongside, never in place of, onsetsSec.
+   */
+  onsetsCenteredSec: number[]
 }
 
 export function newOnsetDetector(): OnsetDetectorState {
-  return { prevEnv: 0, refractoryUntilSec: -Infinity, onsetsSec: [] }
+  return { prevEnv: 0, refractoryUntilSec: -Infinity, onsetsSec: [], onsetsCenteredSec: [] }
 }
 
 const ONSET_THRESHOLD = 0.1
@@ -229,6 +237,7 @@ export function feedOnsetDetector(
     const tSec = chunkStartSec + i / sampleRate
     if (peak > ONSET_THRESHOLD && st.prevEnv <= ONSET_THRESHOLD && tSec >= st.refractoryUntilSec) {
       st.onsetsSec.push(tSec)
+      st.onsetsCenteredSec.push(tSec + (end - i) / 2 / sampleRate)
       st.refractoryUntilSec = tSec + REFRACTORY_SEC
     }
     st.prevEnv = peak
