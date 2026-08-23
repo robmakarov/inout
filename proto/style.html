@@ -1134,6 +1134,8 @@ body.f .filters, body.d .detail { opacity: 1; }
    resize observer: a container-query length here has to be re-resolved every
    frame, and that is what made it stutter. */
 .take__screen {
+  position: relative;
+  z-index: 1; /* the band opens upward past here and belongs behind the picture */
   width: 100%;
   height: 0;
   overflow: hidden;
@@ -2675,11 +2677,11 @@ const smooth = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2
 const RING_L = () => 2 * Math.PI * R_OUT
 
 /* the twist the band carries at rest, so that when it parts it parts on a
-   separator. Zero when one already sits at the bottom. */
+   separator. Zero when one already sits at the top. */
 function seamTwist() {
   const step = (2 * Math.PI) / RING_ORDER.length
   const first = ((RING_ROT * Math.PI) / 180) - step / 2 // a separator, from the top
-  return first + Math.round((Math.PI - first) / step) * step - Math.PI
+  return first - Math.round(first / step) * step
 }
 function morphEnv(t) {
   const bar = barRect()
@@ -2697,17 +2699,15 @@ function morphEnv(t) {
      sag and subtract it, and the bottom of the band travels from where the ring
      already ends to where the row ends: four pixels, in a straight line. All
      the descent anybody sees is the top of it coming down. */
-  const phi = L * k
-  // how far the band's own lowest point falls below its rim's midpoint: the
-  // rim's sag at the arc's end, plus the inner edge where it still hangs lower
-  const sag = k > 0
-    ? (2 / k) * Math.pow(Math.sin(phi / 4), 2) + h * Math.max(0, Math.cos(phi / 2))
-    : h
-  const floor = R_OUT + (bar.top + bar.h - R_OUT) * p
+  /* The band's middle is the bottom of the ring, and the bottom of the ring is
+     already where the row is going. So the middle barely moves — a hundred to a
+     hundred and four — and no sag has to be measured out of anything: the arc
+     opens upward from it, and the only thing that travels is the part of the
+     ring that was above the button, coming down the outside. */
   return {
     bar, p, twist, L, k, h,
     n: RING_ORDER.length,
-    yRim: floor - sag,
+    yBase: R_OUT + (bar.top + bar.h - R_OUT) * p,
     rho: twist * Math.pow(1 - p, RHO_POW),
     detail: Math.max(0, 1 - DETAIL_DIP * Math.sin(Math.PI * t)),
   }
@@ -2718,7 +2718,7 @@ function morphEnv(t) {
 function wedgeSigma(e, key) {
   const L0 = RING_L()
   const fromTop = ((RING_ROT * Math.PI) / 180) + RING_ORDER.indexOf(key) * ((2 * Math.PI) / e.n)
-  let s = (fromTop - e.twist) * R_OUT
+  let s = (Math.PI - fromTop + e.twist) * R_OUT
   s = ((s % L0) + L0) % L0
   if (s > L0 / 2) s -= L0
   return (s / L0) * e.L
@@ -2734,13 +2734,13 @@ function wedgeSigma(e, key) {
    the captions upright while the band they sit on leans. */
 function bandPt(e, d, s) {
   let x, y
-  if (e.k <= 0) { x = s; y = e.yRim + d }
+  if (e.k <= 0) { x = s; y = e.yBase - d }
   else {
     const R = 1 / e.k
     const th = s * e.k
     const sh = Math.sin(th / 2)
     x = Math.sin(th) * (R - d)
-    y = e.yRim + 2 * R * sh * sh + d * Math.cos(th)
+    y = e.yBase - 2 * R * sh * sh - d * Math.cos(th)
   }
   if (!e.rho) return [x, y]
   const c = Math.cos(e.rho), n = Math.sin(e.rho)
@@ -2892,8 +2892,8 @@ function drawBand() {
     const detail = g.querySelector('.wedge__detail')
     detail.setAttribute('opacity', e.detail.toFixed(3))
     const cp = f.at(-CAP_OUT, 0.5)
-    const th = f.mid * e.k + e.rho
-    const nx = Math.sin(th), ny = -Math.cos(th)
+    const th = f.mid * e.k - e.rho
+    const nx = Math.sin(th), ny = Math.cos(th)
     const anchor = nx > 0.3 ? 'start' : nx < -0.3 ? 'end' : 'middle'
     const baseline = ny > 0.3 ? 'hanging' : ny < -0.3 ? 'auto' : 'middle'
     const dy = ny > 0.3 ? 2 : ny < -0.3 ? -2 : 0
