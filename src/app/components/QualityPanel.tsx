@@ -1,9 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import type { QualityTier } from '@core/compose/quality'
 import { QUALITY_TIERS, estimateExportBytes, isDefaultTier } from '@core/compose/quality'
-import type { Calibration } from '@core/compose/calibrate'
-import { estimateFromCalibration } from '@core/compose/calibrate'
-import type { EditState, Recording } from '@core/types'
+import type { Recording } from '@core/types'
 import { humanBytes } from '@app/lib/format'
 import { Icon } from '@app/components/Icon'
 
@@ -18,16 +16,14 @@ import { Icon } from '@app/components/Icon'
  * F7b made the ladder finer and made the numbers honest about themselves: the
  * default step's size is the file, every other one is a prediction.
  *
- * F7c stopped predicting them from a composite a different encoder made — which
- * ran 47 % low on text-heavy takes — and MEASURES them instead: when the panel
- * opens it encodes a few frames of this very take at every step, through the
- * export's own encoder, and prices the file from those. The probe runs in the
- * background and the numbers refine when it lands; it never blocks the panel,
- * and any failure falls straight back to F7's estimate.
+ * F7c tried to MEASURE them instead of predicting them — encode a few frames of
+ * the take at each step when the panel opens — and did not clear the ±20 % gate
+ * either. The spike and its numbers are in src/experimental/perf/sizeProbe.ts;
+ * nothing landed here, because a probe that is 60 % out on motion content is
+ * not an improvement on a model that is 20 % out.
  */
 export function QualityPanel({
   recording,
-  edit,
   outputDurationMs,
   tier,
   onTier,
@@ -35,49 +31,19 @@ export function QualityPanel({
   onCancel,
 }: {
   recording: Recording
-  /** The edit being exported — the calibration composes THROUGH it. */
-  edit: EditState
   outputDurationMs: number
   tier: QualityTier
   onTier: (t: QualityTier) => void
   onExport: () => void
   onCancel: () => void
 }) {
-  // Measured per-step sizes, when they land. Null until then, and null forever
-  // on any failure — the panel is useful either way.
-  const [calibration, setCalibration] = useState<Calibration | null>(null)
-  useEffect(() => {
-    let live = true
-    const ac = new AbortController()
-    void (async () => {
-      try {
-        const { calibrateSteps } = await import('@core/compose/calibrate')
-        const cal = await calibrateSteps(recording, edit, QUALITY_TIERS, { signal: ac.signal })
-        if (live && cal) {
-          setCalibration(cal)
-          console.info(
-            `[quality] step sizes measured in ${cal.wallMs}ms from ${cal.sampledAtSec.length} instants`,
-          )
-        }
-      } catch (err) {
-        console.warn('[quality] size calibration unavailable', err)
-      }
-    })()
-    return () => {
-      live = false
-      ac.abort()
-    }
-  }, [recording, edit])
-
   const estimates = useMemo(
     () =>
       QUALITY_TIERS.map((t) => ({
         tier: t,
-        size:
-          estimateFromCalibration(recording, t, outputDurationMs, calibration) ??
-          estimateExportBytes(recording, t, outputDurationMs),
+        size: estimateExportBytes(recording, t, outputDurationMs),
       })),
-    [recording, outputDurationMs, calibration],
+    [recording, outputDurationMs],
   )
   const current =
     estimates.find((e) => e.tier.id === tier.id) ??

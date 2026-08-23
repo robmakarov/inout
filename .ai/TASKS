@@ -50,13 +50,11 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
                                              the encoder never once blocking. The wall is in the
                                              ASSEMBLY. Start from the counters, not from a rewrite —
                                              see the handoff. Still the keystone for O5/O6/O9, F6, F8, P4.
-  F7c  the size number, calibrated [medium]  F7b's ±20 % gate is UNMET in general and the reason is
-                                             measured (see F7b): the composite's encoder is not the
-                                             export's encoder — 0.97 vs 1.84 Mbps on the same text
-                                             pixels. Designed remedy: encode ONE frame of the take at
-                                             each step and compare it with the composite's mean
-                                             keyframe (O11a already counts that), then scale. Gate:
-                                             ±20 % on every step for BOTH content types, twice over.
+  F7c  the size number, calibrated [medium]  ATTEMPTED 2026-08-23, NOT SHIPPED — three designs, all
+                                             measured, none good enough (see the task). The spike is
+                                             src/experimental/perf/sizeProbe.ts and `npm run exp --
+                                             o11` scores any candidate against real rendered sizes on
+                                             BOTH content types. Start from attempt 4, not attempt 1.
   P1   firefox + 3-engine oracle   [medium]  capabilities.ts engine×OS matrix + Playwright gecko run.
                                              NOW EASIER: P3 shipped core/platform.ts (engine+browser+OS,
                                              probe-first) and scripts/browser-check.mjs — consume them,
@@ -606,23 +604,31 @@ GATES: measured size within ±20 % of the shown number on EVERY step, twice over
 differ ≥25 % predicted · default step still instant (logs) · lowest step visual-diff evidence ·
 `node scripts/ui-shot.mjs --flow=quality` updated · oracles green.
 
-## F7c. the size number, calibrated — meet the gate F7b could not  [P2, medium; READY]
-WHY: F7b's per-step size is anchored on the composite, and the composite's encoder is not the export's
-encoder. Measured: on still text-heavy content MediaRecorder's AVC spends 0.97 Mbps where the export's
-AVC spends 1.84 Mbps for the same pixels (prediction 47 % low at 1440p); on full-motion content they
-agree within 7 %. And the size-vs-resolution shape is content-dependent too — text scales about
-linearly with pixel count, motion about as √ — with the composite's keyframe share separating the two
-cases 68.8 % vs 1.1 %. No exponent fixes both, because the missing quantity is what the EXPORT encoder
-charges for THIS content.
-GOAL: measure the missing quantity instead of modelling it. Encode ONE frame of the take at each step
-through the production encoder and compare it against the composite's mean keyframe size (O11a's audit
-already counts keyframe bytes and count on the copy path); the ratio is the cross-encoder calibration,
-and the per-step ratios are the resolution shape. Budget it: the probe runs when the quality panel
-opens, must stay under ~500 ms for all steps together, must not leave scratch files behind, and must
-degrade to today's estimate on any failure. Show the number as soon as it lands, never block the panel.
-GATES: measured size within ±20 % of the shown number on EVERY step, on BOTH the text rig and the
-motion rig, twice over · panel opens in under 100 ms with the probe still running · zero orphan
-scratch files after 20 opens · default step still exact and still instant.
+## F7c. the size number, calibrated — ATTEMPTED 2026-08-23, NOT SHIPPED  [P2, medium; READY]
+WHY IT EXISTS: F7b's per-step size is predicted from the composite, and the composite's encoder is not
+the export's encoder — 0.97 vs 1.84 Mbps on the same text pixels, so the prediction lands 47 % low at
+1440p. The idea was to stop predicting and measure: encode a bit of the take at each step through the
+export's own encoder and price the file from that.
+THREE DESIGNS, ALL MEASURED AGAINST REAL RENDERED SIZES (12 s takes, screen-like and full-motion
+content, `npm run exp -- o11`, which now scores any candidate automatically):
+  1. key+delta pair sampled from the COMPOSITE            +136 % / −68 %
+     Wrong pixels — a composite frame carries MediaRecorder's ringing on text (expensive to re-encode)
+     and is already smoothed on motion (cheap). The error flips sign with content, which is the tell.
+  2. key+delta pair composed from the RAW CHANNELS through the production drawVideoFrame  +128 % / −64 %
+     Right pixels, wrong shape: one delta against a fresh keyframe is not what a file is made of.
+  3. two 15-frame WINDOWS of consecutive composed frames  −7 to −43 % / −59 to −69 %
+     Better on screen content, still far out on motion: the measured delta (4.8 KB at 1080p) is a
+     THIRD of what the same content costs the real render (14-19 KB/frame).
+NOT SHIPPED, deliberately: the panel keeps F7's estimate, whose error is smaller on the content that
+matters and — the point — already known and written down. A probe 60 % out on one content type is not
+an improvement on a model 20-45 % out on the other. The probe cost 1.7-2.5 s, also over its budget.
+WHAT ATTEMPT 4 MUST HANDLE: the unexplained factor of three between a 30-frame encode and a 360-frame
+one. Rate control has not settled in the short encode; find out what settles it (longer window? a
+prime-the-encoder pass? reading the achieved rate from a longer sample?) and prove it on BOTH content
+types before touching the panel.
+GATES (unchanged): measured size within ±20 % of the shown number on EVERY step, on BOTH rigs, twice
+over · panel opens in under 100 ms with the probe still running · zero orphan scratch files after 20
+opens · default step still exact and still instant.
 
 ## F8. nle-scrub — frame-exact editor feel  [P2, after O4; PO-approved]
 Goal: keyframe-index-driven preview — scrub decodes the EXACT frame (WebCodecs random access) instead

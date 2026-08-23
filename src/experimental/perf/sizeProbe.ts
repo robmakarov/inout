@@ -1,5 +1,8 @@
 /**
- * THE SIZE NUMBER, MEASURED INSTEAD OF MODELLED (task F7c).
+ * EXPERIMENTAL — F7c SPIKE: can the per-step size be MEASURED instead of
+ * modelled? Three designs, all measured, none good enough to ship. Kept here
+ * with its numbers so the next attempt starts from the fourth idea, not the
+ * first.
  *
  * F7b shipped a finer export ladder and reported its own gate unmet: the
  * per-step size was predicted from the composite, and the composite's encoder
@@ -25,9 +28,36 @@
  * which costs bits to re-encode, and on motion it has already been smoothed,
  * which does not. The render decodes the raw channels; so does this.
  *
- * Everything is in memory (BufferTarget), so a probe leaves nothing on disk,
- * and every failure path returns null so the caller falls back to F7's estimate
- * rather than showing nothing.
+ * WHAT WAS TRIED, and what each attempt measured against real rendered sizes
+ * (12 s takes, screen-like content and full-motion content, the shipped ladder):
+ *
+ *   1. key+delta pair sampled from the COMPOSITE.   +136 / −68 %
+ *      Wrong pixels: a composite frame carries MediaRecorder's ringing on text
+ *      (expensive to re-encode) and is already smoothed on motion (cheap).
+ *   2. key+delta pair composed from the RAW CHANNELS through the production
+ *      drawVideoFrame — the right pixels.           +128 / −64 %
+ *      Wrong shape: one delta measured against a fresh keyframe is not what a
+ *      file is made of. In a real file a delta references another delta, and
+ *      the rate controller has settled by then.
+ *   3. two 15-frame WINDOWS of consecutive composed frames, one keyframe each,
+ *      mean delta from the run.                     −7 to −43 % / −59 to −69 %
+ *      Better on screen content, still far out on motion — the measured delta
+ *      (4.8 KB at 1080p) is a third of what the same content actually costs the
+ *      render (14-19 KB/frame). Something about a 30-frame encode still does
+ *      not reach the steady state a 360-frame encode does.
+ *
+ * SO IT IS NOT SHIPPED. The panel keeps F7's estimate, whose error is smaller
+ * and — this is the point — already known and written down. A probe that is
+ * 60 % out on one content type is not an improvement on a model that is 20-45 %
+ * out on the other.
+ *
+ * WHAT THE FOURTH ATTEMPT MUST HANDLE: measure a long enough stretch that rate
+ * control settles (the gap between a 30-frame and a 360-frame encode is the
+ * unexplained factor of three), and prove it on BOTH content types before it
+ * touches the panel. `npm run exp -- o11` already scores any candidate against
+ * real rendered sizes on both — use it.
+ *
+ * Everything is in memory (BufferTarget), so a probe leaves nothing on disk.
  */
 import { BufferTarget, CanvasSource, Mp4OutputFormat, Output, type VideoSample } from 'mediabunny'
 import { blobStore } from '@core/store'
@@ -39,10 +69,10 @@ import {
   outputToRecordingMs,
 } from '@core/timeline'
 import type { EditState, Recording } from '@core/types'
-import { AUDIO_BITRATE, KEYFRAME_INTERVAL_SEC } from './codecs'
-import { drawVideoFrame, type FrameCanvas } from './layout'
-import { isDefaultTier, type QualityTier, type SizeEstimate } from './quality'
-import { openVideoChannel, type VideoChannelReader } from './video'
+import { AUDIO_BITRATE, KEYFRAME_INTERVAL_SEC } from '@core/compose/codecs'
+import { drawVideoFrame, type FrameCanvas } from '@core/compose/layout'
+import { isDefaultTier, type QualityTier, type SizeEstimate } from '@core/compose/quality'
+import { openVideoChannel, type VideoChannelReader } from '@core/compose/video'
 
 export interface StepMeasurement {
   tierId: string
