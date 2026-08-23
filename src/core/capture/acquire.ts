@@ -1,4 +1,10 @@
-import { DEFAULT_EXPORT_SETTINGS, type CaptureConfig, type ChannelKind, type MediaKind } from '@core/types'
+import {
+  DEFAULT_EXPORT_SETTINGS,
+  type CaptureConfig,
+  type ChannelKind,
+  type DisplaySurfaceKind,
+  type MediaKind,
+} from '@core/types'
 
 export interface AcquiredChannel {
   kind: ChannelKind
@@ -6,6 +12,8 @@ export interface AcquiredChannel {
   stream: MediaStream
   /** Primary track: the video track for video kinds, the audio track for audio kinds. */
   track: MediaStreamTrack
+  /** Screen channel only: which surface the picker returned. */
+  surface?: DisplaySurfaceKind
 }
 
 export interface AcquireFailure {
@@ -254,7 +262,7 @@ type DisplayMediaOptions = DisplayMediaStreamOptions & {
 }
 
 /** What the user actually picked in the screen picker. Not in every TS DOM lib. */
-type DisplaySurface = 'monitor' | 'window' | 'browser'
+type DisplaySurface = DisplaySurfaceKind
 function displaySurfaceOf(track: MediaStreamTrack | undefined): DisplaySurface | undefined {
   const s = track?.getSettings() as (MediaTrackSettings & { displaySurface?: string }) | undefined
   const v = s?.displaySurface
@@ -473,7 +481,13 @@ export function acquireChannelsProgressive(
       // Screen delivered LAST from the display result: it is the primary, and
       // delivering it resolves primaryReady — system audio must already be in.
       if (video) {
-        deliver({ kind: 'screen', media: 'video', stream: new MediaStream([video]), track: video })
+        deliver({
+          kind: 'screen',
+          media: 'video',
+          stream: new MediaStream([video]),
+          track: video,
+          surface,
+        })
       }
       mark(
         'display',

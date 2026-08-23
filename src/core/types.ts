@@ -188,6 +188,14 @@ export interface CaptureConfig {
 
 export type CaptureState = 'armed' | 'recording' | 'stopping' | 'stopped'
 
+/**
+ * What the user actually picked in the screen picker. 'monitor' means THIS
+ * window is inside the recorded frame whenever it is in front — which is what
+ * makes the browser's own sharing bar able to spoil a take by pulling focus
+ * here. Null when no screen channel is in the take (or the browser doesn't say).
+ */
+export type DisplaySurfaceKind = 'monitor' | 'window' | 'browser'
+
 export type CaptureEvent =
   | { type: 'tick'; elapsedMs: number; remainingMs: number }
   | { type: 'state'; state: CaptureState }
@@ -215,6 +223,8 @@ export interface CaptureSession {
   readonly config: CaptureConfig
   /** Live streams for UI preview, keyed by channel kind. Available while armed/recording. */
   readonly previewStreams: Partial<Record<ChannelKind, MediaStream>>
+  /** Surface the screen channel is capturing, once it is known. */
+  readonly displaySurface: DisplaySurfaceKind | null
   start(): void
   /** Stops all recorders, flushes to the blob store, persists metadata. */
   stop(): Promise<Recording>

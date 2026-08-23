@@ -8,6 +8,7 @@ import type {
   CaptureState,
   ChannelKind,
   ChannelRecording,
+  DisplaySurfaceKind,
   MediaKind,
   Recording,
 } from '@core/types'
@@ -170,6 +171,8 @@ interface ChannelRuntime {
 class Session implements CaptureSession {
   readonly config: CaptureConfig
   readonly previewStreams: Partial<Record<ChannelKind, MediaStream>> = {}
+  /** Which surface the screen picker returned — see DisplaySurfaceKind. */
+  displaySurface: DisplaySurfaceKind | null = null
 
   private stateInternal: CaptureState = 'armed'
   private readonly listeners = new Set<(e: CaptureEvent) => void>()
@@ -476,6 +479,7 @@ class Session implements CaptureSession {
 
     this.channels.push(rt)
     this.previewStreams[acq.kind] = acq.stream
+    if (acq.kind === 'screen' && acq.surface) this.displaySurface = acq.surface
     return rt
   }
 
