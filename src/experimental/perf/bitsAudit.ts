@@ -281,12 +281,14 @@ export interface GopRung {
 
 export interface StepRung {
   label: string
+  /** 'ladder' rungs are the candidate steps; 'probe' rungs test one lever. */
+  role: 'ladder' | 'probe'
   width: number
   height: number
   videoBitrate: number
   bytes: number
   achievedMbps: number
-  /** Size against the previous (smaller) step. F7b wants ≥25 %. */
+  /** Size against the previous LADDER step. F7b wants ≥25 %. */
   deltaVsPrevPct: number | null
   wallMs: number
 }
@@ -404,27 +406,39 @@ export async function runBitsAudit(
       // (b) candidate quality steps — only on the screen-like content, which is
       // what the slider will be used on.
       if (kind === 'screen') {
-        const candidates = [
-          { label: '720p lean', width: 1280, height: 720, videoBitrate: 2_000_000 },
-          { label: '720p', width: 1280, height: 720, videoBitrate: 4_000_000 },
-          { label: '1080p lean', width: 1920, height: 1080, videoBitrate: 4_500_000 },
-          { label: '1080p', width: 1920, height: 1080, videoBitrate: 8_000_000 },
-          { label: '1440p', width: 2560, height: 1440, videoBitrate: 14_000_000 },
+        // Bitrate ceilings scale with pixel count, as QUALITY_TIERS already
+        // does. The two PROBE rungs answer the question that decides the shape
+        // of the ladder: is bitrate a step at all, or only resolution?
+        const candidates: (Omit<StepRung, 'bytes' | 'achievedMbps' | 'deltaVsPrevPct' | 'wallMs'>)[] = [
+          { label: '540p', role: 'ladder', width: 960, height: 540, videoBitrate: 2_000_000 },
+          { label: '720p', role: 'ladder', width: 1280, height: 720, videoBitrate: 4_000_000 },
+          { label: '900p', role: 'ladder', width: 1600, height: 900, videoBitrate: 6_000_000 },
+          { label: '1080p', role: 'ladder', width: 1920, height: 1080, videoBitrate: 8_000_000 },
+          { label: '1440p', role: 'ladder', width: 2560, height: 1440, videoBitrate: 14_000_000 },
+          { label: '1080p @3Mbps', role: 'probe', width: 1920, height: 1080, videoBitrate: 3_000_000 },
+          { label: '1080p @1.5Mbps', role: 'probe', width: 1920, height: 1080, videoBitrate: 1_500_000 },
         ]
+        let prevLadder: StepRung | null = null
         for (const c of candidates) {
-          const { blob, wallMs } = await renderAt(recording, { ...c, fps: 30 })
+          const { blob, wallMs } = await renderAt(recording, {
+            width: c.width,
+            height: c.height,
+            fps: 30,
+            videoBitrate: c.videoBitrate,
+          })
           const bits = await auditFile(blob)
-          const prev = steps[steps.length - 1]
-          steps.push({
+          const rung: StepRung = {
             ...c,
             bytes: bits.bytes,
             achievedMbps: bits.achievedMbps,
             deltaVsPrevPct:
-              prev && prev.bytes > 0
-                ? Math.round(((bits.bytes - prev.bytes) / prev.bytes) * 1000) / 10
+              c.role === 'ladder' && prevLadder && prevLadder.bytes > 0
+                ? Math.round(((bits.bytes - prevLadder.bytes) / prevLadder.bytes) * 1000) / 10
                 : null,
             wallMs,
-          })
+          }
+          if (c.role === 'ladder') prevLadder = rung
+          steps.push(rung)
         }
       }
     } finally {
