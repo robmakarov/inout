@@ -212,6 +212,10 @@ export interface EngineRun {
     keyframeSharePct: number
     achievedMbps: number
     requestedMbps: number
+    backend: string | null
+    msPerPaint: number
+    msPerFrameCreate: number
+    msPerEncodeCall: number
   } | null
   error?: string
 }
@@ -258,20 +262,6 @@ async function runEngine(
       engine === 'v2' ? (handle as unknown as { stats(): unknown }).stats() : null
     base.sourceFrames = rig.sourceFrames()
     base.longTasks = watcher.stop()
-    if (!composite) {
-      base.error = 'composite returned null (watchdog aborted or produced nothing)'
-      return base
-    }
-    base.bytes = composite.bytes ?? 0
-    base.compositeDurationMs = composite.durationMs
-    const blob = await blobStore.read(key)
-    base.file = await probeComposite(blob)
-    if (base.file) {
-      base.deliveredFps = Math.round((base.file.frameCount / (takeMs / 1000)) * 10) / 10
-      if (base.file.lastFrameSec !== null) {
-        base.tailGapMs = Math.round(takeMs - base.file.lastFrameSec * 1000)
-      }
-    }
     const s = stats as {
       codec: string | null
       hardware: string | null
@@ -285,6 +275,10 @@ async function runEngine(
       keyframeCount: number
       keyframeBytes: number
       requestedVideoBitrate: number
+      backend: string | null
+      paintMs: number
+      frameMs: number
+      encodeMs: number
     } | null
     if (s) {
       const seconds = Math.max(0.001, takeMs / 1000)
@@ -302,6 +296,24 @@ async function runEngine(
         keyframeSharePct: Math.round((s.keyframeBytes / Math.max(1, s.videoBytes)) * 1000) / 10,
         achievedMbps: Math.round(((s.videoBytes * 8) / seconds / 1e6) * 100) / 100,
         requestedMbps: Math.round((s.requestedVideoBitrate / 1e6) * 100) / 100,
+        backend: s.backend,
+        msPerPaint: Math.round((s.paintMs / Math.max(1, s.framesEncoded)) * 100) / 100,
+        msPerFrameCreate: Math.round((s.frameMs / Math.max(1, s.framesEncoded)) * 100) / 100,
+        msPerEncodeCall: Math.round((s.encodeMs / Math.max(1, s.framesEncoded)) * 100) / 100,
+      }
+    }
+    if (!composite) {
+      base.error = 'composite returned null (watchdog aborted or produced nothing)'
+      return base
+    }
+    base.bytes = composite.bytes ?? 0
+    base.compositeDurationMs = composite.durationMs
+    const blob = await blobStore.read(key)
+    base.file = await probeComposite(blob)
+    if (base.file) {
+      base.deliveredFps = Math.round((base.file.frameCount / (takeMs / 1000)) * 10) / 10
+      if (base.file.lastFrameSec !== null) {
+        base.tailGapMs = Math.round(takeMs - base.file.lastFrameSec * 1000)
       }
     }
     return base

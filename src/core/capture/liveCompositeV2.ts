@@ -35,14 +35,19 @@ const AUDIO_BITS = 128_000
 const FPS_LOG_MS = 10_000
 
 /**
- * Watchdog. v1 measured its own draw cadence; here the honest signal is what
- * the ENCODER is doing, because a frame the encoder cannot take is a frame the
- * file will not contain. Only drops count — a static screen legitimately
- * delivers ~1 fps and must never be mistaken for a machine that cannot cope.
+ * Watchdog. The honest signal is the rate that reaches the FILE, not the drop
+ * ratio: drops are only meaningful relative to what was offered, and a source
+ * running at 60 fps into a 30 fps composite "drops" half of everything by
+ * design. So this asks the same question v1's median-gap watchdog asked —
+ * is this machine delivering a usable frame rate? — against the encoder's
+ * own output.
+ *
+ * A source that is merely STATIC must never trip it: those takes encode one
+ * keep-alive frame per second quite correctly, so keep-alive frames are
+ * excluded and a composite that is mostly keep-alive is left alone.
  */
 const WATCHDOG_AFTER_MS = 5000
-const WATCHDOG_MIN_FRAMES = 60
-const WATCHDOG_MAX_DROP_RATIO = 0.5
+const WATCHDOG_MIN_FPS = 12
 
 /**
  * One worklet, two jobs: it taps the mixed PCM and it is the liveness tick.
@@ -230,11 +235,14 @@ export async function startLiveCompositeV2(
   }
 
   function checkWatchdog(s: CompositorStats): void {
-    if (degraded || performance.now() - startedAt < WATCHDOG_AFTER_MS) return
-    const offered = s.framesEncoded + s.framesDropped
-    if (offered < WATCHDOG_MIN_FRAMES) return
-    if (s.framesDropped / offered > WATCHDOG_MAX_DROP_RATIO) {
-      degrade(`encoder dropped ${s.framesDropped}/${offered} frames`)
+    const elapsedSec = (performance.now() - startedAt) / 1000
+    if (degraded || elapsedSec * 1000 < WATCHDOG_AFTER_MS) return
+    // Nothing was asked of the encoder — a static composition, not a slow one.
+    const real = s.framesEncoded - s.keepAliveFrames
+    if (s.framesDropped === 0) return
+    const fps = real / elapsedSec
+    if (fps < WATCHDOG_MIN_FPS) {
+      degrade(`only ${fps.toFixed(1)} fps reached the file (${s.framesDropped} frames dropped)`)
     }
   }
 

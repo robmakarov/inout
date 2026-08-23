@@ -37,6 +37,7 @@ import {
   StreamTarget,
   type StreamTargetChunk,
 } from 'mediabunny'
+import { createGLCompositor, type GLCompositor } from './compositorGL'
 
 const ROOT_DIR = 'blobs'
 /** Keyframe cadence — the smart-cut prerequisite (O5) and the salvage anchor. */
@@ -107,6 +108,8 @@ export interface CompositorStats {
   /** What the encoder actually negotiated — evidence, not decoration. */
   codec: string | null
   hardware: string | null
+  /** Which compositor backend ran — 'webgl2' or the slow '2d' fallback. */
+  backend: 'webgl2' | '2d' | null
   /** Largest number of frames the encoder was behind at any point. */
   peakQueue: number
   /**
@@ -119,6 +122,17 @@ export interface CompositorStats {
   keyframeBytes: number
   keyframeCount: number
   requestedVideoBitrate: number
+  /**
+   * Where the per-frame time goes, accumulated in ms. The composite was
+   * encoder-bound at ~10 fps and the three candidates — compositing, turning
+   * the canvas into a VideoFrame, and the encode call itself — are not
+   * distinguishable from the outside, so they are timed separately here.
+   */
+  paintMs: number
+  frameMs: number
+  encodeMs: number
+  /** Durability barriers actually taken — one per FLUSH_INTERVAL_MS of writes. */
+  flushes: number
 }
 
 export type CompositorReply =
@@ -131,7 +145,14 @@ export type CompositorReply =
    * encoder falling behind while there is still time to degrade. */
   | { event: 'stats'; stats: CompositorStats }
 
-const CODEC_CANDIDATES = ['avc1.640028', 'avc1.4D402A', 'avc1.42E01E'] as const
+/**
+ * Baseline and Main FIRST, High last — the opposite of a quality ranking, and
+ * deliberately so. isConfigSupported() says yes to High on this machine and
+ * then encodes it in software at ~10 fps for 1080p; platform realtime encoders
+ * (VideoToolbox here) commonly expose Baseline/Main only. A profile nobody can
+ * encode in hardware is not a better file, it is a dropped-frame file.
+ */
+const CODEC_CANDIDATES = ['avc1.42E01E', 'avc1.4D402A', 'avc1.640028'] as const
 
 async function pickVideoConfig(
   width: number,
@@ -188,6 +209,8 @@ async function pickAudioConfig(
 let handle: SyncAccessHandle | null = null
 let canvas: OffscreenCanvas | null = null
 let ctx: OffscreenCanvasRenderingContext2D | null = null
+/** WebGL2 backend; null means the 2D fallback is in use. */
+let gl: GLCompositor | null = null
 let output: Output | null = null
 let videoSource: EncodedVideoPacketSource | null = null
 let audioSource: EncodedAudioPacketSource | null = null
@@ -212,6 +235,8 @@ const latest: Partial<Record<'screen' | 'camera', VideoFrame>> = {}
 let audioFramesTotal = 0
 let audioSampleRate = 48000
 let audioStartAtMs: number | null = null
+/** Leading samples that predate the composite timeline; trimmed, not shifted. */
+let audioSkipFrames = 0
 
 const stats: CompositorStats = {
   framesIn: 0,
@@ -223,12 +248,17 @@ const stats: CompositorStats = {
   audioFrames: 0,
   codec: null,
   hardware: null,
+  backend: null,
   peakQueue: 0,
   videoBytes: 0,
   audioBytes: 0,
   keyframeBytes: 0,
   keyframeCount: 0,
   requestedVideoBitrate: 0,
+  paintMs: 0,
+  frameMs: 0,
+  encodeMs: 0,
+  flushes: 0,
 }
 
 function post(reply: CompositorReply): void {
@@ -272,16 +302,46 @@ function roundedRectPath(
   c.closePath()
 }
 
+/** The PiP rect, shared by both backends so they cannot drift apart. */
+function pipRect(camera: VideoFrame): { x: number; y: number; w: number; h: number; r: number; border: number } {
+  const scale = W / 1920
+  const w = 0.24 * W
+  const aspect =
+    camera.displayWidth && camera.displayHeight ? camera.displayWidth / camera.displayHeight : 4 / 3
+  const h = w / aspect
+  const margin = 24 * scale
+  return { x: W - w - margin, y: H - h - margin, w, h, r: 16 * scale, border: 1.5 * scale }
+}
+
 /**
  * The DEFAULT composition, and it must stay pixel-identical to
  * compose/layout.ts — an unedited export packet-copies this file, so any
  * disagreement between the two is a visible jump on the way to the editor.
  */
 function paint(): void {
-  const c = ctx
-  if (!c) return
   const screen = latest.screen
   const camera = latest.camera
+  if (gl) {
+    gl.begin(!!screen)
+    if (screen) {
+      const s = Math.min(W / screen.displayWidth, H / screen.displayHeight)
+      const dw = screen.displayWidth * s
+      const dh = screen.displayHeight * s
+      gl.draw(screen, (W - dw) / 2, (H - dh) / 2, dw, dh, 0, 0)
+      if (camera) {
+        const p = pipRect(camera)
+        gl.draw(camera, p.x, p.y, p.w, p.h, p.r, p.border)
+      }
+    } else if (camera) {
+      const s = Math.max(W / camera.displayWidth, H / camera.displayHeight)
+      const dw = camera.displayWidth * s
+      const dh = camera.displayHeight * s
+      gl.draw(camera, (W - dw) / 2, (H - dh) / 2, dw, dh, 0, 0)
+    }
+    return
+  }
+  const c = ctx
+  if (!c) return
   c.fillStyle = '#0a0a0c'
   c.fillRect(0, 0, W, H)
   if (screen) {
@@ -301,15 +361,7 @@ function paint(): void {
 }
 
 function paintPip(c: OffscreenCanvasRenderingContext2D, camera: VideoFrame): void {
-  const scale = W / 1920
-  const pipW = 0.24 * W
-  const aspect =
-    camera.displayWidth && camera.displayHeight ? camera.displayWidth / camera.displayHeight : 4 / 3
-  const pipH = pipW / aspect
-  const margin = 24 * scale
-  const r = 16 * scale
-  const x = W - pipW - margin
-  const y = H - pipH - margin
+  const { x, y, w: pipW, h: pipH, r, border } = pipRect(camera)
   c.save()
   roundedRectPath(c, x, y, pipW, pipH, r)
   c.clip()
@@ -317,7 +369,7 @@ function paintPip(c: OffscreenCanvasRenderingContext2D, camera: VideoFrame): voi
   c.restore()
   roundedRectPath(c, x, y, pipW, pipH, r)
   c.strokeStyle = 'rgba(255,255,255,0.25)'
-  c.lineWidth = 1.5 * scale
+  c.lineWidth = border
   c.stroke()
 }
 
@@ -327,8 +379,14 @@ function encodeComposite(atMs: number, keepAlive: boolean): void {
   if (startedAtMs === null) startedAtMs = atMs
   // Never queue behind a slow encoder: a backlog at stop is exactly the tail
   // the product promises not to lose.
+  //
+  // lastEncodedMs advances even on a drop, and that matters: without it the
+  // next source frame (a few ms later at 60 fps) passes the cadence gate and
+  // attempts again, so a busy encoder gets hammered at the SOURCE rate and the
+  // drop counter reports a catastrophe that is really just a spin.
   if (enc.encodeQueueSize >= MAX_ENCODER_QUEUE) {
     stats.framesDropped++
+    lastEncodedMs = atMs
     return
   }
   if (enc.encodeQueueSize > stats.peakQueue) stats.peakQueue = enc.encodeQueueSize
@@ -340,11 +398,16 @@ function encodeComposite(atMs: number, keepAlive: boolean): void {
   const keyFrame = tSec - lastKeySec >= KEYFRAME_INTERVAL_S
   if (keyFrame) lastKeySec = tSec
 
+  const tPaint = performance.now()
   paint()
+  const tFrame = performance.now()
+  stats.paintMs += tFrame - tPaint
   const frame = new VideoFrame(canvas, {
     timestamp: timestampUs,
     duration: Math.round(1e6 / FPS),
   })
+  const tEncode = performance.now()
+  stats.frameMs += tEncode - tFrame
   try {
     enc.encode(frame, { keyFrame })
     if (keepAlive) stats.keepAliveFrames++
@@ -352,6 +415,7 @@ function encodeComposite(atMs: number, keepAlive: boolean): void {
     fail(err)
   } finally {
     frame.close()
+    stats.encodeMs += performance.now() - tEncode
   }
 }
 
@@ -368,22 +432,41 @@ async function start(msg: CompositorStartMsg): Promise<void> {
   ).createSyncAccessHandle()
   handle.truncate?.(0)
 
-  canvas = new OffscreenCanvas(W, H)
-  ctx = canvas.getContext('2d', { alpha: false })
-  if (!ctx) throw new Error('compositor: OffscreenCanvas 2d unavailable')
+  // WebGL2 first: a capture VideoFrame is already in GPU memory, and drawing
+  // it through a 2D context reads it back every frame (measured at ~150 ms per
+  // 1080p frame, i.e. 6.7 fps — see compositorGL.ts).
+  gl = createGLCompositor(W, H)
+  if (gl) {
+    canvas = gl.canvas
+  } else {
+    console.warn('[capture] compositor: WebGL2 unavailable, falling back to 2D (slow)')
+    canvas = new OffscreenCanvas(W, H)
+    ctx = canvas.getContext('2d', { alpha: false })
+    if (!ctx) throw new Error('compositor: no WebGL2 and no OffscreenCanvas 2d')
+  }
 
   const { config, hardware } = await pickVideoConfig(W, H, msg.videoBitrate, msg.fps)
   stats.codec = config.codec
   stats.hardware = hardware
+  stats.backend = gl ? 'webgl2' : '2d'
 
-  // Every chunk is written AND FLUSHED where the muxer says it goes, so a tab
-  // kill leaves a file whose fragments are all complete up to the last write.
+  /**
+   * Every chunk is written AND FLUSHED where the muxer says it goes, so a tab
+   * kill leaves a file whose fragments are complete up to the last write.
+   *
+   * Batching the flush on a 250 ms timer was tried, on the theory that a
+   * synchronous disk barrier per chunk was throttling the encoder. It was not:
+   * batching measured no better (6.5 fps against 10.5 on the per-chunk build,
+   * inside this machine's run-to-run spread). So the barrier stays per chunk,
+   * where it buys the strongest salvage guarantee this engine can offer.
+   */
   const sink = new WritableStream<StreamTargetChunk>({
     write(chunk) {
       const h = handle
       if (!h) return
       const written = h.write(chunk.data, { at: chunk.position })
       h.flush()
+      stats.flushes++
       stats.bytes = Math.max(stats.bytes, chunk.position + written)
     },
   })
@@ -493,6 +576,8 @@ async function stop(): Promise<CompositorStats> {
   }
   await muxChain.catch(() => undefined)
   releaseLatest()
+  gl?.dispose()
+  gl = null
   try {
     handle?.flush()
     handle?.close()
@@ -550,26 +635,50 @@ self.onmessage = async (ev: MessageEvent<CompositorMsg>) => {
       case 'audio': {
         noteOrigin(msg.atMs)
         if (stopped || fatal || !audioEncoder || audioEncoder.state !== 'configured') return
-        if (audioStartAtMs === null) audioStartAtMs = msg.atMs
-        if (startedAtMs === null) startedAtMs = msg.atMs
+        if (audioStartAtMs === null) {
+          audioStartAtMs = msg.atMs
+          if (startedAtMs === null) startedAtMs = msg.atMs
+          // The mix is usually already running when the first VIDEO frame
+          // arrives, so the audio genuinely begins before the composite's
+          // timeline does. That lead cannot be placed on a timeline that starts
+          // at the first frame — and emitting it anyway is a negative timestamp,
+          // which the muxer rightly refuses. Trim it: the audio that remains
+          // still starts exactly at t0, so nothing desyncs.
+          const leadMs = startedAtMs - audioStartAtMs
+          if (leadMs > 0) audioSkipFrames = Math.round((leadMs / 1000) * audioSampleRate)
+        }
+        let { planar, frames } = msg
+        if (audioSkipFrames > 0) {
+          const skip = Math.min(audioSkipFrames, frames)
+          audioSkipFrames -= skip
+          if (skip >= frames) break
+          const kept = frames - skip
+          const trimmed = new Float32Array(msg.channels * kept)
+          for (let c = 0; c < msg.channels; c++) {
+            trimmed.set(planar.subarray(c * frames + skip, (c + 1) * frames), c * kept)
+          }
+          planar = trimmed
+          frames = kept
+        }
         // Sample-counted, so the audio timeline can never drift or gap even if
         // a message is late; the wall stamp only places sample 0.
-        const timestampUs = Math.round(
-          (audioStartAtMs - startedAtMs) * 1000 + (audioFramesTotal / audioSampleRate) * 1e6,
+        const timestampUs = Math.max(
+          0,
+          Math.round((audioFramesTotal / audioSampleRate) * 1e6),
         )
         const data = new AudioData({
           format: 'f32-planar',
           sampleRate: audioSampleRate,
-          numberOfFrames: msg.frames,
+          numberOfFrames: frames,
           numberOfChannels: msg.channels,
           timestamp: timestampUs,
           // The transferred view is always a plain ArrayBuffer here; TS widens
           // it to ArrayBufferLike because a SharedArrayBuffer is conceivable.
-          data: msg.planar as unknown as BufferSource,
+          data: planar as unknown as BufferSource,
         })
         try {
           audioEncoder.encode(data)
-          audioFramesTotal += msg.frames
+          audioFramesTotal += frames
           stats.audioFrames = audioFramesTotal
         } finally {
           data.close()
