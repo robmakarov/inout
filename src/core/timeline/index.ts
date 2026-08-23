@@ -34,6 +34,7 @@ export {
   MIN_VIEWPORT_WIDTH_FRAC,
   ZOOM_MOVE_MS,
   clampViewport,
+  moveViewportKeyframe,
   normalizeViewportTrack,
   viewportAt,
   viewportIsActive,

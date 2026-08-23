@@ -4,6 +4,7 @@ import {
   MIN_SEGMENT_MS,
   editSegments,
   normalizeSegments,
+  moveViewportKeyframe,
   outputToRecordingMs,
   recordingToOutputMs,
   removeSegment,
@@ -183,6 +184,20 @@ export function Timeline({
     })
   }
 
+  /** Drag a zoom marker along the take (F2b). Recording-timeline, like the
+   *  keyframes themselves, so the pointer maps straight onto them. */
+  const dragZoomMarker = (index: number) => (e: React.PointerEvent) => {
+    e.stopPropagation()
+    startDrag(e, (clientX) => {
+      const cur = editRef.current
+      if (!cur.viewport) return
+      onEdit({
+        ...cur,
+        viewport: moveViewportKeyframe(cur.viewport, index, msAtClient(clientX), totalMs),
+      })
+    })
+  }
+
   const hasScreen = recording.channels.some((c) => c.kind === 'screen' && c.media === 'video')
   const hasAudio = recording.channels.some((c) => c.media === 'audio')
   const proposal = tighten?.proposal ?? null
@@ -348,8 +363,8 @@ export function Timeline({
           <div className="tl__dim" style={{ left: 0, width: x(gStart) }} />
           <div className="tl__dim" style={{ left: x(gEnd), right: 0 }} />
           {/* Timed zooms (F2): a dot where the view lands, and a bar showing
-              the move it eased through. Read-only in v1 — the gesture on the
-              stage is what writes them. */}
+              the move it eased through. Draggable in time since F2b — the
+              gesture on the stage still writes them, this only moves WHEN. */}
           {(edit.viewport?.keyframes ?? []).map((k, i, all) => {
             const prev = all[i - 1]
             const moved = prev && k.atMs - prev.atMs <= ZOOM_MOVE_MS + 1
@@ -364,7 +379,8 @@ export function Timeline({
                 <div
                   className="tl__zoom-dot"
                   style={{ left: x(k.atMs) }}
-                  title={`Zoom ${Math.round((1 / k.widthFrac) * 10) / 10}×`}
+                  title={`Zoom ${Math.round((1 / k.widthFrac) * 10) / 10}× — drag to move it in time`}
+                  onPointerDown={dragZoomMarker(i)}
                 />
               </div>
             )

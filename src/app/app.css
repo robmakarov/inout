@@ -1383,7 +1383,19 @@
   margin-left: -3px;
   border-radius: 50%;
   background: var(--accent);
-  pointer-events: none;
+  /* Draggable since F2b — it used to be a read-only mark. */
+  pointer-events: auto;
+  cursor: ew-resize;
+  transition: transform var(--t-fast) var(--ease);
+}
+.tl__zoom-dot:hover {
+  transform: scale(1.4);
+}
+/* A 7 px dot is not a drag target. The grip is invisible and generous. */
+.tl__zoom-dot::after {
+  content: '';
+  position: absolute;
+  inset: -7px -6px;
 }
 
 /* Silence tightening (F5a): a PROPOSAL. It is drawn over the timeline in the

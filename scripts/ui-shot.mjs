@@ -220,6 +220,48 @@ try {
       matchesScale: !!factor && !!ratio && Math.abs(ratio - factor) <= 0.06,
       screenshot: out,
     }
+  } else if (flow === 'zoomdrag') {
+    // F2b: make a zoom with the wheel, then DRAG its marker along the timeline
+    // and check the keyframe moved in time while the view itself did not.
+    // Playhead into the middle FIRST: a zoom at t=0 has no room for its anchor,
+    // so it writes a single keyframe and the group-drag has nothing to prove.
+    await evaluate(
+      `(() => { const r=document.querySelector('.tl__ruler'); if(!r) return false;
+        const b=r.getBoundingClientRect(); const x=b.left+b.width*0.5,y=b.top+b.height/2;
+        r.dispatchEvent(new PointerEvent('pointerdown',{clientX:x,clientY:y,bubbles:true,pointerId:1}));
+        r.dispatchEvent(new PointerEvent('pointerup',{clientX:x,clientY:y,bubbles:true,pointerId:1}));
+        return true })()`,
+    )
+    await sleep(400)
+    await evaluate(
+      `(() => { const s=document.querySelector('.stage__surface')||document.querySelector('.stage');
+        if(!s) return false; const b=s.getBoundingClientRect();
+        s.dispatchEvent(new WheelEvent('wheel',{deltaY:-500,clientX:b.left+b.width*0.4,clientY:b.top+b.height*0.5,bubbles:true,cancelable:true}));
+        return true })()`,
+    )
+    await sleep(700)
+    const dots = await evaluate(
+      `JSON.stringify([...document.querySelectorAll('.tl__zoom-dot')].map(e=>e.getBoundingClientRect().left))`,
+    )
+    opened = await evaluate(
+      `(() => { const d=[...document.querySelectorAll('.tl__zoom-dot')]; if(!d.length) return false;
+        const el=d[d.length-1], b=el.getBoundingClientRect();
+        const y=b.top+b.height/2, x0=b.left+b.width/2;
+        // On the ELEMENT, not the window: startDrag listens there and relies on
+        // pointer capture, which a synthetic pointer id does not get.
+        el.dispatchEvent(new PointerEvent('pointerdown',{clientX:x0,clientY:y,bubbles:true,pointerId:7}));
+        el.dispatchEvent(new PointerEvent('pointermove',{clientX:x0+120,clientY:y,bubbles:true,pointerId:7}));
+        el.dispatchEvent(new PointerEvent('pointerup',{clientX:x0+120,clientY:y,bubbles:true,pointerId:7}));
+        return true })()`,
+    )
+    await sleep(500)
+    text = await evaluate(
+      `JSON.stringify({
+        before: ${JSON.stringify(dots)},
+        after: [...document.querySelectorAll('.tl__zoom-dot')].map(e=>e.getBoundingClientRect().left),
+        badge: document.querySelector('.stage__zoom')?.innerText ?? '',
+      })`,
+    )
   } else if (flow === 'frame') {
     // F3: pick a backdrop in the editor and measure where the PREVIEW puts the
     // screen surface, as fractions of the stage — directly comparable with the

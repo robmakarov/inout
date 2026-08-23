@@ -137,6 +137,42 @@ export function writeViewportKeyframe(
   return normalizeViewportTrack({ keyframes: next }, maxMs)
 }
 
+/**
+ * Drag a zoom in TIME (task F2b). v1 markers were read-only: the only way to
+ * move a zoom was to redo the gesture at the new instant, which also redid the
+ * zoom itself.
+ *
+ * A zoom is not one keyframe, it is a MOVE — an anchor and a target
+ * ZOOM_MOVE_MS apart — so dragging one marker drags its whole group. Leaving
+ * the anchor behind would stretch the ease rather than move it, which is a
+ * different edit from the one the user is asking for. The group can slide up to
+ * its neighbours and no further, so a drag can never reorder the track.
+ */
+export function moveViewportKeyframe(
+  track: ViewportTrack | undefined,
+  index: number,
+  toMs: number,
+  maxMs: number,
+): ViewportTrack {
+  const keys = (track?.keyframes ?? []).map((k) => ({ ...k }))
+  if (index < 0 || index >= keys.length) return { keyframes: keys }
+  // The maximal run of keyframes that belong to one move.
+  let first = index
+  let last = index
+  while (first > 0 && keys[first]!.atMs - keys[first - 1]!.atMs <= ZOOM_MOVE_MS + 1) first--
+  while (last < keys.length - 1 && keys[last + 1]!.atMs - keys[last]!.atMs <= ZOOM_MOVE_MS + 1) last++
+  const before = keys[first - 1]
+  const after = keys[last + 1]
+  const lead = keys[index]!.atMs - keys[first]!.atMs
+  const trail = keys[last]!.atMs - keys[index]!.atMs
+  const lo = (before ? before.atMs + 1 : 0) + lead
+  const hi = (after ? after.atMs - 1 : Math.max(0, maxMs)) - trail
+  const at = clamp(toMs, Math.min(lo, hi), Math.max(lo, hi))
+  const delta = at - keys[index]!.atMs
+  for (let i = first; i <= last; i++) keys[i]!.atMs += delta
+  return normalizeViewportTrack({ keyframes: keys }, maxMs)
+}
+
 export interface ViewportRect {
   leftFrac: number
   topFrac: number

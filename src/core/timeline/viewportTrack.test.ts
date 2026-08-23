@@ -4,6 +4,7 @@ import {
   MIN_VIEWPORT_WIDTH_FRAC,
   ZOOM_MOVE_MS,
   clampViewport,
+  moveViewportKeyframe,
   normalizeViewportTrack,
   viewportAt,
   viewportIsActive,
@@ -158,5 +159,59 @@ describe('viewportToRect', () => {
     expect(r.heightFrac).toBeCloseTo(r.widthFrac, 10)
     expect(r.leftFrac).toBeCloseTo(0.25, 10)
     expect(r.topFrac).toBeCloseTo(0.25, 10)
+  })
+})
+
+describe('moveViewportKeyframe (F2b)', () => {
+  const track = (): ViewportTrack => ({
+    keyframes: [
+      { atMs: 1000, xFrac: 0.5, yFrac: 0.5, widthFrac: 1 },
+      { atMs: 1600, xFrac: 0.3, yFrac: 0.4, widthFrac: 0.5 },
+      { atMs: 4000, xFrac: 0.3, yFrac: 0.4, widthFrac: 0.5 },
+      { atMs: 4600, xFrac: 0.5, yFrac: 0.5, widthFrac: 1 },
+    ],
+  })
+
+  it('drags a move by its target, and the anchor comes with it', () => {
+    const next = moveViewportKeyframe(track(), 1, 2500, 10_000)
+    expect(next.keyframes.map((k) => k.atMs)).toEqual([1900, 2500, 4000, 4600])
+    // The move keeps its duration: an ease that stretched would be a different edit.
+    expect(next.keyframes[1]!.atMs - next.keyframes[0]!.atMs).toBe(600)
+  })
+
+  it('drags by the anchor too, moving the same group', () => {
+    const next = moveViewportKeyframe(track(), 0, 2000, 10_000)
+    expect(next.keyframes.map((k) => k.atMs)).toEqual([2000, 2600, 4000, 4600])
+  })
+
+  it('cannot be dragged past the next move', () => {
+    const next = moveViewportKeyframe(track(), 1, 9000, 10_000)
+    // The group stops one ms short of the next keyframe.
+    expect(next.keyframes[1]!.atMs).toBe(3999)
+    expect(next.keyframes[0]!.atMs).toBe(3399)
+    expect(next.keyframes.map((k) => k.atMs)).toEqual([3399, 3999, 4000, 4600])
+  })
+
+  it('cannot be dragged before the take, or past its end', () => {
+    const early = moveViewportKeyframe(track(), 1, -5000, 10_000)
+    expect(early.keyframes[0]!.atMs).toBe(0)
+    expect(early.keyframes[1]!.atMs).toBe(600)
+    const late = moveViewportKeyframe(track(), 3, 999_999, 10_000)
+    expect(late.keyframes[3]!.atMs).toBe(10_000)
+    expect(late.keyframes[2]!.atMs).toBe(9400)
+  })
+
+  it('leaves the view itself alone — only the time moves', () => {
+    const next = moveViewportKeyframe(track(), 1, 2500, 10_000)
+    expect(next.keyframes[1]!.widthFrac).toBe(0.5)
+    expect(next.keyframes[1]!.xFrac).toBe(0.3)
+    expect(viewportAt(next, 2500)).toEqual({ xFrac: 0.3, yFrac: 0.4, widthFrac: 0.5 })
+  })
+
+  it('an out-of-range index changes nothing', () => {
+    expect(moveViewportKeyframe(track(), 9, 100, 10_000).keyframes.map((k) => k.atMs)).toEqual([
+      1000, 1600, 4000, 4600,
+    ])
+    expect(moveViewportKeyframe(undefined, 0, 100, 10_000).keyframes).toEqual([])
   })
 })
