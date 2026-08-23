@@ -42,6 +42,7 @@ import {
   type AudioChannelMixer,
 } from './audio'
 import { AUDIO_BITRATE, AUDIO_CHANNEL_COUNT, AUDIO_SAMPLE_RATE } from './codecs'
+import { createExportScratch, type ExportScratch } from './scratch'
 
 /**
  * A channel's active window on the output timeline. Kept local (mirrors
@@ -127,6 +128,7 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
   const input = new Input({ source: new BlobSource(compBlob), formats: ALL_FORMATS })
   const audioMixers: AudioChannelMixer[] = []
   let output: Output | null = null
+  let scratch: ExportScratch | null = null
   try {
     // ---- video: copy the composite's encoded packets, no re-encode ----
     const videoTrack = await input.getPrimaryVideoTrack()
@@ -174,8 +176,11 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
     if (needAudio && !audioCodec) throw new Error('instant export: no audio encoder available')
 
     const format = new Mp4OutputFormat()
-    const target = new BufferTarget()
-    const out = new Output({ format, target })
+    // Same O(1)-memory rule as the render path: packet-copying a 30-min take
+    // into an ArrayBuffer was the instant path's own OOM.
+    scratch = await createExportScratch()
+    const bufferTarget = scratch ? null : new BufferTarget()
+    const out = new Output({ format, target: scratch ? scratch.target : bufferTarget! })
     output = out
     const videoSource = new EncodedVideoPacketSource(videoCodec)
     out.addVideoTrack(videoSource)
@@ -229,12 +234,18 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
 
     report('finalizing', 0.97)
     await out.finalize()
-    const buffer = target.buffer
-    if (!buffer) throw new Error('instant export: muxer produced no output')
+    let blob: Blob
+    if (scratch) {
+      blob = await scratch.finish(format.mimeType)
+    } else {
+      const buffer = bufferTarget?.buffer
+      if (!buffer) throw new Error('instant export: muxer produced no output')
+      blob = new Blob([buffer], { type: format.mimeType })
+    }
     report('finalizing', 1)
 
     return {
-      blob: new Blob([buffer], { type: format.mimeType }),
+      blob,
       mimeType: format.mimeType,
       fileName: exportFileName(recording.createdAt, format.fileExtension),
       durationMs: composite.durationMs,
@@ -245,6 +256,8 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
     if (output && output.state !== 'finalized' && output.state !== 'canceled') {
       await output.cancel().catch(() => undefined)
     }
+    // Includes the fall-through to the full render: no orphan scratch behind it.
+    await scratch?.discard().catch(() => undefined)
     throw err
   } finally {
     for (const m of audioMixers) m.dispose()

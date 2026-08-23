@@ -107,6 +107,10 @@ async function main() {
       '--disable-backgrounding-occluded-windows',
       '--disable-renderer-backgrounding',
       '--mute-audio',
+      // Memory experiments need a deterministic heap reading: forced GC plus
+      // unquantized performance.memory. Harmless for the other runners.
+      '--js-flags=--expose-gc',
+      '--enable-precise-memory-info',
       pageUrl,
     ],
     { stdio: ['ignore', 'ignore', 'pipe'] },

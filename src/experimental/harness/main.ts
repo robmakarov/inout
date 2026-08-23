@@ -126,6 +126,24 @@ const runners: Runner[] = [
     run: async () => (await import('../streamx/run')).runStreamxBenchmark(20),
   },
   {
+    id: 'o1',
+    title: 'O1 — export stream-to-disk: memory, parity, orphans',
+    detail:
+      'drives the PRODUCTION exportRecording over synthetic audio-only takes (waveform render, 1080p30 avc 8 Mbps): peak JS heap per output size for the OPFS-scratch target vs the old BufferTarget, byte-for-byte A/B parity of a short take, and proof that an aborted export leaves no xport-* file behind.',
+    run: async (args) => {
+      const { runO1Evidence } = await import('../perf/exportMemory')
+      return runO1Evidence({
+        durationsSec: Array.isArray(args?.durationsSec) ? (args.durationsSec as number[]) : undefined,
+        paths: Array.isArray(args?.paths) ? (args.paths as ('scratch' | 'buffer')[]) : undefined,
+        includeBuffer: typeof args?.includeBuffer === 'boolean' ? args.includeBuffer : undefined,
+        bufferMaxSec: typeof args?.bufferMaxSec === 'number' ? args.bufferMaxSec : undefined,
+        shortSec: typeof args?.shortSec === 'number' ? args.shortSec : undefined,
+        skipMemory: typeof args?.skipMemory === 'boolean' ? args.skipMemory : undefined,
+        skipChecks: typeof args?.skipChecks === 'boolean' ? args.skipChecks : undefined,
+      })
+    },
+  },
+  {
     id: 'datachan',
     title: 'Experiment 6 — Timed data channels (live capture demo)',
     detail:

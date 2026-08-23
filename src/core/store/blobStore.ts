@@ -118,6 +118,43 @@ export interface PositionedDurableWriter {
   abort(): Promise<void>
 }
 
+/** Same positioned contract over createWritable — used where the durable
+ * SyncAccessHandle worker is unavailable (no Worker / no OPFS worker support). */
+async function createPositionedFallbackWriter(key: string): Promise<PositionedDurableWriter> {
+  const stream = await createFileWritable(key)
+  return {
+    async write(data, position) {
+      // Copy: the caller's view may be reused before this async write lands.
+      const bytes = new Uint8Array(data.byteLength)
+      bytes.set(data)
+      await stream.write({ type: 'write', data: bytes, position })
+    },
+    async close() {
+      await stream.close()
+    },
+    async abort() {
+      await stream.abort().catch(() => undefined)
+    },
+  }
+}
+
+/**
+ * Positioned writer, durable when the platform allows it. Muxers that seek
+ * (mp4 patches its box sizes at finalize) write through this; O(1) memory
+ * because nothing is retained after a write returns.
+ */
+export async function createPositionedWriter(key: string): Promise<PositionedDurableWriter> {
+  assertKey(key)
+  if (canUseDurableWriter()) {
+    try {
+      return await createDurablePositionedWriter(key)
+    } catch (err) {
+      console.warn('[blobStore] durable positioned writer unavailable, falling back', err)
+    }
+  }
+  return createPositionedFallbackWriter(key)
+}
+
 export async function createDurablePositionedWriter(key: string): Promise<PositionedDurableWriter> {
   assertKey(key)
   const worker = new Worker(new URL('./durableWriter.worker.ts', import.meta.url), {
@@ -209,6 +246,16 @@ export const blobStore = {
       if (isNotFound(err)) throw new Error(`blobStore: no blob stored under key "${key}"`)
       throw err
     }
+  },
+
+  /** Flat listing of stored keys (scratch sweeps, orphan scans). */
+  async listKeys(): Promise<string[]> {
+    const dir = (await blobsDir()) as FileSystemDirectoryHandle & AsyncIterableDirectory
+    const names: string[] = []
+    for await (const handle of dir.values()) {
+      if (handle.kind === 'file') names.push(handle.name)
+    }
+    return names
   },
 
   async remove(key: string): Promise<void> {
