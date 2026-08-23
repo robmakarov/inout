@@ -20,9 +20,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 let takeMs = 4000
 let out = '/tmp/inout-quality.png'
+let flow = 'quality'
 for (const a of process.argv.slice(2)) {
   if (a.startsWith('--takeMs=')) takeMs = Number(a.slice(9))
   else if (a.startsWith('--out=')) out = a.slice(6)
+  else if (a.startsWith('--flow=')) flow = a.slice(7)
 }
 
 const port = await new Promise((res, rej) => {
@@ -102,14 +104,52 @@ try {
   await sleep(takeMs)
   await evaluate(`document.querySelector('button[aria-label="Stop recording"]')?.click()`)
   await sleep(2500)
-  const opened = await evaluate(
-    `(() => { const b=[...document.querySelectorAll('button')].find(x=>/export/i.test(x.textContent||'')); if(!b) return false; b.click(); return true })()`,
-  )
-  await sleep(700)
-  const text = await evaluate(`document.querySelector('.quality')?.innerText ?? 'NO QUALITY PANEL'`)
+  let opened
+  let text
+  if (flow === 'cuts') {
+    // Seek to the middle of the take, split, then split again further along.
+    await evaluate(
+      `(() => { const r=document.querySelector('.tl__ruler'); if(!r) return false;
+        const b=r.getBoundingClientRect();
+        const click=(fx)=>{const x=b.left+b.width*fx,y=b.top+b.height/2;
+          r.dispatchEvent(new PointerEvent('pointerdown',{clientX:x,clientY:y,bubbles:true,pointerId:1}));
+          r.dispatchEvent(new PointerEvent('pointerup',{clientX:x,clientY:y,bubbles:true,pointerId:1}));};
+        click(0.35); return true })()`,
+    )
+    await sleep(400)
+    opened = await evaluate(
+      `(() => { const b=[...document.querySelectorAll('button')].find(x=>/split/i.test(x.textContent||'')); if(!b||b.disabled) return false; b.click(); return true })()`,
+    )
+    await sleep(400)
+    await evaluate(
+      `(() => { const r=document.querySelector('.tl__ruler'); if(!r) return false;
+        const b=r.getBoundingClientRect();
+        const x=b.left+b.width*0.65,y=b.top+b.height/2;
+        r.dispatchEvent(new PointerEvent('pointerdown',{clientX:x,clientY:y,bubbles:true,pointerId:1}));
+        r.dispatchEvent(new PointerEvent('pointerup',{clientX:x,clientY:y,bubbles:true,pointerId:1}));
+        return true })()`,
+    )
+    await sleep(300)
+    await evaluate(
+      `(() => { const b=[...document.querySelectorAll('button')].find(x=>/split/i.test(x.textContent||'')); if(!b||b.disabled) return false; b.click(); return true })()`,
+    )
+    await sleep(300)
+    // Delete the middle clip.
+    await evaluate(
+      `(() => { const d=[...document.querySelectorAll('.tl__seg-del')]; if(d.length<2) return false; d[1].click(); return true })()`,
+    )
+    await sleep(500)
+    text = await evaluate(`document.querySelector('.tl__tools')?.innerText ?? 'NO TOOLS'`)
+  } else {
+    opened = await evaluate(
+      `(() => { const b=[...document.querySelectorAll('button')].find(x=>/export/i.test(x.textContent||'')); if(!b) return false; b.click(); return true })()`,
+    )
+    await sleep(700)
+    text = await evaluate(`document.querySelector('.quality')?.innerText ?? 'NO QUALITY PANEL'`)
+  }
   const shot = await send('Page.captureScreenshot', { format: 'png' })
   writeFileSync(out, Buffer.from(shot.data, 'base64'))
-  console.log(JSON.stringify({ exportButtonFound: opened, panelText: text, screenshot: out }, null, 2))
+  console.log(JSON.stringify({ flow, actionOk: opened, panelText: text, screenshot: out }, null, 2))
 } finally {
   try { chrome?.kill('SIGKILL') } catch {}
   try { rmSync(profile, { recursive: true, force: true }) } catch {}

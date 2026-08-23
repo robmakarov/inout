@@ -7,4 +7,15 @@ export {
   channelHasOutputWindow,
   hasEnabledVideo,
   isDefaultEdit,
+  // Kept segments (F1 — mid-take cuts).
+  keptSegments,
+  editSegments,
+  outputToRecordingMs,
+  recordingToOutputMs,
+  segmentJoinsMs,
+  normalizeSegments,
+  splitAtOutputMs,
+  removeSegment,
+  hasCuts,
+  MIN_SEGMENT_MS,
 } from './timeline'

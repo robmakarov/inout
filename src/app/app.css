@@ -1114,3 +1114,92 @@
   line-height: 1.45;
   min-height: 34px;
 }
+
+/* ---------- mid-take cuts (F1) ---------- */
+
+.tl__row--tools {
+  display: flex;
+  align-items: center;
+  min-height: 30px;
+}
+.tl__tools {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tl__tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  transition: background var(--t-fast) var(--ease);
+}
+.tl__tool:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.tl__tool:disabled {
+  opacity: 0.4;
+}
+.tl__tools-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+/* Cut-out material: dimmed and struck through, so it reads as removed rather
+   than merely deselected. */
+.tl__gap {
+  position: absolute;
+  top: 0;
+  bottom: 26px;
+  background: var(--overlay);
+  border-left: 1px dashed var(--text-dim);
+  border-right: 1px dashed var(--text-dim);
+  pointer-events: none;
+}
+.tl__cut {
+  position: absolute;
+  top: 0;
+  bottom: 26px;
+  width: 12px;
+  margin-left: -6px;
+  cursor: ew-resize;
+  pointer-events: auto;
+}
+.tl__cut::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--accent);
+  opacity: 0.75;
+}
+.tl__seg-del {
+  position: absolute;
+  top: 2px;
+  width: 18px;
+  height: 18px;
+  margin-left: -9px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1;
+  pointer-events: auto;
+  opacity: 0;
+  transition:
+    opacity var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease);
+}
+.tl__overlay:hover .tl__seg-del {
+  opacity: 1;
+}
+.tl__seg-del:hover {
+  color: var(--danger, #e2554f);
+}

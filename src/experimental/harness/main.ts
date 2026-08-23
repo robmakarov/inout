@@ -217,6 +217,18 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'f1',
+    title: 'F1 — mid-take cuts',
+    detail:
+      'records a fiducial take, exports it with three cuts at non-round offsets, and checks that flash/click sync survives every joint, that the audio has no step discontinuity at a join, and that a no-op segment list is dropped so untouched takes keep the old path.',
+    run: async (args) => {
+      const { runCutsEvidence } = await import('../perf/cuts')
+      return runCutsEvidence({
+        recordMs: typeof args?.recordMs === 'number' ? args.recordMs : undefined,
+      })
+    },
+  },
+  {
     id: 'datachan',
     title: 'Experiment 6 — Timed data channels (live capture demo)',
     detail:

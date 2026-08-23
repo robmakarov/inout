@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="baseline" data-frame="desktop">
+<html lang="en" data-theme="baseline" data-frame="desktop" data-neon="on">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -316,9 +316,84 @@ select { font: inherit; }
 .btn--ghost:hover { color: var(--text); background: var(--surface-2); }
 .btn--wide { width: 100%; }
 
-/* ---------- capture ---------- */
-.capture { position: relative; height: 100%; background: var(--ground); }
-.capture--recording { background: var(--bg); }
+/* ---------- capture ground: the studio's grid, lifted from inout copy 2 ----------
+   body::before there — cell grid + bottom glow, tilted toward the pointer and
+   bumped by the elastic scroll spring. Same values, one layer instead of two
+   pseudo-elements. Neon on every theme, by decision; the four vars below are
+   the whole look, so retuning it per theme is a four-line job. */
+.app {
+  --grid-ink: #050810;
+  --grid-line: rgba(0, 240, 255, 0.03);
+  --grid-glow: rgba(0, 255, 200, 0.08);
+  --grid-cell: 24px;
+  --neon: 0, 240, 255;
+}
+.capture { position: relative; height: 100%; background: var(--grid-ink); }
+.capture--recording { background: var(--grid-ink); }
+.capture__grid {
+  position: absolute;
+  inset: -14%;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
+    radial-gradient(ellipse 100% 80% at 50% 120%, var(--grid-glow), transparent 50%);
+  background-size: var(--grid-cell) var(--grid-cell), var(--grid-cell) var(--grid-cell), 100% 100%;
+  /* pointer parallax + hub bump, exactly as the source composes them */
+  background-position:
+    calc(50% + var(--bg-shift-x, 0px) + var(--bump-x, 0px))
+    calc(50% + var(--bg-shift-y, 0px) + var(--bump-y, 0px));
+  background-repeat: repeat, repeat, no-repeat;
+  transform-origin: 50% 50%;
+  transform: perspective(1600px)
+    rotateX(calc(var(--tilt-y, 0) * -3deg))
+    rotateY(calc(var(--tilt-x, 0) * 3deg));
+  will-change: transform;
+}
+.capture__vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0) 44%,
+    rgba(2, 3, 8, 0.38) 78%,
+    rgba(0, 0, 0, 0.52) 100%
+  );
+}
+
+/* ---------- centre cluster: record button with the inputs in orbit ---------- */
+.cluster-anchor {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 6;
+}
+/* the spring writes translate3d here — nothing else may own this transform */
+.cluster { will-change: transform; }
+.ring {
+  position: relative;
+  width: 340px;
+  height: 340px;
+  display: grid;
+  place-items: center;
+}
+.ring .chip {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+}
+.cluster__hint {
+  margin-top: -34px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-faint);
+  min-height: 17px;
+}
 .capture__wordmark {
   position: absolute;
   top: 20px;
@@ -406,15 +481,38 @@ select { font: inherit; }
 }
 .chip--unavailable { background: var(--record-soft); color: var(--record); }
 
+/* Look is untouched. Behaviour is the studio's rec-go: no hover scale — a neon
+   shine instead, a 0.97 press with a short transition, and an arming pulse on
+   the source's blink easing. Toggle "Neon" off to fall back to the plain hover. */
 .recbtn {
   width: 72px; height: 72px;
   border-radius: var(--r-btn);
   border: var(--rec-ring);
   display: grid;
   place-items: center;
-  transition: transform 140ms;
+  transition:
+    transform 0.2s cubic-bezier(0.34, 1.2, 0.64, 1),
+    filter 0.22s ease,
+    opacity 0.2s ease;
 }
-.recbtn:hover { transform: scale(1.05); }
+[data-neon='off'] .recbtn:hover { transform: scale(1.05); }
+[data-neon='on'] .recbtn:hover {
+  filter:
+    drop-shadow(0 0 8px rgba(var(--neon), 0.38))
+    drop-shadow(0 0 26px rgba(var(--neon), 0.22));
+}
+.recbtn:active {
+  transform: scale(0.97);
+  transition-duration: 0.08s;
+}
+.recbtn--arming {
+  animation: recArming 1.2s cubic-bezier(0.45, 0, 0.35, 1) infinite;
+  cursor: wait;
+}
+@keyframes recArming {
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(var(--neon), 0)); }
+  50% { filter: drop-shadow(0 0 14px rgba(var(--neon), 0.45)); }
+}
 .recbtn__inner {
   width: 56px; height: 56px;
   border-radius: var(--r-btn);
@@ -802,6 +900,91 @@ select { font: inherit; }
 .cloud__expiry { font-size: 11px; color: var(--text-faint); }
 
 /* ==========================================================================
+   2b. SPLASH — the mark from inout proto, animated properly.
+   There it was a 5-frame flipbook stepped by setTimeout at 105ms — visibly
+   choppy and 14.7 KB of duplicated path data. The mark is five separate paths
+   (I·N·O·U·T), so each letter can carry its own motion: staggered rise on one
+   spring-ish curve, a glow blooming behind them, out at 1.33s. GPU-only
+   properties (opacity/transform), no timers driving frames.
+   ========================================================================== */
+#splash {
+  position: absolute;
+  inset: 0;
+  z-index: 99;
+  background: #000;
+  display: grid;
+  place-items: center;
+  will-change: opacity, transform;
+}
+#splash[hidden] { display: none; }
+#splash .swrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+#splash .glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 130%;
+  aspect-ratio: 2.4 / 1;
+  transform: translate(-50%, -60%) scale(0.6);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(232, 213, 160, 0.26), transparent 68%);
+  filter: blur(16px);
+  opacity: 0;
+  pointer-events: none;
+}
+#logomark {
+  position: relative;
+  width: min(58%, 232px);
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+#logomark .lm {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+#splash .tag {
+  text-align: center;
+  font-size: 11.5px;
+  color: #6e6a5f;
+  margin-top: 14px;
+  letter-spacing: 0.03em;
+  opacity: 0;
+}
+
+.splash-play .lm { animation: lmIn 0.42s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.splash-play .lm--i { animation-delay: 0.06s; }
+.splash-play .lm--n { animation-delay: 0.105s; }
+.splash-play .lm--o { animation-delay: 0.15s; }
+.splash-play .lm--u { animation-delay: 0.195s; }
+.splash-play .lm--t { animation-delay: 0.24s; }
+.splash-play .glow { animation: glowIn 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both; }
+.splash-play .tag { animation: tagIn 0.5s ease 0.4s both; }
+.splash-out { animation: splashOut 0.38s cubic-bezier(0.2, 1, 0.3, 1) both; }
+
+@keyframes lmIn {
+  from { opacity: 0; transform: translateY(26px) scaleY(0.82); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes glowIn {
+  0% { opacity: 0; transform: translate(-50%, -60%) scale(0.6); }
+  45% { opacity: 1; }
+  100% { opacity: 0.55; transform: translate(-50%, -60%) scale(1); }
+}
+@keyframes tagIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes splashOut {
+  to { opacity: 0; transform: scale(1.05); }
+}
+
+/* ==========================================================================
    3. THEME FLAVOUR — what tokens alone cannot say.
    ========================================================================== */
 
@@ -827,8 +1010,9 @@ select { font: inherit; }
 [data-theme='graphite'] .btn--primary { background: var(--accent); color: #08080a; }
 [data-theme='graphite'] .lane__label { font-size: 10px; }
 
-/* paper: light ground, so lifted surfaces carry a shadow instead of a fill step. */
-[data-theme='paper'] .controlbar { background: linear-gradient(180deg, transparent, #e9e5dc 62%); }
+/* paper: light ground, so lifted surfaces carry a shadow instead of a fill step.
+   The capture ground is the studio grid in every theme now, so paper's chips
+   have to hold their own contrast on it — opaque surface, not a tint. */
 [data-theme='paper'] .chip { box-shadow: var(--shadow-1); background: var(--surface); }
 [data-theme='paper'] .chip[aria-pressed='true'] { background: var(--accent-soft); }
 [data-theme='paper'] .timer { background: var(--surface); }
@@ -866,6 +1050,13 @@ select { font: inherit; }
       <option value="phone">phone 390</option>
     </select>
   </label>
+  <label class="bar__field">Neon
+    <select id="neon">
+      <option value="on">on</option>
+      <option value="off">off</option>
+    </select>
+  </label>
+  <button class="bar__tab" id="replay">Replay splash</button>
   <div class="bar__note" id="note">1–5 · T · F</div>
 </header>
 
@@ -874,16 +1065,38 @@ select { font: inherit; }
   <div class="frame" id="frameEl">
     <div class="app" id="app">
 
+      <!-- ============ splash — the mark, straight out of inout proto ============ -->
+      <div id="splash" hidden>
+        <div class="swrap">
+          <div class="glow"></div>
+          <svg id="logomark" viewBox="247.85 256.76 362.93 43.52" xmlns="http://www.w3.org/2000/svg" aria-label="INOUT">
+            <path class="lm lm--i" fill="#F0ECE3" d="M247.845 258.156H263.845V299.116H247.845V258.156Z"/>
+            <path class="lm lm--n" fill="#F0ECE3" d="M334.907 286.572L328.955 289.964V258.156H344.955V299.116H328.955L280.763 271.212L286.715 267.756V299.116H270.715V258.156H286.715L334.907 286.572Z"/>
+            <path class="lm lm--o" fill="#E8D5A0" d="M391.56 300.28C382.259 300.28 374.771 299.469 369.096 297.848C363.421 296.184 359.283 293.752 356.68 290.552C354.12 287.309 352.84 283.299 352.84 278.52C352.84 273.741 354.12 269.752 356.68 266.552C359.283 263.309 363.421 260.877 369.096 259.256C374.771 257.592 382.259 256.76 391.56 256.76C400.861 256.76 408.349 257.592 414.024 259.256C419.699 260.877 423.816 263.309 426.376 266.552C428.979 269.752 430.28 273.741 430.28 278.52C430.28 283.299 428.979 287.309 426.376 290.552C423.816 293.752 419.699 296.184 414.024 297.848C408.349 299.469 400.861 300.28 391.56 300.28ZM391.56 288.12C395.955 288.12 399.752 287.864 402.952 287.352C406.152 286.797 408.627 285.837 410.376 284.472C412.125 283.064 413 281.08 413 278.52C413 275.96 412.125 273.997 410.376 272.632C408.627 271.224 406.152 270.264 402.952 269.752C399.752 269.197 395.955 268.92 391.56 268.92C387.165 268.92 383.304 269.197 379.976 269.752C376.691 270.264 374.109 271.224 372.232 272.632C370.397 273.997 369.48 275.96 369.48 278.52C369.48 281.08 370.397 283.064 372.232 284.472C374.109 285.837 376.691 286.797 379.976 287.352C383.304 287.864 387.165 288.12 391.56 288.12Z"/>
+            <path class="lm lm--u" fill="#E8D5A0" d="M496.141 275.64V258.04H512.141V278.52C512.141 282.147 511.458 285.24 510.093 287.8C508.77 290.317 506.914 292.408 504.525 294.072C502.136 295.693 499.384 296.952 496.269 297.848C493.154 298.744 489.805 299.363 486.221 299.704C482.68 300.088 479.074 300.28 475.405 300.28C471.522 300.28 467.768 300.088 464.141 299.704C460.514 299.363 457.144 298.744 454.029 297.848C450.957 296.952 448.269 295.693 445.965 294.072C443.661 292.408 441.848 290.317 440.525 287.8C439.245 285.24 438.605 282.147 438.605 278.52V258.04H454.605V275.64C454.605 279.053 455.437 281.656 457.101 283.448C458.765 285.24 461.133 286.477 464.205 287.16C467.32 287.8 471.053 288.12 475.405 288.12C479.629 288.12 483.298 287.8 486.413 287.16C489.528 286.477 491.917 285.24 493.581 283.448C495.288 281.656 496.141 279.053 496.141 275.64Z"/>
+            <path class="lm lm--t" fill="#E8D5A0" d="M518.545 258.04H585.105V270.2H518.545V258.04ZM543.825 269.368H559.825V299H543.825V269.368Z"/>
+          </svg>
+          <div class="tag">Capture · trim · one file</div>
+        </div>
+      </div>
+
+
       <!-- ============ idle ============ -->
       <section class="screen" data-screen="idle">
         <div class="capture">
+          <div class="capture__grid"></div>
+          <div class="capture__vignette"></div>
           <div class="capture__wordmark">INOUT</div>
-          <div class="controlbar">
-            <div class="chips" data-chips></div>
-            <button class="recbtn" data-go="recording" aria-label="Start recording">
-              <span class="recbtn__inner"></span>
-            </button>
-            <div class="controlbar__hint" data-hint></div>
+          <!-- anchor holds the centring; .cluster is the spring's to move -->
+          <div class="cluster-anchor">
+            <div class="cluster" data-cluster>
+              <div class="ring" data-ring>
+                <button class="recbtn" data-rec aria-label="Start recording">
+                  <span class="recbtn__inner"></span>
+                </button>
+              </div>
+              <div class="cluster__hint" data-hint></div>
+            </div>
           </div>
         </div>
       </section>
@@ -891,6 +1104,8 @@ select { font: inherit; }
       <!-- ============ recording ============ -->
       <section class="screen" data-screen="recording" hidden>
         <div class="capture capture--recording">
+          <div class="capture__grid"></div>
+          <div class="capture__vignette"></div>
           <div class="timer">
             <span class="timer__dot"></span>
             <span class="timer__text">00:42</span>
@@ -1052,10 +1267,24 @@ document.querySelectorAll('[data-stage]').forEach((el) => (el.innerHTML = STAGE)
 document.querySelectorAll('[data-icon]').forEach((el) => (el.innerHTML = icon(el.dataset.icon, el.classList.contains('transport__play') ? 18 : 20)))
 document.querySelectorAll('[data-icon-before]').forEach((el) => el.insertAdjacentHTML('afterbegin', icon(el.dataset.iconBefore, 16)))
 
+const chipHTML = (c) =>
+  `<button class="chip" aria-pressed="${c.on}" data-chip="${c.key}">${icon(c.ic, 15)}<span>${c.label}</span></button>`
+
 document.querySelectorAll('[data-chips]').forEach((row) => {
-  row.innerHTML = CHANNELS.map(
-    (c) => `<button class="chip" aria-pressed="${c.on}" data-chip="${c.key}">${icon(c.ic, 15)}<span>${c.label}</span></button>`,
-  ).join('')
+  row.innerHTML = CHANNELS.map(chipHTML).join('')
+})
+
+/* Inputs in orbit: same chips, unchanged, placed on a circle around the button.
+   Screen top-left · Camera top-right · Mic bottom-left · System audio bottom-right. */
+const RING_R = 132
+const RING_ANGLE = { screen: -135, camera: -45, mic: 135, sys: 45 }
+const ring = document.querySelector('[data-ring]')
+CHANNELS.forEach((c) => {
+  const a = (RING_ANGLE[c.key] * Math.PI) / 180
+  ring.insertAdjacentHTML('beforeend', chipHTML(c))
+  const el = ring.lastElementChild
+  el.style.transform =
+    `translate(-50%, -50%) translate(${(Math.cos(a) * RING_R).toFixed(1)}px, ${(Math.sin(a) * RING_R).toFixed(1)}px)`
 })
 
 document.querySelector('[data-timeline]').innerHTML = `
@@ -1110,11 +1339,16 @@ app.addEventListener('click', (e) => {
 })
 
 /* chips + hint */
+const recBtn = app.querySelector('[data-rec]')
+const hintEl = app.querySelector('[data-hint]')
+function anyInputOn() {
+  return [...ring.querySelectorAll('.chip')].some((c) => c.getAttribute('aria-pressed') === 'true')
+}
 function syncHint() {
-  const row = app.querySelector('[data-screen="idle"] [data-chips]')
-  const any = [...row.querySelectorAll('.chip')].some((c) => c.getAttribute('aria-pressed') === 'true')
-  app.querySelector('[data-hint]').textContent = any ? '' : 'Turn on an input to record'
-  app.querySelector('[data-screen="idle"] .recbtn').style.opacity = any ? '1' : '0.4'
+  if (recBtn.classList.contains('recbtn--arming')) return
+  const any = anyInputOn()
+  hintEl.textContent = any ? '' : 'Turn on an input to record'
+  recBtn.style.opacity = any ? '1' : '0.4'
 }
 app.addEventListener('click', (e) => {
   const chip = e.target.closest('[data-chip]')
@@ -1123,6 +1357,150 @@ app.addEventListener('click', (e) => {
   syncHint()
 })
 syncHint()
+
+/* record button: the studio's state walk — press arms, arming pulses, then the
+   take starts. Look untouched; only the states and their timing are borrowed. */
+let armTimer = null
+recBtn.addEventListener('click', () => {
+  if (armTimer || !anyInputOn()) return
+  recBtn.classList.add('recbtn--arming')
+  hintEl.textContent = 'Starting…'
+  armTimer = setTimeout(() => {
+    armTimer = null
+    recBtn.classList.remove('recbtn--arming')
+    show('recording')
+    syncHint()
+  }, 900)
+})
+
+/* splash */
+const splash = document.getElementById('splash')
+let splashOut = null
+let splashEnd = null
+function playSplash() {
+  clearTimeout(splashOut)
+  clearTimeout(splashEnd)
+  splash.hidden = false
+  splash.classList.remove('splash-play', 'splash-out')
+  void splash.offsetWidth // restart the keyframes
+  splash.classList.add('splash-play')
+  splashOut = setTimeout(() => splash.classList.add('splash-out'), 950)
+  splashEnd = setTimeout(() => {
+    splash.hidden = true
+    splash.classList.remove('splash-play', 'splash-out')
+  }, 1340)
+}
+document.getElementById('replay').addEventListener('click', playSplash)
+
+/* ---- studio motion, lifted from inout copy 2 ----
+   initBgGridPointerTilt: grid leans toward the pointer (lerp .11, ±10px shift).
+   initElasticHubScroll:  wheel injects velocity into a damped spring that moves
+   the cluster and drags the grid at 10% of it; walls bounce at 0.14. Same
+   constants; the frame is the viewport instead of the window. */
+;(function studioMotion() {
+  const BG_LERP = 0.11
+  const BG_SHIFT_MAX_PX = 10
+  let curX = 0, curY = 0, tgtX = 0, tgtY = 0, tiltRaf = 0
+
+  function tiltTick() {
+    tiltRaf = 0
+    curX += (tgtX - curX) * BG_LERP
+    curY += (tgtY - curY) * BG_LERP
+    app.style.setProperty('--tilt-x', curX.toFixed(5))
+    app.style.setProperty('--tilt-y', curY.toFixed(5))
+    app.style.setProperty('--bg-shift-x', `${(curX * BG_SHIFT_MAX_PX).toFixed(2)}px`)
+    app.style.setProperty('--bg-shift-y', `${(curY * BG_SHIFT_MAX_PX).toFixed(2)}px`)
+    if (Math.abs(tgtX - curX) > 0.0008 || Math.abs(tgtY - curY) > 0.0008) {
+      tiltRaf = requestAnimationFrame(tiltTick)
+    }
+  }
+  app.addEventListener('mousemove', (e) => {
+    const r = app.getBoundingClientRect()
+    tgtX = Math.max(-1, Math.min(1, ((e.clientX - r.left) / r.width) * 2 - 1))
+    tgtY = Math.max(-1, Math.min(1, ((e.clientY - r.top) / r.height) * 2 - 1))
+    if (!tiltRaf) tiltRaf = requestAnimationFrame(tiltTick)
+  }, { passive: true })
+
+  const cluster = app.querySelector('[data-cluster]')
+  const stiffness = 118
+  const damping = 17
+  const wheelImpulse = 10.2
+  const velCap = 5200
+  const pixelDeltaBoost = 1.72
+  const wallRestitution = 0.14
+  const bgFollow = 0.1
+  const edgePad = 2
+  let posX = 0, posY = 0, velX = 0, velY = 0, physRaf = null, lastT = 0
+
+  const live = () => !app.querySelector('[data-screen="idle"]').hidden
+
+  function bounds() {
+    // cluster is centred, so travel is symmetric — no rect maths, scale-proof
+    const maxX = Math.max(0, (app.clientWidth - cluster.offsetWidth) / 2 - edgePad)
+    const maxY = Math.max(0, (app.clientHeight - cluster.offsetHeight) / 2 - edgePad)
+    return { maxX, maxY }
+  }
+  function apply(x, y) {
+    posX = x
+    posY = y
+    if (Math.abs(x) < 0.02 && Math.abs(y) < 0.02) {
+      cluster.style.transform = ''
+      app.style.removeProperty('--bump-x')
+      app.style.removeProperty('--bump-y')
+    } else {
+      cluster.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0)`
+      app.style.setProperty('--bump-x', `${(x * bgFollow).toFixed(2)}px`)
+      app.style.setProperty('--bump-y', `${(y * bgFollow).toFixed(2)}px`)
+    }
+  }
+  function rest() {
+    posX = posY = velX = velY = 0
+    lastT = 0
+    cluster.style.transform = ''
+    app.style.removeProperty('--bump-x')
+    app.style.removeProperty('--bump-y')
+  }
+  function step(t) {
+    physRaf = null
+    if (!lastT) lastT = t
+    let dt = (t - lastT) / 1000
+    lastT = t
+    if (dt > 0.055) dt = 0.055
+    if (dt <= 0) dt = 1 / 60
+
+    velX += (-stiffness * posX - damping * velX) * dt
+    velY += (-stiffness * posY - damping * velY) * dt
+    posX += velX * dt
+    posY += velY * dt
+
+    const { maxX, maxY } = bounds()
+    if (posX > maxX) { posX = maxX; velX *= -wallRestitution }
+    else if (posX < -maxX) { posX = -maxX; velX *= -wallRestitution }
+    if (posY > maxY) { posY = maxY; velY *= -wallRestitution }
+    else if (posY < -maxY) { posY = -maxY; velY *= -wallRestitution }
+
+    if (Math.hypot(posX, posY) < 0.55 && Math.hypot(velX, velY) < 6) return rest()
+    apply(posX, posY)
+    physRaf = requestAnimationFrame(step)
+  }
+  const kick = () => { if (physRaf == null) physRaf = requestAnimationFrame(step) }
+  const norm = (d, mode) =>
+    mode === 1 ? d * 16 : mode === 2 ? d * Math.min(900, app.clientHeight * 0.85) : d * pixelDeltaBoost
+
+  app.addEventListener('wheel', (e) => {
+    if (!live()) return
+    const dx = norm(e.deltaX, e.deltaMode)
+    const dy = norm(e.deltaY, e.deltaMode)
+    if (!dx && !dy) return
+    e.preventDefault()
+    e.stopPropagation()
+    velX += -dx * wheelImpulse
+    velY += -dy * wheelImpulse
+    const sp = Math.hypot(velX, velY)
+    if (sp > velCap) { velX *= velCap / sp; velY *= velCap / sp }
+    kick()
+  }, { passive: false, capture: true })
+})()
 
 /* lane eye */
 app.addEventListener('click', (e) => {
@@ -1210,16 +1588,19 @@ function fit() {
   frameEl.style.transform = `scale(${s})`
   slot.style.width = w * s + 'px'
   slot.style.height = h * s + 'px'
-  note.textContent = `${w}×${h} · ${Math.round(s * 100)}% · 1–5 · T · F`
+  note.textContent = `${w}×${h} · ${Math.round(s * 100)}% · 0 splash · 1–5 · T · F · N`
 }
 addEventListener('resize', fit)
 
+const neonSel = document.getElementById('neon')
 themeSel.addEventListener('change', () => (document.documentElement.dataset.theme = themeSel.value))
+neonSel.addEventListener('change', () => (document.documentElement.dataset.neon = neonSel.value))
 frameSel.addEventListener('change', () => {
   document.documentElement.dataset.frame = frameSel.value
   fit()
 })
 fit()
+playSplash()
 
 const cycle = (sel, list) => {
   const next = list[(list.indexOf(sel.value) + 1) % list.length]
@@ -1229,9 +1610,11 @@ const cycle = (sel, list) => {
 addEventListener('keydown', (e) => {
   if (e.target.tagName === 'SELECT') return
   const n = Number(e.key)
-  if (n >= 1 && n <= SCREENS.length) show(SCREENS[n - 1])
+  if (e.key === '0') playSplash()
+  else if (n >= 1 && n <= SCREENS.length) show(SCREENS[n - 1])
   else if (e.key.toLowerCase() === 't') cycle(themeSel, ['baseline', 'graphite', 'paper'])
   else if (e.key.toLowerCase() === 'f') cycle(frameSel, ['desktop', 'laptop', 'phone'])
+  else if (e.key.toLowerCase() === 'n') cycle(neonSel, ['on', 'off'])
 })
 </script>
 </body>

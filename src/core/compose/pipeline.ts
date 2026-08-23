@@ -12,7 +12,9 @@ import {
   defaultEditState,
   hasEnabledVideo,
   isDefaultEdit,
+  keptSegments,
   outputDurationMs,
+  segmentJoinsMs,
 } from '@core/timeline'
 import {
   DEFAULT_EXPORT_SETTINGS,
@@ -44,6 +46,13 @@ import { collectPeaks, createPeakBuffer, createWaveformRenderer } from './wavefo
 import { openVideoChannel, type VideoChannelReader } from './video'
 
 const YIELD_EVERY_FRAMES = 8
+/**
+ * Half-width of the fade applied at every cut join (F1). The two sides of a
+ * join are unrelated audio, so butting them together is a step discontinuity —
+ * a click. Ramping to zero and back over a few ms costs nothing audible and
+ * makes a join click-free regardless of what the two sides contain.
+ */
+const JOIN_FADE_MS = 3
 
 const yieldToUi = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
 
@@ -53,19 +62,42 @@ interface ActiveWindow {
   outEndMs: number
   /** Channel-local end of the kept region, ms. */
   localEndMs: number
+  /** channel-local ms = output ms + this. Differs per kept segment. */
+  localOffsetMs: number
 }
 
-/** Interval form of the types.ts time model (per-frame lookups use channelSourceTimeAt). */
-function activeOutputWindowMs(edit: EditState, channel: ChannelRecording): ActiveWindow | null {
+/**
+ * Interval form of the types.ts time model (per-frame lookups use
+ * channelSourceTimeAt). One entry per KEPT SEGMENT the channel overlaps: with
+ * mid-take cuts (F1) a channel's material is no longer one contiguous span of
+ * the output, and each piece maps to source with its own offset.
+ */
+function activeOutputWindowsMs(edit: EditState, channel: ChannelRecording): ActiveWindow[] {
   const ce = edit.channels.find((c) => c.channelId === channel.id)
-  if (!ce || !ce.enabled) return null
+  if (!ce || !ce.enabled) return []
   const localStartMs = Math.max(0, ce.trimStartMs)
   const localEndMs = Math.min(channel.durationMs, ce.trimEndMs)
-  const outStartMs =
-    Math.max(channel.startOffsetMs + localStartMs, edit.globalTrimStartMs) - edit.globalTrimStartMs
-  const outEndMs =
-    Math.min(channel.startOffsetMs + localEndMs, edit.globalTrimEndMs) - edit.globalTrimStartMs
-  return outEndMs > outStartMs ? { outStartMs, outEndMs, localEndMs } : null
+  // The channel's kept material on the RECORDING timeline.
+  const recStart = channel.startOffsetMs + localStartMs
+  const recEnd = channel.startOffsetMs + localEndMs
+  const out: ActiveWindow[] = []
+  let outCursor = 0
+  for (const seg of keptSegments(edit)) {
+    const segLen = Math.max(0, seg.endMs - seg.startMs)
+    const from = Math.max(recStart, seg.startMs)
+    const to = Math.min(recEnd, seg.endMs)
+    if (to > from) {
+      out.push({
+        outStartMs: outCursor + (from - seg.startMs),
+        outEndMs: outCursor + (to - seg.startMs),
+        localEndMs,
+        // localSec = outSec + localOffsetSec, per segment.
+        localOffsetMs: seg.startMs - outCursor - channel.startOffsetMs,
+      })
+    }
+    outCursor += segLen
+  }
+  return out
 }
 
 /** Open a mixer per enabled audio channel (used for both the analysis pre-pass
@@ -79,18 +111,22 @@ async function openAudioMixers(
   for (const channel of recording.channels) {
     if (channel.media !== 'audio') continue
     throwIfAborted()
-    const window = activeOutputWindowMs(edit, channel)
-    if (!window) continue
-    const blob = await blobStore.read(channel.blobKey)
-    const localOffsetSec = (edit.globalTrimStartMs - channel.startOffsetMs) / 1000
-    const mixer = await openAudioChannel(
-      blob,
-      channel.id,
-      window.outStartMs / 1000,
-      window.outEndMs / 1000,
-      localOffsetSec,
-    )
-    if (mixer) mixers.push(mixer)
+    const windows = activeOutputWindowsMs(edit, channel)
+    if (windows.length === 0) continue
+    // One mixer per (channel × kept segment): each streams forward over its own
+    // output span with its own source offset, so the existing forward-only
+    // mixer needs no change to support cuts.
+    for (const window of windows) {
+      const blob = await blobStore.read(channel.blobKey)
+      const mixer = await openAudioChannel(
+        blob,
+        channel.id,
+        window.outStartMs / 1000,
+        window.outEndMs / 1000,
+        window.localOffsetMs / 1000,
+      )
+      if (mixer) mixers.push(mixer)
+    }
   }
   return mixers
 }
@@ -174,10 +210,18 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
     for (const channel of recording.channels) {
       if (channel.media !== 'video' || waveformMode) continue
       throwIfAborted()
-      const window = activeOutputWindowMs(edit, channel)
-      if (!window) continue
+      // Video is sampled per frame through channelSourceTimeAt, which already
+      // understands cuts — the reader only needs the channel's last kept
+      // source instant, which is the same across segments.
+      const windows = activeOutputWindowsMs(edit, channel)
+      if (windows.length === 0) continue
       const blob = await blobStore.read(channel.blobKey)
-      const reader = await openVideoChannel(blob, channel.id, channel.kind, window.localEndMs / 1000)
+      const reader = await openVideoChannel(
+        blob,
+        channel.id,
+        channel.kind,
+        windows[windows.length - 1]!.localEndMs / 1000,
+      )
       if (reader) videoReaders.push(reader)
     }
 
@@ -260,6 +304,10 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
     await out.start()
     report('preparing', 0.05)
 
+    // Output-timeline frame index of every cut join, for the seam fade.
+    const joinFrames = segmentJoinsMs(edit).map((ms) =>
+      Math.round((ms / 1000) * AUDIO_SAMPLE_RATE),
+    )
     const totalFrames = Math.max(1, Math.ceil(durationSec * fps - 1e-9))
     const audioChunks = Math.ceil(totalAudioFrames / AUDIO_SAMPLE_RATE)
     const peaks = createPeakBuffer(waveformMode ? durationSec : 0)
@@ -273,6 +321,20 @@ export async function exportRecording(opts: ExportOptions): Promise<ExportResult
       const right = new Float32Array(frames)
       const chunkOutStartSec = startFrame / AUDIO_SAMPLE_RATE
       for (const mixer of audioMixers) await mixer.mixInto(left, right, chunkOutStartSec)
+      // Cut joins: fade the SUM through zero so no join can click.
+      if (joinFrames.length) {
+        const half = Math.max(1, Math.round((JOIN_FADE_MS / 1000) * AUDIO_SAMPLE_RATE))
+        for (const joinFrame of joinFrames) {
+          const from = Math.max(startFrame, joinFrame - half)
+          const to = Math.min(startFrame + frames, joinFrame + half)
+          for (let f = from; f < to; f++) {
+            const k = f - startFrame
+            const g = Math.min(1, Math.abs(f - joinFrame) / half)
+            left[k] *= g
+            right[k] *= g
+          }
+        }
+      }
       for (let k = 0; k < frames; k++) {
         left[k] = softLimitSample(left[k])
         right[k] = softLimitSample(right[k])

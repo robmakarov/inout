@@ -2,11 +2,21 @@ import { describe, expect, it } from 'vitest'
 import type { ChannelEdit, EditState, Recording } from '../types'
 import {
   activeChannelsAt,
+  channelHasOutputWindow,
   channelSourceTimeAt,
   clampEditState,
   defaultEditState,
+  hasCuts,
   hasEnabledVideo,
+  isDefaultEdit,
+  editSegments,
+  keptSegments,
   outputDurationMs,
+  outputToRecordingMs,
+  recordingToOutputMs,
+  removeSegment,
+  segmentJoinsMs,
+  splitAtOutputMs,
 } from './timeline'
 
 const rec: Recording = {
@@ -277,5 +287,168 @@ describe('clampEditState', () => {
     expect(e.channels.map((c) => c.channelId)).toEqual(['ch-screen', 'ch-cam', 'ch-mic'])
     expect(e.channels[0]).toEqual({ channelId: 'ch-screen', enabled: true, trimStartMs: 0, trimEndMs: 10_000 })
     expect(e.channels[1]).toEqual({ channelId: 'ch-cam', enabled: false, trimStartMs: 500, trimEndMs: 4_000 })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Kept segments — mid-take cuts (F1)
+// ---------------------------------------------------------------------------
+
+describe('kept segments', () => {
+  const rec: Recording = {
+    id: 'r1',
+    createdAt: 0,
+    durationMs: 10_000,
+    channels: [
+      {
+        id: 'v',
+        kind: 'screen',
+        media: 'video',
+        mimeType: 'video/webm',
+        blobKey: 'v',
+        startOffsetMs: 0,
+        durationMs: 10_000,
+      },
+    ],
+  }
+  const base = defaultEditState(rec)
+  // Cut out 3000-5000: two kept spans.
+  const cut: EditState = {
+    ...base,
+    segments: [
+      { startMs: 0, endMs: 3000 },
+      { startMs: 5000, endMs: 10_000 },
+    ],
+  }
+
+  it('absent segments behave exactly like one span over the whole trim', () => {
+    expect(keptSegments(base)).toEqual([{ startMs: 0, endMs: 10_000 }])
+    expect(outputDurationMs(base)).toBe(10_000)
+    expect(outputToRecordingMs(base, 4200)).toBe(4200)
+    expect(hasCuts(base)).toBe(false)
+    expect(isDefaultEdit(rec, base)).toBe(true)
+  })
+
+  it('output duration is the sum of kept spans', () => {
+    expect(outputDurationMs(cut)).toBe(8000)
+    expect(hasCuts(cut)).toBe(true)
+    // A cut take can never take the instant packet-copy path.
+    expect(isDefaultEdit(rec, cut)).toBe(false)
+  })
+
+  it('maps output time across the join', () => {
+    expect(outputToRecordingMs(cut, 0)).toBe(0)
+    expect(outputToRecordingMs(cut, 2999)).toBe(2999)
+    // The instant after the join is the far side of the cut.
+    expect(outputToRecordingMs(cut, 3000)).toBe(5000)
+    expect(outputToRecordingMs(cut, 7999)).toBe(9999)
+    expect(outputToRecordingMs(cut, 8000)).toBeNull()
+  })
+
+  it('round-trips recording time back to output time, and reports cut material', () => {
+    expect(recordingToOutputMs(cut, 2999)).toBe(2999)
+    expect(recordingToOutputMs(cut, 5000)).toBe(3000)
+    expect(recordingToOutputMs(cut, 4000)).toBeNull() // inside the cut
+    for (const t of [0, 1500, 2999, 5000, 7000, 9999]) {
+      const out = recordingToOutputMs(cut, t)
+      expect(out).not.toBeNull()
+      expect(outputToRecordingMs(cut, out as number)).toBe(t)
+    }
+  })
+
+  it('samples the right source frame either side of a join', () => {
+    expect(channelSourceTimeAt(rec, cut, 'v', 2999)).toBe(2999)
+    expect(channelSourceTimeAt(rec, cut, 'v', 3000)).toBe(5000)
+    expect(channelSourceTimeAt(rec, cut, 'v', 8000)).toBeNull()
+  })
+
+  it('reports the joins on the output timeline', () => {
+    expect(segmentJoinsMs(cut)).toEqual([3000])
+    expect(segmentJoinsMs(base)).toEqual([])
+  })
+
+  it('splits at the playhead and deletes a segment', () => {
+    const split = splitAtOutputMs(base, 4000)
+    // The editor keeps the split marker...
+    expect(editSegments(split)).toEqual([
+      { startMs: 0, endMs: 4000 },
+      { startMs: 4000, endMs: 10_000 },
+    ])
+    // ...but nothing was removed, so the engine still sees one continuous span
+    // and the take keeps its instant packet-copy path.
+    expect(keptSegments(split)).toEqual([{ startMs: 0, endMs: 10_000 }])
+    expect(hasCuts(split)).toBe(false)
+    expect(isDefaultEdit(rec, split)).toBe(true)
+    expect(segmentJoinsMs(split)).toEqual([])
+    expect(outputDurationMs(split)).toBe(10_000)
+
+    const dropped = removeSegment(split, 0)
+    expect(keptSegments(dropped)).toEqual([{ startMs: 4000, endMs: 10_000 }])
+    expect(outputDurationMs(dropped)).toBe(6000)
+    // One span that no longer covers the trim IS a cut.
+    expect(hasCuts(dropped)).toBe(true)
+    expect(isDefaultEdit(rec, dropped)).toBe(false)
+    // The last remaining span is never removable.
+    expect(removeSegment(dropped, 0)).toBe(dropped)
+  })
+
+  it('refuses a split that would leave a sliver', () => {
+    expect(splitAtOutputMs(base, 50)).toBe(base)
+    expect(splitAtOutputMs(base, 9990)).toBe(base)
+  })
+
+  it('normalizes overlapping and out-of-order spans, and drops a no-op list', () => {
+    const messy = clampEditState(rec, {
+      ...base,
+      segments: [
+        { startMs: 5000, endMs: 7000 },
+        { startMs: 1000, endMs: 3000 },
+        { startMs: 2500, endMs: 4000 },
+        { startMs: 8000, endMs: 7000 }, // reversed → [7000,8000): adjacent, not
+      ],                                //            overlapping, so it stays
+    })
+    // Overlaps merge; adjacency does not (that is what a split looks like).
+    expect(editSegments(messy)).toEqual([
+      { startMs: 1000, endMs: 4000 },
+      { startMs: 5000, endMs: 7000 },
+      { startMs: 7000, endMs: 8000 },
+    ])
+    // The engine sees the adjacent pair as one continuous run.
+    expect(keptSegments(messy)).toEqual([
+      { startMs: 1000, endMs: 4000 },
+      { startMs: 5000, endMs: 8000 },
+    ])
+    // One span covering the whole trim is not a cut — the field is dropped.
+    const noop = clampEditState(rec, { ...base, segments: [{ startMs: 0, endMs: 10_000 }] })
+    expect(noop.segments).toBeUndefined()
+    expect(isDefaultEdit(rec, noop)).toBe(true)
+  })
+
+  it('drops a channel that every kept span misses', () => {
+    const twoCh: Recording = {
+      ...rec,
+      channels: [
+        rec.channels[0]!,
+        {
+          id: 'a',
+          kind: 'mic',
+          media: 'audio',
+          mimeType: 'audio/webm',
+          blobKey: 'a',
+          startOffsetMs: 3200,
+          durationMs: 1000,
+        },
+      ],
+    }
+    const e = clampEditState(twoCh, {
+      ...defaultEditState(twoCh),
+      segments: [
+        { startMs: 0, endMs: 3000 },
+        { startMs: 5000, endMs: 10_000 },
+      ],
+    })
+    // The mic only exists inside the cut-out span.
+    expect(channelHasOutputWindow(twoCh, e, 'a')).toBe(false)
+    expect(channelHasOutputWindow(twoCh, e, 'v')).toBe(true)
   })
 })

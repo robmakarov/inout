@@ -15,6 +15,7 @@ export type IconName =
   | 'pause'
   | 'chevron-left'
   | 'x'
+  | 'scissors'
   | 'google'
 
 const PATHS: Record<Exclude<IconName, 'google'>, ReactNode> = {
@@ -53,6 +54,13 @@ const PATHS: Record<Exclude<IconName, 'google'>, ReactNode> = {
       <path d="M4.5 8.2C3.2 9.9 2.5 12 2.5 12s3.5 6.25 9.5 6.25c1.5 0 2.87-.39 4.07-.98M9.9 6.06A8.9 8.9 0 0 1 12 5.75c6 0 9.5 6.25 9.5 6.25a16.7 16.7 0 0 1-2.6 3.34" />
       <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
       <path d="M4 3.5l16 17" />
+    </>
+  ),
+  scissors: (
+    <>
+      <circle cx="6" cy="6.5" r="2.5" />
+      <circle cx="6" cy="17.5" r="2.5" />
+      <path d="M8.1 7.9 20 17M8.1 16.1 20 7" />
     </>
   ),
   download: (
