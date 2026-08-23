@@ -1,5 +1,5 @@
 /**
- * Export quality tiers (task F7).
+ * Export quality steps (task F7, ladder widened by F7b).
  *
  * The default tier is the current settings, and it MUST keep the instant
  * packet-copy path — a user who does not touch the slider pays nothing for its
@@ -19,12 +19,13 @@
  * measured on a 6 s take whose composite is 1920×1080, the same content came
  * out 1.61 MB at 720p, 1.99 MB at 1080p and 2.61 MB at 1440p — pixel ratios of
  * 0.44 / 1 / 1.78 against size ratios of 0.81 / 1 / 1.31, which √ tracks and
- * linear does not (linear was −40 % and +36 % out).
+ * linear does not (linear was −40 % and +36 % out). F7b measured the limits of
+ * that model on other content — see the note above estimateExportBytes.
  */
 import { AUDIO_BITRATE, VIDEO_BITRATE } from './codecs'
 import { DEFAULT_EXPORT_SETTINGS, type ExportSettings, type Recording } from '@core/types'
 
-export type QualityTierId = '540p' | '720p' | '900p' | '1080p' | '1440p'
+export type QualityTierId = '540p' | '720p' | '1080p' | '1440p'
 
 export interface QualityTier {
   id: QualityTierId
@@ -54,6 +55,11 @@ export interface QualityTier {
  * squeezed below what the content needs. That is a quality lever wearing a
  * size label, and O9 (text sharpness) owns it.
  *
+ * 900p WAS a step and was DROPPED on its own evidence: it is the one rung the
+ * size estimator misses, +29.0 % and +30.5 % on two production-rig runs where
+ * every other step landed inside ±20 %. A step whose number is noise is worse
+ * than no step, which is exactly F7b's own rule.
+ *
  * Bitrate ceilings still scale with pixel count so a busy take cannot blow
  * past its step.
  */
@@ -68,7 +74,6 @@ export const QUALITY_TIERS: QualityTier[] = [
     note: 'Smallest file. Fine for a talking head; small screen text will be soft.',
   },
   { id: '720p', label: '720p', width: 1280, height: 720, fps: 30, videoBitrate: 4_000_000 },
-  { id: '900p', label: '900p', width: 1600, height: 900, fps: 30, videoBitrate: 6_000_000 },
   {
     id: '1080p',
     label: '1080p',
