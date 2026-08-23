@@ -181,6 +181,20 @@ export async function startMeasuredAudioCapture(opts: {
    * Without it the take keeps "recording" while every later sample is lost —
    * the file just stops partway with no signal to the user. */
   onFatal?: (err: Error) => void
+  /**
+   * Live PCM tap (task O2). Called once per worklet batch with the same samples
+   * that go to the encoder, before any encode. `startFrame` is channel-local
+   * (sample 0 = first live sample); `startOffsetMs` places that sample on the
+   * session timeline. `right` aliases `left` for mono sources. Must be cheap
+   * and must not throw — it runs on the capture path.
+   */
+  onPcm?: (
+    left: Float32Array,
+    right: Float32Array,
+    startFrame: number,
+    startOffsetMs: number,
+    sampleRate: number,
+  ) => void
 }): Promise<MeasuredAudioHandle> {
   const track = opts.stream.getAudioTracks()[0]
   if (!track) throw new Error('measured audio: no audio track')
@@ -363,6 +377,18 @@ export async function startMeasuredAudioCapture(opts: {
       for (let i = 0; i < frames; i++) {
         interleaved[i * 2] = planar[i]!
         interleaved[i * 2 + 1] = planar[i]!
+      }
+    }
+
+    // Loudness tap: the certified mix is measured here, live, from the very
+    // samples about to be encoded — so no export has to decode them again.
+    if (opts.onPcm) {
+      try {
+        const L = planar.subarray(0, frames)
+        const R = channels >= 2 ? planar.subarray(frames, frames * 2) : L
+        opts.onPcm(L, R, framesWritten, startOffsetMs ?? 0, sampleRate)
+      } catch (err) {
+        console.warn('[capture] loudness tap threw (ignored)', err)
       }
     }
 

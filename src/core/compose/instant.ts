@@ -34,6 +34,7 @@ import type {
   Recording,
 } from '@core/types'
 import {
+  loudnessFromCaptureStats,
   makeupGainForLoudness,
   measureMixLoudness,
   mixGainForChannels,
@@ -152,17 +153,34 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
     // loudness (p90 window RMS, transient-proof) on a throwaway set and drive
     // it to target. Without this the instant path would ship the same
     // near-inaudible voice the render path fixes.
+    // O2: the certified mix's loudness was measured live during capture, so the
+    // instant path no longer decodes every audio channel a second time just to
+    // learn it. Takes without stats (recorded before O2, or on a browser whose
+    // audio goes through MediaRecorder) fall back to the probe pass.
     if (needAudio) {
-      const probe = await openAudioMixers(recording, edit)
-      try {
-        const loud = await measureMixLoudness(probe, baseGain, totalAudioFrames, throwIfAborted)
-        const makeup = makeupGainForLoudness(loud)
+      const stored = loudnessFromCaptureStats(
+        recording.loudness,
+        audioMixers.map((m) => m.channelId),
+        baseGain,
+      )
+      if (stored) {
+        const makeup = makeupGainForLoudness(stored)
         if (makeup !== 1) for (const m of audioMixers) m.gain = baseGain * makeup
         console.info(
-          `instant: audio loudness p90rms ${loud.loudRms.toFixed(4)} peak ${loud.peak.toFixed(3)} → makeup ${makeup.toFixed(2)}×`,
+          `instant: audio loudness from capture stats p90rms ${stored.loudRms.toFixed(4)} peak ${stored.peak.toFixed(3)} → makeup ${makeup.toFixed(2)}× (no probe decode)`,
         )
-      } finally {
-        for (const m of probe) m.dispose()
+      } else {
+        const probe = await openAudioMixers(recording, edit)
+        try {
+          const loud = await measureMixLoudness(probe, baseGain, totalAudioFrames, throwIfAborted)
+          const makeup = makeupGainForLoudness(loud)
+          if (makeup !== 1) for (const m of audioMixers) m.gain = baseGain * makeup
+          console.info(
+            `instant: audio loudness p90rms ${loud.loudRms.toFixed(4)} peak ${loud.peak.toFixed(3)} → makeup ${makeup.toFixed(2)}×`,
+          )
+        } finally {
+          for (const m of probe) m.dispose()
+        }
       }
     }
 

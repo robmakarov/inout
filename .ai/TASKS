@@ -24,19 +24,18 @@ cost bands) and WAITS. PO answers "go <id>". One task per session (one branch pe
 several ids, take the first and tell PO to open parallel sessions for the rest. Whoever MERGES a task
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
-── READY MAP — current truth, updated on every merge (last: 2026-08-23, O1 merged) ──
+── READY MAP — current truth, updated on every merge (last: 2026-08-23, O1+O2 merged) ──
 READY NOW — parallel-safe, any subset concurrently (one session each):
-  O2   capture-time loudness       [light]   touches capture/session.ts, compose/instant.ts, types
   O3a  chromium mp4 recorder       [light]   touches capture/session.ts, capture/acquire.ts
   P1   firefox + 3-engine oracle   [medium]  touches capabilities.ts, oracle scripts
   P2   pwa install                 [light]   touches index.html, vite config, service worker
   P3   ru-pack part 1              [light]   touches docs, cloud stubs
   P5a  iOS SCK spike               [light]   touches nothing in repo (separate Xcode proj) — TIME-SENSITIVE: iOS 27 beta window, ships ~Sept
   F7   quality slider              [medium]  touches ExportPanel, export settings in types.ts
-CONFLICT RULES: O2↔O3b both edit instant.ts — never simultaneously · O3b needs O3a merged ·
-F7 coordinates with O5 if both active · O7 is broad-touch — solo lane, announce, TD call on timing.
+CONFLICT RULES: O3b needs O3a merged · F7 coordinates with O5 if both active · O7 is broad-touch —
+solo lane, announce, TD call on timing.
 BLOCKED (dep → unblocks): O3b←O3a · O4←O3 · O5←O4 · O6←O4 · O8←O4/O5 ·
-O9←O4+O5 · O10←O2 (its AEC part ←P4) · F1–F6←O5/O4 per pack (F4 also ←F1 UI seam; F2←F4) ·
+O9←O4+O5 · O10 (its AEC part ←P4) · F1–F6←O5/O4 per pack (F4 also ←F1 UI seam; F2←F4) ·
 F8←O4 · P4←O4/O5 · P5b←P5a · P6←P5b · P7←P4.
 REJECTED (do not resurrect): pre-roll rolling buffer — no capture before the record press, ever
 (PO 2026-08-22; extends "no idle device access"). The related HARD requirement lives in O4/O8:
@@ -50,18 +49,14 @@ wired into pipeline.ts + instant.ts, BufferTarget kept as fallback. Gates green 
 peak live memory 39.2 MB vs 294.2 MB (target held 4.0 MB vs 253.4 MB), parity equal, zero orphans,
 oracle 39.5 ms + fidelity 0.019 dB. Evidence harness: `npm run exp -- o1` (src/experimental/perf).
 
-## O2. capture-time-loudness — kill the probe double-decode  [P2, small]
-Why: every export (incl. instant) decodes ALL audio twice — a throwaway mixer pass for loudness, then
-the render. "Instant" export is O(duration) because of this.
-Goal: accumulate MixLoudness (p90/p20 window-RMS + true peak, same math as measureMixLoudness) DURING
-capture on the certified-gain sum (tap the measured-audio PCM per channel, sum at 1/N in a lightweight
-accumulator), persist on Recording. Instant path consumes stored stats and drops its probe pass.
-Render path keeps its probe for edited windows (trims change the mix).
-Constraints: decision math unchanged (makeupGainForLoudness); takes without stats (old takes,
-MediaRecorder-audio browsers) fall back to the probe. Strictly additive.
-GATES: (a) same-take A/B: stored-stats makeup within ±0.5 dB of probe-based; (b) 10-min take instant
-export: measure phase ≈ 0 decode, report seconds saved; (c) fidelity green; (d) fallback path proven
-(spoofed-UA smoke).
+## O2. capture-time-loudness — DONE 2026-08-23, merged (evidence in DECISIONS)
+Shipped: capture/loudnessAccumulator.ts + onPcm tap in measuredAudio.ts → Recording.loudness
+(types.ts CaptureLoudness); consumed by instant.ts, pipeline.ts (unedited only) and the editor-open
+preview probe. Probe cost measured at 145-156 ms/min ⇒ 1.5 s saved on a 10-min take, ~4.4 s on 30-min.
+Floor-bound takes still probe (capture measures PCM, export measures the decoded file — they disagree
+on p20 by up to 15 dB below the codec floor); healthy mixes skip it entirely. Fallback proven on
+stripped stats AND spoofed Apple WebKit UA. Harness: `npm run exp -- o2`.
+OPEN for O10: re-measure p20 agreement on a realistic room-tone rig; if it holds, drop the floor guard.
 
 ## O3. chromium-mp4-capture — hardware encode + single-generation exports  [P1, two branches, (a) before (b)]
 Why: Chromium channel recording is webm (VP8/VP9 = SOFTWARE encode, ×2 streams) while the composite

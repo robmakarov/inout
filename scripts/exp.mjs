@@ -25,18 +25,24 @@ function parseArgs(argv) {
   let timeoutSec = 1800
   let headed = false
   let rss = false
+  let query = ''
+  let ua = ''
   for (const a of argv) {
     if (a.startsWith('--timeout=')) timeoutSec = Number(a.slice(10))
     else if (a === '--headed') headed = true
     else if (a === '--rss') rss = true
+    else if (a.startsWith('--query=')) query = a.slice(8)
+    else if (a.startsWith('--ua=')) ua = a.slice(5)
     else positional.push(a)
   }
   const [experiment, jsonArgs] = positional
   if (!experiment) {
-    console.error("usage: exp.mjs <experiment> ['{json}'] [--timeout=1800] [--headed] [--rss]")
+    console.error(
+      "usage: exp.mjs <experiment> ['{json}'] [--timeout=1800] [--headed] [--rss] [--query=k=v]",
+    )
     process.exit(2)
   }
-  return { experiment, jsonArgs, timeoutSec, headed, rss }
+  return { experiment, jsonArgs, timeoutSec, headed, rss, query, ua }
 }
 
 /**
@@ -106,7 +112,7 @@ async function waitForHttp(url, deadline) {
 }
 
 async function main() {
-  const { experiment, jsonArgs, timeoutSec, headed, rss } = parseArgs(process.argv.slice(2))
+  const { experiment, jsonArgs, timeoutSec, headed, rss, query, ua } = parseArgs(process.argv.slice(2))
   const port = await allocateEphemeralPort()
   console.error(`exp: ephemeral server on http://${HOST}:${port}`)
 
@@ -129,6 +135,8 @@ async function main() {
       ...(jsonArgs ? [jsonArgs] : []),
       `--port=${port}`,
       `--timeout=${timeoutSec}`,
+      ...(query ? [`--query=${query}`] : []),
+      ...(ua ? [`--ua=${ua}`] : []),
       ...(headed ? ['--headed'] : []),
     ]
     const sampler = rss ? startRssSampler() : null

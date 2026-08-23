@@ -42,12 +42,38 @@ export interface CompositeRecording {
   height: number
 }
 
+/**
+ * Loudness of the certified mix, accumulated DURING capture (task O2) so
+ * export does not have to decode every audio channel a second time just to
+ * measure it. Same statistics as compose/audio measureMixLoudness, taken on
+ * the UNITY sum of the listed channels: per-channel mix gain is a constant
+ * factor, so a consumer scales all three fields by its own baseGain.
+ *
+ * Only valid for a mix of EXACTLY `channelIds` — a consumer mixing a different
+ * set (channel disabled, channel failed to open) must fall back to the probe.
+ * Absent on takes recorded before O2 and on browsers without the measured
+ * audio path (Apple WebKit records audio via MediaRecorder).
+ */
+export interface CaptureLoudness {
+  channelIds: string[]
+  /** Max |sample| of the unity sum. */
+  peak: number
+  /** p90 of 100 ms window RMS of the unity sum. */
+  loudRms: number
+  /** p20 of 100 ms window RMS of the unity sum. */
+  floorRms: number
+  /** Frames folded into the statistic (0 ⇒ unusable). */
+  frames: number
+}
+
 export interface Recording {
   id: string
   createdAt: number
   /** Recording-timeline end: max over channels of startOffsetMs + durationMs. */
   durationMs: number
   channels: ChannelRecording[]
+  /** Capture-time loudness of the certified mix — lets export skip its probe. */
+  loudness?: CaptureLoudness
   /** Present when the live composite succeeded; unedited export = this file. */
   composite?: CompositeRecording
   /** Requested channels that never delivered media — surface loudly in the UI. */
