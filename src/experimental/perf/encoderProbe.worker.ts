@@ -34,6 +34,9 @@ interface FrameMsg {
   cmd: 'frame'
   frame: VideoFrame
   i: number
+  /** Production feeds TWO sources into one compositor. The single-source cell
+   *  was already measured at 59.7 fps here; this is the other one. */
+  kind?: 'screen' | 'camera'
 }
 
 interface EndMsg {
@@ -165,6 +168,7 @@ async function runFed(msg: RunMsg): Promise<unknown> {
     })
   }
 
+  const latest: Partial<Record<'screen' | 'camera', VideoFrame>> = {}
   let framesIn = 0
   let peakQueue = 0
   let dropped = 0
@@ -182,6 +186,7 @@ async function runFed(msg: RunMsg): Promise<unknown> {
       } catch {
         /* already closed */
       }
+      for (const k of ['screen', 'camera'] as const) latest[k]?.close()
       comp?.dispose()
       resolve({
         where: `worker:${msg.mode}`,
@@ -214,17 +219,43 @@ async function runFed(msg: RunMsg): Promise<unknown> {
         handleMs += performance.now() - arrived
         return
       }
+      // Retain the latest of each kind, exactly as the production worker does.
+      const kind = m.kind ?? 'screen'
+      latest[kind]?.close()
+      latest[kind] = m.frame
+      if (kind === 'camera') {
+        // Camera arrivals never drive an encode on their own: the cadence gate
+        // in production is driven by whichever source arrives, but the encode
+        // itself is one composite. Counting them here would flatter the rate.
+        handleMs += performance.now() - arrived
+        return
+      }
       if (encoder.encodeQueueSize > peakQueue) peakQueue = encoder.encodeQueueSize
       if (encoder.encodeQueueSize >= msg.queueCap + 1) {
-        // Same backpressure rule the production worker uses.
+        // Same backpressure rule the production worker uses. The frame stays
+        // RETAINED as `latest`, exactly as production keeps it.
         dropped++
-        m.frame.close()
         handleMs += performance.now() - arrived
         return
       }
       comp.begin(true)
-      comp.draw(m.frame, 0, 0, msg.width, msg.height, 0, 0)
-      m.frame.close()
+      const screen = latest.screen
+      if (screen) comp.draw(screen, 0, 0, msg.width, msg.height, 0, 0)
+      const camera = latest.camera
+      if (camera) {
+        const pipW = 0.24 * msg.width
+        const pipH = (pipW * camera.displayHeight) / Math.max(1, camera.displayWidth)
+        const margin = 24 * (msg.width / 1920)
+        comp.draw(
+          camera,
+          msg.width - pipW - margin,
+          msg.height - pipH - margin,
+          pipW,
+          pipH,
+          16 * (msg.width / 1920),
+          1.5 * (msg.width / 1920),
+        )
+      }
       const frame = new VideoFrame(comp.canvas, {
         timestamp: Math.round((framesIn * 1e6) / 30),
         duration: Math.round(1e6 / 30),

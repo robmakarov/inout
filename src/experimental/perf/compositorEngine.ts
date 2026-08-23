@@ -326,10 +326,13 @@ async function runEngine(
   height: number,
   takeMs: number,
   withRawLane: boolean,
+  withAudio = true,
 ): Promise<EngineRun> {
   const audioCtx = new AudioContext({ sampleRate: 48000 })
   await audioCtx.resume()
-  const rig = makeRig(width, height, audioCtx)
+  // A take with no audio gives v2 no AudioEncoder and the muxer no second
+  // track — the two ingredients the encprobe rows could not reproduce.
+  const rig = makeRig(width, height, withAudio ? audioCtx : null)
   const key = `exp-o4-${engine}-${width}-${Date.now()}.mp4`
   const watcher = watchLongTasks()
   const base: EngineRun = {
@@ -498,6 +501,10 @@ export async function runCompositorEngine(
      * number in this harness incomparable with the ones already recorded.
      */
     rawLane?: boolean
+    /** Run the take SILENT: isolates the audio encoder + the muxer's second
+     *  track, which is the last difference between v2 in situ and the probe
+     *  rows that hit 59.7 fps. */
+    noAudio?: boolean
   } = {},
 ): Promise<O4Step2Report> {
   const takeMs = opts.takeMs ?? 8000
@@ -518,7 +525,7 @@ export async function runCompositorEngine(
     // v1 first each round: it is the incumbent, and running it on the colder
     // machine is the conservative order for a claim that v2 is faster.
     for (const engine of engines) {
-      runs.push(await runEngine(engine, w, h, takeMs, opts.rawLane ?? false))
+      runs.push(await runEngine(engine, w, h, takeMs, opts.rawLane ?? false, opts.noAudio !== true))
       await new Promise((r) => setTimeout(r, 1500))
     }
   }

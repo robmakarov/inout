@@ -403,6 +403,7 @@ async function probeTransfer(
   width: number,
   height: number,
   mode: 'transfer' | 'composite',
+  twoSources = false,
 ): Promise<Record<string, unknown>> {
   const TP = (globalThis as { MediaStreamTrackProcessor?: new (i: { track: MediaStreamTrack }) => { readable: ReadableStream<VideoFrame> } })
     .MediaStreamTrackProcessor
@@ -425,6 +426,41 @@ async function probeTransfer(
   const track = stream.getVideoTracks()[0]!
   const reader = new TP({ track }).readable.getReader()
   const worker = new Worker(new URL('./encoderProbe.worker.ts', import.meta.url), { type: 'module' })
+  // The SECOND pump. Production runs one of these per source, on this thread,
+  // posting into the same worker — the last cell nothing has measured.
+  let camTrack: MediaStreamTrack | null = null
+  let camReader: ReadableStreamDefaultReader<VideoFrame> | null = null
+  let camRaf2 = 0
+  if (twoSources) {
+    const cam = document.createElement('canvas')
+    cam.width = 640
+    cam.height = 480
+    const cctx = cam.getContext('2d', { alpha: false })!
+    let j = 0
+    const camTick = (): void => {
+      cctx.fillStyle = '#7f7f7f'
+      cctx.fillRect(0, 0, 640, 480)
+      cctx.fillStyle = '#e2554f'
+      cctx.beginPath()
+      cctx.arc(320 + Math.sin(j / 12) * 200, 240 + Math.cos(j / 18) * 150, 48, 0, Math.PI * 2)
+      cctx.fill()
+      j++
+      camRaf2 = requestAnimationFrame(camTick)
+    }
+    camTick()
+    const camStream = cam.captureStream(30)
+    camTrack = camStream.getVideoTracks()[0]!
+    camReader = new TP({ track: camTrack }).readable.getReader()
+    void (async () => {
+      for (;;) {
+        const { value, done } = await camReader.read()
+        if (done || !value) break
+        worker.postMessage({ cmd: 'frame', frame: value, i: -1, kind: 'camera' }, [
+          value as unknown as Transferable,
+        ])
+      }
+    })().catch(() => undefined)
+  }
   try {
     const ready = new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('worker never signalled ready')), 20_000)
@@ -467,7 +503,9 @@ async function probeTransfer(
       if (end || !value) break
       const p0 = performance.now()
       // Transferred, exactly as liveCompositeV2 posts them.
-      worker.postMessage({ cmd: 'frame', frame: value, i: sent }, [value as unknown as Transferable])
+      worker.postMessage({ cmd: 'frame', frame: value, i: sent, kind: 'screen' }, [
+        value as unknown as Transferable,
+      ])
       postMs += performance.now() - p0
       sent++
     }
@@ -484,8 +522,11 @@ async function probeTransfer(
     return { where: `worker:${mode}`, error: err instanceof Error ? err.message : String(err) }
   } finally {
     cancelAnimationFrame(raf)
+    cancelAnimationFrame(camRaf2)
     await reader.cancel().catch(() => undefined)
+    await camReader?.cancel().catch(() => undefined)
     track.stop()
+    camTrack?.stop()
     worker.terminate()
   }
 }
@@ -636,6 +677,9 @@ export async function runEncoderProbe(
     await new Promise((r) => setTimeout(r, 300))
     worker.push(await probeTransfer(frames, width, height, mode))
   }
+  await new Promise((r) => setTimeout(r, 300))
+  const two = await probeTransfer(frames, width, height, 'composite', true)
+  worker.push({ ...two, where: 'worker:composite+camera' })
 
   const ok = results.filter((r) => r.supported && !r.error && r.fps > 0)
   const worstOf = (r: ProbeResult): number => r.fpsWorst ?? r.fps
