@@ -938,7 +938,8 @@ select { font: inherit; }
 }
 #logomark {
   position: relative;
-  width: min(58%, 232px);
+  /* cqw, not vw: the frame is the viewport here (see .app container-type) */
+  width: min(58cqw, 232px);
   height: auto;
   display: block;
   overflow: visible;
@@ -1327,12 +1328,13 @@ const SCREENS = ['idle', 'recording', 'editor', 'exporting', 'share']
 
 function show(name) {
   app.querySelectorAll('.screen').forEach((s) => (s.hidden = s.dataset.screen !== name))
-  document.querySelectorAll('.bar__tab').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.tab === name)))
+  document.querySelectorAll('.bar__tab[data-tab]').forEach((t) =>
+    t.setAttribute('aria-selected', String(t.dataset.tab === name)))
   stopPlay()
   clearInterval(expTimer)
   if (name === 'exporting') runExport()
 }
-document.querySelectorAll('.bar__tab').forEach((t) => t.addEventListener('click', () => show(t.dataset.tab)))
+document.querySelectorAll('.bar__tab[data-tab]').forEach((t) => t.addEventListener('click', () => show(t.dataset.tab)))
 app.addEventListener('click', (e) => {
   const go = e.target.closest('[data-go]')
   if (go) show(go.dataset.go)
