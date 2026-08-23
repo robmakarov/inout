@@ -173,6 +173,35 @@ export function displayVideoConstraints(): MediaTrackConstraints {
   } as MediaTrackConstraints
 }
 
+/**
+ * Tell the encoder what it is looking at (task O3a). A screen is mostly static
+ * with sharp glyph edges — 'text' asks for the sharpness-preserving tuning
+ * instead of the motion tuning a camera wants. Purely advisory: an engine that
+ * ignores contentHint records exactly as before.
+ */
+export function hintTrackContent(track: MediaStreamTrack | undefined, kind: ChannelKind): void {
+  if (!track) return
+  try {
+    const hint = kind === 'screen' ? 'text' : 'motion'
+    ;(track as MediaStreamTrack & { contentHint: string }).contentHint = hint
+  } catch {
+    /* unsupported — advisory only */
+  }
+}
+
+/**
+ * Camera constraints. A camera-only take fills the whole frame (the camera-full
+ * rule), so 720p was being upscaled to a 1080p export — visibly soft. Ask for
+ * 1080p when there is no screen channel; when the camera is only a PiP at 24 %
+ * of the width, 720p is already more than the output needs and the smaller
+ * frame is cheaper to encode.
+ */
+export function cameraVideoConstraints(config: CaptureConfig): MediaTrackConstraints {
+  return config.screen
+    ? { width: { ideal: 1280 }, height: { ideal: 720 } }
+    : { width: { ideal: CAPTURE_MAX_WIDTH }, height: { ideal: CAPTURE_MAX_HEIGHT } }
+}
+
 export function exceedsCaptureCeiling(s: MediaTrackSettings): boolean {
   return (
     (s.width ?? 0) > CAPTURE_MAX_WIDTH ||
@@ -290,13 +319,14 @@ export function acquireChannelsProgressive(
   const startCamera = async (granted: boolean): Promise<void> => {
     mark('camera', 'start')
     try {
-      const video: MediaTrackConstraints = { width: { ideal: 1280 }, height: { ideal: 720 } }
+      const video = cameraVideoConstraints(config)
       if (config.cameraDeviceId) video.deviceId = config.cameraDeviceId
       const stream = await withTimeout(
         navigator.mediaDevices.getUserMedia({ video }),
         granted ? ACQUIRE_TIMEOUT_MS : PROMPT_TIMEOUT_MS,
         'getUserMedia(camera)',
       )
+      hintTrackContent(stream.getVideoTracks()[0], 'camera')
       deliver({ kind: 'camera', media: 'video', stream, track: stream.getVideoTracks()[0] })
       mark('camera', 'done', stream.getVideoTracks()[0]?.label)
     } catch (err) {
@@ -439,6 +469,7 @@ export function acquireChannelsProgressive(
       // Enforce the capture ceiling before anything consumes the track (see
       // capDisplayTrack): a few ms here, and only when the surface is oversized.
       await capDisplayTrack(video)
+      hintTrackContent(video, 'screen')
       // Screen delivered LAST from the display result: it is the primary, and
       // delivering it resolves primaryReady — system audio must already be in.
       if (video) {
