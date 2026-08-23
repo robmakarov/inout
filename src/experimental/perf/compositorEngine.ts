@@ -227,6 +227,13 @@ export interface EngineRun {
     msPerPaint: number
     msPerFrameCreate: number
     msPerEncodeCall: number
+    /** The path nobody had timed: mux, disk write, disk barrier. */
+    muxMs: number
+    writeMs: number
+    flushMs: number
+    writeCalls: number
+    framesGated: number
+    framesStale: number
   } | null
   error?: string
 }
@@ -299,6 +306,7 @@ async function runEngine(
   width: number,
   height: number,
   takeMs: number,
+  withRawLane: boolean,
 ): Promise<EngineRun> {
   const audioCtx = new AudioContext({ sampleRate: 48000 })
   await audioCtx.resume()
@@ -338,10 +346,12 @@ async function runEngine(
     // nothing. Started here, with the composite — a lane started at stop
     // records nothing, which is how the first version of this measured a
     // 9851 ms "tail gap" on a 149 ms file.
-    const raw = startRawLane(rig.screen, `exp-o4-raw-${engine}-${width}-${Date.now()}.webm`)
+    const raw = withRawLane
+      ? startRawLane(rig.screen, `exp-o4-raw-${engine}-${width}-${Date.now()}.webm`)
+      : null
     await new Promise((r) => setTimeout(r, takeMs))
     const composite: CompositeRecording | null = await handle.stop()
-    base.rawChannel = await raw.stop(takeMs).catch(() => null)
+    base.rawChannel = raw ? await raw.stop(takeMs).catch(() => null) : null
     // Read AFTER stop: the final stats only exist once the encoder drained.
     const stats =
       engine === 'v2' ? (handle as unknown as { stats(): unknown }).stats() : null
@@ -367,6 +377,12 @@ async function runEngine(
       paintMs: number
       frameMs: number
       encodeMs: number
+      muxMs: number
+      writeMs: number
+      flushMs: number
+      writeCalls: number
+      framesGated: number
+      framesStale: number
     } | null
     if (s) {
       const seconds = Math.max(0.001, takeMs / 1000)
@@ -388,6 +404,12 @@ async function runEngine(
         msPerPaint: Math.round((s.paintMs / Math.max(1, s.framesEncoded)) * 100) / 100,
         msPerFrameCreate: Math.round((s.frameMs / Math.max(1, s.framesEncoded)) * 100) / 100,
         msPerEncodeCall: Math.round((s.encodeMs / Math.max(1, s.framesEncoded)) * 100) / 100,
+        muxMs: Math.round(s.muxMs ?? 0),
+        writeMs: Math.round(s.writeMs ?? 0),
+        flushMs: Math.round(s.flushMs ?? 0),
+        writeCalls: s.writeCalls ?? 0,
+        framesGated: s.framesGated ?? 0,
+        framesStale: s.framesStale ?? 0,
       }
     }
     if (!composite) {
@@ -440,7 +462,18 @@ export interface O4Step2Report {
 }
 
 export async function runCompositorEngine(
-  opts: { takeMs?: number; sizes?: [number, number][]; engines?: ('v1' | 'v2')[] } = {},
+  opts: {
+    takeMs?: number
+    sizes?: [number, number][]
+    engines?: ('v1' | 'v2')[]
+    /**
+     * Record a raw channel off the same source, as production does. OFF by
+     * default and deliberately so: it is a second encoder competing for the
+     * same GPU, so switching it on silently would have made every engine
+     * number in this harness incomparable with the ones already recorded.
+     */
+    rawLane?: boolean
+  } = {},
 ): Promise<O4Step2Report> {
   const takeMs = opts.takeMs ?? 8000
   const sizes: [number, number][] = opts.sizes ?? [
@@ -460,7 +493,7 @@ export async function runCompositorEngine(
     // v1 first each round: it is the incumbent, and running it on the colder
     // machine is the conservative order for a claim that v2 is faster.
     for (const engine of engines) {
-      runs.push(await runEngine(engine, w, h, takeMs))
+      runs.push(await runEngine(engine, w, h, takeMs, opts.rawLane ?? false))
       await new Promise((r) => setTimeout(r, 1500))
     }
   }

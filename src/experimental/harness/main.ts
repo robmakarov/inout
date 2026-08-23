@@ -242,6 +242,21 @@ const runners: Runner[] = [
         takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined,
         sizes: Array.isArray(args?.sizes) ? (args.sizes as [number, number][]) : undefined,
         engines: Array.isArray(args?.engines) ? (args.engines as ('v1' | 'v2')[]) : undefined,
+        rawLane: typeof args?.rawLane === 'boolean' ? args.rawLane : undefined,
+      })
+    },
+  },
+  {
+    id: 'encprobe',
+    title: 'O4 — is WebCodecs the wall, or is our config the wall?',
+    detail:
+      'feeds the same shape of work the v2 compositor does (paint → VideoFrame → encode, same backpressure ceiling) through a matrix of codec × hardwareAcceleration × latencyMode and measures frames per second OUT. If prefer-hardware and prefer-software land on the same number, nothing is accelerated and the remedy is a config, not a machine.',
+    run: async (args) => {
+      const { runEncoderProbe } = await import('../perf/encoderProbe')
+      return runEncoderProbe({
+        frames: typeof args?.frames === 'number' ? args.frames : undefined,
+        width: typeof args?.width === 'number' ? args.width : undefined,
+        height: typeof args?.height === 'number' ? args.height : undefined,
       })
     },
   },

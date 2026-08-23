@@ -133,6 +133,22 @@ export interface CompositorStats {
   encodeMs: number
   /** Durability barriers actually taken — one per FLUSH_INTERVAL_MS of writes. */
   flushes: number
+  /**
+   * THE PATH NOBODY TIMED (2026-08-23). paint/frame/encode accounted for ~1.4 ms
+   * per encoded frame while the engine delivered 7.7 fps, and an isolated
+   * VideoEncoder on the same machine does 150-188 fps at 1080p — so the missing
+   * time is downstream of the encode CALL, in the mux and the disk barrier that
+   * run inside the encoder's own output callback.
+   */
+  muxMs: number
+  writeMs: number
+  flushMs: number
+  writeCalls: number
+  /** Arrivals the CADENCE gate rejected (too soon after the last encode). */
+  framesGated: number
+  /** Arrivals stamped BEFORE the last encode — i.e. the gate was closed against
+   *  frames that were already in the worker's message queue. */
+  framesStale: number
 }
 
 export type CompositorReply =
@@ -259,6 +275,12 @@ const stats: CompositorStats = {
   frameMs: 0,
   encodeMs: 0,
   flushes: 0,
+  muxMs: 0,
+  writeMs: 0,
+  flushMs: 0,
+  writeCalls: 0,
+  framesGated: 0,
+  framesStale: 0,
 }
 
 function post(reply: CompositorReply): void {
@@ -464,8 +486,14 @@ async function start(msg: CompositorStartMsg): Promise<void> {
     write(chunk) {
       const h = handle
       if (!h) return
+      const t0 = performance.now()
       const written = h.write(chunk.data, { at: chunk.position })
+      const t1 = performance.now()
       h.flush()
+      const t2 = performance.now()
+      stats.writeMs += t1 - t0
+      stats.flushMs += t2 - t1
+      stats.writeCalls++
       stats.flushes++
       stats.bytes = Math.max(stats.bytes, chunk.position + written)
     },
@@ -494,7 +522,13 @@ async function start(msg: CompositorStartMsg): Promise<void> {
         stats.keyframeBytes += chunk.byteLength
       }
       const packet = EncodedPacket.fromEncodedChunk(chunk)
-      muxChain = muxChain.then(() => videoSource?.add(packet, meta)).catch(fail)
+      muxChain = muxChain
+        .then(async () => {
+          const t0 = performance.now()
+          await videoSource?.add(packet, meta)
+          stats.muxMs += performance.now() - t0
+        })
+        .catch(fail)
     },
     error: fail,
   })
@@ -506,7 +540,13 @@ async function start(msg: CompositorStartMsg): Promise<void> {
       output: (chunk, meta) => {
         stats.audioBytes += chunk.byteLength
         const packet = EncodedPacket.fromEncodedChunk(chunk)
-        muxChain = muxChain.then(() => audioSource?.add(packet, meta)).catch(fail)
+        muxChain = muxChain
+          .then(async () => {
+            const t0 = performance.now()
+            await audioSource?.add(packet, meta)
+            stats.muxMs += performance.now() - t0
+          })
+          .catch(fail)
       },
       error: fail,
     })
@@ -630,6 +670,10 @@ self.onmessage = async (ev: MessageEvent<CompositorMsg>) => {
         // Frame-driven, capped at the output rate: two sources delivering 60 fps
         // must not encode 120 composites.
         if (msg.atMs - lastEncodedMs >= 1000 / FPS - 1) encodeComposite(msg.atMs, false)
+        else {
+          stats.framesGated++
+          if (msg.atMs < lastEncodedMs) stats.framesStale++
+        }
         break
       }
       case 'audio': {

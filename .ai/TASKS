@@ -41,12 +41,15 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
                                              an EDITED take renders from. Needs a stop-path reorder,
                                              so it wants its own session (see the task).
   O4   webcodecs engine, STEP 2    [heavy]   ENGINE MERGED BUT DORMANT (default v1). Throughput gate
-                                             NOT met: ~10 fps at 1080p vs v1's 30, and the bottleneck
-                                             is WebCodecs' own encoder, not our code — see the handoff.
-                                             REMAINING: WebGPU backend · raw channels → VideoEncoder
-                                             (ee/webcodecs-capture-2, still unmerged) · fMP4 tab-kill
-                                             salvage · preview from the compositor's own output.
-                                             Still the keystone for O5/O6/O9, F6, F8, P4.
+                                             still NOT met (6.7-10 fps at 1080p vs v1's 29.7) BUT THE
+                                             DIAGNOSIS CHANGED 2026-08-23: "WebCodecs' encoder is the
+                                             wall" is FALSIFIED. Measured on this machine: a bare
+                                             encoder does 187 fps on the main thread, 169 fps IN A
+                                             WORKER, 155 fps from a WebGL2 canvas, and the production
+                                             GL compositor fed real capture frames does 60 fps with
+                                             the encoder never once blocking. The wall is in the
+                                             ASSEMBLY. Start from the counters, not from a rewrite —
+                                             see the handoff. Still the keystone for O5/O6/O9, F6, F8, P4.
   F7c  the size number, calibrated [medium]  F7b's ±20 % gate is UNMET in general and the reason is
                                              measured (see F7b): the composite's encoder is not the
                                              export's encoder — 0.97 vs 1.84 Mbps on the same text
@@ -324,6 +327,43 @@ THREE BUGS THE HARNESS CAUGHT that reasoning had not: audio anchored at message-
 NOT DONE: WebGPU backend · raw channels still MediaRecorder (measuredVideo.ts on ee/webcodecs-capture-2
    remains unmerged) · tab-kill salvage of the fMP4 not yet verified · the on-screen preview does not
    yet render the compositor's own output.
+
+── HANDOFF 2026-08-23 (third session) — THE THROUGHPUT DIAGNOSIS IS WRONG, AND HERE IS WHAT IS LEFT.
+   The previous handoff concluded "WebCodecs AVC on this machine simply drains at ~10 fps while
+   MediaRecorder's internal path does 30", and deferred the engine on that. It does not hold.
+   `npm run exp -- encprobe` feeds the same shape of work (paint → VideoFrame → encode, same
+   backpressure ceiling of 5, warm-up discarded, every config run twice in opposite order and scored
+   on its WORSE pass) and measures, at 1080p on the TD machine, Chrome 151:
+     main thread, 2D canvas          142-191 fps   (prefer-hardware ≈ no-preference; software 69-91)
+     main thread, WebGL2 canvas      105-155 fps
+     main thread, PRODUCTION GL compositor fed REAL capture frames   59-60 fps, and the encoder
+                                     never blocked once (queueWait 0 ms — the 60 fps source was
+                                     the limit, not the encoder)
+     WORKER, 2D canvas               169 fps  ← the one variable the main thread cannot test itself
+   Against v2 in situ: 6.7-10 fps. So the encoder is not the wall, nor the codec, nor
+   hardwareAcceleration, nor latencyMode, nor the queue cap (30 vs 5 changes nothing), nor the GL
+   canvas, nor the texture upload of real capture frames, nor the muxer, nor the disk write, nor the
+   disk barrier — the last three are now TIMED inside the worker and total 39 ms across a 10 s take
+   (mux 28, write 1, flush 10 over 7 write calls).
+   WHERE THE FRAMES GO, counted in the worker (new stats): of 452 arrivals — 39 encoded, 101 dropped
+   because the encoder queue was full, 315 rejected by the cadence gate, and ZERO of them stale (the
+   keep-alive is not stamping the gate into the future; that hypothesis is dead too).
+   THE PARADOX THAT REMAINS, and the next session's whole job: the encoder can do 169 fps in this very
+   worker, yet 101 frames find six already outstanding. The only difference left between the fast probe
+   and the slow engine is WHAT IT IS FED — VideoFrames TRANSFERRED across the thread boundary and then
+   uploaded as GL textures. Best-supported hypothesis, NOT yet measured: a transferred capture frame is
+   not GPU-resident in the worker, so each texture upload costs a readback that lands in the GPU
+   pipeline behind the encoder rather than in paintMs (which only times the JS call, 1.19 ms).
+   HOW TO TEST IT NEXT, cheapest first: (1) time the GPU side, not the JS call — draw, then
+   gl.finish() or a fence, and put THAT in the stats; (2) run the compositor-path probe inside the
+   worker with transferred frames, which isolates the transfer from everything else; (3) only then
+   reach for WebGPU importExternalTexture, which is the remedy IF the upload is the cost.
+   STILL NOT DONE, unchanged: WebGPU backend · raw channels → VideoEncoder (ee/webcodecs-capture-2,
+   unmerged) · preview from the compositor's own output.
+   fMP4 TAB-KILL SALVAGE — DECIDED, NOT BUILT, and the reason is P0-tail: a crash-truncated composite
+   has an unknown tail, and the rule established this session is that such a composite must never be
+   packet-copied. A salvaged composite could therefore only ever be used for a size estimate, which is
+   not worth the manifest plumbing. It stays out of salvage; recovery keeps restoring the channels.
 
 ## O5. export-engine-v2 — worker, pipelined, smart-cut, codec ladder  [P1, after O4]
 Why: the render is main-thread and strictly serial (decode awaits draw awaits encode), sleeps every

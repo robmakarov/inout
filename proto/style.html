@@ -761,12 +761,16 @@ body.f .filters, body.d .detail { opacity: 1; }
    brightness knob — these are literally the rim's own values, minus the
    alpha the rim carries. Off is the tinted rim, on is the live green, refused
    is the warn red, unavailable stays the dead neutral. */
-[data-ico='stroke'] .wedge__ico { color: hsl(0 0% calc(86% * var(--wedge-b))); }
-[data-ico='stroke'] .wedge[data-on='true'] .wedge__ico { color: hsl(var(--on-h) var(--on-s) calc(66% * var(--wedge-b))); }
-[data-ico='stroke'] .wedge:hover .wedge__ico { color: hsl(var(--neon-h) calc(var(--wedge-s) + 22%) calc(88% * var(--wedge-b))); }
-[data-ico='stroke'] .wedge[data-on='true']:hover .wedge__ico { color: hsl(var(--on-h) var(--on-s) calc(78% * var(--wedge-b))); }
-[data-ico='stroke'] .wedge[data-state='denied'] .wedge__ico { color: hsl(var(--no-h) var(--no-s) calc(64% * var(--wedge-b))); }
-[data-ico='stroke'] .wedge[data-state='blocked'] .wedge__ico { color: color-mix(in srgb, var(--text), transparent 40%); }
+/* The glyph takes its wedge's rim hue and then goes brighter than it: the rim
+   is the edge of the surface, the mark on it is the thing you read. Same hues,
+   same brightness knob, one step up in lightness and saturation. */
+[data-ico='stroke'] .wedge__ico { color: hsl(0 0% calc(98% * var(--wedge-b))); }
+[data-ico='stroke'] .wedge[data-on='true'] .wedge__ico { color: hsl(var(--on-h) calc(var(--on-s) + 14%) calc(82% * var(--wedge-b))); }
+[data-ico='stroke'] .wedge:hover .wedge__ico { color: #fff; }
+[data-ico='stroke'] .wedge[data-on='true']:hover .wedge__ico { color: hsl(var(--on-h) calc(var(--on-s) + 20%) calc(92% * var(--wedge-b))); }
+[data-ico='stroke'] .wedge[data-state='denied'] .wedge__ico { color: hsl(var(--no-h) calc(var(--no-s) + 14%) calc(80% * var(--wedge-b))); }
+[data-ico='stroke'] .wedge[data-state='denied']:hover .wedge__ico { color: hsl(var(--no-h) calc(var(--no-s) + 20%) calc(90% * var(--wedge-b))); }
+[data-ico='stroke'] .wedge[data-state='blocked'] .wedge__ico { color: color-mix(in srgb, var(--text), transparent 20%); }
 
 /* ---------- volume skin ----------
    Both references say the same thing in two places: light comes from somewhere,
@@ -827,7 +831,7 @@ body.f .filters, body.d .detail { opacity: 1; }
 }
 [data-skin='volume'] .wedge[data-on='true'] .wedge__edge { stroke: hsl(var(--on-h) var(--on-s) calc(66% * var(--wedge-b)) / 0.95); opacity: 1; }
 [data-skin='volume'] .wedge:hover .wedge__edge {
-  stroke: hsl(var(--neon-h) calc(var(--wedge-s) + 22%) calc(88% * var(--wedge-b)));
+  stroke: #fff;
   opacity: 1;
   filter: drop-shadow(0 0 calc(var(--neon-r) * 0.35) hsl(var(--neon-h) 100% 60% / 0.7));
 }
@@ -950,8 +954,8 @@ body.f .filters, body.d .detail { opacity: 1; }
 .wedge__cap {
   font-family: var(--font);
   font-size: 12px;
-  font-weight: 560;
-  letter-spacing: 0.005em;
+  font-weight: 300;
+  letter-spacing: 0.01em;
   fill: var(--text);
   /* a dark casing behind the glyphs so a caption stays readable wherever the
      grid, the glow or a lit wedge happens to be under it */
@@ -968,8 +972,8 @@ body.f .filters, body.d .detail { opacity: 1; }
 .wedge__cap2 {
   font-family: var(--font);
   font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.01em;
+  font-weight: 300;
+  letter-spacing: 0.015em;
   fill: color-mix(in srgb, var(--text-dim), #000 32%);
   paint-order: stroke;
   stroke: #000;
@@ -983,18 +987,19 @@ body.f .filters, body.d .detail { opacity: 1; }
 .wedge[data-state='denied'] .wedge__cap2 { fill: hsl(var(--no-h) calc(var(--no-s) * 0.85) 58%); }
 .wedge[data-on='true'] .wedge__cap2 { fill: hsl(var(--on-h) calc(var(--on-s) * 0.8) 56%); }
 .wedge[data-state='blocked'] .wedge__cap2 { fill: color-mix(in srgb, var(--text-faint), #000 30%); }
-/* the lit arc outside the rim, on the hovered wedge only */
+/* The lit arc outside the rim, on the hovered wedge only. It is white in every
+   state: the arc says "the pointer is here", and that is not a state the wedge
+   colours have anything to add to. */
 .wedge__arc {
   fill: none;
-  stroke: var(--text-dim);
+  stroke: #fff;
   stroke-width: 1.4;
   stroke-linecap: round;
   opacity: 0;
   pointer-events: none;
   transition: opacity 140ms var(--ease);
 }
-.wedge:hover .wedge__arc { opacity: 0.55; }
-.wedge[data-on='true'] .wedge__arc { stroke: var(--accent); }
+.wedge:hover .wedge__arc { opacity: 0.8; }
 [data-neon='on'] .wedge:hover .wedge__arc { filter: drop-shadow(0 0 calc(var(--neon-r) * 0.4) var(--neon-38)); }
 .cluster { position: relative; }
 /* One notice slot, top centre, where the product already puts arming and
@@ -2275,7 +2280,7 @@ function buildRadial() {
     const mid = (WEDGE_AT[c.key] * Math.PI) / 180
     const a0 = mid - span / 2 + PAD
     const a1 = mid + span / 2 - PAD
-    const [ix, iy] = pol((R_IN + R_OUT) / 2, mid)
+    const [ix, iy] = pol(R_IN + (R_OUT - R_IN) * 0.42, mid)
     // caption goes outside, on this wedge's own side — anchor/baseline from the
     // angle alone, so adding wedges later needs no per-item placement
     const [cx, cy] = pol(R_OUT + 22, mid)
@@ -2287,7 +2292,7 @@ function buildRadial() {
     // 12px name had them touching. The pair is also placed as a pair — above the
     // anchor at the top, below it at the bottom, straddling it at the sides — so
     // widening the gap grows the block away from the donut, never into it.
-    const LEAD = 18
+    const LEAD = 14
     const lift = sinm < -0.3 ? -LEAD : sinm > 0.3 ? 0 : -LEAD / 2
     const y1 = +cy + dy + lift
     const st = PERM[c.key] || 'ok'

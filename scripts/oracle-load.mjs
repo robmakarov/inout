@@ -34,7 +34,9 @@ function runOnce() {
     const args = [
       join(ROOT, 'scripts/exp.mjs'),
       'o4step2',
-      JSON.stringify({ takeMs, sizes: [[3840, 2160]], engines: ['v1'] }),
+      // rawLane on: production runs a raw channel next to the composite, and
+      // the gate is about the file the user gets under that real load.
+      JSON.stringify({ takeMs, sizes: [[3840, 2160]], engines: ['v1'], rawLane: true }),
       '--timeout=900',
     ]
     const child = spawn(process.execPath, args, { cwd: ROOT, stdio: ['ignore', 'pipe', 'inherit'] })
