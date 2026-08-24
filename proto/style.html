@@ -11,6 +11,13 @@
   vite's build input (only index.html is) and it is outside tsconfig's `include`,
   so `npm run build`, `npm run typecheck` and `npm test` never see it.
 
+  IT IS OPENED OFF DISK AND NEVER SERVED. Double-click it, or open the file://
+  URL. No dev server, not even a static one — so nothing may be added that only
+  works over http: no <script src>, no <link>, no fetch, no modules, no external
+  fonts or images. Everything is inline or a data: URL. That is also why state
+  goes into the URL fragment before it goes into localStorage, which an opaque
+  file:// origin is allowed to refuse outright.
+
     Open the file. Double-click it, or drag it onto a browser window. No server,
     no build step, nothing to install — everything it needs is in this one file.
 

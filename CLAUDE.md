@@ -8,6 +8,11 @@ Doc rule: every doc holds CURRENT truth only — when state changes, rewrite/del
 - Contracts: `src/core/types.ts` is authoritative; modules implement it.
 - `src/core` never imports from `src/app`.
 - Dev: `npm run dev` · check: `npm run typecheck && npm test` · e2e without permissions: append `?synthetic=1`.
+- `proto/` is opened off disk and never served. Open `proto/style.html` with `file://` —
+  no dev server, no `npm run dev`, not even a static one. It stays one self-contained
+  file: no `<script src>`, no `<link>`, no fetch, no modules, no external assets.
+  Anything that would only work over http is not allowed in it, and state persists
+  through the URL fragment first because `localStorage` can be refused on `file://`.
 
 Auto-commit: a Stop hook (`.claude/hooks/auto-commit.py`) commits and pushes when a session ends.
 It commits only the files this session edited, plus files no other live session claims — a second
