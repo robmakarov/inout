@@ -1,8 +1,9 @@
 # AI export — spec
 
-Status: agreed 2026-08-24; v1 re-scoped same day — PO: **one file that any AI will understand,
-not human-watchable**, max token cutting is the design goal. Everything beyond the file is a
-roadmap candidate, reconsidered only **after PO tests the first real file** (`.ai/TASKS` phase A).
+Status: **V1 SHIPPED 2026-08-24** — the export panel has a "For AI" control and it produces the
+file described below. Everything beyond the file is a roadmap candidate, reconsidered only
+**after PO tests the first real file** (`.ai/TASKS` phase A). Evidence:
+`node scripts/ai-pdf-check.mjs`; a sample the rig built is committed at `docs/qa/ai-export.pdf`.
 
 Agents don't watch video — they sample frames and pay roughly 1 token per 750 pixels: a 1024×576
 view ≈ 800 tokens, a full 1080p frame ≈ 2 800, a 5-minute video is thousands of frames. The export
@@ -80,6 +81,32 @@ Rules that are decisions, not defaults:
   pixels on a downscaled luma diff) so "dense during motion, near zero when static" is testable.
 - **Zero dependencies:** a minimal PDF writer (JPEG images + built-in Helvetica text) is a few
   hundred lines and stays ours.
+
+## What shipping it changed in this spec
+
+Three things the build settled, each with the measurement that settled it:
+
+- **The caption is a 22 pt band ABOVE the picture, not text on it.** Drawn on the image it cost no
+  page area — and covered the top ~20 px of the frame, which on a screen recording is the tab strip
+  and the menu bar. Twenty points of page (~30 tokens) is the cheaper mistake. "No pixel is padding"
+  still holds: the band is the timestamp, legible in the raster as well as extractable as text.
+- **The pointer trail ships.** The rule was to drop it unless the rig proved the detector; on a take
+  whose cursor path is known to the millisecond, 100 % of confident readings land within 5 % of the
+  frame (median error 0.007). `POINTER_TRAIL_ENABLED` in `src/core/ai/build.ts` is the switch.
+- **Pacing is derived from the take's own length** — a page floor of `duration / 60`, clamped to
+  0.5–15 s — because "dense during motion" on a twenty-minute recording is a bankrupt token budget.
+  It is not a rate limit that loses anything: the reference frame only advances when a page is
+  emitted, so a change held back fires at the next instant the pace allows.
+
+Two honest limits, both measured rather than assumed:
+
+- **The take's first page is capture pre-roll.** A canvas `captureStream`'s first encoded frame holds
+  whatever was painted before the recorder existed, so its picture is older than its timestamp (577 ms
+  on the rig take). Confirmed identical on the channel itself — every export path inherits it, this
+  one merely shows it. Every other page's caption is within 9 ms of its own picture.
+- **The build runs on the main thread**, using the decoder's own awaits as its yields. It costs half a
+  full render, so this is not a throughput decision — the export worker's fallback protocol is shaped
+  for the certified render and a new path did not justify generalizing it.
 
 ## Scope honesty — where events can come from
 

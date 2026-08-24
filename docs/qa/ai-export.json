@@ -1,0 +1,308 @@
+{
+  "notes": [
+    "analysis samples at 4/s; every take here is a real MediaRecorder vp9 capture, decoded and composed by production code",
+    "token price: this file ~16826 tokens against ~283116 for the same take as video frames (17× cheaper)",
+    "pointer trail: 100% of confident readings land within 5% of the frame of the path the rig drew (median error 0.007); shipped=true",
+    "rig fiducial take is 1280x720, composed to 1920x1080 by production layout"
+  ],
+  "scenarios": [
+    {
+      "scenario": "burst",
+      "takeMs": 60000,
+      "samples": 240,
+      "keyframes": 7,
+      "pages": 8,
+      "bytes": 139919,
+      "approxTokens": 5632,
+      "perPageTokens": [
+        788,
+        788,
+        788,
+        788,
+        788,
+        788,
+        788
+      ],
+      "keyframeAtMs": [
+        0,
+        20000,
+        21000,
+        22000,
+        23000,
+        24000,
+        25000
+      ],
+      "cropped": 0,
+      "classes": {
+        "first": 1,
+        "static": 218,
+        "content": 21
+      },
+      "minGapMs": 1000,
+      "buildMs": 4723,
+      "longestGapMs": 35000
+    },
+    {
+      "scenario": "cursor",
+      "takeMs": 12000,
+      "samples": 48,
+      "keyframes": 1,
+      "pages": 2,
+      "bytes": 51562,
+      "approxTokens": 946,
+      "perPageTokens": [
+        788
+      ],
+      "keyframeAtMs": [
+        0
+      ],
+      "cropped": 0,
+      "classes": {
+        "first": 1,
+        "cursor": 47
+      },
+      "minGapMs": 500,
+      "buildMs": 1000,
+      "longestGapMs": 12000
+    },
+    {
+      "scenario": "caret",
+      "takeMs": 12000,
+      "samples": 48,
+      "keyframes": 1,
+      "pages": 2,
+      "bytes": 51503,
+      "approxTokens": 927,
+      "perPageTokens": [
+        788
+      ],
+      "keyframeAtMs": [
+        0
+      ],
+      "cropped": 0,
+      "classes": {
+        "first": 1,
+        "static": 14,
+        "cursor": 27,
+        "caret": 6
+      },
+      "minGapMs": 500,
+      "buildMs": 900,
+      "longestGapMs": 12000
+    },
+    {
+      "scenario": "tooltip",
+      "takeMs": 12000,
+      "samples": 48,
+      "keyframes": 2,
+      "pages": 3,
+      "bytes": 110262,
+      "approxTokens": 1976,
+      "perPageTokens": [
+        788,
+        1028
+      ],
+      "keyframeAtMs": [
+        0,
+        4500
+      ],
+      "cropped": 1,
+      "classes": {
+        "first": 1,
+        "cursor": 13,
+        "static": 32,
+        "small": 2
+      },
+      "minGapMs": 500,
+      "buildMs": 920,
+      "longestGapMs": 7500
+    }
+  ],
+  "trail": {
+    "readings": 46,
+    "confident": 45,
+    "withinFrame5Pct": 45,
+    "precisionPct": 100,
+    "medianErrorFrac": 0.007,
+    "shipped": true
+  },
+  "clock": {
+    "keyframes": 20,
+    "decodedFiducials": 20,
+    "offsetsMs": [
+      0,
+      -568,
+      -577,
+      -578,
+      -568,
+      -578,
+      -577,
+      -577,
+      -569,
+      -577,
+      -576,
+      -578,
+      -569,
+      -577,
+      -577,
+      -576,
+      -569,
+      -568,
+      -576,
+      -577
+    ],
+    "medianOffsetMs": -577,
+    "maxDeviationMs": 9,
+    "channelOffsetsMs": [
+      0,
+      -568,
+      -577,
+      -578,
+      -568,
+      -578,
+      -577,
+      -577,
+      -569,
+      -577,
+      -576,
+      -578,
+      -569,
+      -577,
+      -577,
+      -576,
+      -569,
+      -568,
+      -576,
+      -577
+    ],
+    "pagesDisagreeingWithChannel": 0,
+    "excluded": [
+      "page 1 (take’s first frame): picture 0 ms vs caption 0 ms — capture pre-roll, confirmed identical on the channel itself"
+    ]
+  },
+  "edit": {
+    "cutSpanMs": [
+      4200,
+      6600
+    ],
+    "keyframeRecMs": [
+      0,
+      500,
+      1000,
+      1500,
+      2000,
+      2500,
+      3000,
+      3500,
+      4000,
+      6900,
+      7400,
+      7900,
+      8400,
+      8900,
+      9400,
+      9900,
+      10400,
+      10900,
+      11400,
+      11900
+    ],
+    "fromCutSpan": 0,
+    "beforeMs": 4200,
+    "afterMs": 5389
+  },
+  "cost": {
+    "takeMs": 12000,
+    "aiBuildMs": 880,
+    "renderMs": 1750,
+    "ratio": 0.5,
+    "aiBytes": 185704,
+    "renderBytes": 390238,
+    "aiTokens": 16826,
+    "videoFrameTokens": 283116
+  },
+  "gates": {
+    "economy: 60 s mostly-static take ≤8 pages": {
+      "pass": true,
+      "detail": "7 keyframes, 8 pages, ~5632 tokens"
+    },
+    "economy: an idle span emits nothing after its first": {
+      "pass": true,
+      "detail": "1 in the first 19 s (the still part); longest gap 35000 ms"
+    },
+    "economy: a motion burst concentrates the pages inside it": {
+      "pass": true,
+      "detail": "6 of 7 inside 20-25 s; times 0,20000,21000,22000,23000,24000,25000"
+    },
+    "cursor immunity: a wandering cursor is ≤1 page after the first": {
+      "pass": true,
+      "detail": "1 keyframes over 48 samples; classes {\"first\":1,\"cursor\":47}"
+    },
+    "cursor immunity: a blinking caret is 0 after the first": {
+      "pass": true,
+      "detail": "1 keyframes; classes {\"first\":1,\"static\":14,\"cursor\":27,\"caret\":6}"
+    },
+    "cursor immunity: a tooltip is exactly 1 page, cropped": {
+      "pass": true,
+      "detail": "2 keyframes (first + tooltip), 1 cropped, at 0,4500 ms"
+    },
+    "clock: the picture on a page is the frame its caption claims": {
+      "pass": true,
+      "detail": "20/20 pages read back; caption−picture median -577 ms (the recording’s own epoch mapping), max deviation 9 ms · excluded: page 1 (take’s first frame): picture 0 ms vs caption 0 ms — capture pre-roll, confirmed identical on the channel itself"
+    },
+    "clock: every page shows the frame the CHANNEL holds at that instant": {
+      "pass": true,
+      "detail": "0 of 20 pages differ from the channel decoded independently at the same output times"
+    },
+    "edit fidelity: no page comes from the cut span": {
+      "pass": true,
+      "detail": "0 of 20 decoded pages inside 4200-6600 ms"
+    },
+    "token price is reported per page and in total": {
+      "pass": true,
+      "detail": "e.g. the tooltip take: pages 788 + 1028 = ~1976 tokens; the fiducial take ~16826"
+    },
+    "cost: the build is ≤1.5× the same take’s full render": {
+      "pass": true,
+      "detail": "880 ms vs 1750 ms = 0.5×"
+    }
+  },
+  "readerGates": [
+    {
+      "name": "independent parser: the file is structurally valid",
+      "pass": true,
+      "detail": "21 pages, 67 objects"
+    },
+    {
+      "name": "Apple PDFKit accepts the file and finds the same pages",
+      "pass": true,
+      "detail": "PDFKit reads 21 pages (parser: 21)"
+    },
+    {
+      "name": "the index is extractable text, not a picture of text",
+      "pass": true,
+      "detail": "page 1 yields 745 chars of text and 0 images"
+    },
+    {
+      "name": "PDFKit extracts the index too (a real reader, not ours)",
+      "pass": true,
+      "detail": "1198 chars extracted across the document"
+    },
+    {
+      "name": "every keyframe page is its images plus one caption band — no padding",
+      "pass": true,
+      "detail": "1024x598 ← 1024x576 DCTDecode + 22pt band · 1024x598 ← 1024x576 DCTDecode + 22pt band · 1024x598 ← 1024x576 DCTDecode + 22pt band"
+    },
+    {
+      "name": "no video track anywhere in the file",
+      "pass": true,
+      "detail": "searched for /Movie, /Sound, /RichMedia and /Screen annotations"
+    },
+    {
+      "name": "captions are real text on the keyframe pages",
+      "pass": true,
+      "detail": "page 2 caption: \"t=0.00s\""
+    }
+  ],
+  "pdfBytes": 185704
+}

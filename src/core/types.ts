@@ -410,6 +410,20 @@ export interface ExportProgress {
   ratio: number
 }
 
+/**
+ * What an AI export IS, for a UI that must not describe a PDF as a video
+ * (task AI1). Absent on every ordinary export; present means the blob is the
+ * one-file, no-video-track document an agent reads — so `width`/`height` are
+ * one keyframe's dimensions, not a picture the user will watch.
+ */
+export interface AiExportFacts {
+  /** Total pages: the index, then one per keyframe. */
+  pages: number
+  keyframes: number
+  /** What this file costs an agent to read: pixels/750 + text/4. */
+  approxTokens: number
+}
+
 export interface ExportResult {
   blob: Blob
   mimeType: string
@@ -417,6 +431,8 @@ export interface ExportResult {
   durationMs: number
   width: number
   height: number
+  /** Present only for the "For AI" export (task AI1). */
+  ai?: AiExportFacts
 }
 
 export interface ExportOptions {

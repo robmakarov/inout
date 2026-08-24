@@ -17,6 +17,7 @@ export type IconName =
   | 'x'
   | 'scissors'
   | 'gauge'
+  | 'doc'
   | 'google'
 
 const PATHS: Record<Exclude<IconName, 'google'>, ReactNode> = {
@@ -91,6 +92,15 @@ const PATHS: Record<Exclude<IconName, 'google'>, ReactNode> = {
   ),
   'chevron-left': <path d="M14.5 5.5L8 12l6.5 6.5" />,
   x: <path d="M6 6l12 12M18 6L6 18" />,
+  // A page of text with one image band: the AI export is a document, not a
+  // video, and the icon should not promise otherwise (AI1).
+  doc: (
+    <>
+      <rect x="4.5" y="3" width="15" height="18" rx="2" />
+      <path d="M8 7.5h8M8 11h8" />
+      <rect x="8" y="14" width="8" height="4" rx="1" />
+    </>
+  ),
   // A speedometer: dial arc, needle, hub — the clip-speed control (F5b).
   gauge: (
     <>

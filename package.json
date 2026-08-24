@@ -13,7 +13,8 @@
     "oracle:cold": "node scripts/oracle.mjs --cold=20",
     "oracle:fidelity": "node scripts/oracle-fidelity.mjs",
     "exp": "node scripts/exp.mjs",
-    "oracle:load": "node scripts/oracle-load.mjs"
+    "oracle:load": "node scripts/oracle-load.mjs",
+    "ai:check": "node scripts/ai-pdf-check.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.0",

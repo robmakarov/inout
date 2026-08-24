@@ -113,6 +113,58 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
     useAppStore.getState().resetToCapture()
   }
 
+  /**
+   * The AI export (AI1). A separate artefact, not a quality step: no tier, no
+   * geometry, no packet-copy ladder — it composes the take once at 4 samples a
+   * second and keeps the frames that changed. Everything the video export does
+   * is untouched by this path.
+   */
+  const onExportAi = async () => {
+    const store = useAppStore.getState()
+    if (store.mode === 'exporting') return
+    setChoosing(false)
+    pb.pause()
+    const ac = new AbortController()
+    store.setExportAbort(ac)
+    store.setExportProgress({ phase: 'preparing', ratio: 0 })
+    store.setMode('exporting')
+    const effectiveEdit = useAppStore.getState().editState ?? edit
+    analytics.track('export_start')
+    const t0 = performance.now()
+    try {
+      // Loaded on demand: a take that never asks for it never pays for the
+      // PDF writer or the delta analysis.
+      const { exportForAi } = await import('@core/ai')
+      const result = await exportForAi({
+        recording,
+        edit: effectiveEdit,
+        onProgress: (p) => useAppStore.getState().setExportProgress(p),
+        signal: ac.signal,
+      })
+      analytics.track('export_complete', {
+        durationMs: Math.round(performance.now() - t0),
+        sizeBytes: result.blob.size,
+        forAi: true,
+        pages: result.ai?.pages ?? 0,
+        approxTokens: result.ai?.approxTokens ?? 0,
+      })
+      useAppStore.setState({
+        exportResult: result,
+        mode: 'share',
+        exportAbort: null,
+        exportProgress: null,
+      })
+    } catch (err) {
+      const aborted = err instanceof Error && err.name === 'AbortError'
+      if (!aborted) {
+        const message = err instanceof Error ? err.message : 'Export failed'
+        useAppStore.getState().toast(message, 'error')
+        analytics.track('export_error', { message, forAi: true })
+      }
+      useAppStore.setState({ mode: 'editor', exportAbort: null, exportProgress: null })
+    }
+  }
+
   const onExport = async (chosen: QualityTier) => {
     const store = useAppStore.getState()
     if (store.mode === 'exporting') return
@@ -220,6 +272,7 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
             saveQualityTier(t)
           }}
           onExport={() => void onExport(tier)}
+          onExportForAi={() => void onExportAi()}
           onCancel={() => setChoosing(false)}
         />
       ) : (

@@ -1267,6 +1267,15 @@
   line-height: 1.45;
   min-height: 34px;
 }
+/* AI1. The second artefact, one tier below the video export: same width so it
+   reads as a real choice, surface weight so it does not compete with it. */
+.quality__ai {
+  margin-top: 2px;
+}
+.quality__hint--ai {
+  min-height: 0;
+  margin-top: -4px;
+}
 
 /* ---------- mid-take cuts (F1) ---------- */
 

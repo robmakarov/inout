@@ -45,6 +45,10 @@ function Progress() {
 function Result({ onBack }: { onBack: () => void }) {
   const result = useAppStore((s) => s.exportResult)
   if (!result) return null
+  // AI1: an AI export is a document, so the panel says pages and tokens. Its
+  // width/height are one keyframe's, and reporting them as "the video" would
+  // be a lie about what the file is.
+  const ai = result.ai
   return (
     <div className="xp">
       <div className="xp__head">
@@ -53,14 +57,15 @@ function Result({ onBack }: { onBack: () => void }) {
           <span>Editing</span>
         </button>
         <span className="xp__meta">
-          {formatClock(result.durationMs)} · {humanBytes(result.blob.size)} · {result.width}×
-          {result.height}
+          {ai
+            ? `${formatClock(result.durationMs)} · ${humanBytes(result.blob.size)} · ${ai.pages} pages · ~${Math.round(ai.approxTokens / 100) / 10}k tokens`
+            : `${formatClock(result.durationMs)} · ${humanBytes(result.blob.size)} · ${result.width}×${result.height}`}
         </span>
       </div>
       <div className="xp__actions">
         <button className="btn btn--primary btn--wide" onClick={() => saveToFile(result)}>
-          <Icon name="download" size={16} />
-          <span>Save file</span>
+          <Icon name={ai ? 'doc' : 'download'} size={16} />
+          <span>{ai ? 'Save PDF for AI' : 'Save file'}</span>
         </button>
       </div>
       <CloudCard result={result} />

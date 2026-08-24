@@ -28,6 +28,7 @@ export function QualityPanel({
   tier,
   onTier,
   onExport,
+  onExportForAi,
   onCancel,
 }: {
   recording: Recording
@@ -35,6 +36,7 @@ export function QualityPanel({
   tier: QualityTier
   onTier: (t: QualityTier) => void
   onExport: () => void
+  onExportForAi: () => void
   onCancel: () => void
 }) {
   const estimates = useMemo(
@@ -90,6 +92,20 @@ export function QualityPanel({
         <Icon name="download" size={16} />
         <span>Export {current.tier.label}</span>
       </button>
+
+      {/* AI1. The second thing a finished take can become, and it is not a
+          smaller video: agents don't watch, they sample frames and pay about a
+          token per 750 pixels. This makes the cheap artefact instead — one PDF,
+          index first, key moments after, no video track — and it has no
+          settings on purpose (every parameter is derived from the recording). */}
+      <button className="btn btn--surface btn--wide quality__ai" onClick={onExportForAi}>
+        <Icon name="doc" size={16} />
+        <span>For AI</span>
+      </button>
+      <div className="quality__hint quality__hint--ai">
+        One PDF any AI can read: a text index, then the moments the picture actually changed. No
+        video inside — a few thousand tokens instead of a few hundred thousand.
+      </div>
     </div>
   )
 }

@@ -49,6 +49,19 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   2 s → 5 s (−23.8 % on screen content, 0 % on motion, PSNR 83 dB — no pixel changes, O11b) and the raw
   camera channel 4 → 2.5 Mbps when it is only a PiP (−29.3 % on disk, +0.2 % on the file, PiP PSNR
   52.1 dB, O11c). Harness: `npm run exp -- o11`.
+- EXPORT FOR AI (AI1, 2026-08-24): the export panel's second artefact, and it is not a smaller video.
+  One PDF — an index page of pure selectable text (duration, channel windows, cuts, stalls, a keyframe
+  table with page numbers, a pointer trail), then one pixel-delta keyframe per page as JPEG with the
+  timestamp on a caption band. NO video track anywhere in it. Every parameter is derived from the
+  recording: keyframe density from the pixel delta, the full-res crop from how small the changed
+  region is, the page pace from the take's own duration (/60, clamped 0.5-15 s). THE CURSOR IS A
+  THRESHOLD, NOT A DETECTOR — a pointer is ~8 grid cells and a tooltip ~110 — so a cursor wandering a
+  still page for 12 s costs ONE page out of 48 samples and a blinking caret costs none. Price: ~16.8k
+  tokens for a 12 s take vs ~283k for the same take as video frames, printed per page at every export.
+  Costs 0.50× the same take's full render (it decodes once, at 4 samples/s, through the render's own
+  reader and layout — note 13 — and never encodes video). src/core/ai/*, main thread, no worker.
+  Gated by `node scripts/ai-pdf-check.mjs`, which reads the file back with an independent xref-walking
+  parser AND Apple PDFKit. AWAITING PO: upload one to an AI and report — that unfreezes AI2-AI7.
 - crash-durable: mid-record reload salvages all channels (video + positioned-write audio), boots into editor
 - editor: trim, per-channel enable/trim, MID-TAKE CUTS (F1: split at playhead, delete clip, drag cut
   edges), quality steps before export (F7+F7b: 540p/720p/1080p-instant/1440p, each with a size number —

@@ -43,9 +43,23 @@ Audio-only becomes visualized video. UI: iOS-Camera simplicity, Final Cut timeli
 - North star: **distributed multi-device capture** (phone camera + laptop screen, one time model). Shapes time/session/format decisions now; product work gated on a 2-device sync spike with kill criteria. iOS = Safari capture node first; thin native node later; never a separate editor.
 - Never: real-time streaming as the capture basis · closed project format · sub-ms multi-mic mixing promises · silent background capture · deterministic replay of live media
 
-## State (2026-08-23)
+## State (2026-08-24)
 
 Working and verified end-to-end: capture 4 channels → edit → export → share. PO records with it.
+
+**A take can now be exported FOR AN AI (shipped 2026-08-24).** The export panel has a second control,
+"For AI", and it produces one PDF rather than a smaller video: a page of plain text saying what the
+recording is (duration, which inputs ran when, what the edit removed), then one page per moment the
+picture actually changed. Agents do not watch video — they sample frames and pay about a token per
+750 pixels — so a twelve-second take costs roughly 17k tokens this way against 283k as video frames,
+and it takes half as long to build as the ordinary export. It has no settings, deliberately: how many
+moments to keep, whether to add a close-up of what changed and how often a page may appear are all
+read off the recording itself. The cursor was the interesting problem — it moves in every frame and
+means nothing most of the time — and it is filtered by size rather than by a detector, so a cursor
+wandering a still screen for twelve seconds produces one page, not forty-eight. **PO's move: record
+something normal, export it For AI, upload the PDF to any AI and say whether it answers what you
+wanted.** That report is what decides whether the richer layers (DOM events, transcript, repro
+bundle) get built at all; a sample file is in `docs/qa/ai-export.pdf`.
 
 Shipped 2026-08-23 (eleven merges; engineering detail in `.ai/DECISIONS`, task state in `.ai/TASKS`):
 
@@ -125,7 +139,7 @@ WebCodecs capture engine (now the default, see below) · the export engine off t
 smart-cut trimming (O5, see below) · the bits audit and the two size levers it
 priced · background frame · silence tightening · timed zoom/pan · **the tail fix, now on both files a
 take produces** · **per-clip speed** · **draggable zoom markers** · **the engine × OS capability
-matrix**.
+matrix** · **export for AI (AI1) — one PDF, no video inside, ~17× cheaper to read than the frames**.
 
 **The ending of your take is safe now, on both paths.** The composite — the file you get when you
 export without editing — was losing nearly three seconds off a heavy take and was fixed last session.

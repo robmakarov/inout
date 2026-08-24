@@ -410,6 +410,21 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'aiexport',
+    title: 'AI1 — export for AI: is the file cheap, honest, and immune to the cursor?',
+    detail:
+      'records real takes (a wandering cursor, a blinking caret, a tooltip, a still minute with a motion burst) through MediaRecorder, builds the PDF with the production builder, then READS THE FILE BACK — JPEGs scanned out of the PDF, the rig’s timecode decoded off the picture — to prove each page shows the frame its caption claims and that no page comes from a cut span. Reports token price, page distribution, pointer-trail precision and build cost against the same take’s full render.',
+    run: async (args) => {
+      const { runAiExport } = await import('../perf/aiExport')
+      return runAiExport({
+        economySec: typeof args?.economySec === 'number' ? args.economySec : undefined,
+        shortSec: typeof args?.shortSec === 'number' ? args.shortSec : undefined,
+        fiducialSec: typeof args?.fiducialSec === 'number' ? args.fiducialSec : undefined,
+        includePdf: typeof args?.includePdf === 'boolean' ? args.includePdf : undefined,
+      })
+    },
+  },
+  {
     id: 'datachan',
     title: 'Experiment 6 — Timed data channels (live capture demo)',
     detail:

@@ -29,10 +29,16 @@ several ids, take the first and tell PO to open parallel sessions for the rest. 
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
 ── READY MAP — current truth, updated on every merge ──
-Last update 2026-08-24 (EIGHTH session, PO: "go O5-flip"). Everything merged.
-2026-08-24, later (planning session): PHASE A — AI EXPORT added at the bottom of this file.
+Last update 2026-08-24 (NINTH session, PO: "go ai"). Everything merged.
+AI1 IS SHIPPED AND EVERY GATE IS GREEN. The export panel has a "For AI" control; it builds one PDF —
+an index page of pure text, then one pixel-delta keyframe per page, no video track — and a 12 s take
+costs ~17k tokens against ~283k for the same take as video frames. PO's cursor case holds on a real
+recording: a cursor wandering a still screen for 12 s produces ONE page (the first) out of 48 samples.
+Evidence: `node scripts/ai-pdf-check.mjs`, artefact docs/qa/ai-export.pdf. Handoff under AI1 below.
+NEXT ON AI IS PO'S, NOT OURS: AI2-AI7 stay frozen until PO uploads a real take's file to an AI.
+2026-08-24, earlier (planning session): PHASE A — AI EXPORT added at the bottom of this file.
 PO: "export for ai button is highest priority now", max token cutting is the design goal, richer
-layers go to the roadmap. AI1 leads the READY list below; spec rewritten in docs/AI_EXPORT.md.
+layers go to the roadmap. Spec rewritten in docs/AI_EXPORT.md.
 THE FLIP DID NOT HAPPEN, AND THAT IS THE RESULT. O5-flip's job was to build the gate smart cut was
 waiting for and then turn it on. The gate got built — the oracle now records a composite like every
 real take, drives the product's OWN export ladder (compose/choose.ts) for its trim, bands that file's
@@ -67,17 +73,9 @@ START HERE IF YOU ARE FRESH:
      now v2 (worker + WebCodecs) — anything touching capture/* keeps BOTH engines green.
 
 READY NOW — parallel-safe, any subset concurrently (one session each):
-  AI1  export-for-ai — the button  [PO PRIORITY 2026-08-24, medium]  PO: "export for ai button is
-                                             highest priority now", MAX TOKEN CUTTING, and — the
-                                             same-day re-scope — ONE FILE any AI understands, not
-                                             human-watchable. That file is a PDF (the only one-file
-                                             format every major AI ingests natively as text+images):
-                                             index page (pure text, events + keyframe list with page
-                                             numbers) then one pixel-delta keyframe per page, JPEG,
-                                             timestamp-captioned; NO video track inside. Spec
-                                             docs/AI_EXPORT.md; full task in PHASE A at the bottom
-                                             of this file. AI2-AI7 are CANDIDATES ONLY, reconsidered
-                                             after PO tests AI1's first real file.
+  (AI1 SHIPPED 2026-08-24, ninth session — the "For AI" button is in the export panel and every gate
+   is green; handoff in PHASE A at the bottom. AI2-AI7 stay frozen until PO feeds a real take's file
+   to an AI and reports back — that report is the only thing that unfreezes them.)
   P0-instant-sync  packet-copy paths are out of sync  [P0, medium]  FOUND 2026-08-24 BY THE GATE
                                              O5-flip BUILT, on the first run that could see it. The
                                              INSTANT path — what every unedited export takes, the one
@@ -295,6 +293,10 @@ BOTH the composite and the raw channels.
      f2        timed zoom LOCATED in decoded export frames, via the PiP as a fiducial
      f3        background frame LOCATED in decoded export frames vs the pure geometry
      encprobe  is WebCodecs the wall, or is our config? main thread vs worker vs GL, per config
+     aiexport  AI1: the export for AI on real takes — a wandering cursor, a blinking caret, a
+               tooltip, a still minute with a motion burst — then READS THE FILE BACK (JPEGs scanned
+               out of the PDF, the rig's fiducial timecode decoded off the picture) to prove each page
+               shows the frame its caption claims and that no page comes from a cut span
      f5a       silence tightening against a known map: recall, cuts-in-speech, join clicks
      f5b       per-segment speed: pitch of a known tone IN THE EXPORT, sync across the boundaries,
                output length vs arithmetic, cost per second of output
@@ -302,6 +304,11 @@ BOTH the composite and the raw channels.
      p0tailraw does a RAW channel keep its ending? four stop procedures under 4K load, plus a
                `production` run through the real createCaptureSession and a `wedged` forced case
      oracle    accepts {"injectTailLossMs":N} to prove the tail band red
+  node scripts/ai-pdf-check.mjs    AI1's "any AI can read this" gate: runs the aiexport rig, saves the
+     PDF to docs/qa/ai-export.pdf, and puts it through TWO readers that know nothing about the writer —
+     our independent xref-walking parser (src/experimental/tools/pdf-verify.mjs) and Apple PDFKit via
+     JXA. `--reuse=<report.json>` re-runs only the reader gates. No downloads: pdftotext/mutool/qpdf
+     are absent on this machine and PDFKit ships with macOS.
   node scripts/o7-measure.mjs      first-paint bytes, record-click latency, editor prefetch (prod build)
   node scripts/ui-shot.mjs --flow=quality|cuts|camera|frame|tighten|zoom|speed|zoomdrag
      screenshots a flow on the PROD BUILD. It serves dist/ and does NOT rebuild — run `npm run build`
@@ -321,6 +328,10 @@ BOTH the composite and the raw channels.
      `node scripts/oracle.mjs --engine=v2` gates the WebCodecs composite instead of the shipped one
 
 ── AWAITING PO (carried forward) ──
+  · THE FIRST REAL AI FILE (AI1, shipped 2026-08-24): record something normal, Export → "For AI",
+    upload the PDF to any AI and ask it what the recording shows. That report is the acceptance for
+    AI1 and the only thing that unfreezes AI2-AI7. A sample built by the rig is committed at
+    docs/qa/ai-export.pdf if you want to see the shape before recording anything.
   · FIRST REAL TAKE ON THE NEW DEFAULT ENGINE (v2, flipped 2026-08-24): record something normal and
     listen/watch. Sync should be audibly better (33-48 ms vs ~60). If anything is off, `?engine=v1`
     reverts this load and localStorage['inout.capture.engine']='v1' reverts sticky.
@@ -1218,6 +1229,68 @@ GATES:
 · typecheck + tests + oracle green · instant-path logs unchanged.
 ACCEPTANCE THAT UNBLOCKS THE REST OF PHASE A: PO feeds a real take's file to an AI and reports.
 AI2-AI7 stay frozen candidates until that report exists.
+── HANDOFF 2026-08-24 (NINTH session, "go ai") — SHIPPED, ALL GATES GREEN.
+SHIPPED, and src/core owns all of it (`src/core/ai/`, the app owns only the button):
+   delta.ts    the metric — share of a 160×90 mean-luma grid whose cells moved by >10/255. Coarse on
+               purpose: it kills codec noise (zero-mean inside a 12 px cell) and it is what separates
+               a cursor (~8 cells) from a tooltip (~110) without a detector.
+   select.ts   a PURE REDUCER over that metric, and the whole taxonomy. TWO diffs per sample: against
+               the last emitted keyframe (how wrong the picture an agent already has is → the page
+               decision) and against the previous sample (what is moving → cursor/caret). Pacing is
+               derived from the take's own length (duration/60, clamped 0.5-15 s), so a long take
+               cannot bankrupt the token budget and a held-back change is never lost — the reference
+               has not advanced, so it fires at the next allowed instant.
+   pdf.ts      a streaming PDF writer, ~330 lines, zero deps. JPEG XObjects (DCTDecode) + Helvetica.
+               Image bytes go to disk as they are produced and only offsets are kept, so a 200-page
+               file never sits in the heap; the small objects and the xref are written at close, which
+               is also how the index can be page ONE while being authored LAST.
+   indexText.ts  page 1, signal-derived only (durations, channel windows, cuts, speed, stalls,
+               keyframe table with page numbers, pointer trail). No prose, ever — the no-AI rule.
+   build.ts    the builder: composes the take at 4 samples/s through the SAME primitives the render
+               uses (compose/video.ts readers + compose/layout.ts drawVideoFrame), measures, and keeps
+               what changed. No second decode pipeline (note 13), no encode, no audio, no muxer.
+   types.ts gains ExportResult.ai {pages, keyframes, approxTokens} so the result panel can say "3
+               pages · ~2k tokens" instead of describing a PDF as a video.
+MEASURED (`node scripts/ai-pdf-check.mjs`, full run, TD machine, artefact docs/qa/ai-export.pdf):
+   economy      60 s take (still, 5 s motion burst, still) → 7 keyframes / 8 pages / ~5.6k tokens;
+                6 of the 7 land inside the burst, longest gap 35 s, one page in the first 19 s.
+   cursor       12 s of a cursor wandering a still page → 1 page (the first) out of 48 samples;
+                47 samples classified cursor. Caret: 1 page. Tooltip: exactly 2 (first + tooltip),
+                the tooltip page cropped, at 4.5 s.
+   clock        every page's picture read BACK OUT of the PDF (JPEGs scanned from the bytes, the rig's
+                fiducial timecode decoded off the picture): 20/20 pages, caption−picture median
+                −577 ms with MAX DEVIATION 9 ms, and 0/20 pages differ from the channel decoded
+                independently at the same instants. The median is the recording's own epoch mapping,
+                not ours; the take's FIRST page is excluded and named — a canvas captureStream's first
+                encoded frame holds what was painted before the recorder existed, confirmed identical
+                on the channel itself, and every export path inherits it.
+   edit         cut take: 0 of 20 pages come from the cut span, times remapped.
+   cost         880 ms against the same take's full render at 1750 ms = 0.50× (gate ≤1.5×). In the
+                real app a 2 s take: 219 ms, decode 99 / draw 84 / jpeg 16 — decode is still the floor.
+   price        printed per page and in total at every export ([ai] console line): e.g. 788 + 1077
+                tokens. 12 s fiducial take ~16.8k tokens vs ~283k for the same take as video frames.
+   readers      an INDEPENDENT parser (src/experimental/tools/pdf-verify.mjs — goes through the xref
+                like a reader, not by regex) AND Apple PDFKit both accept the file and extract the
+                index text. pdftotext/mutool/qpdf are all absent on this machine and installing one is
+                a download PO owns, so PDFKit is the third-party reader; it agrees on the page count.
+THE POINTER TRAIL SHIPS, and the number is why: 100 % of confident readings land within 5 % of the
+   frame of the path the rig drew (median error 0.007 of the frame). The spec said drop it if the
+   detector was unreliable; it is not. `POINTER_TRAIL_ENABLED` in build.ts is the switch if a real
+   take ever disagrees.
+TWO DELIBERATE DEVIATIONS FROM THE SPEC, both recorded as decisions:
+   (a) the caption is a 22 pt BAND ABOVE the picture, not text drawn on it. On the image it cost no
+       page area and covered the top ~20 px of the frame — which on a screen recording is the tab
+       strip and the menu bar. 20 pt of page (~30 tokens) is the cheaper mistake.
+   (b) the build runs ON THE MAIN THREAD with the decoder's own awaits as its yields, not in the
+       export worker. It is a new path; the worker's one-shot fallback protocol is shaped for
+       ExportResult+RenderStats and generalizing it is real surface on the certified export. The
+       measured cost is half a render, so this is not a throughput decision — if PO finds the UI janky
+       on a long take, the worker is the obvious next move.
+NOT DONE, and none of it is in AI1's scope: DOM events (AI2 needs a capture vehicle — PO's choice),
+   transcript (AI3, PO-gated), a "change at cursor" caption on real takes (the code is in and unit
+   tested; the rig's synthetic tooltip is the only case that has exercised it).
+TOOLING: `npm run exp -- aiexport` (the rig alone) · `node scripts/ai-pdf-check.mjs` (the rig + both
+   readers + the saved artefact; `--reuse=<report.json>` re-runs the reader gates with no recording).
 
 ## AI2. event-sidecar — the DOM events behind the pixels  [CANDIDATE — frozen until PO tests
 AI1's first real file; then also needs the PO vehicle decision below]
