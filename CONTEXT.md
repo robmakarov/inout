@@ -227,7 +227,18 @@ export, the capture-engine polish list, native-resolution capture, crisp screen 
 work, pause/retake, the size number's fifth attempt, and frame-exact scrubbing. Each still costs a
 session, and `.ai/TASKS` says which are unblocked and which can run at the same time.
 
-**Runs in parallel now:** the out-of-sync fast export (P0, top of the list — trimming waits on it) ·
+**New 2026-08-24: AI export (phase A in .ai/TASKS) — PO's named top priority.** A second export
+target next to the MP4: a zip an agent reads instead of a video it must watch. V1 is scoped to
+maximum token cheapness — a tiny index that prices every layer, the facts capture already knows,
+and a handful of change-driven screenshots, with the full mp4 at the bottom for the rare descent.
+The button (AI1) ships first; the richer layers — DOM event sidecar, transcript, repro bundle,
+markers, MCP access, redaction — are roadmap tasks (AI2–AI7). The sidecar waits on a product
+decision only PO can make: where events come from (a browser extension, an SDK snippet in the
+recorded page, or the desktop shell). The transcript stays PO-gated under the standing no-AI rule
+because speech recognition is a local model; the export format itself runs no model anywhere.
+
+**Runs in parallel now:** the AI export button (AI1, PO's named priority) · the out-of-sync fast
+export (P0 — trimming waits on it) ·
 native-resolution capture · crisp screen text · pause/retake · frame-exact scrubbing · the size-number
 probe, attempt 5 · the codec ladder and the real Firefox run, both waiting on one install (below) ·
 the iOS ScreenCaptureKit spike (time-sensitive: iOS 27 ships ~Sept 2026, and it needs a device we do
