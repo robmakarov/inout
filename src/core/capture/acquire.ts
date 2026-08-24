@@ -6,6 +6,7 @@ import {
   type MediaKind,
 } from '@core/types'
 import { guardStream } from './deviceGuard'
+import { knownGranted, rememberGrant } from './grants'
 
 export interface AcquiredChannel {
   kind: ChannelKind
@@ -349,29 +350,50 @@ export function acquireChannelsProgressive(
     )
   }
 
-  const startCamera = async (granted: boolean, afterPicker?: Promise<unknown>): Promise<void> => {
+  /**
+   * `granted` is a PROMISE on purpose. getUserMedia is dispatched on the first
+   * line — before any await — so that when this is called beside an open
+   * screen picker the device starts opening immediately; awaiting a
+   * permissions.query first is what silently turned the concurrent start back
+   * into a serial one (see grants.ts). The answer is still awaited, just
+   * afterwards, and only to choose the budget: a prompt gets the human budget,
+   * a granted device the hardware one.
+   */
+  const startCamera = async (
+    granted: Promise<boolean>,
+    afterPicker?: Promise<unknown>,
+  ): Promise<void> => {
     mark('camera', 'start')
     try {
       const video = cameraVideoConstraints(config)
       if (config.cameraDeviceId) video.deviceId = config.cameraDeviceId
+      const raw = navigator.mediaDevices.getUserMedia({ video })
+      raw.catch(() => undefined) // handled below; never an unhandled rejection
       const stream = await withTimeout(
-        navigator.mediaDevices.getUserMedia({ video }),
-        granted ? ACQUIRE_TIMEOUT_MS : PROMPT_TIMEOUT_MS,
+        raw,
+        (await granted) ? ACQUIRE_TIMEOUT_MS : PROMPT_TIMEOUT_MS,
         'getUserMedia(camera)',
         afterPicker,
       )
+      rememberGrant('camera', true)
       guardStream(stream)
       hintTrackContent(stream.getVideoTracks()[0], 'camera')
       deliver({ kind: 'camera', media: 'video', stream, track: stream.getVideoTracks()[0] })
       mark('camera', 'done', stream.getVideoTracks()[0]?.label)
     } catch (err) {
       const timedOut = err instanceof DOMException && err.name === 'TimeoutError'
-      fail(toFailure('camera', err, timedOut))
+      const f = toFailure('camera', err, timedOut)
+      if (f.denied) rememberGrant('camera', false)
+      fail(f)
       mark('camera', timedOut ? 'timeout' : 'failed', err instanceof Error ? err.message : String(err))
     }
   }
 
-  const startMic = async (granted: boolean, afterPicker?: Promise<unknown>): Promise<void> => {
+  /** Same shape as startCamera — see the note there on why `granted` is a promise. */
+  const startMic = async (
+    granted: Promise<boolean>,
+    afterPicker?: Promise<unknown>,
+  ): Promise<void> => {
     mark('mic', 'start')
     try {
       const audio: MediaTrackConstraints = {
@@ -383,12 +405,15 @@ export function acquireChannelsProgressive(
         sampleRate: { ideal: 48000 },
       }
       if (config.micDeviceId) audio.deviceId = config.micDeviceId
+      const raw = navigator.mediaDevices.getUserMedia({ audio })
+      raw.catch(() => undefined) // handled below; never an unhandled rejection
       const stream = await withTimeout(
-        navigator.mediaDevices.getUserMedia({ audio }),
-        granted ? ACQUIRE_TIMEOUT_MS : PROMPT_TIMEOUT_MS,
+        raw,
+        (await granted) ? ACQUIRE_TIMEOUT_MS : PROMPT_TIMEOUT_MS,
         'getUserMedia(mic)',
         afterPicker,
       )
+      rememberGrant('microphone', true)
       guardStream(stream)
       // NARROWBAND WARNING only (PO rule 2026-07-21: never override the user's
       // device — an earlier auto-swap to the built-in mic broke AirPods takes).
@@ -405,7 +430,9 @@ export function acquireChannelsProgressive(
       mark('mic', 'done', stream.getAudioTracks()[0]?.label)
     } catch (err) {
       const timedOut = err instanceof DOMException && err.name === 'TimeoutError'
-      fail(toFailure('mic', err, timedOut))
+      const f = toFailure('mic', err, timedOut)
+      if (f.denied) rememberGrant('microphone', false)
+      fail(f)
       mark('mic', timedOut ? 'timeout' : 'failed', err instanceof Error ? err.message : String(err))
     }
   }
@@ -458,24 +485,30 @@ export function acquireChannelsProgressive(
     mark('system-audio', 'skipped', 'requires screen sharing')
   }
 
-  // The granted-concurrent-with-picker optimization only helps while a picker
-  // is open. With no screen there's nothing to overlap, and probing
-  // permissions.query adds await hops that are unreliable on Safari — so skip
-  // straight to acquisition below.
+  // SAME TICK AS THE PICKER — this is the line the whole "why is there any
+  // waiting" complaint turns on. A device that starts opening now spends the
+  // seconds the user is reading Chrome's picker doing its hardware spin-up,
+  // and by the time they click Share there is nothing left to wait for. That
+  // only works if NOTHING is awaited in front of it: this used to be gated on
+  // `await isGranted(...)`, an IPC to the very browser process that is busy
+  // displaying the picker, so the answer could land only once the picker
+  // closed — and then the mic's whole spin-up ran on the user's clock, after
+  // the screen was already shared. The cached grant (grants.ts) answers
+  // synchronously; the live probe still runs and still picks the budget.
+  //
+  // Their 8s ceiling is HARDWARE budget, so it may only start counting once
+  // the picker is gone; otherwise the user's own deliberation kills them.
   const early: Promise<void>[] = []
   let camEarly = false
   let micEarly = false
   if (displayPromise) {
-    // Pre-granted devices overlap the picker — that is the instant-start win.
-    // Their 8s ceiling is HARDWARE budget, so it may only start counting once
-    // the picker is gone; otherwise the user's own deliberation kills them.
-    if (config.camera && (await isGranted('camera'))) {
+    if (config.camera && knownGranted('camera')) {
       camEarly = true
-      early.push(startCamera(true, displayPromise))
+      early.push(startCamera(isGranted('camera'), displayPromise))
     }
-    if (config.mic && (await isGranted('microphone'))) {
+    if (config.mic && knownGranted('microphone')) {
       micEarly = true
-      early.push(startMic(true, displayPromise))
+      early.push(startMic(isGranted('microphone'), displayPromise))
     }
   }
 
@@ -563,14 +596,8 @@ export function acquireChannelsProgressive(
   // transient activation — only applies in front of getDisplayMedia, which by
   // here has either been dispatched already or was never requested.
   const parallel: Promise<void>[] = [...early]
-  const wantCam = config.camera && !camEarly
-  const wantMic = config.mic && !micEarly
-  const [camGranted, micGranted] = await Promise.all([
-    wantCam ? isGranted('camera') : Promise.resolve(false),
-    wantMic ? isGranted('microphone') : Promise.resolve(false),
-  ])
-  if (wantCam) parallel.push(startCamera(camGranted))
-  if (wantMic) parallel.push(startMic(micGranted))
+  if (config.camera && !camEarly) parallel.push(startCamera(isGranted('camera')))
+  if (config.mic && !micEarly) parallel.push(startMic(isGranted('microphone')))
 
   if (parallel.length) await Promise.all(parallel)
 

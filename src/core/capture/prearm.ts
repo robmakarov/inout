@@ -18,6 +18,13 @@ export function warmCapturePipeline(): void {
   warmed = true
   void (async () => {
     try {
+      // Ask the browser which devices are already ours, NOW — minutes before
+      // the click, with no picker on screen to delay the answer. It is a
+      // permission lookup, not an acquisition, so the no-idle-device rule
+      // above is untouched; what it buys is that the record click can fire
+      // getUserMedia in the same tick as the screen picker instead of behind
+      // an IPC the picker can hold up (see grants.ts).
+      void (await import('./grants')).primeGrants()
       const { loadCaptureEngine, loadRecovery } = await import('./lazy')
       // Fetch the split chunks now so the record click never waits on a
       // network round-trip (O7).
