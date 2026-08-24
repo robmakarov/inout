@@ -7,6 +7,18 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
 - instant unedited export ~60-105ms (live composite packet-copied, mp4 h264+aac); edited takes → full render
 - exports STREAM TO DISK (O1): the muxer holds 4 MB regardless of length — a 30-min export peaks at
   39 MB live memory instead of 294 MB. ExportResult.blob is a disk-backed OPFS file.
+- NO DURATION CAP (PO 2026-08-23). MAX_RECORDING_MS is `number | null` and is null; a take runs until
+  the user stops it or the last channel dies. The old 30-min cap was hiding the pre-O1 contiguous
+  ~1.74 GB export buffer; capture has always streamed to OPFS. Length now costs DISK (~1.1 GB/hour at
+  8 Mbps + 128 kbps) and nothing guards it — no storage.estimate() check. Logged P2.
+- EVERY INPUT STOPS AND RESTARTS MID-TAKE (PO 2026-08-23): setChannelActive(kind, active). Off is a real
+  stop — device released, camera light out — and closes that channel's file THERE, so its timeline bar
+  ends where you pressed instead of running frozen or silent. On re-acquires and late-joins a NEW segment
+  with its own startOffsetMs. A kind can therefore be SEVERAL non-overlapping segments in
+  Recording.channels; nothing downstream needed changing because activeChannelsAt resolves by id and
+  window, so at most one segment of a kind is live at any instant (pinned by test). Screen resume
+  re-opens the picker — no API re-shares a surface silently. setAudioEnabled (mute) stays in the
+  contract but the default UI no longer calls it.
 - WHERE THE BYTES GO IS MEASURED, NOT GUESSED (O11a): both export paths count every encoded packet
   (keyframe share, achieved vs requested bitrate, mean keyframe vs mean delta) and log one line; the
   certification tag names the codec rung. Two levers priced and shipped off it: render keyframe cadence
@@ -46,6 +58,17 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   makeup + source, stalled/missing channels, cut count, CI sync bound
 - audio: measured pipeline (sample-counted PCM, min-filter anchor), raw system audio, post-capture fidelity fixed
   (knee-limiter replaces tanh bus; composite dynamics bypassed for single source; stereo default on unreported channelCount)
+- THE LIMITER'S FOLD IS ALGEBRAIC u/(1+u), NOT tanh (2026-08-23). tanh scaled by (1-knee)=0.05 saturates
+  to full scale at an input of 1.152, while the makeup gain was licensed to reach 1.9 — so a 1.66:1 range
+  of the loudest content collapsed onto ONE 16-bit code and every boosted transient came out as a bare
+  impulse (measured in a PO take: 217 full-scale ~0.25 ms spikes from t=12.5s, heard as crackle). The
+  algebraic fold keeps f(0)=0, f'(0)=1 (C1 knee, normal program untouched) and f(inf)=1, but approaches
+  the ceiling polynomially and stays resolved to LIMIT_USABLE_MAX ~= 82. Below the knee it is bit-identical.
+  That let NORMALIZE_PEAK_OVERDRIVE go 2 -> 4, which matters because the same single transient was ALSO
+  capping the take's loudness: the gain was peak-bound and landed 1.4 dB under target. Do not retune
+  either constant without the test that asserts overdrive x knee < LIMIT_USABLE_MAX.
+- NOT a general loudness fix: a take whose median window RMS is ~18 dB below its p90 still plays quiet,
+  because only the p90 is normalized. Closing that needs dynamic-range compression — unbuilt, PO's call.
 
 oracle = merge gate: npm run oracle / oracle:cold / oracle:fidelity + pre-push hook (typecheck+test+
 oracle), always spawns its own server. Bands as of 2026-08-23: sync ≤90 ms on the SYMMETRIC flash+click
@@ -184,6 +207,21 @@ gaps / in flight:
   what "unresponsive" meant); and a pagehide guard that stops tracks, because nothing released devices
   when the page went away. Measured: cancel returns in 416 ms, pre-aborted in 1 ms, a normal take arms
   in 228 ms with zero live tracks after stop. Regression cover: `npm run exp -- armcancel`.
+  STILL NOT THE WHOLE STORY — three more, 2026-08-23, after PO hit "mic dont connect" and "indicators
+  still there after cancel". (a) THE MIC WAS TIMED AGAINST THE HUMAN: a pre-granted mic/camera starts
+  concurrently with the screen picker (that overlap is the instant-start win) but carried
+  ACQUIRE_TIMEOUT_MS, a HARDWARE budget — so the 8 s ran while the user read Chrome's picker and any
+  take where choosing a surface took longer lost its mic, deterministically. withTimeout now takes a
+  `startAfter` promise that holds the clock until the picker settles. (b) RELEASE COULD NOT SEE A
+  DEVICE STILL ARMING: channels enter this.channels on the LAST line of armChannel, after awaits of up
+  to seconds, so a cancel inside that window released nothing while the device was live — macOS kept
+  the indicators lit. Session now records every stream in `acquiredStreams` the instant it arrives.
+  (c) getDisplayMedia tracks we never deliver (the audio track Chrome returns when systemAudio is off)
+  are now stopped at the picker boundary. (d) the arming LABEL now tracks the outstanding SET
+  (src/app/lib/arming.ts, pure, 7 tests) instead of the last step to start, so it names the device
+  actually missing rather than sitting on "Waiting for microphone…". SETTLE_BUDGET_MS stays 130 s on
+  purpose: it is the prompt budget plus slack, and a human reading a picker may never be timed out.
+  NOT PO-VERIFIED — argued from ordering and gated by unit tests + the headless oracle only.
   WHICH step originally wedged is still unknown — the label could not say. The failure MODE is gone,
   not the specific wedge; if it recurs the arming timeline + budget warnings will name it.
 - FROZEN-SOURCE TAKES (PO 2026-08-06 "switched to a tab with a game, nothing recorded, just frozen frame") — fixed +
