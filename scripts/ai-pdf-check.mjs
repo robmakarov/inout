@@ -95,7 +95,16 @@ function readWithPdfKit(path) {
           chars: p.string.js.length,
         })
       }
-      JSON.stringify({ ok: true, pageCount: Number(doc.pageCount), pages, text: doc.string.js })
+      const attrs = doc.documentAttributes
+      const attr = (k) => { const v = attrs.objectForKey(k); return v && !v.isNil() ? v.js : '' }
+      JSON.stringify({
+        ok: true,
+        pageCount: Number(doc.pageCount),
+        pages,
+        text: doc.string.js,
+        title: attr('Title'),
+        subject: attr('Subject'),
+      })
     }
   `
   const out = execFileSync('/usr/bin/osascript', ['-l', 'JavaScript', '-e', script], {
@@ -142,13 +151,28 @@ const results = [
   },
   {
     name: 'the index is extractable text, not a picture of text',
-    pass: /INOUT screen recording/.test(indexText) && /keyframes/.test(indexText),
+    pass: /SCREEN RECORDING/.test(indexText) && /THE FRAMES/.test(indexText),
     detail: `page 1 yields ${indexText.length} chars of text and 0 images`,
   },
   {
-    name: 'PDFKit extracts the index too (a real reader, not ours)',
-    pass: kit.ok && /INOUT screen recording/.test(kit.text) && /clock:/.test(kit.text),
-    detail: kit.ok ? `${kit.text.length} chars extracted across the document` : 'n/a',
+    // PO's first real test: the AI opened the file and asked what to do with
+    // it. These four phrases are the answer, and they have to survive
+    // extraction by a reader that is not ours.
+    name: 'the file briefs its own reader: what it is, what the pages are, what to do',
+    pass:
+      kit.ok &&
+      /SCREEN RECORDING/.test(kit.text) &&
+      /frames from ONE screen recording, in time order/.test(kit.text) &&
+      /HOW TO READ IT/.test(kit.text) &&
+      /NO OTHER INSTRUCTION/.test(kit.text),
+    detail: kit.ok
+      ? `PDFKit extracts ${kit.text.length} chars; first line "${kit.text.split('\n')[0].slice(0, 80)}"`
+      : 'n/a',
+  },
+  {
+    name: 'the document says what it is in its metadata, before a page is opened',
+    pass: kit.ok && /[Ss]creen recording/.test(kit.title) && /frame/.test(kit.subject),
+    detail: kit.ok ? `Title: "${kit.title}" · Subject: "${kit.subject.slice(0, 90)}…"` : 'n/a',
   },
   {
     // Page = its images stacked, plus one caption band of ~22 pt. Anything

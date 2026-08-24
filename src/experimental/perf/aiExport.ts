@@ -24,6 +24,7 @@
  * claim worth gating is what a reader will find in the file, not what the
  * builder believed while writing it.
  */
+import { ALL_FORMATS, BlobSource, Input } from 'mediabunny'
 import { exportForAi, getLastAiExportStats, POINTER_TRAIL_ENABLED, SAMPLE_FPS } from '@core/ai'
 import { exportRecording } from '@core/compose'
 import { newId } from '@core/id'
@@ -200,7 +201,10 @@ export interface ScenarioResult {
   keyframeAtMs: number[]
   cropped: number
   classes: Record<string, number>
-  minGapMs: number
+  /** Pages that are frames of something moving — what "recreate the animation" needs. */
+  burstPages: number
+  budget: number
+  finalPaceMs: number
   buildMs: number
   /** Longest stretch of the take with no page at all — the idle claim. */
   longestGapMs: number
@@ -234,7 +238,9 @@ async function runScenario(scenario: string, takeMs: number): Promise<ScenarioRe
       keyframeAtMs: times.map((t) => Math.round(t)),
       cropped: stats.keyframeHasCrop.filter(Boolean).length,
       classes: stats.classes,
-      minGapMs: stats.minGapMs,
+      burstPages: stats.burstPages,
+      budget: stats.budget,
+      finalPaceMs: stats.finalPaceMs,
       buildMs: Math.round(buildMs),
       longestGapMs: Math.round(longestGap),
     }
@@ -386,9 +392,119 @@ async function probeChannelFiducials(
   return out
 }
 
+/**
+ * Run a REAL FILE through the builder — the PO's own take, dropped into
+ * public/ and fetched over the dev server.
+ *
+ * The synthetic scenarios prove the rules; they cannot prove the CALIBRATION,
+ * and the calibration is what PO's first real export got wrong ("it loses way
+ * too much frames"). A real 97 s UI walkthrough answers what no painted canvas
+ * can: how many pages a genuine session earns, where they land, and whether the
+ * moments that matter — a field being typed into, a button turning active, a
+ * tab switching — survive.
+ *
+ * The file is never committed (.gitignore: public/__*) and nothing here writes
+ * it anywhere but OPFS, which the throwaway profile discards.
+ */
+export interface RealFileResult {
+  url: string
+  durationMs: number
+  width: number
+  height: number
+  samples: number
+  keyframes: number
+  pages: number
+  burstPages: number
+  budget: number
+  finalPaceMs: number
+  approxTokens: number
+  bytes: number
+  buildMs: number
+  keyframeAtMs: number[]
+  /** Spacing between consecutive pages, ms — the "does it lose things" number. */
+  gapsMs: { max: number; median: number; over3s: number }
+  cropped: number
+  classes: Record<string, number>
+  /** The built file, when asked for — this is what PO uploads to an AI. */
+  pdfBase64?: string
+}
+
+async function runRealFile(url: string, includePdf = false): Promise<RealFileResult> {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`real file ${url}: HTTP ${res.status}`)
+  const blob = await res.blob()
+  const blobKey = `exp-ai-real-${newId('src')}.mp4`
+  const writer = (await blobStore.createWriteStream(blobKey)).getWriter()
+  await writer.write(blob)
+  await writer.close()
+  try {
+    const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS })
+    let durationMs = 0
+    let width = 0
+    let height = 0
+    try {
+      durationMs = Math.round((await input.computeDuration()) * 1000)
+      const track = await input.getPrimaryVideoTrack()
+      width = track?.displayWidth ?? 0
+      height = track?.displayHeight ?? 0
+    } finally {
+      input.dispose()
+    }
+    const channel: ChannelRecording = {
+      id: newId('ch'),
+      kind: 'screen',
+      media: 'video',
+      mimeType: blob.type || 'video/mp4',
+      blobKey,
+      startOffsetMs: 0,
+      durationMs,
+      width,
+      height,
+    }
+    const recording = recordingOf(channel, durationMs)
+    const edit = clampEditState(recording, defaultEditState(recording))
+    const t0 = performance.now()
+    const result = await exportForAi({ recording, edit })
+    const buildMs = performance.now() - t0
+    const stats = getLastAiExportStats()!
+    const times = stats.keyframeAtOutMs
+    const gaps: number[] = []
+    for (let i = 1; i < times.length; i++) gaps.push(times[i]! - times[i - 1]!)
+    const sorted = [...gaps].sort((a, b) => a - b)
+    return {
+      url,
+      durationMs,
+      width,
+      height,
+      samples: stats.samples,
+      keyframes: stats.keyframes,
+      pages: stats.pages,
+      burstPages: stats.burstPages,
+      budget: stats.budget,
+      finalPaceMs: stats.finalPaceMs,
+      approxTokens: stats.approxTokens,
+      bytes: result.blob.size,
+      buildMs: Math.round(buildMs),
+      keyframeAtMs: times.map((t) => Math.round(t)),
+      gapsMs: {
+        max: Math.round(Math.max(0, ...gaps)),
+        median: sorted.length ? Math.round(sorted[sorted.length >> 1]!) : 0,
+        over3s: gaps.filter((g) => g > 3000).length,
+      },
+      cropped: stats.keyframeHasCrop.filter(Boolean).length,
+      classes: stats.classes,
+      ...(includePdf ? { pdfBase64: base64(new Uint8Array(await result.blob.arrayBuffer())) } : {}),
+    }
+  } finally {
+    await blobStore.remove(blobKey).catch(() => undefined)
+  }
+}
+
 export interface AiExportReport {
   notes: string[]
   scenarios: ScenarioResult[]
+  /** Present when a real recording was run through the builder. */
+  real?: RealFileResult
   trail: Awaited<ReturnType<typeof measureTrail>>
   clock: {
     keyframes: number
@@ -442,8 +558,59 @@ function base64(bytes: Uint8Array): string {
 }
 
 export async function runAiExport(
-  opts: { economySec?: number; shortSec?: number; fiducialSec?: number; includePdf?: boolean } = {},
+  opts: {
+    economySec?: number
+    shortSec?: number
+    fiducialSec?: number
+    includePdf?: boolean
+    /** A real recording served from public/ — the calibration case. */
+    realFile?: string
+    /** Skip the synthetic scenarios and only run the real file. */
+    realOnly?: boolean
+  } = {},
 ): Promise<AiExportReport> {
+  if (opts.realOnly) {
+    const real = await runRealFile(opts.realFile ?? '/__po-take.mp4', opts.includePdf)
+    return {
+      notes: [
+        `real file only: ${real.url}`,
+        `${real.keyframes} frames over ${(real.durationMs / 1000).toFixed(1)}s — median gap ${real.gapsMs.median}ms, worst ${real.gapsMs.max}ms, ${real.gapsMs.over3s} gaps over 3s`,
+        `${real.burstPages} pages are frames of motion; ~${real.approxTokens} tokens, ${(real.bytes / 1024 / 1024).toFixed(1)} MB, built in ${real.buildMs}ms`,
+      ],
+      scenarios: [],
+      real,
+      trail: {
+        readings: 0,
+        confident: 0,
+        withinFrame5Pct: 0,
+        precisionPct: 0,
+        medianErrorFrac: 0,
+        shipped: POINTER_TRAIL_ENABLED,
+      },
+      clock: {
+        keyframes: 0,
+        decodedFiducials: 0,
+        offsetsMs: [],
+        medianOffsetMs: null,
+        maxDeviationMs: null,
+        channelOffsetsMs: [],
+        pagesDisagreeingWithChannel: 0,
+        excluded: [],
+      },
+      edit: { cutSpanMs: [0, 0], keyframeRecMs: [], fromCutSpan: 0, beforeMs: 0, afterMs: 0 },
+      cost: {
+        takeMs: real.durationMs,
+        aiBuildMs: real.buildMs,
+        renderMs: 0,
+        ratio: 0,
+        aiBytes: real.bytes,
+        renderBytes: 0,
+        aiTokens: real.approxTokens,
+        videoFrameTokens: Math.round(((real.durationMs / 1000) * 30 * (1024 * 576)) / 750),
+      },
+      gates: {},
+    }
+  }
   const economyMs = (opts.economySec ?? 60) * 1000
   const shortMs = (opts.shortSec ?? 12) * 1000
   const fiducialMs = (opts.fiducialSec ?? 12) * 1000
@@ -454,6 +621,9 @@ export async function runAiExport(
     `analysis samples at ${SAMPLE_FPS}/s; every take here is a real MediaRecorder vp9 capture, decoded and composed by production code`,
   )
 
+  // A real recording, when one was dropped in: the synthetic scenarios prove
+  // the rules, this proves the calibration on the thing PO actually records.
+  const real = opts.realFile ? await runRealFile(opts.realFile) : undefined
   scenarios.push(await runScenario('burst', economyMs))
   scenarios.push(await runScenario('cursor', shortMs))
   scenarios.push(await runScenario('caret', shortMs))
@@ -620,16 +790,21 @@ export async function runAiExport(
   const burstInside = burst.keyframeAtMs.filter((t) => t >= 19_000 && t <= 26_000).length
 
   const gates: AiExportReport['gates'] = {
-    'economy: 60 s mostly-static take ≤8 pages': {
-      pass: burst.keyframes <= 8,
-      detail: `${burst.keyframes} keyframes, ${burst.pages} pages, ~${burst.approxTokens} tokens`,
+    // WAS "≤8 pages", and that gate encoded the design PO rejected: it passed
+    // by summarizing a motion burst into one page. The economy claim that
+    // survives is about WHERE the pages go, not how few there are.
+    'economy: the file fits what a chat AI will accept (≤100 pages)': {
+      pass: burst.pages <= 100 && tooltip.pages <= 100,
+      detail: `60 s take: ${burst.pages} pages, ~${burst.approxTokens} tokens (Claude and most assistants reject a PDF past 100 pages)`,
     },
     'economy: an idle span emits nothing after its first': {
       pass: burst.keyframeAtMs.filter((t) => t < 19_000).length <= 1,
       detail: `${burst.keyframeAtMs.filter((t) => t < 19_000).length} in the first 19 s (the still part); longest gap ${burst.longestGapMs} ms`,
     },
-    'economy: a motion burst concentrates the pages inside it': {
-      pass: burstInside >= burst.keyframes - 1,
+    'economy: the pages go where the motion is, and are DENSE there': {
+      // PO's use is an agent recreating a UI and its animations: five seconds
+      // of motion has to come back as a sequence, not as one summary page.
+      pass: burstInside >= burst.keyframes - 1 && burstInside >= 12,
       detail: `${burstInside} of ${burst.keyframes} inside 20-25 s; times ${burst.keyframeAtMs.join(',')}`,
     },
     'cursor immunity: a wandering cursor is ≤1 page after the first': {
@@ -663,6 +838,24 @@ export async function runAiExport(
       pass: tooltip.perPageTokens.length === tooltip.keyframes && cost.aiTokens > 0,
       detail: `e.g. the tooltip take: pages ${tooltip.perPageTokens.join(' + ')} = ~${tooltip.approxTokens} tokens; the fiducial take ~${cost.aiTokens}`,
     },
+    ...(real
+      ? {
+          'a REAL recording is covered end to end, densely enough to follow': {
+            // The three numbers PO's complaint was about: nothing skipped for
+            // long, the whole take covered, and the file still uploadable.
+            pass:
+              real.gapsMs.median <= 1500 &&
+              real.gapsMs.max <= 5000 &&
+              real.pages <= 100 &&
+              real.keyframeAtMs[real.keyframeAtMs.length - 1]! >= real.durationMs * 0.9,
+            detail:
+              `${real.keyframes} frames over ${(real.durationMs / 1000).toFixed(1)}s: median gap ` +
+              `${real.gapsMs.median}ms, worst ${real.gapsMs.max}ms, ${real.gapsMs.over3s} over 3s, ` +
+              `last frame at ${(real.keyframeAtMs[real.keyframeAtMs.length - 1]! / 1000).toFixed(1)}s, ` +
+              `${real.pages} pages, ~${real.approxTokens} tokens, ${(real.bytes / 1048576).toFixed(1)} MB`,
+          },
+        }
+      : {}),
     'cost: the build is ≤1.5× the same take’s full render': {
       pass: cost.ratio <= 1.5,
       detail: `${cost.aiBuildMs} ms vs ${cost.renderMs} ms = ${cost.ratio}×`,
@@ -677,5 +870,5 @@ export async function runAiExport(
   )
   notes.push(`rig fiducial take is ${RIG_WIDTH}x${RIG_HEIGHT}, composed to 1920x1080 by production layout`)
 
-  return { notes, scenarios, trail, clock, edit, cost, gates, pdfBase64 }
+  return { notes, scenarios, real, trail, clock, edit, cost, gates, pdfBase64 }
 }

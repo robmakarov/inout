@@ -421,6 +421,8 @@ const runners: Runner[] = [
         shortSec: typeof args?.shortSec === 'number' ? args.shortSec : undefined,
         fiducialSec: typeof args?.fiducialSec === 'number' ? args.fiducialSec : undefined,
         includePdf: typeof args?.includePdf === 'boolean' ? args.includePdf : undefined,
+        realFile: typeof args?.realFile === 'string' ? args.realFile : undefined,
+        realOnly: typeof args?.realOnly === 'boolean' ? args.realOnly : undefined,
       })
     },
   },

@@ -53,15 +53,25 @@ import {
   emptyDelta,
   gridDelta,
   makeGrid,
+  pointerMask,
   type LumaGrid,
   type Rect,
 } from './delta'
 import { buildIndexLines, type KeyframeEntry, type TrailPoint } from './indexText'
 import { PdfWriter, wrapText, type PdfImage, type PdfSink } from './pdf'
-import { initSelector, stepSelection, type Pointer } from './select'
+import { currentPaceMs, initSelector, stepSelection, type Pointer } from './select'
 
-/** Analysis rate. Fast enough to see a tooltip appear, slow enough to be cheap. */
-export const SAMPLE_FPS = 4
+/**
+ * How often the picture is looked at.
+ *
+ * V1 looked 4 times a second and PO's first real take lost a whole sequence
+ * between two pages — typing into a field, the button turning active, the click
+ * and the tab switch, all inside one 5.5 s gap. Eight looks a second costs
+ * nothing that matters (the decoder is already walking every frame — note 13 —
+ * so this is one downscale and one diff more per second) and it is the floor
+ * under everything else: nothing shorter than 125 ms can be seen at all.
+ */
+export const SAMPLE_FPS = 8
 /** Longest side of the full-view image on a page: ~800 tokens at 16:9. */
 const VIEW_MAX_PX = 1024
 const JPEG_QUALITY = 0.72
@@ -74,8 +84,8 @@ const CROP_MAX_PX = 1024
 const PIXELS_PER_TOKEN = 750
 const CHARS_PER_TOKEN = 4
 const MAX_TRAIL_POINTS = 12
-/** Wrap width of the index text at 9 pt on a 468 pt page. */
-const INDEX_WRAP_CHARS = 100
+/** Wrap width of the index text in half-ems: (468 pt page − 28 pt margins) / 4.5. */
+const INDEX_WRAP_UNITS = 97
 const INDEX_LINES_PER_PAGE = 96
 
 /**
@@ -123,7 +133,11 @@ export interface AiExportStats {
   pointerReadings: (Pointer & { atOutMs: number })[]
   /** How many samples each class accounted for. */
   classes: Record<string, number>
-  minGapMs: number
+  /** Pages emitted inside a motion burst — the animation the file kept. */
+  burstPages: number
+  /** Pages this take was allowed, and the spacing the pace ended at. */
+  budget: number
+  finalPaceMs: number
 }
 
 let lastStats: AiExportStats | null = null
@@ -297,7 +311,9 @@ export async function exportForAi(opts: AiExportOptions): Promise<ExportResult> 
     keyframeHasCrop: [],
     pointerReadings: [],
     classes: {},
-    minGapMs: 0,
+    burstPages: 0,
+    budget: 0,
+    finalPaceMs: 0,
   }
 
   const readers: VideoChannelReader[] = []
@@ -343,12 +359,14 @@ export async function exportForAi(opts: AiExportOptions): Promise<ExportResult> 
     const cameraMoves = !cameraFull && cameraTrackIsActive(edit.camera)
     const viewportMoves = viewportTrackIsActive(edit.viewport)
 
-    let selector = initSelector(durationMs)
-    stats.minGapMs = selector.config.minGapMs
+    let selector = initSelector(durationMs, 1000 / SAMPLE_FPS)
     const refGrid = makeGrid()
     const prevGrid = makeGrid()
     const nowGrid = makeGrid()
     let havePrev = false
+    // Where the pointer was at the reference frame and where it is now: both
+    // differ between the two pictures, and neither is content.
+    let refPointer: { xFrac: number; yFrac: number } | null = null
 
     const totalSamples = readers.length ? Math.max(1, Math.ceil((durationMs / 1000) * SAMPLE_FPS)) : 0
     for (let s = 0; s < totalSamples; s++) {
@@ -380,7 +398,11 @@ export async function exportForAi(opts: AiExportOptions): Promise<ExportResult> 
       const viewportNow = viewportMoves ? viewportAt(edit.viewport, recMs) : undefined
       drawVideoFrame(frame, screen, camera, cameraFull, pose, edit.background, viewportNow)
       readLuma(smallCtx, full, nowGrid)
-      const vsRef = havePrev ? gridDelta(refGrid, nowGrid) : emptyDelta()
+      // The pointer is subtracted from the CONTENT metric, never from the
+      // motion one: a moving cursor is not an event, but the threshold that
+      // used to hide it also hid a typed word and a button turning active.
+      const mask = pointerMask(GRID_COLS, GRID_ROWS, [refPointer, selector.pointer])
+      const vsRef = havePrev ? gridDelta(refGrid, nowGrid, undefined, mask) : emptyDelta()
       const vsPrev = havePrev ? gridDelta(prevGrid, nowGrid) : emptyDelta()
       const blobs = havePrev ? changedBlobs(prevGrid, nowGrid) : []
       stats.drawMs += performance.now() - tDraw
@@ -419,12 +441,15 @@ export async function exportForAi(opts: AiExportOptions): Promise<ExportResult> 
             cropPixels = r.dw * r.dh
           }
         }
+        // A page is read on its own as often as in sequence, so its caption
+        // says what it belongs to — not just when it is. PO's first real test
+        // came back with the AI asking what the file was; a bare "t=2.00s"
+        // over a picture is not an answer to that.
         const caption = [
-          `t=${(recMs / 1000).toFixed(2)}s${decision.atCursor ? ' - change at cursor' : ''}${
-            decision.reason === 'persistent' ? ' - small persistent change' : ''
-          }`,
+          `INOUT screen recording - frame ${keyframes.length + 1} at t=${(recMs / 1000).toFixed(2)}s of ${(durationMs / 1000).toFixed(2)}s` +
+            `${decision.atCursor ? ' - the change is where the pointer was' : ''}`,
         ]
-        if (cropImage) caption.push('lower image: full-res crop of the changed region')
+        if (cropImage) caption.push('lower image: close-up of what changed, at full resolution')
         const page = pdf.addImagePage(
           viewImage,
           cropImage,
@@ -447,6 +472,7 @@ export async function exportForAi(opts: AiExportOptions): Promise<ExportResult> 
           ),
         )
         refGrid.data.set(nowGrid.data)
+        refPointer = selector.pointer
       }
 
       prevGrid.data.set(nowGrid.data)
@@ -480,13 +506,14 @@ export async function exportForAi(opts: AiExportOptions): Promise<ExportResult> 
       width: viewW,
       height: viewH,
       sampleFps: SAMPLE_FPS,
+      budgetSpent: selector.emitted >= selector.config.budget,
       approxTokens: 0,
       clockOffsetMs: 0,
     })
     const indexPages = Math.max(
       1,
       Math.ceil(
-        provisional.flatMap((l) => wrapText(l, INDEX_WRAP_CHARS)).length / INDEX_LINES_PER_PAGE,
+        provisional.flatMap((l) => wrapText(l, INDEX_WRAP_UNITS)).length / INDEX_LINES_PER_PAGE,
       ),
     )
     for (let i = 0; i < keyframes.length; i++) keyframes[i]!.page = indexPages + i + 1
@@ -499,21 +526,28 @@ export async function exportForAi(opts: AiExportOptions): Promise<ExportResult> 
       width: viewW,
       height: viewH,
       sampleFps: SAMPLE_FPS,
+      budgetSpent: selector.emitted >= selector.config.budget,
       approxTokens: pixelTokens,
       clockOffsetMs: 0,
-    }).flatMap((l) => wrapText(l, INDEX_WRAP_CHARS))
+    }).flatMap((l) => wrapText(l, INDEX_WRAP_UNITS))
     for (let p = indexPages - 1; p >= 0; p--) {
       pdf.addTextPage(lines.slice(p * INDEX_LINES_PER_PAGE, (p + 1) * INDEX_LINES_PER_PAGE), {
         front: true,
       })
     }
 
-    await pdf.close('INOUT recording, for an AI reader')
+    await pdf.close(
+      `Screen recording, ${(durationMs / 1000).toFixed(1)}s, ${keyframes.length} frames - flattened for an AI reader`,
+      'One screen recording as a document: page 1 says what it is and lists the frames, every page after it is a frame of that recording in time order. There is no video track — these frames are the recording.',
+    )
     const blob = await destination.finish()
     ok = true
 
     stats.pages = indexPages + imagePages
     stats.keyframes = keyframes.length
+    stats.burstPages = selector.burstPages
+    stats.budget = selector.config.budget
+    stats.finalPaceMs = currentPaceMs(selector, durationMs)
     stats.bytes = blob.size
     stats.approxTokens = Math.round(
       pixelTokens + lines.join(' ').length / CHARS_PER_TOKEN,
@@ -521,8 +555,9 @@ export async function exportForAi(opts: AiExportOptions): Promise<ExportResult> 
     stats.totalMs = performance.now() - t0
     lastStats = stats
     console.info(
-      `[ai] ${stats.pages} pages (${stats.keyframes} keyframes of ${stats.samples} samples, ` +
-        `min gap ${stats.minGapMs}ms) · ~${stats.approxTokens} tokens · ` +
+      `[ai] ${stats.pages} pages (${stats.keyframes} frames of ${stats.samples} looks, ` +
+        `${stats.burstPages} inside motion bursts, budget ${stats.budget}, pace ended at ` +
+        `${stats.finalPaceMs}ms) · ~${stats.approxTokens} tokens · ` +
         `${(blob.size / 1024).toFixed(0)} KB · ${Math.round(stats.totalMs)}ms ` +
         `(decode ${Math.round(stats.decodeMs)}ms · draw ${Math.round(stats.drawMs)}ms · jpeg ${Math.round(stats.encodeMs)}ms)`,
     )

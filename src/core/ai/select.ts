@@ -38,12 +38,29 @@ export interface SelectorConfig {
   tinyFrac: number
   /** Consecutive samples a small change must survive to earn its page. */
   persistSamples: number
+  /** How often the picture is looked at, ms — the floor on any spacing. */
+  sampleIntervalMs: number
+  /** Pages this take may spend. Spacing is derived from what is left of it. */
+  budget: number
+  /** Longest the pace may stretch, however long the recording is. */
+  maxGapMs: number
   /**
-   * Floor on the spacing between pages. Derived from the take's own length so
-   * the token bill of a long recording stays bounded (see keyframeMinGapMs) —
-   * a pace, not a setting.
+   * vsPrev share that counts as MOTION: while the picture is moving this much
+   * from sample to sample, the pace is suspended and every sample is a page.
    */
-  minGapMs: number
+  motionFrac: number
+  /** How long a burst keeps running after the motion stops, ms. */
+  burstTailMs: number
+  /**
+   * Longest a burst may run before the ordinary pace takes over again.
+   *
+   * A UI TRANSITION IS SHORT AND A SCROLL IS NOT. Both read as motion, and on
+   * PO's real take an unbounded burst rule turned 97 s into 189 pages and
+   * 177k tokens — because a page being scrolled kept the pace suspended for
+   * seconds at a time. Capping the burst keeps every animation (they finish
+   * well inside this) and throttles anything that just keeps moving.
+   */
+  burstMaxMs: number
   /** A change smaller than this share of the frame gets a full-res crop. */
   cropMaxAreaFrac: number
   /** How close to the cursor's last rest a change must land to be "at cursor". */
@@ -52,34 +69,75 @@ export interface SelectorConfig {
   stillRadiusFrac: number
 }
 
-/** Pages an average take is paced towards; the length of the take does the rest. */
-export const TARGET_KEYFRAMES = 60
-const MIN_GAP_FLOOR_MS = 500
-const MIN_GAP_CEIL_MS = 15_000
+/**
+ * Frames a take may spend, and this number is NOT ours to choose freely.
+ *
+ * The file exists to be uploaded to an AI, and the readers it targets cap a PDF
+ * at 100 PAGES (Claude chat and API both; other assistants are in the same
+ * range). A 186-page file is not a richer export, it is a rejected one. So the
+ * ceiling is 100 pages minus the index, and the whole question becomes WHERE to
+ * spend them — which is what the pace and the burst rule are for.
+ *
+ * V1 spent 60 on a 97 s take, one page every 2.5 s, and PO's verdict was "it
+ * loses way too much frames": a whole sequence — typing into a field, the
+ * button turning active, the click, the tab switch — fell between two pages.
+ * The use is an agent RECREATING a UI and its animations, which needs the
+ * moments themselves, not a summary of them.
+ */
+export const KEYFRAME_BUDGET = 96
+const MAX_GAP_CEIL_MS = 8_000
+/**
+ * How far ahead of an even spend a burst may run.
+ *
+ * Bursts ignore the pace, so without this the first minute of an active
+ * recording eats the budget and the last minute gets nothing. Twelve pages of
+ * credit is enough for any single transition and small enough that the end of
+ * the take is still funded.
+ */
+const BURST_LOOKAHEAD_PAGES = 12
 
 /**
- * The pacing floor, derived from the output's own duration.
+ * The spacing floor, recomputed after every page from what is LEFT.
  *
- * A 30 s take can afford a page every half second; a 20-minute one cannot, and
- * a fixed number would either starve the short take or bankrupt the long one.
- * Suppression is never a loss: the reference frame does not advance, so a
- * change held back is still the change that fires at the next allowed instant.
+ * A fixed floor is wrong at both ends: it starves a short take and bankrupts a
+ * long one. This spends freely while the budget is ahead of the clock — a
+ * 30 s take is sampled as densely as the analysis looks — and stretches only
+ * when the recording is spending faster than it can afford. Suppression is
+ * never a loss: the reference frame does not advance, so a change held back is
+ * the change that fires at the next allowed instant.
  */
-export function keyframeMinGapMs(outputDurationMs: number): number {
-  const paced = outputDurationMs / TARGET_KEYFRAMES
-  return Math.min(MIN_GAP_CEIL_MS, Math.max(MIN_GAP_FLOOR_MS, Math.round(paced)))
+export function paceMs(
+  remainingMs: number,
+  remainingBudget: number,
+  sampleIntervalMs: number,
+  maxGapMs = MAX_GAP_CEIL_MS,
+): number {
+  if (remainingBudget <= 0) return maxGapMs
+  const spread = remainingMs / remainingBudget
+  return Math.min(maxGapMs, Math.max(sampleIntervalMs, Math.round(spread)))
 }
 
-export function defaultSelectorConfig(outputDurationMs: number): SelectorConfig {
+export function defaultSelectorConfig(sampleIntervalMs: number): SelectorConfig {
   return {
-    // 3 % of a 160×90 grid ≈ 430 cells ≈ a 260 px square at 1080p: a dialog, a
-    // scroll, a switched window — never a pointer.
-    bigFrac: 0.03,
-    // 0.25 % ≈ 36 cells ≈ a tooltip or a menu row. A cursor pair is ~8.
-    smallFrac: 0.0025,
+    // 1.2 % of a 160×90 grid ≈ 170 cells ≈ a 160 px square at 1080p: a menu, a
+    // dialog, a scroll, a panel repainting. V1 asked for 3 % and a real UI
+    // rarely changes that much at once.
+    bigFrac: 0.012,
+    // 0.12 % ≈ 17 cells ≈ a typed word, a button turning active, a checkbox.
+    // This can sit below a cursor pair (~8-16 cells) only because the pointer
+    // is MASKED OUT of the content metric — see delta.pointerMask.
+    smallFrac: 0.0012,
     tinyFrac: 0.0025,
     persistSamples: 2,
-    minGapMs: keyframeMinGapMs(outputDurationMs),
+    sampleIntervalMs,
+    budget: KEYFRAME_BUDGET,
+    maxGapMs: MAX_GAP_CEIL_MS,
+    // While the picture moves this much between two looks, it is animating and
+    // the pace steps aside: an animation an agent has to reproduce is exactly
+    // the thing a spacing floor destroys.
+    motionFrac: 0.004,
+    burstTailMs: 400,
+    burstMaxMs: 1200,
     cropMaxAreaFrac: 0.25,
     atCursorRadiusFrac: 0.12,
     stillRadiusFrac: 0.02,
@@ -107,6 +165,21 @@ export interface SelectorState {
   pointer: Pointer | null
   /** A tiny change that keeps happening in one place — a blinking caret. */
   still: { at: { xFrac: number; yFrac: number }; samples: number } | null
+  /** Output ms the total run lasts — the pace reads what is LEFT of it. */
+  durationMs: number
+  /** While set, the picture is moving and the pace is suspended until this ms. */
+  burstUntilMs: number | null
+  /** When the current run of motion began — a burst is capped, motion is not. */
+  burstStartedMs: number | null
+  /**
+   * Consecutive samples that moved. ONE is a discrete change (a tooltip opens,
+   * a tab switches); TWO or more is something animating. Only the second kind
+   * suspends the pace, or a tooltip would be treated as an animation and lose
+   * the close-up that makes it readable.
+   */
+  movingRun: number
+  /** Pages spent inside bursts — evidence that the motion rule is doing work. */
+  burstPages: number
 }
 
 export interface SampleObservation {
@@ -126,6 +199,8 @@ export interface SampleObservation {
 export interface Decision {
   keyframe: boolean
   reason: KeyframeReason | null
+  /** This page is part of a motion burst — one frame of something animating. */
+  inBurst: boolean
   classification: Classification
   /** Full-res crop region for this page, when the change is small enough. */
   crop: Rect | null
@@ -135,15 +210,35 @@ export interface Decision {
   atCursor: boolean
 }
 
-export function initSelector(outputDurationMs: number, config?: Partial<SelectorConfig>): SelectorState {
+export function initSelector(
+  outputDurationMs: number,
+  sampleIntervalMs: number,
+  config?: Partial<SelectorConfig>,
+): SelectorState {
   return {
-    config: { ...defaultSelectorConfig(outputDurationMs), ...config },
+    config: { ...defaultSelectorConfig(sampleIntervalMs), ...config },
     emitted: 0,
     lastKeyframeMs: null,
     pending: null,
     pointer: null,
     still: null,
+    durationMs: outputDurationMs,
+    burstUntilMs: null,
+    burstStartedMs: null,
+    movingRun: 0,
+    burstPages: 0,
   }
+}
+
+/** What the pace allows RIGHT NOW, from what is left of the take and the budget. */
+export function currentPaceMs(state: SelectorState, atOutMs: number): number {
+  const c = state.config
+  return paceMs(
+    Math.max(0, state.durationMs - atOutMs),
+    c.budget - state.emitted,
+    c.sampleIntervalMs,
+    c.maxGapMs,
+  )
 }
 
 /**
@@ -195,6 +290,7 @@ export function stepSelection(
       decision: {
         keyframe: true,
         reason: 'first',
+        inBurst: false,
         classification: 'first',
         crop: null,
         pointer: null,
@@ -202,6 +298,30 @@ export function stepSelection(
       },
     }
   }
+
+  // MOTION SUSPENDS THE PACE. Something animating is precisely what a spacing
+  // floor destroys, and reproducing animation is what PO uses this file for, so
+  // while the picture keeps moving between looks, every look is a page.
+  const movingNow = obs.vsPrev.changedFrac >= c.motionFrac
+  next.movingRun = movingNow ? state.movingRun + 1 : 0
+  // One sample of change is an EVENT; a run of them is MOTION. Only motion
+  // earns a burst — the difference between a menu opening (one change, worth a
+  // close-up) and a menu sliding open (a sequence, worth frames).
+  const moving = movingNow && next.movingRun >= 2
+  if (moving) {
+    next.burstUntilMs = obs.atOutMs + c.burstTailMs
+    next.burstStartedMs = state.burstStartedMs ?? obs.atOutMs
+  }
+  const withinTail = !moving && state.burstUntilMs !== null && obs.atOutMs <= state.burstUntilMs
+  if (!moving && !withinTail) {
+    next.burstUntilMs = null
+    next.burstStartedMs = null
+  }
+  // A transition is over in a fraction of a second; anything still moving after
+  // the cap is a scroll or a video, and pays the ordinary pace for the rest.
+  const started = next.burstStartedMs ?? state.burstStartedMs
+  const burstExpired = started !== null && obs.atOutMs - started > c.burstMaxMs
+  const inBurst = withinTail && !burstExpired
 
   // ---- the taxonomy, on the instantaneous diff -----------------------------
   let classification: Classification = 'static'
@@ -239,6 +359,7 @@ export function stepSelection(
     decision: {
       keyframe: false,
       reason: null,
+      inBurst: false,
       classification,
       crop: null,
       pointer,
@@ -256,8 +377,14 @@ export function stepSelection(
 
   // ---- the page decision, on the diff against what the agent already has ---
   const ref = obs.vsRef
+  const bursting = (moving && !burstExpired) || inBurst
   let reason: KeyframeReason | null = null
-  if (ref.changedFrac >= c.bigFrac) {
+  if (bursting) {
+    // Inside a burst the bar is the motion itself: the picture moved since the
+    // last page, so this is a frame of the movement and the agent needs it.
+    if (ref.changedFrac >= c.smallFrac) reason = 'content'
+    next.pending = null
+  } else if (ref.changedFrac >= c.bigFrac) {
     reason = 'content'
     next.pending = null
   } else if (ref.changedFrac >= c.smallFrac && ref.bbox) {
@@ -273,22 +400,41 @@ export function stepSelection(
   if (!reason) return deny()
 
   // Pace: a change held back keeps its evidence (the reference has not moved),
-  // so the page fires at the next instant the pace allows.
-  if (state.lastKeyframeMs !== null && obs.atOutMs - state.lastKeyframeMs < c.minGapMs) {
+  // so the page fires at the next instant the pace allows. A burst ignores it —
+  // that is the whole point of a burst — but still spends from the budget, so a
+  // recording of continuous motion pays for itself later rather than running
+  // the file to thousands of pages.
+  const gap = currentPaceMs(state, obs.atOutMs)
+  // WHAT MAY BE SPENT BY NOW. An even spend, plus a credit a burst can borrow
+  // against — and the credit shrinks to nothing by the end of the take. Without
+  // the shrink, an active opening spends the file out: measured on PO's take,
+  // the budget ran dry at 84 s of 97 and the last thirteen seconds simply were
+  // not in the file. A recording must be covered end to end before any part of
+  // it is covered densely.
+  const progress = state.durationMs > 0 ? Math.min(1, obs.atOutMs / state.durationMs) : 1
+  const allowance = c.budget * progress + BURST_LOOKAHEAD_PAGES * (1 - progress)
+  if (state.emitted >= Math.min(c.budget, allowance)) return deny()
+  const burstNow = bursting
+  if (!burstNow && state.lastKeyframeMs !== null && obs.atOutMs - state.lastKeyframeMs < gap) {
     return deny()
   }
 
-  const crop = ref.bbox && ref.bboxAreaFrac < c.cropMaxAreaFrac ? ref.bbox : null
+  // No close-up inside a burst: the point of a crop is detail on a small change
+  // that the 1024 px view renders too small to read, and a frame of motion has
+  // no such region — it also doubled the token price of PO's real take.
+  const crop = !burstNow && ref.bbox && ref.bboxAreaFrac < c.cropMaxAreaFrac ? ref.bbox : null
   const atCursor =
     !!state.pointer && !!ref.centroid && distanceFrac(state.pointer, ref.centroid) < c.atCursorRadiusFrac
   next.emitted = state.emitted + 1
   next.lastKeyframeMs = obs.atOutMs
   next.pending = null
+  if (burstNow) next.burstPages = state.burstPages + 1
   return {
     state: next,
     decision: {
       keyframe: true,
       reason,
+      inBurst: burstNow,
       classification: reason === 'persistent' ? 'small' : 'content',
       crop,
       pointer,

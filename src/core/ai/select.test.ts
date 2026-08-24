@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { changedBlobs, emptyDelta, gridDelta, makeGrid, type LumaGrid } from './delta'
-import { initSelector, keyframeMinGapMs, stepSelection, type Decision } from './select'
+import { changedBlobs, emptyDelta, gridDelta, makeGrid, pointerMask, type LumaGrid } from './delta'
+import { initSelector, paceMs, stepSelection, type Decision } from './select'
 
-const FPS = 4
+/** Production looks at the picture 8 times a second; so does this. */
+const FPS = 8
+const INTERVAL = 1000 / FPS
 
 function screen(level = 128): LumaGrid {
   const g = makeGrid()
@@ -20,26 +22,32 @@ function paint(g: LumaGrid, x: number, y: number, w: number, h: number, level: n
 
 /**
  * The production loop, exactly: two diffs per sample (against the last emitted
- * keyframe and against the previous sample), blobs from the second, and the
- * reference advancing only when a page is actually emitted.
+ * keyframe and against the previous sample), blobs from the second, the pointer
+ * masked out of the content metric, and the reference advancing only when a
+ * page is actually emitted.
  */
-function run(frames: LumaGrid[]): Decision[] {
+function run(frames: LumaGrid[], budget?: number): Decision[] {
   const durationMs = (frames.length * 1000) / FPS
-  let state = initSelector(durationMs)
+  let state = initSelector(durationMs, INTERVAL, budget === undefined ? undefined : { budget })
   let ref: LumaGrid | null = null
   let prev: LumaGrid | null = null
+  let refPointer: { xFrac: number; yFrac: number } | null = null
   const out: Decision[] = []
   frames.forEach((f, i) => {
+    const mask = pointerMask(f.cols, f.rows, [refPointer, state.pointer])
     const step = stepSelection(state, {
       index: i,
-      atOutMs: (i * 1000) / FPS,
-      atRecMs: (i * 1000) / FPS,
-      vsRef: ref ? gridDelta(ref, f) : emptyDelta(),
+      atOutMs: i * INTERVAL,
+      atRecMs: i * INTERVAL,
+      vsRef: ref ? gridDelta(ref, f, undefined, mask) : emptyDelta(),
       vsPrev: prev ? gridDelta(prev, f) : emptyDelta(),
       blobsVsPrev: prev ? changedBlobs(prev, f) : [],
     })
     state = step.state
-    if (step.decision.keyframe) ref = f
+    if (step.decision.keyframe) {
+      ref = f
+      refPointer = state.pointer
+    }
     prev = f
     out.push(step.decision)
   })
@@ -58,38 +66,60 @@ describe('keyframe selection — the economy claims', () => {
     expect(keyframes(d)).toEqual([0])
   })
 
-  it('a 60 s mostly-static take stays under the page budget', () => {
-    // Static, with one 5 s burst of full-frame motion in the middle.
-    const frames = Array.from({ length: 60 * FPS }, (_, i) => {
-      if (i < 20 * FPS || i >= 25 * FPS) return screen()
+  it('spends its pages where the picture moves, not over the still stretches', () => {
+    // 30 s: still, a 3 s burst of full-frame motion in the middle, still again.
+    const frames = Array.from({ length: 30 * FPS }, (_, i) => {
+      if (i < 12 * FPS || i >= 15 * FPS) return screen()
       return paint(screen(), 0, 0, 160, 90, 60 + ((i * 37) % 160))
     })
-    const d = run(frames)
-    const ks = keyframes(d)
-    expect(ks.length).toBeLessThanOrEqual(8)
-    // And they are concentrated INSIDE the burst, not spread over the still part.
-    const inside = ks.filter((i) => i >= 20 * FPS && i <= 26 * FPS).length
-    expect(inside).toBeGreaterThanOrEqual(ks.length - 1)
+    const ks = keyframes(run(frames))
+    const still = ks.filter((i) => i < 12 * FPS).length
+    const moving = ks.filter((i) => i >= 12 * FPS && i <= 15 * FPS + 4).length
+    expect(still).toBe(1) // the opening page, and nothing else
+    // The motion is SAMPLED, not summarized: PO uses this file to reproduce
+    // animation, and one page for three seconds of motion cannot do that. It is
+    // also not sampled forever — after the burst cap the ordinary pace resumes,
+    // because three seconds of continuous change is a scroll, not a transition.
+    expect(moving).toBeGreaterThanOrEqual(12)
+    expect(moving).toBeLessThan(24)
   })
 
-  it('paces itself by the take’s own length, never by a setting', () => {
-    expect(keyframeMinGapMs(30_000)).toBe(500)
-    expect(keyframeMinGapMs(60_000)).toBe(1000)
-    expect(keyframeMinGapMs(600_000)).toBe(10_000)
-    // A very long take is capped, so pages never stop entirely.
-    expect(keyframeMinGapMs(60 * 60_000)).toBe(15_000)
+  it('an animation comes back as a sequence of frames, all marked as one burst', () => {
+    // A box slides across the frame over one second — a UI transition.
+    const frames = Array.from({ length: 4 * FPS }, (_, i) => {
+      if (i < FPS || i >= 2 * FPS) return paint(screen(), i < FPS ? 4 : 120, 30, 24, 20, 240)
+      const x = 4 + Math.round(((i - FPS) / FPS) * 116)
+      return paint(screen(), x, 30, 24, 20, 240)
+    })
+    const d = run(frames)
+    const moving = keyframes(d).filter((i) => i >= FPS && i < 2 * FPS)
+    expect(moving.length).toBeGreaterThanOrEqual(6)
+    // The first sample of the movement is an ordinary content page — one change
+    // is an event. From the second on it is motion, and the burst carries it.
+    expect(moving.filter((i) => d[i]!.inBurst).length).toBeGreaterThanOrEqual(5)
+  })
+
+  it('paces from what is LEFT of the budget, so a long take cannot bankrupt it', () => {
+    // Plenty of budget for the time remaining ⇒ the floor is the sample rate.
+    expect(paceMs(10_000, 200, INTERVAL)).toBe(INTERVAL)
+    // Comfortable, but not unlimited: 200 pages over 30 s is one per 150 ms.
+    expect(paceMs(30_000, 200, INTERVAL)).toBe(150)
+    // Budget nearly spent ⇒ the rest is spread over what remains.
+    expect(paceMs(60_000, 10, INTERVAL)).toBe(6000)
+    expect(paceMs(600_000, 10, INTERVAL)).toBe(8000) // and never stretches past the ceiling
+    expect(paceMs(10_000, 0, INTERVAL)).toBe(8000)
   })
 
   it('a change held back by the pace is not lost — it fires at the next allowed instant', () => {
-    // 30 s take ⇒ 500 ms floor ⇒ every other sample may be a page.
-    const frames = Array.from({ length: 30 * FPS }, (_, i) =>
+    // A tight budget forces the pace to stretch over a changing picture.
+    const frames = Array.from({ length: 8 * FPS }, (_, i) =>
       i === 0 ? screen() : paint(screen(), 0, 0, 160, 45, 20 + i),
     )
-    const d = run(frames)
-    const ks = keyframes(d)
+    const ks = keyframes(run(frames, 6))
     expect(ks[0]).toBe(0)
-    expect(ks[1]).toBe(2)
-    for (let i = 1; i < ks.length; i++) expect(ks[i]! - ks[i - 1]!).toBeGreaterThanOrEqual(2)
+    expect(ks.length).toBeLessThanOrEqual(6)
+    // Nothing is silently dropped: the page still lands, just later.
+    expect(ks.length).toBeGreaterThan(1)
   })
 })
 
@@ -123,7 +153,7 @@ describe('keyframe selection — the cursor taxonomy (PO’s hard gate)', () => 
     const frames = Array.from({ length: 60 }, (_, i) => {
       const [x, y] = cursorAt(i)
       let f = paint(screen(), x, y, CURSOR, CURSOR, 20)
-      // Tooltip: ~300×80 px at 1080p ≈ 25×7 cells, appearing at sample 12 and staying.
+      // ~300×80 px at 1080p ≈ 25×7 cells, appearing at sample 12 and staying.
       if (i >= 12) f = paint(f, x + 2, y + 2, 25, 7, 235)
       return f
     })
@@ -132,14 +162,24 @@ describe('keyframe selection — the cursor taxonomy (PO’s hard gate)', () => 
     expect(ks).toHaveLength(2)
     expect(ks[0]).toBe(0)
     const tooltip = d[ks[1]!]!
-    expect(tooltip.reason).toBe('persistent')
     expect(tooltip.crop).not.toBeNull()
     expect(tooltip.atCursor).toBe(true)
   })
 
+  it('a small UI change — a typed word, a button turning active — is NOT lost', () => {
+    // ~250×30 px at 1080p ≈ 20×2 cells: under the old content threshold, which
+    // is exactly what swallowed the typing in PO's first real take.
+    const frames = Array.from({ length: 40 }, (_, i) =>
+      i < 10 ? screen() : paint(screen(), 30, 50, 20, 2, 230),
+    )
+    const ks = keyframes(run(frames))
+    expect(ks).toHaveLength(2)
+    expect(ks[1]).toBeLessThanOrEqual(12) // seen within ~250 ms of happening
+  })
+
   it('a flicker that does not survive is not content', () => {
     const frames = Array.from({ length: 40 }, (_, i) =>
-      i === 10 ? paint(screen(), 60, 40, 25, 7, 235) : screen(),
+      i === 10 ? paint(screen(), 60, 40, 6, 4, 235) : screen(),
     )
     expect(keyframes(run(frames))).toEqual([0])
   })

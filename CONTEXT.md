@@ -47,19 +47,29 @@ Audio-only becomes visualized video. UI: iOS-Camera simplicity, Final Cut timeli
 
 Working and verified end-to-end: capture 4 channels → edit → export → share. PO records with it.
 
-**A take can now be exported FOR AN AI (shipped 2026-08-24).** The export panel has a second control,
-"For AI", and it produces one PDF rather than a smaller video: a page of plain text saying what the
-recording is (duration, which inputs ran when, what the edit removed), then one page per moment the
-picture actually changed. Agents do not watch video — they sample frames and pay about a token per
-750 pixels — so a twelve-second take costs roughly 17k tokens this way against 283k as video frames,
-and it takes half as long to build as the ordinary export. It has no settings, deliberately: how many
-moments to keep, whether to add a close-up of what changed and how often a page may appear are all
-read off the recording itself. The cursor was the interesting problem — it moves in every frame and
-means nothing most of the time — and it is filtered by size rather than by a detector, so a cursor
-wandering a still screen for twelve seconds produces one page, not forty-eight. **PO's move: record
-something normal, export it For AI, upload the PDF to any AI and say whether it answers what you
-wanted.** That report is what decides whether the richer layers (DOM events, transcript, repro
-bundle) get built at all; a sample file is in `docs/qa/ai-export.pdf`.
+**A take can now be exported FOR AN AI (shipped 2026-08-24, reworked the same day).** The export
+panel has a second control, "For AI", and it produces one PDF rather than a smaller video: a page of
+plain text that tells its reader what the file is and how to read it, followed by one page per moment
+the picture actually changed. Agents do not watch video — they sample frames and pay about a token
+per 750 pixels — so a 97-second take costs roughly 86k tokens this way against 2.3M as video frames,
+and it builds in half the time of the ordinary export.
+
+The first real test earned two corrections worth recording, because both were about judgement rather
+than code. PO exported a 97-second walkthrough of a product UI and gave it to an agent to recreate
+that UI and its animations. The AI **asked what to do with the file** — page one had opened with
+machine facts instead of saying what the document was — and PO's own verdict was that it **lost far
+too many frames**: a stretch where a field was typed into, a button turned active, was clicked and a
+tab switched had fallen entirely between two pages five and a half seconds apart. Both are fixed and
+both were measured on that same recording: the file now briefs its reader in its first lines, and it
+went from 39 frames to 96, with no gap longer than 3.75 seconds and the whole take covered. The
+budget turned out not to be ours to choose — chat AIs reject a PDF past 100 pages — so the real
+question became where the frames go: densely through anything moving (an animation comes back as a
+sequence, which is what recreating one needs), nothing at all while the screen is still.
+
+**PO's move: re-test.** The rebuilt version of that same take is at
+`~/Downloads/inout-20260824-183853-for-ai-v2.pdf` for a side-by-side against the original file and
+the MP4. That report decides whether the richer layers (DOM events, transcript, repro bundle) get
+built at all.
 
 Shipped 2026-08-23 (eleven merges; engineering detail in `.ai/DECISIONS`, task state in `.ai/TASKS`):
 

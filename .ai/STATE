@@ -49,19 +49,29 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   2 s → 5 s (−23.8 % on screen content, 0 % on motion, PSNR 83 dB — no pixel changes, O11b) and the raw
   camera channel 4 → 2.5 Mbps when it is only a PiP (−29.3 % on disk, +0.2 % on the file, PiP PSNR
   52.1 dB, O11c). Harness: `npm run exp -- o11`.
-- EXPORT FOR AI (AI1, 2026-08-24): the export panel's second artefact, and it is not a smaller video.
-  One PDF — an index page of pure selectable text (duration, channel windows, cuts, stalls, a keyframe
-  table with page numbers, a pointer trail), then one pixel-delta keyframe per page as JPEG with the
-  timestamp on a caption band. NO video track anywhere in it. Every parameter is derived from the
-  recording: keyframe density from the pixel delta, the full-res crop from how small the changed
-  region is, the page pace from the take's own duration (/60, clamped 0.5-15 s). THE CURSOR IS A
-  THRESHOLD, NOT A DETECTOR — a pointer is ~8 grid cells and a tooltip ~110 — so a cursor wandering a
-  still page for 12 s costs ONE page out of 48 samples and a blinking caret costs none. Price: ~16.8k
-  tokens for a 12 s take vs ~283k for the same take as video frames, printed per page at every export.
-  Costs 0.50× the same take's full render (it decodes once, at 4 samples/s, through the render's own
-  reader and layout — note 13 — and never encodes video). src/core/ai/*, main thread, no worker.
-  Gated by `node scripts/ai-pdf-check.mjs`, which reads the file back with an independent xref-walking
-  parser AND Apple PDFKit. AWAITING PO: upload one to an AI and report — that unfreezes AI2-AI7.
+- EXPORT FOR AI (AI1, 2026-08-24, reworked the same day on PO's first real take): the export panel's
+  second artefact, and it is not a smaller video. One PDF — an index page that BRIEFS ITS READER
+  (what the file is, that the pages after it are frames of one recording in time order, why the
+  spacing is uneven, what to do with no instructions) plus the derived facts (channel windows, cuts,
+  stalls, the frame table with page numbers, a pointer trail), then one frame per page as JPEG with a
+  caption band that names the recording, the frame and its time. NO video track anywhere in it.
+  THE TWO THINGS PO'S FIRST FILE GOT WRONG, both fixed and both measured on that same 97 s take:
+  it never said what it was (an AI opened it and asked what to do with it), and it dropped the
+  moments — 39 frames for 97 s, with typing, a button activating, a click and a tab switch all inside
+  one 5.5 s gap. Now 96 frames, worst gap 3.75 s, whole take covered.
+  WHAT IS DERIVED: 8 looks a second; content threshold 0.12 % of a 160×90 luma grid (~17 cells — a
+  typed word) which is only safe because THE POINTER IS MASKED OUT of that metric rather than hidden
+  under a high threshold; MOTION SUSPENDS THE PACE so an animation comes back as a sequence (needs 2
+  consecutive moving samples — one change is an event, not an animation — and capped at 1.2 s so a
+  scroll is throttled); the page budget is 96 because CHAT AIs REJECT A PDF PAST 100 PAGES, spread by
+  a pace read off what is left of the take plus a burst credit that shrinks to zero by the end.
+  Cursor immunity holds: a cursor wandering a still page for 12 s is ONE page out of 96 samples, a
+  caret is none. Price: ~86k tokens for a 97 s UI take vs ~2.3M for the same take as video frames,
+  printed per page at every export. Costs 0.59× the same take's full render (decodes once through the
+  render's own reader and layout — note 13 — and never encodes video). src/core/ai/*, main thread,
+  no worker. Gated by `node scripts/ai-pdf-check.mjs` (independent xref-walking parser + Apple
+  PDFKit + a real-recording density gate). AWAITING PO: re-test the reworked file — that unfreezes
+  AI2-AI7.
 - crash-durable: mid-record reload salvages all channels (video + positioned-write audio), boots into editor
 - editor: trim, per-channel enable/trim, MID-TAKE CUTS (F1: split at playhead, delete clip, drag cut
   edges), quality steps before export (F7+F7b: 540p/720p/1080p-instant/1440p, each with a size number —

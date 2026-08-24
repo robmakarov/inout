@@ -73,15 +73,36 @@ export function pdfEscape(text: string): string {
   return out
 }
 
-/** Helvetica is ~0.5 em wide on average; enough to wrap machine-readable text. */
-export function wrapText(text: string, maxChars: number): string[] {
-  if (text.length <= maxChars) return [text]
+/**
+ * Width of a character in half-ems, bucketed.
+ *
+ * Counting CHARACTERS is what put a line off the right edge of the index page:
+ * Helvetica's capitals are ~30 % wider than its lower case, and the line that
+ * overflowed was the shouted one ("IF YOU WERE HANDED THIS FILE…"). A full AFM
+ * table would be exact and is 300 lines of data for a wrap; three buckets are
+ * within a few percent and fit in a function.
+ */
+const NARROW = new Set([...'ijltf.,;:\'"|!()[]{}/\\ -'])
+const WIDE = new Set([...'mwMW@%&'])
+export function textUnits(text: string): number {
+  let units = 0
+  for (const ch of text) {
+    if (NARROW.has(ch)) units += 0.55
+    else if (WIDE.has(ch) || (ch >= 'A' && ch <= 'Z')) units += 1.35
+    else units += 1.05
+  }
+  return units
+}
+
+/** Word-wrap to a width in half-ems (see textUnits). */
+export function wrapText(text: string, maxUnits: number): string[] {
+  if (textUnits(text) <= maxUnits) return [text]
   const words = text.split(' ')
   const lines: string[] = []
   let line = ''
   for (const w of words) {
     if (!line) line = w
-    else if (line.length + 1 + w.length <= maxChars) line += ` ${w}`
+    else if (textUnits(`${line} ${w}`) <= maxUnits) line += ` ${w}`
     else {
       lines.push(line)
       line = w
@@ -251,8 +272,14 @@ export class PdfWriter {
     return parts.join('\n') + '\n'
   }
 
-  /** Writes every small object, the xref and the trailer. */
-  async close(title: string): Promise<void> {
+  /**
+   * Writes every small object, the xref and the trailer.
+   *
+   * `subject` is not decoration: some readers surface document metadata before
+   * a single page is looked at, and this file's whole problem is a reader that
+   * does not know what it is holding.
+   */
+  async close(title: string, subject: string): Promise<void> {
     if (!this.opened) throw new Error('pdf: not open')
     if (this.pages.length === 0) throw new Error('pdf: no pages')
 
@@ -306,7 +333,8 @@ export class PdfWriter {
     const infoId = this.allocate()
     this.offsets.set(infoId, this.offset)
     await this.text(
-      `${infoId} 0 obj\n<< /Title (${pdfEscape(title)}) /Producer (INOUT) /Creator (INOUT export for AI) >>\nendobj\n`,
+      `${infoId} 0 obj\n<< /Title (${pdfEscape(title)}) /Subject (${pdfEscape(subject)}) ` +
+        `/Producer (INOUT) /Creator (INOUT export for AI) >>\nendobj\n`,
     )
 
     const xrefOffset = this.offset

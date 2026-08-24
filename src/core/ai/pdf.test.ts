@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 // @ts-expect-error — the verifier is a node-only .mjs tool with no types by design.
 import { parsePdf } from '../../experimental/tools/pdf-verify.mjs'
-import { PdfWriter, pdfEscape, wrapText, type PdfSink } from './pdf'
+import { PdfWriter, pdfEscape, textUnits, wrapText, type PdfSink } from './pdf'
 
 interface Parsed {
   ok: boolean
@@ -55,7 +55,7 @@ async function build(): Promise<Parsed> {
   // The index is authored LAST and read FIRST — the whole reason pages and
   // objects are ordered independently.
   pdf.addTextPage(['INOUT recording - index', 'duration 12.00s', 'p2 t=0.00s'], { front: true })
-  await pdf.close('INOUT recording, for an AI reader')
+  await pdf.close('Screen recording, 12.0s, 2 frames', 'One screen recording as a document')
   return parsePdf(c.bytes()) as Parsed
 }
 
@@ -100,8 +100,12 @@ describe('pdf writer', () => {
     expect(pdfEscape('café — dash')).toBe('caf? ? dash')
   })
 
-  it('wraps long index lines at the page width', () => {
+  it('wraps by rendered width, not by character count', () => {
     expect(wrapText('short', 20)).toEqual(['short'])
-    expect(wrapText('one two three four five', 9)).toEqual(['one two', 'three', 'four five'])
+    expect(wrapText('one two three four five', 10)).toEqual(['one two', 'three four', 'five'])
+    // Capitals are ~30 % wider in Helvetica, and counting characters is what
+    // pushed the index's shouted line off the right edge of the page.
+    expect(textUnits('SHOUT')).toBeGreaterThan(textUnits('shout'))
+    expect(wrapText('SHOUTING WORDS HERE', 10)).toEqual(['SHOUTING', 'WORDS', 'HERE'])
   })
 })

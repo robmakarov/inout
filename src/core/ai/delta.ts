@@ -72,8 +72,21 @@ export function makeGrid(cols = GRID_COLS, rows = GRID_ROWS): LumaGrid {
   return { cols, rows, data: new Uint8Array(cols * rows) }
 }
 
-/** Grid → grid mean-luma difference. Both must be the same shape. */
-export function gridDelta(a: LumaGrid, b: LumaGrid, threshold = CELL_DELTA): Delta {
+/**
+ * Grid → grid mean-luma difference. Both must be the same shape.
+ *
+ * `ignore` marks cells the caller knows are the pointer or the caret (see
+ * pointerMask). Excluding them is what lets the CONTENT threshold go small
+ * enough to catch a button highlight or a typed word without a stopped cursor
+ * buying itself a page — the taxonomy's job done by subtraction rather than by
+ * a threshold high enough to hide both.
+ */
+export function gridDelta(
+  a: LumaGrid,
+  b: LumaGrid,
+  threshold = CELL_DELTA,
+  ignore?: Uint8Array,
+): Delta {
   if (a.cols !== b.cols || a.rows !== b.rows) throw new Error('gridDelta: grid shape mismatch')
   const { cols, rows } = a
   let cells = 0
@@ -86,6 +99,7 @@ export function gridDelta(a: LumaGrid, b: LumaGrid, threshold = CELL_DELTA): Del
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
       const i = y * cols + x
+      if (ignore && ignore[i]) continue
       if (Math.abs(a.data[i]! - b.data[i]!) <= threshold) continue
       cells++
       sumX += x
@@ -194,6 +208,36 @@ export function changedBlobs(
   }
   blobs.sort((p, q) => q.cells - p.cells)
   return blobs.slice(0, maxBlobs)
+}
+
+/**
+ * Cells the pointer and the caret occupy, so the CONTENT metric can ignore
+ * them (task AI1, after PO's first real take).
+ *
+ * The alternative — a content threshold set high enough that a moving cursor
+ * cannot reach it — is what made the first version blind to a typed word and a
+ * button turning active. Masking the pointer instead lets the threshold go
+ * where real UI changes live. The mask covers where the pointer IS and where it
+ * WAS at the reference frame, because both differ between the two pictures.
+ */
+export function pointerMask(
+  cols: number,
+  rows: number,
+  spots: ({ xFrac: number; yFrac: number } | null | undefined)[],
+  radiusCells = 3,
+): Uint8Array {
+  const mask = new Uint8Array(cols * rows)
+  for (const spot of spots) {
+    if (!spot) continue
+    const cx = Math.round(spot.xFrac * cols)
+    const cy = Math.round(spot.yFrac * rows)
+    for (let y = Math.max(0, cy - radiusCells); y <= Math.min(rows - 1, cy + radiusCells); y++) {
+      for (let x = Math.max(0, cx - radiusCells); x <= Math.min(cols - 1, cx + radiusCells); x++) {
+        mask[y * cols + x] = 1
+      }
+    }
+  }
+  return mask
 }
 
 /** Overlap of two boxes as a share of their union — how "same place" they are. */

@@ -29,9 +29,10 @@ Every parameter a human would set is either **derived from a signal already in t
 
 | knob you'd be tempted to add | the signal that replaces it |
 |---|---|
-| frame rate | pixel delta — dense keyframes during motion, near zero when static |
+| frame rate | pixel delta — a fast run of frames while something moves, nothing while it is still |
+| how many frames | the 100-page ceiling every chat AI enforces, spread by a pace read off what is left of the take |
 | resolution | ≤1024 px full view; full-res crop added only when the changed region is small |
-| cursor filter | the delta's own size + persistence — see the taxonomy below |
+| cursor filter | the pointer is masked out of the content metric, so no threshold has to hide it |
 | short vs complete file | page order — index first, an agent that can page (Claude Code `pages`) descends selectively |
 | record quality | none — always capture max, derive everything down at export |
 
@@ -81,6 +82,41 @@ Rules that are decisions, not defaults:
   pixels on a downscaled luma diff) so "dense during motion, near zero when static" is testable.
 - **Zero dependencies:** a minimal PDF writer (JPEG images + built-in Helvetica text) is a few
   hundred lines and stays ours.
+
+## What PO's first real take changed — the important part
+
+V1 shipped, PO exported a 97 s walkthrough of a real product UI, gave the file to an agent **to
+recreate the UI and its animations**, and came back with two verdicts: *"ai didn't understand it's
+video"* and *"it loses way too much frames"*. Both were right, and both were about calibration
+rather than design.
+
+**It never said what it was.** Page 1 opened with machine facts — `clock: recording epoch`,
+`keyframes are pixel-delta selected` — so an AI opened the file and asked what to do with it. The
+index now briefs its reader first: what the document is, that the pages after it are frames of one
+recording in time order, why the spacing is uneven, and what to do if it arrived with no
+instructions. The same one-liner is in the PDF metadata and in every page's caption, so a page read
+alone still says what it belongs to. None of that describes the recording — the no-AI rule is about
+model-written accounts of the content, not about the document explaining its own format.
+
+**It dropped the moments.** In that take, page 7 was t=12.25 s with an empty field and page 8 was
+t=17.75 s on a different tab: the typing, the button turning active, the click and the tab
+transition were all inside one 5.5 s gap. Three causes, all now fixed and each measured on that same
+recording:
+
+| what was wrong | why | now |
+|---|---|---|
+| a typed word is invisible | the content threshold was 0.25 % of the grid (~36 cells) — set high to keep a moving cursor out | the **pointer is masked out** of the content metric, so the threshold could drop to 0.12 % (~17 cells): a typed word, a button turning active, a checkbox |
+| an animation became one page | the pace allowed one page per 1.6 s | **motion suspends the pace**: while the picture keeps moving between looks, every look is a page (capped at 1.2 s, after which a scroll is throttled but a transition is already captured) |
+| 250 ms was the finest anything could be seen | the analysis looked 4 times a second | **8 looks a second** — the decoder is already walking every frame, so this costs one extra downscale and diff per second |
+
+The budget stopped being a number of our choosing: **the readers this file exists for cap a PDF at
+100 pages**, so a take gets ~96 frames and the question is where to spend them. They are spent by a
+pace derived from what is LEFT of the take and the budget, plus a burst credit that shrinks to zero
+by the end — because the first version of that controller spent PO's take out at 84 s of 97 and the
+last thirteen seconds simply were not in the file.
+
+Same 97 s recording, before and after: **39 frames → 96**, worst gap 5.5 s → 3.75 s, median gap
+2.5 s → 1.1 s, whole take covered, 98 pages, ~86k tokens, 3.8 MB, built in 4.8 s.
 
 ## What shipping it changed in this spec
 

@@ -8,11 +8,12 @@ export {
 } from './build'
 export { buildIndexLines, type IndexInput, type KeyframeEntry, type TrailPoint } from './indexText'
 export {
+  currentPaceMs,
   defaultSelectorConfig,
   initSelector,
-  keyframeMinGapMs,
+  paceMs,
   stepSelection,
-  TARGET_KEYFRAMES,
+  KEYFRAME_BUDGET,
   type Classification,
   type Decision,
   type SelectorConfig,

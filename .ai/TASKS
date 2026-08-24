@@ -30,12 +30,16 @@ updates the READY map (move newly-unblocked dependents in, remove the done task)
 
 ── READY MAP — current truth, updated on every merge ──
 Last update 2026-08-24 (NINTH session, PO: "go ai"). Everything merged.
-AI1 IS SHIPPED AND EVERY GATE IS GREEN. The export panel has a "For AI" control; it builds one PDF —
-an index page of pure text, then one pixel-delta keyframe per page, no video track — and a 12 s take
-costs ~17k tokens against ~283k for the same take as video frames. PO's cursor case holds on a real
-recording: a cursor wandering a still screen for 12 s produces ONE page (the first) out of 48 samples.
-Evidence: `node scripts/ai-pdf-check.mjs`, artefact docs/qa/ai-export.pdf. Handoff under AI1 below.
-NEXT ON AI IS PO'S, NOT OURS: AI2-AI7 stay frozen until PO uploads a real take's file to an AI.
+AI1 IS SHIPPED AND EVERY GATE IS GREEN — AND IT WAS ALREADY REWORKED ONCE ON PO'S FIRST REAL TAKE.
+The export panel has a "For AI" control; it builds one PDF — an index page that BRIEFS ITS READER,
+then one frame per page, no video track. PO's first file came back with two verdicts ("ai didnt
+understood its video", "it losses way too much frames"); both are fixed and both are measured on that
+same 97 s recording: 39 frames → 96, worst gap 5.5 s → 3.75 s, whole take covered, 98 pages (the
+100-page ceiling every chat AI enforces), ~86k tokens. The cursor case still holds: a cursor
+wandering a still screen for 12 s is ONE page out of 96 samples. Evidence:
+`node scripts/ai-pdf-check.mjs`, artefact docs/qa/ai-export.pdf. TWO handoffs under AI1 below — read
+the SECOND one first, it is what the design actually is now.
+NEXT ON AI IS PO'S, NOT OURS: AI2-AI7 stay frozen until PO reports on the reworked file.
 2026-08-24, earlier (planning session): PHASE A — AI EXPORT added at the bottom of this file.
 PO: "export for ai button is highest priority now", max token cutting is the design goal, richer
 layers go to the roadmap. Spec rewritten in docs/AI_EXPORT.md.
@@ -328,10 +332,12 @@ BOTH the composite and the raw channels.
      `node scripts/oracle.mjs --engine=v2` gates the WebCodecs composite instead of the shipped one
 
 ── AWAITING PO (carried forward) ──
-  · THE FIRST REAL AI FILE (AI1, shipped 2026-08-24): record something normal, Export → "For AI",
-    upload the PDF to any AI and ask it what the recording shows. That report is the acceptance for
-    AI1 and the only thing that unfreezes AI2-AI7. A sample built by the rig is committed at
-    docs/qa/ai-export.pdf if you want to see the shape before recording anything.
+  · THE REWORKED AI FILE (AI1, second pass 2026-08-24): PO's first real take exposed both defects
+    (the file did not say what it was; it dropped the moments) and both are fixed. Re-test: export a
+    take For AI and give it to an agent for the job PO actually has — recreating a UI and its
+    animations. The rebuilt version of PO's own take is at
+    ~/Downloads/inout-20260824-183853-for-ai-v2.pdf for a side-by-side with the original file and
+    the MP4. That report is AI1's acceptance and the only thing that unfreezes AI2-AI7.
   · FIRST REAL TAKE ON THE NEW DEFAULT ENGINE (v2, flipped 2026-08-24): record something normal and
     listen/watch. Sync should be audibly better (33-48 ms vs ~60). If anything is off, `?engine=v1`
     reverts this load and localStorage['inout.capture.engine']='v1' reverts sticky.
@@ -1291,6 +1297,53 @@ NOT DONE, and none of it is in AI1's scope: DOM events (AI2 needs a capture vehi
    tested; the rig's synthetic tooltip is the only case that has exercised it).
 TOOLING: `npm run exp -- aiexport` (the rig alone) · `node scripts/ai-pdf-check.mjs` (the rig + both
    readers + the saved artefact; `--reuse=<report.json>` re-runs the reader gates with no recording).
+── HANDOFF 2026-08-24 (same session, after PO's FIRST REAL TAKE) — THE FILE WAS BOTH UNREADABLE AND
+   TOO SPARSE, AND BOTH WERE CALIBRATION, NOT DESIGN. PO exported a 97 s walkthrough of a real
+   product UI and gave it to an agent TO RECREATE THE UI AND ITS ANIMATIONS. Two verdicts came back.
+(1) "ai didnt understood its video" — the AI opened the PDF AND ASKED WHAT TO DO WITH IT. Page 1
+   opened with machine facts (`clock: recording epoch`, `keyframes are pixel-delta selected`), which
+   is a config dump, not a document. FIXED: the index now briefs its reader before it states
+   anything — what the file is, that the pages after it are frames of ONE recording in time order,
+   why the spacing is uneven, and what to do if it arrived with no instructions. Same line in the PDF
+   /Title and /Subject and in every page caption ("INOUT screen recording - frame 19 at t=12.50s of
+   97.27s"), so a page read alone still says what it belongs to. NOT a no-AI-rule violation: it
+   describes the DOCUMENT, never the recording.
+(2) "it losses way too much frames" — and the diff against the MP4 proved it: page 7 was t=12.25 s
+   with the field empty, page 8 was t=17.75 s on a different tab, so the typing, the button turning
+   active, the click and the tab transition were all inside one 5.5 s gap. THREE CAUSES, all fixed
+   and all re-measured ON THAT SAME RECORDING (the rig gained a real-file mode: drop an mp4 in
+   public/__*, `npm run exp -- aiexport '{"realOnly":true}'`; .gitignore keeps it out of the repo):
+   · A TYPED WORD IS ~15 GRID CELLS and the content threshold was 36 — set that high only to keep a
+     moving cursor out. The pointer is now MASKED OUT of the content metric (delta.pointerMask, cells
+     around where the pointer is and where it was at the reference frame), so the threshold dropped
+     to 17 cells and the cursor gate still passes: 1 page out of 96 samples of a wandering cursor.
+   · AN ANIMATION BECAME ONE PAGE, because the pace allowed one page per 1.6 s. Motion now SUSPENDS
+     the pace — while the picture keeps moving between looks, every look is a page — with two bounds
+     that matter: a burst needs TWO consecutive moving samples (one change is an event, e.g. a
+     tooltip, which keeps its close-up instead of being treated as animation) and it is capped at
+     1.2 s (a scroll is not a transition).
+   · 250 ms WAS THE FINEST ANYTHING COULD BE SEEN. Now 8 looks a second; the decoder was already
+     walking every frame (note 13) so it costs one downscale and one diff more per second.
+THE BUDGET IS NOT OURS TO PICK: the readers this file exists for cap a PDF at 100 PAGES (Claude chat
+   and API; other assistants are in the same range), so a take gets ~96 frames and the only question
+   is where they go. They go by a pace derived from what is LEFT of the take and the budget, plus a
+   burst credit that SHRINKS TO ZERO by the end — the first version of that controller spent PO's
+   take out at 84 s of 97 and the last thirteen seconds were not in the file at all.
+MEASURED ON PO'S OWN 97 s TAKE, before → after: 39 frames → 96 · worst gap 5.5 s → 3.75 s · median
+   gap 2.5 s → 1.1 s · covered to 97.0 s of 97.3 · 98 pages (under the 100 cap) · ~86k tokens ·
+   3.8 MB · built in 4.8 s (0.59× the same take's full render). The typing at 12.5 s is now four
+   frames, mid-word, with the button caught mid-transition. Rebuilt file left for PO at
+   ~/Downloads/inout-20260824-183853-for-ai-v2.pdf.
+GATE CHANGED, and it is worth knowing why: "60 s mostly-static take ≤8 pages" was DELETED. It passed
+   by summarizing a motion burst into one page, which is exactly the defect PO reported. What
+   replaced it: the file fits what a chat AI accepts (≤100 pages) · the pages go where the motion is
+   AND ARE DENSE THERE (≥12 inside a 5 s burst) · a REAL recording is covered end to end (median gap
+   ≤1.5 s, worst ≤5 s, last frame past 90 % of the take). Everything else still passes unchanged,
+   including all three cursor gates and the clock read back out of the file (max deviation 18 ms).
+STILL OPEN, honestly: a 97 s take costs ~86k tokens, which is a large but usable file; the levers if
+   PO wants it cheaper are a smaller view image (1024 px is what makes UI text legible) or a shorter
+   recording. And the 100-page ceiling means a 10-minute take gets a frame every ~6 s — for long
+   sessions the answer is not a denser file but a smaller one per topic.
 
 ## AI2. event-sidecar — the DOM events behind the pixels  [CANDIDATE — frozen until PO tests
 AI1's first real file; then also needs the PO vehicle decision below]
