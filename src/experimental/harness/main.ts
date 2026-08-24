@@ -263,6 +263,19 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'o5cut',
+    title: 'O5c — smart cut: copy the composite, re-encode only the boundaries',
+    detail:
+      'records a real take through createCaptureSession (composite and all), applies a trim-only edit whose boundaries deliberately miss the composite’s 2 s keyframe grid, and exports it both by smart cut and by the full render. Reports wall clock for each, how much of the video was copied rather than re-encoded, and a PSNR comparison of decoded frames at matching output instants — including one 50 ms after the cut, where a decoder-config mismatch would show first.',
+    run: async (args) => {
+      const { runSmartCut } = await import('../perf/smartCutRun')
+      return runSmartCut({
+        takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined,
+        cutAtFraction: typeof args?.cutAtFraction === 'number' ? args.cutAtFraction : undefined,
+      })
+    },
+  },
+  {
     id: 'p0tailraw',
     title: 'P0-tail-raw — does a RAW channel keep its ending?',
     detail:

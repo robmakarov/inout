@@ -208,7 +208,11 @@ async function main() {
       const rt = m.exportRealtimeFactor ?? 'n/a'
       console.error(
         `[${i + 1}/${cold}] ${status} sync=${sync}/${max}ms spur=${spur}dB jump=${m.maxBoundaryJump ?? 'n/a'} ` +
-          `tail=${tail}ms export=${rt}x aliased=${m.aliased ?? false} (${elapsed}ms)`,
+          `tail=${tail}ms export=${rt}x peakOut=${
+            typeof m.exportPeakOutputBytes === 'number'
+              ? `${(m.exportPeakOutputBytes / 1024 / 1024).toFixed(1)}MB`
+              : 'n/a'
+          } aliased=${m.aliased ?? false} (${elapsed}ms)`,
       )
       if (!gate.pass) {
         console.error('  failures:', gate.failures.join('; '))
@@ -236,6 +240,7 @@ async function main() {
       tailDurationDeltaMs: results.map((r) => r.gate.metrics.tailDurationDeltaMs),
       tailLastFlashToEndMs: results.map((r) => r.gate.metrics.tailLastFlashToEndMs),
       exportRealtimeFactor: results.map((r) => r.gate.metrics.exportRealtimeFactor),
+      exportPeakOutputBytes: results.map((r) => r.gate.metrics.exportPeakOutputBytes),
       port,
     }
     process.stdout.write(JSON.stringify(summary, null, 2) + '\n')

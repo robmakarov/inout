@@ -22,6 +22,15 @@
  *    last seconds — we don't do that shit". A pipeline that drops its final
  *    buffer passes every other gate in this file.
  *  - export throughput ≥ MIN_EXPORT_REALTIME (recorded ms per ms of export)
+ *  - EXPORT PEAK MEMORY (O8, remainder): the muxer must never hold more than
+ *    MAX_EXPORT_PEAK_OUTPUT_BYTES of OUTPUT at once. O1 moved the muxer onto a
+ *    chunked OPFS scratch and measured the result — 4.0 MB held against
+ *    253.4 MB for the old BufferTarget on a 30-minute take — but nothing
+ *    enforced it afterwards, and the failure it guards against is invisible on
+ *    a short take: putting the whole file back in one ArrayBuffer costs
+ *    nothing at 6 s and OOMs the tab at 30 min. The bound is the scratch's own
+ *    chunk size with headroom, so it fails the moment the streaming target is
+ *    bypassed rather than when a user's machine runs out.
  */
 
 const MAX_SYNC_ABS_MS = 60
@@ -34,6 +43,13 @@ const MAX_TAIL_LOSS_MS = 400
 const MAX_LAST_EVENT_GAP_MS = 2000
 /** Export must not be slower than this multiple of realtime. */
 const MIN_EXPORT_REALTIME = 1.0
+/**
+ * Output bytes the muxer may hold at once. compose/scratch.ts coalesces writes
+ * into 4 MB chunks, so a healthy streamed export peaks near that; 12 MB is
+ * three chunks of headroom and still two orders of magnitude below what a
+ * whole-file buffer reaches on a long take.
+ */
+const MAX_EXPORT_PEAK_OUTPUT_BYTES = 12 * 1024 * 1024
 const MAX_BOUNDARY_JUMP = 0.1
 const MAX_SPUR_DB = -40
 
@@ -70,6 +86,15 @@ export function gateOracleReport(report) {
       } else if (gap > MAX_LAST_EVENT_GAP_MS) {
         failures.push(`tail: last ${label} is ${gap}ms before the end (> ${MAX_LAST_EVENT_GAP_MS}ms)`)
       }
+    }
+  }
+  if (typeof report.exportPeakOutputBytes === 'number') {
+    metrics.exportPeakOutputBytes = report.exportPeakOutputBytes
+    if (report.exportPeakOutputBytes > MAX_EXPORT_PEAK_OUTPUT_BYTES) {
+      failures.push(
+        `export held ${(report.exportPeakOutputBytes / 1024 / 1024).toFixed(1)} MB of output in memory ` +
+          `(> ${(MAX_EXPORT_PEAK_OUTPUT_BYTES / 1024 / 1024).toFixed(0)} MB) — the streaming scratch was bypassed`,
+      )
     }
   }
   if (typeof report.exportRealtimeFactor === 'number') {

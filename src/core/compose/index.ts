@@ -1,3 +1,5 @@
 export { exportRecording, measureRecordingMakeup } from './pipeline'
 export { exportInstant } from './instant'
+export { exportSmartCut, getLastSmartCutStats, isPixelDefaultEdit, SmartCutUnavailable } from './smartCut'
+export { smartCutEnabled, setSmartCutEnabled } from './smartCutFlag'
 export { mixGainForChannels, softLimitSample } from './audio'

@@ -29,7 +29,16 @@ several ids, take the first and tell PO to open parallel sessions for the rest. 
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
 ── READY MAP — current truth, updated on every merge ──
-Last update 2026-08-24 (SIXTH session, "go O4"). Everything merged and pushed to origin/main.
+Last update 2026-08-24 (SEVENTH session, PO: "roadmap all O and F in one session"). Everything merged.
+WHAT THAT SESSION ACTUALLY DID, because "all O and F" was not achievable and saying so is the point:
+it took O5 (the heaviest unblocked task, and the one every other O depended on) end to end, and closed
+O8's export peak-memory band on the way. O5's premise turned out to be false, which cost the session
+its budget and bought the roadmap something better than a feature — see the O5 handoff: the render is
+NOT badly pipelined, mediabunny already queues the encoder 4 deep, and the export's floor is the cost
+of decoding every frame. That verdict retires the "multi-× realtime from pipelining" idea for good and
+promotes smart cut from a nicety to the only lever, which is now built and measured at 4.3-5.6×.
+NOT STARTED, and each still costs a session: O3b · O4-polish · O6 · O9 · O10 · F6 · F7c · F8.
+Everything merged and pushed to origin/main.
 Merged 2026-08-23/24 across six sessions: O1 · O2 · O3a · O7 · O4 step1 · O4b · F1 · F7 · O8(partial)
 · P2 · P3 · F4 · O4 step2 (DORMANT) · a P0 mic-hang fix (PO-verified) · O11a · O11b · O11c · F7b · F3
 · F5a · P0-tail · F2 · the O4 RE-DIAGNOSIS · P0-TAIL-RAW · F5B · F2B · P1 (code half) · the O4
@@ -45,12 +54,23 @@ START HERE IF YOU ARE FRESH:
      now v2 (worker + WebCodecs) — anything touching capture/* keeps BOTH engines green.
 
 READY NOW — parallel-safe, any subset concurrently (one session each):
-  O5   export-engine-v2            [heavy]   UNBLOCKED by the O4 flip — the capture encoder now has
-                                             a 2 s keyframe cadence, which is the smart-cut
-                                             prerequisite. See the task.
+  O5-flip  smart cut on by default [light]   THE ONE THING O5 LEFT DELIBERATELY UNDONE, and it is
+                                             small: route the oracle's non-frame-aligned trim through
+                                             the editor's export decision so smart cut runs UNDER the
+                                             sync band, confirm 3/3 green, then flip the fallback in
+                                             compose/smartCutFlag.ts to true. Everything else about it
+                                             is measured (4.3-5.6×, ≤1 s gate met, 90-94 % of frames
+                                             copied, picture matched at 37.5-42.8 dB). Until then a
+                                             cut export still takes the full render.
+  O5e  VFR timestamps              [medium]  the one part of O5 never attempted: preserve source
+                                             presentation timestamps from frame-driven takes instead
+                                             of CFR resampling. CFR 30 stays the default.
   O6   native-res-capture          [medium]  UNBLOCKED — and the 4K lever is named: the worker's GL
                                              texture upload of a 4K frame (~35.6 ms), WebGPU
                                              importExternalTexture is the remedy to probe.
+  O9   text-perfect                [medium]  UNBLOCKED by O5 — the render owns its encoder config
+                                             (codecs.ts EncoderOptions) and the ladder seam is in.
+  O8b  capture fps band under load [medium]  what is left of O8 after the peak-memory band landed.
   F6   pause-retake                [medium]  UNBLOCKED — build segments on the v2 engine once.
   F8   nle-scrub                   [medium]  UNBLOCKED — the fMP4 composite has a keyframe index.
   O3b  single-generation export    [medium]  UNBLOCKED — v2 owns encoder + muxer, both halves of
@@ -83,15 +103,22 @@ off loses whatever the encoder had not caught up on, exactly the defect P0-tail-
 of a take. It needs onTrackEnded to become async (throttle, drain, then stop), which is the same
 stop-path surgery and wants its own session. Under load it is the same 200-1300 ms.
 
-CONFLICT RULES (all of capture/* is now shared by TWO engines — keep both working):
+CONFLICT RULES (capture/* is shared by TWO capture engines and compose/* by THREE export paths):
+· THE EXPORT HAS THREE PATHS AND EditorScreen PICKS BETWEEN THEM IN ORDER: instant (unedited +
+  composite + default tier → packet copy), smart cut (pixel-default edit + composite + default tier +
+  the flag → copy most packets, re-encode the cut boundaries), full render (everything else, and the
+  fallback for both). Anything touching compose/* has to say which of the three it changed. The render
+  itself lives in render.ts and runs in a WORKER by default — nothing in it may touch a Window-only
+  global (no AudioBuffer, no DOM), or the worker dies and every export silently takes the slow lane.
 · The composite geometry lives in THREE places that must agree — compose/layout.ts, capture/
   compositor.worker.ts and capture/liveComposite.ts. cameraTrack.ts owns the PiP rect; F3's frame is
   an EDIT (render path only), so the two live composites deliberately do not know about it.
 · F7c touches compose/quality.ts and the sizeProbe spike, which nothing else does.
 · Any capture/* change must run BOTH `npm run oracle` and `npm run oracle --engine=v2`, and any
   change to the STOP path must run `npm run oracle:load` (both phases) and `npm run exp -- armcancel`.
-BLOCKED (dep → unblocks): O9←O5 · O8 remainder←O5 · P4←O5 · P5b←P5a · P6←P5b · P7←P4 ·
-O10 (AEC part only)←P4. (O4's flip on 2026-08-24 unblocked O5, O6, F6, F8 and O3b — all READY.)
+BLOCKED (dep → unblocks): P4←O5 (now unblocked — O5 is done) · P5b←P5a · P6←P5b · P7←P4 ·
+O10 (AEC part only)←P4. (O4's flip unblocked O5/O6/F6/F8/O3b; O5's completion on 2026-08-24 unblocks
+O9, the O8 remainder and P4. O10 (a)(b)(c) never needed anything and has always been READY.)
 REJECTED (do not resurrect): pre-roll rolling buffer — no capture before the record press, ever
 (PO 2026-08-22; extends "no idle device access"). MP4 MediaRecorder capture — measured 2026-08-23,
 Chrome does not stream it and a tab kill loses the whole take (O3a). Ending a raw channel's TRACK to
@@ -167,6 +194,21 @@ BOTH the composite and the raw channels.
    TO main. Sessions that cannot merge inside one turn should work on main and carry the reasoning in
    the commit message (see the F3 record commit for the shape).
 
+13. THE EXPORT'S FLOOR IS DECODE, NOT SCHEDULING — measured, and it retires a whole family of ideas.
+   O5 assumed the render loop was badly overlapped. It is not: mediabunny's encoder wrapper already
+   keeps 4 frames in the VideoEncoder queue, and the expensive part of "decode" is JS on the same
+   thread, so it cannot hide behind the draw either. 12 s 1080p edited take: decode-wait 1295 ms,
+   draw 450 ms, encode-wait 28 ms — against 962 ms to decode the same frames with no draw and no
+   encode at all. An encode lookahead window AND a decoder prefetch pump were both built, measured,
+   and deleted for buying nothing. Do not propose "pipeline the export" again without first running
+   `npm run exp -- o5` and beating the decode floor it prints. The way past the floor is to decode
+   FEWER frames, which is smart cut.
+   Two traps in the same area, both paid for already: (a) the FIRST lane of any export matrix pays the
+   codec cold start — warm with a discarded export and run both orders, or you will report the second
+   engine as faster whichever one it is; (b) compose/scratch.ts deletes the previous finished export
+   when a new one finishes, so an earlier ExportResult.blob goes dead and reads as a bare
+   `TypeError: network error`. A rig comparing several files must copy each one into memory first.
+
 12. THE UI RIG SERVES dist/, AND DOES NOT BUILD IT. `scripts/ui-shot.mjs` runs `vite preview`, so a
    flow that "does not work" may simply be yesterday's bundle. Run `npm run build` first. The same
    file is also where a synthetic drag goes wrong: `startDrag` listens on the ELEMENT and leans on
@@ -175,6 +217,15 @@ BOTH the composite and the raw channels.
 
 ── TOOLING (built 2026-08-23; all spawn their own ephemeral server + throwaway Chrome profile) ──
   npm run exp -- <id> [json] [--rss] [--query=k=v] [--ua=...]   generic experiment driver
+     o5        THE EXPORT ENGINE: worker vs main-thread render on one fixture, warmed and run in BOTH
+               orders, with the per-stage split (decode / draw / encode-wait / finalize) and a
+               decode-ONLY floor for the same frames. The floor is the number that matters — it is
+               what says whether any scheduling change can pay at all.
+     o5cut     SMART CUT vs the full render on a real take with a trim-only edit: wall clock, how much
+               of the video was copied rather than re-encoded, and PSNR of decoded frames at matching
+               output instants — plus a CONTROL comparing the shipped INSTANT path with the same
+               render, which is what proves the one-frame offset belongs to the composite and not to
+               smart cut.
      o1        export memory / parity / orphan sweep         o2       capture-loudness vs probe
      o3a       MediaRecorder container + mid-take salvage    o4step1  sync residual decomposition
      audiolat  measured-audio anchor latency (loopback)      armcancel arming cancel + device release
@@ -482,6 +533,78 @@ working; abort works mid-pipeline.
 GATES: 60 s 1080p30 edited synthetic take ≥5× realtime on the TD machine (report ×; stretch 8×) ·
 trim-only edit of a 30 s take ≤1 s · zero main-thread long tasks >50 ms during export (trace) · every
 ladder rung's file plays (Chrome + Safari where the codec applies) · fidelity+sync green.
+── HANDOFF 2026-08-24 (SEVENTH session, "roadmap all O and F") — (a)(c)(d) SHIPPED, (b) MEASURED AND
+   REJECTED, (e) NOT DONE. THE TASK'S CENTRAL PREMISE WAS FALSE AND THE STAGE SPLIT IS WHY.
+O5 was written on "the render is main-thread and strictly serial (decode awaits draw awaits encode)".
+   render.ts now counts every stage (RenderStats, one console line per export, `npm run exp -- o5`).
+   12 s 1080p edited take, main-thread lane: decode-wait 1295 ms · draw 450 ms · ENCODE-WAIT 28 ms ·
+   finalize 65 ms. Decode ALONE for the same frames, no draw and no encode: 962 ms.
+   So (i) the encode was never the stall — mediabunny's VideoEncoderWrapper already keeps 4 frames in
+   the VideoEncoder queue and returns before they are encoded (read the source: `if
+   (encoder.encodeQueueSize >= 4) await dequeue`), and (ii) the decode cannot hide behind the draw,
+   because the expensive part of "decode" is JS on the same thread. A lookahead window on the encode
+   AND a prefetch pump on the decoder were both built, measured, and REMOVED for changing nothing.
+   The render is already overlapped as far as one JS thread allows; its floor is the cost of decoding
+   every frame. That is what makes (c) the whole task rather than a nicety.
+(a) WORKER — SHIPPED AND DEFAULT. compose/render.ts (the render, portable) + export.worker.ts +
+   pipeline.ts as a facade that falls back to the SAME code in-thread (one-shot, and only while the
+   worker has produced no output). Getting there meant porting the certified audio path off Web Audio,
+   which is [Exposed=Window]: AudioBufferSink → AudioSampleSink and AudioBufferSource →
+   AudioSampleSource, same PCM, one shared makeStereoSample builder for both export paths. THE
+   FIDELITY ORACLE IS THE PROOF and it is green (THD −77.4 dB, IMD −57.6, separation 53.4 dB,
+   limiterHits 0).
+   MEASURED, warmed, both orders (A,B,B,A — the first version of this rig ran worker-first once and
+   reported the worker 35 % slower, which was note 10's fifth instance):
+     60 s take: worker 6.00× realtime vs main 5.93× — THE ≥5× GATE IS MET, engines at parity.
+     12 s take: worker 5.29× vs main 5.56×; fixed worker costs (draw ~17 % slower in a worker,
+       finalize ~2× slower through the nested OPFS writer) amortize away by 60 s.
+     ALL FOUR LANES PRODUCE BYTE-IDENTICAL FILES — the strongest evidence the worker render IS the
+       in-thread render.
+   THE LONG-TASK GATE CANNOT FAIL AND THEREFORE CANNOT PASS: both engines report ZERO long tasks,
+   because the in-thread render awaits a decoded sample every frame and an await ends the task. It
+   never blocks 50 ms at a stretch; it just never gives the thread back for long. The rig measures
+   SCHEDULING LATENESS instead (a 16 ms ticker, how much of its 60 Hz it does not get): worker 31-48 ms
+   vs main 77-104 ms at 12 s (2.4× freer), but only 184 vs 217 ms at 60 s. Honest reading: the benefit
+   is real and smaller than assumed, and this rig's main thread is otherwise IDLE, so it understates
+   the case that matters (an editor UI competing with the render).
+(b) PIPELINING — REJECTED ON EVIDENCE, see above. Both stages were already pipelined by the library.
+(c) SMART CUT — SHIPPED, MERGED, DEFAULT OFF behind `?smartcut=1` / localStorage (compose/smartCut.ts,
+   smartCutFlag.ts, wired into EditorScreen between the instant path and the render). A trim-only edit
+   changes no pixel, so the composite already holds what the output wants: copy its packets, re-encode
+   only [cut → next keyframe]. Both halves share ONE avcC, so the boundary encoder's emitted decoder
+   description is COMPARED BYTE FOR BYTE with the composite's before a single packet is written, and a
+   mismatch throws → the caller renders. We can be strict because the capture encoder is ours (v2).
+   MEASURED (`npm run exp -- o5cut`, 30 s take, trim-only, both boundaries off the 2 s keyframe grid,
+   five runs): 669-944 ms against 3718-3780 ms for the render — 4.3-5.6×, and THE ≤1 s GATE IS MET.
+   90-94 % of frames copied (44-97 re-encoded of 720). Picture matches the render at 37.5-42.8 dB,
+   which is the ceiling for two independent encodes of one frame.
+   THE ONE-FRAME OFFSET IS NOT OURS, AND THE CONTROL IS HOW WE KNOW. Smart cut sits one frame ahead of
+   the render; the same rig's control shows the SHIPPED INSTANT PATH sitting one frame ahead of the
+   same render too (41.8 and 38.4 dB at +1, with no smart cut anywhere in that comparison). The offset
+   belongs to the composite — composed from source frames as they arrive, while the render samples the
+   raw channel. Smart cut inherits it and adds nothing.
+   WHY IT IS STILL OFF BY DEFAULT: no gate can see it. The oracle's non-frame-aligned trim goes
+   through exportRecording directly, so it would pass while never touching smart cut. Same call as O4's
+   dormant flip, for the same reason. TO FLIP: route the oracle's trim case through the editor's export
+   decision, confirm 3/3 green under the sync band, change the fallback in smartCutFlag.ts to true.
+(d) CODEC LADDER — SEAM SHIPPED, DEFAULT UNCHANGED. codecs.ts FALLBACK_CHAINS now runs av1-hw →
+   hevc-hw → avc → avc-opus → vp9-webm, with the rungs above the avc floor UNREACHABLE unless a caller
+   passes `allowAboveFloor` (nothing does yet). Above the floor a rung must also probe as HARDWARE
+   (VideoEncoder.isConfigSupported, a real probe not a table) — a software hevc encode is slower than
+   the avc it replaces. The certification tag carries the rung. This is O11d's standing decision made
+   executable: the file is blind-shared and no probe can ask the recipient what it can play, so the
+   rung only flips where the recipient is known (raw channels, the cloud player).
+   Also shipped: `hardwareAcceleration: 'prefer-hardware'` on the render encoder (a hint; a platform
+   without one ignores it), latencyMode left at 'quality' deliberately — an export has no clock to keep
+   and must not drop frames.
+(e) VFR — NOT DONE, untouched.
+FOUND WHILE DOING IT, both fixed: (1) moving the export into a worker made getLastScratchStats()
+   main-thread-blind, so O8's new peak-memory band read `n/a` on its first run — the gate caught its
+   own prerequisite; the worker now forwards both RenderStats and ScratchStats and pipeline.ts
+   republishes them. (2) compose/scratch.ts deletes the previous finished export when a new one
+   finishes (correct: one result is live at a time), which invalidates any earlier ExportResult.blob
+   and surfaces as a bare `TypeError: network error`. It cost this session two rig debugging rounds;
+   smartCutRun.ts now detaches every file into memory as it is produced.
 
 ## O6. native-res-capture — lift the ceiling the right way  [P2, after O4]
 Why: CAPTURE_MAX_* (1080p30) was correct for the old engine; the product bar is "no visual
@@ -508,9 +631,14 @@ end) proven red by injection (900 ms chop → −822 ms → FAIL); export throug
 (currently 5.0-5.2×), proven red at 0.7×; certified-export metadata in every file's comment tag (path,
 output settings, loudness makeup/p90/peak/source, stalled+missing channels, cut count, CI sync bound),
 probed back out of real exports on both paths and all three tiers.
-REMAINING (lands with O4/O5 as specced): capture delivered-fps band under the synthetic 4K load; export
-peak-memory band (the number already exists — compose/scratch.ts maxOutstandingBytes — it needs a
-threshold and a slot in the gate).
+EXPORT PEAK-MEMORY BAND — DONE 2026-08-24 (seventh session). scripts/oracle-gate.mjs now fails when
+the muxer holds more than 12 MB of OUTPUT at once (compose/scratch.ts coalesces at 4 MB, so that is
+three chunks of headroom); oracle.mjs prints it as `peakOut=`. Reads 0.1 MB on the 6 s oracle take.
+This is the band O1's claim never had: putting the whole file back in one ArrayBuffer costs nothing at
+6 s and OOMs the tab at 30 min, so only a band that fails on a SHORT take is worth anything. Its first
+run read `n/a` and that was real — the export had just moved into a worker and getLastScratchStats()
+was main-thread-blind; the worker now forwards the stats (see O5's handoff).
+REMAINING: capture delivered-fps band under the synthetic 4K load (still wants O6's rig shape).
 
 ## O9. text-perfect — screen text without smear  [P2, after O4+O5; PO: "text is important"]
 Why: 4:2:0 chroma subsampling + generic encoder tuning fringes and smears colored text — the visible

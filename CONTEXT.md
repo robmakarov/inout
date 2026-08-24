@@ -121,7 +121,8 @@ what a fresh session must know first, and an index of the measurement tooling.
 **Done:** exports stream to disk · capture-time loudness · content hints + full-size camera · bundle
 split · sync root-cause + honest gate · quality steps · mid-take cuts · tail/throughput bands +
 certified exports · PWA install · movable timed camera + edit persistence · Yandex/RU pack part 1 ·
-WebCodecs capture engine (merged dormant, see below) · the bits audit and the two size levers it
+WebCodecs capture engine (now the default, see below) · the export engine off the main thread and
+smart-cut trimming (O5, see below) · the bits audit and the two size levers it
 priced · background frame · silence tightening · timed zoom/pan · **the tail fix, now on both files a
 take produces** · **per-clip speed** · **draggable zoom markers** · **the engine × OS capability
 matrix**.
@@ -136,21 +137,35 @@ frame a second instead — nothing new to compress, everything already queued st
 path also grew a deadline everywhere it did not have one: a take whose recorders all refuse to answer
 now comes back in five seconds with the files intact, where it used to hang forever.
 
-**O4, the WebCodecs engine: built, measured, switched off — and we now know we were blaming the wrong
-thing.** Capture *can* run in a worker feeding our own encoder and fragmented-MP4 muxer, and on every
-axis but one it is better: capture leaves the main thread entirely (131 ms of blocking work per take
-becomes zero), sync is tighter (40 ms vs 59), and because it owns the encoder it can drain it at stop
-instead of asking a black box to stop. The one bad axis is throughput — a few frames a second at
-1080p where the old path does 30 — and it was blamed first on the browser's encoder and then on how
-we feed it. **Both are now disproven, and the search has one file left in it.** We built a test rig
-that reproduces the new engine's entire pipeline — the same two camera and screen feeds handed across
-to the same background worker, the same compositor, the same picture-in-picture, the same timestamps,
-the same file writer, over a full ten-second take — and it runs at sixty frames a second with nothing
-dropped. The real engine, doing what looks like the same work, is fifty times slower. Eight theories
-are now buried with numbers next to them so nobody spends another day on any of them. **The keystone
-is still only half placed** — smart-cut exports, native-resolution capture, pause/retake and
-frame-exact scrubbing wait on it — but what is left is a difference between two files of our own,
-not a limit of the browser.
+**O4, the WebCodecs engine: it is now how you record, and the "wall" was our own stopwatch.** For
+three sessions the new engine looked like it could only manage a few frames a second where the old one
+did thirty, and the search moved from the browser's encoder, to how we fed it, to a difference between
+two of our own files. None of them was it. **The first video encoder a browser creates after launch
+takes several seconds to start up**, every test take fitted entirely inside that window, and the
+engine's own watchdog was killing takes mid-startup — so a one-off delay read as a permanent ceiling.
+Warmed up, the new engine wins on every axis measured: 28.4 frames a second against 29.3, no blocking
+work on the main thread at all (the old path spends 198 ms per take), lower CPU (peak 127 % against
+196 %), tighter sync (33–48 ms against about 60), and because it owns the encoder it can drain it at
+the stop instead of asking a black box to stop. The app now warms the encoder up when it loads, so
+your first take after opening the browser is whole. **It is the default as of 2026-08-24**, with the
+old path kept alive underneath it in three ways — browsers that cannot run it, a failure at start, and
+a take that genuinely runs slow mid-recording — plus `?engine=v1` to force the old one outright.
+
+**O5, the export engine: what we set out to build was already there, and measuring that is what paid.**
+The plan was to overlap the export's stages, which were assumed to run one after another. They do not:
+the library we use already keeps the encoder four frames ahead, and the decoding cannot be hidden
+behind the drawing because both are the same thread. Two versions of the intended speed-up were built,
+measured, and deleted for buying nothing. What the measurement *did* give us is the number nobody had:
+**the export's floor is what it costs to decode every frame** — two thirds of the whole job — and the
+only way past a floor like that is to decode fewer frames. So the effort went there instead, and the
+result is the one people will feel: **trimming a take no longer means re-making the whole video.**
+Cutting changes *which* parts you keep, not what any of them looks like, so the recording's own
+compressed frames are copied straight through and only the few frames either side of each cut are
+re-made. A thirty-second take with two cuts now exports in under a second instead of nearly four.
+It is built, merged and measured, but **switched off by default** until an automatic test watches it —
+the same discipline the capture engine got, and the reason that one is now trustworthy enough to be the
+default. The export also moved off the main thread, so a long export no longer competes with the
+editor for the same thread; it produces a byte-for-byte identical file either way.
 
 **Shipped alongside it:** the **timed movable camera** — drag the picture-in-picture on the stage and
 the export moves it at the moment you moved it (PO's emphasized feature). And, found while building it,
@@ -190,9 +205,21 @@ a take with cuts in it was exporting **9.5 dB quieter than it should**, and the 
 spending itself hiding that; and a whole-take speed change could be silently discarded when the edit
 was saved.
 
-**Runs in parallel now:** the O4 hunt (now a two-file diff) · the size-number probe, attempt 5 · the
-codec ladder and the real Firefox run, both waiting on one install (below) · the iOS ScreenCaptureKit
-spike (time-sensitive: iOS 27 ships ~Sept 2026, and it needs a device we do not have).
+**Asked for on 2026-08-24: "roadmap all O and F in one session" — and it was not achievable, so here
+is what happened instead.** The export engine (O5) was the heaviest unfinished piece and everything
+else in the optimisation list depended on it, so it was taken end to end. Disproving its central
+assumption *was* the work, and it consumed the session. What that bought is worth more than a feature:
+a whole family of "make the export faster by overlapping things" ideas is now closed with numbers
+against it, and the one lever that does work is built. **Eight tasks were not started** — single-pass
+export, the capture-engine polish list, native-resolution capture, crisp screen text, the audio depth
+work, pause/retake, the size number's fifth attempt, and frame-exact scrubbing. Each still costs a
+session, and `.ai/TASKS` says which are unblocked and which can run at the same time.
+
+**Runs in parallel now:** turning smart-cut trimming on by default (small, needs one test wired) ·
+native-resolution capture · crisp screen text · pause/retake · frame-exact scrubbing · the size-number
+probe, attempt 5 · the codec ladder and the real Firefox run, both waiting on one install (below) ·
+the iOS ScreenCaptureKit spike (time-sensitive: iOS 27 ships ~Sept 2026, and it needs a device we do
+not have).
 
 **Waiting on PO:** approve one dependency install — `npm i -D playwright && npx playwright install
 firefox` — which unblocks both the real Firefox run and the codec ladder that needs three engines to

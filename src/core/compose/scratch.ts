@@ -40,6 +40,18 @@ export function getLastScratchStats(): ScratchStats | null {
   return lastStats
 }
 
+/**
+ * Publish stats measured somewhere else — specifically, in the export worker
+ * (O5a). The render moved off the main thread and this module went with it, so
+ * every main-thread caller of getLastScratchStats() started reading null: the
+ * O8 peak-memory band read `n/a` on its first run and that is how this was
+ * found. pipeline.ts forwards the worker's stats through here so the question
+ * "how much output did the muxer hold" has one answer wherever it is asked.
+ */
+export function setLastScratchStats(s: ScratchStats | null): void {
+  lastStats = s
+}
+
 export interface ScratchStats {
   bytesWritten: number
   /** High-water of output bytes held in memory at once — the O1 claim, measured. */

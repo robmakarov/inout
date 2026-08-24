@@ -1,118 +1,39 @@
+/**
+ * exportRecording — the public entry to the certified render (task O5a).
+ *
+ * The render itself moved to render.ts so a worker can import it. What is left
+ * here is the choice of WHERE it runs, and the frozen rule decides the shape:
+ * the worker is the fast path, the in-thread render is the fallback, and the
+ * fallback is the SAME CODE rather than a second implementation that could
+ * drift. A browser without module workers, a worker that fails to construct,
+ * or a worker that dies mid-export all land on the in-thread render with the
+ * behaviour it has had since O1 — including its 8-frame yields, which exist
+ * only for that case.
+ *
+ * ONE-SHOT FALLBACK, AND ONLY BEFORE ANY OUTPUT: a worker failure is retried
+ * in-thread only if the worker never reported progress past 'preparing'. Past
+ * that it has already written to the export scratch, and re-running would
+ * leave two files racing for the same result — the scratch's own discard()
+ * handles the dead one, and the error is surfaced instead.
+ */
+import type { ExportOptions, ExportProgress, ExportResult } from '@core/types'
+import { clampEditState, defaultEditState, outputDurationMs, isDefaultEdit } from '@core/timeline'
 import {
-  AudioBufferSource,
-  BufferTarget,
-  CanvasSource,
-  Output,
-  type VideoSample,
-} from 'mediabunny'
-import { blobStore } from '@core/store'
-import {
-  channelSourceTimeAt,
-  clampEditState,
-  defaultEditState,
-  hasEnabledVideo,
-  isDefaultEdit,
-  keptSegments,
-  segmentOutputMs,
-  segmentSpeed,
-  outputDurationMs,
-  outputToRecordingMs,
-  segmentJoinsMs,
-} from '@core/timeline'
-import {
-  DEFAULT_EXPORT_SETTINGS,
-  type ChannelRecording,
-  type EditState,
-  type ExportOptions,
-  type ExportProgress,
-  type ExportResult,
-} from '@core/types'
-import {
+  busGainFor,
   loudnessFromCaptureStats,
   makeupGainForLoudness,
   measureMixLoudness,
-  busGainFor,
   mixGainForChannels,
   openAudioMixers,
-  type MixSource,
-  softLimitSample,
 } from './audio'
-import {
-  AUDIO_BITRATE,
-  AUDIO_CHANNEL_COUNT,
-  AUDIO_SAMPLE_RATE,
-  KEYFRAME_INTERVAL_SEC,
-  VIDEO_BITRATE,
-  pickEncodingTarget,
-} from './codecs'
-import { BitsAudit, formatBits } from './bits'
-import { drawVideoFrame, type FrameCanvas } from './layout'
-import { cameraPoseAt, cameraTrackIsActive, viewportAt, viewportTrackIsActive } from '@core/timeline'
-import { buildCertification, certificationComment } from './certify'
-import { createExportScratch, type ExportScratch } from './scratch'
-import { collectPeaks, createPeakBuffer, createWaveformRenderer } from './waveform'
-import { openVideoChannel, type VideoChannelReader } from './video'
+import { AUDIO_SAMPLE_RATE } from './codecs'
+import { getLastRenderStats, renderExport, setLastRenderStats } from './render'
+import { setLastScratchStats } from './scratch'
+import type { ExportWorkerIn, ExportWorkerOut } from './export.worker'
 
-const YIELD_EVERY_FRAMES = 8
-/**
- * Half-width of the fade applied at every cut join (F1). The two sides of a
- * join are unrelated audio, so butting them together is a step discontinuity —
- * a click. Ramping to zero and back over a few ms costs nothing audible and
- * makes a join click-free regardless of what the two sides contain.
- */
-const JOIN_FADE_MS = 3
+/** Yields the main-thread render keeps: it shares a thread with the UI. */
+const MAIN_THREAD_YIELD_EVERY_FRAMES = 8
 
-const yieldToUi = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
-
-interface ActiveWindow {
-  /** [outStartMs, outEndMs) — where the channel is active on the output timeline. */
-  outStartMs: number
-  outEndMs: number
-  /** Channel-local end of the kept region, ms. */
-  localEndMs: number
-  /** channel-local ms = output ms + this. Differs per kept segment. Only
-   *  meaningful at speed 1 — a sped span is not an affine shift of output time
-   *  onto source time with slope 1, and its audio goes through SpeedSpanMixer. */
-  localOffsetMs: number
-}
-
-/**
- * Interval form of the types.ts time model (per-frame lookups use
- * channelSourceTimeAt). One entry per KEPT SEGMENT the channel overlaps: with
- * mid-take cuts (F1) a channel's material is no longer one contiguous span of
- * the output, and each piece maps to source with its own offset.
- */
-function activeOutputWindowsMs(edit: EditState, channel: ChannelRecording): ActiveWindow[] {
-  const ce = edit.channels.find((c) => c.channelId === channel.id)
-  if (!ce || !ce.enabled) return []
-  const localStartMs = Math.max(0, ce.trimStartMs)
-  const localEndMs = Math.min(channel.durationMs, ce.trimEndMs)
-  // The channel's kept material on the RECORDING timeline.
-  const recStart = channel.startOffsetMs + localStartMs
-  const recEnd = channel.startOffsetMs + localEndMs
-  const out: ActiveWindow[] = []
-  let outCursor = 0
-  for (const seg of keptSegments(edit)) {
-    const speed = segmentSpeed(seg)
-    const segOutLen = segmentOutputMs(seg)
-    const from = Math.max(recStart, seg.startMs)
-    const to = Math.min(recEnd, seg.endMs)
-    if (to > from) {
-      out.push({
-        outStartMs: outCursor + (from - seg.startMs) / speed,
-        outEndMs: outCursor + (to - seg.startMs) / speed,
-        localEndMs,
-        // localSec = outSec + localOffsetSec, per segment.
-        localOffsetMs: seg.startMs - outCursor - channel.startOffsetMs,
-      })
-    }
-    outCursor += segOutLen
-  }
-  return out
-}
-
-/** Open a mixer per enabled audio channel (used for both the analysis pre-pass
- * and the real render — kept identical so the measured peak matches the mix). */
 /**
  * Loudness makeup the export will apply to this recording (default edit) —
  * used by the editor preview for parity: what you hear while editing is the
@@ -155,342 +76,103 @@ export async function measureRecordingMakeup(
   }
 }
 
-function exportFileName(createdAt: number, fileExtension: string): string {
-  const d = new Date(createdAt)
-  const p = (n: number) => String(n).padStart(2, '0')
-  const date = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`
-  const time = `${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
-  return `inout-${date}-${time}${fileExtension}`
+/** Escape hatch and A/B lever: forces the in-thread render (evidence runs). */
+let workerEnabled = true
+export function setExportWorkerEnabled(value: boolean): void {
+  workerEnabled = value
+}
+
+function canUseExportWorker(): boolean {
+  return workerEnabled && typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined'
 }
 
 export async function exportRecording(opts: ExportOptions): Promise<ExportResult> {
-  const { recording, edit, settings = DEFAULT_EXPORT_SETTINGS, onProgress, signal } = opts
-  const { width, height, fps } = settings
-  const videoBitrate = settings.videoBitrate ?? VIDEO_BITRATE
-  const gopSec = settings.keyFrameIntervalSec ?? KEYFRAME_INTERVAL_SEC
-
-  const report = (phase: ExportProgress['phase'], ratio: number): void => {
-    onProgress?.({ phase, ratio: Math.min(1, Math.max(0, ratio)) })
-  }
-  const throwIfAborted = (): void => {
-    if (signal?.aborted) throw new DOMException('Export aborted', 'AbortError')
-  }
-
-  report('preparing', 0)
-  throwIfAborted()
-
-  const durationMs = outputDurationMs(edit)
-  if (durationMs <= 0) throw new Error('Export window is empty')
-  const durationSec = durationMs / 1000
-
-  const waveformMode = !hasEnabledVideo(recording, edit)
-  const videoReaders: VideoChannelReader[] = []
-  const audioMixers: MixSource[] = []
-  let output: Output | null = null
-  let scratch: ExportScratch | null = null
-  let certified: {
-    makeup: number
-    loudRms: number
-    peak: number
-    fromCaptureStats: boolean
-  } | null = null
-
-  try {
-    for (const channel of recording.channels) {
-      if (channel.media !== 'video' || waveformMode) continue
-      throwIfAborted()
-      // Video is sampled per frame through channelSourceTimeAt, which already
-      // understands cuts — the reader only needs the channel's last kept
-      // source instant, which is the same across segments.
-      const windows = activeOutputWindowsMs(edit, channel)
-      if (windows.length === 0) continue
-      const blob = await blobStore.read(channel.blobKey)
-      const reader = await openVideoChannel(
-        blob,
-        channel.id,
-        channel.kind,
-        windows[windows.length - 1]!.localEndMs / 1000,
-      )
-      if (reader) videoReaders.push(reader)
-    }
-
-    audioMixers.push(...(await openAudioMixers(recording, edit, throwIfAborted)))
-    const needAudio = audioMixers.length > 0
-    const totalAudioFrames = Math.round(durationSec * AUDIO_SAMPLE_RATE)
-    // Headroom for the render sum: a single source stays full-scale (gain 1,
-    // never limited); multiple sources (mic + system audio) mix equal-power so
-    // their sum does not clip into softLimitSample. Unity summing here was the
-    // pervasive-noise cause after the composite export path was removed.
-    const baseGain = busGainFor(audioMixers)
-    for (const m of audioMixers) m.gain = baseGain
-
-    // Loudness normalize: quiet captures (real case: PO's take had voice at
-    // −25 dB window-RMS under a 0.77 transient peak) export near-inaudible.
-    // Measure SPEECH loudness (p90 window RMS) on a throwaway mixer set — the
-    // render streams forward and can't rewind — and drive it to target. Peak
-    // targeting was defeated by a single mic bump; percentile loudness isn't.
-    // No-op for a healthy mix, so the fidelity oracle is untouched.
-    if (needAudio) {
-      // O2: an UNEDITED window is exactly the mix capture measured, so the
-      // probe pass can be skipped here too. Any trim changes the mix — those
-      // render paths still probe.
-      const stored = isDefaultEdit(recording, edit)
-        ? loudnessFromCaptureStats(
-            recording.loudness,
-            audioMixers.map((m) => m.channelId),
-            baseGain,
-          )
-        : null
-      if (stored) {
-        const makeup = makeupGainForLoudness(stored)
-        if (makeup !== 1) for (const m of audioMixers) m.gain = baseGain * makeup
-        certified = { makeup, loudRms: stored.loudRms, peak: stored.peak, fromCaptureStats: true }
-        console.info(
-          `compose: audio loudness from capture stats p90rms ${stored.loudRms.toFixed(4)} peak ${stored.peak.toFixed(3)} → makeup ${makeup.toFixed(2)}× (no probe decode)`,
-        )
+  if (canUseExportWorker()) {
+    try {
+      return await exportInWorker(opts)
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') throw err
+      if (err instanceof WorkerStartFailure) {
+        console.warn('[compose] export worker unusable, rendering in-thread', err.cause)
       } else {
-        const probe = await openAudioMixers(recording, edit, throwIfAborted)
-        try {
-          const loud = await measureMixLoudness(probe, baseGain, totalAudioFrames, throwIfAborted, (r) =>
-            report('preparing', 0.04 * r),
-          )
-          const makeup = makeupGainForLoudness(loud)
-          if (makeup !== 1) for (const m of audioMixers) m.gain = baseGain * makeup
-          certified = { makeup, loudRms: loud.loudRms, peak: loud.peak, fromCaptureStats: false }
-          console.info(
-            `compose: audio loudness p90rms ${loud.loudRms.toFixed(4)} peak ${loud.peak.toFixed(3)} → makeup ${makeup.toFixed(2)}×`,
-          )
-        } finally {
-          for (const m of probe) m.dispose()
-        }
+        throw err
       }
     }
-    // Layout slot is decided once for the whole export: camera only fills the
-    // frame when no screen channel contributes anywhere in the output window.
-    const cameraFull = !videoReaders.some((r) => r.kind === 'screen')
-    // Zero cost when the track is absent: no per-frame pose work at all.
-    const cameraMoves = !cameraFull && cameraTrackIsActive(edit.camera)
-    // F2: same zero-cost rule as the camera track — no track, no per-frame work.
-    const viewportMoves = viewportTrackIsActive(edit.viewport)
-    const target = await pickEncodingTarget(width, height, needAudio, videoBitrate)
-    throwIfAborted()
+  }
+  return renderExport({ ...opts, yieldEveryFrames: MAIN_THREAD_YIELD_EVERY_FRAMES })
+}
 
-    const canvas = new OffscreenCanvas(width, height)
-    const ctx = canvas.getContext('2d', { alpha: false })
-    if (!ctx) throw new Error('Canvas 2D context unavailable')
-    const frame: FrameCanvas = { ctx, width, height, scale: width / 1920 }
-
-    // O(1) memory: mux straight to an OPFS scratch file. BufferTarget stays as
-    // the fallback for platforms where the scratch can't be opened.
-    scratch = await createExportScratch()
-    const bufferTarget = scratch ? null : new BufferTarget()
-    const out = new Output({
-      format: target.format,
-      target: scratch ? scratch.target : bufferTarget!,
-    })
-    output = out
-    // Certified-export metadata (O8): how this file was actually made.
-    out.setMetadataTags({
-      title: 'INOUT recording',
-      comment: certificationComment(
-        buildCertification({
-          recording,
-          path: 'render',
-          settings: { width, height, fps, videoBitrate },
-          audioChannels: audioMixers.length,
-          makeup: certified?.makeup,
-          loudRms: certified?.loudRms,
-          peak: certified?.peak,
-          fromCaptureStats: certified?.fromCaptureStats,
-          cuts: Math.max(0, keptSegments(edit).length - 1),
-          codec: {
-            container: target.mimeType,
-            video: target.videoCodec,
-            audio: needAudio ? target.audioCodec : undefined,
-            gopSec,
-          },
-        }),
-      ),
-    })
-    // O11a: every encoded packet is handed back anyway — count it. Costs one
-    // addition per packet and turns "where do the bytes go" into a number.
-    const bits = new BitsAudit(videoBitrate, gopSec)
-    const videoSource = new CanvasSource(canvas, {
-      codec: target.videoCodec,
-      bitrate: videoBitrate,
-      keyFrameInterval: gopSec,
-      onEncodedPacket: (p) => bits.video(p.byteLength, p.type),
-    })
-    out.addVideoTrack(videoSource, { frameRate: fps })
-    let audioSource: AudioBufferSource | null = null
-    if (needAudio) {
-      audioSource = new AudioBufferSource({
-        codec: target.audioCodec,
-        bitrate: AUDIO_BITRATE,
-        onEncodedPacket: (p) => bits.audio(p.byteLength),
-      })
-      out.addAudioTrack(audioSource)
-    }
-    await out.start()
-    report('preparing', 0.05)
-
-    // Output-timeline frame index of every cut join, for the seam fade.
-    const joinFrames = segmentJoinsMs(edit).map((ms) =>
-      Math.round((ms / 1000) * AUDIO_SAMPLE_RATE),
-    )
-    const totalFrames = Math.max(1, Math.ceil(durationSec * fps - 1e-9))
-    const audioChunks = Math.ceil(totalAudioFrames / AUDIO_SAMPLE_RATE)
-    const peaks = createPeakBuffer(waveformMode ? durationSec : 0)
-
-    const writeAudioChunk = async (chunkIndex: number): Promise<void> => {
-      if (!audioSource) return
-      const startFrame = chunkIndex * AUDIO_SAMPLE_RATE
-      const frames = Math.min(AUDIO_SAMPLE_RATE, totalAudioFrames - startFrame)
-      if (frames <= 0) return
-      const left = new Float32Array(frames)
-      const right = new Float32Array(frames)
-      const chunkOutStartSec = startFrame / AUDIO_SAMPLE_RATE
-      for (const mixer of audioMixers) await mixer.mixInto(left, right, chunkOutStartSec)
-      // Cut joins: fade the SUM through zero so no join can click.
-      if (joinFrames.length) {
-        const half = Math.max(1, Math.round((JOIN_FADE_MS / 1000) * AUDIO_SAMPLE_RATE))
-        for (const joinFrame of joinFrames) {
-          const from = Math.max(startFrame, joinFrame - half)
-          const to = Math.min(startFrame + frames, joinFrame + half)
-          for (let f = from; f < to; f++) {
-            const k = f - startFrame
-            const g = Math.min(1, Math.abs(f - joinFrame) / half)
-            left[k] *= g
-            right[k] *= g
-          }
-        }
-      }
-      for (let k = 0; k < frames; k++) {
-        left[k] = softLimitSample(left[k])
-        right[k] = softLimitSample(right[k])
-      }
-      if (waveformMode) collectPeaks(peaks, left, right, startFrame, AUDIO_SAMPLE_RATE)
-      const buffer = new AudioBuffer({
-        length: frames,
-        numberOfChannels: AUDIO_CHANNEL_COUNT,
-        sampleRate: AUDIO_SAMPLE_RATE,
-      })
-      buffer.copyToChannel(left, 0)
-      buffer.copyToChannel(right, 1)
-      await audioSource.add(buffer)
-    }
-
-    const renderFrame = async (frameIndex: number, drawWaveform: ((t: number) => void) | null): Promise<void> => {
-      const tSec = frameIndex / fps
-      if (drawWaveform) {
-        drawWaveform(tSec)
-      } else {
-        let screen: VideoSample | null = null
-        let camera: VideoSample | null = null
-        for (const reader of videoReaders) {
-          const localMs = channelSourceTimeAt(recording, edit, reader.channelId, tSec * 1000)
-          if (localMs === null) continue
-          const sample = await reader.sampleAt(localMs / 1000)
-          if (!sample) continue
-          if (reader.kind === 'screen') screen = sample
-          else camera = sample
-        }
-        // F4: the camera track is keyed to RECORDING time, so a cut made later
-        // never drags the motion away from the moment it belongs to.
-        let pose
-        if (cameraMoves && camera && camera.displayWidth > 0 && camera.displayHeight > 0) {
-          const recMs = outputToRecordingMs(edit, tSec * 1000)
-          if (recMs !== null) {
-            pose = cameraPoseAt(edit.camera, recMs, {
-              frameAspect: width / height,
-              cameraAspect: camera.displayWidth / camera.displayHeight,
-            })
-          }
-        }
-        let view
-        if (viewportMoves) {
-          const recMs = outputToRecordingMs(edit, tSec * 1000)
-          if (recMs !== null) view = viewportAt(edit.viewport, recMs)
-        }
-        drawVideoFrame(frame, screen, camera, cameraFull, pose, edit.background, view)
-      }
-      await videoSource.add(tSec, 1 / fps)
-    }
-
-    if (waveformMode) {
-      // Audio pass first: the mixed peaks drive every waveform frame.
-      if (audioSource) {
-        for (let c = 0; c < audioChunks; c++) {
-          throwIfAborted()
-          await writeAudioChunk(c)
-          report('rendering', 0.05 + 0.45 * ((c + 1) / audioChunks))
-          await yieldToUi()
-        }
-        audioSource.close()
-      }
-      const base = audioSource ? 0.5 : 0.05
-      const drawWaveform = createWaveformRenderer(frame, peaks)
-      for (let f = 0; f < totalFrames; f++) {
-        throwIfAborted()
-        await renderFrame(f, drawWaveform)
-        report('rendering', base + (0.95 - base) * ((f + 1) / totalFrames))
-        if (f % YIELD_EVERY_FRAMES === 0) await yieldToUi()
-      }
-    } else {
-      // Alternate ~1s of audio with that second's video frames (interleaving).
-      let frameIndex = 0
-      const chunks = Math.max(1, Math.ceil(durationSec))
-      for (let c = 0; c < chunks; c++) {
-        throwIfAborted()
-        await writeAudioChunk(c)
-        const chunkEndSec = Math.min(durationSec, c + 1)
-        while (frameIndex < totalFrames && frameIndex / fps < chunkEndSec) {
-          throwIfAborted()
-          await renderFrame(frameIndex, null)
-          frameIndex++
-          report('rendering', 0.05 + 0.9 * (frameIndex / totalFrames))
-          if (frameIndex % YIELD_EVERY_FRAMES === 0) await yieldToUi()
-        }
-      }
-      // Float-rounding safety: never drop trailing frames.
-      for (; frameIndex < totalFrames; frameIndex++) {
-        throwIfAborted()
-        await renderFrame(frameIndex, null)
-      }
-      audioSource?.close()
-    }
-    videoSource.close()
-
-    report('finalizing', 0.95)
-    await out.finalize()
-    console.info(formatBits(bits.summarize(durationSec), `render ${width}×${height} ${target.videoCodec}`))
-    let blob: Blob
-    if (scratch) {
-      blob = await scratch.finish(target.mimeType)
-    } else {
-      const buffer = bufferTarget?.buffer
-      if (!buffer) throw new Error('Muxer produced no output')
-      blob = new Blob([buffer], { type: target.mimeType })
-    }
-    report('finalizing', 1)
-
-    return {
-      blob,
-      mimeType: target.mimeType,
-      fileName: exportFileName(recording.createdAt, target.fileExtension),
-      durationMs: Math.round(durationMs),
-      width,
-      height,
-    }
-  } catch (err) {
-    if (output && output.state !== 'finalized' && output.state !== 'canceled') {
-      await output.cancel().catch(() => undefined)
-    }
-    // Aborted or failed export leaves nothing behind on disk.
-    await scratch?.discard().catch(() => undefined)
-    throw err
-  } finally {
-    for (const reader of videoReaders) reader.dispose()
-    for (const mixer of audioMixers) mixer.dispose()
+/** Thrown only while the worker has produced nothing — safe to retry in-thread. */
+class WorkerStartFailure extends Error {
+  constructor(override readonly cause: unknown) {
+    super('export worker failed before producing output')
+    this.name = 'WorkerStartFailure'
   }
 }
+
+function exportInWorker(opts: ExportOptions): Promise<ExportResult> {
+  const { recording, edit, settings, onProgress, signal } = opts
+  let worker: Worker
+  try {
+    worker = new Worker(new URL('./export.worker.ts', import.meta.url), { type: 'module' })
+  } catch (err) {
+    return Promise.reject(new WorkerStartFailure(err))
+  }
+
+  return new Promise<ExportResult>((resolve, reject) => {
+    let settled = false
+    // Until the worker reports real progress it has touched nothing on disk,
+    // so a failure up to that point may safely be retried in-thread.
+    let producedOutput = false
+    const onAbort = (): void => post({ type: 'abort' })
+
+    const finish = (fn: () => void): void => {
+      if (settled) return
+      settled = true
+      signal?.removeEventListener('abort', onAbort)
+      worker.terminate()
+      fn()
+    }
+    const post = (m: ExportWorkerIn): void => worker.postMessage(m)
+
+    worker.onmessage = (ev: MessageEvent<ExportWorkerOut>) => {
+      const msg = ev.data
+      if (msg.type === 'progress') {
+        if (msg.progress.phase !== 'preparing' || msg.progress.ratio > 0) producedOutput = true
+        onProgress?.(msg.progress as ExportProgress)
+        return
+      }
+      if (msg.type === 'done') {
+        // The stage split was measured in the worker; publish it on this side
+        // so getLastRenderStats() answers the same question wherever it ran.
+        setLastRenderStats(msg.stats)
+        setLastScratchStats(msg.scratch)
+        finish(() => resolve(msg.result))
+        return
+      }
+      const err =
+        msg.name === 'AbortError'
+          ? new DOMException(msg.message, 'AbortError')
+          : new Error(msg.message)
+      finish(() => reject(producedOutput ? err : new WorkerStartFailure(err)))
+    }
+    // A worker that fails to LOAD (no module worker support, bundling problem)
+    // reports here and has by definition produced nothing.
+    worker.onerror = (ev) => {
+      finish(() => reject(new WorkerStartFailure(new Error(ev.message || 'export worker error'))))
+    }
+    worker.onmessageerror = () => {
+      finish(() => reject(new WorkerStartFailure(new Error('export worker message could not be cloned'))))
+    }
+
+    if (signal?.aborted) {
+      finish(() => reject(new DOMException('Export aborted', 'AbortError')))
+      return
+    }
+    signal?.addEventListener('abort', onAbort)
+    post({ type: 'start', recording, edit, settings })
+  })
+}
+
+/** Re-exported so nothing outside compose has to know the render moved. */
+export { renderExport, getLastRenderStats, isDefaultEdit }

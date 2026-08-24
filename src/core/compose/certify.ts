@@ -29,6 +29,9 @@ export interface CertifiedCodec {
   audio?: string
   /** Keyframe cadence in seconds, where we control it (render path). */
   gopSec?: number
+  /** Ladder rung name (O5d): 'avc' is the blind-share floor; anything above it
+   *  only ever runs where the recipient is known. */
+  rung?: string
 }
 
 export interface CertifiedExport {

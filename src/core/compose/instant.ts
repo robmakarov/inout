@@ -15,7 +15,7 @@
  */
 import {
   ALL_FORMATS,
-  AudioBufferSource,
+  AudioSampleSource,
   BlobSource,
   BufferTarget,
   EncodedPacketSink,
@@ -35,6 +35,7 @@ import type {
 } from '@core/types'
 import {
   loudnessFromCaptureStats,
+  makeStereoSample,
   makeupGainForLoudness,
   measureMixLoudness,
   mixGainForChannels,
@@ -246,9 +247,9 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
     const bits = new BitsAudit(VIDEO_BITRATE, 0)
     const videoSource = new EncodedVideoPacketSource(videoCodec)
     out.addVideoTrack(videoSource)
-    let audioSource: AudioBufferSource | null = null
+    let audioSource: AudioSampleSource | null = null
     if (needAudio && audioCodec) {
-      audioSource = new AudioBufferSource({
+      audioSource = new AudioSampleSource({
         codec: audioCodec,
         bitrate: AUDIO_BITRATE,
         onEncodedPacket: (p) => bits.audio(p.byteLength),
@@ -286,14 +287,12 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
           left[k] = softLimitSample(left[k])
           right[k] = softLimitSample(right[k])
         }
-        const buffer = new AudioBuffer({
-          length: frames,
-          numberOfChannels: AUDIO_CHANNEL_COUNT,
-          sampleRate: AUDIO_SAMPLE_RATE,
-        })
-        buffer.copyToChannel(left, 0)
-        buffer.copyToChannel(right, 1)
-        await audioSource.add(buffer)
+        const sample = makeStereoSample(left, right, chunkOutStartSec)
+        try {
+          await audioSource.add(sample)
+        } finally {
+          sample.close()
+        }
         report('rendering', 0.5 + 0.45 * ((c + 1) / audioChunks))
       }
       audioSource.close()

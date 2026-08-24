@@ -9,7 +9,8 @@ import {
   settingsForTier,
   type QualityTier,
 } from '@core/compose/quality'
-import { exportInstant, exportRecording } from '@core/compose'
+import { exportInstant, exportRecording, exportSmartCut } from '@core/compose'
+import { smartCutEnabled } from '@core/compose/smartCutFlag'
 import { editsRepo, recordingsRepo } from '@core/store'
 import { analytics } from '@core/analytics'
 import { useAppStore } from '@app/state/store'
@@ -155,6 +156,27 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
           console.warn('instant export unavailable, falling back to render', err)
         }
       }
+      // O5c: an edit that only chooses WHICH parts of the take to keep does not
+      // change any pixel, so most of the output is still the composite's own
+      // packets — copy them and re-encode only the frames between each cut and
+      // the next keyframe. Same tier rule as the instant path (a different
+      // resolution is a different picture), and the same refuse-and-fall-back
+      // discipline: exportSmartCut throws for anything it is not certain of.
+      let smartCut = false
+      if (!result && smartCutEnabled() && defaultTier && recording.composite) {
+        try {
+          result = await exportSmartCut({
+            recording,
+            edit: effectiveEdit,
+            onProgress,
+            signal: ac.signal,
+          })
+          smartCut = true
+        } catch (err) {
+          if (err instanceof Error && err.name === 'AbortError') throw err
+          console.info('smart cut unavailable, rendering', err)
+        }
+      }
       if (!result) {
         result = await exportRecording({
           recording,
@@ -168,6 +190,7 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
         durationMs: Math.round(performance.now() - t0),
         sizeBytes: result.blob.size,
         instant,
+        smartCut,
         tier: chosen.id,
       })
       if (import.meta.env.DEV) {

@@ -16,6 +16,7 @@
  */
 
 import { exportRecording } from '@core/compose'
+import { getLastScratchStats } from '@core/compose/scratch'
 import { defaultEditState } from '@core/timeline'
 import type { EditState } from '@core/types'
 import { analyzeAudioIntegrity, type AudioIntegrityReport } from './audioIntegrity'
@@ -63,6 +64,15 @@ export interface OracleReport {
   }
   /** Export throughput: recorded ms per ms of export wall time. */
   exportRealtimeFactor: number
+  /**
+   * Peak OUTPUT bytes the muxer held in memory at once during the full export
+   * (task O8, remainder). O1 made this O(1) by streaming to an OPFS scratch,
+   * and measured it — 4.0 MB against 253.4 MB on a 30-minute take — but
+   * nothing enforced it afterwards, so a future change could silently put the
+   * whole file back in one ArrayBuffer and only a 30-minute take would notice.
+   * Null when the scratch was unavailable and the in-memory target ran.
+   */
+  exportPeakOutputBytes: number | null
   verdicts: OracleVerdict[]
   /** Rig-side reference measurements (O4 step 1 residual decomposition). */
   rigDebug: {
@@ -206,6 +216,7 @@ export async function runOracle(
       })(),
       exportRealtimeFactor:
         exportFullMs > 0 ? Math.round((rig.recording.durationMs / exportFullMs) * 100) / 100 : 0,
+      exportPeakOutputBytes: getLastScratchStats()?.maxOutstandingBytes ?? null,
       verdicts,
       rigDebug: {
         beepStreamArrivalsRigMs: streamArrivals,

@@ -5,6 +5,19 @@ phase: MVP validation (2026-07-16)
 works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → export → share-as-file.
 - SYNCHRONIZED START (PO 2026-07-20, supersedes instant-arm/late-join): arm() waits for src.settled — ALL devices acquired, every permission prompt answered — before start() activates them at one epoch. All channels share one start + one length (verified: 4 lanes 100% ±0.3%); no primary-gated early start, no late-join staggering. pipeline prewarm at mount; devices touched only after record click
 - instant unedited export ~60-105ms (live composite packet-copied, mp4 h264+aac); edited takes → full render
+- THE EXPORT HAS THREE PATHS and EditorScreen picks in this order: INSTANT (unedited + composite +
+  default tier → packet copy), SMART CUT (O5c — a trim/cut-only edit changes no pixel, so the
+  composite's packets are copied and only [cut → next keyframe] is re-encoded; measured 4.3-5.6×
+  faster than rendering, ≤1 s on a 30 s take, 90-94 % of frames copied — DEFAULT OFF behind
+  `?smartcut=1` until a CI gate exercises it), and the FULL RENDER, which is also the fallback for
+  both. The render RUNS IN A WORKER by default (O5a): same code in-thread as the fallback, and the
+  certified audio path moved off Web Audio (AudioSample, not AudioBuffer) to get there — proven by the
+  fidelity oracle, and by all four A/B lanes producing byte-identical files. 60 s edited take: 6.00×
+  realtime in the worker vs 5.93× in-thread.
+- THE EXPORT'S FLOOR IS DECODE, MEASURED: on a 12 s 1080p edited take the loop waits 1295 ms on decode,
+  450 ms drawing and 28 ms on the encoder, against 962 ms to decode the same frames alone. The encoder
+  was never the stall (mediabunny already queues it 4 deep). Pipelining it further was built, measured
+  and deleted. `npm run exp -- o5` prints the split and the floor.
 - exports STREAM TO DISK (O1): the muxer holds 4 MB regardless of length — a 30-min export peaks at
   39 MB live memory instead of 294 MB. ExportResult.blob is a disk-backed OPFS file.
 - NO DURATION CAP (PO 2026-08-23). MAX_RECORDING_MS is `number | null` and is null; a take runs until
