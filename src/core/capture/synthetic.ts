@@ -1,5 +1,10 @@
 import type { CaptureConfig, ChannelKind } from '@core/types'
-import type { AcquiredChannel, ProgressiveAcquire, ProgressiveHandlers } from './acquire'
+import type {
+  AcquiredChannel,
+  ArmingStep,
+  ProgressiveAcquire,
+  ProgressiveHandlers,
+} from './acquire'
 import { primaryKindFor } from './acquire'
 
 export function isSyntheticMode(): boolean {
@@ -232,21 +237,34 @@ export function createSyntheticChannelsProgressive(
   let disposed = false
   const timers: ReturnType<typeof setTimeout>[] = []
 
-  const deliveries = rig.channels.map(
-    (ch) =>
-      new Promise<void>((resolve) => {
-        const emit = (): void => {
-          if (!disposed) {
-            handlers.onChannel(ch)
-            if (ch.kind === primary) primaryResolve()
-          }
-          resolve()
+  // The arming timeline is what drives the "Waiting for microphone…" line, and
+  // that line IS the bug the `slow=` knob exists to reproduce. Without these
+  // marks the harness could stall a channel for twenty seconds and the UI
+  // showed a bare "Starting…" the whole time, so the one symptom the PO
+  // reports could only ever be chased against real hardware.
+  const t0 = performance.now()
+  // The timeline names the screen step 'display' — it is the picker, not the
+  // channel. Everything else is one-to-one with the channel kind.
+  const stepOf = (kind: ChannelKind): ArmingStep => (kind === 'screen' ? 'display' : kind)
+  const mark = (kind: ChannelKind, status: 'start' | 'done'): void =>
+    handlers.onProgress?.({ step: stepOf(kind), status, tMs: performance.now() - t0 })
+
+  const deliveries = rig.channels.map((ch) => {
+    mark(ch.kind, 'start')
+    return new Promise<void>((resolve) => {
+      const emit = (): void => {
+        if (!disposed) {
+          handlers.onChannel(ch)
+          mark(ch.kind, 'done')
+          if (ch.kind === primary) primaryResolve()
         }
-        const delay = delays.get(ch.kind) ?? 0
-        if (delay > 0) timers.push(setTimeout(emit, delay))
-        else queueMicrotask(emit)
-      }),
-  )
+        resolve()
+      }
+      const delay = delays.get(ch.kind) ?? 0
+      if (delay > 0) timers.push(setTimeout(emit, delay))
+      else queueMicrotask(emit)
+    })
+  })
 
   const settled = Promise.all(deliveries).then(() => undefined)
   void settled.then(() => primaryResolve())

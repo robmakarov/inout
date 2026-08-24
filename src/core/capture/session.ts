@@ -21,6 +21,7 @@ import type {
   ProgressiveAcquire,
 } from './acquire'
 import { acquireChannelsProgressive, withTimeout } from './acquire'
+import { releaseAllDevices } from './deviceGuard'
 import {
   canMeasureAudioCapture,
   prewarmMeasuredAudio,
@@ -107,6 +108,16 @@ const COMPOSITE_STOP_BUDGET_MS = 5000
  */
 const SETTLE_BUDGET_MS = 130_000
 const ARM_BUDGET_MS = 15_000
+/**
+ * Ceilings on TEARDOWN. Same principle as the arming budgets and the same bug
+ * when they are missing: a step with no deadline in front of a device release
+ * turns one wedged recorder or one slow disk into a camera light that never
+ * goes out. Both sit after the devices are already off, so they only bound how
+ * long the UI waits — 5 s for recorders that were told to stop, 10 s for the
+ * OPFS write chain, which may still have real bytes in flight.
+ */
+const CANCEL_STOP_BUDGET_MS = 5_000
+const WRITER_CLOSE_BUDGET_MS = 10_000
 
 /** A/B hook for the O3a evidence run (kept so the MP4 rejection stays
  *  re-testable). Production stays on 'auto'. */
@@ -358,6 +369,7 @@ class Session implements CaptureSession {
       const rig = createSyntheticChannelsProgressive(this.config, {
         onChannel: handleAcquired,
         onFailure: handleFailure,
+        onProgress: this.onArming,
       })
       this.disposeSynthetic = rig.dispose
       src = rig
@@ -1085,6 +1097,16 @@ class Session implements CaptureSession {
     this.removeUnloadGuard()
     for (const ch of this.channels) {
       for (const t of ch.stream.getTracks()) t.stop()
+      // The prewarmed AudioContext is handed to the measured capture at
+      // start(), which nulls this and takes over closing it. A take that ends
+      // BEFORE start — every cancelled arm — never transfers it, and nothing
+      // else closed it: an AudioContext per abandoned start, each holding an
+      // audio device open on some platforms, until the tab is reloaded.
+      if (ch.audioCtx) {
+        const ctx = ch.audioCtx
+        ch.audioCtx = null
+        if (ctx.state !== 'closed') void ctx.close().catch(() => undefined)
+      }
     }
     // Channels only enter this.channels at the END of armChannel, after awaits
     // that can take seconds (measured-audio prewarm is bounded at 3s, the OPFS
@@ -1097,6 +1119,12 @@ class Session implements CaptureSession {
       for (const t of s.getTracks()) t.stop()
     }
     this.acquiredStreams.clear()
+    // Last word, and the only one that cannot be out of date: the guard holds
+    // every stream the platform handed this tab, registered at the
+    // getUserMedia/getDisplayMedia call itself. A stream still travelling
+    // between acquire.ts and this session — the gap that produced this bug
+    // three times — is in there and gets stopped here.
+    releaseAllDevices('session release')
     if (this.disposeSynthetic) {
       this.disposeSynthetic()
       this.disposeSynthetic = null
@@ -1238,8 +1266,25 @@ class Session implements CaptureSession {
     } catch (err) {
       console.warn('[capture] a recorder did not stop in budget — keeping what reached disk', err)
     }
-    await Promise.all(this.channels.map((c) => this.closeWriter(c)))
+    // DEVICES OFF HERE — after the last consumer of a track, before the disk.
+    // The composite reads the very same camera/mic tracks, so it goes first;
+    // its stop is internally bounded (COMPOSITE_STOP_BUDGET_MS), so it can
+    // delay this but never block it, and the instant export keeps its tail.
+    // The writers, by contrast, want nothing from a device and `closeWriter`
+    // awaits a write chain with no deadline of its own — releasing behind THAT
+    // is how a slow or stuck disk kept the camera, mic and screen running
+    // after the user had pressed stop and moved on.
+    await compositeStopped
     this.releaseMedia()
+    try {
+      await withTimeout(
+        Promise.all(this.channels.map((c) => this.closeWriter(c))),
+        WRITER_CLOSE_BUDGET_MS,
+        'writer close',
+      )
+    } catch (err) {
+      console.warn('[capture] a channel writer did not close in budget — using what it flushed', err)
+    }
 
     const kept = this.channels.filter((c) => c.bytes > 0)
     for (const c of this.channels) {
@@ -1337,6 +1382,16 @@ class Session implements CaptureSession {
     this.resuming.clear()
     this.clearTick()
     this.releaseWakeLock()
+    // DEVICES OFF FIRST — before a single await. A cancel throws the take away,
+    // so nothing downstream (a recorder that never fires onstop, an
+    // AudioWorklet that never delivers a first sample, an OPFS writer that
+    // wedges) has any claim on keeping the camera, mic or screen running while
+    // it finishes. Releasing used to sit AFTER `await Promise.all(stopped)`
+    // with no deadline, so any one of those hanging kept every device live —
+    // and left the record button stuck on "Cancelling…", because
+    // createCaptureSession awaits this before it rethrows. That is the
+    // "I press record again to stop it and the indicator is still there" bug.
+    this.releaseMedia()
     if (this.manifestTimer) clearTimeout(this.manifestTimer)
     clearPendingManifest(this.recordingId)
     void (async () => {
@@ -1359,9 +1414,28 @@ class Session implements CaptureSession {
       }
     }
     this.stopRecorders(false)
-    await Promise.all(this.channels.map((c) => c.stopped))
+    // Bounded for the same reason doStop's join is: a recorder that never
+    // answers must not be able to hold a discarded take open forever. Nothing
+    // here gates a device any more (they went off above) — this only decides
+    // how long we wait before deleting the scratch files.
+    try {
+      await withTimeout(
+        Promise.all(this.channels.map((c) => c.stopped)),
+        CANCEL_STOP_BUDGET_MS,
+        'cancel recorder stop',
+      )
+    } catch (err) {
+      console.warn('[capture] a recorder did not stop in budget on cancel — discarding anyway', err)
+    }
+    // Devices are already off; this sweeps anything that armed while we waited.
     this.releaseMedia()
-    await Promise.all(
+    // Deleting scratch files is housekeeping, and cancel() is what the record
+    // button is waiting on to become pressable again — createCaptureSession
+    // awaits it before it rethrows, so an OPFS write chain that never settles
+    // here left the UI on "Cancelling…" with no way forward. Bounded; on
+    // expiry the cleanup carries on in the background and the user gets their
+    // button back. Orphaned scratch blobs are collected on the next launch.
+    const cleanup = Promise.all(
       this.channels.map(async (ch) => {
         if (ch.writer) {
           await ch.writeChain
@@ -1374,6 +1448,12 @@ class Session implements CaptureSession {
         await blobStore.remove(ch.blobKey).catch(() => undefined)
       }),
     )
+    try {
+      await withTimeout(cleanup, WRITER_CLOSE_BUDGET_MS, 'cancel cleanup')
+    } catch (err) {
+      console.warn('[capture] cancel cleanup exceeded budget — finishing in the background', err)
+      void cleanup.catch(() => undefined)
+    }
     this.setState('stopped')
   }
 }
@@ -1411,12 +1491,16 @@ export async function createCaptureSession(
   try {
     await Promise.race([session.arm(), aborted])
   } catch (err) {
-    // Whether arm() failed or the user cancelled, nothing may keep a device.
-    await session.cancel().catch(() => undefined)
+    // Whether arm() failed or the user cancelled, nothing may keep a device —
+    // and cancel() turns them all off SYNCHRONOUSLY, before its first await,
+    // so the guarantee holds without waiting for the promise. What remains in
+    // there is scratch-file cleanup, and holding the record button hostage to
+    // a slow disk is how "Cancelling…" became its own stuck state.
+    void session.cancel().catch(() => undefined)
     throw err
   }
   if (signal.aborted) {
-    await session.cancel().catch(() => undefined)
+    void session.cancel().catch(() => undefined)
     throw new DOMException('Recording start cancelled', 'AbortError')
   }
   return session

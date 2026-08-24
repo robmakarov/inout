@@ -217,14 +217,28 @@ export function CaptureScreen() {
           setArmingLabel(armingLabelFor(waitingRef.current) ?? 'Starting recorders…')
         },
       })
-      setArmingLabel('Starting recorders…')
-      s.start()
-      setElapsedMs(0)
-      setRemainingMs(MAX_RECORDING_MS)
-      setOff({})
-      setPending({})
-      setStalled([])
-      setSession(s)
+      // From here the session HOLDS DEVICES and only the store can stop it.
+      // Anything that goes wrong before setSession leaves it running with no
+      // owner and no button that reaches it — the camera light and the
+      // screen-share indicator stay on until the tab is closed. So every exit
+      // from this stretch cancels it.
+      try {
+        // The press that lands in the gap between arm() finishing and the
+        // session reaching the store is a CANCEL, not a start. Without this it
+        // was swallowed: the user pressed stop and got a recording instead.
+        if (ac.signal.aborted) throw new DOMException('Recording start cancelled', 'AbortError')
+        setArmingLabel('Starting recorders…')
+        s.start()
+        setElapsedMs(0)
+        setRemainingMs(MAX_RECORDING_MS)
+        setOff({})
+        setPending({})
+        setStalled([])
+        setSession(s)
+      } catch (err) {
+        void s.cancel().catch(() => undefined)
+        throw err
+      }
       // Recording is live and the user is committed for at least a few
       // seconds — warm the editor chunk now so stop() lands on parsed code.
       prefetchEditorChunk()

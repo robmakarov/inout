@@ -5,6 +5,7 @@ import {
   type DisplaySurfaceKind,
   type MediaKind,
 } from '@core/types'
+import { guardStream } from './deviceGuard'
 
 export interface AcquiredChannel {
   kind: ChannelKind
@@ -359,6 +360,7 @@ export function acquireChannelsProgressive(
         'getUserMedia(camera)',
         afterPicker,
       )
+      guardStream(stream)
       hintTrackContent(stream.getVideoTracks()[0], 'camera')
       deliver({ kind: 'camera', media: 'video', stream, track: stream.getVideoTracks()[0] })
       mark('camera', 'done', stream.getVideoTracks()[0]?.label)
@@ -387,6 +389,7 @@ export function acquireChannelsProgressive(
         'getUserMedia(mic)',
         afterPicker,
       )
+      guardStream(stream)
       // NARROWBAND WARNING only (PO rule 2026-07-21: never override the user's
       // device — an earlier auto-swap to the built-in mic broke AirPods takes).
       // A Bluetooth headset mic in HFP mode captures 8–16 kHz telephone
@@ -479,6 +482,10 @@ export function acquireChannelsProgressive(
   if (displayPromise) {
     try {
       const display = await displayPromise
+      // Before capDisplayTrack's await, before anything: from this line on the
+      // screen is live and Chrome's indicator is lit, so from this line on it
+      // must be releasable no matter what happens next.
+      guardStream(display)
       const video = display.getVideoTracks()[0]
       if (config.systemAudio) {
         const audio = display.getAudioTracks()[0]
@@ -546,10 +553,24 @@ export function acquireChannelsProgressive(
     }
   }
 
-  // Not pre-granted → a permission prompt will appear → human budget.
+  // Which budget the stragglers get. NOT a formality: the budget decides how
+  // long the take can freeze on a device that never answers — 8 s of hardware
+  // spin-up, or two minutes of "never time a human at a prompt". Assuming the
+  // human budget for a device that CANNOT prompt is how an audio-only take
+  // with a wedged but long-granted mic sat on "Waiting for microphone…" for
+  // 120 s (PO 2026-08-24). The probe was previously skipped entirely without a
+  // screen picker; the reason given — extra await hops break Safari's
+  // transient activation — only applies in front of getDisplayMedia, which by
+  // here has either been dispatched already or was never requested.
   const parallel: Promise<void>[] = [...early]
-  if (config.camera && !camEarly) parallel.push(startCamera(false))
-  if (config.mic && !micEarly) parallel.push(startMic(false))
+  const wantCam = config.camera && !camEarly
+  const wantMic = config.mic && !micEarly
+  const [camGranted, micGranted] = await Promise.all([
+    wantCam ? isGranted('camera') : Promise.resolve(false),
+    wantMic ? isGranted('microphone') : Promise.resolve(false),
+  ])
+  if (wantCam) parallel.push(startCamera(camGranted))
+  if (wantMic) parallel.push(startMic(micGranted))
 
   if (parallel.length) await Promise.all(parallel)
 

@@ -12,6 +12,21 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "preview"],
       "port": 4173
+    },
+    {
+      "//": "The preview spawner has no TCC access to ~/Downloads: any process it starts there dies on `EPERM: uv_cwd` before vite loads (three sessions have hit this). scripts/mirror-for-preview.sh rsyncs the tree to /tmp, which it CAN read. Snapshot, not live — re-run the script after edits.",
+      "name": "inout-tmp",
+      "runtimeExecutable": "/usr/bin/env",
+      "runtimeArgs": [
+        "-C",
+        "/tmp/inout-dev",
+        "node",
+        "node_modules/vite/bin/vite.js",
+        "--port",
+        "5174",
+        "--strictPort"
+      ],
+      "port": 5174
     }
   ]
 }
