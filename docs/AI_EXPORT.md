@@ -30,8 +30,26 @@ Every parameter a human would set is either **derived from a signal already in t
 |---|---|
 | frame rate | pixel delta — dense keyframes during motion, near zero when static |
 | resolution | ≤1024 px full view; full-res crop added only when the changed region is small |
+| cursor filter | the delta's own size + persistence — see the taxonomy below |
 | short vs complete file | page order — index first, an agent that can page (Claude Code `pages`) descends selectively |
 | record quality | none — always capture max, derive everything down at export |
+
+**The cursor problem, and the taxonomy that solves it.** The OS cursor is baked into the captured
+pixels and moves every frame — a naive delta metric would keyframe constantly on it. One diff,
+classified by size and persistence, separates noise from signal:
+
+- tiny + moving + transient → **the cursor**: never a keyframe · logged as a low-rate pointer
+  trail in the index text (a few tokens per line) — v1's only interaction signal, since DOM
+  events wait on AI2
+- tiny + stationary + blinking → **a text caret**: ignored
+- small but persistent (survives several samples) → **real content** (tooltip, menu, hover
+  highlight): keyframe, crop pointed at it
+- large → **content change / motion burst**: keyframes as normal
+
+When a content change lands where the cursor last rested, the keyframe caption says "change at
+cursor" — click inference with zero new capture surface. Honest limit: reading a cursor out of
+pixels is a heuristic, so the pointer trail ships only if the rig proves the detector reliable;
+the filtering ships unconditionally (it is a threshold, not a detector).
 
 ## V1 — the file (task AI1)
 

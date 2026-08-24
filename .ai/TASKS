@@ -1186,7 +1186,14 @@ all timestamps on the RECORDING EPOCH with clockOffsetMs declared on page 1 when
 video's t=0 differs (P0-instant-sync's lesson: composite time is not recording time) · index is
 signal-derived, never generated prose (the no-AI rule covers export-time summarization) ·
 keyframe selection pure + unit-tested with a defined delta metric (share of changed pixels on a
-downscaled luma diff).
+downscaled luma diff) · THE CURSOR IS FILTERED BY THE DELTA'S OWN SHAPE, not by a knob (PO raised
+it: "it moves every frame but not very useful all the time"): tiny+moving+transient = cursor →
+never a keyframe, logged as a low-rate pointer trail in the index text (v1's only interaction
+signal while DOM events wait on AI2); tiny+stationary+blinking = caret → ignored; small but
+PERSISTENT = real content (tooltip, menu, hover) → keyframe with the crop on it; large = content →
+keyframes as normal. A change landing where the cursor last rested captions "change at cursor".
+The FILTER ships unconditionally (a threshold); the TRAIL ships only if the rig proves the
+detector reliable — report precision either way.
 Implementation notes: tap composed output frames inside the machinery the render already iterates
 (compose/render.ts loop, chosen via choose.ts) rather than building a second decode pipeline —
 note 13: decode is the floor, nothing may decode the take twice · a minimal PDF writer is ours
@@ -1200,6 +1207,10 @@ GATES:
 · token price printed at export: per-page (pixels/750 + text/4) and total, reported for a real take
 · keyframe economy: a 60 s mostly-static synthetic take → ≤8 keyframe pages · a 10 s idle span
   emits 0 after its first · a motion burst concentrates keyframes inside it (distribution reported)
+· cursor immunity (PO's scenario, hard gate): a take that is ONLY a cursor wandering over a static
+  screen → ≤1 keyframe after the first · a caret blinking in place → 0 · a tooltip appearing under
+  the cursor → exactly 1, cropped on the tooltip · pointer-trail detector precision reported on the
+  rig; the trail is dropped (not shipped degraded) if unreliable
 · correctness by the existing rig: each of the oracle take's flashes appears in a keyframe whose
   caption time is within ±150 ms of the known flash time
 · edit fidelity: a take with a cut → no keyframe from the cut span, times remapped (rig proof)
