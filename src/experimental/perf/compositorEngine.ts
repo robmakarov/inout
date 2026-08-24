@@ -518,6 +518,16 @@ export async function runCompositorEngine(
      *  track, which is the last difference between v2 in situ and the probe
      *  rows that hit 59.7 fps. */
     noAudio?: boolean
+    /**
+     * true = measure the old way, with NO warm-up. The default warms the v2
+     * engine with one discarded 2.5 s take first, because this harness runs in
+     * a fresh throwaway Chrome profile whose FIRST VideoEncoder pays a
+     * multi-second initialization — a state no real browser is in twice.
+     * Measured 2026-08-24: the identical v2 take reads 0.6-5 fps cold and
+     * 28.1 fps warm (13 ms encoder latency, zero drops). Every v2 number this
+     * rig produced before that date was a cold number.
+     */
+    cold?: boolean
   } = {},
 ): Promise<O4Step2Report> {
   const takeMs = opts.takeMs ?? 8000
@@ -533,6 +543,12 @@ export async function runCompositorEngine(
   // One engine at a time is a real option, not a convenience: an A/B of a v1
   // change must not share a machine with a v2 run that loads it differently.
   const engines = opts.engines ?? ['v1', 'v2']
+  // Warm-up, discarded (see opts.cold). v1 needs none: MediaRecorder's
+  // encoder has never shown the transient in this rig.
+  if (opts.cold !== true && capable && engines.includes('v2')) {
+    await runEngine('v2', 1920, 1080, 2500, false, false)
+    await new Promise((r) => setTimeout(r, 500))
+  }
   const runs: EngineRun[] = []
   for (const [w, h] of sizes) {
     // v1 first each round: it is the incumbent, and running it on the colder
@@ -573,6 +589,9 @@ export async function runCompositorEngine(
       'the 4K row is the 2026-08-22 PO scenario (a 4K game tab) reproduced with a canvas that genuinely repaints every frame',
       'tailBandPass is O8 \u2264400 ms evaluated HERE, under load — the band has always existed, it had just never been run anywhere it could fail',
       'rawChannel records the SAME source through a plain MediaRecorder: if the raw channels lose their tails too, refusing the instant path buys nothing',
+      opts.cold === true
+        ? 'COLD RUN: no warm-up — v2 numbers include the fresh-profile first-encoder initialization (multi-second) and are NOT steady-state'
+        : 'v2 was warmed with one discarded 2.5 s take first: this throwaway profile’s FIRST VideoEncoder pays a multi-second initialization no real browser pays twice ({"cold":true} measures it on purpose)',
     ],
   }
 }

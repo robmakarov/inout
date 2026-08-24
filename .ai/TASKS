@@ -29,33 +29,32 @@ several ids, take the first and tell PO to open parallel sessions for the rest. 
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
 ── READY MAP — current truth, updated on every merge ──
-Last update 2026-08-23, end of the FIFTH session ("go finish roadmap"). Everything merged and pushed
-to origin/main.
-Merged on 2026-08-23 across five sessions: O1 · O2 · O3a · O7 · O4 step1 · O4b · F1 · F7 · O8(partial)
+Last update 2026-08-24 (SIXTH session, "go O4"). Everything merged and pushed to origin/main.
+Merged 2026-08-23/24 across six sessions: O1 · O2 · O3a · O7 · O4 step1 · O4b · F1 · F7 · O8(partial)
 · P2 · P3 · F4 · O4 step2 (DORMANT) · a P0 mic-hang fix (PO-verified) · O11a · O11b · O11c · F7b · F3
 · F5a · P0-tail · F2 · the O4 RE-DIAGNOSIS · P0-TAIL-RAW · F5B · F2B · P1 (code half) · the O4
-EXONERATION OF THE WORKER · F7c attempt 4 (not shipped, error halved).
+EXONERATION OF THE WORKER · F7c attempt 4 (not shipped, error halved) · the O4 COLD-START VERDICT
+(the "2-10 fps wall" was the instrument; throughput gate MET at 1080p; rig + watchdog fixed).
 START HERE IF YOU ARE FRESH:
   1. read notes 5, 6, 9, 10, 11 below — they are the ones that will bite you today;
-  2. `npm run typecheck && npm test` (281 tests) and `npm run oracle` should be green before you
+  2. `npm run typecheck && npm test` (287 tests) and `npm run oracle` should be green before you
      change anything, so a red gate later is yours and not inherited;
-  3. take one task from READY NOW. There is no LIVE DEFECT on the map any more; O4 is the keystone
-     and its search space is now down to one file.
+  3. take one task from READY NOW. There is no LIVE DEFECT on the map; O4's throughput mystery is
+     SOLVED — what remains of O4 is a finish list, not a search.
 
 READY NOW — parallel-safe, any subset concurrently (one session each):
-  O4   webcodecs engine, STEP 2    [heavy]   ENGINE MERGED BUT DORMANT (default v1). Throughput gate
-                                             still NOT met (2-4 fps at 1080p vs v1's 29.7) and the
-                                             search space is now ONE FILE WIDE. A probe that
-                                             reproduces v2's ENTIRE data path — two transferred
-                                             capture sources, the production GL compositor and its
-                                             PiP, wall-clock timestamps, the mediabunny fragmented
-                                             MP4 through an OPFS SyncAccessHandle, a full 10 s take,
-                                             in a worker — runs at 60.1 fps with ZERO drops and 13 ms
-                                             of encoder latency. v2 in situ: 850-4665 ms of encoder
-                                             latency. Eight hypotheses are refuted with numbers in
-                                             the handoff; do not re-test them. Diff the two WORKER
-                                             FILES against each other. Keystone for O5/O6/O9, F6,
-                                             F8, P4.
+  O4   webcodecs engine, STEP 2    [medium]  THROUGHPUT SOLVED 2026-08-24, GATE MET: 28.4 fps
+                                             delivered at 1080p (gate ≥28; v1 read 29.3 in the same
+                                             run), 14 ms encoder latency, 0 drops, main thread 0 ms
+                                             vs v1's 198, oracle sync 33.7 vs v1's 63.4. The
+                                             three-session "2-10 fps wall" was the RIG: a fresh
+                                             throwaway profile's FIRST VideoEncoder pays a multi-
+                                             second init, every take fit inside it, and the old
+                                             watchdog killed the take mid-init. What remains is the
+                                             DEFAULT-FLIP finish list in the handoff (cold-start on
+                                             real profiles, fMP4 salvage, preview from compositor,
+                                             CPU report, forced-slow proof, 4K row in production
+                                             shape). Keystone for O5/O6/O9, F6, F8, P4.
   F7c  the size number, calibrated [medium]  ATTEMPT 4 done 2026-08-23, NOT SHIPPED but the error is
                                              HALVED and SCREEN content is inside ±20 % for the first
                                              time (−6.7 to −15.4 %). Motion is a uniform 1.44× under
@@ -124,18 +123,19 @@ BOTH the composite and the raw channels.
    gone inactive and takes the backlog with it. Starve the source instead — 1 fps, same frame size —
    and drain. Do not write a new tail claim without running `npm run exp -- o4step2` and
    `npm run exp -- p0tailraw`.
-6. THERE ARE TWO LIVE-COMPOSITE ENGINES, AND THE REASON THE SECOND IS OFF IS NOT WHAT THE OLD NOTES
-   SAID. v1 (MediaRecorder) is the DEFAULT; v2 (worker + WebCodecs + WebGL2 + fMP4) is merged but
-   DORMANT behind ?engine=v2 because it delivers 6.7-10 fps at 1080p against v1's 29.7. It was
-   believed that "WebCodecs' AVC encoder is the wall". That is FALSIFIED, and so is everything that
-   replaced it: a probe that reproduces v2's ENTIRE data path — two transferred capture sources, the
-   production GL compositor and its PiP, wall-clock timestamps, the mediabunny fragmented MP4 through
-   an OPFS SyncAccessHandle, a full 10 s take, in a worker — runs at 60.1 fps with zero drops and
-   13 ms of encoder latency, against v2's 850-4665 ms in situ. EIGHT hypotheses are refuted with
-   numbers in the O4 handoff. The difference is in the FILE, not in Chrome. v2 is better on every other axis measured
-   (main-thread cost 131 ms → 0, oracle sync 40.0 vs 58.8 ms, it drains its own encoder at stop).
-   Anything touching capture/* must keep BOTH working, and `npm run oracle --engine=v2` gates the
-   second one. DO NOT repeat the elimination work — read the handoff first.
+6. THERE ARE TWO LIVE-COMPOSITE ENGINES, AND THE SECOND IS DORMANT FOR A FINISH LIST, NOT A WALL.
+   v1 (MediaRecorder) is the DEFAULT; v2 (worker + WebCodecs + WebGL2 + fMP4) is merged behind
+   ?engine=v2. Three sessions of "WebCodecs delivers 2-10 fps" were the INSTRUMENT (2026-08-24):
+   every o4step2 run is a fresh throwaway Chrome profile whose FIRST VideoEncoder pays a
+   multi-second initialization, every take was 8-10 s so it fit entirely inside the transient, and
+   the old watchdog (cumulative fps from START) degraded the take mid-init so nothing could ever
+   recover. Warm, the same engine delivers 28.4 fps at 1080p (gate ≥28 MET; v1 29.3 same run) at
+   14 ms encoder latency, and beats v1 on every other axis measured (main thread 0 vs 198 ms,
+   oracle sync 33.7 vs 63.4 ms, it drains its own encoder at stop). o4step2 now warms before
+   measuring ({"cold":true} measures the transient on purpose); the watchdog clock starts at the
+   first real output (capture/compositorWatchdog.ts). Anything touching capture/* must keep BOTH
+   engines working, and `npm run oracle --engine=v2` gates the second one. The default flip waits
+   on the finish list in the O4 handoff, not on throughput.
 7. THE EDIT IS PERSISTED NOW (F4, editsRepo, IndexedDB v2). Before that a refresh silently threw away
    every trim and cut while faithfully restoring the recording. If you add a field to EditState, it is
    automatically persisted — make sure it survives a round trip through structured clone.
@@ -174,6 +174,10 @@ BOTH the composite and the raw channels.
      f1        mid-take cuts: sync + joint discontinuity     f7       quality tiers + certification
      f4        camera pose LOCATED in decoded export frames vs the pose function
      o4step2   v1 vs v2 live composite: delivered fps, main-thread long tasks, tail gap, bits audit
+               (warms v2 first since 2026-08-24 — every earlier v2 number was a cold-start artifact;
+               {"cold":true} measures the transient on purpose)
+     o4worker  the engine bisect that closed O4's throughput mystery: the production worker × the
+               probe feeder × the environment added back cell by cell; {"warmup":false} runs cold
      o11       bits audit: GOP ladder + quality steps + camera-PiP bitrate, all demuxed from the file
      o4step2   also takes {"engines":["v1"]} and reports the tail band + a raw-channel lane
      f2        timed zoom LOCATED in decoded export frames, via the PiP as a fiducial
@@ -356,124 +360,61 @@ GATES: oracle sync ≤10 ms 10/10 · 08-22 4K rig: delivered ≥28 fps at 1080p 
 · mid-record tab-kill salvages composite + all channels · forced-slow harness proves watchdog fallback
 · capture CPU ≤ O3 baseline (report) · unedited instant export ≤ 200 ms · ZERO TAIL LOSS at stop
 (distinctive final-second event present in export, drain-verified — PO hard requirement) · all oracles green.
-── HANDOFF 2026-08-23 (ee/o4-step2) — ENGINE BUILT AND MERGED, DORMANT. THE THROUGHPUT GATE IS NOT MET
-   AND THE REASON IS MEASURED. Per the operating rule (a gate you cannot meet = stop and report why
-   with measurements), v2 ships behind `?engine=v2` / localStorage with the DEFAULT ON v1.
-SHIPPED: capture/compositor.worker.ts (OffscreenCanvas + VideoEncoder + AudioEncoder + fragmented MP4
-   + its OWN SyncAccessHandle, flushed per chunk) · capture/compositorGL.ts (WebGL2 backend, 2D kept as
-   fallback) · capture/liveCompositeV2.ts (TrackProcessor pumps, the v1 audio mix tapped as PCM, the
-   liveness tick, the watchdog) · capture/engine.ts (the switch) · session.ts picks an engine and falls
-   back to v1 if v2 cannot start · `npm run exp -- o4step2` and `npm run oracle --engine=v2`.
-WHAT v2 DOES DELIVER, measured back-to-back against v1 on the same rig:
-   · MAIN THREAD: 131 ms of long tasks during a 1080p take → 0 ms. Capture no longer competes with the UI.
-   · SYNC: oracle 40.0/44.3 ms against v1's 58.8/67.4 ms — frame-driven timestamps beat MediaRecorder's.
-     Tail 70 ms, spur −51.3 dB, export 4.93×. Both engines PASS; v2 is the better number.
-   · It owns the encoder, so stop() DRAINS instead of asking a black box to stop.
-WHY IT IS NOT THE DEFAULT: 1080p delivered ~10 fps against v1's 30. The bottleneck is isolated and it
-   is NOT our code — per frame the worker spends 0.86 ms compositing, 0.05 ms making the VideoFrame and
-   0.03 ms in the encode CALL, with the encoder queue pinned at 5 of 6. WebCodecs AVC on this machine
-   simply drains at ~10 fps while MediaRecorder's internal path does 30. Profile is not the lever (Main
-   and High both ~10 fps; note avc1.42E01E is level 3.0 and cannot do 1080p at all). Flush batching is
-   not the lever (250 ms batching measured 6.5 fps vs 10.5 per-chunk — inside the noise, so the
-   per-chunk flush stayed for the salvage guarantee). At 4K the WebGL texture upload also becomes real
-   at 35.6 ms/frame, which would need WebGPU importExternalTexture — but that is second-order behind
-   the encoder.
-   TO FLIP THE DEFAULT: run `npm run exp -- o4step2` on a machine (or a Chrome) that gives WebCodecs a
-   real hardware encoder and read deliveredFps. Nothing else needs to change.
-FOUND ALONG THE WAY, AND IT MATTERS MORE THAN THE ABOVE — v1 LOSES THE TAIL UNDER LOAD. On the 4K rig
-   the SHIPPED engine delivered 13.3 fps and its last decodable frame sat 3769 ms before the end of the
-   take. Nearly four seconds of a 4K take are simply not in the file. O8's tail band never caught this
-   because it only ever ran on the light synthetic rig. THIS IS A P0-SHAPED BUG IN WHAT USERS RUN TODAY
-   and it is exactly PO's "Loom cuts last seconds — we don't do that shit". It needs its own task:
-   either bound MediaRecorder's stop drain, or extend the O8 tail band to run under the 4K load so the
-   gate can see it.
-THREE BUGS THE HARNESS CAUGHT that reasoning had not: audio anchored at message-DELIVERY time placed
-   the whole track ~430 ms late (the port queues during worker start — it now stamps from the
-   AudioContext clock); starved audio quanta were skipped rather than filled with silence, splicing the
-   sample-counted timeline (−33 dB spur); and audio that begins before the first video frame produced a
-   NEGATIVE timestamp the muxer refused (the lead is now trimmed, not shifted).
-NOT DONE: WebGPU backend · raw channels still MediaRecorder (measuredVideo.ts on ee/webcodecs-capture-2
-   remains unmerged) · tab-kill salvage of the fMP4 not yet verified · the on-screen preview does not
-   yet render the compositor's own output.
-
-── HANDOFF 2026-08-23 (FIFTH session) — THE WORKER IS EXONERATED. EIGHT REFUTATIONS AND A 100x GAP.
-   The previous handoff said the one untested difference left was WHAT IT IS FED: frames transferred
-   across the thread boundary and uploaded as GL textures. It is now tested, with everything else.
-   `npm run exp -- encprobe` grew cells that reproduce v2's data path piece by piece. 1080p, 600
-   frames (a full 10 s take):
-     worker:transfer                           60.7 fps   0.05 ms per post
-     worker:composite                          60.2 fps   0 dropped, encoder latency 12 ms
-     worker:composite+camera                   60.1 fps   two sizes through one texture
-     worker:composite+camera+wallclock         60.1 fps   production's own timestamps
-     worker:composite+camera+wallclock+MUX     60.1 fps   latency 13 ms — mediabunny fragmented MP4
-                                                          through an OPFS SyncAccessHandle, flushed
-                                                          per chunk, mux 45 ms / write 4.7 / flush 9.9
-     v2 IN SITU                                 2-4 fps   encoder latency 850-4665 ms
-   REFUTED, each with numbers — DO NOT SPEND ANOTHER SESSION ON THESE:
-     · the texture re-spec between two differently-sized sources (59.8 vs 59.2 fps on the main thread)
-     · the thread crossing itself (0.05 ms per frame)
-     · GL compositing in a worker off transferred capture frames (60 fps)
-     · the second source and the PiP shader path (60 fps)
-     · production's uneven wall-clock timestamps (60 fps)
-     · take DURATION — the probe holds 60 fps for a full 10 s, not just 2.5 s
-     · the muxer and the OPFS handle (60 fps, and its mux/write/flush match what the engine reports)
-     · audio: a SILENT take (no AudioEncoder, no second muxer track) still ran ~4 fps
-       (`npm run exp -- o4step2 {"noAudio":true}`)
-   AND, A/B'd DIRECTLY IN THE ENGINE:
-     · the encoder config made BYTE-IDENTICAL to the probe's (no codec ladder, no avc:{format}, no
-       isConfigSupported-normalised spread): still 4665 ms of latency
-     · the cadence gate and the drop policy bypassed, every arrival encoded with regular i/30
-       timestamps: still 29 encoded of 450
-     · the GPU finally measured with a BARRIER instead of by timing the enqueue (the old handoff's
-       own step 1): 2.05 and 2.84 ms per composited frame
-   WHERE THAT LEAVES IT: our code in the worker accounts for ~280 ms of a 10 s take — onmessage
-   192-326 ms, output callbacks 1 ms, mux 26, write 1, flush 8. The encoder holds ~6 frames and
-   returns each one 850-4665 ms after encode(), while the same encoder, same config, same frames,
-   same compositor and same muxer returns them in 13 ms ONE FILE OVER. The wall is not the platform
-   and not the shape of the work. Next session: diff compositor.worker.ts against
-   encoderProbe.worker.ts structurally, or move the probe's loop INTO compositor.worker.ts behind a
-   command — the difference is in the file, not in Chrome.
-   NEW INSTRUMENTS, all cheap and left on: handlerMs/idleMs/maxIdleMs (which side of the boundary is
-   busy — and idleMs is NOT proof of an idle thread, it counts microtasks too, which is why outputMs
-   exists), encodeLatencyMs/outputs, outputMs, configJson (the config AFTER normalisation), and gpuMs
-   behind PROBE_GPU (off by default: the barrier serialises the pipeline, so it is an instrument).
-
-── HANDOFF 2026-08-23 (third session) — THE THROUGHPUT DIAGNOSIS IS WRONG, AND HERE IS WHAT IS LEFT.
-   The previous handoff concluded "WebCodecs AVC on this machine simply drains at ~10 fps while
-   MediaRecorder's internal path does 30", and deferred the engine on that. It does not hold.
-   `npm run exp -- encprobe` feeds the same shape of work (paint → VideoFrame → encode, same
-   backpressure ceiling of 5, warm-up discarded, every config run twice in opposite order and scored
-   on its WORSE pass) and measures, at 1080p on the TD machine, Chrome 151:
-     main thread, 2D canvas          142-191 fps   (prefer-hardware ≈ no-preference; software 69-91)
-     main thread, WebGL2 canvas      105-155 fps
-     main thread, PRODUCTION GL compositor fed REAL capture frames   59-60 fps, and the encoder
-                                     never blocked once (queueWait 0 ms — the 60 fps source was
-                                     the limit, not the encoder)
-     WORKER, 2D canvas               169 fps  ← the one variable the main thread cannot test itself
-   Against v2 in situ: 6.7-10 fps. So the encoder is not the wall, nor the codec, nor
-   hardwareAcceleration, nor latencyMode, nor the queue cap (30 vs 5 changes nothing), nor the GL
-   canvas, nor the texture upload of real capture frames, nor the muxer, nor the disk write, nor the
-   disk barrier — the last three are now TIMED inside the worker and total 39 ms across a 10 s take
-   (mux 28, write 1, flush 10 over 7 write calls).
-   WHERE THE FRAMES GO, counted in the worker (new stats): of 452 arrivals — 39 encoded, 101 dropped
-   because the encoder queue was full, 315 rejected by the cadence gate, and ZERO of them stale (the
-   keep-alive is not stamping the gate into the future; that hypothesis is dead too).
-   THE PARADOX THAT REMAINS, and the next session's whole job: the encoder can do 169 fps in this very
-   worker, yet 101 frames find six already outstanding. The only difference left between the fast probe
-   and the slow engine is WHAT IT IS FED — VideoFrames TRANSFERRED across the thread boundary and then
-   uploaded as GL textures. Best-supported hypothesis, NOT yet measured: a transferred capture frame is
-   not GPU-resident in the worker, so each texture upload costs a readback that lands in the GPU
-   pipeline behind the encoder rather than in paintMs (which only times the JS call, 1.19 ms).
-   HOW TO TEST IT NEXT, cheapest first: (1) time the GPU side, not the JS call — draw, then
-   gl.finish() or a fence, and put THAT in the stats; (2) run the compositor-path probe inside the
-   worker with transferred frames, which isolates the transfer from everything else; (3) only then
-   reach for WebGPU importExternalTexture, which is the remedy IF the upload is the cost.
-   STILL NOT DONE, unchanged: WebGPU backend · raw channels → VideoEncoder (ee/webcodecs-capture-2,
-   unmerged) · preview from the compositor's own output.
-   fMP4 TAB-KILL SALVAGE — DECIDED, NOT BUILT, and the reason is P0-tail: a crash-truncated composite
-   has an unknown tail, and the rule established this session is that such a composite must never be
-   packet-copied. A salvaged composite could therefore only ever be used for a size estimate, which is
-   not worth the manifest plumbing. It stays out of salvage; recovery keeps restoring the channels.
+── HANDOFF 2026-08-24 (SIXTH session, "go O4") — SOLVED. THE "2-10 FPS WALL" WAS THE INSTRUMENT'S
+   COLD START, AND THE THROUGHPUT GATE IS MET. Engine remains merged + DORMANT behind ?engine=v2.
+THE FINDING, with the cells that forced it (`npm run exp -- o4worker`, new this session): the
+   UNTOUCHED compositor.worker.ts driven by the probe's own feeder runs 27-28 fps at 13 ms encoder
+   latency — with the engine's audio graph attached, with an idle AudioContext, with a longtask
+   observer, with the o4step2 rig's own sources, and even through the REAL startLiveCompositeV2
+   (26.7-29.1 fps warm). The same cells run COLD (fresh throwaway Chrome profile, which every
+   exp.mjs run is) collapse to 0.6-5 fps with 400-8600 ms "encoder latency": the FIRST VideoEncoder
+   of a fresh profile pays a multi-second initialization. A 30 s cold take proves it is a
+   transient: 747 frames = 24.9 fps overall, all 102 drops inside the first ~5 s, 42 ms mean
+   latency once flowing. Every v2 number this rig ever produced was measured INSIDE that window —
+   and the old watchdog (cumulative fps from START, 5 s deadline) then degraded the take mid-init,
+   which stops the pumps, so nothing could ever recover: a one-time transient read as a permanent
+   2-10 fps. Note 10's fourth instance. The prior sessions' EIGHT refutations (texture re-spec, the
+   thread crossing, GL-in-worker, the second source, wall-clock timestamps, take duration, the
+   muxer + OPFS handle, audio) all still stand — they were all true, which is exactly why only the
+   environment was left to differ.
+SHIPPED THIS SESSION: o4step2 warms v2 with one discarded 2.5 s take before measuring
+   ({"cold":true} restores the old behaviour on purpose; the report's notes say which way it ran) ·
+   the watchdog clock now starts at the encoder's FIRST real output (capture/compositorWatchdog.ts,
+   pure, 6 unit tests): init excluded, sustained slowness still degrades at 12 fps over 5 s, a
+   never-outputs wedge degrades at 15 s — a degrade costs only the composite (raw channels keep
+   recording), so patience beats a false kill · `npm run exp -- o4worker` kept as the engine bisect
+   harness (cells control/bare/idlectx/audio/rigsrc/engine/engine-rigsrc/ctx/obs/ctxaudio/insitu;
+   {"warmup":false} measures cold).
+MEASURED ON THE FIXED INSTRUMENT (warm, 10 s takes, same day, TD machine):
+   1080p: v2 delivers 28.4 fps vs v1 29.3 — THE ≥28 GATE IS MET (this line read "2-10" yesterday) ·
+   v2 main-thread long tasks 0 ms vs v1 198 ms · encoder latency 14 ms, 0 drops, peak queue 1 ·
+   tail −233 ms (the drain runs past the declared end — bytes, not tail) · oracle PASS on both
+   engines, v2 sync 33.7 ms vs v1 63.4 ms same day.
+   4K SOURCE row: v2 still collapses (2 encoded, 1468 ms latency — the 4K GL texture upload,
+   measured earlier at ~35.6 ms/frame) and v1 reads 13.6 fps with tail 3812 ms on the SAME row.
+   BUT the row feeds an UNCAPPED 4K canvas straight into the composite, a shape production forbids
+   (capDisplayTrack pins display tracks to 1080p before any consumer exists), and the rig cannot
+   yet reproduce that cap on a canvas track. Read neither engine's 4K row as production truth.
+   v1's 3812 was also measured with several Chromes alive; oracle:load on a quiet machine before
+   calling it a regression.
+WHAT STILL BLOCKS THE DEFAULT FLIP (throughput no longer does):
+   1. FIRST-TAKE COLD START IS REAL FOR USERS TOO: on a fresh profile, the first take's composite
+      drops its first ~2-5 s while the encoder initializes (the raw channels keep those seconds;
+      the instant path would ship a freeze-start). MEASURE ON A REAL PERSISTENT PROFILE FIRST —
+      on-disk GPU caches may make init short and this a non-issue; if it is real, prewarm a tiny
+      VideoEncoder at MOUNT beside the existing engine prewarm (no device access, off the critical
+      path, instant-start constraint untouched).
+   2. mid-record tab-kill salvage of the fMP4 — unverified (gate).
+   3. the recording preview still decodes sources in <video>; the compositor's own output should
+      feed it (gate: zero extra decodes).
+   4. capture CPU ≤ O3 baseline — unreported (gate).
+   5. forced-slow harness proof of the watchdog fallback (gate) — the new no-output wedge path
+      needs its case.
+   6. sync: v2 reads 33.7 ms on the ≤90 band; the ≤20 ms goal is anchor work (input-latency
+      subtraction), not throughput.
+   7. raw channels on VideoEncoder (ee/webcodecs-capture-2, unmerged, behind main — rebase first)
+      — optional, evidence decides.
+NOT DONE, unchanged: WebGPU backend — now clearly the 4K lever, not the 1080p one.
 
 ## O5. export-engine-v2 — worker, pipelined, smart-cut, codec ladder  [P1, after O4]
 Why: the render is main-thread and strictly serial (decode awaits draw awaits encode), sleeps every

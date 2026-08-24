@@ -244,6 +244,7 @@ const runners: Runner[] = [
         engines: Array.isArray(args?.engines) ? (args.engines as ('v1' | 'v2')[]) : undefined,
         rawLane: typeof args?.rawLane === 'boolean' ? args.rawLane : undefined,
         noAudio: typeof args?.noAudio === 'boolean' ? args.noAudio : undefined,
+        cold: typeof args?.cold === 'boolean' ? args.cold : undefined,
       })
     },
   },
@@ -261,6 +262,22 @@ const runners: Runner[] = [
           ? (args.procedures as ('shipped' | 'slice250' | 'cut' | 'throttle' | 'production' | 'wedged')[])
           : undefined,
         repeats: typeof args?.repeats === 'number' ? args.repeats : undefined,
+      })
+    },
+  },
+  {
+    id: 'o4worker',
+    title: 'O4 — the production worker file driven by the probe feeder',
+    detail:
+      'crosses the two halves nothing has ever crossed: the UNTOUCHED production compositor.worker.ts driven by the probe’s own feeder and sources, then the engine environment added back piece by piece (bare page → idle AudioContext + ticking tap worklet → full oscillator mix with AudioEncoder). Whichever cell collapses names the wall.',
+    run: async (args) => {
+      const { runWorkerBisect } = await import('../perf/workerBisect')
+      return runWorkerBisect({
+        frames: typeof args?.frames === 'number' ? args.frames : undefined,
+        width: typeof args?.width === 'number' ? args.width : undefined,
+        height: typeof args?.height === 'number' ? args.height : undefined,
+        cells: Array.isArray(args?.cells) ? (args.cells as string[]) : undefined,
+        warmup: typeof args?.warmup === 'boolean' ? args.warmup : undefined,
       })
     },
   },

@@ -77,20 +77,21 @@ gaps / in flight:
   O4 step 2's job is to bring the symmetric metric to ≤20 ms, then re-tighten the band.
   ee/webcodecs-capture-2 is untouched and behind main — REBASE before continuing it.
 - LIVE COMPOSITE ENGINES (O4 step 2): v2 (worker + WebCodecs + WebGL2 + fMP4 to its own
-  SyncAccessHandle) is MERGED BUT DORMANT — default stays v1, opt in with ?engine=v2. It does what it
-  was built for (main-thread capture cost 131 ms → 0; oracle sync 40.0 vs v1's 58.8 ms; it drains an
-  encoder it owns at stop) but delivers 2-10 fps at 1080p against v1's 29.7.
-  THE WORKER IS NOW EXONERATED, AND THE SEARCH SPACE IS ONE FILE WIDE. A probe that reproduces v2's
-  ENTIRE data path — two transferred capture sources, the production GL compositor and its PiP,
-  production's wall-clock timestamps, the mediabunny fragmented MP4 through an OPFS SyncAccessHandle
-  flushed per chunk, a full 10 s take, all inside a worker — runs at 60.1 fps with ZERO drops and
-  13 ms of encoder latency. v2 in situ: 850-4665 ms of encoder latency, with our own code accounting
-  for ~280 ms of the whole 10 s. EIGHT hypotheses are refuted with numbers (the texture re-spec, the
-  thread crossing, GL-in-worker, the second source, the timestamps, take duration, the muxer and the
-  OPFS handle, and audio), plus three A/Bs inside the engine itself (a byte-identical encoder config,
-  the cadence gate and drop policy bypassed, and the GPU finally measured with a barrier: 2-2.8 ms
-  per frame). The difference is in the FILE, not in Chrome — next session diffs compositor.worker.ts
-  against encoderProbe.worker.ts. Full table in the O4 handoff in .ai/TASKS.
+  SyncAccessHandle) is MERGED BUT DORMANT — default stays v1, opt in with ?engine=v2.
+  THE THROUGHPUT MYSTERY IS SOLVED (2026-08-24) AND THE GATE IS MET: "2-10 fps" was the instrument.
+  Every o4step2 run is a fresh throwaway Chrome profile whose FIRST VideoEncoder pays a multi-second
+  initialization; every take was 8-10 s, so the whole take fit inside the transient; and the old
+  watchdog (cumulative fps from start, 5 s deadline) degraded the take mid-init so it could never
+  recover. Warm, v2 delivers 28.4 fps at 1080p (v1: 29.3 same run; gate ≥28 MET) at 14 ms encoder
+  latency with 0 drops, main-thread capture cost 0 vs v1's 198 ms, oracle sync 33.7 vs v1's 63.4 ms.
+  Fixed: o4step2 warms before measuring ({"cold":true} keeps the transient measurable), the watchdog
+  clock starts at the encoder's first real output (capture/compositorWatchdog.ts, pure + tested),
+  and `npm run exp -- o4worker` is the bisect harness that closed it. Remaining before a default
+  flip (throughput no longer blocks): first-take cold start measured on a real PERSISTENT profile
+  (prewarm at mount if it is real outside throwaway profiles), fMP4 tab-kill salvage, preview from
+  the compositor's own output, capture CPU report, forced-slow watchdog proof, and the 4K row
+  re-measured in production shape — the rig's uncapped-4K row is not production truth
+  (capDisplayTrack pins display tracks to 1080p before any consumer exists).
 - THE TAIL IS KEPT, ON BOTH FILES A TAKE PRODUCES (2026-08-23). The composite used to lose 2734 ms
   off the end of a 4K take; it now loses 43-320 ms. stop() kills the painting first, then PROBES the encoder with requestData() until it
   answers empty (waiting for the byte flow to go quiet looks equivalent and is not — under load this

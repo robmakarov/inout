@@ -82,15 +82,18 @@ Known gaps, honestly stated:
 - **The end of a take going missing under load is FIXED for the composite** — 2.7 seconds lost off a
   4K recording became 0.04-0.3 seconds, and the recording now recovers about a megabyte at every stop
   that used to be thrown away. A take whose encoder never catches up says so, and the fast export
-  path refuses to ship it. **The raw channels still lose up to 0.75 seconds** under the same
-  artificial load; that is the next item, and it needs care because it touches the code that once
-  wedged the record button.
-- **The new capture engine is off, and we now know we were blaming the wrong thing.** It was deferred
-  on "the browser's video encoder is too slow here". That is measurably false: the same encoder does
-  150-190 frames a second in isolation, and 169 even inside a worker, while the engine delivers 7.5.
-  Nine candidate causes are eliminated with numbers and one suspect is left — how frames are handed
-  across the thread boundary. This is good news: it is a bug we can find rather than hardware we have
-  to wait for.
+  path refuses to ship it. The raw channels got the matching fix the same day (their tail loss went
+  from ~1.3 seconds to under a quarter second, by starving the source instead of ending it).
+- **The new capture engine was never slow — our measuring rig was (found 2026-08-24).** For three
+  sessions the engine read "2-10 fps" and stayed off. The real story: the test harness always runs
+  in a brand-new browser profile, whose very first video encoder takes several seconds to warm up;
+  every test take was 8-10 seconds, so the whole take fit inside that warm-up; and the engine's own
+  watchdog, measuring from the start of the take, killed it before the encoder finished waking.
+  Measured warm, the new engine hits its speed gate (28.4 fps vs the old engine's 29.3) while using
+  ZERO main-thread time (old: 198 ms) and roughly HALVING the audible A/V sync offset (33.7 ms vs
+  63.4). The rig and the watchdog are fixed. What still stands between it and becoming the default
+  is a short finish list (first-take warm-up on real machines, crash salvage of its file format,
+  preview wiring, a CPU report) — a checklist now, not a mystery.
 - **A/V sync is worse than we thought, and the instrument was why.** Every sync number quoted before
   2026-08-23 was ~31 ms optimistic: the oracle carried an exact 18 ms detection bias and never
   measured the video reference at all. The true offset is ~45–63 ms, audio late — which is what PO

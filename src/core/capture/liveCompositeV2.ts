@@ -26,6 +26,7 @@ import { blobStore } from '@core/store'
 import type { CompositorMsg, CompositorReply, CompositorStats } from './compositor.worker'
 import type { CompositeRecording } from '../types'
 import { SourceLiveness, type LivenessEvent } from './sourceLiveness'
+import { watchdogVerdict } from './compositorWatchdog'
 
 const FPS = 30
 const W = 1920
@@ -35,19 +36,13 @@ const AUDIO_BITS = 128_000
 const FPS_LOG_MS = 10_000
 
 /**
- * Watchdog. The honest signal is the rate that reaches the FILE, not the drop
- * ratio: drops are only meaningful relative to what was offered, and a source
- * running at 60 fps into a 30 fps composite "drops" half of everything by
- * design. So this asks the same question v1's median-gap watchdog asked —
- * is this machine delivering a usable frame rate? — against the encoder's
- * own output.
- *
- * A source that is merely STATIC must never trip it: those takes encode one
- * keep-alive frame per second quite correctly, so keep-alive frames are
- * excluded and a composite that is mostly keep-alive is left alone.
+ * Watchdog: see compositorWatchdog.ts. The honest signal is the rate that
+ * reaches the FILE, measured from the encoder's FIRST OUTPUT — a cold
+ * encoder's multi-second initialization is not a slow machine, and killing a
+ * take during it was exactly how the whole engine got misdiagnosed as
+ * "2-10 fps" (2026-08-24). Keep-alive frames are excluded so a static
+ * composition is left alone.
  */
-const WATCHDOG_AFTER_MS = 5000
-const WATCHDOG_MIN_FPS = 12
 
 /**
  * One worklet, two jobs: it taps the mixed PCM and it is the liveness tick.
@@ -234,16 +229,23 @@ export async function startLiveCompositeV2(
     options.onDegrade?.(reason)
   }
 
+  /** First non-keep-alive output, seen through the 1 Hz stats events — the
+   *  watchdog's clock starts here, so encoder initialization is not "slow". */
+  let firstOutputAt: number | null = null
+
   function checkWatchdog(s: CompositorStats): void {
-    const elapsedSec = (performance.now() - startedAt) / 1000
-    if (degraded || elapsedSec * 1000 < WATCHDOG_AFTER_MS) return
-    // Nothing was asked of the encoder — a static composition, not a slow one.
+    if (degraded) return
+    const now = performance.now()
     const real = s.framesEncoded - s.keepAliveFrames
-    if (s.framesDropped === 0) return
-    const fps = real / elapsedSec
-    if (fps < WATCHDOG_MIN_FPS) {
-      degrade(`only ${fps.toFixed(1)} fps reached the file (${s.framesDropped} frames dropped)`)
-    }
+    if (real > 0 && firstOutputAt === null) firstOutputAt = now
+    const verdict = watchdogVerdict({
+      nowMs: now,
+      startedAtMs: startedAt,
+      firstOutputAtMs: firstOutputAt,
+      realFramesEncoded: real,
+      framesDropped: s.framesDropped,
+    })
+    if (verdict) degrade(verdict)
   }
 
   // ---- liveness: last frame timestamp per source, sampled on the tick ------
