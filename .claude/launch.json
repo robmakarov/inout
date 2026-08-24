@@ -2,6 +2,11 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "//": "DEFAULT for agents. Vercel auto-builds main on push, and every change here is pushed, so the deployed build IS the working copy — no local server needed to look at the same code. Append ?synthetic=1 for device-free e2e, &slow=mic:6000 to reproduce a stuck arm.",
+      "name": "inout-live",
+      "url": "https://inout-kappa.vercel.app"
+    },
+    {
       "name": "inout",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
