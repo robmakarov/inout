@@ -4,19 +4,20 @@
  * v1 is the shipped MediaRecorder-on-a-main-thread-canvas path. v2 is the
  * worker/WebCodecs compositor.
  *
- * THE DEFAULT IS v1, AND THAT IS A MEASUREMENT, NOT CAUTION. v2 does what it
- * was built to do — it takes capture off the main thread entirely (144 ms of
- * long tasks during a take becomes 0) and it drains its encoder at stop — but
- * on the TD machine its VideoEncoder delivers ~10 fps at 1080p where
- * MediaRecorder delivers ~29. The bottleneck is isolated and it is not ours:
- * compositing costs 1.1 ms per frame, turning the canvas into a VideoFrame
- * 0.05 ms, and the encode CALL 0.04 ms — the encoder's own throughput is the
- * wall. Shipping v2 by default would trade a working 30 fps composite for a
- * 10 fps one, which is the opposite of the point.
+ * THE DEFAULT IS v1, AND THE REASON CHANGED ON 2026-08-24. The old story —
+ * "the encoder's own throughput is the wall, ~10 fps" — is FALSIFIED: those
+ * numbers were the rig measuring inside a fresh Chrome process's first-
+ * VideoEncoder initialization (multi-second, per LAUNCH), with a watchdog that
+ * killed the take mid-init. Warm, v2 meets its throughput gate (28.4 fps at
+ * 1080p vs v1's 29.3 in the same run) while costing the main thread nothing
+ * (0 ms of long tasks vs v1's 198) and nearly halving the oracle sync offset
+ * (33.7 vs 63.4 ms). The init itself is handled: prearm.ts warms a throwaway
+ * encoder at mount when this switch prefers v2 (encoderWarm.ts, measured).
  *
- * So v2 ships dormant, behind this switch, with its evidence harness. Flip the
- * default when a machine (or a Chrome) is measured giving WebCodecs a real
- * hardware encoder: `npm run exp -- o4step2` prints the numbers that decide it.
+ * v2 stays dormant for the REMAINING gates, not for speed: fMP4 tab-kill
+ * salvage unverified, the recording preview still decodes sources in <video>,
+ * capture-CPU report, and the forced-wedge watchdog case. The list lives in
+ * .ai/TASKS under O4; `npm run exp -- o4step2` prints the throughput evidence.
  *
  *   ?engine=v2   (this load only)
  *   localStorage['inout.capture.engine'] = 'v2'   (sticky)

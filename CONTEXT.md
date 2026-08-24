@@ -91,9 +91,13 @@ Known gaps, honestly stated:
   watchdog, measuring from the start of the take, killed it before the encoder finished waking.
   Measured warm, the new engine hits its speed gate (28.4 fps vs the old engine's 29.3) while using
   ZERO main-thread time (old: 198 ms) and roughly HALVING the audible A/V sync offset (33.7 ms vs
-  63.4). The rig and the watchdog are fixed. What still stands between it and becoming the default
-  is a short finish list (first-take warm-up on real machines, crash salvage of its file format,
-  preview wiring, a CPU report) — a checklist now, not a mystery.
+  63.4). The rig and the watchdog are fixed, and the same afternoon closed three more items:
+  the warm-up question is settled (users would pay it after every browser launch, so the app now
+  warms the encoder quietly at load), the CPU comparison came back in the new engine's favour (it
+  uses LESS processor while delivering more), and the fallback for machines that truly can't keep
+  up is proven. What still stands before it becomes the default: wiring the on-screen preview to
+  the new engine's own output (the one real piece of work left), plus two verification passes
+  (crash recovery, and the sync target).
 - **A/V sync is worse than we thought, and the instrument was why.** Every sync number quoted before
   2026-08-23 was ~31 ms optimistic: the oracle carried an exact 18 ms detection bias and never
   measured the video reference at all. The true offset is ~45–63 ms, audio late — which is what PO

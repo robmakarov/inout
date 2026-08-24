@@ -86,11 +86,16 @@ gaps / in flight:
   latency with 0 drops, main-thread capture cost 0 vs v1's 198 ms, oracle sync 33.7 vs v1's 63.4 ms.
   Fixed: o4step2 warms before measuring ({"cold":true} keeps the transient measurable), the watchdog
   clock starts at the encoder's first real output (capture/compositorWatchdog.ts, pure + tested),
-  and `npm run exp -- o4worker` is the bisect harness that closed it. Remaining before a default
-  flip (throughput no longer blocks): first-take cold start measured on a real PERSISTENT profile
-  (prewarm at mount if it is real outside throwaway profiles), fMP4 tab-kill salvage, preview from
-  the compositor's own output, capture CPU report, forced-slow watchdog proof, and the 4K row
-  re-measured in production shape — the rig's uncapped-4K row is not production truth
+  and `npm run exp -- o4worker` is the bisect harness that closed it. SECOND SESSION SAME DAY:
+  cold start is PER LAUNCH, not per profile (a new Chrome on a reused profile dir still read
+  15.9 fps cold), so capture/encoderWarm.ts now prewarms a throwaway 1080p VideoEncoder at MOUNT
+  when the engine preference is v2 — proven cold end-to-end (the warm absorbs the 3.9 s init on
+  the main thread; the worker's encoder then runs 28.2 fps / 13 ms / 0 drops) · CPU measured and
+  v2 WINS (whole-browser peak 127 % / mean 63 % vs v1's 196 / 72, at more fps and 0 ms of long
+  tasks; exp.mjs --cpu) · the new watchdog proven live on genuine sustained slowness (4K row) and
+  unit-tested on the wedge path. Remaining before a default flip: preview from the compositor's
+  own output (the big one), v2-take channel-salvage verification, sync ≤20 ms (anchor work), and
+  the 4K row re-measured in production shape — the rig's uncapped-4K row is not production truth
   (capDisplayTrack pins display tracks to 1080p before any consumer exists).
 - THE TAIL IS KEPT, ON BOTH FILES A TAKE PRODUCES (2026-08-23). The composite used to lose 2734 ms
   off the end of a 4K take; it now loses 43-320 ms. stop() kills the painting first, then PROBES the encoder with requestData() until it

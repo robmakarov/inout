@@ -28,6 +28,7 @@
 
 import { blobStore } from '@core/store'
 import { startLiveCompositeV2 } from '@core/capture/liveCompositeV2'
+import { warmVideoEncoder } from '@core/capture/encoderWarm'
 import type {
   CompositorMsg,
   CompositorReply,
@@ -323,6 +324,8 @@ export interface BisectCell {
   backend: string | null
   audioTicks: number
   audioBatches: number
+  /** mainwarm cell only: what the main-thread encoder warm itself cost. */
+  warmMs?: number
   error?: string
 }
 
@@ -757,6 +760,15 @@ export async function runWorkerBisect(
     else if (cell === 'audio') cells.push(await runProductionCell(cell, frames, width, height, 'live'))
     else if (cell === 'rigsrc')
       cells.push(await runProductionCell(cell, frames, width, height, 'none', 'rig'))
+    else if (cell === 'mainwarm') {
+      // The production prewarm, verbatim: does a MAIN-thread encoder warm make
+      // the WORKER's encoder fast? Run with {"warmup":false} in a fresh Chrome
+      // or it proves nothing.
+      const t0 = performance.now()
+      await warmVideoEncoder()
+      const warmMs = Math.round(performance.now() - t0)
+      cells.push({ ...(await runProductionCell(cell, frames, width, height, 'none')), warmMs })
+    }
     else if (cell === 'engine') cells.push(await runEngineCell(cell, takeMs, width, height, 'probe'))
     else if (cell === 'engine-rigsrc')
       cells.push(await runEngineCell(cell, takeMs, width, height, 'rig'))

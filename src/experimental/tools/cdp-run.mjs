@@ -18,7 +18,7 @@
  */
 
 import { spawn } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -32,11 +32,13 @@ function parseArgs(argv) {
   let headed = false
   let query = ''
   let ua = ''
+  let profileDir = ''
   for (const a of argv) {
     if (a.startsWith('--port=')) devPort = Number(a.slice(7))
     else if (a.startsWith('--timeout=')) timeoutSec = Number(a.slice(10))
     else if (a.startsWith('--query=')) query = a.slice(8)
     else if (a.startsWith('--ua=')) ua = a.slice(5)
+    else if (a.startsWith('--profile=')) profileDir = a.slice(10)
     else if (a === '--headed') headed = true
     else positional.push(a)
   }
@@ -53,6 +55,7 @@ function parseArgs(argv) {
     headed,
     query,
     ua,
+    profileDir,
   }
 }
 
@@ -98,11 +101,18 @@ class Cdp {
 }
 
 async function main() {
-  const { experiment, args, devPort, timeoutSec, headed, query, ua } = parseArgs(process.argv.slice(2))
+  const { experiment, args, devPort, timeoutSec, headed, query, ua, profileDir } = parseArgs(
+    process.argv.slice(2),
+  )
   // Extra query params reach the page's own knobs (e.g. `quiet=0.05`, the
   // synthetic-audio level used to exercise the loudness rescue).
   const pageUrl = `http://localhost:${devPort}/experimental.html?synthetic=1${query ? `&${query}` : ''}`
-  const profile = mkdtempSync(join(tmpdir(), 'inout-oracle-profile-'))
+  // --profile=<dir> REUSES a profile across runs and keeps it afterwards —
+  // built for the O4 cold-start question: a fresh throwaway profile pays the
+  // first VideoEncoder's multi-second init, and only a persisted profile can
+  // say whether real users pay it once ever or on every browser launch.
+  if (profileDir) mkdirSync(profileDir, { recursive: true })
+  const profile = profileDir || mkdtempSync(join(tmpdir(), 'inout-oracle-profile-'))
   const deadline = Date.now() + timeoutSec * 1000
 
   const chrome = spawn(
@@ -144,7 +154,8 @@ async function main() {
       /* already dead */
     }
     try {
-      rmSync(profile, { recursive: true, force: true })
+      // A named profile is the experiment's subject — keep it.
+      if (!profileDir) rmSync(profile, { recursive: true, force: true })
     } catch {
       /* best effort */
     }

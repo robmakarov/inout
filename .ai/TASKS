@@ -43,18 +43,20 @@ START HERE IF YOU ARE FRESH:
      SOLVED — what remains of O4 is a finish list, not a search.
 
 READY NOW — parallel-safe, any subset concurrently (one session each):
-  O4   webcodecs engine, STEP 2    [medium]  THROUGHPUT SOLVED 2026-08-24, GATE MET: 28.4 fps
-                                             delivered at 1080p (gate ≥28; v1 read 29.3 in the same
-                                             run), 14 ms encoder latency, 0 drops, main thread 0 ms
-                                             vs v1's 198, oracle sync 33.7 vs v1's 63.4. The
-                                             three-session "2-10 fps wall" was the RIG: a fresh
-                                             throwaway profile's FIRST VideoEncoder pays a multi-
-                                             second init, every take fit inside it, and the old
-                                             watchdog killed the take mid-init. What remains is the
-                                             DEFAULT-FLIP finish list in the handoff (cold-start on
-                                             real profiles, fMP4 salvage, preview from compositor,
-                                             CPU report, forced-slow proof, 4K row in production
-                                             shape). Keystone for O5/O6/O9, F6, F8, P4.
+  O4   webcodecs engine, STEP 2    [medium]  THROUGHPUT SOLVED + GATE MET 2026-08-24 (28.4 fps at
+                                             1080p vs v1's 29.3; the "2-10 fps wall" was the rig's
+                                             cold start + a watchdog that killed takes mid-init).
+                                             SECOND session same day closed three more finish-list
+                                             items: cold start is PER LAUNCH and now prewarmed at
+                                             mount (encoderWarm.ts, proven cold: 28.2 fps / 13 ms
+                                             after a 3.9 s mount-time warm) · CPU REPORT — v2 WINS
+                                             (peak 127 % vs v1's 196, mean 63 vs 72, more fps,
+                                             0 ms long tasks) · watchdog fallback proven live on
+                                             the 4K row + unit-tested wedge path. REMAINS before
+                                             the default flip: preview from the compositor's own
+                                             output (the big one) · v2-take channel salvage
+                                             verification · sync ≤20 ms (anchor work) · 4K row in
+                                             production shape. Keystone for O5/O6/O9, F6, F8, P4.
   F7c  the size number, calibrated [medium]  ATTEMPT 4 done 2026-08-23, NOT SHIPPED but the error is
                                              HALVED and SCREEN content is inside ±20 % for the first
                                              time (−6.7 to −15.4 %). Motion is a uniform 1.44× under
@@ -397,24 +399,41 @@ MEASURED ON THE FIXED INSTRUMENT (warm, 10 s takes, same day, TD machine):
    yet reproduce that cap on a canvas track. Read neither engine's 4K row as production truth.
    v1's 3812 was also measured with several Chromes alive; oracle:load on a quiet machine before
    calling it a regression.
-WHAT STILL BLOCKS THE DEFAULT FLIP (throughput no longer does):
-   1. FIRST-TAKE COLD START IS REAL FOR USERS TOO: on a fresh profile, the first take's composite
-      drops its first ~2-5 s while the encoder initializes (the raw channels keep those seconds;
-      the instant path would ship a freeze-start). MEASURE ON A REAL PERSISTENT PROFILE FIRST —
-      on-disk GPU caches may make init short and this a non-issue; if it is real, prewarm a tiny
-      VideoEncoder at MOUNT beside the existing engine prewarm (no device access, off the critical
-      path, instant-start constraint untouched).
-   2. mid-record tab-kill salvage of the fMP4 — unverified (gate).
+FINISH LIST FOR THE DEFAULT FLIP — updated same day (second "go O4" session):
+   1. FIRST-TAKE COLD START — CLOSED. Measured PER LAUNCH, not per profile: a NEW Chrome process on
+      a REUSED profile dir still read 15.9 fps / 177 ms latency cold (fresh dir: 13 / 260), so disk
+      caches do not save real users — the first take after every browser launch would drop its
+      opening ~4 s. SHIPPED: capture/encoderWarm.ts (throwaway 1080p VideoEncoder, 5 frames +
+      flush) called from prearm.ts at mount when the engine preference is v2 — no device touched,
+      off every critical path, v1 users spend nothing. PROVEN COLD END-TO-END: the warm itself
+      absorbs the init (3864 ms) and the WORKER's encoder then runs 28.2 fps / 13 ms / 0 drops in a
+      fully cold Chrome (`npm run exp -- o4worker {"cells":["mainwarm"],"warmup":false}` — the warm
+      is main-thread, the engine encodes in a worker, and that it carries across threads is
+      measured, not assumed).
+   2. mid-record tab-kill salvage of the fMP4 — still unverified (gate). Note the standing decision
+      (third session): a crash-truncated composite must never be packet-copied, so salvage keeps
+      restoring the CHANNELS; what needs verifying is that a v2 take's channels salvage exactly as
+      v1's do and the orphaned fMP4 is cleaned up.
    3. the recording preview still decodes sources in <video>; the compositor's own output should
-      feed it (gate: zero extra decodes).
-   4. capture CPU ≤ O3 baseline — unreported (gate).
-   5. forced-slow harness proof of the watchdog fallback (gate) — the new no-output wedge path
-      needs its case.
-   6. sync: v2 reads 33.7 ms on the ≤90 band; the ≤20 ms goal is anchor work (input-latency
-      subtraction), not throughput.
+      feed it (gate: zero extra decodes). The biggest remaining item.
+   4. CAPTURE CPU — CLOSED, AND v2 WINS: whole-browser CPU sampled from the OS during identical
+      warm 10 s 1080p takes (`--cpu`, new exp.mjs flag): v1 peak 196 % / mean 72 % delivering 25
+      fps with 179 ms of long tasks · v2 peak 127 % / mean 63 % delivering 28.6 fps with 0 ms —
+      and v2's window includes its own warm-up take.
+   5. watchdog fallback proof — MOSTLY CLOSED: the new first-output-clocked watchdog fired LIVE on
+      genuine sustained slowness (the uncapped-4K row: "only 0.3 fps reached the file" → degrade →
+      composite refused, take renders from channels), and the no-output wedge deadline (15 s) is
+      unit-tested (compositorWatchdog.test.ts). RESIDUAL, honestly: no e2e case forces an encoder
+      that ACCEPTS frames and never returns them — faking that needs test surface inside the
+      production worker, which was judged not worth it today. Revisit if a real wedge is ever seen.
+   6. sync: v2 reads 33.7-47.8 ms on the ≤90 band (v1: 63) across today's runs; the ≤20 ms goal is
+      anchor work (input-latency subtraction), not throughput.
    7. raw channels on VideoEncoder (ee/webcodecs-capture-2, unmerged, behind main — rebase first)
       — optional, evidence decides.
 NOT DONE, unchanged: WebGPU backend — now clearly the 4K lever, not the 1080p one.
+HARNESS GREW (second session): exp.mjs `--cpu` (OS-sampled whole-browser CPU, throwaway-profile
+   runs only) and `--profile=<dir>` (REUSE a Chrome profile across runs and keep it — how the
+   per-launch cold-start verdict was measured).
 
 ## O5. export-engine-v2 — worker, pipelined, smart-cut, codec ladder  [P1, after O4]
 Why: the render is main-thread and strictly serial (decode awaits draw awaits encode), sleeps every

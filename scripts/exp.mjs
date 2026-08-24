@@ -25,24 +25,28 @@ function parseArgs(argv) {
   let timeoutSec = 1800
   let headed = false
   let rss = false
+  let cpu = false
   let query = ''
   let ua = ''
+  let profile = ''
   for (const a of argv) {
     if (a.startsWith('--timeout=')) timeoutSec = Number(a.slice(10))
     else if (a === '--headed') headed = true
     else if (a === '--rss') rss = true
+    else if (a === '--cpu') cpu = true
     else if (a.startsWith('--query=')) query = a.slice(8)
     else if (a.startsWith('--ua=')) ua = a.slice(5)
+    else if (a.startsWith('--profile=')) profile = a.slice(10)
     else positional.push(a)
   }
   const [experiment, jsonArgs] = positional
   if (!experiment) {
     console.error(
-      "usage: exp.mjs <experiment> ['{json}'] [--timeout=1800] [--headed] [--rss] [--query=k=v]",
+      "usage: exp.mjs <experiment> ['{json}'] [--timeout=1800] [--headed] [--rss] [--query=k=v] [--profile=dir]",
     )
     process.exit(2)
   }
-  return { experiment, jsonArgs, timeoutSec, headed, rss, query, ua }
+  return { experiment, jsonArgs, timeoutSec, headed, rss, cpu, query, ua, profile }
 }
 
 /**
@@ -82,6 +86,49 @@ function startRssSampler() {
   }
 }
 
+/**
+ * Whole-browser CPU during a run, sampled from the OS: the sum of %CPU across
+ * every Chrome process of the throwaway profile (renderer, GPU, utilities).
+ * In-page instruments can see only their own thread; capture cost lives in
+ * all of them. Peak and mean-of-nonzero are reported; attribution is the
+ * run's job (drive ONE engine per invocation). Not available with --profile
+ * (the marker string is the throwaway dir name).
+ */
+function startCpuSampler() {
+  let peakPct = 0
+  let sumPct = 0
+  let samples = 0
+  const tick = () => {
+    try {
+      const out = execFileSync('/bin/ps', ['-eo', 'pcpu=,command='], { encoding: 'utf8' })
+      let total = 0
+      for (const line of out.split('\n')) {
+        if (!line.includes('inout-oracle-profile-')) continue
+        const pct = Number(line.trim().split(/\s+/)[0])
+        if (Number.isFinite(pct)) total += pct
+      }
+      if (total > 0) {
+        samples++
+        sumPct += total
+        if (total > peakPct) peakPct = total
+      }
+    } catch {
+      /* ps unavailable — reported as null */
+    }
+  }
+  const timer = setInterval(tick, 500)
+  return {
+    stop() {
+      clearInterval(timer)
+      return {
+        peakCpuPct: samples ? Math.round(peakPct) : null,
+        meanCpuPct: samples ? Math.round(sumPct / samples) : null,
+        samples,
+      }
+    },
+  }
+}
+
 function allocateEphemeralPort() {
   return new Promise((resolve, reject) => {
     const s = createServer()
@@ -112,7 +159,9 @@ async function waitForHttp(url, deadline) {
 }
 
 async function main() {
-  const { experiment, jsonArgs, timeoutSec, headed, rss, query, ua } = parseArgs(process.argv.slice(2))
+  const { experiment, jsonArgs, timeoutSec, headed, rss, cpu, query, ua, profile } = parseArgs(
+    process.argv.slice(2),
+  )
   const port = await allocateEphemeralPort()
   console.error(`exp: ephemeral server on http://${HOST}:${port}`)
 
@@ -137,14 +186,20 @@ async function main() {
       `--timeout=${timeoutSec}`,
       ...(query ? [`--query=${query}`] : []),
       ...(ua ? [`--ua=${ua}`] : []),
+      ...(profile ? [`--profile=${profile}`] : []),
       ...(headed ? ['--headed'] : []),
     ]
     const sampler = rss ? startRssSampler() : null
+    const cpuSampler = cpu && !profile ? startCpuSampler() : null
     const code = await new Promise((resolve, reject) => {
       const child = spawn(process.execPath, args, { cwd: ROOT, stdio: 'inherit' })
       child.on('error', reject)
       child.on('close', resolve)
     })
+    if (cpuSampler) {
+      const { peakCpuPct, meanCpuPct, samples } = cpuSampler.stop()
+      console.error(`exp: Chrome CPU peak ${peakCpuPct}% mean ${meanCpuPct}% over ${samples} samples`)
+    }
     if (sampler) {
       const { peakRendererMB, samples } = sampler.stop()
       console.error(`exp: peak Chrome renderer RSS ${peakRendererMB} MB over ${samples} samples`)

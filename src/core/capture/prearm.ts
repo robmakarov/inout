@@ -31,6 +31,15 @@ export function warmCapturePipeline(): void {
       const w = await blobStore.createWriteStream('__warmup.bin')
       await w.abort()
       await blobStore.remove('__warmup.bin').catch(() => undefined)
+      // O4: the v2 engine owns a VideoEncoder, and a Chrome process's FIRST
+      // VideoEncoder pays a multi-second init (per launch, measured — see
+      // encoderWarm.ts). Pay it here, while nobody is recording. Gated on the
+      // engine preference so default (v1) users spend nothing; flips with it.
+      const [{ preferredCompositeEngine }, { warmVideoEncoder }] = await Promise.all([
+        import('./engine'),
+        import('./encoderWarm'),
+      ])
+      if (preferredCompositeEngine() === 'v2') void warmVideoEncoder()
     } catch {
       warmed = false
     }
