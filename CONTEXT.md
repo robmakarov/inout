@@ -95,9 +95,14 @@ Known gaps, honestly stated:
   the warm-up question is settled (users would pay it after every browser launch, so the app now
   warms the encoder quietly at load), the CPU comparison came back in the new engine's favour (it
   uses LESS processor while delivering more), and the fallback for machines that truly can't keep
-  up is proven. What still stands before it becomes the default: wiring the on-screen preview to
-  the new engine's own output (the one real piece of work left), plus two verification passes
-  (crash recovery, and the sync target).
+  up is proven. THE FLIP HAPPENED the same day, on PO's word: the new engine IS the default now,
+  with the old one intact underneath as an automatic fallback (unsupported browsers, a failed
+  start, or a machine that can't keep pace) and a one-parameter revert. Every gate was green on
+  the way: full test suite, both engines' oracles, the eight-gate QA on the production build in
+  real Chrome, recording-start latency proven unaffected. What users get: capture that costs the
+  main thread nothing, LESS CPU, an audibly smaller A/V sync offset (~34-48 ms vs ~60), and a
+  recording that is a playable file on disk even mid-take. Waiting on PO's first real recording
+  to confirm; the sync target and a preview optimization remain as polish.
 - **A/V sync is worse than we thought, and the instrument was why.** Every sync number quoted before
   2026-08-23 was ~31 ms optimistic: the oracle carried an exact 18 ms detection bias and never
   measured the video reference at all. The true offset is ~45–63 ms, audio late — which is what PO

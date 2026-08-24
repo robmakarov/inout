@@ -34,29 +34,33 @@ Merged 2026-08-23/24 across six sessions: O1 · O2 · O3a · O7 · O4 step1 · O
 · P2 · P3 · F4 · O4 step2 (DORMANT) · a P0 mic-hang fix (PO-verified) · O11a · O11b · O11c · F7b · F3
 · F5a · P0-tail · F2 · the O4 RE-DIAGNOSIS · P0-TAIL-RAW · F5B · F2B · P1 (code half) · the O4
 EXONERATION OF THE WORKER · F7c attempt 4 (not shipped, error halved) · the O4 COLD-START VERDICT
-(the "2-10 fps wall" was the instrument; throughput gate MET at 1080p; rig + watchdog fixed).
+(the "2-10 fps wall" was the instrument; throughput gate MET at 1080p; rig + watchdog fixed) ·
+O4 DEFAULT FLIPPED TO v2 (third 08-24 session; v1 = capability/start/watchdog fallback + ?engine=v1;
+gates in the handoff; AWAITS PO REAL-TAKE VERIFICATION).
 START HERE IF YOU ARE FRESH:
   1. read notes 5, 6, 9, 10, 11 below — they are the ones that will bite you today;
   2. `npm run typecheck && npm test` (287 tests) and `npm run oracle` should be green before you
      change anything, so a red gate later is yours and not inherited;
-  3. take one task from READY NOW. There is no LIVE DEFECT on the map; O4's throughput mystery is
-     SOLVED — what remains of O4 is a finish list, not a search.
+  3. take one task from READY NOW. There is no LIVE DEFECT on the map; the DEFAULT capture engine is
+     now v2 (worker + WebCodecs) — anything touching capture/* keeps BOTH engines green.
 
 READY NOW — parallel-safe, any subset concurrently (one session each):
-  O4   webcodecs engine, STEP 2    [medium]  THROUGHPUT SOLVED + GATE MET 2026-08-24 (28.4 fps at
-                                             1080p vs v1's 29.3; the "2-10 fps wall" was the rig's
-                                             cold start + a watchdog that killed takes mid-init).
-                                             SECOND session same day closed three more finish-list
-                                             items: cold start is PER LAUNCH and now prewarmed at
-                                             mount (encoderWarm.ts, proven cold: 28.2 fps / 13 ms
-                                             after a 3.9 s mount-time warm) · CPU REPORT — v2 WINS
-                                             (peak 127 % vs v1's 196, mean 63 vs 72, more fps,
-                                             0 ms long tasks) · watchdog fallback proven live on
-                                             the 4K row + unit-tested wedge path. REMAINS before
-                                             the default flip: preview from the compositor's own
-                                             output (the big one) · v2-take channel salvage
-                                             verification · sync ≤20 ms (anchor work) · 4K row in
-                                             production shape. Keystone for O5/O6/O9, F6, F8, P4.
+  O5   export-engine-v2            [heavy]   UNBLOCKED by the O4 flip — the capture encoder now has
+                                             a 2 s keyframe cadence, which is the smart-cut
+                                             prerequisite. See the task.
+  O6   native-res-capture          [medium]  UNBLOCKED — and the 4K lever is named: the worker's GL
+                                             texture upload of a 4K frame (~35.6 ms), WebGPU
+                                             importExternalTexture is the remedy to probe.
+  F6   pause-retake                [medium]  UNBLOCKED — build segments on the v2 engine once.
+  F8   nle-scrub                   [medium]  UNBLOCKED — the fMP4 composite has a keyframe index.
+  O3b  single-generation export    [medium]  UNBLOCKED — v2 owns encoder + muxer, both halves of
+                                             the original idea are now buildable once.
+  O4-polish                        [light]   what remains of O4 AFTER the default flip (see the O4
+                                             handoff): preview from the compositor's own output
+                                             (removes the last redundant <video> decodes) · sync
+                                             ≤20 ms anchor work (users now get 33-48 ms; v1 gave
+                                             ~60) · e2e wedge case · 4K row in production shape
+                                             (pairs with O6).
   F7c  the size number, calibrated [medium]  ATTEMPT 4 done 2026-08-23, NOT SHIPPED but the error is
                                              HALVED and SCREEN content is inside ±20 % for the first
                                              time (−6.7 to −15.4 %). Motion is a uniform 1.44× under
@@ -86,8 +90,8 @@ CONFLICT RULES (all of capture/* is now shared by TWO engines — keep both work
 · F7c touches compose/quality.ts and the sizeProbe spike, which nothing else does.
 · Any capture/* change must run BOTH `npm run oracle` and `npm run oracle --engine=v2`, and any
   change to the STOP path must run `npm run oracle:load` (both phases) and `npm run exp -- armcancel`.
-BLOCKED (dep → unblocks): O5←O4 · O6←O4 · O9←O4+O5 · O8 remainder←O4/O5 · F6←O4 · F8←O4 ·
-P4←O4/O5 · P5b←P5a · P6←P5b · P7←P4 · O10 (AEC part only)←P4 · O3b←O4 (see below).
+BLOCKED (dep → unblocks): O9←O5 · O8 remainder←O5 · P4←O5 · P5b←P5a · P6←P5b · P7←P4 ·
+O10 (AEC part only)←P4. (O4's flip on 2026-08-24 unblocked O5, O6, F6, F8 and O3b — all READY.)
 REJECTED (do not resurrect): pre-roll rolling buffer — no capture before the record press, ever
 (PO 2026-08-22; extends "no idle device access"). MP4 MediaRecorder capture — measured 2026-08-23,
 Chrome does not stream it and a tab kill loses the whole take (O3a). Ending a raw channel's TRACK to
@@ -125,19 +129,20 @@ BOTH the composite and the raw channels.
    gone inactive and takes the backlog with it. Starve the source instead — 1 fps, same frame size —
    and drain. Do not write a new tail claim without running `npm run exp -- o4step2` and
    `npm run exp -- p0tailraw`.
-6. THERE ARE TWO LIVE-COMPOSITE ENGINES, AND THE SECOND IS DORMANT FOR A FINISH LIST, NOT A WALL.
-   v1 (MediaRecorder) is the DEFAULT; v2 (worker + WebCodecs + WebGL2 + fMP4) is merged behind
-   ?engine=v2. Three sessions of "WebCodecs delivers 2-10 fps" were the INSTRUMENT (2026-08-24):
-   every o4step2 run is a fresh throwaway Chrome profile whose FIRST VideoEncoder pays a
-   multi-second initialization, every take was 8-10 s so it fit entirely inside the transient, and
-   the old watchdog (cumulative fps from START) degraded the take mid-init so nothing could ever
-   recover. Warm, the same engine delivers 28.4 fps at 1080p (gate ≥28 MET; v1 29.3 same run) at
-   14 ms encoder latency, and beats v1 on every other axis measured (main thread 0 vs 198 ms,
-   oracle sync 33.7 vs 63.4 ms, it drains its own encoder at stop). o4step2 now warms before
-   measuring ({"cold":true} measures the transient on purpose); the watchdog clock starts at the
-   first real output (capture/compositorWatchdog.ts). Anything touching capture/* must keep BOTH
-   engines working, and `npm run oracle --engine=v2` gates the second one. The default flip waits
-   on the finish list in the O4 handoff, not on throughput.
+6. THERE ARE TWO LIVE-COMPOSITE ENGINES, AND v2 IS THE DEFAULT (flipped 2026-08-24). v2 = worker +
+   WebCodecs + WebGL2 + fMP4 to its own SyncAccessHandle. v1 (MediaRecorder) is the LADDER under
+   it, all three rungs real: capability (no TrackProcessor/AudioEncoder → v1 from the start, which
+   is all of Apple WebKit and Firefox), start failure (v2 throws → v1 takes the take), mid-take
+   watchdog (sustained <12 fps after first output → composite refused, take renders from raw
+   channels). `?engine=v1` / localStorage force the old engine. HISTORY THAT WILL SAVE YOU A WEEK:
+   three sessions of "WebCodecs delivers 2-10 fps" were the INSTRUMENT — a fresh throwaway
+   profile's FIRST VideoEncoder pays a multi-second init (PER LAUNCH, so production prewarms at
+   mount: prearm.ts → encoderWarm.ts), every rig take fit inside it, and the old watchdog killed
+   the take mid-init. Warm, v2 beats v1 on every measured axis (28.4 vs 29.3 fps; main thread 0 vs
+   198 ms; CPU peak 127 vs 196 %; oracle sync 33-48 vs ~60 ms; drains its own encoder). o4step2
+   warms before measuring ({"cold":true} measures the transient on purpose); the watchdog clock
+   starts at first output (capture/compositorWatchdog.ts). Anything touching capture/* keeps BOTH
+   engines green: `npm run oracle` (v2 by default) AND `node scripts/oracle.mjs --engine=v1`.
 7. THE EDIT IS PERSISTED NOW (F4, editsRepo, IndexedDB v2). Before that a refresh silently threw away
    every trim and cut while faithfully restoring the recording. If you add a field to EditState, it is
    automatically persisted — make sure it survives a round trip through structured clone.
@@ -211,6 +216,9 @@ BOTH the composite and the raw channels.
      `node scripts/oracle.mjs --engine=v2` gates the WebCodecs composite instead of the shipped one
 
 ── AWAITING PO (carried forward) ──
+  · FIRST REAL TAKE ON THE NEW DEFAULT ENGINE (v2, flipped 2026-08-24): record something normal and
+    listen/watch. Sync should be audibly better (33-48 ms vs ~60). If anything is off, `?engine=v1`
+    reverts this load and localStorage['inout.capture.engine']='v1' reverts sticky.
   · camera-only take on a REAL camera should now record 1080p, not upscaled 720p (O3a; synthetic mode
     bypasses getUserMedia so it cannot be verified headlessly)
   · real Safari + iOS Safari recheck of the MediaRecorder-audio path (long-standing)
@@ -434,6 +442,26 @@ NOT DONE, unchanged: WebGPU backend — now clearly the 4K lever, not the 1080p 
 HARNESS GREW (second session): exp.mjs `--cpu` (OS-sampled whole-browser CPU, throwaway-profile
    runs only) and `--profile=<dir>` (REUSE a Chrome profile across runs and keep it — how the
    per-launch cold-start verdict was measured).
+── THE DEFAULT FLIPPED (third 08-24 session, PO: "finish this shit already") ──
+engine.ts default v1 → v2; v1 stays as the three-rung ladder (capability / start failure / mid-take
+watchdog) and behind `?engine=v1` + localStorage. Two scope calls, both recorded as decisions:
+preview-from-compositor is an OPTIMIZATION (both engines pay the same preview <video> decodes
+today; v2 with the current preview is still strictly cheaper than v1 with it) and moved to
+O4-polish rather than blocking the flip; the sync ≤20 ms goal is ANCHOR work shared by both
+engines — flipping IMPROVES sync now (33-48 ms vs v1's ~60) and the goal stays open in O4-polish.
+ALSO SHIPPED WITH THE FLIP: recovery.ts now removes the interrupted take's orphaned composite blob
+at salvage (it was left in OPFS forever, both engines, pre-existing); channel salvage itself is
+engine-independent by construction (raw channels are the same MediaRecorder code either way).
+FLIP GATES, all green same day: typecheck · 287 tests · oracle DEFAULT (v2) PASS twice (sync 60.8
+under load / 35.4 settled) · oracle --engine=v1 PASS (the fallback stays gated) · browser-check
+prod QA in real Chrome: 8/8 gates, 0 console errors, export 504 ms against v1's historical 505-508
+· o7-measure arming UNCHANGED and A/B-proven independent of the mount warm (+349/+257 ms with the
+warm suppressed vs +359/+259/+249 with it — the spread is the loaded machine; o7-measure gained an
+INOUT_O7_QUERY env for exactly this A/B) · `npm run exp -- armcancel` green (cancel 374 ms, arm
+215 ms, zero live tracks after stop).
+AWAITING PO: the first real take on the new default. If anything is off: `?engine=v1` reverts this
+load, localStorage['inout.capture.engine']='v1' reverts sticky, and the session console prints
+which engine ran.
 
 ## O5. export-engine-v2 — worker, pipelined, smart-cut, codec ladder  [P1, after O4]
 Why: the render is main-thread and strictly serial (decode awaits draw awaits encode), sleeps every

@@ -131,7 +131,7 @@ async function main() {
         '--disable-backgrounding-occluded-windows',
         '--disable-renderer-backgrounding',
         '--mute-audio',
-        `http://localhost:${port}/?synthetic=1`,
+        `http://localhost:${port}/?synthetic=1${process.env.INOUT_O7_QUERY ?? ""}`,
       ],
       { stdio: ['ignore', 'ignore', 'pipe'] },
     )

@@ -76,27 +76,26 @@ gaps / in flight:
   capture path moved it 2-5 ms, not the ~60 ms the loopback suggested.
   O4 step 2's job is to bring the symmetric metric to ≤20 ms, then re-tighten the band.
   ee/webcodecs-capture-2 is untouched and behind main — REBASE before continuing it.
-- LIVE COMPOSITE ENGINES (O4 step 2): v2 (worker + WebCodecs + WebGL2 + fMP4 to its own
-  SyncAccessHandle) is MERGED BUT DORMANT — default stays v1, opt in with ?engine=v2.
-  THE THROUGHPUT MYSTERY IS SOLVED (2026-08-24) AND THE GATE IS MET: "2-10 fps" was the instrument.
-  Every o4step2 run is a fresh throwaway Chrome profile whose FIRST VideoEncoder pays a multi-second
-  initialization; every take was 8-10 s, so the whole take fit inside the transient; and the old
-  watchdog (cumulative fps from start, 5 s deadline) degraded the take mid-init so it could never
-  recover. Warm, v2 delivers 28.4 fps at 1080p (v1: 29.3 same run; gate ≥28 MET) at 14 ms encoder
-  latency with 0 drops, main-thread capture cost 0 vs v1's 198 ms, oracle sync 33.7 vs v1's 63.4 ms.
-  Fixed: o4step2 warms before measuring ({"cold":true} keeps the transient measurable), the watchdog
-  clock starts at the encoder's first real output (capture/compositorWatchdog.ts, pure + tested),
-  and `npm run exp -- o4worker` is the bisect harness that closed it. SECOND SESSION SAME DAY:
-  cold start is PER LAUNCH, not per profile (a new Chrome on a reused profile dir still read
-  15.9 fps cold), so capture/encoderWarm.ts now prewarms a throwaway 1080p VideoEncoder at MOUNT
-  when the engine preference is v2 — proven cold end-to-end (the warm absorbs the 3.9 s init on
-  the main thread; the worker's encoder then runs 28.2 fps / 13 ms / 0 drops) · CPU measured and
-  v2 WINS (whole-browser peak 127 % / mean 63 % vs v1's 196 / 72, at more fps and 0 ms of long
-  tasks; exp.mjs --cpu) · the new watchdog proven live on genuine sustained slowness (4K row) and
-  unit-tested on the wedge path. Remaining before a default flip: preview from the compositor's
-  own output (the big one), v2-take channel-salvage verification, sync ≤20 ms (anchor work), and
-  the 4K row re-measured in production shape — the rig's uncapped-4K row is not production truth
-  (capDisplayTrack pins display tracks to 1080p before any consumer exists).
+- THE DEFAULT CAPTURE ENGINE IS v2 (O4, flipped 2026-08-24 — AWAITS PO REAL-TAKE VERIFICATION).
+  v2 = worker + WebCodecs + WebGL2 + fragmented MP4 to its own SyncAccessHandle, frame-driven.
+  v1 (MediaRecorder) remains the full ladder underneath: capability fallback (Apple WebKit and
+  Firefox lack MediaStreamTrackProcessor -> v1 from the start), start-failure fallback (v2 throws ->
+  v1 takes the take), and the mid-take watchdog (sustained <12 fps after first output -> composite
+  refused, take renders from raw channels). `?engine=v1` / localStorage revert outright.
+  WHY, all measured: v2 28.4 fps at 1080p vs v1 29.3 (gate >=28) - main-thread capture cost 0 vs
+  198 ms of long tasks - whole-browser CPU peak 127 % vs 196 - oracle sync 33-48 ms vs ~60 - it
+  drains an encoder it owns at stop. The three-session "2-10 fps wall" was the INSTRUMENT: a fresh
+  Chrome process's first VideoEncoder pays a multi-second init (PER LAUNCH, not per profile), every
+  rig take fit inside it, and the old cumulative-fps watchdog killed takes mid-init. Production
+  pays the init at MOUNT now (prearm.ts -> encoderWarm.ts, proven to carry to the worker: 28.2 fps /
+  13 ms / 0 drops fully cold); the watchdog clock starts at first output (compositorWatchdog.ts);
+  o4step2 warms before measuring ({"cold":true} for the transient); recovery removes the orphaned
+  composite blob at salvage. Flip gates all green: 287 tests - oracle PASS on the v2 default AND
+  --engine=v1 - real-Chrome prod QA 8/8 with 0 console errors, export 504 ms (v1 historical
+  505-508) - arming latency A/B-proven unaffected by the mount warm - armcancel green.
+  O4-POLISH remains, not flip-blocking: preview from the compositor's own output (both engines
+  still pay the preview <video> decodes today), sync <=20 ms anchor work, an e2e encoder-wedge
+  case, and the 4K row in production shape (the rig feeds uncapped 4K, production caps at 1080p).
 - THE TAIL IS KEPT, ON BOTH FILES A TAKE PRODUCES (2026-08-23). The composite used to lose 2734 ms
   off the end of a 4K take; it now loses 43-320 ms. stop() kills the painting first, then PROBES the encoder with requestData() until it
   answers empty (waiting for the byte flow to go quiet looks equivalent and is not — under load this

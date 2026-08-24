@@ -4,23 +4,26 @@
  * v1 is the shipped MediaRecorder-on-a-main-thread-canvas path. v2 is the
  * worker/WebCodecs compositor.
  *
- * THE DEFAULT IS v1, AND THE REASON CHANGED ON 2026-08-24. The old story —
- * "the encoder's own throughput is the wall, ~10 fps" — is FALSIFIED: those
- * numbers were the rig measuring inside a fresh Chrome process's first-
- * VideoEncoder initialization (multi-second, per LAUNCH), with a watchdog that
- * killed the take mid-init. Warm, v2 meets its throughput gate (28.4 fps at
- * 1080p vs v1's 29.3 in the same run) while costing the main thread nothing
- * (0 ms of long tasks vs v1's 198) and nearly halving the oracle sync offset
- * (33.7 vs 63.4 ms). The init itself is handled: prearm.ts warms a throwaway
- * encoder at mount when this switch prefers v2 (encoderWarm.ts, measured).
+ * THE DEFAULT IS v2 (flipped 2026-08-24), AND EVERY REASON IS A MEASUREMENT.
+ * The old story — "the encoder's own throughput is the wall, ~10 fps" — was
+ * the rig measuring inside a fresh Chrome process's first-VideoEncoder
+ * initialization (multi-second, per LAUNCH), with a watchdog that killed the
+ * take mid-init. With the instrument fixed, v2 beats v1 on every measured
+ * axis: throughput 28.4 fps vs 29.3 at 1080p (gate ≥28), main-thread long
+ * tasks 0 ms vs 198, whole-browser CPU peak 127 % vs 196, oracle sync
+ * 33.7-47.8 ms vs 63, and it drains an encoder it owns at stop. The per-launch
+ * encoder init is paid at mount (prearm.ts → encoderWarm.ts, measured to
+ * carry across to the worker).
  *
- * v2 stays dormant for the REMAINING gates, not for speed: fMP4 tab-kill
- * salvage unverified, the recording preview still decodes sources in <video>,
- * capture-CPU report, and the forced-wedge watchdog case. The list lives in
- * .ai/TASKS under O4; `npm run exp -- o4step2` prints the throughput evidence.
+ * v1 remains fully alive as the LADDER UNDER v2, all three rungs measured:
+ * capability (no MediaStreamTrackProcessor / AudioEncoder → v1 from the
+ * start), start failure (v2 throws while starting → v1 takes the take), and
+ * the mid-take watchdog (sustained <12 fps after first output → composite
+ * refused, the take renders from the raw channels). `?engine=v1` or
+ * localStorage forces the old engine outright.
  *
- *   ?engine=v2   (this load only)
- *   localStorage['inout.capture.engine'] = 'v2'   (sticky)
+ *   ?engine=v1   (this load only)
+ *   localStorage['inout.capture.engine'] = 'v1'   (sticky)
  * A URL parameter wins, then storage, then the default.
  */
 
@@ -45,7 +48,7 @@ function fromStorage(): CompositeEngine | null {
 
 /** The engine this take should ASK for; capability still has the last word. */
 export function preferredCompositeEngine(): CompositeEngine {
-  return fromSearch() ?? fromStorage() ?? 'v1'
+  return fromSearch() ?? fromStorage() ?? 'v2'
 }
 
 export function setCompositeEngine(engine: CompositeEngine): void {

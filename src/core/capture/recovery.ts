@@ -94,6 +94,11 @@ export async function salvagePendingRecording(): Promise<Recording | null> {
   if (!m) return null
   // One-shot: a salvage that throws must not brick every subsequent boot.
   clearPendingManifest()
+  // The live composite of the interrupted take is DELIBERATELY not salvaged
+  // (a crash-truncated composite has an unknown tail and must never be
+  // packet-copied — 2026-08-23), which used to mean its blob was simply
+  // orphaned in OPFS forever. Remove it; the channels below are the take.
+  void blobStore.remove(`${m.recordingId}_composite.webm`).catch(() => undefined)
   if (await recordingsRepo.get(m.recordingId)) return null
 
   const channels: ChannelRecording[] = []
