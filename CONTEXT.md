@@ -51,20 +51,23 @@ Working and verified end-to-end: capture 4 channels → edit → export → shar
 panel has a second control, "For AI", and it produces one PDF rather than a smaller video: a page of
 plain text that tells its reader what the file is and how to read it, followed by one page per moment
 the picture actually changed. Agents do not watch video — they sample frames and pay about a token
-per 750 pixels — so a 97-second take costs roughly 86k tokens this way against 2.3M as video frames,
+per 750 pixels — so a 97-second take costs roughly 144k tokens this way against 2.3M as video frames,
 and it builds in half the time of the ordinary export.
 
-The first real test earned two corrections worth recording, because both were about judgement rather
-than code. PO exported a 97-second walkthrough of a product UI and gave it to an agent to recreate
-that UI and its animations. The AI **asked what to do with the file** — page one had opened with
-machine facts instead of saying what the document was — and PO's own verdict was that it **lost far
-too many frames**: a stretch where a field was typed into, a button turned active, was clicked and a
-tab switched had fallen entirely between two pages five and a half seconds apart. Both are fixed and
-both were measured on that same recording: the file now briefs its reader in its first lines, and it
-went from 39 frames to 96, with no gap longer than 3.75 seconds and the whole take covered. The
-budget turned out not to be ours to choose — chat AIs reject a PDF past 100 pages — so the real
-question became where the frames go: densely through anything moving (an animation comes back as a
-sequence, which is what recreating one needs), nothing at all while the screen is still.
+The first real test earned three corrections worth recording, because all three were about judgement
+rather than code. PO exported a 97-second walkthrough of a product UI and gave it to an agent to
+recreate that UI and its animations. The AI **asked what to do with the file** — page one had opened
+with machine facts instead of saying what the document was — and PO's own verdict was that it **lost
+far too many frames**: a stretch where a field was typed into, a button turned active, was clicked
+and a tab switched had fallen entirely between two pages five and a half seconds apart. Then PO
+challenged the format itself, and was right to: the page ceiling the design had been built around was
+a number taken from memory rather than checked. It is wrong — Claude accepts 600 pages and 32 MB,
+Gemini 1000 pages and 50 MB — so the format was never the constraint; the cost is tokens, and how
+many frames a recording earns is a spending decision, not a wall. All three are fixed and measured on
+that same recording: the file briefs its reader in its first lines, and it went from 39 frames to
+165, median gap 0.4 seconds, nothing longer than 2.9, the whole take covered. Frames go densely
+through anything moving — an animation comes back as a sequence, which is what recreating one needs
+— and not at all while the screen is still.
 
 **PO's move: re-test.** The rebuilt version of that same take is at
 `~/Downloads/inout-20260824-183853-for-ai-v2.pdf` for a side-by-side against the original file and
@@ -149,7 +152,7 @@ WebCodecs capture engine (now the default, see below) · the export engine off t
 smart-cut trimming (O5, see below) · the bits audit and the two size levers it
 priced · background frame · silence tightening · timed zoom/pan · **the tail fix, now on both files a
 take produces** · **per-clip speed** · **draggable zoom markers** · **the engine × OS capability
-matrix** · **export for AI (AI1) — one PDF, no video inside, ~17× cheaper to read than the frames**.
+matrix** · **export for AI (AI1) — one PDF, no video inside, ~16× cheaper to read than the video frames**.
 
 **The ending of your take is safe now, on both paths.** The composite — the file you get when you
 export without editing — was losing nearly three seconds off a heavy take and was fixed last session.

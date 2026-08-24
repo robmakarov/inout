@@ -792,10 +792,16 @@ export async function runAiExport(
   const gates: AiExportReport['gates'] = {
     // WAS "≤8 pages", and that gate encoded the design PO rejected: it passed
     // by summarizing a motion burst into one page. The economy claim that
-    // survives is about WHERE the pages go, not how few there are.
-    'economy: the file fits what a chat AI will accept (≤100 pages)': {
-      pass: burst.pages <= 100 && tooltip.pages <= 100,
-      detail: `60 s take: ${burst.pages} pages, ~${burst.approxTokens} tokens (Claude and most assistants reject a PDF past 100 pages)`,
+    // survives is about WHERE the pages go, not how few there are — bounded by
+    // what the readers actually accept, checked 2026-08-24: Claude 32 MB /
+    // 600 pages on 1M-context models, Gemini 50 MB / 1000 pages.
+    'economy: the file fits what the readers accept (≤600 pages, ≤30 MB)': {
+      pass:
+        [burst, tooltip, cursor, caret].every((s) => s.pages <= 600 && s.bytes <= 30 * 1024 * 1024) &&
+        (!real || (real.pages <= 600 && real.bytes <= 30 * 1024 * 1024)),
+      detail:
+        `60 s take: ${burst.pages} pages, ~${burst.approxTokens} tokens` +
+        (real ? ` · real 97 s take: ${real.pages} pages, ${(real.bytes / 1048576).toFixed(1)} MB` : ''),
     },
     'economy: an idle span emits nothing after its first': {
       pass: burst.keyframeAtMs.filter((t) => t < 19_000).length <= 1,
@@ -846,7 +852,7 @@ export async function runAiExport(
             pass:
               real.gapsMs.median <= 1500 &&
               real.gapsMs.max <= 5000 &&
-              real.pages <= 100 &&
+              real.pages <= 600 &&
               real.keyframeAtMs[real.keyframeAtMs.length - 1]! >= real.durationMs * 0.9,
             detail:
               `${real.keyframes} frames over ${(real.durationMs / 1000).toFixed(1)}s: median gap ` +

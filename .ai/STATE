@@ -58,16 +58,20 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   THE TWO THINGS PO'S FIRST FILE GOT WRONG, both fixed and both measured on that same 97 s take:
   it never said what it was (an AI opened it and asked what to do with it), and it dropped the
   moments — 39 frames for 97 s, with typing, a button activating, a click and a tab switch all inside
-  one 5.5 s gap. Now 96 frames, worst gap 3.75 s, whole take covered.
+  one 5.5 s gap. Now 165 frames, median gap 0.4 s, worst 2.9 s, whole take covered.
   WHAT IS DERIVED: 8 looks a second; content threshold 0.12 % of a 160×90 luma grid (~17 cells — a
   typed word) which is only safe because THE POINTER IS MASKED OUT of that metric rather than hidden
   under a high threshold; MOTION SUSPENDS THE PACE so an animation comes back as a sequence (needs 2
   consecutive moving samples — one change is an event, not an animation — and capped at 1.2 s so a
-  scroll is throttled); the page budget is 96 because CHAT AIs REJECT A PDF PAST 100 PAGES, spread by
-  a pace read off what is left of the take plus a burst credit that shrinks to zero by the end.
+  scroll is throttled); the frame budget scales with the take's own length (2.5/s, 96-300) and is
+  spread by a pace read off what is left of the take plus a burst credit that shrinks to zero by the
+  end. WHAT THE READERS ACTUALLY ACCEPT, checked 2026-08-24 and not to be recalled again: Claude
+  32 MB / 600 pages on 1M-context models (100 pages is the 200k-context figure), Gemini 50 MB /
+  1000 pages at a flat 258 tokens/page. Pages are cheap; TOKENS are the binding cost (~800 per page),
+  which is why the budget is a spend decision and there is a hard stop at 28 MB.
   Cursor immunity holds: a cursor wandering a still page for 12 s is ONE page out of 96 samples, a
-  caret is none. Price: ~86k tokens for a 97 s UI take vs ~2.3M for the same take as video frames,
-  printed per page at every export. Costs 0.59× the same take's full render (decodes once through the
+  caret is none. Price: ~144k tokens for a 97 s UI take vs ~2.3M for the same take as video frames,
+  printed per page at every export. Costs 0.74× the same take's full render (decodes once through the
   render's own reader and layout — note 13 — and never encodes video). src/core/ai/*, main thread,
   no worker. Gated by `node scripts/ai-pdf-check.mjs` (independent xref-walking parser + Apple
   PDFKit + a real-recording density gate). AWAITING PO: re-test the reworked file — that unfreezes

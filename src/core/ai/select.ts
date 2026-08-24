@@ -70,13 +70,20 @@ export interface SelectorConfig {
 }
 
 /**
- * Frames a take may spend, and this number is NOT ours to choose freely.
+ * Frames a take may spend — derived from what the readers actually accept.
  *
- * The file exists to be uploaded to an AI, and the readers it targets cap a PDF
- * at 100 PAGES (Claude chat and API both; other assistants are in the same
- * range). A 186-page file is not a richer export, it is a rejected one. So the
- * ceiling is 100 pages minus the index, and the whole question becomes WHERE to
- * spend them — which is what the pace and the burst rule are for.
+ * THE NUMBERS, CHECKED RATHER THAN RECALLED (2026-08-24). Claude: 32 MB per
+ * request and 600 PAGES on 1M-context models (the 100-page figure that an
+ * earlier version of this file was built on applies only to 200k-context
+ * models). Gemini: 50 MB, 1000 pages, and a flat 258 tokens per page whatever
+ * the page holds. So the PDF is not the constraint anybody thought it was; the
+ * binding cost is tokens, at ~800 per full-view page.
+ *
+ * Which makes this a spend decision, not a hard ceiling: 300 pages is ~236k
+ * tokens and ~11 MB — inside every limit above with room to spare — and a take
+ * gets a share of it in proportion to how long it is. A 97 s walkthrough earns
+ * ~240 frames, one every 0.4 s; a ten-minute session earns 300, one every two
+ * seconds, and stays readable.
  *
  * V1 spent 60 on a 97 s take, one page every 2.5 s, and PO's verdict was "it
  * loses way too much frames": a whole sequence — typing into a field, the
@@ -84,7 +91,16 @@ export interface SelectorConfig {
  * The use is an agent RECREATING a UI and its animations, which needs the
  * moments themselves, not a summary of them.
  */
-export const KEYFRAME_BUDGET = 96
+const MIN_BUDGET = 96
+const MAX_BUDGET = 300
+/** Frames per second of recording the budget is scaled at. */
+const BUDGET_PER_SEC = 2.5
+
+export function keyframeBudget(outputDurationMs: number): number {
+  const scaled = Math.round((outputDurationMs / 1000) * BUDGET_PER_SEC)
+  return Math.min(MAX_BUDGET, Math.max(MIN_BUDGET, scaled))
+}
+
 const MAX_GAP_CEIL_MS = 8_000
 /**
  * How far ahead of an even spend a burst may run.
@@ -117,7 +133,10 @@ export function paceMs(
   return Math.min(maxGapMs, Math.max(sampleIntervalMs, Math.round(spread)))
 }
 
-export function defaultSelectorConfig(sampleIntervalMs: number): SelectorConfig {
+export function defaultSelectorConfig(
+  sampleIntervalMs: number,
+  outputDurationMs = 60_000,
+): SelectorConfig {
   return {
     // 1.2 % of a 160×90 grid ≈ 170 cells ≈ a 160 px square at 1080p: a menu, a
     // dialog, a scroll, a panel repainting. V1 asked for 3 % and a real UI
@@ -130,7 +149,7 @@ export function defaultSelectorConfig(sampleIntervalMs: number): SelectorConfig 
     tinyFrac: 0.0025,
     persistSamples: 2,
     sampleIntervalMs,
-    budget: KEYFRAME_BUDGET,
+    budget: keyframeBudget(outputDurationMs),
     maxGapMs: MAX_GAP_CEIL_MS,
     // While the picture moves this much between two looks, it is animating and
     // the pace steps aside: an animation an agent has to reproduce is exactly
@@ -216,7 +235,7 @@ export function initSelector(
   config?: Partial<SelectorConfig>,
 ): SelectorState {
   return {
-    config: { ...defaultSelectorConfig(sampleIntervalMs), ...config },
+    config: { ...defaultSelectorConfig(sampleIntervalMs, outputDurationMs), ...config },
     emitted: 0,
     lastKeyframeMs: null,
     pending: null,

@@ -30,7 +30,7 @@ Every parameter a human would set is either **derived from a signal already in t
 | knob you'd be tempted to add | the signal that replaces it |
 |---|---|
 | frame rate | pixel delta — a fast run of frames while something moves, nothing while it is still |
-| how many frames | the 100-page ceiling every chat AI enforces, spread by a pace read off what is left of the take |
+| how many frames | the take's own length (2.5/s, 96–300), spread by a pace read off what is left of it |
 | resolution | ≤1024 px full view; full-res crop added only when the changed region is small |
 | cursor filter | the pointer is masked out of the content metric, so no threshold has to hide it |
 | short vs complete file | page order — index first, an agent that can page (Claude Code `pages`) descends selectively |
@@ -109,14 +109,29 @@ recording:
 | an animation became one page | the pace allowed one page per 1.6 s | **motion suspends the pace**: while the picture keeps moving between looks, every look is a page (capped at 1.2 s, after which a scroll is throttled but a transition is already captured) |
 | 250 ms was the finest anything could be seen | the analysis looked 4 times a second | **8 looks a second** — the decoder is already walking every frame, so this costs one extra downscale and diff per second |
 
-The budget stopped being a number of our choosing: **the readers this file exists for cap a PDF at
-100 pages**, so a take gets ~96 frames and the question is where to spend them. They are spent by a
-pace derived from what is LEFT of the take and the budget, plus a burst credit that shrinks to zero
-by the end — because the first version of that controller spent PO's take out at 84 s of 97 and the
-last thirteen seconds simply were not in the file.
+### The page limit, checked instead of recalled
 
-Same 97 s recording, before and after: **39 frames → 96**, worst gap 5.5 s → 3.75 s, median gap
-2.5 s → 1.1 s, whole take covered, 98 pages, ~86k tokens, 3.8 MB, built in 4.8 s.
+The first pass at this capped the file at 96 frames on the belief that readers reject a PDF past 100
+pages. PO's answer — *"if pdf is limited than its fucked up format"* — was the right challenge, and
+the belief was wrong. What the readers actually accept (checked 2026-08-24):
+
+| reader | pages | size | note |
+|---|---|---|---|
+| Claude (API + chat) | **600** on 1M-context models | 32 MB | the 100-page figure applies only to 200k-context models |
+| Gemini | **1000** | 50 MB | flat 258 tokens per page, whatever the page holds |
+
+So the format was never the constraint. The binding cost is **tokens** — ~800 per full-view page —
+which makes the budget a spend decision rather than a hard ceiling: frames scale with the length of
+the recording (2.5 per second, floor 96, ceiling 300 ≈ 236k tokens ≈ 11 MB), and a hard stop at
+28 MB exists only so a pathological take degrades by stopping rather than by being rejected. On PO's
+recording the budget stopped binding at all: the content earned 165 frames of an allowed 243.
+
+They are spent by a pace derived from what is LEFT of the take and the budget, plus a burst credit
+that shrinks to zero by the end — because the first version of that controller spent PO's take out at
+84 s of 97 and the last thirteen seconds simply were not in the file.
+
+Same 97 s recording, before and after: **39 frames → 165**, worst gap 5.5 s → 2.9 s, median gap
+2.5 s → 0.4 s, whole take covered to 97.1 s, 167 pages, ~144k tokens, 6.5 MB, built in 5.4 s.
 
 ## What shipping it changed in this spec
 

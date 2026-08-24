@@ -34,9 +34,11 @@ AI1 IS SHIPPED AND EVERY GATE IS GREEN — AND IT WAS ALREADY REWORKED ONCE ON P
 The export panel has a "For AI" control; it builds one PDF — an index page that BRIEFS ITS READER,
 then one frame per page, no video track. PO's first file came back with two verdicts ("ai didnt
 understood its video", "it losses way too much frames"); both are fixed and both are measured on that
-same 97 s recording: 39 frames → 96, worst gap 5.5 s → 3.75 s, whole take covered, 98 pages (the
-100-page ceiling every chat AI enforces), ~86k tokens. The cursor case still holds: a cursor
-wandering a still screen for 12 s is ONE page out of 96 samples. Evidence:
+same 97 s recording: 39 frames → 165, worst gap 5.5 s → 2.9 s, median 2.5 s → 0.4 s, whole take
+covered, 167 pages, ~144k tokens. A THIRD correction came from PO challenging the page cap ("if pdf
+is limited than its fucked up format") — the 100-page limit was a recalled number and it was wrong:
+Claude accepts 600 pages / 32 MB on 1M-context models, Gemini 1000 / 50 MB. The cursor case still
+holds: a cursor wandering a still screen for 12 s is ONE page out of 96 samples. Evidence:
 `node scripts/ai-pdf-check.mjs`, artefact docs/qa/ai-export.pdf. TWO handoffs under AI1 below — read
 the SECOND one first, it is what the design actually is now.
 NEXT ON AI IS PO'S, NOT OURS: AI2-AI7 stay frozen until PO reports on the reworked file.
@@ -1324,26 +1326,37 @@ TOOLING: `npm run exp -- aiexport` (the rig alone) · `node scripts/ai-pdf-check
      1.2 s (a scroll is not a transition).
    · 250 ms WAS THE FINEST ANYTHING COULD BE SEEN. Now 8 looks a second; the decoder was already
      walking every frame (note 13) so it costs one downscale and one diff more per second.
-THE BUDGET IS NOT OURS TO PICK: the readers this file exists for cap a PDF at 100 PAGES (Claude chat
-   and API; other assistants are in the same range), so a take gets ~96 frames and the only question
-   is where they go. They go by a pace derived from what is LEFT of the take and the budget, plus a
+THE PAGE LIMIT WAS WRONG, AND PO CAUGHT IT ("if pdf is limited than its fucked up format"). The
+   budget had been capped at 96 frames on a recalled "readers reject a PDF past 100 pages". CHECKED
+   2026-08-24 instead: Claude accepts 32 MB and 600 PAGES on 1M-context models — the 100-page figure
+   is the 200k-context one — and Gemini accepts 50 MB / 1000 pages at a flat 258 tokens per page. The
+   format was never the constraint; the binding cost is TOKENS (~800 per full-view page). So the
+   budget became a spend decision derived from the take's own length: 2.5 frames per second, floor
+   96, ceiling 300 (≈236k tokens, ≈11 MB), with a hard stop at 28 MB so a pathological recording
+   degrades by stopping rather than by being rejected. On PO's take the budget stopped binding at
+   all — the content earned 165 frames of an allowed 243. LESSON, and it is note 10's shape again:
+   the instrument was a REMEMBERED NUMBER. Verify a platform limit before designing around it.
+   Frames are still SPENT by a pace derived from what is LEFT of the take and the budget, plus a
    burst credit that SHRINKS TO ZERO by the end — the first version of that controller spent PO's
    take out at 84 s of 97 and the last thirteen seconds were not in the file at all.
-MEASURED ON PO'S OWN 97 s TAKE, before → after: 39 frames → 96 · worst gap 5.5 s → 3.75 s · median
-   gap 2.5 s → 1.1 s · covered to 97.0 s of 97.3 · 98 pages (under the 100 cap) · ~86k tokens ·
-   3.8 MB · built in 4.8 s (0.59× the same take's full render). The typing at 12.5 s is now four
-   frames, mid-word, with the button caught mid-transition. Rebuilt file left for PO at
+MEASURED ON PO'S OWN 97 s TAKE, before → after: 39 frames → 165 · worst gap 5.5 s → 2.9 s · median
+   gap 2.5 s → 0.4 s · covered to 97.1 s of 97.3 · 167 pages · ~144k tokens · 6.5 MB · built in
+   5.4 s (0.74× the same take's full render). The typing at 12.5 s is now several frames, mid-word,
+   with the button caught mid-transition. Rebuilt file left for PO at
    ~/Downloads/inout-20260824-183853-for-ai-v2.pdf.
 GATE CHANGED, and it is worth knowing why: "60 s mostly-static take ≤8 pages" was DELETED. It passed
    by summarizing a motion burst into one page, which is exactly the defect PO reported. What
-   replaced it: the file fits what a chat AI accepts (≤100 pages) · the pages go where the motion is
-   AND ARE DENSE THERE (≥12 inside a 5 s burst) · a REAL recording is covered end to end (median gap
-   ≤1.5 s, worst ≤5 s, last frame past 90 % of the take). Everything else still passes unchanged,
-   including all three cursor gates and the clock read back out of the file (max deviation 18 ms).
-STILL OPEN, honestly: a 97 s take costs ~86k tokens, which is a large but usable file; the levers if
-   PO wants it cheaper are a smaller view image (1024 px is what makes UI text legible) or a shorter
-   recording. And the 100-page ceiling means a 10-minute take gets a frame every ~6 s — for long
-   sessions the answer is not a denser file but a smaller one per topic.
+   replaced it: the file fits what the readers ACTUALLY accept (≤600 pages, ≤30 MB) · the pages go
+   where the motion is AND ARE DENSE THERE (≥12 inside a 5 s burst) · a REAL recording is covered end
+   to end (median gap ≤1.5 s, worst ≤5 s, last frame past 90 % of the take). Everything else still
+   passes unchanged, including all three cursor gates and the clock read back out of the file (max
+   deviation 17 ms).
+STILL OPEN, honestly: a 97 s take costs ~144k tokens — fine for a 1M-context model, tight for a 200k
+   one, and 43k on Gemini's flat per-page pricing. The lever if that is ever too much is NOT fewer
+   moments: it is cheaper pages — a contact sheet of 4-6 small frames per page for motion runs costs
+   ~200 tokens per frame instead of ~800, because the page limit is generous and the token bill is
+   what hurts. Not built; it is the obvious next move if PO wants the same density for a quarter of
+   the price.
 
 ## AI2. event-sidecar — the DOM events behind the pixels  [CANDIDATE — frozen until PO tests
 AI1's first real file; then also needs the PO vehicle decision below]

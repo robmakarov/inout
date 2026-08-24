@@ -13,7 +13,7 @@ export {
   initSelector,
   paceMs,
   stepSelection,
-  KEYFRAME_BUDGET,
+  keyframeBudget,
   type Classification,
   type Decision,
   type SelectorConfig,

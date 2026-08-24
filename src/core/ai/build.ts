@@ -87,6 +87,15 @@ const MAX_TRAIL_POINTS = 12
 /** Wrap width of the index text in half-ems: (468 pt page − 28 pt margins) / 4.5. */
 const INDEX_WRAP_UNITS = 97
 const INDEX_LINES_PER_PAGE = 96
+/**
+ * Stop adding frames past this size — the only HARD limit in the file's way.
+ *
+ * Claude accepts 32 MB per request, Gemini 50 MB; a page of ours is ~37 KB, so
+ * 28 MB is ~750 pages and no ordinary take comes near it. It exists so a
+ * pathological recording (4K detail, constant motion) degrades by stopping
+ * rather than by producing a file the reader refuses.
+ */
+const MAX_FILE_BYTES = 28 * 1024 * 1024
 
 /**
  * THE POINTER TRAIL IS A HEURISTIC AND THIS IS ITS SWITCH.
@@ -364,6 +373,7 @@ export async function exportForAi(opts: AiExportOptions): Promise<ExportResult> 
     const prevGrid = makeGrid()
     const nowGrid = makeGrid()
     let havePrev = false
+    let sizeCapped = false
     // Where the pointer was at the reference frame and where it is now: both
     // differ between the two pictures, and neither is content.
     let refPointer: { xFrac: number; yFrac: number } | null = null
@@ -423,7 +433,14 @@ export async function exportForAi(opts: AiExportOptions): Promise<ExportResult> 
         stats.pointerReadings.push({ ...decision.pointer, atOutMs: outMs })
       }
 
-      if (decision.keyframe) {
+      if (decision.keyframe && pdf.bytesWritten >= MAX_FILE_BYTES) {
+        if (!sizeCapped) {
+          sizeCapped = true
+          console.warn(
+            `[ai] file reached ${(MAX_FILE_BYTES / 1024 / 1024).toFixed(0)} MB at t=${(outMs / 1000).toFixed(1)}s — no more frames (readers cap a PDF at 32-50 MB)`,
+          )
+        }
+      } else if (decision.keyframe) {
         const tEncode = performance.now()
         viewCtx.drawImage(full, 0, 0, viewW, viewH)
         const viewImage = await pdf.addJpeg(await encodeJpeg(view), viewW, viewH)
