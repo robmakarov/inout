@@ -228,14 +228,17 @@ work, pause/retake, the size number's fifth attempt, and frame-exact scrubbing. 
 session, and `.ai/TASKS` says which are unblocked and which can run at the same time.
 
 **New 2026-08-24: AI export (phase A in .ai/TASKS) — PO's named top priority.** A second export
-target next to the MP4: a zip an agent reads instead of a video it must watch. V1 is scoped to
-maximum token cheapness — a tiny index that prices every layer, the facts capture already knows,
-and a handful of change-driven screenshots, with the full mp4 at the bottom for the rare descent.
-The button (AI1) ships first; the richer layers — DOM event sidecar, transcript, repro bundle,
-markers, MCP access, redaction — are roadmap tasks (AI2–AI7). The sidecar waits on a product
-decision only PO can make: where events come from (a browser extension, an SDK snippet in the
-recorded page, or the desktop shell). The transcript stays PO-gated under the standing no-AI rule
-because speech recognition is a local model; the export format itself runs no model anywhere.
+target next to the MP4: **one file any AI understands instead of a video it must watch**. The file
+is a PDF — the only single-file format every major AI reads natively as text plus images; nothing
+in it is a video and nothing in it needs a tool to open. Inside, maximum token cheapness: a
+one-page text index (take facts, what capture knew went wrong, and a page-numbered list of the
+screenshots), then one change-driven screenshot per page. The button (AI1) ships first. Everything
+richer — DOM event sidecar, transcript, repro bundle, markers, MCP access, redaction — is marked
+as a **candidate only** (AI2–AI7) and gets reconsidered after PO feeds the first real file to an
+AI and reports how it went. The sidecar additionally waits on a product decision only PO can make:
+where events come from (a browser extension, an SDK snippet in the recorded page, or the desktop
+shell). The transcript stays PO-gated under the standing no-AI rule because speech recognition is
+a local model; the export format itself runs no model anywhere.
 
 **Runs in parallel now:** the AI export button (AI1, PO's named priority) · the out-of-sync fast
 export (P0 — trimming waits on it) ·

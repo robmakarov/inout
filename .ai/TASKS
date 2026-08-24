@@ -68,14 +68,16 @@ START HERE IF YOU ARE FRESH:
 
 READY NOW — parallel-safe, any subset concurrently (one session each):
   AI1  export-for-ai — the button  [PO PRIORITY 2026-08-24, medium]  PO: "export for ai button is
-                                             highest priority now"; MAX TOKEN CUTTING is the design
-                                             goal. One control → zip: INDEX.md (≤~150 tokens) +
-                                             events.jsonl (capture facts only in v1) + pixel-delta
-                                             keyframes (low-res full view + full-res changed-region
-                                             crop) + video.mp4 at the bottom. Spec docs/AI_EXPORT.md;
-                                             full task in PHASE A at the bottom of this file. DOM
-                                             events are AI2 and BLOCKED on a PO vehicle decision —
-                                             they must not creep into AI1.
+                                             highest priority now", MAX TOKEN CUTTING, and — the
+                                             same-day re-scope — ONE FILE any AI understands, not
+                                             human-watchable. That file is a PDF (the only one-file
+                                             format every major AI ingests natively as text+images):
+                                             index page (pure text, events + keyframe list with page
+                                             numbers) then one pixel-delta keyframe per page, JPEG,
+                                             timestamp-captioned; NO video track inside. Spec
+                                             docs/AI_EXPORT.md; full task in PHASE A at the bottom
+                                             of this file. AI2-AI7 are CANDIDATES ONLY, reconsidered
+                                             after PO tests AI1's first real file.
   P0-instant-sync  packet-copy paths are out of sync  [P0, medium]  FOUND 2026-08-24 BY THE GATE
                                              O5-flip BUILT, on the first run that could see it. The
                                              INSTANT path — what every unedited export takes, the one
@@ -1159,47 +1161,55 @@ GATES: HDR take on an HDR display → file carries HDR metadata (probe evidence)
 fallback renders correctly · zero SDR-path regression.
 
 ═══ PHASE A — AI EXPORT (PO 2026-08-24: "export for ai button is highest priority now"; max token
-cutting is THE design goal; spec docs/AI_EXPORT.md) ═══
+cutting; ONE FILE any AI understands, not human-watchable; AI2-AI7 are CANDIDATES reconsidered
+only after PO tests AI1's first real file; spec docs/AI_EXPORT.md) ═══
 
-## AI1. export-for-ai — the button  [PO priority, medium; READY]
-Why: agents don't watch video — they sample frames and pay ~1 token per 750 pixels. A recording is
-useful to an agent only if it is layered so reading cost scales with descent. PO scoped v1 to
-maximum token cheapness; every richer layer is AI2+ and must not creep into this task.
-Goal: one "For AI" control in the export panel → a zip (INDEX at the zip root; unzipped it works
-as a plain folder):
-  INDEX.md (≤~150 tokens: duration, resolution, clock note, keyframe list, approx token price per
-  layer — the agent budgets its descent from this file alone) · events.jsonl (v1 = capture facts
-  only: channel on/off segments, stalls, duration — all already in Recording, no new capture
-  surface) · keyframes/ (pixel-delta sampled; per keyframe a ≤1024 px full view + a full-res crop
-  of the changed region, WebP, timestamp-in-filename in ms) · video.mp4 (the ordinary default-tier
-  export, bottom layer — costs tokens only if opened).
-Design rules (they are decisions, recorded in the spec): the bundle FOLLOWS THE EDIT — keyframe
-and event times remapped through the same output→recording mapping the render uses, cut content
-absent · all timestamps on the RECORDING EPOCH with clockOffsetMs declared in INDEX when the
-video's t=0 differs (P0-instant-sync's lesson: composite time is not recording time) · INDEX is
+## AI1. export-for-ai — one file  [PO priority, medium; READY]
+Why: agents don't watch video — they sample frames and pay ~1 token per 750 pixels. PO's bar:
+ONE file that ANY AI understands (chat AIs included — no shell, no unzip), not human-watchable,
+maximally token-cheap. The one-file format every major AI ingests natively as text+images is PDF;
+zip needs a shell, markdown cannot carry images, base64-in-text explodes tokens, mp4 is the thing
+agents cannot afford. Everything richer is AI2+ and must not creep into this task.
+Goal: one "For AI" control in the export panel → `<take>-for-ai.pdf`:
+  PAGE 1 — index, pure selectable text, ≤~200 tokens: duration, resolution, clock note, the event
+  lines (v1 = capture facts only: channel on/off segments, stalls — all already in Recording, no
+  new capture surface), and the keyframe list (timestamp + page number per line, so a paging agent
+  descends selectively).
+  THEN one pixel-delta keyframe per page: ≤1024 px full view, JPEG (PDF-native DCTDecode),
+  timestamp caption as real text; a full-res crop of the changed region on the same page ONLY when
+  that region is small (<~25 % of frame) — signal-derived, never a setting. Page dimensions equal
+  the image: no pixel is padding, per-page cost predictable (~800 tokens at 1024×576).
+  NO video track anywhere in the file. The ordinary MP4 stays a separate, unrelated export.
+Design rules (decisions, recorded in the spec): the file FOLLOWS THE EDIT — keyframe and event
+times remapped through the same output→recording mapping the render uses, cut content absent ·
+all timestamps on the RECORDING EPOCH with clockOffsetMs declared on page 1 when the source
+video's t=0 differs (P0-instant-sync's lesson: composite time is not recording time) · index is
 signal-derived, never generated prose (the no-AI rule covers export-time summarization) ·
 keyframe selection pure + unit-tested with a defined delta metric (share of changed pixels on a
 downscaled luma diff).
 Implementation notes: tap composed output frames inside the machinery the render already iterates
 (compose/render.ts loop, chosen via choose.ts) rather than building a second decode pipeline —
-note 13: decode is the floor, nothing may decode the take twice · a store-only zip is ~50 lines
-(WebP/MP4 are already compressed) — no new dependency unless it stays tiny · write through
-scratch (O1) so memory stays flat · src/core owns the bundle builder, the app owns only the button.
-Constraints: instant path untouched — the mp4 inside the bundle may be the packet copy, carrying
-its measured `inst=` sync defect until P0-instant-sync lands, and INDEX's clock note says so ·
-no knobs in the UI · defaults of every other export path unchanged.
+note 13: decode is the floor, nothing may decode the take twice · a minimal PDF writer is ours
+and tiny (JPEG XObjects + built-in Helvetica text, a few hundred lines, zero deps) · write
+through scratch (O1) so memory stays flat · src/core owns the builder, the app owns the button.
+Constraints: no knobs in the UI · every other export path untouched, defaults unchanged · the
+file must parse in strict readers (pdftotext/mutool clean) — "any AI" starts at "valid PDF".
 GATES:
-· text layer priced: INDEX ≤150 tokens (chars/4) on a real take · events.jsonl ≤30 tokens/min
-· keyframe economy: a 60 s mostly-static synthetic take → ≤8 keyframes · a 10 s idle span emits 0
-  keyframes after its first · a motion burst concentrates keyframes inside it (distribution reported)
+· any-AI ingestion proven: pdftotext extracts the full index text · the file opens in a real
+  chat-AI upload (PO's test) and page 1 answers "what is this recording" without descending
+· token price printed at export: per-page (pixels/750 + text/4) and total, reported for a real take
+· keyframe economy: a 60 s mostly-static synthetic take → ≤8 keyframe pages · a 10 s idle span
+  emits 0 after its first · a motion burst concentrates keyframes inside it (distribution reported)
 · correctness by the existing rig: each of the oracle take's flashes appears in a keyframe whose
-  filename time is within ±150 ms of the known flash time
+  caption time is within ±150 ms of the known flash time
 · edit fidelity: a take with a cut → no keyframe from the cut span, times remapped (rig proof)
-· cost: bundle wall clock ≤1.5× the same take's full render (report ×)
-· zip: INDEX at root · every file INDEX names exists (unit test) · opens as a plain folder
+· cost: file build wall clock ≤1.5× the same take's full render (report ×)
 · typecheck + tests + oracle green · instant-path logs unchanged.
+ACCEPTANCE THAT UNBLOCKS THE REST OF PHASE A: PO feeds a real take's file to an AI and reports.
+AI2-AI7 stay frozen candidates until that report exists.
 
-## AI2. event-sidecar — the DOM events behind the pixels  [BLOCKED on a PO decision]
+## AI2. event-sidecar — the DOM events behind the pixels  [CANDIDATE — frozen until PO tests
+AI1's first real file; then also needs the PO vehicle decision below]
 The original spec's core claim, and it needs a capture vehicle: a web page sees DOM events only in
 its own tab — no browser API exposes the input events of a captured surface. PO picks: (a)
 companion extension (other tabs, not native apps) · (b) SDK snippet in the recorded page (the
@@ -1211,14 +1221,14 @@ land in events.jsonl and drive full-res crops around the click point.
 GATES (once unblocked): sidecar click t vs the oracle's pixel flash inside the sync band · the
 sensitive-field rule proven by test · AI1's bundle format only extended, never changed.
 
-## AI3. transcript — VTT with timecodes  [PO-GATED per the no-AI rule: ASR is a local model]
-Silence/filler auto-stripped, original timestamps kept. Slot reserved in the bundle; do not build
-without explicit per-instance PO approval.
+## AI3. transcript — VTT with timecodes  [CANDIDATE; PO-GATED per the no-AI rule: ASR is a local model]
+Silence/filler auto-stripped, original timestamps kept. Do not build without explicit per-instance
+PO approval.
 
-## AI4. repro-bundle — console errors + failed requests, timestamped  [after AI2 — same vehicle]
+## AI4. repro-bundle — console errors + failed requests, timestamped  [CANDIDATE; after AI2 — same vehicle]
 
-## AI5. marker-key — press-to-mark during recording  [light, independent; lands in events.jsonl]
+## AI5. marker-key — press-to-mark during recording  [CANDIDATE; light; lands in the index's event lines]
 
-## AI6. addressable-recordings — MCP server / agent pulls a take by reference  [after cloud]
+## AI6. addressable-recordings — MCP server / agent pulls a take by reference  [CANDIDATE; after cloud]
 
-## AI7. pii-redaction  [after AI2 — events name what is sensitive]
+## AI7. pii-redaction  [CANDIDATE; after AI2 — events name what is sensitive]
