@@ -249,6 +249,20 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'o5',
+    title: 'O5 — the export engine: worker + pipelined vs the main-thread render',
+    detail:
+      'records ONE production-shaped fixture (canvas → MediaRecorder vp9 webm + an opus mic lane), applies an edit with two off-keyframe cuts, and exports it through both engines: the worker with the encode pipelined, and the same render.ts in-thread with its 8-frame yields. Reports output seconds per second of wall clock, main-thread long-task time during each, and a decode probe of both files.',
+    run: async (args) => {
+      const { runExportEngine } = await import('../perf/exportEngine')
+      return runExportEngine({
+        takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined,
+        content: args?.content === 'motion' ? 'motion' : undefined,
+        cuts: typeof args?.cuts === 'boolean' ? args.cuts : undefined,
+      })
+    },
+  },
+  {
     id: 'p0tailraw',
     title: 'P0-tail-raw — does a RAW channel keep its ending?',
     detail:
