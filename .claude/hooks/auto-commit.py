@@ -11,10 +11,15 @@ This commits only what this session may claim:
 
     to_commit = dirty - (claimed_by_other_live_sessions - mine)
 
-`mine` is every file this session wrote through Write/Edit/MultiEdit/NotebookEdit,
-read out of its own transcript. Another session's claim wins over a blind sweep, but
-never over my own edits, and files nobody claims (build output, lockfiles, a stray
-Bash write) still get swept so nothing rots uncommitted.
+`mine` is every file this session wrote, read out of its own transcript: paths from
+Write/Edit/MultiEdit/NotebookEdit, plus paths a Bash command plausibly wrote — a
+redirect target, an operand of mv/rm/cp/touch/tee/sed -i, a worktree-mutating git
+subcommand, or the fixed set a package manager rewrites. Read-only commands claim
+nothing on purpose: one `grep -rn foo src/` would otherwise fence off a whole tree.
+
+A claim may be a file, a directory (claiming everything under it) or a glob.
+Another session's claim wins over a blind sweep but never over my own edits, and
+files nobody claims still get swept so nothing rots uncommitted.
 
 A session releases its claims when its own Stop hook finishes (a done-marker newer
 than its transcript). Sessions killed without a Stop release after CLAIM_HOURS.
@@ -27,9 +32,11 @@ Env overrides: INOUT_AUTOCOMMIT_CLAIM_HOURS, INOUT_AUTOCOMMIT_BRANCH,
 INOUT_AUTOCOMMIT_NO_PUSH.
 """
 
+import fnmatch
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -37,12 +44,49 @@ import time
 EDIT_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 PATH_KEYS = ("file_path", "notebook_path")
 
+# Bash attribution. A claim only ever holds a file back from another session's
+# blind sweep, so a false claim is cheap and a missed one is the bug — but only if
+# reads stay out. `grep -rn foo src/` or `cat proto/style.html` must claim nothing,
+# or one read would fence off a whole tree. So: claim from writers, never readers.
+SHELL_SEPARATORS = {";", "|", "||", "&", "&&", "\n"}
+SHELL_PREFIXES = {"sudo", "command", "nohup", "time", "exec", "builtin", "env", "then",
+                  "do", "else", "elif", "if", "while", "until", "for", "!", "{", "("}
+
+# Every non-flag operand is a path this command writes (or removes).
+BASH_WRITERS = {
+    "mv", "rm", "rmdir", "touch", "mkdir", "ln", "tee", "truncate", "dd", "patch",
+    "unzip", "install", "shred", "gzip", "gunzip", "bzip2", "xz", "zip", "rsync",
+}
+# Only the final operand is the destination; earlier ones are sources being read.
+BASH_WRITERS_LAST = {"cp"}
+# Mutate the working tree; `git commit`/`status`/`log`/`diff` deliberately absent.
+# Split by what the operands mean: these take pathspecs...
+GIT_PATH_SUBS = {"add", "rm", "mv", "restore", "apply", "clean"}
+# ...these take refs, so only a pathspec after `--` is a path. `git checkout main`
+# must not claim a file called "main".
+GIT_REF_SUBS = {"checkout", "switch", "reset", "revert", "cherry-pick", "merge",
+                "rebase", "pull", "stash"}
+# Package managers rewrite a known, fixed set regardless of their arguments.
+PKG_MANAGERS = {"npm", "yarn", "pnpm", "bun"}
+PKG_WRITE_SUBS = {"install", "i", "ci", "add", "remove", "uninstall", "rm", "un",
+                  "update", "upgrade", "link", "unlink", "prune", "dedupe"}
+PKG_ARTIFACTS = ("package.json", "package-lock.json", "npm-shrinkwrap.json",
+                 "yarn.lock", "pnpm-lock.yaml", "bun.lockb", "node_modules")
+# In-place editors: only a write when the in-place flag is present.
+INPLACE_EDITORS = {"sed", "perl", "ruby", "gawk"}
+
+_HEREDOC = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
+
 CLAIM_HOURS = float(os.environ.get("INOUT_AUTOCOMMIT_CLAIM_HOURS", "6"))
 BRANCH = os.environ.get("INOUT_AUTOCOMMIT_BRANCH", "main")
 NO_PUSH = os.environ.get("INOUT_AUTOCOMMIT_NO_PUSH", "") not in ("", "0", "false")
 
 LOCK_STALE_SECS = 600
 LOCK_WAIT_SECS = 90
+
+# Bump whenever _extract learns a new claim kind, so caches written by the older
+# extractor are re-read instead of silently under-claiming.
+CACHE_VERSION = 2
 
 
 def log(state_dir, msg):
@@ -75,10 +119,129 @@ def git(repo, *args, **kw):
     return p
 
 
+# ------------------------------------------------------------ bash attribution
+
+def _strip_heredocs(command):
+    """Drop heredoc bodies — they are data, and lexing them invents path tokens."""
+    if "<<" not in command:
+        return command
+    lines = command.split("\n")
+    out, i = [], 0
+    while i < len(lines):
+        line = lines[i]
+        out.append(line)
+        m = _HEREDOC.search(line)
+        i += 1
+        if not m:
+            continue
+        delim = m.group(2)
+        while i < len(lines) and lines[i].strip() != delim:
+            i += 1
+        i += 1  # skip the terminator too
+    return "\n".join(out)
+
+
+def _segments(command):
+    """Split a command line into pipeline segments, tokenised."""
+    try:
+        lexer = shlex.shlex(_strip_heredocs(command), posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        tokens = list(lexer)
+    except ValueError:
+        return []  # unbalanced quotes and the like — claim nothing rather than guess
+    segs, cur = [], []
+    for tok in tokens:
+        if tok in SHELL_SEPARATORS:
+            segs.append(cur)
+            cur = []
+        else:
+            cur.append(tok)
+    segs.append(cur)
+    return [s for s in segs if s]
+
+
+def _operands(argv):
+    return [t for t in argv if not t.startswith("-") and not t.startswith("+")]
+
+
+def _bash_targets(command):
+    """Path tokens a shell command plausibly WRITES. Patterns and dirs allowed."""
+    targets = []
+    for seg in _segments(command):
+        # Redirections write their target wherever they appear in the segment.
+        for i, tok in enumerate(seg):
+            if tok in (">", ">>") and i + 1 < len(seg):
+                dest = seg[i + 1]
+                if not dest.startswith("&") and dest != "/dev/null":
+                    targets.append(dest)
+        # Drop redirect operators and their operands; a `< src` is a read, and a
+        # `> dest` was already collected above.
+        argv, skip = [], False
+        for tok in seg:
+            if skip:
+                skip = False
+                continue
+            if tok in (">", ">>", "<", "<<", "2>", "&>"):
+                skip = True
+                continue
+            argv.append(tok)
+        while argv and (argv[0] in SHELL_PREFIXES or "=" in argv[0].split("/")[0]):
+            argv = argv[1:]
+        if not argv:
+            continue
+        cmd = os.path.basename(argv[0])
+        rest = argv[1:]
+
+        if cmd in BASH_WRITERS:
+            targets += _operands(rest)
+        elif cmd in BASH_WRITERS_LAST:
+            ops = _operands(rest)
+            if ops:
+                targets.append(ops[-1])
+        elif cmd in INPLACE_EDITORS:
+            # -i, --in-place, and clustered forms like perl's -pi or -i.bak.
+            if any(a == "--in-place" or
+                   (a.startswith("-") and not a.startswith("--")
+                    and "i" in a[1:].split(".")[0])
+                   for a in rest):
+                # `sed -i '' 's/x/y/' file`: keep operands that look like paths,
+                # dropping the (possibly empty) backup suffix and the script.
+                targets += [o for o in _operands(rest)
+                            if o and not re.match(r"^[a-z]([/|,;:!#])", o)]
+        elif cmd == "git":
+            sub = next((t for t in rest if not t.startswith("-")), None)
+            after = rest[rest.index("--") + 1:] if "--" in rest else []
+            if sub in GIT_PATH_SUBS:
+                targets += [t for t in _operands(rest) if t != sub] + after
+            elif sub in GIT_REF_SUBS:
+                targets += after  # only what follows `--` is a pathspec
+        elif cmd in PKG_MANAGERS:
+            sub = next((t for t in rest if not t.startswith("-")), None)
+            if sub in PKG_WRITE_SUBS:
+                targets += list(PKG_ARTIFACTS)
+    return [t for t in targets if _plausible_path(t)]
+
+
+def _plausible_path(tok):
+    """Filter shell noise out of claim candidates.
+
+    `2>&1` lexes into stray `2`/`1`/`>&` fragments, and an unexpanded `$VAR` or
+    `$(cmd)` names nothing we can resolve. None of these are paths.
+    """
+    if not tok or tok in (".", "..", "/") or tok.isdigit():
+        return False
+    return not any(ch in tok for ch in "&><$`\n")
+
+
 # ---------------------------------------------------------------- transcripts
 
 def _extract(line):
-    """Repo-absolute file paths written by the edit tools in one transcript line."""
+    """Absolute claims from one transcript line: edit-tool paths and Bash writes.
+
+    Bash targets are resolved against the record's own cwd, since a command may
+    have run somewhere other than the repo root. Claims may be files, directories
+    or globs; see claim_matches.
+    """
     if '"tool_use"' not in line:
         return ()
     try:
@@ -91,19 +254,29 @@ def _extract(line):
     content = msg.get("content")
     if not isinstance(content, list):
         return ()
+    cwd = rec.get("cwd") or ""
     out = []
     for block in content:
         if not isinstance(block, dict) or block.get("type") != "tool_use":
             continue
-        if block.get("name") not in EDIT_TOOLS:
-            continue
+        name = block.get("name")
         inp = block.get("input")
         if not isinstance(inp, dict):
             continue
-        for key in PATH_KEYS:
-            val = inp.get(key)
-            if isinstance(val, str) and val:
-                out.append(val)
+        if name in EDIT_TOOLS:
+            for key in PATH_KEYS:
+                val = inp.get(key)
+                if isinstance(val, str) and val:
+                    out.append(val)
+        elif name == "Bash":
+            command = inp.get("command")
+            if not isinstance(command, str) or not command:
+                continue
+            for target in _bash_targets(command):
+                if os.path.isabs(target):
+                    out.append(target)
+                elif cwd:
+                    out.append(os.path.join(cwd, target))
     return out
 
 
@@ -125,7 +298,8 @@ def touched_files(transcript, cache_dir):
     try:
         with open(cache_file) as f:
             cached = json.load(f)
-        if cached.get("size", 0) <= size:
+        # A cache written by an older extractor saw fewer claim kinds; re-read.
+        if cached.get("v") == CACHE_VERSION and cached.get("size", 0) <= size:
             offset = cached.get("offset", 0)
             paths = cached.get("paths", [])
     except (OSError, ValueError):
@@ -146,7 +320,8 @@ def touched_files(transcript, cache_dir):
     try:
         tmp = cache_file + ".tmp"
         with open(tmp, "w") as f:
-            json.dump({"offset": end, "size": size, "paths": sorted(found)}, f)
+            json.dump({"v": CACHE_VERSION, "offset": end, "size": size,
+                       "paths": sorted(found)}, f)
         os.replace(tmp, cache_file)
     except OSError:
         pass
@@ -225,6 +400,28 @@ def dirty_paths(repo):
                 out.append(fields[i])
                 i += 1
     return out
+
+
+def split_claims(claims):
+    """Partition claim strings into exact/dir names and glob patterns."""
+    exact, globs = set(), []
+    for c in claims:
+        c = c.rstrip("/")
+        if not c:
+            continue
+        (globs.append(c) if any(ch in c for ch in "*?[") else exact.add(c))
+    return exact, globs
+
+
+def claim_matches(path, exact, globs):
+    """True if `path` is claimed directly, via a claimed ancestor dir, or a glob."""
+    if path in exact:
+        return True
+    parts = path.split("/")
+    for i in range(1, len(parts)):
+        if "/".join(parts[:i]) in exact:
+            return True
+    return any(fnmatch.fnmatch(path, g) for g in globs)
 
 
 def rel_to_repo(repo, path):
@@ -378,8 +575,13 @@ def main():
             log(state_dir, "warning: lock timeout, proceeding unlocked")
 
         dirty = dirty_paths(repo)
-        held_back = sorted((theirs - mine) & set(dirty))
-        to_commit = sorted(p for p in dirty if p not in theirs or p in mine)
+        mine_x, mine_g = split_claims(mine)
+        their_x, their_g = split_claims(theirs)
+        held_back = sorted(p for p in dirty
+                           if claim_matches(p, their_x, their_g)
+                           and not claim_matches(p, mine_x, mine_g))
+        blocked = set(held_back)
+        to_commit = sorted(p for p in dirty if p not in blocked)
 
         if not to_commit:
             msg = "nothing to commit"
