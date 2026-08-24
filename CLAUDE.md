@@ -8,6 +8,15 @@ Doc rule: every doc holds CURRENT truth only — when state changes, rewrite/del
 - Contracts: `src/core/types.ts` is authoritative; modules implement it.
 - `src/core` never imports from `src/app`.
 - Dev: `npm run dev` · check: `npm run typecheck && npm test` · e2e without permissions: append `?synthetic=1`.
+- **Agents: `npm run dev` cannot be started by the preview launcher here.** This repo lives in
+  `~/Downloads`, which macOS TCC does not grant to the launcher's process — anything it spawns with
+  this cwd dies on `EPERM: uv_cwd` before vite loads. That is not a project bug and not worth
+  re-debugging. Instead: `node scripts/mirror-watch.mjs &` from Bash (which HAS the grant) live-syncs
+  the tree to `/tmp/inout-dev`, then `preview_start { name: "inout-tmp" }` serves it on **5174** with
+  working HMR — edits in the repo reach the browser in ~1 s. Verify in the app, not from the code:
+  three sessions in a row shipped capture fixes "argued from the ordering" and the bug survived all
+  three. Permanent fix, PO's call: move the repo out of `~/Downloads`, or grant the desktop app Full
+  Disk Access — then plain `npm run dev` works for agents too and the mirror can be deleted.
 - `proto/` is opened off disk and never served. Open `proto/style.html` with `file://` —
   no dev server, no `npm run dev`, not even a static one. It stays one self-contained
   file: no `<script src>`, no `<link>`, no fetch, no modules, no external assets.
