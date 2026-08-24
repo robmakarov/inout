@@ -12,6 +12,22 @@ TD tags technical defects by severity. Done items get deleted, not archived.
 
 ### Now
 
+- [P0] TD 2026-08-24: THE INSTANT EXPORT IS OUT OF SYNC, and nothing could see it until today. An
+  unedited export packet-copies the live composite; measured on the oracle's own flash+click metric it
+  reads 97.4 and 102.4 ms A/V offset on the v2 engine and 244.8 ms on v1, against the SAME take's
+  render at 52.5-64.3 ms — i.e. outside the 90 ms CI band, on the path most takes actually take. Every
+  sync number this project has quoted was measured on the RENDER, because the oracle exported by
+  calling exportRecording directly and never exercised a packet copy; it now drives the product's own
+  export ladder and prints `inst=`, `trim=` and `compT0=` on every line. Smart cut inherits the same
+  offset (150.3 ms) because it copies the same file, which is why it stays off by default. Measured but
+  NOT root-caused: the composite's first video packet sits at 133-300 ms on v2 while CompositeRecording
+  carries no offset field, so both copy paths assume composite time IS recording time — but v1 reads
+  compT0=0 and is the worse of the two, so the clock origin contributes without explaining it.
+  DELIBERATELY NOT GATED YET: banding it turns CI red on a pre-existing defect and blocks every other
+  task, so it is printed on every oracle run instead and gets its band in the session that fixes it.
+  Task P0-instant-sync in .ai/TASKS. PO NOTE: this is consistent with the standing "sync is worse than
+  it should be" report — and it means an UNEDITED take is worse than an edited one, which is backwards.
+
 - [P2] Oracle returns ALL-NULL metrics (and exit 0!) under machine contention — instrument must retry or fail loudly, never emit null-as-result. PARTLY ADDRESSED: oracle.mjs retries and fails loud on incomplete metrics. Still open: branch ee/oracle-nullfix unmerged (TD review), and the fidelity runner has no equivalent retry — it reads RED (toneErr 1.1-2.3 dB) purely from machine load, which is capture starvation and not a mix regression. Needs the same retry/quiet-machine guard.
 
 - [P2] Sync is ~45-63 ms audio-late, not the ~30 ms previously believed (2026-08-23: the oracle was ~31 ms optimistic — exact 18 ms detection bias + an unmeasured 13.5 ms video reference). PO can feel it — re-confirmed 2026-08-24 on a real tab-music take (YouTube music video), which matches the measured offset; no new fault implied. Cause understood and partly compensated. 2026-08-24: the v2 engine is now the DEFAULT and reads 33-48 ms on the oracle against v1's ~60 — users get the better number today; closing the rest to ≤20 ms is anchor work (input latency both engines share), tracked as O4-polish. Awaiting PO listen test on a real take.

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { EditState, Recording } from '@core/types'
-import { clampEditState, isDefaultEdit, outputDurationMs } from '@core/timeline'
+import { clampEditState, outputDurationMs } from '@core/timeline'
 import type { TightenProposal } from '@core/timeline'
 import {
   isDefaultTier,
@@ -9,8 +9,7 @@ import {
   settingsForTier,
   type QualityTier,
 } from '@core/compose/quality'
-import { exportInstant, exportRecording, exportSmartCut } from '@core/compose'
-import { smartCutEnabled } from '@core/compose/smartCutFlag'
+import { exportByBestPath } from '@core/compose'
 import { editsRepo, recordingsRepo } from '@core/store'
 import { analytics } from '@core/analytics'
 import { useAppStore } from '@app/state/store'
@@ -124,12 +123,6 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
     const defaultTier = isDefaultTier(chosen)
     const settings = settingsForTier(chosen)
 
-    // Instant + certified: an unedited take with a live composite copies that
-    // composite's H.264 straight into MP4 (no re-encode) and muxes it with audio
-    // mixed through the SAME certified mixer the render uses — instant again,
-    // without the MediaRecorder audio that 4637bca removed as the noise cause.
-    // Any edit, or any failure of the fast path, falls back to the full render.
-
     const ac = new AbortController()
     store.setExportAbort(ac)
     store.setExportProgress({ phase: 'preparing', ratio: 0 })
@@ -140,57 +133,24 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
     analytics.track('export_start')
     const t0 = performance.now()
     try {
-      // Unedited + composite → instant certified path (copies the composite
-      // H.264, muxes certified-mixer audio). Any edit or fast-path failure falls
-      // back to the full render. BOTH paths now carry the loudness rescue, so a
-      // faint capture (e.g. a Safari mic) exports audible either way.
-      let result: Awaited<ReturnType<typeof exportRecording>> | undefined
-      let instant = false
-      if (defaultTier && recording.composite && isDefaultEdit(recording, effectiveEdit)) {
-        try {
-          result = await exportInstant({ recording, edit: effectiveEdit, onProgress, signal: ac.signal })
-          instant = true
-        } catch (err) {
-          if (err instanceof Error && err.name === 'AbortError') throw err
-          // Fast path unusable (codec/track) — never fail an export over it.
-          console.warn('instant export unavailable, falling back to render', err)
-        }
-      }
-      // O5c: an edit that only chooses WHICH parts of the take to keep does not
-      // change any pixel, so most of the output is still the composite's own
-      // packets — copy them and re-encode only the frames between each cut and
-      // the next keyframe. Same tier rule as the instant path (a different
-      // resolution is a different picture), and the same refuse-and-fall-back
-      // discipline: exportSmartCut throws for anything it is not certain of.
-      let smartCut = false
-      if (!result && smartCutEnabled() && defaultTier && recording.composite) {
-        try {
-          result = await exportSmartCut({
-            recording,
-            edit: effectiveEdit,
-            onProgress,
-            signal: ac.signal,
-          })
-          smartCut = true
-        } catch (err) {
-          if (err instanceof Error && err.name === 'AbortError') throw err
-          console.info('smart cut unavailable, rendering', err)
-        }
-      }
-      if (!result) {
-        result = await exportRecording({
-          recording,
-          edit: effectiveEdit,
-          settings,
-          onProgress,
-          signal: ac.signal,
-        })
-      }
+      // The ladder itself lives in compose/choose.ts, not here: the oracle
+      // drives the SAME function, so the sync band gates the path a user
+      // actually gets rather than the render they only get as a fallback.
+      const { result, path } = await exportByBestPath({
+        recording,
+        edit: effectiveEdit,
+        settings,
+        // Only the default tier can packet-copy: any other tier is a different
+        // resolution, so the recorded composite is not it.
+        allowPacketCopy: defaultTier,
+        onProgress,
+        signal: ac.signal,
+      })
       analytics.track('export_complete', {
         durationMs: Math.round(performance.now() - t0),
         sizeBytes: result.blob.size,
-        instant,
-        smartCut,
+        instant: path === 'instant',
+        smartCut: path === 'smartcut',
         tier: chosen.id,
       })
       if (import.meta.env.DEV) {

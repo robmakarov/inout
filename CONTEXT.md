@@ -162,9 +162,21 @@ result is the one people will feel: **trimming a take no longer means re-making 
 Cutting changes *which* parts you keep, not what any of them looks like, so the recording's own
 compressed frames are copied straight through and only the few frames either side of each cut are
 re-made. A thirty-second take with two cuts now exports in under a second instead of nearly four.
-It is built, merged and measured, but **switched off by default** until an automatic test watches it —
-the same discipline the capture engine got, and the reason that one is now trustworthy enough to be the
-default. The export also moved off the main thread, so a long export no longer competes with the
+It is built, merged and measured, but **switched off by default** — and the next session explains why
+in a way nobody expected.
+
+**The test we built to turn trimming on found something worse, in the feature everyone already uses.**
+The plan was small: teach the automatic checker to export a trimmed take the way the app really does,
+confirm it is clean, switch trimming on. Building that revealed the checker had never tested the fast
+path at all — it always exported the slow way, so **every sync figure this project has ever quoted
+describes the path you get LAST**. With the checker finally looking at the real thing, the fast export
+of an *unedited* take — the one you get every time you record and hit export without editing — is
+**about 100 milliseconds out of sync on the new engine and 245 on the old one**, against 52–64 for the
+slow path on the identical recording. Trimming inherits the same fault because it copies the same
+file, which is why it stayed off. So the flip did not happen and a P0 took its place. This is the
+uncomfortable kind of good news: the fault is not new, it is just newly visible, and it is consistent
+with your standing report that sync is worse than it should be. It also means an untouched take is
+currently worse than an edited one, which is backwards. Fixing it is the top item on the roadmap. The export also moved off the main thread, so a long export no longer competes with the
 editor for the same thread; it produces a byte-for-byte identical file either way.
 
 **Shipped alongside it:** the **timed movable camera** — drag the picture-in-picture on the stage and
@@ -215,7 +227,7 @@ export, the capture-engine polish list, native-resolution capture, crisp screen 
 work, pause/retake, the size number's fifth attempt, and frame-exact scrubbing. Each still costs a
 session, and `.ai/TASKS` says which are unblocked and which can run at the same time.
 
-**Runs in parallel now:** turning smart-cut trimming on by default (small, needs one test wired) ·
+**Runs in parallel now:** the out-of-sync fast export (P0, top of the list — trimming waits on it) ·
 native-resolution capture · crisp screen text · pause/retake · frame-exact scrubbing · the size-number
 probe, attempt 5 · the codec ladder and the real Firefox run, both waiting on one install (below) ·
 the iOS ScreenCaptureKit spike (time-sensitive: iOS 27 ships ~Sept 2026, and it needs a device we do

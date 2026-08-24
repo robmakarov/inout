@@ -15,10 +15,10 @@
  *    exp-oracle-* keys, plus a stale-key sweep before each run.
  */
 
-import { exportRecording } from '@core/compose'
+import { exportByBestPath, exportRecording, smartCutEnabled, type ExportPath } from '@core/compose'
 import { getLastScratchStats } from '@core/compose/scratch'
 import { defaultEditState } from '@core/timeline'
-import type { EditState } from '@core/types'
+import { DEFAULT_EXPORT_SETTINGS, type EditState } from '@core/types'
 import { analyzeAudioIntegrity, type AudioIntegrityReport } from './audioIntegrity'
 import { analyzeExport, type ExportAnalysis } from './analyze'
 import { recordFiducialSession, sweepStaleOracleBlobs, type RecordOptions } from './rig'
@@ -62,6 +62,29 @@ export interface OracleReport {
     lastOnsetMs: number | null
     lastOnsetToEndMs: number | null
   }
+  /**
+   * Which of the three export paths actually produced the TRIMMED file (task
+   * O5-flip). This is the field that stops the smart-cut gate being vacuous:
+   * a run where the fast path quietly declined would otherwise measure the
+   * render and pass, proving nothing about the path it was meant to gate.
+   */
+  trimmedPath: ExportPath
+  /** Why each faster path was skipped, in order — the diagnosis when it is. */
+  trimmedPathDeclined: { path: ExportPath; reason: string }[]
+  /** What the trim SHOULD have taken given the flag — the anti-vacuity check. */
+  expectedTrimmedPath: ExportPath
+  /** Whether the rig recorded a composite at all (no composite ⇒ no fast path). */
+  hasComposite: boolean
+  /** A/V offset measured in the TRIMMED file, on the same flash+click metric. */
+  trimmedSyncMeanMs: number | null
+  trimmedSyncMaxAbsMs: number | null
+  /** Same, for an UNEDITED export — i.e. the instant packet copy. Diagnostic. */
+  instantPath: ExportPath | null
+  instantSyncMeanMs: number | null
+  instantSyncMaxAbsMs: number | null
+  /** The composite's own clock: where its first frame sits, and how long it is. */
+  compositeFirstPacketSec: number | null
+  compositeDurationSec: number | null
   /** Export throughput: recorded ms per ms of export wall time. */
   exportRealtimeFactor: number
   /**
@@ -116,6 +139,11 @@ export async function runOracle(
   // flash+click is the sync gate — default on unless explicitly disabled.
   const rig = await recordFiducialSession(recordMs, {
     flashClick: true,
+    // O5-flip: every real take has a composite, and without one here the two
+    // packet-copying export paths cannot run — so the oracle would gate a file
+    // shape the product never produces. Measured before switching on: the added
+    // capture load does not move the sync band (see the O5-flip handoff).
+    composite: true,
     ...opts,
     ...(opts && 'flashClick' in opts ? { flashClick: opts.flashClick } : {}),
   })
@@ -168,13 +196,77 @@ export async function runOracle(
       globalTrimStartMs: trimStartMs,
       globalTrimEndMs: rig.recording.durationMs,
     }
+    // THE TRIMMED EXPORT GOES THROUGH THE PRODUCT'S OWN LADDER (task O5-flip).
+    // It used to call exportRecording directly, so the render was the only
+    // path any gate ever saw — and the render is what a user gets LAST. A
+    // trim is the archetypal smart-cut edit (time-only, both boundaries off
+    // the keyframe grid at 1483 ms), so this is where that path belongs.
     const t1 = performance.now()
-    const trimmedResult = await exportRecording({ recording: rig.recording, edit: trimmedEdit })
+    const trimmedChoice = await exportByBestPath({
+      recording: rig.recording,
+      edit: trimmedEdit,
+      allowPacketCopy: true,
+      settings: DEFAULT_EXPORT_SETTINGS,
+    })
+    const trimmedResult = trimmedChoice.result
     const exportTrimmedMs = performance.now() - t1
     const trimmed = await analyzeExport(trimmedResult.blob, analyzeOpts)
 
     const trimErrorMs =
       full.fit && trimmed.fit ? trimmed.fit.alphaMs - full.fit.alphaMs - trimStartMs : null
+
+    // THE INSTANT PATH HAS NEVER BEEN MEASURED HERE, and it is the path most
+    // takes actually get: an unedited export copies the composite's packets
+    // wholesale. The render was the only thing this file ever gated, so if the
+    // composite's own time base differs from the recording's, nothing would
+    // have noticed. Diagnostic first — gated once its band is known.
+    // WHERE DOES THE COMPOSITE'S CLOCK START? Both packet-copying paths assume
+    // composite time IS recording time — CompositeRecording carries no offset
+    // field, so nothing anywhere can express anything else. If the composite's
+    // first frame is not at 0, every copied packet is shifted by that much
+    // against audio mixed from the raw channels, on BOTH paths.
+    let compositeFirstPacketSec: number | null = null
+    let compositeDurationSec: number | null = null
+    if (rig.recording.composite) {
+      try {
+        const { ALL_FORMATS, BlobSource, Input, EncodedPacketSink } = await import('mediabunny')
+        const { blobStore } = await import('@core/store')
+        const blob = await blobStore.read(rig.recording.composite.blobKey)
+        const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS })
+        try {
+          const track = await input.getPrimaryVideoTrack()
+          if (track) {
+            const first = await new EncodedPacketSink(track).getFirstPacket({ metadataOnly: true })
+            compositeFirstPacketSec = first ? Math.round(first.timestamp * 1e4) / 1e4 : null
+          }
+          compositeDurationSec = Math.round((await input.computeDuration()) * 1e4) / 1e4
+        } finally {
+          input.dispose()
+        }
+      } catch (err) {
+        console.warn('[oracle] composite time-base probe failed', err)
+      }
+    }
+
+    let instantSyncMeanMs: number | null = null
+    let instantSyncMaxAbsMs: number | null = null
+    let instantPath: ExportPath | null = null
+    if (rig.recording.composite) {
+      try {
+        const instantChoice = await exportByBestPath({
+          recording: rig.recording,
+          edit: baseEdit,
+          allowPacketCopy: true,
+          settings: DEFAULT_EXPORT_SETTINGS,
+        })
+        instantPath = instantChoice.path
+        const inst = await analyzeExport(instantChoice.result.blob, analyzeOpts)
+        instantSyncMeanMs = inst.flashSyncCorrectedMeanMs ?? inst.flashSync?.meanOffsetMs ?? null
+        instantSyncMaxAbsMs = inst.flashSyncCorrectedMaxAbsMs ?? inst.flashSync?.maxAbsOffsetMs ?? null
+      } catch (err) {
+        console.warn('[oracle] instant-path probe failed', err)
+      }
+    }
 
     const verdicts = buildVerdicts({
       recordMs,
@@ -184,6 +276,8 @@ export async function runOracle(
       trimErrorMs,
       exportFullMs,
       audioIntegrity,
+      trimmedPath: trimmedChoice.path,
+      hasComposite: !!rig.recording.composite,
     })
     return {
       recordMs,
@@ -195,6 +289,18 @@ export async function runOracle(
       trimErrorMs,
       exportFullMs,
       exportTrimmedMs,
+      trimmedPath: trimmedChoice.path,
+      trimmedPathDeclined: trimmedChoice.declined,
+      expectedTrimmedPath: smartCutEnabled() ? 'smartcut' : 'render',
+      hasComposite: !!rig.recording.composite,
+      trimmedSyncMeanMs: trimmed.flashSyncCorrectedMeanMs ?? trimmed.flashSync?.meanOffsetMs ?? null,
+      trimmedSyncMaxAbsMs:
+        trimmed.flashSyncCorrectedMaxAbsMs ?? trimmed.flashSync?.maxAbsOffsetMs ?? null,
+      instantPath,
+      instantSyncMeanMs,
+      instantSyncMaxAbsMs,
+      compositeFirstPacketSec,
+      compositeDurationSec,
       tail: (() => {
         const recordedMs = rig.recording.durationMs
         const exportedMs = full.durationSec * 1000
@@ -241,8 +347,20 @@ function buildVerdicts(args: {
   trimErrorMs: number | null
   exportFullMs: number
   audioIntegrity: AudioIntegrityReport | null
+  trimmedPath: ExportPath
+  hasComposite: boolean
 }): OracleVerdict[] {
-  const { recordMs, trimStartMs, full, trimErrorMs, exportFullMs, audioIntegrity } = args
+  const {
+    recordMs,
+    trimStartMs,
+    full,
+    trimmed,
+    trimErrorMs,
+    exportFullMs,
+    audioIntegrity,
+    trimmedPath,
+    hasComposite,
+  } = args
   const verdicts: OracleVerdict[] = []
   const readableRatio = full.flow.frames ? full.flow.readable / full.flow.frames : 0
   verdicts.push({
@@ -326,6 +444,38 @@ function buildVerdicts(args: {
     value:
       trimErrorMs === null ? 'n/a' : `${trimErrorMs.toFixed(1)}ms error at ${trimStartMs}ms trim`,
     pass: trimErrorMs === null ? null : Math.abs(trimErrorMs) <= MAX_TRIM_ERROR_MS,
+  })
+  // O5-flip: the trimmed file is the one a user gets after trimming, and since
+  // it may now be assembled from COPIED packets plus a re-encoded boundary, its
+  // A/V offset is a separate claim from the render's. Gated on the same band.
+  const trimmedFlashMean =
+    trimmed.flashSyncCorrectedMeanMs ?? trimmed.flashSync?.meanOffsetMs ?? null
+  const trimmedFlashMax =
+    trimmed.flashSyncCorrectedMaxAbsMs ?? trimmed.flashSync?.maxAbsOffsetMs ?? null
+  verdicts.push({
+    metric: `A/V sync of the TRIMMED export via '${trimmedPath}' (flash+click) — GATE`,
+    value:
+      trimmedFlashMean === null
+        ? 'n/a'
+        : `mean ${trimmedFlashMean.toFixed(1)}ms, maxAbs ${(trimmedFlashMax ?? 0).toFixed(1)}ms over ${trimmed.flashSync?.matchedPairs ?? 0} pairs`,
+    pass:
+      trimmedFlashMean === null
+        ? null
+        : Math.abs(trimmedFlashMean) <= MAX_SYNC_MEAN_MS &&
+          (trimmedFlashMax ?? 0) <= MAX_SYNC_ABS_MS,
+    note: 'the path a trimmed take actually takes — not the render it falls back to',
+  })
+  // Never let the gate above be vacuous: with a composite present and the flag
+  // on, the trim MUST have taken smart cut. If it silently fell through to the
+  // render, the run measured the thing that was already gated and the new gate
+  // proved nothing — which is a failure, not a pass.
+  verdicts.push({
+    metric: 'trimmed export took the expected path',
+    value: `${trimmedPath}${hasComposite ? '' : ' (rig recorded no composite)'}`,
+    pass: !hasComposite ? null : trimmedPath === (smartCutEnabled() ? 'smartcut' : 'render'),
+    note: hasComposite
+      ? 'a fast path that quietly declines makes the sync gate above measure the wrong file'
+      : 'informational — without a composite no packet-copying path can run',
   })
   verdicts.push({
     metric: 'export speed',

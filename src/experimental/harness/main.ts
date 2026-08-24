@@ -36,9 +36,16 @@ const runners: Runner[] = [
       return runOracle(
         typeof args?.recordMs === 'number' ? args.recordMs : 6000,
         typeof args?.trimMs === 'number' ? args.trimMs : undefined,
-        typeof args?.injectTailLossMs === 'number'
-          ? { injectTailLossMs: args.injectTailLossMs }
-          : undefined,
+        {
+          ...(typeof args?.injectTailLossMs === 'number'
+            ? { injectTailLossMs: args.injectTailLossMs }
+            : {}),
+          // O5-flip A/B lever: `{"composite":false}` restores the pre-O5-flip
+          // rig (no live composite alongside), which is how the claim "the
+          // composite does not move the sync band" is checked rather than
+          // asserted.
+          ...(typeof args?.composite === 'boolean' ? { composite: args.composite } : {}),
+        },
       )
     },
   },

@@ -22,6 +22,14 @@
  *    last seconds — we don't do that shit". A pipeline that drops its final
  *    buffer passes every other gate in this file.
  *  - export throughput ≥ MIN_EXPORT_REALTIME (recorded ms per ms of export)
+ *  - THE TRIMMED EXPORT (task O5-flip). A trim is the archetypal fast-path edit,
+ *    and until now the oracle exported it by calling the renderer directly — so
+ *    every sync number this file has ever gated described the path a user gets
+ *    LAST. The trimmed file now goes through the product's own ladder, and two
+ *    things are checked: its A/V offset against the same band as the full
+ *    export, and THAT IT ACTUALLY TOOK THE PATH IT WAS SUPPOSED TO. The second
+ *    is not bureaucracy — a fast path that quietly declines would leave the
+ *    first gate measuring the render, i.e. passing while proving nothing.
  *  - EXPORT PEAK MEMORY (O8, remainder): the muxer must never hold more than
  *    MAX_EXPORT_PEAK_OUTPUT_BYTES of OUTPUT at once. O1 moved the muxer onto a
  *    chunked OPFS scratch and measured the result — 4.0 MB held against
@@ -87,6 +95,44 @@ export function gateOracleReport(report) {
         failures.push(`tail: last ${label} is ${gap}ms before the end (> ${MAX_LAST_EVENT_GAP_MS}ms)`)
       }
     }
+  }
+  if (report.trimmedPath) {
+    metrics.trimmedPath = report.trimmedPath
+    metrics.trimmedSyncMeanMs = report.trimmedSyncMeanMs ?? null
+    metrics.trimmedSyncMaxAbsMs = report.trimmedSyncMaxAbsMs ?? null
+    const band = MAX_SYNC_ABS_SYMMETRIC_MS
+    const mean = report.trimmedSyncMeanMs
+    const max = report.trimmedSyncMaxAbsMs
+    if (typeof mean === 'number' && Math.abs(mean) > band) {
+      failures.push(
+        `trimmed export sync mean |${mean.toFixed(1)}| > ${band}ms (path: ${report.trimmedPath})`,
+      )
+    }
+    if (typeof max === 'number' && max > band) {
+      failures.push(
+        `trimmed export sync maxAbs ${max.toFixed(1)} > ${band}ms (path: ${report.trimmedPath})`,
+      )
+    }
+    // The anti-vacuity check. Only meaningful when the take HAS a composite —
+    // without one no packet-copying path can run and the render is correct.
+    if (report.hasComposite && report.expectedTrimmedPath) {
+      if (report.trimmedPath !== report.expectedTrimmedPath) {
+        const why = (report.trimmedPathDeclined ?? [])
+          .map((d) => `${d.path}: ${d.reason}`)
+          .join(' | ')
+        failures.push(
+          `trimmed export took '${report.trimmedPath}', expected '${report.expectedTrimmedPath}' — ` +
+            `the sync gate above measured the wrong file (${why || 'no reason recorded'})`,
+        )
+      }
+    }
+  }
+  metrics.compositeFirstPacketSec = report.compositeFirstPacketSec ?? null
+  metrics.compositeDurationSec = report.compositeDurationSec ?? null
+  if (report.instantPath) {
+    metrics.instantPath = report.instantPath
+    metrics.instantSyncMeanMs = report.instantSyncMeanMs ?? null
+    metrics.instantSyncMaxAbsMs = report.instantSyncMaxAbsMs ?? null
   }
   if (typeof report.exportPeakOutputBytes === 'number') {
     metrics.exportPeakOutputBytes = report.exportPeakOutputBytes

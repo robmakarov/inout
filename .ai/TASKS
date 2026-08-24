@@ -29,7 +29,15 @@ several ids, take the first and tell PO to open parallel sessions for the rest. 
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
 ── READY MAP — current truth, updated on every merge ──
-Last update 2026-08-24 (SEVENTH session, PO: "roadmap all O and F in one session"). Everything merged.
+Last update 2026-08-24 (EIGHTH session, PO: "go O5-flip"). Everything merged.
+THE FLIP DID NOT HAPPEN, AND THAT IS THE RESULT. O5-flip's job was to build the gate smart cut was
+waiting for and then turn it on. The gate got built — the oracle now records a composite like every
+real take, drives the product's OWN export ladder (compose/choose.ts) for its trim, bands that file's
+A/V offset, and refuses to pass if a fast path quietly declined. Then it failed the flip on its first
+honest run, and the fault is not smart cut's: the SHIPPED INSTANT PATH is out of sync too, by
+97-102 ms on v2 and 244.8 ms on v1, against the same take's render at 52-64. That is a P0 nobody
+could see until today, because every sync number this project has ever quoted was measured on the
+render — the path a user gets LAST. It is now first on the map.
 WHAT THAT SESSION ACTUALLY DID, because "all O and F" was not achievable and saying so is the point:
 it took O5 (the heaviest unblocked task, and the one every other O depended on) end to end, and closed
 O8's export peak-memory band on the way. O5's premise turned out to be false, which cost the session
@@ -38,6 +46,8 @@ NOT badly pipelined, mediabunny already queues the encoder 4 deep, and the expor
 of decoding every frame. That verdict retires the "multi-× realtime from pipelining" idea for good and
 promotes smart cut from a nicety to the only lever, which is now built and measured at 4.3-5.6×.
 NOT STARTED, and each still costs a session: O3b · O4-polish · O6 · O9 · O10 · F6 · F7c · F8.
+(The eighth session added no features on purpose — it built the instrument that can see the fast
+export paths at all, and the first thing it saw was a P0.)
 Everything merged and pushed to origin/main.
 Merged 2026-08-23/24 across six sessions: O1 · O2 · O3a · O7 · O4 step1 · O4b · F1 · F7 · O8(partial)
 · P2 · P3 · F4 · O4 step2 (DORMANT) · a P0 mic-hang fix (PO-verified) · O11a · O11b · O11c · F7b · F3
@@ -54,14 +64,36 @@ START HERE IF YOU ARE FRESH:
      now v2 (worker + WebCodecs) — anything touching capture/* keeps BOTH engines green.
 
 READY NOW — parallel-safe, any subset concurrently (one session each):
-  O5-flip  smart cut on by default [light]   THE ONE THING O5 LEFT DELIBERATELY UNDONE, and it is
-                                             small: route the oracle's non-frame-aligned trim through
-                                             the editor's export decision so smart cut runs UNDER the
-                                             sync band, confirm 3/3 green, then flip the fallback in
-                                             compose/smartCutFlag.ts to true. Everything else about it
-                                             is measured (4.3-5.6×, ≤1 s gate met, 90-94 % of frames
-                                             copied, picture matched at 37.5-42.8 dB). Until then a
-                                             cut export still takes the full render.
+  P0-instant-sync  packet-copy paths are out of sync  [P0, medium]  FOUND 2026-08-24 BY THE GATE
+                                             O5-flip BUILT, on the first run that could see it. The
+                                             INSTANT path — what every unedited export takes, the one
+                                             PO uses — measures 97.4 and 102.4 ms A/V offset on v2
+                                             against the SAME take's render at 52.5 and 64.3, i.e.
+                                             OUTSIDE the 90 ms band; on v1 it reads 244.8 ms. Some
+                                             runs cannot match flash/click pairs at all. Smart cut
+                                             inherits it (150.3 ms) because it copies the same file,
+                                             which is why O5-flip did NOT flip — see that handoff.
+                                             MEASURED AND NAMED, NOT ROOT-CAUSED: the composite's
+                                             first video packet sits at 133-300 ms on v2 (`compT0=` on
+                                             every oracle line) while CompositeRecording carries no
+                                             offset field, so both copy paths assume composite time IS
+                                             recording time — but v1 reads compT0=0 and is the WORSE
+                                             of the two, so the clock origin is a contributing
+                                             quantity, not the whole cause. Start by deciding what a
+                                             composite timestamp MEANS, then give the type a way to
+                                             say it.
+                                             NOT GATED YET, deliberately: banding it today turns CI
+                                             red on a defect that predates this session and blocks
+                                             every other task. It is measured and printed on every
+                                             oracle line instead (`inst=`), so it cannot be forgotten
+                                             or silently regress. Gate it in the session that fixes it.
+  O5-flip  smart cut on by default [light]   BLOCKED ON P0-instant-sync. The gate is BUILT and works —
+                                             that is how the P0 above was found. The flip itself is
+                                             one boolean in compose/smartCutFlag.ts plus a green
+                                             `npm run oracle -- --cold=3` with `inst=` and `trim=`
+                                             inside the band. Smart cut's own numbers are already
+                                             good (4.3-5.6×, ≤1 s gate met, 90-94 % of frames copied,
+                                             picture matched at 37.5-42.8 dB).
   O5e  VFR timestamps              [medium]  the one part of O5 never attempted: preserve source
                                              presentation timestamps from frame-driven takes instead
                                              of CFR resampling. CFR 30 stays the default.
@@ -208,6 +240,14 @@ BOTH the composite and the raw channels.
    engine as faster whichever one it is; (b) compose/scratch.ts deletes the previous finished export
    when a new one finishes, so an earlier ExportResult.blob goes dead and reads as a bare
    `TypeError: network error`. A rig comparing several files must copy each one into memory first.
+
+14. EVERY SYNC NUMBER THIS PROJECT QUOTED BEFORE 2026-08-24 WAS THE RENDER'S, and the render is the
+   path a user gets LAST. The oracle exported by calling exportRecording directly, so the instant
+   packet copy (what an unedited take takes) and smart cut were invisible to it. They are not any
+   more: the rig records a composite, the trim goes through compose/choose.ts — the product's own
+   ladder — and every oracle line now prints `inst=` (instant-path sync), `trim=<path>/<sync>` and
+   `compT0=` (where the composite's clock starts). The first honest run found the instant path
+   outside the band. If you change anything in compose/*, read those three fields, not just `sync=`.
 
 12. THE UI RIG SERVES dist/, AND DOES NOT BUILD IT. `scripts/ui-shot.mjs` runs `vite preview`, so a
    flow that "does not work" may simply be yesterday's bundle. Run `npm run build` first. The same
@@ -598,6 +638,33 @@ O5 was written on "the render is main-thread and strictly serial (decode awaits 
    without one ignores it), latencyMode left at 'quality' deliberately — an export has no clock to keep
    and must not drop frames.
 (e) VFR — NOT DONE, untouched.
+── HANDOFF 2026-08-24 (EIGHTH session, "go O5-flip") — THE GATE IS BUILT; THE FLIP IS REFUSED, BY IT.
+WHAT WAS BUILT, and all of it stays:
+   · compose/choose.ts — the instant → smartcut → render ladder as ONE function. It used to live
+     inside EditorScreen, where no gate could reach it, which is the whole reason the oracle had only
+     ever measured the render. EditorScreen and the oracle now call the same thing, and it returns
+     WHICH path ran plus why each faster one declined.
+   · the oracle rig records a LIVE COMPOSITE (RecordOptions.composite, on by default) exactly as
+     production does, v2-or-v1 by the same capability choice. Without one, `recording.composite` was
+     always absent, so neither packet-copying path could ever run here and routing the trim through
+     the ladder would have fallen straight through to the render — green, and proving nothing.
+   · the trimmed export goes through the ladder, and the gate bands ITS sync (same ≤90 ms band) and
+     asserts the path it took. A fast path that silently declines now FAILS the run.
+   · `npm run oracle -- --no-composite` restores the old rig, which is how the change was checked:
+     3 runs each, composite OFF 50.2/67.8/62.4 ms vs ON 55.1/37.9/55.7 ms — no systematic shift. (An
+     early single run read 87.1 and was a loaded-machine outlier, not a signal. Note 10, again.)
+   · the instant path's sync and the composite's own clock origin are measured and printed on every
+     oracle line (`inst=`, `compT0=`) — neither had ever been measured before.
+WHAT IT FOUND, which is why the boolean is still false: see task P0-instant-sync at the top of the
+   map. Both packet-copying paths are outside the sync band, the instant one included, and smart cut
+   inherits it by copying the same composite. Flipping would have shipped a worse file than the render
+   for every trimmed take.
+HONEST CALL RECORDED: the instant path's sync is measured but NOT banded yet. Banding it today turns
+   CI red on a pre-existing defect and blocks every other task; it is printed on every run instead so
+   it cannot regress unnoticed, and it gets its band in the session that fixes it.
+ONE MORE THING THE COMPOSITE RIG SURFACED: with a composite running alongside, the audio boundary
+   jump reads 0.002-0.064 where it used to read a flat 0 (band 0.1, so it passes). Production takes
+   have always had that load; the oracle simply never carried it. More representative, not worse.
 FOUND WHILE DOING IT, both fixed: (1) moving the export into a worker made getLastScratchStats()
    main-thread-blind, so O8's new peak-memory band read `n/a` on its first run — the gate caught its
    own prerequisite; the worker now forwards both RenderStats and ScratchStats and pipeline.ts

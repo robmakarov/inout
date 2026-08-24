@@ -28,7 +28,13 @@ function parseArgs(argv) {
   let cold = 1
   let headed = false
   let engine = ''
+  // O5-flip A/B lever: --no-composite restores the pre-O5-flip rig (channels
+  // only, no live composite alongside). The oracle records one by default now
+  // because every real take has one; this is how that change is checked
+  // against the sync band rather than assumed harmless.
+  let composite = true
   for (const a of argv) {
+    if (a === '--no-composite') { composite = false; continue }
     if (a.startsWith('--cold=')) cold = Number(a.slice(7))
     else if (a === '--headed') headed = true
     else if (a.startsWith('--engine=')) engine = a.slice(9)
@@ -37,7 +43,7 @@ function parseArgs(argv) {
       process.exit(2)
     }
   }
-  return { cold, headed, engine }
+  return { cold, headed, engine, composite }
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -93,10 +99,11 @@ function run(cmd, args, opts = {}) {
   })
 }
 
-async function runOracleOnce(port, headed, engine) {
+async function runOracleOnce(port, headed, engine, composite = true) {
   const cdpArgs = [
     join(ROOT, 'src/experimental/tools/cdp-run.mjs'),
     'oracle',
+    JSON.stringify({ composite }),
     `--port=${port}`,
   ]
   if (headed) cdpArgs.push('--headed')
@@ -122,11 +129,11 @@ const METRIC_RETRY_COOLDOWN_MS = 5000
 const METRIC_RETRY_MAX = 2
 
 /** Retry when CDP/oracle returns null metrics (load flake) — never exit 0 on all-null. */
-async function runOracleOnceGated(port, headed, engine) {
+async function runOracleOnceGated(port, headed, engine, composite = true) {
   let last = { error: 'no attempt', report: null, gate: null }
   for (let attempt = 1; attempt <= METRIC_RETRY_MAX; attempt++) {
     const t0 = Date.now()
-    const { error, report } = await runOracleOnce(port, headed, engine)
+    const { error, report } = await runOracleOnce(port, headed, engine, composite)
     const elapsed = Date.now() - t0
     if (error || !report) {
       last = { error: error ?? 'no report', report, gate: null, elapsedMs: elapsed, attempt }
@@ -159,7 +166,7 @@ async function runOracleOnceGated(port, headed, engine) {
 }
 
 async function main() {
-  const { cold, headed, engine } = parseArgs(process.argv.slice(2))
+  const { cold, headed, engine, composite } = parseArgs(process.argv.slice(2))
 
   try {
     await run(CHROME, ['--version'], { stdio: 'pipe' })
@@ -185,7 +192,7 @@ async function main() {
     await waitForHttp(`http://${HOST}:${port}/experimental.html`, Date.now() + 60_000)
 
     for (let i = 0; i < cold; i++) {
-      const run = await runOracleOnceGated(port, headed, engine)
+      const run = await runOracleOnceGated(port, headed, engine, composite)
       const elapsed = run.elapsedMs ?? 0
       if (run.error || !run.report || !run.gate) {
         results.push({
@@ -208,6 +215,15 @@ async function main() {
       const rt = m.exportRealtimeFactor ?? 'n/a'
       console.error(
         `[${i + 1}/${cold}] ${status} sync=${sync}/${max}ms spur=${spur}dB jump=${m.maxBoundaryJump ?? 'n/a'} ` +
+          `compT0=${
+            typeof m.compositeFirstPacketSec === 'number' ? `${(m.compositeFirstPacketSec * 1000).toFixed(0)}ms` : 'n/a'
+          } ` +
+          `inst=${m.instantPath ?? 'n/a'}/${
+            typeof m.instantSyncMeanMs === 'number' ? `${m.instantSyncMeanMs.toFixed(1)}ms` : 'n/a'
+          } ` +
+          `trim=${m.trimmedPath ?? 'n/a'}/${
+            typeof m.trimmedSyncMeanMs === 'number' ? `${m.trimmedSyncMeanMs.toFixed(1)}ms` : 'n/a'
+          } ` +
           `tail=${tail}ms export=${rt}x peakOut=${
             typeof m.exportPeakOutputBytes === 'number'
               ? `${(m.exportPeakOutputBytes / 1024 / 1024).toFixed(1)}MB`
@@ -241,6 +257,9 @@ async function main() {
       tailLastFlashToEndMs: results.map((r) => r.gate.metrics.tailLastFlashToEndMs),
       exportRealtimeFactor: results.map((r) => r.gate.metrics.exportRealtimeFactor),
       exportPeakOutputBytes: results.map((r) => r.gate.metrics.exportPeakOutputBytes),
+      trimmedPath: results.map((r) => r.gate.metrics.trimmedPath),
+      trimmedSyncMeanMs: results.map((r) => r.gate.metrics.trimmedSyncMeanMs),
+      instantSyncMeanMs: results.map((r) => r.gate.metrics.instantSyncMeanMs),
       port,
     }
     process.stdout.write(JSON.stringify(summary, null, 2) + '\n')

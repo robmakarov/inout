@@ -5,12 +5,23 @@ phase: MVP validation (2026-07-16)
 works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → export → share-as-file.
 - SYNCHRONIZED START (PO 2026-07-20, supersedes instant-arm/late-join): arm() waits for src.settled — ALL devices acquired, every permission prompt answered — before start() activates them at one epoch. All channels share one start + one length (verified: 4 lanes 100% ±0.3%); no primary-gated early start, no late-join staggering. pipeline prewarm at mount; devices touched only after record click
 - instant unedited export ~60-105ms (live composite packet-copied, mp4 h264+aac); edited takes → full render
+- THE FAST EXPORT PATHS ARE OUT OF SYNC — P0, found 2026-08-24, NOT FIXED. The INSTANT path (every
+  unedited export; the one PO uses) measures 97-102 ms A/V offset on v2 and 244.8 ms on v1, against
+  the SAME take's render at 52-64 ms — outside the 90 ms band. Invisible until now because every sync
+  number this project ever quoted was measured on the RENDER: the oracle called exportRecording
+  directly and never exercised a packet copy. It does now (`inst=`, `trim=`, `compT0=` on every
+  oracle line). Smart cut inherits the same offset, which is why it stays off. Measured but not
+  root-caused: the composite's first packet sits at 133-300 ms on v2 while CompositeRecording has no
+  offset field, so both copy paths assume composite time IS recording time — yet v1 reads compT0=0
+  and is worse, so that is a contributing quantity, not the cause. Task P0-instant-sync.
 - THE EXPORT HAS THREE PATHS and EditorScreen picks in this order: INSTANT (unedited + composite +
   default tier → packet copy), SMART CUT (O5c — a trim/cut-only edit changes no pixel, so the
   composite's packets are copied and only [cut → next keyframe] is re-encoded; measured 4.3-5.6×
   faster than rendering, ≤1 s on a 30 s take, 90-94 % of frames copied — DEFAULT OFF behind
-  `?smartcut=1` until a CI gate exercises it), and the FULL RENDER, which is also the fallback for
-  both. The render RUNS IN A WORKER by default (O5a): same code in-thread as the fallback, and the
+  `?smartcut=1`; the gate that would have turned it on now exists and REFUSES it — see the P0 above),
+  and the FULL RENDER, which is also the fallback for both. The ladder itself is compose/choose.ts,
+  driven by BOTH the editor and the oracle so the gate measures the path a user actually gets.
+  The render RUNS IN A WORKER by default (O5a): same code in-thread as the fallback, and the
   certified audio path moved off Web Audio (AudioSample, not AudioBuffer) to get there — proven by the
   fidelity oracle, and by all four A/B lanes producing byte-identical files. 60 s edited take: 6.00×
   realtime in the worker vs 5.93× in-thread.

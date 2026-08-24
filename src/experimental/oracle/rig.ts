@@ -30,7 +30,21 @@
 
 import { blobStore, createDurablePositionedWriter } from '@core/store'
 import { canMeasureAudioCapture, startMeasuredAudioCapture } from '@core/capture/measuredAudio'
-import type { ChannelKind, ChannelRecording, MediaKind, Recording } from '@core/types'
+import type {
+  ChannelKind,
+  ChannelRecording,
+  CompositeRecording,
+  MediaKind,
+  Recording,
+} from '@core/types'
+import {
+  canLiveComposite,
+  startLiveComposite,
+  type LiveCompositeHandle,
+  type LiveCompositeInputs,
+} from '@core/capture/liveComposite'
+import { canLiveCompositeV2, startLiveCompositeV2 } from '@core/capture/liveCompositeV2'
+import { preferredCompositeEngine } from '@core/capture/engine'
 import { listProductionBlobs } from '../shared/opfs'
 import { encodeBits, FID_BLOCK, FID_BLOCK_COUNT, FID_MARGIN } from './fiducial'
 
@@ -506,6 +520,23 @@ export interface RecordOptions {
   /** Enable the flash+click cross-check content (step 3d). */
   flashClick?: boolean
   /**
+   * Record a LIVE COMPOSITE alongside the channels, exactly as production does
+   * (task O5-flip).
+   *
+   * Every real take has one; this rig never made one, so `recording.composite`
+   * was always absent and the two packet-copying export paths — instant, and
+   * now smart cut — could not run here at all. The sync band therefore only
+   * ever measured the full render, which is the path a user gets LAST. Without
+   * this, routing the oracle's trim through the export ladder would look green
+   * while proving nothing, because it would fall straight through to the
+   * render it already measured.
+   *
+   * Off by default so the historical numbers stay comparable; `npm run oracle`
+   * turns it on (see scripts/oracle.mjs) after the A/B below showed the added
+   * capture load does not move the sync band.
+   */
+  composite?: boolean
+  /**
    * Hold the streams live for this long BEFORE starting the recorders —
    * models production's arm→start gap (preview can run for seconds). Used to
    * falsify "audio file t=0 tracks stream creation (pre-start audio leaks
@@ -618,14 +649,54 @@ export async function recordFiducialSession(durationMs: number, opts?: RecordOpt
     if (sysStream) enqueue(sysStream, 'system-audio', 'audio')
     if (jobs.length === 0) throw new Error('rig: empty mix')
 
+    // The composite starts with the recorders and off the SAME streams, which
+    // is what session.startComposite does. The engine choice mirrors it too:
+    // v2 when the platform and the preference allow, v1 as the capability
+    // fallback — anything else would gate a composite the product never makes.
+    let compositeHandle: LiveCompositeHandle | null = null
+    const compositeKey = `${runId}_composite.webm`
+    if (opts?.composite) {
+      const inputs: LiveCompositeInputs = {
+        screen: videoRigs.find((v) => v.kind === 'screen')?.rig.stream,
+        camera: videoRigs.find((v) => v.kind === 'camera')?.rig.stream,
+        audio: [micStream, sysStream].filter((s): s is MediaStream => !!s),
+      }
+      blobKeys.push(compositeKey)
+      try {
+        if (preferredCompositeEngine() === 'v2' && canLiveCompositeV2(inputs)) {
+          compositeHandle = await startLiveCompositeV2(inputs, compositeKey)
+        } else if (canLiveComposite(inputs)) {
+          compositeHandle = await startLiveComposite(inputs, compositeKey)
+        }
+      } catch (err) {
+        // A composite that will not start is a real answer, not a rig crash:
+        // the recording simply has none and the export ladder falls back —
+        // which the oracle's own path gate will then report as such.
+        console.warn('[rig] live composite unavailable', err)
+        compositeHandle = null
+      }
+    }
+
     let recorded: RecordedChannel[]
+    let composite: CompositeRecording | null = null
     let beepStreamArrivalsRigMs: number[] = []
     let flashStreamArrivalsRigMs: number[] = []
     try {
       recorded = await Promise.all(jobs)
+      // Stop the composite BEFORE the sources are torn down below: its own
+      // drain needs the encoder alive, and P0-tail's whole lesson is that
+      // killing the stream first takes the backlog with it.
+      if (compositeHandle) {
+        composite = await compositeHandle.stop().catch((err) => {
+          console.warn('[rig] composite stop failed', err)
+          return null
+        })
+        compositeHandle = null
+      }
     } finally {
       clearTimeout(stopTimer)
       releaseStop()
+      if (compositeHandle) await compositeHandle.cancel().catch(() => undefined)
       if (beepProbe) {
         beepStreamArrivalsRigMs = await beepProbe.stop()
         beepProbe.dispose()
@@ -670,6 +741,7 @@ export async function recordFiducialSession(durationMs: number, opts?: RecordOpt
       durationMs: channels.reduce((m, c) => Math.max(m, c.startOffsetMs + c.durationMs), 0),
       channels,
     }
+    if (composite) recording.composite = composite
 
     const debug: RigDebug = {
       rigEpochAbsMs: rigEpoch,
