@@ -1,8 +1,8 @@
-import { ALL_FORMATS, AudioBufferSink, BlobSource, Input, type WrappedAudioBuffer } from 'mediabunny'
+import { ALL_FORMATS, AudioSample, AudioSampleSink, BlobSource, Input } from 'mediabunny'
 import { blobStore } from '@core/store'
 import type { CaptureLoudness, EditState, Recording } from '@core/types'
 import { keptSegments, segmentOutputMs, segmentSpeed } from '@core/timeline'
-import { AUDIO_SAMPLE_RATE } from './codecs'
+import { AUDIO_CHANNEL_COUNT, AUDIO_SAMPLE_RATE } from './codecs'
 import { TimeStretcher } from './timeStretch'
 
 interface CurrentBuffer {
@@ -235,10 +235,37 @@ export interface MixSource {
   dispose(): void
 }
 
+/**
+ * One decoded audio sample → the two Float32 planes the mixer reads.
+ *
+ * O5 moved the export into a worker, and Web Audio is `[Exposed=Window]`: the
+ * AudioBufferSink this used to run on constructs AudioBuffers and therefore
+ * cannot exist off the main thread. AudioSampleSink decodes the identical PCM
+ * through WebCodecs and hands it over as raw planes, so this is a change of
+ * CARRIER, not of content — the fidelity oracle is what proves that, and it is
+ * why the port went in before the worker did rather than alongside it.
+ *
+ * The sample is closed here: mediabunny's samples hold decoder resources, and
+ * the mixer only ever needs the numbers.
+ */
+function planesOf(s: AudioSample): { left: Float32Array; right: Float32Array } {
+  const frames = s.numberOfFrames
+  const left = new Float32Array(frames)
+  s.copyTo(left, { planeIndex: 0, format: 'f32-planar' })
+  // Mono stays mono by SHARING the plane, exactly as the AudioBuffer path did
+  // (getChannelData(0) twice) — never a silent second channel.
+  let right = left
+  if (s.numberOfChannels > 1) {
+    right = new Float32Array(frames)
+    s.copyTo(right, { planeIndex: 1, format: 'f32-planar' })
+  }
+  return { left, right }
+}
+
 export class AudioChannelMixer implements MixSource {
-  private readonly iter: AsyncGenerator<WrappedAudioBuffer, void, unknown>
+  private readonly iter: AsyncGenerator<AudioSample, void, unknown>
   private curr: CurrentBuffer | null = null
-  private pending: WrappedAudioBuffer | null = null
+  private pending: AudioSample | null = null
   private done = false
   /** Last contribution this mixer wrote (channel-local) for seam healing. */
   private prevL = 0
@@ -259,7 +286,7 @@ export class AudioChannelMixer implements MixSource {
 
   constructor(
     private readonly input: Input,
-    sink: AudioBufferSink,
+    sink: AudioSampleSink,
     /** Which ChannelRecording this mixes — matched against Recording.loudness. */
     readonly channelId: string,
     /** Channel's active window on the output timeline, seconds. */
@@ -268,7 +295,7 @@ export class AudioChannelMixer implements MixSource {
     /** localSec = outSec + localOffsetSec */
     private readonly localOffsetSec: number,
   ) {
-    this.iter = sink.buffers(
+    this.iter = sink.samples(
       Math.max(0, outStartSec + localOffsetSec),
       outEndSec + localOffsetSec,
     )
@@ -354,20 +381,21 @@ export class AudioChannelMixer implements MixSource {
     }
   }
 
-  private setCurrent(w: WrappedAudioBuffer): void {
-    const left = w.buffer.getChannelData(0)
-    const right = w.buffer.numberOfChannels > 1 ? w.buffer.getChannelData(1) : left
+  private setCurrent(s: AudioSample): void {
+    const { left, right } = planesOf(s)
     this.curr = {
-      startSec: w.timestamp,
-      endSec: w.timestamp + left.length / w.buffer.sampleRate,
-      rate: w.buffer.sampleRate,
+      startSec: s.timestamp,
+      endSec: s.timestamp + left.length / s.sampleRate,
+      rate: s.sampleRate,
       left,
       right,
     }
+    s.close()
   }
 
   dispose(): void {
     this.curr = null
+    this.pending?.close()
     this.pending = null
     void this.iter.return(undefined).catch(() => undefined)
     this.input.dispose()
@@ -399,7 +427,7 @@ export async function openAudioChannel(
     }
     return new AudioChannelMixer(
       input,
-      new AudioBufferSink(track),
+      new AudioSampleSink(track),
       channelId,
       outStartSec,
       outEndSec,
@@ -705,6 +733,33 @@ export async function openAudioMixers(
 export function busGainFor(sources: MixSource[]): number {
   const distinct = new Set(sources.flatMap((m) => m.channelIds)).size
   return distinct > 1 ? mixGainForChannels(distinct) : 1
+}
+
+/**
+ * The mixed stereo chunk as the muxer wants it (task O5).
+ *
+ * Was `new AudioBuffer(...)` + AudioBufferSource in both export paths. Web
+ * Audio does not exist in a worker, so the carrier is now an AudioSample over
+ * f32-planar bytes: the two planes laid end to end, which is exactly what
+ * copyToChannel used to produce. Same samples, same order, same rate — one
+ * builder so the instant path and the render path cannot drift apart.
+ */
+export function makeStereoSample(
+  left: Float32Array,
+  right: Float32Array,
+  timestampSec: number,
+): AudioSample {
+  const frames = left.length
+  const data = new Float32Array(frames * AUDIO_CHANNEL_COUNT)
+  data.set(left, 0)
+  data.set(right, frames)
+  return new AudioSample({
+    data,
+    format: 'f32-planar',
+    numberOfChannels: AUDIO_CHANNEL_COUNT,
+    sampleRate: AUDIO_SAMPLE_RATE,
+    timestamp: timestampSec,
+  })
 }
 
 /** Pure helpers exported for unit tests. */
