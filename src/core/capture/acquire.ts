@@ -5,7 +5,14 @@ import {
   type DisplaySurfaceKind,
   type MediaKind,
 } from '@core/types'
+import { analytics } from '@core/analytics'
 import { guardStream } from './deviceGuard'
+import {
+  displayWedgeCount,
+  isDisplayConservative,
+  rememberDisplaySuccess,
+  rememberDisplayWedge,
+} from './displayWedge'
 import { knownGranted, rememberGrant } from './grants'
 
 export interface AcquiredChannel {
@@ -527,6 +534,7 @@ export function acquireChannelsProgressive(
   // with NotAllowedError and show NO picker at all. Fire it first, await later.
   let displayPromise: Promise<MediaStream> | null = null
   const canDisplay = typeof navigator.mediaDevices?.getDisplayMedia === 'function'
+  const conservativeDisplay = config.screen && isDisplayConservative()
   if (config.screen) {
     mark('display', 'start')
     if (!canDisplay) {
@@ -540,16 +548,28 @@ export function acquireChannelsProgressive(
         mark('system-audio', 'failed', 'getDisplayMedia unavailable')
       }
     } else {
-      const opts: DisplayMediaOptions = {
-        video: displayVideoConstraints(),
-        // Chromium defaults AEC/NS/AGC ON for display audio — voice processing
-        // mangles music into warble and downmixes to mono. Capture it raw.
-        audio: config.systemAudio
-          ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
-          : false,
-        selfBrowserSurface: 'exclude',
-        surfaceSwitching: 'include',
-        systemAudio: config.systemAudio ? 'include' : 'exclude',
+      // A machine that wedged on the full request gets the minimal one — see
+      // displayWedge.ts. Everything optional is dropped: if any of our options
+      // is what the native picker chokes on, the user's next click just works.
+      // The capture ceiling is unaffected (capDisplayTrack applies post-pick);
+      // tab audio is skipped for the day and reported, not silently absent.
+      const opts: DisplayMediaOptions = conservativeDisplay
+        ? { video: { displaySurface: 'monitor' } as MediaTrackConstraints, audio: false }
+        : {
+            video: displayVideoConstraints(),
+            // Chromium defaults AEC/NS/AGC ON for display audio — voice processing
+            // mangles music into warble and downmixes to mono. Capture it raw.
+            audio: config.systemAudio
+              ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+              : false,
+            selfBrowserSurface: 'exclude',
+            surfaceSwitching: 'include',
+            systemAudio: config.systemAudio ? 'include' : 'exclude',
+          }
+      if (conservativeDisplay) {
+        console.info(
+          '[capture] display request is in safe mode (previous share never delivered) — video only',
+        )
       }
       // TWO ceilings, because there are two different things that can be slow.
       // The outer one is the human at the picker and stays generous. The inner
@@ -616,7 +636,20 @@ export function acquireChannelsProgressive(
         'done',
         video ? `surface=${surface ?? 'unknown'} track=${video.label || video.id}` : 'no video track',
       )
-      if (config.systemAudio) {
+      // Full-request success proves the machine healthy again — clears the
+      // wedge mark. Conservative success keeps it (TTL is the way back).
+      rememberDisplaySuccess(conservativeDisplay)
+      if (conservativeDisplay && config.systemAudio) {
+        // We never asked for audio this take — say that, not "you forgot to
+        // tick the box". Skipped, present in Recording.missing, gone tomorrow.
+        fail({
+          kind: 'system-audio',
+          message:
+            'Tab audio was skipped this take while recovering from a stuck screen share — it comes back automatically.',
+          denied: false,
+        })
+        mark('system-audio', 'skipped', 'safe-mode display request')
+      } else if (config.systemAudio) {
         const audio = display.getAudioTracks()[0]
         if (audio) {
           deliver({
@@ -643,7 +676,9 @@ export function acquireChannelsProgressive(
       // is gone (PO 2026-08-23: "indicators of mic and screen still there").
       const delivered = new Set<MediaStreamTrack>()
       if (video) delivered.add(video)
-      if (config.systemAudio && display.getAudioTracks()[0]) {
+      // In safe mode the audio track (if an engine hands one back unasked) was
+      // NOT delivered as a channel above — so it must not be exempted here.
+      if (!conservativeDisplay && config.systemAudio && display.getAudioTracks()[0]) {
         delivered.add(display.getAudioTracks()[0]!)
       }
       for (const t of display.getTracks()) if (!delivered.has(t)) t.stop()
@@ -667,6 +702,17 @@ export function acquireChannelsProgressive(
       }
     } catch (err) {
       const timedOut = err instanceof DOMException && err.name === 'TimeoutError'
+      if (timedOut) {
+        // The share was taken and never delivered — mark the machine so the
+        // NEXT click sends the minimal request (displayWedge.ts). Counted in
+        // analytics because "never happens to users" is checkable only if we
+        // can see it happening.
+        rememberDisplayWedge()
+        analytics.track('display_wedge', {
+          conservative: conservativeDisplay,
+          wedgeCount: displayWedgeCount(),
+        })
+      }
       fail(toFailure('screen', err, timedOut))
       if (config.systemAudio) fail(toFailure('system-audio', err, timedOut))
       mark('display', timedOut ? 'timeout' : 'failed', err instanceof Error ? err.message : String(err))

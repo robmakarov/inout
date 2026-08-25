@@ -507,6 +507,10 @@ export type AnalyticsEvent =
   | 'export_error'
   | 'share_upload_success'
   | 'share_upload_error'
+  // Screen share taken by the browser but never delivered (the Chrome/macOS
+  // picker wedge). Tracked because "users never hit this" is checkable only
+  // if we can see how often the safe-mode retry is saving them.
+  | 'display_wedge'
   | 'app_error'
 
 export class CaptureError extends Error {
