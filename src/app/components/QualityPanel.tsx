@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { QualityTier } from '@core/compose/quality'
-import { QUALITY_TIERS, estimateExportBytes, isDefaultTier } from '@core/compose/quality'
+import { DEFAULT_TIER_ID, QUALITY_TIERS, estimateExportBytes, isDefaultTier } from '@core/compose/quality'
 import type { EditState, Recording } from '@core/types'
 import type { SizeEstimate } from '@core/compose/quality'
 import { humanBytes } from '@app/lib/format'
+import { sizeConfidence, sizeNotice, type ProbeState } from '@app/lib/sizeConfidence'
 import { Icon } from '@app/components/Icon'
 
 /**
@@ -60,6 +61,18 @@ export function QualityPanel({
    * ever REPLACE a number that is already on screen.
    */
   const [measured, setMeasured] = useState<Record<string, SizeEstimate> | null>(null)
+  /**
+   * F7d: WHETHER THE PROBE IS STILL COMING, which is not the same question as
+   * whether it has landed. The first shipping shape only had the answer, so a
+   * probe that could not run left "Measuring the other sizes on this take —
+   * they settle in a few seconds" on screen forever, over numbers that were
+   * never going to be replaced. That is not a slow measurement, it is a wrong
+   * sentence: an audio-only take has no video channel to probe, a take shorter
+   * than two frames has nothing to encode, and a browser without a working
+   * VideoEncoder has no probe at all — and in every one of those the panel
+   * promised a correction it could not make.
+   */
+  const [probe, setProbe] = useState<ProbeState>('running')
   // The edit is fixed while this panel is open (it sits over the editor), so it
   // is read through a ref rather than being a dependency that could restart a
   // five-second probe on an unrelated re-render.
@@ -68,6 +81,8 @@ export function QualityPanel({
   useEffect(() => {
     const abort = new AbortController()
     let alive = true
+    setMeasured(null)
+    setProbe('running')
     // Dynamic, so the probe's decoder + encoder code is not in the bundle the
     // panel needs to render (O7's first-paint rule, one level down).
     void (async () => {
@@ -76,15 +91,26 @@ export function QualityPanel({
         const calibration = await calibrateSteps(recording, editRef.current, QUALITY_TIERS, {
           signal: abort.signal,
         })
-        if (!alive || !calibration) return
+        if (!alive) return
         const byTier: Record<string, SizeEstimate> = {}
-        for (const t of QUALITY_TIERS) {
-          const e = estimateFromCalibration(recording, t, outputDurationMs, calibration)
-          if (e) byTier[t.id] = e
+        if (calibration) {
+          for (const t of QUALITY_TIERS) {
+            const e = estimateFromCalibration(recording, t, outputDurationMs, calibration)
+            if (e) byTier[t.id] = e
+          }
+        }
+        // A calibration that priced no step is the same outcome as no
+        // calibration: nothing on screen is going to be replaced.
+        if (Object.keys(byTier).length === 0) {
+          setProbe('unavailable')
+          return
         }
         setMeasured(byTier)
+        setProbe('measured')
       } catch {
-        // A probe that cannot run leaves the model's number on screen.
+        // A probe that cannot run leaves the model's number on screen — and the
+        // panel now says that is what it is looking at.
+        if (alive) setProbe('unavailable')
       }
     })()
     return () => {
@@ -93,31 +119,51 @@ export function QualityPanel({
     }
   }, [recording, outputDurationMs])
 
-  const estimates = useMemo(
-    () =>
-      QUALITY_TIERS.map((t) => {
-        const model = estimateExportBytes(recording, t, outputDurationMs)
-        // The default step is the composite copied — the number IS the file and
-        // no probe can improve on it.
-        if (isDefaultTier(t)) return { tier: t, size: model, measured: true }
-        const m = measured?.[t.id]
-        return { tier: t, size: m ?? model, measured: !!m }
-      }),
-    [recording, outputDurationMs, measured],
-  )
   /**
    * F7d: until the probe lands, these are F7's MODEL, and that model is anchored
    * on the composite — whose encoder changed when the capture engine flipped
    * (measured −71 to −84 % on motion content, and 15× OVER on a synthetic take).
    * So the interim numbers are marked as such rather than presented as prices.
    * The default step is never interim: it is the file.
+   *
+   * And when the probe is NOT coming, the shimmer stops and the sentence
+   * changes: a number that will never be corrected must not be dressed as one
+   * that is about to be. The rule itself is pure and tested — app/lib/
+   * sizeConfidence.ts — because it is the only part of this panel that can be
+   * wrong without anyone noticing.
    */
-  const stillMeasuring = estimates.some((e) => !e.measured)
+  const estimates = useMemo(
+    () =>
+      QUALITY_TIERS.map((t) => {
+        const model = estimateExportBytes(recording, t, outputDurationMs)
+        // The default step is the composite copied — the number IS the file and
+        // no probe can improve on it.
+        const m = measured?.[t.id]
+        const size = isDefaultTier(t) ? model : (m ?? model)
+        return {
+          tier: t,
+          size,
+          confidence: sizeConfidence({ exact: size.exact, measured: !!m, probe }),
+        }
+      }),
+    [recording, outputDurationMs, measured, probe],
+  )
+  const notice = sizeNotice(estimates.map((e) => e.confidence))
   const current =
     estimates.find((e) => e.tier.id === tier.id) ??
     estimates.find((e) => isDefaultTier(e.tier)) ??
     estimates[0]!
-  const instant = isDefaultTier(tier)
+  /**
+   * F7d, found while proving the rough-guide branch on a real build: the
+   * default step called itself "Instant" and told the user "that size is the
+   * file, not a guess" on a take with NO COMPOSITE — an audio-only take, or one
+   * whose composite was refused. compose/choose.ts cannot packet-copy without a
+   * composite, so that export fully renders, and the number shown was the
+   * 8 Mbps ceiling: 5.6 MB against a file of a few hundred KB. The panel now
+   * asks the same question the export ladder asks.
+   */
+  const canPacketCopy = !!recording.composite
+  const instant = isDefaultTier(tier) && canPacketCopy
 
   return (
     <div className="quality">
@@ -130,13 +176,13 @@ export function QualityPanel({
       </div>
 
       <div className="quality__tiers" role="radiogroup" aria-label="Export quality">
-        {estimates.map(({ tier: t, size }) => (
+        {estimates.map(({ tier: t, size, confidence }) => (
           <button
             key={t.id}
             role="radio"
             aria-checked={t.id === tier.id}
             className={`quality__tier${t.id === tier.id ? ' quality__tier--on' : ''}${
-              size.exact || !stillMeasuring ? '' : ' quality__tier--provisional'
+              confidence === 'provisional' ? ' quality__tier--provisional' : ''
             }`}
             onClick={() => onTier(t)}
           >
@@ -145,14 +191,23 @@ export function QualityPanel({
               {size.exact ? '' : '~'}
               {humanBytes(size.bytes)}
             </span>
-            <span className="quality__tier-tag">{isDefaultTier(t) ? 'Instant' : ''}</span>
+            <span className="quality__tier-tag">
+              {isDefaultTier(t) && canPacketCopy ? 'Instant' : ''}
+            </span>
           </button>
         ))}
       </div>
 
-      {stillMeasuring && (
+      {notice === 'measuring' && (
         <div className="quality__hint quality__hint--measuring">
           Measuring the other sizes on this take — they settle in a few seconds.
+        </div>
+      )}
+      {notice === 'rough' && (
+        <div className="quality__hint quality__hint--rough">
+          Couldn’t measure the sizes on this take, so they are rough guides — the file can come out
+          several times bigger or smaller.
+          {canPacketCopy ? ` The ${DEFAULT_TIER_ID} size is exact.` : ''}
         </div>
       )}
       <div className="quality__hint">

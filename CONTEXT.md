@@ -43,9 +43,41 @@ Audio-only becomes visualized video. UI: iOS-Camera simplicity, Final Cut timeli
 - North star: **distributed multi-device capture** (phone camera + laptop screen, one time model). Shapes time/session/format decisions now; product work gated on a 2-device sync spike with kill criteria. iOS = Safari capture node first; thin native node later; never a separate editor.
 - Never: real-time streaming as the capture basis · closed project format · sub-ms multi-mic mixing promises · silent background capture · deterministic replay of live media
 
-## State (2026-08-24)
+## State (2026-08-25)
 
 Working and verified end-to-end: capture 4 channels → edit → export → share. PO records with it.
+
+**The timeline shows the recording now, not a set of coloured bars (2026-08-25).** Each video track
+in the editor carries a strip of its own frames, so finding a moment is a matter of looking rather
+than scrubbing — the "Final Cut timeline feel" in the product statement, taken one step. It costs
+about half a second per track and appears after the editor has already opened; if it cannot be built
+the lane simply looks the way it did before, because nothing in editing depends on it.
+
+**The export panel stopped claiming things it could not know (2026-08-25).** Two of them. It used to
+say "measuring the other sizes — they settle in a few seconds" forever on any recording it could not
+measure (an audio-only take, for instance), over numbers that were never going to change; it now says
+plainly that those are rough guides and that the file can come out several times bigger or smaller.
+And on a recording with no combined video file behind it, it called the default choice "Instant" and
+its size "the file, not a guess" while showing 5.6 MB for something that would come out a few hundred
+KB — that export actually re-renders, and the panel now says so. The underlying estimate cannot be
+repaired: measured this session, its error goes +86 % on screen content and −79 % on video with a lot
+of motion, because the encoder that runs while you record has to keep up in real time and the one
+that runs at export does not. Nothing that predicts from the first can be right about the second, so
+the honest move was to label it. The measured number, which is accurate to a few percent, is what
+users see whenever it can be computed — that is the normal case.
+
+**Two ideas were killed with measurements this session, and that was the expensive part.** One was a
+plan to improve audio/video sync by reading each captured frame's own clock; it cannot work, because
+that clock starts at the first frame we receive, which is already late by exactly the amount we were
+trying to remove — and adopting it would have added more drift over a fifteen-minute recording than
+the error it fixed. The other was the export-size estimate above. Neither shipped a feature; both
+close off work that would otherwise be attempted again.
+
+**Found and not fixed, deliberately:** the automated sync test is unreliable on cold runs — two of six
+fail, on a build that has none of this session's changes. Both failures land exactly on the test's own
+one-second timing grid, which points at the measuring apparatus rather than the product, and the
+warm test passes consistently. It is now the first item on the engineering map, with the reproduction
+recorded and no attempted fix, because a test that can invent a one-second error can also hide one.
 
 **A take can now be exported FOR AN AI (shipped 2026-08-24, reworked the same day).** The export
 panel has a second control, "For AI", and it produces one PDF rather than a smaller video: a page of

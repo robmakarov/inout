@@ -29,87 +29,92 @@ several ids, take the first and tell PO to open parallel sessions for the rest. 
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
 ── READY MAP — current truth, updated on every merge ──
-Last update 2026-08-25 (TENTH session, PO: "go roadmap, all o and f in one").
-P0-instant-sync IS FIXED, GATED, AND IT UNBLOCKED O5-flip, WHICH IS NOW SHIPPED — smart cut is ON.
-The root cause was a missing sentence in the contract, not a bug in either copy path: the composite is
-a SECOND file with its OWN clock, and that clock does not start when the take does (v1's starts when
-its MediaRecorder does — measured 134-215 ms in; v2's at whichever of audio/video reached the worker
-first — 66-90 ms in), while CompositeRecording had no field that could say so. Both packet-copy paths
-therefore placed composite-time video against recording-time audio. CompositeRecording now carries
-startOffsetMs (produced by BOTH engines, rebased with the channels) and engine ('v1'|'v2'); instant.ts
-places every copied packet at its true instant and smart cut maps spans through the same offset.
-MEASURED, same symmetric metric as `sync=` (the fast paths used to be read on the audio-corrected one,
-a 13.5 ms systematic between two numbers printed side by side — fixed too):
-  v2  inst 185.1 ms BEFORE → 48.6 / 59.6 / 75.8 after, against those takes' render at 50.0 / 64.2 / 54.8
-  v1  inst 244.8 ms before → 55.7 / 57.8, against 61.7 / 59.5
-i.e. the packet copy now sits inside the render's own run-to-run spread, which is the only target that
-means anything: it is meant to BE the same file. THE BAND IS ON NOW (oracle-gate: instant sync ≤90 ms
-symmetric + an anti-vacuity check that the unedited export really took 'instant'), so this cannot
-regress unnoticed — the previous session left it measured-but-ungated on purpose and said so.
-FOUND BY THE FIX, in the o5cut rig: the "one frame ahead" offset that three sessions attributed to the
-composite's compositing was the SAME clock error — compositeOffsetFrames is 0 now, where it was +1.
-O5-FLIP: smartCutFlag default false → true. Gates: `npm run oracle --cold=3` 3/3 PASS with
-trim=smartcut at 56.3 / 69.9 / 76.9 ms, `--engine=v1 --cold=2` 2/2 PASS, `npm run exp -- o5cut` 684 ms
-vs 3766 ms render (5.5×, ≤1 s gate met), 94.3 % of frames copied, picture 37.3-42.9 dB.
-ONE DECISION RECORDED WITH IT: smart cut now DECLINES a v1 composite up front (engine field) instead of
-discovering it after decoding a GOP — MediaRecorder's avcC is not ours to reproduce, so the byte-for-
-byte description check could only ever refuse it. The v1 oracle expects 'render' for that reason.
-Previous update 2026-08-24 (NINTH session, PO: "go ai"). Everything merged.
-AI1 IS SHIPPED AND EVERY GATE IS GREEN — AND IT WAS ALREADY REWORKED ONCE ON PO'S FIRST REAL TAKE.
-The export panel has a "For AI" control; it builds one PDF — an index page that BRIEFS ITS READER,
-then one frame per page, no video track. PO's first file came back with two verdicts ("ai didnt
-understood its video", "it losses way too much frames"); both are fixed and both are measured on that
-same 97 s recording: 39 frames → 165, worst gap 5.5 s → 2.9 s, median 2.5 s → 0.4 s, whole take
-covered, 167 pages, ~144k tokens. A THIRD correction came from PO challenging the page cap ("if pdf
-is limited than its fucked up format") — the 100-page limit was a recalled number and it was wrong:
-Claude accepts 600 pages / 32 MB on 1M-context models, Gemini 1000 / 50 MB. The cursor case still
-holds: a cursor wandering a still screen for 12 s is ONE page out of 96 samples. Evidence:
-`node scripts/ai-pdf-check.mjs`, artefact docs/qa/ai-export.pdf. TWO handoffs under AI1 below — read
-the SECOND one first, it is what the design actually is now.
-NEXT ON AI IS PO'S, NOT OURS: AI2-AI7 stay frozen until PO reports on the reworked file.
-2026-08-24, earlier (planning session): PHASE A — AI EXPORT added at the bottom of this file.
-PO: "export for ai button is highest priority now", max token cutting is the design goal, richer
-layers go to the roadmap. Spec rewritten in docs/AI_EXPORT.md.
-THE FLIP DID NOT HAPPEN, AND THAT IS THE RESULT. O5-flip's job was to build the gate smart cut was
-waiting for and then turn it on. The gate got built — the oracle now records a composite like every
-real take, drives the product's OWN export ladder (compose/choose.ts) for its trim, bands that file's
-A/V offset, and refuses to pass if a fast path quietly declined. Then it failed the flip on its first
-honest run, and the fault is not smart cut's: the SHIPPED INSTANT PATH is out of sync too, by
-97-102 ms on v2 and 244.8 ms on v1, against the same take's render at 52-64. That is a P0 nobody
-could see until today, because every sync number this project has ever quoted was measured on the
-render — the path a user gets LAST. It is now first on the map.
-WHAT THAT SESSION ACTUALLY DID, because "all O and F" was not achievable and saying so is the point:
-it took O5 (the heaviest unblocked task, and the one every other O depended on) end to end, and closed
-O8's export peak-memory band on the way. O5's premise turned out to be false, which cost the session
-its budget and bought the roadmap something better than a feature — see the O5 handoff: the render is
-NOT badly pipelined, mediabunny already queues the encoder 4 deep, and the export's floor is the cost
-of decoding every frame. That verdict retires the "multi-× realtime from pipelining" idea for good and
-promotes smart cut from a nicety to the only lever, which is now built and measured at 4.3-5.6×.
-NOT STARTED, and each still costs a session: O3b · O4-polish · O6 · O9 · O10 · F6 · F7c · F8.
-(The eighth session added no features on purpose — it built the instrument that can see the fast
-export paths at all, and the first thing it saw was a P0.)
-SHIPPED 2026-08-25 (TENTH session, PO: "go roadmap, all o and f in one"): P0-instant-sync (+ the v1
-first-paint refinement) · O5-flip · O4-polish's preview-from-the-compositor · F7c attempt 5 (the gate
-met at last) · F7d's honesty half · F8's premise REFUTED and its real defect (a 40 ms paused deadband
-against a 33.3 ms frame) fixed and A/B-proven. Full sweep green afterwards: 353 tests · oracle 3/3 on
-v2 AND 3/3 on v1 · fidelity PASS (toneErr 0.017 dB, THD −74, separation 56.8, 0 limiter hits) ·
-browser-check real Chrome 8/8 with 0 console errors and export 508 ms · first paint 238,790 B.
-Everything merged and pushed to origin/main.
-Merged 2026-08-23/24 across six sessions: O1 · O2 · O3a · O7 · O4 step1 · O4b · F1 · F7 · O8(partial)
-· P2 · P3 · F4 · O4 step2 (DORMANT) · a P0 mic-hang fix (PO-verified) · O11a · O11b · O11c · F7b · F3
-· F5a · P0-tail · F2 · the O4 RE-DIAGNOSIS · P0-TAIL-RAW · F5B · F2B · P1 (code half) · the O4
-EXONERATION OF THE WORKER · F7c attempt 4 (not shipped, error halved) · the O4 COLD-START VERDICT
-(the "2-10 fps wall" was the instrument; throughput gate MET at 1080p; rig + watchdog fixed) ·
-O4 DEFAULT FLIPPED TO v2 (third 08-24 session; v1 = capability/start/watchdog fallback + ?engine=v1;
-gates in the handoff; AWAITS PO REAL-TAKE VERIFICATION).
+Last update 2026-08-25 (ELEVENTH session, PO: "go roadmap, all o and f in one").
+"ALL O AND F" WAS AGAIN NOT ACHIEVABLE IN ONE SESSION, AND SAYING SO IS PART OF THE JOB. What landed:
+ONE FEATURE, ONE P1 DEFECT, TWO MEASURED VERDICTS — and the verdicts cost more than the feature.
+  · F8's FILMSTRIP (feature, visible): every video lane in the timeline shows the take's own frames.
+    493-958 ms per channel for 11 thumbnails, on the prod build in real Chrome. See the F8 handoff.
+  · F7d (P1): the re-anchor branch is REFUSED ON MEASUREMENT and the fallback says it is a rough
+    guide instead. It also stopped promising a measurement that could never arrive (an audio-only
+    take left "they settle in a few seconds" on screen forever) and stopped calling a composite-less
+    take's export "Instant" while quoting the 8 Mbps ceiling as "the file, not a guess" — 5.6 MB
+    claimed for a file of a few hundred KB. See the F7d task.
+  · O4-POLISH'S SYNC-ANCHOR ITEM IS RETIRED, with an instrument built to retire it (`npm run exp --
+    o4clock`). A captured frame's own timestamp is TAKE-RELATIVE, so a min-filter's zero is the first
+    frame's arrival — the very latency it was meant to remove — and the media clock runs −20 to
+    −26 ppm, i.e. adopting it trades a 3 ms fixed error for 18-23 ms of drift on a 900 s take. The
+    code was written, unit-tested, measured, and DELETED. Same verdict shape as O5's pipelining.
+  · F7d's model half got the numbers that close it: the estimator's error FLIPS SIGN with content
+    (+86 % on screen at 540p, −79 % on motion) because the realtime capture encoder spends 0.24x the
+    render's bytes on motion and 0.78x on screen. No single correction survives a sign flip.
+NOT STARTED, each still a session: O3b · O5e · O6 · O8b · O9 · O10 · F6 · F8's 60 fps trace and
+waveforms. O4-polish is down to two items (e2e wedge case, 4K row).
+FULL SWEEP AFTER THE MERGE: 399 tests · typecheck clean · oracle PASS on v2 (sync 48.6 ms,
+inst=instant/73.3, trim=smartcut/73.7, tail 67 ms, export 5.2x) AND on v1 (sync 43.7, inst 47.5,
+trim=render/61.0) · fidelity PASS (toneErr 0.03 dB, THD −67.6, separation 59.2, 0 limiter hits) ·
+browser-check real Chrome 151 8/8 with 0 console errors, export 507-514 ms · first paint 241,803 B,
+byte-identical to a build of HEAD before this session (the +3 KB against the tenth session's 238,790
+came from the wedge/persistent-connect commits, not from here).
+THE COLD GATE IS NOT CLEAN, AND IT IS NOT THIS SESSION'S — see GATE-alias below. `--cold=3` failed
+2 of 6 runs at HEAD *without* this session's changes applied. It is the first thing on the map.
+MERGED BEFORE THIS SESSION, one line each because the detail lives under each task: O1 · O2 · O3a ·
+O4 (step1, b, step2, the worker exoneration, the cold-start verdict, DEFAULT FLIPPED TO v2) ·
+O4-polish's preview-from-the-compositor · O5 · O5-flip (smart cut ON) · O7 · O8 (partial) ·
+O11 a/b/c · P0 mic-hang · P0-tail · P0-tail-raw · P0-instant-sync · P1 (code half) · P2 · P3 · F1 ·
+F2 · F2b · F3 · F4 · F5a · F5b · F7 · F7b · F7c (attempt 5) · F8's premise refuted + its paused
+deadband fixed · AI1.
 START HERE IF YOU ARE FRESH:
-  1. read notes 5, 6, 9, 10, 11 below — they are the ones that will bite you today;
-  2. `npm run typecheck && npm test` (287 tests) and `npm run oracle` should be green before you
+  1. read notes 5, 6, 9, 10, 11 below — they are the ones that will bite you today, and note 10 has
+     a fourth instance now (this session lost 25 minutes to a rig killed by its own worktree's HMR;
+     `sh scripts/mirror-measure.sh` exists so nobody repeats it);
+  2. `npm run typecheck && npm test` (415 tests) and `npm run oracle` should be green before you
      change anything, so a red gate later is yours and not inherited;
   3. take one task from READY NOW. There is no LIVE DEFECT on the map; the DEFAULT capture engine is
      now v2 (worker + WebCodecs) — anything touching capture/* keeps BOTH engines green.
 
 READY NOW — parallel-safe, any subset concurrently (one session each):
+  GATE-alias  the cold oracle is flaky  [P0 of the gates, medium]  FOUND 2026-08-25 (eleventh
+                                             session) and NOT this session's code — reproduced on a
+                                             clean `git archive HEAD` build. `npm run oracle
+                                             --cold=3`, six runs at HEAD: TWO FAIL, and both
+                                             failures land on multiples of the rig's own 1 s
+                                             fiducial grid (BEEP_INTERVAL_MS = 1000):
+                                               run A  sync −465.3, inst −471.7, trim −471.3  (~1/2)
+                                               run B  sync   82.7, inst −909.5, trim −909.1  (~1)
+                                             In run A every flash pair reads the SAME −465.3
+                                             (maxAbs == |mean| exactly), which is a constant shift
+                                             and not noise; in run B the RENDER is inside the band
+                                             while only the packet-copy paths are a second out.
+                                             THE LIKELY CAUSE IS THE INSTRUMENT, and the reason is
+                                             structural: the beeps are a UNIFORM 1 s grid, so
+                                             pairing a click with a flash is ambiguous by
+                                             construction, and fiducial.ts snaps to that grid behind
+                                             an `intervalMs / 2` guard — exactly the boundary where
+                                             ~465 and ~909 come from. The oracle's existing
+                                             `aliased` check does not cover this: it only fires when
+                                             the audio-corrected RENDER number moves >750 ms, and it
+                                             read false on every failing run.
+                                             WHY IT IS P0 ANYWAY: the same ambiguity that invents a
+                                             one-second error can HIDE a real one by snapping it
+                                             onto the grid, so nothing measured on this rig is safe
+                                             until it is closed — and the fast paths are the ones it
+                                             hits, which is where P0-instant-sync just landed.
+                                             BISECT, one sample each: 8c73633 (before the
+                                             wedge/persistent-connect commits) 3/3 with no sync
+                                             failure; HEAD 4/6. That is suggestive, NOT conclusive
+                                             at n=1 — a8d8635 (a granted input is asked again, so a
+                                             retried acquire moves a channel's start) is the
+                                             suspect worth eliminating FIRST, and it is a real
+                                             mechanism rather than a guess.
+                                             SHAPE OF THE FIX: make the pairing unique instead of
+                                             inferring it — the video side already carries a
+                                             machine-readable barcode per frame, the audio side does
+                                             not. A non-uniform or coded beep schedule removes the
+                                             ambiguity outright; snapping harder does not.
+                                             DO NOT code a fix from this description: reproduce it
+                                             first (`--cold=6` twice, and note the spur band fails
+                                             separately when the machine is busy — that is the known
+                                             capture-starvation artifact, not this).
   (AI1 SHIPPED 2026-08-24, ninth session — the "For AI" button is in the export panel and every gate
    is green; handoff in PHASE A at the bottom. AI2-AI7 stay frozen until PO feeds a real take's file
    to an AI and reports back — that report is the only thing that unfreezes them.)
@@ -154,22 +159,18 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
                                              both orders (`npm run exp -- o4step2 {"preview":true}`),
                                              and nothing dropped. v1 keeps the source preview: it
                                              composites on the main thread from the very elements
-                                             the UI shows. WHAT IS LEFT: sync ≤20 ms anchor work
-                                             (users now get 33-48 ms; v1 gave ~60) · e2e wedge case ·
-                                             4K row in production shape (pairs with O6).
+                                             the UI shows. WHAT IS LEFT: e2e wedge case · 4K row in
+                                             production shape (pairs with O6). THE SYNC ANCHOR ITEM
+                                             IS RETIRED ON EVIDENCE 2026-08-25 — see the O4-polish
+                                             handoff under O4: the frame's own clock cannot recover
+                                             the delivery latency, and adopting it would have cost
+                                             more drift than it removed jitter.
   (F7c SHIPPED 2026-08-25, attempt 5 — the panel measures its numbers now. See the task.)
-  F7d  the estimator's anchor moved  [P1, medium]  FOUND 2026-08-25 WHILE SHIPPING F7c, and it is the
-                                             reason F7c mattered more than it looked. F7's model —
-                                             still the fallback whenever the probe cannot run, and
-                                             what every take showed until today — is anchored on the
-                                             COMPOSITE's byte rate, and O4's flip changed the encoder
-                                             that produces it. Scored against a v2 composite on 24 s
-                                             takes it reads −71 to −84 % on motion content and +104 %
-                                             on screen. The probe covers the panel; the FALLBACK is
-                                             still that model, and a browser without the probe (any
-                                             failure path) shows it. Either re-anchor it on the v2
-                                             composite's own achieved bitrate or make the fallback
-                                             say it is a rough guide.
+  (F7d DONE 2026-08-25, eleventh session — the re-anchor is REFUSED on measurement (the model's error
+   FLIPS SIGN with content: +86 % on screen at 540p against −79 % on motion, because the realtime
+   capture encoder spends 0.24x the render's bytes on motion and 0.78x on screen) and the fallback
+   says it is a rough guide instead. It also stopped promising a measurement that was never coming,
+   and stopped calling a composite-less take's export "Instant". See the task.)
   P5a  iOS SCK spike               [light]   BLOCKED ON HARDWARE, not on us: needs Xcode 27 and a
                                              real iOS 27 device, neither on the TD machine. STILL
                                              TIME-SENSITIVE (iOS 27 ships ~Sept 2026).
@@ -343,6 +344,12 @@ BOTH the composite and the raw channels.
      f7c       delta cost by DISTANCE FROM THE KEYFRAME, both content types (F7c attempt 4)
      p0tailraw does a RAW channel keep its ending? four stop procedures under 4K load, plus a
                `production` run through the real createCaptureSession and a `wedged` forced case
+     o4clock   WHICH CLOCK DOES A CAPTURED FRAME CARRY? arrival − VideoFrame.timestamp per source:
+               its SPREAD is the delivery jitter a media-clock stamp would remove, its SLOPE is the
+               rate error that stamp would introduce over a 900 s take. Both answers are in the
+               O4-polish handoff and both say no; run it before proposing that idea again
+     f8        <video> seek vs the export's random-access reader at off-grid instants — the rig that
+               refuted F8's premise (same frame, 0 ms apart, and the element is faster)
      oracle    accepts {"injectTailLossMs":N} to prove the tail band red
   node scripts/ai-pdf-check.mjs    AI1's "any AI can read this" gate: runs the aiexport rig, saves the
      PDF to docs/qa/ai-export.pdf, and puts it through TWO readers that know nothing about the writer —
@@ -350,7 +357,16 @@ BOTH the composite and the raw channels.
      JXA. `--reuse=<report.json>` re-runs only the reader gates. No downloads: pdftotext/mutool/qpdf
      are absent on this machine and PDFKit ships with macOS.
   node scripts/o7-measure.mjs      first-paint bytes, record-click latency, editor prefetch (prod build)
-  node scripts/ui-shot.mjs --flow=quality|cuts|camera|frame|tighten|zoom|speed|zoomdrag
+  sh scripts/mirror-measure.sh <npm script> [args]   RUN A LONG RIG FROM A /tmp MIRROR OF THE WORKING
+     TREE, including uncommitted changes. Every rig here spawns a vite server on THIS worktree and
+     vite watches it, so editing a file mid-run reloads the harness page and the run dies quietly —
+     the node process then sits at 0 % CPU until its timeout with the log stuck on "ephemeral server
+     on …". That cost this session 25 minutes; it is now one command.
+  node scripts/ui-shot.mjs --flow=quality|cuts|camera|frame|tighten|zoom|speed|zoomdrag|scrub|film|roughsize
+     film      F8: does the timeline show the take's own frames? reports per lane whether the bar
+               carries a strip, the lane heights, and the per-channel decode budget off the console
+     roughsize F7d: switches the video inputs OFF before the take so the size probe fails for a REAL
+               reason, then reads what the panel claims about numbers it could not measure
      screenshots a flow on the PROD BUILD. It serves dist/ and does NOT rebuild — run `npm run build`
      first or you will screenshot yesterday's bundle
      (camera also drags the PiP, reloads the page, and reports preview↔export fractions + reload drift)
@@ -677,6 +693,40 @@ INOUT_O7_QUERY env for exactly this A/B) · `npm run exp -- armcancel` green (ca
 AWAITING PO: the first real take on the new default. If anything is off: `?engine=v1` reverts this
 load, localStorage['inout.capture.engine']='v1' reverts sticky, and the session console prints
 which engine ran.
+── HANDOFF 2026-08-25 (ELEVENTH session) — O4-POLISH'S SYNC-ANCHOR ITEM IS RETIRED, WITH NUMBERS.
+   IT WAS BUILT, MEASURED AND DELETED, which is the same verdict shape O5 reached about pipelining
+   the export. Do not propose it again without beating the numbers below.
+THE IDEA, as P0-instant-sync left it: the composite's two ends are read off different clocks — the
+   file's origin is the first audio batch's CAPTURE time, while every video frame is stamped
+   `performance.now()` when the reader hands it over, an ARRIVAL time late by the pipeline delay. A
+   VideoFrame carries its own `timestamp`, the capture side of the same event, so stamp frames with
+   that instead.
+WHAT THE RIG FOUND (`npm run exp -- o4clock`, new; 20 s, both sources, canvas capture tracks —
+   getUserMedia is unreachable headless without a fake device, and the run says so):
+     lane            frames   mean d    sd    mean excess   p95 excess   drift
+     canvas-screen    1201    486.1   1.04       2.74         4.05      −26 ppm  (−23.3 ms / 900 s)
+     canvas-camera     601    487.2   1.00       2.97         4.10      −20 ppm  (−18.1 ms / 900 s)
+   d = arrival − frame.timestamp. THREE THINGS FOLLOW AND THEY KILL IT:
+   (1) `firstTimestampMs` is 0 — the frame clock's EPOCH IS TAKE-RELATIVE, not performance.now()'s.
+       So d's absolute value is meaningless and only its shape can be used. The best a min-filter can
+       do is `timestamp + min d`, whose zero is the FIRST frame's arrival — which is itself late by
+       exactly the delivery latency we wanted to remove. The absolute latency is not recoverable from
+       this signal at all; the browser exposes no capture-time reference for a local video track (the
+       audio path's `track.getSettings().latency` has no video equivalent).
+   (2) What IS recoverable is the JITTER, and there is 2.7-3.0 ms of it (4.1 ms at p95). The
+       instrument's own sync noise floor is ~8-9 ms 1σ (note 1), so this is not measurable on the
+       gate even if it were free.
+   (3) It is not free. The media clock runs −20 to −26 ppm against the wall clock, so a whole-take
+       minimum would trade a 3 ms fixed error for 18-23 ms of DRIFT on a 900 s take — and PO records
+       938-1800 s. A sliding-window minimum bounds that, and was written and unit-tested, but it is
+       eight fenced files-worth of capture-path risk for ≤3 ms nobody can measure.
+   AND THE RESIDUAL ITSELF IS NOT JITTER, provably: the oracle rig uses these same canvas sources,
+   where delivery jitter is 1 ms sd, and it still reads the instant path 25-33 ms above the render.
+WHAT WOULD ACTUALLY CLOSE IT, named for the next session: the composite and the raw channels need to
+   share ONE media clock. Today the composite is placed on wall-clock arrivals and the raw channels
+   on MediaRecorder's own media timeline, and the gap between those two is the residual. That
+   converges when we own the raw channel's encoder too — i.e. it is O3b's, not O4-polish's.
+The rig stays (`npm run exp -- o4clock`), because the next attempt should start from these numbers.
 
 ## O5. export-engine-v2 — worker, pipelined, smart-cut, codec ladder  [P1, after O4]
 Why: the render is main-thread and strictly serial (decode awaits draw awaits encode), sleeps every
@@ -1179,6 +1229,58 @@ GATES (unchanged): measured size within ±20 % of the shown number on EVERY step
 over · panel opens in under 100 ms with the probe still running · zero orphan scratch files after 20
 opens · default step still exact and still instant.
 
+## F7d. the estimator's anchor moved — DONE 2026-08-25 (ELEVENTH session), and the re-anchor is REFUSED
+THE TASK OFFERED TWO BRANCHES — "either re-anchor the model on the v2 composite's own achieved bitrate
+or make the fallback say it is a rough guide" — and the measurement closes the first one. Scored on a
+FRESH run of `npm run exp -- o11 {"takeMs":24000}` (24 s takes, every size demuxed back out of the
+rendered file, composite recorded by the shipped v2 default), F7's model against the real file:
+             540p     720p     900p    1080p    1440p
+   screen   +86.4    +30.5     −4.5    −22.2    −21.0 %
+   motion   −68.4    −77.1    −79.0    −75.6    −75.3 %
+THE ERROR FLIPS SIGN WITH CONTENT — +86 % on screen at the small step, −79 % on motion — which is the
+exact tell that killed probe attempts 1 and 4, and no single correction can fix a sign flip. So there
+is nothing to re-anchor TO: the missing quantity is not a constant the composite got wrong, it is how
+differently the two encoders price two kinds of content.
+WHY, and it is a mechanism rather than a fudge factor (same run, `composite` block):
+   screen   composite 3,592,504 B   1080p render 4,617,298 B   ratio 0.78   keyframes 51 % of bytes
+   motion   composite 3,323,543 B   1080p render 13,612,016 B  ratio 0.24   keyframes 1.2 % of bytes
+The capture encoder is REALTIME and must keep up; the render's is not. On motion it spends a quarter
+of what the render spends on the same pixels, on screen four fifths — a 3.2x spread between two content
+types, from one anchor. That is the whole of F7d.
+THE PROBE, on the same takes, is the answer and it is confirmed a third time:
+   screen  +0.3 / +0.5 / +4.0 / −1.1 %      motion  −4.8 / −0.6 / −0.2 / +0.4 %   (probe 5.25-5.28 s)
+SO THE FALLBACK BECAME HONEST INSTEAD, and the defect that made this urgent was not the number:
+  · THE PANEL PROMISED A CORRECTION IT COULD NOT MAKE. `measured` stayed null on any take the probe
+    cannot run — an audio-only take (no video channel to compose), a take under two frames, a browser
+    with no working VideoEncoder — so "Measuring the other sizes on this take — they settle in a few
+    seconds" sat on screen FOREVER, over numbers nothing was going to settle. The probe now reports
+    running / measured / unavailable, and the third one says: "Couldn't measure the sizes on this
+    take, so they are rough guides — the file can come out several times bigger or smaller."
+  · app/lib/sizeConfidence.ts (pure, 9 tests) owns the rule — exact / measured / provisional / rough —
+    because it is the only part of that panel that can be wrong without anyone noticing.
+  · The two notices are styled OPPOSITELY on purpose: "settling in a few seconds" recedes (opacity
+    0.6), "this can be several times out" does not (--warn, full opacity).
+FOUND WHILE PROVING IT ON A REAL BUILD, and worse than the thing the task named: on a take with NO
+COMPOSITE the default step called itself "Instant" and the panel said "that size is the file, not a
+guess" — while compose/choose.ts cannot packet-copy without a composite, so that export fully renders,
+and the number shown was the 8 Mbps ceiling. Measured on the deployed-shape build: ~5.6 MB claimed as
+the file for an audio-only take of a few hundred KB. The panel now asks the same question the export
+ladder asks (`recording.composite`), and drops both the tag and the claim when the answer is no.
+EVIDENCE, prod build in real Chrome (`node scripts/ui-shot.mjs --flow=roughsize`, new — it switches
+the video chips OFF before the take, so the probe fails for a REAL reason rather than a mocked one):
+  before: 1080p "~5.6 MB · INSTANT", hint "That size is the file, not a guess", no notice
+  after : no INSTANT tag, "Re-renders the whole video at 1920x1080, so the size is an estimate",
+          rough-guide notice present, and the false "the 1080p size is exact" clause dropped
+  and the NORMAL take is unchanged: `--flow=quality` still reads 1080p 967 KB exact + INSTANT with
+  the measuring notice while the probe runs.
+ONE TRAP PAID FOR IN THE RIG, worth keeping: two chip clicks dispatched in the same task both read the
+same prefs snapshot and the first is lost, so the flow toggles one input per task. A human cannot
+produce that; a synthetic driver does it every time.
+LEFT NAMED, NOT FIXED: with no video channel at all the fallback is still the 8 Mbps ceiling times the
+duration, which is nonsense for a take that renders a near-static waveform. It is now labelled as a
+rough guide, which is honest; making it a NUMBER would need the audio-only render measured, and this
+session had no evidence for one. Do not invent a constant for it.
+
 ## F8. nle-scrub — frame-exact editor feel  [P2, after O4; PO-approved]
 Goal: keyframe-index-driven preview — scrub decodes the EXACT frame (WebCodecs random access) instead
 of <video> seek granularity; filmstrip thumbnails from the keyframe index; GPU-rendered waveforms.
@@ -1186,6 +1288,38 @@ This is the "Final Cut timeline feel" the product statement names.
 GATES: scrub shows the index-verified exact frame at 5 sampled times · timeline holds 60 fps with a
 30-min take loaded (trace) · thumbnail/waveform generation budget reported · zero preview-parity
 regression.
+── HANDOFF 2026-08-25 (ELEVENTH session) — THE FILMSTRIP IS SHIPPED. The scrub half was refuted and
+   fixed on 2026-08-25 (see the READY map); this is the half that survived the refutation, and it is
+   the one a user actually sees: every VIDEO lane in the timeline now shows the take's own frames
+   instead of a coloured rectangle standing for it.
+SHIPPED:
+  · core/compose/filmstrip.ts — decodes N frames through mediabunny's `samplesAtTimestamps` (RANDOM
+    ACCESS, not compose/video.ts's forward walk: the reader decodes every frame between the instants
+    it is asked for, which is right for a render and would decode 54,000 frames for a strip over a
+    30-minute take) and stitches them into ONE image. Nothing in the export imports it and it imports
+    no export code beyond the demuxer — instant, smart cut and the render are untouched (conflict
+    rule: it changes none of the three).
+  · app/lib/filmstripPlan.ts (pure, 7 tests) — the layout rule is a PITCH in CSS px, not a count, so
+    a 30-minute take gets the same handful of thumbnails as a 10-second one and each stands for more
+    time. MAX_THUMBS = 24 is a DECODE budget, not a look.
+  · app/hooks/useFilmstrips.ts — dynamic-imported, width-bucketed (a window drag does not re-decode),
+    ONE decoder at a time, every failure silent and total: no strip, and the lane looks exactly as it
+    did before F8.
+  · The colour language changes register over a picture: the kept span keeps its channel tint at 0.18
+    so frames read through it, and a cut span goes DARK rather than merely fainter.
+MEASURED on the deployed-shape build, real Chrome, `node scripts/ui-shot.mjs --flow=film` (new):
+    screen 11/11 frames in 493-958 ms · camera 11/11 in 291-315 ms
+  i.e. the GATE "thumbnail generation budget reported" is met, at about 45-85 ms per thumbnail
+  against F8's own measured 65 ms per random-access decode.
+ONE REGRESSION FOUND AND CLOSED BY THE SAME SHOT, and it is why this was verified in a browser rather
+  than argued: .tl is a fixed 184 px and .tl__lanes already overflowed slightly at four channels, so
+  two lanes growing 10 px each pushed Mic off the bottom. The lane is 30 px (not 34) and .tl__lanes
+  tightens its gap to 5 px when any strip exists: 2x30 + 2x24 + 3x5 + 16 = 139 px against the old
+  4x24 + 3x8 + 16 = 136. Both screenshots are in the session; the second shows all four lanes.
+STILL OPEN in F8, and now the only things left in it: the 60 fps-with-a-30-min-take TRACE (the strip
+  is designed for it — one background image, at most 24 thumbnails whatever the length — but designed
+  is not measured, and it wants a 30-minute fixture) and GPU-rendered waveforms on the AUDIO lanes,
+  which are the lanes that still show a bare rectangle.
 
 ═══ PHASE P — PORTS (PO-approved direction 2026-08-22; P1/P2/P3/P5a may run parallel with O-phase) ═══
 

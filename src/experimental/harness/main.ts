@@ -341,6 +341,16 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'o4clock',
+    title: 'O4-polish — which clock does a captured frame carry?',
+    detail:
+      "The v2 instant path sits ~25-33 ms above the same take's render, and the suspicion written down with P0-instant-sync is that the composite's two ends are read off different clocks: video frames are stamped when the reader hands them over (arrival), while the file's origin is the first audio batch's capture time. A VideoFrame carries its own timestamp — the capture side of the same event — but in an unspecified epoch. This measures the only honest quantity, arrival − frame.timestamp: its SPREAD is the jitter a media-clock stamp would remove, its SLOPE is the rate error that stamp would introduce over a 900 s take.",
+    run: async (args) => {
+      const { runFrameClock } = await import('../perf/frameClock')
+      return runFrameClock({ takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined })
+    },
+  },
+  {
     id: 'f8',
     title: 'F8 step one — is the editor scrub actually landing on the wrong frame?',
     detail:

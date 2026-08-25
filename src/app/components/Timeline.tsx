@@ -14,6 +14,8 @@ import {
   type TightenProposal,
 } from '@core/timeline'
 import { CHANNEL_META } from '@app/lib/channels'
+import { useFilmstrips } from '@app/hooks/useFilmstrips'
+import { FILM_LANE_HEIGHT_PX } from '@app/lib/filmstripPlan'
 import { FrameBar } from '@app/components/FrameBar'
 import { SpeedBar } from '@app/components/SpeedBar'
 import { formatClock } from '@app/lib/format'
@@ -198,6 +200,13 @@ export function Timeline({
     })
   }
 
+  /**
+   * F8: the take's own picture under the lanes. Two frames of the lane bar (the
+   * bar itself is inset 1 px top and bottom) so the strip fills it exactly.
+   */
+  const strips = useFilmstrips(recording, width, FILM_LANE_HEIGHT_PX - 2)
+  const anyStrip = Object.keys(strips).length > 0
+
   const hasScreen = recording.channels.some((c) => c.kind === 'screen' && c.media === 'video')
   const hasAudio = recording.channels.some((c) => c.media === 'audio')
   const proposal = tighten?.proposal ?? null
@@ -211,7 +220,7 @@ export function Timeline({
 
   return (
     <div className="tl">
-      <div className="tl__lanes">
+      <div className={`tl__lanes${anyStrip ? ' tl__lanes--film' : ''}`}>
         {recording.channels.map((ch) => {
           const meta = CHANNEL_META[ch.kind]
           const ce = edit.channels.find((c) => c.channelId === ch.id) ?? fallbackChannelEdit(ch)
@@ -219,8 +228,17 @@ export function Timeline({
           const barWidth = Math.max(2, x(ch.durationMs))
           const keptLeft = x(ce.trimStartMs)
           const keptWidth = Math.max(0, x(ce.trimEndMs - ce.trimStartMs))
+          /**
+           * F8. The picture is the lane's background and the colour language
+           * stays exactly what it was — the kept span keeps its channel tint,
+           * only lighter so the frames read through it, and the cut spans turn
+           * into a dark scrim rather than a paler tint, because "excluded" over
+           * a picture has to be darker and not merely fainter.
+           */
+          const strip = strips[ch.id]
+          const cutPaint = { background: strip ? 'rgba(6,6,10,1)' : meta.colorVar }
           return (
-            <div key={ch.id} className="tl__row lane">
+            <div key={ch.id} className={`tl__row lane${strip ? ' lane--film' : ''}`}>
               <div className="tl__gutter lane__gutter">
                 <span className="lane__icon" style={{ color: meta.colorVar }}>
                   <Icon name={meta.icon} size={14} />
@@ -239,11 +257,23 @@ export function Timeline({
                 {width > 0 && (
                   <div
                     className={`lane__bar${ce.enabled ? '' : ' lane__bar--disabled'}`}
-                    style={{ left: barLeft, width: barWidth }}
+                    style={{
+                      left: barLeft,
+                      width: barWidth,
+                      ...(strip
+                        ? {
+                            backgroundImage: `url(${strip.url})`,
+                            // The strip was built for THIS bar's width, so it
+                            // stretches to it exactly and never tiles.
+                            backgroundSize: '100% 100%',
+                            backgroundRepeat: 'no-repeat',
+                          }
+                        : null),
+                    }}
                   >
                     <div
                       className="lane__seg lane__seg--cut"
-                      style={{ left: 0, width: keptLeft, background: meta.colorVar }}
+                      style={{ left: 0, width: keptLeft, ...cutPaint }}
                     />
                     <div
                       className="lane__seg lane__seg--kept"
@@ -254,7 +284,7 @@ export function Timeline({
                       style={{
                         left: keptLeft + keptWidth,
                         right: 0,
-                        background: meta.colorVar,
+                        ...cutPaint,
                       }}
                     />
                     <div

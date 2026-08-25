@@ -101,10 +101,19 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   (2026-08-25): opening the panel composes ten seconds of the take through the export's own geometry
   and encodes it at every step with the export's own encoder, two consecutive GOPs, blended by the
   take's length. ±13.5 % worst case on the rig twice over, +12.9 %/+9.4 % on two real exports of the
-  deployed build. The panel opens on F7's model and the measurement replaces it ~9 s later — and that
-  model is now badly wrong (task F7d): it is anchored on the composite, whose encoder changed when O4
-  flipped the default to v2, so it reads −71 to −84 % on motion. What the user saw before F7c on a
-  16 s synthetic take: ~4.1 MB against a 279 KB file), MOVABLE TIMED CAMERA
+  deployed build, and −4.8 to +4.0 % on a third scoring run. The panel opens on F7's MODEL and the
+  measurement replaces it ~5 s later.
+  THAT MODEL IS NOT FIXABLE AND IS NOW LABELLED INSTEAD (F7d, 2026-08-25). It is anchored on the
+  composite, and the composite's encoder is REALTIME while the export's is not: on 24 s takes the
+  composite costs 0.24x the render's bytes on motion content and 0.78x on screen, so the model's
+  error FLIPS SIGN with content — +86 % on screen at 540p against −79 % on motion. No single
+  correction survives a sign flip, so the re-anchor branch of F7d is refused and the fallback says
+  what it is: "Couldn't measure the sizes on this take, so they are rough guides — the file can come
+  out several times bigger or smaller." Before F7d the panel said "they settle in a few seconds"
+  FOREVER on any take the probe cannot run (an audio-only take has no video to compose), and called a
+  composite-less take's export "Instant" while quoting the 8 Mbps ceiling as "the file, not a guess"
+  — 5.6 MB claimed for a file of a few hundred KB. The rule is pure and tested in
+  app/lib/sizeConfidence.ts), MOVABLE TIMED CAMERA
   (F4: drag/resize the PiP on the stage; the export moves it AT the instant you moved it), BACKGROUND
   FRAME (F3: backdrop + inset + rounded corners + shadow around the screen surface, preview and export
   from one geometry function), SILENCE TIGHTENING (F5a: "Tighten" proposes cuts from the audio's own
@@ -114,6 +123,18 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   DRAGGED in time and the whole move goes with it, keeping its duration), PER-CLIP SPEED (F5b:
   1.25-3x on any clip, pitch preserved by WSOLA rather than resampling — measured −0.08 cents at 2x
   IN THE EXPORTED FILE — and the video retimed to match)
+- THE TIMELINE SHOWS THE TAKE, NOT A RECTANGLE (F8 filmstrip, 2026-08-25). Every VIDEO lane carries a
+  strip of the channel's own frames; audio lanes are unchanged. Decoded by RANDOM ACCESS
+  (mediabunny `samplesAtTimestamps`) rather than compose/video.ts's forward walk, which would decode
+  54,000 frames for a strip over a 30-minute take, and stitched into ONE image so the timeline paints
+  one background however long the take is. The layout rule is a PITCH (76 CSS px between thumbnail
+  centres, at most 24), so length changes what each thumbnail STANDS FOR and never how many there
+  are. Measured on the prod build in real Chrome: screen 11/11 frames in 493-958 ms, camera 11/11 in
+  291-315 ms. Over a picture the colour language changes register — the kept span keeps its channel
+  tint at 0.18 opacity so frames read through it, a cut span goes DARK rather than fainter — and the
+  lane grows 24 → 30 px while .tl__lanes tightens its gap to 5 px, because .tl is a fixed 184 px and
+  the lane list already overflowed at four channels. Every failure is silent and total: no strip, and
+  the lane looks exactly as it did before. Nothing in the export imports it.
 - A ONE-FRAME SCRUB REPAINTS (F8 step one, 2026-08-25). The paused preview re-seeks its elements past
   15 ms of drift, not 40 — a frame is 33.3 ms, so the old deadband could eat a whole frame of scrub.
   A/B on the prod build: `node scripts/ui-shot.mjs --flow=scrub` reads 0 ms of movement at 40 and
@@ -157,6 +178,16 @@ oracle), always spawns its own server. Bands as of 2026-08-23: sync ≤90 ms on 
 metric (see below — the old ≤60 ms band measured a different, ~31 ms optimistic quantity), spur ≥−40 dB,
 boundary jump ≤0.1, TAIL LOSS ≤400 ms with the last flash AND last click within 2000 ms of the end,
 export throughput ≥1× realtime. Typical run: sync 40-66 ms, tail 68-76 ms, export 5.0-5.2×, spur −50 dB.
+THE COLD GATE IS FLAKY AND THE FLAKE IS PROBABLY THE INSTRUMENT (found 2026-08-25, task GATE-alias —
+first on the READY map). `--cold=3` fails 2 of 6 runs on a clean build of HEAD, and BOTH failures land
+on multiples of the rig's own 1 s fiducial grid: one run reads −465 ms on every flash pair (a constant
+shift, maxAbs == |mean| exactly), another reads the RENDER inside the band at 82.7 ms while the
+packet-copy paths read −909 ms. The beeps are a uniform 1 s grid, so click↔flash pairing is ambiguous
+by construction and fiducial.ts snaps to that grid behind an `intervalMs / 2` guard — which is exactly
+where ~465 and ~909 come from. The existing `aliased=` flag does not cover it (it watches only the
+audio-corrected RENDER number moving >750 ms) and read false on every failing run. Until it is closed,
+a WARM `npm run oracle` is the gate to trust and a cold failure must be reproduced before it is
+believed — in either direction, because the same snapping can hide a real error as easily as invent one.
 Fidelity: toneErr ~0.02-0.05 dB, THD −71 dB, IMD −60 dB, separation 51-60 dB, 0 limiter hits. Every band
 is injection-proven red (tanh-bus / mono-downmix / hard-limiter for fidelity; a 900 ms tail chop and a
 0.7× export for the O8 bands).

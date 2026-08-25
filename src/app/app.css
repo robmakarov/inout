@@ -475,15 +475,22 @@
   background: rgba(0, 0, 0, 0.75);
 }
 
-/* The live composite painted by the capture worker (O4-polish). Same box as
-   .stage__screen; the composition is already 16:9 and so is the stage, so the
-   canvas stretches exactly. */
 .quality__tier--provisional .quality__tier-size {
   opacity: 0.45;
 }
 .quality__hint--measuring {
   opacity: 0.6;
 }
+/* F7d: the opposite treatment to --measuring on purpose. "Settling in a few
+   seconds" is a number about to improve, so it recedes; "this can be several
+   times out" is a number the user has to weigh, so it does not. */
+.quality__hint--rough {
+  color: var(--warn);
+  opacity: 1;
+}
+/* The live composite painted by the capture worker (O4-polish). Same box as
+   .stage__screen; the composition is already 16:9 and so is the stage, so the
+   canvas stretches exactly. */
 .stage__composite {
   position: absolute;
   inset: 0;
@@ -748,6 +755,37 @@
 .lane {
   flex: none;
   height: 24px;
+}
+/* F8: a lane showing the take's own frames needs the height to show them. Only
+   video lanes with a strip grow — audio lanes stay where they were, so a
+   mic-only take's timeline is unchanged. Must agree with FILM_LANE_HEIGHT_PX.
+
+   THE GAP PAYS FOR THE HEIGHT. .tl is a fixed 184 px and .tl__lanes scrolls,
+   so two lanes growing 6 px each would push the list further into overflow than
+   it already sits. Tightening the gap on exactly the timelines that have strips
+   keeps the block the height it was: 2x30 + 2x24 + 3x5 + 16 = 139 px against
+   4x24 + 3x8 + 16 = 136 px. Verified in the shot, not assumed. */
+.lane--film {
+  height: 30px;
+}
+.tl__lanes--film {
+  gap: 5px;
+}
+/* Over a picture the colour language has to change register: the kept span
+   keeps its channel tint but thin enough to read through, and a cut span turns
+   DARK rather than merely fainter — "excluded" reads as shadow, not as a paler
+   shade of the same rectangle. */
+.lane--film .lane__seg--kept {
+  opacity: 0.18;
+}
+.lane--film .lane__bar--disabled .lane__seg--kept {
+  opacity: 0.16;
+}
+.lane--film .lane__seg--cut {
+  opacity: 0.66;
+}
+.lane--film .lane__bar--disabled {
+  filter: grayscale(1) brightness(0.7);
 }
 .lane__gutter {
   color: var(--text-dim);

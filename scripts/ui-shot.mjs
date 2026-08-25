@@ -80,8 +80,14 @@ try {
   })
   let seq = 0
   const pending = new Map()
+  /** Page console, kept for flows whose evidence is a logged number (F8). */
+  const consoleLines = []
   sock.addEventListener('message', (ev) => {
     const m = JSON.parse(ev.data)
+    if (m.method === 'Runtime.consoleAPICalled') {
+      consoleLines.push((m.params.args ?? []).map((a) => a.value ?? a.description ?? '').join(' '))
+      return
+    }
     if (m.id && pending.has(m.id)) {
       const { resolve, reject } = pending.get(m.id)
       pending.delete(m.id)
@@ -99,7 +105,34 @@ try {
       .value
 
   await send('Runtime.enable')
+  let chipsBefore = null
+  let chipsAfter = null
   await sleep(2500)
+  /**
+   * F7d: a take with NO video channel is the cheapest real case where the size
+   * probe cannot run at all — there is nothing to compose, so calibrateSteps
+   * returns null and the panel must stop promising a measurement. Switch the
+   * video inputs off before the take rather than mocking the failure.
+   */
+  if (flow === 'roughsize') {
+    chipsBefore = await evaluate(
+      `[...document.querySelectorAll('.chips .chip')].map(b=>b.title+':'+b.getAttribute('aria-pressed')).join(' ')`,
+    )
+    // ONE CLICK PER TASK. Two chip clicks in the same tick both read the same
+    // prefs snapshot and the first one is lost — a human cannot produce that,
+    // a synthetic driver does it every time.
+    for (const label of ['Screen', 'Camera']) {
+      await evaluate(
+        `(() => { for (const b of document.querySelectorAll('.chips .chip')) {
+            if (b.title === ${JSON.stringify(label)} && b.getAttribute('aria-pressed')==='true') b.click();
+          } })()`,
+      )
+      await sleep(400)
+    }
+    chipsAfter = await evaluate(
+      `[...document.querySelectorAll('.chips .chip')].map(b=>b.title+':'+b.getAttribute('aria-pressed')).join(' ')`,
+    )
+  }
   await evaluate(`document.querySelector('button[aria-label="Start recording"]').click()`)
   await sleep(takeMs)
   await evaluate(`document.querySelector('button[aria-label="Stop recording"]')?.click()`)
@@ -107,6 +140,7 @@ try {
   let opened
   let text
   let cameraReport = null
+  let filmReport = null
   if (flow === 'camera') {
     // F4: measure the PiP the way the export measures it — as FRACTIONS of the
     // stage — so the preview number and the exported-frame number are directly
@@ -439,6 +473,60 @@ try {
     )
     await sleep(500)
     text = await evaluate(`document.querySelector('.tl__tools')?.innerText ?? 'NO TOOLS'`)
+  } else if (flow === 'film') {
+    /**
+     * F8: does the timeline actually show the take's own frames, on the build a
+     * user gets? The lane bar carries the strip as a background image, so this
+     * asks the COMPUTED style rather than the React tree — a strip that failed
+     * to decode leaves the bar exactly as it was, which is the fallback working
+     * and must be distinguishable from the feature working.
+     */
+    // Strips land one channel at a time (one decoder at a time, on purpose), so
+    // wait for the count to STOP changing rather than for the first one.
+    let seen = -1
+    let stable = 0
+    for (let i = 0; i < 60; i++) {
+      const n = await evaluate(`document.querySelectorAll('.lane--film').length`)
+      if (n === seen && n > 0) stable++
+      else stable = 0
+      seen = n
+      if (stable >= 4) break
+      await sleep(250)
+    }
+    filmReport = await evaluate(
+      `(() => {
+        const lanes=[...document.querySelectorAll('.lane')];
+        return lanes.map((l)=>{
+          const bar=l.querySelector('.lane__bar');
+          const bg=bar?getComputedStyle(bar).backgroundImage:'none';
+          return {
+            label: l.querySelector('.lane__label')?.textContent ?? '?',
+            film: l.classList.contains('lane--film'),
+            laneHeight: Math.round(l.getBoundingClientRect().height),
+            barWidth: bar?Math.round(bar.getBoundingClientRect().width):0,
+            hasStrip: !!bg && bg !== 'none',
+          };
+        });
+      })()`,
+    )
+    opened = filmReport.some((l) => l.hasStrip)
+    text = filmReport.map((l) => `${l.label}: ${l.hasStrip ? 'strip' : '—'} h${l.laneHeight}`).join(' · ')
+  } else if (flow === 'roughsize') {
+    opened = await evaluate(
+      `(() => { const b=[...document.querySelectorAll('button')].find(x=>/export/i.test(x.textContent||'')); if(!b) return false; b.click(); return true })()`,
+    )
+    // The probe fails fast here (no video channel), but "fast" is still an
+    // await chain — give it room, then read what the panel settled on.
+    await sleep(4000)
+    text = await evaluate(
+      `(() => { const q=document.querySelector('.quality'); if(!q) return 'NO QUALITY PANEL';
+        return JSON.stringify({
+          notice: q.querySelector('.quality__hint--rough')?.textContent?.trim() ?? null,
+          stillMeasuring: !!q.querySelector('.quality__hint--measuring'),
+          provisional: q.querySelectorAll('.quality__tier--provisional').length,
+          text: q.innerText,
+        }) })()`,
+    )
   } else {
     opened = await evaluate(
       `(() => { const b=[...document.querySelectorAll('button')].find(x=>/export/i.test(x.textContent||'')); if(!b) return false; b.click(); return true })()`,
@@ -449,7 +537,20 @@ try {
   const shot = await send('Page.captureScreenshot', { format: 'png' })
   writeFileSync(out, Buffer.from(shot.data, 'base64'))
   console.log(
-    JSON.stringify(cameraReport ?? { flow, actionOk: opened, panelText: text, screenshot: out }, null, 2),
+    JSON.stringify(
+      cameraReport ?? {
+        flow,
+        actionOk: opened,
+        panelText: text,
+        screenshot: out,
+        ...(filmReport
+          ? { lanes: filmReport, filmstripLog: consoleLines.filter((l) => l.includes('filmstrip')) }
+          : {}),
+        ...(chipsBefore ? { chipsBefore, chipsAfter } : {}),
+      },
+      null,
+      2,
+    ),
   )
 } finally {
   try { chrome?.kill('SIGKILL') } catch {}
