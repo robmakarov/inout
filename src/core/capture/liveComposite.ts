@@ -317,6 +317,10 @@ export async function startLiveComposite(
   }
 
   const startedAt = performance.now()
+  /** performance.now() right after recorder.start() — the fallback origin. */
+  let recorderStartedWall: number | null = null
+  /** The first paint the recorder could have captured: the file's real t=0. */
+  let fileOriginWall: number | null = null
   let lastFrame = startedAt
   let lastDraw = 0
   const gaps: number[] = []
@@ -342,6 +346,14 @@ export async function startLiveComposite(
   const draw = (): void => {
     const now = performance.now()
     if (now - lastDraw < 1000 / FPS - 3) return
+    // THE FILE'S ZERO IS THE FIRST PAINT THE RECORDER SEES, not the instant it
+    // was told to start (P0-instant-sync, refined 2026-08-25). A canvas capture
+    // stream produces a frame when the canvas is painted, so between start()
+    // and that paint there is up to a frame of nothing — and stamping the file
+    // a frame early places every copied packet a frame early, which measured as
+    // ~30 ms of extra A/V offset on the instant path and put a v1 oracle run
+    // over the band.
+    if (recorderStartedWall !== null && fileOriginWall === null) fileOriginWall = now
     lastDraw = now
     drawnFrames++
     gaps.push(now - lastFrame)
@@ -404,14 +416,17 @@ export async function startLiveComposite(
   }
   recorder.start(CHUNK_MS)
   /**
-   * THE FILE'S OWN ZERO (P0-instant-sync). A MediaRecorder's first sample is
-   * the first frame the canvas stream hands it after start(), so this stamp is
-   * the file's t=0 to within one 30 Hz frame — and everything above it
-   * (elements, canvas, audio graph, write stream) is time the take had already
-   * been running. `startedAt` is NOT that instant and using it as one is how
-   * the duration came to include the setup as well.
+   * THE FILE'S OWN ZERO (P0-instant-sync). Everything above this line —
+   * elements, canvas, audio graph, durable write stream — is time the take had
+   * already been running, so `startedAt` is not the file's zero and using it as
+   * one made the composite's declared duration include the setup.
+   *
+   * The recorder's first SAMPLE, though, is the first frame the canvas stream
+   * hands it, which is the first PAINT at or after this point: `draw()` fills
+   * fileOriginWall in, and this stamp is only the fallback for a take that
+   * somehow stops before painting once.
    */
-  const fileOriginWall = performance.now()
+  recorderStartedWall = performance.now()
 
   const stats: LiveCompositeStats = {
     drawnFrames: 0,
@@ -504,7 +519,8 @@ export async function startLiveComposite(
     async stop() {
       // Measured from the file's own zero, not from before the recorder
       // existed: the difference is setup time that was never in the file.
-      const durationMs = performance.now() - fileOriginWall
+      const origin = fileOriginWall ?? recorderStartedWall ?? startedAt
+      const durationMs = performance.now() - origin
       if (aborted) return null
       await teardown(false)
       snapshotStats()
@@ -532,7 +548,7 @@ export async function startLiveComposite(
         tailIncomplete: stats.drainTimedOut || undefined,
       }
       if (options.epochMs !== undefined) {
-        const offset = Math.round(fileOriginWall - options.epochMs)
+        const offset = Math.round(origin - options.epochMs)
         composite.startOffsetMs = offset
         console.info(`[capture] composite v1 clock starts +${offset}ms into the take`)
       }
