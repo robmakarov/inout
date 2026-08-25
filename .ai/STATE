@@ -107,6 +107,12 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   DRAGGED in time and the whole move goes with it, keeping its duration), PER-CLIP SPEED (F5b:
   1.25-3x on any clip, pitch preserved by WSOLA rather than resampling — measured −0.08 cents at 2x
   IN THE EXPORTED FILE — and the video retimed to match)
+- A ONE-FRAME SCRUB REPAINTS (F8 step one, 2026-08-25). The paused preview re-seeks its elements past
+  15 ms of drift, not 40 — a frame is 33.3 ms, so the old deadband could eat a whole frame of scrub.
+  A/B on the prod build: `node scripts/ui-shot.mjs --flow=scrub` reads 0 ms of movement at 40 and
+  32 ms at 15. F8's own premise ("<video> seek granularity") is REFUTED: at five off-grid instants a
+  <video> seek and the export's random-access reader land on the same frame, 0 ms apart, and the
+  element is faster (`npm run exp -- f8`).
 - THE EDIT SURVIVES A REFRESH (F4, editsRepo IndexedDB v2). It never did before: recovery restored the
   recording and handed the editor a fresh default, so trims and cuts evaporated on every reload.
 - installable PWA, starts offline (P2); first paint 233.9 KB (O7 gate ≤300 KB; was 803)

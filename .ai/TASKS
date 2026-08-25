@@ -119,7 +119,24 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
                                              (codecs.ts EncoderOptions) and the ladder seam is in.
   O8b  capture fps band under load [medium]  what is left of O8 after the peak-memory band landed.
   F6   pause-retake                [medium]  UNBLOCKED — build segments on the v2 engine once.
-  F8   nle-scrub                   [medium]  UNBLOCKED — the fMP4 composite has a keyframe index.
+  F8   nle-scrub                   [medium]  ITS PREMISE IS REFUTED AND THE REAL DEFECT IS FIXED
+                                             (2026-08-25). F8 was written on "scrub decodes the EXACT
+                                             frame instead of <video> seek granularity". Measured
+                                             first (`npm run exp -- f8`, new): at five off-grid
+                                             instants on a VP9 webm, a <video> seek and the export's
+                                             own random-access reader land on the SAME frame every
+                                             time — 0 ms apart, decoded off the timecode the rig
+                                             paints into every frame — and the element is the FASTER
+                                             path (29 ms mean vs 65). There is no seek-granularity
+                                             defect to fix with a second decoder. WHAT WAS COARSE was
+                                             usePlayback's paused deadband: 40 ms against a 33.3 ms
+                                             frame, so a one-frame scrub left the picture where it
+                                             was. Now 15 ms, and A/B-proven on the prod build in a
+                                             real Chrome (`node scripts/ui-shot.mjs --flow=scrub`,
+                                             new): 40 ms → the elements move 0 ms, 15 ms → 32 ms.
+                                             STILL OPEN, and now on a measured premise: filmstrip
+                                             thumbnails from the keyframe index · GPU-rendered
+                                             waveforms · the 60 fps-with-a-30-min-take trace.
   O3b  single-generation export    [medium]  UNBLOCKED — v2 owns encoder + muxer, both halves of
                                              the original idea are now buildable once.
   O4-polish                        [light]   PREVIEW FROM THE COMPOSITOR IS DONE 2026-08-25 — the
