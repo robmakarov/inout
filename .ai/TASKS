@@ -88,6 +88,12 @@ promotes smart cut from a nicety to the only lever, which is now built and measu
 NOT STARTED, and each still costs a session: O3b · O4-polish · O6 · O9 · O10 · F6 · F7c · F8.
 (The eighth session added no features on purpose — it built the instrument that can see the fast
 export paths at all, and the first thing it saw was a P0.)
+SHIPPED 2026-08-25 (TENTH session, PO: "go roadmap, all o and f in one"): P0-instant-sync (+ the v1
+first-paint refinement) · O5-flip · O4-polish's preview-from-the-compositor · F7c attempt 5 (the gate
+met at last) · F7d's honesty half · F8's premise REFUTED and its real defect (a 40 ms paused deadband
+against a 33.3 ms frame) fixed and A/B-proven. Full sweep green afterwards: 353 tests · oracle 3/3 on
+v2 AND 3/3 on v1 · fidelity PASS (toneErr 0.017 dB, THD −74, separation 56.8, 0 limiter hits) ·
+browser-check real Chrome 8/8 with 0 console errors and export 508 ms · first paint 238,790 B.
 Everything merged and pushed to origin/main.
 Merged 2026-08-23/24 across six sessions: O1 · O2 · O3a · O7 · O4 step1 · O4b · F1 · F7 · O8(partial)
 · P2 · P3 · F4 · O4 step2 (DORMANT) · a P0 mic-hang fix (PO-verified) · O11a · O11b · O11c · F7b · F3
@@ -420,9 +426,18 @@ TWO THINGS THE FIX ALSO SETTLED:
   (2) THE FAST PATHS AND `sync=` WERE READ ON DIFFERENT METRICS — inst/trim on the audio-corrected
       number, sync= on the symmetric one, a ~13.5 ms systematic between two figures printed side by
       side on one line. All three read symmetric now (run.ts pathSync).
-NOT DONE, and deliberately: nothing tries to correct the ±1 frame between "the composite's origin" and
-"the frame the composite was showing at that instant". It is inside the instrument's own noise (~8-9 ms
-1σ) and both paths now land inside the render's spread.
+REFINED THE SAME DAY, by the band itself: a v1 run failed at 93.5 ms maxAbs, because the file's zero
+was stamped at recorder.start() while a canvas capture stream only produces a frame when the canvas is
+PAINTED — up to a frame of nothing in between, and every copied packet a frame early. Dated from the
+first paint at or after start() now (start() is the fallback). v1 instant, three cold runs: 44.3 /
+48.2 / 40.7 ms against the same takes' render at 57.4 / 49.1 / 34.0 — better than the render on two of
+three, where it read 73.9 / 86.3 before the refinement and 244.8 before the task.
+LEFT NAMED, MEASURED, NOT CHASED — the next session's question: on v2 the instant path sits ~25-33 ms
+ABOVE the same take's render (65.8 / 77.2 / 75.6 against 41.8 / 51.6 / 42.6), inside the 90 ms band but
+systematically. That engine stamps video frames with their ARRIVAL time (performance.now() when the
+frame is read) while its origin is the first audio batch's CAPTURE time (wallForContextTime of its
+first sample). Those are two different clocks and the gap between them is the shape of this residual.
+Start there, not in the export.
 
 ═══ P0 — FOUND 2026-08-23, FIXED ═══
 
