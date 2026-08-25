@@ -12,6 +12,13 @@ TD tags technical defects by severity. Done items get deleted, not archived.
 
 ### Now
 
+- [P0] TD 2026-08-25: THE SCREEN WEDGE IS STILL OPEN — getDisplayMedia never settles after the
+  user picks, Chrome keeps the share claim, only ⌘Q clears it. Eight commits of mitigation are
+  shipped (bounded ≤30 s, devices released, no screenless takes, safe-mode ladder); the CAUSE is
+  not found. Full case file with every attempt, ruled-out causes, ranked hypotheses and the
+  evidence kit for the next occurrence: docs/SCREEN_WEDGE.md. Next discriminating datapoint is
+  free: PO's next wedge + the ladder rung it happened on.
+
 - [P1] TD 2026-08-25: NOTHING HERE HAS EVER BEEN MEASURED ON A TAKE LONGER THAN 30 s, and PO records
   938-1800 s. `runOracle` defaults to 6000 ms and the matrix's widest cell is 30 s, so every sync,
   drift and throughput number this project quotes describes a take up to 156× shorter than the one PO
