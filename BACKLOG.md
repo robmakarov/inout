@@ -12,21 +12,38 @@ TD tags technical defects by severity. Done items get deleted, not archived.
 
 ### Now
 
-- [P0] TD 2026-08-24: THE INSTANT EXPORT IS OUT OF SYNC, and nothing could see it until today. An
-  unedited export packet-copies the live composite; measured on the oracle's own flash+click metric it
-  reads 97.4 and 102.4 ms A/V offset on the v2 engine and 244.8 ms on v1, against the SAME take's
-  render at 52.5-64.3 ms — i.e. outside the 90 ms CI band, on the path most takes actually take. Every
-  sync number this project has quoted was measured on the RENDER, because the oracle exported by
-  calling exportRecording directly and never exercised a packet copy; it now drives the product's own
-  export ladder and prints `inst=`, `trim=` and `compT0=` on every line. Smart cut inherits the same
-  offset (150.3 ms) because it copies the same file, which is why it stays off by default. Measured but
-  NOT root-caused: the composite's first video packet sits at 133-300 ms on v2 while CompositeRecording
-  carries no offset field, so both copy paths assume composite time IS recording time — but v1 reads
-  compT0=0 and is the worse of the two, so the clock origin contributes without explaining it.
-  DELIBERATELY NOT GATED YET: banding it turns CI red on a pre-existing defect and blocks every other
-  task, so it is printed on every oracle run instead and gets its band in the session that fixes it.
-  Task P0-instant-sync in .ai/TASKS. PO NOTE: this is consistent with the standing "sync is worse than
-  it should be" report — and it means an UNEDITED take is worse than an edited one, which is backwards.
+- [P1] TD 2026-08-25: NOTHING HERE HAS EVER BEEN MEASURED ON A TAKE LONGER THAN 30 s, and PO records
+  938-1800 s. `runOracle` defaults to 6000 ms and the matrix's widest cell is 30 s, so every sync,
+  drift and throughput number this project quotes describes a take up to 156× shorter than the one PO
+  complained about. Measured at 120 s on a /tmp mirror of the shipped build (a second live session was
+  editing this worktree; its saves reload the harness page through HMR and killed two earlier runs):
+    render path   symmetric 34.5 ms mean / 46.8 max, and FLAT — all 119 flash/click pairs returned
+                  the SAME offset across the two minutes
+    instant path  67.3 / 96.4 ms after 89e250e — it read 117.2 / 153.8 at the SAME length before that
+                  fix, against 97-102 at 6 s, i.e. the defect grew with length and the 6 s gate
+                  under-reported it by ~20 %
+    smart cut     the trimmed export took smartcut at 1384 ms against the render's 17616 on the same
+                  take — 12.7×
+    drift         beta−1 = −0.003 ms/s → 2.8 ms across PO's whole 938 s take
+  So DRIFT IS DEAD as an explanation for what PO hears: whatever is off is a CONSTANT offset.
+  ACTION: one ≥120 s cell before any flip that touches the packet-copy paths — a 6 s gate passed the
+  instant path's own defect while it was 20 % worse at PO's scale.
+
+- [P1] TD 2026-08-25: THE TWO ALIGNMENT ERRORS A SYNTHETIC RIG CANNOT SEE, both pushing audio LATE.
+  (1) the mic anchor subtracts only the platform-REPORTED track latency (measuredAudio.ts) — a
+  Bluetooth headset's real 100-300 ms is invisible to it, and PO's 15-minute Zoom take is exactly that
+  case. (2) the video channel is anchored to the `recorder.start()` CALL (session.ts:588), not to when
+  its first frame landed: a canvas delivers instantly on the rig, a real getDisplayMedia surface does
+  not — the composite's own first frame took 233 ms in the same run. Neither is measurable without
+  instrumenting a REAL take. Next step is to put the alignment inputs into the file's certification
+  (each channel's startOffsetMs, the raw anchor, the reported input latency, the first-frame delay) so
+  the next field report arrives with numbers instead of an adjective.
+
+- [P2] TD 2026-08-25, ONE OBSERVATION, NOT REPRODUCED: the audio-integrity spur gate read −34.6 dB
+  against its −40 dB band on a 120 s run of HEAD (7c9a02f). The same build at 6 s read −52.3 (pass)
+  and the previous build at 120 s read −56.7 (pass), so this is either machine load — the metric is
+  known load-sensitive — or something length-dependent in the mix. Re-run 120 s on a quiet machine
+  before believing either.
 
 - [P2] Oracle returns ALL-NULL metrics (and exit 0!) under machine contention — instrument must retry or fail loudly, never emit null-as-result. PARTLY ADDRESSED: oracle.mjs retries and fails loud on incomplete metrics. Still open: branch ee/oracle-nullfix unmerged (TD review), and the fidelity runner has no equivalent retry — it reads RED (toneErr 1.1-2.3 dB) purely from machine load, which is capture starvation and not a mix regression. Needs the same retry/quiet-machine guard.
 

@@ -4,7 +4,14 @@ phase: MVP validation (2026-07-16)
 
 works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → export → share-as-file.
 - SYNCHRONIZED START (PO 2026-07-20, supersedes instant-arm/late-join): arm() waits for src.settled — ALL devices acquired, every permission prompt answered — before start() activates them at one epoch. All channels share one start + one length (verified: 4 lanes 100% ±0.3%); no primary-gated early start, no late-join staggering. pipeline prewarm at mount; devices touched only after record click
-- instant unedited export ~60-105ms (live composite packet-copied, mp4 h264+aac); edited takes → full render
+- instant unedited export ~60-105ms (live composite packet-copied, mp4 h264+aac); a TIME-ONLY edit
+  takes smart cut (1384 ms on a 120 s take against the render's 17616); everything else renders — and
+  the panel now says HOW LONG IS LEFT, read off the rendering phase's own measured slope and shown
+  only once that slope has 3 s and 3 % under it (the ratio is not uniform in time — `preparing` hides
+  a whole audio decode on a long take — so extrapolating the whole bar would lie). A ring and a
+  percentage were enough for a 100 ms instant export; PO's 15m38s take sat in that panel for ~3.5
+  minutes with no way to tell seconds from an hour. Verified on prod: "about 15s left" at 58 %, done
+  ~10 s later.
 - THE COMPOSITE HAS ITS OWN CLOCK AND NOW SAYS SO (P0-instant-sync, fixed 2026-08-25). It is a second
   file, and its zero is not the record press: v1's starts when its MediaRecorder starts, after the
   <video> elements, canvas, audio graph and write stream exist (134-215 ms in); v2's starts at
@@ -155,6 +162,15 @@ is injection-proven red (tanh-bus / mono-downmix / hard-limiter for fidelity; a 
 0.7× export for the O8 bands).
 NOTE the fidelity oracle reads RED (toneErr 1.1-2.3 dB) when the machine is loaded — it is capture
 starvation, not a mix regression. Re-run on a settled machine before believing it.
+EVERY BAND ABOVE IS MEASURED ON A 6-SECOND TAKE (`runOracle(recordMs = 6000)`; the matrix's widest
+cell is 30 s) AND PO RECORDS 938-1800 s. Run one long cell before trusting a band at his scale:
+`node scripts/exp.mjs oracle '{"recordMs":120000}'`, ~18 min, and run it from a /tmp mirror
+(`git archive HEAD | tar -x -C /tmp/inout-measure` + a node_modules symlink) — a second session
+editing this worktree reloads the harness page through HMR and kills the run. Measured 2026-08-25 at
+120 s on 7c9a02f: render 34.5/46.8 ms and FLAT (all 119 flash pairs identical), instant 67.3/96.4,
+smartcut 1384 ms vs the render's 17616 on the same take, drift beta−1 = −0.003 ms/s (2.8 ms across a
+938 s take — DRIFT IS NOT A LIVE HYPOTHESIS). The same defect read 117.2 ms at 120 s and 97-102 at
+6 s BEFORE 89e250e: length made it ~20 % worse, so a 6 s gate is not evidence about a real take.
 
 gaps / in flight:
 - CROSS-BROWSER (PO override 2026-07-16 "every capable browser"): implemented + Chromium-verified (synthetic e2e + regression green, 105 tests). Four root-caused fixes: (1) getDisplayMedia now fires synchronously in the click gesture — the old permissions.query awaits burned WebKit transient activation → Safari showed NO picker; (2) MediaRecorder gained mp4(h264+aac) fallback — webm-only list threw NotSupported on Safari → zero recording there; (3) capabilities gain ios/appleWebKit/systemAudioCapture, UI strips unsupported channels + shows honest per-platform copy; (4) Safari audio truncated to ~1s: the WebCodecs measured-audio path is broken on Safari (worklet keep-alive worklet→zero-gain→destination did NOT fix it). Real fix: on Apple WebKit, audio records via MediaRecorder (mp4/aac) — the same path that captures Safari VIDEO full-length — gated by isAppleWebKit() in session.ts armChannel useMeasured. Chromium keeps the measured path (sync precision). Verified code-path on spoofed Safari UA: mic → recorder.start (not measured), 100% full-length lane, tab-audio auto-dropped. STILL NEEDS: PO recheck of (4) on real Safari + iOS Safari (cam/mic/audio-only). iOS screen capture stays impossible in-browser (Safari 27 adds no getDisplayMedia, checked 2026-08-22); native path UPGRADED: ScreenCaptureKit is on iOS 27 (beta, ships ~Sept 2026, verified from Apple docs — replaces ReplayKit, no broadcast extensions) = native-node milestone via SCK, spike = TASKS P5a (time-sensitive).
