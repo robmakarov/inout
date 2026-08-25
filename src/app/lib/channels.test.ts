@@ -141,14 +141,8 @@ describe('unsupportedReason', () => {
 })
 
 describe('missingChannelsMessage', () => {
-  it('never tells a macOS user to tick a box Chrome does not show them', () => {
-    const msg = missingChannelsMessage(['system-audio'], chromium)
-    expect(msg).toMatch(/Chrome Tab/)
-    expect(msg).not.toMatch(/Also share system audio/)
-  })
-
-  it('on Windows it names the box that IS there', () => {
-    expect(missingChannelsMessage(['system-audio'], chromiumWindows)).toMatch(/Also share system audio/)
+  it('points at the box in the screen picker when the sound channel is missing', () => {
+    expect(missingChannelsMessage(['system-audio'], chromium)).toMatch(/Also share system audio/)
   })
 
   it('a missing device is a missing device, not a picker problem', () => {

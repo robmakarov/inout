@@ -6,7 +6,6 @@ import {
   type MediaKind,
 } from '@core/types'
 import { analytics } from '@core/analytics'
-import { detectCapabilities, type DisplayAudioScope } from '@core/capabilities'
 import { guardStream } from './deviceGuard'
 import {
   MAX_DISPLAY_LEVEL,
@@ -279,48 +278,31 @@ export const CAPTURE_MAX_HEIGHT = DEFAULT_EXPORT_SETTINGS.height
 export const CAPTURE_MAX_FPS = DEFAULT_EXPORT_SETTINGS.fps
 
 /**
- * WHICH SURFACES THE PICKER OFFERS — a sound question, not a video one.
+ * THE PICKER IS THE USER'S, NOT OURS (PO 2026-08-25, and this is now a rule,
+ * not a preference): the app does not decide which surfaces Chrome offers, and
+ * it does not move which pane opens. Both were changed here for a few hours on
+ * a theory about where the sound checkbox lives — a whole-screen share on this
+ * Mac DOES carry system audio, the theory was wrong, and it took the user's
+ * Entire-Screen option away. Reverted to the 2026-08-06 behaviour below.
  *
- * PO 2026-08-25, three times in one day, last time after a plain reload: "sound
- * checkboxes not there again". The hint alone could not fix it and here is why.
- * On macOS/Linux Chromium the "Also share tab audio" checkbox lives on the
- * Chrome-Tab pane and NOWHERE else — a monitor or window share there is mute by
- * construction. `displaySurface` only says which pane the picker OPENS on, and
- * Chrome overrides it with its own memory of the last surface you shared. Share
- * Entire Screen once and every later picker opens on Entire Screen, checkbox
- * gone, across reloads, forever. A preference cannot beat that memory.
- *
- * `monitorTypeSurfaces: 'exclude'` (Chromium 112+) can: it takes the whole
- * Entire-Screen pane OUT of the picker, so there is nothing for Chrome to
- * remember and nowhere to land that has no sound. That is the guarantee — with
- * the Tab Audio chip lit, the sound checkbox is on screen every single time.
- *
- * The cost is stated plainly rather than hidden: with Tab Audio ON you cannot
- * pick a whole screen, because on this OS that combination has never been able
- * to record sound — it produced a silent take and an apology. Tab Audio OFF
- * restores the picker exactly as it was, monitor pane first (2026-08-06). On
- * Windows a monitor share DOES carry the machine's audio, so nothing changes
- * there at all.
+ * NEVER add `monitorTypeSurfaces`, `preferCurrentTab`, or a conditional
+ * `displaySurface` here without PO saying so first. Removing an option from
+ * Chrome's picker is a product decision, and it is not this file's to make.
  */
-export function displayPaneHint(config: CaptureConfig, scope: DisplayAudioScope): DisplaySurfaceKind {
-  return config.systemAudio && scope === 'tab' ? 'browser' : 'monitor'
-}
-
-/** True when only a tab can satisfy the sound the user asked for. */
-export function tabOnlyForAudio(config: CaptureConfig, scope: DisplayAudioScope): boolean {
-  return !!config.systemAudio && scope === 'tab'
-}
 
 /** Upper bounds only — a smaller surface satisfies them untouched, so this can
  * never overconstrain a source and cost the user their screen capture. */
-export function displayVideoConstraints(pane: DisplaySurfaceKind = 'monitor'): MediaTrackConstraints {
+export function displayVideoConstraints(): MediaTrackConstraints {
   return {
     width: { max: CAPTURE_MAX_WIDTH },
     height: { max: CAPTURE_MAX_HEIGHT },
     // max, not just ideal: a 60 fps game tab hands over 60 fps otherwise, and
     // every frame above 30 is encoded twice and then dropped at export.
     frameRate: { ideal: CAPTURE_MAX_FPS, max: CAPTURE_MAX_FPS },
-    displaySurface: pane,
+    // displaySurface is a HINT, not a constraint: it opens Chrome's picker
+    // on the Entire-Screen pane instead of the tab list, so the default
+    // choice records everything the user does. Any surface stays pickable.
+    displaySurface: 'monitor',
   } as MediaTrackConstraints
 }
 
@@ -402,8 +384,6 @@ type DisplayMediaOptions = DisplayMediaStreamOptions & {
   selfBrowserSurface?: 'include' | 'exclude'
   surfaceSwitching?: 'include' | 'exclude'
   systemAudio?: 'include' | 'exclude'
-  /** Chromium 112+: drop the Entire-Screen pane from the picker entirely. */
-  monitorTypeSurfaces?: 'include' | 'exclude'
 }
 
 /**
@@ -430,31 +410,21 @@ const RAW_DISPLAY_AUDIO: MediaTrackConstraints = {
 export function displayMediaOptions(
   config: CaptureConfig,
   level: DisplayRequestLevel,
-  scope: DisplayAudioScope,
 ): DisplayMediaOptions {
   const wantsAudio = !!config.systemAudio
-  const pane = displayPaneHint(config, scope)
-  // Belongs to the USER'S ask, not to our options — so it rides every rung,
-  // including the floor. Without it Chrome's memory of the last shared surface
-  // decides whether the sound checkbox exists, and it wins over any hint.
-  const tabOnly: Partial<DisplayMediaOptions> = tabOnlyForAudio(config, scope)
-    ? { monitorTypeSurfaces: 'exclude' }
-    : {}
-  if (level >= 2) return { video: true, audio: wantsAudio, ...tabOnly }
+  if (level >= 2) return { video: true, audio: wantsAudio }
   if (level === 1) {
     return {
-      video: { displaySurface: pane } as MediaTrackConstraints,
+      video: { displaySurface: 'monitor' } as MediaTrackConstraints,
       audio: wantsAudio ? RAW_DISPLAY_AUDIO : false,
-      ...tabOnly,
     }
   }
   return {
-    video: displayVideoConstraints(pane),
+    video: displayVideoConstraints(),
     audio: wantsAudio ? RAW_DISPLAY_AUDIO : false,
     selfBrowserSurface: 'exclude',
     surfaceSwitching: 'include',
     systemAudio: config.systemAudio ? 'include' : 'exclude',
-    ...tabOnly,
   }
 }
 
@@ -484,21 +454,16 @@ export function surfaceNotice(_surface: DisplaySurface | undefined): string | nu
 }
 
 /**
- * Audio was asked for and the picker handed back none. Say WHY in the words of
- * the box the user was actually looking at — the old copy told a macOS user to
- * tick "Also share system audio", which Chrome never shows there: on
- * macOS/Linux Chromium only a TAB can carry audio, so on a monitor or window
- * share there is no box to tick and no amount of ticking would have helped.
+ * Audio was asked for and the picker handed back none — i.e. the box in
+ * Chrome's picker was there and left unticked.
+ *
+ * This said something cleverer for a few hours today: that a whole-screen
+ * share cannot carry audio on macOS, so the box could not have existed. PO's
+ * screen share HAS that box. The claim was wrong and it is not coming back
+ * without evidence from his machine.
  */
-export function displayAudioMissingMessage(
-  surface: DisplaySurface | undefined,
-  scope: DisplayAudioScope,
-): string {
-  if (scope === 'tab' && (surface === 'monitor' || surface === 'window')) {
-    return 'No sound in this take: this browser can only capture a Chrome Tab’s audio, never a whole screen’s. Share a Chrome Tab to record sound.'
-  }
-  const box = scope === 'system' ? '“Also share system audio”' : '“Also share tab audio”'
-  return `Sound was not shared — tick ${box} in the screen picker.`
+export function displayAudioMissingMessage(): string {
+  return 'System audio was not shared — tick “Also share system audio” in the screen picker'
 }
 
 export function acquireChannelsProgressive(
@@ -658,7 +623,7 @@ export function acquireChannelsProgressive(
     } else {
       // A machine that wedged gets a smaller request — see displayWedge.ts.
       // Only OUR options are dropped, so nothing the user chose goes missing.
-      const opts = displayMediaOptions(config, displayLevel, detectCapabilities().displayAudioScope)
+      const opts = displayMediaOptions(config, displayLevel)
       // PRINT THE ACTUAL REQUEST, EVERY TAKE. Three rounds of "the sound
       // checkbox is missing" were spent arguing about what we send; from here
       // the console answers that in one line, before the picker even opens.
@@ -748,7 +713,7 @@ export function acquireChannelsProgressive(
           })
           mark('system-audio', 'done')
         } else {
-          const message = displayAudioMissingMessage(surface, detectCapabilities().displayAudioScope)
+          const message = displayAudioMissingMessage()
           fail({ kind: 'system-audio', message, denied: false })
           mark('system-audio', 'failed', message)
         }

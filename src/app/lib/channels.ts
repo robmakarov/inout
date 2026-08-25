@@ -44,21 +44,18 @@ export function channelLabel(kind: ChannelKind, caps: Capabilities): string {
 }
 
 /**
- * The line the editor shows when a take came back short (PO 2026-08-25). It
- * used to end with "next time tick “Also share system audio”", which on
- * macOS/Linux Chromium names a box the picker never shows: there, only a
- * Chrome Tab can carry audio at all. Telling someone to tick a box that does
- * not exist is how three sessions were spent on a checkbox.
+ * The line the editor shows when a take came back short. Wording is the
+ * original (2026-08): for a few hours today it claimed a whole-screen share
+ * cannot carry sound on macOS, which is false on PO's own machine — his screen
+ * share has that box. Restored verbatim; it does not change again without
+ * evidence from a real picker.
  */
 export function missingChannelsMessage(missing: ChannelKind[], caps: Capabilities): string {
   const names = missing.map((k) => channelLabel(k, caps)).join(', ')
   if (!missing.includes('system-audio')) {
     return `Missing from this take: ${names} — the device never connected.`
   }
-  if (caps.displayAudioScope === 'system') {
-    return `Missing from this take: ${names}. Sound wasn’t shared — tick “Also share system audio” in the screen picker next time.`
-  }
-  return `Missing from this take: ${names}. This browser can only record a Chrome Tab’s sound, never a whole screen’s — share a Chrome Tab and keep “Also share tab audio” ticked.`
+  return `Missing from this take: ${names}. Audio wasn't shared — next time tick “Also share system audio” in the screen picker (tab shares always include it; window shares can't).`
 }
 
 /** Why this input can't be used here — shown on press, null when it works. */

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   cameraVideoConstraints,
   displayMediaOptions,
-  displayPaneHint,
   displayAudioMissingMessage,
   CAPTURE_MAX_HEIGHT,
   CAPTURE_MAX_WIDTH,
@@ -28,45 +27,27 @@ describe('cameraVideoConstraints', () => {
 })
 
 /**
- * PO 2026-08-25: "share sound in chrome with screen toggle not there anymore."
- * On macOS/Linux Chromium the "Also share tab audio" checkbox lives on the
- * Chrome-Tab pane and nowhere else, so a take that asked for sound must open
- * the picker there — otherwise the user is staring at a picker with no sound
- * toggle in it and a Tab Audio chip that is lit.
+ * THE PICKER IS THE USER'S. It offers what Chrome offers — every surface, in
+ * Chrome's own order — and the app does not take an option out of it to make
+ * its own life easier (PO 2026-08-25, after a few hours in which it did).
  */
-describe('which pane the picker opens on', () => {
+describe('what the picker offers', () => {
   const withScreen = { ...base, screen: true }
 
-  it('tab-audio platform + sound wanted: the Chrome-Tab pane, where the checkbox is', () => {
-    expect(displayPaneHint({ ...withScreen, systemAudio: true }, 'tab')).toBe('browser')
-  })
-
-  it('no sound wanted: the Entire-Screen pane, unchanged since 2026-08-06', () => {
-    expect(displayPaneHint({ ...withScreen, systemAudio: false }, 'tab')).toBe('monitor')
-  })
-
-  it('Windows: a monitor share carries the machine audio, so nothing moves', () => {
-    expect(displayPaneHint({ ...withScreen, systemAudio: true }, 'system')).toBe('monitor')
-  })
-
-  /**
-   * The hint alone lost to Chrome's memory of the last shared surface: share
-   * Entire Screen once and every later picker opens there, with no sound
-   * checkbox on it, across reloads (PO 2026-08-25, third report of the day).
-   * Excluding the monitor pane is what makes the checkbox unconditional.
-   */
-  it('sound wanted on a tab-only platform: the Entire-Screen pane is not offered at all', () => {
-    for (const level of [0, 1, 2] as const) {
-      const o = displayMediaOptions({ ...withScreen, systemAudio: true }, level, 'tab')
-      expect(o.monitorTypeSurfaces).toBe('exclude')
+  it('never removes a surface from Chrome\u2019s picker, sound on or off', () => {
+    for (const systemAudio of [true, false]) {
+      for (const level of [0, 1, 2] as const) {
+        const o = displayMediaOptions({ ...withScreen, systemAudio }, level)
+        expect((o as Record<string, unknown>).monitorTypeSurfaces).toBeUndefined()
+      }
     }
   })
 
-  it('sound off, or Windows: every surface stays offered', () => {
-    expect(displayMediaOptions({ ...withScreen, systemAudio: false }, 0, 'tab').monitorTypeSurfaces)
-      .toBeUndefined()
-    expect(displayMediaOptions({ ...withScreen, systemAudio: true }, 0, 'system').monitorTypeSurfaces)
-      .toBeUndefined()
+  it('the pane hint is the same one every take: Entire Screen (2026-08-06)', () => {
+    for (const systemAudio of [true, false]) {
+      const o = displayMediaOptions({ ...withScreen, systemAudio }, 0)
+      expect((o.video as MediaTrackConstraints).displaySurface).toBe('monitor')
+    }
   })
 })
 
@@ -74,7 +55,7 @@ describe('the request Chrome receives, rung by rung', () => {
   const config = { screen: true, camera: false, mic: false, systemAudio: true }
 
   it('rung 0 asks for everything', () => {
-    const o = displayMediaOptions(config, 0, 'tab')
+    const o = displayMediaOptions(config, 0)
     expect(o.audio).toBeTruthy()
     expect(o.systemAudio).toBe('include')
     expect(o.selfBrowserSurface).toBe('exclude')
@@ -83,7 +64,7 @@ describe('the request Chrome receives, rung by rung', () => {
 
   it('rungs 1 and 2 drop only what the user cannot see', () => {
     for (const level of [1, 2] as const) {
-      const o = displayMediaOptions(config, level, 'tab')
+      const o = displayMediaOptions(config, level)
       expect(o.selfBrowserSurface).toBeUndefined()
       expect(o.surfaceSwitching).toBeUndefined()
       expect(o.systemAudio).toBeUndefined()
@@ -99,29 +80,20 @@ describe('the request Chrome receives, rung by rung', () => {
    */
   it('NO rung ever drops the audio the user asked for', () => {
     for (const level of [0, 1, 2] as const) {
-      expect(displayMediaOptions(config, level, 'tab').audio).toBeTruthy()
+      expect(displayMediaOptions(config, level).audio).toBeTruthy()
     }
   })
 
   it('sound off means sound off at every rung', () => {
     const silent = { ...config, systemAudio: false }
     for (const level of [0, 1, 2] as const) {
-      expect(displayMediaOptions(silent, level, 'tab').audio).toBe(false)
+      expect(displayMediaOptions(silent, level).audio).toBe(false)
     }
   })
 })
 
 describe('when the picker hands back no audio track', () => {
-  it('names the box that platform actually shows', () => {
-    expect(displayAudioMissingMessage('browser', 'tab')).toMatch(/Also share tab audio/)
-    expect(displayAudioMissingMessage('monitor', 'system')).toMatch(/Also share system audio/)
-  })
-
-  it('does not tell a macOS user to tick a box Chrome never showed them', () => {
-    // Monitor share on a tab-only platform: no checkbox existed, so "tick it"
-    // would be a lie. Say what would actually work instead.
-    const msg = displayAudioMissingMessage('monitor', 'tab')
-    expect(msg).not.toMatch(/tick/)
-    expect(msg).toMatch(/Chrome Tab/)
+  it('names the box in the picker the user just used', () => {
+    expect(displayAudioMissingMessage()).toMatch(/Also share system audio/)
   })
 })
