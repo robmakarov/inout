@@ -334,8 +334,14 @@ gaps / in flight:
   measured. Evidence first (real Chrome 150 / macOS 26, genuinely backgrounded tab, rAF==0): AudioWorklet tick 63/s,
   canvas.captureStream 30fps, <video>→drawImage ~56/s, MediaRecorder ~110KB/s all UNAFFECTED by hidden — the composite
   pipeline does not freeze, so a frozen file means the SOURCE stopped. Also measured: a tab under capture never goes
-  hidden (Chrome force-renders it), and a static surface still yields ~1 keep-alive frame/s — so "no frame for 3s" = dead,
-  not idle. Ship: src/core/capture/sourceLiveness.ts (pure, unit-tested) sampled from the composite's worklet tick →
+  hidden (Chrome force-renders it). THE "no frame for 3s = dead" RULE IS RETIRED (PO 2026-08-25 "message about frozen
+  screen is bullshit"): its premise (~1 keep-alive frame/s on a static surface) was measured on the v1 <video> path and
+  did not survive the v2 flip — MediaStreamTrackProcessor is frame-driven, a static screen delivers NOTHING, and the
+  banner fired on healthy takes. Frozen now requires frame silence AND the browser's own verdict (track.muted / not
+  live, which Chrome sets for minimised/occluded/hidden-Space surfaces); a source the browser heals resumes even before
+  content changes. Both engines pass the track state into sourceLiveness (8 tests). Cost stated honestly: a source that
+  dies with Chrome never muting the track is no longer bannered — the browser's word beats a guess that cried wolf.
+  Ship: src/core/capture/sourceLiveness.ts (pure, unit-tested) sampled from the composite's worklet tick →
   channel-stalled/channel-resumed events + sticky red capture banner (a toast is unseen — the user is in another tab) +
   Recording.stalled; composite marked UNUSABLE (kept running so it keeps watching; cancelled at stop) so an unedited
   export renders from the raw channels instead of copying still frames. Same treatment when a video track ENDS mid-take —

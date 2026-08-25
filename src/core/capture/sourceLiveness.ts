@@ -9,17 +9,28 @@
  * anywhere (PO 2026-08-06: "switched to other tab with game, nothing was
  * recorded, just frozen frame").
  *
- * The signal is the media clock of the source: a LIVE video track advances
- * `video.currentTime` on every delivered frame — even a perfectly static screen
- * still gets ~1 keep-alive frame per second from the capturer (measured, Chrome
- * 150/macOS 26), so "no advance at all for seconds" means dead, not idle.
+ * FRAME SILENCE ALONE IS NOT A VERDICT (PO 2026-08-25: "message about frozen
+ * screen is bullshit"). The original rule — "no frame for 3 s = dead, because
+ * even a static screen gets ~1 keep-alive frame/s" — was measured on the v1
+ * <video> path (Chrome 150/macOS 26) and its premise did not survive the v2
+ * engine flip: MediaStreamTrackProcessor is frame-driven, a genuinely static
+ * screen legitimately delivers NOTHING, and the banner fired on takes that
+ * were recording perfectly. So silence is now merely AMBIGUOUS, and the
+ * browser's own signal disambiguates it: Chrome sets `track.muted` exactly
+ * when a capture source stops producing (minimised window, hidden Space,
+ * occluded surface) and leaves it false for a static-but-live one. Frozen =
+ * frame silence AND the browser says the source is sick. Both edges obey the
+ * same authority: a source the browser declares healthy again is 'resumed'
+ * even before content changes — a still image from a healthy source is
+ * exactly what the user is looking at.
  *
  * Pure and DOM-free so it is unit-testable; the caller feeds it samples from a
- * hidden-tab-proof tick (the composite's AudioWorklet, never rAF).
+ * hidden-tab-proof tick (the composite's AudioWorklet, never rAF) plus the
+ * track's own health (`readyState === 'live' && !muted`).
  */
 
-/** No frame at all for this long = the source is frozen, not merely static.
- * 3s is ~3× the capturer's static-content keep-alive cadence. */
+/** Frame silence must last this long before a sick source is called frozen —
+ * mute alone flickers during window drags; silence alone is a static screen. */
 export const SOURCE_STALL_MS = 3000
 
 export type LivenessEvent = 'stalled' | 'resumed'
@@ -34,8 +45,11 @@ export class SourceLiveness {
   /**
    * Feed one observation. Returns an EDGE only — 'stalled' the first tick the
    * source is judged dead, 'resumed' the first tick it comes back, else null.
+   * `sourceLive` is the browser's word (`readyState === 'live' && !muted`);
+   * its default means a caller with no track evidence can never raise a false
+   * banner, only miss one.
    */
-  sample(nowMs: number, mediaTimeSec: number): LivenessEvent | null {
+  sample(nowMs: number, mediaTimeSec: number, sourceLive = true): LivenessEvent | null {
     if (this.lastAdvanceMs < 0) {
       this.lastAdvanceMs = nowMs
       this.lastMediaTime = mediaTimeSec
@@ -50,7 +64,12 @@ export class SourceLiveness {
       }
       return null
     }
-    if (!this.stalledFlag && nowMs - this.lastAdvanceMs >= this.stallMs) {
+    if (this.stalledFlag && sourceLive) {
+      // The browser healed the source; content is merely static now.
+      this.stalledFlag = false
+      return 'resumed'
+    }
+    if (!this.stalledFlag && !sourceLive && nowMs - this.lastAdvanceMs >= this.stallMs) {
       this.stalledFlag = true
       return 'stalled'
     }

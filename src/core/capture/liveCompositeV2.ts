@@ -271,14 +271,16 @@ export async function startLiveCompositeV2(
   // ---- liveness: last frame timestamp per source, sampled on the tick ------
   const liveness = new Map<
     'screen' | 'camera',
-    { det: SourceLiveness; lastMediaSec: number; frames: number; framesAtLog: number }
+    { det: SourceLiveness; track: MediaStreamTrack; lastMediaSec: number; frames: number; framesAtLog: number }
   >()
   let lastFpsLog = startedAt
 
   const sampleLiveness = (): void => {
     const now = performance.now()
     for (const [kind, s] of liveness) {
-      const ev = s.det.sample(now, s.lastMediaSec)
+      // Frame silence is ambiguous on this frame-driven path (a static screen
+      // delivers nothing); the track's own health decides — see sourceLiveness.
+      const ev = s.det.sample(now, s.lastMediaSec, s.track.readyState === 'live' && !s.track.muted)
       if (ev) {
         console.warn(`[capture] ${kind} source ${ev}`)
         options.onSourceLiveness?.(kind, ev)
@@ -386,7 +388,7 @@ export async function startLiveCompositeV2(
   const pump = (stream: MediaStream, kind: 'screen' | 'camera'): void => {
     const track = stream.getVideoTracks()[0]
     if (!track) return
-    liveness.set(kind, { det: new SourceLiveness(), lastMediaSec: -1, frames: 0, framesAtLog: 0 })
+    liveness.set(kind, { det: new SourceLiveness(), track, lastMediaSec: -1, frames: 0, framesAtLog: 0 })
     const reader = new TP({ track }).readable.getReader()
     readers.push({ cancel: () => void reader.cancel().catch(() => undefined) })
     void (async () => {

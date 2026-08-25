@@ -332,14 +332,31 @@ export async function startLiveComposite(
   const liveness: {
     kind: 'screen' | 'camera'
     el: HTMLVideoElement
+    /** The source's own video track — its muted flag is the browser's verdict
+     * on whether frame silence means frozen or merely static. */
+    track: MediaStreamTrack | undefined
     det: SourceLiveness
     /** Frame counter at the last cadence log — see the FPS_LOG_MS block. */
     framesAtLog: number | null
   }[] = []
+  const videoTrackOf = (el: HTMLVideoElement): MediaStreamTrack | undefined =>
+    el.srcObject instanceof MediaStream ? el.srcObject.getVideoTracks()[0] : undefined
   if (screenEl)
-    liveness.push({ kind: 'screen', el: screenEl, det: new SourceLiveness(), framesAtLog: null })
+    liveness.push({
+      kind: 'screen',
+      el: screenEl,
+      track: videoTrackOf(screenEl),
+      det: new SourceLiveness(),
+      framesAtLog: null,
+    })
   if (cameraEl)
-    liveness.push({ kind: 'camera', el: cameraEl, det: new SourceLiveness(), framesAtLog: null })
+    liveness.push({
+      kind: 'camera',
+      el: cameraEl,
+      track: videoTrackOf(cameraEl),
+      det: new SourceLiveness(),
+      framesAtLog: null,
+    })
   let lastFpsLog = startedAt
 
   let drawnFrames = 0
@@ -360,7 +377,13 @@ export async function startLiveComposite(
     lastFrame = now
     for (const s of liveness) {
       if (s.el.readyState < 2) continue
-      const ev = s.det.sample(now, s.el.currentTime)
+      // A stalled media clock is only "frozen" when the browser itself says the
+      // source is sick (muted/ended) — a static screen is silent and healthy.
+      const ev = s.det.sample(
+        now,
+        s.el.currentTime,
+        s.track ? s.track.readyState === 'live' && !s.track.muted : true,
+      )
       if (ev) {
         console.warn(`[capture] ${s.kind} source ${ev}`)
         options.onSourceLiveness?.(s.kind, ev)
