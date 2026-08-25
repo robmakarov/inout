@@ -315,6 +315,21 @@ gaps / in flight:
   NOT PO-VERIFIED — argued from ordering and gated by unit tests + the headless oracle only.
   WHICH step originally wedged is still unknown — the label could not say. The failure MODE is gone,
   not the specific wedge; if it recurs the arming timeline + budget warnings will name it.
+  THEN 2026-08-25, PO hit stuck-on-mic again after a screen wedge + refresh and ORDERED the contract
+  flipped: "all input must connect everytime without fails" — a single timeout may no longer be a
+  verdict. Shipped (acquire.ts connectPersistently, 6 tests in persistentConnect.test.ts): a GRANTED
+  camera/mic is asked AGAIN — 2 attempts gate the synchronized start (~18 s worst case), then the
+  take starts and a paced background hunt keeps asking; the channel late-joins via the existing
+  lateJoin path the moment the browser delivers. Fences: granted devices only (a prompt is never
+  repeated), stillWanted() from the session (take alive + channel missing + user hasn't turned the
+  kind off — new `suspended` set written at setChannelActive), denial ends the hunt instantly, and a
+  stream landing after the answer changed is stopped on arrival. The budget-picking permissions.query
+  is bounded too (GRANT_PROBE_BUDGET_MS 1 s, falls back to the cached grant) — it was the last
+  unbudgeted await in arming and exactly where "stuck waiting for mic" with no deadline lived. An
+  earlier same-day fail-fast cut (mic fails in 9 s, take starts without it) was REFUSED by PO
+  ("it must not fail") and is recorded in docs/SCREEN_WEDGE.md so nobody re-ships it. The SCREEN
+  cannot be hunted this way — getDisplayMedia legally needs a fresh user gesture; the wedge case
+  file remains the open thread. AWAITS PO REAL-TAKE VERIFICATION.
 - FROZEN-SOURCE TAKES (PO 2026-08-06 "switched to a tab with a game, nothing recorded, just frozen frame") — fixed +
   measured. Evidence first (real Chrome 150 / macOS 26, genuinely backgrounded tab, rAF==0): AudioWorklet tick 63/s,
   canvas.captureStream 30fps, <video>→drawImage ~56/s, MediaRecorder ~110KB/s all UNAFFECTED by hidden — the composite

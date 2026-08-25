@@ -15,7 +15,7 @@ import {
   rememberDisplayWedge,
   type DisplayRequestLevel,
 } from './displayWedge'
-import { knownGranted, rememberGrant } from './grants'
+import { knownGranted, rememberGrant, type DeviceGrant } from './grants'
 
 export interface AcquiredChannel {
   kind: ChannelKind
@@ -111,6 +111,20 @@ export const PICKER_SETTLE_MS = 8_000
 export const DISPLAY_TOTAL_BUDGET_MS = 30_000
 
 /**
+ * The persistent-connect contract for GRANTED camera/mic (see
+ * connectPersistently): this many attempts gate the synchronized start, and
+ * then the take starts while the hunt keeps asking in the background. Two, not
+ * one, because a device that answers the second ask still starts with
+ * everyone else — one continuous channel instead of a late-joined segment.
+ * Not more, because every extra foreground attempt is ~10 s the user watches
+ * an arming label ("wait is too long", PO 2026-08-25).
+ */
+export const CONNECT_ATTEMPTS_BEFORE_START = 2
+/** Pace between asks — an instantly-rejecting device (unplugged, held by
+ * another app) must not turn the hunt into a tight loop. */
+export const CONNECT_RETRY_PAUSE_MS = 2_000
+
+/**
  * Resolves once the screen picker is judged closed: focus left the page and
  * then came back. Never resolves if focus was never lost (a picker that does
  * not take focus, or an engine that reports focus differently) — deliberately,
@@ -161,6 +175,16 @@ export interface ProgressiveHandlers {
   /** Non-fatal quality warning for a channel that still records. */
   onNotice?: (kind: ChannelKind, message: string) => void
   onProgress?: ArmingProgressHandler
+  /**
+   * Consulted by the persistent-connect hunt (PO 2026-08-25 "all input must
+   * connect everytime without fails"): before every background re-ask and
+   * again the instant a late stream arrives. The session answers with full
+   * knowledge — take alive, channel still missing, user has not turned it off.
+   * ABSENT MEANS NO BACKGROUND HUNTING: a one-shot caller (rigs, legacy
+   * collectors) gets the bounded foreground attempts only, because a hunt
+   * nobody can call off is a device-grabbing loop, not a feature.
+   */
+  stillWanted?: (kind: ChannelKind) => boolean
 }
 
 export interface ProgressiveAcquire {
@@ -187,11 +211,26 @@ function toFailure(kind: ChannelKind, err: unknown, timedOut = false): AcquireFa
   return { kind, message, denied, timedOut }
 }
 
+/**
+ * How long the permission LOOKUP may hold up connecting. The query's answer
+ * only picks a timeout budget, but it used to be awaited in FRONT of that
+ * timeout — so a `permissions.query` that never answers (an IPC into the same
+ * browser process that just wedged a screen share) left the mic with no
+ * deadline and no retry: "Waiting for microphone…" with nothing armed to end
+ * it (PO 2026-08-25, stuck-on-mic after a wedge + refresh). A query that hangs
+ * falls back to the cached grant; a query that REJECTS (Safari has none for
+ * camera/mic) keeps reading as not-granted, exactly as before.
+ */
+export const GRANT_PROBE_BUDGET_MS = 1_000
+
 async function isGranted(name: 'camera' | 'microphone'): Promise<boolean> {
   try {
-    const st = await navigator.permissions.query({ name: name as PermissionName })
+    const q = navigator.permissions.query({ name: name as PermissionName })
+    q.catch(() => undefined) // handled below; never an unhandled rejection
+    const st = await withTimeout(q, GRANT_PROBE_BUDGET_MS, `permissions.query(${name})`)
     return st.state === 'granted'
-  } catch {
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'TimeoutError') return knownGranted(name)
     return false
   }
 }
@@ -505,6 +544,120 @@ export function acquireChannelsProgressive(
     )
   }
 
+  const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+
+  /**
+   * ALL INPUT MUST CONNECT (PO 2026-08-25, verbatim, after the third stuck-mic
+   * report: "all input must connect everytime without fails"). One timeout
+   * used to be a verdict: a mic that missed its 8 s budget was dropped from
+   * the take FOREVER, even though the very next getUserMedia often succeeds —
+   * which is exactly what the user's own workaround (refresh, press record
+   * again) had been doing by hand. So a granted device is now ASKED AGAIN:
+   * CONNECT_ATTEMPTS_BEFORE_START attempts gate the synchronized start (a
+   * device that answers the second ask still starts with everyone else), and
+   * after that the take starts and the hunt continues in the background — the
+   * channel late-joins the moment the browser hands it over, on the same
+   * lateJoin path every mid-take resume already uses.
+   *
+   * The hunt is fenced three ways, because a retry loop that grabs devices is
+   * a horror if it outlives its take: it runs only for GRANTED devices (a
+   * permission prompt is never repeated at a user); it re-asks only while
+   * stillWanted() says the session is alive, the channel is still missing and
+   * the user has not turned it off; and a stream that lands after the answer
+   * changed is stopped on arrival. A DENIAL ends everything instantly — that
+   * is an answer, not a failure.
+   */
+  const connectPersistently = async (c: {
+    kind: 'camera' | 'mic'
+    grant: DeviceGrant
+    dispatch: () => Promise<MediaStream>
+    first: Promise<MediaStream>
+    granted: boolean
+    afterPicker?: Promise<unknown>
+    adopt: (stream: MediaStream) => void
+  }): Promise<void> => {
+    const label = `getUserMedia(${c.kind})`
+    const wanted = (): boolean => handlers.stillWanted?.(c.kind) ?? false
+    const adopt = (stream: MediaStream): boolean => {
+      try {
+        rememberGrant(c.grant, true)
+        c.adopt(stream)
+        return true
+      } catch (err) {
+        for (const t of stream.getTracks()) t.stop()
+        fail(toFailure(c.kind, err))
+        mark(c.kind, 'failed', err instanceof Error ? err.message : String(err))
+        return false
+      }
+    }
+    let attemptPromise = c.first
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const stream = await withTimeout(
+          attemptPromise,
+          c.granted ? ACQUIRE_TIMEOUT_MS : PROMPT_TIMEOUT_MS,
+          label,
+          attempt === 1 ? c.afterPicker : undefined,
+        )
+        adopt(stream)
+        return
+      } catch (err) {
+        const timedOut = err instanceof DOMException && err.name === 'TimeoutError'
+        const f = toFailure(c.kind, err, timedOut)
+        if (f.denied) {
+          rememberGrant(c.grant, false)
+          fail(f)
+          mark(c.kind, 'failed', f.message)
+          return
+        }
+        // Prompt case: one ask on the full human budget, never repeated — a
+        // second prompt is the same question the user just answered.
+        if (!c.granted) {
+          fail(f)
+          mark(c.kind, timedOut ? 'timeout' : 'failed', f.message)
+          return
+        }
+        if (attempt >= CONNECT_ATTEMPTS_BEFORE_START) {
+          fail({
+            kind: c.kind,
+            message: `The ${c.kind === 'mic' ? 'microphone' : 'camera'} has not connected yet — still asking; it joins the take the moment it answers`,
+            denied: false,
+            timedOut,
+          })
+          mark(c.kind, timedOut ? 'timeout' : 'failed', 'still asking in the background')
+          break
+        }
+        await sleep(CONNECT_RETRY_PAUSE_MS)
+        mark(c.kind, 'start', `attempt ${attempt + 1}`)
+        attemptPromise = c.dispatch()
+      }
+    }
+    // The background hunt. Reached only for a granted device whose foreground
+    // attempts all timed out; the take is starting without it.
+    void (async () => {
+      for (;;) {
+        await sleep(CONNECT_RETRY_PAUSE_MS)
+        if (!wanted()) return
+        try {
+          const stream = await withTimeout(c.dispatch(), ACQUIRE_TIMEOUT_MS, label)
+          if (!wanted()) {
+            for (const t of stream.getTracks()) t.stop()
+            return
+          }
+          adopt(stream)
+          return
+        } catch (err) {
+          // Revoked mid-hunt: the browser answered. Everything else — another
+          // timeout, device busy, unplugged — is worth asking about again.
+          if (err instanceof DOMException && err.name === 'NotAllowedError') {
+            rememberGrant(c.grant, false)
+            return
+          }
+        }
+      }
+    })()
+  }
+
   /**
    * `granted` is a PROMISE on purpose. getUserMedia is dispatched on the first
    * line — before any await — so that when this is called beside an open
@@ -512,36 +665,36 @@ export function acquireChannelsProgressive(
    * permissions.query first is what silently turned the concurrent start back
    * into a serial one (see grants.ts). The answer is still awaited, just
    * afterwards, and only to choose the budget: a prompt gets the human budget,
-   * a granted device the hardware one.
+   * a granted device the hardware one. isGranted is itself bounded
+   * (GRANT_PROBE_BUDGET_MS), so this await can never hold the hunt hostage.
    */
   const startCamera = async (
     granted: Promise<boolean>,
     afterPicker?: Promise<unknown>,
   ): Promise<void> => {
     mark('camera', 'start')
-    try {
-      const video = cameraVideoConstraints(config)
-      if (config.cameraDeviceId) video.deviceId = config.cameraDeviceId
-      const raw = navigator.mediaDevices.getUserMedia({ video })
-      raw.catch(() => undefined) // handled below; never an unhandled rejection
-      const stream = await withTimeout(
-        raw,
-        (await granted) ? ACQUIRE_TIMEOUT_MS : PROMPT_TIMEOUT_MS,
-        'getUserMedia(camera)',
-        afterPicker,
-      )
-      rememberGrant('camera', true)
-      guardStream(stream)
-      hintTrackContent(stream.getVideoTracks()[0], 'camera')
-      deliver({ kind: 'camera', media: 'video', stream, track: stream.getVideoTracks()[0] })
-      mark('camera', 'done', stream.getVideoTracks()[0]?.label)
-    } catch (err) {
-      const timedOut = err instanceof DOMException && err.name === 'TimeoutError'
-      const f = toFailure('camera', err, timedOut)
-      if (f.denied) rememberGrant('camera', false)
-      fail(f)
-      mark('camera', timedOut ? 'timeout' : 'failed', err instanceof Error ? err.message : String(err))
+    const video = cameraVideoConstraints(config)
+    if (config.cameraDeviceId) video.deviceId = config.cameraDeviceId
+    const dispatch = (): Promise<MediaStream> => {
+      const p = navigator.mediaDevices.getUserMedia({ video })
+      p.catch(() => undefined) // adopted or stopped later; never unhandled
+      return p
     }
+    const first = dispatch()
+    await connectPersistently({
+      kind: 'camera',
+      grant: 'camera',
+      dispatch,
+      first,
+      granted: await granted,
+      afterPicker,
+      adopt: (stream) => {
+        guardStream(stream)
+        hintTrackContent(stream.getVideoTracks()[0], 'camera')
+        deliver({ kind: 'camera', media: 'video', stream, track: stream.getVideoTracks()[0] })
+        mark('camera', 'done', stream.getVideoTracks()[0]?.label)
+      },
+    })
   }
 
   /** Same shape as startCamera — see the note there on why `granted` is a promise. */
@@ -550,46 +703,45 @@ export function acquireChannelsProgressive(
     afterPicker?: Promise<unknown>,
   ): Promise<void> => {
     mark('mic', 'start')
-    try {
-      const audio: MediaTrackConstraints = {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-        // Ask for full-band capture; a device stuck in telephone mode ignores
-        // this, which is exactly what the narrowband rescue below detects.
-        sampleRate: { ideal: 48000 },
-      }
-      if (config.micDeviceId) audio.deviceId = config.micDeviceId
-      const raw = navigator.mediaDevices.getUserMedia({ audio })
-      raw.catch(() => undefined) // handled below; never an unhandled rejection
-      const stream = await withTimeout(
-        raw,
-        (await granted) ? ACQUIRE_TIMEOUT_MS : PROMPT_TIMEOUT_MS,
-        'getUserMedia(mic)',
-        afterPicker,
-      )
-      rememberGrant('microphone', true)
-      guardStream(stream)
-      // NARROWBAND WARNING only (PO rule 2026-07-21: never override the user's
-      // device — an earlier auto-swap to the built-in mic broke AirPods takes).
-      // A Bluetooth headset mic in HFP mode captures 8–16 kHz telephone
-      // quality (measured on a real take: 99.7% of energy below 4 kHz).
-      // The take records exactly as the user chose; we just say so.
-      if (isNarrowband(stream.getAudioTracks()[0])) {
-        handlers.onNotice?.(
-          'mic',
-          'Heads-up: this mic is in Bluetooth phone-quality mode. Recording continues — for full quality choose the built-in or a wired mic in system sound settings.',
-        )
-      }
-      deliver({ kind: 'mic', media: 'audio', stream, track: stream.getAudioTracks()[0] })
-      mark('mic', 'done', stream.getAudioTracks()[0]?.label)
-    } catch (err) {
-      const timedOut = err instanceof DOMException && err.name === 'TimeoutError'
-      const f = toFailure('mic', err, timedOut)
-      if (f.denied) rememberGrant('microphone', false)
-      fail(f)
-      mark('mic', timedOut ? 'timeout' : 'failed', err instanceof Error ? err.message : String(err))
+    const audio: MediaTrackConstraints = {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      // Ask for full-band capture; a device stuck in telephone mode ignores
+      // this, which is exactly what the narrowband rescue below detects.
+      sampleRate: { ideal: 48000 },
     }
+    if (config.micDeviceId) audio.deviceId = config.micDeviceId
+    const dispatch = (): Promise<MediaStream> => {
+      const p = navigator.mediaDevices.getUserMedia({ audio })
+      p.catch(() => undefined) // adopted or stopped later; never unhandled
+      return p
+    }
+    const first = dispatch()
+    await connectPersistently({
+      kind: 'mic',
+      grant: 'microphone',
+      dispatch,
+      first,
+      granted: await granted,
+      afterPicker,
+      adopt: (stream) => {
+        guardStream(stream)
+        // NARROWBAND WARNING only (PO rule 2026-07-21: never override the user's
+        // device — an earlier auto-swap to the built-in mic broke AirPods takes).
+        // A Bluetooth headset mic in HFP mode captures 8–16 kHz telephone
+        // quality (measured on a real take: 99.7% of energy below 4 kHz).
+        // The take records exactly as the user chose; we just say so.
+        if (isNarrowband(stream.getAudioTracks()[0])) {
+          handlers.onNotice?.(
+            'mic',
+            'Heads-up: this mic is in Bluetooth phone-quality mode. Recording continues — for full quality choose the built-in or a wired mic in system sound settings.',
+          )
+        }
+        deliver({ kind: 'mic', media: 'audio', stream, track: stream.getAudioTracks()[0] })
+        mark('mic', 'done', stream.getAudioTracks()[0]?.label)
+      },
+    })
   }
 
   // Devices are touched ONLY after the record click (product decision — no

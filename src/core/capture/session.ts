@@ -278,6 +278,13 @@ class Session implements CaptureSession {
   private stopPromise: Promise<Recording> | null = null
   private cancelPromise: Promise<void> | null = null
   private cancelled = false
+  /**
+   * Kinds the USER turned off mid-take (setChannelActive false). The
+   * persistent-connect hunt consults this through stillWanted: a mic the user
+   * switched off must never be re-grabbed by a retry loop that was started
+   * back when they wanted it (PO rule: the user's choice always wins).
+   */
+  private readonly suspended = new Set<ChannelKind>()
   private disposeSynthetic: (() => void) | null = null
   /**
    * A refresh mid-take used to leave Chrome's microphone indicator lit with no
@@ -381,6 +388,18 @@ class Session implements CaptureSession {
         onFailure: handleFailure,
         onNotice: handleNotice,
         onProgress: this.onArming,
+        // The persistent-connect hunt asks before every re-ask and at every
+        // late delivery. True only while: the take is alive, the channel is
+        // still missing, no manual resume is racing us, and the user has not
+        // turned the kind off. handleAcquired stays the second line of
+        // defence — it stops any stream landing in a dead session.
+        stillWanted: (kind) =>
+          !this.cancelled &&
+          this.stateInternal !== 'stopping' &&
+          this.stateInternal !== 'stopped' &&
+          !this.suspended.has(kind) &&
+          !this.resuming.has(kind) &&
+          !this.channels.some((c) => c.kind === kind && !c.ended),
       })
     }
 
@@ -937,8 +956,16 @@ class Session implements CaptureSession {
 
   setChannelActive(kind: ChannelKind, active: boolean): void {
     if (this.stateInternal !== 'recording') return
-    if (active) this.resumeChannel(kind)
-    else this.stopChannelNow(kind)
+    // Record the user's intent HERE, at the chokepoint, before acting on it:
+    // the persistent-connect hunt reads `suspended` and must never re-grab a
+    // device whose off-switch the user just pressed.
+    if (active) {
+      this.suspended.delete(kind)
+      this.resumeChannel(kind)
+    } else {
+      this.suspended.add(kind)
+      this.stopChannelNow(kind)
+    }
   }
 
   private stopChannelNow(kind: ChannelKind): void {
@@ -1013,6 +1040,14 @@ class Session implements CaptureSession {
           onChannel,
           onFailure,
           onNotice: (k, message) => this.emit({ type: 'channel-notice', kind: k, message }),
+          // Same hunt fence as at arm time, for a mid-take resume: keep asking
+          // only while the take records, the kind is still missing and the
+          // user has not turned it off again.
+          stillWanted: (k) =>
+            !this.cancelled &&
+            this.stateInternal === 'recording' &&
+            !this.suspended.has(k) &&
+            !this.channels.some((c) => c.kind === k && !c.ended),
         })
       }
     } catch (err) {
