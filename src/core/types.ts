@@ -322,6 +322,14 @@ export type CaptureEvent =
    *  set again) and began stopping itself. UI should call stop() to collect the
    *  Recording — stop() is idempotent and always returns the same promise. */
   | { type: 'auto-stopped' }
+  /**
+   * The compositor was painting the recording preview and has stopped (its
+   * watchdog degraded it, or a late join tore it down), so a preview fed from
+   * it would freeze on its last frame. The UI must go back to its own source
+   * preview. Only ever emitted with live:false — the TRUE answer is the
+   * resolved value of attachCompositePreview().
+   */
+  | { type: 'composite-preview'; live: false }
 
 export interface CaptureSession {
   readonly state: CaptureState
@@ -362,6 +370,20 @@ export interface CaptureSession {
    * A kind that was never armed can be turned on the same way.
    */
   setChannelActive(kind: ChannelKind, active: boolean): void
+  /**
+   * Ask the live compositor to paint the recording preview into this canvas
+   * (O4-polish), instead of the UI decoding the same sources a second time into
+   * <video> elements. The canvas is TRANSFERRED to the compositor's worker, so
+   * it must be a fresh element and nothing else may draw into it.
+   *
+   * Resolves TRUE only once a composited frame has actually landed on it, so
+   * the caller can drop its own preview without a blank flash. FALSE is a
+   * normal answer — the v1 engine composites on the main thread from the very
+   * elements the UI is showing and has nothing to hand over — and means "keep
+   * the preview you have". A later 'composite-preview' event with live:false
+   * means the compositor stopped painting and the UI must switch back.
+   */
+  attachCompositePreview(canvas: HTMLCanvasElement): Promise<boolean>
   on(cb: (e: CaptureEvent) => void): () => void
 }
 

@@ -34,6 +34,13 @@ const H = 1080
 const VIDEO_BITS = 8_000_000
 const AUDIO_BITS = 128_000
 const FPS_LOG_MS = 10_000
+/**
+ * How long to wait for the compositor to prove it can paint the preview before
+ * giving up and leaving the caller's own preview in place. Everything on this
+ * path has a deadline (note 3) — and a preview that never arrives must cost the
+ * user a fallback, not a blank rectangle.
+ */
+const PREVIEW_ATTACH_BUDGET_MS = 3000
 
 /**
  * Watchdog: see compositorWatchdog.ts. The honest signal is the rate that
@@ -165,6 +172,12 @@ export interface LiveCompositeV2Handle {
   cancel(): Promise<void>
   /** Engine evidence — read by the session for the console line and by tests. */
   stats(): CompositorStats | null
+  /**
+   * Hand the compositor a canvas to paint the live preview into (O4-polish).
+   * Resolves TRUE only once a frame has actually landed on it, so the caller
+   * can drop its own preview without a blank flash; false means keep it.
+   */
+  attachPreview(canvas: HTMLCanvasElement): Promise<boolean>
 }
 
 export function canLiveCompositeV2(inputs: LiveCompositeV2Inputs): boolean {
@@ -419,6 +432,37 @@ export async function startLiveCompositeV2(
 
   return {
     stats: () => latestStats,
+
+    async attachPreview(el: HTMLCanvasElement): Promise<boolean> {
+      if (torndown || degraded || workerError) return false
+      let off: OffscreenCanvas
+      try {
+        off = el.transferControlToOffscreen()
+      } catch {
+        // Already transferred (a re-render handing over the same element), or
+        // the browser has no OffscreenCanvas: the <video> preview stays.
+        return false
+      }
+      let timer: ReturnType<typeof setTimeout> | undefined
+      try {
+        const reply = await Promise.race([
+          call({ cmd: 'preview', canvas: off } satisfies CompositorMsg, [off]),
+          new Promise<null>((resolve) => {
+            timer = setTimeout(() => resolve(null), PREVIEW_ATTACH_BUDGET_MS)
+          }),
+        ])
+        if (!reply) {
+          pending.delete('preview')
+          console.info('[capture] composite preview did not paint in time — keeping the source preview')
+          return false
+        }
+        return 'ok' in reply && reply.ok
+      } catch {
+        return false
+      } finally {
+        if (timer) clearTimeout(timer)
+      }
+    },
 
     async stop() {
       const wallMs = performance.now() - startedAt

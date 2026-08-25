@@ -266,6 +266,8 @@ class Session implements CaptureSession {
   private compositeResult: CompositeRecording | null = null
   private compositeStarting: Promise<void> | null = null
   private compositeInvalid = false
+  /** True while the recording preview is being painted BY the compositor. */
+  private compositePreviewLive = false
   /** compositeInvalid AND torn down — nothing left to keep or stop. */
   private compositeHardInvalid = false
   /** Video sources frozen right now, and every one that froze at any point. */
@@ -644,9 +646,23 @@ class Session implements CaptureSession {
     console.info(`[capture:arming] late join ${ch.kind} +${(t0 - this.epoch).toFixed(0)}ms into take`)
   }
 
+  /**
+   * The compositor has stopped painting, so a preview fed from it would freeze
+   * on its last frame (O4-polish). Say so once, and the UI goes back to its own
+   * source preview. NOT called for markCompositeUnusable: that verdict is about
+   * COPYING the file — the compositor keeps running and keeps painting, and a
+   * frozen SOURCE is honestly what the user should be seeing anyway.
+   */
+  private notePreviewLost(): void {
+    if (!this.compositePreviewLive) return
+    this.compositePreviewLive = false
+    this.emit({ type: 'composite-preview', live: false })
+  }
+
   private invalidateComposite(reason: string): void {
     this.compositeHardInvalid = true
     this.compositeInvalid = true
+    this.notePreviewLost()
     console.info(`[capture] composite invalidated (${reason}) — unedited export will render`)
     const c = this.composite
     this.composite = null
@@ -774,7 +790,12 @@ class Session implements CaptureSession {
         epochMs,
         // A machine that cannot keep pace stops being copied, exactly as v1's
         // watchdog did: the take is unharmed, the unedited export renders.
-        onDegrade: (reason) => this.markCompositeUnusable(`compositor v2: ${reason}`),
+        onDegrade: (reason) => {
+          this.markCompositeUnusable(`compositor v2: ${reason}`)
+          // A degraded v2 stops its frame pumps, so a preview fed from it would
+          // sit on its last frame for the rest of the take.
+          this.notePreviewLost()
+        },
       }).catch((err: unknown) => {
         // Could not even start (no AAC encoder, OPFS refused, worker blocked):
         // this is precisely what the fallback is for.
@@ -884,6 +905,34 @@ class Session implements CaptureSession {
     if (kind !== 'mic' && kind !== 'system-audio') return
     const ch = this.channels.find((c) => c.kind === kind)
     if (ch) ch.track.enabled = enabled
+  }
+
+  /**
+   * O4-polish: let the compositor paint the recording preview, so the UI stops
+   * decoding the same sources a second time.
+   *
+   * Only the v2 engine can do this — it is the only one holding composited
+   * frames off the main thread. v1 composites ON the main thread from the very
+   * <video> elements the UI is already showing, so there is nothing to hand
+   * over. FALSE means "keep your own preview", and it is a normal answer:
+   * every Apple WebKit and Firefox take gets it, as does any take whose
+   * compositor is still starting when the canvas mounts.
+   */
+  async attachCompositePreview(canvas: HTMLCanvasElement): Promise<boolean> {
+    if (this.stateInternal !== 'recording') return false
+    try {
+      if (this.compositeStarting) {
+        await withTimeout(this.compositeStarting, COMPOSITE_START_BUDGET_MS, 'composite start')
+      }
+    } catch {
+      return false
+    }
+    const handle = this.composite
+    if (!handle?.attachPreview || this.compositeHardInvalid) return false
+    const live = await handle.attachPreview(canvas).catch(() => false)
+    this.compositePreviewLive = live
+    if (live) console.info('[capture] recording preview is the compositor’s own output')
+    return live
   }
 
   setChannelActive(kind: ChannelKind, active: boolean): void {

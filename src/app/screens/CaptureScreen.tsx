@@ -84,6 +84,15 @@ export function CaptureScreen() {
   /** Sources frozen right now — a toast is useless here, the user is in
    * another tab while it happens and only sees this screen on the way back. */
   const [stalled, setStalled] = useState<ChannelKind[]>([])
+  /**
+   * O4-polish: is the COMPOSITOR painting this preview? When it is, the two
+   * <video> elements below come down and the sources stop being decoded a
+   * second time. False is the normal answer on every engine but v2, and the
+   * source preview is what runs until the compositor has proven it can paint —
+   * so this can only ever remove decodes, never a picture.
+   */
+  const [compositePreview, setCompositePreview] = useState(false)
+  const previewCanvasRef = useRef<HTMLCanvasElement>(null)
   const finishingRef = useRef(false)
 
   const finishRecording = async () => {
@@ -170,10 +179,36 @@ export function CaptureScreen() {
           setStalled((s) => s.filter((k) => k !== e.kind))
           toast(`${CHANNEL_META[e.kind].label} is live again`)
           break
+        case 'composite-preview':
+          // The compositor stopped painting (watchdog degrade, or a late join
+          // tore it down). Its canvas would hold its last frame forever.
+          setCompositePreview(false)
+          break
         case 'state':
           break
       }
     })
+  }, [session])
+
+  /**
+   * Hand the canvas over once per take. The canvas is TRANSFERRED to the
+   * compositor's worker, so this must run exactly once per element — and the
+   * whole preview unmounts between takes, so each take gets a fresh one.
+   */
+  useEffect(() => {
+    if (!session) {
+      setCompositePreview(false)
+      return
+    }
+    const canvas = previewCanvasRef.current
+    if (!canvas) return
+    let cancelled = false
+    void session.attachCompositePreview(canvas).then((live) => {
+      if (!cancelled) setCompositePreview(live)
+    })
+    return () => {
+      cancelled = true
+    }
   }, [session])
 
   // Never ask the engine for a channel this browser can't deliver: on iOS that
@@ -333,8 +368,21 @@ export function CaptureScreen() {
               Full-monitor capture can show a mirror tunnel if this window is on
               the captured screen — cosmetic, standard (OBS does the same). */}
           <div className="stage">
-            {screenStream && <StreamVideo stream={screenStream} className="stage__screen" />}
-            {cameraStream && (
+            {/* The compositor's own output, when it can give it (O4-polish):
+                one decode for the whole take instead of one for the file and
+                one for this. Sized to the composition, not the screen — the
+                worker scales into it, and both are 16:9. */}
+            <canvas
+              ref={previewCanvasRef}
+              width={960}
+              height={540}
+              className="stage__composite"
+              style={compositePreview ? undefined : { display: 'none' }}
+            />
+            {!compositePreview && screenStream && (
+              <StreamVideo stream={screenStream} className="stage__screen" />
+            )}
+            {!compositePreview && cameraStream && (
               <StreamVideo
                 stream={cameraStream}
                 className={screenStream ? 'stage__pip' : 'stage__full'}

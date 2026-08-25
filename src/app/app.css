@@ -475,6 +475,16 @@
   background: rgba(0, 0, 0, 0.75);
 }
 
+/* The live composite painted by the capture worker (O4-polish). Same box as
+   .stage__screen; the composition is already 16:9 and so is the stage, so the
+   canvas stretches exactly. */
+.stage__composite {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
 .stage__screen,
 .stage__full {
   position: absolute;

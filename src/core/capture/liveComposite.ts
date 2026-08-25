@@ -133,6 +133,14 @@ export interface LiveCompositeHandle {
   /** Resolves at stop: null when the composite was aborted by the watchdog. */
   stop(): Promise<CompositeRecording | null>
   cancel(): Promise<void>
+  /**
+   * Paint the live preview into this canvas instead of making the UI decode
+   * the sources a second time (O4-polish). OPTIONAL, and v1 does not implement
+   * it: this engine composites on the MAIN thread from <video> elements the UI
+   * is already showing, so there is nothing here to hand over and nothing to
+   * save. Absent = the caller keeps its own preview.
+   */
+  attachPreview?(canvas: HTMLCanvasElement): Promise<boolean>
 }
 
 /** v1 also reports what it did. Kept off the shared handle so the engine

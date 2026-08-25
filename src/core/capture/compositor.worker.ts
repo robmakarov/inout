@@ -97,10 +97,26 @@ export interface CompositorAudioMsg {
   atMs: number
 }
 
+/**
+ * O4-polish: the recording preview stops decoding the sources a SECOND time.
+ *
+ * The composite is already being painted here, once, from frames that never
+ * touch a <video> element. The preview used to re-decode both sources into two
+ * <video> tags on the main thread and re-create the composition in CSS — the
+ * last redundant decodes in the capture path. The main thread hands over a
+ * canvas instead (transferControlToOffscreen, so this worker owns it) and the
+ * composite is blitted into it right after each encode.
+ */
+export interface CompositorPreviewMsg {
+  cmd: 'preview'
+  canvas: OffscreenCanvas
+}
+
 export type CompositorMsg =
   | CompositorStartMsg
   | CompositorFrameMsg
   | CompositorAudioMsg
+  | CompositorPreviewMsg
   | { cmd: 'stop' }
   | { cmd: 'cancel' }
 
@@ -197,10 +213,17 @@ export interface CompositorStats {
    * paths assume 0 and ship the video early (P0-instant-sync).
    */
   originAtMs: number | null
+  /** Time spent blitting the composite into the preview canvas (O4-polish).
+   *  Zero when nothing asked for a preview. */
+  previewMs: number
 }
 
 export type CompositorReply =
   | { ok: true; cmd: 'start' }
+  /** Deliberately NOT sent on receipt: the reply waits for the first frame to
+   *  actually reach the preview canvas, so the caller can swap away from its
+   *  own preview without a blank flash in between. */
+  | { ok: true; cmd: 'preview' }
   | { ok: true; cmd: 'stop'; stats: CompositorStats }
   | { ok: true; cmd: 'cancel' }
   | { ok: false; cmd: string; error: string }
@@ -273,6 +296,10 @@ async function pickAudioConfig(
 let handle: SyncAccessHandle | null = null
 let canvas: OffscreenCanvas | null = null
 let ctx: OffscreenCanvasRenderingContext2D | null = null
+/** The preview the main thread handed over, if any (O4-polish). */
+let previewCtx: OffscreenCanvasRenderingContext2D | null = null
+/** True until the first blit lands — the 'preview' reply is held until then. */
+let previewAwaitingFirstPaint = false
 /** WebGL2 backend; null means the 2D fallback is in use. */
 let gl: GLCompositor | null = null
 let output: Output | null = null
@@ -338,6 +365,7 @@ const stats: CompositorStats = {
   gpuMs: 0,
   framesStale: 0,
   originAtMs: null,
+  previewMs: 0,
 }
 
 function post(reply: CompositorReply): void {
@@ -452,6 +480,30 @@ function paintPip(c: OffscreenCanvasRenderingContext2D, camera: VideoFrame): voi
   c.stroke()
 }
 
+/**
+ * Show the frame that was just composited. Same task as the draw — the GL
+ * backend does not preserve its drawing buffer (that is the readback it exists
+ * to avoid), so this has to happen before the task yields, exactly like the
+ * VideoFrame construction above it.
+ */
+function blitPreview(): void {
+  const p = previewCtx
+  if (!p || !canvas) return
+  const t0 = performance.now()
+  try {
+    p.drawImage(canvas, 0, 0, p.canvas.width, p.canvas.height)
+  } catch {
+    // A preview that cannot be painted must never cost the take its encoder.
+    previewCtx = null
+    return
+  }
+  stats.previewMs += performance.now() - t0
+  if (previewAwaitingFirstPaint) {
+    previewAwaitingFirstPaint = false
+    post({ ok: true, cmd: 'preview' })
+  }
+}
+
 function encodeComposite(atMs: number, keepAlive: boolean): void {
   const enc = videoEncoder
   if (!enc || stopped || fatal || enc.state !== 'configured' || !canvas) return
@@ -502,6 +554,11 @@ function encodeComposite(atMs: number, keepAlive: boolean): void {
     frame.close()
     stats.encodeMs += performance.now() - tEncode
   }
+  // LAST, and counted on its own: the preview must never inflate paintMs,
+  // frameMs or encodeMs — an added cost that quietly lands inside an existing
+  // metric is how a rig starts lying (note 10). Still the same task as the
+  // draw, which is what the GL backend requires.
+  blitPreview()
 }
 
 async function start(msg: CompositorStartMsg): Promise<void> {
@@ -810,6 +867,18 @@ self.onmessage = async (ev: MessageEvent<CompositorMsg>) => {
         } finally {
           data.close()
         }
+        break
+      }
+      case 'preview': {
+        const c = msg.canvas.getContext('2d', { alpha: false })
+        if (!c) {
+          post({ ok: false, cmd: 'preview', error: 'no 2d context on the preview canvas' })
+          break
+        }
+        previewCtx = c
+        previewAwaitingFirstPaint = true
+        // No reply here: blitPreview() sends it once something is actually on
+        // screen. If nothing ever paints, the caller's own deadline decides.
         break
       }
       case 'stop':
