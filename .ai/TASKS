@@ -122,17 +122,31 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
   F8   nle-scrub                   [medium]  UNBLOCKED — the fMP4 composite has a keyframe index.
   O3b  single-generation export    [medium]  UNBLOCKED — v2 owns encoder + muxer, both halves of
                                              the original idea are now buildable once.
-  O4-polish                        [light]   what remains of O4 AFTER the default flip (see the O4
-                                             handoff): preview from the compositor's own output
-                                             (removes the last redundant <video> decodes) · sync
-                                             ≤20 ms anchor work (users now get 33-48 ms; v1 gave
-                                             ~60) · e2e wedge case · 4K row in production shape
-                                             (pairs with O6).
-  F7c  the size number, calibrated [medium]  ATTEMPT 4 done 2026-08-23, NOT SHIPPED but the error is
-                                             HALVED and SCREEN content is inside ±20 % for the first
-                                             time (−6.7 to −15.4 %). Motion is a uniform 1.44× under
-                                             at every step. Attempt 5 has a countable question, not a
-                                             modelling one — see the task.
+  O4-polish                        [light]   PREVIEW FROM THE COMPOSITOR IS DONE 2026-08-25 — the
+                                             recording preview is painted by the capture worker into
+                                             a transferred canvas, so the sources are decoded ONCE
+                                             for the whole take (zero <video> elements in the stage,
+                                             verified on the deployed build). The blit costs
+                                             0.024-0.034 ms/frame against a ~1.0 ms paint, measured
+                                             both orders (`npm run exp -- o4step2 {"preview":true}`),
+                                             and nothing dropped. v1 keeps the source preview: it
+                                             composites on the main thread from the very elements
+                                             the UI shows. WHAT IS LEFT: sync ≤20 ms anchor work
+                                             (users now get 33-48 ms; v1 gave ~60) · e2e wedge case ·
+                                             4K row in production shape (pairs with O6).
+  (F7c SHIPPED 2026-08-25, attempt 5 — the panel measures its numbers now. See the task.)
+  F7d  the estimator's anchor moved  [P1, medium]  FOUND 2026-08-25 WHILE SHIPPING F7c, and it is the
+                                             reason F7c mattered more than it looked. F7's model —
+                                             still the fallback whenever the probe cannot run, and
+                                             what every take showed until today — is anchored on the
+                                             COMPOSITE's byte rate, and O4's flip changed the encoder
+                                             that produces it. Scored against a v2 composite on 24 s
+                                             takes it reads −71 to −84 % on motion content and +104 %
+                                             on screen. The probe covers the panel; the FALLBACK is
+                                             still that model, and a browser without the probe (any
+                                             failure path) shows it. Either re-anchor it on the v2
+                                             composite's own achieved bitrate or make the fallback
+                                             say it is a rough guide.
   P5a  iOS SCK spike               [light]   BLOCKED ON HARDWARE, not on us: needs Xcode 27 and a
                                              real iOS 27 device, neither on the TD machine. STILL
                                              TIME-SENSITIVE (iOS 27 ships ~Sept 2026).
@@ -1034,7 +1048,43 @@ GATES: measured size within ±20 % of the shown number on EVERY step, twice over
 differ ≥25 % predicted · default step still instant (logs) · lowest step visual-diff evidence ·
 `node scripts/ui-shot.mjs --flow=quality` updated · oracles green.
 
-## F7c. the size number, calibrated — ATTEMPT 4 done 2026-08-23, STILL NOT SHIPPED  [P2, medium; READY]
+## F7c. the size number, calibrated — SHIPPED 2026-08-25 (attempt 5). THE GATE IS MET.
+THE COUNT THAT CLOSED IT, and it is a count and not a model: four consecutive GOPs of one encode
+(`npm run exp -- f7c`, new gopSeries block) price a LATER GOP at 1.81× the FIRST on motion content
+and 0.88× on screen —
+             GOP1        GOP2        GOP3        GOP4     later/first
+   motion  1,388,666   2,459,812   2,609,888   2,459,968     1.81
+   screen    449,279     394,812     396,222     400,920     0.88
+Put through a 12 s file (2.4 GOPs): mean/first = (1 + 1.4×1.81)/2.4 = 1.47, against the 1.44× uniform
+shortfall attempt 4 could not explain. That was the whole discrepancy.
+SO THE PROBE READS TWO CONSECUTIVE GOPS — 300 frames, ONE forward pass, forced keys at 0 and 150,
+which is not a simulation of a file's first two GOPs but IS one — and estimateFromCalibration blends
+them by the take's own length, COUNTING keyframes (a 6 s take at a 5 s cadence holds two, not 1.2).
+MEASURED, `npm run exp -- o11 {"takeMs":24000}`, both contents, twice:
+   run 1  screen +1.2 / −7.2 / −6.9 / −13.5 %      motion −2.8 / −0.4 / +2.1 / +0.1 %
+   run 2  screen +2.1 / +0.3 / +6.0 / +0.7 %       motion −6.9 / −2.1 / −1.5 / −2.7 %
+   the model it replaces, on those same takes: screen +104.6/+38.4/−15.1/−16.7, motion −71 to −81.
+AND ON THE DEPLOYED BUILD, which is the gate that counts: a 16 s take's 540p export landed at 279 KB
+against a shown ~315 KB (+12.9 %) and 1440p at 320 KB against ~350 KB (+9.4 %). The panel showed the
+OLD model's ~4.1 MB and ~26.9 MB for those same two steps at the instant it opened, which is what a
+user has been reading since the O4 flip — see task F7d.
+TWO RIG DEFECTS FOUND ON THE WAY, and they invalidate the numbers of attempts 3 AND 4:
+  (1) the probe's 150-frame window ran off the end of a 6 s take, so 40 % of every delta mean it ever
+      reported was `Math.min(durationSec - 0.01, …)` — the same frozen instant, sixty times.
+  (2) the o11 rig recorded its composite with startLiveComposite (v1) while production's default
+      flipped to v2, so it had stopped scoring the estimator users actually get.
+ONE MORE TRAP, PAID FOR: the first shipping shape encoded ONE window TWICE to get a second GOP. A
+channel reader walks its decoder FORWARD, so replaying the same seconds seeks backwards and hands
+back the same frame over and over — the "later GOP" was 150 duplicates and the probe read 84 % under.
+Reading 300 consecutive frames once is both correct and cheaper.
+SHIPPING SHAPE: src/core/compose/sizeProbe.ts (moved out of experimental), memory FLAT — the spike
+held 150 ImageBitmaps ≈ 1.2 GB, it now holds one frame at a time and feeds every step's encoder as it
+composes — encoder options taken from the render's own RENDER_ENCODER_OPTIONS, dynamic-imported from
+QualityPanel so the panel still opens on the model's number and the measurement replaces it ~9 s
+later. First paint unchanged (238,790 B). The DEFAULT step never goes through it: it is the composite
+copied, so its number is the file. No scratch files: the probe muxes to a BufferTarget.
+
+## F7c (attempt 4 and earlier, kept for the record) — [DONE, superseded by attempt 5 above]
 ATTEMPT 4 (fifth session). The task named one suspect — "rate control has not settled in the short
 encode, an unexplained factor of three". `npm run exp -- f7c` measured it instead: 180 frames behind
 ONE keyframe, 45 warm-up frames discarded (without them the first bucket measures the RIG waking up),

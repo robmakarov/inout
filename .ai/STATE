@@ -80,10 +80,24 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   no worker. Gated by `node scripts/ai-pdf-check.mjs` (independent xref-walking parser + Apple
   PDFKit + a real-recording density gate). AWAITING PO: re-test the reworked file — that unfreezes
   AI2-AI7.
+- THE RECORDING PREVIEW IS THE COMPOSITOR'S OWN OUTPUT (O4-polish, 2026-08-25), on the v2 engine: the
+  capture worker blits each composited frame into a canvas the UI transfers to it, so the sources are
+  decoded ONCE for the whole take instead of once for the file and once for the screen. Zero <video>
+  elements in the stage while recording (verified on the deployed build). The blit costs
+  0.024-0.034 ms/frame against a ~1.0 ms paint and drops nothing. The <video> preview is what runs
+  until the worker has actually painted a frame (its reply is held until then, so the swap cannot
+  flash blank) and it comes back if the compositor degrades. v1 keeps the source preview outright.
 - crash-durable: mid-record reload salvages all channels (video + positioned-write audio), boots into editor
 - editor: trim, per-channel enable/trim, MID-TAKE CUTS (F1: split at playhead, delete clip, drag cut
   edges), quality steps before export (F7+F7b: 540p/720p/1080p-instant/1440p, each with a size number —
-  the default step's is EXACT because it is the file, the rest are marked "~"), MOVABLE TIMED CAMERA
+  the default step's is EXACT because it is the file; every OTHER step's is MEASURED since F7c
+  (2026-08-25): opening the panel composes ten seconds of the take through the export's own geometry
+  and encodes it at every step with the export's own encoder, two consecutive GOPs, blended by the
+  take's length. ±13.5 % worst case on the rig twice over, +12.9 %/+9.4 % on two real exports of the
+  deployed build. The panel opens on F7's model and the measurement replaces it ~9 s later — and that
+  model is now badly wrong (task F7d): it is anchored on the composite, whose encoder changed when O4
+  flipped the default to v2, so it reads −71 to −84 % on motion. What the user saw before F7c on a
+  16 s synthetic take: ~4.1 MB against a 279 KB file), MOVABLE TIMED CAMERA
   (F4: drag/resize the PiP on the stage; the export moves it AT the instant you moved it), BACKGROUND
   FRAME (F3: backdrop + inset + rounded corners + shadow around the screen surface, preview and export
   from one geometry function), SILENCE TIGHTENING (F5a: "Tighten" proposes cuts from the audio's own
