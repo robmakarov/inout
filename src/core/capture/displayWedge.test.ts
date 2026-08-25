@@ -40,13 +40,15 @@ describe('wedge memory', () => {
     expect(displayRequestLevel(1_000_001)).toBe(1)
   })
 
-  it('each further wedge steps down again, and the ladder bottoms out at 3', () => {
+  it('the ladder bottoms out at 2 and stays there — there is no rung below it', () => {
     rememberDisplayWedge(1_000_000)
     rememberDisplayWedge(1_000_001)
     expect(displayRequestLevel(1_000_002)).toBe(2)
+    // Wedge all day: the floor holds. Below it lies only the user's own asks,
+    // and those are not ours to drop (PO 2026-08-25).
     rememberDisplayWedge(1_000_003)
     rememberDisplayWedge(1_000_004)
-    expect(displayRequestLevel(1_000_005)).toBe(3)
+    expect(displayRequestLevel(1_000_005)).toBe(2)
   })
 
   it('a FULL-request success clears the mark — nothing stays degraded on a healthy machine', () => {
@@ -61,10 +63,9 @@ describe('wedge memory', () => {
     expect(displayRequestLevel(1_000_001)).toBe(1)
   })
 
-  it('the SILENT rung is one-shot — tab audio is back on the next take', () => {
+  it('a rung-2 success keeps the floor — still nothing the user can see is gone', () => {
     for (let i = 0; i < 3; i++) rememberDisplayWedge(1_000_000 + i)
-    expect(displayRequestLevel(1_000_004)).toBe(3)
-    rememberDisplaySuccess(3)
+    rememberDisplaySuccess(2)
     expect(displayRequestLevel(1_000_005)).toBe(2)
   })
 
@@ -186,25 +187,21 @@ describe('the request Chrome actually receives after a wedge', () => {
     expect(seen.audio).toBe(true)
   })
 
-  it('three wedges: audio finally goes — and is reported, not silently absent', async () => {
-    for (let i = 0; i < 3; i++) rememberDisplayWedge()
+  it('wedge it five times: the request still carries the audio the user asked for', async () => {
+    // THE ONE THAT MUST NEVER GO GREEN BY GOING SILENT. No number of wedges
+    // buys the app the right to record a take without the sound the user
+    // switched on (PO 2026-08-25: "always fucking clean").
+    for (let i = 0; i < 5; i++) rememberDisplayWedge()
     let seen: Record<string, unknown> = {}
-    const failures: { kind: string; message: string }[] = []
     stubDisplay((o) => (seen = o))
     await acquireChannelsProgressive(config, {
       onChannel: () => undefined,
-      onFailure: (f) => failures.push(f),
+      onFailure: () => undefined,
     }).settled
-    expect(seen.audio).toBe(false)
-    expect(seen.video).toBe(true)
-    // Tab audio is skipped HONESTLY: reported as a failure the user can read,
-    // in words that do not blame them for a box we never showed Chrome.
-    const sysAudio = failures.find((f) => f.kind === 'system-audio')
-    expect(sysAudio?.message).toMatch(/skipped this take/)
-    expect(sysAudio?.message).not.toMatch(/tick/)
+    expect(seen.audio).toBeTruthy()
   })
 
-  it('a safe-mode take that succeeds keeps its rung; the silent rung steps back up', async () => {
+  it('a reduced-request take that succeeds keeps its rung, and the floor holds', async () => {
     rememberDisplayWedge()
     stubDisplay(() => undefined)
     await acquireChannelsProgressive(config, {
@@ -216,7 +213,7 @@ describe('the request Chrome actually receives after a wedge', () => {
     expect(displayRequestLevel()).toBe(1)
 
     for (let i = 0; i < 2; i++) rememberDisplayWedge()
-    expect(displayRequestLevel()).toBe(3)
+    expect(displayRequestLevel()).toBe(2)
     await acquireChannelsProgressive(config, {
       onChannel: () => undefined,
       onFailure: () => undefined,

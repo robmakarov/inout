@@ -48,6 +48,26 @@ describe('which pane the picker opens on', () => {
   it('Windows: a monitor share carries the machine audio, so nothing moves', () => {
     expect(displayPaneHint({ ...withScreen, systemAudio: true }, 'system')).toBe('monitor')
   })
+
+  /**
+   * The hint alone lost to Chrome's memory of the last shared surface: share
+   * Entire Screen once and every later picker opens there, with no sound
+   * checkbox on it, across reloads (PO 2026-08-25, third report of the day).
+   * Excluding the monitor pane is what makes the checkbox unconditional.
+   */
+  it('sound wanted on a tab-only platform: the Entire-Screen pane is not offered at all', () => {
+    for (const level of [0, 1, 2] as const) {
+      const o = displayMediaOptions({ ...withScreen, systemAudio: true }, level, 'tab')
+      expect(o.monitorTypeSurfaces).toBe('exclude')
+    }
+  })
+
+  it('sound off, or Windows: every surface stays offered', () => {
+    expect(displayMediaOptions({ ...withScreen, systemAudio: false }, 0, 'tab').monitorTypeSurfaces)
+      .toBeUndefined()
+    expect(displayMediaOptions({ ...withScreen, systemAudio: true }, 0, 'system').monitorTypeSurfaces)
+      .toBeUndefined()
+  })
 })
 
 describe('the request Chrome receives, rung by rung', () => {
@@ -61,23 +81,31 @@ describe('the request Chrome receives, rung by rung', () => {
     expect((o.video as MediaTrackConstraints).width).toEqual({ max: CAPTURE_MAX_WIDTH })
   })
 
-  it('rungs 1 and 2 drop only what the user cannot see — audio survives both', () => {
+  it('rungs 1 and 2 drop only what the user cannot see', () => {
     for (const level of [1, 2] as const) {
       const o = displayMediaOptions(config, level, 'tab')
-      expect(o.audio).toBeTruthy()
       expect(o.selfBrowserSurface).toBeUndefined()
       expect(o.surfaceSwitching).toBeUndefined()
       expect(o.systemAudio).toBeUndefined()
     }
   })
 
-  it('only the last rung is silent', () => {
-    expect(displayMediaOptions(config, 3, 'tab').audio).toBe(false)
+  /**
+   * THE INVARIANT, PO 2026-08-25: "i need this shit never happen to user,
+   * always fucking clean". Safe mode may drop OUR options; it may never drop
+   * one the user chose. If a future session adds a rung that turns Tab Audio
+   * off to dodge a wedge, this is the test that has to be deleted first — and
+   * deleting it is the bug.
+   */
+  it('NO rung ever drops the audio the user asked for', () => {
+    for (const level of [0, 1, 2] as const) {
+      expect(displayMediaOptions(config, level, 'tab').audio).toBeTruthy()
+    }
   })
 
   it('sound off means sound off at every rung', () => {
     const silent = { ...config, systemAudio: false }
-    for (const level of [0, 1, 2, 3] as const) {
+    for (const level of [0, 1, 2] as const) {
       expect(displayMediaOptions(silent, level, 'tab').audio).toBe(false)
     }
   })

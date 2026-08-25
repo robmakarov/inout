@@ -9,7 +9,7 @@ import { analytics } from '@core/analytics'
 import { detectCapabilities, type DisplayAudioScope } from '@core/capabilities'
 import { guardStream } from './deviceGuard'
 import {
-  SILENT_DISPLAY_LEVEL,
+  MAX_DISPLAY_LEVEL,
   displayRequestLevel,
   displayWedgeCount,
   rememberDisplaySuccess,
@@ -279,25 +279,36 @@ export const CAPTURE_MAX_HEIGHT = DEFAULT_EXPORT_SETTINGS.height
 export const CAPTURE_MAX_FPS = DEFAULT_EXPORT_SETTINGS.fps
 
 /**
- * WHICH PANE CHROME'S PICKER OPENS ON — and it is a sound question, not a
- * video one (PO 2026-08-25: "share sound in chrome with screen toggle not
- * there anymore").
+ * WHICH SURFACES THE PICKER OFFERS — a sound question, not a video one.
  *
- * `displaySurface` is a HINT: it chooses the pane the picker opens on, and
- * every surface stays pickable. Since 2026-08-06 that hint has been 'monitor',
- * so the default pick records everything the user does instead of one tab that
- * can freeze while they work elsewhere. That is still right for a silent take.
+ * PO 2026-08-25, three times in one day, last time after a plain reload: "sound
+ * checkboxes not there again". The hint alone could not fix it and here is why.
+ * On macOS/Linux Chromium the "Also share tab audio" checkbox lives on the
+ * Chrome-Tab pane and NOWHERE else — a monitor or window share there is mute by
+ * construction. `displaySurface` only says which pane the picker OPENS on, and
+ * Chrome overrides it with its own memory of the last surface you shared. Share
+ * Entire Screen once and every later picker opens on Entire Screen, checkbox
+ * gone, across reloads, forever. A preference cannot beat that memory.
  *
- * But on macOS and Linux, Chromium can only ever carry a TAB's audio — the
- * "Also share tab audio" checkbox exists on the Chrome-Tab pane and nowhere
- * else. So a user who has turned Tab Audio ON and lands on the Entire-Screen
- * pane is looking at a picker with no sound toggle in it, which is exactly the
- * complaint. When they asked for sound, open where the sound is; when they did
- * not, keep the monitor pane. On Windows a monitor share carries the machine's
- * audio, so nothing moves there.
+ * `monitorTypeSurfaces: 'exclude'` (Chromium 112+) can: it takes the whole
+ * Entire-Screen pane OUT of the picker, so there is nothing for Chrome to
+ * remember and nowhere to land that has no sound. That is the guarantee — with
+ * the Tab Audio chip lit, the sound checkbox is on screen every single time.
+ *
+ * The cost is stated plainly rather than hidden: with Tab Audio ON you cannot
+ * pick a whole screen, because on this OS that combination has never been able
+ * to record sound — it produced a silent take and an apology. Tab Audio OFF
+ * restores the picker exactly as it was, monitor pane first (2026-08-06). On
+ * Windows a monitor share DOES carry the machine's audio, so nothing changes
+ * there at all.
  */
 export function displayPaneHint(config: CaptureConfig, scope: DisplayAudioScope): DisplaySurfaceKind {
   return config.systemAudio && scope === 'tab' ? 'browser' : 'monitor'
+}
+
+/** True when only a tab can satisfy the sound the user asked for. */
+export function tabOnlyForAudio(config: CaptureConfig, scope: DisplayAudioScope): boolean {
+  return !!config.systemAudio && scope === 'tab'
 }
 
 /** Upper bounds only — a smaller surface satisfies them untouched, so this can
@@ -391,6 +402,8 @@ type DisplayMediaOptions = DisplayMediaStreamOptions & {
   selfBrowserSurface?: 'include' | 'exclude'
   surfaceSwitching?: 'include' | 'exclude'
   systemAudio?: 'include' | 'exclude'
+  /** Chromium 112+: drop the Entire-Screen pane from the picker entirely. */
+  monitorTypeSurfaces?: 'include' | 'exclude'
 }
 
 /**
@@ -407,26 +420,32 @@ const RAW_DISPLAY_AUDIO: MediaTrackConstraints = {
  * The request for a given rung of the wedge ladder (displayWedge.ts). Pure, so
  * the exact object Chrome receives is testable without a browser.
  *
- * The ordering is the point: rungs 1 and 2 drop only options the user cannot
- * see, so `audio` — and therefore Chrome's "Also share tab audio" checkbox —
- * survives every rung but the last. Rung 1 also drops the explicit
- * `systemAudio` flag, which costs nothing: 'include' is its spec default.
- * The capture ceiling is unaffected at any rung — capDisplayTrack enforces it
- * after delivery, which is exactly why dropping the picker constraints is free.
+ * Every rung drops OUR options only — never the user's. `audio` is the lit Tab
+ * Audio chip, so it survives all the way to the floor and Chrome keeps showing
+ * its checkbox. Rung 1 also drops the explicit `systemAudio` flag, which costs
+ * nothing: 'include' is its spec default. The capture ceiling is unaffected at
+ * any rung — capDisplayTrack enforces it after delivery, which is exactly why
+ * dropping the picker constraints is free.
  */
 export function displayMediaOptions(
   config: CaptureConfig,
   level: DisplayRequestLevel,
   scope: DisplayAudioScope,
 ): DisplayMediaOptions {
-  const wantsAudio = !!config.systemAudio && level < SILENT_DISPLAY_LEVEL
+  const wantsAudio = !!config.systemAudio
   const pane = displayPaneHint(config, scope)
-  if (level >= SILENT_DISPLAY_LEVEL) return { video: true, audio: false }
-  if (level === 2) return { video: true, audio: wantsAudio }
+  // Belongs to the USER'S ask, not to our options — so it rides every rung,
+  // including the floor. Without it Chrome's memory of the last shared surface
+  // decides whether the sound checkbox exists, and it wins over any hint.
+  const tabOnly: Partial<DisplayMediaOptions> = tabOnlyForAudio(config, scope)
+    ? { monitorTypeSurfaces: 'exclude' }
+    : {}
+  if (level >= 2) return { video: true, audio: wantsAudio, ...tabOnly }
   if (level === 1) {
     return {
       video: { displaySurface: pane } as MediaTrackConstraints,
       audio: wantsAudio ? RAW_DISPLAY_AUDIO : false,
+      ...tabOnly,
     }
   }
   return {
@@ -435,6 +454,7 @@ export function displayMediaOptions(
     selfBrowserSurface: 'exclude',
     surfaceSwitching: 'include',
     systemAudio: config.systemAudio ? 'include' : 'exclude',
+    ...tabOnly,
   }
 }
 
@@ -620,10 +640,9 @@ export function acquireChannelsProgressive(
   let displayPromise: Promise<MediaStream> | null = null
   const canDisplay = typeof navigator.mediaDevices?.getDisplayMedia === 'function'
   // Which rung of the wedge ladder this request rides on — 0 unless this
-  // machine has had a share taken and never delivered (displayWedge.ts).
+  // machine has had a share taken and never delivered (displayWedge.ts). No
+  // rung of it touches the user's asks, so audio is asked for iff they said so.
   const displayLevel: DisplayRequestLevel = config.screen ? displayRequestLevel() : 0
-  // The ONE thing the user can see us drop, and only on the last rung.
-  const audioAsked = !!config.systemAudio && displayLevel < SILENT_DISPLAY_LEVEL
   if (config.screen) {
     mark('display', 'start')
     if (!canDisplay) {
@@ -638,15 +657,18 @@ export function acquireChannelsProgressive(
       }
     } else {
       // A machine that wedged gets a smaller request — see displayWedge.ts.
-      // Options are dropped in order of how little the user can see them go,
-      // so the tab-audio checkbox survives every rung but the last.
+      // Only OUR options are dropped, so nothing the user chose goes missing.
       const opts = displayMediaOptions(config, displayLevel, detectCapabilities().displayAudioScope)
-      if (displayLevel > 0) {
-        console.info(
-          `[capture] display request is in safe mode ${displayLevel}/${SILENT_DISPLAY_LEVEL} ` +
-            `(previous share never delivered) — tab audio ${audioAsked ? 'still requested' : 'skipped this take'}`,
-        )
-      }
+      // PRINT THE ACTUAL REQUEST, EVERY TAKE. Three rounds of "the sound
+      // checkbox is missing" were spent arguing about what we send; from here
+      // the console answers that in one line, before the picker even opens.
+      console.info(
+        `[capture] asking Chrome for ${config.systemAudio ? 'screen + tab audio' : 'screen'}` +
+          (displayLevel > 0
+            ? ` — reduced request ${displayLevel}/${MAX_DISPLAY_LEVEL} after a stuck share, your channels unchanged`
+            : ''),
+        opts,
+      )
       // TWO ceilings, because there are two different things that can be slow.
       // The outer one is the human at the picker and stays generous. The inner
       // one only starts once the picker has closed, and catches the failure
@@ -713,20 +735,9 @@ export function acquireChannelsProgressive(
         video ? `surface=${surface ?? 'unknown'} track=${video.label || video.id}` : 'no video track',
       )
       // Full-request success proves the machine healthy again — clears the
-      // wedge mark. A lower rung keeps it, except the silent one, which is
-      // one-shot: the checkbox is back on the next take either way.
+      // wedge mark. A lower rung keeps it; it costs nothing visible.
       rememberDisplaySuccess(displayLevel)
-      if (config.systemAudio && !audioAsked) {
-        // We never asked for audio this take — say that, not "you forgot to
-        // tick the box". Skipped, present in Recording.missing, back next take.
-        fail({
-          kind: 'system-audio',
-          message:
-            'Tab audio was skipped this take while recovering from a stuck screen share — it comes back on the next one.',
-          denied: false,
-        })
-        mark('system-audio', 'skipped', 'safe-mode display request')
-      } else if (config.systemAudio) {
+      if (config.systemAudio) {
         const audio = display.getAudioTracks()[0]
         if (audio) {
           deliver({
@@ -749,10 +760,7 @@ export function acquireChannelsProgressive(
       // is gone (PO 2026-08-23: "indicators of mic and screen still there").
       const delivered = new Set<MediaStreamTrack>()
       if (video) delivered.add(video)
-      // On the silent rung the audio track (if an engine hands one back
-      // unasked) was NOT delivered as a channel above — so it must not be
-      // exempted here.
-      if (audioAsked && display.getAudioTracks()[0]) {
+      if (config.systemAudio && display.getAudioTracks()[0]) {
         delivered.add(display.getAudioTracks()[0]!)
       }
       for (const t of display.getTracks()) if (!delivered.has(t)) t.stop()

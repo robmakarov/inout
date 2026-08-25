@@ -8,32 +8,32 @@
  * page never received. What the app CAN do is stop presenting the same
  * request to a browser that just choked on it.
  *
- * A LADDER, NOT A SWITCH (PO 2026-08-25: "share sound in chrome with screen
- * toggle not there anymore"). The first cut of this dropped `audio` on the
- * first wedge and kept it dropped for 24h — so Chrome's own "Also share tab
- * audio" checkbox vanished from the picker for a whole day, silently, on the
- * strength of a guess about which option wedges. That is the one rule that
- * does not bend: a fix may not remove a working feature. So each wedge steps
- * DOWN one rung, and the rungs are ordered so the thing the user can see goes
- * last:
+ * THE RULE THIS FILE OBEYS (PO 2026-08-25, after the first cut of it took the
+ * tab-audio checkbox out of Chrome's picker for a day: "i need this shit never
+ * happen to user, always fucking clean"):
+ *
+ *   SAFE MODE MAY ONLY DROP OPTIONS THE USER NEVER CHOSE.
+ *   NEVER ONE THEY DID. NO EXCEPTIONS, NO "JUST THIS TAKE".
+ *
+ * `audio` is chosen — it is the Tab Audio chip, lit, on screen. Constraints,
+ * surface hints and spec-default flags are not: nobody asked for them, nobody
+ * can see them go. So the ladder only ever descends through OUR options, and
+ * it bottoms out with the user's ask still intact:
  *
  *   0  full request — constraints, surface hints, explicit systemAudio, audio
  *   1  drop what the user cannot see: size/fps constraints, selfBrowserSurface,
  *      surfaceSwitching, the explicit systemAudio flag (its spec default is
  *      'include' anyway, so nothing is lost). Audio still requested → Chrome
  *      still shows the checkbox.
- *   2  the bare request: `{ video: true, audio: true }`. No constraints object
- *      at all, plain audio — still the checkbox, minus our raw-capture asks.
- *   3  last resort: `{ video: true, audio: false }`. THIS is the only rung
- *      where tab audio disappears, it is reached only after three consecutive
- *      wedges, and it is ONE-SHOT: a success steps back up to rung 2, so the
- *      checkbox is back on the very next take.
+ *   2  the bare request: `{ video: true, audio: true }` — nothing of ours left
+ *      to drop, and the checkbox is STILL there. This is the floor. There is
+ *      no rung below it and there must never be one: a wedge we cannot fix by
+ *      dropping our own options is Chrome's to fix, not the user's to pay for.
  *
  * Lifecycle: a wedge steps down · a rung-0 success clears the mark entirely
  * (healthy machine, nothing stays degraded) · a rung-1/2 success keeps the
- * rung (invisible to the user, and this machine proved it chokes on the one
- * above) · a rung-3 success steps back up · everything expires 24h after the
- * last wedge, so a Chrome fix restores the full request by itself.
+ * rung, which costs the user nothing they can see · everything expires 24h
+ * after the last wedge, so a Chrome fix restores the full request by itself.
  *
  * Same storage discipline as grants.ts: localStorage with an in-memory
  * fallback, and the browser remains the only authority — this mark only ever
@@ -43,11 +43,10 @@
 const KEY = 'inout.displayWedge.v1'
 const WEDGE_TTL_MS = 24 * 60 * 60 * 1000
 
-/** 0 = full request. Higher = fewer options; see the ladder above. */
-export type DisplayRequestLevel = 0 | 1 | 2 | 3
-export const MAX_DISPLAY_LEVEL = 3
-/** The only rung that drops the audio request — i.e. Chrome's checkbox. */
-export const SILENT_DISPLAY_LEVEL = 3
+/** 0 = full request. Higher = fewer of OUR options; see the ladder above. */
+export type DisplayRequestLevel = 0 | 1 | 2
+/** The floor. Every rung, this one included, still asks for the user's audio. */
+export const MAX_DISPLAY_LEVEL = 2
 
 interface WedgeState {
   /** Last display timeout, ms since epoch. 0 = never / cleared. */
@@ -114,22 +113,15 @@ export function rememberDisplayWedge(now = Date.now()): void {
 
 /**
  * The screen arrived. Rung 0 means the machine is healthy — clear the mark so
- * nothing stays degraded. Rung 3 is one-shot (tab audio returns next take).
- * Rungs 1–2 are invisible to the user and stay until the TTL.
+ * nothing stays degraded. A lower rung keeps it until the TTL: it costs the
+ * user nothing they can see, and the rung above it has already choked once.
  */
 export function rememberDisplaySuccess(usedLevel: DisplayRequestLevel): void {
   const s = load()
-  if (s.wedgedAt === 0) return
-  if (usedLevel === 0) {
-    s.wedgedAt = 0
-    s.level = 0
-    save()
-    return
-  }
-  if (usedLevel >= SILENT_DISPLAY_LEVEL) {
-    s.level = clamp(usedLevel - 1)
-    save()
-  }
+  if (s.wedgedAt === 0 || usedLevel !== 0) return
+  s.wedgedAt = 0
+  s.level = 0
+  save()
 }
 
 /** How many times this machine has wedged — telemetry, not behaviour. */
