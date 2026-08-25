@@ -14,6 +14,7 @@
 
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
+import { writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { gateOracleReport, oracleMetricsIncomplete } from './oracle-gate.mjs'
@@ -229,7 +230,20 @@ async function main() {
             typeof m.exportPeakOutputBytes === 'number'
               ? `${(m.exportPeakOutputBytes / 1024 / 1024).toFixed(1)}MB`
               : 'n/a'
-          } aliased=${m.aliased ?? false} (${elapsed}ms)`,
+          } aliased=${m.aliased ?? false} ` +
+          // GATE-alias: WHICH metric the band was applied to, and the two
+          // reference skews behind it. A cold flake was argued about for an
+          // hour because the line said 'sync=-465' and not that the number was
+          // the RAW rung with both corrections already refused.
+          `metric=${m.syncMetric ?? 'n/a'} skew=${
+            typeof run.report?.rigDebug?.audioSkewMeanMs === 'number'
+              ? run.report.rigDebug.audioSkewMeanMs.toFixed(0)
+              : 'n/a'
+          }/${
+            typeof run.report?.rigDebug?.flashSkewMeanMs === 'number'
+              ? run.report.rigDebug.flashSkewMeanMs.toFixed(0)
+              : 'n/a'
+          } (${elapsed}ms)`,
       )
       if (!gate.pass) {
         console.error('  failures:', gate.failures.join('; '))
@@ -237,6 +251,22 @@ async function main() {
           process.stdout.write(JSON.stringify({ gate, report: run.report }, null, 2) + '\n')
           process.exitCode = 1
           return
+        }
+        /**
+         * A COLD MATRIX USED TO THROW AWAY THE ONE RUN WORTH READING (GATE-alias,
+         * 2026-08-25). With `cold > 1` a failing run printed its failure strings
+         * and nothing else, so diagnosing an intermittent flake meant rerunning
+         * the whole matrix and hoping to catch it at `--cold=1`. Three sessions'
+         * worth of cold flakes have now been argued about from a single summary
+         * line. The full report — both reference skews, every pairing, the rig
+         * debug block — goes to a file instead.
+         */
+        const dump = `/tmp/oracle-fail-${Date.now()}-${i + 1}.json`
+        try {
+          writeFileSync(dump, JSON.stringify({ gate, report: run.report }, null, 2))
+          console.error(`  full report: ${dump}`)
+        } catch (err) {
+          console.error(`  (could not write the failing run's report: ${err?.message ?? err})`)
         }
       }
     }

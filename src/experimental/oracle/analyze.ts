@@ -49,7 +49,7 @@ import {
   type SyncStats,
 } from './fiducial'
 import { BEEP_INTERVAL_MS, RIG_HEIGHT, RIG_WIDTH } from './rig'
-import { isAliasedScheduleCorrection } from './scheduleSkew'
+import { isAliasedScheduleCorrection, isAliasedSymmetricCorrection } from './scheduleSkew'
 
 function blockReaderFor(data: ImageData): BlockReader {
   // Sample the central 50% of each block to dodge ringing at block edges.
@@ -140,6 +140,14 @@ export interface ExportAnalysis {
   flashSyncCorrectedMeanMs: number | null
   /** maxAbs of (pairOffset − scheduleSkewMean) — the gate uses this, not raw maxAbs. */
   flashSyncCorrectedMaxAbsMs: number | null
+  /** The audio-side reference skew that was offered, ms. */
+  beepSkewMeanMs: number | null
+  /** The video-side reference skew that was offered, ms. */
+  flashSkewMeanMs: number | null
+  /** beepSkew − flashSkew: what the symmetric metric subtracts (GATE-alias). */
+  symmetricCorrectionMs: number | null
+  /** True when that correction was refused as not credible; null when none was offered. */
+  symmetricCorrectionRejected: boolean | null
   decodeMs: number
 }
 
@@ -190,17 +198,48 @@ export async function analyzeExport(blob: Blob, opts?: AnalyzeOptions): Promise<
     }
 
     const fit = fitClock(frames)
-    const flashSync = flashSyncStats(onsets.onsetsSec, flashOnsetsSec)
+    const skewMean = opts?.beepScheduleSkewMeanMs
+    const flashSkewMean = opts?.flashScheduleSkewMeanMs
+    /**
+     * GATE-alias: the rig measured both reference schedules before this file
+     * was decoded, and their difference is where a correctly-paired export's
+     * offset must land — the take's own A/V error is tens of milliseconds, the
+     * stall can be hundreds. Centring the pairing window there is the
+     * difference between reporting +562 and reporting −438 on the same file.
+     */
+    const expectedOffsetMs =
+      skewMean !== undefined && flashSkewMean !== undefined && flashSkewMean !== null
+        ? skewMean - flashSkewMean
+        : 0
+    const flashSync = flashSyncStats(onsets.onsetsSec, flashOnsetsSec, expectedOffsetMs)
     // Same statistic with BOTH detection biases removed — reported alongside
     // so the instrument's own contribution to the residual is visible as a
     // number instead of an assumption.
-    const flashSyncUnbiased = flashSyncStats(onsets.onsetsCenteredSec, flashOnsetsMidSec)
-    const skewMean = opts?.beepScheduleSkewMeanMs
-    const flashSkewMean = opts?.flashScheduleSkewMeanMs
+    const flashSyncUnbiased = flashSyncStats(
+      onsets.onsetsCenteredSec,
+      flashOnsetsMidSec,
+      expectedOffsetMs,
+    )
     const skewOk =
       flashSync &&
       skewMean !== undefined &&
       !isAliasedScheduleCorrection(flashSync.meanOffsetMs, skewMean)
+    /**
+     * GATE-alias: the SYMMETRIC metric is what the gate bands, and it subtracts
+     * (beepSkew − flashSkew) — a different number from the one skewOk vetted.
+     * Each half is clamped to ±450 ms on its own, so both can look sane while
+     * their difference is 900. Vet the total that is actually applied, and when
+     * it is not credible produce NO symmetric number rather than a wrong one:
+     * the gate then falls back down its own documented ladder (symmetric →
+     * audio-corrected → raw) and prints which rung it used.
+     */
+    const symmetricOk =
+      skewOk &&
+      flashSyncUnbiased !== null &&
+      skewMean !== undefined &&
+      flashSkewMean !== undefined &&
+      flashSkewMean !== null &&
+      !isAliasedSymmetricCorrection(flashSyncUnbiased.meanOffsetMs, skewMean, flashSkewMean)
     const correctedMean =
       skewOk && flashSync ? flashSync.meanOffsetMs - skewMean : null
     const correctedMaxAbs =
@@ -226,12 +265,14 @@ export async function analyzeExport(blob: Blob, opts?: AnalyzeOptions): Promise<
       // Symmetric correction: subtract the rig's audio-vs-video reference skew,
       // not just its audio half.
       flashSyncSymmetricMeanMs:
-        skewOk && flashSyncUnbiased && flashSkewMean !== undefined && flashSkewMean !== null
-          ? flashSyncUnbiased.meanOffsetMs - ((skewMean as number) - flashSkewMean)
+        symmetricOk && flashSyncUnbiased
+          ? flashSyncUnbiased.meanOffsetMs - ((skewMean as number) - (flashSkewMean as number))
           : null,
       flashSyncSymmetricMaxAbsMs:
-        skewOk && flashSyncUnbiased && flashSkewMean !== undefined && flashSkewMean !== null
-          ? Math.abs(flashSyncUnbiased.meanOffsetMs - ((skewMean as number) - flashSkewMean)) +
+        symmetricOk && flashSyncUnbiased
+          ? Math.abs(
+              flashSyncUnbiased.meanOffsetMs - ((skewMean as number) - (flashSkewMean as number)),
+            ) +
             Math.max(
               0,
               flashSyncUnbiased.maxAbsOffsetMs - Math.abs(flashSyncUnbiased.meanOffsetMs),
@@ -239,6 +280,23 @@ export async function analyzeExport(blob: Blob, opts?: AnalyzeOptions): Promise<
           : null,
       flashSyncCorrectedMeanMs: correctedMean,
       flashSyncCorrectedMaxAbsMs: correctedMaxAbs,
+      // GATE-alias: the corrections are now IN the report. This session had to
+      // re-derive them from three failing runs because nothing printed them,
+      // which is the difference between diagnosing a flake in ten minutes and
+      // in an hour.
+      beepSkewMeanMs: skewMean ?? null,
+      flashSkewMeanMs: flashSkewMean ?? null,
+      symmetricCorrectionMs:
+        skewMean !== undefined && flashSkewMean !== undefined && flashSkewMean !== null
+          ? skewMean - flashSkewMean
+          : null,
+      symmetricCorrectionRejected:
+        skewMean !== undefined &&
+        flashSkewMean !== undefined &&
+        flashSkewMean !== null &&
+        flashSyncUnbiased !== null
+          ? !symmetricOk
+          : null,
       decodeMs: performance.now() - t0,
     }
   } finally {
@@ -255,44 +313,100 @@ export async function analyzeExport(blob: Blob, opts?: AnalyzeOptions): Promise<
  * sequential pairing across candidate first-flash alignments, keep the
  * lowest-variance alignment, then drop outliers >120ms from that mean.
  */
-export function flashSyncStats(audioOnsetsSec: number[], flashOnsetsSec: number[]): FlashSync | null {
+export function flashSyncStats(
+  audioOnsetsSec: number[],
+  flashOnsetsSec: number[],
+  /**
+   * WHERE THE OFFSET IS EXPECTED TO SIT, ms (task GATE-alias, 2026-08-25).
+   *
+   * The pairing window is half the beep grid wide, so without this it is
+   * centred on ZERO and an offset past ±500 ms is not merely inaccurate — it is
+   * unrepresentable, and comes back as its complement against the next flash.
+   * A measured cold run: the AudioContext stalled 537 ms, so the audio in that
+   * export genuinely sat +562 ms behind the flashes, and the estimator could
+   * only report −438. Both readings describe the same file; only one of them is
+   * about the take.
+   *
+   * The rig knows the answer before it looks: it measures both reference
+   * schedules (beep arrivals and flash arrivals), and their difference IS the
+   * offset a correctly-paired export should show. Centring the window there
+   * makes +562 reachable and −438 nine hundred milliseconds away. Omitted (or
+   * unmeasurable) falls back to zero, i.e. exactly the old behaviour.
+   */
+  expectedOffsetMs = 0,
+): FlashSync | null {
   if (flashOnsetsSec.length === 0 || audioOnsetsSec.length === 0) return null
   const audio = [...audioOnsetsSec].sort((a, b) => a - b)
   const flashes = [...flashOnsetsSec].sort((a, b) => a - b)
   const half = BEEP_INTERVAL_MS / 2
   const outlierMs = 120
+  const expected = Number.isFinite(expectedOffsetMs) ? expectedOffsetMs : 0
 
-  let bestOffsets: number[] | null = null
-  let bestVar = Infinity
+  /**
+   * CONSENSUS, NOT COUNT (task GATE-alias, 2026-08-25).
+   *
+   * The previous estimator swept the FIRST flash index and kept the alignment
+   * with the MOST pairs, variance only as a tie-break. That is exactly backwards
+   * on this data. Every event here is a beep and a flash fired at the same rig
+   * instant on a uniform 1 s grid, so a wrong alignment is not merely worse —
+   * it is a different, self-consistent story about the same file, and it wins
+   * on count whenever the detectors produce a spurious extra onset or drop a
+   * real one. Measured consequence, three cold runs in fifteen: a whole file
+   * scored at −453, −465 and −909 ms with every pair agreeing to the decimal,
+   * i.e. maxAbs == |mean| exactly, which is a constant shift and not noise.
+   *
+   * So: every (onset, flash) pair PROPOSES a constant offset, and the offset
+   * the most events independently agree on wins. A spurious event adds one
+   * candidate and no support; a missing one removes support from every
+   * candidate equally. Ties go to the SMALLER |offset|, and that prior is
+   * honest rather than convenient: the band under test is ±90 ms while the grid
+   * is 1000, so two hypotheses with equal support that differ by a grid period
+   * cannot both be about the take — and the one that says "a whole second out"
+   * needs more evidence than the one that says "in band", not less.
+   */
+  const INLIER_MS = 60
 
-  for (let fStart = 0; fStart < flashes.length; fStart++) {
-    const offsets: number[] = []
-    let fi = fStart
+  /** One-to-one match under a proposed constant offset; returns the residuals. */
+  const matchUnder = (offsetMs: number): number[] => {
+    const out: number[] = []
+    let fi = 0
     for (const a of audio) {
+      while (fi < flashes.length && (a - flashes[fi]!) * 1000 - offsetMs > INLIER_MS) fi++
       if (fi >= flashes.length) break
-      // Advance to the flash nearest this onset without rewinding (one-to-one).
-      while (
-        fi + 1 < flashes.length &&
-        Math.abs(a - flashes[fi + 1]!) <= Math.abs(a - flashes[fi]!)
-      ) {
-        fi++
-      }
       const d = (a - flashes[fi]!) * 1000
-      if (Math.abs(d) <= half) {
-        offsets.push(d)
+      if (Math.abs(d - offsetMs) <= INLIER_MS) {
+        out.push(d)
         fi++
       }
     }
-    if (offsets.length < 1) continue
-    const mean = offsets.reduce((s, x) => s + x, 0) / offsets.length
-    const variance = offsets.reduce((s, x) => s + (x - mean) ** 2, 0) / offsets.length
+    return out
+  }
+
+  const candidates: number[] = []
+  for (const a of audio) {
+    for (const f of flashes) {
+      const d = (a - f) * 1000
+      if (Math.abs(d - expected) <= half) candidates.push(d)
+    }
+  }
+  if (candidates.length === 0) return null
+
+  let bestOffsets: number[] | null = null
+  let bestScore = -1
+  let bestCentre = Infinity
+  for (const c of candidates) {
+    const offsets = matchUnder(c)
+    if (offsets.length === 0) continue
+    // Distance from the EXPECTATION, not from zero: with no expectation the two
+    // are the same rule, and with one it is the rule that can be right.
+    const centre = Math.abs(offsets.reduce((s, x) => s + x, 0) / offsets.length - expected)
     if (
-      !bestOffsets ||
-      offsets.length > bestOffsets.length ||
-      (offsets.length === bestOffsets.length && variance < bestVar)
+      offsets.length > bestScore ||
+      (offsets.length === bestScore && centre < bestCentre)
     ) {
       bestOffsets = offsets
-      bestVar = variance
+      bestScore = offsets.length
+      bestCentre = centre
     }
   }
 

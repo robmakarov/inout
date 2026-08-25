@@ -60,6 +60,8 @@ const MIN_EXPORT_REALTIME = 1.0
 const MAX_EXPORT_PEAK_OUTPUT_BYTES = 12 * 1024 * 1024
 const MAX_BOUNDARY_JUMP = 0.1
 const MAX_SPUR_DB = -40
+/** The rig's beep/flash grid period, ms — must match oracle/rig.ts. */
+const BEEP_INTERVAL_MS = 1000
 
 /** True when gate metrics are missing/NaN — must not pass CI under load. */
 export function oracleMetricsIncomplete(metrics) {
@@ -113,6 +115,14 @@ export function gateOracleReport(report) {
         `trimmed export sync maxAbs ${max.toFixed(1)} > ${band}ms (path: ${report.trimmedPath})`,
       )
     }
+    // GATE-alias: a fast path that RAN but produced no number checked nothing.
+    // See the same rule under the instant path for what it was hiding.
+    if (report.trimmedPath !== 'render' && !Number.isFinite(mean)) {
+      failures.push(
+        `trimmed export took '${report.trimmedPath}' but its sync could not be measured — ` +
+          'the band above checked nothing',
+      )
+    }
     // The anti-vacuity check. Only meaningful when the take HAS a composite —
     // without one no packet-copying path can run and the render is correct.
     if (report.hasComposite && report.expectedTrimmedPath) {
@@ -150,6 +160,21 @@ export function gateOracleReport(report) {
     if (typeof max === 'number' && max > band) {
       failures.push(
         `instant export sync maxAbs ${max.toFixed(1)} > ${band}ms (path: ${report.instantPath})`,
+      )
+    }
+    /**
+     * ANTI-VACUITY, SECOND HALF (GATE-alias, 2026-08-25). The band above is
+     * written `typeof mean === 'number'`, so a run where the instant path RAN
+     * but its sync could not be measured pushed no failure at all and the run
+     * passed — observed in the wild: `inst=instant/n/a trim=smartcut/n/a` on a
+     * cold run that the summary counted as green. The path check below catches
+     * a path that declined; this catches a path that ran unmeasured. Both are
+     * the same fault — the gate reporting on a file it did not read.
+     */
+    if (report.instantPath === 'instant' && !Number.isFinite(mean)) {
+      failures.push(
+        'unedited export took the instant path but its sync could not be measured — ' +
+          'the band above checked nothing (machine load, decode failure, or a refused correction)',
       )
     }
     // Anti-vacuity, same rule as the trimmed path: a take WITH a composite that
@@ -232,6 +257,29 @@ export function gateOracleReport(report) {
     }
     if (integrity.spurPeakDb !== null && integrity.spurPeakDb > MAX_SPUR_DB) {
       failures.push(`spur ${integrity.spurPeakDb.toFixed(1)} dB > ${MAX_SPUR_DB} dB`)
+    }
+  }
+
+  /**
+   * THE ONE FAILURE MODE THE GRID CANNOT SEE (GATE-alias, 2026-08-25). The
+   * AudioContext startup stall is recovered as `arrival mod interval`, which is
+   * exact for any stall shorter than one beep interval and WRAPS SILENTLY past
+   * it — a 1100 ms stall reads as 100 ms, with full confidence and no symptom.
+   * Nothing in the signal can distinguish them, so the honest move is to refuse
+   * the run while the stall is still comfortably inside the range rather than
+   * to trust a number that might already have wrapped. Measured on this
+   * machine: ~130 ms before the rig warmed its encoder, 326-498 ms after, so
+   * three quarters of an interval is real headroom and not a hair trigger.
+   */
+  const stall = report.rigDebug?.audioSkewMeanMs
+  if (typeof stall === 'number') {
+    metrics.audioStallMs = Math.round(stall)
+    if (Math.abs(stall) > 0.75 * BEEP_INTERVAL_MS) {
+      failures.push(
+        `AudioContext startup stall ${stall.toFixed(0)}ms is over ${0.75 * BEEP_INTERVAL_MS}ms of the ` +
+          `${BEEP_INTERVAL_MS}ms beep grid — past one full interval it wraps silently, so this run ` +
+          'is inconclusive rather than green',
+      )
     }
   }
 

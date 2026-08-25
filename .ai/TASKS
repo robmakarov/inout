@@ -31,7 +31,13 @@ updates the READY map (move newly-unblocked dependents in, remove the done task)
 ── READY MAP — current truth, updated on every merge ──
 Last update 2026-08-25 (ELEVENTH session, PO: "go roadmap, all o and f in one").
 "ALL O AND F" WAS AGAIN NOT ACHIEVABLE IN ONE SESSION, AND SAYING SO IS PART OF THE JOB. What landed:
-ONE FEATURE, ONE P1 DEFECT, TWO MEASURED VERDICTS — and the verdicts cost more than the feature.
+ONE FEATURE, ONE P1 DEFECT, ONE P0 IN THE GATE ITSELF, TWO MEASURED VERDICTS — and the things that
+shipped no feature cost the most, which was the right trade and has to be said out loud.
+  · GATE-alias (P0, found AND fixed here): the cold oracle failed ~20 % of runs. Not the product — a
+    cold AudioContext stalls up to 537 ms and the rig could represent neither the stall (clamped at
+    450) nor the offset it produces (a pairing window half a 1000 ms grid wide, centred on zero). 22
+    cold runs after the fix: zero sync failures. THE FIRST DIAGNOSIS IN THIS FILE WAS WRONG and is
+    corrected in the task; what settled it was making a failing run dump its own report.
   · F8's FILMSTRIP (feature, visible): every video lane in the timeline shows the take's own frames.
     493-958 ms per channel for 11 thumbnails, on the prod build in real Chrome. See the F8 handoff.
   · F7d (P1): the re-anchor branch is REFUSED ON MEASUREMENT and the fallback says it is a rough
@@ -55,8 +61,10 @@ trim=render/61.0) · fidelity PASS (toneErr 0.03 dB, THD −67.6, separation 59.
 browser-check real Chrome 151 8/8 with 0 console errors, export 507-514 ms · first paint 241,803 B,
 byte-identical to a build of HEAD before this session (the +3 KB against the tenth session's 238,790
 came from the wedge/persistent-connect commits, not from here).
-THE COLD GATE IS NOT CLEAN, AND IT IS NOT THIS SESSION'S — see GATE-alias below. `--cold=3` failed
-2 of 6 runs at HEAD *without* this session's changes applied. It is the first thing on the map.
+THE COLD GATE WAS NOT CLEAN AND NOW IS, on the sync side: GATE-alias was found, diagnosed wrong once,
+then measured and FIXED in the same session — 22 cold runs afterwards with zero sync failures against
+~20 % before. What remains is the SPUR band at about one run in seven, which is capture starvation and
+predates all of this.
 MERGED BEFORE THIS SESSION, one line each because the detail lives under each task: O1 · O2 · O3a ·
 O4 (step1, b, step2, the worker exoneration, the cold-start verdict, DEFAULT FLIPPED TO v2) ·
 O4-polish's preview-from-the-compositor · O5 · O5-flip (smart cut ON) · O7 · O8 (partial) ·
@@ -67,54 +75,18 @@ START HERE IF YOU ARE FRESH:
   1. read notes 5, 6, 9, 10, 11 below — they are the ones that will bite you today, and note 10 has
      a fourth instance now (this session lost 25 minutes to a rig killed by its own worktree's HMR;
      `sh scripts/mirror-measure.sh` exists so nobody repeats it);
-  2. `npm run typecheck && npm test` (415 tests) and `npm run oracle` should be green before you
+  2. `npm run typecheck && npm test` (407 tests) and `npm run oracle` should be green before you
      change anything, so a red gate later is yours and not inherited;
   3. take one task from READY NOW. There is no LIVE DEFECT on the map; the DEFAULT capture engine is
      now v2 (worker + WebCodecs) — anything touching capture/* keeps BOTH engines green.
+  4. the COLD gate (`--cold=N`) is trustworthy again since GATE-alias, with one known exception: the
+     SPUR band still fails about one run in seven at −33 to −38 dB. That is capture starvation, not a
+     mix regression, and it is the next gate task.
 
 READY NOW — parallel-safe, any subset concurrently (one session each):
-  GATE-alias  the cold oracle is flaky  [P0 of the gates, medium]  FOUND 2026-08-25 (eleventh
-                                             session) and NOT this session's code — reproduced on a
-                                             clean `git archive HEAD` build. `npm run oracle
-                                             --cold=3`, six runs at HEAD: TWO FAIL, and both
-                                             failures land on multiples of the rig's own 1 s
-                                             fiducial grid (BEEP_INTERVAL_MS = 1000):
-                                               run A  sync −465.3, inst −471.7, trim −471.3  (~1/2)
-                                               run B  sync   82.7, inst −909.5, trim −909.1  (~1)
-                                             In run A every flash pair reads the SAME −465.3
-                                             (maxAbs == |mean| exactly), which is a constant shift
-                                             and not noise; in run B the RENDER is inside the band
-                                             while only the packet-copy paths are a second out.
-                                             THE LIKELY CAUSE IS THE INSTRUMENT, and the reason is
-                                             structural: the beeps are a UNIFORM 1 s grid, so
-                                             pairing a click with a flash is ambiguous by
-                                             construction, and fiducial.ts snaps to that grid behind
-                                             an `intervalMs / 2` guard — exactly the boundary where
-                                             ~465 and ~909 come from. The oracle's existing
-                                             `aliased` check does not cover this: it only fires when
-                                             the audio-corrected RENDER number moves >750 ms, and it
-                                             read false on every failing run.
-                                             WHY IT IS P0 ANYWAY: the same ambiguity that invents a
-                                             one-second error can HIDE a real one by snapping it
-                                             onto the grid, so nothing measured on this rig is safe
-                                             until it is closed — and the fast paths are the ones it
-                                             hits, which is where P0-instant-sync just landed.
-                                             BISECT, one sample each: 8c73633 (before the
-                                             wedge/persistent-connect commits) 3/3 with no sync
-                                             failure; HEAD 4/6. That is suggestive, NOT conclusive
-                                             at n=1 — a8d8635 (a granted input is asked again, so a
-                                             retried acquire moves a channel's start) is the
-                                             suspect worth eliminating FIRST, and it is a real
-                                             mechanism rather than a guess.
-                                             SHAPE OF THE FIX: make the pairing unique instead of
-                                             inferring it — the video side already carries a
-                                             machine-readable barcode per frame, the audio side does
-                                             not. A non-uniform or coded beep schedule removes the
-                                             ambiguity outright; snapping harder does not.
-                                             DO NOT code a fix from this description: reproduce it
-                                             first (`--cold=6` twice, and note the spur band fails
-                                             separately when the machine is busy — that is the known
-                                             capture-starvation artifact, not this).
+  (GATE-alias FIXED 2026-08-25, eleventh session — see the task below. The first diagnosis written
+   here was WRONG and has been replaced by the measured one: a cold AudioContext stalls further than
+   the rig's own arithmetic could represent. 22 cold runs since, zero sync failures.)
   (AI1 SHIPPED 2026-08-24, ninth session — the "For AI" button is in the export panel and every gate
    is green; handoff in PHASE A at the bottom. AI2-AI7 stay frozen until PO feeds a real take's file
    to an AI and reports back — that report is the only thing that unfreezes them.)
@@ -399,6 +371,68 @@ BOTH the composite and the raw channels.
   · real 4K game-tab recheck of the capture ceiling (2026-08-22 fix)
 
 ═══ P0 ═══
+
+## GATE-alias. the cold oracle was measuring past the end of its own ruler — FIXED 2026-08-25
+THE FIRST DIAGNOSIS IN THIS FILE WAS WRONG, and the way it was wrong is the lesson. It said the
+click↔flash PAIRING was ambiguous on a uniform 1 s grid and that the estimator was picking the wrong
+alignment. Both halves sounded right and neither was the cause. What settled it was making the rig
+dump the failing run instead of arguing about the summary line — the numbers, verbatim, from a cold
+run that failed at −438.7 ms:
+    beep arrivals   1537, 2537, 3537, 4537, 5537   residual vs k·1000 = 537 on EVERY one
+    flash arrivals  1019, 2020, 3020, 4020, 5020   residual = 19-20
+    export onsets   1.395 …   export flashes 0.833 …   true offset = +562 ms
+THE AUDIOCONTEXT STARTUP STALL WAS 537 ms — perfectly regular, trivially measurable, and past TWO
+hard limits at once:
+  (1) estimateScheduleSkewFromArrivals refused it (MAX_SCHEDULE_STALL_MS = 450), so there was no
+      correction at all and the gate fell to its RAW rung — which is why the failure line said
+      `(raw)` and why three sessions of theorising about aliasing missed it;
+  (2) the pairing window is half the grid wide and centred on ZERO, so +562 is not representable and
+      came back as its complement against the next flash, −438.
+So the run was not out of sync. The ruler was too short and nothing said so.
+FOUR FIXES, each measured:
+  · THE STALL IS ARITHMETIC, NOT A SEARCH. A beep is SCHEDULED at k·interval and can only render
+    LATE — an AudioContext that has not started cannot make a sound early. So arrival = k·interval +
+    stall with stall ∈ [0, interval), k = floor(arrival / interval), and the whole candidate-index
+    sweep and its 450 ms clamp go away. Missed first beep still works (k moves, the relation does
+    not). The magnitude clamps in isAliasedScheduleCorrection went with it: what distinguishes an
+    alias from a stall is not size, it is whether the raw reading AGREES (a real stall is in the raw
+    offset too) — the clause that caught every historical flake, and it stays.
+  · THE PAIRING IS TOLD WHERE TO LOOK. The rig measures both reference schedules before it decodes
+    anything, and their difference is where a correctly-paired export must land. flashSyncStats takes
+    that expectation and centres its window there; omitted, it is the old behaviour exactly.
+  · THE PAIRING PICKS BY CONSENSUS, NOT BY COUNT. The old sweep kept whichever alignment produced the
+    MOST pairs. Injection-proven red: with a doubled detector it reports −400 ms where the truth is
+    +50. Now every (onset, flash) pair proposes an offset and the one most events agree on wins, ties
+    to the smaller |offset| — the band is ±90 ms against a 1000 ms grid, so "a whole second out" needs
+    more evidence than "in band", not less.
+  · THE RIG WARMS ITS ENCODER, BECAUSE PRODUCTION DOES (note 6's fourth instance). A Chrome PROCESS's
+    first VideoEncoder pays a multi-second init and every oracle run is a fresh process; production
+    pays it at MOUNT (prearm.ts → encoderWarm.ts) while this rig paid it DURING the take. On a 6 s
+    take that is the whole take: two dumped failures show the render finding all five flashes while
+    the packet-copied exports found one and none, so inst/trim sync could not be computed — and the
+    run PASSED, because the band was written `typeof mean === 'number'`.
+TWO VACUITY HOLES CLOSED WITH IT, and the second one caught a real run within minutes: a fast path
+that RAN but produced no number now fails instead of passing silently, on both the instant and the
+trimmed path.
+ONE SAFETY NET, for the case the arithmetic still cannot see: a stall of a FULL interval wraps
+silently (1100 ms reads as 100). Nothing in the signal can distinguish that, so the gate refuses a run
+whose stall exceeds 0.75 × the grid. Measured headroom: ~130 ms before the rig warmed its encoder,
+326-531 ms after, so the threshold is real headroom and not a hair trigger.
+MEASURED AFTER, 22 cold runs across three batches: ZERO sync failures, zero aliasing, zero `n/a`
+fast-path numbers, and every run on the `metric=symmetric` rung (before: raw, corrected and n/a
+scattered across runs). sync 36.6-65.4 ms, instant 41.8-78.5, smart cut 41.3-78.8.
+TRIED AND DELETED: a 750 ms settle between the warm and the take, on the theory that the warm and the
+AudioContext were competing for the machine. Eight cold runs with it (stall 326-498) against eight
+without (343-462) say they are not. The warm does raise the stall ~3x and that is simply its price.
+STILL OPEN, and it is NOT this: the SPUR band fails about one cold run in seven at −33 to −38 dB
+against a −40 band, on a settled machine as well as a busy one (1 of 6 idle, 2 of 8 under load). That
+is the known capture-starvation artifact STATE already describes for the fidelity oracle, it predates
+this work, and it is the only remaining cold-gate flake. It wants its own session.
+WHAT THE INSTRUMENT STILL CANNOT DO, named so the next attempt starts here: the beep grid is uniform,
+so a stall beyond one full interval is undetectable rather than merely unrepresentable. The structural
+answer is a NON-UNIFORM or coded beep schedule, which makes the index unique at any stall. Not built —
+the arithmetic above covers everything measured so far, and a coded schedule changes the content every
+historical number was taken against.
 
 ## P0-instant-sync. the packet-copy paths were on the wrong clock — DONE 2026-08-25, merged
 WHAT IT WAS, and it is a CONTRACT hole rather than a bug in either path: the composite is a second

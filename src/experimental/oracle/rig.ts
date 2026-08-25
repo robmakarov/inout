@@ -557,6 +557,37 @@ export async function recordFiducialSession(durationMs: number, opts?: RecordOpt
 
   let audioCtx: AudioContext | null = null
   try {
+    /**
+     * WARM THE ENCODER BEFORE THE TAKE, BECAUSE PRODUCTION DOES (task
+     * GATE-alias, 2026-08-25 — note 6's fourth instance).
+     *
+     * A Chrome PROCESS's first VideoEncoder pays a multi-second init, and every
+     * oracle run is a fresh process. Production pays it at MOUNT (prearm.ts →
+     * encoderWarm.ts), long before anyone presses record; this rig paid it
+     * DURING the take, so its composite dropped the opening seconds — on a 6 s
+     * take, all of them. Measured consequence in two dumped cold runs: the
+     * render found all five flashes while the packet-copied exports found one
+     * and none, so the instant and smart-cut sync could not be computed at all
+     * and the run passed on a number that was never taken.
+     *
+     * Awaited, unlike production's fire-and-forget, because there is no user
+     * here to spend the time for us — and the whole point is that the take must
+     * begin after the init, exactly as a real one does.
+     */
+    if (opts?.composite !== false && preferredCompositeEngine() === 'v2') {
+      const { warmVideoEncoder } = await import('@core/capture/encoderWarm')
+      await warmVideoEncoder().catch(() => undefined)
+      /**
+       * PRICE OF THE WARM, MEASURED AND ACCEPTED: it raises the AudioContext's
+       * own startup stall from 115-152 ms to 326-498 ms. A 750 ms settle between
+       * the two was tried on the theory that they were competing for the
+       * machine — eight cold runs with it (326-498) against eight without
+       * (343-462) say they are not, so it was deleted rather than kept as a
+       * comforting no-op. The stall is a cost of having a warm encoder at all,
+       * it is correctly measured and corrected now, and the gate below refuses
+       * a run where it grows far enough to threaten the grid.
+       */
+    }
     const rigEpoch = performance.now()
 
     // -- video sources ---------------------------------------------------------

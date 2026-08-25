@@ -178,16 +178,31 @@ oracle), always spawns its own server. Bands as of 2026-08-23: sync ≤90 ms on 
 metric (see below — the old ≤60 ms band measured a different, ~31 ms optimistic quantity), spur ≥−40 dB,
 boundary jump ≤0.1, TAIL LOSS ≤400 ms with the last flash AND last click within 2000 ms of the end,
 export throughput ≥1× realtime. Typical run: sync 40-66 ms, tail 68-76 ms, export 5.0-5.2×, spur −50 dB.
-THE COLD GATE IS FLAKY AND THE FLAKE IS PROBABLY THE INSTRUMENT (found 2026-08-25, task GATE-alias —
-first on the READY map). `--cold=3` fails 2 of 6 runs on a clean build of HEAD, and BOTH failures land
-on multiples of the rig's own 1 s fiducial grid: one run reads −465 ms on every flash pair (a constant
-shift, maxAbs == |mean| exactly), another reads the RENDER inside the band at 82.7 ms while the
-packet-copy paths read −909 ms. The beeps are a uniform 1 s grid, so click↔flash pairing is ambiguous
-by construction and fiducial.ts snaps to that grid behind an `intervalMs / 2` guard — which is exactly
-where ~465 and ~909 come from. The existing `aliased=` flag does not cover it (it watches only the
-audio-corrected RENDER number moving >750 ms) and read false on every failing run. Until it is closed,
-a WARM `npm run oracle` is the gate to trust and a cold failure must be reproduced before it is
-believed — in either direction, because the same snapping can hide a real error as easily as invent one.
+THE COLD GATE WAS MEASURING PAST THE END OF ITS OWN RULER, AND IT IS FIXED (GATE-alias, 2026-08-25).
+`--cold=3` used to fail ~20 % of runs with a whole file scored a few hundred ms out. The cause was not
+the product and not, as first written here, an ambiguous pairing: a cold AudioContext's STARTUP STALL
+reached 537 ms (beep arrivals 1537/2537/3537/4537/5537 — residual 537 on every one, while the flash
+side stalled 20), and 537 is past two hard limits at once. The skew estimator refused anything over
+450 ms, so there was no correction and the gate fell to its RAW rung; and the click↔flash window is
+half the 1000 ms grid wide and centred on ZERO, so the +562 ms offset that stall produces is not
+representable and came back as −438. Four fixes: the stall is now ARITHMETIC (a beep can only render
+late, so arrival = k·interval + stall and k = floor(arrival/interval) — no sweep, no clamp, missed
+first beep still fine); the pairing is TOLD where to look (the rig measures both reference schedules
+before it decodes, and their difference is the expected offset); the pairing picks by CONSENSUS rather
+than by pair count (injection-proven: the old rule reported −400 where the truth was +50); and THE RIG
+WARMS ITS ENCODER as production does at mount, because a fresh Chrome process's first VideoEncoder ate
+the opening seconds of every 6 s take — which is why the packet-copy exports sometimes contained no
+flashes at all and their sync silently went unmeasured. Two vacuity holes closed with it: a fast path
+that RAN but produced no number now fails instead of passing. AFTER: 22 cold runs, zero sync failures,
+zero aliasing, every run on the `metric=symmetric` rung; sync 36.6-65.4 ms, instant 41.8-78.5.
+The per-run line now prints `metric=` and `skew=<audio>/<flash>`, and a failing run in a cold matrix
+dumps its whole report to /tmp/oracle-fail-*.json instead of only its failure strings.
+STILL FLAKY, SEPARATELY: the SPUR band fails about one cold run in seven at −33 to −38 dB against −40,
+on a settled machine as well as a busy one. That is the capture-starvation artifact described above
+for the fidelity oracle, it predates this work, and it is the only remaining cold-gate flake.
+KNOWN LIMIT: a stall beyond one FULL interval wraps silently (1100 ms reads as 100). The gate refuses
+a run whose stall exceeds 0.75 × the grid so it cannot happen unnoticed; the structural answer is a
+non-uniform beep schedule, not built.
 Fidelity: toneErr ~0.02-0.05 dB, THD −71 dB, IMD −60 dB, separation 51-60 dB, 0 limiter hits. Every band
 is injection-proven red (tanh-bus / mono-downmix / hard-limiter for fidelity; a 900 ms tail chop and a
 0.7× export for the O8 bands).

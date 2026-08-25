@@ -30,6 +30,29 @@ describe('estimateScheduleSkewFromArrivals', () => {
     const est = estimateScheduleSkewFromArrivals([50, 5000])
     expect(est.skewMeanMs).toBeNull()
   })
+
+  /**
+   * THE COLD RUN THAT FAILED THE GATE (GATE-alias, 2026-08-25). Measured
+   * arrivals, verbatim from a dumped failing run: a perfectly regular schedule
+   * stalled by 537 ms. The old estimator refused it because 537 > 450 and the
+   * gate then fell to its raw rung and failed the run at −438.7 ms.
+   */
+  it('measures a stall larger than the old 450 ms clamp', () => {
+    const est = estimateScheduleSkewFromArrivals([1537, 2537, 3537, 4537, 5537])
+    expect(est.skewMeanMs).toBeCloseTo(537, 0)
+    expect(est.firstBeepIndex).toBe(1)
+  })
+
+  it('still measures it when the first beep was missed as well', () => {
+    const est = estimateScheduleSkewFromArrivals([2537, 3537, 4537])
+    expect(est.skewMeanMs).toBeCloseTo(537, 0)
+    expect(est.firstBeepIndex).toBe(2)
+  })
+
+  it('refuses an irregular schedule rather than averaging it', () => {
+    // One beep missing from the MIDDLE: not one arrival per interval.
+    expect(estimateScheduleSkewFromArrivals([1200, 2200, 4200, 5200]).skewMeanMs).toBeNull()
+  })
 })
 
 describe('isAliasedScheduleCorrection', () => {
