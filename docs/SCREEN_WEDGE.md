@@ -37,6 +37,8 @@ never settled at all.
 | Survives a **Chrome update** | PO, 2026-08-24 |
 | Intermittent: "often, not always" | PO, 2026-08-24 |
 | App's own arming cost is ~22 ms; the wait is never our code executing | measured in-browser, 2026-08-24 |
+| **Accumulates within a Chrome session: "usually all okay first couple records, third or so start to have problem"** | PO, 2026-08-25 — the strongest new discriminator; consistent with Chrome leaking a capture-session claim per take until something saturates |
+| After the wedged claim finally clears (a later refresh), the **mic indicator** can light instead, and the app can sit on "Waiting for microphone…" | PO, 2026-08-25 — the mic's timeout budget is chosen by `await permissions.query(...)`, an IPC into the same wedged browser process; if that never answers, no deadline is ever armed (acquire.ts `isGranted`). A bounded fail-fast was written, tested, and NOT shipped: PO ruled "it must not fail" — failing the mic faster is not a fix, the mic has to connect, and no page code can make a wedged browser deliver a stream. Do not re-ship a fail-fast here without PO asking |
 
 ## The attempts, in order, with honest outcomes
 
@@ -64,12 +66,18 @@ never settled at all.
    `audio` request on the first wedge for 24 h — which removed Chrome's own "share tab
    audio" checkbox from the picker for a day, on a guess about which option is guilty.
    PO hit it within hours ("share sound toggle not there anymore").
-8. **Safe mode as a ladder + picker pane fix** (268223f, 9b13f67, 2026-08-25 session).
-   Current state. Rung 1 drops size/fps constraints and surface hints (user-invisible);
-   rung 2 is bare `{video:true, audio:true}`; only rung 3 — after three consecutive
-   wedges, one take only — drops audio. Success steps back up; everything expires 24 h
-   after the last wedge. Also: with Tab Audio on, the picker now opens on the Chrome-Tab
-   pane, the only pane where macOS Chrome offers an audio checkbox at all.
+8. **Safe mode as a ladder** (268223f — current state). Rung 1 drops size/fps
+   constraints and surface hints (user-invisible); rung 2 — the floor — is bare
+   `{video:true, audio:true}`. **No rung drops audio**; the checkbox is requested at
+   every rung, always. Success at rung 0 clears the mark; everything expires 24 h after
+   the last wedge.
+9. **Picker pane meddling — shipped and reverted the same day** (9b13f67 → f35ba00).
+   `monitorTypeSurfaces: 'exclude'` + a conditional pane hint removed the Entire-Screen
+   option whenever Tab Audio was on, on the theory that macOS Chrome only offers a sound
+   checkbox on the tab pane. PO's own whole-screen share HAS a system-audio checkbox, so
+   the theory was wrong and it cost him a picker option. Reverted; the rule is now written
+   in acquire.ts: **the picker is the user's, not ours** — never remove or reorder its
+   surfaces without PO saying so.
 
 ## Ruled out
 
@@ -96,6 +104,15 @@ never settled at all.
    always" and with surviving everything. If true, the ladder rungs all wedge, quit-Chrome
    remains the only cure, and our job is exactly what is already shipped: bound it,
    release everything, say the truth, count it.
+4. **(New, 2026-08-25) A per-take claim leak inside Chrome's capture stack.** PO: first
+   couple of records in a session are fine, the trouble starts "third or so" — something
+   is accumulating per successful take, in a process the page can't inspect. The page
+   provably stops every track it receives (deviceGuard, zero live streams after stop), so
+   if this is real it is Chrome failing to release its own SCK/native-picker session when
+   the page stops the track. Discriminator: after two clean takes, check
+   `chrome://webrtc-internals` and the macOS sharing pill BEFORE the third — a claim
+   showing there with zero live tracks in the page confirms it, and it is Chrome's bug to
+   file, with that page as the repro.
 
 ## What the next wedge must capture (evidence kit)
 

@@ -12,6 +12,17 @@ TD tags technical defects by severity. Done items get deleted, not archived.
 
 ### Now
 
+- [P0] TD 2026-08-25: SAFARI MIC — a real Safari take came back with "a couple seconds of
+  sound in the middle and nothing else" (PO 2026-08-25). The 2026-07 fix routed Apple WebKit
+  audio through MediaRecorder mp4/aac (session.ts isAppleWebKit gate) and was verified only
+  under a SPOOFED UA — that proves the code path runs, not that the sound survives. DO NOT
+  code-fix from theory; the last three capture fixes argued from ordering all failed. Needs
+  ONE artifact from PO first, either of: (a) the exported file itself (ffprobe tells whether
+  the gap is in the raw channel or made by the export), or (b) a Safari take with the console
+  open, copied out. Candidate causes to test against the artifact, not before: Safari
+  MediaRecorder timeslice chunking; mediabunny misreading Safari's mp4 sample tables; a second
+  consumer of the mic track (meter / v1 composite Web Audio graph) silencing the recorder.
+
 - [P0] TD 2026-08-25: THE SCREEN WEDGE IS STILL OPEN — getDisplayMedia never settles after the
   user picks, Chrome keeps the share claim, only ⌘Q clears it. Eight commits of mitigation are
   shipped (bounded ≤30 s, devices released, no screenless takes, safe-mode ladder); the CAUSE is
