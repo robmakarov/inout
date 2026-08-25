@@ -92,9 +92,44 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
    to an AI and reports back — that report is the only thing that unfreezes them.)
   (P0-instant-sync DONE 2026-08-25 and O5-flip SHIPPED on top of it — see the map header and the
    handoff under P0-instant-sync below. Smart cut is ON by default; `?smartcut=0` reverts.)
-  O5e  VFR timestamps              [medium]  the one part of O5 never attempted: preserve source
-                                             presentation timestamps from frame-driven takes instead
-                                             of CFR resampling. CFR 30 stays the default.
+  ── X-SERIES (TD optimization-frontier audit 2026-08-25, PO-ordered onto the map; full specs in
+     the PHASE X block below. Sorted by value-per-cost. X1·X2·X3 are parallel-safe with each other
+     and with nearly everything; X4 and X5 both touch render.ts — X5 after X4.) ──
+  X1   keep-loudness-envelope      [light]   capture already computes the take's full 100 ms RMS
+                                             envelope live and keeps 3 numbers; keeping the curve
+                                             (~72 KB per 30 min) kills the SECOND full audio decode
+                                             every EDITED export pays, F5a's analysis decode, and
+                                             the editor-open probe. Highest value per line found.
+  X2   scratch-writes-inline       [light]   the export worker copies every 4 MB chunk and awaits a
+                                             SECOND worker to write it; it can own the
+                                             SyncAccessHandle itself, as compositor.worker already
+                                             does. Pure overhead removal, no behaviour change.
+  X3   experiments-merge-or-delete [light-medium] PO RULING 2026-08-25: no standing experimental
+                                             tree — a module is gate tooling a live task runs, or
+                                             it is deleted. ~2,300 lines go now; the 30 perf rigs
+                                             get triaged live-vs-spent. Oracle stays (merge gate).
+  X4   parallel-decode-workers     [medium]  the render's floor is single-thread decode (1295 ms of
+                                             a ~1900 ms render, note 13). GOPs are independent at
+                                             our own 5 s cadence → one decoder worker per channel,
+                                             then per GOP range. Note 13 killed single-thread
+                                             prefetch; it says nothing about N threads.
+  X5   gpu-export-compositor       [medium-heavy] the render still composites through a 2D canvas —
+                                             the exact readback capture measured at ~150 ms/frame
+                                             and fixed with compositorGL (0.86 ms). Port the render
+                                             draw onto the GL painter; also collapses the
+                                             three-places geometry drift risk to two. Pairs with O6.
+  X6   raw-channels-webcodecs      [medium]  screen+camera still encode via SOFTWARE VP8/VP9 during
+                                             capture (largest capture CPU cost, O3a). The O3a
+                                             blocker (Chrome won't stream MP4) is solved by v2's own
+                                             fMP4+SyncAccessHandle pattern; ee/webcodecs-capture-2
+                                             is half of it, behind main — rebase first.
+  X9   ai-pdf-off-main-thread      [light]   the For-AI build runs on the UI thread at 0.74× a full
+                                             render — janks the app for seconds. Same move the
+                                             render made in O5 (worker).
+  X12  capture-bitrate-pricing     [light]   measurement only: ~2.3 GB/hour written during capture
+                                             to ship an 8 Mbps file; O11a's packet audit prices the
+                                             raw/composite split. Output = numbers + proposal, no
+                                             behaviour change.
   O6   native-res-capture          [medium]  UNBLOCKED — and the 4K lever is named: the worker's GL
                                              texture upload of a 4K frame (~35.6 ms), WebGPU
                                              importExternalTexture is the remedy to probe.
@@ -154,6 +189,32 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
                                              gecko driver for the real Firefox run and the oracle's
                                              third engine, and a Windows machine for the one row that
                                              cannot be spoofed. See the handoff.
+
+NEEDS PO DISCUSSION BEFORE ANYONE BUILDS (PO 2026-08-25: "questionable mark as need to be discussed
+again" — these change the file a user gets, or need PO's hardware, so they start on a ruling, not a go):
+  X10=O5e VFR export               [medium]  don't re-inflate a frame-driven capture to CFR 30: a
+                                             static screencast stores ~1 fps and the render decodes+
+                                             encodes 30× that for identical frames. Order-of-
+                                             magnitude on screen content — but the output file gets
+                                             VARIABLE frame timing, which some editors/players
+                                             dislike. TD proposal: opt-in first, default CFR.
+  X13  local-adaptive-encoding     [heavy]   on-device zero-token model (per PO's 2026-08-25 "no AI"
+                                             clarification = no runtime token spend) classifying 5 s
+                                             chunks text/motion/still to steer bitrate; realistic
+                                             20-40 % smaller files. Changes output → principle
+                                             ruling first, then per-instance gate.
+  X7   safari-premise-retest       [light]   Safari 26 shipped AudioEncoder/AudioData and Safari 18+
+                                             has MediaStreamTrackProcessor (worker-only, video-only)
+                                             — the premises behind "v1 exists because Apple lacks
+                                             MSTP" and the ~1 s audio truncation are STALE. Needs
+                                             PO's real Mac/Safari and pairs with the P8 artifact PO
+                                             still owes. If green, a whole Safari special-case pile
+                                             deletes and P8 may close itself.
+PARKED (nothing to build today): X11 capture-audio-mix-to-worker — heavy, touches the tuned mix
+graph (limiter/gains), do after X6; kills the last main-thread capture cost and the ~430 ms PCM port
+lag; capture change → PO gate. · X14 sync ≤20 ms — blocked on Q4 2026 Web Audio deliverables
+(audio-thread performance.now(), configurable quantum); nothing buildable until implementers ship.
+· 4K/WebGPU importExternalTexture stays inside O6 (second-order until X5).
 FOLLOW-UP FOUND WHILE FIXING P0-tail-raw, not fixed and not urgent: `setChannelActive(kind, false)`
 stops a channel mid-take through onTrackEnded, which does NOT drain — so a channel the user switches
 off loses whatever the encoder had not caught up on, exactly the defect P0-tail-raw fixed for the END
@@ -369,6 +430,112 @@ BOTH the composite and the raw channels.
     bypasses getUserMedia so it cannot be verified headlessly)
   · real Safari + iOS Safari recheck of the MediaRecorder-audio path (long-standing)
   · real 4K game-tab recheck of the capture ceiling (2026-08-22 fix)
+
+═══ X — OPTIMIZATION FRONTIER (TD audit 2026-08-25; PO standing bar: theoretical practical limit,
+no accepted-engine-limitation answers; PO ordered the map 2026-08-25) ═══
+Source: a data-flow trace of render.ts / layout.ts / audio.ts / loudnessAccumulator.ts /
+compositor.worker.ts / blobStore.ts / scratch.ts — not the docs — plus a platform re-baseline:
+WebGPU default in ALL FOUR engines since 2025-11 (Firefox stable still lacks importExternalTexture;
+Linux still gated) · MediaStreamTrackProcessor in Safari 18+ (SPEC version: worker-only, VIDEO-only;
+Chrome's 2021 main-thread+audio version is proprietary — two code paths, feature-detect in a worker)
+· Safari 26 ships AudioEncoder/AudioData (before 26 Safari had NO audio encoding — the ~1 s
+truncation that routed Apple to MediaRecorder was measured against that Safari) · Firefox has no AAC
+encoder anywhere, nor does any browser on desktop Linux.
+AT-LIMIT, measured, do not re-open without new evidence: instant packet copy (a copy cannot be
+beaten) · scratch muxing (flat 4 MB at any length) · GL capture composite (0.86 ms/frame) ·
+frame-driven capture drawing · per-chunk write+flush (batching measured no better) · encoder queue
+depth (lookahead built, measured, deleted — note 13) · first paint 233.9 KB · the 4K capture cap.
+
+## X1 keep-loudness-envelope [light · ~200 lines: loudnessAccumulator.ts, types.ts, audio.ts,
+   analyzeSilence.ts, tests · touches the RENDER path only of the three]
+loudnessAccumulator.finish() SORTS windowRms (destroying time order) and returns 3 scalars; the
+envelope itself — 10 floats/s, 72 KB per 30 min — is discarded. Three consumers then re-decode all
+audio to rebuild what was thrown away: render.ts's probe pass (openAudioMixers a second time —
+every EDITED export, because O2's shortcut gates on isDefaultEdit), compose/analyzeSilence.ts
+(F5a), and measureRecordingMakeup (every editor open). Keep the envelope in time order on
+Recording.loudness; edited exports re-percentile the windows inside kept segments instead of
+decoding. The p20-floor null-return guard (loudnessFromCaptureStats) generalizes unchanged — the
+codec-floor argument is about the statistic, not how many are kept.
+GATES: an edited export whose envelope covers its channels runs ZERO probe decodes (count them);
+makeup agrees with the probe within the O2 tolerances on the rig (p90 ≤0.4 dB, peak ≤0.03 dB, floor
+term → probe, same as today); F5a proposal identical on the known-silence rig; oracle + fidelity
+green; takes predating the field keep today's exact behaviour.
+
+## X2 scratch-writes-inline [light · ~100 lines net-negative: scratch.ts, export.worker.ts wiring;
+   blobStore's worker stays for MAIN-thread callers (the in-thread render fallback, v1 capture)]
+createDurablePositionedWriter pays, per chunk: a full buffer.slice COPY, a transfer to a SECOND
+worker, and an awaited round trip. The export render already lives in a dedicated worker and
+FileSystemSyncAccessHandle is [Exposed=DedicatedWorker] — own the handle inline, exactly as
+compositor.worker.ts:572 already does. Same fix applies to the AI-PDF writer once X9 lands.
+GATES: A/B export byte-identical; O8 peakOut band unchanged (`npm run exp -- o1`); worker-death
+fallback still lands on BufferTarget; oracle green.
+
+## X3 experiments-merge-or-delete [light-medium · deletes ~2,300 lines now, triages ~10,000 ·
+   touches no product path]
+PO RULING 2026-08-25: no standing experimental tree — "all the shit must get in worked or be
+deleted". A module is (a) tooling a live gate/task runs → it stays and is owned, or (b) spent — its
+question answered, verdict in DECISIONS → deleted on sight (git is the archive; the doc rule
+already says so). Immediate (b): session-log/, timemap/, wcap/ (became liveCompositeV2),
+scene/, datachan/, semantic/, streamx/, shared/. Then triage the ~30 perf rigs: a rig a READY task
+names (o5, o11, f8, o4step2, armcancel, aiexport…) is (a); mp4Capture (O3a verdict in), workerBisect
+(cold-start verdict in), sizeProbe (F7c shipped attempt 5) and peers are (b). Oracle is (a) by
+definition — it is the merge gate. Prune the harness registry and exp.mjs ids to match.
+GATES: typecheck + full test suite + oracle + oracle --engine=v1 + fidelity green AFTER the
+deletions; browser-check 8/8; no scripts/*.mjs references a deleted module; READY-map tooling index
+updated to only name survivors.
+
+## X4 parallel-decode-workers [medium · ~500 new lines: decode worker + range split in
+   compose/video.ts + merge · RENDER path only]
+The render's floor is DECODE ON ONE THREAD: 1295 ms of a ~1900 ms 12 s render, against 962 ms for
+decode alone (note 13). Note 13 retired single-thread scheduling — prefetch pump and lookahead were
+built, measured, deleted. It says NOTHING about N threads: the expensive part is JS, so shard the
+JS. Step 1: one decoder worker per CHANNEL (separate files, zero GOP logic, trivially correct).
+Step 2: GOP-range sharding within a channel — GOPs are independent at OUR OWN 5 s cadence
+(KEYFRAME_INTERVAL_SEC, O11b) and the F8 verdict proved the random-access reader lands frame-exact
+off-grid. Ceiling is core count, not 6×.
+GATES: output byte-identical to the single-thread render where encoder determinism allows, else
+per-frame PSNR ≥ the smart-cut bound (37.5 dB) with cut boundaries exact; export ≥2× today's 5.2×
+realtime on a 60 s edited take, measured both orders warmed (note 10); peak memory band unchanged;
+oracle + fidelity green; worker unavailable → today's loop untouched (frozen rule).
+
+## X5 gpu-export-compositor [medium-heavy · ~600 lines: compositorGL grows background/pose/viewport,
+   render.ts swaps painters · RENDER path only; UNIFIES two of the three geometry places]
+The render composites through a 2D OffscreenCanvas — the EXACT mistake capture measured (~150 ms
+per 1080p frame readback, 6.7 fps) and fixed with compositorGL (0.86 ms), while the render never
+got the fix: every frame pays GPU→CPU readback + CPU composite + CPU→GPU upload for the encoder.
+And the two painters are REQUIRED pixel-identical anyway (instant packet-copies one, the render
+produces the other — conflict rule 8). Port the render draw onto the GL painter: extend the SDF
+shader with F3 backgrounds (gradient as data), F4 poses, F2 viewport transform; 2D stays as the
+no-WebGL2 fallback. Pairs with O6: once the render is GL, importExternalTexture is the 4K probe.
+GATES: pixel parity against layout.ts on a golden-frame set covering default/F3/F4/F2 (per-channel
+max delta ≤1 LSB or PSNR ≥60 dB); drawMs measured before/after; all three export paths named
+(render changed, instant and smart cut untouched); oracle + fidelity green; waveform mode untouched.
+
+## X6 raw-channels-webcodecs [medium · finish ee/webcodecs-capture-2 (behind main — REBASE first),
+   ~400-800 lines · CAPTURE side; additive per the frozen rule, MediaRecorder stays the ladder]
+Screen+camera raw channels still encode via SOFTWARE VP8/VP9 (the largest capture CPU cost, O3a)
+while the composite uses hardware AVC. O3a's rejection reason — Chrome's MediaRecorder does not
+stream MP4, a mid-take kill leaves 753 bytes — is SOLVED by the pattern v2 already ships: WebCodecs
+→ fMP4 → own SyncAccessHandle, bytes on disk as produced. Keyframe control on raw channels also
+opens smart-cut-over-raw later.
+GATES: the O3a mid-take snapshot test — kill at 50 %, the prefix DECODES to within the tail band;
+oracle BOTH engines + oracle:load both phases + armcancel + salvage smoke green; capture CPU
+measured before/after (the two software encodes are the claim); real-device take AWAITS PO.
+
+## X9 ai-pdf-off-main-thread [light · ~100 lines: core/ai/build.ts into a worker, same O5 shape]
+The For-AI build runs on the UI thread at 0.74× a full render — seconds of jank. core/ai is already
+DOM-free by construction; move the build into a worker, stream progress like export.worker does.
+GATES: byte-identical PDF on the rig take; `node scripts/ai-pdf-check.mjs` green; long-task count
+during a For-AI export ~0 on the prod build.
+
+## X12 capture-bitrate-pricing [light · measurement only, zero product lines]
+Capture writes ~18.5 Mbps across three artifacts (raw screen 8 + raw camera 2.5 + composite 8),
+~2.3 GB/hour, to ship an 8 Mbps file. Both artifacts are needed GIVEN THE FEATURES (edit
+flexibility; instant copy) — but the SPLIT has never been priced. O11a's BitsAudit is the
+instrument; O11c already ran this exact play once (camera 4→2.5 Mbps, −29.3 % disk, +0.2 % file).
+OUTPUT: numbers + a proposal appended here. Any actual bitrate change is its own PO-gated task.
+
+(X7, X10=O5e, X13: NEEDS PO DISCUSSION — see the READY map. X11, X14: PARKED — see the READY map.)
 
 ═══ P0 ═══
 
