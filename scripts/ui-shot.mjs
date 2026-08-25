@@ -363,6 +363,48 @@ try {
         duration: document.querySelector('.transport__time')?.innerText ?? '',
       })`,
     )
+  } else if (flow === 'scrub') {
+    // F8: does a ONE-FRAME scrub actually repaint? usePlayback only re-seeks a
+    // paused element past PAUSED_SEEK_MS of drift, and that used to be 40 ms
+    // against a 33.3 ms frame — so a whole frame of scrub could leave the
+    // picture where it was. Two ruler clicks one frame apart; the element's own
+    // currentTime is the answer, and it is read from the PROD build.
+    const readTimes = `(() => [...document.querySelectorAll('video')].filter(v=>v.src).map(v=>Math.round(v.currentTime*1000)))()`
+    const clickRuler = (fx) =>
+      `(() => { const r=document.querySelector('.tl__ruler'); if(!r) return false;
+        const b=r.getBoundingClientRect(); const x=b.left+b.width*${fx}, y=b.top+b.height/2;
+        r.dispatchEvent(new PointerEvent('pointerdown',{clientX:x,clientY:y,bubbles:true,pointerId:1}));
+        r.dispatchEvent(new PointerEvent('pointerup',{clientX:x,clientY:y,bubbles:true,pointerId:1}));
+        return true })()`
+    const clock = await evaluate(
+      `(document.querySelector('.transport__time')?.innerText || '').replace(/\s+/g,' ')`,
+    )
+    const m = /(\d+):(\d\d)[^\d]*$/.exec(clock || '')
+    // The rig knows how long it recorded; the clock is only a cross-check.
+    const durMs = m ? (Number(m[1]) * 60 + Number(m[2])) * 1000 : takeMs
+    const frameFrac = durMs > 0 ? 1000 / 30 / durMs : 0
+    await evaluate(clickRuler(0.4))
+    await sleep(700)
+    const before = await evaluate(readTimes)
+    await evaluate(clickRuler(0.4 + frameFrac))
+    await sleep(200)
+    await sleep(700)
+    const after = await evaluate(readTimes)
+    const moved = before.map((b, i) => after[i] - b)
+    cameraReport = {
+      flow: 'scrub',
+      durMs,
+      clock,
+      frameMs: Math.round((1000 / 30) * 10) / 10,
+      pxPerFrame: null,
+      before,
+      after,
+      movedMs: moved,
+      // The gate: a one-frame scrub must move every video element by about a
+      // frame. Zero means the deadband ate it.
+      allMoved: moved.length > 0 && moved.every((d) => Math.abs(d) >= 20),
+    }
+    text = JSON.stringify(cameraReport)
   } else if (flow === 'cuts') {
     // Seek to the middle of the take, split, then split again further along.
     await evaluate(
