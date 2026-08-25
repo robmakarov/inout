@@ -300,7 +300,20 @@ export async function calibrateSteps(
       if (measured) steps[lane.tier.id] = measured
     }
     if (Object.keys(steps).length === 0) return null
-    return { steps, sampledAtSec, wallMs: Math.round(performance.now() - t0) }
+    const wallMs = Math.round(performance.now() - t0)
+    // One line, always: this is a MEASUREMENT the user is shown, so what it
+    // actually measured has to be readable from a real take's console.
+    console.info(
+      `[quality] size probe: ${composed} frames from ${atSec.toFixed(1)}s of ${durationSec.toFixed(1)}s ` +
+        `in ${wallMs} ms — ` +
+        Object.values(steps)
+          .map(
+            (m) =>
+              `${m.tierId} first ${m.firstKeyframeBytes}/${m.firstDeltaBytes} later ${m.laterKeyframeBytes}/${m.laterDeltaBytes}`,
+          )
+          .join(' · '),
+    )
+    return { steps, sampledAtSec, wallMs }
   } catch (err) {
     console.warn('[quality] size calibration failed, falling back to the estimate', err)
     return null
