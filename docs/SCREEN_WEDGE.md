@@ -60,6 +60,8 @@ never settled at all.
 | **Accumulates within a Chrome session: "usually all okay first couple records, third or so start to have problem"** | PO, 2026-08-25 — the strongest new discriminator; consistent with Chrome leaking a capture-session claim per take until something saturates |
 | **Reproducible at will by rapid cycling: "connect screen, 2 seconds recording, back and again 10 times — it happens again"** | PO, 2026-08-25, after the persistent-connect ship. Confirms per-take accumulation and gives the case file its first repro recipe |
 | After the wedged claim finally clears (a later refresh), the **mic indicator** can light instead, and the app can sit on "Waiting for microphone…" | PO, 2026-08-25 — the mic's timeout budget was chosen by `await permissions.query(...)`, an IPC into the same wedged browser process; when it never answered, no deadline was ever armed. A bounded fail-fast was written and REFUSED by PO ("it must not fail" — the mic has to connect, not fail faster). PO then ordered the opposite contract: "all input must connect everytime without fails" → **persistent connect shipped** (acquire.ts `connectPersistently`): the lookup is bounded (cached grant as fallback), a granted mic/camera is re-asked — 2 attempts before the take starts, then an endless paced background hunt that late-joins the device the moment the browser delivers. Fenced: granted devices only, dies with the take / the user's off-switch / a denial. The SCREEN cannot be hunted — getDisplayMedia needs a fresh user gesture per ask |
+| **Load at picker time is a trigger by ITSELF: a 4K game already running in another tab → the record attempt wedges; restart Chrome, take the share BEFORE starting the game → no wedge** | PO, 2026-08-25 — ordering discriminator; per-take accumulation is not the only path in. The no-wedge ordering (share first, load after) is exactly the state O12 would make permanent |
+| **In the game-load wedge the refresh ritual DID NOT deliver: the app went unresponsive, no automatic reload PO could see, and no message told him to quit/reload Chrome** | PO, 2026-08-25 — contradicts the "what users get today" list below for this ordering. Candidate causes, unproven: the renderer itself is janked by the same GPU load so the reload never runs or paints; or the failure path taken under load never classifies as `wedged` so wedgeReload is never asked. Needs the arming timeline from a repro |
 
 ## The attempts, in order, with honest outcomes
 
@@ -149,6 +151,12 @@ never settled at all.
    `chrome://webrtc-internals` and the macOS sharing pill BEFORE the third — a claim
    showing there with zero live tracks in the page confirms it, and it is Chrome's bug to
    file, with that page as the repro.
+5. **(New, 2026-08-25) The share handshake is load-sensitive.** A 4K game running before
+   the picker opens wedged the record attempt; restart Chrome, share first, start the game
+   after → no wedge (PO). So saturating the browser/GPU process at share time can wedge
+   with zero accumulated takes. Discriminator: replace the game with a synthetic GPU load
+   (a WebGL stress tab) and repeat both orderings — if it reproduces, it is pure load, the
+   game is irrelevant, and a clean Chromium repro exists.
 
 ## What the next wedge must capture (evidence kit)
 
@@ -168,6 +176,9 @@ normal pace). Failure is bounded (≤30 s, usually 8), every device is released 
 failure, no take silently records without its primary, the app refreshes itself once and
 invites a retry, the retry self-heals through the request ladder, a second wedge right
 after the refresh gets the honest ⌘Q text, and every occurrence is counted.
+FIELD-CONTRADICTED for the game-load ordering (PO, 2026-08-25): in that wedge the app went
+unresponsive with no visible reload and no ⌘Q message — the ritual either never fired or
+could not paint under the same load. Open defect, BACKLOG P1.
 
 ## The one unbuilt lever — parked on the roadmap
 
@@ -175,3 +186,5 @@ after the refresh gets the honest ⌘Q text, and every occurrence is counted.
 2026-08-25 "we will consider it later"): one share for the whole session removes the
 picker from every take after the first and the create/teardown churn the wedge
 accumulates on. Cost: the sharing indicator stays lit between takes. PO's call.
+PO's 2026-08-25 game-first case is direct field evidence for it: the ordering that avoids
+the wedge (share taken first, load started after) is exactly the state O12 makes permanent.

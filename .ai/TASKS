@@ -429,7 +429,11 @@ BOTH the composite and the raw channels.
   · camera-only take on a REAL camera should now record 1080p, not upscaled 720p (O3a; synthetic mode
     bypasses getUserMedia so it cannot be verified headlessly)
   · real Safari + iOS Safari recheck of the MediaRecorder-audio path (long-standing)
-  · real 4K game-tab recheck of the capture ceiling (2026-08-22 fix)
+  · 4K game-tab recheck of the capture ceiling — PARTIAL 2026-08-25: video records (no frozen
+    frame reported; 300 MB/5 min = the 8 Mbps ceiling, expected), but the take exposed progressive
+    audio desync + noises under that load (NEW BACKLOG P1, loaded-regime sync never measured) and
+    a game-first wedge ordering where the refresh ritual also failed to surface (case file +
+    BACKLOG P1). Still unseen: the take's `[capture] display capped …` / `delivering N fps` lines.
 
 ═══ X — OPTIMIZATION FRONTIER (TD audit 2026-08-25; PO standing bar: theoretical practical limit,
 no accepted-engine-limitation answers; PO ordered the map 2026-08-25) ═══

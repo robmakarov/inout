@@ -394,7 +394,11 @@ gaps / in flight:
   instead. PO RE-RAN HIS OWN STRESS TEST AGAINST THE FULL STACK: "seems to be allright now"
   (2026-08-25, end of day) — MITIGATED, not cured; the Chrome-side bug stays open and the case file
   (docs/SCREEN_WEDGE.md) now carries the CANONICAL FORMULATION to quote if it recurs, plus the repro
-  recipe and evidence kit. The strongest unbuilt lever — keep ONE screen share alive between takes —
+  recipe and evidence kit. RECURRED same day in ONE ordering (PO): a 4K game already running when
+  record is pressed wedges; restart Chrome, share FIRST, then the game — no wedge. Load at picker
+  time is a trigger by itself (case file updated; direct evidence for O12). AND in that wedge the
+  REFRESH RITUAL DID NOT DELIVER — app unresponsive, no visible reload, no ⌘Q message; that half is
+  ours, BACKLOG P1, evidence (arming timeline under game load) before code. The strongest unbuilt lever — keep ONE screen share alive between takes —
   is parked as TASKS O12, PO-gated ("we will consider it later"); do not build it unbidden.
 - FROZEN-SOURCE TAKES (PO 2026-08-06 "switched to a tab with a game, nothing recorded, just frozen frame") — fixed +
   measured. Evidence first (real Chrome 150 / macOS 26, genuinely backgrounded tab, rAF==0): AudioWorklet tick 63/s,
@@ -426,8 +430,10 @@ gaps / in flight:
   Chrome, hidden tab, AudioWorklet rig mirroring liveComposite, 2 runs order-reversed, idle machine): 4K delivered 21.5/11.9
   fps vs a 30 target, drawImage 13.94/8.55ms of a 33ms budget, composite encoder starved to 289/106 KB/s — same rig at 1080p
   delivered 29.8–29.9 fps, drawImage 0.97–1.04ms, encoders 597–614 KB/s. Also: per-source delivered fps logged every 10s
-  from the composite tick (console only — a static screen legitimately delivers ~1 keep-alive fps). STILL NEEDS: PO recheck
-  on the real 4K game tab, plus the new `[capture] display capped …` / `delivering N fps` console lines from that take.
+  from the composite tick (console only — a static screen legitimately delivers ~1 keep-alive fps). PO RECHECK 2026-08-25 PARTIAL: the game take
+  RECORDS now (no frozen-frame complaint; 300 MB/5 min = the 8 Mbps ceiling exactly — expected size, not a regression), but the
+  failure moved DOWN a layer: progressive audio desync (~20 s in, audio ahead, then wrong speed) + noises under the same load —
+  NEW BACKLOG P1; no sync number in this project was ever taken under load. Console lines from a real game take still unseen.
 - PO 2026-07-23 triple report (Chrome capture stops after a while / AV desync / noises) → TD same-day fixes, awaiting PO recheck:
   capture hardened (screen wake lock while recording, storage.persist, mid-take storage/encoder death emits channel-error and keeps
   the durable partial instead of silently truncating — measured stop() no longer throws away a partial channel, and a failed measured
