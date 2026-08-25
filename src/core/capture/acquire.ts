@@ -78,6 +78,30 @@ export const PROMPT_TIMEOUT_MS = 120_000
 export const PICKER_SETTLE_MS = 8_000
 
 /**
+ * ABSOLUTE ceiling on getDisplayMedia, focus tricks or no focus tricks.
+ *
+ * The 8 s post-picker deadline above is the fast path, and it depends on the
+ * page seeing focus leave and come back. On macOS Chrome now delegates the
+ * picker to the system (the menu-bar sharing pill), and the page may observe
+ * NO focus change at all — PO 2026-08-24, fresh Chrome, first take: wedged
+ * again, "stuck in waiting", and the fast path never engaged. When detection
+ * fails, the old code fell back to the 120 s human budget, which in practice
+ * meant two minutes of lit indicators and then quitting Chrome.
+ *
+ * So the display request gets its own hard total budget. 30 s is 6× the
+ * incident that created the never-time-a-person rule (5 s cut off a real user
+ * reading the picker, 2026-07-16) — nobody spends half a minute choosing a
+ * screen. And the cost of being wrong has changed shape: back then, timeout
+ * meant silently recording WITHOUT the screen; now it means failing the whole
+ * take loudly, releasing every device, and inviting a retry. An impatient
+ * ceiling with an honest failure beats a patient one that takes hostages.
+ *
+ * Camera and mic prompts keep the full PROMPT_TIMEOUT_MS: those are in-page
+ * permission bubbles, humans do read them, and they do not wedge this way.
+ */
+export const DISPLAY_TOTAL_BUDGET_MS = 30_000
+
+/**
  * Resolves once the screen picker is judged closed: focus left the page and
  * then came back. Never resolves if focus was never lost (a picker that does
  * not take focus, or an engine that reports focus differently) — deliberately,
@@ -537,7 +561,7 @@ export function acquireChannelsProgressive(
       rawDisplay.catch(() => undefined) // handled below; never unhandled
       displayPromise = withTimeout(
         withTimeout(rawDisplay, PICKER_SETTLE_MS, 'getDisplayMedia (picker closed)', pickerClosed()),
-        PROMPT_TIMEOUT_MS,
+        DISPLAY_TOTAL_BUDGET_MS,
         'getDisplayMedia',
       )
     }

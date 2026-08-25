@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { PICKER_SETTLE_MS, PROMPT_TIMEOUT_MS, pickerClosed, withTimeout } from './acquire'
+import {
+  DISPLAY_TOTAL_BUDGET_MS,
+  PICKER_SETTLE_MS,
+  PROMPT_TIMEOUT_MS,
+  pickerClosed,
+  withTimeout,
+} from './acquire'
 import { createCaptureSession } from './session'
 import { liveDeviceStreamCount, resetDeviceGuardForTests } from './deviceGuard'
 import { rememberGrant } from './grants'
@@ -82,7 +88,7 @@ describe('a picker that has been answered is no longer a human', () => {
     const wedged = new Promise<MediaStream>(() => {}) // Chrome shares, never answers
     const guarded = withTimeout(
       withTimeout(wedged, PICKER_SETTLE_MS, 'getDisplayMedia (picker closed)', pickerClosed()),
-      PROMPT_TIMEOUT_MS,
+      DISPLAY_TOTAL_BUDGET_MS,
       'getDisplayMedia',
     )
     let outcome = 'pending'
@@ -98,8 +104,37 @@ describe('a picker that has been answered is no longer a human', () => {
     expect(outcome).toBe('pending')
     await vi.advanceTimersByTimeAsync(2_000)
     expect(outcome).toMatch(/picker closed/)
-    // And the 120s ceiling is what it never had to reach.
-    expect(PICKER_SETTLE_MS).toBeLessThan(PROMPT_TIMEOUT_MS / 10)
+    // And the outer ceiling is what it never had to reach.
+    expect(PICKER_SETTLE_MS).toBeLessThan(DISPLAY_TOTAL_BUDGET_MS)
+  })
+
+  /**
+   * PO 2026-08-24, fresh Chrome, first take: wedged again with the fast path
+   * never engaging — macOS's native sharing pill can open and close without
+   * the page ever observing a focus change. Detection is allowed to fail;
+   * the hostage-taking is not. The absolute ceiling fires regardless.
+   */
+  it('fails at the absolute ceiling even when NO focus change is ever observed', async () => {
+    vi.useFakeTimers()
+    stubFocusableDocument()
+    focused = true // the native pill never took page focus — we see nothing
+    const wedged = new Promise<MediaStream>(() => {})
+    const guarded = withTimeout(
+      withTimeout(wedged, PICKER_SETTLE_MS, 'getDisplayMedia (picker closed)', pickerClosed()),
+      DISPLAY_TOTAL_BUDGET_MS,
+      'getDisplayMedia',
+    )
+    let outcome = 'pending'
+    void guarded.catch((e: Error) => {
+      outcome = e.message
+    })
+    await vi.advanceTimersByTimeAsync(DISPLAY_TOTAL_BUDGET_MS - 1_000)
+    expect(outcome).toBe('pending') // still inside the budget
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(outcome).toMatch(/getDisplayMedia timed out/)
+    // Half a minute, not two: the whole point.
+    expect(DISPLAY_TOTAL_BUDGET_MS).toBeLessThanOrEqual(30_000)
+    expect(DISPLAY_TOTAL_BUDGET_MS).toBeLessThan(PROMPT_TIMEOUT_MS / 3)
   })
 })
 
