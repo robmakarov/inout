@@ -133,9 +133,18 @@ try {
       `[...document.querySelectorAll('.chips .chip')].map(b=>b.title+':'+b.getAttribute('aria-pressed')).join(' ')`,
     )
   }
-  await evaluate(`document.querySelector('button[aria-label="Start recording"]').click()`)
+  const clicked = await evaluate(
+    `(() => { const b=document.querySelector('button[aria-label="Start recording"]'); if(!b) return 'no button'; b.click(); return 'clicked' })()`,
+  )
+  if (clicked !== 'clicked') console.error(`  record button: ${clicked}`)
   await sleep(takeMs)
-  await evaluate(`document.querySelector('button[aria-label="Stop recording"]')?.click()`)
+  const stopped = await evaluate(
+    `(() => { const b=document.querySelector('button[aria-label="Stop recording"]'); if(!b) return 'no stop button'; b.click(); return 'stopped' })()`,
+  )
+  if (stopped !== 'stopped') {
+    console.error(`  stop: ${stopped}`)
+    console.error('  console:', consoleLines.slice(-25).join('\n    '))
+  }
   await sleep(2500)
   let opened
   let text
@@ -486,7 +495,9 @@ try {
     let seen = -1
     let stable = 0
     for (let i = 0; i < 60; i++) {
-      const n = await evaluate(`document.querySelectorAll('.lane--film').length`)
+      const n = await evaluate(
+        `document.querySelectorAll('.lane--film').length + document.querySelectorAll('.lane__wave').length`,
+      )
       if (n === seen && n > 0) stable++
       else stable = 0
       seen = n
@@ -505,12 +516,15 @@ try {
             laneHeight: Math.round(l.getBoundingClientRect().height),
             barWidth: bar?Math.round(bar.getBoundingClientRect().width):0,
             hasStrip: !!bg && bg !== 'none',
+            hasWave: !!l.querySelector('.lane__wave'),
           };
         });
       })()`,
     )
-    opened = filmReport.some((l) => l.hasStrip)
-    text = filmReport.map((l) => `${l.label}: ${l.hasStrip ? 'strip' : '—'} h${l.laneHeight}`).join(' · ')
+    opened = filmReport.some((l) => l.hasStrip || l.hasWave)
+    text = filmReport
+      .map((l) => `${l.label}: ${l.hasStrip ? 'strip' : l.hasWave ? 'wave' : '—'} h${l.laneHeight}`)
+      .join(' · ')
   } else if (flow === 'roughsize') {
     opened = await evaluate(
       `(() => { const b=[...document.querySelectorAll('button')].find(x=>/export/i.test(x.textContent||'')); if(!b) return false; b.click(); return true })()`,
@@ -544,7 +558,12 @@ try {
         panelText: text,
         screenshot: out,
         ...(filmReport
-          ? { lanes: filmReport, filmstripLog: consoleLines.filter((l) => l.includes('filmstrip')) }
+          ? {
+              lanes: filmReport,
+              laneArtLog: consoleLines.filter(
+                (l) => l.includes('filmstrip') || l.includes('waveform'),
+              ),
+            }
           : {}),
         ...(chipsBefore ? { chipsBefore, chipsAfter } : {}),
       },

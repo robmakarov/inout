@@ -14,7 +14,7 @@ import {
   type TightenProposal,
 } from '@core/timeline'
 import { CHANNEL_META } from '@app/lib/channels'
-import { useFilmstrips } from '@app/hooks/useFilmstrips'
+import { useLaneArt } from '@app/hooks/useLaneArt'
 import { FILM_LANE_HEIGHT_PX } from '@app/lib/filmstripPlan'
 import { FrameBar } from '@app/components/FrameBar'
 import { SpeedBar } from '@app/components/SpeedBar'
@@ -201,11 +201,12 @@ export function Timeline({
   }
 
   /**
-   * F8: the take's own picture under the lanes. Two frames of the lane bar (the
-   * bar itself is inset 1 px top and bottom) so the strip fills it exactly.
+   * F8: what each lane shows — the take's own frames on a video lane, its own
+   * sound on an audio one. Two pixels off the lane height because the bar is
+   * inset 1 px top and bottom, so the art fills it exactly.
    */
-  const strips = useFilmstrips(recording, width, FILM_LANE_HEIGHT_PX - 2)
-  const anyStrip = Object.keys(strips).length > 0
+  const laneArt = useLaneArt(recording, width, FILM_LANE_HEIGHT_PX - 2)
+  const anyStrip = Object.values(laneArt).some((a) => a.kind === 'film')
 
   const hasScreen = recording.channels.some((c) => c.kind === 'screen' && c.media === 'video')
   const hasAudio = recording.channels.some((c) => c.media === 'audio')
@@ -235,7 +236,8 @@ export function Timeline({
            * into a dark scrim rather than a paler tint, because "excluded" over
            * a picture has to be darker and not merely fainter.
            */
-          const strip = strips[ch.id]
+          const strip = laneArt[ch.id]?.kind === 'film' ? laneArt[ch.id] : undefined
+          const wave = laneArt[ch.id]?.kind === 'wave' ? laneArt[ch.id] : undefined
           const cutPaint = { background: strip ? 'rgba(6,6,10,1)' : meta.colorVar }
           return (
             <div key={ch.id} className={`tl__row lane${strip ? ' lane--film' : ''}`}>
@@ -279,6 +281,22 @@ export function Timeline({
                       className="lane__seg lane__seg--kept"
                       style={{ left: keptLeft, width: keptWidth, background: meta.colorVar }}
                     />
+                    {/* F8: the sound itself, over the channel's own tint —
+                        the opposite layering to the filmstrip, because here
+                        the colour is the background and the wave is the
+                        content. Under the trim edges (z-index 2) so they stay
+                        grabbable, and pointer-events off so the lane still
+                        seeks when clicked. */}
+                    {wave && (
+                      <div
+                        className="lane__wave"
+                        style={{
+                          backgroundImage: `url(${wave.url})`,
+                          backgroundSize: '100% 100%',
+                          backgroundRepeat: 'no-repeat',
+                        }}
+                      />
+                    )}
                     <div
                       className="lane__seg lane__seg--cut"
                       style={{

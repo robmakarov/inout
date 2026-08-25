@@ -849,6 +849,17 @@
 .lane__seg--cut {
   opacity: 0.14;
 }
+/* F8: the waveform sits over the channel tint, inside the bar, and never eats
+   a pointer — the lane under it is the seek surface. */
+.lane__wave {
+  position: absolute;
+  inset: 0;
+  opacity: 0.75;
+  pointer-events: none;
+}
+.lane__bar--disabled .lane__wave {
+  opacity: 0.35;
+}
 .lane__edge {
   position: absolute;
   top: 0;

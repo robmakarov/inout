@@ -123,6 +123,15 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   DRAGGED in time and the whole move goes with it, keeping its duration), PER-CLIP SPEED (F5b:
   1.25-3x on any clip, pitch preserved by WSOLA rather than resampling — measured −0.08 cents at 2x
   IN THE EXPORTED FILE — and the video retimed to match)
+- AND THE AUDIO LANES SHOW THEIR SOUND (F8, same day). Each audio lane carries a waveform over its own
+  tint — one column per two device pixels, each an honest SAMPLE taken by random access rather than a
+  summary of a full scan, so the cost follows the lane's width and not the take's length: 396-400
+  columns in 31-186 ms per channel, against 255-545 ms for a filmstrip. It is normalised to a high
+  PERCENTILE of its own columns, not to the maximum: a system-audio channel whose steady tone sits
+  near 0.05 opened with a 2.2 transient, and against the max every other column drew at 2 % of the
+  lane and the whole channel read as empty. That rule is pure and tested (compose/lanewave.ts
+  waveScale). Both halves are one hook (app/hooks/useLaneArt.ts): video first, one decoder at a time,
+  width-bucketed so a resize does not re-decode, and every failure silent and total.
 - THE TIMELINE SHOWS THE TAKE, NOT A RECTANGLE (F8 filmstrip, 2026-08-25). Every VIDEO lane carries a
   strip of the channel's own frames; audio lanes are unchanged. Decoded by RANDOM ACCESS
   (mediabunny `samplesAtTimestamps`) rather than compose/video.ts's forward walk, which would decode

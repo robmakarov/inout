@@ -1517,10 +1517,25 @@ ONE REGRESSION FOUND AND CLOSED BY THE SAME SHOT, and it is why this was verifie
   two lanes growing 10 px each pushed Mic off the bottom. The lane is 30 px (not 34) and .tl__lanes
   tightens its gap to 5 px when any strip exists: 2x30 + 2x24 + 3x5 + 16 = 139 px against the old
   4x24 + 3x8 + 16 = 136. Both screenshots are in the session; the second shows all four lanes.
-STILL OPEN in F8, and now the only things left in it: the 60 fps-with-a-30-min-take TRACE (the strip
-  is designed for it — one background image, at most 24 thumbnails whatever the length — but designed
-  is not measured, and it wants a 30-minute fixture) and GPU-rendered waveforms on the AUDIO lanes,
-  which are the lanes that still show a bare rectangle.
+── AND THE AUDIO LANES TOO, same session. The filmstrip left the audio lanes as bare rectangles, which
+   is the half of a timeline that says where somebody SPOKE.
+SHIPPED: core/compose/lanewave.ts — one column per two device pixels, each an honest SAMPLE taken
+   through `samplesAtTimestamps` rather than a summary of a scan, so the cost is set by how wide the
+   lane is and not by how long the take is. Stitched into one image like the filmstrip, drawn over the
+   channel's own tint (the opposite layering to the strip: there the picture is the background, here
+   the colour is), pointer-events off so the lane still seeks.
+MEASURED, prod build in real Chrome: 396-400 columns in 31-186 ms per channel, against the
+   filmstrip's 255-545 ms — audio is much the cheaper half.
+ONE DECISION IS PURE AND TESTED (compose/lanewave.ts waveScale, 7 tests) BECAUSE IT CAN BE WRONG
+   WITHOUT LOOKING WRONG: what the lane is drawn AGAINST. The first version used the maximum and a
+   real take killed it within a minute — a system-audio channel whose steady tone sits near 0.05
+   opened with a 2.2 transient, so every other column drew at 2 % of the lane and the channel looked
+   empty. The reference is a high PERCENTILE now and the few columns above it draw full height; the
+   true maximum is still reported, because it is the honest number about the audio even when it is the
+   wrong number to draw against. Screenshots of both versions are in the session.
+STILL OPEN in F8, and now the only thing left in it: the 60 fps-with-a-30-min-take TRACE. Both halves
+  are designed for it — one background image per lane, at most 24 thumbnails and ~400 columns whatever
+  the length — but designed is not measured, and it wants a 30-minute fixture.
 
 ═══ PHASE P — PORTS (PO-approved direction 2026-08-22; P1/P2/P3/P5a may run parallel with O-phase) ═══
 
