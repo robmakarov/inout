@@ -187,6 +187,16 @@ export interface CompositorStats {
   /** GPU time behind the draw, measured with a barrier rather than by timing
    *  the JS enqueue (which times nothing). Only accumulated when probing. */
   gpuMs: number
+  /**
+   * WHERE THIS FILE'S CLOCK STARTS, as a MAIN-THREAD performance.now() stamp
+   * (every arrival is stamped there, so this is directly comparable with the
+   * session epoch). Timestamp 0 in the composite is this instant — usually the
+   * first audio batch, because the mix is already running when the first video
+   * frame arrives. The main thread turns it into
+   * CompositeRecording.startOffsetMs; without it both packet-copying export
+   * paths assume 0 and ship the video early (P0-instant-sync).
+   */
+  originAtMs: number | null
 }
 
 export type CompositorReply =
@@ -327,6 +337,7 @@ const stats: CompositorStats = {
   outputMs: 0,
   gpuMs: 0,
   framesStale: 0,
+  originAtMs: null,
 }
 
 function post(reply: CompositorReply): void {
@@ -444,7 +455,10 @@ function paintPip(c: OffscreenCanvasRenderingContext2D, camera: VideoFrame): voi
 function encodeComposite(atMs: number, keepAlive: boolean): void {
   const enc = videoEncoder
   if (!enc || stopped || fatal || enc.state !== 'configured' || !canvas) return
-  if (startedAtMs === null) startedAtMs = atMs
+  if (startedAtMs === null) {
+    startedAtMs = atMs
+    stats.originAtMs = atMs
+  }
   // Never queue behind a slow encoder: a backlog at stop is exactly the tail
   // the product promises not to lose.
   //
@@ -747,7 +761,10 @@ self.onmessage = async (ev: MessageEvent<CompositorMsg>) => {
         if (stopped || fatal || !audioEncoder || audioEncoder.state !== 'configured') return
         if (audioStartAtMs === null) {
           audioStartAtMs = msg.atMs
-          if (startedAtMs === null) startedAtMs = msg.atMs
+          if (startedAtMs === null) {
+            startedAtMs = msg.atMs
+            stats.originAtMs = msg.atMs
+          }
           // The mix is usually already running when the first VIDEO frame
           // arrives, so the audio genuinely begins before the composite's
           // timeline does. That lead cannot be placed on a timeline that starts

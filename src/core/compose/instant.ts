@@ -18,6 +18,7 @@ import {
   AudioSampleSource,
   BlobSource,
   BufferTarget,
+  EncodedPacket,
   EncodedPacketSink,
   EncodedVideoPacketSource,
   getFirstEncodableAudioCodec,
@@ -44,6 +45,7 @@ import {
   type AudioChannelMixer,
 } from './audio'
 import { AUDIO_BITRATE, AUDIO_CHANNEL_COUNT, AUDIO_SAMPLE_RATE, VIDEO_BITRATE } from './codecs'
+import { compositeOffsetMs } from './compositeTime'
 import { BitsAudit, formatBits } from './bits'
 import { buildCertification, certificationComment } from './certify'
 import { createExportScratch, type ExportScratch } from './scratch'
@@ -157,7 +159,15 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
     const packetSink = new EncodedPacketSink(videoTrack)
 
     // ---- audio: certified mixers over the (default) edit window ----
-    const durationSec = composite.durationMs / 1000
+    // P0-instant-sync: the audio is mixed from the RAW channels, whose clock is
+    // the recording timeline, and the composite's clock starts LATER than that.
+    // The output keeps the recording's timeline — same convention as the render,
+    // which is the file this one has to agree with — so the copied video is
+    // placed at its true instant and the output covers the take from 0.
+    const compOffsetMs = compositeOffsetMs(composite)
+    const compOffsetSec = compOffsetMs / 1000
+    const outDurationMs = composite.durationMs + compOffsetMs
+    const durationSec = outDurationMs / 1000
     const totalAudioFrames = Math.round(durationSec * AUDIO_SAMPLE_RATE)
     audioMixers.push(...(await openAudioMixers(recording, edit)))
     const needAudio = audioMixers.length > 0
@@ -264,8 +274,21 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
     let first = true
     for await (const packet of packetSink.packets()) {
       throwIfAborted()
-      bits.video(packet.byteLength, packet.type)
-      await videoSource.add(packet, first && decoderConfig ? { decoderConfig } : undefined)
+      // Bytes untouched — only the presentation time moves, and only when the
+      // composite declared an origin (old takes keep the exact packets they
+      // always got, including their offset; nothing can recover their origin).
+      const placed =
+        compOffsetSec > 0
+          ? new EncodedPacket(
+              packet.data,
+              packet.type,
+              packet.timestamp + compOffsetSec,
+              packet.duration,
+              packet.sequenceNumber,
+            )
+          : packet
+      bits.video(placed.byteLength, placed.type)
+      await videoSource.add(placed, first && decoderConfig ? { decoderConfig } : undefined)
       first = false
     }
     videoSource.close()
@@ -315,7 +338,7 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
       blob,
       mimeType: format.mimeType,
       fileName: exportFileName(recording.createdAt, format.fileExtension),
-      durationMs: composite.durationMs,
+      durationMs: outDurationMs,
       width: composite.width,
       height: composite.height,
     }

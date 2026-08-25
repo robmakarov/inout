@@ -129,10 +129,38 @@ export function gateOracleReport(report) {
   }
   metrics.compositeFirstPacketSec = report.compositeFirstPacketSec ?? null
   metrics.compositeDurationSec = report.compositeDurationSec ?? null
+  metrics.compositeStartOffsetMs = report.compositeStartOffsetMs ?? null
   if (report.instantPath) {
     metrics.instantPath = report.instantPath
     metrics.instantSyncMeanMs = report.instantSyncMeanMs ?? null
     metrics.instantSyncMaxAbsMs = report.instantSyncMaxAbsMs ?? null
+    // THE INSTANT PATH IS NOW GATED (P0-instant-sync, 2026-08-25). It was
+    // measured-but-ungated for one session on purpose — banding a pre-existing
+    // defect would have turned CI red on every task. The defect is fixed, so
+    // the band goes on: this is the file an unedited export actually produces,
+    // and it gets the same ≤90 ms symmetric band as the render.
+    const band = MAX_SYNC_ABS_SYMMETRIC_MS
+    const mean = report.instantSyncMeanMs
+    const max = report.instantSyncMaxAbsMs
+    if (typeof mean === 'number' && Math.abs(mean) > band) {
+      failures.push(
+        `instant export sync mean |${mean.toFixed(1)}| > ${band}ms (path: ${report.instantPath})`,
+      )
+    }
+    if (typeof max === 'number' && max > band) {
+      failures.push(
+        `instant export sync maxAbs ${max.toFixed(1)} > ${band}ms (path: ${report.instantPath})`,
+      )
+    }
+    // Anti-vacuity, same rule as the trimmed path: a take WITH a composite that
+    // renders instead of copying means the gate above measured the wrong file.
+    if (report.hasComposite && report.instantPath !== 'instant') {
+      const why = (report.instantPathDeclined ?? []).map((d) => `${d.path}: ${d.reason}`).join(' | ')
+      failures.push(
+        `unedited export took '${report.instantPath}', expected 'instant' — the sync gate above ` +
+          `measured the wrong file (${why || 'no reason recorded'})`,
+      )
+    }
   }
   if (typeof report.exportPeakOutputBytes === 'number') {
     metrics.exportPeakOutputBytes = report.exportPeakOutputBytes

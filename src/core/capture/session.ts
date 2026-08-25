@@ -758,8 +758,12 @@ class Session implements CaptureSession {
 
     // v1 is the capability fallback and stays the whole story on Apple WebKit
     // and anywhere without MediaStreamTrackProcessor (O4 step 2).
+    // The epoch is what makes the composite's own clock legible downstream
+    // (P0-instant-sync): start() has already set it — startComposite runs from
+    // inside the same turn — so both engines can date their file's zero.
+    const epochMs = this.epoch
     const startV1 = (): Promise<LiveCompositeHandle> | null =>
-      canLiveComposite(inputs) ? startLiveComposite(inputs, key, { onSourceLiveness }) : null
+      canLiveComposite(inputs) ? startLiveComposite(inputs, key, { onSourceLiveness, epochMs }) : null
 
     const wantV2 = preferredCompositeEngine() === 'v2' && canLiveCompositeV2(inputs)
     let start: Promise<LiveCompositeHandle> | null
@@ -767,6 +771,7 @@ class Session implements CaptureSession {
       console.info('[capture] live composite engine v2 (worker + WebCodecs)')
       start = startLiveCompositeV2(inputs, key, {
         onSourceLiveness,
+        epochMs,
         // A machine that cannot keep pace stops being copied, exactly as v1's
         // watchdog did: the take is unharmed, the unedited export renders.
         onDegrade: (reason) => this.markCompositeUnusable(`compositor v2: ${reason}`),
@@ -1395,7 +1400,19 @@ class Session implements CaptureSession {
     }
 
     await compositeStopped
-    if (this.compositeResult) recording.composite = this.compositeResult
+    if (this.compositeResult) {
+      const composite = this.compositeResult
+      // The composite sits on the SAME timeline as the channels, so it takes
+      // the same rebase (P0-instant-sync). Clamped at 0 because a composite
+      // that reads a few ms EARLIER than the earliest channel is measurement
+      // noise between two first-arrival stamps, not content before the take.
+      if (composite.startOffsetMs !== undefined && Number.isFinite(minOffset) && minOffset !== 0) {
+        composite.startOffsetMs = Math.max(0, composite.startOffsetMs - minOffset)
+      } else if (composite.startOffsetMs !== undefined) {
+        composite.startOffsetMs = Math.max(0, composite.startOffsetMs)
+      }
+      recording.composite = composite
+    }
 
     await recordingsRepo.save(recording)
     if (this.manifestTimer) clearTimeout(this.manifestTimer)

@@ -116,6 +116,17 @@ export interface LiveCompositeOptions {
    * firing while the tab is in the background (which is the normal case).
    */
   onSourceLiveness?: (kind: 'screen' | 'camera', event: LivenessEvent) => void
+  /**
+   * The session epoch (performance.now()), so the composite can say WHERE ITS
+   * OWN CLOCK STARTS on the recording timeline (P0-instant-sync). This engine
+   * is the WORSE offender of the two: a MediaRecorder file always begins at 0,
+   * and by the time it begins, the <video> elements, the canvas, the audio
+   * graph and the durable write stream have all been built — measured 244.8 ms
+   * of A/V offset on the instant path against the same take's render at ~60.
+   * Omitted by rigs driving this engine directly: then the file declares no
+   * offset and consumers keep the old assume-zero behaviour.
+   */
+  epochMs?: number
 }
 
 export interface LiveCompositeHandle {
@@ -384,6 +395,15 @@ export async function startLiveComposite(
     if (!torndown && !aborted) draw()
   }
   recorder.start(CHUNK_MS)
+  /**
+   * THE FILE'S OWN ZERO (P0-instant-sync). A MediaRecorder's first sample is
+   * the first frame the canvas stream hands it after start(), so this stamp is
+   * the file's t=0 to within one 30 Hz frame — and everything above it
+   * (elements, canvas, audio graph, write stream) is time the take had already
+   * been running. `startedAt` is NOT that instant and using it as one is how
+   * the duration came to include the setup as well.
+   */
+  const fileOriginWall = performance.now()
 
   const stats: LiveCompositeStats = {
     drawnFrames: 0,
@@ -474,7 +494,9 @@ export async function startLiveComposite(
 
   return {
     async stop() {
-      const durationMs = performance.now() - startedAt
+      // Measured from the file's own zero, not from before the recorder
+      // existed: the difference is setup time that was never in the file.
+      const durationMs = performance.now() - fileOriginWall
       if (aborted) return null
       await teardown(false)
       snapshotStats()
@@ -491,8 +513,9 @@ export async function startLiveComposite(
         await blobStore.remove(blobKey).catch(() => undefined)
         return null
       }
-      return {
+      const composite: CompositeRecording = {
         blobKey,
+        engine: 'v1',
         mimeType: recorder.mimeType || mime,
         durationMs: Math.round(durationMs),
         width: W,
@@ -500,6 +523,12 @@ export async function startLiveComposite(
         bytes,
         tailIncomplete: stats.drainTimedOut || undefined,
       }
+      if (options.epochMs !== undefined) {
+        const offset = Math.round(fileOriginWall - options.epochMs)
+        composite.startOffsetMs = offset
+        console.info(`[capture] composite v1 clock starts +${offset}ms into the take`)
+      }
+      return composite
     },
     async cancel() {
       aborted = true

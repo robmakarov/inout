@@ -218,6 +218,7 @@ async function main() {
           `compT0=${
             typeof m.compositeFirstPacketSec === 'number' ? `${(m.compositeFirstPacketSec * 1000).toFixed(0)}ms` : 'n/a'
           } ` +
+          `compOff=${typeof m.compositeStartOffsetMs === 'number' ? `${m.compositeStartOffsetMs}ms` : 'n/a'} ` +
           `inst=${m.instantPath ?? 'n/a'}/${
             typeof m.instantSyncMeanMs === 'number' ? `${m.instantSyncMeanMs.toFixed(1)}ms` : 'n/a'
           } ` +
@@ -259,7 +260,9 @@ async function main() {
       exportPeakOutputBytes: results.map((r) => r.gate.metrics.exportPeakOutputBytes),
       trimmedPath: results.map((r) => r.gate.metrics.trimmedPath),
       trimmedSyncMeanMs: results.map((r) => r.gate.metrics.trimmedSyncMeanMs),
+      instantPath: results.map((r) => r.gate.metrics.instantPath),
       instantSyncMeanMs: results.map((r) => r.gate.metrics.instantSyncMeanMs),
+      compositeStartOffsetMs: results.map((r) => r.gate.metrics.compositeStartOffsetMs),
       port,
     }
     process.stdout.write(JSON.stringify(summary, null, 2) + '\n')

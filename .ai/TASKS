@@ -29,7 +29,32 @@ several ids, take the first and tell PO to open parallel sessions for the rest. 
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
 ── READY MAP — current truth, updated on every merge ──
-Last update 2026-08-24 (NINTH session, PO: "go ai"). Everything merged.
+Last update 2026-08-25 (TENTH session, PO: "go roadmap, all o and f in one").
+P0-instant-sync IS FIXED, GATED, AND IT UNBLOCKED O5-flip, WHICH IS NOW SHIPPED — smart cut is ON.
+The root cause was a missing sentence in the contract, not a bug in either copy path: the composite is
+a SECOND file with its OWN clock, and that clock does not start when the take does (v1's starts when
+its MediaRecorder does — measured 134-215 ms in; v2's at whichever of audio/video reached the worker
+first — 66-90 ms in), while CompositeRecording had no field that could say so. Both packet-copy paths
+therefore placed composite-time video against recording-time audio. CompositeRecording now carries
+startOffsetMs (produced by BOTH engines, rebased with the channels) and engine ('v1'|'v2'); instant.ts
+places every copied packet at its true instant and smart cut maps spans through the same offset.
+MEASURED, same symmetric metric as `sync=` (the fast paths used to be read on the audio-corrected one,
+a 13.5 ms systematic between two numbers printed side by side — fixed too):
+  v2  inst 185.1 ms BEFORE → 48.6 / 59.6 / 75.8 after, against those takes' render at 50.0 / 64.2 / 54.8
+  v1  inst 244.8 ms before → 55.7 / 57.8, against 61.7 / 59.5
+i.e. the packet copy now sits inside the render's own run-to-run spread, which is the only target that
+means anything: it is meant to BE the same file. THE BAND IS ON NOW (oracle-gate: instant sync ≤90 ms
+symmetric + an anti-vacuity check that the unedited export really took 'instant'), so this cannot
+regress unnoticed — the previous session left it measured-but-ungated on purpose and said so.
+FOUND BY THE FIX, in the o5cut rig: the "one frame ahead" offset that three sessions attributed to the
+composite's compositing was the SAME clock error — compositeOffsetFrames is 0 now, where it was +1.
+O5-FLIP: smartCutFlag default false → true. Gates: `npm run oracle --cold=3` 3/3 PASS with
+trim=smartcut at 56.3 / 69.9 / 76.9 ms, `--engine=v1 --cold=2` 2/2 PASS, `npm run exp -- o5cut` 684 ms
+vs 3766 ms render (5.5×, ≤1 s gate met), 94.3 % of frames copied, picture 37.3-42.9 dB.
+ONE DECISION RECORDED WITH IT: smart cut now DECLINES a v1 composite up front (engine field) instead of
+discovering it after decoding a GOP — MediaRecorder's avcC is not ours to reproduce, so the byte-for-
+byte description check could only ever refuse it. The v1 oracle expects 'render' for that reason.
+Previous update 2026-08-24 (NINTH session, PO: "go ai"). Everything merged.
 AI1 IS SHIPPED AND EVERY GATE IS GREEN — AND IT WAS ALREADY REWORKED ONCE ON PO'S FIRST REAL TAKE.
 The export panel has a "For AI" control; it builds one PDF — an index page that BRIEFS ITS READER,
 then one frame per page, no video track. PO's first file came back with two verdicts ("ai didnt
@@ -82,36 +107,8 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
   (AI1 SHIPPED 2026-08-24, ninth session — the "For AI" button is in the export panel and every gate
    is green; handoff in PHASE A at the bottom. AI2-AI7 stay frozen until PO feeds a real take's file
    to an AI and reports back — that report is the only thing that unfreezes them.)
-  P0-instant-sync  packet-copy paths are out of sync  [P0, medium]  FOUND 2026-08-24 BY THE GATE
-                                             O5-flip BUILT, on the first run that could see it. The
-                                             INSTANT path — what every unedited export takes, the one
-                                             PO uses — measures 97.4 and 102.4 ms A/V offset on v2
-                                             against the SAME take's render at 52.5 and 64.3, i.e.
-                                             OUTSIDE the 90 ms band; on v1 it reads 244.8 ms. Some
-                                             runs cannot match flash/click pairs at all. Smart cut
-                                             inherits it (150.3 ms) because it copies the same file,
-                                             which is why O5-flip did NOT flip — see that handoff.
-                                             MEASURED AND NAMED, NOT ROOT-CAUSED: the composite's
-                                             first video packet sits at 133-300 ms on v2 (`compT0=` on
-                                             every oracle line) while CompositeRecording carries no
-                                             offset field, so both copy paths assume composite time IS
-                                             recording time — but v1 reads compT0=0 and is the WORSE
-                                             of the two, so the clock origin is a contributing
-                                             quantity, not the whole cause. Start by deciding what a
-                                             composite timestamp MEANS, then give the type a way to
-                                             say it.
-                                             NOT GATED YET, deliberately: banding it today turns CI
-                                             red on a defect that predates this session and blocks
-                                             every other task. It is measured and printed on every
-                                             oracle line instead (`inst=`), so it cannot be forgotten
-                                             or silently regress. Gate it in the session that fixes it.
-  O5-flip  smart cut on by default [light]   BLOCKED ON P0-instant-sync. The gate is BUILT and works —
-                                             that is how the P0 above was found. The flip itself is
-                                             one boolean in compose/smartCutFlag.ts plus a green
-                                             `npm run oracle -- --cold=3` with `inst=` and `trim=`
-                                             inside the band. Smart cut's own numbers are already
-                                             good (4.3-5.6×, ≤1 s gate met, 90-94 % of frames copied,
-                                             picture matched at 37.5-42.8 dB).
+  (P0-instant-sync DONE 2026-08-25 and O5-flip SHIPPED on top of it — see the map header and the
+   handoff under P0-instant-sync below. Smart cut is ON by default; `?smartcut=0` reverts.)
   O5e  VFR timestamps              [medium]  the one part of O5 never attempted: preserve source
                                              presentation timestamps from frame-driven takes instead
                                              of CFR resampling. CFR 30 stays the default.
@@ -348,7 +345,55 @@ BOTH the composite and the raw channels.
   · real Safari + iOS Safari recheck of the MediaRecorder-audio path (long-standing)
   · real 4K game-tab recheck of the capture ceiling (2026-08-22 fix)
 
-═══ P0 — FOUND 2026-08-23, NOT FIXED ═══
+═══ P0 ═══
+
+## P0-instant-sync. the packet-copy paths were on the wrong clock — DONE 2026-08-25, merged
+WHAT IT WAS, and it is a CONTRACT hole rather than a bug in either path: the composite is a second
+file with its own clock, and that clock does not start when the take does. v1's file begins when its
+MediaRecorder begins — after the <video> elements, the canvas, the audio graph and the durable write
+stream have all been built (measured 134-215 ms into the take); v2's begins at whichever of audio or
+video first reached the worker (66-90 ms). CompositeRecording had no field that could express this, so
+instant.ts and smartCut.ts both assumed composite time IS recording time and placed copied video
+against audio mixed from the raw channels on the recording timeline.
+SHIPPED:
+  · CompositeRecording.startOffsetMs — "composite t=0 is recording time startOffsetMs", the same
+    sentence ChannelRecording.startOffsetMs already makes for a channel. ABSENT means 0, i.e. the old
+    assumption preserved for takes recorded before the field existed (nothing can recover their origin
+    now, and a guess would be worse than the behaviour they were exported with).
+  · both engines produce it: the v2 worker reports its origin as a MAIN-THREAD stamp
+    (CompositorStats.originAtMs — every arrival is stamped there, so the subtraction is between two
+    readings of one clock); v1 stamps the instant after recorder.start(). session.ts passes the epoch
+    and REBASES the composite by the same minOffset the channels get. The oracle rig does both too —
+    it drives the engines directly, so wiring production alone would have left the gate blind.
+  · v1's durationMs is now measured from that same instant instead of from before the recorder
+    existed. Total output length is unchanged (offset + duration = stop − epoch either way); what
+    moves is where the video sits inside it.
+  · compose/compositeTime.ts — the four-line conversion, pure, unit-tested, so the decision has one
+    home and a test rather than being re-derived at each call site.
+  · instant.ts places every copied packet at packet.timestamp + offset and mixes audio over the whole
+    take; smartCut.ts maps each kept span through the offset (negative composite time = the span
+    begins before the composite's first frame, which is a real hole in it and NOT a reason to slide
+    its first frame backwards).
+MEASURED (symmetric flash+click, the same metric `sync=` uses):
+    v2   inst 185.1 ms BEFORE → 48.6 / 59.6 / 75.8 ms after · same takes' render 50.0 / 64.2 / 54.8
+    v1   inst 244.8 ms before → 55.7 / 57.8 ms          · same takes' render 61.7 / 59.5
+    the declared offsets on those runs: v2 66-90 ms, v1 134-215 ms
+GATED NOW (the previous session deliberately left it measured-but-ungated): scripts/oracle-gate.mjs
+bands the instant path at ≤90 ms symmetric, mean and maxAbs, PLUS the anti-vacuity check that the
+unedited export really took 'instant' — a silently declining copy path fails the run instead of
+passing it on the render's numbers. `compOff=` joins `inst=`/`compT0=` on every oracle line.
+TWO THINGS THE FIX ALSO SETTLED:
+  (1) THE "ONE FRAME AHEAD" OFFSET WAS THIS, not compositing. Three sessions attributed it to the
+      composite being built from source frames as they arrive; `npm run exp -- o5cut` now reports
+      compositeOffsetFrames 0 where it read +1, with the same rig and the same take shape.
+  (2) THE FAST PATHS AND `sync=` WERE READ ON DIFFERENT METRICS — inst/trim on the audio-corrected
+      number, sync= on the symmetric one, a ~13.5 ms systematic between two figures printed side by
+      side on one line. All three read symmetric now (run.ts pathSync).
+NOT DONE, and deliberately: nothing tries to correct the ±1 frame between "the composite's origin" and
+"the frame the composite was showing at that instant". It is inside the instrument's own noise (~8-9 ms
+1σ) and both paths now land inside the render's spread.
+
+═══ P0 — FOUND 2026-08-23, FIXED ═══
 
 ## P0-tail. v1 LOSES THE TAIL UNDER LOAD — FIXED 2026-08-23, merged (evidence in DECISIONS)
 WAS: on a 4K source the shipped composite delivered 13.3 fps and its last decodable frame sat 3769 ms
@@ -705,6 +750,18 @@ FOUND WHILE DOING IT, both fixed: (1) moving the export into a worker made getLa
    finishes (correct: one result is live at a time), which invalidates any earlier ExportResult.blob
    and surfaces as a bare `TypeError: network error`. It cost this session two rig debugging rounds;
    smartCutRun.ts now detaches every file into memory as it is produced.
+── HANDOFF 2026-08-25 (TENTH session) — THE FLIP HAPPENED. smartCutFlag default false → true, after
+   P0-instant-sync removed the reason the gate refused it. Gates, all green the same day:
+   `npm run oracle -- --cold=3` 3/3 PASS with trim=smartcut (56.3 / 69.9 / 76.9 ms, band 90) and
+   inst=instant inside the band on the same runs · `node scripts/oracle.mjs --engine=v1 --cold=2` 2/2
+   PASS · `npm run exp -- o5cut` 684 ms against 3766 ms of render (5.5×, the ≤1 s gate met), 94.3 % of
+   frames copied (41 re-encoded of 720), picture 37.3 dB aligned / 42.9 dB at the first sample,
+   compositeOffsetFrames 0 · typecheck + 353 tests.
+   ONE BEHAVIOUR CHANGE RECORDED WITH IT: smart cut refuses a v1 composite UP FRONT (the new
+   CompositeRecording.engine field) rather than after decoding and encoding a GOP to discover that
+   MediaRecorder's avcC is not ours to reproduce. Same outcome as before (the render takes it), one
+   honest reason instead of a late throw, and the v1 oracle expects 'render' accordingly.
+   (e) VFR is still NOT DONE — it is task O5e and untouched.
 
 ## O6. native-res-capture — lift the ceiling the right way  [P2, after O4]
 Why: CAPTURE_MAX_* (1080p30) was correct for the old engine; the product bar is "no visual

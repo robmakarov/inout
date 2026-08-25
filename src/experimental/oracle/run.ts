@@ -82,9 +82,16 @@ export interface OracleReport {
   instantPath: ExportPath | null
   instantSyncMeanMs: number | null
   instantSyncMaxAbsMs: number | null
+  /** Why the packet copy did not run, when it did not — the diagnosis behind a
+   *  red instant-path gate. */
+  instantPathDeclined: { path: ExportPath; reason: string }[]
   /** The composite's own clock: where its first frame sits, and how long it is. */
   compositeFirstPacketSec: number | null
   compositeDurationSec: number | null
+  /** What the composite DECLARES about where its clock starts on the recording
+   *  timeline (CompositeRecording.startOffsetMs). Null = the take was recorded
+   *  before the field existed, i.e. both copy paths assume zero. */
+  compositeStartOffsetMs: number | null
   /** Export throughput: recorded ms per ms of export wall time. */
   exportRealtimeFactor: number
   /**
@@ -128,6 +135,31 @@ export interface OracleRunOptions extends RecordOptions {
    * A band nobody has seen go red is not a band.
    */
   injectTailLossMs?: number
+}
+
+/**
+ * The sync of an export, on the SAME metric the main band uses (P0-instant-sync).
+ *
+ * The fast paths used to be read on the audio-CORRECTED number while `sync=`
+ * was read on the SYMMETRIC one — a ~13.5 ms systematic between two figures
+ * printed side by side on one line, which is exactly how a path comparison
+ * goes wrong. Symmetric where the rig measured both references, corrected
+ * where it only measured the audio one, raw as the last resort.
+ */
+function pathSync(a: {
+  flashSyncSymmetricMeanMs?: number | null
+  flashSyncSymmetricMaxAbsMs?: number | null
+  flashSyncCorrectedMeanMs?: number | null
+  flashSyncCorrectedMaxAbsMs?: number | null
+  flashSync?: { meanOffsetMs: number; maxAbsOffsetMs: number } | null
+}): { meanMs: number | null; maxAbsMs: number | null } {
+  if (a.flashSyncSymmetricMeanMs !== null && a.flashSyncSymmetricMeanMs !== undefined) {
+    return { meanMs: a.flashSyncSymmetricMeanMs, maxAbsMs: a.flashSyncSymmetricMaxAbsMs ?? null }
+  }
+  if (a.flashSyncCorrectedMeanMs !== null && a.flashSyncCorrectedMeanMs !== undefined) {
+    return { meanMs: a.flashSyncCorrectedMeanMs, maxAbsMs: a.flashSyncCorrectedMaxAbsMs ?? null }
+  }
+  return { meanMs: a.flashSync?.meanOffsetMs ?? null, maxAbsMs: a.flashSync?.maxAbsOffsetMs ?? null }
 }
 
 export async function runOracle(
@@ -251,6 +283,7 @@ export async function runOracle(
     let instantSyncMeanMs: number | null = null
     let instantSyncMaxAbsMs: number | null = null
     let instantPath: ExportPath | null = null
+    let instantPathDeclined: { path: ExportPath; reason: string }[] = []
     if (rig.recording.composite) {
       try {
         const instantChoice = await exportByBestPath({
@@ -260,9 +293,11 @@ export async function runOracle(
           settings: DEFAULT_EXPORT_SETTINGS,
         })
         instantPath = instantChoice.path
+        instantPathDeclined = instantChoice.declined
         const inst = await analyzeExport(instantChoice.result.blob, analyzeOpts)
-        instantSyncMeanMs = inst.flashSyncCorrectedMeanMs ?? inst.flashSync?.meanOffsetMs ?? null
-        instantSyncMaxAbsMs = inst.flashSyncCorrectedMaxAbsMs ?? inst.flashSync?.maxAbsOffsetMs ?? null
+        const s = pathSync(inst)
+        instantSyncMeanMs = s.meanMs
+        instantSyncMaxAbsMs = s.maxAbsMs
       } catch (err) {
         console.warn('[oracle] instant-path probe failed', err)
       }
@@ -291,16 +326,21 @@ export async function runOracle(
       exportTrimmedMs,
       trimmedPath: trimmedChoice.path,
       trimmedPathDeclined: trimmedChoice.declined,
-      expectedTrimmedPath: smartCutEnabled() ? 'smartcut' : 'render',
+      // Smart cut only applies to a composite OUR encoder wrote (see smartCut.ts):
+      // on the v1 engine the honest expectation is the render, and demanding
+      // 'smartcut' there would fail a run for behaving correctly.
+      expectedTrimmedPath:
+        smartCutEnabled() && rig.recording.composite?.engine !== 'v1' ? 'smartcut' : 'render',
       hasComposite: !!rig.recording.composite,
-      trimmedSyncMeanMs: trimmed.flashSyncCorrectedMeanMs ?? trimmed.flashSync?.meanOffsetMs ?? null,
-      trimmedSyncMaxAbsMs:
-        trimmed.flashSyncCorrectedMaxAbsMs ?? trimmed.flashSync?.maxAbsOffsetMs ?? null,
+      trimmedSyncMeanMs: pathSync(trimmed).meanMs,
+      trimmedSyncMaxAbsMs: pathSync(trimmed).maxAbsMs,
       instantPath,
       instantSyncMeanMs,
       instantSyncMaxAbsMs,
+      instantPathDeclined,
       compositeFirstPacketSec,
       compositeDurationSec,
+      compositeStartOffsetMs: rig.recording.composite?.startOffsetMs ?? null,
       tail: (() => {
         const recordedMs = rig.recording.durationMs
         const exportedMs = full.durationSec * 1000

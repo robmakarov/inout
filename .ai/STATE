@@ -5,20 +5,24 @@ phase: MVP validation (2026-07-16)
 works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → export → share-as-file.
 - SYNCHRONIZED START (PO 2026-07-20, supersedes instant-arm/late-join): arm() waits for src.settled — ALL devices acquired, every permission prompt answered — before start() activates them at one epoch. All channels share one start + one length (verified: 4 lanes 100% ±0.3%); no primary-gated early start, no late-join staggering. pipeline prewarm at mount; devices touched only after record click
 - instant unedited export ~60-105ms (live composite packet-copied, mp4 h264+aac); edited takes → full render
-- THE FAST EXPORT PATHS ARE OUT OF SYNC — P0, found 2026-08-24, NOT FIXED. The INSTANT path (every
-  unedited export; the one PO uses) measures 97-102 ms A/V offset on v2 and 244.8 ms on v1, against
-  the SAME take's render at 52-64 ms — outside the 90 ms band. Invisible until now because every sync
-  number this project ever quoted was measured on the RENDER: the oracle called exportRecording
-  directly and never exercised a packet copy. It does now (`inst=`, `trim=`, `compT0=` on every
-  oracle line). Smart cut inherits the same offset, which is why it stays off. Measured but not
-  root-caused: the composite's first packet sits at 133-300 ms on v2 while CompositeRecording has no
-  offset field, so both copy paths assume composite time IS recording time — yet v1 reads compT0=0
-  and is worse, so that is a contributing quantity, not the cause. Task P0-instant-sync.
+- THE COMPOSITE HAS ITS OWN CLOCK AND NOW SAYS SO (P0-instant-sync, fixed 2026-08-25). It is a second
+  file, and its zero is not the record press: v1's starts when its MediaRecorder starts, after the
+  <video> elements, canvas, audio graph and write stream exist (134-215 ms in); v2's starts at
+  whichever of audio/video first reached the worker (66-90 ms in). CompositeRecording.startOffsetMs
+  declares it — produced by BOTH engines, rebased with the channels — and both packet-copy paths place
+  copied video at its true instant (compose/compositeTime.ts owns the conversion; ABSENT = 0 = the old
+  assumption, kept for takes recorded before the field existed). Before, both assumed composite time
+  IS recording time: instant measured 185 ms of A/V offset on v2 and 244.8 on v1; it now measures
+  48.6-75.8 (v2) and 55.7-57.8 (v1), INSIDE the render's own spread on the same takes. Gated: the
+  oracle bands the instant path at ≤90 ms symmetric and fails a run where the unedited export quietly
+  took the render. Same fix retired the "smart cut sits one frame ahead" story — that was this clock,
+  and o5cut now reports compositeOffsetFrames 0.
 - THE EXPORT HAS THREE PATHS and EditorScreen picks in this order: INSTANT (unedited + composite +
   default tier → packet copy), SMART CUT (O5c — a trim/cut-only edit changes no pixel, so the
-  composite's packets are copied and only [cut → next keyframe] is re-encoded; measured 4.3-5.6×
-  faster than rendering, ≤1 s on a 30 s take, 90-94 % of frames copied — DEFAULT OFF behind
-  `?smartcut=1`; the gate that would have turned it on now exists and REFUSES it — see the P0 above),
+  composite's packets are copied and only [cut → next keyframe] is re-encoded; measured 5.5× faster
+  than rendering, 684 ms on a 30 s take, 94 % of frames copied — DEFAULT ON since 2026-08-25 (O5-flip),
+  `?smartcut=0` reverts; it declines a v1 composite outright because MediaRecorder's avcC is not ours
+  to match, and the render takes those),
   and the FULL RENDER, which is also the fallback for both. The ladder itself is compose/choose.ts,
   driven by BOTH the editor and the oracle so the gate measures the path a user actually gets.
   The render RUNS IN A WORKER by default (O5a): same code in-thread as the fallback, and the

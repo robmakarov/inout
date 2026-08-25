@@ -46,6 +46,36 @@ export interface CompositeRecording {
   durationMs: number
   width: number
   height: number
+  /**
+   * WHAT A COMPOSITE TIMESTAMP MEANS (P0-instant-sync, 2026-08-25).
+   *
+   * The composite is a SECOND file with its OWN clock, and that clock does not
+   * start when the take does: v1's file begins when its MediaRecorder starts
+   * (after the <video> elements, the canvas, the audio graph and the write
+   * stream exist), v2's begins at whichever of audio/video reached the worker
+   * first. Composite time `t` is therefore recording time `t + startOffsetMs`,
+   * exactly as ChannelRecording.startOffsetMs places a channel.
+   *
+   * Both packet-copying export paths used to assume this was 0 — the type had
+   * no way to say otherwise — so every copied packet landed early against
+   * audio mixed from the raw channels: measured 97-102 ms of A/V offset on v2
+   * and 244.8 ms on v1, against the same take's render at 52-64 ms.
+   *
+   * ABSENT means 0, which is the old (wrong) assumption preserved on takes
+   * recorded before this field existed: nothing can recover their origin now,
+   * and guessing would be worse than the behaviour they were exported with.
+   */
+  startOffsetMs?: number
+  /**
+   * WHICH CAPTURE ENGINE WROTE THIS FILE. v2 encodes with a VideoEncoder we
+   * configure, so smart cut may re-encode a cut boundary and splice it into the
+   * copied packets — the two halves share one avcC and we can prove it. v1 is
+   * MediaRecorder's own encoder: its decoder description is not ours to
+   * reproduce, so a boundary splice can only fail the byte-for-byte check that
+   * keeps that path honest. Absent on takes recorded before the field existed —
+   * those still try and are still caught by the check.
+   */
+  engine?: 'v1' | 'v2'
   /** Encoded size. Lets the export size estimate use THIS take's own
    *  compressibility instead of guessing from the bitrate target. */
   bytes?: number

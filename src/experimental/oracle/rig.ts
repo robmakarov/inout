@@ -663,10 +663,13 @@ export async function recordFiducialSession(durationMs: number, opts?: RecordOpt
       }
       blobKeys.push(compositeKey)
       try {
+        // The epoch goes in for the same reason production passes it: the
+        // composite's clock does not start when the take does, and a file that
+        // cannot say so is copied into the wrong place (P0-instant-sync).
         if (preferredCompositeEngine() === 'v2' && canLiveCompositeV2(inputs)) {
-          compositeHandle = await startLiveCompositeV2(inputs, compositeKey)
+          compositeHandle = await startLiveCompositeV2(inputs, compositeKey, { epochMs: epoch })
         } else if (canLiveComposite(inputs)) {
-          compositeHandle = await startLiveComposite(inputs, compositeKey)
+          compositeHandle = await startLiveComposite(inputs, compositeKey, { epochMs: epoch })
         }
       } catch (err) {
         // A composite that will not start is a real answer, not a rig crash:
@@ -741,7 +744,14 @@ export async function recordFiducialSession(durationMs: number, opts?: RecordOpt
       durationMs: channels.reduce((m, c) => Math.max(m, c.startOffsetMs + c.durationMs), 0),
       channels,
     }
-    if (composite) recording.composite = composite
+    if (composite) {
+      // The composite takes the same rebase as the channels — it is on the
+      // same timeline (P0-instant-sync); production does this in session.ts.
+      if (composite.startOffsetMs !== undefined && Number.isFinite(minOffset)) {
+        composite.startOffsetMs = Math.max(0, Math.round(composite.startOffsetMs - minOffset))
+      }
+      recording.composite = composite
+    }
 
     const debug: RigDebug = {
       rigEpochAbsMs: rigEpoch,

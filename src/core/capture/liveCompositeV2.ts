@@ -151,6 +151,13 @@ export interface LiveCompositeV2Options {
   onSourceLiveness?: (kind: 'screen' | 'camera', event: LivenessEvent) => void
   /** Fired when the watchdog gives up, so the caller can fall back to v1. */
   onDegrade?: (reason: string) => void
+  /**
+   * The session epoch (performance.now()), so the composite can say WHERE ITS
+   * OWN CLOCK STARTS on the recording timeline (P0-instant-sync). Omitted by
+   * rigs that drive this engine directly: then the file declares no offset and
+   * consumers keep the old assume-zero behaviour rather than a guess.
+   */
+  epochMs?: number
 }
 
 export interface LiveCompositeV2Handle {
@@ -448,8 +455,9 @@ export async function startLiveCompositeV2(
           `keyframes ${stats.keyframeCount} = ${((stats.keyframeBytes / Math.max(1, stats.videoBytes)) * 100).toFixed(0)}% of video bytes, ` +
           `audio ${(stats.audioBytes / 1024).toFixed(0)} KB`,
       )
-      return {
+      const composite: CompositeRecording = {
         blobKey,
+        engine: 'v2',
         mimeType: 'video/mp4',
         // The encoder's own last timestamp is the truth; wall time includes
         // teardown and would overstate the file by the drain.
@@ -458,6 +466,15 @@ export async function startLiveCompositeV2(
         height: H,
         bytes: stats.bytes,
       }
+      // WHERE THIS FILE'S ZERO SITS IN THE TAKE (P0-instant-sync). The worker
+      // stamps its origin with the MAIN-THREAD clock that stamped the arrival,
+      // so the subtraction is between two readings of one clock.
+      if (options.epochMs !== undefined && stats.originAtMs !== null) {
+        const offset = Math.round(stats.originAtMs - options.epochMs)
+        composite.startOffsetMs = offset
+        console.info(`[capture] composite v2 clock starts +${offset}ms into the take`)
+      }
+      return composite
     },
 
     async cancel() {

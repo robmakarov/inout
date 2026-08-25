@@ -74,6 +74,7 @@ import {
 import { AUDIO_BITRATE, AUDIO_CHANNEL_COUNT, AUDIO_SAMPLE_RATE, VIDEO_BITRATE } from './codecs'
 import { BitsAudit, formatBits } from './bits'
 import { buildCertification, certificationComment } from './certify'
+import { compositeOffsetMs, recordingToCompositeSec } from './compositeTime'
 import { createExportScratch, type ExportScratch } from './scratch'
 
 /** Half-width of the fade at every cut join — identical to the render (F1). */
@@ -250,6 +251,15 @@ export async function exportSmartCut(opts: SmartCutOptions): Promise<ExportResul
   const composite = recording.composite
   if (!composite) throw new SmartCutUnavailable('no composite')
   if (composite.tailIncomplete) throw new SmartCutUnavailable('composite tail incomplete')
+  // A BOUNDARY SPLICE NEEDS AN ENCODER WE OWN. v1's composite comes from
+  // MediaRecorder, whose avcC we cannot reproduce, so the byte-for-byte
+  // description check below would refuse it after decoding and encoding a
+  // GOP's worth of frames for nothing — measured on the v1 oracle:
+  // "boundary encoder produced a different decoder description". Refuse here
+  // instead, cheaply and with a reason that says what actually happened.
+  if (composite.engine === 'v1') {
+    throw new SmartCutUnavailable('composite was recorded by MediaRecorder (v1) — its decoder description is not ours to match')
+  }
   if (!isPixelDefaultEdit(recording, edit)) throw new SmartCutUnavailable('edit changes pixels')
 
   const throwIfAborted = (): void => {
@@ -292,6 +302,10 @@ export async function exportSmartCut(opts: SmartCutOptions): Promise<ExportResul
     const frameSink = new VideoSampleSink(videoTrack)
     const width = composite.width
     const height = composite.height
+    // P0-instant-sync: smart cut copies the same composite the instant path
+    // does, so it inherited the same wrong assumption — that composite time is
+    // recording time. It is not; the file declares where its zero sits.
+    const compOffsetMs = compositeOffsetMs(composite)
 
     // ---- audio: the certified mix over the edited window, exactly as the
     // render builds it (openAudioMixers already understands kept spans) ----
@@ -394,14 +408,30 @@ export async function exportSmartCut(opts: SmartCutOptions): Promise<ExportResul
     stats.spans = spans.length
     for (const span of spans) {
       throwIfAborted()
-      const spanStartSec = span.startMs / 1000
-      const spanEndSec = Math.min(span.endMs / 1000, composite.durationMs / 1000)
+      // KEPT SPANS ARE RECORDING TIME; THE COMPOSITE HAS ITS OWN CLOCK, and it
+      // starts compOffsetMs into the take (P0-instant-sync). Everything below
+      // works in COMPOSITE time — negative means the span begins before the
+      // composite's first frame, which is a real hole in it, not a reason to
+      // slide its first frame backwards.
+      const spanStartSec = recordingToCompositeSec(span.startMs / 1000, compOffsetMs)
+      const spanEndSec = Math.min(
+        recordingToCompositeSec(span.endMs / 1000, compOffsetMs),
+        composite.durationMs / 1000,
+      )
       if (spanEndSec <= spanStartSec) continue
+      /** The earliest instant the composite can actually answer for. */
+      const readFromSec = Math.max(0, spanStartSec)
+      if (spanEndSec <= readFromSec) {
+        outCursorSec += spanEndSec - spanStartSec
+        continue
+      }
+      /** Composite time → this export's output time. */
+      const outAt = (compSec: number): number => outCursorSec + (compSec - spanStartSec)
 
       // Where copying may begin: the first key packet at or after the cut.
-      const keyAtStart = await packetSink.getKeyPacket(spanStartSec, { metadataOnly: true })
+      const keyAtStart = await packetSink.getKeyPacket(readFromSec, { metadataOnly: true })
       let copyFrom = keyAtStart
-      if (!copyFrom || copyFrom.timestamp < spanStartSec - EPS_SEC) {
+      if (!copyFrom || copyFrom.timestamp < readFromSec - EPS_SEC) {
         // The cut is mid-GOP: copying can only start at the NEXT keyframe, and
         // the frames in between have to be re-encoded.
         copyFrom = keyAtStart
@@ -412,7 +442,7 @@ export async function exportSmartCut(opts: SmartCutOptions): Promise<ExportResul
         copyFrom && copyFrom.timestamp < spanEndSec ? copyFrom.timestamp : spanEndSec
 
       // (1) the head: decode the frames the copy cannot reach, re-encode them.
-      if (reencodeUntilSec > spanStartSec + EPS_SEC) {
+      if (reencodeUntilSec > readFromSec + EPS_SEC) {
         let firstOfHead = true
         const emit = (sample: VideoSample, outSec: number): void => {
           const frame = sample.toVideoFrame()
@@ -442,23 +472,23 @@ export async function exportSmartCut(opts: SmartCutOptions): Promise<ExportResul
          * instead, which is exactly what the full render draws there.
          */
         let covering: VideoSample | null = null
-        for await (const sample of frameSink.samples(spanStartSec, reencodeUntilSec)) {
+        for await (const sample of frameSink.samples(readFromSec, reencodeUntilSec)) {
           throwIfAborted()
-          if (sample.timestamp <= spanStartSec + EPS_SEC) {
+          if (sample.timestamp <= readFromSec + EPS_SEC) {
             covering?.close()
             covering = sample
             continue
           }
           if (covering) {
-            emit(covering, outCursorSec)
+            emit(covering, outAt(readFromSec))
             covering.close()
             covering = null
           }
-          emit(sample, outCursorSec + (sample.timestamp - spanStartSec))
+          emit(sample, outAt(sample.timestamp))
           sample.close()
         }
         if (covering) {
-          emit(covering, outCursorSec)
+          emit(covering, outAt(readFromSec))
           covering.close()
         }
         for (const p of await boundary.drain()) {
@@ -478,7 +508,7 @@ export async function exportSmartCut(opts: SmartCutOptions): Promise<ExportResul
           const shifted = new EncodedPacket(
             packet.data,
             packet.type,
-            outCursorSec + (packet.timestamp - spanStartSec),
+            outAt(packet.timestamp),
             packet.duration,
           )
           bits.video(shifted.byteLength, shifted.type)
