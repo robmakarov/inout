@@ -497,7 +497,13 @@ export async function startLiveCompositeV2(
           `${((stats.videoBytes * 8) / seconds / 1e6).toFixed(2)} Mbps of ` +
           `${(stats.requestedVideoBitrate / 1e6).toFixed(1)} Mbps requested, ` +
           `keyframes ${stats.keyframeCount} = ${((stats.keyframeBytes / Math.max(1, stats.videoBytes)) * 100).toFixed(0)}% of video bytes, ` +
-          `audio ${(stats.audioBytes / 1024).toFixed(0)} KB`,
+          `audio ${(stats.audioBytes / 1024).toFixed(0)} KB` +
+          // O4-polish: what the preview blit costs, per frame, measured rather
+          // than asserted. Absent from the line when nothing asked for one.
+          (stats.previewMs > 0
+            ? `; preview ${(stats.previewMs / Math.max(1, stats.framesEncoded)).toFixed(2)} ms/frame ` +
+              `(${stats.previewMs.toFixed(0)} ms total)`
+            : ''),
       )
       const composite: CompositeRecording = {
         blobKey,
