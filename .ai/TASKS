@@ -919,6 +919,22 @@ current Chrome + Safari + Firefox (P1 rig) · export throughput ≥1× realtime 
    STILL TO DO for (a): the same telemetry on the RENDER path (compose/pipeline.ts), and the codec rung
    in the certification tag. Both are independent of O4 and can be done in any session.
 
+## O12. persistent-share — keep the screen share alive BETWEEN takes  [PO-GATED — deferred 2026-08-25, PO: "we will consider it later". Do NOT start without PO's go.]
+Why: the strongest possible fix for the Chrome share wedge (docs/SCREEN_WEDGE.md — the open
+Chrome-side bug that PO's rapid record/stop stress test reproduces). Every take today opens Chrome's
+picker, creates a fresh SCK capture session, and tears it down at stop; the wedge accumulates with
+that churn. Keeping ONE share across takes removes the picker from every take after the first,
+removes the create/teardown cycles that aggravate Chrome, and makes every screen take start
+instantly.
+Cost, and why it is PO's call, not TD's: the sharing indicator stays lit BETWEEN takes, and the app
+would hold a screen claim while not recording — which cuts against two standing rules ("no idle
+device access", "off is a real stop"). Shape if approved: opt-in ("keep sharing between takes"),
+a visible affordance to drop the share at any time, share reused only if the surface is still live,
+released on page hide as today.
+GATES if built: zero picker on take 2+ · indicator/claim honestly presented in the UI · release
+verified (zero live tracks after "stop sharing") · the wedge stress test (10 rapid cycles) green ·
+oracles green.
+
 ═══ PHASE F — FEATURES (PO-approved 2026-08-22; order below; F7 independent) ═══
 
 ## F1. mid-take-cuts — DONE 2026-08-23, merged (evidence in DECISIONS)

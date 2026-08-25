@@ -1,9 +1,29 @@
 # The screen wedge — full case file
 
-**Status: OPEN as of 2026-08-25.** PO still hits it. Everything below is what has been
-tried, what each attempt actually fixed, what each got wrong, and what remains. This doc
-exists because the fix history is spread across eight commits and five ledger entries and
-nobody — including the agents writing the fixes — should ever reconstruct it again.
+**Status as of 2026-08-25 (end of day): MITIGATED, root cause still Chrome's.** After the
+full mitigation stack shipped (request serializer, persistent device connect, refresh
+ritual, safe-mode ladder), PO's own stress test — the repro recipe below — came back
+"seems to be allright now". The Chrome-side bug is NOT fixed and cannot be fixed from a
+web page; if the wedge reappears, start from the formulation below and the evidence kit
+at the bottom. This doc exists because the fix history is spread across a dozen commits
+and nobody — including the agents writing the fixes — should ever reconstruct it again.
+
+## The formulation — canonical, quote this when it happens again
+
+> On macOS, Chrome's screen picker takes the share (the sharing indicator lights) but
+> `getDisplayMedia` **never resolves and never rejects** — the page never receives a
+> track, so no page code can release or retry the claim. The stuck state lives in
+> Chrome's browser process: it survives page refresh, closing the tab, opening a new
+> tab, and sometimes a fresh Chrome launch; only quitting Chrome completely (⌘Q)
+> reliably clears it. It is intermittent, and it accumulates with the number of shares
+> taken in one Chrome session — rapid record/stop cycles (≈10 × 2-second takes)
+> reproduce it at will. The app bounds the damage (fail ≤30 s, all devices released, no
+> screenless take, one automatic refresh, reduced request on retry) but cannot cure the
+> browser process.
+
+If reporting it to Chromium: it is a `getDisplayMedia` promise that never settles after
+the native macOS (SCContentSharingPicker) picker confirms, reproducible by cycling
+share/record/stop rapidly; attach `chrome://webrtc-internals` from the wedged state.
 
 ## The bug
 
@@ -148,3 +168,10 @@ normal pace). Failure is bounded (≤30 s, usually 8), every device is released 
 failure, no take silently records without its primary, the app refreshes itself once and
 invites a retry, the retry self-heals through the request ladder, a second wedge right
 after the refresh gets the honest ⌘Q text, and every occurrence is counted.
+
+## The one unbuilt lever — parked on the roadmap
+
+**Keep the screen share alive between takes** (.ai/TASKS O12, PO-gated, deferred
+2026-08-25 "we will consider it later"): one share for the whole session removes the
+picker from every take after the first and the create/teardown churn the wedge
+accumulates on. Cost: the sharing indicator stays lit between takes. PO's call.

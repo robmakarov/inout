@@ -336,8 +336,11 @@ gaps / in flight:
   stays law there). (2) THE REFRESH RITUAL (wedgeReload.ts + CaptureError reason 'wedged'): a
   wedged screen auto-reloads the page ONCE (nothing to lose — take failed, devices released) and
   boots with "press record to try again"; a wedge within 2 min of that reload shows the ⌘Q text
-  instead. The wedge case file (docs/SCREEN_WEDGE.md) remains the open thread and now carries the
-  first repro recipe. AWAITS PO REAL-TAKE VERIFICATION.
+  instead. PO RE-RAN HIS OWN STRESS TEST AGAINST THE FULL STACK: "seems to be allright now"
+  (2026-08-25, end of day) — MITIGATED, not cured; the Chrome-side bug stays open and the case file
+  (docs/SCREEN_WEDGE.md) now carries the CANONICAL FORMULATION to quote if it recurs, plus the repro
+  recipe and evidence kit. The strongest unbuilt lever — keep ONE screen share alive between takes —
+  is parked as TASKS O12, PO-gated ("we will consider it later"); do not build it unbidden.
 - FROZEN-SOURCE TAKES (PO 2026-08-06 "switched to a tab with a game, nothing recorded, just frozen frame") — fixed +
   measured. Evidence first (real Chrome 150 / macOS 26, genuinely backgrounded tab, rAF==0): AudioWorklet tick 63/s,
   canvas.captureStream 30fps, <video>→drawImage ~56/s, MediaRecorder ~110KB/s all UNAFFECTED by hidden — the composite
