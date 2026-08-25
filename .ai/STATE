@@ -328,8 +328,16 @@ gaps / in flight:
   unbudgeted await in arming and exactly where "stuck waiting for mic" with no deadline lived. An
   earlier same-day fail-fast cut (mic fails in 9 s, take starts without it) was REFUSED by PO
   ("it must not fail") and is recorded in docs/SCREEN_WEDGE.md so nobody re-ships it. The SCREEN
-  cannot be hunted this way — getDisplayMedia legally needs a fresh user gesture; the wedge case
-  file remains the open thread. AWAITS PO REAL-TAKE VERIFICATION.
+  cannot be hunted this way — getDisplayMedia legally needs a fresh user gesture. SAME DAY, PO's
+  stress test (rapid 2 s record/stop cycles ×10) still wedged Chrome → two more ships: (1)
+  displayRelease.ts SERIALIZES share requests against the previous share's teardown — our stop
+  path keeps the display track alive while draining (P0-tail-raw), and a fast re-record raced
+  that; sync no-op when clear, ≤3 s budget, 800 ms grace, Apple WebKit exempt (same-tick dispatch
+  stays law there). (2) THE REFRESH RITUAL (wedgeReload.ts + CaptureError reason 'wedged'): a
+  wedged screen auto-reloads the page ONCE (nothing to lose — take failed, devices released) and
+  boots with "press record to try again"; a wedge within 2 min of that reload shows the ⌘Q text
+  instead. The wedge case file (docs/SCREEN_WEDGE.md) remains the open thread and now carries the
+  first repro recipe. AWAITS PO REAL-TAKE VERIFICATION.
 - FROZEN-SOURCE TAKES (PO 2026-08-06 "switched to a tab with a game, nothing recorded, just frozen frame") — fixed +
   measured. Evidence first (real Chrome 150 / macOS 26, genuinely backgrounded tab, rAF==0): AudioWorklet tick 63/s,
   canvas.captureStream 30fps, <video>→drawImage ~56/s, MediaRecorder ~110KB/s all UNAFFECTED by hidden — the composite

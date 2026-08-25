@@ -568,7 +568,10 @@ export type AnalyticsEvent =
 export class CaptureError extends Error {
   constructor(
     public readonly kind: ChannelKind | 'none',
-    public readonly reason: 'denied' | 'unavailable' | 'no-channels',
+    /** 'wedged': the browser took the share/device and never delivered it —
+     * the Chrome/macOS picker wedge. Distinct from 'unavailable' so the UI
+     * can run its recovery ritual (auto-refresh) for exactly this case. */
+    public readonly reason: 'denied' | 'unavailable' | 'no-channels' | 'wedged',
     message: string,
   ) {
     super(message)

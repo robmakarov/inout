@@ -449,17 +449,15 @@ class Session implements CaptureSession {
       this.releaseMedia()
       throw new CaptureError(
         wedged.kind,
-        'unavailable',
+        'wedged',
         wedged.kind === 'screen'
-          ? // Precise on purpose, because the obvious advice is wrong: the stuck
-            // share lives in Chrome's browser process — the page never received
-            // the track, so no page can release it, and refreshing or closing
-            // the tab provably does not clear it (PO 2026-08-24: "even if i
-            // close tab completely and open new one it doesnt help"). The next
-            // click automatically retries with a minimal share request
-            // (displayWedge.ts); if THAT also never delivers, only restarting
-            // Chrome tears the stuck process down.
-            'Chrome accepted the share but never delivered the screen — nothing was recorded. Press record to try again: a safer share mode kicks in automatically. If it happens twice in a row, quit Chrome completely (⌘Q) and reopen.'
+          ? // The UI runs the recovery ritual on this reason: one automatic
+            // page refresh (PO 2026-08-25: "if it happens make it fixed by
+            // refresh of app page"), then this text for a wedge that survived
+            // the refresh — at that point only restarting Chrome tears the
+            // stuck process down (the claim lives in its browser process; the
+            // page never received a track it could release).
+            'Chrome accepted the share but never delivered the screen — nothing was recorded, even after a refresh. Quit Chrome completely (⌘Q), reopen, and try again.'
           : `${wedged.kind} never responded. Nothing was recorded — press record to try again.`,
       )
     }

@@ -23,6 +23,7 @@ import {
   unsupportedReason,
 } from '@app/lib/channels'
 import { armingLabel as armingLabelFor, foldWaiting } from '@app/lib/arming'
+import { noteWedgeReload, shouldReloadForWedge, wedgeReloadNoticeDue } from '@app/lib/wedgeReload'
 import { ChannelChips } from '@app/components/ChannelChips'
 import { RecordButton } from '@app/components/RecordButton'
 import { TimerPill } from '@app/components/TimerPill'
@@ -62,6 +63,15 @@ export function CaptureScreen() {
   // record click (acquire.ts starts them concurrently with the picker).
   useEffect(() => {
     warmCapturePipeline()
+  }, [])
+
+  // The recovery ritual's second half (wedgeReload.ts): this page just
+  // refreshed itself over a wedged screen share — say so, and what to do.
+  useEffect(() => {
+    if (wedgeReloadNoticeDue()) {
+      toast('The screen share got stuck, so the app refreshed itself. Press record to try again.')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const [arming, setArming] = useState(false)
@@ -286,8 +296,20 @@ export function CaptureScreen() {
     } catch (err) {
       const cancelled = err instanceof Error && err.name === 'AbortError'
       if (cancelled) toast('Recording start cancelled')
-      else if (err instanceof CaptureError) toast(err.message, 'error')
-      else toast('Could not start recording', 'error')
+      else if (err instanceof CaptureError) {
+        // The recovery ritual (wedgeReload.ts): a wedged screen share fails
+        // the take with every device already released, so the app refreshes
+        // ITSELF once — fresh renderer, fresh pipes to Chrome's capture
+        // service — and comes back saying "press record to try again". A
+        // wedge that survives that refresh falls through to the error text,
+        // which says the remaining truth: quit Chrome (⌘Q).
+        if (err.kind === 'screen' && err.reason === 'wedged' && shouldReloadForWedge()) {
+          noteWedgeReload()
+          window.location.reload()
+          return
+        }
+        toast(err.message, 'error')
+      } else toast('Could not start recording', 'error')
     } finally {
       armAbortRef.current = null
       setArming(false)

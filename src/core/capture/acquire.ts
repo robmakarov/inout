@@ -6,7 +6,13 @@ import {
   type MediaKind,
 } from '@core/types'
 import { analytics } from '@core/analytics'
+import { isAppleWebKit } from '@core/capabilities'
 import { guardStream } from './deviceGuard'
+import {
+  awaitDisplayCaptureClear,
+  displayCaptureClear,
+  trackDisplayCapture,
+} from './displayRelease'
 import {
   MAX_DISPLAY_LEVEL,
   displayRequestLevel,
@@ -773,6 +779,21 @@ export function acquireChannelsProgressive(
         mark('system-audio', 'failed', 'getDisplayMedia unavailable')
       }
     } else {
+      // NEVER RACE THE PREVIOUS SHARE'S TEARDOWN (displayRelease.ts — PO's
+      // rapid record/stop stress test wedges Chrome). The check is a sync
+      // no-op whenever clear, so the same-tick dispatch survives in the
+      // common case. Apple WebKit is exempt outright: transient activation
+      // dies at the first await there, and it does not wedge this way.
+      // Chromium/Gecko keep activation for ~5 s, far above the 3 s budget.
+      if (!isAppleWebKit() && !displayCaptureClear()) {
+        mark('display', 'start', 'waiting for the previous share to release')
+        const cleared = await awaitDisplayCaptureClear()
+        console.info(
+          cleared
+            ? '[capture] previous share released — requesting the screen'
+            : '[capture] previous share still held at the deadline — requesting anyway',
+        )
+      }
       // A machine that wedged gets a smaller request — see displayWedge.ts.
       // Only OUR options are dropped, so nothing the user chose goes missing.
       const opts = displayMediaOptions(config, displayLevel)
@@ -839,6 +860,8 @@ export function acquireChannelsProgressive(
       // screen is live and Chrome's indicator is lit, so from this line on it
       // must be releasable no matter what happens next.
       guardStream(display)
+      // …and the NEXT share request must wait for these to end (displayRelease).
+      for (const t of display.getTracks()) trackDisplayCapture(t)
       const video = display.getVideoTracks()[0]
       const surface = displaySurfaceOf(video)
       // THE PICKER HAS ANSWERED — say so here, not eight lines and one await

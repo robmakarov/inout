@@ -8,6 +8,7 @@ import {
 } from './acquire'
 import { createCaptureSession } from './session'
 import { liveDeviceStreamCount, resetDeviceGuardForTests } from './deviceGuard'
+import { resetDisplayReleaseForTests } from './displayRelease'
 import { rememberGrant } from './grants'
 
 /**
@@ -35,6 +36,7 @@ function stubFocusableDocument(): void {
 }
 
 afterEach(() => {
+  resetDisplayReleaseForTests()
   vi.useRealTimers()
   vi.unstubAllGlobals()
   resetDeviceGuardForTests()

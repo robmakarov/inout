@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createCaptureSession } from './session'
 import { liveDeviceStreamCount, resetDeviceGuardForTests } from './deviceGuard'
+import { resetDisplayReleaseForTests } from './displayRelease'
 
 /**
  * THE BUG THIS FILE EXISTS FOR (PO 2026-08-24):
@@ -80,6 +81,7 @@ function install(handlers: {
 }
 
 afterEach(() => {
+  resetDisplayReleaseForTests()
   resetDeviceGuardForTests()
   vi.unstubAllGlobals()
 })

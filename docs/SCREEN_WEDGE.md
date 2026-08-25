@@ -38,6 +38,7 @@ never settled at all.
 | Intermittent: "often, not always" | PO, 2026-08-24 |
 | App's own arming cost is ~22 ms; the wait is never our code executing | measured in-browser, 2026-08-24 |
 | **Accumulates within a Chrome session: "usually all okay first couple records, third or so start to have problem"** | PO, 2026-08-25 — the strongest new discriminator; consistent with Chrome leaking a capture-session claim per take until something saturates |
+| **Reproducible at will by rapid cycling: "connect screen, 2 seconds recording, back and again 10 times — it happens again"** | PO, 2026-08-25, after the persistent-connect ship. Confirms per-take accumulation and gives the case file its first repro recipe |
 | After the wedged claim finally clears (a later refresh), the **mic indicator** can light instead, and the app can sit on "Waiting for microphone…" | PO, 2026-08-25 — the mic's timeout budget was chosen by `await permissions.query(...)`, an IPC into the same wedged browser process; when it never answered, no deadline was ever armed. A bounded fail-fast was written and REFUSED by PO ("it must not fail" — the mic has to connect, not fail faster). PO then ordered the opposite contract: "all input must connect everytime without fails" → **persistent connect shipped** (acquire.ts `connectPersistently`): the lookup is bounded (cached grant as fallback), a granted mic/camera is re-asked — 2 attempts before the take starts, then an endless paced background hunt that late-joins the device the moment the browser delivers. Fenced: granted devices only, dies with the take / the user's off-switch / a denial. The SCREEN cannot be hunted — getDisplayMedia needs a fresh user gesture per ask |
 
 ## The attempts, in order, with honest outcomes
@@ -78,6 +79,21 @@ never settled at all.
    the theory was wrong and it cost him a picker option. Reverted; the rule is now written
    in acquire.ts: **the picker is the user's, not ours** — never remove or reorder its
    surfaces without PO saying so.
+10. **Share requests serialized against the previous share's release**
+   (`displayRelease.ts`, 2026-08-25, prompted by the rapid-cycling repro). Our own stop
+   path keeps the display track alive while it starves and drains the recorder
+   (P0-tail-raw), so a fast re-record raced that teardown — the one overlap the page
+   controls. Every delivered display track is registered; the next getDisplayMedia waits
+   (sync no-op when clear, ≤3 s budget, 800 ms grace after the last track ends) before
+   dispatching. Apple WebKit exempt (same-tick dispatch is law there; it does not wedge).
+11. **The refresh ritual** (`wedgeReload.ts`, 2026-08-25 — PO: "if it happens make it
+   fixed by refresh of app page"). A wedge already fails the take with every device
+   released, so the app reloads ITSELF once — fresh renderer, fresh mojo pipes to the
+   capture service — and boots with "press record to try again". A wedge inside 2 min of
+   that reload gets no second one; the error text then says the remaining truth (⌘Q).
+   Honest limit: the claim provably lives in the browser process (survives tab close), so
+   a refresh is not guaranteed to clear it — the ritual automates the cheapest cure and
+   the escalation stays one step behind.
 
 ## Ruled out
 
@@ -127,7 +143,8 @@ never settled at all.
 
 ## What users get today, wedge or no wedge
 
-Failure is bounded (≤30 s, usually 8), every device is released at the failure, no take
-silently records without its primary, the retry self-heals through the ladder without
-removing anything visible for more than one take, the error text says the truth, and
-every occurrence is counted.
+A new share request never races the previous share's teardown (serialized, invisible at
+normal pace). Failure is bounded (≤30 s, usually 8), every device is released at the
+failure, no take silently records without its primary, the app refreshes itself once and
+invites a retry, the retry self-heals through the request ladder, a second wedge right
+after the refresh gets the honest ⌘Q text, and every occurrence is counted.

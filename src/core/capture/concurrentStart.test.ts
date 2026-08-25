@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { acquireChannelsProgressive, type AcquiredChannel } from './acquire'
 import { knownGranted, rememberGrant } from './grants'
 import { resetDeviceGuardForTests } from './deviceGuard'
+import { resetDisplayReleaseForTests } from './displayRelease'
 
 /**
  * PO 2026-08-24: "it must start together immediately, why the fuck waiting is
@@ -53,6 +54,7 @@ const flush = async (): Promise<void> => {
 }
 
 afterEach(() => {
+  resetDisplayReleaseForTests()
   resetDeviceGuardForTests()
   rememberGrant('microphone', false)
   rememberGrant('camera', false)

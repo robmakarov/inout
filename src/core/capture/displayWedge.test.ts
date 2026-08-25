@@ -8,6 +8,7 @@ import {
 } from './displayWedge'
 import { acquireChannelsProgressive } from './acquire'
 import { resetDeviceGuardForTests } from './deviceGuard'
+import { resetDisplayReleaseForTests } from './displayRelease'
 
 /**
  * PO 2026-08-24: "i need this shit never happens to users". The wedge itself
@@ -25,6 +26,7 @@ import { resetDeviceGuardForTests } from './deviceGuard'
  */
 
 afterEach(() => {
+  resetDisplayReleaseForTests()
   resetDisplayWedgeForTests()
   resetDeviceGuardForTests()
   vi.unstubAllGlobals()
@@ -214,6 +216,9 @@ describe('the request Chrome actually receives after a wedge', () => {
 
     for (let i = 0; i < 2; i++) rememberDisplayWedge()
     expect(displayRequestLevel()).toBe(2)
+    // This test is about the LADDER, not the release barrier: pretend the
+    // previous take's share released long ago so the next request is instant.
+    resetDisplayReleaseForTests()
     await acquireChannelsProgressive(config, {
       onChannel: () => undefined,
       onFailure: () => undefined,
