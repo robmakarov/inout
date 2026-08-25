@@ -430,7 +430,13 @@ class Session implements CaptureSession {
         wedged.kind,
         'unavailable',
         wedged.kind === 'screen'
-          ? 'The browser accepted the share but never delivered the screen. Nothing was recorded — press record to try again, and if it keeps happening close this tab and open a new one.'
+          ? // Precise on purpose, because the obvious advice is wrong: the stuck
+            // share lives in Chrome's browser process — the page never received
+            // the track, so no page can release it, and refreshing or closing
+            // the tab provably does not clear it (PO 2026-08-24: "even if i
+            // close tab completely and open new one it doesnt help"). Only
+            // restarting Chrome tears that process down.
+            'Chrome accepted the share but never delivered the screen — nothing was recorded. This is stuck inside Chrome itself: quit Chrome completely (⌘Q) and reopen, then record again.'
           : `${wedged.kind} never responded. Nothing was recorded — press record to try again.`,
       )
     }
