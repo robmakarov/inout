@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { Capabilities } from '@core/capabilities'
 import { aacEncodeFor, displayAudioScopeFor } from '@core/capabilities'
-import { CHANNEL_KINDS, channelLabel, isKindSupported, unsupportedReason } from './channels'
+import {
+  CHANNEL_KINDS,
+  channelLabel,
+  isKindSupported,
+  missingChannelsMessage,
+  unsupportedReason,
+} from './channels'
 
 const base: Capabilities = {
   chromium: true,
@@ -131,5 +137,21 @@ describe('unsupportedReason', () => {
   it('supported channel on a limited platform still returns null', () => {
     expect(unsupportedReason('camera', ios)).toBeNull()
     expect(unsupportedReason('screen', safariDesktop)).toBeNull()
+  })
+})
+
+describe('missingChannelsMessage', () => {
+  it('never tells a macOS user to tick a box Chrome does not show them', () => {
+    const msg = missingChannelsMessage(['system-audio'], chromium)
+    expect(msg).toMatch(/Chrome Tab/)
+    expect(msg).not.toMatch(/Also share system audio/)
+  })
+
+  it('on Windows it names the box that IS there', () => {
+    expect(missingChannelsMessage(['system-audio'], chromiumWindows)).toMatch(/Also share system audio/)
+  })
+
+  it('a missing device is a missing device, not a picker problem', () => {
+    expect(missingChannelsMessage(['mic'], chromium)).toMatch(/never connected/)
   })
 })

@@ -13,7 +13,8 @@ import { exportByBestPath } from '@core/compose'
 import { editsRepo, recordingsRepo } from '@core/store'
 import { analytics } from '@core/analytics'
 import { useAppStore } from '@app/state/store'
-import { CHANNEL_META } from '@app/lib/channels'
+import { detectCapabilities } from '@core/capabilities'
+import { missingChannelsMessage } from '@app/lib/channels'
 import { usePlayback } from '@app/hooks/usePlayback'
 import { Player } from '@app/components/Player'
 import { Timeline } from '@app/components/Timeline'
@@ -238,13 +239,7 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
     <div className="editor">
       {recording.missing?.length ? (
         <div className="editor__missing" role="alert">
-          {recording.missing.includes('system-audio')
-            ? `Missing from this take: ${recording.missing
-                .map((k) => CHANNEL_META[k].label)
-                .join(', ')}. Audio wasn't shared — next time tick “Also share system audio” in the screen picker (tab shares always include it; window shares can't).`
-            : `Missing from this take: ${recording.missing
-                .map((k) => CHANNEL_META[k].label)
-                .join(', ')} — the device never connected.`}
+          {missingChannelsMessage(recording.missing, detectCapabilities())}
         </div>
       ) : null}
 
