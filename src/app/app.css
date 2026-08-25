@@ -478,6 +478,12 @@
 /* The live composite painted by the capture worker (O4-polish). Same box as
    .stage__screen; the composition is already 16:9 and so is the stage, so the
    canvas stretches exactly. */
+.quality__tier--provisional .quality__tier-size {
+  opacity: 0.45;
+}
+.quality__hint--measuring {
+  opacity: 0.6;
+}
 .stage__composite {
   position: absolute;
   inset: 0;

@@ -99,11 +99,20 @@ export function QualityPanel({
         const model = estimateExportBytes(recording, t, outputDurationMs)
         // The default step is the composite copied — the number IS the file and
         // no probe can improve on it.
-        if (isDefaultTier(t)) return { tier: t, size: model }
-        return { tier: t, size: measured?.[t.id] ?? model }
+        if (isDefaultTier(t)) return { tier: t, size: model, measured: true }
+        const m = measured?.[t.id]
+        return { tier: t, size: m ?? model, measured: !!m }
       }),
     [recording, outputDurationMs, measured],
   )
+  /**
+   * F7d: until the probe lands, these are F7's MODEL, and that model is anchored
+   * on the composite — whose encoder changed when the capture engine flipped
+   * (measured −71 to −84 % on motion content, and 15× OVER on a synthetic take).
+   * So the interim numbers are marked as such rather than presented as prices.
+   * The default step is never interim: it is the file.
+   */
+  const stillMeasuring = estimates.some((e) => !e.measured)
   const current =
     estimates.find((e) => e.tier.id === tier.id) ??
     estimates.find((e) => isDefaultTier(e.tier)) ??
@@ -126,7 +135,9 @@ export function QualityPanel({
             key={t.id}
             role="radio"
             aria-checked={t.id === tier.id}
-            className={`quality__tier${t.id === tier.id ? ' quality__tier--on' : ''}`}
+            className={`quality__tier${t.id === tier.id ? ' quality__tier--on' : ''}${
+              size.exact || !stillMeasuring ? '' : ' quality__tier--provisional'
+            }`}
             onClick={() => onTier(t)}
           >
             <span className="quality__tier-label">{t.label}</span>
@@ -139,6 +150,11 @@ export function QualityPanel({
         ))}
       </div>
 
+      {stillMeasuring && (
+        <div className="quality__hint quality__hint--measuring">
+          Measuring the other sizes on this take — they settle in a few seconds.
+        </div>
+      )}
       <div className="quality__hint">
         {instant
           ? 'Copies the video as recorded — no re-encode, ready in about a second. That size is the file, not a guess.'
