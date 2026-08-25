@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CloudProvider, CloudShare, CloudUser, ExportResult } from '@core/types'
 import { loadRecovery } from '@core/capture'
 import { saveToFile } from '@core/share'
 import { getCloudProvider } from '@core/cloud'
 import { analytics } from '@core/analytics'
 import { useAppStore } from '@app/state/store'
-import { formatClock, humanBytes } from '@app/lib/format'
+import { formatClock, formatRemaining, humanBytes } from '@app/lib/format'
 import { Icon } from '@app/components/Icon'
 import { ProgressRing } from '@app/components/ProgressRing'
 
@@ -26,15 +26,50 @@ export function ExportPanel({ onBack }: { onBack: () => void }) {
   return <Result onBack={onBack} />
 }
 
+/** Below this the slope is still noise — a number that swings by minutes is
+ *  worse than no number. */
+const ETA_MIN_ELAPSED_MS = 3000
+const ETA_MIN_RATIO = 0.03
+
+/**
+ * How long is left — measured, not modelled.
+ *
+ * A ring and a percentage are enough for the 60-105 ms instant export. They are
+ * not enough for a full render: PO's 15m38s take sat in this panel for ~3.5
+ * minutes with nothing to say whether that meant seconds or an hour.
+ *
+ * The progress ratio is NOT uniform in time, so extrapolating the whole thing
+ * would lie: `preparing` (0→0.05) hides an entire audio decode on a long take
+ * and `finalizing` is a muxer flush. Only the `rendering` span advances at a
+ * rate worth reading, so the estimate anchors at the first rendering sample and
+ * takes its slope from there — and says nothing at all until that slope has 3 s
+ * and 3 % under it.
+ */
+function useRemainingMs(phase: keyof typeof PHASE_LABEL, ratio: number): number | null {
+  const anchor = useRef<{ t: number; ratio: number } | null>(null)
+  if (phase === 'preparing') anchor.current = null
+  else if (phase === 'rendering' && !anchor.current) {
+    anchor.current = { t: performance.now(), ratio }
+  }
+  if (phase !== 'rendering' || !anchor.current) return null
+  const dt = performance.now() - anchor.current.t
+  const dr = ratio - anchor.current.ratio
+  if (dt < ETA_MIN_ELAPSED_MS || dr < ETA_MIN_RATIO) return null
+  return ((1 - ratio) / dr) * dt
+}
+
 function Progress() {
   const progress = useAppStore((s) => s.exportProgress)
   const abort = useAppStore((s) => s.exportAbort)
   const ratio = progress?.ratio ?? 0
+  const phase = progress?.phase ?? 'preparing'
+  const remainingMs = useRemainingMs(phase, ratio)
   return (
     <div className="xp xp--progress">
       <ProgressRing ratio={ratio} />
       <div className="xp__pct">{Math.round(ratio * 100)}%</div>
-      <div className="xp__phase">{PHASE_LABEL[progress?.phase ?? 'preparing']}</div>
+      <div className="xp__phase">{PHASE_LABEL[phase]}</div>
+      {remainingMs !== null && <div className="xp__eta">{formatRemaining(remainingMs)}</div>}
       <button className="btn btn--ghost" onClick={() => abort?.abort()}>
         Cancel
       </button>
