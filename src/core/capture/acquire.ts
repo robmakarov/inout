@@ -6,12 +6,15 @@ import {
   type MediaKind,
 } from '@core/types'
 import { analytics } from '@core/analytics'
+import { detectCapabilities, type DisplayAudioScope } from '@core/capabilities'
 import { guardStream } from './deviceGuard'
 import {
+  SILENT_DISPLAY_LEVEL,
+  displayRequestLevel,
   displayWedgeCount,
-  isDisplayConservative,
   rememberDisplaySuccess,
   rememberDisplayWedge,
+  type DisplayRequestLevel,
 } from './displayWedge'
 import { knownGranted, rememberGrant } from './grants'
 
@@ -275,19 +278,38 @@ export const CAPTURE_MAX_WIDTH = DEFAULT_EXPORT_SETTINGS.width
 export const CAPTURE_MAX_HEIGHT = DEFAULT_EXPORT_SETTINGS.height
 export const CAPTURE_MAX_FPS = DEFAULT_EXPORT_SETTINGS.fps
 
+/**
+ * WHICH PANE CHROME'S PICKER OPENS ON — and it is a sound question, not a
+ * video one (PO 2026-08-25: "share sound in chrome with screen toggle not
+ * there anymore").
+ *
+ * `displaySurface` is a HINT: it chooses the pane the picker opens on, and
+ * every surface stays pickable. Since 2026-08-06 that hint has been 'monitor',
+ * so the default pick records everything the user does instead of one tab that
+ * can freeze while they work elsewhere. That is still right for a silent take.
+ *
+ * But on macOS and Linux, Chromium can only ever carry a TAB's audio — the
+ * "Also share tab audio" checkbox exists on the Chrome-Tab pane and nowhere
+ * else. So a user who has turned Tab Audio ON and lands on the Entire-Screen
+ * pane is looking at a picker with no sound toggle in it, which is exactly the
+ * complaint. When they asked for sound, open where the sound is; when they did
+ * not, keep the monitor pane. On Windows a monitor share carries the machine's
+ * audio, so nothing moves there.
+ */
+export function displayPaneHint(config: CaptureConfig, scope: DisplayAudioScope): DisplaySurfaceKind {
+  return config.systemAudio && scope === 'tab' ? 'browser' : 'monitor'
+}
+
 /** Upper bounds only — a smaller surface satisfies them untouched, so this can
  * never overconstrain a source and cost the user their screen capture. */
-export function displayVideoConstraints(): MediaTrackConstraints {
+export function displayVideoConstraints(pane: DisplaySurfaceKind = 'monitor'): MediaTrackConstraints {
   return {
     width: { max: CAPTURE_MAX_WIDTH },
     height: { max: CAPTURE_MAX_HEIGHT },
     // max, not just ideal: a 60 fps game tab hands over 60 fps otherwise, and
     // every frame above 30 is encoded twice and then dropped at export.
     frameRate: { ideal: CAPTURE_MAX_FPS, max: CAPTURE_MAX_FPS },
-    // displaySurface is a HINT, not a constraint: it opens Chrome's picker
-    // on the Entire-Screen pane instead of the tab list, so the default
-    // choice records everything the user does. Any surface stays pickable.
-    displaySurface: 'monitor',
+    displaySurface: pane,
   } as MediaTrackConstraints
 }
 
@@ -371,6 +393,51 @@ type DisplayMediaOptions = DisplayMediaStreamOptions & {
   systemAudio?: 'include' | 'exclude'
 }
 
+/**
+ * Chromium defaults AEC/NS/AGC ON for display audio — voice processing mangles
+ * music into warble and downmixes to mono. Capture it raw.
+ */
+const RAW_DISPLAY_AUDIO: MediaTrackConstraints = {
+  echoCancellation: false,
+  noiseSuppression: false,
+  autoGainControl: false,
+}
+
+/**
+ * The request for a given rung of the wedge ladder (displayWedge.ts). Pure, so
+ * the exact object Chrome receives is testable without a browser.
+ *
+ * The ordering is the point: rungs 1 and 2 drop only options the user cannot
+ * see, so `audio` — and therefore Chrome's "Also share tab audio" checkbox —
+ * survives every rung but the last. Rung 1 also drops the explicit
+ * `systemAudio` flag, which costs nothing: 'include' is its spec default.
+ * The capture ceiling is unaffected at any rung — capDisplayTrack enforces it
+ * after delivery, which is exactly why dropping the picker constraints is free.
+ */
+export function displayMediaOptions(
+  config: CaptureConfig,
+  level: DisplayRequestLevel,
+  scope: DisplayAudioScope,
+): DisplayMediaOptions {
+  const wantsAudio = !!config.systemAudio && level < SILENT_DISPLAY_LEVEL
+  const pane = displayPaneHint(config, scope)
+  if (level >= SILENT_DISPLAY_LEVEL) return { video: true, audio: false }
+  if (level === 2) return { video: true, audio: wantsAudio }
+  if (level === 1) {
+    return {
+      video: { displaySurface: pane } as MediaTrackConstraints,
+      audio: wantsAudio ? RAW_DISPLAY_AUDIO : false,
+    }
+  }
+  return {
+    video: displayVideoConstraints(pane),
+    audio: wantsAudio ? RAW_DISPLAY_AUDIO : false,
+    selfBrowserSurface: 'exclude',
+    surfaceSwitching: 'include',
+    systemAudio: config.systemAudio ? 'include' : 'exclude',
+  }
+}
+
 /** What the user actually picked in the screen picker. Not in every TS DOM lib. */
 type DisplaySurface = DisplaySurfaceKind
 function displaySurfaceOf(track: MediaStreamTrack | undefined): DisplaySurface | undefined {
@@ -394,6 +461,24 @@ function displaySurfaceOf(track: MediaStreamTrack | undefined): DisplaySurface |
  */
 export function surfaceNotice(_surface: DisplaySurface | undefined): string | null {
   return null
+}
+
+/**
+ * Audio was asked for and the picker handed back none. Say WHY in the words of
+ * the box the user was actually looking at — the old copy told a macOS user to
+ * tick "Also share system audio", which Chrome never shows there: on
+ * macOS/Linux Chromium only a TAB can carry audio, so on a monitor or window
+ * share there is no box to tick and no amount of ticking would have helped.
+ */
+export function displayAudioMissingMessage(
+  surface: DisplaySurface | undefined,
+  scope: DisplayAudioScope,
+): string {
+  if (scope === 'tab' && (surface === 'monitor' || surface === 'window')) {
+    return 'No sound in this take: this browser can only capture a Chrome Tab’s audio, never a whole screen’s. Share a Chrome Tab to record sound.'
+  }
+  const box = scope === 'system' ? '“Also share system audio”' : '“Also share tab audio”'
+  return `Sound was not shared — tick ${box} in the screen picker.`
 }
 
 export function acquireChannelsProgressive(
@@ -534,7 +619,11 @@ export function acquireChannelsProgressive(
   // with NotAllowedError and show NO picker at all. Fire it first, await later.
   let displayPromise: Promise<MediaStream> | null = null
   const canDisplay = typeof navigator.mediaDevices?.getDisplayMedia === 'function'
-  const conservativeDisplay = config.screen && isDisplayConservative()
+  // Which rung of the wedge ladder this request rides on — 0 unless this
+  // machine has had a share taken and never delivered (displayWedge.ts).
+  const displayLevel: DisplayRequestLevel = config.screen ? displayRequestLevel() : 0
+  // The ONE thing the user can see us drop, and only on the last rung.
+  const audioAsked = !!config.systemAudio && displayLevel < SILENT_DISPLAY_LEVEL
   if (config.screen) {
     mark('display', 'start')
     if (!canDisplay) {
@@ -548,27 +637,14 @@ export function acquireChannelsProgressive(
         mark('system-audio', 'failed', 'getDisplayMedia unavailable')
       }
     } else {
-      // A machine that wedged on the full request gets the minimal one — see
-      // displayWedge.ts. Everything optional is dropped: if any of our options
-      // is what the native picker chokes on, the user's next click just works.
-      // The capture ceiling is unaffected (capDisplayTrack applies post-pick);
-      // tab audio is skipped for the day and reported, not silently absent.
-      const opts: DisplayMediaOptions = conservativeDisplay
-        ? { video: { displaySurface: 'monitor' } as MediaTrackConstraints, audio: false }
-        : {
-            video: displayVideoConstraints(),
-            // Chromium defaults AEC/NS/AGC ON for display audio — voice processing
-            // mangles music into warble and downmixes to mono. Capture it raw.
-            audio: config.systemAudio
-              ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
-              : false,
-            selfBrowserSurface: 'exclude',
-            surfaceSwitching: 'include',
-            systemAudio: config.systemAudio ? 'include' : 'exclude',
-          }
-      if (conservativeDisplay) {
+      // A machine that wedged gets a smaller request — see displayWedge.ts.
+      // Options are dropped in order of how little the user can see them go,
+      // so the tab-audio checkbox survives every rung but the last.
+      const opts = displayMediaOptions(config, displayLevel, detectCapabilities().displayAudioScope)
+      if (displayLevel > 0) {
         console.info(
-          '[capture] display request is in safe mode (previous share never delivered) — video only',
+          `[capture] display request is in safe mode ${displayLevel}/${SILENT_DISPLAY_LEVEL} ` +
+            `(previous share never delivered) — tab audio ${audioAsked ? 'still requested' : 'skipped this take'}`,
         )
       }
       // TWO ceilings, because there are two different things that can be slow.
@@ -637,15 +713,16 @@ export function acquireChannelsProgressive(
         video ? `surface=${surface ?? 'unknown'} track=${video.label || video.id}` : 'no video track',
       )
       // Full-request success proves the machine healthy again — clears the
-      // wedge mark. Conservative success keeps it (TTL is the way back).
-      rememberDisplaySuccess(conservativeDisplay)
-      if (conservativeDisplay && config.systemAudio) {
+      // wedge mark. A lower rung keeps it, except the silent one, which is
+      // one-shot: the checkbox is back on the next take either way.
+      rememberDisplaySuccess(displayLevel)
+      if (config.systemAudio && !audioAsked) {
         // We never asked for audio this take — say that, not "you forgot to
-        // tick the box". Skipped, present in Recording.missing, gone tomorrow.
+        // tick the box". Skipped, present in Recording.missing, back next take.
         fail({
           kind: 'system-audio',
           message:
-            'Tab audio was skipped this take while recovering from a stuck screen share — it comes back automatically.',
+            'Tab audio was skipped this take while recovering from a stuck screen share — it comes back on the next one.',
           denied: false,
         })
         mark('system-audio', 'skipped', 'safe-mode display request')
@@ -660,13 +737,9 @@ export function acquireChannelsProgressive(
           })
           mark('system-audio', 'done')
         } else {
-          fail({
-            kind: 'system-audio',
-            message:
-              'System audio was not shared — tick “Also share system audio” in the screen picker',
-            denied: false,
-          })
-          mark('system-audio', 'failed', 'System audio was not shared')
+          const message = displayAudioMissingMessage(surface, detectCapabilities().displayAudioScope)
+          fail({ kind: 'system-audio', message, denied: false })
+          mark('system-audio', 'failed', message)
         }
       }
       // Anything the picker handed back that we do NOT deliver must be stopped
@@ -676,9 +749,10 @@ export function acquireChannelsProgressive(
       // is gone (PO 2026-08-23: "indicators of mic and screen still there").
       const delivered = new Set<MediaStreamTrack>()
       if (video) delivered.add(video)
-      // In safe mode the audio track (if an engine hands one back unasked) was
-      // NOT delivered as a channel above — so it must not be exempted here.
-      if (!conservativeDisplay && config.systemAudio && display.getAudioTracks()[0]) {
+      // On the silent rung the audio track (if an engine hands one back
+      // unasked) was NOT delivered as a channel above — so it must not be
+      // exempted here.
+      if (audioAsked && display.getAudioTracks()[0]) {
         delivered.add(display.getAudioTracks()[0]!)
       }
       for (const t of display.getTracks()) if (!delivered.has(t)) t.stop()
@@ -709,7 +783,8 @@ export function acquireChannelsProgressive(
         // can see it happening.
         rememberDisplayWedge()
         analytics.track('display_wedge', {
-          conservative: conservativeDisplay,
+          conservative: displayLevel > 0,
+          level: displayLevel,
           wedgeCount: displayWedgeCount(),
         })
       }
