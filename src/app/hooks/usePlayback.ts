@@ -11,8 +11,20 @@ const RESYNC_HARD_MS = 250
 const SYNC_DEADBAND_MS = 15
 /** Drift is closed over ~this horizon via playbackRate slewing. */
 const SLEW_HORIZON_MS = 500
-/** Paused/scrub seeks snap the frame once drift exceeds this. */
-const PAUSED_SEEK_MS = 40
+/**
+ * Paused/scrub seeks snap the frame once drift exceeds this.
+ *
+ * 40 ms was ABOVE one frame (33.3 ms at 30 fps), so a paused scrub could move
+ * the playhead a whole frame and leave the picture where it was — the "scrub
+ * granularity" F8 set out to fix with a second decoder. It is not a decoder
+ * problem: measured on an off-grid 5-instant probe (`npm run exp -- f8`), a
+ * <video> seek and the export's own random-access reader land on the SAME frame
+ * every time, 0 ms apart, and the element is the FASTER of the two (29 ms mean
+ * against 65). What was coarse was this number. Half a frame instead, so any
+ * scrub of one frame or more repaints, and the element still is not asked to
+ * seek for sub-frame jitter.
+ */
+const PAUSED_SEEK_MS = 15
 /** ~10ms gain ramps — no zipper noise when loudness lands. */
 const GAIN_RAMP_S = 0.01
 

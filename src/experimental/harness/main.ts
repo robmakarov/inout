@@ -341,6 +341,19 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'f8',
+    title: 'F8 step one — is the editor scrub actually landing on the wrong frame?',
+    detail:
+      "F8 is written on 'scrub decodes the EXACT frame instead of <video> seek granularity', and nothing in this codebase has ever measured that. This seeks BOTH paths to the same off-grid instants — a <video> element's currentTime, which is what the paused preview does, and the export's own random-access reader — decodes both frames, and reads the rig's painted timecode off each. The answer is in milliseconds of rig clock, and a frame is 33.3 ms.",
+    run: async (args) => {
+      const { runScrubExact } = await import('../perf/scrubExact')
+      return runScrubExact({
+        takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined,
+        samples: typeof args?.samples === 'number' ? args.samples : undefined,
+      })
+    },
+  },
+  {
     id: 'f7c',
     title: 'F7c — what a delta costs, by distance from its keyframe AND by which GOP it is in',
     detail:
