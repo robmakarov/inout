@@ -57,6 +57,60 @@ export const ACQUIRE_TIMEOUT_MS = 8_000
  * arrival leaked live camera/mic tracks. */
 export const PROMPT_TIMEOUT_MS = 120_000
 
+/**
+ * How long the screen may take to arrive AFTER the human is out of the loop.
+ *
+ * PO 2026-08-24, with the log that proves it: `display start +0ms` … `display
+ * timeout +120004ms`. getDisplayMedia neither resolved nor rejected — for two
+ * full minutes — while Chrome's indicator showed the screen as shared. The
+ * picker had been answered seconds in; everything after that was the app
+ * sitting on a promise the browser was never going to settle, holding the
+ * camera and the microphone the whole time, and then arming a take with no
+ * screen in it.
+ *
+ * "Never time a person" (2026-07-16) is still right, and this does not break
+ * it: a person is only in the loop while the picker is OPEN, and an open
+ * picker takes focus away from the page. The clock below starts when focus
+ * comes BACK — i.e. when the picker has closed and the answer is already the
+ * browser's to deliver. Eight seconds after that is not deliberation, it is a
+ * wedge, and the honest thing is to say so and let go of the devices.
+ */
+export const PICKER_SETTLE_MS = 8_000
+
+/**
+ * Resolves once the screen picker is judged closed: focus left the page and
+ * then came back. Never resolves if focus was never lost (a picker that does
+ * not take focus, or an engine that reports focus differently) — deliberately,
+ * because that leaves PROMPT_TIMEOUT_MS as the only ceiling and a human is
+ * never timed on a guess. Also never resolves while the user is away in
+ * another app, which is exactly right: that is still their time, not a wedge.
+ */
+export function pickerClosed(): Promise<void> {
+  if (typeof document === 'undefined' || typeof window === 'undefined') {
+    return new Promise<void>(() => {})
+  }
+  return new Promise<void>((resolve) => {
+    let lost = !document.hasFocus()
+    let timer: ReturnType<typeof setInterval> | undefined
+    const done = (): void => {
+      if (timer) clearInterval(timer)
+      window.removeEventListener('focus', check)
+      resolve()
+    }
+    function check(): void {
+      if (!document.hasFocus()) {
+        lost = true
+        return
+      }
+      if (lost) done()
+    }
+    // Polled as well as evented: the page can regain focus without firing a
+    // 'focus' event when the thing that took it was a browser-native dialog.
+    timer = setInterval(check, 250)
+    window.addEventListener('focus', check)
+  })
+}
+
 /** The channel whose readiness gates recording start (instant is law: we start
  * the moment this one is live and let slower devices late-join). */
 export function primaryKindFor(config: CaptureConfig): ChannelKind | null {
@@ -473,9 +527,16 @@ export function acquireChannelsProgressive(
         surfaceSwitching: 'include',
         systemAudio: config.systemAudio ? 'include' : 'exclude',
       }
-      // The picker is a human interaction — human budget, never device budget.
+      // TWO ceilings, because there are two different things that can be slow.
+      // The outer one is the human at the picker and stays generous. The inner
+      // one only starts once the picker has closed, and catches the failure
+      // the PO actually hit: a getDisplayMedia that never settles at all while
+      // Chrome shows the screen as shared. Without it the app waits out the
+      // full human budget on a promise that is already dead.
+      const rawDisplay = navigator.mediaDevices.getDisplayMedia(opts)
+      rawDisplay.catch(() => undefined) // handled below; never unhandled
       displayPromise = withTimeout(
-        navigator.mediaDevices.getDisplayMedia(opts),
+        withTimeout(rawDisplay, PICKER_SETTLE_MS, 'getDisplayMedia (picker closed)', pickerClosed()),
         PROMPT_TIMEOUT_MS,
         'getDisplayMedia',
       )
@@ -520,6 +581,17 @@ export function acquireChannelsProgressive(
       // must be releasable no matter what happens next.
       guardStream(display)
       const video = display.getVideoTracks()[0]
+      const surface = displaySurfaceOf(video)
+      // THE PICKER HAS ANSWERED — say so here, not eight lines and one await
+      // further down. `mark('display','done')` used to sit after
+      // capDisplayTrack, so up to 1.5 s of our own applyConstraints was still
+      // labelled "Waiting for screen…" with Chrome already sharing. The screen
+      // is not what we are waiting for any more; we are.
+      mark(
+        'display',
+        'done',
+        video ? `surface=${surface ?? 'unknown'} track=${video.label || video.id}` : 'no video track',
+      )
       if (config.systemAudio) {
         const audio = display.getAudioTracks()[0]
         if (audio) {
@@ -552,7 +624,6 @@ export function acquireChannelsProgressive(
       }
       for (const t of display.getTracks()) if (!delivered.has(t)) t.stop()
 
-      const surface = displaySurfaceOf(video)
       const notice = surfaceNotice(surface)
       if (notice) handlers.onNotice?.('screen', notice)
       // Enforce the capture ceiling before anything consumes the track (see
@@ -570,11 +641,6 @@ export function acquireChannelsProgressive(
           surface,
         })
       }
-      mark(
-        'display',
-        'done',
-        video ? `surface=${surface ?? 'unknown'} track=${video.label || video.id}` : 'no video track',
-      )
     } catch (err) {
       const timedOut = err instanceof DOMException && err.name === 'TimeoutError'
       fail(toFailure('screen', err, timedOut))

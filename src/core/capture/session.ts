@@ -20,7 +20,7 @@ import type {
   ArmingProgressHandler,
   ProgressiveAcquire,
 } from './acquire'
-import { acquireChannelsProgressive, withTimeout } from './acquire'
+import { acquireChannelsProgressive, primaryKindFor, withTimeout } from './acquire'
 import { releaseAllDevices } from './deviceGuard'
 import {
   canMeasureAudioCapture,
@@ -411,6 +411,29 @@ class Session implements CaptureSession {
       `[capture:arming] armed +${(performance.now() - armT0).toFixed(0)}ms ` +
         `(${this.channels.length} channel(s), all start together)`,
     )
+
+    // THE SCREEN NEVER CAME AND IT WAS NOT THE USER'S DOING. A timed-out
+    // primary is not a degraded take, it is a failed one: the user asked to
+    // record their screen, the browser took the share and never handed it
+    // over, and carrying on would give them a camera-and-mic clip they did not
+    // ask for — after a wait — while the camera light stayed on throughout
+    // (PO 2026-08-24: "armed +120007ms (2 channel(s))" on a screen recording).
+    // Denial is left alone: that is a decision, and a user who cancels the
+    // picker with camera and mic on may well still want those.
+    const primaryKind = primaryKindFor(this.config)
+    const wedged = failures.find((f) => f.kind === primaryKind && f.timedOut)
+    if (wedged) {
+      this.disposeSynthetic?.()
+      this.disposeSynthetic = null
+      this.releaseMedia()
+      throw new CaptureError(
+        wedged.kind,
+        'unavailable',
+        wedged.kind === 'screen'
+          ? 'The browser accepted the share but never delivered the screen. Nothing was recorded — press record to try again, and if it keeps happening close this tab and open a new one.'
+          : `${wedged.kind} never responded. Nothing was recorded — press record to try again.`,
+      )
+    }
 
     if (this.channels.length === 0) {
       this.disposeSynthetic?.()
