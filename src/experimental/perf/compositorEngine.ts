@@ -223,6 +223,8 @@ export interface EngineRun {
   rawChannel: { bytes: number; frameCount: number; lastFrameSec: number | null; tailGapMs: number | null } | null
   /** Why the watchdog gave up, when it did. */
   degradeReason?: string
+  /** O4-polish: did the compositor take the preview canvas? */
+  previewAttached?: boolean
   /** v2 only — what the encoder itself reported. */
   encoder: {
     codec: string | null
@@ -257,6 +259,8 @@ export interface EngineRun {
     msPerEncodeLatency: number
     outputMs: number
     msPerGpu: number
+    /** O4-polish: the per-frame cost of painting the on-screen preview. */
+    msPerPreview: number
   } | null
   error?: string
 }
@@ -331,6 +335,13 @@ async function runEngine(
   takeMs: number,
   withRawLane: boolean,
   withAudio = true,
+  /**
+   * Hand the compositor a canvas to paint the preview into, as production does
+   * (O4-polish). OFF by default for the same reason the raw lane is: switching
+   * an extra per-frame cost on silently would make every number this harness
+   * has already recorded incomparable.
+   */
+  withPreview = false,
 ): Promise<EngineRun> {
   const audioCtx = new AudioContext({ sampleRate: 48000 })
   await audioCtx.resume()
@@ -372,6 +383,17 @@ async function runEngine(
     // nothing. Started here, with the composite — a lane started at stop
     // records nothing, which is how the first version of this measured a
     // 9851 ms "tail gap" on a 149 ms file.
+    // The production preview: a canvas transferred to the compositor's worker.
+    // Off-screen but attached — a detached element cannot be transferred.
+    let previewCanvas: HTMLCanvasElement | null = null
+    if (withPreview && 'attachPreview' in handle && handle.attachPreview) {
+      previewCanvas = document.createElement('canvas')
+      previewCanvas.width = 960
+      previewCanvas.height = 540
+      previewCanvas.style.cssText = 'position:fixed;left:-9999px;top:0'
+      document.body.appendChild(previewCanvas)
+      base.previewAttached = await handle.attachPreview(previewCanvas)
+    }
     const raw = withRawLane
       ? startRawLane(rig.screen, `exp-o4-raw-${engine}-${width}-${Date.now()}.webm`)
       : null
@@ -417,6 +439,7 @@ async function runEngine(
       outputs: number
       outputMs: number
       gpuMs: number
+      previewMs: number
     } | null
     if (s) {
       const seconds = Math.max(0.001, takeMs / 1000)
@@ -451,6 +474,7 @@ async function runEngine(
         msPerEncodeLatency: Math.round((s.encodeLatencyMs ?? 0) / Math.max(1, s.outputs ?? 1)),
         outputMs: Math.round(s.outputMs ?? 0),
         msPerGpu: Math.round(((s.gpuMs ?? 0) / Math.max(1, s.framesEncoded)) * 100) / 100,
+        msPerPreview: Math.round(((s.previewMs ?? 0) / Math.max(1, s.framesEncoded)) * 1000) / 1000,
       }
     }
     if (!composite) {
@@ -528,6 +552,12 @@ export async function runCompositorEngine(
      * rig produced before that date was a cold number.
      */
     cold?: boolean
+    /**
+     * Attach a preview canvas to the v2 compositor, as production does
+     * (O4-polish). The point of the flag is the A/B: the same take with and
+     * without, so the blit's cost to THROUGHPUT is measured and not asserted.
+     */
+    preview?: boolean
   } = {},
 ): Promise<O4Step2Report> {
   const takeMs = opts.takeMs ?? 8000
@@ -554,7 +584,17 @@ export async function runCompositorEngine(
     // v1 first each round: it is the incumbent, and running it on the colder
     // machine is the conservative order for a claim that v2 is faster.
     for (const engine of engines) {
-      runs.push(await runEngine(engine, w, h, takeMs, opts.rawLane ?? false, opts.noAudio !== true))
+      runs.push(
+        await runEngine(
+          engine,
+          w,
+          h,
+          takeMs,
+          opts.rawLane ?? false,
+          opts.noAudio !== true,
+          opts.preview ?? false,
+        ),
+      )
       await new Promise((r) => setTimeout(r, 1500))
     }
   }

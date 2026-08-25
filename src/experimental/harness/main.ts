@@ -252,6 +252,7 @@ const runners: Runner[] = [
         rawLane: typeof args?.rawLane === 'boolean' ? args.rawLane : undefined,
         noAudio: typeof args?.noAudio === 'boolean' ? args.noAudio : undefined,
         cold: typeof args?.cold === 'boolean' ? args.cold : undefined,
+        preview: typeof args?.preview === 'boolean' ? args.preview : undefined,
       })
     },
   },
