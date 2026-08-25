@@ -1334,6 +1334,25 @@ SDR until WebCodecs HDR hardens.
 GATES: HDR take on an HDR display → file carries HDR metadata (probe evidence) and plays · SDR
 fallback renders correctly · zero SDR-path regression.
 
+## P8. safari-mic — sound survives a real Safari take  [P0 of the Safari lane; BLOCKED ON PO ARTIFACT — do not code from theory]
+PO 2026-08-25, real Safari take: "mic sound got only couple second in middle and nothing else."
+History that forbids guessing: the 2026-07 "fix" routed Apple WebKit audio through MediaRecorder
+mp4/aac (session.ts isAppleWebKit gate, replacing the measured path that truncated at ~1 s) and was
+verified only under a SPOOFED UA — which proves the code path runs, not that the sound survives.
+Three capture "fixes" argued from code ordering have failed in the field in this project; this one
+starts from evidence or not at all.
+UNBLOCK = ONE artifact from PO, either: (a) the exported file itself (ffprobe splits the question —
+is the gap in the raw mic channel or manufactured by the export?), or (b) a Safari take with the
+console open, copied out.
+CANDIDATE CAUSES to test against the artifact, not before: Safari MediaRecorder timeslice chunking
+(one blob at stop vs periodic chunks and how the durable writer orders them) · mediabunny misreading
+Safari's mp4 sample tables at decode · a second consumer of the mic track (level meter / v1
+composite Web Audio graph) silencing the recorder — Safari mutes an earlier mic consumer when a
+later one attaches.
+GATES: a real-Safari take (PO's machine) plays full-length mic audio in the exported file ·
+the fix names the mechanism with the artifact as evidence · Chromium mic path untouched (measured
+path stays, tests green) · no spoofed-UA-only verification accepted.
+
 ═══ PHASE A — AI EXPORT (PO 2026-08-24: "export for ai button is highest priority now"; max token
 cutting; ONE FILE any AI understands, not human-watchable; AI2-AI7 are CANDIDATES reconsidered
 only after PO tests AI1's first real file; spec docs/AI_EXPORT.md) ═══
