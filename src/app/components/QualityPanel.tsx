@@ -1,7 +1,8 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { QualityTier } from '@core/compose/quality'
 import { QUALITY_TIERS, estimateExportBytes, isDefaultTier } from '@core/compose/quality'
-import type { Recording } from '@core/types'
+import type { EditState, Recording } from '@core/types'
+import type { SizeEstimate } from '@core/compose/quality'
 import { humanBytes } from '@app/lib/format'
 import { Icon } from '@app/components/Icon'
 
@@ -16,14 +17,27 @@ import { Icon } from '@app/components/Icon'
  * F7b made the ladder finer and made the numbers honest about themselves: the
  * default step's size is the file, every other one is a prediction.
  *
- * F7c tried to MEASURE them instead of predicting them — encode a few frames of
- * the take at each step when the panel opens — and did not clear the ±20 % gate
- * either. The spike and its numbers are in src/experimental/perf/sizeProbe.ts;
- * nothing landed here, because a probe that is 60 % out on motion content is
- * not an improvement on a model that is 20 % out.
+ * F7c MEASURES them instead of predicting them (attempt 5, shipped 2026-08-25):
+ * when the panel opens, compose ten seconds of the take through the very
+ * geometry the export uses and encode it at every step with the export's own
+ * encoder — two consecutive GOPs, so a file's first GOP and its later ones are
+ * priced separately and blended by the take's own length. Until it lands (about
+ * five seconds) the panel shows F7's model, which is why the panel still opens
+ * instantly.
+ *
+ * WHY THAT MATTERS MORE THAN IT DID: F7's model is anchored on the COMPOSITE's
+ * byte rate, and the composite's encoder changed under it when O4 flipped the
+ * default capture engine to v2. Scored against a v2 composite on 24 s takes it
+ * reads −71 to −84 % on motion content, i.e. a file 4-5x bigger than the number
+ * shown. The probe reads −7 to +6 % on the same takes, both contents, twice
+ * over (`npm run exp -- o11 {"takeMs":24000}`).
+ *
+ * The DEFAULT step never goes through any of this: it is the composite, copied,
+ * so its size is the file and stays exact.
  */
 export function QualityPanel({
   recording,
+  edit,
   outputDurationMs,
   tier,
   onTier,
@@ -32,6 +46,7 @@ export function QualityPanel({
   onCancel,
 }: {
   recording: Recording
+  edit: EditState
   outputDurationMs: number
   tier: QualityTier
   onTier: (t: QualityTier) => void
@@ -39,13 +54,55 @@ export function QualityPanel({
   onExportForAi: () => void
   onCancel: () => void
 }) {
+  /**
+   * The measured prices, when they arrive. Started on open and dropped on
+   * close: the panel must be usable the instant it appears, so this can only
+   * ever REPLACE a number that is already on screen.
+   */
+  const [measured, setMeasured] = useState<Record<string, SizeEstimate> | null>(null)
+  // The edit is fixed while this panel is open (it sits over the editor), so it
+  // is read through a ref rather than being a dependency that could restart a
+  // five-second probe on an unrelated re-render.
+  const editRef = useRef(edit)
+  editRef.current = edit
+  useEffect(() => {
+    const abort = new AbortController()
+    let alive = true
+    // Dynamic, so the probe's decoder + encoder code is not in the bundle the
+    // panel needs to render (O7's first-paint rule, one level down).
+    void (async () => {
+      try {
+        const { calibrateSteps, estimateFromCalibration } = await import('@core/compose/sizeProbe')
+        const calibration = await calibrateSteps(recording, editRef.current, QUALITY_TIERS, {
+          signal: abort.signal,
+        })
+        if (!alive || !calibration) return
+        const byTier: Record<string, SizeEstimate> = {}
+        for (const t of QUALITY_TIERS) {
+          const e = estimateFromCalibration(recording, t, outputDurationMs, calibration)
+          if (e) byTier[t.id] = e
+        }
+        setMeasured(byTier)
+      } catch {
+        // A probe that cannot run leaves the model's number on screen.
+      }
+    })()
+    return () => {
+      alive = false
+      abort.abort()
+    }
+  }, [recording, outputDurationMs])
+
   const estimates = useMemo(
     () =>
-      QUALITY_TIERS.map((t) => ({
-        tier: t,
-        size: estimateExportBytes(recording, t, outputDurationMs),
-      })),
-    [recording, outputDurationMs],
+      QUALITY_TIERS.map((t) => {
+        const model = estimateExportBytes(recording, t, outputDurationMs)
+        // The default step is the composite copied — the number IS the file and
+        // no probe can improve on it.
+        if (isDefaultTier(t)) return { tier: t, size: model }
+        return { tier: t, size: measured?.[t.id] ?? model }
+      }),
+    [recording, outputDurationMs, measured],
   )
   const current =
     estimates.find((e) => e.tier.id === tier.id) ??

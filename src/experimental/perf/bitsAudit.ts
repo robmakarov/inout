@@ -26,8 +26,10 @@ import { ALL_FORMATS, BlobSource, EncodedPacketSink, Input, VideoSampleSink } fr
 import { newId } from '@core/id'
 import { blobStore } from '@core/store'
 import { exportRecording } from '@core/compose'
-import { startLiveComposite } from '@core/capture/liveComposite'
-import { calibrateSteps, estimateFromCalibration } from './sizeProbe'
+import { canLiveComposite, startLiveComposite } from '@core/capture/liveComposite'
+import { canLiveCompositeV2, startLiveCompositeV2 } from '@core/capture/liveCompositeV2'
+import { preferredCompositeEngine } from '@core/capture/engine'
+import { calibrateSteps, estimateFromCalibration } from '@core/compose/sizeProbe'
 import { QUALITY_TIERS } from '@core/compose/quality'
 import { readCertification } from '@core/compose/certify'
 import { defaultEditState } from '@core/timeline'
@@ -376,7 +378,16 @@ async function captureCompositeShape(source: Source, takeMs: number): Promise<Co
   const stream = source.canvas.captureStream(30)
   const key = `exp-o11-comp-${newId('c')}.mp4`
   try {
-    const handle = await startLiveComposite({ screen: stream, audio: [] }, key)
+    // The engine ladder production uses, not v1 unconditionally (see the note on
+    // CompositeShape.engine).
+    const inputs = { screen: stream, audio: [] }
+    const wantV2 = preferredCompositeEngine() === 'v2' && canLiveCompositeV2(inputs)
+    const handle = wantV2
+      ? await startLiveCompositeV2(inputs, key)
+      : canLiveComposite(inputs)
+        ? await startLiveComposite(inputs, key)
+        : null
+    if (!handle) return null
     await new Promise((r) => setTimeout(r, takeMs))
     const composite = await handle.stop()
     if (!composite) return null
@@ -396,6 +407,7 @@ async function captureCompositeShape(source: Source, takeMs: number): Promise<Co
       const total = keyframeBytes + deltaBytes
       return {
         key,
+        engine: wantV2 ? 'v2' : 'v1',
         bytes: blob.size,
         keyframeBytes,
         deltaBytes,
@@ -473,6 +485,14 @@ export interface ContentReport {
 export interface CompositeShape {
   /** Blob key of the composite, kept alive for the F7c calibration probe. */
   key?: string
+  /**
+   * WHICH ENGINE MADE IT — and it matters more than it looks. The shipped size
+   * estimate for every non-default step is anchored on the composite's own byte
+   * rate, so the estimator's error moves with the encoder that produced it. This
+   * rig recorded v1 unconditionally while production's default flipped to v2
+   * (2026-08-24), i.e. it had stopped measuring what users get.
+   */
+  engine?: 'v1' | 'v2'
   bytes: number
   keyframeBytes: number
   deltaBytes: number
@@ -499,6 +519,8 @@ export interface EstimateRow {
   /** F7c: the size predicted from a MEASURED key+delta pair at this step. */
   calibratedPredicted: number | null
   calibratedErrorPct: number | null
+  /** The same probe measuring the FIRST GOP (attempt 4) — scored side by side. */
+  calibratedFirstGopErrorPct: number | null
 }
 
 export interface CameraRung {
@@ -717,12 +739,22 @@ export async function runBitsAudit(
       // F7c: exactly what the shipped panel does — compose from the RAW
       // channels through the production layout and encode two frames per step.
       let calibration: Awaited<ReturnType<typeof calibrateSteps>> = null
+      let calibrationCold: Awaited<ReturnType<typeof calibrateSteps>> = null
       let calibrationOut: ContentReport['calibration'] = null
       {
         calibration = await calibrateSteps(
           recording,
           defaultEditState(recording),
           CALIBRATION_TIERS,
+        )
+        // F7c attempt 4, scored on the SAME take: measure the FIRST GOP instead
+        // of the second. Two models, one content, one run — the only way to
+        // read a difference between them rather than between two recordings.
+        calibrationCold = await calibrateSteps(
+          recording,
+          defaultEditState(recording),
+          CALIBRATION_TIERS,
+          { warmPass: false },
         )
         if (calibration) {
           calibrationOut = {
@@ -755,6 +787,10 @@ export async function runBitsAudit(
             tier && calibration
               ? estimateFromCalibration(recording, tier, takeMs, calibration)
               : null
+          const calibratedCold =
+            tier && calibrationCold
+              ? estimateFromCalibration(recording, tier, takeMs, calibrationCold)
+              : null
           estimates.push({
             label: rung.label,
             pixelRatio: Math.round(r * 1000) / 1000,
@@ -771,6 +807,9 @@ export async function runBitsAudit(
             calibratedPredicted: calibrated ? calibrated.bytes : null,
             calibratedErrorPct: calibrated
               ? Math.round(((calibrated.bytes - rung.bytes) / rung.bytes) * 1000) / 10
+              : null,
+            calibratedFirstGopErrorPct: calibratedCold
+              ? Math.round(((calibratedCold.bytes - rung.bytes) / rung.bytes) * 1000) / 10
               : null,
           })
         }

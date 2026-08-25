@@ -92,7 +92,7 @@ import {
   outputToRecordingMs,
 } from '@core/timeline'
 import type { EditState, Recording } from '@core/types'
-import { AUDIO_BITRATE, KEYFRAME_INTERVAL_SEC } from '@core/compose/codecs'
+import { AUDIO_BITRATE, KEYFRAME_INTERVAL_SEC, RENDER_ENCODER_OPTIONS } from '@core/compose/codecs'
 import { drawVideoFrame, type FrameCanvas } from '@core/compose/layout'
 import { isDefaultTier, type QualityTier, type SizeEstimate } from '@core/compose/quality'
 import { openVideoChannel, type VideoChannelReader } from '@core/compose/video'
@@ -104,6 +104,23 @@ export interface StepMeasurement {
   /** Mean encoded size of the frame that follows it, bytes. */
   meanDeltaBytes: number
   samples: number
+  /**
+   * THE SAME WINDOW, ENCODED TWICE, REPORTED SEPARATELY (attempt 5).
+   *
+   * A file's FIRST GOP is not a typical one and the difference is large and
+   * content-dependent — measured over four consecutive GOPs
+   * (`npm run exp -- f7c`): a later GOP costs 1.81x the first on motion content
+   * and 0.88x on screen. So neither pass alone can price a file: a 6 s take is
+   * essentially ONE first GOP, a 5 minute take is one first GOP and 59 later
+   * ones. Both are measured in one encode — the second pass opens on a forced
+   * keyframe and carries five seconds of this content in the rate controller,
+   * which is exactly the history a middle GOP has — and the estimate blends
+   * them by the take's own length.
+   */
+  firstKeyframeBytes: number
+  firstDeltaBytes: number
+  laterKeyframeBytes: number
+  laterDeltaBytes: number
 }
 
 export interface Calibration {
@@ -139,25 +156,66 @@ export interface Calibration {
  * had, and no single correction factor can fix a sign flip. So the window stops
  * being a sample of the GOP and becomes the GOP.
  */
-const WINDOW_COUNT = 1
+/**
+ * One window, a WHOLE GOP long, encoded TWICE.
+ *
+ * 150 frames is exactly what the shipped 5 s cadence produces at 30 fps
+ * (O11b). Both passes are measured and reported separately: a file is one FIRST
+ * GOP followed by later ones, and the two cost differently enough that neither
+ * alone can price a take of unknown length.
+ */
 const WINDOW_FRAMES = 150
 
-interface Window {
-  /** Consecutive composed OUTPUT frames, 1/30 s apart, at 1920×1080. */
-  frames: ImageBitmap[]
+/** One step's encoder, fed frames as they are composed. */
+interface TierLane {
+  tier: QualityTier
+  canvas: OffscreenCanvas
+  ctx: OffscreenCanvasRenderingContext2D
+  output: Output
+  source: CanvasSource
+  firstKey: number[]
+  firstDelta: number[]
+  laterKey: number[]
+  laterDelta: number[]
+  nextFirstIsKey: boolean
+  nextLaterIsKey: boolean
+  seq: number
+  failed: boolean
 }
 
+/**
+ * MEMORY IS FLAT ON PURPOSE. The spike held all 150 composed frames as
+ * ImageBitmaps so it could replay them per step — 1920x1080x4 x 150 is about
+ * 1.2 GB of texture, which is fine in a rig and not fine on a user's machine
+ * while a take is open. Every step's encoder is opened up front instead and
+ * each composed frame is handed to all of them before it is released, so the
+ * probe holds ONE frame at a time. The cost is composing the window twice
+ * (decode is the floor — note 13) rather than once.
+ */
 export async function calibrateSteps(
   recording: Recording,
   edit: EditState,
   tiers: QualityTier[],
-  opts: { signal?: AbortSignal } = {},
+  opts: {
+    signal?: AbortSignal
+    /**
+     * false = read ONE GOP instead of two, so every step is priced as a first
+     * GOP — which is what attempt 4 did. Kept as a parameter so both models can
+     * be scored against the SAME take in one run: this content is re-recorded
+     * every run and a few points of spread between runs would otherwise read as
+     * a difference between models.
+     */
+    warmPass?: boolean
+  } = {},
 ): Promise<Calibration | null> {
+  const warmPass = opts.warmPass !== false
   const t0 = performance.now()
   const aborted = (): boolean => !!opts.signal?.aborted
   const readers: VideoChannelReader[] = []
-  const windows: Window[] = []
+  const lanes: TierLane[] = []
   const sampledAtSec: number[] = []
+  /** Set between the passes; every packet before it belongs to the first GOP. */
+  let boundarySec = Number.POSITIVE_INFINITY
   try {
     for (const channel of recording.channels) {
       if (channel.media !== 'video') continue
@@ -177,32 +235,69 @@ export async function calibrateSteps(
     const cameraMoves = !cameraFull && cameraTrackIsActive(edit.camera)
     const durationSec = Math.max(0.2, outputDurationOf(edit) / 1000)
 
-    for (let i = 0; i < WINDOW_COUNT; i++) {
-      if (aborted()) return null
-      // Spread across the take, avoiding both ends: the first frames of a
-      // capture are often a blank surface and the last are the stop itself.
-      const atSec = durationSec * ((i + 1) / (WINDOW_COUNT + 1))
-      const frames: ImageBitmap[] = []
-      for (let f = 0; f < WINDOW_FRAMES; f++) {
-        const t = Math.min(durationSec - 0.01, atSec + f / 30)
-        const bitmap = await composeAt(frame, readers, recording, edit, t, cameraFull, cameraMoves)
-        if (!bitmap) break
-        frames.push(bitmap)
-      }
-      if (frames.length < 2) {
-        for (const b of frames) b.close()
-        continue
-      }
-      sampledAtSec.push(Math.round(atSec * 100) / 100)
-      windows.push({ frames })
+    /**
+     * THE WINDOW HAS TO FIT IN THE TAKE, and in the spike it did not: it started
+     * halfway through and ran 5 s, so on a 6 s take the last 60 of its 150
+     * frames were `Math.min(durationSec - 0.01, ...)` — the SAME frozen instant,
+     * sixty times, each encoding to almost nothing. Forty per cent of every
+     * delta mean the probe ever reported was a duplicate of one still picture.
+     * (Note 10: the rig is wrong before the product is.)
+     */
+    /**
+     * TWO CONSECUTIVE GOPS, READ FORWARD ONCE.
+     *
+     * The first version of this encoded ONE window twice, and that was wrong
+     * for a reason worth writing down: a channel reader walks its decoder
+     * forward, so replaying the same seconds means seeking backwards, and what
+     * came back the second time was the same frame over and over. The measured
+     * "later GOP" was 150 duplicates — the probe read 84 % under and looked
+     * like a modelling failure. It was a rewind.
+     *
+     * So the window is 300 consecutive frames with a forced keyframe at 0 and
+     * at 150. That is not a simulation of a file's first two GOPs, it IS one,
+     * and it costs a single forward pass over ten seconds of the take.
+     */
+    const totalFrames = warmPass ? 2 * WINDOW_FRAMES : WINDOW_FRAMES
+    const windowSec = totalFrames / 30
+    // Away from both ends where it can be: the first frames of a capture are
+    // often a blank surface and the last are the stop itself.
+    const atSec = Math.max(0, Math.min(Math.max(0, durationSec / 2 - windowSec / 2), durationSec - windowSec))
+    sampledAtSec.push(Math.round(atSec * 100) / 100)
+
+    for (const tier of tiers) {
+      const lane = openLane(tier, () => boundarySec)
+      if (lane) lanes.push(lane)
     }
-    if (windows.length === 0) return null
+    if (lanes.length === 0) return null
+    for (const lane of lanes) await lane.output.start()
+
+    let composed = 0
+    for (let f = 0; f < totalFrames; f++) {
+      if (aborted()) return null
+      const t = atSec + f / 30
+      // Past the end of the take there is nothing to measure. Stopping short is
+      // honest; repeating the last frame is not — every mean below would then be
+      // diluted by however much of the window fell off the end, which is exactly
+      // the defect the spike shipped with.
+      if (t > durationSec - 0.01) break
+      const bitmap = await composeAt(frame, readers, recording, edit, t, cameraFull, cameraMoves)
+      if (!bitmap) break
+      try {
+        for (const lane of lanes) await addFrame(lane, bitmap, f % WINDOW_FRAMES === 0)
+      } finally {
+        bitmap.close()
+      }
+      composed = f + 1
+      // Set before the second GOP's first frame is added, so a packet that
+      // lands late still lands on the right side of the boundary.
+      if (composed === WINDOW_FRAMES) boundarySec = WINDOW_FRAMES / 30 - 1e-6
+    }
+    if (composed < 2) return null
 
     const steps: Record<string, StepMeasurement> = {}
-    for (const tier of tiers) {
-      if (aborted()) return null
-      const measured = await measureTier(tier, windows)
-      if (measured) steps[tier.id] = measured
+    for (const lane of lanes) {
+      const measured = await closeLane(lane)
+      if (measured) steps[lane.tier.id] = measured
     }
     if (Object.keys(steps).length === 0) return null
     return { steps, sampledAtSec, wallMs: Math.round(performance.now() - t0) }
@@ -210,8 +305,104 @@ export async function calibrateSteps(
     console.warn('[quality] size calibration failed, falling back to the estimate', err)
     return null
   } finally {
-    for (const w of windows) for (const b of w.frames) b.close()
+    for (const lane of lanes) {
+      if (lane.output.state !== 'finalized' && lane.output.state !== 'canceled') {
+        await lane.output.cancel().catch(() => undefined)
+      }
+    }
     for (const r of readers) r.dispose()
+  }
+}
+
+function openLane(tier: QualityTier, boundary: () => number): TierLane | null {
+  const canvas = new OffscreenCanvas(tier.width, tier.height)
+  const ctx = canvas.getContext('2d', { alpha: false })
+  if (!ctx) return null
+  const lane: TierLane = {
+    tier,
+    canvas,
+    ctx,
+    output: null as unknown as Output,
+    source: null as unknown as CanvasSource,
+    firstKey: [],
+    firstDelta: [],
+    laterKey: [],
+    laterDelta: [],
+    nextFirstIsKey: true,
+    nextLaterIsKey: true,
+    seq: 0,
+    failed: false,
+  }
+  lane.output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() })
+  lane.source = new CanvasSource(canvas, {
+    codec: 'avc',
+    bitrate: tier.videoBitrate,
+    // THE PROBE'S ENCODER MUST BE THE EXPORT'S ENCODER, and a hand-rolled
+    // config is not: the render passes RENDER_ENCODER_OPTIONS. Pricing the same
+    // pixels with a different encoder is the exact mistake F7b made with the
+    // composite, one level down.
+    ...RENDER_ENCODER_OPTIONS,
+    // Never let the encoder insert a keyframe of its own: this measurement
+    // depends on knowing exactly which packet is which. A finite number, not
+    // Infinity — mediabunny validates the field and throws on non-finite, which
+    // is how the first version of this probe returned null every time.
+    keyFrameInterval: 1e6,
+    onEncodedPacket: (p) => {
+      if (p.timestamp < boundary()) {
+        if (p.type === 'key' || lane.nextFirstIsKey) lane.firstKey.push(p.byteLength)
+        else lane.firstDelta.push(p.byteLength)
+        lane.nextFirstIsKey = false
+        return
+      }
+      if (p.type === 'key' || lane.nextLaterIsKey) lane.laterKey.push(p.byteLength)
+      else lane.laterDelta.push(p.byteLength)
+      lane.nextLaterIsKey = false
+    },
+  })
+  lane.output.addVideoTrack(lane.source, { frameRate: tier.fps })
+  return lane
+}
+
+async function addFrame(lane: TierLane, bitmap: ImageBitmap, keyFrame: boolean): Promise<void> {
+  if (lane.failed) return
+  try {
+    lane.ctx.drawImage(bitmap, 0, 0, lane.tier.width, lane.tier.height)
+    await lane.source.add(lane.seq / lane.tier.fps, 1 / lane.tier.fps, { keyFrame })
+    lane.seq++
+  } catch (err) {
+    // One step failing must not cost the others their measurement.
+    console.warn(`[quality] calibration encode failed for ${lane.tier.id}`, err)
+    lane.failed = true
+  }
+}
+
+async function closeLane(lane: TierLane): Promise<StepMeasurement | null> {
+  if (lane.failed) return null
+  try {
+    lane.source.close()
+    await lane.output.finalize()
+  } catch (err) {
+    console.warn(`[quality] calibration finalize failed for ${lane.tier.id}`, err)
+    await lane.output.cancel().catch(() => undefined)
+    return null
+  }
+  const mean = (xs: number[]): number =>
+    xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : 0
+  const hasLater = lane.laterDelta.length > 0
+  const firstKey = mean(lane.firstKey)
+  const firstDelta = mean(lane.firstDelta)
+  if (!firstKey || !firstDelta) return null
+  return {
+    tierId: lane.tier.id,
+    // The headline pair stays the LATER GOP where there is one — that is what
+    // most of a real take is made of.
+    meanKeyframeBytes: hasLater ? mean(lane.laterKey) : firstKey,
+    meanDeltaBytes: hasLater ? mean(lane.laterDelta) : firstDelta,
+    samples: Math.min(lane.laterKey.length + lane.firstKey.length, lane.laterDelta.length + lane.firstDelta.length),
+    firstKeyframeBytes: firstKey,
+    firstDeltaBytes: firstDelta,
+    laterKeyframeBytes: hasLater ? mean(lane.laterKey) : firstKey,
+    laterDeltaBytes: hasLater ? mean(lane.laterDelta) : firstDelta,
   }
 }
 
@@ -252,60 +443,15 @@ async function composeAt(
   return createImageBitmap(frame.ctx.canvas)
 }
 
-async function measureTier(tier: QualityTier, windows: Window[]): Promise<StepMeasurement | null> {
-  const canvas = new OffscreenCanvas(tier.width, tier.height)
-  const ctx = canvas.getContext('2d', { alpha: false })
-  if (!ctx) return null
-  const keyBytes: number[] = []
-  const deltaBytes: number[] = []
-  let nextIsKey = true
-  const output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() })
-  const source = new CanvasSource(canvas, {
-    codec: 'avc',
-    bitrate: tier.videoBitrate,
-    // Never let the encoder insert a keyframe of its own: this measurement
-    // depends on knowing exactly which packet is which. A finite number, not
-    // Infinity — mediabunny validates the field and throws on non-finite, which
-    // is how the first version of this probe returned null every time.
-    keyFrameInterval: 1e6,
-    onEncodedPacket: (p) => {
-      // Packets come back in encode order, and the first of every window is the
-      // only forced keyframe in it.
-      if (p.type === 'key' || nextIsKey) keyBytes.push(p.byteLength)
-      else deltaBytes.push(p.byteLength)
-      nextIsKey = false
-    },
-  })
-  output.addVideoTrack(source, { frameRate: tier.fps })
-  try {
-    await output.start()
-    let seq = 0
-    for (const window of windows) {
-      for (let i = 0; i < window.frames.length; i++) {
-        ctx.drawImage(window.frames[i]!, 0, 0, tier.width, tier.height)
-        await source.add(seq++ / tier.fps, 1 / tier.fps, { keyFrame: i === 0 })
-      }
-    }
-    source.close()
-    await output.finalize()
-  } catch (err) {
-    console.warn(`[quality] calibration encode failed for ${tier.id}`, err)
-    await output.cancel().catch(() => undefined)
-    return null
-  }
-  if (keyBytes.length === 0 || deltaBytes.length === 0) return null
-  const mean = (xs: number[]): number => Math.round(xs.reduce((a, b) => a + b, 0) / xs.length)
-  return {
-    tierId: tier.id,
-    meanKeyframeBytes: mean(keyBytes),
-    meanDeltaBytes: mean(deltaBytes),
-    samples: Math.min(keyBytes.length, deltaBytes.length),
-  }
-}
-
 /**
- * The predicted file, from measured parts. Returns null when this step was not
- * calibrated, so the caller can fall back rather than invent a number.
+ * The predicted file as the encoder actually builds it: one FIRST GOP, then as
+ * many later GOPs as the take has room for, each priced by its own measured
+ * keyframe and delta.
+ *
+ * Counting the GOPs rather than dividing by the cadence matters at both ends: a
+ * 6 s take at a 5 s cadence holds TWO keyframes, not 1.2, and on screen content
+ * a keyframe is ~200 KB against a ~5 KB delta, so the difference is a third of
+ * the file. And a take shorter than one GOP is entirely first-GOP.
  */
 export function estimateFromCalibration(
   recording: Recording,
@@ -318,13 +464,21 @@ export function estimateFromCalibration(
   const seconds = Math.max(0, outputDurationMs / 1000)
   const hasAudio = recording.channels.some((c) => c.media === 'audio')
   const audioBytes = hasAudio ? (AUDIO_BITRATE / 8) * seconds : 0
-  const keyframesPerSec = 1 / KEYFRAME_INTERVAL_SEC
-  const deltasPerSec = Math.max(0, tier.fps - keyframesPerSec)
-  const videoBytesPerSec =
-    keyframesPerSec * step.meanKeyframeBytes + deltasPerSec * step.meanDeltaBytes
+  const gopSec = KEYFRAME_INTERVAL_SEC
+  const firstSec = Math.min(seconds, gopSec)
+  const laterSec = Math.max(0, seconds - gopSec)
+  const perGop = (keyBytes: number, deltaBytes: number, spanSec: number): number => {
+    if (spanSec <= 0) return 0
+    const frames = spanSec * tier.fps
+    const keys = Math.max(1, Math.ceil(spanSec / gopSec))
+    return keys * keyBytes + Math.max(0, frames - keys) * deltaBytes
+  }
+  const videoBytes =
+    perGop(step.firstKeyframeBytes, step.firstDeltaBytes, firstSec) +
+    perGop(step.laterKeyframeBytes, step.laterDeltaBytes, laterSec)
   const ceiling = tier.videoBitrate / 8
   return {
-    bytes: Math.round(Math.min(ceiling, videoBytesPerSec) * seconds + audioBytes),
+    bytes: Math.round(Math.min(ceiling * seconds, videoBytes) + audioBytes),
     fromSource: true,
     // The default step is still the composite itself, copied — that number was
     // never a prediction and this does not change it.
