@@ -28,8 +28,13 @@ Message: if the session left one in .git/inout-autocommit/msg/<session_id>, that
 the commit message and the placeholder never appears. Otherwise the generated
 message names the session and the files, so a sweep is at least traceable.
 
+Push is gated: scripts/build-gate.sh builds the exact commit first, because this
+hook pushes with --no-verify (pre-push must not run another session's oracle) and
+a non-building push is how aa39084 left prod silently serving a stale build for
+hours. A gate failure blocks the push loudly and keeps the commit local.
+
 Env overrides: INOUT_AUTOCOMMIT_CLAIM_HOURS, INOUT_AUTOCOMMIT_BRANCH,
-INOUT_AUTOCOMMIT_NO_PUSH.
+INOUT_AUTOCOMMIT_NO_PUSH, INOUT_AUTOCOMMIT_NO_GATE.
 """
 
 import fnmatch
@@ -80,6 +85,7 @@ _HEREDOC = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
 CLAIM_HOURS = float(os.environ.get("INOUT_AUTOCOMMIT_CLAIM_HOURS", "6"))
 BRANCH = os.environ.get("INOUT_AUTOCOMMIT_BRANCH", "main")
 NO_PUSH = os.environ.get("INOUT_AUTOCOMMIT_NO_PUSH", "") not in ("", "0", "false")
+NO_GATE = os.environ.get("INOUT_AUTOCOMMIT_NO_GATE", "") not in ("", "0", "false")
 
 LOCK_STALE_SECS = 600
 LOCK_WAIT_SECS = 90
@@ -487,6 +493,26 @@ class Lock:
         return False
 
 
+def build_gate(repo, sha):
+    """Build the exact commit before pushing it; None = safe to push.
+
+    Returns the gate's output tail when the commit does not build. A missing
+    gate script passes — an older checkout should not lose its push — but a
+    present, failing one blocks: better an unpushed local commit than prod
+    silently serving the previous build while Vercel's build fails.
+    """
+    gate = os.path.join(repo, "scripts", "build-gate.sh")
+    if NO_GATE or not os.path.exists(gate):
+        return None
+    try:
+        p = subprocess.run([gate, sha], capture_output=True, text=True, timeout=600)
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return "build gate did not run: %r" % (exc,)
+    if p.returncode == 0:
+        return None
+    return "\n".join(((p.stdout or "") + (p.stderr or "")).strip().splitlines()[-25:])
+
+
 # --------------------------------------------------------------------- main
 
 def build_message(state_dir, session_id, paths):
@@ -635,14 +661,22 @@ def main():
         print(log(state_dir, line))
 
         if not NO_PUSH:
-            push = subprocess.run(
-                ["git", "-C", repo, "push", "-q", "--no-verify", "origin",
-                 "HEAD:%s" % BRANCH], capture_output=True, text=True)
-            if push.returncode != 0:
-                print(log(state_dir, "push failed (commit is safe locally): %s"
-                          % (push.stderr or push.stdout).strip()))
+            gate_err = build_gate(repo, sha)
+            if gate_err is not None:
+                print(log(state_dir,
+                          "PUSH BLOCKED — commit %s failed the build gate; prod keeps "
+                          "the previous build. Fix and push by hand (the pre-push gate "
+                          "re-runs), or INOUT_AUTOCOMMIT_NO_GATE=1 to push blind.\n%s"
+                          % (sha, gate_err)))
             else:
-                log(state_dir, "pushed %s to %s" % (sha, BRANCH))
+                push = subprocess.run(
+                    ["git", "-C", repo, "push", "-q", "--no-verify", "origin",
+                     "HEAD:%s" % BRANCH], capture_output=True, text=True)
+                if push.returncode != 0:
+                    print(log(state_dir, "push failed (commit is safe locally): %s"
+                              % (push.stderr or push.stdout).strip()))
+                else:
+                    log(state_dir, "pushed %s to %s" % (sha, BRANCH))
 
         _release(state_dir, session_id)
     return 0

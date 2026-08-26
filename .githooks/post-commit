@@ -1,0 +1,6 @@
+#!/bin/sh
+# core.hooksPath=.githooks shadows the global ~/.githooks for this repo;
+# keep its org-capture post-commit running.
+g="$HOME/.githooks/post-commit"
+[ -x "$g" ] && exec "$g" "$@"
+exit 0

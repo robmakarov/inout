@@ -34,6 +34,16 @@ session in the same worktree keeps its own. **Name your own commit** before you 
 `wip: unattributed sweep …` placeholder, which is a bug to fix, not a default to live with.
 Committing by hand also works — the hook then only sweeps what you left behind.
 
+Deploy guard: every push is build-gated. `scripts/build-gate.sh` builds the exact pushed commit
+(~5 s, throwaway worktree, so other sessions' dirty files can't sway the verdict) from both
+`.githooks/pre-push` (repo hooks live in tracked `.githooks/`, wired via local `core.hooksPath` —
+`.git/hooks` is shadowed by the global hooksPath and does not run) and the Stop hook's own
+`--no-verify` push. A commit that doesn't build stays local and says so loudly;
+`INOUT_AUTOCOMMIT_NO_GATE=1` pushes blind. To prove prod actually serves HEAD after a push:
+`node scripts/verify-deploy.mjs` — polls the live entry-asset hashes against a local build of the
+same commit and reads Vercel's verdict off the GitHub commit-status API; exit 0 only when prod
+serves this build, loud on failure or timeout.
+
 Roadmap protocol: PO saying `roadmap` = print the READY map from `.ai/TASKS` (unblocked tasks,
 parallel-safe combos, cost bands) and wait — do not start anything. PO answers `go <id>` → execute
 that ONE task per the TASKS operating rules (own branch, gates, TD merge). If PO names several ids,

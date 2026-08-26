@@ -1,0 +1,14 @@
+#!/bin/sh
+# Active because core.hooksPath=.githooks (repo-local git config). The global
+# core.hooksPath (~/.githooks, org capture) shadows .git/hooks entirely, so the
+# old typecheck+test+oracle pre-push in .git/hooks had been silently dead since
+# that override landed; this tracked dir is where the repo's hooks live now.
+#
+# Gate: every pushed commit must itself build (scripts/build-gate.sh, ~5 s).
+# Bypass, when you must: git push --no-verify — prod will then build blind.
+set -eu
+repo="$(git rev-parse --show-toplevel)"
+zero=0000000000000000000000000000000000000000
+while read -r _lref lsha _rref _rsha; do
+  [ "$lsha" = "$zero" ] || "$repo/scripts/build-gate.sh" "$lsha"
+done

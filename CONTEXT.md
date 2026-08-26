@@ -359,4 +359,5 @@ without a task, either.
 
 Platform-creep before validation · polishing before PO's real QA · random experiments entering
 production (gate: TD) · browser permission edge cases on real devices · free-tier storage limits
-are product-visible.
+are product-visible. Closed 2026-08-26: a broken commit can no longer reach Vercel silently —
+every push is build-gated locally, and `scripts/verify-deploy.mjs` proves prod serves HEAD.
