@@ -1582,6 +1582,42 @@ export stays 1080p30 unless the user chooses higher (F7).
 GATES: 4K rig on a capable machine sustains ≥25 fps at 4K encode OR degrades stepwise with console
 evidence and zero freeze · PO's real 4K-game-tab scenario re-verified · oracles green.
 
+HANDOFF O6 — THE LADDER IS BUILT AND TESTED; THE CAP RAISE IS BEHIND A FLAG AND AWAITS PO'S HARDWARE
+(2026-08-26, THIRTEENTH SESSION).
+WHY IT IS NOT SIMPLY ON. O6's own gate says "PO's real 4K-game-tab scenario re-verified", and this
+session MEASURED why no rig can stand in for that: a synthetic 4K source is a rAF-painted canvas, so
+its delivered fps is dominated by the painting, a cost a real 4K display (composited by the OS) does
+not have. Capping the synthetic track to 1080p moved oracle:load's fps from 14 to 14. So the thing
+the ladder protects against cannot be reproduced here, and turning the cap off by default would be
+shipping the 08-22 freeze back with an untested safety net.
+BUILT:
+  · `capture/resolutionLadder.ts` — pure, 9 tests, the safety-critical decision. Three rules and each
+    is a way this goes wrong: NEVER STEP UP (changing a channel's frame size mid-file is what
+    P0-tail-raw is careful never to do, so down is a one-way door); GIVE THE ENCODER TIME (note 6 —
+    every "2-10 fps" panic in this project was a first-VideoEncoder init being measured, so nothing
+    is judged until output has started AND a warm-up window has passed); ONE STEP AT A TIME WITH A
+    SETTLE (re-measuring straight after a step scores the step's own transient and cascades to the
+    floor in a fraction of a second). Rungs are 1440p then 1080p; below that the answer is the
+    WATCHDOG's, not the ladder's — the composite is refused and the take renders from raw channels.
+    The floor is 60 % of requested rate sustained 2 s, which is deliberately far below the 28-of-30 a
+    healthy 1080p lane reads, because a ladder that fires on a good take is worse than no ladder.
+  · `capture/nativeRes.ts` — `?nativeres=1`, default OFF. capDisplayTrack skips the cap when it is on.
+  · liveCompositeV2 gained `onDegradeStep`, driven by the same 1 Hz stats the watchdog reads, using
+    fps over the INTERVAL rather than since the start so a take that recovers stops being judged on
+    how it began. session.ts applies the constraint, because the compositor sees delivery and the
+    session owns the tracks. The RATE is deliberately left alone: this ladder trades pixels for
+    keeping up, and moving two things at once would make the next measurement unreadable.
+GATES MET: 440 tests · typecheck clean · oracle PASS on v2 (sync 53.0, inst 63.7, smartcut 69.0, tail
+71) AND v1 (45.2, 47.9, render/62.5, tail 66) · armcancel green (arms 401 ms, zero live tracks after
+stop) · build clean. The DEFAULT PATH IS BYTE-FOR-BYTE UNCHANGED — with the flag off, capDisplayTrack
+behaves exactly as before and onDegradeStep never fires.
+GATE NOT MET, and it is the one that matters: "4K rig sustains ≥25 fps OR degrades stepwise with
+console evidence". The degradation logic is tested at every boundary; the 4K rig cannot exercise it
+for the reason above. TO FINISH O6: PO turns on `?nativeres=1`, records the 4K game tab that froze on
+08-22, and reports what the console says — `[capture] native-res capture: leaving display at …`
+followed by either nothing (it held) or `[capture] display stepped 3840×2160 → 2560×1440 (…)`. That
+one report is the whole remaining gate.
+
 ## O7. bundle-split — DONE 2026-08-23, merged (evidence in DECISIONS)
 First paint 802,975 B → 218,793 B (gate ≤300 KB). Editor lazy behind app/editorChunk.ts + prefetch at
 record start (chunk ready ~3.3 s into a 6 s take); capture engine + recovery behind core/capture/lazy.ts

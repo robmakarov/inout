@@ -8,6 +8,7 @@ import {
 import { analytics } from '@core/analytics'
 import { isAppleWebKit } from '@core/capabilities'
 import { guardStream } from './deviceGuard'
+import { nativeResEnabled } from './nativeRes'
 import {
   awaitDisplayCaptureClear,
   displayCaptureClear,
@@ -400,6 +401,15 @@ export function exceedsCaptureCeiling(s: MediaTrackSettings): boolean {
 export async function capDisplayTrack(track: MediaStreamTrack | undefined): Promise<void> {
   if (!track) return
   const before = track.getSettings()
+  // O6, opt-in: start at the source's own resolution and let the ladder step
+  // DOWN on measured backpressure instead of never starting high. Off by
+  // default — see nativeRes.ts for why that is not just caution here.
+  if (nativeResEnabled()) {
+    console.info(
+      `[capture] native-res capture: leaving display at ${before.width}×${before.height}@${before.frameRate ?? '?'} (O6)`,
+    )
+    return
+  }
   if (!exceedsCaptureCeiling(before)) return
   try {
     await withTimeout(

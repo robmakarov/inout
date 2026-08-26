@@ -27,6 +27,7 @@ import type { CompositorMsg, CompositorReply, CompositorStats } from './composit
 import type { CompositeRecording } from '../types'
 import { SourceLiveness, type LivenessEvent } from './sourceLiveness'
 import { watchdogVerdict } from './compositorWatchdog'
+import { DELIVERY_FLOOR_RATIO, ladderVerdict } from './resolutionLadder'
 
 const FPS = 30
 const W = 1920
@@ -143,6 +144,10 @@ interface TrackProcessorLike {
 }
 type TrackProcessorCtor = new (init: { track: MediaStreamTrack }) => TrackProcessorLike
 
+/** The rate every take asks for; the ladder scores delivery against it. */
+const FPS_REQUESTED = 30
+const LADDER_FLOOR = DELIVERY_FLOOR_RATIO
+
 function trackProcessorCtor(): TrackProcessorCtor | null {
   const g = globalThis as { MediaStreamTrackProcessor?: TrackProcessorCtor }
   return typeof g.MediaStreamTrackProcessor === 'function' ? g.MediaStreamTrackProcessor : null
@@ -158,6 +163,13 @@ export interface LiveCompositeV2Options {
   onSourceLiveness?: (kind: 'screen' | 'camera', event: LivenessEvent) => void
   /** Fired when the watchdog gives up, so the caller can fall back to v1. */
   onDegrade?: (reason: string) => void
+  /**
+   * O6 — step the SOURCE down a rung before giving up on it. The compositor
+   * sees delivery, the session owns the tracks, so the verdict travels and the
+   * constraint is applied there. Absent = the ladder never runs, which is the
+   * default.
+   */
+  onDegradeStep?: (rung: { label: string; width: number; height: number }, reason: string) => void
   /**
    * The session epoch (performance.now()), so the composite can say WHERE ITS
    * OWN CLOCK STARTS on the recording timeline (P0-instant-sync). Omitted by
@@ -283,12 +295,53 @@ export async function startLiveCompositeV2(
   /** First non-keep-alive output, seen through the 1 Hz stats events — the
    *  watchdog's clock starts here, so encoder initialization is not "slow". */
   let firstOutputAt: number | null = null
+  // O6's ladder state. Lives beside the watchdog because it reads the same
+  // stats and answers the gentler half of the same question: the watchdog says
+  // "give up on the composite", the ladder says "ask the source for less first".
+  let stepsTaken = 0
+  let lastStepAt: number | null = null
+  let underFloorSince: number | null = null
+  let lastRealFrames = 0
+  let lastStatsAt: number | null = null
+
+  function checkLadder(now: number, real: number): void {
+    if (!options.onDegradeStep || degraded) return
+    // Delivered fps over the interval between stats events, not since the
+    // start: a take that recovers should stop being judged on how it began.
+    if (lastStatsAt !== null && now > lastStatsAt) {
+      const fps = ((real - lastRealFrames) * 1000) / (now - lastStatsAt)
+      const requested = FPS_REQUESTED
+      const under = requested > 0 && fps / requested < LADDER_FLOOR
+      if (under) underFloorSince ??= now
+      else underFloorSince = null
+      const verdict = ladderVerdict({
+        nowMs: now,
+        startedAtMs: startedAt,
+        firstOutputAtMs: firstOutputAt,
+        lastStepAtMs: lastStepAt,
+        underFloorForMs: underFloorSince === null ? 0 : now - underFloorSince,
+        deliveredFps: fps,
+        requestedFps: requested,
+        stepsTaken,
+      })
+      if (verdict) {
+        stepsTaken++
+        lastStepAt = now
+        underFloorSince = null
+        console.warn(`[capture] native-res backpressure — stepping down: ${verdict.reason}`)
+        options.onDegradeStep(verdict.rung, verdict.reason)
+      }
+    }
+    lastStatsAt = now
+    lastRealFrames = real
+  }
 
   function checkWatchdog(s: CompositorStats): void {
     if (degraded) return
     const now = performance.now()
     const real = s.framesEncoded - s.keepAliveFrames
     if (real > 0 && firstOutputAt === null) firstOutputAt = now
+    checkLadder(now, real)
     const verdict = watchdogVerdict({
       nowMs: now,
       startedAtMs: startedAt,

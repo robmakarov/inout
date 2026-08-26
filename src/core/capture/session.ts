@@ -741,6 +741,47 @@ class Session implements CaptureSession {
    * proof clock we have; killing it here would blind us to the source coming
    * back. doStop/doCancel cancel it.
    */
+  /**
+   * O6 — take the display track down one rung. The composite saw the
+   * backpressure; the session owns the track, so the constraint is applied
+   * here. Bounded, and a refusal is not fatal: a source that will not narrow
+   * simply keeps the resolution it had, and the watchdog remains the backstop
+   * that refuses the composite outright.
+   */
+  private async stepDisplayDown(
+    rung: { label: string; width: number; height: number },
+    reason: string,
+  ): Promise<void> {
+    const ch = this.channels.find((c) => c.kind === 'screen' && !c.ended)
+    if (!ch) return
+    try {
+      const before = ch.track.getSettings()
+      await withTimeout(
+        ch.track.applyConstraints({
+          width: { max: rung.width },
+          height: { max: rung.height },
+          // The RATE is left alone on purpose: this ladder trades PIXELS for
+          // keeping up, and dropping the rate as well would change two things
+          // at once and make the next measurement unreadable.
+        }),
+        THROTTLE_BUDGET_MS,
+        `${ch.kind} step to ${rung.label}`,
+      )
+      const after = ch.track.getSettings()
+      if (after.width) ch.width = after.width
+      if (after.height) ch.height = after.height
+      console.info(
+        `[capture] display stepped ${before.width}×${before.height} → ${after.width}×${after.height} (${reason})`,
+      )
+      // The composite's own geometry did not change — it composes to the export
+      // size regardless — but the take is no longer what an unedited export
+      // would packet-copy without knowing the source changed mid-file.
+      this.emit({ type: 'channel-error', kind: 'screen', message: `Recording quality reduced to ${rung.label} to keep up` })
+    } catch (err) {
+      console.warn('[capture] could not step the display down', err)
+    }
+  }
+
   private markCompositeUnusable(reason: string): void {
     if (this.compositeInvalid) return
     this.compositeInvalid = true
@@ -855,6 +896,12 @@ class Session implements CaptureSession {
         epochMs,
         // A machine that cannot keep pace stops being copied, exactly as v1's
         // watchdog did: the take is unharmed, the unedited export renders.
+        // O6: the gentler rung of the same ladder — ask the SOURCE for less
+        // before giving up on the composite. Only ever fires when native-res
+        // capture is on, because otherwise the track is already at the floor.
+        onDegradeStep: (rung, reason) => {
+          void this.stepDisplayDown(rung, reason)
+        },
         onDegrade: (reason) => {
           this.markCompositeUnusable(`compositor v2: ${reason}`)
           // A degraded v2 stops its frame pumps, so a preview fed from it would
