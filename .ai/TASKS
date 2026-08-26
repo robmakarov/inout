@@ -87,120 +87,38 @@ F6's RETAKE (a resume of a FINISHED recording: recovery, editsRepo and editor st
 FULL SWEEP AT THE END OF THIS SESSION: 449 tests · typecheck clean · oracle PASS on v2 AND v1 ·
 armcancel green · build clean · F6 and X9 verified on the DEPLOYED build.
 
-READY NOW — parallel-safe, any subset concurrently (one session each):
-  (GATE-alias FIXED 2026-08-25, eleventh session — see the task below. The first diagnosis written
-   here was WRONG and has been replaced by the measured one: a cold AudioContext stalls further than
-   the rig's own arithmetic could represent. 22 cold runs since, zero sync failures.)
-  (AI1 SHIPPED 2026-08-24, ninth session — the "For AI" button is in the export panel and every gate
-   is green; handoff in PHASE A at the bottom. AI2-AI7 stay frozen until PO feeds a real take's file
-   to an AI and reports back — that report is the only thing that unfreezes them.)
-  (P0-instant-sync DONE 2026-08-25 and O5-flip SHIPPED on top of it — see the map header and the
-   handoff under P0-instant-sync below. Smart cut is ON by default; `?smartcut=0` reverts.)
-  ── X-SERIES (TD optimization-frontier audit 2026-08-25, PO-ordered onto the map; full specs in
-     the PHASE X block below. Sorted by value-per-cost. X4 and X5 both touch render.ts — X5 after
-     X4 — both are now CLOSED: X4 deleted on measurement, X5 refused on its parity gate. X6 is the
-     top of the X series, and it is also the only thing that would reopen either of them.) ──
-  (X1 keep-loudness-envelope DONE 2026-08-26 — see the handoff. Three consumers off the decode, and
-   two live `peakRobust` defects found and fixed on the way. PO's audio listen test is still owed.)
-  (X2 scratch-writes-inline DONE 2026-08-26 — the export worker owns its OPFS handle. See the handoff
-   for why the "byte-identical export" gate was replaced by a writer-equivalence proof, and for the
-   O1-rig lever bug it uncovered.)
-  (X3 experiments-merge-or-delete DONE 2026-08-26 — 2,745 lines gone; `shared/` kept because two live
-   rigs import it, `sizeProbe` had already merged into src/core/compose.)
-  (X4 parallel-decode-workers BUILT, MEASURED AND DELETED 2026-08-26 — 0.99-1.08× against a ≥2×
-   gate. A worker decodes at 0.93-1.04× the main thread ALONE and 3.7-5× slower while the render
-   encodes beside it; the handoff is 0.4 %; a read-ahead window deep enough to never stall changes
-   nothing. Decode is not thread-bound. STEP 2 DIES WITH IT. See the handoff, and run
-   `npm run exp -- o5` before re-proposing it.)
-  (X9 ai-pdf-off-main-thread SHIPPED 2026-08-26 — the For-AI build runs in a worker, byte-identical
-   PDF on four lanes, UI thread loses 15 ms instead of 78. See the handoff for the gate that could
-   not fail.)
-  (X12 capture-bitrate-pricing DONE 2026-08-26 — capture writes 5.21/7.63 Mbps, not 18.5, and the
-   raw-screen rung is BACKWARDS on screen content: −32.5 % disk for a +31.5 % bigger delivered file.
-   Proposal: keep 8 Mbps. See the handoff.)
-  (X5 gpu-export-compositor REFUSED ON ITS OWN PARITY GATE 2026-08-26, before the shader was
-   written. GL IS faster (1.71×, upload included) but there was never a readback to remove — the
-   render's frames come from a SOFTWARE decoder — and draw is only 25-30 % of the render, so the
-   whole port caps at ~10-13 % of export time. The gate fails on the EASIEST case: same frames,
-   default composition, screen-text interior reads 37.3 dB / max 156 / 3.8 % of pixels off by >8
-   against ≤1 LSB or ≥60 dB, because texImage2D and drawImage upsample 4:2:0 chroma differently.
-   Porting would CHANGE HOW EXPORTED TEXT LOOKS — PO's call, and it collides with O9. See the
-   handoff; `npm run exp -- x5` reproduces it.)
-  (X6 raw-channels-webcodecs BUILT AND SHIPPED OFF BY DEFAULT 2026-08-26. Every gate the task wrote
-   PASSES — including O3a's own, the one that refused this in the first place: a kill at 50 % of the
-   bytes leaves 56-88 % of the take decodable, against MediaRecorder-MP4's 753 bytes. CPU 149→95 %
-   peak, 80→47 % mean, both lanes warm and dropping nothing. `?rawcodec=webcodecs` opts in.
-   THE DEFAULT DOES NOT MOVE because a gate the task did not write does not pass: at the same
-   ceiling the AVC screen channel writes 0.21× the bytes and the pictures agree to 27.9 dB (the
-   camera is fine at 0.75× / 37.2 dB). That is rate control, not loss — see the handoff for the
-   named next measurement (`bitrateMode`) and for why it is PO's call.)
-  O6   native-res-capture          [medium]  UNBLOCKED — and the 4K lever is named: the worker's GL
-                                             texture upload of a 4K frame (~35.6 ms), WebGPU
-                                             importExternalTexture is the remedy to probe.
-  O9   text-perfect                [medium]  UNBLOCKED by O5 — the render owns its encoder config
-                                             (codecs.ts EncoderOptions) and the ladder seam is in.
-  O8b  capture fps band under load [medium]  what is left of O8 after the peak-memory band landed.
-  F6   pause-retake                [medium]  UNBLOCKED — build segments on the v2 engine once.
-  F8   nle-scrub                   [medium]  ITS PREMISE IS REFUTED AND THE REAL DEFECT IS FIXED
-                                             (2026-08-25). F8 was written on "scrub decodes the EXACT
-                                             frame instead of <video> seek granularity". Measured
-                                             first (`npm run exp -- f8`, new): at five off-grid
-                                             instants on a VP9 webm, a <video> seek and the export's
-                                             own random-access reader land on the SAME frame every
-                                             time — 0 ms apart, decoded off the timecode the rig
-                                             paints into every frame — and the element is the FASTER
-                                             path (29 ms mean vs 65). There is no seek-granularity
-                                             defect to fix with a second decoder. WHAT WAS COARSE was
-                                             usePlayback's paused deadband: 40 ms against a 33.3 ms
-                                             frame, so a one-frame scrub left the picture where it
-                                             was. Now 15 ms, and A/B-proven on the prod build in a
-                                             real Chrome (`node scripts/ui-shot.mjs --flow=scrub`,
-                                             new): 40 ms → the elements move 0 ms, 15 ms → 32 ms.
-                                             STILL OPEN, and now on a measured premise: filmstrip
-                                             thumbnails from the keyframe index · GPU-rendered
-                                             waveforms · the 60 fps-with-a-30-min-take trace.
-  O3b  single-generation export    [medium]  UNBLOCKED — v2 owns encoder + muxer, both halves of
-                                             the original idea are now buildable once.
-  (O4-polish CLOSED 2026-08-26 — both remaining items answered. The e2e WEDGE CASE is a rig
-   (`npm run exp -- o4wedge`) that drives the real session through the two fallback rungs unit tests
-   cannot reach and exports each take through the product's own ladder: control → instant 168 ms,
-   start failure → V1 TOOK THE TAKE, instant 141 ms, mid-take wedge → composite refused, render, take
-   unharmed and as long as the control. The 4K ROW IN PRODUCTION SHAPE turned on a premise that was
-   wrong: a canvas track DOES honour the display cap, so synthetic mode now applies it the way the
-   real acquirer does — and the delivered fps did not move, because this rig's 4K cost is its own
-   canvas painting, which production does not have. See the O8b note.)
-  O4-polish (historical)           [light]   PREVIEW FROM THE COMPOSITOR IS DONE 2026-08-25 — the
-                                             recording preview is painted by the capture worker into
-                                             a transferred canvas, so the sources are decoded ONCE
-                                             for the whole take (zero <video> elements in the stage,
-                                             verified on the deployed build). The blit costs
-                                             0.024-0.034 ms/frame against a ~1.0 ms paint, measured
-                                             both orders (`npm run exp -- o4step2 {"preview":true}`),
-                                             and nothing dropped. v1 keeps the source preview: it
-                                             composites on the main thread from the very elements
-                                             the UI shows. WHAT IS LEFT: e2e wedge case · 4K row in
-                                             production shape (pairs with O6). THE SYNC ANCHOR ITEM
-                                             IS RETIRED ON EVIDENCE 2026-08-25 — see the O4-polish
-                                             handoff under O4: the frame's own clock cannot recover
-                                             the delivery latency, and adopting it would have cost
-                                             more drift than it removed jitter.
-  (F7c SHIPPED 2026-08-25, attempt 5 — the panel measures its numbers now. See the task.)
-  (F7d DONE 2026-08-25, eleventh session — the re-anchor is REFUSED on measurement (the model's error
-   FLIPS SIGN with content: +86 % on screen at 540p against −79 % on motion, because the realtime
-   capture encoder spends 0.24x the render's bytes on motion and 0.78x on screen) and the fallback
-   says it is a rough guide instead. It also stopped promising a measurement that was never coming,
-   and stopped calling a composite-less take's export "Instant". See the task.)
-  P5a  iOS SCK spike               [light]   BLOCKED ON HARDWARE, not on us: needs Xcode 27 and a
-                                             real iOS 27 device, neither on the TD machine. STILL
-                                             TIME-SENSITIVE (iOS 27 ships ~Sept 2026).
-  O11d codec ladder, probed        [medium]  needs P1's 3-engine rig, which needs a Playwright
-                                             install (PO's to run — see P1). (a)(b)(c) are shipped.
-  P1   firefox + 3-engine oracle   [medium]  CODE HALF SHIPPED 2026-08-23 (engine×OS matrix, Firefox
-                                             mapped and proven by UA spoof, honest copy). What is
-                                             left needs downloads PO must approve: Playwright's
-                                             gecko driver for the real Firefox run and the oracle's
-                                             third engine, and a Windows machine for the one row that
-                                             cannot be spoofed. See the handoff.
+START HERE IF YOU ARE FRESH:
+  1. read notes 5, 6, 9, 10, 11, 17 below. Note 10 (the rig is wrong before the product is) and
+     note 17 (a gate that cannot fail is not a gate) between them account for most of what went
+     wrong in the last two sessions — including several cases where a GREEN result was the fault,
+     which is the kind this codebase keeps paying for twice.
+  2. `npm run typecheck && npm test` (449 tests) and `npm run oracle` should be green before you
+     change anything, so a red gate later is yours and not inherited.
+  3. THERE IS NO BUILDABLE TASK ON THIS MAP. If PO has answered one of the seven questions in
+     "WHAT IS LEFT" above, that answer is your task; otherwise ask, do not invent one.
+  4. anything touching capture/* keeps BOTH engines green: `npm run oracle` (v2 default) AND
+     `node scripts/oracle.mjs --engine=v1`. Anything touching the STOP path also runs
+     `npm run oracle:load` (HEAVY, announce it) and `npm run exp -- armcancel`.
+
+READY NOW — NOTHING. Every task that could be settled by building or measuring is settled; the
+per-task handoffs below carry the detail, and the map header carries the summary. What is left is
+listed under "WHAT IS LEFT" above and is PO's in every case.
+
+BLOCKED ON HARDWARE OR A DOWNLOAD, unchanged:
+  P5a  iOS SCK spike               [light]   needs Xcode 27 and a real iOS 27 device, neither on the
+                                             TD machine. STILL TIME-SENSITIVE (iOS 27 ~Sept 2026).
+  P1   firefox + 3-engine oracle   [medium]  code half shipped 2026-08-23. What is left needs
+                                             downloads PO must approve (Playwright's gecko driver)
+                                             and a Windows machine for the one row that cannot be
+                                             spoofed. See the handoff.
+  O11d codec ladder, probed        [medium]  needs P1's 3-engine rig. (a)(b)(c) are shipped.
+  P8   safari-mic                  [P0]      blocked on ONE PO artifact (the exported file, or a
+                                             Safari-console take). Do not code it from theory.
+
+BLOCKED ON A RULING PO HAS ALREADY BEEN ASKED FOR:
+  O3b  single-generation export    [medium]  no longer blocked on code — X6 makes raw channels
+                                             mp4/AVC, the copyable shape it needed. Blocked on the
+                                             same ruling X6 is; take them up together.
 
 NEEDS PO DISCUSSION BEFORE ANYONE BUILDS (PO 2026-08-25: "questionable mark as need to be discussed
 again" — these change the file a user gets, or need PO's hardware, so they start on a ruling, not a go):
@@ -426,6 +344,16 @@ BOTH the composite and the raw channels.
    codebase cannot produce, the band is decoration. X12 paid the same tax in its proposal RULE: the
    first version asked only "is it still the same picture?" and duly recommended a bitrate that made
    the delivered file 31.5 % bigger. It is a pure tested function now (perf/screenRung.ts).
+     (c) AND THE OPPOSITE FAULT, same day: O8b's first delivered-fps band was 20, which failed BOTH
+         phases of oracle:load immediately — a band nothing can pass is as useless as one nothing can
+         fail, and it was gating the FIXTURE (an uncapped synthetic 4K source) rather than the
+         product. It is 10 now, chosen as a principle (below a third of the target the footage is not
+         usable) rather than fitted to a run.
+     (d) F8's own gate said "60 fps with a 30-min take". A still timeline repaints nothing and would
+         have scored 60 fps with any amount of work in it, so the trace DRAGS the playhead. The
+         measurable form of "with a 30-min take" turned out to be FLATNESS across lengths, because
+         the design's claim is that cost does not depend on length at all — and that is testable in
+         two minutes where a 30-minute fixture is not.
 
 12. THE UI RIG SERVES dist/, AND DOES NOT BUILD IT. `scripts/ui-shot.mjs` runs `vite preview`, so a
    flow that "does not work" may simply be yesterday's bundle. Run `npm run build` first. The same
