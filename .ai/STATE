@@ -52,6 +52,16 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   competing for. `npm run exp -- o5` prints those three numbers per channel now, so the idea is
   refutable in one command. Reopen only after X6 changes the raw channels from software VP9 to
   hardware AVC, which changes what the decode competes FOR.
+  NOR IS THE DRAW WORTH MOVING TO THE GPU AT THE PRICE IT COSTS (X5, 2026-08-26, refused before the
+  shader was written). GL IS faster than the render's 2D painter — 1.67 ms/frame against 2.86,
+  1.71×, including the per-frame CPU→GPU upload — but there was never a readback to remove here:
+  capture's 150 ms/frame came from GPU-resident capture frames, and the render's come from a
+  SOFTWARE decoder already in CPU memory. Draw is 25-30 % of the render, so the whole port caps at
+  ~10-13 % of export time. And the parity gate fails on the easiest case: the same frames in the
+  DEFAULT composition read 37.3 dB / max 156 of 255 / 3.8 % of pixels off by >8 on the screen-TEXT
+  interior, against ≤1 LSB or ≥60 dB — texImage2D and drawImage upsample 4:2:0 chroma differently.
+  The port would change how exported text looks, which is PO's call and O9's subject. Rig:
+  `npm run exp -- x5`. The same measurement raised a live question logged P1 — see BACKLOG.
 - exports STREAM TO DISK (O1): the muxer holds 4 MB regardless of length — a 30-min export peaks at
   39 MB live memory instead of 294 MB. ExportResult.blob is a disk-backed OPFS file.
 - NO DURATION CAP (PO 2026-08-23). MAX_RECORDING_MS is `number | null` and is null; a take runs until

@@ -52,12 +52,22 @@ TWO OF THEM CLOSED BY BEING REFUTED — which is the point of running them rathe
     its own). And the rung it was written to price is BACKWARDS on the content PO records: dropping
     the raw screen channel 8 → 2.5 Mbps saves 32.5 % of disk and makes the DELIVERED FILE 31.5 %
     BIGGER, because a noisier source is more expensive to re-encode. Proposal: keep 8 Mbps.
-NOT DONE THIS SESSION, and PO asked for all of it: X5 · X6 · O6 · O9 · O8b · O3b · F6 · F8's 60 fps
+  · X5 REFUSED ON ITS OWN PARITY GATE, before the shader was written. GL IS faster than the 2D
+    painter (1.71×, CPU→GPU upload included) — but there was never a readback to remove, because
+    the render's frames come from a SOFTWARE decoder and are already in CPU memory, and draw is
+    only 25-30 % of the render, so the entire port caps at ~10-13 % of export time. Then the gate
+    fails on the EASIEST case: same frames, default composition, the screen-TEXT interior reads
+    37.3 dB / max 156 of 255 / 3.8 % of pixels off by >8, against ≤1 LSB or ≥60 dB. The smooth
+    camera region is clean (max 5-8) and the mean signed delta is ≈0, so it is neither a colour
+    shift nor geometry — texImage2D and drawImage upsample 4:2:0 chroma differently, and the
+    fixture is coloured text on dark ground. The port would change how exported TEXT looks, which
+    is PO's call and collides with O9.
+NOT DONE THIS SESSION, and PO asked for all of it: X6 · O6 · O9 · O8b · O3b · F6 · F8's 60 fps
 trace · O4-polish's two items. Each is a session; see COST BANDS below.
 PO'S AUDIO LISTEN TEST IS STILL OWED (X1, twelfth session) — `peakRobust` was computed and dropped
 on the way to both consumers, so the 2026-08-25 makeup fix was in force nowhere until it was found.
 It runs now; the test is owed on a build where it does.
-NOT STARTED, each still a session: O3b · O5e · O6 · O8b · O9 · O10 · F6 · X5 · X6 ·
+NOT STARTED, each still a session: O3b · O5e · O6 · O8b · O9 · O10 · F6 · X6 ·
 F8's 60 fps trace. O4-polish is down to two items (e2e wedge case, 4K row).
 FULL SWEEP AFTER THIS SESSION (dd07590): 419 tests · typecheck clean · oracle PASS on v2 (sync 52.1,
 inst=instant/61.1, trim=smartcut/60.6, tail 65 ms, spur −53.1, export 5.29x) AND on v1 (sync 47.3,
@@ -96,7 +106,8 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
    handoff under P0-instant-sync below. Smart cut is ON by default; `?smartcut=0` reverts.)
   ── X-SERIES (TD optimization-frontier audit 2026-08-25, PO-ordered onto the map; full specs in
      the PHASE X block below. Sorted by value-per-cost. X4 and X5 both touch render.ts — X5 after
-     X4 — X4 is now DELETED, so X5 is unblocked and is the top of the X series.) ──
+     X4 — both are now CLOSED: X4 deleted on measurement, X5 refused on its parity gate. X6 is the
+     top of the X series, and it is also the only thing that would reopen either of them.) ──
   (X1 keep-loudness-envelope DONE 2026-08-26 — see the handoff. Three consumers off the decode, and
    two live `peakRobust` defects found and fixed on the way. PO's audio listen test is still owed.)
   (X2 scratch-writes-inline DONE 2026-08-26 — the export worker owns its OPFS handle. See the handoff
@@ -115,12 +126,14 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
   (X12 capture-bitrate-pricing DONE 2026-08-26 — capture writes 5.21/7.63 Mbps, not 18.5, and the
    raw-screen rung is BACKWARDS on screen content: −32.5 % disk for a +31.5 % bigger delivered file.
    Proposal: keep 8 Mbps. See the handoff.)
-  X5   gpu-export-compositor       [medium-heavy] TOP OF THE X SERIES NOW. The render still
-                                             composites through a 2D canvas —
-                                             the exact readback capture measured at ~150 ms/frame
-                                             and fixed with compositorGL (0.86 ms). Port the render
-                                             draw onto the GL painter; also collapses the
-                                             three-places geometry drift risk to two. Pairs with O6.
+  (X5 gpu-export-compositor REFUSED ON ITS OWN PARITY GATE 2026-08-26, before the shader was
+   written. GL IS faster (1.71×, upload included) but there was never a readback to remove — the
+   render's frames come from a SOFTWARE decoder — and draw is only 25-30 % of the render, so the
+   whole port caps at ~10-13 % of export time. The gate fails on the EASIEST case: same frames,
+   default composition, screen-text interior reads 37.3 dB / max 156 / 3.8 % of pixels off by >8
+   against ≤1 LSB or ≥60 dB, because texImage2D and drawImage upsample 4:2:0 chroma differently.
+   Porting would CHANGE HOW EXPORTED TEXT LOOKS — PO's call, and it collides with O9. See the
+   handoff; `npm run exp -- x5` reproduces it.)
   X6   raw-channels-webcodecs      [medium]  screen+camera still encode via SOFTWARE VP8/VP9 during
                                              capture (largest capture CPU cost, O3a). The O3a
                                              blocker (Chrome won't stream MP4) is solved by v2's own
@@ -452,6 +465,10 @@ BOTH the composite and the raw channels.
      f2        timed zoom LOCATED in decoded export frames, via the PiP as a fiducial
      f3        background frame LOCATED in decoded export frames vs the pure geometry
      encprobe  is WebCodecs the wall, or is our config? main thread vs worker vs GL, per config
+     x5        X5: the render's 2D composite against the capture GL painter on the SAME decoded
+               frames — interleaved, scored on each painter's best, GL timed with gl.finish() so the
+               GPU work is inside the number, and the two outputs PSNR'd per region. The parity row
+               is the one that decided X5.
      x12       X12: what CAPTURE writes and what each part of it buys. Weighs every artifact of a
                production-shaped take ON DISK (raw screen + raw camera + mic + the live composite
                through the shipped ladder) against the take's own length, then prices the raw-screen
@@ -773,6 +790,48 @@ no-WebGL2 fallback. Pairs with O6: once the render is GL, importExternalTexture 
 GATES: pixel parity against layout.ts on a golden-frame set covering default/F3/F4/F2 (per-channel
 max delta ≤1 LSB or PSNR ≥60 dB); drawMs measured before/after; all three export paths named
 (render changed, instant and smart cut untouched); oracle + fidelity green; waveform mode untouched.
+
+HANDOFF X5 — REFUSED ON ITS OWN PARITY GATE 2026-08-26 (THIRTEENTH SESSION), before the shader was
+written. The premise check is `npm run exp -- x5` (src/experimental/perf/glComposite.ts) and it is
+three numbers.
+(1) THE PREMISE'S REASON IS WRONG, AND ITS CONCLUSION SURVIVES ANYWAY. The task says the render
+    pays "the EXACT readback capture measured (~150 ms/frame)". It does not: capture's frames come
+    from MediaStreamTrackProcessor and live in GPU memory, so drawImage drags them back — the
+    RENDER's frames come from a SOFTWARE VP9 decoder and are already in CPU memory. There is no
+    readback to remove, which is why the render's draw reads 2-4 ms/frame and not 150. GL is
+    nonetheless FASTER: 1.67 ms/frame against 2.86 (1.71×), INCLUDING the per-frame CPU→GPU upload
+    the 2D path never pays. So the port would work — it just is not the fix the task described.
+(2) AND IT IS WORTH LESS THAN IT LOOKS. Draw is 25-30 % of the render's wall clock (o5's stage
+    split), so removing 41 % of it caps X5's whole benefit at ~10-13 % of export time.
+(3) THE PARITY GATE FAILS ON THE EASIEST CASE, AND THAT IS THE VERDICT. Same decoded frames, same
+    default composition — the one the GL painter ALREADY implements for capture, before a single
+    line of F3/F4/F2 shader work exists:
+        screen picture interior   PSNR 37.3 dB · max 156-159 of 255 · 3.8 % of pixels off by >8
+        camera PiP interior       PSNR 47.0 dB · max 5-8       · 0 % of pixels off by >8
+    against a gate of ≤1 LSB or ≥60 dB. Stable across three runs. The mean signed delta is ≈0 and
+    the smooth camera region is clean, so this is NOT a colour shift and NOT geometry (the screen
+    draws 1:1 at the origin — dw=1920, x=0 — so there is no resampling and no subpixel offset). It
+    is sharp-edge colour handling: `texImage2D(VideoFrame)` and `drawImage(VideoFrame)` upsample
+    4:2:0 chroma differently, and the fixture's content is coloured text on dark ground, which is
+    exactly where that shows. PORTING THE RENDER ONTO THE GL PAINTER WOULD CHANGE HOW EXPORTED TEXT
+    LOOKS — which needs PO's yes, is not obviously an improvement, and collides head-on with O9
+    ("text is important").
+A REFEREE THAT IS NOT ONE, kept so nobody re-reaches for it: `VideoFrame.copyTo({format:'RGBA'})`
+was tried as a neutral third party to say WHICH painter is wrong. Both painters sit ~20.7 dB from it
+(max 244) while sitting 37 dB from each other — a referee further from both contestants than they
+are from each other is applying its own range/matrix convention, not adjudicating.
+TWO RIG ERRORS FIXED ON THE WAY, both note 10, and the first would have shipped the wrong answer:
+  (a) the run held 240 frames of BOTH channels alive — over a gigabyte of decoded VideoFrames, which
+      the render never does — and under that pressure the 2D lane degraded 3.8 → 7.7 → 14.3 ms/frame
+      across three rounds while GL barely moved, which read as a 1.87× painter win. Small working
+      set, repeated, now.
+  (b) lanes ran A,B,B,A and were scored on the MEAN. The host drifts monotonically within a run
+      (worst/best is 3.0× on one painter), so a mean is a measurement of when a lane happened to
+      run. Interleaved and scored on each painter's BEST now.
+WHAT WOULD REOPEN IT: a PO ruling that the text difference is acceptable or an improvement (it is a
+picture change, so it is PO's call and not TD's), or a way to make texImage2D and drawImage agree on
+chroma — which is a browser behaviour, not ours. The ~12 % ceiling should be weighed against that
+before anyone writes the F3-shadow shader, which is the genuinely hard part and was never reached.
 
 ## X6 raw-channels-webcodecs [medium · finish ee/webcodecs-capture-2 (behind main — REBASE first),
    ~400-800 lines · CAPTURE side; additive per the frozen rule, MediaRecorder stays the ladder]

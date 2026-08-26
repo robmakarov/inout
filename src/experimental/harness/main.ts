@@ -403,6 +403,19 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'x5',
+    title: 'X5 — is the render’s 2D composite the readback capture fixed, or a different animal?',
+    detail:
+      'decodes a screen+camera take into memory FIRST, then composites the same frames through the shipped 2D painter and through the capture GL painter, A/B/B/A warmed. The GL lane includes the per-frame CPU→GPU texture upload the 2D path never pays, and is timed with gl.finish() so the GPU work is inside the measurement rather than left enqueued. Also PSNRs the two painters against each other on the default composition. Answers whether X5’s port is worth writing before the shader for F3/F4/F2 is written.',
+    run: async (args) => {
+      const { runGlComposite } = await import('../perf/glComposite')
+      return runGlComposite({
+        takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined,
+        frames: typeof args?.frames === 'number' ? args.frames : undefined,
+      })
+    },
+  },
+  {
     id: 'x12',
     title: 'X12 — what CAPTURE writes, and what each part of it buys',
     detail:

@@ -108,9 +108,9 @@ identical down to the checksum. The build is not faster — it was never meant t
 keeps working while it happens. Measured on a short recording, the interface lost 13 ms instead of
 84; on a real 97-second take that difference is roughly a second of unresponsiveness against ten.
 
-**Two optimizations were tried, measured, and thrown away — which is the point of measuring
-(2026-08-26).** Both were on the roadmap as promising and both turned out to be wrong, and finding
-that out cost a session rather than a release.
+**Three optimizations were tried, measured, and thrown away — which is the point of measuring
+(2026-08-26).** All three were on the roadmap as promising and all three turned out to be wrong, and
+finding that out cost sessions rather than releases.
 
 The first was to split the slow part of exporting — decoding your recording frame by frame — across
 several processor cores instead of one. It was built and it worked, in the sense that it produced
@@ -129,6 +129,21 @@ wasteful makes things *worse*: recording the screen at a third of the data rate 
 disk and makes **the file you actually download 31 % bigger**, because a rougher recording is harder,
 not easier, to compress at export time. The recommendation is to change nothing, and that is a
 finding rather than a deferral.
+
+The third was to draw the exported picture on the graphics card instead of the processor. That one is
+genuinely faster — about 1.7× at the drawing step — but drawing is only a quarter of what exporting
+costs, so the whole change was worth roughly a tenth of export time. And it fails on something that
+matters more: **the two ways of drawing do not produce the same text.** Compared on the same frames,
+about 4 % of pixels differ, and they are the pixels that make up letters — the two methods handle
+colour detail at sharp edges differently. Making exports faster by changing how text looks is not a
+trade to take quietly, so it is now a question for PO rather than a change.
+
+**And that raised something worth checking on a real recording.** INOUT already draws with both
+methods: the fast export of an untouched recording copies a picture drawn one way, while any
+recording you have edited is redrawn the other way. If the difference measured in the lab also
+happens in the app, then **adding a single trim would subtly change how text looks** in the file you
+get. That is not established — the lab test fed both methods the same kind of frame, and the app does
+not — so it is written down with the exact experiment that would settle it, not as a claim.
 
 **The timeline shows the recording now, not a set of coloured bars (2026-08-25).** Each video track
 in the editor carries a strip of its own frames, so finding a moment is a matter of looking rather

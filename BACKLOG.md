@@ -133,6 +133,24 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   is still owed — but it is owed on a build where the fix is actually in force, which no build before
   2026-08-26 was.
 
+- [P1] TD 2026-08-26, found while measuring X5: **the two composite painters do not draw the same
+  picture, and the difference lands on TEXT — so a trim may change how a take's text looks.** Fed the
+  SAME software-decoded frame and the SAME default composition, `compose/layout.ts` (2D) and
+  `capture/compositorGL.ts` (GL) agree to only 37.3 dB on the screen interior: max 156 of 255, 3.8 %
+  of pixels off by more than 8. The smooth camera region is clean (max 5-8) and the mean signed delta
+  is ≈0, so it is sharp-edge 4:2:0 chroma handling — `texImage2D(VideoFrame)` and
+  `drawImage(VideoFrame)` upsample it differently — and the fixture is coloured text on dark ground,
+  which is where that shows most.
+  WHY THIS IS MORE THAN AN X5 FOOTNOTE: the conflict rules say those two painters MUST agree, because
+  an UNEDITED take's instant export packet-copies the GL composite while the SAME take with any edit
+  is re-rendered through the 2D painter. If the divergence holds in production, adding one trim
+  changes the look of the text. NOT YET CLAIMED, and the gap is specific: this was measured feeding
+  both painters a software-decoded frame, whereas the live GL composite consumes a GPU-resident
+  capture frame, and the two conversions may not differ the same way. THE MEASUREMENT THAT SETTLES IT:
+  record one take, export it unedited (instant path) and with a one-frame trim (render path), and
+  PSNR the two files over a text region at matching instants. If they diverge, it is a live defect on
+  the default export and it is O9's territory too. `npm run exp -- x5` is the rig that found it.
+
 - [P2] TD 2026-08-26, found while writing X9's gate: **two of this repo's evidence gates are written
   in `longtask` counts, and a long-task count cannot fail here.** Anything in this codebase that
   awaits per frame or per sample — the render, the For-AI build, the AI selection loop — never forms
