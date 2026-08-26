@@ -918,9 +918,39 @@ is PO's call, which is exactly why the frozen rule's "defaults unchanged" is the
 NEXT MEASUREMENT, named so it is not guessed at: sweep `bitrateMode` ('constant' vs the default
 'variable') and re-run the quality row. If constant closes the 27.9 dB gap at a bitrate the disk
 still likes, X6 becomes a flip decision with numbers instead of an open question.
-STILL OWED BEFORE ANY FLIP: `npm run oracle:load` both phases (HEAVY — announce it), a salvage smoke
-over a killed take, and PO's real-device take. None of them gate the code as shipped, because as
-shipped the default path is untouched.
+TWO DEFECTS FOUND ON THE DEPLOYED BUILD AFTER THE RIG WAS GREEN, AND THE RIG COULD NOT HAVE FOUND
+EITHER. Both are the same root cause: MediaStreamTrackProcessor is FRAME-DRIVEN, so a screen that is
+not changing delivers nothing, and the rig's synthetic source is ANIMATED and never goes quiet —
+447 frames of 447, perfect. A real static screen (a slide, a document, a paused UI, a backgrounded
+tab) is the COMMON case.
+  (1) A 9 s take recorded "2 frames encoded of 2 in" on both raw channels. MediaRecorder never had
+      this problem because it encodes at its own cadence whatever the source does, and the live
+      composite has carried a keep-alive since O4 for exactly this reason — the raw path shipped
+      without one. In the same take the composite logged 7 frames of which 6 were keep-alive.
+      FIX: keep a clone of the most recent picture and re-encode it when nothing has reached the
+      encoder for a second. Two things came with it — the channel's timeline is now built from
+      ARRIVAL stamps rather than source timestamps (startOffsetMs is already an arrival quantity, so
+      the file's t=0 and its placement on the session timeline come from one clock, and a keep-alive
+      frame has no source timestamp to use), and the worker min-filters its own clock offset out of
+      the arrival stamps the frame messages already carry, because the timer fires in the worker
+      while the main thread owns the clock. Both are the constructions compositor.worker.ts uses.
+  (2) EVEN THEN the channel declared durationMs 0, and the editor opened the take as AUDIO-ONLY with
+      a waveform. A channel's LENGTH is how long it was LIVE, not how long frames happened to
+      arrive: with a static source exactly one frame arrives, so first === last. The stop message
+      now carries the main thread's stop instant, the worker emits ONE last keep-alive at it, and
+      the duration is that span — so the file also COVERS the length it declares. Tail gap went
+      from −344 ms to 9 ms on the rig.
+  VERIFIED ON THE DEPLOYED BUILD: "13 frames encoded of 1 in, 12 keep-alive (source was static)",
+  against the composite's 14 frames / 11 keep-alive in the same take. The counter is on the console
+  precisely because a channel silently recording 2 frames looks exactly like a short take.
+ORACLE FLAKE, NOT OURS, AND CHECKED RATHER THAN ASSUMED: three post-change runs read FAIL/FAIL/PASS
+with starvation signatures (spur −2.7 to −26 dB, compT0=0, skew 559). The same rig on 27f376b — the
+commit BEFORE any X6 code — read FAIL/FAIL/PASS too, with healthy spur, on the same machine in the
+same hour. The machine has been running heavy rigs for hours; the flake is environmental and
+predates this change. A settled-machine oracle is owed before any flip, and is listed below.
+STILL OWED BEFORE ANY FLIP: a settled-machine oracle on both engines, `npm run oracle:load` both
+phases (HEAVY — announce it), a salvage smoke over a killed take, and PO's real-device take. None of
+them gate the code as shipped, because as shipped the default path is untouched.
 
 ## X9 ai-pdf-off-main-thread [light · ~100 lines: core/ai/build.ts into a worker, same O5 shape]
 The For-AI build runs on the UI thread at 0.74× a full render — seconds of jank. core/ai is already

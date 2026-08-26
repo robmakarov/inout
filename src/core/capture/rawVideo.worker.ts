@@ -88,7 +88,8 @@ export interface RawVideoFrameMsg {
 export type RawVideoMsg =
   | RawVideoStartMsg
   | RawVideoFrameMsg
-  | { cmd: 'stop' }
+  /** `atMs` is the MAIN thread's instant of the stop, which ends the channel. */
+  | { cmd: 'stop'; atMs: number }
   | { cmd: 'cancel' }
 
 export interface RawVideoStats {
@@ -177,7 +178,6 @@ let H = 1080
 
 /** Main-thread stamp of the first frame that reached the encoder. */
 let firstFrameAtMs: number | null = null
-let lastFrameAtMs: number | null = null
 let lastKeySec = -Infinity
 /** Last timestamp handed to the encoder (µs) — the timeline never goes back. */
 let lastEncodedTsUs = -1
@@ -244,7 +244,7 @@ self.onmessage = (ev: MessageEvent<RawVideoMsg>): void => {
       onFrame(msg)
       return
     case 'stop':
-      void stop().then(
+      void stop(msg.atMs).then(
         (r) => post(r),
         (err) => post({ ok: false, cmd: 'stop', error: String(err) }),
       )
@@ -362,13 +362,10 @@ function onFrame(msg: RawVideoFrameMsg): void {
     frame.close()
     return
   }
-  // THE CHANNEL'S LENGTH IS THE SPAN OF FRAMES THAT ARRIVED, not of frames
-  // that were encoded. Advancing this only past the drop check made a take
-  // with drops near the end declare itself SHORTER than its own file — 869 ms
-  // short on one 15 s run — and a channel that under-declares its length slides
-  // every other channel against it on the timeline.
+  // The channel's t=0. Its LENGTH comes from the stop instant instead (see
+  // stop()): a static source delivers one frame, so the span of arrivals is not
+  // the span of the channel.
   if (firstFrameAtMs === null) firstFrameAtMs = msg.atMs
-  lastFrameAtMs = msg.atMs
   // Keep the picture so a source that goes quiet can still be encoded.
   try {
     lastFrame?.close()
@@ -391,10 +388,18 @@ function onFrame(msg: RawVideoFrameMsg): void {
   }
 }
 
-async function stop(): Promise<Extract<RawVideoReply, { cmd: 'stop' }>> {
-  stopped = true
+async function stop(atMs: number): Promise<Extract<RawVideoReply, { cmd: 'stop' }>> {
   if (keepAliveTimer) clearInterval(keepAliveTimer)
   keepAliveTimer = null
+  // ONE LAST KEEP-ALIVE AT THE STOP INSTANT, before anything is torn down.
+  // A channel's LENGTH is how long it was live, not how long frames happened
+  // to arrive — a static screen delivers ONE frame and would otherwise declare
+  // a duration of 0 and vanish from the timeline (found on the deployed build:
+  // "13 frames encoded of 1 in" with durationMs 0, and the editor opened the
+  // take as audio-only). Emitting here also means the file actually COVERS the
+  // length it declares, so the tail band measures a real thing.
+  if (lastFrame && firstFrameAtMs !== null) encodeAt(lastFrame, atMs, true)
+  stopped = true
   lastFrame?.close()
   lastFrame = null
   try {
@@ -417,8 +422,8 @@ async function stop(): Promise<Extract<RawVideoReply, { cmd: 'stop' }>> {
     /* already closed */
   }
   encoder = null
-  const durationMs =
-    firstFrameAtMs !== null && lastFrameAtMs !== null ? lastFrameAtMs - firstFrameAtMs : 0
+  // The live span, from the first frame to the stop — see the keep-alive above.
+  const durationMs = firstFrameAtMs !== null ? Math.max(0, atMs - firstFrameAtMs) : 0
   const bytes = stats.bytes
   try {
     handle?.flush()

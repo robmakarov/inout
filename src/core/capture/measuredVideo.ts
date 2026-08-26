@@ -222,11 +222,15 @@ export async function startMeasuredVideoCapture(opts: {
       // Order matters: stop feeding BEFORE asking the encoder to flush, or the
       // flush races frames still arriving and the file's last fragment is a
       // partial one. The composite's stop makes the same move.
+      // The channel ends HERE, on this thread's clock — the same clock the
+      // session epoch and startOffsetMs live on. Read before endPump() so the
+      // teardown's own duration is not counted as recorded material.
+      const stopAtMs = performance.now()
       await endPump()
       const done = new Promise<RawVideoReply>((resolve) => {
         settleStop = resolve
       })
-      send({ cmd: 'stop' })
+      send({ cmd: 'stop', atMs: stopAtMs })
       const reply = await withDeadline(done, STOP_TIMEOUT_MS, 'raw video stop').finally(() => {
         // Terminated only after the worker has answered: it owns the
         // SyncAccessHandle, and killing it mid-finalize would leave the file

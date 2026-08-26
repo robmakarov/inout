@@ -128,6 +128,20 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   `bitrateMode` undershoots on this content, which is also what the shipped v2 composite does
   (X12 measured it spending 11.8 % of its ceiling). A picture change on the edited-export path is
   PO's to approve; the next measurement is a `bitrateMode` sweep.
+- A FRAME-DRIVEN CHANNEL MUST KEEP ITS OWN CADENCE (X6, 2026-08-26) — two defects, one cause, both
+  found on the DEPLOYED build after the rig was green. MediaStreamTrackProcessor delivers frames only
+  when the picture CHANGES, so a static screen delivers nothing; MediaRecorder never had this problem
+  because it encodes at its own cadence regardless. A 9 s take recorded "2 frames encoded of 2 in",
+  and then — with the keep-alive added — still declared durationMs 0 and opened in the editor as an
+  AUDIO-ONLY take, because a channel's length was being taken as the span of ARRIVALS and exactly one
+  frame arrives. The raw path now keeps a clone of the last picture and re-encodes it every second
+  (the live composite has done this since O4), builds its timeline from arrival stamps, min-filters
+  its own clock offset out of the stamps the frame messages carry, and emits one final keep-alive at
+  the main thread's stop instant so the file COVERS the length it declares — tail gap −344 ms → 9 ms.
+  Verified on prod: "13 frames encoded of 1 in, 12 keep-alive (source was static)" beside the
+  composite's 14 frames / 11 keep-alive on the same take. THE RIG COULD NOT HAVE FOUND EITHER: its
+  synthetic source is animated and never goes quiet (447 frames of 447, perfect), while the failing
+  case — a slide, a document, a paused UI, a backgrounded tab — is the common one.
 - THE ENCODER WARM NOW COVERS EVERY PATH THAT OWNS AN ENCODER (X6, 2026-08-26). prearm.ts warmed the
   VideoEncoder only when the COMPOSITE was v2, so X6's raw encoders would have been cold on every
   browser launch — and note 6's multi-second per-launch init is exactly what that costs. Measured
