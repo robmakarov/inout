@@ -269,6 +269,9 @@ export interface LoadedSyncReport {
     /** (startOffset + duration) − wall at stop: ≈0 when the hold works, strongly
      *  negative when starvation shortens the channel unpadded. */
     vsWallMs: number
+    /** How long the input had been pure digital silence at stop — the "tab
+     *  audio dies" witness; ~0 here because the rig's oscillator never stops. */
+    silentTailSec: number
   } | null
   /** THE NUMBER: how far the two tracks disagree about the same take. */
   avSpanGapMs: number | null
@@ -347,14 +350,31 @@ export async function runLoadedSync(opts?: {
         paddedSec: Math.round(r.paddedMs) / 1000,
         startOffsetMs: Math.round(r.startOffsetMs),
         vsWallMs: Math.round(r.startOffsetMs + r.durationMs - stopWallMs),
+        silentTailSec: Math.round(r.silentTailMs) / 1000,
       }
     }
     await handle.stop()
     const stats =
       engine === 'v2' ? (handle as { stats(): Record<string, number> | null }).stats() : null
 
-    const blob = await blobStore.read(key)
-    const spans = await probeSpans(blob)
+    // A DEGRADED composite deletes its own blob at stop (liveCompositeV2), and
+    // this rig used to throw on the read — discarding the measured lane and the
+    // clock probe with it, twice, on runs whose whole point was those numbers.
+    // The composite's absence is a RESULT (degradeReason says why), not a crash.
+    let spans: TrackSpans = {
+      videoSpanSec: null,
+      audioSpanSec: null,
+      videoFrames: 0,
+      audioPackets: 0,
+      maxVideoGapMs: null,
+      worstGaps: [],
+      videoGapSdMs: null,
+    }
+    try {
+      spans = await probeSpans(await blobStore.read(key))
+    } catch (err) {
+      console.warn('[loadedsync] composite file unreadable (degraded take?) — reporting without spans', err)
+    }
     const statsAudioSec =
       stats && typeof stats.audioFrames === 'number' ? stats.audioFrames / 48000 : null
 

@@ -26,6 +26,9 @@ function parseArgs(argv) {
   let headed = false
   let rss = false
   let cpu = false
+  let keepAudio = false
+  let refocus = false
+  let captureTitle = ''
   let query = ''
   let ua = ''
   let profile = ''
@@ -34,6 +37,9 @@ function parseArgs(argv) {
     else if (a === '--headed') headed = true
     else if (a === '--rss') rss = true
     else if (a === '--cpu') cpu = true
+    else if (a === '--keep-audio') keepAudio = true
+    else if (a === '--refocus') refocus = true
+    else if (a.startsWith('--capture-title=')) captureTitle = a.slice(16)
     else if (a.startsWith('--query=')) query = a.slice(8)
     else if (a.startsWith('--ua=')) ua = a.slice(5)
     else if (a.startsWith('--profile=')) profile = a.slice(10)
@@ -46,7 +52,20 @@ function parseArgs(argv) {
     )
     process.exit(2)
   }
-  return { experiment, jsonArgs, timeoutSec, headed, rss, cpu, query, ua, profile }
+  return {
+    experiment,
+    jsonArgs,
+    timeoutSec,
+    headed,
+    rss,
+    cpu,
+    keepAudio,
+    refocus,
+    captureTitle,
+    query,
+    ua,
+    profile,
+  }
 }
 
 /**
@@ -159,9 +178,20 @@ async function waitForHttp(url, deadline) {
 }
 
 async function main() {
-  const { experiment, jsonArgs, timeoutSec, headed, rss, cpu, query, ua, profile } = parseArgs(
-    process.argv.slice(2),
-  )
+  const {
+    experiment,
+    jsonArgs,
+    timeoutSec,
+    headed,
+    rss,
+    cpu,
+    keepAudio,
+    refocus,
+    captureTitle,
+    query,
+    ua,
+    profile,
+  } = parseArgs(process.argv.slice(2))
   const port = await allocateEphemeralPort()
   console.error(`exp: ephemeral server on http://${HOST}:${port}`)
 
@@ -188,6 +218,9 @@ async function main() {
       ...(ua ? [`--ua=${ua}`] : []),
       ...(profile ? [`--profile=${profile}`] : []),
       ...(headed ? ['--headed'] : []),
+      ...(keepAudio ? ['--keep-audio'] : []),
+      ...(refocus ? ['--refocus'] : []),
+      ...(captureTitle ? [`--capture-title=${captureTitle}`] : []),
     ]
     const sampler = rss ? startRssSampler() : null
     const cpuSampler = cpu && !profile ? startCpuSampler() : null

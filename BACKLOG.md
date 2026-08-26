@@ -12,6 +12,29 @@ TD tags technical defects by severity. Done items get deleted, not archived.
 
 ### Now
 
+- [P1] TD 2026-08-26, from PO's own console dump (real takes, deployed build): **a long-lived app
+  tab spans deploys, its lazily-loaded chunks 404, and that silently killed the EXPORT WORKER.**
+  Evidence in the dump: `/assets/sizeProbe-Bp5ddNpw.js` 404 and `index-Bo_8S72j.css` 404 (hashed
+  names from a build Vercel no longer serves), and twice `[compose] export worker unusable,
+  rendering in-thread — Error: export worker error`. The fallback WORKED (files delivered), but
+  those exports paid the slow lane on the UI thread — one 32 s take spent 7.5 s of its 8.2 s render
+  in encode-wait, in-thread at 1440p. Mechanism: the PWA service worker is assets cache-first /
+  documents network-first, so a tab (or cached document) from build N requests build N's hashed
+  chunks after build N+1 deploys, and Vercel serves 404. Repro: open app → deploy → open the export
+  panel. FIX SHAPE, not chosen: SW precaches ALL hashed assets at activate · a version-mismatch
+  "refresh for the new version" prompt (owed-flag boot-notice machinery exists) · or keep build N−1
+  assets alive in the SW cache. This may also explain past "the fix wasn't there to hear" rounds —
+  a stale tab IS an old build even when prod serves HEAD.
+
+- [EVIDENCE for the live audio session, 2026-08-26 — not a new entry, do not fork the fix here]
+  PO's console from real takes says two things the audio session should read before choosing its
+  fix: (1) mic peaks sit at EXACTLY 1.000 on several takes (`mix loudness measured live: peak
+  1.000`) — the INPUT is clipping at capture, before any of our gain; (2) a mostly-quiet 48-min
+  take read `p90rms 0.0034 → makeup 8.00×` — the normalizer drove room-tone up 8× (+18 dB), which
+  is PO's "mic is kinda too loud now" in one line. A quiet take gets the cap, a clipped take gets
+  the limiter; both read as "sound is wrong". F9 (the slider) is the CONTROL for this, the target/
+  cap policy is the fix and belongs to that session.
+
 - [P0] TD 2026-08-25: SAFARI MIC — promoted to roadmap task .ai/TASKS P8 (PO 2026-08-25 "put
   safari bug in roadmap"). One line of truth: a real Safari take carries only a couple of
   seconds of mic sound; the task is BLOCKED on one PO artifact (the exported file, or a
@@ -80,6 +103,42 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   subsequent solo runs could not reproduce (0.03, 0.70, 0.03 dB). Solo runs of every gate pass. The
   gate should learn to REPORT padding rather than fail opaquely — it is the same capture-starvation
   family already documented for this oracle, now with a louder signature.
+
+- [P1 → INSTRUMENTED 2026-08-26, NEXT TAKE NAMES THE KILLER] PO (same day, after the desync fix):
+  "in long video tab audio still dies after a while."
+  RULED OUT — OUR PIPELINE DYING WITH LENGTH: a 12.5-minute run of the production measured-audio
+  path in a real (hidden-tab) browser delivered batches end to end, padded 417 ms total, no
+  runaway, no stop. Synthetic sources cannot go quiet, so what dies on PO's takes is UPSTREAM of
+  the pipeline: the display-audio TRACK or its source. Chromium is known to MUTE a captured tab's
+  audio track (crbug 40703184 family), to END display-audio tracks on audio-device changes
+  (crbug 344876285 — AirPods auto-switching is that case), and a paused/idle source simply stops
+  producing. All three record IDENTICAL digital silence, which is why every report so far arrived
+  without a cause.
+  SHIPPED (evidence, additive, zero behaviour change): the channel now testifies —
+    · track `mute` / `unmute` / `ended` stamped to the console with take-relative times
+    · AudioContext state changes stamped (a device-switch stall lands there)
+    · a SILENCE WITNESS: stop() computes `silentTailMs` and warns "input was PURE SILENCE for the
+      final Xs — went quiet Ys into the channel" (floor 1e-5, below anything live or dithered)
+    · every measuredAudio console line now carries its channel name; stop() returns
+      silentTailMs + paddedMs; the syncload `measured` lane reports silentTailSec.
+  RED-PROVEN in the app: a live-but-silent stream read silentTailMs 14,688 of a 14,688 ms channel
+  with the warning; dispatched mute/unmute logged at +3.2 s/+5.2 s; paddedMs 0 — silent input and
+  a starved clock are correctly told apart.
+  WHAT CLOSES IT: the console of PO's next long take. Whichever line fires is the killer, and the
+  fix (ours, or a crbug we work around, or a UI surface for a dead channel — PO's call) follows
+  from it. Do not harden anything here from theory before that console arrives.
+  PO's SHARPER OBSERVATION, same day: "maybe audio dies when one youtube video ends and other
+  starts, but i maybe wrong." THE LAB TRIED EXACTLY THAT SHAPE AND CANNOT REPRODUCE IT — a new rig
+  (`npm run exp -- tabaudio '{"gapSecs":45}' --keep-audio`, cross-tab variant adds
+  `{"crossTab":true}` + `--refocus --capture-title=TONECHILD`) drives the REAL getDisplayMedia
+  path with Chrome's auto-accept testing flags: plays an audible tone ("video 1"), tears it down
+  like a player, sits silent 45 s, plays a new one ("video 2"), recording through the production
+  measured path the whole time. BOTH topologies — capturing its own tab, and capturing a separate
+  hidden child tab (PO's, but harsher) — bring video 2 back at full level: 0.4 peak captured,
+  ZERO mute events, silentTail 0. So a plain silence gap between videos does not kill tab audio
+  on this Chrome; whatever kills PO's takes needs something the rig lacks (capture AGE — his die
+  after many minutes; YouTube's own player/output-device behaviour; AirPods auto-switch; game
+  load). Negative results recorded so nobody re-runs the same shape; the field console decides.
 
 - [P1 → FIXED AGAIN 2026-08-26, AWAITING PO RECHECK] PO: progressive audio desync — 08-25 report
   "sounds go faster than video" ~20 s in; 08-26 RECHECK FAILED: "mic and camera unsynch is about
@@ -178,6 +237,10 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   synthetic path is unaffected (v1+v2 both PASS the same day). Until Chrome's behavior is
   understood, run makeRig-family rigs in a VISIBLE unoccluded window (the syncload numbers of
   2026-08-26 were taken in the app pane, fronted). The 08-25 numbers were taken on Chrome 150.
+  SAME DAY, second lesson from the same rig: loadedSync used to THROW on reading the composite's
+  blob, which a degraded take deletes — discarding the measured lane and clock probe it had
+  already collected. A 12.5-min cell paid for that; the rig now reports with null spans and the
+  degradeReason instead of throwing.
 
 - [P2] TD 2026-08-26, found while wiring X2: **O1's MEMORY lane samples the wrong thread, and its
   headline gate metric is absent.** `runO1Evidence` polls heap on the MAIN thread while the export

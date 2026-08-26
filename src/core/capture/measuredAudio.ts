@@ -145,6 +145,10 @@ export interface MeasuredAudioHandle {
     /** Silence inserted to hold the timeline against the wall clock — evidence
      *  the machine starved this take, 0 on a healthy one. */
     paddedMs: number
+    /** How long the channel's input had been pure digital silence when the take
+     *  ended — the witness for "tab audio dies after a while": a muted or dead
+     *  source records exact zeros no listener can tell from quiet. */
+    silentTailMs: number
   }>
   cancel: () => Promise<void>
 }
@@ -185,6 +189,8 @@ export async function startMeasuredAudioCapture(opts: {
   epoch: number
   /** Durable positioned writer (SyncAccessHandle worker) — crash-safe audio. */
   writer: import('@core/store').PositionedDurableWriter
+  /** Channel name for evidence lines ('mic' / 'system-audio'); logs only. */
+  label?: string
   /** Optional pre-warmed context from prewarmMeasuredAudio (arm phase). */
   audioCtx?: AudioContext
   /** Fired ONCE if capture dies mid-take (storage write / encoder failure).
@@ -210,6 +216,36 @@ export async function startMeasuredAudioCapture(opts: {
 }): Promise<MeasuredAudioHandle> {
   const track = opts.stream.getAudioTracks()[0]
   if (!track) throw new Error('measured audio: no audio track')
+  const label = opts.label ?? 'measured'
+
+  /**
+   * THE TRACK'S OWN LIFE EVENTS ARE EVIDENCE (PO 2026-08-26: "in long video
+   * tab audio still dies after a while"). Chromium is known to MUTE a captured
+   * tab's audio track during captured-tab inactivity (crbug 40703184) and to
+   * END display-audio tracks on audio-device changes (crbug 344876285 — AirPods
+   * auto-switching is exactly that). A muted track records indistinguishable
+   * silence, so without these stamps a dead tab-audio channel produces a report
+   * with no numbers in it. Logs only — behaviour is unchanged.
+   */
+  const sinceEpochS = (): string => ((performance.now() - opts.epoch) / 1000).toFixed(1)
+  const onTrackMute = (): void =>
+    console.warn(
+      `[capture] ${label} audio track MUTED at +${sinceEpochS()}s — the source delivers silence until it unmutes (crbug 40703184 family)`,
+    )
+  const onTrackUnmute = (): void =>
+    console.warn(`[capture] ${label} audio track unmuted at +${sinceEpochS()}s`)
+  const onTrackEndedEvidence = (): void =>
+    console.warn(
+      `[capture] ${label} audio track ENDED at +${sinceEpochS()}s — the channel is dead from here (device change / capture revoked)`,
+    )
+  track.addEventListener('mute', onTrackMute)
+  track.addEventListener('unmute', onTrackUnmute)
+  track.addEventListener('ended', onTrackEndedEvidence)
+  const dropTrackEvidence = (): void => {
+    track.removeEventListener('mute', onTrackMute)
+    track.removeEventListener('unmute', onTrackUnmute)
+    track.removeEventListener('ended', onTrackEndedEvidence)
+  }
 
   // BOUNDED init: AudioContext setup on wedged hardware can pend forever, and
   // session.stop() awaits this whole function — an unbounded hang here wedges
@@ -238,6 +274,15 @@ export async function startMeasuredAudioCapture(opts: {
             },
           )
         })
+
+  // The context's own life events are the third witness (mute and ended are
+  // the other two): a default-output-device switch mid-take (AirPods
+  // auto-switching) can suspend or interrupt a rendering context, and that
+  // reads as "audio just stops" with a healthy track.
+  audioCtx.onstatechange = () => {
+    if (audioCtx.state !== 'closed')
+      console.warn(`[capture] ${label} AudioContext state → ${audioCtx.state} at +${sinceEpochS()}s`)
+  }
 
   const sampleRate = audioCtx.sampleRate
   /**
@@ -332,6 +377,12 @@ export async function startMeasuredAudioCapture(opts: {
    */
   const wallHold = new WallClockHold({ sampleRate })
   let paddedFrames = 0
+  /** Input-silence witness. A muted track, a dead source and a paused player
+   *  all deliver EXACT digital silence, which no rig and no listener can tell
+   *  apart after the fact — so the channel tracks where the last signal was.
+   *  Below this floor nothing dithered or live ever sits; zeros do. */
+  const SILENCE_FLOOR = 1e-5
+  let silentRunStartFrame: number | null = null
   /** Last sample per channel of the previous batch — the fade-out needs a value. */
   const lastSample = new Float32Array(2)
   let flushResolve: (() => void) | null = null
@@ -410,7 +461,7 @@ export async function startMeasuredAudioCapture(opts: {
       startOffsetMs = performance.now() - opts.epoch
       resolveFirst(startOffsetMs)
       console.info(
-        `[capture] measured audio first-sample offset=${startOffsetMs.toFixed(1)}ms provisional ` +
+        `[capture] ${label} audio first-sample offset=${startOffsetMs.toFixed(1)}ms provisional ` +
           `(ctx=${currentTime.toFixed(4)}s rate=${sampleRate})`,
       )
     }
@@ -493,6 +544,18 @@ export async function startMeasuredAudioCapture(opts: {
       lastSample[c] = interleaved[(frames - 1) * encCh + c] ?? 0
     }
 
+    // Silence-run bookkeeping, on the input as delivered (pre-fade): one open
+    // run at a time, closed by the first sample with signal in it.
+    {
+      let maxAbs = 0
+      for (let i = 0, n = frames * channels; i < n; i++) {
+        const a = Math.abs(planar[i]!)
+        if (a > maxAbs) maxAbs = a
+      }
+      if (maxAbs > SILENCE_FLOOR) silentRunStartFrame = null
+      else silentRunStartFrame ??= framesWritten
+    }
+
     const timestamp = Math.round((framesWritten * 1_000_000) / sampleRate)
     const data = new AudioData({
       format: 'f32',
@@ -526,6 +589,8 @@ export async function startMeasuredAudioCapture(opts: {
   ])
 
   const teardownGraph = async (): Promise<void> => {
+    dropTrackEvidence()
+    audioCtx.onstatechange = null
     if (!stopped) {
       // Drain the worklet's partial batch (<=21ms of tail audio) before teardown.
       await new Promise<void>((resolve) => {
@@ -584,7 +649,7 @@ export async function startMeasuredAudioCapture(opts: {
       const offset = Math.max(0, rawOffset - inputLatencyMs)
       if (inputLatencyMs > 0) {
         console.info(
-          `[capture] audio anchor ${rawOffset.toFixed(1)}ms − ${inputLatencyMs.toFixed(1)}ms reported input latency → ${offset.toFixed(1)}ms ` +
+          `[capture] ${label} audio anchor ${rawOffset.toFixed(1)}ms − ${inputLatencyMs.toFixed(1)}ms reported input latency → ${offset.toFixed(1)}ms ` +
             `(baseLatency ${((audioCtx as AudioContext & { baseLatency?: number }).baseLatency ?? 0) * 1000}ms)`,
         )
       }
@@ -592,8 +657,19 @@ export async function startMeasuredAudioCapture(opts: {
         // Never silent: this take's audio graph lost real time, and the file
         // says where instead of sliding everything after it earlier.
         console.warn(
-          `[capture] measured audio padded ${((paddedFrames / sampleRate) * 1000).toFixed(0)}ms of silence ` +
+          `[capture] ${label} audio padded ${((paddedFrames / sampleRate) * 1000).toFixed(0)}ms of silence ` +
             `to hold the timeline against the wall clock (the machine was starving this take)`,
+        )
+      }
+      const silentTailMs =
+        silentRunStartFrame !== null
+          ? ((framesWritten - silentRunStartFrame) / sampleRate) * 1000
+          : 0
+      if (silentTailMs > 10_000) {
+        console.warn(
+          `[capture] ${label} audio input was PURE SILENCE for the final ${(silentTailMs / 1000).toFixed(1)}s — ` +
+            `it went quiet ${(((silentRunStartFrame ?? 0) / sampleRate)).toFixed(1)}s into the channel and never came back. ` +
+            `If a "track MUTED/ENDED" line appears above, that is the killer; without one, the source itself went silent.`,
         )
       }
       if (startOffsetMs === null) resolveFirst(offset)
@@ -602,6 +678,7 @@ export async function startMeasuredAudioCapture(opts: {
         durationMs: (framesWritten / sampleRate) * 1000,
         startOffsetMs: offset,
         paddedMs: (paddedFrames / sampleRate) * 1000,
+        silentTailMs,
       }
     },
     async cancel() {

@@ -62,10 +62,10 @@ REFUTED ON MEASUREMENT, and each one is why the map is now honest
          is ~12 % of the total.
 
 WHAT IS LEFT, AND EVERY ITEM IS PO'S
-  1. AUDIO LISTEN TEST (owed since X1) — a normal take and a tab-music take, on a build where the
-     peakRobust fix is actually in force. Two one-line fixes made it real on 2026-08-26.
-  2. THE FOR-AI FILE re-test — give a real take's PDF to an agent for the job you actually have.
-     That report is AI1's acceptance and the only thing that unfreezes AI2-AI7.
+  1. AUDIO LISTEN TEST — DELIVERED 2026-08-26: PO listened, sound is STILL WRONG ("mic is kinda too
+     loud now"), a separate live session owns the fix. PO also asked for a per-channel gain slider
+     → F9 (READY, after that session lands). Do not touch mix constants outside that session.
+  2. THE FOR-AI FILE re-test — DEFERRED by PO 2026-08-26 ("later"). AI2-AI7 stay frozen.
   3. X6's PICTURE RULING — at the same ceiling the AVC raw channel writes 0.21× the bytes and the
      pictures agree to 27.9 dB on screen content. Rate control, not loss; the shipped composite
      already does the same thing. Flipping it changes how an EDITED export looks. If you flip it,
@@ -76,12 +76,18 @@ WHAT IS LEFT, AND EVERY ITEM IS PO'S
   5. O6's 4K RE-VERIFY — `?nativeres=1`, record the game tab that froze on 08-22, report the console.
      No rig can stand in: a synthetic 4K source is a rAF-painted canvas, so its fps is dominated by
      a cost a real display does not have (measured — capping it moved oracle:load 14 → 14).
-  6. X5's TEXT QUESTION (BACKLOG P1) — does adding one trim change how text looks? Measured in the
-     lab, not yet in the app; the settling experiment is written down.
-  7. THE OLD ONES, unchanged: real-Safari recheck (P8), camera-only 1080p recheck, Yandex + RU
-     reachability runs (P3), Playwright install for P1/O11d. (P5a's hardware arrived 2026-08-26.)
+  6. X5's TEXT QUESTION (BACKLOG P1) — now X15 lane (c), READY; no longer waits on PO.
+  7. THE OLD ONES, re-triaged by PO 2026-08-26: Safari (P8 + X7) — "later", stays blocked ·
+     camera-only 1080p → P9, agent-run, off PO's plate · Yandex + RU — PO: "fuck this yandex
+     bullshit, we are building for them without testing" → PARKED; the code half stays (zero
+     ongoing cost), no further RU work unless PO either approves the Yandex download for an agent
+     QA run or asks to drop the lane outright · Playwright/Firefox — "later".
 
-NEEDS A RULING BEFORE ANYONE BUILDS: X7 · X10=O5e · X13 · O12 (see the block below).
+NEEDS A RULING BEFORE ANYONE BUILDS: X7 only — and PO's order is CHROME SOUND FIRST (2026-08-26
+"lets fucking fix chrome sound first"), so X7 waits for the audio fix to land and be heard.
+X10=O5e REJECTED by PO 2026-08-26 ("fuck this") — moved to the REJECTED list.
+O12 DEFERRED to the UI phase by PO 2026-08-26 ("that is ux, we will add it later on ui works").
+X13 APPROVED (PO "lets try") → READY above, Tier 1 first, opt-in, default flip PO-gated.
 PARKED: X11 · X14. BLOCKED ON HARDWARE/DOWNLOADS: P1's two gates · O11d · P8. (P5a unblocked
 2026-08-26 — PO has Xcode 27 + an iOS 27 device.)
 NOT STARTED, and deliberately: O10(b) multitrack · O10(c) spectral gating · O10(d) AEC (P4) ·
@@ -110,9 +116,55 @@ READY NOW:
                                              price tag, and X5's in-app one-trim question (BACKLOG
                                              P1). Spec below in the X frontier. Parallel-safe with
                                              anything — it ships numbers, not behaviour.
+                                             PO 2026-08-26 "i need to see it": every lane ALSO
+                                             delivers side-by-side FILES (or magnified crops) to
+                                             ~/Downloads so the picture ruling is made with eyes,
+                                             not dB numbers. That deliverable is a gate.
   P5a  iOS SCK spike               [light]   UNBLOCKED 2026-08-26: PO confirms Xcode 27 + a real
                                              iOS 27 device are available. Needs PO present (device
                                              plugged in, signing). TIME-SENSITIVE (iOS 27 ~Sept).
+  X13  local-adaptive-encoding     [heavy]   PO 2026-08-26: "lets try". TIER 1 FIRST — NO model:
+                                             deterministic per-5s-chunk features (luma-grid delta +
+                                             edge density) steering bitrate. Changes the output →
+                                             ships OPT-IN behind a flag; the default flip is a
+                                             separate PO gate with A/B files. A learned model only
+                                             if Tier 1's misclassification is MEASURED, never first.
+                                             Run AFTER X15 (both live in capture encoding).
+  F9   per-channel gain slider     [light-medium]  PO 2026-08-26: "mic is kinda too loud now, can
+                                             we add slider?" Spec in NEW TASKS below. Run AFTER the
+                                             live audio-fix session lands (shared mix area).
+  P9   camera-1080 verify          [light]   PO 2026-08-26, and PO is right that eyes are the wrong
+                                             instrument. Agent-run, zero PO time. Spec below.
+
+NEW TASKS (TD-authored 2026-08-26 from PO's answers; all operating rules apply):
+
+## F9 per-channel-gain [light-medium · editor + mix; all three export paths share the mixer]
+PO: "mic is kinda too loud now, can we add slider?" A gain slider per AUDIO channel in the editor,
+default 0 dB, persisted with the edit (editsRepo — must survive refresh), applied in ONE place so
+preview and every export path hear the same thing (the certified mixer; note 14: every export mixes
+audio from the RAW channels, so this composes with instant and smart cut). MUST NOT cost the
+instant path: a gain-only edit changes no pixel, so the video side stays packet-copyable — assert
+the ladder still picks instant. An untouched/returned-to-0 slider is dropped by clampEditState and
+behaviour is bit-identical to today (pinned by test). X1 FENCE REQUIRED: a per-channel gain changes
+the mix the stored envelope summed, so envelope-shortcut consumers must return null and re-probe on
+any take with a non-zero gain — new fence case, unit-tested, stated in the handoff.
+GATES: fidelity oracle green · 0 dB = today, byte-identical behaviour · gain-only edit still takes
+instant/smart cut on video · edit survives refresh · X1 fence added + tested · `npm run exp -- o2`
+green.
+COORDINATION: PO's underlying report ("mic kinda too loud NOW") may be the normalization itself —
+ANOTHER LIVE SESSION owns that fix (PO 2026-08-26). F9 is the CONTROL, not the fix: touch gain
+plumbing only, no mix constants, and start only after that session's merge.
+
+## P9 camera-1080-verify [light · QA only, zero product change, zero PO time]
+The O3a claim "camera-only records 1080p, not upscaled 720p" needs a REAL camera (synthetic mode
+bypasses getUserMedia) and resolution is not judged by eye. Drive real Chrome on the deployed build
+with the real built-in camera (browser-check.mjs shape; --use-fake-ui-for-media-stream auto-grants
+the permission while keeping the REAL device), camera-only take → export → read width×height from
+the FILE ITSELF (mp4 header + the O8 certification tag) and the delivered track settings from the
+console.
+GATES: the exported file's own header reads the camera's true max (≥1920×1080 if the camera offers
+it; if it offers less, report the capability list — that is the answer, not a failure) · evidence
+JSON in docs/qa/ · no changes outside scripts/.
 
 BLOCKED ON HARDWARE OR A DOWNLOAD, unchanged:
   P1   firefox + 3-engine oracle   [medium]  code half shipped 2026-08-23. What is left needs
@@ -130,12 +182,9 @@ BLOCKED ON A RULING PO HAS ALREADY BEEN ASKED FOR:
 
 NEEDS PO DISCUSSION BEFORE ANYONE BUILDS (PO 2026-08-25: "questionable mark as need to be discussed
 again" — these change the file a user gets, or need PO's hardware, so they start on a ruling, not a go):
-  X10=O5e VFR export               [medium]  don't re-inflate a frame-driven capture to CFR 30: a
-                                             static screencast stores ~1 fps and the render decodes+
-                                             encodes 30× that for identical frames. Order-of-
-                                             magnitude on screen content — but the output file gets
-                                             VARIABLE frame timing, which some editors/players
-                                             dislike. TD proposal: opt-in first, default CFR.
+  X10=O5e VFR export — REJECTED by PO 2026-08-26 ("fuck this"). The size win does not buy a file
+                                             some players and editors mishandle. In the REJECTED
+                                             list; do not resurrect without PO.
   X13  local-adaptive-encoding     [heavy]   on-device zero-token model (per PO's 2026-08-25 "no AI"
                                              clarification = no runtime token spend) classifying 5 s
                                              chunks text/motion/still to steer bitrate; realistic
@@ -180,7 +229,8 @@ REJECTED (do not resurrect): pre-roll rolling buffer — no capture before the r
 Chrome does not stream it and a tab kill loses the whole take (O3a). Ending a raw channel's TRACK to
 drain its encoder — measured 2026-08-23, Chrome stops the recorder itself and takes the backlog with
 it (P0-tail-raw). The related HARD requirement lives in O4/O8: zero tail loss at stop, now gated on
-BOTH the composite and the raw channels.
+BOTH the composite and the raw channels. VFR export (X10=O5e) — PO refused 2026-08-26; the
+delivered file stays constant-frame-rate.
 
 ── WHAT A FRESH SESSION MUST KNOW ──
 1. SYNC IS WORSE THAN OLD NOTES SAY, and the instrument was why. Every sync number quoted before
@@ -449,6 +499,16 @@ BOTH the composite and the raw channels.
                HEADLESS IS BROKEN for this rig family on Chrome 151 (canvas capture delivers 0 fps
                to uncomposited windows, composite degrades, degraded stop deletes its blob): run it
                in a VISIBLE unoccluded window and read `measured` + `clock` + audioPaddedSec.
+     tabaudio  does CAPTURED TAB AUDIO survive the tab going silent and sounding again? (PO:
+               "maybe audio dies when one youtube video ends and other starts"). Real
+               getDisplayMedia via Chrome's auto-accept testing flags — no picker; tones play in
+               THIS tab, or in a captured child tab with {"crossTab":true} plus `--refocus
+               --capture-title=TONECHILD` (the child steals focus, and getDisplayMedia throws from
+               an unfocused document — the driver re-activates the page). `--keep-audio` or the
+               run is vacuous. 2026-08-26: NOT reproduced at a 45 s gap in either topology; the
+               negative is recorded in BACKLOG so the shape is not re-run blind. cdp-run's debug
+               port is EPHEMERAL now — fixed 9333 cost three runs in one day to orphaned Chromes —
+               and it prints the page console tail on failure.
      oracle    accepts {"injectTailLossMs":N} to prove the tail band red
   node scripts/ai-pdf-check.mjs    AI1's "any AI can read this" gate: runs the aiexport rig, saves the
      PDF to docs/qa/ai-export.pdf, and puts it through TWO readers that know nothing about the writer —
@@ -998,7 +1058,9 @@ THREE LANES, all numbers, no behaviour change:
 GATES: every lane re-runnable in one command · both content types where applicable (text + motion
 control) · no default moves, no production behaviour change · handoff appended here with the
 numbers · BACKLOG P1 (painters) updated: resolved or confirmed live · if (a) finds a matching
-config, say so in the READY map so PO's X6 ruling is a yes/no on closed evidence.
+config, say so in the READY map so PO's X6 ruling is a yes/no on closed evidence · PO-VISIBLE
+ARTIFACTS (PO: "i need to see it"): per lane, side-by-side exported files or magnified text crops
+saved to ~/Downloads with a one-line README naming which is which — the ruling is made by eye.
 Operating notes: rigs only — production code untouched except where a rig needs a read-only probe
 seam · heavy sweeps announced, not while PO uses the machine · a lane that cannot run (no 4:4:4
 encoder at all) reports that as its result, per the operating rules.

@@ -1030,6 +1030,7 @@ class Session implements CaptureSession {
         stream: ch.stream,
         epoch: this.epoch,
         writer,
+        label: ch.kind,
         audioCtx: ch.audioCtx ?? undefined,
         onFatal: (err) => {
           if (this.stateInternal !== 'recording') return

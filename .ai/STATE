@@ -304,6 +304,23 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   NOT claimed: the "noises" during starvation are the machine mangling audio it DOES deliver, and
   the deepest lever on the starvation itself is capture CPU (the X6 ruling PO still owes). The hold
   makes the loss an honest, non-accumulating gap instead of a growing desync.
+- A DEAD AUDIO CHANNEL NAMES ITS KILLER NOW (2026-08-26, from PO the same day: "in long video tab
+  audio still dies after a while"). Our own pipeline is ruled out at PO's timescale — 12.5 hidden
+  minutes on the production measured path: batches end to end, 417 ms padded, no death — so the
+  death is the display-audio TRACK or its source, and all its ways of dying record identical
+  digital silence. Every measured channel now testifies: track mute/unmute/ended and AudioContext
+  state changes stamped to the console with take-relative times, and a silence witness at stop
+  (`silentTailMs`, warned when >10 s: "input was PURE SILENCE for the final Xs — went quiet at
+  Ys"). Red-proven in the app (a live-but-silent stream: silentTailMs = the whole channel, mute
+  stamps at +3.2/+5.2 s, paddedMs 0 — silent input and a starved clock are told apart). Evidence
+  only, zero behaviour change; the console of PO's next long take decides the fix. Candidates,
+  from the platform record: Chromium muting captured-tab audio (crbug 40703184 family), display
+  tracks ending on device changes (crbug 344876285 — AirPods auto-switch), or the source pausing.
+  PO's "dies between youtube videos" hypothesis was TAKEN TO THE LAB the same day (`npm run exp --
+  tabaudio`: real getDisplayMedia via auto-accept flags, tone → teardown → 45 s silent gap → new
+  tone, own-tab AND hidden-child-tab topologies) and did NOT reproduce — audio returns at full
+  level, zero mute events. The killer needs something the rig lacks (capture age, YouTube player
+  internals, AirPods switching, game load); details and the do-not-re-run note in BACKLOG.
 - CAPTURE MEASURES THE MIX'S ENVELOPE ONCE, AND THE EXPORT STOPPED MEASURING IT AGAIN (X1,
   2026-08-26). O2 kept three scalars from the capture-time accumulator and SORTED the window series
   away; the series is now kept IN TIME ORDER on `Recording.loudness.envelope` (windowRms + windowPeak

@@ -11,6 +11,12 @@
  * throwaway profile per TD hygiene.
  */
 
+import { initToneChildIfRequested } from '../perf/toneChild'
+
+// A page opened with &tonechild=1 is the CAPTURED half of the tabaudio rig:
+// it renames itself and plays tones on command, and builds no UI of its own.
+const isToneChild = initToneChildIfRequested()
+
 interface Runner {
   id: string
   title: string
@@ -502,6 +508,21 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'tabaudio',
+    title: 'does captured tab audio survive the tab going silent and sounding again?',
+    detail:
+      'PO 2026-08-26: "maybe audio dies when one youtube video ends and other starts". This page captures ITSELF (preferCurrentTab + the auto-accept testing flag in cdp-run), plays a tone, tears it down like a player, sits silent for the gap, plays a new one — through the production measured-audio path with its mute/ended/silence witnesses. Run with --keep-audio or phase A is vacuous. {"gapSecs":45} sets the silent gap.',
+    run: async (args) => {
+      const { runTabAudioDeath } = await import('../perf/tabAudioDeath')
+      return runTabAudioDeath({
+        video1Secs: typeof args?.video1Secs === 'number' ? args.video1Secs : undefined,
+        gapSecs: typeof args?.gapSecs === 'number' ? args.gapSecs : undefined,
+        video2Secs: typeof args?.video2Secs === 'number' ? args.video2Secs : undefined,
+        crossTab: args?.crossTab === true,
+      })
+    },
+  },
+  {
     id: 'syncload',
     title: 'A/V sync when the machine is BUSY (PO 4K-game take)',
     detail:
@@ -514,6 +535,47 @@ const runners: Runner[] = [
         height: typeof args?.height === 'number' ? args.height : undefined,
         load: typeof args?.load === 'boolean' ? args.load : undefined,
         engine: args?.engine === 'v1' || args?.engine === 'v2' ? args.engine : undefined,
+      })
+    },
+  },
+  {
+    id: 'x15a',
+    title: 'X15(a) — the bitrateMode sweep X6’s ruling waits on',
+    detail:
+      'sweeps the raw WebCodecs AVC lane over latencyMode × bitrateMode (including quantizer mode, where the ceiling is ignored) against the SHIPPED MediaRecorder VP9 lane, on screen TEXT with a motion control. Every lane encodes the identical deterministic pictures and is compared by frame ORDINAL, so there is no alignment search and no lower bound — unlike x6, whose 27.9 dB its own rig calls "at least this close". Deliverable: a config that matches the VP9 picture at ≤1.2× its bytes, or the frontier showing none exists.',
+    run: async (args) => {
+      const { runBitrateModeSweep } = await import('../perf/bitrateModeSweep')
+      return runBitrateModeSweep({
+        takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined,
+        contents: Array.isArray(args?.contents)
+          ? (args.contents as ('text' | 'motion')[])
+          : undefined,
+      })
+    },
+  },
+  {
+    id: 'x15b',
+    title: 'X15(b) — the 4:4:4 price tag, and a repair of the O9 baseline it is priced against',
+    detail:
+      'probes every chroma/codec mode O9 names across ALL THREE acceleration modes (O9 stopped at the first yes, so "software only" and "hardware" were one row), then measures glyph-edge damage and UNPACED throughput per mode on identical deterministic text frames. Also re-measures O9’s capture stage against the picture that was actually encoded, next to the same comparison deliberately shifted one scroll step — which is what O9’s own reference was. `{"only":"<id>"}` runs a single encoder so `--cpu` has something it can attribute.',
+    run: async (args) => {
+      const { runChromaPrice } = await import('../perf/chromaPrice')
+      return runChromaPrice({
+        takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined,
+        only: typeof args?.only === 'string' ? args.only : undefined,
+        repeats: typeof args?.repeats === 'number' ? args.repeats : undefined,
+      })
+    },
+  },
+  {
+    id: 'x15c',
+    title: 'X15(c) — does adding one trim change how a take’s TEXT looks? (BACKLOG P1)',
+    detail:
+      'records ONE real take of a code-editor screen through the shipped capture session, then exports it three ways through the product’s own ladder — unedited (instant, packet copy of the GL composite), with a tail trim on default flags (smart cut, which copies most packets), and with the SAME trim and smart cut off (render, the 2D painter) — and PSNRs a text region at matching instants with a ±2-frame search. Settles X5’s divergence in production instead of in the lab. Reports; fixes nothing.',
+    run: async (args) => {
+      const { runTrimTextParity } = await import('../perf/trimTextParity')
+      return runTrimTextParity({
+        takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined,
       })
     },
   },
@@ -566,7 +628,7 @@ if (!synthetic) {
   )
 }
 
-for (const r of runners) {
+for (const r of isToneChild ? [] : runners) {
   const out = el('pre', { class: 'info' }, 'not run')
   const btn = el('button', {}, `run ${r.id}`)
   btn.addEventListener('click', () => {

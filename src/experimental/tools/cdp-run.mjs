@@ -19,11 +19,24 @@
 
 import { spawn } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const CHROME = process.env.CHROME_BIN ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-const DEBUG_PORT = 9333
+// EPHEMERAL, not fixed: a fixed 9333 cost three runs in one day — an orphaned
+// Chrome from any earlier run keeps the port, the new Chrome silently binds
+// another interface, and the driver polls the orphan's stale target list until
+// it times out ("timed out waiting for Chrome debug target").
+const DEBUG_PORT = await new Promise((resolve, reject) => {
+  const s = createServer()
+  s.listen(0, '127.0.0.1', () => {
+    const addr = s.address()
+    const port = typeof addr === 'object' && addr ? addr.port : 0
+    s.close((err) => (err || !port ? reject(err ?? new Error('no port')) : resolve(port)))
+  })
+  s.on('error', reject)
+})
 
 function parseArgs(argv) {
   const positional = []
@@ -33,6 +46,9 @@ function parseArgs(argv) {
   let query = ''
   let ua = ''
   let profileDir = ''
+  let keepAudio = false
+  let refocus = false
+  let captureTitle = 'INOUT'
   for (const a of argv) {
     if (a.startsWith('--port=')) devPort = Number(a.slice(7))
     else if (a.startsWith('--timeout=')) timeoutSec = Number(a.slice(10))
@@ -40,6 +56,9 @@ function parseArgs(argv) {
     else if (a.startsWith('--ua=')) ua = a.slice(5)
     else if (a.startsWith('--profile=')) profileDir = a.slice(10)
     else if (a === '--headed') headed = true
+    else if (a === '--keep-audio') keepAudio = true
+    else if (a === '--refocus') refocus = true
+    else if (a.startsWith('--capture-title=')) captureTitle = a.slice(16)
     else positional.push(a)
   }
   const [experiment, jsonArgs] = positional
@@ -56,6 +75,9 @@ function parseArgs(argv) {
     query,
     ua,
     profileDir,
+    keepAudio,
+    refocus,
+    captureTitle,
   }
 }
 
@@ -67,7 +89,7 @@ async function waitForTarget(url, deadline) {
       const res = await fetch(`http://127.0.0.1:${DEBUG_PORT}/json/list`)
       const targets = await res.json()
       const page = targets.find((t) => t.type === 'page' && t.url.startsWith(url))
-      if (page) return page.webSocketDebuggerUrl
+      if (page) return { wsUrl: page.webSocketDebuggerUrl, targetId: page.id }
     } catch {
       /* chrome not up yet */
     }
@@ -104,9 +126,19 @@ class Cdp {
 }
 
 async function main() {
-  const { experiment, args, devPort, timeoutSec, headed, query, ua, profileDir } = parseArgs(
-    process.argv.slice(2),
-  )
+  const {
+    experiment,
+    args,
+    devPort,
+    timeoutSec,
+    headed,
+    query,
+    ua,
+    profileDir,
+    keepAudio,
+    refocus,
+    captureTitle,
+  } = parseArgs(process.argv.slice(2))
   // Extra query params reach the page's own knobs (e.g. `quiet=0.05`, the
   // synthetic-audio level used to exercise the loudness rescue).
   const pageUrl = `http://localhost:${devPort}/experimental.html?synthetic=1${query ? `&${query}` : ''}`
@@ -133,7 +165,16 @@ async function main() {
       '--disable-background-timer-throttling',
       '--disable-backgrounding-occluded-windows',
       '--disable-renderer-backgrounding',
-      '--mute-audio',
+      // Auto-accept current-tab capture (testing flags): lets a rig drive the
+      // REAL getDisplayMedia path against its own tab with no native picker —
+      // the only way to reproduce captured-tab-audio behaviour in a harness.
+      '--auto-accept-this-tab-capture',
+      `--auto-select-tab-capture-source-by-title=${captureTitle}`,
+      // The cross-tab rigs open their captured tab with window.open().
+      '--disable-popup-blocking',
+      // --keep-audio: the tab-audio rigs need the tab to be genuinely AUDIBLE —
+      // a muted-output tab may capture as silence and make the run vacuous.
+      ...(keepAudio ? [] : ['--mute-audio']),
       // Memory experiments need a deterministic heap reading: forced GC plus
       // unquantized performance.memory. Harmless for the other runners.
       '--js-flags=--expose-gc',
@@ -172,8 +213,21 @@ async function main() {
   // console is a guess factory (2026-08-26: a whole degrade chain was
   // invisible because nothing forwarded the page's own warnings).
   const consoleTail = []
+  let refocusTimer = null
   try {
-    const wsUrl = await waitForTarget(`http://localhost:${devPort}/experimental.html`, Date.now() + 20_000)
+    const { wsUrl, targetId } = await waitForTarget(
+      `http://localhost:${devPort}/experimental.html`,
+      Date.now() + 20_000,
+    )
+    // --refocus: keep the experiment page the ACTIVE target. A rig that opens
+    // a child tab (tabaudio crossTab) loses focus to it, and getDisplayMedia
+    // throws InvalidStateError from an unfocused document; the page cannot
+    // reclaim focus itself in headless, but the DevTools activate endpoint can.
+    if (refocus) {
+      refocusTimer = setInterval(() => {
+        fetch(`http://127.0.0.1:${DEBUG_PORT}/json/activate/${targetId}`).catch(() => undefined)
+      }, 1000)
+    }
     const ws = new WebSocket(wsUrl)
     await new Promise((resolve, reject) => {
       ws.addEventListener('open', resolve, { once: true })
@@ -228,6 +282,7 @@ async function main() {
     if (chromeErr) console.error('--- chrome stderr tail ---\n' + chromeErr.slice(-2000))
     process.exitCode = 1
   } finally {
+    if (refocusTimer) clearInterval(refocusTimer)
     cleanup()
     // The losing arm of the timeout race and the CDP socket keep the event
     // loop alive; exit explicitly so wall time == experiment time.
