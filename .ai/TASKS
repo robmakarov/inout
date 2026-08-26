@@ -1679,6 +1679,48 @@ removed from mic) — in the P4 shell where a proper reference signal exists.
 GATES: R128 integrated −14 ±0.5 LUFS on the synthetic set · multitrack file: tracks separate, default
 unchanged · gating: zero triggers on the clean-speech fidelity set · fidelity oracle green throughout.
 
+HANDOFF O10(a) — MEASURED AND BUILT 2026-08-26 (THIRTEENTH SESSION), AND THE MODE IS A NO-OP UNTIL PO
+ALLOWS ATTENUATION. (b)(c)(d) not started.
+(1) THE MEASUREMENT THAT JUSTIFIES THE TASK. The shipped makeup normalises the p90 of 100 ms window
+    RMS — unweighted, ungated. Measured on the DECODED EXPORT of three content shapes
+    (`npm run exp -- o10`):
+        speech-like (bursts with pauses)   −13.08 LUFS
+        bass-heavy                         −10.20 LUFS
+        bright                              −5.24 LUFS
+    A SPREAD OF 7.84 dB. Three takes of the same nominal level land almost 8 dB apart on nothing but
+    their frequency content, and a viewer moving between two INOUT exports hears that. An offset can
+    be dialled in; a spread cannot. This is the argument for a weighted, gated measure.
+(2) BUILT: `compose/lufs.ts`, BS.1770-4 K-weighting + 400 ms blocks at 75 % overlap + the absolute
+    (−70 LUFS) and relative (−10 LU) gates. 14 unit tests. Calibrated against the standard's own
+    1 kHz reference to 0.15 dB across three amplitudes — and that test is worth reading, because the
+    first version of it asserted the wrong thing: the naive prediction is 20·log10(A) − 0.691, and it
+    is wrong because K-weighting is +0.69 dB at 1 kHz and the two CANCEL by construction. A second
+    wrong expectation went the same way (50 Hz "should" read much quieter — the RLB's −3 dB point is
+    near 38 Hz, so 50 Hz is barely touched; 20 Hz is the right probe, and the HIGH shelf is the half
+    an RMS measure misses entirely).
+    STREAMING, because the render needs it that way: `LufsAccumulator` carries biquad state across
+    chunks and keeps one number per 100 ms, not 690 MB of PCM for a 30-minute take (O1's rule).
+    Pinned by test to give the same answer chunked as whole, to 0.05 dB, across four chunk sizes.
+(3) EVERY PROBING EXPORT NOW REPORTS ITS INTEGRATED LOUDNESS, in both modes — the probe already has
+    the mixed PCM in hand, so this costs one biquad pair per sample and no memory. RenderStats gains
+    `integratedLufs`. A number nobody can see is a number nobody can check.
+(4) THE ADDITIVE MODE IS WIRED END TO END (`?loudness=r128`, default `p90`, forwarded into the export
+    worker because a worker has no `location` — note 10's lesson applied up front this time). It
+    reuses the SHIPPED bounds deliberately: the peak licence and the p20 noise-floor ceiling are the
+    same, so a take that is unsafe under one mode is unsafe under the other, and only `wanted`
+    changes.
+(5) AND IT DOES NOTHING, WHICH IS THE FINDING. Same takes through both modes: identical files,
+    spread unchanged at 7.84 dB. The reason is direction, not statistic — every shape asks for a gain
+    BELOW 1 (0.899 / 0.646 / 0.365), because INOUT's exports are ALREADY 1-9 dB LOUDER than the
+    −14 LUFS convention, and the bounding never attenuates (`Math.max(1, …)`, inherited from the p90
+    path where turning a take down was never on the table).
+WHAT PO HAS TO DECIDE, stated plainly because it is not TD's to take: R128 targeting can only close
+this spread by turning takes DOWN. That makes every export quieter — most of all the bright ones,
+which lose ~9 dB — and it interacts with the limiter's knee. It is the correct thing by the standard
+and it is a change to how everything sounds. The measurement, the implementation and the switch are
+all in place; the only missing piece is permission to attenuate.
+NOT STARTED: (b) multitrack export, (c) spectral-gating noise reduction, (d) cross-channel AEC (P4).
+
 ## O11. bits-audit + codec-autoswitch — (a)(b)(c) DONE 2026-08-23, (d) BLOCKED ON P1's 3-engine rig
 PO 2026-08-23: "top shit; auto-switch per browser, invisible; never make it worse for everyone
 because one system can't; camera-with-screen is a small rectangle anyway."

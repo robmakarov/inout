@@ -62,7 +62,8 @@ import {
   loudnessFromCaptureStats,
   makeStereoSample,
   makeupGainForLoudness,
-  measureMixLoudness,
+  makeupGainForTargetLufs,
+  measureMixEnvelope,
   busGainFor,
   openAudioMixers,
   type MixSource,
@@ -76,6 +77,8 @@ import {
   pickEncodingTarget,
 } from './codecs'
 import { BitsAudit, formatBits } from './bits'
+import { DEFAULT_TARGET_LUFS, gainForTargetLufs } from './lufs'
+import { loudnessMode } from './loudnessMode'
 import { drawVideoFrame, type FrameCanvas } from './layout'
 import { cameraPoseAt, cameraTrackIsActive, viewportAt, viewportTrackIsActive } from '@core/timeline'
 import { buildCertification, certificationComment } from './certify'
@@ -136,6 +139,10 @@ export interface RenderStats {
    *  the take (one mixer per channel × kept span). 0 when the capture envelope
    *  answered instead (X1); this is the number that gate counts. */
   probeDecodes: number
+  /** O10(a): BS.1770 integrated loudness of the mix, when a probe measured it. */
+  integratedLufs?: number | null
+  /** What R128 targeting ASKED for, before the peak/floor bounds cut it. */
+  r128AskedGain?: number
 }
 
 let lastStats: RenderStats | null = null
@@ -309,9 +316,16 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       // it does not need the probe either — the envelope is kept in time order
       // and the kept spans pick out of it. Same shortcut, one rung wider.
       const mixedIds = audioMixers.flatMap((m) => m.channelIds)
-      const stored = isDefaultEdit(recording, edit)
-        ? loudnessFromCaptureStats(recording.loudness, mixedIds, baseGain)
-        : loudnessFromCaptureEnvelope(recording.loudness, recording, edit, mixedIds, baseGain)
+      // O10(a): R128 CANNOT take the capture-envelope shortcut. The envelope is
+      // unweighted window RMS, and K-weighting has to see the actual signal —
+      // so this mode always probes. That is the honest cost of the mode and the
+      // reason it is not free the way X1's shortcut is.
+      const wantR128 = loudnessMode() === 'r128'
+      const stored = wantR128
+        ? null
+        : isDefaultEdit(recording, edit)
+          ? loudnessFromCaptureStats(recording.loudness, mixedIds, baseGain)
+          : loudnessFromCaptureEnvelope(recording.loudness, recording, edit, mixedIds, baseGain)
       if (stored) {
         const makeup = makeupGainForLoudness(stored)
         if (makeup !== 1) for (const m of audioMixers) m.gain = baseGain * makeup
@@ -323,15 +337,28 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
         const probe = await openAudioMixers(recording, edit, throwIfAborted)
         stats.probeDecodes = probe.length
         try {
-          const loud = await measureMixLoudness(probe, baseGain, totalAudioFrames, throwIfAborted, (r) =>
+          const env = await measureMixEnvelope(probe, baseGain, totalAudioFrames, throwIfAborted, (r) =>
             report('preparing', 0.04 * r),
           )
-          const makeup = makeupGainForLoudness(loud)
+          const loud = { peak: env.peak, peakRobust: env.peakRobust, loudRms: env.loudRms, floorRms: env.floorRms }
+          stats.integratedLufs = env.integratedLufs
+          let makeup: number
+          if (wantR128) {
+            const asked = gainForTargetLufs(env.integratedLufs)
+            makeup = makeupGainForTargetLufs(loud, asked)
+            stats.r128AskedGain = Math.round(asked * 1000) / 1000
+            console.info(
+              `compose: audio R128 integrated ${env.integratedLufs ?? 'n/a'} LUFS → target ${DEFAULT_TARGET_LUFS} ` +
+                `wants ${asked.toFixed(3)}× → applied ${makeup.toFixed(3)}× (peak/floor bounded)`,
+            )
+          } else {
+            makeup = makeupGainForLoudness(loud)
+            console.info(
+              `compose: audio loudness p90rms ${loud.loudRms.toFixed(4)} peak ${loud.peak.toFixed(3)} → makeup ${makeup.toFixed(2)}× (integrated ${env.integratedLufs ?? 'n/a'} LUFS)`,
+            )
+          }
           if (makeup !== 1) for (const m of audioMixers) m.gain = baseGain * makeup
           certified = { makeup, loudRms: loud.loudRms, peak: loud.peak, fromCaptureStats: false }
-          console.info(
-            `compose: audio loudness p90rms ${loud.loudRms.toFixed(4)} peak ${loud.peak.toFixed(3)} → makeup ${makeup.toFixed(2)}×`,
-          )
         } finally {
           for (const m of probe) m.dispose()
         }

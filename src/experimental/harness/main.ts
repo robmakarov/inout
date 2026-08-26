@@ -403,6 +403,16 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'o10',
+    title: 'O10(a) — what do INOUT’s exports actually read in LUFS?',
+    detail:
+      'records three content shapes (speech-like with pauses, bass-heavy, bright) through a real MediaRecorder, exports each through the real exporter, DECODES the result and runs BS.1770 integrated loudness over the decoded PCM. The shipped makeup normalises a p90 window RMS — unweighted and ungated — and both blind spots are content-dependent, so the number that decides O10(a) is the SPREAD across the three shapes: an offset can be dialled in, a spread cannot.',
+    run: async (args) => {
+      const { runLoudnessR128 } = await import('../perf/loudnessR128')
+      return runLoudnessR128({ takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined })
+    },
+  },
+  {
     id: 'f6',
     title: 'F6 — pause/resume: does the take survive being held, and is the pause left out?',
     detail:

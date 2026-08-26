@@ -3,6 +3,7 @@ import { blobStore } from '@core/store'
 import type { CaptureLoudness, EditState, Recording } from '@core/types'
 import { keptSegments, segmentOutputMs, segmentSpeed } from '@core/timeline'
 import { AUDIO_CHANNEL_COUNT, AUDIO_SAMPLE_RATE } from './codecs'
+import { LufsAccumulator } from './lufs'
 import { TimeStretcher } from './timeStretch'
 
 interface CurrentBuffer {
@@ -337,6 +338,34 @@ export function loudnessFromCaptureEnvelope(
  * peak-bounded so sustained program cannot be driven deep into the limiter;
  * floor-bounded so the boost cannot raise the noise floor into audibility.
  */
+/**
+ * O10(a) — the SAME bounds, driven by an R128 target instead of the p90 RMS.
+ *
+ * The bounds are the point of reusing this: a loudness target on its own would
+ * happily ask a quiet take for 12x, lifting its room tone into audibility — the
+ * exact failure NORMALIZE_FLOOR_CEILING_RMS exists to prevent, and the exact
+ * complaint PO raised about the peak licence. So the only thing that changes
+ * between the two modes is what `wanted` is; the peak ceiling, the noise-floor
+ * ceiling and the "never attenuate" rule are shared, and a take that would be
+ * unsafe under one is unsafe under the other.
+ *
+ * NOT SYMMETRIC WITH THE p90 PATH IN ONE RESPECT, deliberately: R128 can ask
+ * for a gain BELOW 1 (bright content measured 8 dB hot in the o10 rig), and the
+ * shipped path never attenuates. Attenuation is left out here too — turning a
+ * take DOWN is a bigger behaviour change than turning it up, it interacts with
+ * the limiter's knee, and it is not what "targeting" has to mean to be useful.
+ * The asked-for figure is returned in the stats so the gap is visible.
+ */
+export function makeupGainForTargetLufs(m: MixLoudness, wanted: number): number {
+  const ceiling = m.peakRobust ?? m.peak
+  const licence =
+    m.peakRobust !== undefined ? NORMALIZE_PEAK_OVERDRIVE : NORMALIZE_PEAK_OVERDRIVE_RAW
+  const peakBound = ceiling > 0 ? (licence * LIMIT_KNEE) / ceiling : Infinity
+  const floorBound =
+    m.floorRms && m.floorRms > 0 ? NORMALIZE_FLOOR_CEILING_RMS / m.floorRms : Infinity
+  return Math.max(1, Math.min(NORMALIZE_MAX_MAKEUP, wanted, peakBound, floorBound))
+}
+
 export function makeupGainForLoudness(m: MixLoudness): number {
   if (!(m.loudRms > NORMALIZE_GATE_RMS)) return 1
   const wanted = NORMALIZE_TARGET_RMS / m.loudRms
@@ -618,6 +647,14 @@ export interface MixEnvelope extends MixLoudness {
   /** 100 ms window RMS of the mid signal, IN TIME ORDER. */
   windowRms: Float32Array
   windowMs: number
+  /**
+   * O10(a): BS.1770 integrated loudness of the SAME pass. Free to take — the
+   * probe already has the mixed PCM in hand and the accumulator is streaming,
+   * so this costs one biquad pair per sample and no memory that scales with
+   * length. Reported even in p90 mode, because a number nobody can see is a
+   * number nobody can check.
+   */
+  integratedLufs: number | null
 }
 
 /**
@@ -635,6 +672,7 @@ export async function measureMixEnvelope(
 ): Promise<MixEnvelope> {
   for (const m of mixers) m.gain = gain
   let peak = 0
+  const lufs = new LufsAccumulator(AUDIO_SAMPLE_RATE)
   const windowRms: number[] = []
   const windowPeak: number[] = []
   let winSumSq = 0
@@ -650,6 +688,7 @@ export async function measureMixEnvelope(
     const right = new Float32Array(frames)
     const chunkOutStartSec = startFrame / AUDIO_SAMPLE_RATE
     for (const m of mixers) await m.mixInto(left, right, chunkOutStartSec)
+    lufs.add(left, right, frames)
     for (let k = 0; k < frames; k++) {
       const a = Math.abs(left[k])
       const b = Math.abs(right[k])
@@ -696,6 +735,7 @@ export async function measureMixEnvelope(
     floorRms,
     windowRms: inOrder,
     windowMs: (LOUDNESS_WINDOW_FRAMES / AUDIO_SAMPLE_RATE) * 1000,
+    integratedLufs: lufs.finish().integratedLufs,
   }
 }
 
