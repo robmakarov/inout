@@ -44,12 +44,14 @@ const runners: Runner[] = [
   },
   {
     id: 'oracle-fidelity',
-    title: 'Oracle — audio fidelity (stereo multitone)',
+    title: 'Oracle — audio fidelity (stereo multitone, all three export paths)',
     detail:
-      'stereo multitone through measured capture → production export → per-tone level error, THD/IMD, L/R separation, soft-knee hits. Gates: tone ≤1dB, separation ≥40dB, limiterHits=0.',
+      'stereo multitone through measured capture → production export → per-tone level error, THD/IMD, L/R separation, soft-knee hits. Render gate: tone ≤1dB, separation ≥40dB, limiterHits=0. Also records a composite-bearing multi-source take and runs the same metrics on the INSTANT packet copy (the file a user actually gets) and on the render of the same take — {"composite":false} skips those lanes (the red proof for their gates).',
     run: async (args) => {
       const { runOracleFidelity } = await import('../oracle/fidelityRun')
-      return runOracleFidelity(typeof args?.recordMs === 'number' ? args.recordMs : 6000)
+      return runOracleFidelity(typeof args?.recordMs === 'number' ? args.recordMs : 6000, {
+        ...(typeof args?.composite === 'boolean' ? { composite: args.composite } : {}),
+      })
     },
   },
   {

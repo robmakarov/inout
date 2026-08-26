@@ -442,7 +442,10 @@ BOTH the composite and the raw channels.
      HEAVY: announce it, keep it out of the pre-push hook, never run it while the PO is using the
      machine. The composite phase may read INCONCLUSIVE when its watchdog gives up under load — that
      is the fallback working; the raw phase does not depend on the composite surviving.
-  npm run oracle | oracle:cold | oracle:fidelity  merge gates (pre-push hook runs typecheck+test+oracle)
+  npm run oracle | oracle:cold | oracle:fidelity  MERGE gates — run them per task, by hand. The
+     pre-push hook does NOT run the oracle and must not: it is a timing gate, and the cold first run
+     a hook always pays read 76.87 ms of its 90 ms band where a warm run read 37.3 (TD 2026-08-26).
+     The hook runs build (tsc+vite) + tests, ~7 s.
      `node scripts/oracle.mjs --engine=v2` gates the WebCodecs composite instead of the shipped one
 
 ── AWAITING PO (carried forward) ──
