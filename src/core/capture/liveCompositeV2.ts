@@ -180,6 +180,28 @@ export interface LiveCompositeV2Handle {
   attachPreview(canvas: HTMLCanvasElement): Promise<boolean>
 }
 
+/**
+ * FAULT INJECTION, EVIDENCE ONLY (O4-polish's e2e wedge case). Nothing in the
+ * product sets this; the o4wedge rig does, to drive the two fallback rungs that
+ * unit tests cannot reach — a start failure and a mid-take degrade — through the
+ * REAL session, so what is proven is that the take survives them and that the
+ * export lands on the right path, not that a pure function returns the right
+ * verdict. The oracle's `injectTailLossMs` is the same pattern.
+ */
+export interface CompositeFault {
+  /** Throw before the worker exists → the session's v1 fallback takes the take. */
+  startFails?: boolean
+  /** Fire the real degrade path this long after start → composite refused. */
+  degradeAfterMs?: number
+}
+let fault: CompositeFault | null = null
+export function setCompositeFault(f: CompositeFault | null): void {
+  fault = f
+}
+export function getCompositeFault(): CompositeFault | null {
+  return fault
+}
+
 export function canLiveCompositeV2(inputs: LiveCompositeV2Inputs): boolean {
   if (!inputs.screen && !inputs.camera) return false
   return (
@@ -201,6 +223,10 @@ export async function startLiveCompositeV2(
 ): Promise<LiveCompositeV2Handle> {
   const TP = trackProcessorCtor()
   if (!TP) throw new Error('live composite v2: MediaStreamTrackProcessor unavailable')
+  if (fault?.startFails) {
+    // Before the worker, before OPFS: the shape of a real capability failure.
+    throw new Error('live composite v2: injected start failure (o4wedge)')
+  }
 
   const worker = new Worker(new URL('./compositor.worker.ts', import.meta.url), { type: 'module' })
   let latestStats: CompositorStats | null = null
@@ -247,6 +273,11 @@ export async function startLiveCompositeV2(
     degraded = true
     console.warn(`[capture] composite v2 degraded: ${reason} — falling back`)
     options.onDegrade?.(reason)
+  }
+  if (fault?.degradeAfterMs !== undefined) {
+    // The REAL degrade path, not a stand-in for it: the rig proves the take
+    // survives what the watchdog does, so it has to be what the watchdog calls.
+    setTimeout(() => degrade('injected wedge (o4wedge)'), fault.degradeAfterMs)
   }
 
   /** First non-keep-alive output, seen through the 1 Hz stats events — the

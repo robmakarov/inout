@@ -21,7 +21,21 @@
  * never run it while the PO is using the machine (TD hygiene). It is
  * deliberately NOT in the pre-push hook for that reason.
  *
+ * THE SECOND BAND, ADDED 2026-08-26 (task O8b). The tail band answers "did the
+ * ending survive"; it says nothing about whether the MIDDLE did. A composite
+ * that delivers 8 fps under load has a perfect tail and is still a ruined take,
+ * and that is not hypothetical — the 08-22 4K freeze delivered 21.5/11.9 fps
+ * against a 30 target and no gate could see it (the cap that fixed it is
+ * CAPTURE_MAX_*, and nothing re-checks that the cap is doing its job). Both
+ * phases already MEASURED deliveredFps and neither gated it. They do now.
+ *
+ * The band is deliberately well under the 28-30 fps a healthy 1080p lane
+ * delivers: this rig runs a 4K source on a saturated GPU on purpose, so the
+ * number to catch is COLLAPSE, not jitter. Raising --fpsBand is also how the
+ * gate is proven red, because a threshold gate's red proof is the threshold.
+ *
  * Usage: node scripts/oracle-load.mjs [--runs=2] [--takeMs=10000] [--band=400]
+ *                                     [--fpsBand=20]
  */
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -32,10 +46,12 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 let runs = 2
 let takeMs = 10_000
 let band = 400
+let fpsBand = 20
 for (const a of process.argv.slice(2)) {
   if (a.startsWith('--runs=')) runs = Number(a.slice(7))
   else if (a.startsWith('--takeMs=')) takeMs = Number(a.slice(9))
   else if (a.startsWith('--band=')) band = Number(a.slice(7))
+  else if (a.startsWith('--fpsBand=')) fpsBand = Number(a.slice(10))
 }
 
 function runExp(id, args, marker) {
@@ -121,6 +137,19 @@ const measured = results.filter((r) => r.tailGapMs !== null)
 const failed = measured.filter((r) => r.tailGapMs > band)
 const verdict = measured.length > 0 && failed.length === 0 ? 'PASS' : measured.length === 0 ? 'INCONCLUSIVE' : 'FAIL'
 
+// O8b — THE MIDDLE OF THE TAKE, not just its end. A lane that delivered no fps
+// number at all is excluded for the same reason a missing tail is: it cannot
+// prove the band either way, and counting it as a pass would be the vacuous
+// gate note 17 is about.
+const fpsMeasured = results.filter((r) => typeof r.deliveredFps === 'number')
+const fpsFailed = fpsMeasured.filter((r) => r.deliveredFps < fpsBand)
+const fpsVerdict =
+  fpsMeasured.length > 0 && fpsFailed.length === 0
+    ? 'PASS'
+    : fpsMeasured.length === 0
+      ? 'INCONCLUSIVE'
+      : 'FAIL'
+
 // PHASE 2 — the RAW channels, through the production stop path (P0-tail-raw).
 // An edited take renders from these, so their ending is the ending of every
 // take the instant path cannot serve.
@@ -147,19 +176,45 @@ const rawFailed = rawMeasured.filter((r) => r.tailGapMs > band)
 const rawVerdict =
   rawMeasured.length > 0 && rawFailed.length === 0 ? 'PASS' : rawMeasured.length === 0 ? 'INCONCLUSIVE' : 'FAIL'
 
+const rawFpsMeasured = rawRuns.filter((r) => typeof r.deliveredFps === 'number')
+const rawFpsFailed = rawFpsMeasured.filter((r) => r.deliveredFps < fpsBand)
+const rawFpsVerdict =
+  rawFpsMeasured.length > 0 && rawFpsFailed.length === 0
+    ? 'PASS'
+    : rawFpsMeasured.length === 0
+      ? 'INCONCLUSIVE'
+      : 'FAIL'
+
 console.log(
   JSON.stringify(
     {
-      gate: 'tail-under-load',
+      gate: 'tail-and-fps-under-load',
       band,
+      fpsBand,
       takeMs,
       runs,
-      composite: { results, measured: measured.length, verdict },
-      raw: { results: rawRuns, measured: rawMeasured.length, verdict: rawVerdict },
-      verdict: verdict === 'PASS' && rawVerdict === 'PASS' ? 'PASS' : `composite ${verdict} · raw ${rawVerdict}`,
+      composite: {
+        results,
+        measured: measured.length,
+        verdict,
+        fps: { measured: fpsMeasured.length, failed: fpsFailed.length, verdict: fpsVerdict },
+      },
+      raw: {
+        results: rawRuns,
+        measured: rawMeasured.length,
+        verdict: rawVerdict,
+        fps: { measured: rawFpsMeasured.length, failed: rawFpsFailed.length, verdict: rawFpsVerdict },
+      },
+      verdict:
+        verdict === 'PASS' && rawVerdict === 'PASS' && fpsVerdict !== 'FAIL' && rawFpsVerdict !== 'FAIL'
+          ? 'PASS'
+          : `composite tail ${verdict}/fps ${fpsVerdict} · raw tail ${rawVerdict}/fps ${rawFpsVerdict}`,
     },
     null,
     2,
   ),
 )
-process.exitCode = verdict === 'PASS' && rawVerdict === 'PASS' ? 0 : 1
+process.exitCode =
+  verdict === 'PASS' && rawVerdict === 'PASS' && fpsVerdict !== 'FAIL' && rawFpsVerdict !== 'FAIL'
+    ? 0
+    : 1

@@ -403,6 +403,21 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'o4wedge',
+    title: 'O4-polish — does a take survive the composite failing, end to end?',
+    detail:
+      'drives the real createCaptureSession through the two fallback rungs unit tests cannot reach — v2 throwing before its worker exists, and the REAL degrade path firing mid-take — and then exports each take through the product’s own compose/choose.ts ladder. Asserts the path a user would get (instant when the composite is sound, render when it was refused) and that the TAKE is unharmed either way: every raw channel keeps its full length. Injects the trigger, never the consequence.',
+    run: async (args) => {
+      const { runCompositeWedge } = await import('../perf/compositeWedge')
+      return runCompositeWedge({
+        takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined,
+        cases: Array.isArray(args?.cases)
+          ? (args.cases as ('control' | 'startFails' | 'wedged')[])
+          : undefined,
+      })
+    },
+  },
+  {
     id: 'x6',
     title: 'X6 — a raw channel on WebCodecs against the same channel on MediaRecorder',
     detail:
