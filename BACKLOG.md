@@ -48,6 +48,35 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   was. That needs the `[capture:arming]` console timeline from a repro with the game running, plus
   whether the sharing pill lit. Do not harden the ritual further from theory.
 
+- [P1] PO 2026-08-25: "4k game in other tab freezes, but not all the time and other inputs are fine."
+  ONE REAL DEFECT FIXED, AND THE RIG'S OWN ANSWER RETRACTED. Fixed: `encodeComposite` advances
+  `lastEncodedMs` even when it DROPS a frame for a full encoder queue (deliberately — otherwise the
+  next source frame hammers a busy encoder), but the KEEP-ALIVE read that same field to decide
+  whether anything had reached the file lately. So under sustained pressure every arriving-and-
+  dropping frame reset the keep-alive's clock and it never fired: nothing at all was encoded for as
+  long as the pressure lasted. Split into lastEncodedMs (attempted) and lastEncodeOkMs (actually
+  encoded); new stat maxEncodeGapMs measures the longest hole in the file, which is what a viewer
+  sees as a freeze. RETRACTED: the 4.0-4.8 s gaps this rig first reported were NOT a freeze, they
+  were the rig paying a Chrome process's first-VideoEncoder init DURING the take (at t≈0.8 s), which
+  production pays at MOUNT. Warmed with the production `warmVideoEncoder()`, the worst gap over a
+  saturated 60 s take is 133 ms with ZERO drops. So NO mid-take freeze is reproduced under synthetic
+  load and this entry does not claim one. WHAT PO IS PROBABLY SEEING: the screen SOURCE starving
+  under GPU contention — the composite then repeats its last frame via keep-alive and the picture
+  stops changing while audio and the raw channels run on, which is exactly "other inputs are fine".
+  That is Chrome's capture pipeline, and the biggest lever WE still hold is X6: the raw screen and
+  camera channels still encode via SOFTWARE VP8/VP9 during capture, the largest capture CPU cost, on
+  a machine already running a 4K game. NEXT: PO console from a freezing take (`[capture] screen …
+  delivering N fps` says whether the source starved), or take X6.
+
+- [P2] TD 2026-08-25, A CONSEQUENCE OF THE PADDING FIX, stated so it is not mistaken for a
+  regression: holding the audio timeline against the wall clock converts "audio drifts early" into
+  "audio has a short silence where the machine choked". The content is therefore DIFFERENT on a
+  starved take, and the fidelity oracle's fixed 2.5 s analysis window can land on one of those
+  silences: a batch of three oracles run back-to-back produced one toneErr=16.34 dB run that three
+  subsequent solo runs could not reproduce (0.03, 0.70, 0.03 dB). Solo runs of every gate pass. The
+  gate should learn to REPORT padding rather than fail opaquely — it is the same capture-starvation
+  family already documented for this oracle, now with a louder signature.
+
 - [~~P1~~ FIXED 2026-08-25, AWAITING PO RECHECK] PO: on the game take the sound comes apart
   PROGRESSIVELY — in sync ~20 s, then audio AHEAD of video, then "wrong speed". FOUND, MEASURED AND
   FIXED, and the mechanism was NOT the one first guessed. THE FILE CARRIES ITS TWO TRACKS ON TWO
@@ -74,6 +103,34 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   fixes the drift, not the glitches; the same starvation that loses quanta also mangles the audio
   it does deliver. PO recheck on a real game take is what closes this, and the console will now say
   `[capture] measured audio padded …ms` when it fires.
+
+- [P0] TD 2026-08-25, THE BLIND SPOT THAT LET AN AUDIO REGRESSION SHIP: **no gate has ever measured
+  the audio quality of the file a user actually gets.** `analyzeAudioFidelity` has exactly ONE call
+  site and it exports through `exportRecording` — the RENDER. `analyzeAudioIntegrity` likewise. The
+  instant packet-copy path (the default export for an unedited take) has its SYNC measured and its
+  audio quality measured NEVER. This is the same class of hole as note 14's "every sync number was
+  the render's", found and fixed for sync in 2026-08-24 and never checked for audio. PO reporting
+  "audio quality regressed" is exactly what an unmeasured default path produces. BUILD: point
+  fidelityRun at a take that HAS a composite and run the same metrics on `exportByBestPath({...,
+  allowPacketCopy:true})`, as run.ts already does for sync. Expect the multi-source composite to read
+  ~3.1 dB down on the tone gate before anything else is fixed — its mix applies a shared 0.7 gain and
+  a 12:1 compressor that the single-source path does not.
+
+- [P1 → FIXED 2026-08-25, AWAITING PO LISTEN TEST] PO: "audio quality regressed from before we
+  updated roadmap and mass execution". FOUND, and the code had already written down the cost in a
+  comment nobody came back to: on 2026-08-23 NORMALIZE_PEAK_OVERDRIVE went 2 → 4, which licenses the
+  makeup gain to drive true peaks to 3.8 instead of 1.9 — "peaks are now squashed up to ~11.6 dB
+  rather than ~5.6 dB, which is what loudness always costs. Raise no further without a listen test."
+  PO's listen test has now arrived and it says no. THE RAISE WAS TREATING A SYMPTOM: it existed
+  because ONE SHARP TRANSIENT set `peak` and capped the whole take's gain (the take landed 1.4 dB
+  under target), so loudness was bought back by crushing harder. The defect was never the licence, it
+  was the STATISTIC — a single sample must not define a take's headroom. FIX: the bound now reads
+  `peakRobust`, the p99 of per-window peaks over the same 100 ms windows the loudness already uses,
+  measured on BOTH the export probe and the capture-time accumulator; with a statistic a transient
+  cannot own, the licence goes back to 2. Takes recorded before the statistic existed keep the raw
+  peak AND the old licence of 4 (NORMALIZE_PEAK_OVERDRIVE_RAW), so no existing file changes
+  behaviour — pinned by test. Proven: the 08-23 take now reaches target AND its sustained programme
+  lands under 2.0 instead of 3.8. 421 tests green.
 
 - [P1] TD 2026-08-25: NOTHING HERE HAS EVER BEEN MEASURED ON A TAKE LONGER THAN 30 s, and PO records
   938-1800 s. `runOracle` defaults to 6000 ms and the matrix's widest cell is 30 s, so every sync,

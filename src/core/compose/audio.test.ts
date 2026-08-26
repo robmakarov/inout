@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { audioMixInternals, LIMIT_USABLE_MAX, NORMALIZE_PEAK_OVERDRIVE } from './audio'
+import {
+  audioMixInternals,
+  LIMIT_USABLE_MAX,
+  NORMALIZE_PEAK_OVERDRIVE,
+  NORMALIZE_PEAK_OVERDRIVE_RAW,
+} from './audio'
 import { AUDIO_SAMPLE_RATE } from './codecs'
 
 const { hermite, sampleAt, softLimitSample, mixGainForChannels, makeupGainForLoudness } =
@@ -32,11 +37,46 @@ describe('speech-loudness normalization (replaces peak rescue a real take defeat
     // gain would shape most samples; the bound holds overdrive to the constant
     // rather than to a number written out here, so raising the constant on
     // evidence (2 → 4, 2026-08-23) does not silently rewrite what this proves.
+    // No peakRobust here, so this is the LEGACY licence by construction.
     const g = makeupGainForLoudness({ loudRms: 0.03, peak: 0.9 })
-    expect(g * 0.9).toBeLessThanOrEqual(NORMALIZE_PEAK_OVERDRIVE * 0.95 + 1e-9)
+    expect(g * 0.9).toBeLessThanOrEqual(NORMALIZE_PEAK_OVERDRIVE_RAW * 0.95 + 1e-9)
     // Whatever the bound is, it must stay inside the limiter's working range —
     // that is the invariant whose violation was audible as crackle.
     expect(NORMALIZE_PEAK_OVERDRIVE * 0.95).toBeLessThan(LIMIT_USABLE_MAX)
+    expect(NORMALIZE_PEAK_OVERDRIVE_RAW * 0.95).toBeLessThan(LIMIT_USABLE_MAX)
+  })
+
+  it('ONE TRANSIENT NO LONGER OWNS THE TAKE — the defect the overdrive raise was papering over', () => {
+    // PO's 2026-08-23 take, back-solved: p90 window RMS 0.0868, one sharp
+    // transient at peak 1.18, but the take's SUSTAINED ceiling (p99 of window
+    // peaks) only 0.42. Bounding on the raw peak capped the gain and left the
+    // take 1.4 dB under target — which is why the licence was doubled instead.
+    const stray = { loudRms: 0.0868, peak: 1.18, peakRobust: 0.42 }
+    const g = makeupGainForLoudness(stray)
+    // The target is reached: the stray sample does not hold the take quiet.
+    expect(g * stray.loudRms).toBeGreaterThan(0.124)
+    // …and it is reached WITHOUT the extra crushing that bought it before.
+    // At overdrive 4 on the raw peak this take was licensed to 3.8; the
+    // sustained programme now lands barely over the knee instead.
+    expect(g * stray.peakRobust).toBeLessThanOrEqual(NORMALIZE_PEAK_OVERDRIVE * 0.95 + 1e-9)
+    expect(g * stray.peakRobust).toBeLessThan(2.0)
+  })
+
+  it('a take recorded before the statistic existed keeps the behaviour it was made under', () => {
+    // No peakRobust ⇒ fall back to peak. Same inputs, same answer as always.
+    const old = makeupGainForLoudness({ loudRms: 0.03, peak: 0.9 })
+    expect(old * 0.9).toBeLessThanOrEqual(NORMALIZE_PEAK_OVERDRIVE_RAW * 0.95 + 1e-9)
+    // …and identically to what it returned before the statistic was added.
+    expect(old).toBeCloseTo(Math.min(8, 0.125 / 0.03, (NORMALIZE_PEAK_OVERDRIVE_RAW * 0.95) / 0.9), 9)
+  })
+
+  it('the robust ceiling still binds when the programme itself is loud', () => {
+    // Sustained loud music: p99 window peak is genuinely high, so the bound
+    // must still hold. Robustness must not become "ignore the ceiling".
+    const loud = { loudRms: 0.03, peak: 0.95, peakRobust: 0.9 }
+    expect(makeupGainForLoudness(loud) * loud.peakRobust).toBeLessThanOrEqual(
+      NORMALIZE_PEAK_OVERDRIVE * 0.95 + 1e-9,
+    )
   })
 
   it('boost is capped for heavily-AGCd-but-real signals', () => {
@@ -175,6 +215,7 @@ describe('compose audio resampling', () => {
 describe('limiter stays distinguishable across everything the gain bound permits', () => {
   it('the permitted peak sits inside the curve’s working range', () => {
     expect(NORMALIZE_PEAK_OVERDRIVE * 0.95).toBeLessThan(LIMIT_USABLE_MAX)
+    expect(NORMALIZE_PEAK_OVERDRIVE_RAW * 0.95).toBeLessThan(LIMIT_USABLE_MAX)
   })
 
   it('the top of the permitted range is not flat', () => {

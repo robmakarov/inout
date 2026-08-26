@@ -104,6 +104,13 @@ export interface CaptureLoudness {
   channelIds: string[]
   /** Max |sample| of the unity sum. */
   peak: number
+  /**
+   * p99 of per-window peaks of the unity sum — the take's SUSTAINED ceiling,
+   * which is what bounds the makeup gain (one transient must not define a
+   * whole take's headroom). Optional: takes recorded before this statistic
+   * existed fall back to `peak`, i.e. to the behaviour they were made under.
+   */
+  peakRobust?: number
   /** p90 of 100 ms window RMS of the unity sum. */
   loudRms: number
   /** p20 of 100 ms window RMS of the unity sum. */

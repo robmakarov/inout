@@ -26,6 +26,10 @@ const WINDOW_SEC = 0.1
 export interface AccumulatedLoudness {
   channelIds: string[]
   peak: number
+  /** p99 of per-window peaks — the take's SUSTAINED ceiling. The makeup gain
+   *  bounds on this rather than `peak`, so one transient cannot define a whole
+   *  take's headroom (compose/audio.ts NORMALIZE_PEAK_OVERDRIVE). */
+  peakRobust: number
   loudRms: number
   floorRms: number
   frames: number
@@ -53,8 +57,10 @@ export class MixLoudnessAccumulator {
   private gridReady = false
   private peak = 0
   private winSumSq = 0
+  private winPeak = 0
   private winCount = 0
   private readonly windowRms: number[] = []
+  private readonly windowPeak: number[] = []
   private folded = 0
   private degraded = false
   private finished = false
@@ -144,11 +150,14 @@ export class MixLoudnessAccumulator {
       const b = r < 0 ? -r : r
       const s = a > b ? a : b
       if (s > this.peak) this.peak = s
+      if (s > this.winPeak) this.winPeak = s
       const mid = 0.5 * (l + r)
       this.winSumSq += mid * mid
       if (++this.winCount === this.windowFrames) {
         this.windowRms.push(Math.sqrt(this.winSumSq / this.winCount))
+        this.windowPeak.push(this.winPeak)
         this.winSumSq = 0
+        this.winPeak = 0
         this.winCount = 0
       }
       this.sumL[idx] = 0
@@ -165,10 +174,15 @@ export class MixLoudnessAccumulator {
       let max = 0
       for (const d of this.delivered.values()) if (d > max) max = d
       while (this.base < max) this.foldTo(Math.min(max, this.base + this.capacity))
-      if (this.winCount > 0) this.windowRms.push(Math.sqrt(this.winSumSq / this.winCount))
+      if (this.winCount > 0) {
+        this.windowRms.push(Math.sqrt(this.winSumSq / this.winCount))
+        this.windowPeak.push(this.winPeak)
+      }
       this.winSumSq = 0
+      this.winPeak = 0
       this.winCount = 0
       this.windowRms.sort((x, y) => x - y)
+      this.windowPeak.sort((x, y) => x - y)
       this.finished = true
     }
     const w = this.windowRms
@@ -177,6 +191,9 @@ export class MixLoudnessAccumulator {
     return {
       channelIds: this.contributed(),
       peak: this.peak,
+      peakRobust: this.windowPeak.length
+        ? this.windowPeak[Math.min(this.windowPeak.length - 1, Math.floor(0.99 * this.windowPeak.length))]!
+        : this.peak,
       loudRms: at(0.9),
       floorRms: at(0.2),
       frames: this.folded,

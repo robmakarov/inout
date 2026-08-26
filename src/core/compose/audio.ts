@@ -118,21 +118,38 @@ export const NORMALIZE_GATE_RMS = 0.0032
  * Bound on pervasive limiting: gain may push the true peak at most this far
  * past the knee (brief transients get shaped; sustained program does not).
  *
- * 2 → 4 on 2026-08-23, and the reason is measured rather than taste. On PO's
- * take this bound was the one that BOUND: the floor bound was nowhere near
- * (p20 0.0062 against a 0.01 ceiling) and the target was never reached — p90
- * landed at 0.1063, i.e. 1.4 dB short of the 0.125 target — because one sharp
- * transient set `peak` and capped the gain for the whole take. So a single
- * click both crackled AND held everything else quiet ("sound was not loud").
+ * BACK TO 2 on 2026-08-25, because the listen test the 4 was shipped without
+ * came back: PO reports the audio quality regressed over the roadmap sessions.
  *
- * 2 could not be raised while the limiter was a tanh that went numerically
- * dead at 1.152 — the extra range would have been spent flattening transients.
- * With the algebraic fold the curve stays resolved to LIMIT_USABLE_MAX ≈ 82,
- * so 4 × knee = 3.8 is deep inside its working range and a test pins that.
- * The honest cost: peaks are now squashed up to ~11.6 dB rather than ~5.6 dB,
- * which is what loudness always costs. Raise no further without a listen test.
+ * The history matters, because the 4 was not taste either. It was raised on
+ * 2026-08-23 for a real defect: on PO's take this bound BOUND, the target was
+ * missed by 1.4 dB, and the reason was that ONE SHARP TRANSIENT set `peak` and
+ * capped the gain for the whole take — a single click both crackled AND held
+ * everything else quiet. Raising the licence bought loudness back by letting
+ * the limiter crush harder, and the cost was written down honestly at the time:
+ * peaks squashed up to ~11.6 dB rather than ~5.6 dB.
+ *
+ * THAT WAS TREATING THE SYMPTOM. The defect was never the licence, it was the
+ * STATISTIC: a single sample must not be able to define a whole take's
+ * headroom. The bound now reads `peakRobust` — the p99 of per-window peaks,
+ * measured over the same 100 ms windows as the loudness — so a stray transient
+ * cannot own it and the gain reaches target WITHOUT buying the room with three
+ * extra dB of crushing. With that statistic in hand the licence goes back to
+ * where it was before the regression PO is reporting.
+ *
+ * Raise no further without a listen test. That instruction was already here.
  */
-export const NORMALIZE_PEAK_OVERDRIVE = 4
+export const NORMALIZE_PEAK_OVERDRIVE = 2
+/**
+ * The licence for takes that have NO robust ceiling — everything recorded
+ * before the statistic existed. They get the 4 they were made under, because
+ * the 4 exists precisely to survive a stray transient owning `peak`, and
+ * without `peakRobust` there is nothing else protecting them: dropping them to
+ * 2 would re-open the defect of 2026-08-23 (a take held 1.4 dB under target by
+ * one click) on the very files that cannot be re-measured. New takes carry the
+ * statistic and take the tighter, cleaner licence above.
+ */
+export const NORMALIZE_PEAK_OVERDRIVE_RAW = 4
 /** Post-gain ceiling for the take's noise floor (p20 window RMS): −40 dBFS.
  * Boosting speech must not boost room hiss into audibility — a +18 dB rescue
  * of a faint take was reported back as "still some noises". A clean floor
@@ -140,8 +157,19 @@ export const NORMALIZE_PEAK_OVERDRIVE = 4
 export const NORMALIZE_FLOOR_CEILING_RMS = 0.01
 
 export interface MixLoudness {
-  /** Max |sample| across the mix. */
+  /** Max |sample| across the mix. Certification reports this; the makeup gain
+   *  deliberately does NOT bound on it — see peakRobust. */
   peak: number
+  /**
+   * p99 of per-window peaks (the same 100 ms windows the loudness uses) — the
+   * take's SUSTAINED ceiling, as opposed to its single loudest sample. This is
+   * what bounds the makeup gain, because one transient must not be able to
+   * define a whole take's headroom (it did, and cost 1.4 dB of loudness on a
+   * real take, which was then bought back with 3 dB of extra crushing).
+   * Optional: a take recorded before this statistic existed falls back to
+   * `peak`, which is exactly the old behaviour for old takes.
+   */
+  peakRobust?: number
   /** p90 of 100 ms window RMS — the "speech level". */
   loudRms: number
   /** p20 of 100 ms window RMS — the noise floor (room tone between speech).
@@ -180,14 +208,21 @@ export function loudnessFromCaptureStats(
   if (!channelIds.every((id) => stats.channelIds.includes(id))) return null
   const m: MixLoudness = {
     peak: stats.peak * gain,
+    // Scales linearly with gain exactly as the other statistics do; absent on
+    // takes that predate it, and then the fallback in makeupGainForLoudness
+    // reproduces the old behaviour for those takes.
+    ...(stats.peakRobust !== undefined ? { peakRobust: stats.peakRobust * gain } : {}),
     loudRms: stats.loudRms * gain,
     floorRms: stats.floorRms * gain,
   }
   if (!(m.loudRms > NORMALIZE_GATE_RMS)) return m // makeup is 1 either way
+  const ceiling = m.peakRobust ?? m.peak
+  const licence =
+    m.peakRobust !== undefined ? NORMALIZE_PEAK_OVERDRIVE : NORMALIZE_PEAK_OVERDRIVE_RAW
   const nonFloor = Math.min(
     NORMALIZE_MAX_MAKEUP,
     NORMALIZE_TARGET_RMS / m.loudRms,
-    m.peak > 0 ? (NORMALIZE_PEAK_OVERDRIVE * LIMIT_KNEE) / m.peak : Infinity,
+    ceiling > 0 ? (licence * LIMIT_KNEE) / ceiling : Infinity,
   )
   // A healthy mix needs no boost, so the floor cannot change the answer.
   if (nonFloor <= 1) return m
@@ -205,7 +240,14 @@ export function loudnessFromCaptureStats(
 export function makeupGainForLoudness(m: MixLoudness): number {
   if (!(m.loudRms > NORMALIZE_GATE_RMS)) return 1
   const wanted = NORMALIZE_TARGET_RMS / m.loudRms
-  const peakBound = m.peak > 0 ? (NORMALIZE_PEAK_OVERDRIVE * LIMIT_KNEE) / m.peak : Infinity
+  // peakRobust, not peak — and the LICENCE moves with the statistic. A take
+  // that carries the robust ceiling is protected from a stray transient, so it
+  // needs only the tight licence; one that does not keeps the wide licence it
+  // was recorded under. Same answer as before for every old take.
+  const ceiling = m.peakRobust ?? m.peak
+  const licence =
+    m.peakRobust !== undefined ? NORMALIZE_PEAK_OVERDRIVE : NORMALIZE_PEAK_OVERDRIVE_RAW
+  const peakBound = ceiling > 0 ? (licence * LIMIT_KNEE) / ceiling : Infinity
   const floorBound =
     m.floorRms && m.floorRms > 0 ? NORMALIZE_FLOOR_CEILING_RMS / m.floorRms : Infinity
   return Math.max(1, Math.min(NORMALIZE_MAX_MAKEUP, wanted, peakBound, floorBound))
@@ -488,7 +530,9 @@ export async function measureMixEnvelope(
   for (const m of mixers) m.gain = gain
   let peak = 0
   const windowRms: number[] = []
+  const windowPeak: number[] = []
   let winSumSq = 0
+  let winPeak = 0
   let winCount = 0
   const chunks = Math.max(1, Math.ceil(totalAudioFrames / AUDIO_SAMPLE_RATE))
   for (let c = 0; c < chunks; c++) {
@@ -505,22 +549,34 @@ export async function measureMixEnvelope(
       const b = Math.abs(right[k])
       const s = a > b ? a : b
       if (s > peak) peak = s
+      if (s > winPeak) winPeak = s
       // Mono-fold energy for the loudness windows (mid signal).
       const mid = 0.5 * (left[k] + right[k])
       winSumSq += mid * mid
       if (++winCount === LOUDNESS_WINDOW_FRAMES) {
         windowRms.push(Math.sqrt(winSumSq / winCount))
+        windowPeak.push(winPeak)
         winSumSq = 0
+        winPeak = 0
         winCount = 0
       }
     }
     onProgress?.((c + 1) / chunks)
     await new Promise((r) => setTimeout(r, 0))
   }
-  if (winCount > 0) windowRms.push(Math.sqrt(winSumSq / winCount))
+  if (winCount > 0) {
+    windowRms.push(Math.sqrt(winSumSq / winCount))
+    windowPeak.push(winPeak)
+  }
   // Percentiles need it sorted; the caller needs it in time order. Sort a copy.
   const inOrder = Float32Array.from(windowRms)
   windowRms.sort((a, b) => a - b)
+  windowPeak.sort((a, b) => a - b)
+  // p99 of window peaks: high enough that it still tracks the take's real
+  // ceiling, robust enough that one transient window cannot define it.
+  const peakRobust = windowPeak.length
+    ? windowPeak[Math.min(windowPeak.length - 1, Math.floor(0.99 * windowPeak.length))]!
+    : peak
   const loudRms = windowRms.length
     ? windowRms[Math.min(windowRms.length - 1, Math.floor(0.9 * windowRms.length))]
     : 0
@@ -529,6 +585,7 @@ export async function measureMixEnvelope(
     : 0
   return {
     peak,
+    peakRobust,
     loudRms,
     floorRms,
     windowRms: inOrder,

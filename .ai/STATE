@@ -190,6 +190,25 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   audio it DOES deliver, and padding does not touch that.
 - audio: measured pipeline (sample-counted PCM, min-filter anchor), raw system audio, post-capture fidelity fixed
   (knee-limiter replaces tanh bus; composite dynamics bypassed for single source; stereo default on unreported channelCount)
+- THE MAKEUP GAIN BOUNDS ON A STATISTIC ONE TRANSIENT CANNOT OWN (2026-08-25, from PO: "audio quality
+  regressed from before we updated roadmap and mass execution"). NORMALIZE_PEAK_OVERDRIVE went 2 → 4
+  on 2026-08-23 and the cost was written down at the time — peaks squashed up to ~11.6 dB instead of
+  ~5.6 — with the note "raise no further without a listen test". The listen test arrived and said no.
+  The raise was treating a symptom: it existed because ONE SHARP TRANSIENT set `peak` and capped the
+  whole take's gain, so loudness was bought back by crushing harder. The bound now reads `peakRobust`
+  — p99 of per-window peaks over the same 100 ms windows the loudness uses, produced by BOTH
+  measureMixEnvelope and the capture-time accumulator — and with a statistic a stray sample cannot
+  own, the licence returns to 2. TAKES PREDATING THE STATISTIC ARE UNTOUCHED: no peakRobust means the
+  raw peak AND the old licence of 4 (NORMALIZE_PEAK_OVERDRIVE_RAW), pinned by test, so no existing
+  file changes behaviour. Proven on the 08-23 take's own numbers: it reaches target AND its sustained
+  programme lands under 2.0 instead of 3.8.
+- NO GATE HAS EVER MEASURED THE AUDIO QUALITY OF THE DEFAULT EXPORT, and that is how the above
+  shipped. analyzeAudioFidelity and analyzeAudioIntegrity each have exactly ONE call site and both
+  export through the RENDER; the instant packet-copy path — what an unedited take actually gets — has
+  its sync measured and its audio quality measured never. Same hole as note 14's sync story, fixed for
+  sync in 2026-08-24 and never checked for audio. Logged P0 in BACKLOG. Note the instant path
+  RE-ENCODES audio from the RAW channels (only video is packet-copied), so it is the mix + makeup +
+  limiter chain that ships, not the composite's own audio.
 - THE LIMITER'S FOLD IS ALGEBRAIC u/(1+u), NOT tanh (2026-08-23). tanh scaled by (1-knee)=0.05 saturates
   to full scale at an input of 1.152, while the makeup gain was licensed to reach 1.9 — so a 1.66:1 range
   of the loudest content collapsed onto ONE 16-bit code and every boosted transient came out as a bare
