@@ -948,9 +948,14 @@ with starvation signatures (spur −2.7 to −26 dB, compT0=0, skew 559). The sa
 commit BEFORE any X6 code — read FAIL/FAIL/PASS too, with healthy spur, on the same machine in the
 same hour. The machine has been running heavy rigs for hours; the flake is environmental and
 predates this change. A settled-machine oracle is owed before any flip, and is listed below.
-STILL OWED BEFORE ANY FLIP: a settled-machine oracle on both engines, `npm run oracle:load` both
-phases (HEAVY — announce it), a salvage smoke over a killed take, and PO's real-device take. None of
-them gate the code as shipped, because as shipped the default path is untouched.
+SETTLED-MACHINE RE-RUN, after the fixes: oracle PASS (sync 49.7, inst=instant/64.4,
+trim=smartcut/58.9, tail 69, spur −51.8, export 4.66x) · browser-check real Chrome PASS, zero
+failures, export 511 ms. And the FIXES THEMSELVES verified on the deployed build: screen 9108 ms /
+camera 9059 ms with offsets 849/898 against a 9957 ms take — the two add up, and the take opens as
+video instead of as a waveform.
+STILL OWED BEFORE ANY FLIP: `npm run oracle:load` both phases (HEAVY — announce it), a salvage smoke
+over a killed take, and PO's real-device take. None of them gate the code as shipped, because as
+shipped the default path is untouched.
 
 ## X9 ai-pdf-off-main-thread [light · ~100 lines: core/ai/build.ts into a worker, same O5 shape]
 The For-AI build runs on the UI thread at 0.74× a full render — seconds of jank. core/ai is already
