@@ -25,10 +25,14 @@
  *      surfaceSwitching, the explicit systemAudio flag (its spec default is
  *      'include' anyway, so nothing is lost). Audio still requested → Chrome
  *      still shows the checkbox.
- *   2  the bare request: `{ video: true, audio: true }` — nothing of ours left
+ *   2  the bare request: `{ video: true, audio: <raw> }` — nothing of ours left
  *      to drop, and the checkbox is STILL there. This is the floor. There is
  *      no rung below it and there must never be one: a wedge we cannot fix by
  *      dropping our own options is Chrome's to fix, not the user's to pay for.
+ *      `<raw>` = the AEC/NS/AGC-off flags, on EVERY rung: dropping those does
+ *      not shrink the request, it hands the user's tab audio to Chrome's voice
+ *      processing, which turns music into mono warble (heard by PO 2026-08-26
+ *      after the game wedges parked this machine on rung 2 for a day).
  *
  * Lifecycle: a wedge steps down · a rung-0 success clears the mark entirely
  * (healthy machine, nothing stays degraded) · a rung-1/2 success keeps the

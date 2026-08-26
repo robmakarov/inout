@@ -90,6 +90,24 @@ describe('the request Chrome receives, rung by rung', () => {
       expect(displayMediaOptions(silent, level).audio).toBe(false)
     }
   })
+
+  /**
+   * THE OTHER HALF OF THE SAME INVARIANT, PO 2026-08-26 ("music from tab
+   * sounds shitty"): the audio must arrive as the user's audio. Chromium
+   * defaults AEC/NS/AGC ON for display audio, and voice processing turns tab
+   * music into mono warble — so a rung that requests bare `audio: true` has
+   * dropped something the user chose just as surely as dropping the track.
+   * Until 2026-08-26 the floor did exactly that, and a machine parked on
+   * rung 2 by the game wedges recorded every tab-audio take processed.
+   */
+  it('NO rung ever hands the user’s audio to voice processing', () => {
+    for (const level of [0, 1, 2] as const) {
+      const audio = displayMediaOptions(config, level).audio as MediaTrackConstraints
+      expect(audio.echoCancellation).toBe(false)
+      expect(audio.noiseSuppression).toBe(false)
+      expect(audio.autoGainControl).toBe(false)
+    }
+  })
 })
 
 describe('when the picker hands back no audio track', () => {

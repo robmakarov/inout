@@ -451,22 +451,33 @@ const RAW_DISPLAY_AUDIO: MediaTrackConstraints = {
  * nothing: 'include' is its spec default. The capture ceiling is unaffected at
  * any rung — capDisplayTrack enforces it after delivery, which is exactly why
  * dropping the picker constraints is free.
+ *
+ * The RAW_DISPLAY_AUDIO flags ride EVERY rung, the floor included. They are
+ * not "our options" in the ladder's sense: dropping them hands the user's
+ * chosen channel to Chrome's voice processing, and AEC/NS/AGC turn tab music
+ * into mono warble — an audible change to a channel the user chose, which is
+ * exactly what safe mode is forbidden to make. (Until 2026-08-26 the floor
+ * requested bare `audio: true`; a machine parked on rung 2 by the 4K-game
+ * wedges then recorded every tab-audio take voice-processed for up to 24 h —
+ * PO heard it as "music from tab sounds shitty".) The wedge lives in the
+ * picker/video path; three boolean audio-track constraints are advisory and
+ * cannot reject or hang a request.
  */
 export function displayMediaOptions(
   config: CaptureConfig,
   level: DisplayRequestLevel,
 ): DisplayMediaOptions {
-  const wantsAudio = !!config.systemAudio
-  if (level >= 2) return { video: true, audio: wantsAudio }
+  const audio = config.systemAudio ? RAW_DISPLAY_AUDIO : false
+  if (level >= 2) return { video: true, audio }
   if (level === 1) {
     return {
       video: { displaySurface: 'monitor' } as MediaTrackConstraints,
-      audio: wantsAudio ? RAW_DISPLAY_AUDIO : false,
+      audio,
     }
   }
   return {
     video: displayVideoConstraints(),
-    audio: wantsAudio ? RAW_DISPLAY_AUDIO : false,
+    audio,
     selfBrowserSurface: 'exclude',
     surfaceSwitching: 'include',
     systemAudio: config.systemAudio ? 'include' : 'exclude',
@@ -880,6 +891,15 @@ export function acquireChannelsProgressive(
       if (config.systemAudio) {
         const audio = display.getAudioTracks()[0]
         if (audio) {
+          // PRINT WHAT THE TRACK ACTUALLY IS, every take — the request above
+          // asks for raw stereo, but Chrome is the authority on what arrived,
+          // and "tab music sounds wrong" is undiagnosable without this line.
+          // ec/ns/agc true here = voice processing mangled the music.
+          const s = audio.getSettings()
+          console.info(
+            `[capture] tab audio delivered: ec=${s.echoCancellation ?? '?'} ns=${s.noiseSuppression ?? '?'} ` +
+              `agc=${s.autoGainControl ?? '?'} ch=${s.channelCount ?? '?'} sr=${s.sampleRate ?? '?'}`,
+          )
           deliver({
             kind: 'system-audio',
             media: 'audio',

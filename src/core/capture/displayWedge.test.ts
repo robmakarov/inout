@@ -176,7 +176,7 @@ describe('the request Chrome actually receives after a wedge', () => {
     expect((seen.video as Record<string, unknown>).width).toBeUndefined()
   })
 
-  it('two wedges: the bare request — still audio, no constraints object at all', async () => {
+  it('two wedges: the bare request — still audio, still RAW, no video constraints at all', async () => {
     rememberDisplayWedge()
     rememberDisplayWedge()
     let seen: Record<string, unknown> = {}
@@ -186,7 +186,15 @@ describe('the request Chrome actually receives after a wedge', () => {
       onFailure: () => undefined,
     }).settled
     expect(seen.video).toBe(true)
-    expect(seen.audio).toBe(true)
+    // Until 2026-08-26 the floor asked for bare `audio: true`, which hands the
+    // tab audio to Chrome's default AEC/NS/AGC — a machine the game wedges
+    // parked on rung 2 recorded every tab-music take as mono warble for a day
+    // (PO: "music from tab sounds shitty"). The processing flags are part of
+    // the user's ask and ride every rung; only VIDEO constraints shrink here.
+    const audio = seen.audio as Record<string, unknown>
+    expect(audio.echoCancellation).toBe(false)
+    expect(audio.noiseSuppression).toBe(false)
+    expect(audio.autoGainControl).toBe(false)
   })
 
   it('wedge it five times: the request still carries the audio the user asked for', async () => {
