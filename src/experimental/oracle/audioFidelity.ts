@@ -229,7 +229,31 @@ export function synthesizeFidelityStereo(
   return { left, right }
 }
 
-export async function analyzeAudioFidelity(blob: Blob): Promise<AudioFidelityReport> {
+export interface FidelityAnalyzeOptions {
+  /**
+   * Where the measured window starts, seconds. The default 0.25 clears encoder
+   * delay on a take whose audio is running from t≈0 — true of the single-source
+   * fixture, and NOT true of a multi-source take, where each channel's capture
+   * begins at its own offset. A tone missing for a fraction f of the window
+   * reads (1−f) low across the board, which is an instrument artifact wearing
+   * the costume of a level defect (note 10). Multi-source callers skip past
+   * every channel's start.
+   */
+  skipSec?: number
+  /** Length of the measured window, seconds. */
+  windowSec?: number
+  /**
+   * Which tones this file is expected to carry. Defaults to all four. A RAW
+   * channel of a multi-source take carries only its own source's tones, and
+   * asking for the others reads −320 dB of digital silence as a level defect.
+   */
+  tones?: typeof FIDELITY_TONES
+}
+
+export async function analyzeAudioFidelity(
+  blob: Blob,
+  opts?: FidelityAnalyzeOptions,
+): Promise<AudioFidelityReport> {
   const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS })
   try {
     const track = await input.getPrimaryAudioTrack()
@@ -270,9 +294,16 @@ export async function analyzeAudioFidelity(blob: Blob): Promise<AudioFidelityRep
       o += leftChunks[i]!.length
     }
     // Skip leading silence / encoder delay (~100–300 ms) for level estimates.
-    const skip = Math.min(Math.floor(0.25 * sampleRate), Math.max(0, frames - sampleRate))
-    const end = Math.min(frames, skip + Math.floor(2.5 * sampleRate))
-    return analyzeStereoBuffers(left.subarray(skip, end), right.subarray(skip, end), sampleRate)
+    const skipSec = opts?.skipSec ?? 0.25
+    const windowSec = opts?.windowSec ?? 2.5
+    const skip = Math.min(Math.floor(skipSec * sampleRate), Math.max(0, frames - sampleRate))
+    const end = Math.min(frames, skip + Math.floor(windowSec * sampleRate))
+    return analyzeStereoBuffers(
+      left.subarray(skip, end),
+      right.subarray(skip, end),
+      sampleRate,
+      opts?.tones,
+    )
   } finally {
     input.dispose()
   }

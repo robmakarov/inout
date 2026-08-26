@@ -36,6 +36,27 @@ describe('audioFidelity metric', () => {
     expect(r.pass).toBe(false)
   })
 
+  // A mix bus is a flat gain, and the fidelity oracle's delivered-file lanes
+  // gate on the RESIDUAL past it (scripts/oracle-fidelity.mjs): raw tone error
+  // on a multi-source take is dominated by a documented design choice, and a
+  // gate on it would gate the design. These pin both halves of that arithmetic
+  // — what each bus reads, and that the residual past it is ~0.
+  it.each([
+    ['the composite live mix (shared 0.7)', 0.7, 3.098],
+    ['the render/instant mix at N=2 (1/N)', 0.5, 6.021],
+  ])('reads %s as a flat level shift, residual ~0', (_label, busGain, expectedDb) => {
+    const { left, right } = synthesizeFidelityStereo(SR, 2)
+    const bus = (x: Float32Array): Float32Array => x.map((s) => s * busGain)
+    const r = analyzeStereoBuffers(bus(left), bus(right), SR)
+    expect(r.maxToneErrorDb).toBeCloseTo(expectedDb, 1)
+    const residual = Math.max(
+      ...r.tones.map((t) => Math.abs(t.errorDb - 20 * Math.log10(busGain))),
+    )
+    expect(residual).toBeLessThan(0.1)
+    expect(r.separationDb).toBeGreaterThanOrEqual(40)
+    expect(r.limiterHits).toBe(0)
+  })
+
   it('detects −6dB/20:1 limiter as red (tone error + dynamics)', () => {
     const { left, right } = synthesizeFidelityStereo(SR, 2)
     // Heat the signal so the −6dB threshold engages (program near full scale).

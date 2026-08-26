@@ -82,6 +82,13 @@ export interface OracleReport {
   instantPath: ExportPath | null
   instantSyncMeanMs: number | null
   instantSyncMaxAbsMs: number | null
+  /**
+   * Audio integrity of the INSTANT file (BACKLOG P0 2026-08-25): the packet
+   * copy is the default export and its audio was never measured by anything —
+   * the same hole the sync fields above closed on 2026-08-24, one metric over.
+   * Diagnostic first — gated once its band is known.
+   */
+  audioIntegrityInstant: AudioIntegrityReport | null
   /** Why the packet copy did not run, when it did not — the diagnosis behind a
    *  red instant-path gate. */
   instantPathDeclined: { path: ExportPath; reason: string }[]
@@ -284,6 +291,7 @@ export async function runOracle(
     let instantSyncMaxAbsMs: number | null = null
     let instantPath: ExportPath | null = null
     let instantPathDeclined: { path: ExportPath; reason: string }[] = []
+    let audioIntegrityInstant: AudioIntegrityReport | null = null
     if (rig.recording.composite) {
       try {
         const instantChoice = await exportByBestPath({
@@ -298,6 +306,10 @@ export async function runOracle(
         const s = pathSync(inst)
         instantSyncMeanMs = s.meanMs
         instantSyncMaxAbsMs = s.maxAbsMs
+        // The audio-quality half of the same blind spot the sync fields fixed:
+        // the file most takes actually get, through the integrity metric that
+        // until now only ever saw the render (BACKLOG P0 2026-08-25).
+        audioIntegrityInstant = await analyzeAudioIntegrity(instantChoice.result.blob)
       } catch (err) {
         console.warn('[oracle] instant-path probe failed', err)
       }
@@ -311,6 +323,7 @@ export async function runOracle(
       trimErrorMs,
       exportFullMs,
       audioIntegrity,
+      audioIntegrityInstant,
       trimmedPath: trimmedChoice.path,
       hasComposite: !!rig.recording.composite,
     })
@@ -338,6 +351,7 @@ export async function runOracle(
       instantSyncMeanMs,
       instantSyncMaxAbsMs,
       instantPathDeclined,
+      audioIntegrityInstant,
       compositeFirstPacketSec,
       compositeDurationSec,
       compositeStartOffsetMs: rig.recording.composite?.startOffsetMs ?? null,
@@ -387,6 +401,7 @@ function buildVerdicts(args: {
   trimErrorMs: number | null
   exportFullMs: number
   audioIntegrity: AudioIntegrityReport | null
+  audioIntegrityInstant: AudioIntegrityReport | null
   trimmedPath: ExportPath
   hasComposite: boolean
 }): OracleVerdict[] {
@@ -398,6 +413,7 @@ function buildVerdicts(args: {
     trimErrorMs,
     exportFullMs,
     audioIntegrity,
+    audioIntegrityInstant,
     trimmedPath,
     hasComposite,
   } = args
@@ -460,6 +476,19 @@ function buildVerdicts(args: {
           : `${audioIntegrity.spurPeakDb.toFixed(1)} dB vs tone`,
       pass: audioIntegrity.spectrumPass,
       note: 'Task 3b gate: content outside beep freq must be ≤ −40 dB',
+    })
+  }
+  if (audioIntegrityInstant) {
+    verdicts.push({
+      metric: 'audio integrity of the INSTANT export (diagnostic)',
+      value: `max |Δ|=${audioIntegrityInstant.maxBoundaryJump.toFixed(4)}, spur ${
+        audioIntegrityInstant.spurPeakDb === null
+          ? 'n/a'
+          : `${audioIntegrityInstant.spurPeakDb.toFixed(1)} dB`
+      }`,
+      pass: null,
+      note:
+        'first audio-quality measurement of the packet-copy path (BACKLOG P0 2026-08-25) — gated once its band is known; the fidelity oracle gates the same path on tone metrics',
     })
   }
   verdicts.push({
