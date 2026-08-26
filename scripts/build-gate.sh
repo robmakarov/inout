@@ -3,14 +3,29 @@
 # the pushed commit fail typecheck on Vercel and prod silently served the
 # previous build for hours. A commit that does not build must never be pushed.
 #
-# Builds the EXACT commit in a throwaway worktree — not the shared worktree,
-# which may carry another live session's half-finished files that would pass or
-# fail a build the commit itself would not. node_modules is symlinked in, so
-# the build is the same tsc + vite Vercel runs, in ~5 s.
+# Runs, on the exact commit, in this order: `npm run build` (which IS
+# `tsc --noEmit && vite build`, so typecheck needs no separate step) then
+# `npm test`. ~7 s together. The sweep that caused aa39084 is the same
+# mechanism that pulls in a semantically broken file, so both push paths check
+# both — the auto-commit Stop hook pushes with --no-verify and calls this
+# script inline, which is the DOMINANT path in this repo.
+#
+# `npm run oracle` deliberately stays OUT (TD 2026-08-26, measured): it is a
+# TIMING gate, and two runs of one commit on this machine read sync 76.87 ms
+# and 37.3 ms against a 90 ms band. The high read was the cold first run in a
+# fresh worktree — exactly what a hook always pays — so a pre-push oracle would
+# block pushes on machine load rather than on the commit, and a gate that
+# flakes just teaches everyone --no-verify. It stays the deliberate MERGE gate
+# that .ai/TASKS already makes mandatory per task.
+#
+# Builds in a throwaway worktree — not the shared worktree, which may carry
+# another live session's half-finished files that would pass or fail a check
+# the commit itself would not. node_modules is symlinked in, so this is the
+# same tsc + vite Vercel runs.
 #
 # Usage: build-gate.sh <sha>
-# Exit 0: the commit builds; its entry-asset list is cached under
-# $GIT_DIR/inout-gate/<sha> for scripts/verify-deploy.mjs to reuse.
+# Exit 0: the commit builds and its tests pass; the entry-asset list is cached
+# under $GIT_DIR/inout-gate/<sha> for scripts/verify-deploy.mjs to reuse.
 # Non-zero: DO NOT PUSH (the failing output is printed, last 40 lines).
 set -eu
 
@@ -34,13 +49,22 @@ trap cleanup EXIT
 git -C "$repo" worktree add --quiet --detach "$tmp" "$sha"
 ln -s "$repo/node_modules" "$tmp/node_modules"
 
-echo "build-gate: building $(git -C "$repo" rev-parse --short "$sha") (tsc + vite, commit contents only)" >&2
-if ! (cd "$tmp" && npm run --silent build) >"$tmp/build.log" 2>&1; then
-  echo "build-gate: FAIL — commit $sha does not build. Last 40 lines:" >&2
-  tail -40 "$tmp/build.log" >&2
-  exit 1
-fi
+short="$(git -C "$repo" rev-parse --short "$sha")"
+
+run_step() {
+  # run_step <label> <logfile> <npm-args...>
+  label="$1"; logfile="$2"; shift 2
+  if ! (cd "$tmp" && npm "$@") >"$tmp/$logfile" 2>&1; then
+    echo "build-gate: FAIL — commit $sha does not $label. Last 40 lines:" >&2
+    tail -40 "$tmp/$logfile" >&2
+    exit 1
+  fi
+}
+
+echo "build-gate: checking $short — build (tsc + vite) then tests, commit contents only" >&2
+run_step build build.log run --silent build
+run_step "pass its tests" test.log test
 
 mkdir -p "$gitdir/inout-gate"
 grep -o '/assets/[^"]*' "$tmp/dist/index.html" | sort >"$gitdir/inout-gate/$sha"
-echo "build-gate: PASS — $sha builds clean" >&2
+echo "build-gate: PASS — $sha builds clean and its tests pass" >&2

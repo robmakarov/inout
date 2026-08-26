@@ -28,10 +28,11 @@ Message: if the session left one in .git/inout-autocommit/msg/<session_id>, that
 the commit message and the placeholder never appears. Otherwise the generated
 message names the session and the files, so a sweep is at least traceable.
 
-Push is gated: scripts/build-gate.sh builds the exact commit first, because this
-hook pushes with --no-verify (pre-push must not run another session's oracle) and
-a non-building push is how aa39084 left prod silently serving a stale build for
-hours. A gate failure blocks the push loudly and keeps the commit local.
+Push is gated: scripts/build-gate.sh builds the exact commit and runs its tests
+first, because this hook pushes with --no-verify and a non-building push is how
+aa39084 left prod silently serving a stale build for hours. This is the dominant
+push path in the repo, so it checks the same things the pre-push hook does. A
+gate failure blocks the push loudly and keeps the commit local.
 
 Env overrides: INOUT_AUTOCOMMIT_CLAIM_HOURS, INOUT_AUTOCOMMIT_BRANCH,
 INOUT_AUTOCOMMIT_NO_PUSH, INOUT_AUTOCOMMIT_NO_GATE.

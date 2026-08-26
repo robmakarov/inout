@@ -4,7 +4,11 @@
 # old typecheck+test+oracle pre-push in .git/hooks had been silently dead since
 # that override landed; this tracked dir is where the repo's hooks live now.
 #
-# Gate: every pushed commit must itself build (scripts/build-gate.sh, ~5 s).
+# Gate: every pushed commit must itself build AND pass its tests
+# (scripts/build-gate.sh, ~7 s; typecheck is inside `npm run build`).
+# `npm run oracle` is NOT here on purpose — it is a timing gate that reads
+# worst on exactly the cold run a hook pays; see build-gate.sh's header and
+# .ai/DECISIONS. Run it per task, as .ai/TASKS requires.
 # Bypass, when you must: git push --no-verify — prod will then build blind.
 set -eu
 repo="$(git rev-parse --show-toplevel)"

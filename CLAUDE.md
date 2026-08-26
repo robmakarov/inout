@@ -34,12 +34,15 @@ session in the same worktree keeps its own. **Name your own commit** before you 
 `wip: unattributed sweep …` placeholder, which is a bug to fix, not a default to live with.
 Committing by hand also works — the hook then only sweeps what you left behind.
 
-Deploy guard: every push is build-gated. `scripts/build-gate.sh` builds the exact pushed commit
-(~5 s, throwaway worktree, so other sessions' dirty files can't sway the verdict) from both
+Deploy guard: every push is gated. `scripts/build-gate.sh` builds the exact pushed commit and runs
+its tests (~7 s; typecheck is inside `npm run build`; throwaway worktree, so other sessions' dirty
+files can't sway the verdict) from both
 `.githooks/pre-push` (repo hooks live in tracked `.githooks/`, wired via local `core.hooksPath` —
 `.git/hooks` is shadowed by the global hooksPath and does not run) and the Stop hook's own
-`--no-verify` push. A commit that doesn't build stays local and says so loudly;
-`INOUT_AUTOCOMMIT_NO_GATE=1` pushes blind. To prove prod actually serves HEAD after a push:
+`--no-verify` push. A commit that fails either stays local and says so loudly;
+`INOUT_AUTOCOMMIT_NO_GATE=1` pushes blind. `npm run oracle` is deliberately NOT in the hook — it is
+a timing gate whose cold run (what a hook always pays) reads near its band; it stays the per-task
+merge gate `.ai/TASKS` already mandates. To prove prod actually serves HEAD after a push:
 `node scripts/verify-deploy.mjs` — polls the live entry-asset hashes against a local build of the
 same commit and reads Vercel's verdict off the GitHub commit-status API; exit 0 only when prod
 serves this build, loud on failure or timeout.
