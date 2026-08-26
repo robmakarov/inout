@@ -226,13 +226,14 @@ const runners: Runner[] = [
     id: 'o5',
     title: 'O5 — the export engine: worker + pipelined vs the main-thread render',
     detail:
-      'records ONE production-shaped fixture (canvas → MediaRecorder vp9 webm + an opus mic lane), applies an edit with two off-keyframe cuts, and exports it through both engines: the worker with the encode pipelined, and the same render.ts in-thread with its 8-frame yields. Reports output seconds per second of wall clock, main-thread long-task time during each, and a decode probe of both files.',
+      'records ONE production-shaped fixture (canvas → MediaRecorder vp9 webm + an opus mic lane), applies an edit with two off-keyframe cuts, and exports it through both engines: the worker with the encode pipelined, and the same render.ts in-thread with its 8-frame yields. Reports output seconds per second of wall clock, main-thread long-task time during each, and a decode probe of both files. {"camera":true} adds a SECOND video channel and runs X4’s A/B on top: decode sharded onto one worker per channel against the same render decoding in its own thread.',
     run: async (args) => {
       const { runExportEngine } = await import('../perf/exportEngine')
       return runExportEngine({
         takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined,
         content: args?.content === 'motion' ? 'motion' : undefined,
         cuts: typeof args?.cuts === 'boolean' ? args.cuts : undefined,
+        camera: typeof args?.camera === 'boolean' ? args.camera : undefined,
       })
     },
   },
@@ -398,6 +399,21 @@ const runners: Runner[] = [
         includePdf: typeof args?.includePdf === 'boolean' ? args.includePdf : undefined,
         realFile: typeof args?.realFile === 'string' ? args.realFile : undefined,
         realOnly: typeof args?.realOnly === 'boolean' ? args.realOnly : undefined,
+      })
+    },
+  },
+  {
+    id: 'x12',
+    title: 'X12 — what CAPTURE writes, and what each part of it buys',
+    detail:
+      'records a production-shaped take (screen 1080p + camera 720p + a mic channel + the live composite through the shipped engine ladder) and WEIGHS every artifact on disk against the take’s own length — the bill, in Mbps and GB/hour, next to the Mbps the delivered file actually carries. Then prices the one rung nobody has priced: the raw SCREEN channel, recorded at 8/6/4/2.5 Mbps off ONE stream at once, each RENDERED through the production exporter, compared by PSNR between those renders. Measurement only; proposes, changes nothing.',
+    run: async (args) => {
+      const { runCaptureBitrate } = await import('../perf/captureBitrate')
+      return runCaptureBitrate({
+        takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined,
+        contents: Array.isArray(args?.contents)
+          ? (args.contents as ('screen' | 'motion')[])
+          : undefined,
       })
     },
   },

@@ -34,93 +34,10 @@ import {
 import { openVideoChannel } from '@core/compose/video'
 import type { ChannelRecording, EditState, Recording } from '@core/types'
 import { screenLikeSource, motionSource, type Source } from './bitsAudit'
+import { LongTaskWatch, SchedulingDelayWatch } from './mainThreadWatch'
+import { measureDecodeSite, type DecodeSiteRow } from './decodeSite'
 
 const RAW_MIMES = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
-
-interface LongTaskEntry {
-  duration: number
-  startTime: number
-}
-
-/**
- * How late a 16 ms ticker fires while something else has the main thread.
- *
- * THE LONG-TASK GATE WAS THE WRONG INSTRUMENT AND THE FIRST RUN PROVED IT:
- * both engines reported ZERO long tasks, because the in-thread render awaits a
- * decoded sample on every single frame and an await ends the task. It never
- * blocked for 50 ms at a stretch — it just never gave the thread back for
- * long enough to matter either. Lateness is the number a user would feel: a
- * ticker asking for 60 Hz, and how much of it it does not get.
- *
- * Reported as total lateness and as the worst single stall, so a render that
- * is uniformly greedy and one that hitches are distinguishable.
- */
-class SchedulingDelayWatch {
-  private readonly late: number[] = []
-  private timer: ReturnType<typeof setInterval> | null = null
-  private last = 0
-  private readonly periodMs = 16
-
-  start(): void {
-    this.last = performance.now()
-    this.timer = setInterval(() => {
-      const now = performance.now()
-      this.late.push(Math.max(0, now - this.last - this.periodMs))
-      this.last = now
-    }, this.periodMs)
-  }
-
-  stop(): { ticks: number; totalLateMs: number; maxLateMs: number; p95LateMs: number } {
-    if (this.timer !== null) clearInterval(this.timer)
-    this.timer = null
-    const sorted = [...this.late].sort((a, b) => a - b)
-    const p95 = sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(0.95 * sorted.length))]! : 0
-    return {
-      ticks: this.late.length,
-      totalLateMs: Math.round(this.late.reduce((a, b) => a + b, 0)),
-      maxLateMs: Math.round(Math.max(0, ...this.late)),
-      p95LateMs: Math.round(p95 * 10) / 10,
-    }
-  }
-}
-
-/**
- * Main-thread blocking during a span. `longtask` is the browser's own verdict
- * on "the UI could not respond", which is the claim under test — measuring our
- * own loop timings would only ever prove that our loop believes itself fast.
- */
-class LongTaskWatch {
-  private readonly entries: LongTaskEntry[] = []
-  private observer: PerformanceObserver | null = null
-
-  start(): void {
-    try {
-      this.observer = new PerformanceObserver((list) => {
-        for (const e of list.getEntries()) {
-          this.entries.push({ duration: e.duration, startTime: e.startTime })
-        }
-      })
-      this.observer.observe({ entryTypes: ['longtask'] })
-    } catch {
-      // Not every engine ships the Long Tasks API; reported as null, never faked.
-      this.observer = null
-    }
-  }
-
-  stop(): { supported: boolean; count: number; totalMs: number; maxMs: number } {
-    this.observer?.disconnect()
-    const supported = this.observer !== null
-    this.observer = null
-    const totalMs = this.entries.reduce((a, e) => a + e.duration, 0)
-    const maxMs = this.entries.reduce((a, e) => Math.max(a, e.duration), 0)
-    return {
-      supported,
-      count: this.entries.length,
-      totalMs: Math.round(totalMs),
-      maxMs: Math.round(maxMs),
-    }
-  }
-}
 
 /** Record a canvas the way production records a raw video channel. */
 async function recordChannel(
@@ -330,6 +247,8 @@ export interface O5Report {
   content: string
   /** Decode-only cost of the same frames — the floor the render cannot beat. */
   decodeFloor: { frames: number; wallMs: number; framesPerSec: number }
+  /** X4's verdict: is the decode thread-bound, or is it competing? */
+  decodeSite: DecodeSiteRow[]
   lanes: EngineLane[]
   gates: {
     /** ≥5× realtime on the 60 s edited take (stretch 8×). */
@@ -355,7 +274,7 @@ export interface O5Report {
  * price decode very differently and a single number would hide it.
  */
 export async function runExportEngine(
-  opts: { takeSec?: number; content?: 'screen' | 'motion'; cuts?: boolean } = {},
+  opts: { takeSec?: number; content?: 'screen' | 'motion'; cuts?: boolean; camera?: boolean } = {},
 ): Promise<O5Report> {
   const takeSec = opts.takeSec ?? 60
   const content = opts.content ?? 'screen'
@@ -364,14 +283,19 @@ export async function runExportEngine(
   const takeMs = takeSec * 1000
 
   const source = content === 'motion' ? motionSource(1920, 1080) : screenLikeSource(1920, 1080)
+  // X4's question is about sharding decode ACROSS channels, so its fixture has
+  // to have more than one — and screen+camera is also the shape PO records.
+  const cameraSource = opts.camera ? motionSource(1280, 720) : null
   let recording: Recording
   try {
-    const [video, audio] = await Promise.all([
+    const [video, cam, audio] = await Promise.all([
       recordChannel(source, 'screen', takeMs, 8_000_000),
+      cameraSource ? recordChannel(cameraSource, 'camera', takeMs, 2_500_000) : Promise.resolve(null),
       recordAudioChannel(takeMs),
     ])
-    const channels = audio ? [video, audio] : [video]
+    const channels = [video, ...(cam ? [cam] : []), ...(audio ? [audio] : [])]
     if (!audio) notes.push('no opus recorder: video-only fixture, audio lane not exercised')
+    if (cam) notes.push('two VIDEO channels (screen 1080p + camera 720p) — the shape X4 tried to shard')
     recording = {
       id: newId('rec'),
       createdAt: Date.now(),
@@ -380,6 +304,7 @@ export async function runExportEngine(
     }
   } finally {
     source.stop()
+    cameraSource?.stop()
   }
 
   // The gate says EDITED: an unedited take would take the instant path in the
@@ -443,11 +368,25 @@ export async function runExportEngine(
     `decode floor: ${floor.frames} frames in ${floor.wallMs}ms (${floor.framesPerSec} fps) — the render's own decode wait should be close to this, and what is left over is everything else the export does`,
   )
 
+  // X4: the decode SITE. Kept after the decode farm was measured and deleted,
+  // so nobody re-proposes "shard the decode across threads" without first
+  // reading what a thread actually buys here.
+  const decodeSite = await measureDecodeSite(recording, edit, 30)
+  for (const row of decodeSite) {
+    notes.push(
+      `X4 decode site (${row.channelKind}): ${row.inThreadMs}ms in-thread · ${row.workerAloneMs}ms in a worker ALONE ` +
+        `(${row.siteRatio}× — the site is free) · ${row.workerDuringMs}ms in a worker WHILE the render runs ` +
+        `(${row.contentionRatio}× — the decode is competing, not thread-bound). This is why the X4 decode farm ` +
+        `was built, measured at 0.99-1.08× against a ≥2× gate, and deleted`,
+    )
+  }
+
   return {
     notes,
     takeSec,
     content,
     decodeFloor: floor,
+    decodeSite,
     lanes,
     gates: {
       throughput: {

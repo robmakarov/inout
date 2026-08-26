@@ -25,13 +25,20 @@
  * builder believed while writing it.
  */
 import { ALL_FORMATS, BlobSource, Input } from 'mediabunny'
-import { exportForAi, getLastAiExportStats, POINTER_TRAIL_ENABLED, SAMPLE_FPS } from '@core/ai'
+import {
+  exportForAi,
+  getLastAiExportStats,
+  setAiWorkerEnabled,
+  POINTER_TRAIL_ENABLED,
+  SAMPLE_FPS,
+} from '@core/ai'
 import { exportRecording } from '@core/compose'
 import { newId } from '@core/id'
 import { blobStore } from '@core/store'
 import { openVideoChannel } from '@core/compose/video'
 import { channelSourceTimeAt, clampEditState, defaultEditState } from '@core/timeline'
 import type { ChannelRecording, EditState, Recording } from '@core/types'
+import { LongTaskWatch, SchedulingDelayWatch } from './mainThreadWatch'
 import { decodeBits, FID_BLOCK, FID_BLOCK_COUNT, FID_MARGIN } from '../oracle/fiducial'
 import { recordFiducialSession, RIG_HEIGHT, RIG_WIDTH } from '../oracle/rig'
 
@@ -545,8 +552,108 @@ export interface AiExportReport {
     /** What the same take would cost an agent as frames of video, for scale. */
     videoFrameTokens: number
   }
+  /** X9: the same take built in the worker and in-thread, both orders. */
+  threads: ThreadLane[]
   gates: Record<string, { pass: boolean; detail: string }>
   pdfBase64?: string
+}
+
+/**
+ * X9 — the same take built on BOTH threads.
+ *
+ * Two questions, and the second is the whole point of the task: is the file the
+ * same (a worker must not be a second implementation), and does the UI thread
+ * keep working while it is built.
+ *
+ * THE FIRST INSTRUMENT FOR THE SECOND QUESTION WAS WRONG, and it read GREEN —
+ * note 10's shape exactly. It counted `longtask` PerformanceObserver entries,
+ * on the reasoning that a long task IS "the main thread was busy ≥50 ms". It
+ * read ZERO on both threads, which would have said the in-thread build never
+ * janked at all. It does: the build awaits a decode every sample (8/s), so its
+ * work arrives as hundreds of 5-15 ms tasks that never trip the 50 ms rule
+ * while still occupying the thread end to end. A user does not experience "one
+ * task over 50 ms", they experience a UI callback that does not get to run.
+ *
+ * So the instrument is SCHEDULING LATENESS — a 16 ms ticker on the main thread
+ * and how much of its time it does not get. The O5 rig had already learned this
+ * and written it down; X9 reached for the long-task counter anyway, which is
+ * why the instrument is now a shared file (perf/mainThreadWatch.ts) instead of
+ * a lesson living inside one rig. The long-task count is still reported next to
+ * it, unGATED, because it is free and because it is the number that lied.
+ */
+export interface ThreadLane {
+  where: 'worker' | 'in-thread'
+  order: number
+  wallMs: number
+  bytes: number
+  sha256: string
+  /** Main-thread tasks ≥50 ms observed while this build ran (diagnostic). */
+  longTasks: number
+  longTaskMs: number
+  /** Heartbeat ticks the UI thread got, and how much wall clock it lost. */
+  ticks: number
+  blockedMs: number
+  worstGapMs: number
+  /** Share of the build's wall clock in which the UI thread was unavailable. */
+  blockedPct: number
+  pages: number
+}
+
+async function sha256(blob: Blob): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer())
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+async function buildOnThread(
+  where: 'worker' | 'in-thread',
+  order: number,
+  recording: Recording,
+  edit: EditState,
+): Promise<ThreadLane> {
+  const longWatch = new LongTaskWatch()
+  const delayWatch = new SchedulingDelayWatch()
+  setAiWorkerEnabled(where === 'worker')
+  // A settle tick first, so a stall from the PREVIOUS lane cannot be
+  // attributed to this one — note 10, the rig is wrong before the product is.
+  await new Promise((r) => setTimeout(r, 250))
+  longWatch.start()
+  delayWatch.start()
+  try {
+    const t0 = performance.now()
+    const result = await exportForAi({ recording, edit })
+    const wallMs = performance.now() - t0
+    const pulse = delayWatch.stop()
+    const tasks = longWatch.stop()
+    const stats = getLastAiExportStats()
+    return {
+      where,
+      order,
+      wallMs: Math.round(wallMs),
+      bytes: result.blob.size,
+      sha256: await sha256(result.blob),
+      longTasks: tasks.count,
+      longTaskMs: tasks.totalMs,
+      ticks: pulse.ticks,
+      blockedMs: pulse.totalLateMs,
+      worstGapMs: pulse.maxLateMs,
+      blockedPct: Math.round((pulse.totalLateMs / Math.max(1, wallMs)) * 1000) / 10,
+      pages: stats?.pages ?? 0,
+    }
+  } finally {
+    delayWatch.stop()
+    longWatch.stop()
+    setAiWorkerEnabled(true)
+  }
+}
+
+/** Both threads, in BOTH orders — note 10(a): the first lane pays the cold start. */
+async function measureThreads(recording: Recording, edit: EditState): Promise<ThreadLane[]> {
+  const lanes: ThreadLane[] = []
+  lanes.push(await buildOnThread('worker', 1, recording, edit))
+  lanes.push(await buildOnThread('in-thread', 2, recording, edit))
+  lanes.push(await buildOnThread('in-thread', 3, recording, edit))
+  lanes.push(await buildOnThread('worker', 4, recording, edit))
+  return lanes
 }
 
 function base64(bytes: Uint8Array): string {
@@ -608,6 +715,7 @@ export async function runAiExport(
         aiTokens: real.approxTokens,
         videoFrameTokens: Math.round(((real.durationMs / 1000) * 30 * (1024 * 576)) / 750),
       },
+      threads: [],
       gates: {},
     }
   }
@@ -671,6 +779,7 @@ export async function runAiExport(
     videoFrameTokens: 0,
   }
   let pdfBase64: string | undefined
+  let threads: ThreadLane[] = []
 
   try {
     // Warm the decoder before timing anything: note 10, the first lane of any
@@ -778,6 +887,11 @@ export async function runAiExport(
       // 1024×576, which is what "give the agent the video" would cost.
       videoFrameTokens: Math.round(((fiducialMs / 1000) * 30 * (1024 * 576)) / 750),
     }
+
+    // X9: where the build runs. Last, so it cannot perturb the clock and edit
+    // lanes above, and after four builds of this take have already warmed the
+    // decoder.
+    threads = await measureThreads(rig.recording, cutEdit)
   } finally {
     await rig.cleanup().catch(() => undefined)
   }
@@ -866,6 +980,44 @@ export async function runAiExport(
       pass: cost.ratio <= 1.5,
       detail: `${cost.aiBuildMs} ms vs ${cost.renderMs} ms = ${cost.ratio}×`,
     },
+    'X9: the worker builds the SAME file the main thread does (byte-identical)': {
+      pass: threads.length > 0 && new Set(threads.map((t) => t.sha256)).size === 1,
+      detail: threads.length
+        ? threads
+            .map((t) => `${t.order} ${t.where} ${t.bytes} B sha ${t.sha256.slice(0, 12)}`)
+            .join(' · ')
+        : 'not measured',
+    },
+    'X9: the For-AI build leaves the UI thread running': {
+      // The claim is a RATIO against the same build in-thread, not an absolute:
+      // this rig's own scaffolding runs on the main thread too, so an absolute
+      // floor would gate the rig rather than the build.
+      //
+      // THE VACUITY GUARD IS RELATIVE FOR THE SAME REASON. The first version
+      // demanded the in-thread lane lose >100 ms of wall clock before the gate
+      // would count, and read FAIL on a run where the effect was clean and
+      // fivefold (78 ms lost in-thread vs 15 in the worker) purely because this
+      // fixture's build is one second long. The quantity that does not depend on
+      // the fixture is the SHARE of the build's own wall clock the UI did not
+      // have: ≥3 % in-thread means the lane is a real load to compare against,
+      // and the worker must cost at most a quarter of it.
+      pass: (() => {
+        const w = threads.filter((t) => t.where === 'worker')
+        const m = threads.filter((t) => t.where === 'in-thread')
+        if (!w.length || !m.length) return false
+        const wMs = w.reduce((a, t) => a + t.blockedMs, 0) / w.length
+        const mMs = m.reduce((a, t) => a + t.blockedMs, 0) / m.length
+        const mPct = m.reduce((a, t) => a + t.blockedPct, 0) / m.length
+        return mPct >= 3 && wMs <= mMs * 0.25
+      })(),
+      detail: threads
+        .map(
+          (t) =>
+            `${t.order} ${t.where}: UI lost ${t.blockedMs} ms of ${t.wallMs} (${t.blockedPct}%), ` +
+            `${t.ticks} ticks, worst gap ${t.worstGapMs} ms, ${t.longTasks} long tasks`,
+        )
+        .join(' · '),
+    },
   }
 
   notes.push(
@@ -876,5 +1028,23 @@ export async function runAiExport(
   )
   notes.push(`rig fiducial take is ${RIG_WIDTH}x${RIG_HEIGHT}, composed to 1920x1080 by production layout`)
 
-  return { notes, scenarios, real, trail, clock, edit, cost, gates, pdfBase64 }
+  if (threads.length) {
+    const w = threads.filter((t) => t.where === 'worker')
+    const m = threads.filter((t) => t.where === 'in-thread')
+    const mean = (xs: ThreadLane[], f: (t: ThreadLane) => number): number =>
+      Math.round(xs.reduce((a, t) => a + f(t), 0) / xs.length)
+    notes.push(
+      `X9 where the build runs: the UI thread lost ${mean(m, (t) => t.blockedMs)} ms in-thread vs ` +
+        `${mean(w, (t) => t.blockedMs)} ms in the worker (worst single gap ${Math.max(...m.map((t) => t.worstGapMs))} vs ` +
+        `${Math.max(...w.map((t) => t.worstGapMs))} ms); wall ${mean(m, (t) => t.wallMs)} vs ${mean(w, (t) => t.wallMs)} ms — ` +
+        `the worker is not FASTER, it is elsewhere`,
+    )
+    notes.push(
+      `X9 the long-task counter read ${m.reduce((a, t) => a + t.longTasks, 0)} in-thread and ` +
+        `${w.reduce((a, t) => a + t.longTasks, 0)} in the worker: the build awaits a decode every sample, so its ` +
+        `work never forms a single ≥50 ms task even while it occupies the thread end to end. Kept as a diagnostic, not a gate`,
+    )
+  }
+
+  return { notes, scenarios, real, trail, clock, edit, cost, threads, gates, pdfBase64 }
 }

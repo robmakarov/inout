@@ -1,11 +1,12 @@
 export {
-  exportForAi,
+  buildForAi,
   getLastAiExportStats,
   POINTER_TRAIL_ENABLED,
   SAMPLE_FPS,
   type AiExportOptions,
   type AiExportStats,
 } from './build'
+export { exportForAi, isAiWorkerEnabled, setAiWorkerEnabled } from './run'
 export { buildIndexLines, type IndexInput, type KeyframeEntry, type TrailPoint } from './indexText'
 export {
   currentPaceMs,

@@ -133,6 +133,16 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   is still owed — but it is owed on a build where the fix is actually in force, which no build before
   2026-08-26 was.
 
+- [P2] TD 2026-08-26, found while writing X9's gate: **two of this repo's evidence gates are written
+  in `longtask` counts, and a long-task count cannot fail here.** Anything in this codebase that
+  awaits per frame or per sample — the render, the For-AI build, the AI selection loop — never forms
+  a single ≥50 ms task while still owning the thread end to end, so the counter reads 0 on the
+  blocking lane and 0 on the non-blocking one. The O5 rig learned this in August, X9 relearned it in
+  August, and the shared instrument that replaces it now exists (`perf/mainThreadWatch.ts`,
+  SchedulingDelayWatch). WHAT IS LEFT: audit the remaining rigs for gates phrased as long-task counts
+  and move them onto scheduling lateness, and re-read any band whose green rests on one. Not urgent —
+  no shipped claim is known to depend on it — but every such gate is currently decoration.
+
 - [P2] TD 2026-08-26, found while wiring X2: **O1's MEMORY lane samples the wrong thread, and its
   headline gate metric is absent.** `runO1Evidence` polls heap on the MAIN thread while the export
   renders in a worker (since O5a), and `measureUserAgentSpecificMemory` is unavailable in the rig's

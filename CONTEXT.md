@@ -99,6 +99,37 @@ a single source, because INOUT deliberately leaves headroom so two loud sources 
 other. The check now allows that specific, documented amount and flags anything else, so the number
 stays PO's to change rather than something a test quietly locks in.
 
+**The "For AI" export stopped freezing the app while it builds (2026-08-26).** That file is not a
+smaller video — it is a document of the recording's own frames, and building it costs about
+three-quarters of what a full export costs. It was doing that work on the same thread that draws the
+interface, so on a long recording the app went unresponsive for seconds. It now runs out of the way,
+and the file it produces is byte-for-byte the same one: built four times, twice each way, all four
+identical down to the checksum. The build is not faster — it was never meant to be — the app simply
+keeps working while it happens. Measured on a short recording, the interface lost 13 ms instead of
+84; on a real 97-second take that difference is roughly a second of unresponsiveness against ten.
+
+**Two optimizations were tried, measured, and thrown away — which is the point of measuring
+(2026-08-26).** Both were on the roadmap as promising and both turned out to be wrong, and finding
+that out cost a session rather than a release.
+
+The first was to split the slow part of exporting — decoding your recording frame by frame — across
+several processor cores instead of one. It was built and it worked, in the sense that it produced
+exactly the same file. It made exporting 1 % faster, against a target of twice as fast. The reason is
+worth keeping: decoding on a second core is just as fast as decoding on the first when nothing else
+is happening, but the moment the export is also compressing video beside it, both slow down together
+— they are queueing for the same underlying machinery, and adding threads does not create more of it.
+The code was removed entirely; the export is exactly what it was. What stays is a one-command check
+that reproduces those numbers, so the idea does not have to be re-argued from intuition next time.
+
+The second was to lower how much data INOUT writes to disk while recording. The premise turned out to
+be wrong twice over. It does not write anywhere near what was assumed — roughly 2.3 GB an hour for a
+screen recording, not the 8 GB the roadmap implied, because the quality ceilings it sets are ceilings
+and ordinary screen content never comes close to them. And lowering the one setting that looked
+wasteful makes things *worse*: recording the screen at a third of the data rate saves a third of the
+disk and makes **the file you actually download 31 % bigger**, because a rougher recording is harder,
+not easier, to compress at export time. The recommendation is to change nothing, and that is a
+finding rather than a deferral.
+
 **The timeline shows the recording now, not a set of coloured bars (2026-08-25).** Each video track
 in the editor carries a strip of its own frames, so finding a moment is a matter of looking rather
 than scrubbing — the "Final Cut timeline feel" in the product statement, taken one step. It costs
@@ -395,6 +426,12 @@ artifact. What they proved is in the product rather than beside it — the WebCo
 live composite, the streaming benchmark BECAME the stream-to-disk export, the size probe BECAME the
 export panel's measured sizes. Nothing merges without evidence + TD sign-off; nothing waits around
 without a task, either.
+
+The same ruling now cuts the other way too, and 2026-08-26 was the first time: a piece of PRODUCTION
+code that was built, measured and found not to pay is deleted on the spot rather than left switched
+off "in case". The parallel-decode export change is gone — it worked, it produced identical files,
+and it bought 1 %. What is kept instead is the one-command measurement that reproduces the numbers,
+so the next person to have the same idea can settle it in five minutes rather than five hours.
 
 ## Risks
 

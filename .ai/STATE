@@ -40,6 +40,18 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   450 ms drawing and 28 ms on the encoder, against 962 ms to decode the same frames alone. The encoder
   was never the stall (mediabunny already queues it 4 deep). Pipelining it further was built, measured
   and deleted. `npm run exp -- o5` prints the split and the floor.
+  AND THE DECODE IS NOT THREAD-BOUND EITHER (X4, 2026-08-26). A decode farm — one worker per video
+  channel, the whole schedule of source instants sent up front, frames pushed ahead of the render
+  inside a credit window — was built, produced byte-identical files, and bought 0.99-1.08× against a
+  gate asking ≥2×. It is deleted; the render is byte-for-byte what it was. Decomposed, and each
+  piece rules out a fix: a worker decodes at 0.93-1.04× the main thread ALONE, the picture handoff
+  is 0.4 % of a render (57-117 ms of 18-26 s), and at read-ahead 32 the workers never stall on
+  credit and nothing improves. What is left is CONTENTION — the screen worker's own decode goes from
+  4.7 s alone to 17-23 s while the render encodes beside it, and the render's encode-wait rises at
+  the same time. Both sides get slower; a second JS thread did not create more of whatever they are
+  competing for. `npm run exp -- o5` prints those three numbers per channel now, so the idea is
+  refutable in one command. Reopen only after X6 changes the raw channels from software VP9 to
+  hardware AVC, which changes what the decode competes FOR.
 - exports STREAM TO DISK (O1): the muxer holds 4 MB regardless of length — a 30-min export peaks at
   39 MB live memory instead of 294 MB. ExportResult.blob is a disk-backed OPFS file.
 - NO DURATION CAP (PO 2026-08-23). MAX_RECORDING_MS is `number | null` and is null; a take runs until
@@ -87,6 +99,32 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   no worker. Gated by `node scripts/ai-pdf-check.mjs` (independent xref-walking parser + Apple
   PDFKit + a real-recording density gate). AWAITING PO: re-test the reworked file — that unfreezes
   AI2-AI7.
+- THE FOR-AI BUILD RUNS IN A WORKER (X9, 2026-08-26). It costs 0.74× a full render and it used to
+  spend that on the UI thread. core/ai was DOM-free by construction, so the move is O5a's shape
+  exactly: core/ai/run.ts picks the thread, ai.worker.ts runs it, and the in-thread fallback is the
+  SAME build.ts rather than a second implementation. Byte-identical output on four lanes
+  (worker/in-thread/in-thread/worker, same SHA-256, 661,571 B). THE WORKER IS NOT FASTER — wall 958
+  vs 1022 ms — it is elsewhere: the UI thread loses 13 ms of a build instead of 84, worst single
+  stall 2 ms instead of 10, 1.2-1.5 % of the build's wall against 8.1-8.3 %. That share scales with
+  take length, so PO's 97 s take pays it for ~10 s of build rather than ~1.
+  THE GATE THIS SHIPPED AGAINST WAS NOT THE ONE WRITTEN. "Long-task count ~0" read 0 on BOTH threads
+  and could never have failed: a build that awaits a decode every sample never forms a single ≥50 ms
+  task while still owning the thread end to end. The real instrument is scheduling lateness of a
+  16 ms ticker, and it now lives in one place both rigs import (perf/mainThreadWatch.ts) because the
+  O5 rig had already learned this and the lesson was stranded inside it.
+- WHAT CAPTURE ACTUALLY WRITES, MEASURED (X12, 2026-08-26) — and it is a third of what this project
+  believed. Not 18.5 Mbps: 5.21 Mbps / 2.35 GB per hour on screen content, 7.63 / 3.44 on motion.
+  18.5 was the sum of requested CEILINGS and nothing reaches them — raw screen spends 33.2 % of its
+  8 Mbps on screen content, THE COMPOSITE SPENDS 11.8 %, camera 60.5 %, audio 84.4 %. Write
+  amplification against the delivered file is 2.1× (screen) / 1.48× (motion).
+  AND THE RAW-SCREEN RUNG IS NOT A LEVER — it is backwards on the content this product is for.
+  Recorded at 8/6/4/2.5 Mbps off ONE stream and each rendered through the production exporter, screen
+  content reads: 2.5 Mbps saves 32.5 % of the raw channel and makes the DELIVERED FILE 31.5 % BIGGER
+  (6 Mbps: −6.8 % / +15.7 %). A lower-bitrate VP9 source is not a smaller job for the render, it is a
+  noisier one, and quantization noise is expensive to re-encode. Motion content goes the expected way
+  (−63.4 % / −23.3 %), which is exactly why a single fixed rung would be tuned for whichever content
+  the tuner had in mind. STANDING PROPOSAL: keep 8 Mbps. The decision rule is pure and tested
+  (perf/screenRung.ts) because its first version recommended the rung that made the file bigger.
 - THE RECORDING PREVIEW IS THE COMPOSITOR'S OWN OUTPUT (O4-polish, 2026-08-25), on the v2 engine: the
   capture worker blits each composited frame into a canvas the UI transfers to it, so the sources are
   decoded ONCE for the whole take instead of once for the file and once for the screen. Zero <video>

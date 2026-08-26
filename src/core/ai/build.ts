@@ -156,6 +156,16 @@ export function getLastAiExportStats(): AiExportStats | null {
   return lastStats
 }
 
+/**
+ * Publish stats measured on another thread (X9). The build runs in a worker by
+ * default, and a worker has its own module instance — without this, every gate
+ * that reads getLastAiExportStats() would read null on the thread that asked
+ * for the export. Same move compose/render.ts made at O5a.
+ */
+export function setLastAiExportStats(stats: AiExportStats | null): void {
+  lastStats = stats
+}
+
 const SINK_PREFIX = 'aixport-'
 let newestFinished: string | null = null
 
@@ -287,7 +297,13 @@ function localEndSec(edit: EditState, channelId: string, durationMs: number): nu
   return Math.min(durationMs, ce.trimEndMs) / 1000
 }
 
-export async function exportForAi(opts: AiExportOptions): Promise<ExportResult> {
+/**
+ * Build the PDF, on whatever thread called. X9 moved the CHOICE of thread into
+ * run.ts (worker by default, this same code in-thread as the fallback) — this
+ * function is deliberately unchanged by that move, so the fallback cannot drift
+ * from the fast path.
+ */
+export async function buildForAi(opts: AiExportOptions): Promise<ExportResult> {
   const { recording, edit, onProgress, signal } = opts
   const { width, height } = DEFAULT_EXPORT_SETTINGS
   const t0 = performance.now()

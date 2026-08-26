@@ -29,39 +29,36 @@ several ids, take the first and tell PO to open parallel sessions for the rest. 
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
 ── READY MAP — current truth, updated on every merge ──
-Last update 2026-08-26 (TWELFTH session, PO: "go x1 2 3"). ALL THREE LANDED, and the two most
-important things in the session were not optimizations — they were defects the optimization walked into.
-  · X1 KEEPS THE LOUDNESS ENVELOPE, and three consumers stopped decoding the audio a second time: the
-    render's EDITED export (probeDecodes 0 with it, 2 without — the render counts them itself now),
-    SMART CUT, which was not even on the task's list and is the path that most wanted it, and F5a
-    TIGHTEN (1 ms instead of 70 on a 12 s take; the probe costs ~147 ms per minute of audio). The
-    applied makeup gain agrees with the probe to 0.000 dB and F5a's proposal is byte-for-byte the same
-    cuts. Cost: 121 KB per 30 minutes.
-  · THE 2026-08-25 AUDIO FIX WAS IN FORCE NOWHERE, and X1's own rig lane found it. `peakRobust` — the
-    statistic the whole "licence returns to 2" fix rests on — was computed in both places and DROPPED
-    on the way to both consumers: session.ts never copied it onto the Recording, and
-    measureMixLoudness returned three of its four fields. So every export was still running the wide
-    licence on the raw peak, i.e. still doing exactly what PO reported as regressed. Two one-line
-    fixes, one new test. PO'S LISTEN TEST IS STILL OWED — and is now owed on a build where the fix runs.
-  · X2 OWNS ITS OPFS HANDLE INLINE in the export worker: no 4 MB copy, no transfer, no second worker
-    per export. "Byte-identical A/B export" turned out not to be a test this codebase can run (two
-    exports of one take through ONE writer differ in hash, same length — the encoder is not
-    bit-reproducible), so equivalence is proven on the writer itself: 13.6 MB through both, back-patch
-    included, SAME SHA-256, 100 ms vs 105.
-  · AND THE O1 RIG HAD BEEN COMPARING A THING WITH ITSELF SINCE O5a: it flips the scratch lever on the
-    main thread, which stopped rendering when the export moved into a worker. Both levers are forwarded
-    into the worker now. Note 10, one layer down.
-  · X3 DELETED 2,745 LINES of the dormant research tree plus two spent perf rigs, with two corrections
-    to its own spec: `shared/` is a live dependency of the oracle and recovery rigs (restored), and
-    `sizeProbe` had already MERGED into src/core/compose (nothing to delete — the ruling working).
-NOT STARTED, each still a session: O3b · O5e · O6 · O8b · O9 · O10 · F6 · X4 · X5 · X6 · X9 · X12 ·
+Last update 2026-08-26 (THIRTEENTH session, PO: "go roadmap all in one"). THREE TASKS CLOSED AND
+TWO OF THEM CLOSED BY BEING REFUTED — which is the point of running them rather than reasoning.
+  · X9 SHIPPED. The For-AI build runs in a worker; byte-identical PDF on four lanes (same SHA-256),
+    and the UI thread now loses 15 ms of a build instead of 78 (1.3-1.8 % of its wall against
+    7.6-8.3 %). The worker is NOT faster — it is elsewhere. The gate as written ("long-task count
+    ~0") could not fail and therefore could not pass: it read 0 on BOTH threads, because a build
+    that awaits a decode every sample never forms a 50 ms task while still owning the thread. The
+    O5 rig had learned this in August and written it down; this session reached for the same wrong
+    counter anyway, so the instrument is a shared file now (perf/mainThreadWatch.ts).
+  · X4 REFUTED AND DELETED. The decode farm — one worker per channel, whole schedule up front,
+    read-ahead credit window — was built, produced byte-identical files, and bought 0.99-1.08×
+    against a gate asking ≥2×. Decomposed: a worker decodes at 0.93-1.04× the main thread ALONE,
+    the picture handoff is 0.4 % of a render, and at read-ahead 32 the workers never stall on
+    credit and nothing improves. What is left is contention — the screen worker's decode goes
+    4668 ms → 17-23 s the moment the render encodes beside it, and the render's encode-wait rises
+    too. The export's floor is decode, and decode is not thread-bound. Step 2 (GOP sharding) dies
+    with it: more decoders against the same constraint. Production code reverted byte-for-byte;
+    `npm run exp -- o5` prints the three numbers so nobody re-proposes it from a hunch.
+  · X12 REFUTED ITS OWN PREMISE. Capture does not write 18.5 Mbps — it writes 5.21 (screen) and
+    7.63 (motion); 18.5 was the sum of ceilings nothing reaches (the composite spends 11.8 % of
+    its own). And the rung it was written to price is BACKWARDS on the content PO records: dropping
+    the raw screen channel 8 → 2.5 Mbps saves 32.5 % of disk and makes the DELIVERED FILE 31.5 %
+    BIGGER, because a noisier source is more expensive to re-encode. Proposal: keep 8 Mbps.
+NOT DONE THIS SESSION, and PO asked for all of it: X5 · X6 · O6 · O9 · O8b · O3b · F6 · F8's 60 fps
+trace · O4-polish's two items. Each is a session; see COST BANDS below.
+PO'S AUDIO LISTEN TEST IS STILL OWED (X1, twelfth session) — `peakRobust` was computed and dropped
+on the way to both consumers, so the 2026-08-25 makeup fix was in force nowhere until it was found.
+It runs now; the test is owed on a build where it does.
+NOT STARTED, each still a session: O3b · O5e · O6 · O8b · O9 · O10 · F6 · X5 · X6 ·
 F8's 60 fps trace. O4-polish is down to two items (e2e wedge case, 4K row).
-FULL SWEEP AFTER THE MERGE: 410 tests (438 minus the 28 that belonged to deleted pure modules) ·
-typecheck clean · oracle PASS on v2 (sync 52.5, inst=instant/70.5, trim=smartcut/75.8, tail 84 ms,
-spur −47.6, export 4.93x) AND on v1 (sync 47.3/67.3, inst=instant/39.4, trim=render/51.3, tail 78,
-spur −52.6, export 5.11x) · fidelity PASS (toneErr 0.05 dB, THD −68.8, IMD −60.4, separation 62.2,
-0 limiter hits) · browser-check real Chrome 151 8/8 with 0 console errors, export 510 ms · first paint
-242,222 B against 241,803 before (+419 B, blobStore's third writer rung; gate is 300 KB).
 MERGED BEFORE THIS SESSION, one line each because the detail lives under each task: O1 · O2 · O3a ·
 O4 (step1, b, step2, the worker exoneration, the cold-start verdict, DEFAULT FLIPPED TO v2) ·
 O4-polish's preview-from-the-compositor · O5 · O5-flip (smart cut ON) · O7 · O8 (partial) ·
@@ -69,10 +66,10 @@ O11 a/b/c · GATE-alias · P0 mic-hang · P0-tail · P0-tail-raw · P0-instant-s
 P2 · P3 · F1 · F2 · F2b · F3 · F4 · F5a · F5b · F7 · F7b · F7c (attempt 5) · F7d · F8's premise
 refuted + its filmstrip, waveforms and paused deadband · AI1.
 START HERE IF YOU ARE FRESH:
-  1. read notes 5, 6, 9, 10, 11 below — they are the ones that will bite you today, and note 10 now has
-     a FIFTH instance and it is the nastiest kind: a rig that flipped a lever on a thread that had
-     stopped doing the work, and therefore reported a green comparison of a path against itself;
-  2. `npm run typecheck && npm test` (410 tests) and `npm run oracle` should be green before you
+  1. read notes 5, 6, 9, 10, 11, 17 below — they are the ones that will bite you today. Note 10 now
+     has SEVEN instances and note 17 is new and is the one this session paid twice: A GATE THAT
+     CANNOT FAIL IS NOT A GATE, and both times the wrong instrument read GREEN;
+  2. `npm run typecheck && npm test` (419 tests) and `npm run oracle` should be green before you
      change anything, so a red gate later is yours and not inherited;
   3. take one task from READY NOW. There is no LIVE DEFECT on the map; the DEFAULT capture engine is
      now v2 (worker + WebCodecs) — anything touching capture/* keeps BOTH engines green.
@@ -91,7 +88,7 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
    handoff under P0-instant-sync below. Smart cut is ON by default; `?smartcut=0` reverts.)
   ── X-SERIES (TD optimization-frontier audit 2026-08-25, PO-ordered onto the map; full specs in
      the PHASE X block below. Sorted by value-per-cost. X4 and X5 both touch render.ts — X5 after
-     X4.) ──
+     X4 — X4 is now DELETED, so X5 is unblocked and is the top of the X series.) ──
   (X1 keep-loudness-envelope DONE 2026-08-26 — see the handoff. Three consumers off the decode, and
    two live `peakRobust` defects found and fixed on the way. PO's audio listen test is still owed.)
   (X2 scratch-writes-inline DONE 2026-08-26 — the export worker owns its OPFS handle. See the handoff
@@ -99,12 +96,19 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
    O1-rig lever bug it uncovered.)
   (X3 experiments-merge-or-delete DONE 2026-08-26 — 2,745 lines gone; `shared/` kept because two live
    rigs import it, `sizeProbe` had already merged into src/core/compose.)
-  X4   parallel-decode-workers     [medium]  the render's floor is single-thread decode (1295 ms of
-                                             a ~1900 ms render, note 13). GOPs are independent at
-                                             our own 5 s cadence → one decoder worker per channel,
-                                             then per GOP range. Note 13 killed single-thread
-                                             prefetch; it says nothing about N threads.
-  X5   gpu-export-compositor       [medium-heavy] the render still composites through a 2D canvas —
+  (X4 parallel-decode-workers BUILT, MEASURED AND DELETED 2026-08-26 — 0.99-1.08× against a ≥2×
+   gate. A worker decodes at 0.93-1.04× the main thread ALONE and 3.7-5× slower while the render
+   encodes beside it; the handoff is 0.4 %; a read-ahead window deep enough to never stall changes
+   nothing. Decode is not thread-bound. STEP 2 DIES WITH IT. See the handoff, and run
+   `npm run exp -- o5` before re-proposing it.)
+  (X9 ai-pdf-off-main-thread SHIPPED 2026-08-26 — the For-AI build runs in a worker, byte-identical
+   PDF on four lanes, UI thread loses 15 ms instead of 78. See the handoff for the gate that could
+   not fail.)
+  (X12 capture-bitrate-pricing DONE 2026-08-26 — capture writes 5.21/7.63 Mbps, not 18.5, and the
+   raw-screen rung is BACKWARDS on screen content: −32.5 % disk for a +31.5 % bigger delivered file.
+   Proposal: keep 8 Mbps. See the handoff.)
+  X5   gpu-export-compositor       [medium-heavy] TOP OF THE X SERIES NOW. The render still
+                                             composites through a 2D canvas —
                                              the exact readback capture measured at ~150 ms/frame
                                              and fixed with compositorGL (0.86 ms). Port the render
                                              draw onto the GL painter; also collapses the
@@ -114,13 +118,6 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
                                              blocker (Chrome won't stream MP4) is solved by v2's own
                                              fMP4+SyncAccessHandle pattern; ee/webcodecs-capture-2
                                              is half of it, behind main — rebase first.
-  X9   ai-pdf-off-main-thread      [light]   the For-AI build runs on the UI thread at 0.74× a full
-                                             render — janks the app for seconds. Same move the
-                                             render made in O5 (worker).
-  X12  capture-bitrate-pricing     [light]   measurement only: ~2.3 GB/hour written during capture
-                                             to ship an 8 Mbps file; O11a's packet audit prices the
-                                             raw/composite split. Output = numbers + proposal, no
-                                             behaviour change.
   O6   native-res-capture          [medium]  UNBLOCKED — and the 4K lever is named: the worker's GL
                                              texture upload of a 4K frame (~35.6 ms), WebGPU
                                              importExternalTexture is the remedy to probe.
@@ -385,6 +382,27 @@ BOTH the composite and the raw channels.
    as the net. Every fidelity report now prints `win=<start>s/onset=<found>s`: a level number is
    only as good as its window, so the window is evidence, not an implementation detail.
 
+17. A GATE THAT CANNOT FAIL IS NOT A GATE, AND BOTH KINDS OF IT READ GREEN (2026-08-26, paid twice
+   in one session). Note 10 is about the rig being wrong; this is its quieter sibling — the rig is
+   fine and the QUESTION is unanswerable as posed.
+     (a) THE WRONG QUANTITY. X9's gate was "long-task count during a For-AI export ~0". It read 0
+         in the worker AND 0 in-thread, so it would have passed before the task was done. The build
+         awaits a decode every sample, and an await ends the task, so its work arrives as hundreds
+         of 5-15 ms tasks that never trip the 50 ms rule while owning the thread end to end. THE O5
+         RIG HAD ALREADY HIT THIS IN AUGUST AND WRITTEN THE LESSON INSIDE ITSELF, where the next rig
+         did not read it. The instrument is a shared file now — `perf/mainThreadWatch.ts`,
+         SchedulingDelayWatch (how late a 16 ms ticker runs = what a user feels) with LongTaskWatch
+         kept beside it as a diagnostic that is never a gate.
+     (b) THE WRONG THRESHOLD. The replacement gate then demanded the in-thread lane lose >100 ms of
+         ABSOLUTE wall clock before the comparison counted, and read FAIL on a run showing a clean
+         fivefold effect — because this fixture's build is one second long. A threshold that
+         encodes the fixture is a gate on the fixture. It is a SHARE now (≥3 % of the build's own
+         wall), which is the quantity that survives a change of take length.
+   BEFORE WRITING A BAND, ASK WHAT NUMBER WOULD FAIL IT — and if the failing case is one this
+   codebase cannot produce, the band is decoration. X12 paid the same tax in its proposal RULE: the
+   first version asked only "is it still the same picture?" and duly recommended a bitrate that made
+   the delivered file 31.5 % bigger. It is a pure tested function now (perf/screenRung.ts).
+
 12. THE UI RIG SERVES dist/, AND DOES NOT BUILD IT. `scripts/ui-shot.mjs` runs `vite preview`, so a
    flow that "does not work" may simply be yesterday's bundle. Run `npm run build` first. The same
    file is also where a synthetic drag goes wrong: `startDrag` listens on the ELEMENT and leans on
@@ -396,7 +414,10 @@ BOTH the composite and the raw channels.
      o5        THE EXPORT ENGINE: worker vs main-thread render on one fixture, warmed and run in BOTH
                orders, with the per-stage split (decode / draw / encode-wait / finalize) and a
                decode-ONLY floor for the same frames. The floor is the number that matters — it is
-               what says whether any scheduling change can pay at all.
+               what says whether any scheduling change can pay at all. ALSO PRINTS X4'S DECODE SITE
+               per channel since 2026-08-26 — in-thread · in a worker ALONE · in a worker WHILE the
+               render runs — which is the three-number refutation of "shard the decode across
+               threads". `{"camera":true}` gives it a two-video-channel fixture.
      o5cut     SMART CUT vs the full render on a real take with a trim-only edit: wall clock, how much
                of the video was copied rather than re-encoded, and PSNR of decoded frames at matching
                output instants — plus a CONTROL comparing the shipped INSTANT path with the same
@@ -423,10 +444,16 @@ BOTH the composite and the raw channels.
      f2        timed zoom LOCATED in decoded export frames, via the PiP as a fiducial
      f3        background frame LOCATED in decoded export frames vs the pure geometry
      encprobe  is WebCodecs the wall, or is our config? main thread vs worker vs GL, per config
+     x12       X12: what CAPTURE writes and what each part of it buys. Weighs every artifact of a
+               production-shaped take ON DISK (raw screen + raw camera + mic + the live composite
+               through the shipped ladder) against the take's own length, then prices the raw-screen
+               rung by recording 8/6/4/2.5 Mbps off ONE stream and RENDERING each. Measurement only.
      aiexport  AI1: the export for AI on real takes — a wandering cursor, a blinking caret, a
                tooltip, a still minute with a motion burst — then READS THE FILE BACK (JPEGs scanned
                out of the PDF, the rig's fiducial timecode decoded off the picture) to prove each page
                shows the frame its caption claims and that no page comes from a cut span
+     aiexport  ALSO CARRIES X9's THREAD LANES: the same take built worker/in-thread/in-thread/worker,
+               compared by SHA-256 and by how much wall clock a 16 ms UI ticker lost during each
      f5a       silence tightening against a known map: recall, cuts-in-speech, join clicks — PLUS
                X1's `x1` lane, which attaches the envelope capture would have stored and runs the
                PRODUCTION analyzeSilence a second time: the two proposals must be the SAME cuts
@@ -683,6 +710,49 @@ per-frame PSNR ≥ the smart-cut bound (37.5 dB) with cut boundaries exact; expo
 realtime on a 60 s edited take, measured both orders warmed (note 10); peak memory band unchanged;
 oracle + fidelity green; worker unavailable → today's loop untouched (frozen rule).
 
+HANDOFF X4 — BUILT, MEASURED, DELETED 2026-08-26 (THIRTEENTH SESSION). THE GATE IS NOT MET AND THE
+REASON IS MEASURED, WHICH ALSO RETIRES STEP 2.
+WHAT WAS BUILT (step 1, in full): one decoder worker per video channel, each handed the WHOLE
+schedule of source instants up front — `channelSourceTimeAt` is a pure function of the recording and
+the edit, so every instant the render will ask for is known before the loop starts — each pushing
+decoded frames ahead of the render inside a credit window, with `frame` / `repeat` / `none` messages
+reproducing VideoChannelReader's exact semantics. It WORKED: byte-identical output in all nine lanes
+of every matrix run (14,225,372 B on the 60 s two-channel fixture; 10,665,772 on the single-channel).
+IT BOUGHT 0.99-1.08×, AGAINST A GATE ASKING FOR ≥2×. Four runs, two fixtures, A/B/B/A warmed:
+  60 s screen+camera edited   farm 2.77×  ·  in-thread 2.80×   → 0.99×
+  60 s screen only            farm 5.67×  ·  in-thread 5.25×   → 1.08× (run-to-run spread on the
+                              SAME config was 9.0-12.2 s, so this is inside the noise)
+  12 s screen+camera edited   farm 3.80-4.13× · in-thread 3.87-3.92× → 1.04-1.05×
+WHY, decomposed, and each piece rules out a fix:
+  · THE SITE IS FREE. The same schedule decoded in a worker with nothing else running costs
+    0.93-1.04× what it costs in-thread (screen 4668 ms vs 4909; camera 3266 vs 3206). A worker is
+    not a slower place to decode.
+  · THE HANDOFF IS FREE. Transferring the pictures cost 57-117 ms of an 18-26 s render — 0.4 %.
+  · THE READ-AHEAD WINDOW IS NOT THE CONSTRAINT. Swept 6/16/32: at 32 the workers stall on credit
+    for 0 ms — they run their whole schedule flat out — and the render's decode WAIT does not
+    improve (1075 ms vs 1135 at depth 6). Deepening it further only holds more decoded 1080p frames.
+  · WHAT IS LEFT IS CONTENTION, AND IT IS LARGE. The screen worker's own decode goes from 4668 ms
+    alone to 17,272-23,142 ms while the render is encoding beside it — 3.7-5×. The render's
+    encode-wait rises at the same time (3641-5942 ms with the farm against 2585-3653 in-thread).
+    Both sides get slower: they are competing for something a second JS thread does not create.
+    On an 8-core M3 with three busy threads, that is not core starvation — the likeliest remaining
+    mechanism is the browser's own media pipeline (software VP9 decode and the export's encoder),
+    and either way the remedy is not more threads.
+SO STEP 2 IS RETIRED WITH STEP 1, and harder: GOP-range sharding within a channel adds MORE
+concurrent decoders against exactly the resource that is already the constraint.
+DELETED, per the X3 ruling and note 13's own precedent (the encode lookahead and the decoder
+prefetch pump were built, measured and deleted too): `compose/decodeFarm.ts` and
+`compose/decode.worker.ts` are gone and render.ts / pipeline.ts / export.worker.ts are byte-for-byte
+what they were. The shipped render is untouched — this cost the product nothing and left nothing
+behind.
+WHAT SURVIVES, so the verdict is re-runnable rather than remembered: `npm run exp -- o5` now prints
+an X4 DECODE SITE line per channel — in-thread · in a worker ALONE · in a worker WHILE the render
+runs — which is the refutation in three numbers (src/experimental/perf/decodeSite.ts +
+decodeSite.worker.ts). `{"camera":true}` gives it the two-video-channel fixture X4 needed.
+DO NOT RE-PROPOSE "shard the decode across threads" without running it and beating what it prints.
+IF ANYTHING REOPENS THIS: X6. It replaces software VP9 on the raw channels with hardware AVC, which
+changes what the decode is competing FOR. Re-run the decode-site line then, not before.
+
 ## X5 gpu-export-compositor [medium-heavy · ~600 lines: compositorGL grows background/pose/viewport,
    render.ts swaps painters · RENDER path only; UNIFIES two of the three geometry places]
 The render composites through a 2D OffscreenCanvas — the EXACT mistake capture measured (~150 ms
@@ -713,12 +783,77 @@ DOM-free by construction; move the build into a worker, stream progress like exp
 GATES: byte-identical PDF on the rig take; `node scripts/ai-pdf-check.mjs` green; long-task count
 during a For-AI export ~0 on the prod build.
 
+HANDOFF X9 — DONE 2026-08-26 (THIRTEENTH SESSION, PO: "go roadmap all in one").
+SHIPPED: `core/ai/run.ts` picks the thread and `core/ai/ai.worker.ts` runs the build, in the exact
+shape compose/pipeline.ts has used since O5a — worker is the fast path, the SAME build.ts is the
+in-thread fallback (no module workers, a worker that fails to construct, or one that dies before its
+first progress report), and the fallback is not a second implementation that could drift. The
+one-shot-fallback rule is O5a's and for O5a's reason: past the first real progress the worker has
+already written PDF bytes into its own OPFS sink, so a retry would leave two files racing for one
+result. `getLastAiExportStats()` is published across the boundary the way `setLastRenderStats` is,
+or every AI1 gate would read null on the thread that asked.
+BYTE-IDENTICAL, FOUR LANES, worker/in-thread/in-thread/worker: 706,432 B and SHA-256 ac13f1e9f0…
+on all four. Nothing in the PDF is clock-derived, so this is a real identity and not a tolerance.
+THE GATE AS WRITTEN — "long-task count ~0" — CANNOT FAIL, AND THEREFORE COULD NOT PASS. It read 0
+in-thread and 0 in the worker. The build awaits a decode on every sample (8/s), and an await ends
+the task, so its work arrives as hundreds of 5-15 ms tasks that never trip the 50 ms rule while
+occupying the thread end to end. THE O5 RIG HAD ALREADY LEARNED THIS AND WRITTEN IT DOWN, and this
+session reached for the long-task counter anyway — so the instrument is now a shared file
+(`src/experimental/perf/mainThreadWatch.ts`) that both rigs import, with the lesson in its header
+instead of inside one rig. Long tasks are still reported, unGATED, because they are free and because
+they are the number that lies.
+MEASURED ON THE REAL QUANTITY (scheduling lateness of a 16 ms ticker — what a user experiences as
+jank): the UI thread lost 78 ms in-thread against 15 ms in the worker, worst single gap 10 ms → 2 ms,
+7.6-8.3 % of the build's wall clock against 1.3-1.8 %. THE WORKER IS NOT FASTER (wall 980 vs 998 ms)
+— it is elsewhere, which is the whole point. The share scales with take length: the build is 0.74× a
+full render, so PO's 97 s take pays this for ~10 s instead of ~1.
+ONE GATE EXPRESSION WAS FIXED MID-RUN AND IT IS WORTH SAYING WHY: the vacuity guard demanded the
+in-thread lane lose >100 ms of ABSOLUTE wall clock before the comparison counted, and read FAIL on a
+run showing a clean fivefold effect purely because this fixture's build is one second long. It is a
+SHARE now (≥3 % of the build's own wall), which is the quantity that does not depend on the fixture.
+
 ## X12 capture-bitrate-pricing [light · measurement only, zero product lines]
 Capture writes ~18.5 Mbps across three artifacts (raw screen 8 + raw camera 2.5 + composite 8),
 ~2.3 GB/hour, to ship an 8 Mbps file. Both artifacts are needed GIVEN THE FEATURES (edit
 flexibility; instant copy) — but the SPLIT has never been priced. O11a's BitsAudit is the
 instrument; O11c already ran this exact play once (camera 4→2.5 Mbps, −29.3 % disk, +0.2 % file).
 OUTPUT: numbers + a proposal appended here. Any actual bitrate change is its own PO-gated task.
+
+HANDOFF X12 — DONE 2026-08-26 (THIRTEENTH SESSION). THE TASK'S OWN PREMISE IS REFUTED, AND SO IS
+THE LEVER IT WAS WRITTEN TO PRICE.
+RIG: `npm run exp -- x12` (src/experimental/perf/captureBitrate.ts). A production-shaped take —
+screen 1080p + camera 720p + a mic channel + the live composite through the SHIPPED engine ladder —
+with every artifact WEIGHED ON DISK afterwards and divided by the take's own length.
+(1) CAPTURE DOES NOT WRITE 18.5 Mbps. It writes 5.21 Mbps (2.35 GB/hour) on screen content and 7.63
+    (3.44 GB/hour) on motion. 18.5 was the sum of the requested CEILINGS, and none of them is
+    reached: raw screen uses 33.2 % of its 8 Mbps on screen content, THE COMPOSITE USES 11.8 %, the
+    camera 60.5 %, audio 84.4 %. The "2.3 GB/hour" figure in the task happens to be right for screen
+    content and is right for the wrong reason. Write amplification against the delivered file is
+    2.1× (screen) and 1.48× (motion) — not the order-of-magnitude waste the framing implied.
+    Per artifact, screen content: raw screen 2.653 Mbps · raw camera 1.512 · composite 0.941 ·
+    audio 0.108. Motion: 4.537 · 1.530 · 1.438 · 0.128.
+(2) THE RAW-SCREEN RUNG IS NOT A LEVER — IT IS BACKWARDS ON THE CONTENT PO RECORDS. Recorded at
+    8/6/4/2.5 Mbps off ONE stream and each RENDERED through the production exporter:
+      screen content   6 Mbps: channel −6.8 %, DELIVERED FILE +15.7 %, PSNR 45.5 dB
+                       4 Mbps: channel −15.1 %, FILE +25.8 %, PSNR 44.6
+                     2.5 Mbps: channel −32.5 %, FILE +31.5 %, PSNR 43.7
+      motion content   6 Mbps: channel −20.3 %, file −9.3 %, PSNR 49.1
+                     2.5 Mbps: channel −63.4 %, file −23.3 %, PSNR 48.5
+    A lower-bitrate VP9 source does not hand the render a smaller job, it hands it a NOISIER one,
+    and quantization noise is expensive to re-encode. On screen content every rung costs disk AND
+    costs the file a user downloads. PROPOSAL: keep 8 Mbps on the raw screen channel. Not "defer" —
+    the measurement says the change is negative on the content this product is for.
+(3) THE RULE THAT SAYS SO IS PURE AND TESTED (src/experimental/perf/screenRung.ts, 4 tests), because
+    THE FIRST VERSION OF IT RECOMMENDED THE 2.5 Mbps RUNG. It asked only "is the render still the
+    same picture (PSNR ≥40 dB)?" — 43.7 dB, so yes — and never looked at the file getting 31.5 %
+    bigger. A rung now has to clear three bars: same picture, the delivered file does not grow, and
+    the saving is worth touching capture for (≥10 %). The tests are the MEASURED rows, both contents.
+(4) NOT PRICED HERE, DELIBERATELY: the composite rung. It is the file the instant path copies
+    verbatim, so its bitrate IS the delivered quality of an unedited take — lowering it is an export
+    quality change, not a capture saving, and belongs to F7 and to PO. Worth noting anyway that it
+    only spends 11.8 % of its ceiling on screen content, so the ceiling is not what costs the disk.
+WHAT IS LEFT UNPRICED: the camera rung was weighed but not swept (O11c swept it already, 4 → 2.5),
+and no rung was measured at 4K or under load. Neither changes the verdict on the screen rung.
 
 (X7, X10=O5e, X13: NEEDS PO DISCUSSION — see the READY map. X11, X14: PARKED — see the READY map.)
 
