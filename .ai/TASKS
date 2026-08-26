@@ -59,6 +59,14 @@ on the way to both consumers, so the 2026-08-25 makeup fix was in force nowhere 
 It runs now; the test is owed on a build where it does.
 NOT STARTED, each still a session: O3b · O5e · O6 · O8b · O9 · O10 · F6 · X5 · X6 ·
 F8's 60 fps trace. O4-polish is down to two items (e2e wedge case, 4K row).
+FULL SWEEP AFTER THIS SESSION (dd07590): 419 tests · typecheck clean · oracle PASS on v2 (sync 52.1,
+inst=instant/61.1, trim=smartcut/60.6, tail 65 ms, spur −53.1, export 5.29x) AND on v1 (sync 47.3,
+inst=instant/45.8, trim=render/64.6, tail 75, spur −59.8, export 4.96x) · fidelity PASS on BOTH lanes
+(render residual 0.04 dB, instant residual 0.03, THD −67.7/−70.8, IMD −57.0/−61.0, 0 limiter hits) ·
+`node scripts/ai-pdf-check.mjs` ALL GATES PASS including both independent readers · browser-check
+real Chrome PASS, zero failures, 4 channels, export 516 ms · first paint 242,427 B (gate 300 KB) ·
+verify-deploy OK, and the For-AI export driven on the DEPLOYED build fetched `ai.worker-*.js`
+(3 pages, 32.1 KB, no console errors) — i.e. X9's worker path is the one production takes.
 MERGED BEFORE THIS SESSION, one line each because the detail lives under each task: O1 · O2 · O3a ·
 O4 (step1, b, step2, the worker exoneration, the cold-start verdict, DEFAULT FLIPPED TO v2) ·
 O4-polish's preview-from-the-compositor · O5 · O5-flip (smart cut ON) · O7 · O8 (partial) ·
