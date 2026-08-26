@@ -303,6 +303,16 @@ class Session implements CaptureSession {
    * back when they wanted it (PO rule: the user's choice always wins).
    */
   private readonly suspended = new Set<ChannelKind>()
+  /**
+   * F6 — tracks held live across a pause, so resume() opens segment N+1 on the
+   * SAME device instead of acquiring one. Cleared on resume and on stop.
+   */
+  /** performance.now() at the pause, so resume() can discount the gap. */
+  private pausedAtMs: number | null = null
+  private readonly pausedTracks = new Map<
+    ChannelKind,
+    { stream: MediaStream; track: MediaStreamTrack; media: MediaKind }
+  >()
   private disposeSynthetic: (() => void) | null = null
   /**
    * A refresh mid-take used to leave Chrome's microphone indicator lit with no
@@ -1065,8 +1075,139 @@ class Session implements CaptureSession {
     return live
   }
 
-  setChannelActive(kind: ChannelKind, active: boolean): void {
+  /**
+   * F6 — PAUSE. The difference from setChannelActive(kind, false) is the whole
+   * point: nothing is released. The tracks stay live, the camera light stays
+   * on, the wake lock is held, and no permission or picker is asked again on
+   * resume. What ends here is each channel's current SEGMENT.
+   *
+   * THE COMPOSITE CANNOT REPRESENT A GAP. It is ONE continuous file whose
+   * timestamps are arrival stamps, so a paused stretch would either be recorded
+   * as frozen frames or leave the rest of the take sliding against the audio.
+   * It is invalidated instead, and a paused take exports through the render —
+   * exactly the fallback a late join already takes, and for the same reason.
+   */
+  pause(): void {
     if (this.stateInternal !== 'recording') return
+    this.setState('paused')
+    this.pausedAtMs = performance.now()
+    // The composite is CANCELLED here, not merely marked: it is one continuous
+    // file and cannot represent a gap, and leaving it running would spend an
+    // encoder on the paused stretch as well. Cost stated plainly: a paused take
+    // has no source-liveness tick until it is stopped, and it exports through
+    // the render — the same fallback a late join takes.
+    this.invalidateComposite('paused')
+    for (const ch of this.channels) {
+      if (ch.ended) continue
+      this.closeSegment(ch)
+    }
+    this.writeManifest()
+    console.info(`[capture] paused +${(performance.now() - this.epoch).toFixed(0)}ms into the take`)
+  }
+
+  /**
+   * F6 — RESUME. Opens segment N+1 on the SAME tracks: no acquisition, no
+   * prompt, no picker. Every kind the user has not switched off comes back.
+   */
+  resume(): void {
+    if (this.stateInternal !== 'paused') return
+    // THE PAUSE MUST NOT APPEAR IN THE TAKE. Every startOffsetMs downstream is
+    // measured against the session epoch, so moving the epoch FORWARD by the
+    // gap is all it takes: segments already closed keep the offsets they were
+    // given, the next one lands where the last ended, and the elapsed counter
+    // stops counting time nobody recorded. The alternative — keeping one epoch
+    // and letting the gap through — would hand the user dead air to trim out of
+    // every paused take, which is not what a pause button means.
+    const now = performance.now()
+    if (this.pausedAtMs !== null) this.epoch += now - this.pausedAtMs
+    this.pausedAtMs = null
+    this.setState('recording')
+    const t0 = now
+    for (const [kind, held] of this.pausedTracks) {
+      if (this.suspended.has(kind)) continue
+      if (held.track.readyState !== 'live') {
+        // The device died while paused (unplugged, or the browser reclaimed a
+        // screen share). Say so rather than silently recording nothing.
+        this.emit({
+          type: 'channel-error',
+          kind,
+          message: `${kind} was lost while paused`,
+        })
+        continue
+      }
+      void (async () => {
+        try {
+          const rt = await this.armChannel({
+            kind,
+            media: held.media,
+            stream: held.stream,
+            track: held.track,
+          })
+          if (this.stateInternal !== 'recording' || this.cancelled) {
+            this.discardRuntime(rt)
+            return
+          }
+          this.activateChannel(rt, t0)
+        } catch (err) {
+          this.emit({ type: 'channel-error', kind, message: errMessage(err) })
+        }
+      })()
+    }
+    this.pausedTracks.clear()
+    this.writeManifest()
+    console.info(`[capture] resumed +${(t0 - this.epoch).toFixed(0)}ms into the take`)
+  }
+
+  /**
+   * End one channel's CURRENT segment and keep its device. The finished file
+   * stays in `this.channels` (that is what makes it a segment of the take); the
+   * track is remembered so resume() can open the next segment on it.
+   *
+   * Deliberately NOT onTrackEnded: that path stops the track, invalidates the
+   * composite per channel, emits 'channel-ended' to a UI that would show the
+   * channel as gone, and auto-stops the take when the last channel closes —
+   * every one of which is wrong for a pause.
+   */
+  private closeSegment(ch: ChannelRuntime): void {
+    ch.ended = true
+    this.pausedTracks.set(ch.kind, { stream: ch.stream, track: ch.track, media: ch.media })
+    if (ch.useMeasured && ch.measured) {
+      const handle = ch.measured
+      void handle
+        .stop()
+        .then((r) => {
+          ch.bytes = r.bytes
+          ch.durationMs = r.durationMs
+          ch.startOffsetMs = r.startOffsetMs
+        })
+        .catch((err) => console.error('[capture] pause: measured stop failed', ch.kind, err))
+        .finally(() => ch.resolveStopped())
+      return
+    }
+    if (ch.recorder && ch.recorder.state !== 'inactive') {
+      if (ch.startAbs !== undefined && ch.durationMs === undefined) {
+        ch.durationMs = performance.now() - ch.startAbs
+      }
+      try {
+        ch.recorder.requestData()
+      } catch {
+        /* already inactive */
+      }
+      try {
+        ch.recorder.stop()
+      } catch {
+        ch.resolveStopped()
+      }
+      return
+    }
+    ch.resolveStopped()
+  }
+
+  setChannelActive(kind: ChannelKind, active: boolean): void {
+    // Allowed while PAUSED too: turning a kind off during a pause is a natural
+    // thing to do, and `suspended` is what resume() reads to decide which
+    // segments to open.
+    if (this.stateInternal !== 'recording' && this.stateInternal !== 'paused') return
     // Record the user's intent HERE, at the chokepoint, before acting on it:
     // the persistent-connect hunt reads `suspended` and must never re-grab a
     // device whose off-switch the user just pressed.

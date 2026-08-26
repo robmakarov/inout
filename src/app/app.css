@@ -1643,3 +1643,33 @@
 .capture__install-x:hover {
   color: var(--text);
 }
+
+/* pause / resume (F6)
+   A SECONDARY control on purpose: the record button is the only thing in this
+   bar that ends a take, and a pause that looked equally weighty would invite
+   the press that loses one. Text rather than an icon because "Pause" and
+   "Resume" are the two states, and a glyph that has to mean both is a puzzle. */
+.pausebtn {
+  position: absolute;
+  right: 16px;
+  bottom: calc(46px + env(safe-area-inset-bottom));
+  padding: 8px 16px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--surface-3);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  transition:
+    transform var(--t-fast) var(--ease),
+    background var(--t-fast) var(--ease);
+}
+.pausebtn:hover {
+  transform: scale(1.04);
+}
+/* Resume is the one action a paused take is waiting for, so it stops being
+   quiet — the same rule the record button follows when it is the only move. */
+.pausebtn--resume {
+  border-color: var(--accent);
+  color: var(--accent);
+}

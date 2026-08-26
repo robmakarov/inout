@@ -98,6 +98,10 @@ export function CaptureScreen() {
    *  acquisition callback fires faster than a render and must not miss edges. */
   const waitingRef = useRef<ArmingTimelineEntry['step'][]>([])
   const [elapsedMs, setElapsedMs] = useState(0)
+  /** F6: the take is held, devices still armed. Drives the pause control and
+   *  the recording indicator; the elapsed counter simply stops advancing,
+   *  because the session stops counting time nobody is recording. */
+  const [paused, setPaused] = useState(false)
   const [remainingMs, setRemainingMs] = useState<number | null>(MAX_RECORDING_MS)
   /** Inputs turned off mid-take — by the user's chip OR by the browser's own
    *  "Stop sharing", which lands here through the same 'channel-ended' event. */
@@ -159,6 +163,7 @@ export function CaptureScreen() {
       setArming(false)
       setArmingLabel(null)
       setElapsedMs(0)
+      setPaused(false)
       setRemainingMs(MAX_RECORDING_MS)
       setOff({})
       setPending({})
@@ -211,6 +216,7 @@ export function CaptureScreen() {
           setCompositePreview(false)
           break
         case 'state':
+          setPaused(e.state === 'paused')
           break
       }
     })
@@ -468,6 +474,22 @@ export function CaptureScreen() {
           pending={pending}
           onToggle={toggleChip}
         />
+        {/* F6: only while a take is running, and never while arming — a
+            half-started take has nothing to hold. */}
+        {session && !arming && (
+          <button
+            className={`pausebtn${paused ? ' pausebtn--resume' : ''}`}
+            onClick={() => (paused ? session.resume() : session.pause())}
+            aria-label={paused ? 'Resume recording' : 'Pause recording'}
+            title={
+              paused
+                ? 'Resume — your inputs stayed connected'
+                : 'Pause — nothing is released, and the pause is left out of the recording'
+            }
+          >
+            {paused ? 'Resume' : 'Pause'}
+          </button>
+        )}
         <RecordButton
           recording={!!session}
           arming={arming}

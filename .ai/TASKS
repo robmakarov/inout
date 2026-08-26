@@ -1876,6 +1876,53 @@ GATES: pause/resume take: lane-length equality bands hold per segment · cross-s
 bands (multi-segment matrix) · tab-kill mid-segment-2 salvages segment 1 fully + segment 2 partial ·
 retake leaves prior segments intact · paused state visible + wake lock held while paused.
 
+HANDOFF F6 — PAUSE/RESUME SHIPPED 2026-08-26 (THIRTEENTH SESSION). RETAKE IS NOT DONE and is scoped
+below rather than half-built.
+THE SEGMENT MACHINERY ALREADY EXISTED and that is why this is ~200 lines and not 600: since
+2026-08-23 a kind can be SEVERAL non-overlapping ChannelRecordings, because setChannelActive(kind,
+false/true) already closed a segment and opened a new one, and everything downstream resolves by id
+and window (activeChannelsAt). What F6 adds is the one thing that path could not do: hold the take
+WITHOUT RELEASING ANYTHING.
+  · `pause()` closes every live channel's current segment and remembers its track. No track is
+    stopped, no device released, the camera light stays on, the wake lock is held, and resume asks
+    no permission and opens no picker. Deliberately NOT onTrackEnded — that path stops the track,
+    emits 'channel-ended' to a UI that would show the channel as gone, and auto-stops the take when
+    the last channel closes, every one of which is wrong for a pause.
+  · `resume()` opens segment N+1 on the SAME tracks, through the same armChannel every channel uses.
+  · THE PAUSE MUST NOT APPEAR IN THE TAKE, and the mechanism is one line: resume moves the SESSION
+    EPOCH forward by the gap. Every startOffsetMs downstream is measured against that epoch, so
+    segments already closed keep their offsets, the next one lands where the last ended, and the
+    elapsed counter stops counting time nobody recorded. The alternative — one epoch, gap left in —
+    would hand the user dead air to trim out of every paused take.
+  · THE COMPOSITE IS CANCELLED at the pause, not merely marked. It is ONE continuous file whose
+    timestamps are arrivals and it cannot represent a gap; leaving it running would also spend an
+    encoder on the paused stretch. Cost stated plainly: a paused take exports through the RENDER
+    (the same fallback a late join takes) and has no source-liveness tick while paused.
+  · UI: a secondary pause/resume control in the control bar, and CaptureState gains 'paused'.
+GATES, all through the real createCaptureSession (`npm run exp -- f6`), 5 s + 3 s pause + 5 s:
+    two segments per channel ......... screen ×2 · camera ×2 · mic ×2
+    THE SEAM ......................... screen 21 ms · camera 19 ms · mic 277 ms (band ±400)
+    the take is what was RECORDED .... 10,058 ms against 10,000 ms of segments — the wall clock was
+                                       13,000 ms, so the 3 s pause is genuinely absent
+    nothing released ................. same track object recorded BOTH segments, live throughout,
+                                       checked by IDENTITY and read BEFORE the pause (a track
+                                       stopped and re-acquired is indistinguishable afterwards)
+    paused state visible ............. recording → paused → recording → stopping → stopped
+    every segment holds bytes ........ 6 segments, all non-empty
+    a paused take exports ............ render, 4.56 MB, declining instant with "take has no composite"
+  Plus: 419 tests · oracle PASS v2 (sync 57.3, inst 65.9, smartcut 63.6, tail 85) AND v1 (50.9, 45.2,
+  render/34.9, tail 66) · armcancel green (cancel prompt, arms 411 ms, zero live tracks after stop).
+NOT DONE, and named rather than implied:
+  · RETAKE ("drop the tail segment and re-record it"). It is not a capture feature at all — it means
+    RESUMING A FINISHED recording, which touches recovery, editsRepo and the editor's own state, and
+    is a bigger job than pause/resume was. Pause/resume is the half a user reaches for first and it
+    stands alone; retake should be its own task against this segment machinery.
+  · The multi-segment ORACLE matrix (cross-segment sync in band). The seam is measured above as a
+    timeline gap, which is the property the segments must have; what is not measured is A/V sync
+    ACROSS a seam on a fiducial take. Worth doing before PO leans on pause for long takes.
+  · Tab-kill mid-segment-2 salvage. The manifest is rewritten at pause and at resume, so the
+    ingredients are there; it is untested.
+
 ## F7. quality-slider — DONE 2026-08-23, merged (evidence in DECISIONS)
 Three tiers before export (720p/1080p default/1440p) + size estimate + honest path label + persisted
 choice. Default tier provably still instant (59-66 ms vs 1219-1641 ms render). Size estimate inside

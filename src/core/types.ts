@@ -331,7 +331,13 @@ export interface CaptureConfig {
   micDeviceId?: string
 }
 
-export type CaptureState = 'armed' | 'recording' | 'stopping' | 'stopped'
+/**
+ * 'paused' is F6's addition and it is NOT a stop: the devices stay armed, the
+ * camera light stays on, and no permission is asked again on resume. What ends
+ * at a pause is each channel's current SEGMENT — its file is closed there — and
+ * a resume opens segment N+1 on the very same track with its own epoch anchor.
+ */
+export type CaptureState = 'armed' | 'recording' | 'paused' | 'stopping' | 'stopped'
 
 /**
  * What the user actually picked in the screen picker. 'monitor' means THIS
@@ -411,6 +417,21 @@ export interface CaptureSession {
    * A kind that was never armed can be turned on the same way.
    */
   setChannelActive(kind: ChannelKind, active: boolean): void
+  /**
+   * F6 — pause the take without releasing anything. Every live channel closes
+   * its current segment; the tracks, the streams and the wake lock stay. A
+   * paused take's composite is invalidated (a live composite is ONE continuous
+   * file and cannot represent a gap), so a paused take exports through the
+   * render — which is the same fallback a late join already takes.
+   * No-op unless recording.
+   */
+  pause(): void
+  /**
+   * F6 — open segment N+1 on the SAME tracks. No re-acquisition, no prompt, no
+   * picker: that is the whole difference between this and setChannelActive.
+   * No-op unless paused.
+   */
+  resume(): void
   /**
    * Ask the live compositor to paint the recording preview into this canvas
    * (O4-polish), instead of the UI decoding the same sources a second time into

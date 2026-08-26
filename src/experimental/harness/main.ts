@@ -403,6 +403,20 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'f6',
+    title: 'F6 — pause/resume: does the take survive being held, and is the pause left out?',
+    detail:
+      'records a segment, PAUSES, waits, RESUMES, records a second segment, and stops — all through the real createCaptureSession. Checks by IDENTITY that the same MediaStreamTrack recorded both segments and stayed live while paused (that is what separates a pause from a stop), that segment 2 starts where segment 1 ended (the pause must not appear in the take), that the take is as long as what was recorded rather than as long as the wall clock, and that a paused take still exports.',
+    run: async (args) => {
+      const { runPauseTake } = await import('../perf/pauseTake')
+      return runPauseTake({
+        segment1Sec: typeof args?.segment1Sec === 'number' ? args.segment1Sec : undefined,
+        pauseSec: typeof args?.pauseSec === 'number' ? args.pauseSec : undefined,
+        segment2Sec: typeof args?.segment2Sec === 'number' ? args.segment2Sec : undefined,
+      })
+    },
+  },
+  {
     id: 'o9',
     title: 'O9 — where does screen TEXT actually get damaged?',
     detail:
