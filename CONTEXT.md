@@ -83,6 +83,22 @@ reported as regressed was not actually reaching any export — the number it dep
 calculated and then quietly dropped on the way. That is fixed, and the listen test PO owes is now a
 test of a build where the fix is real.
 
+**We started checking the sound of the file people actually get (2026-08-26).** INOUT has had an
+automated listener for a while: it records a known set of tones, exports them, and complains if the
+levels, the stereo or the distortion come out wrong. It was only ever listening to one of the three
+ways INOUT can build a file — the slow, rebuild-everything one. The fast path an untouched recording
+takes, which is what most people get by default, had never been listened to at all, which is exactly
+the kind of gap that lets a sound problem ship unnoticed. It is checked now, on a recording shaped
+like a real one, and the check refuses to pass if the fast path quietly didn't run.
+
+The result is reassuring and worth writing down: the fast file and the slow file are the same to
+three decimal places, on every measure. They share the same sound-mixing code — the fast path only
+skips the video work — so there is no quality penalty for the quick export. One expected difference
+is real and by design: a recording with two sound sources comes out about 6 dB quieter than one with
+a single source, because INOUT deliberately leaves headroom so two loud sources can never clip each
+other. The check now allows that specific, documented amount and flags anything else, so the number
+stays PO's to change rather than something a test quietly locks in.
+
 **The timeline shows the recording now, not a set of coloured bars (2026-08-25).** Each video track
 in the editor carries a strip of its own frames, so finding a moment is a matter of looking rather
 than scrubbing — the "Final Cut timeline feel" in the product statement, taken one step. It costs
