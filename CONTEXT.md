@@ -47,6 +47,31 @@ Audio-only becomes visualized video. UI: iOS-Camera simplicity, Final Cut timeli
 
 Working and verified end-to-end: capture 4 channels → edit → export → share. PO records with it.
 
+**Two things were making your recordings sound wrong, and neither was the part of the app that
+handles sound (2026-08-26).**
+
+The first: **music recorded from a tab was going through Chrome's telephone processing** — echo
+cancellation, noise suppression and automatic gain, which are built for a voice call and turn music
+into pumping mono mush. INOUT switches all three off when it asks for tab audio. But when a screen
+share gets stuck, the app retries with a progressively simpler request, and the simplest version had
+been dropping those three switches along with everything else. The 4K-game freezes last week pushed
+your machine onto exactly that fallback, and it stays there for a day after the last freeze — so
+every tab-audio recording you made since then was captured through the voice processor. The rule you
+set for that fallback settles it: it may only drop things you never chose, and how your sound is
+captured is not one of them. It now keeps them at every level. A machine still stuck on the fallback
+fixes itself on the next recording; there is nothing to do.
+
+The second: **the deploy that carried last week's audio fix had failed, silently.** A leftover file
+meant the commit did not compile, so the live site quietly kept serving the version before it — the
+one where the fix was present but disconnected. Every recording you tested was made on that build,
+which is why the fix you were asked to listen for was never actually there to hear. The site now
+serves the repaired build, and a check was added so a failed deploy cannot go unnoticed again.
+
+**Both need one listen test each**: reload the app, record a normal take and a tab-music take, and
+say whether they sound right. If tab music is still wrong, the console now prints what Chrome
+actually delivered (`[capture] tab audio delivered: ec=… ns=… agc=…`), which says in one line whether
+the problem is in capture or later.
+
 **The editor stopped re-listening to audio it had already heard (2026-08-26).** While a recording is
 being made, INOUT is already measuring how loud it is, moment by moment. It used to keep three numbers
 from that and throw the rest away — so trimming a take, cutting one, or asking it to tighten the

@@ -234,6 +234,24 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   SAME SHA-256, 100 ms inline vs 105.
 - audio: measured pipeline (sample-counted PCM, min-filter anchor), raw system audio, post-capture fidelity fixed
   (knee-limiter replaces tanh bus; composite dynamics bypassed for single source; stereo default on unreported channelCount)
+- TAB AUDIO IS RAW ON EVERY RUNG OF THE WEDGE LADDER, NOT JUST A HEALTHY ONE (2026-08-26, from PO:
+  "when i record music from tab it sounds shitty"). RAW_DISPLAY_AUDIO (echoCancellation /
+  noiseSuppression / autoGainControl all false) exists because Chromium defaults voice processing ON
+  for display audio and it turns music into pumping mono warble. The safe-mode floor (displayWedge
+  rung 2) asked for bare `audio: true` and dropped exactly those flags — and rung 2 is where the
+  4K-game wedges of 08-24/25 parked the machine, where a rung-2 SUCCESS KEEPS the rung and the mark
+  outlives the last wedge by 24 h. So every tab-audio take after a wedge recorded through the voice
+  processor. THE LADDER'S OWN RULE SETTLES IT (PO 2026-08-25, "safe mode may only drop options the
+  user never chose"): the processing flags are not ours to drop — they are what makes the user's
+  chosen channel arrive as music. They ride every rung now; only video constraints and surface hints
+  shrink. Three boolean audio constraints are advisory, so the floor loses nothing a wedge cares
+  about, and a machine still parked on rung 2 records raw again on its next take with no user action.
+  Pinned both ways (no rung drops the audio · no rung hands it to voice processing); the stale test
+  that pinned bare `audio: true` at the floor WAS the defect written down as an expectation.
+  EVIDENCE LINE, every take: `[capture] tab audio delivered: ec=… ns=… agc=… ch=… sr=…` — the
+  DELIVERED track settings, so the next report about tab sound names its capture state instead of an
+  adjective. MAY be a slice of the standing "noises" reports (same takes, same rung, same processor
+  pumping on game audio) — noted, NOT claimed; PO's recheck decides. AWAITING PO LISTEN TEST.
 - THE MAKEUP GAIN BOUNDS ON A STATISTIC ONE TRANSIENT CANNOT OWN (2026-08-25, from PO: "audio quality
   regressed from before we updated roadmap and mass execution"). NORMALIZE_PEAK_OVERDRIVE went 2 → 4
   on 2026-08-23 and the cost was written down at the time — peaks squashed up to ~11.6 dB instead of
