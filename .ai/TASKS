@@ -362,16 +362,28 @@ BOTH the composite and the raw channels.
    WRONG file to look at — `npm run oracle:fidelity` prints it as a diagnostic lane precisely so
    nobody re-derives that the hard way.
 
-16. A LEVEL GATE MUST NOT MEASURE A WINDOW ITS SOURCES ARE NOT IN — the fidelity oracle read a
-   5 % attenuation as a 0.5 dB defect, twice, before the window was moved (2026-08-26; note 10's
-   sixth instance). analyzeAudioFidelity took a FIXED 0.25 s skip, which clears encoder delay on a
-   take whose audio runs from t≈0 and clears nothing on a multi-source take, where each channel's
-   capture starts at its own offset (measured 258-624 ms here) and a cold AudioContext stalls
-   115-500 ms. A tone absent for fraction f of the window reads (1−f) low across EVERY tone at
-   once, which is exactly the shape of a mix-bus regression. It also failed a GREEN build outright
-   once: 30.2 dB "tone error" and 26.7 dB "separation" on a run whose next attempt read 0.02 dB.
-   Both lanes now open their window past the last channel's capture start (`windowSkipSecFor`) and
-   the report prints `windowSkipSec`. Any new level metric in this codebase takes the same care.
+16. A LEVEL GATE MUST NOT MEASURE A WINDOW ITS SOURCES ARE NOT IN, AND METADATA CANNOT TELL IT
+   WHERE THEY ARE (2026-08-26; note 10's sixth instance, and it took THREE tries to actually fix).
+   A tone absent for fraction f of the measured window reads (1−f) low across EVERY tone at once —
+   the exact shape of a mix-bus regression, which is what makes it dangerous. The fidelity oracle
+   read phantom attenuation four different ways before the window was right: 0.5 dB twice, a
+   30.2 dB "tone error" with 26.7 dB "separation" that FAILED A GREEN BUILD, and 11.9/16.1 dB once
+   the first two fixes were in. Each fix was a smaller wrong idea than the last:
+     (a) a FIXED 0.25 s skip — clears encoder delay on a take whose audio runs from t≈0, clears
+         nothing on a multi-source take whose channels start at their own offsets (258-624 ms);
+     (b) skip past the last channel's `startOffsetMs` — better, and still blind, because a channel
+         can be RECORDING SILENCE: the generator's AudioContext stalls before it renders (rig.ts
+         says 115-500 ms; observed 2.15 s here), and no metadata anywhere records that;
+     (c) FIND THE SIGNAL — `findProgrammeOnsetSec` opens the window once every channel the fixture
+         expects is above the floor, plus a ramp. Per CHANNEL, because on a multi-source take the
+         two sources stall independently and an onset taken on the mix fires on whichever arrives
+         first (that was the 11.9/16.1 dB).
+   And then the cheaper half nobody reached for first: `waitForAudioClock` holds until the
+   generator is genuinely rendering BEFORE the take starts, so the silence is not recorded at all —
+   the same move production makes by warming its encoder at mount. Onsets went from 2.15 s to
+   0.12-0.34 s and four consecutive runs read residual 0.01-0.03 dB on both lanes. The seeker stays
+   as the net. Every fidelity report now prints `win=<start>s/onset=<found>s`: a level number is
+   only as good as its window, so the window is evidence, not an implementation detail.
 
 12. THE UI RIG SERVES dist/, AND DOES NOT BUILD IT. `scripts/ui-shot.mjs` runs `vite preview`, so a
    flow that "does not work" may simply be yesterday's bundle. Run `npm run build` first. The same

@@ -245,7 +245,7 @@ async function main() {
       const busDb = expectedBusDbFor(
         (ct.channelStartOffsetsMs ?? []).filter((c) => !/_screen$/.test(c.id)).length,
       )
-      console.error(`info window skip=${ct.windowSkipSec}s (past every channel's capture start)`)
+      console.error(`info window floor=${ct.windowSkipSec}s (past every channel's capture start; each lane opens at the later of this and its own onset)`)
       if (ct.rawChannel) {
         console.error(`info raw channel (capture only, unity): ${fmtLane(laneMetrics(ct.rawChannel.fidelity))}`)
       }

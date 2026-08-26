@@ -4,7 +4,9 @@ import {
   applyLegacyLimiter,
   applyLegacyTanhBus,
   applyMonoDownmix,
+  FIDELITY_TONES,
   findOnsetSec,
+  findProgrammeOnsetSec,
   synthesizeFidelityStereo,
 } from './audioFidelity'
 
@@ -63,18 +65,41 @@ describe('audioFidelity metric', () => {
   // stalling) reads as a flat level defect on every tone at once, which is the
   // costume a mix-bus regression wears. Twice a phantom 0.5 dB, once a 1.3 dB
   // gate failure on green code.
-  it('finds where the programme starts, and reports null on silence', () => {
-    const { left, right } = synthesizeFidelityStereo(SR, 2)
-    const padSec = 0.4
-    const pad = Math.floor(padSec * SR)
-    const delay = (x: Float32Array): Float32Array => {
-      const out = new Float32Array(pad + x.length)
-      out.set(x, pad)
+  it('finds where a channel starts, and reports null on silence', () => {
+    const { left } = synthesizeFidelityStereo(SR, 2)
+    const delay = (x: Float32Array, sec: number): Float32Array => {
+      const out = new Float32Array(Math.floor(sec * SR) + x.length)
+      out.set(x, Math.floor(sec * SR))
       return out
     }
-    expect(findOnsetSec(delay(left), delay(right), SR)).toBeCloseTo(padSec, 2)
-    expect(findOnsetSec(left, right, SR)).toBeLessThan(0.02)
-    expect(findOnsetSec(new Float32Array(SR), new Float32Array(SR), SR)).toBeNull()
+    expect(findOnsetSec(delay(left, 0.4), SR)).toBeCloseTo(0.4, 2)
+    expect(findOnsetSec(left, SR)).toBeLessThan(0.02)
+    expect(findOnsetSec(new Float32Array(SR), SR)).toBeNull()
+  })
+
+  // The multi-source case: two sources stall independently, so the window may
+  // only open once BOTH are up. An onset taken on the mix fires on the first.
+  it('waits for every expected channel, not just the first to arrive', () => {
+    const { left, right } = synthesizeFidelityStereo(SR, 2)
+    const delay = (x: Float32Array, sec: number): Float32Array => {
+      const out = new Float32Array(Math.floor(sec * SR) + x.length)
+      out.set(x, Math.floor(sec * SR))
+      return out
+    }
+    const lateR = delay(right, 0.6)
+    const earlyL = delay(left, 0.1)
+    expect(findProgrammeOnsetSec(earlyL, lateR, SR, FIDELITY_TONES)).toBeCloseTo(0.6, 2)
+    // A lane measured against ONE channel's tones must not wait for the other:
+    // the raw mic channel legitimately carries silence on R.
+    const lOnly = FIDELITY_TONES.filter((t) => t.channel === 'L')
+    expect(findProgrammeOnsetSec(earlyL, new Float32Array(earlyL.length), SR, lOnly)).toBeCloseTo(
+      0.1,
+      2,
+    )
+    // A channel that never arrives is a finding, not a window to move.
+    expect(
+      findProgrammeOnsetSec(earlyL, new Float32Array(earlyL.length), SR, FIDELITY_TONES),
+    ).toBeNull()
   })
 
   it('detects −6dB/20:1 limiter as red (tone error + dynamics)', () => {

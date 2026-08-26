@@ -104,18 +104,6 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   it does deliver. PO recheck on a real game take is what closes this, and the console will now say
   `[capture] measured audio padded …ms` when it fires.
 
-- [P0] TD 2026-08-25, THE BLIND SPOT THAT LET AN AUDIO REGRESSION SHIP: **no gate has ever measured
-  the audio quality of the file a user actually gets.** `analyzeAudioFidelity` has exactly ONE call
-  site and it exports through `exportRecording` — the RENDER. `analyzeAudioIntegrity` likewise. The
-  instant packet-copy path (the default export for an unedited take) has its SYNC measured and its
-  audio quality measured NEVER. This is the same class of hole as note 14's "every sync number was
-  the render's", found and fixed for sync in 2026-08-24 and never checked for audio. PO reporting
-  "audio quality regressed" is exactly what an unmeasured default path produces. BUILD: point
-  fidelityRun at a take that HAS a composite and run the same metrics on `exportByBestPath({...,
-  allowPacketCopy:true})`, as run.ts already does for sync. Expect the multi-source composite to read
-  ~3.1 dB down on the tone gate before anything else is fixed — its mix applies a shared 0.7 gain and
-  a 12:1 compressor that the single-source path does not.
-
 - [P1 → FIXED 2026-08-25, AWAITING PO LISTEN TEST] PO: "audio quality regressed from before we
   updated roadmap and mass execution". FOUND, and the code had already written down the cost in a
   comment nobody came back to: on 2026-08-23 NORMALIZE_PEAK_OVERDRIVE went 2 → 4, which licenses the

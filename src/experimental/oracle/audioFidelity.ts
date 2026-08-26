@@ -243,35 +243,63 @@ const ONSET_BLOCK_SEC = 0.01
 const ONSET_MARGIN_SEC = 0.2
 
 /**
- * First instant at which the programme is actually playing, seconds — null if
+ * First instant at which THIS channel is actually playing, seconds — null if
  * it never rises above the floor.
  *
  * THE WINDOW HAS TO FIND THE SIGNAL, NOT BE TOLD WHERE IT IS. Two independent
  * startups put silence at the front of these files and neither is visible in
  * the metadata: the CAPTURE begins at its channel's own offset, and the
- * GENERATOR's AudioContext stalls 115-500 ms before its oscillators advance —
- * so a channel can be recording, and recording silence. A tone absent for a
- * fraction f of the window reads (1−f) low on every tone at once, which is
- * indistinguishable from a mix-bus regression: measured as a phantom 0.5 dB
- * twice, and as a 1.3 dB gate FAILURE on green code once.
+ * GENERATOR's AudioContext stalls before its oscillators advance — measured at
+ * 115-500 ms in rig.ts and observed up to 2.15 s here — so a channel can be
+ * recording, and recording silence. A tone absent for a fraction f of the
+ * window reads (1−f) low on every tone at once, which is indistinguishable
+ * from a mix-bus regression: measured as a phantom 0.5 dB twice, and as a
+ * 1.3 dB gate FAILURE on green code once.
+ *
+ * PER CHANNEL, because the interesting case is a MULTI-SOURCE take, where the
+ * L-owned tones and the R-owned tones come from two different sources that
+ * stall independently. An onset taken on the mix fires when the FIRST of them
+ * arrives and says nothing about the second — which read as 11.9 and 16.1 dB
+ * of phantom attenuation before the window waited for both.
  */
 export function findOnsetSec(
-  left: Float32Array,
-  right: Float32Array,
+  samples: Float32Array,
   sampleRate: number,
   threshold = ONSET_AMPLITUDE,
 ): number | null {
   const block = Math.max(1, Math.floor(ONSET_BLOCK_SEC * sampleRate))
-  const n = Math.min(left.length, right.length)
-  for (let i = 0; i + block <= n; i += block) {
+  for (let i = 0; i + block <= samples.length; i += block) {
     let peak = 0
     for (let k = i; k < i + block; k++) {
-      const a = Math.max(Math.abs(left[k]!), Math.abs(right[k]!))
+      const a = Math.abs(samples[k]!)
       if (a > peak) peak = a
     }
     if (peak >= threshold) return i / sampleRate
   }
   return null
+}
+
+/**
+ * When every channel the fixture expects to carry tones is up — the instant
+ * the window may open. Null if one of them never arrives, which is a real
+ * finding (a source that never reached the file) and not a window to move.
+ */
+export function findProgrammeOnsetSec(
+  left: Float32Array,
+  right: Float32Array,
+  sampleRate: number,
+  tones: typeof FIDELITY_TONES,
+): number | null {
+  const needed: Float32Array[] = []
+  if (tones.some((t) => t.channel === 'L')) needed.push(left)
+  if (tones.some((t) => t.channel === 'R')) needed.push(right)
+  let latest = 0
+  for (const chan of needed) {
+    const onset = findOnsetSec(chan, sampleRate)
+    if (onset === null) return null
+    latest = Math.max(latest, onset)
+  }
+  return needed.length ? latest : null
 }
 
 export interface FidelityAnalyzeOptions {
@@ -338,15 +366,19 @@ export async function analyzeAudioFidelity(
       o += leftChunks[i]!.length
     }
     // Open the window on the programme: the later of the caller's floor and the
-    // instant the signal actually starts, plus a ramp. Then clamp so a full
-    // window still fits — a late onset must shorten the search, never the file.
+    // instant EVERY expected channel is up, plus a ramp.
     const windowSec = opts?.windowSec ?? 2.5
-    const onsetSec = findOnsetSec(left, right, sampleRate)
+    const tones = opts?.tones ?? FIDELITY_TONES
+    const onsetSec = findProgrammeOnsetSec(left, right, sampleRate, tones)
     const startSec = Math.max(
       opts?.skipSec ?? 0.25,
       onsetSec === null ? 0 : onsetSec + ONSET_MARGIN_SEC,
     )
-    const latestStart = Math.max(0, frames - Math.floor(windowSec * sampleRate))
+    // A late onset SHORTENS the window rather than moving it back into the
+    // silence — a shorter window of real programme beats a full one that is
+    // part silence, which is the whole failure this positioning exists to stop.
+    // One second is the floor below which the percentiles stop meaning much.
+    const latestStart = Math.max(0, frames - Math.floor(sampleRate))
     const skip = Math.min(Math.floor(startSec * sampleRate), latestStart)
     const end = Math.min(frames, skip + Math.floor(windowSec * sampleRate))
     return {

@@ -172,6 +172,7 @@ async function recordFidelityAudio(durationMs: number): Promise<{
   // worklet-bearing AudioContext from the track (passing ours skips addModule).
   const genCtx = new AudioContext()
   await genCtx.resume()
+  await waitForAudioClock(genCtx)
   const src = makeStereoFidelityStream(genCtx)
   const epoch = performance.now()
   const writer = await createDurablePositionedWriter(blobKey)
@@ -208,6 +209,29 @@ async function recordFidelityAudio(durationMs: number): Promise<{
       await blobStore.remove(blobKey).catch(() => undefined)
     },
   }
+}
+
+/**
+ * Hold until the generator's audio clock is genuinely rendering.
+ *
+ * A freshly resumed AudioContext does not start immediately — rig.ts prices
+ * the stall at 115-500 ms and this rig has seen 2.15 s. Every millisecond of
+ * it is silence at the front of the recording, and a level metric whose window
+ * lands in that silence reads a flat attenuation on every tone at once. The
+ * analyzer defends itself (findProgrammeOnsetSec) but defending is second
+ * best: production warms its encoder before the take for the same reason, so
+ * the fixture warms its generator and the take simply starts with the tone
+ * already up.
+ */
+async function waitForAudioClock(ctx: AudioContext, deadlineMs = 3000): Promise<number> {
+  const t0 = ctx.currentTime
+  const started = performance.now()
+  // Advanced by a rendering quantum's worth of real time, not merely nonzero:
+  // currentTime can read ahead while the graph is still stalled.
+  while (ctx.currentTime - t0 < 0.15 && performance.now() - started < deadlineMs) {
+    await new Promise((r) => setTimeout(r, 20))
+  }
+  return performance.now() - started
 }
 
 /** Moving content keeps the encoder honest (same reason as the sync rig). */
@@ -271,6 +295,7 @@ async function recordFidelityCompositeTake(durationMs: number): Promise<{
   let compositeHandle: LiveCompositeHandle | null = null
   try {
     await genCtx.resume()
+    await waitForAudioClock(genCtx)
     const srcMic = makeStereoFidelityStream(
       genCtx,
       FIDELITY_TONES.filter((t) => t.channel === 'L'),
