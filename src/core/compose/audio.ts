@@ -215,6 +215,21 @@ export function loudnessFromCaptureStats(
     loudRms: stats.loudRms * gain,
     floorRms: stats.floorRms * gain,
   }
+  return guardCodecFloor(m)
+}
+
+/**
+ * Reason 3 above, on its own so every capture-derived statistic takes it: hand
+ * back the mix loudness unless the p20 FLOOR term could decide the makeup, in
+ * which case return null and let the caller decode.
+ *
+ * Generalizes unchanged from windows-of-the-whole-take to windows-of-the-kept-
+ * spans (X1): the argument is about the STATISTIC — a captured floor is an
+ * upper estimate of the file's, so a captured floor bound that does not bind
+ * proves the file's cannot either — and not about how many windows it was
+ * taken over.
+ */
+function guardCodecFloor(m: MixLoudness): MixLoudness | null {
   if (!(m.loudRms > NORMALIZE_GATE_RMS)) return m // makeup is 1 either way
   const ceiling = m.peakRobust ?? m.peak
   const licence =
@@ -229,6 +244,91 @@ export function loudnessFromCaptureStats(
   const floorBound = m.floorRms && m.floorRms > 0 ? NORMALIZE_FLOOR_CEILING_RMS / m.floorRms : Infinity
   if (floorBound < nonFloor) return null
   return m
+}
+
+/** How many windows a selection must hold before its percentiles mean anything
+ *  — 3 s of audio. Below that the p90 is one or two windows and the probe,
+ *  which measures the whole output including the silence between spans, is the
+ *  more honest answer. */
+const MIN_ENVELOPE_WINDOWS = 30
+
+/**
+ * The same shortcut for an EDITED export (task X1).
+ *
+ * The probe pass exists to rebuild an envelope capture already measured and
+ * then threw away. With `CaptureLoudness.envelope` kept in time order, an edit
+ * does not need a second decode of every audio channel: p90/p20/p99 are
+ * statistics of a MULTISET, so the windows lying inside the kept spans are the
+ * whole answer and their order never mattered.
+ *
+ * Returns null — caller probes — whenever the kept windows would describe a
+ * different signal from the one the file will carry:
+ *  · no envelope (a take recorded before X1, or no capture stats at all);
+ *  · a channel set that is not exactly what capture summed (same rule, same
+ *    reason as loudnessFromCaptureStats);
+ *  · a PER-CHANNEL trim, which removes one contributor part-way through a kept
+ *    span while the stored windows there still hold its contribution;
+ *  · a SPED span (F5b): WSOLA retimes the material, so a 100 ms source window
+ *    is no longer a 100 ms output window and the multiset is reweighted;
+ *  · too few windows survive to carry a percentile;
+ *  · the codec-floor guard above.
+ */
+export function loudnessFromCaptureEnvelope(
+  stats: CaptureLoudness | undefined,
+  recording: Recording,
+  edit: EditState,
+  channelIds: string[],
+  gain: number,
+): MixLoudness | null {
+  const env = stats?.envelope
+  if (!stats || !env || stats.frames <= 0) return null
+  const n = Math.min(env.windowRms.length, env.windowPeak.length)
+  if (n <= 0 || !(env.windowMs > 0)) return null
+
+  const distinct = [...new Set(channelIds)]
+  if (distinct.length !== stats.channelIds.length) return null
+  if (!distinct.every((id) => stats.channelIds.includes(id))) return null
+
+  for (const c of recording.channels) {
+    if (c.media !== 'audio') continue
+    const ce = edit.channels.find((x) => x.channelId === c.id)
+    if (!ce || !ce.enabled) continue // a dropped channel already failed the set check
+    if (ce.trimStartMs > 0 || ce.trimEndMs < c.durationMs) return null
+  }
+
+  const rms: number[] = []
+  const winPeaks: number[] = []
+  // `peak` is a MAX, so a window the edit only partly keeps may still hold it.
+  // Including those can only overestimate, which is the safe direction and the
+  // one the probe takes too (its windows straddle the joins).
+  let peak = 0
+  for (const seg of keptSegments(edit)) {
+    if (segmentSpeed(seg) !== 1) return null
+    const first = Math.max(0, Math.floor((seg.startMs - env.startMs) / env.windowMs))
+    const last = Math.min(n - 1, Math.ceil((seg.endMs - env.startMs) / env.windowMs) - 1)
+    for (let i = first; i <= last; i++) {
+      const winStart = env.startMs + i * env.windowMs
+      const p = env.windowPeak[i]!
+      if (p > peak) peak = p
+      // Percentiles take only windows the edit keeps WHOLE — a straddling
+      // window is part of a signal the file does not contain.
+      if (winStart >= seg.startMs && winStart + env.windowMs <= seg.endMs) {
+        rms.push(env.windowRms[i]!)
+        winPeaks.push(p)
+      }
+    }
+  }
+  if (rms.length < MIN_ENVELOPE_WINDOWS) return null
+
+  rms.sort((a, b) => a - b)
+  winPeaks.sort((a, b) => a - b)
+  const at = (q: number, w: number[]): number => w[Math.min(w.length - 1, Math.floor(q * w.length))]!
+  return guardCodecFloor({
+    peak: peak * gain,
+    peakRobust: at(0.99, winPeaks) * gain,
+    loudRms: at(0.9, rms) * gain,
+    floorRms: at(0.2, rms) * gain,
+  })
 }
 
 /**
@@ -498,14 +598,20 @@ export async function measureMixLoudness(
   throwIfAborted: () => void,
   onProgress?: (ratio: number) => void,
 ): Promise<MixLoudness> {
-  const { peak, loudRms, floorRms } = await measureMixEnvelope(
+  const { peak, peakRobust, loudRms, floorRms } = await measureMixEnvelope(
     mixers,
     gain,
     totalAudioFrames,
     throwIfAborted,
     onProgress,
   )
-  return { peak, loudRms, floorRms }
+  // peakRobust travels. It used to be dropped here — measureMixEnvelope has
+  // computed it since 2026-08-25 and this destructure took three fields of the
+  // four — so the PROBE path, which is what every take without capture stats
+  // gets, still bounded on the raw `peak` under the wide pre-statistic licence.
+  // That is the regression the statistic was added to end, so the fix was
+  // shipping to nobody: found by X1's rig lane printing `probe.peakRobust: 0`.
+  return { peak, peakRobust, loudRms, floorRms }
 }
 
 export interface MixEnvelope extends MixLoudness {

@@ -153,6 +153,50 @@ describe('MixLoudnessAccumulator', () => {
     expect(got.peak).toBeCloseTo(reference(a, a).peak, 6)
   })
 
+  it('keeps the envelope IN TIME ORDER, and its percentiles are that series sorted (X1)', () => {
+    // Loud first, quiet second: if the returned series were the sorted one, it
+    // would rise rather than fall, so the order is actually under test.
+    const frames = RATE * 6
+    const l = new Float32Array(frames)
+    for (let i = 0; i < frames; i++) {
+      const loud = i < frames / 2
+      l[i] = (loud ? 0.3 : 0.01) * Math.sin((2 * Math.PI * 220 * i) / RATE)
+    }
+    const acc = new MixLoudnessAccumulator({ sampleRate: RATE })
+    acc.register('a')
+    feed(acc, 'a', l, l, 1024)
+    const got = acc.finish()
+
+    expect(got.windowRms.length).toBe(frames / WINDOW)
+    expect(got.windowPeak.length).toBe(got.windowRms.length)
+    expect(got.windowMs).toBeCloseTo(100, 9)
+    expect(got.windowRms[0]!).toBeGreaterThan(got.windowRms[got.windowRms.length - 1]!)
+
+    // The scalars are the same series, sorted — same numbers, one order apart.
+    const sorted = [...got.windowRms].sort((a, b) => a - b)
+    const at = (q: number): number => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]!
+    expect(got.loudRms).toBeCloseTo(at(0.9), 6)
+    expect(got.floorRms).toBeCloseTo(at(0.2), 6)
+    const sortedPeak = [...got.windowPeak].sort((a, b) => a - b)
+    expect(got.peakRobust).toBeCloseTo(
+      sortedPeak[Math.min(sortedPeak.length - 1, Math.floor(0.99 * sortedPeak.length))]!,
+      6,
+    )
+  })
+
+  it('reports the grid ORIGIN, so a late-starting mix can be placed on the timeline', () => {
+    const frames = RATE * 2
+    const a = makeSignal(frames, 1)
+    const acc = new MixLoudnessAccumulator({ sampleRate: RATE })
+    acc.register('a')
+    // Audio that began 1.5 s into the session.
+    feed(acc, 'a', a, a, 1024, Math.round(1.5 * RATE))
+    const got = acc.finish()
+    expect(got.originFrame).toBe(Math.round(1.5 * RATE))
+    expect(got.sampleRate).toBe(RATE)
+    expect(got.windowRms.length).toBe(frames / WINDOW)
+  })
+
   it('reports zeros for a take that never delivered PCM', () => {
     const acc = new MixLoudnessAccumulator({ sampleRate: RATE })
     acc.register('a')

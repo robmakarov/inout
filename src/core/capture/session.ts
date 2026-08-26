@@ -1463,16 +1463,38 @@ class Session implements CaptureSession {
       const same =
         keptAudio.length === acc.channelIds.length && keptAudio.every((id) => acc.channelIds.includes(id))
       if (same) {
+        // The window grid is anchored on the SESSION timeline; the channels
+        // above were just rebased so the earliest one sits at t=0, so the
+        // envelope takes the same shift or it would describe the wrong instants.
+        const shift = Number.isFinite(minOffset) ? minOffset : 0
+        const startMs = (acc.originFrame / acc.sampleRate) * 1000 - shift
         recording.loudness = {
           channelIds: acc.channelIds,
           peak: acc.peak,
+          // The statistic the makeup gain actually bounds on. It was measured
+          // here from the day it existed and then dropped on the way to the
+          // Recording, so every real take fell back to the wide pre-statistic
+          // licence — the exact regression the statistic was built to end.
+          peakRobust: acc.peakRobust,
           loudRms: acc.loudRms,
           floorRms: acc.floorRms,
           frames: acc.frames,
+          ...(acc.windowRms.length > 0
+            ? {
+                envelope: {
+                  windowRms: acc.windowRms,
+                  windowPeak: acc.windowPeak,
+                  windowMs: acc.windowMs,
+                  startMs,
+                },
+              }
+            : {}),
         }
         console.info(
-          `[capture] mix loudness measured live: peak ${acc.peak.toFixed(3)} p90rms ${acc.loudRms.toFixed(4)} ` +
-            `p20rms ${acc.floorRms.toFixed(4)} over ${acc.frames} frames${acc.degraded ? ' (degraded alignment)' : ''}`,
+          `[capture] mix loudness measured live: peak ${acc.peak.toFixed(3)} p99win ${acc.peakRobust.toFixed(3)} ` +
+            `p90rms ${acc.loudRms.toFixed(4)} ` +
+            `p20rms ${acc.floorRms.toFixed(4)} over ${acc.frames} frames${acc.degraded ? ' (degraded alignment)' : ''}` +
+            ` — envelope ${acc.windowRms.length} windows from ${Math.round(startMs)} ms`,
         )
       } else {
         console.info(

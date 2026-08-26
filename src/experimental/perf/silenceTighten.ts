@@ -18,7 +18,8 @@ import { blobStore } from '@core/store'
 import { exportRecording } from '@core/compose'
 import { analyzeSilence } from '@core/compose/analyzeSilence'
 import { SILENCE_DEFAULTS, defaultEditState, keptSegments, segmentJoinsMs } from '@core/timeline'
-import type { ChannelRecording, EditState, Recording } from '@core/types'
+import { MixLoudnessAccumulator } from '@core/capture/loudnessAccumulator'
+import type { CaptureLoudness, ChannelRecording, EditState, Recording } from '@core/types'
 
 interface Segment {
   /** Speech from startMs to endMs; everything else is room tone. */
@@ -139,6 +140,69 @@ async function recordKnownAudio(takeMs: number): Promise<ChannelRecording> {
   }
 }
 
+/**
+ * X1 lane — the SAME graph rendered offline and put through the capture-time
+ * accumulator, i.e. exactly the envelope capture would have kept.
+ *
+ * This is the honest way to ask X1's F5a question on this rig: the rig builds
+ * its channel with a MediaRecorder rather than the production session, so there
+ * is no stored envelope to read. Rendering the identical graph offline gives
+ * the PCM the capture worklet would have tapped — the accumulator is invariant
+ * to batch size (its own tests pin that), so the only difference left between
+ * this and the file's envelope is THE CODEC, which is precisely what the
+ * comparison is for.
+ */
+async function captureSideEnvelope(takeMs: number, channelId: string): Promise<CaptureLoudness> {
+  const rate = 48_000
+  const frames = Math.round((takeMs / 1000) * rate)
+  const ctx = new OfflineAudioContext({ numberOfChannels: 2, length: frames, sampleRate: rate })
+  const tone = new OscillatorNode(ctx, { frequency: 2200, type: 'sine' })
+  const toneGain = new GainNode(ctx, { gain: 0.0009 })
+  tone.connect(toneGain).connect(ctx.destination)
+  tone.start()
+  const voice = new OscillatorNode(ctx, { frequency: 190, type: 'sawtooth' })
+  const wobble = new OscillatorNode(ctx, { frequency: 6, type: 'sine' })
+  const wobbleDepth = new GainNode(ctx, { gain: 0.06 })
+  const voiceGain = new GainNode(ctx, { gain: 0 })
+  wobble.connect(wobbleDepth).connect(voiceGain.gain)
+  voice.connect(voiceGain).connect(ctx.destination)
+  const t0 = LEAD_IN_MS / 1000
+  for (const s of SPEECH) {
+    voiceGain.gain.setValueAtTime(0, t0 + s.startMs / 1000)
+    voiceGain.gain.linearRampToValueAtTime(0.22, t0 + s.startMs / 1000 + 0.02)
+    voiceGain.gain.setValueAtTime(0.22, t0 + s.endMs / 1000 - 0.02)
+    voiceGain.gain.linearRampToValueAtTime(0, t0 + s.endMs / 1000)
+  }
+  voice.start()
+  wobble.start()
+  const rendered = await ctx.startRendering()
+  const left = rendered.getChannelData(0)
+  const right = rendered.numberOfChannels > 1 ? rendered.getChannelData(1) : left
+  const acc = new MixLoudnessAccumulator({ sampleRate: rate })
+  acc.register('mic')
+  const batch = 1024 // a worklet render quantum's worth, times eight
+  for (let i = 0; i < left.length; i += batch) {
+    const n = Math.min(batch, left.length - i)
+    acc.add('mic', left.subarray(i, i + n), right.subarray(i, i + n), i)
+  }
+  const got = acc.finish()
+  return {
+    channelIds: [channelId],
+    peak: got.peak,
+    peakRobust: got.peakRobust,
+    loudRms: got.loudRms,
+    floorRms: got.floorRms,
+    frames: got.frames,
+    envelope: {
+      windowRms: got.windowRms,
+      windowPeak: got.windowPeak,
+      windowMs: got.windowMs,
+      // This rig's channel starts at recording t=0, and so does its envelope.
+      startMs: (got.originFrame / got.sampleRate) * 1000,
+    },
+  }
+}
+
 /** Largest single-sample jump near a join vs anywhere else (the F1 metric). */
 async function jointDiscontinuity(
   blob: Blob,
@@ -189,6 +253,30 @@ export interface F5aReport {
   joints: { joinMaxDelta: number; baselineMaxDelta: number; ratio: number } | null
   joinsMs: number[]
   analysis: { loudRms: number; floorRms: number; thresholdRms: number; usable: boolean }
+  /**
+   * X1: what the CAPTURE-time envelope would have proposed, against what the
+   * decode proposed. The question is whether F5a can drop its decode — so the
+   * only acceptable answer is the same cuts.
+   */
+  x1: {
+    windows: number
+    loudRms: number
+    floorRms: number
+    thresholdRms: number
+    cuts: { startMs: number; endMs: number }[]
+    cutCountDelta: number
+    /** Largest disagreement about any cut boundary the two share, ms. */
+    maxBoundaryDeltaMs: number | null
+    /** Proposed cut time landing inside a known speech span. Must be 0. */
+    speechCutMs: number
+    /** dB the capture envelope's floor sits above the decoded file's. */
+    floorDiffDb: number | null
+    loudDiffDb: number | null
+    /** Wall clock of analyzeSilence with the envelope, and without it. */
+    analyzeMs: number
+    decodeAnalyzeMs: number
+    identical: boolean
+  } | null
   passed: boolean
   notes: string[]
 }
@@ -207,7 +295,9 @@ export async function runSilenceTighten(opts: { takeMs?: number } = {}): Promise
   }
   try {
     const edit: EditState = defaultEditState(recording)
+    const tDecode = performance.now()
     const result = await analyzeSilence(recording, edit)
+    const decodeAnalyzeMs = Math.round(performance.now() - tDecode)
     const proposal = result.proposal
     const cuts = (proposal?.cutSpans ?? []).map((c) => ({
       startMs: Math.round(c.startMs),
@@ -262,6 +352,59 @@ export async function runSilenceTighten(opts: { takeMs?: number } = {}): Promise
       joints = await jointDiscontinuity(exported.blob, joinsMs)
     }
 
+    // ---- X1: the SHIPPED shortcut, end to end. Attach the envelope capture
+    // would have stored and run the PRODUCTION analyzeSilence again — same
+    // function, same edit, one path decoding and one not. The proposal above
+    // is the decode's; this is the envelope's; they must be the same cuts.
+    let x1: F5aReport['x1'] = null
+    try {
+      const cap = await captureSideEnvelope(takeMs, channel.id)
+      const withEnvelope: Recording = { ...recording, loudness: cap }
+      const t0 = performance.now()
+      const capResult = await analyzeSilence(withEnvelope, edit)
+      const capMs = Math.round(performance.now() - t0)
+      const capCuts = (capResult.proposal?.cutSpans ?? []).map((c) => ({
+        startMs: Math.round(c.startMs),
+        endMs: Math.round(c.endMs),
+      }))
+      let maxDelta: number | null = null
+      for (let i = 0; i < Math.min(capCuts.length, cuts.length); i++) {
+        const d = Math.max(
+          Math.abs(capCuts[i]!.startMs - cuts[i]!.startMs),
+          Math.abs(capCuts[i]!.endMs - cuts[i]!.endMs),
+        )
+        maxDelta = maxDelta === null ? d : Math.max(maxDelta, d)
+      }
+      const dB = (a: number, b: number): number | null =>
+        a > 0 && b > 0 ? Math.round(20 * Math.log10(a / b) * 100) / 100 : null
+      const capAnalysis = capResult.proposal?.analysis
+      x1 = {
+        windows: cap.envelope?.windowRms.length ?? 0,
+        loudRms: Math.round((capAnalysis?.loudRms ?? 0) * 1e5) / 1e5,
+        floorRms: Math.round((capAnalysis?.floorRms ?? 0) * 1e5) / 1e5,
+        thresholdRms: Math.round((capAnalysis?.thresholdRms ?? 0) * 1e5) / 1e5,
+        cuts: capCuts,
+        cutCountDelta: capCuts.length - cuts.length,
+        maxBoundaryDeltaMs: maxDelta,
+        speechCutMs: Math.round(
+          capCuts.reduce(
+            (sum, c) => sum + speechInFile().reduce((s, sp) => s + overlapMs(c, sp), 0),
+            0,
+          ),
+        ),
+        floorDiffDb: dB(capAnalysis?.floorRms ?? 0, proposal?.analysis.floorRms ?? 0),
+        loudDiffDb: dB(capAnalysis?.loudRms ?? 0, proposal?.analysis.loudRms ?? 0),
+        analyzeMs: capMs,
+        decodeAnalyzeMs: decodeAnalyzeMs,
+        identical:
+          capCuts.length === cuts.length &&
+          capCuts.every((c, i) => c.startMs === cuts[i]!.startMs && c.endMs === cuts[i]!.endMs),
+      }
+    } catch (err) {
+      console.warn('[f5a] X1 capture-envelope lane failed', err)
+
+    }
+
     const analysis = {
       loudRms: Math.round((proposal?.analysis.loudRms ?? 0) * 1e5) / 1e5,
       floorRms: Math.round((proposal?.analysis.floorRms ?? 0) * 1e5) / 1e5,
@@ -281,6 +424,7 @@ export async function runSilenceTighten(opts: { takeMs?: number } = {}): Promise
       joints,
       joinsMs,
       analysis,
+      x1,
       passed:
         recallLongPct >= 95 &&
         speechCutMs === 0 &&

@@ -18,11 +18,24 @@
  * cloneable — and is re-made into a local AbortController here.
  */
 import type { EditState, ExportProgress, ExportResult, ExportSettings, Recording } from '@core/types'
+import { setInlinePositionedWriterEnabled } from '@core/store'
 import { getLastRenderStats, renderExport, type RenderStats } from './render'
-import { getLastScratchStats, type ScratchStats } from './scratch'
+import { getLastScratchStats, setExportScratchEnabled, type ScratchStats } from './scratch'
 
 export type ExportWorkerIn =
-  | { type: 'start'; recording: Recording; edit: EditState; settings?: ExportSettings }
+  | {
+      type: 'start'
+      recording: Recording
+      edit: EditState
+      settings?: ExportSettings
+      /**
+       * Evidence levers. The worker has its OWN module instances, so a rig
+       * flipping a flag on the main thread flips it on a thread that does not
+       * render; both are forwarded here instead. Absent = the shipped path.
+       */
+      inlineScratchWriter?: boolean
+      scratchEnabled?: boolean
+    }
   | { type: 'abort' }
 
 export type ExportWorkerOut =
@@ -46,6 +59,8 @@ self.onmessage = (ev: MessageEvent<ExportWorkerIn>): void => {
 
 async function run(msg: Extract<ExportWorkerIn, { type: 'start' }>): Promise<void> {
   const post = (m: ExportWorkerOut): void => self.postMessage(m)
+  if (msg.inlineScratchWriter === false) setInlinePositionedWriterEnabled(false)
+  if (msg.scratchEnabled === false) setExportScratchEnabled(false)
   try {
     const result = await renderExport({
       recording: msg.recording,

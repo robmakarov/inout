@@ -26,6 +26,8 @@ import {
   type StreamTargetChunk,
 } from 'mediabunny'
 import { exportRecording } from '@core/compose'
+import { setInlinePositionedWriterEnabled } from '@core/store'
+import type { WriterEquivalenceResult } from './writerEquivalence.worker'
 import { getLastScratchStats, setExportScratchEnabled } from '@core/compose/scratch'
 import { AUDIO_BITRATE, AUDIO_CHANNEL_COUNT, AUDIO_SAMPLE_RATE } from '@core/compose/codecs'
 import { newId } from '@core/id'
@@ -304,7 +306,74 @@ export interface O1Report {
     aborted: boolean
     leaked: string[]
   } | null
+  /**
+   * X2 — the scratch writer owning its OPFS handle inline (in the export
+   * worker) against handing every chunk to a second writer worker. The file
+   * must come out BYTE-IDENTICAL: same muxer, same bytes, same positions, one
+   * copy and one thread hop fewer.
+   */
+  inlineWriter: {
+    inlineBytes: number
+    workerBytes: number
+    /** SHA-256 of each file — byte identity, not just a length match. */
+    inlineHash: string
+    workerHash: string
+    identical: boolean
+    inlineMs: number
+    workerMs: number
+    /** Both orders, warmed: the first export of a process pays codec init. */
+    inlineMsSecondOrder: number
+    workerMsSecondOrder: number
+    inlineHeldMB: number | null
+    workerHeldMB: number | null
+    /**
+     * THE gate. Two exports of one take are not byte-identical anyway (the
+     * video encoder is not bit-reproducible run to run — the `identical` field
+     * above shows it), so equivalence is proven on what X2 actually changed:
+     * one scripted sequence of positioned writes, back-patch included, driven
+     * through both writers from inside a dedicated worker.
+     */
+    equivalence: WriterEquivalenceResult | null
+  } | null
   notes: string[]
+}
+
+async function writerEquivalence(): Promise<WriterEquivalenceResult | null> {
+  const keyA = `xeq-inline-${Date.now().toString(36)}`
+  const keyB = `xeq-worker-${Date.now().toString(36)}`
+  let worker: Worker
+  try {
+    worker = new Worker(new URL('./writerEquivalence.worker.ts', import.meta.url), {
+      type: 'module',
+    })
+  } catch {
+    return null
+  }
+  try {
+    return await new Promise<WriterEquivalenceResult>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('writer equivalence timed out')), 60_000)
+      worker.onmessage = (ev: MessageEvent<WriterEquivalenceResult>) => {
+        clearTimeout(timer)
+        resolve(ev.data)
+      }
+      worker.onerror = (ev) => {
+        clearTimeout(timer)
+        reject(new Error(ev.message || 'writer equivalence worker error'))
+      }
+      worker.postMessage({ keyA, keyB, chunkBytes: 4 * 1024 * 1024, chunks: 4 })
+    })
+  } catch {
+    return null
+  } finally {
+    worker.terminate()
+    await blobStore.remove(keyA).catch(() => undefined)
+    await blobStore.remove(keyB).catch(() => undefined)
+  }
+}
+
+async function sha256(blob: Blob): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer())
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
 function slope(points: { x: number; y: number }[]): number | null {
@@ -393,6 +462,7 @@ export async function runO1Evidence(opts: O1Options = {}): Promise<O1Report> {
   const notes: string[] = [
     'audio-only synthetic take: the export renders the production waveform video at 1920x1080@30, avc 8 Mbps — same muxer target decision, no source decode',
     'heap = Chromium performance.memory usedJSHeapSize sampled every 100ms; OPFS page cache is not JS heap and correctly does not appear',
+    'the scratch/buffer and inline/worker levers are now FORWARDED INTO THE EXPORT WORKER — before this they were flipped on the main thread, which has not rendered since O5a, so the buffer lane was measuring the scratch path',
   ]
 
   // ---- (b) parity: the same take through both targets ----
@@ -402,9 +472,11 @@ export async function runO1Evidence(opts: O1Options = {}): Promise<O1Report> {
     try {
       setExportScratchEnabled(true)
       const a = await exportRecording({ recording, edit: defaultEditState(recording) })
+      // Probe BEFORE the next export runs: a finished scratch is deleted when
+      // the one after it finishes, so a blob held across an export is dead.
+      const pa = { ...(await probe(a.blob)), bytes: a.blob.size }
       setExportScratchEnabled(false)
       const b = await exportRecording({ recording, edit: defaultEditState(recording) })
-      const pa = { ...(await probe(a.blob)), bytes: a.blob.size }
       const pb = { ...(await probe(b.blob)), bytes: b.blob.size }
       parity = {
         scratch: pa,
@@ -420,6 +492,57 @@ export async function runO1Evidence(opts: O1Options = {}): Promise<O1Report> {
       }
     } finally {
       setExportScratchEnabled(true)
+      for (const c of recording.channels) await blobStore.remove(c.blobKey).catch(() => undefined)
+    }
+  }
+
+  // ---- (b2) X2: inline scratch writer vs the second writer worker ----
+  let inlineWriter: O1Report['inlineWriter'] = null
+  if (!opts.skipChecks) {
+    const recording = await makeToneRecording(shortSec)
+    const edit = defaultEditState(recording)
+    try {
+      // Hash INSIDE the run: scratch.ts deletes the previous finished export
+      // when a new one finishes, so a blob held across the next export is dead
+      // (note 13b). Read it before the next one starts, never after.
+      const once = async (
+        inline: boolean,
+      ): Promise<{ bytes: number; hash: string; ms: number; heldMB: number | null }> => {
+        setInlinePositionedWriterEnabled(inline)
+        const t = performance.now()
+        const r = await exportRecording({ recording, edit })
+        const ms = Math.round(performance.now() - t)
+        return {
+          bytes: r.blob.size,
+          hash: (await sha256(r.blob)).slice(0, 16),
+          ms,
+          heldMB: MB(getLastScratchStats()?.maxOutstandingBytes ?? null),
+        }
+      }
+      // Warm first: a process's FIRST export pays codec init, and whichever
+      // lane runs first would otherwise be reported as the slower one (note 10).
+      await once(true)
+      const inlineRun = await once(true)
+      const workerRun = await once(false)
+      // …and both orders, because one ordering is one measurement.
+      const workerAgain = await once(false)
+      const inlineAgain = await once(true)
+      inlineWriter = {
+        inlineBytes: inlineRun.bytes,
+        workerBytes: workerRun.bytes,
+        inlineHash: inlineRun.hash,
+        workerHash: workerRun.hash,
+        identical: inlineRun.hash === workerRun.hash && inlineAgain.hash === workerAgain.hash,
+        inlineMs: inlineRun.ms,
+        workerMs: workerRun.ms,
+        inlineMsSecondOrder: inlineAgain.ms,
+        workerMsSecondOrder: workerAgain.ms,
+        inlineHeldMB: inlineRun.heldMB,
+        workerHeldMB: workerRun.heldMB,
+        equivalence: await writerEquivalence(),
+      }
+    } finally {
+      setInlinePositionedWriterEnabled(true)
       for (const c of recording.channels) await blobStore.remove(c.blobKey).catch(() => undefined)
     }
   }
@@ -498,6 +621,7 @@ export async function runO1Evidence(opts: O1Options = {}): Promise<O1Report> {
     },
     parity,
     orphans,
+    inlineWriter,
     notes,
   }
 }

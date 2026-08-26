@@ -3,6 +3,9 @@ export {
   createFileWritable,
   createDurablePositionedWriter,
   createPositionedWriter,
+  canOwnSyncHandle,
+  isInlinePositionedWriterEnabled,
+  setInlinePositionedWriterEnabled,
   type PositionedDurableWriter,
 } from './blobStore'
 export { editsRepo, recordingsRepo } from './recordingsRepo'

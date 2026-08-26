@@ -181,13 +181,107 @@ async function createPositionedFallbackWriter(key: string): Promise<PositionedDu
   }
 }
 
+/** Escape hatch and A/B lever: forces the second-worker writer even inside a
+ *  dedicated worker (X2 evidence runs, and a manual fallback if a platform ever
+ *  misbehaves holding the handle on the render thread). */
+let inlineWriterEnabled = true
+export function setInlinePositionedWriterEnabled(value: boolean): void {
+  inlineWriterEnabled = value
+}
+
+/** Read back for the export worker, which lives in its own module instance and
+ *  has to be TOLD what the main thread chose (see pipeline.ts). */
+export function isInlinePositionedWriterEnabled(): boolean {
+  return inlineWriterEnabled
+}
+
+/**
+ * True when THIS thread may hold a FileSystemSyncAccessHandle itself: the
+ * handle is `[Exposed=DedicatedWorker]`, so a caller already running in one
+ * needs no second worker at all (task X2).
+ */
+export function canOwnSyncHandle(): boolean {
+  // The project's TS lib set has no WebWorker types, so ask the global object
+  // rather than naming the interface (same reason SyncAccessHandle is declared
+  // by hand at the top of this file).
+  const scope = (globalThis as { DedicatedWorkerGlobalScope?: unknown })
+    .DedicatedWorkerGlobalScope as (abstract new () => unknown) | undefined
+  return (
+    inlineWriterEnabled &&
+    typeof scope === 'function' &&
+    globalThis instanceof scope &&
+    typeof navigator !== 'undefined' &&
+    !!navigator.storage?.getDirectory
+  )
+}
+
+/**
+ * The same positioned contract, owned INLINE (task X2).
+ *
+ * The worker-backed writer below pays three things per chunk that a caller
+ * already inside a dedicated worker has no reason to pay: a full `slice()` copy
+ * of the chunk (4 MB at the export's chunk size), a structured-clone transfer
+ * to a SECOND worker, and an awaited round trip through that worker's event
+ * loop. capture/compositor.worker.ts has owned its own handle since it was
+ * written; this is the same move for everyone else in a worker.
+ *
+ * `write` is synchronous by design — that is what a SyncAccessHandle is — and
+ * it is the same synchronous write that already happened, one thread over,
+ * with the caller blocked on it either way.
+ */
+async function createInlinePositionedWriter(key: string): Promise<PositionedDurableWriter> {
+  const dir = await blobsDir()
+  const file = await dir.getFileHandle(key, { create: true })
+  const anyFile = file as FileSystemFileHandle & {
+    createSyncAccessHandle(): Promise<SyncAccessHandle>
+  }
+  const handle = await anyFile.createSyncAccessHandle()
+  try {
+    ;(handle as SyncAccessHandle & { truncate?(size: number): void }).truncate?.(0)
+  } catch {
+    /* truncate optional */
+  }
+  let offset = 0
+  let closed = false
+  const closeOnce = (): void => {
+    if (closed) return
+    closed = true
+    handle.close()
+  }
+  return {
+    async write(data, position) {
+      if (closed) throw new Error('inline positioned writer is closed')
+      const pos = typeof position === 'number' ? position : offset
+      const written = handle.write(data, { at: pos })
+      offset = Math.max(offset, pos + written)
+      handle.flush()
+    },
+    async close() {
+      closeOnce()
+    },
+    async abort() {
+      closeOnce()
+    },
+  }
+}
+
 /**
  * Positioned writer, durable when the platform allows it. Muxers that seek
  * (mp4 patches its box sizes at finalize) write through this; O(1) memory
  * because nothing is retained after a write returns.
+ *
+ * Three rungs, in cost order: own the handle inline (dedicated worker), hand it
+ * to the durable writer worker (main thread), or fall back to createWritable.
  */
 export async function createPositionedWriter(key: string): Promise<PositionedDurableWriter> {
   assertKey(key)
+  if (canOwnSyncHandle()) {
+    try {
+      return await createInlinePositionedWriter(key)
+    } catch (err) {
+      console.warn('[blobStore] inline positioned writer unavailable, falling back', err)
+    }
+  }
   if (canUseDurableWriter()) {
     try {
       return await createDurablePositionedWriter(key)

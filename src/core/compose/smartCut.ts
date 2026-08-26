@@ -63,7 +63,7 @@ import {
 import type { EditState, ExportProgress, ExportResult, Recording } from '@core/types'
 import {
   busGainFor,
-  loudnessFromCaptureStats,
+  loudnessFromCaptureEnvelope,
   makeStereoSample,
   makeupGainForLoudness,
   measureMixLoudness,
@@ -321,20 +321,39 @@ export async function exportSmartCut(opts: SmartCutOptions): Promise<ExportResul
     let certified: { makeup: number; loudRms: number; peak: number; fromCaptureStats: boolean } | null =
       null
     if (needAudio) {
-      // A cut changes the mix, so the capture-time shortcut does not describe
-      // it — same rule the render applies (O2). Probe.
-      const probe = await openAudioMixers(recording, edit, throwIfAborted)
-      try {
-        const loud = await measureMixLoudness(probe, baseGain, totalAudioFrames, throwIfAborted, (r) =>
-          report('preparing', 0.05 * r),
-        )
-        const makeup = makeupGainForLoudness(loud)
+      // A cut changes the mix, and the SCALAR capture stats describe the whole
+      // take — so O2's shortcut correctly refused this path. X1 keeps the
+      // envelope in time order, and a cut is a SELECTION of its windows, so the
+      // statistic is available without decoding the audio a second time. This
+      // path is the one that most wanted it: smart cut copies its video packets
+      // and finishes in under a second, so a full probe decode was most of it.
+      const stored = loudnessFromCaptureEnvelope(
+        recording.loudness,
+        recording,
+        edit,
+        audioMixers.flatMap((m) => m.channelIds),
+        baseGain,
+      )
+      if (stored) {
+        const makeup = makeupGainForLoudness(stored)
         if (makeup !== 1) for (const m of audioMixers) m.gain = baseGain * makeup
-        certified = { makeup, loudRms: loud.loudRms, peak: loud.peak, fromCaptureStats: false }
-      } finally {
-        for (const m of probe) m.dispose()
+        certified = { makeup, loudRms: stored.loudRms, peak: stored.peak, fromCaptureStats: true }
+        console.info(
+          `[smartcut] audio loudness from capture envelope p90rms ${stored.loudRms.toFixed(4)} → makeup ${makeup.toFixed(2)}× (no probe decode)`,
+        )
+      } else {
+        const probe = await openAudioMixers(recording, edit, throwIfAborted)
+        try {
+          const loud = await measureMixLoudness(probe, baseGain, totalAudioFrames, throwIfAborted, (r) =>
+            report('preparing', 0.05 * r),
+          )
+          const makeup = makeupGainForLoudness(loud)
+          if (makeup !== 1) for (const m of audioMixers) m.gain = baseGain * makeup
+          certified = { makeup, loudRms: loud.loudRms, peak: loud.peak, fromCaptureStats: false }
+        } finally {
+          for (const m of probe) m.dispose()
+        }
       }
-      void loudnessFromCaptureStats
     }
 
     const audioCodec = needAudio

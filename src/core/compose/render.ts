@@ -58,6 +58,7 @@ import {
   type ExportResult,
 } from '@core/types'
 import {
+  loudnessFromCaptureEnvelope,
   loudnessFromCaptureStats,
   makeStereoSample,
   makeupGainForLoudness,
@@ -131,6 +132,10 @@ export interface RenderStats {
   /** finalize() — the muxer flushing and patching the file. */
   finalizeMs: number
   totalMs: number
+  /** Audio MIXERS opened purely to MEASURE loudness — a second full decode of
+   *  the take (one mixer per channel × kept span). 0 when the capture envelope
+   *  answered instead (X1); this is the number that gate counts. */
+  probeDecodes: number
 }
 
 let lastStats: RenderStats | null = null
@@ -237,6 +242,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     prepareMs: 0,
     finalizeMs: 0,
     totalMs: 0,
+    probeDecodes: 0,
   }
   const t0 = performance.now()
   setLastRenderStats(null)
@@ -299,13 +305,13 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       // O2: an UNEDITED window is exactly the mix capture measured, so the
       // probe pass can be skipped here too. Any trim changes the mix — those
       // render paths still probe.
+      // X1: an EDITED window is a SELECTION of the windows capture measured, so
+      // it does not need the probe either — the envelope is kept in time order
+      // and the kept spans pick out of it. Same shortcut, one rung wider.
+      const mixedIds = audioMixers.flatMap((m) => m.channelIds)
       const stored = isDefaultEdit(recording, edit)
-        ? loudnessFromCaptureStats(
-            recording.loudness,
-            audioMixers.map((m) => m.channelId),
-            baseGain,
-          )
-        : null
+        ? loudnessFromCaptureStats(recording.loudness, mixedIds, baseGain)
+        : loudnessFromCaptureEnvelope(recording.loudness, recording, edit, mixedIds, baseGain)
       if (stored) {
         const makeup = makeupGainForLoudness(stored)
         if (makeup !== 1) for (const m of audioMixers) m.gain = baseGain * makeup
@@ -315,6 +321,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
         )
       } else {
         const probe = await openAudioMixers(recording, edit, throwIfAborted)
+        stats.probeDecodes = probe.length
         try {
           const loud = await measureMixLoudness(probe, baseGain, totalAudioFrames, throwIfAborted, (r) =>
             report('preparing', 0.04 * r),

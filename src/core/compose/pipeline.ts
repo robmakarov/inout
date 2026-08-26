@@ -28,7 +28,8 @@ import {
 } from './audio'
 import { AUDIO_SAMPLE_RATE } from './codecs'
 import { getLastRenderStats, renderExport, setLastRenderStats } from './render'
-import { setLastScratchStats } from './scratch'
+import { isInlinePositionedWriterEnabled } from '@core/store'
+import { isExportScratchEnabled, setLastScratchStats } from './scratch'
 import type { ExportWorkerIn, ExportWorkerOut } from './export.worker'
 
 /** Yields the main-thread render keeps: it shares a thread with the UI. */
@@ -170,7 +171,17 @@ function exportInWorker(opts: ExportOptions): Promise<ExportResult> {
       return
     }
     signal?.addEventListener('abort', onAbort)
-    post({ type: 'start', recording, edit, settings })
+    // The worker has its own module instances: carry the main thread's
+    // evidence levers across, or a rig flips them on a thread that does not
+    // render (which is what O1's buffer lane was doing).
+    post({
+      type: 'start',
+      recording,
+      edit,
+      settings,
+      inlineScratchWriter: isInlinePositionedWriterEnabled(),
+      scratchEnabled: isExportScratchEnabled(),
+    })
   })
 }
 

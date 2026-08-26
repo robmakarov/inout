@@ -131,6 +131,31 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   peak AND the old licence of 4 (NORMALIZE_PEAK_OVERDRIVE_RAW), so no existing file changes
   behaviour — pinned by test. Proven: the 08-23 take now reaches target AND its sustained programme
   lands under 2.0 instead of 3.8. 421 tests green.
+  **THAT FIX WAS REACHING NOBODY, AND X1 FOUND IT ON 2026-08-26.** `peakRobust` was computed in both
+  places and then DROPPED on the way to both consumers, so every export was still running the old
+  licence of 4 on the raw `peak` — the exact regression PO reported:
+    · `session.ts` built `recording.loudness` field by field and never copied `acc.peakRobust`, so
+      every take on disk read `peakRobust: undefined` → RAW licence. That is the capture-stats path
+      (unedited exports, the editor's preview loudness).
+    · `measureMixLoudness` destructured three fields of `measureMixEnvelope`'s four and returned
+      `{ peak, loudRms, floorRms }`, so the PROBE path — every take without capture stats, and every
+      edited export — did the same. Found by X1's rig lane printing `probe.peakRobust: 0`.
+  Both are one line each and both are fixed; a unit test now pins the probe passthrough (a single
+  full-scale spike over sustained 0.2 programme: `peak` > 0.9, `peakRobust` < 0.25). PO's listen test
+  is still owed — but it is owed on a build where the fix is actually in force, which no build before
+  2026-08-26 was.
+
+- [P2] TD 2026-08-26, found while wiring X2: **O1's MEMORY lane samples the wrong thread, and its
+  headline gate metric is absent.** `runO1Evidence` polls heap on the MAIN thread while the export
+  renders in a worker (since O5a), and `measureUserAgentSpecificMemory` is unavailable in the rig's
+  Chrome — `totalSamples: 0`, `totalPeakDeltaMB: null` on every row, and the heap deltas it does print
+  (0.1-0.2 MB) are the main thread's, not the export's. The scratch and buffer lanes therefore
+  extrapolate to the SAME 145 MB at 30 minutes, which is exactly what O1 exists to distinguish. The
+  number O1's claim actually rests on is sound and comes from the right place: `targetHeldMB` is
+  ScratchStats, measured inside the worker and forwarded. FIX: sample from inside the export worker
+  and post the high-water back with the done message, or run the rig cross-origin-isolated so
+  measureUserAgentSpecificMemory exists. The related lever bug (flags flipped on a thread that no
+  longer renders) is already fixed.
 
 - [P1] TD 2026-08-25: NOTHING HERE HAS EVER BEEN MEASURED ON A TAKE LONGER THAN 30 s, and PO records
   938-1800 s. `runOracle` defaults to 6000 ms and the matrix's widest cell is 30 s, so every sync,

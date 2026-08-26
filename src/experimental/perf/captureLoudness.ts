@@ -23,10 +23,13 @@ import { createCaptureSession } from '@core/capture/session'
 import { canMeasureAudioCapture } from '@core/capture/measuredAudio'
 import { isAppleWebKit } from '@core/capabilities'
 import {
+  busGainFor,
+  loudnessFromCaptureEnvelope,
   loudnessFromCaptureStats,
   makeupGainForLoudness,
   measureMixLoudness,
   mixGainForChannels,
+  openAudioMixers,
   NORMALIZE_FLOOR_CEILING_RMS,
   NORMALIZE_MAX_MAKEUP,
   NORMALIZE_PEAK_OVERDRIVE,
@@ -36,11 +39,13 @@ import {
 } from '@core/compose/audio'
 import type { MixLoudness } from '@core/compose/audio'
 import { AUDIO_BITRATE, AUDIO_CHANNEL_COUNT, AUDIO_SAMPLE_RATE } from '@core/compose/codecs'
+import { exportRecording } from '@core/compose'
+import { getLastRenderStats } from '@core/compose/render'
 import { exportInstant } from '@core/compose/instant'
 import { newId } from '@core/id'
 import { blobStore, createPositionedWriter, recordingsRepo } from '@core/store'
-import { defaultEditState } from '@core/timeline'
-import type { CaptureConfig, Recording } from '@core/types'
+import { defaultEditState, keptSegments, outputDurationMs } from '@core/timeline'
+import type { CaptureConfig, EditState, Recording } from '@core/types'
 
 const dB = (ratio: number): number => Math.round(20 * Math.log10(ratio) * 1000) / 1000
 const r6 = (x: number): number => Math.round(x * 1e6) / 1e6
@@ -236,6 +241,43 @@ export interface O2Accuracy {
   probeMs: number | null
 }
 
+/**
+ * X1 lane — the EDITED export, which is where the probe pass actually lived.
+ *
+ * O2's shortcut gates on isDefaultEdit, so every trim or cut paid a second full
+ * decode of every audio channel purely to rebuild an envelope capture had
+ * already measured and thrown away. This lane applies a real edit (a global trim
+ * plus a middle cut), compares the makeup the kept windows give against the
+ * makeup the probe gives on the SAME edit, and then exports twice — once with
+ * the envelope and once with it stripped — reading the render's own count of
+ * probe decodes. That count is the gate; the dB is the accuracy.
+ */
+export interface X1Edited {
+  /** The kept spans the lane actually exported — a global trim plus a middle cut. */
+  keptSpans: { startMs: number; endMs: number }[]
+  outputMs: number
+  audioChannels: number
+  stored: { peak: number; peakRobust: number; loudRms: number; floorRms: number } | null
+  probe: { peak: number; peakRobust: number; loudRms: number; floorRms: number } | null
+  storedMakeup: number | null
+  probeMakeup: number | null
+  /** Gate, same tolerances as O2's: p90 ≤0.4 dB, peak ≤0.03 dB. */
+  loudRmsDiffDb: number | null
+  peakDiffDb: number | null
+  makeupDiffDb: number | null
+  /** Cost of the pass X1 removes, on this edit. */
+  probeMs: number | null
+  /** The render's own count, with the envelope and with it stripped. */
+  probeDecodesWithEnvelope: number | null
+  probeDecodesWithout: number | null
+  exportMsWithEnvelope: number | null
+  exportMsWithout: number | null
+  /** Bytes the envelope costs on this take, and per 30 minutes. */
+  envelopeBytes: number
+  envelopeBytesPer30Min: number | null
+  passed: boolean
+}
+
 export interface O2Report {
   syntheticMode: boolean
   /** UA the run saw — the Apple WebKit smoke asserts stats are absent there. */
@@ -254,7 +296,108 @@ export interface O2Report {
     bothPlay: boolean
   } | null
   fallback: { statsStripped: boolean; exported: boolean; error?: string } | null
+  edited: X1Edited | null
   notes: string[]
+}
+
+/** A real edit: drop the first second, cut a second out of the middle. */
+function editedState(recording: Recording): EditState {
+  const base = defaultEditState(recording)
+  const end = recording.durationMs
+  const mid = Math.round(end / 2)
+  return {
+    ...base,
+    globalTrimStartMs: 1000,
+    segments: [
+      { startMs: 1000, endMs: mid - 500 },
+      { startMs: mid + 500, endMs: end },
+    ],
+  }
+}
+
+async function runX1Edited(recording: Recording): Promise<X1Edited> {
+  const edit = editedState(recording)
+  const outputMs = outputDurationMs(edit)
+  const ids = recording.channels.filter((c) => c.media === 'audio').map((c) => c.id)
+  const gain = ids.length > 1 ? mixGainForChannels(ids.length) : 1
+  const stored = loudnessFromCaptureEnvelope(recording.loudness, recording, edit, ids, gain)
+
+  const probeMixers = await openAudioMixers(recording, edit, () => {})
+  const baseGain = busGainFor(probeMixers)
+  const t0 = performance.now()
+  let probe: MixLoudness | null = null
+  try {
+    probe = await measureMixLoudness(
+      probeMixers,
+      baseGain,
+      Math.round((outputMs / 1000) * AUDIO_SAMPLE_RATE),
+      () => {},
+    )
+  } finally {
+    for (const m of probeMixers) m.dispose()
+  }
+  const probeMs = Math.round(performance.now() - t0)
+
+  // The count that is the gate: run the real export both ways.
+  const stripped: Recording = { ...recording, loudness: { ...recording.loudness! } }
+  delete stripped.loudness!.envelope
+  const settings = { width: 960, height: 540, fps: 30 }
+  const te0 = performance.now()
+  await exportRecording({ recording, edit, settings })
+  const exportMsWithEnvelope = Math.round(performance.now() - te0)
+  const withEnv = getLastRenderStats()?.probeDecodes ?? null
+  const te1 = performance.now()
+  await exportRecording({ recording: stripped, edit, settings })
+  const exportMsWithout = Math.round(performance.now() - te1)
+  const without = getLastRenderStats()?.probeDecodes ?? null
+
+  const env = recording.loudness?.envelope
+  const envelopeBytes = env ? env.windowRms.byteLength + env.windowPeak.byteLength : 0
+  const loudDiff = stored && probe ? dB(stored.loudRms / probe.loudRms) : null
+  const peakDiff = stored && probe ? dB(stored.peak / probe.peak) : null
+  const storedMakeup = stored ? makeupGainForLoudness(stored) : null
+  const probeMakeup = probe ? makeupGainForLoudness(probe) : null
+  const view = (m: MixLoudness | null): X1Edited['stored'] =>
+    m
+      ? {
+          peak: r6(m.peak),
+          peakRobust: r6(m.peakRobust ?? 0),
+          loudRms: r6(m.loudRms),
+          floorRms: r6(m.floorRms ?? 0),
+        }
+      : null
+  return {
+    keptSpans: keptSegments(edit).map((g) => ({
+      startMs: Math.round(g.startMs),
+      endMs: Math.round(g.endMs),
+    })),
+    outputMs: Math.round(outputMs),
+    audioChannels: ids.length,
+    stored: view(stored),
+    probe: view(probe),
+    storedMakeup: storedMakeup === null ? null : Math.round(storedMakeup * 1000) / 1000,
+    probeMakeup: probeMakeup === null ? null : Math.round(probeMakeup * 1000) / 1000,
+    loudRmsDiffDb: loudDiff,
+    peakDiffDb: peakDiff,
+    makeupDiffDb:
+      storedMakeup !== null && probeMakeup !== null ? dB(storedMakeup / probeMakeup) : null,
+    probeMs,
+    probeDecodesWithEnvelope: withEnv,
+    probeDecodesWithout: without,
+    exportMsWithEnvelope,
+    exportMsWithout,
+    envelopeBytes,
+    envelopeBytesPer30Min: recording.durationMs
+      ? Math.round((envelopeBytes * 1_800_000) / recording.durationMs)
+      : null,
+    passed:
+      withEnv === 0 &&
+      (without ?? 0) > 0 &&
+      loudDiff !== null &&
+      Math.abs(loudDiff) <= 0.4 &&
+      peakDiff !== null &&
+      Math.abs(peakDiff) <= 0.03,
+  }
 }
 
 export async function runO2Evidence(
@@ -265,6 +408,7 @@ export async function runO2Evidence(
   const notes: string[] = [
     'takes are recorded through the production createCaptureSession in synthetic mode — stats come from the real worklet tap',
     'probe cost is measured on audio-only fixtures so a 10-minute number does not need a 10-minute recording',
+    'X1 (edited): the shortcut now covers a TRIMMED AND CUT take — probeDecodes is the render\'s own count of channels opened purely to measure, and it must be 0 with the envelope and >0 without it',
   ]
   const accuracy: O2Accuracy[] = []
   const mixes: { name: string; config: CaptureConfig }[] = [
@@ -277,6 +421,7 @@ export async function runO2Evidence(
 
   let instant: O2Report['instant'] = null
   let fallback: O2Report['fallback'] = null
+  let edited: X1Edited | null = null
 
   for (const { name, config } of mixes) {
     const recording = await recordTake(config, takeMs)
@@ -348,6 +493,11 @@ export async function runO2Evidence(
         }
         fallback = { statsStripped: true, exported: withoutStats.blob.size > 0 }
       }
+
+      // X1: the edited lane, on the first take that carries an envelope.
+      if (!edited && recording.loudness?.envelope) {
+        edited = await runX1Edited(recording)
+      }
     } catch (err) {
       accuracy.push({
         mix: name,
@@ -411,6 +561,7 @@ export async function runO2Evidence(
     projected10MinProbeMs: probeMsPerMinute === null ? null : probeMsPerMinute * 10,
     instant,
     fallback,
+    edited,
     notes,
   }
 }

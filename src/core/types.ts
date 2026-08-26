@@ -117,6 +117,40 @@ export interface CaptureLoudness {
   floorRms: number
   /** Frames folded into the statistic (0 ⇒ unusable). */
   frames: number
+  /**
+   * The envelope the percentiles above were taken from, IN TIME ORDER (X1).
+   *
+   * Capture already computes it — `finish()` used to sort it and throw the
+   * order away, so an EDITED export had to decode every audio channel a second
+   * time purely to rebuild windows that had already been measured. Keeping it
+   * costs ~144 KB per 30 minutes and lets an edit re-percentile the windows it
+   * KEEPS: a percentile is a statistic of a multiset, so selection is enough
+   * and no re-windowing is needed.
+   *
+   * Absent on takes recorded before X1 (and wherever the stats themselves are
+   * absent) — those keep probing, exactly as they did.
+   */
+  envelope?: CaptureEnvelope
+}
+
+/**
+ * The unity-sum mix's 100 ms window envelope on the RECORDING timeline.
+ *
+ * Both arrays are in time order and the same length; window i covers
+ * `[startMs + i*windowMs, startMs + (i+1)*windowMs)`. The final window may be
+ * short — it is the remainder the take ended on.
+ */
+export interface CaptureEnvelope {
+  /** RMS of the mid (mono-fold) signal per window. */
+  windowRms: Float32Array
+  /** Max |sample| per window — what p99 of gives `peakRobust`. */
+  windowPeak: Float32Array
+  /** Window length in ms (100, matching compose/audio's loudness window). */
+  windowMs: number
+  /** Recording-timeline ms at which window 0 starts (post-rebase, so ≥ 0
+   *  unless audio began before the earliest channel, which cannot happen —
+   *  the rebase puts the earliest channel at 0). */
+  startMs: number
 }
 
 export interface Recording {

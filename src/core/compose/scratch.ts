@@ -35,6 +35,18 @@ export function setExportScratchEnabled(value: boolean): void {
   scratchEnabled = value
 }
 
+/**
+ * Read back so pipeline.ts can TELL the export worker what the main thread
+ * chose. Since O5a the render lives in a worker with its own copy of this
+ * module, so a rig flipping the flag here was flipping it on a thread that no
+ * longer renders — O1's "buffer" lane has been measuring the scratch path ever
+ * since, and its parity check has been comparing scratch against scratch.
+ * Found while wiring X2's A/B, which needed the same plumbing.
+ */
+export function isExportScratchEnabled(): boolean {
+  return scratchEnabled
+}
+
 /** Stats of the most recently finished/discarded scratch (evidence + O8 bands). */
 export function getLastScratchStats(): ScratchStats | null {
   return lastStats

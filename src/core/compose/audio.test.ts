@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   audioMixInternals,
+  measureMixLoudness,
   LIMIT_USABLE_MAX,
   NORMALIZE_PEAK_OVERDRIVE,
   NORMALIZE_PEAK_OVERDRIVE_RAW,
+  type MixSource,
 } from './audio'
 import { AUDIO_SAMPLE_RATE } from './codecs'
 
@@ -288,5 +290,41 @@ describe('mix chunk seam indices', () => {
     expect(kEnd0).toBe(sr)
     expect(sr + kStart1).toBe(sr)
     // Adjacent samples are global sr-1 and sr — no gap, no dup.
+  })
+})
+
+describe('the probe pass carries the robust ceiling (X1 found it dropping it)', () => {
+  /** One MixSource over a synthetic signal — the mixer contract, nothing else. */
+  const sourceOf = (amp: (t: number) => number): MixSource => ({
+    gain: 1,
+    channelIds: ['a'],
+    channelId: 'a',
+    async mixInto(left, right, startSec) {
+      for (let i = 0; i < left.length; i++) {
+        const v = amp(startSec + i / AUDIO_SAMPLE_RATE) * this.gain
+        left[i]! += v
+        right[i]! += v
+      }
+    },
+    dispose() {},
+  })
+
+  it('measureMixLoudness returns peakRobust, so the render bounds on it and not on one sample', async () => {
+    // Sustained programme at 0.2 with a single full-scale spike — the exact
+    // shape that made one transient define a take's headroom.
+    const spikeAt = 1.5
+    const amp = (t: number): number =>
+      Math.abs(t - spikeAt) < 1 / AUDIO_SAMPLE_RATE ? 0.95 : 0.2 * Math.sin(2 * Math.PI * 220 * t)
+    // 20 s = 200 windows, so p99 can actually exclude the one window the spike
+    // lands in; at 3 s it is 30 windows and p99 IS the maximum.
+    const frames = AUDIO_SAMPLE_RATE * 20
+    const loud = await measureMixLoudness([sourceOf(amp)], 1, frames, () => {})
+    expect(loud.peak).toBeGreaterThan(0.9)
+    expect(loud.peakRobust).toBeDefined()
+    // The spike owns `peak` and must NOT own the ceiling the gain bounds on.
+    expect(loud.peakRobust!).toBeLessThan(0.25)
+    // …and that is the whole point: the tight licence now applies.
+    const g = makeupGainForLoudness(loud)
+    expect(g * loud.peakRobust!).toBeLessThanOrEqual(NORMALIZE_PEAK_OVERDRIVE * 0.95 + 1e-9)
   })
 })

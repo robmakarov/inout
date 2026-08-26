@@ -35,6 +35,20 @@ export interface AccumulatedLoudness {
   frames: number
   /** A channel lagged out of the alignment ring; its tail is missing from the sum. */
   degraded: boolean
+  /** The window RMS series IN TIME ORDER (X1). The percentiles above are this
+   *  same series sorted — keeping the order lets an edited export select the
+   *  windows it keeps instead of decoding the audio again to rebuild them. */
+  windowRms: Float32Array
+  /** Per-window max |sample|, in the same time order. */
+  windowPeak: Float32Array
+  /** Session-timeline frame index where window 0 starts (the grid origin). */
+  originFrame: number
+  /** Frames per second of that grid — turns `originFrame` into milliseconds. */
+  sampleRate: number
+  /** Length of one window in ms — the ACTUAL one (windowFrames / sampleRate),
+   *  not the nominal 100, so a rate that does not divide evenly still describes
+   *  its own grid honestly. */
+  windowMs: number
 }
 
 export class MixLoudnessAccumulator {
@@ -65,8 +79,14 @@ export class MixLoudnessAccumulator {
   private degraded = false
   private finished = false
 
+  /** Time-ordered copies taken before finish() sorts the series (X1). */
+  private orderedRms = new Float32Array(0)
+  private orderedPeak = new Float32Array(0)
+  private readonly sampleRate: number
+
   constructor(opts: { sampleRate: number; capacitySec?: number }) {
     const rate = opts.sampleRate
+    this.sampleRate = rate
     this.windowFrames = Math.max(1, Math.round(WINDOW_SEC * rate))
     this.capacity = Math.max(this.windowFrames * 4, Math.round((opts.capacitySec ?? DEFAULT_CAPACITY_SEC) * rate))
     this.sumL = new Float32Array(this.capacity)
@@ -181,6 +201,11 @@ export class MixLoudnessAccumulator {
       this.winSumSq = 0
       this.winPeak = 0
       this.winCount = 0
+      // Percentiles need it sorted; an edited export needs it in time order.
+      // Copy first, sort second — the same shape compose/audio's envelope pass
+      // uses, and the reason the order was recoverable at all (X1).
+      this.orderedRms = Float32Array.from(this.windowRms)
+      this.orderedPeak = Float32Array.from(this.windowPeak)
       this.windowRms.sort((x, y) => x - y)
       this.windowPeak.sort((x, y) => x - y)
       this.finished = true
@@ -198,6 +223,11 @@ export class MixLoudnessAccumulator {
       floorRms: at(0.2),
       frames: this.folded,
       degraded: this.degraded,
+      windowRms: this.orderedRms,
+      windowPeak: this.orderedPeak,
+      originFrame: this.base - this.folded,
+      sampleRate: this.sampleRate,
+      windowMs: (this.windowFrames / this.sampleRate) * 1000,
     }
   }
 }
