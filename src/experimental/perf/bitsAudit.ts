@@ -166,7 +166,7 @@ const RAW_MIMES = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm
  * Several bitrates at once, off ONE stream: an A/B of encoder settings must not
  * also be an A/B of what happened to be on screen at the time.
  */
-async function recordChannels(
+export async function recordChannels(
   source: Source,
   kind: 'screen' | 'camera',
   takeMs: number,
