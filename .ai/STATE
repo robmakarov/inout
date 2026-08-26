@@ -188,6 +188,50 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   never silent (audioPaddedFrames / audioDroppedNotReady / audioDroppedLead + a console warning).
   NOT claimed: the "noises" PO also reported are a different thing — the same starvation mangles the
   audio it DOES deliver, and padding does not touch that.
+- CAPTURE MEASURES THE MIX'S ENVELOPE ONCE, AND THE EXPORT STOPPED MEASURING IT AGAIN (X1,
+  2026-08-26). O2 kept three scalars from the capture-time accumulator and SORTED the window series
+  away; the series is now kept IN TIME ORDER on `Recording.loudness.envelope` (windowRms + windowPeak
+  + the window length + the recording-timeline ms of window 0). 121 KB per 30 minutes. A percentile is
+  a statistic of a multiset, so an EDIT is a SELECTION of those windows — no second decode of every
+  audio channel to rebuild them. Three consumers, all measured on the rigs:
+    · the RENDER'S EDITED export — RenderStats.probeDecodes reads 0 with the envelope and 2 without,
+      p90 within 0.267 dB of the probe, and the APPLIED MAKEUP GAIN identical (0.000 dB);
+    · SMART CUT, which copies its video packets and finished in under a second and then paid a full
+      audio decode anyway — its own comment said the capture shortcut could not describe a cut, which
+      was true of the scalars and false of the envelope;
+    · F5a TIGHTEN — the production analyzeSilence, run twice on one take, proposes THE SAME TWO CUTS
+      (0 ms boundary delta, threshold identical) in 1 ms instead of 70. The probe costs ~147 ms per
+      minute of audio, so Tighten on a 30-minute take goes from ~4.4 s to ~1 ms.
+  FENCES, each one a case where the stored windows describe a signal the file will not carry, all
+  returning null so the caller probes exactly as before: no envelope (a take recorded before X1 is
+  bit-for-bit unchanged) · a channel set that is not what capture summed · a PER-CHANNEL trim · a SPED
+  span (F5b retimes the material) · fewer than 30 whole windows · and the p20 codec-floor guard, which
+  generalizes unchanged and is now one shared function. F5a takes narrower fences still — ONE kept
+  span, because the analyser indexes windows by OUTPUT position — and pads with zero-RMS windows
+  wherever the output has no audio, which is precisely the digital silence the probe measures there.
+  KNOWN EXPOSURE, stated because no rig reaches it: capture measures PCM and the probe measures the
+  DECODED file, and a codec removes content below its perceptual floor (O2 measured up to 15 dB apart
+  down there). On the known-silence rig the two floors agree to 0.04 dB; a take whose room tone sits
+  BELOW the codec floor is the untested case, and the symptom would be a slightly more aggressive
+  Tighten PROPOSAL, which the user still has to press Apply on.
+- THE MAKEUP-GAIN FIX OF 2026-08-25 WAS IN FORCE NOWHERE UNTIL 2026-08-26, and X1's rig found it.
+  `peakRobust` is the statistic the whole "licence returns to 2" fix rests on, and it was computed in
+  both places and DROPPED on the way to both consumers: session.ts built `recording.loudness` field by
+  field and never copied it (so every take on disk read undefined → the wide RAW licence of 4), and
+  `measureMixLoudness` destructured three of measureMixEnvelope's four fields (so the probe path did
+  the same). Every export was therefore still bounding on the raw peak under the old licence — exactly
+  the behaviour PO reported as regressed. Two one-line fixes; the probe passthrough is pinned by a test
+  (one full-scale spike over sustained 0.2 programme: peak > 0.9, peakRobust < 0.25). PO'S LISTEN TEST
+  IS STILL OWED, and is now owed on a build where the fix actually runs.
+- THE EXPORT WORKER OWNS ITS OWN OPFS HANDLE (X2, 2026-08-26). FileSystemSyncAccessHandle is
+  [Exposed=DedicatedWorker] and the render has lived in a worker since O5a, so the scratch writer had
+  been paying — per 4 MB chunk — a full buffer copy, a structured-clone transfer and an awaited round
+  trip to a SECOND worker it also had to spawn. createPositionedWriter now has three rungs: inline
+  (dedicated worker), the durable writer worker (main thread), createWritable (no worker/OPFS). No
+  behaviour change and none measurable on a 6 s export; proven on the writer itself because two
+  exports of ONE take are not byte-identical anyway (same length, different SHA-256 — the video
+  encoder is not bit-reproducible): 13.6 MB through both writers including an mp4-style back-patch,
+  SAME SHA-256, 100 ms inline vs 105.
 - audio: measured pipeline (sample-counted PCM, min-filter anchor), raw system audio, post-capture fidelity fixed
   (knee-limiter replaces tanh bus; composite dynamics bypassed for single source; stereo default on unreported channelCount)
 - THE MAKEUP GAIN BOUNDS ON A STATISTIC ONE TRANSIENT CANNOT OWN (2026-08-25, from PO: "audio quality
@@ -220,6 +264,15 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   either constant without the test that asserts overdrive x knee < LIMIT_USABLE_MAX.
 - NOT a general loudness fix: a take whose median window RMS is ~18 dB below its p90 still plays quiet,
   because only the p90 is normalized. Closing that needs dynamic-range compression — unbuilt, PO's call.
+
+THERE IS NO STANDING EXPERIMENTAL TREE (X3, PO ruling 2026-08-25, executed 2026-08-26). A module under
+src/experimental is tooling a live gate or task RUNS, or it is deleted — git is the archive and the
+verdicts live in .ai/DECISIONS. Gone, 2,745 lines: session-log, timemap, wcap, scene, datachan,
+semantic, streamx, two spent perf rigs (mp4Capture — MediaRecorder MP4 is in the REJECTED list;
+workerBisect — the cold-start verdict is note 6), and the three markdown files that existed to describe
+them. What those experiments proved is in production: wcap BECAME the v2 live composite, streamx BECAME
+O1's stream-to-disk export, sizeProbe BECAME src/core/compose/sizeProbe.ts. `shared/opfs` stayed — it
+is a live dependency of the oracle and recovery rigs, and the delete list was wrong about it.
 
 oracle = merge gate: npm run oracle / oracle:cold / oracle:fidelity + pre-push hook (typecheck+test+
 oracle), always spawns its own server. Bands as of 2026-08-23: sync ≤90 ms on the SYMMETRIC flash+click

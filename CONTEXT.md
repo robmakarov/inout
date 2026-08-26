@@ -43,9 +43,20 @@ Audio-only becomes visualized video. UI: iOS-Camera simplicity, Final Cut timeli
 - North star: **distributed multi-device capture** (phone camera + laptop screen, one time model). Shapes time/session/format decisions now; product work gated on a 2-device sync spike with kill criteria. iOS = Safari capture node first; thin native node later; never a separate editor.
 - Never: real-time streaming as the capture basis · closed project format · sub-ms multi-mic mixing promises · silent background capture · deterministic replay of live media
 
-## State (2026-08-25)
+## State (2026-08-26)
 
 Working and verified end-to-end: capture 4 channels → edit → export → share. PO records with it.
+
+**The editor stopped re-listening to audio it had already heard (2026-08-26).** While a recording is
+being made, INOUT is already measuring how loud it is, moment by moment. It used to keep three numbers
+from that and throw the rest away — so trimming a take, cutting one, or asking it to tighten the
+silences all made it read the whole soundtrack a second time before it could start. It keeps the
+measurements now (about 120 KB for half an hour), and those three jobs simply use them: "Tighten"
+proposes exactly the same cuts it did before, in about a thousandth of the time. And while checking
+that, one thing turned up that matters more than the speed: last week's fix for the audio quality PO
+reported as regressed was not actually reaching any export — the number it depends on was being
+calculated and then quietly dropped on the way. That is fixed, and the listen test PO owes is now a
+test of a build where the fix is real.
 
 **The timeline shows the recording now, not a set of coloured bars (2026-08-25).** Each video track
 in the editor carries a strip of its own frames, so finding a moment is a matter of looking rather
@@ -332,14 +343,17 @@ everything. TD drafts the per-role templates; PM owns keeping them current.
 Deleted from old master list: playback page (signed links play directly), SPEC/STATE/TODO file set
 (superseded by CONTEXT.md + .ai/), 44 completed build items.
 
-## Experiments (verdict 2026-07-14, details: src/experimental/TD-VERDICT.md)
+## Experiments — there is no experimental tree any more (PO ruling 2026-08-25, done 2026-08-26)
 
-Shipped to production: durable writes, measured audio (sync), streaming export (graduated 2026-08-23
-as O1 — the container question was answered by keeping mediabunny and writing through the positioned
-OPFS writer). Instrument: pipeline oracle (QA by numbers), now with tail-integrity and throughput
-bands, plus a measurement harness for memory, capture cost, bundles and UI (see `.ai/TASKS` tooling
-index). Merged: TimeMap. Dormant until needed: scene, data channels, semantic. WebCodecs rig graduates
-via O4. Nothing else merges without evidence + TD sign-off.
+PO: "i just dont want experiments be separated, all the shit must get in worked or be deleted." So a
+module either is tooling a live gate runs — the pipeline oracle, the measurement rigs behind each
+task's evidence — or it is spent, and spent means deleted, with the verdict kept in `.ai/DECISIONS`
+and the code kept in git. The dormant half is gone (2,745 lines): the session log, the WebCodecs
+capture A/B, the streaming-export benchmark, timed data channels, TimeMap/Scene, the semantic
+artifact. What they proved is in the product rather than beside it — the WebCodecs rig BECAME the v2
+live composite, the streaming benchmark BECAME the stream-to-disk export, the size probe BECAME the
+export panel's measured sizes. Nothing merges without evidence + TD sign-off; nothing waits around
+without a task, either.
 
 ## Risks
 

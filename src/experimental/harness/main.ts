@@ -20,13 +20,6 @@ interface Runner {
 
 const runners: Runner[] = [
   {
-    id: 'session-log',
-    title: 'Experiment 1 — Session Log (shadow mode)',
-    detail:
-      'observes an unmodified synthetic CaptureSession, appends chained facts to OPFS, folds them, diffs vs the production Recording, and re-folds from disk (replay).',
-    run: async () => (await import('../session-log/run')).runShadowSession(4000),
-  },
-  {
     id: 'oracle',
     title: 'Experiment 2 — Pipeline Oracle (hardened)',
     detail:
@@ -122,20 +115,6 @@ const runners: Runner[] = [
     run: async () => (await import('../recovery/run')).runRecoveryExperiment(),
   },
   {
-    id: 'wcap',
-    title: 'Experiment 4 — WebCodecs capture A/B',
-    detail:
-      'records the same canvas source via MediaRecorder and via MediaStreamTrackProcessor→VideoEncoder→fragmented MP4; compares keyframe cadence, first-packet timestamps, size, and capture cost.',
-    run: async () => (await import('../wcap/run')).runWcapExperiment(5000),
-  },
-  {
-    id: 'streamx',
-    title: 'Experiment 5 — Streaming export benchmark',
-    detail:
-      'renders the same 1080p30 composition to BufferTarget (RAM) and StreamTarget (OPFS); compares wall time and JS-heap high-water mark.',
-    run: async () => (await import('../streamx/run')).runStreamxBenchmark(20),
-  },
-  {
     id: 'o1',
     title: 'O1 — export stream-to-disk: memory, parity, orphans',
     detail:
@@ -163,21 +142,6 @@ const runners: Runner[] = [
       return runO2Evidence({
         takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined,
         probeSecs: Array.isArray(args?.probeSecs) ? (args.probeSecs as number[]) : undefined,
-      })
-    },
-  },
-  {
-    id: 'o3a',
-    title: 'O3a — Chromium MP4/H.264 capture',
-    detail:
-      'reports which MediaRecorder video MIMEs the engine accepts, records takes under each container preference through the production session, demuxes what actually landed on disk, truncates each channel to 60% to prove crash salvage still recovers it, and checks a camera-only take is no longer 720p.',
-    run: async (args) => {
-      const { runO3aEvidence } = await import('../perf/mp4Capture')
-      return runO3aEvidence({
-        takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined,
-        preferences: Array.isArray(args?.preferences)
-          ? (args.preferences as ('auto' | 'mp4' | 'webm')[])
-          : undefined,
       })
     },
   },
@@ -297,22 +261,6 @@ const runners: Runner[] = [
           ? (args.procedures as ('shipped' | 'slice250' | 'cut' | 'throttle' | 'production' | 'wedged')[])
           : undefined,
         repeats: typeof args?.repeats === 'number' ? args.repeats : undefined,
-      })
-    },
-  },
-  {
-    id: 'o4worker',
-    title: 'O4 — the production worker file driven by the probe feeder',
-    detail:
-      'crosses the two halves nothing has ever crossed: the UNTOUCHED production compositor.worker.ts driven by the probe’s own feeder and sources, then the engine environment added back piece by piece (bare page → idle AudioContext + ticking tap worklet → full oscillator mix with AudioEncoder). Whichever cell collapses names the wall.',
-    run: async (args) => {
-      const { runWorkerBisect } = await import('../perf/workerBisect')
-      return runWorkerBisect({
-        frames: typeof args?.frames === 'number' ? args.frames : undefined,
-        width: typeof args?.width === 'number' ? args.width : undefined,
-        height: typeof args?.height === 'number' ? args.height : undefined,
-        cells: Array.isArray(args?.cells) ? (args.cells as string[]) : undefined,
-        warmup: typeof args?.warmup === 'boolean' ? args.warmup : undefined,
       })
     },
   },
@@ -452,31 +400,6 @@ const runners: Runner[] = [
     },
   },
   {
-    id: 'datachan',
-    title: 'Experiment 6 — Timed data channels (live capture demo)',
-    detail:
-      'records pointer/click/modifier/visibility events against a fresh epoch for 5s (interact with this page!), persists the sidecar, and reports the event stream. Alignment math is covered by unit tests.',
-    run: async () => {
-      const { startDataChannel } = await import('../datachan/events')
-      const rec = startDataChannel(performance.now())
-      await new Promise((r) => setTimeout(r, 5000))
-      const sidecar = await rec.stop(null)
-      const counts: Record<string, number> = {}
-      for (const e of sidecar.events) counts[e.kind] = (counts[e.kind] ?? 0) + 1
-      return { totalEvents: sidecar.events.length, counts, firstTen: sidecar.events.slice(0, 10) }
-    },
-  },
-  {
-    id: 'replay',
-    title: 'Experiment 1b — replay persisted session logs',
-    detail: 'lists .slog.ndjson files in OPFS and re-folds each (crash-prefix tolerant).',
-    run: async () => {
-      const { listPersistedLogs, replayLog } = await import('../session-log/replay')
-      const files = await listPersistedLogs()
-      return Promise.all(files.map((f) => replayLog(f)))
-    },
-  },
-  {
     id: 'syncload',
     title: 'A/V sync when the machine is BUSY (PO 4K-game take)',
     detail:
@@ -494,8 +417,14 @@ const runners: Runner[] = [
   },
 ]
 
-// Experiments 7 (TimeMap/Scene) and 8 (semantic artifact) are pure modules —
-// their evidence is the unit-test suite (npm test), not a browser run.
+// X3 (PO ruling 2026-08-25, "no standing experimental tree"): the dormant
+// research experiments — session log, WebCodecs-capture A/B, streaming-export
+// benchmark, timed data channels, TimeMap/Scene, semantic artifact — are gone.
+// Their verdicts live in .ai/DECISIONS and their code lives in git history;
+// what they proved is in production (wcap became the v2 live composite, streamx
+// became O1's stream-to-disk export). Two spent perf rigs went with them: o3a
+// (MediaRecorder MP4, REJECTED on evidence) and o4worker (the cold-start
+// verdict is in). A rig here is tooling a live task runs, or it is not here.
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,

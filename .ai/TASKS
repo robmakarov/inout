@@ -29,53 +29,50 @@ several ids, take the first and tell PO to open parallel sessions for the rest. 
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
 ── READY MAP — current truth, updated on every merge ──
-Last update 2026-08-25 (ELEVENTH session, PO: "go roadmap, all o and f in one").
-"ALL O AND F" WAS AGAIN NOT ACHIEVABLE IN ONE SESSION, AND SAYING SO IS PART OF THE JOB. What landed:
-ONE FEATURE, ONE P1 DEFECT, ONE P0 IN THE GATE ITSELF, TWO MEASURED VERDICTS — and the things that
-shipped no feature cost the most, which was the right trade and has to be said out loud.
-  · GATE-alias (P0, found AND fixed here): the cold oracle failed ~20 % of runs. Not the product — a
-    cold AudioContext stalls up to 537 ms and the rig could represent neither the stall (clamped at
-    450) nor the offset it produces (a pairing window half a 1000 ms grid wide, centred on zero). 22
-    cold runs after the fix: zero sync failures. THE FIRST DIAGNOSIS IN THIS FILE WAS WRONG and is
-    corrected in the task; what settled it was making a failing run dump its own report.
-  · F8's FILMSTRIP (feature, visible): every video lane in the timeline shows the take's own frames.
-    493-958 ms per channel for 11 thumbnails, on the prod build in real Chrome. See the F8 handoff.
-  · F7d (P1): the re-anchor branch is REFUSED ON MEASUREMENT and the fallback says it is a rough
-    guide instead. It also stopped promising a measurement that could never arrive (an audio-only
-    take left "they settle in a few seconds" on screen forever) and stopped calling a composite-less
-    take's export "Instant" while quoting the 8 Mbps ceiling as "the file, not a guess" — 5.6 MB
-    claimed for a file of a few hundred KB. See the F7d task.
-  · O4-POLISH'S SYNC-ANCHOR ITEM IS RETIRED, with an instrument built to retire it (`npm run exp --
-    o4clock`). A captured frame's own timestamp is TAKE-RELATIVE, so a min-filter's zero is the first
-    frame's arrival — the very latency it was meant to remove — and the media clock runs −20 to
-    −26 ppm, i.e. adopting it trades a 3 ms fixed error for 18-23 ms of drift on a 900 s take. The
-    code was written, unit-tested, measured, and DELETED. Same verdict shape as O5's pipelining.
-  · F7d's model half got the numbers that close it: the estimator's error FLIPS SIGN with content
-    (+86 % on screen at 540p, −79 % on motion) because the realtime capture encoder spends 0.24x the
-    render's bytes on motion and 0.78x on screen. No single correction survives a sign flip.
-NOT STARTED, each still a session: O3b · O5e · O6 · O8b · O9 · O10 · F6 · F8's 60 fps trace and
-waveforms. O4-polish is down to two items (e2e wedge case, 4K row).
-FULL SWEEP AFTER THE MERGE: 399 tests · typecheck clean · oracle PASS on v2 (sync 48.6 ms,
-inst=instant/73.3, trim=smartcut/73.7, tail 67 ms, export 5.2x) AND on v1 (sync 43.7, inst 47.5,
-trim=render/61.0) · fidelity PASS (toneErr 0.03 dB, THD −67.6, separation 59.2, 0 limiter hits) ·
-browser-check real Chrome 151 8/8 with 0 console errors, export 507-514 ms · first paint 241,803 B,
-byte-identical to a build of HEAD before this session (the +3 KB against the tenth session's 238,790
-came from the wedge/persistent-connect commits, not from here).
-THE COLD GATE WAS NOT CLEAN AND NOW IS, on the sync side: GATE-alias was found, diagnosed wrong once,
-then measured and FIXED in the same session — 22 cold runs afterwards with zero sync failures against
-~20 % before. What remains is the SPUR band at about one run in seven, which is capture starvation and
-predates all of this.
+Last update 2026-08-26 (TWELFTH session, PO: "go x1 2 3"). ALL THREE LANDED, and the two most
+important things in the session were not optimizations — they were defects the optimization walked into.
+  · X1 KEEPS THE LOUDNESS ENVELOPE, and three consumers stopped decoding the audio a second time: the
+    render's EDITED export (probeDecodes 0 with it, 2 without — the render counts them itself now),
+    SMART CUT, which was not even on the task's list and is the path that most wanted it, and F5a
+    TIGHTEN (1 ms instead of 70 on a 12 s take; the probe costs ~147 ms per minute of audio). The
+    applied makeup gain agrees with the probe to 0.000 dB and F5a's proposal is byte-for-byte the same
+    cuts. Cost: 121 KB per 30 minutes.
+  · THE 2026-08-25 AUDIO FIX WAS IN FORCE NOWHERE, and X1's own rig lane found it. `peakRobust` — the
+    statistic the whole "licence returns to 2" fix rests on — was computed in both places and DROPPED
+    on the way to both consumers: session.ts never copied it onto the Recording, and
+    measureMixLoudness returned three of its four fields. So every export was still running the wide
+    licence on the raw peak, i.e. still doing exactly what PO reported as regressed. Two one-line
+    fixes, one new test. PO'S LISTEN TEST IS STILL OWED — and is now owed on a build where the fix runs.
+  · X2 OWNS ITS OPFS HANDLE INLINE in the export worker: no 4 MB copy, no transfer, no second worker
+    per export. "Byte-identical A/B export" turned out not to be a test this codebase can run (two
+    exports of one take through ONE writer differ in hash, same length — the encoder is not
+    bit-reproducible), so equivalence is proven on the writer itself: 13.6 MB through both, back-patch
+    included, SAME SHA-256, 100 ms vs 105.
+  · AND THE O1 RIG HAD BEEN COMPARING A THING WITH ITSELF SINCE O5a: it flips the scratch lever on the
+    main thread, which stopped rendering when the export moved into a worker. Both levers are forwarded
+    into the worker now. Note 10, one layer down.
+  · X3 DELETED 2,745 LINES of the dormant research tree plus two spent perf rigs, with two corrections
+    to its own spec: `shared/` is a live dependency of the oracle and recovery rigs (restored), and
+    `sizeProbe` had already MERGED into src/core/compose (nothing to delete — the ruling working).
+NOT STARTED, each still a session: O3b · O5e · O6 · O8b · O9 · O10 · F6 · X4 · X5 · X6 · X9 · X12 ·
+F8's 60 fps trace. O4-polish is down to two items (e2e wedge case, 4K row).
+FULL SWEEP AFTER THE MERGE: 410 tests (438 minus the 28 that belonged to deleted pure modules) ·
+typecheck clean · oracle PASS on v2 (sync 52.5, inst=instant/70.5, trim=smartcut/75.8, tail 84 ms,
+spur −47.6, export 4.93x) AND on v1 (sync 47.3/67.3, inst=instant/39.4, trim=render/51.3, tail 78,
+spur −52.6, export 5.11x) · fidelity PASS (toneErr 0.05 dB, THD −68.8, IMD −60.4, separation 62.2,
+0 limiter hits) · browser-check real Chrome 151 8/8 with 0 console errors, export 510 ms · first paint
+242,222 B against 241,803 before (+419 B, blobStore's third writer rung; gate is 300 KB).
 MERGED BEFORE THIS SESSION, one line each because the detail lives under each task: O1 · O2 · O3a ·
 O4 (step1, b, step2, the worker exoneration, the cold-start verdict, DEFAULT FLIPPED TO v2) ·
 O4-polish's preview-from-the-compositor · O5 · O5-flip (smart cut ON) · O7 · O8 (partial) ·
-O11 a/b/c · P0 mic-hang · P0-tail · P0-tail-raw · P0-instant-sync · P1 (code half) · P2 · P3 · F1 ·
-F2 · F2b · F3 · F4 · F5a · F5b · F7 · F7b · F7c (attempt 5) · F8's premise refuted + its paused
-deadband fixed · AI1.
+O11 a/b/c · GATE-alias · P0 mic-hang · P0-tail · P0-tail-raw · P0-instant-sync · P1 (code half) ·
+P2 · P3 · F1 · F2 · F2b · F3 · F4 · F5a · F5b · F7 · F7b · F7c (attempt 5) · F7d · F8's premise
+refuted + its filmstrip, waveforms and paused deadband · AI1.
 START HERE IF YOU ARE FRESH:
-  1. read notes 5, 6, 9, 10, 11 below — they are the ones that will bite you today, and note 10 has
-     a fourth instance now (this session lost 25 minutes to a rig killed by its own worktree's HMR;
-     `sh scripts/mirror-measure.sh` exists so nobody repeats it);
-  2. `npm run typecheck && npm test` (407 tests) and `npm run oracle` should be green before you
+  1. read notes 5, 6, 9, 10, 11 below — they are the ones that will bite you today, and note 10 now has
+     a FIFTH instance and it is the nastiest kind: a rig that flipped a lever on a thread that had
+     stopped doing the work, and therefore reported a green comparison of a path against itself;
+  2. `npm run typecheck && npm test` (410 tests) and `npm run oracle` should be green before you
      change anything, so a red gate later is yours and not inherited;
   3. take one task from READY NOW. There is no LIVE DEFECT on the map; the DEFAULT capture engine is
      now v2 (worker + WebCodecs) — anything touching capture/* keeps BOTH engines green.
@@ -93,21 +90,15 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
   (P0-instant-sync DONE 2026-08-25 and O5-flip SHIPPED on top of it — see the map header and the
    handoff under P0-instant-sync below. Smart cut is ON by default; `?smartcut=0` reverts.)
   ── X-SERIES (TD optimization-frontier audit 2026-08-25, PO-ordered onto the map; full specs in
-     the PHASE X block below. Sorted by value-per-cost. X1·X2·X3 are parallel-safe with each other
-     and with nearly everything; X4 and X5 both touch render.ts — X5 after X4.) ──
-  X1   keep-loudness-envelope      [light]   capture already computes the take's full 100 ms RMS
-                                             envelope live and keeps 3 numbers; keeping the curve
-                                             (~72 KB per 30 min) kills the SECOND full audio decode
-                                             every EDITED export pays, F5a's analysis decode, and
-                                             the editor-open probe. Highest value per line found.
-  X2   scratch-writes-inline       [light]   the export worker copies every 4 MB chunk and awaits a
-                                             SECOND worker to write it; it can own the
-                                             SyncAccessHandle itself, as compositor.worker already
-                                             does. Pure overhead removal, no behaviour change.
-  X3   experiments-merge-or-delete [light-medium] PO RULING 2026-08-25: no standing experimental
-                                             tree — a module is gate tooling a live task runs, or
-                                             it is deleted. ~2,300 lines go now; the 30 perf rigs
-                                             get triaged live-vs-spent. Oracle stays (merge gate).
+     the PHASE X block below. Sorted by value-per-cost. X4 and X5 both touch render.ts — X5 after
+     X4.) ──
+  (X1 keep-loudness-envelope DONE 2026-08-26 — see the handoff. Three consumers off the decode, and
+   two live `peakRobust` defects found and fixed on the way. PO's audio listen test is still owed.)
+  (X2 scratch-writes-inline DONE 2026-08-26 — the export worker owns its OPFS handle. See the handoff
+   for why the "byte-identical export" gate was replaced by a writer-equivalence proof, and for the
+   O1-rig lever bug it uncovered.)
+  (X3 experiments-merge-or-delete DONE 2026-08-26 — 2,745 lines gone; `shared/` kept because two live
+   rigs import it, `sizeProbe` had already merged into src/core/compose.)
   X4   parallel-decode-workers     [medium]  the render's floor is single-thread decode (1295 ms of
                                              a ~1900 ms render, note 13). GOPs are independent at
                                              our own 5 s cadence → one decoder worker per channel,
@@ -306,17 +297,34 @@ BOTH the composite and the raw channels.
    track, F3's background frame and F2's viewport all do. The other half of the same rule is that an
    INACTIVE style must be dropped rather than stored (clampEditState deletes a background that paints
    and insets nothing), or an untouched take silently loses the instant path.
-10. THE RIG IS WRONG BEFORE THE PRODUCT IS — three times in one day. A 450 px zoom "error" was an
-   expectation that had not been clipped to the canvas. A 9851 ms "tail gap" was a measurement lane
-   started at stop instead of at the beginning. A 16.2 fps "config catastrophe" was the first row of a
-   matrix paying for cold start. Before reporting an alarming number, check the instrument: add the
-   warm-up, print the intermediate quantities, and make the rig prove itself on a case whose answer
-   you already know.
+10. THE RIG IS WRONG BEFORE THE PRODUCT IS — three times in one day, and twice more since. A 450 px
+   zoom "error" was an expectation that had not been clipped to the canvas. A 9851 ms "tail gap" was a
+   measurement lane started at stop instead of at the beginning. A 16.2 fps "config catastrophe" was
+   the first row of a matrix paying for cold start. A cold-oracle sync failure was a stall longer than
+   the rig's own ruler (GATE-alias). And the nastiest one, 2026-08-26: THE O1 RIG WAS COMPARING A PATH
+   WITH ITSELF. It flips `setExportScratchEnabled` on the main thread, and the render moved into a
+   worker at O5a — a worker has its own module instance, so the flag reached nothing and the "buffer"
+   lane was measuring the scratch path. It read GREEN the whole time. Before reporting an alarming
+   number, check the instrument; and before reporting a REASSURING one, check that the lever you
+   pulled is attached to the thing you pulled it for.
 11. THE ONE-BRANCH-PER-TASK RULE COLLIDES WITH THE AUTO-COMMIT HOOK. A Stop hook runs
    `git add -A && git commit && git push origin HEAD:main` after every turn, so work is on main
    before a session can open its own branch, and a branch left checked out at the end would be pushed
    TO main. Sessions that cannot merge inside one turn should work on main and carry the reasoning in
    the commit message (see the F3 record commit for the shape).
+
+15. CAPTURE MEASURES THE MIX ONCE AND EVERY CONSUMER SHOULD ASK IT (X1, 2026-08-26). The take's
+   100 ms window envelope — RMS and per-window peak, in TIME ORDER, on the recording timeline — is on
+   `Recording.loudness.envelope`. A percentile is a statistic of a multiset, so an EDIT is a
+   SELECTION of those windows and needs no second decode: `loudnessFromCaptureEnvelope` serves the
+   render and smart cut, and analyzeSilence builds an output-grid array from it for F5a. Before
+   adding a fourth consumer, read the fences — they are the whole safety argument, and each one
+   marks a case where the stored windows describe a signal the file will not carry (a per-channel
+   trim, a sped span, a channel set that is not what capture summed, the p20 codec floor). And the
+   two ways this family of statistics has already gone wrong are both DROPPED FIELDS, not wrong
+   maths: `peakRobust` was computed in two places and copied to neither consumer for a day and a
+   half, which silently kept the audio regression PO reported. If you add a statistic here, follow
+   it all the way to the thing that reads it.
 
 13. THE EXPORT'S FLOOR IS DECODE, NOT SCHEDULING — measured, and it retires a whole family of ideas.
    O5 assumed the render loop was badly overlapped. It is not: mediabunny's encoder wrapper already
@@ -358,16 +366,22 @@ BOTH the composite and the raw channels.
                output instants — plus a CONTROL comparing the shipped INSTANT path with the same
                render, which is what proves the one-frame offset belongs to the composite and not to
                smart cut.
-     o1        export memory / parity / orphan sweep         o2       capture-loudness vs probe
-     o3a       MediaRecorder container + mid-take salvage    o4step1  sync residual decomposition
+     o1        export memory / parity / orphan sweep, PLUS X2's writer lanes: the export A/B (which
+               proves only that the encoder is not bit-reproducible) and `inlineWriter.equivalence`,
+               which is the real gate — one scripted positioned-write sequence with a back-patch
+               through BOTH writers from inside a dedicated worker, hashes compared. Its scratch and
+               inline levers are FORWARDED INTO THE EXPORT WORKER; flipping them on the main thread
+               does nothing, which is what made its buffer lane meaningless from O5a to 2026-08-26.
+     o2        capture-loudness vs probe, PLUS X1's `edited` lane: a trimmed-and-cut take's makeup
+               from the kept windows against the probe's, and the render's own `probeDecodes` count
+               with the envelope and with it stripped (must be 0 and >0)
+     o4step1   sync residual decomposition (KEPT under X3: sync ≤20 ms is still a live objective)
      audiolat  measured-audio anchor latency (loopback)      armcancel arming cancel + device release
      f1        mid-take cuts: sync + joint discontinuity     f7       quality tiers + certification
      f4        camera pose LOCATED in decoded export frames vs the pose function
      o4step2   v1 vs v2 live composite: delivered fps, main-thread long tasks, tail gap, bits audit
                (warms v2 first since 2026-08-24 — every earlier v2 number was a cold-start artifact;
                {"cold":true} measures the transient on purpose)
-     o4worker  the engine bisect that closed O4's throughput mystery: the production worker × the
-               probe feeder × the environment added back cell by cell; {"warmup":false} runs cold
      o11       bits audit: GOP ladder + quality steps + camera-PiP bitrate, all demuxed from the file
      o4step2   also takes {"engines":["v1"]} and reports the tail band + a raw-channel lane
      f2        timed zoom LOCATED in decoded export frames, via the PiP as a fiducial
@@ -377,7 +391,9 @@ BOTH the composite and the raw channels.
                tooltip, a still minute with a motion burst — then READS THE FILE BACK (JPEGs scanned
                out of the PDF, the rig's fiducial timecode decoded off the picture) to prove each page
                shows the frame its caption claims and that no page comes from a cut span
-     f5a       silence tightening against a known map: recall, cuts-in-speech, join clicks
+     f5a       silence tightening against a known map: recall, cuts-in-speech, join clicks — PLUS
+               X1's `x1` lane, which attaches the envelope capture would have stored and runs the
+               PRODUCTION analyzeSilence a second time: the two proposals must be the SAME cuts
      f5b       per-segment speed: pitch of a known tone IN THE EXPORT, sync across the boundaries,
                output length vs arithmetic, cost per second of output
      f7c       delta cost by DISTANCE FROM THE KEYFRAME, both content types (F7c attempt 4)
@@ -478,6 +494,52 @@ makeup agrees with the probe within the O2 tolerances on the rig (p90 ≤0.4 dB,
 term → probe, same as today); F5a proposal identical on the known-silence rig; oracle + fidelity
 green; takes predating the field keep today's exact behaviour.
 
+HANDOFF X1 — DONE 2026-08-26 (TWELFTH SESSION, PO: "go x1 2 3"). THE ENVELOPE IS KEPT, AND KEEPING IT
+FOUND TWO LIVE DEFECTS THAT MATTERED MORE THAN THE OPTIMIZATION.
+SHIPPED: `CaptureLoudness.envelope` — windowRms + windowPeak IN TIME ORDER, the window length, and the
+recording-timeline ms of window 0. finish() already sorted those series and threw the order away; it
+now copies before it sorts (the same shape compose/audio's envelope pass has always used). 121 KB per
+30 minutes, measured on the rig, both arrays together.
+THREE CONSUMERS, ALL THREE OFF THE DECODE:
+  · THE RENDER'S EDITED EXPORT (`loudnessFromCaptureEnvelope`, compose/audio.ts). A percentile is a
+    statistic of a MULTISET, so the windows lying inside the kept spans ARE the answer and their order
+    never mattered. RenderStats now counts `probeDecodes` — the render's own count of channels opened
+    purely to measure. On a trimmed-and-cut take: 0 with the envelope, 2 without. p90 agrees with the
+    probe to 0.267 dB, and THE APPLIED MAKEUP GAIN IS IDENTICAL (makeupDiffDb 0.000).
+  · SMART CUT, which is the one that most wanted it and was not even on the task's list: it copies its
+    video packets and finishes in under a second, and then paid a full audio decode to measure. Its
+    comment said "a cut changes the mix, so the capture-time shortcut does not describe it" — true of
+    the SCALARS, false of the envelope. Same function, same fences.
+  · F5a TIGHTEN (compose/analyzeSilence.ts), and this one is gated on IDENTITY, not tolerance, because
+    its output is cuts a user sees. `npm run exp -- f5a`, production analyzeSilence run twice on one
+    take, once with the envelope attached and once without: THE SAME TWO CUTS, maxBoundaryDelta 0 ms,
+    0 ms inside speech, threshold identical (0.042), loud/floor within 0.03/0.04 dB — in 1 ms instead
+    of 70. The probe costs ~147 ms per minute of audio, so Tighten on a 30-minute take goes from ~4.4 s
+    to ~1 ms. NARROWER FENCES than the makeup shortcut, on purpose: the analyser indexes its windows by
+    OUTPUT position, so ONE kept span only (a take already cut re-decodes, and is shorter by then), the
+    array is zero-padded wherever the output has no audio because that is exactly the digital silence
+    the probe measures there, and the sub-window remainder between the two grids is carried as an exact
+    offset — nothing rounds a cut boundary.
+FENCES (all return null → probe, all unit-tested): no envelope (a take predating X1 behaves exactly as
+today) · a channel set that is not what capture summed · a PER-CHANNEL trim, which removes one
+contributor part-way through a span the stored windows still hold it in · a SPED span (F5b retimes the
+material, so the multiset reweights) · fewer than 30 whole windows · and the p20 codec-floor guard,
+which generalizes unchanged and is now one shared function both shortcuts call.
+TWO LIVE DEFECTS FOUND ON THE WAY, both the same shape — `peakRobust` computed and then DROPPED:
+  (1) session.ts built `recording.loudness` field by field and never copied it, so EVERY take on disk
+      read `peakRobust: undefined` and took NORMALIZE_PEAK_OVERDRIVE_RAW = 4;
+  (2) `measureMixLoudness` destructured three of measureMixEnvelope's four fields, so the PROBE path
+      did the same. Found by the rig lane printing `probe.peakRobust: 0`.
+So the 2026-08-25 fix for PO's "audio quality regressed" — the one whose whole point was to return the
+licence to 2 — was in force NOWHERE. Both fixed, one line each, and the probe passthrough is pinned by
+a test (one full-scale spike over sustained 0.2 programme: peak > 0.9, peakRobust < 0.25). PO's listen
+test is still owed and is now owed on a build where the fix actually runs.
+GATE NOT MET AS WRITTEN, and the number says why: the task asked for peak within 0.03 dB. Measured
+−0.083 dB on the edited lane — while THE SHIPPED O2 DEFAULT-EDIT SHORTCUT measured −0.463 dB on the
+same run, so 0.03 dB is not a tolerance any path in this codebase meets. `peak` also no longer decides
+anything: the makeup bounds on peakRobust. What the gate is really asking — do the two agree about the
+gain — reads 0.000 dB.
+
 ## X2 scratch-writes-inline [light · ~100 lines net-negative: scratch.ts, export.worker.ts wiring;
    blobStore's worker stays for MAIN-thread callers (the in-thread render fallback, v1 capture)]
 createDurablePositionedWriter pays, per chunk: a full buffer.slice COPY, a transfer to a SECOND
@@ -486,6 +548,39 @@ FileSystemSyncAccessHandle is [Exposed=DedicatedWorker] — own the handle inlin
 compositor.worker.ts:572 already does. Same fix applies to the AI-PDF writer once X9 lands.
 GATES: A/B export byte-identical; O8 peakOut band unchanged (`npm run exp -- o1`); worker-death
 fallback still lands on BufferTarget; oracle green.
+
+HANDOFF X2 — DONE 2026-08-26 (TWELFTH SESSION). SHIPPED: `createPositionedWriter` grew a THIRD rung
+above the other two — own the FileSystemSyncAccessHandle inline when the caller is already in a
+dedicated worker (`canOwnSyncHandle()`), fall back to the durable writer worker, then to
+createWritable. The export render is in a worker by default (O5a), so its scratch writes stop paying,
+per 4 MB chunk, a full `buffer.slice()` copy, a structured-clone transfer and an awaited round trip
+through a SECOND worker's event loop — and an export stops spawning that worker at all.
+"BYTE-IDENTICAL A/B EXPORT" IS NOT A TEST THIS CODEBASE CAN RUN, and finding that out is part of the
+result: two exports of the SAME take through the SAME writer come out the same LENGTH and a different
+SHA-256 (measured: 926,230 bytes both ways, hashes 361cc54f… vs 246bc021…). The video encoder is not
+bit-reproducible run to run — which X4's own gate already half-admits ("byte-identical where encoder
+determinism allows"). So equivalence is proven on WHAT X2 CHANGED instead, from inside a dedicated
+worker where the inline rung actually exists (src/experimental/perf/writerEquivalence.worker.ts): one
+scripted sequence of positioned writes — 4 appends, a BACK-PATCH over byte 0 (what an mp4 finalize
+does), a straddling rewrite mid-file, an append past the end — driven through both writers.
+  13,635,584 bytes out of both · SHA-256 3f4bb8438c5ee9b0 BOTH · inline 100 ms vs worker 105 ms
+The rig refuses to pass vacuously: it reports `inlineAvailable` from the same predicate the ladder
+branches on, so a worker-vs-worker comparison would say so instead of reading green.
+WALL CLOCK, HONESTLY: on the 6 s export the rig exports (0.9 MB written) the two are indistinguishable
+— 1047/1044 ms inline against 1045/1039 ms worker, both orders warmed. The win is the copy and the hop,
+which only show where the bytes are: 5 % of writer time on 13.6 MB. A 30-minute export writes 1744 MB.
+O8 peakOut band unchanged: targetHeld 0.9 MB inline, 0.9 MB worker.
+AN INSTRUMENT DEFECT FIXED TO GET HERE, and it had been silently wrong since O5a: the O1 rig flips
+`setExportScratchEnabled` ON THE MAIN THREAD, and the render has not been on the main thread since the
+export moved into a worker — which has its OWN module instance. So O1's "buffer" lane was measuring the
+scratch path, and its parity check was comparing scratch against scratch. pipeline.ts now FORWARDS both
+levers into the worker's start message. Same class as note 10, one layer down: the rig was wrong before
+the product was, and it had been reporting a green comparison of a thing with itself.
+STILL OPEN, logged P2 in BACKLOG rather than fixed here: O1's MEMORY lane samples heap on the main
+thread while the export renders in the worker, and `measureUserAgentSpecificMemory` is unavailable in
+the rig's Chrome (totalSamples 0, totalPeakDeltaMB null) — so its headline gate metric is absent and its
+heap numbers are the wrong thread's. `targetHeldMB`, which comes from ScratchStats measured inside the
+worker, is the number O1's claim actually rests on and it is sound.
 
 ## X3 experiments-merge-or-delete [light-medium · deletes ~2,300 lines now, triages ~10,000 ·
    touches no product path]
@@ -500,6 +595,29 @@ definition — it is the merge gate. Prune the harness registry and exp.mjs ids 
 GATES: typecheck + full test suite + oracle + oracle --engine=v1 + fidelity green AFTER the
 deletions; browser-check 8/8; no scripts/*.mjs references a deleted module; READY-map tooling index
 updated to only name survivors.
+
+HANDOFF X3 — DONE 2026-08-26 (TWELFTH SESSION). DELETED, 2,745 lines: session-log/ · timemap/ · wcap/ ·
+scene/ · datachan/ · semantic/ · streamx/ · perf/mp4Capture.ts (O3a: MediaRecorder MP4, REJECTED on
+evidence and in the REJECTED list) · perf/workerBisect.ts (the cold-start verdict is in note 6) · and
+RESEARCH.md, TD-VERDICT.md, sync-diagnosis.md, which existed only to describe that tree. Seven runners
+left the harness registry with them. The verdicts stay in .ai/DECISIONS; the code stays in git; what
+they proved is in production — wcap BECAME the v2 live composite and streamx BECAME O1's
+stream-to-disk export, which is the ruling working rather than an exception to it.
+TWO CORRECTIONS TO THE SPEC, both from looking rather than from the list:
+  · `shared/` IS NOT DORMANT. It was on the delete list; oracle/rig.ts and recovery/salvage.ts both
+    import `shared/opfs`. Restored. A live gate's dependency is gate tooling.
+  · `sizeProbe` HAS NOTHING TO DELETE. The spec calls it spent because F7c shipped — and shipping is
+    exactly what happened to it: it is `src/core/compose/sizeProbe.ts` now, production, and the
+    experimental spike is gone. "Merged or deleted" already resolved that one.
+KEPT, AND THE RULE THAT DECIDED IT: a rig stays if a READY task's GATES name it, or a CONFLICT RULE or
+a "what a fresh session must know" note requires running it, or a scripts/*.mjs gate imports it. That
+keeps the whole oracle (it IS the merge gate), recovery/ (the only end-to-end check of crash salvage,
+plus a unit test), tools/pdf-verify.mjs (scripts/ai-pdf-check.mjs), and the perf rigs those notes name.
+o4step1 and audiolat were the closest call — their questions are answered — and they STAY, because
+sync ≤20 ms is a live objective (note 1, X14 parked on browser deliverables) and they are the only
+instruments that decompose the residual. Deleting them would mean rebuilding them the day it moves.
+COST OF THE SWEEP: 28 unit tests went with the deleted pure modules (438 → 410). No product line
+changed; no scripts/*.mjs referenced anything deleted; first paint unmoved (nothing here was in it).
 
 ## X4 parallel-decode-workers [medium · ~500 new lines: decode worker + range split in
    compose/video.ts + merge · RENDER path only]
@@ -763,7 +881,9 @@ OPEN for O10: re-measure p20 agreement on a realistic room-tone rig; if it holds
 screen channel (camera-full takes were upscaling 720p). MP4 preference REJECTED: Chrome's
 MediaRecorder does not stream mp4 — 753 B on disk halfway through an 8 s take vs 1.09 MB of
 decodable webm — so it would trade crash salvage for CPU. Hardware encode moves to O4, which owns
-its own fragmented-MP4 muxer. Standing re-test: `npm run exp -- o3a`.
+its own fragmented-MP4 muxer. THE RE-TEST RIG IS GONE (X3, 2026-08-26): the verdict is settled and
+the approach is in the REJECTED list, so `perf/mp4Capture.ts` was deleted. X6 will write its own
+mid-take-kill snapshot check against the WebCodecs path it builds, which is the shape that matters now.
 NEEDS PO RECHECK: camera-only take on a real camera should now record 1080p, not 720p.
 (b) ee/o3-single-gen — BLOCKED ON O4 (re-scoped 2026-08-23), still to do: a take with exactly ONE video channel whose dims ==
 export dims and codec is mp4-compatible → skip the live composite entirely (audio mix graph still
@@ -821,7 +941,7 @@ GATES: oracle sync ≤10 ms 10/10 · 08-22 4K rig: delivered ≥28 fps at 1080p 
 (distinctive final-second event present in export, drain-verified — PO hard requirement) · all oracles green.
 ── HANDOFF 2026-08-24 (SIXTH session, "go O4") — SOLVED. THE "2-10 FPS WALL" WAS THE INSTRUMENT'S
    COLD START, AND THE THROUGHPUT GATE IS MET. Engine remains merged + DORMANT behind ?engine=v2.
-THE FINDING, with the cells that forced it (`npm run exp -- o4worker`, new this session): the
+THE FINDING, with the cells that forced it (the o4worker bisect, deleted by X3 once it had answered): the
    UNTOUCHED compositor.worker.ts driven by the probe's own feeder runs 27-28 fps at 13 ms encoder
    latency — with the engine's audio graph attached, with an idle AudioContext, with a longtask
    observer, with the o4step2 rig's own sources, and even through the REAL startLiveCompositeV2
@@ -841,9 +961,9 @@ SHIPPED THIS SESSION: o4step2 warms v2 with one discarded 2.5 s take before meas
    the watchdog clock now starts at the encoder's FIRST real output (capture/compositorWatchdog.ts,
    pure, 6 unit tests): init excluded, sustained slowness still degrades at 12 fps over 5 s, a
    never-outputs wedge degrades at 15 s — a degrade costs only the composite (raw channels keep
-   recording), so patience beats a false kill · `npm run exp -- o4worker` kept as the engine bisect
-   harness (cells control/bare/idlectx/audio/rigsrc/engine/engine-rigsrc/ctx/obs/ctxaudio/insitu;
-   {"warmup":false} measures cold).
+   recording), so patience beats a false kill · the o4worker bisect harness was DELETED by X3
+   (2026-08-26) — its question is answered and the answer is note 6; git history has the rig if a
+   future throughput mystery ever needs the same cell-by-cell method.
 MEASURED ON THE FIXED INSTRUMENT (warm, 10 s takes, same day, TD machine):
    1080p: v2 delivers 28.4 fps vs v1 29.3 — THE ≥28 GATE IS MET (this line read "2-10" yesterday) ·
    v2 main-thread long tasks 0 ms vs v1 198 ms · encoder latency 14 ms, 0 drops, peak queue 1 ·
@@ -864,7 +984,7 @@ FINISH LIST FOR THE DEFAULT FLIP — updated same day (second "go O4" session):
       flush) called from prearm.ts at mount when the engine preference is v2 — no device touched,
       off every critical path, v1 users spend nothing. PROVEN COLD END-TO-END: the warm itself
       absorbs the init (3864 ms) and the WORKER's encoder then runs 28.2 fps / 13 ms / 0 drops in a
-      fully cold Chrome (`npm run exp -- o4worker {"cells":["mainwarm"],"warmup":false}` — the warm
+      fully cold Chrome (measured with the since-deleted o4worker bisect, cell `mainwarm` — the warm
       is main-thread, the engine encodes in a worker, and that it carries across threads is
       measured, not assumed).
    2. mid-record tab-kill salvage of the fMP4 — still unverified (gate). Note the standing decision
