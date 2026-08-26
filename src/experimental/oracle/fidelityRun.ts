@@ -600,6 +600,25 @@ export async function runOracleFidelity(
     await cleanup()
   }
 
-  const compositeTake = opts?.composite === false ? null : await runCompositeLanes(recordMs)
+  if (opts?.composite === false) return { ...base, compositeTake: null }
+  // A take that cannot be recorded is a gate FAILURE with a reason, not a
+  // stack trace that reaches the runner as "cdp-run exited 1". The lane gate
+  // reads `error` and says which half of the report is missing and why.
+  let compositeTake: FidelityCompositeReport
+  try {
+    compositeTake = await runCompositeLanes(recordMs)
+  } catch (err) {
+    compositeTake = {
+      engine: null,
+      hasComposite: false,
+      instant: null,
+      render: null,
+      compositeAudio: null,
+      rawChannel: null,
+      channelStartOffsetsMs: [],
+      windowSkipSec: 0,
+      error: `composite take: ${err instanceof Error ? err.message : String(err)}`,
+    }
+  }
   return { ...base, compositeTake }
 }
