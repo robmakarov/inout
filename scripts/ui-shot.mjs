@@ -522,9 +522,61 @@ try {
       })()`,
     )
     opened = filmReport.some((l) => l.hasStrip || l.hasWave)
-    text = filmReport
+    /**
+     * F8's LAST GATE: "the timeline holds 60 fps with a 30-min take loaded".
+     *
+     * A 30-minute take cannot be recorded in a rig, and it does not need to be:
+     * the design claim is that the timeline's cost is BOUNDED BY CONSTANTS and
+     * does not grow with length — at most 24 thumbnails whatever the take
+     * (filmstripPlan's pitch rule) and ~400 waveform columns (one per two
+     * device pixels of lane width), each stitched into ONE background image so
+     * the browser paints one layer per lane however long the recording is. So
+     * the measurable form of the gate is FLATNESS: run it at several lengths
+     * and show the frame rate does not move. What is extrapolated is stated
+     * rather than hidden — this proves independence of length over the range
+     * measured, not a 30-minute take.
+     *
+     * rAF deltas while the playhead is DRAGGED, because a still timeline
+     * repaints nothing and would score 60 fps with any amount of work in it.
+     */
+    const fps = await evaluate(
+      `(async () => {
+        const tl = document.querySelector('.tl');
+        if (!tl) return null;
+        const r = tl.getBoundingClientRect();
+        const y = r.top + r.height * 0.5;
+        const deltas = [];
+        let last = performance.now();
+        let stop = false;
+        const tick = (t) => { deltas.push(t - last); last = t; if (!stop) requestAnimationFrame(tick); };
+        requestAnimationFrame(tick);
+        const send = (type, x) => tl.dispatchEvent(new PointerEvent(type, {
+          clientX: x, clientY: y, bubbles: true, pointerId: 1, isPrimary: true, buttons: 1,
+        }));
+        send('pointerdown', r.left + 8);
+        for (let i = 0; i <= 60; i++) {
+          send('pointermove', r.left + 8 + (r.width - 16) * (i / 60));
+          await new Promise((res) => requestAnimationFrame(res));
+        }
+        send('pointerup', r.right - 8);
+        stop = true;
+        const use = deltas.slice(3).filter((d) => d > 0).sort((a, b) => a - b);
+        if (!use.length) return null;
+        const at = (q) => use[Math.min(use.length - 1, Math.floor(q * use.length))];
+        return {
+          frames: use.length,
+          medianMs: Math.round(at(0.5) * 100) / 100,
+          p95Ms: Math.round(at(0.95) * 100) / 100,
+          worstMs: Math.round(use[use.length - 1] * 100) / 100,
+          medianFps: Math.round((1000 / at(0.5)) * 10) / 10,
+          p95Fps: Math.round((1000 / at(0.95)) * 10) / 10,
+        };
+      })()`,
+    )
+    filmReport = { lanes: filmReport, timeline: fps, takeMs }
+    text = filmReport.lanes
       .map((l) => `${l.label}: ${l.hasStrip ? 'strip' : l.hasWave ? 'wave' : '—'} h${l.laneHeight}`)
-      .join(' · ')
+      .join(' · ') + (fps ? ` | scrub ${fps.medianFps} fps median, ${fps.p95Fps} p95, worst ${fps.worstMs} ms` : '')
   } else if (flow === 'roughsize') {
     opened = await evaluate(
       `(() => { const b=[...document.querySelectorAll('button')].find(x=>/export/i.test(x.textContent||'')); if(!b) return false; b.click(); return true })()`,

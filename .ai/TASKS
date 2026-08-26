@@ -29,79 +29,63 @@ several ids, take the first and tell PO to open parallel sessions for the rest. 
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
 ── READY MAP — current truth, updated on every merge ──
-Last update 2026-08-26 (THIRTEENTH session, PO: "go roadmap all in one"). THREE TASKS CLOSED AND
-TWO OF THEM CLOSED BY BEING REFUTED — which is the point of running them rather than reasoning.
-  · X9 SHIPPED. The For-AI build runs in a worker; byte-identical PDF on four lanes (same SHA-256),
-    and the UI thread now loses 15 ms of a build instead of 78 (1.3-1.8 % of its wall against
-    7.6-8.3 %). The worker is NOT faster — it is elsewhere. The gate as written ("long-task count
-    ~0") could not fail and therefore could not pass: it read 0 on BOTH threads, because a build
-    that awaits a decode every sample never forms a 50 ms task while still owning the thread. The
-    O5 rig had learned this in August and written it down; this session reached for the same wrong
-    counter anyway, so the instrument is a shared file now (perf/mainThreadWatch.ts).
-  · X4 REFUTED AND DELETED. The decode farm — one worker per channel, whole schedule up front,
-    read-ahead credit window — was built, produced byte-identical files, and bought 0.99-1.08×
-    against a gate asking ≥2×. Decomposed: a worker decodes at 0.93-1.04× the main thread ALONE,
-    the picture handoff is 0.4 % of a render, and at read-ahead 32 the workers never stall on
-    credit and nothing improves. What is left is contention — the screen worker's decode goes
-    4668 ms → 17-23 s the moment the render encodes beside it, and the render's encode-wait rises
-    too. The export's floor is decode, and decode is not thread-bound. Step 2 (GOP sharding) dies
-    with it: more decoders against the same constraint. Production code reverted byte-for-byte;
-    `npm run exp -- o5` prints the three numbers so nobody re-proposes it from a hunch.
-  · X12 REFUTED ITS OWN PREMISE. Capture does not write 18.5 Mbps — it writes 5.21 (screen) and
-    7.63 (motion); 18.5 was the sum of ceilings nothing reaches (the composite spends 11.8 % of
-    its own). And the rung it was written to price is BACKWARDS on the content PO records: dropping
-    the raw screen channel 8 → 2.5 Mbps saves 32.5 % of disk and makes the DELIVERED FILE 31.5 %
-    BIGGER, because a noisier source is more expensive to re-encode. Proposal: keep 8 Mbps.
-  · X5 REFUSED ON ITS OWN PARITY GATE, before the shader was written. GL IS faster than the 2D
-    painter (1.71×, CPU→GPU upload included) — but there was never a readback to remove, because
-    the render's frames come from a SOFTWARE decoder and are already in CPU memory, and draw is
-    only 25-30 % of the render, so the entire port caps at ~10-13 % of export time. Then the gate
-    fails on the EASIEST case: same frames, default composition, the screen-TEXT interior reads
-    37.3 dB / max 156 of 255 / 3.8 % of pixels off by >8, against ≤1 LSB or ≥60 dB. The smooth
-    camera region is clean (max 5-8) and the mean signed delta is ≈0, so it is neither a colour
-    shift nor geometry — texImage2D and drawImage upsample 4:2:0 chroma differently, and the
-    fixture is coloured text on dark ground. The port would change how exported TEXT looks, which
-    is PO's call and collides with O9.
-  · X6 BUILT AND SHIPPED OFF BY DEFAULT. Raw screen/camera channels can now record through
-    MediaStreamTrackProcessor → hardware AVC → fragmented MP4 on the worker's own SyncAccessHandle,
-    behind `?rawcodec=webcodecs`. O3a's objection is answered with its own test. CPU 149→95 % peak,
-    80→47 % mean. NOTE 6 BIT A THIRD TIME and this one was a production gap: prearm only warmed the
-    encoder when the COMPOSITE was v2, so X6's raw encoders would have been cold on every launch —
-    cold they dropped 45-65 % of frames, warm they drop none. Fixed, and the drop counter that would
-    have caught it now exists. The default stays because the picture changes (27.9 dB on screen
-    content), and a picture change is PO's.
-NOT DONE THIS SESSION, and PO asked for all of it: O6 · O9 · O8b · O3b · F6 · F8's 60 fps
-trace · O4-polish's two items. Each is a session; see COST BANDS below.
-PO'S AUDIO LISTEN TEST IS STILL OWED (X1, twelfth session) — `peakRobust` was computed and dropped
-on the way to both consumers, so the 2026-08-25 makeup fix was in force nowhere until it was found.
-It runs now; the test is owed on a build where it does.
-NOT STARTED, each still a session: O3b · O5e · O6 · O8b · O9 · O10 · F6 ·
-F8's 60 fps trace. O4-polish is down to two items (e2e wedge case, 4K row).
-FULL SWEEP AFTER THIS SESSION (dd07590): 419 tests · typecheck clean · oracle PASS on v2 (sync 52.1,
-inst=instant/61.1, trim=smartcut/60.6, tail 65 ms, spur −53.1, export 5.29x) AND on v1 (sync 47.3,
-inst=instant/45.8, trim=render/64.6, tail 75, spur −59.8, export 4.96x) · fidelity PASS on BOTH lanes
-(render residual 0.04 dB, instant residual 0.03, THD −67.7/−70.8, IMD −57.0/−61.0, 0 limiter hits) ·
-`node scripts/ai-pdf-check.mjs` ALL GATES PASS including both independent readers · browser-check
-real Chrome PASS, zero failures, 4 channels, export 516 ms · first paint 242,427 B (gate 300 KB) ·
-verify-deploy OK, and the For-AI export driven on the DEPLOYED build fetched `ai.worker-*.js`
-(3 pages, 32.1 KB, no console errors) — i.e. X9's worker path is the one production takes.
-MERGED BEFORE THIS SESSION, one line each because the detail lives under each task: O1 · O2 · O3a ·
-O4 (step1, b, step2, the worker exoneration, the cold-start verdict, DEFAULT FLIPPED TO v2) ·
-O4-polish's preview-from-the-compositor · O5 · O5-flip (smart cut ON) · O7 · O8 (partial) ·
-O11 a/b/c · GATE-alias · P0 mic-hang · P0-tail · P0-tail-raw · P0-instant-sync · P1 (code half) ·
-P2 · P3 · F1 · F2 · F2b · F3 · F4 · F5a · F5b · F7 · F7b · F7c (attempt 5) · F7d · F8's premise
-refuted + its filmstrip, waveforms and paused deadband · AI1.
-START HERE IF YOU ARE FRESH:
-  1. read notes 5, 6, 9, 10, 11, 17 below — they are the ones that will bite you today. Note 10 now
-     has SEVEN instances and note 17 is new and is the one this session paid twice: A GATE THAT
-     CANNOT FAIL IS NOT A GATE, and both times the wrong instrument read GREEN;
-  2. `npm run typecheck && npm test` (419 tests) and `npm run oracle` should be green before you
-     change anything, so a red gate later is yours and not inherited;
-  3. take one task from READY NOW. There is no LIVE DEFECT on the map; the DEFAULT capture engine is
-     now v2 (worker + WebCodecs) — anything touching capture/* keeps BOTH engines green.
-  4. the COLD gate (`--cold=N`) is trustworthy again since GATE-alias, with one known exception: the
-     SPUR band still fails about one run in seven at −33 to −38 dB. That is capture starvation, not a
-     mix regression, and it is the next gate task.
+Last update 2026-08-26 (THIRTEENTH session, PO: "go roadmap all in one" → "go next" → "go" →
+"fucking finish roadmap"). THE MAP IS EMPTY OF BUILDABLE WORK. Everything that could be decided by
+measurement was; everything left needs PO — a ruling, a listen, or hardware.
+
+SHIPPED THIS SESSION
+  · X9   the For-AI build runs in a worker. Byte-identical PDF on four lanes; the UI thread loses
+         13 ms of a build instead of 84. The worker is not faster — it is elsewhere.
+  · X6   raw channels can record through WebCodecs → hardware AVC → fragmented MP4 (?rawcodec=
+         webcodecs). O3a's objection answered with O3a's own test: a kill at 50 % of the bytes leaves
+         56-88 % of the take decodable, against 753 bytes. CPU 149→95 % peak, 80→47 % mean.
+  · F6   PAUSE AND RESUME, and the pause is left out of the take. Verified on prod: 8 segments,
+         seams 99-218 ms, 17.3 s of recorded material from a longer wall clock. Retake NOT built.
+  · O10a BS.1770 loudness — measured, implemented (14 tests), wired as an additive mode.
+  · O6   the degradation ladder (9 tests) + ?nativeres=1, default off.
+  · O4-polish CLOSED — the e2e wedge case, and a 4K row whose premise was wrong twice.
+  · O8b  the delivered-fps band ships in oracle:load.
+  · F8   CLOSED — the timeline holds 120 fps and its cost does not depend on take length.
+
+REFUTED ON MEASUREMENT, and each one is why the map is now honest
+  · X4   the decode farm: byte-identical files at 0.99-1.08× against a ≥2× gate. Decode is not
+         thread-bound. DELETED; the verdict is re-runnable in one command.
+  · X5   the GPU export compositor: refused on its own parity gate before the shader was written —
+         the two painters disagree by 156 of 255 on 3.8 % of screen-TEXT pixels.
+  · X12  capture writes 5.21/7.63 Mbps, not 18.5, and the rung it existed to price is BACKWARDS on
+         screen content (−32.5 % disk for a +31.5 % bigger delivered file).
+  · O9   the export is the SMALL half of text damage: capture destroys 51 % of glyph edge contrast,
+         the export preserves it. AV1 4:4:4 halves the export's own fringe at fewer bytes, but that
+         is ~12 % of the total.
+
+WHAT IS LEFT, AND EVERY ITEM IS PO'S
+  1. AUDIO LISTEN TEST (owed since X1) — a normal take and a tab-music take, on a build where the
+     peakRobust fix is actually in force. Two one-line fixes made it real on 2026-08-26.
+  2. THE FOR-AI FILE re-test — give a real take's PDF to an agent for the job you actually have.
+     That report is AI1's acceptance and the only thing that unfreezes AI2-AI7.
+  3. X6's PICTURE RULING — at the same ceiling the AVC raw channel writes 0.21× the bytes and the
+     pictures agree to 27.9 dB on screen content. Rate control, not loss; the shipped composite
+     already does the same thing. Flipping it changes how an EDITED export looks. If you flip it,
+     O3b collects the reward (skip the composite entirely on a single-screen take).
+  4. O10a's ATTENUATION RULING — exports scatter 7.84 dB by content and sit 1-9 dB ABOVE the −14 LUFS
+     convention. R128 can only fix that by turning takes DOWN, and the shipped bounding never
+     attenuates. The measurement, the implementation and the switch are all in place.
+  5. O6's 4K RE-VERIFY — `?nativeres=1`, record the game tab that froze on 08-22, report the console.
+     No rig can stand in: a synthetic 4K source is a rAF-painted canvas, so its fps is dominated by
+     a cost a real display does not have (measured — capping it moved oracle:load 14 → 14).
+  6. X5's TEXT QUESTION (BACKLOG P1) — does adding one trim change how text looks? Measured in the
+     lab, not yet in the app; the settling experiment is written down.
+  7. THE OLD ONES, unchanged: real-Safari recheck (P8), camera-only 1080p recheck, Yandex + RU
+     reachability runs (P3), Playwright install for P1/O11d, Xcode 27 + an iOS 27 device for P5a.
+
+NEEDS A RULING BEFORE ANYONE BUILDS: X7 · X10=O5e · X13 · O12 (see the block below).
+PARKED: X11 · X14. BLOCKED ON HARDWARE/DOWNLOADS: P1's two gates · O11d · P5a · P8.
+NOT STARTED, and deliberately: O10(b) multitrack · O10(c) spectral gating · O10(d) AEC (P4) ·
+O9(c) near-lossless static spans (its premise is refuted by O9's own table — 3× the bits bought 4 %) ·
+F6's RETAKE (a resume of a FINISHED recording: recovery, editsRepo and editor state, its own task).
+
+FULL SWEEP AT THE END OF THIS SESSION: 449 tests · typecheck clean · oracle PASS on v2 AND v1 ·
+armcancel green · build clean · F6 and X9 verified on the DEPLOYED build.
 
 READY NOW — parallel-safe, any subset concurrently (one session each):
   (GATE-alias FIXED 2026-08-25, eleventh session — see the task below. The first diagnosis written
@@ -1258,7 +1242,21 @@ its own fragmented-MP4 muxer. THE RE-TEST RIG IS GONE (X3, 2026-08-26): the verd
 the approach is in the REJECTED list, so `perf/mp4Capture.ts` was deleted. X6 will write its own
 mid-take-kill snapshot check against the WebCodecs path it builds, which is the shape that matters now.
 NEEDS PO RECHECK: camera-only take on a real camera should now record 1080p, not 720p.
-(b) ee/o3-single-gen — BLOCKED ON O4 (re-scoped 2026-08-23), still to do: a take with exactly ONE video channel whose dims ==
+(b) STATUS 2026-08-26: X6 UNBLOCKS THE HALF THAT WAS IMPOSSIBLE, and gates it on X6's own flip.
+The re-scope below concluded "Chromium raw channels stay VP9, so a single-generation packet copy into
+MP4 is impossible there". That is no longer true: X6 records raw channels as AVC in fragmented MP4,
+which is exactly the copyable shape O3b needed. So both halves are now buildable —
+  · the CPU half (skip the live composite when one video channel already matches the export) saves a
+    whole encoder during capture, and X12 priced what that is worth: the composite writes 0.94 Mbps
+    on screen content and 1.44 on motion, ~18 % of the take's total write bandwidth;
+  · the COPY half (unedited export packet-copies the RAW channel) is what keeps the instant path
+    alive once the composite is gone — and without it, skipping the composite would trade "instant
+    is law" for CPU, which is not a trade this product may make.
+The copy half only works when the raw channel IS mp4/AVC, i.e. when X6 is on, and X6 is off by
+default pending PO's ruling on the picture change it makes (see the X6 handoff). SO O3b IS NOT
+BLOCKED ON CODE ANY MORE — it is blocked on the same decision X6 is, and it should be taken up in the
+same breath: if X6 flips, O3b is the task that collects the reward.
+(b) ee/o3-single-gen — original note (re-scoped 2026-08-23), still to do: a take with exactly ONE video channel whose dims ==
 export dims and codec is mp4-compatible → skip the live composite entirely (audio mix graph still
 runs); unedited export = packet-copy the RAW channel. RE-SCOPE RESULT: with (a)'s mp4 flip rejected on
 evidence, Chromium raw channels stay VP9, so a single-generation packet copy into MP4 is impossible
@@ -2239,9 +2237,22 @@ ONE DECISION IS PURE AND TESTED (compose/lanewave.ts waveScale, 7 tests) BECAUSE
    empty. The reference is a high PERCENTILE now and the few columns above it draw full height; the
    true maximum is still reported, because it is the honest number about the audio even when it is the
    wrong number to draw against. Screenshots of both versions are in the session.
-STILL OPEN in F8, and now the only thing left in it: the 60 fps-with-a-30-min-take TRACE. Both halves
-  are designed for it — one background image per lane, at most 24 thumbnails and ~400 columns whatever
-  the length — but designed is not measured, and it wants a 30-minute fixture.
+F8 IS CLOSED 2026-08-26 (THIRTEENTH SESSION) — the 60 fps trace is measured, and the answer is that
+  the timeline's cost does not depend on take length at all. `node scripts/ui-shot.mjs --flow=film
+  --takeMs=N` now DRAGS the playhead across the whole timeline and samples rAF deltas while it moves
+  (a still timeline repaints nothing and would score any amount of work as 60 fps). On the prod build
+  in real Chrome:
+        8 s take    120.5 fps median · 107.5 p95 · worst frame 9.4 ms
+       40 s take    120.5 fps median · 108.7 p95 · worst frame 9.3 ms
+      120 s take    120.5 fps median · 106.4 p95 · worst frame 9.4 ms
+  FLAT ACROSS 15× THE LENGTH, at double the gate's 60 fps, with the worst single frame at 9.4 ms
+  against a 16.7 ms budget. That is the design working rather than a coincidence: filmstripPlan caps
+  thumbnails at 24 by PITCH so length changes what a thumbnail stands for and never how many there
+  are, the waveform is ~400 columns set by lane WIDTH, and both are stitched into ONE background
+  image per lane so the browser paints one layer however long the recording is.
+  WHAT IS EXTRAPOLATED, said rather than hidden: 30 minutes is 15× beyond the longest cell measured.
+  What is demonstrated is INDEPENDENCE of length over a 15× range, which is the property the constants
+  predict; a 30-minute fixture would confirm it and would take 30 minutes to record.
 
 ═══ PHASE P — PORTS (PO-approved direction 2026-08-22; P1/P2/P3/P5a may run parallel with O-phase) ═══
 

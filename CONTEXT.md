@@ -108,6 +108,18 @@ identical down to the checksum. The build is not faster — it was never meant t
 keeps working while it happens. Measured on a short recording, the interface lost 13 ms instead of
 84; on a real 97-second take that difference is roughly a second of unresponsiveness against ten.
 
+**The engineering roadmap is finished (2026-08-26).** Everything on it that could be settled by
+building or measuring has been. What is left is seven decisions and checks that are yours, not ours —
+they are listed at the end of this section, and each one is a single question with the evidence
+already gathered.
+
+Four items on that roadmap turned out to be **wrong ideas**, and finding that out is most of what the
+work bought. Parallel decoding made exports 1 % faster, not twice as fast. Drawing on the graphics
+card fails on text. Lowering the recording data rate makes your download *bigger*. And "the export
+smears screen text" is false — the export preserves text almost perfectly; the damage happens when
+the recording is first captured. None of those would have been visible without measuring them, and
+three of the four had been on the plan for weeks as things that would obviously help.
+
 **You can pause a recording now (2026-08-26).** A Pause button sits beside the record button while
 you record. It does not release anything: the camera light stays on, nothing is asked for again, and
 pressing Resume picks up on the same inputs — so a pause costs you no setup and no permission
@@ -145,6 +157,17 @@ combined picture INOUT already gives you does exactly the same thing), but it ch
 export looks, and changing a picture you already have is your call and not ours. There is one
 specific setting left to try that would likely close the gap; it is written down. Until then:
 `?rawcodec=webcodecs` turns it on for one load if you want to compare.
+
+**Screen text: we found where it actually gets damaged (2026-08-26).** Making text crisp was on the
+plan as an export problem — better compression settings when the file is built. Measured against the
+original screen, the export turns out to be nearly blameless: it keeps the sharpness of every letter
+edge essentially perfectly. **The damage happens at the moment of recording**, where Chrome's
+software compressor throws away half the contrast of every glyph edge before the export ever sees it.
+So the fix is at the recording end, which is the change described above — and the version of it built
+this session does not fix text either, because it uses the same colour handling. Doing it properly
+means a different compressor at capture, which on this machine only exists in software: the exact
+processor cost the change was made to remove. That tension is now written down with numbers rather
+than being discovered later.
 
 **Three optimizations were tried, measured, and thrown away — which is the point of measuring
 (2026-08-26).** All three were on the roadmap as promising and all three turned out to be wrong, and
@@ -453,7 +476,29 @@ Competitive stance: the empty quadrant is no-install + local-first + world-class
 network (mediocre tool), Screen Studio's Mac-only polish, Cap's required install, Tella's cloud-bound
 browser. Share loop stays the minimal signed-link cloud already scoped.
 
-## Next
+## Next — seven things that need you
+
+The engineering roadmap is done. Each of these is one question with the evidence already gathered;
+none of them can be settled without you.
+
+1. **Listen to two recordings.** A normal one and one with music from a tab. The audio fix you were
+   asked to check before was never actually running — the number it depends on was being calculated
+   and dropped. It runs now.
+2. **Give a "For AI" file to an AI**, for the job you actually have, and say whether it worked. That
+   report is the only thing that unfreezes the rest of the AI work.
+3. **Decide about the new recording compressor.** It halves processor use, but it spends about a
+   fifth of the data on screen content and the picture measurably differs. Try it with
+   `?rawcodec=webcodecs`. If you say yes, a further saving unlocks immediately.
+4. **Decide whether exports may get quieter.** Your recordings currently come out 1–9 dB louder than
+   the level everything else on the internet is normalised to, and they vary by almost 8 dB depending
+   on what is in them. The standard fix is to turn them down. Everything to do it is built.
+5. **Re-test the 4K game tab** with `?nativeres=1` and tell us what the console says. We built the
+   safety net that steps the resolution down under load; we cannot test it, because a fake 4K source
+   costs the browser something a real screen does not.
+6. **A question we raised but could not close**: does adding a single trim change how text looks in
+   your export? Measured in the lab, not yet in the app. The experiment that settles it is written
+   down.
+7. The standing ones: a real Safari recording, a camera-only recording, and the Yandex/RU checks.
 
 PO records with the tool and reports bugs; that loop is working and is what caught both the mic hang
 and the sync drift. Next: (1) provision Supabase + Google OAuth (~15 min, docs/CLOUD_SETUP.md) then
