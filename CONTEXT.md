@@ -108,6 +108,29 @@ identical down to the checksum. The build is not faster — it was never meant t
 keeps working while it happens. Measured on a short recording, the interface lost 13 ms instead of
 84; on a real 97-second take that difference is roughly a second of unresponsiveness against ten.
 
+**Recording now costs about half the processor it did — but the change is switched off until you
+say otherwise (2026-08-26).** While you record, INOUT saves each source separately as well as the
+combined picture, and those separate files were being compressed the slow way, in software, twice
+over. They can now use the graphics chip's built-in video compressor instead, the same one the
+combined picture already uses. Measured on a 15-second test recording with nothing dropped on either
+side: the browser's processor use went from 149 % to 95 % at its peak, and from 80 % to 47 % on
+average. That is headroom that goes straight to the thing you actually hit — recording a demanding
+game or a 4K screen.
+
+It also fixes something that blocked this a month ago. The reason INOUT records those files in the
+older format is that Chrome writes the newer one all at once, at the end — so a browser crash
+halfway through lost the whole recording. The new path writes continuously, and the test for it is
+the same one that rejected the idea last time: cut the file off halfway and see what still plays.
+It plays back 56–88 % of the recording. The old way left 753 bytes.
+
+**Why it is not on yet.** At the same quality setting the new compressor spends about a fifth of the
+data on screen content, and the resulting picture is measurably different from the old one. It is
+not losing frames — every frame is there — it is choosing to spend less. That may well be fine (the
+combined picture INOUT already gives you does exactly the same thing), but it changes how an *edited*
+export looks, and changing a picture you already have is your call and not ours. There is one
+specific setting left to try that would likely close the gap; it is written down. Until then:
+`?rawcodec=webcodecs` turns it on for one load if you want to compare.
+
 **Three optimizations were tried, measured, and thrown away — which is the point of measuring
 (2026-08-26).** All three were on the roadmap as promising and all three turned out to be wrong, and
 finding that out cost sessions rather than releases.

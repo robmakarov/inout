@@ -40,13 +40,18 @@ export function warmCapturePipeline(): void {
       await blobStore.remove('__warmup.bin').catch(() => undefined)
       // O4: the v2 engine owns a VideoEncoder, and a Chrome process's FIRST
       // VideoEncoder pays a multi-second init (per launch, measured — see
-      // encoderWarm.ts). Pay it here, while nobody is recording. Gated on the
-      // engine preference so default (v1) users spend nothing; flips with it.
-      const [{ preferredCompositeEngine }, { warmVideoEncoder }] = await Promise.all([
-        import('./engine'),
-        import('./encoderWarm'),
-      ])
-      if (preferredCompositeEngine() === 'v2') void warmVideoEncoder()
+      // encoderWarm.ts). Pay it here, while nobody is recording. Gated on
+      // whether anything in this take will USE a VideoEncoder, so a session
+      // that will not spends nothing.
+      //
+      // X6 ADDED A SECOND REASON TO WARM and it would have been missed: the raw
+      // channels can now own VideoEncoders too, and they need the init paid
+      // whether or not the COMPOSITE is v2. Measured cold on the rig, the raw
+      // channels dropped 45-65 % of their frames — which is note 6's fault
+      // exactly, a third time.
+      const [{ preferredCompositeEngine }, { warmVideoEncoder }, { canMeasureVideoCapture }] =
+        await Promise.all([import('./engine'), import('./encoderWarm'), import('./measuredVideo')])
+      if (preferredCompositeEngine() === 'v2' || canMeasureVideoCapture()) void warmVideoEncoder()
     } catch {
       warmed = false
     }

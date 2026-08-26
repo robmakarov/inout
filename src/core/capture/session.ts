@@ -30,6 +30,12 @@ import {
 } from './measuredAudio'
 import { canLiveComposite, startLiveComposite, type LiveCompositeHandle } from './liveComposite'
 import { drainRecorder } from './recorderDrain'
+import {
+  MEASURED_VIDEO_MIME,
+  canMeasureVideoCapture,
+  startMeasuredVideoCapture,
+  type MeasuredVideoHandle,
+} from './measuredVideo'
 import { canLiveCompositeV2, startLiveCompositeV2 } from './liveCompositeV2'
 import { preferredCompositeEngine } from './engine'
 import { MixLoudnessAccumulator } from './loudnessAccumulator'
@@ -161,16 +167,23 @@ function pickMimeType(media: MediaKind): string {
  * config, exactly like O3a's capture resolution, so the resolution and the
  * bitrate can never disagree about which take this is.
  */
+function videoBitsFor(kind: ChannelKind, cameraIsPip: boolean): number {
+  return kind === 'screen' ? 8_000_000 : kind === 'camera' && cameraIsPip ? 2_500_000 : 4_000_000
+}
+
 function recorderOptions(
   kind: ChannelKind,
   media: MediaKind,
   mimeType: string,
   cameraIsPip: boolean,
 ): MediaRecorderOptions {
-  const videoBits =
-    kind === 'screen' ? 8_000_000 : kind === 'camera' && cameraIsPip ? 2_500_000 : 4_000_000
+  // X6 reads the SAME function for its VideoEncoder bitrate, so a raw channel
+  // costs the same whichever encoder writes it and O11c's number cannot drift
+  // between the two paths.
   const bits =
-    media === 'video' ? { videoBitsPerSecond: videoBits } : { audioBitsPerSecond: 128_000 }
+    media === 'video'
+      ? { videoBitsPerSecond: videoBitsFor(kind, cameraIsPip) }
+      : { audioBitsPerSecond: 128_000 }
   return mimeType ? { mimeType, ...bits } : bits
 }
 
@@ -212,8 +225,13 @@ interface ChannelRuntime {
   track: MediaStreamTrack
   /** MediaRecorder path (video, or audio fallback). */
   recorder: MediaRecorder | null
-  /** Measured AudioWorklet→WebCodecs path (audio preferred). */
-  measured: MeasuredAudioHandle | null
+  /**
+   * The WebCodecs path for this channel — AudioWorklet→opus for audio (always
+   * preferred on Chromium), MediaStreamTrackProcessor→AVC for video (X6, opt-in
+   * via ?rawcodec=webcodecs). Both handles expose the same stop/cancel contract
+   * on purpose, so the stop path branches on `useMeasured` and never on media.
+   */
+  measured: MeasuredAudioHandle | MeasuredVideoHandle | null
   useMeasured: boolean
   /** Pre-warmed during arm() so start() only connects the graph. */
   audioCtx: AudioContext | null
@@ -494,12 +512,23 @@ class Session implements CaptureSession {
 
   private async armChannel(acq: AcquiredChannel): Promise<ChannelRuntime> {
     const id = newId('ch')
-    const blobKey = `${this.recordingId}_${id}.webm`
     // Apple WebKit: the WebCodecs measured-audio path (AudioWorklet→opus)
     // captures only ~1s on Safari then goes silent, truncating the take. Record
     // audio with MediaRecorder (mp4/aac) there — the very path that already
     // captures Safari VIDEO full-length. Chromium keeps the measured path (sync).
-    const useMeasured = acq.media === 'audio' && canMeasureAudioCapture() && !isAppleWebKit()
+    // X6: raw VIDEO channels can take the same seam — MediaStreamTrackProcessor
+    // → hardware AVC → fragmented MP4 on the worker's own SyncAccessHandle,
+    // instead of MediaRecorder's SOFTWARE VP8/VP9. OFF by default; the
+    // capability check includes the preference (rawCodec.ts).
+    const useMeasured =
+      acq.media === 'audio'
+        ? canMeasureAudioCapture() && !isAppleWebKit()
+        : canMeasureVideoCapture()
+
+    // The extension follows the container the channel will actually hold: the
+    // measured VIDEO path writes fragmented MP4, everything else webm.
+    const measuredVideo = acq.media === 'video' && useMeasured
+    const blobKey = `${this.recordingId}_${id}.${measuredVideo ? 'mp4' : 'webm'}`
 
     let resolveStopped!: () => void
     const stopped = new Promise<void>((resolve) => {
@@ -517,7 +546,11 @@ class Session implements CaptureSession {
       useMeasured,
       audioCtx: null,
       measuredStarting: null,
-      mimeType: useMeasured ? 'audio/webm;codecs=opus' : pickMimeType(acq.media),
+      mimeType: measuredVideo
+        ? MEASURED_VIDEO_MIME
+        : useMeasured
+          ? 'audio/webm;codecs=opus'
+          : pickMimeType(acq.media),
       blobKey,
       writer: null,
       writeChain: Promise.resolve(),
@@ -530,7 +563,11 @@ class Session implements CaptureSession {
       resolveStopped,
     }
 
-    if (useMeasured) {
+    if (measuredVideo) {
+      // Nothing to pre-warm here: the encoder warm-up that matters is the
+      // per-launch VideoEncoder init, and prearm.ts already pays it at mount
+      // (note 6). The worker and its OPFS handle are opened at start().
+    } else if (useMeasured) {
       try {
         // BOUNDED: AudioContext.resume() on wedged audio hardware can pend
         // forever, and arm() awaits this — an unbounded wait here froze the
@@ -625,7 +662,8 @@ class Session implements CaptureSession {
   private activateChannel(ch: ChannelRuntime, startT0: number): void {
     if (ch.ended) return
     if (ch.useMeasured) {
-      ch.measuredStarting = this.startMeasured(ch, startT0)
+      ch.measuredStarting =
+        ch.media === 'video' ? this.startMeasuredVideo(ch, startT0) : this.startMeasured(ch, startT0)
       return
     }
     if (!ch.recorder) return
@@ -858,6 +896,76 @@ class Session implements CaptureSession {
     })
   }
 
+  /**
+   * A raw VIDEO channel on WebCodecs (task X6). Deliberately the smaller twin
+   * of startMeasured: no worklet, no loudness tap, no pre-warmed context —
+   * just the track, its own worker, and the same handle contract so every stop
+   * path already written works unchanged.
+   *
+   * A FAILURE HERE IS NOT FATAL TO THE TAKE. The frozen rule wants the shipped
+   * path as the runtime fallback, so a start failure falls back to the
+   * MediaRecorder this channel was armed with — the recorder object exists
+   * either way, because armChannel only skips creating it for measured AUDIO.
+   */
+  private async startMeasuredVideo(ch: ChannelRuntime, startT0: number): Promise<void> {
+    const settings = ch.track.getSettings()
+    const width = settings.width ?? ch.width ?? 1920
+    const height = settings.height ?? ch.height ?? 1080
+    const fps = Math.round(settings.frameRate ?? 30)
+    try {
+      const handle = await startMeasuredVideoCapture({
+        track: ch.track,
+        key: ch.blobKey,
+        epoch: this.epoch,
+        width,
+        height,
+        fps: fps > 0 ? fps : 30,
+        videoBitrate: videoBitsFor(ch.kind, this.config.screen),
+        onFatal: (err) => {
+          if (this.stateInternal !== 'recording') return
+          this.emit({
+            type: 'channel-error',
+            kind: ch.kind,
+            message: `${ch.kind} recording failed mid-take (${err.message}) — video saved up to this point only`,
+          })
+        },
+      })
+      ch.measured = handle
+      ch.mimeType = handle.mimeType
+      ch.recorderStarted = true
+      ch.width = width
+      ch.height = height
+      const offset = await handle.firstOffset
+      ch.startOffsetMs = offset
+      ch.startAbs = this.epoch + offset
+      console.info(
+        `[capture:arming] measured video ${ch.kind} first-frame +${(performance.now() - startT0).toFixed(0)}ms offset=${offset.toFixed(1)}ms ${width}x${height}@${fps}`,
+      )
+    } catch (err) {
+      // Fall back to the shipped path rather than losing the channel. The
+      // recorder was built during arm() and has not been started.
+      console.warn('[capture] measured video unavailable, using MediaRecorder for', ch.kind, err)
+      ch.useMeasured = false
+      ch.measured = null
+      if (ch.recorder && ch.recorder.state === 'inactive') {
+        const tCall = performance.now()
+        ch.startAbs = tCall
+        ch.startOffsetMs = tCall - this.epoch
+        try {
+          ch.recorder.start(TIMESLICE_MS)
+          ch.recorderStarted = true
+        } catch (startErr) {
+          console.error('[capture] MediaRecorder fallback also failed for', ch.kind, startErr)
+          this.emit({
+            type: 'channel-error',
+            kind: ch.kind,
+            message: `${ch.kind} could not start recording`,
+          })
+        }
+      }
+    }
+  }
+
   private async startMeasured(ch: ChannelRuntime, startT0: number): Promise<void> {
     try {
       const writer = await createDurablePositionedWriter(ch.blobKey)
@@ -883,7 +991,12 @@ class Session implements CaptureSession {
             // Register every measured channel up front: the fold must wait for
             // all of them from frame 0, or a slower channel's opening audio
             // would be summed after its window had already been folded.
-            for (const c of this.channels) if (c.useMeasured) this.loudness.register(c.id)
+            // AUDIO channels only. A measured VIDEO channel (X6) also has
+            // useMeasured set and delivers no PCM ever, so registering it would
+            // make the fold wait forever for a contributor that cannot arrive.
+            for (const c of this.channels) {
+              if (c.useMeasured && c.media === 'audio') this.loudness.register(c.id)
+            }
           }
           const offsetFrames = Math.round((startOffsetMs * sampleRate) / 1000)
           this.loudness.add(ch.id, left, right, startFrame + offsetFrames)

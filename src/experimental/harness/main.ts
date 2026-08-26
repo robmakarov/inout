@@ -403,6 +403,21 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'x6',
+    title: 'X6 — a raw channel on WebCodecs against the same channel on MediaRecorder',
+    detail:
+      'records the SAME take shape twice through the real createCaptureSession — once with the shipped MediaRecorder raw channels, once with X6’s MediaStreamTrackProcessor→AVC→fragmented-MP4 path — and probes both files. Carries O3a’s own gate, the one that refused MP4 capture in the first place: truncate a copy at 50 % of the bytes (which is what a tab kill leaves on disk) and decode it. Reports the tail band, frames, codec and container per channel. CPU is whole-browser and belongs to the sampler: run twice with `--cpu --query=rawcodec=…`.',
+    run: async (args) => {
+      const { runRawCodecTake } = await import('../perf/rawCodecTake')
+      return runRawCodecTake({
+        takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined,
+        codecs: Array.isArray(args?.codecs)
+          ? (args.codecs as ('mediarecorder' | 'webcodecs')[])
+          : undefined,
+      })
+    },
+  },
+  {
     id: 'x5',
     title: 'X5 — is the render’s 2D composite the readback capture fixed, or a different animal?',
     detail:

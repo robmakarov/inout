@@ -62,12 +62,20 @@ TWO OF THEM CLOSED BY BEING REFUTED — which is the point of running them rathe
     shift nor geometry — texImage2D and drawImage upsample 4:2:0 chroma differently, and the
     fixture is coloured text on dark ground. The port would change how exported TEXT looks, which
     is PO's call and collides with O9.
-NOT DONE THIS SESSION, and PO asked for all of it: X6 · O6 · O9 · O8b · O3b · F6 · F8's 60 fps
+  · X6 BUILT AND SHIPPED OFF BY DEFAULT. Raw screen/camera channels can now record through
+    MediaStreamTrackProcessor → hardware AVC → fragmented MP4 on the worker's own SyncAccessHandle,
+    behind `?rawcodec=webcodecs`. O3a's objection is answered with its own test. CPU 149→95 % peak,
+    80→47 % mean. NOTE 6 BIT A THIRD TIME and this one was a production gap: prearm only warmed the
+    encoder when the COMPOSITE was v2, so X6's raw encoders would have been cold on every launch —
+    cold they dropped 45-65 % of frames, warm they drop none. Fixed, and the drop counter that would
+    have caught it now exists. The default stays because the picture changes (27.9 dB on screen
+    content), and a picture change is PO's.
+NOT DONE THIS SESSION, and PO asked for all of it: O6 · O9 · O8b · O3b · F6 · F8's 60 fps
 trace · O4-polish's two items. Each is a session; see COST BANDS below.
 PO'S AUDIO LISTEN TEST IS STILL OWED (X1, twelfth session) — `peakRobust` was computed and dropped
 on the way to both consumers, so the 2026-08-25 makeup fix was in force nowhere until it was found.
 It runs now; the test is owed on a build where it does.
-NOT STARTED, each still a session: O3b · O5e · O6 · O8b · O9 · O10 · F6 · X6 ·
+NOT STARTED, each still a session: O3b · O5e · O6 · O8b · O9 · O10 · F6 ·
 F8's 60 fps trace. O4-polish is down to two items (e2e wedge case, 4K row).
 FULL SWEEP AFTER THIS SESSION (dd07590): 419 tests · typecheck clean · oracle PASS on v2 (sync 52.1,
 inst=instant/61.1, trim=smartcut/60.6, tail 65 ms, spur −53.1, export 5.29x) AND on v1 (sync 47.3,
@@ -134,11 +142,14 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
    against ≤1 LSB or ≥60 dB, because texImage2D and drawImage upsample 4:2:0 chroma differently.
    Porting would CHANGE HOW EXPORTED TEXT LOOKS — PO's call, and it collides with O9. See the
    handoff; `npm run exp -- x5` reproduces it.)
-  X6   raw-channels-webcodecs      [medium]  screen+camera still encode via SOFTWARE VP8/VP9 during
-                                             capture (largest capture CPU cost, O3a). The O3a
-                                             blocker (Chrome won't stream MP4) is solved by v2's own
-                                             fMP4+SyncAccessHandle pattern; ee/webcodecs-capture-2
-                                             is half of it, behind main — rebase first.
+  (X6 raw-channels-webcodecs BUILT AND SHIPPED OFF BY DEFAULT 2026-08-26. Every gate the task wrote
+   PASSES — including O3a's own, the one that refused this in the first place: a kill at 50 % of the
+   bytes leaves 56-88 % of the take decodable, against MediaRecorder-MP4's 753 bytes. CPU 149→95 %
+   peak, 80→47 % mean, both lanes warm and dropping nothing. `?rawcodec=webcodecs` opts in.
+   THE DEFAULT DOES NOT MOVE because a gate the task did not write does not pass: at the same
+   ceiling the AVC screen channel writes 0.21× the bytes and the pictures agree to 27.9 dB (the
+   camera is fine at 0.75× / 37.2 dB). That is rate control, not loss — see the handoff for the
+   named next measurement (`bitrateMode`) and for why it is PO's call.)
   O6   native-res-capture          [medium]  UNBLOCKED — and the 4K lever is named: the worker's GL
                                              texture upload of a 4K frame (~35.6 ms), WebGPU
                                              importExternalTexture is the remedy to probe.
@@ -465,6 +476,11 @@ BOTH the composite and the raw channels.
      f2        timed zoom LOCATED in decoded export frames, via the PiP as a fiducial
      f3        background frame LOCATED in decoded export frames vs the pure geometry
      encprobe  is WebCodecs the wall, or is our config? main thread vs worker vs GL, per config
+     x6        X6: a raw channel on WebCodecs against the same channel on MediaRecorder, both
+               through the REAL createCaptureSession. Carries O3a's own gate (truncate a copy at
+               50 % of the bytes and decode it), the tail band, the drop counter, and a
+               phase-aligned quality row. `--cpu` for the whole-browser comparison; the encoder is
+               WARMED first (note 6) or the WebCodecs lane silently drops half its frames.
      x5        X5: the render's 2D composite against the capture GL painter on the SAME decoded
                frames — interleaved, scored on each painter's best, GL timed with gl.finish() so the
                GPU work is inside the number, and the two outputs PSNR'd per region. The parity row
@@ -843,6 +859,68 @@ opens smart-cut-over-raw later.
 GATES: the O3a mid-take snapshot test — kill at 50 %, the prefix DECODES to within the tail band;
 oracle BOTH engines + oracle:load both phases + armcancel + salvage smoke green; capture CPU
 measured before/after (the two software encodes are the claim); real-device take AWAITS PO.
+
+HANDOFF X6 — BUILT AND SHIPPED OFF BY DEFAULT 2026-08-26 (THIRTEENTH SESSION). Every gate the task
+wrote PASSES, including O3a's. One gate the task did NOT write does not, and it is why the default
+does not move: the picture changes, and a picture change is PO's.
+THE BRANCH IS NOT THE STARTING POINT AND WAS NOT REBASED. `ee/webcodecs-capture-2` samples a paced
+<video> element on the MAIN THREAD into an OffscreenCanvas, and its own header says why: "waiting on
+VideoEncoder stalls the [track] processor". That stall is note 6's instrument fault — a fresh
+process's first VideoEncoder pays a multi-second init, per launch — which O4 later solved by warming
+at mount. Rebasing it would have carried the workaround for a problem that no longer exists. Built on
+v2's shipped pattern instead.
+SHIPPED (~700 lines): `capture/rawVideo.worker.ts` (one channel per worker: VideoEncoder AVC →
+EncodedVideoPacketSource → fragmented MP4 → its OWN SyncAccessHandle, written AND FLUSHED per chunk),
+`capture/measuredVideo.ts` (the main-thread handle, deliberately shaped exactly like
+MeasuredAudioHandle so session.ts's existing `useMeasured` seam carries it and NO new stop path was
+written), `capture/rawCodec.ts` (the preference, default `mediarecorder`). session.ts changes are
+~40 lines and every one of them is at the seam.
+IT NEEDS ITS OWN TRACK, and that is not incidental: a MediaStreamTrackProcessor CONSUMES a track's
+frames and the v2 composite already has one on screen and camera. The channel clones the track — an
+independent sink on the same source, which is exactly what MediaRecorder was as a second consumer.
+GATES, all measured through the REAL createCaptureSession (`npm run exp -- x6`):
+  · O3a's, THE ONE THAT REFUSED THIS IN THE FIRST PLACE: truncate a copy at 50 % of the bytes (what
+    a tab kill leaves on disk) and decode it → 56-88 % of the take survives, against MediaRecorder
+    MP4's 753 bytes. The objection is answered.
+  · every raw channel decodes, 447 frames of 447 in, 0 dropped;
+  · tail band: −344/−343 ms (the FILE runs past the declared length; nothing is lost);
+  · both paths record the same take length (14880 vs 15044 ms);
+  · oracle PASS on v2 (sync 58.2, inst 60.3, trim=smartcut/61.2, tail 79) AND v1 (45.2, 52.6,
+    render/54.2, tail 67) · armcancel green (cancel 212 ms, normal take arms 443 ms, 4 channels,
+    zero live tracks after stop) · 419 tests.
+  · CPU, THE TASK'S CENTRAL CLAIM, whole-browser through the process sampler
+    (`npm run exp -- x6 --cpu`), both lanes WARM and both at 448 frames of 448 in:
+        MediaRecorder (software VP8/VP9)   peak 149 %   mean 80 %   over 51 samples
+        WebCodecs      (hardware AVC)      peak  95 %   mean 47 %   over 48 samples
+    −41 % mean, −36 % peak. The two software encodes were the claim and they were the cost.
+    AN EARLIER READING OF THIS SAID 187→119 % peak and 100→66 % mean, and it was NOT a better
+    result — it was the cold run, where the WebCodecs lane was 45 % lighter partly because it was
+    encoding 45 % fewer frames. A CPU number taken while a path is dropping work is not a
+    comparison. Both figures above are from lanes that dropped nothing.
+NOTE 6 BIT FOR THE THIRD TIME, AND THIS TIME IT WAS A PRODUCTION GAP TOO. Measured cold, the raw
+channels dropped 196/440 then 285/440 frames and read as a hard throughput ceiling. Two things were
+wrong. The rig never warmed (fixed: it calls warmVideoEncoder() before any lane — warmed, drops go
+to 0/447). And prearm.ts only warmed the encoder when the COMPOSITE was v2, so in production X6's
+raw encoders would have been cold on every launch: it now warms when EITHER the composite is v2 or
+a raw channel will use WebCodecs. Before the warm the drop counter did not exist either — a channel
+silently dropping 45 % of its frames is indistinguishable from one recorded at a lower rate, so
+measuredVideo.ts now logs `N frames encoded of M in` and warns when they differ.
+THE GATE X6 DID NOT WRITE, AND THE REASON THE DEFAULT STAYS PUT. At the same requested ceiling and
+with zero drops, the AVC channel writes 0.21× the VP9 channel's bytes on screen content (1.31 MB vs
+6.25 MB over 15 s) and the two pictures agree to only 27.9 dB. The CAMERA channel is fine — 0.75×
+bytes, 37.2 dB, inside the "same picture" band. So this is rate control, not loss: `latencyMode:
+'realtime'` with no `bitrateMode` undershoots hard on this content. WORTH KNOWING BEFORE ANYONE
+CALLS IT A REGRESSION: the shipped v2 COMPOSITE uses the same config shape and X12 measured it
+spending 11.8 % of its own ceiling, and that composite is what the INSTANT export copies to users
+today. So the undershoot is the product's existing accepted behaviour on the default path — but the
+raw channels feed the EDITED path, so adopting it there changes a picture users already have. That
+is PO's call, which is exactly why the frozen rule's "defaults unchanged" is the right answer here.
+NEXT MEASUREMENT, named so it is not guessed at: sweep `bitrateMode` ('constant' vs the default
+'variable') and re-run the quality row. If constant closes the 27.9 dB gap at a bitrate the disk
+still likes, X6 becomes a flip decision with numbers instead of an open question.
+STILL OWED BEFORE ANY FLIP: `npm run oracle:load` both phases (HEAVY — announce it), a salvage smoke
+over a killed take, and PO's real-device take. None of them gate the code as shipped, because as
+shipped the default path is untouched.
 
 ## X9 ai-pdf-off-main-thread [light · ~100 lines: core/ai/build.ts into a worker, same O5 shape]
 The For-AI build runs on the UI thread at 0.74× a full render — seconds of jank. core/ai is already

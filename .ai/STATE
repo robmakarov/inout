@@ -109,6 +109,33 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   no worker. Gated by `node scripts/ai-pdf-check.mjs` (independent xref-walking parser + Apple
   PDFKit + a real-recording density gate). AWAITING PO: re-test the reworked file — that unfreezes
   AI2-AI7.
+- A RAW CHANNEL CAN RECORD THROUGH WEBCODECS INSTEAD OF MediaRecorder (X6, 2026-08-26) — BUILT,
+  GATED, AND OFF BY DEFAULT. `?rawcodec=webcodecs` (or localStorage) opts a take in; capability still
+  decides after the preference, and MediaRecorder stays the ladder underneath, including a runtime
+  fallback if the WebCodecs start fails. The path is MediaStreamTrackProcessor on a CLONE of the
+  channel's track → hardware AVC → fragmented MP4 → the worker's OWN SyncAccessHandle, written and
+  flushed per chunk. It reuses session.ts's existing `useMeasured` seam (the one measured AUDIO has
+  used since O4), so no new stop path was written: measuredVideo's handle has the same contract.
+  O3a's OBJECTION IS ANSWERED WITH O3a's OWN TEST. O3a refused MP4 capture because Chrome does not
+  STREAM it — 753 bytes on disk halfway through an 8 s take. Truncating a copy of an X6 file at 50 %
+  of its bytes, which is what a tab kill leaves, decodes to 56-88 % of the take.
+  CPU, the claim the task was written on: whole-browser peak 149 % → 95 %, mean 80 % → 47 %, both
+  lanes warm and both encoding 448 frames of 448. The two software encodes were the cost.
+  THE DEFAULT DOES NOT MOVE, and the reason is a gate the task never wrote: at the same requested
+  ceiling the AVC screen channel writes 0.21× the VP9 channel's bytes (1.31 MB vs 6.25 MB over 15 s)
+  and the two pictures agree to only 27.9 dB. The camera channel is fine (0.75×, 37.2 dB). With zero
+  drops on both sides that is RATE CONTROL, not loss — `latencyMode: 'realtime'` with no
+  `bitrateMode` undershoots on this content, which is also what the shipped v2 composite does
+  (X12 measured it spending 11.8 % of its ceiling). A picture change on the edited-export path is
+  PO's to approve; the next measurement is a `bitrateMode` sweep.
+- THE ENCODER WARM NOW COVERS EVERY PATH THAT OWNS AN ENCODER (X6, 2026-08-26). prearm.ts warmed the
+  VideoEncoder only when the COMPOSITE was v2, so X6's raw encoders would have been cold on every
+  browser launch — and note 6's multi-second per-launch init is exactly what that costs. Measured
+  cold on the rig, the raw channels dropped 196/440 then 285/440 frames and read as a throughput
+  ceiling that is not there; warmed, they drop 0 of 447. The warm now fires when the composite is v2
+  OR a raw channel will use WebCodecs, and measuredVideo logs `N frames encoded of M in` with a
+  warning when they differ — a channel silently dropping 45 % of its frames is otherwise
+  indistinguishable from one recorded at a lower rate.
 - THE FOR-AI BUILD RUNS IN A WORKER (X9, 2026-08-26). It costs 0.74× a full render and it used to
   spend that on the UI thread. core/ai was DOM-free by construction, so the move is O5a's shape
   exactly: core/ai/run.ts picks the thread, ai.worker.ts runs it, and the in-thread fallback is the
