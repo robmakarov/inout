@@ -407,7 +407,14 @@ async function runProductionCell(
           audio.onBatch = (b) => {
             if (stopped) return
             worker.postMessage(
-              { cmd: 'audio', planar: b.planar, frames: b.frames, channels: b.channels, atMs: performance.now() } satisfies CompositorMsg,
+              {
+                cmd: 'audio',
+                planar: b.planar,
+                frames: b.frames,
+                channels: b.channels,
+                atMs: performance.now(),
+                recvMs: performance.now(),
+              } satisfies CompositorMsg,
               [b.planar.buffer],
             )
           }

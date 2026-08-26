@@ -342,11 +342,23 @@ export async function startLiveCompositeV2(
   // Assigned BEFORE the worker start round-trip: a port only begins delivering
   // when a handler exists, and batches captured in the meantime must keep the
   // capture times they were stamped with, not the time they were handed over.
-  const queuedAudio: { planar: Float32Array; frames: number; channels: number; atMs: number }[] = []
+  const queuedAudio: {
+    planar: Float32Array
+    frames: number
+    channels: number
+    atMs: number
+    recvMs: number
+  }[] = []
   let workerReady = false
   let audioBatches = 0
 
-  const sendAudio = (batch: { planar: Float32Array; frames: number; channels: number; atMs: number }): void => {
+  const sendAudio = (batch: {
+    planar: Float32Array
+    frames: number
+    channels: number
+    atMs: number
+    recvMs: number
+  }): void => {
     audioBatches++
     worker.postMessage({ cmd: 'audio', ...batch } satisfies CompositorMsg, [batch.planar.buffer])
   }
@@ -355,10 +367,13 @@ export async function startLiveCompositeV2(
     ev: MessageEvent<{ tick?: boolean; frames?: number; channels?: number; planar?: Float32Array; contextTime?: number }>,
   ) => {
     if (torndown) return
+    // Taken FIRST: this stamp is the take's only witness that is independent of
+    // the audio clock, and the handler below does real work.
+    const recvMs = performance.now()
     sampleLiveness()
     const { frames, channels, planar, contextTime } = ev.data
     if (!frames || !channels || !planar || contextTime === undefined) return
-    const batch = { planar, frames, channels, atMs: wallForContextTime(contextTime) }
+    const batch = { planar, frames, channels, atMs: wallForContextTime(contextTime), recvMs }
     if (workerReady) sendAudio(batch)
     else queuedAudio.push(batch)
   }

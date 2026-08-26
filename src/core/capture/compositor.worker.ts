@@ -95,6 +95,13 @@ export interface CompositorAudioMsg {
   channels: number
   /** Wall clock of the FIRST sample of this batch, ms since epoch start. */
   atMs: number
+  /**
+   * performance.now() when the MAIN THREAD received this batch. Deliberately
+   * NOT derived from the audio clock like `atMs` is: this is the only stamp in
+   * the message that keeps time when the audio graph does not, which is what
+   * lets the timeline notice it has fallen behind (see the padding below).
+   */
+  recvMs: number
 }
 
 /**
@@ -128,6 +135,22 @@ export interface CompositorStats {
   bytes: number
   durationMs: number
   audioFrames: number
+  /**
+   * Sample frames that reached this worker and were NEVER encoded, split by
+   * why. A short audio track desyncs the whole take — audio is sample-counted
+   * while video is wall-stamped, so every dropped frame moves the rest of the
+   * audio EARLIER against the picture, for the remainder of the take. That
+   * used to happen behind a bare `return` with nothing counted (PO 2026-08-25,
+   * a take beside a 4K game: "sounds go faster than video"). It is counted now.
+   */
+  audioDroppedNotReady: number
+  audioDroppedLead: number
+  /**
+   * Silence inserted to hold the audio timeline against the wall clock. >0
+   * means the audio graph lost real time and the take would otherwise have
+   * drifted by exactly this much.
+   */
+  audioPaddedFrames: number
   /** What the encoder actually negotiated — evidence, not decoration. */
   codec: string | null
   hardware: string | null
@@ -329,6 +352,38 @@ let audioStartAtMs: number | null = null
 /** Leading samples that predate the composite timeline; trimmed, not shifted. */
 let audioSkipFrames = 0
 
+/**
+ * THE AUDIO TIMELINE IS HELD AGAINST THE WALL CLOCK (PO 2026-08-25: a take
+ * recorded beside a 4K game, "sounds go faster than video" from ~20 s in).
+ *
+ * This file carries its two tracks on two different clocks — video is stamped
+ * with each frame's arrival (wall), audio is sample-counted. That is fine while
+ * the audio graph renders in real time, and it is NOT fine when the machine is
+ * saturated: measured on a loaded 60 s take, the AudioContext rendered 56.1 s
+ * of quanta in 59.2 s of wall time, so the audio track came out ~3 s short and
+ * every sample after the loss sat ~3 s EARLY against the picture. Sample
+ * counting cannot see this by construction: it counts what arrived, so what
+ * never arrived costs nothing and the whole rest of the take slides.
+ *
+ * The remedy is the one the raw mic worklet already applies one level down
+ * (measuredAudio.ts: "starved quanta MUST become silence, not be skipped"),
+ * lifted to the batch level: when the timeline has fallen behind the wall by
+ * more than a batch or so, PAD it with silence to where it should be. Audio is
+ * only ever added, never removed or moved, so a healthy take is untouched and a
+ * starved one carries an honest short silence where the machine choked instead
+ * of a permanent offset.
+ *
+ * `audioWallOrigin` is a MIN-FILTER, and that is what makes it safe: message
+ * delivery can only ever be LATE, so the minimum of (received − timeline)
+ * converges on the true origin and a burst of late batches cannot fake a gap.
+ * Same estimator the measured-audio anchor uses, for the same reason.
+ */
+let audioWallOrigin = Infinity
+/** Below this, do nothing: normal batching jitter is ~21 ms and must not pad. */
+const AUDIO_PAD_MIN_MS = 80
+/** One batch may not conjure more than this much silence, whatever the stamp says. */
+const AUDIO_PAD_MAX_MS = 1000
+
 const stats: CompositorStats = {
   framesIn: 0,
   framesEncoded: 0,
@@ -337,6 +392,9 @@ const stats: CompositorStats = {
   bytes: 0,
   durationMs: 0,
   audioFrames: 0,
+  audioDroppedNotReady: 0,
+  audioDroppedLead: 0,
+  audioPaddedFrames: 0,
   codec: null,
   hardware: null,
   backend: null,
@@ -815,7 +873,12 @@ self.onmessage = async (ev: MessageEvent<CompositorMsg>) => {
       }
       case 'audio': {
         noteOrigin(msg.atMs)
-        if (stopped || fatal || !audioEncoder || audioEncoder.state !== 'configured') return
+        if (stopped || fatal || !audioEncoder || audioEncoder.state !== 'configured') {
+          // Count what is being thrown away. Silence here is how a take loses
+          // seconds of its audio timeline without a single line of evidence.
+          if (!stopped && !fatal) stats.audioDroppedNotReady += msg.frames
+          return
+        }
         if (audioStartAtMs === null) {
           audioStartAtMs = msg.atMs
           if (startedAtMs === null) {
@@ -835,6 +898,7 @@ self.onmessage = async (ev: MessageEvent<CompositorMsg>) => {
         if (audioSkipFrames > 0) {
           const skip = Math.min(audioSkipFrames, frames)
           audioSkipFrames -= skip
+          stats.audioDroppedLead += skip
           if (skip >= frames) break
           const kept = frames - skip
           const trimmed = new Float32Array(msg.channels * kept)
@@ -844,8 +908,39 @@ self.onmessage = async (ev: MessageEvent<CompositorMsg>) => {
           planar = trimmed
           frames = kept
         }
-        // Sample-counted, so the audio timeline can never drift or gap even if
-        // a message is late; the wall stamp only places sample 0.
+        // HOLD THE TIMELINE AGAINST THE WALL before placing this batch. Sample
+        // counting is the ruler between batches; it just cannot see time that
+        // never arrived, so the wall stamp gets a say about WHERE the ruler is.
+        // See audioWallOrigin above for why a min-filter is the safe estimator.
+        if (typeof msg.recvMs === 'number') {
+          const timelineMs = (audioFramesTotal / audioSampleRate) * 1000
+          const originCand = msg.recvMs - timelineMs
+          if (originCand < audioWallOrigin) audioWallOrigin = originCand
+          const behindMs = msg.recvMs - audioWallOrigin - timelineMs
+          if (behindMs > AUDIO_PAD_MIN_MS) {
+            const padFrames = Math.round(
+              (Math.min(behindMs, AUDIO_PAD_MAX_MS) / 1000) * audioSampleRate,
+            )
+            const pad = new AudioData({
+              format: 'f32-planar',
+              sampleRate: audioSampleRate,
+              numberOfFrames: padFrames,
+              numberOfChannels: msg.channels,
+              timestamp: Math.round((audioFramesTotal / audioSampleRate) * 1e6),
+              data: new Float32Array(msg.channels * padFrames) as unknown as BufferSource,
+            })
+            try {
+              audioEncoder.encode(pad)
+              audioFramesTotal += padFrames
+              stats.audioPaddedFrames += padFrames
+              stats.audioFrames = audioFramesTotal
+            } finally {
+              pad.close()
+            }
+          }
+        }
+        // Sample-counted from here: between batches the ruler is exact, and the
+        // wall only ever moves it FORWARD, above.
         const timestampUs = Math.max(
           0,
           Math.round((audioFramesTotal / audioSampleRate) * 1e6),

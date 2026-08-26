@@ -23,7 +23,7 @@ import {
   unsupportedReason,
 } from '@app/lib/channels'
 import { armingLabel as armingLabelFor, foldWaiting } from '@app/lib/arming'
-import { noteWedgeReload, shouldReloadForWedge, wedgeReloadNoticeDue } from '@app/lib/wedgeReload'
+import { noteWedgeReload, shouldReloadForWedge, takeWedgeReloadNotice } from '@app/lib/wedgeReload'
 import { ChannelChips } from '@app/components/ChannelChips'
 import { RecordButton } from '@app/components/RecordButton'
 import { TimerPill } from '@app/components/TimerPill'
@@ -65,11 +65,27 @@ export function CaptureScreen() {
     warmCapturePipeline()
   }, [])
 
+  /**
+   * What the wedge ritual has to say, held on screen until the user acts on it
+   * (PO 2026-08-25: after a wedge with a 4K game running, "no message about
+   * that i need to reload chrome"). A TOAST CANNOT CARRY THIS: it expires in
+   * 4 s, and the user who just wedged a share is watching the tab they were
+   * recording — the same reason the frozen-source banner is sticky. It also
+   * has to survive a boot slowed by whatever saturated the machine, which is
+   * why the notice is now an owed flag rather than a 15 s window.
+   */
+  const [wedgeNotice, setWedgeNotice] = useState<string | null>(null)
+
   // The recovery ritual's second half (wedgeReload.ts): this page just
-  // refreshed itself over a wedged screen share — say so, and what to do.
+  // refreshed itself over a wedged screen share — say so, and what to do NEXT
+  // TIME, because a user who never presses record again never reaches the
+  // second wedge that owns the ⌘Q text.
   useEffect(() => {
-    if (wedgeReloadNoticeDue()) {
-      toast('The screen share got stuck, so the app refreshed itself. Press record to try again.')
+    if (takeWedgeReloadNotice()) {
+      setWedgeNotice(
+        'The screen share got stuck, so the app refreshed itself. Press record to try again — ' +
+          'if it sticks again, quit Chrome completely (⌘Q) and reopen it.',
+      )
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -241,6 +257,8 @@ export function CaptureScreen() {
     const ac = new AbortController()
     armAbortRef.current = ac
     waitingRef.current = []
+    // The notice asked for exactly this press — it has been acted on.
+    setWedgeNotice(null)
     setArming(true)
     setArmingLabel('Starting…')
     try {
@@ -305,10 +323,18 @@ export function CaptureScreen() {
         // which says the remaining truth: quit Chrome (⌘Q).
         if (err.kind === 'screen' && err.reason === 'wedged' && shouldReloadForWedge()) {
           noteWedgeReload()
+          // reload() only REQUESTS the navigation; the page keeps running until
+          // it commits, and on the loaded machine that wedged the share that
+          // can take seconds. Say what is happening first, or the app just sits
+          // there looking broken — which is exactly what PO saw.
+          setWedgeNotice('The screen share got stuck. Refreshing the app…')
           window.location.reload()
           return
         }
-        toast(err.message, 'error')
+        // A wedge that survived the refresh: this is the ⌘Q text, and it must
+        // still be on screen when the user comes back from the other tab.
+        if (err.reason === 'wedged') setWedgeNotice(err.message)
+        else toast(err.message, 'error')
       } else toast('Could not start recording', 'error')
     } finally {
       armAbortRef.current = null
@@ -371,6 +397,11 @@ export function CaptureScreen() {
       {!session && !support.ok && support.message && (
         <div className="capture__unsupported" role="alert">
           {support.message}
+        </div>
+      )}
+      {!session && wedgeNotice && (
+        <div className="capture__unsupported" role="alert">
+          {wedgeNotice}
         </div>
       )}
       {arming && armingLabel && <div className="capture__arming">{armingLabel}</div>}

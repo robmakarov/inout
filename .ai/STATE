@@ -168,6 +168,26 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   (userAgentData beats the UA string, which is correct) and is unit-tested only.
 - every exported file carries a certification in its comment tag (O8): path, output settings, loudness
   makeup + source, stalled/missing channels, cut count, CI sync bound
+- THE AUDIO TIMELINE IS HELD AGAINST THE WALL CLOCK, ON BOTH AUDIO PATHS (2026-08-25, from PO's
+  4K-game take: "sounds go faster than video" ~20 s in). A take's file carries its two tracks on TWO
+  DIFFERENT CLOCKS — composite video is stamped with each frame's ARRIVAL, audio is SAMPLE-COUNTED —
+  and they agree only while the audio graph renders in real time. MEASURED on a saturated 60 s take
+  (`npm run exp -- syncload`, new): the AudioContext returned 56.1-57.0 s of quanta in 59.2-60.2 s of
+  wall, the audio track came out 2.6-3.8 s short, and everything after the loss sat that much EARLY
+  against the picture — 12.8-18.7 s projected onto PO's 5 min take, against the ~20 s he reported.
+  Sample counting cannot see this by construction: it counts what arrived, so what never arrived
+  costs nothing and the whole rest of the take slides. REFUTED on the way, do not re-run: the
+  worklets do NOT skip starved quanta (they silence-fill), and nothing is lost in the stream hop
+  (every rendered quantum carried live input, exactly) — it is time the context never rendered.
+  FIX: a MIN-FILTERED wall origin, from a `performance.now()` stamp taken at main-thread receipt (the
+  only stamp not derived from the audio clock), says where the sample ruler sits; silence is PADDED
+  when the timeline falls >80 ms behind, capped at 1 s per batch. Audio is only ever ADDED, never
+  moved or removed — a healthy take pads zero and is unchanged, a starved one carries an honest short
+  silence where the machine choked instead of a permanent growing offset. AFTER, same load: audio
+  60.40 s of a 60.2 s take, A/V span gap −3775 → +395 ms (the idle control's own is +236). Counted,
+  never silent (audioPaddedFrames / audioDroppedNotReady / audioDroppedLead + a console warning).
+  NOT claimed: the "noises" PO also reported are a different thing — the same starvation mangles the
+  audio it DOES deliver, and padding does not touch that.
 - audio: measured pipeline (sample-counted PCM, min-filter anchor), raw system audio, post-capture fidelity fixed
   (knee-limiter replaces tanh bus; composite dynamics bypassed for single source; stereo default on unreported channelCount)
 - THE LIMITER'S FOLD IS ALGEBRAIC u/(1+u), NOT tanh (2026-08-23). tanh scaled by (1-knee)=0.05 saturates

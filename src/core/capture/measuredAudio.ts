@@ -22,6 +22,10 @@ const WORKLET_NAME = 'inout-pcm-capture'
 const OPUS_BITRATE = 128_000
 /** Anchor min-filter window; at 50ppm clock skew the bias stays < 0.2ms. */
 const ANCHOR_WINDOW_S = 3
+/** Below this, do nothing: normal batching jitter is ~21ms and must not pad. */
+const PAD_MIN_MS = 80
+/** One batch may not conjure more than this much silence, whatever the stamp says. */
+const PAD_MAX_MS = 1000
 
 export const MEASURED_AUDIO_MIME = 'audio/webm;codecs=opus'
 
@@ -304,6 +308,22 @@ export async function startMeasuredAudioCapture(opts: {
   let framesWritten = 0
   let anchorWallMs = Infinity
   let lastArrivalMs = -Infinity
+  /**
+   * THE CHANNEL'S TIMELINE IS HELD AGAINST THE WALL CLOCK — same defect and
+   * same remedy as the composite's (compositor.worker.ts, PO 2026-08-25's
+   * 4K-game take). The worklet already turns starved quanta it SEES into
+   * silence, because a skipped quantum splices a sample-counted timeline. What
+   * neither it nor the sample count can see is a quantum the AudioContext never
+   * rendered at all: measured on a loaded machine, a context returned 56.1 s of
+   * quanta in 59.2 s of wall time, which shortens the channel by ~5 % and moves
+   * everything after the loss that much earlier against the picture. This is
+   * the path an EDITED export renders from, so it needs the guard too.
+   *
+   * The origin is a MIN-FILTER because batch delivery can only ever be LATE —
+   * the same estimator, for the same reason, as the anchor above.
+   */
+  let wallOriginMs = Infinity
+  let paddedFrames = 0
   let flushResolve: (() => void) | null = null
   let startOffsetMs: number | null = null
   let resolveFirst!: (ms: number) => void
@@ -358,8 +378,11 @@ export async function startMeasuredAudioCapture(opts: {
     // true wall time of sample 0 — the single-first-arrival anchor was exactly
     // the source of the +45–50ms audio-late runs. Window capped so audio-clock
     // vs performance.now drift (~50ppm) cannot bias the estimate.
+    // Taken for EVERY batch now, not just inside the anchor window: it is the
+    // only stamp here that keeps time when the audio graph does not.
+    const arrivalMs = performance.now()
     if (framesWritten < ANCHOR_WINDOW_S * sampleRate) {
-      const arrival = performance.now()
+      const arrival = arrivalMs
       // Catch-up bursts after resume() deliver quanta back-to-back; their
       // arrival times date sample 0 falsely early. Only steady-state quanta
       // (spaced >= half a quantum) may contribute anchor candidates.
@@ -412,6 +435,36 @@ export async function startMeasuredAudioCapture(opts: {
         opts.onPcm(L, R, framesWritten, startOffsetMs ?? 0, sampleRate, currentTime)
       } catch (err) {
         console.warn('[capture] loudness tap threw (ignored)', err)
+      }
+    }
+
+    // Hold the timeline against the wall before placing this batch. Silence is
+    // only ever ADDED, and only where real time went missing, so a healthy take
+    // pads nothing and is bit-identical to before.
+    {
+      const timelineMs = (framesWritten / sampleRate) * 1000
+      const originCand = arrivalMs - timelineMs
+      if (originCand < wallOriginMs) wallOriginMs = originCand
+      const behindMs = arrivalMs - wallOriginMs - timelineMs
+      if (behindMs > PAD_MIN_MS) {
+        const padFrames = Math.round((Math.min(behindMs, PAD_MAX_MS) / 1000) * sampleRate)
+        const pad = new AudioData({
+          format: 'f32',
+          sampleRate,
+          numberOfFrames: padFrames,
+          numberOfChannels: encCh,
+          timestamp: Math.round((framesWritten * 1_000_000) / sampleRate),
+          data: new Float32Array(padFrames * encCh),
+        })
+        framesWritten += padFrames
+        paddedFrames += padFrames
+        try {
+          encoder.encode(pad)
+        } finally {
+          pad.close()
+        }
+        // Deliberately NOT fed to the loudness tap: the envelope describes the
+        // take's CONTENT, and this silence is the machine choking, not content.
       }
     }
 
@@ -508,6 +561,14 @@ export async function startMeasuredAudioCapture(opts: {
         console.info(
           `[capture] audio anchor ${rawOffset.toFixed(1)}ms − ${inputLatencyMs.toFixed(1)}ms reported input latency → ${offset.toFixed(1)}ms ` +
             `(baseLatency ${((audioCtx as AudioContext & { baseLatency?: number }).baseLatency ?? 0) * 1000}ms)`,
+        )
+      }
+      if (paddedFrames > 0) {
+        // Never silent: this take's audio graph lost real time, and the file
+        // says where instead of sliding everything after it earlier.
+        console.warn(
+          `[capture] measured audio padded ${((paddedFrames / sampleRate) * 1000).toFixed(0)}ms of silence ` +
+            `to hold the timeline against the wall clock (the machine was starving this take)`,
         )
       }
       if (startOffsetMs === null) resolveFirst(offset)

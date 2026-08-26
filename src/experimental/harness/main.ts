@@ -476,6 +476,22 @@ const runners: Runner[] = [
       return Promise.all(files.map((f) => replayLog(f)))
     },
   },
+  {
+    id: 'syncload',
+    title: 'A/V sync when the machine is BUSY (PO 4K-game take)',
+    detail:
+      "records the composite under a saturating CPU+4K-paint load and measures each track's SPAN against the take's wall clock — video is arrival-stamped, audio is sample-counted, so a clock that slips shows up as the two tracks covering different amounts of time. Run {\"load\":false} as the control.",
+    run: async (args) => {
+      const { runLoadedSync } = await import('../perf/loadedSync')
+      return runLoadedSync({
+        takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined,
+        width: typeof args?.width === 'number' ? args.width : undefined,
+        height: typeof args?.height === 'number' ? args.height : undefined,
+        load: typeof args?.load === 'boolean' ? args.load : undefined,
+        engine: args?.engine === 'v1' || args?.engine === 'v2' ? args.engine : undefined,
+      })
+    },
+  },
 ]
 
 // Experiments 7 (TimeMap/Scene) and 8 (semantic artifact) are pure modules —

@@ -31,32 +31,49 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   makes permanent. (b) IN THAT WEDGE THE REFRESH RITUAL DID NOT DELIVER — app unresponsive, no
   visible auto-reload, no ⌘Q message. That half is OURS and is its own P1 below.
 
-- [P1] PO 2026-08-25: THE WEDGE RECOVERY ITSELF FAILED under game load — after the wedge the app
-  "dont reloads normally, gets unresponsive, no message about that i need to reload chrome". The
-  shipped contract (wedgeReload.ts: one automatic reload → "press record to try again"; second
-  wedge within 2 min → ⌘Q text) delivered NEITHER. Candidate causes, unproven: the renderer is
-  janked by the same GPU load so the reload/message never paints; or the failure path under load
-  never classifies as `wedged` (e.g. arming dies somewhere else first) so wedgeReload is never
-  asked. EVIDENCE BEFORE CODE: the `[capture:arming]` console timeline from a repro with the game
-  running, and whether the sharing pill lit. Do not harden the ritual from theory.
+- [P1 → PARTLY FIXED 2026-08-25] PO: THE WEDGE RECOVERY ITSELF FAILED under game load — after the
+  wedge the app "dont reloads normally, gets unresponsive, no message about that i need to reload
+  chrome". ONE HALF WAS OURS AND IS FIXED, from code, no repro needed: the boot notice was due only
+  within 15 s of the reload stamp, and the wedge happens when the machine is saturated — which is
+  exactly when the reload it triggers takes LONGEST to boot, so the one case that most needed
+  explaining was the one case that silently got no message. The notice is now an OWED FLAG consumed
+  once at boot (bounded at 2 min), so a slow boot cannot lose it. Two more, same report: it was a
+  4 s TOAST, and the user who just wedged a share is watching the tab they were recording — the
+  same reason the frozen-source banner is sticky — so it is now a sticky banner that stays until
+  the user presses record; and it carries the ⌘Q escalation itself, because a user who never
+  presses record again never reaches the second wedge that owned that text. The pre-reload state
+  also says "Refreshing the app…" now, since reload() only REQUESTS the navigation and the page
+  keeps running until it commits — seconds, on the machine that just wedged.
+  STILL UNPROVEN AND STILL OPEN: whether the reload itself ran at all, and what "unresponsive"
+  was. That needs the `[capture:arming]` console timeline from a repro with the game running, plus
+  whether the sharing pill lit. Do not harden the ritual further from theory.
 
-- [P1] PO 2026-08-25, NEW DEFECT IN A REGIME NOBODY HAS MEASURED: on the game take (record started
-  first, 4K game running beside it — the ordering that doesn't wedge) the sound comes apart
-  PROGRESSIVELY: in sync for ~20 s, then audio runs AHEAD of video ("sounds go faster"), then
-  "wrong speed", plus a lot of noises. This is NOT the known constant 45-63 ms offset, and it is
-  not covered by "drift is dead" — that verdict (beta−1 = −0.003 ms/s) was measured on an IDLE
-  machine; this take ran starved beside a 4K game, the regime where the fidelity oracle already
-  goes red from capture starvation. No sync number in this project has ever been taken under load
-  (oracle:load stresses the TAIL only). Candidate mechanism, UNPROVEN: starved audio capture loses
-  quanta; if lost quanta are dropped rather than silence-filled, the audio timeline COMPRESSES and
-  audio lands progressively early — exactly "goes faster" — and the starvation glitches are the
-  noises. The v2 worker audio path under load has never been measured; also unknown whether the
-  <12 fps watchdog refused the composite (that flips the export from packet copy to render, two
-  different audio paths). EVIDENCE BEFORE CODE: (1) PO — was this the exported MP4 or the in-app
-  preview player? (2) the console from such a take: `[capture] display capped …`,
-  `[capture] … delivering N fps`, any watchdog/stall lines, engine v1/v2; (3) the file itself.
-  Rig gap: a sync oracle cell under synthetic GPU load does not exist and is the instrument this
-  needs.
+- [~~P1~~ FIXED 2026-08-25, AWAITING PO RECHECK] PO: on the game take the sound comes apart
+  PROGRESSIVELY — in sync ~20 s, then audio AHEAD of video, then "wrong speed". FOUND, MEASURED AND
+  FIXED, and the mechanism was NOT the one first guessed. THE FILE CARRIES ITS TWO TRACKS ON TWO
+  DIFFERENT CLOCKS: composite video is stamped with each frame's ARRIVAL (wall clock), composite
+  audio is SAMPLE-COUNTED. They agree only while the audio graph renders in real time. Measured on
+  a saturated 60 s take (new rig `npm run exp -- syncload`): the AudioContext returned 56.1-57.0 s
+  of quanta in 59.2-60.2 s of wall time, so the audio track came out 2.6-3.8 s SHORT and every
+  sample after the loss sat that much EARLY against the picture — projected to PO's 5 min take,
+  12.8-18.7 s, against the ~20 s he reported. Two hypotheses were REFUTED on the way and are
+  recorded so nobody re-runs them: the worklet does NOT skip starved quanta (it silence-fills, and
+  the counters prove zero drops in the worker), and the loss is NOT in the stream hop (every
+  quantum the context rendered carried live input, exactly). It is time the context never rendered.
+  FIX (both audio paths, additive): the sample count stays the fine ruler, but a MIN-FILTERED wall
+  origin — taken from a `performance.now()` stamp at main-thread receipt, the one stamp in the
+  message that is not derived from the audio clock — says where that ruler sits, and silence is
+  PADDED when the timeline has fallen >80 ms behind. Audio is only ever added, never moved or
+  removed, so a starved take now carries an honest short silence where the machine choked instead
+  of a permanent growing offset. MEASURED AFTER, same load: audio track 60.40 s of a 60.2 s take,
+  A/V span gap −3775 ms → +395 ms, which is the idle control's own +236-288 ms. Healthy takes pad
+  ZERO and are unchanged. Counted, never silent: CompositorStats gains audioPaddedFrames /
+  audioDroppedNotReady / audioDroppedLead, and the raw path logs a warning. Gates: 418 tests ·
+  oracle PASS v2 (sync 60.4) AND v1 (56.7) · fidelity PASS (toneErr 0.04 dB, 0 limiter hits).
+  STILL OPEN AND DELIBERATELY NOT CLAIMED: "a lot of noises" is NOT explained by this — padding
+  fixes the drift, not the glitches; the same starvation that loses quanta also mangles the audio
+  it does deliver. PO recheck on a real game take is what closes this, and the console will now say
+  `[capture] measured audio padded …ms` when it fires.
 
 - [P1] TD 2026-08-25: NOTHING HERE HAS EVER BEEN MEASURED ON A TAKE LONGER THAN 30 s, and PO records
   938-1800 s. `runOracle` defaults to 6000 ms and the matrix's widest cell is 30 s, so every sync,

@@ -177,8 +177,14 @@ failure, no take silently records without its primary, the app refreshes itself 
 invites a retry, the retry self-heals through the request ladder, a second wedge right
 after the refresh gets the honest ⌘Q text, and every occurrence is counted.
 FIELD-CONTRADICTED for the game-load ordering (PO, 2026-08-25): in that wedge the app went
-unresponsive with no visible reload and no ⌘Q message — the ritual either never fired or
-could not paint under the same load. Open defect, BACKLOG P1.
+unresponsive with no visible reload and no ⌘Q message. HALF OF THAT WAS OURS AND IS FIXED
+the same day — the boot notice was due only within 15 s of the reload stamp, and a wedge
+happens when the machine is saturated, which is exactly when the reload takes longest to
+boot; the notice is now an owed flag consumed once (bounded at 2 min), a STICKY banner
+rather than a 4 s toast (the user is in the tab they were recording), and it carries the
+⌘Q escalation itself instead of waiting for a second wedge to say it. What is still
+unproven is whether the reload ran at all under that load — that needs the arming timeline
+from a repro. BACKLOG P1.
 
 ## The one unbuilt lever — parked on the roadmap
 

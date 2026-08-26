@@ -263,6 +263,12 @@ BOTH the composite and the raw channels.
 4. EVIDENCE IS BROWSER-SIDE. Unit tests cover pure logic only; anything about capture, export,
    memory or bundles must be measured in a real browser on the PRODUCTION build. QA on the prod-build
    port only, never the dev server.
+4b. EVERY NUMBER BEFORE 2026-08-25 WAS TAKEN ON AN IDLE MACHINE, AND ONE OF THEM WAS WRONG BECAUSE
+   OF IT. "Drift is dead" (beta−1 = −0.003 ms/s) is true idle and false under load: a saturated
+   machine's AudioContext returned 56.1 s of quanta in 59.2 s of wall, which drifted the composite's
+   audio 2.6-3.8 s per 60 s until it was fixed (see STATE). The take a user records beside a game is
+   a different regime from the take a gate records on a quiet machine, and `npm run exp -- syncload`
+   is the only cell that runs in it. Anything touching audio placement runs it BOTH ways.
 5. THE TAIL IS A DRAIN PROBLEM, AND MediaRecorder LIES ABOUT BEING IDLE. The shipped composite used to
    lose 2734 ms off a 4K take; it now loses 43-320 ms, because stop() kills the painting and then
    PROBES the encoder with requestData() until it answers empty. Waiting for the byte flow to go quiet
@@ -383,6 +389,13 @@ BOTH the composite and the raw channels.
                O4-polish handoff and both say no; run it before proposing that idea again
      f8        <video> seek vs the export's random-access reader at off-grid instants — the rig that
                refuted F8's premise (same frame, 0 ms apart, and the element is faster)
+     syncload  DOES THE TAKE STAY IN SYNC WHEN THE MACHINE IS BUSY? The regime no gate covered:
+               records the composite under a saturating CPU + 4K-paint load and measures each
+               TRACK'S SPAN against the take's own wall clock, plus an independent AudioContext
+               clock probe that names which clock lost the time. `{"load":false}` is the control
+               and the number to read is the DIFFERENCE — a loaded cell alone proves nothing.
+               Found the audio-timeline drift PO reported (audio 2.6-3.8 s short per 60 s) and
+               proved the fix (padding → +395 ms, the idle control's own figure)
      oracle    accepts {"injectTailLossMs":N} to prove the tail band red
   node scripts/ai-pdf-check.mjs    AI1's "any AI can read this" gate: runs the aiexport rig, saves the
      PDF to docs/qa/ai-export.pdf, and puts it through TWO readers that know nothing about the writer —
