@@ -100,6 +100,16 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   asks stand unchanged and both are PO's: (a) the console lines from a freezing take, and/or the
   O6 re-verify (`?nativeres=1`, record the game tab, report the console); (b) the X6 picture
   ruling, which is the capture-CPU lever this freeze keeps pointing at.
+  AUTOPSIED 2026-08-26 (take rec_72y3unjtwmi4, X6 ON, PO pinned "freeze is on 7:35" — exact): the
+  game was captured WITH FULL MOTION for ~3.7 min while its tab was front (motion 4-56 per probe),
+  then frames stop dead at t=455 (one stray frame at 466, frozen to the end) while TAB AUDIO KEEPS
+  FLOWING to the last seconds — the picture-only inverse of the movie take's pair-stall, matching
+  "froze when I switch on its tab": the 4K tab left the foreground and Chrome stopped compositing
+  it for capture under GPU load. X6's CPU relief (starvation 1.6 % → 0.16 % on the same machine)
+  did NOT save the source — this half is Chrome's compositor, not our encoder, and no app-side
+  lever forces frames from a hidden crushed tab. The app's keep-alive held the last frame cleanly.
+  Honest mitigation to tell users: keep a 4K game tab visible while it is being recorded. Levers
+  left: O6 ?nativeres re-verify (console still unseen) and a Chromium report; O12 does not touch it.
 
 - [P2] TD 2026-08-25, A CONSEQUENCE OF THE PADDING FIX, stated so it is not mistaken for a
   regression: holding the audio timeline against the wall clock converts "audio drifts early" into
@@ -360,6 +370,12 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   second try, which is exactly the signature of (2) (a cold first take pays device/recorder spin-up
   inside the anchor) and/or (1). Distinct from the progressive drift fixed the same day; nothing
   shipped today touches the start offset. The certification instrumentation above is still the step.
+  STATUS AFTER THE DRIFT FIX + X6 FLIP (PO, same day: "camera video/mic little unsynch"): the
+  desync is down from seconds to "little" — what remains is this constant-offset family. With X6
+  default the camera runs measuredVideo (arrival-stamped, min-filtered), so error (2) changes
+  shape; the next step is unchanged — put the alignment inputs (anchor, reported latency,
+  first-frame delay) into ChannelDiagnostics/cert so a field take carries the numbers, then
+  compensate from measurements, not theory. X14 (≤20 ms) stays blocked on platform deliverables.
 
 - [P2] TD 2026-08-25, ONE OBSERVATION, NOT REPRODUCED: the audio-integrity spur gate read −34.6 dB
   against its −40 dB band on a 120 s run of HEAD (7c9a02f). The same build at 6 s read −52.3 (pass)

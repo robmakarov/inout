@@ -503,9 +503,12 @@ none of them can be settled without you.
    desync that grows forever. A long recheck take (YouTube, then the game) is what closes it.
 2. **Give a "For AI" file to an AI**, for the job you actually have, and say whether it worked. That
    report is the only thing that unfreezes the rest of the AI work.
-3. **Decide about the new recording compressor.** It halves processor use, but it spends about a
-   fifth of the data on screen content and the picture measurably differs. Try it with
-   `?rawcodec=webcodecs`. If you say yes, a further saving unlocks immediately.
+3. **DONE — the new recording compressor is the default now (your call, 2026-08-26).** You ran days
+   of takes on `?rawcodec=webcodecs` and said the sound is okay with it; measurements agreed (10×
+   less audio starvation, and the "picture differs" worry turned out to be our own measuring
+   mistake — identical pictures at half the data). `?rawcodec=mediarecorder` reverts one load if
+   anything ever looks off. The further saving it unlocks (skipping the combined file entirely on
+   screen-only takes) is now on the READY map.
 4. **Decide whether exports may get quieter.** Your recordings currently come out 1–9 dB louder than
    the level everything else on the internet is normalised to, and they vary by almost 8 dB depending
    on what is in them. The standard fix is to turn them down. Everything to do it is built.

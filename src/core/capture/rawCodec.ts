@@ -7,20 +7,27 @@
  * `webcodecs` is the X6 path: MediaStreamTrackProcessor → VideoEncoder (AVC) →
  * fragmented MP4 → the worker's own SyncAccessHandle.
  *
- * THE DEFAULT IS `mediarecorder`, AND THAT IS THE TASK'S OWN INSTRUCTION, not
- * caution for its own sake. X6 says "additive per the frozen rule, MediaRecorder
- * stays the ladder", and the frozen rule reads: every new engine ships
- * capability-gated with the current path as runtime fallback, DEFAULTS UNCHANGED
- * unless the task says otherwise. A capture default is PO's to flip on evidence,
- * exactly as O4's v2 flip was a separate step with its own measurements.
+ * THE DEFAULT IS `webcodecs` SINCE 2026-08-26 — PO's ruling, given on his own
+ * field evidence, exactly the flip X6 reserved for him. The deciding take pair
+ * (black-boxed): the same recording regime starved the audio clocks 1.6 % of
+ * wall time on MediaRecorder and 0.16 % on WebCodecs — a 10× CPU relief that
+ * PO heard ("music sounds shitty / goes faster" → "yes now it okay with
+ * ?rawcodec=webcodecs"). The known cost, stated when X6 shipped and accepted
+ * with the flip: at the same requested ceiling the AVC screen channel writes
+ * ~0.21× the VP9 bytes on screen content (rate-control undershoot, 27.9 dB
+ * agreement) — the bitrateMode sweep is the standing follow-up, and an
+ * unedited take's INSTANT export is untouched either way (it copies the
+ * composite, not the raw channels). MediaRecorder remains the full ladder
+ * underneath: capability fallback, start-failure fallback, and
+ * `?rawcodec=mediarecorder` / localStorage revert it outright.
  *
  * Capability still has the last word after the preference: see
  * measuredVideo.ts's canMeasureVideoCapture(), which also fails closed on Apple
  * WebKit and Firefox, neither of which has MediaStreamTrackProcessor in the
  * shape this needs.
  *
- *   ?rawcodec=webcodecs   (this load only)
- *   localStorage['inout.capture.rawcodec'] = 'webcodecs'   (sticky)
+ *   ?rawcodec=mediarecorder   (this load only)
+ *   localStorage['inout.capture.rawcodec'] = 'mediarecorder'   (sticky)
  * A URL parameter wins, then storage, then the default.
  */
 
@@ -48,7 +55,7 @@ function fromStorage(): RawVideoCodec | null {
 
 /** What this take should ASK for; capability still decides. */
 export function rawVideoCodec(): RawVideoCodec {
-  return fromSearch() ?? fromStorage() ?? 'mediarecorder'
+  return fromSearch() ?? fromStorage() ?? 'webcodecs'
 }
 
 export function setRawVideoCodec(codec: RawVideoCodec): void {

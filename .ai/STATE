@@ -131,8 +131,14 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   the same fallback a late join takes — and has no source-liveness tick while paused. NOT BUILT:
   retake (dropping the tail segment and re-recording), which is not a capture feature at all but a
   resume of a FINISHED recording, touching recovery, editsRepo and editor state.
-- A RAW CHANNEL CAN RECORD THROUGH WEBCODECS INSTEAD OF MediaRecorder (X6, 2026-08-26) — BUILT,
-  GATED, AND OFF BY DEFAULT. `?rawcodec=webcodecs` (or localStorage) opts a take in; capability still
+- A RAW CHANNEL RECORDS THROUGH WEBCODECS BY DEFAULT (X6, built 2026-08-26; FLIPPED the same day on
+  PO's field ruling — "yes now it okay, with ?rawcodec=webcodecs i mean", after days of takes on the
+  flag). The deciding numbers: the black-boxed take pair measured audio-clock starvation 1.6 % of
+  wall time on MediaRecorder vs 0.16 % on WebCodecs in the same regime (10× CPU relief, audible),
+  and X15(a) refuted the picture objection (identical pictures: AVC 0.52× bytes at 47.8 dB, glyph
+  contrast 1.00 — the old 27.9 dB compared two separate takes of a moving source). Both oracles
+  PASS on the flipped default (v2 36.4 ms / v1 40.6 ms), recording through the production session.
+  `?rawcodec=mediarecorder` (or localStorage) reverts; capability still
   decides after the preference, and MediaRecorder stays the ladder underneath, including a runtime
   fallback if the WebCodecs start fails. The path is MediaStreamTrackProcessor on a CLONE of the
   channel's track → hardware AVC → fragmented MP4 → the worker's OWN SyncAccessHandle, written and

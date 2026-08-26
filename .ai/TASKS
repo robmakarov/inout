@@ -76,15 +76,18 @@ WHAT IS LEFT, AND EVERY ITEM IS PO'S
      loud now"), a separate live session owns the fix. PO also asked for a per-channel gain slider
      → F9 (READY, after that session lands). Do not touch mix constants outside that session.
   2. THE FOR-AI FILE re-test — DEFERRED by PO 2026-08-26 ("later"). AI2-AI7 stay frozen.
-  3. X6's PICTURE RULING — ANSWERED BY MEASUREMENT 2026-08-26 (X15(a)), and the objection does not
-     survive. On identical pictures the AVC raw channel writes 0.52x the VP9 bytes on screen text
-     and the two agree to 47.8 dB with glyph contrast 1.00 (motion: 0.23x at 51.6 dB). The 27.9 dB
-     came from x6's rig comparing two SEPARATE takes of a MOVING source through a phase search its
-     own notes call a lower bound. bitrateMode turned out to be INERT (byte-identical output in
-     hardware AND software), so there is nothing left to tune — the shipped config already clears
-     the bar. WHAT IS STILL PO's: the flip itself, because it changes how an EDITED export looks,
-     and one confirmation is owed first (the sweep feeds canvas frames, production feeds
-     GPU-resident ones — `npm run exp -- x6`). If you flip it, O3b collects the reward.
+  3. X6 — FLIPPED. DEFAULT IS webcodecs SINCE 2026-08-26, on PO's own ruling ("yes now it okay —
+     with ?rawcodec=webcodecs i mean"), given after days of field takes on the flag. The evidence
+     stack: X15(a) refuted the picture objection (identical pictures: AVC 0.52x bytes at 47.8 dB,
+     glyph contrast 1.00; the old 27.9 dB was the rig comparing two separate takes of a moving
+     source), and the black-boxed take pair measured the CPU relief PO heard — audio clocks
+     starved 1.6 % of wall time on MediaRecorder vs 0.16 % on WebCodecs, same regime, 10×. PO's
+     production takes on real GPU-resident sources are the field confirmation the sweep could not
+     give (the formal `npm run exp -- x6` GPU-frames cell remains available). MediaRecorder stays
+     the full ladder (capability + start-failure fallback; `?rawcodec=mediarecorder` / localStorage
+     revert). Both oracles PASS on the flipped default (v2 36.4 ms, v1 40.6 ms) — the oracle
+     records through the production session, so the gate exercised the WebCodecs raw path.
+     → O3b COLLECTS THE REWARD: moved to READY below.
   4. O10a's ATTENUATION RULING — exports scatter 7.84 dB by content and sit 1-9 dB ABOVE the −14 LUFS
      convention. R128 can only fix that by turning takes DOWN, and the shipped bounding never
      attenuates. The measurement, the implementation and the switch are all in place.
@@ -130,6 +133,11 @@ START HERE IF YOU ARE FRESH:
      `npm run oracle:load` (HEAVY, announce it) and `npm run exp -- armcancel`.
 
 READY NOW:
+  O3b  single-generation export    [medium]  UNBLOCKED 2026-08-26: X6 is the DEFAULT now (PO's
+                                             ruling — see WHAT IS LEFT item 3). Raw channels are
+                                             mp4/AVC, the copyable shape it needed: a single-screen
+                                             take can skip the composite entirely and packet-copy
+                                             the raw channel. Read the X6 handoff + note 14 first.
   P5a  iOS SCK spike               [light]   UNBLOCKED 2026-08-26: PO confirms Xcode 27 + a real
                                              iOS 27 device are available. Needs PO present (device
                                              plugged in, signing). TIME-SENSITIVE (iOS 27 ~Sept).
@@ -231,10 +239,8 @@ BLOCKED ON HARDWARE OR A DOWNLOAD, unchanged:
   P8   safari-mic                  [P0]      blocked on ONE PO artifact (the exported file, or a
                                              Safari-console take). Do not code it from theory.
 
-BLOCKED ON A RULING PO HAS ALREADY BEEN ASKED FOR:
-  O3b  single-generation export    [medium]  no longer blocked on code — X6 makes raw channels
-                                             mp4/AVC, the copyable shape it needed. Blocked on the
-                                             same ruling X6 is; take them up together.
+BLOCKED ON A RULING PO HAS ALREADY BEEN ASKED FOR: (none — X6's ruling landed 2026-08-26 and
+  moved O3b to READY NOW.)
 
 NEEDS PO DISCUSSION BEFORE ANYONE BUILDS (PO 2026-08-25: "questionable mark as need to be discussed
 again" — these change the file a user gets, or need PO's hardware, so they start on a ruling, not a go):
