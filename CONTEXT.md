@@ -108,6 +108,21 @@ identical down to the checksum. The build is not faster — it was never meant t
 keeps working while it happens. Measured on a short recording, the interface lost 13 ms instead of
 84; on a real 97-second take that difference is roughly a second of unresponsiveness against ten.
 
+**You can pause a recording now (2026-08-26).** A Pause button sits beside the record button while
+you record. It does not release anything: the camera light stays on, nothing is asked for again, and
+pressing Resume picks up on the same inputs — so a pause costs you no setup and no permission
+dialogs. **The paused stretch is left out of the recording entirely**: if you record five minutes,
+pause for two, and record five more, you get ten minutes with no dead air to trim. The on-screen
+timer stops while you are paused, for the same reason.
+
+One trade, and it is worth knowing: a paused recording takes the slower export path. INOUT normally
+keeps a ready-made combined video while you record, which is what makes an untouched export almost
+instant — but that is one continuous file and it cannot represent a gap, so pausing discards it and
+the export rebuilds instead. Everything else is unaffected.
+
+Not built yet: *retake* — dropping the last stretch and recording it again. That is a different
+thing (it means reopening a finished recording) and it is written down as its own piece of work.
+
 **Recording now costs about half the processor it did — but the change is switched off until you
 say otherwise (2026-08-26).** While you record, INOUT saves each source separately as well as the
 combined picture, and those separate files were being compressed the slow way, in software, twice

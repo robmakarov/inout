@@ -109,6 +109,22 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   no worker. Gated by `node scripts/ai-pdf-check.mjs` (independent xref-walking parser + Apple
   PDFKit + a real-recording density gate). AWAITING PO: re-test the reworked file — that unfreezes
   AI2-AI7.
+- A TAKE CAN BE PAUSED AND RESUMED, AND THE PAUSE IS NOT IN IT (F6, 2026-08-26). `pause()` closes
+  every live channel's current SEGMENT and releases nothing: the tracks stay, the camera light stays
+  on, the wake lock is held, and `resume()` opens segment N+1 on the SAME tracks with no permission
+  prompt and no picker. That is the whole difference from setChannelActive(kind,false), which stops
+  the device. The segment machinery itself is older (08-23): a kind has been able to be several
+  non-overlapping ChannelRecordings since then, and everything downstream resolves by id and window.
+  THE PAUSE IS EXCLUDED BY MOVING THE SESSION EPOCH forward by the gap on resume — every
+  startOffsetMs is measured against it, so closed segments keep their offsets, the next lands where
+  the last ended, and the elapsed counter stops counting time nobody recorded. Verified on the
+  DEPLOYED build: 8 segments (2 per channel), seams screen 99 ms · camera 101 · mic 207 ·
+  system-audio 218, take 17,345 ms of recorded material against a longer wall clock.
+  THE COMPOSITE IS CANCELLED at the pause, not merely marked: it is one continuous file whose
+  timestamps are arrivals and cannot represent a gap. So a paused take exports through the RENDER —
+  the same fallback a late join takes — and has no source-liveness tick while paused. NOT BUILT:
+  retake (dropping the tail segment and re-recording), which is not a capture feature at all but a
+  resume of a FINISHED recording, touching recovery, editsRepo and editor state.
 - A RAW CHANNEL CAN RECORD THROUGH WEBCODECS INSTEAD OF MediaRecorder (X6, 2026-08-26) — BUILT,
   GATED, AND OFF BY DEFAULT. `?rawcodec=webcodecs` (or localStorage) opts a take in; capability still
   decides after the preference, and MediaRecorder stays the ladder underneath, including a runtime
