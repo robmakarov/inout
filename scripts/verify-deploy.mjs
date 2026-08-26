@@ -48,12 +48,31 @@ if (!existsSync(cacheFile)) {
   }
 }
 const expected = readFileSync(cacheFile, 'utf8').trim().split('\n').sort()
-console.log(`verify-deploy: ${short} builds to [${expected.join(', ')}] — polling prod (timeout ${timeoutS}s)`)
 
 const fetchText = async (url, headers = {}) => {
   const res = await fetch(url, { headers: { 'cache-control': 'no-cache', ...headers } })
   return { ok: res.ok, status: res.status, text: await res.text() }
 }
+
+// If prod ALREADY serves exactly these assets, the hash proves nothing: this
+// commit changed no bundled source (docs, scripts, hooks), so its build is
+// identical to the one already up and the match would read green at t=0 against
+// the OLD deployment. Caught in practice on be76dcf, which reported OK after 0s
+// while Vercel was still building. Fall back to the only signal that names the
+// commit — Vercel's own status on the GitHub API.
+let hashBlind = false
+try {
+  const baseline = entryAssets((await fetchText(`${PROD}/?verify=${short}-baseline`)).text)
+  hashBlind = baseline.length > 0 && baseline.join() === expected.join()
+} catch {
+  // prod unreachable right now; the poll loop reports it properly
+}
+
+console.log(
+  hashBlind
+    ? `verify-deploy: ${short} produces the assets prod already serves — it changes no bundled output, so the hash cannot prove it deployed. Waiting on Vercel's status for this commit (timeout ${timeoutS}s).`
+    : `verify-deploy: ${short} builds to [${expected.join(', ')}] — polling prod (timeout ${timeoutS}s)`,
+)
 
 const deadline = Date.now() + timeoutS * 1000
 let lastStatusAt = 0
@@ -88,8 +107,12 @@ while (Date.now() < deadline) {
     served = [`unreachable (${e.message})`]
   }
 
-  if (served.length && served.join() === expected.join()) {
+  if (!hashBlind && served.length && served.join() === expected.join()) {
     console.log(`verify-deploy: OK — prod serves the build of ${short} (github status: ${ghState}) after ${t}s`)
+    process.exit(0)
+  }
+  if (hashBlind && ghState === 'success') {
+    console.log(`verify-deploy: OK — Vercel reports success for ${short} after ${t}s. Prod serves an identical bundle; this commit changed no bundled output.`)
     process.exit(0)
   }
 
@@ -97,7 +120,11 @@ while (Date.now() < deadline) {
   await new Promise((r) => setTimeout(r, SITE_POLL_MS))
 }
 
-console.error(`verify-deploy: TIMEOUT after ${timeoutS}s — prod does NOT serve ${short}.`)
+console.error(
+  hashBlind
+    ? `verify-deploy: TIMEOUT after ${timeoutS}s — Vercel never reported success for ${short} (status: ${ghState}).`
+    : `verify-deploy: TIMEOUT after ${timeoutS}s — prod does NOT serve ${short}.`,
+)
 console.error(`  expected [${expected.join(', ')}]`)
 console.error(`  prod serves [${served.join(', ')}], github status: ${ghState}`)
 console.error(`  Check https://vercel.com deployments for the failing build, or re-run with --timeout=900.`)

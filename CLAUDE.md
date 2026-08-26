@@ -44,8 +44,9 @@ files can't sway the verdict) from both
 a timing gate whose cold run (what a hook always pays) reads near its band; it stays the per-task
 merge gate `.ai/TASKS` already mandates. To prove prod actually serves HEAD after a push:
 `node scripts/verify-deploy.mjs` — polls the live entry-asset hashes against a local build of the
-same commit and reads Vercel's verdict off the GitHub commit-status API; exit 0 only when prod
-serves this build, loud on failure or timeout.
+same commit; exit 0 only when prod serves this build, loud on failure or timeout. When the commit
+changes no bundled output (docs/hooks/scripts), the hashes are already identical and prove nothing —
+it says so and waits for Vercel's own success on the GitHub commit-status API instead.
 
 Roadmap protocol: PO saying `roadmap` = print the READY map from `.ai/TASKS` (unblocked tasks,
 parallel-safe combos, cost bands) and wait — do not start anything. PO answers `go <id>` → execute
