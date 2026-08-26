@@ -24,6 +24,24 @@
 export type ChannelKind = 'screen' | 'camera' | 'mic' | 'system-audio'
 export type MediaKind = 'video' | 'audio'
 
+/**
+ * Capture-time witnesses persisted per channel (additive, 2026-08-26). The
+ * console dies with the tab and no field report has ever arrived with one, so
+ * the take carries its own evidence: what the track/context did, how much
+ * silence the wall-clock hold inserted, how the channel's input ended, and
+ * whether the dead-tap revival ran.
+ */
+export interface ChannelDiagnostics {
+  /** Silence inserted to hold the timeline against the wall clock, ms. */
+  paddedMs?: number
+  /** Input was pure digital silence for this long when the segment ended, ms. */
+  silentTailMs?: number
+  /** Times the audio source tap was rebuilt after sustained digital silence. */
+  revivals?: number
+  /** Track/context life events (mute, unmute, ended, ctx state, revive…), ms from epoch. */
+  events?: { atMs: number; type: string }[]
+}
+
 export interface ChannelRecording {
   id: string
   kind: ChannelKind
@@ -37,6 +55,7 @@ export interface ChannelRecording {
   durationMs: number
   width?: number
   height?: number
+  diagnostics?: ChannelDiagnostics
 }
 
 /** Default-layout composite recorded live alongside the channels (instant export). */

@@ -149,6 +149,9 @@ export interface MeasuredAudioHandle {
      *  ended — the witness for "tab audio dies after a while": a muted or dead
      *  source records exact zeros no listener can tell from quiet. */
     silentTailMs: number
+    /** The same witnesses in persistable form — session stores them on the
+     *  channel so the take carries its own evidence (the console dies with the tab). */
+    diagnostics: import('@core/types').ChannelDiagnostics
   }>
   cancel: () => Promise<void>
 }
@@ -228,16 +231,29 @@ export async function startMeasuredAudioCapture(opts: {
    * with no numbers in it. Logs only — behaviour is unchanged.
    */
   const sinceEpochS = (): string => ((performance.now() - opts.epoch) / 1000).toFixed(1)
-  const onTrackMute = (): void =>
+  /** PERSISTED with the take (ChannelRecording.diagnostics): the console dies
+   *  with the tab, and no field report has ever arrived with one — the file is
+   *  the only witness that reliably survives to be read. */
+  const diagEvents: { atMs: number; type: string }[] = []
+  const noteEvent = (type: string): void => {
+    if (diagEvents.length < 200) diagEvents.push({ atMs: Math.round(performance.now() - opts.epoch), type })
+  }
+  const onTrackMute = (): void => {
+    noteEvent('mute')
     console.warn(
       `[capture] ${label} audio track MUTED at +${sinceEpochS()}s — the source delivers silence until it unmutes (crbug 40703184 family)`,
     )
-  const onTrackUnmute = (): void =>
+  }
+  const onTrackUnmute = (): void => {
+    noteEvent('unmute')
     console.warn(`[capture] ${label} audio track unmuted at +${sinceEpochS()}s`)
-  const onTrackEndedEvidence = (): void =>
+  }
+  const onTrackEndedEvidence = (): void => {
+    noteEvent('ended')
     console.warn(
       `[capture] ${label} audio track ENDED at +${sinceEpochS()}s — the channel is dead from here (device change / capture revoked)`,
     )
+  }
   track.addEventListener('mute', onTrackMute)
   track.addEventListener('unmute', onTrackUnmute)
   track.addEventListener('ended', onTrackEndedEvidence)
@@ -280,8 +296,10 @@ export async function startMeasuredAudioCapture(opts: {
   // auto-switching) can suspend or interrupt a rendering context, and that
   // reads as "audio just stops" with a healthy track.
   audioCtx.onstatechange = () => {
-    if (audioCtx.state !== 'closed')
+    if (audioCtx.state !== 'closed') {
+      noteEvent(`ctx:${audioCtx.state}`)
       console.warn(`[capture] ${label} AudioContext state → ${audioCtx.state} at +${sinceEpochS()}s`)
+    }
   }
 
   const sampleRate = audioCtx.sampleRate
@@ -383,6 +401,24 @@ export async function startMeasuredAudioCapture(opts: {
    *  Below this floor nothing dithered or live ever sits; zeros do. */
   const SILENCE_FLOOR = 1e-5
   let silentRunStartFrame: number | null = null
+  /**
+   * THE TAP IS REBUILT WHEN THE TAP IS DEAD (PO 2026-08-26, autopsied take
+   * rec_cjqcxsfhg02b: tab audio recorded pure zeros from t=71 s to the end of a
+   * 7.5-min take while the SAME share's video kept delivering a playing movie —
+   * an audio-only capture death on a live, unmuted track, which is the known
+   * Chromium class where a MediaStreamSource goes permanently silent, e.g.
+   * after an audio-device change). Recovery: build a NEW source on a CLONE of
+   * the track (cloning re-taps the capture) and swap it in. SAFE BY
+   * CONSTRUCTION: it fires only after seconds of pure digital silence, the
+   * worklet keeps the timeline sample-counted through the swap, and on a
+   * genuinely silent source the swap just yields the same silence — so a false
+   * positive costs nothing audible. A muted or ended track is NOT revivable
+   * from here (Chrome owns the mute); that case is logged and left alone.
+   */
+  const REVIVE_BASE_FRAMES = 5 * sampleRate
+  const REVIVE_MAX_ATTEMPTS = 6
+  let reviveAttempts = 0
+  let revivals = 0
   /** Last sample per channel of the previous batch — the fade-out needs a value. */
   const lastSample = new Float32Array(2)
   let flushResolve: (() => void) | null = null
@@ -408,7 +444,9 @@ export async function startMeasuredAudioCapture(opts: {
   })
   encoder.configure(config)
 
-  const sourceNode = audioCtx.createMediaStreamSource(opts.stream)
+  let sourceNode = audioCtx.createMediaStreamSource(opts.stream)
+  /** After a revival the source runs on a CLONE of the track; kept to stop it. */
+  let sourceClone: MediaStreamTrack | null = null
   const worklet = new AudioWorkletNode(audioCtx, WORKLET_NAME, {
     numberOfInputs: 1,
     // Safari stops rendering any capture subgraph that never reaches the
@@ -545,15 +583,52 @@ export async function startMeasuredAudioCapture(opts: {
     }
 
     // Silence-run bookkeeping, on the input as delivered (pre-fade): one open
-    // run at a time, closed by the first sample with signal in it.
+    // run at a time, closed by the first sample with signal in it. A run long
+    // enough to be a dead tap (not a quiet moment) triggers the revival above.
     {
       let maxAbs = 0
       for (let i = 0, n = frames * channels; i < n; i++) {
         const a = Math.abs(planar[i]!)
         if (a > maxAbs) maxAbs = a
       }
-      if (maxAbs > SILENCE_FLOOR) silentRunStartFrame = null
-      else silentRunStartFrame ??= framesWritten
+      if (maxAbs > SILENCE_FLOOR) {
+        silentRunStartFrame = null
+        reviveAttempts = 0
+      } else {
+        silentRunStartFrame ??= framesWritten
+        const silentFrames = framesWritten + frames - silentRunStartFrame
+        const dueFrames = REVIVE_BASE_FRAMES * 2 ** reviveAttempts
+        if (silentFrames >= dueFrames && reviveAttempts < REVIVE_MAX_ATTEMPTS) {
+          reviveAttempts++
+          if (track.readyState !== 'live' || track.muted) {
+            noteEvent(track.muted ? 'revive-skipped:muted' : 'revive-skipped:ended')
+            console.warn(
+              `[capture] ${label} audio silent ${(silentFrames / sampleRate).toFixed(0)}s but the track is ` +
+                `${track.muted ? 'MUTED — Chrome owns the mute, nothing to revive from here' : 'not live — the channel is over'}`,
+            )
+          } else {
+            try {
+              const clone = track.clone()
+              const next = audioCtx.createMediaStreamSource(new MediaStream([clone]))
+              next.connect(worklet)
+              sourceNode.disconnect()
+              const old = sourceClone
+              sourceNode = next
+              sourceClone = clone
+              old?.stop()
+              revivals++
+              noteEvent('revive')
+              console.warn(
+                `[capture] ${label} audio input dead (pure silence ${(silentFrames / sampleRate).toFixed(0)}s on a live, ` +
+                  `unmuted track) — rebuilt the source tap on a track clone (attempt ${reviveAttempts})`,
+              )
+            } catch (err) {
+              noteEvent('revive-failed')
+              console.warn(`[capture] ${label} audio tap rebuild failed`, err)
+            }
+          }
+        }
+      }
     }
 
     const timestamp = Math.round((framesWritten * 1_000_000) / sampleRate)
@@ -611,6 +686,7 @@ export async function startMeasuredAudioCapture(opts: {
     } catch {
       /* already disconnected */
     }
+    sourceClone?.stop()
     worklet.port.onmessage = null
     worklet.port.close()
     if (audioCtx.state !== 'closed') await audioCtx.close().catch(() => undefined)
@@ -673,12 +749,19 @@ export async function startMeasuredAudioCapture(opts: {
         )
       }
       if (startOffsetMs === null) resolveFirst(offset)
+      const paddedMs = (paddedFrames / sampleRate) * 1000
       return {
         bytes: bytesWritten,
         durationMs: (framesWritten / sampleRate) * 1000,
         startOffsetMs: offset,
-        paddedMs: (paddedFrames / sampleRate) * 1000,
+        paddedMs,
         silentTailMs,
+        diagnostics: {
+          ...(paddedMs > 0 ? { paddedMs: Math.round(paddedMs) } : {}),
+          ...(silentTailMs > 0 ? { silentTailMs: Math.round(silentTailMs) } : {}),
+          ...(revivals > 0 ? { revivals } : {}),
+          ...(diagEvents.length > 0 ? { events: diagEvents } : {}),
+        },
       }
     },
     async cancel() {

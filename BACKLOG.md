@@ -156,6 +156,35 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   same remote autopsy in minutes; the witness build (live on prod) also logs mute/ended/silence
   in the console as it happens. If the buffering story holds, the fix is capture CPU = THE X6
   RULING, which every investigation of this family now terminates at.
+  **SECOND AUTOPSY, SAME DAY (PO kept the take — the protocol worked): the audio-only death is
+  REAL and PROVEN.** Take rec_cjqcxsfhg02b (17:17Z, 7.5 min): tab audio dies at t=71 s ("completely
+  dies in 1:10" — exact) and records PURE ZEROS for the remaining 380 s, while the SAME share's
+  SCREEN channel delivers a playing movie the whole time (motion 9-44 at every probe after the
+  death) and the mic lives to the end. Channels full length, no stall, no track end, no clipping
+  in the tab audio before death (max 0.82; the MIC touches 1.0001 — the other session's clipping
+  thread). So this is an AUDIO-ONLY capture death on a live share — the Chromium class where a
+  MediaStreamSource goes permanently silent (device change family) or the track mutes forever.
+  TWO DISTINCT MECHANISMS are now confirmed across takes: the display-PAIR stall (movie take,
+  likely player buffering) and this audio-only tap death.
+  **SHIPPED against it (2026-08-26): THE DEAD-TAP REVIVAL + BLACK-BOX DIAGNOSTICS.**
+    · measuredAudio watches its own input: after 5 s of PURE digital silence on a live, unmuted
+      track it rebuilds the source tap on a CLONE of the track (cloning re-taps the capture),
+      with 5/10/20/40… s backoff, max 6 attempts per silent run, counter reset by any signal.
+      Safe by construction: it only acts when the channel is already recording nothing, the
+      worklet keeps the timeline sample-counted through the swap, and on a genuinely silent
+      source the swap just yields the same silence. A muted or ended track is logged, not
+      "revived" (Chrome owns the mute). RED-PROVEN in-browser: silent live stream → revivals at
+      5.1/10.1/20.1 s, duration intact, 0 padded; GREEN: audible stream → zero revivals.
+    · ChannelRecording.diagnostics (types.ts, additive): paddedMs, silentTailMs, revivals, and
+      the track/context event log (mute/unmute/ended/ctx-state/revive) persist WITH THE TAKE —
+      the console dies with the tab; the file now carries its own testimony, and the remote
+      autopsy reads it without asking PO for anything.
+  NOT YET KNOWN: whether the revival resurrects Chrome's dead tap in the field — the lab cannot
+  kill a tap on demand. PO's next dying take answers it from diagnostics alone: `revivals` with
+  sound after each revive-stamp = fixed; `revive-skipped:muted` stamps = the mute case, where the
+  only lever is a re-share surface (PO's UI call) or Chromium. Diagnostics presence is also the
+  build fingerprint the stale-tab P1 needs: a take with NO diagnostics field was recorded by an
+  OLD build's tab.
 
 - [P1 → FIXED AGAIN 2026-08-26, AWAITING PO RECHECK] PO: progressive audio desync — 08-25 report
   "sounds go faster than video" ~20 s in; 08-26 RECHECK FAILED: "mic and camera unsynch is about

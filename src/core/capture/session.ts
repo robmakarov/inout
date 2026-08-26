@@ -253,6 +253,8 @@ interface ChannelRuntime {
   durationMs?: number
   width?: number
   height?: number
+  /** Capture-time witnesses from the measured path — persisted with the take. */
+  diagnostics?: import('@core/types').ChannelDiagnostics
   stopped: Promise<void>
   resolveStopped: () => void
 }
@@ -1227,6 +1229,9 @@ class Session implements CaptureSession {
           ch.bytes = r.bytes
           ch.durationMs = r.durationMs
           ch.startOffsetMs = r.startOffsetMs
+          if ('diagnostics' in r && r.diagnostics && Object.keys(r.diagnostics).length) {
+            ch.diagnostics = r.diagnostics
+          }
         })
         .catch((err) => console.error('[capture] pause: measured stop failed', ch.kind, err))
         .finally(() => ch.resolveStopped())
@@ -1418,6 +1423,9 @@ class Session implements CaptureSession {
           rt.bytes = r.bytes
           rt.durationMs = r.durationMs
           rt.startOffsetMs = r.startOffsetMs
+          if ('diagnostics' in r && r.diagnostics && Object.keys(r.diagnostics).length) {
+            rt.diagnostics = r.diagnostics
+          }
         })
         .catch((err) => console.error('[capture] measured stop failed', rt.kind, err))
         // resolveStopped must run even on failure or doStop() hangs forever.
@@ -1467,6 +1475,9 @@ class Session implements CaptureSession {
               ch.bytes = r.bytes
               ch.durationMs = r.durationMs
               ch.startOffsetMs = r.startOffsetMs
+              if ('diagnostics' in r && r.diagnostics && Object.keys(r.diagnostics).length) {
+                ch.diagnostics = r.diagnostics
+              }
             }
           } catch (err) {
             console.error('[capture] measured stop failed', ch.kind, err)
@@ -1727,6 +1738,7 @@ class Session implements CaptureSession {
         if (c.width) rec.width = c.width
         if (c.height) rec.height = c.height
       }
+      if (c.diagnostics) rec.diagnostics = c.diagnostics
       return rec
     })
 

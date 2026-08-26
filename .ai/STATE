@@ -326,15 +326,26 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   tabaudio`: real getDisplayMedia via auto-accept flags, tone → teardown → 45 s silent gap → new
   tone, own-tab AND hidden-child-tab topologies, PLUS an occlusion cell covering the captured
   window 35 s) and did NOT reproduce — audio returns at full level, zero mute events.
-  THEN THE DYING TAKE ITSELF WAS AUTOPSIED (PO: "not fixed"; a browser session on the app origin
-  decodes the take's own OPFS channels in place — the field-evidence loop that needs nothing from
-  PO but "don't discard it"). Verdict on that take: at 6:36–7:02 the WHOLE DISPLAY PAIR dies
-  together — screen frozen on one DIMMED mid-dialogue frame with spinner-scale flicker, tab audio
-  digitally silent, mic alive, both recover together. That signature is A PLAYER STALL (buffering),
-  not a capture death: the recording is likely FAITHFUL and the movie itself froze — plausibly
-  starved by capture's own CPU load, which is the X6 ruling's territory yet again. The rival
-  (Chromium capture outage) survives only because the subtitle-continuity test died with the
-  discarded take. Full detail + the next-take protocol in BACKLOG.
+  THEN THE DYING TAKES THEMSELVES WERE AUTOPSIED (a browser session on the app origin decodes the
+  take's own OPFS channels in place — the field-evidence loop that needs nothing from PO but
+  "don't discard it"). TWO MECHANISMS, both real: (1) the movie take of 16:40Z — at 6:36–7:02 the
+  WHOLE DISPLAY PAIR dies together (screen frozen on a DIMMED mid-dialogue frame with
+  spinner-scale flicker, tab audio silent, mic alive, both recover together) — the signature of a
+  PLAYER STALL faithfully recorded, plausibly starved by capture CPU (X6's territory);
+  (2) the take of 17:17Z — tab audio PERMANENTLY dead from t=71 s (380 s of zeros) while the SAME
+  share's video delivers a playing movie throughout and the mic lives: an AUDIO-ONLY tap death on
+  a live share, the Chromium dead-MediaStreamSource / permanent-mute class, PROVEN.
+  SHIPPED AGAINST (2): THE DEAD-TAP REVIVAL — measuredAudio rebuilds its source tap on a CLONE of
+  the track after 5 s of pure digital silence on a live unmuted track (5/10/20/40 s backoff, max 6
+  per run, reset by signal; muted/ended tracks are logged, not touched). Safe by construction (it
+  acts only on already-silent input; the worklet keeps the timeline through the swap) and
+  red/green-proven in-browser (silent live stream: revivals at 5.1/10.1/20.1 s, duration intact;
+  audible stream: zero). AND THE WITNESSES NOW PERSIST: ChannelRecording.diagnostics (additive)
+  carries paddedMs / silentTailMs / revivals / the track+context event log with every take, so the
+  autopsy loop reads the whole story from the file — and a take WITHOUT the field fingerprints an
+  OLD build's tab (the stale-tab P1). Open: whether the revival resurrects Chrome's tap in the
+  field — the next dying take's diagnostics answer it; the muted-forever case has no app-side
+  lever beyond a re-share surface (PO's UI call). Full detail in BACKLOG.
 - CAPTURE MEASURES THE MIX'S ENVELOPE ONCE, AND THE EXPORT STOPPED MEASURING IT AGAIN (X1,
   2026-08-26). O2 kept three scalars from the capture-time accumulator and SORTED the window series
   away; the series is now kept IN TIME ORDER on `Recording.loudness.envelope` (windowRms + windowPeak
