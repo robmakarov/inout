@@ -124,6 +124,30 @@ function workletModuleUrl(): string {
   return workletUrl
 }
 
+/**
+ * Track clones created by the dead-tap revival. A page that goes away mid-take
+ * (the wedge-refresh ritual, a tab close) must not leave one alive: an
+ * unreleased display-capture claim is exactly what the screen-wedge family
+ * feeds on, and the session's pagehide guard only knows the tracks it acquired.
+ */
+const liveClones = new Set<MediaStreamTrack>()
+let clonePagehideGuard = false
+function trackClone(t: MediaStreamTrack): void {
+  liveClones.add(t)
+  if (!clonePagehideGuard && typeof window !== 'undefined') {
+    clonePagehideGuard = true
+    window.addEventListener('pagehide', () => {
+      for (const c of liveClones) c.stop()
+      liveClones.clear()
+    })
+  }
+}
+function dropClone(t: MediaStreamTrack | null): void {
+  if (!t) return
+  t.stop()
+  liveClones.delete(t)
+}
+
 export function canMeasureAudioCapture(): boolean {
   return (
     typeof AudioContext !== 'undefined' &&
@@ -609,13 +633,14 @@ export async function startMeasuredAudioCapture(opts: {
           } else {
             try {
               const clone = track.clone()
+              trackClone(clone)
               const next = audioCtx.createMediaStreamSource(new MediaStream([clone]))
               next.connect(worklet)
               sourceNode.disconnect()
               const old = sourceClone
               sourceNode = next
               sourceClone = clone
-              old?.stop()
+              dropClone(old)
               revivals++
               noteEvent('revive')
               console.warn(
@@ -686,7 +711,8 @@ export async function startMeasuredAudioCapture(opts: {
     } catch {
       /* already disconnected */
     }
-    sourceClone?.stop()
+    dropClone(sourceClone)
+    sourceClone = null
     worklet.port.onmessage = null
     worklet.port.close()
     if (audioCtx.state !== 'closed') await audioCtx.close().catch(() => undefined)

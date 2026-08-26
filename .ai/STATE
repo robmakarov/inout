@@ -343,9 +343,13 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   audible stream: zero). AND THE WITNESSES NOW PERSIST: ChannelRecording.diagnostics (additive)
   carries paddedMs / silentTailMs / revivals / the track+context event log with every take, so the
   autopsy loop reads the whole story from the file — and a take WITHOUT the field fingerprints an
-  OLD build's tab (the stale-tab P1). Open: whether the revival resurrects Chrome's tap in the
-  field — the next dying take's diagnostics answer it; the muted-forever case has no app-side
-  lever beyond a re-share surface (PO's UI call). Full detail in BACKLOG.
+  OLD build's tab (the stale-tab P1). FIELD-PROVEN the same day on the first black-boxed take:
+  the same t≈71 s tap death that had cost a previous take its remaining 380 s was revived at
+  76.2 s with music back at 78.2 s — a 7.2 s blip instead of a dead take. The same box measured
+  the starvation behind "music sounds shitty / goes faster": clocks lost ~1.6 % of an 84 s take
+  (padded, so no drift), but content Chrome delivers under that load is mangled at the source —
+  the lever is X6. Revival clones stop on pagehide (wedge-family insurance). The muted-forever
+  case still has no app-side lever beyond a re-share surface (PO's UI call). Detail in BACKLOG.
 - CAPTURE MEASURES THE MIX'S ENVELOPE ONCE, AND THE EXPORT STOPPED MEASURING IT AGAIN (X1,
   2026-08-26). O2 kept three scalars from the capture-time accumulator and SORTED the window series
   away; the series is now kept IN TIME ORDER on `Recording.loudness.envelope` (windowRms + windowPeak

@@ -53,6 +53,12 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   wedge. Load at picker time is a trigger by itself, and the safe ordering is exactly what O12
   makes permanent. (b) IN THAT WEDGE THE REFRESH RITUAL DID NOT DELIVER — app unresponsive, no
   visible auto-reload, no ⌘Q message. That half is OURS and is its own P1 below.
+  RECURRED 2026-08-26: "i got chrome wedge after trying to record after previous session" — the
+  known second-take-after-a-session pattern, presumably cleared by ⌘Q (the next take recorded
+  fine). No console timeline again, so no new mechanism facts. Precaution taken the same day:
+  the dead-tap revival's track clones are now stopped on pagehide, so a page dying mid-take
+  cannot leave a clone holding the display-capture claim the wedge family feeds on. The standing
+  levers are unchanged: O12 persistent-share (PO-gated) and the case-file evidence kit.
 
 - [P1 → PARTLY FIXED 2026-08-25] PO: THE WEDGE RECOVERY ITSELF FAILED under game load — after the
   wedge the app "dont reloads normally, gets unresponsive, no message about that i need to reload
@@ -179,12 +185,22 @@ TD tags technical defects by severity. Done items get deleted, not archived.
       the track/context event log (mute/unmute/ended/ctx-state/revive) persist WITH THE TAKE —
       the console dies with the tab; the file now carries its own testimony, and the remote
       autopsy reads it without asking PO for anything.
-  NOT YET KNOWN: whether the revival resurrects Chrome's dead tap in the field — the lab cannot
-  kill a tap on demand. PO's next dying take answers it from diagnostics alone: `revivals` with
-  sound after each revive-stamp = fixed; `revive-skipped:muted` stamps = the mute case, where the
-  only lever is a re-share surface (PO's UI call) or Chromium. Diagnostics presence is also the
-  build fingerprint the stale-tab P1 needs: a take with NO diagnostics field was recorded by an
-  OLD build's tab.
+  **FIELD-PROVEN THE SAME DAY** (take rec_c1hqf2rjvv8o, 17:44Z, 84 s of YouTube music — the first
+  take whose black box came back from the field): the tap died mid-music at t=71 s — the SAME
+  death that cost the previous take its remaining 380 s — the revival fired at 76.2 s and the
+  music is back at 78.2 s. Cost: 7.2 s of silence instead of everything after. A second, benign
+  fire at 5.2 s on pre-roll silence cost nothing, as designed. The deaths keep HAPPENING (that is
+  Chrome + a starving machine); the revival turns them from take-enders into blips.
+  THE SAME BLACK BOX also quantified the starvation behind "music sounds shitty and sometimes
+  goes faster": in 84 s the mic padded 1547 ms and the tab audio 1281 ms — the audio clocks lost
+  ~1.6 % of wall time and the hold repaid it (no drift), but the CONTENT Chrome delivered under
+  that load is time-compressed and mangled at the source, which no clock can restore (and PO's
+  parallel VLC sounding fine confirms the machine's audio output is healthy — it is Chrome's
+  capture pipeline being crushed). The load lever remains X6. Music also peaks at 1.20 (1.42 on
+  the movie take) — above-full-scale floats feeding the loudness/clipping thread.
+  HARDENING with it: revival clones are tracked and stopped on pagehide — a page dying mid-take
+  (the wedge-refresh ritual) must not leave a clone holding a display-capture claim, which is the
+  exact food of the screen-wedge family.
 
 - [P1 → FIXED AGAIN 2026-08-26, AWAITING PO RECHECK] PO: progressive audio desync — 08-25 report
   "sounds go faster than video" ~20 s in; 08-26 RECHECK FAILED: "mic and camera unsynch is about
