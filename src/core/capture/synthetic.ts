@@ -64,6 +64,53 @@ export function setSyntheticScreenSize(size: { width: number; height: number } |
   screenSize = size ?? DEFAULT_SCREEN
 }
 
+export type SyntheticScreenContent = 'default' | 'text'
+let screenContent: SyntheticScreenContent = 'default'
+
+/**
+ * Harness knob, the same family as `setSyntheticScreenSize`: WHAT the synthetic
+ * screen paints. Production never calls it; the default is unchanged.
+ *
+ * The default source is a full-frame gradient with a big frame counter and a
+ * sliding bar — the right fixture for sync and throughput, and the wrong one
+ * for anything about TEXT: two enormous glyphs on a smooth ground, where a
+ * chroma-upsampling difference has almost nothing to land on. X15(c) has to ask
+ * whether adding a trim changes how a take's text looks, so it needs a screen
+ * that is mostly small coloured glyphs — the same code-editor page the bits
+ * audit and the O9 text rig are measured on, so the numbers are comparable.
+ *
+ * AND IT HOLDS PERFECTLY STILL, which is the part that was learned the hard
+ * way. The bits-audit page scrolls a line every 2.5 s, and two export paths do
+ * not place their first frame at the same instant — so comparing them on a
+ * scrolling page measures WHERE each file starts, not what either painter drew.
+ * Measured: instant and render read 13.1 dB, and the dumped frames showed the
+ * same page one line apart. A still page cannot express that confound, so what
+ * is left in a comparison is the pixels, which is the whole question. The
+ * camera PiP still moves and is where placement gets measured instead.
+ */
+export function setSyntheticScreenContent(content: SyntheticScreenContent | null): void {
+  screenContent = content ?? 'default'
+}
+
+/** The bits-audit editor page, held still — see setSyntheticScreenContent. */
+function drawTextScreen(g: CanvasRenderingContext2D, W: number, H: number): void {
+  const words = ['const', 'function', 'return', 'await', 'export', 'if', 'for', 'type']
+  g.fillStyle = '#0d1117'
+  g.fillRect(0, 0, W, H)
+  g.textAlign = 'left'
+  g.font = `${Math.round(H / 38)}px monospace`
+  g.textBaseline = 'top'
+  for (let row = 0; row < 34; row++) {
+    const i = row % 60
+    const indent = '  '.repeat(i % 4)
+    const text = `${indent}${words[i % words.length]} sample${i} = compute(${i}, 'channel-${i % 7}')`
+    g.fillStyle = '#484f58'
+    g.fillText(String(row + 1).padStart(3, ' '), W * 0.01, row * (H / 36) + 8)
+    g.fillStyle = i % 5 === 0 ? '#7ee787' : i % 3 === 0 ? '#79c0ff' : '#c9d1d9'
+    g.fillText(text, W * 0.05, row * (H / 36) + 8)
+  }
+}
+
 function syntheticScreen(): Generated {
   const { width: W, height: H } = screenSize
   const canvas = document.createElement('canvas')
@@ -72,10 +119,16 @@ function syntheticScreen(): Generated {
   const g = get2d(canvas)
   const startedAt = performance.now()
   const s = W / 1280
+  const content = screenContent
   let frame = 0
   let raf = 0
   const draw = (): void => {
     const t = (performance.now() - startedAt) / 1000
+    if (content === 'text') {
+      drawTextScreen(g, W, H)
+      raf = requestAnimationFrame(draw)
+      return
+    }
     const hue = (t * 6) % 360
     const grad = g.createLinearGradient(0, 0, W, H)
     grad.addColorStop(0, `hsl(${hue}, 45%, 10%)`)

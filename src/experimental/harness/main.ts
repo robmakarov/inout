@@ -550,6 +550,7 @@ const runners: Runner[] = [
         contents: Array.isArray(args?.contents)
           ? (args.contents as ('text' | 'motion')[])
           : undefined,
+        crops: typeof args?.crops === 'boolean' ? args.crops : undefined,
       })
     },
   },
@@ -564,6 +565,7 @@ const runners: Runner[] = [
         takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined,
         only: typeof args?.only === 'string' ? args.only : undefined,
         repeats: typeof args?.repeats === 'number' ? args.repeats : undefined,
+        crops: typeof args?.crops === 'boolean' ? args.crops : undefined,
       })
     },
   },
@@ -576,6 +578,9 @@ const runners: Runner[] = [
       const { runTrimTextParity } = await import('../perf/trimTextParity')
       return runTrimTextParity({
         takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined,
+        thumbs: typeof args?.thumbs === 'boolean' ? args.thumbs : undefined,
+        searchSec: typeof args?.searchSec === 'number' ? args.searchSec : undefined,
+        crops: typeof args?.crops === 'boolean' ? args.crops : undefined,
       })
     },
   },

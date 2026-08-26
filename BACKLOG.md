@@ -196,23 +196,36 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   is still owed — but it is owed on a build where the fix is actually in force, which no build before
   2026-08-26 was.
 
-- [P1] TD 2026-08-26, found while measuring X5: **the two composite painters do not draw the same
-  picture, and the difference lands on TEXT — so a trim may change how a take's text looks.** Fed the
-  SAME software-decoded frame and the SAME default composition, `compose/layout.ts` (2D) and
-  `capture/compositorGL.ts` (GL) agree to only 37.3 dB on the screen interior: max 156 of 255, 3.8 %
-  of pixels off by more than 8. The smooth camera region is clean (max 5-8) and the mean signed delta
-  is ≈0, so it is sharp-edge 4:2:0 chroma handling — `texImage2D(VideoFrame)` and
-  `drawImage(VideoFrame)` upsample it differently — and the fixture is coloured text on dark ground,
-  which is where that shows most.
-  WHY THIS IS MORE THAN AN X5 FOOTNOTE: the conflict rules say those two painters MUST agree, because
-  an UNEDITED take's instant export packet-copies the GL composite while the SAME take with any edit
-  is re-rendered through the 2D painter. If the divergence holds in production, adding one trim
-  changes the look of the text. NOT YET CLAIMED, and the gap is specific: this was measured feeding
-  both painters a software-decoded frame, whereas the live GL composite consumes a GPU-resident
-  capture frame, and the two conversions may not differ the same way. THE MEASUREMENT THAT SETTLES IT:
-  record one take, export it unedited (instant path) and with a one-frame trim (render path), and
-  PSNR the two files over a text region at matching instants. If they diverge, it is a live defect on
-  the default export and it is O9's territory too. `npm run exp -- x5` is the rig that found it.
+- [P2, was P1 — SETTLED IN PRODUCTION 2026-08-26 by X15(c), `npm run exp -- x15c`] **a trim does
+  change how a take's text looks, and the change is ~2.8 dB below what a plain re-encode costs
+  anyway — much smaller than the lab number implied, and it does not reach the path a user gets.**
+  One real take (still code-editor screen + camera PiP), exported three ways through the product's
+  own ladder, screen region, worst of four instants:
+      instant ↔ smart cut   99 dB · max 0     — BIT-IDENTICAL
+      instant ↔ render      37.1 dB (mean 37.9) · max 56 · 7.7 % of pixels off by >8 · fringe 4.03
+      the CONTROL: one re-encode of the instant frame alone   39.9 dB · max 50 · 3.8 % · fringe 3.00
+  THE CONTROL IS THE POINT AND IT IS WHY THIS DROPS TO P2. `compose/smartCutFlag.ts` already records
+  ~37.5 dB as "the ceiling for two independent encodes of one frame", so a bare 37.1 dB proves
+  nothing; measured against a re-encode of the very same picture, the render costs 2.8 dB more and
+  doubles the share of visibly-wrong pixels (7.7 % against 3.8 %). Real, bounded, and an order
+  smaller than "max 156 on 3.8 % of pixels" suggested.
+  AND THE PATH A USER ACTUALLY GETS IS UNAFFECTED. The backlog entry assumed a trim takes the render;
+  it does not — SMART CUT has been the default since 2026-08-25 and copies the composite's packets,
+  so a trimmed take is BIT-IDENTICAL to the untrimmed one. The render's number is what a user sees
+  only when smart cut declines.
+  WHAT IS LEFT FOR PO, not TD: whether 2.8 dB of extra glyph fringe on the render path is worth
+  anything. It also re-prices X5, whose refusal rested on the two painters disagreeing.
+
+- [P2] TD 2026-08-26, found while measuring X15(c), NOT chased: **the render places the camera PiP
+  about half a second away from where the instant path places it.** In the same take, on the same
+  output instants, the moving camera region best-matches at −15 frames (−0.5 s) and even there reads
+  only 23.6 dB (max 115), while the STILL screen region of the same two files matches at 37.1 dB.
+  So the two paths agree about pixels and disagree about WHEN: an edited export's PiP shows a
+  different moment than an unedited export's at the same timestamp. The oracle bands audio↔video
+  sync and would not see this, which is video↔video placement between two export paths.
+  NOT DIAGNOSED: it could be the camera channel's `startOffsetMs` against the composite's, or the
+  render resampling the camera onto its own grid. `npm run exp -- x15c` prints it as `alignFrames`
+  on the camera row; `{"thumbs":true}` dumps the frames, which is what made it visible.
 
 - [P2] TD 2026-08-26, found while writing X9's gate: **two of this repo's evidence gates are written
   in `longtask` counts, and a long-task count cannot fail here.** Anything in this codebase that

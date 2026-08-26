@@ -35,6 +35,10 @@ measurement was; everything left needed PO — a ruling, a listen, or hardware.
 LATER SAME DAY (review session): PO reports Xcode 27 AND an iOS 27 device ARE available → P5a moves
 to READY. And PO asked for the text measurements to run in a parallel session → TD authored X15
 (measurement-only, changes no default) → READY. Two buildable tasks exist again.
+FOURTEENTH SESSION (PO: "go X15"): X15 DONE, all three lanes, no default moved. It ANSWERED the
+question X6's ruling was waiting on and REFUTED O9's headline, which the map had been treating as
+settled fact — see the amended X6/O9/X5 lines below. X15 leaves READY; X13 loses its "after X15"
+dependency.
 
 SHIPPED THIS SESSION
   · X9   the For-AI build runs in a worker. Byte-identical PDF on four lanes; the UI thread loses
@@ -54,29 +58,43 @@ REFUTED ON MEASUREMENT, and each one is why the map is now honest
   · X4   the decode farm: byte-identical files at 0.99-1.08× against a ≥2× gate. Decode is not
          thread-bound. DELETED; the verdict is re-runnable in one command.
   · X5   the GPU export compositor: refused on its own parity gate before the shader was written —
-         the two painters disagree by 156 of 255 on 3.8 % of screen-TEXT pixels.
+         the two painters disagree by 156 of 255 on 3.8 % of screen-TEXT pixels. AMENDED by X15(c):
+         in PRODUCTION the divergence is a quarter of that — the render costs 2.8 dB more than a
+         plain re-encode of the same frame (37.1 vs 39.9 dB), max 60, 7.8 % of pixels off by >8.
+         Real, bounded, and much cheaper than the lab number implied. Still PO's to rule on.
   · X12  capture writes 5.21/7.63 Mbps, not 18.5, and the rung it existed to price is BACKWARDS on
          screen content (−32.5 % disk for a +31.5 % bigger delivered file).
-  · O9   the export is the SMALL half of text damage: capture destroys 51 % of glyph edge contrast,
-         the export preserves it. AV1 4:4:4 halves the export's own fringe at fewer bytes, but that
-         is ~12 % of the total.
+  · O9   AV1 4:4:4 halves glyph chroma fringe (9.15 -> 3.03) at fewer bytes, and 3x the bitrate on
+         4:2:0 buys 4 %, so the lever is chroma resolution and not bits. THE REST OF O9's HEADLINE IS
+         REFUTED BY X15(b): "capture destroys 51 % of glyph edge contrast" was its reference at the
+         wrong scroll position — measured against the picture that was actually encoded, capture
+         costs fringe 8.87 / contrast 1.00, and shifting the reference one scroll step reproduces
+         O9's published 23.2 / 68.6 / 0.49 on demand. There is no "big half" at capture.
 
 WHAT IS LEFT, AND EVERY ITEM IS PO'S
   1. AUDIO LISTEN TEST — DELIVERED 2026-08-26: PO listened, sound is STILL WRONG ("mic is kinda too
      loud now"), a separate live session owns the fix. PO also asked for a per-channel gain slider
      → F9 (READY, after that session lands). Do not touch mix constants outside that session.
   2. THE FOR-AI FILE re-test — DEFERRED by PO 2026-08-26 ("later"). AI2-AI7 stay frozen.
-  3. X6's PICTURE RULING — at the same ceiling the AVC raw channel writes 0.21× the bytes and the
-     pictures agree to 27.9 dB on screen content. Rate control, not loss; the shipped composite
-     already does the same thing. Flipping it changes how an EDITED export looks. If you flip it,
-     O3b collects the reward (skip the composite entirely on a single-screen take).
+  3. X6's PICTURE RULING — ANSWERED BY MEASUREMENT 2026-08-26 (X15(a)), and the objection does not
+     survive. On identical pictures the AVC raw channel writes 0.52x the VP9 bytes on screen text
+     and the two agree to 47.8 dB with glyph contrast 1.00 (motion: 0.23x at 51.6 dB). The 27.9 dB
+     came from x6's rig comparing two SEPARATE takes of a MOVING source through a phase search its
+     own notes call a lower bound. bitrateMode turned out to be INERT (byte-identical output in
+     hardware AND software), so there is nothing left to tune — the shipped config already clears
+     the bar. WHAT IS STILL PO's: the flip itself, because it changes how an EDITED export looks,
+     and one confirmation is owed first (the sweep feeds canvas frames, production feeds
+     GPU-resident ones — `npm run exp -- x6`). If you flip it, O3b collects the reward.
   4. O10a's ATTENUATION RULING — exports scatter 7.84 dB by content and sit 1-9 dB ABOVE the −14 LUFS
      convention. R128 can only fix that by turning takes DOWN, and the shipped bounding never
      attenuates. The measurement, the implementation and the switch are all in place.
   5. O6's 4K RE-VERIFY — `?nativeres=1`, record the game tab that froze on 08-22, report the console.
      No rig can stand in: a synthetic 4K source is a rAF-painted canvas, so its fps is dominated by
      a cost a real display does not have (measured — capping it moved oracle:load 14 → 14).
-  6. X5's TEXT QUESTION (BACKLOG P1) — now X15 lane (c), READY; no longer waits on PO.
+  6. X5's TEXT QUESTION (BACKLOG P1) — MEASURED 2026-08-26 by X15(c) and now a ruling, not a
+     question: a trimmed take is BIT-IDENTICAL to the untrimmed one (smart cut copies the packets),
+     and the full render costs 2.8 dB more than a plain re-encode. Artifacts to look at:
+     ~/Downloads/x15-text-truth/c-*.png. Worth anything? PO's call.
   7. THE OLD ONES, re-triaged by PO 2026-08-26: Safari (P8 + X7) — "later", stays blocked ·
      camera-only 1080p → P9, agent-run, off PO's plate · Yandex + RU — PO: "fuck this yandex
      bullshit, we are building for them without testing" → PARKED; the code half stays (zero
@@ -94,8 +112,9 @@ NOT STARTED, and deliberately: O10(b) multitrack · O10(c) spectral gating · O1
 O9(c) near-lossless static spans (its premise is refuted by O9's own table — 3× the bits bought 4 %) ·
 F6's RETAKE (a resume of a FINISHED recording: recovery, editsRepo and editor state, its own task).
 
-FULL SWEEP AT THE END OF THIS SESSION: 449 tests · typecheck clean · oracle PASS on v2 AND v1 ·
-armcancel green · build clean · F6 and X9 verified on the DEPLOYED build.
+FULL SWEEP, 2026-08-26 (fourteenth session, X15): 458 tests · typecheck clean · all three X15 lanes
+re-runnable in one command each. X15 is MEASUREMENT ONLY and touches no path the oracle guards — the
+one production edit is a harness-only synthetic-screen knob, default unchanged.
 
 START HERE IF YOU ARE FRESH:
   1. read notes 5, 6, 9, 10, 11, 17 below. Note 10 (the rig is wrong before the product is) and
@@ -104,22 +123,13 @@ START HERE IF YOU ARE FRESH:
      which is the kind this codebase keeps paying for twice.
   2. `npm run typecheck && npm test` (449 tests) and `npm run oracle` should be green before you
      change anything, so a red gate later is yours and not inherited.
-  3. THERE IS NO BUILDABLE TASK ON THIS MAP. If PO has answered one of the seven questions in
-     "WHAT IS LEFT" above, that answer is your task; otherwise ask, do not invent one.
+  3. THERE IS BUILDABLE WORK AGAIN — see READY NOW. Two of its entries wait on the live audio-fix
+     session (F9, F10); P5a needs PO at the machine. Do not invent a task that is not on the map.
   4. anything touching capture/* keeps BOTH engines green: `npm run oracle` (v2 default) AND
      `node scripts/oracle.mjs --engine=v1`. Anything touching the STOP path also runs
      `npm run oracle:load` (HEAVY, announce it) and `npm run exp -- armcancel`.
 
 READY NOW:
-  X15  text-truth measurement      [medium]  measurement only, changes no default. Three lanes:
-                                             X6's bitrateMode sweep, a software-4:4:4 "crisp text"
-                                             price tag, and X5's in-app one-trim question (BACKLOG
-                                             P1). Spec below in the X frontier. Parallel-safe with
-                                             anything — it ships numbers, not behaviour.
-                                             PO 2026-08-26 "i need to see it": every lane ALSO
-                                             delivers side-by-side FILES (or magnified crops) to
-                                             ~/Downloads so the picture ruling is made with eyes,
-                                             not dB numbers. That deliverable is a gate.
   P5a  iOS SCK spike               [light]   UNBLOCKED 2026-08-26: PO confirms Xcode 27 + a real
                                              iOS 27 device are available. Needs PO present (device
                                              plugged in, signing). TIME-SENSITIVE (iOS 27 ~Sept).
@@ -129,12 +139,21 @@ READY NOW:
                                              ships OPT-IN behind a flag; the default flip is a
                                              separate PO gate with A/B files. A learned model only
                                              if Tier 1's misclassification is MEASURED, never first.
-                                             Run AFTER X15 (both live in capture encoding).
+                                             UNBLOCKED 2026-08-26: X15 is done. Read its handoff
+                                             first — bitrateMode is inert, quantizer mode is the one
+                                             rate-control knob Chrome honours.
   F9   per-channel gain slider     [light-medium]  PO 2026-08-26: "mic is kinda too loud now, can
                                              we add slider?" Spec in NEW TASKS below. Run AFTER the
                                              live audio-fix session lands (shared mix area).
   P9   camera-1080 verify          [light]   PO 2026-08-26, and PO is right that eyes are the wrong
                                              instrument. Agent-run, zero PO time. Spec below.
+  F10  mic noise removal           [medium]  PO 2026-08-26: "i want noise removal". Local model,
+                                             zero tokens, export-time, raw channels untouched.
+                                             Spec below. AFTER the live audio session lands.
+  F11  voice-aware tighten         [light-medium]  PO 2026-08-26. A local VAD gates F5a's proposals
+                                             so cuts never land on speech. Spec below.
+  F12  super-resolution on zoom    [heavy]   PO 2026-08-26: "only if zoom used". Render path only,
+                                             zoomed spans only, opt-in. Spec below.
 
 NEW TASKS (TD-authored 2026-08-26 from PO's answers; all operating rules apply):
 
@@ -165,6 +184,43 @@ console.
 GATES: the exported file's own header reads the camera's true max (≥1920×1080 if the camera offers
 it; if it offers less, report the capability list — that is the answer, not a failure) · evidence
 JSON in docs/qa/ · no changes outside scripts/.
+
+## F10 mic-noise-removal [medium · local model, zero tokens · export mix + preview; raw untouched]
+PO 2026-08-26: "i want noise removal". A per-take toggle that denoises the MIC channel. PLACEMENT:
+at EXPORT (mirrored in preview), never at capture — the raw channel on disk stays untouched, so the
+feature is reversible and "never break working features" holds. Runs in the export worker on the
+mic PCM before the mix; the in-thread fallback is the same code. Default OFF until PO flips it.
+MODEL: verify the current open-model landscape IN-SESSION before choosing (never from memory).
+Candidates to price: RNNoise-class (~0.1-2 MB, faster than realtime on WASM) vs DeepFilterNet-class
+(better, heavier). Permissive license only; model lazy-loaded on first use — the O7 first-paint
+gate must not move.
+GATES: toggle OFF = byte-identical to today (pinned) · ON: measured SNR gain on a known-noise rig
+with the fidelity bands still green (no musical-noise artifacts on tones) · A/B files to
+~/Downloads for PO's ears · toggle persists with the edit (editsRepo) · X1 fence: a denoised mix is
+not what capture summed → envelope shortcut returns null, re-probe (unit-tested) · export time cost
+printed. COORDINATION: starts after the live audio session merges (shared mix area); composes with
+F9's slider.
+
+## F11 voice-aware-tighten [light-medium · extends F5a's analyzer; proposals only, zero tokens]
+PO 2026-08-26. F5a proposes cuts from window-RMS alone, so quiet speech near the floor can be
+proposed as a cut. A local VAD (Silero-class ~1-2 MB — verify landscape in-session, permissive
+license, lazy-loaded at Tighten press) gates the proposals: a window the VAD calls speech is never
+inside a proposed cut, whatever its RMS. Still a PROPOSAL — Apply stays the user's.
+GATES: on the known-silence rig, recall unchanged and cuts-in-speech ZERO, including a new
+breathy-speech fixture · interactive runtime (the envelope path stays ~ms; VAD runs only on
+candidate spans) · VAD unavailable → exactly today's behaviour (fallback pinned).
+
+## F12 zoom-super-resolution [heavy · render path only, zoomed spans only, opt-in]
+PO 2026-08-26: "super resolution on zoom but only if zoom used". F2 caps zoom at 2.5× because
+upscaling 1080p past that is mush; SR raises what a zoom can show. Applied ONLY to frames inside a
+zoom span past a threshold (start ~1.5×), ONLY in the render (a zoomed take is never pixel-default,
+so instant/smart-cut are structurally untouched), as an opt-in quality step in the export panel
+that PRINTS its time cost. WebGPU inference; compact SR model verified in-session (landscape check,
+permissive license, lazy-loaded). Raising the 2.5× zoom cap where SR is on is PO's knob AFTER
+seeing files.
+GATES: un-zoomed takes and SR-off exports byte-identical to today · A/B crops at 2.5× to
+~/Downloads — PO judges by eye · per-frame cost measured, export estimate includes it · no WebGPU →
+today's scaler, silently · oracle green.
 
 BLOCKED ON HARDWARE OR A DOWNLOAD, unchanged:
   P1   firefox + 3-engine oracle   [medium]  code half shipped 2026-08-23. What is left needs
@@ -304,6 +360,23 @@ delivered file stays constant-frame-rate.
    lane was measuring the scratch path. It read GREEN the whole time. Before reporting an alarming
    number, check the instrument; and before reporting a REASSURING one, check that the lever you
    pulled is attached to the thing you pulled it for.
+   THREE MORE, 2026-08-26 (X15), AND THEY ARE ALL ONE FAULT: A REFERENCE THAT MOVES. O9's headline
+   compared decoded frames at fixed instants against a canvas readback taken at an unrelated moment,
+   on a fixture that SCROLLS — "capture destroys 51 % of glyph edge contrast" was a scroll position,
+   and shifting the reference one step reproduces the published numbers on demand. X15's own lane (c)
+   then made the identical mistake and read 13.1 dB with the identical fingerprint. And X15's lane
+   (b) told the exporter a channel was 6.0 s when its file was 6.6, then measured the render placing
+   the picture 0.967 s from where the channel's timestamps predicted — a rig's own arithmetic,
+   debugged as if it were the product's.
+   THE THREE RULES THAT FALL OUT, each of which would have caught it alone:
+     · A FIXTURE THAT CHANGES OVER TIME NEEDS A REFERENCE THAT IS A FUNCTION OF THE SAME TIME.
+       Deterministic-by-frame-index (perf/textSource.ts) makes the reference free: frame i is frame
+       i forever. Where the question is about PIXELS and not timing, hold the fixture STILL instead.
+     · DUMP THE FRAMES. `{"thumbs":true}` settled in one look what three rounds of reasoning about
+       offsets did not — the two files were the same page one line apart. A number says two things
+       differ; only a picture says how.
+     · AN ALIGNMENT SEARCH ON STILL CONTENT IS ILL-CONDITIONED and will saturate at its own span
+       edge while looking like a measurement. Localise on a region that MOVES, or do not localise.
 11. THE ONE-BRANCH-PER-TASK RULE COLLIDES WITH THE AUTO-COMMIT HOOK. A Stop hook runs
    `git add -A && git commit && git push origin HEAD:main` after every turn, so work is on main
    before a session can open its own branch, and a branch left checked out at the end would be pushed
@@ -837,6 +910,14 @@ TWO RIG ERRORS FIXED ON THE WAY, both note 10, and the first would have shipped 
   (b) lanes ran A,B,B,A and were scored on the MEAN. The host drifts monotonically within a run
       (worst/best is 3.0× on one painter), so a mean is a measurement of when a lane happened to
       run. Interleaved and scored on each painter's BEST now.
+AMENDED BY X15(c), 2026-08-26 — THE DIVERGENCE IS REAL IN PRODUCTION AND A QUARTER OF THE SIZE.
+Measured on one real take through the product's own export ladder rather than on frames handed to
+two painters in a lab: instant (packet copy of the GL composite) against render (2D painter) reads
+37.1 dB on the screen text region, max 60, 7.8 % of pixels off by >8 — against a CONTROL of 39.9 dB,
+max 50, 3.8 %, which is what ONE re-encode of that same frame costs on its own. So the painter
+difference is 2.8 dB and a doubling of visibly-wrong pixels, not the "max 156 on 3.8 % of pixels"
+this handoff measured. The lab number was inflated by exactly the gap this handoff named: software-
+decoded frames standing in for GPU-resident capture frames.
 WHAT WOULD REOPEN IT: a PO ruling that the text difference is acceptable or an improvement (it is a
 picture change, so it is PO's call and not TD's), or a way to make texImage2D and drawImage agree on
 chroma — which is a browser behaviour, not ours. The ~12 % ceiling should be weighed against that
@@ -911,6 +992,20 @@ is PO's call, which is exactly why the frozen rule's "defaults unchanged" is the
 NEXT MEASUREMENT, named so it is not guessed at: sweep `bitrateMode` ('constant' vs the default
 'variable') and re-run the quality row. If constant closes the 27.9 dB gap at a bitrate the disk
 still likes, X6 becomes a flip decision with numbers instead of an open question.
+  → DONE 2026-08-26 (X15(a)), AND BOTH HALVES CAME BACK NEGATIVE — IN X6's FAVOUR.
+    bitrateMode is INERT: constant / variable / unset produce BYTE-IDENTICAL files, on the hardware
+    encoder AND on the software one. `isConfigSupported` accepts a value the encoder ignores, so
+    support was never evidence of effect. Quantizer mode IS honoured (qp14/20/26 → 959/692/511 KB).
+    AND THE 27.9 dB IS THIS RIG'S, NOT THE ENCODER'S. It compares two SEPARATE takes of a MOVING
+    source and searches ±0.6 s for the best-matching phase; the header above already calls the
+    result a LOWER BOUND. Today's re-run reads 28.0 dB at 0.22× with its own alignment lines showing
+    the best match 100-200 ms off nominal, so the rig is stable — the METHOD is what differs.
+    Measured on IDENTICAL pictures compared by ordinal, the shipped AVC config reads 47.8 dB against
+    the VP9 lane on screen text at 0.52× its bytes (motion: 51.6 dB at 0.23×), glyph contrast 1.00
+    either way. The byte saving reproduces; the quality gap does not exist.
+    SO THE REASON THE DEFAULT STAYED PUT IS GONE. What remains is a picture-changing flip, which is
+    PO's, and one confirmation nobody has done: X15(a) feeds CANVAS frames while this path feeds
+    GPU-resident frames from a MediaStreamTrackProcessor. Confirm through this rig before flipping.
 TWO DEFECTS FOUND ON THE DEPLOYED BUILD AFTER THE RIG WAS GREEN, AND THE RIG COULD NOT HAVE FOUND
 EITHER. Both are the same root cause: MediaStreamTrackProcessor is FRAME-DRIVEN, so a screen that is
 not changing delivers nothing, and the rig's synthetic source is ANIMATED and never goes quiet —
@@ -1064,6 +1159,130 @@ saved to ~/Downloads with a one-line README naming which is which — the ruling
 Operating notes: rigs only — production code untouched except where a rig needs a read-only probe
 seam · heavy sweeps announced, not while PO uses the machine · a lane that cannot run (no 4:4:4
 encoder at all) reports that as its result, per the operating rules.
+
+HANDOFF X15 — MEASURED 2026-08-26 (FOURTEENTH SESSION). ALL THREE LANES RAN. NO DEFAULT MOVED, no
+production behaviour changed. THE HEADLINE IS THAT TWO OF THE THREE NUMBERS THIS TASK WAS BUILT ON
+TURNED OUT TO BE THE INSTRUMENT, and the third is real but four times smaller than it looked.
+RIGS: `npm run exp -- x15a` (bitrateMode sweep) · `x15b` (4:4:4 price + O9 baseline) · `x15c` (the
+trim question). `{"crops":true}` on any of them writes the PO artifacts. New files:
+`perf/textSource.ts` (a text source DETERMINISTIC IN FRAME INDEX + encode/decode/compare plumbing),
+`perf/bitrateModeSweep.ts`, `perf/chromaPrice.ts`, `perf/trimTextParity.ts`. One harness-only seam in
+production code: `setSyntheticScreenContent()` in capture/synthetic.ts, the same shape and the same
+"production never calls it" as the existing `setSyntheticScreenSize()`; default unchanged.
+PO ARTIFACTS, per the task's own condition: ~/Downloads/x15-text-truth/ — 15 magnified glyph crops
+(4x, nearest-neighbour) + a README naming which is which and what to look for. The rulings below are
+checkable by eye.
+
+(a) THE bitrateMode SWEEP: THE KNOB DOES NOTHING, AND THE GAP IT WAS MEANT TO CLOSE IS NOT THERE.
+    bitrateMode IS INERT on this machine, and the software arm proves it is the API and not the GPU:
+        hardware AVC   default / constant / variable → 1027900 B, 1027900 B, 1027900 B
+        SOFTWARE AVC   default / constant / variable → 1141867 B, 1141867 B, 1141867 B
+    Byte-identical, three ways, both arms. `isConfigSupported` returns true for a value the encoder
+    then ignores — so support was never evidence of effect. The ONE rate-control knob that IS
+    honoured is quantizer mode: qp14 / qp20 / qp26 → 958673 / 692392 / 510847 B.
+    AND X6's QUALITY GAP DOES NOT REPRODUCE. Screen TEXT, 180 identical pictures through both
+    encoders at the same 8 Mbps ceiling, compared by frame ORDINAL (no search, no phase):
+        shipped AVC   1.37 Mbps · 0.52x the VP9 bytes · 47.8 dB against VP9 · glyph contrast 1.00
+        realtime-qp14 1.28 Mbps · 0.48x            · 49.4 dB              · glyph contrast 1.00
+        VP9 (the shipped MediaRecorder raw lane)  2.42 Mbps · 38.0 dB against the canvas
+    MOTION control: shipped AVC 0.23x the bytes at 51.6 dB. So X15(a)'s deliverable is answered YES,
+    by the config that already ships: the AVC channel matches the VP9 picture at HALF its bytes, not
+    at the 1.2x ceiling the task allowed.
+    THE RECONCILIATION WITH X6, because two numbers that far apart need one. `npm run exp -- x6`
+    re-run the same day still reads screen 28.0 dB at 0.22x — its numbers are stable. The difference
+    is method: that rig records TWO SEPARATE TAKES of a MOVING source and searches +-0.6 s for the
+    best matching phase, and its own notes call the result a LOWER BOUND ("at least this close").
+    Its alignment lines from today's run say how much phase is left: the best match sat 100-200 ms
+    off the nominal instant, and the search steps by a whole frame, so up to half a frame of motion
+    is still inside every reading. The BYTE ratio reproduces (0.22 there, 0.23 here on motion
+    content — and X6's fixture is the gradient-and-moving-bar synthetic screen, which is motion, not
+    text). The dB does not reproduce anywhere.
+    WHAT THIS MEANS FOR X6's RULING: the objection that stopped the flip — "the smaller file is a
+    worse picture" — is not supported. The saving is real and the picture is not worse. It is still
+    PO's call, and one gap is named rather than papered over: this sweep feeds CANVAS frames while
+    the production raw channel feeds GPU-resident frames from a MediaStreamTrackProcessor. The
+    config transfers; the frame source does not. Confirm through `npm run exp -- x6` before a flip.
+
+(b) THE 4:4:4 PRICE TAG — REAL, VISIBLE, SOFTWARE-ONLY. Probed across ALL THREE acceleration modes
+    (O9 stopped at the first mode that said yes, so "software" and "hardware" were one row):
+        AVC 4:4:4 (avc1.f40028)    NO, in every mode
+        VP9 profile 1 (4:4:4)      NO, in every mode
+        AV1 main / AV1 profile 1   yes — SOFTWARE only, never prefer-hardware
+    On identical text frames: AV1 4:4:4 takes glyph chroma fringe 9.15 -> 3.03 at 5705 B/frame
+    against the shipped AVC's 5142, and the control says why nothing else can: THREE TIMES THE
+    BITRATE on 4:2:0 moves the fringe 9.15 -> 9.06. It is chroma resolution, not bits. Visible in
+    b-01-*.png on the blue and green lines.
+    WHAT IT COSTS TO RUN, which O9 never priced — whole-browser, one encoder per run
+    (`npm run exp -- x15b '{"only":"<id>"}' --cpu`), 3x180 frames at 1080p:
+        AVC 4:2:0  hardware   207 fps   CPU peak 111 %  mean 52 %
+        VP9 4:2:0  software   152 fps   CPU peak 278 %  mean 87 %
+        AV1 4:4:4  software    80 fps   CPU peak 245 %  mean 75 %
+    80 fps is 2.7x a 30 fps capture on an IDLE machine with one encoder running. A real take runs
+    two raw channels and a composite, so this is a headroom question and not a free win.
+    AND THE BASELINE IT WAS TO BE PRICED AGAINST WAS WRONG — this is the note-10 finding of the
+    session. O9's headline ("capture destroys 51 % of glyph edge contrast, the export preserves it")
+    compares decoded frames at t=1.0/3.5/6.0 s against ONE canvas readback taken after the export
+    finished, and bitsAudit's screenLikeSource scrolls a line every 2.5 s and never repeats. The
+    rig's own comment claims the frame at t and at t+2.5k are the same picture; `scroll =
+    floor(t/2.5)` is monotonic, not periodic. Measured both ways in one run:
+        aligned by ordinal (the picture that was encoded)   fringe  8.87 · smear  0.80 · contrast 1.00
+        the same, reference shifted ONE SCROLL STEP         fringe 25.62 · smear 66.28 · contrast 0.51
+        O9 PUBLISHED                                        fringe 23.2  · smear 68.6  · contrast 0.49
+    The deliberate misalignment lands on O9's published numbers. Chromium's VP9 does NOT destroy half
+    the glyph contrast at capture — it keeps essentially all of it. The tell was in O9's own table:
+    its EXPORT stage (file against file, genuinely aligned) reads smear 2.4 while its CAPTURE stage
+    reads 68.6, and a mean luma error of 68 of 255 on every glyph edge is not an encoder, it is a
+    different page. Re-measured correctly, the whole chain is: capture 8.87 fringe, export 3.02,
+    total 10.81, contrast 1.00 throughout.
+    SO O9's RECOMMENDATION SURVIVES AND ITS REASONING DOES NOT. "Flip the export to AV1 4:4:4" is
+    still the cheap real win (fringe 9.15 -> 3.03). But "the export is the small half, capture is the
+    big half, so the lever is X6" is refuted: capture is not the big half, there is no big half, and
+    X6-as-built (AVC 4:2:0) was never going to help text either way.
+
+(c) THE TRIM QUESTION — CONFIRMED LIVE, AND FOUR TIMES SMALLER THAN THE LAB SAID. One real take
+    (still code-editor screen + camera PiP, v2 composite), three exports through the product's own
+    compose/choose.ts, screen region, worst of four instants:
+        instant <-> smart cut   99 dB · max 0                          BIT-IDENTICAL
+        instant <-> render      37.1 dB (mean 37.7) · max 60 · 7.8 % of pixels off by >8 · fringe 4.03
+        CONTROL: one re-encode of the instant frame alone  39.9 dB · max 50 · 3.8 % · fringe 3.00
+    THE CONTROL IS WHY THIS IS NOT A 37 dB SCARE. compose/smartCutFlag.ts already records ~37.5 dB as
+    "the ceiling for two independent encodes of one frame", so a bare 37.1 dB proves nothing at all.
+    Against a re-encode of the very same picture, the render costs 2.8 dB more and doubles the share
+    of visibly-wrong pixels. That is X5's divergence, surviving into production, at a quarter of the
+    lab's severity (X5: max 156 on 3.8 % of pixels, fed software-decoded frames).
+    AND THE BACKLOG ENTRY ASKED FOR THE WRONG FILE. It says a trim takes the render path. It does
+    not: smart cut has been the default since 2026-08-25 and copies the composite's packets, so a
+    trimmed take is BIT-IDENTICAL to the untrimmed one. The render's number is what a user sees only
+    when smart cut declines. BACKLOG P1 rewritten: confirmed live, dropped to P2, PO's to rule on.
+    FOUND ON THE WAY, NOT CHASED (new BACKLOG P2): the render places the CAMERA PiP about half a
+    second from where the instant path places it — the moving PiP best-matches at -14/-15 frames and
+    even there reads 23.6 dB, while the STILL screen region of the same two files matches at 37.1.
+    The two paths agree about pixels and disagree about WHEN. The oracle bands audio-vs-video and
+    would not see a video-vs-video placement difference between export paths.
+
+THREE INSTRUMENT FAULTS THIS SESSION, and note 10 now has a seventh, eighth and ninth instance —
+ALL THREE WERE MINE except the first, and the pattern is one thing: A REFERENCE THAT MOVES.
+  (1) O9's, above: a scrolling fixture compared against a readback taken at another time.
+  (2) THIS RIG'S OWN FIRST TWO RUNS of lane (c) read 13.1 dB with fringe 22.4 / smear 67.6 /
+      contrast 0.49 — O9's fingerprint exactly, and for the same reason. `{"thumbs":true}` dumps the
+      frames; they showed the same page ONE LINE APART, which settled in one look what three rounds
+      of reasoning about offsets had not. The fixture is now STILL (setSyntheticScreenContent paints
+      no scroll and no caret), so the screen row is pixels and only pixels, and placement is measured
+      on the camera PiP, which moves.
+  (3) lane (b) declared a channel's duration as frames/30 while the file ran 6.6 s for 180 frames
+      (setTimeout pacing), and the render then placed the picture 0.967 s from where the channel's
+      own timestamps predicted. A rig that invents a recording's length gets to debug its own
+      arithmetic as if it were the product's. It reads the file's duration now.
+AND ONE GATE WAS DELETED FOR BEING UNANSWERABLE rather than left reading FAIL: the export-alignment
+search in lane (b) runs on a page that holds still for 2.5 s, so every candidate inside one scroll
+interval is the same picture and the search saturates at its span edge. It reports itself as a
+DIAGNOSTIC and says when it saturated. The stage metrics are unaffected — within one interval a
+same-page frame IS the right reference for a glyph statistic — but a gate that claimed to have
+localised the export would have been quoted as a placement bug it never measured.
+WHAT WAS NOT MEASURED, named rather than left silent: lane (b) runs on TEXT only. 4:4:4 is a
+question about coloured glyph edges and the motion control has none, so a motion row would have
+priced nothing — but it is an omission and not a null result. And no lane ran at 4K or under load.
+FULL SWEEP: 458 tests · typecheck clean · every lane re-runnable in one command.
 
 (X7, X10=O5e, X13: NEEDS PO DISCUSSION — see the READY map. X11, X14: PARKED — see the READY map.)
 
@@ -1738,14 +1957,30 @@ AND IT IS AIMED AT THE SMALLER HALF OF THE PROBLEM. No default changed.
     part that makes it a finding rather than a coincidence: THREE TIMES THE BITRATE on 4:2:0 moves
     the fringe by 4 % (9.45 → 9.08). The lever is chroma resolution, not bits — which is why nobody
     was ever going to fix this by raising the ceiling.
-(4) AND YET THE EXPORT IS THE SMALL HALF. The chain has TWO encodes, and the rig measures each
-    against the canvas itself — the only frame nothing has touched:
-        capture (canvas → raw channel)   chromaFringe 23.2 · lumaSmear 68.6 · edgeContrastKept 0.49
-        export  (raw channel → file)     chromaFringe  5.7 · lumaSmear  2.4 · edgeContrastKept 1.00
-    Chromium's software VP9 destroys HALF the edge contrast of every glyph before the export sees a
-    pixel; the export preserves what it is given essentially perfectly. So a 4:4:4 export can recover
-    at most the 5.7, i.e. ~12 % of the damage, and O9's premise — "the export smears text" — is
-    refuted the way X5's was.
+(4) THIS SECTION WAS WRONG, AND X15(b) SHOWS EXACTLY HOW — 2026-08-26. It said "the export is the
+    small half": capture chromaFringe 23.2 · lumaSmear 68.6 · edgeContrastKept 0.49 against the
+    export's 5.7 · 2.4 · 1.00, i.e. Chromium's VP9 destroying half of every glyph's edge contrast
+    before the export sees a pixel.
+    THE CAPTURE ROW IS A MEASUREMENT OF A SCROLL POSITION. `runTextPerfect` samples the decoded
+    files at t = 1.0 / 3.5 / 6.0 s and compares them against ONE `canvasFrame(source.canvas)` taken
+    AFTER the export finished — and screenLikeSource scrolls a line every 2.5 s and never repeats.
+    The code comment asserting "the frame at 1.0 s and at 1.0 s + 2.5·k are the same picture apart
+    from the caret" is the bug: `scroll = Math.floor(t / 2.5)` is monotonic, not periodic. The
+    EXPORT row was file-against-file at matching instants and was therefore fine, which is why the
+    two rows disagree by a factor of 28 — a mean luma error of 68 of 255 on every glyph edge is not
+    an encoder, it is a different page.
+    RE-MEASURED against the picture that was actually encoded (x15b, deterministic-by-frame-index
+    source, compared by ORDINAL):
+        capture (canvas → raw channel)   chromaFringe  8.87 · lumaSmear 0.80 · edgeContrastKept 1.00
+        export  (raw channel → file)     chromaFringe  3.02 · lumaSmear 1.79 · edgeContrastKept 1.00
+        total   (canvas → file)          chromaFringe 10.81 · lumaSmear 1.95 · edgeContrastKept 1.00
+    and shifting the reference by ONE SCROLL STEP reproduces 25.62 / 66.28 / 0.51 on demand, which
+    is O9's published row. Neither stage destroys glyph contrast. There is no big half.
+    WHAT SURVIVES: (3)'s codec table, which was always measured on identical frames and is
+    unaffected — AV1 4:4:4 really does halve the fringe at fewer bytes, and 3x the bitrate on 4:2:0
+    really does buy 4 %. WHAT DIES: the recommendation's reasoning ("the lever that reaches the big
+    half is CAPTURE, which is X6"). X6 encodes AVC 4:2:0 and was never going to help text, and now
+    there is no capture-side damage for it to have helped with either.
 RECOMMENDATION, and it has a tension in it that PO should see rather than have resolved quietly: the
 lever that reaches the big half is CAPTURE, which is X6. But X6 as built encodes AVC 4:2:0, so it
 does not fix text either; fixing text at capture means AV1 4:4:4 at capture, which on this machine is
