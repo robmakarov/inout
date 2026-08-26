@@ -5,7 +5,7 @@ import type {
   ProgressiveAcquire,
   ProgressiveHandlers,
 } from './acquire'
-import { primaryKindFor } from './acquire'
+import { capDisplayTrack, primaryKindFor } from './acquire'
 
 export function isSyntheticMode(): boolean {
   return typeof location !== 'undefined' && location.search.includes('synthetic')
@@ -249,16 +249,46 @@ export function createSyntheticChannelsProgressive(
   const mark = (kind: ChannelKind, status: 'start' | 'done'): void =>
     handlers.onProgress?.({ step: stepOf(kind), status, tMs: performance.now() - t0 })
 
+  /**
+   * THE CAP PRODUCTION APPLIES, APPLIED HERE TOO (O4-polish). The real acquirer
+   * runs capDisplayTrack on the display track before delivering it, and
+   * synthetic mode bypassed that path entirely — so a rig driving
+   * createCaptureSession over a 4K synthetic screen was measuring the UNCAPPED
+   * regime, the one CAPTURE_MAX_* exists to prevent. A canvas track DOES honour
+   * the constraint (3840×2160 → 1920×1080@30, `npm run exp -- capcheck`), which
+   * is what makes this possible and was worth checking rather than assuming.
+   * Rigs that deliberately want uncapped 4K drive liveComposite directly and
+   * never come through here, so this narrows nothing they measure.
+   */
+  const capScreen = async (ch: AcquiredChannel): Promise<void> => {
+    if (ch.kind !== 'screen') return
+    await capDisplayTrack(ch.track)
+  }
+
   const deliveries = rig.channels.map((ch) => {
     mark(ch.kind, 'start')
     return new Promise<void>((resolve) => {
       const emit = (): void => {
-        if (!disposed) {
-          handlers.onChannel(ch)
-          mark(ch.kind, 'done')
-          if (ch.kind === primary) primaryResolve()
+        if (disposed) {
+          resolve()
+          return
         }
-        resolve()
+        // AWAITED BEFORE DELIVERY, exactly as the real acquirer does it. The
+        // first version fired this and delivered in the same tick, which would
+        // have re-constrained the track MID-TAKE — changing a channel's frame
+        // size after its recorder had started, which is the one thing the tail
+        // drain is careful never to do (P0-tail-raw keeps the size and drops
+        // only the rate).
+        void capScreen(ch)
+          .catch(() => undefined)
+          .then(() => {
+            if (!disposed) {
+              handlers.onChannel(ch)
+              mark(ch.kind, 'done')
+              if (ch.kind === primary) primaryResolve()
+            }
+            resolve()
+          })
       }
       const delay = delays.get(ch.kind) ?? 0
       if (delay > 0) timers.push(setTimeout(emit, delay))

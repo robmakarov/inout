@@ -460,6 +460,63 @@ export interface RawTailReport {
   notes: string[]
 }
 
+/**
+ * O4-polish's remaining "4K row in production shape" — and the first thing it
+ * needs is to know whether the shape can be built here at all.
+ *
+ * Production caps a display track with applyConstraints (capDisplayTrack), so
+ * the composite receives 1080p frames from a 4K screen and never pays for the
+ * extra pixels. This rig's 4K source is a CANVAS captureStream, and a canvas
+ * track's resolution is the canvas's — the question is whether it accepts the
+ * constraint anyway. Asked directly rather than assumed, because the answer
+ * decides how tight O8b's delivered-fps band can be.
+ */
+export async function runCapCheck(): Promise<{
+  before: { width?: number; height?: number; frameRate?: number }
+  after: { width?: number; height?: number; frameRate?: number }
+  accepted: boolean
+  error: string | null
+  verdict: string
+}> {
+  const canvas = document.createElement('canvas')
+  canvas.width = 3840
+  canvas.height = 2160
+  const g = canvas.getContext('2d')!
+  let raf = 0
+  const draw = (): void => {
+    g.fillStyle = `hsl(${(performance.now() / 20) % 360},50%,30%)`
+    g.fillRect(0, 0, canvas.width, canvas.height)
+    raf = requestAnimationFrame(draw)
+  }
+  draw()
+  const stream = canvas.captureStream(30)
+  const track = stream.getVideoTracks()[0]!
+  const before = { ...track.getSettings() }
+  let error: string | null = null
+  try {
+    await track.applyConstraints({
+      width: { max: 1920 },
+      height: { max: 1080 },
+      frameRate: { max: 30 },
+    })
+  } catch (err) {
+    error = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+  }
+  const after = { ...track.getSettings() }
+  cancelAnimationFrame(raf)
+  track.stop()
+  const accepted = (after.width ?? 0) <= 1920 && (after.height ?? 0) <= 1080
+  return {
+    before: { width: before.width, height: before.height, frameRate: before.frameRate },
+    after: { width: after.width, height: after.height, frameRate: after.frameRate },
+    accepted,
+    error,
+    verdict: accepted
+      ? 'a canvas track DOES honour the cap, so a production-shaped 4K row can be built from synthetic sources and O8b’s band can be tightened against it'
+      : `a canvas track does NOT honour the cap (${before.width}×${before.height} → ${after.width}×${after.height}${error ? `, ${error}` : ''}). The rig therefore measures the UNCAPPED regime — the one CAPTURE_MAX_* exists to prevent — and a production-shaped 4K row needs a real display, i.e. PO's hardware.`,
+  }
+}
+
 export async function runRawTail(
   opts: {
     takeMs?: number

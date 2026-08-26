@@ -403,6 +403,13 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'capcheck',
+    title: 'O4-polish — does a canvas track honour the display cap production applies?',
+    detail:
+      'creates a 4K canvas captureStream and applies the SAME constraints capDisplayTrack applies to a real display track, then reads the settings back. Decides whether a production-shaped 4K row can be built from synthetic sources at all — and therefore how tight O8b’s delivered-fps band can be.',
+    run: async () => (await import('../perf/rawTail')).runCapCheck(),
+  },
+  {
     id: 'o10',
     title: 'O10(a) — what do INOUT’s exports actually read in LUFS?',
     detail:

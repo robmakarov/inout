@@ -177,7 +177,15 @@ READY NOW — parallel-safe, any subset concurrently (one session each):
                                              waveforms · the 60 fps-with-a-30-min-take trace.
   O3b  single-generation export    [medium]  UNBLOCKED — v2 owns encoder + muxer, both halves of
                                              the original idea are now buildable once.
-  O4-polish                        [light]   PREVIEW FROM THE COMPOSITOR IS DONE 2026-08-25 — the
+  (O4-polish CLOSED 2026-08-26 — both remaining items answered. The e2e WEDGE CASE is a rig
+   (`npm run exp -- o4wedge`) that drives the real session through the two fallback rungs unit tests
+   cannot reach and exports each take through the product's own ladder: control → instant 168 ms,
+   start failure → V1 TOOK THE TAKE, instant 141 ms, mid-take wedge → composite refused, render, take
+   unharmed and as long as the control. The 4K ROW IN PRODUCTION SHAPE turned on a premise that was
+   wrong: a canvas track DOES honour the display cap, so synthetic mode now applies it the way the
+   real acquirer does — and the delivered fps did not move, because this rig's 4K cost is its own
+   canvas painting, which production does not have. See the O8b note.)
+  O4-polish (historical)           [light]   PREVIEW FROM THE COMPOSITOR IS DONE 2026-08-25 — the
                                              recording preview is painted by the capture worker into
                                              a transferred canvas, so the sources are decoded ONCE
                                              for the whole take (zero <video> elements in the stage,
@@ -1601,17 +1609,24 @@ delivering 8 fps under load has a perfect tail and is still a ruined take, and t
 hypothetical — the 08-22 4K freeze delivered 21.5/11.9 fps against a 30 target and no gate could see
 it. Both phases are banded now (`--fpsBand`, exit code carries it), and a lane with no fps number is
 INCONCLUSIVE rather than a silent pass.
-THE BAND IS 10 AND IT IS DELIBERATELY LOOSE, for a reason that is itself the remaining work: THIS
-RIG'S 4K SOURCE IS UNCAPPED. Production constrains the display track to 1080p30 (CAPTURE_MAX_* in
-acquire.ts — the 08-22 fix), but a canvas captureStream does not honour a resolution constraint, so
-what oracle:load measures is the regime the cap exists to PREVENT. Measured healthy in that regime:
-composite 15 fps, raw channels 14.0-14.2 — against 28-30 on a 1080p lane. 10 is a principle, not a
-fit: below a third of the target the result is not usable footage whatever else is true. A first
-attempt at 20 failed both phases immediately and would have been a gate on the fixture rather than on
-the product.
-TO TIGHTEN IT, do O4-polish's remaining "4K row in production shape": a lane whose 4K source is
-capped the way a real display track is. Then the band can mean "the cap is working" instead of
-"the uncapped regime has not collapsed further".
+THE BAND IS 10, AND WHAT IT CAN AND CANNOT MEAN IS NOW MEASURED RATHER THAN GUESSED.
+FIRST GUESS, WRONG: "a canvas captureStream does not honour a resolution constraint, so the rig
+measures the uncapped regime". Checked directly (`npm run exp -- capcheck`, new) and it is FALSE — a
+canvas track accepts the cap exactly as a display track does: 3840×2160@30 → 1920×1080@30, no error.
+SO THE PRODUCTION SHAPE WAS BUILDABLE ALL ALONG, and O4-polish's remaining "4K row" is now closed:
+synthetic mode applies `capDisplayTrack` to its screen track, AWAITED BEFORE DELIVERY exactly as the
+real acquirer does. (The first version of that fired the constraint and delivered in the same tick,
+which would have re-constrained the track MID-TAKE — changing a channel's frame size after its
+recorder had started, the one thing P0-tail-raw is careful never to do. Caught before it shipped.)
+AND THE FPS DID NOT MOVE: 14 → 14. That is the real finding. With the track capped to 1080p the rig
+still delivers ~13-15 fps, because in THIS rig the 4K cost is the SOURCE — a rAF-driven 4K canvas
+painted in JS — and capping the track downscales after that painting has already been paid. A real
+4K display is composited by the OS and costs the page nothing to produce, so no synthetic fixture can
+model its delivered fps. The band therefore stays at 10, not because the rig is uncapped but because
+its fps number is dominated by a cost production does not have.
+WHAT WOULD TIGHTEN IT is PO's hardware: a real 4K display, which is also O6's own gate ("PO's real
+4K-game-tab scenario re-verified"). Until then the band catches collapse and nothing finer, and it
+says so.
 
 ## O9. text-perfect — screen text without smear  [P2, after O4+O5; PO: "text is important"]
 Why: 4:2:0 chroma subsampling + generic encoder tuning fringes and smears colored text — the visible
