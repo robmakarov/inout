@@ -273,26 +273,37 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   (userAgentData beats the UA string, which is correct) and is unit-tested only.
 - every exported file carries a certification in its comment tag (O8): path, output settings, loudness
   makeup + source, stalled/missing channels, cut count, CI sync bound
-- THE AUDIO TIMELINE IS HELD AGAINST THE WALL CLOCK, ON BOTH AUDIO PATHS (2026-08-25, from PO's
-  4K-game take: "sounds go faster than video" ~20 s in). A take's file carries its two tracks on TWO
-  DIFFERENT CLOCKS — composite video is stamped with each frame's ARRIVAL, audio is SAMPLE-COUNTED —
-  and they agree only while the audio graph renders in real time. MEASURED on a saturated 60 s take
-  (`npm run exp -- syncload`, new): the AudioContext returned 56.1-57.0 s of quanta in 59.2-60.2 s of
-  wall, the audio track came out 2.6-3.8 s short, and everything after the loss sat that much EARLY
-  against the picture — 12.8-18.7 s projected onto PO's 5 min take, against the ~20 s he reported.
-  Sample counting cannot see this by construction: it counts what arrived, so what never arrived
-  costs nothing and the whole rest of the take slides. REFUTED on the way, do not re-run: the
-  worklets do NOT skip starved quanta (they silence-fill), and nothing is lost in the stream hop
-  (every rendered quantum carried live input, exactly) — it is time the context never rendered.
-  FIX: a MIN-FILTERED wall origin, from a `performance.now()` stamp taken at main-thread receipt (the
-  only stamp not derived from the audio clock), says where the sample ruler sits; silence is PADDED
-  when the timeline falls >80 ms behind, capped at 1 s per batch. Audio is only ever ADDED, never
-  moved or removed — a healthy take pads zero and is unchanged, a starved one carries an honest short
-  silence where the machine choked instead of a permanent growing offset. AFTER, same load: audio
-  60.40 s of a 60.2 s take, A/V span gap −3775 → +395 ms (the idle control's own is +236). Counted,
-  never silent (audioPaddedFrames / audioDroppedNotReady / audioDroppedLead + a console warning).
-  NOT claimed: the "noises" PO also reported are a different thing — the same starvation mangles the
-  audio it DOES deliver, and padding does not touch that.
+- THE AUDIO TIMELINE IS HELD AGAINST THE WALL CLOCK, AND AS OF 2026-08-26 THE HOLD ACTUALLY RUNS ON
+  THE AUDIO A USER HEARS. The defect (PO 2026-08-25, "sounds go faster than video" ~20 s in): a
+  take's file carries its two tracks on TWO DIFFERENT CLOCKS — composite video is stamped with each
+  frame's ARRIVAL, audio is SAMPLE-COUNTED — and they agree only while the audio graph renders in
+  real time. Under load the AudioContext renders fewer quanta than wall time (measured 56.1-57.0 s of
+  quanta in 59.2-60.2 s), sample counting cannot see the missing quanta by construction, and
+  everything after the loss slides EARLY, growing through the take. REFUTED on the way, do not
+  re-run: the worklets do NOT skip starved quanta (they silence-fill), and nothing is lost in the
+  stream hop — it is time the context never rendered.
+  THE 08-25 FIX WAS IN FORCE ON NEITHER PATH THAT SHIPS, and PO's recheck (2026-08-26: mic/camera
+  1-2 s apart by minute 6; tab audio "worse and worse, almost nothing just noises in the end") is how
+  it surfaced. measuredAudio.ts — the mic/tab channels EVERY export mixes from (note 14: no export
+  carries the composite's audio) — compared the arrival stamp against a value the same batch had just
+  written, so `steady` was never true, the wall origin was never set and THE PAD NEVER FIRED on any
+  real take. The composite's copy ran but padded on INSTANTANEOUS lateness of a stamp taken at
+  main-thread receipt, so every main-thread stall whose queued batches were about to deliver
+  everything spliced spurious silence and walked the audio late by the worst stall of the take. The
+  syncload rig only measured the composite's copy, which is how a dead pad shipped as "verified".
+  NOW: both paths decide through ONE shared planner (capture/wallClockHold.ts, 9 unit tests
+  including both regressions) — the pad is the MINIMUM deficit that PERSISTS across a 1 s settle
+  window, so a delivery burst erases it and a real loss stands; cost accepted: a real loss is padded
+  up to ~1 s after the choke instead of instantly and sometimes wrongly. MEASURED in a real browser
+  (the headless rig is broken on this machine's Chrome 151 — see BACKLOG): loaded 60 s cell, the
+  independent clock probe says the context lost 4333 ms; the measured channel padded 4097 ms and
+  landed −163 ms vs wall (the settle tail); idle controls pad ZERO at −15/−24 ms. The syncload rig
+  now carries a `measured` lane so this path can never go unmeasured again, and
+  MeasuredAudioHandle.stop() returns paddedMs. Counted, never silent (audioPaddedFrames + console
+  warnings on both paths).
+  NOT claimed: the "noises" during starvation are the machine mangling audio it DOES deliver, and
+  the deepest lever on the starvation itself is capture CPU (the X6 ruling PO still owes). The hold
+  makes the loss an honest, non-accumulating gap instead of a growing desync.
 - CAPTURE MEASURES THE MIX'S ENVELOPE ONCE, AND THE EXPORT STOPPED MEASURING IT AGAIN (X1,
   2026-08-26). O2 kept three scalars from the capture-time accumulator and SORTED the window series
   away; the series is now kept IN TIME ORDER on `Recording.loudness.envelope` (windowRms + windowPeak

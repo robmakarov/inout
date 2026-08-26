@@ -44,7 +44,6 @@ export function makeRig(width: number, height: number, audioCtx: AudioContext | 
   cam.height = 480
   const cg = cam.getContext('2d')!
   let frames = 0
-  let raf = 0
   const t0 = performance.now()
   const draw = (): void => {
     const t = (performance.now() - t0) / 1000
@@ -67,8 +66,13 @@ export function makeRig(width: number, height: number, audioCtx: AudioContext | 
     cg.arc(320 + Math.sin(t * 3) * 200, 240 + Math.cos(t * 2) * 150, 48, 0, Math.PI * 2)
     cg.fill()
     frames++
-    raf = requestAnimationFrame(draw)
   }
+  // setInterval, not rAF — the same lesson the loadedSync load painter already
+  // encodes: today's Chrome stops rAF in occluded and headless windows, so an
+  // rAF-driven source painted ONE frame per take, every composite degraded for
+  // "no first output", and a degraded stop DELETES its blob — which surfaced as
+  // `blobStore: no blob stored` on every headless syncload cell (2026-08-26).
+  const drawTimer = setInterval(draw, 16)
   draw()
 
   const audio: MediaStream[] = []
@@ -95,7 +99,7 @@ export function makeRig(width: number, height: number, audioCtx: AudioContext | 
     audio,
     sourceFrames: () => frames,
     stop: () => {
-      cancelAnimationFrame(raf)
+      clearInterval(drawTimer)
       stopAudio()
     },
   }

@@ -67,6 +67,10 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   camera channels still encode via SOFTWARE VP8/VP9 during capture, the largest capture CPU cost, on
   a machine already running a 4K game. NEXT: PO console from a freezing take (`[capture] screen …
   delivering N fps` says whether the source starved), or take X6.
+  RE-REPORTED 2026-08-26 ("i opened game in other tab, it froze") with no console again. The two
+  asks stand unchanged and both are PO's: (a) the console lines from a freezing take, and/or the
+  O6 re-verify (`?nativeres=1`, record the game tab, report the console); (b) the X6 picture
+  ruling, which is the capture-CPU lever this freeze keeps pointing at.
 
 - [P2] TD 2026-08-25, A CONSEQUENCE OF THE PADDING FIX, stated so it is not mistaken for a
   regression: holding the audio timeline against the wall clock converts "audio drifts early" into
@@ -77,32 +81,32 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   gate should learn to REPORT padding rather than fail opaquely — it is the same capture-starvation
   family already documented for this oracle, now with a louder signature.
 
-- [~~P1~~ FIXED 2026-08-25, AWAITING PO RECHECK] PO: on the game take the sound comes apart
-  PROGRESSIVELY — in sync ~20 s, then audio AHEAD of video, then "wrong speed". FOUND, MEASURED AND
-  FIXED, and the mechanism was NOT the one first guessed. THE FILE CARRIES ITS TWO TRACKS ON TWO
-  DIFFERENT CLOCKS: composite video is stamped with each frame's ARRIVAL (wall clock), composite
-  audio is SAMPLE-COUNTED. They agree only while the audio graph renders in real time. Measured on
-  a saturated 60 s take (new rig `npm run exp -- syncload`): the AudioContext returned 56.1-57.0 s
-  of quanta in 59.2-60.2 s of wall time, so the audio track came out 2.6-3.8 s SHORT and every
-  sample after the loss sat that much EARLY against the picture — projected to PO's 5 min take,
-  12.8-18.7 s, against the ~20 s he reported. Two hypotheses were REFUTED on the way and are
-  recorded so nobody re-runs them: the worklet does NOT skip starved quanta (it silence-fills, and
-  the counters prove zero drops in the worker), and the loss is NOT in the stream hop (every
-  quantum the context rendered carried live input, exactly). It is time the context never rendered.
-  FIX (both audio paths, additive): the sample count stays the fine ruler, but a MIN-FILTERED wall
-  origin — taken from a `performance.now()` stamp at main-thread receipt, the one stamp in the
-  message that is not derived from the audio clock — says where that ruler sits, and silence is
-  PADDED when the timeline has fallen >80 ms behind. Audio is only ever added, never moved or
-  removed, so a starved take now carries an honest short silence where the machine choked instead
-  of a permanent growing offset. MEASURED AFTER, same load: audio track 60.40 s of a 60.2 s take,
-  A/V span gap −3775 ms → +395 ms, which is the idle control's own +236-288 ms. Healthy takes pad
-  ZERO and are unchanged. Counted, never silent: CompositorStats gains audioPaddedFrames /
-  audioDroppedNotReady / audioDroppedLead, and the raw path logs a warning. Gates: 418 tests ·
-  oracle PASS v2 (sync 60.4) AND v1 (56.7) · fidelity PASS (toneErr 0.04 dB, 0 limiter hits).
-  STILL OPEN AND DELIBERATELY NOT CLAIMED: "a lot of noises" is NOT explained by this — padding
-  fixes the drift, not the glitches; the same starvation that loses quanta also mangles the audio
-  it does deliver. PO recheck on a real game take is what closes this, and the console will now say
-  `[capture] measured audio padded …ms` when it fires.
+- [P1 → FIXED AGAIN 2026-08-26, AWAITING PO RECHECK] PO: progressive audio desync — 08-25 report
+  "sounds go faster than video" ~20 s in; 08-26 RECHECK FAILED: "mic and camera unsynch is about
+  1-2 second was on 6 minute" (YouTube in another tab) and "all record tab audio become worse and
+  worse and almost nothing just noises in the end" (game opened mid-take).
+  THE 08-25 FIX WAS REAL AND REACHED NOTHING PO HEARS — the same shape as the peakRobust dropped
+  fields, and it is why the recheck failed. Two defects, found from the recheck report:
+    (1) measuredAudio.ts — the mic/tab channels EVERY export mixes from — updated `lastArrivalMs`
+        to the current batch's own arrival BEFORE computing `steady` against it, so steady was
+        always false inside the 3 s origin window, the wall origin stayed Infinity and THE PAD
+        NEVER FIRED on any real take. Dead code, shipped as verified, because the syncload rig
+        only measured the composite's copy (whose audio no export carries — TASKS note 14).
+    (2) the composite's copy padded on INSTANTANEOUS lateness of `recvMs` (a main-thread receipt
+        stamp), so a main-thread stall whose queued batches deliver every sample moments later
+        spliced spurious silence in and walked the audio late by the take's worst stall.
+  FIX: one shared planner, capture/wallClockHold.ts, used by BOTH paths — the pad is the MINIMUM
+  deficit that PERSISTS across a 1 s settle window (a burst erases it, a real loss stands); a real
+  loss is padded up to ~1 s late as the price of never padding a false one. 9 unit tests pin both
+  regressions. MEASURED in a real browser, loaded 60 s cell: independent clock probe says the
+  context lost 4333 ms; the measured channel padded 4097 ms and landed −163 ms vs wall; idle
+  controls pad ZERO (−15/−24 ms). syncload now carries a `measured` lane so the shipped audio path
+  can never go unmeasured again. Gates: 458 tests · oracle PASS v2 (66.4 ms) AND v1 (52.6 ms).
+  STILL OPEN AND DELIBERATELY NOT CLAIMED: the "noises" themselves — starvation mangles the audio
+  it DOES deliver, and padding cannot resurrect audio the context never rendered; under a game the
+  take now carries honest gaps instead of an accumulating slide. The lever on the starvation
+  itself is capture CPU = the X6 picture ruling PO owes. PO recheck: a long take beside YouTube
+  and one beside the game; the console says `[capture] measured audio padded …ms` when it fires.
 
 - [P1 → FIXED 2026-08-25, AWAITING PO LISTEN TEST] PO: "audio quality regressed from before we
   updated roadmap and mass execution". FOUND, and the code had already written down the cost in a
@@ -161,6 +165,20 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   and move them onto scheduling lateness, and re-read any band whose green rests on one. Not urgent —
   no shipped claim is known to depend on it — but every such gate is currently decoration.
 
+- [P2] TD 2026-08-26, found while verifying the wall-clock hold: **every makeRig-based rig
+  (syncload, o4step2 family) is DEAD in headless Chrome on this machine — Chrome 151 stops
+  delivering canvas-capture frames to an uncomposited window.** The page console (now captured)
+  shows sources at 15.9 fps for the first seconds, then 0.0 forever; the composite degrades
+  ("only 1.2 fps reached the file"), and a degraded stop DELETES its blob (liveCompositeV2), so
+  every cell died as an opaque `blobStore: no blob stored` — including at git HEAD, so this is
+  environmental, not a regression of ours. A HEADED run in an occluded window fails the same way,
+  and the app-pane browser throttles rAF (0 fps) and intervals (1 Hz) when hidden. Mitigations
+  shipped: makeRig paints on setInterval, not rAF (the loadedSync load painter's own lesson), and
+  cdp-run.mjs prints the page console tail on failure so the next dead run says why. The oracle's
+  synthetic path is unaffected (v1+v2 both PASS the same day). Until Chrome's behavior is
+  understood, run makeRig-family rigs in a VISIBLE unoccluded window (the syncload numbers of
+  2026-08-26 were taken in the app pane, fronted). The 08-25 numbers were taken on Chrome 150.
+
 - [P2] TD 2026-08-26, found while wiring X2: **O1's MEMORY lane samples the wrong thread, and its
   headline gate metric is absent.** `runO1Evidence` polls heap on the MAIN thread while the export
   renders in a worker (since O5a), and `measureUserAgentSpecificMemory` is unavailable in the rig's
@@ -199,6 +217,11 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   instrumenting a REAL take. Next step is to put the alignment inputs into the file's certification
   (each channel's startOffsetMs, the raw anchor, the reported input latency, the first-frame delay) so
   the next field report arrives with numbers instead of an adjective.
+  NEW FIELD EVIDENCE, PO 2026-08-26: "mic/camera unsynch in beggining of video seems to be smaller
+  on other try" — a CONSTANT start-of-take offset that varies take to take and shrinks on a warm
+  second try, which is exactly the signature of (2) (a cold first take pays device/recorder spin-up
+  inside the anchor) and/or (1). Distinct from the progressive drift fixed the same day; nothing
+  shipped today touches the start offset. The certification instrumentation above is still the step.
 
 - [P2] TD 2026-08-25, ONE OBSERVATION, NOT REPRODUCED: the audio-integrity spur gate read −34.6 dB
   against its −40 dB band on a 120 s run of HEAD (7c9a02f). The same build at 6 s read −52.3 (pass)

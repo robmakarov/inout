@@ -38,6 +38,7 @@ import {
   type StreamTargetChunk,
 } from 'mediabunny'
 import { createGLCompositor, type GLCompositor } from './compositorGL'
+import { WallClockHold } from './wallClockHold'
 
 const ROOT_DIR = 'blobs'
 /** Keyframe cadence — the smart-cut prerequisite (O5) and the salvage anchor. */
@@ -394,28 +395,16 @@ let audioSkipFrames = 0
  * starved one carries an honest short silence where the machine choked instead
  * of a permanent offset.
  *
- * `audioWallOrigin` is a MIN-FILTER, and that is what makes it safe: message
- * delivery can only ever be LATE, so the minimum of (received − timeline)
- * converges on the true origin and a burst of late batches cannot fake a gap.
- * Same estimator the measured-audio anchor uses, for the same reason.
+ * The decision lives in WallClockHold, shared with measuredAudio.ts. The
+ * inline version here padded on INSTANTANEOUS lateness of `recvMs` — a stamp
+ * taken at MAIN-THREAD receipt, so every main-thread stall read as lost time
+ * even though the queued batches delivered every sample moments later, and the
+ * spurious pad spliced silence into healthy audio and walked the rest late.
+ * The hold pads only a deficit that persists across its settle window.
  */
-let audioWallOrigin = Infinity
-let lastAudioRecvMs = -Infinity
+let audioHold: WallClockHold | null = null
 /** Last sample per channel of the previous batch — the fade-out needs a value. */
 let lastAudioSample: Float32Array | null = null
-/** Below this, do nothing: normal batching jitter is ~21 ms and must not pad. */
-const AUDIO_PAD_MIN_MS = 80
-/** One batch may not conjure more than this much silence, whatever the stamp says. */
-const AUDIO_PAD_MAX_MS = 1000
-/**
- * The origin STOPS MOVING after this much audio, exactly as the measured-audio
- * anchor's window does. A min-filter that runs forever keeps ratcheting down on
- * the luckiest batch of the whole take, and every ratchet is silence padded in
- * that nothing was ever missing — over a long take that walks the audio LATE.
- * Three seconds is enough batches to find the floor and short enough that the
- * audio-vs-wall rate difference cannot bias it.
- */
-const AUDIO_ORIGIN_WINDOW_S = 3
 /** ~1.3 ms, the same ramp the PCM worklet uses on its own silence splices. */
 const AUDIO_PAD_FADE = 64
 
@@ -727,6 +716,7 @@ async function start(msg: CompositorStartMsg): Promise<void> {
   output.addVideoTrack(videoSource, { frameRate: msg.fps })
   if (msg.sampleRate) {
     audioSampleRate = msg.sampleRate
+    audioHold = new WallClockHold({ sampleRate: msg.sampleRate })
     audioSource = new EncodedAudioPacketSource('aac')
     output.addAudioTrack(audioSource)
   }
@@ -953,26 +943,11 @@ self.onmessage = async (ev: MessageEvent<CompositorMsg>) => {
         // HOLD THE TIMELINE AGAINST THE WALL before placing this batch. Sample
         // counting is the ruler between batches; it just cannot see time that
         // never arrived, so the wall stamp gets a say about WHERE the ruler is.
-        // See audioWallOrigin above for why a min-filter is the safe estimator.
-        if (typeof msg.recvMs === 'number') {
-          const timelineMs = (audioFramesTotal / audioSampleRate) * 1000
-          const batchMs = (frames / audioSampleRate) * 1000
-          // Only STEADY-STATE batches may date the origin. A context that has
-          // just started delivers its catch-up burst back to back, and those
-          // arrivals date the origin falsely early — which would pad silence
-          // for time that was never lost. Same guard, same reason, as the
-          // measured-audio anchor's.
-          const steady = msg.recvMs - lastAudioRecvMs >= batchMs / 2
-          if (steady && audioFramesTotal < AUDIO_ORIGIN_WINDOW_S * audioSampleRate) {
-            const originCand = msg.recvMs - timelineMs
-            if (originCand < audioWallOrigin) audioWallOrigin = originCand
-          }
-          lastAudioRecvMs = msg.recvMs
-          const behindMs = msg.recvMs - audioWallOrigin - timelineMs
-          if (audioWallOrigin !== Infinity && behindMs > AUDIO_PAD_MIN_MS) {
-            const padFrames = Math.round(
-              (Math.min(behindMs, AUDIO_PAD_MAX_MS) / 1000) * audioSampleRate,
-            )
+        // See the WallClockHold note above for why only a PERSISTENT deficit
+        // may pad — recvMs reads late on every main-thread stall.
+        if (typeof msg.recvMs === 'number' && audioHold) {
+          const padFrames = audioHold.padFramesFor(msg.recvMs, audioFramesTotal, frames)
+          if (padFrames > 0) {
             // A step from the last sample straight to zero is a click, and this
             // codebase has paid for that lesson once already (the PCM worklet
             // fades every silence splice). Ramp out of the signal and back into

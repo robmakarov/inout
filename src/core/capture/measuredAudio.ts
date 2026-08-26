@@ -17,19 +17,12 @@ import {
   WebMOutputFormat,
   type StreamTargetChunk,
 } from 'mediabunny'
+import { WallClockHold } from './wallClockHold'
 
 const WORKLET_NAME = 'inout-pcm-capture'
 const OPUS_BITRATE = 128_000
 /** Anchor min-filter window; at 50ppm clock skew the bias stays < 0.2ms. */
 const ANCHOR_WINDOW_S = 3
-/** Below this, do nothing: normal batching jitter is ~21ms and must not pad. */
-const PAD_MIN_MS = 80
-/** One batch may not conjure more than this much silence, whatever the stamp says. */
-const PAD_MAX_MS = 1000
-/** The wall origin stops moving here — a min-filter that runs for the whole
- *  take keeps ratcheting onto the luckiest batch, and each ratchet pads silence
- *  for time nothing lost, walking the audio late. Same window as the anchor. */
-const PAD_ORIGIN_WINDOW_S = 3
 /** ~1.3ms, the same ramp the worklet uses on its own silence splices. */
 const PAD_FADE = 64
 
@@ -145,7 +138,14 @@ export interface MeasuredAudioHandle {
   readonly mimeType: string
   /** Resolves with startOffsetMs once the first PCM quantum arrives. */
   readonly firstOffset: Promise<number>
-  stop: () => Promise<{ bytes: number; durationMs: number; startOffsetMs: number }>
+  stop: () => Promise<{
+    bytes: number
+    durationMs: number
+    startOffsetMs: number
+    /** Silence inserted to hold the timeline against the wall clock — evidence
+     *  the machine starved this take, 0 on a healthy one. */
+    paddedMs: number
+  }>
   cancel: () => Promise<void>
 }
 
@@ -323,12 +323,14 @@ export async function startMeasuredAudioCapture(opts: {
    * rendered at all: measured on a loaded machine, a context returned 56.1 s of
    * quanta in 59.2 s of wall time, which shortens the channel by ~5 % and moves
    * everything after the loss that much earlier against the picture. This is
-   * the path an EDITED export renders from, so it needs the guard too.
+   * the path EVERY export mixes its audio from, so it needs the guard most.
    *
-   * The origin is a MIN-FILTER because batch delivery can only ever be LATE —
-   * the same estimator, for the same reason, as the anchor above.
+   * The decision lives in WallClockHold (shared with the composite worker)
+   * because the first inline copy here was DEAD — it compared the arrival
+   * stamp against itself, so the origin was never set and no take ever padded,
+   * which is how the 08-25 fix shipped without reaching the audio PO hears.
    */
-  let wallOriginMs = Infinity
+  const wallHold = new WallClockHold({ sampleRate })
   let paddedFrames = 0
   /** Last sample per channel of the previous batch — the fade-out needs a value. */
   const lastSample = new Float32Array(2)
@@ -386,22 +388,23 @@ export async function startMeasuredAudioCapture(opts: {
     // true wall time of sample 0 — the single-first-arrival anchor was exactly
     // the source of the +45–50ms audio-late runs. Window capped so audio-clock
     // vs performance.now drift (~50ppm) cannot bias the estimate.
-    // Taken for EVERY batch now, not just inside the anchor window: it is the
-    // only stamp here that keeps time when the audio graph does not.
     const arrivalMs = performance.now()
+    // Spacing vs the PREVIOUS batch, taken before the stamp moves: comparing
+    // against a stamp this same batch just wrote reads 0 forever, which is the
+    // ordering bug that killed the wall-clock hold below for a day.
+    const sincePrevArrivalMs = arrivalMs - lastArrivalMs
+    lastArrivalMs = arrivalMs
     if (framesWritten < ANCHOR_WINDOW_S * sampleRate) {
-      const arrival = arrivalMs
       // Catch-up bursts after resume() deliver quanta back-to-back; their
       // arrival times date sample 0 falsely early. Only steady-state quanta
       // (spaced >= half a quantum) may contribute anchor candidates.
       const quantumMs = (frames / sampleRate) * 1000
-      if (arrival - lastArrivalMs >= quantumMs / 2) {
+      if (sincePrevArrivalMs >= quantumMs / 2) {
         // Batches arrive when their LAST sample was rendered — date sample 0
         // from the end of the message, or batching biases the anchor late.
-        const cand = arrival - ((framesWritten + frames) / sampleRate) * 1000
+        const cand = arrivalMs - ((framesWritten + frames) / sampleRate) * 1000
         if (cand < anchorWallMs) anchorWallMs = cand
       }
-      lastArrivalMs = arrival
     }
     if (startOffsetMs === null) {
       startOffsetMs = performance.now() - opts.epoch
@@ -448,22 +451,12 @@ export async function startMeasuredAudioCapture(opts: {
 
     // Hold the timeline against the wall before placing this batch. Silence is
     // only ever ADDED, and only where real time went missing, so a healthy take
-    // pads nothing and is bit-identical to before.
+    // pads nothing and is bit-identical to before. WallClockHold pads only a
+    // deficit that PERSISTS across its settle window: a main-thread stall whose
+    // queued batches drain moments later loses nothing and must not be spliced.
     {
-      const timelineMs = (framesWritten / sampleRate) * 1000
-      const batchMs = (frames / sampleRate) * 1000
-      // Steady-state batches only, and only while the origin window is open —
-      // a startup catch-up burst dates the origin falsely early (padding time
-      // that was never lost) and a never-closing min-filter ratchets down on
-      // the luckiest batch of the take. Both guards mirror the anchor above.
-      const steady = arrivalMs - lastArrivalMs >= batchMs / 2
-      if (steady && framesWritten < PAD_ORIGIN_WINDOW_S * sampleRate) {
-        const originCand = arrivalMs - timelineMs
-        if (originCand < wallOriginMs) wallOriginMs = originCand
-      }
-      const behindMs = arrivalMs - wallOriginMs - timelineMs
-      if (wallOriginMs !== Infinity && behindMs > PAD_MIN_MS) {
-        const padFrames = Math.round((Math.min(behindMs, PAD_MAX_MS) / 1000) * sampleRate)
+      const padFrames = wallHold.padFramesFor(arrivalMs, framesWritten, frames)
+      if (padFrames > 0) {
         // Ramp out of the signal and back into it: a step to zero is a click,
         // which is the exact defect the worklet's own splice fades exist for.
         const padData = new Float32Array(padFrames * encCh)
@@ -608,6 +601,7 @@ export async function startMeasuredAudioCapture(opts: {
         bytes: bytesWritten,
         durationMs: (framesWritten / sampleRate) * 1000,
         startOffsetMs: offset,
+        paddedMs: (paddedFrames / sampleRate) * 1000,
       }
     },
     async cancel() {

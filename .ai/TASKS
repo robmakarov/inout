@@ -443,7 +443,12 @@ BOTH the composite and the raw channels.
                clock probe that names which clock lost the time. `{"load":false}` is the control
                and the number to read is the DIFFERENCE — a loaded cell alone proves nothing.
                Found the audio-timeline drift PO reported (audio 2.6-3.8 s short per 60 s) and
-               proved the fix (padding → +395 ms, the idle control's own figure)
+               proved the fix (padding → +395 ms, the idle control's own figure).
+               CARRIES A `measured` LANE since 2026-08-26 — the RAW measured-audio path beside the
+               composite, the lane whose absence let a DEAD pad ship as verified (see BACKLOG).
+               HEADLESS IS BROKEN for this rig family on Chrome 151 (canvas capture delivers 0 fps
+               to uncomposited windows, composite degrades, degraded stop deletes its blob): run it
+               in a VISIBLE unoccluded window and read `measured` + `clock` + audioPaddedSec.
      oracle    accepts {"injectTailLossMs":N} to prove the tail band red
   node scripts/ai-pdf-check.mjs    AI1's "any AI can read this" gate: runs the aiexport rig, saves the
      PDF to docs/qa/ai-export.pdf, and puts it through TWO readers that know nothing about the writer —

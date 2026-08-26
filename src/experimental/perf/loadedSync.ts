@@ -26,6 +26,7 @@ import { ALL_FORMATS, BlobSource, EncodedPacketSink, Input } from 'mediabunny'
 import { blobStore } from '@core/store'
 import { startLiveCompositeV2 } from '@core/capture/liveCompositeV2'
 import { startLiveComposite } from '@core/capture/liveComposite'
+import { startMeasuredAudioCapture } from '@core/capture/measuredAudio'
 import { warmVideoEncoder } from '@core/capture/encoderWarm'
 import { makeRig } from './compositorEngine'
 
@@ -254,6 +255,21 @@ export interface LoadedSyncReport {
     /** Wall time whose audio NEVER ARRIVED as live input — the missing seconds. */
     liveBehindWallMs: number
   }
+  /**
+   * The RAW measured-audio path — the channels every export mixes its audio
+   * from — run beside the composite on the same load. This lane did not exist
+   * on 2026-08-25, which is how a wall-clock hold that never fired shipped as
+   * "verified": the rig only ever measured the composite's copy.
+   */
+  measured: {
+    durationSec: number
+    /** Silence the hold inserted — >0 under real starvation, 0 on a healthy take. */
+    paddedSec: number
+    startOffsetMs: number
+    /** (startOffset + duration) − wall at stop: ≈0 when the hold works, strongly
+     *  negative when starvation shortens the channel unpadded. */
+    vsWallMs: number
+  } | null
   /** THE NUMBER: how far the two tracks disagree about the same take. */
   avSpanGapMs: number | null
   /** Sign-named so a report cannot be misread. */
@@ -301,9 +317,38 @@ export async function runLoadedSync(opts?: {
             },
           })
         : await startLiveComposite(inputs, key)
+    // The raw measured-audio path, on the same stream and the same load. Its
+    // bytes are discarded — the lane exists for durationMs/paddedMs vs wall.
+    let measuredHandle: Awaited<ReturnType<typeof startMeasuredAudioCapture>> | null = null
+    if (rig.audio[0]) {
+      try {
+        measuredHandle = await startMeasuredAudioCapture({
+          stream: rig.audio[0],
+          epoch: t0,
+          writer: {
+            write: async () => undefined,
+            close: async () => undefined,
+            abort: async () => undefined,
+          },
+        })
+      } catch (err) {
+        console.warn('[loadedsync] measured-audio lane failed to start', err)
+      }
+    }
     await new Promise((r) => setTimeout(r, takeMs))
     const wallMs = performance.now() - t0
     const clock = clockProbe.read()
+    let measured: LoadedSyncReport['measured'] = null
+    if (measuredHandle) {
+      const stopWallMs = performance.now() - t0
+      const r = await measuredHandle.stop()
+      measured = {
+        durationSec: Math.round(r.durationMs) / 1000,
+        paddedSec: Math.round(r.paddedMs) / 1000,
+        startOffsetMs: Math.round(r.startOffsetMs),
+        vsWallMs: Math.round(r.startOffsetMs + r.durationMs - stopWallMs),
+      }
+    }
     await handle.stop()
     const stats =
       engine === 'v2' ? (handle as { stats(): Record<string, number> | null }).stats() : null
@@ -355,6 +400,7 @@ export async function runLoadedSync(opts?: {
           ? stats.audioPaddedFrames / 48000
           : null,
       degradeReason,
+      measured,
       clock: {
         ctxMs: Math.round(clock.ctxMs),
         framesMs: Math.round(clock.framesMs),

@@ -484,6 +484,13 @@ none of them can be settled without you.
 1. **Listen to two recordings.** A normal one and one with music from a tab. The audio fix you were
    asked to check before was never actually running — the number it depends on was being calculated
    and dropped. It runs now.
+   **Same story again on 2026-08-26, for the growing desync:** your recheck ("mic and camera
+   unsynch 1-2 s at minute 6", tab audio rotting to noise) failed because the anti-drift padding
+   shipped on 08-25 was dead on the audio your exports actually use — it only ever ran on a track
+   no export carries. It runs on the right audio now, verified under machine load in a real
+   browser, and healthy takes are untouched. What it cannot do: bring back audio the machine never
+   recorded while a game starves it — those moments are now honest short gaps instead of a
+   desync that grows forever. A long recheck take (YouTube, then the game) is what closes it.
 2. **Give a "For AI" file to an AI**, for the job you actually have, and say whether it worked. That
    report is the only thing that unfreezes the rest of the AI work.
 3. **Decide about the new recording compressor.** It halves processor use, but it spends about a

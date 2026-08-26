@@ -81,12 +81,15 @@ class Cdp {
     this.ws = ws
     this.seq = 0
     this.pending = new Map()
+    this.onEvent = null
     ws.addEventListener('message', (ev) => {
       const msg = JSON.parse(typeof ev.data === 'string' ? ev.data : '')
       if (msg.id && this.pending.has(msg.id)) {
         const { resolve, reject } = this.pending.get(msg.id)
         this.pending.delete(msg.id)
         msg.error ? reject(new Error(msg.error.message)) : resolve(msg.result)
+      } else if (msg.method && this.onEvent) {
+        this.onEvent(msg.method, msg.params)
       }
     })
   }
@@ -165,6 +168,10 @@ async function main() {
     process.exit(130)
   })
 
+  // A failing run must say what the page said: "experiment threw" with no
+  // console is a guess factory (2026-08-26: a whole degrade chain was
+  // invisible because nothing forwarded the page's own warnings).
+  const consoleTail = []
   try {
     const wsUrl = await waitForTarget(`http://localhost:${devPort}/experimental.html`, Date.now() + 20_000)
     const ws = new WebSocket(wsUrl)
@@ -173,6 +180,14 @@ async function main() {
       ws.addEventListener('error', () => reject(new Error('CDP websocket failed')), { once: true })
     })
     const cdp = new Cdp(ws)
+    cdp.onEvent = (method, params) => {
+      if (method !== 'Runtime.consoleAPICalled') return
+      const line = (params.args ?? [])
+        .map((a) => (a.value !== undefined ? String(a.value) : (a.description ?? a.type)))
+        .join(' ')
+      consoleTail.push(`[${params.type}] ${line}`)
+      if (consoleTail.length > 300) consoleTail.shift()
+    }
     await cdp.send('Runtime.enable')
 
     // Wait for the harness module (and __exp) to be ready.
@@ -208,6 +223,8 @@ async function main() {
     process.stdout.write(String(res.result.value) + '\n')
   } catch (err) {
     console.error(String(err instanceof Error ? err.message : err))
+    if (consoleTail.length)
+      console.error('--- page console tail ---\n' + consoleTail.slice(-80).join('\n'))
     if (chromeErr) console.error('--- chrome stderr tail ---\n' + chromeErr.slice(-2000))
     process.exitCode = 1
   } finally {
