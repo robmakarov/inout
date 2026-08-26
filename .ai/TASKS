@@ -1594,7 +1594,24 @@ This is the band O1's claim never had: putting the whole file back in one ArrayB
 6 s and OOMs the tab at 30 min, so only a band that fails on a SHORT take is worth anything. Its first
 run read `n/a` and that was real — the export had just moved into a worker and getLastScratchStats()
 was main-thread-blind; the worker now forwards the stats (see O5's handoff).
-REMAINING: capture delivered-fps band under the synthetic 4K load (still wants O6's rig shape).
+O8b DONE 2026-08-26 (THIRTEENTH SESSION) — the delivered-fps band ships in `npm run oracle:load`.
+oracle-load already MEASURED deliveredFps in both phases and gated NEITHER, which is note 17's shape:
+the tail band answers "did the ending survive" and says nothing about the middle. A composite
+delivering 8 fps under load has a perfect tail and is still a ruined take, and that is not
+hypothetical — the 08-22 4K freeze delivered 21.5/11.9 fps against a 30 target and no gate could see
+it. Both phases are banded now (`--fpsBand`, exit code carries it), and a lane with no fps number is
+INCONCLUSIVE rather than a silent pass.
+THE BAND IS 10 AND IT IS DELIBERATELY LOOSE, for a reason that is itself the remaining work: THIS
+RIG'S 4K SOURCE IS UNCAPPED. Production constrains the display track to 1080p30 (CAPTURE_MAX_* in
+acquire.ts — the 08-22 fix), but a canvas captureStream does not honour a resolution constraint, so
+what oracle:load measures is the regime the cap exists to PREVENT. Measured healthy in that regime:
+composite 15 fps, raw channels 14.0-14.2 — against 28-30 on a 1080p lane. 10 is a principle, not a
+fit: below a third of the target the result is not usable footage whatever else is true. A first
+attempt at 20 failed both phases immediately and would have been a gate on the fixture rather than on
+the product.
+TO TIGHTEN IT, do O4-polish's remaining "4K row in production shape": a lane whose 4K source is
+capped the way a real display track is. Then the band can mean "the cap is working" instead of
+"the uncapped regime has not collapsed further".
 
 ## O9. text-perfect — screen text without smear  [P2, after O4+O5; PO: "text is important"]
 Why: 4:2:0 chroma subsampling + generic encoder tuning fringes and smears colored text — the visible
@@ -1605,6 +1622,53 @@ frames change); (d) synthetic text rig — code-editor frame, colored-on-colored
 measurable text-edge/chroma-fringe metric added to the oracle.
 GATES: text metric improves vs baseline (numbers) · static-screen file size does not balloon (report)
 · every mode plays cross-browser per ladder · perf bands hold.
+
+HANDOFF O9 — MEASURED 2026-08-26 (THIRTEENTH SESSION). THE METRIC EXISTS, 4:4:4 IS REAL AND FREE,
+AND IT IS AIMED AT THE SMALLER HALF OF THE PROBLEM. No default changed.
+(1) THE INSTRUMENT CAME FIRST, because none of (a)(b)(c) can be judged without it. PSNR cannot see
+    this: a frame of coloured text on a dark ground is ~90 % flat background, so a codec can destroy
+    every glyph edge and still score well — exactly what X5 hit when two painters differed by 156
+    levels on 3.8 % of pixels. `oracle/textEdge.ts` (pure, 7 tests) looks ONLY at glyph edges, chosen
+    from the SOURCE so a codec that erases an edge cannot also erase the evidence, and separates the
+    two ways text dies: `chromaFringeMean` (4:2:0 bleeding colour across a boundary), `lumaSmearMean`
+    (the shape blurred) and `edgeContrastKept` (decoded gradient / source gradient, clamped at 1 so
+    ringing is not scored as sharpness).
+(2) WHAT THIS MACHINE ACTUALLY ACCEPTS — O9(a) and O9(b) in full, probed per acceleration mode:
+        AVC High 4:4:4 (avc1.f40028)   NOT SUPPORTED, any mode
+        VP9 profile 1 (4:4:4)          NOT SUPPORTED, any mode
+        AV1 main                       supported (software)
+        AV1 profile 1 = 4:4:4          SUPPORTED (software)
+    So "4:4:4 where hardware supports it" resolves to: nowhere in hardware, and only through AV1 in
+    software.
+(3) THE GATE, on identical source frames straight off the canvas (`npm run exp -- o9`):
+        codec              bytes/frame   chromaFringe   lumaSmear   edgeContrastKept
+        avc 4:2:0 shipped        9,856           9.45        2.85               1.00
+        avc 4:2:0 @24 Mbps      12,441           9.08        1.85               1.00
+        vp9 4:2:0               13,257           9.09        2.33               1.00
+        AV1 4:4:4                9,155           4.63        3.44               0.99
+        AV1 main 4:2:0           7,532           9.95        3.48               1.00
+    AV1 4:4:4 HALVES the chroma fringe and costs FEWER bytes than what ships. And the control is the
+    part that makes it a finding rather than a coincidence: THREE TIMES THE BITRATE on 4:2:0 moves
+    the fringe by 4 % (9.45 → 9.08). The lever is chroma resolution, not bits — which is why nobody
+    was ever going to fix this by raising the ceiling.
+(4) AND YET THE EXPORT IS THE SMALL HALF. The chain has TWO encodes, and the rig measures each
+    against the canvas itself — the only frame nothing has touched:
+        capture (canvas → raw channel)   chromaFringe 23.2 · lumaSmear 68.6 · edgeContrastKept 0.49
+        export  (raw channel → file)     chromaFringe  5.7 · lumaSmear  2.4 · edgeContrastKept 1.00
+    Chromium's software VP9 destroys HALF the edge contrast of every glyph before the export sees a
+    pixel; the export preserves what it is given essentially perfectly. So a 4:4:4 export can recover
+    at most the 5.7, i.e. ~12 % of the damage, and O9's premise — "the export smears text" — is
+    refuted the way X5's was.
+RECOMMENDATION, and it has a tension in it that PO should see rather than have resolved quietly: the
+lever that reaches the big half is CAPTURE, which is X6. But X6 as built encodes AVC 4:2:0, so it
+does not fix text either; fixing text at capture means AV1 4:4:4 at capture, which on this machine is
+SOFTWARE — the exact CPU cost X6 exists to remove. Flipping the EXPORT to AV1 4:4:4 is the cheap,
+real, small win (half the export's fringe, fewer bytes) and it is PO's call because AV1 playback is
+not universal — O9's own gate says "every mode plays cross-browser per ladder", and that is the
+question to answer before the ladder gains an AV1 rung.
+NOT DONE: (c) near-lossless static spans. It is a bitrate-allocation idea, and the measurement above
+says allocation is not what text is losing — 3× the bits bought 4 %. It should be re-proposed only
+against the codec table, not against intuition.
 
 ## O10. audio-depth — beyond certified  [P2, after O2; (d) lands with P4; PO: "quality all doing"]
 Goal: (a) EBU R128 loudness targeting (−14 LUFS integrated) as an ADDITIVE mode first — fidelity

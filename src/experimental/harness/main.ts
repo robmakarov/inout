@@ -403,6 +403,16 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'o9',
+    title: 'O9 — where does screen TEXT actually get damaged?',
+    detail:
+      'probes what this machine’s VideoEncoder will accept for every mode O9 names (AVC 4:4:4, VP9 profile 1, AV1 main and profile 1) per acceleration mode, then measures the damage a glyph takes at EACH of the two encodes in the chain — canvas → raw channel (capture) and raw channel → exported file (export) — against the canvas itself, the only frame nothing has touched. Uses oracle/textEdge.ts, which looks only at glyph edges because a text frame is ~96 % flat background and a whole-frame PSNR is blind to it.',
+    run: async (args) => {
+      const { runTextPerfect } = await import('../perf/textPerfect')
+      return runTextPerfect({ takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined })
+    },
+  },
+  {
     id: 'o4wedge',
     title: 'O4-polish — does a take survive the composite failing, end to end?',
     detail:
