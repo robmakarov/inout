@@ -48,6 +48,7 @@ function parseArgs(argv) {
   let profileDir = ''
   let keepAudio = false
   let refocus = false
+  let realThrottling = false
   let captureTitle = 'INOUT'
   for (const a of argv) {
     if (a.startsWith('--port=')) devPort = Number(a.slice(7))
@@ -58,6 +59,7 @@ function parseArgs(argv) {
     else if (a === '--headed') headed = true
     else if (a === '--keep-audio') keepAudio = true
     else if (a === '--refocus') refocus = true
+    else if (a === '--real-throttling') realThrottling = true
     else if (a.startsWith('--capture-title=')) captureTitle = a.slice(16)
     else positional.push(a)
   }
@@ -77,6 +79,7 @@ function parseArgs(argv) {
     profileDir,
     keepAudio,
     refocus,
+    realThrottling,
     captureTitle,
   }
 }
@@ -137,6 +140,7 @@ async function main() {
     profileDir,
     keepAudio,
     refocus,
+    realThrottling,
     captureTitle,
   } = parseArgs(process.argv.slice(2))
   // Extra query params reach the page's own knobs (e.g. `quiet=0.05`, the
@@ -162,9 +166,17 @@ async function main() {
       '--no-first-run',
       '--no-default-browser-check',
       '--autoplay-policy=no-user-gesture-required',
-      '--disable-background-timer-throttling',
-      '--disable-backgrounding-occluded-windows',
-      '--disable-renderer-backgrounding',
+      // --real-throttling: run with PRODUCTION Chrome's background behaviour.
+      // The anti-throttling flags exist so rigs survive being backgrounded, but
+      // an occlusion/throttling experiment must reproduce what a USER's Chrome
+      // does, and these three flags disable exactly the machinery under test.
+      ...(realThrottling
+        ? []
+        : [
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding',
+          ]),
       // Auto-accept current-tab capture (testing flags): lets a rig drive the
       // REAL getDisplayMedia path against its own tab with no native picker —
       // the only way to reproduce captured-tab-audio behaviour in a harness.

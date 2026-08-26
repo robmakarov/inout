@@ -519,6 +519,7 @@ const runners: Runner[] = [
         gapSecs: typeof args?.gapSecs === 'number' ? args.gapSecs : undefined,
         video2Secs: typeof args?.video2Secs === 'number' ? args.video2Secs : undefined,
         crossTab: args?.crossTab === true,
+        occlude: args?.occlude === true,
       })
     },
   },

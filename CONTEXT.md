@@ -116,9 +116,10 @@ already gathered.
 Four items on that roadmap turned out to be **wrong ideas**, and finding that out is most of what the
 work bought. Parallel decoding made exports 1 % faster, not twice as fast. Drawing on the graphics
 card fails on text. Lowering the recording data rate makes your download *bigger*. And "the export
-smears screen text" is false — the export preserves text almost perfectly; the damage happens when
-the recording is first captured. None of those would have been visible without measuring them, and
-three of the four had been on the plan for weeks as things that would obviously help.
+smears screen text" is false — the export preserves text almost perfectly. None of those would have
+been visible without measuring them, and three of the four had been on the plan for weeks as things
+that would obviously help. (A fifth entry once sat here — "the damage happens when the recording is
+first captured" — and it was our own measuring mistake, corrected on 2026-08-26. See below.)
 
 **You can pause a recording now (2026-08-26).** A Pause button sits beside the record button while
 you record. It does not release anything: the camera light stays on, nothing is asked for again, and
@@ -158,16 +159,23 @@ export looks, and changing a picture you already have is your call and not ours.
 specific setting left to try that would likely close the gap; it is written down. Until then:
 `?rawcodec=webcodecs` turns it on for one load if you want to compare.
 
-**Screen text: we found where it actually gets damaged (2026-08-26).** Making text crisp was on the
-plan as an export problem — better compression settings when the file is built. Measured against the
-original screen, the export turns out to be nearly blameless: it keeps the sharpness of every letter
-edge essentially perfectly. **The damage happens at the moment of recording**, where Chrome's
-software compressor throws away half the contrast of every glyph edge before the export ever sees it.
-So the fix is at the recording end, which is the change described above — and the version of it built
-this session does not fix text either, because it uses the same colour handling. Doing it properly
-means a different compressor at capture, which on this machine only exists in software: the exact
-processor cost the change was made to remove. That tension is now written down with numbers rather
-than being discovered later.
+**Screen text: the alarming finding was our own measuring mistake (corrected 2026-08-26).** We
+reported that recording "throws away half the contrast of every letter edge" before the export ever
+sees it. It does not. The test compared frames from the recording against a snapshot of the screen
+taken at a *different moment* — and the test screen scrolls by one line every 2.5 seconds, so it was
+comparing two different pages of text and reporting the difference as damage. Measured against the
+picture that was actually recorded, neither recording nor exporting loses any measurable letter
+sharpness. We can reproduce the old number on demand by deliberately shifting the reference one line,
+which is how we know that is what happened.
+
+**What is still true, and it is the useful half.** There *is* a compression mode that makes coloured
+text visibly crisper: it keeps colour at full resolution instead of quarter resolution, and it halves
+the colour bleeding around letters — at slightly fewer bytes. Turning the data rate up three times
+over does almost nothing by comparison, so this is not something more bandwidth can buy. The catch is
+the price: no chip in this machine does it, so it would run on the processor — roughly 80 frames a
+second at 1080p against 207 for what we use now, and about twice the processor load. Whether that is
+worth it is a judgement call, and there are magnified before/after crops in `~/Downloads/x15-text-truth/`
+so it can be made by eye rather than from numbers.
 
 **Three optimizations were tried, measured, and thrown away — which is the point of measuring
 (2026-08-26).** All three were on the roadmap as promising and all three turned out to be wrong, and
@@ -199,12 +207,14 @@ about 4 % of pixels differ, and they are the pixels that make up letters — the
 colour detail at sharp edges differently. Making exports faster by changing how text looks is not a
 trade to take quietly, so it is now a question for PO rather than a change.
 
-**And that raised something worth checking on a real recording.** INOUT already draws with both
-methods: the fast export of an untouched recording copies a picture drawn one way, while any
-recording you have edited is redrawn the other way. If the difference measured in the lab also
-happens in the app, then **adding a single trim would subtly change how text looks** in the file you
-get. That is not established — the lab test fed both methods the same kind of frame, and the app does
-not — so it is written down with the exact experiment that would settle it, not as a claim.
+**And that raised something worth checking on a real recording — now checked (2026-08-26).** INOUT
+draws with both methods: the fast export of an untouched recording copies a picture drawn one way,
+while a fully redrawn export uses the other. Measured on a real recording, **trimming does not change
+your file at all** — a trimmed export comes out byte-for-byte identical to the untrimmed one, because
+trimming copies the original picture rather than redrawing it. The full redraw does cost a little:
+about twice as many visibly-off pixels as simply re-compressing the same picture would. Real, small,
+and it only applies to exports that cannot take the fast path. The lab number turned out to be about
+four times worse than what actually happens.
 
 **The timeline shows the recording now, not a set of coloured bars (2026-08-25).** Each video track
 in the editor carries a strip of its own frames, so finding a moment is a matter of looking rather
@@ -502,9 +512,10 @@ none of them can be settled without you.
 5. **Re-test the 4K game tab** with `?nativeres=1` and tell us what the console says. We built the
    safety net that steps the resolution down under load; we cannot test it, because a fake 4K source
    costs the browser something a real screen does not.
-6. **A question we raised but could not close**: does adding a single trim change how text looks in
-   your export? Measured in the lab, not yet in the app. The experiment that settles it is written
-   down.
+6. **Closed 2026-08-26**: trimming does not change how your text looks — a trimmed export is
+   byte-identical to the untrimmed one. What is left for you is a judgement call, not a question:
+   look at `~/Downloads/x15-text-truth/` and say whether the crisper-text compression mode is worth
+   about twice the processor load.
 7. The standing ones: a real Safari recording, a camera-only recording, and the Yandex/RU checks.
 
 PO records with the tool and reports bugs; that loop is working and is what caught both the mic hang

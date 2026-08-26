@@ -61,7 +61,13 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   DEFAULT composition read 37.3 dB / max 156 of 255 / 3.8 % of pixels off by >8 on the screen-TEXT
   interior, against ≤1 LSB or ≥60 dB — texImage2D and drawImage upsample 4:2:0 chroma differently.
   The port would change how exported text looks, which is PO's call and O9's subject. Rig:
-  `npm run exp -- x5`. The same measurement raised a live question logged P1 — see BACKLOG.
+  `npm run exp -- x5`.
+  IN PRODUCTION THAT DIVERGENCE IS A QUARTER OF THE SIZE (X15(c), 2026-08-26, `npm run exp -- x15c`).
+  On one real take through the product's own export ladder, instant against render reads 37.1 dB on
+  screen text, max 60, 7.8 % of pixels off by >8 — against a CONTROL of 39.9 dB / max 50 / 3.8 %,
+  which is what ONE re-encode of the same frame costs by itself. So the painters cost 2.8 dB and a
+  doubling of visibly-wrong pixels, not max 156. And a TRIM does not reach the render at all: smart
+  cut copies the composite's packets, so a trimmed export is BIT-IDENTICAL to the untrimmed one.
 - exports STREAM TO DISK (O1): the muxer holds 4 MB regardless of length — a 30-min export peaks at
   39 MB live memory instead of 294 MB. ExportResult.blob is a disk-backed OPFS file.
 - NO DURATION CAP (PO 2026-08-23). MAX_RECORDING_MS is `number | null` and is null; a take runs until
@@ -318,9 +324,17 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   tracks ending on device changes (crbug 344876285 — AirPods auto-switch), or the source pausing.
   PO's "dies between youtube videos" hypothesis was TAKEN TO THE LAB the same day (`npm run exp --
   tabaudio`: real getDisplayMedia via auto-accept flags, tone → teardown → 45 s silent gap → new
-  tone, own-tab AND hidden-child-tab topologies) and did NOT reproduce — audio returns at full
-  level, zero mute events. The killer needs something the rig lacks (capture age, YouTube player
-  internals, AirPods switching, game load); details and the do-not-re-run note in BACKLOG.
+  tone, own-tab AND hidden-child-tab topologies, PLUS an occlusion cell covering the captured
+  window 35 s) and did NOT reproduce — audio returns at full level, zero mute events.
+  THEN THE DYING TAKE ITSELF WAS AUTOPSIED (PO: "not fixed"; a browser session on the app origin
+  decodes the take's own OPFS channels in place — the field-evidence loop that needs nothing from
+  PO but "don't discard it"). Verdict on that take: at 6:36–7:02 the WHOLE DISPLAY PAIR dies
+  together — screen frozen on one DIMMED mid-dialogue frame with spinner-scale flicker, tab audio
+  digitally silent, mic alive, both recover together. That signature is A PLAYER STALL (buffering),
+  not a capture death: the recording is likely FAITHFUL and the movie itself froze — plausibly
+  starved by capture's own CPU load, which is the X6 ruling's territory yet again. The rival
+  (Chromium capture outage) survives only because the subtitle-continuity test died with the
+  discarded take. Full detail + the next-take protocol in BACKLOG.
 - CAPTURE MEASURES THE MIX'S ENVELOPE ONCE, AND THE EXPORT STOPPED MEASURING IT AGAIN (X1,
   2026-08-26). O2 kept three scalars from the capture-time accumulator and SORTED the window series
   away; the series is now kept IN TIME ORDER on `Recording.loudness.envelope` (windowRms + windowPeak

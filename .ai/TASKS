@@ -577,11 +577,21 @@ delivered file stays constant-frame-rate.
                getDisplayMedia via Chrome's auto-accept testing flags — no picker; tones play in
                THIS tab, or in a captured child tab with {"crossTab":true} plus `--refocus
                --capture-title=TONECHILD` (the child steals focus, and getDisplayMedia throws from
-               an unfocused document — the driver re-activates the page). `--keep-audio` or the
-               run is vacuous. 2026-08-26: NOT reproduced at a 45 s gap in either topology; the
-               negative is recorded in BACKLOG so the shape is not re-run blind. cdp-run's debug
-               port is EPHEMERAL now — fixed 9333 cost three runs in one day to orphaned Chromes —
-               and it prints the page console tail on failure.
+               an unfocused document — the driver re-activates the page). {"occlude":true} runs
+               the OCCLUSION cell (continuous tone, captured window fully covered mid-run) — pair
+               with `--headed --real-throttling`, which strips the anti-throttling flags so the
+               rig runs what a USER's Chrome runs. `--keep-audio` or the run is vacuous.
+               2026-08-26: NOT reproduced in any of the three shapes; negatives + the field
+               autopsy that reframed the bug (the display PAIR dies together — likely a PLAYER
+               stall, see BACKLOG) are recorded so no shape is re-run blind. cdp-run's debug port
+               is EPHEMERAL now — fixed 9333 cost three runs in one day to orphaned Chromes — and
+               it prints the page console tail on failure.
+  THE REMOTE TAKE AUTOPSY (2026-08-26, proven on PO's dying take): a browser session on the app
+     origin shares its storage, so the take IS readable in place — IndexedDB `inout`/`recordings`
+     for the metadata, OPFS `blobs/<blobKey>` for the channels, `decodeAudioData` for envelopes,
+     mediabunny (esm.sh) `VideoSampleSink.getSample` for frames of the UNSEEKABLE live-recorded
+     webm (a <video> element cannot seek it). Per-channel silence maps, frame diffs and frame
+     screenshots of a real field take, with nothing needed from PO except NOT DISCARDING it.
      oracle    accepts {"injectTailLossMs":N} to prove the tail band red
   node scripts/ai-pdf-check.mjs    AI1's "any AI can read this" gate: runs the aiexport rig, saves the
      PDF to docs/qa/ai-export.pdf, and puts it through TWO readers that know nothing about the writer —

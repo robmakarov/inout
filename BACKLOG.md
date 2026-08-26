@@ -135,10 +135,27 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   like a player, sits silent 45 s, plays a new one ("video 2"), recording through the production
   measured path the whole time. BOTH topologies — capturing its own tab, and capturing a separate
   hidden child tab (PO's, but harsher) — bring video 2 back at full level: 0.4 peak captured,
-  ZERO mute events, silentTail 0. So a plain silence gap between videos does not kill tab audio
-  on this Chrome; whatever kills PO's takes needs something the rig lacks (capture AGE — his die
-  after many minutes; YouTube's own player/output-device behaviour; AirPods auto-switch; game
-  load). Negative results recorded so nobody re-runs the same shape; the field console decides.
+  ZERO mute events, silentTail 0. A THIRD shape (`{"occlude":true}` + `--headed --real-throttling`:
+  one continuous tone, the captured window fully COVERED for 35 s mid-run) also fails to kill it —
+  audio sails through occlusion at full level. Negative results recorded so no shape is re-run blind.
+  **THE FIELD AUTOPSY, 2026-08-26 (PO: "not fixed"), read off the dying take ITSELF before PO
+  discarded it** — via a browser session on the app origin: IndexedDB recording + OPFS channel
+  files decoded in place. The take: 7.7 min of a subtitled movie in a captured tab. THE EVENT AT
+  6:36–7:02 (26 s): the SCREEN channel freezes on ONE mid-dialogue frame, DIMMED (luma 36→21.7,
+  residual motion 0.02–0.08 ≈ a spinner), the tab-audio channel goes digitally silent the same
+  instant, the MIC records normally throughout, and both halves recover TOGETHER at full level.
+  No track end, no stall mark, channels full length. So "tab audio dies" is really "THE DISPLAY
+  PAIR dies together, then self-recovers", and the LEADING explanation is that THE PLAYER ITSELF
+  STALLED (buffering/stall: dimmed frozen frame + spinner-scale flicker + silence is exactly that
+  signature) — i.e. the recording is FAITHFUL, and the stall plausibly comes from capture's own
+  CPU load starving the player (the documented contention family). The rival — a Chromium
+  display-capture outage — is not dead, but three lab shapes failed to produce it and the DIMMING
+  is a player behaviour, not a capture one. The discriminating test (subtitle continuity across
+  the resume: paused players resume the same sentence) was lost when the take was discarded
+  mid-analysis. PROTOCOL FOR THE NEXT DYING TAKE: DO NOT DISCARD IT — say so, and it gets the
+  same remote autopsy in minutes; the witness build (live on prod) also logs mute/ended/silence
+  in the console as it happens. If the buffering story holds, the fix is capture CPU = THE X6
+  RULING, which every investigation of this family now terminates at.
 
 - [P1 → FIXED AGAIN 2026-08-26, AWAITING PO RECHECK] PO: progressive audio desync — 08-25 report
   "sounds go faster than video" ~20 s in; 08-26 RECHECK FAILED: "mic and camera unsynch is about

@@ -28,6 +28,7 @@ function parseArgs(argv) {
   let cpu = false
   let keepAudio = false
   let refocus = false
+  let realThrottling = false
   let captureTitle = ''
   let query = ''
   let ua = ''
@@ -39,6 +40,7 @@ function parseArgs(argv) {
     else if (a === '--cpu') cpu = true
     else if (a === '--keep-audio') keepAudio = true
     else if (a === '--refocus') refocus = true
+    else if (a === '--real-throttling') realThrottling = true
     else if (a.startsWith('--capture-title=')) captureTitle = a.slice(16)
     else if (a.startsWith('--query=')) query = a.slice(8)
     else if (a.startsWith('--ua=')) ua = a.slice(5)
@@ -61,6 +63,7 @@ function parseArgs(argv) {
     cpu,
     keepAudio,
     refocus,
+    realThrottling,
     captureTitle,
     query,
     ua,
@@ -187,6 +190,7 @@ async function main() {
     cpu,
     keepAudio,
     refocus,
+    realThrottling,
     captureTitle,
     query,
     ua,
@@ -220,6 +224,7 @@ async function main() {
       ...(headed ? ['--headed'] : []),
       ...(keepAudio ? ['--keep-audio'] : []),
       ...(refocus ? ['--refocus'] : []),
+      ...(realThrottling ? ['--real-throttling'] : []),
       ...(captureTitle ? [`--capture-title=${captureTitle}`] : []),
     ]
     const sampler = rss ? startRssSampler() : null

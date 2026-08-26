@@ -25,12 +25,14 @@ import { startMeasuredAudioCapture } from '@core/capture/measuredAudio'
 import { TONE_CHANNEL, startVideo } from './toneChild'
 
 interface Phase {
-  name: 'video1' | 'gap' | 'video2'
+  name: string
   plannedMs: number
   /** Peak |sample| the CAPTURED channel saw during this phase. */
   capturedMaxAbs: number
   /** How much of the phase the captured input carried signal, in ms. */
   capturedLiveMs: number
+  /** Composited frames the captured VIDEO track delivered during this phase. */
+  videoFrames: number
 }
 
 export interface TabAudioDeathReport {
@@ -73,11 +75,12 @@ function localToneDriver(): ToneDriver {
  * audio stream alive). The child renames itself TONECHILD; cdp-run's
  * --capture-title flag points Chrome's auto-select at it.
  */
-async function childToneDriver(): Promise<ToneDriver> {
+async function childToneDriver(features?: string): Promise<ToneDriver> {
   const bc = new BroadcastChannel(TONE_CHANNEL)
   const child = window.open(
     `${location.origin}${location.pathname}?synthetic=1&tonechild=1`,
     '_blank',
+    features,
   )
   if (!child) throw new Error('window.open blocked — child tab unavailable')
   const waitEvt = (evt: string, timeoutMs: number): Promise<void> =>
@@ -126,7 +129,17 @@ export async function runTabAudioDeath(opts?: {
   /** Capture a CHILD tab (PO's topology) instead of this one. Needs the
    *  --capture-title=TONECHILD flag on the driver. */
   crossTab?: boolean
+  /**
+   * THE OCCLUSION CELL (implies crossTab; run HEADED with --real-throttling).
+   * PO's autopsied take froze picture AND tab audio together for 26 s exactly
+   * while the captured window was covered by another app. Here the child plays
+   * one CONTINUOUS tone; midway a cover window fully occludes it, then closes.
+   * If Chrome stops delivering capture for occluded windows, the occluded
+   * phase reads silent + frameless while the tone never stopped.
+   */
+  occlude?: boolean
 }): Promise<TabAudioDeathReport> {
+  const occlude = opts?.occlude === true
   const video1Ms = (opts?.video1Secs ?? 8) * 1000
   const gapMs = (opts?.gapSecs ?? 45) * 1000
   const video2Ms = (opts?.video2Secs ?? 12) * 1000
@@ -134,11 +147,17 @@ export async function runTabAudioDeath(opts?: {
   const report: TabAudioDeathReport = {
     ok: false,
     verdict: '',
-    phases: [
-      { name: 'video1', plannedMs: video1Ms, capturedMaxAbs: 0, capturedLiveMs: 0 },
-      { name: 'gap', plannedMs: gapMs, capturedMaxAbs: 0, capturedLiveMs: 0 },
-      { name: 'video2', plannedMs: video2Ms, capturedMaxAbs: 0, capturedLiveMs: 0 },
-    ],
+    phases: occlude
+      ? [
+          { name: 'visible', plannedMs: 12_000, capturedMaxAbs: 0, capturedLiveMs: 0, videoFrames: 0 },
+          { name: 'occluded', plannedMs: 35_000, capturedMaxAbs: 0, capturedLiveMs: 0, videoFrames: 0 },
+          { name: 'uncovered', plannedMs: 15_000, capturedMaxAbs: 0, capturedLiveMs: 0, videoFrames: 0 },
+        ]
+      : [
+          { name: 'video1', plannedMs: video1Ms, capturedMaxAbs: 0, capturedLiveMs: 0, videoFrames: 0 },
+          { name: 'gap', plannedMs: gapMs, capturedMaxAbs: 0, capturedLiveMs: 0, videoFrames: 0 },
+          { name: 'video2', plannedMs: video2Ms, capturedMaxAbs: 0, capturedLiveMs: 0, videoFrames: 0 },
+        ],
     trackEvents: [],
     mutedTimeline: [],
     measured: null,
@@ -148,11 +167,17 @@ export async function runTabAudioDeath(opts?: {
   let display: MediaStream | null = null
   let mutedPoll: ReturnType<typeof setInterval> | null = null
   let driver: ToneDriver | null = null
+  let cover: Window | null = null
+  const crossTab = opts?.crossTab === true || occlude
   try {
-    driver = opts?.crossTab ? await childToneDriver() : localToneDriver()
+    driver = crossTab
+      ? await childToneDriver(
+          occlude ? 'left=1050,top=60,width=380,height=300' : undefined,
+        )
+      : localToneDriver()
     // Opening the child tab steals focus, and getDisplayMedia throws
     // InvalidStateError from an unfocused document. Claim it back and wait.
-    if (opts?.crossTab && !document.hasFocus()) {
+    if (crossTab && !document.hasFocus()) {
       for (let i = 0; i < 20 && !document.hasFocus(); i++) {
         window.focus()
         await new Promise((r) => setTimeout(r, 250))
@@ -170,7 +195,7 @@ export async function runTabAudioDeath(opts?: {
       video: true,
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
       // Chromium-specific; missing from the TS lib.
-      ...((opts?.crossTab
+      ...((crossTab
         ? { selfBrowserSurface: 'exclude' }
         : { preferCurrentTab: true }) as Record<string, unknown>),
     } as DisplayMediaStreamOptions)
@@ -188,10 +213,17 @@ export async function runTabAudioDeath(opts?: {
     report.displayAudioSettings = audioTrack.getSettings()
 
     const epoch = performance.now()
+    const bounds: number[] = []
+    {
+      let acc = 0
+      for (const p of report.phases) {
+        acc += p.plannedMs
+        bounds.push(acc)
+      }
+    }
     const phaseAt = (atMs: number): Phase => {
-      if (atMs < video1Ms) return report.phases[0]!
-      if (atMs < video1Ms + gapMs) return report.phases[1]!
-      return report.phases[2]!
+      for (let i = 0; i < bounds.length; i++) if (atMs < bounds[i]!) return report.phases[i]!
+      return report.phases[report.phases.length - 1]!
     }
     for (const type of ['mute', 'unmute', 'ended'] as const) {
       audioTrack.addEventListener(type, () =>
@@ -230,13 +262,43 @@ export async function runTabAudioDeath(opts?: {
       },
     })
 
-    await driver.play(440)
-    await new Promise((r) => setTimeout(r, video1Ms))
-    await driver.silence()
-    await new Promise((r) => setTimeout(r, gapMs))
-    await driver.play(660)
-    await new Promise((r) => setTimeout(r, video2Ms))
-    await driver.silence()
+    // Count composited frames of the captured VIDEO track per phase — the
+    // autopsied take's picture and audio died TOGETHER, so both are measured.
+    const vel = document.createElement('video') as HTMLVideoElement & {
+      requestVideoFrameCallback?: (cb: () => void) => void
+    }
+    vel.srcObject = new MediaStream(display.getVideoTracks())
+    vel.muted = true
+    void vel.play().catch(() => undefined)
+    if (vel.requestVideoFrameCallback) {
+      const bumpFrame = (): void => {
+        phaseAt(performance.now() - epoch).videoFrames++
+        vel.requestVideoFrameCallback!(bumpFrame)
+      }
+      vel.requestVideoFrameCallback(bumpFrame)
+    }
+
+    if (occlude) {
+      // One continuous tone; the only thing that changes is whether the child
+      // window is visible. The cover fully overlaps the child's geometry.
+      await driver.play(440)
+      await new Promise((r) => setTimeout(r, report.phases[0]!.plannedMs))
+      cover = window.open('about:blank', '_cover', 'left=1000,top=0,width=520,height=460')
+      if (cover) cover.document.body.style.background = '#fff'
+      await new Promise((r) => setTimeout(r, report.phases[1]!.plannedMs))
+      cover?.close()
+      cover = null
+      await new Promise((r) => setTimeout(r, report.phases[2]!.plannedMs))
+      await driver.silence()
+    } else {
+      await driver.play(440)
+      await new Promise((r) => setTimeout(r, video1Ms))
+      await driver.silence()
+      await new Promise((r) => setTimeout(r, gapMs))
+      await driver.play(660)
+      await new Promise((r) => setTimeout(r, video2Ms))
+      await driver.silence()
+    }
 
     const r = await handle.stop()
     report.measured = {
@@ -245,11 +307,22 @@ export async function runTabAudioDeath(opts?: {
       silentTailMs: Math.round(r.silentTailMs),
     }
 
-    const [a, , c] = report.phases
+    const [a, b, c] = report.phases
     const HEARD = 1e-3
     if (a!.capturedMaxAbs < HEARD) {
       report.verdict =
-        'VACUOUS: the captured channel never heard video 1 — run with --keep-audio, or this platform captures a muted tab as silence'
+        'VACUOUS: the captured channel never heard the tone while visible — run with --keep-audio, or this platform captures a muted tab as silence'
+    } else if (occlude) {
+      report.ok = true
+      const audioDied = b!.capturedMaxAbs < HEARD
+      const videoDied = a!.videoFrames > 10 && b!.videoFrames <= 2
+      const resumed = c!.capturedMaxAbs >= HEARD
+      report.verdict =
+        audioDied || videoDied
+          ? `REPRODUCED: occluding the captured window killed ${audioDied && videoDied ? 'AUDIO AND VIDEO' : audioDied ? 'AUDIO' : 'VIDEO'} ` +
+            `(occluded phase: ${b!.capturedMaxAbs.toFixed(4)} peak, ${b!.videoFrames} frames vs visible ${a!.capturedMaxAbs.toFixed(3)}/${a!.videoFrames}); ` +
+            (resumed ? 'capture RESUMED on uncover — exactly the autopsied take' : 'capture NEVER resumed after uncover')
+          : `NOT reproduced: occluded phase still carried ${b!.capturedMaxAbs.toFixed(3)} peak and ${b!.videoFrames} frames`
     } else if (c!.capturedMaxAbs < HEARD) {
       report.ok = true
       report.verdict =
@@ -266,6 +339,11 @@ export async function runTabAudioDeath(opts?: {
   } finally {
     if (mutedPoll) clearInterval(mutedPoll)
     if (display) for (const t of display.getTracks()) t.stop()
+    try {
+      cover?.close()
+    } catch {
+      /* already closed */
+    }
     driver?.dispose()
   }
 }
