@@ -245,6 +245,7 @@ export async function startMeasuredVideoCapture(opts: {
       const level = st.framesDropped > 0 ? console.warn : console.info
       level(
         `[capture] raw ${opts.track.kind} channel: ${st.framesEncoded} frames encoded of ${st.framesIn} in` +
+          `${st.keepAliveFrames > 0 ? `, ${st.keepAliveFrames} keep-alive (source was static)` : ''}` +
           `${st.framesDropped > 0 ? `, ${st.framesDropped} DROPPED (encoder behind)` : ''}` +
           ` · ${st.keyframeCount} keyframes · ${(st.bytes / 1024).toFixed(0)} KB · ${st.codec} ${st.hardware}`,
       )

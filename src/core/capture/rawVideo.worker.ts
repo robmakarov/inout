@@ -47,6 +47,19 @@ const ROOT_DIR = 'blobs'
 const KEYFRAME_INTERVAL_S = 2
 /** Frames allowed in flight before this channel drops rather than queues. */
 const MAX_ENCODER_QUEUE = 6
+/**
+ * A STATIC SOURCE DELIVERS NOTHING, AND THAT IS THE WHOLE REASON THIS EXISTS.
+ * MediaStreamTrackProcessor is frame-driven: a screen that is not changing
+ * produces no frames at all, so a pipeline that only encodes what arrives
+ * records a file with two frames in it. MediaRecorder never had this problem —
+ * it encodes at its own cadence whatever the source does — and the live
+ * composite already carries the same fix for the same reason.
+ * FOUND ON THE DEPLOYED BUILD, not in the rig: the rig's synthetic source is
+ * ANIMATED and never went quiet, so it encoded 447 frames of 447 and looked
+ * perfect. A real static screen — a slide, a document, a paused UI — is the
+ * common case and it recorded 2 frames in 9 seconds.
+ */
+const KEEPALIVE_MS = 1000
 
 /** FileSystemSyncAccessHandle is missing from the project's TS lib set. */
 interface SyncAccessHandle {
@@ -82,6 +95,8 @@ export interface RawVideoStats {
   framesIn: number
   framesEncoded: number
   framesDropped: number
+  /** Frames re-encoded because the source went quiet (a static screen). */
+  keepAliveFrames: number
   keyframeCount: number
   bytes: number
   videoBytes: number
@@ -164,12 +179,39 @@ let H = 1080
 let firstFrameAtMs: number | null = null
 let lastFrameAtMs: number | null = null
 let lastKeySec = -Infinity
-let baseTimestampUs: number | null = null
+/** Last timestamp handed to the encoder (µs) — the timeline never goes back. */
+let lastEncodedTsUs = -1
+/** Main-thread reading when a frame last actually reached the encoder. */
+let lastEncodeOkMs = -Infinity
+/** The most recent picture, kept alive so a quiet source can be re-encoded. */
+let lastFrame: VideoFrame | null = null
+let keepAliveTimer: ReturnType<typeof setInterval> | null = null
+
+/**
+ * The main thread owns the clock (every frame message carries its reading), but
+ * the keep-alive fires HERE, so the worker has to express its own now() on the
+ * main thread's timeline. Min-filtered because message delivery can only make
+ * this worker's reading late, never early — the same construction the
+ * compositor uses.
+ */
+let originOffset = 0
+let originSamples = 0
+
+function noteOrigin(mainMs: number): void {
+  const delta = performance.now() - mainMs
+  if (originSamples === 0 || delta < originOffset) originOffset = delta
+  originSamples++
+}
+
+function nowOnMainClock(): number {
+  return performance.now() - originOffset
+}
 
 const stats: RawVideoStats = {
   framesIn: 0,
   framesEncoded: 0,
   framesDropped: 0,
+  keepAliveFrames: 0,
   keyframeCount: 0,
   bytes: 0,
   videoBytes: 0,
@@ -270,11 +312,52 @@ async function start(msg: RawVideoStartMsg): Promise<void> {
     error: fail,
   })
   encoder.configure(config)
+
+  keepAliveTimer = setInterval(() => {
+    if (stopped || fatal || !lastFrame || firstFrameAtMs === null) return
+    const nowMain = nowOnMainClock()
+    // Against the last frame that actually REACHED the encoder, not the last
+    // that arrived: a busy encoder would otherwise suppress the keep-alive it
+    // exists to trigger (the compositor learned this one first).
+    if (nowMain - lastEncodeOkMs >= KEEPALIVE_MS) encodeAt(lastFrame, nowMain, true)
+  }, KEEPALIVE_MS / 2)
+}
+
+/**
+ * Encode one picture at a main-thread instant. The channel's timeline is built
+ * from ARRIVAL stamps rather than source timestamps, for two reasons that are
+ * really one: startOffsetMs is already an arrival quantity, so the file's t=0
+ * and its placement on the session timeline come from the same clock; and a
+ * keep-alive frame has no source timestamp of its own to use.
+ */
+function encodeAt(picture: VideoFrame, atMs: number, keepAlive: boolean): void {
+  if (fatal || stopped || !encoder) return
+  if (firstFrameAtMs === null) firstFrameAtMs = atMs
+  const tUs = Math.max(0, Math.round((atMs - firstFrameAtMs) * 1000))
+  // Never backwards: a late-delivered frame or a keep-alive racing a real one
+  // would otherwise hand the muxer a non-monotonic timeline.
+  if (tUs <= lastEncodedTsUs) return
+  const tSec = tUs / 1e6
+  const keyFrame = stats.framesEncoded === 0 || tSec - lastKeySec >= KEYFRAME_INTERVAL_S
+  let stamped: VideoFrame | null = null
+  try {
+    stamped = new VideoFrame(picture, { timestamp: tUs })
+    encoder.encode(stamped, { keyFrame })
+    if (keyFrame) lastKeySec = tSec
+    lastEncodedTsUs = tUs
+    lastEncodeOkMs = atMs
+    if (keepAlive) stats.keepAliveFrames++
+  } catch (err) {
+    fail(err)
+  } finally {
+    stamped?.close()
+  }
 }
 
 function onFrame(msg: RawVideoFrameMsg): void {
   const frame = msg.frame
   stats.framesIn++
+  noteOrigin(msg.atMs)
   if (fatal || stopped || !encoder) {
     frame.close()
     return
@@ -286,6 +369,13 @@ function onFrame(msg: RawVideoFrameMsg): void {
   // every other channel against it on the timeline.
   if (firstFrameAtMs === null) firstFrameAtMs = msg.atMs
   lastFrameAtMs = msg.atMs
+  // Keep the picture so a source that goes quiet can still be encoded.
+  try {
+    lastFrame?.close()
+    lastFrame = frame.clone()
+  } catch {
+    /* a frame that cannot be cloned simply has no keep-alive behind it */
+  }
   // DROP, NEVER QUEUE. A queue that grows without bound turns a slow encoder
   // into unbounded memory and a take that ends minutes after the press; the
   // composite makes the same choice for the same reason.
@@ -295,16 +385,7 @@ function onFrame(msg: RawVideoFrameMsg): void {
     return
   }
   try {
-    // The channel's own timeline starts at its first frame, so the file's t=0
-    // is that frame — startOffsetMs places it on the session timeline, exactly
-    // as MediaRecorder's file epoch does.
-    if (baseTimestampUs === null) baseTimestampUs = frame.timestamp
-    const tSec = (frame.timestamp - baseTimestampUs) / 1e6
-    const keyFrame = tSec - lastKeySec >= KEYFRAME_INTERVAL_S || stats.framesEncoded === 0
-    if (keyFrame) lastKeySec = tSec
-    encoder.encode(frame, { keyFrame })
-  } catch (err) {
-    fail(err)
+    encodeAt(frame, msg.atMs, false)
   } finally {
     frame.close()
   }
@@ -312,6 +393,10 @@ function onFrame(msg: RawVideoFrameMsg): void {
 
 async function stop(): Promise<Extract<RawVideoReply, { cmd: 'stop' }>> {
   stopped = true
+  if (keepAliveTimer) clearInterval(keepAliveTimer)
+  keepAliveTimer = null
+  lastFrame?.close()
+  lastFrame = null
   try {
     // THE DRAIN THIS PATH GETS FOR FREE, and it is the reason X6 is worth
     // doing beyond CPU. The MediaRecorder path could not be asked to finish:
@@ -354,6 +439,10 @@ async function stop(): Promise<Extract<RawVideoReply, { cmd: 'stop' }>> {
 
 async function cancel(): Promise<void> {
   stopped = true
+  if (keepAliveTimer) clearInterval(keepAliveTimer)
+  keepAliveTimer = null
+  lastFrame?.close()
+  lastFrame = null
   try {
     encoder?.close()
   } catch {
