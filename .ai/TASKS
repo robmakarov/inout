@@ -30,8 +30,11 @@ updates the READY map (move newly-unblocked dependents in, remove the done task)
 
 ── READY MAP — current truth, updated on every merge ──
 Last update 2026-08-26 (THIRTEENTH session, PO: "go roadmap all in one" → "go next" → "go" →
-"fucking finish roadmap"). THE MAP IS EMPTY OF BUILDABLE WORK. Everything that could be decided by
-measurement was; everything left needs PO — a ruling, a listen, or hardware.
+"fucking finish roadmap"). THE MAP WAS EMPTY OF BUILDABLE WORK. Everything that could be decided by
+measurement was; everything left needed PO — a ruling, a listen, or hardware.
+LATER SAME DAY (review session): PO reports Xcode 27 AND an iOS 27 device ARE available → P5a moves
+to READY. And PO asked for the text measurements to run in a parallel session → TD authored X15
+(measurement-only, changes no default) → READY. Two buildable tasks exist again.
 
 SHIPPED THIS SESSION
   · X9   the For-AI build runs in a worker. Byte-identical PDF on four lanes; the UI thread loses
@@ -76,10 +79,11 @@ WHAT IS LEFT, AND EVERY ITEM IS PO'S
   6. X5's TEXT QUESTION (BACKLOG P1) — does adding one trim change how text looks? Measured in the
      lab, not yet in the app; the settling experiment is written down.
   7. THE OLD ONES, unchanged: real-Safari recheck (P8), camera-only 1080p recheck, Yandex + RU
-     reachability runs (P3), Playwright install for P1/O11d, Xcode 27 + an iOS 27 device for P5a.
+     reachability runs (P3), Playwright install for P1/O11d. (P5a's hardware arrived 2026-08-26.)
 
 NEEDS A RULING BEFORE ANYONE BUILDS: X7 · X10=O5e · X13 · O12 (see the block below).
-PARKED: X11 · X14. BLOCKED ON HARDWARE/DOWNLOADS: P1's two gates · O11d · P5a · P8.
+PARKED: X11 · X14. BLOCKED ON HARDWARE/DOWNLOADS: P1's two gates · O11d · P8. (P5a unblocked
+2026-08-26 — PO has Xcode 27 + an iOS 27 device.)
 NOT STARTED, and deliberately: O10(b) multitrack · O10(c) spectral gating · O10(d) AEC (P4) ·
 O9(c) near-lossless static spans (its premise is refuted by O9's own table — 3× the bits bought 4 %) ·
 F6's RETAKE (a resume of a FINISHED recording: recovery, editsRepo and editor state, its own task).
@@ -100,13 +104,17 @@ START HERE IF YOU ARE FRESH:
      `node scripts/oracle.mjs --engine=v1`. Anything touching the STOP path also runs
      `npm run oracle:load` (HEAVY, announce it) and `npm run exp -- armcancel`.
 
-READY NOW — NOTHING. Every task that could be settled by building or measuring is settled; the
-per-task handoffs below carry the detail, and the map header carries the summary. What is left is
-listed under "WHAT IS LEFT" above and is PO's in every case.
+READY NOW:
+  X15  text-truth measurement      [medium]  measurement only, changes no default. Three lanes:
+                                             X6's bitrateMode sweep, a software-4:4:4 "crisp text"
+                                             price tag, and X5's in-app one-trim question (BACKLOG
+                                             P1). Spec below in the X frontier. Parallel-safe with
+                                             anything — it ships numbers, not behaviour.
+  P5a  iOS SCK spike               [light]   UNBLOCKED 2026-08-26: PO confirms Xcode 27 + a real
+                                             iOS 27 device are available. Needs PO present (device
+                                             plugged in, signing). TIME-SENSITIVE (iOS 27 ~Sept).
 
 BLOCKED ON HARDWARE OR A DOWNLOAD, unchanged:
-  P5a  iOS SCK spike               [light]   needs Xcode 27 and a real iOS 27 device, neither on the
-                                             TD machine. STILL TIME-SENSITIVE (iOS 27 ~Sept 2026).
   P1   firefox + 3-engine oracle   [medium]  code half shipped 2026-08-23. What is left needs
                                              downloads PO must approve (Playwright's gecko driver)
                                              and a Windows machine for the one row that cannot be
@@ -954,6 +962,41 @@ with every artifact WEIGHED ON DISK afterwards and divided by the take's own len
     only spends 11.8 % of its ceiling on screen content, so the ceiling is not what costs the disk.
 WHAT IS LEFT UNPRICED: the camera rung was weighed but not swept (O11c swept it already, 4 → 2.5),
 and no rung was measured at 4K or under load. Neither changes the verdict on the screen rung.
+
+## X15 text-truth — where text quality is lost and what buys it back [medium · MEASUREMENT ONLY —
+   changes no default, ships numbers; TD-authored 2026-08-26 on PO "prepare other session to
+   measure shit with text"]
+Context the session must load first: O9 (capture destroys 51 % of glyph edge contrast, the export
+preserves it) · X6's handoff (AVC raw channel writes 0.21× the VP9 bytes at the same ceiling and
+agrees to only 27.9 dB on screen text — rate control undershoot, `latencyMode:'realtime'` with no
+`bitrateMode`; the named next measurement is the bitrateMode sweep) · X5 (texImage2D vs drawImage
+4:2:0 chroma upsampling diverge on text; the two composite painters disagree 37.3 dB / 3.8 % of
+pixels on screen-TEXT interior) · BACKLOG P1 "the two composite painters" (the in-app experiment is
+already written down there). Rigs that exist: `npm run exp -- x6` (extend with a config matrix),
+`npm run exp -- x5`, `npm run exp -- o9` if present — check the tooling index.
+THREE LANES, all numbers, no behaviour change:
+(a) X6 bitrateMode SWEEP: the WebCodecs raw lane across encoder configs — bitrateMode
+    constant/variable (and quantizer mode if the probe says it exists), latencyMode realtime vs
+    quality, on SCREEN-TEXT content, against the VP9 lane on the same stream. Deliverable: either a
+    config where the AVC channel matches the VP9 picture (PSNR + glyph-edge contrast) at ≤~1.2× its
+    bytes, or the measured frontier showing no such config exists. This is the number PO's X6
+    ruling waits on.
+(b) THE 4:4:4 PRICE TAG: same take through a SOFTWARE encoder at 4:4:4 chroma (probe what this
+    machine offers — hardware 4:4:4 is unlikely and the probe result is itself a finding; AV1
+    availability too). Measure glyph-edge contrast retained vs the O9 baseline AND whole-browser
+    CPU (`--cpu`) vs both current lanes. This prices the "crisp text" capture mode PO asked about.
+(c) X5'S IN-APP QUESTION (BACKLOG P1): ONE real take → export unedited (instant path, copies the GL
+    composite) AND with a one-frame trim (render path, 2D painter) → PSNR over a TEXT region at
+    matching instants. Settles whether adding a trim changes how text looks in production, not in
+    the lab. If it diverges, it is a live defect on the default export — report, do not fix in this
+    session.
+GATES: every lane re-runnable in one command · both content types where applicable (text + motion
+control) · no default moves, no production behaviour change · handoff appended here with the
+numbers · BACKLOG P1 (painters) updated: resolved or confirmed live · if (a) finds a matching
+config, say so in the READY map so PO's X6 ruling is a yes/no on closed evidence.
+Operating notes: rigs only — production code untouched except where a rig needs a read-only probe
+seam · heavy sweeps announced, not while PO uses the machine · a lane that cannot run (no 4:4:4
+encoder at all) reports that as its result, per the operating rules.
 
 (X7, X10=O5e, X13: NEEDS PO DISCUSSION — see the READY map. X11, X14: PARKED — see the READY map.)
 
