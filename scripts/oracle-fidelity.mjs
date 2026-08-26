@@ -109,6 +109,10 @@ function laneMetrics(f, expectedBusDb = 0) {
     limiterHits: f?.limiterHits,
     thdDb: f?.thdDb,
     imdDb: f?.imdDb,
+    // Where this lane's window actually opened, and where it found the signal.
+    // A level number is only as good as its window (see findOnsetSec).
+    windowStartSec: f?.windowStartSec,
+    onsetSec: f?.onsetSec,
   }
 }
 
@@ -226,10 +230,8 @@ async function main() {
     const gate = gateFidelity(report)
     const instantGate = gateInstantLane(report)
     const fmtLane = (m) =>
-      `toneErr=${m.maxToneErrorDb?.toFixed?.(2)}dB (bus ${m.expectedBusDb?.toFixed?.(2)}, residual ${m.busResidualDb?.toFixed?.(2)}) sep=${m.separationDb?.toFixed?.(1)}dB hits=${m.limiterHits} thd=${m.thdDb?.toFixed?.(1)} imd=${m.imdDb?.toFixed?.(1)}`
-    console.error(
-      `${gate.pass ? 'PASS' : 'FAIL'} render(single-source, window skip=${report.windowSkipSec}s): ${fmtLane(gate.metrics)}`,
-    )
+      `toneErr=${m.maxToneErrorDb?.toFixed?.(2)}dB (bus ${m.expectedBusDb?.toFixed?.(2)}, residual ${m.busResidualDb?.toFixed?.(2)}) sep=${m.separationDb?.toFixed?.(1)}dB hits=${m.limiterHits} thd=${m.thdDb?.toFixed?.(1)} imd=${m.imdDb?.toFixed?.(1)} win=${m.windowStartSec}s/onset=${m.onsetSec}s`
+    console.error(`${gate.pass ? 'PASS' : 'FAIL'} render(single-source): ${fmtLane(gate.metrics)}`)
     if (!gate.pass) console.error('  failures:', gate.failures.join('; '))
     console.error(
       `${instantGate.pass ? 'PASS' : 'FAIL'} instant(user's default file, engine=${instantGate.metrics.engine ?? 'n/a'}, path=${instantGate.metrics.path ?? 'n/a'}): ${fmtLane(instantGate.metrics)}`,

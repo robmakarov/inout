@@ -45,6 +45,11 @@ export interface AudioFidelityReport {
   separationPass: boolean
   limiterPass: boolean
   pass: boolean
+  /** Where the measured window actually opened, seconds, and where the signal
+   *  was found. Evidence: a level reading is only as good as its window, and
+   *  these two are what say the window contained the programme. */
+  windowStartSec?: number
+  onsetSec?: number | null
 }
 
 export function ampToDbFs(amp: number): number {
@@ -229,15 +234,54 @@ export function synthesizeFidelityStereo(
   return { left, right }
 }
 
+/** Level above which the fixture's programme is unambiguously present. The
+ *  quietest tone the analyzer is ever pointed at peaks near 0.35 after a 1/N
+ *  bus, so this sits well below the signal and well above codec noise. */
+const ONSET_AMPLITUDE = 0.05
+/** Onset search granularity, and the ramp allowed after it before measuring. */
+const ONSET_BLOCK_SEC = 0.01
+const ONSET_MARGIN_SEC = 0.2
+
+/**
+ * First instant at which the programme is actually playing, seconds — null if
+ * it never rises above the floor.
+ *
+ * THE WINDOW HAS TO FIND THE SIGNAL, NOT BE TOLD WHERE IT IS. Two independent
+ * startups put silence at the front of these files and neither is visible in
+ * the metadata: the CAPTURE begins at its channel's own offset, and the
+ * GENERATOR's AudioContext stalls 115-500 ms before its oscillators advance —
+ * so a channel can be recording, and recording silence. A tone absent for a
+ * fraction f of the window reads (1−f) low on every tone at once, which is
+ * indistinguishable from a mix-bus regression: measured as a phantom 0.5 dB
+ * twice, and as a 1.3 dB gate FAILURE on green code once.
+ */
+export function findOnsetSec(
+  left: Float32Array,
+  right: Float32Array,
+  sampleRate: number,
+  threshold = ONSET_AMPLITUDE,
+): number | null {
+  const block = Math.max(1, Math.floor(ONSET_BLOCK_SEC * sampleRate))
+  const n = Math.min(left.length, right.length)
+  for (let i = 0; i + block <= n; i += block) {
+    let peak = 0
+    for (let k = i; k < i + block; k++) {
+      const a = Math.max(Math.abs(left[k]!), Math.abs(right[k]!))
+      if (a > peak) peak = a
+    }
+    if (peak >= threshold) return i / sampleRate
+  }
+  return null
+}
+
 export interface FidelityAnalyzeOptions {
   /**
-   * Where the measured window starts, seconds. The default 0.25 clears encoder
-   * delay on a take whose audio is running from t≈0 — true of the single-source
-   * fixture, and NOT true of a multi-source take, where each channel's capture
-   * begins at its own offset. A tone missing for a fraction f of the window
-   * reads (1−f) low across the board, which is an instrument artifact wearing
-   * the costume of a level defect (note 10). Multi-source callers skip past
-   * every channel's start.
+   * MINIMUM start of the measured window, seconds — a floor, not the answer.
+   * The window opens at the later of this and the measured onset (see
+   * findOnsetSec), because the two guard different things: the onset finds a
+   * generator that had not started yet, and this floor covers a SECOND source
+   * that starts after the first one's onset, which no amount of onset-seeking
+   * on the mix can see. Multi-source callers pass their last channel's start.
    */
   skipSec?: number
   /** Length of the measured window, seconds. */
@@ -293,17 +337,28 @@ export async function analyzeAudioFidelity(
       right.set(rightChunks[i]!, o)
       o += leftChunks[i]!.length
     }
-    // Skip leading silence / encoder delay (~100–300 ms) for level estimates.
-    const skipSec = opts?.skipSec ?? 0.25
+    // Open the window on the programme: the later of the caller's floor and the
+    // instant the signal actually starts, plus a ramp. Then clamp so a full
+    // window still fits — a late onset must shorten the search, never the file.
     const windowSec = opts?.windowSec ?? 2.5
-    const skip = Math.min(Math.floor(skipSec * sampleRate), Math.max(0, frames - sampleRate))
-    const end = Math.min(frames, skip + Math.floor(windowSec * sampleRate))
-    return analyzeStereoBuffers(
-      left.subarray(skip, end),
-      right.subarray(skip, end),
-      sampleRate,
-      opts?.tones,
+    const onsetSec = findOnsetSec(left, right, sampleRate)
+    const startSec = Math.max(
+      opts?.skipSec ?? 0.25,
+      onsetSec === null ? 0 : onsetSec + ONSET_MARGIN_SEC,
     )
+    const latestStart = Math.max(0, frames - Math.floor(windowSec * sampleRate))
+    const skip = Math.min(Math.floor(startSec * sampleRate), latestStart)
+    const end = Math.min(frames, skip + Math.floor(windowSec * sampleRate))
+    return {
+      ...analyzeStereoBuffers(
+        left.subarray(skip, end),
+        right.subarray(skip, end),
+        sampleRate,
+        opts?.tones,
+      ),
+      windowStartSec: Math.round((skip / sampleRate) * 1000) / 1000,
+      onsetSec: onsetSec === null ? null : Math.round(onsetSec * 1000) / 1000,
+    }
   } finally {
     input.dispose()
   }

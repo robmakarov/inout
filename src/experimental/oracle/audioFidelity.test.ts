@@ -4,6 +4,7 @@ import {
   applyLegacyLimiter,
   applyLegacyTanhBus,
   applyMonoDownmix,
+  findOnsetSec,
   synthesizeFidelityStereo,
 } from './audioFidelity'
 
@@ -55,6 +56,25 @@ describe('audioFidelity metric', () => {
     expect(residual).toBeLessThan(0.1)
     expect(r.separationDb).toBeGreaterThanOrEqual(40)
     expect(r.limiterHits).toBe(0)
+  })
+
+  // The window has to find the signal: silence at the front of a file (a
+  // channel that started late, a generator whose AudioContext was still
+  // stalling) reads as a flat level defect on every tone at once, which is the
+  // costume a mix-bus regression wears. Twice a phantom 0.5 dB, once a 1.3 dB
+  // gate failure on green code.
+  it('finds where the programme starts, and reports null on silence', () => {
+    const { left, right } = synthesizeFidelityStereo(SR, 2)
+    const padSec = 0.4
+    const pad = Math.floor(padSec * SR)
+    const delay = (x: Float32Array): Float32Array => {
+      const out = new Float32Array(pad + x.length)
+      out.set(x, pad)
+      return out
+    }
+    expect(findOnsetSec(delay(left), delay(right), SR)).toBeCloseTo(padSec, 2)
+    expect(findOnsetSec(left, right, SR)).toBeLessThan(0.02)
+    expect(findOnsetSec(new Float32Array(SR), new Float32Array(SR), SR)).toBeNull()
   })
 
   it('detects −6dB/20:1 limiter as red (tone error + dynamics)', () => {

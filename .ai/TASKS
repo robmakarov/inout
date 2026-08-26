@@ -348,6 +348,30 @@ BOTH the composite and the raw channels.
    ladder — and every oracle line now prints `inst=` (instant-path sync), `trim=<path>/<sync>` and
    `compT0=` (where the composite's clock starts). The first honest run found the instant path
    outside the band. If you change anything in compose/*, read those three fields, not just `sync=`.
+   THE AUDIO-QUALITY HALF OF THE SAME HOLE IS CLOSED NOW TOO (BACKLOG P0, 2026-08-26), and closing
+   it REFUTED the premise it was written on. The backlog expected the instant lane to read ~3.1 dB
+   down because the live mix applies a shared 0.7 bus and a 12:1 compressor. IT DOES NOT, because
+   NO EXPORT PATH CARRIES THE COMPOSITE'S AUDIO: exportInstant copies the composite's VIDEO packets
+   and mixes the audio from the RAW channels through the same certified mixer the render uses —
+   deliberately, and instant.ts has said so in its opening comment since it was written ("without
+   the composite's uncertified MediaRecorder audio, which was the pervasive-noise cause"). Measured
+   on one take: raw channel 0.01 dB · the composite's own audio −2.00 dB · the instant export
+   −6.07 dB · the render of the same take −6.07 dB, IDENTICAL. So the instant path's audio quality
+   IS the render's, the 1/N headroom rule is the whole of its level cost, and the 0.7 bus lives in
+   a track every export discards. If you are hunting audio quality, the composite's audio is the
+   WRONG file to look at — `npm run oracle:fidelity` prints it as a diagnostic lane precisely so
+   nobody re-derives that the hard way.
+
+16. A LEVEL GATE MUST NOT MEASURE A WINDOW ITS SOURCES ARE NOT IN — the fidelity oracle read a
+   5 % attenuation as a 0.5 dB defect, twice, before the window was moved (2026-08-26; note 10's
+   sixth instance). analyzeAudioFidelity took a FIXED 0.25 s skip, which clears encoder delay on a
+   take whose audio runs from t≈0 and clears nothing on a multi-source take, where each channel's
+   capture starts at its own offset (measured 258-624 ms here) and a cold AudioContext stalls
+   115-500 ms. A tone absent for fraction f of the window reads (1−f) low across EVERY tone at
+   once, which is exactly the shape of a mix-bus regression. It also failed a GREEN build outright
+   once: 30.2 dB "tone error" and 26.7 dB "separation" on a run whose next attempt read 0.02 dB.
+   Both lanes now open their window past the last channel's capture start (`windowSkipSecFor`) and
+   the report prints `windowSkipSec`. Any new level metric in this codebase takes the same care.
 
 12. THE UI RIG SERVES dist/, AND DOES NOT BUILD IT. `scripts/ui-shot.mjs` runs `vite preview`, so a
    flow that "does not work" may simply be yesterday's bundle. Run `npm run build` first. The same
@@ -447,6 +471,17 @@ BOTH the composite and the raw channels.
      a hook always pays read 76.87 ms of its 90 ms band where a warm run read 37.3 (TD 2026-08-26).
      The hook runs build (tsc+vite) + tests, ~7 s.
      `node scripts/oracle.mjs --engine=v2` gates the WebCodecs composite instead of the shipped one
+  oracle:fidelity GATES TWO FILES SINCE 2026-08-26 (BACKLOG P0): the single-source RENDER it always
+     gated, AND the INSTANT packet copy — the default export, whose audio quality nothing had ever
+     measured. The second take is production-shaped (screen + TWO audio sources) and goes through
+     compose/choose.ts, so the lane reports WHICH path ran and fails if the packet copy quietly
+     declined. Its level gate is the RESIDUAL past the mix bus the code is designed to apply
+     (1/N — −6.02 dB at N=2), band ±1 dB, because gating the raw tone error would gate a documented
+     design choice that is PO's to change. Three diagnostics print unGATED and are the decomposition
+     that answers "which stage costs what" on ONE take: the raw channel (capture alone), the
+     composite's OWN audio (the 0.7 bus + 12:1 chain — which no export carries, see note 14), and
+     the render of the same take. `--no-composite` is the red proof: the instant lane must FAIL
+     LOUD when it cannot run rather than let the render pass for both.
 
 ── AWAITING PO (carried forward) ──
   · THE REWORKED AI FILE (AI1, second pass 2026-08-24): PO's first real take exposed both defects
