@@ -26,6 +26,7 @@ import { ALL_FORMATS, BlobSource, EncodedPacketSink, Input } from 'mediabunny'
 import { blobStore } from '@core/store'
 import { startLiveCompositeV2 } from '@core/capture/liveCompositeV2'
 import { startLiveComposite } from '@core/capture/liveComposite'
+import { warmVideoEncoder } from '@core/capture/encoderWarm'
 import { makeRig } from './compositorEngine'
 
 /**
@@ -152,6 +153,9 @@ interface TrackSpans {
   audioPackets: number
   /** Largest gap between consecutive VIDEO timestamps — the stall evidence. */
   maxVideoGapMs: number | null
+  /** The worst holes AND WHERE they are: a gap at t=0 is a cold start, a gap in
+   *  the middle is the freeze a user actually watches. */
+  worstGaps: { atSec: number; gapMs: number }[]
   /** Spread of the frame intervals: how far from constant-rate the file is. */
   videoGapSdMs: number | null
 }
@@ -164,6 +168,7 @@ async function probeSpans(blob: Blob): Promise<TrackSpans> {
     videoFrames: 0,
     audioPackets: 0,
     maxVideoGapMs: null,
+    worstGaps: [],
     videoGapSdMs: null,
   }
   try {
@@ -176,9 +181,15 @@ async function probeSpans(blob: Blob): Promise<TrackSpans> {
         stamps.sort((a, b) => a - b)
         out.videoSpanSec = stamps[stamps.length - 1]! - stamps[0]!
         const gaps: number[] = []
-        for (let i = 1; i < stamps.length; i++) gaps.push((stamps[i]! - stamps[i - 1]!) * 1000)
+        const located: { atSec: number; gapMs: number }[] = []
+        for (let i = 1; i < stamps.length; i++) {
+          const gapMs = (stamps[i]! - stamps[i - 1]!) * 1000
+          gaps.push(gapMs)
+          located.push({ atSec: Math.round(stamps[i - 1]! * 100) / 100, gapMs: Math.round(gapMs) })
+        }
         const mean = gaps.reduce((a, b) => a + b, 0) / gaps.length
         out.maxVideoGapMs = Math.max(...gaps)
+        out.worstGaps = located.sort((a, b) => b.gapMs - a.gapMs).slice(0, 4)
         out.videoGapSdMs = Math.sqrt(
           gaps.reduce((a, b) => a + (b - mean) * (b - mean), 0) / gaps.length,
         )
@@ -220,6 +231,9 @@ export interface LoadedSyncReport {
   statsFramesIn: number | null
   statsFramesEncoded: number | null
   statsFramesDropped: number | null
+  /** The worker's own view of the longest hole in the file — the freeze. */
+  statsMaxEncodeGapMs: number | null
+  statsKeepAliveFrames: number | null
   /** Audio the worker received and never encoded — the silent loss, counted. */
   audioDroppedNotReadySec: number | null
   audioDroppedLeadSec: number | null
@@ -261,6 +275,12 @@ export async function runLoadedSync(opts?: {
   const loaded = opts?.load ?? true
   const engine = opts?.engine ?? 'v2'
 
+  // WARM THE ENCODER AS PRODUCTION DOES AT MOUNT (prearm.ts → encoderWarm.ts).
+  // Without this the take pays a Chrome process's first-VideoEncoder init
+  // DURING the recording, and it lands as a multi-second hole at t≈0.8 s that
+  // reads exactly like a freeze — this rig reported one until it warmed. Note
+  // 10 of .ai/TASKS, fourth instance: check the instrument before the product.
+  await warmVideoEncoder().catch(() => undefined)
   const audioCtx = new AudioContext({ sampleRate: 48000 })
   await audioCtx.resume()
   const rig = makeRig(width, height, audioCtx)
@@ -320,6 +340,10 @@ export async function runLoadedSync(opts?: {
         stats && typeof stats.framesEncoded === 'number' ? stats.framesEncoded : null,
       statsFramesDropped:
         stats && typeof stats.framesDropped === 'number' ? stats.framesDropped : null,
+      statsMaxEncodeGapMs:
+        stats && typeof stats.maxEncodeGapMs === 'number' ? Math.round(stats.maxEncodeGapMs) : null,
+      statsKeepAliveFrames:
+        stats && typeof stats.keepAliveFrames === 'number' ? stats.keepAliveFrames : null,
       audioDroppedNotReadySec:
         stats && typeof stats.audioDroppedNotReady === 'number'
           ? stats.audioDroppedNotReady / 48000

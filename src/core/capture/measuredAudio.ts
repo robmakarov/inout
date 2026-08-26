@@ -26,6 +26,12 @@ const ANCHOR_WINDOW_S = 3
 const PAD_MIN_MS = 80
 /** One batch may not conjure more than this much silence, whatever the stamp says. */
 const PAD_MAX_MS = 1000
+/** The wall origin stops moving here — a min-filter that runs for the whole
+ *  take keeps ratcheting onto the luckiest batch, and each ratchet pads silence
+ *  for time nothing lost, walking the audio late. Same window as the anchor. */
+const PAD_ORIGIN_WINDOW_S = 3
+/** ~1.3ms, the same ramp the worklet uses on its own silence splices. */
+const PAD_FADE = 64
 
 export const MEASURED_AUDIO_MIME = 'audio/webm;codecs=opus'
 
@@ -324,6 +330,8 @@ export async function startMeasuredAudioCapture(opts: {
    */
   let wallOriginMs = Infinity
   let paddedFrames = 0
+  /** Last sample per channel of the previous batch — the fade-out needs a value. */
+  const lastSample = new Float32Array(2)
   let flushResolve: (() => void) | null = null
   let startOffsetMs: number | null = null
   let resolveFirst!: (ms: number) => void
@@ -443,18 +451,34 @@ export async function startMeasuredAudioCapture(opts: {
     // pads nothing and is bit-identical to before.
     {
       const timelineMs = (framesWritten / sampleRate) * 1000
-      const originCand = arrivalMs - timelineMs
-      if (originCand < wallOriginMs) wallOriginMs = originCand
+      const batchMs = (frames / sampleRate) * 1000
+      // Steady-state batches only, and only while the origin window is open —
+      // a startup catch-up burst dates the origin falsely early (padding time
+      // that was never lost) and a never-closing min-filter ratchets down on
+      // the luckiest batch of the take. Both guards mirror the anchor above.
+      const steady = arrivalMs - lastArrivalMs >= batchMs / 2
+      if (steady && framesWritten < PAD_ORIGIN_WINDOW_S * sampleRate) {
+        const originCand = arrivalMs - timelineMs
+        if (originCand < wallOriginMs) wallOriginMs = originCand
+      }
       const behindMs = arrivalMs - wallOriginMs - timelineMs
-      if (behindMs > PAD_MIN_MS) {
+      if (wallOriginMs !== Infinity && behindMs > PAD_MIN_MS) {
         const padFrames = Math.round((Math.min(behindMs, PAD_MAX_MS) / 1000) * sampleRate)
+        // Ramp out of the signal and back into it: a step to zero is a click,
+        // which is the exact defect the worklet's own splice fades exist for.
+        const padData = new Float32Array(padFrames * encCh)
+        const head = Math.min(PAD_FADE, padFrames)
+        for (let i = 0; i < head; i++) {
+          const k = 1 - i / head
+          for (let c = 0; c < encCh; c++) padData[i * encCh + c] = (lastSample[c] ?? 0) * k
+        }
         const pad = new AudioData({
           format: 'f32',
           sampleRate,
           numberOfFrames: padFrames,
           numberOfChannels: encCh,
           timestamp: Math.round((framesWritten * 1_000_000) / sampleRate),
-          data: new Float32Array(padFrames * encCh),
+          data: padData,
         })
         framesWritten += padFrames
         paddedFrames += padFrames
@@ -463,9 +487,17 @@ export async function startMeasuredAudioCapture(opts: {
         } finally {
           pad.close()
         }
+        const tail = Math.min(PAD_FADE, frames)
+        for (let i = 0; i < tail; i++) {
+          const k = i / tail
+          for (let c = 0; c < encCh; c++) interleaved[i * encCh + c] *= k
+        }
         // Deliberately NOT fed to the loudness tap: the envelope describes the
         // take's CONTENT, and this silence is the machine choking, not content.
       }
+    }
+    for (let c = 0; c < encCh; c++) {
+      lastSample[c] = interleaved[(frames - 1) * encCh + c] ?? 0
     }
 
     const timestamp = Math.round((framesWritten * 1_000_000) / sampleRate)

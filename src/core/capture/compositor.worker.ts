@@ -151,6 +151,11 @@ export interface CompositorStats {
    * drifted by exactly this much.
    */
   audioPaddedFrames: number
+  /**
+   * Longest stretch with NO frame in the file, ms. This is what a viewer sees
+   * as a freeze, so it is measured rather than inferred from drop counts.
+   */
+  maxEncodeGapMs: number
   /** What the encoder actually negotiated — evidence, not decoration. */
   codec: string | null
   hardware: string | null
@@ -338,6 +343,22 @@ let H = 1080
 let FPS = 30
 let startedAtMs: number | null = null
 let lastEncodedMs = -Infinity
+/**
+ * When a frame was last ACTUALLY encoded, as opposed to last attempted.
+ *
+ * These have to be two different numbers, and conflating them is what froze
+ * PO's game takes (2026-08-25: "4k game in other tab freezes, but not all the
+ * time and other inputs are fine"). `lastEncodedMs` advances even on a DROP,
+ * deliberately — otherwise the next source frame a few ms later passes the
+ * cadence gate and hammers a busy encoder at the source rate. But the keep-alive
+ * read that same field to decide whether anything had reached the file lately,
+ * so while the encoder queue stayed full every arriving frame reset the
+ * keep-alive's clock, the keep-alive never fired, and NOTHING was encoded for
+ * as long as the pressure lasted. Measured on a saturated take: gaps of
+ * 4.0-4.6 s between consecutive frames in the composite, which is a picture
+ * frozen for four seconds while the audio and the raw channels ran on fine.
+ */
+let lastEncodeOkMs = -Infinity
 let lastEncodedTsUs = -1
 let lastKeySec = -Infinity
 let keepAliveTimer: ReturnType<typeof setInterval> | null = null
@@ -379,10 +400,24 @@ let audioSkipFrames = 0
  * Same estimator the measured-audio anchor uses, for the same reason.
  */
 let audioWallOrigin = Infinity
+let lastAudioRecvMs = -Infinity
+/** Last sample per channel of the previous batch — the fade-out needs a value. */
+let lastAudioSample: Float32Array | null = null
 /** Below this, do nothing: normal batching jitter is ~21 ms and must not pad. */
 const AUDIO_PAD_MIN_MS = 80
 /** One batch may not conjure more than this much silence, whatever the stamp says. */
 const AUDIO_PAD_MAX_MS = 1000
+/**
+ * The origin STOPS MOVING after this much audio, exactly as the measured-audio
+ * anchor's window does. A min-filter that runs forever keeps ratcheting down on
+ * the luckiest batch of the whole take, and every ratchet is silence padded in
+ * that nothing was ever missing — over a long take that walks the audio LATE.
+ * Three seconds is enough batches to find the floor and short enough that the
+ * audio-vs-wall rate difference cannot bias it.
+ */
+const AUDIO_ORIGIN_WINDOW_S = 3
+/** ~1.3 ms, the same ramp the PCM worklet uses on its own silence splices. */
+const AUDIO_PAD_FADE = 64
 
 const stats: CompositorStats = {
   framesIn: 0,
@@ -395,6 +430,7 @@ const stats: CompositorStats = {
   audioDroppedNotReady: 0,
   audioDroppedLead: 0,
   audioPaddedFrames: 0,
+  maxEncodeGapMs: 0,
   codec: null,
   hardware: null,
   backend: null,
@@ -605,6 +641,11 @@ function encodeComposite(atMs: number, keepAlive: boolean): void {
   try {
     submittedAt.push(performance.now())
     enc.encode(frame, { keyFrame })
+    // Only here, and never on the drop path above: this is what the keep-alive
+    // trusts to tell whether the FILE has had a frame lately.
+    const gapMs = lastEncodeOkMs === -Infinity ? 0 : atMs - lastEncodeOkMs
+    if (gapMs > stats.maxEncodeGapMs) stats.maxEncodeGapMs = gapMs
+    lastEncodeOkMs = atMs
     if (keepAlive) stats.keepAliveFrames++
   } catch (err) {
     fail(err)
@@ -747,10 +788,11 @@ async function start(msg: CompositorStartMsg): Promise<void> {
   // second. Cheap by construction — it repaints the same latest frames.
   keepAliveTimer = setInterval(() => {
     if (stopped || fatal || startedAtMs === null) return
-    const sinceLast = performance.now() - performanceOriginOffset - lastEncodedMs
-    if (sinceLast >= KEEPALIVE_MS) {
-      encodeComposite(lastEncodedMs + sinceLast, true)
-    }
+    const nowMain = performance.now() - performanceOriginOffset
+    // Against the last frame that actually REACHED the encoder — see
+    // lastEncodeOkMs. Reading lastEncodedMs here meant a busy encoder silently
+    // suppressed the keep-alive it exists to trigger.
+    if (nowMain - lastEncodeOkMs >= KEEPALIVE_MS) encodeComposite(nowMain, true)
   }, KEEPALIVE_MS / 2)
 }
 
@@ -914,20 +956,43 @@ self.onmessage = async (ev: MessageEvent<CompositorMsg>) => {
         // See audioWallOrigin above for why a min-filter is the safe estimator.
         if (typeof msg.recvMs === 'number') {
           const timelineMs = (audioFramesTotal / audioSampleRate) * 1000
-          const originCand = msg.recvMs - timelineMs
-          if (originCand < audioWallOrigin) audioWallOrigin = originCand
+          const batchMs = (frames / audioSampleRate) * 1000
+          // Only STEADY-STATE batches may date the origin. A context that has
+          // just started delivers its catch-up burst back to back, and those
+          // arrivals date the origin falsely early — which would pad silence
+          // for time that was never lost. Same guard, same reason, as the
+          // measured-audio anchor's.
+          const steady = msg.recvMs - lastAudioRecvMs >= batchMs / 2
+          if (steady && audioFramesTotal < AUDIO_ORIGIN_WINDOW_S * audioSampleRate) {
+            const originCand = msg.recvMs - timelineMs
+            if (originCand < audioWallOrigin) audioWallOrigin = originCand
+          }
+          lastAudioRecvMs = msg.recvMs
           const behindMs = msg.recvMs - audioWallOrigin - timelineMs
-          if (behindMs > AUDIO_PAD_MIN_MS) {
+          if (audioWallOrigin !== Infinity && behindMs > AUDIO_PAD_MIN_MS) {
             const padFrames = Math.round(
               (Math.min(behindMs, AUDIO_PAD_MAX_MS) / 1000) * audioSampleRate,
             )
+            // A step from the last sample straight to zero is a click, and this
+            // codebase has paid for that lesson once already (the PCM worklet
+            // fades every silence splice). Ramp out of the signal and back into
+            // it, so the gap is heard as a gap and not as a pop at each end.
+            const padData = new Float32Array(msg.channels * padFrames)
+            const head = Math.min(AUDIO_PAD_FADE, padFrames)
+            for (let c = 0; c < msg.channels; c++) {
+              const from = lastAudioSample?.[c] ?? 0
+              if (from !== 0) {
+                const base = c * padFrames
+                for (let i = 0; i < head; i++) padData[base + i] = from * (1 - i / head)
+              }
+            }
             const pad = new AudioData({
               format: 'f32-planar',
               sampleRate: audioSampleRate,
               numberOfFrames: padFrames,
               numberOfChannels: msg.channels,
               timestamp: Math.round((audioFramesTotal / audioSampleRate) * 1e6),
-              data: new Float32Array(msg.channels * padFrames) as unknown as BufferSource,
+              data: padData as unknown as BufferSource,
             })
             try {
               audioEncoder.encode(pad)
@@ -937,6 +1002,18 @@ self.onmessage = async (ev: MessageEvent<CompositorMsg>) => {
             } finally {
               pad.close()
             }
+            // …and fade the resuming signal in, the other half of the splice.
+            const tail = Math.min(AUDIO_PAD_FADE, frames)
+            for (let c = 0; c < msg.channels; c++) {
+              const base = c * frames
+              for (let i = 0; i < tail; i++) planar[base + i] *= i / tail
+            }
+          }
+        }
+        if (msg.channels > 0 && frames > 0) {
+          lastAudioSample ??= new Float32Array(msg.channels)
+          for (let c = 0; c < msg.channels && c < lastAudioSample.length; c++) {
+            lastAudioSample[c] = planar[c * frames + frames - 1] ?? 0
           }
         }
         // Sample-counted from here: between batches the ruler is exact, and the

@@ -306,6 +306,18 @@ export async function startLiveCompositeV2(
     numberOfInputs: 1,
     numberOfOutputs: 1,
     outputChannelCount: [1],
+    // EXPLICIT STEREO IN, because the encoder is configured for stereo and the
+    // batches were not guaranteed to be. The input count defaulted to the MAX
+    // of whatever was connected, so an all-mono take (a mono mic, alone or with
+    // mono tab audio) delivered 1-channel batches to a 2-channel AAC encoder —
+    // a mismatch nothing downstream could have reconciled. v1 never had this
+    // hazard: it mixes through a MediaStreamDestination, which is stereo
+    // whatever it is fed, and matching that is the point. A genuinely mono
+    // source is simply duplicated across both channels, exactly as the measured
+    // mic path already does on an unreported channelCount.
+    channelCount: 2,
+    channelCountMode: 'explicit',
+    channelInterpretation: 'speakers',
   })
   const hasAudio = inputs.audio.length > 0
   if (hasAudio) {
