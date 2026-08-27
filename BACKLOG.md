@@ -268,6 +268,27 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   is still owed — but it is owed on a build where the fix is actually in force, which no build before
   2026-08-26 was.
 
+- [P1] TD 2026-08-26, FOUND BY PO'S EYES on the X15 artifacts ("c shit is worse colors") and then
+  measured: **coloured text loses about 30 % of its colour, all of it at capture, and the composite
+  is responsible for a third of that.** Saturation kept against the canvas the source actually
+  painted, masked by the source's own palette (`npm run exp -- x15c`, warmed, two runs within 2 pts):
+      source 100 %  ·  raw screen channel green 80.0 / blue 89.3  ·  composite green 70.3 / blue 75.2
+      instant export = the composite, byte for byte  ·  render green 67.3 / blue 78.3
+  Grey text barely moves, so this is not brightness or gamma — it is 4:2:0 chroma subsampling on thin
+  coloured glyphs. A raw channel costs ONE chroma generation; the composite costs a SECOND (capture
+  frames arrive 4:2:0, the GL painter upsamples to RGB, the AVC encode re-subsamples), and the
+  unedited export copies that file verbatim.
+  WHY NO EXISTING GATE CAUGHT IT, and this is the lesson: every comparison we had — X5's, X15's own
+  pair rows, the oracle's — compares a file with ANOTHER FILE. A loss that every path shares cancels
+  to exactly zero in those. It is only visible against the source, which for a real take has to be
+  reconstructed rather than captured. `chromaRows()` in perf/textSource.ts is that measurement now.
+  TWO LEVERS, one free and one not: **O3b** (READY) skips the composite on a single-screen take and
+  packet-copies the raw channel — 80 % instead of 70.3 %, for strictly less work, no CPU cost, and no
+  help for takes with a camera PiP. The rest needs **4:4:4 at capture**, which on this machine is
+  software only (AV1 profile 1: 80 fps at 1080p against 207, ~2x CPU — X15(b)). PO has the crops:
+  ~/Downloads/x15-text-truth/, c-00-SOURCE against c-01-instant.
+  NOT A REGRESSION and not new — it is how every take this product has ever made behaves.
+
 - [P2, was P1 — SETTLED IN PRODUCTION 2026-08-26 by X15(c), `npm run exp -- x15c`] **a trim does
   change how a take's text looks, and the change is ~2.8 dB below what a plain re-encode costs
   anyway — much smaller than the lab number implied, and it does not reach the path a user gets.**

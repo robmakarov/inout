@@ -92,8 +92,18 @@ export function setSyntheticScreenContent(content: SyntheticScreenContent | null
   screenContent = content ?? 'default'
 }
 
-/** The bits-audit editor page, held still — see setSyntheticScreenContent. */
-function drawTextScreen(g: CanvasRenderingContext2D, W: number, H: number): void {
+/**
+ * The bits-audit editor page, held still — see setSyntheticScreenContent.
+ *
+ * EXPORTED so a rig can reconstruct the exact picture the synthetic screen put
+ * on the wire. Without that there is no reference for anything a real take
+ * produces: the take's frames are only ever available AFTER an encoder, so
+ * every measurement would be file-against-file and a loss shared by all files
+ * would cancel out and read as zero. That is precisely how the chroma loss PO
+ * spotted by eye escaped X15(c)'s first pass. Deterministic, so the reference
+ * is free — same size in, same pixels out, forever.
+ */
+export function drawTextScreen(g: CanvasRenderingContext2D, W: number, H: number): void {
   const words = ['const', 'function', 'return', 'await', 'export', 'if', 'for', 'type']
   g.fillStyle = '#0d1117'
   g.fillRect(0, 0, W, H)

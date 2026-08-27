@@ -46,7 +46,12 @@
  */
 import { blobStore } from '@core/store'
 import { createCaptureSession } from '@core/capture/session'
-import { setSyntheticScreenContent, setSyntheticScreenSize } from '@core/capture/synthetic'
+import { warmVideoEncoder } from '@core/capture/encoderWarm'
+import {
+  drawTextScreen,
+  setSyntheticScreenContent,
+  setSyntheticScreenSize,
+} from '@core/capture/synthetic'
 import { exportByBestPath } from '@core/compose'
 import { setSmartCutEnabled, smartCutEnabled } from '@core/compose/smartCutFlag'
 import { clampEditState, defaultEditState } from '@core/timeline'
@@ -55,6 +60,7 @@ import { textEdgeMetric, type TextEdgeMetric } from '../oracle/textEdge'
 import {
   comparePatch,
   crop,
+  chromaRows,
   decodeByOrdinal,
   encodeDeterministic,
   findOffsetSec,
@@ -63,6 +69,7 @@ import {
   mean,
   openNative,
   stillSource,
+  type ChromaRow,
   type Crop,
   type NativeReader,
   type Rect,
@@ -101,6 +108,15 @@ export interface PairRow {
   edge: TextEdgeMetric | null
 }
 
+/** One artifact in the chain, measured against the SOURCE rather than a sibling. */
+export interface ChromaStage {
+  stage: string
+  what: string
+  width: number
+  height: number
+  rows: ChromaRow[]
+}
+
 export interface X15TrimReport {
   notes: string[]
   takeMs: number
@@ -114,6 +130,12 @@ export interface X15TrimReport {
    * screen rect. The floor instant↔render must beat to be about painters.
    */
   encodeFloor: { psnrDb: number; max: number; over8Pct: number; edge: TextEdgeMetric } | null
+  /**
+   * WHERE THE COLOUR GOES, measured against the canvas the synthetic screen
+   * actually painted — the composite and the raw channel included, so the loss
+   * is attributed to a stage instead of to "the export".
+   */
+  chroma: ChromaStage[]
   /** Downscaled PNGs, one per lane, only with {"thumbs":true}. */
   thumbs: { lane: string; atSec: number; png: string }[]
   /** PO-visible artifacts, magnified glyph crops. Only with {"crops":true}. */
@@ -190,6 +212,14 @@ export async function runTrimTextParity(
 
   setSyntheticScreenSize({ width: W, height: H })
   setSyntheticScreenContent('text')
+  // NOTE 6. Production warms at MOUNT (prearm.ts, and since X6 it warms when a
+  // raw channel will use WebCodecs too); a rig that calls createCaptureSession
+  // directly does not, and a fresh process's first VideoEncoder init is
+  // multi-second — long enough to eat most of a 10 s take. Without this the
+  // raw channels reported 200 of 283 frames DROPPED ("encoder behind"), which
+  // reads exactly like a throughput defect on the newly-default WebCodecs raw
+  // path and is not one.
+  await warmVideoEncoder()
   const untap = tapConsole(captureLog)
   let recording: Recording
   try {
@@ -276,6 +306,7 @@ export async function runTrimTextParity(
 
   const rows: PairRow[] = []
   let encodeFloor: X15TrimReport['encodeFloor'] = null
+  const chroma: ChromaStage[] = []
   const crops: Crop[] = []
   const thumbs: { lane: string; atSec: number; png: string }[] = []
   try {
@@ -385,7 +416,65 @@ export async function runTrimTextParity(
       }
     }
 
+    // ---- WHERE THE COLOUR GOES ------------------------------------------
+    // Against the SOURCE, not against a sibling file. The chain is measured
+    // stage by stage so the loss lands on a stage: the RAW screen channel and
+    // the COMPOSITE are what capture produced, and instant is a packet copy of
+    // the composite while render re-composites from the raw channels. If the
+    // composite is worse than the raw channel, the fast path a user gets by
+    // default is the worst-coloured file the product makes — which is PO's
+    // observation, and it is free to act on if true.
+    const refCanvas = document.createElement('canvas')
+    refCanvas.width = W
+    refCanvas.height = H
+    drawTextScreen(refCanvas.getContext('2d', { alpha: false })!, W, H)
+    const reference = refCanvas
+      .getContext('2d', { willReadFrequently: true })!
+      .getImageData(0, 0, W, H)
+    chroma.push({
+      stage: '0-source',
+      what: 'the canvas the synthetic screen painted — nothing has encoded it',
+      width: W,
+      height: H,
+      rows: chromaRows(reference, reference, rect),
+    })
+    const rawScreen = recording.channels.find((c) => c.kind === 'screen' && c.media === 'video')
+    for (const [stage, what, key] of [
+      ['1-raw-screen-channel', 'CAPTURE: the raw screen channel (what the render composites from)', rawScreen?.blobKey],
+      ['2-composite', 'CAPTURE: the live composite (what instant packet-copies)', recording.composite?.blobKey],
+    ] as [string, string, string | undefined][]) {
+      if (!key) continue
+      const blob = await blobStore.read(key).catch(() => null)
+      if (!blob) continue
+      const rd = await openNative(blob)
+      if (!rd) continue
+      try {
+        const f = await rd.at(sampledAtSec[0]!)
+        // Only 1:1 artifacts are comparable to the reference pixel for pixel;
+        // a scaled one would be measuring the resampler.
+        if (f && rd.width === W && rd.height === H) {
+          chroma.push({ stage, what, width: rd.width, height: rd.height, rows: chromaRows(reference, f, rect) })
+        } else if (f) {
+          chroma.push({ stage, what: `${what} — SKIPPED, ${rd.width}x${rd.height} is not 1:1 with the source`, width: rd.width, height: rd.height, rows: [] })
+        }
+      } finally {
+        rd.close()
+      }
+    }
+    for (const [id, r] of readers) {
+      const f = await r.at(sampledAtSec[0]!)
+      if (!f || r.width !== W || r.height !== H) continue
+      chroma.push({
+        stage: `3-export-${id}`,
+        what: `EXPORT: ${id}`,
+        width: r.width,
+        height: r.height,
+        rows: chromaRows(reference, f, rect),
+      })
+    }
+
     if (opts.crops) {
+      crops.push({ label: 'c-00-SOURCE-canvas', png: await magnify(reference, GLYPH_CROP) })
       for (const [id, r] of readers) {
         const f = await r.at(sampledAtSec[0]!)
         if (f) crops.push({ label: `c-0${id === 'instant' ? 1 : 2}-${id}`, png: await magnify(f, GLYPH_CROP) })
@@ -437,6 +526,35 @@ export async function runTrimTextParity(
       ? `re-encoding the instant frame alone costs ${encodeFloor.psnrDb} dB (max ${encodeFloor.max}, ${encodeFloor.over8Pct} % off by >8, fringe ${encodeFloor.edge.chromaFringeMean}); instant↔render reads ${instRender?.psnrDb ?? 'n/a'} dB. A pair row AT this floor cannot tell a painter difference from the encode`
       : 'not measured',
   }
+  const sat = (stage: string): number | null => {
+    const st = chroma.find((c) => c.stage === stage)
+    const green = st?.rows.find((r) => r.colour.startsWith('green'))
+    return green?.keptPct ?? null
+  }
+  const srcSat = sat('0-source')
+  const compSat = sat('2-composite')
+  const rawSat = sat('1-raw-screen-channel')
+  const instSat = sat('3-export-instant')
+  const rendSat = sat('3-export-render')
+  gates['CHROMA: the shipped chain keeps the colour of coloured text'] = {
+    // PO spotted this by eye in the artifacts; the pair rows above cannot see
+    // it, because a loss every path shares cancels in a file-against-file
+    // comparison. Against the SOURCE it is the largest effect in this rig.
+    pass: (instSat ?? 0) >= 90,
+    detail: chroma
+      .filter((c) => c.rows.length)
+      .map((c) => `${c.stage} ${c.rows.map((r) => `${r.colour.trim()} ${r.keptPct}%`).join(' / ')}`)
+      .join(' · '),
+  }
+  gates['CHROMA: the UNEDITED fast path is not the worst-coloured file we make'] = {
+    pass: instSat === null || rendSat === null || instSat >= rendSat - 1,
+    detail:
+      `green saturation kept — source ${srcSat}% · raw screen channel ${rawSat}% · composite ${compSat}%` +
+      ` · instant ${instSat}% · render ${rendSat}%.` +
+      (instSat !== null && rendSat !== null && instSat < rendSat - 1
+        ? ' THE FAST PATH IS WORSE, and it is the default for every untouched take.'
+        : ''),
+  }
   gates['THE PATH A USER GETS: a trimmed take (smart cut) matches the untrimmed one'] = {
     pass: (instSmart?.psnrDb ?? 0) >= PARITY_DB,
     detail: instSmart
@@ -466,6 +584,7 @@ export async function runTrimTextParity(
     lanes,
     rows,
     encodeFloor,
+    chroma,
     thumbs,
     crops,
     gates,

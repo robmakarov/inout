@@ -658,6 +658,89 @@ export async function magnify(img: ImageData, r: Rect, scale = 4): Promise<strin
 /** The crop every lane's artifact uses: a patch of coloured code, same place. */
 export const GLYPH_CROP: Rect = { x: 96, y: 60, w: 400, h: 225 }
 
+/** The synthetic text page's own palette — the reference every chroma row uses. */
+export const PAGE_COLOURS: { name: string; rgb: [number, number, number] }[] = [
+  { name: 'grey  #c9d1d9', rgb: [201, 209, 217] },
+  { name: 'green #7ee787', rgb: [126, 231, 135] },
+  { name: 'blue  #79c0ff', rgb: [121, 192, 255] },
+]
+
+/** max−min over max, in percent: how much COLOUR a pixel still carries. */
+export function saturationPct(rgb: [number, number, number]): number {
+  const mx = Math.max(...rgb)
+  const mn = Math.min(...rgb)
+  return mx === 0 ? 0 : Math.round(((mx - mn) / mx) * 1000) / 10
+}
+
+export interface ChromaRow {
+  colour: string
+  pixels: number
+  mean: [number, number, number]
+  saturationPct: number
+  /** decoded saturation / source saturation, %. 100 = the colour survived. */
+  keptPct: number
+}
+
+/**
+ * How much of each glyph colour a decoded frame still carries, masked BY THE
+ * SOURCE.
+ *
+ * THE MASK COMES FROM THE SOURCE AND THAT IS THE WHOLE POINT — the same rule
+ * textEdge.ts follows for edges, for the same reason. Classifying the DECODED
+ * pixels by their own colour would let a frame that has desaturated a glyph out
+ * of the green cluster also drop it from the measurement, and the metric would
+ * improve as the picture got worse.
+ *
+ * And this is the statistic X15(c)'s first pass could not have produced at all:
+ * it compared export paths against EACH OTHER, so a loss every path shares —
+ * which is exactly what 4:2:0 chroma subsampling is — cancels to zero. PO saw
+ * it by eye in the artifacts. A file-against-file rig never will.
+ */
+export function chromaRows(
+  source: ImageData,
+  decoded: ImageData,
+  rect: Rect,
+  tolerance = 6,
+): ChromaRow[] {
+  return PAGE_COLOURS.map(({ name, rgb }) => {
+    let n = 0
+    const sum: [number, number, number] = [0, 0, 0]
+    for (let y = rect.y; y < rect.y + rect.h; y++) {
+      for (let x = rect.x; x < rect.x + rect.w; x++) {
+        const si = (y * source.width + x) * 4
+        if (
+          Math.abs(source.data[si]! - rgb[0]) > tolerance ||
+          Math.abs(source.data[si + 1]! - rgb[1]) > tolerance ||
+          Math.abs(source.data[si + 2]! - rgb[2]) > tolerance
+        ) {
+          continue
+        }
+        const di = (y * decoded.width + x) * 4
+        n++
+        sum[0] += decoded.data[di]!
+        sum[1] += decoded.data[di + 1]!
+        sum[2] += decoded.data[di + 2]!
+      }
+    }
+    const mean: [number, number, number] = n
+      ? [
+          Math.round((sum[0] / n) * 10) / 10,
+          Math.round((sum[1] / n) * 10) / 10,
+          Math.round((sum[2] / n) * 10) / 10,
+        ]
+      : [0, 0, 0]
+    const src = saturationPct(rgb)
+    const got = saturationPct(mean)
+    return {
+      colour: name,
+      pixels: n,
+      mean,
+      saturationPct: got,
+      keptPct: src > 0 ? Math.round((got / src) * 1000) / 10 : 0,
+    }
+  })
+}
+
 export interface Crop {
   label: string
   png: string

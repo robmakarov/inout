@@ -138,6 +138,12 @@ READY NOW:
                                              mp4/AVC, the copyable shape it needed: a single-screen
                                              take can skip the composite entirely and packet-copy
                                              the raw channel. Read the X6 handoff + note 14 first.
+                                             AND IT IS NOW A COLOUR FIX, NOT ONLY A SIZE ONE
+                                             (X15(d), on PO's "c shit is worse colors"): the
+                                             composite costs a SECOND chroma generation, so a
+                                             single-screen take that skips it keeps 80 % of the
+                                             source's glyph colour instead of 70.3 %. Free — it is
+                                             strictly less work. No help for takes with a camera.
   P5a  iOS SCK spike               [light]   UNBLOCKED 2026-08-26: PO confirms Xcode 27 + a real
                                              iOS 27 device are available. Needs PO present (device
                                              plugged in, signing). TIME-SENSITIVE (iOS 27 ~Sept).
@@ -1275,6 +1281,37 @@ checkable by eye.
     even there reads 23.6 dB, while the STILL screen region of the same two files matches at 37.1.
     The two paths agree about pixels and disagree about WHEN. The oracle bands audio-vs-video and
     would not see a video-vs-video placement difference between export paths.
+
+(d) FOLLOW-ON, ON PO'S "c shit is worse colors" (2026-08-26, PO looked at the artifacts): HE IS
+    RIGHT, IT IS THE BIGGEST EFFECT IN THIS TASK, AND NO PAIR ROW IN X15 COULD HAVE SEEN IT.
+    Lanes (a) and (c) compare files with each OTHER, so a loss every path shares — which is exactly
+    what 4:2:0 chroma subsampling is — cancels to zero. Measured instead against the canvas the
+    synthetic screen actually painted (the painter is deterministic and now exported for the rig),
+    masked BY THE SOURCE's own palette, saturation kept per glyph colour, warmed take, two runs
+    agreeing within ~2 points:
+        stage                         grey    green    blue
+        0-source                      100 %   100 %    100 %
+        1-raw screen channel         79.7 %  80.0 %   89.3 %     one 4:2:0 generation
+        2-composite                  71.6 %  70.3 %   75.2 %     a SECOND chroma generation
+        3-export instant             71.6 %  70.3 %   75.2 %     the composite, copied verbatim
+        3-export smart cut           71.6 %  70.3 %   75.2 %     identical again
+        3-export render              78.4 %  67.3 %   78.3 %     better on blue/grey, worse on green
+    SO THE COLOUR DIES AT CAPTURE AND THE EXPORT ADDS NOTHING. A raw channel costs one chroma
+    generation; the composite costs a second (capture frames arrive already 4:2:0, the GL painter
+    upsamples them to RGB, and the AVC encode re-subsamples), and instant is that file byte for byte.
+    THE LEAD THAT DID NOT SURVIVE, recorded because it was reported before it was measured: from a
+    single crop it looked as though the RENDER kept more colour than instant, i.e. a free win. It
+    does not — better on blue (78.3 vs 75.2) and grey, WORSE on green (67.3 vs 70.3). It is a wash
+    and it is content-dependent. There is no free colour in choosing a slower export path.
+    WHERE THE FREE COLOUR ACTUALLY IS: O3b, which is already READY. A single-screen take that skips
+    the composite and packet-copies the raw channel delivers 80 % of the source's green instead of
+    70.3 % — about a third of the total loss recovered, for LESS work, at no CPU cost. It does not
+    help a take with a camera PiP, which must composite; that case still needs 4:4:4 at capture, and
+    on this machine that is software (lane (b): 80 fps at 1080p, ~2x CPU).
+    ALSO CHECKED, BECAUSE X6 IS THE DEFAULT NOW AND IT LOOKED LIKE A REGRESSION: the first warmed-less
+    run of this lane reported the raw channels dropping 200 of 283 frames ("encoder behind"). It is
+    note 6 and it is the RIG — the lane called createCaptureSession without prearm's warm. Warmed,
+    the same take encodes 205 of 203 with ZERO drops. The flipped default is not dropping frames.
 
 THREE INSTRUMENT FAULTS THIS SESSION, and note 10 now has a seventh, eighth and ninth instance —
 ALL THREE WERE MINE except the first, and the pattern is one thing: A REFERENCE THAT MOVES.

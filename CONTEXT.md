@@ -168,6 +168,36 @@ picture that was actually recorded, neither recording nor exporting loses any me
 sharpness. We can reproduce the old number on demand by deliberately shifting the reference one line,
 which is how we know that is what happened.
 
+**PO looked at the crops and said the colours were worse. He was right, and it is the biggest thing
+this work found (2026-08-26).** Coloured text — the green and blue words in a code editor — comes out
+of INOUT with about **30 % less colour** than it went in. Grey text barely changes, so this is not
+brightness or gamma; it is the way video compression stores colour at lower resolution than
+brightness, and thin coloured letters are exactly what that hurts.
+
+Measured against the actual screen, stage by stage:
+
+| | green kept | blue kept |
+|---|---|---|
+| the screen itself | 100 % | 100 % |
+| the raw recording of the screen | 80 % | 89 % |
+| the combined picture we build while recording | 70 % | 75 % |
+| **the file you download** | **70 %** | **75 %** |
+
+Two things follow. **All of it happens while recording** — the export adds nothing at all; the
+downloaded file is the combined picture copied across untouched. And **combining the screen with the
+webcam costs a second helping of the same loss**, which is why the middle row drops again.
+
+None of our existing checks could have caught this, and that is worth saying plainly: every quality
+check we have compares one output file against another output file, so damage that happens to *all*
+of them cancels out and reads as zero. It took a person looking at a picture. There is now a
+measurement that compares against the original screen instead.
+
+**What can be done.** One fix is free: a screen-only recording does not need the combining step at
+all, so skipping it keeps 80 % instead of 70 % — less work, not more. That is an existing task (O3b)
+and it is ready to build. It does not help recordings that include the webcam, which must be
+combined. The rest needs full-colour-resolution recording, which on this machine only exists in
+software — roughly double the processor load. That is the trade below.
+
 **What is still true, and it is the useful half.** There *is* a compression mode that makes coloured
 text visibly crisper: it keeps colour at full resolution instead of quarter resolution, and it halves
 the colour bleeding around letters — at slightly fewer bytes. Turning the data rate up three times
