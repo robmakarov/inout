@@ -24,7 +24,7 @@
  */
 import { AUDIO_BITRATE, VIDEO_BITRATE } from './codecs'
 import { chooseCopySource, type CopySource } from './copySource'
-import { frameAspectFor, frameForAspect, sourceResEnabled, takeLongEdge } from '@core/frame'
+import { frameAspectFor, frameForAspect, sourceResEnabled } from '@core/frame'
 import { DEFAULT_FRAME_RATE, normalizeRate, takeRate } from '@core/rate'
 import { DEFAULT_EXPORT_SETTINGS, type ExportSettings, type Recording } from '@core/types'
 
@@ -71,7 +71,11 @@ export const SOURCE_TIER: QualityTier = {
   longEdge: 0,
   fps: DEFAULT_EXPORT_SETTINGS.fps,
   videoBitrate: 14_000_000,
-  note: 'Your screen’s own resolution, copied straight out of the recording — no re-encode.',
+  // NO PROMISE HERE. The panel appends the PATH's own verdict underneath this
+  // line ("INSTANT … that size is the file" or "Re-renders …"), and O3c's rule
+  // is that the badge is the path's to give. A note claiming "no re-encode"
+  // sat on prod directly above the panel saying it re-renders.
+  note: 'Your screen’s own resolution, exactly as it was recorded.',
 }
 
 /**
@@ -147,14 +151,19 @@ export function resolveTier(
   tier: QualityTier,
   aspect: number,
   fps: number = DEFAULT_FRAME_RATE,
-  /** F18: what `longEdge: 0` means for THIS take. Ignored by every other step. */
-  sourceLongEdge = 0,
+  /** F18: the take's OWN pixels, for the step that has no size of its own.
+   *  Ignored by every other step. */
+  source: SourceStep | null = null,
 ): QualityTier {
-  // F18: the source step carries no size of its own. With no take in hand it
-  // stays the declared 1440p box, so a caller that never learned about the
-  // source step still gets a valid tier rather than a 0x0 one.
-  const longEdge = tier.longEdge === 0 ? (sourceLongEdge > 0 ? sourceLongEdge : tier.width) : tier.longEdge
-  const { width, height } = frameForAspect(aspect, longEdge)
+  // F18: THE SOURCE STEP TAKES THE TAKE'S PIXELS VERBATIM and never goes
+  // through the aspect — see SourceStep for the two-pixel drift that cost the
+  // packet copy on prod. With no take in hand it stays the declared 1440p box,
+  // so a caller that never learned about the source step still gets a valid
+  // tier rather than a 0x0 one.
+  const exact = tier.longEdge === 0 ? source : null
+  const { width, height } = exact
+    ? { width: exact.width, height: exact.height }
+    : frameForAspect(aspect, tier.longEdge === 0 ? tier.width : tier.longEdge)
   const rate = normalizeRate(fps)
   if (width === tier.width && height === tier.height && rate === tier.fps) return tier
   const nominal = tier.width * tier.height * tier.fps
@@ -209,13 +218,35 @@ export function tiersForTake(recording: Recording, aspect?: number): QualityTier
  *
  * Returns 0 for "no source step".
  */
-export function sourceStepFor(recording: Recording): number {
-  if (!sourceResEnabled()) return 0
+export function sourceStepFor(recording: Recording): SourceStep | null {
+  if (!sourceResEnabled()) return null
   const video = recording.channels.filter((c) => c.media === 'video')
-  if (video.length !== 1) return 0
-  const long = takeLongEdge(recording)
+  if (video.length !== 1) return null
+  const ch = video[0]!
+  const w = ch.width ?? 0
+  const h = ch.height ?? 0
+  if (!(w > 0) || !(h > 0)) return null
   const top = QUALITY_TIERS.reduce((m, t) => Math.max(m, t.longEdge), 0)
-  return long > top ? long : 0
+  return Math.max(w, h) > top ? { width: w, height: h } : null
+}
+
+/**
+ * THE TAKE'S OWN PIXELS, NOT A RECONSTRUCTION OF THEM — and this pair exists
+ * because a long edge alone was not enough. Every other step is a pixel budget
+ * resolved against the take's ASPECT (F13), which is right for them: 1440p is a
+ * size we chose and the shape follows the take. The source step is the opposite
+ * — the SIZE is the take's and there is nothing to resolve.
+ *
+ * Going through the aspect lost it. A 3024x1964 channel has aspect 1.53971…,
+ * and `frameForAspect(1.53971…, 3024)` comes back 3024x1962: two pixels of
+ * float drift, which is enough for the copy fence to refuse the raw channel and
+ * send the whole take to a full render. Found on prod, where the panel said
+ * "Re-renders the whole video at 3024x1962" directly underneath a note
+ * promising no re-encode.
+ */
+export interface SourceStep {
+  width: number
+  height: number
 }
 
 export function tierById(id: string | null | undefined): QualityTier {

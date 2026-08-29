@@ -78,7 +78,7 @@ afterEach(() => {
 
 describe('whether a take gets a source step at all', () => {
   it('a 3024-wide screen-only take does', () => {
-    expect(sourceStepFor(recording())).toBe(3024)
+    expect(sourceStepFor(recording())).toEqual({ width: 3024, height: 1964 })
   })
 
   it('THE GATE: a take already inside the ladder does NOT — the step is not a duplicate', () => {
@@ -86,17 +86,17 @@ describe('whether a take gets a source step at all', () => {
       channels: [channel({ width: 1920, height: 1080 })],
       composite: composite({ width: 1920, height: 1080 }),
     })
-    expect(sourceStepFor(small)).toBe(0)
+    expect(sourceStepFor(small)).toBeNull()
     expect(tiersForTake(small).map((t) => t.id)).toEqual(QUALITY_TIERS.map((t) => t.id))
   })
 
   it('a 2560 take does not either — that IS the top step', () => {
-    expect(sourceStepFor(recording({ channels: [channel({ width: 2560, height: 1440 })] }))).toBe(0)
+    expect(sourceStepFor(recording({ channels: [channel({ width: 2560, height: 1440 })] }))).toBeNull()
   })
 
   it('OFF BY DEFAULT: the flag decides, and off is byte-identical to yesterday', () => {
     setSourceRes(null)
-    expect(sourceStepFor(recording())).toBe(0)
+    expect(sourceStepFor(recording())).toBeNull()
     expect(tiersForTake(recording()).map((t) => t.id)).toEqual(QUALITY_TIERS.map((t) => t.id))
   })
 
@@ -109,7 +109,7 @@ describe('whether a take gets a source step at all', () => {
     const two = recording({
       channels: [channel(), channel({ id: 'ch_cam', kind: 'camera', blobKey: 'c.mp4', width: 1280, height: 720 })],
     })
-    expect(sourceStepFor(two)).toBe(0)
+    expect(sourceStepFor(two)).toBeNull()
   })
 
   it('reads the RAW channel, not the composite — the composite is always 1920', () => {
@@ -119,12 +119,15 @@ describe('whether a take gets a source step at all', () => {
 })
 
 describe('what the step resolves to', () => {
-  it("is the take's own geometry, and the aspect is the take's", () => {
-    const tiers = tiersForTake(recording())
-    const src = tiers.find((t) => t.id === 'source')!
-    expect(Math.max(src.width, src.height)).toBe(3024)
-    // 3024x1964 is 1.5397:1; the step keeps it.
-    expect(src.width / src.height).toBeCloseTo(3024 / 1964, 2)
+  it("THE REGRESSION: it is the take's EXACT pixels, not a reconstruction of them", () => {
+    // Found on prod. Every other step is a pixel budget resolved against the
+    // take's aspect, which is right for them. Doing that here turned 3024x1964
+    // into 3024x1962 — 1.53971… reconstructed — and two pixels are enough for
+    // the copy fence to refuse the raw channel and send the take to a full
+    // render, under a panel note promising no re-encode.
+    const src = tiersForTake(recording()).find((t) => t.id === 'source')!
+    expect(src.width).toBe(3024)
+    expect(src.height).toBe(1964)
   })
 
   it('the export ASKS for that size — the badge and the path cannot disagree', () => {
