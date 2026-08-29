@@ -77,6 +77,7 @@ import { buildCertification, certificationComment } from './certify'
 import { compositeOffsetMs, recordingToCompositeSec } from './compositeTime'
 import { chooseCopySource, type CopySource } from './copySource'
 import { createExportScratch, type ExportScratch } from './scratch'
+import { exportFileName } from './fileName'
 
 /** Half-width of the fade at every cut join — identical to the render (F1). */
 const JOIN_FADE_MS = 3
@@ -122,13 +123,6 @@ export function isPixelDefaultEdit(recording: Recording, edit: EditState): boole
   return true
 }
 
-function exportFileName(createdAt: number, ext: string): string {
-  const d = new Date(createdAt)
-  const p = (n: number) => String(n).padStart(2, '0')
-  const date = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`
-  const time = `${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
-  return `inout-${date}-${time}${ext}`
-}
 
 function sameBytes(a: AllowSharedBufferSource | undefined, b: AllowSharedBufferSource | undefined): boolean {
   if (!a || !b) return false

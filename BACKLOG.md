@@ -12,6 +12,61 @@ TD tags technical defects by severity. Done items get deleted, not archived.
 
 ### Now
 
+- [P0] PO 2026-08-29 + TD same day: **the audio timeline drifts LATE without bound on a long take**
+  — "sound gets a little slower than screen video, about a second after one hour", preview and
+  export alike. ROOT CAUSE, verified by running the shipped `WallClockHold` over an hour of quanta:
+  video is wall-stamped (`compositor.worker.ts:611`) while audio is sample-counted
+  (`compositor.worker.ts:996`, `measuredAudio.ts:659`), and the guard that reconciles them ONLY
+  PADS — its own comment says "the wall only ever moves it FORWARD". So an audio clock running SLOW
+  is repaid and one running FAST is invisible:
+      clock -278 ppm  padded 960 ms  ends  -41 ms   in sync
+      clock  -50 ppm  padded 160 ms  ends  -20 ms   in sync
+      clock  +50 ppm  padded   0 ms  ends +180 ms   LATE
+      clock +278 ppm  padded   0 ms  ends +1001 ms  LATE   <- PO's number, exactly
+  Main-thread stalls were simulated too (3 s every 60 s, perfect clock): 0 ms padded, no drift — the
+  persistence filter is sound, the fast direction is the only hole. THE PREVIEW CANNOT SEE IT: the
+  sync loop compares `el.currentTime` against expected source time, and the file's stamps are
+  self-consistent, merely stretched — so no slew fires. "Drift is dead" (2026-08-25, beta−1 =
+  −0.003 ms/s) was a 120 s SYNTHETIC cell, where no device clock exists to mismatch.
+  DISCRIMINATOR, already recorded: `ChannelDiagnostics.paddedMs` on PO's take. ~0 ms with audio a
+  second late ⇒ fast clock, confirmed. FIX SHAPE (capture behaviour — PO's yes needed): make the
+  hold symmetric, trimming on a persistent FORWARD deficit with the same persistence test.
+
+- [P1] PO 2026-08-29: **the size estimate is 2.15× low at the top step** — panel said 4.7 GB at
+  1440p, file came out 10.09 GB (140 min). Every other step landed within ~100 MB, so this is the
+  top rung specifically, not the model. quality.ts already admits the √-pixel model came in 47 % low
+  at 1440p on text content; at PO's length that becomes 5.4 GB of surprise. Note the estimate is
+  ALSO the only warning a user gets before committing to a ~2 h render.
+
+- [P1] PO 2026-08-29: **more quality and much less size** — "it's non-editable video, movie files
+  with much better quality are usually twice smaller". Three named causes, all measured:
+  (1) 1440p IS AN UPSCALE — capture is capped at 1920×1080 (`acquire.ts:322`), the composite canvas
+      is hardcoded 1920×1080 (`session.ts:176`), `?nativeres=1` is off. The top step spends 14 Mbps
+      on interpolated pixels. Either gate the step on the source's real size, or ship nativeres.
+  (2) THE EXPORT IS RATE-TARGETED, NOT QUALITY-TARGETED — `render.ts:420` passes `bitrate` and
+      nothing else. X15(a) already measured the lever: `bitrateMode` constant/variable is INERT
+      (byte-identical files), but **quantizer mode is honoured** — qp14/20/26 → 959/692/511 KB on
+      the same content. Constant-quality is exactly "more quality, less size" and is unused.
+  (3) AVC by policy (blind-share floor). A 10 GB file is not blind-shareable anyway, so the
+      hevc/av1 rungs — built, present, opt-in — are worth re-pricing at this length.
+  Default 1080p on the same take would be the composite's own size: X12 measured the composite at
+  11.8 % of its 8 Mbps ceiling on screen content, so ~1 GB for 140 min against 10.
+
+- [P2] PO 2026-08-29: **"at some points video got slows down and lag too"** on a long take. NOT
+  DIAGNOSED — needs to be pinned to a stage before it is chased: during capture (frame delivery),
+  during preview playback, or in the exported file itself. The take already carries the answer for
+  the first (`CompositorStats.framesDropped` / `maxEncodeGapMs` / `peakQueue`); the third is visible
+  by scrubbing the export to the same instant. The preview half is partly addressed 2026-08-29 (the
+  scrubber was firing a full re-seek of every element per pointer event, now one per frame).
+
+- [P2] PO 2026-08-29: **noises on tab audio, "not much but still"**. LEAD, not a diagnosis: every
+  starved audio quantum is deliberately turned into 64 frames of fade-out, silence, fade-in
+  (`measuredAudio.ts` PAD_FADE, `compositor.worker.ts` AUDIO_PAD_FADE) to keep the sample-counted
+  timeline honest — so a starve is AUDIBLE by design, as a ~1.3 ms notch. 2026-08-26 measured tab
+  audio padding 1281 ms in 84 s under load, which is ~15 such notches per minute. Confirm against
+  `ChannelDiagnostics.paddedMs`/`events` on PO's take before choosing between "starve less" and
+  "splice better" (crossfade across the gap rather than through zero).
+
 - [P1] TD 2026-08-26, from PO's own console dump (real takes, deployed build): **a long-lived app
   tab spans deploys, its lazily-loaded chunks 404, and that silently killed the EXPORT WORKER.**
   Evidence in the dump: `/assets/sizeProbe-Bp5ddNpw.js` 404 and `index-Bo_8S72j.css` 404 (hashed

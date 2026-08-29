@@ -82,6 +82,17 @@ export interface Playback {
   toggle(): void
   seek(ms: number): void
   seekBy(deltaMs: number): void
+  /**
+   * A SCRUB GESTURE IS A GESTURE, not a stream of seeks (PO 2026-08-29: "a lot
+   * of noises when i drag video point on player"). Dragging the scrubber fires
+   * a pointermove per frame — up to 120 Hz on a trackpad — and while playing
+   * every one of those landed past RESYNC_HARD_MS, so `sync` hard-seeked each
+   * element and called play() again: a fresh burst of audio per pointer event,
+   * which is the noise. Between these two calls the elements are held paused,
+   * so the picture still scrubs and nothing is heard.
+   */
+  scrubStart(): void
+  scrubEnd(): void
   /** Stable ref callback for the channel's media element. */
   elementRef(channelId: string): (el: HTMLMediaElement | null) => void
 }
@@ -94,6 +105,8 @@ export function usePlayback(recording: Recording, edit: EditState): Playback {
   const els = useRef(new Map<string, HTMLMediaElement>())
   const refCbs = useRef(new Map<string, (el: HTMLMediaElement | null) => void>())
   const playingRef = useRef(false)
+  /** True for the life of a scrubber drag — see Playback.scrubStart. */
+  const scrubbingRef = useRef(false)
   const timeRef = useRef(0)
   const editRef = useRef(edit)
   const durRef = useRef(outputDurationMs(edit))
@@ -112,9 +125,13 @@ export function usePlayback(recording: Recording, edit: EditState): Playback {
     const attached = audioIds.filter((id) => els.current.has(id))
     if (attached.length === 0) return
     const base = mixGainForChannels(attached.length)
+    // Pausing the elements is what actually silences a scrub; this ramp is the
+    // other half — it takes out the few ms already in flight when the drag
+    // starts, which would otherwise be the one click pausing cannot prevent.
+    const scrubMute = scrubbingRef.current ? 0 : 1
     const g = graphRef.current
     if (g) {
-      g.makeup.gain.setTargetAtTime(makeupRef.current, g.ctx.currentTime, GAIN_RAMP_S)
+      g.makeup.gain.setTargetAtTime(makeupRef.current * scrubMute, g.ctx.currentTime, GAIN_RAMP_S)
       for (const id of attached) {
         const el = els.current.get(id)!
         const gain = chGainsRef.current.get(el)
@@ -123,7 +140,7 @@ export function usePlayback(recording: Recording, edit: EditState): Playback {
     } else {
       // Fallback (Apple WebKit / no WebAudio): element volume — headroom exact,
       // makeup capped at 1.0 by the platform.
-      const v = Math.min(1, base * makeupRef.current)
+      const v = Math.min(1, base * makeupRef.current) * scrubMute
       for (const id of attached) {
         const el = els.current.get(id)
         if (el) el.volume = v
@@ -187,6 +204,10 @@ export function usePlayback(recording: Recording, edit: EditState): Playback {
       // Browsers preserve pitch on playbackRate by default, so the preview
       // sounds like the export's WSOLA stretch without reimplementing it here.
       const base = speedAtOutputMs(editRef.current, outMs)
+      // A scrub takes the PAUSED branch even mid-playback: each element is
+      // seeked and held, so the picture follows the drag and no element is
+      // ever asked to play a fragment from a position the drag already left.
+      const live = playingRef.current && !scrubbingRef.current
       for (const ch of recording.channels) {
         const el = els.current.get(ch.id)
         if (!el) continue
@@ -197,7 +218,7 @@ export function usePlayback(recording: Recording, edit: EditState): Playback {
         } else {
           el.muted = false
           const drift = el.currentTime * 1000 - src
-          if (playingRef.current) {
+          if (live) {
             // A/V sync: hard-seeking only past a ±120ms deadband let audio and
             // video elements sit up to ~240ms APART (the reported "audio not
             // synced"). Instead every element is continuously slewed onto the
@@ -270,6 +291,12 @@ export function usePlayback(recording: Recording, edit: EditState): Playback {
     let raf = 0
     let last = performance.now()
     const step = (now: number): boolean => {
+      // A held scrub owns the playhead. Without this the clock keeps advancing
+      // between pointer events and fights the drag for the position.
+      if (scrubbingRef.current) {
+        last = now
+        return true
+      }
       const t = Math.min(durRef.current, timeRef.current + (now - last))
       last = now
       timeRef.current = t
@@ -339,6 +366,20 @@ export function usePlayback(recording: Recording, edit: EditState): Playback {
     [seek],
   )
 
+  const scrubStart = useCallback(() => {
+    if (scrubbingRef.current) return
+    scrubbingRef.current = true
+    applyGains() // ramp the in-flight few ms out
+    sync(timeRef.current) // …and park every element where the drag starts
+  }, [applyGains, sync])
+
+  const scrubEnd = useCallback(() => {
+    if (!scrubbingRef.current) return
+    scrubbingRef.current = false
+    applyGains()
+    sync(timeRef.current) // resumes the elements iff play() was never released
+  }, [applyGains, sync])
+
   const elementRef = useCallback(
     (channelId: string) => {
       let cb = refCbs.current.get(channelId)
@@ -375,6 +416,8 @@ export function usePlayback(recording: Recording, edit: EditState): Playback {
     toggle,
     seek,
     seekBy,
+    scrubStart,
+    scrubEnd,
     elementRef,
   }
 }

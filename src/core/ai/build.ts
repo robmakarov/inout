@@ -60,6 +60,7 @@ import {
 import { buildIndexLines, type KeyframeEntry, type TrailPoint } from './indexText'
 import { PdfWriter, wrapText, type PdfImage, type PdfSink } from './pdf'
 import { currentPaceMs, initSelector, stepSelection, type Pointer } from './select'
+import { exportStem } from '@core/compose/fileName'
 
 /**
  * How often the picture is looked at.
@@ -281,9 +282,7 @@ function cropRectPx(
 }
 
 function fileName(createdAt: number): string {
-  const d = new Date(createdAt)
-  const p = (n: number): string => String(n).padStart(2, '0')
-  return `inout-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}-for-ai.pdf`
+  return `inout-${exportStem(createdAt)}-for-ai.pdf`
 }
 
 /**

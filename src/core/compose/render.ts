@@ -85,6 +85,7 @@ import { buildCertification, certificationComment } from './certify'
 import { createExportScratch, type ExportScratch } from './scratch'
 import { collectPeaks, createPeakBuffer, createWaveformRenderer } from './waveform'
 import { openVideoChannel, type VideoChannelReader } from './video'
+import { exportFileName } from './fileName'
 
 /**
  * Half-width of the fade applied at every cut join (F1). The two sides of a
@@ -218,13 +219,6 @@ function activeOutputWindowsMs(edit: EditState, channel: ChannelRecording): Acti
   return out
 }
 
-function exportFileName(createdAt: number, fileExtension: string): string {
-  const d = new Date(createdAt)
-  const p = (n: number) => String(n).padStart(2, '0')
-  const date = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`
-  const time = `${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
-  return `inout-${date}-${time}${fileExtension}`
-}
 
 export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
   const { recording, edit, settings = DEFAULT_EXPORT_SETTINGS, onProgress, signal } = opts

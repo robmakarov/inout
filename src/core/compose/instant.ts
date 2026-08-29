@@ -58,6 +58,7 @@ import { compositeOffsetMs } from './compositeTime'
 import { BitsAudit, formatBits } from './bits'
 import { buildCertification, certificationComment } from './certify'
 import { createExportScratch, type ExportScratch } from './scratch'
+import { exportFileName } from './fileName'
 
 /**
  * A channel's active window on the output timeline. Kept local (mirrors
@@ -102,13 +103,6 @@ async function openAudioMixers(recording: Recording, edit: EditState): Promise<A
   return mixers
 }
 
-function exportFileName(createdAt: number, ext: string): string {
-  const d = new Date(createdAt)
-  const p = (n: number) => String(n).padStart(2, '0')
-  const date = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`
-  const time = `${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
-  return `inout-${date}-${time}${ext}`
-}
 
 export interface InstantExportOptions {
   recording: Recording

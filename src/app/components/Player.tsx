@@ -33,12 +33,19 @@ function Scrubber({
   value,
   max,
   onSeek,
+  onScrubStart,
+  onScrubEnd,
 }: {
   value: number
   max: number
   onSeek: (ms: number) => void
+  onScrubStart: () => void
+  onScrubEnd: () => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
+  /** Latest pointer position, and the frame that will consume it. */
+  const pending = useRef<number | null>(null)
+  const raf = useRef(0)
   const toMs = (clientX: number) => {
     const el = ref.current
     if (!el) return 0
@@ -46,6 +53,37 @@ function Scrubber({
     const f = Math.min(1, Math.max(0, (clientX - r.left) / Math.max(1, r.width)))
     return f * max
   }
+  /**
+   * ONE SEEK PER FRAME, not one per pointer event. A trackpad drag delivers
+   * pointermove at up to 120 Hz and each seek re-seeks every media element in
+   * the take; coalescing to the frame the user can actually see costs nothing
+   * and stops the drag from queueing work faster than the elements retire it.
+   */
+  const queueSeek = (clientX: number) => {
+    pending.current = clientX
+    if (raf.current) return
+    raf.current = requestAnimationFrame(() => {
+      raf.current = 0
+      const x = pending.current
+      pending.current = null
+      if (x !== null) onSeek(toMs(x))
+    })
+  }
+  const endDrag = () => {
+    if (raf.current) {
+      cancelAnimationFrame(raf.current)
+      raf.current = 0
+    }
+    // Land on the last position the pointer actually reached — a drag that
+    // ends between frames must not be rounded back to the previous one.
+    const x = pending.current
+    pending.current = null
+    if (x !== null) onSeek(toMs(x))
+    onScrubEnd()
+  }
+  useEffect(() => () => {
+    if (raf.current) cancelAnimationFrame(raf.current)
+  }, [])
   return (
     <div
       ref={ref}
@@ -56,11 +94,14 @@ function Scrubber({
         } catch {
           // synthetic or already-released pointer
         }
+        onScrubStart()
         onSeek(toMs(e.clientX))
       }}
       onPointerMove={(e) => {
-        if (e.buttons & 1) onSeek(toMs(e.clientX))
+        if (e.buttons & 1) queueSeek(e.clientX)
       }}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
     >
       <div
         className="scrubber__fill"
@@ -607,7 +648,13 @@ export function Player({
           {formatClock(pb.timeMs)} <span className="transport__time-sep">/</span>{' '}
           {formatClock(pb.durationMs)}
         </span>
-        <Scrubber value={pb.timeMs} max={pb.durationMs} onSeek={pb.seek} />
+        <Scrubber
+          value={pb.timeMs}
+          max={pb.durationMs}
+          onSeek={pb.seek}
+          onScrubStart={pb.scrubStart}
+          onScrubEnd={pb.scrubEnd}
+        />
         {showExport && (
           <button className="btn btn--primary transport__export" onClick={onExport}>
             Export
