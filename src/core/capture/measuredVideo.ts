@@ -197,6 +197,19 @@ export async function startMeasuredVideoCapture(opts: {
         if (!firstFrameSeen) {
           firstFrameSeen = true
           resolveFirst(atMs - opts.epoch)
+          // WHAT COLOUR DOES THE SOURCE EVEN HAND US? This decides whether the
+          // ~20 % of glyph colour a take loses is OURS or Chrome's, and nothing
+          // in the lab can answer it: a synthetic screen is a canvas, while a
+          // real getDisplayMedia frame comes from the OS capturer.
+          //   I420 / NV12  → already 4:2:0 before we touch it. No encoder we
+          //                  choose can get that colour back, and the ceiling
+          //                  is what skipping the composite (O3b) already hits.
+          //   RGBA / I444  → the source is full colour and the loss is OUR
+          //                  encode, so a 4:4:4 capture mode would recover it.
+          // Logged once per channel, console only, nothing behaves differently.
+          console.info(
+            `[capture] raw ${opts.track.kind} source frame: format ${value.format ?? 'unknown'} · coded ${value.codedWidth}x${value.codedHeight} · display ${value.displayWidth}x${value.displayHeight}`,
+          )
         }
         send({ cmd: 'frame', atMs, frame: value }, [value as unknown as Transferable])
       }

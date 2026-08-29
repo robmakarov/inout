@@ -439,7 +439,25 @@ technical defects by severity. Done items get deleted, not archived.
   it being the first. The rig now runs a matched control pair: the identical palette as FLAT SLABS
   and as thin glyphs, through ONE identical AVC 4:2:0 encode. Slabs keep green 101.1 / blue 99.8 %
   (subsampling has no detail to average there); the same page's glyphs keep 79.8 / 82.1 %. It is
-  subsampling on thin glyphs, so 4:4:4 will deliver what this entry promises.
+  subsampling on thin glyphs — but WHOSE subsampling was still assumed, and the answer changes the
+  plan.
+  THE SOURCE IS ALREADY 4:2:0 BEFORE OUR ENCODER SEES IT (2026-08-27, on Robert's "how to fix it").
+  measuredVideo.ts now logs the first frame's pixel format per raw channel, and a take reports
+  `format NV12 · coded 1920x1080`. NV12 IS 4:2:0. So in a REAL take the chain is:
+      canvas/screen RGB → NV12, by Chrome's capture pipeline   ~20 points, and NOT OURS
+      NV12 → our AVC 4:2:0 encode                              ~free (4:2:0 into 4:2:0)
+      NV12 → GL upsample → composite → AVC re-subsample        ~10 points more, ours — O3b's win
+  R1's slab/glyph control and lane (b)'s 100 %-retaining AV1 4:4:4 row were both measured feeding a
+  VideoEncoder RGB frames DIRECTLY (`new VideoFrame(canvas)`), with no MediaStreamTrack in the path.
+  That is why they see the encoder do the subsampling. Capture never does that — it can only get
+  frames through a track, and the track hands over NV12. So "4:4:4 will deliver what this entry
+  promises" is NOT established: at capture it would be encoding chroma that has already been thrown
+  away, and could only buy back the SECOND generation (~10 points) that O3b already removes for
+  screen-only takes. For a take WITH a camera it is ~10 points for software encoding at ~2x CPU.
+  MEASURED ON THE SYNTHETIC SCREEN, WHICH IS A CANVAS — and if a canvas in our own process arrives
+  NV12, a real OS screen capturer is unlikely to be better. Robert's next real take prints the format
+  on the console; that is the confirmation, and it decides whether 4:4:4-at-capture is dead or merely
+  expensive. Do not spend anything on 4:4:4 capture before that line is read from a real take.
   AND GREY'S NUMBER IS NOW HONEST: "grey barely moves" used to be argued from a keptPct that divides
   by a 7.4 % source saturation, so +-1 LSB of decode noise arrived as +-6 points. In absolute
   saturation points grey moves -2.1 against green -13.5 and blue -13.0 — same argument, no amplifier.

@@ -2201,6 +2201,25 @@ checkable by eye.
     70.3 % — about a third of the total loss recovered, for LESS work, at no CPU cost. It does not
     help a take with a camera PiP, which must composite; that case still needs 4:4:4 at capture, and
     on this machine that is software (lane (b): 80 fps at 1080p, ~2x CPU).
+    AND THE CEILING IS NOT OURS — THE SOURCE IS ALREADY 4:2:0 (2026-08-27, on PO's "how to fix
+    it"). measuredVideo.ts now logs the pixel format of the first frame of every raw channel, and a
+    take reports `format NV12 · coded 1920x1080`. NV12 IS 4:2:0: the chroma is at half resolution in
+    both axes BEFORE our encoder is handed the frame. That re-reads the whole table above:
+        source canvas RGB → NV12, done by Chrome's capture pipeline   ≈20 % of the colour, THEIRS
+        NV12 → the raw channel's AVC 4:2:0 encode                     ≈free (80 % is the NV12 loss)
+        NV12 → GL upsample to RGB → composite → AVC re-subsample      ≈10 % more, OURS
+    So a 4:4:4 capture mode would be encoding chroma that has ALREADY been thrown away — it cannot
+    recover the 20 %, and lane (b)'s 100 %-retaining AV1 4:4:4 row is only reachable when the
+    encoder is fed RGB directly, which no capture path does. What 4:4:4 at capture WOULD buy is the
+    second generation alone: ~10 %, for software encoding at ~2x CPU. That is a bad trade and the
+    recommendation is now CAN'T rather than SHOULDN'T for the big half.
+    MEASURED ON THE SYNTHETIC SCREEN, WHICH IS A CANVAS — and a canvas already arrives NV12, so a
+    real getDisplayMedia frame from the OS capturer is not going to be better. PO's next take
+    settles it from the console either way; the line is there now.
+    WHAT IS LEFT THAT IS ACTUALLY OURS: the second generation, and O3b removes it for a
+    single-screen take at no cost. A take WITH a camera must composite, and for that case the only
+    lever is a 4:4:4 composite encode — 10 % of colour for double the capture CPU. Not recommended.
+
     ALSO CHECKED, BECAUSE X6 IS THE DEFAULT NOW AND IT LOOKED LIKE A REGRESSION: the first warmed-less
     run of this lane reported the raw channels dropping 200 of 283 frames ("encoder behind"). It is
     note 6 and it is the RIG — the lane called createCaptureSession without prearm's warm. Warmed,
