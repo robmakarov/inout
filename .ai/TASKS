@@ -277,49 +277,40 @@ READY NOW:
                                              it is right, the default flips and INOUT can make a
                                              vertical video; if it is not, say what is wrong and
                                              nothing has moved in the meantime.
-  W1   the wedges go — DONE 2026-08-29, shipped ON (handoff under the task). The ladder climbs
-       back (two good takes clear the floor), a macOS permission is no longer counted or reported
-       as a wedge and is named while the request is still running, and a degraded machine carries
-       a Reset button instead of a console line. ABSORBS BUG B6.
-  W1 (original entry)              [medium]  Robert 2026-08-29: "i want them gone", after hitting it
-                                             three times in one evening. Chrome's bug is still
-                                             Chrome's — but our safe-mode ladder had no way back
-                                             except a 24 h timer, counted an OS PERMISSION failure
-                                             as a wedge, and (fixed today) dropped the size bounds
-                                             while backing off. The only exit anyone found was a
-                                             console line.
-  F18  the user's own resolution — BUILT AND VERIFIED ON PROD 2026-08-29, flag-gated `?sourceres=1`
-       (handoff under the task). A screen-only take bigger than 1440p gets a Source step at its OWN
-       pixels, delivered by the packet copy. T1 RAN AND ANSWERED and it withdrew this task's colour
-       reason — see the corrected X15(e) table under the task.
-  F18 (original entry)             [medium]  Robert 2026-08-29: "i want 3024x1964 or whatever users
-                                             resolution is on roadmap". The export ladder stops at
-                                             1440p for inherited reasons, not decided ones, and the
-                                             capture ceiling follows it — one constant raises both.
-                                             GATED ON O15, or ships behind a flag.
-                                             AND IT IS THE COLOUR TASK TOO (X15(e), 2026-08-29, on
-                                             Robert's "i want 100% colors"): delivering above the
-                                             viewing size is what makes 4:2:0 carry FULL colour —
-                                             79.6 % → 96.9 % of the source green, on the HARDWARE
-                                             encoder. 1.5x SATURATES IT (2x measured no better),
-                                             which bounds F18's own cost worry: the colour half
-                                             does not need 3024, it needs ~1.5x what is watched.
-                                             ONE SPIKE GATES WHETHER THIS IS FREE — T1 below.
-  O15  how many encoders may a take open — BUILT AND VERIFIED ON PROD 2026-08-29, flag-gated
-       (handoff under the task). The plan now PRINTS on every take with or without the flag, and the
-       budget is EARNED from this machine's own history rather than assumed from a constant. Its
-       closing gate is Robert's: his take, his machine, with a game running.
-  O15 (original entry)             [heavy]   THE FREEZE'S ROOT, read off his own console: three
-       take open                             hardware AVC encoders with nothing budgeting them,
-                                             plus a game on the same GPU. The capture ceiling is
-                                             doing the work a budget should do.
-  O16  a resolution step a raw channel can follow — BUILT AND VERIFIED ON PROD 2026-08-29,
-       flag-gated `?resstep=1` (handoff under the task). The screen's raw channel now FOLLOWS its
-       source's own size change by segmenting, on F6's machinery. Not a load ladder — backpressure
-       stays rate-only, per Robert's ruling.
-  O16 (original entry)             [medium-heavy]  His question, answered: it CAN go safely, and
-       channel can follow                    back up — F6's segment machinery is the mechanism.
-                                             Costs a stepped take its instant export, so O15 first.
+  ── DONE THIS SESSION 2026-08-29 (twentieth), all four merged and verified on prod. Handoffs are
+     under each task; only the one-line verdict lives here.
+  W1   the wedges go            DONE, SHIPPED ON. The safe-mode ladder climbs back (two good takes
+                                clear the floor), an ungranted macOS screen-recording permission is
+                                no longer counted or reported as Chrome's wedge and is named while
+                                the request is still running, and a degraded machine carries a Reset
+                                button instead of a console line. ABSORBS BUG B6.
+  O15  the encoder budget       BUILT, flag `?encoderbudget=1`, OFF. Every take now PRINTS its
+                                encoder plan — how many, what sizes, Mpx/s — with or without the
+                                flag; that line did not exist in any form. The budget is EARNED from
+                                this machine's own collapses, never a constant, and a machine that
+                                has never collapsed has no budget at all. HIS GATE IS OPEN: his take,
+                                his machine, with a game running.
+  F18  the user's own resolution BUILT, flag `?sourceres=1`, OFF. A screen-only take bigger than
+                                1440p gets a Source step at its OWN pixels, delivered by the packet
+                                copy (measured on prod: 452 KB INSTANT at 3024x1964, SMALLER than the
+                                1080p composite copy's 613 KB). Costs 40 % more pixels through the
+                                encoders O15 counts, so the default is Robert's.
+  O16  the resolution step      BUILT, flag `?resstep=1`, OFF. The screen's raw channel follows its
+                                source's own size change by segmenting, on F6's machinery — 30 ms
+                                step, 69 ms seam, each segment measuring its own geometry, the mic
+                                recording straight through. NOT a load ladder: backpressure stays
+                                rate-only, per Robert's ruling.
+  T1   (F18's gate spike)       RAN AND ANSWERED, and it REFUTED the table it was extending. The
+                                published X15(e) colour numbers were read through a mask indexed off
+                                a DIFFERENT layout; aligned, 1.5x does NOT match the 4:4:4 ceiling
+                                (90.1 % vs 99.3 %) and 2x DOES buy over 1.5x. At equal bytes 1.5x is
+                                -0.5 dB on text for +4.8 points of colour — a TRADE, so no
+                                supersampling rule shipped. AND THE CHEAP LEVER FOR COLOUR IS THE
+                                CHROMA FORMAT: 4:4:4 AV1 keeps 99.3 % for 1.11x the bytes where 2x
+                                4:2:0 keeps 94.7 % for 2.29x. That is evidence for SIZE-CODEC's
+                                efficiency lane, not for a resolution change. Corrected table is
+                                under F18.
+
   F15-FLIP  Robert's own eye       [ROBERT OWED]  F15 IS BUILT, VERIFIED ON PROD AND OFF BY DEFAULT
                                              (handoff under the task). Its last gate is yours:
                                              open https://inout-kappa.vercel.app/?sourcefps=1,
@@ -3407,7 +3398,22 @@ checkable by eye.
     note 6 and it is the RIG — the lane called createCaptureSession without prearm's warm. Warmed,
     the same take encodes 205 of 203 with ZERO drops. The flipped default is not dropping frames.
 
-(e) "I WANT 100% COLORS" (Robert, 2026-08-29) — AND IT IS REACHABLE, ON THE HARDWARE ENCODER.
+(e) "I WANT 100% COLORS" (Robert, 2026-08-29)
+    *** RETRACTED IN PART 2026-08-29 BY F18's T1 SPIKE — THE TWO SUPERSAMPLED ROWS BELOW ARE WRONG
+    AND SO IS THE CONCLUSION DRAWN FROM THEM. The ladder painted each rung at its own canvas size,
+    and `deterministicSource` re-derives geometry from the canvas (`font = round(height/38)px`), so
+    a 2880x1620 page is not a 1.5x scaling of a 1920x1080 one — 43 px where proportionality wants
+    42.6, walking every glyph off its counterpart. The pages sat 14.1 dB apart with NO ENCODER
+    INVOLVED, and this rig's chroma metric reads the decode at the REFERENCE's pixel INDICES, so the
+    supersampled rungs were scored on pixels that are not theirs.
+    RE-MEASURED with one master downscaled to every rung, and a GATE ZERO that now refuses to read
+    the chroma numbers unless the rungs are proven to be the same picture:
+        1x 4:2:0 (SHIPS)   80.0 %   ·   1.5x 4:2:0   90.1 %   ·   2x 4:2:0   94.7 %   ·   4:4:4  99.3 %
+    BOTH HEADLINES INVERT: 1.5x does NOT match the 4:4:4 ceiling, and 2x DOES buy over 1.5x, so
+    colour does not saturate where this said it did. AND THE CHEAP LEVER IS THE CHROMA FORMAT, not
+    resolution — 4:4:4 AV1 keeps 99.3 % for 1.11x the shipped bytes where 2x 4:2:0 keeps 94.7 % for
+    2.29x. That is evidence for SIZE-CODEC's efficiency lane. Everything below is kept as the record
+    of what was published and how it was wrong. See F18's task text for the full correction. ***
     THE PREVIOUS ANSWER WAS TRUE AT 1:1 AND ONLY AT 1:1, and stopping there was the mistake. 4:2:0
     stores chroma at half resolution IN EACH AXIS OF WHATEVER FRAME IT IS GIVEN, so what a file
     carries is fixed in ABSOLUTE chroma samples, not in percent:
