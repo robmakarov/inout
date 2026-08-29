@@ -89,9 +89,12 @@ export function QualityPanel({
   const editRef = useRef(edit)
   editRef.current = edit
   /**
-   * F13: the four steps AT THIS TAKE'S SHAPE. Identical to QUALITY_TIERS on a
-   * 16:9 take and on every take with the flag off, so the probe still encodes
-   * the same lanes it was measured on.
+   * F13: the steps AT THIS TAKE'S SHAPE. Identical to QUALITY_TIERS on a 16:9
+   * take and on every take with the flag off, so the probe still encodes the
+   * same lanes it was measured on. F18 can add a FIFTH — the take's own
+   * resolution — on a screen-only take bigger than the ladder's top, with
+   * `?sourceres=1`; everything below it is unchanged, and the probe prices the
+   * new step the same way it prices the others.
    */
   const tiers = useMemo(() => tiersForTake(recording, frameAspect), [recording, frameAspect])
   // Read like `editRef`, for the same reason: the probe effect keys on the
