@@ -155,6 +155,43 @@ describe('the order is the policy', () => {
   })
 })
 
+describe('O3c: single generation follows the SELECTED tier; the composite stays fenced', () => {
+  const OUT_1440 = { width: 2560, height: 1440 }
+
+  it('copies a native-res 1440p raw channel at the 1440p step, composite fenced', () => {
+    // The live defect: nativeres made the raw channel the monitor's size, so
+    // the 1080p-constant equality never held and a 1440p step re-rendered
+    // pixels a file on disk already had.
+    const native = recording({
+      composite: composite(),
+      channels: [channel({ width: 2560, height: 1440 })],
+    })
+    const chosen = chooseCopySource(native, OUT_1440, { allowComposite: false })
+    expect(chosen.source?.origin).toBe('single-generation')
+    expect(chosen.source).toMatchObject({ width: 2560, height: 1440 })
+  })
+
+  it('with nothing matching, declines BOTH and each reason names real geometry', () => {
+    const mismatched = recording({
+      composite: composite(),
+      channels: [channel({ width: 3840, height: 2160 })],
+    })
+    const chosen = chooseCopySource(mismatched, OUT_1440, { allowComposite: false })
+    expect(chosen.source).toBeNull()
+    const byOrigin = Object.fromEntries(chosen.declined.map((d) => [d.origin, d.reason]))
+    expect(byOrigin['single-generation']).toContain('3840x2160')
+    expect(byOrigin['composite']).toContain('1920x1080')
+    expect(byOrigin['composite']).toContain('2560x1440')
+  })
+
+  it('a 1080p screen at the default step behaves exactly as before O3c', () => {
+    const both = recording({ composite: composite() })
+    const chosen = chooseCopySource(both, OUT, { allowComposite: true })
+    expect(chosen.source?.origin).toBe('single-generation')
+    expect(chosen.declined).toEqual([])
+  })
+})
+
 describe('O3b may add a copyable case and may never remove one', () => {
   // The regression guard for the whole task: every take that could be
   // packet-copied before still can, byte for byte the same file.

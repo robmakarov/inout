@@ -62,9 +62,14 @@ export interface ChooseExportOptions {
   settings?: ExportSettings
   /**
    * True only when the requested output geometry IS the composite's — i.e. the
-   * default quality tier. Any other tier is a different picture, so neither
-   * packet-copying path may run. The caller owns this because it owns the tier
+   * default quality tier. The caller owns this because it owns the tier
    * ladder (compose/quality.ts), and the render is unaffected either way.
+   *
+   * O3c: this fences the COMPOSITE only. A single RAW channel that already
+   * holds the requested geometry exactly (a native-res 1440p screen at the
+   * 1440p step) is packet-copyable at ANY tier — chooseCopySource answers
+   * that against `settings`, so a non-default tier no longer forces a full
+   * re-render of pixels a file on disk already holds.
    */
   allowPacketCopy: boolean
   onProgress?: (p: ExportProgress) => void
@@ -89,9 +94,9 @@ export async function exportByBestPath(opts: ChooseExportOptions): Promise<Chose
   // given, so the origin this function reports and the file they actually
   // copied cannot drift apart — and the reasons single generation was refused
   // travel with the answer instead of being re-derived from a console line.
-  const copy = allowPacketCopy
-    ? chooseCopySource(recording, settings)
-    : { source: null, declined: [] as { origin: CopyOrigin; reason: string }[] }
+  // O3c: consulted on EVERY tier — the composite is fenced by allowPacketCopy,
+  // a matching raw channel is not.
+  const copy = chooseCopySource(recording, settings, { allowComposite: allowPacketCopy })
   const source = copy.source
 
   if (source) {

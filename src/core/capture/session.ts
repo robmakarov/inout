@@ -1797,6 +1797,9 @@ class Session implements CaptureSession {
         startOffsetMs: Math.round(c.startOffsetMs ?? 0),
         durationMs: Math.max(0, Math.round(c.durationMs ?? 0)),
       }
+      // The size is already counted (every kept channel has bytes > 0); keep
+      // it with the take so a copyable export step can quote the file (O3c).
+      if (c.bytes > 0) rec.bytes = c.bytes
       if (c.media === 'video') {
         if (c.width) rec.width = c.width
         if (c.height) rec.height = c.height

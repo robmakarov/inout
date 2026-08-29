@@ -63,6 +63,12 @@ export interface ChannelRecording {
   durationMs: number
   width?: number
   height?: number
+  /**
+   * Encoded size on disk. Lets a packet-copying step quote the file instead of
+   * a model (O3c). Absent on takes recorded before it was kept — consumers
+   * fall back to estimating, exactly as they did.
+   */
+  bytes?: number
   diagnostics?: ChannelDiagnostics
 }
 

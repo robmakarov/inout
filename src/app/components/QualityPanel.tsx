@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { QualityTier } from '@core/compose/quality'
-import { DEFAULT_TIER_ID, QUALITY_TIERS, estimateExportBytes, isDefaultTier } from '@core/compose/quality'
+import {
+  DEFAULT_TIER_ID,
+  QUALITY_TIERS,
+  copySourceForTier,
+  estimateExportBytes,
+  isDefaultTier,
+} from '@core/compose/quality'
 import type { EditState, Recording } from '@core/types'
 import type { SizeEstimate } from '@core/compose/quality'
 import { humanBytes } from '@app/lib/format'
@@ -136,13 +142,17 @@ export function QualityPanel({
     () =>
       QUALITY_TIERS.map((t) => {
         const model = estimateExportBytes(recording, t, outputDurationMs)
-        // The default step is the composite copied — the number IS the file and
-        // no probe can improve on it.
+        // An exact step is a file already on disk — the composite copied, or
+        // (O3c) a single raw channel that already holds this tier's geometry —
+        // and no probe can improve on it.
         const m = measured?.[t.id]
-        const size = isDefaultTier(t) ? model : (m ?? model)
+        const size = model.exact ? model : (m ?? model)
         return {
           tier: t,
           size,
+          // O3c: which steps are packet-copyable is the export ladder's own
+          // answer, per tier — the badge and the path can no longer disagree.
+          copy: copySourceForTier(recording, t),
           confidence: sizeConfidence({ exact: size.exact, measured: !!m, probe }),
         }
       }),
@@ -158,12 +168,13 @@ export function QualityPanel({
    * default step called itself "Instant" and told the user "that size is the
    * file, not a guess" on a take with NO COMPOSITE — an audio-only take, or one
    * whose composite was refused. compose/choose.ts cannot packet-copy without a
-   * composite, so that export fully renders, and the number shown was the
+   * copy source, so that export fully renders, and the number shown was the
    * 8 Mbps ceiling: 5.6 MB against a file of a few hundred KB. The panel now
-   * asks the same question the export ladder asks.
+   * asks the same question the export ladder asks — since O3c per tier, so a
+   * native-res screen's matching step is labelled instant too.
    */
-  const canPacketCopy = !!recording.composite
-  const instant = isDefaultTier(tier) && canPacketCopy
+  const canPacketCopy = !!estimates.find((e) => isDefaultTier(e.tier))?.copy
+  const instant = !!current.copy
 
   return (
     <div className="quality">
@@ -176,7 +187,7 @@ export function QualityPanel({
       </div>
 
       <div className="quality__tiers" role="radiogroup" aria-label="Export quality">
-        {estimates.map(({ tier: t, size, confidence }) => (
+        {estimates.map(({ tier: t, size, confidence, copy }) => (
           <button
             key={t.id}
             role="radio"
@@ -191,9 +202,7 @@ export function QualityPanel({
               {size.exact ? '' : '~'}
               {humanBytes(size.bytes)}
             </span>
-            <span className="quality__tier-tag">
-              {isDefaultTier(t) && canPacketCopy ? 'Instant' : ''}
-            </span>
+            <span className="quality__tier-tag">{copy ? 'Instant' : ''}</span>
           </button>
         ))}
       </div>

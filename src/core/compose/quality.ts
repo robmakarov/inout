@@ -23,6 +23,7 @@
  * that model on other content — see the note above estimateExportBytes.
  */
 import { AUDIO_BITRATE, VIDEO_BITRATE } from './codecs'
+import { chooseCopySource, type CopySource } from './copySource'
 import { DEFAULT_EXPORT_SETTINGS, type ExportSettings, type Recording } from '@core/types'
 
 export type QualityTierId = '540p' | '720p' | '1080p' | '1440p'
@@ -96,6 +97,20 @@ export function isDefaultTier(tier: QualityTier): boolean {
   return tier.id === DEFAULT_TIER_ID
 }
 
+/**
+ * The copy source THIS tier's export would use, or null (O3c). This is the
+ * panel's and the estimator's question — "is this step instant, and is its
+ * number the file?" — answered by the same function the export ladder answers
+ * it with, so the badge and the path can never disagree about capability.
+ * (An edit can still demote instant to smart cut or the render; that half is
+ * the ladder's at export time, as it always was.)
+ */
+export function copySourceForTier(recording: Recording, tier: QualityTier): CopySource | null {
+  return chooseCopySource(recording, settingsForTier(tier), {
+    allowComposite: isDefaultTier(tier),
+  }).source
+}
+
 export function settingsForTier(tier: QualityTier): ExportSettings {
   return {
     width: tier.width,
@@ -166,6 +181,19 @@ export function estimateExportBytes(
   const hasAudio = recording.channels.some((c) => c.media === 'audio')
   const audioBytes = hasAudio ? (AUDIO_BITRATE / 8) * seconds : 0
   const ceiling = (tier.videoBitrate / 8) * seconds
+
+  // O3c: a tier that packet-copies a single RAW channel is exact the same way
+  // the default tier is — the number is that file's own byte rate, not a
+  // model. This also corrects the default step on a single-generation take,
+  // where the file copied is the raw channel and not the composite.
+  const single = copySourceForTier(recording, tier)
+  if (single?.origin === 'single-generation' && single.durationMs > 0) {
+    const channelBytes = recording.channels.find((c) => c.id === single.channelId)?.bytes
+    if (channelBytes && channelBytes > 0) {
+      const rate = channelBytes / (single.durationMs / 1000)
+      return { bytes: Math.round(rate * seconds + audioBytes), fromSource: true, exact: true }
+    }
+  }
 
   const src = sourceVideoRate(recording)
   if (!src || src.pixels <= 0) {

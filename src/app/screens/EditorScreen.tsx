@@ -171,8 +171,10 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
     if (store.mode === 'exporting') return
     setChoosing(false)
     pb.pause()
-    // Only the default tier can take the packet-copy path: any other tier is a
-    // different resolution or bitrate, so the recorded composite is not it.
+    // Only the default tier may copy the COMPOSITE: any other tier is a
+    // different resolution, so the recorded composite is not it. A single raw
+    // channel that already holds the chosen tier's geometry is still
+    // packet-copyable at any tier (O3c) — choose.ts answers that itself.
     const defaultTier = isDefaultTier(chosen)
     const settings = settingsForTier(chosen)
 
@@ -193,8 +195,8 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
         recording,
         edit: effectiveEdit,
         settings,
-        // Only the default tier can packet-copy: any other tier is a different
-        // resolution, so the recorded composite is not it.
+        // Fences the composite only — a matching raw channel may still be
+        // copied at any tier (O3c).
         allowPacketCopy: defaultTier,
         onProgress,
         signal: ac.signal,

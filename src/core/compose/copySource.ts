@@ -179,11 +179,20 @@ export function singleGenerationSource(
  * one encode earlier. When it does not, the composite is used exactly as it
  * always was — this function can only ever ADD a copyable case, never remove
  * one, which is why it is safe to have on by default.
+ *
+ * O3c: SINGLE GENERATION IS TRIED AGAINST WHATEVER `settings` ASKS FOR, not
+ * against a 1080p constant — a native-res 1440p screen exporting at the 1440p
+ * step already holds exactly the requested pixels, and re-rendering them was
+ * the day-one interaction that cancelled O3b's win. The COMPOSITE stays fenced
+ * by `allowComposite`: it exists at exactly one geometry, and the caller (who
+ * owns the tier ladder) is the one who knows whether the request is it.
  */
 export function chooseCopySource(
   recording: Recording,
   settings: Pick<ExportSettings, 'width' | 'height'> = DEFAULT_EXPORT_SETTINGS,
+  opts: { allowComposite?: boolean } = {},
 ): CopySourceChoice {
+  const allowComposite = opts.allowComposite ?? true
   const declined: { origin: CopyOrigin; reason: string }[] = []
 
   if (singleGenExportEnabled()) {
@@ -199,9 +208,18 @@ export function chooseCopySource(
     declined.push({ origin: 'composite', reason: 'the take has no composite' })
     return { source: null, declined }
   }
-  // NO GEOMETRY CHECK ON THE COMPOSITE, deliberately. The caller already owns
-  // that question — `allowPacketCopy` means "the requested output geometry IS
-  // the composite's" and is false for every other quality tier — so a second
+  if (!allowComposite) {
+    declined.push({
+      origin: 'composite',
+      reason:
+        `the composite is ${composite.width}x${composite.height} and the requested output is ` +
+        `${settings.width}x${settings.height} — a different picture, only the render can make it`,
+    })
+    return { source: null, declined }
+  }
+  // NO GEOMETRY CHECK ON THE COMPOSITE beyond the caller's `allowComposite`,
+  // deliberately: that flag means "the requested output geometry IS the
+  // composite's" and is false for every other quality tier — so a second
   // opinion here could only ever REFUSE a case that works today. O3b may add a
   // copyable case; it may not remove one.
   return { source: compositeSource(composite), declined }
