@@ -116,6 +116,7 @@ describe('the steps follow the take (F13)', () => {
   })
 
   it('with the flag off a portrait take still gets the landscape steps', () => {
+    setSourceFrame(false)
     const portrait = recording({
       channels: [channel({ kind: 'camera', width: 1080, height: 1920 })],
       composite: undefined,

@@ -55,15 +55,30 @@ function fromStorage(): boolean | null {
 let override: boolean | null = null
 
 /**
+ * A DEVICE THAT CANNOT CAPTURE A SCREEN IS A PHONE, and on a phone the
+ * landscape constant is never the right answer.
+ *
+ * OFF on a desktop: the shipped 16:9 behaviour is what every take was made
+ * under, and Robert has not yet judged the new one, so nothing moves there.
+ * ON where `getDisplayMedia` does not exist at all — the only take such a
+ * device can make is camera-only, its camera is held portrait, and the frame it
+ * was being handed is a landscape box that crops 68 % of the picture away.
+ * There is no working path to protect there; Robert has now reported that same
+ * failure twice ("how the fuck mobile will make 1920x1080? its vertical", then
+ * "it is still fucking horizontal on phone"). `?sourceframe=0` turns it off.
+ */
+function phoneDefault(): boolean {
+  return (
+    typeof navigator !== 'undefined' &&
+    typeof navigator.mediaDevices?.getDisplayMedia !== 'function'
+  )
+}
+
+/**
  * Does the frame follow the source on this load?
  *
- * OFF BY DEFAULT, and that is the task's own gate: "Robert judges one real phone
- * take by eye before any default moves." Off, every function here answers
- * exactly what the constant answered, so a take made today is the take that was
- * made yesterday — the frozen never-break rule, with the switch as the evidence.
- *
- *   ?sourceframe=1   (this load only)
- *   localStorage['inout.frame.source'] = '1'   (sticky)
+ *   ?sourceframe=1 / ?sourceframe=0   (and it sticks — see below)
+ *   localStorage['inout.frame.source']
  */
 export function sourceFrameEnabled(): boolean {
   const url = fromSearch()
@@ -75,10 +90,10 @@ export function sourceFrameEnabled(): boolean {
     // silently put the take back to landscape between recording and judging it.
     // `?sourceframe=0` turns it off the same way, so the contract stays
     // symmetric and reversible.
-    if (url !== (fromStorage() ?? false)) setSourceFrame(url)
+    if (url !== (fromStorage() ?? phoneDefault())) setSourceFrame(url)
     return url
   }
-  return override ?? fromStorage() ?? false
+  return override ?? fromStorage() ?? phoneDefault()
 }
 
 export function setSourceFrame(on: boolean | null): void {

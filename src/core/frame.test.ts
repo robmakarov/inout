@@ -65,6 +65,9 @@ describe('16:9 is the identity', () => {
 
 describe('the flag is the whole of the change', () => {
   it('off, a portrait take is still landscape 16:9 — nothing moves', () => {
+    // Explicit, not inherited: the DEFAULT is now on for a device with no
+    // screen capture (a phone), and this test is about the off path.
+    setSourceFrame(false)
     expect(sourceFrameEnabled()).toBe(false)
     const rec = recording([channel({ kind: 'camera', width: 1080, height: 1920 })])
     expect(frameAspectFor(rec)).toBe(DEFAULT_FRAME_ASPECT)
@@ -231,6 +234,52 @@ describe('the picture that arrived beats the settings that were reported', () =>
     expect(adoptedFrame({ width: 1920, height: 1080 }, { width: 640, height: 480 }, 1920)).toEqual({
       width: 1920,
       height: 1440,
+    })
+  })
+})
+
+/**
+ * WHERE THE DEFAULT SITS, and why it is not one value everywhere. A desktop
+ * keeps the 16:9 behaviour every take was made under until Robert judges the new
+ * one. A device with no `getDisplayMedia` can only make a camera-only take,
+ * held portrait, and the landscape box it used to be handed threw 68 % of the
+ * picture away — there is no working path to protect there.
+ */
+describe('the default', () => {
+  // node's global navigator is a getter-only accessor, so it is redefined
+  // rather than assigned, and put back exactly as it was.
+  function withGetDisplayMedia<T>(present: boolean, run: () => T): T {
+    const before = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: { mediaDevices: present ? { getDisplayMedia: () => undefined } : {} },
+    })
+    try {
+      return run()
+    } finally {
+      if (before) Object.defineProperty(globalThis, 'navigator', before)
+      else delete (globalThis as { navigator?: unknown }).navigator
+    }
+  }
+
+  it('is off where a screen can be captured', () => {
+    setSourceFrame(null)
+    withGetDisplayMedia(true, () => expect(sourceFrameEnabled()).toBe(false))
+  })
+
+  it('is on where one cannot — that device is a phone', () => {
+    setSourceFrame(null)
+    withGetDisplayMedia(false, () => expect(sourceFrameEnabled()).toBe(true))
+  })
+
+  it('is overridable either way', () => {
+    withGetDisplayMedia(false, () => {
+      setSourceFrame(false)
+      expect(sourceFrameEnabled()).toBe(false)
+    })
+    withGetDisplayMedia(true, () => {
+      setSourceFrame(true)
+      expect(sourceFrameEnabled()).toBe(true)
     })
   })
 })

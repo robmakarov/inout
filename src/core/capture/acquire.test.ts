@@ -52,6 +52,7 @@ describe('cameraVideoConstraints', () => {
     afterEach(() => setSourceFrame(null))
 
     it('is the landscape box it always was while the flag is off', () => {
+      setSourceFrame(false)
       withViewport(390, 844, () => {
         const c = cameraVideoConstraints(base)
         expect(c.width).toEqual({ ideal: CAPTURE_MAX_WIDTH })
