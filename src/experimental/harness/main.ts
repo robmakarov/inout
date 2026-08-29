@@ -584,6 +584,19 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'x15e',
+    title: 'X15(e) — can we actually get 100 % of the colour? (Robert: "i want 100% colors")',
+    detail:
+      'reads the pixel format of a REAL getDisplayMedia frame (Chrome auto-accept, no picker) — every other format number in this project is from a canvas — and then runs the supersample ladder: the same page captured at 1x / 1.5x / 2x, encoded 4:2:0 on the SHIPPED hardware config, downscaled to 1080p the way a player would, and measured against the 1080p reference. 4:2:0 stores chroma at half resolution OF WHATEVER IT IS GIVEN, so a 2x capture carries one chroma sample per delivered pixel. If the 2x row lands on the 4:4:4 row, 100 % is a resolution question and costs bytes rather than CPU.',
+    run: async (args) => {
+      const { runColourCeiling } = await import('../perf/colourCeiling')
+      return runColourCeiling({
+        takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined,
+        probeSource: typeof args?.probeSource === 'boolean' ? args.probeSource : undefined,
+      })
+    },
+  },
+  {
     id: 'x15c',
     title: 'X15(c) — does adding one trim change how a take’s TEXT looks? (BACKLOG P1)',
     detail:
