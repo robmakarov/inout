@@ -106,14 +106,33 @@ function parseArgs(argv) {
 // ---------------------------------------------------------------------------
 
 /**
- * The rate a file was WRITTEN at, counted out of its own sample tables.
+ * The rate a file was written at — TWO NUMBERS, because there are two answers
+ * and conflating them is how the first version of this test read 22 fps off a
+ * file whose every frame is stamped 1/60 s.
  *
- * MP4 has no "frame rate" field: the rate is the sample count over the media
- * duration, both in the track's own timescale. Two layouts have to be read
- * because the product writes both — a fragmented file keeps its samples in
- * `moof/traf/trun` (with the duration either per-sample or defaulted in
- * `tfhd`), a plain one keeps them in `stbl/stts`. Reading only one of them
- * would silently score half the files at 0.
+ * MP4 has no "frame rate" field. What it has is a timescale and a duration per
+ * sample, and those give:
+ *
+ *   gridFps      timescale / the MOST COMMON sample duration in the file — the
+ *                frame grid the writer was working on. A take whose source
+ *                delivers 60 puts its frames 1/60 s apart; a 30 fps take puts
+ *                them 1/30 s apart. THIS is "what rate was this file written
+ *                at", and it is the gate.
+ *                MOST COMMON RATHER THAN SMALLEST, and that was measured the
+ *                hard way: the export is a packet COPY carrying the composite's
+ *                real timestamps, and two of those can land 17.8 ms apart on a
+ *                30 fps take through ordinary arrival jitter — a smallest-gap
+ *                reading called that file 56.25 fps. One jittery pair is not a
+ *                grid; the gap that repeats is.
+ *   cadenceFps   samples / total duration — how many frames actually landed per
+ *                second. It is a fact about the MACHINE (an encoder that falls
+ *                behind writes fewer frames on the same grid), which is why it
+ *                is reported next to the drop counts and not gated on.
+ *
+ * Two layouts have to be read because the product writes both: a fragmented
+ * file keeps its samples in `moof/traf/trun` (duration per-sample or defaulted
+ * in `tfhd`), a plain one in `stbl/stts`. Reading only one would silently score
+ * half the files at 0.
  *
  * Self-contained on purpose: it is `String()`-injected into the page so OPFS
  * files never travel as base64.
@@ -132,9 +151,18 @@ function readMp4Rate(bytes) {
     codec: null,
     samples: 0,
     durationTicks: 0,
-    fps: null,
+    minSampleTicks: null,
+    modalSampleTicks: null,
+    gridFps: null,
+    cadenceFps: null,
     source: null,
     truncated: false,
+  }
+  const hist = new Map()
+  const note = (ticks, count) => {
+    if (!(ticks > 0)) return
+    if (out.minSampleTicks === null || ticks < out.minSampleTicks) out.minSampleTicks = ticks
+    hist.set(ticks, (hist.get(ticks) ?? 0) + (count ?? 1))
   }
   if (bytes.byteLength < 16) return out
   out.container =
@@ -212,6 +240,7 @@ function readMp4Rate(bytes) {
                       const delta = u32(ps6 + 8 + i * 8 + 4)
                       samples += count
                       ticks += count * delta
+                      note(delta, count)
                     }
                   }
                 })
@@ -272,10 +301,13 @@ function readMp4Rate(bytes) {
         moofSamples += count
         if (perSampleDuration) {
           for (let i = 0; i < count && at + i * stride + 4 <= pe3; i++) {
-            moofTicks += u32(at + i * stride)
+            const d = u32(at + i * stride)
+            moofTicks += d
+            note(d)
           }
         } else {
           moofTicks += count * defaultDuration
+          note(defaultDuration, count)
         }
       }
     })
@@ -291,7 +323,19 @@ function readMp4Rate(bytes) {
     out.source = 'stbl/stts'
   }
   if (out.timescale > 0 && out.durationTicks > 0) {
-    out.fps = Math.round(((out.samples * out.timescale) / out.durationTicks) * 100) / 100
+    out.cadenceFps = Math.round(((out.samples * out.timescale) / out.durationTicks) * 100) / 100
+  }
+  let best = null
+  let bestCount = -1
+  for (const [ticks, count] of hist) {
+    if (count > bestCount) {
+      bestCount = count
+      best = ticks
+    }
+  }
+  out.modalSampleTicks = best
+  if (out.timescale > 0 && best > 0) {
+    out.gridFps = Math.round((out.timescale / best) * 100) / 100
   }
   return out
 }
@@ -543,7 +587,10 @@ async function runLane(sourceFps) {
     // control's own composite measures 25.2, because the cadence gate opens
     // every 32.3 ms and frames arrive every 33.3 ms. What the gate has to
     // separate is 25 from 49, not 59.9 from 60.
-    const near = (v) => v !== null && v !== undefined && v >= want * 0.7 && v <= want * 1.15
+    // THE GRID IS EXACT, so the band is tight: a frame is 1/60 s or it is not.
+    // (An encoder is allowed to round 16.666 ms to 16 or 17 ticks in a coarse
+    // timescale, so a percent of slack, not zero.)
+    const onGrid = (v) => v !== null && v !== undefined && Math.abs(v - want) <= want * 0.06
     const exported = lane.files.filter((f) => /^xport/.test(f.name) && f.container === 'mp4')
     const composite = lane.files.find((f) => /_composite/.test(f.name) && f.container === 'mp4')
     // The raw channel's key is `<recordingId>_<channelId>` — the KIND is not in
@@ -552,10 +599,15 @@ async function runLane(sourceFps) {
       (f) => f.container === 'mp4' && !/_composite|^xport/.test(f.name),
     )
     lane.measured = {
-      exportFps: exported.map((f) => f.fps),
+      exportSamples: exported.map((f) => f.samples),
+      compositeSamples: composite?.samples ?? null,
+      exportGridFps: exported.map((f) => f.gridFps),
+      exportCadenceFps: exported.map((f) => f.cadenceFps),
       exportGeometry: exported.map((f) => `${f.codedWidth}x${f.codedHeight}`),
-      compositeFps: composite?.fps ?? null,
-      rawScreenFps: rawScreen?.fps ?? null,
+      compositeGridFps: composite?.gridFps ?? null,
+      compositeCadenceFps: composite?.cadenceFps ?? null,
+      rawScreenGridFps: rawScreen?.gridFps ?? null,
+      rawScreenCadenceFps: rawScreen?.cadenceFps ?? null,
     }
     // ---- what the machine managed, read out of the engines' own summaries --
     const num = (re, line) => {
@@ -578,13 +630,40 @@ async function runLane(sourceFps) {
     // THE TRACK ITSELF was handed 60 by the OS — the half F15 changed in
     // acquire.ts. Without this the rest could all be the product agreeing with
     // itself about a source that never sped up.
+    lane.copyLine = lane.captureLog.find((l) => /^\[bits\]/.test(l)) ?? null
     lane.gates.sourceDelivered = lane.captureLog.some((l) =>
       new RegExp(`leaving display at \\d+×\\d+@${want}\\b`).test(l),
     )
     // NOT a contract gate: the raw channel's rate is the first casualty when a
     // machine cannot keep up, and it is reported in `throughput` instead.
-    lane.gates.compositeAtRate = near(lane.measured.compositeFps)
-    lane.gates.exportAtRate = exported.length > 0 && exported.every((f) => near(f.fps))
+    lane.gates.compositeWrittenAtRate = onGrid(lane.measured.compositeGridFps)
+    /**
+     * THE EXPORT IS NOT ASKED FOR A GRID, and that is a fact about the product
+     * rather than a softened gate. An unedited export PACKET-COPIES the
+     * composite: `instant.ts` calls `addVideoTrack(videoSource)` with no rate at
+     * all, so mediabunny picks its own 57600 timescale and re-expresses the
+     * take's real timestamps in it. Both lanes then read a 56.25 fps modal gap —
+     * the remuxer's quantization, identical whatever the take was, and nothing
+     * to do with F15.
+     *
+     * What the copy DOES promise is that the file is the composite's own
+     * frames — every one of them, none added — so that is what is checked, and
+     * only that. The two cadence numbers are NOT compared: the composite's is
+     * derived from durations its worker stamps nominally (1 tick each), the
+     * export's from the timestamps the remuxer recomputed, and holding two
+     * differently-derived numbers to 10 % of each other tests the derivation
+     * and not the product. The RATE comes from the composite's own grid above.
+     * A step that RE-RENDERS builds frames on the tier's grid, so that case is
+     * checked the direct way.
+     */
+    const src = composite
+    lane.gates.exportCarriesTheTakesFrames =
+      exported.length > 0 &&
+      exported.every(
+        (f) =>
+          onGrid(f.gridFps) ||
+          (!!src && /copy/.test(lane.copyLine ?? '') && f.samples === src.samples),
+      )
     lane.gates.productRecordedRate =
       lane.recorded?.composite?.fps === want ||
       (lane.recorded?.channels ?? []).some((c) => c.fps === want)
@@ -594,7 +673,6 @@ async function runLane(sourceFps) {
     lane.gates.announcedOnlyWhenMoved = want === 30 ? !announced : announced
     // The panel's meta line is duration/bytes/geometry — it says nothing about
     // WHICH path ran, so the copy is read from the export's own `[bits]` line.
-    lane.copyLine = lane.captureLog.find((l) => /^\[bits\]/.test(l)) ?? null
     lane.gates.instantCopyStillFires = /copy/.test(lane.copyLine ?? '')
     lane.gates.noConsoleErrors = lane.consoleErrors.length === 0
   } catch (err) {
@@ -629,10 +707,18 @@ for (const l of report.lanes) {
     `\nlane ${l.sourceFps} fps — ${l.pass ? 'PASS' : 'FAIL'}${l.error ? ` (${l.error})` : ''}`,
   )
   console.log(`  rAF in the window       ${l.rafFps} fps`)
-  console.log(`  raw screen channel      ${l.measured?.rawScreenFps ?? '—'} fps (from the file)`)
-  console.log(`  composite               ${l.measured?.compositeFps ?? '—'} fps (from the file)`)
+  const pair = (grid, cadence) => `grid ${grid ?? '—'} fps · cadence ${cadence ?? '—'} fps`
   console.log(
-    `  export                  ${(l.measured?.exportFps ?? []).join(', ') || '—'} fps ${(l.measured?.exportGeometry ?? []).join(', ')} (from the file)`,
+    `  raw screen channel      ${pair(l.measured?.rawScreenGridFps, l.measured?.rawScreenCadenceFps)} (from the file)`,
+  )
+  console.log(
+    `  composite               ${pair(l.measured?.compositeGridFps, l.measured?.compositeCadenceFps)} (from the file)`,
+  )
+  console.log(
+    `  export                  ${pair((l.measured?.exportGridFps ?? []).join('/'), (l.measured?.exportCadenceFps ?? []).join('/'))} ${(l.measured?.exportGeometry ?? []).join(', ')} (from the file)`,
+  )
+  console.log(
+    `  frames in the files     composite ${l.measured?.compositeSamples ?? '—'} · export ${(l.measured?.exportSamples ?? []).join('/') || '—'}`,
   )
   console.log(`  product's own record    ${JSON.stringify(l.recorded)}`)
   console.log(
