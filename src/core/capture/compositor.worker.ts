@@ -28,6 +28,7 @@
  *     for no benefit, because WebAudio cannot run in a worker anyway.
  */
 
+import { frameForAspect } from '@core/frame'
 import {
   EncodedAudioPacketSource,
   EncodedPacket,
@@ -49,6 +50,15 @@ const MAX_ENCODER_QUEUE = 6
 /** A static composition still needs a frame occasionally or the timeline
  * stalls and players show nothing between events. */
 const KEEPALIVE_MS = 1000
+/**
+ * F13: how long the first real frame has to define the composite's shape, and
+ * how long the keep-alive holds off for it. A source that never delivers (a
+ * still screen — getDisplayMedia emits on change) simply keeps the caller's
+ * guess when this expires, which is exactly the shape it used to always have.
+ */
+const ADOPT_BUDGET_MS = 700
+/** The preview canvas's own pixel budget, long edge. */
+const PREVIEW_LONG_EDGE = 960
 /**
  * A GPU barrier after the draw, so that paint timing measures the GPU rather
  * than the enqueue. OFF by default — the barrier itself serialises the pipeline,
@@ -76,6 +86,18 @@ export interface CompositorStartMsg {
   /** Present when the take has any audio channel. */
   sampleRate: number | null
   channelCount: number
+  /**
+   * F13, SECOND PASS: take the shape from the FRAMES, not from the caller.
+   *
+   * `width`/`height` above are the main thread's best guess, and on a phone it
+   * is wrong — `track.getSettings()` reports the SENSOR (landscape) while the
+   * frames that arrive are rotated to portrait, so a phone take was composited
+   * into a landscape canvas and cover-cropped. Nothing else in this worker ever
+   * looked at what a delivered frame actually is. With this set, the first real
+   * frame decides, at `longEdge`'s pixel budget, before anything is encoded.
+   */
+  followSource?: boolean
+  longEdge?: number
 }
 
 export interface CompositorFrameMsg {
@@ -170,6 +192,13 @@ export interface CompositorStats {
   hardware: string | null
   /** Which compositor backend ran — 'webgl2' or the slow '2d' fallback. */
   backend: 'webgl2' | '2d' | null
+  /**
+   * THE SHAPE THIS FILE ACTUALLY IS (F13). The caller's start message is a
+   * guess; with `followSource` the first arriving frame corrects it, and
+   * CompositeRecording must carry what was written, not what was asked for.
+   */
+  outWidth: number
+  outHeight: number
   /** Largest number of frames the encoder was behind at any point. */
   peakQueue: number
   /**
@@ -350,6 +379,18 @@ let fatal: string | null = null
 let W = 1920
 let H = 1080
 let FPS = 30
+/**
+ * F13: is the canvas still allowed to take its shape from the first frame?
+ * False the moment the shape is fixed — either a frame settled it, the deadline
+ * passed, or something already went into the file. A file whose dimensions
+ * change part-way is a file every consumer has to special-case forever, which
+ * is the same rule the degradation ladder obeys (resolutionLadder rule 1).
+ */
+let followSource = false
+let longEdge = 1920
+let shapeSettled = true
+let startedWorkerAtMs = 0
+let videoBitrate = 8_000_000
 let startedAtMs: number | null = null
 let lastEncodedMs = -Infinity
 /**
@@ -432,6 +473,8 @@ const stats: CompositorStats = {
   codec: null,
   hardware: null,
   backend: null,
+  outWidth: 0,
+  outHeight: 0,
   peakQueue: 0,
   videoBytes: 0,
   audioBytes: 0,
@@ -599,6 +642,94 @@ function blitPreview(): void {
   }
 }
 
+/**
+ * F13 — TAKE THE SHAPE FROM THE PICTURE THAT ARRIVED.
+ *
+ * Runs at most once, before a single frame has gone into the file, so nothing
+ * downstream ever sees dimensions change mid-stream. The muxer is not told a
+ * size at all (`addVideoTrack` takes only a frame rate — the geometry reaches
+ * the file through the encoder's own SPS), so the whole correction is the
+ * canvas plus one `configure()` on an encoder that has not encoded yet.
+ *
+ * WHY IT EXISTS: `track.getSettings()` reports the SENSOR on a phone held
+ * portrait — landscape — while the frames delivered are rotated to portrait.
+ * The first pass of F13 believed the settings, so a phone take was composited
+ * into a landscape canvas and cover-cropped, and the editor then cropped the
+ * raw portrait channel a second time into the same landscape stage. Nothing in
+ * this worker had ever looked at what a delivered frame actually is.
+ */
+function settleShape(): void {
+  shapeSettled = true
+  // Only now is this the answer: the host reports the composite's geometry off
+  // these two fields, and reporting the GUESS would put the wrong aspect on the
+  // recording preview for exactly as long as it took the first frame to arrive.
+  stats.outWidth = W
+  stats.outHeight = H
+}
+
+function adoptShape(frame: VideoFrame): void {
+  const w = frame.displayWidth
+  const h = frame.displayHeight
+  if (!w || !h) return
+  const want = frameForAspect(w / h, longEdge)
+  if (want.width === W && want.height === H) {
+    settleShape()
+    return
+  }
+  // Anything already in the file makes this a mid-stream resize, which is the
+  // one thing it may never be. Bail loudly rather than quietly.
+  if (stats.framesEncoded > 0 || lastEncodeOkMs !== -Infinity) {
+    console.warn(
+      `[capture] compositor: first frame is ${w}x${h} but ${W}x${H} is already in the file — keeping it`,
+    )
+    settleShape()
+    return
+  }
+  const from = `${W}x${H}`
+  W = want.width
+  H = want.height
+  if (gl) {
+    gl.dispose()
+    gl = createGLCompositor(W, H)
+  }
+  if (gl) {
+    canvas = gl.canvas
+    ctx = null
+  } else {
+    canvas = new OffscreenCanvas(W, H)
+    ctx = canvas.getContext('2d', { alpha: false })
+    stats.backend = '2d'
+  }
+  // The preview is blitted 1:1 into whatever the main thread handed over, so it
+  // has to turn with the composite or the picture is stretched on screen.
+  const p = previewCtx
+  if (p) {
+    const box = frameForAspect(W / H, PREVIEW_LONG_EDGE)
+    p.canvas.width = box.width
+    p.canvas.height = box.height
+  }
+  settleShape()
+  console.info(
+    `[capture] compositor: the frames are ${w}x${h} — composing ${W}x${H}, not ${from} (F13)`,
+  )
+  void reconfigureEncoder()
+}
+
+async function reconfigureEncoder(): Promise<void> {
+  const enc = videoEncoder
+  if (!enc || stopped || fatal) return
+  try {
+    const { config, hardware } = await pickVideoConfig(W, H, videoBitrate, FPS)
+    if (stopped || fatal || enc.state === 'closed') return
+    enc.configure(config)
+    stats.codec = config.codec
+    stats.hardware = hardware
+    stats.configJson = JSON.stringify(config)
+  } catch (err) {
+    fail(err)
+  }
+}
+
 function encodeComposite(atMs: number, keepAlive: boolean): void {
   const enc = videoEncoder
   if (!enc || stopped || fatal || enc.state !== 'configured' || !canvas) return
@@ -665,6 +796,12 @@ async function start(msg: CompositorStartMsg): Promise<void> {
   W = msg.width
   H = msg.height
   FPS = msg.fps
+  videoBitrate = msg.videoBitrate
+  followSource = msg.followSource === true
+  longEdge = msg.longEdge && msg.longEdge > 0 ? msg.longEdge : Math.max(W, H)
+  startedWorkerAtMs = performance.now()
+  shapeSettled = false
+  if (!followSource) settleShape()
 
   const root = await navigator.storage.getDirectory()
   const dir = await root.getDirectoryHandle(ROOT_DIR, { create: true })
@@ -794,6 +931,14 @@ async function start(msg: CompositorStartMsg): Promise<void> {
     // Against the last frame that actually REACHED the encoder — see
     // lastEncodeOkMs. Reading lastEncodedMs here meant a busy encoder silently
     // suppressed the keep-alive it exists to trigger.
+    // F13: never write the first frame of the file before the shape is
+    // decided — one keep-alive at the guessed size would freeze the wrong
+    // geometry into the take for good. Bounded, so a source that delivers
+    // nothing at all still gets its keep-alive.
+    if (!shapeSettled) {
+      if (performance.now() - startedWorkerAtMs < ADOPT_BUDGET_MS) return
+      settleShape()
+    }
     if (nowMain - lastEncodeOkMs >= KEEPALIVE_MS) encodeComposite(nowMain, true)
   }, KEEPALIVE_MS / 2)
 }
@@ -904,6 +1049,8 @@ self.onmessage = async (ev: MessageEvent<CompositorMsg>) => {
           return
         }
         stats.framesIn++
+        // F13: the FIRST frame decides the shape, before anything is encoded.
+        if (!shapeSettled) adoptShape(msg.frame)
         latest[msg.kind]?.close()
         latest[msg.kind] = msg.frame
         // Frame-driven, capped at the output rate: two sources delivering 60 fps

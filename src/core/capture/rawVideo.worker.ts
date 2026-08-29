@@ -105,6 +105,16 @@ export interface RawVideoStats {
   hardware: string
   writeCalls: number
   flushes: number
+  /**
+   * THE GEOMETRY THIS CHANNEL WAS ACTUALLY ENCODED AT (F13). The start message
+   * carries `track.getSettings()`, which reports the SENSOR on a phone held
+   * portrait — landscape — while the frames delivered are rotated to portrait.
+   * The first frame corrects it here, and the session writes THIS into
+   * ChannelRecording so the single-generation copy and the editor are matching
+   * the file rather than the settings.
+   */
+  outWidth: number
+  outHeight: number
 }
 
 export type RawVideoReply =
@@ -175,6 +185,10 @@ let fatal: string | null = null
 let stopped = false
 let W = 1920
 let H = 1080
+let videoBitrate = 8_000_000
+let fps = 30
+/** F13: has the first frame been allowed to correct W/H yet? */
+let shapeSettled = false
 
 /** Main-thread stamp of the first frame that reached the encoder. */
 let firstFrameAtMs: number | null = null
@@ -217,6 +231,8 @@ const stats: RawVideoStats = {
   videoBytes: 0,
   codec: '',
   hardware: '',
+  outWidth: 0,
+  outHeight: 0,
   writeCalls: 0,
   flushes: 0,
 }
@@ -261,6 +277,10 @@ self.onmessage = (ev: MessageEvent<RawVideoMsg>): void => {
 async function start(msg: RawVideoStartMsg): Promise<void> {
   W = msg.width
   H = msg.height
+  videoBitrate = msg.videoBitrate
+  fps = msg.fps
+  stats.outWidth = W
+  stats.outHeight = H
 
   const root = await navigator.storage.getDirectory()
   const dir = await root.getDirectoryHandle(ROOT_DIR, { create: true })
@@ -354,6 +374,49 @@ function encodeAt(picture: VideoFrame, atMs: number, keepAlive: boolean): void {
   }
 }
 
+/**
+ * F13 — ENCODE THE PICTURE THAT ARRIVED, AT ITS OWN SIZE.
+ *
+ * `track.getSettings()` is what the encoder was configured from, and on a phone
+ * held portrait it reports the sensor's landscape dimensions while the frames
+ * are rotated to portrait. An encoder configured 1920x1080 fed 1080x1920 frames
+ * does not refuse — it rescales — so the raw channel came out squashed, and
+ * every consumer that trusts `ChannelRecording.width/height` (the
+ * single-generation copy, the editor's PiP) inherited the same lie.
+ *
+ * Runs once, before anything is encoded (the keep-alive cannot fire before the
+ * first frame either), so the file never changes dimensions part-way. A no-op
+ * wherever the settings and the frames agree, which is every desktop take this
+ * product has ever made.
+ */
+function adoptFrameSize(frame: VideoFrame): void {
+  shapeSettled = true
+  const w = frame.displayWidth
+  const h = frame.displayHeight
+  if (!w || !h || (w === W && h === H)) return
+  if (stats.framesEncoded > 0) return
+  console.info(
+    `[capture] raw channel: the frames are ${w}x${h}, not the ${W}x${H} the track reported — encoding ${w}x${h} (F13)`,
+  )
+  W = w
+  H = h
+  stats.outWidth = W
+  stats.outHeight = H
+  void (async () => {
+    const enc = encoder
+    if (!enc || stopped || fatal) return
+    try {
+      const { config, hardware } = await pickVideoConfig(W, H, videoBitrate, fps)
+      if (!encoder || stopped || fatal || enc.state === 'closed') return
+      enc.configure(config)
+      stats.codec = config.codec
+      stats.hardware = hardware
+    } catch (err) {
+      fail(err)
+    }
+  })()
+}
+
 function onFrame(msg: RawVideoFrameMsg): void {
   const frame = msg.frame
   stats.framesIn++
@@ -362,6 +425,7 @@ function onFrame(msg: RawVideoFrameMsg): void {
     frame.close()
     return
   }
+  if (!shapeSettled) adoptFrameSize(frame)
   // The channel's t=0. Its LENGTH comes from the stop instant instead (see
   // stop()): a static source delivers one frame, so the span of arrivals is not
   // the span of the channel.

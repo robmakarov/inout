@@ -6,6 +6,7 @@
  * compositor. Geometry mirrors src/core/compose/layout.ts (decision #11).
  * v2 (WebCodecs + smart-cut) replaces this without changing the contract.
  */
+import { frameForAspect } from '@core/frame'
 import { blobStore } from '@core/store'
 import type { CompositeRecording } from '../types'
 import { SourceLiveness, type LivenessEvent } from './sourceLiveness'
@@ -41,6 +42,8 @@ const FPS = 30
  */
 const W = 1920
 const H = 1080
+/** F13: how long the picture has to declare itself before the guess stands. */
+const ADOPT_BUDGET_MS = 700
 const VIDEO_BITS = 8_000_000
 /** How often each source's delivered frame rate is logged (evidence only). */
 const FPS_LOG_MS = 10_000
@@ -138,6 +141,18 @@ export interface LiveCompositeOptions {
    */
   width?: number
   height?: number
+  /**
+   * F13, second pass: take the shape from the PICTURE, not from the caller.
+   * `track.getSettings()` reports the SENSOR on a phone held portrait —
+   * landscape — while the frames are rotated to portrait, and THIS is the
+   * engine an iPhone uses (Safari has no MediaStreamTrackProcessor, so v2 is
+   * never available there). A `<video>` element's videoWidth/videoHeight are
+   * the rotated truth, so the canvas is sized from those.
+   */
+  followSource?: boolean
+  /** The pixel budget the adopted shape is resolved at (long edge). */
+  longEdge?: number
+  onGeometry?: (size: { width: number; height: number }) => void
 }
 
 export interface LiveCompositeHandle {
@@ -243,23 +258,78 @@ function videoFor(stream: MediaStream): HTMLVideoElement {
   return v
 }
 
+/**
+ * The element's real picture size, once the browser knows it. Bounded: a source
+ * that never produces metadata must not hold a take up, and the caller's guess
+ * is exactly the geometry this engine used to always write.
+ */
+async function firstDims(
+  el: HTMLVideoElement,
+  budgetMs: number,
+): Promise<{ width: number; height: number } | null> {
+  if (el.videoWidth > 0 && el.videoHeight > 0) {
+    return { width: el.videoWidth, height: el.videoHeight }
+  }
+  return new Promise((resolve) => {
+    let done = false
+    const finish = (): void => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      el.removeEventListener('loadedmetadata', finish)
+      el.removeEventListener('resize', finish)
+      resolve(
+        el.videoWidth > 0 && el.videoHeight > 0
+          ? { width: el.videoWidth, height: el.videoHeight }
+          : null,
+      )
+    }
+    const timer = setTimeout(finish, budgetMs)
+    el.addEventListener('loadedmetadata', finish)
+    el.addEventListener('resize', finish)
+  })
+}
+
 export async function startLiveComposite(
   inputs: LiveCompositeInputs,
   blobKey: string,
   options: LiveCompositeOptions = {},
 ): Promise<LiveCompositeV1Handle> {
-  // F13: the caller's frame, or the constant this engine shipped with.
-  const outW = options.width && options.width > 0 ? options.width : W
-  const outH = options.height && options.height > 0 ? options.height : H
+  // The elements come FIRST now: their videoWidth/videoHeight is the only
+  // honest statement of what this take looks like (F13), and the canvas has to
+  // be that shape before a single frame is drawn into it.
+  const screenEl = inputs.screen ? videoFor(inputs.screen) : null
+  const cameraEl = inputs.camera ? videoFor(inputs.camera) : null
+  let torndown = false
+
+  // F13: the caller's frame is the guess; the picture is the answer.
+  let outW = options.width && options.width > 0 ? options.width : W
+  let outH = options.height && options.height > 0 ? options.height : H
+  if (options.followSource) {
+    const primary = screenEl ?? cameraEl
+    const dims = primary ? await firstDims(primary, ADOPT_BUDGET_MS) : null
+    if (dims) {
+      const want = frameForAspect(
+        dims.width / dims.height,
+        options.longEdge && options.longEdge > 0 ? options.longEdge : Math.max(outW, outH),
+      )
+      if (want.width !== outW || want.height !== outH) {
+        console.info(
+          `[capture] composite v1: the picture is ${dims.width}x${dims.height} — composing ` +
+            `${want.width}x${want.height}, not ${outW}x${outH} (F13)`,
+        )
+      }
+      outW = want.width
+      outH = want.height
+    }
+  }
+  options.onGeometry?.({ width: outW, height: outH })
+
   const canvas = document.createElement('canvas')
   canvas.width = outW
   canvas.height = outH
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('live composite: 2d context unavailable')
-
-  const screenEl = inputs.screen ? videoFor(inputs.screen) : null
-  const cameraEl = inputs.camera ? videoFor(inputs.camera) : null
-  let torndown = false
 
   // Mixed audio with gain staging + limiter: naive unity summing clips as
   // soon as mic and system audio overlap — that IS audible noise/distortion.

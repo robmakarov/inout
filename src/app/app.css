@@ -505,6 +505,11 @@
   width: 100%;
   height: 100%;
   display: block;
+  /* F13: the worker turns this canvas's bitmap with the composite, and the
+     stage box follows the same reported geometry — so this normally has nothing
+     to do. It is here so that in the moments they disagree (the first frames of
+     a take) the picture is letterboxed rather than stretched. */
+  object-fit: contain;
 }
 .stage__screen,
 .stage__full {

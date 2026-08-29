@@ -410,6 +410,14 @@ export type CaptureEvent =
    * resolved value of attachCompositePreview().
    */
   | { type: 'composite-preview'; live: false }
+  /**
+   * The live composite has settled the shape it is writing (task F13). Fired
+   * once per take, and it is not always what capture ASKED for: the request is
+   * built from `track.getSettings()`, which reports the sensor's landscape
+   * dimensions on a phone held portrait, so the engines correct it from the
+   * first picture they actually receive. The recording preview follows this.
+   */
+  | { type: 'composite-geometry'; width: number; height: number }
 
 export interface CaptureSession {
   readonly state: CaptureState

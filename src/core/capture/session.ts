@@ -301,6 +301,10 @@ class Session implements CaptureSession {
   private compositeInvalid = false
   /** True while the recording preview is being painted BY the compositor. */
   private compositePreviewLive = false
+  /** F13: the shape the composite is ACTUALLY being written at, once its engine
+   *  has seen a frame and said so. The UI's preview stage follows this rather
+   *  than the track settings, which lie about orientation on a phone. */
+  private compositeGeometry: { width: number; height: number } | null = null
   /** compositeInvalid AND torn down — nothing left to keep or stop. */
   private compositeHardInvalid = false
   /** Video sources frozen right now, and every one that froze at any point. */
@@ -975,12 +979,24 @@ class Session implements CaptureSession {
     )
     const inputs = { screen, camera, audio }
     // F13: one answer, handed to whichever engine starts — the two must not
-    // derive it separately or a fallback would change the take's shape.
+    // derive it separately or a fallback would change the take's shape. It is
+    // a GUESS: `track.getSettings()` reports the sensor on a phone held
+    // portrait, so the engines correct it from the first picture they see and
+    // report back what they are actually writing.
     const frame = this.compositeFrame()
-    if (frame.width !== COMPOSITE_WIDTH || frame.height !== COMPOSITE_HEIGHT) {
+    const followSource = sourceFrameEnabled()
+    if (followSource) {
       console.info(
-        `[capture] composite follows the source: ${frame.width}x${frame.height} (F13, ?sourceframe=1)`,
+        `[capture] composite follows the source: starting at ${frame.width}x${frame.height}, ` +
+          `the first frame decides (F13, ?sourceframe=1)`,
       )
+    }
+    const onGeometry = (size: { width: number; height: number }): void => {
+      if (this.compositeGeometry &&
+          this.compositeGeometry.width === size.width &&
+          this.compositeGeometry.height === size.height) return
+      this.compositeGeometry = size
+      this.emit({ type: 'composite-geometry', width: size.width, height: size.height })
     }
     const key = `${this.recordingId}_composite.webm`
     const onSourceLiveness = (kind: 'screen' | 'camera', event: 'stalled' | 'resumed'): void =>
@@ -999,6 +1015,9 @@ class Session implements CaptureSession {
             epochMs,
             width: frame.width,
             height: frame.height,
+            followSource,
+            longEdge: COMPOSITE_WIDTH,
+            onGeometry,
           })
         : null
 
@@ -1011,6 +1030,9 @@ class Session implements CaptureSession {
         epochMs,
         width: frame.width,
         height: frame.height,
+        followSource,
+        longEdge: COMPOSITE_WIDTH,
+        onGeometry,
         // A machine that cannot keep pace stops being copied, exactly as v1's
         // watchdog did: the take is unharmed, the unedited export renders.
         // O6: the gentler rung of the same ladder — ask the SOURCE for less

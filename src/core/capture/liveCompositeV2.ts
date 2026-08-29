@@ -190,6 +190,19 @@ export interface LiveCompositeV2Options {
    */
   width?: number
   height?: number
+  /**
+   * F13, second pass: let the compositor take the shape from the first frame it
+   * actually receives rather than from `width`/`height`, which on a phone are
+   * `track.getSettings()` — the SENSOR's landscape dimensions, not the rotated
+   * portrait frames the camera delivers. `width`/`height` stay the guess the
+   * take starts with and the answer when nothing ever arrives.
+   */
+  followSource?: boolean
+  /** The pixel budget the adopted shape is resolved at (long edge). */
+  longEdge?: number
+  /** Fired once the composite's shape is settled, so the UI can stop showing
+   *  the guess. Called with the geometry the FILE is being written at. */
+  onGeometry?: (size: { width: number; height: number }) => void
 }
 
 export interface LiveCompositeV2Handle {
@@ -261,6 +274,13 @@ export async function startLiveCompositeV2(
   let workerError: string | null = null
   let degraded = false
   let torndown = false
+  /** F13: the shape has been reported to the caller once, and only once. */
+  let geometryReported = false
+  const reportGeometry = (st: CompositorStats): void => {
+    if (geometryReported || !st.outWidth || !st.outHeight) return
+    geometryReported = true
+    options.onGeometry?.({ width: st.outWidth, height: st.outHeight })
+  }
 
   const pending = new Map<string, { resolve: (r: CompositorReply) => void; reject: (e: Error) => void }>()
   worker.onmessage = (ev: MessageEvent<CompositorReply>) => {
@@ -268,6 +288,7 @@ export async function startLiveCompositeV2(
     if ('event' in reply) {
       if (reply.event === 'stats') {
         latestStats = reply.stats
+        reportGeometry(reply.stats)
         checkWatchdog(reply.stats)
       } else {
         workerError = reply.error
@@ -504,6 +525,8 @@ export async function startLiveCompositeV2(
     width: outW,
     height: outH,
     fps: FPS,
+    followSource: options.followSource === true,
+    longEdge: options.longEdge,
     videoBitrate: VIDEO_BITS,
     audioBitrate: AUDIO_BITS,
     sampleRate: hasAudio ? audioCtx.sampleRate : null,
@@ -649,8 +672,10 @@ export async function startLiveCompositeV2(
         // The encoder's own last timestamp is the truth; wall time includes
         // teardown and would overstate the file by the drain.
         durationMs: Math.round(stats.durationMs || wallMs),
-        width: outW,
-        height: outH,
+        // F13: what the worker actually WROTE, which is not always what it was
+        // asked for — the first frame may have turned it.
+        width: stats.outWidth || outW,
+        height: stats.outHeight || outH,
         bytes: stats.bytes,
       }
       // WHERE THIS FILE'S ZERO SITS IN THE TAKE (P0-instant-sync). The worker

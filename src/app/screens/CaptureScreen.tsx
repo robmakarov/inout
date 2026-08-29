@@ -132,6 +132,8 @@ export function CaptureScreen() {
    * so this can only ever remove decodes, never a picture.
    */
   const [compositePreview, setCompositePreview] = useState(false)
+  /** F13: the composite's own geometry, once its engine has seen a frame. */
+  const [compositeSize, setCompositeSize] = useState<{ width: number; height: number } | null>(null)
   const previewCanvasRef = useRef<HTMLCanvasElement>(null)
   const finishingRef = useRef(false)
 
@@ -220,6 +222,12 @@ export function CaptureScreen() {
           setStalled((s) => s.filter((k) => k !== e.kind))
           toast(`${CHANNEL_META[e.kind].label} is live again`)
           break
+        case 'composite-geometry':
+          // F13: what the compositor is ACTUALLY writing, which is the only
+          // honest thing to shape the recording preview by — the track
+          // settings this take started from report the sensor, not the picture.
+          setCompositeSize({ width: e.width, height: e.height })
+          break
         case 'composite-preview':
           // The compositor stopped painting (watchdog degrade, or a late join
           // tore it down). Its canvas would hold its last frame forever.
@@ -240,6 +248,7 @@ export function CaptureScreen() {
   useEffect(() => {
     if (!session) {
       setCompositePreview(false)
+      setCompositeSize(null)
       return
     }
     const canvas = previewCanvasRef.current
@@ -401,9 +410,21 @@ export function CaptureScreen() {
    * than a letterboxed one. 960x540 and 16 / 9 whenever the frame does not
    * follow the source.
    */
-  const previewBox = sourceFrameEnabled()
-    ? frameForAspect(liveTrackAspect(screenStream) ?? liveTrackAspect(cameraStream) ?? DEFAULT_FRAME_ASPECT, 960)
-    : { width: 960, height: 540 }
+  /**
+   * F13: the preview stage IS the composite, so it carries the composite's
+   * shape — reported by the engine that is writing it, because that is the only
+   * source that has looked at a real frame. Until it reports (the first frames
+   * of a take) the track settings are the guess, and 960x540 / 16 / 9 whenever
+   * the frame does not follow the source at all.
+   */
+  const previewBox = !sourceFrameEnabled()
+    ? { width: 960, height: 540 }
+    : compositeSize
+      ? frameForAspect(compositeSize.width / compositeSize.height, 960)
+      : frameForAspect(
+          liveTrackAspect(screenStream) ?? liveTrackAspect(cameraStream) ?? DEFAULT_FRAME_ASPECT,
+          960,
+        )
 
   return (
     <div className={`capture${recording ? ' capture--recording' : ''}`}>
@@ -456,10 +477,16 @@ export function CaptureScreen() {
                 one decode for the whole take instead of one for the file and
                 one for this. Sized to the composition, not the screen — the
                 worker scales into it, and both carry the take's own aspect. */}
+            {/* The bitmap size is FIXED here and never re-rendered: this canvas is
+                transferred to the compositor worker, and writing width/height on
+                a transferred canvas throws. The worker owns the bitmap and turns
+                it with the composite (F13); `object-fit: contain` means whatever
+                shape it ends up, the picture is never stretched — and the stage
+                box below is that shape anyway, so there is nothing to letterbox. */}
             <canvas
               ref={previewCanvasRef}
-              width={previewBox.width}
-              height={previewBox.height}
+              width={960}
+              height={540}
               className="stage__composite"
               style={compositePreview ? undefined : { display: 'none' }}
             />
