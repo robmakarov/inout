@@ -41,6 +41,14 @@ describe('ladderVerdict', () => {
     expect(ladderVerdict({ ...failing, stepsTaken: DEGRADE_RUNGS.length, deliveredFps: 1 })).toBeNull()
   })
 
+  it('the dead-encoder bound sits UNDER the watchdog and well clear of any init', () => {
+    // Both halves are load-bearing and the first attempt got the second wrong:
+    // at 6 s this fired on 2560x1440@60, a configuration measured to keep 81 %
+    // of its frames, and stepped a healthy take down to 132 frames from 508.
+    expect(DEAD_ENCODER_MS).toBeGreaterThan(WARMUP_MS * 2)
+    expect(DEAD_ENCODER_MS).toBeLessThan(15_000)
+  })
+
   it('says nothing while the encoder has not produced output YET', () => {
     // Note 6, the fault that cost this project three sessions: a fresh
     // process's first VideoEncoder pays a multi-second init, and judging inside

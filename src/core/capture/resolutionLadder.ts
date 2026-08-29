@@ -109,11 +109,20 @@ export const WARMUP_MS = 4_000
  * 2560x1440@60 keeps 81 % of its frames, so the rung the ladder would have
  * stepped to was there the whole time.
  *
- * 6 s is comfortably above any init this project has measured and comfortably
- * below the watchdog's 15 s, so the ladder gets to ask for less BEFORE the
- * watchdog gives up. Stepping down can only beat losing the composite.
+ * IT IS A LAST RESORT, NOT A SECOND WARM-UP RULE, and the first attempt at it
+ * got that wrong in exactly the way rule 2 was written to prevent. At 6 s this
+ * fired on 2560x1440@60 — a configuration MEASURED to keep 81 % of its frames —
+ * because that composite's encoder had simply not produced its first output
+ * yet under a heavy source. The ladder then stepped a healthy take down to 30
+ * and it kept 132 frames instead of 508. Note 6, one more time: judging inside
+ * the init reads as a hardware failure.
+ *
+ * So it sits just under the watchdog's 15 s instead. That is the only window
+ * where this rung can be certain: past it the composite is being killed
+ * anyway, so asking for less can only beat losing it, and below it the honest
+ * answer is still "the encoder is waking up".
  */
-export const DEAD_ENCODER_MS = 6_000
+export const DEAD_ENCODER_MS = 12_000
 /** Rule 3: after a step, wait this long before judging the new rung. */
 export const SETTLE_MS = 3_000
 /** How long delivery must stay under the floor before a step. */
