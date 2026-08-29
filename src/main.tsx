@@ -28,8 +28,35 @@ createRoot(document.getElementById('root')!).render(
 // first paint or with warming the capture pipeline.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    void navigator.serviceWorker.register('/sw.js').catch((err) => {
-      console.warn('[pwa] service worker registration failed', err)
-    })
+    void navigator.serviceWorker
+      .register('/sw.js')
+      .then(async () => {
+        /**
+         * ASK THE WORKER TO CACHE THIS BUILD, WHOLE (task B3).
+         *
+         * The worker's install runs once ever — sw.js does not change between
+         * deploys — so without this it would precache the first build a user
+         * ever saw and no other. Every later build would again be caching only
+         * the chunks it happened to fetch, and the lazy ones (export worker,
+         * size probe, EditorScreen, session) would again 404 in any tab left
+         * open across a deploy. Measured before this landed: seven assets gone,
+         * the tab could not even reach the editor.
+         *
+         * Deliberately AFTER `load` and not awaited by anything: it competes
+         * with nothing, and a failure costs only the guarantee it adds.
+         */
+        const reg = await navigator.serviceWorker.ready
+        reg.active?.postMessage({ type: 'inout-precache-build' })
+      })
+      .catch((err) => {
+        console.warn('[pwa] service worker registration failed', err)
+      })
+  })
+  navigator.serviceWorker.addEventListener('message', (ev: MessageEvent) => {
+    const d = ev.data as { type?: string; cached?: number; missed?: number; total?: number } | null
+    if (d?.type !== 'inout-precache-done') return
+    console.info(
+      `[pwa] build precached: ${d.cached ?? 0} newly cached, ${d.missed ?? 0} unavailable, ${d.total ?? 0} in this build`,
+    )
   })
 }

@@ -467,7 +467,9 @@ READY NOW:
                                              own correction (cold decode -> hard seek / +-20 % playbackRate
                                              time-stretch) which HEALS on repeat, and (B) ~15 pad notches
                                              a minute already in the FILE. Discriminator: export and listen.
-  B3   a stale tab kills the export  [light-medium]  a tab that spans a deploy 404s its hashed chunks and
+  B3   a stale tab kills the export  [DONE 2026-08-29 — handoff under the task. Worse than filed: a tab
+                                             that spans a deploy could not RECORD either]
+                                             a tab that spans a deploy 404s its hashed chunks and
        worker                                  the export worker dies silently — the fallback renders
                                              in-thread (7.5 s of an 8.2 s render in encode-wait). May also
                                              explain past "the fix wasn't there to hear" rounds.
@@ -919,6 +921,61 @@ in the SW cache.
 GATES: the repro no longer 404s, or surfaces a refresh prompt the user cannot miss · the export worker
 is still used after a deploy (assert the in-thread fallback did NOT fire) · a fresh tab is unchanged ·
 the boot notice, if used, is an owed flag consumed once (a 4 s toast was already learned to be wrong).
+
+## B3 HANDOFF — DONE 2026-08-29. IT IS NOT ONLY THE EXPORT WORKER: THE TAB CANNOT RECORD EITHER.
+THE MECHANISM, NAMED PRECISELY, because "the cache is stale" is the wrong sentence and it is the one
+this ticket started with. The service worker is cache-first for `/assets/`, and that is SAFE — the
+names are content-hashed, so an asset it has already seen survives any deploy. The ones that break are
+the chunks a session has NOT opened: they were never fetched, so they are not in the cache, and when
+the panel finally opens the worker misses, goes to the network, and the network has moved to build
+N+1. CACHE-FIRST IS NOT THE BUG; AN INCOMPLETE CACHE IS. The install-time precache list was `/` and
+four icons — not one line of JS — which also quietly made the PWA's offline promise thinner than it
+looked.
+
+NEW RIG, AND IT REPRODUCES ROBERT'S CONSOLE EXACTLY: `node scripts/stale-tab-check.mjs`. It builds A,
+serves it, lets the worker install, builds B with different hashes, swaps the served directory (which
+is what Vercel does to an open tab), and then drives the SAME tab. ~90 s, no deploy required.
+  BEFORE (`--broken`, which withholds the manifest and reproduces the old behaviour):
+    7 of build A's assets 404 in the open tab — `export.worker-*.js`, `sizeProbe-*.js`,
+    `EditorScreen-*.js`, `session-*.js`, `analyzeSilence-*.js` and two index chunks.
+    Cache held 7 entries. reachedEditor FALSE. exported FALSE.
+  AFTER: every one of those 7 returns 200 from the cache · cache holds 30 · the take reaches the
+    editor · the export completes (`0:07 · 1.2 MB · 1920×1080`) · the in-thread fallback did NOT fire.
+WORSE THAN THE TICKET SAID, and this is the part worth carrying forward: `session-*.js` and
+`EditorScreen-*.js` are lazy too. A tab that spans a deploy could not START A TAKE, let alone export
+one. The export-worker fallback was the symptom that got noticed because it still produced a file.
+
+THE FIX, in three small pieces:
+  · `vite.config.ts` emits `/asset-manifest.json` — the list of every hashed asset in the build. Only
+    the bundler knows the lazy chunks; nothing in the app can enumerate them.
+  · `public/sw.js` caches the whole build from that list, one asset at a time. NOT `cache.addAll`:
+    addAll is atomic, so one asset the host had already replaced would discard the other twenty-three
+    — and a deploy landing mid-precache is exactly the case this exists for.
+  · `src/main.tsx` asks the worker to do it after every load. `install` runs ONCE, and sw.js's bytes
+    do not change between deploys, so without this the worker would precache the first build a user
+    ever saw and no other — every later build back to the bug.
+RETENTION IS BOUNDED, because caching whole builds costs ~1 MB per distinct build and this repo
+deploys many times a day: the last 3 manifests are kept and older assets are pruned. The current
+build's list is recorded FIRST and everything kept is the union of the retained lists, so the build a
+tab is RUNNING can never be what gets deleted — that would recreate this bug with our own hand.
+
+NO REFRESH PROMPT, AND THAT IS DELIBERATE. The task listed one as a candidate fix shape. A prompt is a
+user-visible behaviour change and needs Robert's yes (and a 4 s toast was already learned to be
+wrong); the precache fixes the defect invisibly and a prompt would now be an improvement rather than a
+repair. If Robert wants one, the owed-flag boot-notice machinery is there and this does not block it.
+
+GATES (11, all green; `--broken` turns 5 of them red on demand, so none is green-by-construction)
+  · the repro no longer 404s — everyAssetStillReachable, noAssetNotFound.
+  · the export worker is still used after a deploy, fallback asserted ABSENT — exportWorkerNotBypassed.
+    IT IS GUARDED AGAINST ITS OWN VACUITY: in the `--broken` run nothing exported at all, so the
+    fallback line was absent and the first version of this gate scored PASS next to four failures. It
+    now requires `exported` first.
+  · a fresh tab is unchanged — freshTabBoots + freshTabServedNewBuild (it must load build B, not a
+    pinned A: a "fix" that froze everyone on an old build would pass every other gate and be worse
+    than the bug).
+  · retention — historyKeptBothBuilds, runningBuildStillCached, newBuildAlsoCached.
+  · the boot notice, if used, is an owed flag consumed once — not used; see above.
+  · 667 tests · typecheck clean.
 
 ## B4 dead-channel-silence — a channel that recorded nothing must say so [light · UI surface + the
 ##    liveness path that already exists]
