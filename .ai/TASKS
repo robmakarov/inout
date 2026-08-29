@@ -277,6 +277,18 @@ READY NOW:
                                              it is right, the default flips and INOUT can make a
                                              vertical video; if it is not, say what is wrong and
                                              nothing has moved in the meantime.
+  F18  the user's own resolution   [medium]  Robert 2026-08-29: "i want 3024x1964 or whatever users
+                                             resolution is on roadmap". The export ladder stops at
+                                             1440p for inherited reasons, not decided ones, and the
+                                             capture ceiling follows it — one constant raises both.
+                                             GATED ON O15, or ships behind a flag.
+  O15  how many encoders may a     [heavy]   THE FREEZE'S ROOT, read off his own console: three
+       take open                             hardware AVC encoders with nothing budgeting them,
+                                             plus a game on the same GPU. The capture ceiling is
+                                             doing the work a budget should do.
+  O16  a resolution step a raw     [medium-heavy]  His question, answered: it CAN go safely, and
+       channel can follow                    back up — F6's segment machinery is the mechanism.
+                                             Costs a stepped take its instant export, so O15 first.
   F15-FLIP  Robert's own eye       [ROBERT OWED]  F15 IS BUILT, VERIFIED ON PROD AND OFF BY DEFAULT
                                              (handoff under the task). Its last gate is yours:
                                              open https://inout-kappa.vercel.app/?sourcefps=1,
@@ -1079,6 +1091,71 @@ GATES when built: Save file measured instant on a long take · no codec word any
 (copy reviewed by Robert) · the smaller-file row never promises a size before its lane reports one ·
 the sheet drives compose/choose.ts unchanged (the oracle still gates the paths users get) · Robert
 judges the sheet by eye before it becomes the default surface.
+
+## F18 the export goes to the user's own resolution — AUTHORED 2026-08-29 from Robert:
+##     "i want 3024x1964 or whatever users resolution is on roadmap"
+[medium · the ladder's top step, not a constant]
+THE PRODUCT CANNOT EXPORT A MACBOOK PRO'S OWN SCREEN. QUALITY_TIERS stops at 1440p, and the reason is
+inherited rather than decided: F7/F7b chose 540p/720p/1080p/1440p by MEASURED FILE-SIZE SEPARATION on
+a product whose capture was hard-capped at 1080p, O6 later made the 1440p step real detail, and
+nobody asked what sits above it. So a 3024x1964 display — an ordinary laptop — is downscaled on the
+way out, and the capture ceiling added 2026-08-29 (CAPTURE_MAX_LONG_EDGE) FOLLOWS that ladder rather
+than causing it. Raise the ladder and the ceiling follows for free: they are one constant,
+MAX_OUTPUT_LONG_EDGE in core/frame.ts.
+WHAT THE TASK IS: a top step that IS the take's own long edge. Most of the machinery exists — F13
+made a step a PIXEL BUDGET resolved against the take's aspect, so `tiersForTake` can inject one per
+take; F15 made the rate follow the take the same way. What does NOT exist is the step's IDENTITY:
+`tierById`/`loadQualityTier` persist an id, and "source" is a different number on every machine, so
+the remembered step has to survive a 3024-wide take being followed by a 1920-wide one.
+THE COST, STATED, because Robert has already been bitten by it: capturing 3024x1964 instead of
+2560x1662 is 40 % more pixels through three hardware encoders, which is exactly where his freeze
+lived. GATED ON O15, or it ships behind a flag so the cost is his to find rather than everyone's.
+GATES: a take already at or below the ladder's top is byte-identical (the step does not appear) ·
+the source step's file measures the take's own geometry, read out of the FILE · the instant copy
+still fires on it (it is the composite's own size by construction) · the remembered step survives a
+smaller take on the next load · size estimates cover it · oracle v2+v1.
+
+## O15 how many encoders may a take open — AUTHORED 2026-08-29 from Robert's own console
+[heavy · the freeze's root, and what F18 is gated on]
+A SCREEN+CAMERA TAKE OPENS THREE HARDWARE AVC ENCODERS AND NOTHING BUDGETS THEM AGAINST EACH OTHER:
+the raw screen channel, the raw camera channel, and the composite. On his game take that was
+3024x1964 (level 5.1) + 1280x720 + 1920x1080 while a game rendered on the same GPU, and the WHOLE
+MACHINE froze — "some movement on record but after a while freezes and whole screen, not just this
+tab". The 2026-08-22 entry blamed a 4K surface consumed four times over; this is the same shape one
+layer up, and it is why the capture ceiling is currently doing work a budget should do.
+WHAT IS ALREADY KNOWN: `?singlegen=capture` removes the composite encoder entirely, measured at
+45-49 % less written per second — but it only fires when the ONE video channel already equals the
+export geometry, so it cannot help a take with a camera. The capture ceiling (2026-08-29) now makes a
+SCREEN-ONLY take satisfy that equality by construction, which is the first real use it has had.
+WHAT THE TASK IS: decide at ARM TIME how many encoders this take can afford and at what sizes, before
+any of them opens — because the collapse is instant and unrecoverable (measured: a composite that
+produces nothing in its first second never produces anything). Candidates, cheapest first: composite
+the camera PiP and do not record it raw when the take will not be edited channel-by-channel · feed
+the composite the raw channel's frames instead of a second decode · make single generation reachable
+for screen+camera by compositing at the raw channel's own geometry.
+GATES: his own take, his machine, with a game running · no take opens more encoders than it does
+today · the instant export still fires wherever it fires today · oracle:load both phases.
+
+## O16 a resolution step a raw channel can follow — AUTHORED 2026-08-29 from Robert:
+##     "why resolution cannot go safely, make it go up safely too"
+[medium-heavy · only worth doing after O15]
+THE ANSWER IS THAT IT CAN, and the machinery exists. A raw channel's VideoEncoder is configured ONCE
+and an MP4 track carries ONE frame size in its sample description, so a mid-file size change is not
+representable — which is why captureLadder.ts now moves only the RATE, and why the resolution steps
+it used to make left Chrome UPSCALING every frame back to the configured size (`screen channel
+recorded 3024x1964 (the track said 2217x1440)`, his console).
+BUT A CHANNEL IS ALREADY ALLOWED SEVERAL RECORDINGS. F6 built exactly this for pause/resume: `pause`
+closes the current segment, `resume` opens segment N+1 on the same track with its own startOffsetMs,
+and the timeline and the render already compose channels of several segments. A resolution step is
+that move without the gap: close the segment, reopen at the new size — and back up the same way,
+which is the half he asked for.
+THE COST, AND IT IS WHY THIS IS NOT FREE: a raw channel with two segments of different geometry
+cannot be packet-copied as one file, so a take that stepped loses its INSTANT export and renders
+instead — a real regression for the user who was already struggling. That argues for O15 first, so
+that stepping is rare.
+GATES: a take that never steps is byte-identical · a stepped take's segments each measure their own
+geometry out of the FILE · the timeline shows no gap and no jump · export renders across the seam
+and the sync oracle holds over it · the instant path is DECLINED rather than wrong.
 
 ## F15 fps-ceiling — BUILT AND VERIFIED ON PROD 2026-08-29, flag-gated (handoff at the end of this
 ##     task). RULED YES 2026-08-29 (Robert: "i want every device to record best quality it can,
