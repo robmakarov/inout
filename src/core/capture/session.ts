@@ -1616,6 +1616,19 @@ class Session implements CaptureSession {
               ch.bytes = r.bytes
               ch.durationMs = r.durationMs
               ch.startOffsetMs = r.startOffsetMs
+              // F13: the file's own geometry, which is not always the one the
+              // track reported at arm time — a phone's settings describe the
+              // sensor, the frames are rotated. Every consumer of
+              // ChannelRecording.width/height (the single-generation copy, the
+              // editor's PiP box) has to be told what was written.
+              const st = 'stats' in r ? r.stats : null
+              if (st?.outWidth && st.outHeight && (st.outWidth !== ch.width || st.outHeight !== ch.height)) {
+                console.info(
+                  `[capture] ${ch.kind} channel recorded ${st.outWidth}x${st.outHeight} (the track said ${ch.width}x${ch.height})`,
+                )
+                ch.width = st.outWidth
+                ch.height = st.outHeight
+              }
               if ('diagnostics' in r && r.diagnostics && Object.keys(r.diagnostics).length) {
                 ch.diagnostics = r.diagnostics
               }

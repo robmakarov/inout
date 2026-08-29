@@ -66,7 +66,19 @@ let override: boolean | null = null
  *   localStorage['inout.frame.source'] = '1'   (sticky)
  */
 export function sourceFrameEnabled(): boolean {
-  return fromSearch() ?? override ?? fromStorage() ?? false
+  const url = fromSearch()
+  if (url !== null) {
+    // THIS ONE FLAG STICKS WHEN IT COMES FROM THE URL, against the convention
+    // every other switch here follows. The reason is the device it exists for:
+    // it is turned on from a PHONE, where there is no console to set
+    // localStorage from, and a reload (a PWA relaunch, a wedge recovery) would
+    // silently put the take back to landscape between recording and judging it.
+    // `?sourceframe=0` turns it off the same way, so the contract stays
+    // symmetric and reversible.
+    if (url !== (fromStorage() ?? false)) setSourceFrame(url)
+    return url
+  }
+  return override ?? fromStorage() ?? false
 }
 
 export function setSourceFrame(on: boolean | null): void {
@@ -112,6 +124,31 @@ export function frameForAspect(
   return a >= 1
     ? { width: long, height: evenDim(long / a) }
     : { width: evenDim(long * a), height: long }
+}
+
+/**
+ * THE SHAPE A DELIVERED PICTURE ASKS FOR, or null when it asks for nothing.
+ *
+ * THE BUG THIS EXISTS FOR: `MediaStreamTrack.getSettings()` describes the
+ * SENSOR. On a phone held portrait it reports 1920x1080 while every frame that
+ * arrives is 1080x1920, rotated by the platform. Capture believed the settings,
+ * so a phone take was composited into a landscape canvas and cover-cropped, and
+ * the editor then cropped the raw portrait channel a second time into the same
+ * landscape stage — PO, having judged exactly that: "preview on phone still
+ * wrong proportions and cutted and in editing even more cutted".
+ *
+ * So the settings are a GUESS and the first frame is the ANSWER. Null means
+ * "the guess was right" — which it is on every desktop take, where the two have
+ * always agreed, so this can only ever fire where something was already wrong.
+ */
+export function adoptedFrame(
+  current: { width: number; height: number },
+  arrived: { width: number; height: number },
+  longEdge: number,
+): { width: number; height: number } | null {
+  if (!arrived.width || !arrived.height || arrived.width <= 0 || arrived.height <= 0) return null
+  const want = frameForAspect(arrived.width / arrived.height, longEdge)
+  return want.width === current.width && want.height === current.height ? null : want
 }
 
 /**

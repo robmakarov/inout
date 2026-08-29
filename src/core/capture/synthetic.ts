@@ -343,6 +343,30 @@ function syntheticSystemAudio(ctx: AudioContext): Generated {
   return { stream: dest.stream, stop }
 }
 
+/**
+ * HARNESS KNOB, `?camlies=1` — REPRODUCE A PHONE WITHOUT A PHONE.
+ *
+ * `MediaStreamTrack.getSettings()` describes the SENSOR, and on a phone held
+ * portrait it reports 1920x1080 while every frame delivered is 1080x1920. That
+ * one lie is the whole of the bug PO judged F13's first pass on ("preview on
+ * phone still wrong proportions and cutted"), and until now no rig could
+ * express it — a canvas track always tells the truth about itself. This makes
+ * the synthetic camera lie in exactly that way, so the failure and its fix are
+ * reproducible on a desktop, from a URL, forever.
+ *
+ * Production never reaches this: it is applied only inside the synthetic path.
+ */
+function makeTrackLieAboutOrientation(track: MediaStreamTrack): void {
+  const real = track.getSettings.bind(track)
+  Object.defineProperty(track, 'getSettings', {
+    configurable: true,
+    value: (): MediaTrackSettings => {
+      const s = real()
+      return { ...s, width: s.height, height: s.width }
+    },
+  })
+}
+
 export function createSyntheticChannels(config: CaptureConfig): SyntheticRig {
   // `?screensize=` / `?camsize=`, read here so every synthetic entry point gets
   // them and no rig runner has to remember (a rig that calls the setter
@@ -357,8 +381,17 @@ export function createSyntheticChannels(config: CaptureConfig): SyntheticRig {
     teardowns.push(gen.stop)
   }
 
+  const liar =
+    typeof location !== 'undefined' && new URLSearchParams(location.search).get('camlies') === '1'
   if (config.screen) add('screen', 'video', syntheticScreen())
-  if (config.camera) add('camera', 'video', syntheticCamera())
+  if (config.camera) {
+    const cam = syntheticCamera()
+    if (liar) {
+      const t = cam.stream.getVideoTracks()[0]
+      if (t) makeTrackLieAboutOrientation(t)
+    }
+    add('camera', 'video', cam)
+  }
   if (audioCtx) {
     if (config.mic) add('mic', 'audio', syntheticMic(audioCtx))
     if (config.systemAudio) add('system-audio', 'audio', syntheticSystemAudio(audioCtx))

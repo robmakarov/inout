@@ -28,7 +28,7 @@
  *     for no benefit, because WebAudio cannot run in a worker anyway.
  */
 
-import { frameForAspect } from '@core/frame'
+import { adoptedFrame, frameForAspect } from '@core/frame'
 import {
   EncodedAudioPacketSource,
   EncodedPacket,
@@ -670,9 +670,8 @@ function settleShape(): void {
 function adoptShape(frame: VideoFrame): void {
   const w = frame.displayWidth
   const h = frame.displayHeight
-  if (!w || !h) return
-  const want = frameForAspect(w / h, longEdge)
-  if (want.width === W && want.height === H) {
+  const want = adoptedFrame({ width: W, height: H }, { width: w, height: h }, longEdge)
+  if (!want) {
     settleShape()
     return
   }

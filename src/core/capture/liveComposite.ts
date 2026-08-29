@@ -6,7 +6,7 @@
  * compositor. Geometry mirrors src/core/compose/layout.ts (decision #11).
  * v2 (WebCodecs + smart-cut) replaces this without changing the contract.
  */
-import { frameForAspect } from '@core/frame'
+import { adoptedFrame } from '@core/frame'
 import { blobStore } from '@core/store'
 import type { CompositeRecording } from '../types'
 import { SourceLiveness, type LivenessEvent } from './sourceLiveness'
@@ -308,17 +308,18 @@ export async function startLiveComposite(
   if (options.followSource) {
     const primary = screenEl ?? cameraEl
     const dims = primary ? await firstDims(primary, ADOPT_BUDGET_MS) : null
-    if (dims) {
-      const want = frameForAspect(
-        dims.width / dims.height,
-        options.longEdge && options.longEdge > 0 ? options.longEdge : Math.max(outW, outH),
-      )
-      if (want.width !== outW || want.height !== outH) {
-        console.info(
-          `[capture] composite v1: the picture is ${dims.width}x${dims.height} — composing ` +
-            `${want.width}x${want.height}, not ${outW}x${outH} (F13)`,
+    const want = dims
+      ? adoptedFrame(
+          { width: outW, height: outH },
+          dims,
+          options.longEdge && options.longEdge > 0 ? options.longEdge : Math.max(outW, outH),
         )
-      }
+      : null
+    if (want && dims) {
+      console.info(
+        `[capture] composite v1: the picture is ${dims.width}x${dims.height} — composing ` +
+          `${want.width}x${want.height}, not ${outW}x${outH} (F13)`,
+      )
       outW = want.width
       outH = want.height
     }

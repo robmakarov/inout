@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { ChannelRecording, Recording } from '@core/types'
 import {
   DEFAULT_FRAME_ASPECT,
+  adoptedFrame,
   aspectOf,
   evenDim,
   frameAspectFor,
@@ -193,5 +194,43 @@ describe('the portrait frame keeps the layout it was authored with', () => {
     // corner than the same layout drawn landscape.
     expect(frameScale(1080, 1920)).toBe(1)
     expect(frameScale(540, 960)).toBe(0.5)
+  })
+})
+
+/**
+ * F13, SECOND PASS — the phone. PO judged the first pass on a real device and
+ * it was still cropped: `track.getSettings()` describes the SENSOR, so a phone
+ * held portrait reports 1920x1080 while every frame delivered is 1080x1920.
+ * Capture believed the settings. These are the cases that produced.
+ */
+describe('the picture that arrived beats the settings that were reported', () => {
+  it('a landscape sensor report with portrait frames asks for a portrait frame', () => {
+    expect(adoptedFrame({ width: 1920, height: 1080 }, { width: 1080, height: 1920 }, 1920)).toEqual({
+      width: 1080,
+      height: 1920,
+    })
+  })
+
+  it('asks for nothing when the settings were already right', () => {
+    expect(adoptedFrame({ width: 1920, height: 1080 }, { width: 1280, height: 720 }, 1920)).toBeNull()
+    expect(adoptedFrame({ width: 1920, height: 1080 }, { width: 3840, height: 2160 }, 1920)).toBeNull()
+    expect(adoptedFrame({ width: 1080, height: 1920 }, { width: 720, height: 1280 }, 1920)).toBeNull()
+  })
+
+  it('asks for nothing when the frame says nothing', () => {
+    expect(adoptedFrame({ width: 1920, height: 1080 }, { width: 0, height: 0 }, 1920)).toBeNull()
+    expect(adoptedFrame({ width: 1920, height: 1080 }, { width: 640, height: 0 }, 1920)).toBeNull()
+  })
+
+  it('keeps the pixel budget — the frame turns, it does not grow', () => {
+    const want = adoptedFrame({ width: 1920, height: 1080 }, { width: 1080, height: 1920 }, 1920)!
+    expect(Math.max(want.width, want.height)).toBe(1920)
+  })
+
+  it('a 4:3 sensor reported landscape but delivered 4:3 keeps its full height', () => {
+    expect(adoptedFrame({ width: 1920, height: 1080 }, { width: 640, height: 480 }, 1920)).toEqual({
+      width: 1920,
+      height: 1440,
+    })
   })
 })
