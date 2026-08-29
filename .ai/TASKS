@@ -267,16 +267,26 @@ READY NOW:
                                              it is right, the default flips and INOUT can make a
                                              vertical video; if it is not, say what is wrong and
                                              nothing has moved in the meantime.
-  F15  60 fps                      [medium]  RULED YES 2026-08-29 (Robert: "i want every device to
-                                             record best quality it can, 60 fps"). UNBLOCKED —
-                                             F13 landed, and its `session.compositeFrame()` is the
-                                             ask-the-take-what-it-is seam fps rides: fps follows
-                                             the source up to 60 the same way geometry does.
-                                             Shipping 60 as new constants would rebuild the exact
-                                             shape Robert rejected. Throughput risk is real (the
-                                             4K-freeze family): the ladder is the guard, and it now
-                                             judges arrivals, so a 60 fps source is not punished
-                                             (pinned).
+  F15-FLIP  Robert's own eye       [ROBERT OWED]  F15 IS BUILT, VERIFIED ON PROD AND OFF BY DEFAULT
+                                             (handoff under the task). Its last gate is yours:
+                                             open https://inout-kappa.vercel.app/?sourcefps=1,
+                                             record something that MOVES at 60 (a game, a scroll,
+                                             yourself), and say whether it is worth the bytes.
+                                             Measured on prod, same 8 s: 411 frames against 204,
+                                             2.0 MB against 1.3. If it is right the default flips;
+                                             if it is not, nothing has moved in the meantime.
+  ORACLE-LOAD  the gate is red      [light]   NOT F15 — same verdict on the commit before it
+                                             (79d6def, throwaway worktree): composite tail 9848 ms
+                                             / 7366 ms against a 400 ms band, delivered 0.2 / 2.5
+                                             fps against a band of 10, both raw runs erroring "the
+                                             take produced no screen channel". LEAD: the rig's 4K
+                                             source is a rAF-painted canvas and `oracle:load` drives
+                                             through exp.mjs, which is HEADLESS by default — a
+                                             headless page runs rAF at 0, so the SOURCE starves and
+                                             the band reads starvation as tail loss. FIRST MOVE:
+                                             re-run `--headed`. P1 in BACKLOG. A rig that cannot
+                                             make its own source move has not been a gate for an
+                                             unknown number of sessions.
   SIZE-CODEC — RESOLVED 2026-08-29: APPLE'S WAY (Robert: "i like apples way"). Codec is never a user
                                              question; the DESTINATION decides it — unknown egress
                                              (saved file, OS share sheet) gets most-compatible AVC;
@@ -308,9 +318,11 @@ READY NOW:
                                              edits — editing is when the machine is idle. INSTANT
                                              = the rung capture recorded: High today; the LATER
                                              pre-record picker makes any selected rung the
-                                             instant one (Robert, sealed). Absorbs F14. AFTER F15;
-                                             two spikes gate it (T1 transcode speed,
-                                             T2 background-render cost) — spec in the task.
+                                             instant one (Robert, sealed). Absorbs F14.
+                                             UNBLOCKED 2026-08-29 — F15 landed. Two spikes gate it
+                                             (T1 transcode speed, T2 background-render cost) —
+                                             spec in the task. It is the biggest thing on the map
+                                             and it is where "minimal size" actually gets paid.
   P5a  iOS SCK spike               [light]   UNBLOCKED 2026-08-26: Robert confirms Xcode 27 + a real
                                              iOS 27 device are available. Needs Robert present (device
                                              plugged in, signing). TIME-SENSITIVE (iOS 27 ~Sept).
