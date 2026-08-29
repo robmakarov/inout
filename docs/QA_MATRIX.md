@@ -117,6 +117,42 @@ a browser that fully supports it. Probing it there declared Chrome 151
 unsupported; `browser-check.mjs` caught that before it shipped, and
 `platform.test.ts` now guards against re-adding it.
 
+## Camera resolution (P9) — `scripts/camera-check.mjs`
+
+A different question from the rest of this file, and it needs its own runner:
+O3a claims a **camera-only** take records the camera's true resolution rather
+than a 720p source stretched into a 1080p export, and nothing here could check
+it. Synthetic mode bypasses `getUserMedia` entirely, the oracle's camera is a
+painted canvas, and PO is right that a resolution is not judged by eye.
+
+```bash
+node scripts/camera-check.mjs                 # the real camera, on the deployed build
+node scripts/camera-check.mjs --fake-device   # the CONTROL: proves the harness, never P9
+```
+
+It drives real Chrome with `--use-fake-ui-for-media-stream` — which auto-grants
+the **site** prompt while keeping the **actual device**; the opposite flag would
+substitute a test pattern and answer nothing — then reads the answer out of the
+files themselves: every raw channel, the composite and the finished export come
+straight out of OPFS and through one MP4 box parser. The number that matters is
+the raw camera channel's **coded** size, because no downstream scaler can
+fabricate it.
+
+Three verdicts, and the third is the point:
+
+| verdict | exit | means |
+|---|---|---|
+| `PASS` / `FAIL` | 0 / 1 | the camera delivered frames and the gates were answered |
+| `CANNOT MEASURE` | 2 | the camera opened, negotiated a resolution, stayed live — and delivered **no frames**. Nothing about the product was measured. |
+| `HARNESS-OK (fake device)` | 1 | the synthetic camera ran the whole flow. Proves the runner, never P9. |
+
+`getUserMedia` resolving is not evidence that a camera works. On a MacBook in
+clamshell the built-in camera still enumerates, still negotiates 1920×1080@30
+and still reports its track `live` while the sensor is off — which is exactly
+what this machine did on 2026-08-29 (`docs/qa/camera-1080-2026-08-29.json`),
+against 50 frames from the synthetic control through the identical code path.
+Run it again with a live camera to finish the row.
+
 ## Out of scope
 
 **Aurora OS** — explicitly out. No modern browser engine ships on it, so there

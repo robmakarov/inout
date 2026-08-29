@@ -268,6 +268,20 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   is still owed — but it is owed on a build where the fix is actually in force, which no build before
   2026-08-26 was.
 
+- [P2] TD 2026-08-29, FOUND BY P9's RUNNER while it was failing for an unrelated reason:
+  **a camera that delivers no frames produces a silent empty recording.** Observed four times on a
+  real device whose track was live, unmuted and negotiated at 1920x1080@30 while the sensor was off
+  (a closed lid does this). What the user gets: the take records for its full length, the compositor
+  logs `camera delivering 0.0 fps`, the raw channel file is **28 bytes**, the recorder stop **times
+  out after 5 s**, and the saved recording has `durationMs: 0` and **zero channels** — with nothing
+  on screen to say any of that happened.
+  THE PIECES TO NOTICE IT ALREADY EXIST: `capture/sourceLiveness.ts` watches exactly this and emits
+  `channel-stalled`, and the UI already renders a stalled chip. Whether it fired here was not
+  established — the runner was not looking at the chips, and that is the first thing to check.
+  WHY IT IS P2 AND NOT P1: the trigger is a dead camera, which the user can usually see for
+  themselves in the preview. It becomes P1 if the preview looks fine while the file is empty.
+  Evidence: docs/qa/camera-1080-2026-08-29.json, and the console lines quoted in the P9 handoff.
+
 - [P1] TD 2026-08-29, FOUND WHILE ATTRIBUTING A RED GATE THAT TURNED OUT NOT TO BE MINE:
   **the v2 oracle fails about half its cold runs on main, and it has nothing to do with the change
   under test.** The failure is always the same — `instant export sync maxAbs 97.1 > 90ms` or

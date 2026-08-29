@@ -1,0 +1,258 @@
+{
+  "task": "P9 camera-1080-verify",
+  "ranAt": "2026-08-29T04:56:56.964Z",
+  "url": "https://inout-kappa.vercel.app/",
+  "platform": "darwin",
+  "chrome": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "chromeVersion": "Google Chrome 151.0.7922.174",
+  "headless": false,
+  "fakeDevice": true,
+  "takeMs": 8000,
+  "camera": {
+    "device": "fake_device_0",
+    "devices": [
+      {
+        "label": "fake_device_0",
+        "deviceId": "f76ca9d1"
+      }
+    ],
+    "capabilities": {
+      "aspectRatio": {
+        "max": 3840,
+        "min": 0.000462962962962963
+      },
+      "deviceId": "f76ca9d1fe96b8c89719bc52625bb8780f7984b4fdd023db8b920adc7bdadd34",
+      "exposureMode": [
+        "manual",
+        "continuous"
+      ],
+      "exposureTime": {
+        "max": 100,
+        "min": 10,
+        "step": 5
+      },
+      "facingMode": [],
+      "focusDistance": {
+        "max": 100,
+        "min": 10,
+        "step": 5
+      },
+      "focusMode": [
+        "manual",
+        "continuous"
+      ],
+      "frameRate": {
+        "max": 20,
+        "min": 0
+      },
+      "groupId": "6dba09b61a7d2268db678e168e9314905ad283f3d90ad15132042390476bf211",
+      "height": {
+        "max": 2160,
+        "min": 1
+      },
+      "resizeMode": [
+        "none",
+        "crop-and-scale"
+      ],
+      "width": {
+        "max": 3840,
+        "min": 1
+      }
+    },
+    "settings": {
+      "aspectRatio": 1.7777777777777777,
+      "deviceId": "f76ca9d1fe96b8c89719bc52625bb8780f7984b4fdd023db8b920adc7bdadd34",
+      "exposureMode": "manual",
+      "exposureTime": 50,
+      "focusDistance": 50,
+      "focusMode": "manual",
+      "frameRate": 20,
+      "groupId": "6dba09b61a7d2268db678e168e9314905ad283f3d90ad15132042390476bf211",
+      "height": 1080,
+      "resizeMode": "none",
+      "width": 1920
+    },
+    "framesIn3000ms": 50,
+    "firstFrameSize": {
+      "width": 1920,
+      "height": 1080
+    },
+    "processorError": null,
+    "chosenDeviceId": null,
+    "probed": [
+      {
+        "label": "fake_device_0",
+        "frames": 50,
+        "settings": "1920x1080",
+        "error": null
+      }
+    ],
+    "decodedFrames": null,
+    "videoSize": {
+      "width": 1920,
+      "height": 1080
+    },
+    "trackReadyState": "live",
+    "trackMuted": false,
+    "error": null
+  },
+  "captureLog": [
+    "[capture:arming] camera start +0ms",
+    "[capture:arming] camera done +10ms — fake_device_0",
+    "[capture:arming] acquire settled +10ms — 1 channel(s), 0 failure(s) Object",
+    "[capture:arming] armed +11ms (1 channel(s), all start together)",
+    "[capture:arming] all start calls kicked +1ms",
+    "[capture] live composite engine v2 (worker + WebCodecs)",
+    "[capture] raw video channel on WebCodecs: avc1.4D402A (prefer-hardware)",
+    "[capture:arming] measured video camera first-frame +198ms offset=198.2ms 1920x1080@20",
+    "[capture] recording preview is the compositor’s own output",
+    "[capture] composite v2 avc1.4D402A prefer-hardware — 156 frames (0 dropped, 0 keep-alive, peak queue 0), 0 audio batches; video 391 KB at 0.41 Mbps of 8.0 Mbps requested, keyframes 4 = 5% of video bytes, audio 0 KB; preview 0.08 ms/frame (12 ms total)",
+    "[capture] composite v2 clock starts +198ms into the take",
+    "[capture] raw video channel: 157 frames encoded of 156 in, 1 keep-alive (source was static) · 4 keyframes · 353 KB · avc1.4D402A prefer-hardware",
+    "[bits] instant copy avc from single-generation: video 0.36 MB @ 0.37 Mbps (4.6% of the 8.00 Mbps ceiling) · keyframes 4 = 5.4% of video bytes (4901 B vs 2223 B/delta, cadence recorder-chosen) · audio 0.00 MB @ 0.00 Mbps · 7.802s"
+  ],
+  "otherLog": [
+    "info: [perf] editor chunk ready",
+    "info: [timeline] filmstrip camera: 9/9 frames in 71 ms",
+    "info: [export] streamed 0.3 MB to disk; peak held in memory 0.3 MB"
+  ],
+  "consoleErrors": [],
+  "files": [
+    {
+      "name": "xport-x_3g2ttl88an8i",
+      "bytes": 361458,
+      "container": "mp4",
+      "tracks": [
+        {
+          "handler": "vide",
+          "displayWidth": null,
+          "displayHeight": null,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "codec": "avc1"
+        }
+      ],
+      "comment": "{\"app\":\"inout\",\"v\":1,\"path\":\"instant\",\"copiedFrom\":\"single-generation\",\"output\":{\"width\":1920,\"height\":1080},\"codec\":{\"container\":\"video/mp4\",\"video\":\"avc\"},\"audio\":{\"channels\":0},\"capture\":{},\"syncBoundMs\":90}",
+      "truncated": false
+    },
+    {
+      "name": "rec_5oq2np1yxcfi_composite.webm",
+      "bytes": 402848,
+      "container": "mp4",
+      "tracks": [
+        {
+          "handler": "vide",
+          "displayWidth": null,
+          "displayHeight": null,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "codec": "avc1"
+        }
+      ],
+      "comment": null,
+      "truncated": false
+    },
+    {
+      "name": "rec_5oq2np1yxcfi_ch_qw2zj5x7gqo3.mp4",
+      "bytes": 361760,
+      "container": "mp4",
+      "tracks": [
+        {
+          "handler": "vide",
+          "displayWidth": null,
+          "displayHeight": null,
+          "codedWidth": 1920,
+          "codedHeight": 1080,
+          "codec": "avc1"
+        }
+      ],
+      "comment": null,
+      "truncated": false
+    }
+  ],
+  "certification": {
+    "app": "inout",
+    "v": 1,
+    "path": "instant",
+    "copiedFrom": "single-generation",
+    "output": {
+      "width": 1920,
+      "height": 1080
+    },
+    "codec": {
+      "container": "video/mp4",
+      "video": "avc"
+    },
+    "audio": {
+      "channels": 0
+    },
+    "capture": {},
+    "syncBoundMs": 90
+  },
+  "gates": {
+    "boots": true,
+    "cameraDeliversFrames": true,
+    "cameraOnlyConfig": true,
+    "recorded": true,
+    "reachedEditor": true,
+    "exported": true,
+    "cameraReachable": true,
+    "cameraChannelOnDisk": true,
+    "rawChannelIsCameraMax": true,
+    "exportIsFullFrame": true,
+    "exportIsNotAnUpscale": true,
+    "deliveredMatchesFile": true,
+    "manifestMatchesFile": true,
+    "noConsoleErrors": true,
+    "fileCarriesCertification": true
+  },
+  "chips": {
+    "Screen": false,
+    "Camera": true,
+    "Mic": false,
+    "Tab Audio": false
+  },
+  "exportMeta": "0:08 · 353 KB · 1920×1080",
+  "recorded": {
+    "id": "rec_5oq2np1yxcfi",
+    "durationMs": 7802,
+    "channels": [
+      {
+        "kind": "camera",
+        "media": "video",
+        "mimeType": "video/mp4",
+        "width": 1920,
+        "height": 1080,
+        "blobKey": "rec_5oq2np1yxcfi_ch_qw2zj5x7gqo3.mp4",
+        "durationMs": 7802
+      }
+    ],
+    "composite": {
+      "width": 1920,
+      "height": 1080,
+      "engine": "v2",
+      "blobKey": "rec_5oq2np1yxcfi_composite.webm"
+    }
+  },
+  "picked": {
+    "cameraChannel": "rec_5oq2np1yxcfi_ch_qw2zj5x7gqo3.mp4",
+    "export": "xport-x_3g2ttl88an8i",
+    "composite": "rec_5oq2np1yxcfi_composite.webm"
+  },
+  "cameraOffers1080": true,
+  "expectedDelivered": {
+    "width": 1920,
+    "height": 1080
+  },
+  "summary": {
+    "cameraOffers": "3840x2160",
+    "delivered": "1920x1080@20",
+    "rawCameraChannel": "1920x1080 avc1",
+    "exportedFile": "1920x1080 avc1",
+    "productRecorded": "1920x1080 video/mp4",
+    "exportCopiedFrom": "single-generation",
+    "captureSaid": "[capture:arming] measured video camera first-frame +198ms offset=198.2ms 1920x1080@20"
+  },
+  "failed": [],
+  "verdict": "HARNESS-OK (fake device — NOT a P9 answer)"
+}

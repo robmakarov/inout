@@ -63,6 +63,18 @@ The CAPTURE half — never recording the composite at all, 45-49 % less written 
 a whole hardware encoder that never runs — is BUILT AND OFF, behind `?singlegen=capture`, because it
 gives up source-liveness detection and the composited preview. That flip is PO's, on the evidence in
 the handoff. O3b leaves READY.
+SAME SESSION (PO: "go P9"): P9 BUILT AND RUN — `scripts/camera-check.mjs`, real Chrome, real device,
+the deployed build, answers read out of the FILES and not the interface. The answer is PARTIAL and the
+missing half belongs to the machine: this Mac's built-in camera enumerates, negotiates 1920x1080@30,
+keeps its track live — and delivers ZERO frames, which is what a closed lid looks like from software.
+The identical code path with Chrome's synthetic camera counts 50 frames and passes every gate, so the
+runner is sound. VERIFIED on the real device: the camera OFFERS 1080p (width/height max 1920) and
+ACCEPTS the product's own camera-only constraint at exactly 1920x1080@30 — the constraint half of
+O3a's claim. VERIFIED end to end on a controlled 1080p source: raw channel, manifest and export all
+1920x1080, no upscale. UNPLANNED BONUS: that export's certification reads copiedFrom
+"single-generation", so O3b's path is now cross-validated on a CAMERA-only take too. One command
+finishes the row on any machine with a live camera. P9 stays on the map as a one-command re-run, not
+as work.
 
 SHIPPED THIS SESSION
   · X9   the For-AI build runs in a worker. Byte-identical PDF on four lanes; the UI thread loses
@@ -177,8 +189,15 @@ READY NOW:
   F9   per-channel gain slider     [light-medium]  PO 2026-08-26: "mic is kinda too loud now, can
                                              we add slider?" Spec in NEW TASKS below. Run AFTER the
                                              live audio-fix session lands (shared mix area).
-  P9   camera-1080 verify          [light]   PO 2026-08-26, and PO is right that eyes are the wrong
-                                             instrument. Agent-run, zero PO time. Spec below.
+  P9   camera-1080 verify        [light]   RUN 2026-08-29 — answer PARTIAL and the missing half is
+                                             the MACHINE's, not the product's: this Mac's camera
+                                             negotiates 1920x1080@30 and delivers ZERO frames to an
+                                             automated Chrome (a closed lid does exactly this).
+                                             VERIFIED anyway: the camera OFFERS 1080p and accepts the
+                                             product's own camera-only constraint, and the pipeline
+                                             preserves 1080p end to end on a controlled source.
+                                             TO CLOSE IT: `node scripts/camera-check.mjs` on any
+                                             machine with a live camera. Exit 0 = the claim holds.
   F10  mic noise removal           [medium]  PO 2026-08-26: "i want noise removal". Local model,
                                              zero tokens, export-time, raw channels untouched.
                                              Spec below. AFTER the live audio session lands.
@@ -206,7 +225,9 @@ COORDINATION: PO's underlying report ("mic kinda too loud NOW") may be the norma
 ANOTHER LIVE SESSION owns that fix (PO 2026-08-26). F9 is the CONTROL, not the fix: touch gain
 plumbing only, no mix constants, and start only after that session's merge.
 
-## P9 camera-1080-verify [light · QA only, zero product change, zero PO time]
+## P9 camera-1080-verify — RUN 2026-08-29, answer PARTIAL (handoff below): the constraint and the
+##     pipeline are verified; the real sensor delivers no frames on this machine. Re-run on a live camera.
+[light · QA only, zero product change, zero PO time]
 The O3a claim "camera-only records 1080p, not upscaled 720p" needs a REAL camera (synthetic mode
 bypasses getUserMedia) and resolution is not judged by eye. Drive real Chrome on the deployed build
 with the real built-in camera (browser-check.mjs shape; --use-fake-ui-for-media-stream auto-grants
@@ -216,6 +237,62 @@ console.
 GATES: the exported file's own header reads the camera's true max (≥1920×1080 if the camera offers
 it; if it offers less, report the capability list — that is the answer, not a failure) · evidence
 JSON in docs/qa/ · no changes outside scripts/.
+
+## P9 HANDOFF — 2026-08-29. BUILT AND RUN. THE ANSWER IS PARTIAL, AND THE MISSING HALF IS THIS MACHINE'S.
+Runner: `node scripts/camera-check.mjs` (and `--fake-device`, the control). Evidence:
+docs/qa/camera-1080-2026-08-29.json and …-harness.json. Nothing outside scripts/ and docs/ changed.
+
+WHAT THE TASK ASSUMED AND GOT WRONG, and it is worth stating because it changes what the runner had
+to do: "read width×height from the FILE ITSELF" cannot answer this on the EXPORT. The export is
+1920×1080 either way — the live compositor COVER-FITS a camera-only take into its own fixed
+1920×1080 canvas, so a 720p camera produces a 1080p file that is 720p pixels stretched, i.e. the
+defect wearing the header of the fix. The number that cannot be fabricated by a downstream scaler is
+the RAW CAMERA CHANNEL's coded size, so that is the gate, and it is read from OPFS along with the
+composite and the export through one MP4 box parser.
+
+WHAT IS ANSWERED, on the real device:
+  · the camera's own capability list — width max 1920, height max 1920, frameRate max 30, so it
+    OFFERS 1080p;
+  · under the product's own camera-only constraint (acquire.ts asks ideal 1920×1080 when there is no
+    screen channel) the real device NEGOTIATES exactly 1920×1080@30. That is the constraint half of
+    O3a's claim, verified against the actual hardware.
+
+WHAT IS ANSWERED, end to end, with a controlled 1080p source (`--fake-device`, all gates green):
+    raw camera channel   1920×1080 avc1        ← the number no scaler can fake
+    product's manifest   1920×1080 video/mp4   ← ChannelRecording.width/height out of IndexedDB
+    exported file        1920×1080 avc1
+    capture's own line   measured video camera first-frame 1920×1080@20
+  …so the pipeline preserves whatever size it is handed, and does not upscale. AND, unplanned but
+  useful: that export's certification reads copiedFrom "single-generation" — O3b's new path, on a
+  CAMERA-only take, cross-validating that the compositor's cover-fit at equal dimensions is the
+  identity. First evidence of O3b outside a screen take.
+
+WHAT IS NOT ANSWERED, AND WHY IT IS NOT A PRODUCT FINDING: this machine's built-in camera DELIVERS NO
+FRAMES to an automated Chrome. It enumerates, gUM resolves, it negotiates 1920×1080@30, the track
+stays `live` and unmuted — and 0 frames arrive in 2.5 s through MediaStreamTrackProcessor, the very
+API capture reads. The product says the same thing from the other end: `camera delivering 0.0 fps`, a
+28-byte channel file, and a recorder stop that times out. The identical code path with Chrome's
+synthetic camera counts 50 frames and passes every gate, so the runner is sound. The likeliest cause
+is a CLOSED LID — a MacBook in clamshell enumerates its built-in camera and negotiates a resolution
+while the sensor is off — with an app holding the device, or the OS camera permission for the Chrome
+binary, giving the same signature. `--use-fake-ui-for-media-stream` answers the SITE prompt, not the
+OS one, and no flag can.
+TO FINISH THE ROW: run `node scripts/camera-check.mjs` on a machine whose camera is live. One
+command, exit 0 = the claim holds. It is not PO's time in any meaningful sense.
+
+THREE INSTRUMENT FAULTS IN THIS RUNNER, all mine, all caught before anything was reported (note 10):
+ 1. IT REPORTED WHAT IT INTENDED, NOT WHAT HAPPENED. The first version set the channel chips and
+    returned the config it wanted; the take it actually recorded was screen+camera+mic and spent 18 s
+    waiting for a microphone. Chips are now set, re-read from aria-pressed, retried, and a gate fails
+    if the app is not camera-only.
+ 2. A PROBE THAT COUNTED ZERO FROM A SOURCE THAT PROVABLY RECORDS. Opening a
+    MediaStreamTrackProcessor on a just-acquired track counts 0 frames from Chrome's SYNTHETIC camera
+    — the source that then records a full take. An earlier version worked by accident, spending three
+    seconds on a video element's play() before counting. The source is warmed on purpose now. Without
+    the fake-device control this would have been published as "the real camera is dead".
+ 3. A HANG, NOT A FAILURE. `video.play()` on a stream that never produces a frame does not reject; it
+    never settles, and an awaited CDP evaluate then wedges the run past 600 s. Every page-side call is
+    bounded at 30 s now.
 
 ## F10 mic-noise-removal [medium · local model, zero tokens · export mix + preview; raw untouched]
 PO 2026-08-26: "i want noise removal". A per-take toggle that denoises the MIC channel. PLACEMENT:

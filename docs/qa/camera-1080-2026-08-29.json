@@ -1,0 +1,160 @@
+{
+  "task": "P9 camera-1080-verify",
+  "ranAt": "2026-08-29T04:53:46.004Z",
+  "url": "https://inout-kappa.vercel.app/",
+  "platform": "darwin",
+  "chrome": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "chromeVersion": "Google Chrome 151.0.7922.174",
+  "headless": false,
+  "fakeDevice": false,
+  "takeMs": 10000,
+  "camera": {
+    "device": "HD-камера FaceTime (CDBF:5350)",
+    "devices": [
+      {
+        "label": "HD-камера FaceTime (CDBF:5350)",
+        "deviceId": "38e501f9"
+      }
+    ],
+    "capabilities": {
+      "aspectRatio": {
+        "max": 1920,
+        "min": 0.0005208333333333333
+      },
+      "deviceId": "38e501f9c0a4a9832b98290e29acf048b9f8fd5ad4d6400114315668d8d0c636",
+      "facingMode": [],
+      "frameRate": {
+        "max": 30,
+        "min": 0
+      },
+      "groupId": "1ad19b9de6a623ee627df23eeaf2a5cd40ee91dff0eeb41d6d844521accb0352",
+      "height": {
+        "max": 1920,
+        "min": 1
+      },
+      "resizeMode": [
+        "none",
+        "crop-and-scale"
+      ],
+      "width": {
+        "max": 1920,
+        "min": 1
+      }
+    },
+    "settings": {
+      "aspectRatio": 1.7777777777777777,
+      "deviceId": "38e501f9c0a4a9832b98290e29acf048b9f8fd5ad4d6400114315668d8d0c636",
+      "frameRate": 30,
+      "groupId": "1ad19b9de6a623ee627df23eeaf2a5cd40ee91dff0eeb41d6d844521accb0352",
+      "height": 1080,
+      "resizeMode": "none",
+      "width": 1920
+    },
+    "framesIn3000ms": 0,
+    "firstFrameSize": null,
+    "processorError": null,
+    "chosenDeviceId": null,
+    "probed": [
+      {
+        "label": "HD-камера FaceTime (CDBF:5350)",
+        "frames": 0,
+        "settings": "1920x1080",
+        "error": null
+      }
+    ],
+    "decodedFrames": null,
+    "videoSize": null,
+    "trackReadyState": "live",
+    "trackMuted": false,
+    "error": null
+  },
+  "captureLog": [
+    "[capture:arming] camera start +0ms",
+    "[capture:arming] camera done +75ms — HD-камера FaceTime (CDBF:5350)",
+    "[capture:arming] acquire settled +75ms — 1 channel(s), 0 failure(s) Object",
+    "[capture:arming] armed +76ms (1 channel(s), all start together)",
+    "[capture:arming] all start calls kicked +1ms",
+    "[capture] live composite engine v2 (worker + WebCodecs)",
+    "[capture] raw video channel on WebCodecs: avc1.4D402A (prefer-hardware)",
+    "[capture] composite preview did not paint in time — keeping the source preview",
+    "[capture] a recorder did not stop in budget — keeping what reached disk TimeoutError: recorder stop timed out after 5000ms"
+  ],
+  "otherLog": [
+    "info: [perf] editor chunk ready"
+  ],
+  "consoleErrors": [],
+  "files": [
+    {
+      "name": "rec_a4a1eg32s7ow_ch_b43iouznrtfs.mp4",
+      "bytes": 28,
+      "container": "mp4",
+      "tracks": [],
+      "comment": null,
+      "truncated": false
+    }
+  ],
+  "certification": null,
+  "gates": {
+    "boots": true,
+    "cameraDeliversFrames": false,
+    "cameraOnlyConfig": true,
+    "recorded": true,
+    "reachedEditor": false,
+    "exported": false,
+    "cameraReachable": true,
+    "cameraChannelOnDisk": false,
+    "rawChannelIsCameraMax": false,
+    "exportIsFullFrame": false,
+    "exportIsNotAnUpscale": false,
+    "deliveredMatchesFile": false,
+    "manifestMatchesFile": false,
+    "noConsoleErrors": true,
+    "fileCarriesCertification": false
+  },
+  "cannotMeasure": "THE CAMERA OPENED AND DELIVERED NOTHING. It negotiated 1920x1080@30, the track stayed live and unmuted, and 0 frames arrived in 3 s through MediaStreamTrackProcessor — the very API capture reads. getUserMedia resolving is not evidence that a camera works, and every video input on this machine was tried: HD-камера FaceTime (CDBF:5350) → 0 frames. THE LIKELIEST CAUSE IS A CLOSED LID: a MacBook in clamshell still enumerates its built-in camera, still negotiates a resolution, and still reports the track live, while the sensor is off. Same signature from another app holding the device, or from the OS camera permission for the Chrome binary (System Settings > Privacy & Security > Camera) — which the --use-fake-ui-for-media-stream flag cannot grant, because that flag answers the SITE prompt and not the OS one. NOTHING ABOUT THE PRODUCT IS BEING MEASURED HERE. Run `node scripts/camera-check.mjs --fake-device` to confirm the harness itself still works, and re-run this with a live camera to finish P9.",
+  "chips": {
+    "Screen": false,
+    "Camera": true,
+    "Mic": false,
+    "Tab Audio": false
+  },
+  "exportMeta": null,
+  "recorded": {
+    "id": "rec_a4a1eg32s7ow",
+    "durationMs": 0,
+    "channels": [],
+    "composite": null
+  },
+  "picked": {
+    "cameraChannel": null,
+    "export": null,
+    "composite": null
+  },
+  "cameraOffers1080": true,
+  "expectedDelivered": {
+    "width": 1920,
+    "height": 1080
+  },
+  "summary": {
+    "cameraOffers": "1920x1920",
+    "delivered": "1920x1080@30",
+    "rawCameraChannel": null,
+    "exportedFile": null,
+    "productRecorded": null,
+    "exportCopiedFrom": null,
+    "captureSaid": null
+  },
+  "failed": [
+    "cameraDeliversFrames",
+    "reachedEditor",
+    "exported",
+    "cameraChannelOnDisk",
+    "rawChannelIsCameraMax",
+    "exportIsFullFrame",
+    "exportIsNotAnUpscale",
+    "deliveredMatchesFile",
+    "manifestMatchesFile",
+    "fileCarriesCertification"
+  ],
+  "verdict": "CANNOT MEASURE"
+}
