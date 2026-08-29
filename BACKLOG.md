@@ -37,6 +37,13 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   top rung specifically, not the model. quality.ts already admits the √-pixel model came in 47 % low
   at 1440p on text content; at PO's length that becomes 5.4 GB of surprise. Note the estimate is
   ALSO the only warning a user gets before committing to a ~2 h render.
+  SECOND, CHEAPER DEFECT SEEN WHILE CHECKING THIS (TD, deployed build, 6 s synthetic take): the
+  PROVISIONAL numbers — what the panel shows for the seconds before sizeProbe's calibration lands —
+  ranked 1440p BELOW the 1080p step, `1080p 400 KB (exact)` against `1440p ~308 KB`. 1440p is an
+  upscale of that very file; it cannot be smaller, and the model has the evidence to know it
+  (`isDefaultTier` already returns the composite's exact bytes). After calibration the same panel
+  read 540p 310 / 720p 340 / 1080p 400 / 1440p 460, which is ordered. Floor every re-encoding step
+  at the exact size of any step whose pixel count it exceeds — one comparison, no new measurement.
 
 - [P1] PO 2026-08-29: **more quality and much less size** — "it's non-editable video, movie files
   with much better quality are usually twice smaller". Three named causes, all measured:
