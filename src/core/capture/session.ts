@@ -23,6 +23,7 @@ import type {
   ArmingProgressHandler,
   ProgressiveAcquire,
 } from './acquire'
+import type { DisplayStall } from './displayWedge'
 import { acquireChannelsProgressive, primaryKindFor, withTimeout } from './acquire'
 import { releaseAllDevices } from './deviceGuard'
 import {
@@ -363,15 +364,23 @@ class Session implements CaptureSession {
    */
   private unloadHandler: (() => void) | null = null
   private readonly onArming: ArmingProgressHandler | undefined
+  /** W1: the screen request is late and the user should hear why NOW, not in
+   *  the post-take banner. Passed straight through to acquire. */
+  private readonly onStall: DisplayStallHandler | undefined
   /** Screen wake lock while recording: display sleep mid-take ends capture
    * tracks in Chrome ("after a while screen and audio stop"). Best-effort —
    * the platform auto-releases it when the tab hides; we reacquire on return. */
   private wakeLock: { release(): Promise<void> } | null = null
   private wakeLockVisHandler: (() => void) | null = null
 
-  constructor(config: CaptureConfig, onArming?: ArmingProgressHandler) {
+  constructor(
+    config: CaptureConfig,
+    onArming?: ArmingProgressHandler,
+    onStall?: DisplayStallHandler,
+  ) {
     this.config = { ...config }
     this.onArming = onArming
+    this.onStall = onStall
   }
 
   get state(): CaptureState {
@@ -455,6 +464,7 @@ class Session implements CaptureSession {
         onChannel: handleAcquired,
         onFailure: handleFailure,
         onNotice: handleNotice,
+        onStall: this.onStall,
         onProgress: this.onArming,
         // The persistent-connect hunt asks before every re-ask and at every
         // late delivery. True only while: the take is alive, the channel is
@@ -517,15 +527,22 @@ class Session implements CaptureSession {
       this.releaseMedia()
       throw new CaptureError(
         wedged.kind,
-        'wedged',
+        // W1: a stall that is really an ungranted macOS screen-recording
+        // permission gets its OWN reason, so the UI does not spend the user's
+        // one automatic refresh on it. Refreshing cannot change a TCC grant;
+        // all it does is throw away the message that names the fix.
+        wedged.stall === 'permission' ? 'permission' : 'wedged',
         wedged.kind === 'screen'
-          ? // The UI runs the recovery ritual on this reason: one automatic
-            // page refresh (Robert 2026-08-25: "if it happens make it fixed by
-            // refresh of app page"), then this text for a wedge that survived
-            // the refresh — at that point only restarting Chrome tears the
-            // stuck process down (the claim lives in its browser process; the
-            // page never received a track it could release).
-            'Chrome accepted the share but never delivered the screen — nothing was recorded, even after a refresh. Quit Chrome completely (⌘Q), reopen, and try again.'
+          ? // The UI runs the recovery ritual on the 'wedged' reason: one
+            // automatic page refresh (Robert 2026-08-25: "if it happens make it
+            // fixed by refresh of app page"), then this text for a wedge that
+            // survived the refresh — at that point only restarting Chrome tears
+            // the stuck process down (the claim lives in its browser process;
+            // the page never received a track it could release). The text is
+            // acquire's now (displayStallMessage), because it is the only place
+            // that knows WHICH of the two failures this was and which browser
+            // the user is actually sitting in.
+            wedged.message
           : `${wedged.kind} never responded. Nothing was recorded — press record to try again.`,
       )
     }
@@ -2160,9 +2177,19 @@ class Session implements CaptureSession {
   }
 }
 
+/** W1 item 3 — see ProgressiveHandlers.onStall. */
+export type DisplayStallHandler = (message: string, stall: DisplayStall) => void
+
 export interface CreateCaptureSessionOptions {
   /** Fired for each permission / device step during arming (UI pending state). */
   onArming?: ArmingProgressHandler
+  /**
+   * The screen request has been outstanding for DISPLAY_STALL_NOTICE_MS and is
+   * STILL RUNNING. Fires at most once per take. The UI shows it as a sticky
+   * notice: when the cause is an ungranted macOS permission, Chrome has the
+   * real answer on screen and the app used to say nothing for 30 s (W1).
+   */
+  onStall?: DisplayStallHandler
   /**
    * Abort arming. Until this existed the user had no way out of a slow or
    * wedged device: the record button is disabled while arming, so a step that
@@ -2176,7 +2203,7 @@ export async function createCaptureSession(
   config: CaptureConfig,
   opts?: CreateCaptureSessionOptions,
 ): Promise<CaptureSession> {
-  const session = new Session(config, opts?.onArming)
+  const session = new Session(config, opts?.onArming, opts?.onStall)
   const signal = opts?.signal
   if (!signal) {
     await session.arm()

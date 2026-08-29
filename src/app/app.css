@@ -153,6 +153,35 @@
   z-index: 7;
 }
 
+/* W1 item 4: THE WAY OUT, and it is a button rather than a console line. The
+   safe-mode ladder used to be exitable only by waiting out a 24 h TTL or by
+   editing localStorage — Robert was handed that line and answered "what the
+   fuck is this?". Sits inside the notice band so it reads as part of the same
+   sentence, not as a separate control the user has to go and find. */
+.capture__notice-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.capture__notice-btn {
+  background: var(--surface-3);
+  border: 1px solid var(--surface-3);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 10px;
+  border-radius: var(--r-sm, 8px);
+  cursor: pointer;
+}
+
+.capture__notice-btn:hover {
+  background: var(--surface-2);
+  border-color: var(--text-dim);
+}
+
 .capture--recording {
   background: #0a0a0a;
 }

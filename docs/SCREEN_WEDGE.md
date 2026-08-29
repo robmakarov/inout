@@ -1,12 +1,35 @@
 # The screen wedge — full case file
 
-**Status as of 2026-08-25 (end of day): MITIGATED, root cause still Chrome's.** After the
-full mitigation stack shipped (request serializer, persistent device connect, refresh
-ritual, safe-mode ladder), Robert's own stress test — the repro recipe below — came back
-"seems to be allright now". The Chrome-side bug is NOT fixed and cannot be fixed from a
-web page; if the wedge reappears, start from the formulation below and the evidence kit
-at the bottom. This doc exists because the fix history is spread across a dozen commits
-and nobody — including the agents writing the fixes — should ever reconstruct it again.
+**Status as of 2026-08-29 (W1): NOT mitigated — Robert hit it three times in one
+evening and reached rung 2 of the safe-mode ladder.** The 08-25 "MITIGATED" reading was
+true when written (his stress test came back "seems to be allright now") and is retracted.
+The Chrome-side bug is NOT fixed and cannot be fixed from a web page. What W1 changed is
+the part that was OURS, because the mitigation stack had become its own failure mode:
+
+- **The ladder had no way up.** A success cleared the mark from rung 0 only, so a machine
+  degraded by a cause that was already gone stayed degraded for the full 24 h TTL. The
+  only exit anyone found was a localStorage line typed into a console; handed that line,
+  Robert answered "what the fuck is this?". Now any success climbs one rung, rung 0 clears
+  outright, and two good takes walk a floored machine home. The TTL is the backstop it was
+  always meant to be rather than the only door.
+- **A timeout was counted as a wedge whatever caused it.** With macOS screen recording
+  ungranted, Chrome's picker opens, says exactly that on screen, and `getDisplayMedia`
+  never settles — identical from the page. So the ladder escalated against a permission no
+  request of ours can satisfy, and the app reported "the device never connected", blaming
+  the user's hardware for an OS toggle. Now `classifyDisplayStall` reads the one recorded
+  fact that separates them (has this profile EVER been handed a screen track? the macOS
+  grant is per-app and permanent), a permission stall does not touch the ladder, and the
+  message names the permission and the browser the user is actually in.
+- **The app said nothing until it gave up.** Every word about a stuck share arrived in the
+  post-take banner, up to 30 s after the press, while Chrome had the real answer on screen
+  the whole time. A notice now fires at 12 s, while the request is still running.
+- **Backing off was asking for MORE** (fixed 2026-08-29, before W1): rung 1 dropped the
+  SIZE and RATE bounds along with the exotic options, so a machine that had already choked
+  once went on to capture its whole monitor uncapped. Rung 1 keeps the bounds; rung 2 is
+  bare on purpose and is covered on the track by `capDisplayTrack`.
+
+This doc exists because the fix history is spread across a dozen commits and nobody —
+including the agents writing the fixes — should ever reconstruct it again.
 
 ## The formulation — canonical, quote this when it happens again
 
@@ -137,7 +160,11 @@ never settled at all.
 2. **macOS ScreenCaptureKit permission-state rot for Chrome.** The one lever never yet
    confirmed tried: System Settings → Privacy & Security → Screen & System Audio
    Recording → toggle Chrome off/on, restart Chrome. If the wedge survives *that* plus
-   rung 2, it is fully outside anything we control.
+   rung 2, it is fully outside anything we control. PARTLY ANSWERED 2026-08-29 (W1): on
+   Robert's evening the grant WAS the cause at least once — it needs a Chrome relaunch,
+   and until then every attempt hangs exactly like the wedge. That case is now named
+   rather than escalated against; what remains unknown is whether a *granted* Chrome can
+   also rot into this state.
 3. **A Chrome native-pill bug independent of options.** Consistent with "often, not
    always" and with surviving everything. If true, the ladder rungs all wedge, quit-Chrome
    remains the only cure, and our job is exactly what is already shipped: bound it,
@@ -185,6 +212,15 @@ rather than a 4 s toast (the user is in the tab they were recording), and it car
 ⌘Q escalation itself instead of waiting for a second wedge to say it. What is still
 unproven is whether the reload ran at all under that load — that needs the arming timeline
 from a repro. BACKLOG P1.
+
+**Added by W1, 2026-08-29.** At 12 s — while the request is still alive and 18 s before it
+fails — the app now says which of the two failures this looks like, in a sticky banner:
+an ungranted macOS screen-recording permission (with the System Settings path, naming the
+browser the user is actually in) or Chrome's stuck share. A permission stall never
+escalates the safe-mode ladder and never spends the one automatic refresh, because a fresh
+renderer cannot change a TCC grant — it only hides the message that names the fix. A
+degraded machine says so on the capture screen and carries a **Reset screen sharing**
+button; before W1 the only exits were a 24 h timer and a console.
 
 ## The one unbuilt lever — parked on the roadmap
 

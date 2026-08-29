@@ -688,8 +688,13 @@ export class CaptureError extends Error {
     public readonly kind: ChannelKind | 'none',
     /** 'wedged': the browser took the share/device and never delivered it —
      * the Chrome/macOS picker wedge. Distinct from 'unavailable' so the UI
-     * can run its recovery ritual (auto-refresh) for exactly this case. */
-    public readonly reason: 'denied' | 'unavailable' | 'no-channels' | 'wedged',
+     * can run its recovery ritual (auto-refresh) for exactly this case.
+     * 'permission': the SAME never-settling promise, but because macOS has not
+     * granted this browser screen recording (W1). It looks identical from the
+     * page and is a different thing entirely: the auto-refresh ritual must NOT
+     * run for it — a fresh renderer does not change a TCC grant, it only hides
+     * the one message that would fix the problem. */
+    public readonly reason: 'denied' | 'unavailable' | 'no-channels' | 'wedged' | 'permission',
     message: string,
   ) {
     super(message)

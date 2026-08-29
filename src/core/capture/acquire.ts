@@ -10,6 +10,7 @@ import { sourceFrameEnabled } from '@core/frame'
 import { captureRateCeiling, rateForSurface } from '@core/rate'
 import { MAX_OUTPUT_LONG_EDGE, evenDown } from '@core/frame'
 import { isAppleWebKit } from '@core/capabilities'
+import { detectPlatform } from '@core/platform'
 import { guardStream } from './deviceGuard'
 import { nativeResEnabled } from './nativeRes'
 import {
@@ -20,9 +21,12 @@ import {
 import {
   MAX_DISPLAY_LEVEL,
   displayRequestLevel,
+  classifyDisplayStall,
+  displayStallMessage,
   displayWedgeCount,
   rememberDisplaySuccess,
   rememberDisplayWedge,
+  type DisplayStall,
   type DisplayRequestLevel,
 } from './displayWedge'
 import { knownGranted, rememberGrant, type DeviceGrant } from './grants'
@@ -43,6 +47,13 @@ export interface AcquireFailure {
   denied: boolean
   /** True when the attempt hit ACQUIRE_TIMEOUT_MS without resolving. */
   timedOut?: boolean
+  /**
+   * WHY a display request never settled — W1. 'permission' means macOS has
+   * not granted this browser screen recording, which looks identical from the
+   * page and must not be treated as, reported as, or escalated like Chrome's
+   * wedge. Only ever set on a screen/system-audio timeout.
+   */
+  stall?: DisplayStall
 }
 
 export interface AcquireResult {
@@ -121,6 +132,17 @@ export const PICKER_SETTLE_MS = 8_000
 export const DISPLAY_TOTAL_BUDGET_MS = 30_000
 
 /**
+ * When to TELL THE USER the screen request is late, while it is still running.
+ *
+ * 12 s: comfortably past a person reading Chrome's picker (the budget above is
+ * set on "nobody spends half a minute choosing a screen"), and 18 s before the
+ * take fails, so the message that matters is on screen for the whole time the
+ * user is wondering what is wrong. Below ~10 s this would interrupt ordinary
+ * deliberation with an alarm, which is its own kind of lie.
+ */
+export const DISPLAY_STALL_NOTICE_MS = 12_000
+
+/**
  * The persistent-connect contract for GRANTED camera/mic (see
  * connectPersistently): this many attempts gate the synchronized start, and
  * then the take starts while the hunt keeps asking in the background. Two, not
@@ -184,6 +206,16 @@ export interface ProgressiveHandlers {
   onFailure: (f: AcquireFailure) => void
   /** Non-fatal quality warning for a channel that still records. */
   onNotice?: (kind: ChannelKind, message: string) => void
+  /**
+   * THE SCREEN REQUEST IS STILL OUTSTANDING AND HAS BEEN FOR A WHILE — W1
+   * item 3. Fired ONCE per take, DISPLAY_STALL_NOTICE_MS after dispatch, while
+   * the request is still alive. It exists because everything this app knew
+   * about a stuck share used to arrive in the post-take banner, up to 30 s
+   * later: Chrome is displaying the real answer (grant screen recording) the
+   * whole time, and the app said nothing until it had given up. Not a failure
+   * — the request keeps running, and most of the time it still lands.
+   */
+  onStall?: (message: string, stall: DisplayStall) => void
   onProgress?: ArmingProgressHandler
   /**
    * Consulted by the persistent-connect hunt (Robert 2026-08-25 "all input must
@@ -208,17 +240,29 @@ export interface ProgressiveAcquire {
 
 export type ArmingProgressHandler = (e: ArmingTimelineEntry) => void
 
-function toFailure(kind: ChannelKind, err: unknown, timedOut = false): AcquireFailure {
+function toFailure(
+  kind: ChannelKind,
+  err: unknown,
+  timedOut = false,
+  /** Set for a DISPLAY timeout only — see classifyDisplayStall (W1). It also
+   *  owns the message, because "Device did not respond in time" is the line
+   *  that became "the device never connected" in the editor while the real
+   *  answer (an ungranted macOS permission) was on screen in Chrome's own
+   *  picker the whole time. */
+  stall?: DisplayStall,
+): AcquireFailure {
   const denied =
     !timedOut &&
     err instanceof DOMException &&
     (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')
-  const message = timedOut
-    ? 'Device did not respond in time'
-    : err instanceof Error
-      ? err.message || err.name
-      : String(err)
-  return { kind, message, denied, timedOut }
+  const message = stall
+    ? displayStallMessage(stall, detectPlatform().browser, 'failed')
+    : timedOut
+      ? 'Device did not respond in time'
+      : err instanceof Error
+        ? err.message || err.name
+        : String(err)
+  return { kind, message, denied, timedOut, stall }
 }
 
 /**
@@ -1035,6 +1079,24 @@ export function acquireChannelsProgressive(
         DISPLAY_TOTAL_BUDGET_MS,
         'getDisplayMedia',
       )
+      // SAY IT WHILE IT IS STILL HAPPENING (W1 item 3). Everything this app
+      // knew about a stuck share used to arrive in the post-take banner, up to
+      // 30 s after the press — and when the cause is an ungranted macOS
+      // permission, Chrome has been displaying the answer that whole time
+      // while our screen said "Waiting for screen…". This is a NOTICE, not a
+      // failure: the request runs on, and most requests that reach this line
+      // still land. It fires once, well past any plausible picker
+      // interaction, and is cancelled the moment the promise settles either
+      // way.
+      const stallTimer = setTimeout(() => {
+        const stall = classifyDisplayStall(detectPlatform().os)
+        console.warn(
+          `[capture] screen request still outstanding at ${DISPLAY_STALL_NOTICE_MS} ms — reading it as ${stall}`,
+        )
+        handlers.onStall?.(displayStallMessage(stall, detectPlatform().browser, 'waiting'), stall)
+      }, DISPLAY_STALL_NOTICE_MS)
+      const clearStall = (): void => clearTimeout(stallTimer)
+      rawDisplay.then(clearStall, clearStall)
     }
   } else if (config.systemAudio) {
     fail({ kind: 'system-audio', message: 'System audio requires screen sharing', denied: false })
@@ -1148,20 +1210,26 @@ export function acquireChannelsProgressive(
       }
     } catch (err) {
       const timedOut = err instanceof DOMException && err.name === 'TimeoutError'
+      let stall: DisplayStall | undefined
       if (timedOut) {
-        // The share was taken and never delivered — mark the machine so the
-        // NEXT click sends the minimal request (displayWedge.ts). Counted in
-        // analytics because "never happens to users" is checkable only if we
-        // can see it happening.
-        rememberDisplayWedge()
+        stall = classifyDisplayStall(detectPlatform().os)
+        // A PERMISSION STALL MUST NOT TOUCH THE LADDER (W1 item 3). The ladder
+        // exists to find which of OUR options Chrome chokes on; an ungranted
+        // macOS screen-recording toggle is not one of them, and escalating
+        // against it parked Robert's machine on the floor for 24 h over a
+        // checkbox — the exact ratchet this task removes. The share was taken
+        // and never delivered only in the OTHER case, and only that one marks
+        // the machine so the NEXT click sends the smaller request.
+        if (stall === 'wedge') rememberDisplayWedge()
         analytics.track('display_wedge', {
           conservative: displayLevel > 0,
           level: displayLevel,
           wedgeCount: displayWedgeCount(),
+          stall,
         })
       }
-      fail(toFailure('screen', err, timedOut))
-      if (config.systemAudio) fail(toFailure('system-audio', err, timedOut))
+      fail(toFailure('screen', err, timedOut, stall))
+      if (config.systemAudio) fail(toFailure('system-audio', err, timedOut, stall))
       mark('display', timedOut ? 'timeout' : 'failed', err instanceof Error ? err.message : String(err))
       if (config.systemAudio) {
         mark('system-audio', timedOut ? 'timeout' : 'failed')
