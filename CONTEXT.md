@@ -559,6 +559,20 @@ browser. Share loop stays the minimal signed-link cloud already scoped.
 The engineering roadmap is done. Each of these is one question with the evidence already gathered;
 none of them can be settled without you.
 
+**NEW AND AHEAD OF ALL SEVEN (2026-08-29).** You read the flags file, asked what the 1920×1080 rule
+was, and rejected it: *"it must be device resolution, how the fuck mobile will make 1920x1080? its
+vertical."* You are right, and it is worse than black bars. **INOUT cannot make a vertical video.**
+The output size is a landscape constant, all four quality steps are landscape, and a camera-only
+take — the only kind a phone can make, since iOS gives browsers no screen recording — is CROPPED to
+fit, not letterboxed. Measured on the live app: a 4:3 source keeps 75 % of its height. A real phone
+camera at 9:16 would keep 31 % — **68 % of the video thrown away, head and chin gone.**
+That is now task F13, and the audit that came with it found four more ceilings of the same shape:
+a still screen being mistaken for a slow machine and quietly dropping your resolution
+(P0-ladder-static, live today); two improvements shipped the same morning that cancel each other
+(O3c); an export quality setting that sticks forever and silently makes every later export slow
+(F14); and 30 fps welded into every path with no way to lift it (F15 — that one is a question for
+you, not a bug). All five are on the READY map in `.ai/TASKS`.
+
 1. **Listen to two recordings.** A normal one and one with music from a tab. The audio fix you were
    asked to check before was never actually running — the number it depends on was being calculated
    and dropped. It runs now.
