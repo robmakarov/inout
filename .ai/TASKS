@@ -17,6 +17,15 @@ Operating rules (every task):
   success; code without evidence is not.
 - No refactors outside task scope. Don't touch .ai/* except appending your handoff under your task.
 - HEAVY RUNS (oracle matrices, load rigs) are announced first and never run while Robert is using the machine.
+- THE LONG CELL IS MANDATORY BEFORE ANY FLIP THAT TOUCHES THE INSTANT OR SMART-CUT PATHS (task G4,
+  2026-08-29). `npm run oracle:long` — ONE 120 s take through both packet-copy paths, ~3 minutes,
+  HEAVY, announce it. Quote its instant/trimmed `maxAbs` in the handoff.
+  READ IT AGAINST THE RECORDED BASELINE, NOT AGAINST GREEN: the 90 ms band is CURRENTLY RED at this
+  length (instant maxAbs 94.2 / 94.2 / 95.3 / 100.5 over five runs, one inside) while the same build
+  reads 69.5-81.2 at 6 s and passes every time. That gap IS the reason for this rule — the defect
+  grows with length and the 6 s gate cannot see it (BACKLOG P0, filed the day this cell first ran).
+  A flip that leaves those numbers where they are is fine; one that moves them up is the thing this
+  catches, and nothing else in the repo can.
 - Order is dependency order WITHIN each phase, not between them: the O-phase-before-F-phase rule was
   about not building features on an engine that was about to change. In practice the whole F phase
   except F6/F8 landed on top of the shipped engine while O4 stayed dormant, because features that
@@ -448,7 +457,10 @@ READY NOW:
                                              counter reads 0 on the blocking lane AND the non-blocking
                                              one. O1's memory lane samples the MAIN thread while the
                                              export renders in a worker. Both are decoration today.
-  G4   nothing measured past 30 s    [light-medium]  Robert records 938-1800 s; the widest cell in every
+  G4   nothing measured past 30 s    [DONE 2026-08-29 — handoff under the task. The cell had never run
+                                             because cdp-run truncated any report over 64 KiB; the
+                                             first one that did is RED on the packet-copy paths]
+                                             Robert records 938-1800 s; the widest cell in every
                                              matrix is 30 s. At 120 s the instant path read 117.2/153.8 ms
                                              before 89e250e against 97-102 at 6 s — the short gate passed
                                              a defect that grew with length. Make the long cell a command.
@@ -795,6 +807,53 @@ file requiring it before any flip that touches instant/smart cut.
 GATES: the command exists and is named in the operating rules · one run on HEAD with numbers in the
 handoff · it fails loudly rather than emitting nulls under contention (the ALL-NULL family) · runtime
 stated so a session can budget it.
+
+## G4 HANDOFF — DONE 2026-08-29. THE LONG CELL HAD NEVER RUN, AND THE REASON WAS A 64 KiB PIPE.
+THE COMMAND: `npm run oracle:long` (= `node scripts/oracle.mjs --recordMs=120000`). `--recordMs=` and
+`--trimMs=` are new; the trim is derived from the take so it always lands OFF the composite's 2 s
+keyframe grid (the runner REFUSES a value on the grid, because a trim on a keyframe never exercises
+smart cut and the cell would be measuring the wrong path in silence). Named in the operating rules at
+the top of this file. RUNTIME: 182-187 s per run, wall, on this machine — the console prints the
+budget before the take starts, and `elapsedMs` is in the JSON.
+
+WHY NOBODY HAD RUN ONE — AND IT IS NOT THAT NOBODY TRIED. A 120 s cell fails 100 % of the time, and
+it failed as `invalid JSON: Unterminated string in JSON at position 65536`. 65536 is not a number
+about JSON. `cdp-run.mjs` writes the report to stdout and then calls `process.exit()` in its
+`finally` — deliberately, so wall time equals experiment time — and stdout to a PIPE is asynchronous
+in Node, so everything past macOS's 64 KiB pipe buffer was DISCARDED. A longer take makes a bigger
+report; the report was truncated; the failure looked like a flaky experiment. THAT is the mechanism
+behind "the widest cell in every matrix is 30 s". The fix is to await the drain (`writeFully`), and
+it costs nothing: THE FIRST 120 s REPORT IS 470,235 BYTES — 7.2x the ceiling it had been dying
+against. Every experiment in this repo that would emit more than 64 KB was silently truncated the
+same way; `npm run exp -- x15c` and the o4 matrices are the obvious next-biggest.
+The runner now names a truncation as a truncation: a parse failure at an exact power of two says so
+instead of reading as a malformed experiment.
+
+THE NUMBERS, FIRST RUN OF THIS CELL IN THE PROJECT'S LIFE — AND IT IS RED ON THE DEFAULT PATH.
+  6 s cell, 4 runs   instant maxAbs 69.5 · 72.0 · 70.2 · 81.2     ALL PASS (band 90 ms)
+  120 s cell, 5 runs instant maxAbs 94.2 · 94.2 · (one PASS) · 95.3 · 100.5   4 OF 5 FAIL
+                     trimmed maxAbs 94.5 · 93.0 · 100.8 on the same runs (smartcut path)
+                     render  maxAbs 45.5 · 47.2 · 65.3 · 81.5 — inside, but it grows too
+  The MEANS do not move much (instant 49.5-67.3 at 6 s, 49.9-71.7 at 120 s). It is the WORST CASE
+  that grows, which is exactly the shape a 6 s gate cannot see: at 6 s the packet-copy paths sit 9 ms
+  inside a 90 ms band and look comfortable; at 120 s they are outside it four times in five.
+  Note 94.2 appearing IDENTICALLY on two separate runs — that is a deterministic worst-case sample,
+  not jitter, so there is a specific instant in the take where the copy paths are ~94 ms out.
+  This is the same family as B7 (a CONSTANT start offset) and it is now filed P0 in BACKLOG with
+  these numbers. G4 does not fix it; G4 is why it is visible.
+
+GATES
+  · the command exists and is named in the operating rules — `npm run oracle:long`, rule added at
+    the top of this file.
+  · one run on HEAD with numbers in the handoff — five, above, plus a four-run 6 s control.
+  · it fails loudly rather than emitting nulls under contention — it now fails loudly rather than
+    emitting nulls FULL STOP, since the nulls were the truncation and not contention. The all-null
+    family still gets its own console line naming the count, and the parse error names the byte
+    count and flags a power-of-two boundary as truncation.
+  · runtime stated so a session can budget it — 182-187 s per run; printed before the run and
+    recorded per run as `elapsedMs`. `recordMs`/`trimMs` are in the summary so a report can never
+    again be read without knowing which cell produced it.
+  · `npm run oracle` (6 s) still PASS · typecheck · tests green.
 
 ## B1 size-panel-lies — the only warning before a two-hour render is wrong by 2.15x
 [light · quality.ts + the panel; no capture change]

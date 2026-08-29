@@ -128,6 +128,31 @@ class Cdp {
   }
 }
 
+/**
+ * WRITE IT ALL, THEN LET THE PROCESS DIE (task G4, 2026-08-29).
+ *
+ * `finally` here calls `process.exit()` on purpose — the losing arm of the
+ * timeout race and the CDP socket both keep the event loop alive, so without it
+ * wall time stops equalling experiment time. But stdout to a PIPE is
+ * asynchronous in Node, and `process.exit()` discards whatever has not reached
+ * the OS yet. On macOS that buffer is 64 KiB.
+ *
+ * So every report bigger than 65536 bytes was silently cut in half a sentence,
+ * and the runner downstream saw `Unterminated string in JSON at position
+ * 65536`. THAT IS WHY NOTHING IN THIS REPO IS MEASURED PAST 30 SECONDS: a
+ * longer take makes a bigger report, the report was truncated, and the failure
+ * looked like a flaky experiment rather than a broken pipe. A 120 s oracle cell
+ * fails this way 100 % of the time and had never been run.
+ *
+ * Awaiting the drain costs nothing and removes the ceiling.
+ */
+function writeFully(stream, text) {
+  return new Promise((resolve) => {
+    if (text && !stream.write(text)) stream.once('drain', resolve)
+    else resolve()
+  })
+}
+
 async function main() {
   const {
     experiment,
@@ -286,12 +311,13 @@ async function main() {
         res.exceptionDetails.exception?.description ?? res.exceptionDetails.text ?? 'unknown page error'
       throw new Error(`experiment threw in page:\n${detail}`)
     }
-    process.stdout.write(String(res.result.value) + '\n')
+    await writeFully(process.stdout, String(res.result.value) + '\n')
   } catch (err) {
     console.error(String(err instanceof Error ? err.message : err))
     if (consoleTail.length)
       console.error('--- page console tail ---\n' + consoleTail.slice(-80).join('\n'))
     if (chromeErr) console.error('--- chrome stderr tail ---\n' + chromeErr.slice(-2000))
+    await writeFully(process.stderr, '')
     process.exitCode = 1
   } finally {
     if (refocusTimer) clearInterval(refocusTimer)

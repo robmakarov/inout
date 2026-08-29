@@ -19,6 +19,21 @@ instrument defects — gates that report a verdict they did not measure. Unmarke
 deliberately not promoted: already a task (F14/F15/F16, the Safari mic P8), waiting only on Robert's
 ear or eye, or the screen wedge, whose cause is Chrome's.
 
+- [P0] 2026-08-29 (G4 session): **the packet-copy paths break the sync band on a LONG take, and the
+  default path is one of them.** First run of a 120 s oracle cell in this project's life (`npm run
+  oracle:long`, new). Instant path maxAbs 94.2 / 94.2 / 95.3 / 100.5 ms over five runs against a
+  90 ms band — FOUR OF FIVE FAIL — with smart cut at 93.0-100.8 on the same runs. The SAME build at
+  6 s reads 69.5 / 72.0 / 70.2 / 81.2 and passes every time. The MEANS barely move (49.5-67.3 at 6 s,
+  49.9-71.7 at 120 s); it is the WORST CASE that grows with length. 94.2 repeats IDENTICALLY across
+  two runs, so there is a specific instant in the take where the copy paths are ~94 ms out — a
+  deterministic sample, not jitter. Robert records 938-1800 s, i.e. 8-15x this cell.
+  SAME FAMILY AS B7 (a constant start offset that a synthetic rig cannot see) and the natural next
+  step is to read it against B7's new per-channel certification. The render path grows too (maxAbs
+  45.5 -> 81.5) but stays inside.
+  NOT A REGRESSION FROM ANY RECENT FLIP — this cell has never been runnable: cdp-run.mjs truncated
+  every report over 64 KiB (fixed in the same commit), so a 120 s run always died as `invalid JSON at
+  position 65536` and read as a flaky experiment.
+
 - [P1] 2026-08-29 (G3 session): **the v1 oracle's export-throughput gate is a coin flip** — `node
   scripts/oracle.mjs --engine=v1` fails on `export throughput X < 1x realtime` with the threshold
   sitting inside the run-to-run noise. Interleaved A/B, same machine, alternating trees:

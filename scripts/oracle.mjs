@@ -6,10 +6,20 @@
  * dev server — 2026-07-16: pointing at :5173 poisoned Robert's QA). Runs synthetic
  * capture→export→measure via CDP, evaluates CI gates, exits nonzero on failure.
  *
+ * THE LENGTH IS PART OF THE MEASUREMENT (task G4, 2026-08-29). This defaults to a
+ * 6 s take and the widest cell in any matrix here is 30 s; Robert records
+ * 938-1800 s. That is not a detail — the instant path was measured at 117.2 /
+ * 153.8 ms at 120 s while reading 97-102 ms at 6 s on the SAME defect, so the
+ * short gate under-reported it by ~20 % and passed it. `--recordMs=` makes the
+ * long cell one command (`npm run oracle:long` = 120 s), and the operating
+ * rules in `.ai/TASKS` require it before any flip that touches the instant or
+ * smart-cut paths.
+ *
  * Usage:
- *   npm run oracle              # single cold run
+ *   npm run oracle              # single cold run, 6 s take
+ *   npm run oracle:long         # ONE 120 s take through both packet-copy paths (HEAVY, announce it)
  *   npm run oracle:cold         # 20 consecutive cold runs (fresh Chrome profile each)
- *   node scripts/oracle.mjs --headed
+ *   node scripts/oracle.mjs --headed --recordMs=180000 --trimMs=4271
  */
 
 import { spawn } from 'node:child_process'
@@ -34,10 +44,18 @@ function parseArgs(argv) {
   // because every real take has one; this is how that change is checked
   // against the sync band rather than assumed harmless.
   let composite = true
+  // G4: the take length, and the trim offset applied to it. The trim must stay
+  // OFF the composite's 2 s keyframe grid or the smart-cut path is never
+  // exercised — 1483 ms is the shipped default for exactly that reason, and a
+  // longer cell needs a value with the same property (see --recordMs below).
+  let recordMs = 6000
+  let trimMs = 0
   for (const a of argv) {
     if (a === '--no-composite') { composite = false; continue }
     if (a.startsWith('--cold=')) cold = Number(a.slice(7))
     else if (a === '--headed') headed = true
+    else if (a.startsWith('--recordMs=')) recordMs = Number(a.slice(11))
+    else if (a.startsWith('--trimMs=')) trimMs = Number(a.slice(9))
     else if (a.startsWith('--engine=')) engine = a.slice(9)
     else if (a.startsWith('--port=')) {
       console.error(
@@ -46,7 +64,20 @@ function parseArgs(argv) {
       process.exit(2)
     }
   }
-  return { cold, headed, engine, composite }
+  if (!Number.isFinite(recordMs) || recordMs < 1000) {
+    console.error(`oracle: --recordMs=${recordMs} is not a take length`)
+    process.exit(2)
+  }
+  // A trim must land off the 2 s keyframe grid AND leave material on both
+  // sides. Scaled from the take rather than fixed, so a 120 s cell trims a
+  // meaningful amount instead of 1.2 % of itself, and the 483 ms tail keeps it
+  // off the grid at every length.
+  if (!trimMs) trimMs = recordMs <= 10_000 ? 1483 : Math.round(recordMs / 4 / 2000) * 2000 + 483
+  if (trimMs % 2000 === 0) {
+    console.error(`oracle: --trimMs=${trimMs} sits ON the 2 s keyframe grid — smart cut would not be exercised`)
+    process.exit(2)
+  }
+  return { cold, headed, engine, composite, recordMs, trimMs }
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -102,11 +133,11 @@ function run(cmd, args, opts = {}) {
   })
 }
 
-async function runOracleOnce(port, headed, engine, composite = true) {
+async function runOracleOnce(port, headed, engine, composite = true, recordMs = 6000, trimMs = 1483) {
   const cdpArgs = [
     join(ROOT, 'src/experimental/tools/cdp-run.mjs'),
     'oracle',
-    JSON.stringify({ composite }),
+    JSON.stringify({ composite, recordMs, trimMs }),
     `--port=${port}`,
   ]
   if (headed) cdpArgs.push('--headed')
@@ -124,7 +155,18 @@ async function runOracleOnce(port, headed, engine, composite = true) {
   try {
     return { error: null, report: JSON.parse(result.out.trim()) }
   } catch (e) {
-    return { error: `invalid JSON: ${String(e)}`, report: null }
+    // THE LENGTH IS THE DIAGNOSIS (task G4). A report cut at a power of two is
+    // a broken pipe, not a broken experiment — cdp-run used to `process.exit()`
+    // before stdout drained, so anything past macOS's 64 KiB pipe buffer was
+    // discarded and every long cell died here looking like a flake.
+    const n = result.out.length
+    const suspectTruncation = n > 0 && (n & (n - 1)) === 0
+    return {
+      error:
+        `invalid JSON after ${n} bytes: ${String(e)}` +
+        (suspectTruncation ? ' — that is exactly a pipe-buffer boundary: the report was TRUNCATED, not malformed' : ''),
+      report: null,
+    }
   }
 }
 
@@ -132,11 +174,11 @@ const METRIC_RETRY_COOLDOWN_MS = 5000
 const METRIC_RETRY_MAX = 2
 
 /** Retry when CDP/oracle returns null metrics (load flake) — never exit 0 on all-null. */
-async function runOracleOnceGated(port, headed, engine, composite = true) {
+async function runOracleOnceGated(port, headed, engine, composite = true, recordMs = 6000, trimMs = 1483) {
   let last = { error: 'no attempt', report: null, gate: null }
   for (let attempt = 1; attempt <= METRIC_RETRY_MAX; attempt++) {
     const t0 = Date.now()
-    const { error, report } = await runOracleOnce(port, headed, engine, composite)
+    const { error, report } = await runOracleOnce(port, headed, engine, composite, recordMs, trimMs)
     const elapsed = Date.now() - t0
     if (error || !report) {
       last = { error: error ?? 'no report', report, gate: null, elapsedMs: elapsed, attempt }
@@ -169,7 +211,16 @@ async function runOracleOnceGated(port, headed, engine, composite = true) {
 }
 
 async function main() {
-  const { cold, headed, engine, composite } = parseArgs(process.argv.slice(2))
+  const { cold, headed, engine, composite, recordMs, trimMs } = parseArgs(process.argv.slice(2))
+  // G4: the length is part of the verdict, so it is on the console before the
+  // first number and in the JSON beside them. A session reading an old report
+  // must never have to guess which cell it was.
+  if (recordMs !== 6000) {
+    console.error(
+      `oracle: LONG CELL — ${(recordMs / 1000).toFixed(0)} s take, trim at ${trimMs} ms ` +
+        `(off the 2 s keyframe grid). Budget roughly ${Math.ceil((recordMs * 2.2 + 25_000) / 1000)} s per run.`,
+    )
+  }
 
   try {
     await run(CHROME, ['--version'], { stdio: 'pipe' })
@@ -195,7 +246,7 @@ async function main() {
     await waitForHttp(`http://${HOST}:${port}/experimental.html`, Date.now() + 60_000)
 
     for (let i = 0; i < cold; i++) {
-      const run = await runOracleOnceGated(port, headed, engine, composite)
+      const run = await runOracleOnceGated(port, headed, engine, composite, recordMs, trimMs)
       const elapsed = run.elapsedMs ?? 0
       if (run.error || !run.report || !run.gate) {
         results.push({
@@ -275,6 +326,10 @@ async function main() {
 
     const passed = results.filter((r) => r.gate.pass).length
     const summary = {
+      // G4: WHICH CELL. A report whose length is not in it is a report the next
+      // session has to guess at, and the guess has always been 6 s.
+      recordMs,
+      trimMs,
       runs: cold,
       passed,
       failed: cold - passed,
@@ -294,8 +349,27 @@ async function main() {
       trimmedSyncMeanMs: results.map((r) => r.gate.metrics.trimmedSyncMeanMs),
       instantPath: results.map((r) => r.gate.metrics.instantPath),
       instantSyncMeanMs: results.map((r) => r.gate.metrics.instantSyncMeanMs),
+      instantSyncMaxAbsMs: results.map((r) => r.gate.metrics.instantSyncMaxAbsMs),
+      trimmedSyncMaxAbsMs: results.map((r) => r.gate.metrics.trimmedSyncMaxAbsMs),
       compositeStartOffsetMs: results.map((r) => r.gate.metrics.compositeStartOffsetMs),
+      // So a session can budget the cell instead of discovering its cost.
+      elapsedMs: results.map((r) => r.elapsedMs),
       port,
+    }
+    /**
+     * THE ALL-NULL FAMILY, MADE LOUD (task G4). `incompleteMetrics` counts runs
+     * whose CORE metrics came back null, and the gate already fails those. The
+     * packet-copy lanes have their own anti-vacuity rules in oracle-gate.mjs (a
+     * path that ran unmeasured, or a path that declined). This line exists so
+     * the condition is stated on the console rather than inferred from a JSON
+     * field nobody scrolls to — a long cell costs minutes, and a session that
+     * has just paid them must not have to read a null as a pass.
+     */
+    if (summary.incompleteMetrics > 0) {
+      console.error(
+        `oracle: ${summary.incompleteMetrics} of ${cold} run(s) produced NULL core metrics — ` +
+          'that is a failed run under contention, not a green one. Re-run when the machine is idle.',
+      )
     }
     process.stdout.write(JSON.stringify(summary, null, 2) + '\n')
     if (passed < cold) process.exitCode = 1
