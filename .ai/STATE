@@ -23,9 +23,28 @@ phase: MVP validation (2026-07-16)
   requestedFps) (framesIn was already in the stats; keep-alives never count); a starved pipeline
   still steps, a 60 fps source is not punished for the cadence gate. Cost stated: crushed-arrivals-
   without-drops no longer steps — that is Chrome's compositor (autopsied 08-26), keep-alive holds
-  the file, the watchdog still guards collapse. The composite canvas is still 1920x1080, so the
-  DEFAULT 1080p export (packet copy) is unchanged — and since O3c the step MATCHING the screen is an
-  instant copy of the raw channel, so native detail no longer needs the render at all.
+  the file, the watchdog still guards collapse. The composite canvas holds 1920 on its LONG edge
+  (F13 gave it the take's aspect, not the take's pixel count), so the DEFAULT 1080p export (packet
+  copy) is unchanged — and since O3c the step MATCHING the screen is an instant copy of the raw
+  channel, so native detail no longer needs the render at all. The ladder's rungs are written
+  landscape and are turned for a rotated source (F13).
+- THE FRAME CAN FOLLOW THE TAKE (F13, 2026-08-29) — `?sourceframe=1`, OFF BY DEFAULT UNTIL PO
+  JUDGES A REAL PHONE TAKE. Until this the output was a landscape constant end to end
+  (DEFAULT_EXPORT_SETTINGS, four 16:9 steps, a 1920x1080 composite canvas, a layout authored at
+  1920w) and THE PRODUCT COULD NOT MAKE A VERTICAL VIDEO: camera-only is the only take a phone can
+  make, it draws with `fit: 'cover'`, and 9:16 into 16:9 keeps 31.6 % of the frame. `core/frame.ts`
+  is the one seam — `takeAspect` (the COMPOSITE first, because that file is what the default step
+  copies and a take must stay the shape it was recorded at; then the screen; then the camera) and
+  `frameForAspect(aspect, longEdge)`, which returns 960x540 / 1280x720 / 1920x1080 / 2560x1440 to
+  the pixel on 16:9. A step keeps its NAME and its PIXEL BUDGET (the long edge) and changes only
+  shape, so minimal-size is not re-priced by the shape of a monitor. Verified on prod by reading
+  width/height out of the exported FILE: portrait 1080x1920 (copiedFrom single-generation), 4:3
+  camera 1920x1440 (full height, was cropped to 1080), 16:9 screen still 1920x1080 with instant AND
+  smart cut copying. `?camsize=WxH` / `?screensize=WxH` reproduce a portrait or 4K source from a URL.
+  FOUND BY DRIVING IT: `allowComposite` alone no longer fences the copy — a take recorded with the
+  flag and exported without it copied a 1920x1440 file under a "1080p" badge — so the composite is
+  now checked against the request too (refuses nothing that ever worked; every pre-F13 composite is
+  1920x1080 and so is its default step).
 - THE EXPORT TARGETS A QUALITY, NOT A BITRATE (2026-08-29). H.264 qp20 via a CustomVideoEncoder on
   mediabunny's registerEncoder seam (its own bitrateMode is typed constant|variable, both of which
   X15(a) measured INERT; quantizer mode is the one that works and needs a per-frame QP nothing in the

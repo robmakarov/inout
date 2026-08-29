@@ -19,8 +19,16 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   F16 lands, O3c's per-step INSTANT badges keep the panel honest.
 
 - [P2] TD 2026-08-29: **30 fps hardcoded everywhere** → `.ai/TASKS` F15, RULED YES the same day
-  (PO: "every device records the best it can, 60 fps"). Scheduled with/after F13 as
-  fps-follows-the-source; the ruling and shape live in the task and DECISIONS.
+  (PO: "every device records the best it can, 60 fps"). F13 landed 2026-08-29 and left the seam it
+  rides (`session.compositeFrame()` asks the take what it is, once, before any encoder exists), so
+  F15 is unblocked; the ruling and shape live in the task and DECISIONS.
+
+- [PO OWED] TD 2026-08-29: **F13 is built, verified on prod and OFF** — `?sourceframe=1` and the
+  output follows the take's shape instead of a landscape constant. Its last gate is PO's eye:
+  open https://inout-kappa.vercel.app/?sourceframe=1 on a PHONE, record, look at the export. Until
+  then INOUT still cannot make a vertical video by default, on purpose. Evidence read out of the
+  exported FILE: portrait 1080x1920 (instant copy), 4:3 camera 1920x1440 (full height, was cropped
+  to 1080), 16:9 unchanged at 1920x1080 on both copy paths.
 
 - [P1] PO 2026-08-29: **the size estimate is 2.15× low at the top step** — panel said 4.7 GB at
   1440p, file came out 10.09 GB (140 min). Every other step landed within ~100 MB, so this is the
@@ -380,7 +388,9 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   source, fringe 8.66 against 10.24) and FASTER, because the file it copies is one we did not have to
   make. It costs 14-23 % more download; the colour half of the win is structural and is NOT bought
   with those bytes. `?singlegen=off` reverts. No help for a take with a camera, or for a window share
-  that is not 1920x1080 — both still composite. The rest needs **4:4:4 at capture**, which on this
+  whose geometry is not the selected step's — both still composite (O3c made the equality follow
+  the step; F13 made the composite follow the take's ASPECT, not its pixel count, so a native-res
+  1440p/4K screen still declines the CAPTURE half — that one is F16's). The rest needs **4:4:4 at capture**, which on this
   machine is software only (AV1 profile 1: 80 fps at 1080p against 207, ~2x CPU — X15(b)). PO has the
   crops: ~/Downloads/x15-text-truth/, c-00-SOURCE against c-01-instant; `npm run exp -- o3b
   '{"crops":true}'` writes the new before/after pair.

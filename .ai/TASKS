@@ -124,6 +124,20 @@ minutes at good quality), which prices the codec decision below. SHIPPED AND VER
   Gates: 510 tests · typecheck · exp o3b 7/7 twice-shipped lanes · oracle v2 PASS · oracle v1 PASS ·
   fidelity PASS · verify-deploy OK (f85aed0) · both prod repros above.
 
+EIGHTEENTH SESSION 2026-08-29 (PO: "go F13"). F13 BUILT AND VERIFIED ON PROD, FLAG-GATED, DEFAULT
+NOT MOVED — the whole handoff is under the task. THE PRODUCT CAN NOW MAKE A VERTICAL VIDEO:
+`?sourceframe=1` and a 9:16 camera take exports 1080x1920, read out of the FILE, with the instant
+packet copy still firing; a 4:3 camera take keeps its full height (1920x1440, against the 1920x1080
+that discarded 25 % of it); a 16:9 take is unchanged to the pixel on both copy paths. One seam,
+`src/core/frame.ts`. A step keeps its NAME and its PIXEL BUDGET and changes only shape, so the
+minimal-size objective is untouched. NEW ON THE MAP: F13-FLIP, which is PO's eye on a real phone —
+that was the task's own last gate and it is the only thing between here and vertical video by
+default. F15 is unblocked and is the natural next one.
+FOUND BY DRIVING IT RATHER THAN READING IT (note 10's shape, the other way round): the copy fence
+`allowComposite` silently meant "the composite is 1920x1080", and once the composite could be any
+shape a take recorded with the flag and exported without it copied a 1920x1440 file out under a
+"1080p" badge. Fixed and pinned in the same push.
+
 SHIPPED THIS SESSION
   · X9   the For-AI build runs in a worker. Byte-identical PDF on four lanes; the UI thread loses
          13 ms of a build instead of 84. The worker is not faster — it is elsewhere.
@@ -222,22 +236,23 @@ START HERE IF YOU ARE FRESH:
      `npm run oracle:load` (HEAVY, announce it) and `npm run exp -- armcancel`.
 
 READY NOW:
-  F13  output follows source       [heavy]   PO 2026-08-29: "yes", re-affirmed same day ("every
-                                             device records the best it can"). The frame stops
-                                             being a constant. THE BIG ONE — vertical video, native
-                                             camera, and it makes O3c's tier-match true by
-                                             construction. Gate: a 16:9 take stays byte-identical.
-                                             Run it in its own session — it touches capture,
-                                             compositor, layout, editor and export.
+  F13-FLIP  PO's own eye           [PO OWED]  F13 IS BUILT, VERIFIED ON PROD AND OFF BY DEFAULT
+                                             (handoff under the task). Its last gate is yours:
+                                             open https://inout-kappa.vercel.app/?sourceframe=1 on
+                                             a PHONE, record yourself, and look at the export. If
+                                             it is right, the default flips and INOUT can make a
+                                             vertical video; if it is not, say what is wrong and
+                                             nothing has moved in the meantime.
   F15  60 fps                      [medium]  RULED YES 2026-08-29 (PO: "i want every device to
-                                             record best quality it can, 60 fps"). Rides F13's
-                                             derive-from-the-take chain — fps follows the source up
-                                             to 60 the same way geometry follows it — so schedule
-                                             WITH or immediately AFTER F13, not before: shipping 60
-                                             as new constants would rebuild the exact shape PO
-                                             rejected. Throughput risk is real (the 4K-freeze
-                                             family): the ladder is the guard, and it now judges
-                                             arrivals, so a 60 fps source is not punished (pinned).
+                                             record best quality it can, 60 fps"). UNBLOCKED —
+                                             F13 landed, and its `session.compositeFrame()` is the
+                                             ask-the-take-what-it-is seam fps rides: fps follows
+                                             the source up to 60 the same way geometry does.
+                                             Shipping 60 as new constants would rebuild the exact
+                                             shape PO rejected. Throughput risk is real (the
+                                             4K-freeze family): the ladder is the guard, and it now
+                                             judges arrivals, so a 60 fps source is not punished
+                                             (pinned).
   SIZE-CODEC  the ~2x lever        [PO PICK OWED]  PO 2026-08-29: "minimal size ... couple minutes
                                              ~10 MB with good quality". qp-targeted encoding is
                                              DEFAULT ON and worth ~11 %; the remaining ~2x IS the
@@ -536,7 +551,7 @@ test, because that disagreement is the bug · no change to any export path's out
 ## F16 one-quality-option — capture follows the chosen rung; instant export at any set quality
 [medium-heavy · TD-authored 2026-08-29 from PO's ruling ("make it one option for now everytime ...
 min-medium-high(default)-max ... we need to try to achieve instant export for any quality") ·
-AFTER F13 (geometry seam) and F15 (fps) — it rides both]
+AFTER F13 (geometry seam — LANDED 2026-08-29, `resolveTier` is the seam) and F15 (fps) — it rides both]
 THE PHYSICS THIS TASK IS BUILT ON, so nobody re-derives it: instant = packet copy = the bytes
 already exist. The render floor is decode-bound at 5-6x realtime (O5, X4 refuted threading), so
 "fast render" can never be instant. Four live encoders for four rungs is dead on X6's own numbers
@@ -600,7 +615,7 @@ after this lands. NOTE the codec dependency honestly: Min's absolute size is ~2x
 hevc/av1 — SIZE-CODEC multiplies every rung and stays PO's pick.
 
 ## F15 fps-ceiling — RULED YES 2026-08-29 (PO: "i want every device to record best quality it can,
-##     60 fps"). Schedule WITH or immediately AFTER F13 — see the ruling note at the bottom.
+##     60 fps"). F13 LANDED 2026-08-29 — this is next. See the ruling note at the bottom.
 [medium · TD-authored 2026-08-29, raised by PO's own objection to the 1920×1080 rule]
 `DEFAULT_EXPORT_SETTINGS.fps = 30`, all four quality steps are `fps: 30` (quality.ts), and capture
 asks the OS for `frameRate: { ideal: 30, max: 30 }` (acquire.ts:360). It is a `max`, so a 60 fps
@@ -613,7 +628,8 @@ THE QUESTION FOR PO, and it is the whole gate: should INOUT be able to make a 60
 A yes costs bytes and encode time on every take that uses it and wants its own quality step; a no is
 fine and should simply be written down as a decision instead of surviving as a constant. If yes,
 this rides F13's chain — the same derive-from-the-take rewrite that carries geometry carries fps —
-so it is scheduled AFTER F13, not before.
+so it is scheduled AFTER F13, which landed 2026-08-29: `session.compositeFrame()` is where the
+take is asked what it is, once, before any encoder is configured, and fps belongs in that answer.
 RULED YES 2026-08-29 (DECISIONS). SHAPE, so the next session does not re-derive it: fps FOLLOWS THE
 SOURCE up to 60 — not a new 60 constant, which would rebuild the shape PO rejected. The chain:
 displayVideoConstraints/cameraVideoConstraints frameRate (acquire.ts, currently ideal:30 max:30
@@ -626,7 +642,7 @@ the ladder watching. GATES when built: a 30 fps source's take is byte-identical 
 synthetic source records and exports 60 (read fps from the FILE) · oracle v2+v1 green · oracle:load
 green (announce it) · one real 60 fps take judged by PO.
 
-## F13 output-follows-source — the frame is a constant and it should be the take's
+## F13 output-follows-source — DONE 2026-08-29, flag-gated (handoff at the end of this task)
 [heavy · TD-authored 2026-08-29, PO: "it must be device resolution, how the fuck mobile will make
 1920x1080? its vertical" → "yes"]
 THE PRODUCT CANNOT MAKE A VERTICAL VIDEO. `DEFAULT_EXPORT_SETTINGS` is 1920x1080 (types.ts:546),
@@ -670,6 +686,88 @@ fidelity + sync oracles green · `npm run exp -- o3b` still green · PO judges o
 eye before any default moves.
 RISK, STATED: this moves what an existing take exports to for any take that is not 16:9. Nothing
 about a 16:9 take may change — that is the byte-identical gate, and it is the whole safety net.
+
+## F13 HANDOFF — BUILT AND VERIFIED ON PROD 2026-08-29. Every gate met. DEFAULT NOT MOVED.
+SHIPPED BEHIND `?sourceframe=1` (sticky `inout.frame.source`), OFF by default — the task's own last
+gate is "PO judges one real phone take by eye before any default moves", so the flip is PO's and
+the flag is how it gets judged. Off, every path answers exactly what the constant answered.
+
+THE ONE SEAM IS `src/core/frame.ts`, and it is two functions:
+ · `takeAspect(recording)` — THE COMPOSITE ANSWERS FIRST, then the screen, then the camera, then
+   16/9. Composite-first is not a detail: that file is what the default step packet-copies, so a
+   take must stay the shape it was RECORDED at or the panel promises one picture and the copy path
+   hands over another. It also means turning the flag on does not retroactively un-crop old takes.
+ · `frameForAspect(aspect, longEdge)` — 960x540 / 1280x720 / 1920x1080 / 2560x1440 to the pixel on
+   16:9, both sides always even. A step is a PIXEL BUDGET (its long edge), not a landscape box:
+   "1080p" is 1920 on the long edge whatever the shape, which is what a phone calls 1080p and what
+   keeps PO's minimal-size objective from being re-priced by the shape of somebody's monitor.
+   THE PIXEL COUNT DELIBERATELY DOES NOT FOLLOW THE SOURCE — a 4K monitor does not turn every
+   default export into a 4K file; that win is O3c's (the step matching the screen copies the raw
+   channel) and it stays there.
+THE CHAIN: both composite engines size their own canvas from `session.compositeFrame()` (one answer,
+handed to whichever engine starts, so a v2→v1 fallback cannot change the take's shape) ·
+`resolveTier`/`tiersForTake` in quality.ts (idempotent, identity on 16:9, bitrate re-scaled by the
+pixel ratio so a taller frame is not a quieter encode wearing the same label) · `frameScale` keyed
+to the LONG edge in layout/render/sizeProbe/ai-build, so a portrait PiP keeps the 1.5 px border and
+16 px radius the layout was authored with instead of losing 44 % of them · the editor stage, the
+capture preview canvas and the CSS `--stage-ar` · `cameraVideoConstraints` on a SCREENLESS take
+follows the device's orientation instead of naming a landscape box · `stepDisplayDown` turns the
+ladder's landscape rungs for a rotated source.
+`cameraFull` KEPT `fit: 'cover'` on purpose: with the frame following the take it is the identity,
+and where the two disagree (a source that changed shape mid-take, a take made before any of this) a
+filled frame is what this product has always done — adding black bars there is not this task's to do.
+
+GATES MET, all four geometry ones read out of the exported FILE by the browser's own demuxer (OPFS
+`blobs/xport-*` → `<video>.videoWidth/Height`), never from the UI:
+ · 16:9 UNCHANGED — with the flag ON a 1280x720 screen take logged NO "composite follows the source"
+   line (the derived frame IS 1920x1080) and exported 1920x1080, `copiedFrom: "composite"`. Unit
+   side: `tiersForTake` deep-equals QUALITY_TIERS and `settingsForTier(t, rec)` equals
+   `settingsForTier(t)` on a 16:9 take, field for field.
+ · PORTRAIT — `?synthetic=1&sourceframe=1&camsize=1080x1920`, camera-only: console "composite follows
+   the source: 1080x1920", channel 1080x1920@30, FILE 1080x1920, cert `copiedFrom:
+   "single-generation"` (O3c's equality true by construction — the raw channel IS the export).
+ · 4:3 CAMERA KEEPS ITS FULL HEIGHT — FILE 1920x1440, cert `copiedFrom: "composite"`. The same take
+   before this was 1920x1080 with 25 % of the picture cut off.
+ · BOTH COPY PATHS ON A SCREEN-ONLY TAKE — instant: `copiedFrom: "composite"` 1920x1080; smart cut
+   after a trim: "[smart cut] 1 spans · 15 packets copied · 0 frames re-encoded · 100.0 % of the
+   video never touched a codec", FILE 1920x1080.
+ · ORACLES — v1 3/3 PASS interleaved against a 263d2a7 baseline at identical throughput
+   (1.29-1.38x both trees); v2 4 PASS / 1 FAIL against the baseline's 2 PASS / 3 FAIL in the same
+   interleaved runs, same signature the map already files as flaky. THE EARLIER RED WAS THE MACHINE:
+   with the Browser pane open BOTH trees failed on export throughput; with it closed both pass.
+   Fidelity 3 PASS / 1 FAIL, the passes matching the baseline's residual to 0.01 dB (0.03/0.04) and
+   the one failure (residual 10.21 dB) not reproducing in three later runs.
+ · `npm run exp -- o3b` 7/7 green, chroma table reproduced unchanged (80.0/89.1 vs 70.3/75.2,
+   37.3 vs 35.5 dB, fringe 8.66 vs 10.24).
+ · 542 tests (32 new), typecheck, build, verify-deploy OK.
+
+A BUG THIS TASK CREATED AND FIXED, FOUND BY DRIVING IT AND NOT BY READING IT: `chooseCopySource`
+fenced the composite with `allowComposite` ALONE, which meant "this is the default step" — sound
+only because the composite was always 1920x1080. Measured live: a 4:3 take recorded with
+`?sourceframe=1` and exported with `?sourceframe=0` packet-copied a 1920x1440 file under a "1080p"
+badge, beside a stage showing the 16:9 crop. The composite is now checked against the request as
+well; every pre-F13 take has a 1920x1080 composite and a 1920x1080 default step, so it refuses
+nothing that ever worked. Re-verified on prod: that same take now renders 1920x1080 and the panel
+says "Re-renders the whole video at 1920x1080" instead of badging it INSTANT.
+
+HONEST RESIDUE, none of it blocking:
+ · the timeline's filmstrip thumbnails are still 16:9 boxes (`app/lib/filmstripPlan.ts`
+   THUMB_ASPECT) — cosmetic in a 30 px lane, and outside the chain this task names.
+ · the fallback capture preview's `.stage__pip` percentages are still derived from a 1920x1080
+   frame. Only visible when the compositor is NOT painting the preview; the composite preview is
+   exact.
+ · smartCut certifies `path: "render"` (certify.ts only has 'instant' | 'render') — pre-existing,
+   noticed while reading certifications out of files. `copiedFrom` is the field that tells the truth.
+ · the CAPTURE half of `?singlegen=capture` on a native-res 1440p/4K screen still declines, because
+   the composite takes the take's ASPECT and not its pixel count. That is the same trade O3c named
+   and F16 is the task that closes it.
+ · `.tl` / `.xp` / `.quality` deliberately do NOT follow the stage aspect: tying them to it squeezed
+   the whole editor into a column on a portrait take (seen, then fixed). Only the stage and the box
+   that must fit it vertically follow.
+
+WHAT F15 AND F16 INHERIT: `resolveTier` is the seam F16's rungs resolve through (F16 says so
+itself), and fps follows the source through the same `session.compositeFrame()`-shaped question F15
+needs — one place that asks the take what it is, at capture, before any encoder is configured.
 
 ## R1 x15-chroma-rig-hardening — DONE 2026-08-29, all 15 fixed (handoff at the end of this task)
 [medium · TD-authored 2026-08-29, PO: "make fix all of them as one step"]

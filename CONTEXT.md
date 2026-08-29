@@ -566,7 +566,8 @@ The output size is a landscape constant, all four quality steps are landscape, a
 take — the only kind a phone can make, since iOS gives browsers no screen recording — is CROPPED to
 fit, not letterboxed. Measured on the live app: a 4:3 source keeps 75 % of its height. A real phone
 camera at 9:16 would keep 31 % — **68 % of the video thrown away, head and chin gone.**
-That is now task F13, and the audit that came with it found four more ceilings of the same shape:
+**F13 IS NOW BUILT, and it is waiting on your eye — see the ask at the top of the list below.**
+The audit that came with it found four more ceilings of the same shape:
 a still screen being mistaken for a slow machine and quietly dropping your resolution
 (P0-ladder-static, live today); two improvements shipped the same morning that cancel each other
 (O3c); an export quality setting that sticks forever and silently makes every later export slow
@@ -586,6 +587,19 @@ make — the codec (details in `BACKLOG.md`, carried as SIZE-CODEC on the READY 
 everywhere and is the floor today; HEVC/AV1 is the ~2× you keep pointing at with the movie-file
 comparison. Recommended: an honest "smaller file, newer players" option in the export panel now,
 and the cloud player switching automatically once cloud lands.
+
+0. **Record yourself on your PHONE and look at the video.** Open
+   `https://inout-kappa.vercel.app/?sourceframe=1` on the phone, record a few seconds, export, watch
+   it. This is F13, built and checked on the live app the same day you rejected the 1920×1080 rule.
+   With that switch on, the video is the shape of what you pointed the camera at: a vertical phone
+   take comes out 1080×1920 with nothing cropped, and a 4:3 webcam keeps its whole height instead of
+   losing a quarter of it. A normal 16:9 screen recording is unchanged to the pixel — that was the
+   rule the work was built under, and it is checked by reading the exported files themselves, not
+   the app's own labels. It is OFF by default on purpose: nobody flips how every video is shaped
+   without you having looked at one first. Say yes and it becomes the default; say what is wrong and
+   nothing has moved in the meantime.
+   One honest caveat, so it is not a surprise: a video you already recorded stays the shape it was
+   recorded at. The switch changes new recordings, not old ones.
 
 1. **Listen to two recordings.** A normal one and one with music from a tab. The audio fix you were
    asked to check before was never actually running — the number it depends on was being calculated
