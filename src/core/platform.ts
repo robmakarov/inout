@@ -236,7 +236,10 @@ export interface SupportVerdict {
   action: 'none' | 'update' | 'switch'
 }
 
-const BROWSER_LABEL: Record<BrowserName, string> = {
+/** What to CALL the browser to the user. Exported because a message that
+ *  says "turn Chrome on" to someone sitting in Edge is the same wrong-blame
+ *  W1 exists to remove. */
+export const BROWSER_LABEL: Record<BrowserName, string> = {
   chrome: 'Chrome',
   edge: 'Edge',
   yandex: 'Yandex Browser',

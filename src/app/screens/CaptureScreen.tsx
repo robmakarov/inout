@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  displayRequestLevel,
   loadCaptureEngine,
   loadCapturePrefs,
+  resetDisplayWedge,
   warmCapturePipeline,
   saveCapturePrefs,
   type ArmingTimelineEntry,
@@ -85,6 +87,16 @@ export function CaptureScreen() {
    * why the notice is now an owed flag rather than a 15 s window.
    */
   const [wedgeNotice, setWedgeNotice] = useState<string | null>(null)
+
+  /**
+   * IS THIS MACHINE IN REDUCED MODE, and can the user get out of it (W1 item
+   * 4)? Before W1 the only exit from the safe-mode ladder was a 24 h timer or
+   * a localStorage line typed into a console — Robert was handed that line and
+   * answered "what the fuck is this?". Read once at mount and after every
+   * attempt, because the rung only ever moves inside one.
+   */
+  const [reducedRung, setReducedRung] = useState(0)
+  useEffect(() => setReducedRung(displayRequestLevel()), [])
 
   // The recovery ritual's second half (wedgeReload.ts): this page just
   // refreshed itself over a wedged screen share — say so, and what to do NEXT
@@ -304,6 +316,11 @@ export function CaptureScreen() {
           }
           setArmingLabel(armingLabelFor(waitingRef.current) ?? 'Starting recorders…')
         },
+        // THE SCREEN IS LATE AND THE REQUEST IS STILL RUNNING (W1 item 3).
+        // Sticky, like every other wedge message: the user is looking at
+        // Chrome's picker in another window, and a 4 s toast is exactly the
+        // thing that already failed here once.
+        onStall: (message) => setWedgeNotice(message),
       })
       // From here the session HOLDS DEVICES and only the store can stop it.
       // Anything that goes wrong before setSession leaves it running with no
@@ -346,6 +363,9 @@ export function CaptureScreen() {
         // service — and comes back saying "press record to try again". A
         // wedge that survives that refresh falls through to the error text,
         // which says the remaining truth: quit Chrome (⌘Q).
+        // 'permission' is deliberately NOT in this condition: a refresh
+        // cannot change a macOS TCC grant, and spending the one automatic
+        // reload on it only throws away the message that names the fix (W1).
         if (err.kind === 'screen' && err.reason === 'wedged' && shouldReloadForWedge()) {
           noteWedgeReload()
           // reload() only REQUESTS the navigation; the page keeps running until
@@ -358,13 +378,16 @@ export function CaptureScreen() {
         }
         // A wedge that survived the refresh: this is the ⌘Q text, and it must
         // still be on screen when the user comes back from the other tab.
-        if (err.reason === 'wedged') setWedgeNotice(err.message)
+        if (err.reason === 'wedged' || err.reason === 'permission') setWedgeNotice(err.message)
         else toast(err.message, 'error')
       } else toast('Could not start recording', 'error')
     } finally {
       armAbortRef.current = null
       setArming(false)
       setArmingLabel(null)
+      // A wedge steps the rung down and a success climbs it back (W1) — either
+      // way the affordance below has to agree with storage after every press.
+      setReducedRung(displayRequestLevel())
     }
   }
 
@@ -448,9 +471,31 @@ export function CaptureScreen() {
           {support.message}
         </div>
       )}
-      {!session && wedgeNotice && (
+      {!session && (wedgeNotice || reducedRung > 0) && (
         <div className="capture__unsupported" role="alert">
-          {wedgeNotice}
+          {wedgeNotice ??
+            'Screen sharing is running in reduced mode after a stuck share. Nothing you chose ' +
+              'is missing — it clears itself after a good take, or you can clear it now.'}
+          {reducedRung > 0 && (
+            <div className="capture__notice-actions">
+              {/* W1 item 4. Before this the ONLY exits were a 24 h timer and a
+                  localStorage line typed into a console; Robert was handed that
+                  line. A good take still climbs the ladder on its own — this is
+                  for the machine whose cause is already gone and knows it. */}
+              <button
+                type="button"
+                className="capture__notice-btn"
+                onClick={() => {
+                  resetDisplayWedge()
+                  setReducedRung(0)
+                  setWedgeNotice(null)
+                  toast('Screen sharing reset — the next take asks for the full quality')
+                }}
+              >
+                Reset screen sharing
+              </button>
+            </div>
+          )}
         </div>
       )}
       {arming && armingLabel && <div className="capture__arming">{armingLabel}</div>}
