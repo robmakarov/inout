@@ -19,6 +19,15 @@ instrument defects — gates that report a verdict they did not measure. Unmarke
 deliberately not promoted: already a task (F14/F15/F16, the Safari mic P8), waiting only on Robert's
 ear or eye, or the screen wedge, whose cause is Chrome's.
 
+- [P1] 2026-08-29 (G3 session): **the v1 oracle's export-throughput gate is a coin flip** — `node
+  scripts/oracle.mjs --engine=v1` fails on `export throughput X < 1x realtime` with the threshold
+  sitting inside the run-to-run noise. Interleaved A/B, same machine, alternating trees:
+  base 1.34x PASS / 0.87x FAIL / 1.35x PASS against a working tree's 1.15 / 1.28 / 1.28. It is not a
+  regression detector at 1x — it is a load detector, and it flips on whatever else the machine is
+  doing. Same family as G1. NOTE FOR ANY SESSION READING A RED v1 ORACLE: run the parent commit
+  beside it before believing it, which is how this one was caught (a first pass read 0.73-1.01 on the
+  working tree against 1.16-1.29 on the parent and looked exactly like a real 20-40 % regression).
+
 - [P1] 2026-08-29 (G2 session): **the fidelity oracle's render lane flips run to run** — `npm run
   oracle:fidelity` read `render(single-source) toneErr=5.33dB` against a 1 dB band on one run, then
   0.04 dB and 0.01 dB on the next two of the SAME tree; pristine main read 0.02 dB. Same family as G1

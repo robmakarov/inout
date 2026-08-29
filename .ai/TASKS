@@ -437,7 +437,9 @@ READY NOW:
                                              runs rAF at 0, so a rAF-painted 4K canvas source starves and
                                              the tail band reads starvation as tail loss. Red on both
                                              sides of F15 (79d6def identical), so it is not F15's.
-  G3   gates that cannot fail        [light]  two evidence gates are phrased in `longtask` counts, and
+  G3   gates that cannot fail        [DONE 2026-08-29 — handoff under the task; at 4K the counter is
+                                             INVERTED, not merely vacuous]
+                                             two evidence gates are phrased in `longtask` counts, and
                                              nothing here that awaits per frame ever forms one — the
                                              counter reads 0 on the blocking lane AND the non-blocking
                                              one. O1's memory lane samples the MAIN thread while the
@@ -688,6 +690,92 @@ GATES: an audit listing EVERY gate phrased as a long-task count · each one move
 lateness or deleted, never left green-by-construction · O1's heap sampled inside the export worker and
 posted back with the done message (or the rig run cross-origin-isolated so the API exists) · any band
 whose green rested on either is re-read and the verdict stated, including "unchanged".
+
+## G3 HANDOFF — DONE 2026-08-29. THE COUNTER IS NOT MERELY VACUOUS: AT 4K IT IS INVERTED.
+(a) THE AUDIT — EVERY GATE PHRASED AS A LONG-TASK COUNT, and what happened to it:
+  1. `.ai/TASKS` O5 GATES, "zero main-thread long tasks >50 ms during export (trace)" — REWRITTEN
+     onto scheduling lateness. The RIG had already moved (gates.mainThreadClear in
+     perf/exportEngine.ts compares lateness and keeps long-task ms as a diagnostic); only the
+     assignment text lagged, so the dead gate was still the one a future session would read.
+  2. `.ai/TASKS` X9 GATES, "long-task count during a For-AI export ~0 on the prod build" — REWRITTEN
+     onto the share of the build's own wall clock the UI thread lost. Same story: the rig gate in
+     perf/aiExport.ts was already lateness-based, the text was not.
+  3. `perf/exportEngine.ts` gates.mainThreadClear — ALREADY CORRECT, no change. Verified running.
+  4. `perf/aiExport.ts` "the For-AI build leaves the UI thread running" — ALREADY CORRECT, no change.
+     `npm run ai:check` green, and its own note prints the counter reading 0 on BOTH lanes.
+  5. `perf/compositorEngine.ts` (o4step2) — THE ONE THAT WAS STILL LIVE. It had no lateness watch at
+     all, and its `v1MainThreadMs`/`v2MainThreadMs` columns are what O4's published handoff quotes.
+     SchedulingDelayWatch added beside the counter; both columns now shipped.
+  6. `perf/mainThreadWatch.ts` — the shared instrument. It carries two gates now, so it has tests
+     (4, new): ~0 on a thread that keeps up, a 400 ms stall that forms NO long task still reported,
+     an even hog told apart from a hitching one, and LongTaskWatch reporting `supported:false`
+     rather than a zero where the API is absent.
+Nothing else in `src/` or `scripts/` gates on a long-task count. `grep -rn longtask` is in the commit.
+
+THE RE-READ, AND IT IS WORSE THAN "DECORATION". o4step2, same rig, lateness measured beside the count:
+    1080p  v1 longTasks 0 ms · lateness 208 ms (max 4)      v2 longTasks 0 ms · lateness 191 ms (max 4)
+    4K     v1 longTasks 0 ms · lateness 4731 ms (max 148, p95 76.4)
+           v2 longTasks 295 ms · lateness 1463 ms (max 98, p95 17.8)
+At 1080p the counter reads 0 for BOTH engines — including v1, which composites on the main thread —
+so O4's published "v2 main-thread long tasks 0 ms vs v1 198 ms" does not reproduce on that lane at
+all. At 4K THE COUNTER INVERTS: it accuses v2, the engine that left the thread 3.2x freer, and
+exonerates v1, the engine that lost 4.7 s of a 16 ms ticker. A gate that cannot fail is one problem;
+this one can fail in the wrong direction, which is how a green result becomes the fault.
+O4's CONCLUSION SURVIVES — v2 really is freer — but its EVIDENCE did not, and both TASKS lines are
+now bracketed with the honest numbers rather than left quotable.
+
+(b) O1'S MEMORY LANE — AND THE GATE'S OWN PRESCRIPTION IS NOT BUILDABLE.
+The task says to sample O1's heap "inside the export worker and post it back with the done message".
+BUILT IT, THEN MEASURED THE THING IT RESTS ON: a dedicated worker in Chrome has NO memory instrument.
+Probed directly — `{hasPerfMemory:false, hasUaApi:"undefined"}` inside a worker, with
+`crossOriginIsolated:true` on both sides. So that fix cannot exist and the product change was REVERTED
+(export.worker.ts and pipeline.ts are untouched in this commit; a lever that can never produce a
+number is the same decoration this task is about).
+IT DOES NOT NEED TO EXIST. The window's `measureUserAgentSpecificMemory()` measures the whole agent
+cluster, and the breakdown attributes memory per scope. PROVED, not assumed: a worker holding a
+200 MB Uint8Array moved the window's reading 1 MB -> 202 MB, with the 200 MB entry attributed to
+`DedicatedWorkerGlobalScope`. The instrument was already pointed at the right place.
+AND THE OTHER STATED CAUSE IS ALSO WRONG. "measureUserAgentSpecificMemory is unavailable in the rig's
+Chrome" — it is available, it is cross-origin isolated, and it works: 1,560,378 bytes, 4 breakdown
+entries, first call. What actually produced `totalSamples: 0` on every row was TWO things:
+  · A RACE, in the rig's own code. `withMemoryWatch` read the counters inside its `return` expression
+    and awaited the sampler in the `finally` — and JS evaluates the return expression FIRST. The
+    numbers were copied out while the sampler was still in flight, every time. Fixed: awaited before
+    read. `totalSamples` went 0 -> 1 immediately, and 0 -> 3 on a longer take.
+  · A CADENCE NOBODY HAD WRITTEN DOWN. One `measureUserAgentSpecificMemory()` sample costs 11-16 s on
+    this Chrome (it aligns with a GC and is rate-limited) — measured, five consecutive calls at
+    11025 / 15023 / 16022 / 16032 / 14030 ms. A 10 s export therefore CANNOT be peak-sampled with it.
+    It is a before/after instrument at that length, and `totalRetainedDeltaMB` is the honest use.
+WHAT SHIPPED IN THE LANE: per-scope attribution (`workerPeakDeltaMB` — the render thread's share),
+`sampleCostMs`, and `peakSampled`, which is false when fewer than two samples completed and says so
+in the notes instead of printing a "peak" that is one reading. THE MAIN THREAD'S HEAP IS NO LONGER A
+FALLBACK METRIC: it has not rendered since O5a, reads ~0.1 MB on both paths, and its being the
+fallback is exactly why scratch and buffer extrapolated to the same number — the one thing O1 exists
+to tell apart. `metricSource` now names the instrument, or says NONE and nulls the extrapolation.
+READ OUT OF A REAL RUN at 60 s (10 s and 20 s are too short for the instrument, which the run now
+says out loud): scratch totalSamples 3, peakSampled true, worker share +11.6 MB; buffer
+totalSamples 2, peakSampled true, worker share 0.0 MB. That is a lane that can now answer O1's
+question — and it is not answering it yet, because 2-3 samples over a 23 s export still under-sample
+the peak and the two paths came out the wrong way round. THE ANSWER NEEDS A LONGER CELL, WHICH IS G4.
+
+GATES
+  · an audit listing EVERY gate phrased as a long-task count — the six above.
+  · each one moved onto scheduling lateness or deleted, never left green-by-construction — done;
+    the counter survives only as a labelled diagnostic, in code and in both TASKS lines.
+  · O1's heap sampled inside the export worker, or the rig run cross-origin-isolated — the FIRST is
+    impossible (proved), the SECOND was already true (proved); the real defects were a race and a
+    16 s sample cost, both fixed.
+  · any band whose green rested on either is re-read and the verdict stated, including "unchanged" —
+    O5's throughput and mainThreadClear: UNCHANGED (they were already lateness). X9's: UNCHANGED,
+    `ai:check` ALL GATES PASS. O4's long-task pair: RETRACTED and re-measured, conclusion unchanged,
+    evidence replaced. O1's memory extrapolation: it was null, and it is honestly null until a
+    long cell runs.
+  · 638 tests · typecheck clean · `npm run oracle` PASS (57.5/57.5 ms) · `--engine=v1` PASS
+    (1.15x / 1.28x / 1.28x) · `npm run ai:check` ALL GATES PASS · o4step2 1080p and 4K both run.
+NOTED, NOT FIXED (BACKLOG, G1's family): the v1 oracle's `export throughput >= 1x realtime` is a
+FOURTH coin-flip gate — interleaved on one machine it read base 1.34 PASS / 0.87 FAIL / 1.35 PASS
+against a working tree's 1.15 / 1.28 / 1.28. A first pass here read it as a 20-40 % regression in
+this session's own work; running the parent commit beside it is what refuted that.
 
 ## G4 long-take-gate — every number this project quotes describes a take 156x too short
 [light-medium · rigs + one operating rule]
@@ -2887,8 +2975,11 @@ shipped the default path is untouched.
 ## X9 ai-pdf-off-main-thread [light · ~100 lines: core/ai/build.ts into a worker, same O5 shape]
 The For-AI build runs on the UI thread at 0.74× a full render — seconds of jank. core/ai is already
 DOM-free by construction; move the build into a worker, stream progress like export.worker does.
-GATES: byte-identical PDF on the rig take; `node scripts/ai-pdf-check.mjs` green; long-task count
-during a For-AI export ~0 on the prod build.
+GATES: byte-identical PDF on the rig take; `node scripts/ai-pdf-check.mjs` green; THE UI THREAD KEEPS
+RUNNING, measured as the SHARE of the build's own wall clock a 16 ms ticker did not get — not as a
+long-task count (REWRITTEN by G3 2026-08-29 for the reason X9's own handoff gives below: the counter
+reads 0 on the blocking lane too. `X9: the For-AI build leaves the UI thread running` in
+perf/aiExport.ts is the shipped form: ≥3 % lost in-thread, and the worker at most a quarter of it).
 
 HANDOFF X9 — DONE 2026-08-26 (THIRTEENTH SESSION, Robert: "go roadmap all in one").
 SHIPPED: `core/ai/run.ts` picks the thread and `core/ai/ai.worker.ts` runs the build, in the exact
@@ -3593,6 +3684,14 @@ SHIPPED THIS SESSION: o4step2 warms v2 with one discarded 2.5 s take before meas
 MEASURED ON THE FIXED INSTRUMENT (warm, 10 s takes, same day, dev machine):
    1080p: v2 delivers 28.4 fps vs v1 29.3 — THE ≥28 GATE IS MET (this line read "2-10" yesterday) ·
    v2 main-thread long tasks 0 ms vs v1 198 ms · encoder latency 14 ms, 0 drops, peak queue 1 ·
+   [G3 2026-08-29 — DO NOT QUOTE THE LONG-TASK PAIR AGAIN. Re-measured on this rig with a scheduling-
+    lateness watch beside it. 1080p: BOTH engines read 0 ms of long tasks, so the number above does
+    not reproduce and the lane it was measured on cannot express the difference (lateness 208 ms v1
+    vs 191 ms v2, max 4 ms both — they are the same). 4K: the counter INVERTS — v1 reads 0 ms of long
+    tasks while losing 4731 ms of a 16 ms ticker (max 148, p95 76.4), and v2 reads 295 ms while
+    losing 1463 (max 98, p95 17.8). The engine the counter calls guilty is the one that kept the
+    thread. The v2-is-freer conclusion SURVIVES on the honest instrument, 3.2× at 4K; its evidence
+    is now lateness.]
    tail −233 ms (the drain runs past the declared end — bytes, not tail) · oracle PASS on both
    engines, v2 sync 33.7 ms vs v1 63.4 ms same day.
    4K SOURCE row: v2 still collapses (2 encoded, 1468 ms latency — the 4K GL texture upload,
@@ -3622,7 +3721,8 @@ FINISH LIST FOR THE DEFAULT FLIP — updated same day (second "go O4" session):
    4. CAPTURE CPU — CLOSED, AND v2 WINS: whole-browser CPU sampled from the OS during identical
       warm 10 s 1080p takes (`--cpu`, new exp.mjs flag): v1 peak 196 % / mean 72 % delivering 25
       fps with 179 ms of long tasks · v2 peak 127 % / mean 63 % delivering 28.6 fps with 0 ms —
-      and v2's window includes its own warm-up take.
+      and v2's window includes its own warm-up take. [G3: the CPU halves of this stand; the
+      long-task halves do not — see the bracket above. Re-run reads 0 ms for both at 1080p.]
    5. watchdog fallback proof — MOSTLY CLOSED: the new first-output-clocked watchdog fired LIVE on
       genuine sustained slowness (the uncapped-4K row: "only 0.3 fps reached the file" → degrade →
       composite refused, take renders from channels), and the no-output wedge deadline (15 s) is
@@ -3710,8 +3810,11 @@ stay smooth; CFR 30 stays the default.
 Constraints: certified audio path behavior identical (fidelity oracle is the proof); progress UI keeps
 working; abort works mid-pipeline.
 GATES: 60 s 1080p30 edited synthetic take ≥5× realtime on the dev machine (report ×; stretch 8×) ·
-trim-only edit of a 30 s take ≤1 s · zero main-thread long tasks >50 ms during export (trace) · every
-ladder rung's file plays (Chrome + Safari where the codec applies) · fidelity+sync green.
+trim-only edit of a 30 s take ≤1 s · THE MAIN THREAD STAYS FREE, measured as SCHEDULING LATENESS of a
+16 ms ticker, not as a long-task count (REWRITTEN by G3 2026-08-29: the long-task form of this gate
+cannot fail, so it could never pass — the rig has enforced lateness since O5a and only this line
+lagged; `gates.mainThreadClear` in perf/exportEngine.ts is the shipped form) · every ladder rung's
+file plays (Chrome + Safari where the codec applies) · fidelity+sync green.
 ── HANDOFF 2026-08-24 (SEVENTH session, "roadmap all O and F") — (a)(c)(d) SHIPPED, (b) MEASURED AND
    REJECTED, (e) NOT DONE. THE TASK'S CENTRAL PREMISE WAS FALSE AND THE STAGE SPLIT IS WHY.
 O5 was written on "the render is main-thread and strictly serial (decode awaits draw awaits encode)".

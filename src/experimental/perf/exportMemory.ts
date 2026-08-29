@@ -62,8 +62,33 @@ async function retainedHeap(): Promise<number | null> {
   return heapNow()
 }
 
+interface UaMemoryBreakdown {
+  bytes: number
+  attribution?: { scope?: string }[]
+}
 interface UaMemoryResult {
   bytes: number
+  breakdown?: UaMemoryBreakdown[]
+}
+
+/**
+ * A UA-memory reading, split by WHICH THREAD holds it (task G3).
+ *
+ * G3 asked for O1's heap to be sampled inside the export worker. MEASURED: a
+ * dedicated worker in Chrome has NO memory instrument at all — neither
+ * `performance.memory` nor `measureUserAgentSpecificMemory` exists there
+ * (`hasPerfMemory:false, hasUaApi:"undefined"`), so that fix cannot be built.
+ * It does not need to be: the WINDOW's call measures the whole agent cluster
+ * and the breakdown attributes memory per scope. Proved directly — a worker
+ * holding a 200 MB Uint8Array moved the window's reading from 1 MB to 202 MB,
+ * with the 200 MB entry attributed to `DedicatedWorkerGlobalScope`.
+ * So the instrument the rig already had was pointed at the right place; what it
+ * lacked was the attribution, and a sampler that did not throw its work away.
+ */
+interface Retained {
+  totalBytes: number
+  /** The share held by dedicated workers — since O5a, that is the render. */
+  workerBytes: number
 }
 
 /**
@@ -73,16 +98,31 @@ interface UaMemoryResult {
  * useless for this gate. Requires cross-origin isolation (scripts/exp.mjs sets
  * the dev-server headers); null when unavailable.
  */
-async function retainedTotal(): Promise<number | null> {
+let lastTotalUnavailableReason: string | null = null
+
+async function retainedTotal(): Promise<Retained | null> {
   const api = (performance as unknown as {
     measureUserAgentSpecificMemory?: () => Promise<UaMemoryResult>
   }).measureUserAgentSpecificMemory
-  if (!api || !(globalThis as unknown as { crossOriginIsolated?: boolean }).crossOriginIsolated) {
+  if (!api) {
+    lastTotalUnavailableReason = 'performance.measureUserAgentSpecificMemory is not implemented here'
+    return null
+  }
+  if (!(globalThis as unknown as { crossOriginIsolated?: boolean }).crossOriginIsolated) {
+    lastTotalUnavailableReason =
+      'the page is not cross-origin isolated (run through scripts/exp.mjs, which sets COOP/COEP)'
     return null
   }
   try {
-    return (await api.call(performance)).bytes
-  } catch {
+    const m = await api.call(performance)
+    const workerBytes = (m.breakdown ?? [])
+      .filter((b) => (b.attribution ?? []).some((a) => a.scope === 'DedicatedWorkerGlobalScope'))
+      .reduce((a, b) => a + b.bytes, 0)
+    return { totalBytes: m.bytes, workerBytes }
+  } catch (err) {
+    // A swallowed reason is how "unavailable in the rig's Chrome" survived as
+    // an explanation while the API worked fine.
+    lastTotalUnavailableReason = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
     return null
   }
 }
@@ -99,7 +139,9 @@ async function withMemoryWatch<T>(fn: () => Promise<T>): Promise<{
   value: T
   heapPeak: number | null
   totalPeak: number | null
+  workerPeak: number | null
   totalSamples: number
+  sampleCostMs: number | null
 }> {
   let heapPeak = heapNow() ?? 0
   const heapTimer = setInterval(() => {
@@ -109,16 +151,19 @@ async function withMemoryWatch<T>(fn: () => Promise<T>): Promise<{
 
   let running = true
   let totalPeak: number | null = null
+  let workerPeak: number | null = null
   let totalSamples = 0
+  let sampleCostMs: number | null = null
   const totalLoop = (async () => {
     while (running) {
+      const t0 = performance.now()
       const t = await retainedTotal()
-      if (t !== null) {
-        totalSamples++
-        if (totalPeak === null || t > totalPeak) totalPeak = t
-      } else {
-        return
-      }
+      if (t === null) return
+      const cost = performance.now() - t0
+      sampleCostMs = sampleCostMs === null ? cost : Math.max(sampleCostMs, cost)
+      totalSamples++
+      if (totalPeak === null || t.totalBytes > totalPeak) totalPeak = t.totalBytes
+      if (workerPeak === null || t.workerBytes > workerPeak) workerPeak = t.workerBytes
       await new Promise((r) => setTimeout(r, 250))
     }
   })()
@@ -127,11 +172,26 @@ async function withMemoryWatch<T>(fn: () => Promise<T>): Promise<{
     const value = await fn()
     const h = heapNow()
     if (h !== null && h > heapPeak) heapPeak = h
-    return { value, heapPeak, totalPeak, totalSamples }
+    running = false
+    clearInterval(heapTimer)
+    // AWAITED BEFORE THE NUMBERS ARE READ (task G3). This used to sit in a
+    // `finally` under a `return { ..., totalSamples }`: JS evaluates the return
+    // expression FIRST, so the counters were copied out while the sampler was
+    // still in flight and `totalSamples` was structurally guaranteed to be
+    // whatever it had at that instant — which, given one sample costs 11-16 s
+    // (measured below), was ZERO on every row this rig ever printed.
+    await totalLoop.catch(() => undefined)
+    return {
+      value,
+      heapPeak,
+      totalPeak,
+      workerPeak,
+      totalSamples,
+      sampleCostMs: sampleCostMs === null ? null : Math.round(sampleCostMs),
+    }
   } finally {
     running = false
     clearInterval(heapTimer)
-    await totalLoop.catch(() => undefined)
   }
 }
 
@@ -278,8 +338,29 @@ export interface ExportMemRun {
   totalSamples: number
   /** Retained after the export while still holding the result (leak check). */
   totalRetainedDeltaMB: number | null
-  /** JS-heap-only peak; excludes ArrayBuffers, kept as secondary evidence. */
+  /** JS-heap-only peak on the MAIN thread; excludes ArrayBuffers. Kept as
+   *  secondary evidence and NOT as the metric — since O5a the render is in a
+   *  worker, so this is an idle thread's heap and reads ~0.1 MB on every path. */
   heapPeakDeltaMB: number | null
+  /**
+   * THE RENDER THREAD'S SHARE (task G3), read out of the UA-memory breakdown's
+   * `DedicatedWorkerGlobalScope` attribution. Since O5a the export renders in a
+   * worker, so this — not the main thread's heap — is where a BufferTarget's
+   * whole output would show up.
+   */
+  workerPeakDeltaMB: number | null
+  /**
+   * How long ONE UA-memory sample cost. It is 11-16 s on this Chrome (the API
+   * aligns with a GC and is rate-limited), which is the fact that makes a
+   * short export unpeakable and was never written down.
+   */
+  sampleCostMs: number | null
+  /**
+   * False when the export was too short for the sampler to see a peak — fewer
+   * than two completed samples. The peak columns are then a single reading,
+   * not a maximum, and must not be read as one.
+   */
+  peakSampled: boolean
   /**
    * Scratch path only: output bytes the target held in memory at once, at its
    * high-water. This is the O1 claim measured at the source — no GC noise, no
@@ -292,6 +373,9 @@ export interface ExportMemRun {
 
 export interface O1Report {
   memory: ExportMemRun[]
+  /** Which instrument the slope and extrapolation below were computed from —
+   *  or the sentence saying no claim can be made (task G3). */
+  metricSource: string
   /** Heap growth per output MB, least-squares over the runs of each path. */
   heapPerOutputMB: { scratch: number | null; buffer: number | null }
   extrapolated30MinPeakMB: { scratch: number | null; buffer: number | null }
@@ -395,9 +479,10 @@ async function runOne(path: 'scratch' | 'buffer', durationSec: number): Promise<
     const settledBase = await retainedHeap()
     const totalBase = await retainedTotal()
     const t0 = performance.now()
-    const { value, heapPeak, totalPeak, totalSamples } = await withMemoryWatch(() =>
-      exportRecording({ recording, edit: defaultEditState(recording) }),
-    )
+    const { value, heapPeak, totalPeak, workerPeak, totalSamples, sampleCostMs } =
+      await withMemoryWatch(() =>
+        exportRecording({ recording, edit: defaultEditState(recording) }),
+      )
     const wallMs = performance.now() - t0
     const bytes = value.blob.size
     // `value` is still referenced here, so anything the result retains counts.
@@ -409,13 +494,19 @@ async function runOne(path: 'scratch' | 'buffer', durationSec: number): Promise<
       outputMB: MB(bytes),
       wallMs: Math.round(wallMs),
       heapBaseMB: MB(settledBase),
-      totalBaseMB: MB(totalBase),
+      totalBaseMB: MB(totalBase?.totalBytes ?? null),
       totalPeakDeltaMB:
-        totalBase !== null && totalPeak !== null ? MB(totalPeak - totalBase) : null,
+        totalBase !== null && totalPeak !== null ? MB(totalPeak - totalBase.totalBytes) : null,
       totalSamples,
       totalRetainedDeltaMB:
-        totalBase !== null && totalAfter !== null ? MB(totalAfter - totalBase) : null,
+        totalBase !== null && totalAfter !== null
+          ? MB(totalAfter.totalBytes - totalBase.totalBytes)
+          : null,
       heapPeakDeltaMB: settledBase !== null && heapPeak !== null ? MB(heapPeak - settledBase) : null,
+      workerPeakDeltaMB:
+        totalBase !== null && workerPeak !== null ? MB(workerPeak - totalBase.workerBytes) : null,
+      sampleCostMs,
+      peakSampled: totalSamples >= 2,
       targetHeldMB: path === 'scratch' ? MB(getLastScratchStats()?.maxOutstandingBytes ?? null) : MB(bytes),
     }
   } catch (err) {
@@ -430,6 +521,9 @@ async function runOne(path: 'scratch' | 'buffer', durationSec: number): Promise<
       totalSamples: 0,
       totalRetainedDeltaMB: null,
       heapPeakDeltaMB: null,
+      workerPeakDeltaMB: null,
+      sampleCostMs: null,
+      peakSampled: false,
       targetHeldMB: null,
       error: err instanceof Error ? `${err.name}: ${err.message}` : String(err),
     }
@@ -593,9 +687,50 @@ export async function runO1Evidence(opts: O1Options = {}): Promise<O1Report> {
     }
   }
 
-  // Slope over the instrument that sees ArrayBuffers, falling back to the
-  // JS-heap-only one when cross-origin isolation isn't available.
-  const metric = (r: ExportMemRun): number | null => r.totalPeakDeltaMB ?? r.heapPeakDeltaMB
+  /**
+   * THE METRIC, AND WHAT IS NO LONGER ALLOWED TO STAND IN FOR IT (task G3).
+   *
+   * First choice is the instrument that sees ArrayBuffer backing stores. It has
+   * a hard limit nobody had written down: MEASURED HERE, one
+   * `measureUserAgentSpecificMemory()` sample costs 11-16 s, because Chrome
+   * aligns it with a GC and rate-limits it. So it CANNOT sample a peak during
+   * an export shorter than about half a minute — it is a before/after
+   * instrument, and `totalRetainedDeltaMB` is the honest use of it.
+   *
+   * Second choice is the render thread's OWN heap, sampled inside the export
+   * worker (G3). That is the thread where a BufferTarget's output would live.
+   *
+   * The MAIN thread's heap is no longer a fallback. It has not rendered since
+   * O5a, so it reads ~0.1 MB on both paths and made the scratch and buffer
+   * lanes extrapolate to the same number — which is the one thing O1 exists to
+   * tell apart. A null here now means "not measured", and says so.
+   */
+  const metric = (r: ExportMemRun): number | null => r.totalPeakDeltaMB
+  const metricSource = memory.some((r) => r.totalPeakDeltaMB !== null)
+    ? 'measureUserAgentSpecificMemory (window scope, which includes the export worker)'
+    : 'NONE — the extrapolation below is null and no memory claim can be made from this run'
+  notes.push(`memory metric: ${metricSource}`)
+  const worstCost = Math.max(0, ...memory.map((r) => r.sampleCostMs ?? 0))
+  if (worstCost > 0) {
+    notes.push(
+      `one UA-memory sample cost up to ${worstCost} ms here — Chrome aligns the call with a GC and ` +
+        'rate-limits it, so an export must run for several times that before the "peak" columns are a ' +
+        'maximum rather than a single reading',
+    )
+  }
+  const unpeaked = memory.filter((r) => !r.peakSampled && !r.error)
+  if (unpeaked.length) {
+    notes.push(
+      `${unpeaked.length} run(s) completed fewer than two UA-memory samples: their peak columns are ONE ` +
+        'reading, not a peak (peakSampled=false). Lengthen the take before quoting them' +
+        (lastTotalUnavailableReason ? ` (last refusal: ${lastTotalUnavailableReason})` : ''),
+    )
+  }
+  notes.push(
+    'the main thread\u2019s performance.memory is reported but is NOT the metric: the render has run in a ' +
+      'worker since O5a, so it reads ~0.1 MB on both paths and made scratch and buffer extrapolate to the ' +
+      'same number — the one thing O1 exists to tell apart (task G3)',
+  )
   const pts = (path: 'scratch' | 'buffer') =>
     memory
       .filter((r) => r.path === path && r.outputMB !== null && metric(r) !== null)
@@ -614,6 +749,7 @@ export async function runO1Evidence(opts: O1Options = {}): Promise<O1Report> {
 
   return {
     memory,
+    metricSource,
     heapPerOutputMB: { scratch: sScratch, buffer: sBuffer },
     extrapolated30MinPeakMB: {
       scratch: extrapolate(sScratch, base('scratch')),

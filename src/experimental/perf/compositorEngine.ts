@@ -19,6 +19,7 @@ import { blobStore } from '@core/store'
 import { startLiveComposite, type LiveCompositeStats } from '@core/capture/liveComposite'
 import { canLiveCompositeV2, startLiveCompositeV2 } from '@core/capture/liveCompositeV2'
 import type { CompositeRecording } from '@core/types'
+import { SchedulingDelayWatch, type SchedulingDelay } from './mainThreadWatch'
 
 export interface Rig {
   screen: MediaStream
@@ -213,7 +214,20 @@ export interface EngineRun {
   compositeDurationMs: number
   /** Frames in the FILE ÷ take seconds. This is the gate number. */
   deliveredFps: number | null
+  /**
+   * DIAGNOSTIC, NEVER A GATE (task G3). See mainThreadWatch.ts: work that
+   * awaits per frame never forms a single >=50 ms task, so this counter can
+   * read 0 on a lane that owns the thread end to end. It is real for v1 here —
+   * v1 composites synchronously — and it is exactly 0 for v2 whether or not v2
+   * is blocking, which is why it cannot carry the claim alone.
+   */
   longTasks: LongTasks
+  /**
+   * THE NUMBER THAT CAN FAIL: a 16 ms ticker, and how much of its 60 Hz it did
+   * not get while this engine captured. Non-zero on any lane that hogs the
+   * thread, whatever shape its tasks are.
+   */
+  mainThread: SchedulingDelay
   file: FileProbe | null
   /** Take length minus the last decodable frame. Small = the tail survived. */
   tailGapMs: number | null
@@ -354,6 +368,10 @@ async function runEngine(
   const rig = makeRig(width, height, withAudio ? audioCtx : null)
   const key = `exp-o4-${engine}-${width}-${Date.now()}.mp4`
   const watcher = watchLongTasks()
+  // G3: the counter above cannot fail on a non-blocking lane, so it never
+  // carries a verdict alone. This one can.
+  const lateness = new SchedulingDelayWatch()
+  lateness.start()
   const base: EngineRun = {
     engine,
     sourceWidth: width,
@@ -364,6 +382,7 @@ async function runEngine(
     compositeDurationMs: 0,
     deliveredFps: null,
     longTasks: { count: 0, totalMs: 0, maxMs: 0 },
+    mainThread: { ticks: 0, totalLateMs: 0, maxLateMs: 0, p95LateMs: 0 },
     file: null,
     tailGapMs: null,
     tailBandPass: null,
@@ -412,6 +431,7 @@ async function runEngine(
     }
     base.sourceFrames = rig.sourceFrames()
     base.longTasks = watcher.stop()
+    base.mainThread = lateness.stop()
     const s = stats as {
       codec: string | null
       hardware: string | null
@@ -500,6 +520,7 @@ async function runEngine(
   } catch (err) {
     base.error = err instanceof Error ? err.message : String(err)
     base.longTasks = watcher.stop()
+    base.mainThread = lateness.stop()
     return base
   } finally {
     rig.stop()
@@ -609,8 +630,14 @@ export async function runCompositorEngine(
       resolution: `${w}x${h}`,
       v1DeliveredFps: v1?.deliveredFps ?? null,
       v2DeliveredFps: v2?.deliveredFps ?? null,
+      // Long-task ms is kept for continuity with the numbers already published,
+      // and lateness is the one a verdict may rest on (task G3).
       v1MainThreadMs: v1?.longTasks.totalMs ?? 0,
       v2MainThreadMs: v2?.longTasks.totalMs ?? 0,
+      v1MainThreadLateMs: v1?.mainThread.totalLateMs ?? null,
+      v2MainThreadLateMs: v2?.mainThread.totalLateMs ?? null,
+      v1MainThreadMaxLateMs: v1?.mainThread.maxLateMs ?? null,
+      v2MainThreadMaxLateMs: v2?.mainThread.maxLateMs ?? null,
       v1TailGapMs: v1?.tailGapMs ?? null,
       v2TailGapMs: v2?.tailGapMs ?? null,
       v1TailBandPass: v1?.tailBandPass ?? null,
@@ -628,7 +655,8 @@ export async function runCompositorEngine(
     tailBandPass: runs.every((r) => r.tailBandPass !== false),
     notes: [
       'deliveredFps counts frames IN THE FILE, not frames offered to the encoder — a frame the encoder dropped is a frame the viewer never sees',
-      'longTasks totalMs is main-thread time spent in tasks over 50 ms during the take; v1 composites there, v2 does not',
+      'longTasks totalMs is main-thread time spent in tasks over 50 ms during the take; v1 composites there, v2 does not — DIAGNOSTIC ONLY (task G3): work that awaits per frame never forms one, so a 0 here is not evidence of a free thread',
+      'mainThreadLateMs is the number that can fail: a 16 ms ticker, and how much of its 60 Hz it did not get while the engine captured. It is non-zero on any lane that hogs the thread, whatever shape its tasks are',
       'tailGapMs is take length minus the last decodable frame: v1 can only ask MediaRecorder to stop, v2 drains its own encoder',
       'the 4K row is the 2026-08-22 Robert scenario (a 4K game tab) reproduced with a canvas that genuinely repaints every frame',
       'tailBandPass is O8 \u2264400 ms evaluated HERE, under load — the band has always existed, it had just never been run anywhere it could fail',
