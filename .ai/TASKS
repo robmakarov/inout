@@ -483,7 +483,10 @@ READY NOW:
        blames the wrong thing                  recording ungranted, Chrome's picker says exactly what to
                                              do, getDisplayMedia never rejects, and our 30 s deadline
                                              throws that message away. Behaviour change -> Robert's yes.
-  B7   the constant start offset     [light-medium]  the two alignment errors a synthetic rig CANNOT see,
+  B7   the constant start offset     [DONE 2026-08-29 — handoff under the task. The audio half is read
+                                             off a real take; the video half needs a machine with
+                                             Screen Recording granted to Chrome — one command]
+                                             the two alignment errors a synthetic rig CANNOT see,
                                              both pushing audio late. This task ships INSTRUMENTATION into
                                              the take's certification, not compensation.
   B8   the two export paths disagree [light]  the render places the camera PiP -15 frames (-0.5 s) from
@@ -984,6 +987,65 @@ with NUMBERS instead of an adjective. Compensating from theory is what has faile
 GATES: the four values persist with the take and survive a reload · read out of one REAL take and
 quoted in the handoff · zero behaviour change, pinned by a byte-identical export test · X14 (<=20 ms)
 stays blocked; this task does not claim it.
+
+## B7 HANDOFF — DONE 2026-08-29. THE NUMBERS ARE IN THE TAKE; NOTHING MOVED.
+WHAT PERSISTS, per channel, in `ChannelDiagnostics.anchor` (contract: `ChannelAnchor` in
+src/core/types.ts):
+  · `startOffsetMs` — already on ChannelRecording, unchanged.
+  · `rawAnchorMs`  — the offset from the SESSION EPOCH, stamped before buildRecording shifts the
+    earliest channel to t=0. After that shift the offsets are relative to the take and a device's own
+    lateness is no longer recoverable from them, which is why the raw one has to be kept separately.
+  · `reportedInputLatencyMs` — what the platform told the audio anchor, and what it subtracted.
+  · `firstFrameDelayMs` — video: how long after the channel started pulling frames the first one
+    arrived. The MediaRecorder lane HAS NO FRAME STAMP (MediaRecorder never says when its first
+    frame landed), so it reports the start()→onstart gap and sets `firstFrameDelayIsStartGap`; the
+    measured WebCodecs lane, default since X6, reports a real one.
+Plus ONE console line at stop, because a field report begins with someone looking at a console:
+  `[capture] B7 anchors — screen off=405ms raw=418.9ms firstFrame=1.3ms · mic off=0ms raw=23.6ms inputLatency=10ms`
+
+NEW TOOL: `node scripts/anchor-check.mjs` — real Chrome, real microphone, the DEPLOYED build, values
+read back out of the product's own IndexedDB and then read AGAIN after a `Page.reload`, because
+"persists" is a claim about storage and not about a variable still in scope. `--synthetic` swaps the
+screen for a canvas; `--headed` for watching.
+
+READ OUT OF A REAL TAKE ON PROD (real built-in MacBook Pro microphone, two runs):
+  `[capture] B7 anchors — mic off=0ms raw=156ms inputLatency=10ms`
+  `[capture] B7 anchors — mic off=0ms raw=52.3ms inputLatency=10ms`
+  Both persisted and both byte-identical after a reload. THE PLATFORM REPORTS 10 ms, and that is the
+  finding rather than a detail: a built-in mic's real path is not 10 ms, and a Bluetooth headset's
+  100-300 ms will report the same 10. The field that was supposed to explain a late-audio take says
+  almost nothing, and now a take can SAY so instead of a session assuming the subtraction worked.
+
+THE VIDEO HALF COULD NOT BE MEASURED ON REAL HARDWARE HERE, AND THE REASON IS THIS MACHINE'S.
+`getDisplayMedia` in an automated Chrome on a throwaway profile is refused by macOS at the OS level —
+`[capture:arming] display failed +44ms — Could not start video source`, headless and headed alike,
+because Screen Recording is granted per application and `--use-fake-ui-for-media-stream` answers the
+SITE prompt, not the OS one. Same wall P9 hit with the camera. So the video lane is proved END TO END
+on a synthetic source instead — populated, persisted, reloaded, all gates green — and the number it
+produces is the point:
+  `screen off=405ms raw=418.9ms firstFrame=1.3ms`
+1.3 ms. A REAL getDisplayMedia surface took 233 ms in the run this task quotes. THAT RATIO IS THE
+WHOLE TASK: the rig's video anchor error is ~180x smaller than the real one, so no amount of rig work
+was ever going to find this, and now the take carries the number instead. One command closes the row
+on any machine with Screen Recording granted to Chrome.
+INCIDENTAL, AND VISIBLE ONLY BECAUSE OF THIS: on that take the screen channel starts 405 ms after the
+mic. That is the session's own arming order, not a device, and the export places it correctly — but
+it is the first time the quantity has been written down anywhere.
+
+GATES
+  · the four values persist with the take and survive a reload — `anchor-check` reads them from
+    IndexedDB before and after `Page.reload` and compares; identical, `survivedReload` green.
+  · read out of one REAL take and quoted in the handoff — above, real microphone, twice. The screen
+    half is blocked by macOS TCC on this machine and says so rather than being faked.
+  · zero behaviour change, pinned by a byte-identical export test — `anchorCert.test.ts` (4 tests):
+    the certification is byte-identical with and without anchors on BOTH export paths, and asserts
+    the comment contains no anchor key at all. THE ANCHORS ARE DELIBERATELY NOT IN THE CERTIFICATION:
+    that comment is written into the container, so putting them there changes every exported byte,
+    which this task's own gate forbids. It is a real option for later — a field report IS a file —
+    and whoever takes it has to delete that test on purpose, with Robert's yes.
+  · X14 (<=20 ms) stays blocked; this task does not claim it. Nothing here compensates anything.
+  · 667 tests · typecheck clean · `npm run oracle` PASS (57.0/57.0 and 64.3/64.3 ms across the two
+    runs that followed the known v2 coin flip) · `--engine=v1` PASS (69.0/69.0 ms).
 
 ## B8 pip-placement — the two export paths disagree about WHEN [light · render path]
 Found while measuring X15(c), never chased: in the same take, on the same output instants, the moving
