@@ -253,17 +253,25 @@ READY NOW:
                                              4K-freeze family): the ladder is the guard, and it now
                                              judges arrivals, so a 60 fps source is not punished
                                              (pinned).
-  SIZE-CODEC  the ~2x lever        [PO PICK OWED]  PO 2026-08-29: "minimal size ... couple minutes
-                                             ~10 MB with good quality". qp-targeted encoding is
-                                             DEFAULT ON and worth ~11 %; the remaining ~2x IS the
-                                             codec (hevc/av1 vs the avc blind-share floor) — built,
-                                             reachable, off for distribution only. PO picks:
-                                             (a) hevc/av1 for the CLOUD player only (no recipient
-                                             risk) · (b) a "smaller file, newer players" choice in
-                                             the export panel, named honestly · (c) flip the floor.
-                                             TD recommends (b) now + (a) when cloud lands; (c)
-                                             breaks blind shares on old players — against the
-                                             frozen never-break rule.
+  SIZE-CODEC — RESOLVED 2026-08-29: APPLE'S WAY (PO: "i like apples way"). Codec is never a user
+                                             question; the DESTINATION decides it — unknown egress
+                                             (saved file, OS share sheet) gets most-compatible AVC;
+                                             controlled playback (our cloud player) and the explicit
+                                             "smaller file" row get high efficiency (HEVC where the
+                                             platform encodes it, AV1 software fallback — capability
+                                             probe joins F16's T1 spike). No codec picker anywhere.
+                                             Executed by F16's lanes + F17's sheet; qp-targeted
+                                             encoding stays on (~11 %); the ~2x arrives with the
+                                             efficiency lane. DECISIONS carries the ruling.
+  F17  the Share sheet             [medium]  TD-drafted 2026-08-29 from PO: "its time to think
+                                             through how share button will work". Destinations, not
+                                             formats: Copy link / Save file (instant, always) /
+                                             Save smaller file (background lane, readiness ON the
+                                             row) / For AI, with the ONE quality option shown
+                                             quietly. Spec below — the sheet is design, so PO's eye
+                                             gates it. UI half AFTER F16's lanes exist; the Save
+                                             file + For AI rows are re-arrangement of what ships
+                                             today and can land first.
   F16  semantic rungs, everything  [medium-heavy]  PO 2026-08-29, design v2 on PO's own counter
        already made when asked              ("cant it be same high instant quality rendered
                                              already and it just converts in smaller file ...
@@ -612,7 +620,51 @@ motion / talking head). UNDER F16 v2 MIN IS AN OFFLINE TRANSCODE, which makes th
 better: the job can probe the take's ACTUAL frames (no pre-record blindness) and even sweep qp per
 span — X13's live per-chunk steering shrinks to an option rather than a dependency; re-price X13
 after this lands. NOTE the codec dependency honestly: Min's absolute size is ~2x better on
-hevc/av1 — SIZE-CODEC multiplies every rung and stays PO's pick.
+hevc/av1 — SIZE-CODEC (resolved: Apple's way) delivers that through the efficiency lane.
+
+## F17 share-sheet — the share button, Apple's way  [medium · UI + share plumbing · the SHEET
+##     LAYOUT IS PO-GATED (it is design); the codec rule underneath is settled (SIZE-CODEC)]
+[TD-drafted 2026-08-29 from PO's "i like apples way, its time to think through how share button
+will work". Three rules, then the sheet.]
+RULES:
+  1. CODEC IS NEVER A USER QUESTION. The destination decides: unknown egress (Save file, OS share
+     sheet) = most-compatible AVC; controlled playback (cloud player) and the explicit smaller-file
+     row = high efficiency. Plain words only ("plays everywhere" / "about half the size, needs an
+     up-to-date player") — never a codec name in the UI.
+  2. SHARE LEADS WITH WHERE IT GOES. Quality (Min/Medium/High/Max) is F16's one option — how it
+     looks — shown as one quiet row, tap to change; destinations are the sheet.
+  3. SOMETHING ALWAYS HAPPENS INSTANTLY (frozen law). Save file = the recorded rung, packet-copied,
+     ~1 s at any length. Slower things show readiness ON THE ROW before the tap (exact size when a
+     lane finished, honest progress when not) — never a surprise after.
+THE SHEET (one primary Share button after a take):
+     Copy link            "Anyone can watch · lasts 7 days"   [headline once cloud lands]
+     Save file            "Plays everywhere"                   [instant, always]
+     Save smaller file    "~34 MB · ready | ~12s"              [F16 efficiency lane]
+     For AI               [existing PDF artifact]
+     ───────────────
+     Quality: High ▾      [the one option]
+DESTINATION WIRING:
+  · Save file → the recorded rung's compatible artifact. Can never be slow, big-surprise or absent.
+  · Save smaller file → F16 background lane: HEVC where the platform encodes it, AV1 software
+    fallback (measured ~2.6x realtime — fine for idle), AVC-higher-qp as the floor; the capability
+    probe is part of T1. Row states exact size or progress; if the lane cannot run on this machine
+    the row says so and points at Save file — it never dangles.
+  · Copy link → upload with progress, link copied on completion. CLOUD V1 HONESTY: Supabase has no
+    transcode and quota is 512 MB, so v1 uploads ONE file — the COMPATIBLE one (a link must play
+    for anyone); the efficient rendition + per-viewer pick is phase 2 (player detects capability);
+    link-before-upload-finishes is the approved-but-OFF instant-link mode, later still.
+  · OS share sheet → a "Share…" row only where navigator.share accepts files (feature-detect);
+    hands over the COMPATIBLE file — unknown egress is Apple's own rule.
+  · Recipient page: stream + title + duration + one Download (compatible). Expiry is the SHARER's
+    information, shown at copy time.
+FAILURE HONESTY: upload fails → "the file is still on your machine" + Save file right there ·
+quota full → name which links to let expire · every row that cannot serve says why in one line.
+SEQUENCING: the Save file + For AI rows and the sheet shell are a re-arrangement of what ships
+today and can land before F16; the smaller-file and link rows light up as their lanes/cloud land.
+GATES when built: Save file measured instant on a long take · no codec word anywhere in the sheet
+(copy reviewed by PO) · the smaller-file row never promises a size before its lane reports one ·
+the sheet drives compose/choose.ts unchanged (the oracle still gates the paths users get) · PO
+judges the sheet by eye before it becomes the default surface.
 
 ## F15 fps-ceiling — RULED YES 2026-08-29 (PO: "i want every device to record best quality it can,
 ##     60 fps"). F13 LANDED 2026-08-29 — this is next. See the ruling note at the bottom.

@@ -352,3 +352,18 @@ today; the pre-record quality picker (later, its own UI task) makes the selected
 place as the LATER half rather than being retired. Every other rung is a fast pre-made lane
 (background transcode/render, F16 v2) and is never labelled instant. Max on single-video takes
 stays instant regardless (the raw native channel is always on disk — O3c).
+
+po 2026-08-29 (6) — SIZE-CODEC RESOLVED: APPLE'S WAY ("i like apples way, its time to think through
+how share button will work"), after TD's survey of how the industry solves it (cloud-first link
+players · compatible-default-plus-efficient-option local tools · Apple's efficient-at-rest,
+compatible-on-egress · messenger crush-on-send; fresh fact: HEVC decode is default-on in Firefox
+134/136/137, Chrome since 2022, Safari always — the incompatible tail is old hardware and
+codec-pack-less Windows). THE RULE: codec is never a user question — the DESTINATION decides.
+Unknown egress (saved file, OS share sheet) ships most-compatible AVC; controlled playback (our
+cloud player) and the explicit "smaller file" row ship high efficiency (HEVC where the platform
+encodes, AV1 software fallback, AVC-high-qp floor; capability probe joins F16's T1). No codec
+picker, no codec names in UI. Executed by F16's background lanes and the new F17 share-sheet
+(TD-drafted, sheet layout PO-gated): Share leads with destinations — Copy link / Save file
+(instant, always) / Save smaller file (readiness on the row) / For AI — with F16's one quality
+option shown quietly. Cloud v1 uploads the COMPATIBLE file (no server transcode, 512 MB quota);
+per-viewer efficient rendition is phase 2; instant-link mode stays approved-but-off.
