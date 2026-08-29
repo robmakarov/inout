@@ -418,16 +418,26 @@ ear or eye, or the screen wedge, whose cause is Chrome's.
   copy paths: N cold runs recording the per-sample distribution, mean against max, and the same take
   through the render beside it. Until then, do not report a red v2 oracle as a regression without
   running HEAD cold next to it — and say which you did.
-  SECOND FLAKY BAND, DIFFERENT ORACLE, SAME LESSON — added 2026-08-29 by the O15 session, measured
-  the way the paragraph above asks for. **The v1 oracle's `export throughput ≥ 1× realtime` band is
-  load-sensitive right at its edge.** Same tree, same evening: 1.08x on an idle machine and 0.67x an
-  hour later with load average 8.8 (Chrome, two other assistants, a parallel session). Clean main run
-  cold in a throwaway worktree UNDER THE SAME LOAD read 0.77x and failed identically, so it is
-  ambient load and not the change under test. Note 4b already says the take a user records beside a
-  game is a different regime from the one a gate records on a quiet machine; this is that sentence
-  applied to the GATE ITSELF, and it means a v1 verdict is only meaningful beside its own baseline
-  or on a quiet machine. Whoever takes G1 should decide whether this band belongs on a shared
-  machine at all, or wants a load-normalised form.
+  SECOND FLAKY BAND, DIFFERENT ORACLE, SAME LESSON — added 2026-08-29, and then MEASURED the way the
+  paragraph above asks for rather than argued. **The v1 oracle's `export throughput ≥ 1× realtime`
+  band sits ON its own boundary on this machine, and its verdict is decided by ambient load.**
+  Readings from one evening, same tree lineage: 1.30x and 1.08x quiet · 0.92x at load average 6.2 ·
+  0.67x at load average 8.8 · and clean main, cold, in a throwaway worktree UNDER THE SAME LOAD,
+  0.77x (failing identically) and 1.02x (passing by two hundredths).
+  THE ATTRIBUTION RUN, which is the part that settles it: three cold runs of a change branch
+  INTERLEAVED with three of clean main, alternating, same machine, same half-hour —
+      branch  PASS · FAIL · PASS
+      main    PASS · FAIL · PASS
+  Identical distribution, failing on the same round. So the band is not measuring the change; it is
+  measuring the machine, and it does it right at the threshold where a coin has two sides. Note 4b
+  already says the take a user records beside a game is a different regime from the one a gate
+  records on a quiet machine — this is that sentence applied to the GATE ITSELF.
+  FOR WHOEVER TAKES G1: this band and the v2 `maxAbs` band above are the same disease in two
+  organs, and neither is fixed by widening. The v1 one has an obvious shape — throughput is a RATE
+  and the band is absolute, so either it wants normalising against a measured machine baseline taken
+  in the same run, or it wants to stop being a gate on a shared machine. Until then a v1 verdict is
+  only meaningful beside its own interleaved baseline, and a session that reports one without that
+  is reporting the load average.
 
 - [P1] 2026-08-26, FOUND BY ROBERT'S EYES on the X15 artifacts ("c shit is worse colors") and then
   measured: **coloured text loses about 30 % of its colour, all of it at capture, and the composite
@@ -687,7 +697,8 @@ Protocol: say "roadmap" in any session → READY map → "go <id>".
 - [P2] THE MEDIARECORDER FALLBACK IS NOT A FALLBACK for a frame the platform's AVC refuses — found while fixing the entry above. When `startMeasuredVideo` threw, the code fell back to the MediaRecorder built during arm and that wrote ZERO bytes too, so the "a failure here is not fatal to the take" comment in session.ts was not true for this class of failure: both paths were asking the same platform encoder for the same impossible frame. Both causes are fixed upstream now, so nothing reaches it this way today — but the fallback's own promise is still unverified for anything a hardware AVC encoder refuses. Wanted: a rung that changes the ASK (even the size, drop the level, or accept webm/VP9, which has no odd-side restriction) rather than re-asking the same question with a different API.
 - [~~P2 → ROADMAP B6~~ FIXED 2026-08-29 by W1 — absorbed, same code, same defect; handoff under W1 in `.ai/TASKS`] "the device never connected" BLAMES THE DEVICE FOR AN OS PERMISSION. Separate from the entry above and still open — hit on the DEV machine while reproducing it: when macOS has not granted Chrome screen recording, Chrome's picker opens and says so ("allow screen recording for Chrome in System Settings. You'll then need to restart Chrome") with Share greyed out, `getDisplayMedia` never rejects, and INOUT's own 30 s deadline fires and reports the generic "the device never connected" — throwing away the one message that would have solved it. Measured: `display timeout +30023ms` / `+30021ms` with and without the flag. Wanted: when a display request times out, say what it actually is, and say it while the request is still outstanding rather than only in the post-take banner. The wedge ladder ALSO escalates on each such timeout (`rememberDisplayWedge`), spending a constraint escalation on something no constraint can fix; it self-heals on the first success. (THAT LAST CLAUSE WAS FALSE and is half of why W1 exists: a success cleared the mark from rung 0 ONLY, so the escalation self-healed from nowhere else and the machine sat degraded for the 24 h TTL.) Behaviour change → Robert's yes before it ships.
 - [P1 → ROADMAP G2] `npm run oracle:load` IS RED, AND IT IS NOT F15 — measured on both sides of it 2026-08-29. HEAD (a47113c) and the commit before F15's first line (79d6def, run in a throwaway worktree) give the IDENTICAL verdict: `composite tail FAIL/fps FAIL · raw tail INCONCLUSIVE/fps INCONCLUSIVE`, composite tail 9848 ms / 7366 ms against a 400 ms band, delivered 0.2 / 2.5 fps against a band of 10, and BOTH raw runs erroring `the take produced no screen channel`. So the gate F15's task lists cannot be met by F15, and the red predates it. THE LEAD, and it is the same mechanism this session diagnosed for the Browser pane: the rig's 4K source is a canvas painted from requestAnimationFrame, and `oracle:load` drives through `exp.mjs`, which is HEADLESS by default — a hidden/headless page runs rAF at 0, so the SOURCE starves and the tail band reads the starvation as tail loss. DECISIONS already records this rig measuring 14 fps under 4K load ("a rAF-painted canvas's cost is the painting"); 0.2-2.5 fps is a different regime, which points at a Chrome update changing headless rAF rather than at the product. FIRST MOVE: re-run it `--headed` (exp.mjs takes the flag) and see whether the source delivers; if it does, the rig's default is the bug and the band has been measuring the harness for an unknown number of sessions. A rig that cannot make its own source move is not a gate.
-  **THAT FIRST MOVE IS NOT RUNNABLE AS WRITTEN** — found 2026-08-29 by the O15 session, which owed this gate and went to run it. `exp.mjs` takes `--headed`, but `scripts/oracle-load.mjs` never forwards it: both of its spawns (`runExp` and `runOnce`) build `exp.mjs`'s argv as a hardcoded literal — id, JSON args, `--timeout=900` — and parse none of their own process's flags beyond `--takeMs=`, `--band=`, `--fpsBand=`. So `npm run oracle:load --headed` runs headless exactly as before and reports the same red. Whoever takes G2 starts by threading the flag through those two argv arrays; until then every task whose gate list names `oracle:load` is blocked on G2, not on itself.
+  **THAT FIRST MOVE IS NOT RUNNABLE AS WRITTEN** — found 2026-08-29 by the O15 session, which owed this gate and went to run it. `exp.mjs` takes `--headed`, but `scripts/oracle-load.mjs` never forwards it: both of its spawns build `exp.mjs`'s argv as a hardcoded literal and parse none of their own process's flags beyond `--takeMs=`, `--band=`, `--fpsBand=`.
+  **AND THE MOVE WOULD NOT HAVE HELPED, because the premise under it was never measured** — G2 settled this the same evening and the whole "headless rAF is 0" lead is RETRACTED: `npm run exp -- rigsource` reads 120.2 Hz headless AND headed, `document.hidden` is false under `--headless=new`, and a rAF-painted track delivers 30.2 of 30 fps either way. It had been written down twice in this repo and measured zero times. The real defect was that `oracle:load` handed all N takes to ONE page; it is one take per page now, and a starved source exits SOURCE-STARVED instead of being scored as the product. This entry is kept for the argv fact, which still stands, and as the record of a lead that two sessions believed on no evidence.
 - [P2] Fidelity oracle red on dev machine under load: uniform tone-level drop 1.1–2.3 dB varying run-to-run (signature of contention-starved capture, same family as the ALL-NULL P2 above). Pre-existing before 2026-07-23 changes (clean tree measured worse). Do not treat as mix-path regression without a quiet-machine run.
 
 ## Ideas
