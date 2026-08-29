@@ -2331,7 +2331,7 @@ checkable by eye.
     70.3 % — about a third of the total loss recovered, for LESS work, at no CPU cost. It does not
     help a take with a camera PiP, which must composite; that case still needs 4:4:4 at capture, and
     on this machine that is software (lane (b): 80 fps at 1080p, ~2x CPU).
-    AND THE CEILING IS NOT OURS — THE SOURCE IS ALREADY 4:2:0 (2026-08-27, on PO's "how to fix
+    AND THE CEILING IS NOT OURS — THE SOURCE IS ALREADY 4:2:0 (2026-08-27, on Robert's "how to fix
     it"). measuredVideo.ts now logs the pixel format of the first frame of every raw channel, and a
     take reports `format NV12 · coded 1920x1080`. NV12 IS 4:2:0: the chroma is at half resolution in
     both axes BEFORE our encoder is handed the frame. That re-reads the whole table above:
@@ -2344,7 +2344,7 @@ checkable by eye.
     second generation alone: ~10 %, for software encoding at ~2x CPU. That is a bad trade and the
     recommendation is now CAN'T rather than SHOULDN'T for the big half.
     MEASURED ON THE SYNTHETIC SCREEN, WHICH IS A CANVAS — and a canvas already arrives NV12, so a
-    real getDisplayMedia frame from the OS capturer is not going to be better. PO's next take
+    real getDisplayMedia frame from the OS capturer is not going to be better. Robert's next take
     settles it from the console either way; the line is there now.
     WHAT IS LEFT THAT IS ACTUALLY OURS: the second generation, and O3b removes it for a
     single-screen take at no cost. A take WITH a camera must composite, and for that case the only
