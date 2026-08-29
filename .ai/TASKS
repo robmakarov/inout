@@ -289,6 +289,14 @@ READY NOW:
                                              1440p for inherited reasons, not decided ones, and the
                                              capture ceiling follows it — one constant raises both.
                                              GATED ON O15, or ships behind a flag.
+                                             AND IT IS THE COLOUR TASK TOO (X15(e), 2026-08-29, on
+                                             Robert's "i want 100% colors"): delivering above the
+                                             viewing size is what makes 4:2:0 carry FULL colour —
+                                             79.6 % → 96.9 % of the source green, on the HARDWARE
+                                             encoder. 1.5x SATURATES IT (2x measured no better),
+                                             which bounds F18's own cost worry: the colour half
+                                             does not need 3024, it needs ~1.5x what is watched.
+                                             ONE SPIKE GATES WHETHER THIS IS FREE — T1 below.
   O15  how many encoders may a     [heavy]   THE FREEZE'S ROOT, read off his own console: three
        take open                             hardware AVC encoders with nothing budgeting them,
                                              plus a game on the same GPU. The capture ceiling is
@@ -1150,10 +1158,42 @@ the remembered step has to survive a 3024-wide take being followed by a 1920-wid
 THE COST, STATED, because Robert has already been bitten by it: capturing 3024x1964 instead of
 2560x1662 is 40 % more pixels through three hardware encoders, which is exactly where his freeze
 lived. GATED ON O15, or it ships behind a flag so the cost is his to find rather than everyone's.
+THE SECOND REASON, MEASURED AFTER THE TASK WAS WRITTEN (X15(e) 2026-08-29, from Robert's "i want
+100% colors"): this is not only about detail, it is the only lever that gives coloured TEXT its
+colour back. 4:2:0 stores chroma at half resolution IN EACH AXIS OF WHATEVER FRAME IT IS GIVEN, so
+what a file carries is an ABSOLUTE number of chroma samples — a file delivered at 2x the size it is
+watched at has one chroma sample per viewed pixel. `npm run exp -- x15e`, equal bits per pixel,
+every rung downscaled to 1920x1080 as a player would and scored against the 1920x1080 reference:
+    1x 4:2:0 (ships)  583752 B   green 79.6 %  blue 81.7 %
+    1.5x 4:2:0        981874 B   green 96.9 %  blue 99.0 %
+    2x 4:2:0         1343479 B   green 96.0 %  blue 98.3 %
+    1x 4:4:4 AV1      668472 B   green 99.6 %  blue 97.9 %
+1.5x ON HARDWARE MATCHES THE SOFTWARE 4:4:4 CEILING, and 2x buys nothing over 1.5x — past one chroma
+sample per viewed pixel there is nothing left to win and the extra pixels only thin the bits. THAT
+BOUNDS THIS TASK'S OWN COST ARGUMENT: the colour half does not need the full 3024, it needs ~1.5x
+the size the file is watched at, so the "40 % more pixels through three encoders" worry above is
+about the DETAIL half only and the two halves can ship at different rungs.
+T1 SPIKE, AND IT GATES WHETHER ANY OF THIS IS FREE [light]: every number above holds bits per pixel
+constant, so 1.5x costs 1.68x the bytes — which collides head-on with the standing minimal-size
+objective ("couple minutes video can be around 10 mb"). THE UNASKED QUESTION IS THE ONE THAT
+MATTERS: at CONSTANT BYTES, is 1.5x 4:2:0 better than 1x 4:2:0 on text? Chroma gets full resolution
+either way; luma gets fewer bits per pixel. If 1.5x wins at equal size this is a pure win and should
+simply become the rule; if it loses, it is a quality/size trade, it belongs to F16's rungs, and it
+is Robert's ruling and not engineering's. Extend x15e with an equal-BYTES ladder — the rig already
+holds every other variable still. DO NOT BUILD THE DELIVERY CHANGE BEFORE T1 ANSWERS.
+STILL UNMEASURED, and one console line settles it: whether Chrome hands us the screen at the
+display's native resolution or already downscaled. capture/measuredVideo.ts logs `format … · coded
+WxH` on the first frame of every raw channel. The rig CANNOT self-serve this — a headless Chrome has
+no desktop for a screen-capture picker and `x15e {"probeSource":true}` hung a run for ten minutes
+before it was given a deadline. Read it off a real take, or run headed.
+RELATED AND NOT THE SAME: O3c already records that nativeres CANCELS single generation, so O3b's
+measured colour win reaches nobody whose screen is not 1080p. F18 and O3c pull the same rope.
 GATES: a take already at or below the ladder's top is byte-identical (the step does not appear) ·
 the source step's file measures the take's own geometry, read out of the FILE · the instant copy
 still fires on it (it is the composite's own size by construction) · the remembered step survives a
-smaller take on the next load · size estimates cover it · oracle v2+v1.
+smaller take on the next load · size estimates cover it · oracle v2+v1 · AND THE COLOUR ONE, since
+it is now half the reason: the delivered file keeps ≥95 % of the source's glyph colour measured by
+`npm run exp -- x15e`'s method at the size it is watched.
 
 ## O15 how many encoders may a take open — AUTHORED 2026-08-29 from Robert's own console
 [heavy · the freeze's root, and what F18 is gated on]
