@@ -31,6 +31,7 @@ import type {
   Recording,
 } from '@core/types'
 import { isDefaultEdit } from '@core/timeline'
+import { chooseCopySource, type CopyOrigin } from './copySource'
 import { exportInstant } from './instant'
 import { exportRecording } from './pipeline'
 import { exportSmartCut } from './smartCut'
@@ -43,6 +44,16 @@ export interface ChosenExport {
   path: ExportPath
   /** Why a faster path was not taken, in order of attempt. Evidence, not UI. */
   declined: { path: ExportPath; reason: string }[]
+  /**
+   * WHICH FILE THE COPY CAME FROM when a copying path ran (task O3b) — the
+   * composite, or a single raw channel that already held the default
+   * composition. Null on the render. Reported because two files of the same
+   * take differ visibly on coloured text depending on it, so no rig or oracle
+   * should have to infer it.
+   */
+  copiedFrom: CopyOrigin | null
+  /** Why single generation was not available, when it was not. Evidence. */
+  copyDeclined: { origin: CopyOrigin; reason: string }[]
 }
 
 export interface ChooseExportOptions {
@@ -74,11 +85,26 @@ export async function exportByBestPath(opts: ChooseExportOptions): Promise<Chose
   const { recording, edit, settings, allowPacketCopy, onProgress, signal } = opts
   const declined: { path: ExportPath; reason: string }[] = []
 
-  if (allowPacketCopy && recording.composite) {
+  // O3b: RESOLVED ONCE, HERE. Both copying paths take the source they are
+  // given, so the origin this function reports and the file they actually
+  // copied cannot drift apart — and the reasons single generation was refused
+  // travel with the answer instead of being re-derived from a console line.
+  const copy = allowPacketCopy
+    ? chooseCopySource(recording, settings)
+    : { source: null, declined: [] as { origin: CopyOrigin; reason: string }[] }
+  const source = copy.source
+
+  if (source) {
     if (isDefaultEdit(recording, edit)) {
       try {
-        const result = await exportInstant({ recording, edit, onProgress, signal })
-        return { result, path: 'instant', declined }
+        const result = await exportInstant({ recording, edit, source, onProgress, signal })
+        return {
+          result,
+          path: 'instant',
+          declined,
+          copiedFrom: source.origin,
+          copyDeclined: copy.declined,
+        }
       } catch (err) {
         throwIfAbort(err)
         // Fast path unusable (codec/track/incomplete tail) — never fail an
@@ -92,8 +118,14 @@ export async function exportByBestPath(opts: ChooseExportOptions): Promise<Chose
 
     if (smartCutEnabled()) {
       try {
-        const result = await exportSmartCut({ recording, edit, onProgress, signal })
-        return { result, path: 'smartcut', declined }
+        const result = await exportSmartCut({ recording, edit, source, onProgress, signal })
+        return {
+          result,
+          path: 'smartcut',
+          declined,
+          copiedFrom: source.origin,
+          copyDeclined: copy.declined,
+        }
       } catch (err) {
         throwIfAbort(err)
         declined.push({ path: 'smartcut', reason: reasonOf(err) })
@@ -103,7 +135,9 @@ export async function exportByBestPath(opts: ChooseExportOptions): Promise<Chose
       declined.push({ path: 'smartcut', reason: 'disabled by flag' })
     }
   } else {
-    const why = !recording.composite ? 'take has no composite' : 'not the default output geometry'
+    const why = allowPacketCopy
+      ? copy.declined.map((d) => `${d.origin}: ${d.reason}`).join('; ') || 'nothing to copy'
+      : 'not the default output geometry'
     declined.push({ path: 'instant', reason: why })
     declined.push({ path: 'smartcut', reason: why })
   }
@@ -115,7 +149,7 @@ export async function exportByBestPath(opts: ChooseExportOptions): Promise<Chose
     onProgress,
     signal,
   } satisfies ExportOptions)
-  return { result, path: 'render', declined }
+  return { result, path: 'render', declined, copiedFrom: null, copyDeclined: copy.declined }
 }
 
 /** Re-exported for callers that only need the type. */

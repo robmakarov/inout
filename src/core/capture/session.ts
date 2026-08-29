@@ -1,5 +1,6 @@
 import { newId } from '@core/id'
 import { isAppleWebKit } from '@core/capabilities'
+import { singleGenCaptureEnabled } from '@core/singleGen'
 import { blobStore, createDurablePositionedWriter, recordingsRepo } from '@core/store'
 import type {
   CaptureConfig,
@@ -167,6 +168,15 @@ function pickMimeType(media: MediaKind): string {
  * config, exactly like O3a's capture resolution, so the resolution and the
  * bitrate can never disagree about which take this is.
  */
+/**
+ * The live compositor's own canvas, which is fixed (capture/compositor.worker
+ * and liveCompositeV2 both hardcode it) and IS the default output geometry.
+ * O3b's capture guard compares the raw track against it: only at exactly this
+ * size is the compositor's contain-fit the identity.
+ */
+const COMPOSITE_WIDTH = 1920
+const COMPOSITE_HEIGHT = 1080
+
 function videoBitsFor(kind: ChannelKind, cameraIsPip: boolean): number {
   return kind === 'screen' ? 8_000_000 : kind === 'camera' && cameraIsPip ? 2_500_000 : 4_000_000
 }
@@ -282,6 +292,8 @@ class Session implements CaptureSession {
    * successful arm. The only structure release can trust — see releaseMedia. */
   private readonly acquiredStreams = new Set<MediaStream>()
   private composite: LiveCompositeHandle | null = null
+  /** O3b: this take deliberately has no composite. Evidence, and a guard. */
+  private singleGeneration = false
   /** Filled by stopCompositeEarly, read once the raw channels have drained. */
   private compositeResult: CompositeRecording | null = null
   private compositeStarting: Promise<void> | null = null
@@ -869,7 +881,54 @@ class Session implements CaptureSession {
     if (s) void s.release().catch(() => undefined)
   }
 
+  /**
+   * Does this take already hold its own default composition in ONE raw channel
+   * (task O3b), so the live compositor would only re-encode a picture we
+   * already have?
+   *
+   * ASKED BEFORE THE COMPOSITE STARTS, from facts that are settled by then:
+   * `useMeasured` was decided in armChannel (capability AND preference — the
+   * X6 mp4/AVC path), and the track's own dimensions were read there too.
+   *
+   * IT IS DELIBERATELY CONSERVATIVE, because skipping the composite is not
+   * reversible mid-take. Every "no" here just records a take exactly the way it
+   * has always been recorded.
+   */
+  private singleGenerationTake(): { yes: boolean; why: string } {
+    if (!singleGenCaptureEnabled()) return { yes: false, why: 'not enabled (?singlegen=capture)' }
+    const video = this.channels.filter((c) => c.media === 'video' && !c.ended)
+    if (video.length !== 1) return { yes: false, why: `${video.length} video channels` }
+    const ch = video[0]!
+    if (!ch.useMeasured) {
+      return { yes: false, why: `the ${ch.kind} channel records webm through MediaRecorder, which nothing can packet-copy into an MP4` }
+    }
+    if (ch.width !== COMPOSITE_WIDTH || ch.height !== COMPOSITE_HEIGHT) {
+      return {
+        yes: false,
+        why: `the ${ch.kind} track is ${ch.width}x${ch.height}, not ${COMPOSITE_WIDTH}x${COMPOSITE_HEIGHT} — the compositor's contain-fit is doing real work`,
+      }
+    }
+    return { yes: true, why: '' }
+  }
+
   private startComposite(): void {
+    // O3b, the CAPTURE half: a whole hardware encoder, its worker and ~18 % of
+    // the take's write bandwidth, none of which run. WHAT IS GIVEN UP IS REAL
+    // and is why this rung is opt-in until PO rules: the compositor owns
+    // SOURCE LIVENESS (a frozen screen stops being noticed) and the recording
+    // preview can no longer render its output. Both are named in
+    // core/singleGen.ts beside the flag.
+    const single = this.singleGenerationTake()
+    if (single.yes) {
+      this.singleGeneration = true
+      console.info(
+        '[capture] SINGLE GENERATION — no live composite for this take: one mp4/AVC video channel already at the export geometry, so the composite would be a second encode of a picture we already have. The unedited export packet-copies the raw channel. Source-liveness detection and the composited preview are off with it.',
+      )
+      return
+    }
+    if (singleGenCaptureEnabled()) {
+      console.info(`[capture] single generation declined — ${single.why}; recording the composite`)
+    }
     const screen = this.previewStreams.screen
     const camera = this.previewStreams.camera
     const audio = [this.previewStreams.mic, this.previewStreams['system-audio']].filter(
@@ -1110,6 +1169,10 @@ class Session implements CaptureSession {
    */
   async attachCompositePreview(canvas: HTMLCanvasElement): Promise<boolean> {
     if (this.stateInternal !== 'recording') return false
+    // O3b: there is no compositor to hand over from, by design. The UI's own
+    // preview is the whole preview for this take — say so rather than letting
+    // it look like a compositor that failed to start.
+    if (this.singleGeneration) return false
     try {
       if (this.compositeStarting) {
         await withTimeout(this.compositeStarting, COMPOSITE_START_BUDGET_MS, 'composite start')

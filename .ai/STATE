@@ -4,7 +4,20 @@ phase: MVP validation (2026-07-16)
 
 works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → export → share-as-file.
 - SYNCHRONIZED START (PO 2026-07-20, supersedes instant-arm/late-join): arm() waits for src.settled — ALL devices acquired, every permission prompt answered — before start() activates them at one epoch. All channels share one start + one length (verified: 4 lanes 100% ±0.3%); no primary-gated early start, no late-join staggering. pipeline prewarm at mount; devices touched only after record click
-- instant unedited export ~60-105ms (live composite packet-copied, mp4 h264+aac); a TIME-ONLY edit
+- WHICH FILE THE FAST PATHS COPY IS A DECISION NOW (O3b, 2026-08-29) — compose/copySource.ts, pure
+  and unit-tested, resolved ONCE in choose.ts and handed to whichever path runs. Usually the live
+  composite. On a take with exactly ONE video channel that is already mp4/AVC at exactly the export
+  geometry it is THAT RAW CHANNEL instead: the compositor's contain-fit into its own 1920x1080 canvas
+  is the identity there, so the composite is a second 4:2:0 generation of a picture we already have.
+  Measured on one take with nothing else changed — colour kept 80.0/89.1 % against 70.3/75.2, luma
+  37.3 dB against 35.5 against the source canvas, fringe 8.66 against 10.24, and the export is FASTER.
+  It costs 14-23 % more download (the raw channel spends more of the same 8 Mbps ceiling); the COLOUR
+  half of the win is structural and not bought with those bytes. `?singlegen=off` reverts. The file
+  says which it is: certification `copiedFrom`. A camera, or any geometry but 1920x1080, still
+  composites — with a stated reason. NOT RECORDING the composite at all is built and OFF behind
+  `?singlegen=capture` (45-49 % less written per second of take, one encoder that never runs) because
+  it gives up source-liveness detection and the composited preview: PO's flip. Rig: `npm run exp -- o3b`.
+- instant unedited export ~60-105ms (packet-copied, mp4 h264+aac); a TIME-ONLY edit
   takes smart cut (1384 ms on a 120 s take against the render's 17616); everything else renders — and
   the panel now says HOW LONG IS LEFT, read off the rendering phase's own measured slope and shown
   only once that slope has 3 s and 3 % under it (the ratio is not uniform in time — `preparing` hides

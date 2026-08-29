@@ -51,6 +51,18 @@ subsampling from a YUV matrix/range drift, which this fixture could not do befor
 O9/X15(b) said it is, and 4:4:4 will deliver. Two chroma gates changed verdict ON PURPOSE (one was
 unreachable-red at >= 90 % against a 70.3 % chain, one cherry-picked the colour the render loses);
 both are explained in the handoff. R1 leaves READY and unblocks nothing new.
+SAME SESSION (PO: "go O3b"): O3b DONE — and it is the task R1 was the instrument for. On a screen-only
+1080p take the unedited export now packet-copies the RAW CHANNEL instead of the composite: same
+picture, one 4:2:0 generation earlier. Measured on one take with nothing but the copy source changed —
+colour 80.0/89.1 % against 70.3/75.2, luma 37.3 dB against 35.5, fringe 8.66 against 10.24, and the
+export is FASTER because the file it copies is one we did not have to make. THE COST THE MAP'S "free"
+FRAMING MISSED: the download grows 14-23 %, because the raw channel spends more of the same ceiling
+on the same seconds. The colour half of the win is structural and not bought with those bytes (X15(b):
+3x the bitrate buys 4 % of the fringe on 4:2:0); part of the luma dB is. `?singlegen=off` reverts.
+The CAPTURE half — never recording the composite at all, 45-49 % less written per second of take and
+a whole hardware encoder that never runs — is BUILT AND OFF, behind `?singlegen=capture`, because it
+gives up source-liveness detection and the composited preview. That flip is PO's, on the evidence in
+the handoff. O3b leaves READY.
 
 SHIPPED THIS SESSION
   · X9   the For-AI build runs in a worker. Byte-identical PDF on four lanes; the UI thread loses
@@ -127,11 +139,14 @@ NOT STARTED, and deliberately: O10(b) multitrack · O10(c) spectral gating · O1
 O9(c) near-lossless static spans (its premise is refuted by O9's own table — 3× the bits bought 4 %) ·
 F6's RETAKE (a resume of a FINISHED recording: recovery, editsRepo and editor state, its own task).
 
-FULL SWEEP, 2026-08-29 (fifteenth session, R1): 464 tests · typecheck clean · x15c twice with the
-chroma chain identical run to run and equal to the committed baselines · all three self-drills as
-specified · `npm run oracle` PASS (v2) AND `--engine=v1` PASS AND `npm run exp -- armcancel` green,
-which is the evidence that R1's two capture/* edits are additive: one exported palette constant and
-one harness-only reference builder, with drawTextScreen painting the identical hex strings.
+FULL SWEEP, 2026-08-29 (fifteenth session, R1 + O3b): 480 tests · typecheck clean · x15c twice with
+the chroma chain identical run to run and equal to the committed baselines · all three R1 self-drills
+as specified · `npm run exp -- o3b` twice, seven gates green both times · `node scripts/oracle.mjs
+--engine=v1` PASS · `npm run exp -- armcancel` green · f3 3/3.
+THE v2 ORACLE IS FLAKY ON MAIN AND IT IS NOT THIS SESSION'S: HEAD with all of this stashed failed 2 of
+4 cold runs on `instant/trimmed export sync maxAbs > 90 ms`; the same tree with O3b in it failed 1 of
+2 and 1 of 3, same failure, same distribution. Filed in BACKLOG. Do not read a red v2 oracle as a
+regression without running HEAD cold beside it.
 
 START HERE IF YOU ARE FRESH:
   1. read notes 5, 6, 9, 10, 11, 17 below. Note 10 (the rig is wrong before the product is) and
@@ -147,17 +162,6 @@ START HERE IF YOU ARE FRESH:
      `npm run oracle:load` (HEAVY, announce it) and `npm run exp -- armcancel`.
 
 READY NOW:
-  O3b  single-generation export    [medium]  UNBLOCKED 2026-08-26: X6 is the DEFAULT now (PO's
-                                             ruling — see WHAT IS LEFT item 3). Raw channels are
-                                             mp4/AVC, the copyable shape it needed: a single-screen
-                                             take can skip the composite entirely and packet-copy
-                                             the raw channel. Read the X6 handoff + note 14 first.
-                                             AND IT IS NOW A COLOUR FIX, NOT ONLY A SIZE ONE
-                                             (X15(d), on PO's "c shit is worse colors"): the
-                                             composite costs a SECOND chroma generation, so a
-                                             single-screen take that skips it keeps 80 % of the
-                                             source's glyph colour instead of 70.3 %. Free — it is
-                                             strictly less work. No help for takes with a camera.
   P5a  iOS SCK spike               [light]   UNBLOCKED 2026-08-26: PO confirms Xcode 27 + a real
                                              iOS 27 device are available. Needs PO present (device
                                              plugged in, signing). TIME-SENSITIVE (iOS 27 ~Sept).
@@ -1756,6 +1760,7 @@ stripped stats AND spoofed Apple WebKit UA. Harness: `npm run exp -- o2`.
 OPEN for O10: re-measure p20 agreement on a realistic room-tone rig; if it holds, drop the floor guard.
 
 ## O3. chromium-mp4-capture — (a) DONE 2026-08-23 with the MP4 flip REJECTED on evidence
+##     (b) = O3b: DONE 2026-08-29 — export half shipped ON, capture half shipped OPT-IN (handoff below)
 (a) shipped: contentHint text/motion at acquire + camera 1920×1080 ideal when the config has no
 screen channel (camera-full takes were upscaling 720p). MP4 preference REJECTED: Chrome's
 MediaRecorder does not stream mp4 — 753 B on disk halfway through an 8 s take vs 1.09 MB of
@@ -1789,6 +1794,78 @@ once O4 owns the encoder and the muxer, so this waits for O4 rather than being b
 GATES (b): screen-only 1080p take: console proves no composite recorder · instant export ≤ current ·
 PSNR/visual evidence that single-generation ≥ composite-generation quality · capture write bandwidth
 ~halved (bytes/s logged) · all oracles green.
+
+## O3b HANDOFF — DONE 2026-08-29. BOTH HALVES BUILT; the EXPORT half is on, the CAPTURE half is PO's.
+Rig: `npm run exp -- o3b` (add `{"crops":true}` for magnified before/after glyphs). Seven gates, two
+runs, all green both times.
+
+THE MEASUREMENT, one screen-only 1080p take exported twice with NOTHING but the copy source changed:
+    against the SOURCE canvas       grey    green    blue     luma PSNR   fringe   bytes
+    copy the COMPOSITE (today)     71.6 %  70.3 %   75.2 %    35.5 dB     10.24   1.66-1.69 MB
+    copy the RAW CHANNEL (O3b)     79.7 %  80.0 %   89.1 %    37.3 dB      8.66   1.89-2.08 MB
+So it is better on colour by 9.7 / 13.9 points, better on luma by 1.8 dB, lower max error (52 vs 59),
+lower fringe — and the instant export is FASTER (73-84 ms against 108-149 ms), because a byte copy of
+a file we did not have to make is strictly less work.
+
+THE ONE COST, AND IT IS NOT IN THIS TASK'S OWN "free — strictly less work" FRAMING: the download grows
+13.9-22.6 %. The raw channel spends more of the same 8 Mbps ceiling on the same seconds than the
+composite does. THE COLOUR WIN IS NOT BOUGHT WITH THOSE BYTES and that distinction matters — X15(b)
+measured 3x the bitrate buying 4 % of the fringe on 4:2:0, so chroma is structural, one generation
+against two. Part of the 1.8 dB luma IS the bits. PO should see the size number; `?singlegen=off`
+reverts in one load. The rig gates the size at ≤25 % so a future rate-control change that doubles a
+download cannot land quietly.
+
+THE CAPTURE HALF, and why it is OFF: `?singlegen=capture` makes startComposite() return before it
+starts anything. Measured: capture writes 0.36-0.38 MB/s with the composite and 0.20 without —
+45-49 % less per second of take, and one hardware encoder that never runs. WHAT IT GIVES UP IS REAL
+and is why it is PO's, not mine:
+  · SOURCE LIVENESS lives inside the compositor (capture/sourceLiveness.ts), so "your screen froze"
+    detection goes with it;
+  · the recording preview can no longer render the compositor's own output and falls back to the raw
+    <video> preview (attachCompositePreview returns false, which is already a normal answer on every
+    Apple WebKit and Firefox take);
+  · a take whose measured-video start falls back to MediaRecorder mid-start would have neither a
+    composite nor a copyable channel, so its unedited export renders.
+Same shape X6 shipped in, and X6's flip is the precedent.
+
+WHAT WAS BUILT
+  · core/singleGen.ts — the three rungs (off / export / capture) with the losses named beside them.
+    A runtime setter that works without localStorage, because a flag a test cannot set is a flag no
+    gate can prove.
+  · compose/copySource.ts — PURE, 16 tests. Which file the copy paths copy, and every reason it said
+    no. THE PROPERTY THAT MATTERS: it may only ever ADD a copyable case, never remove one — there is
+    deliberately NO geometry check on the composite, because `allowPacketCopy` already owns that
+    question and a second opinion could only refuse a case that works today. Four regression tests
+    pin exactly that.
+  · instant.ts and smartCut.ts take a CopySource instead of reading recording.composite. smartCut's
+    v1 refusal became a refusal on source.writer === 'mediarecorder', which is the property it always
+    meant: a boundary splice needs an encoder whose avcC we can reproduce.
+  · choose.ts resolves the source ONCE and hands it to whichever path runs, so the origin it reports
+    and the file that was copied cannot drift apart. ChosenExport gained copiedFrom + copyDeclined.
+  · certify.ts gained `copiedFrom`, so the FILE says which generation it is — two exports of one take
+    differ visibly on coloured text depending on it, and a field report would otherwise be
+    unattributable. The rig reads it back off the blob and gates on it matching.
+  · session.ts skips the composite on a qualifying take, conservatively: the guard reads facts that
+    are settled before start() (useMeasured, decided in armChannel; the track's own dimensions) and
+    every "no" records the take exactly as it always was.
+
+THE SMART-CUT LANES ARE NOT DECORATION. Without smart cut over the raw channel the capture rung would
+quietly send every TRIMMED take to the full render — a speed regression bought with colour, and
+nothing would have said so. Gated: A-smartcut-single-gen and B-smartcut-no-composite both take
+smartcut/single-generation, and the file's own certification tag agrees.
+
+WHY THE ORACLE IS NOT AFFECTED, checked rather than assumed: the oracle rig's synthetic screen is
+1280x720 (RIG_WIDTH/RIG_HEIGHT), so single generation is REFUSED on every oracle take and the
+composite is copied exactly as before. `npm run oracle --engine=v1` PASS. The v2 oracle is FLAKY ON
+MAIN TODAY AND IT IS NOT O3b — see the BACKLOG entry: stashing this work and running HEAD cold four
+times failed 2 of 4 on `instant/trimmed export sync maxAbs > 90 ms`, against 1 of 2 and 1 of 3 with
+O3b in the tree. Same failure, same distribution, and the band was already known to sit ~8-9 ms 1σ
+above its own instrument noise floor (O4b).
+
+NOT DONE, DELIBERATELY: a window share (any size but 1920x1080) never qualifies, and neither does any
+take with a camera — both fall back to the composite with a stated reason. Whole-browser CPU is the
+sampler's to measure, not a rig's: `npm run exp -- o3b --cpu --query=singlegen=capture` against
+`--query=singlegen=off`.
 
 ## O4. webcodecs-engine — the keystone  [P1, big; CONTINUES ee/webcodecs-capture-2 (on origin, behind main — rebase first)]
 Why: the pixel path (MediaRecorder + <video> + main-thread 2D canvas) forces 4–6 redundant decodes

@@ -38,6 +38,15 @@ export interface CertifiedExport {
   app: 'inout'
   v: 1
   path: 'instant' | 'render'
+  /**
+   * WHICH FILE THE COPYING PATHS COPIED (task O3b). Absent means the composite,
+   * which is what every file before O3b copied and what most still do.
+   * 'single-generation' means the take had one video channel already at the
+   * export geometry, so the export copied THAT and the composite's second
+   * 4:2:0 generation never touched the picture. Two files of the same take can
+   * differ visibly on coloured text depending on this, so the file says which.
+   */
+  copiedFrom?: 'composite' | 'single-generation'
   output: { width: number; height: number; fps?: number; videoBitrate?: number }
   codec?: CertifiedCodec
   audio: {
@@ -64,12 +73,14 @@ export function buildCertification(args: {
   fromCaptureStats?: boolean
   cuts?: number
   codec?: CertifiedCodec
+  copiedFrom?: 'composite' | 'single-generation'
 }): CertifiedExport {
   const { recording } = args
   return {
     app: 'inout',
     v: 1,
     path: args.path,
+    copiedFrom: args.copiedFrom,
     output: {
       width: args.settings.width,
       height: args.settings.height,

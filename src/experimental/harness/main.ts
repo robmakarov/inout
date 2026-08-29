@@ -571,6 +571,19 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'o3b',
+    title: 'O3b — single-generation export: is one 4:2:0 generation better than two, and what does skipping the second cost?',
+    detail:
+      'records TWO screen-only 1080p takes through the shipped capture session — one with the live composite, one with `?singlegen=capture` where it never starts — and exports the FIRST one twice, from the composite and from the raw channel, so the two copy sources are compared with nothing else different. Measures colour against the canvas the synthetic screen actually painted (R1’s hardened instrument), luma PSNR against the same canvas (colour alone cannot say "better": X6 measured the raw AVC lane undershooting its bitrate on screen content), export wall clock, and bytes written per second of take. Also proves a TRIMMED take still smart-cuts over the raw channel — without that the capture rung would quietly send every trim to the full render. `{"crops":true}` writes magnified before/after glyph crops.',
+    run: async (args) => {
+      const { runSingleGen } = await import('../perf/singleGen')
+      return runSingleGen({
+        takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined,
+        crops: typeof args?.crops === 'boolean' ? args.crops : undefined,
+      })
+    },
+  },
+  {
     id: 'x15c',
     title: 'X15(c) — does adding one trim change how a take’s TEXT looks? (BACKLOG P1)',
     detail:

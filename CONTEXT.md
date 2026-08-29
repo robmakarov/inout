@@ -204,11 +204,37 @@ blocks come back at 99–101 % of their colour while the same page's thin letter
 It is the letters, as claimed — which means full-colour-resolution recording will actually deliver
 what it promises here.
 
-**What can be done.** One fix is free: a screen-only recording does not need the combining step at
-all, so skipping it keeps 80 % instead of 70 % — less work, not more. That is an existing task (O3b)
-and it is ready to build. It does not help recordings that include the webcam, which must be
-combined. The rest needs full-colour-resolution recording, which on this machine only exists in
-software — roughly double the processor load. That is the trade below.
+**Half of it is fixed as of 2026-08-29, and the fix was to stop doing work.** A screen-only
+recording never needed the combining step: the combined picture is just the screen, re-compressed a
+second time. INOUT now hands you the *first* compression instead of the second. Same recording, one
+step removed.
+
+| a screen-only recording | green kept | blue kept | sharpness |
+|---|---|---|---|
+| before | 70 % | 75 % | 35.5 dB |
+| now | **80 %** | **89 %** | **37.3 dB** |
+
+It is also *faster* to export, because the file it hands you is one it did not have to build.
+
+**One thing you should know, because it is not free.** The download is **14–23 % larger**. The two
+files are compressed by different encoders at the same setting, and the one we now use spends more
+of it. The colour improvement is *not* what those bytes bought — that comes from removing a step, and
+we measured separately that tripling the data rate buys almost no colour back. But some of the
+sharpness improvement is the extra bytes. If you would rather have the smaller file, `?singlegen=off`
+puts it back for a load, and we can make that the default in one line.
+
+This only applies to a **screen-only** recording at full 1080p. A recording with your webcam in it
+still has to be combined, and so does a shared window that is not 1920×1080.
+
+**And there is a second, bigger saving we have built but left switched off.** If the combining step
+is not needed, we do not have to *run* it at all — which is a whole hardware video compressor that
+never starts, and **45–49 % less data written to disk per second of recording**. It is off because it
+would cost two things: INOUT would stop noticing when your screen freezes, and the live preview while
+recording would come from the raw camera/screen feed instead of the combined picture. Both are real,
+so that switch is yours: `?singlegen=capture` turns it on for one load.
+
+**The rest** needs full-colour-resolution recording, which on this machine only exists in software —
+roughly double the processor load. That is the trade below.
 
 **What is still true, and it is the useful half.** There *is* a compression mode that makes coloured
 text visibly crisper: it keeps colour at full resolution instead of quarter resolution, and it halves

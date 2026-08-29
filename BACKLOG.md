@@ -268,6 +268,23 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   is still owed — but it is owed on a build where the fix is actually in force, which no build before
   2026-08-26 was.
 
+- [P1] TD 2026-08-29, FOUND WHILE ATTRIBUTING A RED GATE THAT TURNED OUT NOT TO BE MINE:
+  **the v2 oracle fails about half its cold runs on main, and it has nothing to do with the change
+  under test.** The failure is always the same — `instant export sync maxAbs 97.1 > 90ms` or
+  `trimmed export sync maxAbs 105.5 > 90ms` — i.e. the COPY paths' worst A/V sample, not the mean,
+  and never the render. Measured by stashing a whole task's work and running HEAD cold four times:
+  **2 of 4 FAILED**, while the same tree with the work in it failed 1 of 2 and 1 of 3. Same failure,
+  same distribution.
+  WHY IT MATTERS MORE THAN THE NUMBER: `npm run oracle` is the per-task merge gate every task in
+  `.ai/TASKS` is required to pass, so a coin-flip gate teaches sessions to re-run until green — which
+  is how a real regression eventually gets merged. O4b already wrote down that the instrument's noise
+  floor is ~8-9 ms 1σ against a 90 ms band, and a maxAbs over four samples is the statistic most
+  exposed to that: a candidate explanation, not yet a measurement.
+  THE FIX IS NOT TO WIDEN THE BAND. Someone has to measure whether 97-105 ms is the instrument or the
+  copy paths: N cold runs recording the per-sample distribution, mean against max, and the same take
+  through the render beside it. Until then, do not report a red v2 oracle as a regression without
+  running HEAD cold next to it — and say which you did.
+
 - [P1] TD 2026-08-26, FOUND BY PO'S EYES on the X15 artifacts ("c shit is worse colors") and then
   measured: **coloured text loses about 30 % of its colour, all of it at capture, and the composite
   is responsible for a third of that.** Saturation kept against the canvas the source actually
@@ -282,11 +299,16 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   pair rows, the oracle's — compares a file with ANOTHER FILE. A loss that every path shares cancels
   to exactly zero in those. It is only visible against the source, which for a real take has to be
   reconstructed rather than captured. `chromaRows()` in perf/textSource.ts is that measurement now.
-  TWO LEVERS, one free and one not: **O3b** (READY) skips the composite on a single-screen take and
-  packet-copies the raw channel — 80 % instead of 70.3 %, for strictly less work, no CPU cost, and no
-  help for takes with a camera PiP. The rest needs **4:4:4 at capture**, which on this machine is
-  software only (AV1 profile 1: 80 fps at 1080p against 207, ~2x CPU — X15(b)). PO has the crops:
-  ~/Downloads/x15-text-truth/, c-00-SOURCE against c-01-instant.
+  ONE OF THE TWO LEVERS IS SHIPPED (O3b, 2026-08-29): a screen-only take at exactly the export
+  geometry now packet-copies the RAW CHANNEL, so the unedited export keeps **80.0 % green / 89.1 %
+  blue instead of 70.3 / 75.2** — and it is better on luma too (37.3 dB against 35.5 against the
+  source, fringe 8.66 against 10.24) and FASTER, because the file it copies is one we did not have to
+  make. It costs 14-23 % more download; the colour half of the win is structural and is NOT bought
+  with those bytes. `?singlegen=off` reverts. No help for a take with a camera, or for a window share
+  that is not 1920x1080 — both still composite. The rest needs **4:4:4 at capture**, which on this
+  machine is software only (AV1 profile 1: 80 fps at 1080p against 207, ~2x CPU — X15(b)). PO has the
+  crops: ~/Downloads/x15-text-truth/, c-00-SOURCE against c-01-instant; `npm run exp -- o3b
+  '{"crops":true}'` writes the new before/after pair.
   NOT A REGRESSION and not new — it is how every take this product has ever made behaves.
   THE ATTRIBUTION IS NOW CONTROLLED, NOT ASSUMED (R1, 2026-08-29). 4:2:0 subsampling and a YUV
   matrix/range round-trip drift leave the SAME fingerprint on this fixture — saturated glyphs fade,

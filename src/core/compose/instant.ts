@@ -1,13 +1,21 @@
 /**
  * Instant + certified export (the WebCodecs-v2 path 4637bca deferred).
  *
- * For an UNEDITED take the live composite already holds the exact default
- * composition (screen contain + camera PiP) as encoded H.264. So we COPY its
- * video packets straight into a fresh MP4 — no decode, no re-encode, near
- * instant — and mux them with an audio track mixed through the SAME certified
- * mixer the full render uses (openAudioChannel + mixGainForChannels +
- * softLimitSample). That gives back instant export without the composite's
- * uncertified MediaRecorder audio, which was the pervasive-noise cause.
+ * For an UNEDITED take some file on disk already holds the exact default
+ * composition as encoded H.264. So we COPY its video packets straight into a
+ * fresh MP4 — no decode, no re-encode, near instant — and mux them with an
+ * audio track mixed through the SAME certified mixer the full render uses
+ * (openAudioChannel + mixGainForChannels + softLimitSample). That gives back
+ * instant export without the composite's uncertified MediaRecorder audio,
+ * which was the pervasive-noise cause.
+ *
+ * WHICH file is compose/copySource.ts's decision, not this one's (task O3b).
+ * It is usually the live composite. On a take with exactly one video channel
+ * already at the export geometry it is that RAW CHANNEL instead — the same
+ * picture one 4:2:0 generation earlier, which X15(d) measured as about a third
+ * of the take's whole colour loss, for strictly less work. Everything below is
+ * identical either way: this path copies packets and certifies audio, and it
+ * has never cared where the packets came from.
  *
  * Any edit (trim / disabled channel / global trim) still falls through to the
  * full render in pipeline.ts — which this file deliberately does not touch, so
@@ -45,6 +53,7 @@ import {
   type AudioChannelMixer,
 } from './audio'
 import { AUDIO_BITRATE, AUDIO_CHANNEL_COUNT, AUDIO_SAMPLE_RATE, VIDEO_BITRATE } from './codecs'
+import { chooseCopySource, type CopySource } from './copySource'
 import { compositeOffsetMs } from './compositeTime'
 import { BitsAudit, formatBits } from './bits'
 import { buildCertification, certificationComment } from './certify'
@@ -104,26 +113,32 @@ function exportFileName(createdAt: number, ext: string): string {
 export interface InstantExportOptions {
   recording: Recording
   edit: EditState
+  /**
+   * The file to copy packets out of. The caller normally passes what
+   * compose/choose.ts already resolved, so the path it REPORTS and the path it
+   * RAN cannot disagree; omitted, this resolves it the same way.
+   */
+  source?: CopySource
   onProgress?: (p: ExportProgress) => void
   signal?: AbortSignal
 }
 
 /**
- * Precondition (caller-checked): `recording.composite` exists and `edit` is the
- * default edit. Throws on any incompatibility (no composite video track, no
- * audio encoder, empty blob) so the caller can fall back to the full render.
+ * Precondition (caller-checked): a copy source exists and `edit` is the
+ * default edit. Throws on any incompatibility (no video track, no audio
+ * encoder, empty blob) so the caller can fall back to the full render.
  */
 export async function exportInstant(opts: InstantExportOptions): Promise<ExportResult> {
   const { recording, edit, onProgress, signal } = opts
-  const composite = recording.composite
-  if (!composite) throw new Error('instant export: no composite')
-  // P0-tail: the composite's encoder was still behind when capture stopped, so
-  // this file is missing an unknown amount of its end. Copying it would ship a
-  // take that ends early — the exact thing PO named as unacceptable. The caller
-  // falls back to the full render from the raw channels: slower, and correct.
+  const source = opts.source ?? chooseCopySource(recording).source
+  if (!source) throw new Error('instant export: nothing to copy')
+  // P0-tail: the encoder was still behind when capture stopped, so this file is
+  // missing an unknown amount of its end. Copying it would ship a take that
+  // ends early — the exact thing PO named as unacceptable. The caller falls
+  // back to the full render from the raw channels: slower, and correct.
   // Same call the liveness work made for a frozen source.
-  if (composite.tailIncomplete) {
-    throw new Error('instant export: composite tail incomplete (encoder did not drain)')
+  if (source.tailIncomplete) {
+    throw new Error(`instant export: ${source.origin} tail incomplete (encoder did not drain)`)
   }
 
   const throwIfAborted = (): void => {
@@ -136,8 +151,8 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
   report('preparing', 0)
   throwIfAborted()
 
-  const compBlob = await blobStore.read(composite.blobKey)
-  if (compBlob.size === 0) throw new Error('instant export: composite blob empty')
+  const compBlob = await blobStore.read(source.blobKey)
+  if (compBlob.size === 0) throw new Error(`instant export: ${source.origin} blob empty`)
 
   const input = new Input({ source: new BlobSource(compBlob), formats: ALL_FORMATS })
   const audioMixers: AudioChannelMixer[] = []
@@ -150,23 +165,26 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
     fromCaptureStats: boolean
   } | null = null
   try {
-    // ---- video: copy the composite's encoded packets, no re-encode ----
+    // ---- video: copy the source's encoded packets, no re-encode ----
     const videoTrack = await input.getPrimaryVideoTrack()
-    if (!videoTrack) throw new Error('instant export: composite has no video track')
+    if (!videoTrack) throw new Error(`instant export: ${source.origin} has no video track`)
     const videoCodec = videoTrack.codec
-    if (!videoCodec) throw new Error('instant export: unknown composite video codec')
+    if (!videoCodec) throw new Error(`instant export: unknown ${source.origin} video codec`)
     const decoderConfig = await videoTrack.getDecoderConfig()
     const packetSink = new EncodedPacketSink(videoTrack)
 
     // ---- audio: certified mixers over the (default) edit window ----
     // P0-instant-sync: the audio is mixed from the RAW channels, whose clock is
-    // the recording timeline, and the composite's clock starts LATER than that.
-    // The output keeps the recording's timeline — same convention as the render,
-    // which is the file this one has to agree with — so the copied video is
-    // placed at its true instant and the output covers the take from 0.
-    const compOffsetMs = compositeOffsetMs(composite)
+    // the recording timeline, and the copied file's clock starts LATER than
+    // that — a composite's because it begins when its encoder does, a raw
+    // channel's because it begins at its own first frame. Both declare the
+    // difference the same way (copySource.startOffsetMs). The output keeps the
+    // recording's timeline — same convention as the render, which is the file
+    // this one has to agree with — so the copied video is placed at its true
+    // instant and the output covers the take from 0.
+    const compOffsetMs = compositeOffsetMs({ startOffsetMs: source.startOffsetMs })
     const compOffsetSec = compOffsetMs / 1000
-    const outDurationMs = composite.durationMs + compOffsetMs
+    const outDurationMs = source.durationMs + compOffsetMs
     const durationSec = outDurationMs / 1000
     const totalAudioFrames = Math.round(durationSec * AUDIO_SAMPLE_RATE)
     audioMixers.push(...(await openAudioMixers(recording, edit)))
@@ -235,7 +253,8 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
         buildCertification({
           recording,
           path: 'instant',
-          settings: { width: composite.width, height: composite.height },
+          copiedFrom: source.origin,
+          settings: { width: source.width, height: source.height },
           audioChannels: audioMixers.length,
           makeup: certified?.makeup,
           loudRms: certified?.loudRms,
@@ -245,8 +264,9 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
             container: format.mimeType,
             video: videoCodec,
             audio: needAudio && audioCodec ? audioCodec : undefined,
-            // The composite's GOP is MediaRecorder's to choose until O4's
-            // engine owns the capture encoder — recorded as absent, not as 2 s.
+            // The GOP belongs to whichever encoder wrote the copied file —
+            // MediaRecorder's to choose on a v1 composite — so it is recorded
+            // as absent rather than asserted as 2 s.
           },
         }),
       ),
@@ -275,7 +295,7 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
     for await (const packet of packetSink.packets()) {
       throwIfAborted()
       // Bytes untouched — only the presentation time moves, and only when the
-      // composite declared an origin (old takes keep the exact packets they
+      // source declared an origin (old takes keep the exact packets they
       // always got, including their offset; nothing can recover their origin).
       const placed =
         compOffsetSec > 0
@@ -323,7 +343,9 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
 
     report('finalizing', 0.97)
     await out.finalize()
-    console.info(formatBits(bits.summarize(durationSec), `instant copy ${videoCodec}`))
+    console.info(
+      formatBits(bits.summarize(durationSec), `instant copy ${videoCodec} from ${source.origin}`),
+    )
     let blob: Blob
     if (scratch) {
       blob = await scratch.finish(format.mimeType)
@@ -339,8 +361,8 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
       mimeType: format.mimeType,
       fileName: exportFileName(recording.createdAt, format.fileExtension),
       durationMs: outDurationMs,
-      width: composite.width,
-      height: composite.height,
+      width: source.width,
+      height: source.height,
     }
   } catch (err) {
     if (output && output.state !== 'finalized' && output.state !== 'canceled') {

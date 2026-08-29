@@ -75,6 +75,7 @@ import { AUDIO_BITRATE, AUDIO_CHANNEL_COUNT, AUDIO_SAMPLE_RATE, VIDEO_BITRATE } 
 import { BitsAudit, formatBits } from './bits'
 import { buildCertification, certificationComment } from './certify'
 import { compositeOffsetMs, recordingToCompositeSec } from './compositeTime'
+import { chooseCopySource, type CopySource } from './copySource'
 import { createExportScratch, type ExportScratch } from './scratch'
 
 /** Half-width of the fade at every cut join — identical to the render (F1). */
@@ -221,6 +222,12 @@ class BoundaryEncoder {
 export interface SmartCutOptions {
   recording: Recording
   edit: EditState
+  /**
+   * The file to copy spans out of (task O3b). Normally what compose/choose.ts
+   * already resolved, so the path it REPORTS and the path it RAN cannot
+   * disagree; omitted, this resolves it the same way.
+   */
+  source?: CopySource
   onProgress?: (p: ExportProgress) => void
   signal?: AbortSignal
 }
@@ -242,23 +249,29 @@ export function getLastSmartCutStats(): SmartCutStats | null {
 }
 
 /**
- * Export a cut/trimmed take by copying the composite's packets wherever the
+ * Export a cut/trimmed take by copying the copy source's packets wherever the
  * edit did not change the pixels. Throws SmartCutUnavailable whenever anything
  * is not exactly right, so the caller falls back to the certified render.
+ *
+ * O3b: the source is usually the composite and may be a single raw channel
+ * that already holds the default composition. Nothing below changes — the
+ * boundary splice's whole safety argument is that the copied packets and the
+ * re-encoded ones came from encoders whose parameter sets match, and that is a
+ * property of the WRITER, which the source declares.
  */
 export async function exportSmartCut(opts: SmartCutOptions): Promise<ExportResult> {
   const { recording, edit, onProgress, signal } = opts
-  const composite = recording.composite
-  if (!composite) throw new SmartCutUnavailable('no composite')
-  if (composite.tailIncomplete) throw new SmartCutUnavailable('composite tail incomplete')
-  // A BOUNDARY SPLICE NEEDS AN ENCODER WE OWN. v1's composite comes from
+  const composite = opts.source ?? chooseCopySource(recording).source
+  if (!composite) throw new SmartCutUnavailable('nothing to copy')
+  if (composite.tailIncomplete) throw new SmartCutUnavailable(`${composite.origin} tail incomplete`)
+  // A BOUNDARY SPLICE NEEDS AN ENCODER WE OWN. A v1 composite comes from
   // MediaRecorder, whose avcC we cannot reproduce, so the byte-for-byte
   // description check below would refuse it after decoding and encoding a
   // GOP's worth of frames for nothing — measured on the v1 oracle:
   // "boundary encoder produced a different decoder description". Refuse here
   // instead, cheaply and with a reason that says what actually happened.
-  if (composite.engine === 'v1') {
-    throw new SmartCutUnavailable('composite was recorded by MediaRecorder (v1) — its decoder description is not ours to match')
+  if (composite.writer === 'mediarecorder') {
+    throw new SmartCutUnavailable(`the ${composite.origin} was recorded by MediaRecorder — its decoder description is not ours to match`)
   }
   if (!isPixelDefaultEdit(recording, edit)) throw new SmartCutUnavailable('edit changes pixels')
 
@@ -271,7 +284,7 @@ export async function exportSmartCut(opts: SmartCutOptions): Promise<ExportResul
 
   report('preparing', 0)
   const compBlob = await blobStore.read(composite.blobKey)
-  if (compBlob.size === 0) throw new SmartCutUnavailable('composite blob empty')
+  if (compBlob.size === 0) throw new SmartCutUnavailable(`${composite.origin} blob empty`)
 
   const input = new Input({ source: new BlobSource(compBlob), formats: ALL_FORMATS })
   const audioMixers: MixSource[] = []
@@ -289,23 +302,23 @@ export async function exportSmartCut(opts: SmartCutOptions): Promise<ExportResul
 
   try {
     const videoTrack: InputVideoTrack | null = await input.getPrimaryVideoTrack()
-    if (!videoTrack) throw new SmartCutUnavailable('composite has no video track')
+    if (!videoTrack) throw new SmartCutUnavailable(`${composite.origin} has no video track`)
     const videoCodec = videoTrack.codec
-    if (!videoCodec) throw new SmartCutUnavailable('unknown composite video codec')
+    if (!videoCodec) throw new SmartCutUnavailable(`unknown ${composite.origin} video codec`)
     const decoderConfig = await videoTrack.getDecoderConfig()
-    if (!decoderConfig) throw new SmartCutUnavailable('composite has no decoder config')
+    if (!decoderConfig) throw new SmartCutUnavailable(`${composite.origin} has no decoder config`)
     // Only in-band-parameterless codecs where we can compare descriptions are
-    // in scope. avc is what the composite is, by O11d's standing decision.
-    if (videoCodec !== 'avc') throw new SmartCutUnavailable(`composite codec ${videoCodec} not supported`)
+    // in scope. avc is what both copy sources are, by O11d's standing decision.
+    if (videoCodec !== 'avc') throw new SmartCutUnavailable(`${composite.origin} codec ${videoCodec} not supported`)
 
     const packetSink = new EncodedPacketSink(videoTrack)
     const frameSink = new VideoSampleSink(videoTrack)
     const width = composite.width
     const height = composite.height
-    // P0-instant-sync: smart cut copies the same composite the instant path
-    // does, so it inherited the same wrong assumption — that composite time is
+    // P0-instant-sync: smart cut copies the same file the instant path does, so
+    // it inherited the same wrong assumption — that the copied file's time is
     // recording time. It is not; the file declares where its zero sits.
-    const compOffsetMs = compositeOffsetMs(composite)
+    const compOffsetMs = compositeOffsetMs({ startOffsetMs: composite.startOffsetMs })
 
     // ---- audio: the certified mix over the edited window, exactly as the
     // render builds it (openAudioMixers already understands kept spans) ----
@@ -389,6 +402,7 @@ export async function exportSmartCut(opts: SmartCutOptions): Promise<ExportResul
         buildCertification({
           recording,
           path: 'render',
+          copiedFrom: composite.origin,
           settings: { width, height },
           audioChannels: audioMixers.length,
           makeup: certified?.makeup,
