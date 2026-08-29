@@ -39,6 +39,18 @@ FOURTEENTH SESSION (PO: "go X15"): X15 DONE, all three lanes, no default moved. 
 question X6's ruling was waiting on and REFUTED O9's headline, which the map had been treating as
 settled fact — see the amended X6/O9/X5 lines below. X15 leaves READY; X13 loses its "after X15"
 dependency.
+FIFTEENTH SESSION (PO: "go R1"): R1 DONE — all 15 findings of the chroma-rig review, one step. The
+instrument that measured the colour loss can no longer report a score for a measurement it did not
+take: missing data reads MISSING and FAILS both chroma gates, a drifted palette reads MASK EMPTY, an
+out-of-bounds rect throws instead of counting the overrun as mask hits, and three drills prove it in
+one command each. THE COMMITTED NUMBERS ALL HELD — the reference is now built through the wire's own
+canvas context (the fix most likely to move them) and reproduced the tables bit-identically, so
+nothing was re-anchored. ONE NEW RESULT: a matched flat-slab/thin-glyph control pair separates 4:2:0
+subsampling from a YUV matrix/range drift, which this fixture could not do before and which the whole
+4:4:4 case rested on — slabs keep 99-101 %, the same page's glyphs 80-82 %. The mechanism is what
+O9/X15(b) said it is, and 4:4:4 will deliver. Two chroma gates changed verdict ON PURPOSE (one was
+unreachable-red at >= 90 % against a 70.3 % chain, one cherry-picked the colour the render loses);
+both are explained in the handoff. R1 leaves READY and unblocks nothing new.
 
 SHIPPED THIS SESSION
   · X9   the For-AI build runs in a worker. Byte-identical PDF on four lanes; the UI thread loses
@@ -115,9 +127,11 @@ NOT STARTED, and deliberately: O10(b) multitrack · O10(c) spectral gating · O1
 O9(c) near-lossless static spans (its premise is refuted by O9's own table — 3× the bits bought 4 %) ·
 F6's RETAKE (a resume of a FINISHED recording: recovery, editsRepo and editor state, its own task).
 
-FULL SWEEP, 2026-08-26 (fourteenth session, X15): 458 tests · typecheck clean · all three X15 lanes
-re-runnable in one command each. X15 is MEASUREMENT ONLY and touches no path the oracle guards — the
-one production edit is a harness-only synthetic-screen knob, default unchanged.
+FULL SWEEP, 2026-08-29 (fifteenth session, R1): 464 tests · typecheck clean · x15c twice with the
+chroma chain identical run to run and equal to the committed baselines · all three self-drills as
+specified · `npm run oracle` PASS (v2) AND `--engine=v1` PASS AND `npm run exp -- armcancel` green,
+which is the evidence that R1's two capture/* edits are additive: one exported palette constant and
+one harness-only reference builder, with drawTextScreen painting the identical hex strings.
 
 START HERE IF YOU ARE FRESH:
   1. read notes 5, 6, 9, 10, 11, 17 below. Note 10 (the rig is wrong before the product is) and
@@ -168,14 +182,6 @@ READY NOW:
                                              so cuts never land on speech. Spec below.
   F12  super-resolution on zoom    [heavy]   PO 2026-08-26: "only if zoom used". Render path only,
                                              zoomed spans only, opt-in. Spec below.
-  R1   x15 chroma-rig hardening    [medium]  PO 2026-08-29: fix ALL 15 findings of the 094b13d
-                                             code review as ONE step. The instrument that measured
-                                             the colour loss can lie silently (a gate that reads
-                                             green on missing data, an OOB mask that NaNs, a
-                                             reference drawn with different context options than
-                                             the wire) and one CONTEXT.md line still retracts the
-                                             headline finding. Rig + docs only; production surface
-                                             is one additive export. Spec below.
 
 NEW TASKS (TD-authored 2026-08-26 from PO's answers; all operating rules apply):
 
@@ -244,7 +250,8 @@ GATES: un-zoomed takes and SR-off exports byte-identical to today · A/B crops a
 ~/Downloads — PO judges by eye · per-frame cost measured, export estimate includes it · no WebGPU →
 today's scaler, silently · oracle green.
 
-## R1 x15-chroma-rig-hardening [medium · TD-authored 2026-08-29, PO: "make fix all of them as one step"]
+## R1 x15-chroma-rig-hardening — DONE 2026-08-29, all 15 fixed (handoff at the end of this task)
+[medium · TD-authored 2026-08-29, PO: "make fix all of them as one step"]
 ALL 15 findings of the 094b13d code review, one task. The chroma rig is now the evidence for O3b
 and the 4:4:4 decision, so its failure modes ARE the task. Everything lives in
 src/experimental/perf/{trimTextParity,textSource}.ts unless a path is named. Line numbers are
@@ -308,6 +315,106 @@ them — say which) · missing-data drill: point one stage at a dead blobKey →
 missing/skipped and the report SURVIVES · palette-drift drill: perturb one palette entry by +8 →
 the run says MASK EMPTY, not "0 % kept" · flat-patch control present in the report · no capture/*
 behaviour change, oracle untouched.
+
+## R1 HANDOFF — DONE 2026-08-29, all 15 fixed, every gate met. ALL NUMBERS HELD.
+THE HEADLINE: fix 3 did NOT move the committed baselines. The reference is now rasterized through
+capture/synthetic.ts's OWN context factory (get2d, alpha:true) instead of a private {alpha:false}
+canvas, and the chain reproduced BIT-IDENTICALLY across two runs: raw screen 79.7/80.0/89.1 ·
+composite and instant and smartcut 71.6/70.3/75.2 · render 75.7-78.4/67.0-67.3/78.3-78.7 (grey/
+green/blue). So the tables in TASKS, BACKLOG and CONTEXT stand as written; nothing was re-anchored.
+The alpha attribute was a real hazard and it was not firing.
+
+THE ONE NEW FINDING, and it is fix 8's whole reason: THE ATTRIBUTION IS NOW CONTROLLED. 4:2:0 and a
+YUV matrix/range round-trip drift are indistinguishable on this fixture — both fade saturated glyphs
+and leave grey — so every stage in the table above was consistent with either, and O9/X15(b)'s 4:4:4
+case rested on it being the first. New matched control pair, same palette, ONE identical AVC 4:2:0
+encode:
+    C1 flat slabs      grey 98.6 %  green 101.1 %  blue  99.8 %   nothing to subsample away
+    C2 thin glyphs     grey 71.6 %  green  79.8 %  blue  82.1 %   the same page, same encoder
+Subsampling on thin glyphs is the mechanism, as claimed. 4:4:4 will deliver.
+(C2 also prices ONE standalone encode of the source page at green 79.8 %, against the raw capture
+channel's 80.0 % — the capture encode costs what a generic 4:2:0 encode costs, no more.)
+
+WHAT EACH FIX CHANGED, and the two that changed a VERDICT are marked:
+ 1. ChromaRow carries `key: 'grey'|'green'|'blue'`; the gates look up by key, never by the padded
+    display label they used to `startsWith`. Undecodable / non-1:1 / missing-blob stages push a
+    SKIPPED stage with a reason instead of `continue`. BOTH chroma gates now FAIL loudly on missing
+    data through one shared `missingOf()`; they used to disagree (one passed on null, one read null
+    as total loss).
+ 2. `chromaMask()` asserts the rect is inside the source and `chromaRows()` asserts the decoded
+    frame is 1:1 with it — both throw with the numbers, and the caller turns that into a SKIPPED
+    row. The chroma rect is derived from W x H (the reference), not from the instant reader. Unit
+    tests pin the old OOB-counts-as-hit and sheared-stride behaviours (chromaMask.test.ts, 6 tests).
+ 3. reference through `textScreenReference()` in synthetic.ts — the wire's own get2d. NUMBERS HELD.
+ 4. VERDICT CHANGED: the "chain keeps colour" gate was `>= 90` against a chain that measures 70.3
+    and whose best proposed future is O3b's 80 — unreachable by construction, permanently red. It
+    is now a REGRESSION gate against a committed baseline (green 70.3 / blue 75.2, ±2 pts), and it
+    PASSES today. The ~30 % loss stays stated in the detail as the standing BACKLOG P1 finding.
+    Move CHROMA_BASELINE in the same commit as the doc tables when the chain legitimately improves.
+ 5. per-pair and per-stage catch. Proven by the dead-composite-blob drill: stage 2 reads MISSING and
+    every other stage, pair row and gate in the report survives. It used to throw the whole report.
+ 6. VERDICT CHANGED: the fast-path gate was green-only at a 1 pt margin — tighter than the rig's own
+    ~2 pt variance, and green is the colour the render LOSES. Min over the coloured rows at 2 pts:
+    green +3.0, blue -3.3/-3.5 → the gate now FAILS, correctly. That is X15(d)'s settled "it is a
+    wash", said out loud instead of cherry-picked. It goes green when O3b lands. The detail says so
+    in full, so nobody reads it as a new regression.
+ 7. the composite's `rd.width === W` guard only ever checked the compositor's HARDCODED 1920x1080
+    container and could not fail. It now also requires the SCREEN TRACK to be W x H, so the
+    contain-fit is provably the identity; otherwise SKIPPED, because the stage would be measuring
+    the scaler.
+ 8. the flat/thin control pair above (C1/C2), plus its own gate.
+ 9. every row carries `saturationDeltaPts` (decoded − source, absolute). Grey's "barely moves" is
+    now argued at -2.1 pts against green -13.5 / blue -13.0, instead of through a ratio whose
+    denominator is a 7.4 % source saturation and turns ±1 LSB into ±6 points. Its own gate asserts
+    |grey| < 0.5 × min(|green|,|blue|).
+10. ONE palette, exported from capture/synthetic.ts beside drawTextScreen (TEXT_SCREEN_PALETTE +
+    glyphColour). All five copies now derive from it: synthetic's own painter, textSource's LINES
+    and its decimal PAGE_COLOURS, bitsAudit, aiExport. Additive export, zero behaviour change —
+    drawTextScreen paints the identical hex strings, and the oracle agrees (below).
+11. `experimental/rigWarm.ts`. Eleven cold rigs now warm before they open a session: armCancel,
+    backgroundFrame, cameraMove, captureLoudness, compositeWedge, pauseTake, qualityTiers, rawTail,
+    smartCutRun, zoomPan, recovery/run. The three that already warmed (trimTextParity, rawCodecTake,
+    chromaPrice, loadedSync) route through the same helper. NOT inside createCaptureSession — that
+    is production capture and needs PO. Spot-checked: armcancel green (reject 132 ms, arm 331 ms,
+    4 channels), f3 3/3 PASS.
+12. per-colour index lists built once from the reference; the mask was being recomputed 18x
+    (6 stages x 3 colours) for something that depends only on constants.
+13. sampledAtSec[0] decoded ONCE per reader and shared by the chroma row, the crop and the thumb —
+    it was up to 3 decodes each, every one re-seeking from the keyframe. The crop PO looks at and
+    the number printed beside it are now the same frame by construction. (Also: the crop labels
+    used `id === 'instant' ? 1 : 2`, which labelled smartcut and render both `c-02`.)
+14. the dead second `getContext('2d', {willReadFrequently:true})` is gone with fix 3 — one call,
+    and repeat-call attributes are ignored per spec so it never applied anyway.
+15. CONTEXT.md ~120: the retraction is scoped to SHARPNESS ("capture throws away half of every
+    letter's edge contrast" — retracted) and now points at the colour finding as real and separate,
+    instead of verbatim retracting the headline the section 40 lines below asserts.
+
+DRILLS — all three are options on the rig, so they are re-runnable in one command:
+  `npm run exp -- x15c '{"drill":"dead-composite-blob"}'`  → 2-composite SKIPPED "MISSING — blobStore
+     has no …-R1-DRILL-DEAD", every other stage and gate intact, report produced.
+  `npm run exp -- x15c '{"drill":"dead-instant-export"}'`  → 3-export-instant SKIPPED (mediabunny
+     RangeError, caught), and BOTH chroma gates read "NOT MEASURED — … A missing measurement is a
+     FAILED gate here, never a quiet pass" and FAIL. Report produced.
+  `npm run exp -- x15c '{"drill":"palette-drift"}'`        → green reads MASK EMPTY with keptPct null
+     on EVERY stage, never "0 % kept"; all four chroma gates FAIL naming it.
+
+GATES MET: typecheck clean · 464 tests (was 458; +6 for the instrument) · x15c twice, chroma
+identical run to run and equal to the committed baselines · all three drills as above · flat-patch
+control in the report · `npm run oracle` PASS (v2, sync 34.6 ms) AND `--engine=v1` PASS (sync
+51.0/64.3 ms) · `npm run exp -- armcancel` green · f3 3/3 PASS.
+
+TWO THINGS FOUND, NOT CHASED (both outside R1's 15, both for TD to triage):
+  (a) THE PiP PLACEMENT NUMBER IN X15(c) IS STALE. That entry records the render placing the camera
+      PiP 14-15 frames from the instant path at 23.6 dB. Two runs today read -1 and -2 frames at
+      29.5 and 28.0 dB. Nothing in R1 touches placement (the anchor frame is the identical decode),
+      so something in the product improved it between 08-26 and today. Worth one look before that
+      BACKLOG P2 line is quoted again.
+  (b) AND THAT MAKES THE ALIGNMENT GATE FLIP. Its bar is |align| <= 1 frame; today's takes sit at
+      1-2, so the gate passed on run 1 and failed on run 2 of the same build. A gate whose verdict
+      depends on take jitter is note 17's problem in the other direction. I did NOT move the bar —
+      moving a gate to make it green is the thing this codebase pays for — so it is reported here
+      instead. Fixing it properly means deciding whether 1-2 frames of PiP placement is acceptable,
+      which is (a)'s question.
 
 BLOCKED ON HARDWARE OR A DOWNLOAD, unchanged:
   P1   firefox + 3-engine oracle   [medium]  code half shipped 2026-08-23. What is left needs
@@ -423,6 +530,12 @@ delivered file stays constant-frame-rate.
    warms before measuring ({"cold":true} measures the transient on purpose); the watchdog clock
    starts at first output (capture/compositorWatchdog.ts). Anything touching capture/* keeps BOTH
    engines green: `npm run oracle` (v2 by default) AND `node scripts/oracle.mjs --engine=v1`.
+   AND THE WARM IS ONE FUNCTION NOW, `experimental/rigWarm.ts` (R1, 2026-08-29). It had been pasted
+   into two rigs while ELEVEN others that call createCaptureSession were still cold, each able to
+   reinvent the mirage independently — X15(c) did, and read 200 of 283 raw frames DROPPED on the
+   newly-default WebCodecs path, which looks exactly like a throughput regression and is not one.
+   Every rig that opens a session calls it first. It does NOT go inside createCaptureSession: that
+   is production capture, prearm already covers every real user, and moving it needs PO.
 7. THE EDIT IS PERSISTED NOW (F4, editsRepo, IndexedDB v2). Before that a refresh silently threw away
    every trim and cut while faithfully restoring the recording. If you add a field to EditState, it is
    automatically persisted — make sure it survives a round trip through structured clone.
@@ -462,6 +575,19 @@ delivered file stays constant-frame-rate.
        differ; only a picture says how.
      · AN ALIGNMENT SEARCH ON STILL CONTENT IS ILL-CONDITIONED and will saturate at its own span
        edge while looking like a measurement. Localise on a region that MOVES, or do not localise.
+   A TENTH INSTANCE, FOUND BY REVIEW RATHER THAN BY A WRONG NUMBER (R1, 2026-08-29), and that is the
+   new part: the chroma rig was measuring correctly and could have stopped at any moment WITHOUT
+   SAYING SO. An out-of-bounds mask counted the overrun as HITS (undefined fails every tolerance
+   test, then sums to NaN); an empty mask reported "0 % kept", which is a fabricated total colour
+   loss; a stage that failed to decode vanished on a bare `continue` and both chroma gates read the
+   absence as their own answer; one rejected `at()` threw the entire report away. None of it had
+   fired yet. THE RULE: A MEASUREMENT THAT DID NOT HAPPEN MUST BE REPRESENTABLE, and it must not be
+   representable as a score — MISSING, SKIPPED and MASK EMPTY are values, `null` is not a number,
+   and every gate has to decide what they mean before it decides what a number means. The way to
+   prove that is to POINT THE RIG AT ITS OWN BLIND SPOTS AND SHIP THE DRILLS: x15c now takes
+   `{"drill":"dead-composite-blob"|"dead-instant-export"|"palette-drift"}`, one command each.
+   And its palette lives in ONE place (capture/synthetic.ts) because it lived in five, and a mask
+   that has drifted from the painter measures nothing while looking like a P1.
 11. THE ONE-BRANCH-PER-TASK RULE COLLIDES WITH THE AUTO-COMMIT HOOK. A Stop hook runs
    `git add -A && git commit && git push origin HEAD:main` after every turn, so work is on main
    before a session can open its own branch, and a branch left checked out at the end would be pushed
@@ -570,6 +696,19 @@ delivered file stays constant-frame-rate.
          measurable form of "with a 30-min take" turned out to be FLATNESS across lengths, because
          the design's claim is that cost does not depend on length at all — and that is testable in
          two minutes where a 30-minute fixture is not.
+     (e) THE BORN-RED GATE, and it is (c)'s exact twin (R1, 2026-08-29). X15(c) shipped
+         "the shipped chain keeps the colour of coloured text: instant >= 90 %" against a chain that
+         measures 70.3 % and whose best PROPOSED future — O3b, already on the map — is 80 %. It could
+         not pass, in this world or in the intended one, and it had been quoted as a live FAIL. It is
+         a REGRESSION gate now (>= the committed baseline − the rig's own stated run variance), with
+         the absolute loss stated in the detail where it belongs: the loss is a FINDING for PO to
+         spend CPU on, not an alarm to re-fire every run. THE TEST BEFORE WRITING A BAND IS NOW TWO
+         QUESTIONS: what number would fail it, AND what number would pass it — and if the passing
+         case is one the roadmap does not contain, the gate is measuring a wish.
+         ITS SIBLING IN THE SAME REVIEW went the other way: "the fast path is not the worst-coloured
+         file" compared GREEN alone at a 1 pt margin, tighter than the rig's own ~2 pt run variance,
+         and green is the one colour the render loses. Min over the coloured rows at 2 pts, and it
+         correctly FAILS — a gate whose scope was chosen, however unconsciously, to make it pass.
 
 12. THE UI RIG SERVES dist/, AND DOES NOT BUILD IT. `scripts/ui-shot.mjs` runs `vite preview`, so a
    flow that "does not work" may simply be yesterday's bundle. Run `npm run build` first. The same
