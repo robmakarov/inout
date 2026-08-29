@@ -301,7 +301,11 @@ READY NOW:
                                              which bounds F18's own cost worry: the colour half
                                              does not need 3024, it needs ~1.5x what is watched.
                                              ONE SPIKE GATES WHETHER THIS IS FREE — T1 below.
-  O15  how many encoders may a     [heavy]   THE FREEZE'S ROOT, read off his own console: three
+  O15  how many encoders may a take open — BUILT AND VERIFIED ON PROD 2026-08-29, flag-gated
+       (handoff under the task). The plan now PRINTS on every take with or without the flag, and the
+       budget is EARNED from this machine's own history rather than assumed from a constant. Its
+       closing gate is Robert's: his take, his machine, with a game running.
+  O15 (original entry)             [heavy]   THE FREEZE'S ROOT, read off his own console: three
        take open                             hardware AVC encoders with nothing budgeting them,
                                              plus a game on the same GPU. The capture ceiling is
                                              doing the work a budget should do.
@@ -1288,6 +1292,87 @@ the composite the raw channel's frames instead of a second decode · make single
 for screen+camera by compositing at the raw channel's own geometry.
 GATES: his own take, his machine, with a game running · no take opens more encoders than it does
 today · the instant export still fires wherever it fires today · oracle:load both phases.
+
+## O15 HANDOFF — BUILT AND VERIFIED ON PROD 2026-08-29 (twentieth session). SHIPPED FLAG-GATED, OFF.
+THE SEAM IS `src/core/capture/encoderBudget.ts` plus three hooks in session.ts. Two halves, and the
+first one runs unconditionally.
+
+HALF ONE — THE PLAN, WHICH DID NOT EXIST IN ANY FORM. How many encoders a take opens was EMERGENT:
+armChannel opens one per raw video channel, startComposite opens another, and nothing added them up.
+Robert's freeze had to be reconstructed by hand from three separate log lines after the machine came
+back. Now one line prints at arm time, before any encoder exists, asked from the same settled facts
+singleGenerationTake and compositeFrame are asked from — including the composite's ABSENCE when
+single generation is going to skip it. VERIFIED ON PROD, build 05f43e4:
+  [capture] encoder plan — 3 encoder(s): camera 640x480@30 + screen 2560x1440@30 +
+  composite 1920x1080@30 = 182.0 Mpx/s (this machine has never been seen to collapse, so there is
+  no budget to be over)
+
+HALF TWO — THE BUDGET, AND IT IS EARNED. THIS FILE WOULD BE WRONG AS A CONSTANT and the refutation
+was already in the tree: core/rate.ts tried one four commits earlier (2560x1440x60, "the largest
+configuration measured to sustain 60 on one machine on one evening") and it held Robert's own
+2560x1662 screen at 30 — the exact thing he had just said must work. Its verdict is this file's
+rule: A CONSTANT FROM ONE MACHINE CANNOT DECIDE WHAT EVERY MACHINE MAY ATTEMPT.
+But rate.ts's own answer — the ladder decides from measurement while the take runs — cannot cover
+THIS failure, which is precisely why O15 was written as a separate task: the collapse is instant and
+unrecoverable, and his machine froze past the point where a page could act. So:
+  · a take that ran to the end with nothing degrading RAISES `sustained`;
+  · a rate-ladder step down, or the composite giving up, LOWERS `collapsed`;
+  · NO COLLAPSE EVER RECORDED = NO BUDGET AT ALL. This is the safety property and it has its own
+    test: nobody's first take is bounded by someone else's hardware, which is what makes the
+    measuring half safe to leave running for everyone;
+  · a take that WORKED outranks an older one that did not, so a machine whose collapse was a passing
+    game is never held below its own proven best (the same rule W1 put in the wedge ladder tonight).
+
+MEASURE ALWAYS, ACT ONLY BEHIND THE FLAG (`?encoderbudget=1`, sticky `inout.capture.encoderbudget`,
+OFF). Recording an outcome costs nothing and changes nothing, so it runs unconditionally — which
+means the day the flag flips, the machine already knows its numbers instead of needing one more
+freeze to find them. VERIFIED ON PROD: a clean 19 s three-encoder take wrote
+`{"sustained":182016000,"collapsed":0,"collapses":0}` — the plan's own rate, and still no ceiling.
+
+WHAT THE REDUCTION IS ALLOWED TO BE: the SCREEN's size, in arm(), downwards only. arm() is the last
+moment that can work — `start()` is synchronous by law (instant record start) and configures every
+encoder inside itself. It opens no new encoders (the gate, met by construction), costs no editing
+capability (every channel is still recorded), and never fires mid-take, so captureLadder's rule 1,
+NEVER CHANGE THE SIZE, is untouched. Its FIRST choice is to snap the screen to the composite's own
+geometry: that cuts the raw encoder AND can make the take single-generation eligible, i.e. one whole
+encoder gone rather than a smaller one — O15's own candidate "make single generation reachable by
+compositing at the raw channel's own geometry", reached from the other end. VERIFIED ON PROD with a
+planted collapse at 170 Mpx/s:
+  [capture] encoder plan — ... = 182.0 Mpx/s against this machine's own 144.5 Mpx/s budget
+  [capture] encoder budget: screen 2560x1440 → 1920x1080 before any encoder opened — snapped to the
+  composite's own 1920 long edge, which the plan fits under. New plan: 3 encoder(s):
+  camera 640x480@30 + screen 1920x1080@30 + composite 1920x1080@30 = 133.6 Mpx/s (O15)
+182.0 → 133.6 Mpx/s, a 27 % cut, decided before anything opened.
+
+NOT DONE, AND DELIBERATELY: dropping a raw channel outright, or forcing single generation under
+budget pressure. Each costs a capability the editor has today and each is Robert's to rule on. The
+plan makes what they would save readable; it does not take them.
+
+DOCS: FLAGS.md WAS STALE ON NATIVE RESOLUTION and is corrected here. It still described the flag as
+off after the 08-29 freeze; 29b1a91 put it back ON the same evening on Robert's "i need native
+resolution and 60 fps work, and not freezing, no turning it off". That sentence is this whole task,
+and it mattered that the file said the opposite: native res IS on, so three encoders on a 1440p+
+screen is what ships today, unbudgeted, right now.
+
+GATES. 629 tests (13 new), typecheck clean · `npm run oracle` (v2) PASS: sync 46.7/46.7 ms against
+the 90 ms band, instant 53.1 ms, smartcut 47.4 ms, tail 78 ms, export 3.78x · `verify-deploy` OK on
+05f43e4 · both prod repros above.
+THE v1 ORACLE FAILED AND IT IS NOT THIS CHANGE — measured, not argued. `export throughput 0.67x < 1x
+realtime`. Clean main, run COLD in a throwaway worktree under the SAME ambient load, read 0.77x and
+failed identically; the same band read 1.08x on an idle machine an hour earlier (the W1 run).
+Load average was 8.8. Every SYNC band — the thing a capture change could actually break — passes
+comfortably on both sides: v2 46.7, v1 33.8, base 42.2/68.9 against 90. Filed under G1 in BACKLOG as
+a SECOND flaky band with its own signature, and note 4b's sentence about the take a user records
+beside a game turns out to apply to the GATE itself.
+`oracle:load` IS OWED AND BLOCKED ON G2 — with a new, specific reason found by going to run it:
+G2's own prescribed first move ("re-run it --headed") IS NOT RUNNABLE. `scripts/oracle-load.mjs`
+builds exp.mjs's argv as a hardcoded literal in both spawns and forwards no flags at all, so
+`npm run oracle:load --headed` runs headless exactly as before. Recorded under G2 in BACKLOG; every
+task whose gate list names oracle:load is blocked on G2, not on itself. With the flag OFF this change
+alters no capture behaviour, so there is nothing on the default path for that gate to catch.
+THE CLOSING GATE IS ROBERT'S and always was: his take, his machine, with a game running. What he
+should see in the console is the plan line — and, with `?encoderbudget=1` after any collapse, the
+budget line above it.
 
 ## O16 a resolution step a raw channel can follow — AUTHORED 2026-08-29 from Robert:
 ##     "why resolution cannot go safely, make it go up safely too"
