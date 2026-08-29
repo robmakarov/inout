@@ -84,29 +84,48 @@ function qpOf(config: VideoEncoderConfig): number | null {
 }
 
 /**
- * Does this browser honour quantizer mode at all? Chrome does for AVC; a
- * browser that does not must fall back to the bitrate path rather than produce
- * a file at some unrelated quality, so this is PROBED and not assumed.
+ * AVC profiles to try, in the order the live compositor tries them and for the
+ * same reason: a profile nobody can encode in HARDWARE is not a better file,
+ * it is a slower one. Baseline first, High last.
  */
-export async function constantQualitySupported(
+const AVC_CANDIDATES = ['avc1.42E01E', 'avc1.4D402A', 'avc1.640028'] as const
+
+/**
+ * The exact codec string to encode this size at in quantizer mode, or null if
+ * this browser will not.
+ *
+ * IT RETURNS THE STRING AND THE CALLER PINS IT (`fullCodecString`), because a
+ * probe of one profile says nothing about another and the first version of this
+ * got exactly that wrong: it hardcoded Baseline, which this machine cannot
+ * encode at 1080p AT ALL — not in quantizer mode, not in any mode — so the
+ * feature reported itself unsupported on hardware that supports it fine at
+ * Main and High. Probing a string the encode then might not use is the same bug
+ * with a longer fuse, so the probe's answer IS the string that gets used.
+ */
+export async function constantQualityCodec(
   codec: VideoCodec,
   width: number,
   height: number,
-): Promise<boolean> {
-  if (typeof VideoEncoder === 'undefined') return false
-  if (codec !== 'avc') return false
-  try {
-    const support = await VideoEncoder.isConfigSupported({
-      codec: 'avc1.42E01E',
-      width,
-      height,
-      bitrateMode: 'quantizer',
-      hardwareAcceleration: 'prefer-hardware',
-    } as VideoEncoderConfig)
-    return support.supported === true
-  } catch {
-    return false
+): Promise<string | null> {
+  if (typeof VideoEncoder === 'undefined') return null
+  if (codec !== 'avc') return null
+  for (const candidate of AVC_CANDIDATES) {
+    for (const hardwareAcceleration of ['prefer-hardware', 'no-preference'] as const) {
+      try {
+        const support = await VideoEncoder.isConfigSupported({
+          codec: candidate,
+          width,
+          height,
+          bitrateMode: 'quantizer',
+          hardwareAcceleration,
+        } as VideoEncoderConfig)
+        if (support.supported === true) return candidate
+      } catch {
+        /* try the next rung */
+      }
+    }
   }
+  return null
 }
 
 class ConstantQualityAvcEncoder extends CustomVideoEncoder {
@@ -129,8 +148,16 @@ class ConstantQualityAvcEncoder extends CustomVideoEncoder {
     })
     // `bitrate` is meaningless in quantizer mode and Chrome rejects the pair on
     // some builds, so it is dropped rather than left to be ignored.
-    const { bitrate: _dropped, ...rest } = this.config as VideoEncoderConfig & { bitrate?: number }
-    encoder.configure({ ...rest, bitrateMode: 'quantizer' } as VideoEncoderConfig)
+    const { bitrate, ...rest } = this.config as VideoEncoderConfig & { bitrate?: number }
+    try {
+      encoder.configure({ ...rest, bitrateMode: 'quantizer' } as VideoEncoderConfig)
+    } catch (err) {
+      // The probe said yes and configure said no. Encode the take rather than
+      // fail it: this is exactly the config the library would have built.
+      console.warn('[compose] quantizer mode refused at configure — bitrate target kept', err)
+      this.qp = 0
+      encoder.configure(this.config)
+    }
     this.encoder = encoder
   }
 
@@ -144,7 +171,9 @@ class ConstantQualityAvcEncoder extends CustomVideoEncoder {
       // the quality anyone asked for.
       encoder.encode(frame, {
         keyFrame: options.keyFrame,
-        avc: { quantizer: this.qp },
+        // qp 0 marks the configure-time fallback above: the encoder is on its
+        // bitrate target, so asking for a quantizer would be a lie.
+        ...(this.qp > 0 ? { avc: { quantizer: this.qp } } : {}),
       } as VideoEncoderEncodeOptions)
     } finally {
       frame.close()

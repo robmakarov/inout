@@ -87,8 +87,8 @@ import { collectPeaks, createPeakBuffer, createWaveformRenderer } from './wavefo
 import { openVideoChannel, type VideoChannelReader } from './video'
 import { exportFileName } from './fileName'
 import {
+  constantQualityCodec,
   constantQualityQp,
-  constantQualitySupported,
   markConstantQuality,
   registerConstantQualityEncoder,
 } from './constantQuality'
@@ -387,10 +387,9 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     // custom encoder drops it and drives the QP instead. A browser without
     // quantizer mode never marks the config and encodes exactly as before.
     const wantQp = constantQualityQp()
-    const qp =
-      wantQp !== null && (await constantQualitySupported(target.videoCodec, width, height))
-        ? wantQp
-        : null
+    const cqCodec =
+      wantQp === null ? null : await constantQualityCodec(target.videoCodec, width, height)
+    const qp = cqCodec === null ? null : wantQp
     if (qp !== null) registerConstantQualityEncoder()
     else if (wantQp !== null) {
       console.info('[compose] constant quality asked for but unsupported here — bitrate target kept')
@@ -438,7 +437,12 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       bitrate: videoBitrate,
       keyFrameInterval: gopSec,
       ...target.encoderOptions,
-      ...(qp !== null ? { onEncoderConfig: markConstantQuality(qp) } : {}),
+      // The probed string is PINNED: probing one profile and encoding another
+      // is how the first version of this reported itself unsupported on
+      // hardware that supports it.
+      ...(qp !== null && cqCodec
+        ? { fullCodecString: cqCodec, onEncoderConfig: markConstantQuality(qp) }
+        : {}),
       onEncodedPacket: (p) => bits.video(p.byteLength, p.type),
     })
     out.addVideoTrack(videoSource, { frameRate: fps })
