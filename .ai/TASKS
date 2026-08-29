@@ -313,7 +313,11 @@ READY NOW:
        take open                             hardware AVC encoders with nothing budgeting them,
                                              plus a game on the same GPU. The capture ceiling is
                                              doing the work a budget should do.
-  O16  a resolution step a raw     [medium-heavy]  His question, answered: it CAN go safely, and
+  O16  a resolution step a raw channel can follow — BUILT AND VERIFIED ON PROD 2026-08-29,
+       flag-gated `?resstep=1` (handoff under the task). The screen's raw channel now FOLLOWS its
+       source's own size change by segmenting, on F6's machinery. Not a load ladder — backpressure
+       stays rate-only, per Robert's ruling.
+  O16 (original entry)             [medium-heavy]  His question, answered: it CAN go safely, and
        channel can follow                    back up — F6's segment machinery is the mechanism.
                                              Costs a stepped take its instant export, so O15 first.
   F15-FLIP  Robert's own eye       [ROBERT OWED]  F15 IS BUILT, VERIFIED ON PROD AND OFF BY DEFAULT
@@ -1656,6 +1660,81 @@ that stepping is rare.
 GATES: a take that never steps is byte-identical · a stepped take's segments each measure their own
 geometry out of the FILE · the timeline shows no gap and no jump · export renders across the seam
 and the sync oracle holds over it · the instant path is DECLINED rather than wrong.
+
+## O16 HANDOFF — BUILT AND VERIFIED ON PROD 2026-08-29 (twentieth session). FLAG-GATED, OFF.
+`?resstep=1` (sticky `inout.capture.resstep`). Off, `stepVerdict` is never consulted and a take is
+exactly the take it was.
+
+ALMOST NONE OF IT NEEDED BUILDING, which is the finding. `core/types.ts` already says in the
+setChannelActive contract that "a kind can appear as several non-overlapping segments in
+Recording.channels", every consumer resolves by id and window, and F6 built the move for
+pause/resume: `closeSegment` ends the current file and KEEPS the device, `armChannel` +
+`activateChannel` open segment N+1 on the very same track. A resolution step is that, without the
+gap. `startMeasuredVideo` already reads its geometry from `track.getSettings()`, so segment N+1
+configures itself at the new size with no constraint applied and nothing asked of the source.
+
+IT IS NOT A LOAD LADDER, and that is Robert's ruling rather than an inference: "if something needs
+to be dropped it must be fps not resolution." Backpressure stays captureLadder's and stays
+rate-only. What fires here is the SOURCE changing size — a display-mode change, a shared window
+resized — which today silently produces the upscaling bug captureLadder's header already records
+from his console.
+
+THE HARD PART IS NOT THE FILE SURGERY, IT IS NOT THRASHING, so the decision is a pure module with
+its own tests: 1.5 s SETTLE (a window drag produces ONE step, at the size the user let go at), 5 s
+COOLDOWN, 16 px MIN_DELTA (capturers jitter and `evenDown` can move a side by one), and
+MAX_STEPS_PER_TAKE = 8 so an oscillating source costs a BOUNDED number of files and then stops.
+The old segment is DRAINED before the new one opens — P0-tail-raw is the whole reason.
+
+PROD, build f276328, `?synthetic=1&screensize=1920x1080&singlegen=capture&resstep=1`, the source
+changed from 1920x1080 to 1280x720 mid-take:
+  [capture] raw video channel: 18 frames encoded of 17 in … 89 KB     ← segment 1 drained FIRST
+  [capture] resolution step 1: screen 1920x1080 → segment 2 in 30ms — the source is 1280x720 and
+  this segment was opened at 1920x1080 — following it down, held for 2s. The take's own-resolution
+  export declines from here (two segments, two geometries); the default instant export is
+  unaffected (O16)
+  [capture:arming] measured video screen first-frame +42ms offset=16432.7ms 1280x720@30
+AND THE TAKE, read back out of the store:
+  screen  1920x1080  off 17 ms      dur 16307 ms   90977 B
+  screen  1280x720   off 16393 ms   dur 23551 ms  115063 B
+  mic     (audio)    off 0 ms       dur 39931 ms  — RECORDED STRAIGHT THROUGH THE STEP
+Each segment measures its own geometry. The seam is 69 ms (segment 1 ends at 16324, segment 2
+starts at 16393) — tighter than F6's own measured pause seams of 99-218 ms. The editor shows two
+Screen lanes abutting at 0:16 over one continuous Mic, 0:40 total, filmstrips on both.
+AND THE COPY DECLINED RATHER THAN LIED: no INSTANT badge on any step, the panel says "Re-renders the
+whole video". That is the gate.
+
+THE COST IS SMALLER THAN THE TASK ASSUMED. It said a stepped take "loses its INSTANT export and
+renders instead". Half right: two geometries cannot be packet-copied as one file, so the take's
+OWN-RESOLUTION export (F18's source step, O3c's single generation) declines — tested. But the
+DEFAULT tier's instant export is unaffected, because that one copies the COMPOSITE, which is one
+continuous file at one size throughout. The prod take above had no composite at all only because it
+was driven with `?singlegen=capture` to expose the raw preview; a normal stepped take keeps its
+default instant path, and a unit test pins exactly that.
+
+A LATENT BUG IN F6's OWN MACHINERY, FIXED HERE because this task makes it fire every time:
+`closeSegment` stopped the measured handle and left `ch.measured` set, but that handle is NOT
+idempotent — its stop() terminates the worker owning the SyncAccessHandle. `stopRecorders()` walks
+EVERY channel at stop, including segments a pause already closed, so it messaged a dead worker,
+waited out STOP_TIMEOUT_MS and logged `measured stop failed` about a segment written perfectly.
+Caught rather than fatal, which is why F6 shipped with it. The handle is nulled when the segment
+closes.
+
+GATES. 659 tests (12 new), typecheck clean · `npm run oracle` (v2) PASS: sync 62.0/67.6 ms against
+the 90 ms band, instant 58.7 ms, smartcut 59.6 ms, tail 70 ms, export 4.1x · `npm run exp --
+armcancel` green · `verify-deploy` OK · the prod repro above.
+`npm run oracle:load` RAN — possible only because the parallel G2 session fixed the rig an hour
+before this needed it. COMPOSITE PHASE PASS (source ALIVE 2/2, tail PASS, fps PASS). RAW PHASE
+INCONCLUSIVE: the rig's own raw source starved 2/2, so it exited SOURCE-STARVED — G2's new honest
+exit, and the starvation G2 attributed to the canvas-to-track downscale. Read with G2's own caution:
+it records the composite phase as BIMODAL, so one PASS is one draw, not proof.
+THE v1 THROUGHPUT BAND FAILED AND I MEASURED IT RATHER THAN ARGUING IT — three cold runs of this
+branch INTERLEAVED with three of clean main: branch PASS/FAIL/PASS, main PASS/FAIL/PASS, failing on
+the same round. The band sits on its own boundary and its verdict is the load average. Full numbers
+and a concrete shape for the fix are under G1 in BACKLOG.
+NOT MEASURED, AND SAY SO: the SYNC across a step seam. The oracle records a take that never steps;
+nothing here drives a stepping take through it, so "export renders across the seam and the sync
+oracle holds over it" is met only for the render-not-crashing half. A stepped-take cell in the
+oracle matrix is the honest way to close it, and it belongs with G4's long-cell work.
 
 ## F15 fps-ceiling — BUILT AND VERIFIED ON PROD 2026-08-29, flag-gated (handoff at the end of this
 ##     task). RULED YES 2026-08-29 (Robert: "i want every device to record best quality it can,
