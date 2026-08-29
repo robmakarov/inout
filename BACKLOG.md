@@ -12,10 +12,11 @@ TD tags technical defects by severity. Done items get deleted, not archived.
 
 ### Now
 
-- [P2] TD 2026-08-29: **the export quality step is sticky forever**, so one accidental 1440p makes
-  every later export re-render with nothing on screen saying why. PROMOTED to `.ai/TASKS` F14 — PO
-  picks between "do not persist" and "persist and warn". Softened by O3c (a step matching the
-  screen's geometry is instant now) but still real on any step that re-renders.
+- [P2] TD 2026-08-29: **the export quality step is sticky forever** → F14, RULED the same day and
+  ABSORBED BY `.ai/TASKS` F16: quality becomes ONE option (Min/Medium/High-default/Max-later,
+  later also chosen before record) and capture's composite FOLLOWS it, which is what makes
+  "instant export for any quality" achievable (the chosen rung is always a packet copy). Until
+  F16 lands, O3c's per-step INSTANT badges keep the panel honest.
 
 - [P2] TD 2026-08-29: **30 fps hardcoded everywhere** → `.ai/TASKS` F15, RULED YES the same day
   (PO: "every device records the best it can, 60 fps"). Scheduled with/after F13 as

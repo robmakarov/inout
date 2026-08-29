@@ -310,3 +310,19 @@ re-rendered before (PO's 10 GB 1440p render was this path). The panel's INSTANT 
 via the ladder's own chooser, and a copyable step's size is exact off ChannelRecording.bytes (new,
 additive). Verified live: 720p-geometry take at the 720p step → "instant copy avc from
 single-generation", ~1 s. Gates: 510 tests, exp o3b 7/7, oracle v2+v1, fidelity, prod repro.
+
+po 2026-08-29 (3) — THE QUALITY MODEL, RULED ("later we will add quality choosing before record
+too, so make it one option for now everytime. min(minimal size where text and everything will be
+still readable)-medium-high(default)-max(pro-tier only later, maximum that device and system can
+achieve). but we need to try to achieve instant export for any quality, think"). Three decisions in
+one: (1) F14 is settled by dissolution — no per-export sticky resolution ladder; quality is ONE
+product-wide option, later surfaced pre-record too. (2) The rungs become SEMANTIC — Min / Medium /
+High (default) / Max (pro-gated later, device+system maximum) — replacing resolution names. (3)
+"Instant at any quality" is the objective, and TD's design answer is recorded as task F16: capture's
+one composite encoder FOLLOWS the chosen rung (geometry from F13, quality target from the rung), so
+the set quality is a packet copy by construction; Max is the raw native channel already on disk.
+Rejected on standing evidence, so nobody re-litigates: four live encoders (X6's capture-CPU
+starvation family) and "fast render as instant" (decode floor 5-6x realtime, X4). Honest residue
+stated in the task: changing quality AFTER a take re-renders (except up to Max on single-video
+takes); pixel edits render as ever. MIN's readability floor is a measurement task (MIN-floor);
+X13 becomes Min's capture-time steering; SIZE-CODEC still multiplies every rung and stays PO's pick.

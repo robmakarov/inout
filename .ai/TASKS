@@ -249,11 +249,17 @@ READY NOW:
                                              TD recommends (b) now + (a) when cloud lands; (c)
                                              breaks blind shares on old players — against the
                                              frozen never-break rule.
-  F14  export step stops being     [light]   TD 2026-08-29. One accidental 1440p makes every future
-       sticky                                export re-render, silently. Softened by O3c (a step
-                                             matching the screen is instant now) but still real on
-                                             any tier that re-renders. PO picks (a) do not persist
-                                             or (b) persist and warn loudly — see the task.
+  F16  one quality option,         [medium-heavy]  PO 2026-08-29 (second ruling that day): quality
+       capture follows it                    is ONE option — Min / Medium / High (default) / Max
+                                             (pro-gated later) — chosen once, later also before
+                                             record; the composite encoder FOLLOWS it (geometry
+                                             from F13, quality target from the rung), so the export
+                                             is a packet copy at whatever quality is set — "instant
+                                             export for any quality" by construction, no extra
+                                             encoder. Absorbs F14 (its hazard dissolves when
+                                             capture records the choice). AFTER F13+F15; spec in
+                                             the task. MIN's floor is its own measurement
+                                             (MIN-floor below); X13 becomes Min's steering.
   P5a  iOS SCK spike               [light]   UNBLOCKED 2026-08-26: PO confirms Xcode 27 + a real
                                              iOS 27 device are available. Needs PO present (device
                                              plugged in, signing). TIME-SENSITIVE (iOS 27 ~Sept).
@@ -503,7 +509,13 @@ the composite constant — that rung records NO composite, so tier-chasing there
 other steps; F13's derive-from-the-take rewrite is where it becomes general. The F7c probe still
 prices copyable steps it does not need to (harmless; the exact number wins the display).
 
-## F14 export-step-stops-being-sticky [light · editor/export panel only, zero capture, zero compose]
+## F14 — RULED 2026-08-29 AND ABSORBED BY F16 (PO: "later we will add quality choosing before
+##     record too, so make it one option for now everytime"). No per-export sticky resolution
+##     ladder: quality is ONE product-wide option; F16 below is the task. The original hazard
+##     (a sticky pick silently re-rendering every export) dissolves once capture records the
+##     chosen rung — until F16 lands the panel keeps O3c's honest per-step INSTANT badges.
+## (original spec kept below for the record)
+[light · editor/export panel only, zero capture, zero compose]
 The export quality step persists in `inout.export.tier` forever. 1080p is the ONLY step that keeps
 the packet copy; every other step re-renders the whole take. SEEN LIVE on the deployed build: the
 panel opened on 1440p left by an earlier session, the INSTANT badge sat on the 1080p row it was not
@@ -516,6 +528,48 @@ constraints; (b) keeps a deliberate choice. Do not pick without PO.
 GATES: whichever is chosen, the instant path is still taken on a default take (assert the ladder
 picks instant) · the panel's INSTANT badge and the selected step can never disagree — pinned by
 test, because that disagreement is the bug · no change to any export path's output.
+
+## F16 one-quality-option — capture follows the chosen rung; instant export at any set quality
+[medium-heavy · TD-authored 2026-08-29 from PO's ruling ("make it one option for now everytime ...
+min-medium-high(default)-max ... we need to try to achieve instant export for any quality") ·
+AFTER F13 (geometry seam) and F15 (fps) — it rides both]
+THE PHYSICS THIS TASK IS BUILT ON, so nobody re-derives it: instant = packet copy = the bytes
+already exist. The render floor is decode-bound at 5-6x realtime (O5, X4 refuted threading), so
+"fast render" can never be instant. Four live encoders for four rungs is dead on X6's own numbers
+(capture CPU starvation is THE failure family on PO's machine). What remains is: capture writes the
+file the user is going to ask for — affordable precisely because quality is ONE option.
+WHAT IT IS:
+  · ONE setting (sticky, `inout.quality`-family): MIN / MEDIUM / HIGH (default) / MAX. Semantic
+    names in the UI, not resolutions. MAX is pro-gated LATER (product gate, not engineering —
+    technically it is the raw native channel, already on disk for crash-durability).
+  · the composite encoder FOLLOWS the setting: geometry = the rung's long-edge budget resolved
+    against the take's shape (F13's resolveTier), quality target = the rung's qp-class (cq seam).
+    No second encoder; Min/Medium are CHEAPER than today's fixed 1080p.
+  · the export ladder is unchanged — chooseCopySource already prefers the raw channel (Max) and
+    the composite (the chosen rung); O3c made the equality follow the request. An unedited or
+    trim-only take is therefore instant at the SET quality by construction.
+  · HONEST RESIDUE, to be labelled not hidden: changing quality AFTER a take re-renders (except
+    upward to Max on a single-video-channel take — the raw file is always there); pixel edits
+    (zoom/PiP-move/background) render as they always did.
+  · later UI half (separate, after this): the same option shown pre-record.
+GATES: the set rung's export is packet-copied — certification `copiedFrom` read from the FILE on
+Min, Medium, High and Max takes · a take at HIGH is byte-identical to today's default (pinned) ·
+changing the rung post-take re-renders with the panel saying so BEFORE export · oracle v2+v1 +
+fidelity green · oracle:load green at MAX on a 4K-class source (announce it) — the ladder is the
+guard and it judges arrivals since P0-ladder-static · X1 envelope fences unaffected (audio path
+untouched).
+
+## MIN-floor — what "still readable" measures  [light-medium · measurement only, feeds F16]
+PO's definition of Min: "minimal size where text and everything will be still readable". Make that
+a number, not a vibe, with instruments that already exist: the glyph contrast/fringe metrics
+(perf/textSource.ts chromaRows, R1-hardened) and the F7c probe (composes 10 s of THIS take and
+encodes it with the export's own encoder). DELIVERABLE: a readability floor — the smallest
+(long-edge, qp) whose probed frames keep glyph contrast/fringe above threshold against the take's
+own native frames — plus the threshold itself justified on the three fixture contents (text /
+motion / talking head). X13 (approved, "lets try") then becomes MIN'S STEERING: its per-chunk
+features drive qp WITHIN the floor at capture time, since pre-record Min cannot probe content that
+does not exist yet. NOTE the codec dependency honestly: Min's absolute size is ~2x better on
+hevc/av1 — SIZE-CODEC multiplies every rung and stays PO's pick.
 
 ## F15 fps-ceiling — RULED YES 2026-08-29 (PO: "i want every device to record best quality it can,
 ##     60 fps"). Schedule WITH or immediately AFTER F13 — see the ruling note at the bottom.
