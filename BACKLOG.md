@@ -634,3 +634,26 @@ Protocol: say "roadmap" in any session → READY map → "go <id>".
 ## Ideas
 
 <!-- anything not a defect: UX, features, polish -->
+
+- Robert 2026-08-29: **selectable text in the player, while paused** — "i want on apps player pause
+  ability to select text from video". Pause on a slide, a terminal, a code review, and drag across
+  the words to copy them, the way you would on a real page.
+  WHAT IT ACTUALLY IS: OCR over the paused frame plus an invisible, selectable text layer positioned
+  on top of it — the same trick a scanned PDF uses. The picture stays the picture; the selection is a
+  transparent overlay whose glyph boxes line up with what is on screen.
+  WHY IT IS NOT A STRETCH HERE, and this is the part worth knowing before it is priced: the hard
+  half already exists and already runs locally. `src/core/ai/` builds the for-AI artifact off this
+  same take, `src/experimental/oracle/textEdge.ts` and `localize.ts` already reason about glyph edges
+  and where text sits in a frame, and Robert's standing rule is that local zero-token inference is
+  allowed where runtime token spend is not — so an in-browser OCR pass over ONE paused frame costs
+  nothing per user and needs no service.
+  SHAPE, cheapest first: OCR only the frame that is actually paused, on demand, and cache it by
+  frame ordinal (a viewer pauses on a handful of frames, not thousands); overlay `<span>`s with
+  `color: transparent` inside a container the same size as the stage, so native selection, copy,
+  and find-in-page all work for free; scale the overlay with the stage's own transform so it stays
+  aligned through zoom and the viewport track. Degrades honestly: no OCR result means no overlay and
+  the player behaves exactly as it does today.
+  OPEN QUESTIONS FOR WHOEVER TAKES IT: which engine (a WASM OCR is a real download — measure it
+  against the PWA budget before committing); whether the CLOUD player gets it too, where the frame
+  is not local; and whether this should also feed the for-AI artifact, which today describes a take
+  without ever reading the words on its screen.
