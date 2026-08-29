@@ -410,6 +410,26 @@ Known gaps, honestly stated:
 Every task is evidence-gated. `.ai/TASKS` is authoritative: it carries the READY map, per-task state,
 what a fresh session must know first, and an index of the measurement tooling.
 
+**The bugs are on the roadmap now (2026-08-29, your "put bugs on roadmap").** They used to live only
+in `BACKLOG.md`, which is a dump — so the roadmap protocol never picked them up and several were
+re-found by a later session instead of fixed. Twelve are now tasks with gates, in two lanes:
+
+- **B1–B8 — what you would meet.** The size panel promising 4.7 GB and delivering 10.09 GB · the tab
+  audio noises, which are *two* defects and not one (the ones that heal as you edit are the preview
+  correcting itself; the ones that stay were recorded that way) · a tab left open across a deploy
+  quietly losing the fast export lane · a channel that recorded nothing and said nothing · no disk
+  warning on a long take · "the device never connected" when it was really an OS permission with the
+  answer on screen · the constant start-of-take offset · the two export paths disagreeing about
+  *when* the camera picture belongs.
+- **G1–G4 — the instruments.** These go first when two sessions are free, because a gate that lies
+  makes every other verdict cheap talk: the merge gate fails about half its cold runs for reasons
+  nobody has measured · a load rig that cannot make its own source move and reads its own starvation
+  as a product defect · two bands phrased so they can never fail · and the fact that nothing here has
+  ever been measured on a take longer than 30 seconds, while you record 15 to 30 minutes.
+
+Full specs and gates: `.ai/TASKS`, BUG PACK. Evidence stays in `BACKLOG.md`, which now points at the
+task ids.
+
 **Done:** exports stream to disk · capture-time loudness · content hints + full-size camera · bundle
 split · sync root-cause + honest gate · quality steps · mid-take cuts · tail/throughput bands +
 certified exports · PWA install · movable timed camera + edit persistence · Yandex/RU pack part 1 ·

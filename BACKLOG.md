@@ -12,6 +12,13 @@ technical defects by severity. Done items get deleted, not archived.
 
 ### Now
 
+**PROMOTED TO THE ROADMAP 2026-08-29** (Robert: "put bugs on roadmap"). Entries marked
+`→ ROADMAP <id>` now have a task with GATES in `.ai/TASKS` (BUG PACK) and an entry on the READY map;
+the evidence stays HERE and is not duplicated there. B1-B8 are defects a user meets, G1-G4 are
+instrument defects — gates that report a verdict they did not measure. Unmarked entries were
+deliberately not promoted: already a task (F14/F15/F16, the Safari mic P8), waiting only on Robert's
+ear or eye, or the screen wedge, whose cause is Chrome's.
+
 - [P2] 2026-08-29: **the export quality step is sticky forever** → F14, RULED the same day and
   ABSORBED BY `.ai/TASKS` F16: quality becomes ONE option (Min/Medium/High-default/Max-later,
   later also chosen before record) and capture's composite FOLLOWS it, which is what makes
@@ -23,7 +30,7 @@ technical defects by severity. Done items get deleted, not archived.
   rides (`session.compositeFrame()` asks the take what it is, once, before any encoder exists), so
   F15 is unblocked; the ruling and shape live in the task and DECISIONS.
 
-- [P2] 2026-08-29: **`npm run oracle:fidelity`'s instant lane is flaky on this machine**, the
+- [P2 → ROADMAP G1] 2026-08-29: **`npm run oracle:fidelity`'s instant lane is flaky on this machine**, the
   same way the v2 oracle is. Measured interleaved against a baseline commit with none of the day's
   capture work in it: the BASELINE failed 1 of 3 at level residual 18.83 dB while the tree under
   test passed 3 of 3, and every PASS on both trees reads residual 0.03 dB. So the failure is
@@ -42,7 +49,7 @@ technical defects by severity. Done items get deleted, not archived.
   takes the shape from the FRAMES rather than from `track.getSettings()`, which describes the
   sensor and lies about orientation on a phone. Reproducible on a desktop with `&camlies=1`.
 
-- [P1] Robert 2026-08-29: **the size estimate is 2.15× low at the top step** — panel said 4.7 GB at
+- [P1 → ROADMAP B1] Robert 2026-08-29: **the size estimate is 2.15× low at the top step** — panel said 4.7 GB at
   1440p, file came out 10.09 GB (140 min). Every other step landed within ~100 MB, so this is the
   top rung specifically, not the model. quality.ts already admits the √-pixel model came in 47 % low
   at 1440p on text content; at Robert's length that becomes 5.4 GB of surprise. Note the estimate is
@@ -85,7 +92,7 @@ technical defects by severity. Done items get deleted, not archived.
   by scrubbing the export to the same instant. The preview half is partly addressed 2026-08-29 (the
   scrubber was firing a full re-seek of every element per pointer event, now one per frame).
 
-- [P1] Robert 2026-08-29, sharpening his earlier "noises on tab audio": **tab audio crackles all
+- [P1 → ROADMAP B2] Robert 2026-08-29, sharpening his earlier "noises on tab audio": **tab audio crackles all
   through the start of an editing session and then MOSTLY heals** — "when video recorded and edit
   starts a lot of minor noises in tab audio, but after some time editing noises almost completly
   stops in same places they were in begining, but not completly, i need them gone".
@@ -119,7 +126,7 @@ technical defects by severity. Done items get deleted, not archived.
   says how much (B) there is before you even listen — 0 there means (A) is the whole story.
   Robert's bar is explicit and it is not "less": "i need them gone".
 
-- [P1] 2026-08-26, from Robert's own console dump (real takes, deployed build): **a long-lived app
+- [P1 → ROADMAP B3] 2026-08-26, from Robert's own console dump (real takes, deployed build): **a long-lived app
   tab spans deploys, its lazily-loaded chunks 404, and that silently killed the EXPORT WORKER.**
   Evidence in the dump: `/assets/sizeProbe-Bp5ddNpw.js` 404 and `index-Bo_8S72j.css` 404 (hashed
   names from a build Vercel no longer serves), and twice `[compose] export worker unusable,
@@ -375,7 +382,7 @@ technical defects by severity. Done items get deleted, not archived.
   is still owed — but it is owed on a build where the fix is actually in force, which no build before
   2026-08-26 was.
 
-- [P2] 2026-08-29, FOUND BY P9's RUNNER while it was failing for an unrelated reason:
+- [P2 → ROADMAP B4] 2026-08-29, FOUND BY P9's RUNNER while it was failing for an unrelated reason:
   **a camera that delivers no frames produces a silent empty recording.** Observed four times on a
   real device whose track was live, unmuted and negotiated at 1920x1080@30 while the sensor was off
   (a closed lid does this). What the user gets: the take records for its full length, the compositor
@@ -389,7 +396,7 @@ technical defects by severity. Done items get deleted, not archived.
   themselves in the preview. It becomes P1 if the preview looks fine while the file is empty.
   Evidence: docs/qa/camera-1080-2026-08-29.json, and the console lines quoted in the P9 handoff.
 
-- [P1] 2026-08-29, FOUND WHILE ATTRIBUTING A RED GATE THAT TURNED OUT NOT TO BE MINE:
+- [P1 → ROADMAP G1] 2026-08-29, FOUND WHILE ATTRIBUTING A RED GATE THAT TURNED OUT NOT TO BE MINE:
   **the v2 oracle fails about half its cold runs on main, and it has nothing to do with the change
   under test.** The failure is always the same — `instant export sync maxAbs 97.1 > 90ms` or
   `trimmed export sync maxAbs 105.5 > 90ms` — i.e. the COPY paths' worst A/V sample, not the mean,
@@ -482,7 +489,7 @@ technical defects by severity. Done items get deleted, not archived.
   WHAT IS LEFT FOR ROBERT, not engineering: whether 2.8 dB of extra glyph fringe on the render path is worth
   anything. It also re-prices X5, whose refusal rested on the two painters disagreeing.
 
-- [P2] 2026-08-26, found while measuring X15(c), NOT chased: **the render places the camera PiP
+- [P2 → ROADMAP B8] 2026-08-26, found while measuring X15(c), NOT chased: **the render places the camera PiP
   about half a second away from where the instant path places it.** In the same take, on the same
   output instants, the moving camera region best-matches at −15 frames (−0.5 s) and even there reads
   only 23.6 dB (max 115), while the STILL screen region of the same two files matches at 37.1 dB.
@@ -493,7 +500,7 @@ technical defects by severity. Done items get deleted, not archived.
   render resampling the camera onto its own grid. `npm run exp -- x15c` prints it as `alignFrames`
   on the camera row; `{"thumbs":true}` dumps the frames, which is what made it visible.
 
-- [P2] 2026-08-26, found while writing X9's gate: **two of this repo's evidence gates are written
+- [P2 → ROADMAP G3] 2026-08-26, found while writing X9's gate: **two of this repo's evidence gates are written
   in `longtask` counts, and a long-task count cannot fail here.** Anything in this codebase that
   awaits per frame or per sample — the render, the For-AI build, the AI selection loop — never forms
   a single ≥50 ms task while still owning the thread end to end, so the counter reads 0 on the
@@ -503,7 +510,7 @@ technical defects by severity. Done items get deleted, not archived.
   and move them onto scheduling lateness, and re-read any band whose green rests on one. Not urgent —
   no shipped claim is known to depend on it — but every such gate is currently decoration.
 
-- [P2] 2026-08-26, found while verifying the wall-clock hold: **every makeRig-based rig
+- [P2 → ROADMAP G2] 2026-08-26, found while verifying the wall-clock hold: **every makeRig-based rig
   (syncload, o4step2 family) is DEAD in headless Chrome on this machine — Chrome 151 stops
   delivering canvas-capture frames to an uncomposited window.** The page console (now captured)
   shows sources at 15.9 fps for the first seconds, then 0.0 forever; the composite degrades
@@ -521,7 +528,7 @@ technical defects by severity. Done items get deleted, not archived.
   already collected. A 12.5-min cell paid for that; the rig now reports with null spans and the
   degradeReason instead of throwing.
 
-- [P2] 2026-08-26, found while wiring X2: **O1's MEMORY lane samples the wrong thread, and its
+- [P2 → ROADMAP G3] 2026-08-26, found while wiring X2: **O1's MEMORY lane samples the wrong thread, and its
   headline gate metric is absent.** `runO1Evidence` polls heap on the MAIN thread while the export
   renders in a worker (since O5a), and `measureUserAgentSpecificMemory` is unavailable in the rig's
   Chrome — `totalSamples: 0`, `totalPeakDeltaMB: null` on every row, and the heap deltas it does print
@@ -533,7 +540,7 @@ technical defects by severity. Done items get deleted, not archived.
   measureUserAgentSpecificMemory exists. The related lever bug (flags flipped on a thread that no
   longer renders) is already fixed.
 
-- [P1] 2026-08-25: NOTHING HERE HAS EVER BEEN MEASURED ON A TAKE LONGER THAN 30 s, and Robert records
+- [P1 → ROADMAP G4] 2026-08-25: NOTHING HERE HAS EVER BEEN MEASURED ON A TAKE LONGER THAN 30 s, and Robert records
   938-1800 s. `runOracle` defaults to 6000 ms and the matrix's widest cell is 30 s, so every sync,
   drift and throughput number this project quotes describes a take up to 156× shorter than the one Robert
   complained about. Measured at 120 s on a /tmp mirror of the shipped build (a second live session was
@@ -550,7 +557,7 @@ technical defects by severity. Done items get deleted, not archived.
   ACTION: one ≥120 s cell before any flip that touches the packet-copy paths — a 6 s gate passed the
   instant path's own defect while it was 20 % worse at Robert's scale.
 
-- [P1] 2026-08-25: THE TWO ALIGNMENT ERRORS A SYNTHETIC RIG CANNOT SEE, both pushing audio LATE.
+- [P1 → ROADMAP B7] 2026-08-25: THE TWO ALIGNMENT ERRORS A SYNTHETIC RIG CANNOT SEE, both pushing audio LATE.
   (1) the mic anchor subtracts only the platform-REPORTED track latency (measuredAudio.ts) — a
   Bluetooth headset's real 100-300 ms is invisible to it, and Robert's 15-minute Zoom take is exactly that
   case. (2) the video channel is anchored to the `recorder.start()` CALL (session.ts:588), not to when
@@ -577,7 +584,7 @@ technical defects by severity. Done items get deleted, not archived.
   known load-sensitive — or something length-dependent in the mix. Re-run 120 s on a quiet machine
   before believing either.
 
-- [P2] Oracle returns ALL-NULL metrics (and exit 0!) under machine contention — instrument must retry or fail loudly, never emit null-as-result. PARTLY ADDRESSED: oracle.mjs retries and fails loud on incomplete metrics (merged, 86ed200). Still open: the fidelity runner has no equivalent retry — it reads RED (toneErr 1.1-2.3 dB) purely from machine load, which is capture starvation and not a mix regression. Needs the same retry/quiet-machine guard.
+- [P2 → ROADMAP G1] Oracle returns ALL-NULL metrics (and exit 0!) under machine contention — instrument must retry or fail loudly, never emit null-as-result. PARTLY ADDRESSED: oracle.mjs retries and fails loud on incomplete metrics (merged, 86ed200). Still open: the fidelity runner has no equivalent retry — it reads RED (toneErr 1.1-2.3 dB) purely from machine load, which is capture starvation and not a mix regression. Needs the same retry/quiet-machine guard.
 
 - [P2] Sync is ~45-63 ms audio-late, not the ~30 ms previously believed (2026-08-23: the oracle was ~31 ms optimistic — exact 18 ms detection bias + an unmeasured 13.5 ms video reference). Robert can feel it — re-confirmed 2026-08-24 on a real tab-music take (YouTube music video), which matches the measured offset; no new fault implied. Cause understood and partly compensated. 2026-08-24: the v2 engine is now the DEFAULT and reads 33-48 ms on the oracle against v1's ~60 — users get the better number today; closing the rest to ≤20 ms is anchor work (input latency both engines share), tracked as O4-polish. Awaiting Robert listen test on a real take.
 
@@ -596,7 +603,7 @@ technical defects by severity. Done items get deleted, not archived.
   is the expected size of the current build, not a regression. Levers unchanged: O9 quality-per-bit,
   O11d codec ladder, X13 (Robert-gated). while a 20-run headless oracle matrix hammered it — slow load / unresponsive modal / "waiting to connect" / mic-timeout likely environment artifacts. RETEST on clean prod build (serve main at localhost:4173). Rule going forward: Robert's QA only on a dedicated prod-build port; load tests spawn their own ephemeral server, never 5173.
 - [P1] Camera light at app load (Robert report, pre-any-click?) — if reproduced on the clean 4173 build this violates 'no idle device access, ever'. Note: light DURING the screen picker (after record click) is the approved concurrent-acquisition design; need Robert to distinguish which they saw.
-- [P2] Silent channel loss: mic acquisition timed out and the take completed with no mic and no unmissable warning — user discovered it only on playback. Needs loud post-record surface ('Mic missing from this take') + arming-timeout telemetry.
+- [P2 → ROADMAP B4] Silent channel loss: mic acquisition timed out and the take completed with no mic and no unmissable warning — user discovered it only on playback. Needs loud post-record surface ('Mic missing from this take') + arming-timeout telemetry.
 - [P1] Fix tab/browser music recording quality — root-caused and shipped a 3-part fix (2026-07-15): tanh waveshaping distorted ALL rendered audio (now identity below 0.95 knee); composite hard limiter (−6dB/20:1) pumped music (now bypassed for single source, gentler −3dB/12:1 safety net for multi); unreported channelCount defaulted to mono downmix (now stereo). Awaiting Robert listen test on real tab music to close.
 
 ### Next
@@ -642,11 +649,11 @@ Protocol: say "roadmap" in any session → READY map → "go <id>".
 - [P1] Robert 2026-08-22: recording another Chrome tab that renders a 4K game — "the video freezes". Different failure from 08-06 despite the same words: frames arrive in BURSTS, not never, so the 3s stall detector correctly stays quiet and nothing warns. Root cause is throughput. Nothing capped the display track, so a 4K surface was consumed four times on one GPU (Chrome capture readback of 3840×2160 + raw screen MediaRecorder at 8 Mbps ≈ 0.03 bpp + composite &lt;video&gt; decode and downscale 30×/s + on-screen preview decode) while the captured tab rendered the game on that same GPU — and every one of those pixels was thrown away at export, which is 1080p on both paths. Shipped same day: display track constrained to the export size (CAPTURE_MAX_* tied to DEFAULT_EXPORT_SETTINGS), MAX-only so a smaller surface is never overconstrained, applied in the getDisplayMedia request and re-applied by capDisplayTrack() before the channel is delivered (before its recorder exists — a mid-file resolution change reinitialises the encoder); frameRate capped at 30 as max, not ideal, so a 60 fps game tab stops doubling the encode for frames the export drops; per-source delivered fps logged every 10s from the composite tick (console only). MEASURED (real Chrome, hidden tab, AudioWorklet rig mirroring liveComposite, 8s trials, 2 runs with order reversed, idle machine and no real game): 4K delivered 21.5 / 11.9 fps against a 30 fps target, drawImage 13.94 / 8.55 ms of a 33 ms budget, composite encoder starved to 289 / 106 KB/s; the same rig at 1080p delivered 29.8–29.9 fps, drawImage 0.97–1.04 ms, encoders 597–614 KB/s. ROBERT RECHECK 2026-08-25 PARTIAL: the game take now RECORDS — no frozen-frame complaint; the failure moved to AUDIO (progressive desync + noises under the same load, its own P1 in Now) and to a game-first WEDGE ordering (case file). The console lines (`[capture] display capped 3840×2160@… → 1920×1080@30`, `[capture] screen … delivering N fps`) are still unseen from a real game take.
 - [~~P1~~ FIXED 2026-08-23] Robert: "sound broke into lag sounds" + "sound was not loud, same as before" — ONE cause, both symptoms. Measured on the delivered export: the makeup gain was PEAK-BOUND (p20 floor 0.0062 vs a 0.01 ceiling so the floor bound was slack; p90 reached 0.1063, 1.4 dB short of the 0.125 target, so the target bound was not reached) — one sharp transient set `peak`, capped the gain for the WHOLE take, and was itself destroyed by the limiter. The limiter's tanh fold went numerically dead at an input of 1.152 while the gain bound licensed peaks to 1.9, so a 1.66:1 range of the loudest content collapsed onto one 16-bit code: 217 full-scale ~0.25 ms impulses from t=12.5s, which is the crackle. FIXED by (1) an algebraic u/(1+u) fold — same f(0)=0, f'(0)=1 C1 knee and f(inf)=1 ceiling as tanh, but polynomial approach, resolved to LIMIT_USABLE_MAX ~= 82, and bit-identical below the knee; (2) NORMALIZE_PEAK_OVERDRIVE 2 -> 4, which the old curve could not have carried. Old vs new on the take's back-solved numbers: gain 3.06 peak-bound / p90 -19.47 dBFS / transient rendered as 32768 x5 + 31130 (2 distinct values of 6) BECOMES gain 3.60 target-bound / p90 -18.06 dBFS on target / 6 distinct values, none pinned. Gates: 260 tests, fidelity oracle PASS (toneErr 0.02 dB, limiterHits 0), sync oracle PASS. STILL OPEN and deliberately not claimed as fixed: general loudness. That take's MEDIAN window RMS is 18 dB below its p90, so most of it sits far below the level being normalized — closing that needs real dynamic-range compression, which is a separate Robert decision.
 - [~~P1~~ FIXED 2026-08-23] "stopped some input mid record, but in the editor timeline they are full length" + "why i cant turn off screen and camera mid session" + "must not be muted but stopped, but resumable after, any input". Was: the chips live-MUTED audio (`track.enabled = false` — device still open, camera light still on, channel still recording real-time silence at full length) and locked video entirely. Now `CaptureSession.setChannelActive(kind, active)`: off releases the device and closes that channel's file at that instant; on re-acquires and late-joins a NEW segment with its own startOffsetMs, so the off stretch is a real hole on the timeline. Any input, including one never armed for the take. `setAudioEnabled` is kept in the contract but the default UI no longer calls it.
-- [P2] No local disk guard on capture, exposed by removing the 30-min cap (2026-08-23). Capture streams every channel to OPFS as it records, so length costs disk and not RAM — but nothing checks `navigator.storage.estimate()` before or during a take. A write failure is at least loud (`session.ts` ondataavailable → channel-error + onTrackEnded, partial take kept), so this is degradation and not silent loss; still, an uncapped take should warn on low headroom before it starts and while it runs, and the ~1.1 GB/hour at the production 8 Mbps + 128 kbps is a number the UI can show.
+- [P2 → ROADMAP B5] No local disk guard on capture, exposed by removing the 30-min cap (2026-08-23). Capture streams every channel to OPFS as it records, so length costs disk and not RAM — but nothing checks `navigator.storage.estimate()` before or during a take. A write failure is at least loud (`session.ts` ondataavailable → channel-error + onTrackEnded, partial take kept), so this is degradation and not silent loss; still, an uncapped take should warn on low headroom before it starts and while it runs, and the ~1.1 GB/hour at the production 8 Mbps + 128 kbps is a number the UI can show.
 - [~~P1~~ FIXED 2026-08-29] Robert: "Missing from this take: Screen — the device never connected", then "screen shown on preview, but in video its missing", same without `?sourcefps=1`. TWO CAUSES, ONE SYMPTOM, BOTH EXPOSED BY NATIVE-RES GOING DEFAULT THAT MORNING — the raw channel's VideoEncoder is now configured at the MONITOR's own size, and before that the 1920x1080 cap hid both by accident. (a) AVC CANNOT ENCODE AN ODD SIDE and refuses rather than rounding; a Mac in a scaled display mode reports odd sizes as a matter of course (1728x1117 is a stock "More Space" mode). (b) AN AVC LEVEL IS A FRAME-SIZE LIMIT and Chrome enforces it; both encoders' candidate lists stopped at level 4.2 = 8704 macroblocks ≈ 1920x1088, so EVERY display bigger than 1080p was in the hole (1440p is 14400 MB, 4K is 32400). Either way the channel wrote nothing, the MediaRecorder fallback wrote nothing either, and the take reported the screen missing — while the preview showed it throughout, because the TRACK was never the problem. REPRODUCED AND FIXED FROM A URL on prod: `?synthetic=1&screensize=1728x1117` was `missing: ["screen"]` and is now 1726x1116 on `avc1.4D402A` (the SAME encoder as before, so the 1080p-class path is untouched); `2560x1441` → 2558x1440 on `avc1.640032`; `3456x2234` → recorded whole on `avc1.640033`, 2.6 MB. Fix: `capDisplayTrack` evens the TRACK (so every consumer including MediaRecorder sees an encodable frame) and `startMeasuredVideo` evens its own ENCODER CONFIG (so a source that refuses to be constrained costs a cropped row, not the screen); levels 5.0/5.1/5.2/6.0 appended to both candidate lists, never reordered. `evenDown` lives beside `evenDim` in core/frame.ts.
 - [P2] THE MEDIARECORDER FALLBACK IS NOT A FALLBACK for a frame the platform's AVC refuses — found while fixing the entry above. When `startMeasuredVideo` threw, the code fell back to the MediaRecorder built during arm and that wrote ZERO bytes too, so the "a failure here is not fatal to the take" comment in session.ts was not true for this class of failure: both paths were asking the same platform encoder for the same impossible frame. Both causes are fixed upstream now, so nothing reaches it this way today — but the fallback's own promise is still unverified for anything a hardware AVC encoder refuses. Wanted: a rung that changes the ASK (even the size, drop the level, or accept webm/VP9, which has no odd-side restriction) rather than re-asking the same question with a different API.
-- [P2] "the device never connected" BLAMES THE DEVICE FOR AN OS PERMISSION. Separate from the entry above and still open — hit on the DEV machine while reproducing it: when macOS has not granted Chrome screen recording, Chrome's picker opens and says so ("allow screen recording for Chrome in System Settings. You'll then need to restart Chrome") with Share greyed out, `getDisplayMedia` never rejects, and INOUT's own 30 s deadline fires and reports the generic "the device never connected" — throwing away the one message that would have solved it. Measured: `display timeout +30023ms` / `+30021ms` with and without the flag. Wanted: when a display request times out, say what it actually is, and say it while the request is still outstanding rather than only in the post-take banner. The wedge ladder ALSO escalates on each such timeout (`rememberDisplayWedge`), spending a constraint escalation on something no constraint can fix; it self-heals on the first success. Behaviour change → Robert's yes before it ships.
-- [P1] `npm run oracle:load` IS RED, AND IT IS NOT F15 — measured on both sides of it 2026-08-29. HEAD (a47113c) and the commit before F15's first line (79d6def, run in a throwaway worktree) give the IDENTICAL verdict: `composite tail FAIL/fps FAIL · raw tail INCONCLUSIVE/fps INCONCLUSIVE`, composite tail 9848 ms / 7366 ms against a 400 ms band, delivered 0.2 / 2.5 fps against a band of 10, and BOTH raw runs erroring `the take produced no screen channel`. So the gate F15's task lists cannot be met by F15, and the red predates it. THE LEAD, and it is the same mechanism this session diagnosed for the Browser pane: the rig's 4K source is a canvas painted from requestAnimationFrame, and `oracle:load` drives through `exp.mjs`, which is HEADLESS by default — a hidden/headless page runs rAF at 0, so the SOURCE starves and the tail band reads the starvation as tail loss. DECISIONS already records this rig measuring 14 fps under 4K load ("a rAF-painted canvas's cost is the painting"); 0.2-2.5 fps is a different regime, which points at a Chrome update changing headless rAF rather than at the product. FIRST MOVE: re-run it `--headed` (exp.mjs takes the flag) and see whether the source delivers; if it does, the rig's default is the bug and the band has been measuring the harness for an unknown number of sessions. A rig that cannot make its own source move is not a gate.
+- [P2 → ROADMAP B6] "the device never connected" BLAMES THE DEVICE FOR AN OS PERMISSION. Separate from the entry above and still open — hit on the DEV machine while reproducing it: when macOS has not granted Chrome screen recording, Chrome's picker opens and says so ("allow screen recording for Chrome in System Settings. You'll then need to restart Chrome") with Share greyed out, `getDisplayMedia` never rejects, and INOUT's own 30 s deadline fires and reports the generic "the device never connected" — throwing away the one message that would have solved it. Measured: `display timeout +30023ms` / `+30021ms` with and without the flag. Wanted: when a display request times out, say what it actually is, and say it while the request is still outstanding rather than only in the post-take banner. The wedge ladder ALSO escalates on each such timeout (`rememberDisplayWedge`), spending a constraint escalation on something no constraint can fix; it self-heals on the first success. Behaviour change → Robert's yes before it ships.
+- [P1 → ROADMAP G2] `npm run oracle:load` IS RED, AND IT IS NOT F15 — measured on both sides of it 2026-08-29. HEAD (a47113c) and the commit before F15's first line (79d6def, run in a throwaway worktree) give the IDENTICAL verdict: `composite tail FAIL/fps FAIL · raw tail INCONCLUSIVE/fps INCONCLUSIVE`, composite tail 9848 ms / 7366 ms against a 400 ms band, delivered 0.2 / 2.5 fps against a band of 10, and BOTH raw runs erroring `the take produced no screen channel`. So the gate F15's task lists cannot be met by F15, and the red predates it. THE LEAD, and it is the same mechanism this session diagnosed for the Browser pane: the rig's 4K source is a canvas painted from requestAnimationFrame, and `oracle:load` drives through `exp.mjs`, which is HEADLESS by default — a hidden/headless page runs rAF at 0, so the SOURCE starves and the tail band reads the starvation as tail loss. DECISIONS already records this rig measuring 14 fps under 4K load ("a rAF-painted canvas's cost is the painting"); 0.2-2.5 fps is a different regime, which points at a Chrome update changing headless rAF rather than at the product. FIRST MOVE: re-run it `--headed` (exp.mjs takes the flag) and see whether the source delivers; if it does, the rig's default is the bug and the band has been measuring the harness for an unknown number of sessions. A rig that cannot make its own source move is not a gate.
 - [P2] Fidelity oracle red on dev machine under load: uniform tone-level drop 1.1–2.3 dB varying run-to-run (signature of contention-starved capture, same family as the ALL-NULL P2 above). Pre-existing before 2026-07-23 changes (clean tree measured worse). Do not treat as mix-path regression without a quiet-machine run.
 
 ## Ideas
