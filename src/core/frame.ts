@@ -40,6 +40,65 @@ export const DEFAULT_FRAME_ASPECT = 16 / 9
  */
 export const MAX_OUTPUT_LONG_EDGE = 2560
 
+const SOURCE_RES_KEY = 'inout.frame.sourceres'
+
+function sourceResFromSearch(): boolean | null {
+  if (typeof location === 'undefined') return null
+  const v = new URLSearchParams(location.search).get('sourceres')
+  return v === '1' ? true : v === '0' ? false : null
+}
+
+function sourceResFromStorage(): boolean | null {
+  try {
+    const v = localStorage.getItem(SOURCE_RES_KEY)
+    return v === '1' ? true : v === '0' ? false : null
+  } catch {
+    return null
+  }
+}
+
+let sourceResOverride: boolean | null = null
+
+/**
+ * DOES THE OUTPUT GO ALL THE WAY UP TO THE USER'S OWN SCREEN? — task F18,
+ * Robert: "i want 3024x1964 or whatever users resolution is on roadmap".
+ *
+ * The ladder stopped at 1440p for INHERITED reasons, not decided ones: F7/F7b
+ * chose 540p/720p/1080p/1440p by measured file-size separation on a product
+ * whose capture was hard-capped at 1080p, O6 later made the 1440p step real
+ * detail, and nobody asked what sits above it. MAX_OUTPUT_LONG_EDGE above is
+ * one constant bounding both the ladder and capture, so lifting it lifts both.
+ *
+ * OFF BY DEFAULT, and the task itself says why: capturing 3024x1964 instead of
+ * 2560x1662 is 40 % more pixels through the encoders O15 just finished counting,
+ * which is exactly where Robert's freeze lived. Behind a flag the cost is his to
+ * find rather than everyone's. `?encoderbudget=1` is its companion — that one
+ * bounds a machine that has already been seen to collapse.
+ */
+export function sourceResEnabled(): boolean {
+  return sourceResFromSearch() ?? sourceResOverride ?? sourceResFromStorage() ?? false
+}
+
+export function setSourceRes(on: boolean | null): void {
+  sourceResOverride = on
+  try {
+    if (on === null) localStorage.removeItem(SOURCE_RES_KEY)
+    else localStorage.setItem(SOURCE_RES_KEY, on ? '1' : '0')
+  } catch {
+    /* memory-only */
+  }
+}
+
+/**
+ * THE LONG EDGE CAPTURE MAY NOT EXCEED on this load. Infinity means "the
+ * source's own size" — not a bigger constant, because a constant is what F18
+ * exists to remove. Callers must check `Number.isFinite` before putting it in a
+ * constraint: `{ max: Infinity }` is not a constraint, it is a bug.
+ */
+export function captureCeilingLongEdge(): number {
+  return sourceResEnabled() ? Number.POSITIVE_INFINITY : MAX_OUTPUT_LONG_EDGE
+}
+
 const STORAGE_KEY = 'inout.frame.source'
 
 function fromSearch(): boolean | null {
@@ -248,6 +307,32 @@ export function takeAspect(recording: Recording): number {
   const screen = video.find((c) => c.kind === 'screen')
   const chosen = screen ?? video[0]
   return aspectOf(chosen?.width, chosen?.height) ?? DEFAULT_FRAME_ASPECT
+}
+
+/**
+ * THE BIGGEST PICTURE THIS TAKE ACTUALLY HOLDS — task F18's top step.
+ *
+ * Deliberately NOT `takeAspect`'s composite-first rule, and the difference is
+ * the whole point: the composite is written at COMPOSITE_WIDTH (1920) whatever
+ * the screen was, so asking it would answer 1920 for a 3024-wide take and the
+ * source step would be a step to nowhere. The raw channel is where the take's
+ * own resolution actually lives, and O3c's packet copy is what delivers it.
+ *
+ * THE SCREEN DECIDES where there is one, for the same reason it decides the
+ * aspect: a screen-present take draws the screen full-frame. With no screen the
+ * camera decides — that take IS the camera.
+ *
+ * Returns 0 when there is nothing to follow, which every caller reads as "this
+ * take has no source step".
+ */
+export function takeLongEdge(recording: Recording): number {
+  const video = recording.channels.filter((c) => c.media === 'video')
+  const screen = video.find((c) => c.kind === 'screen')
+  const chosen = screen ?? video[0]
+  const w = chosen?.width ?? 0
+  const h = chosen?.height ?? 0
+  if (!(w > 0) || !(h > 0)) return 0
+  return Math.max(w, h)
 }
 
 /**

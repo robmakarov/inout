@@ -8,6 +8,8 @@ import {
   resolveTier,
   saveQualityTier,
   settingsForTier,
+  sourceStepFor,
+  tierById,
   type QualityTier,
 } from '@core/compose/quality'
 import { frameAspectFor, sourceFrameEnabled } from '@core/frame'
@@ -65,10 +67,21 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
    */
   const frameRate = takeRate(recording)
   const [storedTier, setTier] = useState<QualityTier>(() => loadQualityTier())
-  const tier = useMemo(
-    () => resolveTier(storedTier, frameAspect, frameRate),
-    [storedTier, frameAspect, frameRate],
-  )
+  /**
+   * F18: what "Source" means for THIS take — 0 when it has no source step
+   * (already inside the ladder, or more than one video channel, so the native
+   * packet copy could not deliver it).
+   */
+  const sourceLongEdge = useMemo(() => sourceStepFor(recording), [recording])
+  const tier = useMemo(() => {
+    // THE REMEMBERED STEP HAS TO SURVIVE A SMALLER TAKE, which is the one thing
+    // about the source step that is not like the others: "source" is a
+    // different number on every machine and absent on most takes. A remembered
+    // 'source' on a take that has none falls back to the biggest step this take
+    // does offer, rather than silently resolving to the declared 1440p box.
+    const base = storedTier.id === 'source' && sourceLongEdge === 0 ? tierById('1440p') : storedTier
+    return resolveTier(base, frameAspect, frameRate, sourceLongEdge)
+  }, [storedTier, frameAspect, frameRate, sourceLongEdge])
   const exporting = mode === 'exporting' || mode === 'share'
   // F5a: a PROPOSED cut list. It is preview-only until the user applies it, and
   // any other edit invalidates it — a proposal computed against a timeline that
