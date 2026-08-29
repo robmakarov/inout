@@ -36,6 +36,7 @@ import {
   viewportAt,
   viewportTrackIsActive,
 } from '@core/timeline'
+import { frameAspectFor, frameForAspect, frameScale } from '@core/frame'
 import { drawVideoFrame, type FrameCanvas } from '@core/compose/layout'
 import { openVideoChannel, type VideoChannelReader } from '@core/compose/video'
 import {
@@ -304,7 +305,14 @@ function localEndSec(edit: EditState, channelId: string, durationMs: number): nu
  */
 export async function buildForAi(opts: AiExportOptions): Promise<ExportResult> {
   const { recording, edit, onProgress, signal } = opts
-  const { width, height } = DEFAULT_EXPORT_SETTINGS
+  // F13: the keyframe pages are the take's own picture, so they carry the
+  // take's own shape — a portrait take's page was a landscape box with the
+  // camera cropped into it. The 1080p pixel budget is unchanged, and a 16:9
+  // take resolves to exactly the DEFAULT_EXPORT_SETTINGS this used to read.
+  const { width, height } = frameForAspect(
+    frameAspectFor(recording),
+    DEFAULT_EXPORT_SETTINGS.width,
+  )
   const t0 = performance.now()
   lastStats = null
 
@@ -377,7 +385,7 @@ export async function buildForAi(opts: AiExportOptions): Promise<ExportResult> {
       c.imageSmoothingEnabled = true
       c.imageSmoothingQuality = 'medium'
     }
-    const frame: FrameCanvas = { ctx: fullCtx, width, height, scale: width / 1920 }
+    const frame: FrameCanvas = { ctx: fullCtx, width, height, scale: frameScale(width, height) }
 
     const cameraFull = !readers.some((r) => r.kind === 'screen')
     const cameraMoves = !cameraFull && cameraTrackIsActive(edit.camera)

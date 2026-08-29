@@ -6,6 +6,7 @@ import {
   type MediaKind,
 } from '@core/types'
 import { analytics } from '@core/analytics'
+import { sourceFrameEnabled } from '@core/frame'
 import { isAppleWebKit } from '@core/capabilities'
 import { guardStream } from './deviceGuard'
 import { nativeResEnabled } from './nativeRes'
@@ -382,16 +383,46 @@ export function hintTrackContent(track: MediaStreamTrack | undefined, kind: Chan
 }
 
 /**
+ * Which way up the device is, as a box the size of a screenless take's ask.
+ *
+ * F13's SECOND, SMALLER HALF: a screenless take asked the sensor for a
+ * LANDSCAPE 1920x1080 — the wrong orientation, requested before anything was
+ * composited, on the one kind of take a phone can make. A camera-only take
+ * fills the frame, so the shape it is handed is the shape of the video.
+ *
+ * `ideal` is a preference, not a bound, so a sensor that cannot do this shape
+ * hands over what it has and nothing is lost; what changes is which of several
+ * available formats the browser's fitness distance picks.
+ */
+export function orientedCameraBox(): { width: number; height: number } {
+  const portrait =
+    typeof window !== 'undefined' &&
+    window.innerHeight > 0 &&
+    window.innerWidth > 0 &&
+    window.innerHeight > window.innerWidth
+  return portrait
+    ? { width: CAPTURE_MAX_HEIGHT, height: CAPTURE_MAX_WIDTH }
+    : { width: CAPTURE_MAX_WIDTH, height: CAPTURE_MAX_HEIGHT }
+}
+
+/**
  * Camera constraints. A camera-only take fills the whole frame (the camera-full
  * rule), so 720p was being upscaled to a 1080p export — visibly soft. Ask for
  * 1080p when there is no screen channel; when the camera is only a PiP at 24 %
  * of the width, 720p is already more than the output needs and the smaller
  * frame is cheaper to encode.
+ *
+ * F13: the screenless ask follows the DEVICE's orientation rather than naming
+ * a landscape box. Behind the flag it is the landscape box it always was. The
+ * PiP ask is untouched either way — a PiP is 24 % of the width in every frame
+ * shape, and 1280x720 already exceeds what that slot can show.
  */
 export function cameraVideoConstraints(config: CaptureConfig): MediaTrackConstraints {
-  return config.screen
-    ? { width: { ideal: 1280 }, height: { ideal: 720 } }
-    : { width: { ideal: CAPTURE_MAX_WIDTH }, height: { ideal: CAPTURE_MAX_HEIGHT } }
+  if (config.screen) return { width: { ideal: 1280 }, height: { ideal: 720 } }
+  const box = sourceFrameEnabled()
+    ? orientedCameraBox()
+    : { width: CAPTURE_MAX_WIDTH, height: CAPTURE_MAX_HEIGHT }
+  return { width: { ideal: box.width }, height: { ideal: box.height } }
 }
 
 export function exceedsCaptureCeiling(s: MediaTrackSettings): boolean {

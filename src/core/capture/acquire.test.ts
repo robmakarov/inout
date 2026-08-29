@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import {
   cameraVideoConstraints,
+  orientedCameraBox,
   displayMediaOptions,
   displayAudioMissingMessage,
   CAPTURE_MAX_FPS,
@@ -8,6 +9,7 @@ import {
   CAPTURE_MAX_WIDTH,
 } from './acquire'
 import { setNativeRes } from './nativeRes'
+import { setSourceFrame } from '@core/frame'
 
 const base = { screen: false, camera: true, mic: false, systemAudio: false }
 
@@ -25,6 +27,79 @@ describe('cameraVideoConstraints', () => {
     const c = cameraVideoConstraints({ ...base, screen: true })
     expect(c.width).toEqual({ ideal: 1280 })
     expect(c.height).toEqual({ ideal: 720 })
+  })
+
+  /**
+   * F13's second, smaller half: the app asked a SCREENLESS take's sensor for a
+   * landscape box before anything was composited — on the one kind of take a
+   * phone can make.
+   */
+  describe('the screenless ask follows the device (F13)', () => {
+    const g = globalThis as { window?: unknown }
+
+    function withViewport<T>(width: number, height: number, run: () => T): T {
+      const had = 'window' in g
+      const before = g.window
+      g.window = { innerWidth: width, innerHeight: height }
+      try {
+        return run()
+      } finally {
+        if (had) g.window = before
+        else delete g.window
+      }
+    }
+
+    afterEach(() => setSourceFrame(null))
+
+    it('is the landscape box it always was while the flag is off', () => {
+      withViewport(390, 844, () => {
+        const c = cameraVideoConstraints(base)
+        expect(c.width).toEqual({ ideal: CAPTURE_MAX_WIDTH })
+        expect(c.height).toEqual({ ideal: CAPTURE_MAX_HEIGHT })
+      })
+    })
+
+    it('asks portrait on a portrait viewport once the frame follows the source', () => {
+      setSourceFrame(true)
+      withViewport(390, 844, () => {
+        const c = cameraVideoConstraints(base)
+        expect(c.width).toEqual({ ideal: CAPTURE_MAX_HEIGHT })
+        expect(c.height).toEqual({ ideal: CAPTURE_MAX_WIDTH })
+      })
+    })
+
+    it('the box itself is the export box, turned', () => {
+      withViewport(390, 844, () =>
+        expect(orientedCameraBox()).toEqual({
+          width: CAPTURE_MAX_HEIGHT,
+          height: CAPTURE_MAX_WIDTH,
+        }),
+      )
+      withViewport(1440, 900, () =>
+        expect(orientedCameraBox()).toEqual({
+          width: CAPTURE_MAX_WIDTH,
+          height: CAPTURE_MAX_HEIGHT,
+        }),
+      )
+    })
+
+    it('is unchanged on a landscape viewport, flag or no flag', () => {
+      setSourceFrame(true)
+      withViewport(1440, 900, () => {
+        const c = cameraVideoConstraints(base)
+        expect(c.width).toEqual({ ideal: CAPTURE_MAX_WIDTH })
+        expect(c.height).toEqual({ ideal: CAPTURE_MAX_HEIGHT })
+      })
+    })
+
+    it('leaves the PiP ask alone — a PiP is 24 % of the width in any shape', () => {
+      setSourceFrame(true)
+      withViewport(390, 844, () => {
+        const c = cameraVideoConstraints({ ...base, screen: true })
+        expect(c.width).toEqual({ ideal: 1280 })
+        expect(c.height).toEqual({ ideal: 720 })
+      })
+    })
   })
 })
 

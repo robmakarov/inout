@@ -35,6 +35,10 @@ function tickerModuleUrl(): string {
 }
 
 const FPS = 30
+/**
+ * The composite's shape when the caller names none — what this engine wrote
+ * before F13, and what every take without a frame to follow still gets.
+ */
 const W = 1920
 const H = 1080
 const VIDEO_BITS = 8_000_000
@@ -127,6 +131,13 @@ export interface LiveCompositeOptions {
    * offset and consumers keep the old assume-zero behaviour.
    */
   epochMs?: number
+  /**
+   * THE COMPOSITE'S OWN GEOMETRY (task F13). The session derives it from the
+   * take's video channel; omitted, this engine writes the 1920x1080 it always
+   * has.
+   */
+  width?: number
+  height?: number
 }
 
 export interface LiveCompositeHandle {
@@ -171,7 +182,7 @@ export function canLiveComposite(inputs: LiveCompositeInputs): boolean {
   return !!(inputs.screen || inputs.camera) && pickCompositeMime() !== null
 }
 
-function drawContain(ctx: CanvasRenderingContext2D, v: HTMLVideoElement): void {
+function drawContain(ctx: CanvasRenderingContext2D, v: HTMLVideoElement, W: number, H: number): void {
   const vw = v.videoWidth || W
   const vh = v.videoHeight || H
   const s = Math.min(W / vw, H / vh)
@@ -180,7 +191,7 @@ function drawContain(ctx: CanvasRenderingContext2D, v: HTMLVideoElement): void {
   ctx.drawImage(v, (W - dw) / 2, (H - dh) / 2, dw, dh)
 }
 
-function drawCover(ctx: CanvasRenderingContext2D, v: HTMLVideoElement): void {
+function drawCover(ctx: CanvasRenderingContext2D, v: HTMLVideoElement, W: number, H: number): void {
   const vw = v.videoWidth || W
   const vh = v.videoHeight || H
   const s = Math.max(W / vw, H / vh)
@@ -189,8 +200,10 @@ function drawCover(ctx: CanvasRenderingContext2D, v: HTMLVideoElement): void {
   ctx.drawImage(v, (W - dw) / 2, (H - dh) / 2, dw, dh)
 }
 
-function drawPip(ctx: CanvasRenderingContext2D, v: HTMLVideoElement): void {
-  const scale = W / 1920
+function drawPip(ctx: CanvasRenderingContext2D, v: HTMLVideoElement, W: number, H: number): void {
+  // F13: keyed to the LONG edge, so a portrait composite keeps the border and
+  // radius the layout was authored with. Identical to W / 1920 in landscape.
+  const scale = Math.max(W, H) / 1920
   const pipW = 0.24 * W
   const aspect = v.videoWidth && v.videoHeight ? v.videoWidth / v.videoHeight : 4 / 3
   const pipH = pipW / aspect
@@ -235,9 +248,12 @@ export async function startLiveComposite(
   blobKey: string,
   options: LiveCompositeOptions = {},
 ): Promise<LiveCompositeV1Handle> {
+  // F13: the caller's frame, or the constant this engine shipped with.
+  const outW = options.width && options.width > 0 ? options.width : W
+  const outH = options.height && options.height > 0 ? options.height : H
   const canvas = document.createElement('canvas')
-  canvas.width = W
-  canvas.height = H
+  canvas.width = outW
+  canvas.height = outH
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('live composite: 2d context unavailable')
 
@@ -420,12 +436,12 @@ export async function startLiveComposite(
       gaps.length = 0
     }
     ctx.fillStyle = '#0a0a0c'
-    ctx.fillRect(0, 0, W, H)
+    ctx.fillRect(0, 0, outW, outH)
     if (screenEl && screenEl.readyState >= 2) {
-      drawContain(ctx, screenEl)
-      if (cameraEl && cameraEl.readyState >= 2) drawPip(ctx, cameraEl)
+      drawContain(ctx, screenEl, outW, outH)
+      if (cameraEl && cameraEl.readyState >= 2) drawPip(ctx, cameraEl, outW, outH)
     } else if (cameraEl && cameraEl.readyState >= 2) {
-      drawCover(ctx, cameraEl)
+      drawCover(ctx, cameraEl, outW, outH)
     }
   }
   const ticker = new AudioWorkletNode(audioCtx, 'inout-composite-tick', {
@@ -565,8 +581,8 @@ export async function startLiveComposite(
         engine: 'v1',
         mimeType: recorder.mimeType || mime,
         durationMs: Math.round(durationMs),
-        width: W,
-        height: H,
+        width: outW,
+        height: outH,
         bytes,
         tailIncomplete: stats.drainTimedOut || undefined,
       }

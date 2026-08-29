@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { EditState, Recording } from '@core/types'
 import { clampEditState, outputDurationMs } from '@core/timeline'
 import type { TightenProposal } from '@core/timeline'
 import {
   isDefaultTier,
   loadQualityTier,
+  resolveTier,
   saveQualityTier,
   settingsForTier,
   type QualityTier,
 } from '@core/compose/quality'
+import { frameAspectFor } from '@core/frame'
 import { exportByBestPath } from '@core/compose'
 import { editsRepo, recordingsRepo } from '@core/store'
 import { analytics } from '@core/analytics'
@@ -36,7 +38,12 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
   const [confirmOpen, setConfirmOpen] = useState(false)
   // F7: quality is chosen BEFORE the export runs, in the timeline slot.
   const [choosing, setChoosing] = useState(false)
-  const [tier, setTier] = useState<QualityTier>(() => loadQualityTier())
+  // F13: the remembered step, resolved to THIS take's shape. `resolveTier` is
+  // the identity on a 16:9 take and on every take with the flag off, so a
+  // reload restores exactly the step it always did.
+  const frameAspect = frameAspectFor(recording)
+  const [storedTier, setTier] = useState<QualityTier>(() => loadQualityTier())
+  const tier = useMemo(() => resolveTier(storedTier, frameAspect), [storedTier, frameAspect])
   const exporting = mode === 'exporting' || mode === 'share'
   // F5a: a PROPOSED cut list. It is preview-only until the user applies it, and
   // any other edit invalidates it — a proposal computed against a timeline that
@@ -176,7 +183,7 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
     // channel that already holds the chosen tier's geometry is still
     // packet-copyable at any tier (O3c) — choose.ts answers that itself.
     const defaultTier = isDefaultTier(chosen)
-    const settings = settingsForTier(chosen)
+    const settings = settingsForTier(chosen, recording)
 
     const ac = new AbortController()
     store.setExportAbort(ac)
@@ -238,7 +245,9 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
   }
 
   return (
-    <div className="editor">
+    // F13: the take's own frame aspect, so the stage, the timeline and the
+    // export panel are all the width of the picture this take will make.
+    <div className="editor" style={{ '--stage-ar': frameAspect } as React.CSSProperties}>
       {recording.missing?.length ? (
         <div className="editor__missing" role="alert">
           {missingChannelsMessage(recording.missing, detectCapabilities())}

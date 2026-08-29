@@ -24,6 +24,7 @@
  */
 import { AUDIO_BITRATE, VIDEO_BITRATE } from './codecs'
 import { chooseCopySource, type CopySource } from './copySource'
+import { frameAspectFor, frameForAspect } from '@core/frame'
 import { DEFAULT_EXPORT_SETTINGS, type ExportSettings, type Recording } from '@core/types'
 
 export type QualityTierId = '540p' | '720p' | '1080p' | '1440p'
@@ -35,6 +36,14 @@ export interface QualityTier {
   height: number
   fps: number
   videoBitrate: number
+  /**
+   * WHAT THE STEP ACTUALLY IS (task F13): a pixel budget, expressed as the
+   * frame's long edge. `width`/`height` below are that budget resolved against
+   * 16:9 — the shape every take had before F13 and the shape every take still
+   * has until the frame follows the source. `resolveTier` re-resolves them
+   * against a take's own aspect and is the identity on 16:9.
+   */
+  longEdge: number
   /** Honest one-liner for this step, shown when it is selected. */
   note?: string
 }
@@ -70,23 +79,56 @@ export const QUALITY_TIERS: QualityTier[] = [
     label: '540p',
     width: 960,
     height: 540,
+    longEdge: 960,
     fps: 30,
     videoBitrate: 2_000_000,
     note: 'Smallest file. Fine for a talking head; small screen text will be soft.',
   },
-  { id: '720p', label: '720p', width: 1280, height: 720, fps: 30, videoBitrate: 4_000_000 },
+  { id: '720p', label: '720p', width: 1280, height: 720, longEdge: 1280, fps: 30, videoBitrate: 4_000_000 },
   {
     id: '1080p',
     label: '1080p',
     width: DEFAULT_EXPORT_SETTINGS.width,
     height: DEFAULT_EXPORT_SETTINGS.height,
+    longEdge: DEFAULT_EXPORT_SETTINGS.width,
     fps: DEFAULT_EXPORT_SETTINGS.fps,
     videoBitrate: VIDEO_BITRATE,
   },
-  { id: '1440p', label: '1440p', width: 2560, height: 1440, fps: 30, videoBitrate: 14_000_000 },
+  { id: '1440p', label: '1440p', width: 2560, height: 1440, longEdge: 2560, fps: 30, videoBitrate: 14_000_000 },
 ]
 
 export const DEFAULT_TIER_ID: QualityTierId = '1080p'
+
+/**
+ * This step at THIS take's aspect (task F13).
+ *
+ * The step keeps its name, its long edge and its bits-per-pixel; only the shape
+ * moves. The bitrate ceiling is re-scaled by the pixel ratio for the same
+ * reason it differs between steps at all — a taller frame at the same ceiling
+ * would be a quieter encode wearing the same label.
+ *
+ * IDEMPOTENT AND THE IDENTITY ON 16:9: it is computed from `longEdge` and the
+ * aspect, never from the width/height it is replacing, so resolving twice
+ * changes nothing and resolving a 16:9 take returns this exact tier.
+ */
+export function resolveTier(tier: QualityTier, aspect: number): QualityTier {
+  const { width, height } = frameForAspect(aspect, tier.longEdge)
+  if (width === tier.width && height === tier.height) return tier
+  const nominal = tier.width * tier.height
+  return {
+    ...tier,
+    width,
+    height,
+    videoBitrate: Math.round((tier.videoBitrate * (width * height)) / nominal),
+  }
+}
+
+/** The four steps as this take would export them. Byte-identical to
+ *  QUALITY_TIERS whenever the frame does not follow the source. */
+export function tiersForTake(recording: Recording): QualityTier[] {
+  const aspect = frameAspectFor(recording)
+  return QUALITY_TIERS.map((t) => resolveTier(t, aspect))
+}
 
 export function tierById(id: string | null | undefined): QualityTier {
   return QUALITY_TIERS.find((t) => t.id === id) ?? QUALITY_TIERS.find((t) => t.id === DEFAULT_TIER_ID)!
@@ -106,17 +148,24 @@ export function isDefaultTier(tier: QualityTier): boolean {
  * the ladder's at export time, as it always was.)
  */
 export function copySourceForTier(recording: Recording, tier: QualityTier): CopySource | null {
-  return chooseCopySource(recording, settingsForTier(tier), {
+  return chooseCopySource(recording, settingsForTier(tier, recording), {
     allowComposite: isDefaultTier(tier),
   }).source
 }
 
-export function settingsForTier(tier: QualityTier): ExportSettings {
+/**
+ * What this step asks the export for. Passing the recording resolves the step
+ * against the take's own shape first (F13) — omit it and the step answers with
+ * the landscape box it was declared as, which is what every caller without a
+ * take in hand wants.
+ */
+export function settingsForTier(tier: QualityTier, recording?: Recording): ExportSettings {
+  const t = recording ? resolveTier(tier, frameAspectFor(recording)) : tier
   return {
-    width: tier.width,
-    height: tier.height,
-    fps: tier.fps,
-    videoBitrate: tier.videoBitrate,
+    width: t.width,
+    height: t.height,
+    fps: t.fps,
+    videoBitrate: t.videoBitrate,
   }
 }
 
@@ -174,9 +223,12 @@ export interface SizeEstimate {
 
 export function estimateExportBytes(
   recording: Recording,
-  tier: QualityTier,
+  nominalTier: QualityTier,
   outputDurationMs: number,
 ): SizeEstimate {
+  // F13: price the step this take would actually export, not the landscape box
+  // it is declared as. Idempotent, so a caller that already resolved is free.
+  const tier = resolveTier(nominalTier, frameAspectFor(recording))
   const seconds = Math.max(0, outputDurationMs / 1000)
   const hasAudio = recording.channels.some((c) => c.media === 'audio')
   const audioBytes = hasAudio ? (AUDIO_BITRATE / 8) * seconds : 0

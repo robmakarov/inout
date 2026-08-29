@@ -3,10 +3,19 @@
  * number the file?" is answered by the same function the export ladder uses,
  * so the badge, the estimate and the path cannot disagree about capability.
  */
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { ChannelRecording, CompositeRecording, Recording } from '@core/types'
 import { setSingleGenRung } from '@core/singleGen'
-import { QUALITY_TIERS, copySourceForTier, estimateExportBytes } from './quality'
+import { setSourceFrame } from '@core/frame'
+import { VIDEO_BITRATE } from './codecs'
+import {
+  QUALITY_TIERS,
+  copySourceForTier,
+  estimateExportBytes,
+  resolveTier,
+  settingsForTier,
+  tiersForTake,
+} from './quality'
 
 const tier = (id: string) => QUALITY_TIERS.find((t) => t.id === id)!
 
@@ -85,5 +94,80 @@ describe('estimateExportBytes on a copyable step', () => {
   it('stays a model when the channel never recorded its size', () => {
     const blind = recording({ channels: [channel({ bytes: undefined })] })
     expect(estimateExportBytes(blind, tier('1440p'), 10_000).exact).toBe(false)
+  })
+})
+
+/**
+ * F13 — a step is a pixel budget at the take's own aspect.
+ *
+ * The first test is the task's byte-identical gate expressed where it can
+ * actually fail: the four steps a 16:9 take exports at, field for field.
+ */
+describe('the steps follow the take (F13)', () => {
+  afterEach(() => setSourceFrame(null))
+
+  it('a 16:9 take resolves to the declared steps, field for field', () => {
+    setSourceFrame(true)
+    const rec = recording() // a 2560x1440 screen channel — 16:9
+    expect(tiersForTake(rec)).toEqual(QUALITY_TIERS)
+    for (const t of QUALITY_TIERS) {
+      expect(settingsForTier(t, rec)).toEqual(settingsForTier(t))
+    }
+  })
+
+  it('with the flag off a portrait take still gets the landscape steps', () => {
+    const portrait = recording({
+      channels: [channel({ kind: 'camera', width: 1080, height: 1920 })],
+      composite: undefined,
+    })
+    expect(tiersForTake(portrait)).toEqual(QUALITY_TIERS)
+  })
+
+  it('with the flag on the same take gets portrait steps of the same long edge', () => {
+    setSourceFrame(true)
+    const portrait = recording({
+      channels: [channel({ kind: 'camera', width: 1080, height: 1920 })],
+      composite: undefined,
+    })
+    const steps = tiersForTake(portrait)
+    expect(steps.map((t) => [t.id, t.width, t.height])).toEqual([
+      ['540p', 540, 960],
+      ['720p', 720, 1280],
+      ['1080p', 1080, 1920],
+      ['1440p', 1440, 2560],
+    ])
+    // Same pixels, same name, same bits — only the shape moved.
+    for (const [i, t] of steps.entries()) {
+      expect(t.videoBitrate).toBe(QUALITY_TIERS[i]!.videoBitrate)
+      expect(t.label).toBe(QUALITY_TIERS[i]!.label)
+    }
+  })
+
+  it('a taller frame gets proportionally more bits, so a step is not quietly starved', () => {
+    setSourceFrame(true)
+    const fourThree = recording({
+      channels: [channel({ kind: 'camera', width: 640, height: 480 })],
+      composite: undefined,
+    })
+    const step = tiersForTake(fourThree).find((t) => t.id === '1080p')!
+    expect([step.width, step.height]).toEqual([1920, 1440])
+    expect(step.videoBitrate).toBe(Math.round((VIDEO_BITRATE * (1920 * 1440)) / (1920 * 1080)))
+  })
+
+  it('resolving twice changes nothing', () => {
+    const once = resolveTier(tier('1080p'), 9 / 16)
+    expect(resolveTier(once, 9 / 16)).toEqual(once)
+  })
+
+  it('a portrait take copies its portrait raw channel at the step that matches it', () => {
+    setSourceFrame(true)
+    const portrait = recording({
+      channels: [channel({ kind: 'camera', width: 1080, height: 1920 })],
+      composite: undefined,
+    })
+    const step = tiersForTake(portrait).find((t) => t.id === '1080p')!
+    const copy = copySourceForTier(portrait, step)
+    expect(copy?.origin).toBe('single-generation')
+    expect([copy?.width, copy?.height]).toEqual([1080, 1920])
   })
 })

@@ -14,7 +14,13 @@ export interface FrameCanvas {
   ctx: OffscreenCanvasRenderingContext2D
   width: number
   height: number
-  /** Fixed product layout is authored at 1920w: scale = width / 1920. */
+  /**
+   * Fixed product layout is authored at 1920 wide, so every hardcoded pixel in
+   * this file is multiplied by this. Build it with `frameScale(width, height)`
+   * (core/frame.ts) — on a landscape frame that IS `width / 1920`, and on a
+   * portrait one it keeps the PiP's border and radius the thickness they were
+   * drawn at instead of shrinking them with the narrower side.
+   */
   scale: number
 }
 
@@ -119,6 +125,13 @@ function drawComposition(
     screen.drawWithFit(f.ctx, { fit: 'contain' })
     if (camera) drawCameraPip(f, camera, pose)
   } else if (camera && cameraFull) {
+    // F13: 'cover' is the identity once the frame follows the take — a
+    // camera-only take's frame IS the camera's aspect, so there is nothing to
+    // crop. It stays 'cover' rather than becoming 'contain' because when the
+    // two DO disagree (a source that changed shape mid-take, a take made
+    // before the frame followed anything) a filled frame is the behaviour this
+    // product has always had, and adding black bars to it is not this task's
+    // to do.
     camera.drawWithFit(f.ctx, { fit: 'cover' })
   } else if (camera) {
     drawEmptyFrame(f)

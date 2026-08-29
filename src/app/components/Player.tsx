@@ -25,6 +25,7 @@ import {
   screenInsetRect,
   shadowFor,
 } from '@core/compose/background'
+import { frameAspectFor } from '@core/frame'
 import type { Playback } from '@app/hooks/usePlayback'
 import { formatClock } from '@app/lib/format'
 import { Icon } from '@app/components/Icon'
@@ -151,8 +152,13 @@ function WaveGlyph() {
   )
 }
 
-/** 16:9, matching .stage's aspect-ratio and every export tier. */
-const STAGE_ASPECT = 16 / 9
+/**
+ * THE STAGE IS THE FRAME (task F13). It used to be the constant 16 / 9 that
+ * `.stage`'s CSS and every export tier were; it is now the take's own aspect,
+ * threaded from `frameAspectFor(recording)` so the preview, the PiP geometry
+ * and the exported file are all one number. `.stage` reads the same value
+ * through the `--stage-ar` custom property the editor sets.
+ */
 
 /**
  * The camera PiP, movable directly on the stage (task F4). Drag it and the
@@ -170,6 +176,7 @@ function CameraPip({
   playheadMs,
   onEdit,
   zoomWidthFrac,
+  frameAspect,
 }: {
   channel: ChannelRecording
   videoRef: (el: HTMLVideoElement | null) => void
@@ -182,6 +189,8 @@ function CameraPip({
   /** Visible fraction of the frame (F2). A drag of N stage pixels moves the PiP
    *  by fewer FRAME fractions when the view is zoomed in. */
   zoomWidthFrac: number
+  /** The output frame's aspect (F13) — the stage's, and the export's. */
+  frameAspect: number
 }) {
   const boxRef = useRef<HTMLDivElement>(null)
   // The source aspect decides the box's height. Older takes have no dimensions
@@ -210,7 +219,7 @@ function CameraPip({
   } | null>(null)
   const dragPose = gesture.current?.live ?? null
 
-  const geometry: CameraGeometry = { frameAspect: STAGE_ASPECT, cameraAspect: aspect }
+  const geometry: CameraGeometry = { frameAspect, cameraAspect: aspect }
   const recordingMs = outputToRecordingMs(edit, playheadMs) ?? edit.globalTrimStartMs
   const committed = cameraPoseAt(edit.camera, recordingMs, geometry)
   const pose = dragPose ?? committed
@@ -338,6 +347,7 @@ function StageScreen({
   hidden,
   background,
   stageHeightPx,
+  frameAspect,
 }: {
   channel: ChannelRecording
   videoRef: (el: HTMLVideoElement | null) => void
@@ -347,6 +357,8 @@ function StageScreen({
   /** Measured, because radius and shadow are fractions of frame HEIGHT and a
    *  CSS percentage would resolve them per-axis into an ellipse. */
   stageHeightPx: number
+  /** The output frame's aspect (F13) — the stage's, and the export's. */
+  frameAspect: number
 }) {
   const [aspect, setAspect] = useState<number | null>(() =>
     channel.width && channel.height ? channel.width / channel.height : null,
@@ -354,8 +366,8 @@ function StageScreen({
   const framed = backgroundIsActive(background)
   let style: React.CSSProperties | undefined
   if (framed) {
-    const box = screenInsetRect(background, STAGE_ASPECT)
-    const rect = aspect ? containRect(box, STAGE_ASPECT, aspect) : box
+    const box = screenInsetRect(background, frameAspect)
+    const rect = aspect ? containRect(box, frameAspect, aspect) : box
     const shadow = shadowFor(background, stageHeightPx)
     style = {
       left: `${rect.leftFrac * 100}%`,
@@ -550,6 +562,9 @@ export function Player({
   }, [])
 
   const zoom = useViewportGesture(edit, recording, pb.timeMs, onEdit, stageRef)
+  // F13: the frame this take exports to. 16 / 9 for every take made before the
+  // frame followed anything, and for every take made with the flag off.
+  const frameAspect = frameAspectFor(recording)
   const active = activeChannelsAt(recording, edit, pb.timeMs)
   // Slot is decided per composition, not per instant, so the camera never
   // jumps between PiP and full-frame across momentary screen gaps.
@@ -564,7 +579,12 @@ export function Player({
       <div
         ref={stageRef}
         className={`stage${zoom.zoomed ? ' stage--zoomed' : ''}`}
-        style={{ background: backgroundCss(edit.background) }}
+        style={
+          {
+            background: backgroundCss(edit.background),
+            '--stage-ar': frameAspect,
+          } as React.CSSProperties
+        }
         {...zoom.handlers}
       >
         {/* F2: one transform, the same arithmetic the export compositor uses —
@@ -602,6 +622,7 @@ export function Player({
                 playheadMs={pb.timeMs}
                 onEdit={onEdit}
                 zoomWidthFrac={zoom.rect.widthFrac}
+                frameAspect={frameAspect}
               />
             )
           }
@@ -615,6 +636,7 @@ export function Player({
                 hidden={!isActive}
                 background={edit.background}
                 stageHeightPx={stageHeight}
+                frameAspect={frameAspect}
               />
             )
           }

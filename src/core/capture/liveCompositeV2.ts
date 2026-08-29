@@ -30,6 +30,10 @@ import { watchdogVerdict } from './compositorWatchdog'
 import { DELIVERY_FLOOR_RATIO, ladderVerdict } from './resolutionLadder'
 
 const FPS = 30
+/**
+ * The composite's shape when nothing says otherwise — what this engine wrote
+ * before F13, and what every take without a frame to follow still gets.
+ */
 const W = 1920
 const H = 1080
 const VIDEO_BITS = 8_000_000
@@ -177,6 +181,15 @@ export interface LiveCompositeV2Options {
    * consumers keep the old assume-zero behaviour rather than a guess.
    */
   epochMs?: number
+  /**
+   * THE COMPOSITE'S OWN GEOMETRY (task F13). The session derives it from the
+   * take's video channel so a portrait source is composited portrait instead of
+   * being cropped into a landscape constant. Omitted — by every rig that drives
+   * this engine directly, and by the session whenever the frame does not follow
+   * the source — leaves it at the 1920x1080 this engine has always written.
+   */
+  width?: number
+  height?: number
 }
 
 export interface LiveCompositeV2Handle {
@@ -235,6 +248,9 @@ export async function startLiveCompositeV2(
 ): Promise<LiveCompositeV2Handle> {
   const TP = trackProcessorCtor()
   if (!TP) throw new Error('live composite v2: MediaStreamTrackProcessor unavailable')
+  // F13: the caller's frame, or the constant this engine shipped with.
+  const outW = options.width && options.width > 0 ? options.width : W
+  const outH = options.height && options.height > 0 ? options.height : H
   if (fault?.startFails) {
     // Before the worker, before OPFS: the shape of a real capability failure.
     throw new Error('live composite v2: injected start failure (o4wedge)')
@@ -485,8 +501,8 @@ export async function startLiveCompositeV2(
   const startReply = await call({
     cmd: 'start',
     key: blobKey,
-    width: W,
-    height: H,
+    width: outW,
+    height: outH,
     fps: FPS,
     videoBitrate: VIDEO_BITS,
     audioBitrate: AUDIO_BITS,
@@ -633,8 +649,8 @@ export async function startLiveCompositeV2(
         // The encoder's own last timestamp is the truth; wall time includes
         // teardown and would overstate the file by the drain.
         durationMs: Math.round(stats.durationMs || wallMs),
-        width: W,
-        height: H,
+        width: outW,
+        height: outH,
         bytes: stats.bytes,
       }
       // WHERE THIS FILE'S ZERO SITS IN THE TAKE (P0-instant-sync). The worker

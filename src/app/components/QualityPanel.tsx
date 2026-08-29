@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { QualityTier } from '@core/compose/quality'
 import {
   DEFAULT_TIER_ID,
-  QUALITY_TIERS,
+  tiersForTake,
   copySourceForTier,
   estimateExportBytes,
   isDefaultTier,
@@ -84,6 +84,17 @@ export function QualityPanel({
   // five-second probe on an unrelated re-render.
   const editRef = useRef(edit)
   editRef.current = edit
+  /**
+   * F13: the four steps AT THIS TAKE'S SHAPE. Identical to QUALITY_TIERS on a
+   * 16:9 take and on every take with the flag off, so the probe still encodes
+   * the same lanes it was measured on.
+   */
+  const tiers = useMemo(() => tiersForTake(recording), [recording])
+  // Read like `editRef`, for the same reason: the probe effect keys on the
+  // recording, and re-running it because a memo produced a new array would
+  // re-encode every step for nothing.
+  const tiersRef = useRef(tiers)
+  tiersRef.current = tiers
   useEffect(() => {
     const abort = new AbortController()
     let alive = true
@@ -94,13 +105,13 @@ export function QualityPanel({
     void (async () => {
       try {
         const { calibrateSteps, estimateFromCalibration } = await import('@core/compose/sizeProbe')
-        const calibration = await calibrateSteps(recording, editRef.current, QUALITY_TIERS, {
+        const calibration = await calibrateSteps(recording, editRef.current, tiersRef.current, {
           signal: abort.signal,
         })
         if (!alive) return
         const byTier: Record<string, SizeEstimate> = {}
         if (calibration) {
-          for (const t of QUALITY_TIERS) {
+          for (const t of tiersRef.current) {
             const e = estimateFromCalibration(recording, t, outputDurationMs, calibration)
             if (e) byTier[t.id] = e
           }
@@ -140,7 +151,7 @@ export function QualityPanel({
    */
   const estimates = useMemo(
     () =>
-      QUALITY_TIERS.map((t) => {
+      tiers.map((t) => {
         const model = estimateExportBytes(recording, t, outputDurationMs)
         // An exact step is a file already on disk — the composite copied, or
         // (O3c) a single raw channel that already holds this tier's geometry —
@@ -156,7 +167,7 @@ export function QualityPanel({
           confidence: sizeConfidence({ exact: size.exact, measured: !!m, probe }),
         }
       }),
-    [recording, outputDurationMs, measured, probe],
+    [recording, tiers, outputDurationMs, measured, probe],
   )
   const notice = sizeNotice(estimates.map((e) => e.confidence))
   const current =

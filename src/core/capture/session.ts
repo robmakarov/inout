@@ -1,5 +1,6 @@
 import { newId } from '@core/id'
 import { isAppleWebKit } from '@core/capabilities'
+import { aspectOf, frameForAspect, sourceFrameEnabled } from '@core/frame'
 import { singleGenCaptureEnabled } from '@core/singleGen'
 import { blobStore, createDurablePositionedWriter, recordingsRepo } from '@core/store'
 import type {
@@ -169,10 +170,10 @@ function pickMimeType(media: MediaKind): string {
  * bitrate can never disagree about which take this is.
  */
 /**
- * The live compositor's own canvas, which is fixed (capture/compositor.worker
- * and liveCompositeV2 both hardcode it) and IS the default output geometry.
- * O3b's capture guard compares the raw track against it: only at exactly this
- * size is the compositor's contain-fit the identity.
+ * The live compositor's canvas when the frame does NOT follow the source — the
+ * fixed default output geometry this product shipped with. O3b's capture guard
+ * compares the raw track against whatever the composite is actually going to
+ * be: only at exactly that size is the compositor's contain-fit the identity.
  */
 const COMPOSITE_WIDTH = 1920
 const COMPOSITE_HEIGHT = 1080
@@ -770,10 +771,21 @@ class Session implements CaptureSession {
     if (!ch) return
     try {
       const before = ch.track.getSettings()
+      // F13: the rungs are written landscape, and a `width: {max: 2560}` on a
+      // ROTATED monitor would crush its long side to the rung's short one — a
+      // step down of two rungs, not one, and in the wrong axis. Apply the
+      // rung's long edge to the source's long axis. Landscape sources (every
+      // source this ladder has ever run on) are untouched, and the swap only
+      // happens where the frame follows the source at all.
+      const portrait =
+        sourceFrameEnabled() && (before.height ?? 0) > (before.width ?? 0)
+      const bound = portrait
+        ? { width: rung.height, height: rung.width }
+        : { width: rung.width, height: rung.height }
       await withTimeout(
         ch.track.applyConstraints({
-          width: { max: rung.width },
-          height: { max: rung.height },
+          width: { max: bound.width },
+          height: { max: bound.height },
           // The RATE is left alone on purpose: this ladder trades PIXELS for
           // keeping up, and dropping the rate as well would change two things
           // at once and make the next measurement unreadable.
@@ -902,13 +914,40 @@ class Session implements CaptureSession {
     if (!ch.useMeasured) {
       return { yes: false, why: `the ${ch.kind} channel records webm through MediaRecorder, which nothing can packet-copy into an MP4` }
     }
-    if (ch.width !== COMPOSITE_WIDTH || ch.height !== COMPOSITE_HEIGHT) {
+    const frame = this.compositeFrame()
+    if (ch.width !== frame.width || ch.height !== frame.height) {
       return {
         yes: false,
-        why: `the ${ch.kind} track is ${ch.width}x${ch.height}, not ${COMPOSITE_WIDTH}x${COMPOSITE_HEIGHT} — the compositor's contain-fit is doing real work`,
+        why: `the ${ch.kind} track is ${ch.width}x${ch.height}, not ${frame.width}x${frame.height} — the compositor's contain-fit is doing real work`,
       }
     }
     return { yes: true, why: '' }
+  }
+
+  /**
+   * THE COMPOSITE'S GEOMETRY FOR THIS TAKE (task F13).
+   *
+   * The take's own aspect at the default step's pixel budget. The ASPECT
+   * follows the source — that is the whole task, and it is what stops a 9:16
+   * phone camera being cropped to 31.6 % of itself — while the pixel BUDGET
+   * stays the product's, so a 4K monitor does not silently turn every default
+   * export into a 4K file. (The native-resolution win on such a monitor is
+   * O3c's: the export step that matches the screen packet-copies the raw
+   * channel and never touches this canvas.)
+   *
+   * Behind the flag this returns the constant it always did, exactly.
+   *
+   * ASKED ONCE, AT startComposite, from dimensions armChannel has already read
+   * off the tracks — the same facts singleGenerationTake is decided on, so the
+   * two can never disagree about what the composite is.
+   */
+  private compositeFrame(): { width: number; height: number } {
+    if (!sourceFrameEnabled()) return { width: COMPOSITE_WIDTH, height: COMPOSITE_HEIGHT }
+    const video = this.channels.filter((c) => c.media === 'video' && !c.ended)
+    const chosen = video.find((c) => c.kind === 'screen') ?? video[0]
+    const aspect = aspectOf(chosen?.width, chosen?.height)
+    if (aspect === null) return { width: COMPOSITE_WIDTH, height: COMPOSITE_HEIGHT }
+    return frameForAspect(aspect, COMPOSITE_WIDTH)
   }
 
   private startComposite(): void {
@@ -935,6 +974,14 @@ class Session implements CaptureSession {
       (x): x is MediaStream => !!x,
     )
     const inputs = { screen, camera, audio }
+    // F13: one answer, handed to whichever engine starts — the two must not
+    // derive it separately or a fallback would change the take's shape.
+    const frame = this.compositeFrame()
+    if (frame.width !== COMPOSITE_WIDTH || frame.height !== COMPOSITE_HEIGHT) {
+      console.info(
+        `[capture] composite follows the source: ${frame.width}x${frame.height} (F13, ?sourceframe=1)`,
+      )
+    }
     const key = `${this.recordingId}_composite.webm`
     const onSourceLiveness = (kind: 'screen' | 'camera', event: 'stalled' | 'resumed'): void =>
       this.onSourceLiveness(kind, event)
@@ -946,7 +993,14 @@ class Session implements CaptureSession {
     // inside the same turn — so both engines can date their file's zero.
     const epochMs = this.epoch
     const startV1 = (): Promise<LiveCompositeHandle> | null =>
-      canLiveComposite(inputs) ? startLiveComposite(inputs, key, { onSourceLiveness, epochMs }) : null
+      canLiveComposite(inputs)
+        ? startLiveComposite(inputs, key, {
+            onSourceLiveness,
+            epochMs,
+            width: frame.width,
+            height: frame.height,
+          })
+        : null
 
     const wantV2 = preferredCompositeEngine() === 'v2' && canLiveCompositeV2(inputs)
     let start: Promise<LiveCompositeHandle> | null
@@ -955,6 +1009,8 @@ class Session implements CaptureSession {
       start = startLiveCompositeV2(inputs, key, {
         onSourceLiveness,
         epochMs,
+        width: frame.width,
+        height: frame.height,
         // A machine that cannot keep pace stops being copied, exactly as v1's
         // watchdog did: the take is unharmed, the unedited export renders.
         // O6: the gentler rung of the same ladder — ask the SOURCE for less
