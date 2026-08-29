@@ -47,7 +47,11 @@ function composite(over: Partial<CompositeRecording> = {}): CompositeRecording {
     mimeType: 'video/mp4',
     durationMs: 9_800,
     width: 1920,
-    height: 1247,
+    // EVEN, like every real composite: frameForAspect rounds both sides to even
+    // and is idempotent on the result. An odd height here made this fixture
+    // resolve to 1248 and decline its own composite copy — a fixture bug that
+    // looked exactly like the two-pixel drift F18 had just fixed for real.
+    height: 1248,
     startOffsetMs: 180,
     engine: 'v2',
     bytes: 2_000_000,
@@ -110,6 +114,27 @@ describe('whether a take gets a source step at all', () => {
       channels: [channel(), channel({ id: 'ch_cam', kind: 'camera', blobKey: 'c.mp4', width: 1280, height: 720 })],
     })
     expect(sourceStepFor(two)).toBeNull()
+  })
+
+  it("O16's GATE: a STEPPED take declines the native copy rather than getting it wrong", () => {
+    // A resolution step gives the screen kind two non-overlapping segments with
+    // two geometries. They cannot be packet-copied as ONE file, so the take's
+    // own-resolution export must decline — which it does by the same rule that
+    // refuses a screen+camera take: single generation needs exactly one video
+    // channel. The DEFAULT tier's instant export is unaffected, because that one
+    // copies the composite, which is one continuous file at one size throughout.
+    const stepped = recording({
+      channels: [
+        channel({ id: 'ch_screen_1', width: 1920, height: 1080, durationMs: 5_000 }),
+        channel({ id: 'ch_screen_2', blobKey: 's2.mp4', startOffsetMs: 5_100, durationMs: 5_000 }),
+      ],
+    })
+    expect(sourceStepFor(stepped)).toBeNull()
+    expect(copySourceForTier(stepped, SOURCE_TIER)).toBeNull()
+    // …and the default step still copies the composite. Resolved through
+    // tiersForTake, which is the one place a step is resolved against a take.
+    const dflt = tiersForTake(stepped).find((t) => t.id === '1080p')!
+    expect(copySourceForTier(stepped, dflt)?.origin).toBe('composite')
   })
 
   it('reads the RAW channel, not the composite — the composite is always 1920', () => {
