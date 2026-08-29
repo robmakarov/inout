@@ -5,7 +5,7 @@
  * surface was being paid for four times over on one GPU, so the cap stopped
  * that — and cost every 1440p and 4K user their resolution whether or not their
  * machine could have kept up. O6's answer is to start at native and step DOWN
- * on measured backpressure (resolutionLadder.ts) rather than never start high.
+ * on measured backpressure (captureLadder.ts) rather than never start high.
  *
  * IT WAS ON BY DEFAULT FOR ONE DAY, 2026-08-29, ON ROBERT'S RULING: "we need native
  * res by default of course, why the fuck not, IF FREEZE WILL APPEAR I WILL SAY."
@@ -48,7 +48,7 @@
  * and it is what the DEFAULT 1080p step packet-copies), so the default export
  * is unchanged — this only reaches the steps that re-render.
  *
- * THE LADDER IS THE SAFETY NET, not this flag: resolutionLadder.ts watches
+ * THE LADDER IS THE SAFETY NET, not this flag: captureLadder.ts watches
  * delivered fps and steps 4K -> 1440p -> 1080p before delivery collapses,
  * one rung at a time, never back up.
  *

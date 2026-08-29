@@ -486,7 +486,7 @@ export async function capDisplayTrack(track: MediaStreamTrack | undefined): Prom
   if (!track) return
   const before = track.getSettings()
   // O6, default since 2026-08-29 (Robert's ruling): start at the source's own
-  // resolution and let resolutionLadder.ts step DOWN on measured backpressure
+  // resolution and let captureLadder.ts step DOWN on measured backpressure
   // instead of never starting high. See nativeRes.ts.
   if (nativeResEnabled()) {
     // THE EXPORT CEILING IS ENFORCED HERE TOO, because the request may not have

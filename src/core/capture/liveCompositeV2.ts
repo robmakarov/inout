@@ -27,7 +27,12 @@ import type { CompositorMsg, CompositorReply, CompositorStats } from './composit
 import type { CompositeRecording } from '../types'
 import { SourceLiveness, type LivenessEvent } from './sourceLiveness'
 import { watchdogVerdict } from './compositorWatchdog'
-import { DELIVERY_FLOOR_RATIO, ladderVerdict, type LadderRung } from './resolutionLadder'
+import {
+  DELIVERY_FLOOR_RATIO,
+  RECOVERY_RATIO,
+  ladderVerdict,
+  type LadderRung,
+} from './captureLadder'
 
 /**
  * The composite's rate when nothing says otherwise — what this engine wrote
@@ -348,9 +353,10 @@ export async function startLiveCompositeV2(
   // O6's ladder state. Lives beside the watchdog because it reads the same
   // stats and answers the gentler half of the same question: the watchdog says
   // "give up on the composite", the ladder says "ask the source for less first".
-  let stepsTaken = 0
+  let currentFps = outFps
   let lastStepAt: number | null = null
   let underFloorSince: number | null = null
+  let aboveRecoverySince: number | null = null
   let lastRealFrames = 0
   let lastInFrames = 0
   let lastStatsAt: number | null = null
@@ -366,26 +372,36 @@ export async function startLiveCompositeV2(
       // P0-ladder-static: demand is what ARRIVED, capped at the requested rate
       // (the cadence gate drops a 60 fps source's excess on purpose). A static
       // screen delivers 0 fps by design and must never read as backpressure.
-      const demand = Math.min(inFps, requested)
-      const under = demand > 0 && fps / demand < LADDER_FLOOR
-      if (under) underFloorSince ??= now
+      // Demand is judged against what is CURRENTLY asked for, not against what
+      // the take started at: once the ladder has stepped down, holding the take
+      // to its original rate would score a healthy 30 fps as a 50 % failure and
+      // it could never climb back.
+      const demand = Math.min(inFps, currentFps)
+      const ratio = demand > 0 ? fps / demand : 1
+      if (demand > 0 && ratio < LADDER_FLOOR) underFloorSince ??= now
       else underFloorSince = null
+      if (demand > 0 && ratio >= RECOVERY_RATIO) aboveRecoverySince ??= now
+      else aboveRecoverySince = null
       const verdict = ladderVerdict({
         nowMs: now,
         startedAtMs: startedAt,
         firstOutputAtMs: firstOutputAt,
         lastStepAtMs: lastStepAt,
         underFloorForMs: underFloorSince === null ? 0 : now - underFloorSince,
+        aboveRecoveryForMs: aboveRecoverySince === null ? 0 : now - aboveRecoverySince,
         deliveredFps: fps,
         arrivedFps: inFps,
         requestedFps: requested,
-        stepsTaken,
+        currentFps,
       })
       if (verdict) {
-        stepsTaken++
+        currentFps = verdict.rung.fps
         lastStepAt = now
         underFloorSince = null
-        console.warn(`[capture] native-res backpressure — stepping down: ${verdict.reason}`)
+        aboveRecoverySince = null
+        console.warn(
+          `[capture] capture ladder ${verdict.direction === 'up' ? 'recovering' : 'backing off'}: ${verdict.reason}`,
+        )
         options.onDegradeStep(verdict.rung, verdict.reason)
       }
     }

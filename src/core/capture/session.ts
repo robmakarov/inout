@@ -40,7 +40,7 @@ import {
   type MeasuredVideoHandle,
 } from './measuredVideo'
 import { canLiveCompositeV2, startLiveCompositeV2 } from './liveCompositeV2'
-import type { LadderRung } from './resolutionLadder'
+import type { LadderRung } from './captureLadder'
 import { preferredCompositeEngine } from './engine'
 import { MixLoudnessAccumulator } from './loudnessAccumulator'
 import { clearPendingManifest, writePendingManifest } from './recovery'
@@ -322,6 +322,10 @@ class Session implements CaptureSession {
    *  has seen a frame and said so. The UI's preview stage follows this rather
    *  than the track settings, which lie about orientation on a phone. */
   private compositeGeometry: { width: number; height: number } | null = null
+  /** The rate this take was started at — what the ladder may climb back to. */
+  private requestedRate = DEFAULT_FRAME_RATE
+  /** One notice per take, on the first reduction only (see stepDisplayDown). */
+  private rateNoticeSent = false
   /** compositeInvalid AND torn down — nothing left to keep or stop. */
   private compositeHardInvalid = false
   /** Video sources frozen right now, and every one that froze at any point. */
@@ -806,51 +810,40 @@ class Session implements CaptureSession {
     if (!ch) return
     try {
       const before = ch.track.getSettings()
-      // F13: the rungs are written landscape, and a `width: {max: 2560}` on a
-      // ROTATED monitor would crush its long side to the rung's short one — a
-      // step down of two rungs, not one, and in the wrong axis. Apply the
-      // rung's long edge to the source's long axis. Landscape sources (every
-      // source this ladder has ever run on) are untouched, and the swap only
-      // happens where the frame follows the source at all.
-      const portrait =
-        sourceFrameEnabled() && (before.height ?? 0) > (before.width ?? 0)
-      // ONE RUNG CHANGES ONE THING. A rate rung names no size and a size rung
-      // names no rate, so the "changing two things at once makes the next
-      // measurement unreadable" rule this ladder was built on still holds —
-      // what F15 added is a second currency, not a second simultaneous change.
-      const bound =
-        rung.width && rung.height
-          ? portrait
-            ? { width: rung.height, height: rung.width }
-            : { width: rung.width, height: rung.height }
-          : null
+      // A RUNG IS A RATE AND NOTHING ELSE (captureLadder.ts). The size is never
+      // touched, in either direction: the raw channel's encoder is configured
+      // once at start and cannot follow a frame-size change, so the resolution
+      // steps this used to apply were making Chrome UPSCALE every frame back to
+      // the configured size for it — measured in Robert's own console,
+      // `screen channel recorded 3024x1964 (the track said 2217x1440)`. And
+      // his rule is the same rule: "if something needs to be dropped it must be
+      // fps not resolution", "no screen proportion changes".
       await withTimeout(
-        ch.track.applyConstraints({
-          ...(bound ? { width: { max: bound.width }, height: { max: bound.height } } : {}),
-          ...(rung.fps ? { frameRate: { max: rung.fps } } : {}),
-        }),
+        ch.track.applyConstraints({ frameRate: { max: rung.fps } }),
         THROTTLE_BUDGET_MS,
-        `${ch.kind} step to ${rung.label}`,
+        `${ch.kind} to ${rung.label}`,
       )
       const after = ch.track.getSettings()
-      if (after.width) ch.width = after.width
-      if (after.height) ch.height = after.height
       console.info(
-        `[capture] display stepped ${before.width}×${before.height}@${before.frameRate ?? '?'} → ` +
-          `${after.width}×${after.height}@${after.frameRate ?? '?'} (${reason})`,
+        `[capture] display ${before.frameRate ?? '?'} → ${after.frameRate ?? '?'} fps ` +
+          `at ${after.width}×${after.height} (${reason})`,
       )
-      // The composite's own geometry did not change — it composes to the export
-      // size regardless — but the take is no longer what an unedited export
-      // would packet-copy without knowing the source changed mid-file.
-      this.emit({
-        type: 'channel-error',
-        kind: 'screen',
-        message: rung.fps
-          ? `Recording rate reduced to ${rung.label} to keep up`
-          : `Recording quality reduced to ${rung.label} to keep up`,
-      })
+      // ONE NOTICE PER TAKE, AND ONLY ON THE WAY DOWN. "It has to be smooth,
+      // not noticible for users and watchers" — a banner on every step of a
+      // ladder that now recovers by itself would be more visible than the thing
+      // it reports, and a notice that the rate fell is a lie the moment it
+      // climbs back. The first reduction is worth saying once; the rest is the
+      // guard doing its job.
+      if (rung.fps < this.requestedRate && !this.rateNoticeSent) {
+        this.rateNoticeSent = true
+        this.emit({
+          type: 'channel-error',
+          kind: 'screen',
+          message: `Recording at ${rung.label} for a moment — your machine is busy. Nothing else changes.`,
+        })
+      }
     } catch (err) {
-      console.warn('[capture] could not step the display down', err)
+      console.warn('[capture] could not change the capture rate', err)
     }
   }
 
@@ -1048,6 +1041,7 @@ class Session implements CaptureSession {
     // F15: one answer, handed to whichever engine starts, for the same reason
     // the frame is — a v2→v1 fallback must not change the take's rate.
     const rate = this.compositeRate()
+    this.requestedRate = rate
     if (rate !== DEFAULT_FRAME_RATE) {
       console.info(
         `[capture] composite follows the source: ${rate} fps (F15, ?sourcefps=1)`,

@@ -411,7 +411,7 @@ let FPS = 30
  * False the moment the shape is fixed — either a frame settled it, the deadline
  * passed, or something already went into the file. A file whose dimensions
  * change part-way is a file every consumer has to special-case forever, which
- * is the same rule the degradation ladder obeys (resolutionLadder rule 1).
+ * is the same rule the degradation ladder obeys (captureLadder rule 1).
  */
 let followSource = false
 let longEdge = 1920
