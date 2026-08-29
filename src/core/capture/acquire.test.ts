@@ -144,13 +144,13 @@ describe('the request Chrome receives, rung by rung', () => {
     })
   })
 
-  it('NATIVE-RES (default since 2026-08-29) sends NO size bound at all', () => {
-    // The whole point: `width: { max }` is a real constraint, so leaving it in
-    // means Chrome downscales the surface before the track is handed over and
-    // native-res capture never happens however the flag is set.
+  it('THE SIZE BOUND IS BACK BY DEFAULT (Robert 2026-08-29: the freeze appeared and he said)', () => {
+    // Native-res was default for one day. His game-tab take captured 3024x1964
+    // while three hardware encoders ran, delivered 15-21 of 30 fps, and froze
+    // the whole machine — the condition his own ruling named. See nativeRes.ts.
     const v = displayMediaOptions(config, 0).video as MediaTrackConstraints
-    expect(v.width).toBeUndefined()
-    expect(v.height).toBeUndefined()
+    expect(v.width).toEqual({ max: CAPTURE_MAX_WIDTH })
+    expect(v.height).toEqual({ max: CAPTURE_MAX_HEIGHT })
   })
 
   it('turning native-res OFF puts the 1080p ceiling back', () => {

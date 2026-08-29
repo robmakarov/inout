@@ -84,10 +84,18 @@ describe('capture ceiling (4K game tab froze the take, Robert 2026-08-22)', () =
     })
   })
 
-  it('DEFAULT (native-res, Robert 2026-08-29) sends no size bound, so the surface arrives whole', () => {
-    const c = displayVideoConstraints() as { width?: unknown; height?: unknown }
-    expect(c.width).toBeUndefined()
-    expect(c.height).toBeUndefined()
+  it('DEFAULT sends the size bound again — the freeze appeared and Robert said', () => {
+    const c = displayVideoConstraints() as { width: { max: number }; height: { max: number } }
+    expect(c.width).toEqual({ max: CAPTURE_MAX_WIDTH })
+    expect(c.height).toEqual({ max: CAPTURE_MAX_HEIGHT })
+  })
+
+  it('with native-res ON the bound is dropped, which is the whole point of the flag', () => {
+    withNativeRes(true, () => {
+      const c = displayVideoConstraints() as { width?: unknown; height?: unknown }
+      expect(c.width).toBeUndefined()
+      expect(c.height).toBeUndefined()
+    })
   })
 
   it('with native-res OFF the request is bounded by MAX only — a small surface is never overconstrained', () => {
@@ -106,13 +114,24 @@ describe('capture ceiling (4K game tab froze the take, Robert 2026-08-22)', () =
     expect(exceedsCaptureCeiling({ width: 1280, height: 720, frameRate: 30.000001 })).toBe(false)
   })
 
-  it('DEFAULT: a 4K surface is KEPT — the ladder, not the cap, is the safety net now', async () => {
-    // Robert 2026-08-29 took this risk explicitly. resolutionLadder.ts steps
-    // 4K -> 1440p -> 1080p on measured backpressure instead of never starting
-    // high, and Robert is the reporting channel if the 08-22 freeze returns.
+  it('with native-res ON a 4K surface is KEPT — the ladder is that flag\'s safety net', async () => {
+    // The risk Robert took explicitly on 2026-08-29, and took back the same day
+    // when the freeze arrived. Behind the flag the ladder is still the net.
+    const apply = vi.fn().mockResolvedValue(undefined)
+    await withNativeRes(true, () =>
+      capDisplayTrack(track({ width: 3840, height: 2160, frameRate: 30 }, apply)),
+    )
+    expect(apply).not.toHaveBeenCalled()
+  })
+
+  it('DEFAULT: a 4K surface is capped again, which is what stops the 08-22 freeze', async () => {
     const apply = vi.fn().mockResolvedValue(undefined)
     await capDisplayTrack(track({ width: 3840, height: 2160, frameRate: 60 }, apply))
-    expect(apply).not.toHaveBeenCalled()
+    expect(apply).toHaveBeenCalledWith({
+      width: { max: CAPTURE_MAX_WIDTH },
+      height: { max: CAPTURE_MAX_HEIGHT },
+      frameRate: { max: CAPTURE_MAX_FPS },
+    })
   })
 
   it('with native-res OFF a 4K surface is still downscaled when the picker was ignored', async () => {

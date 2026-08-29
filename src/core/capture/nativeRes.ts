@@ -7,8 +7,26 @@
  * machine could have kept up. O6's answer is to start at native and step DOWN
  * on measured backpressure (resolutionLadder.ts) rather than never start high.
  *
- * IT IS ON BY DEFAULT SINCE 2026-08-29, ON ROBERT'S RULING: "we need native res by
- * default of course, why the fuck not, if freeze will appear i will say."
+ * IT WAS ON BY DEFAULT FOR ONE DAY, 2026-08-29, ON ROBERT'S RULING: "we need native
+ * res by default of course, why the fuck not, IF FREEZE WILL APPEAR I WILL SAY."
+ *
+ * THE FREEZE APPEARED AND HE SAID, the same day: a 60 fps game in another tab,
+ * "some movement on record but after a while freezes and whole screen, not just
+ * this tab". So this is back OFF by default — which is that ruling being
+ * executed, not overturned. `?nativeres=1` is one URL away and everything below
+ * still works.
+ *
+ * WHAT HIS OWN CONSOLE SHOWED, and it is why the cap is the right answer rather
+ * than another guard: the screen was captured at 3024x1964 (5.9 Mpx) while
+ * THREE hardware AVC encoders ran at once — the raw screen channel at level
+ * 5.1, the raw camera channel, and the composite — with a game rendering on the
+ * same GPU. The source delivered 15-21 fps of the 30 it was asked for, and the
+ * degradation ladder stepped the TRACK to 1440p without helping, because the
+ * raw channel's encoder is configured at start and cannot follow: his log reads
+ * `screen channel recorded 3024x1964 (the track said 2217x1440)`, i.e. after
+ * the step Chrome was UPSCALING every frame back to 3024x1964. The step bought
+ * nothing and added work. That is filed; the cap is what stops the collapse
+ * happening in the first place.
  *
  * That overrides the caution this file shipped with, and the caution was real:
  * O6's own gate wanted "Robert's 4K-game-tab scenario re-verified", and 2026-08-26
@@ -30,8 +48,8 @@
  * delivered fps and steps 4K -> 1440p -> 1080p before delivery collapses,
  * one rung at a time, never back up.
  *
- *   ?nativeres=0   (this load only — back to the 1080p cap)
- *   localStorage['inout.capture.nativeres'] = '0'   (sticky)
+ *   ?nativeres=1   (this load only — the source's own resolution)
+ *   localStorage['inout.capture.nativeres'] = '1'   (sticky)
  */
 
 const STORAGE_KEY = 'inout.capture.nativeres'
@@ -53,7 +71,7 @@ function fromStorage(): boolean | null {
 
 /** True when this take should ask for the source's own resolution. */
 export function nativeResEnabled(): boolean {
-  return fromSearch() ?? fromStorage() ?? true
+  return fromSearch() ?? fromStorage() ?? false
 }
 
 export function setNativeRes(on: boolean): void {
