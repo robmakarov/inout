@@ -12,6 +12,7 @@ import { clampEditState, defaultEditState } from '@core/timeline'
 import { detectCapabilities } from '@core/capabilities'
 import { evaluateSupport } from '@core/platform'
 import { analytics } from '@core/analytics'
+import { DEFAULT_FRAME_ASPECT, aspectOf, frameForAspect, sourceFrameEnabled } from '@core/frame'
 import { prefetchEditorChunk } from '@app/editorChunk'
 import { useInstallPrompt } from '@app/hooks/useInstallPrompt'
 import { useAppStore } from '@app/state/store'
@@ -44,6 +45,15 @@ const STEP_NOUN: Record<ArmingTimelineEntry['step'], string> = {
   camera: 'camera',
   mic: 'microphone',
   'system-audio': 'system audio',
+}
+
+/** The aspect of a live preview stream's video track, or null when it has none
+ *  yet (the track exists before its first frame settles the dimensions). */
+function liveTrackAspect(stream: MediaStream | undefined): number | null {
+  const t = stream?.getVideoTracks()[0]
+  if (!t) return null
+  const st = t.getSettings()
+  return aspectOf(st.width, st.height)
 }
 
 export function CaptureScreen() {
@@ -382,6 +392,18 @@ export function CaptureScreen() {
   const audioStream = session?.previewStreams.mic ?? session?.previewStreams['system-audio']
   const audioOnly = !!session && !screenStream && !cameraStream
   const recording = !!session
+  /**
+   * F13: the preview stage IS the composite, so it carries the composite's
+   * shape. Read off the live tracks with the same precedence the session uses
+   * to size its canvas (screen first, then camera), and scaled to the same
+   * 960-long-edge preview budget — the compositor stretches its output into
+   * this canvas, so a preview of the wrong aspect is a squashed picture rather
+   * than a letterboxed one. 960x540 and 16 / 9 whenever the frame does not
+   * follow the source.
+   */
+  const previewBox = sourceFrameEnabled()
+    ? frameForAspect(liveTrackAspect(screenStream) ?? liveTrackAspect(cameraStream) ?? DEFAULT_FRAME_ASPECT, 960)
+    : { width: 960, height: 540 }
 
   return (
     <div className={`capture${recording ? ' capture--recording' : ''}`}>
@@ -421,20 +443,23 @@ export function CaptureScreen() {
 
       {recording && (
         <div className="capture__preview">
-          {/* Live WYSIWYG of the final 16:9 composition — the very same stage
+          {/* Live WYSIWYG of the final composition — the very same stage
               the editor and export use, so the frame the user sees while
               recording is exactly where the editable video lands next.
               Full-monitor capture can show a mirror tunnel if this window is on
               the captured screen — cosmetic, standard (OBS does the same). */}
-          <div className="stage">
+          <div
+            className="stage"
+            style={{ '--stage-ar': previewBox.width / previewBox.height } as React.CSSProperties}
+          >
             {/* The compositor's own output, when it can give it (O4-polish):
                 one decode for the whole take instead of one for the file and
                 one for this. Sized to the composition, not the screen — the
-                worker scales into it, and both are 16:9. */}
+                worker scales into it, and both carry the take's own aspect. */}
             <canvas
               ref={previewCanvasRef}
-              width={960}
-              height={540}
+              width={previewBox.width}
+              height={previewBox.height}
               className="stage__composite"
               style={compositePreview ? undefined : { display: 'none' }}
             />

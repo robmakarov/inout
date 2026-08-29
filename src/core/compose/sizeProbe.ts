@@ -83,6 +83,7 @@
  * Everything is in memory (BufferTarget), so a probe leaves nothing on disk.
  */
 import { BufferTarget, CanvasSource, Mp4OutputFormat, Output, type VideoSample } from 'mediabunny'
+import { frameAspectFor, frameForAspect, frameScale } from '@core/frame'
 import { blobStore } from '@core/store'
 import {
   cameraPoseAt,
@@ -227,10 +228,19 @@ export async function calibrateSteps(
     if (readers.length === 0) return null
 
     // Compose at the take's own geometry; every step is a scale of this.
-    const canvas = new OffscreenCanvas(1920, 1080)
+    // F13: "the take's own geometry" is now literally that — the 1080p step's
+    // pixel budget at the take's aspect, which is 1920x1080 on every 16:9 take
+    // and therefore on every take this probe was measured against.
+    const composeBox = frameForAspect(frameAspectFor(recording), 1920)
+    const canvas = new OffscreenCanvas(composeBox.width, composeBox.height)
     const ctx = canvas.getContext('2d', { alpha: false })
     if (!ctx) return null
-    const frame: FrameCanvas = { ctx, width: 1920, height: 1080, scale: 1 }
+    const frame: FrameCanvas = {
+      ctx,
+      width: composeBox.width,
+      height: composeBox.height,
+      scale: frameScale(composeBox.width, composeBox.height),
+    }
     const cameraFull = !readers.some((r) => r.kind === 'screen')
     const cameraMoves = !cameraFull && cameraTrackIsActive(edit.camera)
     const durationSec = Math.max(0.2, outputDurationOf(edit) / 1000)

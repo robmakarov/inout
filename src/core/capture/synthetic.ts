@@ -219,29 +219,69 @@ function syntheticScreen(): Generated {
   return { stream: canvas.captureStream(30), stop: () => cancelAnimationFrame(raf) }
 }
 
+const DEFAULT_CAMERA = { width: 640, height: 480 }
+let cameraSize = DEFAULT_CAMERA
+
+/**
+ * Harness knob, same family as `setSyntheticScreenSize`. F13 needs a PORTRAIT
+ * source to prove the frame follows it, and no rig can conjure a phone: this is
+ * how a 1080x1920 camera is put in front of the product on the deployed build,
+ * in a URL, forever. Production never calls it.
+ */
+export function setSyntheticCameraSize(size: { width: number; height: number } | null): void {
+  cameraSize = size ?? DEFAULT_CAMERA
+}
+
+/**
+ * `WxH` out of a URL parameter, or null. Used for `screensize=` and `camsize=`,
+ * the two test-only knobs that let a portrait or 4K take be reproduced from a
+ * link on the deployed build instead of only from a rig runner.
+ */
+export function parseSizeParam(search: string, key: string): { width: number; height: number } | null {
+  const raw = new URLSearchParams(search).get(key)
+  const m = raw ? /^(\d{2,5})x(\d{2,5})$/.exec(raw) : null
+  if (!m) return null
+  const width = Number(m[1])
+  const height = Number(m[2])
+  return width > 0 && height > 0 ? { width, height } : null
+}
+
+/** Apply `?screensize=` / `?camsize=` for this load. Called once, from the
+ *  synthetic path only, so nothing outside `?synthetic=1` can reach it. */
+export function applySyntheticSizeParams(search: string): void {
+  const screen = parseSizeParam(search, 'screensize')
+  if (screen) setSyntheticScreenSize(screen)
+  const camera = parseSizeParam(search, 'camsize')
+  if (camera) setSyntheticCameraSize(camera)
+}
+
 function syntheticCamera(): Generated {
+  const { width: W, height: H } = cameraSize
   const canvas = document.createElement('canvas')
-  canvas.width = 640
-  canvas.height = 480
+  canvas.width = W
+  canvas.height = H
   const g = get2d(canvas)
-  const r = 48
-  let x = 320
-  let y = 240
-  let vx = 4.2
-  let vy = 3.1
+  // The bouncing disc keeps its size relative to the SHORT side, so a portrait
+  // camera shows the same picture turned, not a squashed one.
+  const r = Math.round((48 / 480) * Math.min(W, H))
+  let x = W / 2
+  let y = H / 2
+  const s = Math.min(W, H) / 480
+  let vx = 4.2 * s
+  let vy = 3.1 * s
   let raf = 0
   const draw = (): void => {
     g.fillStyle = '#7f7f7f'
-    g.fillRect(0, 0, 640, 480)
+    g.fillRect(0, 0, W, H)
     x += vx
     y += vy
-    if (x < r || x > 640 - r) {
+    if (x < r || x > W - r) {
       vx = -vx
-      x = Math.max(r, Math.min(640 - r, x))
+      x = Math.max(r, Math.min(W - r, x))
     }
-    if (y < r || y > 480 - r) {
+    if (y < r || y > H - r) {
       vy = -vy
-      y = Math.max(r, Math.min(480 - r, y))
+      y = Math.max(r, Math.min(H - r, y))
     }
     g.fillStyle = '#e2554f'
     g.beginPath()
@@ -304,6 +344,10 @@ function syntheticSystemAudio(ctx: AudioContext): Generated {
 }
 
 export function createSyntheticChannels(config: CaptureConfig): SyntheticRig {
+  // `?screensize=` / `?camsize=`, read here so every synthetic entry point gets
+  // them and no rig runner has to remember (a rig that calls the setter
+  // directly still wins — it runs after this).
+  if (typeof location !== 'undefined') applySyntheticSizeParams(location.search)
   const channels: AcquiredChannel[] = []
   const teardowns: (() => void)[] = []
   const audioCtx = config.mic || config.systemAudio ? new AudioContext() : null

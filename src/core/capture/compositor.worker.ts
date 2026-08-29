@@ -503,7 +503,10 @@ function roundedRectPath(
 
 /** The PiP rect, shared by both backends so they cannot drift apart. */
 function pipRect(camera: VideoFrame): { x: number; y: number; w: number; h: number; r: number; border: number } {
-  const scale = W / 1920
+  // F13: the layout's authored-at-1920 scale, keyed to the LONG edge so a
+  // portrait composite draws the same border and radius as a landscape one.
+  // Identical to W / 1920 on every landscape frame.
+  const scale = Math.max(W, H) / 1920
   const w = 0.24 * W
   const aspect =
     camera.displayWidth && camera.displayHeight ? camera.displayWidth / camera.displayHeight : 4 / 3

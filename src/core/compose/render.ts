@@ -37,6 +37,7 @@ import {
   Output,
   type VideoSample,
 } from 'mediabunny'
+import { frameScale } from '@core/frame'
 import { blobStore } from '@core/store'
 import {
   channelSourceTimeAt,
@@ -377,7 +378,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     const canvas = new OffscreenCanvas(width, height)
     const ctx = canvas.getContext('2d', { alpha: false })
     if (!ctx) throw new Error('Canvas 2D context unavailable')
-    const frame: FrameCanvas = { ctx, width, height, scale: width / 1920 }
+    const frame: FrameCanvas = { ctx, width, height, scale: frameScale(width, height) }
 
     // CONSTANT QUALITY, when this browser honours it (PO 2026-08-29, "more
     // quality and much less size"). Resolved BEFORE the output so the file's

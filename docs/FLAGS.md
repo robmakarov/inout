@@ -28,6 +28,7 @@ The URL wins over the sticky value; the sticky value wins over the default.
 | Switch | Turn it on with | What it does, and why it is off |
 |---|---|---|
 | **Capture-side single generation** `?singlegen=capture` | as written | Stops recording the composite at all — 45–49 % less written per second. Off because it gives up **source-liveness detection** ("your screen froze" stops being noticed). It does NOT cost you preview quality: the preview falls back to the raw `<video>` in the same 16:9 contain-fit box, and measured live on prod it carries ~1.8× the pixels of the compositor's 960×540 canvas, so it is sharper, not softer. Only fires when the one video channel is exactly 1920×1080 — with native resolution on, that is usually false, so on most machines this flag does nothing today. |
+| **The frame follows the source** `?sourceframe=` | `?sourceframe=1` | The output stops being a landscape constant and takes THE TAKE'S OWN SHAPE — a 9:16 phone camera exports 1080×1920 instead of losing 68 % of the frame to a crop, a 4:3 camera keeps its full height, and a screenless take asks the sensor for the orientation the device is actually in. The step names and their pixel budget do not move: "1080p" is still 1920 on the long edge, so a 16:9 take is byte-identical either way. Off because F13's own gate says a real phone take is judged by eye before the default moves — that judgement is yours. Note that a take is the shape it was RECORDED at: turning this on does not un-crop takes made with it off. |
 | **R128 loudness** `?loudness=` | `?loudness=r128` | Broadcast −14 LUFS normalization instead of the shipped p90 bounding. Off because R128 can only hit the target by turning takes **down**, and the shipped rule never attenuates. |
 
 ## Test-only (do not use on a real take)
@@ -37,6 +38,8 @@ The URL wins over the sticky value; the sticky value wins over the default.
 | `?synthetic=1` | | Fake devices — no permission prompts. This is how agents drive the app. |
 | `?slow=` | `?synthetic=1&slow=mic:6000` | Delays a channel's arm, to reproduce a stuck arm without hardware. |
 | `?quiet=` | `?synthetic=1&quiet=0.05` | Scales the synthetic audio down. |
+| `?camsize=` | `?synthetic=1&camsize=1080x1920` | The synthetic camera's size — how a PORTRAIT take is reproduced without a phone (default 640×480). |
+| `?screensize=` | `?synthetic=1&screensize=3840x2160` | The synthetic screen's size (default 1280×720). |
 
 ## Not a URL flag — it is in the UI
 

@@ -194,7 +194,7 @@
 }
 .capture__preview .stage {
   width: 100%;
-  max-width: min(100%, calc((100dvh - 300px) * 16 / 9));
+  max-width: min(100%, calc((100dvh - 300px) * var(--stage-ar, 16 / 9)));
 }
 
 /* live audio meter pinned in-frame when capturing screen + audio, no camera */
@@ -421,7 +421,7 @@
 
 .player {
   width: 100%;
-  max-width: min(100%, calc((100dvh - 300px) * 16 / 9));
+  max-width: min(100%, calc((100dvh - 300px) * var(--stage-ar, 16 / 9)));
   height: 100%;
   min-height: 0;
   display: flex;
@@ -431,9 +431,13 @@
   gap: 14px;
 }
 
+/* F13: the stage is the OUTPUT FRAME, and the output frame follows the take.
+   `--stage-ar` is set inline by the editor (and by the capture preview) from
+   the same aspect the compositor and the export use; 16 / 9 is what every take
+   made before the frame followed anything still resolves to. */
 .stage {
   position: relative;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: var(--stage-ar, 16 / 9);
   width: 100%;
   min-width: 200px;
   background: var(--bg);
@@ -489,8 +493,8 @@
   opacity: 1;
 }
 /* The live composite painted by the capture worker (O4-polish). Same box as
-   .stage__screen; the composition is already 16:9 and so is the stage, so the
-   canvas stretches exactly. */
+   .stage__screen; the composition and the stage carry the SAME aspect (F13:
+   both follow the take), so the canvas stretches exactly. */
 .stage__composite {
   position: absolute;
   inset: 0;
@@ -691,7 +695,7 @@
   position: relative;
   flex: none;
   width: 100%;
-  max-width: min(100%, calc((100dvh - 300px) * 16 / 9));
+  max-width: min(100%, calc((100dvh - 300px) * var(--stage-ar, 16 / 9)));
   align-self: center;
   height: 184px;
   background: transparent;
@@ -948,7 +952,7 @@
 .xp {
   flex: none;
   width: 100%;
-  max-width: min(100%, calc((100dvh - 300px) * 16 / 9));
+  max-width: min(100%, calc((100dvh - 300px) * var(--stage-ar, 16 / 9)));
   align-self: center;
   display: flex;
   flex-direction: column;
@@ -1251,7 +1255,7 @@
 .quality {
   flex: none;
   width: 100%;
-  max-width: min(100%, calc((100dvh - 300px) * 16 / 9));
+  max-width: min(100%, calc((100dvh - 300px) * var(--stage-ar, 16 / 9)));
   align-self: center;
   display: flex;
   flex-direction: column;
