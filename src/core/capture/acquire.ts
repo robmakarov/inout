@@ -7,7 +7,7 @@ import {
 } from '@core/types'
 import { analytics } from '@core/analytics'
 import { sourceFrameEnabled } from '@core/frame'
-import { captureRateCeiling } from '@core/rate'
+import { captureRateCeiling, rateForSurface } from '@core/rate'
 import { evenDown } from '@core/frame'
 import { isAppleWebKit } from '@core/capabilities'
 import { guardStream } from './deviceGuard'
@@ -476,7 +476,38 @@ export async function capDisplayTrack(track: MediaStreamTrack | undefined): Prom
     // the hardware this product is used on, not an edge.
     // Rounding DOWN by at most one row and one column is invisible; losing the
     // channel is not.
+    // THE RATE IS BUDGETED AGAINST THE SURFACE (F15). A 60 fps ceiling is an
+    // ask, not a promise the machine can keep: measured on prod, 3456x2234@60
+    // encodes NOTHING and never recovers, while the same surface at 30 is
+    // healthy. The ladder fires correctly on that take and cannot rescue it,
+    // because the collapse is instant. See rate.ts's HIGH_RATE_PIXEL_BUDGET.
+    const rate = rateForSurface(before.width, before.height, captureRateCeiling())
+    const holdRate = rate < captureRateCeiling() && (before.frameRate ?? 0) > rate + 1
     const odd = evenDown(before.width ?? 0) !== before.width || evenDown(before.height ?? 0) !== before.height
+    if (holdRate) {
+      const even = before.width && before.height
+        ? { width: evenDown(before.width), height: evenDown(before.height) }
+        : null
+      try {
+        await withTimeout(
+          track.applyConstraints({
+            ...(odd && even ? { width: { max: even.width }, height: { max: even.height } } : {}),
+            frameRate: { max: rate },
+          }),
+          1500,
+          'applyConstraints(display rate budget)',
+        )
+        const after = track.getSettings()
+        console.info(
+          `[capture] native-res capture: ${before.width}×${before.height} is too many pixels to ` +
+            `sustain ${captureRateCeiling()} fps — holding at ${rate} fps, got ` +
+            `${after.width}×${after.height}@${after.frameRate ?? '?'} (F15)`,
+        )
+      } catch (err) {
+        console.warn('[capture] could not hold the rate down — the ladder is the remaining guard', err)
+      }
+      return
+    }
     if (!odd || !before.width || !before.height) {
       console.info(
         `[capture] native-res capture: leaving display at ${before.width}×${before.height}@${before.frameRate ?? '?'} (O6)`,

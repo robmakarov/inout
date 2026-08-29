@@ -42,6 +42,50 @@ export const DEFAULT_FRAME_RATE = DEFAULT_EXPORT_SETTINGS.fps
  */
 export const MAX_FRAME_RATE = 60
 
+/**
+ * HOW MANY PIXELS A SECOND A TAKE MAY ASK FOR ABOVE 30 fps.
+ *
+ * A rate ceiling alone is not enough, and the take that proved it is Robert's:
+ * "60 fps game on other tab frozen". Measured on prod, one machine, one source
+ * (`?sourcefps=1&screensize=…&screenfps=60`, 20 s each):
+ *
+ *     1920x1080 @60   124 Mpx/s   composite kept 90 % of frames
+ *     2560x1440 @60   221 Mpx/s   composite kept 81 %
+ *     3456x2234 @30   231 Mpx/s   composite healthy, raw kept 493 of 574
+ *     3456x2234 @60   463 Mpx/s   composite encoded NOTHING, raw kept 8 of 305
+ *
+ * That is a CLIFF, not a slope, and it cannot be climbed back down from: the
+ * composite's encoder produced nothing from the first second and never
+ * recovered, so the degradation ladder — which fires correctly now, all three
+ * rungs, rate first — could not rescue the take. A guard that only acts after
+ * the collapse is not a guard for a collapse that is instant.
+ *
+ * So the budget is the largest configuration MEASURED to sustain 60, and the
+ * rate is simply not raised above it. It is a floor of evidence and not a law
+ * about hardware: a machine that can do more should be allowed to, and the way
+ * that happens is somebody measuring it and moving this number, not the number
+ * quietly standing in for "the engine's limitation".
+ *
+ * WHAT A BIG SCREEN GETS INSTEAD is its full resolution at 30, which is the
+ * shipped default and is measured healthy at 3456x2234 — and for a SCREEN
+ * recording that is the better half of the trade anyway.
+ */
+export const HIGH_RATE_PIXEL_BUDGET = 2560 * 1440 * 60
+
+/**
+ * The rate this surface may be asked for: the ceiling, unless the surface is
+ * too big to sustain it. Pure, so the boundary is testable.
+ */
+export function rateForSurface(
+  width: number | undefined,
+  height: number | undefined,
+  ceiling: number,
+): number {
+  if (ceiling <= DEFAULT_FRAME_RATE) return ceiling
+  if (!width || !height || width <= 0 || height <= 0) return ceiling
+  return width * height * ceiling > HIGH_RATE_PIXEL_BUDGET ? DEFAULT_FRAME_RATE : ceiling
+}
+
 const STORAGE_KEY = 'inout.frame.rate'
 
 function fromSearch(): boolean | null {

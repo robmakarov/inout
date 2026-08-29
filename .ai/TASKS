@@ -246,6 +246,16 @@ THE v2 ORACLE IS FLAKY ON MAIN AND IT IS NOT THIS SESSION'S: HEAD with all of th
 2 and 1 of 3, same failure, same distribution. Filed in BACKLOG. Do not read a red v2 oracle as a
 regression without running HEAD cold beside it.
 
+EIGHTEENTH SESSION 2026-08-29 (Robert: "put bugs on roadmap"): the open DEFECTS were living in
+BACKLOG.md, which is a dump and not an assignment — so nothing in it was ever picked up by the roadmap
+protocol, and several have been re-found by a later session instead of fixed. Twelve are promoted below
+as tasks with gates: B1-B8 are defects a USER meets, G1-G4 are INSTRUMENT defects — gates that lie, which
+outrank the product bugs because a coin-flip gate is how a real regression gets merged (note 17). The
+BACKLOG entries keep their evidence and now carry a pointer, the way the Safari mic bug did on 08-25.
+NOT promoted, and why: anything already tracked as a task (F14/F15/F16, the Safari mic P8), anything
+awaiting only Robert's ear or eye (the loudness listen tests, F13-FLIP, F15-FLIP), and the SCREEN WEDGE,
+whose cause is Chrome's and whose strongest lever is O12 (Robert-gated). ORACLE-LOAD is absorbed by G2.
+
 START HERE IF YOU ARE FRESH:
   1. read notes 5, 6, 9, 10, 11, 17 below. Note 10 (the rig is wrong before the product is) and
      note 17 (a gate that cannot fail is not a gate) between them account for most of what went
@@ -354,6 +364,62 @@ READY NOW:
                                              so cuts never land on speech. Spec below.
   F12  super-resolution on zoom    [heavy]   Robert 2026-08-26: "only if zoom used". Render path only,
                                              zoomed spans only, opt-in. Spec below.
+
+  ── BUGS — promoted from BACKLOG 2026-08-29 ("put bugs on roadmap"). Specs in BUG PACK below.
+     The G lane goes FIRST when two sessions are free: a gate that lies makes every B verdict cheap talk.
+  G1   the merge gate is a coin flip [medium]  `npm run oracle` fails ~half its COLD runs on main,
+                                             always `instant/trimmed export sync maxAbs 97-105 > 90ms`,
+                                             never the render. Measured 2 of 4 on a stashed HEAD. It is
+                                             the per-task merge gate every task here is required to
+                                             pass, so it teaches sessions to re-run until green. Measure
+                                             whether it is the instrument or the copy paths. NOT by
+                                             widening the band.
+  G2   a rig that cannot move its    [light]  ABSORBS the old ORACLE-LOAD entry and widens it: the same
+       own source                              mechanism kills the whole makeRig family. `oracle:load`
+                                             drives through exp.mjs, HEADLESS by default; a headless page
+                                             runs rAF at 0, so a rAF-painted 4K canvas source starves and
+                                             the tail band reads starvation as tail loss. Red on both
+                                             sides of F15 (79d6def identical), so it is not F15's.
+  G3   gates that cannot fail        [light]  two evidence gates are phrased in `longtask` counts, and
+                                             nothing here that awaits per frame ever forms one — the
+                                             counter reads 0 on the blocking lane AND the non-blocking
+                                             one. O1's memory lane samples the MAIN thread while the
+                                             export renders in a worker. Both are decoration today.
+  G4   nothing measured past 30 s    [light-medium]  Robert records 938-1800 s; the widest cell in every
+                                             matrix is 30 s. At 120 s the instant path read 117.2/153.8 ms
+                                             before 89e250e against 97-102 at 6 s — the short gate passed
+                                             a defect that grew with length. Make the long cell a command.
+  B1   the size panel lies           [light]  4.7 GB promised, 10.09 GB delivered at 1440p on a 140-min
+                                             take (2.15x) — and it is the ONLY warning before a ~2 h
+                                             render. Cheaper sibling: the PROVISIONAL numbers rank 1440p
+                                             BELOW 1080p, which is an upscale of that very file.
+  B2   the noises Robert can hear    [medium]  "i need them gone". TWO defects, not one: (A) the preview's
+                                             own correction (cold decode -> hard seek / +-20 % playbackRate
+                                             time-stretch) which HEALS on repeat, and (B) ~15 pad notches
+                                             a minute already in the FILE. Discriminator: export and listen.
+  B3   a stale tab kills the export  [light-medium]  a tab that spans a deploy 404s its hashed chunks and
+       worker                                  the export worker dies silently — the fallback renders
+                                             in-thread (7.5 s of an 8.2 s render in encode-wait). May also
+                                             explain past "the fix wasn't there to hear" rounds.
+  B4   a channel that recorded       [light]  a camera delivering 0 fps gives a 28-byte file, a 5 s stop
+       nothing must say so                     timeout, `durationMs: 0` and ZERO channels — with nothing on
+                                             screen to say so. Same family as the old silent mic-timeout
+                                             loss. The machinery to notice it already exists and was not
+                                             checked.
+  B5   no disk guard on capture      [light]  the 30-min cap is gone and nothing reads
+                                             `navigator.storage.estimate()` before or during a take.
+                                             ~1.1 GB/hour is a number the UI can show.
+  B6   "the device never connected"  [light]  blames the DEVICE for an OS permission: with macOS screen
+       blames the wrong thing                  recording ungranted, Chrome's picker says exactly what to
+                                             do, getDisplayMedia never rejects, and our 30 s deadline
+                                             throws that message away. Behaviour change -> Robert's yes.
+  B7   the constant start offset     [light-medium]  the two alignment errors a synthetic rig CANNOT see,
+                                             both pushing audio late. This task ships INSTRUMENTATION into
+                                             the take's certification, not compensation.
+  B8   the two export paths disagree [light]  the render places the camera PiP -15 frames (-0.5 s) from
+       about WHEN                              where the instant path places it, on the same output
+                                             instants. The oracle bands audio-video sync and cannot see
+                                             video-video placement between paths.
 
 NEW TASKS (authored 2026-08-26 from Robert's answers; all operating rules apply):
 
