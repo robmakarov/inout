@@ -43,9 +43,10 @@ function Scrubber({
   onScrubEnd: () => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
-  /** Latest pointer position, and the frame that will consume it. */
+  /** Latest pointer position, and the timer that will consume it. */
   const pending = useRef<number | null>(null)
-  const raf = useRef(0)
+  const timer = useRef(0)
+  const lastSeekAt = useRef(0)
   const toMs = (clientX: number) => {
     const el = ref.current
     if (!el) return 0
@@ -54,35 +55,55 @@ function Scrubber({
     return f * max
   }
   /**
-   * ONE SEEK PER FRAME, not one per pointer event. A trackpad drag delivers
+   * ONE SEEK PER ~FRAME, not one per pointer event. A trackpad drag delivers
    * pointermove at up to 120 Hz and each seek re-seeks every media element in
-   * the take; coalescing to the frame the user can actually see costs nothing
-   * and stops the drag from queueing work faster than the elements retire it.
+   * the take; throttling to what the eye can use costs nothing and stops the
+   * drag from queueing work faster than the elements retire it.
+   *
+   * A TIMER AND NOT requestAnimationFrame, deliberately, for the same reason
+   * the master clock in usePlayback carries an interval beside its rAF: rAF
+   * does not fire at all where the page is not being painted, and a coalescer
+   * built on it stops mid-drag and never resumes. The first move of a gesture
+   * seeks immediately, so the throttle costs no responsiveness.
    */
-  const queueSeek = (clientX: number) => {
-    pending.current = clientX
-    if (raf.current) return
-    raf.current = requestAnimationFrame(() => {
-      raf.current = 0
-      const x = pending.current
-      pending.current = null
-      if (x !== null) onSeek(toMs(x))
-    })
-  }
-  const endDrag = () => {
-    if (raf.current) {
-      cancelAnimationFrame(raf.current)
-      raf.current = 0
-    }
-    // Land on the last position the pointer actually reached — a drag that
-    // ends between frames must not be rounded back to the previous one.
+  const MIN_SEEK_MS = 16
+  const flush = () => {
     const x = pending.current
     pending.current = null
-    if (x !== null) onSeek(toMs(x))
+    if (x === null) return
+    lastSeekAt.current = performance.now()
+    onSeek(toMs(x))
+  }
+  const queueSeek = (clientX: number) => {
+    pending.current = clientX
+    const since = performance.now() - lastSeekAt.current
+    if (since >= MIN_SEEK_MS) {
+      if (timer.current) {
+        clearTimeout(timer.current)
+        timer.current = 0
+      }
+      flush()
+      return
+    }
+    if (timer.current) return
+    timer.current = window.setTimeout(() => {
+      timer.current = 0
+      flush()
+    }, MIN_SEEK_MS - since)
+  }
+  const endDrag = () => {
+    if (timer.current) {
+      clearTimeout(timer.current)
+      timer.current = 0
+    }
+    // Land on the last position the pointer actually reached — a drag that
+    // ends inside the throttle window must not be rounded back to the
+    // previous one.
+    flush()
     onScrubEnd()
   }
   useEffect(() => () => {
-    if (raf.current) cancelAnimationFrame(raf.current)
+    if (timer.current) clearTimeout(timer.current)
   }, [])
   return (
     <div
