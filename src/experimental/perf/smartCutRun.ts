@@ -19,6 +19,7 @@
  */
 import { ALL_FORMATS, BlobSource, Input, VideoSampleSink } from 'mediabunny'
 import { createCaptureSession } from '@core/capture/session'
+import { warmRigEncoder } from '../rigWarm'
 import { exportInstant, exportRecording } from '@core/compose'
 import { exportSmartCut, getLastSmartCutStats, type SmartCutStats } from '@core/compose/smartCut'
 import { readCertification } from '@core/compose/certify'
@@ -162,6 +163,9 @@ export interface O5CutReport {
 export async function runSmartCut(
   opts: { takeMs?: number; cutAtFraction?: number } = {},
 ): Promise<O5CutReport> {
+  // NOTE 6: prearm warms production's first VideoEncoder at mount; a rig that
+  // opens a session directly does not, and a cold first encoder eats the take.
+  await warmRigEncoder()
   const takeMs = opts.takeMs ?? 30_000
   const notes: string[] = []
   const config: CaptureConfig = { screen: true, camera: false, mic: true, systemAudio: false }

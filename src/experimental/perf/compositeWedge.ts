@@ -26,6 +26,7 @@
  */
 import { blobStore } from '@core/store'
 import { createCaptureSession } from '@core/capture/session'
+import { warmRigEncoder } from '../rigWarm'
 import { setSyntheticScreenSize } from '@core/capture/synthetic'
 import { setCompositeFault } from '@core/capture/liveCompositeV2'
 import { exportByBestPath } from '@core/compose'
@@ -154,6 +155,9 @@ async function runCase(wedge: WedgeCase, takeMs: number): Promise<WedgeLane> {
 export async function runCompositeWedge(
   opts: { takeSec?: number; cases?: WedgeCase[] } = {},
 ): Promise<WedgeReport> {
+  // NOTE 6: prearm warms production's first VideoEncoder at mount; a rig that
+  // opens a session directly does not, and a cold first encoder eats the take.
+  await warmRigEncoder()
   const takeMs = (opts.takeSec ?? 10) * 1000
   const cases = opts.cases ?? (['control', 'startFails', 'wedged'] as WedgeCase[])
   // THE COMPOSITE HAS TO BE THE EXPORT'S OWN GEOMETRY or the instant path

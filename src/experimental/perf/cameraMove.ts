@@ -17,6 +17,7 @@
 
 import { ALL_FORMATS, BlobSource, Input, VideoSampleSink } from 'mediabunny'
 import { createCaptureSession } from '@core/capture/session'
+import { warmRigEncoder } from '../rigWarm'
 import { exportInstant } from '@core/compose/instant'
 import { exportRecording } from '@core/compose'
 import { editsRepo, recordingsRepo } from '@core/store'
@@ -210,6 +211,9 @@ export interface F4Report {
 }
 
 export async function runCameraMove(opts: { takeMs?: number } = {}): Promise<F4Report> {
+  // NOTE 6: prearm warms production's first VideoEncoder at mount; a rig that
+  // opens a session directly does not, and a cold first encoder eats the take.
+  await warmRigEncoder()
   const takeMs = opts.takeMs ?? 9000
   const config: CaptureConfig = { screen: true, camera: true, mic: false, systemAudio: false }
   const session = await createCaptureSession(config)

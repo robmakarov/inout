@@ -36,7 +36,7 @@
  */
 import { newId } from '@core/id'
 import { blobStore } from '@core/store'
-import { warmVideoEncoder } from '@core/capture/encoderWarm'
+import { warmRigEncoder } from '../rigWarm'
 import { exportRecording } from '@core/compose'
 import { defaultEditState } from '@core/timeline'
 import type { ChannelRecording, Recording } from '@core/types'
@@ -344,7 +344,7 @@ export async function runChromaPrice(
   // and run each lane twice — the first pass is the warm for THAT codec, and
   // the best of the two is the reading (X5's rig error (b): the host drifts
   // monotonically inside a run, so a mean measures when a lane happened to go).
-  await warmVideoEncoder()
+  await warmRigEncoder()
   const repeats = opts.only ? (opts.repeats ?? 3) : 2
   if (opts.only) {
     notes.push(

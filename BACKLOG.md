@@ -288,6 +288,16 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   software only (AV1 profile 1: 80 fps at 1080p against 207, ~2x CPU — X15(b)). PO has the crops:
   ~/Downloads/x15-text-truth/, c-00-SOURCE against c-01-instant.
   NOT A REGRESSION and not new — it is how every take this product has ever made behaves.
+  THE ATTRIBUTION IS NOW CONTROLLED, NOT ASSUMED (R1, 2026-08-29). 4:2:0 subsampling and a YUV
+  matrix/range round-trip drift leave the SAME fingerprint on this fixture — saturated glyphs fade,
+  grey holds — so every stage above was consistent with either, and the 4:4:4 case rests entirely on
+  it being the first. The rig now runs a matched control pair: the identical palette as FLAT SLABS
+  and as thin glyphs, through ONE identical AVC 4:2:0 encode. Slabs keep green 101.1 / blue 99.8 %
+  (subsampling has no detail to average there); the same page's glyphs keep 79.8 / 82.1 %. It is
+  subsampling on thin glyphs, so 4:4:4 will deliver what this entry promises.
+  AND GREY'S NUMBER IS NOW HONEST: "grey barely moves" used to be argued from a keptPct that divides
+  by a 7.4 % source saturation, so +-1 LSB of decode noise arrived as +-6 points. In absolute
+  saturation points grey moves -2.1 against green -13.5 and blue -13.0 — same argument, no amplifier.
 
 - [P2, was P1 — SETTLED IN PRODUCTION 2026-08-26 by X15(c), `npm run exp -- x15c`] **a trim does
   change how a take's text looks, and the change is ~2.8 dB below what a plain re-encode costs

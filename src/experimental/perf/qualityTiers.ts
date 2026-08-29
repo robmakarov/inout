@@ -11,6 +11,7 @@
 import { ALL_FORMATS, BlobSource, Input, VideoSampleSink } from 'mediabunny'
 import { readCertification } from '@core/compose/certify'
 import { createCaptureSession } from '@core/capture/session'
+import { warmRigEncoder } from '../rigWarm'
 import { exportInstant } from '@core/compose/instant'
 import { exportRecording } from '@core/compose'
 import {
@@ -86,6 +87,9 @@ export interface F7Report {
 }
 
 export async function runQualityTiers(opts: { takeMs?: number } = {}): Promise<F7Report> {
+  // NOTE 6: prearm warms production's first VideoEncoder at mount; a rig that
+  // opens a session directly does not, and a cold first encoder eats the take.
+  await warmRigEncoder()
   const takeMs = opts.takeMs ?? 6000
   const config: CaptureConfig = { screen: true, camera: true, mic: true, systemAudio: false }
   const session = await createCaptureSession(config)

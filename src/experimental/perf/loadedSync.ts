@@ -27,7 +27,7 @@ import { blobStore } from '@core/store'
 import { startLiveCompositeV2 } from '@core/capture/liveCompositeV2'
 import { startLiveComposite } from '@core/capture/liveComposite'
 import { startMeasuredAudioCapture } from '@core/capture/measuredAudio'
-import { warmVideoEncoder } from '@core/capture/encoderWarm'
+import { warmRigEncoder } from '../rigWarm'
 import { makeRig } from './compositorEngine'
 
 /**
@@ -299,7 +299,7 @@ export async function runLoadedSync(opts?: {
   // DURING the recording, and it lands as a multi-second hole at t≈0.8 s that
   // reads exactly like a freeze — this rig reported one until it warmed. Note
   // 10 of .ai/TASKS, fourth instance: check the instrument before the product.
-  await warmVideoEncoder().catch(() => undefined)
+  await warmRigEncoder()
   const audioCtx = new AudioContext({ sampleRate: 48000 })
   await audioCtx.resume()
   const rig = makeRig(width, height, audioCtx)

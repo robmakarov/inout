@@ -574,7 +574,7 @@ const runners: Runner[] = [
     id: 'x15c',
     title: 'X15(c) — does adding one trim change how a take’s TEXT looks? (BACKLOG P1)',
     detail:
-      'records ONE real take of a code-editor screen through the shipped capture session, then exports it three ways through the product’s own ladder — unedited (instant, packet copy of the GL composite), with a tail trim on default flags (smart cut, which copies most packets), and with the SAME trim and smart cut off (render, the 2D painter) — and PSNRs a text region at matching instants with a ±2-frame search. Settles X5’s divergence in production instead of in the lab. Reports; fixes nothing.',
+      'records ONE real take of a code-editor screen through the shipped capture session, then exports it three ways through the product’s own ladder — unedited (instant, packet copy of the GL composite), with a tail trim on default flags (smart cut, which copies most packets), and with the SAME trim and smart cut off (render, the 2D painter) — and PSNRs a text region at matching instants with a ±2-frame search. Also measures WHERE THE COLOUR GOES against the canvas the synthetic screen actually painted, stage by stage, with a matched flat-slab/thin-glyph control pair that separates 4:2:0 subsampling from a YUV matrix or range drift. Settles X5’s divergence in production instead of in the lab. Reports; fixes nothing. `{"drill":"dead-composite-blob"|"dead-instant-export"|"palette-drift"}` runs the instrument against its own blind spots: missing data must read MISSING and a drifted palette MASK EMPTY, never a score.',
     run: async (args) => {
       const { runTrimTextParity } = await import('../perf/trimTextParity')
       return runTrimTextParity({
@@ -582,6 +582,12 @@ const runners: Runner[] = [
         thumbs: typeof args?.thumbs === 'boolean' ? args.thumbs : undefined,
         searchSec: typeof args?.searchSec === 'number' ? args.searchSec : undefined,
         crops: typeof args?.crops === 'boolean' ? args.crops : undefined,
+        drill:
+          args?.drill === 'dead-composite-blob' ||
+          args?.drill === 'dead-instant-export' ||
+          args?.drill === 'palette-drift'
+            ? args.drill
+            : undefined,
       })
     },
   },

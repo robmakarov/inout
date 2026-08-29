@@ -27,6 +27,7 @@ import { blobStore, recordingsRepo } from '@core/store'
 import { startLiveComposite } from '@core/capture/liveComposite'
 import { drainRecorder, type RecorderDrainStats } from '@core/capture/recorderDrain'
 import { createCaptureSession } from '@core/capture/session'
+import { warmRigEncoder } from '../rigWarm'
 import { setSyntheticScreenSize } from '@core/capture/synthetic'
 import { makeRig, probeComposite, type FileProbe } from './compositorEngine'
 
@@ -526,6 +527,9 @@ export async function runRawTail(
     repeats?: number
   } = {},
 ): Promise<RawTailReport> {
+  // NOTE 6: prearm warms production's first VideoEncoder at mount; a rig that
+  // opens a session directly does not, and a cold first encoder eats the take.
+  await warmRigEncoder()
   const takeMs = opts.takeMs ?? 10_000
   const [width, height] = opts.size ?? [3840, 2160]
   const procedures = opts.procedures ?? ['shipped', 'slice250', 'cut', 'throttle', 'production']

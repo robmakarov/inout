@@ -93,6 +93,41 @@ export function setSyntheticScreenContent(content: SyntheticScreenContent | null
 }
 
 /**
+ * THE EDITOR PAGE'S PALETTE, IN ONE PLACE — and it is one place because it was
+ * five (R1 fix 10).
+ *
+ * The same three glyph colours were pasted into synthetic.ts, textSource.ts
+ * twice, bitsAudit.ts and aiExport.ts, and the chroma rig's copy was the only
+ * one written as decimal RGB. That is not a tidiness point: `chromaRows()`
+ * masks the reference BY THIS PALETTE, so one digit of drift between the
+ * painter and the mask empties the mask — and an empty mask used to read as
+ * "0 % of the colour kept", i.e. a fabricated P1, while the gate that compares
+ * two exports passed vacuously because both were measuring nothing. Every
+ * painter and every mask now derives from here.
+ *
+ * `glyph` is ordered the way `glyphColour()` assigns it, and the names are the
+ * ones the chroma tables in TASKS/BACKLOG/CONTEXT use.
+ */
+export const TEXT_SCREEN_PALETTE = {
+  background: '#0d1117',
+  gutter: '#484f58',
+  caret: '#c9d1d9',
+  glyph: [
+    { key: 'grey', hex: '#c9d1d9' },
+    { key: 'green', hex: '#7ee787' },
+    { key: 'blue', hex: '#79c0ff' },
+  ],
+} as const
+
+export type GlyphColourKey = (typeof TEXT_SCREEN_PALETTE.glyph)[number]['key']
+
+/** Which glyph colour line `i` is painted in — the one rule, not four copies. */
+export function glyphColour(i: number): string {
+  const [grey, green, blue] = TEXT_SCREEN_PALETTE.glyph
+  return i % 5 === 0 ? green.hex : i % 3 === 0 ? blue.hex : grey.hex
+}
+
+/**
  * The bits-audit editor page, held still — see setSyntheticScreenContent.
  *
  * EXPORTED so a rig can reconstruct the exact picture the synthetic screen put
@@ -105,7 +140,7 @@ export function setSyntheticScreenContent(content: SyntheticScreenContent | null
  */
 export function drawTextScreen(g: CanvasRenderingContext2D, W: number, H: number): void {
   const words = ['const', 'function', 'return', 'await', 'export', 'if', 'for', 'type']
-  g.fillStyle = '#0d1117'
+  g.fillStyle = TEXT_SCREEN_PALETTE.background
   g.fillRect(0, 0, W, H)
   g.textAlign = 'left'
   g.font = `${Math.round(H / 38)}px monospace`
@@ -114,11 +149,34 @@ export function drawTextScreen(g: CanvasRenderingContext2D, W: number, H: number
     const i = row % 60
     const indent = '  '.repeat(i % 4)
     const text = `${indent}${words[i % words.length]} sample${i} = compute(${i}, 'channel-${i % 7}')`
-    g.fillStyle = '#484f58'
+    g.fillStyle = TEXT_SCREEN_PALETTE.gutter
     g.fillText(String(row + 1).padStart(3, ' '), W * 0.01, row * (H / 36) + 8)
-    g.fillStyle = i % 5 === 0 ? '#7ee787' : i % 3 === 0 ? '#79c0ff' : '#c9d1d9'
+    g.fillStyle = glyphColour(i)
     g.fillText(text, W * 0.05, row * (H / 36) + 8)
   }
+}
+
+/**
+ * The reference picture, rasterized THROUGH THE CONTEXT THE WIRE ACTUALLY USES
+ * (R1 fix 3).
+ *
+ * The chroma rig built its reference on a `{alpha:false}` canvas while
+ * `syntheticScreen()` paints on `get2d()`'s default — an alpha:true one. An
+ * opaque canvas is eligible for different text antialiasing, so the reference
+ * and the picture on the wire could disagree about every glyph edge before a
+ * single frame was encoded, and the rig's own 0-source self-row is
+ * structurally blind to it (it compares the reference with itself). Going
+ * through `get2d` means the two cannot drift: there is one context factory.
+ *
+ * Harness-only, like the two setters above; production never calls it.
+ */
+export function textScreenReference(W: number, H: number): ImageData {
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const g = get2d(canvas)
+  drawTextScreen(g, W, H)
+  return g.getImageData(0, 0, W, H)
 }
 
 function syntheticScreen(): Generated {

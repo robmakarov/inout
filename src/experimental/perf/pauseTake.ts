@@ -20,6 +20,7 @@
  */
 import { blobStore } from '@core/store'
 import { createCaptureSession } from '@core/capture/session'
+import { warmRigEncoder } from '../rigWarm'
 import { setSyntheticScreenSize } from '@core/capture/synthetic'
 import { exportByBestPath } from '@core/compose'
 import { clampEditState, defaultEditState } from '@core/timeline'
@@ -54,6 +55,9 @@ export interface F6Report {
 export async function runPauseTake(
   opts: { segment1Sec?: number; pauseSec?: number; segment2Sec?: number } = {},
 ): Promise<F6Report> {
+  // NOTE 6: prearm warms production's first VideoEncoder at mount; a rig that
+  // opens a session directly does not, and a cold first encoder eats the take.
+  await warmRigEncoder()
   const seg1 = (opts.segment1Sec ?? 5) * 1000
   const pauseMs = (opts.pauseSec ?? 3) * 1000
   const seg2 = (opts.segment2Sec ?? 5) * 1000

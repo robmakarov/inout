@@ -43,23 +43,48 @@
  * settled it. A still page cannot express that confound, so the screen row is
  * pixels and only pixels. The camera PiP still moves, and its alignment IS the
  * placement measurement — reported, not absorbed.
+ *
+ * AND THEN THE LANE GREW THE PART THAT MATTERED MOST: WHERE THE COLOUR GOES.
+ * The pair rows above compare files with EACH OTHER, so a loss every path
+ * shares — which is exactly what 4:2:0 chroma subsampling is — cancels to zero.
+ * PO saw it by eye in the crops and was right. The chroma stages measure every
+ * artifact against the CANVAS THE SYNTHETIC SCREEN PAINTED instead, masked by
+ * the source's own palette, so the loss lands on a stage: one generation at the
+ * raw channel, a second at the composite, nothing at all at the export.
+ *
+ * R1 (2026-08-29) HARDENED THAT INSTRUMENT, because it is now the evidence for
+ * O3b and for the 4:4:4 decision and it could report wrong without saying so.
+ * Everything it could have done silently is named at its fix site; the two
+ * things a reader needs up front are:
+ *   · A MEASUREMENT THAT DID NOT HAPPEN IS NOT A SCORE. Missing stages read
+ *     MISSING, empty masks read MASK EMPTY, and both FAIL every chroma gate.
+ *     `{"drill":"dead-composite-blob"|"dead-instant-export"|"palette-drift"}`
+ *     points the rig at its own blind spots, one command each.
+ *   · THE C1/C2 CONTROL PAIR IS WHAT MAKES THE ATTRIBUTION A CLAIM. 4:2:0 and a
+ *     YUV matrix/range drift leave the same fingerprint here — saturated glyphs
+ *     fade, grey holds — so the same palette goes through the same encoder as
+ *     flat slabs AND as thin glyphs. Slabs keep 99-101 %, glyphs 80-82 %: it is
+ *     subsampling on thin glyphs, and 4:4:4 will deliver.
  */
 import { blobStore } from '@core/store'
 import { createCaptureSession } from '@core/capture/session'
-import { warmVideoEncoder } from '@core/capture/encoderWarm'
 import {
-  drawTextScreen,
   setSyntheticScreenContent,
   setSyntheticScreenSize,
+  textScreenReference,
+  TEXT_SCREEN_PALETTE,
+  type GlyphColourKey,
 } from '@core/capture/synthetic'
 import { exportByBestPath } from '@core/compose'
 import { setSmartCutEnabled, smartCutEnabled } from '@core/compose/smartCutFlag'
 import { clampEditState, defaultEditState } from '@core/timeline'
 import type { EditState, Recording } from '@core/types'
+import { warmRigEncoder } from '../rigWarm'
 import { textEdgeMetric, type TextEdgeMetric } from '../oracle/textEdge'
 import {
   comparePatch,
   crop,
+  chromaMask,
   chromaRows,
   decodeByOrdinal,
   encodeDeterministic,
@@ -68,7 +93,9 @@ import {
   magnify,
   mean,
   openNative,
+  PAGE_COLOURS,
   stillSource,
+  type ChromaMask,
   type ChromaRow,
   type Crop,
   type NativeReader,
@@ -114,10 +141,42 @@ export interface ChromaStage {
   what: string
   width: number
   height: number
+  /**
+   * 'SKIPPED' means NOTHING WAS MEASURED HERE, and it exists because the old
+   * loop expressed that with `continue` (R1 fixes 1 and 5). A stage that
+   * silently vanishes is indistinguishable from a stage that was never asked
+   * for, and the gates read the absence as `null` and passed.
+   */
+  status: 'ok' | 'SKIPPED'
+  /** Why, in words, when status is SKIPPED. */
+  skipped: string | null
   rows: ChromaRow[]
 }
 
+/**
+ * THE DRILLS R1 IS GATED ON, and they are options rather than a test file
+ * because what they prove is that the RIG reports its own blindness — which
+ * only means anything when the whole rig runs.
+ *
+ *   dead-composite-blob   one stage points at a blobKey that does not exist.
+ *                         That stage must read MISSING and the report must
+ *                         still be produced (the old code threw the entire
+ *                         report away on it — fix 5).
+ *   dead-instant-export   the instant lane's file is replaced with nonsense,
+ *                         so the stage BOTH chroma gates read cannot be
+ *                         measured. Both must say NOT MEASURED and FAIL; the
+ *                         old pair passed on it and was born red on it,
+ *                         respectively (fixes 1 and 4).
+ *   palette-drift         one palette entry is moved by +8 before the mask is
+ *                         built. Every row must read MASK EMPTY. The old rig
+ *                         reported "0 % kept" — a fabricated total colour loss
+ *                         that would have read as a P1 (fix 10).
+ */
+export type X15Drill = 'dead-composite-blob' | 'dead-instant-export' | 'palette-drift'
+
 export interface X15TrimReport {
+  /** Which self-check this run is, if any — null for a real measurement. */
+  drill: X15Drill | null
   notes: string[]
   takeMs: number
   engine: string
@@ -149,6 +208,78 @@ export interface X15TrimReport {
 const PARITY_DB = 60
 /** The band this codebase calls "visually the same" (O11, x6's quality gate). */
 const SAME_PICTURE_DB = 35
+
+/**
+ * THE COMMITTED CHROMA BASELINE — what this rig measured on 2026-08-26, and
+ * what TASKS, BACKLOG and CONTEXT all quote (R1 fix 4).
+ *
+ * The chroma gate is a REGRESSION gate against these, not an absolute bar. The
+ * absolute bar it used to carry (>= 90 % kept) was unreachable by construction:
+ * the shipped chain measures 70.3 %, and O3b — the best outcome anyone has
+ * proposed — is 80 %. Move these numbers when a change legitimately improves
+ * the chain, in the same commit as the doc tables that quote them.
+ */
+const CHROMA_BASELINE: Record<'green' | 'blue', number> = { green: 70.3, blue: 75.2 }
+/** The run-to-run variance this rig states for itself, in saturation points. */
+const CHROMA_EPS = 2
+/**
+ * How much colour a FLAT slab has to keep before "the mechanism is subsampling
+ * on thin glyphs" is a claim rather than an assumption (R1 fix 8). A flat area
+ * gives 4:2:0 nothing to average across, so anything short of ~full retention
+ * there is a different fault — a matrix or range round-trip — wearing the same
+ * fingerprint.
+ */
+const FLAT_CONTROL_KEPT = 95
+
+/**
+ * The standalone encode both controls run through — the export's own shape
+ * (AVC High 4:2:0, 8 Mbps, 1080p30), so "what one encode costs" is measured
+ * with one encoder and not with two different ones.
+ */
+const CONTROL_ENCODE = {
+  codec: 'avc1.640028',
+  bitrate: 8_000_000,
+  framerate: FPS,
+  latencyMode: 'quality',
+} as const satisfies Omit<VideoEncoderConfig, 'width' | 'height'>
+const CONTROL_FRAMES = 60
+/** Well past the opening keyframe, so the sample is a steady-state picture. */
+const CONTROL_ORDINAL = 45
+
+/** Stable artifact numbering — the old expression labelled two lanes `c-02`. */
+const CROP_ORDER: Record<ExportLane['id'], number> = { instant: 1, smartcut: 2, render: 4 }
+
+function describe(err: unknown): string {
+  return err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+}
+
+/**
+ * THE FLAT-PATCH CONTROL PICTURE (R1 fix 8): the same three glyph colours on
+ * the same background, in slabs big enough that chroma subsampling has nothing
+ * to average across.
+ *
+ * Painted through the wire's own context for the same reason the reference is
+ * (fix 3) — a control rasterized differently from the thing it controls is not
+ * a control. The slabs sit inside `rect` so the mask, the metric and the region
+ * are the ones every other stage uses.
+ */
+function drawFlatPatches(width: number, height: number, rect: Rect): ImageData {
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const g = canvas.getContext('2d')
+  if (!g) throw new Error('2d canvas context unavailable')
+  g.fillStyle = TEXT_SCREEN_PALETTE.background
+  g.fillRect(0, 0, width, height)
+  const bandH = Math.floor(rect.h / (TEXT_SCREEN_PALETTE.glyph.length * 2))
+  TEXT_SCREEN_PALETTE.glyph.forEach((c, i) => {
+    g.fillStyle = c.hex
+    // Every other band, so each slab is surrounded by background — a slab that
+    // filled the rect edge to edge would have no boundary to be wrong at.
+    g.fillRect(rect.x, rect.y + i * 2 * bandH, rect.w, bandH)
+  })
+  return g.getImageData(0, 0, width, height)
+}
 
 function tapConsole(sink: string[]): () => void {
   const realInfo = console.info
@@ -203,8 +334,15 @@ async function thumb(img: ImageData): Promise<string> {
 }
 
 export async function runTrimTextParity(
-  opts: { takeSec?: number; thumbs?: boolean; searchSec?: number; crops?: boolean } = {},
+  opts: {
+    takeSec?: number
+    thumbs?: boolean
+    searchSec?: number
+    crops?: boolean
+    drill?: X15Drill
+  } = {},
 ): Promise<X15TrimReport> {
+  const drill = opts.drill ?? null
   const takeMs = (opts.takeSec ?? 10) * 1000
   const notes: string[] = []
   const captureLog: string[] = []
@@ -218,8 +356,9 @@ export async function runTrimTextParity(
   // multi-second — long enough to eat most of a 10 s take. Without this the
   // raw channels reported 200 of 283 frames DROPPED ("encoder behind"), which
   // reads exactly like a throughput defect on the newly-default WebCodecs raw
-  // path and is not one.
-  await warmVideoEncoder()
+  // path and is not one. The warm is SHARED now (R1 fix 11 →
+  // experimental/rigWarm.ts): eleven other rigs were still cold.
+  await warmRigEncoder()
   const untap = tapConsole(captureLog)
   let recording: Recording
   try {
@@ -296,15 +435,28 @@ export async function runTrimTextParity(
   )
 
   const readers = new Map<ExportLane['id'], NativeReader>()
+  const readerFailures = new Map<ExportLane['id'], string>()
   for (const lane of lanes) {
-    const r = await openNative(blobs.get(lane.id)!)
-    if (!r) continue
-    readers.set(lane.id, r)
-    lane.width = r.width
-    lane.height = r.height
+    try {
+      const file =
+        drill === 'dead-instant-export' && lane.id === 'instant'
+          ? new Blob([new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7])], { type: 'video/mp4' })
+          : blobs.get(lane.id)!
+      const r = await openNative(file)
+      if (!r) {
+        readerFailures.set(lane.id, 'the file has no primary video track')
+        continue
+      }
+      readers.set(lane.id, r)
+      lane.width = r.width
+      lane.height = r.height
+    } catch (err) {
+      readerFailures.set(lane.id, describe(err))
+    }
   }
 
   const rows: PairRow[] = []
+  const pairFailures: string[] = []
   let encodeFloor: X15TrimReport['encodeFloor'] = null
   const chroma: ChromaStage[] = []
   const crops: Crop[] = []
@@ -313,6 +465,8 @@ export async function runTrimTextParity(
     const ref = readers.get('instant')
     const width = ref?.width || W
     const height = ref?.height || H
+    // THE PAIR ROWS' RECT — derived from the files being compared, which is
+    // correct FOR THEM and wrong for the chroma stages (see chromaRect below).
     const rect = screenTextRect(width, height)
     const pipRect: Rect = (() => {
       const pw = 0.24 * width
@@ -327,57 +481,104 @@ export async function runTrimTextParity(
       }
     })()
 
+    // ONE DECODE OF THE SHARED INSTANT, PER READER (R1 fix 13).
+    // sampledAtSec[0] was being decoded up to three times per file — once for
+    // the chroma row, once for the crop, once for the thumb — and `at()`
+    // re-seeks from the keyframe every call. It also means the crop PO looks
+    // at and the number printed beside it are the SAME frame by construction
+    // rather than by coincidence.
+    const firstFrame = new Map<ExportLane['id'], ImageData | null>()
+    for (const [id, r] of readers) {
+      try {
+        firstFrame.set(id, await r.at(sampledAtSec[0]!))
+      } catch (err) {
+        firstFrame.set(id, null)
+        readerFailures.set(id, describe(err))
+      }
+    }
+
     const pairs: [ExportLane['id'], ExportLane['id']][] = [
       ['instant', 'smartcut'],
       ['instant', 'render'],
       ['smartcut', 'render'],
     ]
     for (const [a, b] of pairs) {
-      const A = readers.get(a)
-      const B = readers.get(b)
-      if (!A || !B || A.width !== B.width || A.height !== B.height) continue
+      // PER-PAIR CATCH (R1 fix 5). One rejected `at()` on one corrupt tail used
+      // to escape the whole measurement block — which has a `finally` and no
+      // `catch` — and throw away every row in the report, chroma stages
+      // included, none of which had touched the bad file.
+      try {
+        const A = readers.get(a)
+        const B = readers.get(b)
+        if (!A || !B) {
+          pairFailures.push(`${a} ↔ ${b}: SKIPPED — ${!A ? a : b} could not be opened`)
+          continue
+        }
+        if (A.width !== B.width || A.height !== B.height) {
+          pairFailures.push(
+            `${a} ↔ ${b}: SKIPPED — ${A.width}x${A.height} against ${B.width}x${B.height}, not comparable`,
+          )
+          continue
+        }
 
-      // THE TWO REGIONS ARE MEASURED DIFFERENTLY, AND THAT IS THE DESIGN.
-      // The screen is STILL, so its comparison needs no alignment and is given
-      // none: a search there could only pick whichever neighbouring frame
-      // flattered the pair. The camera PiP MOVES, so it is the one region that
-      // can localise a file in time — its winning offset IS the placement
-      // measurement, and it is reported rather than absorbed.
-      const camAnchor = await A.at(sampledAtSec[0]!)
-      const found = camAnchor
-        ? await findOffsetSec(camAnchor, B, sampledAtSec[0]!, pipRect, {
-            spanSec: opts.searchSec ?? 1.5,
-          })
-        : null
-      const camOffsetSec = found?.offsetSec ?? 0
+        // THE TWO REGIONS ARE MEASURED DIFFERENTLY, AND THAT IS THE DESIGN.
+        // The screen is STILL, so its comparison needs no alignment and is given
+        // none: a search there could only pick whichever neighbouring frame
+        // flattered the pair. The camera PiP MOVES, so it is the one region that
+        // can localise a file in time — its winning offset IS the placement
+        // measurement, and it is reported rather than absorbed.
+        const camAnchor = firstFrame.get(a) ?? null
+        const found = camAnchor
+          ? await findOffsetSec(camAnchor, B, sampledAtSec[0]!, pipRect, {
+              spanSec: opts.searchSec ?? 1.5,
+            })
+          : null
+        const camOffsetSec = found?.offsetSec ?? 0
 
-      for (const [regionName, region, offsetSec] of [
-        ['screen TEXT', rect, 0],
-        ['camera PiP', pipRect, camOffsetSec],
-      ] as [string, Rect, number][]) {
-        const scored: { cmp: ReturnType<typeof comparePatch>; edge: TextEdgeMetric }[] = []
-        for (const t of sampledAtSec) {
-          const left = await A.at(t)
-          const right = await B.at(t + offsetSec)
-          if (!left || !right) continue
-          scored.push({
-            cmp: comparePatch(left, right, region),
-            edge: textEdgeMetric(crop(left, region), crop(right, region)),
+        for (const [regionName, region, offsetSec] of [
+          ['screen TEXT', rect, 0],
+          ['camera PiP', pipRect, camOffsetSec],
+        ] as [string, Rect, number][]) {
+          const scored: { cmp: ReturnType<typeof comparePatch>; edge: TextEdgeMetric }[] = []
+          let missed = 0
+          for (const t of sampledAtSec) {
+            const left = t === sampledAtSec[0] ? (firstFrame.get(a) ?? null) : await A.at(t)
+            const right = await B.at(t + offsetSec)
+            if (!left || !right) {
+              missed++
+              continue
+            }
+            scored.push({
+              cmp: comparePatch(left, right, region),
+              edge: textEdgeMetric(crop(left, region), crop(right, region)),
+            })
+          }
+          if (!scored.length) {
+            pairFailures.push(
+              `${a} ↔ ${b} / ${regionName}: SKIPPED — none of the ${sampledAtSec.length} sampled instants decoded`,
+            )
+            continue
+          }
+          if (missed) {
+            pairFailures.push(
+              `${a} ↔ ${b} / ${regionName}: ${missed} of ${sampledAtSec.length} instants did not decode`,
+            )
+          }
+          const worst = scored.reduce((lo, r) => (r.cmp.db < lo.cmp.db ? r : lo))
+          rows.push({
+            pair: `${a} ↔ ${b}`,
+            region: regionName,
+            psnrDb: worst.cmp.db,
+            meanPsnrDb: mean(scored.map((s) => s.cmp.db)),
+            max: worst.cmp.max,
+            over8Pct: worst.cmp.over8Pct,
+            meanSigned: worst.cmp.meanSigned,
+            alignFrames: Math.round(camOffsetSec * FPS),
+            edge: worst.edge,
           })
         }
-        if (!scored.length) continue
-        const worst = scored.reduce((lo, r) => (r.cmp.db < lo.cmp.db ? r : lo))
-        rows.push({
-          pair: `${a} ↔ ${b}`,
-          region: regionName,
-          psnrDb: worst.cmp.db,
-          meanPsnrDb: mean(scored.map((s) => s.cmp.db)),
-          max: worst.cmp.max,
-          over8Pct: worst.cmp.over8Pct,
-          meanSigned: worst.cmp.meanSigned,
-          alignFrames: Math.round(camOffsetSec * FPS),
-          edge: worst.edge,
-        })
+      } catch (err) {
+        pairFailures.push(`${a} ↔ ${b}: SKIPPED — ${describe(err)}`)
       }
     }
     // THE CONTROL THE QUESTION NEEDS. instant↔render is a painter difference
@@ -385,34 +586,35 @@ export async function runTrimTextParity(
     // ~37.5 dB. So the same instant frame goes back through an encoder of the
     // export's shape, and what THAT costs is the floor the pair row has to beat
     // before "the painters differ" is a claim about painters.
-    const still = ref ? await ref.at(sampledAtSec[0]!) : null
+    const still = ref ? (firstFrame.get('instant') ?? null) : null
     if (still) {
-      const enc = await encodeDeterministic({
-        config: {
-          codec: 'avc1.640028',
-          width: still.width,
-          height: still.height,
-          bitrate: 8_000_000,
-          framerate: FPS,
-          latencyMode: 'quality',
-        },
-        frames: 60,
-        source: stillSource(still),
-        paced: false,
-      })
-      if (enc.blob) {
-        const back = await decodeByOrdinal(enc.blob, [45], still.width, still.height)
-        const got = back.frames[0]
-        if (got) {
-          if (opts.crops) crops.push({ label: 'c-03-instant-frame-RE-ENCODED-control', png: await magnify(got, GLYPH_CROP) })
-          const cmp = comparePatch(still, got, rect)
-          encodeFloor = {
-            psnrDb: cmp.db,
-            max: cmp.max,
-            over8Pct: cmp.over8Pct,
-            edge: textEdgeMetric(crop(still, rect), crop(got, rect)),
+      try {
+        const enc = await encodeDeterministic({
+          config: { ...CONTROL_ENCODE, width: still.width, height: still.height },
+          frames: CONTROL_FRAMES,
+          source: stillSource(still),
+          paced: false,
+        })
+        if (enc.blob) {
+          const back = await decodeByOrdinal(enc.blob, [CONTROL_ORDINAL], still.width, still.height)
+          const got = back.frames[0]
+          if (got) {
+            if (opts.crops)
+              crops.push({
+                label: 'c-03-instant-frame-RE-ENCODED-control',
+                png: await magnify(got, GLYPH_CROP),
+              })
+            const cmp = comparePatch(still, got, rect)
+            encodeFloor = {
+              psnrDb: cmp.db,
+              max: cmp.max,
+              over8Pct: cmp.over8Pct,
+              edge: textEdgeMetric(crop(still, rect), crop(got, rect)),
+            }
           }
         }
+      } catch {
+        /* the floor is optional; its gate says "not measured" (fix 5) */
       }
     }
 
@@ -424,66 +626,252 @@ export async function runTrimTextParity(
     // composite is worse than the raw channel, the fast path a user gets by
     // default is the worst-coloured file the product makes — which is PO's
     // observation, and it is free to act on if true.
-    const refCanvas = document.createElement('canvas')
-    refCanvas.width = W
-    refCanvas.height = H
-    drawTextScreen(refCanvas.getContext('2d', { alpha: false })!, W, H)
-    const reference = refCanvas
-      .getContext('2d', { willReadFrequently: true })!
-      .getImageData(0, 0, W, H)
-    chroma.push({
-      stage: '0-source',
-      what: 'the canvas the synthetic screen painted — nothing has encoded it',
-      width: W,
-      height: H,
-      rows: chromaRows(reference, reference, rect),
-    })
-    const rawScreen = recording.channels.find((c) => c.kind === 'screen' && c.media === 'video')
-    for (const [stage, what, key] of [
-      ['1-raw-screen-channel', 'CAPTURE: the raw screen channel (what the render composites from)', rawScreen?.blobKey],
-      ['2-composite', 'CAPTURE: the live composite (what instant packet-copies)', recording.composite?.blobKey],
-    ] as [string, string, string | undefined][]) {
-      if (!key) continue
-      const blob = await blobStore.read(key).catch(() => null)
-      if (!blob) continue
-      const rd = await openNative(blob)
-      if (!rd) continue
+    //
+    // THE REFERENCE COMES THROUGH THE WIRE'S OWN CONTEXT (R1 fix 3). It used
+    // to be rasterized on an `{alpha:false}` canvas while syntheticScreen()
+    // paints on get2d()'s default (alpha:true), and an opaque canvas is
+    // eligible for different text antialiasing — a reference that disagrees
+    // with the wire about every glyph edge before anything has encoded it. The
+    // dead second getContext() call went with it (R1 fix 14: repeat-call
+    // attributes are ignored per spec, so `{willReadFrequently:true}` there was
+    // never applied).
+    const reference = textScreenReference(W, H)
+    // AND THE RECT COMES FROM THE REFERENCE (R1 fix 2). It used to be derived
+    // from the INSTANT READER's dimensions: with a reader of another size the
+    // rect ran off the end of the source, where `data[i]` is undefined, every
+    // tolerance test is false, and out-of-bounds pixels counted as mask HITS.
+    // Only artifacts that are 1:1 with the source reach chromaRows at all, so
+    // this is the one rect that is always inside both.
+    const chromaRect = screenTextRect(W, H)
+    const maskPalette =
+      drill === 'palette-drift'
+        ? PAGE_COLOURS.map((c, i) =>
+            i === 1 ? { ...c, rgb: c.rgb.map((v) => Math.min(255, v + 8)) as [number, number, number] } : c,
+          )
+        : PAGE_COLOURS
+    const mask = chromaMask(reference, chromaRect, 6, maskPalette)
+
+    const addStage = async (
+      stage: string,
+      what: string,
+      produce: () => Promise<
+        | { frame: ImageData; width: number; height: number }
+        | { skipped: string; width?: number; height?: number }
+      >,
+      /** The control stages paint a different reference, so they mask by it. */
+      against: ChromaMask = mask,
+    ): Promise<void> => {
+      // PER-STAGE CATCH (R1 fix 5): a blob read, an openNative or an at() that
+      // rejects becomes a SKIPPED ROW, not a lost report.
       try {
-        const f = await rd.at(sampledAtSec[0]!)
-        // Only 1:1 artifacts are comparable to the reference pixel for pixel;
-        // a scaled one would be measuring the resampler.
-        if (f && rd.width === W && rd.height === H) {
-          chroma.push({ stage, what, width: rd.width, height: rd.height, rows: chromaRows(reference, f, rect) })
-        } else if (f) {
-          chroma.push({ stage, what: `${what} — SKIPPED, ${rd.width}x${rd.height} is not 1:1 with the source`, width: rd.width, height: rd.height, rows: [] })
+        const got = await produce()
+        if ('skipped' in got) {
+          chroma.push({
+            stage,
+            what,
+            width: got.width ?? 0,
+            height: got.height ?? 0,
+            status: 'SKIPPED',
+            skipped: got.skipped,
+            rows: [],
+          })
+          return
         }
-      } finally {
-        rd.close()
+        chroma.push({
+          stage,
+          what,
+          width: got.width,
+          height: got.height,
+          status: 'ok',
+          skipped: null,
+          rows: chromaRows(against, got.frame),
+        })
+      } catch (err) {
+        chroma.push({
+          stage,
+          what,
+          width: 0,
+          height: 0,
+          status: 'SKIPPED',
+          skipped: describe(err),
+          rows: [],
+        })
       }
     }
-    for (const [id, r] of readers) {
-      const f = await r.at(sampledAtSec[0]!)
-      if (!f || r.width !== W || r.height !== H) continue
-      chroma.push({
-        stage: `3-export-${id}`,
-        what: `EXPORT: ${id}`,
-        width: r.width,
-        height: r.height,
-        rows: chromaRows(reference, f, rect),
+
+    await addStage(
+      '0-source',
+      'the canvas the synthetic screen painted — nothing has encoded it',
+      async () => ({ frame: reference, width: W, height: H }),
+    )
+
+    // THE SCREEN TRACK'S OWN SIZE, which is what the composite guard needs
+    // (R1 fix 7). The compositor contain-fits whatever it is given into a
+    // HARDCODED 1920x1080 canvas, so `composite.width === W` only ever says
+    // that the container is 1920x1080 — it is true of every take this product
+    // makes and can never fail. What has to be 1:1 with the source is the
+    // screen CONTENT inside it, and that is the screen track's size.
+    const rawScreen = recording.channels.find((c) => c.kind === 'screen' && c.media === 'video')
+    let screenTrack: { width: number; height: number } | null =
+      rawScreen?.width && rawScreen?.height
+        ? { width: rawScreen.width, height: rawScreen.height }
+        : null
+
+    await addStage(
+      '1-raw-screen-channel',
+      'CAPTURE: the raw screen channel (what the render composites from)',
+      async () => {
+        if (!rawScreen?.blobKey) return { skipped: 'MISSING — the take has no raw screen channel' }
+        const blob = await blobStore.read(rawScreen.blobKey).catch(() => null)
+        if (!blob) return { skipped: `MISSING — blobStore has no ${rawScreen.blobKey}` }
+        const rd = await openNative(blob)
+        if (!rd) return { skipped: 'MISSING — the raw screen channel has no video track' }
+        try {
+          // The channel is the screen track, one encode later: its decoded size
+          // is the most direct statement of what the screen actually was.
+          screenTrack ??= { width: rd.width, height: rd.height }
+          const f = await rd.at(sampledAtSec[0]!)
+          if (!f) return { skipped: 'MISSING — nothing decoded at the sampled instant', width: rd.width, height: rd.height }
+          if (rd.width !== W || rd.height !== H) {
+            return {
+              skipped: `SKIPPED — ${rd.width}x${rd.height} is not 1:1 with the source ${W}x${H}; a scaled artifact measures the resampler`,
+              width: rd.width,
+              height: rd.height,
+            }
+          }
+          return { frame: f, width: rd.width, height: rd.height }
+        } finally {
+          rd.close()
+        }
+      },
+    )
+
+    await addStage(
+      '2-composite',
+      'CAPTURE: the live composite (what instant packet-copies)',
+      async () => {
+        const key =
+          drill === 'dead-composite-blob'
+            ? `${recording.composite?.blobKey ?? 'none'}-R1-DRILL-DEAD`
+            : recording.composite?.blobKey
+        if (!key) return { skipped: 'MISSING — the take has no composite' }
+        const blob = await blobStore.read(key).catch(() => null)
+        if (!blob) return { skipped: `MISSING — blobStore has no ${key}` }
+        const rd = await openNative(blob)
+        if (!rd) return { skipped: 'MISSING — the composite has no video track' }
+        try {
+          const f = await rd.at(sampledAtSec[0]!)
+          if (!f) return { skipped: 'MISSING — nothing decoded at the sampled instant', width: rd.width, height: rd.height }
+          if (rd.width !== W || rd.height !== H) {
+            return {
+              skipped: `SKIPPED — ${rd.width}x${rd.height} is not 1:1 with the source ${W}x${H}`,
+              width: rd.width,
+              height: rd.height,
+            }
+          }
+          // R1 fix 7: the composite letterboxes the screen into its own fixed
+          // canvas, so the CONTAINER matching the source proves nothing. Unless
+          // the screen track is itself W x H the contain-fit is a resample and
+          // this stage would be measuring the scaler, not the chroma.
+          if (!screenTrack) {
+            return {
+              skipped: 'SKIPPED — the screen track size is unknown, so the contain-fit cannot be shown to be 1:1',
+              width: rd.width,
+              height: rd.height,
+            }
+          }
+          if (screenTrack.width !== W || screenTrack.height !== H) {
+            return {
+              skipped: `SKIPPED — the screen TRACK is ${screenTrack.width}x${screenTrack.height}, contain-fitted into a ${rd.width}x${rd.height} composite; the content is resampled and not 1:1 with the source`,
+              width: rd.width,
+              height: rd.height,
+            }
+          }
+          return { frame: f, width: rd.width, height: rd.height }
+        } finally {
+          rd.close()
+        }
+      },
+    )
+
+    for (const lane of lanes) {
+      const id = lane.id
+      await addStage(`3-export-${id}`, `EXPORT: ${id}`, async () => {
+        const r = readers.get(id)
+        if (!r)
+          return { skipped: `MISSING — ${readerFailures.get(id) ?? 'the export was never opened'}` }
+        const f = firstFrame.get(id) ?? null
+        if (!f)
+          return {
+            skipped: `MISSING — nothing decoded at ${sampledAtSec[0]} s${readerFailures.has(id) ? ` (${readerFailures.get(id)})` : ''}`,
+            width: r.width,
+            height: r.height,
+          }
+        if (r.width !== W || r.height !== H) {
+          return {
+            skipped: `SKIPPED — ${r.width}x${r.height} is not 1:1 with the source ${W}x${H}`,
+            width: r.width,
+            height: r.height,
+          }
+        }
+        return { frame: f, width: r.width, height: r.height }
       })
     }
 
+    // ---- THE FLAT-PATCH CONTROL (R1 fix 8) -------------------------------
+    // 4:2:0 subsampling and a YUV matrix/range round-trip drift leave the SAME
+    // fingerprint on this page: saturated glyphs fade, grey holds. Everything
+    // above therefore reads the same whichever one is happening, and the whole
+    // 4:4:4 case rests on it being the first — because a flat area has no
+    // chroma detail for subsampling to throw away, while a matrix error hits
+    // every pixel of the same colour equally.
+    // So: the identical palette, in slabs, through the identical encoder, and
+    // the identical text page beside it as the matched half of the pair. If
+    // the SLABS lose colour too, the attribution is wrong and 4:4:4 will
+    // under-deliver against what BACKLOG P1 promises.
+    const flatRef = drawFlatPatches(W, H, chromaRect)
+    const flatMask = chromaMask(flatRef, chromaRect, 6, maskPalette)
+    const throughEncoder = async (img: ImageData): Promise<ImageData | null> => {
+      const enc = await encodeDeterministic({
+        config: { ...CONTROL_ENCODE, width: img.width, height: img.height },
+        frames: CONTROL_FRAMES,
+        source: stillSource(img),
+        paced: false,
+      })
+      if (!enc.blob) return null
+      const back = await decodeByOrdinal(enc.blob, [CONTROL_ORDINAL], img.width, img.height)
+      return back.frames[0] ?? null
+    }
+    await addStage(
+      'C1-control-FLAT-PATCHES',
+      'CONTROL: the same three colours as flat slabs, through one AVC 4:2:0 encode — nothing here for subsampling to damage',
+      async () => {
+        const got = await throughEncoder(flatRef)
+        if (!got) return { skipped: 'MISSING — the control encode produced nothing', width: W, height: H }
+        return { frame: got, width: W, height: H }
+      },
+      flatMask,
+    )
+    await addStage(
+      'C2-control-TEXT-PAGE',
+      'CONTROL: the SAME source page through the SAME encoder — the matched half of the pair, thin glyphs instead of slabs',
+      async () => {
+        const got = await throughEncoder(reference)
+        if (!got) return { skipped: 'MISSING — the control encode produced nothing', width: W, height: H }
+        return { frame: got, width: W, height: H }
+      },
+    )
+
     if (opts.crops) {
       crops.push({ label: 'c-00-SOURCE-canvas', png: await magnify(reference, GLYPH_CROP) })
-      for (const [id, r] of readers) {
-        const f = await r.at(sampledAtSec[0]!)
-        if (f) crops.push({ label: `c-0${id === 'instant' ? 1 : 2}-${id}`, png: await magnify(f, GLYPH_CROP) })
+      for (const lane of lanes) {
+        const f = firstFrame.get(lane.id)
+        if (f) crops.push({ label: `c-0${CROP_ORDER[lane.id]}-${lane.id}`, png: await magnify(f, GLYPH_CROP) })
       }
     }
 
     if (opts.thumbs) {
-      for (const [id, r] of readers) {
-        const f = await r.at(sampledAtSec[0]!)
+      for (const [id, f] of firstFrame) {
         if (f) thumbs.push({ lane: id, atSec: sampledAtSec[0]!, png: await thumb(f) })
       }
     }
@@ -503,12 +891,21 @@ export async function runTrimTextParity(
   const instRender = textRow('instant ↔ render')
   const instSmart = textRow('instant ↔ smartcut')
 
+  gates['every pair row that was asked for was actually measured'] = {
+    // R1 fix 5's other half: pairs used to disappear on `continue` and on a
+    // thrown `at()`, and every gate below reads a missing row as "not measured"
+    // — which is a comment, not a failure. This is the failure.
+    pass: pairFailures.length === 0 && rows.length === 6,
+    detail: pairFailures.length
+      ? pairFailures.join(' · ')
+      : `${rows.length} of 6 rows (3 pairs x 2 regions)${readerFailures.size ? ` · reader trouble: ${[...readerFailures].map(([k, v]) => `${k}: ${v}`).join('; ')}` : ''}`,
+  }
   gates['the export paths PLACE the picture in the same spot (alignment, not quality)'] = {
-    pass: rows.every((r) => Math.abs(r.alignFrames) <= 1),
+    pass: rows.length > 0 && rows.every((r) => Math.abs(r.alignFrames) <= 1),
     detail: rows
       .filter((r) => r.region === 'screen TEXT')
       .map((r) => `${r.pair}: ${r.alignFrames} frames`)
-      .join(' · '),
+      .join(' · ') || 'no rows',
   }
   gates['BACKLOG P1: instant and render draw the SAME text (X5’s parity bar, ≥60 dB)'] = {
     pass: (instRender?.psnrDb ?? 0) >= PARITY_DB,
@@ -526,35 +923,152 @@ export async function runTrimTextParity(
       ? `re-encoding the instant frame alone costs ${encodeFloor.psnrDb} dB (max ${encodeFloor.max}, ${encodeFloor.over8Pct} % off by >8, fringe ${encodeFloor.edge.chromaFringeMean}); instant↔render reads ${instRender?.psnrDb ?? 'n/a'} dB. A pair row AT this floor cannot tell a painter difference from the encode`
       : 'not measured',
   }
-  const sat = (stage: string): number | null => {
-    const st = chroma.find((c) => c.stage === stage)
-    const green = st?.rows.find((r) => r.colour.startsWith('green'))
-    return green?.keptPct ?? null
+
+  // ---- the chroma gates ------------------------------------------------
+  // ONE DEFINITION OF MISSING, SHARED BY BOTH (R1 fixes 1 and 4). They used to
+  // disagree: one read `null` as a total colour loss and was born red, the
+  // other read `null` as "fine" and passed on it. A stage that was skipped, a
+  // frame that never decoded and a mask with no pixels in it are all the same
+  // thing — NOTHING WAS MEASURED — and none of them is a score.
+  const stageOf = (stage: string): ChromaStage | undefined => chroma.find((c) => c.stage === stage)
+  const rowOf = (stage: string, key: GlyphColourKey): ChromaRow | null => {
+    const st = stageOf(stage)
+    if (!st || st.status !== 'ok') return null
+    // BY KEY, NEVER BY LABEL (R1 fix 1). The old lookup was
+    // `rows.find(r => r.colour.startsWith('green'))` against a display string
+    // that carries padding and a hex code — rename the label and every chroma
+    // gate silently starts reading `null`, i.e. passes or fails for free.
+    return st.rows.find((r) => r.key === key) ?? null
   }
-  const srcSat = sat('0-source')
-  const compSat = sat('2-composite')
-  const rawSat = sat('1-raw-screen-channel')
-  const instSat = sat('3-export-instant')
-  const rendSat = sat('3-export-render')
-  gates['CHROMA: the shipped chain keeps the colour of coloured text'] = {
-    // PO spotted this by eye in the artifacts; the pair rows above cannot see
-    // it, because a loss every path shares cancels in a file-against-file
-    // comparison. Against the SOURCE it is the largest effect in this rig.
-    pass: (instSat ?? 0) >= 90,
-    detail: chroma
-      .filter((c) => c.rows.length)
-      .map((c) => `${c.stage} ${c.rows.map((r) => `${r.colour.trim()} ${r.keptPct}%`).join(' / ')}`)
-      .join(' · '),
+  const kept = (stage: string, key: GlyphColourKey): number | null => {
+    const r = rowOf(stage, key)
+    return r && r.status === 'ok' ? r.keptPct : null
   }
+  const deltaPts = (stage: string, key: GlyphColourKey): number | null => {
+    const r = rowOf(stage, key)
+    return r && r.status === 'ok' ? r.saturationDeltaPts : null
+  }
+  /** Why a stage cannot be scored, in words — '' when it can. */
+  const missingOf = (stage: string): string => {
+    const st = stageOf(stage)
+    if (!st) return `${stage}: MISSING — the stage never ran`
+    if (st.status !== 'ok') return `${stage}: ${st.skipped ?? 'MISSING'}`
+    const empty = st.rows.filter((r) => r.status === 'MASK EMPTY').map((r) => r.key)
+    if (empty.length === st.rows.length) {
+      return `${stage}: MASK EMPTY — the source mask matched no pixels at all, so nothing was measured (a palette drift does this)`
+    }
+    if (empty.length) return `${stage}: MASK EMPTY on ${empty.join('/')}`
+    return ''
+  }
+  const missing = (...stages: string[]): string =>
+    stages.map(missingOf).filter(Boolean).join(' · ')
+
+  /** The rows the chroma question is actually about; grey is the control. */
+  const COLOURED = ['green', 'blue'] as const satisfies readonly GlyphColourKey[]
+  const table = chroma
+    .map((c) =>
+      c.status !== 'ok'
+        ? `${c.stage} ${c.skipped ?? 'SKIPPED'}`
+        : `${c.stage} ${c.rows
+            .map((r) =>
+              r.status === 'ok'
+                ? `${r.key} ${r.keptPct}% (${r.saturationDeltaPts! >= 0 ? '+' : ''}${r.saturationDeltaPts} pts)`
+                : `${r.key} MASK EMPTY`,
+            )
+            .join(' / ')}`,
+    )
+    .join(' · ')
+
+  const instMissing = missing('3-export-instant')
+  gates['CHROMA: the shipped chain keeps as much colour as the committed baseline'] = {
+    // R1 fix 4. THIS GATE WAS BORN RED: it asked for >= 90 % against a chain
+    // that measures 70.3 %, so it could only ever fail — including after O3b,
+    // whose whole prize is 80 %. A gate that cannot pass is not a gate, it is a
+    // permanent alarm, and this codebase has already paid for one of those.
+    // The 30 % loss is the STANDING FINDING (BACKLOG P1), not a regression; it
+    // is stated in the detail and it is PO's to spend CPU on. What a gate can
+    // usefully do is notice the day it gets WORSE — so the bar is the committed
+    // baseline minus the rig's own stated run-to-run variance, and it moves up
+    // the day O3b lands.
+    pass:
+      !instMissing &&
+      COLOURED.every((k) => (kept('3-export-instant', k) ?? -1) >= CHROMA_BASELINE[k] - CHROMA_EPS),
+    detail: instMissing
+      ? `NOT MEASURED — ${instMissing}. A missing measurement is a FAILED gate here, never a quiet pass.`
+      : `instant keeps green ${kept('3-export-instant', 'green')} % / blue ${kept('3-export-instant', 'blue')} % of the source's saturation, against the committed baseline green ${CHROMA_BASELINE.green} / blue ${CHROMA_BASELINE.blue} (±${CHROMA_EPS} pts run variance).` +
+        ` THE ~30 % LOSS ITSELF IS THE FINDING, not a regression — BACKLOG P1, and O3b is the free third of it. Full chain: ${table}`,
+  }
+
+  const fastMissing = missing('3-export-instant', '3-export-render')
+  const margins = COLOURED.map((k) => {
+    const i = kept('3-export-instant', k)
+    const r = kept('3-export-render', k)
+    return i === null || r === null ? null : Math.round((i - r) * 10) / 10
+  })
+  const worstMargin = margins.some((m) => m === null)
+    ? null
+    : Math.min(...(margins as number[]))
   gates['CHROMA: the UNEDITED fast path is not the worst-coloured file we make'] = {
-    pass: instSat === null || rendSat === null || instSat >= rendSat - 1,
-    detail:
-      `green saturation kept — source ${srcSat}% · raw screen channel ${rawSat}% · composite ${compSat}%` +
-      ` · instant ${instSat}% · render ${rendSat}%.` +
-      (instSat !== null && rendSat !== null && instSat < rendSat - 1
-        ? ' THE FAST PATH IS WORSE, and it is the default for every untouched take.'
-        : ''),
+    // R1 fixes 1 and 6. It used to pass whenever EITHER side was null — the
+    // exact case where nobody knows — and to compare green alone at a 1 pt
+    // margin, which is tighter than the ~2 pt run variance the rig itself
+    // states. Green alone also flatters the answer: the render wins blue and
+    // loses green, so a single-colour test reads whichever colour it picked.
+    pass: !fastMissing && worstMargin !== null && worstMargin >= -CHROMA_EPS,
+    detail: fastMissing
+      ? `NOT MEASURED — ${fastMissing}. A missing measurement is a FAILED gate here, never a quiet pass.`
+      : `worst of the coloured rows: instant − render = ${worstMargin} pts (${COLOURED.map((k, i) => `${k} ${margins[i]}`).join(', ')}), tolerance ${CHROMA_EPS} pts.` +
+        ` Kept: source 100 % · raw screen ${kept('1-raw-screen-channel', 'green') ?? 'n/a'} % · composite ${kept('2-composite', 'green') ?? 'n/a'} % · instant ${kept('3-export-instant', 'green') ?? 'n/a'} % · render ${kept('3-export-render', 'green') ?? 'n/a'} % (green).` +
+        (worstMargin !== null && worstMargin < -CHROMA_EPS
+          ? ' THE FAST PATH IS WORSE ON AT LEAST ONE COLOUR, and it is the default for every untouched take.' +
+            ' THIS IS THE STANDING X15(d) FINDING, NOT A NEW REGRESSION: the render wins blue and loses green, so it is a' +
+            ' wash and there is no free colour in choosing the slower path. The gate reads the worst colour rather than' +
+            ' the flattering one, and it goes green when O3b lands — a single-screen take that packet-copies the raw' +
+            ' channel beats the render on every row.'
+          : ''),
   }
+
+  const ctrlMissing = missing('C1-control-FLAT-PATCHES', 'C2-control-TEXT-PAGE')
+  const flatWorst = COLOURED.map((k) => kept('C1-control-FLAT-PATCHES', k))
+  const textWorst = COLOURED.map((k) => kept('C2-control-TEXT-PAGE', k))
+  gates['CHROMA CONTROL: the loss is 4:2:0 on thin glyphs, not a matrix/range drift'] = {
+    // R1 fix 8. Chroma subsampling and a YUV matrix or range round-trip error
+    // leave the SAME fingerprint on this fixture — saturated glyphs fade, grey
+    // holds — so every stage above is consistent with either, and the case for
+    // 4:4:4 rests entirely on it being the first. Flat slabs of the identical
+    // colours through the identical encoder separate them: subsampling has no
+    // detail to average away there, a matrix error does not care.
+    pass:
+      !ctrlMissing &&
+      flatWorst.every((v) => v !== null && v >= FLAT_CONTROL_KEPT) &&
+      textWorst.every((v) => v !== null && v < FLAT_CONTROL_KEPT),
+    detail: ctrlMissing
+      ? `NOT MEASURED — ${ctrlMissing}.`
+      : `flat slabs keep ${COLOURED.map((k, i) => `${k} ${flatWorst[i]} %`).join(' / ')} (bar ${FLAT_CONTROL_KEPT} %) while the SAME page's thin glyphs through the SAME encoder keep ${COLOURED.map((k, i) => `${k} ${textWorst[i]} %`).join(' / ')}.` +
+        (flatWorst.some((v) => v !== null && v < FLAT_CONTROL_KEPT)
+          ? ' THE SLABS LOSE COLOUR TOO — the loss is not (only) subsampling, and 4:4:4 will under-deliver against what BACKLOG P1 promises.'
+          : ' Subsampling on thin glyphs is the mechanism, as claimed.'),
+  }
+
+  const greyMissing = missing('3-export-instant')
+  const greyDelta = deltaPts('3-export-instant', 'grey')
+  const colouredDeltas = COLOURED.map((k) => deltaPts('3-export-instant', k))
+  gates['CHROMA: grey barely moves — the “not brightness or gamma” argument, unamplified'] = {
+    // R1 fix 9. That argument used to be made with grey's keptPct, which
+    // divides by a SOURCE SATURATION OF 7.4 % — so ±1 LSB of decode noise
+    // arrives as ±6 points and the headline number is mostly amplifier. In
+    // absolute saturation points the claim is the same and the noise is not:
+    // grey moves a couple of points, the coloured rows move an order more.
+    pass:
+      !greyMissing &&
+      greyDelta !== null &&
+      colouredDeltas.every((d) => d !== null) &&
+      Math.abs(greyDelta) < 0.5 * Math.min(...colouredDeltas.map((d) => Math.abs(d!))),
+    detail: greyMissing
+      ? `NOT MEASURED — ${greyMissing}.`
+      : `grey moves ${greyDelta} saturation points (from a source saturation of ${rowOf('3-export-instant', 'grey')?.sourceSaturationPct} %) against ${COLOURED.map((k, i) => `${k} ${colouredDeltas[i]}`).join(' / ')} points. As a RATIO grey reads ${kept('3-export-instant', 'grey')} % kept, which is the 7.4 % denominator talking, not the picture.`,
+  }
+
   gates['THE PATH A USER GETS: a trimmed take (smart cut) matches the untrimmed one'] = {
     pass: (instSmart?.psnrDb ?? 0) >= PARITY_DB,
     detail: instSmart
@@ -574,8 +1088,26 @@ export async function runTrimTextParity(
   notes.push(
     'every export blob is copied into memory as it is produced — compose/scratch.ts deletes the previous finished export when the next one finishes (note 13b)',
   )
+  notes.push(
+    'the chroma reference is rasterized through capture/synthetic.ts\'s OWN context factory (R1 fix 3): it used to be built on an {alpha:false} canvas while the wire paints on the alpha:true default, and an opaque canvas is eligible for different text antialiasing — a reference that could disagree with the wire about every glyph edge before anything encoded it',
+  )
+  notes.push(
+    'grey is reported as an ABSOLUTE saturation delta as well as a ratio (R1 fix 9): its source saturation is 7.4 %, so the ratio multiplies +-1 LSB of decode noise into +-6 points',
+  )
+  notes.push(
+    'C1/C2 are the matched control pair (R1 fix 8): the same palette as flat slabs and as thin glyphs, through ONE standalone AVC 4:2:0 encode. Subsampling can only damage the second; a YUV matrix or range drift would damage both, and until this ran the two were indistinguishable on this fixture',
+  )
+  notes.push(
+    'the rig can be pointed at its own blind spots: {"drill":"dead-composite-blob"} | "dead-instant-export" | "palette-drift" — a missing stage must read MISSING and a drifted palette must read MASK EMPTY, never a score',
+  )
+  if (drill) {
+    notes.push(
+      `THIS RUN IS A DRILL (${drill}) AND ITS NUMBERS ARE DELIBERATELY WRONG. It is checking that the instrument says so out loud; do not quote anything from it.`,
+    )
+  }
 
   return {
+    drill,
     notes,
     takeMs,
     engine,
@@ -588,7 +1120,9 @@ export async function runTrimTextParity(
     thumbs,
     crops,
     gates,
-    verdict: verdictOf(instRender, instSmart, rows),
+    verdict: drill
+      ? `DRILL RUN (${drill}) — this is the rig testing itself, not a measurement. Read the gates: they must name what is missing rather than score it.`
+      : verdictOf(instRender, instSmart, rows),
     captureLog: captureLog.slice(0, 40),
   }
 }

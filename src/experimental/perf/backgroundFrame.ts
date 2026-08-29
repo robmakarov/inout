@@ -17,6 +17,7 @@
 
 import { ALL_FORMATS, BlobSource, Input, VideoSampleSink } from 'mediabunny'
 import { createCaptureSession } from '@core/capture/session'
+import { warmRigEncoder } from '../rigWarm'
 import { exportRecording } from '@core/compose'
 import { containRect, screenInsetRect } from '@core/compose/background'
 import { recordingsRepo } from '@core/store'
@@ -123,6 +124,9 @@ export interface F3Report {
 const PARITY_BAND_PX = 3
 
 export async function runBackgroundFrame(opts: { takeMs?: number } = {}): Promise<F3Report> {
+  // NOTE 6: prearm warms production's first VideoEncoder at mount; a rig that
+  // opens a session directly does not, and a cold first encoder eats the take.
+  await warmRigEncoder()
   const takeMs = opts.takeMs ?? 6000
   // Screen ONLY: the camera PiP is anchored to the frame, not to the inset
   // surface, so it would sit on top of the edge this measurement scans for.

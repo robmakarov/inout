@@ -36,6 +36,7 @@ import { exportRecording } from '@core/compose'
 import { newId } from '@core/id'
 import { blobStore } from '@core/store'
 import { openVideoChannel } from '@core/compose/video'
+import { glyphColour, TEXT_SCREEN_PALETTE } from '@core/capture/synthetic'
 import { channelSourceTimeAt, clampEditState, defaultEditState } from '@core/timeline'
 import type { ChannelRecording, EditState, Recording } from '@core/types'
 import { LongTaskWatch, SchedulingDelayWatch } from './mainThreadWatch'
@@ -56,14 +57,15 @@ interface Painter {
 
 /** The still page everything is painted over — a plausible screen, not noise. */
 function paintPage(g: CanvasRenderingContext2D): void {
-  g.fillStyle = '#0d1117'
+  g.fillStyle = TEXT_SCREEN_PALETTE.background
   g.fillRect(0, 0, W, H)
   g.fillStyle = '#161b22'
   g.fillRect(0, 0, W, 48)
   g.font = '16px monospace'
   g.textBaseline = 'top'
   for (let row = 0; row < 24; row++) {
-    g.fillStyle = row % 5 === 0 ? '#7ee787' : row % 3 === 0 ? '#79c0ff' : '#c9d1d9'
+    // R1 fix 10: the palette has one home now (capture/synthetic.ts).
+    g.fillStyle = glyphColour(row)
     g.fillText(`  const sample${row} = compute(${row}, 'channel-${row % 7}')`, 40, 70 + row * 26)
   }
 }
@@ -116,7 +118,7 @@ const PAINTERS: Record<string, Painter> = {
       const y = p.yFrac * H + 14
       g.fillStyle = '#f0f6fc'
       g.fillRect(x, y, TOOLTIP_W, TOOLTIP_H)
-      g.fillStyle = '#0d1117'
+      g.fillStyle = TEXT_SCREEN_PALETTE.background
       g.font = '14px system-ui'
       g.fillText('Commit and push to origin', x + 10, y + 12)
       g.fillText('Shortcut: cmd+enter', x + 10, y + 32)

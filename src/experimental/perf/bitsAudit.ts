@@ -29,6 +29,7 @@ import { exportRecording } from '@core/compose'
 import { canLiveComposite, startLiveComposite } from '@core/capture/liveComposite'
 import { canLiveCompositeV2, startLiveCompositeV2 } from '@core/capture/liveCompositeV2'
 import { preferredCompositeEngine } from '@core/capture/engine'
+import { glyphColour, TEXT_SCREEN_PALETTE } from '@core/capture/synthetic'
 import { calibrateSteps, estimateFromCalibration } from '@core/compose/sizeProbe'
 import { QUALITY_TIERS } from '@core/compose/quality'
 import { readCertification } from '@core/compose/certify'
@@ -68,7 +69,8 @@ export function screenLikeSource(width: number, height: number): Source {
     const indent = '  '.repeat(i % 4)
     lines.push({
       text: `${indent}${words[i % words.length]} sample${i} = compute(${i}, 'channel-${i % 7}')`,
-      color: i % 5 === 0 ? '#7ee787' : i % 3 === 0 ? '#79c0ff' : '#c9d1d9',
+      // R1 fix 10: the palette has one home now (capture/synthetic.ts).
+      color: glyphColour(i),
     })
   }
   const t0 = performance.now()
@@ -76,20 +78,20 @@ export function screenLikeSource(width: number, height: number): Source {
   const draw = (): void => {
     const t = (performance.now() - t0) / 1000
     const scroll = Math.floor(t / 2.5)
-    g.fillStyle = '#0d1117'
+    g.fillStyle = TEXT_SCREEN_PALETTE.background
     g.fillRect(0, 0, width, height)
     g.font = `${Math.round(height / 38)}px monospace`
     g.textBaseline = 'top'
     for (let row = 0; row < 34; row++) {
       const line = lines[(row + scroll) % lines.length]!
-      g.fillStyle = '#484f58'
+      g.fillStyle = TEXT_SCREEN_PALETTE.gutter
       g.fillText(String(row + scroll + 1).padStart(3, ' '), width * 0.01, row * (height / 36) + 8)
       g.fillStyle = line.color
       g.fillText(line.text, width * 0.05, row * (height / 36) + 8)
     }
     // A caret is the only thing moving between scrolls — same as a real editor.
     if (Math.floor(t * 2) % 2 === 0) {
-      g.fillStyle = '#c9d1d9'
+      g.fillStyle = TEXT_SCREEN_PALETTE.caret
       g.fillRect(width * 0.05 + 320, 12 * (height / 36) + 8, 3, height / 40)
     }
     raf = requestAnimationFrame(draw)

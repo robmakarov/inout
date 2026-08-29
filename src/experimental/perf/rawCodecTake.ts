@@ -25,7 +25,7 @@
 import { ALL_FORMATS, BlobSource, Input, VideoSampleSink } from 'mediabunny'
 import { blobStore } from '@core/store'
 import { createCaptureSession } from '@core/capture/session'
-import { warmVideoEncoder } from '@core/capture/encoderWarm'
+import { warmRigEncoder } from '../rigWarm'
 import { setRawVideoCodec, rawVideoCodec, type RawVideoCodec } from '@core/capture/rawCodec'
 import type { Recording } from '@core/types'
 
@@ -266,13 +266,10 @@ export async function runRawCodecTake(
   const previous = rawVideoCodec()
   const lanes: CodecLane[] = []
   const notes: string[] = []
-  // NOTE 6, FOR THE THIRD TIME IN THIS PROJECT. A fresh Chrome process's FIRST
-  // VideoEncoder pays a multi-second init — per launch — and every rig take
-  // fits inside it. Production pays it at mount (prearm.ts → encoderWarm.ts);
-  // a rig that calls createCaptureSession directly does not, and measured cold
-  // these raw channels dropped 45-65 % of their frames and looked like a
-  // throughput wall. Warm first, then measure.
-  await warmVideoEncoder()
+  // NOTE 6, AND THE WARM ITSELF NOW LIVES IN ONE PLACE (R1 fix 11 →
+  // experimental/rigWarm.ts). Measured cold, these raw channels dropped
+  // 45-65 % of their frames and looked like a throughput wall.
+  await warmRigEncoder()
   notes.push(
     'the VideoEncoder is WARMED before any lane runs (note 6): cold, the raw WebCodecs channels dropped 45-65 % of frames and read as a throughput ceiling that is not there',
   )

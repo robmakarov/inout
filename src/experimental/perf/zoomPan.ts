@@ -17,6 +17,7 @@
 
 import { ALL_FORMATS, BlobSource, Input, VideoSampleSink } from 'mediabunny'
 import { createCaptureSession } from '@core/capture/session'
+import { warmRigEncoder } from '../rigWarm'
 import { exportRecording } from '@core/compose'
 import { recordingsRepo } from '@core/store'
 import {
@@ -160,6 +161,9 @@ export interface F2Report {
 }
 
 export async function runZoomPan(opts: { takeMs?: number } = {}): Promise<F2Report> {
+  // NOTE 6: prearm warms production's first VideoEncoder at mount; a rig that
+  // opens a session directly does not, and a cold first encoder eats the take.
+  await warmRigEncoder()
   const takeMs = opts.takeMs ?? 8000
   const W = 1920
   const H = 1080

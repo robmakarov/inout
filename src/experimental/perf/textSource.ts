@@ -22,6 +22,7 @@
  * painted would measure a regime production never sees. Every lane here is fed
  * at ~30 fps, MediaRecorder and VideoEncoder alike.
  */
+import { glyphColour, TEXT_SCREEN_PALETTE, type GlyphColourKey } from '@core/capture/synthetic'
 import {
   ALL_FORMATS,
   BlobSource,
@@ -48,7 +49,9 @@ for (let i = 0; i < 60; i++) {
   const indent = '  '.repeat(i % 4)
   LINES.push({
     text: `${indent}${WORDS[i % WORDS.length]} sample${i} = compute(${i}, 'channel-${i % 7}')`,
-    color: i % 5 === 0 ? '#7ee787' : i % 3 === 0 ? '#79c0ff' : '#c9d1d9',
+    // R1 fix 10: ONE palette, in capture/synthetic.ts beside drawTextScreen.
+    // This file used to hold two copies of it and the mask a third, in decimal.
+    color: glyphColour(i),
   })
 }
 
@@ -62,19 +65,19 @@ type AnyCtx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
  */
 export function paintTextFrame(g: AnyCtx, i: number, width: number, height: number): void {
   const scroll = Math.floor(i / SCROLL_FRAMES)
-  g.fillStyle = '#0d1117'
+  g.fillStyle = TEXT_SCREEN_PALETTE.background
   g.fillRect(0, 0, width, height)
   g.font = `${Math.round(height / 38)}px monospace`
   g.textBaseline = 'top'
   for (let row = 0; row < 34; row++) {
     const line = LINES[(row + scroll) % LINES.length]!
-    g.fillStyle = '#484f58'
+    g.fillStyle = TEXT_SCREEN_PALETTE.gutter
     g.fillText(String(row + scroll + 1).padStart(3, ' '), width * 0.01, row * (height / 36) + 8)
     g.fillStyle = line.color
     g.fillText(line.text, width * 0.05, row * (height / 36) + 8)
   }
   if (Math.floor(i / CARET_FRAMES) % 2 === 0) {
-    g.fillStyle = '#c9d1d9'
+    g.fillStyle = TEXT_SCREEN_PALETTE.caret
     g.fillRect(width * 0.05 + 320, 12 * (height / 36) + 8, 3, height / 40)
   }
 }
@@ -658,12 +661,30 @@ export async function magnify(img: ImageData, r: Rect, scale = 4): Promise<strin
 /** The crop every lane's artifact uses: a patch of coloured code, same place. */
 export const GLYPH_CROP: Rect = { x: 96, y: 60, w: 400, h: 225 }
 
-/** The synthetic text page's own palette — the reference every chroma row uses. */
-export const PAGE_COLOURS: { name: string; rgb: [number, number, number] }[] = [
-  { name: 'grey  #c9d1d9', rgb: [201, 209, 217] },
-  { name: 'green #7ee787', rgb: [126, 231, 135] },
-  { name: 'blue  #79c0ff', rgb: [121, 192, 255] },
-]
+/**
+ * The chroma mask's palette, DERIVED from the painter's (R1 fix 10).
+ *
+ * It used to be a fourth hand-written copy, and the only decimal one — so a
+ * one-digit drift between painter and mask would empty the mask silently. It
+ * cannot drift now: both sides read TEXT_SCREEN_PALETTE.
+ */
+export interface ChromaColour {
+  key: GlyphColourKey
+  /** For humans and reports only. NOTHING parses this (R1 fix 1). */
+  name: string
+  rgb: [number, number, number]
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16)
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+}
+
+export const PAGE_COLOURS: ChromaColour[] = TEXT_SCREEN_PALETTE.glyph.map((c) => ({
+  key: c.key,
+  name: `${c.key.padEnd(5, ' ')} ${c.hex}`,
+  rgb: hexToRgb(c.hex),
+}))
 
 /** max−min over max, in percent: how much COLOUR a pixel still carries. */
 export function saturationPct(rgb: [number, number, number]): number {
@@ -673,12 +694,108 @@ export function saturationPct(rgb: [number, number, number]): number {
 }
 
 export interface ChromaRow {
+  /** THE KEY THINGS LOOK UP BY. A display label is not an identifier (fix 1). */
+  key: GlyphColourKey
   colour: string
   pixels: number
-  mean: [number, number, number]
-  saturationPct: number
-  /** decoded saturation / source saturation, %. 100 = the colour survived. */
-  keptPct: number
+  mean: [number, number, number] | null
+  saturationPct: number | null
+  /** The saturation of the colour as PAINTED — the denominator, stated. */
+  sourceSaturationPct: number
+  /**
+   * decoded saturation / source saturation, %. 100 = the colour survived.
+   *
+   * NULL WHEN THE MASK IS EMPTY, never 0 (R1 fix 10's drill). Grey's source
+   * saturation is 7.4 %, so this ratio multiplies ±1 LSB of decode noise into
+   * ±6 points — read `saturationDeltaPts` for grey, and see the note there.
+   */
+  keptPct: number | null
+  /**
+   * decoded − source saturation, in ABSOLUTE points (R1 fix 9).
+   *
+   * The unamplified form. The "this is not brightness or gamma" argument is
+   * that GREY barely moves while green and blue collapse, and that argument
+   * only needs grey's absolute delta — stated as a ratio against a 7.4 %
+   * denominator it reads as a ±6 pt swing that is really ±0.5 pt of noise.
+   */
+  saturationDeltaPts: number | null
+  /** 'MASK EMPTY' is a MEASUREMENT FAILURE and says so; it is not a 0 % score. */
+  status: 'ok' | 'MASK EMPTY'
+}
+
+/**
+ * The per-colour pixel index, built ONCE from the source (R1 fix 12).
+ *
+ * The mask depends only on the reference and the rect — both constants across
+ * a whole run — and it was being recomputed for every (stage × colour) pair:
+ * eighteen full scans of a 1.4-megapixel rect to answer a question whose
+ * answer never changed. Built once, each stage is a sum over the hits.
+ */
+export interface ChromaMask {
+  rect: Rect
+  /** The geometry every decoded frame must match, or it is not comparable. */
+  width: number
+  height: number
+  tolerance: number
+  colours: { colour: ChromaColour; idx: Int32Array }[]
+}
+
+/**
+ * ASSERTED GEOMETRY, and the assertion is the fix (R1 fix 2).
+ *
+ * The old scan walked `rect` over the SOURCE and read the DECODED frame at the
+ * same coordinates without checking either. Two ways that lied: a rect derived
+ * from a different frame's dimensions ran off the end of the source, where
+ * `data[i]` is `undefined` and every `Math.abs(undefined - c) > tol` is FALSE
+ * — so out-of-bounds pixels counted as mask HITS, and their `undefined`
+ * samples summed to NaN. And a decoded frame of another size was read with the
+ * source's stride, i.e. sheared. Both now throw with the numbers in the
+ * message, and the caller turns that into a SKIPPED row.
+ */
+function assertRect(rect: Rect, width: number, height: number, what: string): void {
+  if (
+    !Number.isInteger(rect.x) ||
+    !Number.isInteger(rect.y) ||
+    !Number.isInteger(rect.w) ||
+    !Number.isInteger(rect.h) ||
+    rect.w <= 0 ||
+    rect.h <= 0 ||
+    rect.x < 0 ||
+    rect.y < 0 ||
+    rect.x + rect.w > width ||
+    rect.y + rect.h > height
+  ) {
+    throw new Error(
+      `chroma: rect ${rect.x},${rect.y} ${rect.w}x${rect.h} is not inside ${what} ${width}x${height}`,
+    )
+  }
+}
+
+export function chromaMask(
+  source: ImageData,
+  rect: Rect,
+  tolerance = 6,
+  /** Overridable ONLY so the palette-drift drill can perturb it (R1 fix 10). */
+  palette: ChromaColour[] = PAGE_COLOURS,
+): ChromaMask {
+  assertRect(rect, source.width, source.height, 'the source')
+  const colours = palette.map((colour) => {
+    const hits: number[] = []
+    for (let y = rect.y; y < rect.y + rect.h; y++) {
+      for (let x = rect.x; x < rect.x + rect.w; x++) {
+        const si = (y * source.width + x) * 4
+        if (
+          Math.abs(source.data[si]! - colour.rgb[0]) <= tolerance &&
+          Math.abs(source.data[si + 1]! - colour.rgb[1]) <= tolerance &&
+          Math.abs(source.data[si + 2]! - colour.rgb[2]) <= tolerance
+        ) {
+          hits.push(si)
+        }
+      }
+    }
+    return { colour, idx: Int32Array.from(hits) }
+  })
+  return { rect, width: source.width, height: source.height, tolerance, colours }
 }
 
 /**
@@ -696,47 +813,55 @@ export interface ChromaRow {
  * which is exactly what 4:2:0 chroma subsampling is — cancels to zero. PO saw
  * it by eye in the artifacts. A file-against-file rig never will.
  */
-export function chromaRows(
-  source: ImageData,
-  decoded: ImageData,
-  rect: Rect,
-  tolerance = 6,
-): ChromaRow[] {
-  return PAGE_COLOURS.map(({ name, rgb }) => {
-    let n = 0
-    const sum: [number, number, number] = [0, 0, 0]
-    for (let y = rect.y; y < rect.y + rect.h; y++) {
-      for (let x = rect.x; x < rect.x + rect.w; x++) {
-        const si = (y * source.width + x) * 4
-        if (
-          Math.abs(source.data[si]! - rgb[0]) > tolerance ||
-          Math.abs(source.data[si + 1]! - rgb[1]) > tolerance ||
-          Math.abs(source.data[si + 2]! - rgb[2]) > tolerance
-        ) {
-          continue
-        }
-        const di = (y * decoded.width + x) * 4
-        n++
-        sum[0] += decoded.data[di]!
-        sum[1] += decoded.data[di + 1]!
-        sum[2] += decoded.data[di + 2]!
+export function chromaRows(mask: ChromaMask, decoded: ImageData): ChromaRow[] {
+  if (decoded.width !== mask.width || decoded.height !== mask.height) {
+    throw new Error(
+      `chroma: decoded ${decoded.width}x${decoded.height} is not 1:1 with the source ${mask.width}x${mask.height}`,
+    )
+  }
+  return mask.colours.map(({ colour, idx }) => {
+    const src = saturationPct(colour.rgb)
+    if (idx.length === 0) {
+      // NOT "0 % kept". Nothing was measured, and a rig that reports a score
+      // for a measurement it did not take is the fault this task is about.
+      return {
+        key: colour.key,
+        colour: colour.name,
+        pixels: 0,
+        mean: null,
+        saturationPct: null,
+        sourceSaturationPct: src,
+        keptPct: null,
+        saturationDeltaPts: null,
+        status: 'MASK EMPTY',
       }
     }
-    const mean: [number, number, number] = n
-      ? [
-          Math.round((sum[0] / n) * 10) / 10,
-          Math.round((sum[1] / n) * 10) / 10,
-          Math.round((sum[2] / n) * 10) / 10,
-        ]
-      : [0, 0, 0]
-    const src = saturationPct(rgb)
+    let r = 0
+    let g = 0
+    let b = 0
+    for (let k = 0; k < idx.length; k++) {
+      const di = idx[k]!
+      r += decoded.data[di]!
+      g += decoded.data[di + 1]!
+      b += decoded.data[di + 2]!
+    }
+    const n = idx.length
+    const mean: [number, number, number] = [
+      Math.round((r / n) * 10) / 10,
+      Math.round((g / n) * 10) / 10,
+      Math.round((b / n) * 10) / 10,
+    ]
     const got = saturationPct(mean)
     return {
-      colour: name,
+      key: colour.key,
+      colour: colour.name,
       pixels: n,
       mean,
       saturationPct: got,
-      keptPct: src > 0 ? Math.round((got / src) * 1000) / 10 : 0,
+      sourceSaturationPct: src,
+      keptPct: src > 0 ? Math.round((got / src) * 1000) / 10 : null,
+      saturationDeltaPts: Math.round((got - src) * 10) / 10,
+      status: 'ok',
     }
   })
 }

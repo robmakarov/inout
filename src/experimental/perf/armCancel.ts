@@ -12,6 +12,7 @@
  */
 
 import { createCaptureSession } from '@core/capture/session'
+import { warmRigEncoder } from '../rigWarm'
 import { recordingsRepo } from '@core/store'
 import type { CaptureConfig } from '@core/types'
 
@@ -37,6 +38,9 @@ export interface ArmCancelReport {
 }
 
 export async function runArmCancel(opts: { abortAfterMs?: number } = {}): Promise<ArmCancelReport> {
+  // NOTE 6: prearm warms production's first VideoEncoder at mount; a rig that
+  // opens a session directly does not, and a cold first encoder eats the take.
+  await warmRigEncoder()
   const abortAfterMs = opts.abortAfterMs ?? 40
 
   // 1 + 2: cancel mid-arm.

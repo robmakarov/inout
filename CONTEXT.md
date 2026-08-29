@@ -118,8 +118,10 @@ work bought. Parallel decoding made exports 1 % faster, not twice as fast. Drawi
 card fails on text. Lowering the recording data rate makes your download *bigger*. And "the export
 smears screen text" is false — the export preserves text almost perfectly. None of those would have
 been visible without measuring them, and three of the four had been on the plan for weeks as things
-that would obviously help. (A fifth entry once sat here — "the damage happens when the recording is
-first captured" — and it was our own measuring mistake, corrected on 2026-08-26. See below.)
+that would obviously help. (A fifth entry once sat here, and what it claimed was about SHARPNESS:
+"capture throws away half of every letter's edge contrast". That number was our own measuring
+mistake and it is retracted — letter *sharpness* survives recording intact. Letter *colour* does
+not, and that finding is real, separate, and two sections below.)
 
 **You can pause a recording now (2026-08-26).** A Pause button sits beside the record button while
 you record. It does not release anything: the camera light stays on, nothing is asked for again, and
@@ -191,6 +193,16 @@ None of our existing checks could have caught this, and that is worth saying pla
 check we have compares one output file against another output file, so damage that happens to *all*
 of them cancels out and reads as zero. It took a person looking at a picture. There is now a
 measurement that compares against the original screen instead.
+
+**And we checked that we blamed the right thing (2026-08-29).** "Colour stored at lower resolution
+than brightness" and "we are converting colour slightly wrong somewhere" look identical on a page of
+coloured text — both fade the coloured words and leave grey alone — so the whole case for the fix
+below rested on it being the first one. The test that separates them: put the *same three colours*
+through the *same compression* as big solid blocks instead of thin letters. Solid blocks give the
+low-resolution-colour effect nothing to blur across, and a conversion error would not care. The
+blocks come back at 99–101 % of their colour while the same page's thin letters come back at 80–82 %.
+It is the letters, as claimed — which means full-colour-resolution recording will actually deliver
+what it promises here.
 
 **What can be done.** One fix is free: a screen-only recording does not need the combining step at
 all, so skipping it keeps 80 % instead of 70 % — less work, not more. That is an existing task (O3b)

@@ -17,6 +17,7 @@
 import { blobStore } from '@core/store'
 import { isSyntheticMode } from '@core/capture'
 import { createCaptureSession } from '@core/capture/session'
+import { warmRigEncoder } from '../rigWarm'
 import { recordingsRepo } from '@core/store'
 import { expReadFile, expRemove } from '../shared/opfs'
 import { attachJournal, clearJournal, readJournal, type JournalEntry } from './journal'
@@ -141,6 +142,9 @@ async function createDeliberateOrphan(): Promise<string> {
 }
 
 export async function runRecoveryExperiment(): Promise<RecoveryReport> {
+  // NOTE 6: prearm warms production's first VideoEncoder at mount; a rig that
+  // opens a session directly does not, and a cold first encoder eats the take.
+  await warmRigEncoder()
   // 1. Journal: observe a short synthetic session (requires ?synthetic=1).
   let journalDuring: JournalEntry | null = null
   let journalAfter: JournalEntry | null = null

@@ -20,6 +20,7 @@ import {
 } from 'mediabunny'
 import { isSyntheticMode } from '@core/capture'
 import { createCaptureSession } from '@core/capture/session'
+import { warmRigEncoder } from '../rigWarm'
 import { canMeasureAudioCapture } from '@core/capture/measuredAudio'
 import { isAppleWebKit } from '@core/capabilities'
 import {
@@ -403,6 +404,9 @@ async function runX1Edited(recording: Recording): Promise<X1Edited> {
 export async function runO2Evidence(
   opts: { takeMs?: number; probeSecs?: number[] } = {},
 ): Promise<O2Report> {
+  // NOTE 6: prearm warms production's first VideoEncoder at mount; a rig that
+  // opens a session directly does not, and a cold first encoder eats the take.
+  await warmRigEncoder()
   const takeMs = opts.takeMs ?? 8000
   const probeSecs = opts.probeSecs ?? [60, 180]
   const notes: string[] = [
