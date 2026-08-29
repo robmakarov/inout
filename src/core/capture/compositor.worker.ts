@@ -305,7 +305,34 @@ export type CompositorReply =
  * (VideoToolbox here) commonly expose Baseline/Main only. A profile nobody can
  * encode in hardware is not a better file, it is a dropped-frame file.
  */
-const CODEC_CANDIDATES = ['avc1.42E01E', 'avc1.4D402A', 'avc1.640028'] as const
+/**
+ * AVC PROFILE/LEVEL CANDIDATES, IN ASCENDING CAPACITY.
+ *
+ * A LEVEL IS A FRAME-SIZE LIMIT, and Chrome enforces it: `isConfigSupported`
+ * REFUSES a frame the level cannot hold rather than clamping it. The old list
+ * stopped at 4.2 (8704 macroblocks, i.e. about 1920x1088), which was invisible
+ * for as long as capture was pinned to 1080p — and became a lost channel the
+ * morning native-res capture went default, because the raw channel is now
+ * configured at the MONITOR's own size. Reproduced on prod:
+ * `?synthetic=1&screensize=2560x1441` returns `no supported AVC VideoEncoder
+ * config` and the take comes back "Missing from this take: Screen", with the
+ * preview having shown the screen throughout. Every display bigger than 1080p
+ * was in that hole: 1440p is 14400 macroblocks and 4K is 32400.
+ *
+ * 5.0 (22080 MB) covers 1440p, 5.1/5.2 (36864 MB) cover 4K, 6.0 covers what
+ * comes after. APPENDED, never reordered: the loop returns the first supported
+ * config, so every frame that already had one keeps exactly the encoder it had
+ * — a 1080p take is untouched, which is the whole safety net.
+ */
+const CODEC_CANDIDATES = [
+  'avc1.42E01E',
+  'avc1.4D402A',
+  'avc1.640028',
+  'avc1.640032',
+  'avc1.640033',
+  'avc1.640034',
+  'avc1.640040',
+] as const
 
 async function pickVideoConfig(
   width: number,
