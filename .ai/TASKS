@@ -2865,6 +2865,41 @@ checkable by eye.
     note 6 and it is the RIG — the lane called createCaptureSession without prearm's warm. Warmed,
     the same take encodes 205 of 203 with ZERO drops. The flipped default is not dropping frames.
 
+(e) "I WANT 100% COLORS" (Robert, 2026-08-29) — AND IT IS REACHABLE, ON THE HARDWARE ENCODER.
+    THE PREVIOUS ANSWER WAS TRUE AT 1:1 AND ONLY AT 1:1, and stopping there was the mistake. 4:2:0
+    stores chroma at half resolution IN EACH AXIS OF WHATEVER FRAME IT IS GIVEN, so what a file
+    carries is fixed in ABSOLUTE chroma samples, not in percent:
+        1080p 4:2:0  ->  960x1080/2 chroma  ->  seen at 1080p, a quarter of the samples
+        2160p 4:2:0  -> 1920x1080  chroma   ->  seen at 1080p, ONE SAMPLE PER PIXEL
+    So a supersampled 4:2:0 file is chroma-complete at the size it is watched. `npm run exp -- x15e`,
+    same still code page, every rung encoded at the same bits per pixel, decoded, downscaled to
+    1920x1080 the way a player would, and scored against the 1920x1080 reference:
+        rung                capture      bytes      green kept   blue kept
+        1x 4:2:0 (SHIPS)    1920x1080    583752       79.6 %       81.7 %
+        1.5x 4:2:0          2880x1620    981874       96.9 %       99.0 %
+        2x 4:2:0            3840x2160   1343479       96.0 %       98.3 %
+        1x 4:4:4 AV1        1920x1080    668472       99.6 %       97.9 %
+    1.5x ON HARDWARE MATCHES THE SOFTWARE 4:4:4 CEILING, at 1.68x the bytes. 2x is not better than
+    1.5x (96.0 vs 96.9) — past one chroma sample per delivered pixel there is nothing left to win,
+    and the extra pixels only thin the bits. THE TRADE IS PIXELS, NOT CPU CLASS, which is an
+    entirely different proposition from software AV1 4:4:4 at ~2x capture CPU.
+    WHAT THIS MAKES ACTIONABLE: the lever already exists. O6's `?nativeres=1` stops capping a
+    native-resolution screen down, and on a 2x display that IS the supersample — the capture frame
+    already carries 1x-complete chroma, and the only thing left is to DELIVER at that resolution
+    instead of stepping down to 1080p. Nothing has to be encoded in software.
+    WHAT IS STILL UNMEASURED, and it is one console line away: whether Chrome hands us the screen at
+    the display's native resolution or already downscaled. capture/measuredVideo.ts logs
+    `format ... · coded WxH` on the first frame of every raw channel, so Robert's next real take says
+    both the format and the resolution. THE RIG CANNOT GET THIS ITSELF: a headless Chrome has no
+    desktop for a screen-capture picker, and `{"probeSource":true}` hung a run for ten minutes before
+    it was given a deadline. Run it headed, or read the take's console.
+    A LEVEL-4.0 CONSTANT NEARLY KILLED THE FINDING: the first run reported the 1.5x and 2x rungs as
+    "config unsupported" and would have concluded that supersampling is unavailable. `avc1.640028` is
+    High@4.0 and caps at 1920x1080; the rig walks AVC levels per size now.
+    GREY IS NOT QUOTED ABOVE and R1 says why — its keptPct divides by a 7.4 % source saturation, so
+    it amplifies decode noise (this ladder prints grey at 197 % and 224 %, which is that artefact and
+    not a measurement).
+
 THREE INSTRUMENT FAULTS THIS SESSION, and note 10 now has a seventh, eighth and ninth instance —
 ALL THREE WERE MINE except the first, and the pattern is one thing: A REFERENCE THAT MOVES.
   (1) O9's, above: a scrolling fixture compared against a readback taken at another time.

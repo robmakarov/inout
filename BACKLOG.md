@@ -465,6 +465,20 @@ ear or eye, or the screen wedge, whose cause is Chrome's.
   NV12, a real OS screen capturer is unlikely to be better. Robert's next real take prints the format
   on the console; that is the confirmation, and it decides whether 4:4:4-at-capture is dead or merely
   expensive. Do not spend anything on 4:4:4 capture before that line is read from a real take.
+  100 % IS REACHABLE AND IT IS A RESOLUTION LEVER, NOT A CHROMA-FORMAT ONE (2026-08-29, Robert
+  "i want 100% colors"). 4:2:0 halves chroma in each axis OF WHATEVER IT IS GIVEN, so the samples a
+  file carries are absolute: a 2x-resolution 4:2:0 file has one chroma sample per pixel at 1x.
+  `npm run exp -- x15e`, every rung at equal bits per pixel, downscaled to 1080p as a player would:
+      1x 4:2:0 (ships)  584 KB  green 79.6 / blue 81.7      1.5x 4:2:0  982 KB  green 96.9 / blue 99.0
+      2x 4:2:0         1343 KB  green 96.0 / blue 98.3      1x 4:4:4    668 KB  green 99.6 / blue 97.9
+  1.5x ON THE HARDWARE ENCODER MATCHES THE SOFTWARE 4:4:4 CEILING, at 1.68x the bytes; 2x buys
+  nothing over 1.5x. So the answer to "100 %" is: capture and DELIVER at ~1.5x the viewing size.
+  O6's `?nativeres=1` already stops the down-cap, and on a 2x display the capture frame is the
+  supersample — what is missing is delivering at that resolution instead of the 1080p step.
+  STILL UNMEASURED, one console line: whether Chrome hands us the screen at native resolution or
+  already downscaled. measuredVideo.ts logs `format ... · coded WxH` per raw channel on every take.
+  The rig cannot self-serve this — headless has no desktop picker and the probe hung a run for ten
+  minutes before it got a deadline.
   AND GREY'S NUMBER IS NOW HONEST: "grey barely moves" used to be argued from a keptPct that divides
   by a 7.4 % source saturation, so +-1 LSB of decode noise arrived as +-6 points. In absolute
   saturation points grey moves -2.1 against green -13.5 and blue -13.0 — same argument, no amplifier.
