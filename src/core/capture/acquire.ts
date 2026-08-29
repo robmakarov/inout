@@ -463,98 +463,96 @@ export async function capDisplayTrack(track: MediaStreamTrack | undefined): Prom
   // resolution and let resolutionLadder.ts step DOWN on measured backpressure
   // instead of never starting high. See nativeRes.ts.
   if (nativeResEnabled()) {
-    // …EXCEPT FOR AN ODD SIDE, WHICH IS NOT A RESOLUTION PREFERENCE BUT A
-    // FORMAT ERROR. AVC subsamples chroma by two on both axes and cannot encode
-    // an odd width or height: the raw channel's VideoEncoder answers "no
-    // supported AVC config", the MediaRecorder fallback writes nothing either,
-    // and the take comes back "Missing from this take: Screen" — with the
-    // preview having shown the screen the whole time, because the TRACK was
-    // always fine. Robert hit exactly this the morning native-res went default;
-    // before that the 1920x1080 cap made every side even by accident.
-    // A Mac in a scaled display mode reports odd sizes as a matter of course
-    // (1728x1117 is a stock "More Space" mode), so this is the common case on
-    // the hardware this product is used on, not an edge.
-    // Rounding DOWN by at most one row and one column is invisible; losing the
-    // channel is not.
-    // THE RATE IS BUDGETED AGAINST THE SURFACE (F15). A 60 fps ceiling is an
+    // THE SIZE IS KEPT; ONLY THE RATE IS BUDGETED (F15). A 60 fps ceiling is an
     // ask, not a promise the machine can keep: measured on prod, 3456x2234@60
     // encodes NOTHING and never recovers, while the same surface at 30 is
     // healthy. The ladder fires correctly on that take and cannot rescue it,
     // because the collapse is instant. See rate.ts's HIGH_RATE_PIXEL_BUDGET.
-    const rate = rateForSurface(before.width, before.height, captureRateCeiling())
-    const holdRate = rate < captureRateCeiling() && (before.frameRate ?? 0) > rate + 1
-    const odd = evenDown(before.width ?? 0) !== before.width || evenDown(before.height ?? 0) !== before.height
-    if (holdRate) {
-      const even = before.width && before.height
-        ? { width: evenDown(before.width), height: evenDown(before.height) }
-        : null
+    const ceiling = captureRateCeiling()
+    const rate = rateForSurface(before.width, before.height, ceiling)
+    if (rate < ceiling && (before.frameRate ?? 0) > rate + 1) {
       try {
         await withTimeout(
-          track.applyConstraints({
-            ...(odd && even ? { width: { max: even.width }, height: { max: even.height } } : {}),
-            frameRate: { max: rate },
-          }),
+          track.applyConstraints({ frameRate: { max: rate } }),
           1500,
           'applyConstraints(display rate budget)',
         )
-        const after = track.getSettings()
         console.info(
           `[capture] native-res capture: ${before.width}×${before.height} is too many pixels to ` +
-            `sustain ${captureRateCeiling()} fps — holding at ${rate} fps, got ` +
-            `${after.width}×${after.height}@${after.frameRate ?? '?'} (F15)`,
+            `sustain ${ceiling} fps — holding at ${rate} fps (F15)`,
         )
       } catch (err) {
         console.warn('[capture] could not hold the rate down — the ladder is the remaining guard', err)
       }
-      return
-    }
-    if (!odd || !before.width || !before.height) {
+    } else {
       console.info(
         `[capture] native-res capture: leaving display at ${before.width}×${before.height}@${before.frameRate ?? '?'} (O6)`,
       )
-      return
     }
-    const even = { width: evenDown(before.width), height: evenDown(before.height) }
+  } else if (exceedsCaptureCeiling(before)) {
     try {
       await withTimeout(
-        track.applyConstraints({ width: { max: even.width }, height: { max: even.height } }),
+        track.applyConstraints({
+          width: { max: CAPTURE_MAX_WIDTH },
+          height: { max: CAPTURE_MAX_HEIGHT },
+          frameRate: { max: captureRateCeiling() },
+        }),
         1500,
-        'applyConstraints(display even)',
+        'applyConstraints(display)',
       )
       const after = track.getSettings()
       console.info(
-        `[capture] native-res capture: ${before.width}×${before.height} has an odd side, which AVC ` +
-          `cannot encode — asked for ${even.width}×${even.height}, got ${after.width}×${after.height} (O6)`,
+        `[capture] display capped ${before.width}×${before.height}@${before.frameRate ?? '?'} → ` +
+          `${after.width}×${after.height}@${after.frameRate ?? '?'}`,
       )
     } catch (err) {
-      // The channel is still saved: startMeasuredVideo evens its own encoder
-      // config too, so a track that refuses to be constrained costs a cropped
-      // row, not the screen.
-      console.warn(
-        `[capture] could not even out ${before.width}×${before.height} — the encoder config will be evened instead`,
-        err,
-      )
+      console.warn('[capture] display cap failed — recording at source resolution', err)
     }
-    return
   }
-  if (!exceedsCaptureCeiling(before)) return
+  // EVENNESS IS LAST, AND IT IS ONE PLACE FOR EVERY BRANCH ABOVE. It has to be
+  // both, and that is the lesson: the first version of this evened only the
+  // native-res branch, and `?nativeres=0` — the documented escape hatch for a
+  // machine that is struggling — went on producing an ODD track, because
+  // capping a 3456x2234 screen into a 1920x1080 box gives 1671x1080. Aspect
+  // ratio makes odd sides the NORM after a cap, not the exception.
+  await ensureEvenDisplayDims(track)
+}
+
+/**
+ * AVC subsamples chroma by two on both axes and cannot encode an odd side. It
+ * REFUSES rather than rounding — `isConfigSupported` says no, the MediaRecorder
+ * fallback fails the same way, and the take comes back "Missing from this take:
+ * Screen" with the preview having shown the screen throughout, because the
+ * TRACK was never the problem.
+ *
+ * THE FIX BELONGS TO THE TRACK AND NOWHERE ELSE, which was learned the
+ * expensive way. Evening the ENCODER instead looks equivalent and is worse: a
+ * config of 1670 fed 1671-wide frames is accepted by `isConfigSupported` and
+ * then emits NOTHING — measured, `0 frames encoded of 199 in`. That turns a
+ * loud failure into a silent one. Config and frames must be the same size, so
+ * the frames are what change.
+ */
+async function ensureEvenDisplayDims(track: MediaStreamTrack): Promise<void> {
+  const s = track.getSettings()
+  if (!s.width || !s.height) return
+  const even = { width: evenDown(s.width), height: evenDown(s.height) }
+  if (even.width === s.width && even.height === s.height) return
   try {
     await withTimeout(
-      track.applyConstraints({
-        width: { max: CAPTURE_MAX_WIDTH },
-        height: { max: CAPTURE_MAX_HEIGHT },
-        frameRate: { max: captureRateCeiling() },
-      }),
+      track.applyConstraints({ width: { max: even.width }, height: { max: even.height } }),
       1500,
-      'applyConstraints(display)',
+      'applyConstraints(display even)',
     )
     const after = track.getSettings()
     console.info(
-      `[capture] display capped ${before.width}×${before.height}@${before.frameRate ?? '?'} → ` +
-        `${after.width}×${after.height}@${after.frameRate ?? '?'}`,
+      `[capture] ${s.width}×${s.height} has an odd side, which AVC cannot encode — asked for ` +
+        `${even.width}×${even.height}, got ${after.width}×${after.height}`,
     )
   } catch (err) {
-    console.warn('[capture] display cap failed — recording at source resolution', err)
+    console.warn(
+      `[capture] could not even out ${s.width}×${s.height} — this screen channel may be refused by the encoder`,
+      err,
+    )
   }
 }
 

@@ -1,6 +1,6 @@
 import { newId } from '@core/id'
 import { isAppleWebKit } from '@core/capabilities'
-import { aspectOf, evenDown, frameForAspect, sourceFrameEnabled } from '@core/frame'
+import { aspectOf, frameForAspect, sourceFrameEnabled } from '@core/frame'
 import { DEFAULT_FRAME_RATE, normalizeRate, sourceRateEnabled } from '@core/rate'
 import { singleGenCaptureEnabled } from '@core/singleGen'
 import { blobStore, createDurablePositionedWriter, recordingsRepo } from '@core/store'
@@ -1179,13 +1179,14 @@ class Session implements CaptureSession {
    */
   private async startMeasuredVideo(ch: ChannelRuntime, startT0: number): Promise<void> {
     const settings = ch.track.getSettings()
-    // EVEN, ALWAYS — AVC cannot encode an odd side and answers "no supported
-    // config" rather than rounding, which loses the whole channel (see
-    // capDisplayTrack, and core/frame.ts's evenDown for the take it cost).
-    // capDisplayTrack evens the TRACK where it can; this evens the ENCODER, so
-    // a source that refuses to be constrained still records.
-    const width = evenDown(settings.width ?? ch.width ?? 1920)
-    const height = evenDown(settings.height ?? ch.height ?? 1080)
+    // THE ENCODER IS CONFIGURED AT THE FRAMES' OWN SIZE, deliberately NOT
+    // rounded. Evening here looks like a safety net and is the opposite: a
+    // config of 1670 fed 1671-wide frames passes `isConfigSupported` and then
+    // encodes NOTHING — measured on prod, `0 frames encoded of 199 in`, which
+    // is a silent take instead of a loud refusal. Evenness is the TRACK's
+    // business and capDisplayTrack owns it in one place.
+    const width = settings.width ?? ch.width ?? 1920
+    const height = settings.height ?? ch.height ?? 1080
     const fps = Math.round(settings.frameRate ?? 30)
     try {
       const handle = await startMeasuredVideoCapture({

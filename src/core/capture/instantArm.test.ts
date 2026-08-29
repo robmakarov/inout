@@ -150,6 +150,24 @@ describe('capture ceiling (4K game tab froze the take, Robert 2026-08-22)', () =
     expect(apply).toHaveBeenCalledWith({ width: { max: 1728 }, height: { max: 1116 } })
   })
 
+  it('EVERY branch is evened, including the escape hatch — `?nativeres=0` caps to an ODD width', async () => {
+    // THE HOLE THAT SURVIVED THE FIRST FIX. Evening only the native-res branch
+    // left `?nativeres=0` — the documented switch for a machine that is
+    // struggling — producing an odd track, because capping a 3456x2234 screen
+    // into a 1920x1080 box gives 1671x1080. Aspect ratio makes an odd side the
+    // NORM after a cap, not the exception. Measured: 0 frames encoded of 199.
+    const apply = vi.fn().mockResolvedValue(undefined)
+    const t = track({ width: 3456, height: 2234, frameRate: 30 }, apply)
+    // The cap lands first, then the track reports what the cap gave it.
+    let settings: MediaTrackSettings = { width: 3456, height: 2234, frameRate: 30 }
+    t.getSettings = () => settings
+    apply.mockImplementation(async () => {
+      settings = { width: 1671, height: 1080, frameRate: 30 }
+    })
+    await withNativeRes(false, () => capDisplayTrack(t))
+    expect(apply).toHaveBeenLastCalledWith({ width: { max: 1670 }, height: { max: 1080 } })
+  })
+
   it('DEFAULT: an even native surface is still left completely alone', async () => {
     const apply = vi.fn().mockResolvedValue(undefined)
     await capDisplayTrack(track({ width: 1512, height: 982, frameRate: 30 }, apply))
