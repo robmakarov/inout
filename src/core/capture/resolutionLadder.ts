@@ -41,8 +41,11 @@
 
 export interface LadderRung {
   label: string
-  width: number
-  height: number
+  /** Absent on a rung that only changes the RATE. */
+  width?: number
+  height?: number
+  /** Present only on the rate rung. */
+  fps?: number
 }
 
 /**
@@ -55,6 +58,35 @@ export const DEGRADE_RUNGS: LadderRung[] = [
   { label: '1440p', width: 2560, height: 1440 },
   { label: '1080p', width: 1920, height: 1080 },
 ]
+
+/**
+ * THE RATE IS GIVEN BACK FIRST, and only a take that has a rate to give.
+ *
+ * `stepDisplayDown` used to say the rate was left alone on purpose — "this
+ * ladder trades PIXELS for keeping up, and dropping the rate as well would
+ * change two things at once". That was right for as long as the rate was a
+ * constant 30: there was nothing to give back, so pixels were the only
+ * currency. F15 made the rate follow the source, and then the FIRST thing a
+ * struggling take should return is the thing it most recently asked for.
+ *
+ * IT IS ALSO THE CHEAPER LOSS, measured on prod 2026-08-29 on one machine and
+ * one source, `?sourcefps=1&screensize=3456x2234`:
+ *     3456x2234 @60  the composite encoded NOTHING, raw kept 8 of 305 frames
+ *     3456x2234 @30  composite healthy, raw kept 493 of 574
+ *     2560x1440 @60  composite kept 81 %
+ *     1920x1080 @60  composite kept 90 %
+ * Halving the rate rescued the whole take where two resolution steps did not —
+ * because the composite draws the source into its own 1920x1080 canvas SIXTY
+ * times a second whatever the source's size, so shrinking the source does not
+ * touch the cost that is actually killing it.
+ *
+ * A 30 fps take gets exactly the rungs it always got, in the same order.
+ */
+export function rungsFor(requestedFps: number): LadderRung[] {
+  return requestedFps > 30
+    ? [{ label: '30 fps', fps: 30 }, ...DEGRADE_RUNGS]
+    : DEGRADE_RUNGS
+}
 
 /** Below this share of the frames that arrived, encoding is failing rather than varying. */
 export const DELIVERY_FLOOR_RATIO = 0.6
@@ -124,7 +156,8 @@ export interface LadderVerdict {
  */
 export function ladderVerdict(input: LadderInput): LadderVerdict | null {
   // Rule 1: the floor is the floor.
-  if (input.stepsTaken >= DEGRADE_RUNGS.length) return null
+  const rungs = rungsFor(input.requestedFps)
+  if (input.stepsTaken >= rungs.length) return null
   // Rule 2: an encoder that has not produced yet is initialising, not failing —
   // until it has been silent longer than any initialisation takes, at which
   // point it is failing in the loudest way available and is precisely what this
@@ -144,7 +177,7 @@ export function ladderVerdict(input: LadderInput): LadderVerdict | null {
   if (!(demandFps > 0)) return null
   const ratio = input.deliveredFps / demandFps
   if (ratio >= DELIVERY_FLOOR_RATIO) return null
-  const rung = DEGRADE_RUNGS[input.stepsTaken]!
+  const rung = rungs[input.stepsTaken]!
   return {
     rung,
     reason:

@@ -27,7 +27,7 @@ import type { CompositorMsg, CompositorReply, CompositorStats } from './composit
 import type { CompositeRecording } from '../types'
 import { SourceLiveness, type LivenessEvent } from './sourceLiveness'
 import { watchdogVerdict } from './compositorWatchdog'
-import { DELIVERY_FLOOR_RATIO, ladderVerdict } from './resolutionLadder'
+import { DELIVERY_FLOOR_RATIO, ladderVerdict, type LadderRung } from './resolutionLadder'
 
 /**
  * The composite's rate when nothing says otherwise — what this engine wrote
@@ -175,7 +175,7 @@ export interface LiveCompositeV2Options {
    * constraint is applied there. Absent = the ladder never runs, which is the
    * default.
    */
-  onDegradeStep?: (rung: { label: string; width: number; height: number }, reason: string) => void
+  onDegradeStep?: (rung: LadderRung, reason: string) => void
   /**
    * The session epoch (performance.now()), so the composite can say WHERE ITS
    * OWN CLOCK STARTS on the recording timeline (P0-instant-sync). Omitted by

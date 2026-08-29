@@ -40,6 +40,7 @@ import {
   type MeasuredVideoHandle,
 } from './measuredVideo'
 import { canLiveCompositeV2, startLiveCompositeV2 } from './liveCompositeV2'
+import type { LadderRung } from './resolutionLadder'
 import { preferredCompositeEngine } from './engine'
 import { MixLoudnessAccumulator } from './loudnessAccumulator'
 import { clearPendingManifest, writePendingManifest } from './recovery'
@@ -798,7 +799,7 @@ class Session implements CaptureSession {
    * that refuses the composite outright.
    */
   private async stepDisplayDown(
-    rung: { label: string; width: number; height: number },
+    rung: LadderRung,
     reason: string,
   ): Promise<void> {
     const ch = this.channels.find((c) => c.kind === 'screen' && !c.ended)
@@ -813,16 +814,20 @@ class Session implements CaptureSession {
       // happens where the frame follows the source at all.
       const portrait =
         sourceFrameEnabled() && (before.height ?? 0) > (before.width ?? 0)
-      const bound = portrait
-        ? { width: rung.height, height: rung.width }
-        : { width: rung.width, height: rung.height }
+      // ONE RUNG CHANGES ONE THING. A rate rung names no size and a size rung
+      // names no rate, so the "changing two things at once makes the next
+      // measurement unreadable" rule this ladder was built on still holds —
+      // what F15 added is a second currency, not a second simultaneous change.
+      const bound =
+        rung.width && rung.height
+          ? portrait
+            ? { width: rung.height, height: rung.width }
+            : { width: rung.width, height: rung.height }
+          : null
       await withTimeout(
         ch.track.applyConstraints({
-          width: { max: bound.width },
-          height: { max: bound.height },
-          // The RATE is left alone on purpose: this ladder trades PIXELS for
-          // keeping up, and dropping the rate as well would change two things
-          // at once and make the next measurement unreadable.
+          ...(bound ? { width: { max: bound.width }, height: { max: bound.height } } : {}),
+          ...(rung.fps ? { frameRate: { max: rung.fps } } : {}),
         }),
         THROTTLE_BUDGET_MS,
         `${ch.kind} step to ${rung.label}`,
@@ -831,12 +836,19 @@ class Session implements CaptureSession {
       if (after.width) ch.width = after.width
       if (after.height) ch.height = after.height
       console.info(
-        `[capture] display stepped ${before.width}×${before.height} → ${after.width}×${after.height} (${reason})`,
+        `[capture] display stepped ${before.width}×${before.height}@${before.frameRate ?? '?'} → ` +
+          `${after.width}×${after.height}@${after.frameRate ?? '?'} (${reason})`,
       )
       // The composite's own geometry did not change — it composes to the export
       // size regardless — but the take is no longer what an unedited export
       // would packet-copy without knowing the source changed mid-file.
-      this.emit({ type: 'channel-error', kind: 'screen', message: `Recording quality reduced to ${rung.label} to keep up` })
+      this.emit({
+        type: 'channel-error',
+        kind: 'screen',
+        message: rung.fps
+          ? `Recording rate reduced to ${rung.label} to keep up`
+          : `Recording quality reduced to ${rung.label} to keep up`,
+      })
     } catch (err) {
       console.warn('[capture] could not step the display down', err)
     }

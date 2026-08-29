@@ -7,6 +7,7 @@ import {
   ladderVerdict,
   type LadderInput,
   DEAD_ENCODER_MS,
+  rungsFor,
 } from './resolutionLadder'
 
 /** A machine that is failing badly, with every timing precondition satisfied:
@@ -53,6 +54,27 @@ describe('ladderVerdict', () => {
         deliveredFps: 0,
       }),
     ).toBeNull()
+  })
+
+  it('a take ABOVE 30 gives the RATE back first, and a 30 fps take is unchanged', () => {
+    // Measured on prod 2026-08-29: 3456x2234@60 encoded NOTHING while the same
+    // source at 30 was healthy, and two resolution steps did not rescue it —
+    // the composite draws into its own 1920x1080 canvas sixty times a second
+    // whatever the source's size, so shrinking the source misses the cost.
+    expect(rungsFor(30)).toEqual(DEGRADE_RUNGS)
+    expect(rungsFor(30)[0]?.fps).toBeUndefined()
+    const fast = rungsFor(60)
+    expect(fast[0]).toEqual({ label: '30 fps', fps: 30 })
+    expect(fast.slice(1)).toEqual(DEGRADE_RUNGS)
+    // The first verdict on a 60 fps take is the rate; the next two are the
+    // rungs it always had.
+    const at60 = { ...failing, requestedFps: 60, arrivedFps: 60, deliveredFps: 1 }
+    expect(ladderVerdict(at60)?.rung.label).toBe('30 fps')
+    expect(ladderVerdict({ ...at60, stepsTaken: 1 })?.rung.label).toBe('1440p')
+    expect(ladderVerdict({ ...at60, stepsTaken: 2 })?.rung.label).toBe('1080p')
+    // …and the floor moves with the list rather than being hardcoded.
+    expect(ladderVerdict({ ...at60, stepsTaken: 3 })).toBeNull()
+    expect(ladderVerdict({ ...failing, stepsTaken: DEGRADE_RUNGS.length })).toBeNull()
   })
 
   it('but an encoder silent for longer than any init IS the case this ladder is for', () => {
