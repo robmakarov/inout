@@ -107,6 +107,19 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'rigsource',
+    title: 'G2 — does the rig\u2019s own source move?',
+    detail:
+      'paints one canvas from requestAnimationFrame, one from setInterval and one from the guarded painter, and reports what each TRACK delivered — plus the bare rAF and setInterval callback rates. Run it headless and again with --headed: if the rAF lane starves in one and not the other, every band measured on a rAF-painted source was measuring the harness.',
+    run: async (args) => {
+      const { runRigSource } = await import('../perf/rigSource')
+      return runRigSource({
+        windowMs: typeof args?.windowMs === 'number' ? args.windowMs : undefined,
+        fps: typeof args?.fps === 'number' ? args.fps : undefined,
+      })
+    },
+  },
+  {
     id: 'sweep',
     title: 'Oracle hygiene — sweep stale exp-oracle-* blobs',
     detail: 'removes production-storage keys stranded by crashed earlier oracle runs.',

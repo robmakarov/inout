@@ -320,8 +320,13 @@ READY NOW:
                                              Measured on prod, same 8 s: 411 frames against 204,
                                              2.0 MB against 1.3. If it is right the default flips;
                                              if it is not, nothing has moved in the meantime.
-  ORACLE-LOAD — ABSORBED BY G2 2026-08-29 (same mechanism kills the whole makeRig family; do not
-               run this entry, run G2). NOT F15 — same verdict on the commit before it
+  ORACLE-LOAD — ANSWERED BY G2 2026-08-29 (handoff under G2). The lead this entry carried is REFUTED:
+               rAF runs at 120 Hz headless AND headed, and the raw phase's red was the rig handing all
+               N takes to ONE page (run 2 stopped in 40-54 s where a fresh page stops in 0.8-3.9 s).
+               RAW PHASE RETRACTED (tails 6-191 ms, inside the band). COMPOSITE PHASE CONFIRMED RED on
+               its own merits and BIMODAL — tail 7459-9253 ms / 0.7-3.2 fps on most runs, 14 ms /
+               13.6 fps on one — which is O15's question, not a gate bug. Original text kept below.
+               NOT F15 — same verdict on the commit before it
                                              (79d6def, throwaway worktree): composite tail 9848 ms
                                              / 7366 ms against a 400 ms band, delivered 0.2 / 2.5
                                              fps against a band of 10, both raw runs erroring "the
@@ -424,7 +429,9 @@ READY NOW:
                                              pass, so it teaches sessions to re-run until green. Measure
                                              whether it is the instrument or the copy paths. NOT by
                                              widening the band.
-  G2   a rig that cannot move its    [light]  ABSORBS the old ORACLE-LOAD entry and widens it: the same
+  G2   a rig that cannot move its    [DONE 2026-08-29 — handoff under the task; the lead was refuted and
+       own source                              the real defect was one page for N takes]
+                                             ABSORBS the old ORACLE-LOAD entry and widens it: the same
        own source                              mechanism kills the whole makeRig family. `oracle:load`
                                              drives through exp.mjs, HEADLESS by default; a headless page
                                              runs rAF at 0, so a rAF-painted 4K canvas source starves and
@@ -585,6 +592,85 @@ GATES: `oracle:load` headed vs headless run side by side, delivered fps of the S
 · every rAF-painted rig source either moved to setInterval or declared headed-only in ONE place a
 runner enforces · the tail/fps band re-read once the source moves, and the old verdict retracted or
 confirmed in writing · no product line changes in this task.
+
+## G2 HANDOFF — DONE 2026-08-29. THE LEAD WAS WRONG, THE RIG WAS WORSE, AND THE OLD VERDICT SPLITS IN TWO.
+THE FIRST MOVE WAS THE ONE COMMAND, AND IT REFUTED THE TASK'S OWN PREMISE. New rig:
+`npm run exp -- rigsource` — paints one canvas from rAF, one from setInterval, one from the guarded
+painter, and reads each TRACK with MediaStreamTrackProcessor. Both modes, side by side:
+    HEADLESS  rafHz 120.2 · intervalHz 62.5 · document.hidden false · visibility "visible"
+              raf lane paint 120.5 fps -> track 30.2 of 30 · interval 30.3 -> 30.0 · guarded 120.1 -> 30.2
+    HEADED    rafHz 120.2 · intervalHz 62.5
+              raf lane paint 119.5 fps -> track 30.2 of 30 · interval 30.3 -> 30.1 · guarded 118.1 -> 30.2
+"a headless page runs rAF at 0" IS FALSE ON THIS CHROME. It runs at 120 Hz in both, `document.hidden`
+is false under `--headless=new`, and a rAF-painted track delivers its full rate. The lead was written
+down twice in this repo and was never once measured; it is retracted here.
+
+AND THE MITIGATION IT PROPOSED WOULD NOT HAVE FIXED THE RED EITHER. The raw phase's source IS starving —
+but the painter is not why. Measured on the 4K load rig, one take: the synthetic screen canvas was
+painted 783 times in 10 s (78/s) while its capped track handed the encoder 15.7 fps. The loss is
+between CANVAS AND TRACK — `capDisplayTrack` constrains the 4K canvas capture to 1920x1080 and the
+downscale is what costs — not in the clock. The A/B says the same: moving the painter off bare rAF
+bought 16.5 -> 17.9 fps on a cold run and nothing at all on a hot one (9.8 -> 8.9).
+
+THE DEFECT THAT WAS ACTUALLY THERE, AND IT IS NOT ABOUT rAF: THE RAW PHASE POISONED ITS OWN SECOND RUN.
+`oracle:load` handed all N takes to ONE page. Measured at 4K, `procedures: ['production','production']`:
+    run 1 in the page   stop 3933 ms / 7724 ms · source handed over 164 / 177 frames
+    run 2 in that page  stop 39913 ms / 54162 ms · source handed over 97 / 88 frames · `live composite
+                        stop failed` · the composite encoded 7 frames of 65 (58 dropped)
+    two FRESH pages, back to back, same hot machine:  stop 3845 ms and 773 ms — both behave like a run 1.
+So it is the PAGE, not the machine, and half of every multi-run load verdict since c697bf3
+(2026-08-23, 202 commits ago — every session from the thirteenth on) was measured on a page this rig
+had already broken. One take per page now; the composite phase always did this and the raw phase does now.
+
+AND THE NUMBER THAT WOULD HAVE SAID SO WAS ALREADY THERE. `EngineRun.sourceFrames` has been on the
+composite phase the whole time and the runner never read it. It does now, both phases — the raw phase's
+comes out of capture's own `N frames encoded of M in` line, which is the only place it exists.
+
+THE OLD VERDICT, RE-READ. It splits, and only half of it was ever about the product:
+  · COMPOSITE PHASE — CONFIRMED RED, on its own merits. Source ALIVE every run (32.7-41.9 fps painted,
+    setInterval since 2026-08-26), so the collapse is downstream: tail 7459 / 8388 / 9253 ms against a
+    400 ms band, delivered 0.7 / 1.6 / 3.2 fps against a band of 10. NEW: it is BIMODAL — one headed run
+    read tail 14 ms and 13.6 fps on the same rig, so this is an engine that sometimes keeps up under 4K
+    and sometimes falls off a cliff, not a constant. That is a real question and it belongs to O15.
+  · RAW PHASE — RETRACTED. Its tails are 6 / 61 / 127 / 191 ms, every one inside the 400 ms band, and
+    the "both raw runs erroring `the take produced no screen channel`" does not reproduce even once in
+    ten takes. Its source is starved (10.4-15.9 fps of 30), so it is now reported as SOURCE-STARVED
+    rather than scored: green would be vacuous and red was blaming the product for the harness.
+  · The whole-gate verdict is now `SOURCE-STARVED — this run says nothing about the engine`, and it
+    exits NON-ZERO under that name. NOT F15's, and not F15's on the commit before it either.
+
+WHAT SHIPPED (rigs and runners only; the one file outside `scripts/` and `src/experimental/` is
+`src/core/capture/synthetic.ts`, which IS the `?synthetic=1` source — harness surface that happens to
+live in core, unreachable without the flag):
+  · `paintLoop` — ONE painter for every synthetic source, one home in `@core/capture/synthetic`, with
+    `src/experimental/rigPaint.ts` as the door the rigs come through (no second copy: R1 fix 10).
+    rAF stays PRIMARY so a headed run keeps the display's own clock; an interval watchdog paints only
+    when rAF has been quiet for 1.5 frame periods. Field cost of the guard: 13 watchdog paints out of
+    783, 14 out of 789 — 1.7 %, i.e. it is not carrying these lanes, it is insurance against the
+    occlusion case that ate every headless syncload cell on 2026-08-26.
+  · EVERY rAF-painted capture source moved onto it: synthetic.ts (screen + camera), oracle/rig.ts,
+    oracle/fidelityRun.ts, recovery/run.ts, perf/aiExport.ts, perf/bitsAudit.ts (x3),
+    perf/encoderProbe.ts (x4), perf/rawTail.ts. `grep requestAnimationFrame src/` now returns only the
+    rigsource experiment's deliberate control lanes and two frame-TIMING probes that paint nothing.
+  · 5 unit tests pin the painter (`src/core/capture/paintLoop.test.ts`), including the two that decide
+    whether a rig number means anything: a healthy 60 Hz rAF must trip the watchdog ZERO times against a
+    30 fps lane, and a 30 Hz display must too. FOUND BY THAT TEST: the first watchdog gated on the last
+    paint of ANY kind, so it throttled itself to half the rate asked for (15 of 30). It gates on rAF's
+    own clock now.
+  · `oracle:load` takes `--headed` (it never passed the flag through) and `--sourceBand=`.
+
+GATES
+  · headed vs headless side by side, source reported for both — above, and in every `oracle:load` line.
+  · every rAF-painted rig source moved, in ONE place a runner enforces — `paintLoop`, audited above.
+  · the band re-read, old verdict retracted or confirmed in writing — both, split as above.
+  · no product line changes — none; `synthetic.ts` is declared above and its behaviour on a healthy
+    rAF is unchanged (watchdog paints 0 in the unit test, 1.7 % in the field).
+  · 608 tests · typecheck clean · `npm run oracle` PASS (sync 47.9/47.9 ms) · `--engine=v1` PASS
+    (38.9/38.9 ms) · `npm run oracle:fidelity` PASS · recovery, capcheck, encprobe, o11, ai:check all
+    green on the converted painters.
+NOTED, NOT FIXED (filed in BACKLOG, G1's family): `oracle:fidelity`'s render lane read toneErr 5.33 dB
+against a 1 dB band on one run of three, and 0.04 / 0.01 dB on the other two of the SAME tree, while
+pristine main read 0.02. A third gate that flips run to run.
 
 ## G3 gates-that-cannot-fail — two bands are decoration [light · rigs only]
 (a) Two evidence gates are phrased in `longtask` counts. Nothing in this codebase that awaits per frame

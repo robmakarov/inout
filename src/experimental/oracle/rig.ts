@@ -47,6 +47,7 @@ import { canLiveCompositeV2, startLiveCompositeV2 } from '@core/capture/liveComp
 import { preferredCompositeEngine } from '@core/capture/engine'
 import { listProductionBlobs } from '../shared/opfs'
 import { encodeBits, FID_BLOCK, FID_BLOCK_COUNT, FID_MARGIN } from './fiducial'
+import { paintLoop } from '../rigPaint'
 
 export const BEEP_INTERVAL_MS = 1000
 export const FLASH_DURATION_MS = 120
@@ -494,7 +495,6 @@ function makeFiducialCanvas(kind: 'screen' | 'camera', rigEpoch: number, flashCl
   canvas.height = RIG_HEIGHT
   const g = canvas.getContext('2d')
   if (!g) throw new Error('2d context unavailable')
-  let raf = 0
   const draw = (): void => {
     const rigMs = performance.now() - rigEpoch
     if (flashClick && flashActiveAt(rigMs)) {
@@ -509,10 +509,10 @@ function makeFiducialCanvas(kind: 'screen' | 'camera', rigEpoch: number, flashCl
     g.fillStyle = `hsl(${(rigMs / 4) % 360}, 80%, 60%)`
     g.fillRect(((rigMs / 4) % (RIG_WIDTH + 160)) - 160, 560, 160, 40)
     drawFiducialStrip(g, rigMs)
-    raf = requestAnimationFrame(draw)
   }
-  draw()
-  return { stream: canvas.captureStream(30), stop: () => cancelAnimationFrame(raf) }
+  // G2: rAF stays primary; the watchdog paints only when it goes quiet.
+  const loop = paintLoop(draw, 30)
+  return { stream: canvas.captureStream(30), stop: loop.stop }
 }
 
 export interface RecordOptions {

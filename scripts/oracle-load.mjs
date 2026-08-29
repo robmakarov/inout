@@ -42,8 +42,25 @@
  * Raising --fpsBand is how the gate is proven red: for a threshold gate, the
  * threshold IS the injection.
  *
+ * ONE PAGE PER RUN, AND THAT IS A FIX, NOT A STYLE (task G2, 2026-08-29).
+ * The raw phase used to hand all N takes to a single page. Measured at 4K: the
+ * FIRST take in a page stops in 0.8-3.9 s and its source hands over 129-177
+ * frames; the SECOND take in that same page stops in 39.9-54.2 s and hands over
+ * 87-97, with `live composite stop failed` on the console. Two takes run in
+ * two FRESH pages, back to back on the same hot machine, both behave like a
+ * first take (stop 3845 ms and 773 ms). So it is the page, not the machine, and
+ * half of every previous multi-run verdict was measured on a page this rig had
+ * already broken. The composite phase always did it this way; the raw phase
+ * does now.
+ *
+ * AND THE SOURCE IS REPORTED, because a band on a synthetic source is only
+ * about the product if the source kept up. A run whose source starved is
+ * SOURCE-STARVED, not FAIL: it says nothing about the engine either way, and
+ * counting it as a product failure is how `oracle:load` spent an unknown number
+ * of sessions being red at nobody.
+ *
  * Usage: node scripts/oracle-load.mjs [--runs=2] [--takeMs=10000] [--band=400]
- *                                     [--fpsBand=10]
+ *                                     [--fpsBand=10] [--sourceBand=20] [--headed]
  */
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -55,11 +72,17 @@ let runs = 2
 let takeMs = 10_000
 let band = 400
 let fpsBand = 10
+// The rate every source in this rig is asked for is 30; two thirds of it is the
+// line below which the source is no longer offering what the bands judge.
+let sourceBand = 20
+let headed = false
 for (const a of process.argv.slice(2)) {
   if (a.startsWith('--runs=')) runs = Number(a.slice(7))
   else if (a.startsWith('--takeMs=')) takeMs = Number(a.slice(9))
   else if (a.startsWith('--band=')) band = Number(a.slice(7))
   else if (a.startsWith('--fpsBand=')) fpsBand = Number(a.slice(10))
+  else if (a.startsWith('--sourceBand=')) sourceBand = Number(a.slice(13))
+  else if (a === '--headed') headed = true
 }
 
 function runExp(id, args, marker) {
@@ -69,6 +92,7 @@ function runExp(id, args, marker) {
       id,
       JSON.stringify(args),
       '--timeout=900',
+      ...(headed ? ['--headed'] : []),
     ]
     const child = spawn(process.execPath, argv, { cwd: ROOT, stdio: ['ignore', 'pipe', 'inherit'] })
     let out = ''
@@ -97,6 +121,7 @@ function runOnce() {
       // the gate is about the file the user gets under that real load.
       JSON.stringify({ takeMs, sizes: [[3840, 2160]], engines: ['v1'], rawLane: true }),
       '--timeout=900',
+      ...(headed ? ['--headed'] : []),
     ]
     const child = spawn(process.execPath, args, { cwd: ROOT, stdio: ['ignore', 'pipe', 'inherit'] })
     let out = ''
@@ -121,9 +146,18 @@ for (let i = 0; i < runs; i++) {
   const report = await runOnce()
   const run = report.runs[0]
   const stats = run?.v1Stats ?? null
+  // sourceFrames has been on EngineRun the whole time and this runner never
+  // read it. It is the difference between "the engine lost frames" and "there
+  // were no frames to lose".
+  const sourceFps =
+    typeof run?.sourceFrames === 'number' && takeMs > 0
+      ? Math.round((run.sourceFrames / (takeMs / 1000)) * 10) / 10
+      : null
   results.push({
     tailGapMs: run?.tailGapMs ?? null,
     deliveredFps: run?.deliveredFps ?? null,
+    sourceFps,
+    sourceStarved: sourceFps === null ? null : sourceFps < sourceBand,
     drainMs: stats?.drainMs ?? null,
     drainedBytes: stats?.drainedBytes ?? null,
     drainTimedOut: stats?.drainTimedOut ?? null,
@@ -131,17 +165,40 @@ for (let i = 0; i < runs; i++) {
     error: run?.error ?? null,
   })
   console.error(
-    `[${i + 1}/${runs}] tail=${results[i].tailGapMs}ms fps=${results[i].deliveredFps} ` +
+    `[${i + 1}/${runs}] source=${sourceFps}fps tail=${results[i].tailGapMs}ms fps=${results[i].deliveredFps} ` +
       `drain=${results[i].drainMs}ms(+${results[i].drainedBytes}B) raw=${results[i].rawTailGapMs}ms` +
       (results[i].error ? ` ERROR ${results[i].error}` : ''),
   )
 }
 
+/**
+ * THE SOURCE GATE, AND IT COMES FIRST (task G2).
+ *
+ * Everything below judges an ENGINE by counting frames in a file. That is only
+ * a statement about the engine if the source offered the frames in the first
+ * place — and this rig's 4K source, on this machine, sometimes does not. A run
+ * whose source starved is excluded from the tail and fps verdicts with its own
+ * name, because scoring it either way is a lie: green would be vacuous and red
+ * would be blaming the product for the harness.
+ */
+function sourceVerdict(rows) {
+  const known = rows.filter((r) => typeof r.sourceFps === 'number')
+  const starved = known.filter((r) => r.sourceStarved)
+  if (known.length === 0) return { verdict: 'UNKNOWN', known: 0, starved: 0 }
+  return {
+    verdict: starved.length === 0 ? 'ALIVE' : starved.length === known.length ? 'STARVED' : 'MIXED',
+    known: known.length,
+    starved: starved.length,
+  }
+}
+/** Only runs whose source kept up may vote on a band. */
+const sourced = (rows) => rows.filter((r) => r.sourceStarved !== true)
+
 // A run whose composite never materialised (the watchdog gave up under load) is
 // not a tail failure — it is the fallback working, and the export renders from
 // the raw channels instead. It cannot PROVE the band either, so it is reported
 // and excluded rather than silently counted.
-const measured = results.filter((r) => r.tailGapMs !== null)
+const measured = sourced(results).filter((r) => r.tailGapMs !== null)
 const failed = measured.filter((r) => r.tailGapMs > band)
 const verdict = measured.length > 0 && failed.length === 0 ? 'PASS' : measured.length === 0 ? 'INCONCLUSIVE' : 'FAIL'
 
@@ -149,7 +206,7 @@ const verdict = measured.length > 0 && failed.length === 0 ? 'PASS' : measured.l
 // number at all is excluded for the same reason a missing tail is: it cannot
 // prove the band either way, and counting it as a pass would be the vacuous
 // gate note 17 is about.
-const fpsMeasured = results.filter((r) => typeof r.deliveredFps === 'number')
+const fpsMeasured = sourced(results).filter((r) => typeof r.deliveredFps === 'number')
 const fpsFailed = fpsMeasured.filter((r) => r.deliveredFps < fpsBand)
 const fpsVerdict =
   fpsMeasured.length > 0 && fpsFailed.length === 0
@@ -161,30 +218,42 @@ const fpsVerdict =
 // PHASE 2 — the RAW channels, through the production stop path (P0-tail-raw).
 // An edited take renders from these, so their ending is the ending of every
 // take the instant path cannot serve.
-const rawReport = await runExp(
-  'p0tailraw',
-  { takeMs, size: [3840, 2160], procedures: Array.from({ length: runs }, () => 'production') },
-  '{\n  "takeMs"',
-)
-const rawRuns = (rawReport.runs ?? []).map((r) => ({
-  tailGapMs: r.tailGapMs,
-  overrunMs: r.overrunMs,
-  deliveredFps: r.deliveredFps,
-  stopMs: r.procedureMs,
-  error: r.error ?? null,
-}))
-for (const [i, r] of rawRuns.entries()) {
+const rawRuns = []
+for (let i = 0; i < runs; i++) {
+  // ONE take per page — see the header. All N in one page halved the source's
+  // rate and took 40-54 s to stop.
+  const rawReport = await runExp(
+    'p0tailraw',
+    { takeMs, size: [3840, 2160], procedures: ['production'] },
+    '{\n  "takeMs"',
+  )
+  const r = rawReport.runs?.[0]
+  rawRuns.push({
+    tailGapMs: r?.tailGapMs ?? null,
+    overrunMs: r?.overrunMs ?? null,
+    deliveredFps: r?.deliveredFps ?? null,
+    sourceFps: r?.sourceFps ?? null,
+    sourceStarved: r?.sourceStarved ?? null,
+    sourcePaints: r?.sourcePaints?.screen ?? null,
+    stopMs: r?.procedureMs ?? null,
+    error: r?.error ?? null,
+  })
+  const last = rawRuns[rawRuns.length - 1]
   console.error(
-    `[raw ${i + 1}/${rawRuns.length}] tail=${r.tailGapMs}ms overrun=${r.overrunMs}ms ` +
-      `fps=${r.deliveredFps} stop=${r.stopMs}ms` + (r.error ? ` ERROR ${r.error}` : ''),
+    `[raw ${i + 1}/${runs}] source=${last.sourceFps}fps` +
+      (last.sourcePaints
+        ? `(${last.sourcePaints.paints} paints, ${last.sourcePaints.watchdogPaints} watchdog)`
+        : '') +
+      ` tail=${last.tailGapMs}ms overrun=${last.overrunMs}ms ` +
+      `fps=${last.deliveredFps} stop=${last.stopMs}ms` + (last.error ? ` ERROR ${last.error}` : ''),
   )
 }
-const rawMeasured = rawRuns.filter((r) => r.tailGapMs !== null)
+const rawMeasured = sourced(rawRuns).filter((r) => r.tailGapMs !== null)
 const rawFailed = rawMeasured.filter((r) => r.tailGapMs > band)
 const rawVerdict =
   rawMeasured.length > 0 && rawFailed.length === 0 ? 'PASS' : rawMeasured.length === 0 ? 'INCONCLUSIVE' : 'FAIL'
 
-const rawFpsMeasured = rawRuns.filter((r) => typeof r.deliveredFps === 'number')
+const rawFpsMeasured = sourced(rawRuns).filter((r) => typeof r.deliveredFps === 'number')
 const rawFpsFailed = rawFpsMeasured.filter((r) => r.deliveredFps < fpsBand)
 const rawFpsVerdict =
   rawFpsMeasured.length > 0 && rawFpsFailed.length === 0
@@ -193,28 +262,47 @@ const rawFpsVerdict =
       ? 'INCONCLUSIVE'
       : 'FAIL'
 
+const compositeSource = sourceVerdict(results)
+const rawSource = sourceVerdict(rawRuns)
+// A phase every one of whose runs starved measured NOTHING about the product.
+// Saying PASS there is the vacuous gate note 17 is about; saying FAIL is worse.
+const sourceOk = compositeSource.verdict !== 'STARVED' && rawSource.verdict !== 'STARVED'
+if (!sourceOk) {
+  console.error(
+    `oracle-load: SOURCE STARVED — composite ${compositeSource.starved}/${compositeSource.known} runs, ` +
+      `raw ${rawSource.starved}/${rawSource.known} runs below ${sourceBand} fps. ` +
+      'The bands below describe this machine, not the engine.',
+  )
+}
+
 console.log(
   JSON.stringify(
     {
       gate: 'tail-and-fps-under-load',
       band,
       fpsBand,
+      sourceBand,
+      headed,
       takeMs,
       runs,
       composite: {
         results,
         measured: measured.length,
         verdict,
+        source: compositeSource,
         fps: { measured: fpsMeasured.length, failed: fpsFailed.length, verdict: fpsVerdict },
       },
       raw: {
         results: rawRuns,
         measured: rawMeasured.length,
         verdict: rawVerdict,
+        source: rawSource,
         fps: { measured: rawFpsMeasured.length, failed: rawFpsFailed.length, verdict: rawFpsVerdict },
       },
-      verdict:
-        verdict === 'PASS' && rawVerdict === 'PASS' && fpsVerdict !== 'FAIL' && rawFpsVerdict !== 'FAIL'
+      verdict: !sourceOk
+        ? `SOURCE-STARVED — composite source ${compositeSource.verdict}, raw source ${rawSource.verdict}: ` +
+          'this run says nothing about the engine'
+        : verdict === 'PASS' && rawVerdict === 'PASS' && fpsVerdict !== 'FAIL' && rawFpsVerdict !== 'FAIL'
           ? 'PASS'
           : `composite tail ${verdict}/fps ${fpsVerdict} · raw tail ${rawVerdict}/fps ${rawFpsVerdict}`,
     },
@@ -222,7 +310,13 @@ console.log(
     2,
   ),
 )
+// A starved source exits NON-ZERO — loudly, and under its own name. It is not a
+// pass (nothing was measured) and the runner must not be able to be read as one.
 process.exitCode =
-  verdict === 'PASS' && rawVerdict === 'PASS' && fpsVerdict !== 'FAIL' && rawFpsVerdict !== 'FAIL'
+  sourceOk &&
+  verdict === 'PASS' &&
+  rawVerdict === 'PASS' &&
+  fpsVerdict !== 'FAIL' &&
+  rawFpsVerdict !== 'FAIL'
     ? 0
     : 1

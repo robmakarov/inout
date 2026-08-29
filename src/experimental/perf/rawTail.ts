@@ -28,8 +28,13 @@ import { startLiveComposite } from '@core/capture/liveComposite'
 import { drainRecorder, type RecorderDrainStats } from '@core/capture/recorderDrain'
 import { createCaptureSession } from '@core/capture/session'
 import { warmRigEncoder } from '../rigWarm'
-import { setSyntheticScreenSize } from '@core/capture/synthetic'
+import {
+  resetSyntheticPaintStats,
+  setSyntheticScreenSize,
+  syntheticPaintStats,
+} from '@core/capture/synthetic'
 import { makeRig, probeComposite, type FileProbe } from './compositorEngine'
+import { paintLoop } from '../rigPaint'
 
 /** O8's shipped tail band, in ms — the gate this task has to land inside. */
 export const TAIL_BAND_MS = 400
@@ -84,6 +89,27 @@ export interface RawTailRun {
   selfStoppedOnTrackEnd: boolean
   /** `throttle` only: the source accepted a frameRate constraint. */
   throttled?: boolean
+  /**
+   * DID THE SOURCE MOVE (task G2). Frames the source actually handed the raw
+   * video encoder, per second — read off capture's own `frames encoded of N in`
+   * line, which is the only place the number exists. Without it every band
+   * below is ambiguous: a file short of frames looks identical whether the
+   * pipeline dropped them or the source never made them, and this rig had been
+   * charging the second case to the first for an unknown number of sessions.
+   */
+  sourceFps: number | null
+  /**
+   * What painted the synthetic canvas: total paints, and how many the interval
+   * watchdog had to make because requestAnimationFrame had gone quiet. A run
+   * whose paints are mostly watchdog paints was measured on a page whose
+   * compositor was not keeping up, which is a fact about the harness.
+   */
+  sourcePaints: { screen: { paints: number; watchdogPaints: number } | null } | null
+  /**
+   * True when the source could not offer the rate the take asked for. The
+   * verdict above it is then about this rig, not about the product.
+   */
+  sourceStarved: boolean | null
   /** `production` only: what the take actually contained. A run that reports no
    *  screen channel has to say whether the channel was never armed, arrived
    *  empty, or was dropped — otherwise "no screen channel" is just a shrug. */
@@ -234,6 +260,34 @@ function scoreTail(run: RawTailRun, probe: FileProbe): void {
 }
 
 /**
+ * THE SOURCE'S OWN RATE, out of capture's own console line (task G2).
+ *
+ * `[capture] raw video channel: N frames encoded of M in` — M is what the
+ * source handed over, and it is the only number anywhere that separates "the
+ * pipeline dropped frames" from "the source never made them". The rig already
+ * tapped this log for a different reason; it just never read the number.
+ *
+ * The SCREEN lane is the one that matters and it is the one with the most
+ * bytes: a take here has a 4K screen and a 640x480 camera, so the largest
+ * `KB` wins. Returns null rather than a guess when the line is absent.
+ */
+function sourceFramesInFromLog(captureLog: string[], laneMs: number): number | null {
+  let bestKb = -1
+  let framesIn: number | null = null
+  for (const line of captureLog) {
+    const m = /raw video channel: \d+ frames encoded of (\d+) in.*?· (\d+) KB/.exec(line)
+    if (!m) continue
+    const kb = Number(m[2])
+    if (kb > bestKb) {
+      bestKb = kb
+      framesIn = Number(m[1])
+    }
+  }
+  if (framesIn === null || laneMs <= 0) return null
+  return Math.round((framesIn / (laneMs / 1000)) * 10) / 10
+}
+
+/**
  * The gate run: a whole take through the PRODUCTION session — arm, start, stop —
  * over a 4K synthetic screen, with the live composite running exactly as it
  * does for a user. The tail is read off the raw SCREEN channel's own file,
@@ -255,6 +309,9 @@ async function runProduction(
     bytes: 0,
     frameCount: 0,
     deliveredFps: null,
+    sourceFps: null,
+    sourcePaints: null,
+    sourceStarved: null,
     lastFrameSec: null,
     tailGapMs: null,
     overrunMs: null,
@@ -264,6 +321,7 @@ async function runProduction(
     selfStoppedOnTrackEnd: false,
   }
   setSyntheticScreenSize({ width, height })
+  resetSyntheticPaintStats()
   let recordingId: string | null = null
   let blobKeys: string[] = []
   // THE FORCED CASE: every recorder in the take is made to swallow stop(), so
@@ -329,6 +387,13 @@ async function runProduction(
           ? Math.round((cp.frameCount / (recording.composite.durationMs / 1000)) * 10) / 10
           : null
     }
+    // Read BEFORE the tail is scored, so a starved source is on the record even
+    // for a run that goes on to error out.
+    base.sourceFps = sourceFramesInFromLog(captureLog, recording.channels[0]?.durationMs ?? 0)
+    base.sourcePaints = { screen: syntheticPaintStats().screen }
+    // The take asks every source for 30; below two thirds of that the source is
+    // not offering what the band is about to judge.
+    base.sourceStarved = base.sourceFps === null ? null : base.sourceFps < 20
     base.take = {
       channels: recording.channels.map((c) => ({
         kind: c.kind,
@@ -401,6 +466,9 @@ async function runOne(
     bytes: 0,
     frameCount: 0,
     deliveredFps: null,
+    sourceFps: null,
+    sourcePaints: null,
+    sourceStarved: null,
     lastFrameSec: null,
     tailGapMs: null,
     overrunMs: null,
@@ -483,13 +551,12 @@ export async function runCapCheck(): Promise<{
   canvas.width = 3840
   canvas.height = 2160
   const g = canvas.getContext('2d')!
-  let raf = 0
   const draw = (): void => {
     g.fillStyle = `hsl(${(performance.now() / 20) % 360},50%,30%)`
     g.fillRect(0, 0, canvas.width, canvas.height)
-    raf = requestAnimationFrame(draw)
   }
-  draw()
+  // G2: rAF stays primary; the watchdog paints only when it goes quiet.
+  const loop = paintLoop(draw, 30)
   const stream = canvas.captureStream(30)
   const track = stream.getVideoTracks()[0]!
   const before = { ...track.getSettings() }
@@ -504,7 +571,7 @@ export async function runCapCheck(): Promise<{
     error = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
   }
   const after = { ...track.getSettings() }
-  cancelAnimationFrame(raf)
+  loop.stop()
   track.stop()
   const accepted = (after.width ?? 0) <= 1920 && (after.height ?? 0) <= 1080
   return {
