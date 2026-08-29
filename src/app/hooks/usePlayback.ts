@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { EditState, Recording } from '@core/types'
-import { blobStore } from '@core/store'
+import { mediaUrlFor } from '@core/store'
 import { channelSourceTimeAt, outputDurationMs, speedAtOutputMs } from '@core/timeline'
 import { measureRecordingMakeup, mixGainForChannels, softLimitSample } from '@core/compose'
 import { isAppleWebKit } from '@core/capabilities'
@@ -252,8 +252,11 @@ export function usePlayback(recording: Recording, edit: EditState): Playback {
     void (async () => {
       const entries = await Promise.all(
         recording.channels.map(async (ch) => {
-          const blob = await blobStore.read(ch.blobKey)
-          const url = URL.createObjectURL(blob)
+          // The recorder's own mime, not the stored file's name (core/store/
+          // mediaUrl.ts): on Safari every MediaRecorder channel is an MP4 under
+          // a `.webm` key, and an element handed `video/webm` bytes it cannot
+          // parse plays nothing at all — silent mic, blank camera.
+          const url = await mediaUrlFor(ch.blobKey, ch.mimeType)
           created.push(url)
           return [ch.id, url] as const
         }),

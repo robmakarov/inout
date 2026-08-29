@@ -98,6 +98,9 @@ export async function salvagePendingRecording(): Promise<Recording | null> {
   // (a crash-truncated composite has an unknown tail and must never be
   // packet-copied — 2026-08-23), which used to mean its blob was simply
   // orphaned in OPFS forever. Remove it; the channels below are the take.
+  // Both names: the composite is `.mp4` since the container and the extension
+  // were made to agree, and takes crashed before that are still `.webm`.
+  void blobStore.remove(`${m.recordingId}_composite.mp4`).catch(() => undefined)
   void blobStore.remove(`${m.recordingId}_composite.webm`).catch(() => undefined)
   if (await recordingsRepo.get(m.recordingId)) return null
 

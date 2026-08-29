@@ -25,7 +25,7 @@ import {
   screenInsetRect,
   shadowFor,
 } from '@core/compose/background'
-import { frameAspectFor } from '@core/frame'
+import { frameAspectFor, sourceFrameEnabled } from '@core/frame'
 import type { Playback } from '@app/hooks/usePlayback'
 import { formatClock } from '@app/lib/format'
 import { Icon } from '@app/components/Icon'
@@ -540,6 +540,8 @@ export function Player({
   onExport,
   onEdit,
   showExport,
+  measuredAspect,
+  onMeasuredAspect,
 }: {
   recording: Recording
   edit: EditState
@@ -549,6 +551,19 @@ export function Player({
   onEdit: (next: EditState) => void
   /** Hidden while the export panel owns the bottom slot. */
   showExport: boolean
+  /**
+   * F13 — THE DECODER IS THE LAST WORD ON WHAT SHAPE THIS TAKE IS.
+   *
+   * Everything upstream is a claim: `track.getSettings()` describes the sensor
+   * and lies about orientation on a phone, and the composite inherits whatever
+   * capture believed at the time. The one thing that cannot be wrong is the
+   * picture a decoder actually opened — that is what the user is looking at.
+   * So the camera-full surface reports its real aspect up, the editor holds it,
+   * and BOTH the stage and the export geometry follow it. On every take where
+   * the chain was already right this is the same number it already had.
+   */
+  measuredAspect: number | null
+  onMeasuredAspect?: (aspect: number) => void
 }) {
   const stageRef = useRef<HTMLDivElement>(null)
   const [stageHeight, setStageHeight] = useState(0)
@@ -564,7 +579,9 @@ export function Player({
   const zoom = useViewportGesture(edit, recording, pb.timeMs, onEdit, stageRef)
   // F13: the frame this take exports to. 16 / 9 for every take made before the
   // frame followed anything, and for every take made with the flag off.
-  const frameAspect = frameAspectFor(recording)
+  // `measuredAspect` overrides it once a decoder has actually opened the take's
+  // own video — see the note on onMeasuredAspect.
+  const frameAspect = measuredAspect ?? frameAspectFor(recording)
   const active = activeChannelsAt(recording, edit, pb.timeMs)
   // Slot is decided per composition, not per instant, so the camera never
   // jumps between PiP and full-frame across momentary screen gaps.
@@ -578,7 +595,9 @@ export function Player({
     <div className="player">
       <div
         ref={stageRef}
-        className={`stage${zoom.zoomed ? ' stage--zoomed' : ''}`}
+        className={`stage${zoom.zoomed ? ' stage--zoomed' : ''}${
+          sourceFrameEnabled() ? ' stage--source-frame' : ''
+        }`}
         style={
           {
             background: backgroundCss(edit.background),
@@ -648,6 +667,12 @@ export function Player({
               src={url}
               preload="auto"
               playsInline
+              onLoadedMetadata={(e) => {
+                const v = e.currentTarget
+                if (v.videoWidth > 0 && v.videoHeight > 0) {
+                  onMeasuredAspect?.(v.videoWidth / v.videoHeight)
+                }
+              }}
             />
           )
         })}

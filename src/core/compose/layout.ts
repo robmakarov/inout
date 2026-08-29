@@ -1,5 +1,6 @@
 import type { VideoSample } from 'mediabunny'
 import type { BackgroundStyle, CameraPose, Viewport } from '../types'
+import { sourceFrameEnabled } from '../frame'
 import { defaultCameraPose, poseToRect } from '../timeline/cameraTrack'
 import { viewportIsActive, viewportToRect } from '../timeline/viewportTrack'
 import {
@@ -125,14 +126,20 @@ function drawComposition(
     screen.drawWithFit(f.ctx, { fit: 'contain' })
     if (camera) drawCameraPip(f, camera, pose)
   } else if (camera && cameraFull) {
-    // F13: 'cover' is the identity once the frame follows the take — a
+    // EVERYTHING THE CAMERA SEES (PO 2026-08-29, judging F13 on a phone: "make
+    // it like it supposed on phone, everything camera sees").
+    //
+    // When the frame follows the take these two are the SAME operation — a
     // camera-only take's frame IS the camera's aspect, so there is nothing to
-    // crop. It stays 'cover' rather than becoming 'contain' because when the
-    // two DO disagree (a source that changed shape mid-take, a take made
-    // before the frame followed anything) a filled frame is the behaviour this
-    // product has always had, and adding black bars to it is not this task's
-    // to do.
-    camera.drawWithFit(f.ctx, { fit: 'cover' })
+    // crop either way, and a 16:9 take is byte-identical. They differ only
+    // where the frame and the picture disagree, and that is exactly where
+    // 'cover' silently threw away the user's head and chin. Letterboxing there
+    // is not a nicer default, it is the difference between a bounded cosmetic
+    // cost and losing the recording, so it wins whenever the geometry chain has
+    // been wrong about something — which on a phone it has been twice.
+    //
+    // Without the flag this is the old crop, untouched.
+    camera.drawWithFit(f.ctx, { fit: sourceFrameEnabled() ? 'contain' : 'cover' })
   } else if (camera) {
     drawEmptyFrame(f)
     drawCameraPip(f, camera, pose)

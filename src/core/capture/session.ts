@@ -136,6 +136,19 @@ export function setVideoContainerPreference(pref: ContainerPreference): void {
   containerPreference = pref
 }
 
+/**
+ * The file extension for a recorded container. It exists so the STORED NAME and
+ * the BYTES agree — `File.type` is derived from the name, and a media element
+ * given the wrong one refuses the file outright on Safari.
+ *
+ * An empty mime means MediaRecorder was left to choose its own default, and the
+ * only browsers that reach that are ones whose default is WebM (Safari always
+ * matches an MP4 candidate first).
+ */
+export function containerExt(mime: string): 'mp4' | 'webm' {
+  return mime.includes('mp4') ? 'mp4' : 'webm'
+}
+
 /** First MIME this browser's MediaRecorder accepts, or '' to let it choose its
  * own default (never force an unsupported type — that throws at construction). */
 function pickMimeType(media: MediaKind): string {
@@ -554,10 +567,23 @@ class Session implements CaptureSession {
         ? canMeasureAudioCapture() && !isAppleWebKit()
         : canMeasureVideoCapture()
 
-    // The extension follows the container the channel will actually hold: the
-    // measured VIDEO path writes fragmented MP4, everything else webm.
+    // THE EXTENSION FOLLOWS THE CONTAINER THE CHANNEL WILL ACTUALLY HOLD, and
+    // "everything else is webm" was wrong on the one platform that matters most
+    // for it: MediaRecorder on Safari has NO WebM encoder and produces MP4, so
+    // every iPhone channel was an MP4 stored under a `.webm` name. `File.type`
+    // comes from that name, so the blob handed to a media element claimed
+    // `video/webm` and Safari — which trusts the type instead of sniffing —
+    // played nothing: a silent mic and a blank camera beside a waveform drawn
+    // correctly from the same bytes (PO, 2026-08-29). Takes already recorded
+    // are repaired by re-typing on read (core/store/mediaUrl.ts); this stops
+    // new ones being mislabelled in the first place.
     const measuredVideo = acq.media === 'video' && useMeasured
-    const blobKey = `${this.recordingId}_${id}.${measuredVideo ? 'mp4' : 'webm'}`
+    const recordedMime = measuredVideo
+      ? MEASURED_VIDEO_MIME
+      : useMeasured
+        ? 'audio/webm;codecs=opus'
+        : pickMimeType(acq.media)
+    const blobKey = `${this.recordingId}_${id}.${containerExt(recordedMime)}`
 
     let resolveStopped!: () => void
     const stopped = new Promise<void>((resolve) => {
@@ -575,11 +601,7 @@ class Session implements CaptureSession {
       useMeasured,
       audioCtx: null,
       measuredStarting: null,
-      mimeType: measuredVideo
-        ? MEASURED_VIDEO_MIME
-        : useMeasured
-          ? 'audio/webm;codecs=opus'
-          : pickMimeType(acq.media),
+      mimeType: recordedMime,
       blobKey,
       writer: null,
       writeChain: Promise.resolve(),
@@ -998,7 +1020,10 @@ class Session implements CaptureSession {
       this.compositeGeometry = size
       this.emit({ type: 'composite-geometry', width: size.width, height: size.height })
     }
-    const key = `${this.recordingId}_composite.webm`
+    // Both engines write fragmented MP4; the `.webm` this was called for years
+    // was never true, and a name that disagrees with the bytes is what made
+    // every iPhone channel unplayable (see containerExt above).
+    const key = `${this.recordingId}_composite.mp4`
     const onSourceLiveness = (kind: 'screen' | 'camera', event: 'stalled' | 'resumed'): void =>
       this.onSourceLiveness(kind, event)
 

@@ -522,6 +522,13 @@
 .stage__full {
   object-fit: cover;
 }
+/* The camera-full surface when the frame follows the take (F13): the export
+   letterboxes rather than cropping — "everything camera sees" — so the stage
+   has to as well, or the preview stops predicting the file. Identical to cover
+   whenever the frame and the picture agree, which is the normal case. */
+.stage--source-frame .stage__full {
+  object-fit: contain;
+}
 /* Framed screen surface (F3): every geometry value is set inline from the
    functions the export compositor uses, so this rule only says "stop filling
    the stage" — inset, radius and shadow all arrive as inline style. */

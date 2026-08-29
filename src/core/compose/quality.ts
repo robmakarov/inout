@@ -123,11 +123,17 @@ export function resolveTier(tier: QualityTier, aspect: number): QualityTier {
   }
 }
 
-/** The four steps as this take would export them. Byte-identical to
- *  QUALITY_TIERS whenever the frame does not follow the source. */
-export function tiersForTake(recording: Recording): QualityTier[] {
-  const aspect = frameAspectFor(recording)
-  return QUALITY_TIERS.map((t) => resolveTier(t, aspect))
+/**
+ * The four steps as this take would export them, and THE ONE PLACE a step is
+ * resolved against a shape. `aspect` overrides what the recording claims — the
+ * editor passes what its decoder actually opened, which is the only statement
+ * about a take's shape that cannot be wrong (F13).
+ *
+ * Byte-identical to QUALITY_TIERS whenever the frame does not follow the source.
+ */
+export function tiersForTake(recording: Recording, aspect?: number): QualityTier[] {
+  const a = aspect ?? frameAspectFor(recording)
+  return QUALITY_TIERS.map((t) => resolveTier(t, a))
 }
 
 export function tierById(id: string | null | undefined): QualityTier {
@@ -148,7 +154,11 @@ export function isDefaultTier(tier: QualityTier): boolean {
  * the ladder's at export time, as it always was.)
  */
 export function copySourceForTier(recording: Recording, tier: QualityTier): CopySource | null {
-  return chooseCopySource(recording, settingsForTier(tier, recording), {
+  // The tier is taken AS GIVEN — `tiersForTake` is the one place a step is
+  // resolved against a take's shape, and re-resolving here would quietly
+  // disagree with a caller that resolved against a better answer (the editor's
+  // measured aspect, F13). The badge must be the path's own verdict.
+  return chooseCopySource(recording, settingsForTier(tier), {
     allowComposite: isDefaultTier(tier),
   }).source
 }
@@ -223,12 +233,12 @@ export interface SizeEstimate {
 
 export function estimateExportBytes(
   recording: Recording,
-  nominalTier: QualityTier,
+  tier: QualityTier,
   outputDurationMs: number,
 ): SizeEstimate {
-  // F13: price the step this take would actually export, not the landscape box
-  // it is declared as. Idempotent, so a caller that already resolved is free.
-  const tier = resolveTier(nominalTier, frameAspectFor(recording))
+  // The tier is taken AS GIVEN: `tiersForTake` resolved it against the take's
+  // shape, and a second opinion here could only disagree with the step the
+  // panel is showing and the export will use.
   const seconds = Math.max(0, outputDurationMs / 1000)
   const hasAudio = recording.channels.some((c) => c.media === 'audio')
   const audioBytes = hasAudio ? (AUDIO_BITRATE / 8) * seconds : 0

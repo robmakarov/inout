@@ -47,6 +47,7 @@ export function QualityPanel({
   edit,
   outputDurationMs,
   tier,
+  frameAspect,
   onTier,
   onExport,
   onExportForAi,
@@ -56,6 +57,9 @@ export function QualityPanel({
   edit: EditState
   outputDurationMs: number
   tier: QualityTier
+  /** The shape this take exports at — the editor's decoded answer where it has
+   *  one (F13), so the steps the panel prices are the steps that will run. */
+  frameAspect: number
   onTier: (t: QualityTier) => void
   onExport: () => void
   onExportForAi: () => void
@@ -89,7 +93,7 @@ export function QualityPanel({
    * 16:9 take and on every take with the flag off, so the probe still encodes
    * the same lanes it was measured on.
    */
-  const tiers = useMemo(() => tiersForTake(recording), [recording])
+  const tiers = useMemo(() => tiersForTake(recording, frameAspect), [recording, frameAspect])
   // Read like `editRef`, for the same reason: the probe effect keys on the
   // recording, and re-running it because a memo produced a new array would
   // re-encode every step for nothing.

@@ -10,7 +10,7 @@ import {
   settingsForTier,
   type QualityTier,
 } from '@core/compose/quality'
-import { frameAspectFor } from '@core/frame'
+import { frameAspectFor, sourceFrameEnabled } from '@core/frame'
 import { exportByBestPath } from '@core/compose'
 import { editsRepo, recordingsRepo } from '@core/store'
 import { analytics } from '@core/analytics'
@@ -41,7 +41,19 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
   // F13: the remembered step, resolved to THIS take's shape. `resolveTier` is
   // the identity on a 16:9 take and on every take with the flag off, so a
   // reload restores exactly the step it always did.
-  const frameAspect = frameAspectFor(recording)
+  /**
+   * F13 — WHAT THE DECODER SAW, once it has seen it. Everything upstream is a
+   * claim about the take's shape (`track.getSettings()` describes the sensor
+   * and lies about orientation on a phone; the composite inherits whatever
+   * capture believed). The picture the stage actually decodes cannot be wrong,
+   * so on a camera-only take it is what the stage AND the export follow. Null
+   * until it lands, and null forever when the frame does not follow the source.
+   */
+  const [measured, setMeasured] = useState<number | null>(null)
+  useEffect(() => setMeasured(null), [recording.id])
+  const cameraOnly = !recording.channels.some((c) => c.kind === 'screen' && c.media === 'video')
+  const measuredAspect = sourceFrameEnabled() && cameraOnly ? measured : null
+  const frameAspect = measuredAspect ?? frameAspectFor(recording)
   const [storedTier, setTier] = useState<QualityTier>(() => loadQualityTier())
   const tier = useMemo(() => resolveTier(storedTier, frameAspect), [storedTier, frameAspect])
   const exporting = mode === 'exporting' || mode === 'share'
@@ -183,7 +195,9 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
     // channel that already holds the chosen tier's geometry is still
     // packet-copyable at any tier (O3c) — choose.ts answers that itself.
     const defaultTier = isDefaultTier(chosen)
-    const settings = settingsForTier(chosen, recording)
+    // The step at THIS take's shape — the decoder's answer where there is one,
+    // so the file matches the stage the user just judged it on (F13).
+    const settings = settingsForTier(resolveTier(chosen, frameAspect))
 
     const ac = new AbortController()
     store.setExportAbort(ac)
@@ -263,6 +277,8 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
           onExport={() => setChoosing(true)}
           onEdit={(next) => setEditState(clampEditState(recording, next))}
           showExport={!exporting && !choosing}
+          measuredAspect={measuredAspect}
+          onMeasuredAspect={setMeasured}
         />
       </div>
 
@@ -274,6 +290,7 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
           edit={edit}
           outputDurationMs={outputDurationMs(edit)}
           tier={tier}
+          frameAspect={frameAspect}
           onTier={(t) => {
             setTier(t)
             saveQualityTier(t)
