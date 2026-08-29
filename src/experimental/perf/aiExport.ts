@@ -42,6 +42,7 @@ import type { ChannelRecording, EditState, Recording } from '@core/types'
 import { LongTaskWatch, SchedulingDelayWatch } from './mainThreadWatch'
 import { decodeBits, FID_BLOCK, FID_BLOCK_COUNT, FID_MARGIN } from '../oracle/fiducial'
 import { recordFiducialSession, RIG_HEIGHT, RIG_WIDTH } from '../oracle/rig'
+import { paintLoop } from '../rigPaint'
 
 const RAW_MIMES = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
 const W = 1280
@@ -160,16 +161,12 @@ async function recordPainted(
     chain = chain.then(() => writer.write(e.data).catch(() => undefined))
   }
   const t0 = performance.now()
-  let raf = 0
-  const loop = (): void => {
-    painter(g, performance.now() - t0)
-    raf = requestAnimationFrame(loop)
-  }
   painter(g, 0)
   recorder.start(1000)
-  loop()
+  // G2: rAF stays primary; the watchdog paints only when it goes quiet.
+  const loop = paintLoop(() => painter(g, performance.now() - t0), 30)
   await new Promise((r) => setTimeout(r, takeMs))
-  cancelAnimationFrame(raf)
+  loop.stop()
   await new Promise<void>((resolve) => {
     recorder.onstop = () => resolve()
     recorder.requestData()

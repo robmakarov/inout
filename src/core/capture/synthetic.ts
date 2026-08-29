@@ -50,6 +50,117 @@ function get2d(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
   return g
 }
 
+/**
+ * THE ONE PAINTER EVERY SYNTHETIC SOURCE USES (task G2).
+ *
+ * A synthetic source is a canvas handed to `captureStream()`, and such a track
+ * emits a frame only when the canvas is PAINTED. Painting from
+ * requestAnimationFrame is the obvious way and it is not sufficient here: rAF
+ * is the COMPOSITOR's clock, so under exactly the load these rigs exist to
+ * create — a 4K surface being captured, downscaled and fed to two or three
+ * hardware encoders — it degrades with everything else. Measured on the 4K
+ * load rig: the same take painted from rAF delivered 16.5 fps into the raw
+ * encoder on its first run and 9.8 on its second, and the fps band charged
+ * that to the PRODUCT.
+ *
+ * The roadmap's version of this ("a headless page runs rAF at 0") is refuted —
+ * `npm run exp -- rigsource` reads rAF at 120 Hz headless AND headed. rAF is
+ * not dead; it is merely not independent of the thing under test.
+ *
+ * So rAF stays the primary, because a headed run should keep painting on the
+ * display's own clock, and an interval watchdog sits behind it and paints only
+ * when rAF has been quiet for longer than a frame period. On an idle visible
+ * window the watchdog never fires and the lane is what it always was.
+ *
+ * Harness-only: nothing outside `?synthetic=1` reaches it.
+ */
+export interface PaintLoop {
+  stop: () => void
+  /** Paints the watchdog had to make because rAF had gone quiet. */
+  watchdogPaints: () => number
+  /** Total paints, whoever made them. */
+  paints: () => number
+}
+
+export function paintLoop(draw: () => void, fps = 30): PaintLoop {
+  const periodMs = 1000 / Math.max(1, fps)
+  let raf = 0
+  let running = true
+  let paints = 0
+  let watchdogPaints = 0
+  // The last time rAF ITSELF painted — NOT the last paint of any kind. Gating
+  // on "any paint" makes the watchdog throttle itself: it paints, sees its own
+  // fresh paint one period later, skips, and delivers half the rate asked for
+  // (measured: 15 of 30). The question the watchdog has to answer is whether
+  // rAF is still carrying the lane, and only rAF's own clock answers it.
+  let lastRafAt = performance.now()
+
+  const paint = (): void => {
+    paints++
+    draw()
+  }
+  const tick = (): void => {
+    if (!running) return
+    lastRafAt = performance.now()
+    paint()
+    raf = requestAnimationFrame(tick)
+  }
+  // Painted once before anything attaches: a captureStream whose canvas has
+  // never been painted delivers nothing at all, which is a different failure
+  // wearing the same symptom.
+  paint()
+  raf = requestAnimationFrame(tick)
+
+  // 1.5 periods of slack, so a display running at exactly `fps` never trips it
+  // and a headed run stays the control rather than paying double paints.
+  const timer = setInterval(
+    () => {
+      if (!running) return
+      if (performance.now() - lastRafAt < periodMs * 1.5) return
+      watchdogPaints++
+      paint()
+    },
+    Math.max(4, Math.round(periodMs)),
+  )
+
+  return {
+    stop: () => {
+      running = false
+      cancelAnimationFrame(raf)
+      clearInterval(timer)
+    },
+    watchdogPaints: () => watchdogPaints,
+    paints: () => paints,
+  }
+}
+
+let lastScreenLoop: PaintLoop | null = null
+let lastCameraLoop: PaintLoop | null = null
+
+/**
+ * WHAT PAINTED THE SOURCE — the readout a load rig has to quote (task G2).
+ *
+ * A band measured on a synthetic source is only about the product if the source
+ * kept up. `paints` says whether it did; `watchdogPaints` says whether rAF was
+ * still the clock or the watchdog was carrying it, which is the difference
+ * between "this machine is loaded" and "this rig is measuring itself".
+ * Harness-only; production never calls it.
+ */
+export function syntheticPaintStats(): {
+  screen: { paints: number; watchdogPaints: number } | null
+  camera: { paints: number; watchdogPaints: number } | null
+} {
+  const read = (l: PaintLoop | null): { paints: number; watchdogPaints: number } | null =>
+    l ? { paints: l.paints(), watchdogPaints: l.watchdogPaints() } : null
+  return { screen: read(lastScreenLoop), camera: read(lastCameraLoop) }
+}
+
+/** Forget the previous take's painters so a per-run readout is per-run. */
+export function resetSyntheticPaintStats(): void {
+  lastScreenLoop = null
+  lastCameraLoop = null
+}
+
 const DEFAULT_SCREEN = { width: 1280, height: 720 }
 let screenSize = DEFAULT_SCREEN
 
@@ -199,12 +310,10 @@ function syntheticScreen(): Generated {
   const s = W / 1280
   const content = screenContent
   let frame = 0
-  let raf = 0
   const draw = (): void => {
     const t = (performance.now() - startedAt) / 1000
     if (content === 'text') {
       drawTextScreen(g, W, H)
-      raf = requestAnimationFrame(draw)
       return
     }
     const hue = (t * 6) % 360
@@ -223,10 +332,10 @@ function syntheticScreen(): Generated {
     const x = ((t * 240 * s) % (W + 160 * s)) - 160 * s
     g.fillStyle = `hsl(${(hue + 180) % 360}, 80%, 60%)`
     g.fillRect(x, H * (560 / 720), 160 * s, 40 * s)
-    raf = requestAnimationFrame(draw)
   }
-  draw()
-  return { stream: canvas.captureStream(screenFps), stop: () => cancelAnimationFrame(raf) }
+  const loop = paintLoop(draw, screenFps)
+  lastScreenLoop = loop
+  return { stream: canvas.captureStream(screenFps), stop: loop.stop }
 }
 
 const DEFAULT_CAMERA = { width: 640, height: 480 }
@@ -304,7 +413,6 @@ function syntheticCamera(): Generated {
   const s = Math.min(W, H) / 480
   let vx = 4.2 * s
   let vy = 3.1 * s
-  let raf = 0
   const draw = (): void => {
     g.fillStyle = '#7f7f7f'
     g.fillRect(0, 0, W, H)
@@ -322,10 +430,10 @@ function syntheticCamera(): Generated {
     g.beginPath()
     g.arc(x, y, r, 0, Math.PI * 2)
     g.fill()
-    raf = requestAnimationFrame(draw)
   }
-  draw()
-  return { stream: canvas.captureStream(cameraFps), stop: () => cancelAnimationFrame(raf) }
+  const loop = paintLoop(draw, cameraFps)
+  lastCameraLoop = loop
+  return { stream: canvas.captureStream(cameraFps), stop: loop.stop }
 }
 
 /** Harness knob: `&quiet=0.05` scales synthetic audio down to e2e-test the

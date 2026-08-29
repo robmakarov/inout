@@ -36,6 +36,7 @@ import { readCertification } from '@core/compose/certify'
 import { defaultEditState } from '@core/timeline'
 import { defaultCameraPose, poseToRect } from '@core/timeline/cameraTrack'
 import type { ChannelRecording, Recording } from '@core/types'
+import { paintLoop } from '../rigPaint'
 
 /** The shipped raw-camera bitrate, and the O11c candidate. */
 const CAMERA_BITRATES = [4_000_000, 2_500_000]
@@ -74,7 +75,6 @@ export function screenLikeSource(width: number, height: number): Source {
     })
   }
   const t0 = performance.now()
-  let raf = 0
   const draw = (): void => {
     const t = (performance.now() - t0) / 1000
     const scroll = Math.floor(t / 2.5)
@@ -94,10 +94,10 @@ export function screenLikeSource(width: number, height: number): Source {
       g.fillStyle = TEXT_SCREEN_PALETTE.caret
       g.fillRect(width * 0.05 + 320, 12 * (height / 36) + 8, 3, height / 40)
     }
-    raf = requestAnimationFrame(draw)
   }
-  draw()
-  return { canvas, stop: () => cancelAnimationFrame(raf) }
+  // G2: rAF stays primary; the watchdog paints only when it goes quiet.
+  const loop = paintLoop(draw, 30)
+  return { canvas, stop: loop.stop }
 }
 
 /** The opposite extreme: every pixel changes every frame (a game tab). */
@@ -107,7 +107,6 @@ export function motionSource(width: number, height: number): Source {
   canvas.height = height
   const g = canvas.getContext('2d')!
   const t0 = performance.now()
-  let raf = 0
   const draw = (): void => {
     const t = (performance.now() - t0) / 1000
     const hue = (t * 40) % 360
@@ -119,10 +118,10 @@ export function motionSource(width: number, height: number): Source {
     g.fillStyle = '#ffffff'
     const bar = width / 8
     g.fillRect(((t * width) / 2) % (width + bar) - bar, 0, bar, height)
-    raf = requestAnimationFrame(draw)
   }
-  draw()
-  return { canvas, stop: () => cancelAnimationFrame(raf) }
+  // G2: rAF stays primary; the watchdog paints only when it goes quiet.
+  const loop = paintLoop(draw, 30)
+  return { canvas, stop: loop.stop }
 }
 
 /** A webcam: a head-and-shoulders blob that drifts, on a flat backdrop. */
@@ -132,7 +131,6 @@ function cameraSource(): Source {
   canvas.height = 720
   const g = canvas.getContext('2d')!
   const t0 = performance.now()
-  let raf = 0
   const draw = (): void => {
     const t = (performance.now() - t0) / 1000
     g.fillStyle = '#20242b'
@@ -152,10 +150,10 @@ function cameraSource(): Source {
     g.ellipse(cx - 45, cy - 150, 14, 9 + 5 * Math.abs(Math.sin(t * 2.3)), 0, 0, Math.PI * 2)
     g.ellipse(cx + 45, cy - 150, 14, 9 + 5 * Math.abs(Math.sin(t * 2.3)), 0, 0, Math.PI * 2)
     g.fill()
-    raf = requestAnimationFrame(draw)
   }
-  draw()
-  return { canvas, stop: () => cancelAnimationFrame(raf) }
+  // G2: rAF stays primary; the watchdog paints only when it goes quiet.
+  const loop = paintLoop(draw, 30)
+  return { canvas, stop: loop.stop }
 }
 
 const RAW_MIMES = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']

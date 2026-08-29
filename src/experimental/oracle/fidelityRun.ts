@@ -48,6 +48,7 @@ import { DEFAULT_EXPORT_SETTINGS } from '@core/types'
 import type { ChannelRecording, CompositeRecording, Recording } from '@core/types'
 import { analyzeAudioFidelity, FIDELITY_TONES, type AudioFidelityReport } from './audioFidelity'
 import { sweepStaleOracleBlobs } from './rig'
+import { paintLoop } from '../rigPaint'
 
 export interface FidelityLaneReport {
   /** Which export path actually produced the analyzed file — the anti-vacuity
@@ -244,17 +245,16 @@ function makeMotionCanvas(): { stream: MediaStream; stop: () => void } {
   const g = canvas.getContext('2d')
   if (!g) throw new Error('2d context unavailable')
   const t0 = performance.now()
-  let raf = 0
   const draw = (): void => {
     const t = performance.now() - t0
     g.fillStyle = `hsl(${(t / 40) % 360}, 40%, 20%)`
     g.fillRect(0, 0, W, H)
     g.fillStyle = `hsl(${(t / 4) % 360}, 80%, 60%)`
     g.fillRect(((t / 4) % (W + 160)) - 160, 560, 160, 40)
-    raf = requestAnimationFrame(draw)
   }
-  draw()
-  return { stream: canvas.captureStream(30), stop: () => cancelAnimationFrame(raf) }
+  // G2: rAF stays primary; the watchdog paints only when it goes quiet.
+  const loop = paintLoop(draw, 30)
+  return { stream: canvas.captureStream(30), stop: loop.stop }
 }
 
 const VIDEO_MIMES = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']

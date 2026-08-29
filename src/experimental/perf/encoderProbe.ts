@@ -16,6 +16,8 @@
  *
  * No production code is touched: this is a measurement, not a change.
  */
+import { paintLoop, type PaintLoop } from '../rigPaint'
+
 
 interface ProbeConfig {
   label: string
@@ -235,14 +237,13 @@ export async function probeCompositorPath(
   bridge.width = width
   bridge.height = height
   const bctx = bridge.getContext('2d', { alpha: false })!
-  let raf = 0
   let i = 0
   const tick = (): void => {
     paint(sctx, width, height, i++)
     bctx.drawImage(src, 0, 0)
-    raf = requestAnimationFrame(tick)
   }
-  tick()
+  // G2: rAF stays primary; the watchdog paints only when it goes quiet.
+  const paintScreen = paintLoop(tick, 60)
   const stream = bridge.captureStream(60)
   const track = stream.getVideoTracks()[0]!
   const reader = new TP({ track }).readable.getReader()
@@ -258,7 +259,7 @@ export async function probeCompositorPath(
   const CAM_H = 480
   let camTrack: MediaStreamTrack | null = null
   let camReader: ReadableStreamDefaultReader<VideoFrame> | null = null
-  let camRaf = 0
+  let paintCam: PaintLoop | null = null
   // A holder, not a bare `let`: TypeScript narrows a variable only this
   // function's own flow assigns, and the camera pump assigns from a closure.
   const camHolder = { latest: null as VideoFrame | null }
@@ -276,9 +277,8 @@ export async function probeCompositorPath(
       cctx.arc(320 + Math.sin(j / 12) * 200, 240 + Math.cos(j / 18) * 150, 48, 0, Math.PI * 2)
       cctx.fill()
       j++
-      camRaf = requestAnimationFrame(camTick)
     }
-    camTick()
+    paintCam = paintLoop(camTick, 30)
     const camStream = cam.captureStream(30)
     camTrack = camStream.getVideoTracks()[0]!
     camReader = new TP({ track: camTrack }).readable.getReader()
@@ -368,8 +368,8 @@ export async function probeCompositorPath(
     base.error = err instanceof Error ? err.message : String(err)
     return base
   } finally {
-    cancelAnimationFrame(raf)
-    cancelAnimationFrame(camRaf)
+    paintScreen.stop()
+    paintCam?.stop()
     try {
       encoder.close()
     } catch {
@@ -415,14 +415,13 @@ async function probeTransfer(
   bridge.width = width
   bridge.height = height
   const bctx = bridge.getContext('2d', { alpha: false })!
-  let raf = 0
   let i = 0
   const tick = (): void => {
     paint(sctx, width, height, i++)
     bctx.drawImage(src, 0, 0)
-    raf = requestAnimationFrame(tick)
   }
-  tick()
+  // G2: rAF stays primary; the watchdog paints only when it goes quiet.
+  const paintScreen = paintLoop(tick, 60)
   const stream = bridge.captureStream(60)
   const track = stream.getVideoTracks()[0]!
   const reader = new TP({ track }).readable.getReader()
@@ -431,7 +430,7 @@ async function probeTransfer(
   // posting into the same worker — the last cell nothing has measured.
   let camTrack: MediaStreamTrack | null = null
   let camReader: ReadableStreamDefaultReader<VideoFrame> | null = null
-  let camRaf2 = 0
+  let paintCam2: PaintLoop | null = null
   if (twoSources) {
     const cam = document.createElement('canvas')
     cam.width = 640
@@ -446,9 +445,8 @@ async function probeTransfer(
       cctx.arc(320 + Math.sin(j / 12) * 200, 240 + Math.cos(j / 18) * 150, 48, 0, Math.PI * 2)
       cctx.fill()
       j++
-      camRaf2 = requestAnimationFrame(camTick)
     }
-    camTick()
+    paintCam2 = paintLoop(camTick, 30)
     const camStream = cam.captureStream(30)
     camTrack = camStream.getVideoTracks()[0]!
     camReader = new TP({ track: camTrack }).readable.getReader()
@@ -531,8 +529,8 @@ async function probeTransfer(
   } catch (err) {
     return { where: `worker:${mode}`, error: err instanceof Error ? err.message : String(err) }
   } finally {
-    cancelAnimationFrame(raf)
-    cancelAnimationFrame(camRaf2)
+    paintScreen.stop()
+    paintCam2?.stop()
     await reader.cancel().catch(() => undefined)
     await camReader?.cancel().catch(() => undefined)
     track.stop()

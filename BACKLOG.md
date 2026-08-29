@@ -19,6 +19,12 @@ instrument defects — gates that report a verdict they did not measure. Unmarke
 deliberately not promoted: already a task (F14/F15/F16, the Safari mic P8), waiting only on Robert's
 ear or eye, or the screen wedge, whose cause is Chrome's.
 
+- [P1] 2026-08-29 (G2 session): **the fidelity oracle's render lane flips run to run** — `npm run
+  oracle:fidelity` read `render(single-source) toneErr=5.33dB` against a 1 dB band on one run, then
+  0.04 dB and 0.01 dB on the next two of the SAME tree; pristine main read 0.02 dB. Same family as G1
+  (the v2 oracle's coin flip) and it deserves the same treatment: measure whether it is the instrument
+  or the mix, NOT by widening the band. Three of this repo's merge gates are now known to flip.
+
 - [P2] 2026-08-29: **the export quality step is sticky forever** → F14, RULED the same day and
   ABSORBED BY `.ai/TASKS` F16: quality becomes ONE option (Min/Medium/High-default/Max-later,
   later also chosen before record) and capture's composite FOLLOWS it, which is what makes

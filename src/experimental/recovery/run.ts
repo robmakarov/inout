@@ -22,6 +22,7 @@ import { recordingsRepo } from '@core/store'
 import { expReadFile, expRemove } from '../shared/opfs'
 import { attachJournal, clearJournal, readJournal, type JournalEntry } from './journal'
 import { findOrphanBlobs, groupOrphansByRecording, salvageOrphans, type SalvageReport } from './salvage'
+import { paintLoop } from '../rigPaint'
 
 export interface DurabilityResult {
   path: string
@@ -114,13 +115,12 @@ async function createDeliberateOrphan(): Promise<string> {
   canvas.height = 240
   const g = canvas.getContext('2d')
   if (!g) throw new Error('2d context unavailable')
-  let raf = 0
   const draw = (): void => {
     g.fillStyle = `hsl(${(performance.now() / 10) % 360}, 60%, 50%)`
     g.fillRect(0, 0, 320, 240)
-    raf = requestAnimationFrame(draw)
   }
-  draw()
+  // G2: rAF stays primary; the watchdog paints only when it goes quiet.
+  const loop = paintLoop(draw, 15)
   const stream = canvas.captureStream(15)
   const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' })
   const writable = await blobStore.createWriteStream(key)
@@ -136,7 +136,7 @@ async function createDeliberateOrphan(): Promise<string> {
   await stopped
   await chain
   await writer.close()
-  cancelAnimationFrame(raf)
+  loop.stop()
   for (const t of stream.getTracks()) t.stop()
   return key
 }
