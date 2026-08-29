@@ -277,7 +277,11 @@ READY NOW:
                                              it is right, the default flips and INOUT can make a
                                              vertical video; if it is not, say what is wrong and
                                              nothing has moved in the meantime.
-  W1   the wedges go               [medium]  Robert 2026-08-29: "i want them gone", after hitting it
+  W1   the wedges go — DONE 2026-08-29, shipped ON (handoff under the task). The ladder climbs
+       back (two good takes clear the floor), a macOS permission is no longer counted or reported
+       as a wedge and is named while the request is still running, and a degraded machine carries
+       a Reset button instead of a console line. ABSORBS BUG B6.
+  W1 (original entry)              [medium]  Robert 2026-08-29: "i want them gone", after hitting it
                                              three times in one evening. Chrome's bug is still
                                              Chrome's — but our safe-mode ladder had no way back
                                              except a 24 h timer, counted an OS PERMISSION failure
@@ -1139,6 +1143,75 @@ belongs there).
 GATES: a machine at rung 2 returns to rung 0 after N good takes without waiting out the TTL · a
 permission failure does not raise the rung at all and names the permission · the reduced request
 still carries the bounds (pinned) · his repro recipe from docs/SCREEN_WEDGE.md, run again.
+
+## W1 HANDOFF — DONE 2026-08-29 (twentieth session). SHIPPED ON, no flag. Verified on prod.
+Chrome's bug is still Chrome's and this task never claimed otherwise. All four items are what was
+OURS, and all four are in: the mitigation stack had become its own failure mode.
+
+(1)+(2) THE LADDER CLIMBS. `rememberDisplaySuccess` returned early unless the request rode rung 0,
+so the mark could only ever be cleared by a FULL-request success — which a machine on rung 1 or 2
+never sends. That is why the only exits were a 24 h TTL and a localStorage line in a console.
+Now: any success climbs exactly ONE rung, rung 0 clears outright, a wedge still steps down and
+re-stamps the TTL (a sick machine cannot ratchet out). GATE MET, N=2: rung 2 → success → 1 →
+success → 0, asserted both as a unit and END TO END through `acquireChannelsProgressive`, which is
+where the rung is actually read and written.
+
+(3) A STALL IS NOT ALWAYS A WEDGE — the half that was costing users a day over a checkbox.
+`classifyDisplayStall(os)` reads one recorded fact, `everDelivered`: has this profile EVER been
+handed a screen track? The macOS grant is per-application and permanent once given, so a delivery
+proves it and any stall after one is Chrome's wedge; on macOS with no delivery ever, the missing
+grant is live and is named. A 'permission' stall calls neither `rememberDisplayWedge` nor the
+auto-refresh ritual — a fresh renderer cannot change a TCC grant, it only throws away the message
+that fixes it. New `CaptureError` reason `'permission'` carries it to the UI.
+HONEST LIMIT, STATED RATHER THAN HIDDEN: a genuine first-take wedge on a fresh profile reads as
+'permission'. Cost of that miss = one unescalated rung and a message that names BOTH causes. Cost
+of the other direction = 24 h on the floor over an OS toggle, which is the bug. The bias is
+deliberate and the message never dead-ends ("if it is already on, the share is stuck instead").
+AND IT SPEAKS WHILE THE REQUEST IS ALIVE: `DISPLAY_STALL_NOTICE_MS = 12_000`, fired once, cancelled
+when the promise settles either way. 12 s is past any plausible picker interaction and 18 s before
+the take fails. It is a NOTICE — the request runs on and most that reach it still land. The text
+names the browser the user is actually in (BROWSER_LABEL is now exported): telling someone in Edge
+to switch Chrome on in System Settings is the same wrong-blame one layer up.
+
+(4) THE WAY OUT IS A BUTTON. A machine in reduced mode says so on the capture screen and carries
+"Reset screen sharing". `resetDisplayWedge()` clears rung, TTL and count, and deliberately KEEPS
+`everDelivered` — forgetting it would make the next stall misread a granted machine as an ungranted
+one and send the user to System Settings for nothing.
+
+GATES, AS NUMBERS.
+· 616 tests (from 603), typecheck clean. TWO EXISTING TESTS WERE REWRITTEN, and this is the point:
+  they asserted "a rung-1 success keeps the rung" and "a rung-2 success keeps the floor". That
+  assertion WAS the bug, written down and defended by a green test for four days.
+· `npm run oracle` (v2) PASS, COLD, FIRST RUN: sync 59.0/59.0 ms against the 90 ms band, spur
+  -51.0 dB, jump 0, instant 43.0 ms, smartcut 42.5 ms, tail 65 ms, export 4.31x.
+· `node scripts/oracle.mjs --engine=v1` PASS, COLD, FIRST RUN: sync 47.9/67.9 ms, spur -63.3 dB,
+  instant 44.5 ms, render 49.2 ms, tail 84 ms, export 1.08x. (Note G1: the v2 oracle is a known
+  coin flip on main. It passed first try on both engines here; W1 touches no capture-timing path.)
+· THE BOUNDS PIN HOLDS: the rung-1 request still carries width/height/frameRate — the 08-29 fix
+  is still asserted, unchanged, by its own test.
+· PROD, build of 3c4409f, `verify-deploy` OK: a planted legacy record `{wedgedAt, level:2, count:3}`
+  (exactly the shape Robert's machine carried — no `everDelivered` field) renders the banner
+  "Screen sharing is running in reduced mode after a stuck share. Nothing you chose is missing — it
+  clears itself after a good take, or you can clear it now." with the Reset button. Clicking it
+  leaves `{"wedgedAt":0,"level":0,"count":0,"everDelivered":false}` and the banner does not return
+  on reload. That is the screen Robert should have been given instead of a console line.
+
+WHAT IS NOT CLOSED, and it is the task's own fourth gate: HIS REPRO RECIPE (rapid share/record/stop
+cycling, ~10 x 2 s takes) needs a real display and real hardware. No rig here can stand in — an
+automated Chrome has no desktop picker at all. The permission path was likewise exercised through
+the production acquire code with a never-settling `getDisplayMedia` under fake timers, not against
+a real ungranted macOS. Both want one pass on Robert's own machine.
+
+ABSORBED: BACKLOG's B6 ("the device never connected" blames the device for an OS permission) —
+same code, same defect. Its entry keeps its evidence and now points here. It also contained a claim
+that was FALSE and is half of why W1 exists: "it self-heals on the first success". It did not; it
+self-healed from rung 0 only.
+
+FOUND WHILE DOING IT, not from reading: a concurrent session's Stop hook swept three of this task's
+files (app.css, CaptureScreen.tsx, platform.ts) into ITS commit on this branch at 21:35. Caught
+before the push and un-mixed — that commit now carries only its own `.ai/TASKS` change. Two
+sessions in one worktree is the documented hazard; the check that caught it was `git status`
+disagreeing with the files on disk.
 
 ## F18 the export goes to the user's own resolution — AUTHORED 2026-08-29 from Robert:
 ##     "i want 3024x1964 or whatever users resolution is on roadmap"
