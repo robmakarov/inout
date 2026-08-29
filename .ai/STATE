@@ -2,6 +2,31 @@
 
 phase: MVP validation (2026-07-16)
 
+- THE AUDIO TIMELINE IS HELD IN BOTH DIRECTIONS (2026-08-29, PO's hour-long take: "sound get a
+  little slower than screen video ... about second after one hour"). WallClockHold pads a starved
+  clock and now TRIMS a fast one — video is wall-stamped, audio is sample-counted at the NOMINAL
+  rate, so a +278 ppm device clock used to walk the sound 1001 ms late across an hour with nothing
+  in the app able to see it (the file's stamps stay self-consistent, merely stretched, so the
+  preview's slew reads zero). The trim is rate-limited to 0.2 % of a batch and removes frames by
+  RESAMPLING the batch shorter, so there is no splice and nothing to click. Take carries its own
+  verdict: ChannelDiagnostics.trimmedMs beside paddedMs.
+- CAPTURE IS AT THE SOURCE'S OWN RESOLUTION (2026-08-29, PO's ruling, overriding O6's unmet 4K gate
+  — PO holds the freeze risk and is the reporting channel). Flipping it found the flag was half-dead:
+  displayVideoConstraints sent width/height {max:1920x1080}, a REAL constraint Chrome honours before
+  handing the track over, so `?nativeres=1` had been buying nothing. The size bound is dropped at the
+  request now; the 30 fps bound stays. resolutionLadder steps 4K->1440p->1080p on backpressure and is
+  wired (liveCompositeV2 -> onDegradeStep -> session.stepDisplayDown). The composite canvas is still
+  1920x1080, so the DEFAULT 1080p export (packet copy) is unchanged — this reaches the re-rendering
+  steps, where 1440p stops being an upscale.
+- THE EXPORT TARGETS A QUALITY, NOT A BITRATE (2026-08-29). H.264 qp20 via a CustomVideoEncoder on
+  mediabunny's registerEncoder seam (its own bitrateMode is typed constant|variable, both of which
+  X15(a) measured INERT; quantizer mode is the one that works and needs a per-frame QP nothing in the
+  library sets). Measured at 1440p against the source frames: -11.6 % / +0.52 dB on a still document,
+  -11.1 % / +0.03 dB scrolling — Pareto-better on both, which is why 20 and not 23. `?cq=off` reverts.
+  ONLY THE RENDER SEES IT: an unedited default-tier export copies packets and never encodes.
+  This is 11 %, NOT the "twice smaller" a movie file is — that gap is the CODEC (hevc/av1 vs our avc
+  blind-share floor), which is a distribution decision and PO's, logged P1.
+
 works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → export → share-as-file.
 - SYNCHRONIZED START (PO 2026-07-20, supersedes instant-arm/late-join): arm() waits for src.settled — ALL devices acquired, every permission prompt answered — before start() activates them at one epoch. All channels share one start + one length (verified: 4 lanes 100% ±0.3%); no primary-gated early start, no late-join staggering. pipeline prewarm at mount; devices touched only after record click
 - WHICH FILE THE FAST PATHS COPY IS A DECISION NOW (O3b, 2026-08-29) — compose/copySource.ts, pure

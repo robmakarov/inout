@@ -12,26 +12,6 @@ TD tags technical defects by severity. Done items get deleted, not archived.
 
 ### Now
 
-- [P0] PO 2026-08-29 + TD same day: **the audio timeline drifts LATE without bound on a long take**
-  — "sound gets a little slower than screen video, about a second after one hour", preview and
-  export alike. ROOT CAUSE, verified by running the shipped `WallClockHold` over an hour of quanta:
-  video is wall-stamped (`compositor.worker.ts:611`) while audio is sample-counted
-  (`compositor.worker.ts:996`, `measuredAudio.ts:659`), and the guard that reconciles them ONLY
-  PADS — its own comment says "the wall only ever moves it FORWARD". So an audio clock running SLOW
-  is repaid and one running FAST is invisible:
-      clock -278 ppm  padded 960 ms  ends  -41 ms   in sync
-      clock  -50 ppm  padded 160 ms  ends  -20 ms   in sync
-      clock  +50 ppm  padded   0 ms  ends +180 ms   LATE
-      clock +278 ppm  padded   0 ms  ends +1001 ms  LATE   <- PO's number, exactly
-  Main-thread stalls were simulated too (3 s every 60 s, perfect clock): 0 ms padded, no drift — the
-  persistence filter is sound, the fast direction is the only hole. THE PREVIEW CANNOT SEE IT: the
-  sync loop compares `el.currentTime` against expected source time, and the file's stamps are
-  self-consistent, merely stretched — so no slew fires. "Drift is dead" (2026-08-25, beta−1 =
-  −0.003 ms/s) was a 120 s SYNTHETIC cell, where no device clock exists to mismatch.
-  DISCRIMINATOR, already recorded: `ChannelDiagnostics.paddedMs` on PO's take. ~0 ms with audio a
-  second late ⇒ fast clock, confirmed. FIX SHAPE (capture behaviour — PO's yes needed): make the
-  hold symmetric, trimming on a persistent FORWARD deficit with the same persistence test.
-
 - [P1] PO 2026-08-29: **the size estimate is 2.15× low at the top step** — panel said 4.7 GB at
   1440p, file came out 10.09 GB (140 min). Every other step landed within ~100 MB, so this is the
   top rung specifically, not the model. quality.ts already admits the √-pixel model came in 47 % low
@@ -45,19 +25,22 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   read 540p 310 / 720p 340 / 1080p 400 / 1440p 460, which is ordered. Floor every re-encoding step
   at the exact size of any step whose pixel count it exceeds — one comparison, no new measurement.
 
-- [P1] PO 2026-08-29: **more quality and much less size** — "it's non-editable video, movie files
-  with much better quality are usually twice smaller". Three named causes, all measured:
-  (1) 1440p IS AN UPSCALE — capture is capped at 1920×1080 (`acquire.ts:322`), the composite canvas
-      is hardcoded 1920×1080 (`session.ts:176`), `?nativeres=1` is off. The top step spends 14 Mbps
-      on interpolated pixels. Either gate the step on the source's real size, or ship nativeres.
-  (2) THE EXPORT IS RATE-TARGETED, NOT QUALITY-TARGETED — `render.ts:420` passes `bitrate` and
-      nothing else. X15(a) already measured the lever: `bitrateMode` constant/variable is INERT
-      (byte-identical files), but **quantizer mode is honoured** — qp14/20/26 → 959/692/511 KB on
-      the same content. Constant-quality is exactly "more quality, less size" and is unused.
-  (3) AVC by policy (blind-share floor). A 10 GB file is not blind-shareable anyway, so the
-      hevc/av1 rungs — built, present, opt-in — are worth re-pricing at this length.
-  Default 1080p on the same take would be the composite's own size: X12 measured the composite at
-  11.8 % of its 8 Mbps ceiling on screen content, so ~1 GB for 140 min against 10.
+- [P1] PO 2026-08-29, PARTLY DONE — what is LEFT is the codec. Two of the three named causes
+  shipped the same day: 1440p is no longer an upscale (native-res capture is the default now), and
+  the export targets a QUALITY instead of a bitrate (qp20, measured Pareto-better at 1440p — never
+  worse picture, ~11 % smaller, `docs/FLAGS.md`). THE REMAINING GAP IS NOT RATE CONTROL and the
+  measurement says so: the bitrate target was already undershooting at 1.83 of 14 Mbps, so there was
+  no ceiling of waste to reclaim, and 11 % is what rate control was ever worth here. PO's comparison
+  ("movies files with much better quality is twice smaller") is a CODEC comparison — hevc/av1 against
+  our avc floor. Both rungs are BUILT and reachable (`pickEncodingTarget(..., {allowAboveFloor:true})`),
+  and off for a distribution reason rather than a technical one: a blind-shared file must play for a
+  recipient we cannot probe. THE DECISION IS PO'S and it is worth re-pricing at two-hour takes, where
+  the file is too big to send anyway. Options, in order of how little they give up: (a) hevc/av1 for
+  the CLOUD player only, where we control playback — no recipient risk at all; (b) a "smaller file,
+  newer players only" choice in the export panel, named honestly; (c) flip the blind-share floor.
+  Also open, and cheap: quantizer mode has NO bitrate ceiling, so a pathological source could exceed
+  the tier's old cap. Nothing measured came close (busiest lane 3.17 Mbps at qp20 against 3.55), but
+  the guarantee is gone — a mid-export achieved-rate check that steps the QP up would restore it.
 
 - [P2] PO 2026-08-29: **"at some points video got slows down and lag too"** on a long take. NOT
   DIAGNOSED — needs to be pinned to a stage before it is chased: during capture (frame delivery),
