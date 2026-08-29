@@ -30,6 +30,8 @@ import {
   MAX_FRAME_RATE,
   captureRateCeiling,
   normalizeRate,
+  rateForSurface,
+  HIGH_RATE_PIXEL_BUDGET,
   setSourceRate,
   sourceRateEnabled,
   takeRate,
@@ -270,6 +272,39 @@ describe('the copy fence refuses a file of the wrong rate', () => {
     expect(chooseCopySource(rec, { width: 1920, height: 1080, fps: 60 }).source?.origin).toBe(
       'single-generation',
     )
+  })
+})
+
+describe('a 60 fps ask is budgeted against the surface', () => {
+  // Measured on prod, one machine, 20 s takes: 1920x1080@60 kept 90 % of the
+  // composite's frames, 2560x1440@60 kept 81 %, 3456x2234@30 was healthy, and
+  // 3456x2234@60 encoded NOTHING and never recovered. A cliff, not a slope —
+  // and one the ladder cannot climb back down from, because the collapse is
+  // instant. See HIGH_RATE_PIXEL_BUDGET.
+  it('leaves a 30 fps ceiling completely alone, whatever the surface', () => {
+    expect(rateForSurface(3456, 2234, 30)).toBe(30)
+    expect(rateForSurface(7680, 4320, 30)).toBe(30)
+  })
+
+  it('allows 60 up to the largest surface measured to sustain it', () => {
+    expect(rateForSurface(1920, 1080, 60)).toBe(60)
+    expect(rateForSurface(2560, 1440, 60)).toBe(60)
+  })
+
+  it('holds a bigger surface at 30 rather than letting it collapse', () => {
+    expect(rateForSurface(3456, 2234, 60)).toBe(30)
+    expect(rateForSurface(3840, 2160, 60)).toBe(30)
+  })
+
+  it('is the pixel RATE that is budgeted, not the width', () => {
+    // A very wide, very short surface is cheap and is allowed 60.
+    expect(rateForSurface(5120, 720, 60)).toBe(60)
+    expect(HIGH_RATE_PIXEL_BUDGET).toBe(2560 * 1440 * 60)
+  })
+
+  it('an unknown surface is not punished for being unknown', () => {
+    expect(rateForSurface(undefined, undefined, 60)).toBe(60)
+    expect(rateForSurface(0, 0, 60)).toBe(60)
   })
 })
 
