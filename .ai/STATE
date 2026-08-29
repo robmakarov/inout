@@ -33,6 +33,24 @@ phase: MVP validation (2026-07-16)
   copy) is unchanged — and since O3c the step MATCHING the screen is an instant copy of the raw
   channel, so native detail no longer needs the render at all. The ladder's rungs are written
   landscape and are turned for a rotated source (F13).
+- NATIVE-RES CAPTURE COST EVERY NON-1080p SCREEN ITS CHANNEL FOR ONE DAY (fixed 2026-08-29, same
+  day it went default). Robert: "screen shown on preview, but in video its missing". The raw channel's
+  VideoEncoder is configured at the MONITOR's own size now, and TWO limits it had never met were
+  waiting there: AVC cannot encode an ODD side (a Mac in a scaled display mode reports 1728x1117 as
+  a matter of course) and an AVC LEVEL is a frame-size limit Chrome ENFORCES, with both candidate
+  lists stopping at 4.2 ≈ 1920x1088 — so 1440p and 4K were refused outright. Either way the channel
+  wrote nothing, the MediaRecorder fallback wrote nothing either (it asks the same platform encoder
+  the same impossible question — P2), and the take said the screen was missing while the preview had
+  shown it throughout, because THE TRACK WAS NEVER THE PROBLEM. Fixed in both places it can go wrong:
+  `capDisplayTrack` evens the TRACK so every consumer sees an encodable frame, `startMeasuredVideo`
+  evens its own ENCODER CONFIG so a source that refuses to be constrained costs a cropped row rather
+  than the screen, and levels 5.0/5.1/5.2/6.0 are APPENDED to both lists (never reordered, so a
+  1080p take keeps exactly the encoder it had — pinned by the 1728x1117 lane still choosing
+  `avc1.4D402A`). Verified on prod from a URL: `?synthetic=1&screensize=` 1728x1117 → 1726x1116,
+  2560x1441 → 2558x1440 on `avc1.640032`, 3456x2234 → whole on `avc1.640033`.
+  THE LESSON, and it is note 10's again: the cap that was removed had been making every side even
+  and every frame small BY ACCIDENT, and nothing downstream had ever been asked to hold a real
+  monitor. A default that moves has to be re-measured at the sizes it newly admits.
 - THE RATE CAN FOLLOW THE TAKE (F15, 2026-08-29) — `?sourcefps=1`, OFF BY DEFAULT UNTIL ROBERT
   JUDGES A REAL 60 fps TAKE. Until this `frameRate: {ideal:30, max:30}` capped a 60 fps game tab or
   camera AT THE SENSOR, justified as "every frame above 30 is encoded twice and then dropped at
