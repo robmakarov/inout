@@ -278,6 +278,40 @@ START HERE IF YOU ARE FRESH:
      `node scripts/oracle.mjs --engine=v1`. Anything touching the STOP path also runs
      `npm run oracle:load` (HEAVY, announce it) and `npm run exp -- armcancel`.
 
+TWENTIETH SESSION 2026-08-29/30 (Robert: "go b2,3,7/g2,3,4 one session overnight, so dont stop").
+ALL SIX MERGED AND PUSHED. The G lane went first because a B verdict is worth what its gates are, and
+that turned out to be the right order twice over: G4's own new gate is what made B7's sibling defect
+visible, and G2/G3 between them retracted two published claims this map had been treating as fact.
+WHAT THE G LANE FOUND, and none of it is what the tasks predicted:
+  · G2 — "a headless page runs rAF at 0" is FALSE (120 Hz headless AND headed). The real defect was
+    `oracle:load` handing all N takes to ONE page: run 2 stopped in 40-54 s where a fresh page stops
+    in 0.8-3.9 s. Half of every multi-run load verdict since 2026-08-23 was measured on a page the rig
+    had already broken. Raw phase RETRACTED (tails 6-191 ms, inside the band); composite phase
+    CONFIRMED red and BIMODAL, which is O15's question.
+  · G3 — the long-task counter is not merely vacuous, at 4K it is INVERTED: it reads 0 ms for v1
+    while v1 loses 4731 ms of a 16 ms ticker, and 295 ms for v2 which loses 1463. O4's published
+    "v2 0 ms vs v1 198 ms" does not reproduce; the conclusion survives on lateness, the evidence did
+    not. O1's memory lane: the task's own prescription is unbuildable (a worker has NO memory
+    instrument in Chrome) and unnecessary (the window's call sees the worker — proved with 200 MB).
+    Its zeros were a race in the rig plus a 16 s sample cost nobody had written down.
+  · G4 — the long cell had NEVER RUN, because cdp-run truncated every report over 64 KiB (stdout to a
+    pipe, then process.exit). That is the mechanism behind "the widest cell in every matrix is 30 s".
+    The first 120 s cell in this project's life is RED on the DEFAULT path: instant maxAbs 94-100 ms
+    against a 90 ms band, four of five runs, where 6 s reads 69-81 and always passes. FILED P0.
+THE B LANE:
+  · B7 — the anchors are in the take. The audio half read off a real mic on prod; the video half needs
+    a machine with Screen Recording granted to Chrome (one command). The finding: the platform
+    reports 10 ms of input latency, which is what it will also report for a Bluetooth headset's 300.
+  · B3 — worse than filed: a tab that spans a deploy could not RECORD, not just export. Fixed by
+    precaching the whole build; 11 gates, and `--broken` turns five of them red on demand.
+  · B2 — the discriminator split it. (A) fixed and measured (audio slew 9.7 % -> a 4.0 % cap, hard
+    seeks 1 -> 0 and muted). (B) REFUTED: paddedMs is 0 at idle, and under load the gaps are ~92 ms,
+    which no crossfade can fix. Capture unchanged, by measurement. ROBERT'S LISTEN IS OWED.
+FOUR GATES IN THIS REPO ARE NOW KNOWN TO FLIP RUN TO RUN (all filed in BACKLOG): the v2 oracle's sync
+maxAbs, the v1 oracle's export throughput, the fidelity oracle's render lane, and G1's original. G4
+explains the first: the packet-copy maxAbs sits ON the band, so at 6 s it is a coin toss and at 120 s
+it is simply red. G1 is now the highest-value instrument task left.
+
 READY NOW:
   F13-FLIP  Robert's own eye           [ROBERT OWED]  F13 IS BUILT, VERIFIED ON PROD AND OFF BY DEFAULT
                                              (handoff under the task). Its last gate is yours:
@@ -973,6 +1007,10 @@ GATES
   · `npm run oracle` PASS (54.5 and 38.2 ms; one run in three hit the KNOWN v2 coin flip at
     maxAbs 91.4/91.7 against 90 — G1's subject, and G4 explains why it sits on the band).
     `--engine=v1` PASS (58.5 ms). 667 tests · typecheck clean.
+VERIFIED ON PROD AFTER THE PUSH (c8f3adb), three takes: the audio slew cap holds at EXACTLY 0.04 on
+every run — it is the shipped ceiling, live, against 0.077-0.097 before. First-pass audio hard seeks
+read 3 / 0 / 1 across the three, and every one of them is now muted; the count tracks how busy the
+machine is (this one had been running heavy rigs all night) rather than anything about the take.
   · ROBERT'S LISTEN CLOSES IT, NOT THE NUMBERS — OWED. Open the editor on a take with tab audio and
     play the first pass. The claim under test: the noises at the start are gone, and nothing new
     appears when the preview corrects. If any remain, `node scripts/noise-check.mjs --load=8` on that
