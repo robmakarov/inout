@@ -168,6 +168,14 @@ READY NOW:
                                              so cuts never land on speech. Spec below.
   F12  super-resolution on zoom    [heavy]   PO 2026-08-26: "only if zoom used". Render path only,
                                              zoomed spans only, opt-in. Spec below.
+  R1   x15 chroma-rig hardening    [medium]  PO 2026-08-29: fix ALL 15 findings of the 094b13d
+                                             code review as ONE step. The instrument that measured
+                                             the colour loss can lie silently (a gate that reads
+                                             green on missing data, an OOB mask that NaNs, a
+                                             reference drawn with different context options than
+                                             the wire) and one CONTEXT.md line still retracts the
+                                             headline finding. Rig + docs only; production surface
+                                             is one additive export. Spec below.
 
 NEW TASKS (TD-authored 2026-08-26 from PO's answers; all operating rules apply):
 
@@ -235,6 +243,71 @@ seeing files.
 GATES: un-zoomed takes and SR-off exports byte-identical to today · A/B crops at 2.5× to
 ~/Downloads — PO judges by eye · per-frame cost measured, export estimate includes it · no WebGPU →
 today's scaler, silently · oracle green.
+
+## R1 x15-chroma-rig-hardening [medium · TD-authored 2026-08-29, PO: "make fix all of them as one step"]
+ALL 15 findings of the 094b13d code review, one task. The chroma rig is now the evidence for O3b
+and the 4:4:4 decision, so its failure modes ARE the task. Everything lives in
+src/experimental/perf/{trimTextParity,textSource}.ts unless a path is named. Line numbers are
+094b13d's.
+INSTRUMENT LIES (the rig can report wrong without saying so — fix these first):
+ 1. the "fast path is not the worst-coloured file" gate passes on null (trimTextParity 550) and
+    the export loop skips undecodable/non-1:1 frames with a bare `continue`, no SKIPPED row (466)
+    — missing data must read MISSING, loudly, in BOTH chroma gates. Same trigger via sat()'s
+    startsWith on display labels: give rows a real key.
+ 2. chromaRows counts out-of-bounds pixels as mask hits (undefined → NaN>tol is false; textSource
+    712) and rect is derived from the INSTANT READER's dims, not the reference's (316) — assert
+    source/decoded/rect geometry at the top of chromaRows, derive rect from W×H.
+ 3. the reference is rasterized on {alpha:false} but the wire canvas is get2d()'s default
+    alpha:true (synthetic.ts 48) — opaque canvases are eligible for different text AA, and the
+    0-source self-row is structurally blind to it. Build the reference through the same context
+    the wire uses. IF THE COMMITTED NUMBERS MOVE, the tables in TASKS/BACKLOG/CONTEXT update in
+    the same change — the numbers are quoted in three docs.
+ 4. the "chain keeps colour" gate is born red ((instSat ?? 0) >= 90 vs measured 70.3, still red
+    at O3b's 80; 543) and null reads as total loss — regression-baseline form (>= today − eps) or
+    chromaPrice's own DIAGNOSTIC ONLY convention (pass: true + self-describing detail), and the
+    two gates must agree on what null means.
+ 5. an rd.at() rejection aborts the ENTIRE report (452 — the big try has finally, no catch): one
+    corrupt channel tail throws away pair rows that never touched chroma. Per-stage catch;
+    blob-read/openNative failures get SKIPPED rows like the size-mismatch branch already does.
+ 6. the fast-path gate margin (1 pt, 550) is tighter than the rig's own stated ~2 pt run
+    variance, and it gates green only while render wins blue and loses green — margin ≥ 2 pts,
+    min over the coloured rows.
+ 7. the composite 1:1 guard is vacuous: the compositor contain-fits into a hardcoded 1920×1080
+    canvas (compositor.worker 517-520), so rd.width===W checks the container, never the content —
+    guard the screen track's own dims.
+ 8. nothing separates 4:2:0 loss from a YUV matrix/range round-trip drift (same fingerprint:
+    saturated glyphs fade, grey holds) — add a flat-saturated-patch control stage: nothing for
+    subsampling to damage, so if IT loses colour the attribution is wrong and 4:4:4 under-delivers.
+ 9. grey's keptPct divides by a 7.4 % source saturation, so ±1 LSB of decode noise reads as
+    ±6 pts — report grey as ABSOLUTE saturation delta; the "not brightness or gamma" argument
+    survives without the amplifier.
+SHARED SEAMS:
+ 10. the palette exists as FIVE unlinked copies and the rig's is the only decimal one
+     (textSource 662 vs synthetic 119, textSource 51, bitsAudit 71, aiExport 66) — export ONE
+     constant from synthetic.ts beside drawTextScreen, derive PAGE_COLOURS and the painters from
+     it (additive export, zero behaviour change). A drift today zeroes the mask and gate 2 passes
+     vacuously while gate 1 screams a fake P1.
+ 11. the encoder warm is pasted per-rig and ELEVEN rigs calling createCaptureSession are still
+     cold (note 6's mirage, ninth instance and counting) — one shared rig-harness warm. Warming
+     inside createCaptureSession itself is production capture = PO's explicit yes, NOT this task.
+WASTE:
+ 12. the chroma mask is recomputed 18× (6 stages × 3 colours, full-rect scans) for a mask that
+     depends only on constants — build per-colour index lists from the reference once.
+ 13. sampledAtSec[0] is decoded up to 3× per reader (chroma/crops/thumbs) and .at() re-seeks from
+     the keyframe every time — decode once per reader, share; also keeps the crop PO sees and the
+     number beside it the same frame by construction.
+ 14. the second getContext('2d', {willReadFrequently:true}) is dead — repeat-call attributes are
+     ignored per spec (432) — one call with both options, the openNative pattern.
+DOCS:
+ 15. CONTEXT.md ~120: the old parenthetical retracts "the damage happens when the recording is
+     first captured" VERBATIM while the new block 40 lines later asserts exactly that — scope the
+     retraction to sharpness so the doc stops contradicting its own headline finding.
+GATES: typecheck + tests green · `npm run exp -- x15c` twice, numbers inside the stated ~2 pt band
+of the committed baselines (or baselines updated in the same change if fix 3 legitimately moves
+them — say which) · missing-data drill: point one stage at a dead blobKey → BOTH chroma gates read
+missing/skipped and the report SURVIVES · palette-drift drill: perturb one palette entry by +8 →
+the run says MASK EMPTY, not "0 % kept" · flat-patch control present in the report · no capture/*
+behaviour change, oracle untouched.
 
 BLOCKED ON HARDWARE OR A DOWNLOAD, unchanged:
   P1   firefox + 3-engine oracle   [medium]  code half shipped 2026-08-23. What is left needs
