@@ -57,10 +57,43 @@ type MarkedConfig = VideoEncoderConfig & { [QP_KEY]?: number }
 export const DEFAULT_QP = 20
 
 /**
- * THE DEFAULT, and it is a measured one — see the DECISIONS entry for the
- * numbers this was set from. `null` here means "keep the bitrate target".
+ * THE DEFAULT, AND IT IS A MEASURED ONE. `null` would mean "keep the bitrate
+ * target"; 20 is where the measurement landed.
+ *
+ * Measured 2026-08-29 on the deployed build at 2560x1440 (PO's own step), 48
+ * frames, PSNR of the DECODED file against the very frames that made it, on
+ * two contents this product is actually for — a document sitting still with a
+ * blinking caret, and the same page scrolling:
+ *
+ *              static                        scroll
+ *   bitrate    365,967 B   49.69 dB          426,535 B   50.97 dB
+ *   qp18       -4.9 %      +2.29 dB          -4.4 %      +1.73 dB
+ *   qp20       -11.6 %     +0.52 dB          -11.1 %     +0.03 dB
+ *   qp23       -21.4 %     -2.23 dB          -19.9 %     -2.38 dB
+ *   qp26       -30.3 %     -4.85 dB          -28.9 %     -4.97 dB
+ *
+ * 20 is the rung that is PARETO-BETTER on both contents — never worse than the
+ * bitrate target on quality, always about 11 % smaller. 23 and 26 are cheaper
+ * still but pay real quality for it, which is not what was asked for. 18 is
+ * also Pareto-better and buys 2 dB for half the saving; 20 was chosen because
+ * PO asked for size first.
+ *
+ * BE HONEST ABOUT THE SIZE OF THIS WIN: it is ~11 %, not the "twice smaller"
+ * PO compared against. The rest of that gap is not rate control — on this
+ * content the bitrate target was ALREADY undershooting (1.83 of 14 Mbps), so
+ * there was never 14 Mbps of waste to reclaim. What makes a movie file half
+ * the size at better quality is the CODEC: hevc/av1 against our avc floor. The
+ * ladder has those rungs and they are off for a distribution reason, not a
+ * technical one (a blind-shared file must play for a recipient we cannot
+ * probe) — that trade is PO's and worth re-pricing at two-hour takes.
+ *
+ * NO CEILING. Quantizer mode ignores `bitrate` entirely, so a pathological
+ * source (grain, confetti, dither) can in principle cost more than the tier's
+ * old cap. Every content measured came in far under it — the busiest lane
+ * tested ran 3.17 Mbps at qp20 against 3.55 on the bitrate target — but the
+ * guarantee is gone, and `?cq=off` is the way back.
  */
-const CQ_DEFAULT: number | null = null
+const CQ_DEFAULT: number | null = 20
 
 /** Clamp to the range H.264 actually defines; a config outside it is a crash. */
 export function clampQp(qp: number): number {
@@ -88,7 +121,21 @@ function qpOf(config: VideoEncoderConfig): number | null {
  * same reason: a profile nobody can encode in HARDWARE is not a better file,
  * it is a slower one. Baseline first, High last.
  */
-const AVC_CANDIDATES = ['avc1.42E01E', 'avc1.4D402A', 'avc1.640028'] as const
+const AVC_PROFILES = ['42E0', '4D40', '6400'] as const
+
+/**
+ * AVC levels, ascending — 3.0 through 5.2.
+ *
+ * THE LEVEL IS PART OF THE ANSWER AND CANNOT BE A CONSTANT, which cost this
+ * feature a whole round: the first list here was `avc1.42E01E / 4D402A /
+ * 640028`, i.e. levels 3.0, 4.2 and 4.0, and a level caps the frame SIZE.
+ * Measured on prod, `isConfigSupported` enforces it: at 2560x1440 only levels
+ * 5.0-5.2 are accepted at all, so constant quality would have reported itself
+ * unsupported at exactly the 1440p step PO exports from — the one step this
+ * whole feature exists for. Ascending, so the file gets the LOWEST level that
+ * fits, which is the one the most decoders will play.
+ */
+const AVC_LEVELS = ['1e', '1f', '28', '29', '2a', '32', '33', '34'] as const
 
 /**
  * The exact codec string to encode this size at in quantizer mode, or null if
@@ -109,19 +156,22 @@ export async function constantQualityCodec(
 ): Promise<string | null> {
   if (typeof VideoEncoder === 'undefined') return null
   if (codec !== 'avc') return null
-  for (const candidate of AVC_CANDIDATES) {
-    for (const hardwareAcceleration of ['prefer-hardware', 'no-preference'] as const) {
-      try {
-        const support = await VideoEncoder.isConfigSupported({
-          codec: candidate,
-          width,
-          height,
-          bitrateMode: 'quantizer',
-          hardwareAcceleration,
-        } as VideoEncoderConfig)
-        if (support.supported === true) return candidate
-      } catch {
-        /* try the next rung */
+  for (const profile of AVC_PROFILES) {
+    for (const level of AVC_LEVELS) {
+      const candidate = `avc1.${profile}${level}`
+      for (const hardwareAcceleration of ['prefer-hardware', 'no-preference'] as const) {
+        try {
+          const support = await VideoEncoder.isConfigSupported({
+            codec: candidate,
+            width,
+            height,
+            bitrateMode: 'quantizer',
+            hardwareAcceleration,
+          } as VideoEncoderConfig)
+          if (support.supported === true) return candidate
+        } catch {
+          /* try the next rung */
+        }
       }
     }
   }

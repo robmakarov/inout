@@ -20,6 +20,7 @@ The URL wins over the sticky value; the sticky value wins over the default.
 | **WebCodecs raw channels** `?rawcodec=` | `?rawcodec=mediarecorder` | Raw screen/camera recorded through WebCodecs instead of MediaRecorder. Flipped on your ruling 2026-08-26. 10× less audio-clock starvation, half the bytes at the same picture. |
 | **Composite engine v2** `?engine=` | `?engine=v1` | The worker compositor that owns its own encoder. v1 is the old MediaRecorder-on-canvas path. |
 | **All four inputs** | the chips on the capture screen | screen + camera + mic + system audio are all armed by default (`inout.capture.prefs`). |
+| **Constant quality** `?cq=` | `?cq=off` | The export targets a QUALITY (H.264 qp20) instead of a bitrate. Measured at 1440p: ~11 % smaller at the same or better picture, on both a still document and a scrolling one. `?cq=18` for finer, `?cq=26` for smaller. Only affects exports that RE-RENDER — an unedited 1080p export copies packets and never encodes. |
 | **Native resolution** `?nativeres=` | `?nativeres=0` | Capture the screen at ITS OWN size instead of downscaling to 1080p. On since 2026-08-29 on PO's ruling. This is what makes the 1440p export step real detail instead of an upscale. If a big screen ever freezes a take again, this is the switch to turn off — and say so. |
 
 ## What is OFF by default
@@ -52,7 +53,7 @@ the export-size entry in `BACKLOG.md`.
 ```
 inout.capture.prefs       inout.capture.engine      inout.capture.nativeres
 inout.capture.rawcodec    inout.compose.singlegen   inout.compose.smartcut
-inout.export.loudness     inout.export.tier
+inout.export.loudness     inout.export.tier          inout.export.cq
 ```
 
 Clear them all: `Object.keys(localStorage).filter(k=>k.startsWith('inout.')).forEach(k=>localStorage.removeItem(k))`
