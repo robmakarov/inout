@@ -51,6 +51,30 @@ phase: MVP validation (2026-07-16)
   THE LESSON, and it is note 10's again: the cap that was removed had been making every side even
   and every frame small BY ACCIDENT, and nothing downstream had ever been asked to hold a real
   monitor. A default that moves has to be re-measured at the sizes it newly admits.
+- 60 fps IS BUDGETED AGAINST THE SURFACE, AND THE LADDER GIVES THE RATE BACK FIRST (F15 follow-up,
+  2026-08-29, from Robert: "60 fps game on other tab frozen"). Three findings, each measured on prod:
+  (1) THE LADDER WAS SWITCHED OFF BY THE SILENCE IT EXISTS TO ANSWER — rule 2's "an encoder that has
+  not produced yet is initialising" had no upper bound, so a composite that encoded NOTHING kept
+  `firstOutputAtMs` null and the ladder never ran; the watchdog then killed the composite at 15 s.
+  Bounded at DEAD_ENCODER_MS = 12 s, deliberately just UNDER the watchdog: the first attempt used 6 s
+  and fired on 2560x1440@60 — a configuration measured to keep 81 % — dropping it to 132 frames from
+  508, which is note 6 all over again. (2) THE LADDER WAS SHRINKING THE PICTURE WHEN THE RATE WAS THE
+  COST: the compositor draws the source into its own 1920x1080 canvas at the take's rate whatever the
+  source's size, so resolution rungs miss it. `rungsFor` puts a 30 fps rung FIRST for a take above 30;
+  `rungsFor(30)` is DEGRADE_RUNGS exactly, so a default take is unchanged. (3) A CLIFF CANNOT BE
+  CLIMBED DOWN FROM — 3456x2234@60 encodes nothing from the first second and no mid-take step rescues
+  it, so `rateForSurface` refuses to ASK above HIGH_RATE_PIXEL_BUDGET (2560x1440x60, the largest
+  configuration measured to sustain 60) and a bigger screen gets its FULL RESOLUTION at 30 instead.
+  MEASURED, one machine, 20 s takes: 1920x1080@60 keeps 90-96 % · 2560x1440@60 keeps 55-81 % ·
+  3456x2234@30 healthy (419 of 470 raw) · 3456x2234@60 composite encodes NOTHING, raw keeps 8 of 305.
+  DEFAULT PATH RE-VERIFIED UNCHANGED at 3456x2234@30 after all of it: composite 2.07 MB, raw 419/470,
+  no steps, no degrade.
+  STILL UNRESOLVED AND STATED: with the flag ON at 3456x2234 the composite dies even at the held
+  30 fps, while the same size WITHOUT the flag is healthy. The likeliest cause is the rig and not the
+  product — `?screenfps=60` keeps the synthetic CANVAS painting 7.7 Mpx sixty times a second in our
+  own process however the track is constrained, which is the cost DECISIONS already warns dominates a
+  rAF-painted source and which a real game tab (rendered in another process, composited by the OS)
+  does not have. It needs Robert's real 60 fps tab to separate, and no rig here can.
 - THE RATE CAN FOLLOW THE TAKE (F15, 2026-08-29) — `?sourcefps=1`, OFF BY DEFAULT UNTIL ROBERT
   JUDGES A REAL 60 fps TAKE. Until this `frameRate: {ideal:30, max:30}` capped a 60 fps game tab or
   camera AT THE SENSOR, justified as "every frame above 30 is encoded twice and then dropped at
