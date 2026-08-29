@@ -334,6 +334,16 @@ READY NOW:
                                              (T1 transcode speed, T2 background-render cost) —
                                              spec in the task. It is the biggest thing on the map
                                              and it is where "minimal size" actually gets paid.
+
+  ── D1  the take an agent can read from ANOTHER project — Robert 2026-08-29, "i want it"
+  D1   point-at-it                 [ROBERT-GATED · spike first]  Robert wants INOUT's output usable
+                                             INSIDE his other projects (his game): the agent working
+                                             on that repo gets to SEE what he means, and he gets to
+                                             point at it. Four lanes, spec below; T0 is a SPIKE that
+                                             must answer "does the payload change the agent's answer"
+                                             with a measurement before any of it ships. BLOCKED ON ONE
+                                             ANSWER FROM ROBERT: what the game runs on (browser vs
+                                             native) — it decides lane (d) entirely and nothing else.
   P5a  iOS SCK spike               [light]   UNBLOCKED 2026-08-26: Robert confirms Xcode 27 + a real
                                              iOS 27 device are available. Needs Robert present (device
                                              plugged in, signing). TIME-SENSITIVE (iOS 27 ~Sept).
@@ -428,6 +438,66 @@ Every entry below keeps its FULL evidence in BACKLOG.md; what is here is the ass
 THE G LANE OUTRANKS THE B LANE. Note 10 (the rig is wrong before the product is) and note 17 (a gate
 that cannot fail is not a gate) are why: three of the four G tasks describe a gate that has been
 reporting a verdict it did not measure, and a B task's handoff is worth exactly what its gates are.
+
+## D1 point-at-it — the recording as a channel between Robert and the agent working on his OTHER
+##     project [ROBERT-GATED · T0 spike gates the rest]
+## (NOT the frozen AI2 slot — that id belongs to AI1's candidate ladder. New D lane: developer
+##  collaboration, i.e. INOUT's output used inside a project that is NOT INOUT.)
+Robert 2026-08-29: "how can it be usefull in my other projects, game i m doing for example ... so it
+will be debugging my game too and open projects app and said i opened it, now point me there what you
+meant or whatever."
+WHAT IS ALREADY TRUE AND CHANGES THE DESIGN: an agent can ALREADY open and drive a web app (the
+browser tools do it, this repo is verified that way every session). What it cannot do is see what
+ROBERT means. So the missing half is HUMAN -> AGENT, not agent -> app, and this task builds that half.
+WHAT TRANSFERS FROM INOUT, and it is not the recorder: the hard part INOUT has already solved is
+TIME-ALIGNMENT — channel offsets, the wall-clock hold, a sample-counted timeline, a black box that
+persists with the take. A frame, a log line and a click that all agree about WHEN is the payload;
+anything can screenshot.
+LANES:
+ (a) SIDECAR MANIFEST [light]. Export writes a JSON beside the file: geometry, fps, codec, per-channel
+     startOffsetMs, ChannelDiagnostics, the edit decisions (cuts, zoom spans, speed ramps) and the
+     keyframe index the For-AI build already computes. Nothing new is measured — this is publishing
+     what the app already knows. Also closes the gap B7 instruments and makes the remote autopsy a
+     read instead of an excavation.
+ (b) MCP SERVER [light-medium]. `list_takes` / `read_take(id)` over a FOLDER of exported takes, so a
+     Claude Code session in ANY repo can say "look at my last recording" with no drag, no paste, no
+     cloud, no auth. The folder is the cheap door: takes live in OPFS/IndexedDB inside the browser
+     origin and no local process can read them, so export-to-folder is the whole enabling step.
+ (c) POINTING [medium]. A click or a dragged region on a frame becomes {frame, t, rect} in the
+     manifest, with an optional typed note. That IS "point me there what you meant", and it is the
+     lane with no equivalent anywhere — it is why a recording beats a screenshot.
+ (d) DROP-IN DEV RECORDER [medium, STACK-DEPENDENT — Robert's answer needed]. A script another project
+     adds in its dev build: a ring buffer of the last N seconds plus that app's OWN console/log lines,
+     time-aligned to the frames, dumped by a hotkey into the folder (b) reads. BROWSER GAME: a script
+     tag, the logs come free. NATIVE GAME: screen capture works (INOUT already does it) but the logs
+     only arrive if the game writes them somewhere the tool can tail — a different, larger task. Do
+     not design this lane before the answer.
+THE TOKEN MATH, AND IT IS THE WHOLE ARGUMENT (numbers from docs/AI_EXPORT.md, not invented):
+a full-view page is ~800 tokens at 1024x576; a 1080p frame is ~2 800; AI1's export caps at ~300 pages
+= ~236k tokens, and ONE MEASURED 97-second take built 167 pages = ~144k tokens. So the For-AI export
+is cheaper than sampling the video and STILL too expensive to drop into a coding session — 144k
+tokens for a minute and a half is most of a context window.
+POINTING IS THE TOKEN OPTIMIZATION, not a convenience. {frame, t, rect} collapses the payload to the
+index page (~200 tokens) + the 2-3 keyframes around the marked instant (~2.4k) + the host app's log
+lines at that instant (text, negligible) = ~3k tokens against 144k. That is ~50x, and it is the only
+version of this that fits in a session where the agent also has to hold the codebase.
+IF LANE (c) DOES NOT SHIP, NOTHING ELSE HERE IS WORTH BUILDING — an agent handed the whole take pays
+more than the bug is worth.
+
+HONEST STANDING OBJECTION, to be answered by T0 and not by argument: a screenshot plus a pasted
+console already costs ~1-2k tokens, needs no code, and solves most bugs. The recording only wins
+where the bug is about TIME — a sequence, a stutter, a thing that is wrong only in motion — and where
+three screenshots would not have done. That is a narrower case than this task's framing implies, and
+if T0 does not find it, the task is DELETED (experiments ruling), not parked.
+
+T0 SPIKE, AND NOTHING SHIPS BEFORE IT: take one REAL bug in Robert's other project. Give an agent (1)
+Robert's sentence alone, (2) the sentence plus a plain screen recording, (3) the sentence plus the
+(a)+(c) payload. Measure turns-to-diagnosis and whether the diagnosis is right. If (3) does not beat
+(2), this whole task is speculation and gets deleted rather than parked — the experiments ruling.
+GATES: T0 run and reported before any lane merges · (a) additive, no export byte changes, manifest
+round-trips · (b) works offline against a folder, no cloud, no auth · (c) the pointing survives a
+reload and lands in the manifest · every lane zero runtime tokens (the ledger's boundary: local only)
+· the drop-in of (d) never ships enabled in a production build of the host project.
 
 ## G1 gate-coinflip — the per-task merge gate fails half its cold runs [medium · measurement first]
 `npm run oracle` (v2) failed 2 of 4 COLD runs on a stashed HEAD, and the tree under test failed 1 of 2
