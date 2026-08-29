@@ -821,6 +821,14 @@ export async function startMeasuredAudioCapture(opts: {
           ...(silentTailMs > 0 ? { silentTailMs: Math.round(silentTailMs) } : {}),
           ...(revivals > 0 ? { revivals } : {}),
           ...(diagEvents.length > 0 ? { events: diagEvents } : {}),
+          // B7: the two numbers this channel's offset was BUILT from. Always
+          // written, including the zeros — "the platform reported no latency"
+          // is the finding on a Bluetooth take, and an absent field cannot say
+          // it. Descriptive only; nothing here moves an offset.
+          anchor: {
+            rawAnchorMs: Math.round(rawOffset * 10) / 10,
+            reportedInputLatencyMs: Math.round(inputLatencyMs * 10) / 10,
+          },
         },
       }
     },

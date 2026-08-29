@@ -48,6 +48,52 @@ export interface ChannelDiagnostics {
   revivals?: number
   /** Track/context life events (mute, unmute, ended, ctx state, revive…), ms from epoch. */
   events?: { atMs: number; type: string }[]
+  /**
+   * B7 — THE ALIGNMENT INPUTS, IN THE FILE, SO THE NEXT FIELD REPORT ARRIVES
+   * WITH NUMBERS INSTEAD OF AN ADJECTIVE.
+   *
+   * "mic/camera unsynch in beggining of video seems to be smaller on other try"
+   * is the whole of what is known about a constant start-of-take offset that
+   * varies take to take. It cannot be chased from a synthetic rig: a canvas
+   * delivers its first frame instantly and a synthetic mic has no device
+   * buffer, so both of the errors below are exactly zero there. They are only
+   * ever visible on real hardware, on the take the user complained about — and
+   * until now that take carried none of them.
+   *
+   * Every field is DESCRIPTIVE. Nothing here changes an offset; compensating
+   * from theory is what has failed at this seam before.
+   */
+  anchor?: ChannelAnchor
+}
+
+/** B7. What each channel's start offset was BUILT from. Instrumentation only. */
+export interface ChannelAnchor {
+  /**
+   * This channel's offset from the session epoch BEFORE the take-wide shift
+   * that makes the earliest channel t=0. `startOffsetMs` is relative to the
+   * take; this is relative to when the session started, which is the only
+   * frame in which "the camera was 233 ms late" is a statement about a device.
+   */
+  rawAnchorMs?: number
+  /**
+   * AUDIO. The platform-reported input latency subtracted from the raw anchor
+   * (measuredAudio bounds it at 200 ms). A Bluetooth headset's real 100-300 ms
+   * is INVISIBLE here — Chrome reports the part it knows and no more — so a
+   * take whose sound is late with this reading ~10 ms is the evidence that the
+   * unreported part is what is left.
+   */
+  reportedInputLatencyMs?: number
+  /**
+   * VIDEO. How long after this channel started pulling frames the FIRST one
+   * arrived. A canvas answers in ~0 ms; a real getDisplayMedia surface does
+   * not — the composite's own first frame took 233 ms in one measured run. The
+   * MediaRecorder lane cannot see its first frame at all and reports the
+   * start()→onstart gap instead, flagged by `firstFrameDelayIsStartGap`.
+   */
+  firstFrameDelayMs?: number
+  /** True when `firstFrameDelayMs` is the recorder's start→onstart gap rather
+   *  than a real first frame — the MediaRecorder lane has no frame stamp. */
+  firstFrameDelayIsStartGap?: boolean
 }
 
 export interface ChannelRecording {

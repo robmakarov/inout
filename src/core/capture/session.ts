@@ -26,6 +26,8 @@ import type {
   CaptureEvent,
   CaptureSession,
   CaptureState,
+  ChannelAnchor,
+  ChannelDiagnostics,
   ChannelKind,
   ChannelRecording,
   CompositeRecording,
@@ -312,6 +314,42 @@ interface ChannelRuntime {
   diagnostics?: import('@core/types').ChannelDiagnostics
   stopped: Promise<void>
   resolveStopped: () => void
+}
+
+/**
+ * B7 — CARRY THE ALIGNMENT INPUTS ONTO THE CHANNEL, WITHOUT MOVING ANYTHING.
+ *
+ * The measured audio path already returns them inside its diagnostics; the
+ * measured video path returns them beside its stats. Both land in the same
+ * place so a take's certification reads one shape, and neither is allowed to
+ * touch `startOffsetMs` — this task ships instrumentation, not compensation.
+ *
+ * `rawAnchorMs` is recorded HERE, before buildRecording shifts every channel so
+ * the earliest one is t=0. After that shift the offsets are relative to the
+ * take and the device's own lateness is no longer recoverable from them.
+ */
+function mergeAnchor(
+  ch: { diagnostics?: ChannelDiagnostics; startOffsetMs?: number },
+  r: { anchor?: { rawAnchorMs?: number; firstFrameDelayMs?: number } } | Record<string, unknown>,
+): void {
+  const fromResult = (r as { anchor?: { rawAnchorMs?: number; firstFrameDelayMs?: number } }).anchor
+  const existing = ch.diagnostics?.anchor
+  const merged: ChannelAnchor = {
+    // The audio lane reports its own raw anchor (pre-latency-subtraction) in
+    // diagnostics; the video lane reports it here. Whichever exists wins over
+    // the fallback, which is simply the offset as it stands right now.
+    rawAnchorMs:
+      existing?.rawAnchorMs ??
+      fromResult?.rawAnchorMs ??
+      (typeof ch.startOffsetMs === 'number' ? Math.round(ch.startOffsetMs * 10) / 10 : undefined),
+    ...(existing?.reportedInputLatencyMs !== undefined
+      ? { reportedInputLatencyMs: existing.reportedInputLatencyMs }
+      : {}),
+    ...(fromResult?.firstFrameDelayMs !== undefined
+      ? { firstFrameDelayMs: fromResult.firstFrameDelayMs }
+      : {}),
+  }
+  ch.diagnostics = { ...(ch.diagnostics ?? {}), anchor: merged }
 }
 
 class Session implements CaptureSession {
@@ -718,6 +756,22 @@ class Session implements CaptureSession {
       recorder.onstart = () => {
         // Duration anchor only — startOffset was set at start() from startCall
         // for video (file epoch ≈ startCall). Do not overwrite startOffsetMs.
+        // B7: this lane has NO frame stamp — MediaRecorder never says when its
+        // first frame arrived — so the closest thing it can offer is the
+        // start()→onstart gap, and it is flagged so nobody reads it as one.
+        // The measured (WebCodecs) lane, which is the default since X6, does
+        // report a real first-frame delay.
+        if (rt.startAbs !== undefined) {
+          const gap = Math.round((performance.now() - rt.startAbs) * 10) / 10
+          rt.diagnostics = {
+            ...(rt.diagnostics ?? {}),
+            anchor: {
+              ...(rt.diagnostics?.anchor ?? {}),
+              firstFrameDelayMs: gap,
+              firstFrameDelayIsStartGap: true,
+            },
+          }
+        }
         if (rt.startAbs === undefined) rt.startAbs = performance.now()
         if (rt.media === 'video') {
           const s = rt.track.getSettings()
@@ -1637,6 +1691,7 @@ class Session implements CaptureSession {
           if ('diagnostics' in r && r.diagnostics && Object.keys(r.diagnostics).length) {
             ch.diagnostics = r.diagnostics
           }
+          mergeAnchor(ch, r)
         })
         .catch((err) => console.error('[capture] pause: measured stop failed', ch.kind, err))
         .finally(() => ch.resolveStopped())
@@ -1937,6 +1992,7 @@ class Session implements CaptureSession {
           if ('diagnostics' in r && r.diagnostics && Object.keys(r.diagnostics).length) {
             rt.diagnostics = r.diagnostics
           }
+          mergeAnchor(rt, r)
         })
         .catch((err) => console.error('[capture] measured stop failed', rt.kind, err))
         // resolveStopped must run even on failure or doStop() hangs forever.
@@ -2002,6 +2058,7 @@ class Session implements CaptureSession {
               if ('diagnostics' in r && r.diagnostics && Object.keys(r.diagnostics).length) {
                 ch.diagnostics = r.diagnostics
               }
+              mergeAnchor(ch, r)
             }
           } catch (err) {
             console.error('[capture] measured stop failed', ch.kind, err)
@@ -2270,6 +2327,19 @@ class Session implements CaptureSession {
         if (c.fps) rec.fps = c.fps
       }
       if (c.diagnostics) rec.diagnostics = c.diagnostics
+      // B7: THE ANCHOR IS STAMPED HERE, BEFORE THE SHIFT BELOW. Every lane gets
+      // one — the measured lanes have already filled in the parts only they can
+      // know (the audio latency the platform reported, the video first-frame
+      // delay), and this fills the frame of reference they all share. After the
+      // shift, offsets are relative to the take and a device's own lateness is
+      // no longer recoverable from them.
+      rec.diagnostics = {
+        ...(rec.diagnostics ?? {}),
+        anchor: {
+          ...(rec.diagnostics?.anchor ?? {}),
+          rawAnchorMs: rec.diagnostics?.anchor?.rawAnchorMs ?? rec.startOffsetMs,
+        },
+      }
       return rec
     })
 
@@ -2285,6 +2355,34 @@ class Session implements CaptureSession {
       durationMs: channels.reduce((m, c) => Math.max(m, c.startOffsetMs + c.durationMs), 0),
       channels,
     }
+
+    /**
+     * B7 — THE ALIGNMENT INPUTS, ON ONE LINE, FOR THE TAKE THAT JUST HAPPENED.
+     *
+     * The values are persisted (above) so a reload keeps them, but a field
+     * report starts with someone looking at a console, and "mic/camera unsynch
+     * in beggining" has never once arrived with a number attached. This is the
+     * line that changes that. It is descriptive: nothing below it moves.
+     */
+    console.info(
+      '[capture] B7 anchors — ' +
+        channels
+          .map((c) => {
+            const a = c.diagnostics?.anchor
+            const parts = [`${c.kind} off=${c.startOffsetMs}ms`]
+            if (a?.rawAnchorMs !== undefined) parts.push(`raw=${a.rawAnchorMs}ms`)
+            if (a?.reportedInputLatencyMs !== undefined) {
+              parts.push(`inputLatency=${a.reportedInputLatencyMs}ms`)
+            }
+            if (a?.firstFrameDelayMs !== undefined) {
+              parts.push(
+                `${a.firstFrameDelayIsStartGap ? 'startGap' : 'firstFrame'}=${a.firstFrameDelayMs}ms`,
+              )
+            }
+            return parts.join(' ')
+          })
+          .join(' · '),
+    )
 
     // O15: THIS MACHINE CARRIED THIS PLAN. Only a take that ran long enough to
     // mean it, and only one where nothing degraded — the ladder never stepped

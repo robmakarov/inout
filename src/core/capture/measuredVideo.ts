@@ -67,6 +67,8 @@ export interface MeasuredVideoHandle {
     durationMs: number
     startOffsetMs: number
     stats: RawVideoStats
+    /** B7: what this channel's offset was built from. Instrumentation only. */
+    anchor: { rawAnchorMs: number; firstFrameDelayMs: number }
   }>
   cancel: () => Promise<void>
 }
@@ -183,6 +185,13 @@ export async function startMeasuredVideoCapture(opts: {
   // stamp on the same clock as the session epoch. See the worker's header.
   let pumping = true
   let firstFrameSeen = false
+  // B7: when this channel STARTED ASKING for frames. `startOffsetMs` measures
+  // from the session epoch and so folds in everything the session did before
+  // this channel existed; the gap between these two is the DEVICE's own
+  // spin-up, which is the half a synthetic rig can never show (a canvas
+  // answers in ~0 ms, a real getDisplayMedia surface took 233 ms in one run).
+  const pumpStartMs = performance.now()
+  let firstFrameDelayMs = 0
   const reader = new TP({ track: clone }).readable.getReader()
   void (async () => {
     try {
@@ -196,6 +205,7 @@ export async function startMeasuredVideoCapture(opts: {
         const atMs = performance.now()
         if (!firstFrameSeen) {
           firstFrameSeen = true
+          firstFrameDelayMs = atMs - pumpStartMs
           resolveFirst(atMs - opts.epoch)
           // WHAT COLOUR DOES THE SOURCE EVEN HAND US? This decides whether the
           // ~20 % of glyph colour a take loses is OURS or Chrome's, and nothing
@@ -271,6 +281,10 @@ export async function startMeasuredVideoCapture(opts: {
         durationMs: reply.durationMs,
         startOffsetMs,
         stats: reply.stats,
+        anchor: {
+          rawAnchorMs: Math.round(startOffsetMs * 10) / 10,
+          firstFrameDelayMs: Math.round(firstFrameDelayMs * 10) / 10,
+        },
       }
     },
     async cancel() {
