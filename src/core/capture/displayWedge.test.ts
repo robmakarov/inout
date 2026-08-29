@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  classifyDisplayStall,
   displayRequestLevel,
+  displayStallMessage,
   displayWedgeCount,
   rememberDisplaySuccess,
   rememberDisplayWedge,
+  resetDisplayWedge,
   resetDisplayWedgeForTests,
 } from './displayWedge'
 import { acquireChannelsProgressive } from './acquire'
@@ -59,16 +62,46 @@ describe('wedge memory', () => {
     expect(displayRequestLevel(1_000_001)).toBe(0)
   })
 
-  it('a rung-1 success keeps the rung — invisible to the user, and the rung above choked', () => {
+  // W1, 2026-08-29 — THESE TWO USED TO ASSERT THE OPPOSITE, and that was the
+  // bug. "A lower rung keeps it until the TTL: it costs the user nothing they
+  // can see" was true about the picker and false about everything else: a
+  // machine degraded by a cause that was already gone stayed degraded for 24 h,
+  // and the only exit anyone found was a localStorage line in a console.
+  // Robert hit it three times in one evening. One good take is stronger
+  // evidence than one old bad one.
+  it('a rung-1 success climbs home — the mark is gone, not merely quieter', () => {
     rememberDisplayWedge(1_000_000)
     rememberDisplaySuccess(1)
-    expect(displayRequestLevel(1_000_001)).toBe(1)
+    expect(displayRequestLevel(1_000_001)).toBe(0)
   })
 
-  it('a rung-2 success keeps the floor — still nothing the user can see is gone', () => {
+  it('a rung-2 success climbs ONE rung — not straight home, that rung did choke', () => {
     for (let i = 0; i < 3; i++) rememberDisplayWedge(1_000_000 + i)
     rememberDisplaySuccess(2)
+    expect(displayRequestLevel(1_000_005)).toBe(1)
+  })
+
+  it('W1 GATE: two good takes walk a floored machine back to 0, with no TTL waiting', () => {
+    for (let i = 0; i < 3; i++) rememberDisplayWedge(1_000_000 + i)
     expect(displayRequestLevel(1_000_005)).toBe(2)
+    rememberDisplaySuccess(2)
+    rememberDisplaySuccess(1)
+    // Minutes later, not 24 hours later.
+    expect(displayRequestLevel(1_000_000 + 60_000)).toBe(0)
+  })
+
+  it('a wedge after a climb still steps down — a sick machine cannot ratchet out', () => {
+    rememberDisplayWedge(1_000_000)
+    rememberDisplayWedge(1_000_001)
+    rememberDisplaySuccess(2) // → 1
+    rememberDisplayWedge(1_000_002)
+    expect(displayRequestLevel(1_000_003)).toBe(2)
+  })
+
+  it('a FULL-request success still clears outright — nothing of ours was dropped', () => {
+    for (let i = 0; i < 3; i++) rememberDisplayWedge(1_000_000 + i)
+    rememberDisplaySuccess(0)
+    expect(displayRequestLevel(1_000_005)).toBe(0)
   })
 
   it('the mark expires 24h after the last wedge — a fixed Chrome restores the full request', () => {
@@ -222,19 +255,22 @@ describe('the request Chrome actually receives after a wedge', () => {
     expect(seen.audio).toBeTruthy()
   })
 
-  it('a reduced-request take that succeeds keeps its rung, and the floor holds', async () => {
-    rememberDisplayWedge()
+  it('W1 GATE, END TO END: real takes walk a floored machine off the floor', async () => {
+    // The same climb as the unit tests above, but driven through the actual
+    // acquisition path — which is where the rung is read and written, and the
+    // reason this used to assert "keeps its rung, and the floor holds". It
+    // held so well that Robert spent an evening on rung 2 with the cause
+    // already gone.
+    for (let i = 0; i < 3; i++) rememberDisplayWedge()
+    expect(displayRequestLevel()).toBe(2)
+
     stubDisplay(() => undefined)
     await acquireChannelsProgressive(config, {
       onChannel: () => undefined,
       onFailure: () => undefined,
     }).settled
-    // Rung-1 success — still marked (the machine proved it chokes on rung 0),
-    // but nothing the user can see is missing there.
     expect(displayRequestLevel()).toBe(1)
 
-    for (let i = 0; i < 2; i++) rememberDisplayWedge()
-    expect(displayRequestLevel()).toBe(2)
     // This test is about the LADDER, not the release barrier: pretend the
     // previous take's share released long ago so the next request is instant.
     resetDisplayReleaseForTests()
@@ -242,6 +278,162 @@ describe('the request Chrome actually receives after a wedge', () => {
       onChannel: () => undefined,
       onFailure: () => undefined,
     }).settled
+    expect(displayRequestLevel()).toBe(0)
+  })
+})
+
+/**
+ * W1, 2026-08-29 — A STALL IS NOT ALWAYS A WEDGE.
+ *
+ * With macOS screen recording ungranted, Chrome's picker opens, SAYS SO, and
+ * getDisplayMedia never settles: identical to the wedge from the page. Before
+ * this, every such stall escalated the safe-mode ladder against a permission
+ * no request of ours can satisfy — parking the machine on a reduced request
+ * for 24 h over a checkbox — and reported "the device never connected" while
+ * Chrome was displaying the actual answer on screen.
+ */
+describe('telling the wedge from the permission', () => {
+  it('macOS + never delivered = the permission, which is the one Chrome is showing', () => {
+    expect(classifyDisplayStall('macos')).toBe('permission')
+  })
+
+  it('one delivered share proves the grant — every stall after it is the wedge', () => {
+    rememberDisplaySuccess(0)
+    expect(classifyDisplayStall('macos')).toBe('wedge')
+  })
+
+  it('nowhere else has a grant that HANGS — Windows and Linux read as the wedge', () => {
+    // The Wayland portal refuses, and a refusal arrives as a rejection that
+    // never reaches this path at all.
+    expect(classifyDisplayStall('windows')).toBe('wedge')
+    expect(classifyDisplayStall('linux')).toBe('wedge')
+  })
+
+  it('the user\'s reset clears the rung and KEEPS the delivery fact', () => {
+    rememberDisplaySuccess(0) // this profile has the grant
+    for (let i = 0; i < 3; i++) rememberDisplayWedge()
     expect(displayRequestLevel()).toBe(2)
+    resetDisplayWedge()
+    expect(displayRequestLevel()).toBe(0)
+    // Forgetting the delivery would make the very next stall misread a granted
+    // machine as an ungranted one, and send the user to System Settings for
+    // nothing.
+    expect(classifyDisplayStall('macos')).toBe('wedge')
+  })
+
+  it('the permission text names the browser the user is actually in', () => {
+    const edge = displayStallMessage('permission', 'edge', 'failed')
+    expect(edge).toContain('Edge')
+    expect(edge).not.toContain('Chrome')
+    expect(edge).toContain('Screen & System Audio Recording')
+    // THE LINE THIS TASK EXISTS TO DELETE.
+    expect(edge).not.toContain('never connected')
+  })
+
+  it('the waiting text may not claim anything failed — the request is still alive', () => {
+    const waiting = displayStallMessage('wedge', 'chrome', 'waiting')
+    expect(waiting).toContain('Still waiting')
+    expect(waiting).not.toContain('nothing was recorded')
+  })
+})
+
+describe('what a real timeout does to the ladder', () => {
+  const config = { screen: true, camera: false, mic: false, systemAudio: false }
+  const MAC_UA =
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
+
+  /** getDisplayMedia that never settles — the wedge, and the ungranted
+   *  permission, are the same object from here. */
+  function stubNeverSettles(ua = MAC_UA): void {
+    vi.stubGlobal('MediaStream', StubStream)
+    vi.stubGlobal('navigator', {
+      userAgent: ua,
+      maxTouchPoints: 0,
+      mediaDevices: {
+        getDisplayMedia: () => new Promise<never>(() => {}),
+        getUserMedia: () => Promise.resolve(new StubStream([stubTrack('audio')])),
+      },
+      permissions: { query: () => Promise.resolve({ state: 'granted' }) },
+    })
+  }
+
+  it('a PERMISSION stall does not raise the rung at all — W1 gate', async () => {
+    vi.useFakeTimers()
+    stubNeverSettles()
+    const failures: { stall?: string }[] = []
+    const acq = acquireChannelsProgressive(config, {
+      onChannel: () => undefined,
+      onFailure: (f) => failures.push(f),
+    })
+    await vi.advanceTimersByTimeAsync(31_000)
+    await acq.settled
+    expect(failures[0]?.stall).toBe('permission')
+    // The whole point: nothing was learned about OUR options, so nothing of
+    // ours is dropped on the next click.
+    expect(displayRequestLevel()).toBe(0)
+    vi.useRealTimers()
+  })
+
+  it('the SAME stall after a delivered share is a wedge, and does step down', async () => {
+    rememberDisplaySuccess(0) // this profile has the macOS grant
+    vi.useFakeTimers()
+    stubNeverSettles()
+    const failures: { stall?: string }[] = []
+    const acq = acquireChannelsProgressive(config, {
+      onChannel: () => undefined,
+      onFailure: (f) => failures.push(f),
+    })
+    await vi.advanceTimersByTimeAsync(31_000)
+    await acq.settled
+    expect(failures[0]?.stall).toBe('wedge')
+    expect(displayRequestLevel()).toBe(1)
+    vi.useRealTimers()
+  })
+
+  it('says it while the request is STILL RUNNING, not 30 s later', async () => {
+    vi.useFakeTimers()
+    stubNeverSettles()
+    const stalls: { message: string; stall: string }[] = []
+    const acq = acquireChannelsProgressive(config, {
+      onChannel: () => undefined,
+      onFailure: () => undefined,
+      onStall: (message, stall) => stalls.push({ message, stall }),
+    })
+    // Nothing at 11 s — a person may still be reading Chrome's picker.
+    await vi.advanceTimersByTimeAsync(11_000)
+    expect(stalls).toHaveLength(0)
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(stalls).toHaveLength(1)
+    expect(stalls[0]?.stall).toBe('permission')
+    expect(stalls[0]?.message).toContain('Screen & System Audio Recording')
+    // And it stays a NOTICE: the take has not failed yet.
+    await vi.advanceTimersByTimeAsync(20_000)
+    await acq.settled
+    expect(stalls).toHaveLength(1)
+    vi.useRealTimers()
+  })
+
+  it('a share that ARRIVES never nags — the notice is cancelled with the promise', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('MediaStream', StubStream)
+    vi.stubGlobal('navigator', {
+      userAgent: MAC_UA,
+      maxTouchPoints: 0,
+      mediaDevices: {
+        getDisplayMedia: () => Promise.resolve(new StubStream([stubTrack('video')])),
+        getUserMedia: () => Promise.resolve(new StubStream([stubTrack('audio')])),
+      },
+      permissions: { query: () => Promise.resolve({ state: 'granted' }) },
+    })
+    const stalls: string[] = []
+    const acq = acquireChannelsProgressive(config, {
+      onChannel: () => undefined,
+      onFailure: () => undefined,
+      onStall: (m) => stalls.push(m),
+    })
+    await acq.settled
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(stalls).toEqual([])
+    vi.useRealTimers()
   })
 })
