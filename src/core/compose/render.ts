@@ -86,6 +86,12 @@ import { createExportScratch, type ExportScratch } from './scratch'
 import { collectPeaks, createPeakBuffer, createWaveformRenderer } from './waveform'
 import { openVideoChannel, type VideoChannelReader } from './video'
 import { exportFileName } from './fileName'
+import {
+  constantQualityQp,
+  constantQualitySupported,
+  markConstantQuality,
+  registerConstantQualityEncoder,
+} from './constantQuality'
 
 /**
  * Half-width of the fade applied at every cut join (F1). The two sides of a
@@ -373,6 +379,23 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     if (!ctx) throw new Error('Canvas 2D context unavailable')
     const frame: FrameCanvas = { ctx, width, height, scale: width / 1920 }
 
+    // CONSTANT QUALITY, when this browser honours it (PO 2026-08-29, "more
+    // quality and much less size"). Resolved BEFORE the output so the file's
+    // own certification can say which way it was encoded — a size report from
+    // the field is unattributable otherwise. The bitrate stays in the config as
+    // the fallback's target and as what the size estimate is built from; the
+    // custom encoder drops it and drives the QP instead. A browser without
+    // quantizer mode never marks the config and encodes exactly as before.
+    const wantQp = constantQualityQp()
+    const qp =
+      wantQp !== null && (await constantQualitySupported(target.videoCodec, width, height))
+        ? wantQp
+        : null
+    if (qp !== null) registerConstantQualityEncoder()
+    else if (wantQp !== null) {
+      console.info('[compose] constant quality asked for but unsupported here — bitrate target kept')
+    }
+
     // O(1) memory: mux straight to an OPFS scratch file. BufferTarget stays as
     // the fallback for platforms where the scratch can't be opened.
     scratch = await createExportScratch()
@@ -402,6 +425,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
             audio: needAudio ? target.audioCodec : undefined,
             gopSec,
             rung: target.rung,
+            qp: qp ?? undefined,
           },
         }),
       ),
@@ -414,6 +438,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       bitrate: videoBitrate,
       keyFrameInterval: gopSec,
       ...target.encoderOptions,
+      ...(qp !== null ? { onEncoderConfig: markConstantQuality(qp) } : {}),
       onEncodedPacket: (p) => bits.video(p.byteLength, p.type),
     })
     out.addVideoTrack(videoSource, { frameRate: fps })

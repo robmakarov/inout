@@ -32,6 +32,14 @@ export interface CertifiedCodec {
   /** Ladder rung name (O5d): 'avc' is the blind-share floor; anything above it
    *  only ever runs where the recipient is known. */
   rung?: string
+  /**
+   * H.264 quantizer this file was encoded at, when the render targeted a
+   * QUALITY instead of a bitrate (PO 2026-08-29). Absent means the bitrate
+   * target — which is what every file before this, and every packet-copied
+   * file since, was made with. A size report from the field cannot be read
+   * without knowing which of the two produced the file.
+   */
+  qp?: number
 }
 
 export interface CertifiedExport {
