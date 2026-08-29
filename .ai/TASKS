@@ -148,8 +148,10 @@ it is not a 60 constant: the rate follows the source and ONLY GOES UP, so a 24 f
 untouched and a source at or below 30 cannot reach a changed line. PRICED: twice the frames for
 1.5× the bytes (2.0 MB against 1.3 MB), which is the number the minimal-size objective should be
 read against. NEW ON THE MAP: F15-FLIP, Robert's eye on one real 60 fps take — the task's own last
-gate, and the only thing between here and 60 fps by default; and `oracle:load`, announced and NOT
-run because it is a load rig and he is at the machine.
+gate, and the only thing between here and 60 fps by default. `oracle:load` was announced, approved
+and RUN — and it is RED ON BOTH SIDES OF F15 (identical verdict on 79d6def in a throwaway worktree),
+so it is filed P1 in BACKLOG rather than counted against this task; the lead is that its own 4K
+source is a rAF-painted canvas driven headless, which paints nothing.
 FOUND BY DRIVING IT RATHER THAN READING IT, third session running: EditorScreen resolved its step
 against the take's SHAPE and not its RATE, so the export asked for 30 fps of a 60 fps take, the new
 copy fence correctly refused the mismatch, and the take silently RE-RENDERED ITSELF DOWN. Nothing
@@ -786,9 +788,20 @@ GATES MET, everything geometric and temporal read out of the FILES in OPFS, neve
    1.25×; fidelity residual 0.04 dB). Both are the timing-gate flakiness `.ai/DECISIONS` already
    records, and neither commit here touches the audio path or the render.
 
-STILL OPEN, and both are Robert's:
- · `oracle:load` — announced, not run: it is a load rig and the rule is it never runs while Robert
-   is at the machine. `npm run oracle:load` when he says.
+THE ONE GATE THIS TASK CANNOT MEET, with the measurement rather than an excuse: `oracle:load` IS
+RED, AND IT IS RED WITHOUT F15. Announced, approved by Robert, run — and then run again on 79d6def
+(the commit before F15's first line) in a throwaway worktree. IDENTICAL verdict both sides:
+`composite tail FAIL/fps FAIL · raw tail INCONCLUSIVE/fps INCONCLUSIVE`, tail 9848 ms against HEAD
+and 7366 ms against the baseline over a 400 ms band, delivered 0.2 and 2.5 fps over a band of 10,
+and both raw runs erroring "the take produced no screen channel". THE LEAD is the same mechanism
+this session hit in the Browser pane: the rig's 4K source is a rAF-painted canvas and `oracle:load`
+drives through `exp.mjs`, which is HEADLESS by default, and a headless page runs rAF at 0 — so the
+SOURCE starves and the tail band reads the starvation as tail loss. DECISIONS records this rig at
+14 fps under the same 4K load, so 0.2-2.5 is a different regime and points at Chrome, not at us.
+Filed P1 in BACKLOG with the first move (`--headed`). F15 is merged with this gate explicitly unmet
+and explicitly not caused by it.
+
+STILL OPEN, and it is Robert's:
  · ONE REAL 60 fps TAKE JUDGED BY EYE, which is the task's own last gate and the only thing between
    here and turning `?sourcefps=1` on by default.
 

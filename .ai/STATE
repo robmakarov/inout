@@ -721,8 +721,9 @@ gaps / in flight:
   PROTOCOL: Robert says "roadmap" → print the TASKS READY map and WAIT; Robert says "go <id>" → one task,
   own branch, gates, merge, then update the READY map.
   READY NOW: F15-FLIP and F13-FLIP (both are Robert's EYE on one real take — a 60 fps take and a
-  phone take — and each is the only thing between its flag and being the default) · `oracle:load`
-  for F15, announced and unrun because it is a load rig · O4 step 2 remainder (the worker is
+  phone take — and each is the only thing between its flag and being the default) · ORACLE:LOAD IS
+  RED and it is not F15 (same verdict on the commit before it; the rig's own 4K source is a
+  rAF-painted canvas driven headless — P1 in BACKLOG) · O4 step 2 remainder (the worker is
   exonerated — see above) · F7c (attempt 5: motion is
   a uniform 1.44x under, which is a countable question) · P5a (BLOCKED on Xcode 27 + an iOS 27
   device) · O11d (blocked on P1's Playwright install) · P1's two remaining gates (both need
