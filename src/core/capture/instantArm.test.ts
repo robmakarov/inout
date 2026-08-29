@@ -14,6 +14,35 @@ import {
 } from './acquire'
 import { DEFAULT_EXPORT_SETTINGS } from '@core/types'
 import { parseSlowChannels } from './synthetic'
+import { setNativeRes } from './nativeRes'
+
+/**
+ * Run `fn` with the native-res preference forced. This suite has no DOM, so the
+ * sticky store has to exist for the preference to be readable at all.
+ */
+function withNativeRes<T>(on: boolean, fn: () => T): T {
+  const store = new Map<string, string>()
+  const g = globalThis as { localStorage?: unknown }
+  const had = 'localStorage' in g
+  g.localStorage = {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => void store.set(k, v),
+    removeItem: (k: string) => void store.delete(k),
+  }
+  setNativeRes(on)
+  const done = () => {
+    if (!had) delete g.localStorage
+  }
+  try {
+    const out = fn()
+    if (out instanceof Promise) return out.finally(done) as T
+    done()
+    return out
+  } catch (err) {
+    done()
+    throw err
+  }
+}
 
 // PO 2026-08-23 removed the tab/window "Heads-up:" toasts. The picker the user
 // just used already shows which surface they chose, so the notice narrated
@@ -43,17 +72,30 @@ describe('capture ceiling (4K game tab froze the take, PO 2026-08-22)', () => {
     expect(CAPTURE_MAX_FPS).toBe(DEFAULT_EXPORT_SETTINGS.fps)
   })
 
-  it('constrains the picker request by MAX only — a small surface can never be overconstrained', () => {
-    const c = displayVideoConstraints() as {
-      width: { max: number }
-      height: { max: number }
-      frameRate: { max: number; ideal: number }
-    }
-    expect(c.width).toEqual({ max: CAPTURE_MAX_WIDTH })
-    expect(c.height).toEqual({ max: CAPTURE_MAX_HEIGHT })
+  it('caps the frame rate on every rung, native-res or not', () => {
     // A 60 fps game tab must be capped, not merely nudged: `ideal` alone lets
     // Chrome deliver 60 and every extra frame is encoded twice, then dropped.
+    // This bound is about frames and not pixels, so native-res never lifts it.
+    const c = displayVideoConstraints() as { frameRate: { max: number; ideal: number } }
     expect(c.frameRate.max).toBe(CAPTURE_MAX_FPS)
+    withNativeRes(false, () => {
+      const off = displayVideoConstraints() as { frameRate: { max: number } }
+      expect(off.frameRate.max).toBe(CAPTURE_MAX_FPS)
+    })
+  })
+
+  it('DEFAULT (native-res, PO 2026-08-29) sends no size bound, so the surface arrives whole', () => {
+    const c = displayVideoConstraints() as { width?: unknown; height?: unknown }
+    expect(c.width).toBeUndefined()
+    expect(c.height).toBeUndefined()
+  })
+
+  it('with native-res OFF the request is bounded by MAX only — a small surface is never overconstrained', () => {
+    withNativeRes(false, () => {
+      const c = displayVideoConstraints() as { width: { max: number }; height: { max: number } }
+      expect(c.width).toEqual({ max: CAPTURE_MAX_WIDTH })
+      expect(c.height).toEqual({ max: CAPTURE_MAX_HEIGHT })
+    })
   })
 
   it('recognises an oversized surface and leaves a compliant one alone', () => {
@@ -64,9 +106,20 @@ describe('capture ceiling (4K game tab froze the take, PO 2026-08-22)', () => {
     expect(exceedsCaptureCeiling({ width: 1280, height: 720, frameRate: 30.000001 })).toBe(false)
   })
 
-  it('downscales a 4K surface when the browser ignored the picker constraints', async () => {
+  it('DEFAULT: a 4K surface is KEPT — the ladder, not the cap, is the safety net now', async () => {
+    // PO 2026-08-29 took this risk explicitly. resolutionLadder.ts steps
+    // 4K -> 1440p -> 1080p on measured backpressure instead of never starting
+    // high, and PO is the reporting channel if the 08-22 freeze returns.
     const apply = vi.fn().mockResolvedValue(undefined)
     await capDisplayTrack(track({ width: 3840, height: 2160, frameRate: 60 }, apply))
+    expect(apply).not.toHaveBeenCalled()
+  })
+
+  it('with native-res OFF a 4K surface is still downscaled when the picker was ignored', async () => {
+    const apply = vi.fn().mockResolvedValue(undefined)
+    await withNativeRes(false, () =>
+      capDisplayTrack(track({ width: 3840, height: 2160, frameRate: 60 }, apply)),
+    )
     expect(apply).toHaveBeenCalledWith({
       width: { max: CAPTURE_MAX_WIDTH },
       height: { max: CAPTURE_MAX_HEIGHT },
@@ -76,14 +129,18 @@ describe('capture ceiling (4K game tab froze the take, PO 2026-08-22)', () => {
 
   it('touches nothing when the surface already fits', async () => {
     const apply = vi.fn().mockResolvedValue(undefined)
-    await capDisplayTrack(track({ width: 1440, height: 900, frameRate: 30 }, apply))
+    await withNativeRes(false, () =>
+      capDisplayTrack(track({ width: 1440, height: 900, frameRate: 30 }, apply)),
+    )
     expect(apply).not.toHaveBeenCalled()
   })
 
   it('an oversized take beats no take: a rejecting applyConstraints never throws', async () => {
     const apply = vi.fn().mockRejectedValue(new Error('OverconstrainedError'))
     await expect(
-      capDisplayTrack(track({ width: 3840, height: 2160, frameRate: 30 }, apply)),
+      withNativeRes(false, () =>
+        capDisplayTrack(track({ width: 3840, height: 2160, frameRate: 30 }, apply)),
+      ),
     ).resolves.toBeUndefined()
   })
 })

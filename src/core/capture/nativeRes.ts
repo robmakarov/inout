@@ -7,16 +7,31 @@
  * machine could have kept up. O6's answer is to start at native and step DOWN
  * on measured backpressure (resolutionLadder.ts) rather than never start high.
  *
- * IT IS OFF BY DEFAULT, and this is the one place in the session where that is
- * not merely the frozen rule's caution. O6's OWN GATE says "PO's real
- * 4K-game-tab scenario re-verified", and 2026-08-26 measured why no rig can
- * stand in for that: a synthetic 4K source is a rAF-painted canvas, so its
- * delivered fps is dominated by the painting — a cost a real 4K display, which
- * the OS composites, does not have. The ladder is tested at its boundaries; the
- * thing it protects cannot be tested here.
+ * IT IS ON BY DEFAULT SINCE 2026-08-29, ON PO'S RULING: "we need native res by
+ * default of course, why the fuck not, if freeze will appear i will say."
  *
- *   ?nativeres=1   (this load only)
- *   localStorage['inout.capture.nativeres'] = '1'   (sticky)
+ * That overrides the caution this file shipped with, and the caution was real:
+ * O6's own gate wanted "PO's 4K-game-tab scenario re-verified", and 2026-08-26
+ * measured why no rig can stand in for it — a synthetic 4K source is a
+ * rAF-painted canvas, so its delivered fps is dominated by the painting, a cost
+ * a real 4K display (which the OS composites) does not have. The ladder is
+ * tested at its boundaries; the thing it protects still cannot be tested here.
+ * What changed is who carries that risk: PO has taken it, explicitly, and is
+ * the reporting channel if the freeze returns.
+ *
+ * WHAT IT ACTUALLY BUYS, so the expectation is right: the export ladder's 1440p
+ * step was an UPSCALE of a 1080p capture, spending 14 Mbps on interpolated
+ * pixels. With this on, a 1440p or 4K screen is captured at its own size and
+ * that step is real detail. The composite stays 1920x1080 (its canvas is fixed,
+ * and it is what the DEFAULT 1080p step packet-copies), so the default export
+ * is unchanged — this only reaches the steps that re-render.
+ *
+ * THE LADDER IS THE SAFETY NET, not this flag: resolutionLadder.ts watches
+ * delivered fps and steps 4K -> 1440p -> 1080p before delivery collapses,
+ * one rung at a time, never back up.
+ *
+ *   ?nativeres=0   (this load only — back to the 1080p cap)
+ *   localStorage['inout.capture.nativeres'] = '0'   (sticky)
  */
 
 const STORAGE_KEY = 'inout.capture.nativeres'
@@ -38,7 +53,7 @@ function fromStorage(): boolean | null {
 
 /** True when this take should ask for the source's own resolution. */
 export function nativeResEnabled(): boolean {
-  return fromSearch() ?? fromStorage() ?? false
+  return fromSearch() ?? fromStorage() ?? true
 }
 
 export function setNativeRes(on: boolean): void {

@@ -20,12 +20,12 @@ The URL wins over the sticky value; the sticky value wins over the default.
 | **WebCodecs raw channels** `?rawcodec=` | `?rawcodec=mediarecorder` | Raw screen/camera recorded through WebCodecs instead of MediaRecorder. Flipped on your ruling 2026-08-26. 10× less audio-clock starvation, half the bytes at the same picture. |
 | **Composite engine v2** `?engine=` | `?engine=v1` | The worker compositor that owns its own encoder. v1 is the old MediaRecorder-on-canvas path. |
 | **All four inputs** | the chips on the capture screen | screen + camera + mic + system audio are all armed by default (`inout.capture.prefs`). |
+| **Native resolution** `?nativeres=` | `?nativeres=0` | Capture the screen at ITS OWN size instead of downscaling to 1080p. On since 2026-08-29 on PO's ruling. This is what makes the 1440p export step real detail instead of an upscale. If a big screen ever freezes a take again, this is the switch to turn off — and say so. |
 
 ## What is OFF by default
 
 | Switch | Turn it on with | What it does, and why it is off |
 |---|---|---|
-| **Native resolution** `?nativeres=` | `?nativeres=1` | Capture at the screen's own resolution instead of the 1080p cap, stepping down only if delivery collapses. **This is the one you want for a 1440p/4K screen** — today the 1440p export step is upscaling a 1080p capture. Off because the 4K-game-tab freeze of 2026-08-22 has never been re-tested with it; no synthetic rig can stand in for that. |
 | **Capture-side single generation** `?singlegen=capture` | as written | Stops recording the composite at all — 45–49 % less written per second. Off because it gives up source-liveness detection and the composited preview. |
 | **R128 loudness** `?loudness=` | `?loudness=r128` | Broadcast −14 LUFS normalization instead of the shipped p90 bounding. Off because R128 can only hit the target by turning takes **down**, and the shipped rule never attenuates. |
 

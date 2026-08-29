@@ -3,9 +3,11 @@ import {
   cameraVideoConstraints,
   displayMediaOptions,
   displayAudioMissingMessage,
+  CAPTURE_MAX_FPS,
   CAPTURE_MAX_HEIGHT,
   CAPTURE_MAX_WIDTH,
 } from './acquire'
+import { setNativeRes } from './nativeRes'
 
 const base = { screen: false, camera: true, mic: false, systemAudio: false }
 
@@ -59,7 +61,41 @@ describe('the request Chrome receives, rung by rung', () => {
     expect(o.audio).toBeTruthy()
     expect(o.systemAudio).toBe('include')
     expect(o.selfBrowserSurface).toBe('exclude')
-    expect((o.video as MediaTrackConstraints).width).toEqual({ max: CAPTURE_MAX_WIDTH })
+    // The frame-rate bound is not about resolution and holds on every rung.
+    expect((o.video as MediaTrackConstraints).frameRate).toEqual({
+      ideal: CAPTURE_MAX_FPS,
+      max: CAPTURE_MAX_FPS,
+    })
+  })
+
+  it('NATIVE-RES (default since 2026-08-29) sends NO size bound at all', () => {
+    // The whole point: `width: { max }` is a real constraint, so leaving it in
+    // means Chrome downscales the surface before the track is handed over and
+    // native-res capture never happens however the flag is set.
+    const v = displayMediaOptions(config, 0).video as MediaTrackConstraints
+    expect(v.width).toBeUndefined()
+    expect(v.height).toBeUndefined()
+  })
+
+  it('turning native-res OFF puts the 1080p ceiling back', () => {
+    // This suite runs without a DOM, so the sticky store has to exist for the
+    // preference to be readable at all.
+    const store = new Map<string, string>()
+    const g = globalThis as { localStorage?: unknown }
+    const had = 'localStorage' in g
+    g.localStorage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+    }
+    try {
+      setNativeRes(false)
+      const v = displayMediaOptions(config, 0).video as MediaTrackConstraints
+      expect(v.width).toEqual({ max: CAPTURE_MAX_WIDTH })
+      expect(v.height).toEqual({ max: CAPTURE_MAX_HEIGHT })
+    } finally {
+      if (!had) delete g.localStorage
+    }
   })
 
   it('rungs 1 and 2 drop only what the user cannot see', () => {

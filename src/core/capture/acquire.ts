@@ -336,12 +336,25 @@ export const CAPTURE_MAX_FPS = DEFAULT_EXPORT_SETTINGS.fps
  * Chrome's picker is a product decision, and it is not this file's to make.
  */
 
-/** Upper bounds only — a smaller surface satisfies them untouched, so this can
- * never overconstrain a source and cost the user their screen capture. */
+/**
+ * Upper bounds only — a smaller surface satisfies them untouched, so this can
+ * never overconstrain a source and cost the user their screen capture.
+ *
+ * THE SIZE BOUND IS DROPPED WHEN NATIVE-RES CAPTURE IS ON (default since
+ * 2026-08-29), and it has to be dropped HERE or the flag does nothing at all:
+ * `width: { max }` is a real constraint and Chrome downscales the surface to
+ * satisfy it before the track is ever handed over, so capDisplayTrack's
+ * native-res branch was skipping a re-cap of a track that had already been
+ * capped at the source. The frame-rate bound stays either way — that one is not
+ * about resolution, it is that every frame above 30 is encoded twice and then
+ * dropped at export.
+ */
 export function displayVideoConstraints(): MediaTrackConstraints {
+  const size = nativeResEnabled()
+    ? {}
+    : { width: { max: CAPTURE_MAX_WIDTH }, height: { max: CAPTURE_MAX_HEIGHT } }
   return {
-    width: { max: CAPTURE_MAX_WIDTH },
-    height: { max: CAPTURE_MAX_HEIGHT },
+    ...size,
     // max, not just ideal: a 60 fps game tab hands over 60 fps otherwise, and
     // every frame above 30 is encoded twice and then dropped at export.
     frameRate: { ideal: CAPTURE_MAX_FPS, max: CAPTURE_MAX_FPS },
@@ -401,9 +414,9 @@ export function exceedsCaptureCeiling(s: MediaTrackSettings): boolean {
 export async function capDisplayTrack(track: MediaStreamTrack | undefined): Promise<void> {
   if (!track) return
   const before = track.getSettings()
-  // O6, opt-in: start at the source's own resolution and let the ladder step
-  // DOWN on measured backpressure instead of never starting high. Off by
-  // default — see nativeRes.ts for why that is not just caution here.
+  // O6, default since 2026-08-29 (PO's ruling): start at the source's own
+  // resolution and let resolutionLadder.ts step DOWN on measured backpressure
+  // instead of never starting high. See nativeRes.ts.
   if (nativeResEnabled()) {
     console.info(
       `[capture] native-res capture: leaving display at ${before.width}×${before.height}@${before.frameRate ?? '?'} (O6)`,
