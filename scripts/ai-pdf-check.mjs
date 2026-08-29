@@ -10,7 +10,7 @@
  *      regex-scanning for objects. Catches the failure a hand-rolled writer
  *      actually has: an offset that does not land on its object.
  *   2. Apple PDFKit, through JXA. A real third-party implementation, already
- *      on every mac, and therefore no download for the PO to approve —
+ *      on every mac, and therefore no download for Robert to approve —
  *      pdftotext/mutool/qpdf are all absent on this machine.
  *
  * "Any AI" starts at "a strict reader accepts it and finds the text", and
@@ -155,7 +155,7 @@ const results = [
     detail: `page 1 yields ${indexText.length} chars of text and 0 images`,
   },
   {
-    // PO's first real test: the AI opened the file and asked what to do with
+    // Robert's first real test: the AI opened the file and asked what to do with
     // it. These four phrases are the answer, and they have to survive
     // extraction by a reader that is not ours.
     name: 'the file briefs its own reader: what it is, what the pages are, what to do',

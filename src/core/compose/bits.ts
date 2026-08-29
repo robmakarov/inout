@@ -1,7 +1,7 @@
 /**
  * BITS AUDIT — the render half (task O11a).
  *
- * PO 2026-08-23: "never make it worse for everyone because one system can't."
+ * Robert 2026-08-23: "never make it worse for everyone because one system can't."
  * The precondition for any size lever is knowing where the bytes actually go,
  * and until now nobody did: the 8 Mbps ceiling in codecs.ts was picked blind.
  *

@@ -432,10 +432,10 @@ export async function runCaptureBitrate(
   proposal.push(
     'NOT PROPOSED HERE, and deliberately: the COMPOSITE rung. It is the file the instant path copies ' +
       'verbatim, so its bitrate IS the delivered quality of an unedited take — lowering it is not a ' +
-      'capture saving, it is an export quality change, and belongs to F7 and to PO.',
+      'capture saving, it is an export quality change, and belongs to F7 and to Robert.',
   )
   proposal.push(
-    'ANY ACTUAL CHANGE IS ITS OWN PO-GATED TASK (X12 is measurement only). What this run licenses is a ' +
+    'ANY ACTUAL CHANGE IS ITS OWN Robert-GATED TASK (X12 is measurement only). What this run licenses is a ' +
       'proposal with numbers under it, not a flip.',
   )
 

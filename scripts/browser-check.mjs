@@ -10,7 +10,7 @@
  * not evidence. This turns the Yandex gate into one command.
  *
  * Same hygiene as oracle.mjs: ephemeral server on a free port (never :5173,
- * which PO QA owns), throwaway browser profile, prod build only.
+ * which Robert's QA owns), throwaway browser profile, prod build only.
  *
  *   node scripts/browser-check.mjs --list
  *   node scripts/browser-check.mjs --browser=yandex

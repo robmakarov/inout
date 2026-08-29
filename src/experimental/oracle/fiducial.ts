@@ -82,7 +82,7 @@ export interface ClockFit {
   rmsMs: number
   maxAbsMs: number
   usedPoints: number
-  /** Readable frames excluded as outliers (misdecodes, stalls), TD item 3. */
+  /** Readable frames excluded as outliers (misdecodes, stalls), review item 3. */
   rejectedPoints: number
 }
 
@@ -118,7 +118,7 @@ const OUTLIER_FLOOR_MS = 12
  * Two passes: ordinary least squares, then refit excluding points whose
  * residual exceeds max(3sigma-equivalent MAD, 12 ms floor). Rejects
  * barcode misdecodes / render stalls without letting them drag alpha
- * (TD verdict item 3: outlier rejection in fitClock).
+ * (review verdict item 3: outlier rejection in fitClock).
  */
 export function fitClock(readings: FrameReading[]): ClockFit | null {
   const pts: XY[] = readings
@@ -248,13 +248,13 @@ export interface SyncStats {
   onsets: number
   matched: number
   /**
-   * SIGN CONVENTION (TD item 3, fixed and documented):
+   * SIGN CONVENTION (review item 3, fixed and documented):
    *   offset = audio onset position on the output timeline
    *            minus the video-clock-predicted position of that beep.
    *   POSITIVE  => AUDIO LATE relative to video (equivalently: video content
    *                placed too early on the timeline).
    *   NEGATIVE  => AUDIO EARLY relative to video (video placed too late).
-   * The TD's measured +171 ms therefore reads: audio lags video by ~171 ms.
+   * The measured +171 ms therefore reads: audio lags video by ~171 ms.
    */
   meanOffsetMs: number
   maxAbsOffsetMs: number

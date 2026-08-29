@@ -284,7 +284,7 @@ export async function runExportEngine(
 
   const source = content === 'motion' ? motionSource(1920, 1080) : screenLikeSource(1920, 1080)
   // X4's question is about sharding decode ACROSS channels, so its fixture has
-  // to have more than one — and screen+camera is also the shape PO records.
+  // to have more than one — and screen+camera is also the shape Robert records.
   const cameraSource = opts.camera ? motionSource(1280, 720) : null
   let recording: Recording
   try {

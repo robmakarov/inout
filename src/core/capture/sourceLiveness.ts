@@ -6,10 +6,10 @@
  * full-screen app takes over the shared surface, or the track ends outright
  * (browser "Stop sharing"). MediaRecorder does NOT fail in that case — it holds
  * the last frame, so the take ends as a long still image with no warning
- * anywhere (PO 2026-08-06: "switched to other tab with game, nothing was
+ * anywhere (Robert 2026-08-06: "switched to other tab with game, nothing was
  * recorded, just frozen frame").
  *
- * FRAME SILENCE ALONE IS NOT A VERDICT (PO 2026-08-25: "message about frozen
+ * FRAME SILENCE ALONE IS NOT A VERDICT (Robert 2026-08-25: "message about frozen
  * screen is bullshit"). The original rule — "no frame for 3 s = dead, because
  * even a static screen gets ~1 keep-alive frame/s" — was measured on the v1
  * <video> path (Chrome 150/macOS 26) and its premise did not survive the v2

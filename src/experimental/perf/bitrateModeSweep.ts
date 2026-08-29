@@ -1,6 +1,6 @@
 /**
  * EXPERIMENTAL — X15 lane (a): the bitrateMode sweep X6's handoff named as the
- * next measurement, and the number PO's X6 ruling waits on.
+ * next measurement, and the number Robert's X6 ruling waits on.
  *
  * WHAT X6 LEFT OPEN. At the same requested ceiling the WebCodecs AVC raw
  * channel wrote 0.21× the MediaRecorder VP9 channel's bytes on screen content
@@ -101,7 +101,7 @@ export interface X15SweepReport {
   sampledOrdinals: number[]
   picked: { codec: string; hardware: string } | null
   contents: SweepContent[]
-  /** PO-visible artifacts, magnified glyph crops. Only with {"crops":true}. */
+  /** Robert-visible artifacts, magnified glyph crops. Only with {"crops":true}. */
   crops: Crop[]
   gates: Record<string, { pass: boolean; detail: string }>
   verdict: string

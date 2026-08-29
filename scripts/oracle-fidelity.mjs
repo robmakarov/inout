@@ -2,7 +2,7 @@
 /**
  * EXPERIMENTAL — headless audio-fidelity oracle (task oracle-audio-fidelity;
  * instant lane: BACKLOG P0 2026-08-25).
- * Ephemeral Vite server only (never :5173 / shared PO QA).
+ * Ephemeral Vite server only (never :5173 / Robert's shared QA).
  *
  * Gates TWO files:
  *  - the RENDER of a single-source take (the historical gate, bands unchanged);
@@ -12,7 +12,7 @@
  *    shared 0.7 bus (−3.1 dB, pinned by unit test) plus a 12:1 limiter, so the
  *    gate here is a ceiling that catches anything WORSE than that documented
  *    cost (crushing under load, double-gain, a dead lane), while the level
- *    cost itself is PO's call to change (mix behaviour = PO gate).
+ *    cost itself is Robert's call to change (mix behaviour = Robert gate).
  *  The render of the SAME multi-source take is printed as the A/B (its 1/N bus
  *  reads ~−6 dB by design) but not gated — one take, two files, side by side.
  *
@@ -44,7 +44,7 @@ const MIN_SEPARATION_DB = 40
  * ("without the composite's uncertified MediaRecorder audio" — instant.ts).
  * So its level cost is the render's own headroom rule, 1/N for N sources
  * (compose/audio.ts mixGainForChannels: −6.02 dB at N=2), and gating the raw
- * error would gate a documented design choice that is PO's to change.
+ * error would gate a documented design choice that is Robert's to change.
  *
  * What a gate can honestly say is that nothing ELSE moved the level: measured
  * error minus the designed bus gain must sit inside the same ±1 dB the

@@ -7,7 +7,7 @@
  * showed whichever step happened to start LAST and then sat there — reading
  * "Waiting for microphone…" while the microphone was long since live and
  * something else was the holdout, and reading it for the full 130 s settle
- * budget (PO 2026-08-23: "stuck on waiting for microphone again").
+ * budget (Robert 2026-08-23: "stuck on waiting for microphone again").
  *
  * The fix is to track the OUTSTANDING SET rather than the latest event, so the
  * line always names what is genuinely still missing. Pure and DOM-free so the

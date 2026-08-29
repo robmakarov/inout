@@ -7,11 +7,11 @@
  * `webcodecs` is the X6 path: MediaStreamTrackProcessor → VideoEncoder (AVC) →
  * fragmented MP4 → the worker's own SyncAccessHandle.
  *
- * THE DEFAULT IS `webcodecs` SINCE 2026-08-26 — PO's ruling, given on his own
+ * THE DEFAULT IS `webcodecs` SINCE 2026-08-26 — Robert's ruling, given on his own
  * field evidence, exactly the flip X6 reserved for him. The deciding take pair
  * (black-boxed): the same recording regime starved the audio clocks 1.6 % of
  * wall time on MediaRecorder and 0.16 % on WebCodecs — a 10× CPU relief that
- * PO heard ("music sounds shitty / goes faster" → "yes now it okay with
+ * Robert heard ("music sounds shitty / goes faster" → "yes now it okay with
  * ?rawcodec=webcodecs"). The known cost, stated when X6 shipped and accepted
  * with the flip: at the same requested ceiling the AVC screen channel writes
  * ~0.21× the VP9 bytes on screen content (rate-control undershoot, 27.9 dB

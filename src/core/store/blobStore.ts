@@ -41,7 +41,7 @@ type DurableWorkerReply =
 /**
  * A worker that never answers used to hang its caller forever — and since
  * arm() awaits a write-stream open, that froze recording with no error and no
- * way out (PO-hit 2026-08-23, "stuck on waiting for microphone"). Every worker
+ * way out (Robert-hit 2026-08-23, "stuck on waiting for microphone"). Every worker
  * round-trip is now bounded; a timeout surfaces as a normal rejection, which
  * callers already handle by falling back or failing the channel loudly.
  */
@@ -69,7 +69,7 @@ function callTimeoutFor(cmd: DurableWorkerMsg['cmd']): number {
 }
 
 /**
- * Durable OPFS writer via SyncAccessHandle + flush (TD-VERDICT item 2).
+ * Durable OPFS writer via SyncAccessHandle + flush (review verdict item 2).
  * Survives hard tab kill; createWritable swap-file does not.
  * Same WritableStream<Uint8Array | Blob> contract as the legacy path.
  */

@@ -1,5 +1,5 @@
 /**
- * Certified-export metadata (task O8, PO-approved 2026-08-22).
+ * Certified-export metadata (task O8, Robert-approved 2026-08-22).
  *
  * Every exported file carries a short, honest record of how it was made: which
  * path produced it, the output settings, what the loudness normalizer actually
@@ -34,7 +34,7 @@ export interface CertifiedCodec {
   rung?: string
   /**
    * H.264 quantizer this file was encoded at, when the render targeted a
-   * QUALITY instead of a bitrate (PO 2026-08-29). Absent means the bitrate
+   * QUALITY instead of a bitrate (Robert 2026-08-29). Absent means the bitrate
    * target — which is what every file before this, and every packet-copied
    * file since, was made with. A size report from the field cannot be read
    * without knowing which of the two produced the file.

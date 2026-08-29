@@ -212,7 +212,7 @@ export function changedBlobs(
 
 /**
  * Cells the pointer and the caret occupy, so the CONTENT metric can ignore
- * them (task AI1, after PO's first real take).
+ * them (task AI1, after Robert's first real take).
  *
  * The alternative — a content threshold set high enough that a moving cursor
  * cannot reach it — is what made the first version blind to a typed word and a

@@ -151,7 +151,7 @@ describe('WallClockHold', () => {
 
 /**
  * One hour of quanta at a given audio-clock error against the wall. This is the
- * instrument PO's report is answered with, so it drives the SHIPPED class the
+ * instrument Robert's report is answered with, so it drives the SHIPPED class the
  * capture paths use, not a copy of its arithmetic.
  */
 function hour(ppm: number, opts: Partial<WallClockHoldOpts> = {}) {
@@ -176,9 +176,9 @@ function hour(ppm: number, opts: Partial<WallClockHoldOpts> = {}) {
   }
 }
 
-describe('WallClockHold holds BOTH directions (PO 2026-08-29)', () => {
+describe('WallClockHold holds BOTH directions (Robert 2026-08-29)', () => {
   it('a FAST audio clock no longer drifts a second late across an hour', () => {
-    // The defect exactly as PO reported it: +278 ppm ended +1001 ms late with
+    // The defect exactly as Robert reported it: +278 ppm ended +1001 ms late with
     // the pad-only class, and nothing in the app could see it.
     const r = hour(278)
     expect(r.trimmedMs).toBeGreaterThan(800)

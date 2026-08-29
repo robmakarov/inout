@@ -76,7 +76,7 @@ describe('keyframe selection — the economy claims', () => {
     const still = ks.filter((i) => i < 12 * FPS).length
     const moving = ks.filter((i) => i >= 12 * FPS && i <= 15 * FPS + 4).length
     expect(still).toBe(1) // the opening page, and nothing else
-    // The motion is SAMPLED, not summarized: PO uses this file to reproduce
+    // The motion is SAMPLED, not summarized: Robert uses this file to reproduce
     // animation, and one page for three seconds of motion cannot do that. It is
     // also not sampled forever — after the burst cap the ordinary pace resumes,
     // because three seconds of continuous change is a scroll, not a transition.
@@ -123,7 +123,7 @@ describe('keyframe selection — the economy claims', () => {
   })
 })
 
-describe('keyframe selection — the cursor taxonomy (PO’s hard gate)', () => {
+describe('keyframe selection — the cursor taxonomy (Robert’s hard gate)', () => {
   it('a cursor wandering over a static screen costs ONE page, the first', () => {
     const path = [
       [10, 10], [24, 18], [40, 30], [55, 44], [70, 55], [88, 61], [100, 50], [110, 35],
@@ -168,7 +168,7 @@ describe('keyframe selection — the cursor taxonomy (PO’s hard gate)', () => 
 
   it('a small UI change — a typed word, a button turning active — is NOT lost', () => {
     // ~250×30 px at 1080p ≈ 20×2 cells: under the old content threshold, which
-    // is exactly what swallowed the typing in PO's first real take.
+    // is exactly what swallowed the typing in Robert's first real take.
     const frames = Array.from({ length: 40 }, (_, i) =>
       i < 10 ? screen() : paint(screen(), 30, 50, 20, 2, 230),
     )

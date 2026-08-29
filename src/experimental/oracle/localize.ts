@@ -23,10 +23,10 @@
  *   composeResidualMs    = measured export sync − predictedSyncErrorMs
  *       — whatever misalignment compose ADDS on top of capture bookkeeping.
  *
- * Decision rule (TD step 2): predicted ≈ measured & residual ≈ 0 →
+ * Decision rule (review step 2): predicted ≈ measured & residual ≈ 0 →
  * CAPTURE-SIDE; raw aligned (predicted ≈ 0) but export off → COMPOSE-SIDE.
  *
- * Falsification hooks (TD step 3):
+ * Falsification hooks (review step 3):
  *  (a) is proven if lag(video) ≫ lag(audio) AND predicted ≈ measured; it
  *      would be DISPROVEN by lag(video) ≈ lag(audio) (then raw files are
  *      aligned and the error must live downstream).

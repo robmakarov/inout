@@ -13,7 +13,7 @@ Ranked by what it costs us if it goes red:
 
 | # | risk | blast radius | status |
 |---|---|---|---|
-| 1 | **Google sign-in unreachable** | cloud sharing entirely unusable; capture/edit/export unaffected | ACCEPTED — alternatives ruled out by PO |
+| 1 | **Google sign-in unreachable** | cloud sharing entirely unusable; capture/edit/export unaffected | ACCEPTED — alternatives ruled out by Robert |
 | 2 | **`*.supabase.co` blocked platform-wide** | no sign-in, no share links | mitigation known, not applied |
 | 3 | **Vercel shared IP blocked** | the app does not open at all | mitigation known, not applied |
 | 4 | Yandex Browser engine incompatibility | — | **not the risk** (Chromium; QA row still open) |
@@ -38,7 +38,7 @@ and fool a naive status check).
 
 ## Evidence so far
 
-**Non-RU baseline, TD machine, 2026-08-23** — [`docs/qa/reachability-baseline.json`](qa/reachability-baseline.json):
+**Non-RU baseline, dev machine, 2026-08-23** — [`docs/qa/reachability-baseline.json`](qa/reachability-baseline.json):
 
 ```
   ✓  app                HTTP 200      inout-kappa.vercel.app
@@ -53,7 +53,7 @@ and fool a naive status check).
 ```
 
 **RU run: NOT DONE.** It cannot be faked from here, and a VPN run would measure
-the VPN. This is the one open item of the P3 evidence, and it needs either PO on
+the VPN. This is the one open item of the P3 evidence, and it needs either Robert on
 an RU connection or one RU tester. Two things to supply when running it:
 `--supabase=` (the deployed project URL, which is not in the local env) and a
 `--label` naming the ISP and city.
@@ -93,17 +93,17 @@ one order can take the backend away, and keep the product useful without it.
 
 Sign-in is not on this list any more — see the ruling below.
 
-## Auth alternatives — RULED OUT (PO, 2026-08-23)
+## Auth alternatives — RULED OUT (Robert, 2026-08-23)
 
 Yandex ID / VK ID / email-OTP were designed and built as a compiling stub, and
-then removed on PO instruction: *"dont do auth alternatives for rus, just
+then removed on instruction: *"dont do auth alternatives for rus, just
 prepare it to work in yandex browser."* `CloudProvider` is unchanged — Google is
 the only door, and no optional members or adapters remain in the tree.
 
 What that means for risk #1 above: where `accounts.google.com` is unreachable,
 cloud sharing is simply unavailable. Capture, editing and export keep working,
 because they are local — the user still gets their file, they just cannot get a
-link. Do not re-add an alternative without PO asking for it.
+link. Do not re-add an alternative without Robert asking for it.
 
 ## i18n — decided, not started
 

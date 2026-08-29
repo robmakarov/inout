@@ -2,12 +2,12 @@
  * WallClockHold — decides when a sample-counted audio timeline has come loose
  * from the wall clock, in EITHER direction, and by how much.
  *
- * WHY IT EXISTS (PO 2026-08-25 game take; measured by `npm run exp -- syncload`):
+ * WHY IT EXISTS (Robert 2026-08-25 game take; measured by `npm run exp -- syncload`):
  * a starved AudioContext renders fewer quanta than wall time, sample counting
  * cannot see the missing quanta by construction, and everything after the loss
  * slides EARLY against the picture, growing through the take.
  *
- * WHY IT IS A CLASS AND NOT TWO INLINE BLOCKS (2026-08-26, from PO's recheck —
+ * WHY IT IS A CLASS AND NOT TWO INLINE BLOCKS (2026-08-26, from Robert's recheck —
  * "mic and camera unsynch 1-2 s at 6 min", "tab audio worse and worse"): the
  * two inline copies of this logic had diverged into one dead and one harmful.
  * measuredAudio.ts updated its arrival stamp before comparing against it, so
@@ -34,7 +34,7 @@
  * the true offset whatever its sign.
  *
  * ────────────────────────────────────────────────────────────────────────────
- * WHY IT TRIMS AS WELL AS PADS (PO 2026-08-29: "in long video more than hour
+ * WHY IT TRIMS AS WELL AS PADS (Robert 2026-08-29: "in long video more than hour
  * the sound gets a little slower than screen video, about a second after one
  * hour" — preview and export alike).
  *
@@ -48,7 +48,7 @@
  *     clock -278 ppm   padded 960 ms   ends   -41 ms    in sync
  *     clock  -50 ppm   padded 160 ms   ends   -20 ms    in sync
  *     clock  +50 ppm   padded   0 ms   ends  +180 ms    LATE
- *     clock +278 ppm   padded   0 ms   ends +1001 ms    LATE   ← PO's second
+ *     clock +278 ppm   padded   0 ms   ends +1001 ms    LATE   ← Robert's second
  *
  * 278 ppm is an utterly ordinary crystal difference between an audio device
  * and the system clock. Nothing in the pipeline could see it: the file's own

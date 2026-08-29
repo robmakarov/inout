@@ -1,7 +1,7 @@
 /**
  * The AI export — one PDF an agent can read (task AI1).
  *
- * PO's bar: ONE file that ANY AI understands, not human-watchable, maximally
+ * Robert's bar: ONE file that ANY AI understands, not human-watchable, maximally
  * token-cheap. Agents do not watch video; they sample frames and pay about one
  * token per 750 pixels, so a five-minute MP4 is thousands of frames nobody can
  * afford. This builds the cheap thing instead: an index page of pure text, then
@@ -66,7 +66,7 @@ import { exportStem } from '@core/compose/fileName'
 /**
  * How often the picture is looked at.
  *
- * V1 looked 4 times a second and PO's first real take lost a whole sequence
+ * V1 looked 4 times a second and Robert's first real take lost a whole sequence
  * between two pages — typing into a field, the button turning active, the click
  * and the tab switch, all inside one 5.5 s gap. Eight looks a second costs
  * nothing that matters (the decoder is already walking every frame — note 13 —
@@ -482,7 +482,7 @@ export async function buildForAi(opts: AiExportOptions): Promise<ExportResult> {
           }
         }
         // A page is read on its own as often as in sequence, so its caption
-        // says what it belongs to — not just when it is. PO's first real test
+        // says what it belongs to — not just when it is. Robert's first real test
         // came back with the AI asking what the file was; a bare "t=2.00s"
         // over a picture is not an answer to that.
         const caption = [

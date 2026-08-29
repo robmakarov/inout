@@ -198,7 +198,7 @@ describe('the portrait frame keeps the layout it was authored with', () => {
 })
 
 /**
- * F13, SECOND PASS — the phone. PO judged the first pass on a real device and
+ * F13, SECOND PASS — the phone. Robert judged the first pass on a real device and
  * it was still cropped: `track.getSettings()` describes the SENSOR, so a phone
  * held portrait reports 1920x1080 while every frame delivered is 1080x1920.
  * Capture believed the settings. These are the cases that produced.

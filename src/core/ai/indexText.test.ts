@@ -63,7 +63,7 @@ const lines = (): string[] =>
   })
 
 describe('index page', () => {
-  // PO's first real test: the AI opened the file and ASKED WHAT TO DO WITH IT.
+  // Robert's first real test: the AI opened the file and ASKED WHAT TO DO WITH IT.
   // A reader that cannot tell what a document is cannot use it, so these three
   // are the load-bearing lines of the whole export.
   it('says what the file IS in its first line, before any machine fact', () => {

@@ -46,7 +46,7 @@ export function channelLabel(kind: ChannelKind, caps: Capabilities): string {
 /**
  * The line the editor shows when a take came back short. Wording is the
  * original (2026-08): for a few hours today it claimed a whole-screen share
- * cannot carry sound on macOS, which is false on PO's own machine — his screen
+ * cannot carry sound on macOS, which is false on Robert's own machine — his screen
  * share has that box. Restored verbatim; it does not change again without
  * evidence from a real picker.
  */

@@ -10,7 +10,7 @@
  * It answers the gates in the order they were written:
  *   economy      a mostly-static minute costs ≤8 pages, an idle span costs 0,
  *                a motion burst concentrates its pages inside itself
- *   cursor       PO's hard case: a cursor wandering a still screen is ≤1 page
+ *   cursor       Robert's hard case: a cursor wandering a still screen is ≤1 page
  *                after the first, a caret is 0, a tooltip is exactly 1 + crop
  *   trail        precision of the pointer detector against the path the rig
  *                actually drew — the number that decides whether it ships
@@ -402,11 +402,11 @@ async function probeChannelFiducials(
 }
 
 /**
- * Run a REAL FILE through the builder — the PO's own take, dropped into
+ * Run a REAL FILE through the builder — Robert's own take, dropped into
  * public/ and fetched over the dev server.
  *
  * The synthetic scenarios prove the rules; they cannot prove the CALIBRATION,
- * and the calibration is what PO's first real export got wrong ("it loses way
+ * and the calibration is what Robert's first real export got wrong ("it loses way
  * too much frames"). A real 97 s UI walkthrough answers what no painted canvas
  * can: how many pages a genuine session earns, where they land, and whether the
  * moments that matter — a field being typed into, a button turning active, a
@@ -434,7 +434,7 @@ export interface RealFileResult {
   gapsMs: { max: number; median: number; over3s: number }
   cropped: number
   classes: Record<string, number>
-  /** The built file, when asked for — this is what PO uploads to an AI. */
+  /** The built file, when asked for — this is what Robert uploads to an AI. */
   pdfBase64?: string
 }
 
@@ -732,7 +732,7 @@ export async function runAiExport(
   )
 
   // A real recording, when one was dropped in: the synthetic scenarios prove
-  // the rules, this proves the calibration on the thing PO actually records.
+  // the rules, this proves the calibration on the thing Robert actually records.
   const real = opts.realFile ? await runRealFile(opts.realFile) : undefined
   scenarios.push(await runScenario('burst', economyMs))
   scenarios.push(await runScenario('cursor', shortMs))
@@ -906,7 +906,7 @@ export async function runAiExport(
   const burstInside = burst.keyframeAtMs.filter((t) => t >= 19_000 && t <= 26_000).length
 
   const gates: AiExportReport['gates'] = {
-    // WAS "≤8 pages", and that gate encoded the design PO rejected: it passed
+    // WAS "≤8 pages", and that gate encoded the design Robert rejected: it passed
     // by summarizing a motion burst into one page. The economy claim that
     // survives is about WHERE the pages go, not how few there are — bounded by
     // what the readers actually accept, checked 2026-08-24: Claude 32 MB /
@@ -924,7 +924,7 @@ export async function runAiExport(
       detail: `${burst.keyframeAtMs.filter((t) => t < 19_000).length} in the first 19 s (the still part); longest gap ${burst.longestGapMs} ms`,
     },
     'economy: the pages go where the motion is, and are DENSE there': {
-      // PO's use is an agent recreating a UI and its animations: five seconds
+      // Robert's use is an agent recreating a UI and its animations: five seconds
       // of motion has to come back as a sequence, not as one summary page.
       pass: burstInside >= burst.keyframes - 1 && burstInside >= 12,
       detail: `${burstInside} of ${burst.keyframes} inside 20-25 s; times ${burst.keyframeAtMs.join(',')}`,
@@ -963,7 +963,7 @@ export async function runAiExport(
     ...(real
       ? {
           'a REAL recording is covered end to end, densely enough to follow': {
-            // The three numbers PO's complaint was about: nothing skipped for
+            // The three numbers Robert's complaint was about: nothing skipped for
             // long, the whole take covered, and the file still uploadable.
             pass:
               real.gapsMs.median <= 1500 &&

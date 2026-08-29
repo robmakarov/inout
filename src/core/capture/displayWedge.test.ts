@@ -11,14 +11,14 @@ import { resetDeviceGuardForTests } from './deviceGuard'
 import { resetDisplayReleaseForTests } from './displayRelease'
 
 /**
- * PO 2026-08-24: "i need this shit never happens to users". The wedge itself
+ * Robert 2026-08-24: "i need this shit never happens to users". The wedge itself
  * is Chrome's (share taken, track never delivered, survives tab close, only a
  * Chrome quit clears it) — but a user hitting it TWICE would be ours. After a
  * wedge, the next record click must send a smaller share request, so that if
  * any of our options is the trigger, the user's second click just works and
  * they never learn any of this existed.
  *
- * PO 2026-08-25: "share sound in chrome with screen toggle not there anymore".
+ * Robert 2026-08-25: "share sound in chrome with screen toggle not there anymore".
  * The first cut dropped `audio` on the FIRST wedge and kept it dropped for
  * 24h, which took Chrome's own tab-audio checkbox off the picker for a day.
  * The rungs below exist so the visible feature is the LAST thing to go, and
@@ -47,7 +47,7 @@ describe('wedge memory', () => {
     rememberDisplayWedge(1_000_001)
     expect(displayRequestLevel(1_000_002)).toBe(2)
     // Wedge all day: the floor holds. Below it lies only the user's own asks,
-    // and those are not ours to drop (PO 2026-08-25).
+    // and those are not ours to drop (Robert 2026-08-25).
     rememberDisplayWedge(1_000_003)
     rememberDisplayWedge(1_000_004)
     expect(displayRequestLevel(1_000_005)).toBe(2)
@@ -79,7 +79,7 @@ describe('wedge memory', () => {
 
   it('a machine marked by the OLD audio-dropping safe mode lands on rung 1, not the silent one', () => {
     // Exactly what the shipped 2026-08-25 build wrote: no rung recorded. Any
-    // PO or user carrying that record gets the tab-audio checkbox back on
+    // Robert or user carrying that record gets the tab-audio checkbox back on
     // their next click instead of waiting out the 24h TTL.
     const raw = JSON.stringify({ wedgedAt: 1_000_000, count: 1 })
     vi.stubGlobal('localStorage', {
@@ -189,7 +189,7 @@ describe('the request Chrome actually receives after a wedge', () => {
     // Until 2026-08-26 the floor asked for bare `audio: true`, which hands the
     // tab audio to Chrome's default AEC/NS/AGC — a machine the game wedges
     // parked on rung 2 recorded every tab-music take as mono warble for a day
-    // (PO: "music from tab sounds shitty"). The processing flags are part of
+    // (Robert: "music from tab sounds shitty"). The processing flags are part of
     // the user's ask and ride every rung; only VIDEO constraints shrink here.
     const audio = seen.audio as Record<string, unknown>
     expect(audio.echoCancellation).toBe(false)
@@ -200,7 +200,7 @@ describe('the request Chrome actually receives after a wedge', () => {
   it('wedge it five times: the request still carries the audio the user asked for', async () => {
     // THE ONE THAT MUST NEVER GO GREEN BY GOING SILENT. No number of wedges
     // buys the app the right to record a take without the sound the user
-    // switched on (PO 2026-08-25: "always fucking clean").
+    // switched on (Robert 2026-08-25: "always fucking clean").
     for (let i = 0; i < 5; i++) rememberDisplayWedge()
     let seen: Record<string, unknown> = {}
     stubDisplay((o) => (seen = o))

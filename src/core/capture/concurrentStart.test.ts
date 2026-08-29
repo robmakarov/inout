@@ -5,7 +5,7 @@ import { resetDeviceGuardForTests } from './deviceGuard'
 import { resetDisplayReleaseForTests } from './displayRelease'
 
 /**
- * PO 2026-08-24: "it must start together immediately, why the fuck waiting is
+ * Robert 2026-08-24: "it must start together immediately, why the fuck waiting is
  * happening". Measured: our arming code costs ~22 ms. Everything else the user
  * waits for after the picker closes is the microphone opening — which is
  * supposed to have happened DURING the picker, concurrently, and silently

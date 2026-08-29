@@ -24,7 +24,7 @@
  *
  * THE SECOND TAKE IS THE OTHER HALF. `?singlegen=capture` skips recording the
  * composite at all, which is where the CPU and the write bandwidth are. It also
- * gives up source-liveness detection and the composited preview, so it is PO's
+ * gives up source-liveness detection and the composited preview, so it is Robert's
  * to flip — this rig's job is to put a number on both sides of that.
  *
  * WHAT IT CANNOT MEASURE: whole-browser CPU. That belongs to the sampler —
@@ -635,7 +635,7 @@ function verdictOf(
   }
   const bw =
     withComp && withoutComp
-      ? ` And the CAPTURE rung stops writing ${((withComp.writeBytesPerSec - withoutComp.writeBytesPerSec) / 1e6).toFixed(2)} MB/s — a whole hardware encoder that never runs — at the price of source-liveness detection and the composited preview, which is PO's call.`
+      ? ` And the CAPTURE rung stops writing ${((withComp.writeBytesPerSec - withoutComp.writeBytesPerSec) / 1e6).toFixed(2)} MB/s — a whole hardware encoder that never runs — at the price of source-liveness detection and the composited preview, which is Robert's call.`
       : ''
   // THE COST THE TASK'S OWN "free — it is strictly less work" FRAMING DID NOT
   // CONTAIN, and it is a number a user can see: the raw channel spends more of

@@ -9,9 +9,9 @@
  *  - optional flash detection (rig flashClick mode) -> a barcode-free,
  *    clock-fit-free second opinion on A/V sync: flashes and beeps fire at the
  *    SAME rig instants, so (audio onset - nearest flash onset) measures the
- *    same misalignment through an independent path (TD step 3d).
+ *    same misalignment through an independent path (review step 3d).
  *
- * SYNC VERDICT RULE (TD sync-fix review 2026-07-14):
+ * SYNC VERDICT RULE (sync-fix review 2026-07-14):
  * Gate on flash+click ONLY. Barcode sync — even with measured beep-grid
  * correction — is demoted to drift/trim diagnostics.
  *

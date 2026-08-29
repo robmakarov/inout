@@ -12,7 +12,7 @@ const run = (events: ArmingTimelineEntry[]): ArmingStep[] =>
 
 describe('arming label tracks what is outstanding, not what started last', () => {
   it('names the one device still missing', () => {
-    // The exact shape of the PO report: three devices start together, two land,
+    // The exact shape of Robert report: three devices start together, two land,
     // the screen picker is still open. The old label said "microphone" here
     // purely because mic was the last 'start' it saw.
     const waiting = run([

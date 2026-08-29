@@ -1,7 +1,7 @@
 /**
  * SILENCE TIGHTENING (task F5a) — the pure half.
  *
- * PO rule for this whole family: deterministic DSP only, NO transcript, NO ML,
+ * Robert rule for this whole family: deterministic DSP only, NO transcript, NO ML,
  * ever. So the only input here is the 100 ms window-RMS envelope the loudness
  * normalizer already computes, and every decision below is a threshold on it.
  *

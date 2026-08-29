@@ -254,7 +254,7 @@ export class LufsAccumulator {
   }
 }
 
-/** R128's own target. −14 is the streaming convention PO's viewers live in. */
+/** R128's own target. −14 is the streaming convention Robert's viewers live in. */
 export const DEFAULT_TARGET_LUFS = -14
 
 /**

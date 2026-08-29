@@ -25,7 +25,7 @@
  *     would remove (min-filter d, stamp frames at timestamp + min d);
  *   · a non-zero slope says the media clock DRIFTS against the wall clock, so
  *     adopting it wholesale would trade a fixed error for a growing one — and
- *     PO records 938-1800 s takes, where even 50 ppm is 45 ms.
+ *     Robert records 938-1800 s takes, where even 50 ppm is 45 ms.
  *
  * So this measures both before anything in production changes (note 10: the rig
  * is wrong before the product is). It reports per source kind, on a canvas

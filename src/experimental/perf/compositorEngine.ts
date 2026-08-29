@@ -630,7 +630,7 @@ export async function runCompositorEngine(
       'deliveredFps counts frames IN THE FILE, not frames offered to the encoder — a frame the encoder dropped is a frame the viewer never sees',
       'longTasks totalMs is main-thread time spent in tasks over 50 ms during the take; v1 composites there, v2 does not',
       'tailGapMs is take length minus the last decodable frame: v1 can only ask MediaRecorder to stop, v2 drains its own encoder',
-      'the 4K row is the 2026-08-22 PO scenario (a 4K game tab) reproduced with a canvas that genuinely repaints every frame',
+      'the 4K row is the 2026-08-22 Robert scenario (a 4K game tab) reproduced with a canvas that genuinely repaints every frame',
       'tailBandPass is O8 \u2264400 ms evaluated HERE, under load — the band has always existed, it had just never been run anywhere it could fail',
       'rawChannel records the SAME source through a plain MediaRecorder: if the raw channels lose their tails too, refusing the instant path buys nothing',
       opts.cold === true

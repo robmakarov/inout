@@ -34,7 +34,7 @@
  *              · a take whose measured-video start FALLS BACK to MediaRecorder
  *                mid-start has neither a composite nor a copyable channel, so
  *                its unedited export renders.
- *            Each is a real capability, so this rung is PO's to flip on
+ *            Each is a real capability, so this rung is Robert's to flip on
  *            evidence — the same shape X6 shipped in, and X6's flip is the
  *            precedent. `npm run exp -- o3b` prices it.
  *
@@ -56,7 +56,7 @@ const STORAGE_KEY = 'inout.compose.singlegen'
  * evidence for it is in `npm run exp -- o3b`: on a screen-only 1080p take the
  * single-generation file keeps the source's colour where the composite loses a
  * second helping of it, at no extra work and no extra bytes. `capture` stays
- * opt-in until PO rules, because that one gives capabilities up.
+ * opt-in until Robert rules, because that one gives capabilities up.
  */
 const DEFAULT_RUNG: SingleGenRung = 'export'
 

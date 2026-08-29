@@ -2,7 +2,7 @@
 
 phase: MVP validation (2026-07-16)
 
-- THE AUDIO TIMELINE IS HELD IN BOTH DIRECTIONS (2026-08-29, PO's hour-long take: "sound get a
+- THE AUDIO TIMELINE IS HELD IN BOTH DIRECTIONS (2026-08-29, Robert's hour-long take: "sound get a
   little slower than screen video ... about second after one hour"). WallClockHold pads a starved
   clock and now TRIMS a fast one — video is wall-stamped, audio is sample-counted at the NOMINAL
   rate, so a +278 ppm device clock used to walk the sound 1001 ms late across an hour with nothing
@@ -10,8 +10,8 @@ phase: MVP validation (2026-07-16)
   preview's slew reads zero). The trim is rate-limited to 0.2 % of a batch and removes frames by
   RESAMPLING the batch shorter, so there is no splice and nothing to click. Take carries its own
   verdict: ChannelDiagnostics.trimmedMs beside paddedMs.
-- CAPTURE IS AT THE SOURCE'S OWN RESOLUTION (2026-08-29, PO's ruling, overriding O6's unmet 4K gate
-  — PO holds the freeze risk and is the reporting channel). Flipping it found the flag was half-dead:
+- CAPTURE IS AT THE SOURCE'S OWN RESOLUTION (2026-08-29, Robert's ruling, overriding O6's unmet 4K gate
+  — Robert holds the freeze risk and is the reporting channel). Flipping it found the flag was half-dead:
   displayVideoConstraints sent width/height {max:1920x1080}, a REAL constraint Chrome honours before
   handing the track over, so `?nativeres=1` had been buying nothing. The size bound is dropped at the
   request now; the 30 fps bound stays (F15 RULED YES 2026-08-29 — 60 fps rides F13, see TASKS).
@@ -28,7 +28,7 @@ phase: MVP validation (2026-07-16)
   copy) is unchanged — and since O3c the step MATCHING the screen is an instant copy of the raw
   channel, so native detail no longer needs the render at all. The ladder's rungs are written
   landscape and are turned for a rotated source (F13).
-- THE FRAME CAN FOLLOW THE TAKE (F13, 2026-08-29) — `?sourceframe=1`, OFF BY DEFAULT UNTIL PO
+- THE FRAME CAN FOLLOW THE TAKE (F13, 2026-08-29) — `?sourceframe=1`, OFF BY DEFAULT UNTIL ROBERT
   JUDGES A REAL PHONE TAKE. Until this the output was a landscape constant end to end
   (DEFAULT_EXPORT_SETTINGS, four 16:9 steps, a 1920x1080 composite canvas, a layout authored at
   1920w) and THE PRODUCT COULD NOT MAKE A VERTICAL VIDEO: camera-only is the only take a phone can
@@ -45,7 +45,7 @@ phase: MVP validation (2026-07-16)
   flag and exported without it copied a 1920x1440 file under a "1080p" badge — so the composite is
   now checked against the request too (refuses nothing that ever worked; every pre-F13 composite is
   1920x1080 and so is its default step).
-  SECOND PASS, same day, after PO judged it ON A PHONE ("still wrong proportions and cutted and in
+  SECOND PASS, same day, after Robert judged it ON A PHONE ("still wrong proportions and cutted and in
   editing even more cutted"): `track.getSettings()` DESCRIBES THE SENSOR — a phone held portrait
   reports 1920x1080 while every frame delivered is 1080x1920 — and the first pass believed it, so a
   portrait take was composited into a landscape canvas and the editor cropped the raw portrait
@@ -66,10 +66,10 @@ phase: MVP validation (2026-07-16)
   -11.1 % / +0.03 dB scrolling — Pareto-better on both, which is why 20 and not 23. `?cq=off` reverts.
   ONLY THE RENDER SEES IT: an unedited default-tier export copies packets and never encodes.
   This is 11 %, NOT the "twice smaller" a movie file is — that gap is the CODEC (hevc/av1 vs our avc
-  blind-share floor), which is a distribution decision and PO's, logged P1.
+  blind-share floor), which is a distribution decision and Robert's, logged P1.
 
 works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → export → share-as-file.
-- SYNCHRONIZED START (PO 2026-07-20, supersedes instant-arm/late-join): arm() waits for src.settled — ALL devices acquired, every permission prompt answered — before start() activates them at one epoch. All channels share one start + one length (verified: 4 lanes 100% ±0.3%); no primary-gated early start, no late-join staggering. pipeline prewarm at mount; devices touched only after record click
+- SYNCHRONIZED START (Robert 2026-07-20, supersedes instant-arm/late-join): arm() waits for src.settled — ALL devices acquired, every permission prompt answered — before start() activates them at one epoch. All channels share one start + one length (verified: 4 lanes 100% ±0.3%); no primary-gated early start, no late-join staggering. pipeline prewarm at mount; devices touched only after record click
 - WHICH FILE THE FAST PATHS COPY IS A DECISION NOW (O3b, 2026-08-29; O3c the same day) —
   compose/copySource.ts, pure and unit-tested, resolved ONCE in choose.ts and handed to whichever
   path runs. Usually the live composite. On a take with exactly ONE video channel that is already
@@ -88,13 +88,13 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   says which it is: certification `copiedFrom`. A camera, or any geometry but 1920x1080, still
   composites — with a stated reason. NOT RECORDING the composite at all is built and OFF behind
   `?singlegen=capture` (45-49 % less written per second of take, one encoder that never runs) because
-  it gives up source-liveness detection and the composited preview: PO's flip. Rig: `npm run exp -- o3b`.
+  it gives up source-liveness detection and the composited preview: Robert's flip. Rig: `npm run exp -- o3b`.
 - instant unedited export ~60-105ms (packet-copied, mp4 h264+aac); a TIME-ONLY edit
   takes smart cut (1384 ms on a 120 s take against the render's 17616); everything else renders — and
   the panel now says HOW LONG IS LEFT, read off the rendering phase's own measured slope and shown
   only once that slope has 3 s and 3 % under it (the ratio is not uniform in time — `preparing` hides
   a whole audio decode on a long take — so extrapolating the whole bar would lie). A ring and a
-  percentage were enough for a 100 ms instant export; PO's 15m38s take sat in that panel for ~3.5
+  percentage were enough for a 100 ms instant export; Robert's 15m38s take sat in that panel for ~3.5
   minutes with no way to tell seconds from an hour. Verified on prod: "about 15s left" at 58 %, done
   ~10 s later.
 - THE COMPOSITE HAS ITS OWN CLOCK AND NOW SAYS SO (P0-instant-sync, fixed 2026-08-25). It is a second
@@ -145,7 +145,7 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   ~10-13 % of export time. And the parity gate fails on the easiest case: the same frames in the
   DEFAULT composition read 37.3 dB / max 156 of 255 / 3.8 % of pixels off by >8 on the screen-TEXT
   interior, against ≤1 LSB or ≥60 dB — texImage2D and drawImage upsample 4:2:0 chroma differently.
-  The port would change how exported text looks, which is PO's call and O9's subject. Rig:
+  The port would change how exported text looks, which is Robert's call and O9's subject. Rig:
   `npm run exp -- x5`.
   IN PRODUCTION THAT DIVERGENCE IS A QUARTER OF THE SIZE (X15(c), 2026-08-26, `npm run exp -- x15c`).
   On one real take through the product's own export ladder, instant against render reads 37.1 dB on
@@ -155,11 +155,11 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   cut copies the composite's packets, so a trimmed export is BIT-IDENTICAL to the untrimmed one.
 - exports STREAM TO DISK (O1): the muxer holds 4 MB regardless of length — a 30-min export peaks at
   39 MB live memory instead of 294 MB. ExportResult.blob is a disk-backed OPFS file.
-- NO DURATION CAP (PO 2026-08-23). MAX_RECORDING_MS is `number | null` and is null; a take runs until
+- NO DURATION CAP (Robert 2026-08-23). MAX_RECORDING_MS is `number | null` and is null; a take runs until
   the user stops it or the last channel dies. The old 30-min cap was hiding the pre-O1 contiguous
   ~1.74 GB export buffer; capture has always streamed to OPFS. Length now costs DISK (~1.1 GB/hour at
   8 Mbps + 128 kbps) and nothing guards it — no storage.estimate() check. Logged P2.
-- EVERY INPUT STOPS AND RESTARTS MID-TAKE (PO 2026-08-23): setChannelActive(kind, active). Off is a real
+- EVERY INPUT STOPS AND RESTARTS MID-TAKE (Robert 2026-08-23): setChannelActive(kind, active). Off is a real
   stop — device released, camera light out — and closes that channel's file THERE, so its timeline bar
   ends where you pressed instead of running frozen or silent. On re-acquires and late-joins a NEW segment
   with its own startOffsetMs. A kind can therefore be SEVERAL non-overlapping segments in
@@ -173,13 +173,13 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   2 s → 5 s (−23.8 % on screen content, 0 % on motion, PSNR 83 dB — no pixel changes, O11b) and the raw
   camera channel 4 → 2.5 Mbps when it is only a PiP (−29.3 % on disk, +0.2 % on the file, PiP PSNR
   52.1 dB, O11c). Harness: `npm run exp -- o11`.
-- EXPORT FOR AI (AI1, 2026-08-24, reworked the same day on PO's first real take): the export panel's
+- EXPORT FOR AI (AI1, 2026-08-24, reworked the same day on Robert's first real take): the export panel's
   second artefact, and it is not a smaller video. One PDF — an index page that BRIEFS ITS READER
   (what the file is, that the pages after it are frames of one recording in time order, why the
   spacing is uneven, what to do with no instructions) plus the derived facts (channel windows, cuts,
   stalls, the frame table with page numbers, a pointer trail), then one frame per page as JPEG with a
   caption band that names the recording, the frame and its time. NO video track anywhere in it.
-  THE TWO THINGS PO'S FIRST FILE GOT WRONG, both fixed and both measured on that same 97 s take:
+  THE TWO THINGS ROBERT'S FIRST FILE GOT WRONG, both fixed and both measured on that same 97 s take:
   it never said what it was (an AI opened it and asked what to do with it), and it dropped the
   moments — 39 frames for 97 s, with typing, a button activating, a click and a tab switch all inside
   one 5.5 s gap. Now 165 frames, median gap 0.4 s, worst 2.9 s, whole take covered.
@@ -198,7 +198,7 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   printed per page at every export. Costs 0.74× the same take's full render (decodes once through the
   render's own reader and layout — note 13 — and never encodes video). src/core/ai/*, main thread,
   no worker. Gated by `node scripts/ai-pdf-check.mjs` (independent xref-walking parser + Apple
-  PDFKit + a real-recording density gate). AWAITING PO: re-test the reworked file — that unfreezes
+  PDFKit + a real-recording density gate). AWAITING ROBERT: re-test the reworked file — that unfreezes
   AI2-AI7.
 - A TAKE CAN BE PAUSED AND RESUMED, AND THE PAUSE IS NOT IN IT (F6, 2026-08-26). `pause()` closes
   every live channel's current SEGMENT and releases nothing: the tracks stay, the camera light stays
@@ -217,7 +217,7 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   retake (dropping the tail segment and re-recording), which is not a capture feature at all but a
   resume of a FINISHED recording, touching recovery, editsRepo and editor state.
 - A RAW CHANNEL RECORDS THROUGH WEBCODECS BY DEFAULT (X6, built 2026-08-26; FLIPPED the same day on
-  PO's field ruling — "yes now it okay, with ?rawcodec=webcodecs i mean", after days of takes on the
+  Robert's field ruling — "yes now it okay, with ?rawcodec=webcodecs i mean", after days of takes on the
   flag). The deciding numbers: the black-boxed take pair measured audio-clock starvation 1.6 % of
   wall time on MediaRecorder vs 0.16 % on WebCodecs in the same regime (10× CPU relief, audible),
   and X15(a) refuted the picture objection (identical pictures: AVC 0.52× bytes at 47.8 dB, glyph
@@ -240,7 +240,7 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   drops on both sides that is RATE CONTROL, not loss — `latencyMode: 'realtime'` with no
   `bitrateMode` undershoots on this content, which is also what the shipped v2 composite does
   (X12 measured it spending 11.8 % of its ceiling). A picture change on the edited-export path is
-  PO's to approve; the next measurement is a `bitrateMode` sweep.
+  Robert's to approve; the next measurement is a `bitrateMode` sweep.
 - A FRAME-DRIVEN CHANNEL MUST KEEP ITS OWN CADENCE (X6, 2026-08-26) — two defects, one cause, both
   found on the DEPLOYED build after the rig was green. MediaStreamTrackProcessor delivers frames only
   when the picture CHANGES, so a static screen delivers nothing; MediaRecorder never had this problem
@@ -270,7 +270,7 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   (worker/in-thread/in-thread/worker, same SHA-256, 661,571 B). THE WORKER IS NOT FASTER — wall 958
   vs 1022 ms — it is elsewhere: the UI thread loses 13 ms of a build instead of 84, worst single
   stall 2 ms instead of 10, 1.2-1.5 % of the build's wall against 8.1-8.3 %. That share scales with
-  take length, so PO's 97 s take pays it for ~10 s of build rather than ~1.
+  take length, so Robert's 97 s take pays it for ~10 s of build rather than ~1.
   THE GATE THIS SHIPPED AGAINST WAS NOT THE ONE WRITTEN. "Long-task count ~0" read 0 on BOTH threads
   and could never have failed: a build that awaits a decode every sample never forms a single ≥50 ms
   task while still owning the thread end to end. The real instrument is scheduling lateness of a
@@ -355,9 +355,9 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
 - THE EDIT SURVIVES A REFRESH (F4, editsRepo IndexedDB v2). It never did before: recovery restored the
   recording and handed the editor a fresh default, so trims and cuts evaporated on every reload.
 - installable PWA, starts offline (P2); first paint 233.9 KB (O7 gate ≤300 KB; was 803)
-- IN-SHOT NOTICE: REMOVED 2026-08-23 on PO's call. The live preview runs on every take again, mirror
+- IN-SHOT NOTICE: REMOVED 2026-08-23 on Robert's call. The live preview runs on every take again, mirror
   tunnel included. CaptureSession.displaySurface stays (acquire fills it; null in synthetic mode) but
-  nothing in the UI reads it. Do not reintroduce a notice here without PO asking for one.
+  nothing in the UI reads it. Do not reintroduce a notice here without Robert asking for one.
 - knows WHICH browser it is running in (P3, core/platform.ts): Yandex is named as Yandex and not
   Chrome, and a below-floor build gets an honest "update" line instead of a silent failure
 - CAPABILITY GATING IS ENGINE × OS, NOT ENGINE (P1): Chromium on WINDOWS carries the machine's audio
@@ -371,7 +371,7 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
 - every exported file carries a certification in its comment tag (O8): path, output settings, loudness
   makeup + source, stalled/missing channels, cut count, CI sync bound
 - THE AUDIO TIMELINE IS HELD AGAINST THE WALL CLOCK, AND AS OF 2026-08-26 THE HOLD ACTUALLY RUNS ON
-  THE AUDIO A USER HEARS. The defect (PO 2026-08-25, "sounds go faster than video" ~20 s in): a
+  THE AUDIO A USER HEARS. The defect (Robert 2026-08-25, "sounds go faster than video" ~20 s in): a
   take's file carries its two tracks on TWO DIFFERENT CLOCKS — composite video is stamped with each
   frame's ARRIVAL, audio is SAMPLE-COUNTED — and they agree only while the audio graph renders in
   real time. Under load the AudioContext renders fewer quanta than wall time (measured 56.1-57.0 s of
@@ -379,7 +379,7 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   everything after the loss slides EARLY, growing through the take. REFUTED on the way, do not
   re-run: the worklets do NOT skip starved quanta (they silence-fill), and nothing is lost in the
   stream hop — it is time the context never rendered.
-  THE 08-25 FIX WAS IN FORCE ON NEITHER PATH THAT SHIPS, and PO's recheck (2026-08-26: mic/camera
+  THE 08-25 FIX WAS IN FORCE ON NEITHER PATH THAT SHIPS, and Robert's recheck (2026-08-26: mic/camera
   1-2 s apart by minute 6; tab audio "worse and worse, almost nothing just noises in the end") is how
   it surfaced. measuredAudio.ts — the mic/tab channels EVERY export mixes from (note 14: no export
   carries the composite's audio) — compared the arrival stamp against a value the same batch had just
@@ -399,10 +399,10 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   MeasuredAudioHandle.stop() returns paddedMs. Counted, never silent (audioPaddedFrames + console
   warnings on both paths).
   NOT claimed: the "noises" during starvation are the machine mangling audio it DOES deliver, and
-  the deepest lever on the starvation itself is capture CPU (the X6 ruling PO still owes). The hold
+  the deepest lever on the starvation itself is capture CPU (the X6 ruling Robert still owes). The hold
   makes the loss an honest, non-accumulating gap instead of a growing desync.
-- A DEAD AUDIO CHANNEL NAMES ITS KILLER NOW (2026-08-26, from PO the same day: "in long video tab
-  audio still dies after a while"). Our own pipeline is ruled out at PO's timescale — 12.5 hidden
+- A DEAD AUDIO CHANNEL NAMES ITS KILLER NOW (2026-08-26, from Robert the same day: "in long video tab
+  audio still dies after a while"). Our own pipeline is ruled out at Robert's timescale — 12.5 hidden
   minutes on the production measured path: batches end to end, 417 ms padded, no death — so the
   death is the display-audio TRACK or its source, and all its ways of dying record identical
   digital silence. Every measured channel now testifies: track mute/unmute/ended and AudioContext
@@ -410,15 +410,15 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   (`silentTailMs`, warned when >10 s: "input was PURE SILENCE for the final Xs — went quiet at
   Ys"). Red-proven in the app (a live-but-silent stream: silentTailMs = the whole channel, mute
   stamps at +3.2/+5.2 s, paddedMs 0 — silent input and a starved clock are told apart). Evidence
-  only, zero behaviour change; the console of PO's next long take decides the fix. Candidates,
+  only, zero behaviour change; the console of Robert's next long take decides the fix. Candidates,
   from the platform record: Chromium muting captured-tab audio (crbug 40703184 family), display
   tracks ending on device changes (crbug 344876285 — AirPods auto-switch), or the source pausing.
-  PO's "dies between youtube videos" hypothesis was TAKEN TO THE LAB the same day (`npm run exp --
+  Robert's "dies between youtube videos" hypothesis was TAKEN TO THE LAB the same day (`npm run exp --
   tabaudio`: real getDisplayMedia via auto-accept flags, tone → teardown → 45 s silent gap → new
   tone, own-tab AND hidden-child-tab topologies, PLUS an occlusion cell covering the captured
   window 35 s) and did NOT reproduce — audio returns at full level, zero mute events.
   THEN THE DYING TAKES THEMSELVES WERE AUTOPSIED (a browser session on the app origin decodes the
-  take's own OPFS channels in place — the field-evidence loop that needs nothing from PO but
+  take's own OPFS channels in place — the field-evidence loop that needs nothing from Robert but
   "don't discard it"). TWO MECHANISMS, both real: (1) the movie take of 16:40Z — at 6:36–7:02 the
   WHOLE DISPLAY PAIR dies together (screen frozen on a DIMMED mid-dialogue frame with
   spinner-scale flicker, tab audio silent, mic alive, both recover together) — the signature of a
@@ -440,7 +440,7 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   the starvation behind "music sounds shitty / goes faster": clocks lost ~1.6 % of an 84 s take
   (padded, so no drift), but content Chrome delivers under that load is mangled at the source —
   the lever is X6. Revival clones stop on pagehide (wedge-family insurance). The muted-forever
-  case still has no app-side lever beyond a re-share surface (PO's UI call). Detail in BACKLOG.
+  case still has no app-side lever beyond a re-share surface (Robert's UI call). Detail in BACKLOG.
 - CAPTURE MEASURES THE MIX'S ENVELOPE ONCE, AND THE EXPORT STOPPED MEASURING IT AGAIN (X1,
   2026-08-26). O2 kept three scalars from the capture-time accumulator and SORTED the window series
   away; the series is now kept IN TIME ORDER on `Recording.loudness.envelope` (windowRms + windowPeak
@@ -473,8 +473,8 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   field and never copied it (so every take on disk read undefined → the wide RAW licence of 4), and
   `measureMixLoudness` destructured three of measureMixEnvelope's four fields (so the probe path did
   the same). Every export was therefore still bounding on the raw peak under the old licence — exactly
-  the behaviour PO reported as regressed. Two one-line fixes; the probe passthrough is pinned by a test
-  (one full-scale spike over sustained 0.2 programme: peak > 0.9, peakRobust < 0.25). PO'S LISTEN TEST
+  the behaviour Robert reported as regressed. Two one-line fixes; the probe passthrough is pinned by a test
+  (one full-scale spike over sustained 0.2 programme: peak > 0.9, peakRobust < 0.25). ROBERT'S LISTEN TEST
   IS STILL OWED, and is now owed on a build where the fix actually runs.
 - THE EXPORT WORKER OWNS ITS OWN OPFS HANDLE (X2, 2026-08-26). FileSystemSyncAccessHandle is
   [Exposed=DedicatedWorker] and the render has lived in a worker since O5a, so the scratch writer had
@@ -487,14 +487,14 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   SAME SHA-256, 100 ms inline vs 105.
 - audio: measured pipeline (sample-counted PCM, min-filter anchor), raw system audio, post-capture fidelity fixed
   (knee-limiter replaces tanh bus; composite dynamics bypassed for single source; stereo default on unreported channelCount)
-- TAB AUDIO IS RAW ON EVERY RUNG OF THE WEDGE LADDER, NOT JUST A HEALTHY ONE (2026-08-26, from PO:
+- TAB AUDIO IS RAW ON EVERY RUNG OF THE WEDGE LADDER, NOT JUST A HEALTHY ONE (2026-08-26, from Robert:
   "when i record music from tab it sounds shitty"). RAW_DISPLAY_AUDIO (echoCancellation /
   noiseSuppression / autoGainControl all false) exists because Chromium defaults voice processing ON
   for display audio and it turns music into pumping mono warble. The safe-mode floor (displayWedge
   rung 2) asked for bare `audio: true` and dropped exactly those flags — and rung 2 is where the
   4K-game wedges of 08-24/25 parked the machine, where a rung-2 SUCCESS KEEPS the rung and the mark
   outlives the last wedge by 24 h. So every tab-audio take after a wedge recorded through the voice
-  processor. THE LADDER'S OWN RULE SETTLES IT (PO 2026-08-25, "safe mode may only drop options the
+  processor. THE LADDER'S OWN RULE SETTLES IT (Robert 2026-08-25, "safe mode may only drop options the
   user never chose"): the processing flags are not ours to drop — they are what makes the user's
   chosen channel arrive as music. They ride every rung now; only video constraints and surface hints
   shrink. Three boolean audio constraints are advisory, so the floor loses nothing a wedge cares
@@ -504,8 +504,8 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   EVIDENCE LINE, every take: `[capture] tab audio delivered: ec=… ns=… agc=… ch=… sr=…` — the
   DELIVERED track settings, so the next report about tab sound names its capture state instead of an
   adjective. MAY be a slice of the standing "noises" reports (same takes, same rung, same processor
-  pumping on game audio) — noted, NOT claimed; PO's recheck decides. AWAITING PO LISTEN TEST.
-- THE MAKEUP GAIN BOUNDS ON A STATISTIC ONE TRANSIENT CANNOT OWN (2026-08-25, from PO: "audio quality
+  pumping on game audio) — noted, NOT claimed; Robert's recheck decides. AWAITING ROBERT LISTEN TEST.
+- THE MAKEUP GAIN BOUNDS ON A STATISTIC ONE TRANSIENT CANNOT OWN (2026-08-25, from Robert: "audio quality
   regressed from before we updated roadmap and mass execution"). NORMALIZE_PEAK_OVERDRIVE went 2 → 4
   on 2026-08-23 and the cost was written down at the time — peaks squashed up to ~11.6 dB instead of
   ~5.6 — with the note "raise no further without a listen test". The listen test arrived and said no.
@@ -527,16 +527,16 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
 - THE LIMITER'S FOLD IS ALGEBRAIC u/(1+u), NOT tanh (2026-08-23). tanh scaled by (1-knee)=0.05 saturates
   to full scale at an input of 1.152, while the makeup gain was licensed to reach 1.9 — so a 1.66:1 range
   of the loudest content collapsed onto ONE 16-bit code and every boosted transient came out as a bare
-  impulse (measured in a PO take: 217 full-scale ~0.25 ms spikes from t=12.5s, heard as crackle). The
+  impulse (measured in one of Robert's takes: 217 full-scale ~0.25 ms spikes from t=12.5s, heard as crackle). The
   algebraic fold keeps f(0)=0, f'(0)=1 (C1 knee, normal program untouched) and f(inf)=1, but approaches
   the ceiling polynomially and stays resolved to LIMIT_USABLE_MAX ~= 82. Below the knee it is bit-identical.
   That let NORMALIZE_PEAK_OVERDRIVE go 2 -> 4, which matters because the same single transient was ALSO
   capping the take's loudness: the gain was peak-bound and landed 1.4 dB under target. Do not retune
   either constant without the test that asserts overdrive x knee < LIMIT_USABLE_MAX.
 - NOT a general loudness fix: a take whose median window RMS is ~18 dB below its p90 still plays quiet,
-  because only the p90 is normalized. Closing that needs dynamic-range compression — unbuilt, PO's call.
+  because only the p90 is normalized. Closing that needs dynamic-range compression — unbuilt, Robert's call.
 
-THERE IS NO STANDING EXPERIMENTAL TREE (X3, PO ruling 2026-08-25, executed 2026-08-26). A module under
+THERE IS NO STANDING EXPERIMENTAL TREE (X3, Robert ruling 2026-08-25, executed 2026-08-26). A module under
 src/experimental is tooling a live gate or task RUNS, or it is deleted — git is the archive and the
 verdicts live in .ai/DECISIONS. Gone, 2,745 lines: session-log, timemap, wcap, scene, datachan,
 semantic, streamx, two spent perf rigs (mp4Capture — MediaRecorder MP4 is in the REJECTED list;
@@ -581,7 +581,7 @@ is injection-proven red (tanh-bus / mono-downmix / hard-limiter for fidelity; a 
 NOTE the fidelity oracle reads RED (toneErr 1.1-2.3 dB) when the machine is loaded — it is capture
 starvation, not a mix regression. Re-run on a settled machine before believing it.
 EVERY BAND ABOVE IS MEASURED ON A 6-SECOND TAKE (`runOracle(recordMs = 6000)`; the matrix's widest
-cell is 30 s) AND PO RECORDS 938-1800 s. Run one long cell before trusting a band at his scale:
+cell is 30 s) AND ROBERT RECORDS 938-1800 s. Run one long cell before trusting a band at his scale:
 `node scripts/exp.mjs oracle '{"recordMs":120000}'`, ~18 min, and run it from a /tmp mirror
 (`git archive HEAD | tar -x -C /tmp/inout-measure` + a node_modules symlink) — a second session
 editing this worktree reloads the harness page through HMR and kills the run. Measured 2026-08-25 at
@@ -591,8 +591,8 @@ smartcut 1384 ms vs the render's 17616 on the same take, drift beta−1 = −0.0
 6 s BEFORE 89e250e: length made it ~20 % worse, so a 6 s gate is not evidence about a real take.
 
 gaps / in flight:
-- CROSS-BROWSER (PO override 2026-07-16 "every capable browser"): implemented + Chromium-verified (synthetic e2e + regression green, 105 tests). Four root-caused fixes: (1) getDisplayMedia now fires synchronously in the click gesture — the old permissions.query awaits burned WebKit transient activation → Safari showed NO picker; (2) MediaRecorder gained mp4(h264+aac) fallback — webm-only list threw NotSupported on Safari → zero recording there; (3) capabilities gain ios/appleWebKit/systemAudioCapture, UI strips unsupported channels + shows honest per-platform copy; (4) Safari audio truncated to ~1s: the WebCodecs measured-audio path is broken on Safari (worklet keep-alive worklet→zero-gain→destination did NOT fix it). Real fix: on Apple WebKit, audio records via MediaRecorder (mp4/aac) — the same path that captures Safari VIDEO full-length — gated by isAppleWebKit() in session.ts armChannel useMeasured. Chromium keeps the measured path (sync precision). Verified code-path on spoofed Safari UA: mic → recorder.start (not measured), 100% full-length lane, tab-audio auto-dropped. PO'S REAL-SAFARI RECHECK OF (4) FAILED (2026-08-25: mic sound "only couple second in middle and nothing else") — the spoofed-UA verification proved the path runs, not that sound survives. Now roadmap task P8 (safari-mic), BLOCKED on one PO artifact (the exported file or a Safari-console take); do not code it from theory. iOS Safari (cam/mic/audio-only) still unrechecked. iOS screen capture stays impossible in-browser (Safari 27 adds no getDisplayMedia, checked 2026-08-22); native path UPGRADED: ScreenCaptureKit is on iOS 27 (beta, ships ~Sept 2026, verified from Apple docs — replaces ReplayKit, no broadcast extensions) = native-node milestone via SCK, spike = TASKS P5a (time-sensitive).
-- A/V SYNC — the honest picture (O4 step 1 + O4b, 2026-08-23, ×10 runs). PO felt it on a real take
+- CROSS-BROWSER (Robert override 2026-07-16 "every capable browser"): implemented + Chromium-verified (synthetic e2e + regression green, 105 tests). Four root-caused fixes: (1) getDisplayMedia now fires synchronously in the click gesture — the old permissions.query awaits burned WebKit transient activation → Safari showed NO picker; (2) MediaRecorder gained mp4(h264+aac) fallback — webm-only list threw NotSupported on Safari → zero recording there; (3) capabilities gain ios/appleWebKit/systemAudioCapture, UI strips unsupported channels + shows honest per-platform copy; (4) Safari audio truncated to ~1s: the WebCodecs measured-audio path is broken on Safari (worklet keep-alive worklet→zero-gain→destination did NOT fix it). Real fix: on Apple WebKit, audio records via MediaRecorder (mp4/aac) — the same path that captures Safari VIDEO full-length — gated by isAppleWebKit() in session.ts armChannel useMeasured. Chromium keeps the measured path (sync precision). Verified code-path on spoofed Safari UA: mic → recorder.start (not measured), 100% full-length lane, tab-audio auto-dropped. ROBERT'S REAL-SAFARI RECHECK OF (4) FAILED (2026-08-25: mic sound "only couple second in middle and nothing else") — the spoofed-UA verification proved the path runs, not that sound survives. Now roadmap task P8 (safari-mic), BLOCKED on one Robert artifact (the exported file or a Safari-console take); do not code it from theory. iOS Safari (cam/mic/audio-only) still unrechecked. iOS screen capture stays impossible in-browser (Safari 27 adds no getDisplayMedia, checked 2026-08-22); native path UPGRADED: ScreenCaptureKit is on iOS 27 (beta, ships ~Sept 2026, verified from Apple docs — replaces ReplayKit, no broadcast extensions) = native-node milestone via SCK, spike = TASKS P5a (time-sensitive).
+- A/V SYNC — the honest picture (O4 step 1 + O4b, 2026-08-23, ×10 runs). Robert felt it on a real take
   ("maybe a little unsynchron"). TWO instrument faults made every previous number ~31 ms optimistic:
   an EXACT +18.00 ms detection bias (half a 30 fps frame + half a 128-sample envelope window; predicted
   18.00, measured 18.00 sd 0.00) and a 13.5 ms VIDEO reference delay the oracle never measured while
@@ -608,7 +608,7 @@ gaps / in flight:
   capture path moved it 2-5 ms, not the ~60 ms the loopback suggested.
   O4 step 2's job is to bring the symmetric metric to ≤20 ms, then re-tighten the band.
   ee/webcodecs-capture-2 is untouched and behind main — REBASE before continuing it.
-- THE DEFAULT CAPTURE ENGINE IS v2 (O4, flipped 2026-08-24 — AWAITS PO REAL-TAKE VERIFICATION).
+- THE DEFAULT CAPTURE ENGINE IS v2 (O4, flipped 2026-08-24 — AWAITS ROBERT REAL-TAKE VERIFICATION).
   v2 = worker + WebCodecs + WebGL2 + fragmented MP4 to its own SyncAccessHandle, frame-driven.
   v1 (MediaRecorder) remains the full ladder underneath: capability fallback (Apple WebKit and
   Firefox lack MediaStreamTrackProcessor -> v1 from the start), start-failure fallback (v2 throws ->
@@ -645,18 +645,18 @@ gaps / in flight:
   to stop() now comes back in 5.6 s with every channel on disk, where it used to hang forever.
   Audio stops at the press rather than after the drain — with it stopping late, one take measured
   mic 11947 ms against a screen channel of 10059 ms.
-- SHIPPED 2026-08-23, FIFTH SESSION (PO: "go finish roadmap"): P0-tail-raw (above) · F5b per-clip
+- SHIPPED 2026-08-23, FIFTH SESSION (Robert: "go finish roadmap"): P0-tail-raw (above) · F5b per-clip
   speed · F2b draggable zoom markers · P1's code half (above) · the O4 exoneration (above) · F7c
   attempt 4 (not shipped; the error is halved and screen content is inside ±20 % for the first time,
   motion is still 30-40 % low). Two live defects fixed on the way, both found by their own gates: the
   render's mix bus counted MIXERS rather than CHANNELS, so a cut take exported 9.5 dB down; and
   clampEditState dropped a whole-take span as "the same as no cuts", which would have discarded a
   speed change.
-- SHIPPED 2026-08-23, FOURTH SESSION (PO: "go p0-tail and others"): F2 timed zoom/pan (PO confirmed
+- SHIPPED 2026-08-23, FOURTH SESSION (Robert: "go p0-tail and others"): F2 timed zoom/pan (Robert confirmed
   timed zooms over a static reframe) · P0-tail (above) · the O4
   re-diagnosis (above) · F7c attempted and NOT shipped (three probe designs, all measured, none beat
   the model it would replace — spike kept at src/experimental/perf/sizeProbe.ts).
-- SHIPPED 2026-08-23, THIRD SESSION (PO: "roadmap o/f, all in one session"): the in-shot notice
+- SHIPPED 2026-08-23, THIRD SESSION (Robert: "roadmap o/f, all in one session"): the in-shot notice
   (SINCE REMOVED — see above) ·
   O11a bits audit (render half + codec rung in the tag) · O11b GOP 2→5 s · O11c camera-when-PiP ·
   F7b finer export ladder (with its ±20 % gate reported UNMET and the reason measured — new task F7c) ·
@@ -664,9 +664,9 @@ gaps / in flight:
   (record→edit→export, 4 channels, export 505 ms, zero console errors).
 - SHIPPED 2026-08-23, SECOND SESSION (three more merges): P3 ru-pack part 1 (core/platform.ts +
   scripts/browser-check.mjs QA runner + scripts/ru-reachability.mjs + docs/QA_MATRIX.md +
-  docs/RU_REACHABILITY.md; RU auth alternatives were built and then REMOVED on PO instruction —
+  docs/RU_REACHABILITY.md; RU auth alternatives were built and then REMOVED on instruction —
   Google stays the only door) · F4 movable timed camera + edit persistence · O4 step 2 (above).
-  OPEN FOR PO from P3: install Yandex Browser and run
+  OPEN FOR ROBERT from P3: install Yandex Browser and run
   `node scripts/browser-check.mjs --browser=yandex --out=docs/qa/yandex.json`; run
   `node scripts/ru-reachability.mjs --label="<ISP>, no VPN" --supabase=<url>` from an RU connection.
 - SHIPPED 2026-08-23 (one session, eleven merges — details in DECISIONS, task state in TASKS):
@@ -677,16 +677,16 @@ gaps / in flight:
   slider · F1 mid-take cuts · O8 partial (tail + throughput bands, certified exports) · P2 PWA ·
   P0 mic-hang fix. NEXT: O4 step 2 is the keystone; F3/F4/F5a and P1/P3/P5a run in parallel.
 - ROADMAP: .ai/TASKS is authoritative — it carries the READY map, per-task state, what a fresh session
-  must know, and the tooling index. PO-approved shape (2026-08-22): optimization O1-O10, features
+  must know, and the tooling index. Robert-approved shape (2026-08-22): optimization O1-O10, features
   F1-F8, ports P1-P7; rulings — pre-roll REJECTED (no capture before the press), tail integrity is a
   HARD requirement (now gated), "no AI" means no AI product features ever (local quality models are
-  merely deferred and PO-gated per instance), fixed composition layout unfrozen for F4's timed camera.
-  PROTOCOL: PO says "roadmap" → print the TASKS READY map and WAIT; PO says "go <id>" → one task,
-  own branch, gates, TD merge, then update the READY map.
+  merely deferred and Robert-gated per instance), fixed composition layout unfrozen for F4's timed camera.
+  PROTOCOL: Robert says "roadmap" → print the TASKS READY map and WAIT; Robert says "go <id>" → one task,
+  own branch, gates, merge, then update the READY map.
   READY NOW: O4 step 2 remainder (the worker is exonerated — see above) · F7c (attempt 5: motion is
   a uniform 1.44x under, which is a countable question) · P5a (BLOCKED on Xcode 27 + an iOS 27
   device) · O11d (blocked on P1's Playwright install) · P1's two remaining gates (both need
-  downloads PO must approve).
+  downloads Robert must approve).
 - composite blob absent from crash salvage → absorbed by TASKS O4 (fMP4-on-disk makes it free)
 - bundle: O7 SHIPPED — first paint 802,975 B → ~221,000 B; editor/cloud/capture-engine split, engine
   prewarmed at mount so record latency is unchanged (282 → 296 ms). Enforcement is the capture barrel:
@@ -701,12 +701,12 @@ gaps / in flight:
   local-history-backup's root (dac00a1) is NOT an ancestor of main. That is the property that matters
   and it holds; pushing main is normal. What must never happen is grafting local-history-backup onto
   main. Remaining cloud reset:
-  PO runs docs/CLOUD_RESET.md steps 2-3 (Vercel env+old deployments, Supabase wipe+key rotation; auth
+  Robert runs docs/CLOUD_RESET.md steps 2-3 (Vercel env+old deployments, Supabase wipe+key rotation; auth
   users kept)
-- instant-arm SHIPPED (c8424a5): start gates only on primary channel, slow devices late-join (verified: armed 269ms w/ 3s-cold camera), 5s device budget, missing channel = loud banner + Recording.missing; late join → composite invalidated → render path. Await PO recheck of device-wait on live site.
+- instant-arm SHIPPED (c8424a5): start gates only on primary channel, slow devices late-join (verified: armed 269ms w/ 3s-cold camera), 5s device budget, missing channel = loud banner + Recording.missing; late join → composite invalidated → render path. Await Robert recheck of device-wait on live site.
 - PERVASIVE AUDIO NOISE root-caused + fixed (2026-07-16): render mix bus summed all audio channels at UNITY (no headroom) — mic+system-audio sum clipped softLimitSample on 34% of samples (measured). Removing the composite export shortcut had moved ALL exports onto this unstaged sum. Fix: 1/N per-channel headroom (single source unchanged/unity; multi-source guaranteed no clip, −6dB, recover via later 2-pass normalize). Proven at mix site: 16586→0 limiter hits. Single-source fidelity unregressed (THD −68dB).
-- STUCK "waiting for mic" — hit AGAIN 2026-08-23 (PO: unresponsive, mic indicator still lit after
-  refresh), fixed and PO-VERIFIED ("record seems to be okay"). The 2026-07-24 fix bounded each arming
+- STUCK "waiting for mic" — hit AGAIN 2026-08-23 (Robert: unresponsive, mic indicator still lit after
+  refresh), fixed and Robert-VERIFIED ("record seems to be okay"). The 2026-07-24 fix bounded each arming
   STEP; what hung was the JOINS between them (`await src.settled`, `await Promise.all(armPromises)`),
   which had no deadline — so the arming label, which only updates when a step STARTS, sat on
   "Waiting for microphone…" wherever the hang actually was. Four fixes, all additive: budgets on both
@@ -716,7 +716,7 @@ gaps / in flight:
   what "unresponsive" meant); and a pagehide guard that stops tracks, because nothing released devices
   when the page went away. Measured: cancel returns in 416 ms, pre-aborted in 1 ms, a normal take arms
   in 228 ms with zero live tracks after stop. Regression cover: `npm run exp -- armcancel`.
-  STILL NOT THE WHOLE STORY — three more, 2026-08-23, after PO hit "mic dont connect" and "indicators
+  STILL NOT THE WHOLE STORY — three more, 2026-08-23, after Robert hit "mic dont connect" and "indicators
   still there after cancel". (a) THE MIC WAS TIMED AGAINST THE HUMAN: a pre-granted mic/camera starts
   concurrently with the screen picker (that overlap is the instant-start win) but carried
   ACQUIRE_TIMEOUT_MS, a HARDWARE budget — so the 8 s ran while the user read Chrome's picker and any
@@ -730,10 +730,10 @@ gaps / in flight:
   (src/app/lib/arming.ts, pure, 7 tests) instead of the last step to start, so it names the device
   actually missing rather than sitting on "Waiting for microphone…". SETTLE_BUDGET_MS stays 130 s on
   purpose: it is the prompt budget plus slack, and a human reading a picker may never be timed out.
-  NOT PO-VERIFIED — argued from ordering and gated by unit tests + the headless oracle only.
+  NOT Robert-VERIFIED — argued from ordering and gated by unit tests + the headless oracle only.
   WHICH step originally wedged is still unknown — the label could not say. The failure MODE is gone,
   not the specific wedge; if it recurs the arming timeline + budget warnings will name it.
-  THEN 2026-08-25, PO hit stuck-on-mic again after a screen wedge + refresh and ORDERED the contract
+  THEN 2026-08-25, Robert hit stuck-on-mic again after a screen wedge + refresh and ORDERED the contract
   flipped: "all input must connect everytime without fails" — a single timeout may no longer be a
   verdict. Shipped (acquire.ts connectPersistently, 6 tests in persistentConnect.test.ts): a GRANTED
   camera/mic is asked AGAIN — 2 attempts gate the synchronized start (~18 s worst case), then the
@@ -744,9 +744,9 @@ gaps / in flight:
   stream landing after the answer changed is stopped on arrival. The budget-picking permissions.query
   is bounded too (GRANT_PROBE_BUDGET_MS 1 s, falls back to the cached grant) — it was the last
   unbudgeted await in arming and exactly where "stuck waiting for mic" with no deadline lived. An
-  earlier same-day fail-fast cut (mic fails in 9 s, take starts without it) was REFUSED by PO
+  earlier same-day fail-fast cut (mic fails in 9 s, take starts without it) was REFUSED by Robert
   ("it must not fail") and is recorded in docs/SCREEN_WEDGE.md so nobody re-ships it. The SCREEN
-  cannot be hunted this way — getDisplayMedia legally needs a fresh user gesture. SAME DAY, PO's
+  cannot be hunted this way — getDisplayMedia legally needs a fresh user gesture. SAME DAY, Robert's
   stress test (rapid 2 s record/stop cycles ×10) still wedged Chrome → two more ships: (1)
   displayRelease.ts SERIALIZES share requests against the previous share's teardown — our stop
   path keeps the display track alive while draining (P0-tail-raw), and a fast re-record raced
@@ -754,20 +754,20 @@ gaps / in flight:
   stays law there). (2) THE REFRESH RITUAL (wedgeReload.ts + CaptureError reason 'wedged'): a
   wedged screen auto-reloads the page ONCE (nothing to lose — take failed, devices released) and
   boots with "press record to try again"; a wedge within 2 min of that reload shows the ⌘Q text
-  instead. PO RE-RAN HIS OWN STRESS TEST AGAINST THE FULL STACK: "seems to be allright now"
+  instead. Robert RE-RAN HIS OWN STRESS TEST AGAINST THE FULL STACK: "seems to be allright now"
   (2026-08-25, end of day) — MITIGATED, not cured; the Chrome-side bug stays open and the case file
   (docs/SCREEN_WEDGE.md) now carries the CANONICAL FORMULATION to quote if it recurs, plus the repro
-  recipe and evidence kit. RECURRED same day in ONE ordering (PO): a 4K game already running when
+  recipe and evidence kit. RECURRED same day in ONE ordering (Robert): a 4K game already running when
   record is pressed wedges; restart Chrome, share FIRST, then the game — no wedge. Load at picker
   time is a trigger by itself (case file updated; direct evidence for O12). AND in that wedge the
   REFRESH RITUAL DID NOT DELIVER — app unresponsive, no visible reload, no ⌘Q message; that half is
   ours, BACKLOG P1, evidence (arming timeline under game load) before code. The strongest unbuilt lever — keep ONE screen share alive between takes —
-  is parked as TASKS O12, PO-gated ("we will consider it later"); do not build it unbidden.
-- FROZEN-SOURCE TAKES (PO 2026-08-06 "switched to a tab with a game, nothing recorded, just frozen frame") — fixed +
+  is parked as TASKS O12, Robert-gated ("we will consider it later"); do not build it unbidden.
+- FROZEN-SOURCE TAKES (Robert 2026-08-06 "switched to a tab with a game, nothing recorded, just frozen frame") — fixed +
   measured. Evidence first (real Chrome 150 / macOS 26, genuinely backgrounded tab, rAF==0): AudioWorklet tick 63/s,
   canvas.captureStream 30fps, <video>→drawImage ~56/s, MediaRecorder ~110KB/s all UNAFFECTED by hidden — the composite
   pipeline does not freeze, so a frozen file means the SOURCE stopped. Also measured: a tab under capture never goes
-  hidden (Chrome force-renders it). THE "no frame for 3s = dead" RULE IS RETIRED (PO 2026-08-25 "message about frozen
+  hidden (Chrome force-renders it). THE "no frame for 3s = dead" RULE IS RETIRED (Robert 2026-08-25 "message about frozen
   screen is bullshit"): its premise (~1 keep-alive frame/s on a static surface) was measured on the v1 <video> path and
   did not survive the v2 flip — MediaStreamTrackProcessor is frame-driven, a static screen delivers NOTHING, and the
   banner fired on healthy takes. Frozen now requires frame silence AND the browser's own verdict (track.muted / not
@@ -782,7 +782,7 @@ gaps / in flight:
   getDisplayMedia now hints displaySurface:'monitor' (picker opens on Entire Screen) and a tab/window pick raises a notice
   that other tabs/apps won't appear. Verified in-browser against the real module: freeze at 2.6s → stalled 5.7s, resume
   8.6s → resumed 8.7s; synthetic 4-lane take persisted stalled:[screen,camera] with composite dropped.
-- CAPTURE CEILING (PO 2026-08-22 "record another Chrome tab with a 4K game → video freezes") — answers the open surface
+- CAPTURE CEILING (Robert 2026-08-22 "record another Chrome tab with a 4K game → video freezes") — answers the open surface
   question above (ONE tab) and is a SECOND, different root cause: throughput, not liveness. Frames arrive in bursts rather
   than stopping dead, so the 3s stall detector never fires. A 4K surface is paid for four times on one GPU (Chrome capture
   readback + raw 8 Mbps encode + composite <video> decode & downscale 30×/s + on-screen preview decode) while the captured
@@ -793,21 +793,21 @@ gaps / in flight:
   Chrome, hidden tab, AudioWorklet rig mirroring liveComposite, 2 runs order-reversed, idle machine): 4K delivered 21.5/11.9
   fps vs a 30 target, drawImage 13.94/8.55ms of a 33ms budget, composite encoder starved to 289/106 KB/s — same rig at 1080p
   delivered 29.8–29.9 fps, drawImage 0.97–1.04ms, encoders 597–614 KB/s. Also: per-source delivered fps logged every 10s
-  from the composite tick (console only — a static screen legitimately delivers ~1 keep-alive fps). PO RECHECK 2026-08-25 PARTIAL: the game take
+  from the composite tick (console only — a static screen legitimately delivers ~1 keep-alive fps). ROBERT RECHECK 2026-08-25 PARTIAL: the game take
   RECORDS now (no frozen-frame complaint; 300 MB/5 min = the 8 Mbps ceiling exactly — expected size, not a regression), but the
   failure moved DOWN a layer: progressive audio desync (~20 s in, audio ahead, then wrong speed) + noises under the same load —
   NEW BACKLOG P1; no sync number in this project was ever taken under load. Console lines from a real game take still unseen.
-- PO 2026-07-23 triple report (Chrome capture stops after a while / AV desync / noises) → TD same-day fixes, awaiting PO recheck:
+- Robert 2026-07-23 triple report (Chrome capture stops after a while / AV desync / noises) → same-day fixes, awaiting Robert recheck:
   capture hardened (screen wake lock while recording, storage.persist, mid-take storage/encoder death emits channel-error and keeps
   the durable partial instead of silently truncating — measured stop() no longer throws away a partial channel, and a failed measured
   stop can no longer hang doStop); editor preview re-clocked: hidden-tab-proof master clock (rAF + 1Hz interval fallback; rAF-only
   clock froze in hidden tabs while audio elements played on → frozen video + audio seconds ahead) and continuous playbackRate slewing
   onto the clock (old ±120ms seek deadband allowed ~240ms A/V preview gap; verified sub-10ms post-fix on synthetic take); loudness
   makeup now noise-floor-bounded (p20 window-RMS post-gain ≤ −40 dBFS — the +18dB rescue could boost hiss audibly); measured-audio
-  worklet fades silence-splice boundaries (~1.3ms ramps, click source under starved quanta). Fidelity oracle currently RED on TD
+  worklet fades silence-splice boundaries (~1.3ms ramps, click source under starved quanta). Fidelity oracle currently RED on the dev
   machine under load (toneErr 1.1–2.3dB uniform level drop, run-to-run varying; clean tree measured WORSE than patched) — environmental
   capture starvation, not a mix regression; needs quiet-machine rerun (BACKLOG P2).
 - LOUDNESS RESCUE DONE (2026-07-20, was the "two-pass normalize" followup): peak-normalize pre-pass shared by both export paths (audio.ts makeupGainForPeak + measureMixPeak) boosts a faint mix toward 0.45 peak (only-boost, capped ×12) — fixes quiet Safari mic AND recovers the −6dB on multi-source takes. No-op for healthy mixes so the fidelity oracle is untouched. Wired into pipeline.ts (render) + instant.ts (instant+certified). Verified firing (peak 0.349→1.29×), deployed. NOTE: export flow was concurrently redesigned (instant.ts instant+certified path, ExportPanel inline editor export, ShareScreen/ExportingOverlay removed) by a parallel agent; loudness rescue integrated into it.
 
-process: QA on prod-build port only, never dev server; EE load tests spawn own server. HEAVY RUNS (oracle matrices/fleets) are announced first and never run while PO is actively using the machine — CPU contention starves real capture (bit PO twice: EE 07-15, TD 07-16). Roles .ai/ROLES ·
+process: QA on prod-build port only, never dev server; load tests spawn own server. HEAVY RUNS (oracle matrices/fleets) are announced first and never run while Robert is actively using the machine — CPU contention starves real capture (bit Robert twice: 07-15, 07-16).
 tasks+gates .ai/TASKS · decisions ledger .ai/DECISIONS (append-only) · bugs BACKLOG.md (done = deleted).

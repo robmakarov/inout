@@ -163,7 +163,7 @@ export interface CompositorStats {
    * why. A short audio track desyncs the whole take — audio is sample-counted
    * while video is wall-stamped, so every dropped frame moves the rest of the
    * audio EARLIER against the picture, for the remainder of the take. That
-   * used to happen behind a bare `return` with nothing counted (PO 2026-08-25,
+   * used to happen behind a bare `return` with nothing counted (Robert 2026-08-25,
    * a take beside a 4K game: "sounds go faster than video"). It is counted now.
    */
   audioDroppedNotReady: number
@@ -175,7 +175,7 @@ export interface CompositorStats {
    */
   audioPaddedFrames: number
   /**
-   * Frames REMOVED to walk a fast audio clock back onto the wall (PO
+   * Frames REMOVED to walk a fast audio clock back onto the wall (Robert
    * 2026-08-29, "sound gets a little slower than screen video ... about a
    * second after one hour"). >0 means this source's audio clock ran faster
    * than the system clock and the take would otherwise have drifted late by
@@ -405,7 +405,7 @@ let lastEncodedMs = -Infinity
  * When a frame was last ACTUALLY encoded, as opposed to last attempted.
  *
  * These have to be two different numbers, and conflating them is what froze
- * PO's game takes (2026-08-25: "4k game in other tab freezes, but not all the
+ * Robert's game takes (2026-08-25: "4k game in other tab freezes, but not all the
  * time and other inputs are fine"). `lastEncodedMs` advances even on a DROP,
  * deliberately — otherwise the next source frame a few ms later passes the
  * cadence gate and hammers a busy encoder at the source rate. But the keep-alive
@@ -432,7 +432,7 @@ let audioStartAtMs: number | null = null
 let audioSkipFrames = 0
 
 /**
- * THE AUDIO TIMELINE IS HELD AGAINST THE WALL CLOCK (PO 2026-08-25: a take
+ * THE AUDIO TIMELINE IS HELD AGAINST THE WALL CLOCK (Robert 2026-08-25: a take
  * recorded beside a 4K game, "sounds go faster than video" from ~20 s in).
  *
  * This file carries its two tracks on two different clocks — video is stamped

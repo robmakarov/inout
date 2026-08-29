@@ -17,7 +17,7 @@
  * ADDITIVE mode first — current behavior stays until parity proven", and parity
  * is not merely unproven here, it is measured to be false: the whole point of
  * r128 is that it CHANGES the level of anything that is not speech-shaped. That
- * is a decision about how every export sounds, so it is PO's.
+ * is a decision about how every export sounds, so it is Robert's.
  *
  *   ?loudness=r128   (this load only)
  *   localStorage['inout.export.loudness'] = 'r128'   (sticky)

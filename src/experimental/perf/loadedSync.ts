@@ -1,11 +1,11 @@
 /**
- * EXPERIMENTAL — A/V SYNC WHEN THE MACHINE IS BUSY (PO 2026-08-25: recording
+ * EXPERIMENTAL — A/V SYNC WHEN THE MACHINE IS BUSY (Robert 2026-08-25: recording
  * beside a 4K game, "sounds go faster than video" from ~20 s in, "then it goes
  * with wrong speed").
  *
  * WHY THIS RIG HAD TO EXIST: every sync number this project has ever quoted was
  * taken on an IDLE machine. The oracle's own note says drift is dead (beta−1 =
- * −0.003 ms/s), and that verdict is true — on an idle machine. PO's take ran
+ * −0.003 ms/s), and that verdict is true — on an idle machine. Robert's take ran
  * starved beside a 4K game, and nothing in the gate covers that regime.
  *
  * WHAT IT MEASURES, and why it is the right quantity: the composite writes its
@@ -16,7 +16,7 @@
  * amounts of wall time and the gap between them grows linearly through the
  * take — which is exactly what "in sync at first, then audio runs ahead" is.
  * So the number that decides it is the SPAN of each track against the wall
- * clock of the same take, plus the slope that gap implies over PO's length.
+ * clock of the same take, plus the slope that gap implies over Robert's length.
  *
  * Run it both ways — `{"load":false}` is the control. A number from the loaded
  * cell alone proves nothing; it is the DIFFERENCE that is evidence.
@@ -277,7 +277,7 @@ export interface LoadedSyncReport {
   avSpanGapMs: number | null
   /** Sign-named so a report cannot be misread. */
   verdict: string
-  /** What that gap becomes over PO's own 5-minute take, if it is a rate error. */
+  /** What that gap becomes over Robert's own 5-minute take, if it is a rate error. */
   projectedGapAt300sMs: number | null
 }
 

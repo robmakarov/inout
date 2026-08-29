@@ -1,10 +1,10 @@
 # Cloud reset runbook — replace old INOUT deployment, keep auth users
 
 Goal: same URL (inout-kappa.vercel.app) serves the new app; all old data/secrets gone;
-the 2–3 existing login accounts preserved. PO executes dashboard steps (keys never
+the 2–3 existing login accounts preserved. Robert executes dashboard steps (keys never
 pass through agents). Order matters.
 
-## 1. Publish new code (PO terminal, one time)
+## 1. Publish new code (Robert terminal, one time)
 Force-replace GitHub main with the depersonalized single-commit history (already prepared
 on branch `publish`), delete stale branches. After this push, Vercel auto-builds the new app.
 

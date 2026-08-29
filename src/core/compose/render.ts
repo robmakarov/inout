@@ -303,7 +303,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     const baseGain = busGainFor(audioMixers)
     for (const m of audioMixers) m.gain = baseGain
 
-    // Loudness normalize: quiet captures (real case: PO's take had voice at
+    // Loudness normalize: quiet captures (real case: Robert's take had voice at
     // −25 dB window-RMS under a 0.77 transient peak) export near-inaudible.
     // Measure SPEECH loudness (p90 window RMS) on a throwaway mixer set — the
     // render streams forward and can't rewind — and drive it to target. Peak
@@ -380,7 +380,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     if (!ctx) throw new Error('Canvas 2D context unavailable')
     const frame: FrameCanvas = { ctx, width, height, scale: frameScale(width, height) }
 
-    // CONSTANT QUALITY, when this browser honours it (PO 2026-08-29, "more
+    // CONSTANT QUALITY, when this browser honours it (Robert 2026-08-29, "more
     // quality and much less size"). Resolved BEFORE the output so the file's
     // own certification can say which way it was encoded — a size report from
     // the field is unattributable otherwise. The bitrate stays in the config as

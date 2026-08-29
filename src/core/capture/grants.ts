@@ -12,7 +12,7 @@
  * screen. Whenever that answer came back late the whole optimisation
  * evaporated silently: the mic started AFTER the picker, its full hardware
  * spin-up landed on the user's clock, and the arming line sat on "Waiting for
- * microphone…" over a screen that was already being shared (PO 2026-08-24,
+ * microphone…" over a screen that was already being shared (Robert 2026-08-24,
  * "why the fuck waiting is happening").
  *
  * A cached grant lets the request go out in the SAME TICK as the picker, with

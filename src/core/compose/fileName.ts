@@ -4,7 +4,7 @@
  * `inout-29-08-2026-134512.mp4` — day, month, year, then the clock time, in the
  * take's own local timezone.
  *
- * IT IS DAY-FIRST ON PURPOSE (PO 2026-08-29: "why date is reversed? dd mm
+ * IT IS DAY-FIRST ON PURPOSE (Robert 2026-08-29: "why date is reversed? dd mm
  * yyyy"). The old `inout-20260829-134512` was ISO-ordered, which sorts
  * lexicographically in a file manager and is unreadable to the person who has
  * to find their own recording in a Downloads folder. Sorting is what the file

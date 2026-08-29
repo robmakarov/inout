@@ -24,7 +24,7 @@
  * IT IS OFF BY DEFAULT. The frozen rule is that a new engine ships capability-
  * gated with the current path as the runtime fallback and DEFAULTS UNCHANGED
  * unless the task says otherwise, and X6 does not say otherwise — a capture
- * default is PO's to flip, on evidence, as O4's was. `?rawcodec=webcodecs`.
+ * default is Robert's to flip, on evidence, as O4's was. `?rawcodec=webcodecs`.
  */
 import { rawVideoCodec } from './rawCodec'
 import type { RawVideoMsg, RawVideoReply, RawVideoStats } from './rawVideo.worker'

@@ -1,14 +1,14 @@
 /**
  * SELF-HEALING FOR A WEDGED SCREEN SHARE — the "never happens to users" layer.
  *
- * The wedge itself (PO 2026-08-24, twice, incl. a fresh Chrome): the user
+ * The wedge itself (Robert 2026-08-24, twice, incl. a fresh Chrome): the user
  * picks a surface, Chrome lights the indicator, and getDisplayMedia neither
  * resolves nor rejects. It lives in Chrome's browser process / the macOS
  * native picker, survives tab close, and no page code can release a track the
  * page never received. What the app CAN do is stop presenting the same
  * request to a browser that just choked on it.
  *
- * THE RULE THIS FILE OBEYS (PO 2026-08-25, after the first cut of it took the
+ * THE RULE THIS FILE OBEYS (Robert 2026-08-25, after the first cut of it took the
  * tab-audio checkbox out of Chrome's picker for a day: "i need this shit never
  * happen to user, always fucking clean"):
  *
@@ -31,7 +31,7 @@
  *      dropping our own options is Chrome's to fix, not the user's to pay for.
  *      `<raw>` = the AEC/NS/AGC-off flags, on EVERY rung: dropping those does
  *      not shrink the request, it hands the user's tab audio to Chrome's voice
- *      processing, which turns music into mono warble (heard by PO 2026-08-26
+ *      processing, which turns music into mono warble (heard by Robert 2026-08-26
  *      after the game wedges parked this machine on rung 2 for a day).
  *
  * Lifecycle: a wedge steps down · a rung-0 success clears the mark entirely

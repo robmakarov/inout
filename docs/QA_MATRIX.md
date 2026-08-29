@@ -31,13 +31,13 @@ node scripts/browser-check.mjs --browser=yandex --out=docs/qa/yandex.json
 | browser | version | run | verdict | evidence |
 |---|---|---|---|---|
 | Chrome (macOS 26) | 151.0.7922.170 | 2026-08-23 | **PASS** — 4 channels, export 1.6 MB 1920×1080 in 508 ms | [chrome.json](qa/chrome.json) |
-| Yandex Browser (desktop) | — | **NOT RUN — not installed on the TD machine** | ⛔ open | — |
+| Yandex Browser (desktop) | — | **NOT RUN — not installed on the dev machine** | ⛔ open | — |
 | Yandex Browser (UA only, engine = Chrome 151) | UA 24.10.0.0 / Chromium 128 | 2026-08-23 | PASS *detection only* | [yandex-ua-spoof.json](qa/yandex-ua-spoof.json) |
 | Yandex Browser 2021 (UA only, engine = Chrome 151) | UA 21.11 / Chromium 94 | 2026-08-23 | PASS, `belowFloor: true` and correctly NOT blocked | [yandex-old-ua-spoof.json](qa/yandex-old-ua-spoof.json) |
 | Firefox (real gecko) | — | **NOT RUN — not installed, and this runner speaks CDP** | ⛔ open | — |
 | Firefox 131 (UA only, engine = Chrome 151) | UA 131.0 / Gecko | 2026-08-23 | PASS *detection only* — engine `gecko`, and **Tab Audio correctly dropped** | [firefox-ua.json](qa/firefox-ua.json) |
 | Chrome on Windows (UA only) | UA 151 / Win64 | 2026-08-23 | PASS, but see below — the OS did **not** spoof | [chrome-windows-ua.json](qa/chrome-windows-ua.json) |
-| Safari / iOS Safari | — | not run — long-standing PO recheck | — | — |
+| Safari / iOS Safari | — | not run — long-standing Robert recheck | — | — |
 | Edge, Opera, Brave | — | not installed here; the runner knows their paths | — | — |
 
 ### The engine × OS matrix (P1)
@@ -78,7 +78,7 @@ test only, and can be closed for real only by running the checker on Windows.
 
 **To close Firefox:** it needs Playwright's gecko driver — this runner drives
 browsers over CDP, which Firefox does not speak. That is a dependency install,
-so it is PO's to run:
+so it is Robert's to run:
 
 ```bash
 npm i -D playwright && npx playwright install firefox
@@ -123,7 +123,7 @@ A different question from the rest of this file, and it needs its own runner:
 O3a claims a **camera-only** take records the camera's true resolution rather
 than a 720p source stretched into a 1080p export, and nothing here could check
 it. Synthetic mode bypasses `getUserMedia` entirely, the oracle's camera is a
-painted canvas, and PO is right that a resolution is not judged by eye.
+painted canvas, and Robert is right that a resolution is not judged by eye.
 
 ```bash
 node scripts/camera-check.mjs                 # the real camera, on the deployed build

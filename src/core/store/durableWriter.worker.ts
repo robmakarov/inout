@@ -1,6 +1,6 @@
 /**
  * Durable OPFS writer worker — SyncAccessHandle + flush per write.
- * Production path for blobStore.createWriteStream (TD-VERDICT item 2).
+ * Production path for blobStore.createWriteStream (review verdict item 2).
  *
  * Protocol (message id echoed):
  *   {id, cmd:'open', name}                -> {id, ok, cmd:'open'}

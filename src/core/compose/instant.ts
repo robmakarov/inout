@@ -128,7 +128,7 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
   if (!source) throw new Error('instant export: nothing to copy')
   // P0-tail: the encoder was still behind when capture stopped, so this file is
   // missing an unknown amount of its end. Copying it would ship a take that
-  // ends early — the exact thing PO named as unacceptable. The caller falls
+  // ends early — the exact thing Robert named as unacceptable. The caller falls
   // back to the full render from the raw channels: slower, and correct.
   // Same call the liveness work made for a frozen source.
   if (source.tailIncomplete) {

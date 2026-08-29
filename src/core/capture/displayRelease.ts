@@ -1,7 +1,7 @@
 /**
  * SERIALIZE SCREEN-SHARE REQUESTS AGAINST THE PREVIOUS SHARE'S RELEASE.
  *
- * PO 2026-08-25, the stress test that reproduced the wedge at will: "connect
+ * Robert 2026-08-25, the stress test that reproduced the wedge at will: "connect
  * screen, 2 seconds recording, back and again 10 times — it happens again."
  * Rapid record/stop cycles are exactly the case where a NEW getDisplayMedia
  * can go out while Chrome's browser process is still tearing down the LAST

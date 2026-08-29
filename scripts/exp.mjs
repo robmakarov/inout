@@ -3,7 +3,7 @@
  * Generic experiment driver: ephemeral Vite server + headless Chrome + one
  * window.__exp.run(id, args) call, JSON to stdout.
  *
- * Same hygiene rules as scripts/oracle.mjs: never reuses :5173 (PO QA owns it),
+ * Same hygiene rules as scripts/oracle.mjs: never reuses :5173 (Robert's QA owns it),
  * always spawns its own server, throwaway Chrome profile (cdp-run does that).
  *
  * Usage:

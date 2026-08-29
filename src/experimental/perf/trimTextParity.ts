@@ -47,7 +47,7 @@
  * AND THEN THE LANE GREW THE PART THAT MATTERED MOST: WHERE THE COLOUR GOES.
  * The pair rows above compare files with EACH OTHER, so a loss every path
  * shares — which is exactly what 4:2:0 chroma subsampling is — cancels to zero.
- * PO saw it by eye in the crops and was right. The chroma stages measure every
+ * Robert saw it by eye in the crops and was right. The chroma stages measure every
  * artifact against the CANVAS THE SYNTHETIC SCREEN PAINTED instead, masked by
  * the source's own palette, so the loss lands on a stage: one generation at the
  * raw channel, a second at the composite, nothing at all at the export.
@@ -197,7 +197,7 @@ export interface X15TrimReport {
   chroma: ChromaStage[]
   /** Downscaled PNGs, one per lane, only with {"thumbs":true}. */
   thumbs: { lane: string; atSec: number; png: string }[]
-  /** PO-visible artifacts, magnified glyph crops. Only with {"crops":true}. */
+  /** Robert-visible artifacts, magnified glyph crops. Only with {"crops":true}. */
   crops: Crop[]
   gates: Record<string, { pass: boolean; detail: string }>
   verdict: string
@@ -484,7 +484,7 @@ export async function runTrimTextParity(
     // ONE DECODE OF THE SHARED INSTANT, PER READER (R1 fix 13).
     // sampledAtSec[0] was being decoded up to three times per file — once for
     // the chroma row, once for the crop, once for the thumb — and `at()`
-    // re-seeks from the keyframe every call. It also means the crop PO looks
+    // re-seeks from the keyframe every call. It also means the crop Robert looks
     // at and the number printed beside it are the SAME frame by construction
     // rather than by coincidence.
     const firstFrame = new Map<ExportLane['id'], ImageData | null>()
@@ -624,7 +624,7 @@ export async function runTrimTextParity(
     // the COMPOSITE are what capture produced, and instant is a packet copy of
     // the composite while render re-composites from the raw channels. If the
     // composite is worse than the raw channel, the fast path a user gets by
-    // default is the worst-coloured file the product makes — which is PO's
+    // default is the worst-coloured file the product makes — which is Robert's
     // observation, and it is free to act on if true.
     //
     // THE REFERENCE COMES THROUGH THE WIRE'S OWN CONTEXT (R1 fix 3). It used
@@ -986,7 +986,7 @@ export async function runTrimTextParity(
     // whose whole prize is 80 %. A gate that cannot pass is not a gate, it is a
     // permanent alarm, and this codebase has already paid for one of those.
     // The 30 % loss is the STANDING FINDING (BACKLOG P1), not a regression; it
-    // is stated in the detail and it is PO's to spend CPU on. What a gate can
+    // is stated in the detail and it is Robert's to spend CPU on. What a gate can
     // usefully do is notice the day it gets WORSE — so the bar is the committed
     // baseline minus the rig's own stated run-to-run variance, and it moves up
     // the day O3b lands.

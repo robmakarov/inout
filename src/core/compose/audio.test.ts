@@ -13,7 +13,7 @@ const { hermite, sampleAt, softLimitSample, mixGainForChannels, makeupGainForLou
   audioMixInternals
 
 describe('speech-loudness normalization (replaces peak rescue a real take defeated)', () => {
-  it("PO's real take: voice at −24.7 dB under a 0.77 transient peak gets boosted to target", () => {
+  it("Robert's real take: voice at −24.7 dB under a 0.77 transient peak gets boosted to target", () => {
     // Measured from inout-20260716-101732.mp4: p90 window RMS 0.058, peak 0.7725
     // (one 3-sample mic bump). Peak-targeting returned 1 here — inaudible voice
     // shipped. Loudness targeting must boost ~2× and land near −18 dB RMS.
@@ -49,7 +49,7 @@ describe('speech-loudness normalization (replaces peak rescue a real take defeat
   })
 
   it('ONE TRANSIENT NO LONGER OWNS THE TAKE — the defect the overdrive raise was papering over', () => {
-    // PO's 2026-08-23 take, back-solved: p90 window RMS 0.0868, one sharp
+    // Robert's 2026-08-23 take, back-solved: p90 window RMS 0.0868, one sharp
     // transient at peak 1.18, but the take's SUSTAINED ceiling (p99 of window
     // peaks) only 0.42. Bounding on the raw peak capped the gain and left the
     // take 1.4 dB under target — which is why the licence was doubled instead.
@@ -202,7 +202,7 @@ describe('compose audio resampling', () => {
 })
 
 /**
- * PO 2026-08-23: "at some point tab audio broke and became just lag sounds".
+ * Robert 2026-08-23: "at some point tab audio broke and became just lag sounds".
  * Measured in the real export: 217 sample-step discontinuities from t≈12.5s,
  * peaks pinned at exactly ±1.0000 for ten straight seconds against a −28 dBFS
  * window RMS, longest full-scale run 1 sample. Not clipping and not stutter —
@@ -252,7 +252,7 @@ describe('limiter stays distinguishable across everything the gain bound permits
     }
   })
 
-  it("PO's 2026-08-23 take reaches the loudness target instead of being held short by one click", () => {
+  it("Robert's 2026-08-23 take reaches the loudness target instead of being held short by one click", () => {
     // Measured off the delivered export: p90 window RMS 0.1063 (1.4 dB under
     // the 0.125 target), p20 floor 0.0062 (the floor bound was NOT binding),
     // true peak pinned at 1.0. Only the peak bound could have stopped it — so
@@ -266,7 +266,7 @@ describe('limiter stays distinguishable across everything the gain bound permits
   })
 
   it('a quiet take with one sharp transient keeps that transient a shape, not an impulse', () => {
-    // The shape of PO's take: speech near −37 dBFS, isolated clicks far above
+    // The shape of Robert's take: speech near −37 dBFS, isolated clicks far above
     // it, makeup gain bounded by the peak. Feed the boosted transient's own
     // neighbourhood through the limiter and require the waveform to survive as
     // distinct samples rather than a row of identical full-scale codes.

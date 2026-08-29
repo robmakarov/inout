@@ -49,7 +49,7 @@ function sampleAt(chan: Float32Array, pos: number): number {
  * NORMALIZE_PEAK_OVERDRIVE × knee = 1.9. Every sample in that 1.66:1 range
  * landed on the SAME output code, so a boosted transient lost its shape and
  * came out as an impulse — measured as 217 full-scale ~0.25 ms spikes from
- * t≈12.5s in PO's 2026-08-23 take, out of a −40 dBFS background. Audible as
+ * t≈12.5s in Robert's 2026-08-23 take, out of a −40 dBFS background. Audible as
  * crackle, and reported as "sound broke into lag sounds".
  *
  * u/(1+u) has the same three properties that made tanh the choice — f(0)=0,
@@ -97,7 +97,7 @@ export function mixGainForChannels(count: number): number {
 
 /**
  * SPEECH-LOUDNESS normalization (replaces the peak-based rescue, which a real
- * take defeated: PO's 31s export had voice at −25 dB RMS but one 3-sample mic
+ * take defeated: Robert's 31s export had voice at −25 dB RMS but one 3-sample mic
  * bump peaking at 0.77 — peak-targeting saw "loud enough" and did nothing).
  *
  * Loudness is measured as the p90 of 100 ms window RMS: robust to silence
@@ -120,10 +120,10 @@ export const NORMALIZE_GATE_RMS = 0.0032
  * past the knee (brief transients get shaped; sustained program does not).
  *
  * BACK TO 2 on 2026-08-25, because the listen test the 4 was shipped without
- * came back: PO reports the audio quality regressed over the roadmap sessions.
+ * came back: Robert reports the audio quality regressed over the roadmap sessions.
  *
  * The history matters, because the 4 was not taste either. It was raised on
- * 2026-08-23 for a real defect: on PO's take this bound BOUND, the target was
+ * 2026-08-23 for a real defect: on Robert's take this bound BOUND, the target was
  * missed by 1.4 dB, and the reason was that ONE SHARP TRANSIENT set `peak` and
  * capped the gain for the whole take — a single click both crackled AND held
  * everything else quiet. Raising the licence bought loudness back by letting
@@ -136,7 +136,7 @@ export const NORMALIZE_GATE_RMS = 0.0032
  * measured over the same 100 ms windows as the loudness — so a stray transient
  * cannot own it and the gain reaches target WITHOUT buying the room with three
  * extra dB of crushing. With that statistic in hand the licence goes back to
- * where it was before the regression PO is reporting.
+ * where it was before the regression Robert is reporting.
  *
  * Raise no further without a listen test. That instruction was already here.
  */
@@ -344,7 +344,7 @@ export function loudnessFromCaptureEnvelope(
  * The bounds are the point of reusing this: a loudness target on its own would
  * happily ask a quiet take for 12x, lifting its room tone into audibility — the
  * exact failure NORMALIZE_FLOOR_CEILING_RMS exists to prevent, and the exact
- * complaint PO raised about the peak licence. So the only thing that changes
+ * complaint Robert raised about the peak licence. So the only thing that changes
  * between the two modes is what `wanted` is; the peak ceiling, the noise-floor
  * ceiling and the "never attenuate" rule are shared, and a take that would be
  * unsafe under one is unsafe under the other.

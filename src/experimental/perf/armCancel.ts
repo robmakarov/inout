@@ -1,5 +1,5 @@
 /**
- * EXPERIMENTAL — regression cover for the 2026-08-23 PO report:
+ * EXPERIMENTAL — regression cover for the 2026-08-23 Robert report:
  * "stuck on waiting for microphone, got unresponsive, and the mic indicator
  * stayed on after refresh".
  *

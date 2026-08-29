@@ -162,7 +162,7 @@ export interface X15ChromaReport {
   support: CandidateSupport[]
   codecs: CodecPriceRow[]
   stages: StageRow | null
-  /** PO-visible artifacts, magnified glyph crops. Only with {"crops":true}. */
+  /** Robert-visible artifacts, magnified glyph crops. Only with {"crops":true}. */
   crops: Crop[]
   gates: Record<string, { pass: boolean; detail: string }>
   verdict: string

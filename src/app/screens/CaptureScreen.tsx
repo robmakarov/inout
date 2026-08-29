@@ -77,7 +77,7 @@ export function CaptureScreen() {
 
   /**
    * What the wedge ritual has to say, held on screen until the user acts on it
-   * (PO 2026-08-25: after a wedge with a 4K game running, "no message about
+   * (Robert 2026-08-25: after a wedge with a 4K game running, "no message about
    * that i need to reload chrome"). A TOAST CANNOT CARRY THIS: it expires in
    * 4 s, and the user who just wedged a share is watching the tab they were
    * recording — the same reason the frozen-source banner is sticky. It also
@@ -351,7 +351,7 @@ export function CaptureScreen() {
           // reload() only REQUESTS the navigation; the page keeps running until
           // it commits, and on the loaded machine that wedged the share that
           // can take seconds. Say what is happening first, or the app just sits
-          // there looking broken — which is exactly what PO saw.
+          // there looking broken — which is exactly what Robert saw.
           setWedgeNotice('The screen share got stuck. Refreshing the app…')
           window.location.reload()
           return

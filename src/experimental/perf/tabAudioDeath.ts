@@ -1,6 +1,6 @@
 /**
  * EXPERIMENTAL — DOES CAPTURED TAB AUDIO SURVIVE THE TAB GOING SILENT AND THEN
- * SOUNDING AGAIN? (PO 2026-08-26: "in long video tab audio still dies after a
+ * SOUNDING AGAIN? (Robert 2026-08-26: "in long video tab audio still dies after a
  * while … maybe audio dies when one youtube video ends and other starts".)
  *
  * The scenario, in the lab: this page IS the captured tab. With Chrome's
@@ -12,7 +12,7 @@
  * pause between videos"), and a NEW element plays ("video 2"). The captured
  * audio track records through the PRODUCTION measured path the whole time, so
  * the new witnesses (track mute/unmute/ended stamps, the silence witness)
- * report exactly as they would on PO's take.
+ * report exactly as they would on Robert's take.
  *
  * The verdict is one comparison: does phase C (video 2) carry signal in the
  * CAPTURED channel while the tab itself is audibly playing it?
@@ -70,7 +70,7 @@ function localToneDriver(): ToneDriver {
 }
 
 /**
- * Tones in a CHILD TAB (cross-tab mode — PO's real topology: the captured tab
+ * Tones in a CHILD TAB (cross-tab mode — Robert's real topology: the captured tab
  * is not the capturing tab, so nothing in it holds a capture that keeps its
  * audio stream alive). The child renames itself TONECHILD; cdp-run's
  * --capture-title flag points Chrome's auto-select at it.
@@ -126,12 +126,12 @@ export async function runTabAudioDeath(opts?: {
   video1Secs?: number
   gapSecs?: number
   video2Secs?: number
-  /** Capture a CHILD tab (PO's topology) instead of this one. Needs the
+  /** Capture a CHILD tab (Robert's topology) instead of this one. Needs the
    *  --capture-title=TONECHILD flag on the driver. */
   crossTab?: boolean
   /**
    * THE OCCLUSION CELL (implies crossTab; run HEADED with --real-throttling).
-   * PO's autopsied take froze picture AND tab audio together for 26 s exactly
+   * Robert's autopsied take froze picture AND tab audio together for 26 s exactly
    * while the captured window was covered by another app. Here the child plays
    * one CONTINUOUS tone; midway a cover window fully occludes it, then closes.
    * If Chrome stops delivering capture for occluded windows, the occluded

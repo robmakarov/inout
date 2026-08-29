@@ -1,29 +1,29 @@
 # Backlog
 
 Dump anything, anytime, top of Inbox. One line is enough; add repro/device only if you have it.
-PM owns the project lane; TD owns the technical lane. PM triages Inbox and assigns it to one lane.
-TD tags technical defects by severity. Done items get deleted, not archived.
+Two lanes: technical/code and project. Whoever picks an item up triages it into a lane and tags
+technical defects by severity. Done items get deleted, not archived.
 
 ## Inbox
 
 - (dump here)
 
-## Technical / code — TD + experimental engineer
+## Technical / code
 
 ### Now
 
-- [P2] TD 2026-08-29: **the export quality step is sticky forever** → F14, RULED the same day and
+- [P2] 2026-08-29: **the export quality step is sticky forever** → F14, RULED the same day and
   ABSORBED BY `.ai/TASKS` F16: quality becomes ONE option (Min/Medium/High-default/Max-later,
   later also chosen before record) and capture's composite FOLLOWS it, which is what makes
   "instant export for any quality" achievable (the chosen rung is always a packet copy). Until
   F16 lands, O3c's per-step INSTANT badges keep the panel honest.
 
-- [P2] TD 2026-08-29: **30 fps hardcoded everywhere** → `.ai/TASKS` F15, RULED YES the same day
-  (PO: "every device records the best it can, 60 fps"). F13 landed 2026-08-29 and left the seam it
+- [P2] 2026-08-29: **30 fps hardcoded everywhere** → `.ai/TASKS` F15, RULED YES the same day
+  (Robert: "every device records the best it can, 60 fps"). F13 landed 2026-08-29 and left the seam it
   rides (`session.compositeFrame()` asks the take what it is, once, before any encoder exists), so
   F15 is unblocked; the ruling and shape live in the task and DECISIONS.
 
-- [P2] TD 2026-08-29: **`npm run oracle:fidelity`'s instant lane is flaky on this machine**, the
+- [P2] 2026-08-29: **`npm run oracle:fidelity`'s instant lane is flaky on this machine**, the
   same way the v2 oracle is. Measured interleaved against a baseline commit with none of the day's
   capture work in it: the BASELINE failed 1 of 3 at level residual 18.83 dB while the tree under
   test passed 3 of 3, and every PASS on both trees reads residual 0.03 dB. So the failure is
@@ -32,25 +32,25 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   without running a baseline beside it. Worth a proper look: this gate is the one that is supposed
   to catch audio-level regressions on the packet-copy path.
 
-- [PO OWED] TD 2026-08-29: **F13 is built, verified on prod and OFF** — `?sourceframe=1` and the
-  output follows the take's shape instead of a landscape constant. Its last gate is PO's eye:
+- [ROBERT OWED] 2026-08-29: **F13 is built, verified on prod and OFF** — `?sourceframe=1` and the
+  output follows the take's shape instead of a landscape constant. Its last gate is Robert's eye:
   open https://inout-kappa.vercel.app/?sourceframe=1 on a PHONE, record, look at the export. Until
   then INOUT still cannot make a vertical video by default, on purpose. Evidence read out of the
   exported FILE: portrait 1080x1920 (instant copy), 4:3 camera 1920x1440 (full height, was cropped
   to 1080), 16:9 unchanged at 1920x1080 on both copy paths.
-  SECOND PASS SHIPPED after PO's phone verdict ("still wrong proportions and cutted"): capture now
+  SECOND PASS SHIPPED after Robert's phone verdict ("still wrong proportions and cutted"): capture now
   takes the shape from the FRAMES rather than from `track.getSettings()`, which describes the
   sensor and lies about orientation on a phone. Reproducible on a desktop with `&camlies=1`.
 
-- [P1] PO 2026-08-29: **the size estimate is 2.15× low at the top step** — panel said 4.7 GB at
+- [P1] Robert 2026-08-29: **the size estimate is 2.15× low at the top step** — panel said 4.7 GB at
   1440p, file came out 10.09 GB (140 min). Every other step landed within ~100 MB, so this is the
   top rung specifically, not the model. quality.ts already admits the √-pixel model came in 47 % low
-  at 1440p on text content; at PO's length that becomes 5.4 GB of surprise. Note the estimate is
+  at 1440p on text content; at Robert's length that becomes 5.4 GB of surprise. Note the estimate is
   ALSO the only warning a user gets before committing to a ~2 h render.
   PARTLY NARROWED BY O3c (2026-08-29): on a take whose single raw channel matches the step's
   geometry the number is now EXACT (the file's own byte rate) and that export no longer renders at
   all. The defect remains for steps that genuinely re-render (camera takes, mismatched geometry).
-  SECOND, CHEAPER DEFECT SEEN WHILE CHECKING THIS (TD, deployed build, 6 s synthetic take): the
+  SECOND, CHEAPER DEFECT SEEN WHILE CHECKING THIS (deployed build, 6 s synthetic take): the
   PROVISIONAL numbers — what the panel shows for the seconds before sizeProbe's calibration lands —
   ranked 1440p BELOW the 1080p step, `1080p 400 KB (exact)` against `1440p ~308 KB`. 1440p is an
   upscale of that very file; it cannot be smaller, and the model has the evidence to know it
@@ -58,42 +58,42 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   read 540p 310 / 720p 340 / 1080p 400 / 1440p 460, which is ordered. Floor every re-encoding step
   at the exact size of any step whose pixel count it exceeds — one comparison, no new measurement.
 
-- [P1] PO 2026-08-29, PARTLY DONE — what is LEFT is the codec. Two of the three named causes
+- [P1] Robert 2026-08-29, PARTLY DONE — what is LEFT is the codec. Two of the three named causes
   shipped the same day: 1440p is no longer an upscale (native-res capture is the default now), and
   the export targets a QUALITY instead of a bitrate (qp20, measured Pareto-better at 1440p — never
   worse picture, ~11 % smaller, `docs/FLAGS.md`). THE REMAINING GAP IS NOT RATE CONTROL and the
   measurement says so: the bitrate target was already undershooting at 1.83 of 14 Mbps, so there was
-  no ceiling of waste to reclaim, and 11 % is what rate control was ever worth here. PO's comparison
+  no ceiling of waste to reclaim, and 11 % is what rate control was ever worth here. Robert's comparison
   ("movies files with much better quality is twice smaller") is a CODEC comparison — hevc/av1 against
   our avc floor. Both rungs are BUILT and reachable (`pickEncodingTarget(..., {allowAboveFloor:true})`),
   and off for a distribution reason rather than a technical one: a blind-shared file must play for a
-  recipient we cannot probe. THE DECISION IS PO'S and it is worth re-pricing at two-hour takes, where
+  recipient we cannot probe. THE DECISION IS ROBERT'S and it is worth re-pricing at two-hour takes, where
   the file is too big to send anyway. Options, in order of how little they give up: (a) hevc/av1 for
   the CLOUD player only, where we control playback — no recipient risk at all; (b) a "smaller file,
   newer players only" choice in the export panel, named honestly; (c) flip the blind-share floor.
-  PO RULED THE OBJECTIVE 2026-08-29 ("minimal size ... couple minutes ~10 MB with good quality") —
-  the a/b/c PICK is still owed; TD recommends (b) now + (a) when cloud lands, and against (c) (it
+  ROBERT RULED THE OBJECTIVE 2026-08-29 ("minimal size ... couple minutes ~10 MB with good quality") —
+  the a/b/c PICK is still owed; recommendation: (b) now + (a) when cloud lands, and against (c) (it
   breaks blind shares on old players). Carried on the READY map as SIZE-CODEC.
   Also open, and cheap: quantizer mode has NO bitrate ceiling, so a pathological source could exceed
   the tier's old cap. Nothing measured came close (busiest lane 3.17 Mbps at qp20 against 3.55), but
   the guarantee is gone — a mid-export achieved-rate check that steps the QP up would restore it.
 
-- [P2] PO 2026-08-29: **"at some points video got slows down and lag too"** on a long take. NOT
+- [P2] Robert 2026-08-29: **"at some points video got slows down and lag too"** on a long take. NOT
   DIAGNOSED — needs to be pinned to a stage before it is chased: during capture (frame delivery),
   during preview playback, or in the exported file itself. The take already carries the answer for
   the first (`CompositorStats.framesDropped` / `maxEncodeGapMs` / `peakQueue`); the third is visible
   by scrubbing the export to the same instant. The preview half is partly addressed 2026-08-29 (the
   scrubber was firing a full re-seek of every element per pointer event, now one per frame).
 
-- [P2] PO 2026-08-29: **noises on tab audio, "not much but still"**. LEAD, not a diagnosis: every
+- [P2] Robert 2026-08-29: **noises on tab audio, "not much but still"**. LEAD, not a diagnosis: every
   starved audio quantum is deliberately turned into 64 frames of fade-out, silence, fade-in
   (`measuredAudio.ts` PAD_FADE, `compositor.worker.ts` AUDIO_PAD_FADE) to keep the sample-counted
   timeline honest — so a starve is AUDIBLE by design, as a ~1.3 ms notch. 2026-08-26 measured tab
   audio padding 1281 ms in 84 s under load, which is ~15 such notches per minute. Confirm against
-  `ChannelDiagnostics.paddedMs`/`events` on PO's take before choosing between "starve less" and
+  `ChannelDiagnostics.paddedMs`/`events` on Robert's take before choosing between "starve less" and
   "splice better" (crossfade across the gap rather than through zero).
 
-- [P1] TD 2026-08-26, from PO's own console dump (real takes, deployed build): **a long-lived app
+- [P1] 2026-08-26, from Robert's own console dump (real takes, deployed build): **a long-lived app
   tab spans deploys, its lazily-loaded chunks 404, and that silently killed the EXPORT WORKER.**
   Evidence in the dump: `/assets/sizeProbe-Bp5ddNpw.js` 404 and `index-Bo_8S72j.css` 404 (hashed
   names from a build Vercel no longer serves), and twice `[compose] export worker unusable,
@@ -108,27 +108,27 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   a stale tab IS an old build even when prod serves HEAD.
 
 - [EVIDENCE for the live audio session, 2026-08-26 — not a new entry, do not fork the fix here]
-  PO's console from real takes says two things the audio session should read before choosing its
+  Robert's console from real takes says two things the audio session should read before choosing its
   fix: (1) mic peaks sit at EXACTLY 1.000 on several takes (`mix loudness measured live: peak
   1.000`) — the INPUT is clipping at capture, before any of our gain; (2) a mostly-quiet 48-min
   take read `p90rms 0.0034 → makeup 8.00×` — the normalizer drove room-tone up 8× (+18 dB), which
-  is PO's "mic is kinda too loud now" in one line. A quiet take gets the cap, a clipped take gets
+  is Robert's "mic is kinda too loud now" in one line. A quiet take gets the cap, a clipped take gets
   the limiter; both read as "sound is wrong". F9 (the slider) is the CONTROL for this, the target/
   cap policy is the fix and belongs to that session.
 
-- [P0] TD 2026-08-25: SAFARI MIC — promoted to roadmap task .ai/TASKS P8 (PO 2026-08-25 "put
+- [P0] 2026-08-25: SAFARI MIC — promoted to roadmap task .ai/TASKS P8 (Robert 2026-08-25 "put
   safari bug in roadmap"). One line of truth: a real Safari take carries only a couple of
-  seconds of mic sound; the task is BLOCKED on one PO artifact (the exported file, or a
+  seconds of mic sound; the task is BLOCKED on one Robert artifact (the exported file, or a
   Safari-console take) and must not be coded from theory. Full spec, candidate causes and
   gates live in the task.
 
-- [P1] TD 2026-08-25 (was P0; downgraded same day on PO's stress-test pass "seems to be allright
+- [P1] 2026-08-25 (was P0; downgraded same day on Robert's stress-test pass "seems to be allright
   now"): THE SCREEN WEDGE — MITIGATED, CAUSE STILL CHROME'S. getDisplayMedia never settles after
   the user picks; only ⌘Q reliably clears the browser-process claim. Shipped stack: bounded ≤30 s,
   devices released, request serializer (displayRelease.ts), persistent device connect, one
   automatic refresh + ⌘Q escalation, safe-mode ladder. If it recurs: quote the canonical
   formulation at the top of docs/SCREEN_WEDGE.md and run its evidence kit. Strongest unbuilt
-  lever: TASKS O12 persistent-share (PO-gated, deferred).
+  lever: TASKS O12 persistent-share (Robert-gated, deferred).
   RECURRED 2026-08-25 in ONE ordering, two new facts in the case file: (a) a 4K game already
   running when record is pressed wedges; restart Chrome, share FIRST, then start the game — no
   wedge. Load at picker time is a trigger by itself, and the safe ordering is exactly what O12
@@ -139,9 +139,9 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   fine). No console timeline again, so no new mechanism facts. Precaution taken the same day:
   the dead-tap revival's track clones are now stopped on pagehide, so a page dying mid-take
   cannot leave a clone holding the display-capture claim the wedge family feeds on. The standing
-  levers are unchanged: O12 persistent-share (PO-gated) and the case-file evidence kit.
+  levers are unchanged: O12 persistent-share (Robert-gated) and the case-file evidence kit.
 
-- [P1 → PARTLY FIXED 2026-08-25] PO: THE WEDGE RECOVERY ITSELF FAILED under game load — after the
+- [P1 → PARTLY FIXED 2026-08-25] Robert: THE WEDGE RECOVERY ITSELF FAILED under game load — after the
   wedge the app "dont reloads normally, gets unresponsive, no message about that i need to reload
   chrome". ONE HALF WAS OURS AND IS FIXED, from code, no repro needed: the boot notice was due only
   within 15 s of the reload stamp, and the wedge happens when the machine is saturated — which is
@@ -158,7 +158,7 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   was. That needs the `[capture:arming]` console timeline from a repro with the game running, plus
   whether the sharing pill lit. Do not harden the ritual further from theory.
 
-- [P1] PO 2026-08-25: "4k game in other tab freezes, but not all the time and other inputs are fine."
+- [P1] Robert 2026-08-25: "4k game in other tab freezes, but not all the time and other inputs are fine."
   ONE REAL DEFECT FIXED, AND THE RIG'S OWN ANSWER RETRACTED. Fixed: `encodeComposite` advances
   `lastEncodedMs` even when it DROPS a frame for a full encoder queue (deliberately — otherwise the
   next source frame hammers a busy encoder), but the KEEP-ALIVE read that same field to decide
@@ -170,18 +170,18 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   were the rig paying a Chrome process's first-VideoEncoder init DURING the take (at t≈0.8 s), which
   production pays at MOUNT. Warmed with the production `warmVideoEncoder()`, the worst gap over a
   saturated 60 s take is 133 ms with ZERO drops. So NO mid-take freeze is reproduced under synthetic
-  load and this entry does not claim one. WHAT PO IS PROBABLY SEEING: the screen SOURCE starving
+  load and this entry does not claim one. WHAT ROBERT IS PROBABLY SEEING: the screen SOURCE starving
   under GPU contention — the composite then repeats its last frame via keep-alive and the picture
   stops changing while audio and the raw channels run on, which is exactly "other inputs are fine".
   That is Chrome's capture pipeline, and the biggest lever WE still hold is X6: the raw screen and
   camera channels still encode via SOFTWARE VP8/VP9 during capture, the largest capture CPU cost, on
-  a machine already running a 4K game. NEXT: PO console from a freezing take (`[capture] screen …
+  a machine already running a 4K game. NEXT: Robert console from a freezing take (`[capture] screen …
   delivering N fps` says whether the source starved), or take X6.
   RE-REPORTED 2026-08-26 ("i opened game in other tab, it froze") with no console again. The two
-  asks stand unchanged and both are PO's: (a) the console lines from a freezing take, and/or the
+  asks stand unchanged and both are Robert's: (a) the console lines from a freezing take, and/or the
   O6 re-verify (`?nativeres=1`, record the game tab, report the console); (b) the X6 picture
   ruling, which is the capture-CPU lever this freeze keeps pointing at.
-  AUTOPSIED 2026-08-26 (take rec_72y3unjtwmi4, X6 ON, PO pinned "freeze is on 7:35" — exact): the
+  AUTOPSIED 2026-08-26 (take rec_72y3unjtwmi4, X6 ON, Robert pinned "freeze is on 7:35" — exact): the
   game was captured WITH FULL MOTION for ~3.7 min while its tab was front (motion 4-56 per probe),
   then frames stop dead at t=455 (one stray frame at 466, frozen to the end) while TAB AUDIO KEEPS
   FLOWING to the last seconds — the picture-only inverse of the movie take's pair-stall, matching
@@ -192,7 +192,7 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   Honest mitigation to tell users: keep a 4K game tab visible while it is being recorded. Levers
   left: O6 ?nativeres re-verify (console still unseen) and a Chromium report; O12 does not touch it.
 
-- [P2] TD 2026-08-25, A CONSEQUENCE OF THE PADDING FIX, stated so it is not mistaken for a
+- [P2] 2026-08-25, A CONSEQUENCE OF THE PADDING FIX, stated so it is not mistaken for a
   regression: holding the audio timeline against the wall clock converts "audio drifts early" into
   "audio has a short silence where the machine choked". The content is therefore DIFFERENT on a
   starved take, and the fidelity oracle's fixed 2.5 s analysis window can land on one of those
@@ -201,11 +201,11 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   gate should learn to REPORT padding rather than fail opaquely — it is the same capture-starvation
   family already documented for this oracle, now with a louder signature.
 
-- [P1 → INSTRUMENTED 2026-08-26, NEXT TAKE NAMES THE KILLER] PO (same day, after the desync fix):
+- [P1 → INSTRUMENTED 2026-08-26, NEXT TAKE NAMES THE KILLER] Robert (same day, after the desync fix):
   "in long video tab audio still dies after a while."
   RULED OUT — OUR PIPELINE DYING WITH LENGTH: a 12.5-minute run of the production measured-audio
   path in a real (hidden-tab) browser delivered batches end to end, padded 417 ms total, no
-  runaway, no stop. Synthetic sources cannot go quiet, so what dies on PO's takes is UPSTREAM of
+  runaway, no stop. Synthetic sources cannot go quiet, so what dies on Robert's takes is UPSTREAM of
   the pipeline: the display-audio TRACK or its source. Chromium is known to MUTE a captured tab's
   audio track (crbug 40703184 family), to END display-audio tracks on audio-device changes
   (crbug 344876285 — AirPods auto-switching is that case), and a paused/idle source simply stops
@@ -221,21 +221,21 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   RED-PROVEN in the app: a live-but-silent stream read silentTailMs 14,688 of a 14,688 ms channel
   with the warning; dispatched mute/unmute logged at +3.2 s/+5.2 s; paddedMs 0 — silent input and
   a starved clock are correctly told apart.
-  WHAT CLOSES IT: the console of PO's next long take. Whichever line fires is the killer, and the
-  fix (ours, or a crbug we work around, or a UI surface for a dead channel — PO's call) follows
+  WHAT CLOSES IT: the console of Robert's next long take. Whichever line fires is the killer, and the
+  fix (ours, or a crbug we work around, or a UI surface for a dead channel — Robert's call) follows
   from it. Do not harden anything here from theory before that console arrives.
-  PO's SHARPER OBSERVATION, same day: "maybe audio dies when one youtube video ends and other
+  Robert's SHARPER OBSERVATION, same day: "maybe audio dies when one youtube video ends and other
   starts, but i maybe wrong." THE LAB TRIED EXACTLY THAT SHAPE AND CANNOT REPRODUCE IT — a new rig
   (`npm run exp -- tabaudio '{"gapSecs":45}' --keep-audio`, cross-tab variant adds
   `{"crossTab":true}` + `--refocus --capture-title=TONECHILD`) drives the REAL getDisplayMedia
   path with Chrome's auto-accept testing flags: plays an audible tone ("video 1"), tears it down
   like a player, sits silent 45 s, plays a new one ("video 2"), recording through the production
   measured path the whole time. BOTH topologies — capturing its own tab, and capturing a separate
-  hidden child tab (PO's, but harsher) — bring video 2 back at full level: 0.4 peak captured,
+  hidden child tab (Robert's, but harsher) — bring video 2 back at full level: 0.4 peak captured,
   ZERO mute events, silentTail 0. A THIRD shape (`{"occlude":true}` + `--headed --real-throttling`:
   one continuous tone, the captured window fully COVERED for 35 s mid-run) also fails to kill it —
   audio sails through occlusion at full level. Negative results recorded so no shape is re-run blind.
-  **THE FIELD AUTOPSY, 2026-08-26 (PO: "not fixed"), read off the dying take ITSELF before PO
+  **THE FIELD AUTOPSY, 2026-08-26 (Robert: "not fixed"), read off the dying take ITSELF before Robert
   discarded it** — via a browser session on the app origin: IndexedDB recording + OPFS channel
   files decoded in place. The take: 7.7 min of a subtitled movie in a captured tab. THE EVENT AT
   6:36–7:02 (26 s): the SCREEN channel freezes on ONE mid-dialogue frame, DIMMED (luma 36→21.7,
@@ -253,7 +253,7 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   same remote autopsy in minutes; the witness build (live on prod) also logs mute/ended/silence
   in the console as it happens. If the buffering story holds, the fix is capture CPU = THE X6
   RULING, which every investigation of this family now terminates at.
-  **SECOND AUTOPSY, SAME DAY (PO kept the take — the protocol worked): the audio-only death is
+  **SECOND AUTOPSY, SAME DAY (Robert kept the take — the protocol worked): the audio-only death is
   REAL and PROVEN.** Take rec_cjqcxsfhg02b (17:17Z, 7.5 min): tab audio dies at t=71 s ("completely
   dies in 1:10" — exact) and records PURE ZEROS for the remaining 380 s, while the SAME share's
   SCREEN channel delivers a playing movie the whole time (motion 9-44 at every probe after the
@@ -275,7 +275,7 @@ TD tags technical defects by severity. Done items get deleted, not archived.
     · ChannelRecording.diagnostics (types.ts, additive): paddedMs, silentTailMs, revivals, and
       the track/context event log (mute/unmute/ended/ctx-state/revive) persist WITH THE TAKE —
       the console dies with the tab; the file now carries its own testimony, and the remote
-      autopsy reads it without asking PO for anything.
+      autopsy reads it without asking Robert for anything.
   **FIELD-PROVEN THE SAME DAY** (take rec_c1hqf2rjvv8o, 17:44Z, 84 s of YouTube music — the first
   take whose black box came back from the field): the tap died mid-music at t=71 s — the SAME
   death that cost the previous take its remaining 380 s — the revival fired at 76.2 s and the
@@ -285,7 +285,7 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   THE SAME BLACK BOX also quantified the starvation behind "music sounds shitty and sometimes
   goes faster": in 84 s the mic padded 1547 ms and the tab audio 1281 ms — the audio clocks lost
   ~1.6 % of wall time and the hold repaid it (no drift), but the CONTENT Chrome delivered under
-  that load is time-compressed and mangled at the source, which no clock can restore (and PO's
+  that load is time-compressed and mangled at the source, which no clock can restore (and Robert's
   parallel VLC sounding fine confirms the machine's audio output is healthy — it is Chrome's
   capture pipeline being crushed). The load lever remains X6. Music also peaks at 1.20 (1.42 on
   the movie take) — above-full-scale floats feeding the loudness/clipping thread.
@@ -293,11 +293,11 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   (the wedge-refresh ritual) must not leave a clone holding a display-capture claim, which is the
   exact food of the screen-wedge family.
 
-- [P1 → FIXED AGAIN 2026-08-26, AWAITING PO RECHECK] PO: progressive audio desync — 08-25 report
+- [P1 → FIXED AGAIN 2026-08-26, AWAITING ROBERT RECHECK] Robert: progressive audio desync — 08-25 report
   "sounds go faster than video" ~20 s in; 08-26 RECHECK FAILED: "mic and camera unsynch is about
   1-2 second was on 6 minute" (YouTube in another tab) and "all record tab audio become worse and
   worse and almost nothing just noises in the end" (game opened mid-take).
-  THE 08-25 FIX WAS REAL AND REACHED NOTHING PO HEARS — the same shape as the peakRobust dropped
+  THE 08-25 FIX WAS REAL AND REACHED NOTHING Robert HEARS — the same shape as the peakRobust dropped
   fields, and it is why the recheck failed. Two defects, found from the recheck report:
     (1) measuredAudio.ts — the mic/tab channels EVERY export mixes from — updated `lastArrivalMs`
         to the current batch's own arrival BEFORE computing `steady` against it, so steady was
@@ -317,15 +317,15 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   STILL OPEN AND DELIBERATELY NOT CLAIMED: the "noises" themselves — starvation mangles the audio
   it DOES deliver, and padding cannot resurrect audio the context never rendered; under a game the
   take now carries honest gaps instead of an accumulating slide. The lever on the starvation
-  itself is capture CPU = the X6 picture ruling PO owes. PO recheck: a long take beside YouTube
+  itself is capture CPU = the X6 picture ruling Robert owes. Robert recheck: a long take beside YouTube
   and one beside the game; the console says `[capture] measured audio padded …ms` when it fires.
 
-- [P1 → FIXED 2026-08-25, AWAITING PO LISTEN TEST] PO: "audio quality regressed from before we
+- [P1 → FIXED 2026-08-25, AWAITING ROBERT LISTEN TEST] Robert: "audio quality regressed from before we
   updated roadmap and mass execution". FOUND, and the code had already written down the cost in a
   comment nobody came back to: on 2026-08-23 NORMALIZE_PEAK_OVERDRIVE went 2 → 4, which licenses the
   makeup gain to drive true peaks to 3.8 instead of 1.9 — "peaks are now squashed up to ~11.6 dB
   rather than ~5.6 dB, which is what loudness always costs. Raise no further without a listen test."
-  PO's listen test has now arrived and it says no. THE RAISE WAS TREATING A SYMPTOM: it existed
+  Robert's listen test has now arrived and it says no. THE RAISE WAS TREATING A SYMPTOM: it existed
   because ONE SHARP TRANSIENT set `peak` and capped the whole take's gain (the take landed 1.4 dB
   under target), so loudness was bought back by crushing harder. The defect was never the licence, it
   was the STATISTIC — a single sample must not define a take's headroom. FIX: the bound now reads
@@ -337,7 +337,7 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   lands under 2.0 instead of 3.8. 421 tests green.
   **THAT FIX WAS REACHING NOBODY, AND X1 FOUND IT ON 2026-08-26.** `peakRobust` was computed in both
   places and then DROPPED on the way to both consumers, so every export was still running the old
-  licence of 4 on the raw `peak` — the exact regression PO reported:
+  licence of 4 on the raw `peak` — the exact regression Robert reported:
     · `session.ts` built `recording.loudness` field by field and never copied `acc.peakRobust`, so
       every take on disk read `peakRobust: undefined` → RAW licence. That is the capture-stats path
       (unedited exports, the editor's preview loudness).
@@ -345,11 +345,11 @@ TD tags technical defects by severity. Done items get deleted, not archived.
       `{ peak, loudRms, floorRms }`, so the PROBE path — every take without capture stats, and every
       edited export — did the same. Found by X1's rig lane printing `probe.peakRobust: 0`.
   Both are one line each and both are fixed; a unit test now pins the probe passthrough (a single
-  full-scale spike over sustained 0.2 programme: `peak` > 0.9, `peakRobust` < 0.25). PO's listen test
+  full-scale spike over sustained 0.2 programme: `peak` > 0.9, `peakRobust` < 0.25). Robert's listen test
   is still owed — but it is owed on a build where the fix is actually in force, which no build before
   2026-08-26 was.
 
-- [P2] TD 2026-08-29, FOUND BY P9's RUNNER while it was failing for an unrelated reason:
+- [P2] 2026-08-29, FOUND BY P9's RUNNER while it was failing for an unrelated reason:
   **a camera that delivers no frames produces a silent empty recording.** Observed four times on a
   real device whose track was live, unmuted and negotiated at 1920x1080@30 while the sensor was off
   (a closed lid does this). What the user gets: the take records for its full length, the compositor
@@ -363,7 +363,7 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   themselves in the preview. It becomes P1 if the preview looks fine while the file is empty.
   Evidence: docs/qa/camera-1080-2026-08-29.json, and the console lines quoted in the P9 handoff.
 
-- [P1] TD 2026-08-29, FOUND WHILE ATTRIBUTING A RED GATE THAT TURNED OUT NOT TO BE MINE:
+- [P1] 2026-08-29, FOUND WHILE ATTRIBUTING A RED GATE THAT TURNED OUT NOT TO BE MINE:
   **the v2 oracle fails about half its cold runs on main, and it has nothing to do with the change
   under test.** The failure is always the same — `instant export sync maxAbs 97.1 > 90ms` or
   `trimmed export sync maxAbs 105.5 > 90ms` — i.e. the COPY paths' worst A/V sample, not the mean,
@@ -380,7 +380,7 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   through the render beside it. Until then, do not report a red v2 oracle as a regression without
   running HEAD cold next to it — and say which you did.
 
-- [P1] TD 2026-08-26, FOUND BY PO'S EYES on the X15 artifacts ("c shit is worse colors") and then
+- [P1] 2026-08-26, FOUND BY ROBERT'S EYES on the X15 artifacts ("c shit is worse colors") and then
   measured: **coloured text loses about 30 % of its colour, all of it at capture, and the composite
   is responsible for a third of that.** Saturation kept against the canvas the source actually
   painted, masked by the source's own palette (`npm run exp -- x15c`, warmed, two runs within 2 pts):
@@ -403,7 +403,7 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   whose geometry is not the selected step's — both still composite (O3c made the equality follow
   the step; F13 made the composite follow the take's ASPECT, not its pixel count, so a native-res
   1440p/4K screen still declines the CAPTURE half — that one is F16's). The rest needs **4:4:4 at capture**, which on this
-  machine is software only (AV1 profile 1: 80 fps at 1080p against 207, ~2x CPU — X15(b)). PO has the
+  machine is software only (AV1 profile 1: 80 fps at 1080p against 207, ~2x CPU — X15(b)). Robert has the
   crops: ~/Downloads/x15-text-truth/, c-00-SOURCE against c-01-instant; `npm run exp -- o3b
   '{"crops":true}'` writes the new before/after pair.
   NOT A REGRESSION and not new — it is how every take this product has ever made behaves.
@@ -435,10 +435,10 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   it does not — SMART CUT has been the default since 2026-08-25 and copies the composite's packets,
   so a trimmed take is BIT-IDENTICAL to the untrimmed one. The render's number is what a user sees
   only when smart cut declines.
-  WHAT IS LEFT FOR PO, not TD: whether 2.8 dB of extra glyph fringe on the render path is worth
+  WHAT IS LEFT FOR ROBERT, not engineering: whether 2.8 dB of extra glyph fringe on the render path is worth
   anything. It also re-prices X5, whose refusal rested on the two painters disagreeing.
 
-- [P2] TD 2026-08-26, found while measuring X15(c), NOT chased: **the render places the camera PiP
+- [P2] 2026-08-26, found while measuring X15(c), NOT chased: **the render places the camera PiP
   about half a second away from where the instant path places it.** In the same take, on the same
   output instants, the moving camera region best-matches at −15 frames (−0.5 s) and even there reads
   only 23.6 dB (max 115), while the STILL screen region of the same two files matches at 37.1 dB.
@@ -449,7 +449,7 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   render resampling the camera onto its own grid. `npm run exp -- x15c` prints it as `alignFrames`
   on the camera row; `{"thumbs":true}` dumps the frames, which is what made it visible.
 
-- [P2] TD 2026-08-26, found while writing X9's gate: **two of this repo's evidence gates are written
+- [P2] 2026-08-26, found while writing X9's gate: **two of this repo's evidence gates are written
   in `longtask` counts, and a long-task count cannot fail here.** Anything in this codebase that
   awaits per frame or per sample — the render, the For-AI build, the AI selection loop — never forms
   a single ≥50 ms task while still owning the thread end to end, so the counter reads 0 on the
@@ -459,7 +459,7 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   and move them onto scheduling lateness, and re-read any band whose green rests on one. Not urgent —
   no shipped claim is known to depend on it — but every such gate is currently decoration.
 
-- [P2] TD 2026-08-26, found while verifying the wall-clock hold: **every makeRig-based rig
+- [P2] 2026-08-26, found while verifying the wall-clock hold: **every makeRig-based rig
   (syncload, o4step2 family) is DEAD in headless Chrome on this machine — Chrome 151 stops
   delivering canvas-capture frames to an uncomposited window.** The page console (now captured)
   shows sources at 15.9 fps for the first seconds, then 0.0 forever; the composite degrades
@@ -477,7 +477,7 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   already collected. A 12.5-min cell paid for that; the rig now reports with null spans and the
   degradeReason instead of throwing.
 
-- [P2] TD 2026-08-26, found while wiring X2: **O1's MEMORY lane samples the wrong thread, and its
+- [P2] 2026-08-26, found while wiring X2: **O1's MEMORY lane samples the wrong thread, and its
   headline gate metric is absent.** `runO1Evidence` polls heap on the MAIN thread while the export
   renders in a worker (since O5a), and `measureUserAgentSpecificMemory` is unavailable in the rig's
   Chrome — `totalSamples: 0`, `totalPeakDeltaMB: null` on every row, and the heap deltas it does print
@@ -489,9 +489,9 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   measureUserAgentSpecificMemory exists. The related lever bug (flags flipped on a thread that no
   longer renders) is already fixed.
 
-- [P1] TD 2026-08-25: NOTHING HERE HAS EVER BEEN MEASURED ON A TAKE LONGER THAN 30 s, and PO records
+- [P1] 2026-08-25: NOTHING HERE HAS EVER BEEN MEASURED ON A TAKE LONGER THAN 30 s, and Robert records
   938-1800 s. `runOracle` defaults to 6000 ms and the matrix's widest cell is 30 s, so every sync,
-  drift and throughput number this project quotes describes a take up to 156× shorter than the one PO
+  drift and throughput number this project quotes describes a take up to 156× shorter than the one Robert
   complained about. Measured at 120 s on a /tmp mirror of the shipped build (a second live session was
   editing this worktree; its saves reload the harness page through HMR and killed two earlier runs):
     render path   symmetric 34.5 ms mean / 46.8 max, and FLAT — all 119 flash/click pairs returned
@@ -501,43 +501,43 @@ TD tags technical defects by severity. Done items get deleted, not archived.
                   under-reported it by ~20 %
     smart cut     the trimmed export took smartcut at 1384 ms against the render's 17616 on the same
                   take — 12.7×
-    drift         beta−1 = −0.003 ms/s → 2.8 ms across PO's whole 938 s take
-  So DRIFT IS DEAD as an explanation for what PO hears: whatever is off is a CONSTANT offset.
+    drift         beta−1 = −0.003 ms/s → 2.8 ms across Robert's whole 938 s take
+  So DRIFT IS DEAD as an explanation for what Robert hears: whatever is off is a CONSTANT offset.
   ACTION: one ≥120 s cell before any flip that touches the packet-copy paths — a 6 s gate passed the
-  instant path's own defect while it was 20 % worse at PO's scale.
+  instant path's own defect while it was 20 % worse at Robert's scale.
 
-- [P1] TD 2026-08-25: THE TWO ALIGNMENT ERRORS A SYNTHETIC RIG CANNOT SEE, both pushing audio LATE.
+- [P1] 2026-08-25: THE TWO ALIGNMENT ERRORS A SYNTHETIC RIG CANNOT SEE, both pushing audio LATE.
   (1) the mic anchor subtracts only the platform-REPORTED track latency (measuredAudio.ts) — a
-  Bluetooth headset's real 100-300 ms is invisible to it, and PO's 15-minute Zoom take is exactly that
+  Bluetooth headset's real 100-300 ms is invisible to it, and Robert's 15-minute Zoom take is exactly that
   case. (2) the video channel is anchored to the `recorder.start()` CALL (session.ts:588), not to when
   its first frame landed: a canvas delivers instantly on the rig, a real getDisplayMedia surface does
   not — the composite's own first frame took 233 ms in the same run. Neither is measurable without
   instrumenting a REAL take. Next step is to put the alignment inputs into the file's certification
   (each channel's startOffsetMs, the raw anchor, the reported input latency, the first-frame delay) so
   the next field report arrives with numbers instead of an adjective.
-  NEW FIELD EVIDENCE, PO 2026-08-26: "mic/camera unsynch in beggining of video seems to be smaller
+  NEW FIELD EVIDENCE, Robert 2026-08-26: "mic/camera unsynch in beggining of video seems to be smaller
   on other try" — a CONSTANT start-of-take offset that varies take to take and shrinks on a warm
   second try, which is exactly the signature of (2) (a cold first take pays device/recorder spin-up
   inside the anchor) and/or (1). Distinct from the progressive drift fixed the same day; nothing
   shipped today touches the start offset. The certification instrumentation above is still the step.
-  STATUS AFTER THE DRIFT FIX + X6 FLIP (PO, same day: "camera video/mic little unsynch"): the
+  STATUS AFTER THE DRIFT FIX + X6 FLIP (Robert, same day: "camera video/mic little unsynch"): the
   desync is down from seconds to "little" — what remains is this constant-offset family. With X6
   default the camera runs measuredVideo (arrival-stamped, min-filtered), so error (2) changes
   shape; the next step is unchanged — put the alignment inputs (anchor, reported latency,
   first-frame delay) into ChannelDiagnostics/cert so a field take carries the numbers, then
   compensate from measurements, not theory. X14 (≤20 ms) stays blocked on platform deliverables.
 
-- [P2] TD 2026-08-25, ONE OBSERVATION, NOT REPRODUCED: the audio-integrity spur gate read −34.6 dB
+- [P2] 2026-08-25, ONE OBSERVATION, NOT REPRODUCED: the audio-integrity spur gate read −34.6 dB
   against its −40 dB band on a 120 s run of HEAD (7c9a02f). The same build at 6 s read −52.3 (pass)
   and the previous build at 120 s read −56.7 (pass), so this is either machine load — the metric is
   known load-sensitive — or something length-dependent in the mix. Re-run 120 s on a quiet machine
   before believing either.
 
-- [P2] Oracle returns ALL-NULL metrics (and exit 0!) under machine contention — instrument must retry or fail loudly, never emit null-as-result. PARTLY ADDRESSED: oracle.mjs retries and fails loud on incomplete metrics. Still open: branch ee/oracle-nullfix unmerged (TD review), and the fidelity runner has no equivalent retry — it reads RED (toneErr 1.1-2.3 dB) purely from machine load, which is capture starvation and not a mix regression. Needs the same retry/quiet-machine guard.
+- [P2] Oracle returns ALL-NULL metrics (and exit 0!) under machine contention — instrument must retry or fail loudly, never emit null-as-result. PARTLY ADDRESSED: oracle.mjs retries and fails loud on incomplete metrics. Still open: branch ee/oracle-nullfix unmerged (review), and the fidelity runner has no equivalent retry — it reads RED (toneErr 1.1-2.3 dB) purely from machine load, which is capture starvation and not a mix regression. Needs the same retry/quiet-machine guard.
 
-- [P2] Sync is ~45-63 ms audio-late, not the ~30 ms previously believed (2026-08-23: the oracle was ~31 ms optimistic — exact 18 ms detection bias + an unmeasured 13.5 ms video reference). PO can feel it — re-confirmed 2026-08-24 on a real tab-music take (YouTube music video), which matches the measured offset; no new fault implied. Cause understood and partly compensated. 2026-08-24: the v2 engine is now the DEFAULT and reads 33-48 ms on the oracle against v1's ~60 — users get the better number today; closing the rest to ≤20 ms is anchor work (input latency both engines share), tracked as O4-polish. Awaiting PO listen test on a real take.
+- [P2] Sync is ~45-63 ms audio-late, not the ~30 ms previously believed (2026-08-23: the oracle was ~31 ms optimistic — exact 18 ms detection bias + an unmeasured 13.5 ms video reference). Robert can feel it — re-confirmed 2026-08-24 on a real tab-music take (YouTube music video), which matches the measured offset; no new fault implied. Cause understood and partly compensated. 2026-08-24: the v2 engine is now the DEFAULT and reads 33-48 ms on the oracle against v1's ~60 — users get the better number today; closing the rest to ≤20 ms is anchor work (input latency both engines share), tracked as O4-polish. Awaiting Robert listen test on a real take.
 
-- [P2] PO 2026-08-24: files too large for the quality on motion-heavy takes (YouTube music video).
+- [P2] Robert 2026-08-24: files too large for the quality on motion-heavy takes (YouTube music video).
   Structural to the v1 engine, not a regression: an unedited export packet-copies the live composite,
   whose MediaRecorder runs at a flat 8 Mbps ceiling with generic tuning — on motion the ceiling binds
   (~60 MB/min) and quality-per-bit is whatever MediaRecorder gives, no knobs. The shipped size levers
@@ -547,63 +547,63 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   frame-driven draw means static spans now cost ~1 fps of bytes; motion still rides the 8 Mbps
   ceiling) — then O5/O9 quality-per-bit, and O11d codec ladder (25-40 %, blocked on P1's Playwright
   install; default file stays avc for blind shares, so the rung flips only where the recipient is
-  known). PO RE-JUDGED 2026-08-25: 300 MB / 5 min on a 4K game take — 60 MB/min, the 8 Mbps ceiling
+  known). Robert RE-JUDGED 2026-08-25: 300 MB / 5 min on a 4K game take — 60 MB/min, the 8 Mbps ceiling
   EXACTLY, so the ceiling still binds on motion as described (v2 helps static spans only) and this
   is the expected size of the current build, not a regression. Levers unchanged: O9 quality-per-bit,
-  O11d codec ladder, X13 (PO-gated). while EE's 20-run headless oracle matrix hammered it — slow load / unresponsive modal / "waiting to connect" / mic-timeout likely environment artifacts. RETEST on clean prod build (TD serves main at localhost:4173). Rule going forward: PO QA only on a dedicated prod-build port; EE load tests spawn their own ephemeral server, never 5173.
-- [P1] Camera light at app load (PO report, pre-any-click?) — if reproduced on the clean 4173 build this violates 'no idle device access, ever'. Note: light DURING the screen picker (after record click) is the approved concurrent-acquisition design; need PO to distinguish which they saw.
+  O11d codec ladder, X13 (Robert-gated). while a 20-run headless oracle matrix hammered it — slow load / unresponsive modal / "waiting to connect" / mic-timeout likely environment artifacts. RETEST on clean prod build (serve main at localhost:4173). Rule going forward: Robert's QA only on a dedicated prod-build port; load tests spawn their own ephemeral server, never 5173.
+- [P1] Camera light at app load (Robert report, pre-any-click?) — if reproduced on the clean 4173 build this violates 'no idle device access, ever'. Note: light DURING the screen picker (after record click) is the approved concurrent-acquisition design; need Robert to distinguish which they saw.
 - [P2] Silent channel loss: mic acquisition timed out and the take completed with no mic and no unmissable warning — user discovered it only on playback. Needs loud post-record surface ('Mic missing from this take') + arming-timeout telemetry.
-- [P1] Fix tab/browser music recording quality — TD root-caused and shipped a 3-part fix (2026-07-15): tanh waveshaping distorted ALL rendered audio (now identity below 0.95 knee); composite hard limiter (−6dB/20:1) pumped music (now bypassed for single source, gentler −3dB/12:1 safety net for multi); unreported channelCount defaulted to mono downmix (now stereo). Awaiting PO listen test on real tab music to close.
+- [P1] Fix tab/browser music recording quality — root-caused and shipped a 3-part fix (2026-07-15): tanh waveshaping distorted ALL rendered audio (now identity below 0.95 knee); composite hard limiter (−6dB/20:1) pumped music (now bypassed for single source, gentler −3dB/12:1 safety net for multi); unreported channelCount defaulted to mono downmix (now stereo). Awaiting Robert listen test on real tab music to close.
 
 ### Next
 
 THE ROADMAP LIVES IN `.ai/TASKS` — not here. That file carries the READY map, every task with its
 gates, what a fresh session must know first, and the tooling index; it is rewritten on every merge.
 Duplicating it here is how the two go out of step, so this section is a pointer on purpose.
-PO protocol: say "roadmap" in any session → READY map → "go <id>".
+Protocol: say "roadmap" in any session → READY map → "go <id>".
 
 ### Later — deliberately inactive
 
-- [P3] Distributed multi-device capture: run the gated two-device sync spike with kill criteria before product work. One authoritative mic/scene; no sub-ms mixing claim. PO 2026-08-22: "we'll need it eventually" — gating unchanged.
-- [P3] Cursor-excluded capture + vector cursor re-render (sharp at any zoom, click ripples) — PO "maybe someday"; P4 designs the metadata track for it, builds nothing.
-- [P3] Local quality models (camera background blur, ML denoise) — PO "maybe later". Boundary (ledger 08-22(3)): no AI product features ever; local quality models allowed when revisited; deterministic DSP ships first.
+- [P3] Distributed multi-device capture: run the gated two-device sync spike with kill criteria before product work. One authoritative mic/scene; no sub-ms mixing claim. Robert 2026-08-22: "we'll need it eventually" — gating unchanged.
+- [P3] Cursor-excluded capture + vector cursor re-render (sharp at any zoom, click ripples) — Robert "maybe someday"; P4 designs the metadata track for it, builds nothing.
+- [P3] Local quality models (camera background blur, ML denoise) — Robert "maybe later". Boundary (ledger 08-22(3)): no AI product features ever; local quality models allowed when revisited; deterministic DSP ships first.
 - [P3] Server-side auth-user deletion hook (the client already deletes user-owned objects/rows).
 - [P3] Image/screenshot capture channel.
 
-## Project / PM — PO + PM
+## Project
 
 ### Now
 
-- [P2] Oracle returns ALL-NULL metrics (and exit 0!) under machine contention — instrument must retry or fail loudly, never emit null-as-result. PARTLY ADDRESSED: oracle.mjs retries and fails loud on incomplete metrics. Still open: branch ee/oracle-nullfix unmerged (TD review), and the fidelity runner has no equivalent retry — it reads RED (toneErr 1.1-2.3 dB) purely from machine load, which is capture starvation and not a mix regression. Needs the same retry/quiet-machine guard.
+- [P2] Oracle returns ALL-NULL metrics (and exit 0!) under machine contention — instrument must retry or fail loudly, never emit null-as-result. PARTLY ADDRESSED: oracle.mjs retries and fails loud on incomplete metrics. Still open: branch ee/oracle-nullfix unmerged (review), and the fidelity runner has no equivalent retry — it reads RED (toneErr 1.1-2.3 dB) purely from machine load, which is capture starvation and not a mix regression. Needs the same retry/quiet-machine guard.
 
-- [P2] Sync is ~45-63 ms audio-late, not the ~30 ms previously believed (2026-08-23: the oracle was ~31 ms optimistic — exact 18 ms detection bias + an unmeasured 13.5 ms video reference). PO can feel it — re-confirmed 2026-08-24 on a real tab-music take (YouTube music video), which matches the measured offset; no new fault implied. Cause understood and partly compensated. 2026-08-24: the v2 engine is now the DEFAULT and reads 33-48 ms on the oracle against v1's ~60 — users get the better number today; closing the rest to ≤20 ms is anchor work (input latency both engines share), tracked as O4-polish. Awaiting PO listen test on a real take.
+- [P2] Sync is ~45-63 ms audio-late, not the ~30 ms previously believed (2026-08-23: the oracle was ~31 ms optimistic — exact 18 ms detection bias + an unmeasured 13.5 ms video reference). Robert can feel it — re-confirmed 2026-08-24 on a real tab-music take (YouTube music video), which matches the measured offset; no new fault implied. Cause understood and partly compensated. 2026-08-24: the v2 engine is now the DEFAULT and reads 33-48 ms on the oracle against v1's ~60 — users get the better number today; closing the rest to ≤20 ms is anchor work (input latency both engines share), tracked as O4-polish. Awaiting Robert listen test on a real take.
 
 - [P1] Provision Supabase + Google OAuth, then verify login → upload → signed-link view in a second browser. Required before public cloud sharing; local download already works.
-- [P2] Daily real use: collect only concrete friction/defects. PM turns evidence into a bounded decision; PO decides any resulting UX change.
+- [P2] Daily real use: collect only concrete friction/defects. Evidence turns into a bounded decision; Robert decides any resulting UX change.
 
 ### Launch — after the technical Now list and cloud test are clear
 
 - [P1] Domain and product email.
 - [P1] Public deploy.
-- [P2] PO UX pass from observed friction.
+- [P2] Robert UX pass from observed friction.
 - [P1] Invite first users and establish a feedback channel.
 
 ### Later — approved, but intentionally inactive
 
 - [P3] Instant link mode: opt-in progressive raw upload and cloud assembly. Depends on durable chunk boundaries, sync work, real QA, and a cloud-compose decision; OFF by default with explicit privacy copy.
-- [P3] Design-later pack (PO 2026-08-22, "we will build, design later"): brand templates on F3 · link-unfurl page so shared links show a thumbnail · local library search · keyboard-first editing pass.
+- [P3] Design-later pack (Robert 2026-08-22, "we will build, design later"): brand templates on F3 · link-unfurl page so shared links show a thumbnail · local library search · keyboard-first editing pass.
 
 ## Bugs
 
-<!-- TD moves confirmed defects here when triaged; format: - [P1|P2|P3] description — repro/context -->
+<!-- Confirmed defects move here when triaged; format: - [P1|P2|P3] description — repro/context -->
 
-- [P1] PO 2026-07-23: (a) Chrome capture "stops after a while", (b) recorded audio not synced with video, (c) "still some noises". TD shipped same day: screen wake lock while recording + OPFS persist + mid-take storage/encoder death now surfaces loudly and keeps the partial take (was: silent truncation — the take "stopped" with no signal); editor preview re-clocked — hidden-tab-proof master clock + playbackRate slewing (was: rAF clock froze in hidden tab while audio played on → frozen video, audio seconds ahead; ±120ms seek deadband allowed ~240ms A/V gap even when visible; verified sub-10ms after fix); loudness makeup now noise-floor-bounded (boost cannot lift room hiss past −40 dBFS — the +18 dB rescue amplified hiss). AWAITING PO recheck on real takes; if (a) still reproduces during capture (not playback), collect console log + take length vs file length.
-- [P1] PO 2026-08-06: recorded in Chrome, switched to another tab with a game — "nothing was recorded, just frozen frame". TD shipped same day: (1) a dead/frozen video source no longer poisons the take silently — SourceLiveness watches each source's media clock off the composite's AudioWorklet tick (hidden-tab-proof) and 3s with no frame emits channel-stalled, marks the composite unusable (unedited export renders from the raw channels instead of copying still frames) and records Recording.stalled; (2) a video track ENDING mid-take now invalidates the composite too — previously the dead track kept readyState 2 so the composite repainted its last frame for the rest of the take and instant export copied it; (3) sticky red banner while a source is frozen (a toast is invisible — the user is in another tab when it happens); (4) getDisplayMedia now hints displaySurface:'monitor' so the picker opens on Entire Screen, and picking a single tab/window raises a notice that other tabs/apps will not appear. MEASURED in real Chrome 150/macOS 26: in a hidden tab the AudioWorklet tick, canvas.captureStream, <video>→drawImage and MediaRecorder all keep running at full rate (rAF goes to 0) — the composite pipeline itself does NOT freeze, so the frozen frame comes from the SOURCE. SURFACE QUESTION ANSWERED by PO 2026-08-22 — one Chrome tab — see the entry below; that report is a second, independent root cause.
-- [P1] PO 2026-08-22: recording another Chrome tab that renders a 4K game — "the video freezes". Different failure from 08-06 despite the same words: frames arrive in BURSTS, not never, so the 3s stall detector correctly stays quiet and nothing warns. Root cause is throughput. Nothing capped the display track, so a 4K surface was consumed four times on one GPU (Chrome capture readback of 3840×2160 + raw screen MediaRecorder at 8 Mbps ≈ 0.03 bpp + composite &lt;video&gt; decode and downscale 30×/s + on-screen preview decode) while the captured tab rendered the game on that same GPU — and every one of those pixels was thrown away at export, which is 1080p on both paths. TD shipped same day: display track constrained to the export size (CAPTURE_MAX_* tied to DEFAULT_EXPORT_SETTINGS), MAX-only so a smaller surface is never overconstrained, applied in the getDisplayMedia request and re-applied by capDisplayTrack() before the channel is delivered (before its recorder exists — a mid-file resolution change reinitialises the encoder); frameRate capped at 30 as max, not ideal, so a 60 fps game tab stops doubling the encode for frames the export drops; per-source delivered fps logged every 10s from the composite tick (console only). MEASURED (real Chrome, hidden tab, AudioWorklet rig mirroring liveComposite, 8s trials, 2 runs with order reversed, idle machine and no real game): 4K delivered 21.5 / 11.9 fps against a 30 fps target, drawImage 13.94 / 8.55 ms of a 33 ms budget, composite encoder starved to 289 / 106 KB/s; the same rig at 1080p delivered 29.8–29.9 fps, drawImage 0.97–1.04 ms, encoders 597–614 KB/s. PO RECHECK 2026-08-25 PARTIAL: the game take now RECORDS — no frozen-frame complaint; the failure moved to AUDIO (progressive desync + noises under the same load, its own P1 in Now) and to a game-first WEDGE ordering (case file). The console lines (`[capture] display capped 3840×2160@… → 1920×1080@30`, `[capture] screen … delivering N fps`) are still unseen from a real game take.
-- [~~P1~~ FIXED 2026-08-23] PO: "sound broke into lag sounds" + "sound was not loud, same as before" — ONE cause, both symptoms. Measured on the delivered export: the makeup gain was PEAK-BOUND (p20 floor 0.0062 vs a 0.01 ceiling so the floor bound was slack; p90 reached 0.1063, 1.4 dB short of the 0.125 target, so the target bound was not reached) — one sharp transient set `peak`, capped the gain for the WHOLE take, and was itself destroyed by the limiter. The limiter's tanh fold went numerically dead at an input of 1.152 while the gain bound licensed peaks to 1.9, so a 1.66:1 range of the loudest content collapsed onto one 16-bit code: 217 full-scale ~0.25 ms impulses from t=12.5s, which is the crackle. FIXED by (1) an algebraic u/(1+u) fold — same f(0)=0, f'(0)=1 C1 knee and f(inf)=1 ceiling as tanh, but polynomial approach, resolved to LIMIT_USABLE_MAX ~= 82, and bit-identical below the knee; (2) NORMALIZE_PEAK_OVERDRIVE 2 -> 4, which the old curve could not have carried. Old vs new on the take's back-solved numbers: gain 3.06 peak-bound / p90 -19.47 dBFS / transient rendered as 32768 x5 + 31130 (2 distinct values of 6) BECOMES gain 3.60 target-bound / p90 -18.06 dBFS on target / 6 distinct values, none pinned. Gates: 260 tests, fidelity oracle PASS (toneErr 0.02 dB, limiterHits 0), sync oracle PASS. STILL OPEN and deliberately not claimed as fixed: general loudness. That take's MEDIAN window RMS is 18 dB below its p90, so most of it sits far below the level being normalized — closing that needs real dynamic-range compression, which is a separate PO decision.
+- [P1] Robert 2026-07-23: (a) Chrome capture "stops after a while", (b) recorded audio not synced with video, (c) "still some noises". Shipped same day: screen wake lock while recording + OPFS persist + mid-take storage/encoder death now surfaces loudly and keeps the partial take (was: silent truncation — the take "stopped" with no signal); editor preview re-clocked — hidden-tab-proof master clock + playbackRate slewing (was: rAF clock froze in hidden tab while audio played on → frozen video, audio seconds ahead; ±120ms seek deadband allowed ~240ms A/V gap even when visible; verified sub-10ms after fix); loudness makeup now noise-floor-bounded (boost cannot lift room hiss past −40 dBFS — the +18 dB rescue amplified hiss). AWAITING ROBERT recheck on real takes; if (a) still reproduces during capture (not playback), collect console log + take length vs file length.
+- [P1] Robert 2026-08-06: recorded in Chrome, switched to another tab with a game — "nothing was recorded, just frozen frame". Shipped same day: (1) a dead/frozen video source no longer poisons the take silently — SourceLiveness watches each source's media clock off the composite's AudioWorklet tick (hidden-tab-proof) and 3s with no frame emits channel-stalled, marks the composite unusable (unedited export renders from the raw channels instead of copying still frames) and records Recording.stalled; (2) a video track ENDING mid-take now invalidates the composite too — previously the dead track kept readyState 2 so the composite repainted its last frame for the rest of the take and instant export copied it; (3) sticky red banner while a source is frozen (a toast is invisible — the user is in another tab when it happens); (4) getDisplayMedia now hints displaySurface:'monitor' so the picker opens on Entire Screen, and picking a single tab/window raises a notice that other tabs/apps will not appear. MEASURED in real Chrome 150/macOS 26: in a hidden tab the AudioWorklet tick, canvas.captureStream, <video>→drawImage and MediaRecorder all keep running at full rate (rAF goes to 0) — the composite pipeline itself does NOT freeze, so the frozen frame comes from the SOURCE. SURFACE QUESTION ANSWERED by Robert 2026-08-22 — one Chrome tab — see the entry below; that report is a second, independent root cause.
+- [P1] Robert 2026-08-22: recording another Chrome tab that renders a 4K game — "the video freezes". Different failure from 08-06 despite the same words: frames arrive in BURSTS, not never, so the 3s stall detector correctly stays quiet and nothing warns. Root cause is throughput. Nothing capped the display track, so a 4K surface was consumed four times on one GPU (Chrome capture readback of 3840×2160 + raw screen MediaRecorder at 8 Mbps ≈ 0.03 bpp + composite &lt;video&gt; decode and downscale 30×/s + on-screen preview decode) while the captured tab rendered the game on that same GPU — and every one of those pixels was thrown away at export, which is 1080p on both paths. Shipped same day: display track constrained to the export size (CAPTURE_MAX_* tied to DEFAULT_EXPORT_SETTINGS), MAX-only so a smaller surface is never overconstrained, applied in the getDisplayMedia request and re-applied by capDisplayTrack() before the channel is delivered (before its recorder exists — a mid-file resolution change reinitialises the encoder); frameRate capped at 30 as max, not ideal, so a 60 fps game tab stops doubling the encode for frames the export drops; per-source delivered fps logged every 10s from the composite tick (console only). MEASURED (real Chrome, hidden tab, AudioWorklet rig mirroring liveComposite, 8s trials, 2 runs with order reversed, idle machine and no real game): 4K delivered 21.5 / 11.9 fps against a 30 fps target, drawImage 13.94 / 8.55 ms of a 33 ms budget, composite encoder starved to 289 / 106 KB/s; the same rig at 1080p delivered 29.8–29.9 fps, drawImage 0.97–1.04 ms, encoders 597–614 KB/s. ROBERT RECHECK 2026-08-25 PARTIAL: the game take now RECORDS — no frozen-frame complaint; the failure moved to AUDIO (progressive desync + noises under the same load, its own P1 in Now) and to a game-first WEDGE ordering (case file). The console lines (`[capture] display capped 3840×2160@… → 1920×1080@30`, `[capture] screen … delivering N fps`) are still unseen from a real game take.
+- [~~P1~~ FIXED 2026-08-23] Robert: "sound broke into lag sounds" + "sound was not loud, same as before" — ONE cause, both symptoms. Measured on the delivered export: the makeup gain was PEAK-BOUND (p20 floor 0.0062 vs a 0.01 ceiling so the floor bound was slack; p90 reached 0.1063, 1.4 dB short of the 0.125 target, so the target bound was not reached) — one sharp transient set `peak`, capped the gain for the WHOLE take, and was itself destroyed by the limiter. The limiter's tanh fold went numerically dead at an input of 1.152 while the gain bound licensed peaks to 1.9, so a 1.66:1 range of the loudest content collapsed onto one 16-bit code: 217 full-scale ~0.25 ms impulses from t=12.5s, which is the crackle. FIXED by (1) an algebraic u/(1+u) fold — same f(0)=0, f'(0)=1 C1 knee and f(inf)=1 ceiling as tanh, but polynomial approach, resolved to LIMIT_USABLE_MAX ~= 82, and bit-identical below the knee; (2) NORMALIZE_PEAK_OVERDRIVE 2 -> 4, which the old curve could not have carried. Old vs new on the take's back-solved numbers: gain 3.06 peak-bound / p90 -19.47 dBFS / transient rendered as 32768 x5 + 31130 (2 distinct values of 6) BECOMES gain 3.60 target-bound / p90 -18.06 dBFS on target / 6 distinct values, none pinned. Gates: 260 tests, fidelity oracle PASS (toneErr 0.02 dB, limiterHits 0), sync oracle PASS. STILL OPEN and deliberately not claimed as fixed: general loudness. That take's MEDIAN window RMS is 18 dB below its p90, so most of it sits far below the level being normalized — closing that needs real dynamic-range compression, which is a separate Robert decision.
 - [~~P1~~ FIXED 2026-08-23] "stopped some input mid record, but in the editor timeline they are full length" + "why i cant turn off screen and camera mid session" + "must not be muted but stopped, but resumable after, any input". Was: the chips live-MUTED audio (`track.enabled = false` — device still open, camera light still on, channel still recording real-time silence at full length) and locked video entirely. Now `CaptureSession.setChannelActive(kind, active)`: off releases the device and closes that channel's file at that instant; on re-acquires and late-joins a NEW segment with its own startOffsetMs, so the off stretch is a real hole on the timeline. Any input, including one never armed for the take. `setAudioEnabled` is kept in the contract but the default UI no longer calls it.
 - [P2] No local disk guard on capture, exposed by removing the 30-min cap (2026-08-23). Capture streams every channel to OPFS as it records, so length costs disk and not RAM — but nothing checks `navigator.storage.estimate()` before or during a take. A write failure is at least loud (`session.ts` ondataavailable → channel-error + onTrackEnded, partial take kept), so this is degradation and not silent loss; still, an uncapped take should warn on low headroom before it starts and while it runs, and the ~1.1 GB/hour at the production 8 Mbps + 128 kbps is a number the UI can show.
-- [P2] Fidelity oracle red on TD machine under load: uniform tone-level drop 1.1–2.3 dB varying run-to-run (signature of contention-starved capture, same family as the ALL-NULL P2 above). Pre-existing before 2026-07-23 changes (clean tree measured worse). Do not treat as mix-path regression without a quiet-machine run.
+- [P2] Fidelity oracle red on dev machine under load: uniform tone-level drop 1.1–2.3 dB varying run-to-run (signature of contention-starved capture, same family as the ALL-NULL P2 above). Pre-existing before 2026-07-23 changes (clean tree measured worse). Do not treat as mix-path regression without a quiet-machine run.
 
 ## Ideas
 

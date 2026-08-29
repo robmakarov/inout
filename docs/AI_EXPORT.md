@@ -2,7 +2,7 @@
 
 Status: **V1 SHIPPED 2026-08-24** — the export panel has a "For AI" control and it produces the
 file described below. Everything beyond the file is a roadmap candidate, reconsidered only
-**after PO tests the first real file** (`.ai/TASKS` phase A). Evidence:
+**after Robert tests the first real file** (`.ai/TASKS` phase A). Evidence:
 `node scripts/ai-pdf-check.mjs`; a sample the rig built is committed at `docs/qa/ai-export.pdf`.
 
 Agents don't watch video — they sample frames and pay roughly 1 token per 750 pixels: a 1024×576
@@ -76,16 +76,16 @@ Rules that are decisions, not defaults:
 - **Clock:** every timestamp sits on the recording epoch. If the source video's t=0 differs (the
   composite's first packet sits 133–300 ms in — see P0-instant-sync), the index declares
   `clockOffsetMs`. Never assume composite time is recording time; that assumption is the P0.
-- **No generated prose.** "No AI" is a standing PO ruling — index content is signal-derived
+- **No generated prose.** "No AI" is a standing Robert ruling — index content is signal-derived
   (durations, counts, timestamps), never model-written summaries.
 - **Keyframe selection is pure and unit-tested**, with a defined delta metric (share of changed
   pixels on a downscaled luma diff) so "dense during motion, near zero when static" is testable.
 - **Zero dependencies:** a minimal PDF writer (JPEG images + built-in Helvetica text) is a few
   hundred lines and stays ours.
 
-## What PO's first real take changed — the important part
+## What Robert's first real take changed — the important part
 
-V1 shipped, PO exported a 97 s walkthrough of a real product UI, gave the file to an agent **to
+V1 shipped, Robert exported a 97 s walkthrough of a real product UI, gave the file to an agent **to
 recreate the UI and its animations**, and came back with two verdicts: *"ai didn't understand it's
 video"* and *"it loses way too much frames"*. Both were right, and both were about calibration
 rather than design.
@@ -112,7 +112,7 @@ recording:
 ### The page limit, checked instead of recalled
 
 The first pass at this capped the file at 96 frames on the belief that readers reject a PDF past 100
-pages. PO's answer — *"if pdf is limited than its fucked up format"* — was the right challenge, and
+pages. Robert's answer — *"if pdf is limited than its fucked up format"* — was the right challenge, and
 the belief was wrong. What the readers actually accept (checked 2026-08-24):
 
 | reader | pages | size | note |
@@ -123,11 +123,11 @@ the belief was wrong. What the readers actually accept (checked 2026-08-24):
 So the format was never the constraint. The binding cost is **tokens** — ~800 per full-view page —
 which makes the budget a spend decision rather than a hard ceiling: frames scale with the length of
 the recording (2.5 per second, floor 96, ceiling 300 ≈ 236k tokens ≈ 11 MB), and a hard stop at
-28 MB exists only so a pathological take degrades by stopping rather than by being rejected. On PO's
+28 MB exists only so a pathological take degrades by stopping rather than by being rejected. On Robert's
 recording the budget stopped binding at all: the content earned 165 frames of an allowed 243.
 
 They are spent by a pace derived from what is LEFT of the take and the budget, plus a burst credit
-that shrinks to zero by the end — because the first version of that controller spent PO's take out at
+that shrinks to zero by the end — because the first version of that controller spent Robert's take out at
 84 s of 97 and the last thirteen seconds simply were not in the file.
 
 Same 97 s recording, before and after: **39 frames → 165**, worst gap 5.5 s → 2.9 s, median gap
@@ -163,16 +163,16 @@ Two honest limits, both measured rather than assumed:
 
 inout is a web page: it sees DOM events only in **its own tab**. No browser API exposes the input
 events of a captured surface (another tab, a window, the screen). So the event sidecar this spec
-originally led with needs a capture vehicle, and that is a PO decision (candidate AI2):
+originally led with needs a capture vehicle, and that is Robert's decision (candidate AI2):
 (a) companion extension — other tabs, not native apps · (b) SDK snippet in the recorded page —
 the "developers record their own product" market · (c) the desktop shell (P4) — global
 cursor/clicks natively; richest, latest. V1 ships without DOM events and the index says so.
 
-## Roadmap candidates — considered only after PO tests the first real file
+## Roadmap candidates — considered only after Robert tests the first real file
 
 Named so they don't get reinvented, and deliberately **not** scheduled (`.ai/TASKS` AI2–AI7):
 DOM event sidecar (schema ready: click/key/scroll/nav/focus + role/name/bbox; visible text in
 ordinary fields, count-only in password/sensitive fields) · voice transcript VTT (ASR is a local
-model — PO-gated under the no-AI rule) · repro bundle (console errors + failed requests; needs
+model — Robert-gated under the no-AI rule) · repro bundle (console errors + failed requests; needs
 the sidecar's vehicle) · marker key during recording · addressable recordings / MCP server ·
 PII redaction · dense burst sequences · low-rate pointer trail.

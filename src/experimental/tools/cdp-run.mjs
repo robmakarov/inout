@@ -3,7 +3,7 @@
  * EXPERIMENTAL — headless-Chromium driver for the research harness.
  * Zero dependencies: Node >= 22 (native WebSocket + fetch) + installed Chrome.
  *
- * Launches Chrome headless on a THROWAWAY profile (TD hygiene: harness runs
+ * Launches Chrome headless on a THROWAWAY profile (hygiene: harness runs
  * must not touch a real profile's storage), opens
  * /experimental.html?synthetic=1 from a running `npm run dev` server, invokes
  * window.__exp.run(<experiment>, <args>) over CDP, prints the JSON report to

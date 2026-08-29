@@ -9,7 +9,7 @@
  *  - optional system-audio channel: constant low-level tone (gain 0.045, below
  *    the 0.1 onset threshold) — exercises multi-channel mixing without
  *    polluting onset detection;
- *  - optional flash+click cross-check (TD step 3d): the SAME rig-clock instants
+ *  - optional flash+click cross-check (review step 3d): the SAME rig-clock instants
  *    that fire beeps also flash the video background white for ~120 ms. Flash
  *    onsets are detectable in the export without barcodes or clock fits, so
  *    they independently confirm (or falsify) barcode-derived sync numbers.
@@ -23,7 +23,7 @@
  *
  * Storage note: blobs are written through the production blobStore because
  * exportRecording reads through it. Keys are prefixed `exp-oracle` and removed
- * by cleanup(); every failure path also removes them (TD hygiene item), and
+ * by cleanup(); every failure path also removes them (hygiene item), and
  * sweepStaleOracleBlobs() clears leftovers from crashed earlier runs.
  * recordingsRepo is never touched, so nothing ever appears in the library.
  */
@@ -232,7 +232,7 @@ async function recordStream(
   recorder.stop()
   await stopped
   const stopFinishAbsMs = performance.now()
-  // Video: file epoch ≈ startCall (TD measured). Audio MediaRecorder fallback
+  // Video: file epoch ≈ startCall (measured). Audio MediaRecorder fallback
   // still uses onstart (prefer measured path above).
   const offsetAnchor = media === 'video' ? startCallAbsMs : startAbs || startCallAbsMs
   const durationMs = stopFinishAbsMs - (startAbs || startCallAbsMs)
@@ -825,14 +825,14 @@ export async function recordFiducialSession(durationMs: number, opts?: RecordOpt
 
     return { recording, debug, cleanup: removeBlobs }
   } catch (err) {
-    // TD hygiene: no stranded production-storage keys on any failure path.
+    // hygiene: no stranded production-storage keys on any failure path.
     await removeBlobs()
     if (audioCtx && audioCtx.state !== 'closed') await audioCtx.close().catch(() => undefined)
     throw err
   }
 }
 
-/** Remove exp-oracle-* blobs stranded by crashed earlier runs (TD hygiene). */
+/** Remove exp-oracle-* blobs stranded by crashed earlier runs (hygiene). */
 export async function sweepStaleOracleBlobs(): Promise<string[]> {
   const files = await listProductionBlobs()
   const stale = files.filter((f) => f.name.startsWith('exp-oracle-')).map((f) => f.name)

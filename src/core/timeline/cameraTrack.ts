@@ -31,7 +31,7 @@ export const PIP_MAX_WIDTH_FRAC = 0.5
 /**
  * How long the camera takes to travel to a newly dropped position.
  *
- * This is the one real interpretation call in F4 and it is worth naming. PO:
+ * This is the one real interpretation call in F4 and it is worth naming. Robert:
  * "the export moves it exactly WHEN the user moved it". Interpolating straight
  * between two drops would instead have the camera drifting for the whole span
  * between them — moving long before the user did. So a drop writes a PAIR of

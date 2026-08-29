@@ -44,7 +44,7 @@ function withNativeRes<T>(on: boolean, fn: () => T): T {
   }
 }
 
-// PO 2026-08-23 removed the tab/window "Heads-up:" toasts. The picker the user
+// Robert 2026-08-23 removed the tab/window "Heads-up:" toasts. The picker the user
 // just used already shows which surface they chose, so the notice narrated
 // their own click; the frozen-source banner still covers the case where the
 // surface really does stop delivering, and it fires on measurement. The test
@@ -58,7 +58,7 @@ describe('shared-surface notice', () => {
   })
 })
 
-describe('capture ceiling (4K game tab froze the take, PO 2026-08-22)', () => {
+describe('capture ceiling (4K game tab froze the take, Robert 2026-08-22)', () => {
   const track = (settings: MediaTrackSettings, apply = vi.fn().mockResolvedValue(undefined)) =>
     ({
       getSettings: () => settings,
@@ -84,7 +84,7 @@ describe('capture ceiling (4K game tab froze the take, PO 2026-08-22)', () => {
     })
   })
 
-  it('DEFAULT (native-res, PO 2026-08-29) sends no size bound, so the surface arrives whole', () => {
+  it('DEFAULT (native-res, Robert 2026-08-29) sends no size bound, so the surface arrives whole', () => {
     const c = displayVideoConstraints() as { width?: unknown; height?: unknown }
     expect(c.width).toBeUndefined()
     expect(c.height).toBeUndefined()
@@ -107,9 +107,9 @@ describe('capture ceiling (4K game tab froze the take, PO 2026-08-22)', () => {
   })
 
   it('DEFAULT: a 4K surface is KEPT — the ladder, not the cap, is the safety net now', async () => {
-    // PO 2026-08-29 took this risk explicitly. resolutionLadder.ts steps
+    // Robert 2026-08-29 took this risk explicitly. resolutionLadder.ts steps
     // 4K -> 1440p -> 1080p on measured backpressure instead of never starting
-    // high, and PO is the reporting channel if the 08-22 freeze returns.
+    // high, and Robert is the reporting channel if the 08-22 freeze returns.
     const apply = vi.fn().mockResolvedValue(undefined)
     await capDisplayTrack(track({ width: 3840, height: 2160, frameRate: 60 }, apply))
     expect(apply).not.toHaveBeenCalled()
@@ -182,7 +182,7 @@ describe('acquire budgets', () => {
   it('device budget: above real spin-ups, but bounded — every device gates start', () => {
     // Since synchronized start (2026-07-20) EVERY device blocks the take start,
     // so this budget is exactly how long the UI can freeze on one wedged device
-    // ("stuck waiting for mic", PO 2026-07-23). Lower bound: 5s falsely killed
+    // ("stuck waiting for mic", Robert 2026-07-23). Lower bound: 5s falsely killed
     // slow-but-alive granted inputs (loaded Mac mic, mobile Safari getUserMedia).
     expect(ACQUIRE_TIMEOUT_MS).toBeGreaterThan(5_000)
     expect(ACQUIRE_TIMEOUT_MS).toBeLessThanOrEqual(10_000)
@@ -220,7 +220,7 @@ describe('acquire budgets', () => {
   })
 
   /**
-   * PO 2026-08-23, "why the fuck mic dont connects". A pre-granted mic starts
+   * Robert 2026-08-23, "why the fuck mic dont connects". A pre-granted mic starts
    * CONCURRENTLY with the screen picker — that overlap is the instant-start
    * win — but it carried ACQUIRE_TIMEOUT_MS, which is a HARDWARE budget. So
    * the 8 s ran while the user was reading Chrome's picker, and any take where

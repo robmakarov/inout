@@ -35,7 +35,7 @@ const ETA_MIN_RATIO = 0.03
  * How long is left — measured, not modelled.
  *
  * A ring and a percentage are enough for the 60-105 ms instant export. They are
- * not enough for a full render: PO's 15m38s take sat in this panel for ~3.5
+ * not enough for a full render: Robert's 15m38s take sat in this panel for ~3.5
  * minutes with nothing to say whether that meant seconds or an hour.
  *
  * The progress ratio is NOT uniform in time, so extrapolating the whole thing

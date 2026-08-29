@@ -4,7 +4,7 @@
  *
  * Every line is DERIVED: durations, counts, timestamps, channel windows, the
  * cut list, the keyframe table. Nothing here is written by a model — "no AI in
- * the product" is a standing PO ruling, and it covers export-time
+ * the product" is a standing Robert ruling, and it covers export-time
  * summarization, so this file must never grow a sentence that interprets the
  * recording rather than states it.
  *
@@ -84,7 +84,7 @@ function editLines(recording: Recording, edit: EditState): string[] {
  * The briefing, and it is the first thing shipping this taught us.
  *
  * V1's page 1 opened with machine facts — "clock: recording epoch", "keyframes
- * are pixel-delta selected" — and PO's first real test came back with the AI
+ * are pixel-delta selected" — and Robert's first real test came back with the AI
  * ASKING WHAT TO DO WITH THE PDF. A reader that cannot tell what a file is
  * cannot use it, however cheap the file is, so the document now briefs its own
  * reader before it states anything.

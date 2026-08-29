@@ -83,7 +83,7 @@ export interface Playback {
   seek(ms: number): void
   seekBy(deltaMs: number): void
   /**
-   * A SCRUB GESTURE IS A GESTURE, not a stream of seeks (PO 2026-08-29: "a lot
+   * A SCRUB GESTURE IS A GESTURE, not a stream of seeks (Robert 2026-08-29: "a lot
    * of noises when i drag video point on player"). Dragging the scrubber fires
    * a pointermove per frame — up to 120 Hz on a trackpad — and while playing
    * every one of those landed past RESYNC_HARD_MS, so `sync` hard-seeked each

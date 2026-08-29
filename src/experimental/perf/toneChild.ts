@@ -5,7 +5,7 @@
  * tears down audible tones on BroadcastChannel command — one "YouTube video"
  * per play, ended the way a player teardown looks to the audio stack. The
  * point of it being a SEPARATE TAB: a foreign tab has no capture of its own
- * keeping its audio stream alive, which is the topology PO actually records.
+ * keeping its audio stream alive, which is the topology Robert actually records.
  */
 
 export const TONE_CHILD_TITLE = 'TONECHILD'

@@ -1,6 +1,6 @@
 # Every switch in INOUT, and what it is set to
 
-Written 2026-08-29 because PO had no way to know these existed. This file holds
+Written 2026-08-29 because Robert had no way to know these existed. This file holds
 CURRENT truth — if a default moves, rewrite the row, do not append a note.
 
 Two ways to set any of them:
@@ -21,7 +21,7 @@ The URL wins over the sticky value; the sticky value wins over the default.
 | **Composite engine v2** `?engine=` | `?engine=v1` | The worker compositor that owns its own encoder. v1 is the old MediaRecorder-on-canvas path. |
 | **All four inputs** | the chips on the capture screen | screen + camera + mic + system audio are all armed by default (`inout.capture.prefs`). |
 | **Constant quality** `?cq=` | `?cq=off` | The export targets a QUALITY (H.264 qp20) instead of a bitrate. Measured at 1440p: ~11 % smaller at the same or better picture, on both a still document and a scrolling one. `?cq=18` for finer, `?cq=26` for smaller. Only affects exports that RE-RENDER — an unedited 1080p export copies packets and never encodes. |
-| **Native resolution** `?nativeres=` | `?nativeres=0` | Capture the screen at ITS OWN size instead of downscaling to 1080p. On since 2026-08-29 on PO's ruling. This is what makes the 1440p export step real detail instead of an upscale. If a big screen ever freezes a take again, this is the switch to turn off — and say so. (The degradation ladder guards it; since 2026-08-29 it judges frames that ARRIVED, so a still screen no longer loses resolution for being still.) |
+| **Native resolution** `?nativeres=` | `?nativeres=0` | Capture the screen at ITS OWN size instead of downscaling to 1080p. On since 2026-08-29 on Robert's ruling. This is what makes the 1440p export step real detail instead of an upscale. If a big screen ever freezes a take again, this is the switch to turn off — and say so. (The degradation ladder guards it; since 2026-08-29 it judges frames that ARRIVED, so a still screen no longer loses resolution for being still.) |
 
 ## What is OFF by default
 

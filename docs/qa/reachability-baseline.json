@@ -1,6 +1,6 @@
 {
   "runAt": "2026-08-23T14:18:05.942Z",
-  "label": "TD machine, non-RU baseline",
+  "label": "dev machine, non-RU baseline",
   "node": "v24.11.1",
   "platform": "darwin",
   "targets": [

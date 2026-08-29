@@ -11,7 +11,7 @@ import { acquireChannelsProgressive } from './acquire'
 import { resetDeviceGuardForTests } from './deviceGuard'
 
 /**
- * PO 2026-08-25 stress test: "connect screen, 2 seconds recording, back and
+ * Robert 2026-08-25 stress test: "connect screen, 2 seconds recording, back and
  * again 10 times — it happens again." The one overlap the page controls is a
  * new share request racing the previous share's teardown; these tests pin the
  * serializer that removes it.

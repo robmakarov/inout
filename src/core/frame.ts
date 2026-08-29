@@ -14,7 +14,7 @@
  * WHAT FOLLOWS THE SOURCE, AND WHAT DOES NOT. The frame takes the take's
  * ASPECT; it does not take the take's pixel count. A quality step stays a
  * PIXEL BUDGET — its long edge — so "1080p" means the same amount of picture on
- * every shape, and PO's standing "minimal size" objective is not quietly
+ * every shape, and Robert's standing "minimal size" objective is not quietly
  * re-priced by the shape of somebody's monitor. The native-resolution win on a
  * 1440p/4K screen is already delivered by O3c (the step that matches the screen
  * packet-copies the raw channel), and that is where it belongs.
@@ -57,7 +57,7 @@ let override: boolean | null = null
 /**
  * Does the frame follow the source on this load?
  *
- * OFF BY DEFAULT, and that is the task's own gate: "PO judges one real phone
+ * OFF BY DEFAULT, and that is the task's own gate: "Robert judges one real phone
  * take by eye before any default moves." Off, every function here answers
  * exactly what the constant answered, so a take made today is the take that was
  * made yesterday — the frozen never-break rule, with the switch as the evidence.
@@ -134,7 +134,7 @@ export function frameForAspect(
  * arrives is 1080x1920, rotated by the platform. Capture believed the settings,
  * so a phone take was composited into a landscape canvas and cover-cropped, and
  * the editor then cropped the raw portrait channel a second time into the same
- * landscape stage — PO, having judged exactly that: "preview on phone still
+ * landscape stage — Robert, having judged exactly that: "preview on phone still
  * wrong proportions and cutted and in editing even more cutted".
  *
  * So the settings are a GUESS and the first frame is the ANSWER. Null means

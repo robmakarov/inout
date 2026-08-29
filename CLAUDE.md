@@ -3,7 +3,7 @@
 Capture (screen/camera/mic/system-audio) → trim → synthesize one MP4 → share (file/cloud).
 
 Internal state lives in `.ai/` (STATE, ARCH, DECISIONS) — read those first, keep them current, keep them compressed.
-Doc rule: every doc holds CURRENT truth only — when state changes, rewrite/delete stale lines, never append a log; git history is the archive. Sole exception: `.ai/DECISIONS` is an append-only ledger. BACKLOG: done items are deleted on sight. Human/PM context: `CONTEXT.md` — update it when decisions or state change materially. Bug/idea dumps: `BACKLOG.md` (PO dumps to Inbox, PM triages, TD tags severity). EE task assignments + operating rules: `.ai/TASKS` (TD-authored; evidence gates are mandatory).
+Doc rule: every doc holds CURRENT truth only — when state changes, rewrite/delete stale lines, never append a log; git history is the archive. Sole exception: `.ai/DECISIONS` is an append-only ledger. BACKLOG: done items are deleted on sight. Human context: `CONTEXT.md` — update it when decisions or state change materially. Bug/idea dumps: `BACKLOG.md` (Robert dumps to Inbox; whoever picks it up triages and tags severity). Task specs + operating rules: `.ai/TASKS` (evidence gates are mandatory).
 
 - Every URL flag / sticky setting and its default: `docs/FLAGS.md` — keep it current when a default moves.
 - Contracts: `src/core/types.ts` is authoritative; modules implement it.
@@ -20,7 +20,7 @@ Doc rule: every doc holds CURRENT truth only — when state changes, rewrite/del
   launcher's process, so anything it spawns with this cwd dies on `EPERM: uv_cwd` before vite loads.
   Don't re-debug that. `node scripts/mirror-watch.mjs &` from Bash (which HAS the grant) live-syncs to
   `/tmp/inout-dev`, then `preview_start { name: "inout-tmp" }` serves it on 5174 with working HMR.
-  Deletable the day the repo moves out of `~/Downloads` (PO's call), after which plain `npm run dev`
+  Deletable the day the repo moves out of `~/Downloads` (Robert's call), after which plain `npm run dev`
   works for agents too.
 - `proto/` is opened off disk and never served. Open `proto/style.html` with `file://` —
   no dev server, no `npm run dev`, not even a static one. It stays one self-contained
@@ -49,9 +49,9 @@ same commit; exit 0 only when prod serves this build, loud on failure or timeout
 changes no bundled output (docs/hooks/scripts), the hashes are already identical and prove nothing —
 it says so and waits for Vercel's own success on the GitHub commit-status API instead.
 
-Roadmap protocol: PO saying `roadmap` = print the READY map from `.ai/TASKS` (unblocked tasks,
-parallel-safe combos, cost bands) and wait — do not start anything. PO answers `go <id>` → execute
-that ONE task per the TASKS operating rules (own branch, gates, TD merge). If PO names several ids,
+Roadmap protocol: Robert saying `roadmap` = print the READY map from `.ai/TASKS` (unblocked tasks,
+parallel-safe combos, cost bands) and wait — do not start anything. Robert answers `go <id>` → execute
+that ONE task per the TASKS operating rules (own branch, gates, merge). If Robert names several ids,
 take the first and say the rest need parallel sessions. After any merge, update the READY map.
-When a session finishes its task (or is asked "what now"), remind PO which tasks are currently
+When a session finishes its task (or is asked "what now"), remind Robert which tasks are currently
 parallel-runnable.

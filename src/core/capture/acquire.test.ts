@@ -106,7 +106,7 @@ describe('cameraVideoConstraints', () => {
 /**
  * THE PICKER IS THE USER'S. It offers what Chrome offers — every surface, in
  * Chrome's own order — and the app does not take an option out of it to make
- * its own life easier (PO 2026-08-25, after a few hours in which it did).
+ * its own life easier (Robert 2026-08-25, after a few hours in which it did).
  */
 describe('what the picker offers', () => {
   const withScreen = { ...base, screen: true }
@@ -183,7 +183,7 @@ describe('the request Chrome receives, rung by rung', () => {
   })
 
   /**
-   * THE INVARIANT, PO 2026-08-25: "i need this shit never happen to user,
+   * THE INVARIANT, Robert 2026-08-25: "i need this shit never happen to user,
    * always fucking clean". Safe mode may drop OUR options; it may never drop
    * one the user chose. If a future session adds a rung that turns Tab Audio
    * off to dodge a wedge, this is the test that has to be deleted first — and
@@ -203,7 +203,7 @@ describe('the request Chrome receives, rung by rung', () => {
   })
 
   /**
-   * THE OTHER HALF OF THE SAME INVARIANT, PO 2026-08-26 ("music from tab
+   * THE OTHER HALF OF THE SAME INVARIANT, Robert 2026-08-26 ("music from tab
    * sounds shitty"): the audio must arrive as the user's audio. Chromium
    * defaults AEC/NS/AGC ON for display audio, and voice processing turns tab
    * music into mono warble — so a rung that requests bare `audio: true` has

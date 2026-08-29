@@ -514,7 +514,7 @@ export async function runCapCheck(): Promise<{
     error,
     verdict: accepted
       ? 'a canvas track DOES honour the cap, so a production-shaped 4K row can be built from synthetic sources and O8b’s band can be tightened against it'
-      : `a canvas track does NOT honour the cap (${before.width}×${before.height} → ${after.width}×${after.height}${error ? `, ${error}` : ''}). The rig therefore measures the UNCAPPED regime — the one CAPTURE_MAX_* exists to prevent — and a production-shaped 4K row needs a real display, i.e. PO's hardware.`,
+      : `a canvas track does NOT honour the cap (${before.width}×${before.height} → ${after.width}×${after.height}${error ? `, ${error}` : ''}). The rig therefore measures the UNCAPPED regime — the one CAPTURE_MAX_* exists to prevent — and a production-shaped 4K row needs a real display, i.e. Robert's hardware.`,
   }
 }
 

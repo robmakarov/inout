@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Deploy-guard, detection half. Answers one question out loud: does prod serve
 // THIS commit's build? Born from aa39084, whose Vercel build failed and prod
-// silently served the previous deploy for hours while the PO tested on it.
+// silently served the previous deploy for hours while Robert tested on it.
 //
 //   node scripts/verify-deploy.mjs [sha] [--timeout=480]
 //

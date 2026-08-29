@@ -18,7 +18,7 @@
  * the composite surviving, so it is the one that can always answer.
  *
  * HEAVY: it pegs the GPU for the duration. Announce it before running, and
- * never run it while the PO is using the machine (TD hygiene). It is
+ * never run it while Robert is using the machine (hygiene). It is
  * deliberately NOT in the pre-push hook for that reason.
  *
  * THE SECOND BAND, ADDED 2026-08-26 (task O8b). The tail band answers "did the

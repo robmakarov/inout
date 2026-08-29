@@ -1,5 +1,5 @@
 /**
- * Constant-quality video encoding for the export (PO 2026-08-29: "we need more
+ * Constant-quality video encoding for the export (Robert 2026-08-29: "we need more
  * quality and much less size, its non editable video, movies files with much
  * better quality is twice smaller usually").
  *
@@ -50,7 +50,7 @@ type MarkedConfig = VideoEncoderConfig & { [QP_KEY]?: number }
  *
  * The rungs X15(a) measured on identical content were qp14 → 959 KB, qp20 →
  * 692 KB, qp26 → 511 KB. This is deliberately at the HIGH-QUALITY end of that:
- * PO asked for more quality AND less size, and the size win at this step comes
+ * Robert asked for more quality AND less size, and the size win at this step comes
  * from not spending 14 Mbps on frames that do not need it, not from spending
  * fewer bits on the frames that do.
  */
@@ -60,7 +60,7 @@ export const DEFAULT_QP = 20
  * THE DEFAULT, AND IT IS A MEASURED ONE. `null` would mean "keep the bitrate
  * target"; 20 is where the measurement landed.
  *
- * Measured 2026-08-29 on the deployed build at 2560x1440 (PO's own step), 48
+ * Measured 2026-08-29 on the deployed build at 2560x1440 (Robert's own step), 48
  * frames, PSNR of the DECODED file against the very frames that made it, on
  * two contents this product is actually for — a document sitting still with a
  * blinking caret, and the same page scrolling:
@@ -76,16 +76,16 @@ export const DEFAULT_QP = 20
  * bitrate target on quality, always about 11 % smaller. 23 and 26 are cheaper
  * still but pay real quality for it, which is not what was asked for. 18 is
  * also Pareto-better and buys 2 dB for half the saving; 20 was chosen because
- * PO asked for size first.
+ * Robert asked for size first.
  *
  * BE HONEST ABOUT THE SIZE OF THIS WIN: it is ~11 %, not the "twice smaller"
- * PO compared against. The rest of that gap is not rate control — on this
+ * Robert compared against. The rest of that gap is not rate control — on this
  * content the bitrate target was ALREADY undershooting (1.83 of 14 Mbps), so
  * there was never 14 Mbps of waste to reclaim. What makes a movie file half
  * the size at better quality is the CODEC: hevc/av1 against our avc floor. The
  * ladder has those rungs and they are off for a distribution reason, not a
  * technical one (a blind-shared file must play for a recipient we cannot
- * probe) — that trade is PO's and worth re-pricing at two-hour takes.
+ * probe) — that trade is Robert's and worth re-pricing at two-hour takes.
  *
  * NO CEILING. Quantizer mode ignores `bitrate` entirely, so a pathological
  * source (grain, confetti, dither) can in principle cost more than the tier's
@@ -131,7 +131,7 @@ const AVC_PROFILES = ['42E0', '4D40', '6400'] as const
  * 640028`, i.e. levels 3.0, 4.2 and 4.0, and a level caps the frame SIZE.
  * Measured on prod, `isConfigSupported` enforces it: at 2560x1440 only levels
  * 5.0-5.2 are accepted at all, so constant quality would have reported itself
- * unsupported at exactly the 1440p step PO exports from — the one step this
+ * unsupported at exactly the 1440p step Robert exports from — the one step this
  * whole feature exists for. Ascending, so the file gets the LOWEST level that
  * fits, which is the one the most decoders will play.
  */

@@ -10,7 +10,7 @@
  *
  *   · synthetic mode bypasses getUserMedia entirely, so no rig can see it;
  *   · the oracle's camera is a painted canvas at whatever size it chose;
- *   · and PO is right that eyes are the wrong instrument for a resolution.
+ *   · and Robert is right that eyes are the wrong instrument for a resolution.
  *
  * So this drives REAL Chrome against the REAL built-in camera on the DEPLOYED
  * build, and then reads the answer out of the FILES THEMSELVES rather than out

@@ -639,7 +639,7 @@ export function comparePatch(
 /**
  * A rect of a frame, blown up with NEAREST-NEIGHBOUR, as a PNG data URL.
  *
- * PO's own condition on this task is "i need to see it", and the ruling is made
+ * Robert's own condition on this task is "i need to see it", and the ruling is made
  * by eye — so the artifact has to show PIXELS, not a resampled impression of
  * them. Smoothing on a 4× magnification would apply exactly the kind of blur
  * the measurement is about, and would flatter every lane equally.
@@ -810,7 +810,7 @@ export function chromaMask(
  *
  * And this is the statistic X15(c)'s first pass could not have produced at all:
  * it compared export paths against EACH OTHER, so a loss every path shares —
- * which is exactly what 4:2:0 chroma subsampling is — cancels to zero. PO saw
+ * which is exactly what 4:2:0 chroma subsampling is — cancels to zero. Robert saw
  * it by eye in the artifacts. A file-against-file rig never will.
  */
 export function chromaRows(mask: ChromaMask, decoded: ImageData): ChromaRow[] {

@@ -84,7 +84,7 @@ describe('oracle clock fit', () => {
     expect(fit.usedPoints).toBeLessThan(300)
   })
 
-  it('rejects gross outliers without letting them drag alpha (TD item 3)', () => {
+  it('rejects gross outliers without letting them drag alpha (review item 3)', () => {
     const readings: FrameReading[] = []
     for (let f = 0; f < 120; f++) {
       const outSec = f / 30

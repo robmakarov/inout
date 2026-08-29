@@ -13,7 +13,7 @@
  * nonzero-but-tiny on the second, forever, which is exactly why it never earns
  * a page and can still be logged as a trail.
  *
- * THE TAXONOMY (PO raised the cursor problem: "it moves every frame but not
+ * THE TAXONOMY (Robert raised the cursor problem: "it moves every frame but not
  * very useful all the time"):
  *   tiny + moving + transient      → cursor  · never a keyframe, feeds the trail
  *   tiny + stationary + blinking   → caret   · ignored entirely
@@ -55,7 +55,7 @@ export interface SelectorConfig {
    * Longest a burst may run before the ordinary pace takes over again.
    *
    * A UI TRANSITION IS SHORT AND A SCROLL IS NOT. Both read as motion, and on
-   * PO's real take an unbounded burst rule turned 97 s into 189 pages and
+   * Robert's real take an unbounded burst rule turned 97 s into 189 pages and
    * 177k tokens — because a page being scrolled kept the pace suspended for
    * seconds at a time. Capping the burst keeps every animation (they finish
    * well inside this) and throttles anything that just keeps moving.
@@ -85,7 +85,7 @@ export interface SelectorConfig {
  * ~240 frames, one every 0.4 s; a ten-minute session earns 300, one every two
  * seconds, and stays readable.
  *
- * V1 spent 60 on a 97 s take, one page every 2.5 s, and PO's verdict was "it
+ * V1 spent 60 on a 97 s take, one page every 2.5 s, and Robert's verdict was "it
  * loses way too much frames": a whole sequence — typing into a field, the
  * button turning active, the click, the tab switch — fell between two pages.
  * The use is an agent RECREATING a UI and its animations, which needs the
@@ -319,7 +319,7 @@ export function stepSelection(
   }
 
   // MOTION SUSPENDS THE PACE. Something animating is precisely what a spacing
-  // floor destroys, and reproducing animation is what PO uses this file for, so
+  // floor destroys, and reproducing animation is what Robert uses this file for, so
   // while the picture keeps moving between looks, every look is a page.
   const movingNow = obs.vsPrev.changedFrac >= c.motionFrac
   next.movingRun = movingNow ? state.movingRun + 1 : 0
@@ -426,7 +426,7 @@ export function stepSelection(
   const gap = currentPaceMs(state, obs.atOutMs)
   // WHAT MAY BE SPENT BY NOW. An even spend, plus a credit a burst can borrow
   // against — and the credit shrinks to nothing by the end of the take. Without
-  // the shrink, an active opening spends the file out: measured on PO's take,
+  // the shrink, an active opening spends the file out: measured on Robert's take,
   // the budget ran dry at 84 s of 97 and the last thirteen seconds simply were
   // not in the file. A recording must be covered end to end before any part of
   // it is covered densely.
@@ -440,7 +440,7 @@ export function stepSelection(
 
   // No close-up inside a burst: the point of a crop is detail on a small change
   // that the 1024 px view renders too small to read, and a frame of motion has
-  // no such region — it also doubled the token price of PO's real take.
+  // no such region — it also doubled the token price of Robert's real take.
   const crop = !burstNow && ref.bbox && ref.bboxAreaFrac < c.cropMaxAreaFrac ? ref.bbox : null
   const atCursor =
     !!state.pointer && !!ref.centroid && distanceFrac(state.pointer, ref.centroid) < c.atCursorRadiusFrac

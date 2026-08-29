@@ -16,7 +16,7 @@
  *     second take is recorded WITH a live composite, production-shaped:
  *     screen + TWO audio sources, because the multi-source capture mix is a
  *     different chain (shared 0.7 gain + 12:1 compressor) from the
- *     single-source pass-through, and it is the chain PO's real takes use.
+ *     single-source pass-through, and it is the chain Robert's real takes use.
  *     The take exports through exportByBestPath — the product's own ladder —
  *     and the report says which path actually ran, so the lane cannot pass by
  *     quietly measuring the render.
@@ -73,7 +73,7 @@ export interface FidelityCompositeReport {
    * from the raw channels instead (instant.ts's opening comment says why —
    * "without the composite's uncertified MediaRecorder audio"). Keeping the
    * number visible is what makes that a measured fact rather than a claim, and
-   * it is the lane to watch when PO reports noises under load.
+   * it is the lane to watch when Robert reports noises under load.
    *
    * MEASURED 2026-08-26, and it is not the 0.7 bus on its own: all four tones
    * read −2.00 dB, i.e. 1.10 dB ABOVE −3.10. Dead flat across four tones with
@@ -367,7 +367,7 @@ async function recordFidelityCompositeTake(durationMs: number): Promise<{
         kind: 'screen' as const,
         blobKey: videoKey,
         mimeType: recorder.mimeType || mimeType,
-        // Video file epoch ≈ start() call (TD measured — see rig.ts).
+        // Video file epoch ≈ start() call (measured — see rig.ts).
         startOffsetMs: startCallAbsMs - epoch,
         durationMs: stopFinishAbsMs - startCallAbsMs,
       }
@@ -450,7 +450,7 @@ async function recordFidelityCompositeTake(durationMs: number): Promise<{
     }
     return { recording, cleanup: removeBlobs }
   } catch (err) {
-    // TD hygiene: no stranded production-storage keys on any failure path.
+    // hygiene: no stranded production-storage keys on any failure path.
     if (compositeHandle) await compositeHandle.cancel().catch(() => undefined)
     video.stop()
     await removeBlobs()

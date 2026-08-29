@@ -1,45 +1,46 @@
-# EE task pack v2 — TD-authored 2026-08-22. PO-approved roadmap: OPTIMIZATION first (O), then FEATURES (F).
-# Executor: Opus agent sessions in the EE seat. Read .ai/ROLES + this file; nothing else is assignment.
+# Task pack v2 — 2026-08-22. Roadmap approved by Robert: OPTIMIZATION first (O), then FEATURES (F).
+# Executor: an Opus agent session. This file is the assignment; nothing outside it is.
 # Supersedes pack v1 (git history archives it): v1 tasks 1,2 merged · 7 obsolete (synchronized start
-# superseded instant-arm) · 9 shipped (awaits PO real-Safari recheck, tracked in STATE) · 3 → O4 ·
+# superseded instant-arm) · 9 shipped (awaits Robert real-Safari recheck, tracked in STATE) · 3 → O4 ·
 # 4 → absorbed by O4 · 5 → O7 · 8 residual → BACKLOG P2 (fidelity-runner retry; ee/oracle-nullfix exists, unmerged).
 
 Operating rules (every task):
-- One branch per task: `ee/<task-id>`. Never commit to main. TD merges.
+- One branch per task: `task/<id>`. Never commit to main; it lands only with the evidence below.
+  (Branches already open predate this and keep their `ee/` names — they are real refs, not a convention.)
 - Evidence required for merge = the task's GATES pasted as numbers/output in a handoff appended under
   the task, plus `npm run typecheck && npm test` green, plus the named oracles green.
-- PO FROZEN RULE (2026-07-21): never break a working path. Every new engine ships capability-gated
+- FROZEN RULE (Robert, 2026-07-21): never break a working path. Every new engine ships capability-gated
   with the current path as runtime fallback; defaults unchanged unless the task says otherwise.
 - Frozen constraints: instant record start · instant default export · no idle device access ·
   no streaming-as-capture · src/core never imports src/app · contracts live in src/core/types.ts.
 - A gate you cannot meet = stop and report WHY with measurements. A failed spike with data is a
   success; code without evidence is not.
 - No refactors outside task scope. Don't touch .ai/* except appending your handoff under your task.
-- HEAVY RUNS (oracle matrices, load rigs) are announced first and never run while PO is using the machine.
+- HEAVY RUNS (oracle matrices, load rigs) are announced first and never run while Robert is using the machine.
 - Order is dependency order WITHIN each phase, not between them: the O-phase-before-F-phase rule was
   about not building features on an engine that was about to change. In practice the whole F phase
   except F6/F8 landed on top of the shipped engine while O4 stayed dormant, because features that
   touch compose/* and the timeline do not touch the capture engine O4 replaces. What is left in F
   (F5b, F2b) is the same shape; F6 and F8 genuinely need O4.
 
-── ROADMAP PROTOCOL (PO 2026-08-22) ──
-PO says "roadmap" → the session prints the READY map below (unblocked tasks, parallel-safe combos,
-cost bands) and WAITS. PO answers "go <id>". One task per session (one branch per task); if PO names
-several ids, take the first and tell PO to open parallel sessions for the rest. Whoever MERGES a task
+── ROADMAP PROTOCOL (Robert 2026-08-22) ──
+Robert says "roadmap" → the session prints the READY map below (unblocked tasks, parallel-safe combos,
+cost bands) and WAITS. Robert answers "go <id>". One task per session (one branch per task); if Robert names
+several ids, take the first and tell Robert to open parallel sessions for the rest. Whoever MERGES a task
 updates the READY map (move newly-unblocked dependents in, remove the done task).
 
 ── READY MAP — current truth, updated on every merge ──
-Last update 2026-08-26 (THIRTEENTH session, PO: "go roadmap all in one" → "go next" → "go" →
+Last update 2026-08-26 (THIRTEENTH session, Robert: "go roadmap all in one" → "go next" → "go" →
 "fucking finish roadmap"). THE MAP WAS EMPTY OF BUILDABLE WORK. Everything that could be decided by
-measurement was; everything left needed PO — a ruling, a listen, or hardware.
-LATER SAME DAY (review session): PO reports Xcode 27 AND an iOS 27 device ARE available → P5a moves
-to READY. And PO asked for the text measurements to run in a parallel session → TD authored X15
+measurement was; everything left needed Robert — a ruling, a listen, or hardware.
+LATER SAME DAY (review session): Robert reports Xcode 27 AND an iOS 27 device ARE available → P5a moves
+to READY. And Robert asked for the text measurements to run in a parallel session → authored X15
 (measurement-only, changes no default) → READY. Two buildable tasks exist again.
-FOURTEENTH SESSION (PO: "go X15"): X15 DONE, all three lanes, no default moved. It ANSWERED the
+FOURTEENTH SESSION (Robert: "go X15"): X15 DONE, all three lanes, no default moved. It ANSWERED the
 question X6's ruling was waiting on and REFUTED O9's headline, which the map had been treating as
 settled fact — see the amended X6/O9/X5 lines below. X15 leaves READY; X13 loses its "after X15"
 dependency.
-FIFTEENTH SESSION (PO: "go R1"): R1 DONE — all 15 findings of the chroma-rig review, one step. The
+FIFTEENTH SESSION (Robert: "go R1"): R1 DONE — all 15 findings of the chroma-rig review, one step. The
 instrument that measured the colour loss can no longer report a score for a measurement it did not
 take: missing data reads MISSING and FAILS both chroma gates, a drifted palette reads MASK EMPTY, an
 out-of-bounds rect throws instead of counting the overrun as mask hits, and three drills prove it in
@@ -51,7 +52,7 @@ subsampling from a YUV matrix/range drift, which this fixture could not do befor
 O9/X15(b) said it is, and 4:4:4 will deliver. Two chroma gates changed verdict ON PURPOSE (one was
 unreachable-red at >= 90 % against a 70.3 % chain, one cherry-picked the colour the render loses);
 both are explained in the handoff. R1 leaves READY and unblocks nothing new.
-SAME SESSION (PO: "go O3b"): O3b DONE — and it is the task R1 was the instrument for. On a screen-only
+SAME SESSION (Robert: "go O3b"): O3b DONE — and it is the task R1 was the instrument for. On a screen-only
 1080p take the unedited export now packet-copies the RAW CHANNEL instead of the composite: same
 picture, one 4:2:0 generation earlier. Measured on one take with nothing but the copy source changed —
 colour 80.0/89.1 % against 70.3/75.2, luma 37.3 dB against 35.5, fringe 8.66 against 10.24, and the
@@ -61,9 +62,9 @@ on the same seconds. The colour half of the win is structural and not bought wit
 3x the bitrate buys 4 % of the fringe on 4:2:0); part of the luma dB is. `?singlegen=off` reverts.
 The CAPTURE half — never recording the composite at all, 45-49 % less written per second of take and
 a whole hardware encoder that never runs — is BUILT AND OFF, behind `?singlegen=capture`, because it
-gives up source-liveness detection and the composited preview. That flip is PO's, on the evidence in
+gives up source-liveness detection and the composited preview. That flip is Robert's, on the evidence in
 the handoff. O3b leaves READY.
-SAME SESSION (PO: "go P9"): P9 BUILT AND RUN — `scripts/camera-check.mjs`, real Chrome, real device,
+SAME SESSION (Robert: "go P9"): P9 BUILT AND RUN — `scripts/camera-check.mjs`, real Chrome, real device,
 the deployed build, answers read out of the FILES and not the interface. The answer is PARTIAL and the
 missing half belongs to the machine: this Mac's built-in camera enumerates, negotiates 1920x1080@30,
 keeps its track live — and delivers ZERO frames, which is what a closed lid looks like from software.
@@ -76,11 +77,11 @@ O3a's claim. VERIFIED end to end on a controlled 1080p source: raw channel, mani
 finishes the row on any machine with a live camera. P9 stays on the map as a one-command re-run, not
 as work.
 
-SIXTEENTH SESSION 2026-08-29 (PO: "?singlegen=capture, ?loudness=r128 the fuck is this" → "it must
+SIXTEENTH SESSION 2026-08-29 (Robert: "?singlegen=capture, ?loudness=r128 the fuck is this" → "it must
 be device resolution, how the fuck mobile will make 1920x1080? its vertical" → "yes and find out what
 we can improve without that shit" → "find out what else is suspicios like this fucked up rule that
 limiting us" → "put it all in roadmap"). NO CODE SHIPPED — this was an audit, and it found five
-things, all now tasks. PO READ docs/FLAGS.md and rejected the premise the whole geometry chain rests
+things, all now tasks. Robert READ docs/FLAGS.md and rejected the premise the whole geometry chain rests
 on: the output is a landscape constant and a phone records vertical. VERIFIED ON PROD rather than
 argued from the source, which is the standing rule this session's first answer broke and its second
 kept: a camera-only take draws with `fit: 'cover'`, so a 4:3 source keeps 75 % of its height — the
@@ -95,13 +96,13 @@ THE AUDIT FOUND FOUR MORE CEILINGS OF THE SAME SHAPE, two of them live on the de
     monitor's size. O3b's measured colour win is reaching nobody whose screen is not 1080p.
   · F14 — the export step is sticky forever, so one accidental 1440p makes every later export
     re-render. Hit live: the panel opened on 1440p with the INSTANT badge on the row it was not using.
-  · F15 — 30 fps is hardcoded in every tier and every constraint, with no flag. PO-GATED: the
+  · F15 — 30 fps is hardcoded in every tier and every constraint, with no flag. Robert-GATED: the
     question is whether INOUT should be able to make 60 fps at all, and it needs a ruling, not code.
 CORRECTED THE SAME DAY IT WAS WRITTEN: docs/FLAGS.md claimed `?singlegen=capture` costs preview
 quality. Measured live, the fallback preview carries ~1.8× the pixels of the compositor's 960×540
 canvas — it is SHARPER. The flag's only real cost is source-liveness detection.
 
-SEVENTEENTH SESSION 2026-08-29 (PO: "there was rule that video always must be 1920x1080, i reverted
+SEVENTEENTH SESSION 2026-08-29 (Robert: "there was rule that video always must be 1920x1080, i reverted
 it ... now quality of video sucks and file size is fucking huge ... i want every device to record
 best quality it can, 60 fps, and i want minimal size for exported files ... couple minutes video can
 be around 10 mb with good quality, go"). TWO RULINGS LANDED IN THAT MESSAGE and both are recorded in
@@ -124,13 +125,13 @@ minutes at good quality), which prices the codec decision below. SHIPPED AND VER
   Gates: 510 tests · typecheck · exp o3b 7/7 twice-shipped lanes · oracle v2 PASS · oracle v1 PASS ·
   fidelity PASS · verify-deploy OK (f85aed0) · both prod repros above.
 
-EIGHTEENTH SESSION 2026-08-29 (PO: "go F13"). F13 BUILT AND VERIFIED ON PROD, FLAG-GATED, DEFAULT
+EIGHTEENTH SESSION 2026-08-29 (Robert: "go F13"). F13 BUILT AND VERIFIED ON PROD, FLAG-GATED, DEFAULT
 NOT MOVED — the whole handoff is under the task. THE PRODUCT CAN NOW MAKE A VERTICAL VIDEO:
 `?sourceframe=1` and a 9:16 camera take exports 1080x1920, read out of the FILE, with the instant
 packet copy still firing; a 4:3 camera take keeps its full height (1920x1440, against the 1920x1080
 that discarded 25 % of it); a 16:9 take is unchanged to the pixel on both copy paths. One seam,
 `src/core/frame.ts`. A step keeps its NAME and its PIXEL BUDGET and changes only shape, so the
-minimal-size objective is untouched. NEW ON THE MAP: F13-FLIP, which is PO's eye on a real phone —
+minimal-size objective is untouched. NEW ON THE MAP: F13-FLIP, which is Robert's eye on a real phone —
 that was the task's own last gate and it is the only thing between here and vertical video by
 default. F15 is unblocked and is the natural next one.
 FOUND BY DRIVING IT RATHER THAN READING IT (note 10's shape, the other way round): the copy fence
@@ -159,7 +160,7 @@ REFUTED ON MEASUREMENT, and each one is why the map is now honest
          the two painters disagree by 156 of 255 on 3.8 % of screen-TEXT pixels. AMENDED by X15(c):
          in PRODUCTION the divergence is a quarter of that — the render costs 2.8 dB more than a
          plain re-encode of the same frame (37.1 vs 39.9 dB), max 60, 7.8 % of pixels off by >8.
-         Real, bounded, and much cheaper than the lab number implied. Still PO's to rule on.
+         Real, bounded, and much cheaper than the lab number implied. Still Robert's to rule on.
   · X12  capture writes 5.21/7.63 Mbps, not 18.5, and the rung it existed to price is BACKWARDS on
          screen content (−32.5 % disk for a +31.5 % bigger delivered file).
   · O9   AV1 4:4:4 halves glyph chroma fringe (9.15 -> 3.03) at fewer bytes, and 3x the bitrate on
@@ -169,17 +170,17 @@ REFUTED ON MEASUREMENT, and each one is why the map is now honest
          costs fringe 8.87 / contrast 1.00, and shifting the reference one scroll step reproduces
          O9's published 23.2 / 68.6 / 0.49 on demand. There is no "big half" at capture.
 
-WHAT IS LEFT, AND EVERY ITEM IS PO'S
-  1. AUDIO LISTEN TEST — DELIVERED 2026-08-26: PO listened, sound is STILL WRONG ("mic is kinda too
-     loud now"), a separate live session owns the fix. PO also asked for a per-channel gain slider
+WHAT IS LEFT, AND EVERY ITEM IS ROBERT'S
+  1. AUDIO LISTEN TEST — DELIVERED 2026-08-26: Robert listened, sound is STILL WRONG ("mic is kinda too
+     loud now"), a separate live session owns the fix. Robert also asked for a per-channel gain slider
      → F9 (READY, after that session lands). Do not touch mix constants outside that session.
-  2. THE FOR-AI FILE re-test — DEFERRED by PO 2026-08-26 ("later"). AI2-AI7 stay frozen.
-  3. X6 — FLIPPED. DEFAULT IS webcodecs SINCE 2026-08-26, on PO's own ruling ("yes now it okay —
+  2. THE FOR-AI FILE re-test — DEFERRED by Robert 2026-08-26 ("later"). AI2-AI7 stay frozen.
+  3. X6 — FLIPPED. DEFAULT IS webcodecs SINCE 2026-08-26, on Robert's own ruling ("yes now it okay —
      with ?rawcodec=webcodecs i mean"), given after days of field takes on the flag. The evidence
      stack: X15(a) refuted the picture objection (identical pictures: AVC 0.52x bytes at 47.8 dB,
      glyph contrast 1.00; the old 27.9 dB was the rig comparing two separate takes of a moving
-     source), and the black-boxed take pair measured the CPU relief PO heard — audio clocks
-     starved 1.6 % of wall time on MediaRecorder vs 0.16 % on WebCodecs, same regime, 10×. PO's
+     source), and the black-boxed take pair measured the CPU relief Robert heard — audio clocks
+     starved 1.6 % of wall time on MediaRecorder vs 0.16 % on WebCodecs, same regime, 10×. Robert's
      production takes on real GPU-resident sources are the field confirmation the sweep could not
      give (the formal `npm run exp -- x6` GPU-frames cell remains available). MediaRecorder stays
      the full ladder (capability + start-failure fallback; `?rawcodec=mediarecorder` / localStorage
@@ -195,20 +196,20 @@ WHAT IS LEFT, AND EVERY ITEM IS PO'S
   6. X5's TEXT QUESTION (BACKLOG P1) — MEASURED 2026-08-26 by X15(c) and now a ruling, not a
      question: a trimmed take is BIT-IDENTICAL to the untrimmed one (smart cut copies the packets),
      and the full render costs 2.8 dB more than a plain re-encode. Artifacts to look at:
-     ~/Downloads/x15-text-truth/c-*.png. Worth anything? PO's call.
-  7. THE OLD ONES, re-triaged by PO 2026-08-26: Safari (P8 + X7) — "later", stays blocked ·
-     camera-only 1080p → P9, agent-run, off PO's plate · Yandex + RU — PO: "fuck this yandex
+     ~/Downloads/x15-text-truth/c-*.png. Worth anything? Robert's call.
+  7. THE OLD ONES, re-triaged by Robert 2026-08-26: Safari (P8 + X7) — "later", stays blocked ·
+     camera-only 1080p → P9, agent-run, off Robert's plate · Yandex + RU — Robert: "fuck this yandex
      bullshit, we are building for them without testing" → PARKED; the code half stays (zero
-     ongoing cost), no further RU work unless PO either approves the Yandex download for an agent
+     ongoing cost), no further RU work unless Robert either approves the Yandex download for an agent
      QA run or asks to drop the lane outright · Playwright/Firefox — "later".
 
-NEEDS A RULING BEFORE ANYONE BUILDS: X7 only — and PO's order is CHROME SOUND FIRST (2026-08-26
+NEEDS A RULING BEFORE ANYONE BUILDS: X7 only — and Robert's order is CHROME SOUND FIRST (2026-08-26
 "lets fucking fix chrome sound first"), so X7 waits for the audio fix to land and be heard.
-X10=O5e REJECTED by PO 2026-08-26 ("fuck this") — moved to the REJECTED list.
-O12 DEFERRED to the UI phase by PO 2026-08-26 ("that is ux, we will add it later on ui works").
-X13 APPROVED (PO "lets try") → READY above, Tier 1 first, opt-in, default flip PO-gated.
+X10=O5e REJECTED by Robert 2026-08-26 ("fuck this") — moved to the REJECTED list.
+O12 DEFERRED to the UI phase by Robert 2026-08-26 ("that is ux, we will add it later on ui works").
+X13 APPROVED (Robert "lets try") → READY above, Tier 1 first, opt-in, default flip Robert-gated.
 PARKED: X11 · X14. BLOCKED ON HARDWARE/DOWNLOADS: P1's two gates · O11d · P8. (P5a unblocked
-2026-08-26 — PO has Xcode 27 + an iOS 27 device.)
+2026-08-26 — Robert has Xcode 27 + an iOS 27 device.)
 NOT STARTED, and deliberately: O10(b) multitrack · O10(c) spectral gating · O10(d) AEC (P4) ·
 O9(c) near-lossless static spans (its premise is refuted by O9's own table — 3× the bits bought 4 %) ·
 F6's RETAKE (a resume of a FINISHED recording: recovery, editsRepo and editor state, its own task).
@@ -230,30 +231,30 @@ START HERE IF YOU ARE FRESH:
   2. `npm run typecheck && npm test` (449 tests) and `npm run oracle` should be green before you
      change anything, so a red gate later is yours and not inherited.
   3. THERE IS BUILDABLE WORK AGAIN — see READY NOW. Two of its entries wait on the live audio-fix
-     session (F9, F10); P5a needs PO at the machine. Do not invent a task that is not on the map.
+     session (F9, F10); P5a needs Robert at the machine. Do not invent a task that is not on the map.
   4. anything touching capture/* keeps BOTH engines green: `npm run oracle` (v2 default) AND
      `node scripts/oracle.mjs --engine=v1`. Anything touching the STOP path also runs
      `npm run oracle:load` (HEAVY, announce it) and `npm run exp -- armcancel`.
 
 READY NOW:
-  F13-FLIP  PO's own eye           [PO OWED]  F13 IS BUILT, VERIFIED ON PROD AND OFF BY DEFAULT
+  F13-FLIP  Robert's own eye           [ROBERT OWED]  F13 IS BUILT, VERIFIED ON PROD AND OFF BY DEFAULT
                                              (handoff under the task). Its last gate is yours:
                                              open https://inout-kappa.vercel.app/?sourceframe=1 on
                                              a PHONE, record yourself, and look at the export. If
                                              it is right, the default flips and INOUT can make a
                                              vertical video; if it is not, say what is wrong and
                                              nothing has moved in the meantime.
-  F15  60 fps                      [medium]  RULED YES 2026-08-29 (PO: "i want every device to
+  F15  60 fps                      [medium]  RULED YES 2026-08-29 (Robert: "i want every device to
                                              record best quality it can, 60 fps"). UNBLOCKED —
                                              F13 landed, and its `session.compositeFrame()` is the
                                              ask-the-take-what-it-is seam fps rides: fps follows
                                              the source up to 60 the same way geometry does.
                                              Shipping 60 as new constants would rebuild the exact
-                                             shape PO rejected. Throughput risk is real (the
+                                             shape Robert rejected. Throughput risk is real (the
                                              4K-freeze family): the ladder is the guard, and it now
                                              judges arrivals, so a 60 fps source is not punished
                                              (pinned).
-  SIZE-CODEC — RESOLVED 2026-08-29: APPLE'S WAY (PO: "i like apples way"). Codec is never a user
+  SIZE-CODEC — RESOLVED 2026-08-29: APPLE'S WAY (Robert: "i like apples way"). Codec is never a user
                                              question; the DESTINATION decides it — unknown egress
                                              (saved file, OS share sheet) gets most-compatible AVC;
                                              controlled playback (our cloud player) and the explicit
@@ -263,16 +264,16 @@ READY NOW:
                                              Executed by F16's lanes + F17's sheet; qp-targeted
                                              encoding stays on (~11 %); the ~2x arrives with the
                                              efficiency lane. DECISIONS carries the ruling.
-  F17  the Share sheet             [medium]  TD-drafted 2026-08-29 from PO: "its time to think
+  F17  the Share sheet             [medium]  drafted 2026-08-29 from Robert: "its time to think
                                              through how share button will work". Destinations, not
                                              formats: Copy link / Save file (instant, always) /
                                              Save smaller file (background lane, readiness ON the
                                              row) / For AI, with the ONE quality option shown
-                                             quietly. Spec below — the sheet is design, so PO's eye
+                                             quietly. Spec below — the sheet is design, so Robert's eye
                                              gates it. UI half AFTER F16's lanes exist; the Save
                                              file + For AI rows are re-arrangement of what ships
                                              today and can land first.
-  F16  semantic rungs, everything  [medium-heavy]  PO 2026-08-29, design v2 on PO's own counter
+  F16  semantic rungs, everything  [medium-heavy]  Robert 2026-08-29, design v2 on Robert's own counter
        already made when asked              ("cant it be same high instant quality rendered
                                              already and it just converts in smaller file ...
                                              squeeze rendering in parallel of edits"): RECORD HIGH
@@ -284,22 +285,22 @@ READY NOW:
                                              edits — editing is when the machine is idle. INSTANT
                                              = the rung capture recorded: High today; the LATER
                                              pre-record picker makes any selected rung the
-                                             instant one (PO, sealed). Absorbs F14. AFTER F15;
+                                             instant one (Robert, sealed). Absorbs F14. AFTER F15;
                                              two spikes gate it (T1 transcode speed,
                                              T2 background-render cost) — spec in the task.
-  P5a  iOS SCK spike               [light]   UNBLOCKED 2026-08-26: PO confirms Xcode 27 + a real
-                                             iOS 27 device are available. Needs PO present (device
+  P5a  iOS SCK spike               [light]   UNBLOCKED 2026-08-26: Robert confirms Xcode 27 + a real
+                                             iOS 27 device are available. Needs Robert present (device
                                              plugged in, signing). TIME-SENSITIVE (iOS 27 ~Sept).
-  X13  local-adaptive-encoding     [heavy]   PO 2026-08-26: "lets try". TIER 1 FIRST — NO model:
+  X13  local-adaptive-encoding     [heavy]   Robert 2026-08-26: "lets try". TIER 1 FIRST — NO model:
                                              deterministic per-5s-chunk features (luma-grid delta +
                                              edge density) steering bitrate. Changes the output →
                                              ships OPT-IN behind a flag; the default flip is a
-                                             separate PO gate with A/B files. A learned model only
+                                             separate Robert gate with A/B files. A learned model only
                                              if Tier 1's misclassification is MEASURED, never first.
                                              UNBLOCKED 2026-08-26: X15 is done. Read its handoff
                                              first — bitrateMode is inert, quantizer mode is the one
                                              rate-control knob Chrome honours.
-  F9   per-channel gain slider     [light-medium]  PO 2026-08-26: "mic is kinda too loud now, can
+  F9   per-channel gain slider     [light-medium]  Robert 2026-08-26: "mic is kinda too loud now, can
                                              we add slider?" Spec in NEW TASKS below. Run AFTER the
                                              live audio-fix session lands (shared mix area).
   P9   camera-1080 verify        [light]   RUN 2026-08-29 — answer PARTIAL and the missing half is
@@ -311,18 +312,18 @@ READY NOW:
                                              preserves 1080p end to end on a controlled source.
                                              TO CLOSE IT: `node scripts/camera-check.mjs` on any
                                              machine with a live camera. Exit 0 = the claim holds.
-  F10  mic noise removal           [medium]  PO 2026-08-26: "i want noise removal". Local model,
+  F10  mic noise removal           [medium]  Robert 2026-08-26: "i want noise removal". Local model,
                                              zero tokens, export-time, raw channels untouched.
                                              Spec below. AFTER the live audio session lands.
-  F11  voice-aware tighten         [light-medium]  PO 2026-08-26. A local VAD gates F5a's proposals
+  F11  voice-aware tighten         [light-medium]  Robert 2026-08-26. A local VAD gates F5a's proposals
                                              so cuts never land on speech. Spec below.
-  F12  super-resolution on zoom    [heavy]   PO 2026-08-26: "only if zoom used". Render path only,
+  F12  super-resolution on zoom    [heavy]   Robert 2026-08-26: "only if zoom used". Render path only,
                                              zoomed spans only, opt-in. Spec below.
 
-NEW TASKS (TD-authored 2026-08-26 from PO's answers; all operating rules apply):
+NEW TASKS (authored 2026-08-26 from Robert's answers; all operating rules apply):
 
 ## F9 per-channel-gain [light-medium · editor + mix; all three export paths share the mixer]
-PO: "mic is kinda too loud now, can we add slider?" A gain slider per AUDIO channel in the editor,
+Robert: "mic is kinda too loud now, can we add slider?" A gain slider per AUDIO channel in the editor,
 default 0 dB, persisted with the edit (editsRepo — must survive refresh), applied in ONE place so
 preview and every export path hear the same thing (the certified mixer; note 14: every export mixes
 audio from the RAW channels, so this composes with instant and smart cut). MUST NOT cost the
@@ -334,13 +335,13 @@ any take with a non-zero gain — new fence case, unit-tested, stated in the han
 GATES: fidelity oracle green · 0 dB = today, byte-identical behaviour · gain-only edit still takes
 instant/smart cut on video · edit survives refresh · X1 fence added + tested · `npm run exp -- o2`
 green.
-COORDINATION: PO's underlying report ("mic kinda too loud NOW") may be the normalization itself —
-ANOTHER LIVE SESSION owns that fix (PO 2026-08-26). F9 is the CONTROL, not the fix: touch gain
+COORDINATION: Robert's underlying report ("mic kinda too loud NOW") may be the normalization itself —
+ANOTHER LIVE SESSION owns that fix (Robert 2026-08-26). F9 is the CONTROL, not the fix: touch gain
 plumbing only, no mix constants, and start only after that session's merge.
 
 ## P9 camera-1080-verify — RUN 2026-08-29, answer PARTIAL (handoff below): the constraint and the
 ##     pipeline are verified; the real sensor delivers no frames on this machine. Re-run on a live camera.
-[light · QA only, zero product change, zero PO time]
+[light · QA only, zero product change, zero Robert time]
 The O3a claim "camera-only records 1080p, not upscaled 720p" needs a REAL camera (synthetic mode
 bypasses getUserMedia) and resolution is not judged by eye. Drive real Chrome on the deployed build
 with the real built-in camera (browser-check.mjs shape; --use-fake-ui-for-media-stream auto-grants
@@ -391,7 +392,7 @@ while the sensor is off — with an app holding the device, or the OS camera per
 binary, giving the same signature. `--use-fake-ui-for-media-stream` answers the SITE prompt, not the
 OS one, and no flag can.
 TO FINISH THE ROW: run `node scripts/camera-check.mjs` on a machine whose camera is live. One
-command, exit 0 = the claim holds. It is not PO's time in any meaningful sense.
+command, exit 0 = the claim holds. It is not Robert's time in any meaningful sense.
 
 THREE INSTRUMENT FAULTS IN THIS RUNNER, all mine, all caught before anything was reported (note 10):
  1. IT REPORTED WHAT IT INTENDED, NOT WHAT HAPPENED. The first version set the channel chips and
@@ -408,23 +409,23 @@ THREE INSTRUMENT FAULTS IN THIS RUNNER, all mine, all caught before anything was
     bounded at 30 s now.
 
 ## F10 mic-noise-removal [medium · local model, zero tokens · export mix + preview; raw untouched]
-PO 2026-08-26: "i want noise removal". A per-take toggle that denoises the MIC channel. PLACEMENT:
+Robert 2026-08-26: "i want noise removal". A per-take toggle that denoises the MIC channel. PLACEMENT:
 at EXPORT (mirrored in preview), never at capture — the raw channel on disk stays untouched, so the
 feature is reversible and "never break working features" holds. Runs in the export worker on the
-mic PCM before the mix; the in-thread fallback is the same code. Default OFF until PO flips it.
+mic PCM before the mix; the in-thread fallback is the same code. Default OFF until Robert flips it.
 MODEL: verify the current open-model landscape IN-SESSION before choosing (never from memory).
 Candidates to price: RNNoise-class (~0.1-2 MB, faster than realtime on WASM) vs DeepFilterNet-class
 (better, heavier). Permissive license only; model lazy-loaded on first use — the O7 first-paint
 gate must not move.
 GATES: toggle OFF = byte-identical to today (pinned) · ON: measured SNR gain on a known-noise rig
 with the fidelity bands still green (no musical-noise artifacts on tones) · A/B files to
-~/Downloads for PO's ears · toggle persists with the edit (editsRepo) · X1 fence: a denoised mix is
+~/Downloads for Robert's ears · toggle persists with the edit (editsRepo) · X1 fence: a denoised mix is
 not what capture summed → envelope shortcut returns null, re-probe (unit-tested) · export time cost
 printed. COORDINATION: starts after the live audio session merges (shared mix area); composes with
 F9's slider.
 
 ## F11 voice-aware-tighten [light-medium · extends F5a's analyzer; proposals only, zero tokens]
-PO 2026-08-26. F5a proposes cuts from window-RMS alone, so quiet speech near the floor can be
+Robert 2026-08-26. F5a proposes cuts from window-RMS alone, so quiet speech near the floor can be
 proposed as a cut. A local VAD (Silero-class ~1-2 MB — verify landscape in-session, permissive
 license, lazy-loaded at Tighten press) gates the proposals: a window the VAD calls speech is never
 inside a proposed cut, whatever its RMS. Still a PROPOSAL — Apply stays the user's.
@@ -433,19 +434,19 @@ breathy-speech fixture · interactive runtime (the envelope path stays ~ms; VAD 
 candidate spans) · VAD unavailable → exactly today's behaviour (fallback pinned).
 
 ## F12 zoom-super-resolution [heavy · render path only, zoomed spans only, opt-in]
-PO 2026-08-26: "super resolution on zoom but only if zoom used". F2 caps zoom at 2.5× because
+Robert 2026-08-26: "super resolution on zoom but only if zoom used". F2 caps zoom at 2.5× because
 upscaling 1080p past that is mush; SR raises what a zoom can show. Applied ONLY to frames inside a
 zoom span past a threshold (start ~1.5×), ONLY in the render (a zoomed take is never pixel-default,
 so instant/smart-cut are structurally untouched), as an opt-in quality step in the export panel
 that PRINTS its time cost. WebGPU inference; compact SR model verified in-session (landscape check,
-permissive license, lazy-loaded). Raising the 2.5× zoom cap where SR is on is PO's knob AFTER
+permissive license, lazy-loaded). Raising the 2.5× zoom cap where SR is on is Robert's knob AFTER
 seeing files.
 GATES: un-zoomed takes and SR-off exports byte-identical to today · A/B crops at 2.5× to
-~/Downloads — PO judges by eye · per-frame cost measured, export estimate includes it · no WebGPU →
+~/Downloads — Robert judges by eye · per-frame cost measured, export estimate includes it · no WebGPU →
 today's scaler, silently · oracle green.
 
 ## P0-ladder-static — DONE 2026-08-29 (seventeenth session, handoff at the end of this task)
-[light · TD-authored 2026-08-29 · resolutionLadder.ts + its caller in liveCompositeV2.ts · LIVE ON
+[light · authored 2026-08-29 · resolutionLadder.ts + its caller in liveCompositeV2.ts · LIVE ON
 THE DEFAULT PATH since nativeres went default the same day]
 Chrome's `getDisplayMedia` emits frames ON CHANGE. A screen nobody is touching delivers 0 fps, not
 30. `ladderVerdict` compares `deliveredFps` to `requestedFps` against `DELIVERY_FLOOR_RATIO 0.6`
@@ -491,7 +492,7 @@ composite. If a real 4K screen ever shows sustained arrivals-crushed-no-drops wh
 have helped, the discriminator to add is framesDropped/maxEncodeGapMs, both already in the stats.
 
 ## O3c — DONE 2026-08-29 (seventeenth session, handoff at the end of this task)
-[light-medium · TD-authored 2026-08-29 · copySource.ts, session.ts, quality wiring · restores a
+[light-medium · authored 2026-08-29 · copySource.ts, session.ts, quality wiring · restores a
 measured win that is currently reaching nobody]
 Two defaults flipped 2026-08-29. `?singlegen=` (O3b, ON) copies the raw channel instead of the
 composite ONLY when that channel equals the export geometry exactly — `copySource.ts:143` and
@@ -536,7 +537,7 @@ the composite constant — that rung records NO composite, so tier-chasing there
 other steps; F13's derive-from-the-take rewrite is where it becomes general. The F7c probe still
 prices copyable steps it does not need to (harmless; the exact number wins the display).
 
-## F14 — RULED 2026-08-29 AND ABSORBED BY F16 (PO: "later we will add quality choosing before
+## F14 — RULED 2026-08-29 AND ABSORBED BY F16 (Robert: "later we will add quality choosing before
 ##     record too, so make it one option for now everytime"). No per-export sticky resolution
 ##     ladder: quality is ONE product-wide option; F16 below is the task. The original hazard
 ##     (a sticky pick silently re-rendering every export) dissolves once capture records the
@@ -548,26 +549,26 @@ the packet copy; every other step re-renders the whole take. SEEN LIVE on the de
 panel opened on 1440p left by an earlier session, the INSTANT badge sat on the 1080p row it was not
 using, and the button read "Export 1440p". One accidental pick, once, makes every future export
 slow and large with nothing on screen explaining why the instant path stopped being taken.
-PO DECIDES WHICH: (a) do not persist the tier — every take opens on 1080p; (b) persist it but say
+ROBERT DECIDES WHICH: (a) do not persist the tier — every take opens on 1080p; (b) persist it but say
 plainly in the panel that this take will re-render and roughly what that costs in time and bytes.
 (a) is the smaller change and the one that matches "instant default export" in the frozen
-constraints; (b) keeps a deliberate choice. Do not pick without PO.
+constraints; (b) keeps a deliberate choice. Do not pick without Robert.
 GATES: whichever is chosen, the instant path is still taken on a default take (assert the ladder
 picks instant) · the panel's INSTANT badge and the selected step can never disagree — pinned by
 test, because that disagreement is the bug · no change to any export path's output.
 
 ## F16 one-quality-option — capture follows the chosen rung; instant export at any set quality
-[medium-heavy · TD-authored 2026-08-29 from PO's ruling ("make it one option for now everytime ...
+[medium-heavy · authored 2026-08-29 from Robert's ruling ("make it one option for now everytime ...
 min-medium-high(default)-max ... we need to try to achieve instant export for any quality") ·
 AFTER F13 (geometry seam — LANDED 2026-08-29, `resolveTier` is the seam) and F15 (fps) — it rides both]
 THE PHYSICS THIS TASK IS BUILT ON, so nobody re-derives it: instant = packet copy = the bytes
 already exist. The render floor is decode-bound at 5-6x realtime (O5, X4 refuted threading), so
 "fast render" can never be instant. Four live encoders for four rungs is dead on X6's own numbers
-(capture CPU starvation is THE failure family on PO's machine). What remains is: capture writes the
+(capture CPU starvation is THE failure family on Robert's machine). What remains is: capture writes the
 file the user is going to ask for — affordable precisely because quality is ONE option.
-WHAT IT IS — DESIGN v2, 2026-08-29, on PO's OWN COUNTER ("cant it be same high instant quality
+WHAT IT IS — DESIGN v2, 2026-08-29, on Robert's OWN COUNTER ("cant it be same high instant quality
 rendered already and it just converts in smaller file if choosing? ... can we squezze rendering in
-parallel of edits so user wont notice?"), SEALED by PO the same day: "High instant — or any, only
+parallel of edits so user wont notice?"), SEALED by Robert the same day: "High instant — or any, only
 if user will select it before record, which we will add later." THE INSTANT CONTRACT, exactly:
 INSTANT IS THE RUNG CAPTURE RECORDED — High by default today; the pre-record picker (LATER, its
 own UI task) makes the selected rung the recorded one, and therefore the instant one (v1's
@@ -578,7 +579,7 @@ EVERYTHING IS ALREADY MADE BY THE TIME IT IS ASKED FOR, using the time the machi
     take-shaped after F13, quality-targeted. Nothing changes at capture.
   · HIGH  = instant copy of the composite (today's default, unchanged).
   · MAX   = instant copy of the raw native channel on single-video takes (O3c, SHIPPED); on
-    camera/multi-channel takes a BACKGROUND render at native geometry starting at stop — PO:
+    camera/multi-channel takes a BACKGROUND render at native geometry starting at stop — Robert:
     "some quick extra render for max quality is okay, but it must be fast too".
   · MIN / MEDIUM = BACKGROUND TRANSCODE of the High composite (or of the raw channel on
     single-video takes — pick by measurement: one extra 4:2:0 generation against a heavier
@@ -597,10 +598,10 @@ TWO SPIKES GATE THE BUILD — both are claims currently made from reasoning, and
 not ship reasoning:
   · T1 transcode-speed: measure High→Min/Medium (one hardware AVC decode → scale → encode small)
     against the full render on the same takes. Expectation is a several-times-faster lane;
-    the number decides whether "usually done before the panel opens" is true at PO's lengths.
+    the number decides whether "usually done before the panel opens" is true at Robert's lengths.
   · T2 background-render cost: the render beside a playing editor — UI-thread lateness through
     perf/mainThreadWatch.ts (the instrument X9 standardized), plus a stated thermal/battery
-    policy (interruptible, deprioritized, and what happens on battery is a PO call).
+    policy (interruptible, deprioritized, and what happens on battery is Robert's call).
 GATES: unedited take — Min/Medium/High/Max each export a file that EXISTED at press time (cert
 copiedFrom, or the background job's output served with its hash), measured on a take longer than
 the job needs · the panel never promises a size it cannot yet know (sizeConfidence extends to the
@@ -610,7 +611,7 @@ v2+v1 + fidelity green · T2's lateness inside the O5/X9 bands · a 20-minute ta
 before a user plausibly reaches the panel (number from T1, stated in the handoff).
 
 ## MIN-floor — what "still readable" measures  [light-medium · measurement only, feeds F16]
-PO's definition of Min: "minimal size where text and everything will be still readable". Make that
+Robert's definition of Min: "minimal size where text and everything will be still readable". Make that
 a number, not a vibe, with instruments that already exist: the glyph contrast/fringe metrics
 (perf/textSource.ts chromaRows, R1-hardened) and the F7c probe (composes 10 s of THIS take and
 encodes it with the export's own encoder). DELIVERABLE: a readability floor — the smallest
@@ -623,8 +624,8 @@ after this lands. NOTE the codec dependency honestly: Min's absolute size is ~2x
 hevc/av1 — SIZE-CODEC (resolved: Apple's way) delivers that through the efficiency lane.
 
 ## F17 share-sheet — the share button, Apple's way  [medium · UI + share plumbing · the SHEET
-##     LAYOUT IS PO-GATED (it is design); the codec rule underneath is settled (SIZE-CODEC)]
-[TD-drafted 2026-08-29 from PO's "i like apples way, its time to think through how share button
+##     LAYOUT IS ROBERT-GATED (it is design); the codec rule underneath is settled (SIZE-CODEC)]
+[drafted 2026-08-29 from Robert's "i like apples way, its time to think through how share button
 will work". Three rules, then the sheet.]
 RULES:
   1. CODEC IS NEVER A USER QUESTION. The destination decides: unknown egress (Save file, OS share
@@ -662,28 +663,28 @@ quota full → name which links to let expire · every row that cannot serve say
 SEQUENCING: the Save file + For AI rows and the sheet shell are a re-arrangement of what ships
 today and can land before F16; the smaller-file and link rows light up as their lanes/cloud land.
 GATES when built: Save file measured instant on a long take · no codec word anywhere in the sheet
-(copy reviewed by PO) · the smaller-file row never promises a size before its lane reports one ·
-the sheet drives compose/choose.ts unchanged (the oracle still gates the paths users get) · PO
+(copy reviewed by Robert) · the smaller-file row never promises a size before its lane reports one ·
+the sheet drives compose/choose.ts unchanged (the oracle still gates the paths users get) · Robert
 judges the sheet by eye before it becomes the default surface.
 
-## F15 fps-ceiling — RULED YES 2026-08-29 (PO: "i want every device to record best quality it can,
+## F15 fps-ceiling — RULED YES 2026-08-29 (Robert: "i want every device to record best quality it can,
 ##     60 fps"). F13 LANDED 2026-08-29 — this is next. See the ruling note at the bottom.
-[medium · TD-authored 2026-08-29, raised by PO's own objection to the 1920×1080 rule]
+[medium · authored 2026-08-29, raised by Robert's own objection to the 1920×1080 rule]
 `DEFAULT_EXPORT_SETTINGS.fps = 30`, all four quality steps are `fps: 30` (quality.ts), and capture
 asks the OS for `frameRate: { ideal: 30, max: 30 }` (acquire.ts:360). It is a `max`, so a 60 fps
 game tab or a 60 fps camera is throttled AT THE SOURCE. Native-res drops the SIZE bound and keeps
 this one deliberately — "every frame above 30 is encoded twice and then dropped at export" — which
-is only true because the export is 30. THAT IS THE SAME SHAPE AS THE 1920×1080 RULE PO OBJECTED TO:
+is only true because the export is 30. THAT IS THE SAME SHAPE AS THE 1920×1080 RULE Robert OBJECTED TO:
 an output constant reaching back to cap the input. Nothing here is broken today; it is a ceiling
 with no flag, and no recent decision behind it.
-THE QUESTION FOR PO, and it is the whole gate: should INOUT be able to make a 60 fps video at all?
+THE QUESTION FOR ROBERT, and it is the whole gate: should INOUT be able to make a 60 fps video at all?
 A yes costs bytes and encode time on every take that uses it and wants its own quality step; a no is
 fine and should simply be written down as a decision instead of surviving as a constant. If yes,
 this rides F13's chain — the same derive-from-the-take rewrite that carries geometry carries fps —
 so it is scheduled AFTER F13, which landed 2026-08-29: `session.compositeFrame()` is where the
 take is asked what it is, once, before any encoder is configured, and fps belongs in that answer.
 RULED YES 2026-08-29 (DECISIONS). SHAPE, so the next session does not re-derive it: fps FOLLOWS THE
-SOURCE up to 60 — not a new 60 constant, which would rebuild the shape PO rejected. The chain:
+SOURCE up to 60 — not a new 60 constant, which would rebuild the shape Robert rejected. The chain:
 displayVideoConstraints/cameraVideoConstraints frameRate (acquire.ts, currently ideal:30 max:30
 unconditional) → composite FPS + cadence gate (liveCompositeV2/compositor.worker) → tier fps
 (quality.ts) → render loop (render.ts drives everything off settings.fps) → encoderWarm shape →
@@ -692,10 +693,10 @@ sizeProbe's 30-fps-derived WINDOW_FRAMES. THE GUARDS ALREADY IN PLACE: the ladde
 is rate-relative, and the throughput risk (4K-freeze family) is why this ships flagged first with
 the ladder watching. GATES when built: a 30 fps source's take is byte-identical to today · a 60 fps
 synthetic source records and exports 60 (read fps from the FILE) · oracle v2+v1 green · oracle:load
-green (announce it) · one real 60 fps take judged by PO.
+green (announce it) · one real 60 fps take judged by Robert.
 
 ## F13 output-follows-source — DONE 2026-08-29, flag-gated (handoff at the end of this task)
-[heavy · TD-authored 2026-08-29, PO: "it must be device resolution, how the fuck mobile will make
+[heavy · authored 2026-08-29, Robert: "it must be device resolution, how the fuck mobile will make
 1920x1080? its vertical" → "yes"]
 THE PRODUCT CANNOT MAKE A VERTICAL VIDEO. `DEFAULT_EXPORT_SETTINGS` is 1920x1080 (types.ts:546),
 all four quality steps are landscape 16:9 (quality.ts:66), the live composite canvas is
@@ -734,14 +735,14 @@ GATES: a 16:9 take is BYTE-IDENTICAL to today, pinned by test — this task may 
 move the existing one · a portrait source exports portrait with NO crop, verified by reading
 width/height out of the exported FILE (not the UI) · a camera-only 4:3 take keeps its full height
 · the instant and smart-cut copy paths still fire on a screen-only take (assert copiedFrom) ·
-fidelity + sync oracles green · `npm run exp -- o3b` still green · PO judges one real phone take by
+fidelity + sync oracles green · `npm run exp -- o3b` still green · Robert judges one real phone take by
 eye before any default moves.
 RISK, STATED: this moves what an existing take exports to for any take that is not 16:9. Nothing
 about a 16:9 take may change — that is the byte-identical gate, and it is the whole safety net.
 
 ## F13 HANDOFF — BUILT AND VERIFIED ON PROD 2026-08-29. Every gate met. DEFAULT NOT MOVED.
 SHIPPED BEHIND `?sourceframe=1` (sticky `inout.frame.source`), OFF by default — the task's own last
-gate is "PO judges one real phone take by eye before any default moves", so the flip is PO's and
+gate is "Robert judges one real phone take by eye before any default moves", so the flip is Robert's and
 the flag is how it gets judged. Off, every path answers exactly what the constant answered.
 
 THE ONE SEAM IS `src/core/frame.ts`, and it is two functions:
@@ -752,7 +753,7 @@ THE ONE SEAM IS `src/core/frame.ts`, and it is two functions:
  · `frameForAspect(aspect, longEdge)` — 960x540 / 1280x720 / 1920x1080 / 2560x1440 to the pixel on
    16:9, both sides always even. A step is a PIXEL BUDGET (its long edge), not a landscape box:
    "1080p" is 1920 on the long edge whatever the shape, which is what a phone calls 1080p and what
-   keeps PO's minimal-size objective from being re-priced by the shape of somebody's monitor.
+   keeps Robert's minimal-size objective from being re-priced by the shape of somebody's monitor.
    THE PIXEL COUNT DELIBERATELY DOES NOT FOLLOW THE SOURCE — a 4K monitor does not turn every
    default export into a 4K file; that win is O3c's (the step matching the screen copies the raw
    channel) and it stays there.
@@ -817,13 +818,13 @@ HONEST RESIDUE, none of it blocking:
    the whole editor into a column on a portrait take (seen, then fixed). Only the stage and the box
    that must fit it vertically follow.
 
-## F13 SECOND PASS — PO JUDGED IT ON A PHONE AND IT WAS STILL WRONG. Fixed 2026-08-29.
-PO: "preview on phone still wrong proportions and cutted and in editing even more cutted preview,
+## F13 SECOND PASS — Robert JUDGED IT ON A PHONE AND IT WAS STILL WRONG. Fixed 2026-08-29.
+Robert: "preview on phone still wrong proportions and cutted and in editing even more cutted preview,
 fix it." THE FIRST PASS BELIEVED `track.getSettings()`, AND THAT CALL DESCRIBES THE SENSOR. A phone
 held portrait reports 1920x1080 while every frame the platform delivers is 1080x1920, rotated. So
 `compositeFrame()` derived a LANDSCAPE canvas from a portrait take, the compositor cover-cropped
 into it, and the editor then cropped the raw portrait channel a SECOND time into the same landscape
-stage — which is exactly "even more cutted", and it is the only reading of PO's sentence that
+stage — which is exactly "even more cutted", and it is the only reading of Robert's sentence that
 explains why editing was worse than capture. Nothing in the capture chain had ever looked at what a
 delivered frame actually is; `displayWidth/displayHeight` were used only to fit INTO the canvas.
 THE FIX: the settings are the GUESS, the first frame is the ANSWER — one shared decision
@@ -877,7 +878,7 @@ itself), and fps follows the source through the same `session.compositeFrame()`-
 needs — one place that asks the take what it is, at capture, before any encoder is configured.
 
 ## R1 x15-chroma-rig-hardening — DONE 2026-08-29, all 15 fixed (handoff at the end of this task)
-[medium · TD-authored 2026-08-29, PO: "make fix all of them as one step"]
+[medium · authored 2026-08-29, Robert: "make fix all of them as one step"]
 ALL 15 findings of the 094b13d code review, one task. The chroma rig is now the evidence for O3b
 and the 4:4:4 decision, so its failure modes ARE the task. Everything lives in
 src/experimental/perf/{trimTextParity,textSource}.ts unless a path is named. Line numbers are
@@ -922,12 +923,12 @@ SHARED SEAMS:
      vacuously while gate 1 screams a fake P1.
  11. the encoder warm is pasted per-rig and ELEVEN rigs calling createCaptureSession are still
      cold (note 6's mirage, ninth instance and counting) — one shared rig-harness warm. Warming
-     inside createCaptureSession itself is production capture = PO's explicit yes, NOT this task.
+     inside createCaptureSession itself is production capture = Robert's explicit yes, NOT this task.
 WASTE:
  12. the chroma mask is recomputed 18× (6 stages × 3 colours, full-rect scans) for a mask that
      depends only on constants — build per-colour index lists from the reference once.
  13. sampledAtSec[0] is decoded up to 3× per reader (chroma/crops/thumbs) and .at() re-seeks from
-     the keyframe every time — decode once per reader, share; also keeps the crop PO sees and the
+     the keyframe every time — decode once per reader, share; also keeps the crop Robert sees and the
      number beside it the same frame by construction.
  14. the second getContext('2d', {willReadFrequently:true}) is dead — repeat-call attributes are
      ignored per spec (432) — one call with both options, the openNative pattern.
@@ -1001,12 +1002,12 @@ WHAT EACH FIX CHANGED, and the two that changed a VERDICT are marked:
     backgroundFrame, cameraMove, captureLoudness, compositeWedge, pauseTake, qualityTiers, rawTail,
     smartCutRun, zoomPan, recovery/run. The three that already warmed (trimTextParity, rawCodecTake,
     chromaPrice, loadedSync) route through the same helper. NOT inside createCaptureSession — that
-    is production capture and needs PO. Spot-checked: armcancel green (reject 132 ms, arm 331 ms,
+    is production capture and needs Robert. Spot-checked: armcancel green (reject 132 ms, arm 331 ms,
     4 channels), f3 3/3 PASS.
 12. per-colour index lists built once from the reference; the mask was being recomputed 18x
     (6 stages x 3 colours) for something that depends only on constants.
 13. sampledAtSec[0] decoded ONCE per reader and shared by the chroma row, the crop and the thumb —
-    it was up to 3 decodes each, every one re-seeking from the keyframe. The crop PO looks at and
+    it was up to 3 decodes each, every one re-seeking from the keyframe. The crop Robert looks at and
     the number printed beside it are now the same frame by construction. (Also: the crop labels
     used `id === 'instant' ? 1 : 2`, which labelled smartcut and render both `c-02`.)
 14. the dead second `getContext('2d', {willReadFrequently:true})` is gone with fix 3 — one call,
@@ -1029,7 +1030,7 @@ identical run to run and equal to the committed baselines · all three drills as
 control in the report · `npm run oracle` PASS (v2, sync 34.6 ms) AND `--engine=v1` PASS (sync
 51.0/64.3 ms) · `npm run exp -- armcancel` green · f3 3/3 PASS.
 
-TWO THINGS FOUND, NOT CHASED (both outside R1's 15, both for TD to triage):
+TWO THINGS FOUND, NOT CHASED (both outside R1's 15, both to triage):
   (a) THE PiP PLACEMENT NUMBER IN X15(c) IS STALE. That entry records the render placing the camera
       PiP 14-15 frames from the instant path at 23.6 dB. Two runs today read -1 and -2 frames at
       29.5 and 28.0 dB. Nothing in R1 touches placement (the anchor frame is the identical decode),
@@ -1044,22 +1045,22 @@ TWO THINGS FOUND, NOT CHASED (both outside R1's 15, both for TD to triage):
 
 BLOCKED ON HARDWARE OR A DOWNLOAD, unchanged:
   P1   firefox + 3-engine oracle   [medium]  code half shipped 2026-08-23. What is left needs
-                                             downloads PO must approve (Playwright's gecko driver)
+                                             downloads Robert must approve (Playwright's gecko driver)
                                              and a Windows machine for the one row that cannot be
                                              spoofed. See the handoff.
   O11d codec ladder, probed        [medium]  needs P1's 3-engine rig. (a)(b)(c) are shipped.
-  P8   safari-mic                  [P0]      blocked on ONE PO artifact (the exported file, or a
+  P8   safari-mic                  [P0]      blocked on ONE Robert artifact (the exported file, or a
                                              Safari-console take). Do not code it from theory.
 
-BLOCKED ON A RULING PO HAS ALREADY BEEN ASKED FOR: (none — X6's ruling landed 2026-08-26 and
+BLOCKED ON A RULING Robert HAS ALREADY BEEN ASKED FOR: (none — X6's ruling landed 2026-08-26 and
   moved O3b to READY NOW.)
 
-NEEDS PO DISCUSSION BEFORE ANYONE BUILDS (PO 2026-08-25: "questionable mark as need to be discussed
-again" — these change the file a user gets, or need PO's hardware, so they start on a ruling, not a go):
-  X10=O5e VFR export — REJECTED by PO 2026-08-26 ("fuck this"). The size win does not buy a file
+NEEDS ROBERT DISCUSSION BEFORE ANYONE BUILDS (Robert 2026-08-25: "questionable mark as need to be discussed
+again" — these change the file a user gets, or need Robert's hardware, so they start on a ruling, not a go):
+  X10=O5e VFR export — REJECTED by Robert 2026-08-26 ("fuck this"). The size win does not buy a file
                                              some players and editors mishandle. In the REJECTED
-                                             list; do not resurrect without PO.
-  X13  local-adaptive-encoding     [heavy]   on-device zero-token model (per PO's 2026-08-25 "no AI"
+                                             list; do not resurrect without Robert.
+  X13  local-adaptive-encoding     [heavy]   on-device zero-token model (per Robert's 2026-08-25 "no AI"
                                              clarification = no runtime token spend) classifying 5 s
                                              chunks text/motion/still to steer bitrate; realistic
                                              20-40 % smaller files. Changes output → principle
@@ -1068,12 +1069,12 @@ again" — these change the file a user gets, or need PO's hardware, so they sta
                                              has MediaStreamTrackProcessor (worker-only, video-only)
                                              — the premises behind "v1 exists because Apple lacks
                                              MSTP" and the ~1 s audio truncation are STALE. Needs
-                                             PO's real Mac/Safari and pairs with the P8 artifact PO
+                                             Robert's real Mac/Safari and pairs with the P8 artifact Robert
                                              still owes. If green, a whole Safari special-case pile
                                              deletes and P8 may close itself.
 PARKED (nothing to build today): X11 capture-audio-mix-to-worker — heavy, touches the tuned mix
 graph (limiter/gains), do after X6; kills the last main-thread capture cost and the ~430 ms PCM port
-lag; capture change → PO gate. · X14 sync ≤20 ms — blocked on Q4 2026 Web Audio deliverables
+lag; capture change → Robert gate. · X14 sync ≤20 ms — blocked on Q4 2026 Web Audio deliverables
 (audio-thread performance.now(), configurable quantum); nothing buildable until implementers ship.
 · 4K/WebGPU importExternalTexture stays inside O6 (second-order until X5).
 FOLLOW-UP FOUND WHILE FIXING P0-tail-raw, not fixed and not urgent: `setChannelActive(kind, false)`
@@ -1099,11 +1100,11 @@ BLOCKED (dep → unblocks): P4←O5 (now unblocked — O5 is done) · P5b←P5a 
 O10 (AEC part only)←P4. (O4's flip unblocked O5/O6/F6/F8/O3b; O5's completion on 2026-08-24 unblocks
 O9, the O8 remainder and P4. O10 (a)(b)(c) never needed anything and has always been READY.)
 REJECTED (do not resurrect): pre-roll rolling buffer — no capture before the record press, ever
-(PO 2026-08-22; extends "no idle device access"). MP4 MediaRecorder capture — measured 2026-08-23,
+(Robert 2026-08-22; extends "no idle device access"). MP4 MediaRecorder capture — measured 2026-08-23,
 Chrome does not stream it and a tab kill loses the whole take (O3a). Ending a raw channel's TRACK to
 drain its encoder — measured 2026-08-23, Chrome stops the recorder itself and takes the backlog with
 it (P0-tail-raw). The related HARD requirement lives in O4/O8: zero tail loss at stop, now gated on
-BOTH the composite and the raw channels. VFR export (X10=O5e) — PO refused 2026-08-26; the
+BOTH the composite and the raw channels. VFR export (X10=O5e) — Robert refused 2026-08-26; the
 delivered file stays constant-frame-rate.
 
 ── WHAT A FRESH SESSION MUST KNOW ──
@@ -1161,7 +1162,7 @@ delivered file stays constant-frame-rate.
    reinvent the mirage independently — X15(c) did, and read 200 of 283 raw frames DROPPED on the
    newly-default WebCodecs path, which looks exactly like a throughput regression and is not one.
    Every rig that opens a session calls it first. It does NOT go inside createCaptureSession: that
-   is production capture, prearm already covers every real user, and moving it needs PO.
+   is production capture, prearm already covers every real user, and moving it needs Robert.
 7. THE EDIT IS PERSISTED NOW (F4, editsRepo, IndexedDB v2). Before that a refresh silently threw away
    every trim and cut while faithfully restoring the recording. If you add a field to EditState, it is
    automatically persisted — make sure it survives a round trip through structured clone.
@@ -1230,7 +1231,7 @@ delivered file stays constant-frame-rate.
    trim, a sped span, a channel set that is not what capture summed, the p20 codec floor). And the
    two ways this family of statistics has already gone wrong are both DROPPED FIELDS, not wrong
    maths: `peakRobust` was computed in two places and copied to neither consumer for a day and a
-   half, which silently kept the audio regression PO reported. If you add a statistic here, follow
+   half, which silently kept the audio regression Robert reported. If you add a statistic here, follow
    it all the way to the thing that reads it.
 
 13. THE EXPORT'S FLOOR IS DECODE, NOT SCHEDULING — measured, and it retires a whole family of ideas.
@@ -1327,7 +1328,7 @@ delivered file stays constant-frame-rate.
          measures 70.3 % and whose best PROPOSED future — O3b, already on the map — is 80 %. It could
          not pass, in this world or in the intended one, and it had been quoted as a live FAIL. It is
          a REGRESSION gate now (>= the committed baseline − the rig's own stated run variance), with
-         the absolute loss stated in the detail where it belongs: the loss is a FINDING for PO to
+         the absolute loss stated in the detail where it belongs: the loss is a FINDING for Robert to
          spend CPU on, not an alarm to re-fire every run. THE TEST BEFORE WRITING A BAND IS NOW TWO
          QUESTIONS: what number would fail it, AND what number would pass it — and if the passing
          case is one the roadmap does not contain, the gate is measuring a wish.
@@ -1415,14 +1416,14 @@ delivered file stays constant-frame-rate.
                TRACK'S SPAN against the take's own wall clock, plus an independent AudioContext
                clock probe that names which clock lost the time. `{"load":false}` is the control
                and the number to read is the DIFFERENCE — a loaded cell alone proves nothing.
-               Found the audio-timeline drift PO reported (audio 2.6-3.8 s short per 60 s) and
+               Found the audio-timeline drift Robert reported (audio 2.6-3.8 s short per 60 s) and
                proved the fix (padding → +395 ms, the idle control's own figure).
                CARRIES A `measured` LANE since 2026-08-26 — the RAW measured-audio path beside the
                composite, the lane whose absence let a DEAD pad ship as verified (see BACKLOG).
                HEADLESS IS BROKEN for this rig family on Chrome 151 (canvas capture delivers 0 fps
                to uncomposited windows, composite degrades, degraded stop deletes its blob): run it
                in a VISIBLE unoccluded window and read `measured` + `clock` + audioPaddedSec.
-     tabaudio  does CAPTURED TAB AUDIO survive the tab going silent and sounding again? (PO:
+     tabaudio  does CAPTURED TAB AUDIO survive the tab going silent and sounding again? (Robert:
                "maybe audio dies when one youtube video ends and other starts"). Real
                getDisplayMedia via Chrome's auto-accept testing flags — no picker; tones play in
                THIS tab, or in a captured child tab with {"crossTab":true} plus `--refocus
@@ -1436,12 +1437,12 @@ delivered file stays constant-frame-rate.
                stall, see BACKLOG) are recorded so no shape is re-run blind. cdp-run's debug port
                is EPHEMERAL now — fixed 9333 cost three runs in one day to orphaned Chromes — and
                it prints the page console tail on failure.
-  THE REMOTE TAKE AUTOPSY (2026-08-26, proven on PO's dying take): a browser session on the app
+  THE REMOTE TAKE AUTOPSY (2026-08-26, proven on Robert's dying take): a browser session on the app
      origin shares its storage, so the take IS readable in place — IndexedDB `inout`/`recordings`
      for the metadata, OPFS `blobs/<blobKey>` for the channels, `decodeAudioData` for envelopes,
      mediabunny (esm.sh) `VideoSampleSink.getSample` for frames of the UNSEEKABLE live-recorded
      webm (a <video> element cannot seek it). Per-channel silence maps, frame diffs and frame
-     screenshots of a real field take, with nothing needed from PO except NOT DISCARDING it.
+     screenshots of a real field take, with nothing needed from Robert except NOT DISCARDING it.
      oracle    accepts {"injectTailLossMs":N} to prove the tail band red
   node scripts/ai-pdf-check.mjs    AI1's "any AI can read this" gate: runs the aiexport rig, saves the
      PDF to docs/qa/ai-export.pdf, and puts it through TWO readers that know nothing about the writer —
@@ -1469,12 +1470,12 @@ delivered file stays constant-frame-rate.
   node scripts/make-icons.mjs      regenerates PWA icons (deterministic, no image dep)
   npm run oracle:load   the O8 tail band UNDER 4K LOAD, in TWO phases (P0-tail and P0-tail-raw): the
      composite through the o4step2 rig, and the RAW channels through the real createCaptureSession.
-     HEAVY: announce it, keep it out of the pre-push hook, never run it while the PO is using the
+     HEAVY: announce it, keep it out of the pre-push hook, never run it while Robert is using the
      machine. The composite phase may read INCONCLUSIVE when its watchdog gives up under load — that
      is the fallback working; the raw phase does not depend on the composite surviving.
   npm run oracle | oracle:cold | oracle:fidelity  MERGE gates — run them per task, by hand. The
      pre-push hook does NOT run the oracle and must not: it is a timing gate, and the cold first run
-     a hook always pays read 76.87 ms of its 90 ms band where a warm run read 37.3 (TD 2026-08-26).
+     a hook always pays read 76.87 ms of its 90 ms band where a warm run read 37.3 (2026-08-26).
      The hook runs build (tsc+vite) + tests, ~7 s.
      `node scripts/oracle.mjs --engine=v2` gates the WebCodecs composite instead of the shipped one
   oracle:fidelity GATES TWO FILES SINCE 2026-08-26 (BACKLOG P0): the single-source RENDER it always
@@ -1483,17 +1484,17 @@ delivered file stays constant-frame-rate.
      compose/choose.ts, so the lane reports WHICH path ran and fails if the packet copy quietly
      declined. Its level gate is the RESIDUAL past the mix bus the code is designed to apply
      (1/N — −6.02 dB at N=2), band ±1 dB, because gating the raw tone error would gate a documented
-     design choice that is PO's to change. Three diagnostics print unGATED and are the decomposition
+     design choice that is Robert's to change. Three diagnostics print unGATED and are the decomposition
      that answers "which stage costs what" on ONE take: the raw channel (capture alone), the
      composite's OWN audio (the 0.7 bus + 12:1 chain — which no export carries, see note 14), and
      the render of the same take. `--no-composite` is the red proof: the instant lane must FAIL
      LOUD when it cannot run rather than let the render pass for both.
 
-── AWAITING PO (carried forward) ──
-  · THE REWORKED AI FILE (AI1, second pass 2026-08-24): PO's first real take exposed both defects
+── AWAITING ROBERT (carried forward) ──
+  · THE REWORKED AI FILE (AI1, second pass 2026-08-24): Robert's first real take exposed both defects
     (the file did not say what it was; it dropped the moments) and both are fixed. Re-test: export a
-    take For AI and give it to an agent for the job PO actually has — recreating a UI and its
-    animations. The rebuilt version of PO's own take is at
+    take For AI and give it to an agent for the job Robert actually has — recreating a UI and its
+    animations. The rebuilt version of Robert's own take is at
     ~/Downloads/inout-20260824-183853-for-ai-v2.pdf for a side-by-side with the original file and
     the MP4. That report is AI1's acceptance and the only thing that unfreezes AI2-AI7.
   · FIRST REAL TAKE ON THE NEW DEFAULT ENGINE (v2, flipped 2026-08-24): record something normal and
@@ -1508,8 +1509,8 @@ delivered file stays constant-frame-rate.
     a game-first wedge ordering where the refresh ritual also failed to surface (case file +
     BACKLOG P1). Still unseen: the take's `[capture] display capped …` / `delivering N fps` lines.
 
-═══ X — OPTIMIZATION FRONTIER (TD audit 2026-08-25; PO standing bar: theoretical practical limit,
-no accepted-engine-limitation answers; PO ordered the map 2026-08-25) ═══
+═══ X — OPTIMIZATION FRONTIER (audit 2026-08-25; standing bar: theoretical practical limit,
+no accepted-engine-limitation answers; Robert ordered the map 2026-08-25) ═══
 Source: a data-flow trace of render.ts / layout.ts / audio.ts / loudnessAccumulator.ts /
 compositor.worker.ts / blobStore.ts / scratch.ts — not the docs — plus a platform re-baseline:
 WebGPU default in ALL FOUR engines since 2025-11 (Firefox stable still lacks importExternalTexture;
@@ -1538,7 +1539,7 @@ makeup agrees with the probe within the O2 tolerances on the rig (p90 ≤0.4 dB,
 term → probe, same as today); F5a proposal identical on the known-silence rig; oracle + fidelity
 green; takes predating the field keep today's exact behaviour.
 
-HANDOFF X1 — DONE 2026-08-26 (TWELFTH SESSION, PO: "go x1 2 3"). THE ENVELOPE IS KEPT, AND KEEPING IT
+HANDOFF X1 — DONE 2026-08-26 (TWELFTH SESSION, Robert: "go x1 2 3"). THE ENVELOPE IS KEPT, AND KEEPING IT
 FOUND TWO LIVE DEFECTS THAT MATTERED MORE THAN THE OPTIMIZATION.
 SHIPPED: `CaptureLoudness.envelope` — windowRms + windowPeak IN TIME ORDER, the window length, and the
 recording-timeline ms of window 0. finish() already sorted those series and threw the order away; it
@@ -1574,9 +1575,9 @@ TWO LIVE DEFECTS FOUND ON THE WAY, both the same shape — `peakRobust` computed
       read `peakRobust: undefined` and took NORMALIZE_PEAK_OVERDRIVE_RAW = 4;
   (2) `measureMixLoudness` destructured three of measureMixEnvelope's four fields, so the PROBE path
       did the same. Found by the rig lane printing `probe.peakRobust: 0`.
-So the 2026-08-25 fix for PO's "audio quality regressed" — the one whose whole point was to return the
+So the 2026-08-25 fix for Robert's "audio quality regressed" — the one whose whole point was to return the
 licence to 2 — was in force NOWHERE. Both fixed, one line each, and the probe passthrough is pinned by
-a test (one full-scale spike over sustained 0.2 programme: peak > 0.9, peakRobust < 0.25). PO's listen
+a test (one full-scale spike over sustained 0.2 programme: peak > 0.9, peakRobust < 0.25). Robert's listen
 test is still owed and is now owed on a build where the fix actually runs.
 GATE NOT MET AS WRITTEN, and the number says why: the task asked for peak within 0.03 dB. Measured
 −0.083 dB on the edited lane — while THE SHIPPED O2 DEFAULT-EDIT SHORTCUT measured −0.463 dB on the
@@ -1628,7 +1629,7 @@ worker, is the number O1's claim actually rests on and it is sound.
 
 ## X3 experiments-merge-or-delete [light-medium · deletes ~2,300 lines now, triages ~10,000 ·
    touches no product path]
-PO RULING 2026-08-25: no standing experimental tree — "all the shit must get in worked or be
+ROBERT RULING 2026-08-25: no standing experimental tree — "all the shit must get in worked or be
 deleted". A module is (a) tooling a live gate/task runs → it stays and is owned, or (b) spent — its
 question answered, verdict in DECISIONS → deleted on sight (git is the archive; the doc rule
 already says so). Immediate (b): session-log/, timemap/, wcap/ (became liveCompositeV2),
@@ -1643,7 +1644,7 @@ updated to only name survivors.
 HANDOFF X3 — DONE 2026-08-26 (TWELFTH SESSION). DELETED, 2,745 lines: session-log/ · timemap/ · wcap/ ·
 scene/ · datachan/ · semantic/ · streamx/ · perf/mp4Capture.ts (O3a: MediaRecorder MP4, REJECTED on
 evidence and in the REJECTED list) · perf/workerBisect.ts (the cold-start verdict is in note 6) · and
-RESEARCH.md, TD-VERDICT.md, sync-diagnosis.md, which existed only to describe that tree. Seven runners
+RESEARCH.md, verdict.md, sync-diagnosis.md, which existed only to describe that tree. Seven runners
 left the harness registry with them. The verdicts stay in .ai/DECISIONS; the code stays in git; what
 they proved is in production — wcap BECAME the v2 live composite and streamx BECAME O1's
 stream-to-disk export, which is the ruling working rather than an exception to it.
@@ -1756,7 +1757,7 @@ three numbers.
     is sharp-edge colour handling: `texImage2D(VideoFrame)` and `drawImage(VideoFrame)` upsample
     4:2:0 chroma differently, and the fixture's content is coloured text on dark ground, which is
     exactly where that shows. PORTING THE RENDER ONTO THE GL PAINTER WOULD CHANGE HOW EXPORTED TEXT
-    LOOKS — which needs PO's yes, is not obviously an improvement, and collides head-on with O9
+    LOOKS — which needs Robert's yes, is not obviously an improvement, and collides head-on with O9
     ("text is important").
 A REFEREE THAT IS NOT ONE, kept so nobody re-reaches for it: `VideoFrame.copyTo({format:'RGBA'})`
 was tried as a neutral third party to say WHICH painter is wrong. Both painters sit ~20.7 dB from it
@@ -1778,8 +1779,8 @@ max 50, 3.8 %, which is what ONE re-encode of that same frame costs on its own. 
 difference is 2.8 dB and a doubling of visibly-wrong pixels, not the "max 156 on 3.8 % of pixels"
 this handoff measured. The lab number was inflated by exactly the gap this handoff named: software-
 decoded frames standing in for GPU-resident capture frames.
-WHAT WOULD REOPEN IT: a PO ruling that the text difference is acceptable or an improvement (it is a
-picture change, so it is PO's call and not TD's), or a way to make texImage2D and drawImage agree on
+WHAT WOULD REOPEN IT: a ruling from Robert that the text difference is acceptable or an improvement (it is a
+picture change, so it is Robert's call, not an engineering one), or a way to make texImage2D and drawImage agree on
 chroma — which is a browser behaviour, not ours. The ~12 % ceiling should be weighed against that
 before anyone writes the F3-shadow shader, which is the genuinely hard part and was never reached.
 
@@ -1792,11 +1793,11 @@ stream MP4, a mid-take kill leaves 753 bytes — is SOLVED by the pattern v2 alr
 opens smart-cut-over-raw later.
 GATES: the O3a mid-take snapshot test — kill at 50 %, the prefix DECODES to within the tail band;
 oracle BOTH engines + oracle:load both phases + armcancel + salvage smoke green; capture CPU
-measured before/after (the two software encodes are the claim); real-device take AWAITS PO.
+measured before/after (the two software encodes are the claim); real-device take AWAITS ROBERT.
 
 HANDOFF X6 — BUILT AND SHIPPED OFF BY DEFAULT 2026-08-26 (THIRTEENTH SESSION). Every gate the task
 wrote PASSES, including O3a's. One gate the task did NOT write does not, and it is why the default
-does not move: the picture changes, and a picture change is PO's.
+does not move: the picture changes, and a picture change is Robert's.
 THE BRANCH IS NOT THE STARTING POINT AND WAS NOT REBASED. `ee/webcodecs-capture-2` samples a paced
 <video> element on the MAIN THREAD into an OffscreenCanvas, and its own header says why: "waiting on
 VideoEncoder stalls the [track] processor". That stall is note 6's instrument fault — a fresh
@@ -1848,7 +1849,7 @@ CALLS IT A REGRESSION: the shipped v2 COMPOSITE uses the same config shape and X
 spending 11.8 % of its own ceiling, and that composite is what the INSTANT export copies to users
 today. So the undershoot is the product's existing accepted behaviour on the default path — but the
 raw channels feed the EDITED path, so adopting it there changes a picture users already have. That
-is PO's call, which is exactly why the frozen rule's "defaults unchanged" is the right answer here.
+is Robert's call, which is exactly why the frozen rule's "defaults unchanged" is the right answer here.
 NEXT MEASUREMENT, named so it is not guessed at: sweep `bitrateMode` ('constant' vs the default
 'variable') and re-run the quality row. If constant closes the 27.9 dB gap at a bitrate the disk
 still likes, X6 becomes a flip decision with numbers instead of an open question.
@@ -1864,7 +1865,7 @@ still likes, X6 becomes a flip decision with numbers instead of an open question
     the VP9 lane on screen text at 0.52× its bytes (motion: 51.6 dB at 0.23×), glyph contrast 1.00
     either way. The byte saving reproduces; the quality gap does not exist.
     SO THE REASON THE DEFAULT STAYED PUT IS GONE. What remains is a picture-changing flip, which is
-    PO's, and one confirmation nobody has done: X15(a) feeds CANVAS frames while this path feeds
+    Robert's, and one confirmation nobody has done: X15(a) feeds CANVAS frames while this path feeds
     GPU-resident frames from a MediaStreamTrackProcessor. Confirm through this rig before flipping.
 TWO DEFECTS FOUND ON THE DEPLOYED BUILD AFTER THE RIG WAS GREEN, AND THE RIG COULD NOT HAVE FOUND
 EITHER. Both are the same root cause: MediaStreamTrackProcessor is FRAME-DRIVEN, so a screen that is
@@ -1902,7 +1903,7 @@ failures, export 511 ms. And the FIXES THEMSELVES verified on the deployed build
 camera 9059 ms with offsets 849/898 against a 9957 ms take — the two add up, and the take opens as
 video instead of as a waveform.
 STILL OWED BEFORE ANY FLIP: `npm run oracle:load` both phases (HEAVY — announce it), a salvage smoke
-over a killed take, and PO's real-device take. None of them gate the code as shipped, because as
+over a killed take, and Robert's real-device take. None of them gate the code as shipped, because as
 shipped the default path is untouched.
 
 ## X9 ai-pdf-off-main-thread [light · ~100 lines: core/ai/build.ts into a worker, same O5 shape]
@@ -1911,7 +1912,7 @@ DOM-free by construction; move the build into a worker, stream progress like exp
 GATES: byte-identical PDF on the rig take; `node scripts/ai-pdf-check.mjs` green; long-task count
 during a For-AI export ~0 on the prod build.
 
-HANDOFF X9 — DONE 2026-08-26 (THIRTEENTH SESSION, PO: "go roadmap all in one").
+HANDOFF X9 — DONE 2026-08-26 (THIRTEENTH SESSION, Robert: "go roadmap all in one").
 SHIPPED: `core/ai/run.ts` picks the thread and `core/ai/ai.worker.ts` runs the build, in the exact
 shape compose/pipeline.ts has used since O5a — worker is the fast path, the SAME build.ts is the
 in-thread fallback (no module workers, a worker that fails to construct, or one that dies before its
@@ -1934,7 +1935,7 @@ MEASURED ON THE REAL QUANTITY (scheduling lateness of a 16 ms ticker — what a 
 jank): the UI thread lost 78 ms in-thread against 15 ms in the worker, worst single gap 10 ms → 2 ms,
 7.6-8.3 % of the build's wall clock against 1.3-1.8 %. THE WORKER IS NOT FASTER (wall 980 vs 998 ms)
 — it is elsewhere, which is the whole point. The share scales with take length: the build is 0.74× a
-full render, so PO's 97 s take pays this for ~10 s instead of ~1.
+full render, so Robert's 97 s take pays this for ~10 s instead of ~1.
 ONE GATE EXPRESSION WAS FIXED MID-RUN AND IT IS WORTH SAYING WHY: the vacuity guard demanded the
 in-thread lane lose >100 ms of ABSOLUTE wall clock before the comparison counted, and read FAIL on a
 run showing a clean fivefold effect purely because this fixture's build is one second long. It is a
@@ -1945,7 +1946,7 @@ Capture writes ~18.5 Mbps across three artifacts (raw screen 8 + raw camera 2.5 
 ~2.3 GB/hour, to ship an 8 Mbps file. Both artifacts are needed GIVEN THE FEATURES (edit
 flexibility; instant copy) — but the SPLIT has never been priced. O11a's BitsAudit is the
 instrument; O11c already ran this exact play once (camera 4→2.5 Mbps, −29.3 % disk, +0.2 % file).
-OUTPUT: numbers + a proposal appended here. Any actual bitrate change is its own PO-gated task.
+OUTPUT: numbers + a proposal appended here. Any actual bitrate change is its own Robert-gated task.
 
 HANDOFF X12 — DONE 2026-08-26 (THIRTEENTH SESSION). THE TASK'S OWN PREMISE IS REFUTED, AND SO IS
 THE LEVER IT WAS WRITTEN TO PRICE.
@@ -1960,7 +1961,7 @@ with every artifact WEIGHED ON DISK afterwards and divided by the take's own len
     2.1× (screen) and 1.48× (motion) — not the order-of-magnitude waste the framing implied.
     Per artifact, screen content: raw screen 2.653 Mbps · raw camera 1.512 · composite 0.941 ·
     audio 0.108. Motion: 4.537 · 1.530 · 1.438 · 0.128.
-(2) THE RAW-SCREEN RUNG IS NOT A LEVER — IT IS BACKWARDS ON THE CONTENT PO RECORDS. Recorded at
+(2) THE RAW-SCREEN RUNG IS NOT A LEVER — IT IS BACKWARDS ON THE CONTENT Robert RECORDS. Recorded at
     8/6/4/2.5 Mbps off ONE stream and each RENDERED through the production exporter:
       screen content   6 Mbps: channel −6.8 %, DELIVERED FILE +15.7 %, PSNR 45.5 dB
                        4 Mbps: channel −15.1 %, FILE +25.8 %, PSNR 44.6
@@ -1978,13 +1979,13 @@ with every artifact WEIGHED ON DISK afterwards and divided by the take's own len
     the saving is worth touching capture for (≥10 %). The tests are the MEASURED rows, both contents.
 (4) NOT PRICED HERE, DELIBERATELY: the composite rung. It is the file the instant path copies
     verbatim, so its bitrate IS the delivered quality of an unedited take — lowering it is an export
-    quality change, not a capture saving, and belongs to F7 and to PO. Worth noting anyway that it
+    quality change, not a capture saving, and belongs to F7 and to Robert. Worth noting anyway that it
     only spends 11.8 % of its ceiling on screen content, so the ceiling is not what costs the disk.
 WHAT IS LEFT UNPRICED: the camera rung was weighed but not swept (O11c swept it already, 4 → 2.5),
 and no rung was measured at 4K or under load. Neither changes the verdict on the screen rung.
 
 ## X15 text-truth — where text quality is lost and what buys it back [medium · MEASUREMENT ONLY —
-   changes no default, ships numbers; TD-authored 2026-08-26 on PO "prepare other session to
+   changes no default, ships numbers; authored 2026-08-26 on Robert "prepare other session to
    measure shit with text"]
 Context the session must load first: O9 (capture destroys 51 % of glyph edge contrast, the export
 preserves it) · X6's handoff (AVC raw channel writes 0.21× the VP9 bytes at the same ceiling and
@@ -1999,12 +2000,12 @@ THREE LANES, all numbers, no behaviour change:
     constant/variable (and quantizer mode if the probe says it exists), latencyMode realtime vs
     quality, on SCREEN-TEXT content, against the VP9 lane on the same stream. Deliverable: either a
     config where the AVC channel matches the VP9 picture (PSNR + glyph-edge contrast) at ≤~1.2× its
-    bytes, or the measured frontier showing no such config exists. This is the number PO's X6
+    bytes, or the measured frontier showing no such config exists. This is the number Robert's X6
     ruling waits on.
 (b) THE 4:4:4 PRICE TAG: same take through a SOFTWARE encoder at 4:4:4 chroma (probe what this
     machine offers — hardware 4:4:4 is unlikely and the probe result is itself a finding; AV1
     availability too). Measure glyph-edge contrast retained vs the O9 baseline AND whole-browser
-    CPU (`--cpu`) vs both current lanes. This prices the "crisp text" capture mode PO asked about.
+    CPU (`--cpu`) vs both current lanes. This prices the "crisp text" capture mode Robert asked about.
 (c) X5'S IN-APP QUESTION (BACKLOG P1): ONE real take → export unedited (instant path, copies the GL
     composite) AND with a one-frame trim (render path, 2D painter) → PSNR over a TEXT region at
     matching instants. Settles whether adding a trim changes how text looks in production, not in
@@ -2013,23 +2014,23 @@ THREE LANES, all numbers, no behaviour change:
 GATES: every lane re-runnable in one command · both content types where applicable (text + motion
 control) · no default moves, no production behaviour change · handoff appended here with the
 numbers · BACKLOG P1 (painters) updated: resolved or confirmed live · if (a) finds a matching
-config, say so in the READY map so PO's X6 ruling is a yes/no on closed evidence · PO-VISIBLE
-ARTIFACTS (PO: "i need to see it"): per lane, side-by-side exported files or magnified text crops
+config, say so in the READY map so Robert's X6 ruling is a yes/no on closed evidence · Robert-VISIBLE
+ARTIFACTS (Robert: "i need to see it"): per lane, side-by-side exported files or magnified text crops
 saved to ~/Downloads with a one-line README naming which is which — the ruling is made by eye.
 Operating notes: rigs only — production code untouched except where a rig needs a read-only probe
-seam · heavy sweeps announced, not while PO uses the machine · a lane that cannot run (no 4:4:4
+seam · heavy sweeps announced, not while Robert uses the machine · a lane that cannot run (no 4:4:4
 encoder at all) reports that as its result, per the operating rules.
 
 HANDOFF X15 — MEASURED 2026-08-26 (FOURTEENTH SESSION). ALL THREE LANES RAN. NO DEFAULT MOVED, no
 production behaviour changed. THE HEADLINE IS THAT TWO OF THE THREE NUMBERS THIS TASK WAS BUILT ON
 TURNED OUT TO BE THE INSTRUMENT, and the third is real but four times smaller than it looked.
 RIGS: `npm run exp -- x15a` (bitrateMode sweep) · `x15b` (4:4:4 price + O9 baseline) · `x15c` (the
-trim question). `{"crops":true}` on any of them writes the PO artifacts. New files:
+trim question). `{"crops":true}` on any of them writes Robert artifacts. New files:
 `perf/textSource.ts` (a text source DETERMINISTIC IN FRAME INDEX + encode/decode/compare plumbing),
 `perf/bitrateModeSweep.ts`, `perf/chromaPrice.ts`, `perf/trimTextParity.ts`. One harness-only seam in
 production code: `setSyntheticScreenContent()` in capture/synthetic.ts, the same shape and the same
 "production never calls it" as the existing `setSyntheticScreenSize()`; default unchanged.
-PO ARTIFACTS, per the task's own condition: ~/Downloads/x15-text-truth/ — 15 magnified glyph crops
+Robert ARTIFACTS, per the task's own condition: ~/Downloads/x15-text-truth/ — 15 magnified glyph crops
 (4x, nearest-neighbour) + a README naming which is which and what to look for. The rulings below are
 checkable by eye.
 
@@ -2059,7 +2060,7 @@ checkable by eye.
     text). The dB does not reproduce anywhere.
     WHAT THIS MEANS FOR X6's RULING: the objection that stopped the flip — "the smaller file is a
     worse picture" — is not supported. The saving is real and the picture is not worse. It is still
-    PO's call, and one gap is named rather than papered over: this sweep feeds CANVAS frames while
+    Robert's call, and one gap is named rather than papered over: this sweep feeds CANVAS frames while
     the production raw channel feeds GPU-resident frames from a MediaStreamTrackProcessor. The
     config transfers; the frame source does not. Confirm through `npm run exp -- x6` before a flip.
 
@@ -2113,14 +2114,14 @@ checkable by eye.
     AND THE BACKLOG ENTRY ASKED FOR THE WRONG FILE. It says a trim takes the render path. It does
     not: smart cut has been the default since 2026-08-25 and copies the composite's packets, so a
     trimmed take is BIT-IDENTICAL to the untrimmed one. The render's number is what a user sees only
-    when smart cut declines. BACKLOG P1 rewritten: confirmed live, dropped to P2, PO's to rule on.
+    when smart cut declines. BACKLOG P1 rewritten: confirmed live, dropped to P2, Robert's to rule on.
     FOUND ON THE WAY, NOT CHASED (new BACKLOG P2): the render places the CAMERA PiP about half a
     second from where the instant path places it — the moving PiP best-matches at -14/-15 frames and
     even there reads 23.6 dB, while the STILL screen region of the same two files matches at 37.1.
     The two paths agree about pixels and disagree about WHEN. The oracle bands audio-vs-video and
     would not see a video-vs-video placement difference between export paths.
 
-(d) FOLLOW-ON, ON PO'S "c shit is worse colors" (2026-08-26, PO looked at the artifacts): HE IS
+(d) FOLLOW-ON, ON ROBERT'S "c shit is worse colors" (2026-08-26, Robert looked at the artifacts): HE IS
     RIGHT, IT IS THE BIGGEST EFFECT IN THIS TASK, AND NO PAIR ROW IN X15 COULD HAVE SEEN IT.
     Lanes (a) and (c) compare files with each OTHER, so a loss every path shares — which is exactly
     what 4:2:0 chroma subsampling is — cancels to zero. Measured instead against the canvas the
@@ -2175,7 +2176,7 @@ question about coloured glyph edges and the motion control has none, so a motion
 priced nothing — but it is an omission and not a null result. And no lane ran at 4K or under load.
 FULL SWEEP: 458 tests · typecheck clean · every lane re-runnable in one command.
 
-(X7, X10=O5e, X13: NEEDS PO DISCUSSION — see the READY map. X11, X14: PARKED — see the READY map.)
+(X7, X10=O5e, X13: NEEDS ROBERT DISCUSSION — see the READY map. X11, X14: PARKED — see the READY map.)
 
 ═══ P0 ═══
 
@@ -2314,7 +2315,7 @@ per take recovered by the drain that used to be discarded. Healthy 1080p: tail 7
 unchanged), delivered 29.7/29.9 fps (unchanged), drain costs 242 ms at stop and recovers 0 bytes,
 because there is nothing to recover.
 (a) THE GATE CAN NOW SEE IT: `npm run oracle:load` (scripts/oracle-load.mjs) runs the band under the
-4K load and exits non-zero when it is red. HEAVY — announce it, never run it under the PO's feet, and
+4K load and exits non-zero when it is red. HEAVY — announce it, never run it under Robert's feet, and
 it is deliberately NOT in the pre-push hook. Proven red before the fix by the same harness (675/922 ms
 with the drain disabled, 2734 ms as shipped); reproduce by setting DRAIN_BUDGET_MS = 0.
 (b) INSTRUMENTED: LiveCompositeStats (frames painted, chunks, drain ms, bytes recovered, timed out) in
@@ -2390,7 +2391,7 @@ decodable webm — so it would trade crash salvage for CPU. Hardware encode move
 its own fragmented-MP4 muxer. THE RE-TEST RIG IS GONE (X3, 2026-08-26): the verdict is settled and
 the approach is in the REJECTED list, so `perf/mp4Capture.ts` was deleted. X6 will write its own
 mid-take-kill snapshot check against the WebCodecs path it builds, which is the shape that matters now.
-NEEDS PO RECHECK: camera-only take on a real camera should now record 1080p, not 720p.
+NEEDS ROBERT RECHECK: camera-only take on a real camera should now record 1080p, not 720p.
 (b) STATUS 2026-08-26: X6 UNBLOCKS THE HALF THAT WAS IMPOSSIBLE, and gates it on X6's own flip.
 The re-scope below concluded "Chromium raw channels stay VP9, so a single-generation packet copy into
 MP4 is impossible there". That is no longer true: X6 records raw channels as AVC in fragmented MP4,
@@ -2402,7 +2403,7 @@ which is exactly the copyable shape O3b needed. So both halves are now buildable
     alive once the composite is gone — and without it, skipping the composite would trade "instant
     is law" for CPU, which is not a trade this product may make.
 The copy half only works when the raw channel IS mp4/AVC, i.e. when X6 is on, and X6 is off by
-default pending PO's ruling on the picture change it makes (see the X6 handoff). SO O3b IS NOT
+default pending Robert's ruling on the picture change it makes (see the X6 handoff). SO O3b IS NOT
 BLOCKED ON CODE ANY MORE — it is blocked on the same decision X6 is, and it should be taken up in the
 same breath: if X6 flips, O3b is the task that collects the reward.
 (b) ee/o3-single-gen — original note (re-scoped 2026-08-23), still to do: a take with exactly ONE video channel whose dims ==
@@ -2417,7 +2418,7 @@ GATES (b): screen-only 1080p take: console proves no composite recorder · insta
 PSNR/visual evidence that single-generation ≥ composite-generation quality · capture write bandwidth
 ~halved (bytes/s logged) · all oracles green.
 
-## O3b HANDOFF — DONE 2026-08-29. BOTH HALVES BUILT; the EXPORT half is on, the CAPTURE half is PO's.
+## O3b HANDOFF — DONE 2026-08-29. BOTH HALVES BUILT; the EXPORT half is on, the CAPTURE half is Robert's.
 Rig: `npm run exp -- o3b` (add `{"crops":true}` for magnified before/after glyphs). Seven gates, two
 runs, all green both times.
 
@@ -2433,14 +2434,14 @@ THE ONE COST, AND IT IS NOT IN THIS TASK'S OWN "free — strictly less work" FRA
 13.9-22.6 %. The raw channel spends more of the same 8 Mbps ceiling on the same seconds than the
 composite does. THE COLOUR WIN IS NOT BOUGHT WITH THOSE BYTES and that distinction matters — X15(b)
 measured 3x the bitrate buying 4 % of the fringe on 4:2:0, so chroma is structural, one generation
-against two. Part of the 1.8 dB luma IS the bits. PO should see the size number; `?singlegen=off`
+against two. Part of the 1.8 dB luma IS the bits. Robert should see the size number; `?singlegen=off`
 reverts in one load. The rig gates the size at ≤25 % so a future rate-control change that doubles a
 download cannot land quietly.
 
 THE CAPTURE HALF, and why it is OFF: `?singlegen=capture` makes startComposite() return before it
 starts anything. Measured: capture writes 0.36-0.38 MB/s with the composite and 0.20 without —
 45-49 % less per second of take, and one hardware encoder that never runs. WHAT IT GIVES UP IS REAL
-and is why it is PO's, not mine:
+and is why it is Robert's, not mine:
   · SOURCE LIVENESS lives inside the compositor (capture/sourceLiveness.ts), so "your screen froze"
     detection goes with it;
   · the recording preview can no longer render the compositor's own output and falls back to the raw
@@ -2530,7 +2531,7 @@ The COMPOSITE stays avc: it is what instant export packet-copies into the blind-
 GATES: oracle sync ≤10 ms 10/10 · 08-22 4K rig: delivered ≥28 fps at 1080p output (baseline 21.5/11.9)
 · mid-record tab-kill salvages composite + all channels · forced-slow harness proves watchdog fallback
 · capture CPU ≤ O3 baseline (report) · unedited instant export ≤ 200 ms · ZERO TAIL LOSS at stop
-(distinctive final-second event present in export, drain-verified — PO hard requirement) · all oracles green.
+(distinctive final-second event present in export, drain-verified — Robert hard requirement) · all oracles green.
 ── HANDOFF 2026-08-24 (SIXTH session, "go O4") — SOLVED. THE "2-10 FPS WALL" WAS THE INSTRUMENT'S
    COLD START, AND THE THROUGHPUT GATE IS MET. Engine remains merged + DORMANT behind ?engine=v2.
 THE FINDING, with the cells that forced it (the o4worker bisect, deleted by X3 once it had answered): the
@@ -2556,7 +2557,7 @@ SHIPPED THIS SESSION: o4step2 warms v2 with one discarded 2.5 s take before meas
    recording), so patience beats a false kill · the o4worker bisect harness was DELETED by X3
    (2026-08-26) — its question is answered and the answer is note 6; git history has the rig if a
    future throughput mystery ever needs the same cell-by-cell method.
-MEASURED ON THE FIXED INSTRUMENT (warm, 10 s takes, same day, TD machine):
+MEASURED ON THE FIXED INSTRUMENT (warm, 10 s takes, same day, dev machine):
    1080p: v2 delivers 28.4 fps vs v1 29.3 — THE ≥28 GATE IS MET (this line read "2-10" yesterday) ·
    v2 main-thread long tasks 0 ms vs v1 198 ms · encoder latency 14 ms, 0 drops, peak queue 1 ·
    tail −233 ms (the drain runs past the declared end — bytes, not tail) · oracle PASS on both
@@ -2603,7 +2604,7 @@ NOT DONE, unchanged: WebGPU backend — now clearly the 4K lever, not the 1080p 
 HARNESS GREW (second session): exp.mjs `--cpu` (OS-sampled whole-browser CPU, throwaway-profile
    runs only) and `--profile=<dir>` (REUSE a Chrome profile across runs and keep it — how the
    per-launch cold-start verdict was measured).
-── THE DEFAULT FLIPPED (third 08-24 session, PO: "finish this shit already") ──
+── THE DEFAULT FLIPPED (third 08-24 session, Robert: "finish this shit already") ──
 engine.ts default v1 → v2; v1 stays as the three-rung ladder (capability / start failure / mid-take
 watchdog) and behind `?engine=v1` + localStorage. Two scope calls, both recorded as decisions:
 preview-from-compositor is an OPTIMIZATION (both engines pay the same preview <video> decodes
@@ -2620,7 +2621,7 @@ prod QA in real Chrome: 8/8 gates, 0 console errors, export 504 ms against v1's 
 warm suppressed vs +359/+259/+249 with it — the spread is the loaded machine; o7-measure gained an
 INOUT_O7_QUERY env for exactly this A/B) · `npm run exp -- armcancel` green (cancel 374 ms, arm
 215 ms, zero live tracks after stop).
-AWAITING PO: the first real take on the new default. If anything is off: `?engine=v1` reverts this
+AWAITING ROBERT: the first real take on the new default. If anything is off: `?engine=v1` reverts this
 load, localStorage['inout.capture.engine']='v1' reverts sticky, and the session console prints
 which engine ran.
 ── HANDOFF 2026-08-25 (ELEVENTH session) — O4-POLISH'S SYNC-ANCHOR ITEM IS RETIRED, WITH NUMBERS.
@@ -2647,7 +2648,7 @@ WHAT THE RIG FOUND (`npm run exp -- o4clock`, new; 20 s, both sources, canvas ca
        instrument's own sync noise floor is ~8-9 ms 1σ (note 1), so this is not measurable on the
        gate even if it were free.
    (3) It is not free. The media clock runs −20 to −26 ppm against the wall clock, so a whole-take
-       minimum would trade a 3 ms fixed error for 18-23 ms of DRIFT on a 900 s take — and PO records
+       minimum would trade a 3 ms fixed error for 18-23 ms of DRIFT on a 900 s take — and Robert records
        938-1800 s. A sliding-window minimum bounds that, and was written and unit-tested, but it is
        eight fenced files-worth of capture-path risk for ≤3 ms nobody can measure.
    AND THE RESIDUAL ITSELF IS NOT JITTER, provably: the oracle rig uses these same canvas sources,
@@ -2669,12 +2670,12 @@ Generalize to DIRTY-SEGMENT rendering: only spans whose PIXELS an edit changed r
 move during minute 2 → render minute 2, packet-copy the rest) — this is what keeps even visual edits
 near-instant; F2/F4 tracks must expose per-span dirty ranges for it.
 (d) codec ladder above avc: probe hevc/av1 hardware encode (isConfigSupported, mp4 container); avc
-floor, vp9/webm last (codecs.ts FALLBACK_CHAINS is the seam). (e) VFR option (PO-approved): preserve
+floor, vp9/webm last (codecs.ts FALLBACK_CHAINS is the seam). (e) VFR option (Robert-approved): preserve
 source presentation timestamps from frame-driven takes instead of CFR resampling — high-Hz scrolls
 stay smooth; CFR 30 stays the default.
 Constraints: certified audio path behavior identical (fidelity oracle is the proof); progress UI keeps
 working; abort works mid-pipeline.
-GATES: 60 s 1080p30 edited synthetic take ≥5× realtime on the TD machine (report ×; stretch 8×) ·
+GATES: 60 s 1080p30 edited synthetic take ≥5× realtime on the dev machine (report ×; stretch 8×) ·
 trim-only edit of a 30 s take ≤1 s · zero main-thread long tasks >50 ms during export (trace) · every
 ladder rung's file plays (Chrome + Safari where the codec applies) · fidelity+sync green.
 ── HANDOFF 2026-08-24 (SEVENTH session, "roadmap all O and F") — (a)(c)(d) SHIPPED, (b) MEASURED AND
@@ -2799,11 +2800,11 @@ delivery collapses, console-evidenced. Export resolution options tie into F7.
 Constraints: NEVER regress the 08-22 4K-freeze fix — degradation engages before starvation; default
 export stays 1080p30 unless the user chooses higher (F7).
 GATES: 4K rig on a capable machine sustains ≥25 fps at 4K encode OR degrades stepwise with console
-evidence and zero freeze · PO's real 4K-game-tab scenario re-verified · oracles green.
+evidence and zero freeze · Robert's real 4K-game-tab scenario re-verified · oracles green.
 
-HANDOFF O6 — THE LADDER IS BUILT AND TESTED; THE CAP RAISE IS BEHIND A FLAG AND AWAITS PO'S HARDWARE
+HANDOFF O6 — THE LADDER IS BUILT AND TESTED; THE CAP RAISE IS BEHIND A FLAG AND AWAITS ROBERT'S HARDWARE
 (2026-08-26, THIRTEENTH SESSION).
-WHY IT IS NOT SIMPLY ON. O6's own gate says "PO's real 4K-game-tab scenario re-verified", and this
+WHY IT IS NOT SIMPLY ON. O6's own gate says "Robert's real 4K-game-tab scenario re-verified", and this
 session MEASURED why no rig can stand in for that: a synthetic 4K source is a rAF-painted canvas, so
 its delivered fps is dominated by the painting, a cost a real 4K display (composited by the OS) does
 not have. Capping the synthetic track to 1080p moved oracle:load's fps from 14 to 14. So the thing
@@ -2832,7 +2833,7 @@ stop) · build clean. The DEFAULT PATH IS BYTE-FOR-BYTE UNCHANGED — with the f
 behaves exactly as before and onDegradeStep never fires.
 GATE NOT MET, and it is the one that matters: "4K rig sustains ≥25 fps OR degrades stepwise with
 console evidence". The degradation logic is tested at every boundary; the 4K rig cannot exercise it
-for the reason above. TO FINISH O6: PO turns on `?nativeres=1`, records the 4K game tab that froze on
+for the reason above. TO FINISH O6: Robert turns on `?nativeres=1`, records the 4K game tab that froze on
 08-22, and reports what the console says — `[capture] native-res capture: leaving display at …`
 followed by either nothing (it held) or `[capture] display stepped 3840×2160 → 2560×1440 (…)`. That
 one report is the whole remaining gate.
@@ -2879,11 +2880,11 @@ painted in JS — and capping the track downscales after that painting has alrea
 4K display is composited by the OS and costs the page nothing to produce, so no synthetic fixture can
 model its delivered fps. The band therefore stays at 10, not because the rig is uncapped but because
 its fps number is dominated by a cost production does not have.
-WHAT WOULD TIGHTEN IT is PO's hardware: a real 4K display, which is also O6's own gate ("PO's real
+WHAT WOULD TIGHTEN IT is Robert's hardware: a real 4K display, which is also O6's own gate ("Robert's real
 4K-game-tab scenario re-verified"). Until then the band catches collapse and nothing finer, and it
 says so.
 
-## O9. text-perfect — screen text without smear  [P2, after O4+O5; PO: "text is important"]
+## O9. text-perfect — screen text without smear  [P2, after O4+O5; Robert: "text is important"]
 Why: 4:2:0 chroma subsampling + generic encoder tuning fringes and smears colored text — the visible
 difference between a mushy Loom and a crisp file. Frame-driven capture makes static text cheap.
 Goal: (a) 4:4:4 encode where hardware supports it (probe); (b) AV1 screen-content tools (palette/IBC)
@@ -2945,18 +2946,18 @@ AND IT IS AIMED AT THE SMALLER HALF OF THE PROBLEM. No default changed.
     really does buy 4 %. WHAT DIES: the recommendation's reasoning ("the lever that reaches the big
     half is CAPTURE, which is X6"). X6 encodes AVC 4:2:0 and was never going to help text, and now
     there is no capture-side damage for it to have helped with either.
-RECOMMENDATION, and it has a tension in it that PO should see rather than have resolved quietly: the
+RECOMMENDATION, and it has a tension in it that Robert should see rather than have resolved quietly: the
 lever that reaches the big half is CAPTURE, which is X6. But X6 as built encodes AVC 4:2:0, so it
 does not fix text either; fixing text at capture means AV1 4:4:4 at capture, which on this machine is
 SOFTWARE — the exact CPU cost X6 exists to remove. Flipping the EXPORT to AV1 4:4:4 is the cheap,
-real, small win (half the export's fringe, fewer bytes) and it is PO's call because AV1 playback is
+real, small win (half the export's fringe, fewer bytes) and it is Robert's call because AV1 playback is
 not universal — O9's own gate says "every mode plays cross-browser per ladder", and that is the
 question to answer before the ladder gains an AV1 rung.
 NOT DONE: (c) near-lossless static spans. It is a bitrate-allocation idea, and the measurement above
 says allocation is not what text is losing — 3× the bits bought 4 %. It should be re-proposed only
 against the codec table, not against intuition.
 
-## O10. audio-depth — beyond certified  [P2, after O2; (d) lands with P4; PO: "quality all doing"]
+## O10. audio-depth — beyond certified  [P2, after O2; (d) lands with P4; Robert: "quality all doing"]
 Goal: (a) EBU R128 loudness targeting (−14 LUFS integrated) as an ADDITIVE mode first — fidelity
 oracle updated in the same branch, current behavior stays until parity proven; (b) multitrack export
 option: mic + system audio as separate mp4 tracks, default stays flattened; (c) deterministic
@@ -2965,7 +2966,7 @@ removed from mic) — in the P4 shell where a proper reference signal exists.
 GATES: R128 integrated −14 ±0.5 LUFS on the synthetic set · multitrack file: tracks separate, default
 unchanged · gating: zero triggers on the clean-speech fidelity set · fidelity oracle green throughout.
 
-HANDOFF O10(a) — MEASURED AND BUILT 2026-08-26 (THIRTEENTH SESSION), AND THE MODE IS A NO-OP UNTIL PO
+HANDOFF O10(a) — MEASURED AND BUILT 2026-08-26 (THIRTEENTH SESSION), AND THE MODE IS A NO-OP UNTIL ROBERT
 ALLOWS ATTENUATION. (b)(c)(d) not started.
 (1) THE MEASUREMENT THAT JUSTIFIES THE TASK. The shipped makeup normalises the p90 of 100 ms window
     RMS — unweighted, ungated. Measured on the DECODED EXPORT of three content shapes
@@ -3000,7 +3001,7 @@ ALLOWS ATTENUATION. (b)(c)(d) not started.
     BELOW 1 (0.899 / 0.646 / 0.365), because INOUT's exports are ALREADY 1-9 dB LOUDER than the
     −14 LUFS convention, and the bounding never attenuates (`Math.max(1, …)`, inherited from the p90
     path where turning a take down was never on the table).
-WHAT PO HAS TO DECIDE, stated plainly because it is not TD's to take: R128 targeting can only close
+WHAT ROBERT HAS TO DECIDE, stated plainly because it is not an engineering call: R128 targeting can only close
 this spread by turning takes DOWN. That makes every export quieter — most of all the bright ones,
 which lose ~9 dB — and it interacts with the limiter's knee. It is the correct thing by the standard
 and it is a change to how everything sounds. The measurement, the implementation and the switch are
@@ -3008,10 +3009,10 @@ all in place; the only missing piece is permission to attenuate.
 NOT STARTED: (b) multitrack export, (c) spectral-gating noise reduction, (d) cross-channel AEC (P4).
 
 ## O11. bits-audit + codec-autoswitch — (a)(b)(c) DONE 2026-08-23, (d) BLOCKED ON P1's 3-engine rig
-PO 2026-08-23: "top shit; auto-switch per browser, invisible; never make it worse for everyone
+Robert 2026-08-23: "top shit; auto-switch per browser, invisible; never make it worse for everyone
 because one system can't; camera-with-screen is a small rectangle anyway."
 Why: file size is set by flat 8 Mbps ceilings chosen blind — nobody has measured where the bits go.
-The autoswitch PO asked for is already the house pattern (recorder mime probe, WebKit audio path,
+The autoswitch Robert asked for is already the house pattern (recorder mime probe, WebKit audio path,
 encoder fallback chains, capability gating); this extends it to the codec rung, evidence first.
 (a) BITS AUDIT (light, FIRST — prices every other lever): onEncodedPacket telemetry on the render
 path + composite stats — keyframe share of bytes, achieved-vs-ceiling bitrate, per-channel bytes/s —
@@ -3020,7 +3021,7 @@ console-logged; certification tag gains the codec rung. No lever below ships wit
 ~5 s. Identical pixels; only player seek granularity coarsens. Expected 10-30 % off static-screen
 exports — (a) decides. The instant path gets GOP control only when O4 owns the capture encoder.
 (c) CAMERA-WHEN-PIP (light): capture side ALREADY rightsized by O3a (720p ideal + 4 Mbps + motion
-hint when screen present) — PO's instinct, half shipped. Remaining now: raw camera channel
+hint when screen present) — Robert's instinct, half shipped. Remaining now: raw camera channel
 4 → ~2.5 Mbps, visual-evidence gated (saves disk + write bandwidth only; the exported PiP already
 costs ~7.7 % of frame area so the file barely changes). Post-O4: encode the camera channel at its MAX
 RENDER size exactly (default PiP 461 px wide @1080p; F4 resize ceiling × largest tier = 1280 px, so
@@ -3064,14 +3065,14 @@ current Chrome + Safari + Firefox (P1 rig) · export throughput ≥1× realtime 
    STILL TO DO for (a): the same telemetry on the RENDER path (compose/pipeline.ts), and the codec rung
    in the certification tag. Both are independent of O4 and can be done in any session.
 
-## O12. persistent-share — keep the screen share alive BETWEEN takes  [PO-GATED — deferred 2026-08-25, PO: "we will consider it later". Do NOT start without PO's go.]
+## O12. persistent-share — keep the screen share alive BETWEEN takes  [Robert-GATED — deferred 2026-08-25, Robert: "we will consider it later". Do NOT start without Robert's go.]
 Why: the strongest possible fix for the Chrome share wedge (docs/SCREEN_WEDGE.md — the open
-Chrome-side bug that PO's rapid record/stop stress test reproduces). Every take today opens Chrome's
+Chrome-side bug that Robert's rapid record/stop stress test reproduces). Every take today opens Chrome's
 picker, creates a fresh SCK capture session, and tears it down at stop; the wedge accumulates with
 that churn. Keeping ONE share across takes removes the picker from every take after the first,
 removes the create/teardown cycles that aggravate Chrome, and makes every screen take start
 instantly.
-Cost, and why it is PO's call, not TD's: the sharing indicator stays lit BETWEEN takes, and the app
+Cost, and why it is Robert's call, not an engineering one: the sharing indicator stays lit BETWEEN takes, and the app
 would hold a screen claim while not recording — which cuts against two standing rules ("no idle
 device access", "off is a real stop"). Shape if approved: opt-in ("keep sharing between takes"),
 a visible affordance to drop the share at any time, share reused only if the surface is still live,
@@ -3080,7 +3081,7 @@ GATES if built: zero picker on take 2+ · indicator/claim honestly presented in 
 verified (zero live tracks after "stop sharing") · the wedge stress test (10 rapid cycles) green ·
 oracles green.
 
-═══ PHASE F — FEATURES (PO-approved 2026-08-22; order below; F7 independent) ═══
+═══ PHASE F — FEATURES (Robert-approved 2026-08-22; order below; F7 independent) ═══
 
 ## F1. mid-take-cuts — DONE 2026-08-23, merged (evidence in DECISIONS)
 EditState.segments (optional KeptSegment[]) + piecewise output→recording mapping; video and preview
@@ -3091,7 +3092,7 @@ cuts, joint discontinuity 0.000 vs 0.168 baseline, no-op segment lists dropped.
 Deferred to O5: smart-cut so cut exports are duration-independent (12 s take + 3 cuts = 1473 ms today).
 
 ## F2. zoom-pan — DONE 2026-08-23, merged (evidence in DECISIONS)
-PO confirmed the scope this session: TIMED zooms, not a static reframe.
+Robert confirmed the scope this session: TIMED zooms, not a static reframe.
 Shipped: timeline/viewportTrack.ts — F4's camera track with a different subject, deliberately (the
 roadmap said copy it, do not invent a second one). Fractions of the frame, keyframes on the RECORDING
 timeline, a gesture writes the anchor/target PAIR that LANDS on the playhead. The viewport is a
@@ -3152,7 +3153,7 @@ DEFERRED: live-drag DURING recording (out of scope v1, revisit after O4 makes th
 edit-aware); F2 will reuse the same track shape for a viewport.
 
 ## F5. silence-speed — (a) and (b) BOTH DONE 2026-08-23, merged (evidence in DECISIONS)
-PO: okay. Deterministic DSP only — NO transcript, NO ML, ever.
+Robert: okay. Deterministic DSP only — NO transcript, NO ML, ever.
 (a) DONE. timeline/silence.ts (pure: envelope -> quiet stretches -> padded cuts -> F1 segments) +
 compose/analyzeSilence.ts (opens exactly the mixers the export would, over exactly the current edit;
 code-split so the decoder loads only when the button is pressed) + a Tighten button, a proposal bar
@@ -3195,7 +3196,7 @@ GATES (b) — MET: pitch within 10 cents (measured −0.08 / +0.20) · sync band
 reported (0.97-1.03×).
 
 ## F6. pause-retake  [P1, after O4 — build segments on the new engine once, not twice]
-PO: yes. Pause/resume + retake-from-here.
+Robert: yes. Pause/resume + retake-from-here.
 Goal: the recording session gains segments: pause stops feeding recorders (devices STAY armed — no new
 permission or idle-access surface), resume opens segment N+1 with its own epoch anchor; per-segment
 durable blobs; the timeline concatenates segments; retake = drop the tail segment and re-record it.
@@ -3247,7 +3248,7 @@ NOT DONE, and named rather than implied:
     stands alone; retake should be its own task against this segment machinery.
   · The multi-segment ORACLE matrix (cross-segment sync in band). The seam is measured above as a
     timeline gap, which is the property the segments must have; what is not measured is A/V sync
-    ACROSS a seam on a fiducial take. Worth doing before PO leans on pause for long takes.
+    ACROSS a seam on a fiducial take. Worth doing before Robert leans on pause for long takes.
   · Tab-kill mid-segment-2 salvage. The manifest is rewritten at pause and at resume, so the
     ingredients are there; it is untested.
 
@@ -3271,9 +3272,9 @@ so the prediction lands 47 % low at 1440p; and the size-vs-resolution shape is c
 ~linear, motion ~sqrt; composite keyframe share separates them 68.8 % vs 1.1 %). The default step's
 number is EXACT (it is the file); everything else is marked "~".
 
-## F7b (original spec, kept for the follow-on)  [PO 2026-08-23]
-PO: slider before export with SIZES shown per step; "step is whatever optimal" — TD picks from
-evidence. UI REFERENCE (PO): "like claude code / chatgpt effort level" — a discrete stepped control
+## F7b (original spec, kept for the follow-on)  [Robert 2026-08-23]
+Robert: slider before export with SIZES shown per step; "step is whatever optimal" — picked from
+evidence. UI REFERENCE (Robert): "like claude code / chatgpt effort level" — a discrete stepped control
 with a handful of NAMED levels, not a continuous slider; selecting a level shows its predicted MB.
 Builds on F7's shipped slider + estimator; this is more rungs, not a new control.
 Goal: the ladder becomes size-ordered steps mixing resolution AND bitrate (e.g. 720p-lean · 720p ·
@@ -3423,7 +3424,7 @@ duration, which is nonsense for a take that renders a near-static waveform. It i
 rough guide, which is honest; making it a NUMBER would need the audio-only render measured, and this
 session had no evidence for one. Do not invent a constant for it.
 
-## F8. nle-scrub — frame-exact editor feel  [P2, after O4; PO-approved]
+## F8. nle-scrub — frame-exact editor feel  [P2, after O4; Robert-approved]
 Goal: keyframe-index-driven preview — scrub decodes the EXACT frame (WebCodecs random access) instead
 of <video> seek granularity; filmstrip thumbnails from the keyframe index; GPU-rendered waveforms.
 This is the "Final Cut timeline feel" the product statement names.
@@ -3491,10 +3492,10 @@ F8 IS CLOSED 2026-08-26 (THIRTEENTH SESSION) — the 60 fps trace is measured, a
   What is demonstrated is INDEPENDENCE of length over a 15× range, which is the property the constants
   predict; a 30-minute fixture would confirm it and would take 30 minutes to record.
 
-═══ PHASE P — PORTS (PO-approved direction 2026-08-22; P1/P2/P3/P5a may run parallel with O-phase) ═══
+═══ PHASE P — PORTS (Robert-approved direction 2026-08-22; P1/P2/P3/P5a may run parallel with O-phase) ═══
 
 ## P1. browser-breadth — Firefox + OS-aware capabilities + 3-engine oracle  [P2, medium, parallel-safe]
-Why: PO override "every capable browser". Verified 2026-08: Firefox 130+ has full desktop WebCodecs
+Why: Robert override "every capable browser". Verified 2026-08: Firefox 130+ has full desktop WebCodecs
 incl. Opus AudioEncoder → our MEASURED audio path runs as-is; getDisplayMedia AUDIO is silently
 ignored (tracking bug unassigned) → drop the channel with honest copy (Safari machinery exists);
 no AAC encoder → export lands on the existing avc+opus / vp9+opus chains. Also: Chromium on WINDOWS
@@ -3523,7 +3524,7 @@ Firefox macOS/Windows/old and Chrome on Windows. 12 unit tests cover every cell.
 EVIDENCE: spoofed Firefox 131 through the whole flow on the production build — engine reads `gecko`
 and the channel list comes back ["Screen","Camera","Mic"], Tab Audio dropped by the matrix, all 8
 gates PASS (export 1.5 MB 1920×1080 in 507 ms). docs/qa/firefox-ua.json. Real Chrome unregressed.
-OPEN FOR PO, one command each:
+OPEN FOR ROBERT, one command each:
   (a) real Firefox needs Playwright's gecko driver — this runner speaks CDP, which Firefox does not:
       npm i -D playwright && npx playwright install firefox
       after which the oracle's third engine can be wired to it (and O11d unblocks).
@@ -3538,7 +3539,7 @@ beforeinstallprompt affordance with remembered dismissal. Offline reload reaches
 the network provably blocked; capture verified unaffected under a controlling worker.
 Gate script: `node scripts/pwa-check.mjs`. Lighthouse itself not run (not installed).
 
-## P3. ru-pack part 1 — DONE 2026-08-23, merged (2 gates await PO hardware/network — see handoff)
+## P3. ru-pack part 1 — DONE 2026-08-23, merged (2 gates await Robert hardware/network — see handoff)
 Why: RU market ≈ 75 % Chromium (Chrome ~53 % + Yandex ~18 %, current Chromium base, verified 2026-08).
 The real risks are infra and auth, not the engine.
 Goal: Yandex Browser slot in the QA matrix + version-floor probe · reachability test of app + Supabase
@@ -3549,8 +3550,8 @@ no mass string churn yet (avoids F-phase conflicts). Aurora OS: explicitly out (
 GATES: Yandex smoke capture→edit→export documented with version · reachability report · auth-alt
 design in ARCH + stub compiles · zero behavior change for current users.
 ── HANDOFF 2026-08-23 (ee/p3) — DONE except the two gates that need hardware/network we don't have.
-GATE 1 Yandex smoke — PARTIAL, honestly. Yandex Browser is NOT installed on the TD machine and
-  installing it is a download, which is PO's to run. So the gate was turned into ONE command:
+GATE 1 Yandex smoke — PARTIAL, honestly. Yandex Browser is NOT installed on the dev machine and
+  installing it is a download, which is Robert's to run. So the gate was turned into ONE command:
   `node scripts/browser-check.mjs --browser=yandex --out=docs/qa/yandex.json` — it finds Yandex at
   both macOS app spellings, drives the PRODUCTION build through record→stop→editor→export in the
   real browser, and writes the row's evidence. What IS measured: Chrome 151.0.7922.170 PASS on all
@@ -3567,12 +3568,12 @@ GATE 2 reachability — report written (docs/RU_REACHABILITY.md) with a non-RU B
   India blocked it at Jio/Airtel/ACT on 2026-02-24), and Vercel shared-IP collateral blocks (#3,
   reports 2021→Jan 2026; *.vercel.app keeps working while custom domains die, so the custom domain
   we don't have yet is the exposure). Nothing threatens a RECORDING — capture/edit/export are local.
-GATE 3 auth-alt design — BUILT, THEN REMOVED ON PO INSTRUCTION 2026-08-23: "dont do auth alternatives
+GATE 3 auth-alt design — BUILT, THEN REMOVED ON ROBERT INSTRUCTION 2026-08-23: "dont do auth alternatives
   for rus, just prepare it to work in yandex browser." The Yandex ID / VK ID / email-OTP adapter and
   the optional CloudProvider members are gone; the contract is exactly what it was. Consequence,
   recorded so it is a decision and not a surprise: where accounts.google.com is unreachable, cloud
   sharing is simply unavailable there — capture, edit and export are local and keep working, so the
-  user still gets their file, just not a link. Do not re-add without PO asking.
+  user still gets their file, just not a link. Do not re-add without Robert asking.
 GATE 4 zero behavior change — held. typecheck clean · 181/181 tests (28 new) · oracle PASS
   (sync 36.2 ms, spur −52.4 dB, jump 0, tail 70 ms, export 5.04×) · first paint 225,689 B vs the
   ≤300 KB O7 gate. The below-floor notice is the only new UI and it is silent on every browser that
@@ -3586,7 +3587,7 @@ i18n DECIDED, not started (docs/RU_REACHABILITY.md): flat typed catalog in src/a
   format.ts as the number/date seam, and EXTRACTION IS MANUAL-ON-TOUCH — a mass string rewrite now
   would collide with F2/F3/F4/F5, all of which are editing UI files.
 Aurora OS: OUT, decided, not a backlog item — no modern engine ships on it.
-STILL OPEN for PO: (a) install Yandex Browser + run the one command above; (b) run the reachability
+STILL OPEN for Robert: (a) install Yandex Browser + run the one command above; (b) run the reachability
   probe from an RU connection without a VPN.
 
 ## P4. desktop-shell — Electron + native capture bridges  [P1 of phase, heavy, AFTER O4/O5]
@@ -3597,7 +3598,7 @@ Safari-grade exactly where it matters most; Electron = engine parity everywhere.
 Goal: shell + a bridge contract feeding the O4 worker compositor: macOS ScreenCaptureKit (screen +
 system audio + cursor data), Windows Graphics Capture + WASAPI loopback, Linux PipeWire. Cursor/click
 event stream as a metadata track (schema in types.ts, compatible extension). Global hotkey record,
-tray controls. PO "maybe someday" (design for, do NOT build): cursor-EXCLUDED capture + vector cursor
+tray controls. Robert "maybe someday" (design for, do NOT build): cursor-EXCLUDED capture + vector cursor
 re-render (sharp at any zoom, click ripples) — the metadata track schema must make it possible later. Distribution: notarized DMG (+ MAS later), Windows installer + winget, Flatpak.
 GATES: macOS screen+system-audio+mic take → export, all lanes in sync bands · click-metadata aligns
 to video ≤50 ms (oracle extension) · Windows equivalent with loopback audio · engine parity: same
@@ -3630,7 +3631,7 @@ type) → h264 mp4 file → shared engine, same file-handoff shape as P5b. Distr
 GATES: screen+internal-audio take → shared-engine export plays · survives app-switch/background ·
 RuStore + Play listing drafts · zero editor code duplicated.
 
-## P7. hdr — capture→export HDR  [P3, after P4, heavy horizon; PO-approved]
+## P7. hdr — capture→export HDR  [P3, after P4, heavy horizon; Robert-approved]
 Why: SCK (macOS/iOS 27) and Windows Graphics Capture deliver HDR; nobody in the product class ships
 HDR screen recording end-to-end.
 Goal: HDR capture in the P4 shell → HDR10/HLG export with a tone-mapped SDR fallback; browsers stay
@@ -3638,14 +3639,14 @@ SDR until WebCodecs HDR hardens.
 GATES: HDR take on an HDR display → file carries HDR metadata (probe evidence) and plays · SDR
 fallback renders correctly · zero SDR-path regression.
 
-## P8. safari-mic — sound survives a real Safari take  [P0 of the Safari lane; BLOCKED ON PO ARTIFACT — do not code from theory]
-PO 2026-08-25, real Safari take: "mic sound got only couple second in middle and nothing else."
+## P8. safari-mic — sound survives a real Safari take  [P0 of the Safari lane; BLOCKED ON ROBERT ARTIFACT — do not code from theory]
+Robert 2026-08-25, real Safari take: "mic sound got only couple second in middle and nothing else."
 History that forbids guessing: the 2026-07 "fix" routed Apple WebKit audio through MediaRecorder
 mp4/aac (session.ts isAppleWebKit gate, replacing the measured path that truncated at ~1 s) and was
 verified only under a SPOOFED UA — which proves the code path runs, not that the sound survives.
 Three capture "fixes" argued from code ordering have failed in the field in this project; this one
 starts from evidence or not at all.
-UNBLOCK = ONE artifact from PO, either: (a) the exported file itself (ffprobe splits the question —
+UNBLOCK = ONE artifact from Robert, either: (a) the exported file itself (ffprobe splits the question —
 is the gap in the raw mic channel or manufactured by the export?), or (b) a Safari take with the
 console open, copied out.
 CANDIDATE CAUSES to test against the artifact, not before: Safari MediaRecorder timeslice chunking
@@ -3653,16 +3654,16 @@ CANDIDATE CAUSES to test against the artifact, not before: Safari MediaRecorder 
 Safari's mp4 sample tables at decode · a second consumer of the mic track (level meter / v1
 composite Web Audio graph) silencing the recorder — Safari mutes an earlier mic consumer when a
 later one attaches.
-GATES: a real-Safari take (PO's machine) plays full-length mic audio in the exported file ·
+GATES: a real-Safari take (Robert's machine) plays full-length mic audio in the exported file ·
 the fix names the mechanism with the artifact as evidence · Chromium mic path untouched (measured
 path stays, tests green) · no spoofed-UA-only verification accepted.
 
-═══ PHASE A — AI EXPORT (PO 2026-08-24: "export for ai button is highest priority now"; max token
+═══ PHASE A — AI EXPORT (Robert 2026-08-24: "export for ai button is highest priority now"; max token
 cutting; ONE FILE any AI understands, not human-watchable; AI2-AI7 are CANDIDATES reconsidered
-only after PO tests AI1's first real file; spec docs/AI_EXPORT.md) ═══
+only after Robert tests AI1's first real file; spec docs/AI_EXPORT.md) ═══
 
-## AI1. export-for-ai — one file  [PO priority, medium; READY]
-Why: agents don't watch video — they sample frames and pay ~1 token per 750 pixels. PO's bar:
+## AI1. export-for-ai — one file  [Robert priority, medium; READY]
+Why: agents don't watch video — they sample frames and pay ~1 token per 750 pixels. Robert's bar:
 ONE file that ANY AI understands (chat AIs included — no shell, no unzip), not human-watchable,
 maximally token-cheap. The one-file format every major AI ingests natively as text+images is PDF;
 zip needs a shell, markdown cannot carry images, base64-in-text explodes tokens, mp4 is the thing
@@ -3683,7 +3684,7 @@ all timestamps on the RECORDING EPOCH with clockOffsetMs declared on page 1 when
 video's t=0 differs (P0-instant-sync's lesson: composite time is not recording time) · index is
 signal-derived, never generated prose (the no-AI rule covers export-time summarization) ·
 keyframe selection pure + unit-tested with a defined delta metric (share of changed pixels on a
-downscaled luma diff) · THE CURSOR IS FILTERED BY THE DELTA'S OWN SHAPE, not by a knob (PO raised
+downscaled luma diff) · THE CURSOR IS FILTERED BY THE DELTA'S OWN SHAPE, not by a knob (Robert raised
 it: "it moves every frame but not very useful all the time"): tiny+moving+transient = cursor →
 never a keyframe, logged as a low-rate pointer trail in the index text (v1's only interaction
 signal while DOM events wait on AI2); tiny+stationary+blinking = caret → ignored; small but
@@ -3700,11 +3701,11 @@ Constraints: no knobs in the UI · every other export path untouched, defaults u
 file must parse in strict readers (pdftotext/mutool clean) — "any AI" starts at "valid PDF".
 GATES:
 · any-AI ingestion proven: pdftotext extracts the full index text · the file opens in a real
-  chat-AI upload (PO's test) and page 1 answers "what is this recording" without descending
+  chat-AI upload (Robert's test) and page 1 answers "what is this recording" without descending
 · token price printed at export: per-page (pixels/750 + text/4) and total, reported for a real take
 · keyframe economy: a 60 s mostly-static synthetic take → ≤8 keyframe pages · a 10 s idle span
   emits 0 after its first · a motion burst concentrates keyframes inside it (distribution reported)
-· cursor immunity (PO's scenario, hard gate): a take that is ONLY a cursor wandering over a static
+· cursor immunity (Robert's scenario, hard gate): a take that is ONLY a cursor wandering over a static
   screen → ≤1 keyframe after the first · a caret blinking in place → 0 · a tooltip appearing under
   the cursor → exactly 1, cropped on the tooltip · pointer-trail detector precision reported on the
   rig; the trail is dropped (not shipped degraded) if unreliable
@@ -3713,7 +3714,7 @@ GATES:
 · edit fidelity: a take with a cut → no keyframe from the cut span, times remapped (rig proof)
 · cost: file build wall clock ≤1.5× the same take's full render (report ×)
 · typecheck + tests + oracle green · instant-path logs unchanged.
-ACCEPTANCE THAT UNBLOCKS THE REST OF PHASE A: PO feeds a real take's file to an AI and reports.
+ACCEPTANCE THAT UNBLOCKS THE REST OF PHASE A: Robert feeds a real take's file to an AI and reports.
 AI2-AI7 stay frozen candidates until that report exists.
 ── HANDOFF 2026-08-24 (NINTH session, "go ai") — SHIPPED, ALL GATES GREEN.
 SHIPPED, and src/core owns all of it (`src/core/ai/`, the app owns only the button):
@@ -3737,7 +3738,7 @@ SHIPPED, and src/core owns all of it (`src/core/ai/`, the app owns only the butt
                what changed. No second decode pipeline (note 13), no encode, no audio, no muxer.
    types.ts gains ExportResult.ai {pages, keyframes, approxTokens} so the result panel can say "3
                pages · ~2k tokens" instead of describing a PDF as a video.
-MEASURED (`node scripts/ai-pdf-check.mjs`, full run, TD machine, artefact docs/qa/ai-export.pdf):
+MEASURED (`node scripts/ai-pdf-check.mjs`, full run, dev machine, artefact docs/qa/ai-export.pdf):
    economy      60 s take (still, 5 s motion burst, still) → 7 keyframes / 8 pages / ~5.6k tokens;
                 6 of the 7 land inside the burst, longest gap 35 s, one page in the first 19 s.
    cursor       12 s of a cursor wandering a still page → 1 page (the first) out of 48 samples;
@@ -3758,7 +3759,7 @@ MEASURED (`node scripts/ai-pdf-check.mjs`, full run, TD machine, artefact docs/q
    readers      an INDEPENDENT parser (src/experimental/tools/pdf-verify.mjs — goes through the xref
                 like a reader, not by regex) AND Apple PDFKit both accept the file and extract the
                 index text. pdftotext/mutool/qpdf are all absent on this machine and installing one is
-                a download PO owns, so PDFKit is the third-party reader; it agrees on the page count.
+                a download Robert owns, so PDFKit is the third-party reader; it agrees on the page count.
 THE POINTER TRAIL SHIPS, and the number is why: 100 % of confident readings land within 5 % of the
    frame of the path the rig drew (median error 0.007 of the frame). The spec said drop it if the
    detector was unreliable; it is not. `POINTER_TRAIL_ENABLED` in build.ts is the switch if a real
@@ -3770,15 +3771,15 @@ TWO DELIBERATE DEVIATIONS FROM THE SPEC, both recorded as decisions:
    (b) the build runs ON THE MAIN THREAD with the decoder's own awaits as its yields, not in the
        export worker. It is a new path; the worker's one-shot fallback protocol is shaped for
        ExportResult+RenderStats and generalizing it is real surface on the certified export. The
-       measured cost is half a render, so this is not a throughput decision — if PO finds the UI janky
+       measured cost is half a render, so this is not a throughput decision — if Robert finds the UI janky
        on a long take, the worker is the obvious next move.
-NOT DONE, and none of it is in AI1's scope: DOM events (AI2 needs a capture vehicle — PO's choice),
-   transcript (AI3, PO-gated), a "change at cursor" caption on real takes (the code is in and unit
+NOT DONE, and none of it is in AI1's scope: DOM events (AI2 needs a capture vehicle — Robert's choice),
+   transcript (AI3, Robert-gated), a "change at cursor" caption on real takes (the code is in and unit
    tested; the rig's synthetic tooltip is the only case that has exercised it).
 TOOLING: `npm run exp -- aiexport` (the rig alone) · `node scripts/ai-pdf-check.mjs` (the rig + both
    readers + the saved artefact; `--reuse=<report.json>` re-runs the reader gates with no recording).
-── HANDOFF 2026-08-24 (same session, after PO's FIRST REAL TAKE) — THE FILE WAS BOTH UNREADABLE AND
-   TOO SPARSE, AND BOTH WERE CALIBRATION, NOT DESIGN. PO exported a 97 s walkthrough of a real
+── HANDOFF 2026-08-24 (same session, after Robert's FIRST REAL TAKE) — THE FILE WAS BOTH UNREADABLE AND
+   TOO SPARSE, AND BOTH WERE CALIBRATION, NOT DESIGN. Robert exported a 97 s walkthrough of a real
    product UI and gave it to an agent TO RECREATE THE UI AND ITS ANIMATIONS. Two verdicts came back.
 (1) "ai didnt understood its video" — the AI opened the PDF AND ASKED WHAT TO DO WITH IT. Page 1
    opened with machine facts (`clock: recording epoch`, `keyframes are pixel-delta selected`), which
@@ -3804,26 +3805,26 @@ TOOLING: `npm run exp -- aiexport` (the rig alone) · `node scripts/ai-pdf-check
      1.2 s (a scroll is not a transition).
    · 250 ms WAS THE FINEST ANYTHING COULD BE SEEN. Now 8 looks a second; the decoder was already
      walking every frame (note 13) so it costs one downscale and one diff more per second.
-THE PAGE LIMIT WAS WRONG, AND PO CAUGHT IT ("if pdf is limited than its fucked up format"). The
+THE PAGE LIMIT WAS WRONG, AND ROBERT CAUGHT IT ("if pdf is limited than its fucked up format"). The
    budget had been capped at 96 frames on a recalled "readers reject a PDF past 100 pages". CHECKED
    2026-08-24 instead: Claude accepts 32 MB and 600 PAGES on 1M-context models — the 100-page figure
    is the 200k-context one — and Gemini accepts 50 MB / 1000 pages at a flat 258 tokens per page. The
    format was never the constraint; the binding cost is TOKENS (~800 per full-view page). So the
    budget became a spend decision derived from the take's own length: 2.5 frames per second, floor
    96, ceiling 300 (≈236k tokens, ≈11 MB), with a hard stop at 28 MB so a pathological recording
-   degrades by stopping rather than by being rejected. On PO's take the budget stopped binding at
+   degrades by stopping rather than by being rejected. On Robert's take the budget stopped binding at
    all — the content earned 165 frames of an allowed 243. LESSON, and it is note 10's shape again:
    the instrument was a REMEMBERED NUMBER. Verify a platform limit before designing around it.
    Frames are still SPENT by a pace derived from what is LEFT of the take and the budget, plus a
-   burst credit that SHRINKS TO ZERO by the end — the first version of that controller spent PO's
+   burst credit that SHRINKS TO ZERO by the end — the first version of that controller spent Robert's
    take out at 84 s of 97 and the last thirteen seconds were not in the file at all.
-MEASURED ON PO'S OWN 97 s TAKE, before → after: 39 frames → 165 · worst gap 5.5 s → 2.9 s · median
+MEASURED ON ROBERT'S OWN 97 s TAKE, before → after: 39 frames → 165 · worst gap 5.5 s → 2.9 s · median
    gap 2.5 s → 0.4 s · covered to 97.1 s of 97.3 · 167 pages · ~144k tokens · 6.5 MB · built in
    5.4 s (0.74× the same take's full render). The typing at 12.5 s is now several frames, mid-word,
-   with the button caught mid-transition. Rebuilt file left for PO at
+   with the button caught mid-transition. Rebuilt file left for Robert at
    ~/Downloads/inout-20260824-183853-for-ai-v2.pdf.
 GATE CHANGED, and it is worth knowing why: "60 s mostly-static take ≤8 pages" was DELETED. It passed
-   by summarizing a motion burst into one page, which is exactly the defect PO reported. What
+   by summarizing a motion burst into one page, which is exactly the defect Robert reported. What
    replaced it: the file fits what the readers ACTUALLY accept (≤600 pages, ≤30 MB) · the pages go
    where the motion is AND ARE DENSE THERE (≥12 inside a 5 s burst) · a REAL recording is covered end
    to end (median gap ≤1.5 s, worst ≤5 s, last frame past 90 % of the take). Everything else still
@@ -3833,13 +3834,13 @@ STILL OPEN, honestly: a 97 s take costs ~144k tokens — fine for a 1M-context m
    one, and 43k on Gemini's flat per-page pricing. The lever if that is ever too much is NOT fewer
    moments: it is cheaper pages — a contact sheet of 4-6 small frames per page for motion runs costs
    ~200 tokens per frame instead of ~800, because the page limit is generous and the token bill is
-   what hurts. Not built; it is the obvious next move if PO wants the same density for a quarter of
+   what hurts. Not built; it is the obvious next move if Robert wants the same density for a quarter of
    the price.
 
-## AI2. event-sidecar — the DOM events behind the pixels  [CANDIDATE — frozen until PO tests
-AI1's first real file; then also needs the PO vehicle decision below]
+## AI2. event-sidecar — the DOM events behind the pixels  [CANDIDATE — frozen until Robert tests
+AI1's first real file; then also needs Robert vehicle decision below]
 The original spec's core claim, and it needs a capture vehicle: a web page sees DOM events only in
-its own tab — no browser API exposes the input events of a captured surface. PO picks: (a)
+its own tab — no browser API exposes the input events of a captured surface. Robert picks: (a)
 companion extension (other tabs, not native apps) · (b) SDK snippet in the recorded page (the
 "developers record their own product" market) · (c) wait for P4's desktop shell (global
 cursor/clicks natively — richest, latest; P4 already specs a cursor/click metadata track, AI2 is
@@ -3849,9 +3850,9 @@ land in events.jsonl and drive full-res crops around the click point.
 GATES (once unblocked): sidecar click t vs the oracle's pixel flash inside the sync band · the
 sensitive-field rule proven by test · AI1's bundle format only extended, never changed.
 
-## AI3. transcript — VTT with timecodes  [CANDIDATE; PO-GATED per the no-AI rule: ASR is a local model]
+## AI3. transcript — VTT with timecodes  [CANDIDATE; Robert-GATED per the no-AI rule: ASR is a local model]
 Silence/filler auto-stripped, original timestamps kept. Do not build without explicit per-instance
-PO approval.
+Robert approval.
 
 ## AI4. repro-bundle — console errors + failed requests, timestamped  [CANDIDATE; after AI2 — same vehicle]
 

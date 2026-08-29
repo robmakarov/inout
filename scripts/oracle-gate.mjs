@@ -2,7 +2,7 @@
 /**
  * EXPERIMENTAL — evaluate an oracle JSON report against CI gates (task oracle-ci).
  *
- * Gates (aligned to oracle-internal thresholds, TD 2026-07-16):
+ * Gates (aligned to oracle-internal thresholds, 2026-07-16):
  *  - sync |offset| ≤ 80 ms on the SYMMETRIC flash+click metric (both rig
  *    references measured, both detection biases removed), falling back to the
  *    old audio-only-corrected metric at ≤60 ms when the symmetric one is
@@ -18,7 +18,7 @@
  *  - spur peak ≤ −40 dB
  *  - TAIL INTEGRITY (O8): the exported file must not be shorter than what was
  *    recorded by more than MAX_TAIL_LOSS_MS, and the last fiducial event must
- *    sit within MAX_LAST_EVENT_GAP_MS of the end. PO 2026-08-22: "Loom cuts
+ *    sit within MAX_LAST_EVENT_GAP_MS of the end. Robert 2026-08-22: "Loom cuts
  *    last seconds — we don't do that shit". A pipeline that drops its final
  *    buffer passes every other gate in this file.
  *  - export throughput ≥ MIN_EXPORT_REALTIME (recorded ms per ms of export)

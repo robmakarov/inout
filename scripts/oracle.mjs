@@ -3,7 +3,7 @@
  * EXPERIMENTAL — headless pipeline oracle driver (task oracle-ci).
  *
  * Always spawns an ephemeral Vite server on a free port (never reuses a shared
- * dev server — TD 2026-07-16: pointing at :5173 poisoned PO QA). Runs synthetic
+ * dev server — 2026-07-16: pointing at :5173 poisoned Robert's QA). Runs synthetic
  * capture→export→measure via CDP, evaluates CI gates, exits nonzero on failure.
  *
  * Usage:
@@ -22,7 +22,7 @@ import { gateOracleReport, oracleMetricsIncomplete } from './oracle-gate.mjs'
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const HOST = 'localhost'
 const CHROME = process.env.CHROME_BIN ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-/** Reserved for interactive `npm run dev` / PO QA — oracle must never use it. */
+/** Reserved for interactive `npm run dev` / Robert's QA — oracle must never use it. */
 const FORBIDDEN_PORTS = new Set([5173])
 
 function parseArgs(argv) {
@@ -40,7 +40,9 @@ function parseArgs(argv) {
     else if (a === '--headed') headed = true
     else if (a.startsWith('--engine=')) engine = a.slice(9)
     else if (a.startsWith('--port=')) {
-      console.error('oracle: --port is disabled (ephemeral server only; never share with PO QA)')
+      console.error(
+        "oracle: --port is disabled (ephemeral server only; never share with Robert's QA)",
+      )
       process.exit(2)
     }
   }
@@ -177,7 +179,7 @@ async function main() {
   }
 
   const port = await allocateEphemeralPort()
-  console.error(`oracle: ephemeral server on http://${HOST}:${port} (isolated from PO QA)`)
+  console.error(`oracle: ephemeral server on http://${HOST}:${port} (isolated from Robert's QA)`)
 
   const vite = spawn('npm', ['run', 'dev', '--', '--port', String(port), '--strictPort'], {
     cwd: ROOT,

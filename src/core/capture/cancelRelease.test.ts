@@ -4,7 +4,7 @@ import { liveDeviceStreamCount, resetDeviceGuardForTests } from './deviceGuard'
 import { resetDisplayReleaseForTests } from './displayRelease'
 
 /**
- * THE BUG THIS FILE EXISTS FOR (PO 2026-08-24):
+ * THE BUG THIS FILE EXISTS FOR (Robert 2026-08-24):
  *   "i press record again to stop it, and indicator still there after i'm done
  *    and refreshed … sometimes app stuck in waiting for mic"
  *

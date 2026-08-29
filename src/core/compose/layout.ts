@@ -126,7 +126,7 @@ function drawComposition(
     screen.drawWithFit(f.ctx, { fit: 'contain' })
     if (camera) drawCameraPip(f, camera, pose)
   } else if (camera && cameraFull) {
-    // EVERYTHING THE CAMERA SEES (PO 2026-08-29, judging F13 on a phone: "make
+    // EVERYTHING THE CAMERA SEES (Robert 2026-08-29, judging F13 on a phone: "make
     // it like it supposed on phone, everything camera sees").
     //
     // When the frame follows the take these two are the SAME operation — a

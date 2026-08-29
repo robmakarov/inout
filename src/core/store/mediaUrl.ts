@@ -2,7 +2,7 @@
  * A BLOB URL A MEDIA ELEMENT WILL ACTUALLY PLAY.
  *
  * THE BUG THIS EXISTS FOR, and it is the whole of iPhone Safari's behaviour
- * that PO reported (2026-08-29: "mic dont work in iphone safari too … recorded
+ * that Robert reported (2026-08-29: "mic dont work in iphone safari too … recorded
  * mic beatrate is shown on editing but no sound hearable"):
  *
  * A channel's bytes are written to OPFS under a key whose EXTENSION was chosen
@@ -15,7 +15,7 @@
  * rather than sniffing the bytes — refuses it. The element is silent and
  * blank; the file is perfectly fine.
  *
- * That split is exactly what PO saw: the WAVEFORM is decoded from the raw bytes
+ * That split is exactly what Robert saw: the WAVEFORM is decoded from the raw bytes
  * (mediabunny sniffs the container, so it is right) while the ELEMENT beside it
  * plays nothing. It also blinds the editor to the camera's real shape, because
  * an element that will not load reports videoWidth 0.

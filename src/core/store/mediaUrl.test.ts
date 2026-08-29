@@ -1,7 +1,7 @@
 /**
  * The bytes decide the type, not the filename.
  *
- * PO on an iPhone, 2026-08-29: "mic dont work in iphone safari too … recorded
+ * Robert on an iPhone, 2026-08-29: "mic dont work in iphone safari too … recorded
  * mic beatrate is shown on editing but no sound hearable". The waveform is
  * decoded from the raw bytes and was right; the element beside it was handed a
  * blob labelled `video/webm` holding MP4, because MediaRecorder on Safari has

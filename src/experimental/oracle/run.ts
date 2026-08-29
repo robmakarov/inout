@@ -1,5 +1,5 @@
 /**
- * EXPERIMENTAL — Oracle runner (Experiment 2), hardened per TD verdict item 3.
+ * EXPERIMENTAL — Oracle runner (Experiment 2), hardened per review verdict item 3.
  *
  * Full loop: record a fiducial session -> export through the PRODUCTION
  * exportRecording (untouched) -> decode the export -> report numbers.
@@ -43,7 +43,7 @@ export interface OracleReport {
   exportFullMs: number
   exportTrimmedMs: number
   /**
-   * TAIL INTEGRITY (task O8, PO 2026-08-22: "Loom cuts last seconds — we don't
+   * TAIL INTEGRITY (task O8, Robert 2026-08-22: "Loom cuts last seconds — we don't
    * do that shit"). Everything needed to prove the END of the take survived:
    * the exported file's own duration against what was recorded, and the last
    * fiducial event actually present in it. A pipeline that silently drops its
@@ -123,7 +123,7 @@ export interface OracleReport {
   }
 }
 
-/** Instrument gates — TD sync-fix review: flash+click is the sync verdict. */
+/** Instrument gates — sync-fix review: flash+click is the sync verdict. */
 export const MAX_SYNC_MEAN_MS = 30
 export const MAX_SYNC_ABS_MS = 50
 /** Barcode sync kept as drift/trim diagnostic only — not a pass/fail gate. */

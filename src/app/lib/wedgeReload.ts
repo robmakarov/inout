@@ -1,5 +1,5 @@
 /**
- * THE RECOVERY RITUAL FOR A WEDGED SCREEN SHARE (PO 2026-08-25: "if it
+ * THE RECOVERY RITUAL FOR A WEDGED SCREEN SHARE (Robert 2026-08-25: "if it
  * happens make it fixed by refresh of app page"). When Chrome takes the share
  * and never delivers it, the take has already failed and every device is
  * released — so the app refreshes ITSELF, once, and comes back saying "press
@@ -15,7 +15,7 @@
 
 const KEY = 'inout.wedgeReload.v1'
 /**
- * The notice is OWED, not merely recent (PO 2026-08-25: after a wedge with a
+ * The notice is OWED, not merely recent (Robert 2026-08-25: after a wedge with a
  * 4K game running, "no message about that i need to reload chrome"). It used to
  * be due only within 15 s of the stamp — but the wedge happens when the machine
  * is saturated, which is exactly when the reload it triggers takes longest to

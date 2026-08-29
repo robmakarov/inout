@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { SourceLiveness, SOURCE_STALL_MS } from './sourceLiveness'
 
 /**
- * The contract after 2026-08-25 (PO: "message about frozen screen is
+ * The contract after 2026-08-25 (Robert: "message about frozen screen is
  * bullshit"): frame silence alone NEVER fires the banner — a static screen on
  * the frame-driven v2 path legitimately delivers nothing. Frozen requires the
  * browser's own verdict (`track.muted` / not live) AND the silence. Both edges
@@ -53,7 +53,7 @@ describe('SourceLiveness', () => {
   })
 
   it('a static screen — frame silence from a HEALTHY source — is never frozen', () => {
-    // The exact false positive PO hit on real takes: v2 is frame-driven, a
+    // The exact false positive Robert hit on real takes: v2 is frame-driven, a
     // still screen delivers nothing, and the track stays unmuted throughout.
     const det = new SourceLiveness()
     const events = run(det, [

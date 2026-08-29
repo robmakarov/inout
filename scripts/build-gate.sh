@@ -10,7 +10,7 @@
 # both — the auto-commit Stop hook pushes with --no-verify and calls this
 # script inline, which is the DOMINANT path in this repo.
 #
-# `npm run oracle` deliberately stays OUT (TD 2026-08-26, measured): it is a
+# `npm run oracle` deliberately stays OUT (2026-08-26, measured): it is a
 # TIMING gate, and two runs of one commit on this machine read sync 76.87 ms
 # and 37.3 ms against a 90 ms band. The high read was the cold first run in a
 # fresh worktree — exactly what a hook always pays — so a pre-push oracle would

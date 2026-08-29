@@ -42,7 +42,7 @@ describe('the wedge refresh ritual', () => {
 
   it('SURVIVES A SLOW BOOT — the wedge saturates the machine, so its own reload is the slow one', () => {
     noteWedgeReload(1_000_000)
-    // The old rule expired the notice after 15 s and PO got no message at all
+    // The old rule expired the notice after 15 s and Robert got no message at all
     // on a machine loaded enough to wedge in the first place.
     expect(takeWedgeReloadNotice(1_000_000 + 45_000)).toBe(true)
   })

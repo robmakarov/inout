@@ -170,7 +170,7 @@ export interface MeasuredAudioHandle {
      *  the machine starved this take, 0 on a healthy one. */
     paddedMs: number
     /** Time removed to hold a FAST audio clock back onto the wall — evidence
-     *  of the drift PO reported 2026-08-29, 0 on a matched clock. */
+     *  of the drift Robert reported 2026-08-29, 0 on a matched clock. */
     trimmedMs: number
     /** How long the channel's input had been pure digital silence when the take
      *  ended — the witness for "tab audio dies after a while": a muted or dead
@@ -249,7 +249,7 @@ export async function startMeasuredAudioCapture(opts: {
   const label = opts.label ?? 'measured'
 
   /**
-   * THE TRACK'S OWN LIFE EVENTS ARE EVIDENCE (PO 2026-08-26: "in long video
+   * THE TRACK'S OWN LIFE EVENTS ARE EVIDENCE (Robert 2026-08-26: "in long video
    * tab audio still dies after a while"). Chromium is known to MUTE a captured
    * tab's audio track during captured-tab inactivity (crbug 40703184) and to
    * END display-audio tracks on audio-device changes (crbug 344876285 — AirPods
@@ -406,7 +406,7 @@ export async function startMeasuredAudioCapture(opts: {
   let lastArrivalMs = -Infinity
   /**
    * THE CHANNEL'S TIMELINE IS HELD AGAINST THE WALL CLOCK — same defect and
-   * same remedy as the composite's (compositor.worker.ts, PO 2026-08-25's
+   * same remedy as the composite's (compositor.worker.ts, Robert 2026-08-25's
    * 4K-game take). The worklet already turns starved quanta it SEES into
    * silence, because a skipped quantum splices a sample-counted timeline. What
    * neither it nor the sample count can see is a quantum the AudioContext never
@@ -418,11 +418,11 @@ export async function startMeasuredAudioCapture(opts: {
    * The decision lives in WallClockHold (shared with the composite worker)
    * because the first inline copy here was DEAD — it compared the arrival
    * stamp against itself, so the origin was never set and no take ever padded,
-   * which is how the 08-25 fix shipped without reaching the audio PO hears.
+   * which is how the 08-25 fix shipped without reaching the audio Robert hears.
    */
   const wallHold = new WallClockHold({ sampleRate })
   let paddedFrames = 0
-  /** Frames removed to walk a fast audio clock back onto the wall (PO 2026-08-29). */
+  /** Frames removed to walk a fast audio clock back onto the wall (Robert 2026-08-29). */
   let trimmedFrames = 0
   /** Input-silence witness. A muted track, a dead source and a paused player
    *  all deliver EXACT digital silence, which no rig and no listener can tell
@@ -431,7 +431,7 @@ export async function startMeasuredAudioCapture(opts: {
   const SILENCE_FLOOR = 1e-5
   let silentRunStartFrame: number | null = null
   /**
-   * THE TAP IS REBUILT WHEN THE TAP IS DEAD (PO 2026-08-26, autopsied take
+   * THE TAP IS REBUILT WHEN THE TAP IS DEAD (Robert 2026-08-26, autopsied take
    * rec_cjqcxsfhg02b: tab audio recorded pure zeros from t=71 s to the end of a
    * 7.5-min take while the SAME share's video kept delivering a playing movie —
    * an audio-only capture death on a live, unmuted track, which is the known
@@ -579,7 +579,7 @@ export async function startMeasuredAudioCapture(opts: {
     // later loses nothing and must not be touched, so a healthy take is
     // bit-identical to before. Positive = the context lost real time and owes
     // silence. Negative = this channel's audio clock runs FAST and the timeline
-    // has walked ahead of the wall, which is what PO hears as the sound falling
+    // has walked ahead of the wall, which is what Robert hears as the sound falling
     // a second behind the picture across an hour.
     {
       const correction = wallHold.correctionFramesFor(arrivalMs, framesWritten, frames)

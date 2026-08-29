@@ -12,7 +12,7 @@ import { resetDisplayReleaseForTests } from './displayRelease'
 import { rememberGrant } from './grants'
 
 /**
- * PO 2026-08-24, from the console of a real take:
+ * Robert 2026-08-24, from the console of a real take:
  *
  *   [capture:arming] display start   +0ms
  *   [capture:arming] camera done  +1256ms
@@ -111,7 +111,7 @@ describe('a picker that has been answered is no longer a human', () => {
   })
 
   /**
-   * PO 2026-08-24, fresh Chrome, first take: wedged again with the fast path
+   * Robert 2026-08-24, fresh Chrome, first take: wedged again with the fast path
    * never engaging — macOS's native sharing pill can open and close without
    * the page ever observing a focus change. Detection is allowed to fail;
    * the hostage-taking is not. The absolute ceiling fires regardless.

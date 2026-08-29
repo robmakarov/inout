@@ -9,5 +9,5 @@ preview.log
 .claude/settings.local.json
 inout-*.mp4
 
-# PO recordings dropped in for a rig run — never committed.
+# Robert recordings dropped in for a rig run — never committed.
 public/__*

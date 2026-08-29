@@ -12,7 +12,7 @@ import { resetDeviceGuardForTests } from './deviceGuard'
 import { rememberGrant } from './grants'
 
 /**
- * PO 2026-08-25, verbatim: "all input must connect everytime without fails".
+ * Robert 2026-08-25, verbatim: "all input must connect everytime without fails".
  * One timeout used to be a verdict — a mic that missed its 8 s budget was out
  * of the take forever, even though the user's own workaround (refresh, press
  * record again) proved a fresh getUserMedia often succeeds. These tests pin

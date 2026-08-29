@@ -18,7 +18,7 @@
  * copy; every such rig calls it before it opens a session.
  *
  * IT DOES NOT BELONG INSIDE `createCaptureSession`. That would be a change to
- * production capture, which needs PO's explicit yes — and prearm already does
+ * production capture, which needs Robert's explicit yes — and prearm already does
  * the job for every real user. This is a harness concern: rigs skip the mount
  * that production always performs.
  *

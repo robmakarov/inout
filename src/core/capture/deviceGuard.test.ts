@@ -94,7 +94,7 @@ describe('device guard — the tab can always turn every device off', () => {
 })
 
 /**
- * The regression this module exists for (PO 2026-08-24: "indicator still there
+ * The regression this module exists for (Robert 2026-08-24: "indicator still there
  * after i'm done and refreshed", then a mic that will not connect on the next
  * take). Every previous fix released devices from a structure the SESSION
  * owned, so a stream still in flight between the platform and the session — or

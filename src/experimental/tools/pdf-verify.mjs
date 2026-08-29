@@ -2,8 +2,8 @@
  * EXPERIMENTAL — an INDEPENDENT reader for the AI export's PDF (task AI1).
  *
  * The gate is "any AI understands this file", and that starts at "a strict
- * reader accepts it". Nothing on the TD machine reads PDFs from a shell
- * (no pdftotext, no mutool, no qpdf) and installing one is a download the PO
+ * reader accepts it". Nothing on the dev machine reads PDFs from a shell
+ * (no pdftotext, no mutool, no qpdf) and installing one is a download Robert
  * owns, so the check is built here instead — deliberately NOT by reusing
  * src/core/ai/pdf.ts, which would only prove the writer agrees with itself.
  *

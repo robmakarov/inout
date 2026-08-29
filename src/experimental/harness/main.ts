@@ -8,7 +8,7 @@
  * Automation: `window.__exp.run(id, args?)` exposes every runner (plus the
  * A/V-sync diagnosis runners) to headless-Chromium drivers
  * (src/experimental/tools/cdp-run.mjs) so matrices can run unattended on a
- * throwaway profile per TD hygiene.
+ * throwaway profile per hygiene.
  */
 
 import { initToneChildIfRequested } from '../perf/toneChild'
@@ -511,7 +511,7 @@ const runners: Runner[] = [
     id: 'tabaudio',
     title: 'does captured tab audio survive the tab going silent and sounding again?',
     detail:
-      'PO 2026-08-26: "maybe audio dies when one youtube video ends and other starts". This page captures ITSELF (preferCurrentTab + the auto-accept testing flag in cdp-run), plays a tone, tears it down like a player, sits silent for the gap, plays a new one — through the production measured-audio path with its mute/ended/silence witnesses. Run with --keep-audio or phase A is vacuous. {"gapSecs":45} sets the silent gap.',
+      'Robert 2026-08-26: "maybe audio dies when one youtube video ends and other starts". This page captures ITSELF (preferCurrentTab + the auto-accept testing flag in cdp-run), plays a tone, tears it down like a player, sits silent for the gap, plays a new one — through the production measured-audio path with its mute/ended/silence witnesses. Run with --keep-audio or phase A is vacuous. {"gapSecs":45} sets the silent gap.',
     run: async (args) => {
       const { runTabAudioDeath } = await import('../perf/tabAudioDeath')
       return runTabAudioDeath({
@@ -525,7 +525,7 @@ const runners: Runner[] = [
   },
   {
     id: 'syncload',
-    title: 'A/V sync when the machine is BUSY (PO 4K-game take)',
+    title: 'A/V sync when the machine is BUSY (Robert 4K-game take)',
     detail:
       "records the composite under a saturating CPU+4K-paint load and measures each track's SPAN against the take's wall clock — video is arrival-stamped, audio is sample-counted, so a clock that slips shows up as the two tracks covering different amounts of time. Run {\"load\":false} as the control.",
     run: async (args) => {
@@ -606,7 +606,7 @@ const runners: Runner[] = [
   },
 ]
 
-// X3 (PO ruling 2026-08-25, "no standing experimental tree"): the dormant
+// X3 (Robert ruling 2026-08-25, "no standing experimental tree"): the dormant
 // research experiments — session log, WebCodecs-capture A/B, streaming-export
 // benchmark, timed data channels, TimeMap/Scene, semantic artifact — are gone.
 // Their verdicts live in .ai/DECISIONS and their code lives in git history;

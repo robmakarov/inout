@@ -7,16 +7,16 @@
  * machine could have kept up. O6's answer is to start at native and step DOWN
  * on measured backpressure (resolutionLadder.ts) rather than never start high.
  *
- * IT IS ON BY DEFAULT SINCE 2026-08-29, ON PO'S RULING: "we need native res by
+ * IT IS ON BY DEFAULT SINCE 2026-08-29, ON ROBERT'S RULING: "we need native res by
  * default of course, why the fuck not, if freeze will appear i will say."
  *
  * That overrides the caution this file shipped with, and the caution was real:
- * O6's own gate wanted "PO's 4K-game-tab scenario re-verified", and 2026-08-26
+ * O6's own gate wanted "Robert's 4K-game-tab scenario re-verified", and 2026-08-26
  * measured why no rig can stand in for it — a synthetic 4K source is a
  * rAF-painted canvas, so its delivered fps is dominated by the painting, a cost
  * a real 4K display (which the OS composites) does not have. The ladder is
  * tested at its boundaries; the thing it protects still cannot be tested here.
- * What changed is who carries that risk: PO has taken it, explicitly, and is
+ * What changed is who carries that risk: Robert has taken it, explicitly, and is
  * the reporting channel if the freeze returns.
  *
  * WHAT IT ACTUALLY BUYS, so the expectation is right: the export ladder's 1440p

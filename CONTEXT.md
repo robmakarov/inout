@@ -1,24 +1,20 @@
 # INOUT — Context
 
 Human-readable truth. Machine layer: `.ai/` (ARCH, STATE, DECISIONS — authoritative, kept current).
-Business ops live with the PM, not here.
+Business ops live outside this repo.
 
-## Roles
+## How work happens
 
-Shared rules: no flattery · direct · evidence first · admit uncertainty · challenge assumptions · minimize words, time, complexity, waste.
+Working rules: no flattery · direct · evidence first · admit uncertainty · challenge assumptions · minimize words, time, complexity, waste.
 
-- **PO** — Product Owner + Design Director. Final decision maker.
-- **TD** — Technical Director. Architecture and technical strategy; reliability, security,
-  maintainability. **All production changes require TD review; veto absolute for safety.** While PM
-  is vacant, TD also maintains STATE/DECISIONS/NEXT and flags scope drift.
-- **EE** — Experimental engineer. Experiments in shadow mode only; production work only on
-  TD-assigned tasks, on branches, merged only by TD.
-- **PM** — Owns scope protection, validation plan, product evidence, role briefings,
-  and the business/launch work outside the repository. PO retains final product decisions; TD
-  retains production-change review and the safety veto.
+Robert decides product, design and scope; that call is his and it is final. Everything technical —
+architecture, reliability, security, maintainability — is settled in the session, on evidence, and
+**every production change is reviewed before it lands on main**. State, decisions and scope drift are
+kept current in `.ai/` by whoever does the work.
 
-Pipeline: experiment → shadow → evidence → TD review → production.
-Override rule: if PO overrides a TD safety block, the override is recorded in DECISIONS with the risk stated.
+Pipeline: experiment → shadow → evidence → review → production.
+Safety block: an unresolved safety objection stops a merge. Robert can override it; the override is
+recorded in DECISIONS with the risk stated.
 
 ## Product
 
@@ -45,7 +41,7 @@ Audio-only becomes visualized video. UI: iOS-Camera simplicity, Final Cut timeli
 
 ## State (2026-08-26)
 
-Working and verified end-to-end: capture 4 channels → edit → export → share. PO records with it.
+Working and verified end-to-end: capture 4 channels → edit → export → share. Robert records with it.
 
 **Two things were making your recordings sound wrong, and neither was the part of the app that
 handles sound (2026-08-26).**
@@ -78,9 +74,9 @@ from that and throw the rest away — so trimming a take, cutting one, or asking
 silences all made it read the whole soundtrack a second time before it could start. It keeps the
 measurements now (about 120 KB for half an hour), and those three jobs simply use them: "Tighten"
 proposes exactly the same cuts it did before, in about a thousandth of the time. And while checking
-that, one thing turned up that matters more than the speed: last week's fix for the audio quality PO
+that, one thing turned up that matters more than the speed: last week's fix for the audio quality Robert
 reported as regressed was not actually reaching any export — the number it depends on was being
-calculated and then quietly dropped on the way. That is fixed, and the listen test PO owes is now a
+calculated and then quietly dropped on the way. That is fixed, and the listen test Robert owes is now a
 test of a build where the fix is real.
 
 **We started checking the sound of the file people actually get (2026-08-26).** INOUT has had an
@@ -97,7 +93,7 @@ skips the video work — so there is no quality penalty for the quick export. On
 is real and by design: a recording with two sound sources comes out about 6 dB quieter than one with
 a single source, because INOUT deliberately leaves headroom so two loud sources can never clip each
 other. The check now allows that specific, documented amount and flags anything else, so the number
-stays PO's to change rather than something a test quietly locks in.
+stays Robert's to change rather than something a test quietly locks in.
 
 **The "For AI" export stopped freezing the app while it builds (2026-08-26).** That file is not a
 smaller video — it is a document of the recording's own frames, and building it costs about
@@ -170,7 +166,7 @@ picture that was actually recorded, neither recording nor exporting loses any me
 sharpness. We can reproduce the old number on demand by deliberately shifting the reference one line,
 which is how we know that is what happened.
 
-**PO looked at the crops and said the colours were worse. He was right, and it is the biggest thing
+**Robert looked at the crops and said the colours were worse. He was right, and it is the biggest thing
 this work found (2026-08-26).** Coloured text — the green and blue words in a code editor — comes out
 of INOUT with about **30 % less colour** than it went in. Grey text barely changes, so this is not
 brightness or gamma; it is the way video compression stores colour at lower resolution than
@@ -273,7 +269,7 @@ costs, so the whole change was worth roughly a tenth of export time. And it fail
 matters more: **the two ways of drawing do not produce the same text.** Compared on the same frames,
 about 4 % of pixels differ, and they are the pixels that make up letters — the two methods handle
 colour detail at sharp edges differently. Making exports faster by changing how text looks is not a
-trade to take quietly, so it is now a question for PO rather than a change.
+trade to take quietly, so it is now a question for Robert rather than a change.
 
 **And that raised something worth checking on a real recording — now checked (2026-08-26).** INOUT
 draws with both methods: the fast export of an untouched recording copies a picture drawn one way,
@@ -324,11 +320,11 @@ per 750 pixels — so a 97-second take costs roughly 144k tokens this way agains
 and it builds in half the time of the ordinary export.
 
 The first real test earned three corrections worth recording, because all three were about judgement
-rather than code. PO exported a 97-second walkthrough of a product UI and gave it to an agent to
+rather than code. Robert exported a 97-second walkthrough of a product UI and gave it to an agent to
 recreate that UI and its animations. The AI **asked what to do with the file** — page one had opened
-with machine facts instead of saying what the document was — and PO's own verdict was that it **lost
+with machine facts instead of saying what the document was — and Robert's own verdict was that it **lost
 far too many frames**: a stretch where a field was typed into, a button turned active, was clicked
-and a tab switched had fallen entirely between two pages five and a half seconds apart. Then PO
+and a tab switched had fallen entirely between two pages five and a half seconds apart. Then Robert
 challenged the format itself, and was right to: the page ceiling the design had been built around was
 a number taken from memory rather than checked. It is wrong — Claude accepts 600 pages and 32 MB,
 Gemini 1000 pages and 50 MB — so the format was never the constraint; the cost is tokens, and how
@@ -338,7 +334,7 @@ that same recording: the file briefs its reader in its first lines, and it went 
 through anything moving — an animation comes back as a sequence, which is what recreating one needs
 — and not at all while the screen is still.
 
-**PO's move: re-test.** The rebuilt version of that same take is at
+**Robert's move: re-test.** The rebuilt version of that same take is at
 `~/Downloads/inout-20260824-183853-for-ai-v2.pdf` for a side-by-side against the original file and
 the MP4. That report decides whether the richer layers (DOM events, transcript, repro bundle) get
 built at all.
@@ -348,7 +344,7 @@ Shipped 2026-08-23 (eleven merges; engineering detail in `.ai/DECISIONS`, task s
 - **Reliability.** Recording could hang on arming with no way out and leave the mic indicator lit
   after a refresh. Each arming step had a deadline but the waits that JOIN them did not; the record
   button was disabled while arming, so there was nothing to press; and nothing released devices when
-  the page went away. All four closed, PO-verified.
+  the page went away. All four closed, Robert-verified.
 - **Exports stream to disk.** The muxer holds 4 MB whatever the length — a 30-minute export peaks at
   39 MB instead of 294 MB. The RAM ceiling on long takes is gone.
 - **Loudness is measured during capture**, so export stops decoding every audio channel twice.
@@ -391,17 +387,17 @@ Known gaps, honestly stated:
   the warm-up question is settled (users would pay it after every browser launch, so the app now
   warms the encoder quietly at load), the CPU comparison came back in the new engine's favour (it
   uses LESS processor while delivering more), and the fallback for machines that truly can't keep
-  up is proven. THE FLIP HAPPENED the same day, on PO's word: the new engine IS the default now,
+  up is proven. THE FLIP HAPPENED the same day, on Robert's word: the new engine IS the default now,
   with the old one intact underneath as an automatic fallback (unsupported browsers, a failed
   start, or a machine that can't keep pace) and a one-parameter revert. Every gate was green on
   the way: full test suite, both engines' oracles, the eight-gate QA on the production build in
   real Chrome, recording-start latency proven unaffected. What users get: capture that costs the
   main thread nothing, LESS CPU, an audibly smaller A/V sync offset (~34-48 ms vs ~60), and a
-  recording that is a playable file on disk even mid-take. Waiting on PO's first real recording
+  recording that is a playable file on disk even mid-take. Waiting on Robert's first real recording
   to confirm; the sync target and a preview optimization remain as polish.
 - **A/V sync is worse than we thought, and the instrument was why.** Every sync number quoted before
   2026-08-23 was ~31 ms optimistic: the oracle carried an exact 18 ms detection bias and never
-  measured the video reference at all. The true offset is ~45–63 ms, audio late — which is what PO
+  measured the video reference at all. The true offset is ~45–63 ms, audio late — which is what Robert
   felt on a real take. The cause is understood (the audio anchor cannot see input latency; measured
   at +128.7 ms on a loopback rig) and partly compensated. Closing it properly is the WebCodecs
   engine's job (O4), whose target is ≤20 ms.
@@ -409,7 +405,7 @@ Known gaps, honestly stated:
   tab kill would lose the whole take. That hardware-encode win moves to O4, which owns its own muxer.
 - Cloud unprovisioned. Composite still absent from crash salvage (O4 makes it free).
 
-## Roadmap (PO-approved 2026-08-22 — executable plan and READY map in .ai/TASKS)
+## Roadmap (Robert-approved 2026-08-22 — executable plan and READY map in .ai/TASKS)
 
 Every task is evidence-gated. `.ai/TASKS` is authoritative: it carries the READY map, per-task state,
 what a fresh session must know first, and an index of the measurement tooling.
@@ -476,14 +472,14 @@ currently worse than an edited one, which is backwards. Fixing it is the top ite
 editor for the same thread; it produces a byte-for-byte identical file either way.
 
 **Shipped alongside it:** the **timed movable camera** — drag the picture-in-picture on the stage and
-the export moves it at the moment you moved it (PO's emphasized feature). And, found while building it,
+the export moves it at the moment you moved it (Robert's emphasized feature). And, found while building it,
 **edits now survive a refresh**: until today a reload restored your recording but silently threw away
 every trim and cut you had made. **Yandex Browser preparation** landed too: the app can now tell Yandex
 from Chrome, and there is a one-command QA runner and an RU network probe.
 
-**Shipped 2026-08-23 in one session, on PO's "roadmap o/f, all in one session":** the background
+**Shipped 2026-08-23 in one session, on Robert's "roadmap o/f, all in one session":** the background
 frame · silence tightening · the finer export ladder · the whole bits audit and the two size levers it
-priced. (An "in-shot" notice shipped the same day and was pulled on PO's call — see DECISIONS.)
+priced. (An "in-shot" notice shipped the same day and was pulled on Robert's call — see DECISIONS.)
 One gate was NOT met and is a task rather than a footnote: the per-step
 size number cannot be honest to ±20 % on every kind of content, because it is predicted from a file a
 DIFFERENT encoder made — on text-heavy screen content the two encoders disagree by nearly 2×. The fix
@@ -523,27 +519,27 @@ export, the capture-engine polish list, native-resolution capture, crisp screen 
 work, pause/retake, the size number's fifth attempt, and frame-exact scrubbing. Each still costs a
 session, and `.ai/TASKS` says which are unblocked and which can run at the same time.
 
-**New 2026-08-24: AI export (phase A in .ai/TASKS) — PO's named top priority.** A second export
+**New 2026-08-24: AI export (phase A in .ai/TASKS) — Robert's named top priority.** A second export
 target next to the MP4: **one file any AI understands instead of a video it must watch**. The file
 is a PDF — the only single-file format every major AI reads natively as text plus images; nothing
 in it is a video and nothing in it needs a tool to open. Inside, maximum token cheapness: a
 one-page text index (take facts, what capture knew went wrong, and a page-numbered list of the
 screenshots), then one change-driven screenshot per page. The button (AI1) ships first. Everything
 richer — DOM event sidecar, transcript, repro bundle, markers, MCP access, redaction — is marked
-as a **candidate only** (AI2–AI7) and gets reconsidered after PO feeds the first real file to an
-AI and reports how it went. The sidecar additionally waits on a product decision only PO can make:
+as a **candidate only** (AI2–AI7) and gets reconsidered after Robert feeds the first real file to an
+AI and reports how it went. The sidecar additionally waits on a product decision only Robert can make:
 where events come from (a browser extension, an SDK snippet in the recorded page, or the desktop
-shell). The transcript stays PO-gated under the standing no-AI rule because speech recognition is
+shell). The transcript stays Robert-gated under the standing no-AI rule because speech recognition is
 a local model; the export format itself runs no model anywhere.
 
-**Runs in parallel now:** the AI export button (AI1, PO's named priority) · the out-of-sync fast
+**Runs in parallel now:** the AI export button (AI1, Robert's named priority) · the out-of-sync fast
 export (P0 — trimming waits on it) ·
 native-resolution capture · crisp screen text · pause/retake · frame-exact scrubbing · the size-number
 probe, attempt 5 · the codec ladder and the real Firefox run, both waiting on one install (below) ·
 the iOS ScreenCaptureKit spike (time-sensitive: iOS 27 ships ~Sept 2026, and it needs a device we do
 not have).
 
-**Waiting on PO:** approve one dependency install — `npm i -D playwright && npx playwright install
+**Waiting on Robert:** approve one dependency install — `npm i -D playwright && npx playwright install
 firefox` — which unblocks both the real Firefox run and the codec ladder that needs three engines to
 test against. Install Yandex Browser and run the one-command QA smoke.
 Run the RU reachability probe from a Russian connection without a VPN. And two rechecks on real
@@ -636,29 +632,28 @@ and the cloud player switching automatically once cloud lands.
    about twice the processor load.
 7. The standing ones: a real Safari recording, a camera-only recording, and the Yandex/RU checks.
 
-PO records with the tool and reports bugs; that loop is working and is what caught both the mic hang
+Robert records with the tool and reports bugs; that loop is working and is what caught both the mic hang
 and the sync drift. Next: (1) provision Supabase + Google OAuth (~15 min, docs/CLOUD_SETUP.md) then
-e2e login→upload→share→view; (2) PO keeps using INOUT daily and collecting pain points.
-Engineering (TD-gated): O4 as the single big rock, features and ports in parallel — see .ai/TASKS.
-Ship: (7) domain + email (no payments yet); (8) public deploy; (9) UX pass from pain points (PO);
+e2e login→upload→share→view; (2) Robert keeps using INOUT daily and collecting pain points.
+Engineering (review-gated): O4 as the single big rock, features and ports in parallel — see .ai/TASKS.
+Ship: (7) domain + email (no payments yet); (8) public deploy; (9) UX pass from pain points (Robert);
 (10) first users + feedback channel.
 After real usage data: next milestone · business model · validation approach · launch path.
-PM: establish context-separation rules per role — each role gets its own scoped briefing (what it
-needs to know, what it must do, how, and what it must NOT touch), instead of everyone reading
-everything. TD drafts the per-role templates; PM owns keeping them current.
+Reading discipline: a session reads what its task needs, not everything — `.ai/TASKS` for the
+assignment, `.ai/ARCH` and `src/*` for the code, and the rest only when the task reaches it.
 Deleted from old master list: playback page (signed links play directly), SPEC/STATE/TODO file set
 (superseded by CONTEXT.md + .ai/), 44 completed build items.
 
-## Experiments — there is no experimental tree any more (PO ruling 2026-08-25, done 2026-08-26)
+## Experiments — there is no experimental tree any more (Robert ruling 2026-08-25, done 2026-08-26)
 
-PO: "i just dont want experiments be separated, all the shit must get in worked or be deleted." So a
+Robert: "i just dont want experiments be separated, all the shit must get in worked or be deleted." So a
 module either is tooling a live gate runs — the pipeline oracle, the measurement rigs behind each
 task's evidence — or it is spent, and spent means deleted, with the verdict kept in `.ai/DECISIONS`
 and the code kept in git. The dormant half is gone (2,745 lines): the session log, the WebCodecs
 capture A/B, the streaming-export benchmark, timed data channels, TimeMap/Scene, the semantic
 artifact. What they proved is in the product rather than beside it — the WebCodecs rig BECAME the v2
 live composite, the streaming benchmark BECAME the stream-to-disk export, the size probe BECAME the
-export panel's measured sizes. Nothing merges without evidence + TD sign-off; nothing waits around
+export panel's measured sizes. Nothing merges without evidence + review sign-off; nothing waits around
 without a task, either.
 
 The same ruling now cuts the other way too, and 2026-08-26 was the first time: a piece of PRODUCTION
@@ -669,7 +664,7 @@ so the next person to have the same idea can settle it in five minutes rather th
 
 ## Risks
 
-Platform-creep before validation · polishing before PO's real QA · random experiments entering
-production (gate: TD) · browser permission edge cases on real devices · free-tier storage limits
+Platform-creep before validation · polishing before Robert's real QA · random experiments entering
+production (gate: review) · browser permission edge cases on real devices · free-tier storage limits
 are product-visible. Closed 2026-08-26: a broken commit can no longer reach Vercel silently —
 every push is build-gated locally, and `scripts/verify-deploy.mjs` proves prod serves HEAD.
