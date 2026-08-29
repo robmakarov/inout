@@ -189,6 +189,15 @@ let videoBitrate = 8_000_000
 let fps = 30
 /** F13: has the first frame been allowed to correct W/H yet? */
 let shapeSettled = false
+/**
+ * F13: the encoder is being reconfigured to the shape the first frame asked
+ * for, and NOTHING may be encoded until it is. Getting this wrong is not a
+ * subtle cost — the reconfigure is async (it probes the config), so frames
+ * encoded meanwhile go in at the OLD geometry and the file ends up carrying two
+ * of them. Reproduced on prod with `?camlies=1`: the channel came back
+ * `EncodingError: Decoding error` and the editor stage was black.
+ */
+let encoderPending = false
 
 /** Main-thread stamp of the first frame that reached the encoder. */
 let firstFrameAtMs: number | null = null
@@ -334,7 +343,7 @@ async function start(msg: RawVideoStartMsg): Promise<void> {
   encoder.configure(config)
 
   keepAliveTimer = setInterval(() => {
-    if (stopped || fatal || !lastFrame || firstFrameAtMs === null) return
+    if (stopped || fatal || encoderPending || !lastFrame || firstFrameAtMs === null) return
     const nowMain = nowOnMainClock()
     // Against the last frame that actually REACHED the encoder, not the last
     // that arrived: a busy encoder would otherwise suppress the keep-alive it
@@ -402,10 +411,11 @@ function adoptFrameSize(frame: VideoFrame): void {
   H = h
   stats.outWidth = W
   stats.outHeight = H
+  encoderPending = true
   void (async () => {
     const enc = encoder
-    if (!enc || stopped || fatal) return
     try {
+      if (!enc || stopped || fatal) return
       const { config, hardware } = await pickVideoConfig(W, H, videoBitrate, fps)
       if (!encoder || stopped || fatal || enc.state === 'closed') return
       enc.configure(config)
@@ -413,6 +423,8 @@ function adoptFrameSize(frame: VideoFrame): void {
       stats.hardware = hardware
     } catch (err) {
       fail(err)
+    } finally {
+      encoderPending = false
     }
   })()
 }
@@ -436,6 +448,14 @@ function onFrame(msg: RawVideoFrameMsg): void {
     lastFrame = frame.clone()
   } catch {
     /* a frame that cannot be cloned simply has no keep-alive behind it */
+  }
+  // F13: the encoder is mid-reconfigure. These few milliseconds of frames are
+  // NOT encoded — one of them at the old geometry is a second SPS in the file
+  // and the whole channel stops decoding. `lastFrame` is already kept above, so
+  // the keep-alive puts the picture in as soon as the encoder is ready.
+  if (encoderPending) {
+    frame.close()
+    return
   }
   // DROP, NEVER QUEUE. A queue that grows without bound turns a slow encoder
   // into unbounded memory and a take that ends minutes after the press; the

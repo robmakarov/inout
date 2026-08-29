@@ -389,6 +389,14 @@ let FPS = 30
 let followSource = false
 let longEdge = 1920
 let shapeSettled = true
+/**
+ * F13: the encoder is being reconfigured to the shape the first frame asked
+ * for, and NOTHING may be encoded until it is. The reconfigure is async (it
+ * probes the config), so a frame encoded meanwhile goes in at the OLD geometry
+ * and the file carries two — reproduced on prod with `?camlies=1`, where the
+ * raw channel came back undecodable for exactly this reason.
+ */
+let encoderPending = false
 let startedWorkerAtMs = 0
 let videoBitrate = 8_000_000
 let startedAtMs: number | null = null
@@ -711,13 +719,14 @@ function adoptShape(frame: VideoFrame): void {
   console.info(
     `[capture] compositor: the frames are ${w}x${h} — composing ${W}x${H}, not ${from} (F13)`,
   )
+  encoderPending = true
   void reconfigureEncoder()
 }
 
 async function reconfigureEncoder(): Promise<void> {
   const enc = videoEncoder
-  if (!enc || stopped || fatal) return
   try {
+    if (!enc || stopped || fatal) return
     const { config, hardware } = await pickVideoConfig(W, H, videoBitrate, FPS)
     if (stopped || fatal || enc.state === 'closed') return
     enc.configure(config)
@@ -726,12 +735,17 @@ async function reconfigureEncoder(): Promise<void> {
     stats.configJson = JSON.stringify(config)
   } catch (err) {
     fail(err)
+  } finally {
+    encoderPending = false
   }
 }
 
 function encodeComposite(atMs: number, keepAlive: boolean): void {
   const enc = videoEncoder
   if (!enc || stopped || fatal || enc.state !== 'configured' || !canvas) return
+  // F13: mid-reconfigure. One frame at the old geometry is a second SPS in the
+  // file, and the whole composite stops decoding.
+  if (encoderPending) return
   if (startedAtMs === null) {
     startedAtMs = atMs
     stats.originAtMs = atMs
