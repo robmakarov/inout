@@ -6,6 +6,7 @@ import {
   WARMUP_MS,
   ladderVerdict,
   type LadderInput,
+  DEAD_ENCODER_MS,
 } from './resolutionLadder'
 
 /** A machine that is failing badly, with every timing precondition satisfied:
@@ -39,11 +40,44 @@ describe('ladderVerdict', () => {
     expect(ladderVerdict({ ...failing, stepsTaken: DEGRADE_RUNGS.length, deliveredFps: 1 })).toBeNull()
   })
 
-  it('says nothing while the encoder has not produced output yet', () => {
+  it('says nothing while the encoder has not produced output YET', () => {
     // Note 6, the fault that cost this project three sessions: a fresh
     // process's first VideoEncoder pays a multi-second init, and judging inside
     // it reads as a hardware failure.
-    expect(ladderVerdict({ ...failing, firstOutputAtMs: null, deliveredFps: 0 })).toBeNull()
+    expect(
+      ladderVerdict({
+        ...failing,
+        startedAtMs: 0,
+        nowMs: DEAD_ENCODER_MS - 1,
+        firstOutputAtMs: null,
+        deliveredFps: 0,
+      }),
+    ).toBeNull()
+  })
+
+  it('but an encoder silent for longer than any init IS the case this ladder is for', () => {
+    // THE HOLE THAT COST A TAKE ITS COMPOSITE, measured on prod 2026-08-29 at
+    // 3456x2234@60: the encoder produced nothing at all, so firstOutputAtMs
+    // stayed null, so the rule above held FOREVER and the ladder never ran —
+    // and the watchdog then killed the composite at 15 s. "Initialising" and
+    // "never going to produce anything" cannot be the same state forever.
+    const dead = {
+      ...failing,
+      startedAtMs: 0,
+      nowMs: DEAD_ENCODER_MS + 1,
+      firstOutputAtMs: null,
+      deliveredFps: 0,
+    }
+    const verdict = ladderVerdict(dead)
+    expect(verdict?.rung.label).toBe('1440p')
+    expect(verdict?.reason).toContain('produced NOTHING')
+    // …and it still obeys every other rule. A source that sent nothing has not
+    // failed (rule 4), so a dead encoder over a still screen is left alone.
+    expect(ladderVerdict({ ...dead, arrivedFps: 0 })).toBeNull()
+    // The floor is still the floor (rule 1).
+    expect(ladderVerdict({ ...dead, stepsTaken: DEGRADE_RUNGS.length })).toBeNull()
+    // A step still has to settle before the next one (rule 3).
+    expect(ladderVerdict({ ...dead, lastStepAtMs: dead.nowMs - 1 })).toBeNull()
   })
 
   it('gives the encoder a warm-up window even after its first output', () => {

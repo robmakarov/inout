@@ -60,6 +60,28 @@ export const DEGRADE_RUNGS: LadderRung[] = [
 export const DELIVERY_FLOOR_RATIO = 0.6
 /** Rule 2: nothing is judged until the encoder has produced output for this long. */
 export const WARMUP_MS = 4_000
+/**
+ * Rule 2's UPPER BOUND, and the hole it closes cost a take its whole composite.
+ *
+ * "An encoder that has not produced yet is initialising" is true and it is why
+ * rule 2 exists (note 6: a fresh process's first VideoEncoder pays a
+ * multi-second init, and every "2-10 fps" panic in this project was that init
+ * being measured). But it was written with no ceiling, so INITIALISING and
+ * NEVER GOING TO PRODUCE ANYTHING were the same state forever — and the ladder,
+ * the thing that exists to rescue exactly that, was switched off by it.
+ *
+ * MEASURED ON PROD 2026-08-29, `?sourcefps=1&screensize=3456x2234&screenfps=60`
+ * — a real monitor's worth of pixels at 60: the composite encoded ZERO frames,
+ * `firstOutputAtMs` stayed null for the whole take, the ladder never once ran,
+ * and the watchdog gave up at 15 s and killed the composite. The same source at
+ * 2560x1440@60 keeps 81 % of its frames, so the rung the ladder would have
+ * stepped to was there the whole time.
+ *
+ * 6 s is comfortably above any init this project has measured and comfortably
+ * below the watchdog's 15 s, so the ladder gets to ask for less BEFORE the
+ * watchdog gives up. Stepping down can only beat losing the composite.
+ */
+export const DEAD_ENCODER_MS = 6_000
 /** Rule 3: after a step, wait this long before judging the new rung. */
 export const SETTLE_MS = 3_000
 /** How long delivery must stay under the floor before a step. */
@@ -103,9 +125,13 @@ export interface LadderVerdict {
 export function ladderVerdict(input: LadderInput): LadderVerdict | null {
   // Rule 1: the floor is the floor.
   if (input.stepsTaken >= DEGRADE_RUNGS.length) return null
-  // Rule 2: an encoder that has not produced yet is initialising, not failing.
-  if (input.firstOutputAtMs === null) return null
-  if (input.nowMs - input.firstOutputAtMs < WARMUP_MS) return null
+  // Rule 2: an encoder that has not produced yet is initialising, not failing —
+  // until it has been silent longer than any initialisation takes, at which
+  // point it is failing in the loudest way available and is precisely what this
+  // ladder is for. See DEAD_ENCODER_MS.
+  if (input.firstOutputAtMs === null) {
+    if (input.nowMs - input.startedAtMs < DEAD_ENCODER_MS) return null
+  } else if (input.nowMs - input.firstOutputAtMs < WARMUP_MS) return null
   // Rule 3: let a step settle before judging its result.
   if (input.lastStepAtMs !== null && input.nowMs - input.lastStepAtMs < SETTLE_MS) return null
   if (input.underFloorForMs < SUSTAINED_MS) return null
@@ -122,7 +148,11 @@ export function ladderVerdict(input: LadderInput): LadderVerdict | null {
   return {
     rung,
     reason:
-      `encoded ${input.deliveredFps.toFixed(1)} of ${demandFps.toFixed(1)} arriving fps ` +
-      `(${Math.round(ratio * 100)} % kept) for ${Math.round(input.underFloorForMs)} ms → ${rung.label}`,
+      (input.firstOutputAtMs === null
+        ? `the encoder has produced NOTHING in ${Math.round(input.nowMs - input.startedAtMs)} ms while ` +
+          `${demandFps.toFixed(1)} fps arrived — `
+        : `encoded ${input.deliveredFps.toFixed(1)} of ${demandFps.toFixed(1)} arriving fps ` +
+          `(${Math.round(ratio * 100)} % kept) for ${Math.round(input.underFloorForMs)} ms `) +
+      `→ ${rung.label}`,
   }
 }
