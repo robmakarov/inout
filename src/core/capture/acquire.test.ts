@@ -7,6 +7,7 @@ import {
   CAPTURE_MAX_FPS,
   CAPTURE_MAX_HEIGHT,
   CAPTURE_MAX_WIDTH,
+  CAPTURE_MAX_LONG_EDGE,
 } from './acquire'
 import { setNativeRes } from './nativeRes'
 import { setSourceFrame } from '@core/frame'
@@ -144,13 +145,14 @@ describe('the request Chrome receives, rung by rung', () => {
     })
   })
 
-  it('THE SIZE BOUND IS BACK BY DEFAULT (Robert 2026-08-29: the freeze appeared and he said)', () => {
-    // Native-res was default for one day. His game-tab take captured 3024x1964
-    // while three hardware encoders ran, delivered 15-21 of 30 fps, and froze
-    // the whole machine — the condition his own ruling named. See nativeRes.ts.
+  it('THE BOUND IS THE EXPORT CEILING, not the monitor and not the default step', () => {
+    // Robert's game-tab take captured 3024x1964 — 5.9 Mpx of which 4.25 could
+    // ever reach a file, the rest encoded, written and discarded while a game
+    // shared the GPU. A SQUARE box, so a rotated display is bounded on its own
+    // long edge rather than crushed onto the wrong axis (F13).
     const v = displayMediaOptions(config, 0).video as MediaTrackConstraints
-    expect(v.width).toEqual({ max: CAPTURE_MAX_WIDTH })
-    expect(v.height).toEqual({ max: CAPTURE_MAX_HEIGHT })
+    expect(v.width).toEqual({ max: CAPTURE_MAX_LONG_EDGE })
+    expect(v.height).toEqual({ max: CAPTURE_MAX_LONG_EDGE })
   })
 
   it('turning native-res OFF puts the 1080p ceiling back', () => {

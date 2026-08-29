@@ -324,6 +324,32 @@ export function isNarrowband(track: MediaStreamTrack | undefined): boolean {
  */
 export const CAPTURE_MAX_WIDTH = DEFAULT_EXPORT_SETTINGS.width
 export const CAPTURE_MAX_HEIGHT = DEFAULT_EXPORT_SETTINGS.height
+
+/**
+ * WHAT "NATIVE RESOLUTION" ACTUALLY MEANS, corrected 2026-08-29 by Robert's own
+ * console: it is not "the monitor's size", it is "everything this product can
+ * deliver". The largest export step INOUT offers is 1440p — 2560 on the long
+ * edge — so every pixel above that was encoded, written to disk, and then
+ * thrown away at export. His screen is 3024x1964: 5.9 Mpx captured, 4.25 Mpx
+ * usable, and the difference paid for in a hardware encoder, disk bandwidth,
+ * and a downscale on every composite tick, while a game rendered on the same
+ * GPU. The take froze the whole machine.
+ *
+ * The 2026-08-22 cap made this argument already — "capping at the export size
+ * makes the whole chain 1:1 and costs nothing in quality: the 4K frames were
+ * being thrown away at export anyway" — and then capped at the DEFAULT step
+ * rather than the LARGEST, which is what cost every 1440p user their detail and
+ * is what native-res was invented to undo. Both were half right. This is the
+ * whole rule: bound the capture by the biggest thing the export ladder can
+ * make, and nothing above it is ever recorded because nothing above it can ever
+ * be watched.
+ *
+ * A SQUARE BOX, not a landscape one, so a rotated or portrait display is bounded
+ * on its own long edge instead of being crushed onto the wrong axis (F13).
+ * Pinned against QUALITY_TIERS by test: if a bigger step is ever added, this
+ * moves with it or the test fails.
+ */
+export const CAPTURE_MAX_LONG_EDGE = 2560
 export const CAPTURE_MAX_FPS = DEFAULT_EXPORT_SETTINGS.fps
 
 /**
@@ -362,7 +388,7 @@ export const CAPTURE_MAX_FPS = DEFAULT_EXPORT_SETTINGS.fps
  */
 export function displayVideoConstraints(): MediaTrackConstraints {
   const size = nativeResEnabled()
-    ? {}
+    ? { width: { max: CAPTURE_MAX_LONG_EDGE }, height: { max: CAPTURE_MAX_LONG_EDGE } }
     : { width: { max: CAPTURE_MAX_WIDTH }, height: { max: CAPTURE_MAX_HEIGHT } }
   const ceiling = captureRateCeiling()
   return {
@@ -463,14 +489,42 @@ export async function capDisplayTrack(track: MediaStreamTrack | undefined): Prom
   // resolution and let resolutionLadder.ts step DOWN on measured backpressure
   // instead of never starting high. See nativeRes.ts.
   if (nativeResEnabled()) {
-    // THE SIZE IS KEPT; ONLY THE RATE IS BUDGETED (F15). A 60 fps ceiling is an
+    // THE EXPORT CEILING IS ENFORCED HERE TOO, because the request may not have
+    // carried it: after a stuck share the wedge ladder drops to `{video: true}`
+    // and sends NO video constraints at all (Robert's log: "reduced request
+    // 2/2"), so a machine that has ever wedged was capturing its full monitor
+    // however this flag was set. A constraint that only lives in the request is
+    // a constraint the degraded path does not have.
+    const long = Math.max(before.width ?? 0, before.height ?? 0)
+    if (long > CAPTURE_MAX_LONG_EDGE) {
+      try {
+        await withTimeout(
+          track.applyConstraints({
+            width: { max: CAPTURE_MAX_LONG_EDGE },
+            height: { max: CAPTURE_MAX_LONG_EDGE },
+          }),
+          1500,
+          'applyConstraints(export ceiling)',
+        )
+        const capped = track.getSettings()
+        console.info(
+          `[capture] native-res capture: ${before.width}×${before.height} is past the largest export ` +
+            `step (${CAPTURE_MAX_LONG_EDGE} long edge) — those pixels can never be exported, so ` +
+            `recording ${capped.width}×${capped.height} (O6)`,
+        )
+      } catch (err) {
+        console.warn('[capture] could not bound the surface to the export ceiling', err)
+      }
+    }
+    // THE SIZE IS OTHERWISE KEPT; ONLY THE RATE IS BUDGETED (F15). A 60 fps ceiling is an
     // ask, not a promise the machine can keep: measured on prod, 3456x2234@60
     // encodes NOTHING and never recovers, while the same surface at 30 is
     // healthy. The ladder fires correctly on that take and cannot rescue it,
     // because the collapse is instant. See rate.ts's HIGH_RATE_PIXEL_BUDGET.
     const ceiling = captureRateCeiling()
-    const rate = rateForSurface(before.width, before.height, ceiling)
-    if (rate < ceiling && (before.frameRate ?? 0) > rate + 1) {
+    const now = track.getSettings()
+    const rate = rateForSurface(now.width, now.height, ceiling)
+    if (rate < ceiling && (now.frameRate ?? 0) > rate + 1) {
       try {
         await withTimeout(
           track.applyConstraints({ frameRate: { max: rate } }),

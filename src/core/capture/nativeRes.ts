@@ -12,9 +12,13 @@
  *
  * THE FREEZE APPEARED AND HE SAID, the same day: a 60 fps game in another tab,
  * "some movement on record but after a while freezes and whole screen, not just
- * this tab". So this is back OFF by default — which is that ruling being
- * executed, not overturned. `?nativeres=1` is one URL away and everything below
- * still works.
+ * this tab". It went off by default for an hour — and he ruled on that too:
+ * "i need native resolution and 60 fps work, and not freezing, no turning it
+ * off." So it is ON, and the cost was taken out of the capture instead: native
+ * resolution now means EVERYTHING THE PRODUCT CAN EXPORT (2560 long edge, the
+ * largest quality step) rather than the monitor's own size. His 3024x1964
+ * screen was 5.9 Mpx of which 4.25 could ever reach a file; the rest was
+ * encoded, written and discarded. See CAPTURE_MAX_LONG_EDGE in acquire.ts.
  *
  * WHAT HIS OWN CONSOLE SHOWED, and it is why the cap is the right answer rather
  * than another guard: the screen was captured at 3024x1964 (5.9 Mpx) while
@@ -71,7 +75,7 @@ function fromStorage(): boolean | null {
 
 /** True when this take should ask for the source's own resolution. */
 export function nativeResEnabled(): boolean {
-  return fromSearch() ?? fromStorage() ?? false
+  return fromSearch() ?? fromStorage() ?? true
 }
 
 export function setNativeRes(on: boolean): void {

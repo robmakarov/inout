@@ -11,8 +11,10 @@ import {
   primaryKindFor,
   surfaceNotice,
   withTimeout,
+  CAPTURE_MAX_LONG_EDGE,
 } from './acquire'
 import { DEFAULT_EXPORT_SETTINGS } from '@core/types'
+import { QUALITY_TIERS } from '@core/compose/quality'
 import { parseSlowChannels } from './synthetic'
 import { setNativeRes } from './nativeRes'
 
@@ -84,18 +86,21 @@ describe('capture ceiling (4K game tab froze the take, Robert 2026-08-22)', () =
     })
   })
 
-  it('DEFAULT sends the size bound again — the freeze appeared and Robert said', () => {
+  it('DEFAULT bounds the request by the EXPORT CEILING — the largest step, not the monitor', () => {
+    // Native resolution means everything the product can DELIVER, not the
+    // monitor's own size: Robert's 3024x1964 screen was 5.9 Mpx of which 4.25
+    // could ever reach a file, and the rest was encoded, written and discarded
+    // while a game shared the GPU. A SQUARE box, so a rotated display is
+    // bounded on its own long edge rather than crushed onto the wrong axis.
     const c = displayVideoConstraints() as { width: { max: number }; height: { max: number } }
-    expect(c.width).toEqual({ max: CAPTURE_MAX_WIDTH })
-    expect(c.height).toEqual({ max: CAPTURE_MAX_HEIGHT })
+    expect(c.width).toEqual({ max: CAPTURE_MAX_LONG_EDGE })
+    expect(c.height).toEqual({ max: CAPTURE_MAX_LONG_EDGE })
   })
 
-  it('with native-res ON the bound is dropped, which is the whole point of the flag', () => {
-    withNativeRes(true, () => {
-      const c = displayVideoConstraints() as { width?: unknown; height?: unknown }
-      expect(c.width).toBeUndefined()
-      expect(c.height).toBeUndefined()
-    })
+  it('the ceiling IS the largest quality step, so adding a bigger step moves it', () => {
+    // The tie that keeps the claim honest: "nothing above this can ever be
+    // exported" is only true while this is the top of the export ladder.
+    expect(CAPTURE_MAX_LONG_EDGE).toBe(Math.max(...QUALITY_TIERS.map((t) => t.longEdge)))
   })
 
   it('with native-res OFF the request is bounded by MAX only — a small surface is never overconstrained', () => {
@@ -114,24 +119,24 @@ describe('capture ceiling (4K game tab froze the take, Robert 2026-08-22)', () =
     expect(exceedsCaptureCeiling({ width: 1280, height: 720, frameRate: 30.000001 })).toBe(false)
   })
 
-  it('with native-res ON a 4K surface is KEPT — the ladder is that flag\'s safety net', async () => {
-    // The risk Robert took explicitly on 2026-08-29, and took back the same day
-    // when the freeze arrived. Behind the flag the ladder is still the net.
+  it('DEFAULT: a 4K surface is bounded even when the REQUEST carried no bound', async () => {
+    // After a stuck share the wedge ladder drops to `{video: true}` and sends
+    // NO video constraints — Robert's log read "reduced request 2/2" — so a
+    // machine that has ever wedged was capturing its whole monitor however this
+    // flag was set. A bound that lives only in the request is a bound the
+    // degraded path does not have.
     const apply = vi.fn().mockResolvedValue(undefined)
-    await withNativeRes(true, () =>
-      capDisplayTrack(track({ width: 3840, height: 2160, frameRate: 30 }, apply)),
-    )
-    expect(apply).not.toHaveBeenCalled()
+    await capDisplayTrack(track({ width: 3840, height: 2160, frameRate: 30 }, apply))
+    expect(apply).toHaveBeenCalledWith({
+      width: { max: CAPTURE_MAX_LONG_EDGE },
+      height: { max: CAPTURE_MAX_LONG_EDGE },
+    })
   })
 
-  it('DEFAULT: a 4K surface is capped again, which is what stops the 08-22 freeze', async () => {
+  it('DEFAULT: a surface already inside the ceiling is left completely alone', async () => {
     const apply = vi.fn().mockResolvedValue(undefined)
-    await capDisplayTrack(track({ width: 3840, height: 2160, frameRate: 60 }, apply))
-    expect(apply).toHaveBeenCalledWith({
-      width: { max: CAPTURE_MAX_WIDTH },
-      height: { max: CAPTURE_MAX_HEIGHT },
-      frameRate: { max: CAPTURE_MAX_FPS },
-    })
+    await capDisplayTrack(track({ width: 2560, height: 1440, frameRate: 30 }, apply))
+    expect(apply).not.toHaveBeenCalled()
   })
 
   it('with native-res OFF a 4K surface is still downscaled when the picker was ignored', async () => {
