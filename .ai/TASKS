@@ -285,7 +285,8 @@ READY NOW:
                                              Measured on prod, same 8 s: 411 frames against 204,
                                              2.0 MB against 1.3. If it is right the default flips;
                                              if it is not, nothing has moved in the meantime.
-  ORACLE-LOAD  the gate is red      [light]   NOT F15 — same verdict on the commit before it
+  ORACLE-LOAD — ABSORBED BY G2 2026-08-29 (same mechanism kills the whole makeRig family; do not
+               run this entry, run G2). NOT F15 — same verdict on the commit before it
                                              (79d6def, throwaway worktree): composite tail 9848 ms
                                              / 7366 ms against a 400 ms band, delivered 0.2 / 2.5
                                              fps against a band of 10, both raw runs erroring "the
@@ -420,6 +421,233 @@ READY NOW:
        about WHEN                              where the instant path places it, on the same output
                                              instants. The oracle bands audio-video sync and cannot see
                                              video-video placement between paths.
+
+BUG PACK (promoted from BACKLOG.md 2026-08-29 on Robert's "put bugs on roadmap"; all operating rules
+apply — own branch, gates pasted as numbers, `npm run oracle` green, no behaviour change without Robert).
+Every entry below keeps its FULL evidence in BACKLOG.md; what is here is the assignment.
+THE G LANE OUTRANKS THE B LANE. Note 10 (the rig is wrong before the product is) and note 17 (a gate
+that cannot fail is not a gate) are why: three of the four G tasks describe a gate that has been
+reporting a verdict it did not measure, and a B task's handoff is worth exactly what its gates are.
+
+## G1 gate-coinflip — the per-task merge gate fails half its cold runs [medium · measurement first]
+`npm run oracle` (v2) failed 2 of 4 COLD runs on a stashed HEAD, and the tree under test failed 1 of 2
+and 1 of 3 — same failure every time: `instant export sync maxAbs 97.1 > 90ms` or `trimmed export sync
+maxAbs 105.5 > 90ms`. Never the render, never the mean. O4b already recorded the instrument's noise
+floor at ~8-9 ms 1sigma against a 90 ms band, and a maxAbs over four samples is the statistic most
+exposed to that — a CANDIDATE, not a measurement.
+WHY IT IS FIRST: every task in this file must pass this gate to merge. A coin-flip gate teaches
+sessions to re-run until green, which is how a real regression eventually lands on main.
+THE FIX IS NOT TO WIDEN THE BAND. Measure: N>=10 cold runs recording the PER-SAMPLE offset
+distribution (not just maxAbs), mean against max, the same take through the RENDER beside it, and the
+number of samples the copy paths actually contribute. Then either the instrument is named and fixed
+(more samples, a better statistic, the detection bias re-measured) or the copy paths own 97-105 ms and
+that is a P1 defect of its own, promoted with the numbers.
+GATES: N>=10 cold runs on one commit, distribution reported · a verdict naming instrument OR copy path,
+with numbers · if the instrument: the fix runs green 10 of 10 cold · if the copy paths: a new task
+authored here with the measurement attached · the band is NOT widened in this task · the fidelity
+oracle's own bimodal instant lane (0.03 dB or 18.83 dB, never between) is measured the same way and
+gets the same verdict, because it smells like the same wrong-window family.
+
+## G2 rig-source-dead — a rig that cannot move its own source is not a gate [light · rigs only]
+ABSORBS the ORACLE-LOAD entry. `npm run oracle:load` is RED and it is NOT F15: HEAD and the commit
+before F15's first line (79d6def, throwaway worktree) give the IDENTICAL verdict — composite tail
+9848 / 7366 ms against a 400 ms band, delivered 0.2 / 2.5 fps against a band of 10, both raw runs
+erroring "the take produced no screen channel".
+THE LEAD, already written down twice in this repo: the rig's 4K source is a canvas painted from
+requestAnimationFrame, `oracle:load` drives through `exp.mjs` which is HEADLESS by default, and a
+headless/hidden page runs rAF at 0. The source starves and the band reads starvation as tail loss.
+The same mechanism killed the whole makeRig family on Chrome 151 (sources 15.9 fps then 0.0 forever,
+composite degraded, blob deleted, every cell dying as an opaque `blobStore: no blob stored`), and the
+mitigation there was exactly this: paint on setInterval, not rAF.
+FIRST MOVE IS ONE COMMAND: re-run `--headed` (exp.mjs takes the flag) and see whether the source
+delivers. If it does, the rig's DEFAULT is the bug and this band has been measuring the harness for an
+unknown number of sessions — say how many, out loud, in the handoff.
+GATES: `oracle:load` headed vs headless run side by side, delivered fps of the SOURCE reported for both
+· every rAF-painted rig source either moved to setInterval or declared headed-only in ONE place a
+runner enforces · the tail/fps band re-read once the source moves, and the old verdict retracted or
+confirmed in writing · no product line changes in this task.
+
+## G3 gates-that-cannot-fail — two bands are decoration [light · rigs only]
+(a) Two evidence gates are phrased in `longtask` counts. Nothing in this codebase that awaits per frame
+or per sample — the render, the For-AI build, the AI selection loop — ever forms a single >=50 ms task
+while owning the thread end to end, so the counter reads 0 on the BLOCKING lane and 0 on the
+non-blocking one. The O5 rig learned this in August and X9 relearned it in August. The shared
+instrument that replaces it already exists: `perf/mainThreadWatch.ts`, SchedulingDelayWatch.
+(b) O1's MEMORY lane polls the heap on the MAIN thread while the export renders in a WORKER (since
+O5a), and `measureUserAgentSpecificMemory` is unavailable in the rig's Chrome — `totalSamples: 0`,
+`totalPeakDeltaMB: null` on every row, and the 0.1-0.2 MB deltas it does print are the wrong thread's.
+The scratch and buffer lanes therefore extrapolate to the SAME 145 MB at 30 minutes, which is the one
+thing O1 exists to distinguish. O1's actual claim rests on `targetHeldMB` (ScratchStats, measured
+inside the worker) and is sound — the lane around it is not.
+GATES: an audit listing EVERY gate phrased as a long-task count · each one moved onto scheduling
+lateness or deleted, never left green-by-construction · O1's heap sampled inside the export worker and
+posted back with the done message (or the rig run cross-origin-isolated so the API exists) · any band
+whose green rested on either is re-read and the verdict stated, including "unchanged".
+
+## G4 long-take-gate — every number this project quotes describes a take 156x too short
+[light-medium · rigs + one operating rule]
+`runOracle` defaults to 6000 ms and the widest cell in the matrix is 30 s. Robert records 938-1800 s.
+Measured once at 120 s: the instant path read 67.3 / 96.4 ms after 89e250e and 117.2 / 153.8 ms at the
+SAME length before it, against 97-102 at 6 s — the defect GREW with length and the 6 s gate
+under-reported it by ~20 %. The render path was flat (34.5 / 46.8 ms, all 119 pairs identical) and
+drift is dead as an explanation (beta-1 = -0.003 ms/s = 2.8 ms across a 938 s take): what is left is a
+CONSTANT offset, which is B7's subject.
+THE TASK IS TO MAKE THE LONG CELL CHEAP ENOUGH TO BE MANDATORY: one command, announced as HEAVY, that
+runs a >=120 s cell on the packet-copy paths, plus a line in the operating rules at the top of this
+file requiring it before any flip that touches instant/smart cut.
+GATES: the command exists and is named in the operating rules · one run on HEAD with numbers in the
+handoff · it fails loudly rather than emitting nulls under contention (the ALL-NULL family) · runtime
+stated so a session can budget it.
+
+## B1 size-panel-lies — the only warning before a two-hour render is wrong by 2.15x
+[light · quality.ts + the panel; no capture change]
+Robert 2026-08-29: the panel said 4.7 GB at 1440p and the file came out 10.09 GB on a 140-minute take.
+Every OTHER step landed within ~100 MB, so this is the top rung specifically, not the model as a whole —
+`quality.ts` already admits the sqrt-pixel model came in 47 % low at 1440p on text content, which at
+Robert's length is 5.4 GB of surprise. O3c NARROWED it: on a take whose single raw channel matches the
+step's geometry the number is now EXACT (the file's own byte rate) and that export does not render at
+all. The defect remains for every step that genuinely re-renders — camera takes, mismatched geometry.
+THE CHEAPER SIBLING, SEEN THE SAME DAY on a 6 s synthetic take on the deployed build: the PROVISIONAL
+numbers — what the panel shows for the seconds before sizeProbe's calibration lands — ranked 1440p
+BELOW the 1080p step, `1080p 400 KB (exact)` against `1440p ~308 KB`. 1440p is an UPSCALE of that very
+file; it cannot be smaller, and the model already has the evidence to know it (`isDefaultTier` returns
+the composite's exact bytes). Fix: floor every re-encoding step at the exact size of any step whose
+pixel count it exceeds. One comparison, no new measurement.
+GATES: a unit test asserts the panel is MONOTONIC in pixel count in both the provisional and the
+calibrated state · the 1440p re-render estimate measured against the file produced, on text content, at
+>=120 s, with the residual stated as a ratio · steps that are already exact are byte-identical to today
+· no change to which steps are instant.
+
+## B2 tab-audio-noises — Robert's bar is "i need them gone" [medium · playback + capture; two defects]
+"when video recorded and edit starts a lot of minor noises in tab audio, but after some time editing
+noises almost completly stops in same places they were in begining, but not completly."
+THAT SHAPE IS THE WHOLE CLUE AND IT SAYS THERE ARE TWO DEFECTS. A noise that HEALS with repetition is
+not in the file; one that survives every repetition is. Chasing them as one bug is how this stays open.
+(A) THE HEALING HALF IS PLAYBACK, and what is heard is the preview's own CORRECTION. Channel blobs
+    reach the player as OPFS-backed Files, so the first pass over any region pays a disk read and a
+    cold decode however `preload` is set — "the same places, quieter each time". The stall then meets
+    `usePlayback.sync`: past RESYNC_HARD_MS (250 ms) it hard-seeks a PLAYING element (a click), and
+    between SYNC_DEADBAND_MS (15 ms) and that it slews playbackRate by -20 %/+25 %. Media elements
+    preserve pitch by default, so that slew engages the browser's TIME-STRETCHER — worst on tab audio,
+    which is usually music or continuous speech where stretch artefacts have nowhere to hide.
+    Candidates, cheapest first: warm the decode before playback (audio channels are small — decoding to
+    an AudioBuffer once removes the class outright); ramp the correction instead of applying it; or stop
+    slewing AUDIO at all and slew only video, letting audio be the clock.
+(B) THE RESIDUAL IS CAPTURE and is immune to warming. Every starved audio quantum is deliberately
+    turned into 64 frames of fade-out / silence / fade-in (PAD_FADE) so the sample-counted timeline
+    stays honest — a starve is audible BY DESIGN, a ~1.3 ms notch. Measured 2026-08-26: tab audio
+    padded 1281 ms in 84 s under load, ~15 notches a minute. Fix is starve less (that is capture CPU)
+    or splice better: crossfade ACROSS the gap instead of through zero.
+DO THE DISCRIMINATOR FIRST AND REPORT IT, so nobody argues about which half is which: export the take
+and listen to the FILE. Anything audible there is (B). `ChannelDiagnostics.paddedMs` says how much (B)
+exists before anyone listens — 0 there means (A) is the whole story.
+GATES: the discriminator run and reported (paddedMs + a listen of the exported file) BEFORE any fix ·
+(A) no hard seek of a playing element, slew capped, measured against the same take twice — first pass
+and second pass — showing the first pass no longer differs · (B) the crossfade keeps the timeline
+sample-exact (wallClockHold tests green) and the notch is measured before and after in dB · fidelity
+oracle green · `npm run oracle` green both engines · Robert's listen closes it, not the numbers.
+
+## B3 stale-tab-chunks — a tab that spans a deploy silently loses the export worker
+[light-medium · service worker + boot notice]
+From Robert's own console dump on real takes against the deployed build: `/assets/sizeProbe-*.js` 404
+and `index-*.css` 404 (hashed names from a build Vercel no longer serves), and twice `[compose] export
+worker unusable, rendering in-thread — Error: export worker error`. The fallback WORKED, so files were
+delivered — on the slow lane, on the UI thread: one 32 s take spent 7.5 s of its 8.2 s render in
+encode-wait at 1440p.
+MECHANISM: the PWA service worker is assets cache-first / documents network-first, so a tab (or a
+cached document) from build N requests build N's hashed chunks after build N+1 deploys and Vercel
+serves 404. REPRO: open the app, deploy, open the export panel.
+THIS MAY ALSO EXPLAIN PAST "the fix wasn't there to hear" ROUNDS — a stale tab IS an old build even
+when prod serves HEAD, which makes it a testing bug as much as a product one.
+FIX SHAPE, not chosen: precache ALL hashed assets at activate · a version-mismatch "refresh for the new
+version" prompt (the owed-flag boot-notice machinery already exists) · or keep build N-1's assets alive
+in the SW cache.
+GATES: the repro no longer 404s, or surfaces a refresh prompt the user cannot miss · the export worker
+is still used after a deploy (assert the in-thread fallback did NOT fire) · a fresh tab is unchanged ·
+the boot notice, if used, is an owed flag consumed once (a 4 s toast was already learned to be wrong).
+
+## B4 dead-channel-silence — a channel that recorded nothing must say so [light · UI surface + the
+##    liveness path that already exists]
+Observed four times on a real device by P9's runner: a camera whose track is live, unmuted and
+negotiated at 1920x1080@30 while the sensor is off (a closed lid does this) records for the take's full
+length, logs `camera delivering 0.0 fps`, writes a **28-byte** raw channel file, times the recorder stop
+out after 5 s, and saves a recording with `durationMs: 0` and **zero channels** — with nothing on screen
+to say any of that happened. Same family as the older report where a mic acquisition timed out and the
+take completed with no mic and no unmissable warning, discovered only on playback.
+THE PIECES TO NOTICE IT ALREADY EXIST: `capture/sourceLiveness.ts` watches exactly this and emits
+`channel-stalled`, and the UI already renders a stalled chip. WHETHER IT FIRED HERE WAS NEVER
+ESTABLISHED — the runner was not looking at the chips. That is the first thing to check, and if it did
+fire, this is a surfacing bug, not a detection one.
+IT IS P2 AND NOT P1 because the trigger is a dead camera the user can usually see in the preview. It
+becomes P1 the moment the preview looks fine while the file is empty.
+GATES: a synthetic channel that delivers ZERO frames is reproducible from a URL (a knob in the same
+family as `?slow=`) · the stalled chip is asserted to render for it · a take that saved zero channels,
+or lost a channel it armed, never lands silently — one loud post-record surface, wording is Robert's ·
+the 5 s stop timeout is either avoided on a known-dead channel or explained in the handoff · evidence:
+docs/qa/camera-1080-2026-08-29.json and the P9 handoff console lines.
+
+## B5 disk-headroom — an uncapped take can fill the disk with no warning [light · additive]
+Exposed by removing the 30-minute cap (2026-08-23). Capture streams every channel to OPFS as it
+records, so length costs DISK and not RAM — but nothing checks `navigator.storage.estimate()` before or
+during a take. A write failure is at least loud (session.ts ondataavailable -> channel-error +
+onTrackEnded, partial take kept), so this is degradation and not silent loss. Still: an uncapped take
+should warn on low headroom before it starts and while it runs, and ~1.1 GB/hour at the production
+8 Mbps + 128 kbps is a number the UI can show.
+GATES: the estimate is read before start and on a cadence during a take · a low-headroom machine warns
+before and during, a healthy one shows nothing new · the rate shown matches the measured byte rate of a
+real take within 10 % · additive only — no take is ever refused or stopped by this task.
+
+## B6 display-permission-message — we blame the device for an OS permission
+[light · arming errors + the wedge ladder; BEHAVIOUR CHANGE -> Robert's yes before it ships]
+Hit on the dev machine while reproducing something else: when macOS has not granted Chrome screen
+recording, Chrome's picker opens and says exactly what to do ("allow screen recording for Chrome in
+System Settings. You'll then need to restart Chrome") with Share greyed out, `getDisplayMedia` NEVER
+REJECTS, and INOUT's own 30 s deadline fires and reports the generic "the device never connected" —
+throwing away the one message that would have solved it. Measured: `display timeout +30023ms` /
+`+30021ms`, with and without the flag.
+SECOND HALF, same mechanism: the wedge ladder ESCALATES on each such timeout (`rememberDisplayWedge`),
+spending a constraint escalation on something no constraint can fix. It self-heals on the first
+success, so this is waste rather than damage — but it also means a permission problem walks the user
+down the safe-mode ladder for no reason.
+GATES: a display request that is still outstanding says what it probably is BEFORE the deadline, not
+only in the post-take banner · the wedge ladder does not escalate on this class · a genuine wedge still
+escalates exactly as today (pinned by test) · Robert approves the wording before it ships.
+
+## B7 start-offset-cert — put the alignment inputs in the file, then argue [light-medium ·
+##    instrumentation ONLY; no compensation ships in this task]
+TWO ALIGNMENT ERRORS A SYNTHETIC RIG CANNOT SEE, both pushing audio LATE:
+  (1) the mic anchor subtracts only the platform-REPORTED track latency (measuredAudio.ts) — a
+      Bluetooth headset's real 100-300 ms is invisible to it, and Robert's 15-minute Zoom take is
+      exactly that case;
+  (2) the video channel is anchored to the `recorder.start()` CALL, not to when its first frame landed.
+      A canvas delivers instantly on the rig; a real getDisplayMedia surface does not — the composite's
+      own first frame took 233 ms in the same run.
+FIELD EVIDENCE THAT IT IS THIS FAMILY: "mic/camera unsynch in beggining of video seems to be smaller on
+other try" — a CONSTANT start-of-take offset that varies take to take and SHRINKS on a warm second try,
+which is what (2) looks like when a cold first take pays device spin-up inside the anchor. Distinct
+from the progressive drift, which is fixed; G4's 120 s cell already ruled drift out arithmetically
+(2.8 ms across a 938 s take).
+THE TASK: each channel's `startOffsetMs`, the raw anchor, the platform-reported input latency and the
+first-frame delay persist in ChannelDiagnostics / the certification, so the next field report arrives
+with NUMBERS instead of an adjective. Compensating from theory is what has failed here before.
+GATES: the four values persist with the take and survive a reload · read out of one REAL take and
+quoted in the handoff · zero behaviour change, pinned by a byte-identical export test · X14 (<=20 ms)
+stays blocked; this task does not claim it.
+
+## B8 pip-placement — the two export paths disagree about WHEN [light · render path]
+Found while measuring X15(c), never chased: in the same take, on the same output instants, the moving
+camera region best-matches at -15 frames (-0.5 s) and even there reads only 23.6 dB (max 115), while
+the STILL screen region of the same two files matches at 37.1 dB. So the two paths agree about pixels
+and disagree about time: an EDITED export's PiP shows a different moment than an unedited export's at
+the same timestamp.
+NOT DIAGNOSED. Two candidates: the camera channel's `startOffsetMs` against the composite's, or the
+render resampling the camera onto its own grid. `npm run exp -- x15c` prints it as `alignFrames` on the
+camera row; `{"thumbs":true}` dumps the frames, which is what made it visible.
+WHY NO GATE CAUGHT IT: the oracle bands audio-against-video sync. This is video-against-video placement
+BETWEEN two export paths, which nothing here measures.
+GATES: `npm run exp -- x15c` reads alignFrames 0 +-1 on the camera row · the screen row's dB is
+unchanged · instant and smart-cut paths are untouched, byte-identical · the diagnosis is stated (which
+of the two candidates it was), because the other one stays a hazard if it is not.
 
 NEW TASKS (authored 2026-08-26 from Robert's answers; all operating rules apply):
 
@@ -2046,8 +2274,11 @@ picture change, so it is Robert's call, not an engineering one), or a way to mak
 chroma — which is a browser behaviour, not ours. The ~12 % ceiling should be weighed against that
 before anyone writes the F3-shadow shader, which is the genuinely hard part and was never reached.
 
-## X6 raw-channels-webcodecs [medium · finish ee/webcodecs-capture-2 (behind main — REBASE first),
-   ~400-800 lines · CAPTURE side; additive per the frozen rule, MediaRecorder stays the ladder]
+## X6 raw-channels-webcodecs — BUILT AND SHIPPED OFF BY DEFAULT 2026-08-26 (handoff below)
+   [what is left is not code: the default flip is Robert's, because the AVC and VP9 channels agree
+   to only 27.9 dB on screen content and that is a picture change · CAPTURE side; additive per the
+   frozen rule, MediaRecorder stays the ladder. The branch was REFUSED, not rebased — see the
+   handoff — and was deleted 2026-08-29 once nothing needed it.]
 Screen+camera raw channels still encode via SOFTWARE VP8/VP9 (the largest capture CPU cost, O3a)
 while the composite uses hardware AVC. O3a's rejection reason — Chrome's MediaRecorder does not
 stream MP4, a mid-take kill leaves 753 bytes — is SOLVED by the pattern v2 already ships: WebCodecs
@@ -2771,7 +3002,8 @@ take with a camera — both fall back to the composite with a stated reason. Who
 sampler's to measure, not a rig's: `npm run exp -- o3b --cpu --query=singlegen=capture` against
 `--query=singlegen=off`.
 
-## O4. webcodecs-engine — the keystone  [P1, big; CONTINUES ee/webcodecs-capture-2 (on origin, behind main — rebase first)]
+## O4. webcodecs-engine — the keystone  [P1; steps 1, 1b and 2 all DONE (handoffs below), none of
+   them from a branch. The WebGPU backend is all that is left, and it is the 4K lever, not the 1080p one.]
 Why: the pixel path (MediaRecorder + <video> + main-thread 2D canvas) forces 4–6 redundant decodes
 during capture, fixed-tick redraws of static frames, no keyframe control, ±45 ms epoch jitter, and the
 1080p capture ceiling.
@@ -2879,8 +3111,9 @@ FINISH LIST FOR THE DEFAULT FLIP — updated same day (second "go O4" session):
       production worker, which was judged not worth it today. Revisit if a real wedge is ever seen.
    6. sync: v2 reads 33.7-47.8 ms on the ≤90 band (v1: 63) across today's runs; the ≤20 ms goal is
       anchor work (input-latency subtraction), not throughput.
-   7. raw channels on VideoEncoder (ee/webcodecs-capture-2, unmerged, behind main — rebase first)
-      — optional, evidence decides.
+   7. raw channels on VideoEncoder — DONE as task X6 (2026-08-26), built on v2's shipped pattern
+      rather than the old branch, and shipped off by default. Evidence decided: −41 % mean capture
+      CPU, and a picture change that is Robert's to accept.
 NOT DONE, unchanged: WebGPU backend — now clearly the 4K lever, not the 1080p one.
 HARNESS GREW (second session): exp.mjs `--cpu` (OS-sampled whole-browser CPU, throwaway-profile
    runs only) and `--profile=<dir>` (REUSE a Chrome profile across runs and keep it — how the

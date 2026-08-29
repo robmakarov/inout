@@ -662,7 +662,6 @@ gaps / in flight:
   retries it: switching the oracle's audio reference from a track-processor clone to the production
   capture path moved it 2-5 ms, not the ~60 ms the loopback suggested.
   O4 step 2's job is to bring the symmetric metric to ≤20 ms, then re-tighten the band.
-  ee/webcodecs-capture-2 is untouched and behind main — REBASE before continuing it.
 - THE DEFAULT CAPTURE ENGINE IS v2 (O4, flipped 2026-08-24 — AWAITS ROBERT REAL-TAKE VERIFICATION).
   v2 = worker + WebCodecs + WebGL2 + fragmented MP4 to its own SyncAccessHandle, frame-driven.
   v1 (MediaRecorder) remains the full ladder underneath: capability fallback (Apple WebKit and
