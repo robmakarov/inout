@@ -85,13 +85,39 @@ technical defects by severity. Done items get deleted, not archived.
   by scrubbing the export to the same instant. The preview half is partly addressed 2026-08-29 (the
   scrubber was firing a full re-seek of every element per pointer event, now one per frame).
 
-- [P2] Robert 2026-08-29: **noises on tab audio, "not much but still"**. LEAD, not a diagnosis: every
-  starved audio quantum is deliberately turned into 64 frames of fade-out, silence, fade-in
-  (`measuredAudio.ts` PAD_FADE, `compositor.worker.ts` AUDIO_PAD_FADE) to keep the sample-counted
-  timeline honest — so a starve is AUDIBLE by design, as a ~1.3 ms notch. 2026-08-26 measured tab
-  audio padding 1281 ms in 84 s under load, which is ~15 such notches per minute. Confirm against
-  `ChannelDiagnostics.paddedMs`/`events` on Robert's take before choosing between "starve less" and
-  "splice better" (crossfade across the gap rather than through zero).
+- [P1] Robert 2026-08-29, sharpening his earlier "noises on tab audio": **tab audio crackles all
+  through the start of an editing session and then MOSTLY heals** — "when video recorded and edit
+  starts a lot of minor noises in tab audio, but after some time editing noises almost completly
+  stops in same places they were in begining, but not completly, i need them gone".
+  THAT SHAPE IS THE WHOLE CLUE AND IT SAYS THERE ARE TWO DEFECTS, not one. A noise that heals with
+  repetition is not in the file; one that survives every repetition is. Chasing them as one bug is
+  how this stays open.
+  (A) THE HEALING PART IS PLAYBACK, and what you hear is the preview's own CORRECTION rather than
+      the audio. Channel blobs reach the player as OPFS-backed `File`s (`blobStore.read` →
+      `getFile()` → `createObjectURL`), so the first pass over any region pays a disk read and a
+      cold decode however `preload="auto"` is set, and later passes hit the browser's cache — which
+      is exactly "the same places, quieter each time". The resulting stall then meets
+      `usePlayback.sync`, which makes it audible two ways: past RESYNC_HARD_MS (250 ms) it
+      hard-seeks a PLAYING element, which is a click, and between SYNC_DEADBAND_MS (15 ms) and that
+      it slews `playbackRate` by up to −20 %/+25 %. Media elements preserve pitch by default, so
+      that slew engages the browser's TIME-STRETCHER — the warbling a listener calls "minor noises",
+      and worst on tab audio because it is usually music or continuous speech, where stretch
+      artefacts have nowhere to hide. Candidates, cheapest first: warm the decode before playback
+      (audio channels are small — decoding them to an AudioBuffer once removes the class outright);
+      ramp the correction instead of applying it (crossfade a hard seek, cap the slew far below
+      ±20 %); or stop slewing AUDIO at all and slew only video, letting audio be the clock — it is
+      the one channel where a listener can hear the correction being made.
+  (B) THE RESIDUAL IS CAPTURE, already in the file and immune to warming. Every starved audio
+      quantum is deliberately turned into 64 frames of fade-out / silence / fade-in
+      (`measuredAudio.ts` PAD_FADE, `compositor.worker.ts` AUDIO_PAD_FADE) so the sample-counted
+      timeline stays honest — a starve is audible BY DESIGN, as a ~1.3 ms notch. 2026-08-26 measured
+      tab audio padding 1281 ms in 84 s under load, ~15 notches a minute. Fix is either starve less
+      (CPU) or splice better: crossfade ACROSS the gap instead of through zero.
+  THE DISCRIMINATOR IS ONE EXPORT, so nobody has to argue about which half is which: export the take
+  and listen to the FILE. Anything audible in the exported file is (B) and was recorded that way;
+  anything that exists only in the editor preview is (A). `ChannelDiagnostics.paddedMs` on the take
+  says how much (B) there is before you even listen — 0 there means (A) is the whole story.
+  Robert's bar is explicit and it is not "less": "i need them gone".
 
 - [P1] 2026-08-26, from Robert's own console dump (real takes, deployed build): **a long-lived app
   tab spans deploys, its lazily-loaded chunks 404, and that silently killed the EXPORT WORKER.**
