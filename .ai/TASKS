@@ -288,7 +288,11 @@ READY NOW:
                                              as a wedge, and (fixed today) dropped the size bounds
                                              while backing off. The only exit anyone found was a
                                              console line.
-  F18  the user's own resolution   [medium]  Robert 2026-08-29: "i want 3024x1964 or whatever users
+  F18  the user's own resolution — BUILT AND VERIFIED ON PROD 2026-08-29, flag-gated `?sourceres=1`
+       (handoff under the task). A screen-only take bigger than 1440p gets a Source step at its OWN
+       pixels, delivered by the packet copy. T1 RAN AND ANSWERED and it withdrew this task's colour
+       reason — see the corrected X15(e) table under the task.
+  F18 (original entry)             [medium]  Robert 2026-08-29: "i want 3024x1964 or whatever users
                                              resolution is on roadmap". The export ladder stops at
                                              1440p for inherited reasons, not decided ones, and the
                                              capture ceiling follows it — one constant raises both.
@@ -1375,6 +1379,72 @@ load · size estimates cover it · oracle v2+v1.
 THE COLOUR GATE IS WITHDRAWN with the reason above: ≥95 % of glyph colour is not reachable by
 resolution at all (2x reaches 94.7 %), and the format that does reach it is 4:4:4, which belongs to
 SIZE-CODEC's efficiency lane and not here.
+
+## F18 HANDOFF — BUILT AND VERIFIED ON PROD 2026-08-29 (twentieth session). FLAG-GATED, OFF.
+`?sourceres=1` (sticky `inout.frame.sourceres`). Off, every path answers exactly what it answered
+yesterday, and that is structural rather than tested-for: `sourceStepFor` returns null and
+`tiersForTake` returns exactly QUALITY_TIERS.
+
+THE STEP HAS NO SIZE OF ITS OWN. `longEdge: 0` is a sentinel for "this take's", and the remembered
+step is an ID because "source" is a different number on every machine — a 3024-wide take followed by
+a 1920-wide one survives, because the id re-resolves against whatever take is in hand and the editor
+falls back to the biggest step THAT take offers rather than silently resolving a declared box.
+
+IT IS OFFERED ONLY WHERE IT CAN BE DELIVERED, and the refusal is the feature. The composite is
+written at COMPOSITE_WIDTH (1920) whatever the screen was, so only the RAW channel holds the take's
+own resolution and only O3c's single generation hands it over untouched — which needs exactly one
+video channel. Screen-only bigger than 1440p gets it; screen+camera does not. Offering it there
+would promise 3024 and return the 1920 composite upscaled: the badge disagreeing with the path.
+
+THE CAPTURE CEILING FOLLOWS FOR FREE — one constant, as the task said. `captureCeilingLongEdge()`
+returns Infinity with the flag on and the size bound is OMITTED rather than widened, because
+`{ max: Infinity }` is not a constraint but a silently-accepted bug.
+
+FOUND BY DRIVING IT ON PROD, FOURTH SESSION RUNNING THAT THIS IS HOW THE REAL BUG SURFACES: the
+first build put the Source step on screen and the panel said, one line under my own note promising
+"copied straight out of the recording — no re-encode":
+    Re-renders the whole video at 3024x1962, so the size is an estimate.
+1962, not 1964. Every other step is a pixel budget resolved against the take's ASPECT (F13), which
+is right for them — the size is ours and the shape follows the take. The source step is the exact
+opposite and there is nothing to resolve: 3024/1964 = 1.53971…, and reconstructing from that comes
+back 1962. TWO PIXELS were enough for the copy fence to correctly refuse the raw channel and send
+the whole take to a full render at the wrong size. `sourceStepFor` now returns the channel's own
+{width, height} and `resolveTier` takes the pair verbatim; pinned by a test named for the
+regression. The tier note also stopped promising anything — O3c's rule is that the badge is the
+PATH's verdict, and a note claiming "no re-encode" was a second voice on that question and the wrong
+one.
+
+PROD, build 3df91ee, `?synthetic=1&screensize=3024x1964&sourceres=1&sourceframe=1`, screen-only:
+· the raw channel recorded 3024x1964 — the ceiling really lifted (without the flag it caps at 2560)
+· the composite stayed 1920x1246, as designed
+· the panel offers: 540p ~451 KB · 720p ~505 KB · 1080p 613 KB INSTANT · 1440p ~722 KB ·
+  SOURCE 452 KB INSTANT — "Copies the video as recorded — no re-encode, ready in about a second.
+  That size is the file, not a guess."
+· and the Source file is SMALLER than the 1080p composite copy (452 KB against 613 KB) while being
+  native resolution, because it is the raw channel's own file rather than a second encode of it.
+HONEST LIMIT ON THAT LAST GATE: "read out of the FILE" is satisfied via the store — the copy source
+is single-generation on a blob whose dimensions IndexedDB reports as 3024x1964, and a packet copy
+does not change them. A byte-level read of the exported file needs a download the browser pane
+blocks.
+
+T1 RAN, ANSWERED, AND WITHDREW THIS TASK'S SECOND REASON. Its own commit carries the detail; the
+short form is that the X15(e) colour table this task cited was measured through a mask indexed off a
+DIFFERENT layout (the rungs sat 14.1 dB apart uncompressed), and once the fixture paints one master
+and downscales every rung off it, both published conclusions invert: 1.5x does NOT match the 4:4:4
+ceiling (90.1 % against 99.3 %), 2x DOES buy over 1.5x (+4.6 points), and the cheap lever for colour
+is the chroma FORMAT — 4:4:4 AV1 at 99.3 % for 1.11x the bytes against 2x 4:2:0 at 94.7 % for 2.29x.
+At genuinely equal bytes 1.5x is -0.5 dB on text for +4.8 points of colour: a trade, not a free win,
+which is this task's own "belongs to F16's rungs, Robert's ruling" branch. SO NO SUPERSAMPLING RULE
+SHIPPED. F18 delivers its FIRST reason only, which is the one Robert asked for.
+
+GATES. 642 tests (13 new), typecheck clean · `npm run oracle` (v2) PASS: sync 37.7/37.7 ms against
+the 90 ms band, instant 63.3 ms, smartcut 65.3 ms, tail 79 ms, export 4.72x · `--engine=v1` PASS:
+sync 54.2/54.2 ms, instant 52.5 ms, render 38.2 ms, tail 81 ms, export 1.30x — the same throughput
+band that read 0.67x during O15 under load average 8.8, which confirms that red was ambient.
+· byte-identical with the flag off, structurally · the remembered step survives a smaller take
+· size estimates cover the new step (the panel priced it at 452 KB exactly) · `verify-deploy` OK.
+STILL OWED: the flag's default is Robert's, and the honest thing to say when he asks is that this is
+40 % more pixels through the encoders O15 counts — `?encoderbudget=1` is its companion.
 
 ## O15 how many encoders may a take open — AUTHORED 2026-08-29 from Robert's own console
 [heavy · the freeze's root, and what F18 is gated on]
