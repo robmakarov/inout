@@ -112,9 +112,9 @@ function videoChannels(recording: Recording): ChannelRecording[] {
  *    the shape the MP4 muxer copies into (this is exactly what O3b waited on
  *    for months, and what X6 delivered);
  *  · dimensions that are not the export's — the compositor CONTAIN-fits into
- *    its own fixed canvas, so at any other size it is resampling, and copying
- *    the raw channel would hand the user a file of a different geometry than
- *    the one the product promises;
+ *    its own canvas, so at any other size it is resampling, and copying the raw
+ *    channel would hand the user a file of a different geometry than the one
+ *    the product promises;
  *  · a zero-length channel — nothing to copy.
  */
 export function singleGenerationSource(
@@ -186,6 +186,19 @@ export function singleGenerationSource(
  * the day-one interaction that cancelled O3b's win. The COMPOSITE stays fenced
  * by `allowComposite`: it exists at exactly one geometry, and the caller (who
  * owns the tier ladder) is the one who knows whether the request is it.
+ *
+ * F13 ADDS THE SECOND HALF OF THAT FENCE, and it is not belt-and-braces — it is
+ * a case that got real. Until F13 the composite was ALWAYS 1920x1080, so
+ * `allowComposite` (i.e. "this is the default tier") implied "the request is
+ * the composite's geometry" and a geometry check here could only ever refuse
+ * something that worked. Now the composite is written at the take's own shape,
+ * and a take RECORDED with the frame following the source and EXPORTED without
+ * it breaks that implication: measured live on prod, a 4:3 camera take exported
+ * at "1080p" with `?sourceframe=0` handed back a 1920x1440 file while the panel
+ * said 1080p and the stage showed the 16:9 crop. So the composite is now
+ * checked against the request as well. Every take made before F13 has a
+ * 1920x1080 composite and a 1920x1080 default step, so this refuses nothing
+ * that ever worked; what it refuses is the export that lied.
  */
 export function chooseCopySource(
   recording: Recording,
@@ -208,7 +221,9 @@ export function chooseCopySource(
     declined.push({ origin: 'composite', reason: 'the take has no composite' })
     return { source: null, declined }
   }
-  if (!allowComposite) {
+  const wrongShape =
+    composite.width !== settings.width || composite.height !== settings.height
+  if (!allowComposite || wrongShape) {
     declined.push({
       origin: 'composite',
       reason:
@@ -217,10 +232,5 @@ export function chooseCopySource(
     })
     return { source: null, declined }
   }
-  // NO GEOMETRY CHECK ON THE COMPOSITE beyond the caller's `allowComposite`,
-  // deliberately: that flag means "the requested output geometry IS the
-  // composite's" and is false for every other quality tier — so a second
-  // opinion here could only ever REFUSE a case that works today. O3b may add a
-  // copyable case; it may not remove one.
   return { source: compositeSource(composite), declined }
 }

@@ -190,6 +190,28 @@ describe('O3c: single generation follows the SELECTED tier; the composite stays 
     expect(chosen.source?.origin).toBe('single-generation')
     expect(chosen.declined).toEqual([])
   })
+
+  /**
+   * F13: `allowComposite` used to be the whole fence, because the composite was
+   * always 1920x1080 and "this is the default step" therefore implied "the
+   * request is the composite's geometry". It does not any more, and the case is
+   * not hypothetical: measured live on prod, a 4:3 take RECORDED with the frame
+   * following the source and EXPORTED with `?sourceframe=0` handed back a
+   * 1920x1440 file under a "1080p" badge, next to a stage showing the 16:9 crop.
+   */
+  it('a composite of a different shape than the request is not the request', () => {
+    const tall = recording({
+      channels: [channel({ kind: 'camera', width: 640, height: 480, mimeType: 'video/webm' })],
+      composite: composite({ width: 1920, height: 1440 }),
+    })
+    const chosen = chooseCopySource(tall, OUT, { allowComposite: true })
+    expect(chosen.source).toBeNull()
+    expect(chosen.declined.at(-1)?.reason).toContain('1920x1440')
+    // ...and it IS the request when the request is its shape.
+    expect(
+      chooseCopySource(tall, { width: 1920, height: 1440 }, { allowComposite: true }).source?.origin,
+    ).toBe('composite')
+  })
 })
 
 describe('O3b may add a copyable case and may never remove one', () => {

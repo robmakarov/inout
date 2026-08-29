@@ -419,6 +419,10 @@
   padding: 16px 0;
 }
 
+/* F13: the STAGE is the only thing that follows the take's shape. This bound
+   exists so the stage fits the viewport height, so it follows too. The timeline
+   and the panels below deliberately do NOT — they are controls, and a portrait
+   take would squeeze them into a column. */
 .player {
   width: 100%;
   max-width: min(100%, calc((100dvh - 300px) * var(--stage-ar, 16 / 9)));
@@ -695,7 +699,7 @@
   position: relative;
   flex: none;
   width: 100%;
-  max-width: min(100%, calc((100dvh - 300px) * var(--stage-ar, 16 / 9)));
+  max-width: min(100%, calc((100dvh - 300px) * 16 / 9));
   align-self: center;
   height: 184px;
   background: transparent;
@@ -952,7 +956,7 @@
 .xp {
   flex: none;
   width: 100%;
-  max-width: min(100%, calc((100dvh - 300px) * var(--stage-ar, 16 / 9)));
+  max-width: min(100%, calc((100dvh - 300px) * 16 / 9));
   align-self: center;
   display: flex;
   flex-direction: column;
@@ -1255,7 +1259,7 @@
 .quality {
   flex: none;
   width: 100%;
-  max-width: min(100%, calc((100dvh - 300px) * var(--stage-ar, 16 / 9)));
+  max-width: min(100%, calc((100dvh - 300px) * 16 / 9));
   align-self: center;
   display: flex;
   flex-direction: column;
