@@ -657,10 +657,25 @@ export function displayMediaOptions(
   level: DisplayRequestLevel,
 ): DisplayMediaOptions {
   const audio = config.systemAudio ? RAW_DISPLAY_AUDIO : false
+  // A DEGRADED RUNG DROPS THE EXOTIC OPTIONS, NOT THE BOUNDS, and that was
+  // backwards until 2026-08-29. The wedge these rungs exist for is Chrome
+  // hanging on `selfBrowserSurface` / `surfaceSwitching` / `systemAudio`, and
+  // rung 1 was throwing the SIZE and RATE bounds out with them — so a machine
+  // that had already choked once started capturing its WHOLE monitor, uncapped,
+  // which is the opposite of backing off. Robert's take read "reduced request
+  // 2/2 after a stuck share" and was capturing 3024x1964 with no bound in
+  // sight, and no flag could reach it because the flag lives in the bounds that
+  // had been removed.
+  //
+  // Rung 2 stays bare `{video: true}` on purpose: it is the rung for a machine
+  // that wedges on ANY constraint object, and giving it one back would defeat
+  // it. That rung is covered on the TRACK instead — capDisplayTrack enforces
+  // the export ceiling on what actually arrives, whatever the request managed
+  // to say.
   if (level >= 2) return { video: true, audio }
   if (level === 1) {
     return {
-      video: { displaySurface: 'monitor' } as MediaTrackConstraints,
+      video: { ...displayVideoConstraints(), displaySurface: 'monitor' } as MediaTrackConstraints,
       audio,
     }
   }

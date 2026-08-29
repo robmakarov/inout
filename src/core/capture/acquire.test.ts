@@ -145,6 +145,31 @@ describe('the request Chrome receives, rung by rung', () => {
     })
   })
 
+  it('a DEGRADED rung drops the exotic options, never the bounds', () => {
+    // The inversion this fixes: rung 1 threw the size and rate bounds out with
+    // the options, so a machine that had already choked once started capturing
+    // its WHOLE monitor uncapped — the opposite of backing off, and no flag
+    // could reach it because the flag lives in the bounds that were removed.
+    const v = displayMediaOptions(config, 1).video as MediaTrackConstraints & {
+      displaySurface?: string
+    }
+    expect(v.width).toEqual({ max: CAPTURE_MAX_LONG_EDGE })
+    expect(v.height).toEqual({ max: CAPTURE_MAX_LONG_EDGE })
+    expect(v.frameRate).toBeDefined()
+    expect(v.displaySurface).toBe('monitor')
+    // …and the exotic options ARE gone, which is what the rung is for.
+    const full = displayMediaOptions(config, 0) as Record<string, unknown>
+    const degraded = displayMediaOptions(config, 1) as Record<string, unknown>
+    expect(full.selfBrowserSurface).toBeDefined()
+    expect(degraded.selfBrowserSurface).toBeUndefined()
+  })
+
+  it('rung 2 stays bare, because it is the rung for a machine that wedges on ANY constraint', () => {
+    // Covered on the TRACK instead: capDisplayTrack enforces the export ceiling
+    // on what actually arrives, whatever the request managed to say.
+    expect(displayMediaOptions(config, 2).video).toBe(true)
+  })
+
   it('THE BOUND IS THE EXPORT CEILING, not the monitor and not the default step', () => {
     // Robert's game-tab take captured 3024x1964 — 5.9 Mpx of which 4.25 could
     // ever reach a file, the rest encoded, written and discarded while a game

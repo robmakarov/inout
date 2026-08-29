@@ -160,7 +160,7 @@ describe('the request Chrome actually receives after a wedge', () => {
     expect(seen.selfBrowserSurface).toBe('exclude')
   })
 
-  it('ONE wedge: hints and constraints go — the audio request, and so Chrome’s checkbox, stays', async () => {
+  it('ONE wedge: the HINTS go, the BOUNDS stay — backing off must not capture more', async () => {
     rememberDisplayWedge()
     let seen: Record<string, unknown> = {}
     stubDisplay((o) => (seen = o))
@@ -173,7 +173,18 @@ describe('the request Chrome actually receives after a wedge', () => {
     expect(seen.selfBrowserSurface).toBeUndefined()
     expect(seen.surfaceSwitching).toBeUndefined()
     expect(seen.systemAudio).toBeUndefined()
-    expect((seen.video as Record<string, unknown>).width).toBeUndefined()
+    // AND THE BOUNDS SURVIVE, corrected 2026-08-29. This rung used to throw the
+    // size and rate limits out along with the hints, so a machine that had
+    // already choked once went on to capture its WHOLE monitor uncapped —
+    // Robert's take read "reduced request 2/2 after a stuck share" at
+    // 3024x1964, and no flag could reach it because every flag lives in the
+    // bounds this rung had removed. The wedge is Chrome hanging on the exotic
+    // OPTIONS; the bounds were never part of it.
+    const video = seen.video as Record<string, unknown>
+    expect(video.width).toBeDefined()
+    expect(video.height).toBeDefined()
+    expect(video.frameRate).toBeDefined()
+    expect(video.displaySurface).toBe('monitor')
   })
 
   it('two wedges: the bare request — still audio, still RAW, no video constraints at all', async () => {
