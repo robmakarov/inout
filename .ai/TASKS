@@ -2,7 +2,7 @@
 # Executor: an Opus agent session. This file is the assignment; nothing outside it is.
 # Supersedes pack v1 (git history archives it): v1 tasks 1,2 merged · 7 obsolete (synchronized start
 # superseded instant-arm) · 9 shipped (awaits Robert real-Safari recheck, tracked in STATE) · 3 → O4 ·
-# 4 → absorbed by O4 · 5 → O7 · 8 residual → BACKLOG P2 (fidelity-runner retry; ee/oracle-nullfix exists, unmerged).
+# 4 → absorbed by O4 · 5 → O7 · 8 residual → BACKLOG P2 (fidelity-runner retry; oracle null-metric fix merged, 86ed200).
 
 Operating rules (every task):
 - One branch per task: `task/<id>`. Never commit to main; it lands only with the evidence below.
