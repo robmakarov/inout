@@ -38,7 +38,7 @@ import {
   type StreamTargetChunk,
 } from 'mediabunny'
 import { createGLCompositor, type GLCompositor } from './compositorGL'
-import { WallClockHold } from './wallClockHold'
+import { WallClockHold, compressPlanar } from './wallClockHold'
 
 const ROOT_DIR = 'blobs'
 /** Keyframe cadence — the smart-cut prerequisite (O5) and the salvage anchor. */
@@ -152,6 +152,14 @@ export interface CompositorStats {
    * drifted by exactly this much.
    */
   audioPaddedFrames: number
+  /**
+   * Frames REMOVED to walk a fast audio clock back onto the wall (PO
+   * 2026-08-29, "sound gets a little slower than screen video ... about a
+   * second after one hour"). >0 means this source's audio clock ran faster
+   * than the system clock and the take would otherwise have drifted late by
+   * exactly this much.
+   */
+  audioTrimmedFrames: number
   /**
    * Longest stretch with NO frame in the file, ms. This is what a viewer sees
    * as a freeze, so it is measured rather than inferred from drop counts.
@@ -419,6 +427,7 @@ const stats: CompositorStats = {
   audioDroppedNotReady: 0,
   audioDroppedLead: 0,
   audioPaddedFrames: 0,
+  audioTrimmedFrames: 0,
   maxEncodeGapMs: 0,
   codec: null,
   hardware: null,
@@ -946,7 +955,19 @@ self.onmessage = async (ev: MessageEvent<CompositorMsg>) => {
         // See the WallClockHold note above for why only a PERSISTENT deficit
         // may pad — recvMs reads late on every main-thread stall.
         if (typeof msg.recvMs === 'number' && audioHold) {
-          const padFrames = audioHold.padFramesFor(msg.recvMs, audioFramesTotal, frames)
+          const correction = audioHold.correctionFramesFor(msg.recvMs, audioFramesTotal, frames)
+          if (correction < 0) {
+            // The timeline has walked AHEAD of the wall — this source's audio
+            // clock is fast, which a listener hears as the sound falling behind
+            // the picture across a long take. Walk it back by resampling the
+            // batch very slightly shorter (rate-limited to 0.2 %, no splice, so
+            // nothing to click) rather than cutting samples out of it.
+            const drop = -correction
+            planar = compressPlanar(planar, msg.channels, frames, drop)
+            frames -= drop
+            stats.audioTrimmedFrames += drop
+          }
+          const padFrames = Math.max(0, correction)
           if (padFrames > 0) {
             // A step from the last sample straight to zero is a click, and this
             // codebase has paid for that lesson once already (the PCM worklet

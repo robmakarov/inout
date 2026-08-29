@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { WallClockHold } from './wallClockHold'
+import {
+  WallClockHold,
+  compressInterleaved,
+  compressPlanar,
+  type WallClockHoldOpts,
+} from './wallClockHold'
 
 const RATE = 48_000
 const BATCH = 1024 // ~21.3 ms, the worklet's own batch size
@@ -15,7 +20,7 @@ function run(
   const pads: { atMs: number; padMs: number }[] = []
   for (const step of script) {
     for (let i = 0; i < (step.batches ?? 1); i++) {
-      const pad = hold.padFramesFor(step.arrivalMs, timeline, BATCH)
+      const pad = hold.correctionFramesFor(step.arrivalMs, timeline, BATCH)
       if (pad > 0) {
         totalPad += (pad / RATE) * 1000
         pads.push({ atMs: step.arrivalMs, padMs: (pad / RATE) * 1000 })
@@ -141,5 +146,144 @@ describe('WallClockHold', () => {
     const post = steady(lastPre, 600, 1)
     const { totalPadMs } = run(hold, [...pre, ...post])
     expect(totalPadMs).toBe(0)
+  })
+})
+
+/**
+ * One hour of quanta at a given audio-clock error against the wall. This is the
+ * instrument PO's report is answered with, so it drives the SHIPPED class the
+ * capture paths use, not a copy of its arithmetic.
+ */
+function hour(ppm: number, opts: Partial<WallClockHoldOpts> = {}) {
+  const hold = new WallClockHold({ sampleRate: RATE, ...opts })
+  const batchWallMs = BATCH_MS / (1 + ppm / 1e6)
+  let timeline = 0
+  let padded = 0
+  let trimmed = 0
+  let wall = 0
+  const batches = Math.round(3600_000 / batchWallMs)
+  for (let i = 0; i < batches; i++) {
+    wall += batchWallMs
+    const c = hold.correctionFramesFor(wall, timeline, BATCH)
+    if (c > 0) padded += c
+    if (c < 0) trimmed += -c
+    timeline += c + BATCH
+  }
+  return {
+    driftMs: (timeline / RATE) * 1000 - wall,
+    paddedMs: (padded / RATE) * 1000,
+    trimmedMs: (trimmed / RATE) * 1000,
+  }
+}
+
+describe('WallClockHold holds BOTH directions (PO 2026-08-29)', () => {
+  it('a FAST audio clock no longer drifts a second late across an hour', () => {
+    // The defect exactly as PO reported it: +278 ppm ended +1001 ms late with
+    // the pad-only class, and nothing in the app could see it.
+    const r = hour(278)
+    expect(r.trimmedMs).toBeGreaterThan(800)
+    expect(Math.abs(r.driftMs)).toBeLessThan(100)
+  })
+
+  it('an ordinary +50 ppm clock is held too (it used to end 180 ms late)', () => {
+    const r = hour(50)
+    expect(Math.abs(r.driftMs)).toBeLessThan(100)
+  })
+
+  it('the SLOW direction still pads, exactly as before', () => {
+    const r = hour(-278)
+    expect(r.paddedMs).toBeGreaterThan(800)
+    expect(r.trimmedMs).toBe(0)
+    expect(Math.abs(r.driftMs)).toBeLessThan(100)
+  })
+
+  it('a perfect clock is still touched by nothing at all', () => {
+    const r = hour(0)
+    expect(r.paddedMs).toBe(0)
+    expect(r.trimmedMs).toBe(0)
+  })
+
+  it('the correction never exceeds the rate limit that keeps it inaudible', () => {
+    // 5000 ppm — far past anything real — must still be walked back at the cap
+    // rather than yanked, or the trim becomes a pitch artefact instead of a fix.
+    const hold = new WallClockHold({ sampleRate: RATE })
+    let timeline = 0
+    let wall = 0
+    let worst = 0
+    const batchWallMs = BATCH_MS / 1.005
+    for (let i = 0; i < 20_000; i++) {
+      wall += batchWallMs
+      const c = hold.correctionFramesFor(wall, timeline, BATCH)
+      if (c < 0) worst = Math.max(worst, -c / BATCH)
+      timeline += c + BATCH
+    }
+    expect(worst).toBeLessThanOrEqual(0.002 + 1e-9)
+  })
+
+  it('tracks a drift even when the allowance is under one frame per batch', () => {
+    // The carry branch: 0.0002 x 1024 = 0.2 frames of allowance per batch, so
+    // without the sub-sample carry every batch would floor to zero and the
+    // hold would silently do nothing at all.
+    const r = hour(50, { maxTrimRatio: 0.0002 })
+    expect(r.trimmedMs).toBeGreaterThan(80)
+    expect(Math.abs(r.driftMs)).toBeLessThan(100)
+  })
+
+  it('a main-thread stall never trims (the queue drains, nothing is ahead)', () => {
+    const hold = new WallClockHold({ sampleRate: RATE })
+    const pre = steady(0, 240)
+    const lastPre = pre[pre.length - 1]!.arrivalMs
+    const burstAt = lastPre + 3000
+    const queued = Math.round(3000 / BATCH_MS)
+    let timeline = 0
+    let trimmed = 0
+    const drive = (arrivalMs: number, n = 1) => {
+      for (let i = 0; i < n; i++) {
+        const c = hold.correctionFramesFor(arrivalMs, timeline, BATCH)
+        if (c < 0) trimmed += -c
+        timeline += c + BATCH
+      }
+    }
+    for (const s of pre) drive(s.arrivalMs)
+    drive(burstAt, queued)
+    for (const s of steady(burstAt, 300, 5)) drive(s.arrivalMs)
+    expect(trimmed).toBe(0)
+  })
+})
+
+describe('compressing a batch removes time without a splice', () => {
+  it('keeps both endpoints and every channel, interleaved', () => {
+    const frames = 1024
+    const src = new Float32Array(frames * 2)
+    for (let i = 0; i < frames; i++) {
+      src[i * 2] = Math.sin((i / frames) * Math.PI * 2)
+      src[i * 2 + 1] = -src[i * 2]!
+    }
+    const out = compressInterleaved(src, 2, frames, 2)
+    expect(out.length).toBe((frames - 2) * 2)
+    expect(out[0]).toBeCloseTo(src[0]!, 6)
+    expect(out[out.length - 2]).toBeCloseTo(src[(frames - 1) * 2]!, 6)
+    // No discontinuity: neighbouring samples of a resampled sine stay close.
+    let maxStep = 0
+    for (let i = 1; i < frames - 2; i++) maxStep = Math.max(maxStep, Math.abs(out[i * 2]! - out[(i - 1) * 2]!))
+    expect(maxStep).toBeLessThan(0.02)
+    // The second channel is still the inverse of the first.
+    for (let i = 0; i < frames - 2; i++) expect(out[i * 2 + 1]).toBeCloseTo(-out[i * 2]!, 6)
+  })
+
+  it('keeps both endpoints and every channel, planar', () => {
+    const frames = 512
+    const src = new Float32Array(frames * 2)
+    for (let i = 0; i < frames; i++) {
+      src[i] = i / frames
+      src[frames + i] = 1 - i / frames
+    }
+    const out = compressPlanar(src, 2, frames, 1)
+    const outFrames = frames - 1
+    expect(out.length).toBe(outFrames * 2)
+    expect(out[0]).toBeCloseTo(0, 6)
+    expect(out[outFrames - 1]).toBeCloseTo(src[frames - 1]!, 6)
+    expect(out[outFrames]).toBeCloseTo(1, 6)
+    expect(out[out.length - 1]).toBeCloseTo(src[frames * 2 - 1]!, 6)
   })
 })

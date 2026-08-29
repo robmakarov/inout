@@ -17,7 +17,7 @@ import {
   WebMOutputFormat,
   type StreamTargetChunk,
 } from 'mediabunny'
-import { WallClockHold } from './wallClockHold'
+import { WallClockHold, compressInterleaved } from './wallClockHold'
 
 const WORKLET_NAME = 'inout-pcm-capture'
 const OPUS_BITRATE = 128_000
@@ -169,6 +169,9 @@ export interface MeasuredAudioHandle {
     /** Silence inserted to hold the timeline against the wall clock — evidence
      *  the machine starved this take, 0 on a healthy one. */
     paddedMs: number
+    /** Time removed to hold a FAST audio clock back onto the wall — evidence
+     *  of the drift PO reported 2026-08-29, 0 on a matched clock. */
+    trimmedMs: number
     /** How long the channel's input had been pure digital silence when the take
      *  ended — the witness for "tab audio dies after a while": a muted or dead
      *  source records exact zeros no listener can tell from quiet. */
@@ -419,6 +422,8 @@ export async function startMeasuredAudioCapture(opts: {
    */
   const wallHold = new WallClockHold({ sampleRate })
   let paddedFrames = 0
+  /** Frames removed to walk a fast audio clock back onto the wall (PO 2026-08-29). */
+  let trimmedFrames = 0
   /** Input-silence witness. A muted track, a dead source and a paused player
    *  all deliver EXACT digital silence, which no rig and no listener can tell
    *  apart after the fact — so the channel tracks where the last signal was.
@@ -550,6 +555,12 @@ export async function startMeasuredAudioCapture(opts: {
       }
     }
 
+    // What actually reaches the encoder. Normally the interleaved batch as
+    // delivered; a wall-clock TRIM replaces it with a slightly shorter resample
+    // of itself, so everything downstream reads these two and not `frames`.
+    let encBuf = interleaved
+    let encFrames = frames
+
     // Loudness tap: the certified mix is measured here, live, from the very
     // samples about to be encoded — so no export has to decode them again.
     if (opts.onPcm) {
@@ -562,13 +573,25 @@ export async function startMeasuredAudioCapture(opts: {
       }
     }
 
-    // Hold the timeline against the wall before placing this batch. Silence is
-    // only ever ADDED, and only where real time went missing, so a healthy take
-    // pads nothing and is bit-identical to before. WallClockHold pads only a
-    // deficit that PERSISTS across its settle window: a main-thread stall whose
-    // queued batches drain moments later loses nothing and must not be spliced.
+    // Hold the timeline against the wall before placing this batch, in BOTH
+    // directions. WallClockHold corrects only an offset that PERSISTS across
+    // its settle window: a main-thread stall whose queued batches drain moments
+    // later loses nothing and must not be touched, so a healthy take is
+    // bit-identical to before. Positive = the context lost real time and owes
+    // silence. Negative = this channel's audio clock runs FAST and the timeline
+    // has walked ahead of the wall, which is what PO hears as the sound falling
+    // a second behind the picture across an hour.
     {
-      const padFrames = wallHold.padFramesFor(arrivalMs, framesWritten, frames)
+      const correction = wallHold.correctionFramesFor(arrivalMs, framesWritten, frames)
+      if (correction < 0) {
+        // Resampled shorter, not cut: no splice, so no click and no fade. See
+        // the note on WallClockHold for why this is rate-limited and inaudible.
+        const drop = -correction
+        encBuf = compressInterleaved(interleaved, encCh, frames, drop)
+        encFrames = frames - drop
+        trimmedFrames += drop
+      }
+      const padFrames = Math.max(0, correction)
       if (padFrames > 0) {
         // Ramp out of the signal and back into it: a step to zero is a click,
         // which is the exact defect the worklet's own splice fades exist for.
@@ -593,17 +616,17 @@ export async function startMeasuredAudioCapture(opts: {
         } finally {
           pad.close()
         }
-        const tail = Math.min(PAD_FADE, frames)
+        const tail = Math.min(PAD_FADE, encFrames)
         for (let i = 0; i < tail; i++) {
           const k = i / tail
-          for (let c = 0; c < encCh; c++) interleaved[i * encCh + c] *= k
+          for (let c = 0; c < encCh; c++) encBuf[i * encCh + c] *= k
         }
         // Deliberately NOT fed to the loudness tap: the envelope describes the
         // take's CONTENT, and this silence is the machine choking, not content.
       }
     }
     for (let c = 0; c < encCh; c++) {
-      lastSample[c] = interleaved[(frames - 1) * encCh + c] ?? 0
+      lastSample[c] = encBuf[(encFrames - 1) * encCh + c] ?? 0
     }
 
     // Silence-run bookkeeping, on the input as delivered (pre-fade): one open
@@ -660,12 +683,12 @@ export async function startMeasuredAudioCapture(opts: {
     const data = new AudioData({
       format: 'f32',
       sampleRate,
-      numberOfFrames: frames,
+      numberOfFrames: encFrames,
       numberOfChannels: encCh,
       timestamp,
-      data: interleaved,
+      data: encBuf,
     })
-    framesWritten += frames
+    framesWritten += encFrames
     try {
       encoder.encode(data)
     } finally {
@@ -776,14 +799,25 @@ export async function startMeasuredAudioCapture(opts: {
       }
       if (startOffsetMs === null) resolveFirst(offset)
       const paddedMs = (paddedFrames / sampleRate) * 1000
+      const trimmedMs = (trimmedFrames / sampleRate) * 1000
+      if (trimmedMs > 0) {
+        const wallS = (framesWritten / sampleRate)
+        console.info(
+          `[capture] ${label} audio clock ran fast — trimmed ${trimmedMs.toFixed(0)}ms across ` +
+            `${wallS.toFixed(0)}s (${Math.round((trimmedMs / 1000 / wallS) * 1e6)} ppm). Without this ` +
+            `the sound would have drifted that far behind the picture.`,
+        )
+      }
       return {
         bytes: bytesWritten,
         durationMs: (framesWritten / sampleRate) * 1000,
         startOffsetMs: offset,
         paddedMs,
+        trimmedMs,
         silentTailMs,
         diagnostics: {
           ...(paddedMs > 0 ? { paddedMs: Math.round(paddedMs) } : {}),
+          ...(trimmedMs > 0 ? { trimmedMs: Math.round(trimmedMs) } : {}),
           ...(silentTailMs > 0 ? { silentTailMs: Math.round(silentTailMs) } : {}),
           ...(revivals > 0 ? { revivals } : {}),
           ...(diagEvents.length > 0 ? { events: diagEvents } : {}),

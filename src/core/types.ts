@@ -34,6 +34,14 @@ export type MediaKind = 'video' | 'audio'
 export interface ChannelDiagnostics {
   /** Silence inserted to hold the timeline against the wall clock, ms. */
   paddedMs?: number
+  /**
+   * Time REMOVED to hold the timeline against the wall clock, ms (PO
+   * 2026-08-29). >0 means this channel's audio clock ran FASTER than the
+   * system clock, which without the trim is heard as the sound falling
+   * progressively behind the picture — about a second per hour at 278 ppm.
+   * The two are mutually exclusive in practice: a clock is fast or slow.
+   */
+  trimmedMs?: number
   /** Input was pure digital silence for this long when the segment ended, ms. */
   silentTailMs?: number
   /** Times the audio source tap was rebuilt after sustained digital silence. */
