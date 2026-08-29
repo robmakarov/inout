@@ -8,7 +8,7 @@ import {
 import { analytics } from '@core/analytics'
 import { sourceFrameEnabled } from '@core/frame'
 import { captureRateCeiling, rateForSurface } from '@core/rate'
-import { MAX_OUTPUT_LONG_EDGE, evenDown } from '@core/frame'
+import { MAX_OUTPUT_LONG_EDGE, captureCeilingLongEdge, evenDown } from '@core/frame'
 import { isAppleWebKit } from '@core/capabilities'
 import { detectPlatform } from '@core/platform'
 import { guardStream } from './deviceGuard'
@@ -431,8 +431,15 @@ export const CAPTURE_MAX_FPS = DEFAULT_EXPORT_SETTINGS.fps
  * field. See core/rate.ts.
  */
 export function displayVideoConstraints(): MediaTrackConstraints {
+  // F18: with `?sourceres=1` the ceiling is the SOURCE'S OWN SIZE, so no size
+  // bound is sent at all. `{ max: Infinity }` is not a constraint — it is a
+  // bug that would be accepted silently — so the branch is on finiteness and
+  // the bound is omitted rather than widened.
+  const ceilingLong = captureCeilingLongEdge()
   const size = nativeResEnabled()
-    ? { width: { max: CAPTURE_MAX_LONG_EDGE }, height: { max: CAPTURE_MAX_LONG_EDGE } }
+    ? Number.isFinite(ceilingLong)
+      ? { width: { max: ceilingLong }, height: { max: ceilingLong } }
+      : {}
     : { width: { max: CAPTURE_MAX_WIDTH }, height: { max: CAPTURE_MAX_HEIGHT } }
   const ceiling = captureRateCeiling()
   return {
@@ -540,12 +547,17 @@ export async function capDisplayTrack(track: MediaStreamTrack | undefined): Prom
     // however this flag was set. A constraint that only lives in the request is
     // a constraint the degraded path does not have.
     const long = Math.max(before.width ?? 0, before.height ?? 0)
-    if (long > CAPTURE_MAX_LONG_EDGE) {
+    // F18: an infinite ceiling means the export ladder now goes as high as this
+    // take does, so there is nothing above it to bound. The whole argument for
+    // this cap was "those pixels can never be exported"; with the source step
+    // they can, and the cap would be the constant F18 exists to remove.
+    const sizeCeiling = captureCeilingLongEdge()
+    if (Number.isFinite(sizeCeiling) && long > sizeCeiling) {
       try {
         await withTimeout(
           track.applyConstraints({
-            width: { max: CAPTURE_MAX_LONG_EDGE },
-            height: { max: CAPTURE_MAX_LONG_EDGE },
+            width: { max: sizeCeiling },
+            height: { max: sizeCeiling },
           }),
           1500,
           'applyConstraints(export ceiling)',
@@ -553,7 +565,7 @@ export async function capDisplayTrack(track: MediaStreamTrack | undefined): Prom
         const capped = track.getSettings()
         console.info(
           `[capture] native-res capture: ${before.width}×${before.height} is past the largest export ` +
-            `step (${CAPTURE_MAX_LONG_EDGE} long edge) — those pixels can never be exported, so ` +
+            `step (${sizeCeiling} long edge) — those pixels can never be exported, so ` +
             `recording ${capped.width}×${capped.height} (O6)`,
         )
       } catch (err) {

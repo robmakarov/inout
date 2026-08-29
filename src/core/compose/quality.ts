@@ -24,11 +24,11 @@
  */
 import { AUDIO_BITRATE, VIDEO_BITRATE } from './codecs'
 import { chooseCopySource, type CopySource } from './copySource'
-import { frameAspectFor, frameForAspect } from '@core/frame'
+import { frameAspectFor, frameForAspect, sourceResEnabled } from '@core/frame'
 import { DEFAULT_FRAME_RATE, normalizeRate, takeRate } from '@core/rate'
 import { DEFAULT_EXPORT_SETTINGS, type ExportSettings, type Recording } from '@core/types'
 
-export type QualityTierId = '540p' | '720p' | '1080p' | '1440p'
+export type QualityTierId = '540p' | '720p' | '1080p' | '1440p' | 'source'
 
 export interface QualityTier {
   id: QualityTierId
@@ -47,6 +47,35 @@ export interface QualityTier {
   longEdge: number
   /** Honest one-liner for this step, shown when it is selected. */
   note?: string
+}
+
+/**
+ * THE TOP STEP, AND IT HAS NO NUMBER OF ITS OWN — task F18, Robert: "i want
+ * 3024x1964 or whatever users resolution is".
+ *
+ * `longEdge: 0` is the sentinel for "this take's own", resolved by
+ * `resolveTier` against the long edge `tiersForTake` measures off the take. It
+ * cannot be a constant: "source" is a different number on every machine, which
+ * is exactly why the remembered step is an ID and not a size — a 3024-wide take
+ * followed by a 1920-wide one has to survive, and it does, because the id
+ * re-resolves against whatever take is in hand.
+ *
+ * The bitrate is a bits-per-pixel scale of 1440p's, applied by `resolveTier`
+ * from the nominal below — the same rule every other step's ceiling follows.
+ */
+export const SOURCE_TIER: QualityTier = {
+  id: 'source',
+  label: 'Source',
+  width: 2560,
+  height: 1440,
+  longEdge: 0,
+  fps: DEFAULT_EXPORT_SETTINGS.fps,
+  videoBitrate: 14_000_000,
+  // NO PROMISE HERE. The panel appends the PATH's own verdict underneath this
+  // line ("INSTANT … that size is the file" or "Re-renders …"), and O3c's rule
+  // is that the badge is the path's to give. A note claiming "no re-encode"
+  // sat on prod directly above the panel saying it re-renders.
+  note: 'Your screen’s own resolution, exactly as it was recorded.',
 }
 
 /**
@@ -122,8 +151,19 @@ export function resolveTier(
   tier: QualityTier,
   aspect: number,
   fps: number = DEFAULT_FRAME_RATE,
+  /** F18: the take's OWN pixels, for the step that has no size of its own.
+   *  Ignored by every other step. */
+  source: SourceStep | null = null,
 ): QualityTier {
-  const { width, height } = frameForAspect(aspect, tier.longEdge)
+  // F18: THE SOURCE STEP TAKES THE TAKE'S PIXELS VERBATIM and never goes
+  // through the aspect — see SourceStep for the two-pixel drift that cost the
+  // packet copy on prod. With no take in hand it stays the declared 1440p box,
+  // so a caller that never learned about the source step still gets a valid
+  // tier rather than a 0x0 one.
+  const exact = tier.longEdge === 0 ? source : null
+  const { width, height } = exact
+    ? { width: exact.width, height: exact.height }
+    : frameForAspect(aspect, tier.longEdge === 0 ? tier.width : tier.longEdge)
   const rate = normalizeRate(fps)
   if (width === tier.width && height === tier.height && rate === tier.fps) return tier
   const nominal = tier.width * tier.height * tier.fps
@@ -152,10 +192,68 @@ export function resolveTier(
 export function tiersForTake(recording: Recording, aspect?: number): QualityTier[] {
   const a = aspect ?? frameAspectFor(recording)
   const rate = takeRate(recording)
-  return QUALITY_TIERS.map((t) => resolveTier(t, a, rate))
+  const tiers = QUALITY_TIERS.map((t) => resolveTier(t, a, rate))
+  const source = sourceStepFor(recording)
+  return source ? [...tiers, resolveTier(SOURCE_TIER, a, rate, source)] : tiers
+}
+
+/**
+ * DOES THIS TAKE GET A SOURCE STEP, AND HOW BIG — task F18.
+ *
+ * Two conditions, and the second one is the one that keeps this honest.
+ *
+ * 1. The take is actually bigger than the ladder's top. Otherwise "Source"
+ *    would be a duplicate of a step already on the list, or worse, smaller than
+ *    one — a step that is not a step.
+ *
+ * 2. THE STEP CAN ACTUALLY BE DELIVERED AT THAT SIZE. The composite is written
+ *    at 1920 whatever the screen was, so the only thing that holds a take's own
+ *    resolution is the RAW channel, and the only path that hands it over
+ *    untouched is O3c's single-generation packet copy — which needs exactly one
+ *    video channel. A screen+camera take therefore gets NO source step, and
+ *    that refusal is the feature: offering one would promise 3024 and hand back
+ *    the 1920 composite upscaled, which is the badge disagreeing with the path
+ *    — the exact bug shape O3c's wiring exists to make impossible, and the one
+ *    F13 hit when `allowComposite` silently meant "1920x1080".
+ *
+ * Returns 0 for "no source step".
+ */
+export function sourceStepFor(recording: Recording): SourceStep | null {
+  if (!sourceResEnabled()) return null
+  const video = recording.channels.filter((c) => c.media === 'video')
+  if (video.length !== 1) return null
+  const ch = video[0]!
+  const w = ch.width ?? 0
+  const h = ch.height ?? 0
+  if (!(w > 0) || !(h > 0)) return null
+  const top = QUALITY_TIERS.reduce((m, t) => Math.max(m, t.longEdge), 0)
+  return Math.max(w, h) > top ? { width: w, height: h } : null
+}
+
+/**
+ * THE TAKE'S OWN PIXELS, NOT A RECONSTRUCTION OF THEM — and this pair exists
+ * because a long edge alone was not enough. Every other step is a pixel budget
+ * resolved against the take's ASPECT (F13), which is right for them: 1440p is a
+ * size we chose and the shape follows the take. The source step is the opposite
+ * — the SIZE is the take's and there is nothing to resolve.
+ *
+ * Going through the aspect lost it. A 3024x1964 channel has aspect 1.53971…,
+ * and `frameForAspect(1.53971…, 3024)` comes back 3024x1962: two pixels of
+ * float drift, which is enough for the copy fence to refuse the raw channel and
+ * send the whole take to a full render. Found on prod, where the panel said
+ * "Re-renders the whole video at 3024x1962" directly underneath a note
+ * promising no re-encode.
+ */
+export interface SourceStep {
+  width: number
+  height: number
 }
 
 export function tierById(id: string | null | undefined): QualityTier {
+  // F18: 'source' is remembered like any other id. It resolves to a real size
+  // only once a take is in hand (`tiersForTake`); on its own it answers the
+  // declared 1440p box, which is what a caller with no take can use.
+  if (id === 'source') return SOURCE_TIER
   return QUALITY_TIERS.find((t) => t.id === id) ?? QUALITY_TIERS.find((t) => t.id === DEFAULT_TIER_ID)!
 }
 
@@ -189,7 +287,14 @@ export function copySourceForTier(recording: Recording, tier: QualityTier): Copy
  * take in hand wants.
  */
 export function settingsForTier(tier: QualityTier, recording?: Recording): ExportSettings {
-  const t = recording ? resolveTier(tier, frameAspectFor(recording), takeRate(recording)) : tier
+  // F18: the source step MUST be re-resolved with the take's own long edge
+  // here too. Without it a 'source' tier resolves to its declared 1440p box and
+  // the export asks for 1440p while the panel says Source — the badge and the
+  // path disagreeing, which is the one failure this whole area is built to
+  // prevent.
+  const t = recording
+    ? resolveTier(tier, frameAspectFor(recording), takeRate(recording), sourceStepFor(recording))
+    : tier
   return {
     width: t.width,
     height: t.height,
