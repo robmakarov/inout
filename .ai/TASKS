@@ -249,17 +249,19 @@ READY NOW:
                                              TD recommends (b) now + (a) when cloud lands; (c)
                                              breaks blind shares on old players — against the
                                              frozen never-break rule.
-  F16  one quality option,         [medium-heavy]  PO 2026-08-29 (second ruling that day): quality
-       capture follows it                    is ONE option — Min / Medium / High (default) / Max
-                                             (pro-gated later) — chosen once, later also before
-                                             record; the composite encoder FOLLOWS it (geometry
-                                             from F13, quality target from the rung), so the export
-                                             is a packet copy at whatever quality is set — "instant
-                                             export for any quality" by construction, no extra
-                                             encoder. Absorbs F14 (its hazard dissolves when
-                                             capture records the choice). AFTER F13+F15; spec in
-                                             the task. MIN's floor is its own measurement
-                                             (MIN-floor below); X13 becomes Min's steering.
+  F16  semantic rungs, everything  [medium-heavy]  PO 2026-08-29, design v2 on PO's own counter
+       already made when asked              ("cant it be same high instant quality rendered
+                                             already and it just converts in smaller file ...
+                                             squeeze rendering in parallel of edits"): RECORD HIGH
+                                             ALWAYS (= today), then Min/Medium are BACKGROUND
+                                             TRANSCODES of the High file started at stop, Max is
+                                             the raw-channel copy (instant, shipped) or a
+                                             background native render on camera takes, and an
+                                             EDITED take renders in the background while the user
+                                             edits — editing is when the machine is idle. No
+                                             pre-record choice is load-bearing. Absorbs F14.
+                                             AFTER F15; two spikes gate it (T1 transcode speed,
+                                             T2 background-render cost) — spec in the task.
   P5a  iOS SCK spike               [light]   UNBLOCKED 2026-08-26: PO confirms Xcode 27 + a real
                                              iOS 27 device are available. Needs PO present (device
                                              plugged in, signing). TIME-SENSITIVE (iOS 27 ~Sept).
@@ -538,26 +540,45 @@ already exist. The render floor is decode-bound at 5-6x realtime (O5, X4 refuted
 "fast render" can never be instant. Four live encoders for four rungs is dead on X6's own numbers
 (capture CPU starvation is THE failure family on PO's machine). What remains is: capture writes the
 file the user is going to ask for — affordable precisely because quality is ONE option.
-WHAT IT IS:
-  · ONE setting (sticky, `inout.quality`-family): MIN / MEDIUM / HIGH (default) / MAX. Semantic
-    names in the UI, not resolutions. MAX is pro-gated LATER (product gate, not engineering —
-    technically it is the raw native channel, already on disk for crash-durability).
-  · the composite encoder FOLLOWS the setting: geometry = the rung's long-edge budget resolved
-    against the take's shape (F13's resolveTier), quality target = the rung's qp-class (cq seam).
-    No second encoder; Min/Medium are CHEAPER than today's fixed 1080p.
-  · the export ladder is unchanged — chooseCopySource already prefers the raw channel (Max) and
-    the composite (the chosen rung); O3c made the equality follow the request. An unedited or
-    trim-only take is therefore instant at the SET quality by construction.
-  · HONEST RESIDUE, to be labelled not hidden: changing quality AFTER a take re-renders (except
-    upward to Max on a single-video-channel take — the raw file is always there); pixel edits
-    (zoom/PiP-move/background) render as they always did.
-  · later UI half (separate, after this): the same option shown pre-record.
-GATES: the set rung's export is packet-copied — certification `copiedFrom` read from the FILE on
-Min, Medium, High and Max takes · a take at HIGH is byte-identical to today's default (pinned) ·
-changing the rung post-take re-renders with the panel saying so BEFORE export · oracle v2+v1 +
-fidelity green · oracle:load green at MAX on a 4K-class source (announce it) — the ladder is the
-guard and it judges arrivals since P0-ladder-static · X1 envelope fences unaffected (audio path
-untouched).
+WHAT IT IS — DESIGN v2, 2026-08-29, on PO's OWN COUNTER ("cant it be same high instant quality
+rendered already and it just converts in smaller file if choosing? ... can we squezze rendering in
+parallel of edits so user wont notice?"). v1's pre-choice (capture follows a chosen rung) is
+RETIRED as load-bearing — it survives only as a later pre-record preference. The v2 principle:
+EVERYTHING IS ALREADY MADE BY THE TIME IT IS ASKED FOR, using the time the machine is idle.
+  · RECORD HIGH ALWAYS = exactly today's capture: raw native channels + the composite,
+    take-shaped after F13, quality-targeted. Nothing changes at capture.
+  · HIGH  = instant copy of the composite (today's default, unchanged).
+  · MAX   = instant copy of the raw native channel on single-video takes (O3c, SHIPPED); on
+    camera/multi-channel takes a BACKGROUND render at native geometry starting at stop — PO:
+    "some quick extra render for max quality is okay, but it must be fast too".
+  · MIN / MEDIUM = BACKGROUND TRANSCODE of the High composite (or of the raw channel on
+    single-video takes — pick by measurement: one extra 4:2:0 generation against a heavier
+    decode), started at stop. An OFFLINE encode beats any live encode per bit — so v2's Min is
+    SMALLER than v1's live-encoded Min would have been, and the realtime-encoding tax (the one
+    honest way "editable" was costing bytes) is paid only by High. Panel shows the exact size
+    once the job lands, progress until.
+  · EDITED TAKES = BACKGROUND RENDER IN PARALLEL WITH EDITING: render the current edit state
+    while the user reviews; an edit invalidates what it touched (segment-level if T2 justifies
+    it, debounce-restart otherwise). Editing is when the machine is idle — capture is over, the
+    contention family does not apply, and the render already lives in a worker (O5a). Export
+    foregrounds the same job with an honest time-left when it is not done.
+  · UI: semantic rungs MIN / MEDIUM / HIGH (default) / MAX (pro-gated later — product gate, not
+    engineering), one option, no per-export sticky resolution ladder (F14 dissolved).
+TWO SPIKES GATE THE BUILD — both are claims currently made from reasoning, and this project does
+not ship reasoning:
+  · T1 transcode-speed: measure High→Min/Medium (one hardware AVC decode → scale → encode small)
+    against the full render on the same takes. Expectation is a several-times-faster lane;
+    the number decides whether "usually done before the panel opens" is true at PO's lengths.
+  · T2 background-render cost: the render beside a playing editor — UI-thread lateness through
+    perf/mainThreadWatch.ts (the instrument X9 standardized), plus a stated thermal/battery
+    policy (interruptible, deprioritized, and what happens on battery is a PO call).
+GATES: unedited take — Min/Medium/High/Max each export a file that EXISTED at press time (cert
+copiedFrom, or the background job's output served with its hash), measured on a take longer than
+the job needs · the panel never promises a size it cannot yet know (sizeConfidence extends to the
+job states) · exported files carry no edit machinery: size delta vs a bare remux ≤ container
+overhead · changing rungs after the jobs ran serves the pre-made file, not a re-render · oracle
+v2+v1 + fidelity green · T2's lateness inside the O5/X9 bands · a 20-minute take's Min ready
+before a user plausibly reaches the panel (number from T1, stated in the handoff).
 
 ## MIN-floor — what "still readable" measures  [light-medium · measurement only, feeds F16]
 PO's definition of Min: "minimal size where text and everything will be still readable". Make that
@@ -566,9 +587,10 @@ a number, not a vibe, with instruments that already exist: the glyph contrast/fr
 encodes it with the export's own encoder). DELIVERABLE: a readability floor — the smallest
 (long-edge, qp) whose probed frames keep glyph contrast/fringe above threshold against the take's
 own native frames — plus the threshold itself justified on the three fixture contents (text /
-motion / talking head). X13 (approved, "lets try") then becomes MIN'S STEERING: its per-chunk
-features drive qp WITHIN the floor at capture time, since pre-record Min cannot probe content that
-does not exist yet. NOTE the codec dependency honestly: Min's absolute size is ~2x better on
+motion / talking head). UNDER F16 v2 MIN IS AN OFFLINE TRANSCODE, which makes this easier and
+better: the job can probe the take's ACTUAL frames (no pre-record blindness) and even sweep qp per
+span — X13's live per-chunk steering shrinks to an option rather than a dependency; re-price X13
+after this lands. NOTE the codec dependency honestly: Min's absolute size is ~2x better on
 hevc/av1 — SIZE-CODEC multiplies every rung and stays PO's pick.
 
 ## F15 fps-ceiling — RULED YES 2026-08-29 (PO: "i want every device to record best quality it can,

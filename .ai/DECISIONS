@@ -326,3 +326,21 @@ starvation family) and "fast render as instant" (decode floor 5-6x realtime, X4)
 stated in the task: changing quality AFTER a take re-renders (except up to Max on single-video
 takes); pixel edits render as ever. MIN's readability floor is a measurement task (MIN-floor);
 X13 becomes Min's capture-time steering; SIZE-CODEC still multiplies every rung and stays PO's pick.
+
+po 2026-08-29 (4) — F16 DESIGN v2, ON PO'S OWN COUNTER ("cant it fucking be same high instant
+quality rendered already and it just converts in smaller file if choosing? ... how come if i can
+watch it on preview its not rendered at some form already? can we squezze rendering in parallel of
+edits so user wont notice? ... you sure some of this editable shit dont fuckes up file size?").
+ACCEPTED — it is better than TD's v1 pre-choice model and v1 is retired as load-bearing. The v2
+principle: everything is already made by the time it is asked for, using idle time. Record High
+always (= today's capture, unchanged); High = instant composite copy; Max = instant raw copy on
+single-video takes, background native render otherwise; Min/Medium = background OFFLINE transcodes
+of the High file started at stop (an offline encode beats any live encode per bit — v2's Min is
+smaller than v1's would have been); edited takes render in the background WHILE the user edits
+(editing is when the machine is idle; the render already lives in a worker). Answered on the
+record: the recording preview IS a rendered file and the instant export copies it; the editing
+preview paints edits live but writes nothing (encoding per scrub would be wasted per edit); the
+exported file carries zero edit machinery — the honest size costs are the realtime-encoding tax on
+the live composite (which v2 confines to High), singlegen's +12-23 % (buys measured colour), and
+the codec (SIZE-CODEC, PO's pick). Two spikes gate the build (T1 transcode speed, T2 background-
+render cost) because both speed claims are currently reasoning, and reasoning does not ship.
