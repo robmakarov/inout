@@ -30,6 +30,13 @@
  *     bad second would give up resolution the machine might well have held; and
  *     re-measuring immediately after a step would score the step's own
  *     transient as a failure and cascade to the floor.
+ *  4. A SOURCE THAT SENT NOTHING DID NOT FAIL (P0-ladder-static). getDisplayMedia
+ *     emits frames ON CHANGE: a document nobody is scrolling delivers 0 fps and
+ *     that is health, not collapse. Judging delivery against a wall-clock 30
+ *     stepped real takes down permanently for being still. The ladder therefore
+ *     judges against what actually ARRIVED — backpressure is frames the
+ *     compositor could not keep up with, and where nothing arrived there is
+ *     nothing to have fallen behind on.
  */
 
 export interface LadderRung {
@@ -49,7 +56,7 @@ export const DEGRADE_RUNGS: LadderRung[] = [
   { label: '1080p', width: 1920, height: 1080 },
 ]
 
-/** Below this share of the requested rate, delivery is failing rather than varying. */
+/** Below this share of the frames that arrived, encoding is failing rather than varying. */
 export const DELIVERY_FLOOR_RATIO = 0.6
 /** Rule 2: nothing is judged until the encoder has produced output for this long. */
 export const WARMUP_MS = 4_000
@@ -66,11 +73,18 @@ export interface LadderInput {
   firstOutputAtMs: number | null
   /** When the last step was applied, or null if the ladder has not stepped. */
   lastStepAtMs: number | null
-  /** How long delivery has been continuously under the floor, ms. */
+  /** How long encoding has continuously failed to keep up with arrivals, ms. */
   underFloorForMs: number
-  /** Frames per second delivered recently. */
+  /** Real (non-keep-alive) frames per second that reached the encoder recently. */
   deliveredFps: number
-  /** Frames per second the take asked for. */
+  /**
+   * Frames per second that ARRIVED from the sources recently. This is the
+   * ruler (Rule 4): a static screen reads 0 here and is left alone, however
+   * far below `requestedFps` it sits.
+   */
+  arrivedFps: number
+  /** Frames per second the take asked for — arrivals above it are deliberately
+   *  dropped by the cadence gate, so demand is capped at this rate. */
   requestedFps: number
   /** Rungs already taken — the ladder only ever descends. */
   stepsTaken: number
@@ -96,13 +110,19 @@ export function ladderVerdict(input: LadderInput): LadderVerdict | null {
   if (input.lastStepAtMs !== null && input.nowMs - input.lastStepAtMs < SETTLE_MS) return null
   if (input.underFloorForMs < SUSTAINED_MS) return null
   if (!(input.requestedFps > 0)) return null
-  const ratio = input.deliveredFps / input.requestedFps
+  // Rule 4: demand is what arrived, capped at the requested rate (the cadence
+  // gate drops the excess of a 60 fps source on purpose — that is not failure).
+  // Zero demand means the source sent nothing, and a source that sent nothing
+  // because nothing changed is not a source that failed.
+  const demandFps = Math.min(input.arrivedFps, input.requestedFps)
+  if (!(demandFps > 0)) return null
+  const ratio = input.deliveredFps / demandFps
   if (ratio >= DELIVERY_FLOOR_RATIO) return null
   const rung = DEGRADE_RUNGS[input.stepsTaken]!
   return {
     rung,
     reason:
-      `delivered ${input.deliveredFps.toFixed(1)} of ${input.requestedFps} fps ` +
-      `(${Math.round(ratio * 100)} % of requested) for ${Math.round(input.underFloorForMs)} ms → ${rung.label}`,
+      `encoded ${input.deliveredFps.toFixed(1)} of ${demandFps.toFixed(1)} arriving fps ` +
+      `(${Math.round(ratio * 100)} % kept) for ${Math.round(input.underFloorForMs)} ms → ${rung.label}`,
   }
 }

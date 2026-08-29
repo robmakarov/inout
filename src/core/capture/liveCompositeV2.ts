@@ -302,16 +302,22 @@ export async function startLiveCompositeV2(
   let lastStepAt: number | null = null
   let underFloorSince: number | null = null
   let lastRealFrames = 0
+  let lastInFrames = 0
   let lastStatsAt: number | null = null
 
-  function checkLadder(now: number, real: number): void {
+  function checkLadder(now: number, real: number, framesIn: number): void {
     if (!options.onDegradeStep || degraded) return
     // Delivered fps over the interval between stats events, not since the
     // start: a take that recovers should stop being judged on how it began.
     if (lastStatsAt !== null && now > lastStatsAt) {
       const fps = ((real - lastRealFrames) * 1000) / (now - lastStatsAt)
+      const inFps = ((framesIn - lastInFrames) * 1000) / (now - lastStatsAt)
       const requested = FPS_REQUESTED
-      const under = requested > 0 && fps / requested < LADDER_FLOOR
+      // P0-ladder-static: demand is what ARRIVED, capped at the requested rate
+      // (the cadence gate drops a 60 fps source's excess on purpose). A static
+      // screen delivers 0 fps by design and must never read as backpressure.
+      const demand = Math.min(inFps, requested)
+      const under = demand > 0 && fps / demand < LADDER_FLOOR
       if (under) underFloorSince ??= now
       else underFloorSince = null
       const verdict = ladderVerdict({
@@ -321,6 +327,7 @@ export async function startLiveCompositeV2(
         lastStepAtMs: lastStepAt,
         underFloorForMs: underFloorSince === null ? 0 : now - underFloorSince,
         deliveredFps: fps,
+        arrivedFps: inFps,
         requestedFps: requested,
         stepsTaken,
       })
@@ -334,6 +341,7 @@ export async function startLiveCompositeV2(
     }
     lastStatsAt = now
     lastRealFrames = real
+    lastInFrames = framesIn
   }
 
   function checkWatchdog(s: CompositorStats): void {
@@ -341,7 +349,7 @@ export async function startLiveCompositeV2(
     const now = performance.now()
     const real = s.framesEncoded - s.keepAliveFrames
     if (real > 0 && firstOutputAt === null) firstOutputAt = now
-    checkLadder(now, real)
+    checkLadder(now, real, s.framesIn)
     const verdict = watchdogVerdict({
       nowMs: now,
       startedAtMs: startedAt,

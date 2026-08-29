@@ -8,7 +8,8 @@ import {
   type LadderInput,
 } from './resolutionLadder'
 
-/** A machine that is failing badly, with every timing precondition satisfied. */
+/** A machine that is failing badly, with every timing precondition satisfied:
+ *  frames ARRIVE at the full rate and two thirds of them never get encoded. */
 const failing: LadderInput = {
   nowMs: 30_000,
   startedAtMs: 0,
@@ -16,6 +17,7 @@ const failing: LadderInput = {
   lastStepAtMs: null,
   underFloorForMs: SUSTAINED_MS + 500,
   deliveredFps: 9,
+  arrivedFps: 30,
   requestedFps: 30,
   stepsTaken: 0,
 }
@@ -77,5 +79,34 @@ describe('ladderVerdict', () => {
 
   it('is silent when the requested rate is unknown rather than guessing', () => {
     expect(ladderVerdict({ ...failing, requestedFps: 0 })).toBeNull()
+  })
+
+  // ---- Rule 4 (P0-ladder-static): the ruler is what ARRIVED, not the wall clock
+
+  it('NEVER steps for a static source — 0 fps arriving is health, not collapse', () => {
+    // The live defect: getDisplayMedia emits on change, a still document
+    // delivers nothing, and the old requested-rate ruler read that as 0 % and
+    // walked a 4K screen down to 1080p for the rest of the take.
+    expect(
+      ladderVerdict({ ...failing, arrivedFps: 0, deliveredFps: 0, underFloorForMs: 10_000 }),
+    ).toBeNull()
+  })
+
+  it('still steps for a starved pipeline — frames arriving and none reaching the file', () => {
+    const v = ladderVerdict({ ...failing, arrivedFps: 30, deliveredFps: 0 })
+    expect(v?.rung.label).toBe('1440p')
+    expect(v?.reason).toContain('0 % kept')
+  })
+
+  it('does not step for a sparse source the encoder fully keeps up with', () => {
+    // Someone typing on an otherwise-still screen: 2 fps arrive, 2 fps encode.
+    // Under the old ruler this was 7 % of requested and stepped.
+    expect(ladderVerdict({ ...failing, arrivedFps: 2, deliveredFps: 2 })).toBeNull()
+  })
+
+  it('does not punish a 60 fps source for the cadence gate dropping its excess', () => {
+    // Demand is capped at the requested rate: 30 encoded of 60 arriving is the
+    // cadence gate working, not backpressure.
+    expect(ladderVerdict({ ...failing, arrivedFps: 60, deliveredFps: 30 })).toBeNull()
   })
 })
