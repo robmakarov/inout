@@ -277,6 +277,13 @@ READY NOW:
                                              it is right, the default flips and INOUT can make a
                                              vertical video; if it is not, say what is wrong and
                                              nothing has moved in the meantime.
+  W1   the wedges go               [medium]  Robert 2026-08-29: "i want them gone", after hitting it
+                                             three times in one evening. Chrome's bug is still
+                                             Chrome's — but our safe-mode ladder had no way back
+                                             except a 24 h timer, counted an OS PERMISSION failure
+                                             as a wedge, and (fixed today) dropped the size bounds
+                                             while backing off. The only exit anyone found was a
+                                             console line.
   F18  the user's own resolution   [medium]  Robert 2026-08-29: "i want 3024x1964 or whatever users
                                              resolution is on roadmap". The export ladder stops at
                                              1440p for inherited reasons, not decided ones, and the
@@ -1091,6 +1098,39 @@ GATES when built: Save file measured instant on a long take · no codec word any
 (copy reviewed by Robert) · the smaller-file row never promises a size before its lane reports one ·
 the sheet drives compose/choose.ts unchanged (the oracle still gates the paths users get) · Robert
 judges the sheet by eye before it becomes the default surface.
+
+## W1 the wedges go — AUTHORED 2026-08-29 from Robert: "i want them gone"
+[medium · mitigation is shipped and he still hit it three times in one evening]
+docs/SCREEN_WEDGE.md says MITIGATED since 2026-08-25 and it was true when written — his own stress
+test came back "seems to be allright now". It is not true today: in one evening he hit "got chrome
+wedge again" and reached rung 2 of the safe-mode ladder, which is the rung for a machine that has
+wedged repeatedly. The root cause remains Chrome's (`getDisplayMedia` never settles after the native
+picker confirms; the stuck state lives in the browser process and survives a refresh) and no web page
+can cure it. What this task is about is that WE MADE IT WORSE and then could not get out of it.
+THREE THINGS FOUND THE HARD WAY 2026-08-29, one already fixed:
+ · FIXED — the safe-mode rungs were dropping the SIZE and RATE bounds along with the exotic options,
+   so a machine that had already choked once went on to capture its WHOLE monitor uncapped. Backing
+   off was asking for MORE. Rung 1 keeps the bounds now; rung 2 is bare on purpose and is covered on
+   the track by capDisplayTrack.
+ · THE ESCALATION HAS NO WAY BACK BUT TIME. `rememberDisplayWedge` raises the rung and pins it for a
+   24 h TTL; `rememberDisplaySuccess` clears it only from rung 0. So a machine that wedged once for a
+   reason that is now GONE — his was the macOS screen-recording grant, which needs a Chrome relaunch
+   — stays degraded for a day, and the only exit anyone found was a localStorage line in a console.
+   Robert's answer to being handed that line was "what the fuck is this?", and he is right.
+ · A TIMEOUT IS COUNTED AS A WEDGE WHATEVER CAUSED IT. When macOS has not granted Chrome screen
+   recording, Chrome's picker opens, says so, and `getDisplayMedia` never settles — identical from
+   the page, so the ladder escalates against a permission no constraint can fix, and reports "the
+   device never connected" while Chrome is displaying the actual answer on screen.
+WHAT THE TASK IS: (1) a successful share clears the mark from ANY rung, not only rung 0 — one good
+take is stronger evidence than an old bad one; (2) climb back one rung at a time on success rather
+than only falling; (3) tell the difference between "Chrome wedged" and "the OS has not granted
+permission" — the second is not a wedge, must not escalate, and must say what it is while the
+request is still outstanding rather than only in the post-take banner; (4) a visible way out that is
+not a console (the capture screen already surfaces notices; a "reset screen sharing" affordance
+belongs there).
+GATES: a machine at rung 2 returns to rung 0 after N good takes without waiting out the TTL · a
+permission failure does not raise the rung at all and names the permission · the reduced request
+still carries the bounds (pinned) · his repro recipe from docs/SCREEN_WEDGE.md, run again.
 
 ## F18 the export goes to the user's own resolution — AUTHORED 2026-08-29 from Robert:
 ##     "i want 3024x1964 or whatever users resolution is on roadmap"
