@@ -573,6 +573,20 @@ a still screen being mistaken for a slow machine and quietly dropping your resol
 (F14); and 30 fps welded into every path with no way to lift it (F15 — that one is a question for
 you, not a bug). All five are on the READY map in `.ai/TASKS`.
 
+**LATER THE SAME DAY you ruled and two of the five are fixed, live.** Your message — *"every device
+records the best it can, 60 fps, minimal size, couple minutes ~10 MB"* — settled F15 (60 fps: yes,
+scheduled behind F13 so it is derived from the take, not welded in as a new constant) and set the
+size objective. Shipped and verified on the live app the same session: a still screen no longer
+loses resolution for being still (P0-ladder-static — before the fix a static screen walked BOTH
+ladder rungs down in 10 seconds; after, zero steps), and the export step that MATCHES your screen is
+now an instant copy of the raw recording instead of a re-render (O3c — this is the fix for "picked
+1440p on a 1440p screen and waited hours for a 10 GB file": that click is now ~a second, native
+detail, and the size shown is exact). What is left of "minimal size" is one decision only you can
+make — the codec (details in `BACKLOG.md`, carried as SIZE-CODEC on the READY map): AVC plays
+everywhere and is the floor today; HEVC/AV1 is the ~2× you keep pointing at with the movie-file
+comparison. Recommended: an honest "smaller file, newer players" option in the export panel now,
+and the cloud player switching automatically once cloud lands.
+
 1. **Listen to two recordings.** A normal one and one with music from a tab. The audio fix you were
    asked to check before was never actually running — the number it depends on was being calculated
    and dropped. It runs now.

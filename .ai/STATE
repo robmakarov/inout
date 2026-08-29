@@ -14,10 +14,18 @@ phase: MVP validation (2026-07-16)
   — PO holds the freeze risk and is the reporting channel). Flipping it found the flag was half-dead:
   displayVideoConstraints sent width/height {max:1920x1080}, a REAL constraint Chrome honours before
   handing the track over, so `?nativeres=1` had been buying nothing. The size bound is dropped at the
-  request now; the 30 fps bound stays. resolutionLadder steps 4K->1440p->1080p on backpressure and is
-  wired (liveCompositeV2 -> onDegradeStep -> session.stepDisplayDown). The composite canvas is still
-  1920x1080, so the DEFAULT 1080p export (packet copy) is unchanged — this reaches the re-rendering
-  steps, where 1440p stops being an upscale.
+  request now; the 30 fps bound stays (F15 RULED YES 2026-08-29 — 60 fps rides F13, see TASKS).
+  resolutionLadder steps 4K->1440p->1080p on backpressure and is wired (liveCompositeV2 ->
+  onDegradeStep -> session.stepDisplayDown). AND THE LADDER JUDGES WHAT ARRIVED (P0-ladder-static,
+  fixed 2026-08-29 the day after it went live): getDisplayMedia emits on change, a still screen
+  delivers 0 fps BY DESIGN, and the old requested-rate ruler read that as 0 % delivery — prod repro
+  consumed BOTH rungs in 10 s of stillness. Verdict is now deliveredFps against min(arrivedFps,
+  requestedFps) (framesIn was already in the stats; keep-alives never count); a starved pipeline
+  still steps, a 60 fps source is not punished for the cadence gate. Cost stated: crushed-arrivals-
+  without-drops no longer steps — that is Chrome's compositor (autopsied 08-26), keep-alive holds
+  the file, the watchdog still guards collapse. The composite canvas is still 1920x1080, so the
+  DEFAULT 1080p export (packet copy) is unchanged — and since O3c the step MATCHING the screen is an
+  instant copy of the raw channel, so native detail no longer needs the render at all.
 - THE EXPORT TARGETS A QUALITY, NOT A BITRATE (2026-08-29). H.264 qp20 via a CustomVideoEncoder on
   mediabunny's registerEncoder seam (its own bitrateMode is typed constant|variable, both of which
   X15(a) measured INERT; quantizer mode is the one that works and needs a per-frame QP nothing in the
@@ -29,11 +37,17 @@ phase: MVP validation (2026-07-16)
 
 works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → export → share-as-file.
 - SYNCHRONIZED START (PO 2026-07-20, supersedes instant-arm/late-join): arm() waits for src.settled — ALL devices acquired, every permission prompt answered — before start() activates them at one epoch. All channels share one start + one length (verified: 4 lanes 100% ±0.3%); no primary-gated early start, no late-join staggering. pipeline prewarm at mount; devices touched only after record click
-- WHICH FILE THE FAST PATHS COPY IS A DECISION NOW (O3b, 2026-08-29) — compose/copySource.ts, pure
-  and unit-tested, resolved ONCE in choose.ts and handed to whichever path runs. Usually the live
-  composite. On a take with exactly ONE video channel that is already mp4/AVC at exactly the export
-  geometry it is THAT RAW CHANNEL instead: the compositor's contain-fit into its own 1920x1080 canvas
-  is the identity there, so the composite is a second 4:2:0 generation of a picture we already have.
+- WHICH FILE THE FAST PATHS COPY IS A DECISION NOW (O3b, 2026-08-29; O3c the same day) —
+  compose/copySource.ts, pure and unit-tested, resolved ONCE in choose.ts and handed to whichever
+  path runs. Usually the live composite. On a take with exactly ONE video channel that is already
+  mp4/AVC at exactly the SELECTED STEP'S geometry it is THAT RAW CHANNEL instead (O3c: the equality
+  follows the tier, not a 1080p constant — nativeres had cancelled O3b for every non-1080p monitor
+  the day both shipped, and the matching step was a full re-render of pixels already on disk; now it
+  is an instant copy, verified live: "instant copy avc from single-generation" at the 720p step in
+  ~1 s). The panel's INSTANT badge is per step via copySourceForTier (the ladder's own answer) and a
+  copyable step's size is exact off ChannelRecording.bytes (new, additive). The compositor's
+  contain-fit into its own 1920x1080 canvas is the identity on the 1080p case, so the composite is a
+  second 4:2:0 generation of a picture we already have.
   Measured on one take with nothing else changed — colour kept 80.0/89.1 % against 70.3/75.2, luma
   37.3 dB against 35.5 against the source canvas, fringe 8.66 against 10.24, and the export is FASTER.
   It costs 14-23 % more download (the raw channel spends more of the same 8 Mbps ceiling); the COLOUR

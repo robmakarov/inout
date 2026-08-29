@@ -281,3 +281,32 @@ td 2026-08-29 (3) — THE EXPORT TARGETS A QUALITY, NOT A BITRATE, ON PO'S GO ("
 MEASURED ON THE DEPLOYED BUILD at 2560x1440 (PO's own step), 48 frames, PSNR of the DECODED file against the very frames that made it, on the two contents this product is for — a document sitting still with a blinking caret, and the same page scrolling. static: bitrate 365,967 B / 49.69 dB · qp18 -4.9 % / +2.29 dB · qp20 -11.6 % / +0.52 dB · qp23 -21.4 % / -2.23 dB · qp26 -30.3 % / -4.85 dB. scroll: bitrate 426,535 B / 50.97 dB · qp18 -4.4 % / +1.73 · qp20 -11.1 % / +0.03 · qp23 -19.9 % / -2.38 · qp26 -28.9 % / -4.97. qp20 is the rung that is PARETO-BETTER on both — never worse quality than today, always ~11 % smaller — so that is the default. Oracle PASS (63.1 ms).
 TWO HONEST LIMITS, both of which the number above would otherwise hide. (1) THIS IS 11 %, NOT PO'S "TWICE SMALLER", and rate control is not where the rest is: on this content the bitrate target was ALREADY undershooting at 1.83 of 14 Mbps, so there was never 14 Mbps of waste to reclaim. What makes a movie half the size at better quality is the CODEC — hevc/av1 against our avc floor. Those rungs are BUILT and off for a distribution reason, not a technical one (a blind-shared file must play for a recipient we cannot probe), and that trade is PO's and worth re-pricing at two-hour takes. (2) QUANTIZER MODE HAS NO CEILING: it ignores `bitrate` outright, so a pathological source could in principle cost more than the tier's old cap. Every content measured came far under (busiest lane 3.17 Mbps at qp20 against 3.55 on the bitrate target), but the guarantee is gone and `?cq=off` is the way back.
 AND THE LEVEL IS PART OF THE CODEC STRING, which cost a whole round and is the reusable lesson. The probe first shipped with a fixed list — avc1.42E01E / 4D402A / 640028, levels 3.0 / 4.2 / 4.0 — and a level caps the frame SIZE. Measured on prod, isConfigSupported enforces it: at 2560x1440 only levels 5.0-5.2 are accepted at all, so constant quality reported itself unsupported at exactly the 1440p step the whole feature exists for, on hardware that does it fine. The probe now walks profiles x ascending levels and RETURNS the string it verified, which the render pins as fullCodecString — probing one string and encoding another is the same bug with a longer fuse.
+
+po 2026-08-29 (2) — THE 1080p ERA'S TWO STANDING QUESTIONS, RULED IN ONE MESSAGE ("i want every
+device to record best quality it can, 60 fps, and i want minimal size for exported files ... i know
+couple minutes video can be around 10 mb with good quality"). (1) F15's gate is ANSWERED: 60 fps is
+a YES — INOUT should make it. Shape recorded in the task: fps FOLLOWS THE SOURCE up to 60, riding
+F13's derive-from-the-take chain; not a new constant. (2) MINIMAL EXPORT SIZE is a standing
+objective with a reference point (~10 MB / couple minutes at good quality). Pricing recorded where
+the levers are: qp-targeted encoding (default on) bought ~11 %; the remaining ~2x on motion content
+IS the codec — hevc/av1 against the avc blind-share floor — and the pick between (a) cloud-player
+only, (b) an honest export-panel choice, (c) flipping the floor is still PO's; TD recommends (b)
+now and (a) when cloud lands. On screen content the target is already near: X12 measured the
+composite ~1 Mbps on screen content = ~15 MB for 2 min, and a single-generation copy is smaller
+still on static takes.
+
+td 2026-08-29 (2) — P0-ladder-static MERGED (f9bac50): the degradation ladder judges deliveredFps
+against min(arrivedFps, requestedFps) instead of a wall-clock 30 — a static screen (0 fps BY DESIGN
+under getDisplayMedia's emit-on-change) no longer reads as backpressure and no longer loses
+resolution one-way. Proven on prod before/after: both rungs consumed in 10 s by a still screen
+before; zero steps in 26+ s after, same conditions. Starved pipeline still steps (unit-pinned).
+Cost stated: crushed-arrivals-without-drops no longer steps — that case is Chrome's compositor
+(autopsied 08-26), keep-alive holds the file, watchdog still guards collapse.
+
+td 2026-08-29 (3) — O3c MERGED (f85aed0): single generation follows the SELECTED export tier; the
+composite stays fenced by allowPacketCopy. A native-res screen exporting at its matching step now
+packet-copies the raw channel — instant, native detail, one 4:2:0 generation earlier — where it
+re-rendered before (PO's 10 GB 1440p render was this path). The panel's INSTANT badge is per step
+via the ladder's own chooser, and a copyable step's size is exact off ChannelRecording.bytes (new,
+additive). Verified live: 720p-geometry take at the 720p step → "instant copy avc from
+single-generation", ~1 s. Gates: 510 tests, exp o3b 7/7, oracle v2+v1, fidelity, prod repro.

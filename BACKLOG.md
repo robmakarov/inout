@@ -12,11 +12,23 @@ TD tags technical defects by severity. Done items get deleted, not archived.
 
 ### Now
 
+- [P2] TD 2026-08-29: **the export quality step is sticky forever**, so one accidental 1440p makes
+  every later export re-render with nothing on screen saying why. PROMOTED to `.ai/TASKS` F14 — PO
+  picks between "do not persist" and "persist and warn". Softened by O3c (a step matching the
+  screen's geometry is instant now) but still real on any step that re-renders.
+
+- [P2] TD 2026-08-29: **30 fps hardcoded everywhere** → `.ai/TASKS` F15, RULED YES the same day
+  (PO: "every device records the best it can, 60 fps"). Scheduled with/after F13 as
+  fps-follows-the-source; the ruling and shape live in the task and DECISIONS.
+
 - [P1] PO 2026-08-29: **the size estimate is 2.15× low at the top step** — panel said 4.7 GB at
   1440p, file came out 10.09 GB (140 min). Every other step landed within ~100 MB, so this is the
   top rung specifically, not the model. quality.ts already admits the √-pixel model came in 47 % low
   at 1440p on text content; at PO's length that becomes 5.4 GB of surprise. Note the estimate is
   ALSO the only warning a user gets before committing to a ~2 h render.
+  PARTLY NARROWED BY O3c (2026-08-29): on a take whose single raw channel matches the step's
+  geometry the number is now EXACT (the file's own byte rate) and that export no longer renders at
+  all. The defect remains for steps that genuinely re-render (camera takes, mismatched geometry).
   SECOND, CHEAPER DEFECT SEEN WHILE CHECKING THIS (TD, deployed build, 6 s synthetic take): the
   PROVISIONAL numbers — what the panel shows for the seconds before sizeProbe's calibration lands —
   ranked 1440p BELOW the 1080p step, `1080p 400 KB (exact)` against `1440p ~308 KB`. 1440p is an
@@ -38,6 +50,9 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   the file is too big to send anyway. Options, in order of how little they give up: (a) hevc/av1 for
   the CLOUD player only, where we control playback — no recipient risk at all; (b) a "smaller file,
   newer players only" choice in the export panel, named honestly; (c) flip the blind-share floor.
+  PO RULED THE OBJECTIVE 2026-08-29 ("minimal size ... couple minutes ~10 MB with good quality") —
+  the a/b/c PICK is still owed; TD recommends (b) now + (a) when cloud lands, and against (c) (it
+  breaks blind shares on old players). Carried on the READY map as SIZE-CODEC.
   Also open, and cheap: quantizer mode has NO bitrate ceiling, so a pathological source could exceed
   the tier's old cap. Nothing measured came close (busiest lane 3.17 Mbps at qp20 against 3.55), but
   the guarantee is gone — a mid-export achieved-rate check that steps the QP up would restore it.

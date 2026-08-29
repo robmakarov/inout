@@ -76,6 +76,54 @@ O3a's claim. VERIFIED end to end on a controlled 1080p source: raw channel, mani
 finishes the row on any machine with a live camera. P9 stays on the map as a one-command re-run, not
 as work.
 
+SIXTEENTH SESSION 2026-08-29 (PO: "?singlegen=capture, ?loudness=r128 the fuck is this" → "it must
+be device resolution, how the fuck mobile will make 1920x1080? its vertical" → "yes and find out what
+we can improve without that shit" → "find out what else is suspicios like this fucked up rule that
+limiting us" → "put it all in roadmap"). NO CODE SHIPPED — this was an audit, and it found five
+things, all now tasks. PO READ docs/FLAGS.md and rejected the premise the whole geometry chain rests
+on: the output is a landscape constant and a phone records vertical. VERIFIED ON PROD rather than
+argued from the source, which is the standing rule this session's first answer broke and its second
+kept: a camera-only take draws with `fit: 'cover'`, so a 4:3 source keeps 75 % of its height — the
+same path on a 9:16 phone camera discards 68 % of the frame, and camera-only is the ONLY take a
+phone can make. → F13 (heavy).
+THE AUDIT FOUND FOUR MORE CEILINGS OF THE SAME SHAPE, two of them live on the default path TODAY:
+  · P0-ladder-static — a static screen delivers 0 fps and the degradation ladder reads that as
+    backpressure, stepping resolution down one-way. Seen live twice on the deployed build while the
+    same take's raw channel logged "source was static". Live since nativeres went default 08-29.
+  · O3c — nativeres and singlegen both went default 2026-08-29 and the first CANCELS the second:
+    single generation needs the raw channel to equal 1920×1080 exactly, and nativeres makes it the
+    monitor's size. O3b's measured colour win is reaching nobody whose screen is not 1080p.
+  · F14 — the export step is sticky forever, so one accidental 1440p makes every later export
+    re-render. Hit live: the panel opened on 1440p with the INSTANT badge on the row it was not using.
+  · F15 — 30 fps is hardcoded in every tier and every constraint, with no flag. PO-GATED: the
+    question is whether INOUT should be able to make 60 fps at all, and it needs a ruling, not code.
+CORRECTED THE SAME DAY IT WAS WRITTEN: docs/FLAGS.md claimed `?singlegen=capture` costs preview
+quality. Measured live, the fallback preview carries ~1.8× the pixels of the compositor's 960×540
+canvas — it is SHARPER. The flag's only real cost is source-liveness detection.
+
+SEVENTEENTH SESSION 2026-08-29 (PO: "there was rule that video always must be 1920x1080, i reverted
+it ... now quality of video sucks and file size is fucking huge ... i want every device to record
+best quality it can, 60 fps, and i want minimal size for exported files ... couple minutes video can
+be around 10 mb with good quality, go"). TWO RULINGS LANDED IN THAT MESSAGE and both are recorded in
+DECISIONS: F15's gate is answered — 60 FPS IS A YES ("every device records the best it can") — and
+minimal export size is a standing objective with a stated reference point (~10 MB for a couple of
+minutes at good quality), which prices the codec decision below. SHIPPED AND VERIFIED ON PROD:
+  · P0-ladder-static DONE — the ladder judges deliveredFps against min(arrivedFps, requestedFps);
+    framesIn was already in the stats. BEFORE on prod: a static synthetic screen consumed BOTH rungs
+    in 10 s ("delivered 0.0 of 30 fps ... → 1440p", then "→ 1080p"). AFTER on prod: same conditions,
+    26+ s static at 0.0-0.1 fps, zero steps. Starved-pipeline case still steps (unit-pinned).
+    Priced tradeoff in the commit: crushed-arrival-without-drops no longer steps — that case is
+    Chrome's compositor, keep-alive holds the file, the watchdog still guards collapse.
+  · O3c DONE — single generation follows the SELECTED tier; the composite stays fenced by
+    allowPacketCopy. VERIFIED ON PROD: a 720p-geometry take at the 720p step exported
+    "[bits] instant copy avc from single-generation" in ~1 s — before the push that click was a
+    full re-render. Quality wiring: copySourceForTier gives the panel the ladder's own answer, so
+    the INSTANT badge is per step and a copyable step's size is exact (ChannelRecording.bytes, new,
+    additive). On a 1440p/4K monitor the step matching the screen is now instant, native and small —
+    which is the "quality sucks + files huge" pair in one fix for unedited takes.
+  Gates: 510 tests · typecheck · exp o3b 7/7 twice-shipped lanes · oracle v2 PASS · oracle v1 PASS ·
+  fidelity PASS · verify-deploy OK (f85aed0) · both prod repros above.
+
 SHIPPED THIS SESSION
   · X9   the For-AI build runs in a worker. Byte-identical PDF on four lanes; the UI thread loses
          13 ms of a build instead of 84. The worker is not faster — it is elsewhere.
@@ -174,6 +222,38 @@ START HERE IF YOU ARE FRESH:
      `npm run oracle:load` (HEAVY, announce it) and `npm run exp -- armcancel`.
 
 READY NOW:
+  F13  output follows source       [heavy]   PO 2026-08-29: "yes", re-affirmed same day ("every
+                                             device records the best it can"). The frame stops
+                                             being a constant. THE BIG ONE — vertical video, native
+                                             camera, and it makes O3c's tier-match true by
+                                             construction. Gate: a 16:9 take stays byte-identical.
+                                             Run it in its own session — it touches capture,
+                                             compositor, layout, editor and export.
+  F15  60 fps                      [medium]  RULED YES 2026-08-29 (PO: "i want every device to
+                                             record best quality it can, 60 fps"). Rides F13's
+                                             derive-from-the-take chain — fps follows the source up
+                                             to 60 the same way geometry follows it — so schedule
+                                             WITH or immediately AFTER F13, not before: shipping 60
+                                             as new constants would rebuild the exact shape PO
+                                             rejected. Throughput risk is real (the 4K-freeze
+                                             family): the ladder is the guard, and it now judges
+                                             arrivals, so a 60 fps source is not punished (pinned).
+  SIZE-CODEC  the ~2x lever        [PO PICK OWED]  PO 2026-08-29: "minimal size ... couple minutes
+                                             ~10 MB with good quality". qp-targeted encoding is
+                                             DEFAULT ON and worth ~11 %; the remaining ~2x IS the
+                                             codec (hevc/av1 vs the avc blind-share floor) — built,
+                                             reachable, off for distribution only. PO picks:
+                                             (a) hevc/av1 for the CLOUD player only (no recipient
+                                             risk) · (b) a "smaller file, newer players" choice in
+                                             the export panel, named honestly · (c) flip the floor.
+                                             TD recommends (b) now + (a) when cloud lands; (c)
+                                             breaks blind shares on old players — against the
+                                             frozen never-break rule.
+  F14  export step stops being     [light]   TD 2026-08-29. One accidental 1440p makes every future
+       sticky                                export re-render, silently. Softened by O3c (a step
+                                             matching the screen is instant now) but still real on
+                                             any tier that re-renders. PO picks (a) do not persist
+                                             or (b) persist and warn loudly — see the task.
   P5a  iOS SCK spike               [light]   UNBLOCKED 2026-08-26: PO confirms Xcode 27 + a real
                                              iOS 27 device are available. Needs PO present (device
                                              plugged in, signing). TIME-SENSITIVE (iOS 27 ~Sept).
@@ -330,6 +410,184 @@ seeing files.
 GATES: un-zoomed takes and SR-off exports byte-identical to today · A/B crops at 2.5× to
 ~/Downloads — PO judges by eye · per-frame cost measured, export estimate includes it · no WebGPU →
 today's scaler, silently · oracle green.
+
+## P0-ladder-static — DONE 2026-08-29 (seventeenth session, handoff at the end of this task)
+[light · TD-authored 2026-08-29 · resolutionLadder.ts + its caller in liveCompositeV2.ts · LIVE ON
+THE DEFAULT PATH since nativeres went default the same day]
+Chrome's `getDisplayMedia` emits frames ON CHANGE. A screen nobody is touching delivers 0 fps, not
+30. `ladderVerdict` compares `deliveredFps` to `requestedFps` against `DELIVERY_FLOOR_RATIO 0.6`
+for `SUSTAINED_MS 2000` and cannot tell the two apart, and Rule 1 makes the step one-way.
+SEEN LIVE, TWICE, deployed build, static synthetic screen:
+  `[capture] native-res backpressure — stepping down: delivered 0.0 of 30 fps (0 % of requested)
+   for 3001 ms → 1440p`
+and in the SAME take:
+  `[capture] raw video channel: 7 frames encoded of 2 in, 5 keep-alive (source was static)`
+The pipeline already distinguishes "static" from "starved" — the ladder does not ask it. The step
+was a no-op in this repro only because the synthetic source (1280×720) is below both rungs; on a
+1440p or 4K screen it is a real, permanent loss of resolution. USER-VISIBLE COST: read a document,
+a slide, a paused video or your own editor for ~2 s after warmup and capture walks 4K → 1440p →
+1080p and never returns.
+FIX SHAPE (pick on evidence, do not guess): a source that sent nothing because nothing changed is
+not a source that failed. Either feed the raw channel's static/keep-alive signal into `LadderInput`,
+or judge on frames the compositor DROPPED rather than frames it received — dropping is what
+backpressure actually looks like.
+GATES: a new boundary test — static source at 0 fps for 10 s does NOT step, starved source at 0 fps
+DOES · every existing resolutionLadder test still green (the ladder's other three rules are
+untouched) · reproduce the false step on the deployed build BEFORE the fix and show it gone after,
+with the console lines pasted · nativeres off = byte-identical behaviour.
+NOT YET REPRODUCED on a real 4K screen; the console lines above are what to look for.
+
+## P0-LADDER-STATIC HANDOFF — DONE 2026-08-29, every gate met, verified on prod both sides.
+CHOSEN FIX SHAPE (the task's second option): judge on what the compositor failed to keep up with.
+`framesIn` was already in CompositorStats and counts only genuine source arrivals — keep-alives are
+a worker-internal setInterval and never pass through the 'frame' message. Rule 4 in
+resolutionLadder.ts: demand = min(arrivedFps, requestedFps) (the cadence gate drops a 60 fps
+source's excess ON PURPOSE — not failure); zero demand = the source sent nothing = no verdict;
+otherwise step when deliveredFps/demand < 0.6 sustained, exactly the old thresholds.
+GATES MET: 13 ladder tests (4 new: static-never-steps, starved-still-steps, sparse-kept-up,
+60fps-not-punished) · BEFORE on deployed build: static synthetic screen, "delivered 0.0 of 30 fps
+(0 % of requested) for 3999 ms → 1440p" then "→ 1080p" — BOTH rungs consumed in 10 s · AFTER on
+deployed build (f85aed0): same conditions, screen at 0.0-0.1 fps for 26+ s, ZERO steps · nativeres
+off untouched (the ladder only runs under onDegradeStep, which nativeres wires) · oracle v2 PASS
+46.8 ms + v1 PASS 32.5 ms.
+STATED COST (was in the task as a fix-shape choice, now a shipped fact): a source whose ARRIVALS are
+crushed below the floor without our pipeline dropping anything no longer steps. The 08-22 4K story
+says that case is Chrome's own compositor starving the source; a step cannot force frames out of a
+hidden crushed tab (autopsied), keep-alive holds the file, and the watchdog still ends a collapsed
+composite. If a real 4K screen ever shows sustained arrivals-crushed-no-drops where a step WOULD
+have helped, the discriminator to add is framesDropped/maxEncodeGapMs, both already in the stats.
+
+## O3c — DONE 2026-08-29 (seventeenth session, handoff at the end of this task)
+[light-medium · TD-authored 2026-08-29 · copySource.ts, session.ts, quality wiring · restores a
+measured win that is currently reaching nobody]
+Two defaults flipped 2026-08-29. `?singlegen=` (O3b, ON) copies the raw channel instead of the
+composite ONLY when that channel equals the export geometry exactly — `copySource.ts:143` and
+`session.ts:905`, both against the 1920×1080 constant. `?nativeres=` (O6, ON) drops the 1920×1080
+capture bound so the screen records at its own size. On any monitor that is not exactly 1920×1080
+the equality now fails, single generation declines, and the export is the composite again.
+SO O3b's MEASURED WIN IS NOT BEING DELIVERED: colour 80.0 % vs 70.3 % green retention, luma 37.3 vs
+35.5 dB, fringe 8.66 vs 10.24, and a faster export — all of it, to everyone whose screen is not
+1080p, on the same day it shipped. nativeRes.ts states the mechanism ("the composite stays
+1920×1080 … so the default export is unchanged") but reads it as a non-loss; it is the loss of a
+shipped improvement.
+FIX SHAPE: compare the raw channel against the SELECTED export tier instead of the 1080p constant —
+a 1440p screen exporting at the 1440p step already matches, and the composite can follow the tier
+so the copy has something to be equal to. F13 makes this true by construction, but this does NOT
+need F13 and should not wait for it.
+GATES: a 1080p screen behaves exactly as today (pinned) · a 1440p screen + 1440p step reports
+`copiedFrom: "single-generation"`, read from the export's own certification and not from a console
+line · `npm run exp -- o3b` green · the declined-reason string still names the real reason on a take
+that genuinely cannot copy · fidelity oracle green.
+
+## O3c HANDOFF — DONE 2026-08-29, every gate met.
+WHAT SHIPPED: chooseCopySource takes the REQUESTED settings for the single-generation equality and
+an `allowComposite` fence (default true — rigs unchanged); exportByBestPath consults it on EVERY
+tier with allowComposite = allowPacketCopy, so the flag keeps its documented meaning (the request IS
+the composite's geometry) and a matching raw channel is copyable at any step. instant/smartCut
+already derive geometry from the source — no copy path changed. QUALITY WIRING: copySourceForTier
+(quality.ts) answers the panel and the estimator with the ladder's own function — the INSTANT badge
+is per step, and a copyable step's size is EXACT off the channel's own byte rate. That also corrects
+the DEFAULT step on single-generation takes, which quoted the composite's size while copying the raw
+channel (+12-23 % under-quote, live since O3b). ChannelRecording.bytes is new and additive; old
+takes fall back to the model exactly as before (pinned by test).
+GATES MET: 1080p-screen-at-default pinned byte-identical (copySource tests) · tier-match cert
+verified: exp o3b's own cert-reading lanes green 7/7 (A/B lanes read copiedFrom out of the FILE),
+and live on the DEPLOYED build a 1280x720 take at the 720p step exported "[bits] instant copy avc
+from single-generation" in ~1 s with the panel badging 720p INSTANT — before this push that click
+was a full re-render (the geometry generalisation is one equality; the 720p repro exercises the
+same code path a 1440p screen takes) · declined reasons name real geometry on both origins
+(unit-pinned: "3840x2160" / "1920x1080 ... 2560x1440") · fidelity oracle PASS · oracle v2+v1 PASS ·
+510 tests · typecheck.
+NOT TOUCHED, deliberately: session.ts's CAPTURE half (?singlegen=capture) still compares against
+the composite constant — that rung records NO composite, so tier-chasing there would strand the
+other steps; F13's derive-from-the-take rewrite is where it becomes general. The F7c probe still
+prices copyable steps it does not need to (harmless; the exact number wins the display).
+
+## F14 export-step-stops-being-sticky [light · editor/export panel only, zero capture, zero compose]
+The export quality step persists in `inout.export.tier` forever. 1080p is the ONLY step that keeps
+the packet copy; every other step re-renders the whole take. SEEN LIVE on the deployed build: the
+panel opened on 1440p left by an earlier session, the INSTANT badge sat on the 1080p row it was not
+using, and the button read "Export 1440p". One accidental pick, once, makes every future export
+slow and large with nothing on screen explaining why the instant path stopped being taken.
+PO DECIDES WHICH: (a) do not persist the tier — every take opens on 1080p; (b) persist it but say
+plainly in the panel that this take will re-render and roughly what that costs in time and bytes.
+(a) is the smaller change and the one that matches "instant default export" in the frozen
+constraints; (b) keeps a deliberate choice. Do not pick without PO.
+GATES: whichever is chosen, the instant path is still taken on a default take (assert the ladder
+picks instant) · the panel's INSTANT badge and the selected step can never disagree — pinned by
+test, because that disagreement is the bug · no change to any export path's output.
+
+## F15 fps-ceiling — RULED YES 2026-08-29 (PO: "i want every device to record best quality it can,
+##     60 fps"). Schedule WITH or immediately AFTER F13 — see the ruling note at the bottom.
+[medium · TD-authored 2026-08-29, raised by PO's own objection to the 1920×1080 rule]
+`DEFAULT_EXPORT_SETTINGS.fps = 30`, all four quality steps are `fps: 30` (quality.ts), and capture
+asks the OS for `frameRate: { ideal: 30, max: 30 }` (acquire.ts:360). It is a `max`, so a 60 fps
+game tab or a 60 fps camera is throttled AT THE SOURCE. Native-res drops the SIZE bound and keeps
+this one deliberately — "every frame above 30 is encoded twice and then dropped at export" — which
+is only true because the export is 30. THAT IS THE SAME SHAPE AS THE 1920×1080 RULE PO OBJECTED TO:
+an output constant reaching back to cap the input. Nothing here is broken today; it is a ceiling
+with no flag, and no recent decision behind it.
+THE QUESTION FOR PO, and it is the whole gate: should INOUT be able to make a 60 fps video at all?
+A yes costs bytes and encode time on every take that uses it and wants its own quality step; a no is
+fine and should simply be written down as a decision instead of surviving as a constant. If yes,
+this rides F13's chain — the same derive-from-the-take rewrite that carries geometry carries fps —
+so it is scheduled AFTER F13, not before.
+RULED YES 2026-08-29 (DECISIONS). SHAPE, so the next session does not re-derive it: fps FOLLOWS THE
+SOURCE up to 60 — not a new 60 constant, which would rebuild the shape PO rejected. The chain:
+displayVideoConstraints/cameraVideoConstraints frameRate (acquire.ts, currently ideal:30 max:30
+unconditional) → composite FPS + cadence gate (liveCompositeV2/compositor.worker) → tier fps
+(quality.ts) → render loop (render.ts drives everything off settings.fps) → encoderWarm shape →
+sizeProbe's 30-fps-derived WINDOW_FRAMES. THE GUARDS ALREADY IN PLACE: the ladder judges arrivals
+(P0-ladder-static handoff — a 60 fps source is explicitly not punished, pinned), keep-alive cadence
+is rate-relative, and the throughput risk (4K-freeze family) is why this ships flagged first with
+the ladder watching. GATES when built: a 30 fps source's take is byte-identical to today · a 60 fps
+synthetic source records and exports 60 (read fps from the FILE) · oracle v2+v1 green · oracle:load
+green (announce it) · one real 60 fps take judged by PO.
+
+## F13 output-follows-source — the frame is a constant and it should be the take's
+[heavy · TD-authored 2026-08-29, PO: "it must be device resolution, how the fuck mobile will make
+1920x1080? its vertical" → "yes"]
+THE PRODUCT CANNOT MAKE A VERTICAL VIDEO. `DEFAULT_EXPORT_SETTINGS` is 1920x1080 (types.ts:546),
+all four quality steps are landscape 16:9 (quality.ts:66), the live composite canvas is
+`COMPOSITE_WIDTH/HEIGHT = 1920/1080` (session.ts:177), and the layout is authored against a fixed
+1920 width (layout.ts:17). Nothing in the chain asks the take what shape it is.
+
+MEASURED ON PROD 2026-08-29, camera-only synthetic take, live DOM read mid-take: the stage is
+1.778 and the source is 1.333, and a camera-only take draws with `fit: 'cover'` (layout.ts:120), so
+the compositor KEPT 75 % OF THE PICTURE HEIGHT AND CROPPED 25 %. It does not letterbox — it cuts.
+Apply the same cover to a real 9:16 phone camera: 0.5625/1.778 = 31.6 % of the frame survives,
+68 % is discarded, head and chin gone. And camera-only is the ONLY take a phone can make, because
+iOS gives browsers no screen capture at all (CaptureScreen.tsx isKindSupported drops screen+tab
+audio there) — so the crop path is not an edge case on mobile, it is the whole of mobile.
+
+SECOND, SMALLER HALF, same root: `cameraVideoConstraints` asks a screenless take for
+`CAPTURE_MAX_WIDTH x CAPTURE_MAX_HEIGHT` = a LANDSCAPE 1920x1080 (acquire.ts:390) — the app
+requests the wrong orientation from the sensor before anything is composited.
+
+WHAT THE TASK IS: the output geometry is derived from the take instead of being a constant.
+  · capture   — the composite canvas sizes itself from the take's video channel (or from a chosen
+                aspect), not from COMPOSITE_WIDTH/HEIGHT; camera constraints stop naming a
+                landscape box on a screenless take.
+  · quality   — a step becomes "how many pixels" (a long-edge target), not "which landscape box".
+                540p/720p/1080p/1440p keep their names and their meaning on a 16:9 take.
+  · layout    — drawComposition stops being authored at 1920w; `cameraFull` letterboxes or fills by
+                the take's own aspect rather than always cropping to 16:9.
+  · editor    — the stage, the preview and the export panel follow the same aspect.
+  · export    — render + both copy paths carry the take's geometry.
+THE PAYOFF BEYOND MOBILE: single generation (O3b) currently requires the raw channel to equal
+1920x1080 exactly (copySource.ts:143, session.ts:905). If the output follows the source, that
+equality is TRUE BY CONSTRUCTION on every screen-only take — the export half stops silently
+declining (see the nativeres interaction in BACKLOG) and the capture half becomes flippable for
+everyone instead of for 1080p monitors only.
+
+GATES: a 16:9 take is BYTE-IDENTICAL to today, pinned by test — this task may add shapes, never
+move the existing one · a portrait source exports portrait with NO crop, verified by reading
+width/height out of the exported FILE (not the UI) · a camera-only 4:3 take keeps its full height
+· the instant and smart-cut copy paths still fire on a screen-only take (assert copiedFrom) ·
+fidelity + sync oracles green · `npm run exp -- o3b` still green · PO judges one real phone take by
+eye before any default moves.
+RISK, STATED: this moves what an existing take exports to for any take that is not 16:9. Nothing
+about a 16:9 take may change — that is the byte-identical gate, and it is the whole safety net.
 
 ## R1 x15-chroma-rig-hardening — DONE 2026-08-29, all 15 fixed (handoff at the end of this task)
 [medium · TD-authored 2026-08-29, PO: "make fix all of them as one step"]
