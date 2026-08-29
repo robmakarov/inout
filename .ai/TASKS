@@ -258,9 +258,11 @@ READY NOW:
                                              the raw-channel copy (instant, shipped) or a
                                              background native render on camera takes, and an
                                              EDITED take renders in the background while the user
-                                             edits — editing is when the machine is idle. No
-                                             pre-record choice is load-bearing. Absorbs F14.
-                                             AFTER F15; two spikes gate it (T1 transcode speed,
+                                             edits — editing is when the machine is idle. INSTANT
+                                             = the rung capture recorded: High today; the LATER
+                                             pre-record picker makes any selected rung the
+                                             instant one (PO, sealed). Absorbs F14. AFTER F15;
+                                             two spikes gate it (T1 transcode speed,
                                              T2 background-render cost) — spec in the task.
   P5a  iOS SCK spike               [light]   UNBLOCKED 2026-08-26: PO confirms Xcode 27 + a real
                                              iOS 27 device are available. Needs PO present (device
@@ -542,8 +544,12 @@ already exist. The render floor is decode-bound at 5-6x realtime (O5, X4 refuted
 file the user is going to ask for — affordable precisely because quality is ONE option.
 WHAT IT IS — DESIGN v2, 2026-08-29, on PO's OWN COUNTER ("cant it be same high instant quality
 rendered already and it just converts in smaller file if choosing? ... can we squezze rendering in
-parallel of edits so user wont notice?"). v1's pre-choice (capture follows a chosen rung) is
-RETIRED as load-bearing — it survives only as a later pre-record preference. The v2 principle:
+parallel of edits so user wont notice?"), SEALED by PO the same day: "High instant — or any, only
+if user will select it before record, which we will add later." THE INSTANT CONTRACT, exactly:
+INSTANT IS THE RUNG CAPTURE RECORDED — High by default today; the pre-record picker (LATER, its
+own UI task) makes the selected rung the recorded one, and therefore the instant one (v1's
+capture-follows-the-choice mechanism is that later half, not retired). Every other rung is a FAST
+LANE, pre-made in idle time, and is never labelled instant. The v2 principle:
 EVERYTHING IS ALREADY MADE BY THE TIME IT IS ASKED FOR, using the time the machine is idle.
   · RECORD HIGH ALWAYS = exactly today's capture: raw native channels + the composite,
     take-shaped after F13, quality-targeted. Nothing changes at capture.

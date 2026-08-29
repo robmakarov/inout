@@ -344,3 +344,11 @@ exported file carries zero edit machinery — the honest size costs are the real
 the live composite (which v2 confines to High), singlegen's +12-23 % (buys measured colour), and
 the codec (SIZE-CODEC, PO's pick). Two spikes gate the build (T1 transcode speed, T2 background-
 render cost) because both speed claims are currently reasoning, and reasoning does not ship.
+
+po 2026-08-29 (5) — THE INSTANT CONTRACT, SEALED ("High instant - or any, only if user will select
+it before record, which we will add later"). Instant is THE RUNG CAPTURE RECORDED: High by default
+today; the pre-record quality picker (later, its own UI task) makes the selected rung the recorded
+— and therefore the instant — one, which is v1's capture-follows-the-choice mechanism taking its
+place as the LATER half rather than being retired. Every other rung is a fast pre-made lane
+(background transcode/render, F16 v2) and is never labelled instant. Max on single-video takes
+stays instant regardless (the raw native channel is always on disk — O3c).
