@@ -8,7 +8,7 @@ import {
 import { analytics } from '@core/analytics'
 import { sourceFrameEnabled } from '@core/frame'
 import { captureRateCeiling, rateForSurface } from '@core/rate'
-import { evenDown } from '@core/frame'
+import { MAX_OUTPUT_LONG_EDGE, evenDown } from '@core/frame'
 import { isAppleWebKit } from '@core/capabilities'
 import { guardStream } from './deviceGuard'
 import { nativeResEnabled } from './nativeRes'
@@ -349,7 +349,7 @@ export const CAPTURE_MAX_HEIGHT = DEFAULT_EXPORT_SETTINGS.height
  * Pinned against QUALITY_TIERS by test: if a bigger step is ever added, this
  * moves with it or the test fails.
  */
-export const CAPTURE_MAX_LONG_EDGE = 2560
+export const CAPTURE_MAX_LONG_EDGE = MAX_OUTPUT_LONG_EDGE
 export const CAPTURE_MAX_FPS = DEFAULT_EXPORT_SETTINGS.fps
 
 /**

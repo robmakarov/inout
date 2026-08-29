@@ -28,6 +28,18 @@ import type { Recording } from './types'
 /** What the product was before F13, and what an unknown take still gets. */
 export const DEFAULT_FRAME_ASPECT = 16 / 9
 
+/**
+ * THE LARGEST PICTURE THIS PRODUCT CAN DELIVER — the long edge of the biggest
+ * export step (1440p). Nothing above it can ever reach a file, so nothing above
+ * it is worth capturing, encoding, writing to disk, or downscaling on every
+ * composite tick. Tied to QUALITY_TIERS by test.
+ *
+ * It is the bound on CAPTURE (acquire.ts) and the bound on what may be recorded
+ * at 60 fps (rate.ts), and those are the same question asked twice: what can
+ * this product actually hand back?
+ */
+export const MAX_OUTPUT_LONG_EDGE = 2560
+
 const STORAGE_KEY = 'inout.frame.source'
 
 function fromSearch(): boolean | null {

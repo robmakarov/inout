@@ -24,14 +24,13 @@ import {
   tiersForTake,
 } from '@core/compose/quality'
 import { chooseCopySource } from '@core/compose/copySource'
-import { DEFAULT_FRAME_ASPECT } from './frame'
+import { DEFAULT_FRAME_ASPECT, MAX_OUTPUT_LONG_EDGE } from './frame'
 import {
   DEFAULT_FRAME_RATE,
   MAX_FRAME_RATE,
   captureRateCeiling,
   normalizeRate,
   rateForSurface,
-  HIGH_RATE_PIXEL_BUDGET,
   setSourceRate,
   sourceRateEnabled,
   takeRate,
@@ -275,31 +274,31 @@ describe('the copy fence refuses a file of the wrong rate', () => {
   })
 })
 
-describe('a 60 fps ask is budgeted against the surface', () => {
-  // Measured on prod, one machine, 20 s takes: 1920x1080@60 kept 90 % of the
-  // composite's frames, 2560x1440@60 kept 81 %, 3456x2234@30 was healthy, and
-  // 3456x2234@60 encoded NOTHING and never recovered. A cliff, not a slope —
-  // and one the ladder cannot climb back down from, because the collapse is
-  // instant. See HIGH_RATE_PIXEL_BUDGET.
+describe('a 60 fps ask is bounded by what the product can export', () => {
+  // Robert's order of sacrifice, in his words: "if something needs to be
+  // dropped it must be fps not resolution, but you must make it work max
+  // resolution 60 fps". So this never trades resolution for rate — it only
+  // declines a rate for a surface already past the export ceiling, which after
+  // capDisplayTrack should not exist.
   it('leaves a 30 fps ceiling completely alone, whatever the surface', () => {
     expect(rateForSurface(3456, 2234, 30)).toBe(30)
     expect(rateForSurface(7680, 4320, 30)).toBe(30)
   })
 
-  it('allows 60 up to the largest surface measured to sustain it', () => {
+  it('allows 60 anywhere inside the export ceiling, including Robert’s own screen', () => {
     expect(rateForSurface(1920, 1080, 60)).toBe(60)
     expect(rateForSurface(2560, 1440, 60)).toBe(60)
+    // 3024x1964 capped to the export ceiling. The pixel-rate constant this
+    // replaced held exactly this shape at 30, which is what he said must work.
+    expect(rateForSurface(2560, 1662, 60)).toBe(60)
+    // Portrait counts its own long edge, not its width.
+    expect(rateForSurface(1662, 2560, 60)).toBe(60)
   })
 
-  it('holds a bigger surface at 30 rather than letting it collapse', () => {
-    expect(rateForSurface(3456, 2234, 60)).toBe(30)
+  it('declines only a surface the capture bound should already have removed', () => {
+    expect(rateForSurface(3024, 1964, 60)).toBe(30)
     expect(rateForSurface(3840, 2160, 60)).toBe(30)
-  })
-
-  it('is the pixel RATE that is budgeted, not the width', () => {
-    // A very wide, very short surface is cheap and is allowed 60.
-    expect(rateForSurface(5120, 720, 60)).toBe(60)
-    expect(HIGH_RATE_PIXEL_BUDGET).toBe(2560 * 1440 * 60)
+    expect(MAX_OUTPUT_LONG_EDGE).toBe(2560)
   })
 
   it('an unknown surface is not punished for being unknown', () => {

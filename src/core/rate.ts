@@ -30,6 +30,7 @@
  * export step that would have to re-render it down; a take exports at the rate
  * it was recorded at, the same sentence F13 writes about shape.
  */
+import { MAX_OUTPUT_LONG_EDGE } from './frame'
 import { DEFAULT_EXPORT_SETTINGS, type Recording } from './types'
 
 /** What the product was before F15, and what a take with no rate still gets. */
@@ -43,38 +44,29 @@ export const DEFAULT_FRAME_RATE = DEFAULT_EXPORT_SETTINGS.fps
 export const MAX_FRAME_RATE = 60
 
 /**
- * HOW MANY PIXELS A SECOND A TAKE MAY ASK FOR ABOVE 30 fps.
+ * MAY THIS SURFACE BE RECORDED ABOVE 30 fps?
  *
- * A rate ceiling alone is not enough, and the take that proved it is Robert's:
- * "60 fps game on other tab frozen". Measured on prod, one machine, one source
- * (`?sourcefps=1&screensize=…&screenfps=60`, 20 s each):
+ * THE RULE IS STRUCTURAL, and it replaces a measured pixel-rate constant that
+ * was standing in for exactly the thing this product already knows: a surface
+ * may run at the full rate when it is within what the product can EXPORT. Above
+ * that there is no picture to protect — those pixels can never reach a file —
+ * so the honest answer is to bound the SIZE (acquire.ts does, at capture) and
+ * let the rate alone.
  *
- *     1920x1080 @60   124 Mpx/s   composite kept 90 % of frames
- *     2560x1440 @60   221 Mpx/s   composite kept 81 %
- *     3456x2234 @30   231 Mpx/s   composite healthy, raw kept 493 of 574
- *     3456x2234 @60   463 Mpx/s   composite encoded NOTHING, raw kept 8 of 305
+ * ROBERT'S ORDER OF SACRIFICE, and it is his and not an inference: "if
+ * something needs to be dropped it must be fps not resolution, but you must
+ * make it work max resolution 60 fps". So resolution is never traded for rate
+ * here; the only thing this function can do is decline a rate for a surface
+ * that is already past the export ceiling, which after capDisplayTrack should
+ * not exist. It is the belt on a track that refused to be bounded.
  *
- * That is a CLIFF, not a slope, and it cannot be climbed back down from: the
- * composite's encoder produced nothing from the first second and never
- * recovered, so the degradation ladder — which fires correctly now, all three
- * rungs, rate first — could not rescue the take. A guard that only acts after
- * the collapse is not a guard for a collapse that is instant.
- *
- * So the budget is the largest configuration MEASURED to sustain 60, and the
- * rate is simply not raised above it. It is a floor of evidence and not a law
- * about hardware: a machine that can do more should be allowed to, and the way
- * that happens is somebody measuring it and moving this number, not the number
- * quietly standing in for "the engine's limitation".
- *
- * WHAT A BIG SCREEN GETS INSTEAD is its full resolution at 30, which is the
- * shipped default and is measured healthy at 3456x2234 — and for a SCREEN
- * recording that is the better half of the trade anyway.
- */
-export const HIGH_RATE_PIXEL_BUDGET = 2560 * 1440 * 60
-
-/**
- * The rate this surface may be asked for: the ceiling, unless the surface is
- * too big to sustain it. Pure, so the boundary is testable.
+ * WHY NOT A PIXEL-RATE NUMBER: the first version used one (2560x1440x60, the
+ * largest configuration measured to sustain 60 on one machine on one evening)
+ * and it held a 2560x1662 screen — the exact shape of Robert's, after the
+ * export ceiling — at 30, which is the thing he had just said must work. A
+ * constant from one machine cannot decide what every machine may attempt. The
+ * degradation ladder decides that, from measurement, at the only time anyone
+ * can: while the take is running.
  */
 export function rateForSurface(
   width: number | undefined,
@@ -83,7 +75,7 @@ export function rateForSurface(
 ): number {
   if (ceiling <= DEFAULT_FRAME_RATE) return ceiling
   if (!width || !height || width <= 0 || height <= 0) return ceiling
-  return width * height * ceiling > HIGH_RATE_PIXEL_BUDGET ? DEFAULT_FRAME_RATE : ceiling
+  return Math.max(width, height) > MAX_OUTPUT_LONG_EDGE ? DEFAULT_FRAME_RATE : ceiling
 }
 
 const STORAGE_KEY = 'inout.frame.rate'
