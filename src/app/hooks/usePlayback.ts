@@ -7,10 +7,53 @@ import { isAppleWebKit } from '@core/capabilities'
 
 /** Beyond this the element is lost — hard seek (audible/visible jump). */
 const RESYNC_HARD_MS = 250
+/**
+ * AUDIO GETS A WIDER ONE, AND IS MUTED ACROSS IT (task B2, Robert: "a lot of
+ * minor noises in tab audio ... after some time editing noises almost
+ * completly stops in same places they were in begining").
+ *
+ * That shape — noises that HEAL with repetition, in the same places — is the
+ * signature of the preview's own correction, not of the file. The discriminator
+ * says so with a number: on an idle machine a 34 s take on prod recorded
+ * `paddedMs: 0` on every audio channel and its export decoded with one 0.7 ms
+ * notch in 34 s. There is nothing there to heal from; what heals is a COLD
+ * DECODE. Channel blobs reach the player as OPFS-backed Files, so the first
+ * pass over any region pays a disk read and a cold decode however `preload` is
+ * set. The element stalls, drift crosses 250 ms, and this code hard-seeked a
+ * PLAYING element — a click — and below that slewed playbackRate by -20/+25 %,
+ * which engages the browser's pitch-preserving TIME-STRETCHER. On tab audio,
+ * usually music or continuous speech, stretch artefacts have nowhere to hide.
+ * Second pass, the region is warm, the stall never happens, and the noise is
+ * "almost completly" gone.
+ *
+ * So audio stops being corrected the way video is. The rule is: NEVER STRETCH
+ * AUDIBLY, AND NEVER CLICK. Slew is capped at 4 %, a rate the stretcher cannot
+ * make audible; past 300 ms the element is seeked instead of stretched, MUTED
+ * ACROSS THE SEEK, because the click is the seek's transient and not its
+ * arrival.
+ *
+ * MEASURED, and the first attempt at this was worse: with the cap at 4 % and
+ * the seek threshold at a full second, 4 % of authority could not close the
+ * drift a cold decode opens, so drift accumulated and the element seeked TWICE
+ * in twelve seconds anyway — later and further out than before. Prompt and
+ * silent beats late and silent. 300 ms is close to the 250 ms this always
+ * used, which keeps the A/V bound where it was.
+ */
+const RESYNC_HARD_AUDIO_MS = 300
 /** Inside this the element counts as in sync — no correction (avoids hunting). */
 const SYNC_DEADBAND_MS = 15
 /** Drift is closed over ~this horizon via playbackRate slewing. */
 const SLEW_HORIZON_MS = 500
+/**
+ * How far playbackRate may stray, per media kind.
+ *
+ * VIDEO keeps what it had: a frame shown 20 % early is not an artefact, it is a
+ * frame, and closing drift fast is what keeps the picture on the sound.
+ * AUDIO is the whole of this bug. 4 % is under a semitone of resampling and is
+ * inaudible on speech and music alike; it closes a 250 ms drift in ~6 s instead
+ * of 1 s, which is the trade this task exists to make.
+ */
+const SLEW_LIMIT = { video: { down: 0.8, up: 1.25 }, audio: { down: 0.96, up: 1.04 } }
 /**
  * Paused/scrub seeks snap the frame once drift exceeds this.
  *
@@ -95,6 +138,43 @@ export interface Playback {
   scrubEnd(): void
   /** Stable ref callback for the channel's media element. */
   elementRef(channelId: string): (el: HTMLMediaElement | null) => void
+}
+
+/**
+ * Mute an element across a seek and restore it when the seek lands (task B2).
+ *
+ * The click a listener hears at a hard seek is the discontinuity at the moment
+ * the element jumps, not the audio it arrives in. Muting for the duration
+ * removes it, and `seeked` is what ends it — a timer would be guessing at a
+ * duration that depends on the decode. Re-entrant: a second seek during the
+ * first keeps the ORIGINAL muted value, so a burst of corrections cannot leave
+ * the element muted forever.
+ */
+const seekMuted = new WeakMap<HTMLMediaElement, boolean>()
+
+function muteAcrossSeek(el: HTMLMediaElement): void {
+  if (seekMuted.has(el)) return
+  seekMuted.set(el, el.muted)
+  el.muted = true
+  let done = false
+  const restore = (): void => {
+    if (done) return
+    done = true
+    clearTimeout(timer)
+    el.removeEventListener('seeked', restore)
+    const was = seekMuted.get(el)
+    seekMuted.delete(el)
+    // `sync` owns `muted` for channel activity; only give back what we took,
+    // and never un-mute a channel it has since decided is inactive.
+    if (was === false && !el.paused) el.muted = false
+  }
+  // THE SAFETY NET, AND IT IS NOT OPTIONAL. `seeked` is the honest signal, but
+  // an element that never fires it — a decode that fails, a source that ends
+  // mid-seek — would leave this channel muted for the rest of the session, and
+  // silent audio is a far worse bug than the click this removes. Never break a
+  // working path: after a second the mute comes off whatever happened.
+  const timer = setTimeout(restore, 1000)
+  el.addEventListener('seeked', restore, { once: true })
 }
 
 export function usePlayback(recording: Recording, edit: EditState): Playback {
@@ -216,7 +296,10 @@ export function usePlayback(recording: Recording, edit: EditState): Playback {
           el.muted = true
           if (!el.paused) el.pause()
         } else {
-          el.muted = false
+          // NOT while a seek-mute is outstanding: `sync` runs every frame, so
+          // an unconditional unmute here would undo the mute ~16 ms later and
+          // the click it exists to hide would come back.
+          if (!seekMuted.has(el)) el.muted = false
           const drift = el.currentTime * 1000 - src
           if (live) {
             // A/V sync: hard-seeking only past a ±120ms deadband let audio and
@@ -224,14 +307,21 @@ export function usePlayback(recording: Recording, edit: EditState): Playback {
             // synced"). Instead every element is continuously slewed onto the
             // master clock via playbackRate — inaudible, no seek stutter —
             // with hard seeks reserved for genuine jumps.
-            if (Math.abs(drift) > RESYNC_HARD_MS) {
+            const isAudio = ch.media === 'audio'
+            const hardMs = isAudio ? RESYNC_HARD_AUDIO_MS : RESYNC_HARD_MS
+            const limit = isAudio ? SLEW_LIMIT.audio : SLEW_LIMIT.video
+            if (Math.abs(drift) > hardMs) {
+              // A seek of a PLAYING element is heard as a click — it is the
+              // transient, not the arrival. Muted across it, and unmuted by the
+              // element's own `seeked`, so nothing guesses at the duration.
+              if (isAudio) muteAcrossSeek(el)
               el.currentTime = src / 1000
               el.playbackRate = base
             } else if (Math.abs(drift) <= SYNC_DEADBAND_MS) {
               el.playbackRate = base
             } else {
               const rate = base * (1 - drift / SLEW_HORIZON_MS)
-              el.playbackRate = Math.min(base * 1.25, Math.max(base * 0.8, rate))
+              el.playbackRate = Math.min(base * limit.up, Math.max(base * limit.down, rate))
             }
             if (el.paused) void el.play().catch(() => {})
           } else {
@@ -256,7 +346,16 @@ export function usePlayback(recording: Recording, edit: EditState): Playback {
           // mediaUrl.ts): on Safari every MediaRecorder channel is an MP4 under
           // a `.webm` key, and an element handed `video/webm` bytes it cannot
           // parse plays nothing at all — silent mic, blank camera.
-          const url = await mediaUrlFor(ch.blobKey, ch.mimeType)
+          // B2: AUDIO is read into memory so the first pass over a region does
+          // not pay a disk read — that stall is what the sync correction reacts
+          // to, and the correction is the noise. Video is left on disk: it is
+          // orders of magnitude bigger, and a stalled video frame is not a
+          // sound. The cap inside mediaUrlFor is the guard for a long take.
+          const url = await mediaUrlFor(
+            ch.blobKey,
+            ch.mimeType,
+            ch.media === 'audio' ? { warmUpToBytes: 64 * 1024 * 1024 } : undefined,
+          )
           created.push(url)
           return [ch.id, url] as const
         }),

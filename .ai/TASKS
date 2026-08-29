@@ -463,7 +463,9 @@ READY NOW:
                                              take (2.15x) — and it is the ONLY warning before a ~2 h
                                              render. Cheaper sibling: the PROVISIONAL numbers rank 1440p
                                              BELOW 1080p, which is an upscale of that very file.
-  B2   the noises Robert can hear    [medium]  "i need them gone". TWO defects, not one: (A) the preview's
+  B2   the noises Robert can hear    [(A) DONE 2026-08-29 · (B) REFUTED ON MEASUREMENT · ROBERT'S LISTEN
+                                             OWED — handoff under the task]
+                                             "i need them gone". TWO defects, not one: (A) the preview's
                                              own correction (cold decode -> hard seek / +-20 % playbackRate
                                              time-stretch) which HEALS on repeat, and (B) ~15 pad notches
                                              a minute already in the FILE. Discriminator: export and listen.
@@ -902,6 +904,79 @@ GATES: the discriminator run and reported (paddedMs + a listen of the exported f
 and second pass — showing the first pass no longer differs · (B) the crossfade keeps the timeline
 sample-exact (wallClockHold tests green) and the notch is measured before and after in dB · fidelity
 oracle green · `npm run oracle` green both engines · Robert's listen closes it, not the numbers.
+
+## B2 HANDOFF — 2026-08-29. THE DISCRIMINATOR RAN FIRST AND IT SPLIT THE TASK IN HALF.
+NEW RIG: `node scripts/noise-check.mjs` — the deployed build, screen + tab audio + mic, and it reports
+BOTH halves in one run: `paddedMs` per audio channel out of the product's own storage, the pad notches
+actually decodable in the EXPORTED file (count, ms, depth in dB), and the preview's own corrections
+over the SAME seconds played twice. `--load=N` spins N busy cores for the duration of the take.
+
+THE DISCRIMINATOR, AS THE TASK DEMANDS, BEFORE ANY FIX:
+  IDLE, 34 s take on prod under a 4K synthetic screen:
+    paddedMs 0 on the mic AND on tab audio · trimmedMs 0 · revivals 0
+    the exported file decodes to 33.9 s and contains ONE notch of 0.7 ms in the whole take.
+  So on an idle machine (B) DID NOT HAPPEN AT ALL, and the task's own rule applies: "0 there means
+  (A) is the whole story". That is a change since 2026-08-26's 1281 ms in 84 s, and the likely cause
+  is X6's default flip to WebCodecs raw channels the same week, which measured audio clocks starved
+  1.6 % of wall time on MediaRecorder against 0.16 % on WebCodecs — a 10x.
+  AND THE MEASUREMENT CAN STILL FAIL, which is why `--load` exists: the first version of this rig
+  could only ever read 0, because a 4K synthetic screen is capped to 1920x1080 by capDisplayTrack
+  before the session sees it, so "4K" bought almost no load. With 12 busy cores on an 8-core machine:
+    paddedMs mic 335 · tab audio 332 (34 s take) · the export carries 184.3 ms of real dropout.
+  TWO THINGS FOLLOW, AND THE SECOND REFUTES THE TASK'S PROPOSED FIX:
+    1. (B) is load-dependent, not constant. It is gone at idle and real under contention.
+    2. The gaps are ~92 ms, not the ~1.3 ms the task describes. A CROSSFADE CANNOT FIX A 92 ms HOLE —
+       there is no audio to fade to. "Splice better" is not available at this size; "starve less" is
+       the only lever, and X6 already pulled the big one. NOTHING WAS CHANGED IN CAPTURE, and that is
+       a measured decision rather than a deferral.
+    Also learned: the export MIXES the channels, so a pad on one channel is masked by the other —
+    667 ms of padding produced 184 ms of audible silence, because only the coincident pads survive
+    the mix. The audible defect is smaller than paddedMs implies, and its long tail is what to chase.
+
+(A) THE HEALING HALF, FIXED AND MEASURED. Instrumented from OUTSIDE the product (`seeking` counted per
+element, playbackRate sampled at 50 ms), the same 12 s played twice, on an idle machine, prod against
+this build, TWO ROUNDS EACH — and the before is Robert's sentence as a number:
+    BEFORE  first pass  AUDIO 1 hard seek · slew to 9.7 % and 7.8 %      second pass 0 · 0
+    AFTER   first pass  AUDIO 0 hard seeks · slew capped at exactly 4.0 % second pass 0 · 0
+  The second pass was always clean, before and after: that is the "healing", and it is a cold decode
+  off OPFS on the first pass and nothing at all on the second.
+  WHAT SHIPPED, three pieces, audio only — video keeps every number it had, because a frame shown
+  20 % early is a frame and not an artefact:
+    · slew capped at 4 % for audio (was 25 %). 4 % is under a semitone; it is the rate at which the
+      browser's pitch-preserving TIME-STRETCHER stops being audible, and tab audio — music or
+      continuous speech — is where stretch artefacts have nowhere to hide.
+    · a hard seek of a PLAYING audio element is now MUTED ACROSS THE SEEK. The click is the seek's
+      transient, not its arrival. `seeked` ends the mute, with a 1 s timeout behind it, because an
+      element that never fires `seeked` would otherwise be silent for the rest of the session — a far
+      worse bug than the click, and the frozen rule says never break a working path.
+    · AUDIO IS READ INTO MEMORY (`mediaUrlFor`, ≤64 MB, audio only). The stall the correction reacts
+      to is a disk read: channel blobs reach the player as OPFS-backed Files. A 30-minute opus channel
+      is ~28 MB; the same length of screen video is hundreds, so video stays on disk and the cap keeps
+      a two-hour take out of the heap.
+  TUNING THAT WAS MEASURED RATHER THAN CHOSEN: the first attempt paired the 4 % cap with a 1000 ms
+  seek threshold, and it was WORSE — 4 % of authority cannot close what a cold decode opens, so drift
+  accumulated and the element seeked twice in twelve seconds anyway, later and further out. 300 ms
+  (near the 250 ms this always used) makes the correction prompt and silent instead of late and silent.
+
+GATES
+  · the discriminator run and reported BEFORE any fix — above, both idle and loaded.
+  · (A) no hard seek of a playing element — 1 -> 0 in the first pass, both rounds; and any seek that
+    does happen is muted. Slew capped — 9.7 % -> exactly 4.0 %, the cap, both rounds.
+    "the first pass no longer differs" — HONESTLY: it no longer differs AUDIBLY. It no longer seeks at
+    all and its slew is bounded below audibility; a 4 % correction still occurs. Claiming identity
+    would need the decode warmed AND the element never stalling, and the memory warm gets the first
+    of those only.
+  · (B) the crossfade — NOT SHIPPED, and refuted on measurement: the gaps are ~92 ms. wallClockHold
+    tests untouched and green. Notch measured before and after: idle 1 notch / 0.7 ms both sides;
+    under load, unchanged, because capture was not changed.
+  · fidelity oracle PASS (render toneErr 0.04 dB, sep 56.0 dB, hits 0; instant 6.05/0.03).
+  · `npm run oracle` PASS (54.5 and 38.2 ms; one run in three hit the KNOWN v2 coin flip at
+    maxAbs 91.4/91.7 against 90 — G1's subject, and G4 explains why it sits on the band).
+    `--engine=v1` PASS (58.5 ms). 667 tests · typecheck clean.
+  · ROBERT'S LISTEN CLOSES IT, NOT THE NUMBERS — OWED. Open the editor on a take with tab audio and
+    play the first pass. The claim under test: the noises at the start are gone, and nothing new
+    appears when the preview corrects. If any remain, `node scripts/noise-check.mjs --load=8` on that
+    machine says whether they are in the file.
 
 ## B3 stale-tab-chunks — a tab that spans a deploy silently loses the export worker
 [light-medium · service worker + boot notice]

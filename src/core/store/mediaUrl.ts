@@ -44,8 +44,41 @@ export function typedBlob(blob: Blob, declaredType: string | undefined): Blob {
   return blob.slice(0, blob.size, declaredType)
 }
 
-/** Read a stored blob and hand back a URL a media element will accept. */
-export async function mediaUrlFor(blobKey: string, declaredType: string | undefined): Promise<string> {
+/**
+ * WARM IT, IF IT IS SMALL ENOUGH TO BE WORTH IT (task B2).
+ *
+ * `blobStore.read` hands back an OPFS-BACKED File. The bytes are on disk, so
+ * the first pass a media element makes over any region pays a disk read
+ * whatever `preload` says — and that stall is what the preview's own sync
+ * correction then reacts to. It is the mechanism behind the whole of Robert's
+ * report: "a lot of minor noises in tab audio, but after some time editing
+ * noises almost completly stops IN SAME PLACES they were in begining". The
+ * second pass is warm; nothing stalls; nothing is corrected; the noise is gone.
+ *
+ * Reading the file into memory once removes the class rather than bounding it.
+ * It is only worth doing where the file is small, which audio is and video is
+ * not: a 30-minute opus channel is ~28 MB, the same length of screen video is
+ * hundreds. Above the cap the OPFS file is handed over exactly as before, so a
+ * two-hour take cannot be pulled into the heap by this.
+ */
+const DEFAULT_WARM_LIMIT_BYTES = 64 * 1024 * 1024
+
+export async function mediaUrlFor(
+  blobKey: string,
+  declaredType: string | undefined,
+  opts?: { warmUpToBytes?: number },
+): Promise<string> {
   const blob = await blobStore.read(blobKey)
+  const limit = opts?.warmUpToBytes ?? 0
+  if (limit > 0 && blob.size > 0 && blob.size <= Math.min(limit, DEFAULT_WARM_LIMIT_BYTES)) {
+    try {
+      const bytes = await blob.arrayBuffer()
+      const type = usable(declaredType) ? declaredType : blob.type
+      return URL.createObjectURL(new Blob([bytes], type ? { type } : undefined))
+    } catch {
+      // Out of memory, or a read that failed: fall through to the file-backed
+      // URL, which is what shipped before this and always works.
+    }
+  }
   return URL.createObjectURL(typedBlob(blob, declaredType))
 }
