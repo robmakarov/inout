@@ -584,6 +584,22 @@ everywhere and is the floor today; HEVC/AV1 is the ~2× you keep pointing at wit
 comparison. Recommended: an honest "smaller file, newer players" option in the export panel now,
 and the cloud player switching automatically once cloud lands.
 
+**AND F15 IS NOW BUILT TOO — 60 fps exists, and it is waiting on your eye.** Turn it on with
+`?sourcefps=1`. What changed is small and it is deliberately not "60 fps": the app used to tell your
+screen "give me thirty frames a second and no more", so a 60 fps game or a 60 fps camera was slowed
+down *before* anything was recorded. Now it simply stops saying that, and takes whatever the device
+offers, up to sixty. A 30 fps webcam records exactly what it always did — nothing here can make a
+video slower than it is today, which is why nothing you have already recorded can move.
+Measured on the live app, an 8-second recording: **411 frames at 60 against 204 at 30, read out of
+the finished file** — and the export is still the instant, no-waiting copy at both. **The price, on
+the same recording: 2.0 MB against 1.3 MB.** Twice the frames for half again the size, which is
+better than it sounds — moving pictures compress the *changes*, and at 60 fps each change is
+smaller. That is the trade against your "minimal size" objective, in one number, and it is your
+call. THE ONE THING LEFT IS YOUR EYE: record one real 60 fps take and tell me whether it looks
+worth the bytes. Until you do, it stays off. One caveat worth knowing: 60 fps asks your machine for
+twice the work, and on a busy machine the recorder drops frames rather than slowing the picture — on
+a quiet one it dropped none.
+
 0. **Record yourself on your PHONE again — it should just work now, no link needed.**
    Two things were wrong, and the second one you found yourself.
    **The one you saw twice:** the app asked the browser how big the camera was, and on a phone the

@@ -139,6 +139,27 @@ FOUND BY DRIVING IT RATHER THAN READING IT (note 10's shape, the other way round
 shape a take recorded with the flag and exported without it copied a 1920x1440 file out under a
 "1080p" badge. Fixed and pinned in the same push.
 
+NINETEENTH SESSION 2026-08-29 (Robert: "go f15"). F15 BUILT AND VERIFIED ON PROD, FLAG-GATED,
+DEFAULT NOT MOVED — the whole handoff is under the task. THE PRODUCT CAN NOW MAKE A 60 fps VIDEO:
+`?sourcefps=1` and a 60 fps source records and exports 411 frames of an 8 s take where the same take
+at 30 holds 204, read out of the FILES; the composite's own media grid says 60 against the control's
+30, and the export is still the INSTANT PACKET COPY at both rates. One seam, `src/core/rate.ts`, and
+it is not a 60 constant: the rate follows the source and ONLY GOES UP, so a 24 fps webcam is
+untouched and a source at or below 30 cannot reach a changed line. PRICED: twice the frames for
+1.5× the bytes (2.0 MB against 1.3 MB), which is the number the minimal-size objective should be
+read against. NEW ON THE MAP: F15-FLIP, Robert's eye on one real 60 fps take — the task's own last
+gate, and the only thing between here and 60 fps by default; and `oracle:load`, announced and NOT
+run because it is a load rig and he is at the machine.
+FOUND BY DRIVING IT RATHER THAN READING IT, third session running: EditorScreen resolved its step
+against the take's SHAPE and not its RATE, so the export asked for 30 fps of a 60 fps take, the new
+copy fence correctly refused the mismatch, and the take silently RE-RENDERED ITSELF DOWN. Nothing
+about that is visible from the source; the rig read it off the file in one run. Fixed and pinned in
+the same push.
+NEW TOOL: `scripts/fps-check.mjs` — real Chrome, the deployed build, both rate lanes, answers read
+out of the OPFS files. It exists because the Browser pane CANNOT answer this question: a hidden tab
+does not run requestAnimationFrame, so the synthetic screen paints nothing and a take driven that
+way declares 60 and delivers 0.1.
+
 SHIPPED THIS SESSION
   · X9   the For-AI build runs in a worker. Byte-identical PDF on four lanes; the UI thread loses
          13 ms of a build instead of 84. The worker is not faster — it is elsewhere.
@@ -667,7 +688,8 @@ GATES when built: Save file measured instant on a long take · no codec word any
 the sheet drives compose/choose.ts unchanged (the oracle still gates the paths users get) · Robert
 judges the sheet by eye before it becomes the default surface.
 
-## F15 fps-ceiling — RULED YES 2026-08-29 (Robert: "i want every device to record best quality it can,
+## F15 fps-ceiling — BUILT AND VERIFIED ON PROD 2026-08-29, flag-gated (handoff at the end of this
+##     task). RULED YES 2026-08-29 (Robert: "i want every device to record best quality it can,
 ##     60 fps"). F13 LANDED 2026-08-29 — this is next. See the ruling note at the bottom.
 [medium · authored 2026-08-29, raised by Robert's own objection to the 1920×1080 rule]
 `DEFAULT_EXPORT_SETTINGS.fps = 30`, all four quality steps are `fps: 30` (quality.ts), and capture
@@ -694,6 +716,101 @@ is rate-relative, and the throughput risk (4K-freeze family) is why this ships f
 the ladder watching. GATES when built: a 30 fps source's take is byte-identical to today · a 60 fps
 synthetic source records and exports 60 (read fps from the FILE) · oracle v2+v1 green · oracle:load
 green (announce it) · one real 60 fps take judged by Robert.
+
+## F15 HANDOFF — BUILT AND VERIFIED ON PROD 2026-08-29. DEFAULT NOT MOVED.
+SHIPPED BEHIND `?sourcefps=1` (sticky `inout.frame.rate`), OFF by default — the task's own last gate
+is "one real 60 fps take judged by Robert", so the flip is his. Off, every path answers exactly what
+the constant answered.
+
+THE SEAM IS `src/core/rate.ts`, and it is deliberately NOT a new 60 constant — that would rebuild
+the shape Robert rejected in F13. The rate FOLLOWS THE SOURCE up to 60 and ONLY EVER GOES UP: a
+24 fps webcam still records and exports 30, because the ceiling moved and the floor did not. That is
+what makes the byte-identical gate structural rather than tested-for — a source at or below 30
+cannot reach a single changed line.
+ · `normalizeRate` rounds (capturers say 29.97 / 59.94), floors at 30, caps at 60. Total: every
+   unknown answers 30, never NaN.
+ · `takeRate(recording)` — THE COMPOSITE ANSWERS FIRST, the same argument `takeAspect` gives: that
+   file is what the default step packet-copies, so returning the camera's rate for a take whose
+   composite is 30 would have the panel promise 60 and the copy hand back 30.
+ · Absent rate reads as 30 and that is a FACT, not a guess: until this shipped capture asked every
+   source for `max: 30` and nothing downstream could exceed it.
+
+WHAT IS GATED BY THE FLAG AND WHAT IS NOT, because it is the one asymmetry here: the flag governs
+what gets RECORDED. The EXPORT side is not gated — it reads the rate out of the take. So turning the
+flag off cannot strand a 60 fps file behind a 30 fps step that would have to re-render it down; a
+take exports at the rate it was RECORDED at, the same sentence F13 writes about shape.
+
+THE CHAIN, one answer each: `displayVideoConstraints` drops the ask entirely above 30 and keeps a
+bare `max` (an `ideal: 60` would trade a source's resolution for a rate it may not have — nothing is
+REQUESTED, the throttle is lifted) · `session.compositeRate()` decides once and hands the same
+number to whichever engine starts, so a v2→v1 fallback cannot change the take's rate · both engines
+paint, encode and declare it (`CompositeRecording.fps`, `ChannelRecording.fps`, both additive and
+absent-means-30) · `resolveTier` carries it into every step, bitrate ceiling re-scaled by the rate
+for the same reason F13 re-scaled it by pixels · `copySource` fences BOTH origins on it ·
+`sizeProbe`'s window becomes a GOP-DURATION instead of 150 frames (150 is half a GOP at 60, and half
+a GOP priced as a whole one reads high on every 60 fps step).
+
+FOUND BY DRIVING IT RATHER THAN READING IT, and it is the whole reason the rig exists: EditorScreen
+resolved its step against the take's SHAPE and not its RATE, so `settingsForTier` asked the export
+for 30 fps of a 60 fps take. The fence did exactly its job — refused to hand a 60 fps file over
+under a 30 fps label — and the cost of being right was a SILENT RE-RENDER DOWN TO 30, measured on
+prod as composite 49.3 fps / export 30 fps / no copy where the control lane copied in one second.
+Fixed and pinned by a test asserting the DEFAULT step of a 60 fps take is still the instant copy.
+
+THE INSTRUMENT IS `scripts/fps-check.mjs`, and the Browser pane could not have been it: the
+synthetic screen is a canvas painted from requestAnimationFrame and a HIDDEN tab does not run rAF —
+a take driven that way recorded "37 frames encoded of 2 in, 35 keep-alive (source was static)",
+declared 60 and delivered 0.1. Real, visible Chrome against the deployed build is the instrument.
+It reads TWO numbers out of every file and gates on one: GRID (timescale over the most common sample
+duration — the frame grid the writer worked on, which is "what rate is this file") and CADENCE
+(samples over duration — how many frames the MACHINE managed). Conflating them is how its own first
+run called a file whose every frame is stamped 1/60 s "22 fps".
+
+GATES MET, everything geometric and temporal read out of the FILES in OPFS, never from the UI
+(prod build f0b85d1, both lanes green, machine quiet):
+ · 60 fps LANE — source handed over `1280×720@60` (before F15 the `max: 30` made this 30), 462
+   frames ARRIVED, composite 411 encoded / 0 dropped, composite FILE grid 60 fps · 411 frames,
+   export 411 frames 1920x1080 by INSTANT COPY, 2.0 MB. Product's own record: channel fps 60,
+   composite fps 60.
+ · 30 fps CONTROL — source `@30`, 234 arrived, composite 204 / 0 dropped, FILE grid 30 fps, export
+   204 frames by instant copy, 1.3 MB, and no take announced a moved rate.
+ · THE PRICE, measured rather than asserted: twice the frames for 1.5× the bytes (2.0 MB against
+   1.3 MB on the same 8 s). Sub-linear, which is the temporal-redundancy argument — and it is the
+   number Robert's standing minimal-size objective should be read against.
+ · unit — 28 new tests in `src/core/rate.test.ts`. The first block is the safety net: `tiersForTake`
+   deep-equals QUALITY_TIERS on a 30 fps take, `resolveTier` returns the same OBJECT, and the
+   capture ask is `{ideal:30,max:30}` field for field.
+ · 585 tests · typecheck · oracle v2 PASS · oracle v1 PASS · fidelity PASS · verify-deploy OK.
+   HONESTLY: v1 and fidelity each failed ONCE on a loaded machine (v1 export throughput 0.76× < 1×;
+   fidelity render residual 3.39 dB) and passed on every re-run once it was quiet (v1 1.17× and
+   1.25×; fidelity residual 0.04 dB). Both are the timing-gate flakiness `.ai/DECISIONS` already
+   records, and neither commit here touches the audio path or the render.
+
+STILL OPEN, and both are Robert's:
+ · `oracle:load` — announced, not run: it is a load rig and the rule is it never runs while Robert
+   is at the machine. `npm run oracle:load` when he says.
+ · ONE REAL 60 fps TAKE JUDGED BY EYE, which is the task's own last gate and the only thing between
+   here and turning `?sourcefps=1` on by default.
+
+TWO THINGS DELIBERATELY NOT DONE, so the next session does not re-derive them:
+ · THE CAMERA IS NOT ASKED FOR 60. `cameraVideoConstraints` gains no `frameRate` at all: a camera
+   that natively runs 60 now flows through unthrottled, but an `ideal: 60` would let fitness
+   distance trade 1080p30 for 720p60 on a real sensor, and no synthetic rig can measure that trade
+   (a canvas track ignores constraints). It needs a real-device run in the shape of P9's
+   `camera-check.mjs`. Until then a 30 fps sensor stays 30, which is what "follows the source"
+   means.
+ · `encoderWarm` still warms at 30. Its own header measures the cost as a per-PROCESS GPU
+   initialization, not a per-config one, so matching the rate buys nothing and risks a different
+   throwaway config for no evidence.
+
+THROUGHPUT, STATED PLAINLY because it is what the flag is guarding: a 60 fps take asks the
+compositor and the encoder for twice the frames. On a QUIET machine both kept up (0 dropped, 411
+frames). On a LOADED one — two browsers and a build running — the same rig measured 341 of 401
+composite frames dropped and 393 of 455 raw frames dropped at 60, against 0 at 30. The degradation
+ladder is the designed guard and it judges arrivals (P0-ladder-static), but an 8 s take is shorter
+than its grace period, so it was never seen to fire. That is the case a longer real take should be
+watched for, and it is why the rig reports throughput beside the contract and never folds it into
+the exit code — a green-by-default number there would only mean the machine was quiet.
 
 ## F13 output-follows-source — DONE 2026-08-29, flag-gated (handoff at the end of this task)
 [heavy · authored 2026-08-29, Robert: "it must be device resolution, how the fuck mobile will make

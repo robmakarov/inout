@@ -14,7 +14,12 @@ phase: MVP validation (2026-07-16)
   — Robert holds the freeze risk and is the reporting channel). Flipping it found the flag was half-dead:
   displayVideoConstraints sent width/height {max:1920x1080}, a REAL constraint Chrome honours before
   handing the track over, so `?nativeres=1` had been buying nothing. The size bound is dropped at the
-  request now; the 30 fps bound stays (F15 RULED YES 2026-08-29 — 60 fps rides F13, see TASKS).
+  request now; THE 30 fps BOUND IS NOW A CEILING, NOT A CONSTANT (F15, 2026-08-29): with
+  `?sourcefps=1` the ask drops to a bare `max: 60` and the rate follows the source up to 60 through
+  the composite, the steps and the copy fence; off (the default) it is the `{ideal:30,max:30}` it
+  always was, field for field. `src/core/rate.ts` is the seam and it only ever goes UP, so a 24 fps
+  webcam is untouched. Verified on prod by `scripts/fps-check.mjs`, which reads the rate out of the
+  FILES: 411 composite frames on an 8 s 60 fps take against 204 at 30, instant copy at both.
   resolutionLadder steps 4K->1440p->1080p on backpressure and is wired (liveCompositeV2 ->
   onDegradeStep -> session.stepDisplayDown). AND THE LADDER JUDGES WHAT ARRIVED (P0-ladder-static,
   fixed 2026-08-29 the day after it went live): getDisplayMedia emits on change, a still screen
@@ -28,6 +33,26 @@ phase: MVP validation (2026-07-16)
   copy) is unchanged — and since O3c the step MATCHING the screen is an instant copy of the raw
   channel, so native detail no longer needs the render at all. The ladder's rungs are written
   landscape and are turned for a rotated source (F13).
+- THE RATE CAN FOLLOW THE TAKE (F15, 2026-08-29) — `?sourcefps=1`, OFF BY DEFAULT UNTIL ROBERT
+  JUDGES A REAL 60 fps TAKE. Until this `frameRate: {ideal:30, max:30}` capped a 60 fps game tab or
+  camera AT THE SENSOR, justified as "every frame above 30 is encoded twice and then dropped at
+  export" — true only because the export was 30, which is the output-constant-caps-the-input shape
+  Robert rejected in F13. `core/rate.ts` is the one seam and it is NOT a 60 constant: `takeRate`
+  (the COMPOSITE first, same argument as `takeAspect`), `normalizeRate` (rounds 29.97/59.94, floors
+  at 30, caps at 60), and the rate ONLY GOES UP — a 24 fps webcam still records 30, so a source at
+  or below 30 cannot reach a changed line. THE FLAG GOVERNS WHAT IS RECORDED, NOT WHAT IS EXPORTED:
+  a take exports at the rate it was recorded at, so turning the flag off cannot strand a 60 fps file
+  behind a step that would re-render it down. `copySource` fences both origins on the rate, so a
+  60 fps file can never be handed over under a 30 fps step's label. Verified on prod by
+  `scripts/fps-check.mjs` reading the FILES: 60 lane — source `1280×720@60`, 462 arrived, composite
+  411 encoded / 0 dropped, FILE grid 60 fps, export 411 frames by instant copy, 2.0 MB; 30 control —
+  204 frames, grid 30, instant copy, 1.3 MB. TWICE THE FRAMES FOR 1.5x THE BYTES.
+  FOUND BY DRIVING IT: EditorScreen resolved its step against the take's SHAPE and not its RATE, so
+  the export asked for 30 of a 60 fps take, the fence correctly refused, and the take silently
+  RE-RENDERED DOWN — invisible from the source, one run of the rig off the file.
+  DELIBERATELY NOT DONE: the camera is not ASKED for 60 (an `ideal: 60` can trade 1080p30 for
+  720p60 on a real sensor and no canvas rig can measure that); `encoderWarm` still warms at 30 (its
+  own measurement says the cost is per-process, not per-config).
 - THE FRAME CAN FOLLOW THE TAKE (F13, 2026-08-29) — `?sourceframe=1`, OFF BY DEFAULT UNTIL ROBERT
   JUDGES A REAL PHONE TAKE. Until this the output was a landscape constant end to end
   (DEFAULT_EXPORT_SETTINGS, four 16:9 steps, a 1920x1080 composite canvas, a layout authored at
@@ -695,7 +720,10 @@ gaps / in flight:
   merely deferred and Robert-gated per instance), fixed composition layout unfrozen for F4's timed camera.
   PROTOCOL: Robert says "roadmap" → print the TASKS READY map and WAIT; Robert says "go <id>" → one task,
   own branch, gates, merge, then update the READY map.
-  READY NOW: O4 step 2 remainder (the worker is exonerated — see above) · F7c (attempt 5: motion is
+  READY NOW: F15-FLIP and F13-FLIP (both are Robert's EYE on one real take — a 60 fps take and a
+  phone take — and each is the only thing between its flag and being the default) · `oracle:load`
+  for F15, announced and unrun because it is a load rig · O4 step 2 remainder (the worker is
+  exonerated — see above) · F7c (attempt 5: motion is
   a uniform 1.44x under, which is a countable question) · P5a (BLOCKED on Xcode 27 + an iOS 27
   device) · O11d (blocked on P1's Playwright install) · P1's two remaining gates (both need
   downloads Robert must approve).
