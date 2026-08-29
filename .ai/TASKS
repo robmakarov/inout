@@ -873,6 +873,60 @@ FIDELITY IS FLAKY ON THIS MACHINE AND IT IS NOT THIS CHANGE: interleaved against
 anything this tree produced. Filed in BACKLOG beside the v2 oracle's own flake. Every PASS on both
 trees reads 0.03.
 
+## F13 THIRD PASS — THE PHONE'S REAL BUG WAS NOT GEOMETRY AT ALL. Fixed 2026-08-29.
+Robert, on an iPhone: "it is still fucking horizontal on phone, make it like it supposed on phone,
+everything camera sees" · "i m talking about only camera recording, and mic dont work in iphone
+safari too" · "recorded mic beatrate is shown on editing but no sound hearable".
+THAT LAST SENTENCE IS THE DIAGNOSIS, and it is worth reading twice: a waveform drawn correctly
+beside an element that plays nothing means the BYTES are fine and the LABEL is not.
+MediaRecorder on Safari has no WebM encoder — it produces MP4 — and `armChannel` chose the storage
+key's extension as "mp4 for the WebCodecs path, webm for everything else". On an iPhone
+"everything else" is EVERY channel: Safari has no MediaStreamTrackProcessor, so both measured paths
+are unavailable and the composite is v1. So every file was an MP4 stored under a `.webm` name,
+`File.type` is derived from that name, and `URL.createObjectURL` handed each element a blob
+labelled `video/webm`. Safari trusts the type instead of sniffing. Silent mic, blank camera.
+AND THAT IS ALSO WHY IT WAS STILL HORIZONTAL. An element that will not load reports videoWidth 0,
+so nothing downstream could ever learn the take's shape from the FILE — it fell back to
+`track.getSettings()`, which describes the sensor and is landscape on a phone held portrait. Two
+reports, one root cause, and the geometry work of passes one and two could not reach it.
+WHAT SHIPPED:
+ · `core/store/mediaUrl.ts` re-types the blob from the recorder's own `mimeType` before it reaches
+   an element. `slice` re-types without copying, and this REPAIRS TAKES ALREADY RECORDED, which
+   renaming cannot. Every media element in the app goes through it.
+ · new channels are named by the container they actually hold (`containerExt`), and the composite
+   is `.mp4` — which both engines have always written. `recovery.ts` sweeps both names.
+ · THE EDITOR TAKES THE TAKE'S SHAPE FROM WHAT ITS DECODER OPENED, not from anything capture
+   claimed. `tiersForTake(recording, aspect?)` is now the single place a step is resolved, and both
+   the stage and the export follow that one number; `copySourceForTier`/`estimateExportBytes` stop
+   re-resolving so the badge cannot disagree with the path.
+ · A CAMERA-ONLY TAKE LETTERBOXES INSTEAD OF CROPPING under the flag — Robert's "everything camera
+   sees". Identical to the old crop whenever frame and picture agree; where they do NOT it is the
+   difference between a bounded cosmetic cost and losing someone's head, which is the right way
+   round for a chain that has now been wrong about a phone twice.
+ · THE DEFAULT IS ON WHERE `getDisplayMedia` DOES NOT EXIST. Narrow on purpose: on a desktop the
+   shipped 16:9 behaviour is what every take was made under and Robert has not judged the new one.
+   On a device with no screen capture the only possible take is camera-only, held portrait, and the
+   landscape box threw 68 % of it away — there is no working path to protect. `?sourceframe=0` off.
+VERIFIED ON PROD, on the closest reproduction of iPhone Safari this rig can build —
+`?synthetic=1&sourceframe=1&camsize=1080x1920&camlies=1&rawcodec=mediarecorder&engine=v1`
+(MediaRecorder channels, v1 composite, a sensor that lies about orientation):
+console "composite v1: the picture is 1080x1920 — composing 1080x1920, not 1920x1080" · capture
+preview portrait, uncropped · editor stage portrait with `stage__full` reporting w1080 h1920 from
+its own decoder · the audio element readyState 4, error null, and the blob it was handed typed
+`audio/webm` (the RECORDER's mime) where the filename would have said `video/webm` — on Safari that
+difference is the whole bug · exported FILE 1080x1920, `path: instant`, `copiedFrom: composite`, so
+the fast path still fires · composite stored as `_composite.mp4`.
+584 tests · typecheck · build · `exp o3b` 7/7 · verify-deploy OK.
+THE ORACLES COULD NOT BE READ CLEANLY THIS ROUND and the reason is on the record rather than
+hidden: another session was running F15 in the same worktree at load average 16.4, and under it the
+v1 oracle fails on export throughput for BOTH trees — measured interleaved, the pre-fix baseline
+read 0.72x against this tree's 0.96x, i.e. this tree was the FASTER of the two. v2 read 2 PASS /
+1 FAIL in three runs. The one gate that is load-immune, `exp o3b`, is 7/7 green. Re-run both
+oracles on a quiet machine before reading anything into them.
+WHAT IS STILL UNPROVEN, and only Robert's phone can prove it: that Safari plays the re-typed blob.
+The mechanism is certain and the fix is the only thing that can address it, but every check above
+ran on Chromium, which sniffs past the wrong label and therefore cannot fail the way Safari does.
+
 WHAT F15 AND F16 INHERIT: `resolveTier` is the seam F16's rungs resolve through (F16 says so
 itself), and fps follows the source through the same `session.compositeFrame()`-shaped question F15
 needs — one place that asks the take what it is, at capture, before any encoder is configured.

@@ -584,23 +584,25 @@ everywhere and is the floor today; HEVC/AV1 is the ~2× you keep pointing at wit
 comparison. Recommended: an honest "smaller file, newer players" option in the export panel now,
 and the cloud player switching automatically once cloud lands.
 
-0. **Record yourself on your PHONE again.** Open
-   `https://inout-kappa.vercel.app/?sourceframe=1` on the phone (that link now STICKS — you only
-   need it once per phone), record a few seconds, export, watch it.
-   **You already tried this once and it was still cropped, and you were right.** The reason is worth
-   one sentence: when a browser is asked how big the camera is, it answers with the SENSOR's size —
-   1920×1080 — while the pictures it actually hands over are the rotated 1080×1920 you are holding.
-   The app believed the answer instead of looking at the pictures, so it built a landscape video out
-   of a portrait one, and then the editor cropped it a second time. That is why editing looked worse
-   than recording.
-   It now takes the shape from the first picture that arrives, in all three places that write video.
-   Checked on the live app by making a fake camera lie about itself the exact way a phone does: the
-   recording preview, the editor and the exported file all come out 1080×1920 with nothing cut off.
-   A normal 16:9 screen recording is unchanged to the pixel.
-   Still OFF by default: nobody flips how every video is shaped without you having looked at one
-   first. Say yes and it becomes the default; say what is wrong and nothing has moved meanwhile.
-   One honest caveat: a video you already recorded stays the shape it was recorded at. The switch
-   changes new recordings, not old ones — so record a fresh one to judge it.
+0. **Record yourself on your PHONE again — it should just work now, no link needed.**
+   Two things were wrong, and the second one you found yourself.
+   **The one you saw twice:** the app asked the browser how big the camera was, and on a phone the
+   browser answers with the *sensor's* size — sideways — while the pictures it hands over are the
+   upright ones you are holding. It believed the answer instead of looking at the pictures.
+   **The one your third message solved:** you said the mic waveform was there but no sound. That
+   sentence was the whole diagnosis. Safari cannot record the file format the app assumed, so every
+   recording on an iPhone was saved under a name that described the wrong format — and Safari, which
+   trusts the name, then refused to play any of it. Silent mic, and a camera the editor could not
+   open. Because it could not open it, it could never learn the real shape either, which is why the
+   video stayed horizontal no matter what else was fixed. One cause, both symptoms.
+   Fixed: files are labelled by what they actually are (including ones you already recorded), the
+   shape now comes from the picture a decoder actually opened, and a camera-only video is never
+   cropped — if anything ever disagrees you get black bars, not a missing chin.
+   **On a phone this is now the default**, because a phone can only record its camera and the
+   landscape rule was never right for one. Nothing changed on your computer.
+   Please record a fresh one and tell me two things: is it the right shape, and can you hear
+   yourself. If the sound is still missing, say whether the SAVED file is silent too or only the
+   editor — that distinction points at two different fixes.
 
 1. **Listen to two recordings.** A normal one and one with music from a tab. The audio fix you were
    asked to check before was never actually running — the number it depends on was being calculated

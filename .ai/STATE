@@ -59,6 +59,18 @@ phase: MVP validation (2026-07-16)
   phone failure is reproducible on a desktop from a URL, and it caught both bugs on its first run.
   `?sourceframe=` sticks when set from the URL, because it is turned on from a device with no
   console.
+  THIRD PASS, and the phone's real bug was NOT geometry: MediaRecorder on Safari has no WebM
+  encoder, and every channel was an MP4 stored under a `.webm` key. `File.type` comes from the
+  name, so every media element was handed a blob labelled `video/webm` and Safari — which trusts
+  the type rather than sniffing — refused it: silent mic, blank camera, beside a waveform drawn
+  correctly from the same bytes. That ALSO kept the take horizontal, because an element that will
+  not load reports videoWidth 0, so nothing could learn the shape from the FILE and it fell back to
+  the sensor's landscape claim. `core/store/mediaUrl.ts` re-types every blob from the recorder's
+  own mimeType before it reaches an element (repairing takes already recorded); new channels are
+  named by the container they hold; the editor now takes the shape from what its DECODER opened and
+  the export follows that; a camera-only take LETTERBOXES instead of cropping. The default is ON
+  where getDisplayMedia does not exist — a phone can only make a camera-only take and the landscape
+  box was never right for one — and unchanged everywhere else.
 - THE EXPORT TARGETS A QUALITY, NOT A BITRATE (2026-08-29). H.264 qp20 via a CustomVideoEncoder on
   mediabunny's registerEncoder seam (its own bitrateMode is typed constant|variable, both of which
   X15(a) measured INERT; quantizer mode is the one that works and needs a per-frame QP nothing in the
