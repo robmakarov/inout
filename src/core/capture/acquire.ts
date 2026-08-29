@@ -8,6 +8,7 @@ import {
 import { analytics } from '@core/analytics'
 import { sourceFrameEnabled } from '@core/frame'
 import { captureRateCeiling } from '@core/rate'
+import { evenDown } from '@core/frame'
 import { isAppleWebKit } from '@core/capabilities'
 import { guardStream } from './deviceGuard'
 import { nativeResEnabled } from './nativeRes'
@@ -462,9 +463,47 @@ export async function capDisplayTrack(track: MediaStreamTrack | undefined): Prom
   // resolution and let resolutionLadder.ts step DOWN on measured backpressure
   // instead of never starting high. See nativeRes.ts.
   if (nativeResEnabled()) {
-    console.info(
-      `[capture] native-res capture: leaving display at ${before.width}×${before.height}@${before.frameRate ?? '?'} (O6)`,
-    )
+    // …EXCEPT FOR AN ODD SIDE, WHICH IS NOT A RESOLUTION PREFERENCE BUT A
+    // FORMAT ERROR. AVC subsamples chroma by two on both axes and cannot encode
+    // an odd width or height: the raw channel's VideoEncoder answers "no
+    // supported AVC config", the MediaRecorder fallback writes nothing either,
+    // and the take comes back "Missing from this take: Screen" — with the
+    // preview having shown the screen the whole time, because the TRACK was
+    // always fine. Robert hit exactly this the morning native-res went default;
+    // before that the 1920x1080 cap made every side even by accident.
+    // A Mac in a scaled display mode reports odd sizes as a matter of course
+    // (1728x1117 is a stock "More Space" mode), so this is the common case on
+    // the hardware this product is used on, not an edge.
+    // Rounding DOWN by at most one row and one column is invisible; losing the
+    // channel is not.
+    const odd = evenDown(before.width ?? 0) !== before.width || evenDown(before.height ?? 0) !== before.height
+    if (!odd || !before.width || !before.height) {
+      console.info(
+        `[capture] native-res capture: leaving display at ${before.width}×${before.height}@${before.frameRate ?? '?'} (O6)`,
+      )
+      return
+    }
+    const even = { width: evenDown(before.width), height: evenDown(before.height) }
+    try {
+      await withTimeout(
+        track.applyConstraints({ width: { max: even.width }, height: { max: even.height } }),
+        1500,
+        'applyConstraints(display even)',
+      )
+      const after = track.getSettings()
+      console.info(
+        `[capture] native-res capture: ${before.width}×${before.height} has an odd side, which AVC ` +
+          `cannot encode — asked for ${even.width}×${even.height}, got ${after.width}×${after.height} (O6)`,
+      )
+    } catch (err) {
+      // The channel is still saved: startMeasuredVideo evens its own encoder
+      // config too, so a track that refuses to be constrained costs a cropped
+      // row, not the screen.
+      console.warn(
+        `[capture] could not even out ${before.width}×${before.height} — the encoder config will be evened instead`,
+        err,
+      )
+    }
     return
   }
   if (!exceedsCaptureCeiling(before)) return

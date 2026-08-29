@@ -1,6 +1,6 @@
 import { newId } from '@core/id'
 import { isAppleWebKit } from '@core/capabilities'
-import { aspectOf, frameForAspect, sourceFrameEnabled } from '@core/frame'
+import { aspectOf, evenDown, frameForAspect, sourceFrameEnabled } from '@core/frame'
 import { DEFAULT_FRAME_RATE, normalizeRate, sourceRateEnabled } from '@core/rate'
 import { singleGenCaptureEnabled } from '@core/singleGen'
 import { blobStore, createDurablePositionedWriter, recordingsRepo } from '@core/store'
@@ -1167,8 +1167,13 @@ class Session implements CaptureSession {
    */
   private async startMeasuredVideo(ch: ChannelRuntime, startT0: number): Promise<void> {
     const settings = ch.track.getSettings()
-    const width = settings.width ?? ch.width ?? 1920
-    const height = settings.height ?? ch.height ?? 1080
+    // EVEN, ALWAYS — AVC cannot encode an odd side and answers "no supported
+    // config" rather than rounding, which loses the whole channel (see
+    // capDisplayTrack, and core/frame.ts's evenDown for the take it cost).
+    // capDisplayTrack evens the TRACK where it can; this evens the ENCODER, so
+    // a source that refuses to be constrained still records.
+    const width = evenDown(settings.width ?? ch.width ?? 1920)
+    const height = evenDown(settings.height ?? ch.height ?? 1080)
     const fps = Math.round(settings.frameRate ?? 30)
     try {
       const handle = await startMeasuredVideoCapture({

@@ -117,6 +117,31 @@ export function evenDim(n: number): number {
   return Math.max(2, Math.round(n / 2) * 2)
 }
 
+/**
+ * The same evenness rule, but never rounding UP — the size a real, arriving
+ * picture can be encoded at.
+ *
+ * `evenDim` rounds to nearest because it DERIVES a side from an aspect and a
+ * budget, where landing a pixel short of what was asked for is the worse
+ * error. This one is handed an actual frame, and there the worse error is the
+ * other way: asking an encoder for a row that the source does not have.
+ * Rounding down crops at most one row and one column of a real picture, which
+ * is what every encoder on earth does with an odd side — when it does not
+ * simply refuse.
+ *
+ * IT EXISTS BECAUSE THE REFUSAL IS REAL AND IT COST A TAKE ITS SCREEN. AVC
+ * cannot encode an odd side; native-res capture (default 2026-08-29) hands the
+ * raw channel the MONITOR's own size; and a Mac in a scaled display mode
+ * reports odd sizes — 1728x1117 is a stock "More Space" mode. Reproduced on
+ * prod: `?synthetic=1&screensize=1728x1117` gives `rawVideo: no supported AVC
+ * VideoEncoder config`, the MediaRecorder fallback writes nothing either, and
+ * the take comes back "Missing from this take: Screen" with the preview having
+ * shown the screen the whole time.
+ */
+export function evenDown(n: number): number {
+  return Math.max(2, Math.floor(n / 2) * 2)
+}
+
 /** width/height, or null when the source never said (old takes, dead tracks). */
 export function aspectOf(width?: number | null, height?: number | null): number | null {
   if (!width || !height || width <= 0 || height <= 0) return null

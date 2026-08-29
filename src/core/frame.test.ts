@@ -13,6 +13,7 @@ import {
   adoptedFrame,
   aspectOf,
   evenDim,
+  evenDown,
   frameAspectFor,
   frameForAspect,
   frameScale,
@@ -114,6 +115,20 @@ describe('the frame the take asks for', () => {
     expect(frameForAspect(Number.NaN, 1920)).toEqual({ width: 1920, height: 1080 })
     expect(frameForAspect(0, 1920)).toEqual({ width: 1920, height: 1080 })
     expect(frameForAspect(Number.POSITIVE_INFINITY, 1920)).toEqual({ width: 1920, height: 1080 })
+  })
+
+  it('evenDown never rounds UP, because the row it would invent is not in the picture', () => {
+    // AVC refuses an odd side outright — see evenDown's own header for the take
+    // that cost. Down, not nearest: an arriving 1117-row frame HAS 1116 rows to
+    // encode and does not have 1118.
+    expect(evenDown(1117)).toBe(1116)
+    expect(evenDown(1118)).toBe(1118)
+    expect(evenDown(1729)).toBe(1728)
+    expect(evenDown(982)).toBe(982)
+    // Never zero, never negative: a garbage side still has to be encodable.
+    expect(evenDown(1)).toBe(2)
+    expect(evenDown(0)).toBe(2)
+    expect(evenDown(-4)).toBe(2)
   })
 
   it('evenDim never collapses a side to zero', () => {

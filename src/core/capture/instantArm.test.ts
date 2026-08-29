@@ -135,6 +135,34 @@ describe('capture ceiling (4K game tab froze the take, Robert 2026-08-22)', () =
     expect(apply).not.toHaveBeenCalled()
   })
 
+  /**
+   * THE TAKE ROBERT LOST ITS SCREEN ON, the morning native-res went default.
+   * AVC cannot encode an odd side, so a 1728x1117 display — a stock macOS
+   * "More Space" mode — made the raw channel's VideoEncoder answer "no
+   * supported AVC config", the MediaRecorder fallback wrote nothing either,
+   * and the take came back "Missing from this take: Screen" while the preview
+   * had shown the screen throughout. Reproduced on prod with
+   * `?synthetic=1&screensize=1728x1117`; 1728x1118 and 1512x982 were fine.
+   */
+  it('DEFAULT: an ODD side is evened, because AVC refuses it and the channel is lost', async () => {
+    const apply = vi.fn().mockResolvedValue(undefined)
+    await capDisplayTrack(track({ width: 1728, height: 1117, frameRate: 30 }, apply))
+    expect(apply).toHaveBeenCalledWith({ width: { max: 1728 }, height: { max: 1116 } })
+  })
+
+  it('DEFAULT: an even native surface is still left completely alone', async () => {
+    const apply = vi.fn().mockResolvedValue(undefined)
+    await capDisplayTrack(track({ width: 1512, height: 982, frameRate: 30 }, apply))
+    expect(apply).not.toHaveBeenCalled()
+  })
+
+  it('evening the track is never fatal: a track that refuses is still recorded', async () => {
+    const apply = vi.fn().mockRejectedValue(new Error('OverconstrainedError'))
+    await expect(
+      capDisplayTrack(track({ width: 1728, height: 1117, frameRate: 30 }, apply)),
+    ).resolves.toBeUndefined()
+  })
+
   it('an oversized take beats no take: a rejecting applyConstraints never throws', async () => {
     const apply = vi.fn().mockRejectedValue(new Error('OverconstrainedError'))
     await expect(
