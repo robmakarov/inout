@@ -25,6 +25,7 @@
 import type { CompositeRecording, ChannelRecording, ExportSettings, Recording } from '@core/types'
 import { DEFAULT_EXPORT_SETTINGS } from '@core/types'
 import { singleGenExportEnabled } from '@core/singleGen'
+import { normalizeRate } from '@core/rate'
 
 export type CopyOrigin = 'composite' | 'single-generation'
 
@@ -104,6 +105,22 @@ function videoChannels(recording: Recording): ChannelRecording[] {
 }
 
 /**
+ * What the export is asking this file to be.
+ *
+ * `fps` is OPTIONAL and absent means 30, for the same reason the fields it sits
+ * beside are read the way they are: every take made before F15 was recorded at
+ * 30 and every step asked for 30, so an omitted rate is the rate those callers
+ * meant. A caller that knows better (`settingsForTier`, which resolves the step
+ * against the take) always passes one.
+ */
+type RequestedOutput = Pick<ExportSettings, 'width' | 'height'> &
+  Partial<Pick<ExportSettings, 'fps'>>
+
+function requestedRate(settings: RequestedOutput): number {
+  return normalizeRate(settings.fps)
+}
+
+/**
  * Does one raw channel already hold the default composition?
  *
  * EVERY CONDITION HERE IS A WAY THE COPY WOULD BE WRONG, not a preference:
@@ -119,7 +136,7 @@ function videoChannels(recording: Recording): ChannelRecording[] {
  */
 export function singleGenerationSource(
   recording: Recording,
-  settings: Pick<ExportSettings, 'width' | 'height'>,
+  settings: RequestedOutput,
 ): { source: CopySource | null; reason: string } {
   const video = videoChannels(recording)
   if (video.length !== 1) {
@@ -145,6 +162,14 @@ export function singleGenerationSource(
     return {
       source: null,
       reason: `the raw ${channel.kind} channel is ${channel.width}x${channel.height}, and the output is ${settings.width}x${settings.height} — the compositor's fit is not the identity`,
+    }
+  }
+  const wantRate = requestedRate(settings)
+  const haveRate = normalizeRate(channel.fps)
+  if (haveRate !== wantRate) {
+    return {
+      source: null,
+      reason: `the raw ${channel.kind} channel is ${haveRate} fps and the output is ${wantRate} fps — the frames are not the same frames`,
     }
   }
   if (channel.durationMs <= 0) {
@@ -199,10 +224,17 @@ export function singleGenerationSource(
  * checked against the request as well. Every take made before F13 has a
  * 1920x1080 composite and a 1920x1080 default step, so this refuses nothing
  * that ever worked; what it refuses is the export that lied.
+ *
+ * F15 PUTS THE RATE THROUGH THE SAME FENCE, on both origins. A 60 fps file
+ * handed over under a 30 fps step's label is the identical bug in the other
+ * dimension: the panel would quote a 30 fps size and a 30 fps encode time for
+ * a file with twice the frames. Absent rates read as 30 on both sides, so
+ * every take made before F15 compares 30 against 30 and nothing that ever
+ * copied stops copying.
  */
 export function chooseCopySource(
   recording: Recording,
-  settings: Pick<ExportSettings, 'width' | 'height'> = DEFAULT_EXPORT_SETTINGS,
+  settings: RequestedOutput = DEFAULT_EXPORT_SETTINGS,
   opts: { allowComposite?: boolean } = {},
 ): CopySourceChoice {
   const allowComposite = opts.allowComposite ?? true
@@ -221,14 +253,18 @@ export function chooseCopySource(
     declined.push({ origin: 'composite', reason: 'the take has no composite' })
     return { source: null, declined }
   }
+  const wantRate = requestedRate(settings)
+  const haveRate = normalizeRate(composite.fps)
   const wrongShape =
-    composite.width !== settings.width || composite.height !== settings.height
+    composite.width !== settings.width ||
+    composite.height !== settings.height ||
+    haveRate !== wantRate
   if (!allowComposite || wrongShape) {
     declined.push({
       origin: 'composite',
       reason:
-        `the composite is ${composite.width}x${composite.height} and the requested output is ` +
-        `${settings.width}x${settings.height} — a different picture, only the render can make it`,
+        `the composite is ${composite.width}x${composite.height}@${haveRate} and the requested output is ` +
+        `${settings.width}x${settings.height}@${wantRate} — a different picture, only the render can make it`,
     })
     return { source: null, declined }
   }

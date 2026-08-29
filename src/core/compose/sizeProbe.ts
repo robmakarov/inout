@@ -84,6 +84,7 @@
  */
 import { BufferTarget, CanvasSource, Mp4OutputFormat, Output, type VideoSample } from 'mediabunny'
 import { frameAspectFor, frameForAspect, frameScale } from '@core/frame'
+import { takeRate } from '@core/rate'
 import { blobStore } from '@core/store'
 import {
   cameraPoseAt,
@@ -164,8 +165,16 @@ export interface Calibration {
  * (O11b). Both passes are measured and reported separately: a file is one FIRST
  * GOP followed by later ones, and the two cost differently enough that neither
  * alone can price a take of unknown length.
+ *
+ * F15 MAKES IT A DURATION RATHER THAN A COUNT. A GOP is 5 SECONDS, not 150
+ * frames — at 60 fps a 150-frame window is half a GOP, and half a GOP priced as
+ * a whole one over-counts keyframes and would make every 60 fps step's estimate
+ * read high. So the window is `GOP_SECONDS x the take's rate`, which is exactly
+ * 150 on every 30 fps take and therefore on every take this probe was measured
+ * against. It costs twice the frames on a 60 fps take, and that is what pricing
+ * twice the frames costs.
  */
-const WINDOW_FRAMES = 150
+const GOP_SECONDS = KEYFRAME_INTERVAL_SEC
 
 /** One step's encoder, fed frames as they are composed. */
 interface TierLane {
@@ -267,8 +276,11 @@ export async function calibrateSteps(
      * at 150. That is not a simulation of a file's first two GOPs, it IS one,
      * and it costs a single forward pass over ten seconds of the take.
      */
-    const totalFrames = warmPass ? 2 * WINDOW_FRAMES : WINDOW_FRAMES
-    const windowSec = totalFrames / 30
+    // F15: the take's own rate, so a window is a GOP whatever the rate is.
+    const rate = takeRate(recording)
+    const windowFrames = Math.round(GOP_SECONDS * rate)
+    const totalFrames = warmPass ? 2 * windowFrames : windowFrames
+    const windowSec = totalFrames / rate
     // Away from both ends where it can be: the first frames of a capture are
     // often a blank surface and the last are the stop itself.
     const atSec = Math.max(0, Math.min(Math.max(0, durationSec / 2 - windowSec / 2), durationSec - windowSec))
@@ -284,7 +296,7 @@ export async function calibrateSteps(
     let composed = 0
     for (let f = 0; f < totalFrames; f++) {
       if (aborted()) return null
-      const t = atSec + f / 30
+      const t = atSec + f / rate
       // Past the end of the take there is nothing to measure. Stopping short is
       // honest; repeating the last frame is not — every mean below would then be
       // diluted by however much of the window fell off the end, which is exactly
@@ -293,14 +305,14 @@ export async function calibrateSteps(
       const bitmap = await composeAt(frame, readers, recording, edit, t, cameraFull, cameraMoves)
       if (!bitmap) break
       try {
-        for (const lane of lanes) await addFrame(lane, bitmap, f % WINDOW_FRAMES === 0)
+        for (const lane of lanes) await addFrame(lane, bitmap, f % windowFrames === 0)
       } finally {
         bitmap.close()
       }
       composed = f + 1
       // Set before the second GOP's first frame is added, so a packet that
       // lands late still lands on the right side of the boundary.
-      if (composed === WINDOW_FRAMES) boundarySec = WINDOW_FRAMES / 30 - 1e-6
+      if (composed === windowFrames) boundarySec = windowFrames / rate - 1e-6
     }
     if (composed < 2) return null
 

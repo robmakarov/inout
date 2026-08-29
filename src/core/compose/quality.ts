@@ -25,6 +25,7 @@
 import { AUDIO_BITRATE, VIDEO_BITRATE } from './codecs'
 import { chooseCopySource, type CopySource } from './copySource'
 import { frameAspectFor, frameForAspect } from '@core/frame'
+import { DEFAULT_FRAME_RATE, normalizeRate, takeRate } from '@core/rate'
 import { DEFAULT_EXPORT_SETTINGS, type ExportSettings, type Recording } from '@core/types'
 
 export type QualityTierId = '540p' | '720p' | '1080p' | '1440p'
@@ -100,26 +101,38 @@ export const QUALITY_TIERS: QualityTier[] = [
 export const DEFAULT_TIER_ID: QualityTierId = '1080p'
 
 /**
- * This step at THIS take's aspect (task F13).
+ * This step at THIS take's aspect and rate (tasks F13, F15).
  *
  * The step keeps its name, its long edge and its bits-per-pixel; only the shape
- * moves. The bitrate ceiling is re-scaled by the pixel ratio for the same
- * reason it differs between steps at all — a taller frame at the same ceiling
- * would be a quieter encode wearing the same label.
+ * and the rate move. The bitrate ceiling is re-scaled by the pixel ratio AND by
+ * the rate ratio, for the same reason it differs between steps at all — a
+ * taller or a faster frame at the same ceiling would be a quieter encode
+ * wearing the same label. Both scales are LINEAR, which is the convention this
+ * ceiling already used for pixels (the √ elsewhere in this file belongs to the
+ * SIZE ESTIMATE, a different quantity). A ceiling is generous on purpose:
+ * squeezing an encoder below what its content needs is a quality lever wearing
+ * a size label, and this file refuses those as steps.
  *
- * IDEMPOTENT AND THE IDENTITY ON 16:9: it is computed from `longEdge` and the
- * aspect, never from the width/height it is replacing, so resolving twice
- * changes nothing and resolving a 16:9 take returns this exact tier.
+ * IDEMPOTENT AND THE IDENTITY ON A 16:9 30 fps TAKE: it is computed from
+ * `longEdge`, the aspect and the rate, never from the width/height/fps it is
+ * replacing, so resolving twice changes nothing and resolving the take this
+ * product made before F13 and F15 returns this exact tier.
  */
-export function resolveTier(tier: QualityTier, aspect: number): QualityTier {
+export function resolveTier(
+  tier: QualityTier,
+  aspect: number,
+  fps: number = DEFAULT_FRAME_RATE,
+): QualityTier {
   const { width, height } = frameForAspect(aspect, tier.longEdge)
-  if (width === tier.width && height === tier.height) return tier
-  const nominal = tier.width * tier.height
+  const rate = normalizeRate(fps)
+  if (width === tier.width && height === tier.height && rate === tier.fps) return tier
+  const nominal = tier.width * tier.height * tier.fps
   return {
     ...tier,
     width,
     height,
-    videoBitrate: Math.round((tier.videoBitrate * (width * height)) / nominal),
+    fps: rate,
+    videoBitrate: Math.round((tier.videoBitrate * (width * height * rate)) / nominal),
   }
 }
 
@@ -129,11 +142,17 @@ export function resolveTier(tier: QualityTier, aspect: number): QualityTier {
  * editor passes what its decoder actually opened, which is the only statement
  * about a take's shape that cannot be wrong (F13).
  *
- * Byte-identical to QUALITY_TIERS whenever the frame does not follow the source.
+ * The RATE is never overridden that way and is always the take's own (F15):
+ * unlike shape, nothing downstream re-measures it — the take's files carry the
+ * rate they were written at, and that is the only claim there is.
+ *
+ * Byte-identical to QUALITY_TIERS whenever the frame does not follow the source
+ * and the take was recorded at 30.
  */
 export function tiersForTake(recording: Recording, aspect?: number): QualityTier[] {
   const a = aspect ?? frameAspectFor(recording)
-  return QUALITY_TIERS.map((t) => resolveTier(t, a))
+  const rate = takeRate(recording)
+  return QUALITY_TIERS.map((t) => resolveTier(t, a, rate))
 }
 
 export function tierById(id: string | null | undefined): QualityTier {
@@ -170,7 +189,7 @@ export function copySourceForTier(recording: Recording, tier: QualityTier): Copy
  * take in hand wants.
  */
 export function settingsForTier(tier: QualityTier, recording?: Recording): ExportSettings {
-  const t = recording ? resolveTier(tier, frameAspectFor(recording)) : tier
+  const t = recording ? resolveTier(tier, frameAspectFor(recording), takeRate(recording)) : tier
   return {
     width: t.width,
     height: t.height,

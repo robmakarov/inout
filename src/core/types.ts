@@ -35,7 +35,7 @@ export interface ChannelDiagnostics {
   /** Silence inserted to hold the timeline against the wall clock, ms. */
   paddedMs?: number
   /**
-   * Time REMOVED to hold the timeline against the wall clock, ms (PO
+   * Time REMOVED to hold the timeline against the wall clock, ms (Robert
    * 2026-08-29). >0 means this channel's audio clock ran FASTER than the
    * system clock, which without the trim is heard as the sound falling
    * progressively behind the picture — about a second per hour at 278 ppm.
@@ -64,6 +64,12 @@ export interface ChannelRecording {
   width?: number
   height?: number
   /**
+   * The rate this channel's file was WRITTEN at (task F15). Absent means 30 and
+   * not "unknown": until F15 capture asked every source for `max: 30`, so every
+   * take made before this field existed is a 30 fps take. See core/rate.ts.
+   */
+  fps?: number
+  /**
    * Encoded size on disk. Lets a packet-copying step quote the file instead of
    * a model (O3c). Absent on takes recorded before it was kept — consumers
    * fall back to estimating, exactly as they did.
@@ -79,6 +85,15 @@ export interface CompositeRecording {
   durationMs: number
   width: number
   height: number
+  /**
+   * The rate this file was ENCODED at (task F15) — the cadence gate's rate, not
+   * the rate any source delivered. Absent means 30, which is a fact about every
+   * composite written before F15 and not a guess: both engines painted at a
+   * hardcoded 30 and capture could not hand them more. The copy fence in
+   * compose/copySource.ts reads this, so a 60 fps composite can never be handed
+   * over under a 30 fps step's label. See core/rate.ts.
+   */
+  fps?: number
   /**
    * WHAT A COMPOSITE TIMESTAMP MEANS (P0-instant-sync, 2026-08-25).
    *
@@ -491,7 +506,7 @@ export interface CaptureSession {
 }
 
 /**
- * Duration cap, or null for none. PO 2026-08-23: NONE — takes run until the
+ * Duration cap, or null for none. Robert 2026-08-23: NONE — takes run until the
  * user stops them or the last channel dies. The 30-min cap of 2026-07-13 was
  * retired once the two things it was hiding were gone: capture already streams
  * every channel to OPFS as it records (no RAM growth with length), and O1 put

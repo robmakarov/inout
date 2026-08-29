@@ -1,6 +1,7 @@
 import { newId } from '@core/id'
 import { isAppleWebKit } from '@core/capabilities'
 import { aspectOf, frameForAspect, sourceFrameEnabled } from '@core/frame'
+import { DEFAULT_FRAME_RATE, normalizeRate, sourceRateEnabled } from '@core/rate'
 import { singleGenCaptureEnabled } from '@core/singleGen'
 import { blobStore, createDurablePositionedWriter, recordingsRepo } from '@core/store'
 import type {
@@ -277,6 +278,8 @@ interface ChannelRuntime {
   durationMs?: number
   width?: number
   height?: number
+  /** The rate this channel's file is being written at (F15). Absent = 30. */
+  fps?: number
   /** Capture-time witnesses from the measured path — persisted with the take. */
   diagnostics?: import('@core/types').ChannelDiagnostics
   stopped: Promise<void>
@@ -332,7 +335,7 @@ class Session implements CaptureSession {
    * Kinds the USER turned off mid-take (setChannelActive false). The
    * persistent-connect hunt consults this through stillWanted: a mic the user
    * switched off must never be re-grabbed by a retry loop that was started
-   * back when they wanted it (PO rule: the user's choice always wins).
+   * back when they wanted it (Robert rule: the user's choice always wins).
    */
   private readonly suspended = new Set<ChannelKind>()
   /**
@@ -348,7 +351,7 @@ class Session implements CaptureSession {
   private disposeSynthetic: (() => void) | null = null
   /**
    * A refresh mid-take used to leave Chrome's microphone indicator lit with no
-   * owner (PO-hit 2026-08-23): nothing stopped the tracks on the way out, and
+   * owner (Robert-hit 2026-08-23): nothing stopped the tracks on the way out, and
    * a wedged page never reached doStop. Track stopping is synchronous, so it
    * is safe to do in pagehide — the durable writer has already flushed
    * everything it acknowledged, so the take still salvages on reload.
@@ -463,7 +466,7 @@ class Session implements CaptureSession {
       })
     }
 
-    // PO 2026-07-20: every input starts together. Wait for ALL devices — every
+    // Robert 2026-07-20: every input starts together. Wait for ALL devices — every
     // permission prompt answered, every stream delivered — before arming, so
     // start() activates them at a single epoch. No primary-gated early start,
     // no late-join: all channels share one start and one length.
@@ -472,7 +475,7 @@ class Session implements CaptureSession {
     // Each individual step is bounded, yet a step that never settles at all —
     // wedged audio hardware, a worker that never answers, an acquisition that
     // neither resolves nor rejects — used to leave arm() awaiting forever, and
-    // the UI frozen on "Waiting for microphone…" with no way out (PO-hit
+    // the UI frozen on "Waiting for microphone…" with no way out (Robert-hit
     // 2026-08-23). Nothing may await without a deadline here. On expiry the
     // take starts with whatever IS ready; the rest is reported as missing.
     try {
@@ -498,7 +501,7 @@ class Session implements CaptureSession {
     // record their screen, the browser took the share and never handed it
     // over, and carrying on would give them a camera-and-mic clip they did not
     // ask for — after a wait — while the camera light stayed on throughout
-    // (PO 2026-08-24: "armed +120007ms (2 channel(s))" on a screen recording).
+    // (Robert 2026-08-24: "armed +120007ms (2 channel(s))" on a screen recording).
     // Denial is left alone: that is a decision, and a user who cancels the
     // picker with camera and mic on may well still want those.
     const primaryKind = primaryKindFor(this.config)
@@ -512,7 +515,7 @@ class Session implements CaptureSession {
         'wedged',
         wedged.kind === 'screen'
           ? // The UI runs the recovery ritual on this reason: one automatic
-            // page refresh (PO 2026-08-25: "if it happens make it fixed by
+            // page refresh (Robert 2026-08-25: "if it happens make it fixed by
             // refresh of app page"), then this text for a wedge that survived
             // the refresh — at that point only restarting Chrome tears the
             // stuck process down (the claim lives in its browser process; the
@@ -574,7 +577,7 @@ class Session implements CaptureSession {
     // comes from that name, so the blob handed to a media element claimed
     // `video/webm` and Safari — which trusts the type instead of sniffing —
     // played nothing: a silent mic and a blank camera beside a waveform drawn
-    // correctly from the same bytes (PO, 2026-08-29). Takes already recorded
+    // correctly from the same bytes (Robert, 2026-08-29). Takes already recorded
     // are repaired by re-typing on read (core/store/mediaUrl.ts); this stops
     // new ones being mislabelled in the first place.
     const measuredVideo = acq.media === 'video' && useMeasured
@@ -622,7 +625,7 @@ class Session implements CaptureSession {
       try {
         // BOUNDED: AudioContext.resume() on wedged audio hardware can pend
         // forever, and arm() awaits this — an unbounded wait here froze the
-        // whole start on "waiting for mic" (PO 2026-07-23). On timeout the
+        // whole start on "waiting for mic" (Robert 2026-07-23). On timeout the
         // channel still records: startMeasured brings its own context.
         rt.audioCtx = await boundedPrewarm(acq.track, 3000)
       } catch (err) {
@@ -654,6 +657,7 @@ class Session implements CaptureSession {
           const s = rt.track.getSettings()
           if (s.width) rt.width = s.width
           if (s.height) rt.height = s.height
+          if (s.frameRate) rt.fps = Math.round(s.frameRate)
         }
       }
 
@@ -700,6 +704,10 @@ class Session implements CaptureSession {
       const s = rt.track.getSettings()
       if (s.width) rt.width = s.width
       if (s.height) rt.height = s.height
+      // F15: what the source is actually delivering. Below the ceiling this is
+      // 30 on every take the product has ever made, because that is what
+      // displayVideoConstraints asked for as a `max`.
+      if (s.frameRate) rt.fps = Math.round(s.frameRate)
     }
 
     acq.track.addEventListener('ended', () => this.onTrackEnded(rt))
@@ -976,10 +984,29 @@ class Session implements CaptureSession {
     return frameForAspect(aspect, COMPOSITE_WIDTH)
   }
 
+  /**
+   * THE COMPOSITE'S RATE FOR THIS TAKE (task F15).
+   *
+   * The same question `compositeFrame` asks, one field over, and answered from
+   * the same facts at the same moment so the two can never disagree about what
+   * the composite is. The SCREEN decides where there is one — it is the full
+   * frame, and a 60 fps PiP camera over a 30 fps screen is not a 60 fps take —
+   * then the camera, then the constant.
+   *
+   * Behind the flag this returns the 30 both engines were hardcoded to, so a
+   * take recorded with it off is the take that was recorded yesterday.
+   */
+  private compositeRate(): number {
+    if (!sourceRateEnabled()) return DEFAULT_FRAME_RATE
+    const video = this.channels.filter((c) => c.media === 'video' && !c.ended)
+    const chosen = video.find((c) => c.kind === 'screen') ?? video[0]
+    return normalizeRate(chosen?.fps)
+  }
+
   private startComposite(): void {
     // O3b, the CAPTURE half: a whole hardware encoder, its worker and ~18 % of
     // the take's write bandwidth, none of which run. WHAT IS GIVEN UP IS REAL
-    // and is why this rung is opt-in until PO rules: the compositor owns
+    // and is why this rung is opt-in until Robert rules: the compositor owns
     // SOURCE LIVENESS (a frozen screen stops being noticed) and the recording
     // preview can no longer render its output. Both are named in
     // core/singleGen.ts beside the flag.
@@ -1006,6 +1033,14 @@ class Session implements CaptureSession {
     // portrait, so the engines correct it from the first picture they see and
     // report back what they are actually writing.
     const frame = this.compositeFrame()
+    // F15: one answer, handed to whichever engine starts, for the same reason
+    // the frame is — a v2→v1 fallback must not change the take's rate.
+    const rate = this.compositeRate()
+    if (rate !== DEFAULT_FRAME_RATE) {
+      console.info(
+        `[capture] composite follows the source: ${rate} fps (F15, ?sourcefps=1)`,
+      )
+    }
     const followSource = sourceFrameEnabled()
     if (followSource) {
       console.info(
@@ -1040,6 +1075,7 @@ class Session implements CaptureSession {
             epochMs,
             width: frame.width,
             height: frame.height,
+            fps: rate,
             followSource,
             longEdge: COMPOSITE_WIDTH,
             onGeometry,
@@ -1055,6 +1091,7 @@ class Session implements CaptureSession {
         epochMs,
         width: frame.width,
         height: frame.height,
+        fps: rate,
         followSource,
         longEdge: COMPOSITE_WIDTH,
         onGeometry,
@@ -1156,6 +1193,7 @@ class Session implements CaptureSession {
       ch.recorderStarted = true
       ch.width = width
       ch.height = height
+      ch.fps = fps > 0 ? fps : 30
       const offset = await handle.firstOffset
       ch.startOffsetMs = offset
       ch.startAbs = this.epoch + offset
@@ -1483,7 +1521,7 @@ class Session implements CaptureSession {
           // open. EVERY track must be stopped, not just the one we would have
           // used: a display resume also yields a system-audio track, and a
           // device left running here holds its claim in the browser — which is
-          // how the NEXT take sat on "Waiting for microphone…" (PO 2026-08-23).
+          // how the NEXT take sat on "Waiting for microphone…" (Robert 2026-08-23).
           if (this.stateInternal !== 'recording' || this.cancelled) {
             for (const t of acq.stream.getTracks()) t.stop()
             return
@@ -1723,7 +1761,7 @@ class Session implements CaptureSession {
     // write stream is unbounded). A cancel landing inside that window found an
     // empty list and released nothing, while the device was already live — the
     // macOS mic and screen-recording indicators then stayed lit with no owner
-    // (PO 2026-08-23). Every stream the session has ever been handed is
+    // (Robert 2026-08-23). Every stream the session has ever been handed is
     // tracked from the instant it arrives, so release cannot miss one.
     for (const s of this.acquiredStreams) {
       for (const t of s.getTracks()) t.stop()
@@ -1919,6 +1957,10 @@ class Session implements CaptureSession {
       if (c.media === 'video') {
         if (c.width) rec.width = c.width
         if (c.height) rec.height = c.height
+        // F15: the rate this file was written at. Every take made before the
+        // rate could move carries none, and reads back as 30 — which is what
+        // it was.
+        if (c.fps) rec.fps = c.fps
       }
       if (c.diagnostics) rec.diagnostics = c.diagnostics
       return rec
@@ -2112,7 +2154,7 @@ export interface CreateCaptureSessionOptions {
   /**
    * Abort arming. Until this existed the user had no way out of a slow or
    * wedged device: the record button is disabled while arming, so a step that
-   * never returned read as "the app is frozen" (PO-hit 2026-08-23). Aborting
+   * never returned read as "the app is frozen" (Robert-hit 2026-08-23). Aborting
    * releases every device the attempt had already taken.
    */
   signal?: AbortSignal

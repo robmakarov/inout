@@ -54,9 +54,19 @@ const DEFAULT_SCREEN = { width: 1280, height: 720 }
 let screenSize = DEFAULT_SCREEN
 
 /**
+ * The rate the synthetic sources hand over — the product's own floor unless a
+ * knob says otherwise (F15). Both generators paint from requestAnimationFrame,
+ * so 60 is the most a display can actually deliver here and asking for more
+ * would produce a track that lies.
+ */
+const DEFAULT_SYNTHETIC_FPS = 30
+let screenFps = DEFAULT_SYNTHETIC_FPS
+let cameraFps = DEFAULT_SYNTHETIC_FPS
+
+/**
  * Harness knob, same family as `slow=` and `quiet=`: how big the synthetic
  * screen is. The load rigs (P0-tail, P0-tail-raw) need a source large enough to
- * genuinely starve an encoder — a 4K surface is PO's own failing scenario — and
+ * genuinely starve an encoder — a 4K surface is Robert's own failing scenario — and
  * the harness page is loaded once per experiment, so this has to be settable
  * from the runner rather than from the URL. Production never calls it.
  */
@@ -134,7 +144,7 @@ export function glyphColour(i: number): string {
  * on the wire. Without that there is no reference for anything a real take
  * produces: the take's frames are only ever available AFTER an encoder, so
  * every measurement would be file-against-file and a loss shared by all files
- * would cancel out and read as zero. That is precisely how the chroma loss PO
+ * would cancel out and read as zero. That is precisely how the chroma loss Robert
  * spotted by eye escaped X15(c)'s first pass. Deterministic, so the reference
  * is free — same size in, same pixels out, forever.
  */
@@ -216,7 +226,7 @@ function syntheticScreen(): Generated {
     raf = requestAnimationFrame(draw)
   }
   draw()
-  return { stream: canvas.captureStream(30), stop: () => cancelAnimationFrame(raf) }
+  return { stream: canvas.captureStream(screenFps), stop: () => cancelAnimationFrame(raf) }
 }
 
 const DEFAULT_CAMERA = { width: 640, height: 480 }
@@ -253,6 +263,31 @@ export function applySyntheticSizeParams(search: string): void {
   if (screen) setSyntheticScreenSize(screen)
   const camera = parseSizeParam(search, 'camsize')
   if (camera) setSyntheticCameraSize(camera)
+  setSyntheticScreenFps(parseFpsParam(search, 'screenfps'))
+  setSyntheticCameraFps(parseFpsParam(search, 'camfps'))
+}
+
+/**
+ * Harness knobs `?screenfps=` / `?camfps=` — REPRODUCE A 60 fps SOURCE WITHOUT
+ * ONE. F15 needs a source that offers more than 30 to prove the rate follows
+ * it, and no rig can conjure a 120 Hz gaming monitor or a 60 fps sensor: a
+ * canvas capture stream asked for 60 is one, and the deployed build can be
+ * driven to it from a URL, forever. Production never calls these.
+ */
+export function setSyntheticScreenFps(fps: number | null): void {
+  screenFps = fps && fps > 0 ? fps : DEFAULT_SYNTHETIC_FPS
+}
+
+export function setSyntheticCameraFps(fps: number | null): void {
+  cameraFps = fps && fps > 0 ? fps : DEFAULT_SYNTHETIC_FPS
+}
+
+/** An integer rate out of a URL parameter, or null. Bounded at 120 so a typo
+ *  cannot ask a canvas for a rate no display can source. */
+export function parseFpsParam(search: string, key: string): number | null {
+  const raw = new URLSearchParams(search).get(key)
+  const n = raw !== null && /^\d{1,3}$/.test(raw) ? Number(raw) : NaN
+  return Number.isFinite(n) && n > 0 && n <= 120 ? n : null
 }
 
 function syntheticCamera(): Generated {
@@ -290,7 +325,7 @@ function syntheticCamera(): Generated {
     raf = requestAnimationFrame(draw)
   }
   draw()
-  return { stream: canvas.captureStream(30), stop: () => cancelAnimationFrame(raf) }
+  return { stream: canvas.captureStream(cameraFps), stop: () => cancelAnimationFrame(raf) }
 }
 
 /** Harness knob: `&quiet=0.05` scales synthetic audio down to e2e-test the
@@ -348,7 +383,7 @@ function syntheticSystemAudio(ctx: AudioContext): Generated {
  *
  * `MediaStreamTrack.getSettings()` describes the SENSOR, and on a phone held
  * portrait it reports 1920x1080 while every frame delivered is 1080x1920. That
- * one lie is the whole of the bug PO judged F13's first pass on ("preview on
+ * one lie is the whole of the bug Robert judged F13's first pass on ("preview on
  * phone still wrong proportions and cutted"), and until now no rig could
  * express it — a canvas track always tells the truth about itself. This makes
  * the synthetic camera lie in exactly that way, so the failure and its fix are
@@ -438,7 +473,7 @@ export function createSyntheticChannelsProgressive(
   // The arming timeline is what drives the "Waiting for microphone…" line, and
   // that line IS the bug the `slow=` knob exists to reproduce. Without these
   // marks the harness could stall a channel for twenty seconds and the UI
-  // showed a bare "Starting…" the whole time, so the one symptom the PO
+  // showed a bare "Starting…" the whole time, so the one symptom Robert
   // reports could only ever be chased against real hardware.
   const t0 = performance.now()
   // The timeline names the screen step 'display' — it is the picker, not the

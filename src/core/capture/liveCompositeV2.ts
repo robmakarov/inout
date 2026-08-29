@@ -29,6 +29,10 @@ import { SourceLiveness, type LivenessEvent } from './sourceLiveness'
 import { watchdogVerdict } from './compositorWatchdog'
 import { DELIVERY_FLOOR_RATIO, ladderVerdict } from './resolutionLadder'
 
+/**
+ * The composite's rate when nothing says otherwise — what this engine wrote
+ * before F15, and what every take whose source does not offer more still gets.
+ */
 const FPS = 30
 /**
  * The composite's shape when nothing says otherwise — what this engine wrote
@@ -148,8 +152,6 @@ interface TrackProcessorLike {
 }
 type TrackProcessorCtor = new (init: { track: MediaStreamTrack }) => TrackProcessorLike
 
-/** The rate every take asks for; the ladder scores delivery against it. */
-const FPS_REQUESTED = 30
 const LADDER_FLOOR = DELIVERY_FLOOR_RATIO
 
 function trackProcessorCtor(): TrackProcessorCtor | null {
@@ -200,6 +202,15 @@ export interface LiveCompositeV2Options {
   followSource?: boolean
   /** The pixel budget the adopted shape is resolved at (long edge). */
   longEdge?: number
+  /**
+   * THE COMPOSITE'S RATE (task F15). The session derives it from the take's
+   * video channel, capped at the ceiling core/rate.ts holds; omitted, this
+   * engine paints and encodes at the 30 it always has. It is also the rate the
+   * degradation ladder scores delivery against — a 60 fps take that only gets
+   * 30 frames out is real backpressure and must step down, and a 30 fps take
+   * must not be judged against 60.
+   */
+  fps?: number
   /** Fired once the composite's shape is settled, so the UI can stop showing
    *  the guess. Called with the geometry the FILE is being written at. */
   onGeometry?: (size: { width: number; height: number }) => void
@@ -264,6 +275,8 @@ export async function startLiveCompositeV2(
   // F13: the caller's frame, or the constant this engine shipped with.
   const outW = options.width && options.width > 0 ? options.width : W
   const outH = options.height && options.height > 0 ? options.height : H
+  // F15: the caller's rate, same contract.
+  const outFps = options.fps && options.fps > 0 ? Math.round(options.fps) : FPS
   if (fault?.startFails) {
     // Before the worker, before OPFS: the shape of a real capability failure.
     throw new Error('live composite v2: injected start failure (o4wedge)')
@@ -349,7 +362,7 @@ export async function startLiveCompositeV2(
     if (lastStatsAt !== null && now > lastStatsAt) {
       const fps = ((real - lastRealFrames) * 1000) / (now - lastStatsAt)
       const inFps = ((framesIn - lastInFrames) * 1000) / (now - lastStatsAt)
-      const requested = FPS_REQUESTED
+      const requested = outFps
       // P0-ladder-static: demand is what ARRIVED, capped at the requested rate
       // (the cadence gate drops a 60 fps source's excess on purpose). A static
       // screen delivers 0 fps by design and must never read as backpressure.
@@ -524,7 +537,7 @@ export async function startLiveCompositeV2(
     key: blobKey,
     width: outW,
     height: outH,
-    fps: FPS,
+    fps: outFps,
     followSource: options.followSource === true,
     longEdge: options.longEdge,
     videoBitrate: VIDEO_BITS,
@@ -676,6 +689,10 @@ export async function startLiveCompositeV2(
         // asked for — the first frame may have turned it.
         width: stats.outWidth || outW,
         height: stats.outHeight || outH,
+        // F15: the cadence gate's rate, which IS the file's rate — the worker
+        // encodes at most one frame per 1000/fps ms and stamps every frame's
+        // duration from it.
+        fps: outFps,
         bytes: stats.bytes,
       }
       // WHERE THIS FILE'S ZERO SITS IN THE TAKE (P0-instant-sync). The worker

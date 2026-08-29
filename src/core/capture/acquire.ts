@@ -7,6 +7,7 @@ import {
 } from '@core/types'
 import { analytics } from '@core/analytics'
 import { sourceFrameEnabled } from '@core/frame'
+import { captureRateCeiling } from '@core/rate'
 import { isAppleWebKit } from '@core/capabilities'
 import { guardStream } from './deviceGuard'
 import { nativeResEnabled } from './nativeRes'
@@ -63,13 +64,13 @@ export interface ArmingTimelineEntry {
 /** Budget for a GRANTED device (no prompt can appear) — hardware spin-up only.
  * Since synchronized start (2026-07-20) EVERY device gates the take start, so
  * this ceiling is exactly how long the UI can freeze on one wedged device
- * ("stuck waiting for mic", PO 2026-07-23: the old 30s read as hung). 8s:
+ * ("stuck waiting for mic", Robert 2026-07-23: the old 30s read as hung). 8s:
  * above real slow-but-alive spin-ups (5s falsely killed a granted mic on a
  * loaded Mac), far below "the app is stuck". On timeout the take starts
  * without the device + loud missing-channel warning. */
 export const ACQUIRE_TIMEOUT_MS = 8_000
 /** Budget when a HUMAN is in the loop (permission prompt, screen picker).
- * Never time a person: 5s here recorded takes without screen while the PO was
+ * Never time a person: 5s here recorded takes without screen while Robert was
  * still reading Chrome's picker (2026-07-16), and the post-timeout stream
  * arrival leaked live camera/mic tracks. */
 export const PROMPT_TIMEOUT_MS = 120_000
@@ -77,7 +78,7 @@ export const PROMPT_TIMEOUT_MS = 120_000
 /**
  * How long the screen may take to arrive AFTER the human is out of the loop.
  *
- * PO 2026-08-24, with the log that proves it: `display start +0ms` … `display
+ * Robert 2026-08-24, with the log that proves it: `display start +0ms` … `display
  * timeout +120004ms`. getDisplayMedia neither resolved nor rejected — for two
  * full minutes — while Chrome's indicator showed the screen as shared. The
  * picker had been answered seconds in; everything after that was the app
@@ -100,7 +101,7 @@ export const PICKER_SETTLE_MS = 8_000
  * The 8 s post-picker deadline above is the fast path, and it depends on the
  * page seeing focus leave and come back. On macOS Chrome now delegates the
  * picker to the system (the menu-bar sharing pill), and the page may observe
- * NO focus change at all — PO 2026-08-24, fresh Chrome, first take: wedged
+ * NO focus change at all — Robert 2026-08-24, fresh Chrome, first take: wedged
  * again, "stuck in waiting", and the fast path never engaged. When detection
  * fails, the old code fell back to the 120 s human budget, which in practice
  * meant two minutes of lit indicators and then quitting Chrome.
@@ -125,7 +126,7 @@ export const DISPLAY_TOTAL_BUDGET_MS = 30_000
  * one, because a device that answers the second ask still starts with
  * everyone else — one continuous channel instead of a late-joined segment.
  * Not more, because every extra foreground attempt is ~10 s the user watches
- * an arming label ("wait is too long", PO 2026-08-25).
+ * an arming label ("wait is too long", Robert 2026-08-25).
  */
 export const CONNECT_ATTEMPTS_BEFORE_START = 2
 /** Pace between asks — an instantly-rejecting device (unplugged, held by
@@ -184,7 +185,7 @@ export interface ProgressiveHandlers {
   onNotice?: (kind: ChannelKind, message: string) => void
   onProgress?: ArmingProgressHandler
   /**
-   * Consulted by the persistent-connect hunt (PO 2026-08-25 "all input must
+   * Consulted by the persistent-connect hunt (Robert 2026-08-25 "all input must
    * connect everytime without fails"): before every background re-ask and
    * again the instant a late stream arrives. The session answers with full
    * knowledge — take alive, channel still missing, user has not turned it off.
@@ -225,7 +226,7 @@ function toFailure(kind: ChannelKind, err: unknown, timedOut = false): AcquireFa
  * timeout — so a `permissions.query` that never answers (an IPC into the same
  * browser process that just wedged a screen share) left the mic with no
  * deadline and no retry: "Waiting for microphone…" with nothing armed to end
- * it (PO 2026-08-25, stuck-on-mic after a wedge + refresh). A query that hangs
+ * it (Robert 2026-08-25, stuck-on-mic after a wedge + refresh). A query that hangs
  * falls back to the cached grant; a query that REJECTS (Safari has none for
  * camera/mic) keeps reading as not-granted, exactly as before.
  */
@@ -246,7 +247,7 @@ async function isGranted(name: 'camera' | 'microphone'): Promise<boolean> {
 /** Timeout that can NEVER leak a live device: if the media promise resolves
  * after the deadline already fired (user answered a prompt late), the stream's
  * tracks are stopped immediately — otherwise the camera/mic light stays on
- * with no owner (PO-hit 2026-07-16). Exported for tests. */
+ * with no owner (Robert-hit 2026-07-16). Exported for tests. */
 export function withTimeout<T>(
   promise: Promise<T>,
   ms: number,
@@ -256,7 +257,7 @@ export function withTimeout<T>(
    * spin-up, so it must not run while a HUMAN is still in the loop: the mic
    * and camera start concurrently with the screen picker, and counting their
    * 8 s against the time the user spends choosing a surface dropped the mic
-   * from every take where that took longer (PO 2026-08-23, "why the fuck mic
+   * from every take where that took longer (Robert 2026-08-23, "why the fuck mic
    * dont connects"). Starting the clock when the picker closes keeps the
    * ceiling meaningful without ever timing a person.
    */
@@ -315,7 +316,7 @@ export function isNarrowband(track: MediaStreamTrack | undefined): boolean {
  *   4. the on-screen preview decodes the same 4K stream a second time
  * Saturate that and Chrome's frame-sink capturer runs out of in-flight buffers
  * and simply stops delivering — the take is a frozen picture with a live clock
- * (PO 2026-08-22: shared a Chrome tab rendering a 4K game, "video freezes").
+ * (Robert 2026-08-22: shared a Chrome tab rendering a 4K game, "video freezes").
  *
  * Capping at the export size makes the whole chain 1:1 and costs nothing in
  * quality: the 4K frames were being thrown away at export anyway.
@@ -325,7 +326,7 @@ export const CAPTURE_MAX_HEIGHT = DEFAULT_EXPORT_SETTINGS.height
 export const CAPTURE_MAX_FPS = DEFAULT_EXPORT_SETTINGS.fps
 
 /**
- * THE PICKER IS THE USER'S, NOT OURS (PO 2026-08-25, and this is now a rule,
+ * THE PICKER IS THE USER'S, NOT OURS (Robert 2026-08-25, and this is now a rule,
  * not a preference): the app does not decide which surfaces Chrome offers, and
  * it does not move which pane opens. Both were changed here for a few hours on
  * a theory about where the sound checkbox lives — a whole-screen share on this
@@ -333,7 +334,7 @@ export const CAPTURE_MAX_FPS = DEFAULT_EXPORT_SETTINGS.fps
  * Entire-Screen option away. Reverted to the 2026-08-06 behaviour below.
  *
  * NEVER add `monitorTypeSurfaces`, `preferCurrentTab`, or a conditional
- * `displaySurface` here without PO saying so first. Removing an option from
+ * `displaySurface` here without Robert saying so first. Removing an option from
  * Chrome's picker is a product decision, and it is not this file's to make.
  */
 
@@ -346,19 +347,31 @@ export const CAPTURE_MAX_FPS = DEFAULT_EXPORT_SETTINGS.fps
  * `width: { max }` is a real constraint and Chrome downscales the surface to
  * satisfy it before the track is ever handed over, so capDisplayTrack's
  * native-res branch was skipping a re-cap of a track that had already been
- * capped at the source. The frame-rate bound stays either way — that one is not
- * about resolution, it is that every frame above 30 is encoded twice and then
- * dropped at export.
+ * capped at the source.
+ *
+ * THE FRAME-RATE BOUND IS THE CEILING, NOT 30 (task F15). It used to be
+ * `ideal: 30, max: 30` unconditionally, justified as "every frame above 30 is
+ * encoded twice and then dropped at export" — true only because the export was
+ * 30, which is the same output-constant-caps-the-input shape Robert rejected in
+ * F13. With `?sourcefps=1` the bound becomes a bare `max: 60`: nothing is
+ * ASKED for (an `ideal: 60` would trade resolution for rate on a source with
+ * several formats), the source simply stops being throttled below what it
+ * already offers. Off, it is the `ideal: 30, max: 30` it always was, to the
+ * field. See core/rate.ts.
  */
 export function displayVideoConstraints(): MediaTrackConstraints {
   const size = nativeResEnabled()
     ? {}
     : { width: { max: CAPTURE_MAX_WIDTH }, height: { max: CAPTURE_MAX_HEIGHT } }
+  const ceiling = captureRateCeiling()
   return {
     ...size,
-    // max, not just ideal: a 60 fps game tab hands over 60 fps otherwise, and
-    // every frame above 30 is encoded twice and then dropped at export.
-    frameRate: { ideal: CAPTURE_MAX_FPS, max: CAPTURE_MAX_FPS },
+    // At the 30 ceiling this is `max`, not just `ideal`, on purpose: a 60 fps
+    // game tab hands over 60 fps otherwise, and with a 30 fps export every one
+    // of those frames is encoded twice and then dropped. Above it, the whole
+    // point is to stop capping — so no `ideal` is sent at all (F15).
+    frameRate:
+      ceiling > CAPTURE_MAX_FPS ? { max: ceiling } : { ideal: ceiling, max: ceiling },
     // displaySurface is a HINT, not a constraint: it opens Chrome's picker
     // on the Entire-Screen pane instead of the tab list, so the default
     // choice records everything the user does. Any surface stays pickable.
@@ -430,7 +443,7 @@ export function exceedsCaptureCeiling(s: MediaTrackSettings): boolean {
     (s.width ?? 0) > CAPTURE_MAX_WIDTH ||
     (s.height ?? 0) > CAPTURE_MAX_HEIGHT ||
     // +1 fps slack: capturers report 30.000001 / 29.97 style values.
-    (s.frameRate ?? 0) > CAPTURE_MAX_FPS + 1
+    (s.frameRate ?? 0) > captureRateCeiling() + 1
   )
 }
 
@@ -445,7 +458,7 @@ export function exceedsCaptureCeiling(s: MediaTrackSettings): boolean {
 export async function capDisplayTrack(track: MediaStreamTrack | undefined): Promise<void> {
   if (!track) return
   const before = track.getSettings()
-  // O6, default since 2026-08-29 (PO's ruling): start at the source's own
+  // O6, default since 2026-08-29 (Robert's ruling): start at the source's own
   // resolution and let resolutionLadder.ts step DOWN on measured backpressure
   // instead of never starting high. See nativeRes.ts.
   if (nativeResEnabled()) {
@@ -460,7 +473,7 @@ export async function capDisplayTrack(track: MediaStreamTrack | undefined): Prom
       track.applyConstraints({
         width: { max: CAPTURE_MAX_WIDTH },
         height: { max: CAPTURE_MAX_HEIGHT },
-        frameRate: { max: CAPTURE_MAX_FPS },
+        frameRate: { max: captureRateCeiling() },
       }),
       1500,
       'applyConstraints(display)',
@@ -513,7 +526,7 @@ const RAW_DISPLAY_AUDIO: MediaTrackConstraints = {
  * exactly what safe mode is forbidden to make. (Until 2026-08-26 the floor
  * requested bare `audio: true`; a machine parked on rung 2 by the 4K-game
  * wedges then recorded every tab-audio take voice-processed for up to 24 h —
- * PO heard it as "music from tab sounds shitty".) The wedge lives in the
+ * Robert heard it as "music from tab sounds shitty".) The wedge lives in the
  * picker/video path; three boolean audio-track constraints are advisory and
  * cannot reject or hang a request.
  */
@@ -548,7 +561,7 @@ function displaySurfaceOf(track: MediaStreamTrack | undefined): DisplaySurface |
 
 /**
  * Anything but a whole monitor records ONE surface. That used to raise a
- * two-line "Heads-up:" toast on every tab/window share; PO 2026-08-23 killed
+ * two-line "Heads-up:" toast on every tab/window share; Robert 2026-08-23 killed
  * it ("fix it without stupid texts") and the call is right — the user picked
  * that surface a second earlier in Chrome's own picker, which shows what it
  * is, so the toast told them what they had just chosen. The failure it was
@@ -568,7 +581,7 @@ export function surfaceNotice(_surface: DisplaySurface | undefined): string | nu
  * Chrome's picker was there and left unticked.
  *
  * This said something cleverer for a few hours today: that a whole-screen
- * share cannot carry audio on macOS, so the box could not have existed. PO's
+ * share cannot carry audio on macOS, so the box could not have existed. Robert's
  * screen share HAS that box. The claim was wrong and it is not coming back
  * without evidence from his machine.
  */
@@ -618,7 +631,7 @@ export function acquireChannelsProgressive(
   const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
   /**
-   * ALL INPUT MUST CONNECT (PO 2026-08-25, verbatim, after the third stuck-mic
+   * ALL INPUT MUST CONNECT (Robert 2026-08-25, verbatim, after the third stuck-mic
    * report: "all input must connect everytime without fails"). One timeout
    * used to be a verdict: a mic that missed its 8 s budget was dropped from
    * the take FOREVER, even though the very next getUserMedia often succeeds —
@@ -798,7 +811,7 @@ export function acquireChannelsProgressive(
       afterPicker,
       adopt: (stream) => {
         guardStream(stream)
-        // NARROWBAND WARNING only (PO rule 2026-07-21: never override the user's
+        // NARROWBAND WARNING only (Robert rule 2026-07-21: never override the user's
         // device — an earlier auto-swap to the built-in mic broke AirPods takes).
         // A Bluetooth headset mic in HFP mode captures 8–16 kHz telephone
         // quality (measured on a real take: 99.7% of energy below 4 kHz).
@@ -844,7 +857,7 @@ export function acquireChannelsProgressive(
         mark('system-audio', 'failed', 'getDisplayMedia unavailable')
       }
     } else {
-      // NEVER RACE THE PREVIOUS SHARE'S TEARDOWN (displayRelease.ts — PO's
+      // NEVER RACE THE PREVIOUS SHARE'S TEARDOWN (displayRelease.ts — Robert's
       // rapid record/stop stress test wedges Chrome). The check is a sync
       // no-op whenever clear, so the same-tick dispatch survives in the
       // common case. Apple WebKit is exempt outright: transient activation
@@ -875,7 +888,7 @@ export function acquireChannelsProgressive(
       // TWO ceilings, because there are two different things that can be slow.
       // The outer one is the human at the picker and stays generous. The inner
       // one only starts once the picker has closed, and catches the failure
-      // the PO actually hit: a getDisplayMedia that never settles at all while
+      // Robert actually hit: a getDisplayMedia that never settles at all while
       // Chrome shows the screen as shared. Without it the app waits out the
       // full human budget on a promise that is already dead.
       const rawDisplay = navigator.mediaDevices.getDisplayMedia(opts)
@@ -971,7 +984,7 @@ export function acquireChannelsProgressive(
       // right here. Only the first video track and (when asked for) the first
       // audio track become channels; the rest used to stay live with no owner,
       // which on macOS keeps the screen-recording indicator lit after the take
-      // is gone (PO 2026-08-23: "indicators of mic and screen still there").
+      // is gone (Robert 2026-08-23: "indicators of mic and screen still there").
       const delivered = new Set<MediaStreamTrack>()
       if (video) delivered.add(video)
       if (config.systemAudio && display.getAudioTracks()[0]) {
@@ -1024,7 +1037,7 @@ export function acquireChannelsProgressive(
   // spin-up, or two minutes of "never time a human at a prompt". Assuming the
   // human budget for a device that CANNOT prompt is how an audio-only take
   // with a wedged but long-granted mic sat on "Waiting for microphone…" for
-  // 120 s (PO 2026-08-24). The probe was previously skipped entirely without a
+  // 120 s (Robert 2026-08-24). The probe was previously skipped entirely without a
   // screen picker; the reason given — extra await hops break Safari's
   // transient activation — only applies in front of getDisplayMedia, which by
   // here has either been dispatched already or was never requested.

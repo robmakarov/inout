@@ -29,6 +29,7 @@ The URL wins over the sticky value; the sticky value wins over the default.
 |---|---|---|
 | **Capture-side single generation** `?singlegen=capture` | as written | Stops recording the composite at all — 45–49 % less written per second. Off because it gives up **source-liveness detection** ("your screen froze" stops being noticed). It does NOT cost you preview quality: the preview falls back to the raw `<video>` in the same 16:9 contain-fit box, and measured live on prod it carries ~1.8× the pixels of the compositor's 960×540 canvas, so it is sharper, not softer. Only fires when the one video channel is exactly 1920×1080 — with native resolution on, that is usually false, so on most machines this flag does nothing today. |
 | **The frame follows the source** `?sourceframe=` | `?sourceframe=1` | The output stops being a landscape constant and takes THE TAKE'S OWN SHAPE — a 9:16 phone camera exports 1080×1920 instead of losing 68 % of the frame to a crop, a 4:3 camera keeps its full height, and a screenless take asks the sensor for the orientation the device is actually in. The step names and their pixel budget do not move: "1080p" is still 1920 on the long edge, so a 16:9 take is byte-identical either way. Off because F13's own gate says a real phone take is judged by eye before the default moves — that judgement is yours. Note that a take is the shape it was RECORDED at: turning this on does not un-crop takes made with it off. **This is the one switch that STICKS when you set it from the URL** — it is meant to be turned on from a phone, where there is no console to set the sticky value from, and a reload between recording and judging would silently put you back to landscape. `?sourceframe=0` turns it off the same way. |
+| **The rate follows the source** `?sourcefps=` | `?sourcefps=1` | The frame RATE stops being a constant and takes THE SOURCE'S OWN, up to 60. Capture stops asking every screen for `max: 30`, both composite engines paint and encode at the take's rate, and the export steps carry it — so a 60 fps game tab or a 60 fps camera records and exports 60 instead of being throttled at the source. It only ever goes UP: a 24 fps webcam still records 30, as it always has. Nothing is REQUESTED — the throttle is lifted, so a source that only offers 30 is unchanged to the byte. Off because F15's own gate says one real 60 fps take is judged by eye before the default moves, and because 60 fps asks the compositor for twice the frames (the degradation ladder watches, and steps resolution down before delivery collapses). A take exports at the rate it was RECORDED at: turning this off does not make an existing 60 fps take export at 30. Costs bytes — twice the frames is close to twice the file at the same picture. |
 | **R128 loudness** `?loudness=` | `?loudness=r128` | Broadcast −14 LUFS normalization instead of the shipped p90 bounding. Off because R128 can only hit the target by turning takes **down**, and the shipped rule never attenuates. |
 
 ## Test-only (do not use on a real take)
@@ -41,6 +42,7 @@ The URL wins over the sticky value; the sticky value wins over the default.
 | `?camsize=` | `?synthetic=1&camsize=1080x1920` | The synthetic camera's size — how a PORTRAIT take is reproduced without a phone (default 640×480). |
 | `?camlies=1` | `?synthetic=1&sourceframe=1&camsize=1080x1920&camlies=1` | Makes the synthetic camera report its dimensions **transposed** — the one lie a real phone tells (`getSettings()` describes the sensor, the frames arrive rotated). This is how the phone bug is reproduced on a desktop. |
 | `?screensize=` | `?synthetic=1&screensize=3840x2160` | The synthetic screen's size (default 1280×720). |
+| `?screenfps=` `?camfps=` | `?synthetic=1&sourcefps=1&screenfps=60` | The synthetic screen's / camera's rate (default 30, max 120) — how a **60 fps source** is put in front of the product without a 120 Hz monitor or a 60 fps sensor. |
 
 ## Not a URL flag — it is in the UI
 
@@ -60,6 +62,7 @@ slow and much bigger — see the export-size entry in `BACKLOG.md`.
 inout.capture.prefs       inout.capture.engine      inout.capture.nativeres
 inout.capture.rawcodec    inout.compose.singlegen   inout.compose.smartcut
 inout.export.loudness     inout.export.tier          inout.export.cq
+inout.frame.source        inout.frame.rate
 ```
 
 Clear them all: `Object.keys(localStorage).filter(k=>k.startsWith('inout.')).forEach(k=>localStorage.removeItem(k))`

@@ -35,6 +35,10 @@ function tickerModuleUrl(): string {
   return tickerUrl
 }
 
+/**
+ * The composite's rate when the caller names none — what this engine wrote
+ * before F15, and what every take whose source does not offer more still gets.
+ */
 const FPS = 30
 /**
  * The composite's shape when the caller names none — what this engine wrote
@@ -55,7 +59,7 @@ const WATCHDOG_MAX_GAP_P50_MS = 50
  * TAIL DRAIN (task P0-tail). MEASURED 2026-08-23: on a 4K source this recorder
  * put 140 frames into a 10 s file and its last decodable frame sat 2734 ms
  * before the end — nearly three seconds of the take simply absent, which is
- * PO's "Loom cuts last seconds" happening in our own product.
+ * Robert's "Loom cuts last seconds" happening in our own product.
  *
  * MediaRecorder is a black box at stop: whatever it has not encoded is gone.
  * So stop() now stops PAINTING first, then PROBES the encoder with
@@ -152,6 +156,12 @@ export interface LiveCompositeOptions {
   followSource?: boolean
   /** The pixel budget the adopted shape is resolved at (long edge). */
   longEdge?: number
+  /**
+   * THE COMPOSITE'S RATE (task F15). This engine's rate is the rate it asks
+   * `canvas.captureStream()` for — MediaRecorder then encodes what that stream
+   * delivers. Omitted, it is the 30 this engine always painted at.
+   */
+  fps?: number
   onGeometry?: (size: { width: number; height: number }) => void
 }
 
@@ -305,6 +315,8 @@ export async function startLiveComposite(
   // F13: the caller's frame is the guess; the picture is the answer.
   let outW = options.width && options.width > 0 ? options.width : W
   let outH = options.height && options.height > 0 ? options.height : H
+  // F15: the caller's rate, same contract as the frame above.
+  const outFps = options.fps && options.fps > 0 ? Math.round(options.fps) : FPS
   if (options.followSource) {
     const primary = screenEl ?? cameraEl
     const dims = primary ? await firstDims(primary, ADOPT_BUDGET_MS) : null
@@ -364,7 +376,7 @@ export async function startLiveComposite(
   }
   await audioCtx.resume()
 
-  const canvasStream = canvas.captureStream(FPS)
+  const canvasStream = canvas.captureStream(outFps)
   if (audioTrack) canvasStream.addTrack(audioTrack)
 
   const writable = await blobStore.createWriteStream(blobKey)
@@ -449,7 +461,7 @@ export async function startLiveComposite(
   let drawnFrames = 0
   const draw = (): void => {
     const now = performance.now()
-    if (now - lastDraw < 1000 / FPS - 3) return
+    if (now - lastDraw < 1000 / outFps - 3) return
     // THE FILE'S ZERO IS THE FIRST PAINT THE RECORDER SEES, not the instant it
     // was told to start (P0-instant-sync, refined 2026-08-25). A canvas capture
     // stream produces a frame when the canvas is painted, so between start()
@@ -654,6 +666,9 @@ export async function startLiveComposite(
         durationMs: Math.round(durationMs),
         width: outW,
         height: outH,
+        // F15: what `captureStream` was asked for, which is the ceiling this
+        // file's frames were produced under.
+        fps: outFps,
         bytes,
         tailIncomplete: stats.drainTimedOut || undefined,
       }
