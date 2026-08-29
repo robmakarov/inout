@@ -4,6 +4,12 @@ import { aspectOf, frameForAspect, sourceFrameEnabled } from '@core/frame'
 import { DEFAULT_FRAME_RATE, normalizeRate, sourceRateEnabled } from '@core/rate'
 import { singleGenCaptureEnabled } from '@core/singleGen'
 import {
+  differsMeaningfully,
+  resolutionStepEnabled,
+  stepVerdict,
+  type SegmentGeometry,
+} from './resolutionStep'
+import {
   budgetVerdict,
   describePlan,
   encoderBudgetEnabled,
@@ -351,6 +357,13 @@ class Session implements CaptureSession {
   private encoderPlan: EncoderPlan | null = null
   /** O15: this take already told the budget it collapsed; say it once. */
   private collapseRecorded = false
+  /** O16 — when the screen's delivered size first stopped matching the size its
+   *  current segment's encoder was opened at. Null while they agree. */
+  private sizeDifferingSinceMs: number | null = null
+  private lastResStepAtMs: number | null = null
+  private resStepsTaken = 0
+  /** O16 — a step is async and the tick is not; never start a second one. */
+  private resStepping = false
   /** The rate this take was started at — what the ladder may climb back to. */
   private requestedRate = DEFAULT_FRAME_RATE
   /** One notice per take, on the first reduction only (see stepDisplayDown). */
@@ -1605,6 +1618,16 @@ class Session implements CaptureSession {
     this.pausedTracks.set(ch.kind, { stream: ch.stream, track: ch.track, media: ch.media })
     if (ch.useMeasured && ch.measured) {
       const handle = ch.measured
+      // A CLOSED SEGMENT IS FINISHED, AND NOTHING MAY STOP IT AGAIN. The
+      // measured handle is NOT idempotent — its stop() terminates the worker
+      // that owns the SyncAccessHandle — and stopRecorders() walks EVERY
+      // channel including the ones a pause or a resolution step already closed.
+      // The second call then messages a dead worker, waits out STOP_TIMEOUT_MS
+      // and logs `measured stop failed` about a segment that was written
+      // correctly. It was caught rather than fatal, which is why F6 shipped
+      // with it; O16 makes it fire on every stepped take, so the state gets
+      // represented instead of inferred.
+      ch.measured = null
       void handle
         .stop()
         .then((r) => {
@@ -1778,7 +1801,113 @@ class Session implements CaptureSession {
     const elapsedMs = performance.now() - this.epoch
     const remainingMs = MAX_RECORDING_MS === null ? null : Math.max(0, MAX_RECORDING_MS - elapsedMs)
     this.emit({ type: 'tick', elapsedMs, remainingMs })
-    if (remainingMs !== null && remainingMs <= 0) this.autoStop()
+    if (remainingMs !== null && remainingMs <= 0) return this.autoStop()
+    this.watchScreenSize()
+  }
+
+  /**
+   * O16 — DOES THE SCREEN'S RAW CHANNEL STILL MATCH ITS SOURCE?
+   *
+   * Sampled on the existing tick, which is the cheapest place there is: one
+   * `getSettings()` every 250 ms and, on the overwhelming majority of takes,
+   * nothing else ever happens. A source that is not changing size never reaches
+   * the settle clause.
+   *
+   * Nothing here is about LOAD. Backpressure stays captureLadder's and stays
+   * rate-only, on Robert's ruling — "if something needs to be dropped it must be
+   * fps not resolution". What this follows is the source's own size changing:
+   * a display-mode change, or a shared window being resized.
+   */
+  private watchScreenSize(): void {
+    if (!resolutionStepEnabled() || this.resStepping) return
+    const ch = this.channels.find((c) => c.kind === 'screen' && c.media === 'video' && !c.ended)
+    if (!ch || !ch.width || !ch.height) return
+    const s = ch.track.getSettings()
+    const observed: SegmentGeometry | null =
+      s.width && s.height ? { width: s.width, height: s.height } : null
+    const current: SegmentGeometry = { width: ch.width, height: ch.height }
+    const now = performance.now()
+    // The settle clock starts when the sizes first disagree and is cleared the
+    // moment they agree again — a window being dragged emits a continuous
+    // stream of sizes, and this is what turns that into ONE step at the size
+    // the user let go at rather than a segment per frame.
+    if (!differsMeaningfully(current, observed)) {
+      this.sizeDifferingSinceMs = null
+      return
+    }
+    if (this.sizeDifferingSinceMs === null) this.sizeDifferingSinceMs = now
+    const verdict = stepVerdict({
+      current,
+      observed,
+      nowMs: now,
+      differingSinceMs: this.sizeDifferingSinceMs,
+      lastStepAtMs: this.lastResStepAtMs,
+      stepsTaken: this.resStepsTaken,
+    })
+    if (!verdict) return
+    this.sizeDifferingSinceMs = null
+    void this.stepScreenSegment(verdict.why)
+  }
+
+  /**
+   * O16 — CLOSE THE SCREEN'S SEGMENT AND OPEN THE NEXT ONE AT THE SOURCE'S SIZE.
+   *
+   * The move F6 already built, without the gap. `closeSegment` ends the current
+   * file and KEEPS the device; `armChannel` + `activateChannel` open segment
+   * N+1 on the very same track, which by now is delivering the new size, so the
+   * new encoder is configured from it with no constraint applied and nothing
+   * asked of the source.
+   *
+   * WAITS FOR THE OLD SEGMENT TO DRAIN before opening the next. P0-tail-raw is
+   * the whole reason: an encoder that is still flushing when its successor
+   * starts loses whatever it had not caught up on, which is the defect that task
+   * fixed for the END of a take and this one could re-introduce in the middle.
+   *
+   * Only the SCREEN steps. Every other channel keeps recording through it
+   * untouched, and the composite is not invalidated: the track stays live
+   * throughout, so the compositor never sees a break — it contain-fits whatever
+   * size arrives, exactly as it does for a source that resizes today.
+   */
+  private async stepScreenSegment(why: string): Promise<void> {
+    if (this.resStepping) return
+    this.resStepping = true
+    const t0 = performance.now()
+    try {
+      const ch = this.channels.find((c) => c.kind === 'screen' && c.media === 'video' && !c.ended)
+      if (!ch) return
+      const { stream, track } = ch
+      const from = `${ch.width}x${ch.height}`
+      this.closeSegment(ch)
+      // closeSegment hands the track to pausedTracks so a resume() can reopen
+      // it. There is no pause here and resume() must not find it.
+      this.pausedTracks.delete('screen')
+      await withTimeout(ch.stopped, STOP_BUDGET_MS, 'segment drain').catch((err) =>
+        console.warn('[capture] resolution step: previous segment did not drain in budget', err),
+      )
+      if (this.stateInternal !== 'recording' || this.cancelled) return
+      if (track.readyState !== 'live') {
+        console.warn('[capture] resolution step: the screen track ended mid-step')
+        return
+      }
+      const rt = await this.armChannel({ kind: 'screen', media: 'video', stream, track })
+      if (this.stateInternal !== 'recording' || this.cancelled) {
+        this.discardRuntime(rt)
+        return
+      }
+      this.activateChannel(rt, performance.now())
+      this.resStepsTaken += 1
+      this.lastResStepAtMs = performance.now()
+      this.writeManifest()
+      console.info(
+        `[capture] resolution step ${this.resStepsTaken}: screen ${from} → segment ${this.resStepsTaken + 1} ` +
+          `in ${(performance.now() - t0).toFixed(0)}ms — ${why}. The take's own-resolution export ` +
+          `declines from here (two segments, two geometries); the default instant export is unaffected (O16)`,
+      )
+    } catch (err) {
+      console.error('[capture] resolution step failed — the channel keeps the size it had', err)
+    } finally {
+      this.resStepping = false
+    }
   }
 
   private autoStop(): void {
