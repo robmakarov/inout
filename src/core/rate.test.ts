@@ -15,7 +15,14 @@ import {
   displayVideoConstraints,
   exceedsCaptureCeiling,
 } from '@core/capture/acquire'
-import { QUALITY_TIERS, resolveTier, settingsForTier, tiersForTake } from '@core/compose/quality'
+import {
+  QUALITY_TIERS,
+  copySourceForTier,
+  isDefaultTier,
+  resolveTier,
+  settingsForTier,
+  tiersForTake,
+} from '@core/compose/quality'
 import { chooseCopySource } from '@core/compose/copySource'
 import { DEFAULT_FRAME_ASPECT } from './frame'
 import {
@@ -245,6 +252,17 @@ describe('the copy fence refuses a file of the wrong rate', () => {
     expect(chosen.declined.find((d) => d.origin === 'single-generation')?.reason).toContain(
       'not the same frames',
     )
+  })
+
+  it('the default step of a 60 fps take is STILL the instant copy — badge and path agree', () => {
+    // The bug this pins was measured on prod: the editor resolved its step
+    // against the take's shape but not its rate, so the export asked for 30
+    // while the panel offered 60, the fence (correctly) refused the mismatch,
+    // and a 60 fps take silently re-rendered itself down to 30.
+    const rec = composited({ fps: 60 })
+    const def = tiersForTake(rec).find(isDefaultTier)!
+    expect(def.fps).toBe(60)
+    expect(copySourceForTier(rec, def)?.origin).toBe('composite')
   })
 
   it('a raw channel at the take’s own rate is still the preferred copy', () => {

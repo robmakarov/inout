@@ -11,6 +11,7 @@ import {
   type QualityTier,
 } from '@core/compose/quality'
 import { frameAspectFor, sourceFrameEnabled } from '@core/frame'
+import { takeRate } from '@core/rate'
 import { exportByBestPath } from '@core/compose'
 import { editsRepo, recordingsRepo } from '@core/store'
 import { analytics } from '@core/analytics'
@@ -54,8 +55,20 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
   const cameraOnly = !recording.channels.some((c) => c.kind === 'screen' && c.media === 'video')
   const measuredAspect = sourceFrameEnabled() && cameraOnly ? measured : null
   const frameAspect = measuredAspect ?? frameAspectFor(recording)
+  /**
+   * F15 — THE TAKE'S RATE, and unlike the aspect there is nothing to re-measure
+   * it against: the files carry the rate they were written at. It has to be
+   * threaded through every `resolveTier` here or the export asks for 30 while
+   * the panel offers 60, the copy fence (correctly) refuses the mismatch, and a
+   * 60 fps take silently re-renders itself down — measured exactly that way on
+   * prod before this line existed.
+   */
+  const frameRate = takeRate(recording)
   const [storedTier, setTier] = useState<QualityTier>(() => loadQualityTier())
-  const tier = useMemo(() => resolveTier(storedTier, frameAspect), [storedTier, frameAspect])
+  const tier = useMemo(
+    () => resolveTier(storedTier, frameAspect, frameRate),
+    [storedTier, frameAspect, frameRate],
+  )
   const exporting = mode === 'exporting' || mode === 'share'
   // F5a: a PROPOSED cut list. It is preview-only until the user applies it, and
   // any other edit invalidates it — a proposal computed against a timeline that
@@ -197,7 +210,7 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
     const defaultTier = isDefaultTier(chosen)
     // The step at THIS take's shape — the decoder's answer where there is one,
     // so the file matches the stage the user just judged it on (F13).
-    const settings = settingsForTier(resolveTier(chosen, frameAspect))
+    const settings = settingsForTier(resolveTier(chosen, frameAspect, frameRate))
 
     const ac = new AbortController()
     store.setExportAbort(ac)
