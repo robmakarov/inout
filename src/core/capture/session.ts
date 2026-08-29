@@ -3,6 +3,17 @@ import { isAppleWebKit } from '@core/capabilities'
 import { aspectOf, frameForAspect, sourceFrameEnabled } from '@core/frame'
 import { DEFAULT_FRAME_RATE, normalizeRate, sourceRateEnabled } from '@core/rate'
 import { singleGenCaptureEnabled } from '@core/singleGen'
+import {
+  budgetVerdict,
+  describePlan,
+  encoderBudgetEnabled,
+  encoderCeiling,
+  planOf,
+  recordEncoderCollapse,
+  recordEncoderSustained,
+  type EncoderPlan,
+  type PlannedEncoder,
+} from './encoderBudget'
 import { blobStore, createDurablePositionedWriter, recordingsRepo } from '@core/store'
 import type {
   CaptureConfig,
@@ -102,6 +113,15 @@ const TIMESLICE_MS = 1000
 const TAIL_THROTTLE_FPS = 1
 /** applyConstraints on a wedged device must not hold the take open. */
 const THROTTLE_BUDGET_MS = 400
+/**
+ * O15: how long a take must run before it is allowed to say this machine
+ * SUSTAINED its plan. 10 s clears note 6's encoder warm-up (a fresh process's
+ * first VideoEncoder pays a multi-second init, and every "2-10 fps" panic in
+ * this project's history was that init being measured) with room to spare, so
+ * the mark is raised on throughput and never on a warm-up that had not
+ * finished failing yet.
+ */
+const SUSTAINED_TAKE_MIN_MS = 10_000
 /**
  * Deadlines on the stop path, for the same reason arming has them (note 3): a
  * recorder that never answers must not be able to freeze a finished take.
@@ -323,6 +343,14 @@ class Session implements CaptureSession {
    *  has seen a frame and said so. The UI's preview stage follows this rather
    *  than the track settings, which lie about orientation on a phone. */
   private compositeGeometry: { width: number; height: number } | null = null
+  /**
+   * O15: what this take intends to open, decided at ARM TIME and before any
+   * encoder exists. Held so the take's OUTCOME can be filed against the load
+   * that produced it — a collapse is only worth remembering beside its size.
+   */
+  private encoderPlan: EncoderPlan | null = null
+  /** O15: this take already told the budget it collapsed; say it once. */
+  private collapseRecorded = false
   /** The rate this take was started at — what the ladder may climb back to. */
   private requestedRate = DEFAULT_FRAME_RATE
   /** One notice per take, on the first reduction only (see stepDisplayDown). */
@@ -560,6 +588,9 @@ class Session implements CaptureSession {
     }
 
     this.pendingErrors = failures.map((f) => ({ kind: f.kind, message: f.message }))
+    // O15 — the last moment anything can decide how much this take will ask of
+    // the machine. start() is synchronous and opens every encoder inside it.
+    await this.applyEncoderBudget()
     // Devices are live from here on — guarantee they are released even if the
     // page goes away without reaching stop()/cancel().
     this.installUnloadGuard()
@@ -845,6 +876,10 @@ class Session implements CaptureSession {
         `[capture] display ${before.frameRate ?? '?'} → ${after.frameRate ?? '?'} fps ` +
           `at ${after.width}×${after.height} (${reason})`,
       )
+      // O15: a step DOWN is this machine saying it could not carry the plan.
+      // Only downward steps count — the ladder climbs back on its own, and a
+      // recovery is not evidence of anything failing.
+      if (rung.fps < this.requestedRate) this.noteEncoderCollapse(`the rate ladder stepped: ${reason}`)
       // ONE NOTICE PER TAKE, AND ONLY ON THE WAY DOWN. "It has to be smooth,
       // not noticible for users and watchers" — a banner on every step of a
       // ladder that now recovers by itself would be more visible than the thing
@@ -868,6 +903,10 @@ class Session implements CaptureSession {
     if (this.compositeInvalid) return
     this.compositeInvalid = true
     console.info(`[capture] composite unusable (${reason}) — unedited export will render`)
+    // O15: the composite giving up IS the collapse this budget exists for —
+    // "a composite that produces nothing in its first second never produces
+    // anything". File it against the plan that produced it.
+    this.noteEncoderCollapse(`the composite degraded: ${reason}`)
   }
 
   /** A video source froze (or came back). The take continues — audio and the
@@ -978,6 +1017,116 @@ class Session implements CaptureSession {
       }
     }
     return { yes: true, why: '' }
+  }
+
+  /**
+   * WHAT THIS TAKE INTENDS TO OPEN — task O15, and nothing like it existed
+   * before. How many encoders a take opens was EMERGENT: armChannel opens one
+   * per raw video channel, startComposite opens another, and no line of code
+   * or console ever added them up. Robert's freeze was three of them —
+   * 3024x1964 + 1280x720 + 1920x1080 with a game on the same GPU — and the
+   * only place that fact appeared was in his own reading of three separate log
+   * lines after the machine came back.
+   *
+   * Asked at ARM TIME, from the same settled facts singleGenerationTake and
+   * compositeFrame are asked from, so the three can never disagree about what
+   * this take is.
+   *
+   * A MediaRecorder channel counts too. It is software VP8/VP9 rather than a
+   * hardware AVC instance, so it is not the same KIND of load — but it is a
+   * whole video encoder running on this machine while the others do, and a
+   * budget that pretended otherwise would be measuring the wrong take.
+   */
+  private planEncoders(): EncoderPlan {
+    const video = this.channels.filter((c) => c.media === 'video' && !c.ended)
+    const encoders: PlannedEncoder[] = video.map((c) => ({
+      what: c.kind,
+      width: c.width ?? 0,
+      height: c.height ?? 0,
+      fps: c.fps ?? DEFAULT_FRAME_RATE,
+    }))
+    // The composite is an encoder like any other, EXCEPT when single
+    // generation is going to skip it — which is exactly the branch
+    // startComposite will take, asked here from the same facts.
+    if (!this.singleGenerationTake().yes) {
+      const frame = this.compositeFrame()
+      encoders.push({ what: 'composite', width: frame.width, height: frame.height, fps: this.compositeRate() })
+    }
+    return planOf(encoders)
+  }
+
+  /**
+   * THE BUDGET, APPLIED BEFORE ANYTHING OPENS — task O15.
+   *
+   * This runs inside arm(), which is the last moment it can: `start()` is
+   * synchronous by law (instant record start) and every encoder is configured
+   * inside it, so a size decided any later cannot be acted on. It is also the
+   * only moment that helps — the collapse this exists for is instant and
+   * unrecoverable, and captureLadder.ts, which measures while the take runs,
+   * arrives after the machine has already stopped answering.
+   *
+   * BOUNDED, AND A REFUSAL IS NOT FATAL (note 3: nothing in arming may await
+   * without a deadline). A track that will not narrow simply keeps the size it
+   * had, exactly as capDisplayTrack already tolerates.
+   *
+   * The plan is logged either way. With no flag and no history this method
+   * prints one line and changes nothing, which is the point: the machine is
+   * measured long before it is ever bounded.
+   */
+  private async applyEncoderBudget(): Promise<void> {
+    const plan = this.planEncoders()
+    this.encoderPlan = plan
+    if (!plan.encoders.length) return
+    const ceiling = encoderCeiling()
+    console.info(
+      `[capture] encoder plan — ${describePlan(plan)}` +
+        (ceiling > 0
+          ? ` against this machine's own ${(ceiling / 1e6).toFixed(1)} Mpx/s budget`
+          : ' (this machine has never been seen to collapse, so there is no budget to be over)'),
+    )
+    if (!encoderBudgetEnabled()) return
+    const screenCh = this.channels.find((c) => c.kind === 'screen' && c.media === 'video' && !c.ended)
+    const screen = plan.encoders.find((e) => e.what === 'screen') ?? null
+    if (!screenCh || !screen) return
+    const frame = this.compositeFrame()
+    const verdict = budgetVerdict({
+      plan,
+      ceiling,
+      screen,
+      compositeLongEdge: Math.max(frame.width, frame.height),
+    })
+    if (!verdict) return
+    try {
+      await withTimeout(
+        screenCh.track.applyConstraints({
+          width: { max: verdict.screenLongEdge },
+          height: { max: verdict.screenLongEdge },
+        }),
+        THROTTLE_BUDGET_MS,
+        'applyConstraints(encoder budget)',
+      )
+      const after = screenCh.track.getSettings()
+      // The runtime's own dimensions are what singleGenerationTake and
+      // compositeFrame read, so they have to follow the track or the take
+      // would be planned at one size and recorded at another.
+      screenCh.width = after.width ?? screenCh.width
+      screenCh.height = after.height ?? screenCh.height
+      this.encoderPlan = this.planEncoders()
+      console.info(
+        `[capture] encoder budget: screen ${screen.width}x${screen.height} → ` +
+          `${after.width}x${after.height} before any encoder opened — ${verdict.why}. ` +
+          `New plan: ${describePlan(this.encoderPlan)} (O15)`,
+      )
+    } catch (err) {
+      console.warn('[capture] could not bound the screen to the encoder budget — recording as-is', err)
+    }
+  }
+
+  /** O15: this take degraded. File it against the load that produced it. */
+  private noteEncoderCollapse(reason: string): void {
+    if (this.collapseRecorded) return
+    this.collapseRecorded = true
+    if (this.encoderPlan) recordEncoderCollapse(this.encoderPlan.pixelRate, reason)
   }
 
   /**
@@ -2006,6 +2155,20 @@ class Session implements CaptureSession {
       createdAt: Date.now(),
       durationMs: channels.reduce((m, c) => Math.max(m, c.startOffsetMs + c.durationMs), 0),
       channels,
+    }
+
+    // O15: THIS MACHINE CARRIED THIS PLAN. Only a take that ran long enough to
+    // mean it, and only one where nothing degraded — the ladder never stepped
+    // and the composite never gave up. A two-second take proves nothing about
+    // sustained throughput, and note 6's encoder warm-up lives inside exactly
+    // that window, so a short take could otherwise raise the mark on the back
+    // of an encoder that had not started working yet.
+    if (
+      !this.collapseRecorded &&
+      this.encoderPlan &&
+      recording.durationMs >= SUSTAINED_TAKE_MIN_MS
+    ) {
+      recordEncoderSustained(this.encoderPlan.pixelRate)
     }
 
     // Requested channels that never delivered media — the UI must say so
