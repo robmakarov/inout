@@ -45,6 +45,20 @@ phase: MVP validation (2026-07-16)
   flag and exported without it copied a 1920x1440 file under a "1080p" badge — so the composite is
   now checked against the request too (refuses nothing that ever worked; every pre-F13 composite is
   1920x1080 and so is its default step).
+  SECOND PASS, same day, after PO judged it ON A PHONE ("still wrong proportions and cutted and in
+  editing even more cutted"): `track.getSettings()` DESCRIBES THE SENSOR — a phone held portrait
+  reports 1920x1080 while every frame delivered is 1080x1920 — and the first pass believed it, so a
+  portrait take was composited into a landscape canvas and the editor cropped the raw portrait
+  channel a second time into the same landscape stage. The settings are the GUESS now and the first
+  frame is the ANSWER, through one shared decision (`adoptedFrame`) in all three encoders: the v2
+  compositor worker, live composite v1 (the engine an iPhone uses — Safari has no
+  MediaStreamTrackProcessor) and the raw channel worker, which was rescaling portrait frames into a
+  landscape config. Both engines report the shape they settled on; the recording preview follows
+  that. Encoding is held until the reconfigure lands — doing it async first produced a file with two
+  SPS that nothing could decode. `?camlies=1` makes the synthetic camera tell that exact lie, so the
+  phone failure is reproducible on a desktop from a URL, and it caught both bugs on its first run.
+  `?sourceframe=` sticks when set from the URL, because it is turned on from a device with no
+  console.
 - THE EXPORT TARGETS A QUALITY, NOT A BITRATE (2026-08-29). H.264 qp20 via a CustomVideoEncoder on
   mediabunny's registerEncoder seam (its own bitrateMode is typed constant|variable, both of which
   X15(a) measured INERT; quantizer mode is the one that works and needs a per-frame QP nothing in the

@@ -588,18 +588,23 @@ everywhere and is the floor today; HEVC/AV1 is the ~2× you keep pointing at wit
 comparison. Recommended: an honest "smaller file, newer players" option in the export panel now,
 and the cloud player switching automatically once cloud lands.
 
-0. **Record yourself on your PHONE and look at the video.** Open
-   `https://inout-kappa.vercel.app/?sourceframe=1` on the phone, record a few seconds, export, watch
-   it. This is F13, built and checked on the live app the same day you rejected the 1920×1080 rule.
-   With that switch on, the video is the shape of what you pointed the camera at: a vertical phone
-   take comes out 1080×1920 with nothing cropped, and a 4:3 webcam keeps its whole height instead of
-   losing a quarter of it. A normal 16:9 screen recording is unchanged to the pixel — that was the
-   rule the work was built under, and it is checked by reading the exported files themselves, not
-   the app's own labels. It is OFF by default on purpose: nobody flips how every video is shaped
-   without you having looked at one first. Say yes and it becomes the default; say what is wrong and
-   nothing has moved in the meantime.
-   One honest caveat, so it is not a surprise: a video you already recorded stays the shape it was
-   recorded at. The switch changes new recordings, not old ones.
+0. **Record yourself on your PHONE again.** Open
+   `https://inout-kappa.vercel.app/?sourceframe=1` on the phone (that link now STICKS — you only
+   need it once per phone), record a few seconds, export, watch it.
+   **You already tried this once and it was still cropped, and you were right.** The reason is worth
+   one sentence: when a browser is asked how big the camera is, it answers with the SENSOR's size —
+   1920×1080 — while the pictures it actually hands over are the rotated 1080×1920 you are holding.
+   The app believed the answer instead of looking at the pictures, so it built a landscape video out
+   of a portrait one, and then the editor cropped it a second time. That is why editing looked worse
+   than recording.
+   It now takes the shape from the first picture that arrives, in all three places that write video.
+   Checked on the live app by making a fake camera lie about itself the exact way a phone does: the
+   recording preview, the editor and the exported file all come out 1080×1920 with nothing cut off.
+   A normal 16:9 screen recording is unchanged to the pixel.
+   Still OFF by default: nobody flips how every video is shaped without you having looked at one
+   first. Say yes and it becomes the default; say what is wrong and nothing has moved meanwhile.
+   One honest caveat: a video you already recorded stays the shape it was recorded at. The switch
+   changes new recordings, not old ones — so record a fresh one to judge it.
 
 1. **Listen to two recordings.** A normal one and one with music from a tab. The audio fix you were
    asked to check before was never actually running — the number it depends on was being calculated

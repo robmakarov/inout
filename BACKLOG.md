@@ -23,12 +23,24 @@ TD tags technical defects by severity. Done items get deleted, not archived.
   rides (`session.compositeFrame()` asks the take what it is, once, before any encoder exists), so
   F15 is unblocked; the ruling and shape live in the task and DECISIONS.
 
+- [P2] TD 2026-08-29: **`npm run oracle:fidelity`'s instant lane is flaky on this machine**, the
+  same way the v2 oracle is. Measured interleaved against a baseline commit with none of the day's
+  capture work in it: the BASELINE failed 1 of 3 at level residual 18.83 dB while the tree under
+  test passed 3 of 3, and every PASS on both trees reads residual 0.03 dB. So the failure is
+  bimodal — either 0.03 or a wild number — which smells like a decode window landing on the wrong
+  span rather than a level being wrong. Do not read a red fidelity instant lane as a regression
+  without running a baseline beside it. Worth a proper look: this gate is the one that is supposed
+  to catch audio-level regressions on the packet-copy path.
+
 - [PO OWED] TD 2026-08-29: **F13 is built, verified on prod and OFF** — `?sourceframe=1` and the
   output follows the take's shape instead of a landscape constant. Its last gate is PO's eye:
   open https://inout-kappa.vercel.app/?sourceframe=1 on a PHONE, record, look at the export. Until
   then INOUT still cannot make a vertical video by default, on purpose. Evidence read out of the
   exported FILE: portrait 1080x1920 (instant copy), 4:3 camera 1920x1440 (full height, was cropped
   to 1080), 16:9 unchanged at 1920x1080 on both copy paths.
+  SECOND PASS SHIPPED after PO's phone verdict ("still wrong proportions and cutted"): capture now
+  takes the shape from the FRAMES rather than from `track.getSettings()`, which describes the
+  sensor and lies about orientation on a phone. Reproducible on a desktop with `&camlies=1`.
 
 - [P1] PO 2026-08-29: **the size estimate is 2.15× low at the top step** — panel said 4.7 GB at
   1440p, file came out 10.09 GB (140 min). Every other step landed within ~100 MB, so this is the

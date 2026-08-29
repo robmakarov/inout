@@ -817,6 +817,61 @@ HONEST RESIDUE, none of it blocking:
    the whole editor into a column on a portrait take (seen, then fixed). Only the stage and the box
    that must fit it vertically follow.
 
+## F13 SECOND PASS — PO JUDGED IT ON A PHONE AND IT WAS STILL WRONG. Fixed 2026-08-29.
+PO: "preview on phone still wrong proportions and cutted and in editing even more cutted preview,
+fix it." THE FIRST PASS BELIEVED `track.getSettings()`, AND THAT CALL DESCRIBES THE SENSOR. A phone
+held portrait reports 1920x1080 while every frame the platform delivers is 1080x1920, rotated. So
+`compositeFrame()` derived a LANDSCAPE canvas from a portrait take, the compositor cover-cropped
+into it, and the editor then cropped the raw portrait channel a SECOND time into the same landscape
+stage — which is exactly "even more cutted", and it is the only reading of PO's sentence that
+explains why editing was worse than capture. Nothing in the capture chain had ever looked at what a
+delivered frame actually is; `displayWidth/displayHeight` were used only to fit INTO the canvas.
+THE FIX: the settings are the GUESS, the first frame is the ANSWER — one shared decision
+(`adoptedFrame`, core/frame.ts, unit-tested) in all three places that encode.
+ · compositor worker (v2, Android/desktop) — adopts the first frame's aspect at the 1920 long-edge
+   budget and reconfigures its encoder BEFORE anything is in the file. The muxer is never told a
+   size (`addVideoTrack` takes only a frame rate; the geometry reaches the file through the
+   encoder's SPS), so the whole correction is one canvas and one `configure()`. The keep-alive
+   holds off for a bounded 700 ms so it cannot freeze the guess in first, and a source that never
+   delivers (a still screen) simply keeps the guess — which is the shape it always had.
+ · live composite v1 — THE ENGINE AN IPHONE ACTUALLY USES (Safari has no MediaStreamTrackProcessor,
+   so v2 is never available there, which is why this half is not optional). Sizes its canvas from
+   the `<video>` element's videoWidth/videoHeight, the rotated truth, behind the same 700 ms bound.
+ · raw channel worker — was configuring its encoder from the settings and then RESCALING portrait
+   frames into a landscape config. Encodes the frame's own size now, and the session writes what
+   was written into ChannelRecording, so the single-generation copy and the editor's PiP stop
+   inheriting the lie. NOT flag-gated: a channel whose declared geometry disagrees with its frames
+   is broken for everyone, and on a truthful source it is a no-op.
+Both engines report the shape they settled on; the session emits `composite-geometry` and the
+recording preview follows THAT instead of the track settings. The preview canvas is no longer
+re-sized from React (writing width on a transferred canvas throws) — the worker owns that bitmap
+and turns it, with `object-fit: contain` as the safety net for the moments they disagree.
+
+A SECOND BUG, CREATED AND CAUGHT INSIDE THE SAME HOUR: the reconfigure is ASYNC (it probes the
+config) and both workers kept encoding through it, so the first frames went in at the old geometry
+and the file carried two SPS. Seen on prod: `EncodingError: Decoding error`, the filmstrip refused
+the channel and the editor stage was black. Both workers now hold every encode AND the keep-alive
+until the new config is applied; the raw worker already clones each frame, so the keep-alive puts
+the picture in the moment the encoder is ready. Cost: a few ms at the very start of a take.
+
+`?camlies=1` IS WHY BOTH WERE FOUND. It makes the synthetic camera report its dimensions transposed
+— the one lie a phone tells and the one no rig could express, since a canvas track always tells the
+truth about itself. The phone failure and its fix are now reproducible on a desktop from a URL:
+`?synthetic=1&sourceframe=1&camsize=1080x1920&camlies=1`. It paid for itself on its first run.
+`?sourceframe=` ALSO STICKS NOW when it comes from the URL, against the convention every other flag
+follows, and the reason is the device: it is turned on from a phone, where there is no console, and
+a reload between recording and judging would silently put the take back to landscape.
+GATES RE-RUN AFTER THE CAPTURE CHANGE: with the sensor lying, console says "raw channel: the frames
+are 1080x1920, not the 1920x1080 the track reported" and "compositor: the frames are 1080x1920 —
+composing 1080x1920, not 1920x1080"; capture preview portrait and uncropped; editor stage portrait
+and uncropped; filmstrip decodes 8/8; exported FILE 1080x1920, `copiedFrom: "single-generation"`.
+oracle v2 4 PASS / 1 FAIL over five runs · oracle v1 2/2 PASS · `exp o3b` 7/7 with the chroma table
+unchanged · `exp armcancel` green · 547 tests · typecheck · build · verify-deploy OK.
+FIDELITY IS FLAKY ON THIS MACHINE AND IT IS NOT THIS CHANGE: interleaved against e75e34d, HEAD read
+3/3 PASS at residual 0.03 dB while the BASELINE failed one of three at residual 18.83 — worse than
+anything this tree produced. Filed in BACKLOG beside the v2 oracle's own flake. Every PASS on both
+trees reads 0.03.
+
 WHAT F15 AND F16 INHERIT: `resolveTier` is the seam F16's rungs resolve through (F16 says so
 itself), and fps follows the source through the same `session.compositeFrame()`-shaped question F15
 needs — one place that asks the take what it is, at capture, before any encoder is configured.
