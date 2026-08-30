@@ -2102,8 +2102,8 @@
 .takecard {
   display: flex;
   align-items: stretch;
-  gap: 10px;
-  padding: 10px 12px 9px;
+  gap: 9px;
+  padding: 8px 10px;
   background: var(--surface);
   border: 1px solid var(--surface-2);
   border-radius: var(--r-md);
@@ -2117,7 +2117,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 5px;
 }
 /* One decoded frame. Fixed box so a portrait take and a landscape one leave the
    card the same shape; `cover` because this is an identifier, not a preview of
@@ -2125,7 +2125,7 @@
    the card is complete without it. */
 .takecard__thumb {
   flex: none;
-  width: 88px;
+  width: 76px;
   align-self: center;
   aspect-ratio: 16 / 10;
   padding: 0;
@@ -2149,8 +2149,8 @@
 .takecard__top {
   display: flex;
   align-items: baseline;
-  gap: 9px;
-  font-size: 13px;
+  gap: 8px;
+  font-size: 12.5px;
   color: var(--text);
 }
 .takecard__when {
@@ -2204,24 +2204,23 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-top: -3px;
 }
 .takecard__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
 }
 .takecard__btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
+  gap: 4px;
+  padding: 4px 8px;
   border: 1px solid var(--surface-3);
   border-radius: var(--r-full);
   background: transparent;
   color: var(--text-dim);
   font: inherit;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 500;
   cursor: pointer;
   transition:
