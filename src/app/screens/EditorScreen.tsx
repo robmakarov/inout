@@ -458,7 +458,7 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
           screen of its own any more; they just stop taking input, because the
           export snapshotted the edit when it started and a change made now
           would silently not be in the file. */}
-      <div className={exporting ? 'editor__locked' : undefined}>
+      <div className={`editor__below${exporting ? ' editor__below--locked' : ''}`}>
         <ToolsBar
           recording={recording}
           edit={edit}

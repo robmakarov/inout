@@ -463,17 +463,22 @@
   /* UI1: everything below the picture — the transport, the tools row, the
      timeline and the quality slider — added up once, here, instead of a magic
      number repeated in four rules. MEASURED on prod at 1280x720 with the tools
-     row wrapped (its worst case): transport 38 + gap 14 + padding 32 + tools 62
-     + timeline 152 + quality 133 = 431.
+     slider lost its title row and its note: transport 38 + gap 14 + padding 32
+     + tools 62 + timeline 152 + quality 63 = 361.
 
-     IT IS THE COLUMN'S WIDTH AND NOT THE STAGE'S BOUND. Getting it wrong used
+     IT IS THE CONTROLS' WIDTH AND NOT THE STAGE'S BOUND. Getting it wrong used
      to crush the picture: the stage is a flex item, so a column sized for more
      height than there was simply SHRANK it, and a 16:9 take drew into a 2.24
      box with black bars down both sides — exactly the "blackspace" this task
      exists to remove, reintroduced by arithmetic. The stage now carries its own
-     height cap (see .stage), so this number can only make the column narrower
-     than ideal — never the picture wrong. */
-  --below: 431px;
+     height cap (see .stage), so this number can only make the controls narrower
+     or wider than the picture — never the picture wrong. */
+  --below: 361px;
+  /* The controls track the PICTURE's width, so the timeline lines up with the
+     frame it describes — they used to be a flat 16:9 guess, which on a
+     1728x1117 take left them 40 px narrower than the stage above them. Floored
+     at 520 px so a portrait take does not squeeze the timeline into a column. */
+  --pane-w: min(100%, max(520px, calc((100dvh - var(--below)) * var(--stage-ar, 16 / 9))));
 }
 
 .editor__player {
@@ -794,7 +799,7 @@
   position: relative;
   flex: none;
   width: 100%;
-  max-width: min(100%, calc((100dvh - var(--below, 431px)) * 16 / 9));
+  max-width: var(--pane-w);
   align-self: center;
   /* UI1: 30 px shorter — the tools row that used to run through the middle of
      it now lives under the picture (see .tools). */
@@ -1586,7 +1591,7 @@
 .qbar {
   flex: none;
   width: 100%;
-  max-width: min(100%, calc((100dvh - var(--below, 431px)) * 16 / 9));
+  max-width: var(--pane-w);
   align-self: center;
   display: flex;
   justify-content: center;
@@ -1610,7 +1615,7 @@
 .xstrip {
   flex: none;
   width: 100%;
-  max-width: min(100%, calc((100dvh - var(--below, 431px)) * 16 / 9));
+  max-width: var(--pane-w);
   align-self: center;
   display: flex;
   align-items: center;
@@ -1693,10 +1698,20 @@
   color: var(--text);
 }
 
-/* The timeline and tools stay put while a render runs — the screen does not
-   change — but they stop taking input, because the export snapshotted the edit
-   when it started and a change made now would silently not be in the file. */
-.editor__locked {
+/* The tools and the timeline, in one centred column. It has to BE a flex
+   column: they carry `align-self: center`, which is inert inside a plain block,
+   and that is exactly how they ended up 40 px narrower than the picture and
+   pinned to the left of it. */
+.editor__below {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+/* They stay put while a render runs — the screen does not change — but they
+   stop taking input, because the export snapshotted the edit when it started
+   and a change made now would silently not be in the file. */
+.editor__below--locked {
   pointer-events: none;
   opacity: 0.4;
 }
@@ -1711,7 +1726,7 @@
 .tools {
   flex: none;
   width: 100%;
-  max-width: min(100%, calc((100dvh - var(--below, 431px)) * 16 / 9));
+  max-width: var(--pane-w);
   align-self: center;
   display: flex;
   align-items: center;
