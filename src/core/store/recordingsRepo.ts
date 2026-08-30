@@ -26,6 +26,19 @@ let dbPromise: Promise<IDBDatabase> | null = null
 
 function openDb(): Promise<IDBDatabase> {
   dbPromise ??= new Promise((resolve, reject) => {
+    const adopt = (db: IDBDatabase): void => {
+      // Browser may close the connection (e.g. storage eviction); reopen lazily.
+      db.onclose = () => {
+        dbPromise = null
+      }
+      // Hygiene for any future page that needs a versionchange: step aside
+      // instead of blocking it forever. See the note on DB_VERSION.
+      db.onversionchange = () => {
+        db.close()
+        dbPromise = null
+      }
+      resolve(db)
+    }
     const req = indexedDB.open(DB_NAME, DB_VERSION)
     req.onupgradeneeded = () => {
       if (!req.result.objectStoreNames.contains(STORE)) {
@@ -35,20 +48,22 @@ function openDb(): Promise<IDBDatabase> {
         req.result.createObjectStore(EDITS_STORE, { keyPath: 'recordingId' })
       }
     }
-    req.onsuccess = () => {
-      // Browser may close the connection (e.g. storage eviction); reopen lazily.
-      req.result.onclose = () => {
-        dbPromise = null
-      }
-      // Hygiene for any future page that needs a versionchange: step aside
-      // instead of blocking it forever. See the note on DB_VERSION.
-      req.result.onversionchange = () => {
-        req.result.close()
-        dbPromise = null
-      }
-      resolve(req.result)
-    }
+    req.onsuccess = () => adopt(req.result)
     req.onerror = () => {
+      // VersionError: this profile's DB is ABOVE v2 — the build that briefly
+      // bumped to v3 (live ~20 min on 2026-08-30) upgraded it. v3 is v2 plus
+      // an unused table, so attach at whatever version exists; a versioned
+      // open below the current version can never succeed and would otherwise
+      // brick the app for exactly the profiles that caught the bad window.
+      if (req.error?.name === 'VersionError') {
+        const anyVersion = indexedDB.open(DB_NAME)
+        anyVersion.onsuccess = () => adopt(anyVersion.result)
+        anyVersion.onerror = () => {
+          dbPromise = null
+          reject(anyVersion.error ?? new Error('recordingsRepo: failed to open IndexedDB'))
+        }
+        return
+      }
       dbPromise = null
       reject(req.error ?? new Error('recordingsRepo: failed to open IndexedDB'))
     }
