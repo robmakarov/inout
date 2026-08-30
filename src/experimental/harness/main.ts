@@ -632,6 +632,20 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'f16t2',
+    title: 'F16 spike T2 — what does the background render cost the person editing?',
+    detail:
+      'F16 says "editing is when the machine is idle" and the render lives in a worker, so the UI thread should barely notice. That is reasoning, and F16\'s gate refuses reasoning. Runs the same 16 ms scheduling ticker twice — once with nothing running, once while the production pre-render works — so the answer is a DELTA against this machine\'s own floor rather than a number that means nothing without a machine attached. A background job that makes editing stutter is worse than no background job.',
+    run: async (args) => {
+      const { runF16BackgroundCost } = await import('../perf/f16Transcode')
+      return runF16BackgroundCost({
+        takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined,
+        rung: typeof args?.rung === 'string' ? (args.rung as '540p' | '720p' | '1080p' | '1440p' | 'source') : undefined,
+        sampleSec: typeof args?.sampleSec === 'number' ? args.sampleSec : undefined,
+      })
+    },
+  },
+  {
     id: 'f16t1',
     title: 'F16 spike T1 — is a TRANSCODE actually several times faster than a full render?',
     detail:

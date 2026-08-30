@@ -37,6 +37,8 @@ import { blobStore, createPositionedWriter } from '@core/store'
 import { defaultEditState } from '@core/timeline'
 import type { Recording } from '@core/types'
 import { buildChannelFile, channel, existingFixture, fixtureKey } from './nativeRender'
+import { SchedulingDelayWatch } from './mainThreadWatch'
+import { cancelPrerender, prerenderKey, startPrerender, takePrerender } from '@core/compose/prerender'
 
 const MB = (bytes: number): number => Math.round((bytes / 1024 / 1024) * 10) / 10
 
@@ -63,11 +65,23 @@ interface LaneResult {
   timesRealtime: number | null
 }
 
+export interface T2Report {
+  /** UI-thread lateness with nothing running — the floor this machine has. */
+  idle: { ticks: number; totalLateMs: number; maxLateMs: number; p95LateMs: number }
+  /** The same, measured while the background pre-render runs. */
+  duringPrerender: { ticks: number; totalLateMs: number; maxLateMs: number; p95LateMs: number }
+  prerenderFinished: boolean
+  prerenderMs: number
+  verdict: string
+}
+
 export interface F16TranscodeReport {
   source: { width: number; height: number; fps: number; takeSec: number; sizeMB: number }
   high: { width: number; height: number; sizeMB: number; wallMs: number } | null
   lanes: LaneResult[]
   verdict: string[]
+  /** F16 spike T2 — see runF16BackgroundCost. Null unless asked for. */
+  t2?: T2Report
 }
 
 
@@ -135,6 +149,93 @@ async function transcode(
   const ms = Math.round(performance.now() - t0)
   await blobStore.remove(key).catch(() => undefined)
   return { ms, bytes }
+}
+
+
+/**
+ * F16 SPIKE T2 — WHAT DOES A BACKGROUND RENDER COST THE PERSON EDITING?
+ *
+ * The whole design says "editing is when the machine is idle", and the render
+ * lives in a worker, so the expectation is that the UI thread barely notices.
+ * That is a reasoning claim and F16's gate refuses reasoning, so it is measured
+ * against this machine's OWN floor: the same 16 ms ticker, once with nothing
+ * running and once while the pre-render works, so the answer is a DELTA rather
+ * than a number that means nothing without a machine attached to it.
+ *
+ * A background job that makes editing stutter is worse than no background job,
+ * because the user is looking at the thing it is stuttering.
+ */
+export async function runF16BackgroundCost(opts: {
+  sourceW?: number
+  sourceH?: number
+  sourceFps?: number
+  takeSec?: number
+  sourceMbps?: number
+  rung?: QualityTierId
+  sampleSec?: number
+} = {}): Promise<T2Report> {
+  const sourceW = opts.sourceW ?? 3024
+  const sourceH = opts.sourceH ?? 1964
+  const sourceFps = opts.sourceFps ?? 60
+  const takeSec = opts.takeSec ?? 60
+  const mbps = opts.sourceMbps ?? 24
+  const sampleSec = opts.sampleSec ?? 8
+
+  const key = fixtureKey(sourceW, sourceH, sourceFps, takeSec, mbps)
+  let frames = Math.round(takeSec * sourceFps)
+  if ((await existingFixture(key)) === null) {
+    const built = await buildChannelFile({
+      key, width: sourceW, height: sourceH, fps: sourceFps,
+      seconds: takeSec, mbps, budgetSec: 1800, label: 'screen',
+    })
+    frames = built.frames
+  }
+  const rawBlob = await blobStore.read(key)
+  const durationMs = Math.round((frames / sourceFps) * 1000)
+  const recording: Recording = {
+    id: newId('rec'),
+    createdAt: Date.now(),
+    durationMs,
+    channels: [channel('screen', key, sourceW, sourceH, sourceFps, durationMs, rawBlob.size)],
+  }
+  const settings = settingsForTier(tierById(opts.rung ?? '1080p'), recording)
+
+  // The floor, first and alone.
+  const idleWatch = new SchedulingDelayWatch()
+  idleWatch.start()
+  await new Promise((r) => setTimeout(r, sampleSec * 1000))
+  const idle = idleWatch.stop()
+
+  // The same ticker, while the background render works.
+  const t0 = performance.now()
+  startPrerender({ recording, edit: defaultEditState(recording), settings })
+  const busyWatch = new SchedulingDelayWatch()
+  busyWatch.start()
+  await new Promise((r) => setTimeout(r, sampleSec * 1000))
+  const duringPrerender = busyWatch.stop()
+
+  const taken = takePrerender(prerenderKey({ recording, edit: defaultEditState(recording), settings }))
+  let prerenderFinished = false
+  if (taken) {
+    try {
+      await taken
+      prerenderFinished = true
+    } catch {
+      prerenderFinished = false
+    }
+  }
+  cancelPrerender()
+
+  const deltaP95 = Math.round((duringPrerender.p95LateMs - idle.p95LateMs) * 10) / 10
+  return {
+    idle,
+    duringPrerender,
+    prerenderFinished,
+    prerenderMs: Math.round(performance.now() - t0),
+    verdict:
+      `p95 UI lateness ${idle.p95LateMs} ms idle -> ${duringPrerender.p95LateMs} ms during the ` +
+      `background render (delta ${deltaP95} ms); worst tick ${idle.maxLateMs} -> ${duringPrerender.maxLateMs} ms`,
+  }
 }
 
 export async function runF16Transcode(

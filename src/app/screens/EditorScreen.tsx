@@ -15,7 +15,13 @@ import {
 } from '@core/compose/quality'
 import { frameAspectFor, sourceFrameEnabled } from '@core/frame'
 import { takeRate } from '@core/rate'
-import { exportByBestPath } from '@core/compose'
+import {
+  cancelPrerender,
+  exportByBestPath,
+  exportWouldRender,
+  startPrerender,
+} from '@core/compose'
+import { prerenderEnabled } from '@core/compose/prerenderFlag'
 import { editsRepo, recordingsRepo } from '@core/store'
 import { analytics } from '@core/analytics'
 import { useAppStore } from '@app/state/store'
@@ -167,6 +173,41 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
     }, 400)
     return () => clearTimeout(t)
   }, [edit])
+
+  /**
+   * F16: START THE EXPORT BEFORE IT IS ASKED FOR.
+   *
+   * Robert, 2026-08-30: "max 60 fps must export fast on any old computer."
+   * Rendering faster cannot get there — a native 60 fps take is more decode and
+   * encode than the machine has — so the export has to be finished before the
+   * button is pressed. Editing is exactly when the machine is idle: capture is
+   * over and the render lives in a worker.
+   *
+   * DEBOUNCED HARDER THAN THE EDIT SAVE, and for a different reason: a save
+   * that fires mid-drag costs a small write, but a RENDER that fires mid-drag
+   * spends the machine on a file the next drag frame invalidates. 1.2 s of
+   * stillness is the signal that the user is looking rather than moving.
+   *
+   * Only when the export would actually RENDER — an instant copy or a smart cut
+   * is already fast, and pre-rendering one would spend a machine to save
+   * nothing. A miss costs nothing either: choose.ts falls straight through to
+   * rendering on demand, exactly as it did before this existed.
+   */
+  useEffect(() => {
+    if (!prerenderEnabled()) return
+    const chosen = resolveTier(tier, frameAspect, frameRate)
+    const settings = settingsForTier(chosen)
+    if (!exportWouldRender({ recording, edit, settings, allowPacketCopy: isDefaultTier(tier) })) {
+      cancelPrerender()
+      return
+    }
+    const t = setTimeout(() => startPrerender({ recording, edit, settings }), 1200)
+    return () => clearTimeout(t)
+  }, [recording, edit, tier, frameAspect, frameRate])
+
+  // A take that is left behind takes its pre-render with it: the file is for an
+  // export nobody is going to ask for now.
+  useEffect(() => () => cancelPrerender(), [recording.id])
 
   const discard = async () => {
     setConfirmOpen(false)

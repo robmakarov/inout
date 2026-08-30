@@ -1,6 +1,7 @@
 import { blobStore, recordingsRepo } from './index'
 import { pendingBlobKeys } from '@core/capture/recovery'
 import { SCRATCH_PREFIX } from '@core/compose/scratch'
+import { PRERENDER_PREFIX } from '@core/compose/prerender'
 
 /**
  * DELETE WHAT BELONGS TO NOTHING, AT EVERY BOOT — Robert, 2026-08-30: "we must
@@ -31,6 +32,11 @@ import { SCRATCH_PREFIX } from '@core/compose/scratch'
  *    also the file most likely to still be OPEN, which is how it broke the
  *    Reclaim button (below). scratch.ts owns these and sweeps its own stale
  *    ones at every export start; one fact, one home;
+ *  · a live PRE-RENDER (F16). Same shape as the scratch: unreferenced by any
+ *    Recording on purpose, because it is an export that has not been asked for
+ *    yet. prerender.ts owns these and sweeps its own at boot, before any job
+ *    starts — so a leftover from a previous page session is gone by the time
+ *    this runs, and one belonging to a LIVE job must not be touched.
  *  · `__` dev dump files, the same exclusion salvage.ts already makes.
  *
  * Failure is per-file and never fatal: a blob still locked by a worker that has
@@ -51,7 +57,9 @@ export interface ReclaimResult {
  * is how "Reclaim does nothing" looks from the outside.
  */
 function isSweepable(key: string): boolean {
-  return !key.startsWith('__') && !key.startsWith(SCRATCH_PREFIX)
+  return (
+    !key.startsWith('__') && !key.startsWith(SCRATCH_PREFIX) && !key.startsWith(PRERENDER_PREFIX)
+  )
 }
 
 async function keepSet(): Promise<Set<string>> {

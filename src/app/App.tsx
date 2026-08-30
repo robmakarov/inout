@@ -51,6 +51,11 @@ function Main() {
         void import('@core/store/reclaim')
           .then((m) => m.reclaimOrphanBlobs())
           .catch(() => undefined)
+        // F16: a pre-render belongs to the page session that started it. One
+        // left by a previous session is an export nobody is going to ask for.
+        void import('@core/compose/prerender')
+          .then((m) => m.sweepPrerenderBlobs())
+          .catch(() => undefined)
       })
   }, [])
 

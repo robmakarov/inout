@@ -34,7 +34,8 @@ import { isDefaultEdit } from '@core/timeline'
 import { chooseCopySource, type CopyOrigin } from './copySource'
 import { exportInstant } from './instant'
 import { exportRecording } from './pipeline'
-import { exportSmartCut } from './smartCut'
+import { prerenderKey, takePrerender } from './prerender'
+import { exportSmartCut, isPixelDefaultEdit } from './smartCut'
 import { smartCutEnabled } from './smartCutFlag'
 
 export type ExportPath = 'instant' | 'smartcut' | 'render'
@@ -84,6 +85,33 @@ function reasonOf(err: unknown): string {
 /** Rethrow immediately for a user abort — that is not a path being unavailable. */
 function throwIfAbort(err: unknown): void {
   if (err instanceof Error && err.name === 'AbortError') throw err
+}
+
+
+/**
+ * WOULD THIS EXPORT HAVE TO RENDER? — the question F16's pre-render asks before
+ * it spends the machine on anything.
+ *
+ * Read-only, and deliberately CONSERVATIVE: it says yes only when neither
+ * copying path can possibly apply, so a take whose export is already instant
+ * (or a smart cut) is never pre-rendered. Spending a machine to save nothing is
+ * the one way this feature could make the product worse, and under-triggering
+ * costs only the pre-render — the export itself behaves exactly as it always
+ * did either way.
+ */
+export function exportWouldRender(opts: {
+  recording: Recording
+  edit: EditState
+  settings?: ExportSettings
+  allowPacketCopy: boolean
+}): boolean {
+  const { recording, edit, settings, allowPacketCopy } = opts
+  const copy = chooseCopySource(recording, settings, { allowComposite: allowPacketCopy })
+  if (!copy.source) return true
+  // A copy source exists, so an unedited take is instant and a time-only edit
+  // is a smart cut. Anything that changes PIXELS cannot be copied through.
+  if (isDefaultEdit(recording, edit)) return false
+  return !isPixelDefaultEdit(recording, edit)
 }
 
 export async function exportByBestPath(opts: ChooseExportOptions): Promise<ChosenExport> {
@@ -145,6 +173,27 @@ export async function exportByBestPath(opts: ChooseExportOptions): Promise<Chose
       : 'not the default output geometry'
     declined.push({ path: 'instant', reason: why })
     declined.push({ path: 'smartcut', reason: why })
+  }
+
+  // F16: THE RENDER MAY ALREADY BE DONE. A job started at stop, for this exact
+  // (recording, edit, settings), is either finished or in flight — and taking
+  // an IN-FLIGHT one is as important as taking a finished one, because it means
+  // pressing export early costs the remainder rather than starting the same
+  // work twice. Never slower than before: a miss falls straight through.
+  const ready = takePrerender(prerenderKey({ recording, edit, settings }))
+  if (ready) {
+    try {
+      onProgress?.({ phase: 'finalizing', ratio: 0.99 })
+      const result = await ready
+      console.info('[compose] export served a render that was already made (F16)')
+      return { result, path: 'render', declined, copiedFrom: null, copyDeclined: copy.declined }
+    } catch (err) {
+      throwIfAbort(err)
+      // The pre-render failed or was cancelled under us. Render on demand,
+      // which is exactly what this function did before F16 existed.
+      declined.push({ path: 'render', reason: `pre-render unusable: ${reasonOf(err)}` })
+      console.info('[compose] the pre-made render was unusable, rendering now', err)
+    }
   }
 
   const result = await exportRecording({
