@@ -313,6 +313,12 @@ explains the first: the packet-copy maxAbs sits ON the band, so at 6 s it is a c
 it is simply red. G1 is now the highest-value instrument task left.
 
 READY NOW:
+  R2   THE NATIVE-RES EXPORT CRASHES CHROME'S GPU PROCESS  [HEAVY · BLOCKING · full brief under R2]
+       A long 3024x1964@60 take exported at 1080p/1440p lags the machine, crashes the GPU process
+       (Chrome's own header vanishes), kills every decoder with it and loses the render. Once it took
+       the machine to a manual restart. 5 s of the same settings is fine. Mitigations shipped, cause
+       NOT found. Read R2 before touching it — three plausible causes are already ruled out with
+       reasons, and no rig here can reproduce it.
   F13-FLIP  Robert's own eye           [ROBERT OWED]  F13 IS BUILT, VERIFIED ON PROD AND OFF BY DEFAULT
                                              (handoff under the task). Its last gate is yours:
                                              open https://inout-kappa.vercel.app/?sourceframe=1 on
@@ -538,6 +544,102 @@ Every entry below keeps its FULL evidence in BACKLOG.md; what is here is the ass
 THE G LANE OUTRANKS THE B LANE. Note 10 (the rig is wrong before the product is) and note 17 (a gate
 that cannot fail is not a gate) are why: three of the four G tasks describe a gate that has been
 reporting a verdict it did not measure, and a B task's handoff is worth exactly what its gates are.
+
+## R2 the native-res session — WHAT IS OPEN AFTER 2026-08-30, and it is one bug and one trade
+[the open bug is HEAVY and blocking; everything else here is context a fresh session needs]
+
+READ THIS FIRST IF YOU ARE PICKING UP THE 60 FPS / NATIVE RESOLUTION WORK. Robert spent an evening
+and a night driving `?sourceres=1&sourcefps=1&quality=max` on a 3024x1964 screen with a game, a
+YouTube video and a second browser running. Everything below was found by him hitting it, and most of
+the fixes were mine to make because most of the defects were mine.
+
+THE ONE BUG THAT IS STILL OPEN, AND IT IS THE BLOCKER:
+  EXPORTING A LONG NATIVE-RES TAKE CRASHES CHROME'S GPU PROCESS. On a ~4-minute 3024x1964@60 take,
+  exporting at 1080p or 1440p (both of which must RE-RENDER — see the trade below) lags the whole
+  machine, then "even chrome header dissapears for second and all screen skeleton", then a decoding
+  error, then back to the editor. Once it took the machine down to a MANUAL RESTART. A 5-second take
+  of the same settings exports fine, so it is resource exhaustion with the length of the job.
+  THE HEADER VANISHING IS THE DIAGNOSIS: that is the GPU process dying and taking every decoder in
+  the tab with it. "Decoding error" is the symptom. Hours were spent looking at the decoder before
+  that detail arrived; do not repeat them.
+  RULED OUT, with the reasons, so they are not re-checked:
+   · the render does NOT leak decoded frames. It looks exactly like it does — `screen` and `camera`
+     samples are taken every frame and never closed — but VideoChannelReader OWNS them and closes the
+     previous one as it advances, and says so on the method. Closing them there is a use-after-free.
+     I nearly shipped that.
+   · the render does NOT buffer its output in memory: it muxes to an OPFS scratch, O(1), with
+     BufferTarget only as a fallback where the scratch cannot open.
+   · it is not the encoder queue: mediabunny holds four frames and blocks.
+  DONE ALREADY, none of it a proven cure: big renders yield a macrotask every 30 frames so they
+  cannot monopolise the machine (render.ts PACE_ABOVE_PIXELS); the decoder is opened with
+  `optimizeForLatency`, which is a memory hint in effect since a decoded 3024x1964 frame is
+  GPU-backed; and a decode failure now ENDS THAT READER instead of throwing, so the render finishes
+  with a held frame and reports where and why by name.
+  WHERE TO GO NEXT: measure GPU memory across a long render (chrome://gpu, or the memory tab) and
+  find what grows. The suspects left are mediabunny's own decode-ahead inside VideoSampleSink, and
+  the sheer rate of 6 Mpx GPU allocations. A software-decode fallback for very large renders is the
+  crude answer if nothing else holds. NO RIG HERE CAN REPRODUCE IT — a synthetic 3024x1964@60 source
+  costs more to paint than to encode, which is its own finding (below).
+
+THE TRADE, WHICH IS NOT A BUG AND WILL BE ASKED AGAIN:
+  "this render not fucking instant at all, nor 1080 nor 1440". It cannot be. An instant export is a
+  PACKET COPY — the bytes cross untouched — so it exists only where the output geometry already
+  exists on disk. On a 3024x1964 take that is the Source step and nothing else. Before max mode the
+  composite was recorded at 1920x1080, so 1080p copied it instantly; max skips that second encoder,
+  which is what stopped his captures collapsing, and the bill moves to export. A take that offers a
+  Source step now defaults to it, so the common path is a copy again.
+
+WHAT MAX QUALITY IS, after his rulings (they overruled me twice and he was right both times):
+  · "max must not have ladder" and "max must have perfect picture all the time, we need to search
+    ways to make it work not implement auto reducing quality". So max refuses nothing in advance and
+    steps nothing down; the ladder is reachable at `?maxladder=1` and off ("it must be possible
+    there, but off for now").
+  · Max is made to work by OPENING FEWER ENCODERS, not by throttling: at native resolution the
+    composite is not recorded at all. His screen+camera take wanted 555 Mpx/s across three encoders
+    against the ~416 his machine measures; without the composite it is 411.
+  · I argued for keeping the ladder in max (dropped frames are a slideshow where a lower rate is
+    smooth — his take 3 proved that cost is real). He overruled it. The argument is preserved in
+    captureQuality.ts so nobody re-litigates it blind.
+
+NUMBERS FROM HIS MACHINE, measured not assumed, worth keeping:
+  one hardware AVC encoder, idle, no source cost —
+    1920x1080  175 fps  362 Mpx/s     3024x1964   70 fps  416 Mpx/s
+    2560x1662   96 fps  410 Mpx/s     3840x2160   52 fps  435 Mpx/s
+  and at 3024x1964, interleaved so load drift hits both equally:
+    avc quality 446/456 Mpx/s (319 KB) · avc realtime 404 (319 KB) · hevc quality 412/416 (294 KB)
+  So `latencyMode: 'quality'` is ~13 % faster than 'realtime' for the same bytes and no frame
+  reordering — the raw channel uses it now, because a raw channel feeds nothing live. An earlier
+  reading making HEVC 41 % faster was load noise; repeated properly AVC-quality wins on speed and
+  HEVC is 8 % smaller, which is a SIZE-CODEC question and not a throughput one.
+  3024x1964@60 needs 356 Mpx/s. It fits on ONE encoder and does not fit on two.
+
+THE INSTRUMENT PROBLEM THAT BLOCKED EVERY ATTEMPT TO VERIFY THIS:
+  no rig here can produce a 3024x1964@60 source. The synthetic screen is a rAF-painted canvas and
+  painting it costs ~209 Mpx/s — more than the encoder it is meant to feed — so every run starves the
+  source and indicts the rig rather than the product. `scripts/fps-check.mjs --query=` was added to
+  drive arbitrary flags at arbitrary sizes and still cannot answer this. `anchor-check.mjs` already
+  has the Chrome flags for REAL getDisplayMedia (`--auto-accept-this-tab-capture`); a rig built on
+  those, at a real window size, is the missing instrument and is worth building before the next
+  attempt at the GPU crash.
+
+STILL OPEN, SMALLER:
+  · TAB AUDIO DIES MID-TAKE and the rescue does not always take (his: silent from 95s, 2 attempts;
+    and 234s, 4 attempts). measuredAudio.ts already names the Chromium class and rebuilds the tap on
+    a track clone. The structural fix is X11: the PCM crosses the MAIN THREAD, which is the most
+    contended and most deprioritised resource in exactly the situation a screen recorder is used in —
+    video encodes in a worker and survives, audio does not.
+  · The take-diagnostics banners are behind `/?test` on his instruction, after twice reporting a
+    healthy take as damaged. The bar for showing them to a user is higher than I met.
+
+DONE THIS SESSION, so it is not re-derived: the odd-side fix (a 2559-wide track made every AVC config
+unsupported and dropped the whole channel to a SOFTWARE encoder — that was the original freeze); the
+keyframe storm (the raw encoder asked for a keyframe on EVERY frame while cold, because the
+first-frame test read a counter incremented in the async output callback); single generation reaching
+native resolution; the encoder measured at mount so the rate is decided by measurement and not a
+constant; the wedge ladder's oscillation (it climbed back on ONE good take, which walked the machine
+onto the request that had just wedged it — that was "wedges every second record"); orphaned blobs
+(one take that froze left 1,138 MB with nothing able to see or delete it) now swept at every boot;
+a disk guard that stops a take before the quota does; the takes list; and `/?test` itself.
 
 ## D1 inout-dev — vision AND project data for the agent working on ANOTHER repo, at ~1.5k tokens
 ##     [medium, 3 lanes · Robert 2026-08-29: "i need real tool that will have vision and data from
