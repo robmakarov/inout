@@ -383,3 +383,18 @@ Robert chose his own name over a neutral word — the remote is github.com/robma
 address already sits in tracked files, so it publishes nothing new. Branch convention is now
 `task/<id>`; branches already open keep their `ee/` names because they are real refs. Git author
 identity INOUT TD <td@inout.local> → INOUT <dev@inout.local>, still depersonalized.
+
+robert 2026-08-30 (1) — THE STUCK SCREEN SHARE IS THE APP'S PROBLEM TO ANSWER, AND THE ANSWER MAY
+NOT BE A CONSOLE ("i will not do anything in console and no keeping for now, fix it, what will users
+do if this happens?"). Two rulings in one line. (a) NO HELD SHARE, for now: acquiring the screen once
+per session and keeping it alive across takes would cut the number of getDisplayMedia calls — and so
+the wedge surface — from one per take to one per session, and it was offered as the only change that
+removes the failure rather than containing it. Declined, because it lights the macOS sharing
+indicator while nothing is recording, which breaks "devices are touched ONLY after the record click".
+The rule stands; the option stays available if the wedge outlives everything else. (b) A REMEDY THAT
+NEEDS A TERMINAL IS NOT A REMEDY. `tccutil reset ScreenCapture` cures the macOS half and no user will
+ever run it, so the app now ships the fix as a button: the notice opens System Settings straight onto
+Privacy & Security → Screen & System Audio Recording via the `x-apple.systempreferences:` scheme
+(macOS only; Windows has no such grant and Wayland refuses rather than hangs). It appears on the
+SECOND stall in a row, because the first is answered by the app's own refresh at no cost to the user
+and a second one after that has ruled the page out.

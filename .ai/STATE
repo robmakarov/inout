@@ -25,10 +25,21 @@ phase: MVP validation (2026-07-16)
   toggle the browser off and on, and look for the macOS re-authorisation dialog hiding behind a
   window, which stalls every share and survives every ⌘Q. The refreshed page shows that escalated text
   too, since that is the screen the user actually reads before deciding what to do.
-  WHAT THIS DOES NOT DO: it does not stop the FIRST wedge. That one is Chrome's/macOS's, and the only
-  change that would remove the failure surface rather than contain it is acquiring the share ONCE per
-  session and holding it across takes — which breaks "devices are touched ONLY after the record click"
-  and is Robert's call, not ours.
+  AND THE WAY OUT IS A BUTTON NOW, because a user has no terminal (Robert: "i will not do anything in
+  console … what will users do if this happens?"). From the SECOND stall in a row the notice carries
+  "Open Screen Recording settings", which navigates to `x-apple.systempreferences:` and lands System
+  Settings on Privacy & Security → Screen & System Audio Recording — the pane with the browser's own
+  toggle on it — with one line under it for the part macOS insists on (toggle, ⌘Q, reopen). macOS only:
+  Windows has no such grant and Wayland REFUSES rather than hangs, so elsewhere the button would point
+  at a setting that does not exist. Second, not third: the first stall is answered by the app's own
+  refresh at no cost to the user, and a second one after that has ruled the page out — waiting for a
+  third is waiting for someone to give up. The text shrank to two sentences when the button took over
+  the instructions.
+  WHAT THIS DOES NOT DO: it does not stop the FIRST wedge. That one is Chrome's/macOS's. The only
+  change that would remove the failure surface rather than contain it — acquiring the share ONCE per
+  session and holding it across takes — was offered and DECLINED for now (DECISIONS 2026-08-30 (1)):
+  it lights the macOS sharing indicator while nothing is recording, and "devices are touched ONLY
+  after the record click" stands.
 
 - QUALITY IS ONE DECISION NOW, MADE BEFORE THE TAKE, AND IT BINDS BOTH HALVES (UI1, 2026-08-30,
   Robert's eight-item UI pass: "make chatgpt/claudecode effort-like slider for our quality choosing …

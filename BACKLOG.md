@@ -41,18 +41,6 @@ instrument defects — gates that report a verdict they did not measure. Unmarke
 deliberately not promoted: already a task (F14/F15/F16, the Safari mic P8), waiting only on Robert's
 ear or eye, or the screen wedge, whose cause is Chrome's.
 
-- [P0 — NEEDS ROBERT'S RULING, NOT CODE] **the screen is re-acquired on every single take, and every
-  acquisition is a chance to wedge.** 2026-08-30: four stalls in a row on his machine, two Chrome
-  relaunches in between, all four on `getDisplayMedia`. The document-level poison is fixed (a stuck
-  request can no longer block the next press — `displayInflight.ts`) and the advice no longer loops,
-  but the FIRST wedge is untouched and cannot be fixed from the page: Chrome takes the share and never
-  delivers it. THE ONLY CHANGE THAT REMOVES THE FAILURE SURFACE rather than containing it is asking
-  ONCE per session instead of once per take — acquire the share when the Screen chip goes on (or on the
-  first record) and HOLD it across stop → record → stop, which is what `session.pause()` already does
-  for a held take (F6). Cost, and it is the whole question: the macOS sharing indicator would be lit
-  while he is on the capture screen and not yet recording, which breaks the standing product rule that
-  devices are touched ONLY after the record click. That rule is Robert's and so is this trade.
-
 - [~~P0~~ FIXED 2026-08-30] **"?sourcefps=1 - record froze on game tab again"** (Robert). NOT the game
   and NOT 60 fps. REPRODUCED ON A QUIET MACHINE WITH NO GAME, from his own configuration
   (`screensize=3024x1964`, sourcefps on, native res at its shipped default), against prod — and the
