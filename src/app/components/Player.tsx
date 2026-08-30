@@ -580,7 +580,40 @@ export function Player({
   // `measuredAspect` overrides it once a decoder has actually opened the take's
   // own video — see the note on onMeasuredAspect.
   const frameAspect = measuredAspect ?? frameAspectFor(recording)
-  const active = activeChannelsAt(recording, edit, pb.timeMs)
+  /**
+   * WHAT TO DRAW AT THIS INSTANT — and the take's first frames are a special
+   * case that cost Robert the camera drag.
+   *
+   * Devices do not arm on the same millisecond. The take's zero is the EARLIEST
+   * channel of any kind, which is normally the microphone, so the video
+   * channels typically begin a few milliseconds later: measured on a take here,
+   * mic at 0 and both video channels at 4 ms. That is a real, correct hole —
+   * for 4 ms the take genuinely is audio-only — and `activeChannelsAt` reports
+   * it faithfully.
+   *
+   * The editor parks its playhead at 0, so it opened INSIDE that hole: no video
+   * element drawn, a black stage, and — because `.is-hidden` is
+   * `visibility: hidden`, which removes an element from hit testing — a camera
+   * PiP that could not be grabbed at all. Robert: "draging camera dont work …
+   * it was working before, i m almost sure". He was right to be unsure: it
+   * works the moment the playhead moves off zero, and on any take whose video
+   * happens to start first.
+   *
+   * So the first `HEAD_GRACE_MS` of a take are drawn as the composition the
+   * take OPENS with, rather than as the arming noise they are. The elements are
+   * still seeked to the real instant — a video seeked before its own start
+   * clamps to its first frame — so this changes which surfaces are visible, not
+   * what they show. Nothing past the head window is touched, so a genuine
+   * mid-take camera gap still hides the camera.
+   *
+   * PRESENTATION ONLY. `compose` calls `activeChannelsAt` itself and is
+   * untouched: the exported file keeps exactly the frames it always had.
+   */
+  const HEAD_GRACE_MS = 150
+  // Clamped to the take: a take shorter than the grace window must not be
+  // evaluated past its own end, which would draw nothing at all.
+  const headAt = Math.min(HEAD_GRACE_MS, Math.max(0, pb.durationMs - 1))
+  const active = activeChannelsAt(recording, edit, Math.max(pb.timeMs, headAt))
   // Slot is decided per composition, not per instant, so the camera never
   // jumps between PiP and full-frame across momentary screen gaps.
   const screenInComposition = recording.channels.some(
