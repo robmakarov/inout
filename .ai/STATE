@@ -112,7 +112,7 @@ phase: MVP validation (2026-07-16)
   bottom of screen layout and happening further if i switch app screen, independetly, and i want it
   sirvive refresh and continue, and several rendering at the same time possible too."
   compose/exportJobs.ts owns it: pressing Export (or For AI — same lane) creates a PERSISTED job
-  (jobsRepo, IndexedDB v3) and returns immediately; the editor never locks, because the job
+  (jobsRepo) and returns immediately; the editor never locks, because the job
   snapshotted the edit at the press. The dock (ExportDock, fixed bottom-centre, rendered by App on
   every screen) shows one strip per job — real %, phase, measured ETA, a Cancel that reaches the
   worker — and a finished job becomes the old saved strip (Save again · cloud link · dismiss).
@@ -123,6 +123,15 @@ phase: MVP validation (2026-07-16)
   says it stopped, and done/failed rows expire after 24 h (the file is in Downloads; the row is a
   convenience, not an archive). Duplicate press of the same output JOINS the running job (same
   argument as F16, one level up); a different tier is a second, genuinely parallel job.
+  THE JOBS TABLE IS ITS OWN DATABASE (`inout-jobs`), AND THE `inout` VERSION CAN NEVER GO UP
+  AGAIN — the first cut bumped it 2→3 and WEDGED PROD WITHIN THE HOUR, found by driving it: an
+  IndexedDB version bump needs a versionchange that ANY old-version connection blocks forever (an
+  old build's tab, a bfcached page — nothing shipped ever registered onversionchange), and every
+  open issued after the blocked upgrade queues behind it, so boot recovery hung silently and
+  STOP() HUNG SAVING THE RECORDING — a lost take, on every profile with an old tab anywhere. A
+  brand-new database has no old holders on any profile, so it opens instantly, everywhere.
+  Connections now close themselves on versionchange (hygiene shipped for the future), but tabs
+  already in the field never will; the rule is pinned as a comment on DB_VERSION.
   PARALLEL EXPORTS MADE THE SCRATCH SWEEP A WEAPON: each export worker carries its own scratch.ts
   instance, so worker B's start-of-export sweep read worker A's half-written scratch as a leftover
   and would have deleted it mid-write. Scratch keys carry their birth time now and the sweep skips
