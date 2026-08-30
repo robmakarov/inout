@@ -16,6 +16,8 @@ import { detectCapabilities } from '@core/capabilities'
 import { detectPlatform, evaluateSupport } from '@core/platform'
 import { analytics } from '@core/analytics'
 import { DEFAULT_FRAME_ASPECT, aspectOf, frameForAspect, sourceFrameEnabled } from '@core/frame'
+import { clampPose, defaultCameraPose, poseToRect, type CameraGeometry } from '@core/timeline'
+import type { CameraPose } from '@core/types'
 import { prefetchEditorChunk } from '@app/editorChunk'
 import { useInstallPrompt } from '@app/hooks/useInstallPrompt'
 import {
@@ -50,13 +52,21 @@ import { TimerPill } from '@app/components/TimerPill'
 import { AudioLevelRing } from '@app/components/AudioLevelRing'
 import { Icon } from '@app/components/Icon'
 
-function StreamVideo({ stream, className }: { stream: MediaStream; className: string }) {
+function StreamVideo({
+  stream,
+  className,
+  style,
+}: {
+  stream: MediaStream
+  className: string
+  style?: React.CSSProperties
+}) {
   const ref = useRef<HTMLVideoElement>(null)
   useEffect(() => {
     const el = ref.current
     if (el && el.srcObject !== stream) el.srcObject = stream
   }, [stream])
-  return <video ref={ref} className={className} autoPlay muted playsInline />
+  return <video ref={ref} className={className} style={style} autoPlay muted playsInline />
 }
 
 const STEP_NOUN: Record<ArmingTimelineEntry['step'], string> = {
@@ -188,6 +198,29 @@ export function CaptureScreen() {
   const [compositeSize, setCompositeSize] = useState<{ width: number; height: number } | null>(null)
   const previewCanvasRef = useRef<HTMLCanvasElement>(null)
   const finishingRef = useRef(false)
+  /**
+   * UI1 — WHERE THE CAMERA IS, WHILE THE TAKE RUNS. Robert asked to drag the
+   * small camera view during recording, and it had never been draggable there:
+   * the editor's PiP is a keyframe track over a finished take, and the capture
+   * preview only ever drew the default corner.
+   *
+   * It matters most here and not in the editor, because the thing you are
+   * trying not to cover is on screen WHILE you record. Null = the default
+   * corner, and a take nobody drags is byte-identical to one made before this.
+   */
+  const [pipPose, setPipPose] = useState<CameraPose | null>(null)
+  useEffect(() => {
+    if (!session) setPipPose(null)
+  }, [session])
+  /** Live gesture. The ref is the truth — a flick can move and release inside
+   *  one task, and a state read in the release handler would be stale. */
+  const pipDrag = useRef<{
+    startX: number
+    startY: number
+    from: CameraPose
+    stageW: number
+    stageH: number
+  } | null>(null)
 
   const finishRecording = async () => {
     const s = useAppStore.getState().session
@@ -501,6 +534,67 @@ export function CaptureScreen() {
           960,
         )
 
+  /**
+   * UI1 — the PiP's geometry, in the SAME functions the compositor and the
+   * editor use (`clampPose` / `poseToRect`). Three renderers, one arithmetic:
+   * what is dragged here is what the composite writes and what the editor
+   * re-opens on.
+   */
+  const camGeometry: CameraGeometry = {
+    frameAspect: previewBox.width / previewBox.height,
+    cameraAspect: liveTrackAspect(cameraStream) ?? 4 / 3,
+  }
+  const camPose = clampPose(pipPose ?? defaultCameraPose(camGeometry), camGeometry)
+  const camRect = poseToRect(camPose, camGeometry)
+  const pipStyle: React.CSSProperties = {
+    left: `${camRect.leftFrac * 100}%`,
+    top: `${camRect.topFrac * 100}%`,
+    width: `${camRect.widthFrac * 100}%`,
+    height: `${camRect.heightFrac * 100}%`,
+  }
+  /** The PiP slot only exists when a screen is being composited under it. */
+  const pipMovable = !!session && !!cameraStream && !!screenStream
+
+  const beginPipDrag = (e: React.PointerEvent) => {
+    const stage = (e.currentTarget as HTMLElement).parentElement
+    if (!stage) return
+    e.preventDefault()
+    const r = stage.getBoundingClientRect()
+    pipDrag.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      from: camPose,
+      stageW: Math.max(1, r.width),
+      stageH: Math.max(1, r.height),
+    }
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {
+      // synthetic pointer — capture is a nicety, the gesture still works
+    }
+  }
+
+  const movePipDrag = (e: React.PointerEvent) => {
+    const g = pipDrag.current
+    if (!g || !session) return
+    const next = clampPose(
+      {
+        ...g.from,
+        xFrac: g.from.xFrac + (e.clientX - g.startX) / g.stageW,
+        yFrac: g.from.yFrac + (e.clientY - g.startY) / g.stageH,
+      },
+      camGeometry,
+    )
+    setPipPose(next)
+    // Sent on every move, not on release: the compositor is what the user is
+    // watching, and a PiP that only jumps when you let go is not a drag.
+    session.setCameraPose(next)
+  }
+
+  const endPipDrag = () => {
+    pipDrag.current = null
+  }
+
   return (
     <div className={`capture${recording ? ' capture--recording' : ''}`}>
       {/* UI1: the page's own column. The takes list lives IN it rather than
@@ -537,21 +631,6 @@ export function CaptureScreen() {
           and neither could anyone: the app opened the newest recording at boot
           and there was no other route in. */}
       {!session && !arming && <TakesList />}
-      </div>
-      {!session && testPanelEnabled() && (
-        <Suspense fallback={null}>
-          <TestPanel />
-        </Suspense>
-      )}
-      {arming && armingLabel && <div className="capture__arming">{armingLabel}</div>}
-      {session && <TimerPill elapsedMs={elapsedMs} remainingMs={remainingMs} />}
-      {recording && stalled.length > 0 && (
-        <div className="capture__stalled" role="alert">
-          {stalled.map((k) => CHANNEL_META[k].label).join(' & ')} frozen — recording a still image.
-          Re-share your whole screen to fix it.
-        </div>
-      )}
-
       {recording && (
         <div className="capture__preview">
           {/* Live WYSIWYG of the final composition — the very same stage
@@ -586,7 +665,24 @@ export function CaptureScreen() {
             {!compositePreview && cameraStream && (
               <StreamVideo
                 stream={cameraStream}
-                className={screenStream ? 'stage__pip' : 'stage__full'}
+                className={screenStream ? 'stage__pip stage__pip--posed' : 'stage__full'}
+                style={screenStream ? pipStyle : undefined}
+              />
+            )}
+            {/* UI1 — the grab target. It is its own element rather than
+                handlers on the video because the composite preview has no video
+                to put them on: when the compositor is painting, the PiP is
+                pixels in a canvas, and this transparent box is the only thing
+                there is to take hold of. Same rect either way. */}
+            {pipMovable && (
+              <div
+                className={`stage__pipdrag${pipDrag.current ? ' is-dragging' : ''}`}
+                style={pipStyle}
+                onPointerDown={beginPipDrag}
+                onPointerMove={movePipDrag}
+                onPointerUp={endPipDrag}
+                onPointerCancel={endPipDrag}
+                title="Drag to move the camera"
               />
             )}
             {screenStream && !cameraStream && audioStream && (
@@ -604,6 +700,20 @@ export function CaptureScreen() {
               </div>
             )}
           </div>
+        </div>
+      )}
+      </div>
+      {!session && testPanelEnabled() && (
+        <Suspense fallback={null}>
+          <TestPanel />
+        </Suspense>
+      )}
+      {arming && armingLabel && <div className="capture__arming">{armingLabel}</div>}
+      {session && <TimerPill elapsedMs={elapsedMs} remainingMs={remainingMs} />}
+      {recording && stalled.length > 0 && (
+        <div className="capture__stalled" role="alert">
+          {stalled.map((k) => CHANNEL_META[k].label).join(' & ')} frozen — recording a still image.
+          Re-share your whole screen to fix it.
         </div>
       )}
 

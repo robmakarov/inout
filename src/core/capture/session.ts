@@ -34,6 +34,7 @@ import type {
   ChannelDiagnostics,
   ChannelKind,
   ChannelRecording,
+  CameraPose,
   CompositeRecording,
   DisplaySurfaceKind,
   MediaKind,
@@ -1844,6 +1845,14 @@ class Session implements CaptureSession {
     ch.resolveStopped()
   }
 
+  /** UI1: where the camera PiP has been dragged to during this take. */
+  private cameraPose: CameraPose | null = null
+
+  setCameraPose(pose: CameraPose | null): void {
+    this.cameraPose = pose
+    this.composite?.setCameraPose?.(pose)
+  }
+
   setChannelActive(kind: ChannelKind, active: boolean): void {
     // Allowed while PAUSED too: turning a kind off during a pause is a natural
     // thing to do, and `suspended` is what resume() reads to decide which
@@ -2530,6 +2539,9 @@ class Session implements CaptureSession {
       // the export ladder is capped by what was chosen for IT — see
       // Recording.qualityStep.
       qualityStep: loadQualityStep(),
+      // UI1: the pose the composite was written with, so the editor opens on
+      // the composition this take actually holds.
+      ...(this.cameraPose ? { cameraPose: this.cameraPose } : null),
     }
 
     /**

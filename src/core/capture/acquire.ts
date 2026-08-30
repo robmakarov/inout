@@ -33,6 +33,7 @@ import {
   type DisplayRequestLevel,
 } from './displayWedge'
 import { displayRequestOutstanding, markDisplayRequest } from './displayInflight'
+import { beginDisplayForensics, describeForensics, noteScreenDelivered } from './stallForensics'
 import { knownGranted, rememberGrant, type DeviceGrant } from './grants'
 
 export interface AcquiredChannel {
@@ -1101,6 +1102,9 @@ export function acquireChannelsProgressive(
   /** The live request's handle — the timeout path marks it stuck so the NEXT
    *  press knows this frame can no longer ask (displayInflight.ts). */
   let displayReq: { stuck: () => void } | null = null
+  /** The live request's forensic watch — read again at the timeout, where its
+   *  report is the only witness statement a wedge ever gives. */
+  let displayForensics: ReturnType<typeof beginDisplayForensics> | null = null
   const canDisplay = typeof navigator.mediaDevices?.getDisplayMedia === 'function'
   // Which rung of the wedge ladder this request rides on — 0 unless this
   // machine has had a share taken and never delivered (displayWedge.ts). No
@@ -1180,6 +1184,11 @@ export function acquireChannelsProgressive(
       // From here this document owns an open request until Chrome settles it —
       // which, in the wedge, is never. The next press must not add a second.
       displayReq = markDisplayRequest(rawDisplay)
+      // …and from here the forensics watch what leaks out of Chrome around it
+      // (focus and time — all a page can see), so a stall names its suspect
+      // instead of adding one to a count (stallForensics.ts).
+      const forensics = beginDisplayForensics()
+      displayForensics = forensics
       displayPromise = withTimeout(
         withTimeout(rawDisplay, PICKER_SETTLE_MS, 'getDisplayMedia (picker closed)', pickerClosed()),
         DISPLAY_TOTAL_BUDGET_MS,
@@ -1199,9 +1208,13 @@ export function acquireChannelsProgressive(
         console.warn(
           `[capture] screen request still outstanding at ${DISPLAY_STALL_NOTICE_MS} ms — reading it as ${stall}`,
         )
+        console.warn(`[capture:forensics] ${describeForensics(forensics.report())}`)
         handlers.onStall?.(displayStallMessage(stall, detectPlatform().browser, 'waiting'), stall)
       }, DISPLAY_STALL_NOTICE_MS)
-      const clearStall = (): void => clearTimeout(stallTimer)
+      const clearStall = (): void => {
+        clearTimeout(stallTimer)
+        forensics.settle()
+      }
       rawDisplay.then(clearStall, clearStall)
     }
   } else if (config.systemAudio) {
@@ -1260,6 +1273,9 @@ export function acquireChannelsProgressive(
       // Full-request success proves the machine healthy again — clears the
       // wedge mark. A lower rung keeps it; it costs nothing visible.
       rememberDisplaySuccess(displayLevel)
+      // …and the delivery count is what the forensics compare a stall against
+      // ("first take after a Chrome launch" is the pattern under test).
+      noteScreenDelivered()
       if (config.systemAudio) {
         const audio = display.getAudioTracks()[0]
         if (audio) {
@@ -1336,11 +1352,25 @@ export function acquireChannelsProgressive(
         // and never delivered only in the OTHER case, and only that one marks
         // the machine so the NEXT click sends the smaller request.
         if (stall === 'wedge') rememberDisplayWedge()
+        // THE WITNESS STATEMENT, printed at the failure too: the stall notice
+        // at 12 s is easy to scroll past, and the analytics event is where the
+        // clustering question ("always the first take after a Chrome launch?")
+        // gets its answer across machines.
+        const witness = displayForensics?.report()
+        if (witness) console.warn(`[capture:forensics] ${describeForensics(witness)}`)
         analytics.track('display_wedge', {
           conservative: displayLevel > 0,
           level: displayLevel,
           wedgeCount: displayWedgeCount(),
           stall,
+          ...(witness
+            ? {
+                focus: witness.focus,
+                deliveriesThisSession: witness.deliveriesThisSession,
+                pageAgeMs: witness.pageAgeMs,
+                waitedMs: witness.waitedMs,
+              }
+            : {}),
         })
       }
       fail(toFailure('screen', err, timedOut, stall))

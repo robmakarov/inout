@@ -68,6 +68,14 @@ export function defaultEditState(r: Recording): EditState {
     globalTrimStartMs: 0,
     globalTrimEndMs: r.durationMs,
     channels: r.channels.map(defaultChannelEdit),
+    // UI1: a take whose PiP was moved DURING capture opens on that composition.
+    // The composite was written with this pose and the default export copies
+    // that file, so an editor that started from the default corner would be
+    // previewing a frame the export cannot produce. Absent on every take made
+    // before the PiP could be moved during a take, which is the identity.
+    ...(r.cameraPose
+      ? { camera: { keyframes: [{ ...r.cameraPose, atMs: 0 }] } }
+      : null),
   }
 }
 

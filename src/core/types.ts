@@ -265,6 +265,14 @@ export interface Recording {
    * silently. */
   stalled?: ChannelKind[]
   /**
+   * UI1 — WHERE THE CAMERA PiP WAS WHEN THE TAKE STOPPED, if it was moved
+   * during capture. The composite holds this pose, so the editor has to open
+   * with it or the preview stops predicting the file (the default export
+   * packet-copies that composite). Absent = the default corner, which is every
+   * take made before the PiP could be moved during a take.
+   */
+  cameraPose?: CameraPose
+  /**
    * UI1 — THE QUALITY CEILING THIS TAKE WAS RECORDED UNDER (`QualityStepId`).
    *
    * Robert: "make it not possible to choose higher quality that was choosen
@@ -533,6 +541,19 @@ export interface CaptureSession {
    * A kind that was never armed can be turned on the same way.
    */
   setChannelActive(kind: ChannelKind, active: boolean): void
+  /**
+   * UI1 — MOVE THE CAMERA PiP WHILE THE TAKE RUNS. Null restores the default
+   * corner. It is the ONE place during capture where the composition is the
+   * user's to change, and it is here rather than only in the editor because the
+   * thing you are trying not to cover is on screen while you record, not after.
+   *
+   * The pose is written into the COMPOSITE, so it is in the recorded file, and
+   * it is carried on the finished Recording so the editor opens with the PiP
+   * where it was put — see Recording.cameraPose. Without that second half the
+   * editor would show the default corner over a file that has the moved one,
+   * which is the badge-disagrees-with-the-path bug in a different costume.
+   */
+  setCameraPose(pose: CameraPose | null): void
   /**
    * F6 — pause the take without releasing anything. Every live channel closes
    * its current segment; the tracks, the streams and the wake lock stay. A

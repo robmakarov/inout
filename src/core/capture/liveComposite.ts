@@ -8,7 +8,7 @@
  */
 import { adoptedFrame } from '@core/frame'
 import { blobStore } from '@core/store'
-import type { CompositeRecording } from '../types'
+import type { CameraPose, CompositeRecording } from '../types'
 import { SourceLiveness, type LivenessEvent } from './sourceLiveness'
 
 /**
@@ -177,6 +177,14 @@ export interface LiveCompositeHandle {
    * save. Absent = the caller keeps its own preview.
    */
   attachPreview?(canvas: HTMLCanvasElement): Promise<boolean>
+  /**
+   * UI1 — move the camera PiP while the take runs. OPTIONAL, and v1 does not
+   * implement it: v1 composites on the MAIN thread from the <video> elements
+   * the UI already shows, and its layout is `compose/layout.ts` called directly
+   * — a pose there is the editor's job, not a live message. Absent = the take
+   * keeps the default corner, which is what v1 takes have always had.
+   */
+  setCameraPose?(pose: CameraPose | null): void
 }
 
 /** v1 also reports what it did. Kept off the shared handle so the engine

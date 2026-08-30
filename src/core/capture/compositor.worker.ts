@@ -29,6 +29,8 @@
  */
 
 import { adoptedFrame, evenDown, frameForAspect } from '@core/frame'
+import { poseToRect } from '@core/timeline/cameraTrack'
+import type { CameraPose } from '@core/types'
 import {
   EncodedAudioPacketSource,
   EncodedPacket,
@@ -142,11 +144,25 @@ export interface CompositorPreviewMsg {
   canvas: OffscreenCanvas
 }
 
+/**
+ * WHERE THE CAMERA SITS, CHANGED WHILE THE TAKE RUNS (UI1).
+ *
+ * Fire-and-forget: no reply, because the answer is the next painted frame. Null
+ * puts it back to the default corner. A take that never sends one is
+ * byte-identical to a take made before this existed — the pose starts null and
+ * `pipRect` falls straight through to the constants it always used.
+ */
+export interface CompositorPoseMsg {
+  cmd: 'campose'
+  pose: CameraPose | null
+}
+
 export type CompositorMsg =
   | CompositorStartMsg
   | CompositorFrameMsg
   | CompositorAudioMsg
   | CompositorPreviewMsg
+  | CompositorPoseMsg
   | { cmd: 'stop' }
   | { cmd: 'cancel' }
 
@@ -396,6 +412,8 @@ async function pickAudioConfig(
 let handle: SyncAccessHandle | null = null
 let canvas: OffscreenCanvas | null = null
 let ctx: OffscreenCanvasRenderingContext2D | null = null
+/** Where the camera PiP has been dragged to, or null for the default corner. */
+let camPose: CameraPose | null = null
 /** The preview the main thread handed over, if any (O4-polish). */
 let previewCtx: OffscreenCanvasRenderingContext2D | null = null
 /** True until the first blit lands — the 'preview' reply is held until then. */
@@ -592,12 +610,27 @@ function pipRect(camera: VideoFrame): { x: number; y: number; w: number; h: numb
   // portrait composite draws the same border and radius as a landscape one.
   // Identical to W / 1920 on every landscape frame.
   const scale = Math.max(W, H) / 1920
-  const w = 0.24 * W
   const aspect =
     camera.displayWidth && camera.displayHeight ? camera.displayWidth / camera.displayHeight : 4 / 3
+  const chrome = { r: 16 * scale, border: 1.5 * scale }
+  // UI1: dragged during the take. `poseToRect` is the SAME function the editor
+  // positions its PiP with and the same one compose/layout.ts renders from, so
+  // a pose set here, previewed here, and re-opened in the editor is one number
+  // through three renderers rather than three implementations of a corner.
+  if (camPose) {
+    const rect = poseToRect(camPose, { frameAspect: W / H, cameraAspect: aspect })
+    return {
+      x: rect.leftFrac * W,
+      y: rect.topFrac * H,
+      w: rect.widthFrac * W,
+      h: rect.heightFrac * H,
+      ...chrome,
+    }
+  }
+  const w = 0.24 * W
   const h = w / aspect
   const margin = 24 * scale
-  return { x: W - w - margin, y: H - h - margin, w, h, r: 16 * scale, border: 1.5 * scale }
+  return { x: W - w - margin, y: H - h - margin, w, h, ...chrome }
 }
 
 /**
@@ -1278,6 +1311,10 @@ self.onmessage = async (ev: MessageEvent<CompositorMsg>) => {
         // screen. If nothing ever paints, the caller's own deadline decides.
         break
       }
+      case 'campose':
+        // No reply: the answer is the next painted frame.
+        camPose = msg.pose
+        break
       case 'stop':
         post({ ok: true, cmd: 'stop', stats: await stop() })
         break

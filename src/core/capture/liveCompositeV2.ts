@@ -24,7 +24,7 @@
  */
 import { blobStore } from '@core/store'
 import type { CompositorMsg, CompositorReply, CompositorStats } from './compositor.worker'
-import type { CompositeRecording } from '../types'
+import type { CameraPose, CompositeRecording } from '../types'
 import { SourceLiveness, type LivenessEvent } from './sourceLiveness'
 import { watchdogVerdict } from './compositorWatchdog'
 import {
@@ -222,6 +222,9 @@ export interface LiveCompositeV2Options {
 }
 
 export interface LiveCompositeV2Handle {
+  /** UI1: move the camera PiP while the take runs. Null restores the default
+   *  corner. Fire-and-forget — the next painted frame is the acknowledgement. */
+  setCameraPose(pose: CameraPose | null): void
   stop(): Promise<CompositeRecording | null>
   cancel(): Promise<void>
   /** Engine evidence — read by the session for the console line and by tests. */
@@ -621,6 +624,15 @@ export async function startLiveCompositeV2(
 
   return {
     stats: () => latestStats,
+
+    setCameraPose(pose: CameraPose | null): void {
+      if (torndown || degraded || workerError) return
+      try {
+        worker.postMessage({ cmd: 'campose', pose } satisfies CompositorMsg)
+      } catch {
+        // A worker that has gone away simply keeps the pose it last painted.
+      }
+    },
 
     async attachPreview(el: HTMLCanvasElement): Promise<boolean> {
       if (torndown || degraded || workerError) return false

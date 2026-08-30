@@ -239,17 +239,32 @@
    same size, same top-anchored position (the editor pins its stage ~24px from
    the top), so the frame does not move on the hand-off from recording to
    editing. The control bar sits below in the space the timeline will occupy. */
+/* THE PICTURE FILLS WHAT IS THERE. It used to be absolutely positioned over the
+   whole screen and sized from `100dvh - 300px` — a guess at the controls' height
+   that was made when the control bar was taller, so on a recording screen (chips
+   + record button, no slider) it left a black band the height of the gap between
+   the guess and the truth. Robert: "make screen fill so no gap here".
+   It is a flex child of the body now and takes its bound from the box it is
+   actually in (`container-type: size` + `100cqh`), the same way the editor's
+   stage does — so there is nothing left to guess. */
 .capture__preview {
-  position: absolute;
-  inset: 0;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  padding: 24px 16px 0;
+  container-type: size;
 }
 .capture__preview .stage {
-  width: 100%;
-  max-width: min(100%, calc((100dvh - 300px) * var(--stage-ar, 16 / 9)));
+  flex: none;
+  width: min(100%, calc(100cqh * var(--stage-ar, 16 / 9)));
+}
+/* Nothing scrolls while a take runs — the body holds one thing. */
+.capture--recording .capture__body {
+  justify-content: center;
+  overflow: hidden;
+  padding: 16px 16px 0;
 }
 
 /* live audio meter pinned in-frame when capturing screen + audio, no camera */
@@ -621,6 +636,32 @@
   border-radius: var(--r-lg);
   border: 1px solid rgba(255, 255, 255, 0.25);
   z-index: 2;
+}
+/* UI1: positioned from the pose instead of the default corner — every value
+   arrives as inline style, so this only clears the defaults it replaces. */
+.stage__pip--posed {
+  right: auto;
+  bottom: auto;
+  object-fit: cover;
+}
+/* The grab target for the camera during a take. Invisible until you touch it:
+   the composite preview draws the PiP itself, and a standing outline over a
+   picture the user is judging is a decoration they did not ask for. */
+.stage__pipdrag {
+  position: absolute;
+  z-index: 3;
+  border-radius: var(--r-lg);
+  cursor: grab;
+  touch-action: none;
+  transition: box-shadow var(--t-fast) var(--ease);
+}
+.stage__pipdrag:hover {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5);
+}
+.stage__pipdrag.is-dragging,
+.stage__pipdrag:active {
+  cursor: grabbing;
+  box-shadow: 0 0 0 2px var(--accent);
 }
 .stage .is-hidden {
   visibility: hidden;
