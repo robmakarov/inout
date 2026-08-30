@@ -3,6 +3,7 @@ import { isAppleWebKit } from '@core/capabilities'
 import { aspectOf, frameForAspect, sourceFrameEnabled, sourceResEnabled } from '@core/frame'
 import { DEFAULT_FRAME_RATE, normalizeRate, sourceRateEnabled } from '@core/rate'
 import { singleGenCaptureEnabled } from '@core/singleGen'
+import { qualityDropsAllowed } from './captureQuality'
 import {
   differsMeaningfully,
   resolutionStepEnabled,
@@ -395,6 +396,8 @@ class Session implements CaptureSession {
   private encoderPlan: EncoderPlan | null = null
   /** O15: this take already told the budget it collapsed; say it once. */
   private collapseRecorded = false
+  /** Max mode refuses the ladder's step — say so once, not once a second. */
+  private maxModeNoticeSent = false
   /** O16 — when the screen's delivered size first stopped matching the size its
    *  current segment's encoder was opened at. Null while they agree. */
   private sizeDifferingSinceMs: number | null = null
@@ -1188,7 +1191,9 @@ class Session implements CaptureSession {
           ? ` against this machine's own ${(ceiling / 1e6).toFixed(1)} Mpx/s budget`
           : ' (this machine has never been seen to collapse, so there is no budget to be over)'),
     )
-    if (!encoderBudgetEnabled()) return
+    // Max mode is not bounded either: it is one mode, and this is one of the
+    // three things it turns off.
+    if (!encoderBudgetEnabled() || !qualityDropsAllowed()) return
     const screenCh = this.channels.find((c) => c.kind === 'screen' && c.media === 'video' && !c.ended)
     const screen = plan.encoders.find((e) => e.what === 'screen') ?? null
     if (!screenCh || !screen) return
@@ -1377,6 +1382,23 @@ class Session implements CaptureSession {
         // before giving up on the composite. Only ever fires when native-res
         // capture is on, because otherwise the track is already at the floor.
         onDegradeStep: (rung, reason) => {
+          // MAX MODE DOES NOT STEP. The ladder still MEASURES — its verdict is
+          // what tells the take it is behind, and O15 still files the collapse
+          // against the plan — but nothing is taken away from the picture the
+          // user asked for. What they get instead is dropped frames, reported
+          // rather than hidden, which is the price max exists to let them pay.
+          if (!qualityDropsAllowed()) {
+            if (!this.maxModeNoticeSent) {
+              this.maxModeNoticeSent = true
+              console.info(
+                `[capture] max quality: the ladder wants ${rung.label} (${reason}) and is NOT taking it — ` +
+                  `the take keeps the rate it was asked for and drops frames instead. ` +
+                  `?quality=auto steps the rate down smoothly instead (captureQuality.ts)`,
+              )
+            }
+            this.noteEncoderCollapse(`the rate ladder wanted to step: ${reason}`)
+            return
+          }
           void this.stepDisplayDown(rung, reason)
         },
         onDegrade: (reason) => {

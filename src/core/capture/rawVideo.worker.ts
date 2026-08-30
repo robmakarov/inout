@@ -413,6 +413,10 @@ async function start(msg: RawVideoStartMsg): Promise<void> {
  * and its placement on the session timeline come from the same clock; and a
  * keep-alive frame has no source timestamp of its own to use.
  */
+/** Encode calls made, counted HERE and not in the output callback — see the
+ *  keyframe test below for what reading the async counter cost. */
+let encodeCalls = 0
+
 function encodeAt(picture: VideoFrame, atMs: number, keepAlive: boolean): void {
   if (fatal || stopped || !encoder) return
   if (firstFrameAtMs === null) firstFrameAtMs = atMs
@@ -421,11 +425,28 @@ function encodeAt(picture: VideoFrame, atMs: number, keepAlive: boolean): void {
   // would otherwise hand the muxer a non-monotonic timeline.
   if (tUs <= lastEncodedTsUs) return
   const tSec = tUs / 1e6
-  const keyFrame = stats.framesEncoded === 0 || tSec - lastKeySec >= KEYFRAME_INTERVAL_S
+  // THE FIRST-FRAME TEST COUNTS ENCODE CALLS, NOT OUTPUTS, and reading the
+  // wrong one was a vicious cycle at the worst possible moment.
+  //
+  // `stats.framesEncoded` is incremented in the encoder's OUTPUT callback —
+  // asynchronously, after a chunk comes back. A cold encoder produces nothing
+  // for seconds (note 6: a Chrome process's first VideoEncoder pays a
+  // multi-second init), so for that entire window every frame read
+  // `framesEncoded === 0` and was requested as a KEYFRAME. A keyframe costs
+  // many times a delta frame, so the encoder fell further behind, which kept
+  // the output at zero, which kept forcing keyframes.
+  //
+  // Robert's 3024x1964 take, 2026-08-30, has it in one line: the raw channel
+  // encoded "13 frames of 133 in … 13 keyframes" — every frame that got out was
+  // a keyframe — while the COMPOSITE in the very same take, whose cadence has
+  // never had this term, encoded 6 frames with 1 keyframe. Same machine, same
+  // second, one correct and one not.
+  const keyFrame = encodeCalls === 0 || tSec - lastKeySec >= KEYFRAME_INTERVAL_S
   let stamped: VideoFrame | null = null
   try {
     stamped = new VideoFrame(picture, { timestamp: tUs })
     encoder.encode(stamped, { keyFrame })
+    encodeCalls++
     if (keyFrame) lastKeySec = tSec
     lastEncodedTsUs = tUs
     lastEncodeOkMs = atMs
