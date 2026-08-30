@@ -2283,13 +2283,6 @@
   border-style: dashed;
 }
 
-.takes__foot {
-  padding: 0 2px;
-  font-size: 11px;
-  line-height: 1.35;
-  color: var(--text-faint);
-}
-
 /* Storage left behind by takes that never finished (2026-08-30). Its own row
    because it is not a take and must not look like one. */
 .takes__orphan {

@@ -367,10 +367,6 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
           )
         })}
       </ul>
-      <div className="takes__foot">
-        Kept until you delete them — a take you exported is not removed automatically. Files you
-        already saved to Downloads are the browser’s and can only be deleted there.
-      </div>
     </div>
   )
 }

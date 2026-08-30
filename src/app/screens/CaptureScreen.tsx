@@ -18,7 +18,6 @@ import { useInstallPrompt } from '@app/hooks/useInstallPrompt'
 import {
   QUALITY_STEPS,
   loadQualityStep,
-  qualityStepById,
   setQualityStep,
   type QualityStepId,
 } from '@core/qualityStep'
@@ -593,12 +592,13 @@ export function CaptureScreen() {
             value={step}
             disabled={arming}
             // UI1, Robert: "remove all three captions near slider in main
-            // screen" — the QUALITY label, the step's name beside it, and the
-            // sentence underneath. The step names under the track already say
-            // which one is chosen; the sentence survives as the track's tooltip,
-            // because "heaviest on the machine" is worth having somewhere.
+            // screen", then "i said delete this shit" at the sentence coming
+            // back as a hover tooltip. So it is GONE, not relocated: the step
+            // names under the track say which one is chosen, and moving prose
+            // the user deleted onto a hover is not removing it. `QualityStep.note`
+            // still exists and is still the honest description of a step — it
+            // simply has no home on this screen.
             compact
-            hint={qualityStepById(step).note}
             onChange={(id) => {
               const next = id as QualityStepId
               setStep(next)
