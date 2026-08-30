@@ -1,6 +1,7 @@
 import { ALL_FORMATS, BlobSource, Input, VideoSampleSink, type VideoSample } from 'mediabunny'
 import type { ChannelKind } from '@core/types'
 
+
 /**
  * Sequential frame cursor over one channel's video track. `sampleAt` must be
  * called with non-decreasing channel-local times; it holds (and owns) the
