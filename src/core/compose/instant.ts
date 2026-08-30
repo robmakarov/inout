@@ -357,6 +357,7 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
       durationMs: outDurationMs,
       width: source.width,
       height: source.height,
+      scratchKey: scratch?.key,
     }
   } catch (err) {
     if (output && output.state !== 'finalized' && output.state !== 'canceled') {

@@ -12,24 +12,17 @@ import {
 } from '@core/compose/quality'
 import { frameAspectFor, sourceFrameEnabled } from '@core/frame'
 import { takeRate } from '@core/rate'
-import {
-  cancelPrerender,
-  exportByBestPath,
-  exportWouldRender,
-  startPrerender,
-} from '@core/compose'
+import { cancelPrerender, exportWouldRender, startPrerender } from '@core/compose'
 import { prerenderEnabled } from '@core/compose/prerenderFlag'
 import { loadRecovery } from '@core/capture'
 import { editsRepo, recordingsRepo } from '@core/store'
-import { saveToFile } from '@core/share'
-import { analytics } from '@core/analytics'
 import { useAppStore } from '@app/state/store'
+import { loadExportJobs } from '@app/lib/exportJobs'
 import { detectCapabilities } from '@core/capabilities'
 import { missingChannelsMessage, takeLosses } from '@app/lib/channels'
 import { usePlayback } from '@app/hooks/usePlayback'
 import { Player } from '@app/components/Player'
 import { Timeline } from '@app/components/Timeline'
-import { ExportProgressStrip, ExportSavedStrip } from '@app/components/ExportPanel'
 import { QualityBar } from '@app/components/QualityBar'
 import { ToolsBar } from '@app/components/ToolsBar'
 import { SettingsBadge } from '@app/components/SettingsBadge'
@@ -45,7 +38,6 @@ export function EditorScreen() {
 
 function Editor({ recording, edit }: { recording: Recording; edit: EditState }) {
   const setEditState = useAppStore((s) => s.setEditState)
-  const mode = useAppStore((s) => s.mode)
   const pb = usePlayback(recording, edit)
   const [confirmOpen, setConfirmOpen] = useState(false)
   // F13: the remembered step, resolved to THIS take's shape. `resolveTier` is
@@ -120,20 +112,13 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
       top
     )
   }, [tiers, chosenId, recording.qualityStep, frameAspect, frameRate])
-  const exporting = mode === 'exporting'
   // F5a: a PROPOSED cut list. It is preview-only until the user applies it, and
   // any other edit invalidates it — a proposal computed against a timeline that
   // has since moved would cut the wrong places.
   const [proposal, setProposal] = useState<TightenProposal | null>(null)
   const [analysing, setAnalysing] = useState(false)
-  const exportResult = useAppStore((s) => s.exportResult)
   useEffect(() => {
     setProposal(null)
-    // The saved strip describes a file made from a timeline that has now moved,
-    // so it stops describing anything. Clearing it is the whole of "that file
-    // is not this edit" — no warning needed, because the slider below is right
-    // there to make the new one.
-    useAppStore.getState().setExportResult(null)
   }, [edit])
 
   const runTighten = async () => {
@@ -256,62 +241,28 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
    * The AI export (AI1). A separate artefact, not a quality step: no tier, no
    * geometry, no packet-copy ladder — it composes the take once at 4 samples a
    * second and keeps the frames that changed. Everything the video export does
-   * is untouched by this path.
+   * is untouched by this path. A JOB like the video export: the press returns
+   * immediately and the dock carries it from here.
    */
   const onExportAi = async () => {
-    const store = useAppStore.getState()
-    if (store.mode === 'exporting') return
-    pb.pause()
-    const ac = new AbortController()
-    store.setExportAbort(ac)
-    store.setExportProgress({ phase: 'preparing', ratio: 0 })
-    store.setMode('exporting')
     const effectiveEdit = useAppStore.getState().editState ?? edit
-    analytics.track('export_start')
-    const t0 = performance.now()
-    try {
-      // Loaded on demand: a take that never asks for it never pays for the
-      // PDF writer or the delta analysis.
-      const { exportForAi } = await import('@core/ai')
-      const result = await exportForAi({
-        recording,
-        edit: effectiveEdit,
-        onProgress: (p) => useAppStore.getState().setExportProgress(p),
-        signal: ac.signal,
-      })
-      analytics.track('export_complete', {
-        durationMs: Math.round(performance.now() - t0),
-        sizeBytes: result.blob.size,
-        forAi: true,
-        pages: result.ai?.pages ?? 0,
-        approxTokens: result.ai?.approxTokens ?? 0,
-      })
-      // UI1: THE FILE IS THE POINT — Robert: "skip bullshit extra step after
-      // render, download after it done". See the note on the video export.
-      saveToFile(result)
-      useAppStore.setState({
-        exportResult: result,
-        // UI1: back to the editor, not to a screen of its own — what the export
-        // produced is a strip above the slider that made it.
-        mode: 'editor',
-        exportAbort: null,
-        exportProgress: null,
-      })
-    } catch (err) {
-      const aborted = err instanceof Error && err.name === 'AbortError'
-      if (!aborted) {
-        const message = err instanceof Error ? err.message : 'Export failed'
-        useAppStore.getState().toast(message, 'error')
-        analytics.track('export_error', { message, forAi: true })
-      }
-      useAppStore.setState({ mode: 'editor', exportAbort: null, exportProgress: null })
-    }
+    const m = await loadExportJobs()
+    m.startExportJob({ kind: 'ai', recording, edit: effectiveEdit, allowPacketCopy: false })
   }
 
+  /**
+   * THE PRESS CREATES A JOB, NOT A MODE (2026-08-30, Robert: rendering
+   * "happening further if i switch app screen, independetly, and i want it
+   * sirvive refresh and continue, and several rendering at the same time").
+   * The editor never locks: the job snapshotted the edit at the press, so a
+   * change made now simply belongs to the NEXT export. The dock at the bottom
+   * of every screen carries the progress, the cancel that actually cancels,
+   * and the saved row; the download still fires the moment the job finishes
+   * (UI1: pressing Export IS asking for the file). The ladder itself lives in
+   * compose/choose.ts — the oracle drives the same function, so the sync band
+   * gates the path a user actually gets.
+   */
   const onExport = async (chosen: QualityTier) => {
-    const store = useAppStore.getState()
-    if (store.mode === 'exporting') return
-    pb.pause()
     // Only the default tier may copy the COMPOSITE: any other tier is a
     // different resolution, so the recorded composite is not it. A single raw
     // channel that already holds the chosen tier's geometry is still
@@ -320,82 +271,15 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
     // The step at THIS take's shape — the decoder's answer where there is one,
     // so the file matches the stage the user just judged it on (F13).
     const settings = settingsForTier(resolveTier(chosen, frameAspect, frameRate))
-
-    const ac = new AbortController()
-    store.setExportAbort(ac)
-    store.setExportProgress({ phase: 'preparing', ratio: 0 })
-    store.setMode('exporting')
     const effectiveEdit = useAppStore.getState().editState ?? edit
-    const onProgress = (p: Parameters<typeof store.setExportProgress>[0]) =>
-      useAppStore.getState().setExportProgress(p)
-    analytics.track('export_start')
-    const t0 = performance.now()
-    try {
-      // The ladder itself lives in compose/choose.ts, not here: the oracle
-      // drives the SAME function, so the sync band gates the path a user
-      // actually gets rather than the render they only get as a fallback.
-      const { result, path } = await exportByBestPath({
-        recording,
-        edit: effectiveEdit,
-        settings,
-        // Fences the composite only — a matching raw channel may still be
-        // copied at any tier (O3c).
-        allowPacketCopy: defaultTier,
-        onProgress,
-        signal: ac.signal,
-      })
-      analytics.track('export_complete', {
-        durationMs: Math.round(performance.now() - t0),
-        sizeBytes: result.blob.size,
-        instant: path === 'instant',
-        smartCut: path === 'smartcut',
-        tier: chosen.id,
-      })
-      if (import.meta.env.DEV) {
-        ;(window as unknown as Record<string, unknown>).__lastExport = result
-        void navigator.storage
-          .getDirectory()
-          .then((d) => d.getFileHandle('__last-export.bin', { create: true }))
-          .then((h) => h.createWritable())
-          .then(async (w) => {
-            await w.write(result.blob)
-            await w.close()
-          })
-          .catch(() => undefined)
-      }
-      /**
-       * UI1 — THE DOWNLOAD IS NOT A SEPARATE DECISION. Robert: "skip bullshit
-       * extra step after render, download after it done".
-       *
-       * Pressing Export IS asking for the file; making the user press Save
-       * afterwards was a second question with only one sensible answer, and it
-       * put a click between the render finishing and the thing the render was
-       * for. The share panel still opens behind it — a link is a different
-       * thing to want and it stays a choice — but the file is already in
-       * Downloads by the time it appears.
-       *
-       * This is a plain anchor click on a blob URL (core/share), the same call
-       * the button made; it is not a filesystem write and it cannot fail
-       * silently in a way the panel's Save button would have survived.
-       */
-      saveToFile(result)
-      useAppStore.setState({
-        exportResult: result,
-        // UI1: back to the editor, not to a screen of its own — what the export
-        // produced is a strip above the slider that made it.
-        mode: 'editor',
-        exportAbort: null,
-        exportProgress: null,
-      })
-    } catch (err) {
-      const aborted = err instanceof Error && err.name === 'AbortError'
-      if (!aborted) {
-        const message = err instanceof Error ? err.message : 'Export failed'
-        useAppStore.getState().toast(message, 'error')
-        analytics.track('export_error', { message })
-      }
-      useAppStore.setState({ mode: 'editor', exportAbort: null, exportProgress: null })
-    }
+    const m = await loadExportJobs()
+    m.startExportJob({
+      kind: 'video',
+      recording,
+      edit: effectiveEdit,
+      settings,
+      allowPacketCopy: defaultTier,
+    })
   }
 
   return (
@@ -454,11 +338,10 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
       {/* UI1: the editing tools, under the picture rather than through the
           middle of the timeline — Robert: "buttons with extra features make
           under preview video, not in the fucking middle of timeline".
-          They STAY on screen while a render runs, because the render is not a
-          screen of its own any more; they just stop taking input, because the
-          export snapshotted the edit when it started and a change made now
-          would silently not be in the file. */}
-      <div className={`editor__below${exporting ? ' editor__below--locked' : ''}`}>
+          They stay LIVE while a render runs: the job snapshotted the edit at
+          the press, so an edit made now belongs to the next export — the dock
+          row carries the running one wherever the user goes. */}
+      <div className="editor__below">
         <ToolsBar
           recording={recording}
           edit={edit}
@@ -486,31 +369,20 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
         />
       </div>
 
-      {exporting ? (
-        <ExportProgressStrip />
-      ) : (
-        <>
-          {exportResult && (
-            <ExportSavedStrip
-              result={exportResult}
-              onDismiss={() => useAppStore.getState().setExportResult(null)}
-            />
-          )}
-          {/* UI1: the quality slider is always on screen — there is no "choose
-              a quality" step any more, because the choice was already made
-              before the take and this only lets you go down from it. */}
-          <QualityBar
-            recording={recording}
-            edit={edit}
-            outputDurationMs={outputDurationMs(edit)}
-            tier={tier}
-            frameAspect={frameAspect}
-            onTier={(t) => setChosenId(t.id)}
-            onExport={() => void onExport(tier)}
-            onExportForAi={() => void onExportAi()}
-          />
-        </>
-      )}
+      {/* UI1: the quality slider is always on screen — there is no "choose
+          a quality" step any more, because the choice was already made
+          before the take and this only lets you go down from it. The export's
+          progress and result live in the ExportDock now, not in this slot. */}
+      <QualityBar
+        recording={recording}
+        edit={edit}
+        outputDurationMs={outputDurationMs(edit)}
+        tier={tier}
+        frameAspect={frameAspect}
+        onTier={(t) => setChosenId(t.id)}
+        onExport={() => void onExport(tier)}
+        onExportForAi={() => void onExportAi()}
+      />
 
       <ConfirmDialog
         open={confirmOpen}

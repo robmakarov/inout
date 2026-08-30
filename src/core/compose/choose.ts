@@ -182,9 +182,21 @@ export async function exportByBestPath(opts: ChooseExportOptions): Promise<Chose
   // work twice. Never slower than before: a miss falls straight through.
   const ready = takePrerender(prerenderKey({ recording, edit, settings }))
   if (ready) {
+    // A JOINED JOB IS THIS EXPORT NOW, so it reports ITS OWN place and obeys
+    // THIS export's cancel. The first version of the join reported a flat
+    // `finalizing 0.99` and listened to nothing: Robert pressed export on a
+    // take whose pre-render had minutes left, watched "99%" for five of them,
+    // and his cancel reached no one — the render finished anyway and the file
+    // downloaded the moment it did (2026-08-30).
+    const onAbort = (): void => ready.abort.abort()
     try {
-      onProgress?.({ phase: 'finalizing', ratio: 0.99 })
-      const result = await ready
+      onProgress?.(ready.progress)
+      if (onProgress) ready.onProgress(onProgress)
+      if (signal) {
+        if (signal.aborted) onAbort()
+        signal.addEventListener('abort', onAbort)
+      }
+      const result = await ready.promise
       console.info('[compose] export served a render that was already made (F16)')
       return { result, path: 'render', declined, copiedFrom: null, copyDeclined: copy.declined }
     } catch (err) {
@@ -193,6 +205,8 @@ export async function exportByBestPath(opts: ChooseExportOptions): Promise<Chose
       // which is exactly what this function did before F16 existed.
       declined.push({ path: 'render', reason: `pre-render unusable: ${reasonOf(err)}` })
       console.info('[compose] the pre-made render was unusable, rendering now', err)
+    } finally {
+      signal?.removeEventListener('abort', onAbort)
     }
   }
 

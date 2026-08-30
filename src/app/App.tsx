@@ -2,8 +2,10 @@ import { lazy, Suspense, useEffect } from 'react'
 import { loadRecovery } from '@core/capture'
 import { clampEditState, defaultEditState } from '@core/timeline'
 import { useAppStore } from '@app/state/store'
+import { loadExportJobs } from '@app/lib/exportJobs'
 import { ErrorBoundary } from '@app/components/ErrorBoundary'
 import { Toasts } from '@app/components/Toasts'
+import { ExportDock } from '@app/components/ExportDock'
 import { CaptureScreen } from '@app/screens/CaptureScreen'
 import { loadEditorScreen } from '@app/editorChunk'
 import './app.css'
@@ -56,17 +58,27 @@ function Main() {
         void import('@core/compose/prerender')
           .then((m) => m.sweepPrerenderBlobs())
           .catch(() => undefined)
+        // Export jobs SURVIVE the page session (2026-08-30): finished rows
+        // come back, interrupted ones restart. Gated on the repo actually
+        // holding rows, so a boot with no jobs never loads the compose graph.
+        void import('@core/store')
+          .then((m) => m.jobsRepo.list())
+          .then((rows) =>
+            rows.length ? loadExportJobs().then((m) => m.resumeExportJobs()) : undefined,
+          )
+          .catch(() => undefined)
       })
   }, [])
 
   return (
     <div className="app">
       {mode === 'capture' && <CaptureScreen />}
-      {(mode === 'editor' || mode === 'exporting') && (
+      {mode === 'editor' && (
         <Suspense fallback={<div className="app__loading" />}>
           <EditorScreen />
         </Suspense>
       )}
+      <ExportDock />
       <Toasts />
     </div>
   )

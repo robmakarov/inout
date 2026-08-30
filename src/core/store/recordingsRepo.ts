@@ -1,11 +1,12 @@
-import type { EditState, Recording } from '../types'
+import type { EditState, ExportJobRecord, Recording } from '../types'
 import { blobStore } from './blobStore'
 
 const DB_NAME = 'inout'
-/** v2 (F4) adds the `edits` store — see editsRepo below. */
-const DB_VERSION = 2
+/** v2 (F4) adds the `edits` store; v3 adds `exportJobs` — see jobsRepo below. */
+const DB_VERSION = 3
 const STORE = 'recordings'
 const EDITS_STORE = 'edits'
+const JOBS_STORE = 'exportJobs'
 
 let dbPromise: Promise<IDBDatabase> | null = null
 
@@ -18,6 +19,9 @@ function openDb(): Promise<IDBDatabase> {
       }
       if (!req.result.objectStoreNames.contains(EDITS_STORE)) {
         req.result.createObjectStore(EDITS_STORE, { keyPath: 'recordingId' })
+      }
+      if (!req.result.objectStoreNames.contains(JOBS_STORE)) {
+        req.result.createObjectStore(JOBS_STORE, { keyPath: 'id' })
       }
     }
     req.onsuccess = () => {
@@ -104,5 +108,38 @@ export const editsRepo = {
 
   async remove(recordingId: string): Promise<void> {
     await withStore('readwrite', (s) => s.delete(recordingId), EDITS_STORE).catch(() => undefined)
+  },
+}
+
+/**
+ * Export jobs, persisted (2026-08-30). An export is a background job now: the
+ * dock shows it on every screen, and a page refresh RESTARTS it rather than
+ * losing it — the sources (OPFS) and the snapshotted edit (in the record) are
+ * already durable, so the spec here is everything a restart needs. The row of
+ * a finished job keeps the result's metadata so "Save again" and the cloud
+ * link survive the refresh too. compose/exportJobs.ts owns the lifecycle;
+ * this is only the shelf it stands on.
+ */
+/** OPFS namespace of a job's own finished-file copy: `xjob-<job id>`. Lives
+ *  here (not in compose/exportJobs.ts) so reclaim.ts can honour it without
+ *  dragging the whole compose graph into the boot sweep. */
+export const EXPORTJOB_PREFIX = 'xjob-'
+
+export const jobsRepo = {
+  async save(job: ExportJobRecord): Promise<void> {
+    await withStore('readwrite', (s) => s.put(job), JOBS_STORE)
+  },
+
+  async list(): Promise<ExportJobRecord[]> {
+    const rows = await withStore(
+      'readonly',
+      (s) => s.getAll() as IDBRequest<ExportJobRecord[]>,
+      JOBS_STORE,
+    )
+    return rows.sort((a, b) => a.createdAt - b.createdAt)
+  },
+
+  async remove(id: string): Promise<void> {
+    await withStore('readwrite', (s) => s.delete(id), JOBS_STORE).catch(() => undefined)
   },
 }

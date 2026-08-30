@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { CloudProvider, CloudShare, CloudUser, ExportResult } from '@core/types'
+import type {
+  CloudProvider,
+  CloudShare,
+  CloudUser,
+  ExportJobRecord,
+  ExportResult,
+} from '@core/types'
 import { saveToFile } from '@core/share'
 import { getCloudProvider } from '@core/cloud'
 import { analytics } from '@core/analytics'
 import { useAppStore } from '@app/state/store'
 import { formatRemaining, humanBytes } from '@app/lib/format'
+import { loadExportJobs } from '@app/lib/exportJobs'
 import { Icon } from '@app/components/Icon'
 import { ProgressRing } from '@app/components/ProgressRing'
 
@@ -15,37 +22,121 @@ const PHASE_LABEL = {
 } as const
 
 /**
- * THERE ARE THREE SCREENS AND THIS IS NOT ONE OF THEM (UI1, 2026-08-30).
+ * EVERY EXPORT, ON EVERY SCREEN — Robert, 2026-08-30: "i want rendering
+ * process shown in block like on screenshot in bottom of screen layout and
+ * happening further if i switch app screen, independetly".
  *
- * Robert: "rendering loader show on same screen where download button is, so we
- * have only main screen, recording screen, and editing screen", and of the old
- * result panel: "no need for screen on first screenshot at all".
- *
- * The export used to take over the whole bottom half twice — once as a progress
- * panel, then again as a result panel with a Save button, a cloud card and a
- * "New recording" button. Two screens for one action, and the second one asked
- * a question (save it?) that pressing Export had already answered.
- *
- * So both halves are strips now, and they live in the slot the quality slider
- * occupies: the render replaces it while it runs, and what it produced sits
- * above it afterwards. The editor never goes away, so the picture never moves.
+ * One dock, fixed to the bottom of the app, one row per job. A running job
+ * shows its real place and a Cancel that actually reaches it; a finished one
+ * becomes the saved row (the file is already in Downloads — the row offers
+ * the second copy and the cloud link); a failed one says what happened. Rows
+ * come from core/compose/exportJobs via the store mirror, so they are the
+ * same rows before and after a refresh.
  */
-export function ExportProgressStrip() {
-  const progress = useAppStore((s) => s.exportProgress)
-  const abort = useAppStore((s) => s.exportAbort)
-  const ratio = progress?.ratio ?? 0
-  const phase = progress?.phase ?? 'preparing'
+export function ExportDock() {
+  const jobs = useAppStore((s) => s.exportJobs)
+  if (jobs.length === 0) return null
+  return (
+    <div className="xdock">
+      {jobs.map((job) => (
+        // runs in the key: a restart after refresh remounts the row, which
+        // resets the ETA anchor to the new run's own slope.
+        <DockRow key={`${job.id}:${job.runs}`} job={job} />
+      ))}
+    </div>
+  )
+}
+
+function remove(id: string): void {
+  void loadExportJobs().then((m) => m.removeExportJob(id))
+}
+
+function DockRow({ job }: { job: ExportJobRecord }) {
+  if (job.state === 'running') return <RunningRow job={job} />
+  if (job.state === 'failed') return <FailedRow job={job} />
+  return <SavedRow job={job} />
+}
+
+/** What a row is ABOUT — with several jobs at once, the rows need names. */
+function jobLabel(job: ExportJobRecord): string {
+  if (job.kind === 'ai') return 'For AI'
+  const s = job.settings
+  return s ? `${s.width}×${s.height}` : 'video'
+}
+
+function RunningRow({ job }: { job: ExportJobRecord }) {
+  const ratio = job.progress.ratio
+  const phase = job.progress.phase
   const remainingMs = useRemainingMs(phase, ratio)
   return (
     <div className="xstrip xstrip--progress">
       <ProgressRing ratio={ratio} />
       <span className="xstrip__pct">{Math.round(ratio * 100)}%</span>
       <span className="xstrip__phase">{PHASE_LABEL[phase]}</span>
-      {remainingMs !== null && (
-        <span className="xstrip__eta">{formatRemaining(remainingMs)}</span>
-      )}
-      <button className="btn btn--ghost xstrip__cancel" onClick={() => abort?.abort()}>
+      <span className="xstrip__meta">{jobLabel(job)}</span>
+      {remainingMs !== null && <span className="xstrip__eta">{formatRemaining(remainingMs)}</span>}
+      <button className="btn btn--ghost xstrip__cancel" onClick={() => remove(job.id)}>
         Cancel
+      </button>
+    </div>
+  )
+}
+
+function FailedRow({ job }: { job: ExportJobRecord }) {
+  return (
+    <div className="xstrip xstrip--failed">
+      <span className="xstrip__name" title={job.error}>
+        Export failed{job.error ? ` · ${job.error}` : ''}
+      </span>
+      <span className="xstrip__meta">{jobLabel(job)}</span>
+      <button className="xstrip__x" onClick={() => remove(job.id)} aria-label="Dismiss">
+        <Icon name="x" size={12} />
+      </button>
+    </div>
+  )
+}
+
+/**
+ * WHAT THE EXPORT PRODUCED, on one line. The file is already in the user's
+ * downloads — pressing Export was asking for it — so this offers the second
+ * copy (a download the browser put somewhere unexpected, a dismissed dialog)
+ * and the cloud link, which is a genuinely different thing to want.
+ */
+function SavedRow({ job }: { job: ExportJobRecord }) {
+  const meta = job.result
+  const [result, setResult] = useState<ExportResult | null>(null)
+  useEffect(() => {
+    let alive = true
+    void loadExportJobs()
+      .then((m) => m.exportJobResult(job.id))
+      .then((r) => {
+        if (alive) setResult(r)
+      })
+    return () => {
+      alive = false
+    }
+  }, [job.id])
+  if (!meta) return null
+  return (
+    <div className="xstrip xstrip--saved">
+      <Icon name="check" size={15} />
+      <span className="xstrip__name" title={meta.fileName}>
+        Saved to your downloads · {meta.fileName}
+      </span>
+      <span className="xstrip__meta">
+        {meta.ai
+          ? `${meta.ai.pages} pages · ~${Math.round(meta.ai.approxTokens / 100) / 10}k tokens`
+          : `${humanBytes(meta.bytes)} · ${meta.width}×${meta.height}`}
+      </span>
+      {result && (
+        <button className="xstrip__btn" onClick={() => saveToFile(result)}>
+          <Icon name="download" size={13} />
+          <span>Save again</span>
+        </button>
+      )}
+      {result && <CloudAction result={result} />}
+      <button className="xstrip__x" onClick={() => remove(job.id)} aria-label="Dismiss">
+        <Icon name="x" size={12} />
       </button>
     </div>
   )
@@ -59,16 +150,12 @@ const ETA_MIN_RATIO = 0.03
 /**
  * How long is left — measured, not modelled.
  *
- * A ring and a percentage are enough for the 60-105 ms instant export. They are
- * not enough for a full render: Robert's 15m38s take sat in this panel for ~3.5
- * minutes with nothing to say whether that meant seconds or an hour.
- *
  * The progress ratio is NOT uniform in time, so extrapolating the whole thing
  * would lie: `preparing` (0→0.05) hides an entire audio decode on a long take
  * and `finalizing` is a muxer flush. Only the `rendering` span advances at a
- * rate worth reading, so the estimate anchors at the first rendering sample and
- * takes its slope from there — and says nothing at all until that slope has 3 s
- * and 3 % under it.
+ * rate worth reading, so the estimate anchors at the first rendering sample
+ * and takes its slope from there — and says nothing at all until that slope
+ * has 3 s and 3 % under it.
  */
 function useRemainingMs(phase: keyof typeof PHASE_LABEL, ratio: number): number | null {
   const anchor = useRef<{ t: number; ratio: number } | null>(null)
@@ -81,41 +168,6 @@ function useRemainingMs(phase: keyof typeof PHASE_LABEL, ratio: number): number 
   const dr = ratio - anchor.current.ratio
   if (dt < ETA_MIN_ELAPSED_MS || dr < ETA_MIN_RATIO) return null
   return ((1 - ratio) / dr) * dt
-}
-
-/**
- * WHAT THE EXPORT PRODUCED, on one line, above the slider that made it.
- *
- * The file is already in the user's downloads — pressing Export is asking for
- * it, and asking again afterwards was the "bullshit extra step". This says so
- * and offers the second copy, which is the only reason anyone would press it: a
- * download the browser put somewhere unexpected, or a dialog that was
- * dismissed. The cloud link keeps its place here because a link is a genuinely
- * different thing to want, and it stays a choice.
- */
-export function ExportSavedStrip({ result, onDismiss }: { result: ExportResult; onDismiss: () => void }) {
-  const ai = result.ai
-  return (
-    <div className="xstrip xstrip--saved">
-      <Icon name="check" size={15} />
-      <span className="xstrip__name" title={result.fileName}>
-        Saved to your downloads · {result.fileName}
-      </span>
-      <span className="xstrip__meta">
-        {ai
-          ? `${ai.pages} pages · ~${Math.round(ai.approxTokens / 100) / 10}k tokens`
-          : `${humanBytes(result.blob.size)} · ${result.width}×${result.height}`}
-      </span>
-      <button className="xstrip__btn" onClick={() => saveToFile(result)}>
-        <Icon name="download" size={13} />
-        <span>Save again</span>
-      </button>
-      <CloudAction result={result} />
-      <button className="xstrip__x" onClick={onDismiss} aria-label="Dismiss">
-        <Icon name="x" size={12} />
-      </button>
-    </div>
-  )
 }
 
 /**

@@ -29,6 +29,23 @@ export const SCRATCH_PREFIX = 'xport-'
 /** Muxer writes coalesce into chunks of this size before hitting disk. */
 const CHUNK_SIZE = 4 * 1024 * 1024
 
+/**
+ * EXPORTS RUN IN PARALLEL NOW (export jobs, 2026-08-30), and each export
+ * worker carries its OWN instance of this module — so `open` only ever knows
+ * this worker's file, and the sweep used to read every OTHER live export's
+ * scratch as a leftover and delete it mid-write. The key carries its birth
+ * time instead, and the sweep only touches files old enough that no export
+ * can plausibly still be writing them. Pre-stamp keys (`xport-x_…`) parse as
+ * ancient, which is correct: they are from builds that no longer run.
+ */
+const SCRATCH_TTL_MS = 6 * 60 * 60 * 1000
+
+function scratchBornAt(key: string): number {
+  const stamp = key.slice(SCRATCH_PREFIX.length).split('-')[0]
+  const t = parseInt(stamp, 36)
+  return Number.isFinite(t) ? t : 0
+}
+
 /** Keys this page session must not sweep: open exports + the newest finished one. */
 const open = new Set<string>()
 let newestFinished: string | null = null
@@ -77,6 +94,8 @@ export interface ScratchStats {
 }
 
 export interface ExportScratch {
+  /** OPFS key of the file — ExportResult.scratchKey, for precise cleanup. */
+  key: string
   /** Pass as `new Output({ target })`. */
   target: StreamTarget
   /** After output.finalize(): the file as a Blob typed `mimeType`, still on disk. */
@@ -89,9 +108,12 @@ export interface ExportScratch {
 /** Remove scratch files no live result depends on (previous page sessions). */
 async function sweepStale(): Promise<void> {
   const keys = await blobStore.listKeys()
+  const now = Date.now()
   for (const key of keys) {
     if (!key.startsWith(SCRATCH_PREFIX)) continue
     if (open.has(key) || key === newestFinished) continue
+    // Another worker (or tab) may still be writing or serving this one.
+    if (now - scratchBornAt(key) < SCRATCH_TTL_MS) continue
     await blobStore.remove(key).catch(() => undefined)
   }
 }
@@ -102,7 +124,7 @@ async function sweepStale(): Promise<void> {
  */
 export async function createExportScratch(): Promise<ExportScratch | null> {
   if (!scratchEnabled) return null
-  const key = `${SCRATCH_PREFIX}${newId('x')}`
+  const key = `${SCRATCH_PREFIX}${Date.now().toString(36)}-${newId('x')}`
   try {
     await sweepStale().catch(() => undefined)
     const writer = await createPositionedWriter(key)
@@ -141,6 +163,7 @@ export async function createExportScratch(): Promise<ExportScratch | null> {
     }
 
     return {
+      key,
       target,
       async finish(mimeType) {
         await release()

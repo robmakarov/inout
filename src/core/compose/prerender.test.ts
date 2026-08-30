@@ -10,10 +10,15 @@ import type { EditState, ExportResult, Recording } from '@core/types'
 let renderCalls = 0
 let settle: ((r: ExportResult) => void) | null = null
 let reject: ((e: unknown) => void) | null = null
+let progress: ((p: { phase: string; ratio: number }) => void) | null = null
 
 vi.mock('./pipeline', () => ({
-  exportRecording: (opts: { signal?: AbortSignal }) => {
+  exportRecording: (opts: {
+    signal?: AbortSignal
+    onProgress?: (p: { phase: string; ratio: number }) => void
+  }) => {
     renderCalls += 1
+    progress = opts.onProgress ?? null
     return new Promise<ExportResult>((res, rej) => {
       settle = res
       reject = rej
@@ -28,6 +33,10 @@ vi.mock('./pipeline', () => ({
 
 const written = new Map<string, number>()
 vi.mock('@core/store', () => ({
+  persistBlobCopy: (blob: Blob, key: string) => {
+    written.set(key, blob.size)
+    return Promise.resolve({ size: blob.size, type: blob.type } as unknown as Blob)
+  },
   blobStore: {
     read: (key: string) =>
       Promise.resolve({
@@ -84,6 +93,7 @@ afterEach(() => {
   renderCalls = 0
   settle = null
   reject = null
+  progress = null
   written.clear()
 })
 
@@ -123,8 +133,34 @@ describe('the pre-rendered export', () => {
     expect(taken).not.toBeNull()
     expect(renderCalls).toBe(1)
     settle!(fakeResult())
-    await expect(taken!).resolves.toBeTruthy()
+    await expect(taken!.promise).resolves.toBeTruthy()
     expect(renderCalls).toBe(1)
+  })
+
+  /**
+   * THE JOIN IS HONEST NOW (2026-08-30). The first version reported a flat
+   * "finalizing 99%" and ignored the claimer's cancel: Robert watched 99% for
+   * five minutes and his cancel reached nothing. A claimed job forwards its
+   * real progress and its abort controller is the claimer's to pull.
+   */
+  it('a claimed job keeps reporting its real progress to the claimer', async () => {
+    startPrerender({ recording, edit, settings })
+    const key = prerenderKey({ recording, edit, settings })
+    const taken = takePrerender(key)!
+    const seen: number[] = []
+    taken.onProgress((p) => seen.push(p.ratio))
+    progress?.({ phase: 'rendering', ratio: 0.4 })
+    progress?.({ phase: 'rendering', ratio: 0.6 })
+    expect(seen).toEqual([0.4, 0.6])
+    settle!(fakeResult())
+    await taken.promise
+  })
+
+  it('aborting a claimed job aborts the render underneath', async () => {
+    startPrerender({ recording, edit, settings })
+    const taken = takePrerender(prerenderKey({ recording, edit, settings }))!
+    taken.abort.abort()
+    await expect(taken.promise).rejects.toMatchObject({ name: 'AbortError' })
   })
 
   it('handing it out retires the job, so nothing deletes a file being downloaded', async () => {
@@ -134,7 +170,11 @@ describe('the pre-rendered export', () => {
     expect(first).not.toBeNull()
     expect(takePrerender(key)).toBeNull()
     settle!(fakeResult())
-    await first
+    await first!.promise
+    // The settle handler must KEEP the claimed file: the claimer's blob reads
+    // from it. (It used to drop it whenever the job was already retired.)
+    await new Promise((r) => setTimeout(r, 0))
+    expect([...written.keys()].some((k) => k.startsWith('prerender-'))).toBe(true)
   })
 
   it('a MISS is silent — the caller renders on demand exactly as before', () => {

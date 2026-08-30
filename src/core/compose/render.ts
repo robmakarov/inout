@@ -654,6 +654,9 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
     }
     videoSource.close()
 
+    // A cancel that lands during the last frames must not spend the flush:
+    // finalize() cannot be interrupted once entered.
+    throwIfAborted()
     report('finalizing', 0.95)
     const tFinalize = performance.now()
     await out.finalize()
@@ -679,6 +682,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       durationMs: Math.round(durationMs),
       width,
       height,
+      scratchKey: scratch?.key,
     }
   } catch (err) {
     if (output && output.state !== 'finalized' && output.state !== 'canceled') {

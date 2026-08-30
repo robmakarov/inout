@@ -622,6 +622,7 @@ export async function exportSmartCut(opts: SmartCutOptions): Promise<ExportResul
       durationMs: Math.round(durationMs),
       width,
       height,
+      scratchKey: scratch?.key,
     }
   } catch (err) {
     if (output && output.state !== 'finalized' && output.state !== 'canceled') {

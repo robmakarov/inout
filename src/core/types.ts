@@ -684,6 +684,13 @@ export interface ExportResult {
   height: number
   /** Present only for the "For AI" export (task AI1). */
   ai?: AiExportFacts
+  /**
+   * OPFS key of the scratch file backing `blob`, when the muxer streamed to
+   * disk (task O1). Present so a caller that finished with the bytes — copied
+   * them, or delivered nothing because the user cancelled — can free the
+   * scratch precisely instead of waiting for an age sweep.
+   */
+  scratchKey?: string
 }
 
 export interface ExportOptions {
@@ -692,6 +699,52 @@ export interface ExportOptions {
   settings?: ExportSettings
   onProgress?: (p: ExportProgress) => void
   signal?: AbortSignal
+}
+
+// ---------------------------------------------------------------------------
+// export jobs (src/core/compose/exportJobs.ts) — the export as a BACKGROUND
+// JOB (Robert, 2026-08-30): visible in a dock at the bottom of every screen,
+// running while the user edits or records something else, surviving a page
+// refresh (the job restarts from its persisted spec — sources and edit are
+// already durable), several at once. jobsRepo (IndexedDB) holds the records;
+// the finished file is copied to an OPFS key the job owns so "Save again" and
+// the cloud button survive the refresh too.
+// ---------------------------------------------------------------------------
+
+export type ExportJobKind = 'video' | 'ai'
+export type ExportJobState = 'running' | 'done' | 'failed'
+
+/** What survives of an ExportResult in IndexedDB — everything but the Blob. */
+export interface ExportJobResultMeta {
+  fileName: string
+  mimeType: string
+  bytes: number
+  durationMs: number
+  width: number
+  height: number
+  /** OPFS key of the job's own copy; null until the copy lands (the download
+   *  itself never waits on it). */
+  blobKey: string | null
+  ai?: AiExportFacts
+}
+
+export interface ExportJobRecord {
+  id: string
+  kind: ExportJobKind
+  recordingId: string
+  /** Snapshotted at press — later edits never leak into a running job. */
+  edit: EditState
+  /** Absent for 'ai' (that artefact has no tier). */
+  settings?: ExportSettings
+  allowPacketCopy: boolean
+  createdAt: number
+  /** How many times this job has started — a refresh restarts it, and a job
+   *  that keeps killing the page must not restart forever. */
+  runs: number
+  state: ExportJobState
+  progress: ExportProgress
+  error?: string
+  result?: ExportJobResultMeta
 }
 
 // ---------------------------------------------------------------------------

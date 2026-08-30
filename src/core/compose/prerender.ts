@@ -35,9 +35,9 @@
  *    so pressing the button early costs the user the remaining time and never
  *    restarts the work.
  */
-import type { EditState, ExportResult, ExportSettings, Recording } from '@core/types'
+import type { EditState, ExportProgress, ExportResult, ExportSettings, Recording } from '@core/types'
 import { newId } from '@core/id'
-import { blobStore, createPositionedWriter } from '@core/store'
+import { blobStore, persistBlobCopy } from '@core/store'
 import { exportRecording } from './pipeline'
 
 /**
@@ -53,29 +53,10 @@ import { exportRecording } from './pipeline'
  * key this module owns, and the copy is what is served. One extra file on disk,
  * never two: the previous copy is removed as soon as a new job supersedes it.
  *
- * Streamed rather than `arrayBuffer()` — these are hundreds of megabytes, and
- * this whole feature exists because memory pressure is what breaks the machine.
+ * The copy itself is store/persistBlobCopy.ts — export jobs make the same move.
  */
 export const PRERENDER_PREFIX = 'prerender-'
 const OWN_PREFIX = PRERENDER_PREFIX
-
-async function persistCopy(blob: Blob, key: string): Promise<Blob> {
-  const writer = await createPositionedWriter(key)
-  const reader = blob.stream().getReader()
-  let position = 0
-  try {
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      await writer.write(value, position)
-      position += value.byteLength
-    }
-  } finally {
-    await writer.close()
-  }
-  const file = await blobStore.read(key)
-  return file.slice(0, file.size, blob.type)
-}
 
 export interface PrerenderKeyInput {
   recording: Recording
@@ -98,11 +79,17 @@ export type PrerenderState = 'running' | 'done' | 'failed'
 interface Job {
   key: string
   state: PrerenderState
-  ratio: number
+  progress: ExportProgress
   startedAt: number
   abort: AbortController
   blobKey: string
   promise: Promise<ExportResult>
+  /** Set by the claimer (takePrerender) — progress keeps flowing after the
+   *  job is retired, because from then on it is a USER-VISIBLE export. */
+  forward: ((p: ExportProgress) => void) | null
+  /** Claimed by an export. The settle handlers must then KEEP the blob — the
+   *  claimer's file reads from it; the boot sweep collects it next session. */
+  takenOut: boolean
 }
 
 let job: Job | null = null
@@ -110,7 +97,7 @@ let job: Job | null = null
 /** What the panel may say about the job — never a promise it cannot keep. */
 export function prerenderStatus(key: string): { state: PrerenderState; ratio: number } | null {
   if (!job || job.key !== key) return null
-  return { state: job.state, ratio: job.ratio }
+  return { state: job.state, ratio: job.progress.ratio }
 }
 
 async function dropOwnBlob(key: string): Promise<void> {
@@ -143,11 +130,13 @@ export function startPrerender(input: PrerenderKeyInput): void {
   const started: Job = {
     key,
     state: 'running',
-    ratio: 0,
+    progress: { phase: 'preparing', ratio: 0 },
     startedAt: Date.now(),
     abort,
     blobKey,
     promise: Promise.resolve() as unknown as Promise<ExportResult>,
+    forward: null,
+    takenOut: false,
   }
   job = started
 
@@ -158,23 +147,35 @@ export function startPrerender(input: PrerenderKeyInput): void {
       settings: input.settings,
       signal: abort.signal,
       onProgress: (p) => {
-        if (job === started) started.ratio = p.ratio
+        // NOT guarded by `job === started`: once claimed the job is retired
+        // from this module but its progress is what the user is watching —
+        // the flat "finalizing 99%" Robert sat five minutes behind was this
+        // guard swallowing every real number the render produced.
+        started.progress = p
+        started.forward?.(p)
       },
     })
-    // Copied BEFORE anyone can supersede it — see persistCopy's note.
-    const held = await persistCopy(result.blob, blobKey)
-    return { ...result, blob: held }
+    // Copied BEFORE anyone can supersede it — see persistBlobCopy's note.
+    const held = await persistBlobCopy(result.blob, blobKey)
+    if (result.scratchKey) {
+      // The copy is the file now; the scratch would otherwise sit until an
+      // age sweep. Nobody has downloaded from this blob yet — it was never
+      // handed out — so the remove is safe.
+      void blobStore.remove(result.scratchKey).catch(() => undefined)
+    }
+    return { ...result, blob: held, scratchKey: undefined }
   })()
 
   started.promise.then(
     (result) => {
       if (job !== started) {
-        // Superseded while it ran: its file is nobody's now.
-        void dropOwnBlob(blobKey)
+        // Superseded while it ran: its file is nobody's now. A CLAIMED job is
+        // different — its file is exactly what the claimer is serving.
+        if (!started.takenOut) void dropOwnBlob(blobKey)
         return
       }
       started.state = 'done'
-      started.ratio = 1
+      started.progress = { phase: 'finalizing', ratio: 1 }
       console.info(
         `[compose] pre-render ready after ${((Date.now() - started.startedAt) / 1000).toFixed(1)}s — ` +
           `${(result.blob.size / 1048576).toFixed(1)} MB waiting before it was asked for (F16)`,
@@ -193,6 +194,18 @@ export function startPrerender(input: PrerenderKeyInput): void {
   )
 }
 
+/** What a claimer gets: the render, and the levers a user-visible export needs. */
+export interface TakenPrerender {
+  promise: Promise<ExportResult>
+  /** Aborting this aborts the underlying render — cancel must reach a joined
+   *  job (Robert's cancel pressed at the fake 99% reached nothing). */
+  abort: AbortController
+  /** Where the job is right now, for the first paint of the claimer's UI. */
+  progress: ExportProgress
+  /** Live updates from here on. One claimer; a second call replaces the first. */
+  onProgress(cb: (p: ExportProgress) => void): void
+}
+
 /**
  * The finished (or in-flight) render for this exact output, or null.
  *
@@ -203,11 +216,19 @@ export function startPrerender(input: PrerenderKeyInput): void {
  * Handing it out RETIRES the job — the blob is the caller's now, and this
  * module must not delete a file somebody is downloading.
  */
-export function takePrerender(key: string): Promise<ExportResult> | null {
+export function takePrerender(key: string): TakenPrerender | null {
   if (!job || job.key !== key || job.state === 'failed') return null
   const taken = job
   job = null
-  return taken.promise
+  taken.takenOut = true
+  return {
+    promise: taken.promise,
+    abort: taken.abort,
+    progress: taken.progress,
+    onProgress: (cb) => {
+      taken.forward = cb
+    },
+  }
 }
 
 /** Test seam — module state outlives test cases. */

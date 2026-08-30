@@ -52,12 +52,19 @@ Default is 1080p and must stay there — the composite is written at 1920 and th
 packet-copies it, so a higher default would silently break "instant default export".
 `max` means source resolution at 60 fps, nothing refused in advance.
 SECOND PASS the same day, from screenshots: the slider was a progress bar with dots on it and is now
-a segmented meter; the export stopped being a screen (progress and result are strips in the slider's
-slot, so there are three screens — main, recording, editing); the editor's slider lost its title row
+a segmented meter; the editor's slider lost its title row
 and note; Export and For AI sit on the track's own line; the pause button is gone and a
 continue-from-the-playhead control took its place in the editor transport, on the UI and on the
 roadmap as R-CONT; take cards gained a decoded frame and a Show-in-folder button that is honest about
 the fact no web API can reveal a file.
+
+THIRD PASS, later the same day, after a stuck export ("99% finalizing" for five minutes, cancel
+produced the download): exports are BACKGROUND JOBS now. Pressing Export creates a job and returns —
+progress lives in a dock at the bottom of every screen with a cancel that actually cancels, the
+editor never locks, several exports run at once, and a page refresh restarts an interrupted job
+instead of losing it (its spec and sources were durable all along). A finished job still downloads
+immediately and its row keeps Save again and the cloud link, surviving refresh for a day. The stall
+itself was the pre-render join reporting a fake 99% with cancel wired to nothing; both fixed.
 
 Also: the output frame now follows the take everywhere (his call — the black bars were IN the file,
 not a preview artefact); takes are cards in the page with watch / edit / download (send and copy

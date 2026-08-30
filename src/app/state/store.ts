@@ -1,20 +1,14 @@
 import { create } from 'zustand'
-import type {
-  CaptureSession,
-  EditState,
-  ExportProgress,
-  ExportResult,
-  Recording,
-} from '@core/types'
+import type { CaptureSession, EditState, ExportJobRecord, Recording } from '@core/types'
 
 /**
- * THREE SCREENS, and 'exporting' is not a fourth — it is the editor with the
- * render running in the slider's slot. UI1, Robert: "rendering loader show on
- * same screen where download button is, so we have only main screen, recording
- * screen, and editing screen". The old 'share' mode was a whole screen whose
- * job is now one strip above the slider (ExportSavedStrip).
+ * THREE SCREENS, and the export is not a mode AT ALL any more (2026-08-30,
+ * Robert: rendering "happening further if i switch app screen, independetly").
+ * An export is a background JOB — a row in the dock at the bottom of every
+ * screen (ExportDock) — so nothing locks, nothing navigates, and `exportJobs`
+ * here is just the dock's mirror of core/compose/exportJobs.
  */
-export type AppMode = 'capture' | 'editor' | 'exporting'
+export type AppMode = 'capture' | 'editor'
 
 /**
  * UI1 — WHY THE EDITOR WAS OPENED. A take reached through the takes list's
@@ -37,18 +31,15 @@ interface AppStore {
   session: CaptureSession | null
   recording: Recording | null
   editState: EditState | null
-  exportResult: ExportResult | null
-  exportProgress: ExportProgress | null
-  exportAbort: AbortController | null
+  /** The dock's rows — mirrored from core by app/lib/exportJobs. */
+  exportJobs: ExportJobRecord[]
   openIntent: OpenIntent | null
   toasts: Toast[]
   setMode(mode: AppMode): void
   setSession(session: CaptureSession | null): void
   setRecording(recording: Recording | null): void
   setEditState(editState: EditState | null): void
-  setExportResult(result: ExportResult | null): void
-  setExportProgress(p: ExportProgress | null): void
-  setExportAbort(a: AbortController | null): void
+  setExportJobs(jobs: ExportJobRecord[]): void
   setOpenIntent(i: OpenIntent | null): void
   toast(message: string, variant?: ToastVariant): void
   dismissToast(id: number): void
@@ -63,18 +54,14 @@ export const useAppStore = create<AppStore>()((set, get) => ({
   session: null,
   recording: null,
   editState: null,
-  exportResult: null,
-  exportProgress: null,
-  exportAbort: null,
+  exportJobs: [],
   openIntent: null,
   toasts: [],
   setMode: (mode) => set({ mode }),
   setSession: (session) => set({ session }),
   setRecording: (recording) => set({ recording }),
   setEditState: (editState) => set({ editState }),
-  setExportResult: (exportResult) => set({ exportResult }),
-  setExportProgress: (exportProgress) => set({ exportProgress }),
-  setExportAbort: (exportAbort) => set({ exportAbort }),
+  setExportJobs: (exportJobs) => set({ exportJobs }),
   setOpenIntent: (openIntent) => set({ openIntent }),
   toast: (message, variant = 'info') => {
     const id = ++toastSeq
@@ -82,15 +69,14 @@ export const useAppStore = create<AppStore>()((set, get) => ({
     setTimeout(() => get().dismissToast(id), TOAST_MS)
   },
   dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
+  // Deliberately does NOT touch exportJobs: jobs are independent of the
+  // screen you are on — that is their whole point.
   resetToCapture: () =>
     set({
       mode: 'capture',
       session: null,
       recording: null,
       editState: null,
-      exportResult: null,
-      exportProgress: null,
-      exportAbort: null,
       openIntent: null,
     }),
 }))

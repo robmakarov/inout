@@ -1800,9 +1800,33 @@
 /* They stay put while a render runs — the screen does not change — but they
    stop taking input, because the export snapshotted the edit when it started
    and a change made now would silently not be in the file. */
-.editor__below--locked {
-  pointer-events: none;
-  opacity: 0.4;
+/* ---------- export dock ----------
+   Every export, on every screen (2026-08-30): one fixed dock at the bottom,
+   one .xstrip row per job — the same strip language the saved row already
+   spoke, floated free of any single screen's layout. */
+
+.xdock {
+  position: fixed;
+  left: 50%;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  z-index: 90;
+  width: min(92vw, 720px);
+}
+.xdock .xstrip {
+  width: 100%;
+  max-width: none;
+  margin-bottom: 0;
+  background: var(--surface-2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.xstrip--failed {
+  border-color: color-mix(in srgb, var(--danger, #e2554f), transparent 70%);
+  color: var(--danger, #e2554f);
 }
 
 /* ---------- mid-take cuts (F1) ---------- */

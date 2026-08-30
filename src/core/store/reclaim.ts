@@ -2,6 +2,7 @@ import { blobStore, recordingsRepo } from './index'
 import { pendingBlobKeys } from '@core/capture/recovery'
 import { SCRATCH_PREFIX } from '@core/compose/scratch'
 import { PRERENDER_PREFIX } from '@core/compose/prerender'
+import { EXPORTJOB_PREFIX } from './recordingsRepo'
 
 /**
  * DELETE WHAT BELONGS TO NOTHING, AT EVERY BOOT — Robert, 2026-08-30: "we must
@@ -37,6 +38,9 @@ import { PRERENDER_PREFIX } from '@core/compose/prerender'
  *    yet. prerender.ts owns these and sweeps its own at boot, before any job
  *    starts — so a leftover from a previous page session is gone by the time
  *    this runs, and one belonging to a LIVE job must not be touched.
+ *  · an EXPORT JOB's finished file (`xjob-*`). Referenced by a jobsRepo row,
+ *    which this sweep does not read; exportJobs.ts owns these and sweeps its
+ *    own unclaimed ones at resume. One fact, one home.
  *  · `__` dev dump files, the same exclusion salvage.ts already makes.
  *
  * Failure is per-file and never fatal: a blob still locked by a worker that has
@@ -58,7 +62,10 @@ export interface ReclaimResult {
  */
 function isSweepable(key: string): boolean {
   return (
-    !key.startsWith('__') && !key.startsWith(SCRATCH_PREFIX) && !key.startsWith(PRERENDER_PREFIX)
+    !key.startsWith('__') &&
+    !key.startsWith(SCRATCH_PREFIX) &&
+    !key.startsWith(PRERENDER_PREFIX) &&
+    !key.startsWith(EXPORTJOB_PREFIX)
   )
 }
 
