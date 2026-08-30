@@ -18,6 +18,29 @@ export function warmCapturePipeline(): void {
   warmed = true
   void (async () => {
     try {
+      // THE ENCODER MEASUREMENT GOES FIRST, and that ordering is the point
+      // (2026-08-30). encoderWarm both pays the per-launch VideoEncoder init
+      // AND measures what this machine's encoder can carry, and capDisplayTrack
+      // reads that measurement to decide whether a take may attempt 60 fps at
+      // the source's own size. Kicked off behind four other awaits, it landed
+      // AFTER the first take had already armed — measured on the rig, which
+      // uses a cold profile every run: the number printed, and the take had
+      // already fallen back to the constant. It is cached across launches, so
+      // this only ever cost the FIRST take of a fresh profile; it costs it no
+      // longer. Deliberately not awaited — nothing here may delay a record.
+      //
+      // O4's original reason still stands and is why the warm exists at all: a
+      // Chrome process's FIRST VideoEncoder pays a multi-second init, per
+      // LAUNCH (see encoderWarm.ts). X6 added a second: the raw channels own
+      // VideoEncoders too and need the init paid whether or not the COMPOSITE
+      // is v2 — measured cold on the rig, they dropped 45-65 % of their frames.
+      // Gated on whether anything will USE one, so a session that will not
+      // spends nothing.
+      void (async () => {
+        const [{ preferredCompositeEngine }, { warmVideoEncoder }, { canMeasureVideoCapture }] =
+          await Promise.all([import('./engine'), import('./encoderWarm'), import('./measuredVideo')])
+        if (preferredCompositeEngine() === 'v2' || canMeasureVideoCapture()) void warmVideoEncoder()
+      })()
       // Ask the browser which devices are already ours, NOW — minutes before
       // the click, with no picker on screen to delay the answer. It is a
       // permission lookup, not an acquisition, so the no-idle-device rule
@@ -38,20 +61,6 @@ export function warmCapturePipeline(): void {
       const w = await blobStore.createWriteStream('__warmup.bin')
       await w.abort()
       await blobStore.remove('__warmup.bin').catch(() => undefined)
-      // O4: the v2 engine owns a VideoEncoder, and a Chrome process's FIRST
-      // VideoEncoder pays a multi-second init (per launch, measured — see
-      // encoderWarm.ts). Pay it here, while nobody is recording. Gated on
-      // whether anything in this take will USE a VideoEncoder, so a session
-      // that will not spends nothing.
-      //
-      // X6 ADDED A SECOND REASON TO WARM and it would have been missed: the raw
-      // channels can now own VideoEncoders too, and they need the init paid
-      // whether or not the COMPOSITE is v2. Measured cold on the rig, the raw
-      // channels dropped 45-65 % of their frames — which is note 6's fault
-      // exactly, a third time.
-      const [{ preferredCompositeEngine }, { warmVideoEncoder }, { canMeasureVideoCapture }] =
-        await Promise.all([import('./engine'), import('./encoderWarm'), import('./measuredVideo')])
-      if (preferredCompositeEngine() === 'v2' || canMeasureVideoCapture()) void warmVideoEncoder()
     } catch {
       warmed = false
     }
