@@ -597,6 +597,19 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       await breathe(stats.frames)
     }
 
+    // A decode that failed mid-render is reported LOUDLY and by name — the
+    // export finished, but part of it is a held frame and the user must be
+    // told which part and why. Before this the whole render died with
+    // "decoding error" and nothing else (Robert, 2026-08-30).
+    for (const r of videoReaders) {
+      if (!r.failure) continue
+      console.error(
+        `[compose] EXPORT INCOMPLETE: the ${r.kind} channel stopped decoding at ` +
+          `${r.failure.atSec.toFixed(1)}s of its own timeline — everything after that is the last ` +
+          `frame held. The source file is damaged from there. Reason: ${r.failure.message}`,
+      )
+    }
+
     if (waveformMode) {
       // Audio pass first: the mixed peaks drive every waveform frame.
       if (audioSource) {
