@@ -9,6 +9,7 @@ import {
   resetDisplayInflightForTests,
 } from './displayInflight'
 import {
+  ESCALATE_AT_STALLS,
   consecutiveDisplayStalls,
   displayStallMessage,
   rememberDisplayStall,
@@ -143,30 +144,28 @@ describe('advice that knows what it has already told this user', () => {
     expect(msg).not.toMatch(/System Settings/)
   })
 
-  it('THE THIRD IN A ROW STOPS BLAMING THE BROWSER — ⌘Q has been tried twice by then', () => {
+  it('THE SECOND IN A ROW STOPS BLAMING THE BROWSER — the app already spent its refresh', () => {
     rememberDisplayStall()
     rememberDisplayStall()
-    rememberDisplayStall()
-    expect(consecutiveDisplayStalls()).toBe(3)
+    expect(consecutiveDisplayStalls()).toBe(ESCALATE_AT_STALLS)
     const msg = displayStallMessage('wedge', 'chrome', 'failed')
-    expect(msg).toMatch(/System Settings/)
-    expect(msg).toMatch(/Screen & System Audio Recording/)
-    // It must name the count, because "the 3rd in a row" is the evidence that
-    // the previous advice failed — without it this is just another sentence.
-    expect(msg).toMatch(/stalled 3 times in a row/)
+    expect(msg).toMatch(/screen-recording permission/)
+    expect(msg).toMatch(/Screen Recording settings/)
+    // It must name the count: "twice in a row, and the refresh did not help" is
+    // the evidence that the page has been ruled out. Without it this is just
+    // another sentence telling the user to go and change something.
+    expect(msg).toMatch(/stalled 2 times in a row/)
   })
 
   it('a delivered screen clears the run — the next stall starts from the top again', () => {
     rememberDisplayStall()
     rememberDisplayStall()
-    rememberDisplayStall()
     rememberDisplaySuccess(0)
     expect(consecutiveDisplayStalls()).toBe(0)
-    expect(displayStallMessage('wedge', 'chrome', 'failed')).not.toMatch(/System Settings/)
+    expect(displayStallMessage('wedge', 'chrome', 'failed')).not.toMatch(/screen-recording permission/)
   })
 
   it('the still-running notice never escalates: the share may still land', () => {
-    rememberDisplayStall()
     rememberDisplayStall()
     rememberDisplayStall()
     expect(displayStallMessage('wedge', 'chrome', 'waiting')).toMatch(/Still waiting/)

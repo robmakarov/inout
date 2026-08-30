@@ -9,6 +9,7 @@ export {
   resetDisplayWedge,
   consecutiveDisplayStalls,
   displayStallMessage,
+  ESCALATE_AT_STALLS,
 } from './displayWedge'
 export type { DisplayStall } from './displayWedge'
 export { warmCapturePipeline } from './prearm'

@@ -90,6 +90,16 @@ const KEY = 'inout.displayWedge.v1'
  * gone is back at full quality within a minute of ordinary use.
  */
 export const GOOD_TAKES_TO_CLIMB = 3
+
+/**
+ * How many stalls in a row before the advice stops being about the browser.
+ * TWO: the first is answered by the app's own refresh, which costs the user
+ * nothing and often works; a second one after that has ruled the page out. The
+ * UI reads the same number to decide whether to show the button that opens the
+ * macOS setting, so a user meets the actual fix on their second stall rather
+ * than after they have given up.
+ */
+export const ESCALATE_AT_STALLS = 2
 const WEDGE_TTL_MS = 24 * 60 * 60 * 1000
 
 /** 0 = full request. Higher = fewer of OUR options; see the ladder above. */
@@ -361,13 +371,18 @@ export function resetDisplayWedgeForTests(): void {
  * classifier reads `everDelivered` and a profile that has ever been handed a
  * screen is, by that rule, forever in "Chrome's transient wedge". Robert did
  * exactly what it said, twice, and stalled four times: for him the sentence
- * was not advice, it was a loop. A stall that survives the refresh AND a
- * relaunch has FALSIFIED the browser-process story, and the remaining cause is
- * the one below the browser — macOS is not handing the screen to it. So from
- * the third stall in a row the text names that instead, with the toggle that
- * clears it. (macOS re-asks for screen recording periodically; the prompt can
- * open behind a full-screen window and never be seen, which looks from the
- * page exactly like a wedge and survives every ⌘Q.)
+ * was not advice, it was a loop.
+ *
+ * THE SECOND STALL IS THE TURN, not the third. The first one is answered by
+ * the app itself — it refreshes and says try again, and a user does nothing.
+ * If the share stalls again after that, the fresh renderer has been ruled out
+ * and the cause is below the browser: macOS is not handing the screen over.
+ * Waiting for a third would only be waiting for a user to give up, and the
+ * whole point of naming it is that they should not have to. (macOS re-asks for
+ * screen recording periodically; the prompt can open behind a full-screen
+ * window and never be seen, which looks from the page exactly like a wedge and
+ * survives every ⌘Q — and the escalated text is what the UI hangs its
+ * open-the-settings button on.)
  *
  * The permission text names the browser the user is actually in. Sending
  * someone in Edge to switch Chrome on in System Settings is the same
@@ -397,15 +412,16 @@ export function displayStallMessage(
       : `Still waiting for the screen. ${name} has the share but has not handed it over — ` +
           `if nothing happens, nothing is being recorded and you can press record again.`
   }
-  // THE THIRD ONE IN A ROW IS NOT A BROWSER PROBLEM ANY MORE. Refresh (stall 1)
-  // and ⌘Q (stall 2) have both been spent, and neither produced a screen.
-  if (stalls >= 3) {
-    return `macOS is not handing the screen to ${name} — the share has stalled ${stalls} times in ` +
-      `a row and restarting ${name} did not change it, so the block is below the browser. ` +
-      `Open System Settings → Privacy & Security → Screen & System Audio Recording and turn ` +
-      `${name} OFF and then ON again (a stale grant looks exactly like this), then quit ${name} ` +
-      `with ⌘Q and reopen. Also check for a macOS permission dialog hiding behind your windows: ` +
-      `it re-asks every so often, and an unanswered one stalls every share.`
+  // THE SECOND ONE IN A ROW IS NOT THE PAGE'S PROBLEM ANY MORE: the app spent
+  // its automatic refresh on the first, and a fresh renderer did not help.
+  if (stalls >= ESCALATE_AT_STALLS) {
+    return `macOS is not handing the screen to ${name} — it has stalled ${stalls} times in a row, ` +
+      `and refreshing the app did not change it, so the block is the screen-recording permission ` +
+      `below the browser rather than anything on this page. Open Screen Recording settings below, ` +
+      `turn ${name} OFF and then ON again (a stale grant looks exactly like this), then quit ` +
+      `${name} with ⌘Q and reopen it. If a macOS permission dialog is hiding behind your windows, ` +
+      `answering that fixes it too — it re-asks every so often, and an unanswered one stalls ` +
+      `every share.`
   }
   if (stall === 'permission') {
     // NOT "the device never connected", which is what this said until W1
