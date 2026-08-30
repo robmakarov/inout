@@ -163,11 +163,15 @@ export function QualityBar({
    * actually offers one (F18), so it is not on the rail for a take that has no
    * source step to give.
    */
-  const hasSource = tiers.some((t) => t.id === 'source')
+  // The top rung's NAME comes from the tier like every other rung's does —
+  // hardcoding 'Max' here is how the step ended up with two names, 'Source' in
+  // core and 'Max' on the rail (2026-08-30).
+  const source = tiers.find((t) => t.id === 'source')
+  const sourceLabel = source?.label
   const rail = useMemo(() => {
     const rungs = QUALITY_TIERS.map((t) => ({ id: t.id, label: t.label }))
-    return hasSource ? [...rungs, { id: 'source', label: 'Max' }] : rungs
-  }, [hasSource])
+    return sourceLabel ? [...rungs, { id: 'source', label: sourceLabel }] : rungs
+  }, [sourceLabel])
   const cap = rail.reduce(
     (top, r, i) => (tiers.some((t) => t.id === r.id) ? i : top),
     0,

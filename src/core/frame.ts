@@ -332,29 +332,42 @@ export function takeAspect(recording: Recording): number {
 }
 
 /**
- * THE BIGGEST PICTURE THIS TAKE ACTUALLY HOLDS — task F18's top step.
+ * THE BIGGEST PICTURE THIS TAKE ACTUALLY HOLDS — task F18's top step, and the
+ * ONE place "the take's own resolution" is decided.
  *
  * Deliberately NOT `takeAspect`'s composite-first rule, and the difference is
  * the whole point: the composite is written at COMPOSITE_WIDTH (1920) whatever
  * the screen was, so asking it would answer 1920 for a 3024-wide take and the
  * source step would be a step to nowhere. The raw channel is where the take's
- * own resolution actually lives, and O3c's packet copy is what delivers it.
+ * own resolution actually lives.
  *
  * THE SCREEN DECIDES where there is one, for the same reason it decides the
- * aspect: a screen-present take draws the screen full-frame. With no screen the
- * camera decides — that take IS the camera.
+ * aspect: a screen-present take draws the screen full-frame, so its pixels are
+ * the frame's. With no screen the camera decides — that take IS the camera. A
+ * CAMERA BESIDE A SCREEN CHANGES NOTHING: it is a PiP drawn into a corner of
+ * that frame, and it never sets the frame's size (2026-08-30 — the missing Max
+ * step; see `compose/quality.sourceStepFor`).
  *
- * Returns 0 when there is nothing to follow, which every caller reads as "this
- * take has no source step".
+ * TWO CHANNELS OF THE DECIDING KIND MEANS THERE IS NO ANSWER, and that is the
+ * only refusal left here: `?resstep=1` segments the screen when its source
+ * resizes mid-take, so "its own resolution" would be two different numbers and
+ * picking one would be a guess. Returns null, which every caller reads as
+ * "this take has no source step".
  */
-export function takeLongEdge(recording: Recording): number {
+export function takeSourcePixels(recording: Recording): { width: number; height: number } | null {
   const video = recording.channels.filter((c) => c.media === 'video')
-  const screen = video.find((c) => c.kind === 'screen')
-  const chosen = screen ?? video[0]
-  const w = chosen?.width ?? 0
-  const h = chosen?.height ?? 0
-  if (!(w > 0) || !(h > 0)) return 0
-  return Math.max(w, h)
+  const kind = video.some((c) => c.kind === 'screen') ? 'screen' : video[0]?.kind
+  const of = video.filter((c) => c.kind === kind)
+  if (of.length !== 1) return null
+  const w = of[0]!.width ?? 0
+  const h = of[0]!.height ?? 0
+  return w > 0 && h > 0 ? { width: w, height: h } : null
+}
+
+/** `takeSourcePixels`'s long edge, or 0 for "nothing to follow". */
+export function takeLongEdge(recording: Recording): number {
+  const px = takeSourcePixels(recording)
+  return px ? Math.max(px.width, px.height) : 0
 }
 
 /**

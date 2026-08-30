@@ -104,24 +104,36 @@ describe('whether a take gets a source step at all', () => {
     expect(tiersForTake(recording()).map((t) => t.id)).toEqual(QUALITY_TIERS.map((t) => t.id))
   })
 
-  it('a screen+camera take gets NO source step, and the refusal is the feature', () => {
-    // The composite is written at 1920 whatever the screen was, so only the raw
-    // channel holds the take's own resolution and only single generation hands
-    // it over untouched — which needs exactly one video channel. Offering the
-    // step here would promise 3024 and deliver the 1920 composite upscaled: the
-    // badge disagreeing with the path, which is the bug O3c exists to prevent.
+  it('THE MISSING MAX STEP: a screen+camera take gets one, and it is the SCREEN', () => {
+    // Robert, 2026-08-30: "i choosed max quality but export options is up to
+    // 1440 only". Every input chip is armed by default, so his max take was
+    // screen+camera — and this used to refuse any take with more than one video
+    // channel, dropping the top rung off the rail for the product's own default
+    // configuration. The camera is a PiP drawn into a corner of the screen's
+    // frame; it never sets the frame's size.
     const two = recording({
+      qualityStep: 'max',
       channels: [channel(), channel({ id: 'ch_cam', kind: 'camera', blobKey: 'c.mp4', width: 1280, height: 720 })],
     })
-    expect(sourceStepFor(two)).toBeNull()
+    expect(sourceStepFor(two)).toEqual({ width: 3024, height: 1964 })
+    expect(tiersForTake(two).map((t) => t.id)).toEqual(['540p', '720p', '1080p', '1440p', 'source'])
+    // …and it is DELIVERED BY THE RENDER, not the copy — which is why offering
+    // it is honest. The badge asks this same function, so it says so.
+    const src = tiersForTake(two).find((t) => t.id === 'source')!
+    expect(copySourceForTier(two, src)).toBeNull()
+    expect(settingsForTier(src, two).width).toBe(3024)
+  })
+
+  it('the step is called Max, the same name the slider gave it before the take', () => {
+    expect(SOURCE_TIER.label).toBe('Max')
+    expect(tierById('source').label).toBe('Max')
   })
 
   it("O16's GATE: a STEPPED take declines the native copy rather than getting it wrong", () => {
     // A resolution step gives the screen kind two non-overlapping segments with
-    // two geometries. They cannot be packet-copied as ONE file, so the take's
-    // own-resolution export must decline — which it does by the same rule that
-    // refuses a screen+camera take: single generation needs exactly one video
-    // channel. The DEFAULT tier's instant export is unaffected, because that one
+    // two geometries. They cannot be packet-copied as ONE file, and there is no
+    // single number to call the take's own resolution either, so the step is not
+    // offered. The DEFAULT tier's instant export is unaffected, because that one
     // copies the composite, which is one continuous file at one size throughout.
     const stepped = recording({
       channels: [
@@ -129,6 +141,9 @@ describe('whether a take gets a source step at all', () => {
         channel({ id: 'ch_screen_2', blobKey: 's2.mp4', startOffsetMs: 5_100, durationMs: 5_000 }),
       ],
     })
+    // Two channels of the DECIDING kind: "its own resolution" is two different
+    // numbers and picking one would be a guess. This is the one refusal left in
+    // `takeSourcePixels` now that a camera beside a screen no longer vetoes it.
     expect(sourceStepFor(stepped)).toBeNull()
     expect(copySourceForTier(stepped, SOURCE_TIER)).toBeNull()
     // …and the default step still copies the composite. Resolved through

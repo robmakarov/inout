@@ -24,7 +24,7 @@
  */
 import { AUDIO_BITRATE, VIDEO_BITRATE } from './codecs'
 import { chooseCopySource, type CopySource } from './copySource'
-import { frameAspectFor, frameForAspect, sourceResEnabled } from '@core/frame'
+import { frameAspectFor, frameForAspect, sourceResEnabled, takeSourcePixels } from '@core/frame'
 import { DEFAULT_FRAME_RATE, normalizeRate, takeRate } from '@core/rate'
 import { stepAtOrBelow } from '@core/qualityStep'
 import { DEFAULT_EXPORT_SETTINGS, type ExportSettings, type Recording } from '@core/types'
@@ -66,7 +66,14 @@ export interface QualityTier {
  */
 export const SOURCE_TIER: QualityTier = {
   id: 'source',
-  label: 'Source',
+  // IT IS CALLED MAX, EVERYWHERE (2026-08-30, Robert: "i thought we have naming
+  // for this tier isnt it?"). Since UI1 there is ONE quality ladder and its top
+  // rung is `max` in `core/qualityStep.ts` — the name on the slider before the
+  // take. This file's id stayed 'source' because that is what is written into
+  // stored takes, but the label the user reads is the step's own. The editor's
+  // rail used to hardcode the string, so the name lived in two places and only
+  // one of them was this one.
+  label: 'Max',
   width: 2560,
   height: 1440,
   longEdge: 0,
@@ -234,17 +241,32 @@ export function tierWithinTakeCeiling(recording: Recording, id: QualityTierId): 
  *    would be a duplicate of a step already on the list, or worse, smaller than
  *    one — a step that is not a step.
  *
- * 2. THE STEP CAN ACTUALLY BE DELIVERED AT THAT SIZE. The composite is written
- *    at 1920 whatever the screen was, so the only thing that holds a take's own
- *    resolution is the RAW channel, and the only path that hands it over
- *    untouched is O3c's single-generation packet copy — which needs exactly one
- *    video channel. A screen+camera take therefore gets NO source step, and
- *    that refusal is the feature: offering one would promise 3024 and hand back
- *    the 1920 composite upscaled, which is the badge disagreeing with the path
- *    — the exact bug shape O3c's wiring exists to make impossible, and the one
- *    F13 hit when `allowComposite` silently meant "1920x1080".
+ * 2. THE TAKE HOLDS THOSE PIXELS SOMEWHERE — `frame.takeSourcePixels`, the one
+ *    place "the take's own resolution" is decided. The composite is written at
+ *    1920 whatever the screen was, so it is never the answer; the raw screen
+ *    channel is.
  *
- * Returns 0 for "no source step".
+ * THE CAMERA USED TO VETO THIS STEP AND THAT WAS THE BUG (2026-08-30, Robert:
+ * "i choosed max quality but export options is up to 1440 only"). Every input
+ * chip is armed by default, so his max take was screen+camera — and this
+ * function refused any take with more than one video channel, dropping the top
+ * rung off the rail for the exact configuration the product is built around.
+ *
+ * The refusal was inherited from the DELIVERY path, not from this question. It
+ * read: only O3c's packet copy hands a raw channel over untouched, a packet
+ * copy needs exactly one video channel, therefore a screen+camera take could
+ * only be handed the 1920 composite upscaled — the badge disagreeing with the
+ * path. That reasoning was already dead when it was written: `copySourceForTier`
+ * answers the copy question PER TIER, so the panel badges this step "Re-renders
+ * the whole video at 3024x1964" and the export does exactly that, composing
+ * from the RAW channels (`compose/render.ts` never reads the composite). Slow is
+ * not the same as wrong, and a slow export is the documented price of max —
+ * paid at export time, where a wait costs only time.
+ *
+ * A step that is offered and rendered is honest. A step that is not offered is
+ * a quality ceiling the user chose and cannot reach.
+ *
+ * Returns null for "no source step".
  */
 export function sourceStepFor(recording: Recording): SourceStep | null {
   // UI1: THE TAKE ANSWERS FOR ITSELF where it recorded a ceiling. A take shot at
@@ -254,14 +276,10 @@ export function sourceStepFor(recording: Recording): SourceStep | null {
   // which is the behaviour it was made under.
   const ceiling = recording.qualityStep
   if (ceiling ? ceiling !== 'max' : !sourceResEnabled()) return null
-  const video = recording.channels.filter((c) => c.media === 'video')
-  if (video.length !== 1) return null
-  const ch = video[0]!
-  const w = ch.width ?? 0
-  const h = ch.height ?? 0
-  if (!(w > 0) || !(h > 0)) return null
+  const px = takeSourcePixels(recording)
+  if (!px) return null
   const top = QUALITY_TIERS.reduce((m, t) => Math.max(m, t.longEdge), 0)
-  return Math.max(w, h) > top ? { width: w, height: h } : null
+  return Math.max(px.width, px.height) > top ? px : null
 }
 
 /**
