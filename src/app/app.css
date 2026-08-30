@@ -2000,17 +2000,22 @@
     var(--bg);
   pointer-events: none;
 }
-/* The undo, inside the zone it undoes. Only drawn where there is room for it —
-   below that the gap is a few pixels wide and a button in it would cover the
-   clips on either side. */
-.tl__gap-undo {
+/* What you can do with a cut, inside the cut itself. Only drawn where there is
+   room — below that the gap is a few pixels wide and buttons in it would cover
+   the clips on either side. */
+.tl__gap-acts {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.tl__gap-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   height: 18px;
-  padding: 0;
   width: 18px;
-  justify-content: center;
+  padding: 0;
   border: none;
   border-radius: var(--r-full);
   background: var(--surface-2);
@@ -2025,13 +2030,59 @@
     background var(--t-fast) var(--ease),
     color var(--t-fast) var(--ease);
 }
-.tl__gap-undo--wide {
+.tl__gap-btn--wide {
   width: auto;
   padding: 0 7px 0 5px;
 }
-.tl__gap-undo:hover {
+.tl__gap-btn:hover {
   background: var(--surface-3);
   color: var(--text);
+}
+.tl__gap-btn--close:hover {
+  background: var(--record-soft);
+  color: var(--record);
+}
+
+/* A gap that has been closed. The clips either side have slid together, so
+   what is left is a SEAM — a mark saying material was taken out here, not a
+   zone with anything in it. */
+.tl__seam {
+  position: absolute;
+  top: 0;
+  bottom: 26px;
+  width: 3px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(
+    180deg,
+    var(--text-faint) 0 3px,
+    transparent 3px 6px
+  );
+  pointer-events: none;
+}
+
+/* The slide itself, and it lives only for the length of one — see `sliding` in
+   Timeline.tsx. The filmstrip's slice moves with its piece, so the background
+   is transitioned too or the picture would jump while its box glides. */
+.tl--sliding .lane__bar,
+.tl--sliding .lane__wave,
+.tl--sliding .lane__edge,
+.tl--sliding .tl__gap,
+.tl--sliding .tl__seam,
+.tl--sliding .tl__cut,
+.tl--sliding .tl__trim,
+.tl--sliding .tl__dim,
+.tl--sliding .tl__playhead,
+.tl--sliding .tl__seg-del,
+.tl--sliding .tl__seg-speed,
+.tl--sliding .tl__zoom-dot,
+.tl--sliding .tl__zoom-move,
+.tl--sliding .tl__tick {
+  transition:
+    left 240ms var(--ease),
+    width 240ms var(--ease),
+    background-position 240ms var(--ease),
+    background-size 240ms var(--ease);
 }
 .tl__cut {
   position: absolute;

@@ -82,13 +82,106 @@ export function Timeline({
   }, [])
 
   const totalMs = Math.max(1, recording.durationMs)
-  const x = (ms: number) => (ms / totalMs) * width
+
+  /**
+   * GAPS THE USER HAS DELETED — the timeline stops spending width on them
+   * (Robert: "add delete button, which will remove it completle and other part
+   * will slide to each other smoothly").
+   *
+   * Held here and not on the EditState, because it changes NOTHING about the
+   * output: the material was already excluded the moment the cut was made, and
+   * this only decides whether the timeline still draws the hole it left.
+   * `EditState` is a core contract the export reads; a view preference has no
+   * business in it.
+   *
+   * Keyed by the gap's own start instant rather than by index, so adding a cut
+   * somewhere else does not collapse the wrong hole.
+   */
+  const [collapsed, setCollapsed] = useState<ReadonlySet<number>>(new Set())
+  useEffect(() => setCollapsed(new Set()), [recording.id])
+  /**
+   * Robert asked for the clips to "slide to each other smoothly", so the
+   * collapse is animated — and ONLY the collapse. The same transition left on
+   * permanently would put 240 ms of lag behind every trim drag, which is the
+   * opposite of what a timeline is for. So it is a class that lives for the
+   * length of one slide.
+   */
+  const [sliding, setSliding] = useState(false)
+  const slideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(
+    () => () => {
+      if (slideTimer.current) clearTimeout(slideTimer.current)
+    },
+    [],
+  )
+  const closeGap = (atMs: number) => {
+    setCollapsed((prev) => new Set(prev).add(atMs))
+    setSliding(true)
+    if (slideTimer.current) clearTimeout(slideTimer.current)
+    slideTimer.current = setTimeout(() => setSliding(false), 280)
+  }
+
+  const allSegments = editSegments(edit)
+  /** Every hole between kept spans, and whether it is still drawn. */
+  const holes = allSegments
+    .slice(0, -1)
+    .map((sg, i) => ({ index: i, startMs: sg.endMs, endMs: allSegments[i + 1]!.startMs }))
+    .filter((h) => h.endMs > h.startMs)
+  const hidden = holes.filter((h) => collapsed.has(h.startMs))
+  const hiddenMs = hidden.reduce((n, h) => n + (h.endMs - h.startMs), 0)
+  /** The take's length as the timeline DRAWS it. */
+  const shownMs = Math.max(1, totalMs - hiddenMs)
+
+  /**
+   * THE AXIS. Linear in recording time everywhere except across a collapsed
+   * hole, which takes no width at all — so the clips either side of it close
+   * up. Every position on this timeline goes through here, which is what makes
+   * the collapse one change rather than one per element.
+   */
+  const shownAt = (ms: number): number => {
+    let out = ms
+    for (const h of hidden) {
+      if (ms >= h.endMs) out -= h.endMs - h.startMs
+      else if (ms > h.startMs) out -= ms - h.startMs
+    }
+    return out
+  }
+  const x = (ms: number) => (shownAt(ms) / shownMs) * width
+  /** A WIDTH, not a position. `x(duration)` is only the width of a span when
+   *  the axis is linear, and across a collapsed hole it is not. */
+  const spanW = (aMs: number, bMs: number) => Math.max(0, x(bMs) - x(aMs))
+  /** The inverse of `shownAt`, so a click lands on the instant under it. */
+  const msAtShown = (shown: number): number => {
+    let out = shown
+    for (const h of hidden) {
+      if (out >= h.startMs) out += h.endMs - h.startMs
+    }
+    return Math.min(totalMs, Math.max(0, out))
+  }
   const msAtClient = (clientX: number) => {
     const el = trackRef.current
     if (!el) return 0
     const r = el.getBoundingClientRect()
     const f = Math.min(1, Math.max(0, (clientX - r.left) / Math.max(1, r.width)))
-    return f * totalMs
+    return msAtShown(f * shownMs)
+  }
+
+  /** `[a, b)` broken into the stretches the timeline actually draws. */
+  const visibleSpans = (aMs: number, bMs: number): { startMs: number; endMs: number }[] => {
+    let spans = [{ startMs: aMs, endMs: bMs }]
+    for (const h of hidden) {
+      const next: typeof spans = []
+      for (const sp of spans) {
+        if (h.endMs <= sp.startMs || h.startMs >= sp.endMs) {
+          next.push(sp)
+          continue
+        }
+        if (h.startMs > sp.startMs) next.push({ startMs: sp.startMs, endMs: h.startMs })
+        if (h.endMs < sp.endMs) next.push({ startMs: h.endMs, endMs: sp.endMs })
+      }
+      spans = next
+    }
+    return spans.filter((sp) => sp.endMs > sp.startMs)
   }
 
   const seekAtClient = (clientX: number) => {
@@ -261,15 +354,29 @@ export function Timeline({
   const gEnd = edit.globalTrimEndMs
 
   return (
-    <div className="tl">
+    <div className={`tl${sliding ? ' tl--sliding' : ''}`}>
       <div className={`tl__lanes${anyStrip ? ' tl__lanes--film' : ''}`}>
         {recording.channels.map((ch) => {
           const meta = CHANNEL_META[ch.kind]
           const ce = edit.channels.find((c) => c.channelId === ch.id) ?? fallbackChannelEdit(ch)
-          const barLeft = x(ch.startOffsetMs)
-          const barWidth = Math.max(2, x(ch.durationMs))
-          const keptLeft = x(ce.trimStartMs)
-          const keptWidth = Math.max(0, x(ce.trimEndMs - ce.trimStartMs))
+          /**
+           * THE LANE IS DRAWN IN PIECES, one per stretch of this channel the
+           * timeline still shows. With no collapsed hole that is exactly one
+           * piece spanning the whole channel, which is the bar this always was.
+           *
+           * A piece cannot simply stretch the whole filmstrip: the strip was
+           * built for the channel's FULL width, so each piece shows a SLICE of
+           * it — sized up by how much of the channel it covers and offset to
+           * where that slice begins. Getting this wrong is invisible in the
+           * geometry and glaring in the picture, which is why the strip is
+           * positioned from the channel's own fractions rather than from px.
+           */
+          const chStart = ch.startOffsetMs
+          const chEnd = ch.startOffsetMs + ch.durationMs
+          const pieces = visibleSpans(chStart, chEnd)
+          /** The kept window, on the RECORDING timeline. */
+          const keptStart = chStart + ce.trimStartMs
+          const keptEnd = chStart + ce.trimEndMs
           /**
            * F8. The picture is the lane's background and the colour language
            * stays exactly what it was — the kept span keeps its channel tint,
@@ -297,66 +404,69 @@ export function Timeline({
                 </button>
               </div>
               <div className="lane__track" onPointerDown={(e) => startDrag(e, seekAtClient)}>
-                {width > 0 && (
-                  <div
-                    className={`lane__bar${ce.enabled ? '' : ' lane__bar--disabled'}`}
-                    style={{
-                      left: barLeft,
-                      width: barWidth,
-                      ...(strip
-                        ? {
-                            backgroundImage: `url(${strip.url})`,
-                            // The strip was built for THIS bar's width, so it
-                            // stretches to it exactly and never tiles.
-                            backgroundSize: '100% 100%',
-                            backgroundRepeat: 'no-repeat',
-                          }
-                        : null),
-                    }}
-                  >
-                    <div
-                      className="lane__seg lane__seg--cut"
-                      style={{ left: 0, width: keptLeft, ...cutPaint }}
-                    />
-                    <div
-                      className="lane__seg lane__seg--kept"
-                      style={{ left: keptLeft, width: keptWidth, background: meta.colorVar }}
-                    />
-                    {/* F8: the sound itself, over the channel's own tint —
-                        the opposite layering to the filmstrip, because here
-                        the colour is the background and the wave is the
-                        content. Under the trim edges (z-index 2) so they stay
-                        grabbable, and pointer-events off so the lane still
-                        seeks when clicked. */}
-                    {wave && (
+                {width > 0 &&
+                  pieces.map((p) => {
+                    const left = x(p.startMs)
+                    const w = Math.max(2, spanW(p.startMs, p.endMs))
+                    // Where this piece sits inside the channel, 0..1 — the
+                    // strip and the waveform are both sliced by these.
+                    const f0 = (p.startMs - chStart) / Math.max(1, ch.durationMs)
+                    const f1 = (p.endMs - chStart) / Math.max(1, ch.durationMs)
+                    const fullW = w / Math.max(1e-6, f1 - f0)
+                    const slice = (url: string) => ({
+                      backgroundImage: `url(${url})`,
+                      backgroundSize: `${fullW}px 100%`,
+                      backgroundPosition: `${-f0 * fullW}px 0`,
+                      backgroundRepeat: 'no-repeat' as const,
+                    })
+                    // The kept window, clipped to this piece, in piece pixels.
+                    const kFrom = Math.max(p.startMs, Math.min(keptStart, p.endMs))
+                    const kTo = Math.max(p.startMs, Math.min(keptEnd, p.endMs))
+                    const kLeft = spanW(p.startMs, kFrom)
+                    const kWidth = spanW(kFrom, kTo)
+                    return (
                       <div
-                        className="lane__wave"
-                        style={{
-                          backgroundImage: `url(${wave.url})`,
-                          backgroundSize: '100% 100%',
-                          backgroundRepeat: 'no-repeat',
-                        }}
-                      />
-                    )}
-                    <div
-                      className="lane__seg lane__seg--cut"
-                      style={{
-                        left: keptLeft + keptWidth,
-                        right: 0,
-                        ...cutPaint,
-                      }}
-                    />
+                        key={`${ch.id}-${p.startMs}`}
+                        className={`lane__bar${ce.enabled ? '' : ' lane__bar--disabled'}`}
+                        style={{ left, width: w, ...(strip ? slice(strip.url) : null) }}
+                      >
+                        <div
+                          className="lane__seg lane__seg--cut"
+                          style={{ left: 0, width: kLeft, ...cutPaint }}
+                        />
+                        <div
+                          className="lane__seg lane__seg--kept"
+                          style={{ left: kLeft, width: kWidth, background: meta.colorVar }}
+                        />
+                        {/* F8: the sound itself, over the channel's own tint —
+                            the opposite layering to the filmstrip, because here
+                            the colour is the background and the wave is the
+                            content. Pointer-events off so the lane still seeks
+                            when clicked. */}
+                        {wave && <div className="lane__wave" style={slice(wave.url)} />}
+                        <div
+                          className="lane__seg lane__seg--cut"
+                          style={{ left: kLeft + kWidth, right: 0, ...cutPaint }}
+                        />
+                      </div>
+                    )
+                  })}
+                {/* The trim edges belong to the CHANNEL, not to a piece — they
+                    are one instant each and a collapsed hole must not give them
+                    two homes. Positioned in the track, over the pieces. */}
+                {width > 0 && (
+                  <>
                     <div
                       className="lane__edge lane__edge--l"
-                      style={{ left: keptLeft - 3 }}
+                      style={{ left: x(keptStart) - 3 }}
                       onPointerDown={dragChannelTrim(ch, 'start')}
                     />
                     <div
                       className="lane__edge lane__edge--r"
-                      style={{ left: keptLeft + keptWidth - 3 }}
+                      style={{ left: x(keptEnd) - 3 }}
                       onPointerDown={dragChannelTrim(ch, 'end')}
                     />
-                  </div>
+                  </>
                 )}
               </div>
             </div>
@@ -395,7 +505,7 @@ export function Timeline({
                 {moved && (
                   <div
                     className="tl__zoom-move"
-                    style={{ left: x(prev.atMs), width: Math.max(2, x(k.atMs - prev.atMs)) }}
+                    style={{ left: x(prev.atMs), width: Math.max(2, spanW(prev.atMs, k.atMs)) }}
                   />
                 )}
                 <div
@@ -412,7 +522,7 @@ export function Timeline({
             <div
               key={`prop-${sp.startMs}`}
               className="tl__propose-span"
-              style={{ left: x(sp.startMs), width: Math.max(2, x(sp.endMs - sp.startMs)) }}
+              style={{ left: x(sp.startMs), width: Math.max(2, spanW(sp.startMs, sp.endMs)) }}
             />
           ))}
           {/* F5b: which clips are sped up, said on the clip itself — the tools
@@ -438,23 +548,47 @@ export function Timeline({
               // A bare split removes nothing: there is no zone to draw, and no
               // cut to undo — the two handles are the whole of it.
               if (removedMs <= 0) return null
-              const w = Math.max(1, x(removedMs))
+              // Collapsed: the clips either side have closed up and the hole is
+              // a seam, not a zone. Nothing to put a button in.
+              if (collapsed.has(sg.endMs)) {
+                return <div key={`seam-${sg.endMs}`} className="tl__seam" style={{ left: x(sg.endMs) }} />
+              }
+              const w = spanW(sg.endMs, segments[i + 1]!.startMs)
               return (
-                <div key={`gap-${sg.endMs}`} className="tl__gap" style={{ left: x(sg.endMs), width: w }}>
-                  {w >= 22 && (
-                    <button
-                      className={`tl__gap-undo${w >= 62 ? ' tl__gap-undo--wide' : ''}`}
-                      title={`Put back ${formatClock(removedMs)} — undo this cut`}
-                      aria-label={`Undo this cut and put back ${formatClock(removedMs)}`}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        restoreGap(i)
-                      }}
-                    >
-                      <Icon name="undo" size={12} />
-                      {w >= 62 && <span>{formatClock(removedMs)}</span>}
-                    </button>
+                <div key={`gap-${sg.endMs}`} className="tl__gap" style={{ left: x(sg.endMs), width: Math.max(1, w) }}>
+                  {w >= 44 && (
+                    <div className="tl__gap-acts">
+                      <button
+                        className={`tl__gap-btn${w >= 104 ? ' tl__gap-btn--wide' : ''}`}
+                        title={`Put back ${formatClock(removedMs)} — undo this cut`}
+                        aria-label={`Undo this cut and put back ${formatClock(removedMs)}`}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          restoreGap(i)
+                        }}
+                      >
+                        <Icon name="undo" size={12} />
+                        {w >= 104 && <span>{formatClock(removedMs)}</span>}
+                      </button>
+                      {/* CLOSE THE HOLE. The material was already excluded the
+                          moment the cut was made — this only stops the timeline
+                          spending width on it, so the clips either side slide
+                          together. Robert: "remove it completle and other part
+                          will slide to each other smoothly". */}
+                      <button
+                        className="tl__gap-btn tl__gap-btn--close"
+                        title="Close this gap — the clips slide together and the timeline stops showing it"
+                        aria-label="Close this gap"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          closeGap(sg.endMs)
+                        }}
+                      >
+                        <Icon name="trash" size={12} />
+                      </button>
+                    </div>
                   )}
                 </div>
               )
@@ -475,9 +609,10 @@ export function Timeline({
                * ends there, the right half trims the clip that starts there.
                * Which is also what the gesture already meant.
                */
-              const tightBefore = i > 0 && x(sg.startMs - segments[i - 1]!.endMs) < 14
+              const tightBefore =
+                i > 0 && spanW(segments[i - 1]!.endMs, sg.startMs) < 14
               const tightAfter =
-                i < segments.length - 1 && x(segments[i + 1]!.startMs - sg.endMs) < 14
+                i < segments.length - 1 && spanW(sg.endMs, segments[i + 1]!.startMs) < 14
               return (
               <div key={`seg-${sg.startMs}`}>
                 {i > 0 && (
