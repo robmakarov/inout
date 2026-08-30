@@ -19,6 +19,42 @@ instrument defects — gates that report a verdict they did not measure. Unmarke
 deliberately not promoted: already a task (F14/F15/F16, the Safari mic P8), waiting only on Robert's
 ear or eye, or the screen wedge, whose cause is Chrome's.
 
+- [~~P0~~ FIXED 2026-08-30] **"?sourcefps=1 - record froze on game tab again"** (Robert). NOT the game
+  and NOT 60 fps. REPRODUCED ON A QUIET MACHINE WITH NO GAME, from his own configuration
+  (`screensize=3024x1964`, sourcefps on, native res at its shipped default), against prod — and the
+  take produced NO channels and no composite at all.
+  THE CHAIN, four defects deep: the capture ceiling asks for a 2560 long edge → Chrome returns
+  2560x1663, odd HEIGHT → capDisplayTrack asks for 2560x1662 → **Chrome re-derives the width from the
+  aspect and returns 2559x1662, odd WIDTH** → every AVC config is unsupported → `pickVideoConfig`
+  threw → the raw channel fell back to **MediaRecorder's SOFTWARE VP8/VP9 at 2559x1662@60**.
+  Software-encoding 4.25 Mpx sixty times a second is the freeze. The console said only "measured
+  video unavailable". The 2026-08-29 odd-side fix had evened the TRACK and stopped there; BACKLOG
+  recorded that `startMeasuredVideo` "evens its own ENCODER CONFIG" as the second line of defence and
+  IT DID NOT — no caller of the worker evened anything.
+  FIXED IN FOUR PLACES, each measured rather than argued:
+   1. both encoder-config pickers even DOWN (Chrome 151, measured first: 2559x1662 AVC unsupported,
+      2558x1662 supported, and an encoder configured at 2558 ACCEPTS a 2559-wide frame and emits a
+      chunk with no error — so it costs one pixel column instead of the hardware path);
+   2. single generation now reaches native resolution, so a screen-only take at its own size opens
+      ONE encoder instead of two. His ask, 3024x1964@60, is 481 Mpx/s with a composite and 356
+      without — the composite is the difference between impossible and merely hard;
+   3. the 60 fps decision is MEASURED, not a size constant. The app times its own encoder at load:
+      on his Mac, idle, one hardware AVC encoder — 362 Mpx/s at 1080p, 410 at 2560x1662, 416 at
+      3024x1964, 435 at 4K. The old rule refused 60 above a 2560 long edge, which allowed 60 at a
+      2559 long edge and refused it at 2561 — the worst case this product can produce was the one
+      case nothing checked, and it is the take that froze;
+   4. the encoder measurement is kicked off FIRST in prearm; behind four other awaits it landed after
+      the take had already armed.
+  WHERE IT LANDS: the take that produced nothing now records 3024x1964@30 on one encoder, verified on
+  prod. 60 fps AT FULL NATIVE RESOLUTION IS RIGHT AT THE EDGE OF HIS HARDWARE — 356 Mpx/s wanted
+  against 346-416 measured depending on how busy the machine is — so it is decided per launch by
+  measurement, and a game correctly pushes it to 30. 2560-class at 60 (255 Mpx/s) is comfortably
+  inside. That trade is his to make and the console now prints both numbers.
+  STILL OPEN, and it is the honest remainder: nothing yet measures the encoder WHILE A GAME RUNS. The
+  reading is taken at app load on an idle machine; captureLadder is the only thing that sees the
+  loaded regime, and it steps the rate. Whether the ladder is fast enough for a game that starts
+  MID-TAKE is unmeasured — `npm run exp -- syncload` is the cell that would say.
+
 - [P0] 2026-08-29 (G4 session): **the packet-copy paths break the sync band on a LONG take, and the
   default path is one of them.** First run of a 120 s oracle cell in this project's life (`npm run
   oracle:long`, new). Instant path maxAbs 94.2 / 94.2 / 95.3 / 100.5 ms over five runs against a
