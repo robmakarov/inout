@@ -4,27 +4,38 @@ import { useRef, type ReactNode } from 'react'
  * THE QUALITY SLIDER (task UI1).
  *
  * Robert, 2026-08-30: "make chatgpt/claudecode effort-like slider for our
- * quality choosing". So it is that control and not a row of buttons: one rail,
- * discrete detents, a filled track behind the thumb, the step's name under each
- * detent, and a single sentence underneath saying what the chosen step costs.
+ * quality choosing", then on the first attempt: "slider dont look like claude
+ * code effort at all, fix it".
+ *
+ * WHAT WAS WRONG WITH THE FIRST ONE, and it is worth writing down because it is
+ * a whole class of mistake: it was a PROGRESS BAR with dots on it. A 4 px hair
+ * of a rail, a continuous accent fill, a small round handle. Nothing about it
+ * said "there are five discrete levels here and you are on the third" — the
+ * fill read as "43 % of the way through something", which is the one thing a
+ * stepped control must never look like.
+ *
+ * An effort control reads as a METER: discrete blocks, filled up to where you
+ * are, empty above it. So the track is SEGMENTED — one block per step, real
+ * gaps between them, filled blocks in accent and empty ones in surface — and it
+ * is thick enough (10 px) to read as blocks rather than as a line. The handle
+ * sits on the boundary you are at, so the thing is still obviously draggable.
+ *
+ * The blocks are positioned ABSOLUTELY from the same percentages the handle and
+ * the labels use, rather than being flex children with a gap: a flex gap
+ * accumulates, so the fourth boundary would sit a few pixels off the fourth
+ * label, and a control whose parts disagree about where they are is worse than
+ * a plain bar.
  *
  * The same component runs in both places it is needed — above the chips before
- * a take, and under the player in the editor — because Robert asked for the
+ * a take, and under the timeline in the editor — because Robert asked for the
  * same slider in both ("make same slider of quality"), and because a control
  * that looks different in the two places it appears is two controls.
  *
- * IT IS A LADDER, NOT A RANGE. `<input type=range>` was the obvious reach and
- * is the wrong one: it has no per-detent labels, its thumb travels continuously
- * between values, and the browser's own track cannot carry the "unreachable
- * above here" state the editor needs. So the rail is drawn and the ARIA is
- * declared by hand — `role="slider"` with the index as its value, which is what
- * a screen reader gets from a range anyway.
- *
  * UNREACHABLE STEPS ARE SHOWN, NOT HIDDEN. In the editor the ladder stops at
- * whatever the take was recorded under, and the steps above it stay on the rail
- * greyed out: a ladder that silently loses its top two rungs looks broken,
- * while one that shows them dimmed says "you chose this before you recorded"
- * without a sentence.
+ * whatever the take was recorded under, and the blocks above it stay on the
+ * track hatched out: a ladder that silently loses its top two rungs looks
+ * broken, while one that shows them struck through says "you chose this before
+ * you recorded" without a sentence.
  */
 export interface QualityStop {
   id: string
@@ -42,6 +53,7 @@ export function QualitySlider({
   title = 'Quality',
   actions,
   disabled = false,
+  compact = false,
   lockedHint,
 }: {
   stops: QualityStop[]
@@ -49,14 +61,22 @@ export function QualitySlider({
   onChange: (id: string) => void
   /** Highest index the user may reach. Defaults to the top of the ladder. */
   maxIndex?: number
-  /** The sentence under the rail — what the chosen step costs and buys. */
+  /** The sentence under the track — what the chosen step costs and buys. */
   note?: ReactNode
   title?: string
-  /** Right-hand slot. The editor puts Export and For AI here — Robert:
-   *  "buttons export and for ai right to it not under". */
+  /**
+   * Sits on the track's own line, to its right — Robert: "export buttons on
+   * same line with slider right to it i said".
+   */
   actions?: ReactNode
   disabled?: boolean
-  /** Shown when a locked step is pressed, instead of moving the thumb. */
+  /**
+   * The editor's shape: no title row and no note (Robert: "second screenshot no
+   * need for top and bottom captions"). The step names and their sizes stay,
+   * because those are the choice itself rather than a caption about it.
+   */
+  compact?: boolean
+  /** Called when a locked step is pressed, instead of moving the handle. */
   lockedHint?: (stop: QualityStop) => void
 }) {
   const railRef = useRef<HTMLDivElement>(null)
@@ -68,7 +88,7 @@ export function QualitySlider({
   )
   const current = stops[index] ?? stops[0]
 
-  /** Nearest detent to a pointer position, clamped to the reachable range. */
+  /** Nearest step to a pointer position. */
   const indexAt = (clientX: number): number => {
     const el = railRef.current
     if (!el) return index
@@ -114,69 +134,75 @@ export function QualitySlider({
   }
 
   const pct = (i: number) => (last === 0 ? 0 : (i / last) * 100)
+  /** One block per step. The first block is the floor, so there are `last` of
+   *  them: block i spans step i → i+1 and is lit once you are past step i. */
+  const blocks = Array.from({ length: Math.max(1, last) }, (_, i) => i)
 
   return (
-    <div className={`qs${disabled ? ' qs--disabled' : ''}`}>
-      <div className="qs__head">
-        <span className="qs__title">{title}</span>
-        <span className="qs__value">{current?.label}</span>
-        {actions && <span className="qs__actions">{actions}</span>}
-      </div>
-
-      <div
-        className="qs__railbox"
-        role="slider"
-        tabIndex={disabled ? -1 : 0}
-        aria-label={title}
-        aria-valuemin={0}
-        aria-valuemax={cap}
-        aria-valuenow={index}
-        aria-valuetext={current?.label}
-        aria-disabled={disabled || undefined}
-        onKeyDown={onKey}
-        onPointerDown={drag}
-        onPointerMove={(e) => {
-          if (e.buttons & 1) pick(indexAt(e.clientX), true)
-        }}
-      >
-        <div ref={railRef} className="qs__rail">
-          <div className="qs__rail-fill" style={{ width: `${pct(index)}%` }} />
-          {/* Everything past the take's ceiling, drawn as a distinct stretch of
-              rail rather than simply absent — see the note above. */}
-          {cap < last && (
-            <div className="qs__rail-locked" style={{ left: `${pct(cap)}%`, right: 0 }} />
-          )}
-          {stops.map((s, i) => (
-            <span
-              key={s.id}
-              className={`qs__dot${i <= index ? ' qs__dot--on' : ''}${i > cap ? ' qs__dot--locked' : ''}`}
-              style={{ left: `${pct(i)}%` }}
-            />
-          ))}
-          <span className="qs__thumb" style={{ left: `${pct(index)}%` }} />
+    <div className={`qs${disabled ? ' qs--disabled' : ''}${compact ? ' qs--compact' : ''}`}>
+      {!compact && (
+        <div className="qs__head">
+          <span className="qs__title">{title}</span>
+          <span className="qs__value">{current?.label}</span>
         </div>
-      </div>
+      )}
 
-      <div className="qs__labels">
-        {stops.map((s, i) => (
-          <button
-            key={s.id}
-            type="button"
-            className={`qs__label${i === index ? ' qs__label--on' : ''}${
-              i > cap ? ' qs__label--locked' : ''
-            }`}
-            style={{ left: `${pct(i)}%` }}
-            aria-hidden="true"
-            tabIndex={-1}
-            onClick={() => pick(i, true)}
+      <div className="qs__row">
+        <div className="qs__track-col">
+          <div
+            className="qs__railbox"
+            role="slider"
+            tabIndex={disabled ? -1 : 0}
+            aria-label={title}
+            aria-valuemin={0}
+            aria-valuemax={cap}
+            aria-valuenow={index}
+            aria-valuetext={current?.label}
+            aria-disabled={disabled || undefined}
+            onKeyDown={onKey}
+            onPointerDown={drag}
+            onPointerMove={(e) => {
+              if (e.buttons & 1) pick(indexAt(e.clientX), true)
+            }}
           >
-            <span className="qs__label-text">{s.label}</span>
-            {s.sub !== undefined && <span className="qs__label-sub">{s.sub}</span>}
-          </button>
-        ))}
+            <div ref={railRef} className="qs__rail">
+              {blocks.map((i) => (
+                <span
+                  key={i}
+                  className={`qs__block${i < index ? ' qs__block--on' : ''}${
+                    i >= cap ? ' qs__block--locked' : ''
+                  }`}
+                  style={{ left: `${pct(i)}%`, width: `${pct(1)}%` }}
+                />
+              ))}
+              <span className="qs__thumb" style={{ left: `${pct(index)}%` }} />
+            </div>
+          </div>
+
+          <div className="qs__labels">
+            {stops.map((s, i) => (
+              <button
+                key={s.id}
+                type="button"
+                className={`qs__label${i === index ? ' qs__label--on' : ''}${
+                  i > cap ? ' qs__label--locked' : ''
+                }${i === 0 ? ' qs__label--first' : ''}${i === last ? ' qs__label--last' : ''}`}
+                style={{ left: `${pct(i)}%` }}
+                aria-hidden="true"
+                tabIndex={-1}
+                onClick={() => pick(i, true)}
+              >
+                <span className="qs__label-text">{s.label}</span>
+                {s.sub !== undefined && <span className="qs__label-sub">{s.sub}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {actions && <div className="qs__actions">{actions}</div>}
       </div>
 
-      {note && <div className="qs__note">{note}</div>}
+      {!compact && note && <div className="qs__note">{note}</div>}
     </div>
   )
 }

@@ -29,7 +29,7 @@ import { missingChannelsMessage, takeLosses } from '@app/lib/channels'
 import { usePlayback } from '@app/hooks/usePlayback'
 import { Player } from '@app/components/Player'
 import { Timeline } from '@app/components/Timeline'
-import { ExportPanel } from '@app/components/ExportPanel'
+import { ExportProgressStrip, ExportSavedStrip } from '@app/components/ExportPanel'
 import { QualityBar } from '@app/components/QualityBar'
 import { ToolsBar } from '@app/components/ToolsBar'
 import { SettingsBadge } from '@app/components/SettingsBadge'
@@ -120,14 +120,20 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
       top
     )
   }, [tiers, chosenId, recording.qualityStep, frameAspect, frameRate])
-  const exporting = mode === 'exporting' || mode === 'share'
+  const exporting = mode === 'exporting'
   // F5a: a PROPOSED cut list. It is preview-only until the user applies it, and
   // any other edit invalidates it — a proposal computed against a timeline that
   // has since moved would cut the wrong places.
   const [proposal, setProposal] = useState<TightenProposal | null>(null)
   const [analysing, setAnalysing] = useState(false)
+  const exportResult = useAppStore((s) => s.exportResult)
   useEffect(() => {
     setProposal(null)
+    // The saved strip describes a file made from a timeline that has now moved,
+    // so it stops describing anything. Clearing it is the whole of "that file
+    // is not this edit" — no warning needed, because the slider below is right
+    // there to make the new one.
+    useAppStore.getState().setExportResult(null)
   }, [edit])
 
   const runTighten = async () => {
@@ -285,7 +291,9 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
       saveToFile(result)
       useAppStore.setState({
         exportResult: result,
-        mode: 'share',
+        // UI1: back to the editor, not to a screen of its own — what the export
+        // produced is a strip above the slider that made it.
+        mode: 'editor',
         exportAbort: null,
         exportProgress: null,
       })
@@ -373,7 +381,9 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
       saveToFile(result)
       useAppStore.setState({
         exportResult: result,
-        mode: 'share',
+        // UI1: back to the editor, not to a screen of its own — what the export
+        // produced is a strip above the slider that made it.
+        mode: 'editor',
         exportAbort: null,
         exportProgress: null,
       })
@@ -436,8 +446,12 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
 
       {/* UI1: the editing tools, under the picture rather than through the
           middle of the timeline — Robert: "buttons with extra features make
-          under preview video, not in the fucking middle of timeline". */}
-      {!exporting && (
+          under preview video, not in the fucking middle of timeline".
+          They STAY on screen while a render runs, because the render is not a
+          screen of its own any more; they just stop taking input, because the
+          export snapshotted the edit when it started and a change made now
+          would silently not be in the file. */}
+      <div className={exporting ? 'editor__locked' : undefined}>
         <ToolsBar
           recording={recording}
           edit={edit}
@@ -453,9 +467,7 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
             onDismiss: () => setProposal(null),
           }}
         />
-      )}
 
-      {!exporting && (
         <Timeline
           recording={recording}
           edit={edit}
@@ -465,24 +477,32 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
           onEdit={(next) => setEditState(clampEditState(recording, next))}
           proposal={proposal}
         />
-      )}
+      </div>
 
       {exporting ? (
-        <ExportPanel onBack={() => useAppStore.getState().setMode('editor')} />
+        <ExportProgressStrip />
       ) : (
-        /* UI1: the quality slider is always on screen — there is no "choose a
-           quality" step any more, because the choice was already made before
-           the take and this only lets you go down from it. */
-        <QualityBar
-          recording={recording}
-          edit={edit}
-          outputDurationMs={outputDurationMs(edit)}
-          tier={tier}
-          frameAspect={frameAspect}
-          onTier={(t) => setChosenId(t.id)}
-          onExport={() => void onExport(tier)}
-          onExportForAi={() => void onExportAi()}
-        />
+        <>
+          {exportResult && (
+            <ExportSavedStrip
+              result={exportResult}
+              onDismiss={() => useAppStore.getState().setExportResult(null)}
+            />
+          )}
+          {/* UI1: the quality slider is always on screen — there is no "choose
+              a quality" step any more, because the choice was already made
+              before the take and this only lets you go down from it. */}
+          <QualityBar
+            recording={recording}
+            edit={edit}
+            outputDurationMs={outputDurationMs(edit)}
+            tier={tier}
+            frameAspect={frameAspect}
+            onTier={(t) => setChosenId(t.id)}
+            onExport={() => void onExport(tier)}
+            onExportForAi={() => void onExportAi()}
+          />
+        </>
       )}
 
       <ConfirmDialog

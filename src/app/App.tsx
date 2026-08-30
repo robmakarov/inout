@@ -62,7 +62,7 @@ function Main() {
   return (
     <div className="app">
       {mode === 'capture' && <CaptureScreen />}
-      {(mode === 'editor' || mode === 'exporting' || mode === 'share') && (
+      {(mode === 'editor' || mode === 'exporting') && (
         <Suspense fallback={<div className="app__loading" />}>
           <EditorScreen />
         </Suspense>

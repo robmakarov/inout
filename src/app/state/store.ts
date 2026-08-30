@@ -7,7 +7,14 @@ import type {
   Recording,
 } from '@core/types'
 
-export type AppMode = 'capture' | 'editor' | 'exporting' | 'share'
+/**
+ * THREE SCREENS, and 'exporting' is not a fourth — it is the editor with the
+ * render running in the slider's slot. UI1, Robert: "rendering loader show on
+ * same screen where download button is, so we have only main screen, recording
+ * screen, and editing screen". The old 'share' mode was a whole screen whose
+ * job is now one strip above the slider (ExportSavedStrip).
+ */
+export type AppMode = 'capture' | 'editor' | 'exporting'
 
 /**
  * UI1 — WHY THE EDITOR WAS OPENED. A take reached through the takes list's

@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CloudProvider, CloudShare, CloudUser, ExportResult } from '@core/types'
-import { loadRecovery } from '@core/capture'
 import { saveToFile } from '@core/share'
 import { getCloudProvider } from '@core/cloud'
 import { analytics } from '@core/analytics'
 import { useAppStore } from '@app/state/store'
-import { formatClock, formatRemaining, humanBytes } from '@app/lib/format'
+import { formatRemaining, humanBytes } from '@app/lib/format'
 import { Icon } from '@app/components/Icon'
 import { ProgressRing } from '@app/components/ProgressRing'
 
@@ -16,14 +15,40 @@ const PHASE_LABEL = {
 } as const
 
 /**
- * The export flow lives in the editor's bottom slot, replacing the timeline —
- * the player above stays put so the frame never moves. Progress while the MP4
- * renders, then the result actions; Back returns to the timeline.
+ * THERE ARE THREE SCREENS AND THIS IS NOT ONE OF THEM (UI1, 2026-08-30).
+ *
+ * Robert: "rendering loader show on same screen where download button is, so we
+ * have only main screen, recording screen, and editing screen", and of the old
+ * result panel: "no need for screen on first screenshot at all".
+ *
+ * The export used to take over the whole bottom half twice — once as a progress
+ * panel, then again as a result panel with a Save button, a cloud card and a
+ * "New recording" button. Two screens for one action, and the second one asked
+ * a question (save it?) that pressing Export had already answered.
+ *
+ * So both halves are strips now, and they live in the slot the quality slider
+ * occupies: the render replaces it while it runs, and what it produced sits
+ * above it afterwards. The editor never goes away, so the picture never moves.
  */
-export function ExportPanel({ onBack }: { onBack: () => void }) {
-  const mode = useAppStore((s) => s.mode)
-  if (mode === 'exporting') return <Progress />
-  return <Result onBack={onBack} />
+export function ExportProgressStrip() {
+  const progress = useAppStore((s) => s.exportProgress)
+  const abort = useAppStore((s) => s.exportAbort)
+  const ratio = progress?.ratio ?? 0
+  const phase = progress?.phase ?? 'preparing'
+  const remainingMs = useRemainingMs(phase, ratio)
+  return (
+    <div className="xstrip xstrip--progress">
+      <ProgressRing ratio={ratio} />
+      <span className="xstrip__pct">{Math.round(ratio * 100)}%</span>
+      <span className="xstrip__phase">{PHASE_LABEL[phase]}</span>
+      {remainingMs !== null && (
+        <span className="xstrip__eta">{formatRemaining(remainingMs)}</span>
+      )}
+      <button className="btn btn--ghost xstrip__cancel" onClick={() => abort?.abort()}>
+        Cancel
+      </button>
+    </div>
+  )
 }
 
 /** Below this the slope is still noise — a number that swings by minutes is
@@ -58,85 +83,49 @@ function useRemainingMs(phase: keyof typeof PHASE_LABEL, ratio: number): number 
   return ((1 - ratio) / dr) * dt
 }
 
-function Progress() {
-  const progress = useAppStore((s) => s.exportProgress)
-  const abort = useAppStore((s) => s.exportAbort)
-  const ratio = progress?.ratio ?? 0
-  const phase = progress?.phase ?? 'preparing'
-  const remainingMs = useRemainingMs(phase, ratio)
-  return (
-    <div className="xp xp--progress">
-      <ProgressRing ratio={ratio} />
-      <div className="xp__pct">{Math.round(ratio * 100)}%</div>
-      <div className="xp__phase">{PHASE_LABEL[phase]}</div>
-      {remainingMs !== null && <div className="xp__eta">{formatRemaining(remainingMs)}</div>}
-      <button className="btn btn--ghost" onClick={() => abort?.abort()}>
-        Cancel
-      </button>
-    </div>
-  )
-}
-
-function Result({ onBack }: { onBack: () => void }) {
-  const result = useAppStore((s) => s.exportResult)
-  if (!result) return null
-  // AI1: an AI export is a document, so the panel says pages and tokens. Its
-  // width/height are one keyframe's, and reporting them as "the video" would
-  // be a lie about what the file is.
+/**
+ * WHAT THE EXPORT PRODUCED, on one line, above the slider that made it.
+ *
+ * The file is already in the user's downloads — pressing Export is asking for
+ * it, and asking again afterwards was the "bullshit extra step". This says so
+ * and offers the second copy, which is the only reason anyone would press it: a
+ * download the browser put somewhere unexpected, or a dialog that was
+ * dismissed. The cloud link keeps its place here because a link is a genuinely
+ * different thing to want, and it stays a choice.
+ */
+export function ExportSavedStrip({ result, onDismiss }: { result: ExportResult; onDismiss: () => void }) {
   const ai = result.ai
   return (
-    <div className="xp">
-      <div className="xp__head">
-        <button className="xp__back" onClick={onBack} aria-label="Back to editing">
-          <Icon name="chevron-left" size={18} />
-          <span>Editing</span>
-        </button>
-        <span className="xp__meta">
-          {ai
-            ? `${formatClock(result.durationMs)} · ${humanBytes(result.blob.size)} · ${ai.pages} pages · ~${Math.round(ai.approxTokens / 100) / 10}k tokens`
-            : `${formatClock(result.durationMs)} · ${humanBytes(result.blob.size)} · ${result.width}×${result.height}`}
-        </span>
-      </div>
-      {/* UI1: the file was saved the moment the render finished — Robert:
-          "skip bullshit extra step after render, download after it done". This
-          says so and offers the second copy, which is the only reason anyone
-          would press it: a download the browser put somewhere unexpected, or a
-          dialog that was dismissed. */}
-      <div className="xp__saved">
-        <Icon name="check" size={15} />
-        <span>Saved to your downloads as {result.fileName}</span>
-      </div>
-      <div className="xp__actions">
-        <button className="btn btn--surface btn--wide" onClick={() => saveToFile(result)}>
-          <Icon name={ai ? 'doc' : 'download'} size={16} />
-          <span>Save again</span>
-        </button>
-      </div>
-      <CloudCard result={result} />
-      <button
-        className="btn btn--ghost xp__new"
-        onClick={() => {
-          const rec = useAppStore.getState().recording
-          if (rec) void loadRecovery().then((m) => m.markRecordingDismissed(rec.id))
-          useAppStore.getState().resetToCapture()
-        }}
-      >
-        New recording
+    <div className="xstrip xstrip--saved">
+      <Icon name="check" size={15} />
+      <span className="xstrip__name" title={result.fileName}>
+        Saved to your downloads · {result.fileName}
+      </span>
+      <span className="xstrip__meta">
+        {ai
+          ? `${ai.pages} pages · ~${Math.round(ai.approxTokens / 100) / 10}k tokens`
+          : `${humanBytes(result.blob.size)} · ${result.width}×${result.height}`}
+      </span>
+      <button className="xstrip__btn" onClick={() => saveToFile(result)}>
+        <Icon name="download" size={13} />
+        <span>Save again</span>
+      </button>
+      <CloudAction result={result} />
+      <button className="xstrip__x" onClick={onDismiss} aria-label="Dismiss">
+        <Icon name="x" size={12} />
       </button>
     </div>
   )
 }
 
-function CloudCard({ result }: { result: ExportResult }) {
+/**
+ * The cloud link, reduced to one control. It was a card with an avatar, an
+ * email and a sign-out row; that is an account panel, and an account panel is
+ * not what someone who just exported a video is looking at.
+ */
+function CloudAction({ result }: { result: ExportResult }) {
   const provider = useMemo(() => getCloudProvider(), [])
-  if (!provider) {
-    return (
-      <div className="cloud">
-        <div className="cloud__off-title">Cloud sharing not configured</div>
-        <div className="cloud__off-hint">Add Supabase keys to enable links</div>
-      </div>
-    )
-  }
+  if (!provider) return null
   return <CloudInner provider={provider} result={result} />
 }
 
@@ -162,16 +151,6 @@ function CloudInner({ provider, result }: { provider: CloudProvider; result: Exp
     }
   }, [provider])
 
-  const signIn = () => {
-    void provider.signInWithGoogle().catch((err: unknown) => {
-      toast(err instanceof Error ? err.message : 'Sign-in failed', 'error')
-    })
-  }
-
-  const signOut = () => {
-    void provider.signOut().catch(() => {})
-  }
-
   const createLink = async () => {
     setUploading(true)
     try {
@@ -187,71 +166,44 @@ function CloudInner({ provider, result }: { provider: CloudProvider; result: Exp
     }
   }
 
-  const copy = () => {
-    if (!share) return
-    void navigator.clipboard.writeText(share.url).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    })
+  if (share) {
+    return (
+      <button
+        className="xstrip__btn"
+        title={`${share.url} — expires in ${provider.quota.shareTtlDays} days`}
+        onClick={() => {
+          void navigator.clipboard.writeText(share.url).then(() => {
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1500)
+          })
+        }}
+      >
+        <Icon name={copied ? 'check' : 'copy'} size={13} />
+        <span>{copied ? 'Copied' : 'Copy link'}</span>
+      </button>
+    )
   }
 
   if (!user) {
     return (
-      <div className="cloud">
-        <button className="btn btn--surface btn--wide" onClick={signIn}>
-          <Icon name="google" size={16} />
-          <span>Continue with Google</span>
-        </button>
-      </div>
+      <button
+        className="xstrip__btn"
+        onClick={() =>
+          void provider.signInWithGoogle().catch((err: unknown) => {
+            toast(err instanceof Error ? err.message : 'Sign-in failed', 'error')
+          })
+        }
+      >
+        <Icon name="google" size={13} />
+        <span>Sign in for a link</span>
+      </button>
     )
   }
 
   return (
-    <div className="cloud">
-      <div className="cloud__user">
-        {user.avatarUrl ? (
-          <img className="cloud__avatar" src={user.avatarUrl} alt="" />
-        ) : (
-          <span className="cloud__avatar cloud__avatar--initial">
-            {(user.name ?? user.email ?? '?').charAt(0).toUpperCase()}
-          </span>
-        )}
-        <span className="cloud__email">{user.email ?? user.name ?? 'Signed in'}</span>
-        <button className="cloud__signout" onClick={signOut}>
-          Sign out
-        </button>
-      </div>
-      {share ? (
-        <div className="cloud__link">
-          <div className="cloud__link-row">
-            <span className="cloud__url" title={share.url}>
-              {share.url}
-            </span>
-            <button className="cloud__copy" onClick={copy} aria-label="Copy link">
-              <Icon name={copied ? 'check' : 'copy'} size={15} />
-            </button>
-          </div>
-          <div className="cloud__expiry">Expires in {provider.quota.shareTtlDays} days</div>
-        </div>
-      ) : (
-        <button
-          className="btn btn--surface btn--wide"
-          disabled={uploading}
-          onClick={() => void createLink()}
-        >
-          {uploading ? (
-            <>
-              <span className="spinner" />
-              <span>Uploading…</span>
-            </>
-          ) : (
-            <>
-              <Icon name="link" size={16} />
-              <span>Create link</span>
-            </>
-          )}
-        </button>
-      )}
-    </div>
+    <button className="xstrip__btn" disabled={uploading} onClick={() => void createLink()}>
+      {uploading ? <span className="spinner" /> : <Icon name="link" size={13} />}
+      <span>{uploading ? 'Uploading…' : 'Create link'}</span>
+    </button>
   )
 }
