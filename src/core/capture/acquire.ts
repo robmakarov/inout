@@ -11,6 +11,7 @@ import { captureRateCeiling, rateForSurface } from '@core/rate'
 import { MAX_OUTPUT_LONG_EDGE, captureCeilingLongEdge, evenDown } from '@core/frame'
 import { isAppleWebKit } from '@core/capabilities'
 import { detectPlatform } from '@core/platform'
+import { measuredEncoderThroughput } from './encoderBudget'
 import { guardStream } from './deviceGuard'
 import { nativeResEnabled } from './nativeRes'
 import {
@@ -579,7 +580,7 @@ export async function capDisplayTrack(track: MediaStreamTrack | undefined): Prom
     // because the collapse is instant. See rate.ts's HIGH_RATE_PIXEL_BUDGET.
     const ceiling = captureRateCeiling()
     const now = track.getSettings()
-    const rate = rateForSurface(now.width, now.height, ceiling)
+    const rate = rateForSurface(now.width, now.height, ceiling, measuredEncoderThroughput())
     if (rate < ceiling && (now.frameRate ?? 0) > rate + 1) {
       try {
         await withTimeout(
