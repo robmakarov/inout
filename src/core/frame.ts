@@ -24,6 +24,7 @@
  * this task and it is pinned by test.
  */
 import type { Recording } from './types'
+import { currentQualityStep, loadQualityStep } from './qualityStep'
 
 /** What the product was before F13, and what an unknown take still gets. */
 export const DEFAULT_FRAME_ASPECT = 16 / 9
@@ -76,7 +77,17 @@ let sourceResOverride: boolean | null = null
  * bounds a machine that has already been seen to collapse.
  */
 export function sourceResEnabled(): boolean {
-  return sourceResFromSearch() ?? sourceResOverride ?? sourceResFromStorage() ?? false
+  // UI1: THE SLIDER IS THE DEFAULT ANSWER NOW, and the flag is the override it
+  // always was. `max` is the step where the user has said they will pay for the
+  // picture — Robert, 2026-08-30: "max - maximum resolution, 60 fps, all
+  // maximum" — so the F18 switch is what that step means, not a separate thing
+  // to remember to turn on. `?sourceres=0` still refuses it for one load.
+  return (
+    sourceResFromSearch() ??
+    sourceResOverride ??
+    sourceResFromStorage() ??
+    loadQualityStep() === 'max'
+  )
 }
 
 export function setSourceRes(on: boolean | null): void {
@@ -96,7 +107,13 @@ export function setSourceRes(on: boolean | null): void {
  * constraint: `{ max: Infinity }` is not a constraint, it is a bug.
  */
 export function captureCeilingLongEdge(): number {
-  return sourceResEnabled() ? Number.POSITIVE_INFINITY : MAX_OUTPUT_LONG_EDGE
+  if (sourceResEnabled()) return Number.POSITIVE_INFINITY
+  // UI1: THE CHOSEN STEP IS A REAL CONSTRAINT ON CAPTURE, not just a label on
+  // the export ladder — Robert: "to save resources on other processes". A user
+  // who chose 720p is not made to encode 3024x1964 for the whole take and then
+  // throw it away at export. Bounded by MAX_OUTPUT_LONG_EDGE for the same
+  // reason it always was: nothing above it can reach a file.
+  return Math.min(MAX_OUTPUT_LONG_EDGE, currentQualityStep().longEdge)
 }
 
 const STORAGE_KEY = 'inout.frame.source'
@@ -126,23 +143,28 @@ function fromStorage(): boolean | null {
 let override: boolean | null = null
 
 /**
- * A DEVICE THAT CANNOT CAPTURE A SCREEN IS A PHONE, and on a phone the
- * landscape constant is never the right answer.
+ * THE FRAME FOLLOWS THE TAKE. ON EVERYWHERE, as of UI1 — Robert, 2026-08-30,
+ * asked for "preview and in edit video frame hug main video of record, no
+ * blackspace around that" and was given the choice between hugging the preview
+ * only and moving the OUTPUT. He chose the output.
  *
- * OFF on a desktop: the shipped 16:9 behaviour is what every take was made
- * under, and Robert has not yet judged the new one, so nothing moves there.
- * ON where `getDisplayMedia` does not exist at all — the only take such a
- * device can make is camera-only, its camera is held portrait, and the frame it
- * was being handed is a landscape box that crops 68 % of the picture away.
- * There is no working path to protect there; Robert has now reported that same
- * failure twice ("how the fuck mobile will make 1920x1080? its vertical", then
- * "it is still fucking horizontal on phone"). `?sourceframe=0` turns it off.
+ * That is the honest one and it is the only one that keeps this product's own
+ * law: the preview is not an approximation of the file, it is the same
+ * arithmetic (F2/F13/O3c). Bars around the picture on a 1728x1117 screen were
+ * never a rendering artefact — they were IN THE FILE, because the frame was a
+ * 16:9 constant and the take was not. Hugging only the stage would have made
+ * the preview stop predicting the export, which is the one bug shape this whole
+ * area is built to prevent.
+ *
+ * It was already ON for phones (they can only make a camera-only take, held
+ * portrait, and a landscape frame threw 68 % of it away). Desktop was waiting
+ * on Robert's judgement of a real take. It has it.
+ *
+ * `?sourceframe=0` turns it off — takes made under the constant still resolve
+ * to it, because `takeAspect` reads the composite the take actually wrote.
  */
-function phoneDefault(): boolean {
-  return (
-    typeof navigator !== 'undefined' &&
-    typeof navigator.mediaDevices?.getDisplayMedia !== 'function'
-  )
+function frameDefault(): boolean {
+  return true
 }
 
 /**
@@ -161,10 +183,10 @@ export function sourceFrameEnabled(): boolean {
     // silently put the take back to landscape between recording and judging it.
     // `?sourceframe=0` turns it off the same way, so the contract stays
     // symmetric and reversible.
-    if (url !== (fromStorage() ?? phoneDefault())) setSourceFrame(url)
+    if (url !== (fromStorage() ?? frameDefault())) setSourceFrame(url)
     return url
   }
-  return override ?? fromStorage() ?? phoneDefault()
+  return override ?? fromStorage() ?? frameDefault()
 }
 
 export function setSourceFrame(on: boolean | null): void {

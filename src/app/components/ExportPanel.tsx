@@ -97,10 +97,19 @@ function Result({ onBack }: { onBack: () => void }) {
             : `${formatClock(result.durationMs)} · ${humanBytes(result.blob.size)} · ${result.width}×${result.height}`}
         </span>
       </div>
+      {/* UI1: the file was saved the moment the render finished — Robert:
+          "skip bullshit extra step after render, download after it done". This
+          says so and offers the second copy, which is the only reason anyone
+          would press it: a download the browser put somewhere unexpected, or a
+          dialog that was dismissed. */}
+      <div className="xp__saved">
+        <Icon name="check" size={15} />
+        <span>Saved to your downloads as {result.fileName}</span>
+      </div>
       <div className="xp__actions">
-        <button className="btn btn--primary btn--wide" onClick={() => saveToFile(result)}>
+        <button className="btn btn--surface btn--wide" onClick={() => saveToFile(result)}>
           <Icon name={ai ? 'doc' : 'download'} size={16} />
-          <span>{ai ? 'Save PDF for AI' : 'Save file'}</span>
+          <span>Save again</span>
         </button>
       </div>
       <CloudCard result={result} />

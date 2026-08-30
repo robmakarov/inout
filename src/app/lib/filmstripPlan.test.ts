@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_THUMBS, THUMB_PITCH_PX, planFilmstrip } from './filmstripPlan'
+import { MAX_THUMBS, THUMB_PITCH_PX, planFilmstrip, thumbPitchPx } from './filmstripPlan'
 
 describe('planFilmstrip', () => {
   it('has no strip to draw when the lane is narrower than one thumbnail', () => {
@@ -14,7 +14,7 @@ describe('planFilmstrip', () => {
   it('spaces thumbnails by pitch, not by take length', () => {
     const short = planFilmstrip(760, 10, 32)!
     const long = planFilmstrip(760, 1800, 32)!
-    expect(short.count).toBe(Math.round(760 / THUMB_PITCH_PX))
+    expect(short.count).toBe(Math.round(760 / thumbPitchPx(32)))
     // THE POINT OF THE PITCH RULE: a 30-minute take gets the same number of
     // thumbnails as a 10-second one, each standing for more time.
     expect(long.count).toBe(short.count)
@@ -44,5 +44,18 @@ describe('planFilmstrip', () => {
   it('draws one thumbnail rather than none on a narrow-but-usable lane', () => {
     const p = planFilmstrip(60, 10, 32)!
     expect(p.count).toBe(1)
+  })
+
+  // UI1: the pitch may never fall below a thumbnail's own width, or the strip
+  // is drawn wider than its lane and every frame is squashed to fit — the
+  // stretch is `background-size: 100% 100%`, so the overrun is invisible in the
+  // count and plainly visible in the picture.
+  it('never packs thumbnails closer together than they are wide', () => {
+    for (const h of [16, 24, 30, 32, 48]) {
+      expect(thumbPitchPx(h)).toBeGreaterThanOrEqual(Math.round(h * (16 / 9)))
+      expect(thumbPitchPx(h)).toBeGreaterThanOrEqual(THUMB_PITCH_PX)
+      const p = planFilmstrip(900, 30, h)!
+      expect(p.count * p.thumbWidthPx).toBeLessThanOrEqual(900 + p.thumbWidthPx)
+    }
   })
 })

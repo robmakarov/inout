@@ -15,6 +15,13 @@ import { analytics } from '@core/analytics'
 import { DEFAULT_FRAME_ASPECT, aspectOf, frameForAspect, sourceFrameEnabled } from '@core/frame'
 import { prefetchEditorChunk } from '@app/editorChunk'
 import { useInstallPrompt } from '@app/hooks/useInstallPrompt'
+import {
+  QUALITY_STEPS,
+  loadQualityStep,
+  qualityStepById,
+  setQualityStep,
+  type QualityStepId,
+} from '@core/qualityStep'
 import { useAppStore } from '@app/state/store'
 import {
   CHANNEL_KINDS,
@@ -26,6 +33,7 @@ import {
 import { armingLabel as armingLabelFor, foldWaiting } from '@app/lib/arming'
 import { noteWedgeReload, shouldReloadForWedge, takeWedgeReloadNotice } from '@app/lib/wedgeReload'
 import { ChannelChips } from '@app/components/ChannelChips'
+import { QualitySlider } from '@app/components/QualitySlider'
 import { TakesList } from '@app/components/TakesList'
 import { testPanelEnabled } from '@app/lib/testPanel'
 import { lazy, Suspense } from 'react'
@@ -76,6 +84,16 @@ export function CaptureScreen() {
   const toast = useAppStore((s) => s.toast)
 
   const [prefs, setPrefs] = useState<CaptureConfig>(() => loadCapturePrefs())
+  /**
+   * UI1 — THE QUALITY CEILING, CHOSEN BEFORE THE TAKE.
+   *
+   * It is not a label: it bounds what capture ASKS FOR (frame.ts's
+   * `captureCeilingLongEdge`, rate.ts's ceiling) and it is stamped on the
+   * finished take, which caps the export ladder afterwards. So it can only be
+   * moved while nothing is running — a ceiling changed mid-take would describe
+   * a file that was already written under the old one.
+   */
+  const [step, setStep] = useState<QualityStepId>(() => loadQualityStep())
   const installer = useInstallPrompt()
 
   // Warm compilers/workers only — devices must NOT activate before the
@@ -458,7 +476,11 @@ export function CaptureScreen() {
 
   return (
     <div className={`capture${recording ? ' capture--recording' : ''}`}>
-      {!session && <div className="capture__wordmark">INOUT</div>}
+      {/* UI1: the page's own column. The takes list lives IN it rather than
+          floating over the record button — Robert: "show kept videos saved
+          above slider, not floating". Bottom-anchored, so one take sits just
+          above the controls and twenty scroll. */}
+      <div className="capture__body">
       {!session && !arming && installer.canInstall && (
         <div className="capture__install">
           <button className="capture__install-btn" onClick={installer.install}>
@@ -488,6 +510,7 @@ export function CaptureScreen() {
           and neither could anyone: the app opened the newest recording at boot
           and there was no other route in. */}
       {!session && !arming && <TakesList />}
+      </div>
       {!session && testPanelEnabled() && (
         <Suspense fallback={null}>
           <TestPanel />
@@ -558,6 +581,22 @@ export function CaptureScreen() {
       )}
 
       <div className="controlbar">
+        {/* UI1: fixed above the chips, and only before a take — Robert: "show
+            it fixed above chips before record". Locked while arming: the
+            ceiling has already been handed to the devices by then. */}
+        {!session && (
+          <QualitySlider
+            stops={QUALITY_STEPS.map((q) => ({ id: q.id, label: q.label }))}
+            value={step}
+            disabled={arming}
+            note={qualityStepById(step).note}
+            onChange={(id) => {
+              const next = id as QualityStepId
+              setStep(next)
+              setQualityStep(next)
+            }}
+          />
+        )}
         <ChannelChips
           prefs={prefs}
           caps={caps}

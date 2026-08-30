@@ -3,14 +3,12 @@ import type { EditState, Recording } from '@core/types'
 import { clampEditState, outputDurationMs } from '@core/timeline'
 import type { TightenProposal } from '@core/timeline'
 import {
-  DEFAULT_TIER_ID,
+  QUALITY_TIERS,
   isDefaultTier,
-  loadQualityTier,
   resolveTier,
-  saveQualityTier,
   settingsForTier,
   sourceStepFor,
-  tierById,
+  tiersForTake,
   type QualityTier,
 } from '@core/compose/quality'
 import { frameAspectFor, sourceFrameEnabled } from '@core/frame'
@@ -22,7 +20,9 @@ import {
   startPrerender,
 } from '@core/compose'
 import { prerenderEnabled } from '@core/compose/prerenderFlag'
+import { loadRecovery } from '@core/capture'
 import { editsRepo, recordingsRepo } from '@core/store'
+import { saveToFile } from '@core/share'
 import { analytics } from '@core/analytics'
 import { useAppStore } from '@app/state/store'
 import { detectCapabilities } from '@core/capabilities'
@@ -31,7 +31,8 @@ import { usePlayback } from '@app/hooks/usePlayback'
 import { Player } from '@app/components/Player'
 import { Timeline } from '@app/components/Timeline'
 import { ExportPanel } from '@app/components/ExportPanel'
-import { QualityPanel } from '@app/components/QualityPanel'
+import { QualityBar } from '@app/components/QualityBar'
+import { ToolsBar } from '@app/components/ToolsBar'
 import { SettingsBadge } from '@app/components/SettingsBadge'
 import { testPanelEnabled } from '@app/lib/testPanel'
 import { ConfirmDialog } from '@app/components/ConfirmDialog'
@@ -48,8 +49,6 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
   const mode = useAppStore((s) => s.mode)
   const pb = usePlayback(recording, edit)
   const [confirmOpen, setConfirmOpen] = useState(false)
-  // F7: quality is chosen BEFORE the export runs, in the timeline slot.
-  const [choosing, setChoosing] = useState(false)
   // F13: the remembered step, resolved to THIS take's shape. `resolveTier` is
   // the identity on a 16:9 take and on every take with the flag off, so a
   // reload restores exactly the step it always did.
@@ -75,7 +74,6 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
    * prod before this line existed.
    */
   const frameRate = takeRate(recording)
-  const [storedTier, setTier] = useState<QualityTier>(() => loadQualityTier())
   /**
    * F18: what "Source" means for THIS take — null when it has no source step
    * (already inside the ladder, or more than one video channel, so the native
@@ -84,29 +82,34 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
    * pixels are enough for the copy fence to refuse.
    */
   const sourceStep = useMemo(() => sourceStepFor(recording), [recording])
+  /**
+   * UI1 — THE STEPS THIS TAKE MAY EXPORT AT, capped by what was chosen before
+   * it was recorded. `tiersForTake` is the one place a step is resolved against
+   * a take (F13/F15) and now also the one place the ceiling is applied.
+   */
+  const tiers = useMemo(
+    () => tiersForTake(recording, frameAspect),
+    [recording, frameAspect],
+  )
+  /**
+   * UI1 — THE DEFAULT IS THE CEILING, i.e. exactly what the user chose before
+   * pressing record. Robert: "maximal choosen quality must be rendered in
+   * priority or background, whatever we do with it, instant". So the export the
+   * pre-render spends the idle machine on is the one that was asked for, and
+   * there is no second remembered preference quietly overriding the first.
+   *
+   * Keyed on the take: opening another one re-defaults to ITS ceiling rather
+   * than carrying this one's choice across.
+   */
+  const [chosenId, setChosenId] = useState<string | null>(null)
+  useEffect(() => setChosenId(null), [recording.id])
   const tier = useMemo(() => {
-    // THE REMEMBERED STEP HAS TO SURVIVE A SMALLER TAKE, which is the one thing
-    // about the source step that is not like the others: "source" is a
-    // different number on every machine and absent on most takes. A remembered
-    // 'source' on a take that has none falls back to the biggest step this take
-    // does offer, rather than silently resolving to the declared 1440p box.
-    let base = storedTier.id === 'source' && !sourceStep ? tierById('1440p') : storedTier
-    // A TAKE THAT OFFERS ITS OWN RESOLUTION DEFAULTS TO IT, and not defaulting
-    // to it was the worst of both ends. Robert, 2026-08-30: "export render is
-    // slow, all computer slows done, in about 60% all chrome blinks and
-    // decoding error message, sends back to edit" — on a take at 3024x1964
-    // exported at the remembered 1080p. With max mode there is no composite to
-    // copy, so that step re-rendered six thousand frames of 5.9 Mpx DOWN to
-    // 1080p: all of the capture cost, none of the resolution, and a render long
-    // enough to exhaust the renderer. A five-second take of the same settings
-    // exported fine, which is the shape of a resource problem rather than a
-    // logic one.
-    // Turning on "my own resolution" and then throwing it away by default was
-    // never what the switch meant. An explicit choice still wins — this only
-    // moves the step nobody picked.
-    if (sourceStep && base.id === DEFAULT_TIER_ID) base = tierById('source')
-    return resolveTier(base, frameAspect, frameRate, sourceStep)
-  }, [storedTier, frameAspect, frameRate, sourceStep])
+    const top = tiers[tiers.length - 1]
+    const picked = chosenId ? tiers.find((t) => t.id === chosenId) : undefined
+    // `tiersForTake` never returns an empty ladder — the lowest rung is
+    // reachable from every ceiling — so `top` is the answer in every real case.
+    return picked ?? top ?? resolveTier(QUALITY_TIERS[0]!, frameAspect, frameRate, sourceStep)
+  }, [tiers, chosenId, frameAspect, frameRate, sourceStep])
   const exporting = mode === 'exporting' || mode === 'share'
   // F5a: a PROPOSED cut list. It is preview-only until the user applies it, and
   // any other edit invalidates it — a proposal computed against a timeline that
@@ -142,6 +145,20 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
     setEditState(clampEditState(recording, { ...edit, segments: proposal.segments }))
     setProposal(null)
   }
+
+  /**
+   * UI1 — WATCH MEANS WATCH. A take opened from the takes list's Watch button
+   * arrives with `openIntent: 'watch'` and should be PLAYING when it appears;
+   * one opened with Edit, or by the boot recovery, should not. Consumed once
+   * and cleared, so a later re-render cannot restart playback under the user.
+   */
+  const openIntent = useAppStore((s) => s.openIntent)
+  useEffect(() => {
+    if (openIntent !== 'watch' || !pb.ready) return
+    useAppStore.getState().setOpenIntent(null)
+    pb.play()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openIntent, pb.ready])
 
   const { toggle, seekBy } = pb
   useEffect(() => {
@@ -228,7 +245,6 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
   const onExportAi = async () => {
     const store = useAppStore.getState()
     if (store.mode === 'exporting') return
-    setChoosing(false)
     pb.pause()
     const ac = new AbortController()
     store.setExportAbort(ac)
@@ -254,6 +270,9 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
         pages: result.ai?.pages ?? 0,
         approxTokens: result.ai?.approxTokens ?? 0,
       })
+      // UI1: THE FILE IS THE POINT — Robert: "skip bullshit extra step after
+      // render, download after it done". See the note on the video export.
+      saveToFile(result)
       useAppStore.setState({
         exportResult: result,
         mode: 'share',
@@ -274,7 +293,6 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
   const onExport = async (chosen: QualityTier) => {
     const store = useAppStore.getState()
     if (store.mode === 'exporting') return
-    setChoosing(false)
     pb.pause()
     // Only the default tier may copy the COMPOSITE: any other tier is a
     // different resolution, so the recorded composite is not it. A single raw
@@ -327,6 +345,22 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
           })
           .catch(() => undefined)
       }
+      /**
+       * UI1 — THE DOWNLOAD IS NOT A SEPARATE DECISION. Robert: "skip bullshit
+       * extra step after render, download after it done".
+       *
+       * Pressing Export IS asking for the file; making the user press Save
+       * afterwards was a second question with only one sensible answer, and it
+       * put a click between the render finishing and the thing the render was
+       * for. The share panel still opens behind it — a link is a different
+       * thing to want and it stays a choice — but the file is already in
+       * Downloads by the time it appears.
+       *
+       * This is a plain anchor click on a blob URL (core/share), the same call
+       * the button made; it is not a filesystem write and it cannot fail
+       * silently in a way the panel's Save button would have survived.
+       */
+      saveToFile(result)
       useAppStore.setState({
         exportResult: result,
         mode: 'share',
@@ -384,33 +418,17 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
           edit={edit}
           pb={pb}
           onBack={() => setConfirmOpen(true)}
-          onExport={() => setChoosing(true)}
           onEdit={(next) => setEditState(clampEditState(recording, next))}
-          showExport={!exporting && !choosing}
           measuredAspect={measuredAspect}
           onMeasuredAspect={setMeasured}
         />
       </div>
 
-      {exporting ? (
-        <ExportPanel onBack={() => useAppStore.getState().setMode('editor')} />
-      ) : choosing ? (
-        <QualityPanel
-          recording={recording}
-          edit={edit}
-          outputDurationMs={outputDurationMs(edit)}
-          tier={tier}
-          frameAspect={frameAspect}
-          onTier={(t) => {
-            setTier(t)
-            saveQualityTier(t)
-          }}
-          onExport={() => void onExport(tier)}
-          onExportForAi={() => void onExportAi()}
-          onCancel={() => setChoosing(false)}
-        />
-      ) : (
-        <Timeline
+      {/* UI1: the editing tools, under the picture rather than through the
+          middle of the timeline — Robert: "buttons with extra features make
+          under preview video, not in the fucking middle of timeline". */}
+      {!exporting && (
+        <ToolsBar
           recording={recording}
           edit={edit}
           timeMs={pb.timeMs}
@@ -427,12 +445,53 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
         />
       )}
 
+      {!exporting && (
+        <Timeline
+          recording={recording}
+          edit={edit}
+          timeMs={pb.timeMs}
+          durationMs={pb.durationMs}
+          onSeek={pb.seek}
+          onEdit={(next) => setEditState(clampEditState(recording, next))}
+          proposal={proposal}
+        />
+      )}
+
+      {exporting ? (
+        <ExportPanel onBack={() => useAppStore.getState().setMode('editor')} />
+      ) : (
+        /* UI1: the quality slider is always on screen — there is no "choose a
+           quality" step any more, because the choice was already made before
+           the take and this only lets you go down from it. */
+        <QualityBar
+          recording={recording}
+          edit={edit}
+          outputDurationMs={outputDurationMs(edit)}
+          tier={tier}
+          frameAspect={frameAspect}
+          onTier={(t) => setChosenId(t.id)}
+          onExport={() => void onExport(tier)}
+          onExportForAi={() => void onExportAi()}
+        />
+      )}
+
       <ConfirmDialog
         open={confirmOpen}
-        title="Discard recording?"
-        message="This recording will be deleted. This can't be undone."
+        title="Leave this recording?"
+        message="Keep it and you can reopen it from the takes list on the record screen. Discarding deletes it and its files — that can't be undone."
         confirmLabel="Discard"
+        neutralLabel="Keep"
         danger
+        onNeutral={() => {
+          setConfirmOpen(false)
+          // The take stays on disk and stays reachable — mark it dismissed so
+          // the next boot does not decide it is the interesting one and drop
+          // the user straight back into it (recovery.ts).
+          void loadRecovery()
+            .then((m) => m.markRecordingDismissed(recording.id))
+            .catch(() => undefined)
+            .finally(() => useAppStore.getState().resetToCapture())
+        }}
         onConfirm={() => void discard()}
         onCancel={() => setConfirmOpen(false)}
       />
