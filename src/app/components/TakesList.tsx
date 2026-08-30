@@ -25,6 +25,8 @@ import { CHANNEL_META } from '@app/lib/channels'
 export function TakesList({ onOpen }: { onOpen?: () => void }) {
   const [takes, setTakes] = useState<Recording[] | null>(null)
   const [busy, setBusy] = useState(false)
+  /** Bytes on disk belonging to no take — see reclaim(). */
+  const [orphanBytes, setOrphanBytes] = useState(0)
 
   useEffect(() => {
     let alive = true
@@ -35,6 +37,7 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
         const { recordingsRepo } = await import('@core/store')
         const rows = await recordingsRepo.list()
         if (alive) setTakes(rows)
+        if (alive) setOrphanBytes(await orphanTotal(rows))
       } catch {
         if (alive) setTakes([])
       }
@@ -44,14 +47,47 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
     }
   }, [])
 
-  if (!takes || takes.length === 0) return null
+  const refreshOrphans = async (rows: Recording[]): Promise<void> => {
+    setOrphanBytes(await orphanTotal(rows).catch(() => 0))
+  }
+
+  /**
+   * RECLAIM WHAT BELONGS TO NOTHING. A take that freezes never reaches stop, so
+   * no Recording row is written — but its file is already on disk, and until
+   * now nothing in the product could see it or remove it. Robert, 2026-08-30,
+   * with the app showing zero takes: "i dont see any takes and you telling me
+   * its 1,1 gb". One orphaned file, 1,138 MB, from an evening of takes that
+   * froze.
+   *
+   * Never touches the blobs a CRASHED take is still hoping to be salvaged from
+   * (recovery.ts's pending manifest): those are unreferenced on purpose.
+   */
+  const reclaim = async (): Promise<void> => {
+    setBusy(true)
+    try {
+      const { blobStore } = await import('@core/store')
+      const { pendingBlobKeys } = await import('@core/capture/recovery')
+      const keep = new Set([...referencedKeys(takes ?? []), ...pendingBlobKeys()])
+      for (const f of await blobStore.list()) {
+        if (keep.has(f.key) || f.key.startsWith('__')) continue
+        await blobStore.remove(f.key)
+      }
+      setOrphanBytes(0)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (takes === null || (takes.length === 0 && orphanBytes <= 0)) return null
 
   const remove = async (id: string): Promise<void> => {
     setBusy(true)
     try {
       const { recordingsRepo } = await import('@core/store')
       await recordingsRepo.remove(id)
-      setTakes((cur) => (cur ?? []).filter((r) => r.id !== id))
+      const left = (takes ?? []).filter((r) => r.id !== id)
+      setTakes(left)
+      await refreshOrphans(left)
     } finally {
       setBusy(false)
     }
@@ -61,8 +97,9 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
     setBusy(true)
     try {
       const { recordingsRepo } = await import('@core/store')
-      for (const r of takes) await recordingsRepo.remove(r.id)
+      for (const r of takes ?? []) await recordingsRepo.remove(r.id)
       setTakes([])
+      await refreshOrphans([])
     } finally {
       setBusy(false)
     }
@@ -96,12 +133,25 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
     <div className="takes">
       <div className="takes__head">
         <span>
-          {takes.length} take{takes.length === 1 ? '' : 's'} kept on this computer
+          {(takes ?? []).length} take{(takes ?? []).length === 1 ? '' : 's'} kept on this computer
         </span>
-        <button type="button" className="takes__all" disabled={busy} onClick={() => void removeAll()}>
-          Delete all
-        </button>
+        {(takes ?? []).length > 0 && (
+          <button type="button" className="takes__all" disabled={busy} onClick={() => void removeAll()}>
+            Delete all
+          </button>
+        )}
       </div>
+      {orphanBytes > 0 && (
+        <div className="takes__orphan">
+          <span>
+            {bytes(orphanBytes)} left behind by takes that never finished — no recording to open,
+            nothing using it.
+          </span>
+          <button type="button" className="takes__all" disabled={busy} onClick={() => void reclaim()}>
+            Reclaim
+          </button>
+        </div>
+      )}
       <ul className="takes__list">
         {takes.map((r) => (
           <li key={r.id}>
@@ -140,6 +190,33 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
       </div>
     </div>
   )
+}
+
+/** Every blob key any take points at — the rest is orphaned. */
+function referencedKeys(rows: Recording[]): string[] {
+  const keys: string[] = []
+  for (const r of rows) {
+    for (const c of r.channels) keys.push(c.blobKey)
+    if (r.composite) keys.push(r.composite.blobKey)
+  }
+  return keys
+}
+
+async function orphanTotal(rows: Recording[]): Promise<number> {
+  const { blobStore } = await import('@core/store')
+  const { pendingBlobKeys } = await import('@core/capture/recovery')
+  const keep = new Set([...referencedKeys(rows), ...pendingBlobKeys()])
+  let total = 0
+  for (const f of await blobStore.list()) {
+    if (keep.has(f.key) || f.key.startsWith('__')) continue
+    total += f.size
+  }
+  return total
+}
+
+function bytes(n: number): string {
+  const mb = n / 1048576
+  return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb.toFixed(mb >= 10 ? 0 : 1)} MB`
 }
 
 /** What this take occupies on disk — every channel plus the composite. */

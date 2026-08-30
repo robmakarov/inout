@@ -61,6 +61,19 @@ function readPendingManifest(): PendingManifest | null {
   }
 }
 
+/**
+ * The blob keys a crashed take is still hoping to be salvaged from.
+ *
+ * Anything reclaiming orphaned storage has to leave these alone: they are the
+ * one set of unreferenced files that is unreferenced ON PURPOSE, because the
+ * Recording row is written at STOP and this manifest is what stands in for it
+ * until then. Deleting them would turn a recoverable take into a lost one.
+ */
+export function pendingBlobKeys(): string[] {
+  const m = readPendingManifest()
+  return m ? m.channels.map((c) => c.blobKey) : []
+}
+
 export function markRecordingDismissed(id: string): void {
   try {
     localStorage.setItem(DISMISSED_KEY, id)
