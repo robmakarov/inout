@@ -1112,6 +1112,30 @@ export function acquireChannelsProgressive(
   // rung of it touches the user's asks, so audio is asked for iff they said so.
   const displayLevel: DisplayRequestLevel = config.screen ? displayRequestLevel() : 0
   if (config.screen) {
+    /**
+     * ONE SCREEN REQUEST AT A TIME — the refusal all the "do not ask now"
+     * paths share. It is not a diagnosis and not a wedge: nothing is counted,
+     * no rung moves, and the UI does not refresh on it (refreshing is what
+     * orphans a request that could still settle). The user's next press is
+     * free the moment Chrome is.
+     */
+    const refuseBusy = (why: string): void => {
+      const msg = displayStallMessage('busy', detectPlatform().browser, 'failed')
+      console.warn(`[capture] not asking Chrome for the screen — ${why}`)
+      appendWedgeJournal({
+        kind: 'wedge',
+        stall: 'busy',
+        level: displayLevel,
+        count: displayWedgeCount(),
+        pending: unsettledDisplayRequests(),
+      })
+      fail({ kind: 'screen', message: msg, denied: false, timedOut: true, stall: 'busy' })
+      mark('display', 'failed', why)
+      if (config.systemAudio) {
+        fail({ kind: 'system-audio', message: msg, denied: false, timedOut: true, stall: 'busy' })
+        mark('system-audio', 'failed', why)
+      }
+    }
     mark('display', 'start')
     if (!canDisplay) {
       // iOS/iPadOS: Apple exposes no screen capture to any browser (native-only,
@@ -1162,22 +1186,9 @@ export function acquireChannelsProgressive(
       // and unlike 'stale' NOTHING is refreshed: the pending request can still
       // settle by itself, and replacing this document is what orphans it where
       // nobody can ever settle it again.
-      const msg = displayStallMessage('busy', detectPlatform().browser, 'failed')
-      console.warn('[capture] a screen request from this page is still pending — not dispatching a second one')
-      appendWedgeJournal({
-        kind: 'wedge',
-        stall: 'busy',
-        level: displayLevel,
-        count: displayWedgeCount(),
-        pending: unsettledDisplayRequests(),
-      })
-      fail({ kind: 'screen', message: msg, denied: false, timedOut: true, stall: 'busy' })
-      mark('display', 'failed', 'a screen request from this page is still pending')
-      if (config.systemAudio) {
-        fail({ kind: 'system-audio', message: msg, denied: false, timedOut: true, stall: 'busy' })
-        mark('system-audio', 'failed', 'a screen request from this page is still pending')
-      }
+      refuseBusy('a screen request from this page is still pending')
     } else {
+      let stillHeldAtDeadline = false
       // NEVER RACE THE PREVIOUS SHARE'S TEARDOWN (displayRelease.ts — Robert's
       // rapid record/stop stress test wedges Chrome). The check is a sync
       // no-op whenever clear, so the same-tick dispatch survives in the
@@ -1190,65 +1201,80 @@ export function acquireChannelsProgressive(
         console.info(
           cleared
             ? '[capture] previous share released — requesting the screen'
-            : '[capture] previous share still held at the deadline — requesting anyway',
+            : '[capture] previous share still held at the deadline — not asking on top of it',
         )
+        stillHeldAtDeadline = !cleared
       }
-      // A machine that wedged gets a smaller request — see displayWedge.ts.
-      // Only OUR options are dropped, so nothing the user chose goes missing.
-      const opts = displayMediaOptions(config, displayLevel)
-      // PRINT THE ACTUAL REQUEST, EVERY TAKE. Three rounds of "the sound
-      // checkbox is missing" were spent arguing about what we send; from here
-      // the console answers that in one line, before the picker even opens.
-      console.info(
-        `[capture] asking Chrome for ${config.systemAudio ? 'screen + tab audio' : 'screen'}` +
-          (displayLevel > 0
-            ? ` — reduced request ${displayLevel}/${MAX_DISPLAY_LEVEL} after a stuck share, your channels unchanged`
-            : ''),
-        opts,
-      )
-      // TWO ceilings, because there are two different things that can be slow.
-      // The outer one is the human at the picker and stays generous. The inner
-      // one only starts once the picker has closed, and catches the failure
-      // Robert actually hit: a getDisplayMedia that never settles at all while
-      // Chrome shows the screen as shared. Without it the app waits out the
-      // full human budget on a promise that is already dead.
-      const rawDisplay = navigator.mediaDevices.getDisplayMedia(opts)
-      rawDisplay.catch(() => undefined) // handled below; never unhandled
-      // From here this document owns an open request until Chrome settles it —
-      // which, in the wedge, is never. The next press must not add a second.
-      displayReq = markDisplayRequest(rawDisplay)
-      // …and from here the forensics watch what leaks out of Chrome around it
-      // (focus and time — all a page can see), so a stall names its suspect
-      // instead of adding one to a count (stallForensics.ts).
-      const forensics = beginDisplayForensics()
-      displayForensics = forensics
-      displayPromise = withTimeout(
-        withTimeout(rawDisplay, PICKER_SETTLE_MS, 'getDisplayMedia (picker closed)', pickerClosed()),
-        DISPLAY_TOTAL_BUDGET_MS,
-        'getDisplayMedia',
-      )
-      // SAY IT WHILE IT IS STILL HAPPENING (W1 item 3). Everything this app
-      // knew about a stuck share used to arrive in the post-take banner, up to
-      // 30 s after the press — and when the cause is an ungranted macOS
-      // permission, Chrome has been displaying the answer that whole time
-      // while our screen said "Waiting for screen…". This is a NOTICE, not a
-      // failure: the request runs on, and most requests that reach this line
-      // still land. It fires once, well past any plausible picker
-      // interaction, and is cancelled the moment the promise settles either
-      // way.
-      const stallTimer = setTimeout(() => {
-        const stall = classifyDisplayStall(detectPlatform().os)
-        console.warn(
-          `[capture] screen request still outstanding at ${DISPLAY_STALL_NOTICE_MS} ms — reading it as ${stall}`,
+      // AND CLEAR THE PREVIOUS SHARE BEFORE ASKING, OR DO NOT ASK. Robert,
+      // 2026-08-30: "when we about to ask permission, do we clear previous one
+      // in this moment?" We do not — a page cannot cancel a getDisplayMedia,
+      // and the only thing it can clear is a delivered track. What this used
+      // to do at the deadline was worse than not clearing: it logged "still
+      // held — requesting anyway" and made the call ON TOP of a live share,
+      // which is the exact collision that hangs Chrome. It does not ask now.
+      // The tracks are NOT stopped here: our own stop path keeps the display
+      // track alive while it drains the recorder (P0-tail-raw), and killing it
+      // would cut the tail off the take that is still being written.
+      if (stillHeldAtDeadline) {
+        refuseBusy('the previous share has not been released yet')
+      } else {
+        // A machine that wedged gets a smaller request — see displayWedge.ts.
+        // Only OUR options are dropped, so nothing the user chose goes missing.
+        const opts = displayMediaOptions(config, displayLevel)
+        // PRINT THE ACTUAL REQUEST, EVERY TAKE. Three rounds of "the sound
+        // checkbox is missing" were spent arguing about what we send; from here
+        // the console answers that in one line, before the picker even opens.
+        console.info(
+          `[capture] asking Chrome for ${config.systemAudio ? 'screen + tab audio' : 'screen'}` +
+            (displayLevel > 0
+              ? ` — reduced request ${displayLevel}/${MAX_DISPLAY_LEVEL} after a stuck share, your channels unchanged`
+              : ''),
+          opts,
         )
-        console.warn(`[capture:forensics] ${describeForensics(forensics.report())}`)
-        handlers.onStall?.(displayStallMessage(stall, detectPlatform().browser, 'waiting'), stall)
-      }, DISPLAY_STALL_NOTICE_MS)
-      const clearStall = (): void => {
-        clearTimeout(stallTimer)
-        forensics.settle()
+        // TWO ceilings, because there are two different things that can be slow.
+        // The outer one is the human at the picker and stays generous. The inner
+        // one only starts once the picker has closed, and catches the failure
+        // Robert actually hit: a getDisplayMedia that never settles at all while
+        // Chrome shows the screen as shared. Without it the app waits out the
+        // full human budget on a promise that is already dead.
+        const rawDisplay = navigator.mediaDevices.getDisplayMedia(opts)
+        rawDisplay.catch(() => undefined) // handled below; never unhandled
+        // From here this document owns an open request until Chrome settles it —
+        // which, in the wedge, is never. The next press must not add a second.
+        displayReq = markDisplayRequest(rawDisplay)
+        // …and from here the forensics watch what leaks out of Chrome around it
+        // (focus and time — all a page can see), so a stall names its suspect
+        // instead of adding one to a count (stallForensics.ts).
+        const forensics = beginDisplayForensics()
+        displayForensics = forensics
+        displayPromise = withTimeout(
+          withTimeout(rawDisplay, PICKER_SETTLE_MS, 'getDisplayMedia (picker closed)', pickerClosed()),
+          DISPLAY_TOTAL_BUDGET_MS,
+          'getDisplayMedia',
+        )
+        // SAY IT WHILE IT IS STILL HAPPENING (W1 item 3). Everything this app
+        // knew about a stuck share used to arrive in the post-take banner, up to
+        // 30 s after the press — and when the cause is an ungranted macOS
+        // permission, Chrome has been displaying the answer that whole time
+        // while our screen said "Waiting for screen…". This is a NOTICE, not a
+        // failure: the request runs on, and most requests that reach this line
+        // still land. It fires once, well past any plausible picker
+        // interaction, and is cancelled the moment the promise settles either
+        // way.
+        const stallTimer = setTimeout(() => {
+          const stall = classifyDisplayStall(detectPlatform().os)
+          console.warn(
+            `[capture] screen request still outstanding at ${DISPLAY_STALL_NOTICE_MS} ms — reading it as ${stall}`,
+          )
+          console.warn(`[capture:forensics] ${describeForensics(forensics.report())}`)
+          handlers.onStall?.(displayStallMessage(stall, detectPlatform().browser, 'waiting'), stall)
+        }, DISPLAY_STALL_NOTICE_MS)
+        const clearStall = (): void => {
+          clearTimeout(stallTimer)
+          forensics.settle()
+        }
+        rawDisplay.then(clearStall, clearStall)
       }
-      rawDisplay.then(clearStall, clearStall)
     }
   } else if (config.systemAudio) {
     fail({ kind: 'system-audio', message: 'System audio requires screen sharing', denied: false })

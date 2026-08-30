@@ -70,7 +70,12 @@ phase: MVP validation (2026-07-16)
   session alive for this origin, every later take colliding with it, which is "it happens after that
   too" exactly, and is what resetting the site's permissions was killing by hand. An unclaimed arrival
   is now stopped and written to the journal as a `settle` entry, which is also the first evidence about
-  whether an abandoned request can come back at all.
+  whether an abandoned request can come back at all. AND WE NO LONGER ASK ON TOP OF A LIVE SHARE (his
+  question: "when we about to ask permission, do we clear previous one in this moment?"). We cannot
+  clear a REQUEST — there is no abort — and we must not stop a delivered track at that moment, because
+  the stop path keeps it alive while it drains the recorder (P0-tail-raw). What we can do is not make
+  the call: `displayRelease` waits ≤3 s as before, and where it used to log "still held at the deadline
+  — requesting anyway" and ask anyway, the press is now refused as `'busy'`.
   2026-08-30 EVENING, THREE THINGS MOVED. (1) ROBERT CLEARED A LIVE WEDGE BY RESETTING THE SITE'S
   PERMISSIONS FROM INSIDE CHROME, after this project had told him three times that only ⌘Q would do
   it. A claim that dies with ONE ORIGIN's permission entry is not machine-wide macOS SCK rot, so the

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createCaptureSession } from './session'
 import { CaptureError } from '../types'
 import { resetDeviceGuardForTests } from './deviceGuard'
-import { resetDisplayReleaseForTests } from './displayRelease'
+import { resetDisplayReleaseForTests, trackDisplayCapture } from './displayRelease'
 import {
   displayRequestOutstanding,
   displayRequestPending,
@@ -182,6 +182,43 @@ describe('one screen request at a time — Chrome takes exactly one', () => {
     // request can still settle, and replacing the document orphans it.
     expect((err as CaptureError).reason).toBe('busy')
     expect(calls).toBe(1)
+  })
+
+  it('NEVER ASKS ON TOP OF A SHARE THAT IS STILL LIVE', async () => {
+    // Robert, 2026-08-30: "when we about to ask permission, do we clear
+    // previous one in this moment?" We cannot clear a REQUEST — there is no
+    // abort — and we must not stop a delivered track here, because the stop
+    // path keeps it alive while it drains the recorder. What we can do is not
+    // make the call. This used to log "still held — requesting anyway" and ask
+    // on top of a live share, which is the collision that hangs Chrome.
+    vi.useFakeTimers()
+    let calls = 0
+    vi.stubGlobal('MediaStream', StubStream)
+    vi.stubGlobal('MediaRecorder', StubRecorder)
+    vi.stubGlobal('navigator', {
+      mediaDevices: {
+        getDisplayMedia: () => {
+          calls += 1
+          return new Promise(() => {})
+        },
+        getUserMedia: () => new Promise(() => {}),
+      },
+      permissions: { query: () => Promise.resolve({ state: 'granted' }) },
+    })
+    // A previous take's screen track that never releases.
+    trackDisplayCapture({ readyState: 'live' } as unknown as MediaStreamTrack)
+
+    const attempt = createCaptureSession({
+      screen: true,
+      camera: false,
+      mic: false,
+      systemAudio: false,
+    }).catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(6_000)
+    const err = await attempt
+    expect(err).toBeInstanceOf(CaptureError)
+    expect((err as CaptureError).reason).toBe('busy')
+    expect(calls).toBe(0)
   })
 
   it('a share that arrives with nobody left to want it is STOPPED', async () => {
