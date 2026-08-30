@@ -51,6 +51,14 @@ only upscale. The take carries the ceiling it was recorded under, so an old take
 Default is 1080p and must stay there — the composite is written at 1920 and the untouched export
 packet-copies it, so a higher default would silently break "instant default export".
 `max` means source resolution at 60 fps, nothing refused in advance.
+SECOND PASS the same day, from screenshots: the slider was a progress bar with dots on it and is now
+a segmented meter; the export stopped being a screen (progress and result are strips in the slider's
+slot, so there are three screens — main, recording, editing); the editor's slider lost its title row
+and note; Export and For AI sit on the track's own line; the pause button is gone and a
+continue-from-the-playhead control took its place in the editor transport, on the UI and on the
+roadmap as R-CONT; take cards gained a decoded frame and a Show-in-folder button that is honest about
+the fact no web API can reveal a file.
+
 Also: the output frame now follows the take everywhere (his call — the black bars were IN the file,
 not a preview artefact); takes are cards in the page with watch / edit / download (send and copy
 blank by his instruction); the editing tools moved out of the middle of the timeline to under the
