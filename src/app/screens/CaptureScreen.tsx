@@ -148,10 +148,13 @@ export function CaptureScreen() {
    *  acquisition callback fires faster than a render and must not miss edges. */
   const waitingRef = useRef<ArmingTimelineEntry['step'][]>([])
   const [elapsedMs, setElapsedMs] = useState(0)
-  /** F6: the take is held, devices still armed. Drives the pause control and
-   *  the recording indicator; the elapsed counter simply stops advancing,
-   *  because the session stops counting time nobody is recording. */
-  const [paused, setPaused] = useState(false)
+  /** F6: the take is held, devices still armed. The elapsed counter simply
+   *  stops advancing, because the session stops counting time nobody is
+   *  recording. UI1 removed the button that reached this from here (see the
+   *  control bar); the state is kept because the ENGINE can still pause — the
+   *  browser's own "Stop sharing" and the wedge paths both go through it — and
+   *  the timer must not run through a hold it did not ask for. */
+  const [, setPaused] = useState(false)
   const [remainingMs, setRemainingMs] = useState<number | null>(MAX_RECORDING_MS)
   /** Inputs turned off mid-take — by the user's chip OR by the browser's own
    *  "Stop sharing", which lands here through the same 'channel-ended' event. */
@@ -605,22 +608,14 @@ export function CaptureScreen() {
           pending={pending}
           onToggle={toggleChip}
         />
-        {/* F6: only while a take is running, and never while arming — a
-            half-started take has nothing to hold. */}
-        {session && !arming && (
-          <button
-            className={`pausebtn${paused ? ' pausebtn--resume' : ''}`}
-            onClick={() => (paused ? session.resume() : session.pause())}
-            aria-label={paused ? 'Resume recording' : 'Pause recording'}
-            title={
-              paused
-                ? 'Resume — your inputs stayed connected'
-                : 'Pause — nothing is released, and the pause is left out of the recording'
-            }
-          >
-            {paused ? 'Resume' : 'Pause'}
-          </button>
-        )}
+        {/* UI1: NO PAUSE BUTTON. Robert, 2026-08-30: "no need for fucking pause
+            button, record pressed - on editing appearing again left to play
+            button, if pressed continues where dragger in timeline stands".
+            Pausing mid-take is answered by stopping and continuing from the
+            editor instead — one control, on the screen where you can see where
+            you would be continuing FROM. The session's pause/resume API is
+            untouched (F6 still holds the devices); only the button is gone, so
+            the continue path has something to build on. */}
         <RecordButton
           recording={!!session}
           arming={arming}

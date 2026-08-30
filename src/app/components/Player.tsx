@@ -537,6 +537,7 @@ export function Player({
   edit,
   pb,
   onBack,
+  onContinue,
   onEdit,
   measuredAspect,
   onMeasuredAspect,
@@ -545,6 +546,8 @@ export function Player({
   edit: EditState
   pb: Playback
   onBack: () => void
+  /** UI1: continue recording into this take from the playhead. */
+  onContinue: () => void
   onEdit: (next: EditState) => void
   /**
    * F13 — THE DECODER IS THE LAST WORD ON WHAT SHAPE THIS TAKE IS.
@@ -698,6 +701,25 @@ export function Player({
           aria-label="Back to capture"
         >
           <Icon name="chevron-left" size={20} />
+        </button>
+        {/* UI1 — CONTINUE THE TAKE, and it is here rather than on the capture
+            screen for the reason Robert gave: "record pressed - on editing
+            appearing again left to play button, if pressed continues where
+            dragger in timeline stands". The pause button was the wrong shape
+            for that — it lived on the recording screen, where you cannot see
+            the point you would be continuing from. Here the playhead IS the
+            answer to "from where".
+            NOT WIRED YET, by his own instruction ("if it cant work now put it
+            in roadmap, just make on ui"): appending a live segment to a
+            finished take means re-arming the devices and splicing new channels
+            into an existing timeline. Task R-CONT in .ai/TASKS. */}
+        <button
+          className="transport__rec"
+          onClick={onContinue}
+          aria-label="Continue recording from the playhead"
+          title="Continue recording from the playhead"
+        >
+          <Icon name="record" size={16} />
         </button>
         <button
           className="transport__play"

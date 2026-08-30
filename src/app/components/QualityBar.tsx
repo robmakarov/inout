@@ -191,10 +191,36 @@ export function QualityBar({
     }
   })
 
+  /**
+   * UI1 — WHAT THE SENTENCE UNDER THE SLIDER USED TO SAY, now the Export
+   * button's own tooltip. Robert asked for the caption to go ("second
+   * screenshot no need for top and bottom captions") and he is right that it
+   * was noise on a control whose sizes already say most of it — but "this one
+   * is a copy and takes a second, that one re-renders and takes minutes" is a
+   * real difference between two presses of the same button, so it moves onto
+   * the button rather than disappearing.
+   */
+  const exportTitle = [
+    instant
+      ? 'Copies the video as recorded — no re-encode, ready in about a second, and that size is the file.'
+      : `Re-renders the whole video at ${tier.width}×${tier.height}${
+          tier.fps >= 60 ? ' at 60 fps' : ''
+        }, so the size is an estimate. Longer takes take a while.`,
+    notice === 'measuring' ? 'The other sizes are still being measured.' : '',
+    notice === 'rough'
+      ? `Couldn’t measure the sizes on this take, so they are rough guides.${
+          canPacketCopy ? ' The 1080p size is exact.' : ''
+        }`
+      : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
   return (
     <div className="qbar">
       <QualitySlider
-        title="Export"
+        title="Export quality"
+        compact
         stops={stops}
         value={tier.id}
         maxIndex={cap}
@@ -207,27 +233,9 @@ export function QualityBar({
             .getState()
             .toast('This take was recorded at a lower quality — that step would only upscale it')
         }
-        note={
-          <>
-            {notice === 'measuring' && (
-              <span className="qs__note-soft">Measuring the other sizes on this take… </span>
-            )}
-            {notice === 'rough' && (
-              <span className="qs__note-warn">
-                Couldn’t measure the sizes on this take, so they are rough guides.
-                {canPacketCopy ? ' The 1080p size is exact.' : ''}{' '}
-              </span>
-            )}
-            {instant
-              ? 'Copies the video as recorded — no re-encode, ready in about a second, and that size is the file.'
-              : `Re-renders the whole video at ${tier.width}×${tier.height}${
-                  tier.fps >= 60 ? ' at 60 fps' : ''
-                }, so the size is an estimate. Longer takes take a while.`}
-          </>
-        }
         actions={
           <>
-            <button className="btn btn--primary qbar__go" onClick={onExport}>
+            <button className="btn btn--primary qbar__go" onClick={onExport} title={exportTitle}>
               <Icon name="download" size={15} />
               <span>Export</span>
             </button>

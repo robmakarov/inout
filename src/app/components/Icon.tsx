@@ -20,6 +20,8 @@ export type IconName =
   | 'doc'
   | 'trash'
   | 'send'
+  | 'record'
+  | 'folder'
   | 'google'
 
 const PATHS: Record<Exclude<IconName, 'google'>, ReactNode> = {
@@ -101,6 +103,14 @@ const PATHS: Record<Exclude<IconName, 'google'>, ReactNode> = {
       <rect x="4.5" y="3" width="15" height="18" rx="2" />
       <path d="M8 7.5h8M8 11h8" />
       <rect x="8" y="14" width="8" height="4" rx="1" />
+    </>
+  ),
+  // A filled dot — continue recording into this take (UI1's transport).
+  record: <circle cx="12" cy="12" r="6" fill="currentColor" strokeWidth="0" />,
+  // A folder — reveal the exported file where the browser put it (UI1's cards).
+  folder: (
+    <>
+      <path d="M3 7.5a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
     </>
   ),
   // A bin with a lid — deleting a take (UI1's cards).

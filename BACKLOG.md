@@ -8,6 +8,28 @@ technical defects by severity. Done items get deleted, not archived.
 
 - (dump here)
 
+## Roadmap — asked for, on the UI, not wired
+
+- **R-CONT — continue a take from the playhead.** Robert, 2026-08-30: "no need for fucking pause
+  button, record pressed - on editing appearing again left to play button, if pressed continues where
+  dragger in timeline stands (if it cant work now put it in roadmap, just make on ui)". The control
+  IS on the UI — `transport__rec`, left of play in the editor — and pressing it says it is on the
+  roadmap. What it needs is real capture work, which is why it is not done: re-arm the same devices
+  the take used, record a NEW segment, and splice it into an existing recording at a recording-timeline
+  instant. Open questions the task has to answer before it is built: does the new segment become new
+  channels or extend the existing ones (the blobs are per-channel and already closed); what happens to
+  the audio anchors, which are measured once per session (B7); and what a continue does to the
+  composite, which is one file written by one encoder for one arming. The pause button it replaces is
+  gone from the capture screen — `session.pause()`/`resume()` still exist and still hold the devices
+  (F6), so a first cut could be "continue = resume an un-stopped take" for the case where the user has
+  not left the editor yet.
+- **Show in folder.** On the take cards, and it cannot do what it says: no web API reveals a file in
+  Finder or Explorer, by design. It currently explains where the file is (the browser's Downloads,
+  ⌘⇧J) instead of opening a tab that fails silently. If this is ever wanted for real it needs a native
+  wrapper, which is off the MVP roadmap.
+- **Send / Copy link on the take cards.** Deliberately blank — Robert, 2026-08-30: "make them blank
+  for now".
+
 ## Technical / code
 
 ### Now

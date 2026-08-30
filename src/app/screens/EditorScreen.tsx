@@ -438,6 +438,13 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
           edit={edit}
           pb={pb}
           onBack={() => setConfirmOpen(true)}
+          onContinue={() =>
+            useAppStore
+              .getState()
+              .toast(
+                'Continuing a take from the playhead isn’t wired up yet — it’s on the roadmap (R-CONT)',
+              )
+          }
           onEdit={(next) => setEditState(clampEditState(recording, next))}
           measuredAspect={measuredAspect}
           onMeasuredAspect={setMeasured}
