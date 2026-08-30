@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  GOOD_TAKES_TO_CLIMB,
   classifyDisplayStall,
   displayRequestLevel,
   displayStallMessage,
@@ -69,24 +70,35 @@ describe('wedge memory', () => {
   // and the only exit anyone found was a localStorage line in a console.
   // Robert hit it three times in one evening. One good take is stronger
   // evidence than one old bad one.
-  it('a rung-1 success climbs home — the mark is gone, not merely quieter', () => {
+  // 2026-08-30 — THESE ASSERTED A CLIMB ON ONE GOOD TAKE, AND THAT WAS THE BUG.
+  // Climbing after a single success walks the machine straight back onto the
+  // request that had just wedged it, so it wedges again, drops a rung, works
+  // once, climbs, wedges — every other record, forever. Robert hit exactly
+  // that: "chrome screen and mic wedges happend every second record after
+  // reopening chrome". A rung is EARNED clear now.
+  it('ONE good take is not enough — the rung it is standing on is kept', () => {
     rememberDisplayWedge(1_000_000)
     rememberDisplaySuccess(1)
-    expect(displayRequestLevel(1_000_001)).toBe(0)
+    expect(displayRequestLevel(1_000_001)).toBe(1)
   })
 
-  it('a rung-2 success climbs ONE rung — not straight home, that rung did choke', () => {
-    for (let i = 0; i < 3; i++) rememberDisplayWedge(1_000_000 + i)
-    rememberDisplaySuccess(2)
-    expect(displayRequestLevel(1_000_005)).toBe(1)
+  it('THE OSCILLATION: a rung that works once and wedges once never climbs', () => {
+    rememberDisplayWedge(1_000_000) // → rung 1
+    for (let i = 0; i < 10; i++) {
+      rememberDisplaySuccess(1)
+      rememberDisplayWedge(1_000_001 + i) // the good run is broken every time
+    }
+    // It settles at the floor rather than rediscovering rung 0 every other take.
+    expect(displayRequestLevel(1_000_100)).toBe(2)
   })
 
-  it('W1 GATE: two good takes walk a floored machine back to 0, with no TTL waiting', () => {
+  it(`${GOOD_TAKES_TO_CLIMB} consecutive good takes climb one rung`, () => {
     for (let i = 0; i < 3; i++) rememberDisplayWedge(1_000_000 + i)
     expect(displayRequestLevel(1_000_005)).toBe(2)
-    rememberDisplaySuccess(2)
-    rememberDisplaySuccess(1)
-    // Minutes later, not 24 hours later.
+    for (let i = 0; i < GOOD_TAKES_TO_CLIMB; i++) rememberDisplaySuccess(2)
+    expect(displayRequestLevel(1_000_005)).toBe(1)
+    for (let i = 0; i < GOOD_TAKES_TO_CLIMB; i++) rememberDisplaySuccess(1)
+    // Home on its own, in ordinary use, with no TTL wait and nothing to press.
     expect(displayRequestLevel(1_000_000 + 60_000)).toBe(0)
   })
 
@@ -264,20 +276,26 @@ describe('the request Chrome actually receives after a wedge', () => {
     for (let i = 0; i < 3; i++) rememberDisplayWedge()
     expect(displayRequestLevel()).toBe(2)
 
-    stubDisplay(() => undefined)
-    await acquireChannelsProgressive(config, {
-      onChannel: () => undefined,
-      onFailure: () => undefined,
-    }).settled
+    // This test is about the LADDER, not the release barrier: pretend the
+    // previous take's share released long ago so each request is instant.
+    for (let i = 0; i < GOOD_TAKES_TO_CLIMB; i++) {
+      resetDisplayReleaseForTests()
+      stubDisplay(() => undefined)
+      await acquireChannelsProgressive(config, {
+        onChannel: () => undefined,
+        onFailure: () => undefined,
+      }).settled
+    }
     expect(displayRequestLevel()).toBe(1)
 
-    // This test is about the LADDER, not the release barrier: pretend the
-    // previous take's share released long ago so the next request is instant.
-    resetDisplayReleaseForTests()
-    await acquireChannelsProgressive(config, {
-      onChannel: () => undefined,
-      onFailure: () => undefined,
-    }).settled
+    for (let i = 0; i < GOOD_TAKES_TO_CLIMB; i++) {
+      resetDisplayReleaseForTests()
+      stubDisplay(() => undefined)
+      await acquireChannelsProgressive(config, {
+        onChannel: () => undefined,
+        onFailure: () => undefined,
+      }).settled
+    }
     expect(displayRequestLevel()).toBe(0)
   })
 })

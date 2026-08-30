@@ -94,6 +94,7 @@ import {
   outputToRecordingMs,
 } from '@core/timeline'
 import type { EditState, Recording } from '@core/types'
+import { copySourceForTier } from './quality'
 import { AUDIO_BITRATE, KEYFRAME_INTERVAL_SEC, RENDER_ENCODER_OPTIONS } from '@core/compose/codecs'
 import { drawVideoFrame, type FrameCanvas } from '@core/compose/layout'
 import { isDefaultTier, type QualityTier, type SizeEstimate } from '@core/compose/quality'
@@ -224,6 +225,8 @@ export async function calibrateSteps(
   const readers: VideoChannelReader[] = []
   const lanes: TierLane[] = []
   const sampledAtSec: number[] = []
+  /** Steps whose size is exact because they packet-copy — never encoded here. */
+  const skippedExact: string[] = []
   /** Set between the passes; every packet before it belongs to the first GOP. */
   let boundarySec = Number.POSITIVE_INFINITY
   try {
@@ -287,6 +290,19 @@ export async function calibrateSteps(
     sampledAtSec.push(Math.round(atSec * 100) / 100)
 
     for (const tier of tiers) {
+      // A STEP THAT PACKET-COPIES ALREADY KNOWS ITS SIZE EXACTLY, so encoding
+      // 300 frames to estimate it is pure waste — and the panel does not even
+      // use the answer: it says "that size is the file, not a guess" and shows
+      // ChannelRecording.bytes (O3c). Skipping these is not a lost measurement,
+      // it is a measurement that was never needed.
+      // It matters most where it costs most: F18's Source step is the take's
+      // own resolution, so on a 3024x1964 take this lane alone was encoding 300
+      // frames of 5.9 Mpx — the bulk of the sixteen-second probe that runs
+      // right before the user presses record again.
+      if (copySourceForTier(recording, tier)) {
+        skippedExact.push(tier.id)
+        continue
+      }
       const lane = openLane(tier, () => boundarySec)
       if (lane) lanes.push(lane)
     }
@@ -333,7 +349,10 @@ export async function calibrateSteps(
             (m) =>
               `${m.tierId} first ${m.firstKeyframeBytes}/${m.firstDeltaBytes} later ${m.laterKeyframeBytes}/${m.laterDeltaBytes}`,
           )
-          .join(' · '),
+          .join(' · ') +
+        (skippedExact.length
+          ? ` · not encoded (their size is the file, not an estimate): ${skippedExact.join(', ')}`
+          : ''),
     )
     return { steps, sampledAtSec, wallMs }
   } catch (err) {
@@ -342,6 +361,23 @@ export async function calibrateSteps(
   } finally {
     for (const lane of lanes) {
       if (lane.output.state !== 'finalized' && lane.output.state !== 'canceled') {
+        // THE SOURCE OWNS A VideoEncoder AND MUST BE CLOSED, NOT JUST THE
+        // OUTPUT. `closeLane` closes both on the success path; this one
+        // cancelled the muxer and walked away from the encoder, so every
+        // ABANDONED probe stranded one hardware encoder per tier — and a probe
+        // is abandoned every time the editor is left before it finishes, which
+        // on a long take is sixteen seconds of work nobody waits for.
+        // F18 made it worse by adding a fifth tier.
+        // Why it matters beyond tidiness: the next take's picker and encoders
+        // then open against a browser still holding those, and load at picker
+        // time is a documented trigger of the screen wedge
+        // (docs/SCREEN_WEDGE.md). Robert, 2026-08-30: "chrome screen and mic
+        // wedges happend every second record after reopening chrome".
+        try {
+          lane.source.close()
+        } catch {
+          /* already closed by closeLane on the success path */
+        }
         await lane.output.cancel().catch(() => undefined)
       }
     }

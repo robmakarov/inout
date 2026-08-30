@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  displayRequestLevel,
   loadCaptureEngine,
   loadCapturePrefs,
-  resetDisplayWedge,
   warmCapturePipeline,
   saveCapturePrefs,
   type ArmingTimelineEntry,
@@ -89,15 +87,18 @@ export function CaptureScreen() {
    */
   const [wedgeNotice, setWedgeNotice] = useState<string | null>(null)
 
-  /**
-   * IS THIS MACHINE IN REDUCED MODE, and can the user get out of it (W1 item
-   * 4)? Before W1 the only exit from the safe-mode ladder was a 24 h timer or
-   * a localStorage line typed into a console — Robert was handed that line and
-   * answered "what the fuck is this?". Read once at mount and after every
-   * attempt, because the rung only ever moves inside one.
+  /*
+   * THERE IS NO "REDUCED MODE" FOR THE USER TO MANAGE — Robert, 2026-08-30:
+   * "why there is still button clear reduced mode? no reduced mode we agreed,
+   * auto coming back to max when ready". W1 added a banner and a Clear button
+   * because the ladder used to be a one-way ratchet with a 24 h timer, and the
+   * only escape anyone had found was a console line. Now that a rung is earned
+   * clear by consecutive good takes (displayWedge.ts), there is nothing to
+   * escape from, and a banner about a self-healing internal state is just a
+   * mode the user did not ask to be given. The safe-mode request is invisible
+   * by construction — no rung drops anything the user chose — so it should be
+   * invisible in the interface too.
    */
-  const [reducedRung, setReducedRung] = useState(0)
-  useEffect(() => setReducedRung(displayRequestLevel()), [])
 
   // The recovery ritual's second half (wedgeReload.ts): this page just
   // refreshed itself over a wedged screen share — say so, and what to do NEXT
@@ -386,9 +387,6 @@ export function CaptureScreen() {
       armAbortRef.current = null
       setArming(false)
       setArmingLabel(null)
-      // A wedge steps the rung down and a success climbs it back (W1) — either
-      // way the affordance below has to agree with storage after every press.
-      setReducedRung(displayRequestLevel())
     }
   }
 
@@ -472,40 +470,9 @@ export function CaptureScreen() {
           {support.message}
         </div>
       )}
-      {!session && (wedgeNotice || reducedRung > 0) && (
+      {!session && wedgeNotice && (
         <div className="capture__unsupported" role="alert">
-          {wedgeNotice ??
-            'Screen sharing is running in reduced mode after a stuck share. Nothing you chose ' +
-              'is missing — it clears itself after a good take, or you can clear it now.'}
-          {reducedRung > 0 && (
-            <div className="capture__notice-actions">
-              {/* THE BUTTON MUST NOT PROMISE WHAT NO PAGE CAN DO — Robert,
-                  2026-08-30: "reset screen sharing button dont fixes it i still
-                  need to relaunch chrome". It was labelled "Reset screen
-                  sharing", which reads as "unstick my screen sharing", and all
-                  it can actually do is clear OUR reduced mode. The stuck claim
-                  lives in Chrome's browser process and survives a refresh and a
-                  tab close (docs/SCREEN_WEDGE.md); only quitting Chrome clears
-                  it. So the control now says what it is, and the sentence next
-                  to it says what the user actually has to do. */}
-              <button
-                type="button"
-                className="capture__notice-btn"
-                onClick={() => {
-                  resetDisplayWedge()
-                  setReducedRung(0)
-                  setWedgeNotice(null)
-                  toast('Reduced mode cleared — the next take asks for full quality')
-                }}
-              >
-                Clear reduced mode
-              </button>
-              <span className="capture__notice-aside">
-                Screen still stuck? That part is Chrome’s, not ours — quit Chrome completely
-                (⌘Q) and reopen. Nothing on this page can release it.
-              </span>
-            </div>
-          )}
+          {wedgeNotice}
         </div>
       )}
       {/* Every take you have, and a way back into one — Robert, 2026-08-30:
