@@ -109,6 +109,32 @@ phase: MVP validation (2026-07-16)
   under the track say which one is chosen; the sentence each step carried survives as the track's
   tooltip, and the instant-vs-re-render difference as the Export button's, because "copies in a
   second" vs "re-renders for minutes" is a real difference between two presses of the same button.
+- THE CAMERA CAN BE MOVED WHILE THE TAKE RUNS (UI1, Robert: "draggin camera small view stopped
+  working while recording"). It had never worked there — the editor's PiP is a keyframe track over a
+  FINISHED take, and the capture preview only ever drew the default corner — so nothing regressed;
+  the feature was missing. It belongs here more than in the editor, because the thing you are trying
+  not to cover is on screen WHILE you record.
+  FOUR LAYERS, capability-gated so a take nobody drags is byte-identical to one made before this:
+  the compositor takes a `campose` message and `pipRect` reads it, falling through to the constants
+  when it is null · liveCompositeV2 exposes `setCameraPose`, and v1 DECLARES it optional and does not
+  implement it (v1 composites on the main thread from the UI's own <video> elements, so a live pose
+  there is the editor's job) · the session forwards it and stamps the final pose on the Recording ·
+  `defaultEditState` seeds the editor's camera track from that pose.
+  THE LAST ONE IS NOT OPTIONAL AND IS THE WHOLE REASON THIS IS FOUR LAYERS: the composite is written
+  with the moved PiP and the default export packet-copies that file, so an editor that opened on the
+  default corner would be previewing a frame the export cannot produce. The pose goes through
+  `poseToRect` in all three renderers — capture preview, compositor, editor — so it is one piece of
+  arithmetic and not three implementations of a corner. Verified on prod: dragged to (0.258, 0.296)
+  mid-take, the stored `Recording.cameraPose` reads that, and the editor's PiP opens at (0.259,
+  0.297).
+- THE RECORDING PREVIEW FILLS WHAT IS THERE (UI1, Robert: "make screen fill so no gap here"). It was
+  absolutely positioned over the whole screen and sized from `100dvh - 300px`, a guess at the
+  controls' height made when the control bar was taller; on a recording screen (chips + record
+  button, no slider) the guess was ~150 px too big and left a black band exactly that tall. It is a
+  flex child of the body now and takes its bound from the box it is actually in (`container-type:
+  size` + `100cqh`), the same fix the editor's stage got, for the same reason: an estimate of
+  available height is a bug waiting for the layout below it to change.
+
 - A FRESH CUT COULD NOT BE GRABBED, FOR TWO REASONS AT ONCE (UI1, Robert: "cant grab normally grabers
   after split"). (1) A split happens AT the playhead, and the playhead's own 12 px grab strip sits
   above everything at z-index 4 — so it ate every press within 6 px of the boundary the split had
