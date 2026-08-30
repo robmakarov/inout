@@ -1071,15 +1071,46 @@
   cursor: ew-resize;
   touch-action: none;
 }
+/* The take's own start and end. Same grip language as a cut so both read as
+   draggable, and WHITE rather than accent so which is which needs no legend:
+   white bounds the take, blue cuts inside it. */
 .tl__trim-grip {
-  width: 4px;
+  position: relative;
+  width: 3px;
   border-radius: 2px;
   background: var(--text);
-  opacity: 0.75;
+  opacity: 0.9;
   transition: opacity var(--t-fast) var(--ease);
+}
+.tl__trim-grip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 13px;
+  height: 30px;
+  margin: -15px 0 0 -6.5px;
+  border-radius: 4px;
+  background: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0 4px,
+    rgba(0, 0, 0, 0.45) 4px 5px,
+    transparent 5px 8px,
+    rgba(0, 0, 0, 0.45) 8px 9px,
+    transparent 9px 100%
+  );
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 13px 12px;
+  transition: transform var(--t-fast) var(--ease);
 }
 .tl__trim:hover .tl__trim-grip {
   opacity: 1;
+}
+.tl__trim:hover .tl__trim-grip::after {
+  transform: scale(1.12);
 }
 .tl__playhead {
   position: absolute;
@@ -2028,25 +2059,75 @@
   width: 7px;
   margin-left: 0;
 }
+/* A boundary where two clips touch is ONE handle: the two 7 px halves share a
+   single gesture (see dragTightBoundary), so they must share a single drawing
+   too. The right-hand half draws nothing; the left-hand half draws the rule and
+   the grip, aligned to the boundary they meet on. */
 .tl__cut--tight.tl__cut--r::after {
   left: auto;
-  right: 0;
+  right: -1.5px;
   margin-left: 0;
 }
-/* One line for one boundary — the two handles share it. */
-.tl__cut--tight.tl__cut--l::after {
+.tl__cut--tight.tl__cut--r::before {
+  left: auto;
+  right: -6.5px;
+  margin-left: 0;
+}
+.tl__cut--tight.tl__cut--l::after,
+.tl__cut--tight.tl__cut--l::before {
   display: none;
 }
+/* …and hovering either half lights the one grip they share. */
+.tl__cut--tight.tl__cut--l:hover + .tl__cut--tight.tl__cut--r::before {
+  transform: scale(1.12);
+}
+/* THE CUT ITSELF: a full-height rule so you can see where the boundary is
+   against every lane at once. */
 .tl__cut::after {
   content: '';
   position: absolute;
   left: 50%;
   top: 0;
   bottom: 0;
-  width: 2px;
-  margin-left: -1px;
+  width: 3px;
+  margin-left: -1.5px;
+  border-radius: 2px;
   background: var(--accent);
-  opacity: 0.75;
+}
+/* THE GRIP: the part you are meant to take hold of, and it has to LOOK like it
+   — Robert: "grabbers to ugly and hard to distinct on edit timeline". A 3 px
+   line is a mark, not a handle; it says where the cut is and nothing about
+   being draggable. This is a real tab, centred in the lanes, with two ridges. */
+.tl__cut::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 13px;
+  height: 30px;
+  margin: -15px 0 0 -6.5px;
+  border-radius: 4px;
+  background: var(--accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  /* The ridges — two hairlines through the middle of the tab. */
+  background-image: linear-gradient(
+    90deg,
+    transparent 0 4px,
+    rgba(255, 255, 255, 0.65) 4px 5px,
+    transparent 5px 8px,
+    rgba(255, 255, 255, 0.65) 8px 9px,
+    transparent 9px 100%
+  );
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 13px 12px;
+  transition:
+    transform var(--t-fast) var(--ease),
+    box-shadow var(--t-fast) var(--ease);
+}
+.tl__cut:hover::before {
+  transform: scale(1.12);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
 }
 .tl__seg-del {
   position: absolute;

@@ -165,6 +165,53 @@ export function Timeline({
   }
 
   /**
+   * A BOUNDARY WHERE TWO CLIPS TOUCH IS ONE HANDLE, NOT TWO.
+   *
+   * Robert: "when i split record i cant drag left part but right part grabber
+   * dont moves". Both halves of that are the same defect. A fresh split leaves
+   * the end of one clip and the start of the next on the SAME pixel, and each
+   * of those edges can only move ONE way — the left clip's end is clamped by
+   * the next clip's start, the right clip's start by the previous clip's end.
+   * So half of every grab was a no-op, on a 7 px target, with nothing on screen
+   * saying which half you had hold of.
+   *
+   * One gesture instead: the boundary stays where it was pressed, and dragging
+   * opens the cut on whichever SIDE you drag towards. Dragging back through the
+   * boundary closes that side and opens the other, so the gesture is reversible
+   * — which the two-handle version could not be, because each handle could only
+   * ever travel away from the other.
+   *
+   * `at` is captured at pointerdown deliberately: it is the boundary the user
+   * grabbed, not the moving edge, and every frame of the drag is measured
+   * against it.
+   */
+  const dragTightBoundary = (index: number) => (e: React.PointerEvent) => {
+    e.stopPropagation()
+    const at = editSegments(editRef.current)[index]?.endMs ?? 0
+    startDrag(e, (clientX) => {
+      const cur = editRef.current
+      const segs = editSegments(cur).map((sg) => ({ ...sg }))
+      const before = segs[index]
+      const after = segs[index + 1]
+      if (!before || !after) return
+      const ms = msAtClient(clientX)
+      if (ms < at) {
+        before.endMs = Math.max(before.startMs + MIN_SEGMENT_MS, ms)
+        after.startMs = at
+      } else {
+        before.endMs = at
+        after.startMs = Math.min(after.endMs - MIN_SEGMENT_MS, ms)
+      }
+      // Never let a drag swallow a neighbour outside the pair.
+      const prev = segs[index - 1]
+      const next = segs[index + 2]
+      if (prev) before.startMs = Math.max(before.startMs, prev.endMs)
+      if (next) after.endMs = Math.min(after.endMs, next.startMs)
+      onEdit({ ...cur, segments: normalizeSegments(cur, segs) })
+    })
+  }
+
+  /**
    * PUT THE MATERIAL BACK — the undo inside the cut zone itself (UI1, Robert:
    * "make cutted out zone shrink with button undo inside").
    *
@@ -437,16 +484,18 @@ export function Timeline({
                   <div
                     className={`tl__cut tl__cut--l${tightBefore ? ' tl__cut--tight' : ''}`}
                     style={{ left: x(sg.startMs) }}
-                    onPointerDown={dragCutEdge(i, 'start')}
-                    title="Drag right to trim the start of this clip"
+                    onPointerDown={
+                      tightBefore ? dragTightBoundary(i - 1) : dragCutEdge(i, 'start')
+                    }
+                    title={tightBefore ? 'Drag either way to cut from here' : 'Drag to move this edge'}
                   />
                 )}
                 {i < segments.length - 1 && (
                   <div
                     className={`tl__cut tl__cut--r${tightAfter ? ' tl__cut--tight' : ''}`}
                     style={{ left: x(sg.endMs) }}
-                    onPointerDown={dragCutEdge(i, 'end')}
-                    title="Drag left to trim the end of this clip"
+                    onPointerDown={tightAfter ? dragTightBoundary(i) : dragCutEdge(i, 'end')}
+                    title={tightAfter ? 'Drag either way to cut from here' : 'Drag to move this edge'}
                   />
                 )}
                 <button
