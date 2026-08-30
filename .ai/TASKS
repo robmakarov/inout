@@ -360,11 +360,15 @@ READY NOW:
                                 this machine's own collapses, never a constant, and a machine that
                                 has never collapsed has no budget at all. HIS GATE IS OPEN: his take,
                                 his machine, with a game running.
-  F18  the user's own resolution BUILT, flag `?sourceres=1`, OFF. A screen-only take bigger than
-                                1440p gets a Source step at its OWN pixels, delivered by the packet
+  F18  the user's own resolution BUILT. Since UI1 the `max` step is the switch and `?sourceres=`
+                                the override. A take bigger than 1440p whose SCREEN is one continuous
+                                channel gets a Max step at its OWN pixels. Screen-only: the packet
                                 copy (measured on prod: 452 KB INSTANT at 3024x1964, SMALLER than the
-                                1080p composite copy's 613 KB). Costs 40 % more pixels through the
-                                encoders O15 counts, so the default is Robert's.
+                                1080p composite copy's 613 KB). With a camera: a render at that size,
+                                which is what the badge says — the camera is a PiP and never costs
+                                the top rung (2026-08-30, Robert: "i choosed max quality but export
+                                options is up to 1440 only"). Costs 40 % more pixels through the
+                                encoders O15 counts, which is why it is `max` and not the default.
   O16  the resolution step      BUILT, flag `?resstep=1`, OFF. The screen's raw channel follows its
                                 source's own size change by segmenting, on F6's machinery — 30 ms
                                 step, 69 ms seam, each segment measuring its own geometry, the mic
