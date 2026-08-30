@@ -313,12 +313,21 @@ explains the first: the packet-copy maxAbs sits ON the band, so at 6 s it is a c
 it is simply red. G1 is now the highest-value instrument task left.
 
 READY NOW:
-  R2   THE NATIVE-RES EXPORT CRASHES CHROME'S GPU PROCESS  [HEAVY · BLOCKING · full brief under R2]
-       A long 3024x1964@60 take exported at 1080p/1440p lags the machine, crashes the GPU process
-       (Chrome's own header vanishes), kills every decoder with it and loses the render. Once it took
-       the machine to a manual restart. 5 s of the same settings is fine. Mitigations shipped, cause
-       NOT found. Read R2 before touching it — three plausible causes are already ruled out with
-       reasons, and no rig here can reproduce it.
+  R2   FIXED AND MERGED 2026-08-30 (0f8fefe). THE CAUSE WAS THE EXPORT ENCODER'S MISSING
+       BACKPRESSURE — the custom constant-quality encoder took every frame synchronously for the
+       whole take, so a 4-minute 60 fps render queued 14,400 GPU-backed VideoFrames inside one
+       VideoEncoder. macOS SIGKILLed the GPU process to reclaim the memory (`exit_code=9`), which
+       reaches the tab as "decoding error". The decoder was the victim, which is why three sessions
+       looking at it found nothing. It was ALSO the "95% finalizing" stall: nothing was waited for
+       during the render, so the whole backlog drained in flush().
+       VERIFIED at Robert's own size — 240 s of 3024x1964@60 exported at 1440p60: completes in 132 s
+       (faster than real time), 251.9 MB, finalize 75 ms, GPU process PID changes 0, machine free
+       memory 12 % (was 1-2 % and a kill). Handoff under the task.
+       STILL OPEN, and now the top of the map: the CAPTURE half — "non max video must stop fucking
+       app record" (Robert 2026-08-30). Auto mode opens the composite's encoder on top of the raw
+       channels and freezes his game tab; max mode skips it, which is why max records clean. O15's
+       budget is built and measuring, and the reduction it is allowed to make is size-only —
+       dropping the composite is the ruling it was waiting for and it has now been given.
   F13-FLIP  Robert's own eye           [ROBERT OWED]  F13 IS BUILT, VERIFIED ON PROD AND OFF BY DEFAULT
                                              (handoff under the task). Its last gate is yours:
                                              open https://inout-kappa.vercel.app/?sourceframe=1 on
