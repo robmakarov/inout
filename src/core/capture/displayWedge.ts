@@ -106,6 +106,16 @@ interface WedgeState {
   /** Consecutive good takes at the CURRENT rung — see rememberDisplaySuccess. */
   goodRun: number
   /**
+   * CONSECUTIVE STALLS WITH NO SCREEN IN BETWEEN — how the advice knows what
+   * has already been tried and failed. 1 = the refresh ritual. 2 = the refresh
+   * AND ⌘Q. From 3 the app has spent every remedy that lives in the browser,
+   * and the only thing left is the macOS grant, so that is what it must say
+   * instead of repeating ⌘Q at a user who has already done it twice (Robert,
+   * 2026-08-30: four stalls, two Chrome relaunches, "make this shit gone
+   * completly"). Cleared by a delivered screen, never by time.
+   */
+  stalls: number
+  /**
    * Has this browser profile ever been handed a screen track? The macOS
    * screen-recording grant is per-application and permanent once given, so
    * one delivery proves it exists — which is what separates Chrome's wedge
@@ -138,6 +148,7 @@ function load(): WedgeState {
         level: typeof s.level === 'number' ? clamp(s.level) : 1,
         count: (s.count ?? 0) | 0,
         goodRun: (s.goodRun ?? 0) | 0,
+        stalls: (s.stalls ?? 0) | 0,
         // A record written before W1 carries no delivery flag, and the honest
         // reading of that is FALSE: we have no evidence this profile was ever
         // handed a share. The only consequence is that its next stall names
@@ -151,7 +162,7 @@ function load(): WedgeState {
   } catch {
     /* absent, corrupt, or storage refused — memory-only is fine */
   }
-  mem = { wedgedAt: 0, level: 0, count: 0, goodRun: 0, everDelivered: false }
+  mem = { wedgedAt: 0, level: 0, count: 0, goodRun: 0, stalls: 0, everDelivered: false }
   return mem
 }
 
@@ -183,6 +194,24 @@ export function rememberDisplayWedge(now = Date.now()): void {
 }
 
 /**
+ * A SCREEN REQUEST STALLED — of any kind, and this is the counter the ADVICE
+ * reads. Separate from rememberDisplayWedge, which only fires for the wedge
+ * classification and only shapes the next REQUEST: a permission stall must not
+ * touch the ladder (W1) but it absolutely counts as "the last thing we told
+ * them to do did not work". Call it for every stall, once.
+ */
+export function rememberDisplayStall(): void {
+  const s = load()
+  s.stalls += 1
+  save()
+}
+
+/** How many stalls in a row, with no screen delivered since. */
+export function consecutiveDisplayStalls(): number {
+  return load().stalls
+}
+
+/**
  * THE SCREEN ARRIVED — and until W1 (2026-08-29) that only counted at rung 0.
  * A success at rung 1 or 2 changed nothing, so the only exit from the floor
  * was the 24 h TTL, and the only exit anyone actually found was editing
@@ -204,10 +233,14 @@ export function rememberDisplaySuccess(usedLevel: DisplayRequestLevel): void {
   const s = load()
   const first = !s.everDelivered
   s.everDelivered = true
+  // The screen arrived: every remedy the advice was escalating through is moot.
+  const hadStalls = s.stalls > 0
+  s.stalls = 0
   if (s.wedgedAt === 0) {
     // Healthy machine. Nothing to climb; write only if this is the delivery
-    // that proves the OS grant, so a normal take does not touch storage.
-    if (first) save()
+    // that proves the OS grant (or the one that ends a stall run), so a normal
+    // take does not touch storage.
+    if (first || hadStalls) save()
     return
   }
   if (usedLevel === 0) {
@@ -257,11 +290,17 @@ export function resetDisplayWedge(): void {
   s.level = 0
   s.count = 0
   s.goodRun = 0
+  s.stalls = 0
   save()
 }
 
-/** Why a display request never settled. Both look identical from the page. */
-export type DisplayStall = 'permission' | 'wedge'
+/**
+ * Why a display request never settled. 'permission' and 'wedge' look identical
+ * from the page and are told apart by classifyDisplayStall. 'stale' is neither
+ * — it is the request we REFUSED to make because this document already had one
+ * stuck in it (displayInflight.ts), so it is known rather than inferred.
+ */
+export type DisplayStall = 'permission' | 'wedge' | 'stale'
 
 /**
  * WHICH OF THE TWO NEVER-SETTLING FAILURES THIS IS (W1, item 3).
@@ -308,13 +347,27 @@ export function resetDisplayWedgeForTests(): void {
 }
 
 /**
- * WHAT TO SAY ABOUT A SCREEN REQUEST THAT IS NOT COMING BACK — W1 item 3.
+ * WHAT TO SAY ABOUT A SCREEN REQUEST THAT IS NOT COMING BACK — W1 item 3,
+ * and the escalation this evening forced onto it.
  *
  * Two phases, because they are answering different questions. 'waiting' is
  * spoken while the request is STILL ALIVE and most of them still land: it may
  * not claim anything failed, and it must be the thing Chrome is already
  * showing on screen, since the user is looking at the picker. 'failed' is
  * spoken after the budget, when nothing was recorded.
+ *
+ * THE ADVICE HAS TO KNOW WHAT IT HAS ALREADY TOLD THIS USER. Until 2026-08-30
+ * every wedge said the same sentence — quit Chrome, reopen — because the
+ * classifier reads `everDelivered` and a profile that has ever been handed a
+ * screen is, by that rule, forever in "Chrome's transient wedge". Robert did
+ * exactly what it said, twice, and stalled four times: for him the sentence
+ * was not advice, it was a loop. A stall that survives the refresh AND a
+ * relaunch has FALSIFIED the browser-process story, and the remaining cause is
+ * the one below the browser — macOS is not handing the screen to it. So from
+ * the third stall in a row the text names that instead, with the toggle that
+ * clears it. (macOS re-asks for screen recording periodically; the prompt can
+ * open behind a full-screen window and never be seen, which looks from the
+ * page exactly like a wedge and survives every ⌘Q.)
  *
  * The permission text names the browser the user is actually in. Sending
  * someone in Edge to switch Chrome on in System Settings is the same
@@ -324,24 +377,43 @@ export function displayStallMessage(
   stall: DisplayStall,
   browser: BrowserName,
   phase: 'waiting' | 'failed',
+  /** Consecutive stalls including this one — see rememberDisplayStall. */
+  stalls: number = consecutiveDisplayStalls(),
 ): string {
   const name = BROWSER_LABEL[browser]
   const grant =
     `Open System Settings → Privacy & Security → Screen & System Audio Recording, ` +
     `turn ${name} on, then quit ${name} completely (⌘Q) and reopen it.`
-  if (stall === 'permission') {
-    return phase === 'waiting'
+  // The request we declined to make because one was already stuck here. The
+  // app reloads on this, so the text is a status line, not a set of steps.
+  if (stall === 'stale') {
+    return `${name} still has the last screen request open, so a new one cannot get through. ` +
+      `Refreshing the app to clear it…`
+  }
+  if (phase === 'waiting') {
+    return stall === 'permission'
       ? `Still waiting for the screen. If ${name} is asking for screen-recording permission, ` +
           `macOS has not granted it yet — ${grant}`
-      : // NOT "the device never connected", which is what this said until W1
-        // while Chrome was displaying the real answer on screen.
-        `macOS has not granted ${name} permission to record the screen, so the share never ` +
-          `arrived and nothing was recorded. ${grant} If it is already on, the share is stuck ` +
-          `instead — quit ${name} (⌘Q), reopen, and try again.`
+      : `Still waiting for the screen. ${name} has the share but has not handed it over — ` +
+          `if nothing happens, nothing is being recorded and you can press record again.`
   }
-  return phase === 'waiting'
-    ? `Still waiting for the screen. ${name} has the share but has not handed it over — ` +
-        `if nothing happens, nothing is being recorded and you can press record again.`
-    : `${name} accepted the share but never delivered the screen — nothing was recorded, even ` +
-        `after a refresh. Quit ${name} completely (⌘Q), reopen, and try again.`
+  // THE THIRD ONE IN A ROW IS NOT A BROWSER PROBLEM ANY MORE. Refresh (stall 1)
+  // and ⌘Q (stall 2) have both been spent, and neither produced a screen.
+  if (stalls >= 3) {
+    return `macOS is not handing the screen to ${name} — the share has stalled ${stalls} times in ` +
+      `a row and restarting ${name} did not change it, so the block is below the browser. ` +
+      `Open System Settings → Privacy & Security → Screen & System Audio Recording and turn ` +
+      `${name} OFF and then ON again (a stale grant looks exactly like this), then quit ${name} ` +
+      `with ⌘Q and reopen. Also check for a macOS permission dialog hiding behind your windows: ` +
+      `it re-asks every so often, and an unanswered one stalls every share.`
+  }
+  if (stall === 'permission') {
+    // NOT "the device never connected", which is what this said until W1
+    // while Chrome was displaying the real answer on screen.
+    return `macOS has not granted ${name} permission to record the screen, so the share never ` +
+      `arrived and nothing was recorded. ${grant} If it is already on, the share is stuck ` +
+      `instead — quit ${name} (⌘Q), reopen, and try again.`
+  }
+  return `${name} accepted the share but never delivered the screen — nothing was recorded, even ` +
+    `after a refresh. Quit ${name} completely (⌘Q), reopen, and try again.`
 }

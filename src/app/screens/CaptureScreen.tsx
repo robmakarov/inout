@@ -4,13 +4,15 @@ import {
   loadCapturePrefs,
   warmCapturePipeline,
   saveCapturePrefs,
+  consecutiveDisplayStalls,
+  displayStallMessage,
   type ArmingTimelineEntry,
 } from '@core/capture'
 import { CaptureError, MAX_RECORDING_MS } from '@core/types'
 import type { CaptureConfig, ChannelKind } from '@core/types'
 import { clampEditState, defaultEditState } from '@core/timeline'
 import { detectCapabilities } from '@core/capabilities'
-import { evaluateSupport } from '@core/platform'
+import { detectPlatform, evaluateSupport } from '@core/platform'
 import { analytics } from '@core/analytics'
 import { DEFAULT_FRAME_ASPECT, aspectOf, frameForAspect, sourceFrameEnabled } from '@core/frame'
 import { prefetchEditorChunk } from '@app/editorChunk'
@@ -131,9 +133,18 @@ export function CaptureScreen() {
   // second wedge that owns the ⌘Q text.
   useEffect(() => {
     if (takeWedgeReloadNotice()) {
+      // AND SAY THE TRUE THING ON THE WAY BACK. The refresh notice used to end
+      // in "quit Chrome (⌘Q)" every single time, which is the right next step
+      // exactly once. By the third stall in a row that sentence has been tried
+      // and disproved, so the message the user is handed after the refresh has
+      // to be the escalated one — this is the screen they are actually reading
+      // when they decide what to do next.
+      const stalls = consecutiveDisplayStalls()
       setWedgeNotice(
-        'The screen share got stuck, so the app refreshed itself. Press record to try again — ' +
-          'if it sticks again, quit Chrome completely (⌘Q) and reopen it.',
+        stalls >= 3
+          ? displayStallMessage('wedge', detectPlatform().browser, 'failed', stalls)
+          : 'The screen share got stuck, so the app refreshed itself. Press record to try again — ' +
+              'if it sticks again, quit Chrome completely (⌘Q) and reopen it.',
       )
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -396,6 +407,19 @@ export function CaptureScreen() {
         // 'permission' is deliberately NOT in this condition: a refresh
         // cannot change a macOS TCC grant, and spending the one automatic
         // reload on it only throws away the message that names the fix (W1).
+        // A DOCUMENT WITH A STUCK REQUEST IN IT IS NOT RETRYABLE, so this one
+        // ignores the once-per-window rule that guards the wedge ritual: the
+        // rule exists because a refresh MIGHT not cure a wedge, and here the
+        // refresh is not a diagnosis at all — the page has an open screen
+        // request Chrome will never settle, and replacing the document is the
+        // only way to get one that can ask again. Nothing was waited for and
+        // nothing was recorded, so it costs the user a blink instead of 30 s.
+        if (err.kind === 'screen' && err.reason === 'stale') {
+          noteWedgeReload()
+          setWedgeNotice(err.message)
+          window.location.reload()
+          return
+        }
         if (err.kind === 'screen' && err.reason === 'wedged' && shouldReloadForWedge()) {
           noteWedgeReload()
           // reload() only REQUESTS the navigation; the page keeps running until
@@ -408,7 +432,8 @@ export function CaptureScreen() {
         }
         // A wedge that survived the refresh: this is the ⌘Q text, and it must
         // still be on screen when the user comes back from the other tab.
-        if (err.reason === 'wedged' || err.reason === 'permission') setWedgeNotice(err.message)
+        if (err.reason === 'wedged' || err.reason === 'permission' || err.reason === 'stale')
+          setWedgeNotice(err.message)
         else toast(err.message, 'error')
       } else toast('Could not start recording', 'error')
     } finally {

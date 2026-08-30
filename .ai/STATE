@@ -2,6 +2,34 @@
 
 phase: MVP validation (2026-07-16)
 
+- ONE STUCK SCREEN REQUEST USED TO POISON EVERY PRESS AFTER IT (2026-08-30, Robert: four stalls in a
+  row, two Chrome relaunches in between — "first time waiting for screen, second waiting for screen and
+  microphone, third too, fourth too", "make this shit gone completly"). A wedged getDisplayMedia never
+  resolves AND never rejects: our 30 s budget gives up on the PROMISE, but the REQUEST stays booked
+  against this RenderFrame and no page code can cancel it — there is no abort signal on
+  getDisplayMedia. Every later press dispatched a SECOND request into that frame. `displayInflight.ts`
+  now counts outstanding requests per DOCUMENT and refuses to make the second one: the press fails
+  instantly with its own reason (`'stale'`, distinct from `'wedged'`), and the app ALWAYS refreshes on
+  it — ignoring the once-per-2-min rule that guards the wedge ritual, because this is not a diagnosis a
+  refresh might fail to cure, it is a document known to be unusable, and replacing it is the only reset
+  a page has. NOT THE FAIL-FAST DODGE: nothing that could have connected is given up, only the call
+  that was provably going to stall, and what replaces it is the one action that restores a frame able
+  to ask again. The mic half of Robert's second stall is the same defect from the side — a stuck screen
+  request holds up the frame's other device requests, and our own mic clock does not start until the
+  display promise settles.
+  THE ADVICE ALSO STOPPED LOOPING. `everDelivered` classes every stall on a profile that once got a
+  screen as Chrome's transient wedge, so the text said "quit Chrome (⌘Q)" forever; Robert did exactly
+  that, twice, and stalled twice more. `stalls` (consecutive, cleared by a delivered screen) is now
+  carried in the wedge state, and from the THIRD in a row the message stops blaming the browser and
+  names the layer below it — System Settings → Privacy & Security → Screen & System Audio Recording,
+  toggle the browser off and on, and look for the macOS re-authorisation dialog hiding behind a
+  window, which stalls every share and survives every ⌘Q. The refreshed page shows that escalated text
+  too, since that is the screen the user actually reads before deciding what to do.
+  WHAT THIS DOES NOT DO: it does not stop the FIRST wedge. That one is Chrome's/macOS's, and the only
+  change that would remove the failure surface rather than contain it is acquiring the share ONCE per
+  session and holding it across takes — which breaks "devices are touched ONLY after the record click"
+  and is Robert's call, not ours.
+
 - QUALITY IS ONE DECISION NOW, MADE BEFORE THE TAKE, AND IT BINDS BOTH HALVES (UI1, 2026-08-30,
   Robert's eight-item UI pass: "make chatgpt/claudecode effort-like slider for our quality choosing …
   make it not possible to choose higher quality that was choosen before start of record to save

@@ -26,11 +26,13 @@ import {
   classifyDisplayStall,
   displayStallMessage,
   displayWedgeCount,
+  rememberDisplayStall,
   rememberDisplaySuccess,
   rememberDisplayWedge,
   type DisplayStall,
   type DisplayRequestLevel,
 } from './displayWedge'
+import { displayRequestOutstanding, markDisplayRequest } from './displayInflight'
 import { knownGranted, rememberGrant, type DeviceGrant } from './grants'
 
 export interface AcquiredChannel {
@@ -1068,6 +1070,28 @@ export function acquireChannelsProgressive(
         fail({ kind: 'system-audio', message: msg, denied: false })
         mark('system-audio', 'failed', 'getDisplayMedia unavailable')
       }
+    } else if (displayRequestOutstanding()) {
+      // A SCREEN REQUEST FROM THIS DOCUMENT IS STILL STUCK (displayInflight.ts).
+      // Chrome has it booked against this RenderFrame and no page code can
+      // cancel it; a second request dispatched into that frame is the one that
+      // "wedges again" on every press after the first. Do not make the call
+      // that cannot work — say so instantly and let the app reload, which is
+      // the only reset a page has. Nothing that could have connected is given
+      // up here; 30 s of "Waiting for screen…" is.
+      const msg = displayStallMessage('stale', detectPlatform().browser, 'failed')
+      console.warn('[capture] a screen request from this page is still outstanding — not dispatching another')
+      analytics.track('display_wedge', {
+        conservative: displayLevel > 0,
+        level: displayLevel,
+        wedgeCount: displayWedgeCount(),
+        stall: 'stale',
+      })
+      fail({ kind: 'screen', message: msg, denied: false, timedOut: true, stall: 'stale' })
+      mark('display', 'failed', 'a previous screen request is still outstanding')
+      if (config.systemAudio) {
+        fail({ kind: 'system-audio', message: msg, denied: false, timedOut: true, stall: 'stale' })
+        mark('system-audio', 'failed', 'a previous screen request is still outstanding')
+      }
     } else {
       // NEVER RACE THE PREVIOUS SHARE'S TEARDOWN (displayRelease.ts — Robert's
       // rapid record/stop stress test wedges Chrome). The check is a sync
@@ -1105,6 +1129,9 @@ export function acquireChannelsProgressive(
       // full human budget on a promise that is already dead.
       const rawDisplay = navigator.mediaDevices.getDisplayMedia(opts)
       rawDisplay.catch(() => undefined) // handled below; never unhandled
+      // From here this document owns an open request until Chrome settles it —
+      // which, in the wedge, is never. The next press must not add a second.
+      markDisplayRequest(rawDisplay)
       displayPromise = withTimeout(
         withTimeout(rawDisplay, PICKER_SETTLE_MS, 'getDisplayMedia (picker closed)', pickerClosed()),
         DISPLAY_TOTAL_BUDGET_MS,
@@ -1244,6 +1271,9 @@ export function acquireChannelsProgressive(
       let stall: DisplayStall | undefined
       if (timedOut) {
         stall = classifyDisplayStall(detectPlatform().os)
+        // Counted before the message is built, so the text can say "the 3rd in
+        // a row" and stop repeating advice this user has already carried out.
+        rememberDisplayStall()
         // A PERMISSION STALL MUST NOT TOUCH THE LADDER (W1 item 3). The ladder
         // exists to find which of OUR options Chrome chokes on; an ungranted
         // macOS screen-recording toggle is not one of them, and escalating

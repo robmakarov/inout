@@ -753,8 +753,14 @@ export class CaptureError extends Error {
      * granted this browser screen recording (W1). It looks identical from the
      * page and is a different thing entirely: the auto-refresh ritual must NOT
      * run for it — a fresh renderer does not change a TCC grant, it only hides
-     * the one message that would fix the problem. */
-    public readonly reason: 'denied' | 'unavailable' | 'no-channels' | 'wedged' | 'permission',
+     * the one message that would fix the problem.
+     * 'stale': no request was made at all. This document still had a stuck one
+     * outstanding (displayInflight.ts), and a second one dispatched into the
+     * same frame is what turns one wedge into every-press-wedges. The UI must
+     * ALWAYS refresh on this one — unlike 'wedged', it is not a diagnosis that
+     * a refresh might fail to cure, it is a document that is known to be
+     * unusable and a refresh is the only thing that replaces it. */
+    public readonly reason: 'denied' | 'unavailable' | 'no-channels' | 'wedged' | 'permission' | 'stale',
     message: string,
   ) {
     super(message)

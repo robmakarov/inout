@@ -13,6 +13,7 @@ import {
 import { acquireChannelsProgressive } from './acquire'
 import { resetDeviceGuardForTests } from './deviceGuard'
 import { resetDisplayReleaseForTests } from './displayRelease'
+import { resetDisplayInflightForTests } from './displayInflight'
 
 /**
  * Robert 2026-08-24: "i need this shit never happens to users". The wedge itself
@@ -33,6 +34,12 @@ afterEach(() => {
   resetDisplayReleaseForTests()
   resetDisplayWedgeForTests()
   resetDeviceGuardForTests()
+  // A wedged request stays outstanding for the life of the DOCUMENT
+  // (displayInflight.ts) — which in a test file is every case after the one
+  // that wedged. Without this reset the next case is correctly refused a
+  // dispatch and reads as 'stale', which is the new behaviour working, not the
+  // case under test.
+  resetDisplayInflightForTests()
   vi.unstubAllGlobals()
 })
 

@@ -626,7 +626,7 @@ class Session implements CaptureSession {
         // permission gets its OWN reason, so the UI does not spend the user's
         // one automatic refresh on it. Refreshing cannot change a TCC grant;
         // all it does is throw away the message that names the fix.
-        wedged.stall === 'permission' ? 'permission' : 'wedged',
+        wedged.stall === 'permission' ? 'permission' : wedged.stall === 'stale' ? 'stale' : 'wedged',
         wedged.kind === 'screen'
           ? // The UI runs the recovery ritual on the 'wedged' reason: one
             // automatic page refresh (Robert 2026-08-25: "if it happens make it
