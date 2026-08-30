@@ -29,6 +29,7 @@
  * be the document's. Every sync number this project owns was expensive; none of
  * them is worth a clock calibration nobody asked for.
  */
+import { evenDown } from '@core/frame'
 import {
   EncodedPacket,
   EncodedVideoPacketSource,
@@ -162,11 +163,37 @@ const CODEC_CANDIDATES = [
 ] as const
 
 async function pickVideoConfig(
-  width: number,
-  height: number,
+  requestedWidth: number,
+  requestedHeight: number,
   bitrate: number,
   framerate: number,
 ): Promise<{ config: VideoEncoderConfig; hardware: string }> {
+  // AN ODD SIDE IS NOT A SIZE AVC CAN ENCODE, AND THIS IS THE LAST PLACE THAT
+  // CAN KNOW IT. The 2026-08-29 odd-side fix evened the TRACK in
+  // capDisplayTrack, on the reasoning that every consumer then sees an
+  // encodable frame. Chrome does not always agree to be constrained: asked for
+  // 2560x1662 it returned 2559x1662 — it re-derived the width from the aspect
+  // and handed back an ODD one. Every AVC candidate is then unsupported, this
+  // function threw, and the whole raw channel fell back to MediaRecorder's
+  // SOFTWARE VP8/VP9 at 2559x1662@60. That is what froze Robert's machine on
+  // 2026-08-30, and the console said only "measured video unavailable".
+  //
+  // Measured in Chrome 151 before this line was written: 2559x1662 AVC is
+  // unsupported and 2558x1662 is supported, and an encoder configured at 2558
+  // ACCEPTS a 2559-wide VideoFrame and emits a chunk with no error. So evening
+  // DOWN here costs one pixel column and keeps the hardware path; not evening
+  // costs the hardware path entirely. `stopRecorders` already corrects
+  // ChannelRecording.width from the file's own geometry, so the take still
+  // reports what was actually written.
+  const width = evenDown(requestedWidth)
+  const height = evenDown(requestedHeight)
+  if (width !== requestedWidth || height !== requestedHeight) {
+    console.info(
+      `[capture] raw video: ${requestedWidth}x${requestedHeight} has an odd side, which AVC cannot ` +
+        `encode — configuring ${width}x${height} and letting the encoder crop, rather than falling ` +
+        `back to a software encoder`,
+    )
+  }
   // Hardware first — replacing a SOFTWARE encode is the whole point of the
   // task. Software is still an honest fallback rather than a failure: even
   // then this path buys streamed MP4 and keyframe control.

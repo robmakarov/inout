@@ -28,7 +28,7 @@
  *     for no benefit, because WebAudio cannot run in a worker anyway.
  */
 
-import { adoptedFrame, frameForAspect } from '@core/frame'
+import { adoptedFrame, evenDown, frameForAspect } from '@core/frame'
 import {
   EncodedAudioPacketSource,
   EncodedPacket,
@@ -340,6 +340,13 @@ async function pickVideoConfig(
   bitrate: number,
   framerate: number,
 ): Promise<{ config: VideoEncoderConfig; hardware: string }> {
+  // AN ODD SIDE IS NOT A SIZE AVC CAN ENCODE — same fix, same reason as
+  // rawVideo.worker.ts, where it cost Robert's machine the hardware path on
+  // 2026-08-30. The composite derives its own geometry from frameForAspect,
+  // which already rounds to even, so this is the belt rather than the braces —
+  // but the two workers must not disagree about what an encodable size is.
+  width = evenDown(width)
+  height = evenDown(height)
   // Hardware first: this is the whole point of owning the encoder. Software is
   // the honest fallback rather than a failure.
   for (const hardwareAcceleration of ['prefer-hardware', 'no-preference', 'prefer-software'] as const) {

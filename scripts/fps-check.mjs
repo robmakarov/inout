@@ -84,7 +84,7 @@ function parseArgs(argv) {
   // has no GPU here, the raw channel's WebCodecs path times out and falls back
   // to MediaRecorder — a different file answering a different question. Headed
   // is also what makes rAF run at all, which this test depends on absolutely.
-  const o = { url: PROD_URL, takeMs: 8000, headed: true, out: null, bin: null, lanes: [60, 30] }
+  const o = { url: PROD_URL, takeMs: 8000, headed: true, out: null, bin: null, lanes: [60, 30], query: '' }
   for (const a of argv) {
     if (a === '--headed') o.headed = true
     else if (a === '--headless') o.headed = false
@@ -93,6 +93,11 @@ function parseArgs(argv) {
     else if (a.startsWith('--out=')) o.out = a.slice(6)
     else if (a.startsWith('--bin=')) o.bin = a.slice(6)
     else if (a.startsWith('--lane=')) o.lanes = [Number(a.slice(7))]
+    // Extra URL parameters, appended verbatim. This rig was written to answer
+    // F15's own question at 1080p; Robert's freeze is the same question at HIS
+    // screen (`--query=screensize=3024x1964&sourceres=1`), and the rate is only
+    // half of what a machine is being asked for.
+    else if (a.startsWith('--query=')) o.query = a.slice(8).replace(/^[?&]/, '')
     else {
       console.error(`fps-check: unknown argument ${a}`)
       process.exit(2)
@@ -373,7 +378,9 @@ async function runLane(sourceFps) {
     // `sourceframe=0` pins F13 off, so this measures ONE thing. The screen is
     // 16:9 either way, but a sticky flag from another session's testing would
     // otherwise change which lines appear and read as noise.
-    url: `${opts.url}?synthetic=1&sourcefps=1&sourceframe=0&screenfps=${sourceFps}`,
+    url:
+      `${opts.url}?synthetic=1&sourcefps=1&sourceframe=0&screenfps=${sourceFps}` +
+      (opts.query ? `&${opts.query}` : ''),
     captureLog: [],
     consoleErrors: [],
     files: [],
