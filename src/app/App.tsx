@@ -42,6 +42,16 @@ function Main() {
         s.setEditState(clampEditState(rec, saved ?? defaultEditState(rec)))
         s.setMode('editor')
       })
+      // AFTER recovery has had its chance, never before: the crash-salvage path
+      // above is the one thing that can turn an unreferenced blob back into a
+      // take, so the sweep runs behind it and skips whatever the pending
+      // manifest still claims. Best-effort and never awaited by anything — a
+      // failed sweep costs nothing and the next boot tries again.
+      .finally(() => {
+        void import('@core/store/reclaim')
+          .then((m) => m.reclaimOrphanBlobs())
+          .catch(() => undefined)
+      })
   }, [])
 
   return (
