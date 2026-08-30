@@ -202,6 +202,43 @@ phase: MVP validation (2026-07-16)
   size` + `100cqh`), the same fix the editor's stage got, for the same reason: an estimate of
   available height is a bug waiting for the layout below it to change.
 
+- THE TIMELINE'S AXIS IS PIECEWISE, AND A CLOSED CUT TAKES NO WIDTH (2026-08-30, Robert: "add delete
+  button, which will remove it completle and other part will slide to each other smoothly"). `x()` is
+  linear in recording time everywhere except across a hole the user has CLOSED, which contributes
+  nothing; `msAtClient` inverts it, so a click still lands on the instant under it. Every position on
+  the timeline goes through those two, which is what makes the collapse one change instead of one per
+  element.
+  THE COST THAT COULD NOT BE SKIPPED, and it is why this was never a button: a lane was ONE element
+  spanning the channel with its filmstrip stretched across it, which is only correct while the axis
+  is linear. A lane is drawn in PIECES now — one per stretch still shown — and each piece takes a
+  SLICE of the strip, scaled by how much of the channel it covers and offset to where that slice
+  begins. With nothing closed that is exactly one piece spanning the whole channel, i.e. the bar it
+  always was. The trim edges moved OUT of the bar to the lane track: they are one instant each and a
+  closed hole must not give them two homes. `x(duration)` is no longer a width anywhere — `spanW(a,b)`
+  is, and every width was converted.
+  CLOSING IS A VIEW STATE and deliberately not on `EditState`: the material was already excluded when
+  the cut was made, and this only decides whether the timeline still draws the hole it left.
+  `EditState` is a contract the export reads. Keyed by the hole's own start instant, so adding a cut
+  elsewhere cannot collapse the wrong one. The slide is animated for 240 ms and ONLY then — the same
+  transition left on permanently would put lag behind every trim drag.
+  Verified on prod: split, drag left to cut 5 s, close it — the clips slide together, the ruler skips
+  the closed stretch, the filmstrip is continuous across the seam, and a global trim afterwards still
+  reads 0:25 -> 0:20 with 8 lane pieces (4 channels x 2).
+- A CUT BOUNDARY IS ONE HANDLE, NOT TWO (2026-08-30, Robert: "grabbers to ugly and hard to distinct"
+  + "when i split record i cant drag left part but right part grabber dont moves" — one defect, two
+  reports). A fresh split leaves the end of one clip and the start of the next on the SAME pixel, and
+  each of those edges can only travel one way: the left clip's end is clamped by the next clip's
+  start, the right clip's start by the previous clip's end. So half of every grab was a no-op, on a
+  7 px target, with nothing on screen saying which half was held. Splitting the hit area (the first
+  fix) made both halves reachable and left each one-directional, which is the half he reported.
+  Now the two halves share ONE gesture: the boundary stays where it was pressed and dragging opens
+  the cut on whichever side it is dragged towards, so it is reversible — drag back through and that
+  side closes while the other opens.
+  AND THE GRIP IS A GRIP: a 13x30 tab with two ridges, centred in the lanes, over a full-height rule.
+  A 3 px line says where a cut IS and nothing about being draggable. Accent for a cut inside the
+  take, white for the take's own start and end — same shape so both read as handles, different colour
+  so which is which needs no legend.
+
 - A FRESH CUT COULD NOT BE GRABBED, FOR TWO REASONS AT ONCE (UI1, Robert: "cant grab normally grabers
   after split"). (1) A split happens AT the playhead, and the playhead's own 12 px grab strip sits
   above everything at z-index 4 — so it ate every press within 6 px of the boundary the split had
