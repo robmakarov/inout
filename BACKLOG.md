@@ -23,6 +23,16 @@ technical defects by severity. Done items get deleted, not archived.
   gone from the capture screen — `session.pause()`/`resume()` still exist and still hold the devices
   (F6), so a first cut could be "continue = resume an un-stopped take" for the case where the user has
   not left the editor yet.
+- **R-RIPPLE — the timeline closing up over a cut.** UI1, Robert: "make cutted out zone shrink with
+  button undo inside". The undo IS inside the zone and the zone is recessed so it stops reading as
+  timeline, but it still occupies its real width — the segments on either side do not slide together.
+  That half is not cosmetic: the timeline's x() maps RECORDING time linearly, and making a cut span
+  collapse to a fixed width means a piecewise x() plus its exact inverse in msAtClient(). Everything
+  that reads the axis follows for free (ruler, playhead, trims, cut handles, zoom markers) EXCEPT the
+  lane bars: each is one element whose filmstrip is a single stitched image stretched
+  `background-size: 100% 100%` across a linear span, so a piecewise axis misaligns every frame after
+  the first cut. Doing it properly means splitting each lane bar into per-segment pieces with their
+  own slice of the strip. Worth doing, not worth doing by accident.
 - **Show in folder.** On the take cards, and it cannot do what it says: no web API reveals a file in
   Finder or Explorer, by design. It currently explains where the file is (the browser's Downloads,
   ⌘⇧J) instead of opening a tab that fails silently. If this is ever wanted for real it needs a native

@@ -102,6 +102,24 @@ phase: MVP validation (2026-07-16)
   under the track say which one is chosen; the sentence each step carried survives as the track's
   tooltip, and the instant-vs-re-render difference as the Export button's, because "copies in a
   second" vs "re-renders for minutes" is a real difference between two presses of the same button.
+- A FRESH CUT COULD NOT BE GRABBED, FOR TWO REASONS AT ONCE (UI1, Robert: "cant grab normally grabers
+  after split"). (1) A split happens AT the playhead, and the playhead's own 12 px grab strip sits
+  above everything at z-index 4 — so it ate every press within 6 px of the boundary the split had
+  just created. (2) The two handles that meet at that boundary — the END of the clip before and the
+  START of the clip after — were both 12 px and centred on the same pixel, so the later one in the
+  DOM won every press and dragging LEFT was unreachable. Cuts are z-index 5 now (the playhead is
+  still draggable from anywhere along the lanes and the ruler; the cut is only grabbable at the cut),
+  and a boundary too narrow to hold both handles splits its hit area down the middle: left half trims
+  the clip that ends there, right half the clip that starts there, which is what the gesture already
+  meant. Verified on prod: a left drag off a fresh split now opens the gap, which it could not do.
+- THE CUT-OUT ZONE CARRIES ITS OWN UNDO (UI1, "make cutted out zone shrink with button undo inside").
+  It is recessed rather than framed — a hatched scrim, so it stops reading as timeline, since there is
+  nothing in it to look at — and it holds a button that puts the removed material back, labelled with
+  how much. The undo extends the clip BEFORE the gap rather than merging the two spans: they can
+  carry different speeds (F5b) and merging would silently throw one away; `normalizeSegments` decides
+  afterwards whether what is left is really one span. It does NOT ripple — the segments either side
+  keep their real positions and the zone keeps its real width. That half is R-RIPPLE in BACKLOG, and
+  it is a piecewise timeline axis plus per-segment lane bars, not a style change.
 - NO PAUSE BUTTON; THE CONTROL IS "CONTINUE FROM THE PLAYHEAD", IN THE EDITOR (UI1 second pass).
   Robert: "no need for fucking pause button, record pressed - on editing appearing again left to play
   button, if pressed continues where dragger in timeline stands (if it cant work now put it in
