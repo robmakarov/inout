@@ -16,17 +16,17 @@
  *         moves, only the rate, which is Robert's own order of sacrifice ("if
  *         something needs to be dropped it must be fps not resolution").
  *
- *   max   The take is protected from the machine. Nothing steps down and
- *         nothing is refused: the source's own resolution and its own rate,
- *         for the whole take, and the cost is the user's to pay. This is the
- *         mode behind "i need 3024x1964/60fps … we need to make it work".
+ *   max   Nothing is refused IN ADVANCE: the source's own resolution and its
+ *         own rate are always attempted, whatever this machine measured itself
+ *         able to sustain. This is the mode behind "i need 3024x1964/60fps …
+ *         we need to make it work".
  *
- * WHAT MAX HONESTLY COSTS, because a mode that hides its price is a lie. With
- * nothing allowed to give, a machine that cannot keep up DROPS FRAMES — and a
- * dropped frame is a worse artefact than a lower rate, because it is uneven.
- * So max is not "better quality" unconditionally; it is "the quality you asked
- * for, or a visible failure, and never a quiet substitution". The take must say
- * which it got, which is why the drop counters are reported rather than hidden.
+ * NOTHING STEPS DOWN IN MAX, including the rate ladder (Robert: "max must not
+ * have ladder"). So max has to not NEED stepping down, which is a load problem
+ * and is answered by opening fewer encoders rather than by throttling the take:
+ * at native resolution the composite is not recorded at all, because it is a
+ * downscaled second copy of a picture the take already has, made by a second
+ * hardware encoder. See session.startComposite.
  *
  *   ?quality=max|auto     (this load only)
  *   localStorage['inout.capture.quality']   (sticky)
@@ -67,9 +67,74 @@ export function captureQualityMode(): CaptureQualityMode {
   return fromSearch() ?? override ?? fromStorage() ?? 'auto'
 }
 
-/** Nothing may step down, and nothing may be refused for being too much. */
-export function qualityDropsAllowed(): boolean {
+/**
+ * MAY A TAKE BE REFUSED, BEFORE IT STARTS, FOR BEING TOO MUCH? Off in max: the
+ * user has said they will pay for the picture rather than be protected from
+ * asking for it. This is the arm-time measurement and O15's earned budget.
+ */
+export function preemptiveRefusalAllowed(): boolean {
   return captureQualityMode() !== 'max'
+}
+
+/**
+ * MAY THE RATE LADDER STEP WHILE THE TAKE RUNS? NOT IN MAX — Robert's ruling,
+ * 2026-08-30: "max must not have ladder".
+ *
+ * I argued the other way and was overruled, and the argument is kept here
+ * because the cost is real and someone will meet it: with nothing allowed to
+ * give, the encoders drop whatever they cannot take, and DROPPED FRAMES ARE
+ * UNEVEN. That is a slideshow where a lower rate would have been smooth — his
+ * own third take, "exported video image has severe lags, both tab and camera,
+ * slideshow, sound is fine".
+ *
+ * His answer is the better one and it is the harder one: if the ladder must not
+ * rescue max, then max has to not need rescuing. That is a load problem, not a
+ * policy problem, and it is fixed by opening fewer encoders — which is what
+ * skipping the composite at native resolution does (session.startComposite).
+ * A mode that survives because it was throttled was never max.
+ */
+export function rateLadderAllowed(): boolean {
+  if (captureQualityMode() !== 'max') return true
+  return maxLadderFromSearch() ?? maxLadderOverride ?? maxLadderFromStorage() ?? false
+}
+
+/**
+ * THE LADDER IS STILL REACHABLE INSIDE MAX, IT IS JUST OFF — Robert, 2026-08-30:
+ * "it must be possible there, but off for now". So this is a switch and not a
+ * deleted branch: a machine that cannot be made to carry a take any other way
+ * can still be told to trade rate for smoothness, without leaving max and
+ * losing the resolution with it.
+ *
+ *   ?maxladder=1     (this load only)
+ *   localStorage['inout.capture.maxladder']   (sticky)
+ */
+const MAX_LADDER_KEY = 'inout.capture.maxladder'
+
+function maxLadderFromSearch(): boolean | null {
+  if (typeof location === 'undefined') return null
+  const v = new URLSearchParams(location.search).get('maxladder')
+  return v === '1' ? true : v === '0' ? false : null
+}
+
+function maxLadderFromStorage(): boolean | null {
+  try {
+    const v = localStorage.getItem(MAX_LADDER_KEY)
+    return v === '1' ? true : v === '0' ? false : null
+  } catch {
+    return null
+  }
+}
+
+let maxLadderOverride: boolean | null = null
+
+export function setMaxLadder(on: boolean | null): void {
+  maxLadderOverride = on
+  try {
+    if (on === null) localStorage.removeItem(MAX_LADDER_KEY)
+    else localStorage.setItem(MAX_LADDER_KEY, on ? '1' : '0')
+  } catch {
+    /* memory-only */
+  }
 }
 
 export function setCaptureQualityMode(mode: CaptureQualityMode | null): void {
