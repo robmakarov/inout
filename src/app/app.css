@@ -163,9 +163,12 @@
   align-items: center;
   gap: 10px;
   margin-top: 8px;
+  flex-wrap: wrap;
 }
 
 .capture__notice-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
   background: var(--surface-3);
   border: 1px solid var(--surface-3);
   color: var(--text);
