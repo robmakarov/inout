@@ -95,9 +95,14 @@ export function singleGenRung(): SingleGenRung {
   return fromSearch() ?? override ?? fromStorage() ?? DEFAULT_RUNG
 }
 
-export function setSingleGenRung(rung: SingleGenRung): void {
+/** `null` clears the sticky choice and returns the rung to its default. */
+export function setSingleGenRung(rung: SingleGenRung | null): void {
   override = rung
   try {
+    if (rung === null) {
+      localStorage.removeItem(STORAGE_KEY)
+      return
+    }
     localStorage.setItem(STORAGE_KEY, rung)
   } catch {
     /* storage unavailable — the in-module value above still holds */
