@@ -588,16 +588,28 @@ export async function capDisplayTrack(track: MediaStreamTrack | undefined): Prom
           1500,
           'applyConstraints(display rate budget)',
         )
+        const want = ((now.width ?? 0) * (now.height ?? 0) * ceiling) / 1e6
+        const can = measuredEncoderThroughput() / 1e6
         console.info(
-          `[capture] native-res capture: ${before.width}×${before.height} is too many pixels to ` +
-            `sustain ${ceiling} fps — holding at ${rate} fps (F15)`,
+          `[capture] ${now.width}×${now.height} at ${ceiling} fps wants ${want.toFixed(0)} Mpx/s and ` +
+            (can > 0
+              ? `this machine's encoder measured ${can.toFixed(0)} Mpx/s — holding at ${rate} fps. ` +
+                `The rate is what gives, never the resolution; the ladder puts it back as soon as the ` +
+                `machine eases (F15/O15)`
+              : `this machine has not been measured yet — holding at ${rate} fps on the old size rule. ` +
+                `The next take on this profile decides from the measurement (F15)`),
         )
       } catch (err) {
         console.warn('[capture] could not hold the rate down — the ladder is the remaining guard', err)
       }
     } else {
+      // Report what is being RECORDED, not what arrived. This read `before`,
+      // so a surface that had just been capped printed the size it used to be —
+      // "recording 2560x1663" followed by "leaving display at 3024x1964@60" in
+      // the same take, which is how the 2026-08-30 freeze log read.
+      const at = track.getSettings()
       console.info(
-        `[capture] native-res capture: leaving display at ${before.width}×${before.height}@${before.frameRate ?? '?'} (O6)`,
+        `[capture] native-res capture: leaving display at ${at.width}×${at.height}@${at.frameRate ?? '?'} (O6)`,
       )
     }
   } else if (exceedsCaptureCeiling(before)) {
