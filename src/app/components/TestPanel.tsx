@@ -12,7 +12,7 @@ import {
 import { encoderBudgetEnabled, setEncoderBudget } from '@core/capture/encoderBudget'
 import { resolutionStepEnabled, setResolutionStep } from '@core/capture/resolutionStep'
 import { nativeResEnabled, setNativeRes } from '@core/capture/nativeRes'
-import { urlOverrides } from '@app/lib/testPanel'
+import { urlOverrides, urlWithoutTestParam } from '@app/lib/testPanel'
 
 /**
  * EVERY SWITCH WE HAVE BEEN TESTING, IN ONE PLACE — Robert, 2026-08-30: "i m
@@ -45,9 +45,27 @@ export function TestPanel() {
       )}
 
       <Toggle
-        label="My own resolution"
-        hint="Capture and export at the screen’s own size instead of stopping at 1440p"
+        label="Record at the screen’s size"
+        hint="On by default. Off records 1080p whatever your screen is — and makes “Go past 1440p” do nothing."
+        on={nativeResEnabled()}
+        set={(v) => {
+          setNativeRes(v)
+          redraw()
+        }}
+      />
+      {/* THE DEPENDENCY MADE VISIBLE — Robert, 2026-08-30: "what the fuck is own
+          res on and native res off, what is difference?". He was right to ask,
+          and the honest answer was worse than confusing: with native-res OFF
+          the capture constraint is the flat 1080p cap and this switch is not
+          consulted at all (acquire.ts, displayVideoConstraints). So he recorded
+          a take whose settings line said "own res" while the capture was 1080p.
+          A switch that reports itself ON while being inert is a lie, so it now
+          greys out with its owner, the way the max-ladder row already does. */}
+      <Toggle
+        label="Go past 1440p"
+        hint="Needs “Record at the screen’s size”. Off stops at 2560 across; on goes all the way to your screen’s own pixels."
         on={sourceResEnabled()}
+        disabled={!nativeResEnabled()}
         set={(v) => {
           setSourceRes(v)
           redraw()
@@ -93,15 +111,6 @@ export function TestPanel() {
       />
 
       <div className="tp__sep">Rarely</div>
-      <Toggle
-        label="Native-res capture"
-        hint="On by default. Off caps capture at 1080p."
-        on={nativeResEnabled()}
-        set={(v) => {
-          setNativeRes(v)
-          redraw()
-        }}
-      />
       <Toggle
         label="Encoder budget"
         hint="Bounds a take on a machine that has been seen to collapse. Never bounds an unmeasured one."
@@ -149,7 +158,22 @@ export function TestPanel() {
       >
         Everything back to defaults
       </button>
-      <div className="tp__foot">Applies to the next take. Nothing here needs a reload.</div>
+      {/* LEAVING TEST MODE IS DROPPING THE PARAMETER, now that the switch is
+          URL-only. Kept as a button because the alternative is editing the
+          address bar, which is the thing this panel exists to spare him.
+          Navigates rather than re-renders: two screens read the gate, and there
+          is no session to lose here — the panel only shows when none is live. */}
+      <button
+        type="button"
+        className="tp__reset tp__reset--exit"
+        onClick={() => location.replace(urlWithoutTestParam())}
+      >
+        Leave test mode
+      </button>
+      <div className="tp__foot">
+        Settings apply to the next take and persist. This panel does not: it is only ever here on a{' '}
+        <code>/?test</code> link, so a plain visit to the app never shows it.
+      </div>
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { blobStore, recordingsRepo } from './index'
 import { pendingBlobKeys } from '@core/capture/recovery'
+import { SCRATCH_PREFIX } from '@core/compose/scratch'
 
 /**
  * DELETE WHAT BELONGS TO NOTHING, AT EVERY BOOT — Robert, 2026-08-30: "we must
@@ -23,6 +24,13 @@ import { pendingBlobKeys } from '@core/capture/recovery'
  *    start and clears it on a clean stop, so those files are unreferenced ON
  *    PURPOSE until the row exists. Deleting them turns a recoverable take into
  *    a lost one, which is the one outcome worse than the leak;
+ *  · the EXPORT SCRATCH. `xport-*` is the file a finished export's own blob
+ *    reads from — the download, the upload — and it is unreferenced by any
+ *    Recording BY DESIGN, so a sweep that goes by references alone reads a live
+ *    export as garbage and deletes the thing the user is about to save. It is
+ *    also the file most likely to still be OPEN, which is how it broke the
+ *    Reclaim button (below). scratch.ts owns these and sweeps its own stale
+ *    ones at every export start; one fact, one home;
  *  · `__` dev dump files, the same exclusion salvage.ts already makes.
  *
  * Failure is per-file and never fatal: a blob still locked by a worker that has
@@ -32,24 +40,56 @@ import { pendingBlobKeys } from '@core/capture/recovery'
 export interface ReclaimResult {
   removed: number
   bytes: number
+  /** Files that refused removal — still open. The next boot gets them. */
   failed: number
+}
+
+/**
+ * Keys this sweep is allowed to consider AT ALL, before references are checked.
+ * Shared by the count and the sweep on purpose: they used to be two copies of
+ * the rule in two files, and a count that disagrees with the button beside it
+ * is how "Reclaim does nothing" looks from the outside.
+ */
+function isSweepable(key: string): boolean {
+  return !key.startsWith('__') && !key.startsWith(SCRATCH_PREFIX)
+}
+
+async function keepSet(): Promise<Set<string>> {
+  const keep = new Set<string>(pendingBlobKeys())
+  for (const r of await recordingsRepo.list()) {
+    for (const c of r.channels) keep.add(c.blobKey)
+    if (r.composite) keep.add(r.composite.blobKey)
+  }
+  return keep
+}
+
+/** Bytes on disk belonging to nothing — what the Reclaim line offers to free. */
+export async function orphanBlobBytes(): Promise<number> {
+  const [files, keep] = await Promise.all([blobStore.list(), keepSet()])
+  let total = 0
+  for (const f of files) {
+    if (!isSweepable(f.key) || keep.has(f.key)) continue
+    total += f.size
+  }
+  return total
 }
 
 export async function reclaimOrphanBlobs(): Promise<ReclaimResult> {
   const out: ReclaimResult = { removed: 0, bytes: 0, failed: 0 }
-  const [files, recordings] = await Promise.all([blobStore.list(), recordingsRepo.list()])
-  const keep = new Set<string>(pendingBlobKeys())
-  for (const r of recordings) {
-    for (const c of r.channels) keep.add(c.blobKey)
-    if (r.composite) keep.add(r.composite.blobKey)
-  }
+  const [files, keep] = await Promise.all([blobStore.list(), keepSet()])
   for (const f of files) {
-    if (keep.has(f.key) || f.key.startsWith('__')) continue
+    if (!isSweepable(f.key) || keep.has(f.key)) continue
     try {
       await blobStore.remove(f.key)
       out.removed += 1
       out.bytes += f.size
     } catch {
+      // PER FILE, AND THIS IS THE WHOLE BUG THE BUTTON HAD. The copy of this
+      // loop that lived in TakesList had no catch: the first file that refused
+      // removal threw, the loop died, the remaining orphans were never touched
+      // and the count on screen never moved. Pressing Reclaim did nothing,
+      // visibly and repeatedly (Robert, 2026-08-30: "reclaim button still
+      // fucking doing nothing"). One locked file must cost one file.
       out.failed += 1
     }
   }

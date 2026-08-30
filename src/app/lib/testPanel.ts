@@ -1,50 +1,58 @@
 /**
- * THE TEST PANEL SWITCH — Robert, 2026-08-30: "i m tired of your links with
+ * THE TEST PANEL SWITCH — one link, and ONLY that link.
+ *
+ * The panel exists because of Robert, 2026-08-30: "i m tired of your links with
  * parametres, make me one link /?text with panel of settings we testing all the
- * time".
- *
- * He is right, and the URLs were mine: every round of this has ended with me
- * handing him another `?sourceres=1&sourcefps=1&quality=max`, which he then has
- * to keep, retype, or lose. The flags all persist to localStorage already — the
- * only thing missing was somewhere to press them.
- *
- * STICKY FROM THE URL, like `?sourceframe=`, and for the same reason: it is
- * meant to be turned on once and stay on. One link, forever:
+ * time". The flags all persist to localStorage already; what was missing was
+ * somewhere to press them.
  *
  *     https://inout-kappa.vercel.app/?test
  *
- * `?test=0` turns it off again. Accepts `?text` too, because that is what he
- * typed and a panel that does not open is not a panel.
+ * IT USED TO BE STICKY, AND THAT WAS WRONG — ruled the same day, twice, by the
+ * person it happened to. "One link forever" was read as "keep it on forever",
+ * so the switch was written to localStorage and stayed on. What that produced:
+ * a link opened once followed him into ordinary use, put the settings line on
+ * an editing screen he was not testing on, and left him no way to see why —
+ * "test setting shown in not test mode now, what the fuck?". An off button was
+ * added; the panel was still there on the next plain visit, because an off
+ * button only helps someone who knows they need to press it. His ruling:
+ * "it must be only in /?test".
+ *
+ * So test mode now lasts EXACTLY the load it was asked for on. Nothing is
+ * remembered, nothing is written, and there is no state to get stuck in: a
+ * plain visit to the app is a plain visit, every time, and the bookmark still
+ * works the way a bookmark works. That is what "one link" always meant.
+ *
+ * `?text` is accepted too, because that is what he typed and a panel that does
+ * not open is not a panel. `?test=0` still reads as off, so an old link with it
+ * in does not turn the panel on.
+ *
+ * The FLAGS the panel sets are unaffected: they persist exactly as they did.
+ * This governs only whether the panel and the editor's settings line are shown.
  */
-const KEY = 'inout.app.testpanel'
-
-function fromSearch(): boolean | null {
-  if (typeof location === 'undefined') return null
+export function testPanelEnabled(): boolean {
+  if (typeof location === 'undefined') return false
   const p = new URLSearchParams(location.search)
   for (const name of ['test', 'text']) {
     if (!p.has(name)) continue
     const v = p.get(name)
     // `?test` with no value is the whole point — a bare switch, nothing to type.
-    return v === null || v === '' || v === '1' ? true : v === '0' ? false : true
+    return v === null || v === '' || v === '1' ? true : v !== '0'
   }
-  return null
+  return false
 }
 
-export function testPanelEnabled(): boolean {
-  const url = fromSearch()
-  if (url !== null) {
-    try {
-      localStorage.setItem(KEY, url ? '1' : '0')
-    } catch {
-      /* memory-only: it lasts this load, which is what the URL asked for */
-    }
-    return url
-  }
-  try {
-    return localStorage.getItem(KEY) === '1'
-  } catch {
-    return false
-  }
+/**
+ * This page's URL with the test switch stripped out — what the panel's own off
+ * button navigates to. With the switch URL-only, leaving test mode IS removing
+ * the parameter; there is nothing else to clear.
+ */
+export function urlWithoutTestParam(): string {
+  if (typeof location === 'undefined') return '/'
+  const url = new URL(location.href)
+  url.searchParams.delete('test')
+  url.searchParams.delete('text')
+  return url.pathname + (url.search ? url.search : '') + url.hash
 }
 
 /**

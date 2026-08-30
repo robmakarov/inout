@@ -23,12 +23,20 @@ import { nativeResEnabled } from '@core/capture/nativeRes'
  */
 export function SettingsBadge() {
   const on: string[] = []
-  if (sourceResEnabled()) on.push('own res')
+  // A SWITCH THAT IS ON AND INERT MUST NOT READ AS ON. With native-res capture
+  // off, the capture constraint is the flat 1080p cap and `sourceres` is never
+  // consulted (acquire.ts) — so a take recorded that way carried a settings
+  // line saying "own res" while its screen channel was 1080p, and Robert read
+  // the line and asked the obvious question: "what the fuck is own res on and
+  // native res off, what is difference?". The line has to answer that, not
+  // pose it.
+  const nativeRes = nativeResEnabled()
+  if (sourceResEnabled()) on.push(nativeRes ? 'full screen res' : 'full screen res (INERT)')
   if (sourceRateEnabled()) on.push('60 fps')
   const q = captureQualityMode()
   on.push(q === 'max' ? (rateLadderAllowed() ? 'max +ladder' : 'max') : 'auto')
   if (sourceFrameEnabled()) on.push('source frame')
-  if (!nativeResEnabled()) on.push('native-res OFF')
+  if (!nativeRes) on.push('capture 1080p (screen-size OFF)')
   if (encoderBudgetEnabled()) on.push('budget')
   if (resolutionStepEnabled()) on.push('res step')
   const rung = singleGenRung()

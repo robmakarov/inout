@@ -1974,6 +1974,21 @@
   cursor: pointer;
 }
 
+/* The exit. Weightier than "back to defaults" because it is the one control
+   here that ends test mode rather than adjusting it — a sticky switch with an
+   invisible off is what put a test surface on Robert's editing screen. */
+.tp__reset--exit {
+  margin-top: 6px;
+  background: transparent;
+  border-color: var(--text-dim);
+  color: var(--text-dim);
+}
+
+.tp__reset--exit:hover {
+  border-color: var(--text);
+  color: var(--text);
+}
+
 .tp__foot {
   margin-top: 8px;
   color: var(--text-dim);
@@ -2007,4 +2022,14 @@
   line-height: 1.35;
   color: var(--warn);
   border-bottom: 1px solid var(--surface-3);
+}
+
+/* What the sweep actually did. Sits under the line it answers — a Reclaim that
+   frees nothing must SAY nothing-was-freed, because silence is indistinguishable
+   from the broken button this replaced. */
+.takes__orphan-note {
+  margin: 4px 0 0;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.35;
 }
