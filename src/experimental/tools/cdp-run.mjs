@@ -18,7 +18,7 @@
  */
 
 import { spawn } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -50,6 +50,15 @@ function parseArgs(argv) {
   let refocus = false
   let realThrottling = false
   let captureTitle = 'INOUT'
+  // Raw Chrome switches, repeatable. Exists for R2: the GPU-crash lane has to
+  // A/B a BROWSER-level switch (--disable-gpu-watchdog) with everything else
+  // identical, and one hardcoded flag per question does not scale.
+  const chromeFlags = []
+  // Where to keep Chrome's OWN stderr and the page console. Both were captured
+  // already and both were printed ONLY on failure — so a run that returns a
+  // report while the GPU process dies underneath it threw away the one place
+  // Chrome names the reason. R2 spent a run finding that out.
+  let logDir = ''
   for (const a of argv) {
     if (a.startsWith('--port=')) devPort = Number(a.slice(7))
     else if (a.startsWith('--timeout=')) timeoutSec = Number(a.slice(10))
@@ -61,6 +70,8 @@ function parseArgs(argv) {
     else if (a === '--refocus') refocus = true
     else if (a === '--real-throttling') realThrottling = true
     else if (a.startsWith('--capture-title=')) captureTitle = a.slice(16)
+    else if (a.startsWith('--chrome-flag=')) chromeFlags.push(a.slice(14))
+    else if (a.startsWith('--log-dir=')) logDir = a.slice(10)
     else positional.push(a)
   }
   const [experiment, jsonArgs] = positional
@@ -81,6 +92,8 @@ function parseArgs(argv) {
     refocus,
     realThrottling,
     captureTitle,
+    chromeFlags,
+    logDir,
   }
 }
 
@@ -167,6 +180,8 @@ async function main() {
     refocus,
     realThrottling,
     captureTitle,
+    chromeFlags,
+    logDir,
   } = parseArgs(process.argv.slice(2))
   // Extra query params reach the page's own knobs (e.g. `quiet=0.05`, the
   // synthetic-audio level used to exercise the loudness rescue).
@@ -219,6 +234,7 @@ async function main() {
       // Capability-gate smokes (e.g. the Apple WebKit audio path) need the UA
       // set before the page loads, so it is a launch flag, not a CDP override.
       ...(ua ? [`--user-agent=${ua}`] : []),
+      ...chromeFlags,
       pageUrl,
     ],
     { stdio: ['ignore', 'ignore', 'pipe'] },
@@ -320,6 +336,20 @@ async function main() {
     await writeFully(process.stderr, '')
     process.exitCode = 1
   } finally {
+    // ALWAYS, not only on failure. A run that returns a report while the GPU
+    // process dies underneath it is a SUCCESS by exit code and a disaster in
+    // fact, and Chrome names the reason in its own stderr — which was being
+    // discarded in exactly that case.
+    if (logDir) {
+      try {
+        mkdirSync(logDir, { recursive: true })
+        writeFileSync(join(logDir, 'chrome-stderr.log'), chromeErr)
+        writeFileSync(join(logDir, 'page-console.log'), consoleTail.join('\n'))
+        console.error(`cdp-run: chrome stderr + page console written to ${logDir}`)
+      } catch (err) {
+        console.error(`cdp-run: could not write logs to ${logDir}: ${String(err)}`)
+      }
+    }
     if (refocusTimer) clearInterval(refocusTimer)
     cleanup()
     // The losing arm of the timeout race and the CDP socket keep the event

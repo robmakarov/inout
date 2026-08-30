@@ -29,6 +29,9 @@ import {
 import { AUDIO_SAMPLE_RATE } from './codecs'
 import { getLastRenderStats, renderExport, setLastRenderStats } from './render'
 import { isInlinePositionedWriterEnabled } from '@core/store'
+import { sourceFrameEnabled } from '@core/frame'
+import { constantQualityQp } from './constantQuality'
+import { loudnessMode } from './loudnessMode'
 import { isExportScratchEnabled, setLastScratchStats } from './scratch'
 import type { ExportWorkerIn, ExportWorkerOut } from './export.worker'
 
@@ -181,6 +184,19 @@ function exportInWorker(opts: ExportOptions): Promise<ExportResult> {
       settings,
       inlineScratchWriter: isInlinePositionedWriterEnabled(),
       scratchEnabled: isExportScratchEnabled(),
+      // THE FLAGS THE RENDER READS, read HERE — where they exist. A dedicated
+      // worker has no `localStorage` and its `location` is its own script URL,
+      // so every one of these getters answered its DEFAULT inside the worker no
+      // matter what the page was opened with. Three switches were dead on the
+      // shipped path from O5a until 2026-08-30: `?cq=`, `?loudness=`, and
+      // F13's `?sourceframe=` (that last one silently drew the camera with the
+      // wrong fit in the render, while the editor preview beside it obeyed the
+      // flag). Found by an A/B whose two lanes came back byte-identical.
+      flags: {
+        cq: constantQualityQp(),
+        loudness: loudnessMode(),
+        sourceFrame: sourceFrameEnabled(),
+      },
     })
   })
 }

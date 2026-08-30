@@ -178,9 +178,30 @@ export async function constantQualityCodec(
   return null
 }
 
+/**
+ * How far the governor may give back quality before it stops. 32 is still a
+ * watchable picture; past it the file would be small and worthless, and a
+ * source that cannot fit its tier at 32 is telling us the tier is wrong, not
+ * that the picture should be destroyed.
+ */
+const MAX_GOVERNED_QP = 32
+
+/**
+ * How many frames may sit inside the VideoEncoder before the render is made to
+ * wait. Four is mediabunny's own number for its own encoder, and matching it
+ * keeps the two paths behaving alike rather than inventing a second answer.
+ */
+const ENCODE_QUEUE_DEPTH = 4
+
 class ConstantQualityAvcEncoder extends CustomVideoEncoder {
   private encoder: VideoEncoder | null = null
   private qp = DEFAULT_QP
+  /** What the page asked for. The governor never goes finer than this. */
+  private targetQp = DEFAULT_QP
+  /** The tier's promise, in bytes per second. null = nothing to bound against. */
+  private bytesPerSecCeiling: number | null = null
+  private bytesOut = 0
+  private firstTimestampUs: number | null = null
 
   static supports(codec: VideoCodec, config: VideoEncoderConfig): boolean {
     return codec === 'avc' && qpOf(config) !== null
@@ -188,8 +209,15 @@ class ConstantQualityAvcEncoder extends CustomVideoEncoder {
 
   init(): void {
     this.qp = qpOf(this.config) ?? DEFAULT_QP
+    this.targetQp = this.qp
+    // THE CEILING, KEPT RATHER THAN DISCARDED. `bitrate` cannot be handed to a
+    // quantizer-mode encoder, but it is still the number the tier promised —
+    // and dropping it is what left this path unbounded. See `spend()`.
+    const ceiling = (this.config as VideoEncoderConfig & { bitrate?: number }).bitrate
+    this.bytesPerSecCeiling = ceiling && ceiling > 0 ? ceiling / 8 : null
     const encoder = new VideoEncoder({
       output: (chunk, meta) => {
+        this.spend(chunk.byteLength, chunk.timestamp)
         this.onPacket(EncodedPacket.fromEncodedChunk(chunk), meta)
       },
       error: (err) => {
@@ -211,7 +239,40 @@ class ConstantQualityAvcEncoder extends CustomVideoEncoder {
     this.encoder = encoder
   }
 
-  encode(videoSample: { toVideoFrame(): VideoFrame }, options: VideoEncoderEncodeOptions): void {
+  /**
+   * THE BUG THIS METHOD HAD, AND IT WAS THE BLOCKER UNDER R2.
+   *
+   * mediabunny's OWN encoder waits before handing over another frame:
+   *
+   *     if (this.encoder.encodeQueueSize >= 4)
+   *       await new Promise(r => this.encoder.addEventListener('dequeue', r, {once: true}))
+   *
+   * This one did not. It accepted every frame the render offered, synchronously,
+   * for the whole take. mediabunny bounds its calls INTO a custom encoder at
+   * four — but that counts calls to this method, and this method used to return
+   * the instant `encoder.encode()` was called, so the counter fell straight back
+   * to zero while the REAL queue kept growing. On a four-minute 60 fps take that
+   * is fourteen thousand frames queued inside one VideoEncoder, each one holding
+   * a GPU-backed VideoFrame.
+   *
+   * That is where the gigabyte went, and macOS's answer to it is
+   * `GPU process exited unexpectedly: exit_code=9` — SIGKILL, the kernel
+   * reclaiming memory — which reaches the tab as "decoding error" and reaches
+   * Robert as the Chrome header vanishing and the machine locking up.
+   *
+   * It is also the "stuck at 95 % finalizing": nothing was ever waited for
+   * during the render, so the ENTIRE backlog drained in flush(). Measured on one
+   * 30 s take at the 1080p step, finalize was 9,164 ms here against 70 ms on
+   * mediabunny's encoder — and shrinking the FILE by 42 % moved it to 9,258 ms,
+   * i.e. not at all, which is what proved the cost was the queue and not the
+   * bytes.
+   *
+   * Awaiting the dequeue costs nothing when the encoder is keeping up.
+   */
+  async encode(
+    videoSample: { toVideoFrame(): VideoFrame },
+    options: VideoEncoderEncodeOptions,
+  ): Promise<void> {
     const encoder = this.encoder
     if (!encoder) throw new Error('constant-quality encoder used before init')
     const frame = videoSample.toVideoFrame()
@@ -228,6 +289,54 @@ class ConstantQualityAvcEncoder extends CustomVideoEncoder {
     } finally {
       frame.close()
     }
+    // The frame is handed over and closed above, so this waits on the ENCODER,
+    // holding nothing of its own. Same depth mediabunny uses for its own.
+    while (encoder.state === 'configured' && encoder.encodeQueueSize >= ENCODE_QUEUE_DEPTH) {
+      await new Promise<void>((resolve) => {
+        encoder.addEventListener('dequeue', () => resolve(), { once: true })
+      })
+    }
+  }
+
+  /**
+   * THE CEILING THE QUANTIZER PATH LOST, PUT BACK.
+   *
+   * Quantizer mode ignores `bitrate` entirely — this file said so from the day
+   * it was written ("NO CEILING ... a pathological source can in principle cost
+   * more than the tier's old cap") and treated it as a theoretical risk because
+   * every content measured came in under. It is not theoretical. Measured
+   * 2026-08-30 on one 30 s take at the 1080p step: 36.9 MB at QP 20 against
+   * 14.3 MB on the tier's bitrate target — 2.6x — and because FINALIZE IS
+   * PROPORTIONAL TO OUTPUT SIZE, the same export spent 9,164 ms finalizing
+   * against 70 ms. That is Robert's "all export took fucking long on 95%
+   * finilizing shit", and his "file size is fucking huge", from one cause.
+   *
+   * (It had been invisible because `?cq=off` could not reach the render at all:
+   * the export runs in a worker, which has no localStorage and does not see the
+   * page's URL. Fixed in the same change.)
+   *
+   * So the QP now FLOATS between the target and a bounded floor of quality,
+   * driven by what the file has actually cost so far. Under the ceiling it sits
+   * exactly where it was — a still slide still costs almost nothing, which is
+   * the whole point of quantizer mode and is untouched here. Over the ceiling
+   * it gives back quality one step at a time rather than writing an unbounded
+   * file. It never goes finer than the target, so this can only ever make a
+   * file smaller than it is today, never bigger.
+   */
+  private spend(bytes: number, timestampUs: number): void {
+    this.bytesOut += bytes
+    // The first packet establishes the origin — and `null` rather than 0,
+    // because a take legitimately starts at timestamp 0 and a sentinel that
+    // collides with real data is how an off-by-one becomes a wrong ceiling.
+    if (this.firstTimestampUs === null) this.firstTimestampUs = timestampUs
+    if (this.bytesPerSecCeiling === null) return
+    // Measured against the OUTPUT's own clock, so a render that runs slower or
+    // faster than real time governs identically.
+    const elapsedSec = Math.max(0.5, (timestampUs - this.firstTimestampUs) / 1_000_000)
+    const spentPerSec = this.bytesOut / elapsedSec
+    const over = spentPerSec / this.bytesPerSecCeiling
+    if (over > 1.15 && this.qp < MAX_GOVERNED_QP) this.qp = clampQp(this.qp + 1)
+    else if (over < 0.85 && this.qp > this.targetQp) this.qp = clampQp(this.qp - 1)
   }
 
   async flush(): Promise<void> {
@@ -273,7 +382,26 @@ function parseCq(raw: string | null): number | null | undefined {
   return Number.isFinite(n) && n >= 1 && n <= 51 ? clampQp(n) : undefined
 }
 
+/**
+ * Module-level override, so the export WORKER can be told what the page chose —
+ * the same seam loudnessMode.ts already has, and for the same reason.
+ *
+ * WITHOUT IT THIS SWITCH DID NOTHING ON THE PATH THAT SHIPS. The render moved
+ * into a worker (O5a), and a worker has no `localStorage` at all and a
+ * `location` that is its own script URL — so `?cq=off`, and the sticky setting
+ * beside it, were read on a thread that does not render, while the worker fell
+ * through to CQ_DEFAULT every single time. Found 2026-08-30 by an A/B whose two
+ * lanes came back byte-identical: a lever that changes nothing is either
+ * measuring the wrong thing or is not connected, and this one was not
+ * connected.
+ */
+let forcedQp: number | null | undefined
+export function setConstantQualityOverride(qp: number | null | undefined): void {
+  forcedQp = qp
+}
+
 export function constantQualityQp(): number | null {
+  if (forcedQp !== undefined) return forcedQp
   let fromSearch: number | null | undefined
   if (typeof location !== 'undefined') {
     fromSearch = parseCq(new URLSearchParams(location.search).get('cq'))

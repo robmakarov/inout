@@ -19,7 +19,10 @@
  */
 import type { EditState, ExportProgress, ExportResult, ExportSettings, Recording } from '@core/types'
 import { setInlinePositionedWriterEnabled } from '@core/store'
+import { setSourceFrame } from '@core/frame'
 import { getLastRenderStats, renderExport, type RenderStats } from './render'
+import { setConstantQualityOverride } from './constantQuality'
+import { setLoudnessMode, type LoudnessMode } from './loudnessMode'
 import { getLastScratchStats, setExportScratchEnabled, type ScratchStats } from './scratch'
 
 export type ExportWorkerIn =
@@ -35,6 +38,18 @@ export type ExportWorkerIn =
        */
       inlineScratchWriter?: boolean
       scratchEnabled?: boolean
+      /**
+       * EVERY FLAG THE RENDER ITSELF READS, decided on the thread that can
+       * actually read them. A worker has no `localStorage` and its `location`
+       * is its own script URL, so a getter called in here answers its DEFAULT
+       * no matter what the page was opened with. Three switches were silently
+       * dead on the shipped path because of it — see the note in pipeline.ts.
+       */
+      flags?: {
+        cq?: number | null
+        loudness?: LoudnessMode
+        sourceFrame?: boolean
+      }
     }
   | { type: 'abort' }
 
@@ -61,6 +76,13 @@ async function run(msg: Extract<ExportWorkerIn, { type: 'start' }>): Promise<voi
   const post = (m: ExportWorkerOut): void => self.postMessage(m)
   if (msg.inlineScratchWriter === false) setInlinePositionedWriterEnabled(false)
   if (msg.scratchEnabled === false) setExportScratchEnabled(false)
+  if (msg.flags) {
+    // Absent means "the page did not say", which must stay distinct from
+    // "the page said off" — hence the `in` checks rather than truthiness.
+    if ('cq' in msg.flags) setConstantQualityOverride(msg.flags.cq)
+    if (msg.flags.loudness) setLoudnessMode(msg.flags.loudness)
+    if (typeof msg.flags.sourceFrame === 'boolean') setSourceFrame(msg.flags.sourceFrame)
+  }
   try {
     const result = await renderExport({
       recording: msg.recording,
