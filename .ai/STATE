@@ -107,6 +107,29 @@ phase: MVP validation (2026-07-16)
   under the track say which one is chosen; the sentence each step carried survives as the track's
   tooltip, and the instant-vs-re-render difference as the Export button's, because "copies in a
   second" vs "re-renders for minutes" is a real difference between two presses of the same button.
+- THE EDITOR OPENED INSIDE A 4 ms HOLE, AND THAT IS WHY THE CAMERA COULD NOT BE DRAGGED (fixed
+  2026-08-30; Robert: "draging camera dont work … it was working before, i m almost sure" — he was
+  right to be unsure, and I was wrong to answer "it never worked there"). It worked the moment the
+  playhead moved off zero, and on any take whose video happened to start first.
+  THE CHAIN: devices do not arm on the same millisecond, and a take's zero is the earliest channel of
+  ANY kind — normally the microphone. So the video channels typically begin a few ms later (measured
+  on a take here: mic at 0, camera and screen both at 4). For those 4 ms the take genuinely IS
+  audio-only and `activeChannelsAt` reports it correctly. The editor parks its playhead at 0, so it
+  opened in that hole: no video element drawn, a black stage — and because `.is-hidden` is
+  `visibility: hidden`, WHICH REMOVES AN ELEMENT FROM HIT TESTING, a camera PiP that could not be
+  grabbed at all. The drag code was never involved. Found with `document.elementFromPoint`, which
+  returned the PiP's PARENT at the PiP's own centre; the black opening frame had been visible in my
+  own screenshots for several rounds and I had read it as "the take starts on a black frame".
+  THE FIX IS PRESENTATION ONLY: Player draws the first 150 ms as the composition the take OPENS with
+  rather than as the arming noise it is. Elements are still seeked to the real instant (a video
+  seeked before its own start clamps to its first frame), so it changes which surfaces are visible,
+  not what they show, and nothing past the head window moves — a genuine mid-take camera gap still
+  hides the camera. `compose` calls `activeChannelsAt` itself and is untouched: the exported file
+  keeps exactly the frames it always had.
+  THE LESSON: `visibility: hidden` is not a paint state, it is a HIT-TESTING state. Anything
+  interactive that can be hidden this way stops being reachable, and the symptom is reported as
+  "the control is broken" rather than "the control is invisible".
+
 - THE CAMERA CAN BE MOVED WHILE THE TAKE RUNS (UI1, Robert: "draggin camera small view stopped
   working while recording"). It had never worked there — the editor's PiP is a keyframe track over a
   FINISHED take, and the capture preview only ever drew the default corner — so nothing regressed;
