@@ -14,6 +14,7 @@ import {
 import {
   budgetVerdict,
   describePlan,
+  dropCompositeVerdict,
   encoderBudgetEnabled,
   encoderCeiling,
   planOf,
@@ -398,6 +399,13 @@ class Session implements CaptureSession {
    */
   private encoderPlan: EncoderPlan | null = null
   /** O15: this take already told the budget it collapsed; say it once. */
+  /**
+   * O15 + Robert's ruling of 2026-08-30, "non max video must stop fucking app
+   * record": this take's plan was over the budget this machine EARNED from its
+   * own collapses, and the composite was dropped to bring it under. Set once,
+   * before any encoder opens, and read by singleGenerationTake.
+   */
+  private budgetDroppedComposite = false
   private collapseRecorded = false
   /** O16 — when the screen's delivered size first stopped matching the size its
    *  current segment's encoder was opened at. Null while they agree. */
@@ -1077,6 +1085,11 @@ class Session implements CaptureSession {
    */
   private singleGenerationTake(): { yes: boolean; why: string } {
     const video = this.channels.filter((c) => c.media === 'video' && !c.ended)
+    // THE BUDGET DROPPED IT — Robert, 2026-08-30: "non max video must stop
+    // fucking app record". Decided in applyEncoderBudget from this machine's
+    // own measured history; read here so startComposite, planEncoders and
+    // compositeFrame all agree, which is the rule this method exists to keep.
+    if (this.budgetDroppedComposite) return { yes: true, why: '' }
     // MAX MODE DOES NOT RECORD THE COMPOSITE, and this is the whole of how max
     // is made to work without a ladder to rescue it (Robert: "max must not have
     // ladder", 2026-08-30).
@@ -1221,12 +1234,41 @@ class Session implements CaptureSession {
     // Max mode is not bounded either: it is one mode, and this is one of the
     // three things it turns off.
     if (!encoderBudgetEnabled() || !preemptiveRefusalAllowed()) return
+    // THE COMPOSITE GOES FIRST, AND IT IS NOT A CLOSE CALL. The two reductions
+    // available here are not comparable: dropping the composite costs NO
+    // PICTURE — the raw channel already holds the same frame, larger — while
+    // narrowing the screen track costs exactly the resolution the user turned
+    // native-res on to get. Robert has ruled against auto-reducing quality
+    // often enough that spending picture before spending a redundant second
+    // encode would be the wrong order every time.
+    //
+    // What it costs instead, all of it paid at EXPORT rather than during
+    // capture: source-liveness detection ("your screen froze" stops being
+    // noticed), the preview becomes the raw one (measured SHARPER, not
+    // softer), and an unedited export at a step below the take re-renders
+    // instead of packet-copying. That last one used to be fatal and is why
+    // this was left as Robert's ruling rather than shipped — a re-render meant
+    // the GPU-process crash. It does not any more (0f8fefe): 240 s of
+    // 3024x1964@60 renders to 1440p in 132 s with the GPU process intact.
+    let workingPlan = plan
+    const drop = dropCompositeVerdict({ plan, ceiling })
+    if (drop) {
+      this.budgetDroppedComposite = true
+      this.encoderPlan = drop.plan
+      workingPlan = drop.plan
+      console.info(
+        `[capture] encoder budget: the composite is NOT being recorded — ${drop.why}. ` +
+          `New plan: ${describePlan(drop.plan)}. The unedited export re-renders instead of ` +
+          `copying (O15, Robert 2026-08-30)`,
+      )
+      if (drop.plan.pixelRate <= ceiling) return
+    }
     const screenCh = this.channels.find((c) => c.kind === 'screen' && c.media === 'video' && !c.ended)
-    const screen = plan.encoders.find((e) => e.what === 'screen') ?? null
+    const screen = workingPlan.encoders.find((e) => e.what === 'screen') ?? null
     if (!screenCh || !screen) return
     const frame = this.compositeFrame()
     const verdict = budgetVerdict({
-      plan,
+      plan: workingPlan,
       ceiling,
       screen,
       compositeLongEdge: Math.max(frame.width, frame.height),

@@ -4,6 +4,7 @@ import {
   REDUCTION_FLOOR_LONG_EDGE,
   budgetVerdict,
   describePlan,
+  dropCompositeVerdict,
   encoderCeiling,
   encoderPixelRate,
   planOf,
@@ -155,5 +156,65 @@ describe('what the screen is allowed to be', () => {
     expect(
       budgetVerdict({ plan: planOf([cam]), ceiling: 1e6, screen: null, compositeLongEdge: 1920 }),
     ).toBeNull()
+  })
+})
+
+/**
+ * THE COMPOSITE GOES BEFORE THE PICTURE — Robert, 2026-08-30: "non max video
+ * must stop fucking app record."
+ *
+ * Auto mode opened three hardware encoders on his screen+camera take — raw
+ * screen, raw camera, and the composite — and the composite is the third one,
+ * a downscaled second copy of a frame the raw channel already holds. Max mode
+ * has refused it since the same day, which is exactly why max records cleanly
+ * and auto freezes his game tab.
+ *
+ * The reduction ORDER is what these pin. Dropping the composite costs no
+ * picture; narrowing the screen costs the resolution native-res exists to
+ * deliver. The cheap one has to be spent first.
+ */
+describe('dropping the composite before the picture', () => {
+  const screen = { what: 'screen', width: 3024, height: 1964, fps: 60 }
+  const camera = { what: 'camera', width: 1280, height: 720, fps: 60 }
+  const composite = { what: 'composite', width: 1920, height: 1080, fps: 60 }
+
+  it('does nothing to a machine with no budget — it has never collapsed', () => {
+    const plan = planOf([screen, camera, composite])
+    expect(dropCompositeVerdict({ plan, ceiling: 0 })).toBeNull()
+  })
+
+  it('does nothing to a plan that already fits', () => {
+    const plan = planOf([screen, camera, composite])
+    expect(dropCompositeVerdict({ plan, ceiling: plan.pixelRate })).toBeNull()
+  })
+
+  it('drops it when the plan is over, and the plan then fits', () => {
+    // Robert's own numbers: 555 Mpx/s across three encoders against ~416.
+    const plan = planOf([screen, camera, composite])
+    const verdict = dropCompositeVerdict({ plan, ceiling: 416e6 })
+    expect(verdict).not.toBeNull()
+    expect(verdict!.plan.encoders.map((e) => e.what)).toEqual(['screen', 'camera'])
+    expect(verdict!.plan.pixelRate).toBeLessThan(plan.pixelRate)
+    expect(verdict!.plan.pixelRate).toBeLessThanOrEqual(416e6)
+  })
+
+  it('still drops it when that is NOT enough, so the size reduction is smaller', () => {
+    const plan = planOf([screen, camera, composite])
+    const verdict = dropCompositeVerdict({ plan, ceiling: 200e6 })
+    expect(verdict).not.toBeNull()
+    expect(verdict!.plan.pixelRate).toBeGreaterThan(200e6)
+    expect(verdict!.why).toContain('still over')
+  })
+
+  it('has nothing to drop on a take that never planned a composite', () => {
+    const plan = planOf([screen, camera])
+    expect(dropCompositeVerdict({ plan, ceiling: 100e6 })).toBeNull()
+  })
+
+  it('leaves the raw channels alone — it is the SECOND copy that goes', () => {
+    const plan = planOf([screen, camera, composite])
+    const verdict = dropCompositeVerdict({ plan, ceiling: 1 })
+    expect(verdict!.plan.encoders).toContainEqual(screen)
+    expect(verdict!.plan.encoders).toContainEqual(camera)
   })
 })

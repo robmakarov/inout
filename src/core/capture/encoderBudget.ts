@@ -240,6 +240,41 @@ export interface BudgetVerdict {
  *  2. SCALE TO FIT. Otherwise take the largest even long edge whose plan fits
  *     under the ceiling, floored at REDUCTION_FLOOR_LONG_EDGE.
  */
+/**
+ * IS THE COMPOSITE WHAT PUTS THIS TAKE OVER, AND WOULD DROPPING IT HELP?
+ *
+ * Pure, for the same reason budgetVerdict is: the machine this matters on is
+ * the one about to stop responding, so the arithmetic has to be checkable
+ * without one.
+ *
+ * THIS IS TRIED BEFORE ANY REDUCTION IN SIZE, and the order is not a close
+ * call. The composite is a DOWNSCALED SECOND COPY of a frame the raw channel
+ * already holds, made by its own hardware encoder — dropping it costs no
+ * picture at all, where narrowing the screen costs exactly the resolution
+ * native-res exists to deliver. Spending picture before spending a redundant
+ * encode would be the wrong order every time.
+ *
+ * Returns the lighter plan even when it is STILL over the ceiling: one encoder
+ * fewer is worth having on the way to the size reduction that follows.
+ */
+export function dropCompositeVerdict(input: {
+  plan: EncoderPlan
+  ceiling: number
+}): { plan: EncoderPlan; why: string } | null {
+  const { plan, ceiling } = input
+  if (ceiling <= 0) return null
+  if (plan.pixelRate <= ceiling) return null
+  if (!plan.encoders.some((e) => e.what === 'composite')) return null
+  const lighter = planOf(plan.encoders.filter((e) => e.what !== 'composite'))
+  return {
+    plan: lighter,
+    why:
+      `${mpx(plan.pixelRate)} Mpx/s is over this machine's ${mpx(ceiling)} Mpx/s budget, and the ` +
+      `composite is a downscaled second copy of a picture the raw channel already holds` +
+      (lighter.pixelRate <= ceiling ? '' : ' — still over, so the screen is bounded too'),
+  }
+}
+
 export function budgetVerdict(input: {
   plan: EncoderPlan
   ceiling: number
@@ -319,8 +354,27 @@ let override: boolean | null = null
  * measurement still runs and every line still prints: the plan is logged, the
  * outcome is recorded, and nothing is bounded.
  */
+/**
+ * ON BY DEFAULT SINCE 2026-08-30, on Robert's ruling: "non max video must stop
+ * fucking app record."
+ *
+ * It was off because it changes what gets recorded, which is a capture change,
+ * which is his. He has now made it — and what it changes first is the
+ * COMPOSITE, not the picture: a downscaled second copy of a frame the raw
+ * channel already holds, made by its own hardware encoder, which is the third
+ * encoder that freezes his game tab. Max mode already refuses it; auto mode
+ * paid for it whatever the machine could carry.
+ *
+ * THE GUARD THAT MAKES A DEFAULT SAFE IS THE ONE THIS FILE WAS BUILT ON: a
+ * machine with no collapse in its own history HAS NO BUDGET, so `encoderCeiling()`
+ * is 0 and nothing is bounded. Turning this on cannot punish a machine that has
+ * never failed, and it cannot import anyone else's hardware — the number is
+ * earned here or it does not exist. Nobody's first take is bounded.
+ *
+ * `?encoderbudget=0` reverts for one load; the panel switch is sticky.
+ */
 export function encoderBudgetEnabled(): boolean {
-  return fromSearch() ?? override ?? fromStorage() ?? false
+  return fromSearch() ?? override ?? fromStorage() ?? true
 }
 
 export function setEncoderBudget(on: boolean | null): void {
