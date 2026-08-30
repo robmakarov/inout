@@ -17,6 +17,20 @@ import { DEFAULT_EXPORT_SETTINGS } from '@core/types'
 import { QUALITY_TIERS } from '@core/compose/quality'
 import { parseSlowChannels } from './synthetic'
 import { setNativeRes } from './nativeRes'
+import { setQualityStep, type QualityStepId } from '@core/qualityStep'
+
+/**
+ * Run `fn` with the quality ceiling forced (UI1). `setQualityStep` keeps a
+ * module-level override precisely so a test with no localStorage can set it.
+ */
+function withQualityStep<T>(id: QualityStepId, fn: () => T): T {
+  try {
+    setQualityStep(id)
+    return fn()
+  } finally {
+    setQualityStep(null)
+  }
+}
 
 /**
  * Run `fn` with the native-res preference forced. This suite has no DOM, so the
@@ -86,15 +100,37 @@ describe('capture ceiling (4K game tab froze the take, Robert 2026-08-22)', () =
     })
   })
 
-  it('DEFAULT bounds the request by the EXPORT CEILING — the largest step, not the monitor', () => {
+  it('DEFAULT bounds the request by the CHOSEN QUALITY STEP, not the monitor', () => {
     // Native resolution means everything the product can DELIVER, not the
     // monitor's own size: Robert's 3024x1964 screen was 5.9 Mpx of which 4.25
     // could ever reach a file, and the rest was encoded, written and discarded
     // while a game shared the GPU. A SQUARE box, so a rotated display is
     // bounded on its own long edge rather than crushed onto the wrong axis.
+    //
+    // UI1 handed that ceiling to the user: the slider above the chips bounds
+    // CAPTURE and not just the export ladder, so the pixels above the chosen
+    // step are never encoded at all. 1920 at the default step.
     const c = displayVideoConstraints() as { width: { max: number }; height: { max: number } }
-    expect(c.width).toEqual({ max: CAPTURE_MAX_LONG_EDGE })
-    expect(c.height).toEqual({ max: CAPTURE_MAX_LONG_EDGE })
+    expect(c.width).toEqual({ max: 1920 })
+    expect(c.height).toEqual({ max: 1920 })
+  })
+
+  it('the step moves the bound, and `max` lifts it entirely', () => {
+    withQualityStep('540p', () => {
+      const c = displayVideoConstraints() as { width: { max: number } }
+      expect(c.width).toEqual({ max: 960 })
+    })
+    withQualityStep('1440p', () => {
+      const c = displayVideoConstraints() as { width: { max: number } }
+      expect(c.width).toEqual({ max: CAPTURE_MAX_LONG_EDGE })
+    })
+    withQualityStep('max', () => {
+      const c = displayVideoConstraints() as { width?: unknown; frameRate: { max: number } }
+      expect(c.width).toBeUndefined()
+      // Robert on what the top step means, 2026-08-30: "max - maximum
+      // resolution, 60 fps, all maximum".
+      expect(c.frameRate.max).toBe(60)
+    })
   })
 
   it('the ceiling IS the largest quality step, so adding a bigger step moves it', () => {
@@ -128,14 +164,28 @@ describe('capture ceiling (4K game tab froze the take, Robert 2026-08-22)', () =
     const apply = vi.fn().mockResolvedValue(undefined)
     await capDisplayTrack(track({ width: 3840, height: 2160, frameRate: 30 }, apply))
     expect(apply).toHaveBeenCalledWith({
-      width: { max: CAPTURE_MAX_LONG_EDGE },
-      height: { max: CAPTURE_MAX_LONG_EDGE },
+      width: { max: 1920 },
+      height: { max: 1920 },
     })
   })
 
-  it('DEFAULT: a surface already inside the ceiling is left completely alone', async () => {
+  it('a surface already inside the chosen step is left completely alone', async () => {
     const apply = vi.fn().mockResolvedValue(undefined)
-    await capDisplayTrack(track({ width: 2560, height: 1440, frameRate: 30 }, apply))
+    await capDisplayTrack(track({ width: 1920, height: 1080, frameRate: 30 }, apply))
+    expect(apply).not.toHaveBeenCalled()
+    // …and the SAME surface is capped once the step is below it (UI1).
+    const apply720 = vi.fn().mockResolvedValue(undefined)
+    await withQualityStep('720p', () =>
+      capDisplayTrack(track({ width: 1920, height: 1080, frameRate: 30 }, apply720)),
+    )
+    expect(apply720).toHaveBeenCalledWith({ width: { max: 1280 }, height: { max: 1280 } })
+  })
+
+  it('`max` bounds nothing: the whole monitor arrives untouched', async () => {
+    const apply = vi.fn().mockResolvedValue(undefined)
+    await withQualityStep('max', () =>
+      capDisplayTrack(track({ width: 3456, height: 2234, frameRate: 30 }, apply)),
+    )
     expect(apply).not.toHaveBeenCalled()
   })
 

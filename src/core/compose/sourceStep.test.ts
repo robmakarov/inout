@@ -205,3 +205,66 @@ describe('nothing below the top step moves', () => {
     }
   })
 })
+
+/**
+ * UI1 — THE LADDER STOPS WHERE THE TAKE WAS RECORDED.
+ *
+ * Robert, 2026-08-30: "make it not possible to choose higher quality that was
+ * choosen before start of record to save resources on other processes". The
+ * saving is real — capture asked for no more than the chosen long edge, so the
+ * pixels above it were never encoded — and that is exactly why the step above
+ * must not be offered: it could only be delivered by upscaling.
+ */
+describe('the take carries its own ceiling', () => {
+  it('offers only the steps at or below what the take was recorded at', () => {
+    const at720 = recording({
+      channels: [channel({ width: 1280, height: 720 })],
+      composite: composite({ width: 1280, height: 720 }),
+      qualityStep: '720p',
+    })
+    expect(tiersForTake(at720).map((t) => t.id)).toEqual(['540p', '720p'])
+  })
+
+  it('a take recorded at max keeps its source step whatever the slider says today', () => {
+    const atMax = recording({ qualityStep: 'max' })
+    setSourceRes(false) // the load's flag says no; the TAKE says yes
+    expect(sourceStepFor(atMax)).toEqual({ width: 3024, height: 1964 })
+    expect(tiersForTake(atMax).map((t) => t.id)).toEqual([
+      '540p',
+      '720p',
+      '1080p',
+      '1440p',
+      'source',
+    ])
+  })
+
+  it('a take recorded BELOW max never gets a source step, however big its channel is', () => {
+    // The pixels the step would promise were never captured — the fixture's
+    // 3024-wide channel cannot happen under a 1080p ceiling, and if it somehow
+    // did, offering "Source" would still be the badge disagreeing with the
+    // ladder the user was given.
+    const at1080 = recording({ qualityStep: '1080p' })
+    expect(sourceStepFor(at1080)).toBeNull()
+    expect(tiersForTake(at1080).map((t) => t.id)).toEqual(['540p', '720p', '1080p'])
+  })
+
+  it('a take from before UI1 is uncapped — it keeps the ladder it was made under', () => {
+    const legacy = recording()
+    expect(legacy.qualityStep).toBeUndefined()
+    expect(tiersForTake(legacy).map((t) => t.id)).toEqual([
+      '540p',
+      '720p',
+      '1080p',
+      '1440p',
+      'source',
+    ])
+  })
+
+  it('never returns an empty ladder: the lowest rung is reachable from every ceiling', () => {
+    for (const step of ['540p', '720p', '1080p', '1440p', 'max'] as const) {
+      const tiers = tiersForTake(recording({ qualityStep: step }))
+      expect(tiers.length).toBeGreaterThan(0)
+      expect(tiers[0]!.id).toBe('540p')
+    }
+  })
+})

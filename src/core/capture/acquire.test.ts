@@ -11,6 +11,20 @@ import {
 } from './acquire'
 import { setNativeRes } from './nativeRes'
 import { setSourceFrame } from '@core/frame'
+import { setQualityStep, type QualityStepId } from '@core/qualityStep'
+
+/**
+ * Run `fn` with the quality ceiling forced (UI1). `setQualityStep` keeps a
+ * module-level override precisely so a test with no localStorage can set it.
+ */
+function withQualityStep<T>(id: QualityStepId, fn: () => T): T {
+  try {
+    setQualityStep(id)
+    return fn()
+  } finally {
+    setQualityStep(null)
+  }
+}
 
 const base = { screen: false, camera: true, mic: false, systemAudio: false }
 
@@ -153,8 +167,8 @@ describe('the request Chrome receives, rung by rung', () => {
     const v = displayMediaOptions(config, 1).video as MediaTrackConstraints & {
       displaySurface?: string
     }
-    expect(v.width).toEqual({ max: CAPTURE_MAX_LONG_EDGE })
-    expect(v.height).toEqual({ max: CAPTURE_MAX_LONG_EDGE })
+    expect(v.width).toEqual({ max: 1920 })
+    expect(v.height).toEqual({ max: 1920 })
     expect(v.frameRate).toBeDefined()
     expect(v.displaySurface).toBe('monitor')
     // …and the exotic options ARE gone, which is what the rung is for.
@@ -170,14 +184,34 @@ describe('the request Chrome receives, rung by rung', () => {
     expect(displayMediaOptions(config, 2).video).toBe(true)
   })
 
-  it('THE BOUND IS THE EXPORT CEILING, not the monitor and not the default step', () => {
+  it('THE BOUND IS THE CHOSEN QUALITY STEP, not the monitor', () => {
     // Robert's game-tab take captured 3024x1964 — 5.9 Mpx of which 4.25 could
     // ever reach a file, the rest encoded, written and discarded while a game
     // shared the GPU. A SQUARE box, so a rotated display is bounded on its own
     // long edge rather than crushed onto the wrong axis (F13).
+    //
+    // UI1 made the bound the user's own: the slider above the chips is a real
+    // ceiling on capture, not a label on the export ladder — Robert: "to save
+    // resources on other processes". At the default step that is 1920.
     const v = displayMediaOptions(config, 0).video as MediaTrackConstraints
-    expect(v.width).toEqual({ max: CAPTURE_MAX_LONG_EDGE })
-    expect(v.height).toEqual({ max: CAPTURE_MAX_LONG_EDGE })
+    expect(v.width).toEqual({ max: 1920 })
+    expect(v.height).toEqual({ max: 1920 })
+    expect(1920).toBeLessThanOrEqual(CAPTURE_MAX_LONG_EDGE)
+  })
+
+  it('a higher step raises the bound, and `max` removes it', () => {
+    withQualityStep('1440p', () => {
+      const v = displayMediaOptions(config, 0).video as MediaTrackConstraints
+      expect(v.width).toEqual({ max: CAPTURE_MAX_LONG_EDGE })
+      expect(v.height).toEqual({ max: CAPTURE_MAX_LONG_EDGE })
+    })
+    withQualityStep('max', () => {
+      // `{ max: Infinity }` is not a constraint — it is a bug accepted
+      // silently — so the bound is OMITTED rather than widened (F18).
+      const v = displayMediaOptions(config, 0).video as MediaTrackConstraints
+      expect(v.width).toBeUndefined()
+      expect(v.height).toBeUndefined()
+    })
   })
 
   it('turning native-res OFF puts the 1080p ceiling back', () => {

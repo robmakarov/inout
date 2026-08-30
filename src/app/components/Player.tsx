@@ -537,9 +537,7 @@ export function Player({
   edit,
   pb,
   onBack,
-  onExport,
   onEdit,
-  showExport,
   measuredAspect,
   onMeasuredAspect,
 }: {
@@ -547,10 +545,7 @@ export function Player({
   edit: EditState
   pb: Playback
   onBack: () => void
-  onExport: () => void
   onEdit: (next: EditState) => void
-  /** Hidden while the export panel owns the bottom slot. */
-  showExport: boolean
   /**
    * F13 — THE DECODER IS THE LAST WORD ON WHAT SHAPE THIS TAKE IS.
    *
@@ -723,11 +718,10 @@ export function Player({
           onScrubStart={pb.scrubStart}
           onScrubEnd={pb.scrubEnd}
         />
-        {showExport && (
-          <button className="btn btn--primary transport__export" onClick={onExport}>
-            Export
-          </button>
-        )}
+        {/* UI1: no Export button here. The quality slider under the timeline
+            carries it, beside the step it will export at — a button that opens
+            a panel to ask a question the user answered before recording was the
+            extra step Robert asked to be rid of. */}
       </div>
     </div>
   )

@@ -264,6 +264,20 @@ export interface Recording {
    * stretches are a still image in the file — say so instead of shipping it
    * silently. */
   stalled?: ChannelKind[]
+  /**
+   * UI1 — THE QUALITY CEILING THIS TAKE WAS RECORDED UNDER (`QualityStepId`).
+   *
+   * Robert: "make it not possible to choose higher quality that was choosen
+   * before start of record". The export ladder is capped here, and it has to be
+   * capped by the take's OWN choice rather than by wherever the slider sits
+   * when the take is reopened — a take from last night is not re-recordable at
+   * a step it was never captured at.
+   *
+   * Absent = uncapped, which is every take made before this field existed and
+   * exactly the behaviour those files were made under. Typed as a string so
+   * `core/types.ts` stays the leaf it is.
+   */
+  qualityStep?: string
 }
 
 export interface ChannelEdit {

@@ -6,18 +6,14 @@ import {
   normalizeSegments,
   moveViewportKeyframe,
   outputToRecordingMs,
-  recordingToOutputMs,
   removeSegment,
   segmentSpeed,
-  splitAtOutputMs,
   ZOOM_MOVE_MS,
   type TightenProposal,
 } from '@core/timeline'
 import { CHANNEL_META } from '@app/lib/channels'
 import { useLaneArt } from '@app/hooks/useLaneArt'
 import { FILM_LANE_HEIGHT_PX } from '@app/lib/filmstripPlan'
-import { FrameBar } from '@app/components/FrameBar'
-import { SpeedBar } from '@app/components/SpeedBar'
 import { formatClock } from '@app/lib/format'
 import { Icon } from '@app/components/Icon'
 
@@ -56,7 +52,7 @@ export function Timeline({
   durationMs,
   onSeek,
   onEdit,
-  tighten,
+  proposal = null,
 }: {
   recording: Recording
   edit: EditState
@@ -67,14 +63,9 @@ export function Timeline({
   onSeek: (outputMs: number) => void
   /** Parent clamps via clampEditState. */
   onEdit: (next: EditState) => void
-  /** Silence tightening (F5a). The proposal is preview-only until onApply. */
-  tighten?: {
-    analysing: boolean
-    proposal: TightenProposal | null
-    onRun: () => void
-    onApply: () => void
-    onDismiss: () => void
-  }
+  /** F5a: the PROPOSED cuts, drawn over the take. The controls that make and
+   *  apply them live in ToolsBar, under the picture (UI1). */
+  proposal?: TightenProposal | null
 }) {
   const trackRef = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(0)
@@ -147,19 +138,6 @@ export function Timeline({
   const playheadAt = outputToRecordingMs(edit, Math.min(timeMs, durationMs))
   /** Never null for DRAWING: past the last frame the playhead sits at the end. */
   const playheadRecMs = playheadAt ?? edit.globalTrimEndMs
-  const playheadSegment =
-    playheadAt === null
-      ? null
-      : segments.findIndex((sg) => playheadAt >= sg.startMs && playheadAt < sg.endMs)
-  const activeSegment = playheadSegment === null || playheadSegment < 0 ? null : playheadSegment
-  const canSplit =
-    playheadAt !== null &&
-    segments.some(
-      (sg) => playheadAt > sg.startMs + MIN_SEGMENT_MS && playheadAt < sg.endMs - MIN_SEGMENT_MS,
-    )
-  const splitHere = () => {
-    onEdit(splitAtOutputMs(editRef.current, Math.min(timeMs, durationMs)))
-  }
   const dropSegment = (index: number) => {
     onEdit(removeSegment(editRef.current, index))
   }
@@ -207,10 +185,6 @@ export function Timeline({
    */
   const laneArt = useLaneArt(recording, width, FILM_LANE_HEIGHT_PX - 2)
   const anyStrip = Object.values(laneArt).some((a) => a.kind === 'film')
-
-  const hasScreen = recording.channels.some((c) => c.kind === 'screen' && c.media === 'video')
-  const hasAudio = recording.channels.some((c) => c.media === 'audio')
-  const proposal = tighten?.proposal ?? null
 
   const step = TICK_STEPS_MS.find((s) => (s / totalMs) * width >= MIN_TICK_PX) ?? 900000
   const ticks: number[] = []
@@ -321,73 +295,6 @@ export function Timeline({
             </div>
           )
         })}
-      </div>
-
-      <div className="tl__row tl__row--tools">
-        <div className="tl__gutter" />
-        <div className="tl__tools">
-          <button
-            className="tl__tool"
-            onClick={splitHere}
-            disabled={!canSplit}
-            title={canSplit ? 'Split at playhead' : 'Move the playhead inside a clip to split'}
-          >
-            <Icon name="scissors" size={14} />
-            <span>Split</span>
-          </button>
-          {tighten && hasAudio && !proposal && (
-            <button
-              className="tl__tool"
-              onClick={tighten.onRun}
-              disabled={tighten.analysing}
-              title="Find the silent stretches and propose cuts"
-            >
-              <Icon name="waves" size={14} />
-              <span>{tighten.analysing ? 'Listening…' : 'Tighten'}</span>
-            </button>
-          )}
-          {tighten && proposal && (
-            <span className="tl__propose">
-              <span className="tl__propose-text">
-                {proposal.cutSpans.length} silence{proposal.cutSpans.length === 1 ? '' : 's'} ·{' '}
-                −{formatClock(proposal.removedMs)}
-              </span>
-              <button className="tl__tool tl__tool--go" onClick={tighten.onApply}>
-                Apply
-              </button>
-              <button className="tl__tool" onClick={tighten.onDismiss}>
-                Dismiss
-              </button>
-            </span>
-          )}
-          {segments.length > 1 && !proposal && (
-            <span className="tl__tools-hint">
-              {segments.length} clips — drag a cut edge to move it, × to delete a clip
-            </span>
-          )}
-          {/* F5b: per-clip speed, acting on the clip under the playhead. */}
-          {!proposal && (
-            <SpeedBar
-              edit={edit}
-              onEdit={(next) => {
-                onEdit(next)
-                // Hold the RECORDING instant, not the output one: compressing
-                // the clip under the playhead moves every later output time, so
-                // keeping the output number would slide the playhead off the
-                // clip the user just changed — and the control would light up
-                // for a different clip than the one it acted on.
-                if (playheadAt !== null) {
-                  const at = recordingToOutputMs(next, playheadAt)
-                  if (at !== null) onSeek(at)
-                }
-              }}
-              index={activeSegment}
-            />
-          )}
-          {/* F3: the frame only exists around a screen surface, so a
-              camera-only take never shows a control that would do nothing. */}
-          {hasScreen && <FrameBar edit={edit} onEdit={onEdit} />}
-        </div>
       </div>
 
       <div className="tl__row tl__row--ruler">

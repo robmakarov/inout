@@ -26,6 +26,7 @@ import { AUDIO_BITRATE, VIDEO_BITRATE } from './codecs'
 import { chooseCopySource, type CopySource } from './copySource'
 import { frameAspectFor, frameForAspect, sourceResEnabled } from '@core/frame'
 import { DEFAULT_FRAME_RATE, normalizeRate, takeRate } from '@core/rate'
+import { stepAtOrBelow } from '@core/qualityStep'
 import { DEFAULT_EXPORT_SETTINGS, type ExportSettings, type Recording } from '@core/types'
 
 export type QualityTierId = '540p' | '720p' | '1080p' | '1440p' | 'source'
@@ -192,9 +193,36 @@ export function resolveTier(
 export function tiersForTake(recording: Recording, aspect?: number): QualityTier[] {
   const a = aspect ?? frameAspectFor(recording)
   const rate = takeRate(recording)
-  const tiers = QUALITY_TIERS.map((t) => resolveTier(t, a, rate))
+  const tiers = QUALITY_TIERS.filter((t) => tierWithinTakeCeiling(recording, t.id)).map((t) =>
+    resolveTier(t, a, rate),
+  )
   const source = sourceStepFor(recording)
   return source ? [...tiers, resolveTier(SOURCE_TIER, a, rate, source)] : tiers
+}
+
+/**
+ * UI1 — IS THIS STEP AT OR BELOW WHAT THE TAKE WAS RECORDED UNDER?
+ *
+ * Robert: "make it not possible to choose higher quality that was choosen
+ * before start of record to save resources on other processes". The saving is
+ * real — capture asked for no more than the chosen long edge, so the pixels
+ * above it were never encoded — and that is exactly why the step above it must
+ * not be offered: it could only be delivered by UPSCALING, which is a bigger
+ * file carrying no more picture.
+ *
+ * A take with no ceiling recorded is every take made before UI1, and those are
+ * uncapped: their files hold whatever capture gave them and the ladder they
+ * were made under is the one they keep.
+ *
+ * The `source` step is not on this ladder — `sourceStepFor` answers for it,
+ * because it is a size and not a rung.
+ */
+export function tierWithinTakeCeiling(recording: Recording, id: QualityTierId): boolean {
+  const ceiling = recording.qualityStep
+  if (!ceiling) return true
+  // 'max' names a step in `core/qualityStep.ts` and a size in this file; on the
+  // ladder itself the two orders agree rung for rung.
+  return stepAtOrBelow(id, ceiling)
 }
 
 /**
@@ -219,7 +247,13 @@ export function tiersForTake(recording: Recording, aspect?: number): QualityTier
  * Returns 0 for "no source step".
  */
 export function sourceStepFor(recording: Recording): SourceStep | null {
-  if (!sourceResEnabled()) return null
+  // UI1: THE TAKE ANSWERS FOR ITSELF where it recorded a ceiling. A take shot at
+  // `max` keeps its source step forever, whatever the slider says today; a take
+  // shot at 1080p never gets one, because the pixels it would promise were
+  // never captured. Only a take from before UI1 falls back to the load's flag,
+  // which is the behaviour it was made under.
+  const ceiling = recording.qualityStep
+  if (ceiling ? ceiling !== 'max' : !sourceResEnabled()) return null
   const video = recording.channels.filter((c) => c.media === 'video')
   if (video.length !== 1) return null
   const ch = video[0]!

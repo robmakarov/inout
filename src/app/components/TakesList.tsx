@@ -1,26 +1,39 @@
 import { useEffect, useState } from 'react'
-import type { Recording } from '@core/types'
+import type { ExportProgress, Recording } from '@core/types'
 import { clampEditState, defaultEditState } from '@core/timeline'
+import { qualityStepById } from '@core/qualityStep'
 import { useAppStore } from '@app/state/store'
 import { CHANNEL_META } from '@app/lib/channels'
+import { Icon } from '@app/components/Icon'
 
 /**
- * EVERY TAKE YOU HAVE, AND A WAY BACK INTO ONE.
+ * EVERY TAKE YOU HAVE, AND EVERY WAY BACK INTO ONE.
  *
  * Robert, 2026-08-30: "how th fuck will i open last night take in the editor".
  * He could not, and neither could anyone. The app opens the newest recording at
  * boot and there was no other route: record a second take, or dismiss the first,
  * and the earlier one became unreachable while still sitting on disk with its
- * blobs, its edit state and its diagnostics intact. `recordingsRepo.list()` has
- * existed the whole time and only experimental rigs ever called it.
+ * blobs, its edit state and its diagnostics intact.
  *
- * It surfaced as a diagnosis problem — his tab audio died and the evidence was
- * in a take he had no way to open — but it is a product hole in its own right:
- * takes are kept and were not reachable.
+ * UI1 turned the list into CARDS IN THE PAGE — Robert: "show kept videos saved
+ * above slider, not floating, as cards with delete and download and send and
+ * copy buttons, watch and edit too if possible". It used to be an overlay
+ * floating over the record button, which is the wrong shape for the one thing
+ * on this screen you are meant to be able to act on: a floating panel is a
+ * notification, and these are your files.
  *
- * Opens a take exactly the way the boot recovery does (App.tsx), including the
- * saved edit state, so a take reached from here is the take a refresh would
- * have handed back.
+ * WHAT EACH BUTTON DOES:
+ *   Watch     opens the take in the editor and starts playing it.
+ *   Edit      opens it in the editor, paused, exactly as the boot recovery does.
+ *   Download  runs the export and saves the file — no editor round-trip. On an
+ *             untouched take at its own step this is the instant packet copy,
+ *             so it is a second's work; on anything else it renders, and the
+ *             card says so while it does.
+ *   Send/Copy are NOT WIRED YET and say so (Robert: "make them blank for now").
+ *             They are on the card because that is where he asked for them, and
+ *             a disabled control that names itself is honest about a gap that a
+ *             missing control hides.
+ *   Delete    removes the take and its files.
  */
 export function TakesList({ onOpen }: { onOpen?: () => void }) {
   const [takes, setTakes] = useState<Recording[] | null>(null)
@@ -29,6 +42,8 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
   const [orphanBytes, setOrphanBytes] = useState(0)
   /** What the last Reclaim actually did. Null until one has been pressed. */
   const [reclaimed, setReclaimed] = useState<string | null>(null)
+  /** The take being exported straight from its card, and how far along. */
+  const [saving, setSaving] = useState<{ id: string; label: string } | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -61,10 +76,7 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
    * one `await blobStore.remove()` with no catch, so the first file that
    * refused removal threw, the loop died, nothing else was touched and the
    * number on screen never moved. Robert, 2026-08-30: "reclaim button still
-   * fucking doing nothing, fix it or fucking remove this shit". The likeliest
-   * file to refuse is the export scratch, which this now leaves alone anyway —
-   * so the button was most reliably broken right after an export, which is
-   * exactly when someone looks at their disk.
+   * fucking doing nothing, fix it or fucking remove this shit".
    *
    * Delegating to reclaim.ts means the count, the button and the boot sweep
    * cannot disagree about what an orphan is. And the result is REPORTED: a
@@ -119,7 +131,7 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
     }
   }
 
-  const openTake = async (rec: Recording): Promise<void> => {
+  const openTake = async (rec: Recording, intent: 'watch' | 'edit'): Promise<void> => {
     const s = useAppStore.getState()
     let saved: import('@core/types').EditState | undefined
     try {
@@ -139,9 +151,62 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
     }
     s.setRecording(rec)
     s.setEditState(clampEditState(rec, saved ?? defaultEditState(rec)))
+    s.setOpenIntent(intent)
     s.setMode('editor')
     onOpen?.()
   }
+
+  /**
+   * SAVE THE FILE WITHOUT GOING THROUGH THE EDITOR.
+   *
+   * The same call the editor's Export makes — `exportByBestPath` with the
+   * take's own top step — so a card download and an editor export of an
+   * untouched take are the same file by the same path, including the instant
+   * packet copy. Anything else would be a second export ladder, and two
+   * ladders disagree eventually.
+   */
+  const download = async (rec: Recording): Promise<void> => {
+    if (saving) return
+    setSaving({ id: rec.id, label: 'Preparing…' })
+    try {
+      const [{ exportByBestPath }, { settingsForTier, tiersForTake }, { saveToFile }, store] =
+        await Promise.all([
+          import('@core/compose'),
+          import('@core/compose/quality'),
+          import('@core/share'),
+          import('@core/store'),
+        ])
+      let edit: import('@core/types').EditState | undefined
+      try {
+        edit = await store.editsRepo.get(rec.id)
+      } catch {
+        edit = undefined
+      }
+      const steps = tiersForTake(rec)
+      const top = steps[steps.length - 1]!
+      const { result } = await exportByBestPath({
+        recording: rec,
+        edit: clampEditState(rec, edit ?? defaultEditState(rec)),
+        settings: settingsForTier(top, rec),
+        // Only the default step may copy the composite — the same fence the
+        // editor applies, answered by the same function (O3c).
+        allowPacketCopy: top.id === '1080p',
+        onProgress: (p: ExportProgress) =>
+          setSaving({ id: rec.id, label: progressLabel(p) }),
+      })
+      saveToFile(result)
+      useAppStore.getState().toast(`Saved ${result.fileName}`)
+    } catch (err) {
+      useAppStore
+        .getState()
+        .toast(err instanceof Error ? err.message : 'Could not save this take', 'error')
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  const notWired = () =>
+    useAppStore.getState().toast('Sending and links aren’t wired up yet — use Download for now')
 
   return (
     <div className="takes">
@@ -174,36 +239,84 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
       )}
       {orphanBytes > 0 && reclaimed && <div className="takes__orphan-note">{reclaimed}</div>}
       <ul className="takes__list">
-        {takes.map((r) => (
-          <li key={r.id}>
-            <button
-              type="button"
-              className="takes__item"
-              disabled={busy}
-              onClick={() => void openTake(r)}
-            >
-              <span className="takes__when">{when(r.createdAt)}</span>
-              <span className="takes__len">{clock(r.durationMs)}</span>
-              <span className="takes__size">{size(r)}</span>
-              <span className="takes__kinds">
+        {takes.map((r) => {
+          const savingThis = saving?.id === r.id
+          return (
+            <li key={r.id} className="takecard">
+              <div className="takecard__top">
+                <span className="takecard__when">{when(r.createdAt)}</span>
+                <span className="takecard__len">{clock(r.durationMs)}</span>
+                <span className="takecard__size">{size(r)}</span>
+                <span className="takecard__step">{stepLabel(r)}</span>
+                {lossNote(r) && <span className="takecard__loss">{lossNote(r)}</span>}
+                <button
+                  type="button"
+                  className="takecard__del"
+                  disabled={busy || savingThis}
+                  aria-label="Delete this take"
+                  title="Delete this take and its files"
+                  onClick={() => void remove(r.id)}
+                >
+                  <Icon name="trash" size={15} />
+                </button>
+              </div>
+              <div className="takecard__kinds">
                 {[...new Set(r.channels.map((c) => c.kind))]
                   .map((k) => CHANNEL_META[k].label)
                   .join(' · ')}
-              </span>
-              {lossNote(r) && <span className="takes__loss">{lossNote(r)}</span>}
-            </button>
-            <button
-              type="button"
-              className="takes__del"
-              disabled={busy}
-              aria-label="Delete this take"
-              title="Delete this take and its files"
-              onClick={() => void remove(r.id)}
-            >
-              ×
-            </button>
-          </li>
-        ))}
+              </div>
+              <div className="takecard__actions">
+                <button
+                  type="button"
+                  className="takecard__btn"
+                  disabled={busy}
+                  onClick={() => void openTake(r, 'watch')}
+                >
+                  <Icon name="play" size={13} />
+                  <span>Watch</span>
+                </button>
+                <button
+                  type="button"
+                  className="takecard__btn"
+                  disabled={busy}
+                  onClick={() => void openTake(r, 'edit')}
+                >
+                  <Icon name="scissors" size={13} />
+                  <span>Edit</span>
+                </button>
+                <button
+                  type="button"
+                  className="takecard__btn takecard__btn--go"
+                  disabled={busy || !!saving}
+                  onClick={() => void download(r)}
+                >
+                  <Icon name="download" size={13} />
+                  <span>{savingThis ? saving.label : 'Download'}</span>
+                </button>
+                {/* Blank for now, by Robert's own call — present so the card is
+                    the shape he asked for, disabled so it cannot lie. */}
+                <button
+                  type="button"
+                  className="takecard__btn takecard__btn--soon"
+                  title="Not wired up yet"
+                  onClick={notWired}
+                >
+                  <Icon name="send" size={13} />
+                  <span>Send</span>
+                </button>
+                <button
+                  type="button"
+                  className="takecard__btn takecard__btn--soon"
+                  title="Not wired up yet"
+                  onClick={notWired}
+                >
+                  <Icon name="link" size={13} />
+                  <span>Copy link</span>
+                </button>
+              </div>
+            </li>
+          )
+        })}
       </ul>
       <div className="takes__foot">
         Kept until you delete them — a take you exported is not removed automatically. Files you
@@ -211,6 +324,11 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
       </div>
     </div>
   )
+}
+
+function progressLabel(p: ExportProgress): string {
+  if (p.phase === 'rendering') return `${Math.round(p.ratio * 100)}%`
+  return p.phase === 'finalizing' ? 'Finishing…' : 'Preparing…'
 }
 
 /** Every blob key any take points at — the rest is orphaned. */
@@ -226,6 +344,11 @@ function size(r: Recording): string {
   if (bytes <= 0) return ''
   const mb = bytes / 1048576
   return mb >= 1 ? `${mb.toFixed(mb >= 10 ? 0 : 1)} MB` : `${Math.round(bytes / 1024)} KB`
+}
+
+/** UI1: the ceiling this take was recorded under, which is also its export cap. */
+function stepLabel(r: Recording): string {
+  return r.qualityStep ? qualityStepById(r.qualityStep).label : ''
 }
 
 function clock(ms: number): string {

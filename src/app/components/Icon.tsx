@@ -18,6 +18,8 @@ export type IconName =
   | 'scissors'
   | 'gauge'
   | 'doc'
+  | 'trash'
+  | 'send'
   | 'google'
 
 const PATHS: Record<Exclude<IconName, 'google'>, ReactNode> = {
@@ -99,6 +101,20 @@ const PATHS: Record<Exclude<IconName, 'google'>, ReactNode> = {
       <rect x="4.5" y="3" width="15" height="18" rx="2" />
       <path d="M8 7.5h8M8 11h8" />
       <rect x="8" y="14" width="8" height="4" rx="1" />
+    </>
+  ),
+  // A bin with a lid — deleting a take (UI1's cards).
+  trash: (
+    <>
+      <path d="M4 6.5h16M9.5 6.5V4.5h5v2M6.5 6.5l1 13h9l1-13" />
+      <path d="M10.5 10v6M13.5 10v6" />
+    </>
+  ),
+  // A paper plane — sending a take somewhere (UI1's cards; not wired yet).
+  send: (
+    <>
+      <path d="M21 3L10.5 13.5" />
+      <path d="M21 3l-6.8 18-3.7-7.5L3 9.8 21 3z" />
     </>
   ),
   // A speedometer: dial arc, needle, hub — the clip-speed control (F5b).

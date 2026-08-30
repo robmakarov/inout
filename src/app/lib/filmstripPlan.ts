@@ -19,15 +19,52 @@
  *     rig), so 24 of them is ~1.5 s of work for a picture nobody is waiting on.
  */
 export const THUMB_ASPECT = 16 / 9
-/** Target distance between thumbnail centres, CSS px. */
-export const THUMB_PITCH_PX = 76
-export const MAX_THUMBS = 24
+/**
+ * The FLOOR on the distance between thumbnail centres, CSS px.
+ *
+ * UI1 halved it — Robert, 2026-08-30: "videos frames in timeline stripe
+ * smaller, smaller step so more frames". A 76 px pitch on a 900 px lane is
+ * twelve frames for a whole take, which is a decoration rather than a way of
+ * finding a moment.
+ *
+ * IT IS A FLOOR AND NOT THE PITCH, because a pitch smaller than a thumbnail is
+ * not a denser strip — it is a squashed one. The strip is drawn as ONE image
+ * `count * thumbWidthPx` wide and then stretched to the lane with
+ * `background-size: 100% 100%`, so asking for more thumbnails than fit
+ * side-by-side compresses every frame horizontally by exactly the overrun.
+ * `thumbPitchPx` below is what actually spaces them.
+ */
+export const THUMB_PITCH_PX = 38
+
+/**
+ * The real distance between thumbnail centres: the frames tile edge to edge,
+ * never overlapping and never squashed. With the lane at 24 px this is 43 px,
+ * against the 76 px it was — so a 900 px lane carries 21 frames where it
+ * carried 12, which is the density Robert asked for, bought by making the
+ * frames smaller rather than by cheating the arithmetic.
+ */
+export function thumbPitchPx(thumbHeightPx: number): number {
+  return Math.max(THUMB_PITCH_PX, Math.max(1, Math.round(thumbHeightPx * THUMB_ASPECT)))
+}
+/**
+ * The DECODE budget, and it had to move with the pitch or the pitch would do
+ * nothing on any lane wider than 24 thumbnails. Each thumbnail is a seek to a
+ * keyframe and a decode (65 ms mean on this codebase's own random-access
+ * reader, F8's rig), so 48 is ~3 s of background work for a picture nobody is
+ * waiting on — it lands after the editor is already usable, and a failure at
+ * any point simply leaves the lane as it was.
+ */
+export const MAX_THUMBS = 48
 /**
  * How tall a lane carrying a filmstrip is. A video lane grows from 24 px to
  * this; audio lanes do not move. Kept next to the pitch because the two
  * together are the strip's shape, and .lane--film in app.css must agree.
+ *
+ * SMALLER SINCE UI1, with the pitch: the frames are the thing being made
+ * denser, and a 30 px tall thumbnail at a 38 px pitch is nearly square, which
+ * is not what a strip of 16:9 frames should look like.
  */
-export const FILM_LANE_HEIGHT_PX = 30
+export const FILM_LANE_HEIGHT_PX = 24
 
 export interface FilmstripPlan {
   /** How many thumbnails the strip holds. */
@@ -51,7 +88,7 @@ export function planFilmstrip(
   const thumbWidthPx = Math.max(1, Math.round(thumbHeightPx * THUMB_ASPECT))
   if (!(trackWidthPx > 0) || !(durationSec > 0) || !Number.isFinite(durationSec)) return null
   if (trackWidthPx < thumbWidthPx) return null
-  const wanted = Math.round(trackWidthPx / THUMB_PITCH_PX)
+  const wanted = Math.round(trackWidthPx / thumbPitchPx(thumbHeightPx))
   const count = Math.max(1, Math.min(MAX_THUMBS, wanted))
   const atSec: number[] = []
   for (let i = 0; i < count; i++) {

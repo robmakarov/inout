@@ -31,6 +31,7 @@
  * it was recorded at, the same sentence F13 writes about shape.
  */
 import { MAX_OUTPUT_LONG_EDGE } from './frame'
+import { currentQualityStep } from './qualityStep'
 import { DEFAULT_EXPORT_SETTINGS, type Recording } from './types'
 
 /** What the product was before F15, and what a take with no rate still gets. */
@@ -151,7 +152,14 @@ let override: boolean | null = null
  *   localStorage['inout.frame.rate'] = '1'   (sticky)
  */
 export function sourceRateEnabled(): boolean {
-  return fromSearch() ?? override ?? fromStorage() ?? false
+  // UI1: THE `max` STEP IS WHAT TURNS THIS ON — Robert, 2026-08-30, on what the
+  // top of the slider means: "max - maximum resolution, 60 fps, all maximum".
+  // F15's own gate was "one real 60 fps take judged by Robert"; the ruling
+  // above is that judgement, scoped to the step where the user has explicitly
+  // asked for everything. Every step below it still records at 30, which is
+  // byte-identical to what this product did yesterday. `?sourcefps=0` still
+  // refuses it for one load.
+  return fromSearch() ?? override ?? fromStorage() ?? currentQualityStep().fps >= MAX_FRAME_RATE
 }
 
 export function setSourceRate(on: boolean | null): void {

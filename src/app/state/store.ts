@@ -9,6 +9,14 @@ import type {
 
 export type AppMode = 'capture' | 'editor' | 'exporting' | 'share'
 
+/**
+ * UI1 — WHY THE EDITOR WAS OPENED. A take reached through the takes list's
+ * Watch button should be PLAYING when it appears; one reached through Edit, or
+ * through the boot recovery, should not. Consumed once by the editor and
+ * cleared, so a later re-render cannot restart playback.
+ */
+export type OpenIntent = 'watch' | 'edit'
+
 export type ToastVariant = 'info' | 'error'
 
 export interface Toast {
@@ -25,6 +33,7 @@ interface AppStore {
   exportResult: ExportResult | null
   exportProgress: ExportProgress | null
   exportAbort: AbortController | null
+  openIntent: OpenIntent | null
   toasts: Toast[]
   setMode(mode: AppMode): void
   setSession(session: CaptureSession | null): void
@@ -33,6 +42,7 @@ interface AppStore {
   setExportResult(result: ExportResult | null): void
   setExportProgress(p: ExportProgress | null): void
   setExportAbort(a: AbortController | null): void
+  setOpenIntent(i: OpenIntent | null): void
   toast(message: string, variant?: ToastVariant): void
   dismissToast(id: number): void
   resetToCapture(): void
@@ -49,6 +59,7 @@ export const useAppStore = create<AppStore>()((set, get) => ({
   exportResult: null,
   exportProgress: null,
   exportAbort: null,
+  openIntent: null,
   toasts: [],
   setMode: (mode) => set({ mode }),
   setSession: (session) => set({ session }),
@@ -57,6 +68,7 @@ export const useAppStore = create<AppStore>()((set, get) => ({
   setExportResult: (exportResult) => set({ exportResult }),
   setExportProgress: (exportProgress) => set({ exportProgress }),
   setExportAbort: (exportAbort) => set({ exportAbort }),
+  setOpenIntent: (openIntent) => set({ openIntent }),
   toast: (message, variant = 'info') => {
     const id = ++toastSeq
     set({ toasts: [...get().toasts, { id, message, variant }] })
@@ -72,5 +84,6 @@ export const useAppStore = create<AppStore>()((set, get) => ({
       exportResult: null,
       exportProgress: null,
       exportAbort: null,
+      openIntent: null,
     }),
 }))

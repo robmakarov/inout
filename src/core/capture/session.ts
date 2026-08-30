@@ -2,6 +2,7 @@ import { newId } from '@core/id'
 import { isAppleWebKit } from '@core/capabilities'
 import { aspectOf, frameForAspect, sourceFrameEnabled, sourceResEnabled } from '@core/frame'
 import { DEFAULT_FRAME_RATE, normalizeRate, sourceRateEnabled } from '@core/rate'
+import { loadQualityStep } from '@core/qualityStep'
 import { singleGenCaptureEnabled } from '@core/singleGen'
 import { preemptiveRefusalAllowed, rateLadderAllowed } from './captureQuality'
 import { diskVerdict } from './diskGuard'
@@ -2525,6 +2526,10 @@ class Session implements CaptureSession {
       createdAt: Date.now(),
       durationMs: channels.reduce((m, c) => Math.max(m, c.startOffsetMs + c.durationMs), 0),
       channels,
+      // UI1: the ceiling this take was recorded under, stamped ON the take so
+      // the export ladder is capped by what was chosen for IT — see
+      // Recording.qualityStep.
+      qualityStep: loadQualityStep(),
     }
 
     /**

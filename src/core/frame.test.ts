@@ -277,9 +277,13 @@ describe('the default', () => {
     }
   }
 
-  it('is off where a screen can be captured', () => {
+  // UI1, Robert's ruling 2026-08-30: the frame follows the take EVERYWHERE.
+  // He asked for "no blackspace around" the picture and was given the choice
+  // between hugging the preview only and moving the output; he chose the
+  // output, which is the only answer that keeps preview↔export parity.
+  it('is on where a screen can be captured', () => {
     setSourceFrame(null)
-    withGetDisplayMedia(true, () => expect(sourceFrameEnabled()).toBe(false))
+    withGetDisplayMedia(true, () => expect(sourceFrameEnabled()).toBe(true))
   })
 
   it('is on where one cannot — that device is a phone', () => {
