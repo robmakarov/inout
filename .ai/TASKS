@@ -1592,6 +1592,26 @@ GATES: whichever is chosen, the instant path is still taken on a default take (a
 picks instant) · the panel's INSTANT badge and the selected step can never disagree — pinned by
 test, because that disagreement is the bug · no change to any export path's output.
 
+## F16 — CORE BUILT AND MERGED 2026-08-30 (e660940). THE EXPORT IS MADE BEFORE IT IS ASKED FOR.
+Both gating spikes ran first and the first one CHANGED THE BUILD: T1 measured the prescribed
+transcode lane at 1.3x the render (not "several times"), and transcoding from the smaller High
+file — a third of the pixels — was not faster than from the raw channel at all. The premise had
+been formed against a render whose encoder had no backpressure; that defect was fixed the same
+morning (0f8fefe), so the transcode lane had been designed to beat a bug. NO TRANSCODE LANE WAS
+BUILT. The production render runs earlier instead: every path reused, no second 4:2:0 generation,
+same scaling on a slow machine. T2: p95 UI lateness 1.1 ms idle -> 1.0 ms while the background
+render works (worst tick 11 -> 2) — editing pays nothing measurable, the worker isolation holds.
+SHIPPED: prerender.ts (one job, keyed on recording+edit+settings whole), consulted in choose.ts's
+render branch, started by EditorScreen 1.2 s after the edit or rung settles, never for an export
+that is already a packet copy. An export pressed mid-job JOINS it rather than re-rendering. Every
+miss, failure, cancel and supersession falls through to rendering on demand — a pre-render can only
+save time. `?prerender=0` reverts. VERIFIED ON PROD: "pre-render ready after 0.7s ... waiting
+before it was asked for" then "export served a render that was already made".
+WHAT IS LEFT OF F16, and none of it is the engine: the SEMANTIC RUNGS (Min/Medium/High/Max as one
+option, replacing the resolution ladder in the panel) and the panel states for a job in flight —
+both UI, both Robert-gated. The pre-record picker that makes a chosen rung the INSTANT one is its
+own later task, as sealed.
+## (original spec below, kept for the record)
 ## F16 one-quality-option — capture follows the chosen rung; instant export at any set quality
 [medium-heavy · authored 2026-08-29 from Robert's ruling ("make it one option for now everytime ...
 min-medium-high(default)-max ... we need to try to achieve instant export for any quality") ·
