@@ -1,32 +1,33 @@
 # The screen wedge — full case file
 
-**Status as of 2026-08-29 (W1): NOT mitigated — Robert hit it three times in one
-evening and reached rung 2 of the safe-mode ladder.** The 08-25 "MITIGATED" reading was
-true when written (his stress test came back "seems to be allright now") and is retracted.
-The Chrome-side bug is NOT fixed and cannot be fixed from a web page. What W1 changed is
-the part that was OURS, because the mitigation stack had become its own failure mode:
+**Status as of 2026-08-30: NOT prevented, contained to one press, and instrumented to
+convict.** Robert stalled four times in one run — across the app's own ritual reloads and
+two Chrome relaunches — which killed the two comfortable stories at once: a fresh document
+does not cure it and a fresh Chrome does not reliably cure it either. Everything that was
+OURS in the failure is fixed (the list below); what remains is a promise no page code can
+cancel, in a layer no page code can reach, and the forensics that will name that layer the
+next time it fires.
 
-- **The ladder had no way up.** A success cleared the mark from rung 0 only, so a machine
-  degraded by a cause that was already gone stayed degraded for the full 24 h TTL. The
-  only exit anyone found was a localStorage line typed into a console; handed that line,
-  Robert answered "what the fuck is this?". Now any success climbs one rung, rung 0 clears
-  outright, and two good takes walk a floored machine home. The TTL is the backstop it was
-  always meant to be rather than the only door.
-- **A timeout was counted as a wedge whatever caused it.** With macOS screen recording
-  ungranted, Chrome's picker opens, says exactly that on screen, and `getDisplayMedia`
-  never settles — identical from the page. So the ladder escalated against a permission no
-  request of ours can satisfy, and the app reported "the device never connected", blaming
-  the user's hardware for an OS toggle. Now `classifyDisplayStall` reads the one recorded
-  fact that separates them (has this profile EVER been handed a screen track? the macOS
-  grant is per-app and permanent), a permission stall does not touch the ladder, and the
-  message names the permission and the browser the user is actually in.
-- **The app said nothing until it gave up.** Every word about a stuck share arrived in the
-  post-take banner, up to 30 s after the press, while Chrome had the real answer on screen
-  the whole time. A notice now fires at 12 s, while the request is still running.
-- **Backing off was asking for MORE** (fixed 2026-08-29, before W1): rung 1 dropped the
-  SIZE and RATE bounds along with the exotic options, so a machine that had already choked
-  once went on to capture its whole monitor uncapped. Rung 1 keeps the bounds; rung 2 is
-  bare on purpose and is covered on the track by `capDisplayTrack`.
+## WHEN ROBERT REPORTS IT AGAIN — the playbook. Start here, do not re-derive.
+
+1. **Get two console lines** (screenshot is enough):
+   `[capture] asking Chrome for …` — carries the RUNG (`reduced request N/3`), and
+   `[capture:forensics] …` — carries the verdict fields. If he has no console, the same
+   fields rode the `display_wedge` analytics event.
+2. **Read the verdict:**
+   | What the lines say | Verdict | What to do |
+   |---|---|---|
+   | Wedges stopped once the ladder reached rung 3 | our request contents were the trigger | nothing — the ladder holds; note which rung cured it here |
+   | rung 3 + `focus never left` + `0 screen deliveries this session` | **below Chrome** — macOS SCK/replayd, incl. its periodic re-auth dialog that can open BEHIND every window | no web API can prevent it (getDisplayMedia has no abort, no silent pre-flight). Put the two endpoint levers to Robert — see the last section — and change nothing else |
+   | rung 3 + `focus left and came back` | Chrome's picker/capture service | file upstream (repro recipe below, attach `chrome://webrtc-internals` + the forensics line); containment already does the rest |
+3. **Do NOT rebuild or re-propose what is already ruled**, it is all shipped or ruled out:
+   containment = a wedge costs one press (instant stale-refusal + one auto-reload,
+   `displayInflight.ts`); the ladder never climbs on good takes (day-probe only,
+   `displayWedge.ts`); no instructions are ever shown to the user and no System Settings
+   deep-link (Robert, twice, DECISIONS 2026-08-30 (1) and (2)); no console remedies; no
+   held share between takes (same rulings).
+4. **His machine's state**, if needed: `inout.displayWedge.v1` (localStorage — rung, count,
+   stall run), `inout.screenDeliveries.v1` (sessionStorage — the clustering number).
 
 This doc exists because the fix history is spread across a dozen commits and nobody —
 including the agents writing the fixes — should ever reconstruct it again.
@@ -84,6 +85,9 @@ never settled at all.
 | **Reproducible at will by rapid cycling: "connect screen, 2 seconds recording, back and again 10 times — it happens again"** | Robert, 2026-08-25, after the persistent-connect ship. Confirms per-take accumulation and gives the case file its first repro recipe |
 | After the wedged claim finally clears (a later refresh), the **mic indicator** can light instead, and the app can sit on "Waiting for microphone…" | Robert, 2026-08-25 — the mic's timeout budget was chosen by `await permissions.query(...)`, an IPC into the same wedged browser process; when it never answered, no deadline was ever armed. A bounded fail-fast was written and REFUSED by Robert ("it must not fail" — the mic has to connect, not fail faster). Robert then ordered the opposite contract: "all input must connect everytime without fails" → **persistent connect shipped** (acquire.ts `connectPersistently`): the lookup is bounded (cached grant as fallback), a granted mic/camera is re-asked — 2 attempts before the take starts, then an endless paced background hunt that late-joins the device the moment the browser delivers. Fenced: granted devices only, dies with the take / the user's off-switch / a denial. The SCREEN cannot be hunted — getDisplayMedia needs a fresh user gesture per ask |
 | **Load at picker time is a trigger by ITSELF: a 4K game already running in another tab → the record attempt wedges; restart Chrome, take the share BEFORE starting the game → no wedge** | Robert, 2026-08-25 — ordering discriminator; per-take accumulation is not the only path in. The no-wedge ordering (share first, load after) is exactly the state O12 would make permanent |
+| **A page reload does not cure it: four stalls in one run ACROSS the ritual's own reloads** | Robert, 2026-08-30 — fresh document, same stall; the poison is not frame-scoped |
+| **A Chrome relaunch did not cure it that day (⌘Q twice mid-run, stalls continued)** | Robert, 2026-08-30 — the strongest pointer BELOW Chrome: macOS SCK/replayd/re-auth state survives the browser |
+| **Every 2026-08-30 stall happened with the ladder already on rung 2** | his stored state, read off the Chrome profile: `level:2, count:5` — so the old floor's remaining contents (our three raw-audio flags) went on trial: rung 3 is bare `{video, audio}` |
 | **In the game-load wedge the refresh ritual DID NOT deliver: the app went unresponsive, no automatic reload Robert could see, and no message told him to quit/reload Chrome** | Robert, 2026-08-25 — contradicts the "what users get today" list below for this ordering. Candidate causes, unproven: the renderer itself is janked by the same GPU load so the reload never runs or paints; or the failure path taken under load never classifies as `wedged` so wedgeReload is never asked. Needs the arming timeline from a repro |
 
 ## The attempts, in order, with honest outcomes
@@ -139,6 +143,28 @@ never settled at all.
    Honest limit: the claim provably lives in the browser process (survives tab close), so
    a refresh is not guaranteed to clear it — the ritual automates the cheapest cure and
    the escalation stays one step behind.
+12. **One outstanding screen request per document** (`displayInflight.ts`, 2026-08-30).
+   A wedged promise leaves its REQUEST booked against the RenderFrame with no way to
+   cancel it (the spec has no abort), so every later press used to dispatch a second
+   request into a poisoned frame — that is the shape of "four stalls in a row". Now a
+   request our own budget declared dead refuses the next dispatch instantly ('stale'
+   reason), the app always reloads on it, and the cost of a wedge is one press. Narrowed
+   so a cancelled picker is not poison.
+13. **The climb is gone** (2026-08-30). Twice a good-take counter walked the machine back
+   onto the rung that wedges it (W1: one take → wedge every 2nd record; then three →
+   every 4th). A good take at rung N is evidence about rung N only. The only way up is a
+   full day with no wedge, one rung per day (`WEDGE_PROBE_AFTER_MS`); rungs drop nothing
+   the user chose and nothing announces a mode, so sitting degraded costs ~nothing.
+14. **Rung 3 — the floor that actually is one** (2026-08-30). Rung 2 still sent our three
+   raw-audio flags on an unmeasured claim they "cannot hang a request"; his five wedges
+   all happened ON rung 2. Rung 3 sends bare `{video, audio}` and the raw flags move to
+   the delivered track (`repairDisplayAudio`) — checkbox stays in the picker, music stays
+   raw. Machines parked on the old floor with count > 2 migrate to it on load.
+15. **Stall forensics** (`stallForensics.ts`, 2026-08-30). A page can see exactly two
+   things that leak out of the capture service: focus and time. Every display request is
+   watched from dispatch; a stall prints one console line (focus story + deliveries this
+   session + page age) and ships the same fields on `display_wedge`. This is what turns
+   the NEXT wedge into a verdict — see the playbook at the top.
 
 ## Ruled out
 
@@ -155,8 +181,10 @@ never settled at all.
 ## Still unknown — ranked
 
 1. **One of our getDisplayMedia options × the macOS native picker.** The ladder is the
-   experiment: if Robert's takes succeed at rung 1 or 2, the guilty option is named by
-   construction. If rung 2 (bare video+audio) still wedges, our options are innocent.
+   experiment: if the wedges stop at a rung, the guilty option is named by construction.
+   2026-08-30 sharpened it: rung 2 was never actually bare (it still carried our three
+   raw-audio flags, and all five of his that day happened ON rung 2) — rung 3 is the
+   truly bare `{video, audio}` request. A stall there clears our options entirely.
 2. **macOS ScreenCaptureKit permission-state rot for Chrome.** The one lever never yet
    confirmed tried: System Settings → Privacy & Security → Screen & System Audio
    Recording → toggle Chrome off/on, restart Chrome. If the wedge survives *that* plus
@@ -187,14 +215,11 @@ never settled at all.
 
 ## What the next wedge must capture (evidence kit)
 
-- The `[capture:arming]` timeline (already in the console — the one artifact that has
-  driven every real finding so far).
-- The active ladder rung (`inout.displayWedge.v1` in localStorage).
-- `chrome://webrtc-internals` while wedged — shows whether the capture request exists at
-  Chrome's layer.
-- Chrome version, and whether the macOS sharing pill appeared before the hang.
-- `display_wedge` analytics now fire with rung + count; once a sink is wired this stops
-  depending on Robert reporting it by hand.
+AUTOMATED as of 2026-08-30: the `[capture:forensics]` console line + the `display_wedge`
+analytics event carry the rung, the focus story, deliveries-this-session, page age and
+wait time — the playbook at the top reads the verdict straight off them. Still worth
+grabbing by hand if reachable: `chrome://webrtc-internals` while wedged (does the request
+exist at Chrome's layer), and whether the macOS sharing pill appeared before the hang.
 
 ## What users get today, wedge or no wedge
 
@@ -213,20 +238,27 @@ rather than a 4 s toast (the user is in the tab they were recording), and it car
 unproven is whether the reload ran at all under that load — that needs the arming timeline
 from a repro. BACKLOG P1.
 
-**Added by W1, 2026-08-29.** At 12 s — while the request is still alive and 18 s before it
-fails — the app now says which of the two failures this looks like, in a sticky banner:
-an ungranted macOS screen-recording permission (with the System Settings path, naming the
-browser the user is actually in) or Chrome's stuck share. A permission stall never
-escalates the safe-mode ladder and never spends the one automatic refresh, because a fresh
-renderer cannot change a TCC grant — it only hides the message that names the fix. A
-degraded machine says so on the capture screen and carries a **Reset screen sharing**
-button; before W1 the only exits were a 24 h timer and a console.
+**Rewritten 2026-08-30 — the user is told less, on purpose.** The W1 banner texts (the
+System Settings path, the ⌘Q escalation) and the Reset button are GONE, on Robert's two
+rulings that day: "no fucking opening system settings, search for no user action ways" and
+"i will not do anything in console". A remedy the user must perform is not a fix. What the
+user sees now: the 12 s still-running notice (claims nothing failed), and on failure a
+sticky banner that says what happened, that nothing was recorded, and that the app has
+narrowed its request — the next press is the whole of their job. Every escalation is
+automatic: rung down, stale-refusal, one reload.
 
-## The one unbuilt lever — parked on the roadmap
+## The two endpoint levers — both Robert's call, neither buildable without him
 
-**Keep the screen share alive between takes** (.ai/TASKS O12, Robert-gated, deferred
-2026-08-25 "we will consider it later"): one share for the whole session removes the
-picker from every take after the first and the create/teardown churn the wedge
-accumulates on. Cost: the sharing indicator stays lit between takes. Robert's call.
-Robert's 2026-08-25 game-first case is direct field evidence for it: the ordering that avoids
-the wedge (share taken first, load started after) is exactly the state O12 makes permanent.
+If the playbook's verdict lands on "below Chrome" (or on "Chrome's picker path" and
+upstream never fixes it), the page is out of moves and these are the only two left:
+
+1. **Hold the share across takes** (was O12). One picker per session instead of one per
+   take — removes the failure surface instead of containing it, and his own field evidence
+   supports it (share-first-then-load-the-game never wedged). RULED OUT TWICE, 2026-08-30
+   (DECISIONS (1) and (2)): the sharing indicator would be lit while nothing records, and
+   "devices are touched ONLY after the record click" stands. Do not re-propose it;
+   re-open only if HE brings it up.
+2. **A native capture layer** (wrapper owning ScreenCaptureKit directly): can pre-flight
+   the grant (`CGPreflightScreenCaptureAccess`), retry, and kill its own hung stream —
+   the primitives the web platform is missing. Off the MVP roadmap; it is the "make it
+   never happen" endpoint if the verdict proves the OS layer.

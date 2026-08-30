@@ -44,34 +44,10 @@ technical defects by severity. Done items get deleted, not archived.
 
 ### Now
 
-- [P0 — EVIDENCE PHASE, the wedge] **the next stall convicts a suspect instead of adding to a count**
-  (2026-08-30, Robert: "keep thinking how to prevent it completly"). What today's four stalls DISPROVED:
-  a page reload does not cure it (the ritual reloaded between stalls — fresh document, still stalled)
-  and a Chrome relaunch does not cure it (he ⌘Q'd twice mid-run). The only layer that survives both is
-  macOS's capture service under Chrome (ScreenCaptureKit/replayd, incl. its periodic re-authorisation
-  dialog, which can open BEHIND every window and holds every share until answered). The remaining
-  in-page suspect — our request object — is already on trial: rung 3 sends bare `{video, audio}`.
-  `stallForensics.ts` now watches every display request and, on a stall, prints ONE console line and
-  ships the same fields on the `display_wedge` analytics event:
-    · `focus` — `never-lost` = no picker was ever interacted with → below-Chrome class;
-      `lost-and-returned` = picker answered, Chrome silent → Chrome's capture service;
-    · `deliveriesThisSession` — 0 = first take since this Chrome launch. His pattern says wedges
-      cluster there; if the events confirm it, first-SCK-touch-after-launch is the cause.
-  VERDICT TABLE for whoever reads the next wedge: rung 3 + `never-lost` + `deliveries 0` ⇒ proven
-  below Chrome; no web API can prevent it (getDisplayMedia has no abort, no silent pre-flight — a hung
-  request cannot be cancelled by ANY page code) and complete prevention means a native capture layer
-  owning SCK directly (pre-flight the grant, retry, kill its own hung stream) — Robert's product call,
-  off MVP today. `lost-and-returned` on rung 3 ⇒ Chrome's picker path; file upstream with the trace,
-  keep containment. Any wedge that STOPS at rung 3 ⇒ it was our request contents all along, done.
-  Containment meanwhile: a wedge costs one press (instant stale-refusal + auto-reload), never a take.
-
-**PROMOTED TO THE ROADMAP 2026-08-29** (Robert: "put bugs on roadmap"). Entries marked
-`→ ROADMAP <id>` now have a task with GATES in `.ai/TASKS` (BUG PACK) and an entry on the READY map;
-the evidence stays HERE and is not duplicated there. B1-B8 are defects a user meets, G1-G4 are
-instrument defects — gates that report a verdict they did not measure. Unmarked entries were
-deliberately not promoted: already a task (F14/F15/F16, the Safari mic P8), waiting only on Robert's
-ear or eye, or the screen wedge, whose cause is Chrome's.
-
+- [P0 — EVIDENCE PHASE, the wedge] **the next stall convicts a suspect instead of adding to a
+  count.** The verdict table, the playbook for whoever handles Robert's next report, and the whole
+  case history live in ONE place: `docs/SCREEN_WEDGE.md` (rewritten 2026-08-30 — start at "WHEN
+  ROBERT REPORTS IT AGAIN"). Containment today: a wedge costs one press, never a take.
 - [~~P0~~ FIXED 2026-08-30] **"?sourcefps=1 - record froze on game tab again"** (Robert). NOT the game
   and NOT 60 fps. REPRODUCED ON A QUIET MACHINE WITH NO GAME, from his own configuration
   (`screensize=3024x1964`, sourcefps on, native res at its shipped default), against prod — and the
