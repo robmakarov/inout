@@ -80,8 +80,11 @@
   display: flex;
   flex-direction: column;
   /* UI1: the takes and the quality slider are the same column — Robert: "make
-     card same width as quality slider". One value, so they cannot drift. */
-  --pane: min(560px, 100%);
+     card same width as quality slider". One value, so they cannot drift.
+     640 rather than 560 because the card has to hold its six actions on ONE
+     line: at 560 "Show in folder" wrapped, which cost every card 40 px of
+     height and pushed the third take off the screen. */
+  --pane: min(640px, 100%);
   background: radial-gradient(
     120% 90% at 50% 30%,
     color-mix(in srgb, var(--bg), var(--text) 4%) 0%,
@@ -1379,7 +1382,7 @@
   user-select: none;
 }
 .controlbar .qs {
-  width: var(--pane, min(560px, 100%));
+  width: var(--pane, min(640px, 100%));
 }
 .qs--disabled {
   opacity: 0.45;
@@ -2050,7 +2053,7 @@
    which is the wrong shape for the one thing on this screen you are meant to be
    able to act on. */
 .takes {
-  width: var(--pane, min(560px, 100%));
+  width: var(--pane, min(640px, 100%));
   flex: 0 1 auto;
   min-height: 0;
   display: flex;
