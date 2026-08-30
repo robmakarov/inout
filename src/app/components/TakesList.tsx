@@ -247,7 +247,7 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
                 <span className="takecard__when">{when(r.createdAt)}</span>
                 <span className="takecard__len">{clock(r.durationMs)}</span>
                 <span className="takecard__size">{size(r)}</span>
-                <span className="takecard__step">{stepLabel(r)}</span>
+                {stepLabel(r) && <span className="takecard__step">{stepLabel(r)}</span>}
                 {lossNote(r) && <span className="takecard__loss">{lossNote(r)}</span>}
                 <button
                   type="button"
@@ -346,7 +346,9 @@ function size(r: Recording): string {
   return mb >= 1 ? `${mb.toFixed(mb >= 10 ? 0 : 1)} MB` : `${Math.round(bytes / 1024)} KB`
 }
 
-/** UI1: the ceiling this take was recorded under, which is also its export cap. */
+/** UI1: the ceiling this take was recorded under, which is also its export cap.
+ *  Empty for a take made before the ceiling existed — and the badge is then not
+ *  rendered at all, because an empty pill is a label about nothing. */
 function stepLabel(r: Recording): string {
   return r.qualityStep ? qualityStepById(r.qualityStep).label : ''
 }

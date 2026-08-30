@@ -239,7 +239,6 @@
 .capture__preview .stage {
   width: 100%;
   max-width: min(100%, calc((100dvh - 300px) * var(--stage-ar, 16 / 9)));
-  max-height: calc(100dvh - 300px);
 }
 
 /* live audio meter pinned in-frame when capturing screen + audio, no camera */
@@ -455,11 +454,20 @@
   display: flex;
   flex-direction: column;
   padding: 0 16px;
-  /* UI1: everything below the picture — the tools row, the timeline and the
-     quality slider — added up once, here, instead of a magic number repeated in
-     four rules. The stage takes what is left, which is what makes it hug the
-     take at whatever shape the take is. */
-  --below: 356px;
+  /* UI1: everything below the picture — the transport, the tools row, the
+     timeline and the quality slider — added up once, here, instead of a magic
+     number repeated in four rules. MEASURED on prod at 1280x720 with the tools
+     row wrapped (its worst case): transport 38 + gap 14 + padding 32 + tools 62
+     + timeline 152 + quality 133 = 431.
+
+     IT IS THE COLUMN'S WIDTH AND NOT THE STAGE'S BOUND. Getting it wrong used
+     to crush the picture: the stage is a flex item, so a column sized for more
+     height than there was simply SHRANK it, and a 16:9 take drew into a 2.24
+     box with black bars down both sides — exactly the "blackspace" this task
+     exists to remove, reintroduced by arithmetic. The stage now carries its own
+     height cap (see .stage), so this number can only make the column narrower
+     than ideal — never the picture wrong. */
+  --below: 431px;
 }
 
 .editor__player {
@@ -469,6 +477,9 @@
   align-items: center;
   justify-content: center;
   padding: 16px 0;
+  /* UI1: makes `cqh` below mean THIS box's real height, so the stage is bounded
+     by the space that actually exists rather than by an estimate of it. */
+  container-type: size;
 }
 
 /* F13: the STAGE is the only thing that follows the take's shape. This bound
@@ -477,7 +488,7 @@
    take would squeeze them into a column. */
 .player {
   width: 100%;
-  max-width: min(100%, calc((100dvh - var(--below, 356px)) * var(--stage-ar, 16 / 9)));
+  max-width: min(100%, calc((100cqh - 52px) * var(--stage-ar, 16 / 9)));
   height: 100%;
   min-height: 0;
   display: flex;
@@ -500,6 +511,18 @@
   border-radius: var(--r-md);
   overflow: hidden;
   border: 1px solid var(--surface-2);
+}
+/* UI1 — THE PICTURE CANNOT BE CRUSHED.
+   A flex item shrinks before it overflows, and `aspect-ratio` loses that
+   argument: given less height than its width implies, the stage simply became
+   a wider box with the video letterboxed inside it. So it opts out of shrinking
+   AND takes its own bound from the container's real height — 52 px is the
+   transport plus the column gap, the only things sharing that box. `min()` with
+   100% keeps the column's own width as the other bound, so the stage is always
+   the largest frame of the take's shape that fits both ways. */
+.editor__player .stage {
+  flex: none;
+  width: min(100%, calc((100cqh - 52px) * var(--stage-ar, 16 / 9)));
 }
 /* Timed zoom (F2). The transform is set inline from the same viewport function
    the export compositor samples — nothing about the geometry lives here. */
@@ -746,7 +769,7 @@
   position: relative;
   flex: none;
   width: 100%;
-  max-width: min(100%, calc((100dvh - var(--below, 356px)) * 16 / 9));
+  max-width: min(100%, calc((100dvh - var(--below, 431px)) * 16 / 9));
   align-self: center;
   /* UI1: 30 px shorter — the tools row that used to run through the middle of
      it now lives under the picture (see .tools). */
@@ -1516,7 +1539,7 @@
 .qbar {
   flex: none;
   width: 100%;
-  max-width: min(100%, calc((100dvh - var(--below, 340px)) * 16 / 9));
+  max-width: min(100%, calc((100dvh - var(--below, 431px)) * 16 / 9));
   align-self: center;
   display: flex;
   justify-content: center;
@@ -1546,7 +1569,7 @@
 .tools {
   flex: none;
   width: 100%;
-  max-width: min(100%, calc((100dvh - var(--below, 356px)) * 16 / 9));
+  max-width: min(100%, calc((100dvh - var(--below, 431px)) * 16 / 9));
   align-self: center;
   display: flex;
   align-items: center;

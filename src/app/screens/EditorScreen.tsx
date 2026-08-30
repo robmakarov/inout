@@ -7,7 +7,6 @@ import {
   isDefaultTier,
   resolveTier,
   settingsForTier,
-  sourceStepFor,
   tiersForTake,
   type QualityTier,
 } from '@core/compose/quality'
@@ -75,14 +74,6 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
    */
   const frameRate = takeRate(recording)
   /**
-   * F18: what "Source" means for THIS take — null when it has no source step
-   * (already inside the ladder, or more than one video channel, so the native
-   * packet copy could not deliver it). It is the take's own pixel dimensions,
-   * not a long edge: reconstructing 1964 from an aspect gives 1962, and two
-   * pixels are enough for the copy fence to refuse.
-   */
-  const sourceStep = useMemo(() => sourceStepFor(recording), [recording])
-  /**
    * UI1 — THE STEPS THIS TAKE MAY EXPORT AT, capped by what was chosen before
    * it was recorded. `tiersForTake` is the one place a step is resolved against
    * a take (F13/F15) and now also the one place the ceiling is applied.
@@ -104,12 +95,31 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
   const [chosenId, setChosenId] = useState<string | null>(null)
   useEffect(() => setChosenId(null), [recording.id])
   const tier = useMemo(() => {
-    const top = tiers[tiers.length - 1]
-    const picked = chosenId ? tiers.find((t) => t.id === chosenId) : undefined
     // `tiersForTake` never returns an empty ladder — the lowest rung is
-    // reachable from every ceiling — so `top` is the answer in every real case.
-    return picked ?? top ?? resolveTier(QUALITY_TIERS[0]!, frameAspect, frameRate, sourceStep)
-  }, [tiers, chosenId, frameAspect, frameRate, sourceStep])
+    // reachable from every ceiling — so `top` is defined in every real case.
+    const top = tiers[tiers.length - 1] ?? resolveTier(QUALITY_TIERS[0]!, frameAspect, frameRate)
+    const picked = chosenId ? tiers.find((t) => t.id === chosenId) : undefined
+    if (picked) return picked
+    const ceiling = recording.qualityStep
+    if (ceiling) {
+      // The step the user chose before recording. 'max' is this file's 'source'.
+      return tiers.find((t) => t.id === (ceiling === 'max' ? 'source' : ceiling)) ?? top
+    }
+    /**
+     * A TAKE FROM BEFORE THE CEILING EXISTED KEEPS THE DEFAULT IT WAS MADE
+     * UNDER, and this is not a detail: defaulting an old take to the TOP of its
+     * (uncapped) ladder would make its untouched export a full re-render of
+     * every frame, where yesterday it was a packet copy. That is the frozen
+     * "instant default export" rule, broken silently, for every take already on
+     * disk. F18's rule stands for these: their own resolution when they offer
+     * one, otherwise the default step.
+     */
+    return (
+      tiers.find((t) => t.id === 'source') ??
+      tiers.find((t) => isDefaultTier(t)) ??
+      top
+    )
+  }, [tiers, chosenId, recording.qualityStep, frameAspect, frameRate])
   const exporting = mode === 'exporting' || mode === 'share'
   // F5a: a PROPOSED cut list. It is preview-only until the user applies it, and
   // any other edit invalidates it — a proposal computed against a timeline that
