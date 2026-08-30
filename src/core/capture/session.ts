@@ -3,7 +3,7 @@ import { isAppleWebKit } from '@core/capabilities'
 import { aspectOf, frameForAspect, sourceFrameEnabled, sourceResEnabled } from '@core/frame'
 import { DEFAULT_FRAME_RATE, normalizeRate, sourceRateEnabled } from '@core/rate'
 import { singleGenCaptureEnabled } from '@core/singleGen'
-import { qualityDropsAllowed } from './captureQuality'
+import { preemptiveRefusalAllowed, rateLadderAllowed } from './captureQuality'
 import {
   differsMeaningfully,
   resolutionStepEnabled,
@@ -396,8 +396,6 @@ class Session implements CaptureSession {
   private encoderPlan: EncoderPlan | null = null
   /** O15: this take already told the budget it collapsed; say it once. */
   private collapseRecorded = false
-  /** Max mode refuses the ladder's step — say so once, not once a second. */
-  private maxModeNoticeSent = false
   /** O16 — when the screen's delivered size first stopped matching the size its
    *  current segment's encoder was opened at. Null while they agree. */
   private sizeDifferingSinceMs: number | null = null
@@ -1073,6 +1071,29 @@ class Session implements CaptureSession {
    */
   private singleGenerationTake(): { yes: boolean; why: string } {
     const video = this.channels.filter((c) => c.media === 'video' && !c.ended)
+    // MAX MODE DOES NOT RECORD THE COMPOSITE, and this is the whole of how max
+    // is made to work without a ladder to rescue it (Robert: "max must not have
+    // ladder", 2026-08-30).
+    //
+    // The composite is a DOWNSCALED SECOND COPY of a picture the take already
+    // has, made by its own hardware encoder. On his screen+camera take at
+    // 3024x1964/60 the three encoders wanted 555 Mpx/s against the ~416 this
+    // machine measures; without the composite it is 411, which fits. That is
+    // the difference between a take and a slideshow, and no amount of policy
+    // would have produced it — only opening fewer encoders does.
+    //
+    // Unlike the single-generation case below, this does NOT require one video
+    // channel: with a camera there is nothing to packet-copy, so the unedited
+    // export RENDERS from the raw channels instead of copying. That is the
+    // price of max and it is paid at export time, where a wait costs nothing
+    // but time — rather than during capture, where it costs the picture.
+    if (!rateLadderAllowed()) {
+      const screen = video.find((c) => c.kind === 'screen') ?? video[0]
+      const frame = this.compositeFrame()
+      if (screen?.width && screen.height && screen.width * screen.height >= frame.width * frame.height) {
+        return { yes: true, why: '' }
+      }
+    }
     if (video.length !== 1) {
       return { yes: false, why: `${video.length} video channels`, }
     }
@@ -1193,7 +1214,7 @@ class Session implements CaptureSession {
     )
     // Max mode is not bounded either: it is one mode, and this is one of the
     // three things it turns off.
-    if (!encoderBudgetEnabled() || !qualityDropsAllowed()) return
+    if (!encoderBudgetEnabled() || !preemptiveRefusalAllowed()) return
     const screenCh = this.channels.find((c) => c.kind === 'screen' && c.media === 'video' && !c.ended)
     const screen = plan.encoders.find((e) => e.what === 'screen') ?? null
     if (!screenCh || !screen) return
@@ -1293,8 +1314,15 @@ class Session implements CaptureSession {
     const single = this.singleGenerationTake()
     if (single.yes) {
       this.singleGeneration = true
+      const copies = this.channels.filter((c) => c.media === 'video' && !c.ended).length === 1
       console.info(
-        '[capture] SINGLE GENERATION — no live composite for this take: one mp4/AVC video channel already at the export geometry, so the composite would be a second encode of a picture we already have. The unedited export packet-copies the raw channel. Source-liveness detection and the composited preview are off with it.',
+        `[capture] NO LIVE COMPOSITE for this take — it would be a second encode of a picture the ` +
+          `raw channel${copies ? '' : 's'} already ${copies ? 'holds' : 'hold'}, and that encoder is ` +
+          `what a busy machine cannot afford. ` +
+          (copies
+            ? 'The unedited export packet-copies the raw channel.'
+            : 'With more than one video channel there is nothing to copy, so the unedited export RENDERS.') +
+          ' Source-liveness detection and the composited preview are off with it.',
       )
       return
     }
@@ -1387,15 +1415,7 @@ class Session implements CaptureSession {
           // against the plan — but nothing is taken away from the picture the
           // user asked for. What they get instead is dropped frames, reported
           // rather than hidden, which is the price max exists to let them pay.
-          if (!qualityDropsAllowed()) {
-            if (!this.maxModeNoticeSent) {
-              this.maxModeNoticeSent = true
-              console.info(
-                `[capture] max quality: the ladder wants ${rung.label} (${reason}) and is NOT taking it — ` +
-                  `the take keeps the rate it was asked for and drops frames instead. ` +
-                  `?quality=auto steps the rate down smoothly instead (captureQuality.ts)`,
-              )
-            }
+          if (!rateLadderAllowed()) {
             this.noteEncoderCollapse(`the rate ladder wanted to step: ${reason}`)
             return
           }

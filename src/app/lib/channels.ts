@@ -102,8 +102,20 @@ export interface TakeLoss {
 
 /** Below this a silent tail is a quiet ending, not a dead source. */
 const SILENT_TAIL_FLOOR_MS = 3_000
-/** Padding worth mentioning: a fifth of a second of inserted silence. */
-const PAD_FLOOR_MS = 200
+/**
+ * PADDING IS THE GUARD WORKING, NOT A LOSS, AND SAYING OTHERWISE WAS A LIE.
+ *
+ * First cut reported anything over 200 ms as "Mic lost 0.4s". Robert, on a take
+ * where both channels recorded perfectly: "tab audio was there all the time,
+ * with little lags but there so its laying" — it is lying. He is right. A few
+ * hundred milliseconds of inserted silence across a whole take is the
+ * wall-clock hold doing its job on a busy machine; nothing was lost, nothing is
+ * audible, and there is nothing for him to do about it. A number that alarms
+ * without being actionable is worse than no number.
+ *
+ * Two seconds is the floor now, and the wording says what actually happened.
+ */
+const PAD_FLOOR_MS = 2_000
 
 export function takeLosses(
   channels: readonly {
@@ -129,25 +141,30 @@ export function takeLosses(
     const revivals = d.revivals ?? 0
     const muted = (d.events ?? []).some((e) => e.type === 'mute')
     if (tail >= SILENT_TAIL_FLOOR_MS) {
+      // THE ONE THAT COST HIM A TAKE: sound that stopped and never came back.
       const secs = Math.round(tail / 1000)
       const from = Math.max(0, Math.round((c.durationMs - tail) / 1000))
       out.push({
         kind: c.kind,
         message:
-          `${name} went silent ${secs}s before the end (from ${from}s) and never came back` +
-          (muted ? ' — the source muted itself' : '') +
-          (revivals > 0 ? `, after ${revivals} attempt${revivals === 1 ? '' : 's'} to reopen it` : '') +
-          '. The recording kept its length; those seconds are silence.',
+          `${name} went silent ${from}s in and never came back — the last ${secs}s have no sound` +
+          (muted ? ', because the source muted itself' : '') +
+          (revivals > 0 ? `, and ${revivals} attempt${revivals === 1 ? '' : 's'} to reopen it did not take` : '') +
+          '.',
       })
     } else if (revivals > 0) {
+      // IT CAME BACK, so this is the rescue working rather than damage. Said as
+      // a fact to check, not as a warning: on the take where Robert saw this,
+      // everything had recorded fine. "There may be a gap" was a guess dressed
+      // as a finding.
       out.push({
         kind: c.kind,
-        message: `${name} stopped delivering sound mid-take and was reopened ${revivals} time${revivals === 1 ? '' : 's'} — there may be a gap.`,
+        message: `${name} dropped out mid-take and came back on its own${revivals > 1 ? ` (${revivals} times)` : ''} — the sound is complete either side of it.`,
       })
     } else if ((d.paddedMs ?? 0) >= PAD_FLOOR_MS) {
       out.push({
         kind: c.kind,
-        message: `${name} lost ${Math.round((d.paddedMs ?? 0) / 100) / 10}s to a machine that could not keep up; silence was added to hold it in sync.`,
+        message: `${name} was held in sync across ${Math.round((d.paddedMs ?? 0) / 100) / 10}s the machine could not deliver — nothing is missing, but that much of it is silence.`,
       })
     }
   }

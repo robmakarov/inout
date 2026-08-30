@@ -11,7 +11,7 @@ import { captureRateCeiling, rateForSurface } from '@core/rate'
 import { MAX_OUTPUT_LONG_EDGE, captureCeilingLongEdge, evenDown } from '@core/frame'
 import { isAppleWebKit } from '@core/capabilities'
 import { detectPlatform } from '@core/platform'
-import { qualityDropsAllowed } from './captureQuality'
+import { preemptiveRefusalAllowed } from './captureQuality'
 import { measuredEncoderThroughput } from './encoderBudget'
 import { guardStream } from './deviceGuard'
 import { nativeResEnabled } from './nativeRes'
@@ -584,7 +584,7 @@ export async function capDisplayTrack(track: MediaStreamTrack | undefined): Prom
     // MAX MODE ATTEMPTS WHAT THE SOURCE OFFERS, full stop. The measurement
     // below is a protection, and max is the mode where the user has said they
     // will pay for the picture instead of being protected from it.
-    const rate = qualityDropsAllowed()
+    const rate = preemptiveRefusalAllowed()
       ? rateForSurface(now.width, now.height, ceiling, measuredEncoderThroughput())
       : ceiling
     if (rate < ceiling && (now.frameRate ?? 0) > rate + 1) {

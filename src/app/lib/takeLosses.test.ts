@@ -27,9 +27,8 @@ describe('what a take says it lost', () => {
       [ch({ durationMs: 120_000, diagnostics: { silentTailMs: 60_000, revivals: 2 } })],
       caps,
     )
-    expect(loss?.message).toContain('went silent 60s before the end')
-    expect(loss?.message).toContain('from 60s')
-    expect(loss?.message).toContain('2 attempts')
+    expect(loss?.message).toContain('went silent 60s in and never came back')
+    expect(loss?.message).toContain('last 60s have no sound')
   })
 
   it('names the mute when the source muted itself', () => {
@@ -42,7 +41,7 @@ describe('what a take says it lost', () => {
 
   it('a tap that was rebuilt and RECOVERED still says so — there may be a gap', () => {
     const [loss] = takeLosses([ch({ diagnostics: { silentTailMs: 0, revivals: 1 } })], caps)
-    expect(loss?.message).toContain('reopened 1 time')
+    expect(loss?.message).toContain('came back on its own')
   })
 
   it('a quiet ending is not a dead source', () => {
@@ -50,10 +49,16 @@ describe('what a take says it lost', () => {
     expect(takeLosses([ch({ diagnostics: { silentTailMs: 2_000 } })], caps)).toEqual([])
   })
 
-  it('reports padding only when a listener could notice it', () => {
-    expect(takeLosses([ch({ diagnostics: { paddedMs: 40 } })], caps)).toEqual([])
-    const [loss] = takeLosses([ch({ diagnostics: { paddedMs: 1_400 } })], caps)
-    expect(loss?.message).toContain('1.4s')
+  it('DOES NOT CALL SYNC PADDING A LOSS — Robert: "so its laying"', () => {
+    // Both channels had recorded perfectly and the banner said "Mic lost 0.4s".
+    // A few hundred ms of inserted silence across a take is the wall-clock hold
+    // working; nothing was lost and nothing is audible.
+    expect(takeLosses([ch({ diagnostics: { paddedMs: 400 } })], caps)).toEqual([])
+    expect(takeLosses([ch({ diagnostics: { paddedMs: 600 } })], caps)).toEqual([])
+    expect(takeLosses([ch({ diagnostics: { paddedMs: 1_900 } })], caps)).toEqual([])
+    const [loss] = takeLosses([ch({ diagnostics: { paddedMs: 4_200 } })], caps)
+    expect(loss?.message).toContain('4.2s')
+    expect(loss?.message).toContain('nothing is missing')
   })
 
   it('video channels are not audio and are left alone', () => {

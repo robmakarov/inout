@@ -209,7 +209,26 @@ async function pickVideoConfig(
         height,
         bitrate,
         framerate,
-        latencyMode: 'realtime',
+        // 'quality', NOT 'realtime', AND IT IS FASTER — which is the opposite
+        // of what the names suggest and is why this was never tried.
+        //
+        // A RAW CHANNEL FEEDS NOTHING LIVE. It is a file writer: no preview
+        // renders from it, no peer waits on it, and nothing downstream cares
+        // how many milliseconds an individual frame spends inside the encoder.
+        // `realtime` buys low latency by constraining the encoder, and here it
+        // was buying nothing and charging throughput for it.
+        //
+        // Measured on Robert's machine at 3024x1964, interleaved so load drift
+        // hits both equally (2026-08-30):
+        //     avc  quality   446, 456 Mpx/s   319 KB
+        //     avc  realtime  404      Mpx/s   319 KB
+        //     hevc quality   412, 416 Mpx/s   294 KB
+        // Same bytes, same picture, ~13 % more throughput — and 3024x1964@60
+        // needs 356 Mpx/s, so this is a real part of the margin that decides
+        // whether max works. Frame order was checked, not assumed: zero
+        // out-of-order chunks across every run, so the packet-copy paths and
+        // the smart cut see exactly what they saw before.
+        latencyMode: 'quality',
         hardwareAcceleration,
         avc: { format: 'avc' },
       }
