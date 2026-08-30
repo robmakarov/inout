@@ -12,6 +12,7 @@ import { MAX_OUTPUT_LONG_EDGE, captureCeilingLongEdge, evenDown } from '@core/fr
 import { isAppleWebKit } from '@core/capabilities'
 import { detectPlatform } from '@core/platform'
 import { qualityDropsAllowed } from './captureQuality'
+import { heldShare, keepShareEnabled } from './persistentShare'
 import { measuredEncoderThroughput } from './encoderBudget'
 import { guardStream } from './deviceGuard'
 import { nativeResEnabled } from './nativeRes'
@@ -1084,6 +1085,15 @@ export function acquireChannelsProgressive(
             : '[capture] previous share still held at the deadline — requesting anyway',
         )
       }
+      // O12: A SHARE WE ALREADY HAVE IS NOT ASKED FOR AGAIN. This is the only
+      // lever that reduces the NUMBER of getDisplayMedia calls, and a call that
+      // is never made cannot wedge (persistentShare.ts). Reused synchronously,
+      // before any await, so the take arms faster than a picker ever could.
+      const reuse = keepShareEnabled() ? heldShare() : null
+      if (reuse) {
+        console.info('[capture] reusing the screen share from the last take — no picker (O12)')
+        displayPromise = Promise.resolve(reuse.stream)
+      } else {
       // A machine that wedged gets a smaller request — see displayWedge.ts.
       // Only OUR options are dropped, so nothing the user chose goes missing.
       const opts = displayMediaOptions(config, displayLevel)
@@ -1128,6 +1138,7 @@ export function acquireChannelsProgressive(
       }, DISPLAY_STALL_NOTICE_MS)
       const clearStall = (): void => clearTimeout(stallTimer)
       rawDisplay.then(clearStall, clearStall)
+      }
     }
   } else if (config.systemAudio) {
     fail({ kind: 'system-audio', message: 'System audio requires screen sharing', denied: false })

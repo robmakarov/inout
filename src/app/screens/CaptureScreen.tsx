@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   displayRequestLevel,
+  releaseHeldShare,
   loadCaptureEngine,
   loadCapturePrefs,
   resetDisplayWedge,
@@ -478,22 +479,32 @@ export function CaptureScreen() {
               'is missing — it clears itself after a good take, or you can clear it now.'}
           {reducedRung > 0 && (
             <div className="capture__notice-actions">
-              {/* W1 item 4. Before this the ONLY exits were a 24 h timer and a
-                  localStorage line typed into a console; Robert was handed that
-                  line. A good take still climbs the ladder on its own — this is
-                  for the machine whose cause is already gone and knows it. */}
+              {/* THE BUTTON MUST NOT PROMISE WHAT NO PAGE CAN DO — Robert,
+                  2026-08-30: "reset screen sharing button dont fixes it i still
+                  need to relaunch chrome". It was labelled "Reset screen
+                  sharing", which reads as "unstick my screen sharing", and all
+                  it can actually do is clear OUR reduced mode. The stuck claim
+                  lives in Chrome's browser process and survives a refresh and a
+                  tab close (docs/SCREEN_WEDGE.md); only quitting Chrome clears
+                  it. So the control now says what it is, and the sentence next
+                  to it says what the user actually has to do. */}
               <button
                 type="button"
                 className="capture__notice-btn"
                 onClick={() => {
                   resetDisplayWedge()
+                  releaseHeldShare('the user cleared reduced mode')
                   setReducedRung(0)
                   setWedgeNotice(null)
-                  toast('Screen sharing reset — the next take asks for the full quality')
+                  toast('Reduced mode cleared — the next take asks for full quality')
                 }}
               >
-                Reset screen sharing
+                Clear reduced mode
               </button>
+              <span className="capture__notice-aside">
+                Screen still stuck? That part is Chrome’s, not ours — quit Chrome completely
+                (⌘Q) and reopen. Nothing on this page can release it.
+              </span>
             </div>
           )}
         </div>
