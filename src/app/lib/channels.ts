@@ -100,8 +100,26 @@ export interface TakeLoss {
   message: string
 }
 
-/** Below this a silent tail is a quiet ending, not a dead source. */
-const SILENT_TAIL_FLOOR_MS = 3_000
+/**
+ * A SILENT TAIL IS ONLY NEWS IF IT IS BOTH LONG AND A REAL SHARE OF THE TAKE.
+ *
+ * Second time this banner cried wolf. Robert, 2026-08-30: "this shit messages
+ * about audio - i dont know what the fuck, on edit audio seems allright". It
+ * had told him "Tab Audio went silent 234s in and never came back — the last 6s
+ * have no sound, and 4 attempts to reopen it did not take" on a 240 s take.
+ * Six seconds is 2.5 % of it: that is a person reaching for the stop button
+ * after the thing they were recording finished. Nothing was lost.
+ *
+ * TAB AUDIO IS LEGITIMATELY SILENT MUCH OF THE TIME — a screen recording with
+ * nothing playing is exactly digital silence — so the capture-side rescue,
+ * which reads 5 s of it as a dead tap, fires on healthy takes too. Its premise
+ * came from an autopsy where audio died at 71 s and stayed dead for seven
+ * minutes; that is a different signal from a quiet passage, and the reporting
+ * must not treat them as one.
+ */
+const SILENT_TAIL_FLOOR_MS = 10_000
+/** …and at least this much of the take, so a long take is not judged by a pause. */
+const SILENT_TAIL_FLOOR_RATIO = 0.1
 /**
  * PADDING IS THE GUARD WORKING, NOT A LOSS, AND SAYING OTHERWISE WAS A LIE.
  *
@@ -138,9 +156,9 @@ export function takeLosses(
     if (!d) continue
     const name = channelLabel(c.kind, caps)
     const tail = d.silentTailMs ?? 0
-    const revivals = d.revivals ?? 0
     const muted = (d.events ?? []).some((e) => e.type === 'mute')
-    if (tail >= SILENT_TAIL_FLOOR_MS) {
+    const tailShare = c.durationMs > 0 ? tail / c.durationMs : 0
+    if (tail >= SILENT_TAIL_FLOOR_MS && tailShare >= SILENT_TAIL_FLOOR_RATIO) {
       // THE ONE THAT COST HIM A TAKE: sound that stopped and never came back.
       const secs = Math.round(tail / 1000)
       const from = Math.max(0, Math.round((c.durationMs - tail) / 1000))
@@ -149,17 +167,7 @@ export function takeLosses(
         message:
           `${name} went silent ${from}s in and never came back — the last ${secs}s have no sound` +
           (muted ? ', because the source muted itself' : '') +
-          (revivals > 0 ? `, and ${revivals} attempt${revivals === 1 ? '' : 's'} to reopen it did not take` : '') +
           '.',
-      })
-    } else if (revivals > 0) {
-      // IT CAME BACK, so this is the rescue working rather than damage. Said as
-      // a fact to check, not as a warning: on the take where Robert saw this,
-      // everything had recorded fine. "There may be a gap" was a guess dressed
-      // as a finding.
-      out.push({
-        kind: c.kind,
-        message: `${name} dropped out mid-take and came back on its own${revivals > 1 ? ` (${revivals} times)` : ''} — the sound is complete either side of it.`,
       })
     } else if ((d.paddedMs ?? 0) >= PAD_FLOOR_MS) {
       out.push({
