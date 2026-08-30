@@ -144,14 +144,14 @@ export interface NativeRenderReport {
 }
 
 /** A fixture is identified by everything that changes its bytes. */
-function fixtureKey(w: number, h: number, fps: number, sec: number, mbps: number): string {
+export function fixtureKey(w: number, h: number, fps: number, sec: number, mbps: number): string {
   // `v3` is the PAINTER's version: a cached file built by an earlier painter is
   // a different picture at a different bitrate, and reusing one silently would
   // compare two takes rather than two renders.
   return `r2fix-v3-${w}x${h}-${fps}fps-${sec}s-${mbps}mbps`
 }
 
-async function existingFixture(key: string): Promise<Blob | null> {
+export async function existingFixture(key: string): Promise<Blob | null> {
   try {
     const blob = await blobStore.read(key)
     return blob.size > 0 ? blob : null
@@ -235,7 +235,7 @@ function makePainter(
 }
 
 /** Manufacture one video channel file, slower than real time if it must be. */
-async function buildChannelFile(opts: {
+export async function buildChannelFile(opts: {
   key: string
   width: number
   height: number
@@ -308,7 +308,7 @@ async function buildChannelFile(opts: {
   return { frames, bytes, ms: Math.round(performance.now() - t0) }
 }
 
-function channel(
+export function channel(
   kind: 'screen' | 'camera',
   blobKey: string,
   width: number,
