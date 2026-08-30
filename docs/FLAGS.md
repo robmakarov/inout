@@ -36,6 +36,12 @@ The URL wins over the sticky value; the sticky value wins over the default.
 | **The encoder budget** `?encoderbudget=` | `?encoderbudget=1` | Bounds the SCREEN's capture size at arm time, before any encoder opens, so a take cannot ask for more encoding than this machine has been seen to survive. A screen+camera take opens THREE encoders — raw screen, raw camera, composite — and until O15 nothing added them up. **It is not a constant**: a machine that has never been seen to collapse has no budget at all and nothing changes. The bound comes only from this machine's own history — a take that ran clean raises what it may attempt, a rate-ladder step or a composite giving up lowers it, and a take that worked outranks an older one that did not. Off because it changes what gets recorded on a machine with a collapse in its history; the measurement and the console line run either way, so your machine already knows its own numbers before you ever turn this on. |
 | **R128 loudness** `?loudness=` | `?loudness=r128` | Broadcast −14 LUFS normalization instead of the shipped p90 bounding. Off because R128 can only hit the target by turning takes **down**, and the shipped rule never attenuates. |
 
+## Quality modes
+
+| Switch | Example | What it does |
+|---|---|---|
+| **Capture quality** `?quality=` | `?quality=max` | **`auto` (default)** — the machine is protected from the take. Three things may reduce it under load, and they are one behaviour with one name: the ladder steps the frame RATE down and puts it back as the machine eases, a rate your encoder measured itself unable to sustain is not attempted, and (with `?encoderbudget=1`) a machine with a collapse in its history is bounded before anything opens. **The SIZE never moves — only the rate**, which is your own order of sacrifice. **`max`** — the take is protected from the machine. Nothing steps down and nothing is refused: your source's own resolution and its own rate, for the whole take. **What it honestly costs:** with nothing allowed to give, a machine that cannot keep up DROPS FRAMES, and a dropped frame is a worse artefact than a lower rate because it is uneven. Max is not "better" unconditionally — it is "the quality you asked for, or a visible failure, and never a quiet substitution". The ladder still measures and the console says once that it refused to step. |
+
 ## Test-only (do not use on a real take)
 
 | Switch | Example | What it does |

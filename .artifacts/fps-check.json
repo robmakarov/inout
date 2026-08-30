@@ -1,6 +1,6 @@
 {
   "task": "F15 fps-follows-source",
-  "ranAt": "2026-08-30T02:09:10.449Z",
+  "ranAt": "2026-08-30T02:31:36.697Z",
   "url": "https://inout-kappa.vercel.app/",
   "platform": "darwin",
   "chrome": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -9,67 +9,65 @@
   "lanes": [
     {
       "sourceFps": 60,
-      "url": "https://inout-kappa.vercel.app/?synthetic=1&sourcefps=1&sourceframe=0&screenfps=60&screensize=3024x1964&sourceres=1",
+      "url": "https://inout-kappa.vercel.app/?synthetic=1&sourcefps=1&sourceframe=0&screenfps=60&screensize=3024x1964&sourceres=1&quality=max",
       "captureLog": [
-        "[capture] native-res capture: 3024×1964 is too many pixels to sustain 60 fps — holding at 30 fps (F15)",
-        "[capture:arming] armed +149ms (2 channel(s), all start together)",
-        "[capture] encoder plan — 1 encoder(s): screen 3024x1964@30 = 178.2 Mpx/s (this machine has never been seen to collapse, so there is no budget to be over)",
+        "[capture] native-res capture: leaving display at 3024×1964@60 (O6)",
+        "[capture:arming] armed +120ms (2 channel(s), all start together)",
+        "[capture] encoder plan — 1 encoder(s): screen 3024x1964@60 = 356.3 Mpx/s (this machine has never been seen to collapse, so there is no budget to be over)",
         "[capture:arming] all start calls kicked +1ms",
         "[capture] SINGLE GENERATION — no live composite for this take: one mp4/AVC video channel already at the export geometry, so the composite would be a second encode of a picture we already have. The unedited export packet-copies the raw channel. Source-liveness detection and the composited preview are off with it.",
-        "[capture] mic audio first-sample offset=159.6ms provisional (ctx=0.2160s rate=48000)",
-        "[capture:arming] measured audio mic first-sample +164ms offset=159.6ms",
         "[capture] raw video channel on WebCodecs: avc1.640033 (prefer-hardware)",
+        "[capture] mic audio first-sample offset=107.2ms provisional (ctx=0.1200s rate=48000)",
+        "[capture:arming] measured audio mic first-sample +108ms offset=107.2ms",
         "[capture] raw video source frame: format BGRA · coded 3024x1964 · display 3024x1964",
-        "[capture:arming] measured video screen first-frame +590ms offset=589.1ms 3024x1964@30",
-        "[capture] raw video channel: 41 frames encoded of 128 in, 4 keep-alive (source was static), 91 DROPPED (encoder behind) · 13 keyframes · 516 KB · avc1.640033 prefer-hardware",
-        "[capture] mic audio anchor 118.7ms − 10.0ms reported input latency → 108.7ms (baseLatency 5.333333333333333ms)",
-        "[capture] B7 anchors — screen off=480ms raw=589.1ms firstFrame=40.2ms · mic off=0ms raw=118.7ms inputLatency=10ms",
-        "[capture] mix loudness measured live: peak 0.500 p99win 0.500 p90rms 0.3420 p20rms 0.0506 over 375296 frames — envelope 79 windows from 51 ms",
-        "[capture] this machine's video encoder: 151 fps at 1920x1080 = 312 Mpx/s (measured at mount, idle — what a take may attempt is decided from this rather than from a constant)"
+        "[capture:arming] measured video screen first-frame +144ms offset=143.8ms 3024x1964@60",
+        "[capture] mic audio anchor 85.1ms − 10.0ms reported input latency → 75.1ms (baseLatency 5.333333333333333ms)",
+        "[capture] raw video channel: 10 frames encoded of 282 in, 7 keep-alive (source was static), 275 DROPPED (encoder behind) · 4 keyframes · 62 KB · avc1.640033 prefer-hardware",
+        "[capture] B7 anchors — screen off=69ms raw=143.8ms firstFrame=41.9ms · mic off=0ms raw=85.1ms inputLatency=10ms",
+        "[capture] mix loudness measured live: peak 0.500 p99win 0.500 p90rms 0.3318 p20rms 0.0250 over 377856 frames — envelope 79 windows from 32 ms",
+        "[capture] this machine's video encoder: 131 fps at 1920x1080 = 272 Mpx/s (measured at mount, idle — what a take may attempt is decided from this rather than from a constant)"
       ],
-      "consoleErrors": [
-        "A VideoSample was garbage collected without first being closed. For proper resource management, make sure to call close() on all your VideoSamples as soon as you're done using them."
-      ],
+      "consoleErrors": [],
       "files": [
         {
-          "name": "xport-x_196sa087f2fd",
-          "bytes": 460510,
+          "name": "xport-x_dk1jfd72984c",
+          "bytes": 399249,
           "container": "mp4",
           "trackId": 1,
-          "timescale": 30,
+          "timescale": 60,
           "codedWidth": 1920,
           "codedHeight": 1080,
           "codec": "avc1",
-          "samples": 236,
-          "durationTicks": 236,
+          "samples": 479,
+          "durationTicks": 479,
           "minSampleTicks": 1,
-          "modalSampleTicks": 1024,
-          "gridFps": 0.03,
-          "cadenceFps": 30,
+          "modalSampleTicks": 1,
+          "gridFps": 60,
+          "cadenceFps": 60,
           "source": "stbl/stts",
           "truncated": false
         },
         {
-          "name": "rec_nt9txwji83ws_ch_h59w2ys3wbpa.mp4",
-          "bytes": 528419,
+          "name": "rec_faopg90rmmye_ch_ut25oqz33u0z.mp4",
+          "bytes": 63673,
           "container": "mp4",
           "trackId": 1,
-          "timescale": 30,
+          "timescale": 60,
           "codedWidth": 3024,
           "codedHeight": 1964,
           "codec": "avc1",
-          "samples": 41,
-          "durationTicks": 221,
+          "samples": 10,
+          "durationTicks": 447,
           "minSampleTicks": 1,
-          "modalSampleTicks": 2,
-          "gridFps": 15,
-          "cadenceFps": 5.57,
+          "modalSampleTicks": 1,
+          "gridFps": 60,
+          "cadenceFps": 1.34,
           "source": "moof/trun",
           "truncated": false
         },
         {
-          "name": "rec_nt9txwji83ws_ch_6z7n5e9qhhsh.webm",
-          "bytes": 130208,
+          "name": "rec_faopg90rmmye_ch_rop53itcsq7p.webm",
+          "bytes": 130849,
           "container": "webm",
           "trackId": null,
           "timescale": null,
@@ -87,13 +85,13 @@
         }
       ],
       "recorded": {
-        "id": "rec_nt9txwji83ws",
+        "id": "rec_faopg90rmmye",
         "channels": [
           {
             "kind": "screen",
             "w": 3024,
             "h": 1964,
-            "fps": 30
+            "fps": 60
           }
         ],
         "composite": null
@@ -105,13 +103,13 @@
         "recorded": true,
         "reachedEditor": true,
         "exported": true,
-        "sourceDelivered": false,
+        "sourceDelivered": true,
         "compositeWrittenAtRate": false,
-        "exportCarriesTheTakesFrames": false,
-        "productRecordedRate": false,
+        "exportCarriesTheTakesFrames": true,
+        "productRecordedRate": true,
         "announcedOnlyWhenMoved": false,
         "instantCopyStillFires": false,
-        "noConsoleErrors": false
+        "noConsoleErrors": true
       },
       "chips": {
         "Screen": true,
@@ -119,34 +117,34 @@
         "Mic": true,
         "Tab Audio": false
       },
-      "rafFps": 121,
-      "exportMeta": "0:08 · 450 KB · 1920×1080",
+      "rafFps": 123,
+      "exportMeta": "0:08 · 390 KB · 1920×1080",
       "measured": {
         "exportSamples": [
-          236
+          479
         ],
         "compositeSamples": null,
         "exportGridFps": [
-          0.03
+          60
         ],
         "exportCadenceFps": [
-          30
+          60
         ],
         "exportGeometry": [
           "1920x1080"
         ],
         "compositeGridFps": null,
         "compositeCadenceFps": null,
-        "rawScreenGridFps": 15,
-        "rawScreenCadenceFps": 5.57
+        "rawScreenGridFps": 60,
+        "rawScreenCadenceFps": 1.34
       },
       "throughput": {
-        "arrived": 128,
-        "rawEncoded": 41,
-        "rawDropped": 91,
+        "arrived": 282,
+        "rawEncoded": 10,
+        "rawDropped": 275,
         "compositeEncoded": null,
         "compositeDropped": 0,
-        "rawLine": "[capture] raw video channel: 41 frames encoded of 128 in, 4 keep-alive (source was static), 91 DROPPED (encoder behind) · 13 keyframes · 516 KB · avc1.640033 prefer-hardware",
+        "rawLine": "[capture] raw video channel: 10 frames encoded of 282 in, 7 keep-alive (source was static), 275 DROPPED (encoder behind) · 4 keyframes · 62 KB · avc1.640033 prefer-hardware",
         "compLine": null
       },
       "throughputOk": false,
