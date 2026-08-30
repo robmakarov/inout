@@ -2023,3 +2023,13 @@
   color: var(--warn);
   border-bottom: 1px solid var(--surface-3);
 }
+
+/* What the sweep actually did. Sits under the line it answers — a Reclaim that
+   frees nothing must SAY nothing-was-freed, because silence is indistinguishable
+   from the broken button this replaced. */
+.takes__orphan-note {
+  margin: 4px 0 0;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.35;
+}

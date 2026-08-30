@@ -19,7 +19,13 @@ import { StreamTarget } from 'mediabunny'
 import { newId } from '@core/id'
 import { blobStore, createPositionedWriter } from '@core/store'
 
-const SCRATCH_PREFIX = 'xport-'
+/**
+ * Exported because the ORPHAN SWEEP has to know these files are owned. They are
+ * unreferenced by any Recording — that is what an export scratch IS — so a
+ * sweep that goes by references alone reads a live export as garbage. See
+ * reclaim.ts.
+ */
+export const SCRATCH_PREFIX = 'xport-'
 /** Muxer writes coalesce into chunks of this size before hitting disk. */
 const CHUNK_SIZE = 4 * 1024 * 1024
 

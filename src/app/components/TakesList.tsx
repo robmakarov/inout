@@ -27,6 +27,8 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
   const [busy, setBusy] = useState(false)
   /** Bytes on disk belonging to no take — see reclaim(). */
   const [orphanBytes, setOrphanBytes] = useState(0)
+  /** What the last Reclaim actually did. Null until one has been pressed. */
+  const [reclaimed, setReclaimed] = useState<string | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -37,7 +39,8 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
         const { recordingsRepo } = await import('@core/store')
         const rows = await recordingsRepo.list()
         if (alive) setTakes(rows)
-        if (alive) setOrphanBytes(await orphanTotal(rows))
+        const { orphanBlobBytes } = await import('@core/store/reclaim')
+        if (alive) setOrphanBytes(await orphanBlobBytes())
       } catch {
         if (alive) setTakes([])
       }
@@ -47,38 +50,49 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
     }
   }, [])
 
-  const refreshOrphans = async (rows: Recording[]): Promise<void> => {
-    setOrphanBytes(await orphanTotal(rows).catch(() => 0))
+  const refreshOrphans = async (): Promise<void> => {
+    const { orphanBlobBytes } = await import('@core/store/reclaim')
+    setOrphanBytes(await orphanBlobBytes().catch(() => 0))
   }
 
   /**
-   * RECLAIM WHAT BELONGS TO NOTHING. A take that freezes never reaches stop, so
-   * no Recording row is written — but its file is already on disk, and until
-   * now nothing in the product could see it or remove it. Robert, 2026-08-30,
-   * with the app showing zero takes: "i dont see any takes and you telling me
-   * its 1,1 gb". One orphaned file, 1,138 MB, from an evening of takes that
-   * froze.
+   * RECLAIM WHAT BELONGS TO NOTHING — and it is BOOT'S OWN SWEEP, not a second
+   * copy of it. This used to inline its own loop, and the copy is what broke:
+   * one `await blobStore.remove()` with no catch, so the first file that
+   * refused removal threw, the loop died, nothing else was touched and the
+   * number on screen never moved. Robert, 2026-08-30: "reclaim button still
+   * fucking doing nothing, fix it or fucking remove this shit". The likeliest
+   * file to refuse is the export scratch, which this now leaves alone anyway —
+   * so the button was most reliably broken right after an export, which is
+   * exactly when someone looks at their disk.
    *
-   * Never touches the blobs a CRASHED take is still hoping to be salvaged from
-   * (recovery.ts's pending manifest): those are unreferenced on purpose.
+   * Delegating to reclaim.ts means the count, the button and the boot sweep
+   * cannot disagree about what an orphan is. And the result is REPORTED: a
+   * sweep that frees nothing has to say so, because silence is what "does
+   * nothing" is made of.
    */
   const reclaim = async (): Promise<void> => {
     setBusy(true)
     try {
-      const { blobStore } = await import('@core/store')
-      const { pendingBlobKeys } = await import('@core/capture/recovery')
-      const keep = new Set([...referencedKeys(takes ?? []), ...pendingBlobKeys()])
-      for (const f of await blobStore.list()) {
-        if (keep.has(f.key) || f.key.startsWith('__')) continue
-        await blobStore.remove(f.key)
-      }
-      setOrphanBytes(0)
+      const { reclaimOrphanBlobs, orphanBlobBytes } = await import('@core/store/reclaim')
+      const result = await reclaimOrphanBlobs()
+      setOrphanBytes(await orphanBlobBytes().catch(() => 0))
+      setReclaimed(
+        result.removed === 0 && result.failed === 0
+          ? 'Nothing left to free.'
+          : `Freed ${bytes(result.bytes)}` +
+              (result.failed > 0
+                ? ` — ${result.failed} file${result.failed === 1 ? '' : 's'} still in use, restarting the app will get ${result.failed === 1 ? 'it' : 'them'}.`
+                : '.'),
+      )
+    } catch (err) {
+      setReclaimed(`Could not free the space: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setBusy(false)
     }
   }
 
-  if (takes === null || (takes.length === 0 && orphanBytes <= 0)) return null
+  if (takes === null || (takes.length === 0 && orphanBytes <= 0 && !reclaimed)) return null
 
   const remove = async (id: string): Promise<void> => {
     setBusy(true)
@@ -87,7 +101,7 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
       await recordingsRepo.remove(id)
       const left = (takes ?? []).filter((r) => r.id !== id)
       setTakes(left)
-      await refreshOrphans(left)
+      await refreshOrphans()
     } finally {
       setBusy(false)
     }
@@ -99,7 +113,7 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
       const { recordingsRepo } = await import('@core/store')
       for (const r of takes ?? []) await recordingsRepo.remove(r.id)
       setTakes([])
-      await refreshOrphans([])
+      await refreshOrphans()
     } finally {
       setBusy(false)
     }
@@ -141,17 +155,24 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
           </button>
         )}
       </div>
-      {orphanBytes > 0 && (
+      {(orphanBytes > 0 || reclaimed) && (
         <div className="takes__orphan">
           <span>
-            {bytes(orphanBytes)} left behind by takes that never finished — no recording to open,
-            nothing using it.
+            {orphanBytes > 0
+              ? `${bytes(orphanBytes)} left behind by takes that never finished — no recording to open, nothing using it.`
+              : /* The sweep has to survive its own success: the line stays put
+                   long enough to say what happened, or a button that worked
+                   looks exactly like the button that did not. */
+                (reclaimed ?? '')}
           </span>
-          <button type="button" className="takes__all" disabled={busy} onClick={() => void reclaim()}>
-            Reclaim
-          </button>
+          {orphanBytes > 0 && (
+            <button type="button" className="takes__all" disabled={busy} onClick={() => void reclaim()}>
+              Reclaim
+            </button>
+          )}
         </div>
       )}
+      {orphanBytes > 0 && reclaimed && <div className="takes__orphan-note">{reclaimed}</div>}
       <ul className="takes__list">
         {takes.map((r) => (
           <li key={r.id}>
@@ -193,27 +214,6 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
 }
 
 /** Every blob key any take points at — the rest is orphaned. */
-function referencedKeys(rows: Recording[]): string[] {
-  const keys: string[] = []
-  for (const r of rows) {
-    for (const c of r.channels) keys.push(c.blobKey)
-    if (r.composite) keys.push(r.composite.blobKey)
-  }
-  return keys
-}
-
-async function orphanTotal(rows: Recording[]): Promise<number> {
-  const { blobStore } = await import('@core/store')
-  const { pendingBlobKeys } = await import('@core/capture/recovery')
-  const keep = new Set([...referencedKeys(rows), ...pendingBlobKeys()])
-  let total = 0
-  for (const f of await blobStore.list()) {
-    if (keep.has(f.key) || f.key.startsWith('__')) continue
-    total += f.size
-  }
-  return total
-}
-
 function bytes(n: number): string {
   const mb = n / 1048576
   return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb.toFixed(mb >= 10 ? 0 : 1)} MB`
