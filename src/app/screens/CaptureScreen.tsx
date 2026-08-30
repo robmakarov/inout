@@ -467,6 +467,16 @@ export function CaptureScreen() {
         // request Chrome will never settle, and replacing the document is the
         // only way to get one that can ask again. Nothing was waited for and
         // nothing was recorded, so it costs the user a blink instead of 30 s.
+        // A REQUEST WE HELD BACK, NOT A FAILURE — and the one wedge-shaped
+        // reason that must NOT refresh (Robert, 2026-08-30: two tabs recording
+        // at once wedges Chrome, and the same collision needs no second tab).
+        // The previous request is still pending, so it can still come back on
+        // its own; replacing this document is exactly what would orphan it
+        // where nothing can ever settle it. Say what happened and stop.
+        if (err.kind === 'screen' && err.reason === 'busy') {
+          setWedgeNotice(err.message)
+          return
+        }
         if (err.kind === 'screen' && err.reason === 'stale') {
           noteWedgeReload()
           setWedgeNotice(err.message)
@@ -485,7 +495,12 @@ export function CaptureScreen() {
         }
         // A wedge that survived the refresh: this is the ⌘Q text, and it must
         // still be on screen when the user comes back from the other tab.
-        if (err.reason === 'wedged' || err.reason === 'permission' || err.reason === 'stale') {
+        if (
+          err.reason === 'wedged' ||
+          err.reason === 'permission' ||
+          err.reason === 'stale' ||
+          err.reason === 'busy'
+        ) {
           setWedgeNotice(err.message)
         }
         else toast(err.message, 'error')

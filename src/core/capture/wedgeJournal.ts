@@ -39,7 +39,7 @@ const KEY = 'inout.wedgeJournal.v1'
  *  entries is several wedges' worth of story and a few KB. */
 const MAX_ENTRIES = 24
 
-export type WedgeJournalKind = 'wedge' | 'reload' | 'boot' | 'block'
+export type WedgeJournalKind = 'wedge' | 'reload' | 'boot' | 'block' | 'settle'
 
 export interface WedgeJournalEntry {
   /** Epoch ms — the one field every entry has, and the only one that lets a
@@ -63,6 +63,17 @@ export interface WedgeJournalEntry {
   /** block: how long the main thread was unavailable, and where the tab was. */
   blockedMs?: number
   vis?: string
+  /** settle: a screen request that came back AFTER the take gave up on it —
+   *  how late, what it brought, and whether anyone still wanted it. The one
+   *  entry that decides whether an abandoned request can ever come back, or
+   *  whether it is gone the moment our budget expires. */
+  lateMs?: number
+  outcome?: string
+  claimed?: boolean
+  /** wedge: how many requests from this document were still unsettled when
+   *  this one was dispatched. Chrome takes one screen request at a time, so
+   *  anything above zero is the collision that hangs it. */
+  pending?: number
 }
 
 let mem: WedgeJournalEntry[] | null = null

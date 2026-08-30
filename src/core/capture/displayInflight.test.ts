@@ -5,6 +5,7 @@ import { resetDeviceGuardForTests } from './deviceGuard'
 import { resetDisplayReleaseForTests } from './displayRelease'
 import {
   displayRequestOutstanding,
+  displayRequestPending,
   markDisplayRequest,
   resetDisplayInflightForTests,
 } from './displayInflight'
@@ -133,6 +134,92 @@ describe('one outstanding screen request per document', () => {
     expect((secondErr as CaptureError).reason).toBe('stale')
     // The whole point: no second call, and no 30 s spent discovering that.
     expect(calls).toBe(1)
+  })
+})
+
+describe('one screen request at a time — Chrome takes exactly one', () => {
+  /**
+   * ROBERT, 2026-08-30: "i tried to run record from two tabs at same time and
+   * wedge happen ... and it happens after that too". Chrome serialises screen
+   * requests; a second one dispatched while another is unsettled hangs. The
+   * two-tab version is his repro, but the same collision needs no second tab:
+   * press record, let the picker open, cancel the arm — a page cannot cancel
+   * getDisplayMedia, so that request is still pending — then press again.
+   */
+  it('A CANCELLED ARM LEAVES A PENDING REQUEST, and the next press does not add a second', async () => {
+    vi.useFakeTimers()
+    let calls = 0
+    vi.stubGlobal('MediaStream', StubStream)
+    vi.stubGlobal('MediaRecorder', StubRecorder)
+    vi.stubGlobal('navigator', {
+      mediaDevices: {
+        // The picker is open and the user never answers it.
+        getDisplayMedia: () => {
+          calls += 1
+          return new Promise(() => {})
+        },
+        getUserMedia: () => new Promise(() => {}),
+      },
+      permissions: { query: () => Promise.resolve({ state: 'granted' }) },
+    })
+    const config = { screen: true, camera: false, mic: false, systemAudio: false }
+
+    const ac = new AbortController()
+    const first = createCaptureSession(config, { signal: ac.signal }).catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(100)
+    ac.abort()
+    await first
+    expect(calls).toBe(1)
+    // Nothing declared it dead — our budget never fired — but Chrome still has it.
+    expect(displayRequestOutstanding()).toBe(false)
+    expect(displayRequestPending()).toBe(true)
+
+    const second = createCaptureSession(config).catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(50)
+    const err = await second
+    expect(err).toBeInstanceOf(CaptureError)
+    // 'busy', NOT 'stale': the UI must not refresh on this one. The pending
+    // request can still settle, and replacing the document orphans it.
+    expect((err as CaptureError).reason).toBe('busy')
+    expect(calls).toBe(1)
+  })
+
+  it('a share that arrives with nobody left to want it is STOPPED', async () => {
+    vi.useFakeTimers()
+    const stopped: string[] = []
+    const track = {
+      stop: () => {
+        stopped.push('video')
+      },
+    }
+    let deliver!: (s: unknown) => void
+    const late = new Promise((r) => (deliver = r))
+    const req = markDisplayRequest(late)
+    req.stuck()
+    deliver(new StubStream([track]))
+    await vi.advanceTimersByTimeAsync(10)
+    // Already written off — no grace, it goes the moment it lands. An unowned
+    // screen track is a lit macOS indicator and a live capture session for
+    // this origin, which is what "and it happens after that too" is made of.
+    expect(stopped).toEqual(['video'])
+  })
+
+  it('a share the take actually took is left alone', async () => {
+    vi.useFakeTimers()
+    const stopped: string[] = []
+    const track = {
+      stop: () => {
+        stopped.push('video')
+      },
+    }
+    let deliver!: (s: unknown) => void
+    const arriving = new Promise((r) => (deliver = r))
+    const req = markDisplayRequest(arriving)
+    deliver(new StubStream([track]))
+    await Promise.resolve()
+    req.claim()
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(stopped).toEqual([])
   })
 })
 

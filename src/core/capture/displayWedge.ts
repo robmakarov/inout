@@ -320,7 +320,7 @@ export function resetDisplayWedge(): void {
  * — it is the request we REFUSED to make because this document already had one
  * stuck in it (displayInflight.ts), so it is known rather than inferred.
  */
-export type DisplayStall = 'permission' | 'wedge' | 'stale'
+export type DisplayStall = 'permission' | 'wedge' | 'stale' | 'busy'
 
 /**
  * WHICH OF THE TWO NEVER-SETTLING FAILURES THIS IS (W1, item 3).
@@ -411,6 +411,14 @@ export function displayStallMessage(
     `turn ${name} on, then quit ${name} completely (⌘Q) and reopen it.`
   // The request we declined to make because one was already stuck here. The
   // app reloads on this, so the text is a status line, not a set of steps.
+  // A REQUEST WE HELD BACK BECAUSE ONE IS STILL OPEN. Not a failure of the
+  // browser and not a diagnosis: Chrome takes one screen request at a time,
+  // and the previous one has not come back yet. Nothing is refreshed and
+  // nothing is escalated — the next press works as soon as it settles.
+  if (stall === 'busy') {
+    return `${name} is still working on the last screen request, so this one was not sent. ` +
+      `Nothing was recorded.`
+  }
   if (stall === 'stale') {
     return `${name} still has the last screen request open, so a new one cannot get through. ` +
       `Refreshing the app to clear it…`

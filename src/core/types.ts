@@ -833,8 +833,15 @@ export class CaptureError extends Error {
      * same frame is what turns one wedge into every-press-wedges. The UI must
      * ALWAYS refresh on this one — unlike 'wedged', it is not a diagnosis that
      * a refresh might fail to cure, it is a document that is known to be
-     * unusable and a refresh is the only thing that replaces it. */
-    public readonly reason: 'denied' | 'unavailable' | 'no-channels' | 'wedged' | 'permission' | 'stale',
+     * unusable and a refresh is the only thing that replaces it.
+     * 'busy': no request was made either, and this one is NOT a diagnosis at
+     * all — a screen request from this document is still pending, so Chrome's
+     * capture queue is already occupied and a second dispatch is the exact
+     * collision that hangs it (Robert, 2026-08-30: two tabs recording at once
+     * wedged it on demand). The UI must NOT refresh on this: the pending
+     * request can still settle, and replacing the document is what orphans it
+     * beyond anyone's reach. */
+    public readonly reason: 'denied' | 'unavailable' | 'no-channels' | 'wedged' | 'permission' | 'stale' | 'busy',
     message: string,
   ) {
     super(message)

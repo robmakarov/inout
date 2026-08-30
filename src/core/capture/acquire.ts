@@ -32,7 +32,7 @@ import {
   type DisplayStall,
   type DisplayRequestLevel,
 } from './displayWedge'
-import { displayRequestOutstanding, markDisplayRequest } from './displayInflight'
+import { displayRequestOutstanding, displayRequestPending, markDisplayRequest, unsettledDisplayRequests } from './displayInflight'
 import { appendWedgeJournal } from './wedgeJournal'
 import { beginDisplayForensics, describeForensics, noteScreenDelivered } from './stallForensics'
 import { knownGranted, rememberGrant, type DeviceGrant } from './grants'
@@ -1102,7 +1102,7 @@ export function acquireChannelsProgressive(
   let displayPromise: Promise<MediaStream> | null = null
   /** The live request's handle — the timeout path marks it stuck so the NEXT
    *  press knows this frame can no longer ask (displayInflight.ts). */
-  let displayReq: { stuck: () => void } | null = null
+  let displayReq: { stuck: () => void; claim: () => void } | null = null
   /** The live request's forensic watch — read again at the timeout, where its
    *  report is the only witness statement a wedge ever gives. */
   let displayForensics: ReturnType<typeof beginDisplayForensics> | null = null
@@ -1147,6 +1147,35 @@ export function acquireChannelsProgressive(
       if (config.systemAudio) {
         fail({ kind: 'system-audio', message: msg, denied: false, timedOut: true, stall: 'stale' })
         mark('system-audio', 'failed', 'a previous screen request is still outstanding')
+      }
+    } else if (displayRequestPending()) {
+      // CHROME TAKES ONE SCREEN REQUEST AT A TIME, and this document already
+      // has one out (displayInflight.ts). Robert proved what a second one does
+      // (2026-08-30, two tabs at once: "wedge happen"), and the same collision
+      // is reachable with no second tab at all — press record, let the picker
+      // open, cancel the arm, press record again: the first request is still
+      // pending because a page cannot cancel getDisplayMedia, and the second
+      // one is the one that hangs forever.
+      //
+      // So this press does not send it. Nothing that could have connected is
+      // given up — the call this removes is the one that was going to hang —
+      // and unlike 'stale' NOTHING is refreshed: the pending request can still
+      // settle by itself, and replacing this document is what orphans it where
+      // nobody can ever settle it again.
+      const msg = displayStallMessage('busy', detectPlatform().browser, 'failed')
+      console.warn('[capture] a screen request from this page is still pending — not dispatching a second one')
+      appendWedgeJournal({
+        kind: 'wedge',
+        stall: 'busy',
+        level: displayLevel,
+        count: displayWedgeCount(),
+        pending: unsettledDisplayRequests(),
+      })
+      fail({ kind: 'screen', message: msg, denied: false, timedOut: true, stall: 'busy' })
+      mark('display', 'failed', 'a screen request from this page is still pending')
+      if (config.systemAudio) {
+        fail({ kind: 'system-audio', message: msg, denied: false, timedOut: true, stall: 'busy' })
+        mark('system-audio', 'failed', 'a screen request from this page is still pending')
       }
     } else {
       // NEVER RACE THE PREVIOUS SHARE'S TEARDOWN (displayRelease.ts — Robert's
@@ -1256,6 +1285,11 @@ export function acquireChannelsProgressive(
   if (displayPromise) {
     try {
       const display = await displayPromise
+      // THIS TAKE OWNS WHAT ARRIVED. Said here, first thing, because anything
+      // that comes back unclaimed is stopped as an abandoned share
+      // (displayInflight.ts) — the leak that kept a capture session alive for
+      // this origin after a take had already given up on it.
+      displayReq?.claim()
       // Before capDisplayTrack's await, before anything: from this line on the
       // screen is live and Chrome's indicator is lit, so from this line on it
       // must be releasable no matter what happens next.
@@ -1385,6 +1419,9 @@ export function acquireChannelsProgressive(
           stall,
           level: displayLevel,
           count: displayWedgeCount(),
+          // Chrome takes one at a time: anything above 1 here (this request
+          // included) means the take collided with one of ours.
+          pending: unsettledDisplayRequests(),
           ...(witness
             ? {
                 focus: witness.focus,

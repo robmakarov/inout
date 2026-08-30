@@ -55,6 +55,22 @@ phase: MVP validation (2026-07-16)
   NEXT wedge names its layer. THE PLAYBOOK FOR HIS NEXT REPORT — verdict table, what is ruled out,
   the two Robert-gated endpoint levers — is `docs/SCREEN_WEDGE.md`, top section; sessions start
   there, not from the commits. Contained cost of a wedge meanwhile: one press.
+  THE MECHANISM HAS A NAME NOW (2026-08-30, Robert: "i tried to run record from two tabs at same time
+  and wedge happen ... and it happens after that too"). CHROME TAKES ONE SCREEN REQUEST AT A TIME: a
+  second one dispatched while another is unsettled hangs instead of queueing. Two tabs is his repro;
+  the same collision needed no second tab, because this app was making it itself. `displayInflight`
+  refused a dispatch only when a request was STUCK (our budget had given up on it) — a merely PENDING
+  one blocked nothing, so press-record → picker opens → cancel the arm (a page CANNOT cancel
+  getDisplayMedia, so that request stays pending) → press record again put a second request into an
+  occupied queue. Pending now blocks too, under its own reason `'busy'`, and 'busy' is the one
+  wedge-shaped failure that does NOT refresh: the pending request can still settle, and replacing the
+  document is what orphans it where nothing can settle it again. AND THE SHARE THAT ARRIVES LATE IS NO
+  LONGER LEAKED: the raw promise's late resolution was swallowed (`rawDisplay.catch(() => undefined)`),
+  so a stream delivered after the take gave up stayed live with no owner — indicator lit, capture
+  session alive for this origin, every later take colliding with it, which is "it happens after that
+  too" exactly, and is what resetting the site's permissions was killing by hand. An unclaimed arrival
+  is now stopped and written to the journal as a `settle` entry, which is also the first evidence about
+  whether an abandoned request can come back at all.
   2026-08-30 EVENING, THREE THINGS MOVED. (1) ROBERT CLEARED A LIVE WEDGE BY RESETTING THE SITE'S
   PERMISSIONS FROM INSIDE CHROME, after this project had told him three times that only ⌘Q would do
   it. A claim that dies with ONE ORIGIN's permission entry is not machine-wide macOS SCK rot, so the
