@@ -631,6 +631,28 @@ const runners: Runner[] = [
       })
     },
   },
+  {
+    id: 'nativerender',
+    title: 'R2 — does a LONG native-resolution render kill the GPU process, and what grows first?',
+    detail:
+      'MANUFACTURES a 3024x1964@60 raw channel offline (slower than real time, cached in OPFS) and runs the PRODUCTION exportRecording over it at 1080p and 1440p. This is the rig every earlier attempt could not build: the crash is in the EXPORT, so the source needs to be a FILE and not a live capture, and a file is not bound by what a synthetic screen can paint in real time. Run `--headed --gpu` or the verdict is worthless — headless may use a software GL stack, and exp.mjs\'s --gpu sampler is what sees the GPU process\'s RSS and its PID changing (the crash itself). {"takeSec":240,"camera":true,"outputs":["1080p"]}.',
+    run: async (args) => {
+      const { runNativeRender } = await import('../perf/nativeRender')
+      return runNativeRender({
+        sourceW: typeof args?.sourceW === 'number' ? args.sourceW : undefined,
+        sourceH: typeof args?.sourceH === 'number' ? args.sourceH : undefined,
+        sourceFps: typeof args?.sourceFps === 'number' ? args.sourceFps : undefined,
+        takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined,
+        sourceMbps: typeof args?.sourceMbps === 'number' ? args.sourceMbps : undefined,
+        outputs: Array.isArray(args?.outputs)
+          ? (args.outputs as ('540p' | '720p' | '1080p' | '1440p' | 'source')[])
+          : undefined,
+        camera: args?.camera === true,
+        rebuild: args?.rebuild === true,
+        buildBudgetSec: typeof args?.buildBudgetSec === 'number' ? args.buildBudgetSec : undefined,
+      })
+    },
+  },
 ]
 
 // X3 (Robert ruling 2026-08-25, "no standing experimental tree"): the dormant

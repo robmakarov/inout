@@ -50,6 +50,10 @@ function parseArgs(argv) {
   let refocus = false
   let realThrottling = false
   let captureTitle = 'INOUT'
+  // Raw Chrome switches, repeatable. Exists for R2: the GPU-crash lane has to
+  // A/B a BROWSER-level switch (--disable-gpu-watchdog) with everything else
+  // identical, and one hardcoded flag per question does not scale.
+  const chromeFlags = []
   for (const a of argv) {
     if (a.startsWith('--port=')) devPort = Number(a.slice(7))
     else if (a.startsWith('--timeout=')) timeoutSec = Number(a.slice(10))
@@ -61,6 +65,7 @@ function parseArgs(argv) {
     else if (a === '--refocus') refocus = true
     else if (a === '--real-throttling') realThrottling = true
     else if (a.startsWith('--capture-title=')) captureTitle = a.slice(16)
+    else if (a.startsWith('--chrome-flag=')) chromeFlags.push(a.slice(14))
     else positional.push(a)
   }
   const [experiment, jsonArgs] = positional
@@ -81,6 +86,7 @@ function parseArgs(argv) {
     refocus,
     realThrottling,
     captureTitle,
+    chromeFlags,
   }
 }
 
@@ -167,6 +173,7 @@ async function main() {
     refocus,
     realThrottling,
     captureTitle,
+    chromeFlags,
   } = parseArgs(process.argv.slice(2))
   // Extra query params reach the page's own knobs (e.g. `quiet=0.05`, the
   // synthetic-audio level used to exercise the loudness rescue).
@@ -219,6 +226,7 @@ async function main() {
       // Capability-gate smokes (e.g. the Apple WebKit audio path) need the UA
       // set before the page loads, so it is a launch flag, not a CDP override.
       ...(ua ? [`--user-agent=${ua}`] : []),
+      ...chromeFlags,
       pageUrl,
     ],
     { stdio: ['ignore', 'ignore', 'pipe'] },
