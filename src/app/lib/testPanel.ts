@@ -30,6 +30,46 @@ function fromSearch(): boolean | null {
   return null
 }
 
+/**
+ * THE WAY BACK OUT, which this switch shipped without — Robert, 2026-08-30,
+ * looking at the settings line on his editing screen: "test setting shown in
+ * not test mode now, what the fuck?".
+ *
+ * He was not misreading it. `?test` is STICKY on purpose — he asked for one
+ * link that stays on — but nothing was ever built to turn it off except typing
+ * `?test=0`, another URL parameter, which is the exact thing this whole switch
+ * existed to spare him. So a link opened once followed him into ordinary use,
+ * put a test surface on a screen he was not testing on, and gave him no way to
+ * see why or make it stop.
+ *
+ * That is the same ratchet W1 took out of the wedge ladder: a state a machine
+ * can enter by itself and cannot leave by itself is not a setting, it is a
+ * trap. A sticky switch needs a visible off, and now it has one.
+ */
+export function setTestPanelEnabled(on: boolean): void {
+  try {
+    localStorage.setItem(KEY, on ? '1' : '0')
+  } catch {
+    /* memory-only: the URL below still decides this load */
+  }
+}
+
+/**
+ * This page's URL with the test switch stripped out. Turning the panel off has
+ * to leave the address bar clean too: `?test` in the URL WINS over storage on
+ * every load (that is the documented precedence), so writing '0' while the
+ * parameter is still there would turn itself straight back on at the next
+ * refresh — the off button would look broken exactly once and then be
+ * disbelieved forever.
+ */
+export function urlWithoutTestParam(): string {
+  if (typeof location === 'undefined') return '/'
+  const url = new URL(location.href)
+  url.searchParams.delete('test')
+  url.searchParams.delete('text')
+  return url.pathname + (url.search ? url.search : '') + url.hash
+}
+
 export function testPanelEnabled(): boolean {
   const url = fromSearch()
   if (url !== null) {

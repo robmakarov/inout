@@ -12,7 +12,7 @@ import {
 import { encoderBudgetEnabled, setEncoderBudget } from '@core/capture/encoderBudget'
 import { resolutionStepEnabled, setResolutionStep } from '@core/capture/resolutionStep'
 import { nativeResEnabled, setNativeRes } from '@core/capture/nativeRes'
-import { urlOverrides } from '@app/lib/testPanel'
+import { setTestPanelEnabled, urlOverrides, urlWithoutTestParam } from '@app/lib/testPanel'
 
 /**
  * EVERY SWITCH WE HAVE BEEN TESTING, IN ONE PLACE — Robert, 2026-08-30: "i m
@@ -149,7 +149,28 @@ export function TestPanel() {
       >
         Everything back to defaults
       </button>
-      <div className="tp__foot">Applies to the next take. Nothing here needs a reload.</div>
+      {/* THE OFF SWITCH THIS PANEL SHIPPED WITHOUT. `?test` is sticky by
+          design — one link, kept — but sticky with no exit is a trap, and it
+          sprang: the settings line followed Robert onto an editing screen he
+          was not testing on, and the only documented way out was another URL
+          parameter. Reloads on purpose, and only from here, where there is no
+          session to lose: the gate is read at render by two screens, and the
+          address bar has to be cleaned in the same move or the parameter turns
+          it back on at the next refresh. */}
+      <button
+        type="button"
+        className="tp__reset tp__reset--exit"
+        onClick={() => {
+          setTestPanelEnabled(false)
+          location.replace(urlWithoutTestParam())
+        }}
+      >
+        Turn off test mode
+      </button>
+      <div className="tp__foot">
+        Applies to the next take. Nothing here needs a reload. Turning test mode off hides this
+        panel and the settings line in the editor — open <code>/?test</code> again to bring it back.
+      </div>
     </div>
   )
 }
