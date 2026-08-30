@@ -19,7 +19,7 @@ import { editsRepo, recordingsRepo } from '@core/store'
 import { analytics } from '@core/analytics'
 import { useAppStore } from '@app/state/store'
 import { detectCapabilities } from '@core/capabilities'
-import { missingChannelsMessage } from '@app/lib/channels'
+import { missingChannelsMessage, takeLosses } from '@app/lib/channels'
 import { usePlayback } from '@app/hooks/usePlayback'
 import { Player } from '@app/components/Player'
 import { Timeline } from '@app/components/Timeline'
@@ -295,6 +295,15 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
           {missingChannelsMessage(recording.missing, detectCapabilities())}
         </div>
       ) : null}
+      {/* WHAT THIS TAKE LOST WHILE RECORDING. The take has always carried the
+          evidence — silent tails, tap rebuilds, wall-clock padding — and it has
+          always been invisible, so a take whose tab audio died was something
+          you found out by listening (Robert, 2026-08-30). */}
+      {takeLosses(recording.channels, detectCapabilities()).map((l) => (
+        <div key={`${l.kind}-loss`} className="editor__missing" role="alert">
+          {l.message}
+        </div>
+      ))}
 
       <div className="editor__player">
         <Player

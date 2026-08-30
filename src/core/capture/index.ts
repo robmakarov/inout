@@ -5,9 +5,6 @@ export { ACQUIRE_TIMEOUT_MS } from './acquire'
 // to be able to clear it with a button. displayWedge.ts imports nothing but a
 // type, so this costs the first-paint chunk nothing — unlike session.ts below.
 export { displayRequestLevel, resetDisplayWedge } from './displayWedge'
-// O12: the capture screen hands a kept share back. persistentShare.ts imports
-// nothing, so this costs the first-paint chunk nothing.
-export { keepShareEnabled, releaseHeldShare } from './persistentShare'
 export type { DisplayStall } from './displayWedge'
 export { warmCapturePipeline } from './prearm'
 // O7: session.ts and recovery.ts are reached through these loaders, never

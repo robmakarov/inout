@@ -274,6 +274,18 @@ export async function startMeasuredAudioCapture(opts: {
   const onTrackUnmute = (): void => {
     noteEvent('unmute')
     console.warn(`[capture] ${label} audio track unmuted at +${sinceEpochS()}s`)
+    // A TRACK THAT UNMUTES DESERVES ANOTHER CHANCE. The revive path below
+    // refuses to act on a muted track — correctly, since Chrome owns the mute
+    // and a clone of a muted track is muted too — but it also burned an attempt
+    // and left the exponential backoff where it was. So a source that muted
+    // briefly and came back could arrive at the far end of the backoff, or out
+    // of attempts entirely, and stay silent for the rest of the take with the
+    // one mechanism that could rescue it already spent on the mute.
+    // Robert 2026-08-30: "after 1 minute … tab audio died completly" — the same
+    // shape as the 2026-08-26 autopsy (rec_cjqcxsfhg02b, zeros from t=71 s
+    // while the same share's video kept playing).
+    reviveAttempts = 0
+    silentRunStartFrame = null
   }
   const onTrackEndedEvidence = (): void => {
     noteEvent('ended')
@@ -646,6 +658,16 @@ export async function startMeasuredAudioCapture(opts: {
         const silentFrames = framesWritten + frames - silentRunStartFrame
         const dueFrames = REVIVE_BASE_FRAMES * 2 ** reviveAttempts
         if (silentFrames >= dueFrames && reviveAttempts < REVIVE_MAX_ATTEMPTS) {
+          // THE BACKOFF ADVANCES ON EVERY CHECK, INCLUDING A SKIP — and it has
+          // to. Making only a real rebuild count (first cut of this fix,
+          // 2026-08-30) left `dueFrames` where it was, so a muted, silent track
+          // re-entered this branch on EVERY batch and warned on every one of
+          // them. Console work on the thread that carries the PCM is exactly
+          // what a starved audio path cannot afford: measured on the v2 oracle,
+          // interleaved against clean main, spur went -49.9/-34.9/-33.1 dB
+          // against main's -57.8/-40.2/-51.6 and failed 2 of 3 runs.
+          // The real fix for spending the rescue on a mute is onTrackUnmute
+          // resetting the count, which is where it belongs.
           reviveAttempts++
           if (track.readyState !== 'live' || track.muted) {
             noteEvent(track.muted ? 'revive-skipped:muted' : 'revive-skipped:ended')
