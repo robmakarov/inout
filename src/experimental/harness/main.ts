@@ -632,6 +632,26 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'f16t1',
+    title: 'F16 spike T1 — is a TRANSCODE actually several times faster than a full render?',
+    detail:
+      'F16 rests on "Min and Medium are background TRANSCODES of the High file, pre-made in idle time". The task\'s own gate says that is currently reasoning, not measurement. Three lanes on one manufactured native take: RENDER (today\'s exportRecording off the raw channel), FROM-RAW (mediabunny Conversion straight off the native channel — heavy decode, ONE 4:2:0 generation) and FROM-HIGH (Conversion off the already-made High file — light decode, a SECOND generation). The spec leaves that last choice explicitly open: "pick by measurement: one extra 4:2:0 generation against a heavier decode". Reports x-realtime for each, which is what decides whether "done before the panel opens" is true. {"takeSec":120,"rungs":["540p","720p"]}.',
+    run: async (args) => {
+      const { runF16Transcode } = await import('../perf/f16Transcode')
+      return runF16Transcode({
+        sourceW: typeof args?.sourceW === 'number' ? args.sourceW : undefined,
+        sourceH: typeof args?.sourceH === 'number' ? args.sourceH : undefined,
+        sourceFps: typeof args?.sourceFps === 'number' ? args.sourceFps : undefined,
+        takeSec: typeof args?.takeSec === 'number' ? args.takeSec : undefined,
+        sourceMbps: typeof args?.sourceMbps === 'number' ? args.sourceMbps : undefined,
+        rungs: Array.isArray(args?.rungs)
+          ? (args.rungs as ('540p' | '720p' | '1080p' | '1440p' | 'source')[])
+          : undefined,
+        rebuild: args?.rebuild === true,
+      })
+    },
+  },
+  {
     id: 'nativerender',
     title: 'R2 — does a LONG native-resolution render kill the GPU process, and what grows first?',
     detail:
