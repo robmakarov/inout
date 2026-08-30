@@ -31,17 +31,28 @@ phase: MVP validation (2026-07-16)
   taking input, because the export snapshotted the edit at the start), and what it produced sits above
   the slider afterwards. `AppMode` lost `'share'`. The cloud link survives as ONE button on that strip
   instead of an account card, so nothing that worked was removed.
-- THE SLIDER WAS A PROGRESS BAR WITH DOTS ON IT, and that is a whole class of mistake worth naming
-  (UI1 second pass, Robert: "slider dont look like claude code effort at all, fix it"). A 4 px rail, a
-  continuous accent fill and a small round handle read as "43 % of the way through something" — the
-  one thing a STEPPED control must never look like. An effort control reads as a METER: discrete
-  blocks, filled to where you are, empty above, thick enough to be blocks rather than a line. The
-  blocks are positioned absolutely from the same percentages the handle and the labels use, because a
-  flex gap accumulates and a control whose parts disagree about where they are is worse than a plain
-  bar. Export and For AI sit on the track's own line ("export buttons on same line with slider right
-  to it i said"); the editor's copy has no title row and no note ("no need for top and bottom
-  captions") — that sentence moved onto the Export button's tooltip, because "copies in a second" vs
-  "re-renders for minutes" is a real difference between two presses of the same button.
+- I INVENTED A PROGRESS INDICATOR TWICE AND HAD TO BE SENT A SCREENSHOT (UI1, 2026-08-30, three
+  rounds: "slider dont look like claude code effort at all, fix it", then "slider dont fucking look
+  like this, is in it?" with a picture of the real control). The class of mistake is worth naming
+  because both attempts made it in the same direction — I kept reaching for a FILL:
+    attempt 1 — thin rail, continuous accent fill, round handle. Reads as "43 % of the way through
+                something", which is the one thing a stepped control must never look like.
+    attempt 2 — the same fill cut into blocks. A five-bar signal meter: "more is better" rather than
+                "you are on step three of five".
+  THE REAL ONE HAS NO FILL ANYWHERE. One continuous dark track, a faint dot at each stop inside it,
+  and a white rounded-RECTANGLE handle sitting on the stop you are on. The only thing that moves is
+  the handle, and nothing is coloured, because nothing is being measured — a step is a choice, not an
+  amount. The handle travels INSET by half its own width so it never hangs off either end, and the
+  dots share that inset so it always lands exactly on one; the position is ONE expression used by the
+  dots, the handle and the labels (`--qs-tw` on the .qs root, not on the track — declared on the
+  track it was invisible to the labels, which are its sibling, and the three middle steps collapsed
+  into a heap at the left edge).
+  Export and For AI sit on the track's own line ("export buttons on same line with slider right to it
+  i said"). BOTH copies are captionless now — the editor's ("no need for top and bottom captions")
+  and the capture screen's ("remove all three captions near slider in main screen"). The step names
+  under the track say which one is chosen; the sentence each step carried survives as the track's
+  tooltip, and the instant-vs-re-render difference as the Export button's, because "copies in a
+  second" vs "re-renders for minutes" is a real difference between two presses of the same button.
 - NO PAUSE BUTTON; THE CONTROL IS "CONTINUE FROM THE PLAYHEAD", IN THE EDITOR (UI1 second pass).
   Robert: "no need for fucking pause button, record pressed - on editing appearing again left to play
   button, if pressed continues where dragger in timeline stands (if it cant work now put it in
@@ -51,9 +62,10 @@ phase: MVP validation (2026-07-16)
   instant, with open questions about channels, B7's once-per-session audio anchors, and a composite
   that is one file from one encoder for one arming. `session.pause()`/`resume()` are untouched (F6
   still holds the devices), so a first cut can be "continue = resume an un-stopped take".
-- THE TAKE CARDS CARRY A DECODED FRAME (UI1 second pass) — `buildFilmstrip` with a single instant,
-  taken at 1 s rather than 0 because the first frame of a screen capture is very often a blank
-  desktop and every card would look the same. One at a time, newest first, lazily imported, and every
+- THE TAKE CARDS CARRY A DECODED FRAME (UI1 second pass) — `buildFilmstrip` with a single instant, taken
+  from the MIDDLE of the take ("mid record screenshot on image") — not the first frame, which on a
+  screen capture is very often a blank desktop, and not a fixed offset either, which is the same
+  mistake on a longer take. The picture fills the card's height. One at a time, newest first, lazily imported, and every
   failure silent: no picture and the card is what it was. SHOW IN FOLDER IS ON THE CARD AND CANNOT DO
   WHAT IT SAYS — no web API reveals a file in Finder, by design — so it says where the file is
   (the browser's Downloads, ⌘⇧J) rather than opening a tab that fails silently.
