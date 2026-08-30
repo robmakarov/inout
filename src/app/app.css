@@ -1791,7 +1791,7 @@
 .xdock {
   position: fixed;
   left: 50%;
-  bottom: calc(12px + env(safe-area-inset-bottom));
+  bottom: calc(10px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
@@ -1799,6 +1799,12 @@
   gap: 8px;
   z-index: 90;
   width: min(92vw, 720px);
+}
+/* One row's height, reserved: the dock floats, the layout shrinks, and the
+   bottom controls stay clickable above it. Extra rows stack upward over the
+   content — rare, and better than reserving a growing band. */
+.app--docked {
+  padding-bottom: calc(64px + env(safe-area-inset-bottom));
 }
 .xdock .xstrip {
   width: 100%;

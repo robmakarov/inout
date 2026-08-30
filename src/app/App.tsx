@@ -19,6 +19,10 @@ const EditorScreen = lazy(async () => ({ default: (await loadEditorScreen()).Edi
 
 function Main() {
   const mode = useAppStore((s) => s.mode)
+  // The dock is a fixed overlay; when it has rows the app reserves one row's
+  // height so the bottom controls (quality bar, record bar) stay reachable
+  // instead of sitting behind it.
+  const docked = useAppStore((s) => s.exportJobs.length > 0)
 
   // Never lose a recording to a refresh: salvage interrupted sessions and
   // re-open the latest un-dismissed recording straight in the editor.
@@ -71,7 +75,7 @@ function Main() {
   }, [])
 
   return (
-    <div className="app">
+    <div className={docked ? 'app app--docked' : 'app'}>
       {mode === 'capture' && <CaptureScreen />}
       {mode === 'editor' && (
         <Suspense fallback={<div className="app__loading" />}>
