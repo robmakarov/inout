@@ -398,3 +398,11 @@ Privacy & Security → Screen & System Audio Recording via the `x-apple.systempr
 (macOS only; Windows has no such grant and Wayland refuses rather than hangs). It appears on the
 SECOND stall in a row, because the first is answered by the app's own refresh at no cost to the user
 and a second one after that has ruled the page out.
+
+robert 2026-08-30 (2) — NO USER ACTION, AT ALL ("no fucking opening system settings, search for no
+user action ways, fix it, make it never happen, we improved it before, all was working, now something
+broke"). The System Settings button from (1) is removed the same session. The standard this sets is
+the useful part: a remedy the user has to perform is not a fix, and an app that prints instructions
+after failing is still failing. Everything the wedge does now happens without the user — the request
+steps down a rung, the page replaces itself when its frame is poisoned, and the text says only what
+happened and that nothing was recorded.

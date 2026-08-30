@@ -25,21 +25,31 @@ phase: MVP validation (2026-07-16)
   toggle the browser off and on, and look for the macOS re-authorisation dialog hiding behind a
   window, which stalls every share and survives every ⌘Q. The refreshed page shows that escalated text
   too, since that is the screen the user actually reads before deciding what to do.
-  AND THE WAY OUT IS A BUTTON NOW, because a user has no terminal (Robert: "i will not do anything in
-  console … what will users do if this happens?"). From the SECOND stall in a row the notice carries
-  "Open Screen Recording settings", which navigates to `x-apple.systempreferences:` and lands System
-  Settings on Privacy & Security → Screen & System Audio Recording — the pane with the browser's own
-  toggle on it — with one line under it for the part macOS insists on (toggle, ⌘Q, reopen). macOS only:
-  Windows has no such grant and Wayland REFUSES rather than hangs, so elsewhere the button would point
-  at a setting that does not exist. Second, not third: the first stall is answered by the app's own
-  refresh at no cost to the user, and a second one after that has ruled the page out — waiting for a
-  third is waiting for someone to give up. The text shrank to two sentences when the button took over
-  the instructions.
-  WHAT THIS DOES NOT DO: it does not stop the FIRST wedge. That one is Chrome's/macOS's. The only
-  change that would remove the failure surface rather than contain it — acquiring the share ONCE per
-  session and holding it across takes — was offered and DECLINED for now (DECISIONS 2026-08-30 (1)):
-  it lights the macOS sharing indicator while nothing is recording, and "devices are touched ONLY
-  after the record click" stands.
+  THE LADDER STOPPED CLIMBING BACK ONTO THE WEDGE, which is what was actually re-breaking him. Read
+  off his own Chrome profile mid-session: `{"wedgedAt":…,"level":2,"count":5,"goodRun":2}` — five
+  wedges, parked on the floor, and two good takes into EARNING A CLIMB back onto the rung that had
+  wedged him five times. Twice now the climb has been driven by a counter and twice the counter walked
+  the machine back into the failure: W1 climbed on ONE good take (wedge every second record), a6a8240
+  made it THREE (every fourth). Slower is not fixed. A good take at rung N is evidence about rung N;
+  it is never evidence about the rung above, which is the one that choked. THE CLIMB IS GONE. The only
+  way up is a whole day with no wedge, and it buys ONE rung, not the whole ladder (WEDGE_PROBE_AFTER_MS).
+  That is the pre-W1 ratchet with the two things fixed that made it hurt: the rungs no longer drop
+  anything the user chose, and there is no banner or button announcing a mode — so sitting in it costs
+  nothing worth a wedge every fourth record to escape.
+  AND THE LADDER GREW THE FLOOR IT NEVER HAD. Rung 2 was called "nothing of ours left to drop" and
+  that was false: the three raw-audio flags (`echoCancellation/noiseSuppression/autoGainControl:
+  false`, added 2026-08-26 to stop tab music warbling) ride every rung on the claim that they "cannot
+  reject or hang a request" — asserted, never measured. His five wedges happened WITH the ladder on
+  rung 2, so whatever chokes is in what rung 2 still sends. RUNG 3 is `{video: true, audio: true}` and
+  the raw flags MOVE to the delivered track (`repairDisplayAudio`), so nothing the user chose is
+  dropped — the tab-audio checkbox is still in the picker and the music is still raw. If the track
+  refuses them the console says so and we are where this project was before 2026-08-26, on a machine
+  that has already wedged three times.
+  NO INSTRUCTIONS, ANYWHERE (Robert: "no fucking opening system settings, search for no user action
+  ways"). A System Settings deep-link button shipped and was removed the same session on his ruling.
+  Every remedy this app used to print is work for the user, and the two he tried — refresh, ⌘Q — did
+  not work. The stall text now says what happened, that nothing was recorded, and that the request has
+  been narrowed. The next press is the whole of the user's job.
 
 - QUALITY IS ONE DECISION NOW, MADE BEFORE THE TAKE, AND IT BINDS BOTH HALVES (UI1, 2026-08-30,
   Robert's eight-item UI pass: "make chatgpt/claudecode effort-like slider for our quality choosing …
