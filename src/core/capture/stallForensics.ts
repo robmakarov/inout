@@ -98,23 +98,37 @@ export function beginDisplayForensics(
   const onBlur = (): void => push('blur')
   const onFocus = (): void => push('focus')
   const onVis = (): void => push(document.visibilityState)
-  const hasDom = typeof window !== 'undefined' && typeof document !== 'undefined'
-  if (hasDom) {
+  // A WITNESS MUST NEVER BE ABLE TO KILL THE THING IT WATCHES. This runs
+  // inside the acquisition path, between the dispatch and the budget — a throw
+  // here (a stubbed document without addEventListener was the first) would
+  // read as a failed take with no failure recorded. So every DOM touch is
+  // guarded, and losing the listeners only weakens the report to 'quiet'.
+  let hasDom = false
+  try {
     // The page may already be unfocused at dispatch (a click can land with
     // focus elsewhere in edge cases) — record the starting state so the fold
     // does not misread "focus" as a return that had no departure.
-    if (!document.hasFocus()) events.push({ type: 'blur', at: 0 })
+    if (typeof document !== 'undefined' && !document.hasFocus()) {
+      events.push({ type: 'blur', at: 0 })
+    }
     window.addEventListener('blur', onBlur)
     window.addEventListener('focus', onFocus)
     document.addEventListener('visibilitychange', onVis)
+    hasDom = true
+  } catch {
+    /* no DOM, or a partial one — observe nothing rather than break the take */
   }
   const deliveries = screenDeliveriesThisSession()
   return {
     settle: () => {
       if (!hasDom) return
-      window.removeEventListener('blur', onBlur)
-      window.removeEventListener('focus', onFocus)
-      document.removeEventListener('visibilitychange', onVis)
+      try {
+        window.removeEventListener('blur', onBlur)
+        window.removeEventListener('focus', onFocus)
+        document.removeEventListener('visibilitychange', onVis)
+      } catch {
+        /* same guard as the install */
+      }
     },
     report: (now = performance.now()) => ({
       waitedMs: Math.round(now - t0),

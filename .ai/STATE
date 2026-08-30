@@ -50,6 +50,13 @@ phase: MVP validation (2026-07-16)
   Every remedy this app used to print is work for the user, and the two he tried — refresh, ⌘Q — did
   not work. The stall text now says what happened, that nothing was recorded, and that the request has
   been narrowed. The next press is the whole of the user's job.
+  EVIDENCE PHASE ("keep thinking how to prevent it completly"): today disproved reload-cures-it AND
+  relaunch-cures-it, which convicts the layer under Chrome unless rung 3 proves otherwise.
+  `stallForensics.ts` watches every display request (focus trace + deliveries-this-session + page age,
+  console line + analytics on stall) so the next wedge names its suspect — the verdict table is in
+  BACKLOG. A hung getDisplayMedia cannot be cancelled by any page code (no abort in the spec), so if
+  the below-Chrome verdict lands, complete prevention is a native capture layer and that is Robert's
+  product call; until then the contained cost of a wedge is one press.
 
 - QUALITY IS ONE DECISION NOW, MADE BEFORE THE TAKE, AND IT BINDS BOTH HALVES (UI1, 2026-08-30,
   Robert's eight-item UI pass: "make chatgpt/claudecode effort-like slider for our quality choosing …
