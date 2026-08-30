@@ -4,6 +4,7 @@ import { aspectOf, frameForAspect, sourceFrameEnabled, sourceResEnabled } from '
 import { DEFAULT_FRAME_RATE, normalizeRate, sourceRateEnabled } from '@core/rate'
 import { singleGenCaptureEnabled } from '@core/singleGen'
 import { preemptiveRefusalAllowed, rateLadderAllowed } from './captureQuality'
+import { diskVerdict } from './diskGuard'
 import {
   differsMeaningfully,
   resolutionStepEnabled,
@@ -131,6 +132,8 @@ const THROTTLE_BUDGET_MS = 400
  * finished failing yet.
  */
 const SUSTAINED_TAKE_MIN_MS = 10_000
+/** B5 — how often the disk is asked how much room is left. */
+const DISK_CHECK_MS = 5_000
 /**
  * Deadlines on the stop path, for the same reason arming has them (note 3): a
  * recorder that never answers must not be able to freeze a finished take.
@@ -399,6 +402,9 @@ class Session implements CaptureSession {
   /** O16 — when the screen's delivered size first stopped matching the size its
    *  current segment's encoder was opened at. Null while they agree. */
   private sizeDifferingSinceMs: number | null = null
+  /** B5 — the disk is asked every few seconds, not every tick. */
+  private lastDiskCheckMs = 0
+  private diskWarned = false
   private lastResStepAtMs: number | null = null
   private resStepsTaken = 0
   /** O16 — a step is async and the tick is not; never start a second one. */
@@ -1937,6 +1943,50 @@ class Session implements CaptureSession {
     this.emit({ type: 'tick', elapsedMs, remainingMs })
     if (remainingMs !== null && remainingMs <= 0) return this.autoStop()
     this.watchScreenSize()
+    this.watchDisk(elapsedMs)
+  }
+
+  /**
+   * B5 — IS THERE ROOM TO FINISH? Nothing in this product has ever asked.
+   *
+   * The takes got very much bigger (one of Robert's at 3024x1964@60 wrote
+   * 1,138 MB before it froze) and the old 30-minute cap that bounded the damage
+   * is gone. A take that hits the storage quota mid-write loses whatever the
+   * writer had not acknowledged — the user gets neither the recording nor the
+   * space. Stopping with room to spare gives them the recording.
+   *
+   * Every few seconds, not every tick: `estimate()` is a real query and the
+   * answer cannot move fast enough to be worth 250 ms.
+   */
+  private watchDisk(elapsedMs: number): void {
+    const now = performance.now()
+    if (now - this.lastDiskCheckMs < DISK_CHECK_MS) return
+    this.lastDiskCheckMs = now
+    if (typeof navigator === 'undefined' || !navigator.storage?.estimate) return
+    void navigator.storage
+      .estimate()
+      .then((est) => {
+        if (this.stateInternal !== 'recording') return
+        const takeBytes = this.channels.reduce((n, c) => n + c.bytes, 0)
+        const v = diskVerdict({
+          usageBytes: est.usage ?? 0,
+          quotaBytes: est.quota ?? 0,
+          takeBytes,
+          takeMs: elapsedMs,
+        })
+        if (!v || v.level === 'ok') return
+        if (v.level === 'warn') {
+          if (this.diskWarned) return
+          this.diskWarned = true
+          console.warn(`[capture] ${v.message}`)
+          this.emit({ type: 'channel-error', kind: 'screen', message: v.message })
+          return
+        }
+        console.warn(`[capture] ${v.message}`)
+        this.emit({ type: 'channel-error', kind: 'screen', message: v.message })
+        this.autoStop()
+      })
+      .catch(() => undefined)
   }
 
   /**
