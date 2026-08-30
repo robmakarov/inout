@@ -415,6 +415,33 @@ export const blobStore = {
     }
   },
 
+  /**
+   * Every stored blob WITH ITS SIZE, in one pass.
+   *
+   * `listKeys` gives names and `usageBytes` gives a total, and between them
+   * there was no way to ask the question that matters: which bytes belong to
+   * nothing? A take that FREEZES never reaches doStop, so no Recording row is
+   * ever saved — but the durable writer has already streamed its file to disk.
+   * Measured on Robert's machine 2026-08-30, after an evening of takes that
+   * froze: one orphaned file of 1,138 MB, with the app showing no takes at all
+   * and nothing anywhere able to delete it. "i dont see any takes and you
+   * telling me its 1,1 gb".
+   */
+  async list(): Promise<{ key: string; size: number }[]> {
+    const dir = (await blobsDir()) as FileSystemDirectoryHandle & AsyncIterableDirectory
+    const out: { key: string; size: number }[] = []
+    for await (const handle of dir.values()) {
+      if (handle.kind !== 'file') continue
+      try {
+        out.push({ key: handle.name, size: (await (handle as FileSystemFileHandle).getFile()).size })
+      } catch {
+        // A file being written by a live take can refuse to open; it is not an
+        // orphan by definition, so skipping it is the safe answer.
+      }
+    }
+    return out
+  },
+
   async usageBytes(): Promise<number> {
     const dir = (await blobsDir()) as FileSystemDirectoryHandle & AsyncIterableDirectory
     let total = 0

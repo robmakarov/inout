@@ -1994,3 +1994,17 @@
   font-size: 11px;
   line-height: 1.4;
 }
+
+/* Storage left behind by takes that never finished (2026-08-30). Its own row
+   because it is not a take: there is nothing to open, only bytes to reclaim. */
+.takes__orphan {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--warn);
+  border-bottom: 1px solid var(--surface-3);
+}
