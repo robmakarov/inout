@@ -4,6 +4,7 @@ import { clampEditState, defaultEditState } from '@core/timeline'
 import { qualityStepById } from '@core/qualityStep'
 import { useAppStore } from '@app/state/store'
 import { CHANNEL_META } from '@app/lib/channels'
+import { useTakeThumbs } from '@app/hooks/useTakeThumbs'
 import { Icon } from '@app/components/Icon'
 
 /**
@@ -44,6 +45,8 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
   const [reclaimed, setReclaimed] = useState<string | null>(null)
   /** The take being exported straight from its card, and how far along. */
   const [saving, setSaving] = useState<{ id: string; label: string } | null>(null)
+  /** One decoded frame per take (UI1) — best-effort, empty until it lands. */
+  const thumbs = useTakeThumbs(takes)
 
   useEffect(() => {
     let alive = true
@@ -208,6 +211,21 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
   const notWired = () =>
     useAppStore.getState().toast('Sending and links aren’t wired up yet — use Download for now')
 
+  /**
+   * WHERE THE FILE WENT. A page cannot open Finder — there is no web API that
+   * reveals a path, and there will not be one, because it is the browser's
+   * sandbox working. What it CAN do is send you to the browser's own downloads
+   * list, which is where the "Show in folder" button that does work lives.
+   * Chrome blocks a script navigation to chrome://downloads, so this says so
+   * rather than opening a tab that fails silently.
+   */
+  const showInFolder = () =>
+    useAppStore
+      .getState()
+      .toast(
+        'A web page can’t open Finder — your exports are in the browser’s Downloads (⌘⇧J in Chrome), where “Show in Folder” is.',
+      )
+
   return (
     <div className="takes">
       <div className="takes__head">
@@ -243,6 +261,21 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
           const savingThis = saving?.id === r.id
           return (
             <li key={r.id} className="takecard">
+              {/* UI1, Robert: "dont change how inside card look, just add
+                  preview picture left to it". So the card is a row now and
+                  everything that was in it is the column on the right,
+                  unchanged. A take whose frame will not decode simply gets the
+                  empty box, which is the shape the card had before. */}
+              <button
+                type="button"
+                className="takecard__thumb"
+                disabled={busy}
+                aria-label="Open this take"
+                onClick={() => void openTake(r, 'edit')}
+              >
+                {thumbs[r.id] ? <img src={thumbs[r.id]} alt="" /> : <span />}
+              </button>
+              <div className="takecard__body">
               <div className="takecard__top">
                 <span className="takecard__when">{when(r.createdAt)}</span>
                 <span className="takecard__len">{clock(r.durationMs)}</span>
@@ -313,6 +346,22 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
                   <Icon name="link" size={13} />
                   <span>Copy link</span>
                 </button>
+                {/* UI1 — SHOW IN FOLDER, and it is honest about what it can do.
+                    A web page cannot reveal a file in Finder or Explorer: there
+                    is no API for it, and the one place that button really
+                    exists is the browser's own downloads list. So this opens
+                    THAT, which is the closest thing the platform allows and the
+                    place the file actually is. */}
+                <button
+                  type="button"
+                  className="takecard__btn"
+                  title="Open the browser’s downloads — a web page cannot reach Finder itself"
+                  onClick={showInFolder}
+                >
+                  <Icon name="folder" size={13} />
+                  <span>Show in folder</span>
+                </button>
+              </div>
               </div>
             </li>
           )

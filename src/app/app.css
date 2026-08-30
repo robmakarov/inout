@@ -79,6 +79,9 @@
   height: 100%;
   display: flex;
   flex-direction: column;
+  /* UI1: the takes and the quality slider are the same column — Robert: "make
+     card same width as quality slider". One value, so they cannot drift. */
+  --pane: min(560px, 100%);
   background: radial-gradient(
     120% 90% at 50% 30%,
     color-mix(in srgb, var(--bg), var(--text) 4%) 0%,
@@ -705,6 +708,25 @@
 .transport__back:hover {
   background: var(--surface-2);
   color: var(--text);
+}
+/* UI1: continue the take from the playhead, left of play — Robert: "record
+   pressed - on editing appearing again left to play button". Record red,
+   because it is the same action the big button on the capture screen is. */
+.transport__rec {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--record);
+  transition:
+    background var(--t-fast) var(--ease),
+    transform var(--t-fast) var(--ease);
+}
+.transport__rec:hover {
+  background: var(--record-soft);
+  transform: scale(1.06);
 }
 .transport__play {
   width: 38px;
@@ -1339,27 +1361,36 @@
 }
 
 /* ---------- quality slider (UI1) ----------
-   Robert: "make chatgpt/claudecode effort-like slider for our quality
-   choosing". One rail, five detents, a filled track behind the thumb, the step
-   names under the detents and one sentence underneath. Same control on the
-   capture screen and in the editor — it is one component, so it cannot drift.  */
+   Robert asked for a "chatgpt/claudecode effort-like slider" and the first
+   attempt was a PROGRESS BAR with dots on it — a 4 px rail, a continuous fill,
+   a small handle. It read as "43 % of the way through something", which is the
+   one thing a stepped control must never look like ("slider dont look like
+   claude code effort at all, fix it").
+
+   An effort control reads as a METER: discrete blocks, filled up to where you
+   are, empty above. So the track is segmented, one block per step, thick
+   enough to be blocks rather than a line. Same control on the capture screen
+   and in the editor — one component, so it cannot drift.                      */
 
 .qs {
   width: 100%;
-  max-width: 520px;
   display: flex;
   flex-direction: column;
   user-select: none;
+}
+.controlbar .qs {
+  width: var(--pane, min(560px, 100%));
 }
 .qs--disabled {
   opacity: 0.45;
   pointer-events: none;
 }
+
 .qs__head {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
-  margin-bottom: 9px;
+  margin-bottom: 10px;
 }
 .qs__title {
   font-size: 11px;
@@ -1368,32 +1399,46 @@
   text-transform: uppercase;
   color: var(--text-faint);
 }
-/* The chosen step, said in words next to the label — the rail alone is a
+/* The chosen step, said in words next to the label — the track alone is a
    position, and a position is not a name. */
 .qs__value {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
+
+/* The track and whatever sits beside it, on ONE line — Robert: "export buttons
+   on same line with slider right to it i said". */
+.qs__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.qs__track-col {
+  flex: 1;
+  min-width: 0;
+}
 .qs__actions {
-  margin-left: auto;
+  flex: none;
   display: flex;
   align-items: center;
   gap: 8px;
+  /* Centred on the TRACK, not on the track-plus-labels column, so the buttons
+     line up with the thing they are beside. */
+  margin-top: 3px;
 }
 
-/* A generous hit area around a thin rail: the rail is 4 px and nobody can
-   click 4 px. The box is what takes the pointer and the keyboard. */
+/* A generous hit area around the blocks: the track is 10 px and a pointer
+   target should not be. The box takes the pointer and the keyboard. */
 .qs__railbox {
   position: relative;
-  height: 22px;
+  height: 24px;
   display: flex;
   align-items: center;
-  padding: 0 8px;
   cursor: pointer;
   touch-action: none;
-  border-radius: var(--r-full);
+  border-radius: var(--r-sm);
   outline: none;
 }
 .qs__railbox:focus-visible {
@@ -1402,72 +1447,58 @@
 .qs__rail {
   position: relative;
   flex: 1;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--surface-3);
+  height: 10px;
 }
-.qs__rail-fill {
-  position: absolute;
-  left: 0;
-  top: 0;
-  height: 100%;
-  border-radius: 2px;
-  background: var(--accent);
-  transition: width var(--t-fast) var(--ease);
-}
-/* Everything past the take's ceiling. Drawn as a distinct stretch of rail
-   rather than left absent: a ladder that silently loses its top rungs looks
-   broken, one that shows them struck out says "you chose this before you
-   recorded" without a sentence. */
-.qs__rail-locked {
+/* One block per step. Positioned absolutely from the same percentages the
+   handle and the labels use — a flex gap accumulates, so the fourth boundary
+   would sit a few pixels off the fourth label, and a control whose parts
+   disagree about where they are is worse than a plain bar. */
+.qs__block {
   position: absolute;
   top: 0;
   height: 100%;
-  border-radius: 2px;
-  background: repeating-linear-gradient(
-    -45deg,
-    var(--surface-3) 0 3px,
-    transparent 3px 6px
-  );
 }
-.qs__dot {
+/* The visible block, inset so there is a real gap between one step and the
+   next — drawn on a pseudo-element rather than by shrinking the box, so the
+   box keeps the exact percentage geometry the handle and the labels use. */
+.qs__block::after {
+  content: '';
   position: absolute;
-  top: 50%;
-  width: 7px;
-  height: 7px;
-  margin: -3.5px 0 0 -3.5px;
-  border-radius: 50%;
+  inset: 0 3px;
+  border-radius: 3px;
   background: var(--surface-3);
   transition: background var(--t-fast) var(--ease);
 }
-.qs__dot--on {
+.qs__block--on::after {
   background: var(--accent);
 }
-.qs__dot--locked {
-  background: transparent;
-  box-shadow: inset 0 0 0 1px var(--surface-3);
+.qs__block--locked::after {
+  background: repeating-linear-gradient(-45deg, var(--surface-2) 0 4px, transparent 4px 8px);
+  box-shadow: inset 0 0 0 1px var(--surface-2);
 }
 .qs__thumb {
   position: absolute;
   top: 50%;
-  width: 16px;
-  height: 16px;
-  margin: -8px 0 0 -8px;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
   border-radius: 50%;
   background: var(--text);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  border: 3px solid var(--bg);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
   transition: left var(--t-fast) var(--ease);
   pointer-events: none;
 }
 
-/* The names, anchored under their own detent. Absolute so the first and last
-   sit exactly over the rail's ends rather than being spread by a flex row —
-   a label that does not line up with its dot is a control that lies about
-   where it is. */
+/* The names, anchored under their own step. Absolute so the first and last sit
+   exactly over the ends of the track rather than being spread by a flex row —
+   a label that does not line up with its block is a control that lies about
+   where it is. The two ends are flush rather than centred, for the same
+   reason. */
 .qs__labels {
   position: relative;
   height: 30px;
-  margin: 4px 8px 0;
+  margin-top: 5px;
 }
 .qs__label {
   position: absolute;
@@ -1477,17 +1508,27 @@
   flex-direction: column;
   align-items: center;
   gap: 1px;
-  padding: 2px 5px;
+  padding: 1px 4px;
   border: none;
   background: none;
   border-radius: var(--r-sm);
   color: var(--text-faint);
   font: inherit;
   font-size: 11px;
-  line-height: 1.15;
+  line-height: 1.2;
   white-space: nowrap;
   cursor: pointer;
   transition: color var(--t-fast) var(--ease);
+}
+.qs__label--first {
+  transform: none;
+  align-items: flex-start;
+  padding-left: 0;
+}
+.qs__label--last {
+  transform: translateX(-100%);
+  align-items: flex-end;
+  padding-right: 0;
 }
 .qs__label:hover {
   color: var(--text-dim);
@@ -1521,6 +1562,7 @@
   color: var(--text-dim);
   text-align: center;
   min-height: 32px;
+  margin-top: 4px;
   padding: 0 4px;
 }
 .qs__note-soft {
@@ -1534,8 +1576,10 @@
 }
 
 /* ---------- the editor's copy of it (UI1) ----------
-   Same slider, wider, with the two things a finished take can become sitting
-   beside it — Robert: "buttons export and for ai right to it not under". */
+   Same slider, no title row and no note — Robert: "second screenshot no need
+   for top and bottom captions". What that sentence said has moved onto the
+   Export button's tooltip; the step names and sizes stay, because those are
+   the choice itself rather than a caption about it. */
 .qbar {
   flex: none;
   width: 100%;
@@ -1545,18 +1589,113 @@
   justify-content: center;
   padding-bottom: calc(6px + env(safe-area-inset-bottom));
 }
-.qbar .qs {
-  max-width: none;
-}
-.qbar .qs__note {
-  text-align: left;
-  min-height: 30px;
+.qs--compact .qs__labels {
+  height: 28px;
 }
 .qbar__go,
 .qbar__ai {
   flex: none;
-  padding: 7px 16px;
+  padding: 8px 16px;
   font-size: 13px;
+}
+
+/* ---------- the export, in the editor's own slot (UI1) ----------
+   Not a screen: the render replaces the slider while it runs, and what it
+   produced sits above the slider afterwards. Robert: "rendering loader show on
+   same screen where download button is, so we have only main screen, recording
+   screen, and editing screen".                                                */
+.xstrip {
+  flex: none;
+  width: 100%;
+  max-width: min(100%, calc((100dvh - var(--below, 431px)) * 16 / 9));
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 7px 12px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--surface-2);
+  font-size: 12.5px;
+}
+.xstrip--progress {
+  justify-content: center;
+  margin-bottom: calc(6px + env(safe-area-inset-bottom));
+}
+.xstrip--saved {
+  margin-bottom: 8px;
+  border-color: color-mix(in srgb, var(--ok), transparent 70%);
+  color: var(--ok);
+}
+.xstrip__pct {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text);
+}
+.xstrip__phase,
+.xstrip__eta {
+  color: var(--text-dim);
+}
+.xstrip__cancel {
+  margin-left: 8px;
+}
+.xstrip__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.xstrip__meta {
+  flex: none;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.xstrip__btn {
+  flex: none;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid var(--surface-3);
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.xstrip__btn + .xstrip__btn {
+  margin-left: 0;
+}
+.xstrip__btn:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.xstrip__x {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: none;
+  border-radius: var(--r-sm);
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.xstrip__x:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* The timeline and tools stay put while a render runs — the screen does not
+   change — but they stop taking input, because the export snapshotted the edit
+   when it started and a change made now would silently not be in the file. */
+.editor__locked {
+  pointer-events: none;
+  opacity: 0.4;
 }
 
 /* ---------- mid-take cuts (F1) ---------- */
@@ -1911,7 +2050,7 @@
    which is the wrong shape for the one thing on this screen you are meant to be
    able to act on. */
 .takes {
-  width: min(620px, 100%);
+  width: var(--pane, min(560px, 100%));
   flex: 0 1 auto;
   min-height: 0;
   display: flex;
@@ -1957,11 +2096,13 @@
   gap: 8px;
 }
 
-/* One take, one card. */
+/* One take, one card. UI1 put a picture on the left and changed nothing else —
+   Robert: "dont change how inside card look, just add preview picture left to
+   it" — so the card is a row and everything that was in it is `__body`. */
 .takecard {
   display: flex;
-  flex-direction: column;
-  gap: 7px;
+  align-items: stretch;
+  gap: 10px;
   padding: 10px 12px 9px;
   background: var(--surface);
   border: 1px solid var(--surface-2);
@@ -1970,6 +2111,40 @@
 }
 .takecard:hover {
   border-color: var(--surface-3);
+}
+.takecard__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+/* One decoded frame. Fixed box so a portrait take and a landscape one leave the
+   card the same shape; `cover` because this is an identifier, not a preview of
+   the framing. Empty until it lands, and empty forever if it will not decode —
+   the card is complete without it. */
+.takecard__thumb {
+  flex: none;
+  width: 88px;
+  align-self: center;
+  aspect-ratio: 16 / 10;
+  padding: 0;
+  border: 1px solid var(--surface-3);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color var(--t-fast) var(--ease);
+}
+.takecard__thumb:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.takecard__thumb img,
+.takecard__thumb span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .takecard__top {
   display: flex;
