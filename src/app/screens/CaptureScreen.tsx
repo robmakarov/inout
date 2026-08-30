@@ -565,7 +565,9 @@ export function CaptureScreen() {
               </a>
               <span className="capture__notice-aside">
                 Turn {BROWSER_LABEL[detectPlatform().browser]} off and back on there, then quit it
-                with ⌘Q and reopen — macOS only applies the change on a fresh launch.
+                with ⌘Q and reopen — macOS only applies the change on a fresh launch. A macOS
+                permission dialog hidden behind your windows does the same thing; answering it
+                fixes it too.
               </span>
             </div>
           )}

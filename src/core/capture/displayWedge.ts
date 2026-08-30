@@ -415,13 +415,11 @@ export function displayStallMessage(
   // THE SECOND ONE IN A ROW IS NOT THE PAGE'S PROBLEM ANY MORE: the app spent
   // its automatic refresh on the first, and a fresh renderer did not help.
   if (stalls >= ESCALATE_AT_STALLS) {
-    return `macOS is not handing the screen to ${name} — it has stalled ${stalls} times in a row, ` +
-      `and refreshing the app did not change it, so the block is the screen-recording permission ` +
-      `below the browser rather than anything on this page. Open Screen Recording settings below, ` +
-      `turn ${name} OFF and then ON again (a stale grant looks exactly like this), then quit ` +
-      `${name} with ⌘Q and reopen it. If a macOS permission dialog is hiding behind your windows, ` +
-      `answering that fixes it too — it re-asks every so often, and an unanswered one stalls ` +
-      `every share.`
+    // SHORT, because the button under it is the instruction. Everything this
+    // used to spell out in five sentences — which pane, which toggle, why a
+    // relaunch — is either one click away or one line under the button now.
+    return `macOS is not handing the screen to ${name}. It stalled ${stalls} times in a row and ` +
+      `refreshing did not help, so this is the screen-recording permission, not the app.`
   }
   if (stall === 'permission') {
     // NOT "the device never connected", which is what this said until W1

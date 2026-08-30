@@ -180,6 +180,11 @@
 
 .capture__notice-btn {
   flex: 0 0 auto;
+  /* It is an <a> now (an external-scheme navigation, so the browser's own
+     confirmation is the security story) and an anchor that looks like a link
+     reads as "more reading". This one is the action. */
+  display: inline-block;
+  text-decoration: none;
   white-space: nowrap;
   background: var(--surface-3);
   border: 1px solid var(--surface-3);

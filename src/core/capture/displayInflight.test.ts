@@ -150,11 +150,14 @@ describe('advice that knows what it has already told this user', () => {
     expect(consecutiveDisplayStalls()).toBe(ESCALATE_AT_STALLS)
     const msg = displayStallMessage('wedge', 'chrome', 'failed')
     expect(msg).toMatch(/screen-recording permission/)
-    expect(msg).toMatch(/Screen Recording settings/)
     // It must name the count: "twice in a row, and the refresh did not help" is
     // the evidence that the page has been ruled out. Without it this is just
     // another sentence telling the user to go and change something.
     expect(msg).toMatch(/stalled 2 times in a row/)
+    // And it must stop being a wall — the steps live on the button under it,
+    // so the text that used to spell out the pane, the toggle and the relaunch
+    // is two sentences now. A user reading an alert does not read five.
+    expect(msg.length).toBeLessThan(200)
   })
 
   it('a delivered screen clears the run — the next stall starts from the top again', () => {
