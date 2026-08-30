@@ -1631,8 +1631,25 @@ EVERYTHING IS ALREADY MADE BY THE TIME IT IS ASKED FOR, using the time the machi
     engineering), one option, no per-export sticky resolution ladder (F14 dissolved).
 TWO SPIKES GATE THE BUILD — both are claims currently made from reasoning, and this project does
 not ship reasoning:
-  · T1 transcode-speed: measure High→Min/Medium (one hardware AVC decode → scale → encode small)
-    against the full render on the same takes. Expectation is a several-times-faster lane;
+  · T1 transcode-speed — RUN 2026-08-30, AND IT REFUTES THE PREMISE. `npm run exp -- f16t1`.
+    On a 3024x1964@60 take, at 60 s and again at 120 s (identical ratios, so it is a property of
+    the work and not the run):
+        render 4.4x realtime · from-raw 6.0x · from-high 6.0x
+    A transcode is 1.3-1.4x the render, NOT several times it. And FROM-HIGH decodes a third of
+    the pixels FROM-RAW does and is not faster for it — so the question this task left open
+    ("one extra 4:2:0 generation against a heavier decode") is settled the easy way: the extra
+    generation buys NOTHING, and X15(b) already priced what it costs on glyphs. Take the heavier
+    decode.
+    WHY THE EXPECTATION WAS WRONG: this task was authored against a render whose encoder had no
+    backpressure and spent most of its time draining a queue (fixed the same morning, 0f8fefe).
+    The transcode lane was designed to beat a defect.
+    CONSEQUENCE — THE BUILD SHRINKS: there is no reason to build a transcode lane. The PRODUCTION
+    RENDER run in the background at stop is within 30 % of the fastest alternative, reuses
+    everything, and costs no second generation. F16 collapses to "run the render we already have,
+    earlier, and serve what it made". ROBERT'S TO CONFIRM before the build starts.
+  · T1's original text kept for the record: measure High→Min/Medium (one hardware AVC decode →
+    scale → encode small) against the full render on the same takes. Expectation is a
+    several-times-faster lane;
     the number decides whether "usually done before the panel opens" is true at Robert's lengths.
   · T2 background-render cost: the render beside a playing editor — UI-thread lateness through
     perf/mainThreadWatch.ts (the instrument X9 standardized), plus a stated thermal/battery
