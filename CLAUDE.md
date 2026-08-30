@@ -15,6 +15,13 @@ Doc rule: every doc holds CURRENT truth only — when state changes, rewrite/del
   local server to look at the same code is wasted tokens. Add `&slow=mic:6000` to reproduce a stuck
   arm without hardware. Verify in the app, not from the code — three sessions in a row shipped capture
   fixes "argued from the ordering" and the bug survived all three.
+  **A TAB LEFT OPEN ACROSS A DEPLOY IS TESTING THE OLD BUILD.** The app is a PWA and its service
+  worker serves `inout-v1` from cache, so a plain navigate can hand you the previous bundle while
+  `verify-deploy` (which fetches, uncached) correctly says prod is current — an hour was lost to
+  exactly that, "fixing" a bug that was already fixed. Bust it before judging anything:
+  `(async()=>{for(const r of await navigator.serviceWorker.getRegistrations())await r.unregister();for(const k of await caches.keys())await caches.delete(k)})()`
+  then reload. To be certain which bundle is live, compare a chunk hash — `ls dist/assets` against
+  the URLs in `performance.getEntriesByType('resource')`.
 - Local server, ONLY when a fix must be seen before it is pushed: `npm run dev` cannot be started by
   the preview launcher here — this repo lives in `~/Downloads`, which macOS TCC does not grant to the
   launcher's process, so anything it spawns with this cwd dies on `EPERM: uv_cwd` before vite loads.
