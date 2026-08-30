@@ -3,6 +3,7 @@ import type { EditState, Recording } from '@core/types'
 import { clampEditState, outputDurationMs } from '@core/timeline'
 import type { TightenProposal } from '@core/timeline'
 import {
+  DEFAULT_TIER_ID,
   isDefaultTier,
   loadQualityTier,
   resolveTier,
@@ -82,7 +83,21 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
     // different number on every machine and absent on most takes. A remembered
     // 'source' on a take that has none falls back to the biggest step this take
     // does offer, rather than silently resolving to the declared 1440p box.
-    const base = storedTier.id === 'source' && !sourceStep ? tierById('1440p') : storedTier
+    let base = storedTier.id === 'source' && !sourceStep ? tierById('1440p') : storedTier
+    // A TAKE THAT OFFERS ITS OWN RESOLUTION DEFAULTS TO IT, and not defaulting
+    // to it was the worst of both ends. Robert, 2026-08-30: "export render is
+    // slow, all computer slows done, in about 60% all chrome blinks and
+    // decoding error message, sends back to edit" — on a take at 3024x1964
+    // exported at the remembered 1080p. With max mode there is no composite to
+    // copy, so that step re-rendered six thousand frames of 5.9 Mpx DOWN to
+    // 1080p: all of the capture cost, none of the resolution, and a render long
+    // enough to exhaust the renderer. A five-second take of the same settings
+    // exported fine, which is the shape of a resource problem rather than a
+    // logic one.
+    // Turning on "my own resolution" and then throwing it away by default was
+    // never what the switch meant. An explicit choice still wins — this only
+    // moves the step nobody picked.
+    if (sourceStep && base.id === DEFAULT_TIER_ID) base = tierById('source')
     return resolveTier(base, frameAspect, frameRate, sourceStep)
   }, [storedTier, frameAspect, frameRate, sourceStep])
   const exporting = mode === 'exporting' || mode === 'share'
