@@ -6,6 +6,7 @@ import {
   normalizeSegments,
   moveViewportKeyframe,
   outputToRecordingMs,
+  recordingToOutputMs,
   removeSegment,
   segmentSpeed,
   ZOOM_MOVE_MS,
@@ -203,16 +204,40 @@ export function Timeline({
     onSeek(msAtClient(clientX) - editRef.current.globalTrimStartMs)
   }
 
+  /**
+   * KEEP THE "NOW" LINE ON THE FRAME IT IS ON.
+   *
+   * Robert: "split grabber moving that shit on timeline that 'now' line".
+   * The playhead is stored as an OUTPUT time and drawn at the RECORDING instant
+   * that output time maps to — and cutting is precisely the operation that
+   * changes that mapping. So every pixel of a cut drag re-pointed an unchanged
+   * output time at a different recording instant, and the line crawled across
+   * the timeline while the picture under it never moved.
+   *
+   * The instant is captured when the gesture starts and re-derived into output
+   * time on every move, which is the same trick the speed control already uses
+   * for the same reason. If the drag swallows the instant the playhead was on,
+   * `recordingToOutputMs` answers null and the line is left alone rather than
+   * thrown to an arbitrary place.
+   */
+  const holdPlayhead = (next: EditState, recMs: number | null) => {
+    if (recMs === null) return
+    const at = recordingToOutputMs(next, recMs)
+    if (at !== null) onSeek(at)
+  }
+  /** The recording instant under the playhead right now. */
+  const playheadNow = () => outputToRecordingMs(editRef.current, Math.min(timeMs, durationMs))
+
   const dragGlobalTrim = (side: 'start' | 'end') => (e: React.PointerEvent) => {
     e.stopPropagation()
+    const hold = playheadNow()
     startDrag(e, (clientX) => {
       const ms = msAtClient(clientX)
       const cur = editRef.current
-      onEdit(
-        side === 'start'
-          ? { ...cur, globalTrimStartMs: ms }
-          : { ...cur, globalTrimEndMs: ms },
-      )
+      const next =
+        side === 'start' ? { ...cur, globalTrimStartMs: ms } : { ...cur, globalTrimEndMs: ms }
+      onEdit(next)
+      holdPlayhead(next, hold)
     })
   }
 
@@ -251,6 +276,7 @@ export function Timeline({
   /** Drag the boundary between two kept spans — i.e. move the cut. */
   const dragCutEdge = (index: number, side: 'end' | 'start') => (e: React.PointerEvent) => {
     e.stopPropagation()
+    const hold = playheadNow()
     startDrag(e, (clientX) => {
       const cur = editRef.current
       const segs = editSegments(cur).map((sg) => ({ ...sg }))
@@ -267,7 +293,9 @@ export function Timeline({
       const next = segs[index + 1]
       if (prev) target.startMs = Math.max(target.startMs, prev.endMs)
       if (next) target.endMs = Math.min(target.endMs, next.startMs)
-      onEdit({ ...cur, segments: normalizeSegments(cur, segs) })
+      const edited = { ...cur, segments: normalizeSegments(cur, segs) }
+      onEdit(edited)
+      holdPlayhead(edited, hold)
     })
   }
 
@@ -295,6 +323,7 @@ export function Timeline({
   const dragTightBoundary = (index: number) => (e: React.PointerEvent) => {
     e.stopPropagation()
     const at = editSegments(editRef.current)[index]?.endMs ?? 0
+    const hold = playheadNow()
     startDrag(e, (clientX) => {
       const cur = editRef.current
       const segs = editSegments(cur).map((sg) => ({ ...sg }))
@@ -314,7 +343,9 @@ export function Timeline({
       const next = segs[index + 2]
       if (prev) before.startMs = Math.max(before.startMs, prev.endMs)
       if (next) after.endMs = Math.min(after.endMs, next.startMs)
-      onEdit({ ...cur, segments: normalizeSegments(cur, segs) })
+      const edited = { ...cur, segments: normalizeSegments(cur, segs) }
+      onEdit(edited)
+      holdPlayhead(edited, hold)
     })
   }
 
