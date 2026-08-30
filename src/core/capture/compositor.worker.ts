@@ -666,6 +666,36 @@ function paintPip(c: OffscreenCanvasRenderingContext2D, camera: VideoFrame): voi
  * to avoid), so this has to happen before the task yields, exactly like the
  * VideoFrame construction above it.
  */
+/**
+ * THE PREVIEW CANVAS TAKES THE COMPOSITE'S SHAPE.
+ *
+ * `blitPreview` draws the composite 1:1 into whatever bitmap the main thread
+ * handed over, so a preview canvas of a different aspect is a stretched picture
+ * — and the stage box on screen already carries the composite's aspect, so the
+ * mismatch shows as bars around a distorted frame. UI1 found exactly that on a
+ * 1728x1117 screen: the composite was 1726x1116 and the preview bitmap was
+ * still the 960x540 the main thread created it at.
+ *
+ * It USED to be resized in one place only — `adoptShape`, the F13 path that
+ * runs when the arrived frames disagree with the initial guess. That path is
+ * the exception, not the rule: with the frame following the take, the composite
+ * is normally built at the right shape from the start and `adoptShape` never
+ * runs. So the sizing belongs wherever the two can first disagree, which is all
+ * three of: the composite being created, its shape being adopted, and a preview
+ * canvas arriving.
+ *
+ * Safe to call at any time: the worker owns this bitmap (it was transferred),
+ * and writing a size it already has costs nothing.
+ */
+function sizePreviewToComposite(): void {
+  const p = previewCtx
+  if (!p || !canvas || !(canvas.width > 0) || !(canvas.height > 0)) return
+  const box = frameForAspect(canvas.width / canvas.height, PREVIEW_LONG_EDGE)
+  if (p.canvas.width === box.width && p.canvas.height === box.height) return
+  p.canvas.width = box.width
+  p.canvas.height = box.height
+}
+
 function blitPreview(): void {
   const p = previewCtx
   if (!p || !canvas) return
@@ -743,12 +773,7 @@ function adoptShape(frame: VideoFrame): void {
   }
   // The preview is blitted 1:1 into whatever the main thread handed over, so it
   // has to turn with the composite or the picture is stretched on screen.
-  const p = previewCtx
-  if (p) {
-    const box = frameForAspect(W / H, PREVIEW_LONG_EDGE)
-    p.canvas.width = box.width
-    p.canvas.height = box.height
-  }
+  sizePreviewToComposite()
   settleShape()
   console.info(
     `[capture] compositor: the frames are ${w}x${h} — composing ${W}x${H}, not ${from} (F13)`,
@@ -870,6 +895,9 @@ async function start(msg: CompositorStartMsg): Promise<void> {
     ctx = canvas.getContext('2d', { alpha: false })
     if (!ctx) throw new Error('compositor: no WebGL2 and no OffscreenCanvas 2d')
   }
+
+  // …and the preview, if one was handed over before the composite existed.
+  sizePreviewToComposite()
 
   const { config, hardware } = await pickVideoConfig(W, H, msg.videoBitrate, msg.fps)
   stats.codec = config.codec
@@ -1241,6 +1269,10 @@ self.onmessage = async (ev: MessageEvent<CompositorMsg>) => {
           break
         }
         previewCtx = c
+        // The composite usually already exists by the time a preview is handed
+        // over — take its shape now rather than waiting for a disagreement that
+        // will never come.
+        sizePreviewToComposite()
         previewAwaitingFirstPaint = true
         // No reply here: blitPreview() sends it once something is actually on
         // screen. If nothing ever paints, the caller's own deadline decides.
