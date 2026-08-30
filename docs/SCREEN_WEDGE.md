@@ -1,7 +1,11 @@
 # The screen wedge — full case file
 
-**Status as of 2026-08-30: NOT prevented, contained to one press, and instrumented to
-convict.** Robert stalled four times in one run — across the app's own ritual reloads and
+**Status as of 2026-08-30 (evening): NOT prevented, contained to one press, and the
+instrumentation now writes where it can be read: `inout.wedgeJournal.v1` keeps the last
+24 wedges, reloads, boots and main-thread blocks on the machine, so the next occurrence
+is a verdict an agent reads in seconds with nothing asked of him. Two new facts landed this evening: a site-permission
+reset from inside Chrome CURES it (so the claim is origin-scoped, inside Chrome), and
+the ladder had silently reset itself to rung 0, so the floor experiment never ran.** Robert stalled four times in one run — across the app's own ritual reloads and
 two Chrome relaunches — which killed the two comfortable stories at once: a fresh document
 does not cure it and a fresh Chrome does not reliably cure it either. Everything that was
 OURS in the failure is fixed (the list below); what remains is a promise no page code can
@@ -10,10 +14,17 @@ next time it fires.
 
 ## WHEN ROBERT REPORTS IT AGAIN — the playbook. Start here, do not re-derive.
 
-1. **Get two console lines** (screenshot is enough):
-   `[capture] asking Chrome for …` — carries the RUNG (`reduced request N/3`), and
-   `[capture:forensics] …` — carries the verdict fields. If he has no console, the same
-   fields rode the `display_wedge` analytics event.
+1. **Read the journal off his machine — ask him for nothing.** `inout.wedgeJournal.v1`
+   (localStorage, `wedgeJournal.ts`) holds the last 24 dated entries and is the ONLY copy
+   that survives in production: `wedge` (rung, lifetime count, stall class, focus story,
+   waited, deliveries, page age), `reload` (the ritual firing), `boot` (`script` = the
+   bundle ran · `mount` = the UI painted) and `block` (main thread gone while visible).
+   A `reload` with no `boot` after it = the refresh never committed. A `boot/script` with
+   no `boot/mount` = it came back and never painted. `block` entries = the "goes
+   unresponsive after the refresh" report, timed. The console line
+   (`[capture:forensics] …`) still prints if he happens to have one open; the
+   `display_wedge` analytics event carries the same fields into a NOOP SINK in prod and
+   is worth nothing in the field.
 2. **Read the verdict:**
    | What the lines say | Verdict | What to do |
    |---|---|---|
@@ -26,8 +37,15 @@ next time it fires.
    `displayWedge.ts`); no instructions are ever shown to the user and no System Settings
    deep-link (Robert, twice, DECISIONS 2026-08-30 (1) and (2)); no console remedies; no
    held share between takes (same rulings).
-4. **His machine's state**, if needed: `inout.displayWedge.v1` (localStorage — rung, count,
-   stall run), `inout.screenDeliveries.v1` (sessionStorage — the clustering number).
+4. **His machine's state — READ IT YOURSELF FIRST**, it costs him nothing: his Chrome is
+   reachable over the claude-in-chrome MCP. Navigate a tab to a same-origin document that
+   is NOT the app (`https://inout-kappa.vercel.app/sw.js` — booting the SPA would migrate
+   the very record you came to read) and read `inout.displayWedge.v1` (rung, count, stall
+   run, everDelivered). `inout.screenDeliveries.v1` is sessionStorage and exists only in
+   the wedged tab, which is not in your tab group — that one is his screenshot or nothing.
+5. **Do not ask him for the console** (ruling 2026-08-30: "i will not do anything in
+   console"). Everything the verdict needs is in step 1's journal; if it is empty, the
+   machine is on a build older than 2026-08-30 evening.
 
 This doc exists because the fix history is spread across a dozen commits and nobody —
 including the agents writing the fixes — should ever reconstruct it again.
@@ -38,8 +56,11 @@ including the agents writing the fixes — should ever reconstruct it again.
 > `getDisplayMedia` **never resolves and never rejects** — the page never receives a
 > track, so no page code can release or retry the claim. The stuck state lives in
 > Chrome's browser process: it survives page refresh, closing the tab, opening a new
-> tab, and sometimes a fresh Chrome launch; only quitting Chrome completely (⌘Q)
-> reliably clears it. It is intermittent, and it accumulates with the number of shares
+> tab, and sometimes a fresh Chrome launch. Two things clear it: quitting Chrome
+> completely (⌘Q), and — cheaper, and found by Robert 2026-08-30 after three sessions
+> had told him ⌘Q was the only way — RESETTING THIS SITE'S PERMISSIONS from inside
+> Chrome. That second cure is the case's strongest fact: the claim is keyed to the
+> ORIGIN inside Chrome, not to the machine. It is intermittent, and it accumulates with the number of shares
 > taken in one Chrome session — rapid record/stop cycles (≈10 × 2-second takes)
 > reproduce it at will. The app bounds the damage (fail ≤30 s, all devices released, no
 > screenless take, one automatic refresh, reduced request on retry) but cannot cure the
@@ -88,6 +109,9 @@ never settled at all.
 | **A page reload does not cure it: four stalls in one run ACROSS the ritual's own reloads** | Robert, 2026-08-30 — fresh document, same stall; the poison is not frame-scoped |
 | **A Chrome relaunch did not cure it that day (⌘Q twice mid-run, stalls continued)** | Robert, 2026-08-30 — the strongest pointer BELOW Chrome: macOS SCK/replayd/re-auth state survives the browser |
 | **Every 2026-08-30 stall happened with the ladder already on rung 2** | his stored state, read off the Chrome profile: `level:2, count:5` — so the old floor's remaining contents (our three raw-audio flags) went on trial: rung 3 is bare `{video, audio}` |
+| **Resetting the site's permissions from inside Chrome clears it — no ⌘Q, no System Settings** | Robert, 2026-08-30. Three sessions had told him this was impossible; they were wrong, he is right. It is the strongest discriminator the case has: a claim that dies with ONE ORIGIN's permission entry lives in Chrome's per-origin permission/capture state — a machine-wide macOS SCK/replayd wedge could not be cured by resetting one site. Suspect 3 (Chrome) moves ahead of suspect 2 (macOS below Chrome) |
+| **The 2026-08-30 wedges did NOT happen on rung 3 — the ladder had reset itself to 0** | his stored record, read off the Chrome profile at 16:21 MSK: `{wedgedAt: 16:18 today, level:1, count:6, stalls:1, everDelivered:true}`. level 1 means the request that wedged was rung 0, the FULL one: the day-probe had walked the old mark down to 0 and cleared it (`count` survives that path, the rung does not), so the rung-3 migration never applied. The floor experiment has never run on his machine, and reading the playbook's verdict table below rung 3 is reading nothing |
+| **After the post-wedge reload the app goes unresponsive with NO user action** | Robert, 2026-08-30 — the second field report (first: the 2026-08-25 game-load ordering), and this one had no game running, so it is not load-specific. Unconvicted at the time, and unconvictable: console-only forensics, a noop analytics sink, and "i will not do anything in console". INSTRUMENTED the same evening — `wedgeJournal.ts` now records reload/boot-script/boot-mount/block on the machine, which separates "the reload never committed" from "it came back and never painted" from "it painted and then froze". The next one answers it |
 | **In the game-load wedge the refresh ritual DID NOT deliver: the app went unresponsive, no automatic reload Robert could see, and no message told him to quit/reload Chrome** | Robert, 2026-08-25 — contradicts the "what users get today" list below for this ordering. Candidate causes, unproven: the renderer itself is janked by the same GPU load so the reload never runs or paints; or the failure path taken under load never classifies as `wedged` so wedgeReload is never asked. Needs the arming timeline from a repro |
 
 ## The attempts, in order, with honest outcomes
@@ -185,7 +209,10 @@ never settled at all.
    2026-08-30 sharpened it: rung 2 was never actually bare (it still carried our three
    raw-audio flags, and all five of his that day happened ON rung 2) — rung 3 is the
    truly bare `{video, audio}` request. A stall there clears our options entirely.
-2. **macOS ScreenCaptureKit permission-state rot for Chrome.** The one lever never yet
+2. **DEMOTED 2026-08-30 by the site-permission cure — see the facts table.** A wedge that
+   a per-origin permission reset clears is not machine-wide OS rot. Kept only because the
+   two need not be the same failure: **macOS ScreenCaptureKit permission-state rot for
+   Chrome.** The one lever never yet
    confirmed tried: System Settings → Privacy & Security → Screen & System Audio
    Recording → toggle Chrome off/on, restart Chrome. If the wedge survives *that* plus
    rung 2, it is fully outside anything we control. PARTLY ANSWERED 2026-08-29 (W1): on

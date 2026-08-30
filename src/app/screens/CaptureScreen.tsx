@@ -35,7 +35,14 @@ import {
   unsupportedReason,
 } from '@app/lib/channels'
 import { armingLabel as armingLabelFor, foldWaiting } from '@app/lib/arming'
-import { noteWedgeReload, shouldReloadForWedge, takeWedgeReloadNotice } from '@app/lib/wedgeReload'
+import {
+  WEDGE_RELOAD_WINDOW_MS,
+  noteWedgeReload,
+  shouldReloadForWedge,
+  takeWedgeReloadNotice,
+  wedgeReloadStamp,
+} from '@app/lib/wedgeReload'
+import { appendWedgeJournal } from '@core/capture/wedgeJournal'
 import { ChannelChips } from '@app/components/ChannelChips'
 import { QualitySlider } from '@app/components/QualitySlider'
 import { TakesList } from '@app/components/TakesList'
@@ -141,6 +148,20 @@ export function CaptureScreen() {
   // refreshed itself over a wedged screen share — say so, and what to do NEXT
   // TIME, because a user who never presses record again never reaches the
   // second wedge that owns the ⌘Q text.
+  // AND THE OTHER HALF OF THE SAME QUESTION: not "was the notice due" but
+  // "did this document ever paint". main.tsx writes the boot entry when the
+  // bundle runs; this one is written when the UI is on screen, so a script
+  // entry with no mount after it is the app coming back from the wedge and
+  // never becoming usable — the report that has gone unconvicted twice
+  // (wedgeJournal.ts).
+  useEffect(() => {
+    const at = wedgeReloadStamp()
+    if (at && Date.now() - at < WEDGE_RELOAD_WINDOW_MS) {
+      appendWedgeJournal({ kind: 'boot', phase: 'mount', sinceReloadMs: Math.round(Date.now() - at) })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     if (takeWedgeReloadNotice()) {
       // AND SAY THE TRUE THING ON THE WAY BACK. The refresh notice used to end

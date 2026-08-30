@@ -151,6 +151,14 @@ interface WedgeState {
    * penalty.
    */
   everDelivered: boolean
+  /**
+   * Has this machine already been put on the floor for having a history? The
+   * flag exists so that the flooring happens ONCE: without it, every load
+   * would re-pin a machine the day-probe had just walked up a rung, and the
+   * ladder's only way home would be dead for exactly the machines that need
+   * it most.
+   */
+  floored?: boolean
 }
 
 let mem: WedgeState | null = null
@@ -182,15 +190,26 @@ function load(): WedgeState {
         // — which is the right way round, since the grant is exactly what was
         // wrong on the evening this task was written. One success flips it.
         everDelivered: s.everDelivered === true,
+        floored: s.floored === true,
       }
-      // A MACHINE PARKED ON THE OLD FLOOR HAS ALREADY DISPROVED IT. Rung 2 was
-      // the bottom until 2026-08-30, so a record sitting there with more wedges
-      // than it took to get there (two) is a machine that kept wedging after
-      // running out of ladder — which is exactly the evidence rung 3 was added
-      // for. Start it on the new floor instead of making it wedge again to
-      // discover the rung that already exists. Robert's own record was
-      // level 2 / count 5.
-      if (mem.level === 2 && mem.count > 2 && mem.wedgedAt !== 0) mem.level = 3
+      // A MACHINE WITH A HISTORY STARTS ON THE FLOOR, ONCE (2026-08-30, second
+      // cut). The first cut of this only caught a record sitting on the OLD
+      // floor — `level === 2` — and Robert's machine walked straight past it:
+      // read off his profile that evening, `{level:1, count:6}`. The day-probe
+      // had cleared his mark (the rung resets, `count` does not), so wedge
+      // number six was taken on rung 0, the FULL request, and the floor
+      // experiment the whole case file is waiting on had never once run.
+      //
+      // Three wedges is not a machine that needs the ladder walked to it
+      // politely; it is a machine that has already spent five presses proving
+      // the upper rungs. So it starts at the bottom and the NEXT wedge is
+      // evidence about the bare request instead of another anecdote. Costs the
+      // user nothing visible: no rung drops anything they chose (see above).
+      if (!mem.floored && mem.count > 2 && mem.wedgedAt !== 0 && mem.level < MAX_DISPLAY_LEVEL) {
+        mem.level = MAX_DISPLAY_LEVEL
+        mem.floored = true
+        save()
+      }
       return mem
     }
   } catch {
@@ -228,7 +247,13 @@ export function displayRequestLevel(now = Date.now()): DisplayRequestLevel {
 /** A display acquisition hit its deadline with the share taken but never delivered. */
 export function rememberDisplayWedge(now = Date.now()): void {
   const s = load()
-  s.level = clamp(displayRequestLevel(now) + 1)
+  // `count` is the wedges BEFORE this one. A machine on its first or second
+  // wedge steps one rung, which is how the ladder names the guilty option.
+  // Past that it has stopped being an experiment and started being a machine
+  // that wedges, so it drops to the floor in one move rather than paying a
+  // wedge per rung to get there — the mistake that cost tonight's evidence.
+  s.level = s.count > 2 ? MAX_DISPLAY_LEVEL : clamp(displayRequestLevel(now) + 1)
+  if (s.level === MAX_DISPLAY_LEVEL) s.floored = true
   s.wedgedAt = now
   s.count += 1
   save()
@@ -284,6 +309,8 @@ export function resetDisplayWedge(): void {
   s.level = 0
   s.count = 0
   s.stalls = 0
+  // The history is what the flooring reads, and this erases the history.
+  s.floored = false
   save()
 }
 

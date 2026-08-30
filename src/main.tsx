@@ -1,8 +1,26 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from '@app/App'
+import { WEDGE_RELOAD_WINDOW_MS, wedgeReloadStamp } from '@app/lib/wedgeReload'
+import { appendWedgeJournal, watchBootLiveness } from '@core/capture/wedgeJournal'
 import { detectPlatform, evaluateSupport, probeMissingFeatures } from '@core/platform'
 import './styles/base.css'
+
+/**
+ * DID THE RECOVERY RELOAD LAND — AND DID THE APP STAY ALIVE AFTER IT?
+ * Robert, twice (2026-08-25 and 2026-08-30): after the wedge refresh the app
+ * "goes unresponsive without any actions", and nothing about it was readable
+ * afterwards. Written before the first render on purpose: a boot entry has to
+ * survive a render that never happens. See wedgeJournal.ts.
+ */
+{
+  const reloadedAt = wedgeReloadStamp()
+  const sinceReload = reloadedAt ? Date.now() - reloadedAt : 0
+  if (reloadedAt && sinceReload < WEDGE_RELOAD_WINDOW_MS) {
+    appendWedgeJournal({ kind: 'boot', phase: 'script', sinceReloadMs: Math.round(sinceReload) })
+    watchBootLiveness(sinceReload)
+  }
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

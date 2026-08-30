@@ -55,6 +55,25 @@ phase: MVP validation (2026-07-16)
   NEXT wedge names its layer. THE PLAYBOOK FOR HIS NEXT REPORT — verdict table, what is ruled out,
   the two Robert-gated endpoint levers — is `docs/SCREEN_WEDGE.md`, top section; sessions start
   there, not from the commits. Contained cost of a wedge meanwhile: one press.
+  2026-08-30 EVENING, THREE THINGS MOVED. (1) ROBERT CLEARED A LIVE WEDGE BY RESETTING THE SITE'S
+  PERMISSIONS FROM INSIDE CHROME, after this project had told him three times that only ⌘Q would do
+  it. A claim that dies with ONE ORIGIN's permission entry is not machine-wide macOS SCK rot, so the
+  "below Chrome" suspect the case file was leaning on is demoted and Chrome's own per-origin capture
+  state leads. (2) THE FLOOR EXPERIMENT HAD NEVER RUN. His record, read off the profile at 16:21:
+  `{level:1, count:6, stalls:1}` — the day-probe had cleared the mark (the rung resets, `count` does
+  not) so wedge six was taken on rung 0, the FULL request, and the rung-2-only migration missed it.
+  A machine with more than two lifetime wedges now starts on the floor, once (`floored`), and a new
+  wedge on one drops to rung 3 in a single move instead of paying a wedge per rung. (3) THE FORENSICS
+  NOW LAND SOMEWHERE A PERSON CAN READ. They were a console line (ruled out: "i will not do anything
+  in console") and an analytics event into a noop sink in prod — so nothing about a wedge survived on
+  the machine. `wedgeJournal.ts` keeps the last 24 dated entries in `inout.wedgeJournal.v1`: wedge
+  (rung/count/stall/focus/waited/deliveries), reload, boot (`script` = bundle ran, `mount` = UI
+  painted) and block (main thread gone while VISIBLE — the hidden-tab throttling artifact this
+  project once convicted by mistake is excluded by construction). That is what finally arbitrates
+  "after it refreshed after wedge it goes unresponsive without any actions" (Robert, twice — no game
+  running the second time, so it is not load-specific): reload-with-no-boot means the refresh never
+  committed, script-with-no-mount means it came back and never painted, and block entries time the
+  freeze. Read it over the browser MCP; ask him for nothing.
 
 - QUALITY IS ONE DECISION NOW, MADE BEFORE THE TAKE, AND IT BINDS BOTH HALVES (UI1, 2026-08-30,
   Robert's eight-item UI pass: "make chatgpt/claudecode effort-like slider for our quality choosing …
@@ -75,16 +94,43 @@ phase: MVP validation (2026-07-16)
   test. COST STATED: a user who never touches the slider now captures at a 1920 long edge instead of
   up to 2560, and can no longer export 1440p from such a take. That is the resource saving Robert
   asked for and the slider is the first thing above the chips.
-- THREE SCREENS, AND THE EXPORT IS NOT ONE OF THEM (UI1 second pass, 2026-08-30). Robert: "rendering
-  loader show on same screen where download button is, so we have only main screen, recording screen,
-  and editing screen", and of the result panel: "no need for screen on first screenshot at all". The
-  export used to take the bottom half twice — a progress panel, then a result panel with a Save
-  button, a cloud card and a New-recording button — two screens for one action, the second of which
-  asked a question that pressing Export had already answered. Both halves are STRIPS in the slider's
-  slot now: the render replaces the slider while it runs (tools and timeline stay on screen and stop
-  taking input, because the export snapshotted the edit at the start), and what it produced sits above
-  the slider afterwards. `AppMode` lost `'share'`. The cloud link survives as ONE button on that strip
-  instead of an account card, so nothing that worked was removed.
+- THE EXPORT IS A BACKGROUND JOB IN A DOCK ON EVERY SCREEN (2026-08-30, third answer in one day to
+  where the export lives; supersedes the strips-in-the-slider-slot pass, which had itself replaced
+  the two-panel screen — `AppMode` lost 'share' then, and lost 'exporting' now).
+  WHAT FORCED IT, and it is a bug worth remembering: Robert exported a big take and saw "99 %
+  Finalizing…" THE MOMENT he pressed Export, sat behind that number for five minutes, pressed
+  Cancel, and got the download. F16's join was lying three ways at once — choose.ts reported a
+  HARD-CODED `finalizing 0.99` and then silently awaited the whole in-flight pre-render; the
+  claimer's abort was wired to NOTHING (the pre-render owns its own controller, and the export's
+  signal was never connected to it); and onExport never re-checked its signal after the await, so
+  the cancel's only visible effect was whatever the render did when it finished anyway. Fixed at the
+  joint: takePrerender now hands over the job's real progress AND its abort controller, choose.ts
+  forwards both, the settle handler keeps a claimed file's bytes (it used to drop them the moment
+  the job was retired), and a cancelled job DELIVERS NOTHING — liveness is re-checked after the
+  export settles, whatever settled it. Pinned by tests in prerender.test.ts and exportJobs.test.ts.
+  THE REST OF HIS MESSAGE IS THE FEATURE: "rendering process shown in block like on screenshot in
+  bottom of screen layout and happening further if i switch app screen, independetly, and i want it
+  sirvive refresh and continue, and several rendering at the same time possible too."
+  compose/exportJobs.ts owns it: pressing Export (or For AI — same lane) creates a PERSISTED job
+  (jobsRepo, IndexedDB v3) and returns immediately; the editor never locks, because the job
+  snapshotted the edit at the press. The dock (ExportDock, fixed bottom-centre, rendered by App on
+  every screen) shows one strip per job — real %, phase, measured ETA, a Cancel that reaches the
+  worker — and a finished job becomes the old saved strip (Save again · cloud link · dismiss).
+  The download still fires the moment the job finishes; the job then copies the file to its own
+  OPFS key (`xjob-<id>`) AFTER the download starts, so instant stays instant and Save again / the
+  cloud button survive a refresh. REFRESH RESTARTS a running job from zero — a muxer's half-written
+  file is not a file, so restarting is the honest "continue" — at most 3 attempts before the row
+  says it stopped, and done/failed rows expire after 24 h (the file is in Downloads; the row is a
+  convenience, not an archive). Duplicate press of the same output JOINS the running job (same
+  argument as F16, one level up); a different tier is a second, genuinely parallel job.
+  PARALLEL EXPORTS MADE THE SCRATCH SWEEP A WEAPON: each export worker carries its own scratch.ts
+  instance, so worker B's start-of-export sweep read worker A's half-written scratch as a leftover
+  and would have deleted it mid-write. Scratch keys carry their birth time now and the sweep skips
+  anything younger than 6 h (pre-stamp keys parse as ancient, which is correct — they are from
+  builds that no longer run). ExportResult carries `scratchKey` so the paths that finished with the
+  bytes free the file precisely instead of waiting for age. Cost stated: the app shell grew
+  275.6 → 281.5 kB (+1.8 kB gzip — the dock UI itself); the compose graph still loads only on an
+  export press, or at boot when persisted jobs exist.
 - I INVENTED A PROGRESS INDICATOR TWICE AND HAD TO BE SENT A SCREENSHOT (UI1, 2026-08-30, three
   rounds: "slider dont look like claude code effort at all, fix it", then "slider dont fucking look
   like this, is in it?" with a picture of the real control). The class of mistake is worth naming

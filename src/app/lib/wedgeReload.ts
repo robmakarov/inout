@@ -13,6 +13,8 @@
  * a fresh tab deserves a fresh first refresh.
  */
 
+import { appendWedgeJournal } from '@core/capture/wedgeJournal'
+
 const KEY = 'inout.wedgeReload.v1'
 /**
  * The notice is OWED, not merely recent (Robert 2026-08-25: after a wedge with a
@@ -44,12 +46,26 @@ export function shouldReloadForWedge(now = Date.now()): boolean {
 }
 
 export function noteWedgeReload(now = Date.now()): void {
+  // Written down before the navigation is even requested, so that a boot
+  // entry that never follows this one is proof the reload was asked for and
+  // never committed — the open question in the two "unresponsive after the
+  // refresh" reports (wedgeJournal.ts).
+  appendWedgeJournal({ kind: 'reload', t: now })
   try {
     sessionStorage.setItem(KEY, String(now))
     sessionStorage.setItem(NOTICE_KEY, String(now))
   } catch {
     /* storage refused — the ritual degrades to showing the error text */
   }
+}
+
+/**
+ * When this document's own reload was triggered, or 0 if it was not one. Read
+ * at boot to date the entries the reloaded page writes; deliberately does NOT
+ * consume anything — the notice debt above is a separate, once-only flag.
+ */
+export function wedgeReloadStamp(): number {
+  return readStamp()
 }
 
 /**

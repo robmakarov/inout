@@ -33,6 +33,7 @@ import {
   type DisplayRequestLevel,
 } from './displayWedge'
 import { displayRequestOutstanding, markDisplayRequest } from './displayInflight'
+import { appendWedgeJournal } from './wedgeJournal'
 import { beginDisplayForensics, describeForensics, noteScreenDelivered } from './stallForensics'
 import { knownGranted, rememberGrant, type DeviceGrant } from './grants'
 
@@ -1138,6 +1139,9 @@ export function acquireChannelsProgressive(
         wedgeCount: displayWedgeCount(),
         stall: 'stale',
       })
+      // AND ON THE MACHINE, where somebody can actually read it later
+      // (wedgeJournal.ts) — the sink above is a noop in production.
+      appendWedgeJournal({ kind: 'wedge', stall: 'stale', level: displayLevel, count: displayWedgeCount() })
       fail({ kind: 'screen', message: msg, denied: false, timedOut: true, stall: 'stale' })
       mark('display', 'failed', 'a previous screen request is still outstanding')
       if (config.systemAudio) {
@@ -1367,6 +1371,24 @@ export function acquireChannelsProgressive(
             ? {
                 focus: witness.focus,
                 deliveriesThisSession: witness.deliveriesThisSession,
+                pageAgeMs: witness.pageAgeMs,
+                waitedMs: witness.waitedMs,
+              }
+            : {}),
+        })
+        // THE SAME STATEMENT, WRITTEN DOWN. The console line above is for a
+        // console nobody will open and the sink is a noop in production, so
+        // the journal is the only copy that survives to be read off the
+        // machine afterwards (wedgeJournal.ts).
+        appendWedgeJournal({
+          kind: 'wedge',
+          stall,
+          level: displayLevel,
+          count: displayWedgeCount(),
+          ...(witness
+            ? {
+                focus: witness.focus,
+                deliveries: witness.deliveriesThisSession,
                 pageAgeMs: witness.pageAgeMs,
                 waitedMs: witness.waitedMs,
               }

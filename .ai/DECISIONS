@@ -406,3 +406,21 @@ the useful part: a remedy the user has to perform is not a fix, and an app that 
 after failing is still failing. Everything the wedge does now happens without the user — the request
 steps down a rung, the page replaces itself when its frame is poisoned, and the text says only what
 happened and that nothing was recorded.
+
+robert 2026-08-30 (3) — THE SITE-PERMISSION RESET IS A CURE, AND WE WERE WRONG ("i reseted
+permissions from inside chrome motherfucker, you were telling me its impossible"). Three sessions
+had written that quitting Chrome was the only way to clear a wedged share. He cleared one by
+resetting THIS SITE's permissions from inside Chrome. Recorded as fact in docs/SCREEN_WEDGE.md and
+in the canonical formulation, and it is the strongest discriminator the case has: a claim that dies
+with one ORIGIN's permission entry lives in Chrome's per-origin capture state, not in machine-wide
+macOS SCK — which demotes the "below Chrome" suspect the file was leaning on. The standing lesson is
+narrower than the bug: this project states impossibility far too easily about layers it cannot see,
+and every such line in a doc is a claim someone will disprove with one click.
+
+robert 2026-08-30 (4) — INSTRUMENTATION THAT ONLY PRINTS IS NOT INSTRUMENTATION. The forensics built
+this same day to "convict the next wedge" went to a console he has ruled out and to an analytics sink
+that is a noop in production, so his sixth wedge left nothing behind but four counters — and the
+second report of "unresponsive after the refresh" is still unconvicted. Evidence now lands in
+localStorage (`wedgeJournal.ts`, `inout.wedgeJournal.v1`), where an agent reads it off the machine
+over the browser MCP with nothing asked of him. The rule this sets: a diagnostic that requires the
+user to do anything is worth zero, exactly like a remedy that does (decision (2)).

@@ -86,6 +86,59 @@ describe('wedge memory', () => {
     expect(displayRequestLevel(1_000_001)).toBe(3)
   })
 
+  /**
+   * HIS ACTUAL RECORD, READ OFF THE PROFILE 2026-08-30 AT 16:21 MSK:
+   * `{wedgedAt: 16:18 today, level: 1, count: 6, stalls: 1, everDelivered: true}`.
+   * The first cut of the migration only recognised a machine sitting on the
+   * OLD floor (level 2), and his had walked past it: the day-probe cleared the
+   * mark (the rung resets, `count` does not), so wedge number six was taken on
+   * rung 0 — the FULL request — and the floor experiment the case file is
+   * waiting on had never run once.
+   */
+  it('SIX WEDGES AND STANDING ON RUNG 1: history puts a machine on the floor', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) =>
+        k === 'inout.displayWedge.v1'
+          ? JSON.stringify({ wedgedAt: 1_000_000, level: 1, count: 6, stalls: 1, everDelivered: true })
+          : null,
+      setItem: () => undefined,
+      removeItem: () => undefined,
+    })
+    resetDisplayWedgeForTests()
+    expect(displayRequestLevel(1_000_001)).toBe(3)
+  })
+
+  it('the flooring happens ONCE — a quiet day still walks the machine home', () => {
+    const stored = { wedgedAt: 1_000_000, level: 1, count: 6, stalls: 0, everDelivered: true }
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => (k === 'inout.displayWedge.v1' ? JSON.stringify(stored) : null),
+      setItem: () => undefined,
+      removeItem: () => undefined,
+    })
+    resetDisplayWedgeForTests()
+    expect(displayRequestLevel(1_000_001)).toBe(3)
+    // A whole day with no wedge buys exactly one rung — and the flag must not
+    // hand it straight back, or the ladder's only way up is dead for the
+    // machines that have used it most.
+    expect(displayRequestLevel(1_000_001 + WEDGE_PROBE_AFTER_MS)).toBe(2)
+  })
+
+  it('a NEW wedge on a machine with a history drops to the floor in one move', () => {
+    // Three wedges, then quiet days until the probe clears the mark entirely —
+    // which is exactly how his record came to read level 1 with count 6.
+    for (let i = 0; i < 3; i++) rememberDisplayWedge(1_000_000 + i)
+    let t = 1_000_010
+    for (let i = 0; i < 4; i++) {
+      t += WEDGE_PROBE_AFTER_MS + 1
+      displayRequestLevel(t)
+    }
+    expect(displayRequestLevel(t)).toBe(0)
+    // The next wedge is not this machine's first rodeo: it does not spend four
+    // more wedges re-walking a ladder it has already walked.
+    rememberDisplayWedge(t + 1)
+    expect(displayRequestLevel(t + 2)).toBe(3)
+  })
+
   it('a machine that has only just reached the old floor is left where it is', () => {
     vi.stubGlobal('localStorage', {
       getItem: (k: string) => (k === 'inout.displayWedge.v1' ? JSON.stringify({ wedgedAt: 1_000_000, level: 2, count: 2, everDelivered: true }) : null),
