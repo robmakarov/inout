@@ -233,6 +233,18 @@ phase: MVP validation (2026-07-16)
   Verified on prod: split, drag left to cut 5 s, close it — the clips slide together, the ruler skips
   the closed stretch, the filmstrip is continuous across the seam, and a global trim afterwards still
   reads 0:25 -> 0:20 with 8 lane pieces (4 channels x 2).
+- EVERY EXCLUDED STRETCH IS ONE THING, AND YOU CAN SEE THROUGH IT (2026-08-30, Robert: "cutted zone
+  keep slightly transparent to see whats cut, for cutted zone from beggining and end apply same
+  shit"). The zone was an OPAQUE scrim — honest that the material is gone, useless for judging
+  whether the right thing was cut, because you could not see what you had thrown away. It is 55 %
+  now, under a hatch. And the take's HEAD AND TAIL are cuts too — the global trim excludes them
+  exactly as a mid-cut excludes what sits between two clips — so they stopped being a plain dim band
+  and became the same zone, with the same undo and the same close, differing only in which edit field
+  the undo resets. One renderer for all three (`zoneActions`), so they cannot drift.
+  CLOSING IS NOT A ONE-WAY DOOR: a closed stretch leaves a seam and the seam is a BUTTON that opens
+  it again. Shipping the collapse without that was my gap, not a request.
+  The two buttons are stacked, not side by side ("i said delete UNDER cancel"), which also means they
+  survive in a much narrower cut — the threshold fell from 44 px to 24.
 - A CUT BOUNDARY IS ONE HANDLE, NOT TWO (2026-08-30, Robert: "grabbers to ugly and hard to distinct"
   + "when i split record i cant drag left part but right part grabber dont moves" — one defect, two
   reports). A fresh split leaves the end of one clip and the start of the next on the SAME pixel, and
@@ -243,10 +255,14 @@ phase: MVP validation (2026-07-16)
   Now the two halves share ONE gesture: the boundary stays where it was pressed and dragging opens
   the cut on whichever side it is dragged towards, so it is reversible — drag back through and that
   side closes while the other opens.
-  AND THE GRIP IS A GRIP: a 13x30 tab with two ridges, centred in the lanes, over a full-height rule.
-  A 3 px line says where a cut IS and nothing about being draggable. Accent for a cut inside the
-  take, white for the take's own start and end — same shape so both read as handles, different colour
-  so which is which needs no legend.
+  THE GRIP TOOK THREE ATTEMPTS and the first two failed the same way. v1 was a 2 px accent line — a
+  MARK: it says where the cut is and nothing about being draggable. v2 was a 13x30 tab with two
+  ridges floating mid-lane — an object, but an OPAQUE one pasted over the frames ("grabbers ugly as
+  fuck"). The lanes are a dense picture, so a handle here has to be present without covering them:
+  it is the grab zone MADE VISIBLE — a slim translucent band the full height of the lanes, outlined
+  so it reads as an object, with the crisp rule down its middle saying where the cut falls. Accent
+  inside the take, white for the take's own bounds. Found by injecting the candidates into the
+  DEPLOYED page and looking at them, instead of shipping a third guess.
 
 - A FRESH CUT COULD NOT BE GRABBED, FOR TWO REASONS AT ONCE (UI1, Robert: "cant grab normally grabers
   after split"). (1) A split happens AT the playhead, and the playhead's own 12 px grab strip sits
