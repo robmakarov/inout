@@ -1434,19 +1434,25 @@
   gap: 8px;
   /* Centred on the TRACK, not on the track-plus-labels column, so the buttons
      line up with the thing they are beside. */
-  margin-top: 3px;
+  margin-top: 0;
+  align-self: flex-start;
+  height: 26px;
 }
 
-/* A generous hit area around the blocks: the track is 10 px and a pointer
-   target should not be. The box takes the pointer and the keyboard. */
+/* THE TRACK. One continuous dark pill, no fill of any kind: a step is a choice,
+   not an amount, and every coloured-fill version of this control read as a
+   progress bar (see the note on QualitySlider.tsx). `--qs-tw` is the handle's
+   width and MUST equal THUMB_PX in that file — the handle travels inset by half
+   of itself so it never hangs off either end, and the dots use the same inset
+   so it always lands exactly on one. */
 .qs__railbox {
+  --qs-tw: 34px;
   position: relative;
-  height: 24px;
   display: flex;
   align-items: center;
   cursor: pointer;
   touch-action: none;
-  border-radius: var(--r-sm);
+  border-radius: 9px;
   outline: none;
 }
 .qs__railbox:focus-visible {
@@ -1455,45 +1461,46 @@
 .qs__rail {
   position: relative;
   flex: 1;
-  height: 10px;
+  height: 26px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-3), var(--text) 7%);
 }
-/* One block per step. Positioned absolutely from the same percentages the
-   handle and the labels use — a flex gap accumulates, so the fourth boundary
-   would sit a few pixels off the fourth label, and a control whose parts
-   disagree about where they are is worse than a plain bar. */
-.qs__block {
+/* Everything past the take's ceiling. With no fill there is no "unfilled" to
+   lean on, so the locked stretch is simply darker. */
+.qs__lock {
   position: absolute;
   top: 0;
+  right: 0;
   height: 100%;
+  border-radius: 0 8px 8px 0;
+  background: var(--bg);
+  opacity: 0.55;
 }
-/* The visible block, inset so there is a real gap between one step and the
-   next — drawn on a pseudo-element rather than by shrinking the box, so the
-   box keeps the exact percentage geometry the handle and the labels use. */
-.qs__block::after {
-  content: '';
-  position: absolute;
-  inset: 0 3px;
-  border-radius: 3px;
-  background: var(--surface-3);
-  transition: background var(--t-fast) var(--ease);
-}
-.qs__block--on::after {
-  background: var(--accent);
-}
-.qs__block--locked::after {
-  background: repeating-linear-gradient(-45deg, var(--surface-2) 0 4px, transparent 4px 8px);
-  box-shadow: inset 0 0 0 1px var(--surface-2);
-}
-.qs__thumb {
+/* A stop. The handle covers the one it is on, which is exactly what the real
+   control does. */
+.qs__dot {
   position: absolute;
   top: 50%;
-  width: 20px;
-  height: 20px;
-  margin: -10px 0 0 -10px;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
   border-radius: 50%;
+  background: var(--text-faint);
+}
+.qs__dot--locked {
+  opacity: 0.4;
+}
+/* The handle: a white rounded rectangle the height of the track, not a circle
+   riding on top of it. */
+.qs__thumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: var(--qs-tw);
+  margin-left: calc(var(--qs-tw) / -2);
+  border-radius: 6px;
   background: var(--text);
-  border: 3px solid var(--bg);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
   transition: left var(--t-fast) var(--ease);
   pointer-events: none;
 }
@@ -1506,7 +1513,7 @@
 .qs__labels {
   position: relative;
   height: 30px;
-  margin-top: 5px;
+  margin-top: 6px;
 }
 .qs__label {
   position: absolute;
@@ -2137,15 +2144,15 @@
   flex-direction: column;
   gap: 5px;
 }
-/* One decoded frame. Fixed box so a portrait take and a landscape one leave the
-   card the same shape; `cover` because this is an identifier, not a preview of
-   the framing. Empty until it lands, and empty forever if it will not decode —
-   the card is complete without it. */
+/* One decoded frame, filling the card's full height (Robert: "make preview
+   image on video card fill height"). Fixed WIDTH so a portrait take and a
+   landscape one leave the card the same shape, and `cover` because this is an
+   identifier rather than a preview of the framing. Empty until it lands, and
+   empty forever if it will not decode — the card is complete without it. */
 .takecard__thumb {
   flex: none;
-  width: 76px;
-  align-self: center;
-  aspect-ratio: 16 / 10;
+  width: 96px;
+  align-self: stretch;
   padding: 0;
   border: 1px solid var(--surface-3);
   border-radius: var(--r-sm);

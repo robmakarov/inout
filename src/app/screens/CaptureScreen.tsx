@@ -592,7 +592,13 @@ export function CaptureScreen() {
             stops={QUALITY_STEPS.map((q) => ({ id: q.id, label: q.label }))}
             value={step}
             disabled={arming}
-            note={qualityStepById(step).note}
+            // UI1, Robert: "remove all three captions near slider in main
+            // screen" — the QUALITY label, the step's name beside it, and the
+            // sentence underneath. The step names under the track already say
+            // which one is chosen; the sentence survives as the track's tooltip,
+            // because "heaviest on the machine" is worth having somewhere.
+            compact
+            hint={qualityStepById(step).note}
             onChange={(id) => {
               const next = id as QualityStepId
               setStep(next)

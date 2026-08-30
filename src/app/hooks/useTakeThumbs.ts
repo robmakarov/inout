@@ -23,12 +23,14 @@ import type { Recording } from '@core/types'
  *    before this existed — which is the correct behaviour for something the
  *    screen does not need in order to work.
  *
- * The frame is taken at 1 s (or the middle of a shorter take) rather than at 0:
- * the first frame of a screen capture is very often a blank desktop or a
- * half-painted window, which makes every card look identical.
+ * The frame is taken from the MIDDLE of the take (Robert: "mid record
+ * screenshot on image"). Not the first frame, which on a screen capture is very
+ * often a blank desktop or a half-painted window — every card would look the
+ * same — and not a fixed offset either, which is the same mistake on a longer
+ * take. The middle is where a recording is actually doing the thing it is of.
  */
-const THUMB_W = 128
-const THUMB_H = 80
+const THUMB_W = 160
+const THUMB_H = 120
 
 export function useTakeThumbs(takes: Recording[] | null): Record<string, string> {
   const [thumbs, setThumbs] = useState<Record<string, string>>({})
@@ -60,7 +62,7 @@ export function useTakeThumbs(takes: Recording[] | null): Record<string, string>
         try {
           const blob = await blobStore.read(source)
           const lenSec = Math.max(0, take.durationMs / 1000)
-          const at = lenSec > 2 ? 1 : lenSec / 2
+          const at = lenSec / 2
           const strip = await buildFilmstrip(
             blob,
             [at],

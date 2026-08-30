@@ -3,39 +3,38 @@ import { useRef, type ReactNode } from 'react'
 /**
  * THE QUALITY SLIDER (task UI1).
  *
- * Robert, 2026-08-30: "make chatgpt/claudecode effort-like slider for our
- * quality choosing", then on the first attempt: "slider dont look like claude
- * code effort at all, fix it".
+ * Robert asked for a "chatgpt/claudecode effort-like slider", rejected the
+ * first attempt ("slider dont look like claude code effort at all"), rejected
+ * the second, and then sent a SCREENSHOT OF THE ACTUAL CONTROL. That ended the
+ * guessing, and both of my guesses were wrong in the same way: I kept inventing
+ * a progress indicator.
  *
- * WHAT WAS WRONG WITH THE FIRST ONE, and it is worth writing down because it is
- * a whole class of mistake: it was a PROGRESS BAR with dots on it. A 4 px hair
- * of a rail, a continuous accent fill, a small round handle. Nothing about it
- * said "there are five discrete levels here and you are on the third" — the
- * fill read as "43 % of the way through something", which is the one thing a
- * stepped control must never look like.
+ *   attempt 1 — a thin rail with a continuous accent FILL and a round handle.
+ *               Reads as "43 % of the way through something".
+ *   attempt 2 — the rail cut into accent-filled BLOCKS. Still a fill, just
+ *               chunkier: a five-bar signal meter, which says "more is better"
+ *               rather than "you are on step three of five".
+ *   the real one — ONE continuous dark track, NO fill anywhere, a faint dot at
+ *               each stop inside it, and a white rounded-rectangle handle
+ *               sitting on the stop you are on. The only thing that moves is
+ *               the handle. Nothing is coloured, because nothing is being
+ *               measured — a step is a choice, not an amount.
  *
- * An effort control reads as a METER: discrete blocks, filled up to where you
- * are, empty above it. So the track is SEGMENTED — one block per step, real
- * gaps between them, filled blocks in accent and empty ones in surface — and it
- * is thick enough (10 px) to read as blocks rather than as a line. The handle
- * sits on the boundary you are at, so the thing is still obviously draggable.
- *
- * The blocks are positioned ABSOLUTELY from the same percentages the handle and
- * the labels use, rather than being flex children with a gap: a flex gap
- * accumulates, so the fourth boundary would sit a few pixels off the fourth
- * label, and a control whose parts disagree about where they are is worse than
- * a plain bar.
+ * So: uniform track, dots, white pill handle. The handle travels INSET by half
+ * its own width so it stays inside the track at both ends, and the dots use the
+ * same inset so the handle lands exactly on one.
  *
  * The same component runs in both places it is needed — above the chips before
  * a take, and under the timeline in the editor — because Robert asked for the
- * same slider in both ("make same slider of quality"), and because a control
- * that looks different in the two places it appears is two controls.
+ * same slider in both, and because a control that looks different in the two
+ * places it appears is two controls.
  *
  * UNREACHABLE STEPS ARE SHOWN, NOT HIDDEN. In the editor the ladder stops at
- * whatever the take was recorded under, and the blocks above it stay on the
- * track hatched out: a ladder that silently loses its top two rungs looks
- * broken, while one that shows them struck through says "you chose this before
- * you recorded" without a sentence.
+ * whatever the take was recorded under. With no fill there is no "unfilled" to
+ * lean on, so the locked stretch of track is darkened and its labels struck
+ * through: a ladder that silently loses its top rungs looks broken, one that
+ * shows them struck says "you chose this before you recorded" without a
+ * sentence.
  */
 export interface QualityStop {
   id: string
@@ -50,6 +49,7 @@ export function QualitySlider({
   onChange,
   maxIndex,
   note,
+  hint,
   title = 'Quality',
   actions,
   disabled = false,
@@ -61,8 +61,11 @@ export function QualitySlider({
   onChange: (id: string) => void
   /** Highest index the user may reach. Defaults to the top of the ladder. */
   maxIndex?: number
-  /** The sentence under the track — what the chosen step costs and buys. */
+  /** The sentence under the track — what the chosen step costs and buys.
+   *  Not rendered in `compact`, which is now both places it is used. */
   note?: ReactNode
+  /** The same thing as a tooltip, for where the sentence itself is not wanted. */
+  hint?: string
   title?: string
   /**
    * Sits on the track's own line, to its right — Robert: "export buttons on
@@ -81,6 +84,13 @@ export function QualitySlider({
 }) {
   const railRef = useRef<HTMLDivElement>(null)
   const last = Math.max(0, stops.length - 1)
+  /**
+   * The handle's width, and it has to be known HERE as well as in the CSS: the
+   * handle travels inset by half of itself at each end so it never hangs off
+   * the track, which means a pointer at the very left edge is still step 0.
+   * Must equal `--qs-tw` in app.css.
+   */
+  const THUMB_PX = 34
   const cap = Math.min(maxIndex ?? last, last)
   const index = Math.max(
     0,
@@ -88,14 +98,20 @@ export function QualitySlider({
   )
   const current = stops[index] ?? stops[0]
 
-  /** Nearest step to a pointer position. */
+  /** Nearest step to a pointer position, in the handle's own inset travel. */
   const indexAt = (clientX: number): number => {
     const el = railRef.current
     if (!el) return index
     const r = el.getBoundingClientRect()
-    const f = Math.min(1, Math.max(0, (clientX - r.left) / Math.max(1, r.width)))
+    const travel = Math.max(1, r.width - THUMB_PX)
+    const f = Math.min(1, Math.max(0, (clientX - r.left - THUMB_PX / 2) / travel))
     return Math.round(f * last)
   }
+
+  /** Where step `i` sits on the track — one expression, used by the dots, the
+   *  handle and the labels, so they cannot disagree about a position. */
+  const at = (i: number): string =>
+    `calc(var(--qs-tw) / 2 + (100% - var(--qs-tw)) * ${last === 0 ? 0 : i / last})`
 
   const pick = (next: number, viaPointer: boolean): void => {
     if (disabled) return
@@ -134,9 +150,6 @@ export function QualitySlider({
   }
 
   const pct = (i: number) => (last === 0 ? 0 : (i / last) * 100)
-  /** One block per step. The first block is the floor, so there are `last` of
-   *  them: block i spans step i → i+1 and is lit once you are past step i. */
-  const blocks = Array.from({ length: Math.max(1, last) }, (_, i) => i)
 
   return (
     <div className={`qs${disabled ? ' qs--disabled' : ''}${compact ? ' qs--compact' : ''}`}>
@@ -159,6 +172,7 @@ export function QualitySlider({
             aria-valuenow={index}
             aria-valuetext={current?.label}
             aria-disabled={disabled || undefined}
+            title={hint}
             onKeyDown={onKey}
             onPointerDown={drag}
             onPointerMove={(e) => {
@@ -166,16 +180,15 @@ export function QualitySlider({
             }}
           >
             <div ref={railRef} className="qs__rail">
-              {blocks.map((i) => (
+              {cap < last && <span className="qs__lock" style={{ left: at(cap) }} />}
+              {stops.map((s, i) => (
                 <span
-                  key={i}
-                  className={`qs__block${i < index ? ' qs__block--on' : ''}${
-                    i >= cap ? ' qs__block--locked' : ''
-                  }`}
-                  style={{ left: `${pct(i)}%`, width: `${pct(1)}%` }}
+                  key={s.id}
+                  className={`qs__dot${i > cap ? ' qs__dot--locked' : ''}`}
+                  style={{ left: at(i) }}
                 />
               ))}
-              <span className="qs__thumb" style={{ left: `${pct(index)}%` }} />
+              <span className="qs__thumb" style={{ left: at(index) }} />
             </div>
           </div>
 
@@ -187,7 +200,7 @@ export function QualitySlider({
                 className={`qs__label${i === index ? ' qs__label--on' : ''}${
                   i > cap ? ' qs__label--locked' : ''
                 }${i === 0 ? ' qs__label--first' : ''}${i === last ? ' qs__label--last' : ''}`}
-                style={{ left: `${pct(i)}%` }}
+                style={{ left: i === 0 || i === last ? `${pct(i)}%` : at(i) }}
                 aria-hidden="true"
                 tabIndex={-1}
                 onClick={() => pick(i, true)}
