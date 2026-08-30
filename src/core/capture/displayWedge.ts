@@ -82,6 +82,14 @@ import { BROWSER_LABEL } from '../platform'
 import type { BrowserName, OSName } from '../platform'
 
 const KEY = 'inout.displayWedge.v1'
+
+/**
+ * How many consecutive good takes a rung must carry before the request climbs
+ * back toward the full one. Three: enough that a climb is not triggered by the
+ * single take that happened to work, few enough that a machine whose cause is
+ * gone is back at full quality within a minute of ordinary use.
+ */
+export const GOOD_TAKES_TO_CLIMB = 3
 const WEDGE_TTL_MS = 24 * 60 * 60 * 1000
 
 /** 0 = full request. Higher = fewer of OUR options; see the ladder above. */
@@ -95,6 +103,8 @@ interface WedgeState {
   /** Which rung the next request uses. */
   level: DisplayRequestLevel
   count: number
+  /** Consecutive good takes at the CURRENT rung — see rememberDisplaySuccess. */
+  goodRun: number
   /**
    * Has this browser profile ever been handed a screen track? The macOS
    * screen-recording grant is per-application and permanent once given, so
@@ -127,6 +137,7 @@ function load(): WedgeState {
         // their next click instead of waiting out the TTL.
         level: typeof s.level === 'number' ? clamp(s.level) : 1,
         count: (s.count ?? 0) | 0,
+        goodRun: (s.goodRun ?? 0) | 0,
         // A record written before W1 carries no delivery flag, and the honest
         // reading of that is FALSE: we have no evidence this profile was ever
         // handed a share. The only consequence is that its next stall names
@@ -140,7 +151,7 @@ function load(): WedgeState {
   } catch {
     /* absent, corrupt, or storage refused — memory-only is fine */
   }
-  mem = { wedgedAt: 0, level: 0, count: 0, everDelivered: false }
+  mem = { wedgedAt: 0, level: 0, count: 0, goodRun: 0, everDelivered: false }
   return mem
 }
 
@@ -165,6 +176,9 @@ export function rememberDisplayWedge(now = Date.now()): void {
   s.level = clamp(displayRequestLevel(now) + 1)
   s.wedgedAt = now
   s.count += 1
+  // A wedge ends whatever good run was accumulating: the evidence for climbing
+  // is consecutive successes, and this is not one.
+  s.goodRun = 0
   save()
 }
 
@@ -196,13 +210,38 @@ export function rememberDisplaySuccess(usedLevel: DisplayRequestLevel): void {
     if (first) save()
     return
   }
-  // A FULL request that worked is the strongest evidence there is — nothing
-  // of ours was dropped and the screen still arrived — so rung 0 clears
-  // outright, as it always did. Any lower rung climbs one step from wherever
-  // the mark stands now.
-  const climbed = usedLevel === 0 ? 0 : clamp(s.level - 1)
-  s.level = climbed
-  if (climbed === 0) s.wedgedAt = 0
+  if (usedLevel === 0) {
+    // A FULL request that worked is the strongest evidence there is — nothing
+    // of ours was dropped and the screen still arrived.
+    s.level = 0
+    s.wedgedAt = 0
+    s.goodRun = 0
+    save()
+    return
+  }
+  // ONE GOOD TAKE IS NOT READY, AND THE FIRST CUT OF THIS CLIMBED ON ONE.
+  //
+  // W1 shipped "any success climbs one rung", which walks a machine straight
+  // back onto the request that had just wedged it. Robert, 2026-08-30: "chrome
+  // screen and mic wedges happend every second record after reopening chrome".
+  // That is this, deterministically: wedge → rung 1 → good take → climb to rung
+  // 0 → rung 0 is the request that wedges → wedge. Every other record, forever.
+  // The old pre-W1 behaviour never oscillated because it never climbed at all;
+  // it just stayed degraded for a day, which is the bug W1 was written to fix.
+  // Both were wrong in the same place: how much evidence a climb needs.
+  //
+  // So a rung has to be EARNED CLEAR: consecutive good takes at the rung it is
+  // standing on. A machine whose cause is gone comes back on its own in a few
+  // takes, and a machine that genuinely chokes on the rung above settles where
+  // it works instead of rediscovering that every second take.
+  s.goodRun += 1
+  if (s.goodRun < GOOD_TAKES_TO_CLIMB) {
+    save()
+    return
+  }
+  s.goodRun = 0
+  s.level = clamp(s.level - 1)
+  if (s.level === 0) s.wedgedAt = 0
   save()
 }
 
@@ -217,6 +256,7 @@ export function resetDisplayWedge(): void {
   s.wedgedAt = 0
   s.level = 0
   s.count = 0
+  s.goodRun = 0
   save()
 }
 
