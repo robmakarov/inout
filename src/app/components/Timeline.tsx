@@ -98,7 +98,14 @@ export function Timeline({
    * somewhere else does not collapse the wrong hole.
    */
   const [collapsed, setCollapsed] = useState<ReadonlySet<number>>(new Set())
-  useEffect(() => setCollapsed(new Set()), [recording.id])
+  /** The take's own head and tail, closed the same way a mid-cut is. Held apart
+   *  from `collapsed` because they are bounded by the trim rather than by a
+   *  segment edge, so an instant is not a stable key for them. */
+  const [closedEnds, setClosedEnds] = useState({ head: false, tail: false })
+  useEffect(() => {
+    setCollapsed(new Set())
+    setClosedEnds({ head: false, tail: false })
+  }, [recording.id])
   /**
    * Robert asked for the clips to "slide to each other smoothly", so the
    * collapse is animated — and ONLY the collapse. The same transition left on
@@ -114,8 +121,9 @@ export function Timeline({
     },
     [],
   )
-  const closeGap = (atMs: number) => {
-    setCollapsed((prev) => new Set(prev).add(atMs))
+  const closeGap = (atMs: number | null, end?: 'head' | 'tail') => {
+    if (end) setClosedEnds((prev) => ({ ...prev, [end]: true }))
+    else if (atMs !== null) setCollapsed((prev) => new Set(prev).add(atMs))
     setSliding(true)
     if (slideTimer.current) clearTimeout(slideTimer.current)
     slideTimer.current = setTimeout(() => setSliding(false), 280)
@@ -127,7 +135,13 @@ export function Timeline({
     .slice(0, -1)
     .map((sg, i) => ({ index: i, startMs: sg.endMs, endMs: allSegments[i + 1]!.startMs }))
     .filter((h) => h.endMs > h.startMs)
-  const hidden = holes.filter((h) => collapsed.has(h.startMs))
+  const headSpan = { startMs: 0, endMs: edit.globalTrimStartMs }
+  const tailSpan = { startMs: edit.globalTrimEndMs, endMs: totalMs }
+  const hidden = [
+    ...(closedEnds.head && headSpan.endMs > 0 ? [headSpan] : []),
+    ...holes.filter((h) => collapsed.has(h.startMs)),
+    ...(closedEnds.tail && tailSpan.endMs > tailSpan.startMs ? [tailSpan] : []),
+  ]
   const hiddenMs = hidden.reduce((n, h) => n + (h.endMs - h.startMs), 0)
   /** The take's length as the timeline DRAWS it. */
   const shownMs = Math.max(1, totalMs - hiddenMs)
@@ -303,6 +317,77 @@ export function Timeline({
       onEdit({ ...cur, segments: normalizeSegments(cur, segs) })
     })
   }
+
+  /**
+   * EVERY EXCLUDED STRETCH LOOKS AND BEHAVES THE SAME (Robert: "for cutted zone
+   * from beggining and end apply same shit"). The take's head and tail are cuts
+   * too — the global trim excludes them exactly as a mid-cut excludes what is
+   * between two clips — so they get the same scrim, the same undo and the same
+   * close, and differ only in which edit field the undo resets.
+   */
+  const zoneActions = (
+    startMs: number,
+    endMs: number,
+    key: string,
+    onRestore: () => void,
+    onClose: () => void,
+  ) => {
+    const w = spanW(startMs, endMs)
+    return (
+      <div key={key} className="tl__gap" style={{ left: x(startMs), width: Math.max(1, w) }}>
+        {w >= 24 && (
+          <div className="tl__gap-acts">
+            <button
+              className={`tl__gap-btn${w >= 64 ? ' tl__gap-btn--wide' : ''}`}
+              title={`Put back ${formatClock(endMs - startMs)} — undo this cut`}
+              aria-label={`Undo this cut and put back ${formatClock(endMs - startMs)}`}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation()
+                onRestore()
+              }}
+            >
+              <Icon name="undo" size={12} />
+              {w >= 64 && <span>{formatClock(endMs - startMs)}</span>}
+            </button>
+            {/* CLOSE THE HOLE. The material was already excluded — this only
+                stops the timeline spending width on it, so what is kept closes
+                up. Robert: "remove it completle and other part will slide to
+                each other smoothly". */}
+            <button
+              className="tl__gap-btn tl__gap-btn--close"
+              title="Close this gap — the timeline stops showing it and the rest slides together"
+              aria-label="Close this gap"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation()
+                onClose()
+              }}
+            >
+              <Icon name="trash" size={12} />
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  /** A closed stretch, and the way back into it. */
+  const seam = (atMs: number, key: string, onOpen: () => void) => (
+    <button
+      key={key}
+      type="button"
+      className="tl__seam"
+      style={{ left: x(atMs) }}
+      title="Material was cut out here — click to show it again"
+      aria-label="Show what was cut here"
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation()
+        onOpen()
+      }}
+    />
+  )
 
   /**
    * PUT THE MATERIAL BACK — the undo inside the cut zone itself (UI1, Robert:
@@ -492,8 +577,26 @@ export function Timeline({
 
       {width > 0 && (
         <div className="tl__overlay">
-          <div className="tl__dim" style={{ left: 0, width: x(gStart) }} />
-          <div className="tl__dim" style={{ left: x(gEnd), right: 0 }} />
+          {gStart > 0 &&
+            (closedEnds.head
+              ? seam(0, 'seam-head', () => setClosedEnds((p) => ({ ...p, head: false })))
+              : zoneActions(
+                  0,
+                  gStart,
+                  'zone-head',
+                  () => onEdit({ ...editRef.current, globalTrimStartMs: 0 }),
+                  () => closeGap(null, 'head'),
+                ))}
+          {gEnd < totalMs &&
+            (closedEnds.tail
+              ? seam(totalMs, 'seam-tail', () => setClosedEnds((p) => ({ ...p, tail: false })))
+              : zoneActions(
+                  gEnd,
+                  totalMs,
+                  'zone-tail',
+                  () => onEdit({ ...editRef.current, globalTrimEndMs: totalMs }),
+                  () => closeGap(null, 'tail'),
+                ))}
           {/* Timed zooms (F2): a dot where the view lands, and a bar showing
               the move it eased through. Draggable in time since F2b — the
               gesture on the stage still writes them, this only moves WHEN. */}
@@ -545,52 +648,24 @@ export function Timeline({
           {segments.length > 1 &&
             segments.slice(0, -1).map((sg, i) => {
               const removedMs = segments[i + 1]!.startMs - sg.endMs
-              // A bare split removes nothing: there is no zone to draw, and no
-              // cut to undo — the two handles are the whole of it.
+              // A bare split removes nothing: there is no zone to draw and no
+              // cut to undo — the boundary handle is the whole of it.
               if (removedMs <= 0) return null
-              // Collapsed: the clips either side have closed up and the hole is
-              // a seam, not a zone. Nothing to put a button in.
               if (collapsed.has(sg.endMs)) {
-                return <div key={`seam-${sg.endMs}`} className="tl__seam" style={{ left: x(sg.endMs) }} />
+                return seam(sg.endMs, `seam-${sg.endMs}`, () =>
+                  setCollapsed((prev) => {
+                    const next = new Set(prev)
+                    next.delete(sg.endMs)
+                    return next
+                  }),
+                )
               }
-              const w = spanW(sg.endMs, segments[i + 1]!.startMs)
-              return (
-                <div key={`gap-${sg.endMs}`} className="tl__gap" style={{ left: x(sg.endMs), width: Math.max(1, w) }}>
-                  {w >= 24 && (
-                    <div className="tl__gap-acts">
-                      <button
-                        className={`tl__gap-btn${w >= 64 ? ' tl__gap-btn--wide' : ''}`}
-                        title={`Put back ${formatClock(removedMs)} — undo this cut`}
-                        aria-label={`Undo this cut and put back ${formatClock(removedMs)}`}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          restoreGap(i)
-                        }}
-                      >
-                        <Icon name="undo" size={12} />
-                        {w >= 64 && <span>{formatClock(removedMs)}</span>}
-                      </button>
-                      {/* CLOSE THE HOLE. The material was already excluded the
-                          moment the cut was made — this only stops the timeline
-                          spending width on it, so the clips either side slide
-                          together. Robert: "remove it completle and other part
-                          will slide to each other smoothly". */}
-                      <button
-                        className="tl__gap-btn tl__gap-btn--close"
-                        title="Close this gap — the clips slide together and the timeline stops showing it"
-                        aria-label="Close this gap"
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          closeGap(sg.endMs)
-                        }}
-                      >
-                        <Icon name="trash" size={12} />
-                      </button>
-                    </div>
-                  )}
-                </div>
+              return zoneActions(
+                sg.endMs,
+                segments[i + 1]!.startMs,
+                `gap-${sg.endMs}`,
+                () => restoreGap(i),
+                () => closeGap(sg.endMs),
               )
             })}
           {segments.length > 1 &&

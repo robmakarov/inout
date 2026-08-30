@@ -1053,12 +1053,6 @@
   pointer-events: none;
   z-index: 3;
 }
-.tl__dim {
-  position: absolute;
-  top: 0;
-  bottom: 26px;
-  background: var(--overlay);
-}
 .tl__trim {
   position: absolute;
   top: 0;
@@ -1993,10 +1987,14 @@
 }
 /* Cut-out material: dimmed and struck through, so it reads as removed rather
    than merely deselected. */
-/* THE CUT-OUT ZONE, RECESSED. There is nothing in it to look at, so it stops
-   reading as timeline: a flat dark scrim with a hatch over it, rather than a
-   framed band competing with the lanes it sits between. It carries its own undo
-   (UI1, Robert: "make cutted out zone shrink with button undo inside"). */
+/* AN EXCLUDED STRETCH — a cut in the middle, or the head and tail the trim
+   leaves out. All three are the same thing and now look the same (Robert: "for
+   cutted zone from beggining and end apply same shit").
+   TRANSLUCENT ON PURPOSE: "keep slightly transparent to see whats cut". It was
+   an opaque scrim, which is honest about the material being gone and useless
+   for deciding whether you cut the right thing — you could not see what you had
+   thrown away. The frames read through it now, under a hatch that says
+   excluded. */
 .tl__gap {
   position: absolute;
   top: 0;
@@ -2005,14 +2003,11 @@
   align-items: center;
   justify-content: center;
   background:
-    repeating-linear-gradient(
-      -45deg,
-      rgba(255, 255, 255, 0.05) 0 3px,
-      transparent 3px 7px
-    ),
-    var(--bg);
+    repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.055) 0 3px, transparent 3px 7px),
+    rgba(10, 10, 12, 0.55);
   pointer-events: none;
 }
+
 /* What you can do with a cut, inside the cut itself. Only drawn where there is
    room — below that the gap is a few pixels wide and buttons in it would cover
    the clips on either side. */
@@ -2060,22 +2055,31 @@
   color: var(--record);
 }
 
-/* A gap that has been closed. The clips either side have slid together, so
-   what is left is a SEAM — a mark saying material was taken out here, not a
-   zone with anything in it. */
+/* A stretch that has been CLOSED: what is kept has slid together, so all that
+   is left is a seam saying material came out here. It is a button — closing is
+   otherwise a one-way door, and a timeline you cannot get back into is worse
+   than one that wastes a little width. */
 .tl__seam {
   position: absolute;
   top: 0;
   bottom: 26px;
-  width: 3px;
-  margin-left: -1.5px;
-  border-radius: 2px;
-  background: repeating-linear-gradient(
-    180deg,
-    var(--text-faint) 0 3px,
-    transparent 3px 6px
-  );
-  pointer-events: none;
+  width: 11px;
+  margin-left: -5.5px;
+  padding: 0;
+  border: none;
+  background: linear-gradient(
+      180deg,
+      var(--text-faint) 0 3px,
+      transparent 3px 6px
+    )
+    50% 0 / 3px 6px repeat-y;
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 4;
+  transition: background-color var(--t-fast) var(--ease);
+}
+.tl__seam:hover {
+  background-color: color-mix(in srgb, var(--text), transparent 88%);
 }
 
 /* The slide itself, and it lives only for the length of one — see `sliding` in
@@ -2088,7 +2092,6 @@
 .tl--sliding .tl__seam,
 .tl--sliding .tl__cut,
 .tl--sliding .tl__trim,
-.tl--sliding .tl__dim,
 .tl--sliding .tl__playhead,
 .tl--sliding .tl__seg-del,
 .tl--sliding .tl__seg-speed,
