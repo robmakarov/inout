@@ -4,7 +4,6 @@ import { aspectOf, frameForAspect, sourceFrameEnabled, sourceResEnabled } from '
 import { DEFAULT_FRAME_RATE, normalizeRate, sourceRateEnabled } from '@core/rate'
 import { singleGenCaptureEnabled } from '@core/singleGen'
 import { qualityDropsAllowed } from './captureQuality'
-import { holdShare, isHeldTrack, keepShareEnabled, releaseHeldShare } from './persistentShare'
 import {
   differsMeaningfully,
   resolutionStepEnabled,
@@ -2165,20 +2164,10 @@ class Session implements CaptureSession {
     this.unloadHandler = null
   }
 
-  /** O12 — a cancel gives the share back. See holdShare's own note. */
-  private dropHeldShare(reason: string): void {
-    releaseHeldShare(reason)
-  }
-
   private releaseMedia(): void {
     this.removeUnloadGuard()
     for (const ch of this.channels) {
-      // O12: the screen share this session is holding for the NEXT take is not
-      // this take's to stop. Everything else is released exactly as before, and
-      // the held stream is still registered with deviceGuard, so pagehide and
-      // cancel still turn it off — the no-device-outlives-the-tab guarantee is
-      // untouched.
-      for (const t of ch.stream.getTracks()) if (!isHeldTrack(t)) t.stop()
+      for (const t of ch.stream.getTracks()) t.stop()
       // The prewarmed AudioContext is handed to the measured capture at
       // start(), which nulls this and takes over closing it. A take that ends
       // BEFORE start — every cancelled arm — never transfers it, and nothing
@@ -2357,18 +2346,6 @@ class Session implements CaptureSession {
     // is how a slow or stuck disk kept the camera, mic and screen running
     // after the user had pressed stop and moved on.
     await compositeStopped
-    // O12: BEFORE the devices go off, decide whether the SCREEN share is kept
-    // for the next take. Only at stop, never at cancel — a cancelled arm is
-    // exactly where the user may be trying to get out of a share that is
-    // already going wrong, and handing that one forward would be the opposite
-    // of a fix.
-    if (keepShareEnabled()) {
-      const screen = this.channels.find((c) => c.kind === 'screen' && c.media === 'video')
-      const sysAudio = this.channels.find((c) => c.kind === 'system-audio')
-      if (screen && screen.track.readyState === 'live') {
-        holdShare(screen.stream, screen.track, sysAudio?.track ?? null)
-      }
-    }
     this.releaseMedia()
     try {
       await withTimeout(
@@ -2570,11 +2547,6 @@ class Session implements CaptureSession {
       return
     }
     this.cancelled = true
-    // O12: a cancel gives the share back rather than keeping it. This is the
-    // one case where the user may be trying to get OUT of a share that is
-    // already going wrong, and holding it forward would be the opposite of a
-    // fix. It is also what makes "press record, cancel" a way out by hand.
-    this.dropHeldShare('the take was cancelled')
     this.resuming.clear()
     this.clearTick()
     this.releaseWakeLock()

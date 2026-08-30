@@ -79,3 +79,77 @@ export function unsupportedReason(kind: ChannelKind, caps: Capabilities): string
   }
   return 'Camera and mic access isn’t available in this browser.'
 }
+
+/**
+ * WHAT THIS TAKE LOST WHILE IT WAS RECORDING, said in the editor rather than
+ * left in a console the tab already closed.
+ *
+ * Robert, 2026-08-30: "tab audio died completly". The take KNEW — every channel
+ * carries `silentTailMs`, `revivals` and its track's life events, stored on the
+ * recording precisely because "the console dies with the tab" — and nothing
+ * showed him any of it. He found out by listening. That is the same defect as a
+ * silently mic-less take, one layer in: the evidence existed and the interface
+ * stayed quiet.
+ *
+ * Deliberately only reports what a LISTENER would notice. A second of padding
+ * on an hour-long take is the guard working, not news; a channel that ended in
+ * silence, or that had to have its tap rebuilt, is the thing worth a sentence.
+ */
+export interface TakeLoss {
+  kind: ChannelKind
+  message: string
+}
+
+/** Below this a silent tail is a quiet ending, not a dead source. */
+const SILENT_TAIL_FLOOR_MS = 3_000
+/** Padding worth mentioning: a fifth of a second of inserted silence. */
+const PAD_FLOOR_MS = 200
+
+export function takeLosses(
+  channels: readonly {
+    kind: ChannelKind
+    media: string
+    durationMs: number
+    diagnostics?: {
+      silentTailMs?: number
+      paddedMs?: number
+      revivals?: number
+      events?: { atMs: number; type: string }[]
+    }
+  }[],
+  caps: Capabilities,
+): TakeLoss[] {
+  const out: TakeLoss[] = []
+  for (const c of channels) {
+    if (c.media !== 'audio') continue
+    const d = c.diagnostics
+    if (!d) continue
+    const name = channelLabel(c.kind, caps)
+    const tail = d.silentTailMs ?? 0
+    const revivals = d.revivals ?? 0
+    const muted = (d.events ?? []).some((e) => e.type === 'mute')
+    if (tail >= SILENT_TAIL_FLOOR_MS) {
+      const secs = Math.round(tail / 1000)
+      const from = Math.max(0, Math.round((c.durationMs - tail) / 1000))
+      out.push({
+        kind: c.kind,
+        message:
+          `${name} went silent ${secs}s before the end (from ${from}s) and never came back` +
+          (muted ? ' — the source muted itself' : '') +
+          (revivals > 0 ? `, after ${revivals} attempt${revivals === 1 ? '' : 's'} to reopen it` : '') +
+          '. The recording kept its length; those seconds are silence.',
+      })
+    } else if (revivals > 0) {
+      out.push({
+        kind: c.kind,
+        message: `${name} stopped delivering sound mid-take and was reopened ${revivals} time${revivals === 1 ? '' : 's'} — there may be a gap.`,
+      })
+    } else if ((d.paddedMs ?? 0) >= PAD_FLOOR_MS) {
+      out.push({
+        kind: c.kind,
+        message: `${name} lost ${Math.round((d.paddedMs ?? 0) / 100) / 10}s to a machine that could not keep up; silence was added to hold it in sync.`,
+      })
+    }
+  }
+  return out
+}

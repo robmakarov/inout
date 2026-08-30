@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   displayRequestLevel,
-  releaseHeldShare,
   loadCaptureEngine,
   loadCapturePrefs,
   resetDisplayWedge,
@@ -493,7 +492,6 @@ export function CaptureScreen() {
                 className="capture__notice-btn"
                 onClick={() => {
                   resetDisplayWedge()
-                  releaseHeldShare('the user cleared reduced mode')
                   setReducedRung(0)
                   setWedgeNotice(null)
                   toast('Reduced mode cleared — the next take asks for full quality')
