@@ -39,6 +39,15 @@ import {
 } from 'mediabunny'
 import { frameScale } from '@core/frame'
 import { blobStore } from '@core/store'
+
+/**
+ * Above this much total work a render starts yielding — roughly a 1080p take of
+ * four minutes, comfortably inside what a machine renders without noticing.
+ * Everything smaller keeps O5's uninterrupted loop.
+ */
+const PACE_ABOVE_PIXELS = 1920 * 1080 * 7_200
+/** One macrotask back to the browser per this many frames. */
+const PACE_EVERY_FRAMES = 30
 import {
   channelSourceTimeAt,
   isDefaultEdit,
@@ -464,6 +473,36 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       Math.round((ms / 1000) * AUDIO_SAMPLE_RATE),
     )
     const totalFrames = Math.max(1, Math.ceil(durationSec * fps - 1e-9))
+    /**
+     * LET THE MACHINE BREATHE ON A BIG RENDER — Robert, 2026-08-30: "trying to
+     * export 1080 my computer froze, i had to restart it manually".
+     *
+     * O5 deleted the old yield hacks and was right to: at 1080p a render is
+     * seconds long and a sleep every few frames is pure waste. But a 3024x1964
+     * take at 60 fps for four minutes is FOURTEEN THOUSAND frames, each one a
+     * 5.9 Mpx decode and a re-encode, and driving that flat out is what took his
+     * whole machine down — not the tab, the machine, to a manual restart.
+     *
+     * So the pace is decided by the SIZE OF THE JOB, not applied always: a
+     * render whose total work is small keeps O5's throughput exactly, and one
+     * big enough to hold the media engine for minutes gives a slice back
+     * regularly. Yielding to the macrotask queue is what lets the compositor,
+     * the GPU process and everything else on the machine have a turn.
+     *
+     * It costs wall time on exactly the renders that were unusable anyway. A
+     * slower export that finishes beats a faster one that requires a restart.
+     */
+    const jobPixels = width * height * totalFrames
+    const paceEvery = jobPixels > PACE_ABOVE_PIXELS ? PACE_EVERY_FRAMES : 0
+    if (paceEvery > 0) {
+      console.info(
+        `[compose] big render (${totalFrames} frames of ${width}x${height}) — yielding every ` +
+          `${paceEvery} frames so the export cannot monopolise the machine`,
+      )
+    }
+    const breathe = async (n: number): Promise<void> => {
+      if (paceEvery > 0 && n % paceEvery === 0) await new Promise((r) => setTimeout(r, 0))
+    }
     const audioChunks = Math.ceil(totalAudioFrames / AUDIO_SAMPLE_RATE)
     const peaks = createPeakBuffer(waveformMode ? durationSec : 0)
     stats.prepareMs = performance.now() - t0
@@ -555,6 +594,7 @@ export async function renderExport(opts: RenderOptions): Promise<ExportResult> {
       await videoSource.add(tSec, 1 / fps)
       stats.encodeMs += performance.now() - tEncode
       stats.frames++
+      await breathe(stats.frames)
     }
 
     if (waveformMode) {

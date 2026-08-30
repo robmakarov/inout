@@ -29,6 +29,21 @@ describe('what a take says it lost', () => {
     )
     expect(loss?.message).toContain('went silent 60s in and never came back')
     expect(loss?.message).toContain('last 60s have no sound')
+    // Attempts from an EARLIER quiet stretch are not evidence about this one.
+    expect(loss?.message).not.toContain('attempt')
+  })
+
+  it('SAYS NOTHING about a person reaching for the stop button', () => {
+    // Robert's 240 s take reported "went silent 234s in ... 4 attempts to
+    // reopen it did not take". Six seconds is 2.5 % of it, the sound was fine,
+    // and four attempts need 75 s of continuous silence — they belonged to a
+    // different, earlier stretch and were glued on.
+    expect(takeLosses([ch({ durationMs: 240_000, diagnostics: { silentTailMs: 6_000, revivals: 4 } })], caps)).toEqual([])
+  })
+
+  it('a long tail that is still a small share of a long take says nothing', () => {
+    // 12 s of quiet at the end of a 30-minute take is someone finishing up.
+    expect(takeLosses([ch({ durationMs: 1_800_000, diagnostics: { silentTailMs: 12_000 } })], caps)).toEqual([])
   })
 
   it('names the mute when the source muted itself', () => {
@@ -39,9 +54,12 @@ describe('what a take says it lost', () => {
     expect(loss?.message).toContain('the source muted itself')
   })
 
-  it('a tap that was rebuilt and RECOVERED still says so — there may be a gap', () => {
-    const [loss] = takeLosses([ch({ diagnostics: { silentTailMs: 0, revivals: 1 } })], caps)
-    expect(loss?.message).toContain('came back on its own')
+  it('A RESCUE THAT WORKED IS NOT NEWS — the sound is there, so nothing is said', () => {
+    // Tab audio is legitimately silent much of the time, so the capture-side
+    // rescue fires on healthy takes. Reporting every one of those trained the
+    // user to distrust the banner, which is worse than saying nothing.
+    expect(takeLosses([ch({ diagnostics: { silentTailMs: 0, revivals: 1 } })], caps)).toEqual([])
+    expect(takeLosses([ch({ diagnostics: { silentTailMs: 0, revivals: 6 } })], caps)).toEqual([])
   })
 
   it('a quiet ending is not a dead source', () => {
