@@ -35,6 +35,7 @@ function parseArgs(argv) {
   let ua = ''
   let profile = ''
   let fixedPort = 0
+  let logDir = ''
   const chromeFlags = []
   for (const a of argv) {
     if (a.startsWith('--timeout=')) timeoutSec = Number(a.slice(10))
@@ -51,6 +52,7 @@ function parseArgs(argv) {
     else if (a.startsWith('--profile=')) profile = a.slice(10)
     else if (a.startsWith('--chrome-flag=')) chromeFlags.push(a.slice(14))
     else if (a.startsWith('--port=')) fixedPort = Number(a.slice(7))
+    else if (a.startsWith('--log-dir=')) logDir = a.slice(10)
     else positional.push(a)
   }
   const [experiment, jsonArgs] = positional
@@ -77,6 +79,7 @@ function parseArgs(argv) {
     profile,
     chromeFlags,
     fixedPort,
+    logDir,
   }
 }
 
@@ -176,6 +179,45 @@ function startCpuSampler(marker) {
  *    process is reported inside the tab as "decoding error", which is what sent
  *    an earlier session hunting the decoder for hours.
  */
+
+/**
+ * TOTAL Chrome across every process of this profile, and how much memory the
+ * MACHINE has left — because R2's GPU process is dying with `exit_code=9`,
+ * which is SIGKILL, which on macOS means the kernel killed it under memory
+ * pressure rather than it crashing on its own.
+ *
+ * THE GPU PROCESS'S OWN RSS IS THE WRONG NUMBER and reading it alone is how
+ * this was nearly called "not memory": GPU allocations on macOS are largely
+ * IOSurface-backed shared memory, which `ps` RSS does not attribute to the
+ * process holding them. A GPU process sitting at 130 MB of RSS can be the
+ * biggest memory consumer on the machine. What is NOT ambiguous is what the
+ * whole browser costs and what the machine has left, so sample both.
+ */
+function chromeTotalMb(psOut, marker) {
+  let sum = 0
+  for (const line of psOut.split('\n')) {
+    if (!line.includes(marker)) continue
+    const kb = Number(line.trim().split(/\s+/)[1])
+    if (Number.isFinite(kb)) sum += kb
+  }
+  return Math.round(sum / 1024)
+}
+
+/** Free + inactive as a share of physical memory, from vm_stat. */
+function systemFreePct() {
+  try {
+    const out = execFileSync('/usr/bin/vm_stat', { encoding: 'utf8' })
+    const page = Number(/page size of (\d+)/.exec(out)?.[1] ?? 16384)
+    const get = (name) => Number(new RegExp(`${name}:\\s+(\\d+)`).exec(out)?.[1] ?? 0)
+    const free = get('Pages free') + get('Pages inactive') + get('Pages purgeable')
+    const total = Number(execFileSync('/usr/sbin/sysctl', ['-n', 'hw.memsize'], { encoding: 'utf8' }).trim())
+    if (!total) return null
+    return Math.round(((free * page) / total) * 100)
+  } catch {
+    return null
+  }
+}
+
 function startGpuSampler(marker) {
   const series = []
   let peakKb = 0
@@ -196,7 +238,13 @@ function startGpuSampler(marker) {
         pid = nextPid
         samples++
         if (kb > peakKb) peakKb = kb
-        series.push({ t: Date.now(), mb: Math.round(kb / 1024), pid: nextPid })
+        series.push({
+          t: Date.now(),
+          mb: Math.round(kb / 1024),
+          pid: nextPid,
+          allMb: chromeTotalMb(out, marker),
+          freePct: systemFreePct(),
+        })
         return
       }
     } catch {
@@ -210,6 +258,11 @@ function startGpuSampler(marker) {
       return {
         peakGpuMB: samples ? Math.round(peakKb / 1024) : null,
         lastGpuMB: series.length ? series[series.length - 1].mb : null,
+        peakChromeMB: series.reduce((m, s) => Math.max(m, s.allMb ?? 0), 0) || null,
+        minFreePct: series.reduce(
+          (m, s) => (s.freePct === null ? m : Math.min(m ?? 100, s.freePct)),
+          null,
+        ),
         gpuProcessRestarts: restarts,
         samples,
         series,
@@ -265,6 +318,7 @@ async function main() {
     profile,
     chromeFlags,
     fixedPort,
+    logDir,
   } = parseArgs(process.argv.slice(2))
   // A PINNED PORT IS A PINNED ORIGIN, and OPFS is per-origin. The ephemeral
   // port is right for every run that wants a clean slate, and wrong for the one
@@ -305,6 +359,7 @@ async function main() {
       ...(realThrottling ? ['--real-throttling'] : []),
       ...(captureTitle ? [`--capture-title=${captureTitle}`] : []),
       ...chromeFlags.map((f) => `--chrome-flag=${f}`),
+      ...(logDir ? [`--log-dir=${logDir}`] : []),
     ]
     // WHICH CHROME TO WATCH. The samplers pick their processes out of `ps` by a
     // string in the command line, and that string is the profile directory:
@@ -323,16 +378,22 @@ async function main() {
       child.on('close', resolve)
     })
     if (gpuSampler) {
-      const { peakGpuMB, lastGpuMB, gpuProcessRestarts, samples, series } = gpuSampler.stop()
+      const { peakGpuMB, lastGpuMB, peakChromeMB, minFreePct, gpuProcessRestarts, samples, series } =
+        gpuSampler.stop()
       console.error(
         `exp: Chrome GPU process peak RSS ${peakGpuMB} MB, last ${lastGpuMB} MB, ` +
           `PID changes ${gpuProcessRestarts} over ${samples} samples` +
           (gpuProcessRestarts > 0 ? '  <-- THE GPU PROCESS DIED AND RESTARTED' : ''),
       )
+      console.error(
+        `exp: whole-browser peak RSS ${peakChromeMB} MB · machine free+inactive bottomed at ${minFreePct}%`,
+      )
       // Coarse trace so "what grows" is answerable after the fact, not only live.
       const step = Math.max(1, Math.floor(series.length / 40))
-      const trace = series.filter((_, i) => i % step === 0).map((s) => s.mb)
-      console.error(`exp: GPU RSS trace (MB, every ${(step * 0.5).toFixed(1)}s) ${trace.join(' ')}`)
+      const pick = series.filter((_, i) => i % step === 0)
+      console.error(`exp: GPU RSS trace (MB, every ${(step * 0.5).toFixed(1)}s) ${pick.map((s) => s.mb).join(' ')}`)
+      console.error(`exp: whole-Chrome RSS trace (MB) ${pick.map((s) => s.allMb).join(' ')}`)
+      console.error(`exp: machine free+inactive trace (%) ${pick.map((s) => s.freePct).join(' ')}`)
     }
     if (cpuSampler) {
       const { peakCpuPct, meanCpuPct, samples } = cpuSampler.stop()

@@ -50,6 +50,8 @@ import {
   type StreamTargetChunk,
 } from 'mediabunny'
 import { exportRecording } from '@core/compose'
+import { getLastRenderStats } from '@core/compose/render'
+import { getLastScratchStats } from '@core/compose/scratch'
 import { settingsForTier, tierById, type QualityTierId } from '@core/compose/quality'
 import { newId } from '@core/id'
 import { blobStore, createPositionedWriter } from '@core/store'
@@ -108,6 +110,17 @@ interface OutputReport {
   fpsLastHalf: number | null
   heapStartMB: number | null
   heapEndMB: number | null
+  /** Where the wall clock went — the render's own stage split. */
+  stages: Record<string, number> | null
+  /**
+   * WHAT THE MUXER HELD IN MEMORY. The export streams to an OPFS scratch and
+   * claims O(1) memory for it; this is the claim, measured. If output bytes are
+   * piling up faster than the disk takes them, this is where a render's
+   * footprint comes from — and it would also explain a finalize that takes
+   * "too long on 95%", since the backlog has to land before the file closes.
+   */
+  scratchHeldMB: number | null
+  scratchWrittenMB: number | null
   samples: Sample[]
 }
 
@@ -132,10 +145,10 @@ export interface NativeRenderReport {
 
 /** A fixture is identified by everything that changes its bytes. */
 function fixtureKey(w: number, h: number, fps: number, sec: number, mbps: number): string {
-  // `v2` is the PAINTER's version: a cached file built by an earlier painter is
+  // `v3` is the PAINTER's version: a cached file built by an earlier painter is
   // a different picture at a different bitrate, and reusing one silently would
   // compare two takes rather than two renders.
-  return `r2fix-v2-${w}x${h}-${fps}fps-${sec}s-${mbps}mbps`
+  return `r2fix-v3-${w}x${h}-${fps}fps-${sec}s-${mbps}mbps`
 }
 
 async function existingFixture(key: string): Promise<Blob | null> {
@@ -183,47 +196,41 @@ function makePainter(
       if (x > w - 120) break
     }
   }
-  // High-frequency detail, pre-rendered once and blitted with a moving offset.
-  // Without it the encoder coasts: the first version of this fixture asked for
-  // 24 Mbps and wrote 6.4, because flat bands over a still backdrop are almost
-  // free — and a file that cheap decodes far more cheaply than the take under
-  // investigation, which would have made every verdict here optimistic.
-  const tile = new OffscreenCanvas(512, 512)
-  const tctx = tile.getContext('2d', { alpha: false })
-  if (!tctx) throw new Error('fixture: no 2d context for the detail tile')
-  const noise = tctx.createImageData(512, 512)
-  let seed = 0x2f6e2b1
-  for (let i = 0; i < noise.data.length; i += 4) {
-    seed = (seed * 1103515245 + 12345) & 0x7fffffff
-    const v = 40 + (seed % 180)
-    noise.data[i] = v
-    noise.data[i + 1] = v
-    noise.data[i + 2] = v
-    noise.data[i + 3] = 255
-  }
-  tctx.putImageData(noise, 0, 0)
-
-  const bars = 14
+  // WHAT THIS IS NOT ANY MORE: a field of random noise. The first version
+  // blitted a noise tile to stop the encoder coasting, and it worked far too
+  // well — noise is INCOMPRESSIBLE, so a 60 s take exported at 1080p wrote
+  // 2,857 MB (381 Mbps against a 16 Mbps target) and spent 112-131 s in
+  // finalize. Both numbers were the FIXTURE's, not the product's, and what
+  // gave it away was `?cq=off` reproducing them byte for byte: a lever that
+  // changes nothing is measuring something the lever does not touch.
+  //
+  // Screen content is TEXT AND EDGES THAT MOVE — highly structured, highly
+  // compressible, expensive in a completely different way. So the frame
+  // SCROLLS: the backdrop is drawn at a moving offset, which gives every
+  // macroblock real motion residual without handing the encoder entropy it
+  // cannot compress.
   return (frame: number) => {
-    ctx.drawImage(backdrop, 0, 0)
-    // The detail field moves a pixel or two per frame, which is what makes a
-    // screen recording expensive: every macroblock has new residual.
-    const ox = -(frame * 3) % 512
-    const oy = -(frame * 2) % 512
-    for (let y = oy; y < h; y += 512) {
-      for (let x = ox; x < w; x += 512) ctx.drawImage(tile, x, y)
+    // The page scrolls, wrapping — a reader moving through a document, which
+    // is what a screen recording mostly is.
+    const oy = -((frame * 2) % h)
+    ctx.drawImage(backdrop, 0, oy)
+    ctx.drawImage(backdrop, 0, oy + h)
+    // A window dragged across it: one large moving edge, the other thing
+    // screen recordings are made of.
+    const wx = ((frame * 4) % (w + 600)) - 600
+    ctx.fillStyle = '#0b0e13'
+    ctx.fillRect(wx, h * 0.25, 560, h * 0.45)
+    ctx.fillStyle = '#5b8def'
+    ctx.fillRect(wx, h * 0.25, 560, 28)
+    ctx.fillStyle = '#9fb2c9'
+    for (let i = 0; i < 9; i++) {
+      ctx.fillRect(wx + 24, h * 0.25 + 60 + i * 30, 180 + ((i * 61 + frame) % 300), 11)
     }
-    // Moving furniture: one band per stripe of the frame, so every row of
-    // macroblocks carries new residual every frame.
-    for (let i = 0; i < bars; i++) {
-      const bandH = h / bars
-      const y = i * bandH
-      const phase = (frame * (3 + i)) % (w + 400)
-      ctx.fillStyle = i % 2 === 0 ? '#3d7ef0' : '#e8b64c'
-      ctx.fillRect(phase - 400, y + 4, 320, bandH - 8)
+    // A caret, so something changes even in an otherwise still stretch.
+    if (frame % 30 < 15) {
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(wx + 24, h * 0.25 + 330, 10, 14)
     }
-    ctx.fillStyle = '#ffffff'
-    ctx.fillRect((frame * 11) % (w - 200), h / 2 - 60, 200, 120)
   }
 }
 
@@ -446,6 +453,8 @@ export async function runNativeRender(
       clearInterval(timer)
     }
     const wallMs = Math.round(performance.now() - t0)
+    const rs = getLastRenderStats()
+    const ss = getLastScratchStats()
     // Rate over the first and last half of the RENDER phase, which is where a
     // growing cost would show as a slowdown rather than as a crash.
     const rendering = samples.filter((s) => s.ratio > 0.05 && s.ratio < 0.95)
@@ -468,6 +477,20 @@ export async function runNativeRender(
       fpsLastHalf: rate(rendering[mid], rendering[rendering.length - 1]),
       heapStartMB,
       heapEndMB: heapMB(),
+      stages: rs
+        ? {
+            frames: rs.frames,
+            prepareMs: Math.round(rs.prepareMs),
+            decodeMs: Math.round(rs.decodeMs),
+            drawMs: Math.round(rs.drawMs),
+            encodeMs: Math.round(rs.encodeMs),
+            audioMs: Math.round(rs.audioMs),
+            finalizeMs: Math.round(rs.finalizeMs),
+            totalMs: Math.round(rs.totalMs),
+          }
+        : null,
+      scratchHeldMB: ss ? MB(ss.maxOutstandingBytes) : null,
+      scratchWrittenMB: ss ? MB(ss.bytesWritten) : null,
       samples,
     })
   }
