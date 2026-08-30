@@ -64,17 +64,34 @@ afterEach(() => {
 })
 
 describe('one outstanding screen request per document', () => {
-  it('a request that never settles keeps the document marked, forever', () => {
+  it('a request the deadline gave up on keeps the document marked, forever', () => {
     expect(displayRequestOutstanding()).toBe(false)
-    markDisplayRequest(new Promise(() => {}))
+    const req = markDisplayRequest(new Promise(() => {}))
+    // Merely outstanding is not poison — the user may still be at the picker.
+    expect(displayRequestOutstanding()).toBe(false)
+    req.stuck()
     expect(displayRequestOutstanding()).toBe(true)
   })
 
-  it('a settled request — either way — releases it', async () => {
-    markDisplayRequest(Promise.resolve('a stream'))
+  it('AN ABANDONED PICKER IS NOT A WEDGE — cancel, then record, must not refresh the app', async () => {
+    // The user cancels the arm while the picker is open, then presses record
+    // again. Chrome rejects the abandoned request as the picker closes; nothing
+    // about that frame is stuck, and the next press must dispatch normally.
     const rejected = Promise.reject(new Error('user cancelled the picker'))
     markDisplayRequest(rejected)
     rejected.catch(() => undefined)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(displayRequestOutstanding()).toBe(false)
+  })
+
+  it('a share that arrives late, after we gave up, clears the mark', async () => {
+    let deliver!: (s: unknown) => void
+    const late = new Promise((r) => (deliver = r))
+    const req = markDisplayRequest(late)
+    req.stuck()
+    expect(displayRequestOutstanding()).toBe(true)
+    deliver('a stream nobody is waiting for any more')
     await Promise.resolve()
     await Promise.resolve()
     expect(displayRequestOutstanding()).toBe(false)

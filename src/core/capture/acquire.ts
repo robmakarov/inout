@@ -1053,6 +1053,9 @@ export function acquireChannelsProgressive(
   // await before this (e.g. probing permissions) made Safari reject the call
   // with NotAllowedError and show NO picker at all. Fire it first, await later.
   let displayPromise: Promise<MediaStream> | null = null
+  /** The live request's handle — the timeout path marks it stuck so the NEXT
+   *  press knows this frame can no longer ask (displayInflight.ts). */
+  let displayReq: { stuck: () => void } | null = null
   const canDisplay = typeof navigator.mediaDevices?.getDisplayMedia === 'function'
   // Which rung of the wedge ladder this request rides on — 0 unless this
   // machine has had a share taken and never delivered (displayWedge.ts). No
@@ -1131,7 +1134,7 @@ export function acquireChannelsProgressive(
       rawDisplay.catch(() => undefined) // handled below; never unhandled
       // From here this document owns an open request until Chrome settles it —
       // which, in the wedge, is never. The next press must not add a second.
-      markDisplayRequest(rawDisplay)
+      displayReq = markDisplayRequest(rawDisplay)
       displayPromise = withTimeout(
         withTimeout(rawDisplay, PICKER_SETTLE_MS, 'getDisplayMedia (picker closed)', pickerClosed()),
         DISPLAY_TOTAL_BUDGET_MS,
@@ -1271,8 +1274,13 @@ export function acquireChannelsProgressive(
       let stall: DisplayStall | undefined
       if (timedOut) {
         stall = classifyDisplayStall(detectPlatform().os)
-        // Counted before the message is built, so the text can say "the 3rd in
-        // a row" and stop repeating advice this user has already carried out.
+        // OUR BUDGET IS DEAD, CHROME'S REQUEST IS NOT. It is still booked
+        // against this frame with no way to cancel it, so nothing dispatched
+        // from this document can get through any more — say so once, here,
+        // where the deadline actually fired.
+        displayReq?.stuck()
+        // Counted before the message is built, so the text can say how many in
+        // a row, and stop repeating advice this user has already carried out.
         rememberDisplayStall()
         // A PERMISSION STALL MUST NOT TOUCH THE LADDER (W1 item 3). The ladder
         // exists to find which of OUR options Chrome chokes on; an ungranted
