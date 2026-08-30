@@ -45,9 +45,27 @@ export function TestPanel() {
       )}
 
       <Toggle
-        label="My own resolution"
-        hint="Capture and export at the screen’s own size instead of stopping at 1440p"
+        label="Record at the screen’s size"
+        hint="On by default. Off records 1080p whatever your screen is — and makes “Go past 1440p” do nothing."
+        on={nativeResEnabled()}
+        set={(v) => {
+          setNativeRes(v)
+          redraw()
+        }}
+      />
+      {/* THE DEPENDENCY MADE VISIBLE — Robert, 2026-08-30: "what the fuck is own
+          res on and native res off, what is difference?". He was right to ask,
+          and the honest answer was worse than confusing: with native-res OFF
+          the capture constraint is the flat 1080p cap and this switch is not
+          consulted at all (acquire.ts, displayVideoConstraints). So he recorded
+          a take whose settings line said "own res" while the capture was 1080p.
+          A switch that reports itself ON while being inert is a lie, so it now
+          greys out with its owner, the way the max-ladder row already does. */}
+      <Toggle
+        label="Go past 1440p"
+        hint="Needs “Record at the screen’s size”. Off stops at 2560 across; on goes all the way to your screen’s own pixels."
         on={sourceResEnabled()}
+        disabled={!nativeResEnabled()}
         set={(v) => {
           setSourceRes(v)
           redraw()
@@ -93,15 +111,6 @@ export function TestPanel() {
       />
 
       <div className="tp__sep">Rarely</div>
-      <Toggle
-        label="Native-res capture"
-        hint="On by default. Off caps capture at 1080p."
-        on={nativeResEnabled()}
-        set={(v) => {
-          setNativeRes(v)
-          redraw()
-        }}
-      />
       <Toggle
         label="Encoder budget"
         hint="Bounds a take on a machine that has been seen to collapse. Never bounds an unmeasured one."
