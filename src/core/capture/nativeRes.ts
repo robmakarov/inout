@@ -78,8 +78,15 @@ export function nativeResEnabled(): boolean {
   return fromSearch() ?? fromStorage() ?? true
 }
 
-export function setNativeRes(on: boolean): void {
+/** `null` clears the sticky choice and returns this flag to its default —
+ *  the shape every other flag's setter already had, needed so the test panel
+ *  can put everything back at once. */
+export function setNativeRes(on: boolean | null): void {
   try {
+    if (on === null) {
+      localStorage.removeItem(STORAGE_KEY)
+      return
+    }
     localStorage.setItem(STORAGE_KEY, on ? '1' : '0')
   } catch {
     /* storage unavailable — the URL parameter still works */

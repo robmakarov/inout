@@ -27,6 +27,14 @@ import { armingLabel as armingLabelFor, foldWaiting } from '@app/lib/arming'
 import { noteWedgeReload, shouldReloadForWedge, takeWedgeReloadNotice } from '@app/lib/wedgeReload'
 import { ChannelChips } from '@app/components/ChannelChips'
 import { TakesList } from '@app/components/TakesList'
+import { testPanelEnabled } from '@app/lib/testPanel'
+import { lazy, Suspense } from 'react'
+
+/* Lazily loaded so it costs the first-paint chunk nothing for everyone who is
+   not testing (O7) — Robert's one link, `/?test`, is what turns it on. */
+const TestPanel = lazy(() =>
+  import('@app/components/TestPanel').then((m) => ({ default: m.TestPanel })),
+)
 import { RecordButton } from '@app/components/RecordButton'
 import { TimerPill } from '@app/components/TimerPill'
 import { AudioLevelRing } from '@app/components/AudioLevelRing'
@@ -480,6 +488,11 @@ export function CaptureScreen() {
           and neither could anyone: the app opened the newest recording at boot
           and there was no other route in. */}
       {!session && !arming && <TakesList />}
+      {!session && testPanelEnabled() && (
+        <Suspense fallback={null}>
+          <TestPanel />
+        </Suspense>
+      )}
       {arming && armingLabel && <div className="capture__arming">{armingLabel}</div>}
       {session && <TimerPill elapsedMs={elapsedMs} remainingMs={remainingMs} />}
       {recording && stalled.length > 0 && (

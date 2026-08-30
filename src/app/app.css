@@ -1823,3 +1823,123 @@
   color: var(--warn);
   font-size: 11px;
 }
+
+/* The test panel (2026-08-30). One link, `/?test`, instead of a URL full of
+   parameters to keep or lose. Sits along the left so it never covers the stage,
+   the chips or the record button. */
+.tp {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 300px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  background: var(--surface-2);
+  border: 1px solid var(--surface-3);
+  border-radius: var(--r-md, 12px);
+  padding: 12px;
+  z-index: 8;
+  font-size: 12px;
+}
+
+.tp__title {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.tp__warn {
+  color: var(--warn);
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+
+.tp__warn code {
+  font-family: inherit;
+  opacity: 0.9;
+}
+
+.tp__sep {
+  margin: 10px 0 6px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+}
+
+.tp__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--surface-3);
+  cursor: pointer;
+}
+
+.tp__row--off {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.tp__row input {
+  margin-top: 2px;
+  flex: 0 0 auto;
+}
+
+.tp__label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  color: var(--text);
+}
+
+.tp__hint {
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.tp__choice {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+.tp__opt {
+  background: var(--surface-3);
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 7px;
+  border-radius: var(--r-sm, 8px);
+  cursor: pointer;
+}
+
+.tp__opt--on {
+  background: var(--accent, #3b82f6);
+  color: #fff;
+}
+
+.tp__reset {
+  width: 100%;
+  margin-top: 10px;
+  background: var(--surface-3);
+  border: 1px solid var(--surface-3);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  padding: 6px;
+  border-radius: var(--r-sm, 8px);
+  cursor: pointer;
+}
+
+.tp__foot {
+  margin-top: 8px;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.35;
+}
