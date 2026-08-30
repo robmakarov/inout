@@ -28,6 +28,7 @@ import {
 import { armingLabel as armingLabelFor, foldWaiting } from '@app/lib/arming'
 import { noteWedgeReload, shouldReloadForWedge, takeWedgeReloadNotice } from '@app/lib/wedgeReload'
 import { ChannelChips } from '@app/components/ChannelChips'
+import { TakesList } from '@app/components/TakesList'
 import { RecordButton } from '@app/components/RecordButton'
 import { TimerPill } from '@app/components/TimerPill'
 import { AudioLevelRing } from '@app/components/AudioLevelRing'
@@ -507,6 +508,11 @@ export function CaptureScreen() {
           )}
         </div>
       )}
+      {/* Every take you have, and a way back into one — Robert, 2026-08-30:
+          "how th fuck will i open last night take in the editor". He could not,
+          and neither could anyone: the app opened the newest recording at boot
+          and there was no other route in. */}
+      {!session && !arming && <TakesList />}
       {arming && armingLabel && <div className="capture__arming">{armingLabel}</div>}
       {session && <TimerPill elapsedMs={elapsedMs} remainingMs={remainingMs} />}
       {recording && stalled.length > 0 && (
