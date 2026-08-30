@@ -1086,31 +1086,20 @@
   content: '';
   position: absolute;
   left: 50%;
-  top: 50%;
-  width: 13px;
-  height: 30px;
-  margin: -15px 0 0 -6.5px;
+  top: 0;
+  bottom: 0;
+  width: 11px;
+  margin-left: -5.5px;
   border-radius: 4px;
-  background: var(--text);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-  background-image: linear-gradient(
-    90deg,
-    transparent 0 4px,
-    rgba(0, 0, 0, 0.45) 4px 5px,
-    transparent 5px 8px,
-    rgba(0, 0, 0, 0.45) 8px 9px,
-    transparent 9px 100%
-  );
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 13px 12px;
-  transition: transform var(--t-fast) var(--ease);
+  background: color-mix(in srgb, var(--text), transparent 80%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text), transparent 55%);
+  transition: background var(--t-fast) var(--ease);
 }
 .tl__trim:hover .tl__trim-grip {
   opacity: 1;
 }
 .tl__trim:hover .tl__trim-grip::after {
-  transform: scale(1.12);
+  background: color-mix(in srgb, var(--text), transparent 62%);
 }
 .tl__playhead {
   position: absolute;
@@ -2027,8 +2016,12 @@
 /* What you can do with a cut, inside the cut itself. Only drawn where there is
    room — below that the gap is a few pixels wide and buttons in it would cover
    the clips on either side. */
+/* Stacked, not side by side — Robert: "i said delete UNDER cancel in cutted
+   zone". A column also needs far less WIDTH, so the buttons survive in a much
+   narrower cut than a row of two could. */
 .tl__gap-acts {
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 3px;
 }
@@ -2145,7 +2138,7 @@
 }
 .tl__cut--tight.tl__cut--r::before {
   left: auto;
-  right: -6.5px;
+  right: -5.5px;
   margin-left: 0;
 }
 .tl__cut--tight.tl__cut--l::after,
@@ -2154,7 +2147,7 @@
 }
 /* …and hovering either half lights the one grip they share. */
 .tl__cut--tight.tl__cut--l:hover + .tl__cut--tight.tl__cut--r::before {
-  transform: scale(1.12);
+  background: color-mix(in srgb, var(--accent), transparent 50%);
 }
 /* THE CUT ITSELF: a full-height rule so you can see where the boundary is
    against every lane at once. */
@@ -2169,41 +2162,35 @@
   border-radius: 2px;
   background: var(--accent);
 }
-/* THE GRIP: the part you are meant to take hold of, and it has to LOOK like it
-   — Robert: "grabbers to ugly and hard to distinct on edit timeline". A 3 px
-   line is a mark, not a handle; it says where the cut is and nothing about
-   being draggable. This is a real tab, centred in the lanes, with two ridges. */
+/* THE GRIP, THIRD attempt — and the first two are worth naming because they
+   failed the same way. Robert: "grabbers to ugly and hard to distinct", then
+   "grabbers ugly as fuck".
+     v1 — a 2 px accent line. A MARK: it says where the cut is and nothing about
+          being draggable.
+     v2 — a 13x30 tab with two ridges, floating mid-lane. An OBJECT, but an
+          opaque one pasted over the frames, which is what "ugly" meant.
+   The lanes are a dense picture; a handle here has to be present without
+   covering them. So it is the grab zone MADE VISIBLE: a slim translucent band
+   the full height of the lanes, outlined so it reads as an object, with the
+   crisp rule down its middle saying exactly where the cut falls. Nothing is
+   hidden — the frames read straight through it. */
 .tl__cut::before {
   content: '';
   position: absolute;
   left: 50%;
-  top: 50%;
-  width: 13px;
-  height: 30px;
-  margin: -15px 0 0 -6.5px;
+  top: 0;
+  bottom: 0;
+  width: 11px;
+  margin-left: -5.5px;
   border-radius: 4px;
-  background: var(--accent);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-  /* The ridges — two hairlines through the middle of the tab. */
-  background-image: linear-gradient(
-    90deg,
-    transparent 0 4px,
-    rgba(255, 255, 255, 0.65) 4px 5px,
-    transparent 5px 8px,
-    rgba(255, 255, 255, 0.65) 8px 9px,
-    transparent 9px 100%
-  );
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 13px 12px;
-  transition:
-    transform var(--t-fast) var(--ease),
-    box-shadow var(--t-fast) var(--ease);
+  background: color-mix(in srgb, var(--accent), transparent 72%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent), transparent 40%);
+  transition: background var(--t-fast) var(--ease);
 }
 .tl__cut:hover::before {
-  transform: scale(1.12);
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+  background: color-mix(in srgb, var(--accent), transparent 50%);
 }
+
 .tl__seg-del {
   position: absolute;
   top: 2px;

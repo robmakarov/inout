@@ -556,10 +556,10 @@ export function Timeline({
               const w = spanW(sg.endMs, segments[i + 1]!.startMs)
               return (
                 <div key={`gap-${sg.endMs}`} className="tl__gap" style={{ left: x(sg.endMs), width: Math.max(1, w) }}>
-                  {w >= 44 && (
+                  {w >= 24 && (
                     <div className="tl__gap-acts">
                       <button
-                        className={`tl__gap-btn${w >= 104 ? ' tl__gap-btn--wide' : ''}`}
+                        className={`tl__gap-btn${w >= 64 ? ' tl__gap-btn--wide' : ''}`}
                         title={`Put back ${formatClock(removedMs)} — undo this cut`}
                         aria-label={`Undo this cut and put back ${formatClock(removedMs)}`}
                         onPointerDown={(e) => e.stopPropagation()}
@@ -569,7 +569,7 @@ export function Timeline({
                         }}
                       >
                         <Icon name="undo" size={12} />
-                        {w >= 104 && <span>{formatClock(removedMs)}</span>}
+                        {w >= 64 && <span>{formatClock(removedMs)}</span>}
                       </button>
                       {/* CLOSE THE HOLE. The material was already excluded the
                           moment the cut was made — this only stops the timeline
