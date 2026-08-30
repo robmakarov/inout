@@ -1385,6 +1385,12 @@
   display: flex;
   flex-direction: column;
   user-select: none;
+  /* THE HANDLE'S WIDTH, and it lives on the ROOT rather than on the track
+     because the LABELS are a sibling of the track and use the same position
+     expression. Declared on the track it was simply undefined for them, the
+     calc was invalid, and the three middle labels collapsed into a heap at the
+     left edge. Must equal THUMB_PX in QualitySlider.tsx. */
+  --qs-tw: 34px;
 }
 .controlbar .qs {
   width: var(--pane, min(640px, 100%));
@@ -1446,7 +1452,6 @@
    of itself so it never hangs off either end, and the dots use the same inset
    so it always lands exactly on one. */
 .qs__railbox {
-  --qs-tw: 34px;
   position: relative;
   display: flex;
   align-items: center;
