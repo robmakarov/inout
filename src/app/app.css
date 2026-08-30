@@ -2138,10 +2138,14 @@
   display: flex;
   align-items: stretch;
   gap: 9px;
-  padding: 8px 10px;
+  /* No left padding: the picture takes the card's own edge (see __thumb). */
+  padding: 8px 10px 8px 0;
   background: var(--surface);
   border: 1px solid var(--surface-2);
   border-radius: var(--r-md);
+  /* Clips the picture to the card's own corner — this is what makes the card
+     ONE rounded rectangle instead of two nested ones. */
+  overflow: hidden;
   transition: border-color var(--t-fast) var(--ease);
 }
 .takecard:hover {
@@ -2158,21 +2162,31 @@
    image on video card fill height"). Fixed WIDTH so a portrait take and a
    landscape one leave the card the same shape, and `cover` because this is an
    identifier rather than a preview of the framing. Empty until it lands, and
-   empty forever if it will not decode — the card is complete without it. */
+   empty forever if it will not decode — the card is complete without it.
+   
+   IT HAS NO BORDER AND NO RADIUS OF ITS OWN, and that is the fix for "strokes
+   fucked": it used to be a bordered, 8px-rounded box inset 8px inside a
+   bordered, 12px-rounded card, which drew TWO concentric strokes of different
+   colours and radii 8px apart. Worse, `overflow: hidden` clips a child at the
+   PADDING box — radius 8 minus the 1px border — so the photo's corner stopped
+   short of its own stroke and left a sliver of black between them.
+   Now the picture bleeds to the card's edge and the CARD's corner clips it:
+   one rounded rectangle, one stroke, and the photo meets it exactly. */
 .takecard__thumb {
   flex: none;
-  width: 96px;
+  width: 100px;
   align-self: stretch;
+  /* Cancels the card's vertical padding, so the picture is the full card. */
+  margin: -8px 0;
   padding: 0;
-  border: 1px solid var(--surface-3);
-  border-radius: var(--r-sm);
+  border: none;
+  border-radius: 0;
   background: var(--bg);
   overflow: hidden;
   cursor: pointer;
-  transition: border-color var(--t-fast) var(--ease);
 }
-.takecard__thumb:hover:not(:disabled) {
-  border-color: var(--accent);
+.takecard__thumb:hover:not(:disabled) img {
+  filter: brightness(1.12);
 }
 .takecard__thumb img,
 .takecard__thumb span {
@@ -2180,6 +2194,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: filter var(--t-fast) var(--ease);
 }
 .takecard__top {
   display: flex;
