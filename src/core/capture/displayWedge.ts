@@ -183,6 +183,14 @@ function load(): WedgeState {
         // wrong on the evening this task was written. One success flips it.
         everDelivered: s.everDelivered === true,
       }
+      // A MACHINE PARKED ON THE OLD FLOOR HAS ALREADY DISPROVED IT. Rung 2 was
+      // the bottom until 2026-08-30, so a record sitting there with more wedges
+      // than it took to get there (two) is a machine that kept wedging after
+      // running out of ladder — which is exactly the evidence rung 3 was added
+      // for. Start it on the new floor instead of making it wedge again to
+      // discover the rung that already exists. Robert's own record was
+      // level 2 / count 5.
+      if (mem.level === 2 && mem.count > 2 && mem.wedgedAt !== 0) mem.level = 3
       return mem
     }
   } catch {

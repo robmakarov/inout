@@ -73,6 +73,29 @@ describe('wedge memory', () => {
    * A good take at rung N is evidence about rung N. It is never evidence about
    * the rung above, which is the one that choked.
    */
+  it('A MACHINE PARKED ON THE OLD FLOOR STARTS ON THE NEW ONE', () => {
+    // His own record, 2026-08-30: level 2 was the bottom of the old ladder and
+    // he wedged five times sitting on it. Making such a machine wedge again to
+    // discover a rung that now exists is a wedge spent on bookkeeping.
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => (k === 'inout.displayWedge.v1' ? JSON.stringify({ wedgedAt: 1_000_000, level: 2, count: 5, goodRun: 2, everDelivered: true }) : null),
+      setItem: () => undefined,
+      removeItem: () => undefined,
+    })
+    resetDisplayWedgeForTests()
+    expect(displayRequestLevel(1_000_001)).toBe(3)
+  })
+
+  it('a machine that has only just reached the old floor is left where it is', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => (k === 'inout.displayWedge.v1' ? JSON.stringify({ wedgedAt: 1_000_000, level: 2, count: 2, everDelivered: true }) : null),
+      setItem: () => undefined,
+      removeItem: () => undefined,
+    })
+    resetDisplayWedgeForTests()
+    expect(displayRequestLevel(1_000_001)).toBe(2)
+  })
+
   it('THE CLIMB IS GONE: a hundred good takes do not move the ladder', () => {
     rememberDisplayWedge(1_000_000)
     for (let i = 0; i < 100; i++) rememberDisplaySuccess(1)
