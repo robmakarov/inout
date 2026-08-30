@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { evenDown } from '@core/frame'
+import { rateForSurface } from '@core/rate'
 
 /**
  * THE FREEZE OF 2026-08-30, and it was not "too much load" — it was one odd
@@ -52,5 +53,45 @@ describe('the size an encoder is configured at', () => {
     expect(evenDown(fromChrome.width) % 2).toBe(0)
     expect(evenDown(fromChrome.height) % 2).toBe(0)
     expect(fromChrome.width - evenDown(fromChrome.width)).toBe(1)
+  })
+})
+
+/**
+ * …AND THE SECOND HALF OF THE SAME FREEZE: what a take is allowed to ATTEMPT.
+ *
+ * `rateForSurface` capped 60 fps above a 2560 long edge — a SIZE standing in
+ * for a CAPABILITY, which rate.ts's own header already argues against. It had
+ * an accidental cliff Robert's take fell straight through, and once F18 lifted
+ * the capture ceiling it forced 30 fps at exactly the resolution the flag
+ * exists to deliver.
+ */
+describe('what a machine may attempt', () => {
+  const MEASURED = 416e6 // Robert's machine, one hardware AVC encoder, idle
+
+  it("allows his own screen at 60 — 356 Mpx/s against a measured 416", () => {
+    expect(rateForSurface(3024, 1964, 60, MEASURED)).toBe(60)
+  })
+
+  it('refuses a rate the machine measurably cannot carry, and drops the RATE', () => {
+    // 4K60 is 498 Mpx/s. Resolution is never the thing that gives — his rule.
+    expect(rateForSurface(3840, 2160, 60, MEASURED)).toBe(30)
+  })
+
+  it('THE CLIFF THE FREEZE FELL THROUGH is gone', () => {
+    // The old rule allowed 60 at a 2559 long edge and forced 30 at 2561, so the
+    // worst case this product can make — just under the ceiling, at full rate —
+    // was the one case nothing checked.
+    expect(rateForSurface(2559, 1662, 60, MEASURED)).toBe(60)
+    expect(rateForSurface(2561, 1663, 60, MEASURED)).toBe(60)
+  })
+
+  it('an UNMEASURED machine keeps exactly the old rule — no experiments', () => {
+    expect(rateForSurface(3024, 1964, 60, 0)).toBe(30)
+    expect(rateForSurface(1920, 1080, 60, 0)).toBe(60)
+  })
+
+  it('a 30 fps ask is never touched, measured or not', () => {
+    expect(rateForSurface(3840, 2160, 30, MEASURED)).toBe(30)
+    expect(rateForSurface(3840, 2160, 30, 0)).toBe(30)
   })
 })

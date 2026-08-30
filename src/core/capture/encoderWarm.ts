@@ -18,6 +18,12 @@
  * then the production worker.
  */
 
+import { rememberEncoderThroughput } from './encoderBudget'
+
+/** Enough to time, few enough to be invisible: ~0.2 s on the machine this was
+ *  written on, and the warm above has already paid the initialization. */
+const MEASURE_FRAMES = 40
+
 let started: Promise<void> | null = null
 
 export function warmVideoEncoder(): Promise<void> {
@@ -53,6 +59,54 @@ export function warmVideoEncoder(): Promise<void> {
         }
       }
       await encoder.flush()
+
+      // …AND NOW THAT IT IS WARM, MEASURE WHAT IT CAN DO (2026-08-30).
+      //
+      // Robert's freeze needed a number nobody had: how much encoding THIS
+      // machine can actually carry. Every guard until now used a constant —
+      // rate.ts capped 60 fps above a 2560 long edge, which is a size and not a
+      // capability, and rate.ts's own header already says why that is wrong
+      // ("a constant from one machine cannot decide what every machine may
+      // attempt"). But its answer — let the ladder decide while the take runs —
+      // cannot cover a collapse that is instant, which is exactly O15's premise.
+      //
+      // So the machine is asked, once per launch, HERE: where the encoder is
+      // already warm, no device is touched, nothing is recording, and the cost
+      // is already being paid. One frame is built and re-stamped rather than
+      // repainted, so this measures the ENCODER and not a canvas — and the
+      // count is small enough to be invisible (measured on this Mac: ~0.2 s).
+      //
+      // Mpx/s is the machine-level invariant worth storing: measured across
+      // 1080p / 2560x1662 / 3024x1964 / 4K it reads 362 / 410 / 416 / 435, so
+      // it is near-constant and RISES slightly with frame size. Measuring at
+      // 1080p therefore under-states a bigger frame, which is the safe
+      // direction for a number that decides what to attempt.
+      const t0 = performance.now()
+      let out = 0
+      const meter = new VideoEncoder({ output: () => (out += 1), error: () => undefined })
+      meter.configure(config)
+      const still = new VideoFrame(canvas, { timestamp: 0 })
+      for (let i = 0; i < MEASURE_FRAMES; i++) {
+        const frame = new VideoFrame(still, { timestamp: Math.round((i * 1e6) / 30) })
+        try {
+          meter.encode(frame, { keyFrame: i === 0 })
+        } finally {
+          frame.close()
+        }
+      }
+      await meter.flush()
+      still.close()
+      meter.close()
+      const seconds = (performance.now() - t0) / 1000
+      if (out > 0 && seconds > 0) {
+        const mpxPerSec = (config.width * config.height * (out / seconds)) / 1e6
+        rememberEncoderThroughput(mpxPerSec)
+        console.info(
+          `[capture] this machine's video encoder: ${Math.round(out / seconds)} fps at ` +
+            `${config.width}x${config.height} = ${mpxPerSec.toFixed(0)} Mpx/s (measured at mount, ` +
+            `idle — what a take may attempt is decided from this rather than from a constant)`,
+        )
+      }
       encoder.close()
     } catch {
       /* a failed warm costs nothing — the take pays the init instead */

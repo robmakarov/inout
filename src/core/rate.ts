@@ -72,9 +72,43 @@ export function rateForSurface(
   width: number | undefined,
   height: number | undefined,
   ceiling: number,
+  /**
+   * What this machine's encoder MEASURED, in pixels per second, or 0 when it
+   * has not been measured (encoderWarm.ts, via encoderBudget.ts). Injected
+   * rather than imported so this file stays pure and the decision is testable
+   * without a browser.
+   */
+  measuredPixelRate = 0,
 ): number {
   if (ceiling <= DEFAULT_FRAME_RATE) return ceiling
   if (!width || !height || width <= 0 || height <= 0) return ceiling
+  // THE MACHINE ANSWERS, NOT A CONSTANT — 2026-08-30, Robert: "record froze on
+  // game tab again … i need 3024x1964/60fps on my computer running easily".
+  //
+  // The constant below was a SIZE standing in for a CAPABILITY, and this file's
+  // own header already said why that is wrong. It also had an accidental cliff
+  // that his freeze fell straight through: at a 2559 long edge it allowed 60
+  // and at 2561 it forced 30, so the worst case this product can produce —
+  // just under the ceiling, at full rate — was the one case nothing checked.
+  // And with F18 lifting the capture ceiling, it forced 30 fps at exactly the
+  // resolution the flag exists to deliver.
+  //
+  // Measured on his machine, idle, one hardware AVC encoder: 362 Mpx/s at
+  // 1080p, 410 at 2560x1662, 416 at 3024x1964, 435 at 4K. So 3024x1964@60 —
+  // 356 Mpx/s — is inside what the hardware can do, and refusing it was a guess
+  // overruling a fact.
+  //
+  // No margin is subtracted: this decides what is worth ATTEMPTING, and
+  // captureLadder.ts measures the take as it runs and steps the RATE down when
+  // the machine is busier than it was at mount. That is the order of sacrifice
+  // Robert set — "if something needs to be dropped it must be fps not
+  // resolution" — and it is the only thing that can know about a game.
+  const wanted = width * height * ceiling
+  if (measuredPixelRate > 0) {
+    return wanted <= measuredPixelRate ? ceiling : DEFAULT_FRAME_RATE
+  }
+  // UNMEASURED: the old constant stands. It is a poor rule, but a machine that
+  // could not be asked is not a machine to experiment on.
   return Math.max(width, height) > MAX_OUTPUT_LONG_EDGE ? DEFAULT_FRAME_RATE : ceiling
 }
 

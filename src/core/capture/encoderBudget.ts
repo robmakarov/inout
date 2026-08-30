@@ -121,6 +121,13 @@ interface BudgetState {
   /** Lowest pixel rate at which this machine has been seen to collapse. */
   collapsed: number
   collapses: number
+  /**
+   * What this machine's video encoder MEASURED, in Mpx/s, idle, at mount
+   * (encoderWarm.ts). Unlike `sustained` and `collapsed` this needs no
+   * history — it is asked directly, once per launch, so a machine knows what
+   * it can attempt on its FIRST take instead of after its first freeze.
+   */
+  throughput: number
 }
 
 let mem: BudgetState | null = null
@@ -135,13 +142,14 @@ function load(): BudgetState {
         sustained: num(s.sustained),
         collapsed: num(s.collapsed),
         collapses: num(s.collapses) | 0,
+        throughput: num(s.throughput),
       }
       return mem
     }
   } catch {
     /* absent, corrupt, or storage refused — memory-only is fine */
   }
-  mem = { sustained: 0, collapsed: 0, collapses: 0 }
+  mem = { sustained: 0, collapsed: 0, collapses: 0, throughput: 0 }
   return mem
 }
 
@@ -335,4 +343,36 @@ export function resetEncoderBudgetForTests(): void {
   } catch {
     /* memory-only */
   }
+}
+
+/**
+ * WHAT THIS MACHINE'S ENCODER MEASURED, in pixels per second (encoderWarm.ts).
+ *
+ * Overwritten every launch rather than accumulated: it is a reading of the
+ * machine as it is now, and a laptop on battery, thermally throttled, or with a
+ * game already running is a different machine from the one that was measured
+ * yesterday. The freshest reading is the truthful one.
+ */
+export function rememberEncoderThroughput(mpxPerSec: number): void {
+  if (!(mpxPerSec > 0)) return
+  const s = load()
+  s.throughput = Math.round(mpxPerSec * 1e6)
+  save()
+}
+
+/**
+ * The pixel rate a take may ATTEMPT on this machine, or 0 when it has not been
+ * measured. Distinct from `encoderCeiling()` above, which is what this machine
+ * has been observed to SURVIVE — this one is what its encoder can do when
+ * asked directly, and it is available before any take has ever run.
+ *
+ * NO MARGIN IS APPLIED, deliberately. This decides only what is worth
+ * ATTEMPTING; captureLadder.ts is the thing that measures the take as it runs
+ * and steps the RATE down when the machine turns out to be busier than it was
+ * at mount — which is Robert's own order of sacrifice, "if something needs to
+ * be dropped it must be fps not resolution". Subtracting a margin here would
+ * refuse, at arm time and forever, takes the ladder can carry perfectly well.
+ */
+export function measuredEncoderThroughput(): number {
+  return load().throughput
 }
