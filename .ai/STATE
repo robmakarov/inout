@@ -245,6 +245,16 @@ phase: MVP validation (2026-07-16)
   it again. Shipping the collapse without that was my gap, not a request.
   The two buttons are stacked, not side by side ("i said delete UNDER cancel"), which also means they
   survive in a much narrower cut — the threshold fell from 44 px to 24.
+- THE PLAYHEAD CRAWLED WHILE YOU DRAGGED A CUT (2026-08-30, Robert: "split grabber moving that shit
+  on timeline that 'now' line"). It is stored as an OUTPUT time and DRAWN at the recording instant
+  that output time maps to — and cutting is precisely the operation that changes that mapping. So
+  every pixel of a cut drag re-pointed an unchanged output time at a different recording instant, and
+  the line walked across the timeline while the picture under it never moved. The instant is captured
+  at gesture start and re-derived into output time on every move (`holdPlayhead`), which is the trick
+  the speed control already used for the same reason; applied to a cut edge, a touching boundary and
+  the global trim, the three gestures that move the mapping. Verified on the local mirror: playhead
+  pinned at x=688 through a drag that opened a 2 s cut to its left, its output time correctly
+  re-derived 0:05 -> 0:03.
 - A REACT KEY WAS KILLING THE DRAG, AND THE ASYMMETRY WAS THE CLUE (2026-08-30, Robert: "still cant
   drag right grabber after split, barely moves"). The segment wrapper was keyed `seg-${sg.startMs}`.
   Dragging a boundary RIGHT moves the NEXT clip's `startMs` — which WAS that key — so React unmounted
