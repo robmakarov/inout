@@ -41,6 +41,22 @@ Audio-only becomes visualized video. UI: iOS-Camera simplicity, Final Cut timeli
 
 ## State (2026-08-26)
 
+**2026-08-30 — QUALITY IS NOW ONE SLIDER, CHOSEN BEFORE THE TAKE (UI1).** Robert's eight-item UI
+pass. The through-line: quality was two decisions that could not see each other — capture ran at
+whatever the source offered, the export ladder was picked afterwards — so the encoders running
+during the take were never told what he wanted. There is one ceiling now (`core/qualityStep.ts`,
+540p · 720p · 1080p · 1440p · max) and it binds both halves: capture asks for no more than the
+chosen long edge, and the export ladder stops there, because a step above what was captured could
+only upscale. The take carries the ceiling it was recorded under, so an old take keeps its own.
+Default is 1080p and must stay there — the composite is written at 1920 and the untouched export
+packet-copies it, so a higher default would silently break "instant default export".
+`max` means source resolution at 60 fps, nothing refused in advance.
+Also: the output frame now follows the take everywhere (his call — the black bars were IN the file,
+not a preview artefact); takes are cards in the page with watch / edit / download (send and copy
+blank by his instruction); the editing tools moved out of the middle of the timeline to under the
+picture; the export saves the file when the render finishes instead of asking again; leaving the
+editor offers Keep beside Cancel and Discard; the filmstrip is denser; the wordmark is gone.
+
 Working and verified end-to-end: capture 4 channels → edit → export → share. Robert records with it.
 
 **Two things were making your recordings sound wrong, and neither was the part of the app that

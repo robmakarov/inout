@@ -18,10 +18,9 @@ import {
   QUALITY_TIERS,
   estimateExportBytes,
   isDefaultTier,
-  loadQualityTier,
-  saveQualityTier,
   settingsForTier,
 } from '@core/compose/quality'
+import { loadQualityStep, setQualityStep } from '@core/qualityStep'
 import { recordingsRepo } from '@core/store'
 import { defaultEditState, outputDurationMs } from '@core/timeline'
 import type { CaptureConfig, Recording } from '@core/types'
@@ -128,10 +127,10 @@ export async function runQualityTiers(opts: { takeMs?: number } = {}): Promise<F
     await recordingsRepo.remove(recording.id).catch(() => undefined)
   }
 
-  // Persistence: save a non-default tier and read it back the way a reload would.
-  const pick = QUALITY_TIERS.find((t) => !isDefaultTier(t))!
-  saveQualityTier(pick)
-  const reloaded = loadQualityTier()
+  // Persistence: the CEILING is what is remembered now (UI1) — one quality
+  // decision, made before the take, read back the way a reload would.
+  setQualityStep('720p')
+  const reloaded = loadQualityStep()
 
   return {
     takeMs: recording.durationMs,
@@ -139,7 +138,7 @@ export async function runQualityTiers(opts: { takeMs?: number } = {}): Promise<F
     estimateFromSource: estimateExportBytes(recording, QUALITY_TIERS[1]!, recording.durationMs)
       .fromSource,
     tiers,
-    prefs: { saved: pick.id, reloaded: reloaded.id, persisted: reloaded.id === pick.id },
+    prefs: { saved: '720p', reloaded, persisted: reloaded === '720p' },
     notes: [
       'synthetic canvas content compresses far better than a real screen, so absolute sizes here are small — what is being tested is whether the ESTIMATE tracks the actual',
       'the default tier must report path=instant; any other path there means the packet-copy shortcut was lost',

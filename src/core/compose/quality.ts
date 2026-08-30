@@ -485,20 +485,12 @@ export function estimateExportBytes(
   return { bytes: Math.round(Math.min(ceiling, scaled) + audioBytes), fromSource: true, exact: false }
 }
 
-const PREFS_KEY = 'inout.export.tier'
-
-export function loadQualityTier(): QualityTier {
-  try {
-    return tierById(localStorage.getItem(PREFS_KEY))
-  } catch {
-    return tierById(DEFAULT_TIER_ID)
-  }
-}
-
-export function saveQualityTier(tier: QualityTier): void {
-  try {
-    localStorage.setItem(PREFS_KEY, tier.id)
-  } catch {
-    /* storage unavailable — the slider still works for this session */
-  }
-}
+/*
+ * THE REMEMBERED EXPORT TIER IS GONE (UI1, 2026-08-30). `loadQualityTier` /
+ * `saveQualityTier` and their `inout.export.tier` key held a SECOND quality
+ * preference, chosen after the take, that could quietly disagree with the one
+ * chosen before it. There is one decision now and it lives in
+ * `core/qualityStep.ts`: the editor defaults to the step the take was recorded
+ * at (`Recording.qualityStep`) and can only go down from it, so there is
+ * nothing left for this to remember.
+ */

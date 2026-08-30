@@ -2,6 +2,46 @@
 
 phase: MVP validation (2026-07-16)
 
+- QUALITY IS ONE DECISION NOW, MADE BEFORE THE TAKE, AND IT BINDS BOTH HALVES (UI1, 2026-08-30,
+  Robert's eight-item UI pass: "make chatgpt/claudecode effort-like slider for our quality choosing …
+  make it not possible to choose higher quality that was choosen before start of record to save
+  resources on other processes"). It used to be TWO decisions that could not see each other — capture
+  ran at whatever the source offered and the export ladder was picked afterwards — so the expensive
+  half, the encoders running while the take is live, was never told what the user wanted.
+  `core/qualityStep.ts` is the single ceiling both halves read: 540p · 720p · 1080p · 1440p · max,
+  the export ladder's own rungs plus F18's source step, tied to QUALITY_TIERS by test. It DRIVES the
+  flags F15/F18 already built rather than adding machinery — `captureCeilingLongEdge`,
+  `sourceResEnabled`, `captureRateCeiling`, `tiersForTake` — and `max` is what turns source
+  resolution and 60 fps on (Robert: "max - maximum resolution, 60 fps, all maximum"). THE TAKE
+  CARRIES ITS OWN CEILING (`Recording.qualityStep`), so a take opened from the takes list is capped
+  by what was chosen for IT; a take from before UI1 has none and is uncapped, which is the ladder it
+  was made under. DEFAULT IS 1080p AND MUST STAY THERE: the composite is written at a 1920 long edge
+  and the untouched export packet-copies it, so a higher default would silently turn every export
+  into a full re-render — the frozen "instant default export" rule, broken by arithmetic. Pinned by
+  test. COST STATED: a user who never touches the slider now captures at a 1920 long edge instead of
+  up to 2560, and can no longer export 1440p from such a take. That is the resource saving Robert
+  asked for and the slider is the first thing above the chips.
+- THE FRAME FOLLOWS THE TAKE EVERYWHERE (UI1, 2026-08-30). F13's `?sourceframe=` was on for phones
+  only and off on desktop pending Robert's judgement; he asked for "preview and in edit video frame
+  hug main video of record, no blackspace around that", was given the choice between hugging only the
+  preview and moving the OUTPUT, and chose the output. That is the only answer that keeps this
+  product's law that the preview is the same arithmetic as the file: the bars were IN the file,
+  because the frame was a 16:9 constant and the screen was not. Verified on prod at 1728x1117 —
+  composite 1920x1242, stage aspect identical to it, and the untouched export still reports the
+  INSTANT packet copy. Takes made under the constant still resolve to it (`takeAspect` reads the
+  composite the take actually wrote).
+  TWO THINGS THIS BROKE AND HOW, both found by driving prod rather than reading code: (1) the editor
+  stage is a FLEX ITEM and `aspect-ratio` loses to flex shrink, so a column sized from a stale
+  `--below` estimate crushed a 16:9 take into a 2.24 box with bars down both sides — the blackspace
+  reintroduced by arithmetic. The stage now takes its own bound from the container's real height
+  (`container-type: size` + `100cqh`) and cannot be shrunk. (2) THE PREVIEW CANVAS WAS RESIZED IN
+  EXACTLY ONE PLACE — `adoptShape`, the F13 path that runs when the arrived frames disagree with the
+  guess — and that path is the EXCEPTION: with the frame following the take the composite is built at
+  the right shape from the start and `adoptShape` never runs, so the code keeping the preview honest
+  was dead precisely when it was needed. Sized now at all three points the two can first disagree.
+  THE LESSON IS NOTE 10'S AGAIN: a default that moves has to be re-measured everywhere the old
+  default was doing work by accident.
+
 - THE AUDIO TIMELINE IS HELD IN BOTH DIRECTIONS (2026-08-29, Robert's hour-long take: "sound get a
   little slower than screen video ... about second after one hour"). WallClockHold pads a starved
   clock and now TRIMS a fast one — video is wall-stamped, audio is sample-counted at the NOMINAL
@@ -10,7 +50,10 @@ phase: MVP validation (2026-07-16)
   preview's slew reads zero). The trim is rate-limited to 0.2 % of a batch and removes frames by
   RESAMPLING the batch shorter, so there is no splice and nothing to click. Take carries its own
   verdict: ChannelDiagnostics.trimmedMs beside paddedMs.
-- CAPTURE IS AT THE SOURCE'S OWN RESOLUTION (2026-08-29, Robert's ruling, overriding O6's unmet 4K gate
+- CAPTURE IS AT THE SOURCE'S OWN RESOLUTION, BOUNDED BY THE CHOSEN QUALITY STEP (2026-08-29 ruling,
+  bounded by UI1 2026-08-30 — the slider is a real ceiling on capture, not a label on the export
+  ladder, and at `max` this line stands unchanged and unbounded). Original ruling follows.
+  (2026-08-29, Robert's ruling, overriding O6's unmet 4K gate
   — Robert holds the freeze risk and is the reporting channel). Flipping it found the flag was half-dead:
   displayVideoConstraints sent width/height {max:1920x1080}, a REAL constraint Chrome honours before
   handing the track over, so `?nativeres=1` had been buying nothing. The size bound is dropped at the
@@ -75,8 +118,9 @@ phase: MVP validation (2026-07-16)
   own process however the track is constrained, which is the cost DECISIONS already warns dominates a
   rAF-painted source and which a real game tab (rendered in another process, composited by the OS)
   does not have. It needs Robert's real 60 fps tab to separate, and no rig here can.
-- THE RATE CAN FOLLOW THE TAKE (F15, 2026-08-29) — `?sourcefps=1`, OFF BY DEFAULT UNTIL ROBERT
-  JUDGES A REAL 60 fps TAKE. Until this `frameRate: {ideal:30, max:30}` capped a 60 fps game tab or
+- THE RATE CAN FOLLOW THE TAKE (F15, 2026-08-29) — now what the `max` QUALITY STEP means (UI1,
+  2026-08-30: "max - maximum resolution, 60 fps, all maximum"); `?sourcefps=` is the override. Off at
+  every step below max, where the rate is the 30 it has always been. Until this `frameRate: {ideal:30, max:30}` capped a 60 fps game tab or
   camera AT THE SENSOR, justified as "every frame above 30 is encoded twice and then dropped at
   export" — true only because the export was 30, which is the output-constant-caps-the-input shape
   Robert rejected in F13. `core/rate.ts` is the one seam and it is NOT a 60 constant: `takeRate`
