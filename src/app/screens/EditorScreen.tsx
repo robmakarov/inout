@@ -27,6 +27,7 @@ import { Timeline } from '@app/components/Timeline'
 import { ExportPanel } from '@app/components/ExportPanel'
 import { QualityPanel } from '@app/components/QualityPanel'
 import { SettingsBadge } from '@app/components/SettingsBadge'
+import { testPanelEnabled } from '@app/lib/testPanel'
 import { ConfirmDialog } from '@app/components/ConfirmDialog'
 
 export function EditorScreen() {
@@ -315,13 +316,26 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
           evidence — silent tails, tap rebuilds, wall-clock padding — and it has
           always been invisible, so a take whose tab audio died was something
           you found out by listening (Robert, 2026-08-30). */}
-      {takeLosses(recording.channels, detectCapabilities()).map((l) => (
-        <div key={`${l.kind}-loss`} className="editor__missing" role="alert">
-          {l.message}
-        </div>
-      ))}
-      {/* The switches, beside the warnings, so one screenshot carries both. */}
-      <SettingsBadge />
+      {/* THE TAKE'S OWN DIAGNOSTICS ARE A TEST-MODE THING — Robert, 2026-08-30:
+          "make sure this stupid errors of your shown only in test mode, audio
+          was fine all this session". They were built to make his reports
+          carry evidence, and they earned their keep doing that; but a banner
+          that fires on a healthy take is worse than no banner, and twice now
+          one has. Behind `/?test` they are diagnostics for us. In front of a
+          user they would need a bar I have not yet shown I can hold. The
+          MISSING-CHANNEL line above is not one of these: a take that lost a
+          whole input has always said so, and still does. */}
+      {testPanelEnabled() && (
+        <>
+          {takeLosses(recording.channels, detectCapabilities()).map((l) => (
+            <div key={`${l.kind}-loss`} className="editor__missing" role="alert">
+              {l.message}
+            </div>
+          ))}
+          {/* The switches, beside the warnings, so one screenshot carries both. */}
+          <SettingsBadge />
+        </>
+      )}
 
       <div className="editor__player">
         <Player
