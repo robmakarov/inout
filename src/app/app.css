@@ -1048,15 +1048,18 @@
   position: absolute;
   left: 100px;
   right: 0;
-  top: 0;
-  bottom: 0;
+  /* The ruler sits ABOVE the lanes now (Robert: "make timeline part with time
+     that under input, make it above it"), so the overlay starts below it and
+     every child keeps its own offsets relative to the LANES. */
+  top: 26px;
+  bottom: 10px;
   pointer-events: none;
   z-index: 3;
 }
 .tl__trim {
   position: absolute;
   top: 0;
-  bottom: 26px;
+  bottom: 0;
   width: 14px;
   margin-left: -7px;
   display: flex;
@@ -1097,7 +1100,8 @@
 }
 .tl__playhead {
   position: absolute;
-  top: 0;
+  /* Up into the ruler, so the time under the head is readable. */
+  top: -26px;
   bottom: 0;
   width: 12px;
   margin-left: -6px;
@@ -1985,7 +1989,7 @@
 .tl__propose-span {
   position: absolute;
   top: 0;
-  bottom: 26px;
+  bottom: 0;
   background: color-mix(in srgb, var(--accent), transparent 78%);
   border-left: 1px solid var(--accent);
   border-right: 1px solid var(--accent);
@@ -2004,7 +2008,7 @@
 .tl__gap {
   position: absolute;
   top: 0;
-  bottom: 26px;
+  bottom: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2068,7 +2072,7 @@
 .tl__seam {
   position: absolute;
   top: 0;
-  bottom: 26px;
+  bottom: 0;
   width: 11px;
   margin-left: -5.5px;
   padding: 0;
@@ -2113,7 +2117,7 @@
 .tl__cut {
   position: absolute;
   top: 0;
-  bottom: 26px;
+  bottom: 0;
   width: 14px;
   margin-left: -7px;
   cursor: ew-resize;

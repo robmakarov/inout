@@ -440,6 +440,22 @@ export function Timeline({
 
   return (
     <div className={`tl${sliding ? ' tl--sliding' : ''}`}>
+      <div className="tl__row tl__row--ruler">
+        <div className="tl__gutter" />
+        <div
+          ref={trackRef}
+          className="tl__ruler"
+          onPointerDown={(e) => startDrag(e, seekAtClient)}
+        >
+          {width > 0 &&
+            ticks.map((t) => (
+              <div key={t} className="tl__tick" style={{ left: x(t) }}>
+                <span className="tl__tick-label">{formatClock(t)}</span>
+              </div>
+            ))}
+        </div>
+      </div>
+
       <div className={`tl__lanes${anyStrip ? ' tl__lanes--film' : ''}`}>
         {recording.channels.map((ch) => {
           const meta = CHANNEL_META[ch.kind]
@@ -559,22 +575,6 @@ export function Timeline({
         })}
       </div>
 
-      <div className="tl__row tl__row--ruler">
-        <div className="tl__gutter" />
-        <div
-          ref={trackRef}
-          className="tl__ruler"
-          onPointerDown={(e) => startDrag(e, seekAtClient)}
-        >
-          {width > 0 &&
-            ticks.map((t) => (
-              <div key={t} className="tl__tick" style={{ left: x(t) }}>
-                <span className="tl__tick-label">{formatClock(t)}</span>
-              </div>
-            ))}
-        </div>
-      </div>
-
       {width > 0 && (
         <div className="tl__overlay">
           {gStart > 0 &&
@@ -652,7 +652,7 @@ export function Timeline({
               // cut to undo — the boundary handle is the whole of it.
               if (removedMs <= 0) return null
               if (collapsed.has(sg.endMs)) {
-                return seam(sg.endMs, `seam-${sg.endMs}`, () =>
+                return seam(sg.endMs, `seam-${i}`, () =>
                   setCollapsed((prev) => {
                     const next = new Set(prev)
                     next.delete(sg.endMs)
@@ -663,7 +663,7 @@ export function Timeline({
               return zoneActions(
                 sg.endMs,
                 segments[i + 1]!.startMs,
-                `gap-${sg.endMs}`,
+                `gap-${i}`,
                 () => restoreGap(i),
                 () => closeGap(sg.endMs),
               )
@@ -689,7 +689,16 @@ export function Timeline({
               const tightAfter =
                 i < segments.length - 1 && spanW(sg.endMs, segments[i + 1]!.startMs) < 14
               return (
-              <div key={`seg-${sg.startMs}`}>
+              /* KEYED BY POSITION, NOT BY TIME, and that is the whole of
+                 "still cant drag right grabber after split, barely moves".
+                 This used to be `seg-${sg.startMs}`. Dragging the boundary
+                 RIGHT moves the NEXT clip's startMs — which was this key — so
+                 React unmounted the subtree holding the very handle under the
+                 pointer, taking its listeners and its pointer capture with it.
+                 The drag died after one move. Dragging LEFT moves the previous
+                 clip's endMs, which is in no key, so that direction always
+                 worked: exactly the asymmetry reported. */
+              <div key={`seg-${i}`}>
                 {i > 0 && (
                   <div
                     className={`tl__cut tl__cut--l${tightBefore ? ' tl__cut--tight' : ''}`}
