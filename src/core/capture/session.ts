@@ -1,6 +1,6 @@
 import { newId } from '@core/id'
 import { isAppleWebKit } from '@core/capabilities'
-import { aspectOf, frameForAspect, sourceFrameEnabled } from '@core/frame'
+import { aspectOf, frameForAspect, sourceFrameEnabled, sourceResEnabled } from '@core/frame'
 import { DEFAULT_FRAME_RATE, normalizeRate, sourceRateEnabled } from '@core/rate'
 import { singleGenCaptureEnabled } from '@core/singleGen'
 import {
@@ -1069,21 +1069,58 @@ class Session implements CaptureSession {
    * has always been recorded.
    */
   private singleGenerationTake(): { yes: boolean; why: string } {
-    if (!singleGenCaptureEnabled()) return { yes: false, why: 'not enabled (?singlegen=capture)' }
     const video = this.channels.filter((c) => c.media === 'video' && !c.ended)
-    if (video.length !== 1) return { yes: false, why: `${video.length} video channels` }
+    if (video.length !== 1) {
+      return { yes: false, why: `${video.length} video channels`, }
+    }
     const ch = video[0]!
     if (!ch.useMeasured) {
       return { yes: false, why: `the ${ch.kind} channel records webm through MediaRecorder, which nothing can packet-copy into an MP4` }
     }
     const frame = this.compositeFrame()
-    if (ch.width !== frame.width || ch.height !== frame.height) {
-      return {
-        yes: false,
-        why: `the ${ch.kind} track is ${ch.width}x${ch.height}, not ${frame.width}x${frame.height} — the compositor's contain-fit is doing real work`,
-      }
+    // NATIVE RESOLUTION IS ITS OWN OPT-IN, and it does not need a second one.
+    // `?sourceres=1` promises the take's own resolution, delivered by the
+    // packet copy — and on a single-video take BIGGER than the composite, the
+    // composite is not a different picture, it is a smaller copy of this one
+    // made by a second hardware encoder running beside the first. Asking the
+    // user for a separate flag to stop paying for that would mean the feature
+    // does not work for the person who turned it on.
+    if (
+      sourceResEnabled() &&
+      ch.width &&
+      ch.height &&
+      ch.width * ch.height > frame.width * frame.height
+    ) {
+      return { yes: true, why: '' }
     }
-    return { yes: true, why: '' }
+    if (!singleGenCaptureEnabled()) return { yes: false, why: 'not enabled (?singlegen=capture)' }
+    if (ch.width === frame.width && ch.height === frame.height) return { yes: true, why: '' }
+    // THE COMPOSITE WOULD BE A DOWNSCALE OF A PICTURE WE ALREADY HAVE (F18 +
+    // O15, 2026-08-30). The original rule asked for EQUALITY, because before
+    // F18 the export ladder stopped below the screen and the composite was the
+    // only thing shaped like the output. With `?sourceres=1` the take's own
+    // size IS an export step, delivered by the packet copy — so on a
+    // single-video take that is BIGGER than the composite, the composite is not
+    // a different picture, it is a smaller copy of this one, made by a second
+    // hardware encoder running beside the first.
+    //
+    // THIS IS THE LEVER ROBERT'S FREEZE TURNS ON. Measured 2026-08-30 from his
+    // configuration: 3024x1964@60 plus a composite asks for 481 Mpx/s across
+    // two encoders — a whole 4K60 stream's worth, while a game renders on the
+    // same GPU. Without the composite it is 356 on one. The composite is the
+    // difference between impossible and merely hard.
+    //
+    // WHAT IS GIVEN UP is what `?singlegen=capture` always gave up and is named
+    // in core/singleGen.ts: source-liveness detection, and the composited
+    // preview (the raw <video> preview takes over, and measured live it carries
+    // MORE pixels than the compositor's 960x540 canvas). NEW HERE: an export at
+    // a step SMALLER than the take now renders instead of copying the
+    // composite. That is the honest trade — a slower export on a take that
+    // would otherwise have produced nothing at all.
+    return {
+      yes: false,
+      why: `the ${ch.kind} track is ${ch.width}x${ch.height}, not ${frame.width}x${frame.height} — the compositor's contain-fit is doing real work`,
+    }
   }
 
   /**
