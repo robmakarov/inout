@@ -134,11 +134,6 @@ export function ToolsBar({
       {/* F3: the frame only exists around a screen surface, so a camera-only
           take never shows a control that would do nothing. */}
       {hasScreen && <FrameBar edit={edit} onEdit={onEdit} />}
-      {segments.length > 1 && !proposal && (
-        <span className="tl__tools-hint">
-          {segments.length} clips — drag a cut edge to move it, × to delete a clip
-        </span>
-      )}
     </div>
   )
 }

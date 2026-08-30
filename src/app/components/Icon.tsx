@@ -22,6 +22,7 @@ export type IconName =
   | 'send'
   | 'record'
   | 'folder'
+  | 'undo'
   | 'google'
 
 const PATHS: Record<Exclude<IconName, 'google'>, ReactNode> = {
@@ -103,6 +104,13 @@ const PATHS: Record<Exclude<IconName, 'google'>, ReactNode> = {
       <rect x="4.5" y="3" width="15" height="18" rx="2" />
       <path d="M8 7.5h8M8 11h8" />
       <rect x="8" y="14" width="8" height="4" rx="1" />
+    </>
+  ),
+  // A circular arrow — put back the material a cut removed (UI1's timeline).
+  undo: (
+    <>
+      <path d="M4 10.5h9.5a4.5 4.5 0 1 1 0 9H8" />
+      <path d="M7.5 6.5 3.5 10.5l4 4" />
     </>
   ),
   // A filled dot — continue recording into this take (UI1's transport).

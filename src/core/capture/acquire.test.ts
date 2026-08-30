@@ -129,7 +129,7 @@ describe('what the picker offers', () => {
 
   it('never removes a surface from Chrome\u2019s picker, sound on or off', () => {
     for (const systemAudio of [true, false]) {
-      for (const level of [0, 1, 2] as const) {
+      for (const level of [0, 1, 2, 3] as const) {
         const o = displayMediaOptions({ ...withScreen, systemAudio }, level)
         expect((o as Record<string, unknown>).monitorTypeSurfaces).toBeUndefined()
       }
@@ -182,6 +182,31 @@ describe('the request Chrome receives, rung by rung', () => {
     // Covered on the TRACK instead: capDisplayTrack enforces the export ceiling
     // on what actually arrives, whatever the request managed to say.
     expect(displayMediaOptions(config, 2).video).toBe(true)
+    // …but it still carries OUR three raw-audio flags, which is what made it a
+    // floor that was not one.
+    expect(displayMediaOptions(config, 2).audio).toEqual({
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+    })
+  })
+
+  it('THE REAL FLOOR IS RUNG 3: nothing of ours is left in the request at all', () => {
+    // Robert's machine wedged FIVE times with the ladder already on rung 2, so
+    // whatever chokes is in what rung 2 still sends — and the only thing rung 2
+    // still sends is ours: three audio flags added in 2026-08-26 on the claim
+    // that they "cannot reject or hang a request", asserted and never measured.
+    const o = displayMediaOptions(config, 3)
+    expect(o.video).toBe(true)
+    // The user's ask survives — the tab-audio checkbox is still in the picker.
+    expect(o.audio).toBe(true)
+    // What moved is HOW the raw flags are applied: on the delivered track
+    // (repairDisplayAudio) instead of in the request, so the music is still raw.
+    expect(Object.keys(o)).toEqual(['video', 'audio'])
+  })
+
+  it('rung 3 with the sound off asks for no audio at all', () => {
+    expect(displayMediaOptions({ ...config, systemAudio: false }, 3).audio).toBe(false)
   })
 
   it('THE BOUND IS THE CHOSEN QUALITY STEP, not the monitor', () => {

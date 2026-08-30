@@ -749,6 +749,21 @@ export function displayMediaOptions(
   // it. That rung is covered on the TRACK instead — capDisplayTrack enforces
   // the export ceiling on what actually arrives, whatever the request managed
   // to say.
+  // THE NEW FLOOR (2026-08-30). Rung 2 was called "nothing of ours left to
+  // drop" and that was not true: the three raw-audio flags are ours — the user
+  // chose Tab Audio, nobody chose `echoCancellation: false` — and they have
+  // ridden every rung since 2026-08-26 on the claim that "three boolean audio
+  // constraints are advisory and cannot reject or hang a request", which was
+  // asserted and never measured. Robert's machine wedged FIVE times with the
+  // ladder already on rung 2, so whatever is choking is in what rung 2 still
+  // sends, and this is what rung 2 still sends.
+  //
+  // Nothing the user chose goes missing: the flags MOVE to the delivered track
+  // (repairDisplayAudio, below) instead of being dropped, so the tab music is
+  // still raw. If the track refuses them we are exactly where this project was
+  // before 2026-08-26, on a machine that has already wedged three times, and
+  // the console says so.
+  if (level >= 3) return { video: true, audio: config.systemAudio ? true : false }
   if (level >= 2) return { video: true, audio }
   if (level === 1) {
     return {
@@ -762,6 +777,36 @@ export function displayMediaOptions(
     selfBrowserSurface: 'exclude',
     surfaceSwitching: 'include',
     systemAudio: config.systemAudio ? 'include' : 'exclude',
+  }
+}
+
+/**
+ * PUT THE RAW FLAGS BACK ON THE TRACK when the request was not allowed to carry
+ * them (the floor rung, above). Chrome's voice processing turns tab music into
+ * mono warble — Robert heard it in 2026-08-26 — so this is not cosmetic; it is
+ * the reason the flags exist. A no-op on every other rung, where the settings
+ * already came back false, so the common path does not even await.
+ */
+async function repairDisplayAudio(track: MediaStreamTrack): Promise<void> {
+  const before = track.getSettings()
+  if (
+    before.echoCancellation !== true &&
+    before.noiseSuppression !== true &&
+    before.autoGainControl !== true
+  ) {
+    return
+  }
+  try {
+    await track.applyConstraints(RAW_DISPLAY_AUDIO)
+    const after = track.getSettings()
+    console.info(
+      `[capture] raw tab audio applied on the track: ec=${after.echoCancellation ?? '?'} ` +
+        `ns=${after.noiseSuppression ?? '?'} agc=${after.autoGainControl ?? '?'}`,
+    )
+  } catch (err) {
+    // Nothing to fall back to, and nothing is lost that was not already lost:
+    // this only runs on a machine that has wedged its way to the floor.
+    console.warn('[capture] the tab-audio track refused the raw flags — voice processing is on', err)
   }
 }
 
@@ -1227,6 +1272,7 @@ export function acquireChannelsProgressive(
             `[capture] tab audio delivered: ec=${s.echoCancellation ?? '?'} ns=${s.noiseSuppression ?? '?'} ` +
               `agc=${s.autoGainControl ?? '?'} ch=${s.channelCount ?? '?'} sr=${s.sampleRate ?? '?'}`,
           )
+          await repairDisplayAudio(audio)
           deliver({
             kind: 'system-audio',
             media: 'audio',

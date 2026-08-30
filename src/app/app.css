@@ -1843,10 +1843,6 @@
 .tl__tool:disabled {
   opacity: 0.4;
 }
-.tl__tools-hint {
-  font-size: 11px;
-  color: var(--text-dim);
-}
 
 /* Timed zoom markers (F2). Read-only: the gesture lives on the stage, this is
    just where the timeline says a move happened. */
@@ -1912,23 +1908,93 @@
 }
 /* Cut-out material: dimmed and struck through, so it reads as removed rather
    than merely deselected. */
+/* THE CUT-OUT ZONE, RECESSED. There is nothing in it to look at, so it stops
+   reading as timeline: a flat dark scrim with a hatch over it, rather than a
+   framed band competing with the lanes it sits between. It carries its own undo
+   (UI1, Robert: "make cutted out zone shrink with button undo inside"). */
 .tl__gap {
   position: absolute;
   top: 0;
   bottom: 26px;
-  background: var(--overlay);
-  border-left: 1px dashed var(--text-dim);
-  border-right: 1px dashed var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.05) 0 3px,
+      transparent 3px 7px
+    ),
+    var(--bg);
   pointer-events: none;
+}
+/* The undo, inside the zone it undoes. Only drawn where there is room for it —
+   below that the gap is a few pixels wide and a button in it would cover the
+   clips on either side. */
+.tl__gap-undo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0;
+  width: 18px;
+  justify-content: center;
+  border: none;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+  transition:
+    background var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease);
+}
+.tl__gap-undo--wide {
+  width: auto;
+  padding: 0 7px 0 5px;
+}
+.tl__gap-undo:hover {
+  background: var(--surface-3);
+  color: var(--text);
 }
 .tl__cut {
   position: absolute;
   top: 0;
   bottom: 26px;
-  width: 12px;
-  margin-left: -6px;
+  width: 14px;
+  margin-left: -7px;
   cursor: ew-resize;
   pointer-events: auto;
+  /* ABOVE THE PLAYHEAD (z-index 4), and this is half of why a fresh cut could
+     not be grabbed: a split happens AT the playhead, so the playhead's own 12px
+     grab strip landed exactly on the new boundary and ate every press within
+     6px of it. The playhead can still be dragged from anywhere along the lanes
+     and the ruler; the cut can only be grabbed here. */
+  z-index: 5;
+}
+/* A boundary too narrow to hold both handles: the hit area is split down the
+   middle instead of stacking two 14px strips on the same pixel. The left half
+   trims the clip that ENDS here, the right half the clip that STARTS here. */
+.tl__cut--tight.tl__cut--r {
+  width: 7px;
+  margin-left: -7px;
+}
+.tl__cut--tight.tl__cut--l {
+  width: 7px;
+  margin-left: 0;
+}
+.tl__cut--tight.tl__cut--r::after {
+  left: auto;
+  right: 0;
+  margin-left: 0;
+}
+/* One line for one boundary — the two handles share it. */
+.tl__cut--tight.tl__cut--l::after {
+  display: none;
 }
 .tl__cut::after {
   content: '';

@@ -13,7 +13,7 @@ import { CaptureError, MAX_RECORDING_MS } from '@core/types'
 import type { CaptureConfig, ChannelKind } from '@core/types'
 import { clampEditState, defaultEditState } from '@core/timeline'
 import { detectCapabilities } from '@core/capabilities'
-import { BROWSER_LABEL, detectPlatform, evaluateSupport } from '@core/platform'
+import { detectPlatform, evaluateSupport } from '@core/platform'
 import { analytics } from '@core/analytics'
 import { DEFAULT_FRAME_ASPECT, aspectOf, frameForAspect, sourceFrameEnabled } from '@core/frame'
 import { prefetchEditorChunk } from '@app/editorChunk'
@@ -34,10 +34,6 @@ import {
 } from '@app/lib/channels'
 import { armingLabel as armingLabelFor, foldWaiting } from '@app/lib/arming'
 import { noteWedgeReload, shouldReloadForWedge, takeWedgeReloadNotice } from '@app/lib/wedgeReload'
-import {
-  SCREEN_RECORDING_SETTINGS_URL,
-  canOpenScreenRecordingSettings,
-} from '@app/lib/screenSettings'
 import { ChannelChips } from '@app/components/ChannelChips'
 import { QualitySlider } from '@app/components/QualitySlider'
 import { TakesList } from '@app/components/TakesList'
@@ -118,21 +114,6 @@ export function CaptureScreen() {
    * why the notice is now an owed flag rather than a 15 s window.
    */
   const [wedgeNotice, setWedgeNotice] = useState<string | null>(null)
-  /**
-   * Does this notice come with the way out? A user cannot open a terminal and
-   * should not have to find six menus deep, so once the stall is no longer the
-   * page's to fix (ESCALATE_AT_STALLS, or an outright permission stall) the
-   * notice carries a button that opens the exact macOS pane with the toggle on
-   * it. Robert, 2026-08-30: "i will not do anything in console … what will
-   * users do if this happens?" — this is the answer to the second half.
-   */
-  const [wedgeFix, setWedgeFix] = useState(false)
-
-  /** The stall has left the page's hands: show the settings button with it. */
-  const noticeNeedsSettings = (reason?: string): boolean =>
-    canOpenScreenRecordingSettings(detectPlatform().os) &&
-    (reason === 'permission' || consecutiveDisplayStalls() >= ESCALATE_AT_STALLS)
-
   /*
    * THERE IS NO "REDUCED MODE" FOR THE USER TO MANAGE — Robert, 2026-08-30:
    * "why there is still button clear reduced mode? no reduced mode we agreed,
@@ -164,7 +145,6 @@ export function CaptureScreen() {
           ? displayStallMessage('wedge', detectPlatform().browser, 'failed', stalls)
           : 'The screen share got stuck, so the app refreshed itself. Press record to try again.',
       )
-      setWedgeFix(noticeNeedsSettings())
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -436,7 +416,6 @@ export function CaptureScreen() {
         if (err.kind === 'screen' && err.reason === 'stale') {
           noteWedgeReload()
           setWedgeNotice(err.message)
-          setWedgeFix(false)
           window.location.reload()
           return
         }
@@ -447,7 +426,6 @@ export function CaptureScreen() {
           // can take seconds. Say what is happening first, or the app just sits
           // there looking broken — which is exactly what Robert saw.
           setWedgeNotice('The screen share got stuck. Refreshing the app…')
-          setWedgeFix(false)
           window.location.reload()
           return
         }
@@ -455,7 +433,6 @@ export function CaptureScreen() {
         // still be on screen when the user comes back from the other tab.
         if (err.reason === 'wedged' || err.reason === 'permission' || err.reason === 'stale') {
           setWedgeNotice(err.message)
-          setWedgeFix(noticeNeedsSettings(err.reason))
         }
         else toast(err.message, 'error')
       } else toast('Could not start recording', 'error')
@@ -553,24 +530,6 @@ export function CaptureScreen() {
       {!session && wedgeNotice && (
         <div className="capture__unsupported" role="alert">
           {wedgeNotice}
-          {wedgeFix && (
-            <div className="capture__notice-actions">
-              {/* An anchor, not a button with a script behind it: this is a
-                  navigation to an external scheme, and the browser's own "Open
-                  System Settings?" confirmation is the security story. A
-                  scripted location assignment gets treated as less trustworthy
-                  by exactly the engines that matter here. */}
-              <a className="capture__notice-btn" href={SCREEN_RECORDING_SETTINGS_URL}>
-                Open Screen Recording settings
-              </a>
-              <span className="capture__notice-aside">
-                Turn {BROWSER_LABEL[detectPlatform().browser]} off and back on there, then quit it
-                with ⌘Q and reopen — macOS only applies the change on a fresh launch. A macOS
-                permission dialog hidden behind your windows does the same thing; answering it
-                fixes it too.
-              </span>
-            </div>
-          )}
         </div>
       )}
       {/* Every take you have, and a way back into one — Robert, 2026-08-30:

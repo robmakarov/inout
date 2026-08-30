@@ -144,16 +144,19 @@ describe('advice that knows what it has already told this user', () => {
     expect(msg).not.toMatch(/System Settings/)
   })
 
-  it('THE SECOND IN A ROW STOPS BLAMING THE BROWSER — the app already spent its refresh', () => {
+  it('THE SECOND IN A ROW STOPS GIVING ORDERS — the app narrows the request instead', () => {
     rememberDisplayStall()
     rememberDisplayStall()
     expect(consecutiveDisplayStalls()).toBe(ESCALATE_AT_STALLS)
     const msg = displayStallMessage('wedge', 'chrome', 'failed')
-    expect(msg).toMatch(/screen-recording permission/)
+    expect(msg).toMatch(/narrowed what it asks for/)
+    // NO INSTRUCTIONS. Every remedy this used to print was work for the user,
+    // and the ones that were tried did not work.
+    expect(msg).not.toMatch(/System Settings|⌘Q|Privacy/)
     // It must name the count: "twice in a row, and the refresh did not help" is
     // the evidence that the page has been ruled out. Without it this is just
     // another sentence telling the user to go and change something.
-    expect(msg).toMatch(/stalled 2 times in a row/)
+    expect(msg).toMatch(/2 in a row/)
     // And it must stop being a wall — the steps live on the button under it,
     // so the text that used to spell out the pane, the toggle and the relaunch
     // is two sentences now. A user reading an alert does not read five.
@@ -165,7 +168,7 @@ describe('advice that knows what it has already told this user', () => {
     rememberDisplayStall()
     rememberDisplaySuccess(0)
     expect(consecutiveDisplayStalls()).toBe(0)
-    expect(displayStallMessage('wedge', 'chrome', 'failed')).not.toMatch(/screen-recording permission/)
+    expect(displayStallMessage('wedge', 'chrome', 'failed')).not.toMatch(/narrowed what it asks for/)
   })
 
   it('the still-running notice never escalates: the share may still land', () => {

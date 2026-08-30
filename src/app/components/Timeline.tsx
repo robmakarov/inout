@@ -164,6 +164,26 @@ export function Timeline({
     })
   }
 
+  /**
+   * PUT THE MATERIAL BACK — the undo inside the cut zone itself (UI1, Robert:
+   * "make cutted out zone shrink with button undo inside").
+   *
+   * It extends the clip BEFORE the gap up to the clip after it, rather than
+   * merging the two spans into one. That is deliberate: the two clips can carry
+   * different speeds (F5b), and merging would silently throw one of them away.
+   * `normalizeSegments` decides afterwards whether what is left is really one
+   * span, which is the one place that question is answered.
+   */
+  const restoreGap = (index: number) => {
+    const cur = editRef.current
+    const segs = editSegments(cur).map((sg) => ({ ...sg }))
+    const before = segs[index]
+    const after = segs[index + 1]
+    if (!before || !after) return
+    before.endMs = after.startMs
+    onEdit({ ...cur, segments: normalizeSegments(cur, segs) })
+  }
+
   /** Drag a zoom marker along the take (F2b). Recording-timeline, like the
    *  keyframes themselves, so the pointer maps straight onto them. */
   const dragZoomMarker = (index: number) => (e: React.PointerEvent) => {
@@ -361,32 +381,72 @@ export function Timeline({
               </div>
             ),
           )}
-          {/* Material cut out of the middle, plus the handles that move each cut. */}
+          {/* Material cut out of the middle. It is drawn RECESSED rather than as
+              a band of timeline — there is nothing in it to look at — and it
+              carries its own undo, so putting a cut back does not need a
+              sentence explaining where the control is (UI1). */}
           {segments.length > 1 &&
-            segments.slice(0, -1).map((sg, i) => (
-              <div
-                key={`gap-${sg.endMs}`}
-                className="tl__gap"
-                style={{ left: x(sg.endMs), width: Math.max(1, x(segments[i + 1]!.startMs - sg.endMs)) }}
-              />
-            ))}
+            segments.slice(0, -1).map((sg, i) => {
+              const removedMs = segments[i + 1]!.startMs - sg.endMs
+              // A bare split removes nothing: there is no zone to draw, and no
+              // cut to undo — the two handles are the whole of it.
+              if (removedMs <= 0) return null
+              const w = Math.max(1, x(removedMs))
+              return (
+                <div key={`gap-${sg.endMs}`} className="tl__gap" style={{ left: x(sg.endMs), width: w }}>
+                  {w >= 22 && (
+                    <button
+                      className={`tl__gap-undo${w >= 62 ? ' tl__gap-undo--wide' : ''}`}
+                      title={`Put back ${formatClock(removedMs)} — undo this cut`}
+                      aria-label={`Undo this cut and put back ${formatClock(removedMs)}`}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        restoreGap(i)
+                      }}
+                    >
+                      <Icon name="undo" size={12} />
+                      {w >= 62 && <span>{formatClock(removedMs)}</span>}
+                    </button>
+                  )}
+                </div>
+              )
+            })}
           {segments.length > 1 &&
-            segments.map((sg, i) => (
+            segments.map((sg, i) => {
+              /**
+               * TWO HANDLES CAN SIT ON THE SAME PIXEL, and that is what a fresh
+               * split IS — the clip before it ends exactly where the next one
+               * begins. Both were 12 px wide and centred on the boundary, so
+               * they overlapped completely and the later one in the DOM won
+               * every press: dragging LEFT (trim the clip before) was
+               * unreachable, and the handle felt dead. Robert: "cant grab
+               * normally grabers after split".
+               *
+               * When the gap is too narrow to hold both, the hit area is split
+               * down the boundary instead — the left half trims the clip that
+               * ends there, the right half trims the clip that starts there.
+               * Which is also what the gesture already meant.
+               */
+              const tightBefore = i > 0 && x(sg.startMs - segments[i - 1]!.endMs) < 14
+              const tightAfter =
+                i < segments.length - 1 && x(segments[i + 1]!.startMs - sg.endMs) < 14
+              return (
               <div key={`seg-${sg.startMs}`}>
                 {i > 0 && (
                   <div
-                    className="tl__cut tl__cut--l"
+                    className={`tl__cut tl__cut--l${tightBefore ? ' tl__cut--tight' : ''}`}
                     style={{ left: x(sg.startMs) }}
                     onPointerDown={dragCutEdge(i, 'start')}
-                    title="Move this cut"
+                    title="Drag right to trim the start of this clip"
                   />
                 )}
                 {i < segments.length - 1 && (
                   <div
-                    className="tl__cut tl__cut--r"
+                    className={`tl__cut tl__cut--r${tightAfter ? ' tl__cut--tight' : ''}`}
                     style={{ left: x(sg.endMs) }}
                     onPointerDown={dragCutEdge(i, 'end')}
-                    title="Move this cut"
+                    title="Drag left to trim the end of this clip"
                   />
                 )}
                 <button
@@ -403,7 +463,8 @@ export function Timeline({
                   ×
                 </button>
               </div>
-            ))}
+              )
+            })}
           <div
             className="tl__trim tl__trim--l"
             style={{ left: x(gStart) }}

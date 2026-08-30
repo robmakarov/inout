@@ -84,12 +84,30 @@ import type { BrowserName, OSName } from '../platform'
 const KEY = 'inout.displayWedge.v1'
 
 /**
- * How many consecutive good takes a rung must carry before the request climbs
- * back toward the full one. Three: enough that a climb is not triggered by the
- * single take that happened to work, few enough that a machine whose cause is
- * gone is back at full quality within a minute of ordinary use.
+ * A RUNG THAT WEDGED THIS MACHINE IS NOT RE-ATTEMPTED BECAUSE SOME TAKES WENT
+ * WELL. Twice now the climb has been driven by a counter of good takes, and
+ * both times the counter walked the machine straight back onto the request
+ * that wedges it:
+ *
+ *   first cut (W1)  climb on ONE good take   → wedge every second record
+ *   second (a6a824) climb on THREE           → wedge every fourth record
+ *
+ * Robert's own stored state, read off his Chrome profile 2026-08-30:
+ * `{"level":2,"count":5,"goodRun":2,...}` — five wedges, parked on the floor,
+ * two good takes into earning a climb back onto the rung that had just wedged
+ * him five times. Slower is not fixed. Good takes at rung N are evidence about
+ * RUNG N; they are not evidence about the rung above, which is the one that
+ * choked, and no number of them ever becomes that evidence.
+ *
+ * So the only way up is TIME — a whole day with no wedge — and it goes up ONE
+ * rung, not straight to the full request. That is the pre-W1 ratchet with the
+ * two things fixed that actually made it hurt: the rungs no longer drop
+ * anything the user chose (the ceiling is enforced on the delivered track, and
+ * the audio flags moved there too), and there is no banner or button telling
+ * them they are in a mode. Reduced mode is invisible now, so sitting in it
+ * costs nothing worth a wedge every fourth record to escape.
  */
-export const GOOD_TAKES_TO_CLIMB = 3
+export const WEDGE_PROBE_AFTER_MS = 24 * 60 * 60 * 1000
 
 /**
  * How many stalls in a row before the advice stops being about the browser.
@@ -100,12 +118,13 @@ export const GOOD_TAKES_TO_CLIMB = 3
  * than after they have given up.
  */
 export const ESCALATE_AT_STALLS = 2
-const WEDGE_TTL_MS = 24 * 60 * 60 * 1000
 
 /** 0 = full request. Higher = fewer of OUR options; see the ladder above. */
-export type DisplayRequestLevel = 0 | 1 | 2
-/** The floor. Every rung, this one included, still asks for the user's audio. */
-export const MAX_DISPLAY_LEVEL = 2
+export type DisplayRequestLevel = 0 | 1 | 2 | 3
+/** The floor. Every rung, this one included, still gets the user their audio —
+ *  rung 3 moves our three raw-audio flags onto the delivered track instead of
+ *  sending them in the request, which is the last thing of ours left in it. */
+export const MAX_DISPLAY_LEVEL = 3
 
 interface WedgeState {
   /** Last display timeout, ms since epoch. 0 = never / cleared. */
@@ -113,8 +132,6 @@ interface WedgeState {
   /** Which rung the next request uses. */
   level: DisplayRequestLevel
   count: number
-  /** Consecutive good takes at the CURRENT rung — see rememberDisplaySuccess. */
-  goodRun: number
   /**
    * CONSECUTIVE STALLS WITH NO SCREEN IN BETWEEN — how the advice knows what
    * has already been tried and failed. 1 = the refresh ritual. 2 = the refresh
@@ -157,7 +174,6 @@ function load(): WedgeState {
         // their next click instead of waiting out the TTL.
         level: typeof s.level === 'number' ? clamp(s.level) : 1,
         count: (s.count ?? 0) | 0,
-        goodRun: (s.goodRun ?? 0) | 0,
         stalls: (s.stalls ?? 0) | 0,
         // A record written before W1 carries no delivery flag, and the honest
         // reading of that is FALSE: we have no evidence this profile was ever
@@ -172,7 +188,7 @@ function load(): WedgeState {
   } catch {
     /* absent, corrupt, or storage refused — memory-only is fine */
   }
-  mem = { wedgedAt: 0, level: 0, count: 0, goodRun: 0, stalls: 0, everDelivered: false }
+  mem = { wedgedAt: 0, level: 0, count: 0, stalls: 0, everDelivered: false }
   return mem
 }
 
@@ -187,7 +203,17 @@ function save(): void {
 /** Which rung the next getDisplayMedia should use. 0 on a healthy machine. */
 export function displayRequestLevel(now = Date.now()): DisplayRequestLevel {
   const s = load()
-  if (s.wedgedAt === 0 || now - s.wedgedAt >= WEDGE_TTL_MS) return 0
+  if (s.wedgedAt === 0) return 0
+  if (now - s.wedgedAt < WEDGE_PROBE_AFTER_MS) return s.level
+  // A DAY WITH NO WEDGE IS THE ONLY EVIDENCE THAT COUNTS — and it buys ONE
+  // rung, not the whole ladder. Jumping straight to the full request is how
+  // this used to hand a healed machine the exact call that had been breaking
+  // it; one rung at a time means a machine that is still sick pays a single
+  // wedge a day instead of one every few takes, and a machine that is well
+  // walks home over a few quiet days without ever noticing.
+  s.level = clamp(s.level - 1)
+  s.wedgedAt = s.level === 0 ? 0 : now
+  save()
   return s.level
 }
 
@@ -197,9 +223,6 @@ export function rememberDisplayWedge(now = Date.now()): void {
   s.level = clamp(displayRequestLevel(now) + 1)
   s.wedgedAt = now
   s.count += 1
-  // A wedge ends whatever good run was accumulating: the evidence for climbing
-  // is consecutive successes, and this is not one.
-  s.goodRun = 0
   save()
 }
 
@@ -222,70 +245,23 @@ export function consecutiveDisplayStalls(): number {
 }
 
 /**
- * THE SCREEN ARRIVED — and until W1 (2026-08-29) that only counted at rung 0.
- * A success at rung 1 or 2 changed nothing, so the only exit from the floor
- * was the 24 h TTL, and the only exit anyone actually found was editing
- * localStorage from a console. Robert reached rung 2 in one evening on a cause
- * that was already gone and had to be handed that line.
+ * THE SCREEN ARRIVED. It records two things and climbs nothing.
  *
- * Now every success climbs exactly one rung, and reaching 0 clears the mark.
- * ONE rung, not straight to 0: the rung above did choke once and a single good
- * take is not proof it is cured — but two of them are enough to walk a floored
- * machine all the way back, which is W1's own gate. Compare with a wedge,
- * which still steps down one rung and re-stamps the TTL, so a machine that is
- * genuinely sick cannot ratchet itself up out of safe mode.
- *
- * It also records `everDelivered` — see classifyDisplayStall. That is the only
- * part that runs on a machine which never wedged at all, and it is why this no
- * longer returns early on a clean record.
+ * `everDelivered` — see classifyDisplayStall — is the fact that this profile
+ * has the macOS grant, and `stalls` is the run of failures the advice counts.
+ * What it deliberately no longer does is move the ladder: a good take at the
+ * rung we are standing on says that rung works, which is the reason to STAY,
+ * not a reason to try the one above it again (see WEDGE_PROBE_AFTER_MS).
  */
-export function rememberDisplaySuccess(usedLevel: DisplayRequestLevel): void {
+export function rememberDisplaySuccess(_usedLevel: DisplayRequestLevel): void {
   const s = load()
   const first = !s.everDelivered
-  s.everDelivered = true
-  // The screen arrived: every remedy the advice was escalating through is moot.
   const hadStalls = s.stalls > 0
+  s.everDelivered = true
   s.stalls = 0
-  if (s.wedgedAt === 0) {
-    // Healthy machine. Nothing to climb; write only if this is the delivery
-    // that proves the OS grant (or the one that ends a stall run), so a normal
-    // take does not touch storage.
-    if (first || hadStalls) save()
-    return
-  }
-  if (usedLevel === 0) {
-    // A FULL request that worked is the strongest evidence there is — nothing
-    // of ours was dropped and the screen still arrived.
-    s.level = 0
-    s.wedgedAt = 0
-    s.goodRun = 0
-    save()
-    return
-  }
-  // ONE GOOD TAKE IS NOT READY, AND THE FIRST CUT OF THIS CLIMBED ON ONE.
-  //
-  // W1 shipped "any success climbs one rung", which walks a machine straight
-  // back onto the request that had just wedged it. Robert, 2026-08-30: "chrome
-  // screen and mic wedges happend every second record after reopening chrome".
-  // That is this, deterministically: wedge → rung 1 → good take → climb to rung
-  // 0 → rung 0 is the request that wedges → wedge. Every other record, forever.
-  // The old pre-W1 behaviour never oscillated because it never climbed at all;
-  // it just stayed degraded for a day, which is the bug W1 was written to fix.
-  // Both were wrong in the same place: how much evidence a climb needs.
-  //
-  // So a rung has to be EARNED CLEAR: consecutive good takes at the rung it is
-  // standing on. A machine whose cause is gone comes back on its own in a few
-  // takes, and a machine that genuinely chokes on the rung above settles where
-  // it works instead of rediscovering that every second take.
-  s.goodRun += 1
-  if (s.goodRun < GOOD_TAKES_TO_CLIMB) {
-    save()
-    return
-  }
-  s.goodRun = 0
-  s.level = clamp(s.level - 1)
-  if (s.level === 0) s.wedgedAt = 0
-  save()
+  // Write only when something actually changed, so an ordinary take on a
+  // healthy machine does not touch storage at all.
+  if (first || hadStalls) save()
 }
 
 /**
@@ -299,7 +275,6 @@ export function resetDisplayWedge(): void {
   s.wedgedAt = 0
   s.level = 0
   s.count = 0
-  s.goodRun = 0
   s.stalls = 0
   save()
 }
@@ -412,14 +387,16 @@ export function displayStallMessage(
       : `Still waiting for the screen. ${name} has the share but has not handed it over — ` +
           `if nothing happens, nothing is being recorded and you can press record again.`
   }
-  // THE SECOND ONE IN A ROW IS NOT THE PAGE'S PROBLEM ANY MORE: the app spent
-  // its automatic refresh on the first, and a fresh renderer did not help.
+  // A SECOND STALL IN A ROW GETS NO INSTRUCTIONS (Robert, 2026-08-30: "no
+  // fucking opening system settings, search for no user action ways"). Every
+  // remedy this used to print was work for the user — refresh, ⌘Q, a settings
+  // pane — and the two that were tried did not work. What is true and useful
+  // is what the app did about it: the request steps down a rung every time
+  // this happens, silently, and the next press is the whole of the user's job.
   if (stalls >= ESCALATE_AT_STALLS) {
-    // SHORT, because the button under it is the instruction. Everything this
-    // used to spell out in five sentences — which pane, which toggle, why a
-    // relaunch — is either one click away or one line under the button now.
-    return `macOS is not handing the screen to ${name}. It stalled ${stalls} times in a row and ` +
-      `refreshing did not help, so this is the screen-recording permission, not the app.`
+    return `The screen did not arrive and nothing was recorded — ${stalls} in a row. ${name} took ` +
+      `the share without handing it over, so the app has narrowed what it asks for. Press record ` +
+      `to try again.`
   }
   if (stall === 'permission') {
     // NOT "the device never connected", which is what this said until W1

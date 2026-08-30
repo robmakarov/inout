@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  GOOD_TAKES_TO_CLIMB,
+  WEDGE_PROBE_AFTER_MS,
   classifyDisplayStall,
   displayRequestLevel,
   displayStallMessage,
@@ -53,74 +53,63 @@ describe('wedge memory', () => {
     expect(displayRequestLevel(1_000_001)).toBe(1)
   })
 
-  it('the ladder bottoms out at 2 and stays there — there is no rung below it', () => {
-    rememberDisplayWedge(1_000_000)
-    rememberDisplayWedge(1_000_001)
-    expect(displayRequestLevel(1_000_002)).toBe(2)
+  it('the ladder bottoms out at 3 and stays there — there is no rung below it', () => {
+    for (let i = 0; i < 3; i++) rememberDisplayWedge(1_000_000 + i)
+    expect(displayRequestLevel(1_000_005)).toBe(3)
     // Wedge all day: the floor holds. Below it lies only the user's own asks,
-    // and those are not ours to drop (Robert 2026-08-25).
-    rememberDisplayWedge(1_000_003)
-    rememberDisplayWedge(1_000_004)
-    expect(displayRequestLevel(1_000_005)).toBe(2)
+    // and those are not ours to drop (Robert 2026-08-25). Rung 3 does not drop
+    // the tab audio either — it moves our three raw flags onto the track.
+    rememberDisplayWedge(1_000_006)
+    rememberDisplayWedge(1_000_007)
+    expect(displayRequestLevel(1_000_008)).toBe(3)
   })
 
-  it('a FULL-request success clears the mark — nothing stays degraded on a healthy machine', () => {
+  /*
+   * NO NUMBER OF GOOD TAKES CLIMBS. Twice this was driven by a counter and
+   * twice the counter walked the machine back onto the request that wedges it —
+   * on one good take (wedge every second record), then on three (every fourth).
+   * Robert's own stored state on 2026-08-30 was `level:2, count:5, goodRun:2`:
+   * five wedges, parked on the floor, two takes into earning the climb back.
+   * A good take at rung N is evidence about rung N. It is never evidence about
+   * the rung above, which is the one that choked.
+   */
+  it('THE CLIMB IS GONE: a hundred good takes do not move the ladder', () => {
     rememberDisplayWedge(1_000_000)
-    rememberDisplaySuccess(0)
-    expect(displayRequestLevel(1_000_001)).toBe(0)
-  })
-
-  // W1, 2026-08-29 — THESE TWO USED TO ASSERT THE OPPOSITE, and that was the
-  // bug. "A lower rung keeps it until the TTL: it costs the user nothing they
-  // can see" was true about the picker and false about everything else: a
-  // machine degraded by a cause that was already gone stayed degraded for 24 h,
-  // and the only exit anyone found was a localStorage line in a console.
-  // Robert hit it three times in one evening. One good take is stronger
-  // evidence than one old bad one.
-  // 2026-08-30 — THESE ASSERTED A CLIMB ON ONE GOOD TAKE, AND THAT WAS THE BUG.
-  // Climbing after a single success walks the machine straight back onto the
-  // request that had just wedged it, so it wedges again, drops a rung, works
-  // once, climbs, wedges — every other record, forever. Robert hit exactly
-  // that: "chrome screen and mic wedges happend every second record after
-  // reopening chrome". A rung is EARNED clear now.
-  it('ONE good take is not enough — the rung it is standing on is kept', () => {
-    rememberDisplayWedge(1_000_000)
-    rememberDisplaySuccess(1)
+    for (let i = 0; i < 100; i++) rememberDisplaySuccess(1)
     expect(displayRequestLevel(1_000_001)).toBe(1)
   })
 
-  it('THE OSCILLATION: a rung that works once and wedges once never climbs', () => {
-    rememberDisplayWedge(1_000_000) // → rung 1
-    for (let i = 0; i < 10; i++) {
-      rememberDisplaySuccess(1)
-      rememberDisplayWedge(1_000_001 + i) // the good run is broken every time
-    }
-    // It settles at the floor rather than rediscovering rung 0 every other take.
-    expect(displayRequestLevel(1_000_100)).toBe(2)
+  it('a good take at the FULL request does not clear the mark either — it cannot happen', () => {
+    // usedLevel is whatever the ladder handed out, so a success at 0 on a
+    // marked machine is not a state this can reach; if it ever did, the mark
+    // stays and the day-long probe is what moves it.
+    rememberDisplayWedge(1_000_000)
+    rememberDisplaySuccess(0)
+    expect(displayRequestLevel(1_000_001)).toBe(1)
   })
 
-  it(`${GOOD_TAKES_TO_CLIMB} consecutive good takes climb one rung`, () => {
+  it('A QUIET DAY PROBES ONE RUNG UP, not the whole ladder', () => {
     for (let i = 0; i < 3; i++) rememberDisplayWedge(1_000_000 + i)
-    expect(displayRequestLevel(1_000_005)).toBe(2)
-    for (let i = 0; i < GOOD_TAKES_TO_CLIMB; i++) rememberDisplaySuccess(2)
-    expect(displayRequestLevel(1_000_005)).toBe(1)
-    for (let i = 0; i < GOOD_TAKES_TO_CLIMB; i++) rememberDisplaySuccess(1)
-    // Home on its own, in ordinary use, with no TTL wait and nothing to press.
-    expect(displayRequestLevel(1_000_000 + 60_000)).toBe(0)
+    expect(displayRequestLevel(1_000_005)).toBe(3)
+    const day = WEDGE_PROBE_AFTER_MS
+    // A day later it tries rung 2 — not rung 0, which is the call that broke it.
+    expect(displayRequestLevel(1_000_005 + day)).toBe(2)
+    // And the probe re-stamps, so the next one is another day away, not now.
+    expect(displayRequestLevel(1_000_005 + day + 1)).toBe(2)
+    expect(displayRequestLevel(1_000_005 + day * 2 + 10)).toBe(1)
+    expect(displayRequestLevel(1_000_005 + day * 3 + 20)).toBe(0)
+    // Home, and the mark is gone rather than merely aged out.
+    expect(displayRequestLevel(1_000_005 + day * 3 + 21)).toBe(0)
   })
 
-  it('a wedge after a climb still steps down — a sick machine cannot ratchet out', () => {
+  it('a wedge during the probe drops straight back — a sick machine cannot ratchet out', () => {
     rememberDisplayWedge(1_000_000)
     rememberDisplayWedge(1_000_001)
-    rememberDisplaySuccess(2) // → 1
-    rememberDisplayWedge(1_000_002)
-    expect(displayRequestLevel(1_000_003)).toBe(2)
-  })
-
-  it('a FULL-request success still clears outright — nothing of ours was dropped', () => {
-    for (let i = 0; i < 3; i++) rememberDisplayWedge(1_000_000 + i)
-    rememberDisplaySuccess(0)
-    expect(displayRequestLevel(1_000_005)).toBe(0)
+    expect(displayRequestLevel(1_000_002)).toBe(2)
+    const day = WEDGE_PROBE_AFTER_MS
+    expect(displayRequestLevel(1_000_002 + day)).toBe(1)
+    rememberDisplayWedge(1_000_003 + day)
+    expect(displayRequestLevel(1_000_004 + day)).toBe(2)
   })
 
   it('the mark expires 24h after the last wedge — a fixed Chrome restores the full request', () => {
@@ -274,18 +263,18 @@ describe('the request Chrome actually receives after a wedge', () => {
     expect(seen.audio).toBeTruthy()
   })
 
-  it('W1 GATE, END TO END: real takes walk a floored machine off the floor', async () => {
-    // The same climb as the unit tests above, but driven through the actual
-    // acquisition path — which is where the rung is read and written, and the
-    // reason this used to assert "keeps its rung, and the floor holds". It
-    // held so well that Robert spent an evening on rung 2 with the cause
-    // already gone.
+  it('GATE, END TO END: real takes do NOT walk the machine back onto the wedge', async () => {
+    // Driven through the actual acquisition path — which is where the rung is
+    // read and written — because that is where both broken versions of the
+    // climb lived. This used to assert the opposite, twice: first that one good
+    // take climbs, then that three do. Both walked Robert back onto the request
+    // that had been wedging him, the second one just took four takes to do it.
     for (let i = 0; i < 3; i++) rememberDisplayWedge()
-    expect(displayRequestLevel()).toBe(2)
+    expect(displayRequestLevel()).toBe(3)
 
-    // This test is about the LADDER, not the release barrier: pretend the
-    // previous take's share released long ago so each request is instant.
-    for (let i = 0; i < GOOD_TAKES_TO_CLIMB; i++) {
+    // Ten good takes in a row, the release barrier reset each time so every
+    // request is instant. The floor holds through all of them.
+    for (let i = 0; i < 10; i++) {
       resetDisplayReleaseForTests()
       stubDisplay(() => undefined)
       await acquireChannelsProgressive(config, {
@@ -293,17 +282,7 @@ describe('the request Chrome actually receives after a wedge', () => {
         onFailure: () => undefined,
       }).settled
     }
-    expect(displayRequestLevel()).toBe(1)
-
-    for (let i = 0; i < GOOD_TAKES_TO_CLIMB; i++) {
-      resetDisplayReleaseForTests()
-      stubDisplay(() => undefined)
-      await acquireChannelsProgressive(config, {
-        onChannel: () => undefined,
-        onFailure: () => undefined,
-      }).settled
-    }
-    expect(displayRequestLevel()).toBe(0)
+    expect(displayRequestLevel()).toBe(3)
   })
 })
 
@@ -337,7 +316,7 @@ describe('telling the wedge from the permission', () => {
   it('the user\'s reset clears the rung and KEEPS the delivery fact', () => {
     rememberDisplaySuccess(0) // this profile has the grant
     for (let i = 0; i < 3; i++) rememberDisplayWedge()
-    expect(displayRequestLevel()).toBe(2)
+    expect(displayRequestLevel()).toBe(3)
     resetDisplayWedge()
     expect(displayRequestLevel()).toBe(0)
     // Forgetting the delivery would make the very next stall misread a granted
