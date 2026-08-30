@@ -24,7 +24,7 @@ import { CHANNEL_META } from '@app/lib/channels'
  */
 export function TakesList({ onOpen }: { onOpen?: () => void }) {
   const [takes, setTakes] = useState<Recording[] | null>(null)
-  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -45,6 +45,28 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
   }, [])
 
   if (!takes || takes.length === 0) return null
+
+  const remove = async (id: string): Promise<void> => {
+    setBusy(true)
+    try {
+      const { recordingsRepo } = await import('@core/store')
+      await recordingsRepo.remove(id)
+      setTakes((cur) => (cur ?? []).filter((r) => r.id !== id))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const removeAll = async (): Promise<void> => {
+    setBusy(true)
+    try {
+      const { recordingsRepo } = await import('@core/store')
+      for (const r of takes) await recordingsRepo.remove(r.id)
+      setTakes([])
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const openTake = async (rec: Recording): Promise<void> => {
     const s = useAppStore.getState()
@@ -72,29 +94,61 @@ export function TakesList({ onOpen }: { onOpen?: () => void }) {
 
   return (
     <div className="takes">
-      <button type="button" className="takes__toggle" onClick={() => setOpen((v) => !v)}>
-        {open ? 'Hide takes' : `Takes (${takes.length})`}
-      </button>
-      {open && (
-        <ul className="takes__list">
-          {takes.map((r) => (
-            <li key={r.id}>
-              <button type="button" className="takes__item" onClick={() => void openTake(r)}>
-                <span className="takes__when">{when(r.createdAt)}</span>
-                <span className="takes__len">{clock(r.durationMs)}</span>
-                <span className="takes__kinds">
-                  {[...new Set(r.channels.map((c) => c.kind))]
-                    .map((k) => CHANNEL_META[k].label)
-                    .join(' · ')}
-                </span>
-                {lossNote(r) && <span className="takes__loss">{lossNote(r)}</span>}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className="takes__head">
+        <span>
+          {takes.length} take{takes.length === 1 ? '' : 's'} kept on this computer
+        </span>
+        <button type="button" className="takes__all" disabled={busy} onClick={() => void removeAll()}>
+          Delete all
+        </button>
+      </div>
+      <ul className="takes__list">
+        {takes.map((r) => (
+          <li key={r.id}>
+            <button
+              type="button"
+              className="takes__item"
+              disabled={busy}
+              onClick={() => void openTake(r)}
+            >
+              <span className="takes__when">{when(r.createdAt)}</span>
+              <span className="takes__len">{clock(r.durationMs)}</span>
+              <span className="takes__size">{size(r)}</span>
+              <span className="takes__kinds">
+                {[...new Set(r.channels.map((c) => c.kind))]
+                  .map((k) => CHANNEL_META[k].label)
+                  .join(' · ')}
+              </span>
+              {lossNote(r) && <span className="takes__loss">{lossNote(r)}</span>}
+            </button>
+            <button
+              type="button"
+              className="takes__del"
+              disabled={busy}
+              aria-label="Delete this take"
+              title="Delete this take and its files"
+              onClick={() => void remove(r.id)}
+            >
+              ×
+            </button>
+          </li>
+        ))}
+      </ul>
+      <div className="takes__foot">
+        Kept until you delete them — a take you exported is not removed automatically. Files you
+        already saved to Downloads are the browser’s and can only be deleted there.
+      </div>
     </div>
   )
+}
+
+/** What this take occupies on disk — every channel plus the composite. */
+function size(r: Recording): string {
+  let bytes = r.channels.reduce((n, c) => n + (c.bytes ?? 0), 0)
+  bytes += r.composite?.bytes ?? 0
+  if (bytes <= 0) return ''
+  const mb = bytes / 1048576
+  return mb >= 1 ? `${mb.toFixed(mb >= 10 ? 0 : 1)} MB` : `${Math.round(bytes / 1024)} KB`
 }
 
 function clock(ms: number): string {

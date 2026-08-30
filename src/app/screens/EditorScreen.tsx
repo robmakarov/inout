@@ -25,6 +25,7 @@ import { Player } from '@app/components/Player'
 import { Timeline } from '@app/components/Timeline'
 import { ExportPanel } from '@app/components/ExportPanel'
 import { QualityPanel } from '@app/components/QualityPanel'
+import { SettingsBadge } from '@app/components/SettingsBadge'
 import { ConfirmDialog } from '@app/components/ConfirmDialog'
 
 export function EditorScreen() {
@@ -304,6 +305,8 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
           {l.message}
         </div>
       ))}
+      {/* The switches, beside the warnings, so one screenshot carries both. */}
+      <SettingsBadge />
 
       <div className="editor__player">
         <Player

@@ -1732,70 +1732,106 @@
   color: var(--accent);
 }
 
-/* The takes list (2026-08-30). Sits under the record button rather than over
-   the stage: it is a way back to old work, not part of making new work, and
-   nothing about it may compete with the record button for attention. */
+/* The takes list (2026-08-30). ABOVE the record button and the chips, and
+   visible without being asked for — Robert: "if we are keeping some takes saved
+   show them above record button and input chips ... i dont like that you made
+   some takes saved without me knowing". A hidden toggle was the same silence in
+   a different place. */
 .takes {
   position: absolute;
-  bottom: 16px;
   left: 50%;
+  bottom: 130px;
   transform: translateX(-50%);
+  width: min(560px, calc(100% - 32px));
+  max-height: 34vh;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  max-width: min(520px, calc(100% - 32px));
+  background: var(--surface-2);
+  border: 1px solid var(--surface-3);
+  border-radius: var(--r-md, 12px);
   z-index: 6;
+  overflow: hidden;
 }
 
-.takes__toggle {
+.takes__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--surface-3);
+}
+
+.takes__all {
   background: none;
   border: none;
-  color: var(--text-dim);
+  color: var(--danger, #ef4444);
   font: inherit;
   font-size: 12px;
-  padding: 4px 8px;
   cursor: pointer;
-}
-
-.takes__toggle:hover {
-  color: var(--text);
+  padding: 2px 4px;
 }
 
 .takes__list {
   list-style: none;
   margin: 0;
   padding: 0;
-  width: 100%;
-  max-height: 40vh;
   overflow-y: auto;
-  background: var(--surface-2);
-  border: 1px solid var(--surface-3);
-  border-radius: var(--r-md, 12px);
+}
+
+.takes__list li {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--surface-3);
+}
+
+.takes__list li:last-child {
+  border-bottom: none;
 }
 
 .takes__item {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   background: none;
   border: none;
-  border-bottom: 1px solid var(--surface-3);
   color: var(--text);
   font: inherit;
   font-size: 13px;
   text-align: left;
-  padding: 9px 14px;
+  padding: 9px 12px;
   cursor: pointer;
-}
-
-.takes__list li:last-child .takes__item {
-  border-bottom: none;
 }
 
 .takes__item:hover {
   background: var(--surface-3);
+}
+
+.takes__del {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+.takes__del:hover {
+  color: var(--danger, #ef4444);
+}
+
+.takes__foot {
+  padding: 7px 12px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-dim);
+  border-top: 1px solid var(--surface-3);
 }
 
 .takes__when {
@@ -1803,7 +1839,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-.takes__len {
+.takes__len,
+.takes__size {
   flex: 0 0 auto;
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
@@ -1942,4 +1979,18 @@
   color: var(--text-dim);
   font-size: 11px;
   line-height: 1.35;
+}
+
+/* The settings line in the editor (2026-08-30) — sits with the take's warnings
+   so a screenshot carries the evidence and the configuration together. */
+.editor__settings {
+  margin: 0 auto 8px;
+  max-width: min(760px, calc(100% - 32px));
+  padding: 5px 12px;
+  border-radius: var(--r-sm, 8px);
+  background: var(--surface-2);
+  border: 1px solid var(--surface-3);
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.4;
 }
