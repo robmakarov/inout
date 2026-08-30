@@ -323,11 +323,23 @@ READY NOW:
        VERIFIED at Robert's own size — 240 s of 3024x1964@60 exported at 1440p60: completes in 132 s
        (faster than real time), 251.9 MB, finalize 75 ms, GPU process PID changes 0, machine free
        memory 12 % (was 1-2 % and a kill). Handoff under the task.
-       STILL OPEN, and now the top of the map: the CAPTURE half — "non max video must stop fucking
-       app record" (Robert 2026-08-30). Auto mode opens the composite's encoder on top of the raw
-       channels and freezes his game tab; max mode skips it, which is why max records clean. O15's
-       budget is built and measuring, and the reduction it is allowed to make is size-only —
-       dropping the composite is the ruling it was waiting for and it has now been given.
+       THE CAPTURE HALF IS ALSO DONE, 2026-08-30 (78308a4). "non max video must stop fucking app
+       record": auto mode opened the composite's encoder on top of the raw channels and froze his
+       game tab, where max has refused the composite since the day max was built. O15's budget now
+       drops the COMPOSITE before it touches the picture — the two reductions are not comparable,
+       since dropping a downscaled second copy of a frame the raw channel already holds costs no
+       picture at all, and narrowing the screen costs the resolution native-res exists to deliver.
+       Only if one encoder fewer is still not enough does the size move. DEFAULT MOVED to on, and
+       the guard is the one the file was built on: a machine with no collapse in its own history has
+       no budget, so nothing is bounded — verified on prod, where the plan printed and correctly
+       changed nothing. Shippable only now: no composite means an unedited export re-renders, which
+       until this morning killed the GPU process.
+       WHAT IS STILL NOT DONE, and it is the remaining half of "max 60 fps must export fast on any
+       old computer": the export COMPLETES now and beats real time on an M3, but it is still a
+       re-render, and a re-render is never fast on a weak machine. The sealed answer is F16 —
+       record the rung you will export, so the export is a packet copy — plus the background
+       transcode at stop. That is the next task, and it is the one both of Robert's requirements
+       converge on.
   F13-FLIP  Robert's own eye           [ROBERT OWED]  F13 IS BUILT, VERIFIED ON PROD AND OFF BY DEFAULT
                                              (handoff under the task). Its last gate is yours:
                                              open https://inout-kappa.vercel.app/?sourceframe=1 on
