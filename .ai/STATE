@@ -245,6 +245,21 @@ phase: MVP validation (2026-07-16)
   it again. Shipping the collapse without that was my gap, not a request.
   The two buttons are stacked, not side by side ("i said delete UNDER cancel"), which also means they
   survive in a much narrower cut — the threshold fell from 44 px to 24.
+- A REACT KEY WAS KILLING THE DRAG, AND THE ASYMMETRY WAS THE CLUE (2026-08-30, Robert: "still cant
+  drag right grabber after split, barely moves"). The segment wrapper was keyed `seg-${sg.startMs}`.
+  Dragging a boundary RIGHT moves the NEXT clip's `startMs` — which WAS that key — so React unmounted
+  the subtree holding the very handle under the pointer, taking its listeners and its pointer capture
+  with it: the gesture died after one move, which is exactly what "barely moves" describes. Dragging
+  LEFT moves the previous clip's `endMs`, which appears in no key, so that direction always worked.
+  Keyed by POSITION now, never by a value the gesture itself mutates — the same trap was in the zone
+  and seam keys and was fixed there too.
+  THE LESSON, and it is general: a React key built from mutable data is a self-destruct on any
+  element that edits that data. It presents as "the control is broken", not as "the component
+  remounted", and it fails in ONE DIRECTION ONLY, which is the fingerprint to look for.
+- THE RULER SITS ABOVE THE LANES (2026-08-30, Robert: "make timeline part with time that under input,
+  make it above it"). The overlay starts below it, so every child keeps its offsets relative to the
+  lanes rather than each one being nudged; the playhead reaches UP into it (`top: -26px`) so the time
+  under the head stays readable.
 - A CUT BOUNDARY IS ONE HANDLE, NOT TWO (2026-08-30, Robert: "grabbers to ugly and hard to distinct"
   + "when i split record i cant drag left part but right part grabber dont moves" — one defect, two
   reports). A fresh split leaves the end of one clip and the start of the next on the SAME pixel, and
