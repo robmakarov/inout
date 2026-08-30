@@ -111,7 +111,17 @@ describe('the steps follow the take (F13)', () => {
     const rec = recording() // a 2560x1440 screen channel — 16:9
     expect(tiersForTake(rec)).toEqual(QUALITY_TIERS)
     for (const t of QUALITY_TIERS) {
-      expect(settingsForTier(t, rec)).toEqual(settingsForTier(t))
+      const withTake = settingsForTier(t, rec)
+      const declared = settingsForTier(t)
+      // GEOMETRY AND RATE ARE THE IDENTITY THIS TEST GUARDS (F13) and they are
+      // untouched. The BITRATE is now bounded by what the take itself needed
+      // (cappedTierBitrate, 2026-08-30) — a ceiling extrapolated from a 1440p
+      // anchor asked 45 Mbps of a 3024x1964@60 export and advertised 245 MB
+      // against Robert's usual 20 MB. It can only ever LOWER the ceiling.
+      expect(withTake.width).toBe(declared.width)
+      expect(withTake.height).toBe(declared.height)
+      expect(withTake.fps).toBe(declared.fps)
+      expect(withTake.videoBitrate ?? 0).toBeLessThanOrEqual(declared.videoBitrate ?? 0)
     }
   })
 

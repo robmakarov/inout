@@ -299,7 +299,10 @@ export function settingsForTier(tier: QualityTier, recording?: Recording): Expor
     width: t.width,
     height: t.height,
     fps: t.fps,
-    videoBitrate: t.videoBitrate,
+    // Bounded by what this take actually needed — see cappedTierBitrate. With
+    // no recording in hand there is nothing to bound it with, and the declared
+    // ceiling stands.
+    videoBitrate: recording ? cappedTierBitrate(t, recording) : t.videoBitrate,
   }
 }
 
@@ -317,7 +320,55 @@ function sourceVideoRate(recording: Recording): { bytesPerSec: number; pixels: n
       }
     }
   }
-  return null
+  // NO COMPOSITE IS NOW A NORMAL TAKE, not an odd one — max mode and native
+  // resolution both stop recording it, because it is a second encode of a
+  // picture the raw channel already holds. Before this, such a take had no
+  // anchor at all and every size on the panel fell back to the MODEL, which is
+  // what let a 3024x1964@60 export be advertised at 245 MB (Robert,
+  // 2026-08-30, against ~20 MB for his usual take).
+  // The biggest raw video channel is a better anchor than the model in every
+  // case: it is this exact content, at a known size, already encoded once.
+  const video = recording.channels.filter((c) => c.media === 'video' && c.width && c.height && c.bytes)
+  let best: { bytesPerSec: number; pixels: number } | null = null
+  for (const c of video) {
+    const px = (c.width ?? 0) * (c.height ?? 0)
+    const secs = (c.durationMs || recording.durationMs) / 1000
+    if (px <= 0 || secs <= 0 || !c.bytes) continue
+    if (!best || px > best.pixels) best = { bytesPerSec: c.bytes / secs, pixels: px }
+  }
+  return best
+}
+
+/**
+ * WHAT THE ENCODER MAY BE ASKED FOR, bounded by what this take actually needed.
+ *
+ * `resolveTier` scales a step's bitrate ceiling LINEARLY by pixels and by rate
+ * from a 1440p/30 anchor. That was measured at 1080p and 1440p and is fine
+ * there; extrapolated to 3024x1964 at 60 it asks for 45 Mbps — a 645 MB ceiling
+ * for two minutes, against a standing objective of "couple minutes video can be
+ * around 10 mb with good quality". Robert's take came back advertised at 245 MB
+ * and the render that followed froze his machine and failed.
+ *
+ * The take itself is the better authority: its own raw channel encoded THIS
+ * content, at a known size, once already. So the ceiling is capped at that rate
+ * scaled to the output's pixels, with generous headroom — a re-render legitimately
+ * costs more than a capture (it is a second generation, and an edit can add
+ * motion the capture never had), but not five times more.
+ *
+ * Never raises a ceiling, only lowers it: a take with no measurable source keeps
+ * exactly the number it had before this existed.
+ */
+export const RERENDER_HEADROOM = 2
+
+export function cappedTierBitrate(tier: QualityTier, recording: Recording): number {
+  const src = sourceVideoRate(recording)
+  if (!src || src.pixels <= 0 || src.bytesPerSec <= 0) return tier.videoBitrate
+  const outPixels = tier.width * tier.height
+  const scaled = src.bytesPerSec * 8 * (outPixels / src.pixels) * RERENDER_HEADROOM
+  // A floor so a nearly-static take cannot squeeze a busy edit down to nothing:
+  // the model is still the authority on how little is too little.
+  const floor = tier.videoBitrate / 4
+  return Math.round(Math.max(floor, Math.min(tier.videoBitrate, scaled)))
 }
 
 export interface SizeEstimate {
