@@ -323,11 +323,31 @@ phase: MVP validation (2026-07-16)
 - THE CUT-OUT ZONE CARRIES ITS OWN UNDO (UI1, "make cutted out zone shrink with button undo inside").
   It is recessed rather than framed — a hatched scrim, so it stops reading as timeline, since there is
   nothing in it to look at — and it holds a button that puts the removed material back, labelled with
-  how much. The undo extends the clip BEFORE the gap rather than merging the two spans: they can
-  carry different speeds (F5b) and merging would silently throw one away; `normalizeSegments` decides
-  afterwards whether what is left is really one span. It does NOT ripple — the segments either side
-  keep their real positions and the zone keeps its real width. That half is R-RIPPLE in BACKLOG, and
-  it is a piecewise timeline axis plus per-segment lane bars, not a style change.
+  how much. UNDO MERGES THE TWO CLIPS BACK INTO ONE (2026-08-31, Robert: "when split undone remove
+  grabbers too, merge back"). It used to only extend the clip BEFORE the gap up to the one after it,
+  leaving two spans touching at a point — and `normalizeSegments` merges OVERLAPS, never adjacencies,
+  because a fresh split IS an adjacency and collapsing it would undo the split as it was made. So
+  undo gave the material back and left a pair of boundary handles on an edge that cut nothing. It now
+  splices the pair into one span; verified on prod (13 s take, cut to 11 s, undo → 0 handles, 0 gaps,
+  13 s). THE ONE CASE THAT STILL DOES NOT MERGE is two clips at different SPEEDS (F5b) — merging
+  throws one speed away — so there the boundary is real and keeps its handles. It does NOT ripple —
+  the segments either side keep their real positions and the zone keeps its real width. That half is
+  R-RIPPLE in BACKLOG, and it is a piecewise timeline axis plus per-segment lane bars, not a style
+  change.
+- THE FRAME CONTROL FLOATS ON THE STAGE, AND THE CAMERA HAS NO CROSS (2026-08-31, Robert: "why the
+  fuck cross on camera video on edit, remove it" + "move stuff ... from panel to float by right side
+  of video frame vertically"). `.pip__reset` faded in over the camera PiP's top-right and reset the
+  camera track; on a picture you are judging, a close button on the camera reads as delete-this-camera.
+  Gone — resetting the pose is now dragging it back, the same gesture that moved it. FrameBar left the
+  tools row and renders inside `.stage`, outside `.stage__view` (a zoom scales the picture, never the
+  chrome), as a vertical overlay strip pinned top-right. It stops pointerdown, or every press on a
+  swatch also started a zoom-pan drag of the picture underneath. TWO MEASUREMENTS SHAPED IT, both off
+  prod: centred and complete it was 279 px of a 317 px stage, standing on the camera. The four inset
+  steps and Shadow are `disabled` until a backdrop is picked, so they are now ABSENT until then — a
+  fresh take floats five swatches (91 px) and grows to 246 px only when those controls first mean
+  something — and it is anchored top-right rather than centred, the one corner of that edge nothing
+  else claims (the zoom pill is top-left), so on a real window (1440x900 → 497 px stage) the expanded
+  strip clears the camera entirely.
 - NO PAUSE BUTTON; THE CONTROL IS "CONTINUE FROM THE PLAYHEAD", IN THE EDITOR (UI1 second pass).
   Robert: "no need for fucking pause button, record pressed - on editing appearing again left to play
   button, if pressed continues where dragger in timeline stands (if it cant work now put it in
