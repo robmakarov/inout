@@ -91,31 +91,41 @@ export function FrameBar({
         ))}
       </div>
 
-      <div className="frame-bar__rule" />
+      {/* THE INSET AND THE SHADOW ONLY EXIST ONCE THERE IS A FRAME TO INSET.
+          They were always `disabled` without one — five controls that do
+          nothing — and in a row under the picture that cost nothing but a grey
+          patch. Standing ON the picture it is different: the strip was 279 px
+          of a 317 px stage, most of it dead, covering the camera. So the
+          half that has no subject yet is absent rather than greyed, and the
+          float on a fresh take is the swatches and nothing else. No control is
+          lost: nothing here was reachable before a backdrop was picked. */}
+      {active && (
+        <>
+          <div className="frame-bar__rule" />
 
-      <div className="frame-bar__steps" role="radiogroup" aria-label="Frame inset">
-        {PAD_STEPS.map((s) => (
+          <div className="frame-bar__steps" role="radiogroup" aria-label="Frame inset">
+            {PAD_STEPS.map((s) => (
+              <button
+                key={s.id}
+                role="radio"
+                aria-checked={s.id === padStepId}
+                className={`frame-bar__step${s.id === padStepId ? ' frame-bar__step--on' : ''}`}
+                onClick={() => apply({ padFrac: s.padFrac, radiusFrac: s.radiusFrac })}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+
           <button
-            key={s.id}
-            role="radio"
-            aria-checked={s.id === padStepId}
-            disabled={!active}
-            className={`frame-bar__step${s.id === padStepId && active ? ' frame-bar__step--on' : ''}`}
-            onClick={() => apply({ padFrac: s.padFrac, radiusFrac: s.radiusFrac })}
+            className={`frame-bar__step frame-bar__step--shadow${current.shadow ? ' frame-bar__step--on' : ''}`}
+            aria-pressed={current.shadow}
+            onClick={() => apply({ shadow: !current.shadow })}
           >
-            {s.label}
+            Shadow
           </button>
-        ))}
-      </div>
-
-      <button
-        className={`frame-bar__step frame-bar__step--shadow${active && current.shadow ? ' frame-bar__step--on' : ''}`}
-        disabled={!active}
-        aria-pressed={active && current.shadow}
-        onClick={() => apply({ shadow: !current.shadow })}
-      >
-        Shadow
-      </button>
+        </>
+      )}
     </div>
   )
 }

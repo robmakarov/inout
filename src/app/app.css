@@ -1858,8 +1858,8 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
-  padding: 8px 7px;
+  gap: 5px;
+  padding: 7px 6px;
   border-radius: var(--r-md);
   background: var(--overlay);
   border: 1px solid var(--surface-2);
@@ -1892,11 +1892,11 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
 }
 .frame-bar__swatch {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   border: 1px solid var(--surface-3);
   display: inline-flex;
@@ -1916,7 +1916,7 @@
 }
 .frame-bar__step {
   width: 100%;
-  padding: 4px 7px;
+  padding: 3px 6px;
   text-align: center;
   border-radius: var(--r-sm);
   background: var(--surface);
