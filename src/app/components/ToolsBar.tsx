@@ -7,7 +7,6 @@ import {
   splitAtOutputMs,
   type TightenProposal,
 } from '@core/timeline'
-import { FrameBar } from '@app/components/FrameBar'
 import { SpeedBar } from '@app/components/SpeedBar'
 import { formatClock } from '@app/lib/format'
 import { Icon } from '@app/components/Icon'
@@ -24,9 +23,10 @@ import { Icon } from '@app/components/Icon'
  *
  * Nothing about what they DO changed: Split and the speed steps still act on
  * the clip under the playhead (one rule for "which clip does this mean", so the
- * two controls can never disagree), Tighten still proposes rather than applies,
- * and the frame control still only exists where there is a screen surface to
- * put a frame around.
+ * two controls can never disagree) and Tighten still proposes rather than
+ * applies. The frame control has since moved OFF this row and onto the stage's
+ * right edge — see Player — because its whole subject is the edge of the
+ * picture, and it belongs against that edge.
  */
 export function ToolsBar({
   recording,
@@ -72,7 +72,6 @@ export function ToolsBar({
       (sg) => playheadAt > sg.startMs + MIN_SEGMENT_MS && playheadAt < sg.endMs - MIN_SEGMENT_MS,
     )
 
-  const hasScreen = recording.channels.some((c) => c.kind === 'screen' && c.media === 'video')
   const hasAudio = recording.channels.some((c) => c.media === 'audio')
   const proposal = tighten?.proposal ?? null
 
@@ -131,9 +130,8 @@ export function ToolsBar({
           index={activeSegment}
         />
       )}
-      {/* F3: the frame only exists around a screen surface, so a camera-only
-          take never shows a control that would do nothing. */}
-      {hasScreen && <FrameBar edit={edit} onEdit={onEdit} />}
+      {/* F3's frame control is no longer here: it floats on the right edge of
+          the stage now (Player), beside the edge it moves. */}
     </div>
   )
 }

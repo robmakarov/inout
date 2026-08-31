@@ -424,11 +424,18 @@ export function Timeline({
    * PUT THE MATERIAL BACK — the undo inside the cut zone itself (UI1, Robert:
    * "make cutted out zone shrink with button undo inside").
    *
-   * It extends the clip BEFORE the gap up to the clip after it, rather than
-   * merging the two spans into one. That is deliberate: the two clips can carry
-   * different speeds (F5b), and merging would silently throw one of them away.
-   * `normalizeSegments` decides afterwards whether what is left is really one
-   * span, which is the one place that question is answered.
+   * AND UNDO MEANS UNDO: the two clips become ONE again, so the boundary
+   * handles go with the cut that created them. Robert: "when split undone
+   * remove grabbers too, merge back". It used to only extend the clip before
+   * the gap up to the clip after it, leaving two spans touching at a point —
+   * `normalizeSegments` merges overlaps, never adjacencies (a fresh split IS an
+   * adjacency, and collapsing that would undo the split the instant it was
+   * made). So pressing undo gave back the material and left a pair of grabbers
+   * on an edge that no longer cut anything: a control standing on nothing.
+   *
+   * THE ONE CASE THAT STILL DOES NOT MERGE is two clips at DIFFERENT speeds
+   * (F5b) — merging would silently throw one of them away, and there the
+   * boundary is real, so it keeps its handles and only the hole closes.
    */
   const restoreGap = (index: number) => {
     const cur = editRef.current
@@ -436,7 +443,11 @@ export function Timeline({
     const before = segs[index]
     const after = segs[index + 1]
     if (!before || !after) return
-    before.endMs = after.startMs
+    if (segmentSpeed(before) === segmentSpeed(after)) {
+      segs.splice(index, 2, { ...before, endMs: after.endMs })
+    } else {
+      before.endMs = after.startMs
+    }
     onEdit({ ...cur, segments: normalizeSegments(cur, segs) })
   }
 

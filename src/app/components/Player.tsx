@@ -3,7 +3,6 @@ import type { CameraPose, ChannelRecording, EditState, Recording, Viewport } fro
 import {
   activeChannelsAt,
   cameraPoseAt,
-  cameraTrackIsActive,
   channelHasOutputWindow,
   clampPose,
   clampViewport,
@@ -29,6 +28,7 @@ import { frameAspectFor, sourceFrameEnabled } from '@core/frame'
 import type { Playback } from '@app/hooks/usePlayback'
 import { formatClock } from '@app/lib/format'
 import { Icon } from '@app/components/Icon'
+import { FrameBar } from '@app/components/FrameBar'
 
 function Scrubber({
   value,
@@ -224,7 +224,6 @@ function CameraPip({
   const committed = cameraPoseAt(edit.camera, recordingMs, geometry)
   const pose = dragPose ?? committed
   const rect = poseToRect(pose, geometry)
-  const moved = cameraTrackIsActive(edit.camera)
 
   const begin = (kind: 'move' | 'resize') => (e: React.PointerEvent) => {
     const stage = boxRef.current?.parentElement
@@ -281,12 +280,6 @@ function CameraPip({
     })
   }
 
-  const reset = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    const { camera: _dropped, ...rest } = edit
-    onEdit(rest)
-  }
-
   return (
     <div
       ref={boxRef}
@@ -321,11 +314,6 @@ function CameraPip({
         onPointerCancel={end}
         aria-label="Resize camera"
       />
-      {moved && (
-        <button className="pip__reset" onClick={reset} aria-label="Reset camera position">
-          <Icon name="x" size={11} />
-        </button>
-      )}
     </div>
   )
 }
@@ -621,6 +609,11 @@ export function Player({
   )
   // The wave glyph marks an audio-only composition, not a momentary video gap.
   const audioOnly = !hasEnabledVideo(recording, edit)
+  /* F3: the frame only exists around a screen surface, so a camera-only take
+     never floats a control that would do nothing. Same test the tools row used
+     when this lived down there — not `screenInComposition`, which is about the
+     instant rather than about the take. */
+  const hasScreen = recording.channels.some((c) => c.kind === 'screen' && c.media === 'video')
 
   return (
     <div className="player">
@@ -713,6 +706,13 @@ export function Player({
           </div>
         )}
         </div>
+        {/* UI: THE FRAME CONTROL FLOATS ON THE PICTURE IT FRAMES. Robert:
+            "move stuff ... from panel to float by right side of video frame
+            vertically". It used to sit at the far right of the tools row under
+            the stage, which put the one control whose whole subject is the
+            edge of the picture furthest from that edge. Outside stage__view on
+            purpose: a zoomed stage scales the picture, never its chrome. */}
+        {hasScreen && <FrameBar edit={edit} onEdit={onEdit} />}
         {zoom.active && (
           <button
             className="stage__zoom-reset"

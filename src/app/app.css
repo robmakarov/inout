@@ -708,25 +708,6 @@
 .pip--dragging .pip__grip {
   opacity: 0.85;
 }
-.pip__reset {
-  position: absolute;
-  right: 4px;
-  top: 4px;
-  width: 20px;
-  height: 20px;
-  display: grid;
-  place-items: center;
-  border: none;
-  border-radius: var(--r-full);
-  background: var(--overlay);
-  color: var(--text);
-  opacity: 0;
-  cursor: pointer;
-  transition: opacity var(--t-fast) var(--ease);
-}
-.pip:hover .pip__reset {
-  opacity: 1;
-}
 .stage__audio {
   position: absolute;
   inset: 0;
@@ -1855,23 +1836,63 @@
   gap: 10px;
 }
 
-/* Background frame (F3). Nothing about the RENDERED geometry lives here — the
-   stage reads it from the same functions the export compositor does. */
+/* Background frame (F3), FLOATING ON THE STAGE'S RIGHT EDGE — Robert: "move
+   stuff ... from panel to float by right side of video frame vertically". It
+   is chrome ON the picture, so it gets the overlay treatment the zoom pill has
+   rather than the flat surface of a row under the timeline: it has to read
+   against whatever the take happens to be showing behind it.
+
+   Nothing about the RENDERED geometry lives here — the stage reads that from
+   the same functions the export compositor does. */
 .frame-bar {
+  position: absolute;
+  z-index: 4;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  /* Never taller than the picture it sits on: a short stage scrolls the strip
+     instead of overflowing into a clipped column of half-buttons. */
+  max-height: calc(100% - 20px);
+  overflow-y: auto;
+  scrollbar-width: none;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 8px 7px;
+  border-radius: var(--r-md);
+  background: var(--overlay);
+  border: 1px solid var(--surface-2);
+  backdrop-filter: blur(10px);
+  /* Present, but not competing with the frame for attention until it is
+     wanted (style rule 1 — one region dominates, and it is the picture). */
+  opacity: 0.55;
+  transition: opacity var(--t-fast) var(--ease);
+}
+.frame-bar::-webkit-scrollbar {
+  display: none;
+}
+.frame-bar:hover,
+.frame-bar:focus-within {
+  opacity: 1;
 }
 .frame-bar__label {
-  font-size: 11px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-align: center;
   color: var(--text-dim);
+}
+.frame-bar__rule {
+  height: 1px;
+  background: var(--surface-2);
+  margin: 1px 0;
 }
 .frame-bar__swatches,
 .frame-bar__steps {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
 }
 .frame-bar__swatch {
   width: 18px;
@@ -1894,8 +1915,9 @@
   transform: scale(1.08);
 }
 .frame-bar__step {
-  min-width: 24px;
+  width: 100%;
   padding: 4px 7px;
+  text-align: center;
   border-radius: var(--r-sm);
   background: var(--surface);
   color: var(--text-dim);

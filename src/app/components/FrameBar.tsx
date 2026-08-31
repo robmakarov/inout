@@ -8,7 +8,16 @@ import {
 import { Icon } from '@app/components/Icon'
 
 /**
- * The background frame control (task F3).
+ * The background frame control (task F3), FLOATING ON THE RIGHT EDGE OF THE
+ * STAGE — Robert: "move stuff ... from panel to float by right side of video
+ * frame vertically". It used to be the tail of the tools row under the picture,
+ * which is the one place a control about the picture's margin cannot be read
+ * against: you set an inset here and measured it a screen away. Now the swatch
+ * and the step sit against the edge they move, so choosing one is a comparison
+ * rather than a guess.
+ *
+ * It renders INSIDE `.stage` but outside `.stage__view`, so a zoomed take
+ * scales the picture and never this.
  *
  * Every take starts full-bleed and stays that way until the user asks for
  * something — the frozen rule. So "None" is a real, reachable state and picking
@@ -59,7 +68,9 @@ export function FrameBar({
     'custom'
 
   return (
-    <div className="frame-bar">
+    /* The stage owns pointerdown (zoom pan, F2). Without this, every press on a
+       swatch also began a drag of the picture underneath it. */
+    <div className="frame-bar" onPointerDown={(e) => e.stopPropagation()}>
       <span className="frame-bar__label">Frame</span>
       <div className="frame-bar__swatches" role="radiogroup" aria-label="Background">
         {BACKGROUND_PRESETS.map((p) => (
@@ -80,6 +91,8 @@ export function FrameBar({
         ))}
       </div>
 
+      <div className="frame-bar__rule" />
+
       <div className="frame-bar__steps" role="radiogroup" aria-label="Frame inset">
         {PAD_STEPS.map((s) => (
           <button
@@ -96,7 +109,7 @@ export function FrameBar({
       </div>
 
       <button
-        className={`frame-bar__step${active && current.shadow ? ' frame-bar__step--on' : ''}`}
+        className={`frame-bar__step frame-bar__step--shadow${active && current.shadow ? ' frame-bar__step--on' : ''}`}
         disabled={!active}
         aria-pressed={active && current.shadow}
         onClick={() => apply({ shadow: !current.shadow })}
