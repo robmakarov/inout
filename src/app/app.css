@@ -1848,8 +1848,13 @@
   position: absolute;
   z-index: 4;
   right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
+  /* TOP-RIGHT, NOT CENTRED. The camera PiP's home is the bottom-right corner,
+     which is the half of this edge a centred strip grows into: picking a
+     backdrop expands it from 5 controls to 10 and it landed on the camera.
+     Anchored at the top it grows DOWN from a corner nothing else claims (the
+     zoom pill is top-left), and on any stage taller than ~430 px — every real
+     window — the expanded strip stops above the camera entirely. */
+  top: 10px;
   /* Never taller than the picture it sits on: a short stage scrolls the strip
      instead of overflowing into a clipped column of half-buttons. */
   max-height: calc(100% - 20px);
