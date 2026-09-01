@@ -42,6 +42,21 @@ phase: MVP validation (2026-07-16)
   even at zero, because a channel with no counter is indistinguishable from one nobody counted.
   rec_78ogcw052vdn grades RED naming tab audio and its six bursts; a clean take grades GREEN.
 
+- A CRASH COSTS 2.1 SECONDS, AND IT DOES NOT GROW WITH THE TAKE (H2, 2026-09-01). Five real
+  `kill -9`s on Chrome's whole process group, one max60 take each on prod, the take verified still
+  recording at the kill: the salvaged take ends 1.01 / 2.12 / 1.95 / 1.47 / 1.79 s behind the crash
+  at 60 s, 5, 12, 20 and 31 minutes. Every channel came back every time, the pending manifest
+  survived every kill, and the salvaged take EXPORTS through the product's own buttons. The price is
+  the muxer's cadence and not the disk's — video is fragmented MP4 that closes a fragment only at a
+  keyframe on a 2 s GOP, audio is WebM on ~1 s clusters — and a take stopped PROPERLY still ends
+  0.22-0.24 s behind its stop click, so only about a second and a half of that is the crash. The
+  composite is deliberately not salvaged, so a crashed take is its raw channels, and S1's card reads
+  INCOMPLETE on one because seven of its ten dimensions died with the page. One command:
+  `node scripts/crash-bound.mjs --control=300000 --killAt=60000,300000,720000,1200000,1860000`
+  (HEAVY, ~80 min, headed). Playbook: docs/CRASH_BOUND.md. The production salvage path also has its
+  first tests (`src/core/capture/recovery.test.ts`); until now the only coverage was the
+  experimental copy, which cannot fail when this one breaks.
+
 - ONE STUCK SCREEN REQUEST USED TO POISON EVERY PRESS AFTER IT (2026-08-30, Robert: four stalls in a
   row, two Chrome relaunches in between — "first time waiting for screen, second waiting for screen and
   microphone, third too, fourth too", "make this shit gone completly"). A wedged getDisplayMedia never
