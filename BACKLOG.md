@@ -767,6 +767,15 @@ technical defects by severity. Done items get deleted, not archived.
 
 ### Next
 
+- [P2] Oracle arrival probes date frames by READ time, not by the frame's own timestamp. Both
+  `probeBeepArrivals` and `probeFlashArrivals` (src/experimental/oracle/rig.ts) stamp
+  `performance.now()` when JS reads the AudioData/VideoFrame, so the reference carries the delivery
+  latency and main-thread scheduling on top of the media's own clock. G5 (2026-09-01) removed the
+  frame-phase lock that used to dominate the sync gate's run-to-run scatter and left 6.5 ms per run
+  that is nothing else in the chain: not the beep reference (residual sd 0.43 ms), not the estimator
+  (every candidate within 0.5 ms), not the event sets (aligning costs 0.0 ms). Record BOTH stampings
+  in the probes, report the difference, and the next reduction in this instrument's noise is visible.
+
 THE ROADMAP LIVES IN `.ai/TASKS` — not here. That file carries the READY map, every task with its
 gates, what a fresh session must know first, and the tooling index; it is rewritten on every merge.
 Duplicating it here is how the two go out of step, so this section is a pointer on purpose.

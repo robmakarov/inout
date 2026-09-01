@@ -2,19 +2,22 @@ import { describe, expect, it } from 'vitest'
 import { flashSyncStats } from './analyze'
 import { audioFileEpochRig } from './localize'
 
+/** These onsets sit on a 1000 ms grid; G5 moved the rig's own grid off it. */
+const GRID = 1000
+
 describe('audioFileEpochRig', () => {
   it('recovers the epoch from onsets with k disambiguated by expectation', () => {
     // File t=0 corresponds to rig 940ms => beep k=1 (rig 1000) at file 0.060s.
     const onsets = [0.06, 1.06, 2.06, 3.06]
-    expect(audioFileEpochRig(onsets, 950)).toBeCloseTo(940, 6)
+    expect(audioFileEpochRig(onsets, 950, undefined, GRID)).toBeCloseTo(940, 6)
     // Expectation off by ±300ms must not flip k (grid is 1000ms).
-    expect(audioFileEpochRig(onsets, 650)).toBeCloseTo(940, 6)
-    expect(audioFileEpochRig(onsets, 1250)).toBeCloseTo(940, 6)
+    expect(audioFileEpochRig(onsets, 650, undefined, GRID)).toBeCloseTo(940, 6)
+    expect(audioFileEpochRig(onsets, 1250, undefined, GRID)).toBeCloseTo(940, 6)
   })
 
   it('is median-robust to one spurious onset', () => {
     const onsets = [0.06, 1.06, 1.37 /* spurious */, 2.06, 3.06]
-    const epoch = audioFileEpochRig(onsets, 950)!
+    const epoch = audioFileEpochRig(onsets, 950, undefined, GRID)!
     expect(Math.abs(epoch - 940)).toBeLessThan(1)
   })
 

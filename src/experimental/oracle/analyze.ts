@@ -405,7 +405,7 @@ export function flashSyncStats(
    * The previous estimator swept the FIRST flash index and kept the alignment
    * with the MOST pairs, variance only as a tie-break. That is exactly backwards
    * on this data. Every event here is a beep and a flash fired at the same rig
-   * instant on a uniform 1 s grid, so a wrong alignment is not merely worse —
+   * instant on one uniform grid, so a wrong alignment is not merely worse —
    * it is a different, self-consistent story about the same file, and it wins
    * on count whenever the detectors produce a spurious extra onset or drop a
    * real one. Measured consequence, three cold runs in fifteen: a whole file

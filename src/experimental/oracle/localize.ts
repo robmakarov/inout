@@ -142,28 +142,34 @@ export async function rawFileDurationMs(blob: Blob, media: 'video' | 'audio'): P
 /**
  * Rig time of audio file t=0. Beep index k for the first onset is ambiguous
  * from the file alone; disambiguate with the onstart-based expectation, whose
- * error is far below the 1000 ms grid.
+ * error is far below the beep grid.
  *
  * `trueGridRigMs` (rig.debug.beepTrueRigMs, index k-1 = beep k) supplies the
  * MEASURED render times of the beeps; without it the nominal grid is used and
  * the returned epoch is early by the AudioContext startup stall.
+ *
+ * `intervalMs` defaults to the rig's current grid. It is a parameter because
+ * G5 moved that grid off 1000 ms, and a fixture recorded on the old one still
+ * has to be readable as what it is — a series on a 1000 ms grid — rather than
+ * silently re-interpreted by whatever the rig fires on today.
  */
 export function audioFileEpochRig(
   onsetsSec: number[],
   expectedEpochRigMs: number,
   trueGridRigMs?: number[],
+  intervalMs: number = BEEP_INTERVAL_MS,
 ): number | null {
   if (onsetsSec.length === 0) return null
   const first = onsetsSec[0]
-  const k0 = Math.max(1, Math.round((expectedEpochRigMs + first * 1000) / BEEP_INTERVAL_MS))
+  const k0 = Math.max(1, Math.round((expectedEpochRigMs + first * 1000) / intervalMs))
   // Median over all onsets for robustness (each onset votes with its own k).
   const epochs: number[] = []
   for (const t of onsetsSec) {
-    const k = k0 + Math.round(((t - first) * 1000) / BEEP_INTERVAL_MS)
+    const k = k0 + Math.round(((t - first) * 1000) / intervalMs)
     const beepRigMs =
       trueGridRigMs && trueGridRigMs.length >= k && k >= 1
         ? trueGridRigMs[k - 1]
-        : k * BEEP_INTERVAL_MS
+        : k * intervalMs
     epochs.push(beepRigMs - t * 1000)
   }
   const sorted = [...epochs].sort((a, b) => a - b)

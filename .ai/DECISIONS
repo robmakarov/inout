@@ -512,3 +512,20 @@ B1b is untouched by this (it measures the take itself, it does not guess from ot
 before judging.
 Same pass, dictated shape for the parked multi-device item: no QR ceremony, ONE ACCOUNT is the
 pairing — recorded on the BACKLOG entry.
+2026-09-01 G5 (instrument ruling, from measurement) — A MERGE GATE'S EVENT GRID MUST NOT DIVIDE ITS
+SAMPLING GRID. The oracle fired its beep+flash every 1000 ms and dated each flash at the midpoint of
+the frames that show it — an estimator quantised to ±half an output frame. 1000 ms is exactly 30
+frames at 30 fps, so every event in a run drew the SAME sub-frame phase and the quantisation was one
+constant per run: invisible in the dispersion (the render lane's per-pair offsets read identical to
+the decimal, sd 0.00, on ten cold 6 s runs and on two 120 s runs with 118-120 pairs) and immune to
+averaging in the mean. Measured across the change (1000 -> 987 ms, 29.61 frames): run-to-run sd of the
+sync mean 11.40 -> 8.32 ms with the LEVEL unmoved (51.2 -> 51.7), and the per-run error visible for
+the first time as within-run spread, 0.00 -> 12.6 ms — the same quantity the old scatter was, read
+directly. RULING: an instrument's own error must be arranged to be per-sample, not per-run; a per-run
+constant cannot be reduced by measuring more, and it masquerades as a floor. O4b's published
+"instrument noise floor ~8-9 ms 1σ" was this lock (33.33/√12 = 9.6) and is retracted as a floor.
+Corollary, learned the same day: G5's three leads (a robust statistic, a quieter reference, a
+per-event correction) were all refuted on the SAME takes by re-deriving each candidate offline from
+arrays the runs already recorded — one matrix, every candidate, no re-runs. A candidate that is a
+function of recorded data never needs its own matrix, and the check that the offline arithmetic is
+the shipped estimator is that it reproduces the shipped number to the decimal.

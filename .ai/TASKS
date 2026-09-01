@@ -314,7 +314,9 @@ sits ON the band") is retracted: the packet-copy MEAN sits at 62 ms and does not
 was the worst-sample term that grew. STILL FLIPPING, both measured again on 2026-09-01 and both filed:
 the v1 oracle's export throughput (RED 4 OF 4 here — 0.68 / 0.68 / 0.94 / 0.46× against a 1.0× band —
 while every one of those runs' SYNC gates was green at 35.1-58.0 ms; a second session was recording on
-this machine throughout, which is the regime the band cannot survive) and the fidelity oracle's render
+this machine throughout, which is the regime the band cannot survive — AND RED AGAIN LATER THAT DAY ON
+AN IDLE MACHINE, 10 of 10 at 0.51-0.82× with sync green at 49.0 ± 8.2, plus 5 of 5 at 0.78-0.95× on a
+stashed pre-G5 tree, so contention is not the whole story and this band owns its own task) and the fidelity oracle's render
 lane (1 of 5 runs). Neither is
 a sync defect, and the runner-level fix for both is the retry/quiet-machine guard `oracle.mjs` already
 has. A third family is louder than either: the 120 s cell dies on CDP about a third of the time.
@@ -338,9 +340,19 @@ it is built combine-ready:
           worse for being longer (6 s mean 62.7 / maxAbs 78; 120 s SAME mean / maxAbs 112). Now
           banded on location + dispersion-in-frame-intervals + drift, with a census floor. Sync
           gates 10/10 cold green after, 0/10 flips. Handoff below. LEFT BEHIND, each measured
-          here and filed: G5 (the reference's own noise — the other half of the 6 s scatter),
-          the smart-cut negative timestamp at 120 s (BACKLOG P1, a user meets it as a re-render),
-          the fidelity render lane (BACKLOG P1, load), the 120 s cell's CDP death rate (P2).
+          here and filed: G5, the smart-cut negative timestamp at 120 s (BACKLOG P1, a user
+          meets it as a re-render), the fidelity render lane (BACKLOG P1, load), the 120 s
+          cell's CDP death rate (P2).
+  2b. G5   DONE 2026-09-01 — and its own premise was wrong. The reference is not noisy (residual
+          sd 0.76 ms at 6 s, 1.98 at 120 s, the QUIETEST of the three, against the 43.40 the task
+          was filed on) and no estimator beats the mean by more than 0.5 ms. The 6 s scatter was
+          the EVENT GRID: 1000 ms is exactly 30 frames at 30 fps, so every flash in a run drew the
+          same sub-frame phase and the dating error was one constant per run — the render lane's
+          per-pair offsets read sd 0.00 on ten cold runs. Grid is 987 ms now (29.61 frames);
+          run-to-run sd 11.40 -> 8.32 ms at 6 s, neutral at 120 s, LEVEL UNMOVED so nothing
+          re-baselines. O4b's "noise floor ~8-9 ms 1σ" was this lock and is retracted as a floor.
+          Handoff below. LEFT OWED: the 6.5 ms per-run term underneath it — both arrival probes
+          stamp when JS READS a frame, not the frame's own timestamp.
      A1's fix now has an instrument that does not flip on length. NEXT ON THIS LANE: A1.
   3. S1   the take report card            DONE 2026-09-01 — every take grades itself at stop across
           ten dimensions and says which one failed; `incomplete` is a third verdict and never a
@@ -1636,6 +1648,125 @@ GATES: the reference's own residual sd reported for each candidate estimator ove
 number this repo published through the old correction re-read and the deltas tabulated, or the change
 declined with that table as the reason · no product line changes · `npm run oracle` green 10 of 10 cold
 after, on both engines.
+
+## G5 HANDOFF — DONE 2026-09-01. ALL THREE LEADS REFUTED; THE SCATTER WAS THE EVENT GRID.
+THE METHOD FIRST, because it is why one matrix decided every candidate: each candidate correction is a
+FUNCTION of arrays the run already records. `oracle.mjs --dumpDir=` now keeps every run's whole report
+(a passing run used to throw it away — only failures were dumped), and `scripts/syncref.mjs` re-derives
+OFFLINE, on the SAME takes, what each reference x each statistic would have produced. Its `anchor/mean`
+row reproduces the report's own `flashSyncSymmetricMeanMs` to the decimal on every run — that identity
+is the check that the offline arithmetic IS the shipped estimator, and it caught a bug in this analyser
+(it kept its own copy of the 1000 ms grid, the exact fault it was written to study). 11 unit tests pin
+it; two of them decide whether a per-event correction is allowed to exist on a given run.
+
+THE TASK'S OWN NUMBERS DO NOT REPRODUCE. Each schedule fitted to its own straight line, residual sd in
+ms, mean over runs (range):
+                          6 s, 10 cold        120 s, 5 cold      G5's spec said (120 s)
+    beep ARRIVAL/ANCHOR    0.76 (0.5-0.9)      1.98 (0.5-7.4)     43.40
+    flash ARRIVAL          1.78 (0.2-7.2)      4.46 (0.9-7.1)     10.56
+    beep TRUE (ctx)       20.21 (4.2-47.8)    12.91 (4.9-19.7)     9.65
+The anchor is the QUIETEST of the three at both lengths, not "four times noisier than either thing it
+references" — and `beepTrueRigMs`, the reference lead (2) proposed switching to, is the noisiest. The
+anchor's standard error at 6 s is 0.76/sqrt(6) = 0.3 ms, not the +-19 ms the spec derived from 43.40.
+No series in five fresh 120 s cells drops or doubles an event (arrival gaps 998.0-1001.3 ms), which is
+the only way a fit against index reaches 43 ms, so the spec's table is RETRACTED, not re-explained.
+
+LEAD (1), A ROBUST STATISTIC — REFUTED. Render-lane sync mean +- run-to-run sd, every candidate on the
+same runs (old grid):        6 s (n=10)        120 s (n=5)
+    mean [SHIPPED]           51.2 +- 11.4      54.4 +- 5.9
+    median                   51.6 +- 11.9      54.5 +- 7.5
+    trimmed 20 %             51.6 +- 11.8      54.8 +- 6.3
+    over shared events       51.2 +- 11.4      54.4 +- 5.9
+    per event                51.2 +- 11.4      54.3 +- 5.7
+Every statistic lands within 0.5 ms of every other. There is nothing for robustness to fix.
+LEAD (2), THE QUIETER REFERENCE — REFUTED, and it would buy worse numbers for a full re-baselining:
+the clone moves the level -18.1 +- 3.8 ms at 6 s (-24.6 +- 9.5 at 120 s) and reads 33.0 +- 10.8 /
+29.9 +- 10.4; `beepTrue` reads 40.5 +- 21.1 at 6 s. Both are the same or worse scatter for a ~20 ms
+shift in every sync figure this repo has published.
+LEAD (3), PER EVENT — REFUTED ON THE OLD GRID, for the reason that turned out to be the task: at 6 s
+the render lane's per-pair offsets were IDENTICAL TO THE DECIMAL on all ten cold runs (sd 0.00), and
+at 120 s on two runs of five carrying 118 and 120 pairs. There was no per-event information to use.
+Aligning the correction to the events the export actually measured cost 0.0 ms on ten runs of ten.
+
+WHAT THE SCATTER ACTUALLY WAS. A flash can only be dated to the frames that show it, so analyze.ts
+dates each at the MIDPOINT of the sampling interval — quantised to +-half an output frame. The grid was
+1000 ms, EXACTLY 30 frames at 30 fps (and 60 at 60), so every event in a run drew the SAME sub-frame
+phase: the quantisation was one constant per run, invisible in the dispersion and immune to averaging
+in the mean. Signature: the sd 0.00 above. Size: the run-to-run spread, 32.3-63.3 ms against a 33.33 ms
+frame, sd 11.4 where a uniform phase predicts 33.33/sqrt(12) = 9.6.
+THAT IS WHAT O4b PUBLISHED AS AN "INSTRUMENT NOISE FLOOR OF ~8-9 ms 1sigma". It was never a floor. A
+floor is exactly what it is not: break the lock and it divides by sqrt(n).
+
+THE FIX IS ONE CONSTANT. `BEEP_INTERVAL_MS` 1000 -> 987 ms — 29.61 output frames at 30 fps (59.22 at
+60, 24.68 at 25), a fractional part near the golden ratio so consecutive events walk the sub-frame
+phase in low-discrepancy steps at EVERY take length (a half-frame step would only alternate between
+two phases). Everything downstream already took the interval as a parameter. The two places that
+hard-coded 1000 — oracle-gate.mjs's own copy, carrying the comment "must match oracle/rig.ts", and
+this task's analyser — now READ IT FROM THE REPORT (`rigDebug.beepIntervalMs`), so the rig's grid
+cannot drift away from its readers unnoticed. Unit fixtures recorded on the old grid now NAME it
+(`GRID = 1000`) instead of inheriting whatever the rig fires on today.
+
+MEASURED ACROSS THE CHANGE, same command, same machine:
+                                    6 s (10 cold)      120 s (5 cold)
+    run-to-run sd of the sync mean  11.40 -> 8.32      5.9 -> 6.7
+    level (what published numbers are on)  51.2 -> 51.7      54.4 -> 54.4
+    per-pair sd WITHIN a run         0.00 -> 12.6       4.0 -> 10.7
+    anchor reference residual sd     0.76 -> 0.43      1.98 -> 0.75
+    gate verdict                    10/10 -> 10/10     4/5 -> 5/5
+THE THIRD ROW IS THE EVIDENCE, not the first. 12.6 ms measured directly as within-run spread AFTER the
+change is the same quantity as the 11.4 ms of run-to-run scatter BEFORE it — the per-run flash-dating
+error, read two ways, agreeing. Once it is n draws instead of one constant it enters the mean as
+12.6/sqrt(6) = 5.1, and 8.32 = 5.1 (+) 6.5 leaves a 6.5 ms per-run term that is NOT the frame grid and
+is now the honest 6 s floor. SAID PLAINLY, BOTH WAYS IT CUTS: on the sd alone F = 1.88 on (9,9) df
+against a 3.18 critical value, so ten runs an arm cannot certify the ratio at p<0.05 — the MECHANISM is
+what is proven, by construction, and the size is consistent with it. AND AT 120 s THE CHANGE IS
+NEUTRAL (5.9 -> 6.7, n=5 each, inside its own noise; the before-cell also lost a run to an 827 ms
+stall while the after-cell passed five of five). That is expected and not a let-off: at 120 s the lock
+was already half-broken by the drift between the two clocks (within-run sd 4.0, but still 0.00 on two
+runs of five), so there was less to win. The cell this buys is the 6 s one — which is the cell every
+merge in this repo actually runs.
+WHAT ELSE MOVED, so nobody reads it as a regression: the flash reference's own residual sd rose
+1.78 -> 10.36 (6 s) and 4.46 -> 10.06 (120 s), and the per-event alignment went from useless to
+r = 0.87 / 0.94 with a 4.6 / 3.4 ms residual. That noise was always there; the old grid held it still
+and hid it in a constant. It costs the dispersion bands nothing: worst lane sd 19.2 ms at 6 s and
+22.1 at 120 s against a 2.0-frame-interval band (66.7 ms), i.e. 3x headroom, and worst deviation
+34.9 ms against a 3.0-frame band.
+
+RE-BASELINING — NOTHING TO RE-BASELINE, which is a result and not an omission. The level moved 0.48 ms
+at 6 s and 0.0 at 120 s:
+  · O4b's `40.5-66.2 ms` and STATE's "typical run: sync 40-66 ms" — HOLD (measured 37.3-67.5).
+  · O4b's "noise floor ~8-9 ms 1sigma — the honest limit for any future band" — RETRACTED AS A FLOOR
+    (above). The number was right; its name was wrong. Corrected in STATE and in TASKS' fresh-session
+    notes; the historical handoffs keep their text and this retraction.
+  · P0-instant-sync's before/after (v2 185.1 -> 48.6/59.6/75.8; v1 244.8 -> 44.3/48.2/40.7) — HOLD.
+    The defect it measured is 20x the instrument's per-run error.
+  · O3b's comparisons and G1's own figures — HOLD, same reason.
+  · G1's 20.9 ms at 6 s, THIS TASK'S PREMISE — RE-READ: that matrix included a run that paired TWO
+    events (offsets [211.33, 211.33], sync 7.3), which G1's own census floor now rejects; without it
+    the same eight runs read 13.5, and G1's after-matrix that day read 7.8. A fresh 10-run matrix on
+    HEAD reads 11.4. It was one draw of an unstable statistic — which is why this verdict rests on
+    paired comparison (every candidate on the same takes) and not on beating that number.
+
+GATES
+  · reference residual sd per candidate estimator, both lengths, >=5 cold runs — the tables above.
+  · sync mean's run-to-run sd before and after — 11.40 -> 8.32 at 6 s; 5.9 -> 6.7 at 120 s, both quoted.
+  · every published number re-read and tabulated, OR the change declined with that table — both: the
+    estimator change is DECLINED on the table above, and the grid change moves no level.
+  · no product line changes — none. rig.ts, run.ts, localize.ts, analyze.ts (one comment),
+    oracle-gate.mjs, scripts/oracle.mjs, scripts/syncref.mjs, three test files. All rig and runner.
+  · `npm run oracle` 10 of 10 cold, both engines — v2 10/10 PASS. v1 0/10, every one of them on
+    `export throughput < 1x realtime` with the SYNC gates green throughout (49.0 +- 8.2). A/B'd rather
+    than argued: the same matrix on the stashed pre-change tree fails 5 of 5 at 0.78-0.95x. That is
+    the band already filed as flipping on this machine; it is not G5's and G5 does not fix it.
+  · 896 tests (11 new) · typecheck clean · oracle:long quoted above against the recorded baseline.
+
+LEFT BEHIND, MEASURED HERE, FOR WHOEVER TAKES IT: the 6.5 ms per-run term that is left at 6 s once the
+frame lock is gone. It is not the beep reference (residual sd 0.43), not the estimator (every candidate
+within 0.5 ms), and not the event sets (aligning costs 0.0 ms). The arithmetic says what it must be —
+`sync = (audio placement in the file) - (flash dating in the file)`, and the only unmeasured term left
+in it is the video side's delivery-vs-encode dating: both arrival probes stamp `performance.now()` when
+JS READS the frame, not the frame's own `timestamp`. Recording both stampings in the probes is a small
+rig change and the next real reduction in this instrument's noise.
 
 ## G2 rig-source-dead — a rig that cannot move its own source is not a gate [light · rigs only]
 ABSORBS the ORACLE-LOAD entry. `npm run oracle:load` is RED and it is NOT F15: HEAD and the commit
@@ -3962,7 +4093,9 @@ delivered file stays constant-frame-rate.
    2026-08-23 was ~31 ms optimistic: the oracle carried an exact +18.00 ms detection bias (half a
    30 fps frame + half a 128-sample envelope window) and never measured the VIDEO reference at all
    (13.5 ms) while correcting the audio one. CI now gates the SYMMETRIC metric at ≤90 ms and reads
-   40-66 ms. The instrument's own noise floor is ~8-9 ms 1σ — no band below that is measurable.
+   40-66 ms. The "noise floor of ~8-9 ms 1σ" that used to close this line was the flash-dating
+   quantisation, locked to one phase per run because the 1000 ms event grid was exactly 30 frames
+   (G5, 2026-09-01, handoff under the task). Grid is 987 ms now; run-to-run sd 8.3 ms at 6 s.
    O4's job is to bring this to ≤20 ms; re-tighten the band then.
 2. THE AUDIO ANCHOR CANNOT SEE INPUT LATENCY. It dates sample 0 from when a worklet batch ARRIVES,
    so device/stream buffering is invisible and audio lands late. Loopback-measured at +128.7 ms

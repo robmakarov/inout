@@ -49,7 +49,37 @@ import { listProductionBlobs } from '../shared/opfs'
 import { encodeBits, FID_BLOCK, FID_BLOCK_COUNT, FID_MARGIN } from './fiducial'
 import { paintLoop } from '../rigPaint'
 
-export const BEEP_INTERVAL_MS = 1000
+/**
+ * THE EVENT GRID MUST NOT DIVIDE THE FRAME GRID (task G5, 2026-09-01).
+ *
+ * A flash can only be dated to the frames that show it, so `analyze.ts` dates
+ * each one at the MIDPOINT between the last dark frame and the first lit one —
+ * an estimator quantised to ±half an output frame (±16.67 ms at 30 fps). That
+ * is fine on its own; what was not fine is that the grid used to be 1000 ms,
+ * which is exactly 30 frames at 30 fps and exactly 60 at 60. Every event in a
+ * run therefore landed at the SAME sub-frame phase, the quantisation error was
+ * one constant per run instead of n independent draws, and averaging over
+ * events could not touch it.
+ *
+ * MEASURED, before this line changed: at 6 s the render lane's per-pair offsets
+ * were IDENTICAL to the decimal on all ten cold runs (sd 0.00), and at 120 s
+ * they were still identical on two runs of five with 118-120 pairs each. The
+ * run-to-run scatter of the gate's own sync mean was 11.4 ms at 6 s against a
+ * 33.33 ms frame — one frame of phase, uniform, exactly 33.33/√12 = 9.6 ms
+ * predicted. That is also what O4b published as an "instrument noise floor of
+ * ~8-9 ms 1σ": it was never a floor, it was this lock.
+ *
+ * 987 ms is 29.61 output frames at 30 fps (59.22 at 60, 24.68 at 25, 23.69 at
+ * 24) — the fractional part is near the golden ratio, so consecutive events
+ * walk the sub-frame phase in low-discrepancy steps at EVERY take length
+ * instead of repeating a short cycle. A half-frame step would only alternate
+ * between two phases and buy nothing at even n.
+ *
+ * Everything downstream already takes the interval as a parameter; the two
+ * places that hard-coded 1000 (this file's consumers via BEEP_INTERVAL_MS, and
+ * oracle-gate.mjs's own copy) now read it from the rig's report.
+ */
+export const BEEP_INTERVAL_MS = 987
 export const FLASH_DURATION_MS = 120
 export const RIG_WIDTH = 1280
 export const RIG_HEIGHT = 720
