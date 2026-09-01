@@ -402,9 +402,20 @@ opens; long ones show the dock's honest progress. Costs the take NOTHING — the
 stop by definition. A DURING-TAKE max composite encoder is the load family already starving the
 tap (A1) and is refused here; re-test it as a measured spike under O15's budget only after A1
 lands and a 50-min take holds its audio.
-GATES: unedited max+camera take — an export press JOINS the at-stop job (prod log line) · T2's
-lateness bands hold when the editor opens while the job runs · a screen-only max take still
-packet-copies and never starts a job · a sub-max take is untouched · oracle green.
+RULING 2026-09-01 (Robert: "prerender must be perfect and not to fuck up record and edit" —
+DECISIONS (3)): THE PRIORITY ORDER IS ABSOLUTE — CAPTURE > EDITING > PRERENDER — and it binds
+every background job, not only this task's. Since R2 made exports persistent dock jobs, a render
+can be RUNNING when a new take starts; that is A1's contention family arriving through the back
+door. Therefore: NO background render runs while any capture session is armed or live — every job
+pauses on record start and resumes at stop; the editor keeps T2's lateness bands whenever a job
+works; and a prerender may only ever SAVE time — every miss, failure, cancel and supersession
+falls through to the on-demand render (the shipped fall-through is now a permanent contract).
+GATES: unedited max+camera take — an export press JOINS the at-stop job (prod log line) · a
+record press while a job runs → the job pauses BEFORE devices are asked for, resumes at stop, and
+the take's stats are clean (delivered fps and audio silentTail identical to a no-job control) ·
+T2's lateness bands hold when the editor opens while the job runs, measured on drags, not idle ·
+a screen-only max take still packet-copies and never starts a job · a sub-max take is untouched ·
+oracle v2+v1 green.
 
 ## S1 the take report card — "perfect" is a verdict, not a vibe [light-medium · instrument ·
    authored 2026-09-01 second pass]
