@@ -742,16 +742,29 @@ smartcut, tail 65-84 ms). v1 lane RED on `export` throughput — 0.90 / 0.83 /
 hour (0.85 / 0.66x), with every sync gate green on both. That is the flaky
 throughput gate this file already filed, not E1.
 
+MERGED 2026-09-01 (8c434d5, on Robert's "merge it"), and VERIFIED ON PROD:
+`verify-deploy` OK after 37 s, the tab confirmed on the new bundle by chunk hash
+(index-Bp_kGo-L.js), and a 1080p60 auto take on the live build logged
+`capture ladder backing off (predicted): pressure critical for 0 ms
+(encode-latency: 175.6 ms in the encoder against 100 ms of pipeline)` ~1.45 s
+after the load, followed by `display 60 -> 30 fps at 1920x1080` — the size
+unchanged, exactly as designed. S1's report card graded the take RED and named
+`rate`, which is the two instruments agreeing.
+
 WHAT IS NOT PROVEN, said plainly:
-  · THE UP HALF WAS NEVER SEEN IN THE APP, only in the rig (repeatedly, both
-    `predicted` and `measured`). The app cell that stepped down was the run that
-    exposed the too-strict `nominal` rule; the runs after the fix did not
-    reproduce a down on that machine state. It is the first thing to watch when
-    this reaches prod.
-  · NOT VERIFIED ON THE VERCEL URL. There is no `gh` on this machine and a task
-    branch gets no preview alias I could find, so the app verification is the
-    production code path served from `npm run dev` on 5178, driven through the
-    real UI with `?synthetic=1`. `node scripts/verify-deploy.mjs` on merge.
+  · THE UP HALF HAS NEVER BEEN SEEN IN THE APP — only in the rig, repeatedly,
+    both `predicted` and `measured`. AND THE REASON IS NOW KNOWN, which is worth
+    more than the missing observation: THE BROWSER PANE IS A HIDDEN DOCUMENT,
+    AND A HIDDEN TAB CLAMPS setInterval TO 1 Hz — measured in that very pane, 4
+    ticks in 3 s from a 16 ms timer. `?synthetic=1`'s screen is a canvas painted
+    by exactly such a timer, so an app take driven through this pane is a ~2 fps
+    take, not a 60 fps one. A 720p prod cell proved it out loud: it stepped down
+    on `encoded 1.0 of 2.0 arriving fps (50 % kept)`. So every app-side number
+    here describes a degenerate source, the DOWN evidence survives it (the
+    encoder latency and the step are real), and the UP evidence cannot come from
+    this pane at all. It needs a visible window — Robert's own browser, or a
+    headed rig. THIS IS ALSO A STANDING WARNING FOR EVERY FUTURE SESSION: an
+    agent-driven `?synthetic=1` take in the hidden pane is not a rate test.
   · THE LOAD GENERATOR IS NOT DETERMINISTIC on this machine and the handoff
     would be dishonest without it: six spinning cores plus 4K paints moved this
     composite's encode latency from 11.0 ms to 13.4 — i.e. not at all — because
@@ -761,8 +774,15 @@ WHAT IS NOT PROVEN, said plainly:
     load produced heavy pressure in some processes and none in others; drop
     COUNTS are therefore not comparable across lanes and no claim here rests on
     one. What is comparable is the ORDER of events within a single take.
-  · `?pressure=0` restores the shipped ladder exactly, and 883 unit tests
-    (25 new) pin that: every pre-E1 case runs with pressureLevel null.
+  · `?pressure=0` restores the shipped ladder exactly, and 885 unit tests
+    (27 new) pin that: every pre-E1 case runs with pressureLevel null.
+THE ONE WAY E1 COULD BE WORSE THAN WHAT SHIPPED, and its bound. The up-path's
+pressure veto can keep a take at half its rate for as long as the reading stays
+serious — and "as long as" is an hour of Robert's take for a detector that only
+has to be wrong once. VETO_MAX_MS: after three RECOVERY_MS of unbroken healthy
+delivery the ladder climbs anyway and lets the detector step it back down if it
+was right. Being wrong that way costs one step pair every ~20 s; being wrong the
+other way costs the rest of the take.
 NEW: `npm run exp -- pressure` (src/experimental/perf/pressureLead.ts) is the
 cell, one command, three phases, two lanes. docs/FLAGS.md carries the flag.
 

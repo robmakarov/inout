@@ -13,6 +13,7 @@ import {
   DELIVERY_FLOOR_RATIO,
   PREDICT_SUSTAINED_MS,
   PRESSURE_CLEAR_MS,
+  VETO_MAX_MS,
   RATE_RUNGS,
   RECOVERY_MS,
   RECOVERY_RATIO,
@@ -327,5 +328,28 @@ describe('the up-path needs the detector too (E1)', () => {
 
   it('and with no reading at all it is the shipped ladder', () => {
     expect(ladderVerdict({ ...recovered, pressureLevel: null })?.direction).toBe('up')
+  })
+})
+
+describe('the veto cannot hold a take down forever (E1)', () => {
+  const stuck: LadderInput = {
+    ...base,
+    currentFps: 30,
+    arrivedFps: 30,
+    deliveredFps: 30,
+    pressureLevel: 'serious',
+    pressureClearForMs: 0,
+  }
+
+  it('holds while delivery has only been healthy a little while', () => {
+    expect(ladderVerdict({ ...stuck, aboveRecoveryForMs: RECOVERY_MS + 1 })).toBeNull()
+  })
+
+  it('climbs anyway after three recoveries of unbroken healthy delivery', () => {
+    // Being wrong this way costs one step pair every ~20 s. Being wrong the
+    // other way costs the rest of the take at half its rate.
+    const v = ladderVerdict({ ...stuck, aboveRecoveryForMs: VETO_MAX_MS })
+    expect(v?.direction).toBe('up')
+    expect(v?.rung.fps).toBe(60)
   })
 })

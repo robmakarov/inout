@@ -150,6 +150,22 @@ export const PREDICT_CRITICAL_MS = 0
  * says nominal while frames are being lost is a detector with a hole in it.
  */
 export const PRESSURE_CLEAR_MS = 2_500
+/**
+ * …AND THE VETO CANNOT HOLD FOREVER.
+ *
+ * The up-path's pressure veto is the one part of E1 that can make a take WORSE
+ * than the ladder that shipped: before it, delivery healthy for RECOVERY_MS
+ * climbed, full stop. Now a reading stuck at `serious` keeps a take at half its
+ * rate indefinitely — and "indefinitely" is an hour of Robert's take, for a
+ * detector that only has to be wrong once.
+ *
+ * So after three RECOVERY_MS of unbroken healthy delivery the ladder climbs
+ * anyway and lets the detector step it straight back down if it was right. The
+ * cost of being wrong that way is one step pair every ~20 s; the cost of the
+ * veto being wrong without this is the whole take. Robert's own words decide
+ * which is worse — "i want it to go back to max smoothly as suffering eases".
+ */
+export const VETO_MAX_MS = RECOVERY_MS * 3
 
 /**
  * The rates this take can move between, richest first.
@@ -329,8 +345,11 @@ export function ladderVerdict(input: LadderInput): LadderVerdict | null {
   // So the reading, when there is one, has a veto: never climb while pressure
   // is at or above `serious`, and not for PRESSURE_CLEAR_MS after it last was.
   // The bar is "below serious", NOT "nominal" — see pressureClearForMs.
-  if (input.pressureLevel !== null && atLeast(input.pressureLevel, 'serious')) return null
-  if (input.pressureLevel !== null && input.pressureClearForMs < PRESSURE_CLEAR_MS) return null
+  const vetoExpired = input.aboveRecoveryForMs >= VETO_MAX_MS
+  if (!vetoExpired) {
+    if (input.pressureLevel !== null && atLeast(input.pressureLevel, 'serious')) return null
+    if (input.pressureLevel !== null && input.pressureClearForMs < PRESSURE_CLEAR_MS) return null
+  }
 
   // Rule 6's up-path: pressure clear AND delivery healthy climbs sooner than
   // delivery alone. Never pressure alone — a detector that reads clear while
