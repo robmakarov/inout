@@ -1027,6 +1027,10 @@ GATES, AS RUN.
   G1 · fix runs green 10 of 10 cold: THE SYNC GATES ARE GREEN 10/10. The run-level verdict is 9/10 —
        the one failure is `spur -38.8 dB > -40 dB`, a different band, not touched by this task.
   G1 · the band is NOT widened: the 90 ms mean band is byte-identical. Three bands were ADDED.
+       AND THE BANDS WERE NOT TUNED TO PASS. Every matrix above ran under TIGHTER provisional values
+       (p90 2.5 and drift 2.0) and no run failed either — worst readings 1.94 and 1.62. They were
+       widened to 3.0 and 4.0 AFTERWARDS, on the rule that a band with under ~50 % headroom over the
+       measured worst case is the next coin flip. Nothing red was made green by moving a band.
   BOTH ENGINES · v2: 10/10 cold, sync green, 9/10 overall (one spur). v1: FOUR cold runs, SYNC GREEN
        ON ALL FOUR (35.1 / 43.5 / 52.5 / 58.0 ms, every dispersion, census and drift band inside),
        and all four RED on `export throughput` at 0.46-0.94× against 1.0×. That is the separately
