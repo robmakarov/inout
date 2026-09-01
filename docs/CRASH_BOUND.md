@@ -5,8 +5,9 @@ if the numbers move, rewrite the table, do not append a note.
 
 ## The bound
 
-**Kill the tab anywhere in a max60 take and you lose at most ~2.1 seconds.** Every
-channel comes back, the take is complete up to that point, and it exports.
+**Kill the tab anywhere in a running max60 take and you lose at most ~2.1 seconds.**
+Every channel comes back, the take is complete up to that point, and it exports. The
+exception is the first few seconds of a take, which have their own floor — see below.
 
 Five `kill -9` points on Chrome's whole process group, one take each, prod build,
 synthetic 1920×1080@60 source, all four channels armed. The take was verified to be
@@ -28,6 +29,39 @@ which is the thing this task existed to find out.
 The reference is a take **stopped properly** on the same machine: its channels end
 0.22–0.24 s behind the stop click. So roughly a quarter-second of the trail above is
 what any end-of-take costs, and the crash adds about one to two seconds on top.
+
+## The floor: a crash in the first five seconds loses everything
+
+The 2.1 s above is the bound for a take that has been running. It is not the bound at
+the very start, and this is the one place "kill it anywhere" is not yet true. Measured
+the same way, one kill per row:
+
+| killed at | manifest on disk | what came back |
+|---|---|---|
+| 2.8 s | **no** | **nothing — the whole take** |
+| 3.3 s | **no** | **nothing** |
+| 4.2 s | **no** | **nothing** |
+| 5.4 s | yes | **audio only** — both video channels had nothing decodable yet |
+| 7.5 s | yes | everything, 0.44 s behind |
+| 8.3 s | yes | everything, 1.13 s behind |
+| 10.3 s | yes | everything, 1.63 s behind |
+
+Two different floors, one after the other:
+
+- **Below ~5 s the pending manifest has not reached disk.** It is written to
+  `localStorage` at record start (`session.ts` `writeManifest`), and Chrome's storage
+  service commits localStorage asynchronously — a `kill -9` inside that window takes the
+  manifest with it, and the manifest is the only pointer to the take's blobs. Nothing is
+  recoverable, because nothing knows the take existed.
+- **Below ~7 s the video channels have no closed fragment.** The audio is already there
+  (~1 s clusters) but a fragmented-MP4 fragment needs both its minimum duration and the
+  next keyframe, so at 5.4 s the take salvages as audio only.
+
+Both have an obvious remedy and neither is shipped, because both change what a user
+sees after a crash and that is Robert's call: write the manifest through the same
+durable path the channels use (or IndexedDB, which has a real transaction commit)
+instead of localStorage; and close the first video fragment early so a young take has
+something decodable. Filed to BACKLOG.
 
 ## What prices it
 

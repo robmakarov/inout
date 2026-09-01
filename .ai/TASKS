@@ -1011,6 +1011,15 @@ GATE EVIDENCE: 5 usable kill points · worst 2116 ms < 5000 · typecheck clean, 
 · oracle 1/1 PASS sync 59.8/59.8 ms, instant 58.2 ms, smartcut 59.8 ms. No oracle:long: this
 task changed no product code at all — a rig, a doc and a test file — so no flip touches the
 instant or smart-cut paths.
+THE FLOOR, PROBED AFTER THE GATES WERE MET, and it is the one place "kill it anywhere" is not
+yet true: eight single-kill cells at 2-20 s. At 2.8 / 3.3 / 4.2 s NOTHING is recoverable — the
+pending manifest is not on disk, because writeManifest puts it in localStorage and Chrome commits
+localStorage asynchronously, so the kill takes the only pointer to the blobs with it (takeCount 0,
+no files). At 5.4 s the manifest is there and the take salvages as AUDIO ONLY: ~1 s WebM clusters
+already have material, no video fragment has closed. From 7.5 s on everything comes back (0.44 s,
+1.13 s, 1.63 s at 7.5 / 8.3 / 10.3 s) and the 2.1 s bound holds to 31 minutes. TWO CHEAP ADDITIVE
+FIXES — the manifest through the durable writer or IndexedDB, and an early first video fragment —
+are BACKLOG P1 and NOT shipped: both change what a user sees after a crash, which is Robert's.
 THE LOAD IS PART OF THE ANSWER, and the first matrix is the reason this one is trustworthy. Run
 at a synthetic 2560x1440@60 source, three of five takes were dead or dying before the kill
 arrived (screen delivery 44 -> 26 -> 10 -> 0.2 fps, both audio channels ending tens of seconds

@@ -44,6 +44,24 @@ technical defects by severity. Done items get deleted, not archived.
 
 ### Now
 
+- [P1 — MEASURED, H2's floor probe, 2026-09-01] **a crash in the first ~5 seconds of a take
+  loses the WHOLE take, and in the first ~7 seconds loses the picture.** Eight single-kill
+  cells on prod, `node scripts/crash-bound.mjs --killAt=2000,3000,4000,5000,7000,8000,10000,20000`:
+  at 2.8 / 3.3 / 4.2 s the pending manifest is NOT on disk and nothing is recoverable — no
+  Recording, no blobs, `takeCount 0` — because `session.ts writeManifest` puts it in
+  `localStorage` and Chrome's storage service commits localStorage asynchronously, so a `kill -9`
+  inside that window takes the only pointer to the take's blobs with it. At 5.4 s the manifest is
+  there and the take salvages as AUDIO ONLY: audio is on ~1 s WebM clusters and already has
+  material, while a fragmented-MP4 fragment needs its minimum duration AND the next keyframe, so
+  neither video channel has anything decodable. From 7.5 s on everything comes back and the
+  2.1 s bound in docs/CRASH_BOUND.md holds at every length up to 31 minutes.
+  TWO FIXES, both cheap, both BEHAVIOUR CHANGES and therefore Robert's to allow: write the
+  manifest through the durable positioned writer the channels already use (or IndexedDB, which
+  has a real transaction commit) instead of localStorage; and close the first video fragment
+  early so a young take has something decodable. Each is additive — it can only turn a lost take
+  into a recovered one — and each should ship capability-gated with the current path as fallback,
+  per the frozen rule.
+
 - [P1 — OBSERVATION with a caveat, H2's heavy cells, 2026-09-01] **under a starved main thread
   BOTH measured-audio channels end tens of seconds early, on a CLEAN stop, and only the report
   card notices.** A 300 s take at a synthetic 2560x1440@60 source (four channels, three encoders,
