@@ -536,7 +536,15 @@ export async function startLiveCompositeV2(
     for (const [kind, s] of liveness) {
       // Frame silence is ambiguous on this frame-driven path (a static screen
       // delivers nothing); the track's own health decides — see sourceLiveness.
-      const ev = s.det.sample(now, s.lastMediaSec, s.track.readyState === 'live' && !s.track.muted)
+      const ev = s.det.sample(
+        now,
+        s.lastMediaSec,
+        s.track.readyState === 'live' && !s.track.muted,
+        // H4: has this source EVER produced a frame? A static screen has (its
+        // first one); a sensor-off camera has not, and no other signal on the
+        // track tells them apart.
+        s.frames > 0,
+      )
       if (ev) {
         console.warn(`[capture] ${kind} source ${ev}`)
         options.onSourceLiveness?.(kind, ev)

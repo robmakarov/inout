@@ -71,6 +71,7 @@ import { preferredCompositeEngine } from './engine'
 import { MixLoudnessAccumulator } from './loudnessAccumulator'
 import { clearPendingManifest, writePendingManifest } from './recovery'
 import { armSyntheticDeaths, createSyntheticChannelsProgressive, isSyntheticMode } from './synthetic'
+import type { LivenessEvent } from './sourceLiveness'
 
 export type { ArmingProgressHandler, ArmingTimelineEntry, ArmingStep } from './acquire'
 
@@ -434,10 +435,19 @@ class Session implements CaptureSession {
   /** Video sources frozen right now, and every one that froze at any point. */
   private readonly stalledNow = new Set<ChannelKind>()
   private readonly stalledEver = new Set<ChannelKind>()
-  /** Certified-mix loudness accumulated live (O2) — created on first PCM. */
-  private loudness: MixLoudnessAccumulator | null = null
+  /**
+   * H4 — THE LOSS LEDGER. One entry per channel that stopped being a source
+   * while the take ran: its track ended, or it never delivered a frame at all.
+   * Timestamped on the session clock here and rebased with the channels at
+   * stop, so `Recording.lost` reads on the same timeline as the files.
+   * FIRST WRITE WINS: a camera that is unplugged after it was already certified
+   * dead lost nothing new at that instant.
+   */
+  private readonly losses = new Map<ChannelKind, { atMs: number; reason: 'ended' | 'never-delivered' }>()
   /** H4 harness (`?die=`): cancels the scheduled synthetic track deaths. */
   private cancelDeaths: (() => void) | null = null
+  /** Certified-mix loudness accumulated live (O2) — created on first PCM. */
+  private loudness: MixLoudnessAccumulator | null = null
   private stopPromise: Promise<Recording> | null = null
   private cancelPromise: Promise<void> | null = null
   private cancelled = false
@@ -1007,11 +1017,36 @@ class Session implements CaptureSession {
     this.noteEncoderCollapse(`the composite degraded: ${reason}`)
   }
 
+  /**
+   * H4 — file one channel's death, once, on the session clock. `stalledEver`
+   * has always recorded WHICH channel; this records WHEN, which is the half
+   * that makes a take readable afterwards: a mic lost at minute 40 of an hour
+   * and one lost at second 3 are different takes and the files look the same.
+   */
+  private noteLoss(kind: ChannelKind, reason: 'ended' | 'never-delivered'): void {
+    if (this.losses.has(kind)) return
+    const atMs = reason === 'never-delivered' ? 0 : Math.max(0, performance.now() - this.epoch)
+    this.losses.set(kind, { atMs, reason })
+    console.warn(`[capture] ${kind} lost at +${Math.round(atMs)}ms (${reason}) — the take continues`)
+  }
+
   /** A video source froze (or came back). The take continues — audio and the
    * other channels are unaffected — but the frozen stretch is a still image, so
    * the composite can't be copied and the user has to be told. */
-  private onSourceLiveness(kind: ChannelKind, event: 'stalled' | 'resumed'): void {
+  private onSourceLiveness(kind: ChannelKind, event: LivenessEvent): void {
     if (this.stateInternal !== 'recording') return
+    if (event === 'dead') {
+      // H4/B4: live, unmuted, correctly negotiated — and not one frame. The
+      // take goes on (the other channels are fine and this one was never
+      // giving anything up), but it is certified from here and said on screen.
+      if (this.stalledNow.has(kind)) return
+      this.stalledNow.add(kind)
+      this.stalledEver.add(kind)
+      this.noteLoss(kind, 'never-delivered')
+      this.markCompositeUnusable(`${kind} never delivered a frame`)
+      this.emit({ type: 'channel-dead', kind })
+      return
+    }
     if (event === 'stalled') {
       if (this.stalledNow.has(kind)) return
       this.stalledNow.add(kind)
@@ -1436,7 +1471,7 @@ class Session implements CaptureSession {
     // was never true, and a name that disagrees with the bytes is what made
     // every iPhone channel unplayable (see containerExt above).
     const key = `${this.recordingId}_composite.mp4`
-    const onSourceLiveness = (kind: 'screen' | 'camera', event: 'stalled' | 'resumed'): void =>
+    const onSourceLiveness = (kind: 'screen' | 'camera', event: LivenessEvent): void =>
       this.onSourceLiveness(kind, event)
 
     // v1 is the capability fallback and stays the whole story on Apple WebKit
@@ -2208,6 +2243,16 @@ class Session implements CaptureSession {
     // the live composite goes on repainting its last frame — and an unedited
     // export would copy that still image for the whole remaining take while the
     // channel's own file correctly stopped. Render from the channels instead.
+    // H4: EVERY media kind, not only video. A Bluetooth mic that drops at
+    // minute 40 ends its track exactly like an unplugged camera, and the audio
+    // half of that was the half nothing recorded — the channel simply came back
+    // short and no surface said why. `suspended` is the exception and it is the
+    // whole exception: a channel the USER switched off mid-take arrives here
+    // through stopChannelNow, and reporting that as a loss would be calling the
+    // user's own button a failure.
+    if (this.stateInternal === 'recording' && !this.suspended.has(rt.kind)) {
+      this.noteLoss(rt.kind, 'ended')
+    }
     if (rt.media === 'video' && this.stateInternal === 'recording') {
       this.markCompositeUnusable(`${rt.kind} track ended`)
       this.stalledEver.add(rt.kind)
@@ -2278,6 +2323,22 @@ class Session implements CaptureSession {
               // ChannelRecording.width/height (the single-generation copy, the
               // editor's PiP box) has to be told what was written.
               const st = 'stats' in r ? r.stats : null
+              /**
+               * H4 — THE AT-STOP VERDICT, AND THE ONLY ONE THAT WORKS EVERYWHERE.
+               *
+               * The live detector rides the composite's liveness tick, and at
+               * quality=max there IS no composite — so on the one path Robert
+               * actually records at, nothing was watching. This needs no
+               * threshold and no timing judgement: the encoder counted the
+               * frames that reached it, and zero in is zero in. `framesIn`
+               * rather than `framesEncoded`, because the raw worker synthesises
+               * keep-alive frames for a static source and those are output the
+               * source never produced.
+               */
+              if (ch.media === 'video' && st && st.framesIn === 0) {
+                this.noteLoss(ch.kind, 'never-delivered')
+                this.stalledEver.add(ch.kind)
+              }
               if (st?.outWidth && st.outHeight && (st.outWidth !== ch.width || st.outHeight !== ch.height)) {
                 console.info(
                   `[capture] ${ch.kind} channel recorded ${st.outWidth}x${st.outHeight} (the track said ${ch.width}x${ch.height})`,
@@ -2647,6 +2708,41 @@ class Session implements CaptureSession {
     if (missing.length) recording.missing = missing
 
     if (this.stalledEver.size) recording.stalled = [...this.stalledEver]
+
+    /**
+     * H4 — THE LOSSES, ON THE TAKE'S OWN TIMELINE.
+     *
+     * The ledger was stamped on the session clock (epoch-relative); the
+     * channels above have just been rebased so the earliest one sits at t=0, so
+     * these take the same shift or they would name the wrong instants. A
+     * 'never-delivered' channel is left at 0 — it was never there to lose at a
+     * later moment — and `lostMs` is how long the take ran on without it, which
+     * is the number that says whether this take is salvageable.
+     */
+    if (this.losses.size) {
+      const shift = Number.isFinite(minOffset) ? minOffset : 0
+      // A channel that produced NO file at all is already `missing` above, and
+      // one failure gets one line: 'never-delivered' and 'missing' are the same
+      // sentence told twice.
+      recording.lost = [...this.losses.entries()].filter(([kind]) => !missing.includes(kind)).map(([kind, l]) => {
+        const atMs = l.reason === 'never-delivered' ? 0 : Math.max(0, Math.round(l.atMs - shift))
+        return {
+          kind,
+          atMs,
+          reason: l.reason,
+          lostMs: Math.max(0, Math.round(recording.durationMs - atMs)),
+        }
+      })
+      if (recording.lost.length === 0) delete recording.lost
+      else {
+        console.warn(
+          '[capture] H4 losses — ' +
+            recording.lost
+              .map((l) => `${l.kind} ${l.reason} at ${l.atMs}ms (${l.lostMs}ms lost)`)
+              .join(' · '),
+        )
+      }
+    }
 
     // Capture-time loudness (O2): only valid when the stats cover EXACTLY the
     // audio channels the export will mix — otherwise the sum is a different

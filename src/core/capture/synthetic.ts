@@ -528,32 +528,48 @@ function syntheticCamera(): Generated {
 }
 
 /**
- * H4: the `?dead=` source. A canvas captured at rate 0 emits a frame ONLY on
- * `requestFrame()`, which nothing here ever calls — so the track is live,
- * unmuted, correctly sized and delivers not one frame for the whole take.
- * `getSettings().frameRate` is then 0, which would be a tell no real dead
- * camera gives; B4's camera reported 30 the whole time it delivered nothing,
- * so the fixture reports it too.
+ * H4: the `?dead=` source — a video track that is live, unmuted, correctly
+ * described and delivers NOT ONE FRAME.
+ *
+ * MEASURED, NOT ASSUMED (2026-09-01): the obvious fixture — a canvas captured
+ * at rate 0, whose `requestFrame()` is never called — is WRONG. It emits one
+ * initial frame at capture, which the raw channel duly encoded
+ * (`measured video camera first-frame +45ms 640x480@30`) and the compositor
+ * counted. One frame is not zero frames, and B4's real camera wrote a 28-byte
+ * file, which is a container holding nothing at all.
+ *
+ * `MediaStreamTrackGenerator` is a writable track: it is 'live' and unmuted the
+ * moment it is constructed and produces frames only when something writes them,
+ * which nothing here does. It reports no width/height of its own, so it is
+ * dressed in the size and rate B4's camera reported while it delivered nothing.
+ * The canvas is kept as the fallback for a browser without it — one frame is
+ * still a dead source everywhere it matters, just not a perfect one.
  */
 function syntheticDeadSource(size: { width: number; height: number }, fps: number): Generated {
+  const settings = { width: size.width, height: size.height, frameRate: fps }
+  const dress = (track: MediaStreamTrack): void => {
+    const real = track.getSettings.bind(track)
+    Object.defineProperty(track, 'getSettings', {
+      configurable: true,
+      value: (): MediaTrackSettings => ({ ...real(), ...settings }),
+    })
+  }
+  const Gen = (globalThis as { MediaStreamTrackGenerator?: new (o: { kind: string }) => MediaStreamTrack })
+    .MediaStreamTrackGenerator
+  if (Gen) {
+    const track = new Gen({ kind: 'video' })
+    dress(track)
+    return { stream: new MediaStream([track]), stop: () => track.stop() }
+  }
   const canvas = document.createElement('canvas')
   canvas.width = size.width
   canvas.height = size.height
-  // One paint BEFORE the capture starts, so the canvas is not a blank surface
-  // that never had content — the sensor-off camera has a real configuration,
-  // it simply produces nothing.
   const g = get2d(canvas)
   g.fillStyle = '#000000'
   g.fillRect(0, 0, size.width, size.height)
   const stream = canvas.captureStream(0)
   const track = stream.getVideoTracks()[0]
-  if (track) {
-    const real = track.getSettings.bind(track)
-    Object.defineProperty(track, 'getSettings', {
-      configurable: true,
-      value: (): MediaTrackSettings => ({ ...real(), frameRate: fps }),
-    })
-  }
+  if (track) dress(track)
   return { stream, stop: () => undefined }
 }
 

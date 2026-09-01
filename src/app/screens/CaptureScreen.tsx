@@ -31,6 +31,8 @@ import {
   CHANNEL_KINDS,
   CHANNEL_META,
   CONFIG_KEY,
+  deadChannelMessage,
+  endedChannelMessage,
   isKindSupported,
   unsupportedReason,
 } from '@app/lib/channels'
@@ -207,6 +209,10 @@ export function CaptureScreen() {
   /** Sources frozen right now — a toast is useless here, the user is in
    * another tab while it happens and only sees this screen on the way back. */
   const [stalled, setStalled] = useState<ChannelKind[]>([])
+  /** H4: connected, healthy by the browser's word, delivering nothing. */
+  const [deadChannels, setDeadChannels] = useState<ChannelKind[]>([])
+  /** H4: died mid-take (unplugged, Bluetooth dropped, "Stop sharing"). */
+  const [endedMidTake, setEndedMidTake] = useState<ChannelKind[]>([])
   /**
    * B5 — IS THERE ROOM FOR THE TAKE ABOUT TO BE MADE.
    *
@@ -242,6 +248,11 @@ export function CaptureScreen() {
   const [pipPose, setPipPose] = useState<CameraPose | null>(null)
   useEffect(() => {
     if (!session) setPipPose(null)
+    // H4: the loss banners belong to ONE take. Without this they survive into
+    // the next one and report a camera that is now fine.
+    setStalled([])
+    setDeadChannels([])
+    setEndedMidTake([])
   }, [session])
   /** Live gesture. The ref is the truth — a flick can move and release inside
    *  one task, and a state read in the release handler would be stale. */
@@ -335,11 +346,21 @@ export function CaptureScreen() {
           setOff((s) => ({ ...s, [e.kind]: true }))
           setPending((s) => ({ ...s, [e.kind]: false }))
           bumpStreams((n) => n + 1)
+          // H4: the dark chip stays the readout, and it is not enough on its
+          // own — a device that dies at minute 40 dies while the user is
+          // looking at something else, and a state they did not watch change
+          // is a state they never saw. The band below says it and stays said.
+          // Only while RECORDING: a channel ending during arming is the arming
+          // path's story, and one the user turned off is their own doing.
+          if (session.state === 'recording' || session.state === 'paused') {
+            setEndedMidTake((s) => (s.includes(e.kind) ? s : [...s, e.kind]))
+          }
           break
         case 'channel-late-join':
           setOff((s) => ({ ...s, [e.kind]: false }))
           setPending((s) => ({ ...s, [e.kind]: false }))
           bumpStreams((n) => n + 1)
+          setEndedMidTake((s) => s.filter((k) => k !== e.kind))
           break
         case 'channel-error':
           setPending((s) => ({ ...s, [e.kind]: false }))
@@ -354,7 +375,14 @@ export function CaptureScreen() {
           break
         case 'channel-resumed':
           setStalled((s) => s.filter((k) => k !== e.kind))
+          setDeadChannels((s) => s.filter((k) => k !== e.kind))
           toast(`${CHANNEL_META[e.kind].label} is live again`)
+          break
+        // H4/B4: connected, unmuted, correctly negotiated — and not one frame,
+        // for the whole take. Its own band, because the frozen-source band's
+        // instruction ("re-share your whole screen") cannot fix this one.
+        case 'channel-dead':
+          setDeadChannels((s) => (s.includes(e.kind) ? s : [...s, e.kind]))
           break
         case 'composite-geometry':
           // F13: what the compositor is ACTUALLY writing, which is the only
@@ -810,10 +838,16 @@ export function CaptureScreen() {
       )}
       {arming && armingLabel && <div className="capture__arming">{armingLabel}</div>}
       {session && <TimerPill elapsedMs={elapsedMs} remainingMs={remainingMs} />}
-      {recording && stalled.length > 0 && (
+      {recording && (stalled.length > 0 || deadChannels.length > 0 || endedMidTake.length > 0) && (
         <div className="capture__stalled" role="alert">
-          {stalled.map((k) => CHANNEL_META[k].label).join(' & ')} frozen — recording a still image.
-          Re-share your whole screen to fix it.
+          {stalled.length > 0 && (
+            <div>
+              {stalled.map((k) => CHANNEL_META[k].label).join(' & ')} frozen — recording a still
+              image. Re-share your whole screen to fix it.
+            </div>
+          )}
+          {deadChannels.length > 0 && <div>{deadChannelMessage(deadChannels, caps)}</div>}
+          {endedMidTake.length > 0 && <div>{endedChannelMessage(endedMidTake, caps)}</div>}
         </div>
       )}
 

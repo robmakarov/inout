@@ -1,4 +1,4 @@
-import type { CaptureConfig, ChannelKind } from '@core/types'
+import type { CaptureConfig, ChannelKind, ChannelLoss } from '@core/types'
 import type { Capabilities } from '@core/capabilities'
 import type { IconName } from '@app/components/Icon'
 
@@ -41,6 +41,77 @@ export function isKindSupported(kind: ChannelKind, caps: Capabilities): boolean 
 export function channelLabel(kind: ChannelKind, caps: Capabilities): string {
   if (kind === 'system-audio' && caps.displayAudioScope === 'system') return 'System Audio'
   return CHANNEL_META[kind].label
+}
+
+/**
+ * H4 — WHAT A DEAD CHANNEL SAYS WHILE THE TAKE IS STILL RUNNING.
+ *
+ * Deliberately NOT the frozen-source sentence. "Re-share your whole screen to
+ * fix it" is the right instruction for a source that stopped delivering, and
+ * exactly the wrong one here: this source never delivered, the browser insists
+ * it is healthy, and re-sharing changes nothing. B4's case is a camera whose
+ * sensor is off (a shut lid, a privacy shutter, another app holding it), so
+ * the sentence names the one thing the user can act on.
+ *
+ * WORDING IS ROBERT'S (B4's gate says so). This is the proposal, not the
+ * ruling — everything else about the path is measured and settled.
+ */
+export function deadChannelMessage(kinds: readonly ChannelKind[], caps: Capabilities): string {
+  const names = kinds.map((k) => channelLabel(k, caps)).join(' & ')
+  const verb = kinds.length > 1 ? 'are' : 'is'
+  return `${names} ${verb} connected but sending no picture — nothing is being recorded from it. Check the lid, the privacy shutter, or another app holding the camera.`
+}
+
+/**
+ * H4 — WHAT A CHANNEL THAT DIED MID-TAKE SAYS WHILE THE TAKE IS STILL RUNNING.
+ * The chip already goes dark; a dark chip is a state, not a sentence, and the
+ * user is usually in another window when a Bluetooth mic drops.
+ */
+export function endedChannelMessage(kinds: readonly ChannelKind[], caps: Capabilities): string {
+  const names = kinds.map((k) => channelLabel(k, caps)).join(' & ')
+  const verb = kinds.length > 1 ? 'have' : 'has'
+  return `${names} ${verb} stopped — the take is still recording everything else.`
+}
+
+/** m:ss, for a position inside a take. */
+function atStamp(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000))
+  const m = Math.floor(total / 60)
+  const sec = total % 60
+  return `${m}:${String(sec).padStart(2, '0')}`
+}
+
+/**
+ * H4 — THE CERTIFICATION, AFTER THE TAKE.
+ *
+ * `Recording.lost` is the evidence; this is the sentence. One line per channel,
+ * naming the instant, because that is the half a file cannot show you: a take
+ * whose mic died at 40:00 plays back as forty good minutes and then silence,
+ * and until this line existed the only way to find that out was to listen to
+ * the whole thing.
+ *
+ * NOT test-mode gated, and that is on purpose: this is the same class as the
+ * missing-channel line above ("a take that lost a whole input has always said
+ * so"), not the same class as the audio diagnostics Robert had gated — it
+ * cannot fire on a healthy take, because a healthy take has no ledger entry.
+ */
+export function lostChannelsMessages(
+  lost: readonly ChannelLoss[],
+  caps: Capabilities,
+): { kind: ChannelKind; message: string }[] {
+  return lost.map((l) => {
+    const name = channelLabel(l.kind, caps)
+    if (l.reason === 'never-delivered') {
+      return {
+        kind: l.kind,
+        message: `${name} was connected for the whole take and recorded nothing — there is no ${name.toLowerCase()} in this take.`,
+      }
+    }
+    return {
+      kind: l.kind,
+      message: `${name} stopped at ${atStamp(l.atMs)} and the take ran on for another ${atStamp(l.lostMs)} without it.`,
+    }
+  })
 }
 
 /**

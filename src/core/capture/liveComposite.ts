@@ -483,13 +483,19 @@ export async function startLiveComposite(
     gaps.push(now - lastFrame)
     lastFrame = now
     for (const s of liveness) {
-      if (s.el.readyState < 2) continue
+      // NO readyState GUARD (H4). Skipping a source below readyState 2 skipped
+      // exactly the channel that never delivered anything — a <video> fed a
+      // track that produces no frames never reaches 2 — so the one case B4
+      // reported was the one case this loop could not see.
+      const frames = deliveredFrames(s.el)
+      const everDelivered = s.el.readyState >= 2 && (frames === null || frames > 0)
       // A stalled media clock is only "frozen" when the browser itself says the
       // source is sick (muted/ended) — a static screen is silent and healthy.
       const ev = s.det.sample(
         now,
         s.el.currentTime,
         s.track ? s.track.readyState === 'live' && !s.track.muted : true,
+        everDelivered,
       )
       if (ev) {
         console.warn(`[capture] ${s.kind} source ${ev}`)

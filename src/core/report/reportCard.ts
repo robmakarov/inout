@@ -249,7 +249,19 @@ export function buildReportCard(recording: Recording, evidence: ReportEvidence =
     const missing = recording.missing ?? []
     const shortfall = Math.max(SHORT_CHANNEL_MS, take * SHORT_CHANNEL_RATIO)
     const short = recording.channels.filter((c) => take - channelEnd(c) > shortfall)
-    const kinds = [...missing, ...short.map((c) => c.kind)]
+    /**
+     * H4 — THE LOSS LEDGER CONVICTS HERE.
+     *
+     * Measured on prod 2026-09-01, before this line existed: a take whose
+     * camera delivered nothing for 45 s read `GREEN — 10 of 10 dimensions
+     * measured and inside band`. It was not missing (the file exists, 28 bytes
+     * of container) and it was not short (a dead source still stamps a full
+     * duration), so every dimension above passed it honestly and the verdict
+     * was still wrong. Folded into THIS dimension rather than added as a new
+     * one: it is the same question these lines already ask.
+     */
+    const lost = (recording.lost ?? []).filter((l) => !missing.includes(l.kind))
+    const kinds = [...missing, ...short.map((c) => c.kind), ...lost.map((l) => l.kind)]
     if (kinds.length) {
       dims.push({
         id: 'channels',
@@ -261,6 +273,11 @@ export function buildReportCard(recording: Recording, evidence: ReportEvidence =
             (c) =>
               `${LABEL[c.kind]} ended ${dur(take - channelEnd(c))} before the take did ` +
               `(${dur(c.durationMs)} of ${dur(take)})`,
+          ),
+          ...lost.map((l) =>
+            l.reason === 'never-delivered'
+              ? `${LABEL[l.kind]} stayed connected for the whole take and delivered no frames`
+              : `${LABEL[l.kind]} died at ${dur(l.atMs)} and the take ran ${dur(l.lostMs)} without it`,
           ),
         ]),
       })
