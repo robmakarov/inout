@@ -383,8 +383,13 @@ it is built combine-ready:
           it in one command; docs/CRASH_BOUND.md is the playbook. Handoff under the task. It also
           gave the production salvage path its first tests, and left one P1 observation in
           BACKLOG about audio under a starved main thread — which is A1/H4's, not H2's.
-     H3   memory slope at hour scale      RUNNING overnight 2026-09-01 (Robert: "go h3, you are
-          working over night"). `scripts/memory-slope.mjs`, 60 min soak, sampled per minute.
+     H3   memory slope at hour scale      DONE overnight 2026-09-01 — FLAT, and the premise is
+          refuted. Two soaks (60 and 90 min) hold 60 fps end to end with RSS slope +0.03 and
+          -0.73 MB/min, heap +0.05, DOM nodes constant; the 90-minute take's card is GREEN
+          10/10. Memory is NOT the take-length ceiling — DISK is, at ~66 MB/min (about 8.8 h at
+          35 GB free), so B5's guard is what ends a long take. `node scripts/memory-slope.mjs`
+          re-runs it; docs/MEMORY_SLOPE.md is the playbook. Handoff under the task.
+     H1, H4 are what is left of the pack (H4 was in flight in its own worktree tonight).
   7. F16b prerender-at-stop, max+camera   [light-medium · spec below] instant-feel max with a
           camera, paid AT STOP. A during-take max composite is a POST-A1 measured spike only.
   8. M1   THE COMBINE — max + emergency elastic  [ROBERT-GATED + blocked on A1 and E1 · spec
@@ -996,6 +1001,40 @@ Nothing measures memory past minutes. One cell: synthetic max60 soak, 60 min, me
 minute. Band: slope ~0 after warmup — this is the 8 GB machine's take-length ceiling in disguise.
 GATES: the curve in the handoff · a leak found becomes its own task, not a widened band · the
 cell is one command afterwards.
+
+HANDOFF 2026-09-01 (task/H3, same worktree as H2, overnight — Robert: "go h3, you are working
+over night"). DONE, all three gates, and THE TASK'S OWN PREMISE IS REFUTED.
+THE CURVE IS FLAT. Two soaks, 60 min and 90 min, synthetic max60 takes (1920x1080@60, four
+channels), sampled once a minute, stopped properly, graded by the product's own card:
+  RSS slope after warm-up   +0.03 MB/min (r2 0.00)   ·   -0.73 MB/min (r2 0.12)
+  RSS by halves             427 -> 417 MB (-10)      ·   625 -> 606 MB (-20)
+  JS heap slope             +0.04 (r2 0.18)          ·   +0.05 (r2 0.38)
+  DOM nodes                 395 constant             ·   395 constant
+  Chrome processes          8 constant               ·   8 constant
+  delivered fps             58.2-60.1                ·   59.2-60.1
+  written                   4.1 GB                   ·   5.9 GB
+  card                      RED (one rate step)      ·   GREEN, 10 of 10
+Band was declared before the run (RSS < 5 MB/min, heap < 1 MB/min, 5-minute warm-up) and held.
+NO LEAK FOUND, so nothing here becomes its own task. Curve and playbook: docs/MEMORY_SLOPE.md.
+MEMORY IS NOT THE TAKE-LENGTH CEILING — DISK IS, and that is the correction this task makes to
+its own spec. The take writes ~66 MB/min, so free space runs out in about 8.8 hours at 35 GB
+free while memory sits where it started. B5's guard is what will end a long take, not RAM, and
+S1's storage dimension already watches it.
+READ THE SLOPE FROM THE HALVES, NOT FROM THE LINE, and this cost a detour worth recording: RSS
+oscillates +-90 MB while macOS reclaims, and the 60-minute cell reads +0.03 MB/min over the hour
+(r2 0.000) but +3.45 MB/min over its SECOND HALF ALONE (r2 0.30). That is not a leak starting,
+it is the oscillation aliased by a 28-point window — the half-means say -10 MB. Same for the
+per-process split: the renderer reads +0.60 MB/min at 60 min and +0.10 at 90, and a trend that
+SHRINKS as the lever arm grows is noise. The rig now reports slope, r2, per-process-type
+breakdown AND half-means, because only the last of those survives the oscillation.
+THE INSTRUMENT: `scripts/memory-slope.mjs`, one command, on H2's `scripts/lib/chrome.mjs`. It
+samples RSS PER CHROME PROCESS off the OS grouped by Chrome's own `--type=`, not
+`performance.memory` — decoded frames, encoder buffers and GPU-backed VideoFrames live outside
+the JS heap, which is how R2's GPU-process kill stayed invisible to every in-page counter for
+three sessions. It also samples what the take is DOING (delivered fps, bytes written) and stops
+the moment the take is no longer recording, because a dead take makes a beautifully flat curve.
+GATE EVIDENCE: two curves in docs/MEMORY_SLOPE.md · take survived both · both slopes in band ·
+typecheck clean, 910 tests · oracle 1/1 PASS. No product code changed, so no oracle:long.
 
 ## H4 a device that dies mid-take is survived and said [light · ABSORBS B4]
 B4 widened: not only "recorded nothing from the start" — a BT mic that dies at minute 40, a

@@ -42,6 +42,17 @@ phase: MVP validation (2026-07-16)
   even at zero, because a channel with no counter is indistinguishable from one nobody counted.
   rec_78ogcw052vdn grades RED naming tab audio and its six bursts; a clean take grades GREEN.
 
+- MEMORY IS FLAT AT HOUR SCALE, AND IT IS NOT THE TAKE-LENGTH CEILING — DISK IS (H3, 2026-09-01).
+  Two soaks of a max60 take, 60 and 90 minutes, both holding 60 fps end to end: RSS slope after
+  warm-up +0.03 and -0.73 MB/min, JS heap +0.04/+0.05, DOM nodes 395 constant, Chrome processes 8
+  constant, and the 90-minute take's own report card is GREEN on all ten dimensions. No leak, so
+  nothing was filed. What runs out instead is space: the take writes ~66 MB/min, about 8.8 hours
+  at 35 GB free, so B5's disk guard is what ends a long take and S1's storage dimension is what
+  watches it. READ THE SLOPE FROM THE HALF-MEANS, not from a regression line — RSS oscillates
+  ±90 MB while macOS reclaims, and the same hour that reads +0.03 MB/min overall reads
+  +3.45 MB/min over its second half alone. One command: `node scripts/memory-slope.mjs`
+  (HEAVY, 60 min, headed). Playbook: docs/MEMORY_SLOPE.md.
+
 - A CRASH COSTS 2.1 SECONDS, AND IT DOES NOT GROW WITH THE TAKE (H2, 2026-09-01). Five real
   `kill -9`s on Chrome's whole process group, one max60 take each on prod, the take verified still
   recording at the kill: the salvaged take ends 1.01 / 2.12 / 1.95 / 1.47 / 1.79 s behind the crash
