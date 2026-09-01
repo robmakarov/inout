@@ -43,6 +43,133 @@
 
 const MAX_SYNC_ABS_MS = 60
 const MAX_SYNC_ABS_SYMMETRIC_MS = 90
+/**
+ * THE EXTREME IS NO LONGER THE GATE (task G1 + LC1, 2026-09-01).
+ *
+ * Every sync lane used to fail on `maxAbs = |mean| + (max|dᵢ| − |mean d|)`,
+ * which adds the WORST per-event placement error to the systematic offset.
+ * Neither half of that addition is a property of the file:
+ *   · a flash can only be dated to the frame that shows it, so each pair
+ *     carries up to a frame interval of placement error — measured, the 6 s
+ *     spread term takes the values 0.0, 16.7 and 33.3 ms and nothing else,
+ *     i.e. exactly zero, one or two 30 fps frames;
+ *   · `max` over n samples grows with n, and n IS the take length in seconds.
+ * Measured on one commit: 6 s takes read mean 36-78 ms with a spread term of
+ * 0-33 ms (n≈5), 120 s takes read mean 62.7 ms — the SAME mean — with a
+ * spread term of 69 ms (n=99), for 112.2 against a 90 ms band. The file did
+ * not get worse; the statistic did.
+ *
+ * So the band goes on the two things that are properties of the file and do
+ * not move with its length: WHERE the audio sits (the mean, band unchanged at
+ * 90 ms) and HOW FAR the events scatter around that. Dispersion is expressed
+ * in FRAME INTERVALS of the file under test, because the frame grid is what
+ * sets the floor — a band in milliseconds would silently mean something
+ * different at 60 fps than at 30.
+ *
+ * Bands from the measured distribution across BOTH cells (6 s ×10 cold and
+ * 120 s cold, three lanes each): sd reached 1.04 frame intervals and p90 of
+ * |offset − mean| reached 1.53. Set at 2.0 and 2.5 — ≥60 % headroom over
+ * everything measured, and still red on a real scatter, which the old extreme
+ * could not distinguish from being long.
+ */
+const MAX_SYNC_SPREAD_FRAMES = 2.0
+const MAX_SYNC_P90_DEV_FRAMES = 2.5
+/**
+ * A LANE THAT MATCHED ALMOST NOTHING MEASURED ALMOST NOTHING. Observed live on
+ * a cold run that the summary counted GREEN: the trimmed lane paired ONE event
+ * and passed the band on it, because with a single sample maxAbs is |mean| by
+ * construction. Same fault family as the two anti-vacuity rules below — the
+ * gate reporting on a file it did not read.
+ */
+const MIN_MATCHED_PAIRS = 3
+const MIN_MATCHED_FRACTION = 0.5
+/** Frame interval assumed when the file's own could not be measured. */
+const NOMINAL_FRAME_INTERVAL_MS = 1000 / 30
+/**
+ * A/V DRIFT, ms per second of take — new coverage, not a replacement.
+ * A steady ramp centres its own mean and spreads modestly, so it passed the
+ * old extreme (a 1 ms/s drift over 120 s reads maxAbs 60 against a 90 band)
+ * and it would pass the dispersion bands above too. It is also the ONE sync
+ * failure that gets worse the longer the take is in a way that is about the
+ * file: 2 ms/s is 6 seconds of desync on a 50-minute take, which is the length
+ * this product is being aimed at.
+ * MEASURED ON THIS RIG, and why the band is not tighter: a 120 s cell reads
+ * -0.58 ms/s (SE 0.10), of which 0.166 is the FIXTURE's own AudioContext-vs-
+ * vsync divergence, measured directly off the two reference schedules. The
+ * residual is real and unexplained, is filed as its own task with the numbers,
+ * and must not be smuggled into a band that would then fail every run before
+ * anyone had decided what to do about it.
+ */
+const MAX_SYNC_DRIFT_MS_PER_SEC = 2.0
+/** Below this span a slope is not estimable — a 6 s take fits noise. */
+const MIN_DRIFT_SPAN_SEC = 30
+
+/**
+ * Band the SHAPE of one lane's pairings: enough of them, and not scattered
+ * beyond what the frame grid explains. Pushes onto `failures`, records under
+ * `metrics` with the lane's prefix. Silent when the analysis predates these
+ * fields (an old report is not a failing one).
+ */
+function gateSyncShape(label, prefix, flashSync, frameIntervalMs, failures, metrics) {
+  if (!flashSync || !Array.isArray(flashSync.offsetsMs)) return
+  const frame =
+    typeof frameIntervalMs === 'number' && frameIntervalMs > 0
+      ? frameIntervalMs
+      : NOMINAL_FRAME_INTERVAL_MS
+  const pairs = flashSync.matchedPairs ?? flashSync.offsetsMs.length
+  const flashes = flashSync.flashes ?? 0
+  metrics[`${prefix}MatchedPairs`] = pairs
+  metrics[`${prefix}Flashes`] = flashes
+  metrics[`${prefix}FrameIntervalMs`] = Math.round(frame * 100) / 100
+  metrics[`${prefix}SpreadMs`] = flashSync.sdMs ?? null
+  metrics[`${prefix}P90DevMs`] = flashSync.p90DevMs ?? null
+  metrics[`${prefix}SpreadFrames`] =
+    typeof flashSync.sdMs === 'number' ? Math.round((flashSync.sdMs / frame) * 100) / 100 : null
+  metrics[`${prefix}P90DevFrames`] =
+    typeof flashSync.p90DevMs === 'number'
+      ? Math.round((flashSync.p90DevMs / frame) * 100) / 100
+      : null
+
+  const floor = Math.max(MIN_MATCHED_PAIRS, Math.ceil(flashes * MIN_MATCHED_FRACTION))
+  if (flashes > 0 && pairs < floor) {
+    failures.push(
+      `${label} sync paired ${pairs} of ${flashes} events (< ${floor}) — too few to be a measurement`,
+    )
+  }
+  if (typeof flashSync.sdMs === 'number') {
+    const frames = flashSync.sdMs / frame
+    if (frames > MAX_SYNC_SPREAD_FRAMES) {
+      failures.push(
+        `${label} sync spread sd ${flashSync.sdMs.toFixed(1)}ms = ${frames.toFixed(2)} frame ` +
+          `intervals > ${MAX_SYNC_SPREAD_FRAMES} (frame ${frame.toFixed(1)}ms, n=${pairs})`,
+      )
+    }
+  }
+  if (typeof flashSync.p90DevMs === 'number') {
+    const frames = flashSync.p90DevMs / frame
+    if (frames > MAX_SYNC_P90_DEV_FRAMES) {
+      failures.push(
+        `${label} sync p90 deviation ${flashSync.p90DevMs.toFixed(1)}ms = ${frames.toFixed(2)} ` +
+          `frame intervals > ${MAX_SYNC_P90_DEV_FRAMES} (frame ${frame.toFixed(1)}ms, n=${pairs})`,
+      )
+    }
+  }
+  metrics[`${prefix}DriftMsPerSec`] = flashSync.driftMsPerSec ?? null
+  metrics[`${prefix}DriftR2`] = flashSync.driftR2 ?? null
+  metrics[`${prefix}SpanSec`] = flashSync.spanSec ?? null
+  if (
+    typeof flashSync.driftMsPerSec === 'number' &&
+    typeof flashSync.spanSec === 'number' &&
+    flashSync.spanSec >= MIN_DRIFT_SPAN_SEC &&
+    Math.abs(flashSync.driftMsPerSec) > MAX_SYNC_DRIFT_MS_PER_SEC
+  ) {
+    failures.push(
+      `${label} sync drifts ${flashSync.driftMsPerSec.toFixed(2)}ms per second over ` +
+        `${flashSync.spanSec.toFixed(0)}s (> ${MAX_SYNC_DRIFT_MS_PER_SEC}) — ` +
+        `${((flashSync.driftMsPerSec * flashSync.spanSec) / 1000).toFixed(2)}s across this take alone`,
+    )
+  }
+}
 /** How much shorter than the take the export may be. */
 const MAX_TAIL_LOSS_MS = 400
 /** The rig fires a flash+beep every second, so the last one is at most ~1 s
@@ -104,17 +231,21 @@ export function gateOracleReport(report) {
     metrics.trimmedSyncMaxAbsMs = report.trimmedSyncMaxAbsMs ?? null
     const band = MAX_SYNC_ABS_SYMMETRIC_MS
     const mean = report.trimmedSyncMeanMs
-    const max = report.trimmedSyncMaxAbsMs
     if (typeof mean === 'number' && Math.abs(mean) > band) {
       failures.push(
         `trimmed export sync mean |${mean.toFixed(1)}| > ${band}ms (path: ${report.trimmedPath})`,
       )
     }
-    if (typeof max === 'number' && max > band) {
-      failures.push(
-        `trimmed export sync maxAbs ${max.toFixed(1)} > ${band}ms (path: ${report.trimmedPath})`,
-      )
-    }
+    // G1: maxAbs is reported (metrics.trimmedSyncMaxAbsMs) and never banded —
+    // see MAX_SYNC_SPREAD_FRAMES above for what replaced it.
+    gateSyncShape(
+      'trimmed export',
+      'trimmed',
+      report.trimmed?.flashSyncUnbiased ?? report.trimmed?.flashSync,
+      report.trimmed?.outFrameIntervalMs,
+      failures,
+      metrics,
+    )
     // GATE-alias: a fast path that RAN but produced no number checked nothing.
     // See the same rule under the instant path for what it was hiding.
     if (report.trimmedPath !== 'render' && !Number.isFinite(mean)) {
@@ -151,17 +282,21 @@ export function gateOracleReport(report) {
     // and it gets the same ≤90 ms symmetric band as the render.
     const band = MAX_SYNC_ABS_SYMMETRIC_MS
     const mean = report.instantSyncMeanMs
-    const max = report.instantSyncMaxAbsMs
     if (typeof mean === 'number' && Math.abs(mean) > band) {
       failures.push(
         `instant export sync mean |${mean.toFixed(1)}| > ${band}ms (path: ${report.instantPath})`,
       )
     }
-    if (typeof max === 'number' && max > band) {
-      failures.push(
-        `instant export sync maxAbs ${max.toFixed(1)} > ${band}ms (path: ${report.instantPath})`,
-      )
-    }
+    // G1: maxAbs is reported (metrics.instantSyncMaxAbsMs) and never banded —
+    // see MAX_SYNC_SPREAD_FRAMES above for what replaced it.
+    gateSyncShape(
+      'instant export',
+      'instant',
+      report.instantFlashSync,
+      report.instantOutFrameIntervalMs,
+      failures,
+      metrics,
+    )
     /**
      * ANTI-VACUITY, SECOND HALF (GATE-alias, 2026-08-25). The band above is
      * written `typeof mean === 'number'`, so a run where the instant path RAN
@@ -241,9 +376,16 @@ export function gateOracleReport(report) {
     if (Math.abs(syncMean) > band) {
       failures.push(`sync mean |${syncMean.toFixed(1)}| > ${band}ms (${metrics.syncMetric})`)
     }
-    if (syncMax > band) {
-      failures.push(`sync maxAbs ${syncMax.toFixed(1)} > ${band}ms (${metrics.syncMetric})`)
-    }
+    // G1: `syncMax` stays in `metrics` — the worst pair is worth knowing — but a
+    // merge no longer hangs on an extreme whose size is set by the take length.
+    gateSyncShape(
+      'render',
+      'render',
+      full.flashSyncUnbiased ?? flash,
+      full.outFrameIntervalMs,
+      failures,
+      metrics,
+    )
   }
 
   const integrity = report.audioIntegrity

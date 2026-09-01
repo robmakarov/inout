@@ -119,6 +119,19 @@ export interface FlashSync {
   p90DevMs: number
   /** Pairs the median filter threw away — a mis-synced event, counted not hidden. */
   droppedPairs: number
+  /**
+   * DRIFT, WHICH DISPERSION CANNOT SEE. Least-squares slope of offset against
+   * take time, ms per second, with its R² and the span it was fitted over.
+   * A steady ramp centres its own mean and spreads modestly — a 1 ms/s drift
+   * over 120 s reads mean 0 and sd 35 ms, which passes both bands and is three
+   * seconds of desync on a 50-minute take. It is the one failure the old
+   * extreme could not catch either (maxAbs 60 on that ramp, band 90), so this
+   * is new coverage, not a replacement. Null when there are too few pairs or
+   * too short a span to fit a line worth reading.
+   */
+  driftMsPerSec: number | null
+  driftR2: number | null
+  spanSec: number | null
 }
 
 export interface AnalyzeOptions {
@@ -471,6 +484,25 @@ export function flashSyncStats(
         )
       : 0
 
+  const secs = use.map((x) => x.sec)
+  const spanSec = use.length > 1 ? secs[secs.length - 1]! - secs[0]! : null
+  let driftMsPerSec: number | null = null
+  let driftR2: number | null = null
+  if (use.length > 2) {
+    const tm = secs.reduce((a, b) => a + b, 0) / secs.length
+    const sxx = secs.reduce((a, t) => a + (t - tm) ** 2, 0)
+    if (sxx > 0) {
+      const sxy = use.reduce((a, x, i) => a + (secs[i]! - tm) * (x.d - meanOffsetMs), 0)
+      driftMsPerSec = sxy / sxx
+      const ssTot = use.reduce((a, x) => a + (x.d - meanOffsetMs) ** 2, 0)
+      const ssRes = use.reduce(
+        (a, x, i) => a + (x.d - (meanOffsetMs + driftMsPerSec! * (secs[i]! - tm))) ** 2,
+        0,
+      )
+      driftR2 = ssTot > 0 ? 1 - ssRes / ssTot : null
+    }
+  }
+
   return {
     flashes: flashOnsetsSec.length,
     matchedPairs: use.length,
@@ -481,5 +513,8 @@ export function flashSyncStats(
     sdMs: Math.round(sdMs * 100) / 100,
     p90DevMs: Math.round((devs[Math.min(devs.length - 1, Math.ceil(devs.length * 0.9) - 1)] ?? 0) * 100) / 100,
     droppedPairs: bestOffsets.length - use.length,
+    driftMsPerSec: driftMsPerSec === null ? null : Math.round(driftMsPerSec * 1000) / 1000,
+    driftR2: driftR2 === null ? null : Math.round(driftR2 * 1000) / 1000,
+    spanSec: spanSec === null ? null : Math.round(spanSec * 100) / 100,
   }
 }
