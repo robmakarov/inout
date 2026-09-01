@@ -30,7 +30,16 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const INTERVAL_MS = 1000
+/**
+ * Fallback grid for reports recorded before the rig reported its own (G5 moved
+ * it off 1000 ms). Every function below takes the interval as a parameter —
+ * this analyser is not allowed a second copy of a fact the report carries.
+ */
+const LEGACY_INTERVAL_MS = 1000
+const intervalOf = (report) =>
+  typeof report?.rigDebug?.beepIntervalMs === 'number' && report.rigDebug.beepIntervalMs > 0
+    ? report.rigDebug.beepIntervalMs
+    : LEGACY_INTERVAL_MS
 
 /* ── small statistics, spelled out so a reader can check them ─────────────── */
 
@@ -87,7 +96,7 @@ function corr(a, b) {
  * `estimateScheduleSkewFromArrivals` indexes them: a beep can only render LATE,
  * so k = floor(arrival / interval) and every later arrival is the next one.
  */
-export function gridSkews(arrivals, intervalMs = INTERVAL_MS) {
+export function gridSkews(arrivals, intervalMs = LEGACY_INTERVAL_MS) {
   if (!Array.isArray(arrivals) || arrivals.length < 2) return null
   const k0 = Math.floor(arrivals[0] / intervalMs)
   if (k0 < 1) return null
@@ -152,9 +161,12 @@ export function readRun(path) {
   const report = raw.report
   if (!report) return { path, ok: false, why: raw.error ?? 'no report' }
   const rd = report.rigDebug ?? {}
-  const flash = gridSkews(rd.flashStreamArrivalsRigMs)
+  const intervalMs = intervalOf(report)
+  const flash = gridSkews(rd.flashStreamArrivalsRigMs, intervalMs)
   const beeps = {}
-  for (const [name, pick] of Object.entries(BEEP_REFS)) beeps[name] = gridSkews(pick(rd) ?? [])
+  for (const [name, pick] of Object.entries(BEEP_REFS)) {
+    beeps[name] = gridSkews(pick(rd) ?? [], intervalMs)
+  }
   if (!flash || !beeps.anchor) return { path, ok: false, why: 'reference schedule missing' }
 
   const lanes = {}
@@ -178,6 +190,7 @@ export function readRun(path) {
     ok: true,
     recordMs: raw.recordMs ?? null,
     engine: raw.engine ?? null,
+    intervalMs,
     pass: raw.gate?.pass ?? null,
     // What the run actually applied, straight out of the report — the check
     // that this file's arithmetic reproduces the shipped estimator.
@@ -227,7 +240,8 @@ export function perEvent(run, lane, refName) {
   if (diffByK.size < 4) return null
 
   const t0 = l.pairSec[0]
-  const relIdx = l.pairSec.map((t) => Math.round(t - t0))
+  const interval = (run.intervalMs ?? LEGACY_INTERVAL_MS) / 1000
+  const relIdx = l.pairSec.map((t) => Math.round((t - t0) / interval))
   const ks = [...diffByK.keys()]
   const scored = []
   for (let shift = Math.min(...ks) - 2; shift <= Math.max(...ks) + 2; shift++) {

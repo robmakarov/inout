@@ -124,6 +124,12 @@ export interface OracleReport {
   verdicts: OracleVerdict[]
   /** Rig-side reference measurements (O4 step 1 residual decomposition). */
   rigDebug: {
+    /**
+     * The grid the rig actually fired on, ms (task G5). The gate used to keep
+     * its own copy of this number; a report now carries it, so the two cannot
+     * drift apart unnoticed.
+     */
+    beepIntervalMs: number
     beepStreamArrivalsRigMs: number[]
     beepAnchorRigMs: number[]
     beepCloneArrivalsRigMs: number[]
@@ -398,6 +404,7 @@ export async function runOracle(
       exportPeakOutputBytes: getLastScratchStats()?.maxOutstandingBytes ?? null,
       verdicts,
       rigDebug: {
+        beepIntervalMs: rig.debug.beepIntervalMs,
         beepStreamArrivalsRigMs: streamArrivals,
         beepAnchorRigMs: anchorArrivals,
         beepCloneArrivalsRigMs: rig.debug.beepStreamArrivalsRigMs,

@@ -16,10 +16,12 @@ function makeRun(opts: {
   flashK0?: number
   offsetsMs?: number[]
   pairSec?: number[]
+  intervalMs?: number
 }) {
   const beepK0 = opts.beepK0 ?? 1
   const flashK0 = opts.flashK0 ?? 1
   return {
+    intervalMs: opts.intervalMs,
     schedules: {
       anchor: { k0: beepK0, skews: opts.beepSkews },
       flash: { k0: flashK0, skews: opts.flashSkews },
@@ -152,5 +154,26 @@ describe('perEvent — alignment must be earned, not assumed', () => {
       pairSec: [1, 2],
     })
     expect(perEvent(run, 'render', 'anchor')).toBeNull()
+  })
+})
+
+describe('the grid is read from the run, never assumed', () => {
+  it('aligns export events spaced by the rig\'s own interval, not by one second', () => {
+    // G5 moved the rig's grid to 987 ms. An analyser that still divides by 1000
+    // maps every export pair to the wrong event as the take goes on — by pair 8
+    // it is a whole event out — and then reports a per-event correction built
+    // from mismatched pairs as if it were a measurement.
+    const wander = [0, 30, -20, 50, -10, 25, 15, -35]
+    const run = makeRun({
+      intervalMs: 987,
+      beepSkews: wander.map((w) => 100 + w),
+      flashSkews: wander.map(() => 10),
+      offsetsMs: wander.map((w) => 90 + w + 40),
+      pairSec: wander.map((_, i) => 1.0 + i * 0.987),
+    })
+    const p = perEvent(run, 'render', 'anchor')
+    expect(p.n).toBe(8)
+    expect(p.syncMeanMs).toBeCloseTo(40, 6)
+    expect(p.residualSdMs).toBeCloseTo(0, 6)
   })
 })
