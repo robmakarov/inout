@@ -331,7 +331,8 @@ it is built combine-ready:
           before the fix — a fix judged by a coin flip is not judged.
   3. S1   the take report card            [light-medium · spec below] "perfect" becomes a VERDICT
           every take computes from its own black box — Robert's daily takes become the soak fleet.
-  4. B5   disk guard                      [light] unlimited length makes disk the wall.
+  4. B5   disk guard                      BUILT AND GATED 2026-09-01 on `task/B5`, UNMERGED — the
+          during-take half had shipped BLIND on the default capture path (handoff under the task).
      B1   size panel truth                [light] the only pre-render warning, wrong 2.15x.
   5. E1   elastic below max               [medium · spec below, EXTENDED: the detector must
           PREDICT — step before loss, not after — because M1 inherits it as max's floor].
@@ -1398,6 +1399,46 @@ should warn on low headroom before it starts and while it runs, and ~1.1 GB/hour
 GATES: the estimate is read before start and on a cadence during a take · a low-headroom machine warns
 before and during, a healthy one shows nothing new · the rate shown matches the measured byte rate of a
 real take within 10 % · additive only — no take is ever refused or stopped by this task.
+
+HANDOFF 2026-09-01 (task/B5, own worktree — another session held main). DONE, and the gate found a
+defect in the half that had already shipped.
+THE HALF THAT SHIPPED WAS BLIND. `rt.bytes` is accumulated in `ondataavailable` — the MediaRecorder
+path — and the default path has not been that for months: measured audio and X6's raw video report
+their size only when the handle STOPS. So `takeBytes` was ~0 on a normal take, `diskVerdict` refuses
+to judge a take with no rate, and the guard watched nothing. The composite was never counted on any
+path. MEASURED ON THE RUNNING APP, before the fix: machine reporting 6.2 MB free, take ran 6.6 min
+and wrote 29.2 MB — 4.7x the free space — and not one warning. Robert's 1,138 MB take was invisible
+to it for the same reason.
+THE FIX: the origin's own `estimate().usage` growth since the take's first sample, maxed with the
+channel sum (so the MediaRecorder path keeps its exact number). Sees every byte whoever wrote it,
+composite included. A parallel export writing OPFS scratch inflates it and the message then
+misattributes the rate — but the headroom is still true, and erring toward "less room than you
+think" is the safe direction for a guard whose failure mode is a lost take.
+THE HALF THAT WAS NEVER BUILT — before the press. On the IDLE capture screen (never on the record
+path: instant start is frozen), read the estimate, price a second of the take, and say how long that
+leaves. Silent above 20 minutes of room, because that is the length below which the machine cannot
+hold a take of the kind Robert actually records. THE RATE IS THIS MACHINE'S OWN: median of its recent
+takes at the same quality step, `planned` from the configured bitrates only where there is no
+history, and the verdict says which. Reuses the existing notice slot, so no new CSS and never two
+strips on top of each other.
+GATES, all measured live on the deployed code path (synthetic sources, real pipeline):
+  · READ BEFORE AND DURING — pre-flight on mount/step/channel change, and the shipped 5 s cadence.
+  · WARNS BEFORE: "Room for about 6 more minutes of recording at this quality — this take would write
+    about 3.3 MB a minute. Free some space, or record less at once." (screenshot in session)
+  · WARNS DURING: "About 2 minutes of room left at this quality — this take is writing 3 MB a minute.
+    It will stop itself before the disk fills." Then, room lowered: "Stopped — this computer is out
+    of room. The recording is saved. It was writing about 3.5 MB a minute" — and the 1:18 take opened
+    in the editor with all four lanes.
+  · HEALTHY SHOWS NOTHING: 1.43 GB free, notice null.
+  · RATE WITHIN 10 %: predicted 3.485 MB/min from the two prior takes; the next real take measured
+    3.443 — off by 1.2 %. The string the UI shows reads 3.3 MB/min against a measured 3.28 MiB/min
+    (0.6 %), which needed the decimal: rounding to "3" is 12 % low and the gate is 10 %.
+  · oracle green (1/1 PASS, sync 53.3/53.3 ms) · typecheck clean · 817 tests (12 new).
+THE ONE THING THAT IS NOT PURELY ADDITIVE, and it is ROBERT'S CALL if he disagrees: the auto-stop was
+already shipped (2026-08-30, and its own docblock argues for it — a take stopped with room to spare
+is a finished recording). This task does not add it; it makes it REACHABLE on the default path, where
+it could not fire. If the preference is "warn but never stop", that is one constant away and the
+warning half stands on its own.
 
 ## B6 display-permission-message — we blame the device for an OS permission
 [light · arming errors + the wedge ladder; BEHAVIOUR CHANGE -> Robert's yes before it ships]

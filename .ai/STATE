@@ -2,6 +2,21 @@
 
 phase: MVP validation (2026-07-16)
 
+- THE DISK GUARD NOW SEES THE BYTES IT GUARDS, AND ANSWERS BEFORE THE PRESS (B5, 2026-09-01, on
+  `task/B5` — gated, unmerged while another session held main). The during-take half had shipped
+  BLIND: `rt.bytes` accumulates in `ondataavailable`, which is the MediaRecorder path, and the
+  default path has not been that for months — measured audio and X6's raw video report their size
+  only at stop, so `takeBytes` was ~0 and `diskVerdict` refuses to judge a take with no rate.
+  Measured on the running app: 6.2 MB free, a take ran 6.6 min and wrote 29.2 MB in silence. It
+  now reads the origin's own `estimate().usage` growth since the take's first sample (maxed with
+  the channel sum), which sees every byte including the composite. CONSEQUENCE, and it is the one
+  user-visible change: the auto-stop shipped in August can finally fire on the default path.
+  BEFORE the press, on the idle capture screen only (instant start is frozen — nothing runs from
+  the press), it says how many MINUTES of recording the machine can hold, and stays silent above
+  20. The rate is this machine's own — the median of its recent takes at the same quality step,
+  the configured bitrates only where there is no history. Predicted 3.485 MB/min, next real take
+  measured 3.443 (1.2 %). Capture bitrates now live in one home, `core/capture/captureBitrate.ts`.
+
 - ONE STUCK SCREEN REQUEST USED TO POISON EVERY PRESS AFTER IT (2026-08-30, Robert: four stalls in a
   row, two Chrome relaunches in between — "first time waiting for screen, second waiting for screen and
   microphone, third too, fourth too", "make this shit gone completly"). A wedged getDisplayMedia never
