@@ -11,6 +11,8 @@ import { describe, expect, it } from 'vitest'
 import {
   DEAD_ENCODER_MS,
   DELIVERY_FLOOR_RATIO,
+  PREDICT_SUSTAINED_MS,
+  PRESSURE_CLEAR_MS,
   RATE_RUNGS,
   RECOVERY_MS,
   RECOVERY_RATIO,
@@ -34,6 +36,13 @@ const base: LadderInput = {
   arrivedFps: 60,
   requestedFps: 60,
   currentFps: 60,
+  // E1: no pressure reading at all is the pre-E1 world, and every case below
+  // that does not mention pressure is asserting the ladder still behaves
+  // exactly as it did — which is what `?pressure=0` gives a user.
+  pressureLevel: null,
+  pressureSeriousForMs: 0,
+  pressureNominalForMs: 0,
+  pressureWhy: null,
 }
 
 /** …and the same take collapsing: 10 of 60 arriving, sustained. */
@@ -166,5 +175,145 @@ describe('RULE 3: one step at a time, in both directions', () => {
     const again = { ...failing, currentFps: 30, arrivedFps: 30, deliveredFps: 2 }
     // …but there is nowhere below 30 to go, which is the floor doing its job.
     expect(ladderVerdict(again)).toBeNull()
+  })
+})
+
+// ── E1: predict, do not autopsy ────────────────────────────────────────────
+describe('the pressure path (E1)', () => {
+  /** Healthy delivery, so nothing here can be the old floor firing. */
+  const well: LadderInput = { ...base, deliveredFps: 58, arrivedFps: 60 }
+
+  it('steps down on sustained SERIOUS pressure, before any frame is lost', () => {
+    const v = ladderVerdict({
+      ...well,
+      pressureLevel: 'serious',
+      pressureSeriousForMs: PREDICT_SUSTAINED_MS,
+      pressureWhy: 'encoder-queue: 4.50 of 6 frames queued',
+    })
+    expect(v?.direction).toBe('down')
+    expect(v?.from).toBe('predicted')
+    expect(v?.rung.fps).toBe(30)
+    expect(v?.reason).toContain('BEFORE frames are lost')
+    expect(v?.reason).toContain('encoder-queue')
+  })
+
+  it('waits out a short serious blip — four samples, not one', () => {
+    expect(
+      ladderVerdict({ ...well, pressureLevel: 'serious', pressureSeriousForMs: 250 }),
+    ).toBeNull()
+  })
+
+  it('CRITICAL does not wait: 163 ms is all the lead there was', () => {
+    const v = ladderVerdict({ ...well, pressureLevel: 'critical', pressureSeriousForMs: 0 })
+    expect(v?.direction).toBe('down')
+    expect(v?.from).toBe('predicted')
+  })
+
+  it('never steps above the rate the take was started at', () => {
+    // The hard bound the task asks for: a 30 fps take has no 60 to climb to,
+    // whatever pressure says, because 60 was never recorded.
+    const at30: LadderInput = {
+      ...well,
+      requestedFps: 30,
+      currentFps: 30,
+      deliveredFps: 30,
+      arrivedFps: 30,
+      pressureLevel: 'nominal',
+      pressureNominalForMs: 60_000,
+      aboveRecoveryForMs: 60_000,
+    }
+    expect(ladderVerdict(at30)).toBeNull()
+    expect(rungsFor(30).map((r) => r.fps)).toEqual([30])
+  })
+
+  it('at the floor under pressure it holds — it does not climb back into the load', () => {
+    // The hunting the off-lane control did and the detector lane did not:
+    // down at 17.0 s, UP at 24.0 s while still loaded, down again at 27.0 s.
+    const floored: LadderInput = {
+      ...well,
+      currentFps: 30,
+      arrivedFps: 30,
+      deliveredFps: 30,
+      aboveRecoveryForMs: RECOVERY_MS + 1,
+      pressureLevel: 'critical',
+      pressureSeriousForMs: 5_000,
+    }
+    expect(ladderVerdict(floored)).toBeNull()
+  })
+
+  it('climbs sooner when pressure is clear AND delivery is healthy', () => {
+    const v = ladderVerdict({
+      ...base,
+      currentFps: 30,
+      arrivedFps: 30,
+      deliveredFps: 30,
+      aboveRecoveryForMs: PRESSURE_CLEAR_MS,
+      pressureLevel: 'nominal',
+      pressureNominalForMs: PRESSURE_CLEAR_MS,
+    })
+    expect(v?.direction).toBe('up')
+    expect(v?.from).toBe('predicted')
+    expect(v?.rung.fps).toBe(60)
+  })
+
+  it('never climbs on pressure alone — delivery still has to be healthy', () => {
+    expect(
+      ladderVerdict({
+        ...base,
+        currentFps: 30,
+        arrivedFps: 30,
+        deliveredFps: 10,
+        aboveRecoveryForMs: 0,
+        pressureLevel: 'nominal',
+        pressureNominalForMs: 60_000,
+      }),
+    ).toBeNull()
+  })
+
+  it('rule 7: the delivery floor may not step a take whose encoder is idle', () => {
+    // Measured 2026-09-01: "encoded 34.0 of 60.0 arriving fps (57 % kept)" on a
+    // take with a 0.00/6 queue, 15.9 ms of latency and ZERO dropped frames. The
+    // source had slowed; the rate asked of it was never the problem.
+    expect(
+      ladderVerdict({ ...failing, pressureLevel: 'nominal', pressureNominalForMs: 10_000 }),
+    ).toBeNull()
+  })
+
+  it('…but with no reading at all it is exactly the ladder that shipped', () => {
+    const v = ladderVerdict({ ...failing, pressureLevel: null })
+    expect(v?.direction).toBe('down')
+    expect(v?.from).toBe('measured')
+  })
+
+  it('…and a corroborating reading lets the floor through', () => {
+    const v = ladderVerdict({
+      ...failing,
+      pressureLevel: 'fair',
+      pressureSeriousForMs: 0,
+    })
+    expect(v?.direction).toBe('down')
+    expect(v?.from).toBe('measured')
+  })
+})
+
+describe('the up-path needs the detector too (E1)', () => {
+  const recovered: LadderInput = {
+    ...base,
+    currentFps: 30,
+    arrivedFps: 30,
+    deliveredFps: 30,
+    aboveRecoveryForMs: RECOVERY_MS + 1,
+  }
+
+  it('will not climb back into a load that is merely not-serious yet', () => {
+    expect(ladderVerdict({ ...recovered, pressureLevel: 'fair' })).toBeNull()
+  })
+
+  it('climbs when the reading is nominal', () => {
+    expect(ladderVerdict({ ...recovered, pressureLevel: 'nominal' })?.direction).toBe('up')
+  })
+
+  it('and with no reading at all it is the shipped ladder', () => {
+    expect(ladderVerdict({ ...recovered, pressureLevel: null })?.direction).toBe('up')
   })
 })

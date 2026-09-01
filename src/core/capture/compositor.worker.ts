@@ -40,6 +40,7 @@ import {
   StreamTarget,
   type StreamTargetChunk,
 } from 'mediabunny'
+import type { PressureSignals } from '../pressure'
 import { createGLCompositor, type GLCompositor } from './compositorGL'
 import { WallClockHold, compressPlanar } from './wallClockHold'
 
@@ -52,6 +53,21 @@ const MAX_ENCODER_QUEUE = 6
 /** A static composition still needs a frame occasionally or the timeline
  * stalls and players show nothing between events. */
 const KEEPALIVE_MS = 1000
+/**
+ * E1's pressure cadence. The stats event is 1 Hz and that is a whole second of
+ * lost frames before anything can react — Robert's bar is "up and down very
+ * fast and responsive", so the leading signals get their own tick. 250 ms is
+ * four readings inside the shortest sustain window the ladder uses, which is
+ * what stops one bad quarter-second from moving a take.
+ *
+ * It costs a timestamp and a subtraction per tick, on a thread measured to run
+ * a 16 ms ticker at 59 Hz with 2-4 ms of lateness while the page is hidden.
+ */
+const PRESSURE_TICK_MS = 250
+/** How long the ticker holds off after start — see the comment where it is
+ *  scheduled. Comfortably inside the ladder's own 4 s warmup, so nothing that
+ *  could have acted on a reading is delayed by this. */
+const PRESSURE_START_DELAY_MS = 1_000
 /**
  * F13: how long the first real frame has to define the composite's shape, and
  * how long the keep-alive holds off for it. A source that never delivers (a
@@ -218,6 +234,25 @@ export interface CompositorStats {
   /** Largest number of frames the encoder was behind at any point. */
   peakQueue: number
   /**
+   * E1's leading signals, accumulated here and differenced per interval by the
+   * pressure tick below. peakQueue is a since-start extreme — the same shape of
+   * statistic G1 threw out for reading worse the longer a take ran — so the
+   * detector reads a MEAN over a window instead, which needs a sum and a count.
+   */
+  queueSum: number
+  queueSamples: number
+  /**
+   * THE WORKER'S OWN SCHEDULING LATENESS. The main thread cannot answer this
+   * during a take: measured on prod 2026-09-01, a hidden tab clamps a 16 ms
+   * timer to ~1 Hz, so perf/mainThreadWatch.ts reads 984 ms late while idle.
+   * The same ticker inside a worker of the same hidden page ran at 59 Hz with
+   * 2-4 ms of lateness — and this is the thread the compositor and the video
+   * encoder actually run on, so its starvation is the take's starvation.
+   */
+  lateTicks: number
+  lateSumMs: number
+  lateMaxMs: number
+  /**
    * Where the bits actually went (task O11a). Owning the encoder makes this
    * free: every packet is already in hand, so the keyframe share and the
    * achieved-vs-requested bitrate are counted rather than guessed.
@@ -313,6 +348,13 @@ export type CompositorReply =
   /** Pushed once a second so the watchdog on the main thread can see the
    * encoder falling behind while there is still time to degrade. */
   | { event: 'stats'; stats: CompositorStats }
+  /**
+   * E1 — the leading signals for the interval just ended, four times a second.
+   * The worker is the only place they exist (the encoder's queue and this
+   * thread's own lateness), and the main thread is the only place the actuator
+   * is (the track's constraints), so they have to cross.
+   */
+  | { event: 'pressure'; signals: PressureSignals }
 
 /**
  * Baseline and Main FIRST, High last — the opposite of a quality ranking, and
@@ -473,6 +515,9 @@ let lastEncodedTsUs = -1
 let lastKeySec = -Infinity
 let keepAliveTimer: ReturnType<typeof setInterval> | null = null
 let statsTimer: ReturnType<typeof setInterval> | null = null
+/** E1's pressure tick — see PRESSURE_TICK_MS. */
+let pressureTimer: ReturnType<typeof setInterval> | null = null
+let pressureStartTimer: ReturnType<typeof setTimeout> | null = null
 let stopped = false
 
 /** Newest frame per source; the composite always paints the latest of each. */
@@ -536,6 +581,11 @@ const stats: CompositorStats = {
   outWidth: 0,
   outHeight: 0,
   peakQueue: 0,
+  queueSum: 0,
+  queueSamples: 0,
+  lateTicks: 0,
+  lateSumMs: 0,
+  lateMaxMs: 0,
   videoBytes: 0,
   audioBytes: 0,
   keyframeBytes: 0,
@@ -855,6 +905,12 @@ function encodeComposite(atMs: number, keepAlive: boolean): void {
     return
   }
   if (enc.encodeQueueSize > stats.peakQueue) stats.peakQueue = enc.encodeQueueSize
+  // E1: sampled at SUBMIT, which is the only moment the depth means
+  // "distance to the drop above" — the drop is `>= MAX_ENCODER_QUEUE` on this
+  // very line's condition, so this number is literally how close this frame
+  // came to being the one that was lost.
+  stats.queueSum += enc.encodeQueueSize
+  stats.queueSamples++
   const relMs = Math.max(0, atMs - startedAtMs)
   const timestampUs = Math.max(lastEncodedTsUs + 1, Math.round(relMs * 1000))
   lastEncodedTsUs = timestampUs
@@ -1031,6 +1087,44 @@ async function start(msg: CompositorStartMsg): Promise<void> {
     if (!stopped) post({ event: 'stats', stats: { ...stats } })
   }, 1000)
 
+  // ---- E1: the pressure tick ----------------------------------------------
+  // ONE timer does two jobs, and it has to be one: the lateness is measured by
+  // how late this very timer is, so a coarse 250 ms timer could not resolve a
+  // stall shorter than a quarter second, and a second fast timer would be a
+  // second thing to keep alive. It ticks at a 60 fps frame budget and posts
+  // every sixteenth tick.
+  //
+  // AND IT DOES NOT START WITH THE TAKE. Nothing may ACT on a pressure reading
+  // before the ladder's own warmup (rule 2, 4 s after first output) — every
+  // "2-10 fps" panic in this project's history was an encoder's init being
+  // measured — so a ticker running through the encoder's configuration buys
+  // nothing and lands 60 wakeups a second on this thread at the one moment in a
+  // take that is most sensitive to them. NOT PROVEN TO HAVE COST ANYTHING: what
+  // is measured is that the v2 oracle went red twice in nine runs with this
+  // ticker starting at t=0, both times with the composite's first frame at
+  // 733 and 1167 ms against 200-333 ms on every green run, and 7/7 green on the
+  // same machine without it. The delay costs nothing that could be wanted, and
+  // it removes the only window in which the instrument could be the subject.
+  pressureStartTimer = setTimeout(() => {
+  pressureLastTickMs = performance.now()
+  pressureWindowStartMs = pressureLastTickMs
+  pressurePrev = snapshotForPressure()
+  pressureTimer = setInterval(() => {
+    if (stopped) return
+    const now = performance.now()
+    const late = Math.max(0, now - pressureLastTickMs - LATE_TICK_MS)
+    pressureLastTickMs = now
+    stats.lateTicks++
+    stats.lateSumMs += late
+    if (late > stats.lateMaxMs) stats.lateMaxMs = late
+    if (late > lateMaxWindowMs) lateMaxWindowMs = late
+    lateSumWindowMs += late
+    lateTicksWindow++
+    if (lateTicksWindow < TICKS_PER_PRESSURE_POST) return
+    post({ event: 'pressure', signals: readSignals(now) })
+  }, LATE_TICK_MS)
+  }, PRESSURE_START_DELAY_MS)
+
   // Keep-alive: a composition nobody is changing still needs a frame per
   // second. Cheap by construction — it repaints the same latest frames.
   keepAliveTimer = setInterval(() => {
@@ -1073,8 +1167,12 @@ async function stop(): Promise<CompositorStats> {
   stopped = true
   if (keepAliveTimer) clearInterval(keepAliveTimer)
   if (statsTimer) clearInterval(statsTimer)
+  if (pressureStartTimer) clearTimeout(pressureStartTimer)
+  if (pressureTimer) clearInterval(pressureTimer)
   keepAliveTimer = null
   statsTimer = null
+  pressureTimer = null
+  pressureStartTimer = null
   // DRAIN, in order: this is the tail the product promises. flush() returns
   // only once every queued frame has been encoded and handed to the muxer.
   try {
@@ -1114,8 +1212,12 @@ async function cancel(): Promise<void> {
   stopped = true
   if (keepAliveTimer) clearInterval(keepAliveTimer)
   if (statsTimer) clearInterval(statsTimer)
+  if (pressureStartTimer) clearTimeout(pressureStartTimer)
+  if (pressureTimer) clearInterval(pressureTimer)
   keepAliveTimer = null
   statsTimer = null
+  pressureTimer = null
+  pressureStartTimer = null
   releaseLatest()
   try {
     videoEncoder?.close()
@@ -1135,6 +1237,86 @@ async function cancel(): Promise<void> {
 let lastHandlerEndedAt = 0
 /** When each submitted frame entered the encoder, FIFO — paired with outputs. */
 const submittedAt: number[] = []
+
+// ---- E1 pressure state ----------------------------------------------------
+/** The ticker's own period. One 60 fps frame budget: fine enough to resolve a
+ *  stall of a single frame, coarse enough to cost nothing. */
+const LATE_TICK_MS = 16
+/** 16 ticks ≈ PRESSURE_TICK_MS of wall clock per posted sample. */
+const TICKS_PER_PRESSURE_POST = Math.max(1, Math.round(PRESSURE_TICK_MS / LATE_TICK_MS))
+let pressureLastTickMs = 0
+let pressureWindowStartMs = 0
+let lateMaxWindowMs = 0
+let lateSumWindowMs = 0
+let lateTicksWindow = 0
+
+interface PressureSnapshot {
+  framesIn: number
+  framesEncoded: number
+  framesDropped: number
+  framesStale: number
+  queueSum: number
+  queueSamples: number
+  encodeLatencyMs: number
+  outputs: number
+  workMs: number
+}
+
+function snapshotForPressure(): PressureSnapshot {
+  return {
+    framesIn: stats.framesIn,
+    framesEncoded: stats.framesEncoded,
+    framesDropped: stats.framesDropped,
+    framesStale: stats.framesStale,
+    queueSum: stats.queueSum,
+    queueSamples: stats.queueSamples,
+    encodeLatencyMs: stats.encodeLatencyMs,
+    outputs: stats.outputs,
+    workMs: stats.paintMs + stats.frameMs + stats.encodeMs,
+  }
+}
+
+let pressurePrev: PressureSnapshot = snapshotForPressure()
+
+/**
+ * The interval just ended, as ratios rather than totals. A counter that has run
+ * since the start of the take answers a question about the whole take; the
+ * ladder is asking about NOW, and a take that recovers has to stop being judged
+ * on how it began.
+ *
+ * Every quotient is null when its denominator is zero — a window in which
+ * nothing was submitted has not measured the queue, and saying 0 there would be
+ * saying the encoder was empty when in truth nobody looked (R1's rule).
+ */
+function readSignals(now: number): PressureSignals {
+  const p = pressurePrev
+  const s = snapshotForPressure()
+  const intervalMs = Math.max(1, now - pressureWindowStartMs)
+  const arrivals = s.framesIn - p.framesIn
+  const outputs = s.outputs - p.outputs
+  const queueSamples = s.queueSamples - p.queueSamples
+  const encoded = s.framesEncoded - p.framesEncoded
+  const signals: PressureSignals = {
+    intervalMs,
+    frameBudgetMs: 1000 / Math.max(1, FPS),
+    queueMean: queueSamples > 0 ? (s.queueSum - p.queueSum) / queueSamples : null,
+    queueCliff: MAX_ENCODER_QUEUE,
+    encodeLatencyMs: outputs > 0 ? (s.encodeLatencyMs - p.encodeLatencyMs) / outputs : null,
+    workerLateMaxMs: lateMaxWindowMs,
+    workerLateMeanMs: lateTicksWindow > 0 ? lateSumWindowMs / lateTicksWindow : null,
+    perFrameCostMs: encoded > 0 ? (s.workMs - p.workMs) / encoded : null,
+    stale: arrivals > 0 ? s.framesStale - p.framesStale : null,
+    arrivals: arrivals > 0 ? arrivals : null,
+    dropped: s.framesDropped - p.framesDropped,
+    platform: null,
+  }
+  pressurePrev = s
+  pressureWindowStartMs = now
+  lateMaxWindowMs = 0
+  lateSumWindowMs = 0
+  lateTicksWindow = 0
+  return signals
+}
 
 self.onmessage = async (ev: MessageEvent<CompositorMsg>) => {
   const msg = ev.data

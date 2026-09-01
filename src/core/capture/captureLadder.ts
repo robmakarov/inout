@@ -44,11 +44,26 @@
  *     emits frames ON CHANGE: a document nobody is scrolling delivers 0 fps and
  *     that is health, not collapse. Backpressure is frames the compositor could
  *     not keep up with, so the ruler is what ARRIVED.
+ *  7. AN AUTOPSY NEEDS A SECOND OPINION (task E1). See rule 7 at the delivery
+ *     floor below: delivery falling while the encoder is provably idle means
+ *     the SOURCE slowed, and stepping the rate down cannot fix that.
+ *
+ *  6. PREDICT, DO NOT AUTOPSY (task E1). deliveredFps is a verdict on frames
+ *     ALREADY LOST — by the time this file could read a collapse, the file has
+ *     the hole in it. So the leading signals (core/pressure.ts: the encoder's
+ *     own queue depth, its latency, and the compositing thread's scheduling
+ *     lateness) get to move the ladder FIRST, and the delivery floor stays as
+ *     the backstop for everything the detector does not see. The autopsy path
+ *     below is unchanged, deliberately: `?pressure=0` turns the prediction off
+ *     and the ladder is exactly the ladder that shipped.
+ *
  *  5. RECOVERY IS SLOWER AND STRICTER THAN COLLAPSE. Going back up on the first
  *     good second would oscillate, and an oscillating frame rate is more
  *     visible to a watcher than a low steady one. Up needs a higher bar held
  *     for longer.
  */
+
+import { atLeast, type PressureLevel } from '../pressure'
 
 /** A rung is a RATE now, and nothing else. */
 export interface LadderRung {
@@ -98,6 +113,43 @@ export const SETTLE_MS = 3_000
 export const SUSTAINED_MS = 2_000
 /** Rule 5: how long delivery must stay healthy before stepping back up. */
 export const RECOVERY_MS = 6_000
+/**
+ * Rule 6 — how long the leading signals must agree before a PREDICTIVE step.
+ *
+ * Four pressure samples (the worker posts one every 250 ms). One bad quarter
+ * second is a keyframe or a window being dragged; four in a row is a machine.
+ * Deliberately far below SUSTAINED_MS: the autopsy path has to wait 2 s for
+ * proof of loss, and the whole point of this one is that it does not.
+ */
+export const PREDICT_SUSTAINED_MS = 750
+/**
+ * …AND `critical` DOES NOT WAIT AT ALL.
+ *
+ * `serious` means heading for trouble, so it is confirmed over four samples.
+ * `critical` means strain >= 1.0 — at or past the point where the encoder
+ * starts refusing frames — and waiting 750 ms to confirm THAT is waiting for
+ * the thing to happen. Measured on this machine 2026-09-01: three separate
+ * idle cells, ~350 samples, and the worst strain a HEALTHY 60 fps take ever
+ * produced was 0.303, while the loaded phase of the same rig sat at a median of
+ * 2.85. A single critical sample is 3.3x anything a well take has been seen to
+ * do, and the collapse it reports is 163 ms from its first lost frame — there
+ * is no room in that for a confirmation window.
+ *
+ * The cost if it is ever wrong is bounded and self-correcting: half the frame
+ * rate for one settle plus one recovery, after which the ladder climbs back.
+ */
+export const PREDICT_CRITICAL_MS = 0
+/**
+ * Rule 6's up-path — how long pressure must read nominal before climbing.
+ *
+ * Robert: "i want it to go back to max smoothly as suffering eases
+ * immediately". RECOVERY_MS is 6 s because delivery alone is weak evidence: a
+ * healthy ratio at a low rate says the encoder is coping with LESS, not that
+ * the machine is free. Pressure says the second thing directly, so with it the
+ * climb needs less waiting — but it still needs BOTH, because a detector that
+ * says nominal while frames are being lost is a detector with a hole in it.
+ */
+export const PRESSURE_CLEAR_MS = 2_500
 
 /**
  * The rates this take can move between, richest first.
@@ -134,12 +186,31 @@ export interface LadderInput {
   requestedFps: number
   /** The rate currently being asked of the source. */
   currentFps: number
+  /**
+   * Rule 6 — the leading reading for the interval just ended, or null when the
+   * detector is off or has nothing to report. Null makes this file behave
+   * exactly as it did before E1.
+   */
+  pressureLevel: PressureLevel | null
+  /** How long pressure has been continuously at or above `serious`, ms. */
+  pressureSeriousForMs: number
+  /** How long pressure has been continuously `nominal`, ms. */
+  pressureNominalForMs: number
+  /** The leading signal's own words, for the reason line. */
+  pressureWhy: string | null
 }
 
 export interface LadderVerdict {
   rung: LadderRung
   direction: 'down' | 'up'
   reason: string
+  /**
+   * Which half of rule 6 produced this. 'predicted' = the leading signals moved
+   * it before any frame was lost; 'measured' = the delivery floor, i.e. the
+   * autopsy backstop. Carried so a handoff can say which one actually fires on
+   * a real machine instead of assuming the new path did.
+   */
+  from: 'predicted' | 'measured'
 }
 
 /**
@@ -170,13 +241,58 @@ export function ladderVerdict(input: LadderInput): LadderVerdict | null {
   if (!(demandFps > 0)) return null
   const ratio = input.deliveredFps / demandFps
 
-  // ---- DOWN -----------------------------------------------------------------
-  if (ratio < DELIVERY_FLOOR_RATIO && input.underFloorForMs >= SUSTAINED_MS) {
+  // ---- DOWN (rule 6 first, then rule 4's autopsy) ---------------------------
+  // The prediction goes FIRST because that is the whole of E1: if the leading
+  // signals are already certain, waiting for the delivery floor is waiting for
+  // the loss this step exists to prevent.
+  const predictAfterMs =
+    input.pressureLevel === 'critical' ? PREDICT_CRITICAL_MS : PREDICT_SUSTAINED_MS
+  if (
+    input.pressureLevel !== null &&
+    atLeast(input.pressureLevel, 'serious') &&
+    input.pressureSeriousForMs >= predictAfterMs
+  ) {
     const next = rungs[index + 1]
     if (next) {
       return {
         rung: next,
         direction: 'down',
+        from: 'predicted',
+        reason:
+          `pressure ${input.pressureLevel} for ${Math.round(input.pressureSeriousForMs)} ms ` +
+          `(${input.pressureWhy ?? 'no leader'}) — stepping BEFORE frames are lost → ${next.label}`,
+      }
+    }
+    // At the floor already: there is no rung left to give, and saying so is
+    // more useful than silently returning null forever.
+    return null
+  }
+
+  if (ratio < DELIVERY_FLOOR_RATIO && input.underFloorForMs >= SUSTAINED_MS) {
+    // RULE 7, AND IT IS A CORRECTION TO RULE 4 RATHER THAN A NEW IDEA (E1).
+    //
+    // "A source that sent NOTHING did not fail" only ever covered zero. A source
+    // that HALVED did fail this file, and it is not the encoder's fault: demand
+    // sums every source's arrivals, so a 60 fps screen beside a 30 fps camera
+    // makes `demand` 60 while the composite can only ever encode as fast as the
+    // screen delivers. Measured 2026-09-01 on a take under pure CPU load — the
+    // ladder stepped 60 → 30 reading "encoded 34.0 of 60.0 arriving fps (57 %
+    // kept)" while the SAME take's encoder queue was 0.00 of 6, its encode
+    // latency 15.9 ms of a 100 ms pipeline, and it dropped ZERO frames. The
+    // step was useless (the source was the limit, not the rate asked of it) and
+    // it cost the take half its frame rate for nothing.
+    //
+    // So the autopsy now needs a second opinion, and only when there IS one:
+    // null (detector off, or nothing readable) leaves this branch exactly as it
+    // shipped. A reading of `nominal` is the encoder saying it is not the
+    // problem, and a rate step cannot fix a problem the encoder does not have.
+    if (input.pressureLevel !== null && !atLeast(input.pressureLevel, 'fair')) return null
+    const next = rungs[index + 1]
+    if (next) {
+      return {
+        rung: next,
+        direction: 'down',
+        from: 'measured',
         reason: silent
           ? `the encoder has produced NOTHING in ${Math.round(input.nowMs - input.startedAtMs)} ms ` +
             `while ${demandFps.toFixed(1)} fps arrived → ${next.label}`
@@ -191,17 +307,40 @@ export function ladderVerdict(input: LadderInput): LadderVerdict | null {
   // Never from silence: an encoder that has produced nothing has proved
   // nothing, and climbing on that would be climbing on no evidence at all.
   if (silent) return null
-  if (ratio >= RECOVERY_RATIO && input.aboveRecoveryForMs >= RECOVERY_MS) {
-    const back = rungs[index - 1]
-    if (back) {
-      return {
-        rung: back,
-        direction: 'up',
-        reason:
-          `encoded ${input.deliveredFps.toFixed(1)} of ${demandFps.toFixed(1)} arriving fps ` +
-          `(${Math.round(ratio * 100)} % kept) for ${Math.round(input.aboveRecoveryForMs)} ms → ${back.label}`,
-      }
-    }
+  if (ratio < RECOVERY_RATIO) return null
+  const back = rungs[index - 1]
+  if (!back) return null
+
+  // SYMMETRY WITH RULE 7, and it is the fix for the last of the hunting. The
+  // delivery ruler reads HEALTHY at a reduced rate almost by definition — the
+  // encoder is coping with half the frames — so on its own it climbs back into
+  // a load that never went away. Measured: a control take went down at 17.0 s,
+  // UP at 24.0 s while still loaded, and down again at 27.0 s; a second, at
+  // 22.2 s, climbed on 6.2 s of healthy delivery while pressure was still
+  // reading fair, and fell back 3.1 s later. So when there IS a reading it has
+  // to be `nominal`, not merely "not serious": `fair` at the lower rate would
+  // be worse than fair at the higher one, which is the rung being asked for.
+  if (input.pressureLevel !== null && input.pressureLevel !== 'nominal') return null
+
+  // Rule 6's up-path: pressure clear AND delivery healthy climbs sooner than
+  // delivery alone. Never pressure alone — a detector that says nominal while
+  // frames are being lost would climb straight back into the loss.
+  const clear =
+    input.pressureLevel === 'nominal' &&
+    input.pressureNominalForMs >= PRESSURE_CLEAR_MS &&
+    input.aboveRecoveryForMs >= PRESSURE_CLEAR_MS
+  if (!clear && input.aboveRecoveryForMs < RECOVERY_MS) return null
+
+  return {
+    rung: back,
+    direction: 'up',
+    from: clear ? 'predicted' : 'measured',
+    reason:
+      `encoded ${input.deliveredFps.toFixed(1)} of ${demandFps.toFixed(1)} arriving fps ` +
+      `(${Math.round(ratio * 100)} % kept) for ${Math.round(input.aboveRecoveryForMs)} ms` +
+      (clear
+        ? ` and pressure nominal for ${Math.round(input.pressureNominalForMs)} ms`
+        : '') +
+      ` → ${back.label}`,
   }
-  return null
 }
