@@ -409,6 +409,12 @@ class Session implements CaptureSession {
    */
   private budgetDroppedComposite = false
   private collapseRecorded = false
+  /** S1 — the first thing this take gave up, kept so the report card can name
+   *  it. `collapseRecorded` is a latch and says only THAT something did. */
+  private collapseWhy: string | null = null
+  /** S1 — the last storage sample the disk guard took while this take ran.
+   *  Kept rather than discarded; nothing extra is asked of the machine. */
+  private lastStorage: { usageBytes: number; quotaBytes: number } | null = null
   /** O16 — when the screen's delivered size first stopped matching the size its
    *  current segment's encoder was opened at. Null while they agree. */
   private sizeDifferingSinceMs: number | null = null
@@ -1312,6 +1318,7 @@ class Session implements CaptureSession {
   private noteEncoderCollapse(reason: string): void {
     if (this.collapseRecorded) return
     this.collapseRecorded = true
+    this.collapseWhy = reason
     if (this.encoderPlan) recordEncoderCollapse(this.encoderPlan.pixelRate, reason)
   }
 
@@ -2025,6 +2032,9 @@ class Session implements CaptureSession {
       .estimate()
       .then((est) => {
         if (this.stateInternal !== 'recording') return
+        // S1: the answer is already here — keep it for the report card instead
+        // of throwing it away after the verdict below.
+        this.lastStorage = { usageBytes: est.usage ?? 0, quotaBytes: est.quota ?? 0 }
         const takeBytes = this.channels.reduce((n, c) => n + c.bytes, 0)
         const v = diskVerdict({
           usageBytes: est.usage ?? 0,
@@ -2667,6 +2677,36 @@ class Session implements CaptureSession {
         composite.startOffsetMs = Math.max(0, composite.startOffsetMs)
       }
       recording.composite = composite
+    }
+
+    /**
+     * S1 — THE TAKE'S OWN STOP STATS, READ ONCE, HERE.
+     *
+     * Everything below is already in hand: the heap is one property read, the
+     * storage numbers are the disk guard's last sample, the rate and the
+     * degrade reason are this session's own state. Nothing is sampled while the
+     * recorder runs and nothing here can change a capture decision — the report
+     * card (core/report) reads them, and a take without them reports those
+     * dimensions as unmeasured rather than passing them.
+     */
+    try {
+      const mem = (performance as unknown as { memory?: { usedJSHeapSize?: number; jsHeapSizeLimit?: number } })
+        .memory
+      const stats: NonNullable<Recording['stopStats']> = {
+        requestedFps: this.requestedRate,
+        ...(mem?.usedJSHeapSize !== undefined ? { heapBytes: mem.usedJSHeapSize } : null),
+        ...(mem?.jsHeapSizeLimit !== undefined ? { heapLimitBytes: mem.jsHeapSizeLimit } : null),
+        ...(this.lastStorage
+          ? {
+              storageUsageBytes: this.lastStorage.usageBytes,
+              storageQuotaBytes: this.lastStorage.quotaBytes,
+            }
+          : null),
+        ...(this.collapseWhy ? { degradedWhy: this.collapseWhy } : null),
+      }
+      recording.stopStats = stats
+    } catch {
+      /* a take is never worth losing to a statistic about it */
     }
 
     await recordingsRepo.save(recording)

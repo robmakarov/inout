@@ -1022,10 +1022,16 @@ export async function startMeasuredAudioCapture(opts: {
         trimmedMs,
         silentTailMs,
         diagnostics: {
-          ...(paddedMs > 0 ? { paddedMs: Math.round(paddedMs) } : {}),
-          ...(trimmedMs > 0 ? { trimmedMs: Math.round(trimmedMs) } : {}),
-          ...(silentTailMs > 0 ? { silentTailMs: Math.round(silentTailMs) } : {}),
-          ...(revivals > 0 ? { revivals } : {}),
+          // S1: WRITTEN EVEN WHEN THEY ARE ZERO. A channel that carries no
+          // counter is indistinguishable from one nobody counted — the same
+          // container comes out of the MediaRecorder audio lane, which measures
+          // none of this — and a report card that reads an absent field as
+          // "nothing was lost" is scoring a measurement it did not take. Zero
+          // is the finding on a healthy take; say it.
+          paddedMs: Math.round(paddedMs),
+          trimmedMs: Math.round(trimmedMs),
+          silentTailMs: Math.round(silentTailMs),
+          revivals,
           ...(diagEvents.length > 0 ? { events: diagEvents } : {}),
           // B7: the two numbers this channel's offset was BUILT from. Always
           // written, including the zeros — "the platform reported no latency"
