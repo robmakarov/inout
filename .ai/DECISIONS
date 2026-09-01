@@ -455,14 +455,18 @@ is KB/s against video's MB/s and its loss is the one Robert hears, so a starved 
 frames before one audio buffer. M1 is the task; blocked on A1 + E1 AND ROBERT-GATED ("but not
 until i say", same message thread): even with both prerequisites perfect, the combine does not
 start until Robert says so.
-2026-09-01 robert (3) — PRERENDER MUST BE PERFECT AND NEVER HARM RECORD OR EDIT ("prerender must be
-perfect and not to fuck up record and edit"). The priority order is absolute: CAPTURE > EDITING >
-PRERENDER, and it binds every background job, not only F16b — since R2 made exports persistent dock
-jobs, a render can be running when a NEW take starts, which is exactly the contention A1 exists to
-kill. Consequences written into F16b's spec: no background render runs while any capture session is
-armed or live (jobs pause on record start, resume at stop); the editor keeps T2's lateness bands as
-a merge gate whenever a job works; a prerender can only ever SAVE time — every miss, failure,
-cancel or supersession falls through to the on-demand render (the shipped semantics, now a
-permanent contract). T2's measured evidence stands for editing (p95 1.1 -> 1.0 ms beside a working
-render); the capture-side half was never measured because prerender used to live only in the
-editor — now it is gated, not assumed.
+2026-09-01 robert (3) — PRERENDER MUST BE PERFECT AND NEVER HARM RECORD OR EDIT, AND IT RUNS IN
+PARALLEL ("prerender must be perfect and not to fuck up record and edit" → corrected in the same
+thread: "render can be parallel to record, it just must not fuck up, thats what i mean perfect,
+make it elastic too or whatver"). So NOT a blanket pause: the background render runs BESIDE a live
+take at strictly lower priority, ELASTICALLY — it paces itself in chunks, reads the same pressure
+instrument E1 builds (one detector, many consumers), and is the FIRST load shed on the whole
+machine: it throttles to fully paused before the composite, before anything of the take's, and
+ramps back when pressure clears. CAPTURE > EDITING > BACKGROUND RENDER stays absolute as a
+priority order; the mechanism is elasticity, not prohibition. Binds every background job (R2 made
+renders persistent dock jobs, so one can be running when a new take starts). Standing contracts:
+the take must be PROVABLY untouched (a take recorded beside a working job carries stats identical
+to a no-job control — delivered fps, audio silentTail, revive events); the editor keeps T2's
+lateness bands, measured on drags; a prerender may only ever SAVE time — every miss, failure,
+cancel or supersession falls through to the on-demand render. One more reason E1 precedes F16b:
+the job's elasticity rides E1's detector.

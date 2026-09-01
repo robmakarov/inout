@@ -550,7 +550,9 @@ const runners: Runner[] = [
           args?.originalTap === 'mstp' || args?.originalTap === 'webaudio'
             ? args.originalTap
             : undefined,
-        lanes: Array.isArray(args?.lanes) ? (args.lanes as ('webaudio' | 'mstp')[]) : undefined,
+        lanes: Array.isArray(args?.lanes)
+          ? (args.lanes as ('webaudio' | 'webaudio-playback' | 'mstp')[])
+          : undefined,
         screen: (args?.screen as { w: number; h: number; fps: number }) ?? undefined,
         camera: (args?.camera as { w: number; h: number; fps: number }) ?? undefined,
       })
