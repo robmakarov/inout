@@ -91,21 +91,6 @@ technical defects by severity. Done items get deleted, not archived.
   loaded regime, and it steps the rate. Whether the ladder is fast enough for a game that starts
   MID-TAKE is unmeasured — `npm run exp -- syncload` is the cell that would say.
 
-- [P0] 2026-08-29 (G4 session): **the packet-copy paths break the sync band on a LONG take, and the
-  default path is one of them.** First run of a 120 s oracle cell in this project's life (`npm run
-  oracle:long`, new). Instant path maxAbs 94.2 / 94.2 / 95.3 / 100.5 ms over five runs against a
-  90 ms band — FOUR OF FIVE FAIL — with smart cut at 93.0-100.8 on the same runs. The SAME build at
-  6 s reads 69.5 / 72.0 / 70.2 / 81.2 and passes every time. The MEANS barely move (49.5-67.3 at 6 s,
-  49.9-71.7 at 120 s); it is the WORST CASE that grows with length. 94.2 repeats IDENTICALLY across
-  two runs, so there is a specific instant in the take where the copy paths are ~94 ms out — a
-  deterministic sample, not jitter. Robert records 938-1800 s, i.e. 8-15x this cell.
-  SAME FAMILY AS B7 (a constant start offset that a synthetic rig cannot see) and the natural next
-  step is to read it against B7's new per-channel certification. The render path grows too (maxAbs
-  45.5 -> 81.5) but stays inside.
-  NOT A REGRESSION FROM ANY RECENT FLIP — this cell has never been runnable: cdp-run.mjs truncated
-  every report over 64 KiB (fixed in the same commit), so a 120 s run always died as `invalid JSON at
-  position 65536` and read as a flaky experiment.
-
 - [P1] 2026-08-29 (G3 session): **the v1 oracle's export-throughput gate is a coin flip** — `node
   scripts/oracle.mjs --engine=v1` fails on `export throughput X < 1x realtime` with the threshold
   sitting inside the run-to-run noise. Interleaved A/B, same machine, alternating trees:
@@ -114,12 +99,6 @@ technical defects by severity. Done items get deleted, not archived.
   doing. Same family as G1. NOTE FOR ANY SESSION READING A RED v1 ORACLE: run the parent commit
   beside it before believing it, which is how this one was caught (a first pass read 0.73-1.01 on the
   working tree against 1.16-1.29 on the parent and looked exactly like a real 20-40 % regression).
-
-- [P1] 2026-08-29 (G2 session): **the fidelity oracle's render lane flips run to run** — `npm run
-  oracle:fidelity` read `render(single-source) toneErr=5.33dB` against a 1 dB band on one run, then
-  0.04 dB and 0.01 dB on the next two of the SAME tree; pristine main read 0.02 dB. Same family as G1
-  (the v2 oracle's coin flip) and it deserves the same treatment: measure whether it is the instrument
-  or the mix, NOT by widening the band. Three of this repo's merge gates are now known to flip.
 
 - [P2] 2026-08-29: **the export quality step is sticky forever** → F14, RULED the same day and
   ABSORBED BY `.ai/TASKS` F16: quality becomes ONE option (Min/Medium/High-default/Max-later,
@@ -132,15 +111,43 @@ technical defects by severity. Done items get deleted, not archived.
   rides (`session.compositeFrame()` asks the take what it is, once, before any encoder exists), so
   F15 is unblocked; the ruling and shape live in the task and DECISIONS.
 
-- [P2 → ROADMAP G1] 2026-08-29: **`npm run oracle:fidelity`'s instant lane is flaky on this machine**, the
-  same way the v2 oracle is. Measured interleaved against a baseline commit with none of the day's
-  capture work in it: the BASELINE failed 1 of 3 at level residual 18.83 dB while the tree under
-  test passed 3 of 3, and every PASS on both trees reads residual 0.03 dB. So the failure is
-  bimodal — either 0.03 or a wild number — which smells like a decode window landing on the wrong
-  span rather than a level being wrong. Do not read a red fidelity instant lane as a regression
-  without running a baseline beside it. Worth a proper look: this gate is the one that is supposed
-  to catch audio-level regressions on the packet-copy path.
+- [P1] 2026-09-01 (G1+LC1 session; ABSORBS the 08-29 "render lane flips run to run" entry and
+  RETRACTS the "instant lane is bimodal" one): **the fidelity oracle's RENDER lane flips on machine
+  load, and the instant lane does not flip at all.** Prior readings on the same lane, now explained:
+  toneErr 5.33 dB once, then 0.04 and 0.01 on the same tree (G2 session). Five consecutive runs
+  here: instant residual 0.03 / 0.03 / 0.04 / 0.03 / 0.03 (sd 0.004 dB);
+  render 8.69 FAIL / 0.02 / 0.04 / 0.03 / 0.02. The old entry blamed the instant lane and a "decode
+  window landing on the wrong span"; BOTH are refuted — the failing run's window (0.403 s) is EARLIER
+  than a passing run's (0.409 s), and its four tones are wrong by four different amounts (440/L
+  -8.69, 880/L -0.77, 550/R -1.78, 1100/R -6.69), which a misplaced window cannot produce because it
+  attenuates every tone by the same fraction. In the red run THD reads -56.8 dB against -65.9, IMD
+  -54.5 against -61.9, separation 47.4 against 55.6: a disturbed recording, not a wrong measurement
+  of a good one, and it was the FIRST run after an hour of 120 s cells.
+  ACTION, already written down one entry below: this runner never got the retry/quiet-machine guard
+  `oracle.mjs` got in 86ed200. Give it that, and re-read the render band after.
+  Evidence: /tmp/fid-1..5.json, and the fidelity block in the G1+LC1 handoff in `.ai/TASKS`.
 
+- [P1] 2026-09-01 (found by the 120 s cell, G1+LC1 session): **smart cut errors out on a long take and
+  the trim silently falls back to a full render.** One of five cold `--recordMs=120000` runs:
+  `trimmed export took 'render', expected 'smartcut'` with the reason `Timestamps must be
+  non-negative (got -0.0003333333333337407s)`. That is exactly -1/3000 s — a rounding artefact, not a
+  real negative time. `outAt(compSec) = outCursorSec + (compSec - spanStartSec)` (src/core/compose/
+  smartCut.ts:456) goes a hair negative when a sample sits just before its span start, and mediabunny
+  rejects it. The same trim at 6 s takes the smart-cut path every time; the 120 s trim offset is
+  30483 ms against 1483 ms, so this needs a long take to reach.
+  WHY IT MATTERS: the user meets it as "the trim re-rendered instead of being instant" on exactly the
+  long takes where a render costs the most — the complaint F16b exists for. The oracle's anti-vacuity
+  rule is what caught it (the sync gate said it had measured the wrong file), which is the second time
+  that rule has found a real defect rather than a bookkeeping one.
+  LIKELY ONE LINE: clamp at the EPS_SEC the same file already uses everywhere else.
+
+- [P2] 2026-09-01 (G1+LC1 session): **the 120 s cell dies on CDP about a third of the time, and it is
+  the most expensive run in the repo.** Eight attempts at `--recordMs=120000`: three died — "experiment
+  threw in page", "Inspected target navigated or closed" x2 — and all three were CONSECUTIVE, straight
+  after a 10-run 6 s matrix, after which five ran clean. So it is a state the rig gets into, not a
+  per-run dice roll; killing stray Chrome first is what preceded the clean five. At ~4 minutes a run
+  that is 12 minutes lost, on the cell `.ai/TASKS` makes MANDATORY before any flip touching the
+  instant or smart-cut paths — i.e. the tax is paid by every such task.
 - [ROBERT OWED] 2026-08-29: **F13 is built, verified on prod and OFF** — `?sourceframe=1` and the
   output follows the take's shape instead of a landscape constant. Its last gate is Robert's eye:
   open https://inout-kappa.vercel.app/?sourceframe=1 on a PHONE, record, look at the export. Until
@@ -522,43 +529,6 @@ technical defects by severity. Done items get deleted, not archived.
   WHY IT IS P2 AND NOT P1: the trigger is a dead camera, which the user can usually see for
   themselves in the preview. It becomes P1 if the preview looks fine while the file is empty.
   Evidence: docs/qa/camera-1080-2026-08-29.json, and the console lines quoted in the P9 handoff.
-
-- [P1 → ROADMAP G1] 2026-08-29, FOUND WHILE ATTRIBUTING A RED GATE THAT TURNED OUT NOT TO BE MINE:
-  **the v2 oracle fails about half its cold runs on main, and it has nothing to do with the change
-  under test.** The failure is always the same — `instant export sync maxAbs 97.1 > 90ms` or
-  `trimmed export sync maxAbs 105.5 > 90ms` — i.e. the COPY paths' worst A/V sample, not the mean,
-  and never the render. Measured by stashing a whole task's work and running HEAD cold four times:
-  **2 of 4 FAILED**, while the same tree with the work in it failed 1 of 2 and 1 of 3. Same failure,
-  same distribution.
-  WHY IT MATTERS MORE THAN THE NUMBER: `npm run oracle` is the per-task merge gate every task in
-  `.ai/TASKS` is required to pass, so a coin-flip gate teaches sessions to re-run until green — which
-  is how a real regression eventually gets merged. O4b already wrote down that the instrument's noise
-  floor is ~8-9 ms 1σ against a 90 ms band, and a maxAbs over four samples is the statistic most
-  exposed to that: a candidate explanation, not yet a measurement.
-  THE FIX IS NOT TO WIDEN THE BAND. Someone has to measure whether 97-105 ms is the instrument or the
-  copy paths: N cold runs recording the per-sample distribution, mean against max, and the same take
-  through the render beside it. Until then, do not report a red v2 oracle as a regression without
-  running HEAD cold next to it — and say which you did.
-  SECOND FLAKY BAND, DIFFERENT ORACLE, SAME LESSON — added 2026-08-29, and then MEASURED the way the
-  paragraph above asks for rather than argued. **The v1 oracle's `export throughput ≥ 1× realtime`
-  band sits ON its own boundary on this machine, and its verdict is decided by ambient load.**
-  Readings from one evening, same tree lineage: 1.30x and 1.08x quiet · 0.92x at load average 6.2 ·
-  0.67x at load average 8.8 · and clean main, cold, in a throwaway worktree UNDER THE SAME LOAD,
-  0.77x (failing identically) and 1.02x (passing by two hundredths).
-  THE ATTRIBUTION RUN, which is the part that settles it: three cold runs of a change branch
-  INTERLEAVED with three of clean main, alternating, same machine, same half-hour —
-      branch  PASS · FAIL · PASS
-      main    PASS · FAIL · PASS
-  Identical distribution, failing on the same round. So the band is not measuring the change; it is
-  measuring the machine, and it does it right at the threshold where a coin has two sides. Note 4b
-  already says the take a user records beside a game is a different regime from the one a gate
-  records on a quiet machine — this is that sentence applied to the GATE ITSELF.
-  FOR WHOEVER TAKES G1: this band and the v2 `maxAbs` band above are the same disease in two
-  organs, and neither is fixed by widening. The v1 one has an obvious shape — throughput is a RATE
-  and the band is absolute, so either it wants normalising against a measured machine baseline taken
-  in the same run, or it wants to stop being a gate on a shared machine. Until then a v1 verdict is
-  only meaningful beside its own interleaved baseline, and a session that reports one without that
-  is reporting the load average.
 
 - [P1] 2026-08-26, FOUND BY ROBERT'S EYES on the X15 artifacts ("c shit is worse colors") and then
   measured: **coloured text loses about 30 % of its colour, all of it at capture, and the composite
