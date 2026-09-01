@@ -107,6 +107,18 @@ export interface FlashSync {
   offsetsMs: number[]
   /** Export-timeline second of the FLASH in each kept pair, same index order. */
   pairSec: number[]
+  /**
+   * DISPERSION, WHICH DOES NOT GROW WITH THE TAKE. `maxAbsOffsetMs` is an
+   * extreme over `matchedPairs`, so a 6 s take draws 5 samples of the
+   * per-event placement error and a 120 s take draws 119 — the same file reads
+   * worse for being longer. Standard deviation and the 90th percentile of
+   * |offset − mean| are estimates of the same population from any number of
+   * samples, so a band on them means the same thing at every length.
+   */
+  sdMs: number
+  p90DevMs: number
+  /** Pairs the median filter threw away — a mis-synced event, counted not hidden. */
+  droppedPairs: number
 }
 
 export interface AnalyzeOptions {
@@ -139,6 +151,13 @@ export interface ExportAnalysis {
   /** Flash onsets dated at the midpoint of the sampling interval (unbiased). */
   flashOnsetsMidSec: number[]
   flashSync: FlashSync | null
+  /**
+   * Median spacing of the DECODED frames of this file, ms (task G1). A flash
+   * can only be dated to the frame that shows it, so this interval IS the
+   * instrument's per-event resolution — and it belongs beside the offsets it
+   * bounds rather than assumed to be 1/30 s by whoever reads them.
+   */
+  outFrameIntervalMs: number | null
   /** flashSync with the video-quantisation and audio-window biases removed. */
   flashSyncUnbiased: FlashSync | null
   flashSyncUnbiasedCorrectedMeanMs: number | null
@@ -271,6 +290,7 @@ export async function analyzeExport(blob: Blob, opts?: AnalyzeOptions): Promise<
       flashOnsetsSec,
       flashOnsetsMidSec,
       flashSync,
+      outFrameIntervalMs: medianOutFrameIntervalMs(frames),
       flashSyncUnbiased,
       flashSyncUnbiasedCorrectedMeanMs:
         skewOk && flashSyncUnbiased ? flashSyncUnbiased.meanOffsetMs - (skewMean as number) : null,
@@ -325,6 +345,18 @@ export async function analyzeExport(blob: Blob, opts?: AnalyzeOptions): Promise<
  * sequential pairing across candidate first-flash alignments, keep the
  * lowest-variance alignment, then drop outliers >120ms from that mean.
  */
+/** Median gap between consecutive decoded frame timestamps, ms. */
+function medianOutFrameIntervalMs(frames: FrameReading[]): number | null {
+  const deltas: number[] = []
+  for (let i = 1; i < frames.length; i++) {
+    const d = (frames[i]!.outSec - frames[i - 1]!.outSec) * 1000
+    if (d > 0) deltas.push(d)
+  }
+  if (deltas.length === 0) return null
+  deltas.sort((a, b) => a - b)
+  return Math.round(deltas[Math.floor(deltas.length / 2)]! * 100) / 100
+}
+
 export function flashSyncStats(
   audioOnsetsSec: number[],
   flashOnsetsSec: number[],
@@ -431,6 +463,13 @@ export function flashSyncStats(
   const use = kept.length >= 1 ? kept : bestOffsets
   const meanOffsetMs = use.reduce((s, x) => s + x.d, 0) / use.length
   const maxAbsOffsetMs = Math.max(...use.map((x) => Math.abs(x.d)))
+  const devs = use.map((x) => Math.abs(x.d - meanOffsetMs)).sort((a, b) => a - b)
+  const sdMs =
+    use.length > 1
+      ? Math.sqrt(
+          use.reduce((acc, x) => acc + (x.d - meanOffsetMs) ** 2, 0) / (use.length - 1),
+        )
+      : 0
 
   return {
     flashes: flashOnsetsSec.length,
@@ -439,5 +478,8 @@ export function flashSyncStats(
     maxAbsOffsetMs,
     offsetsMs: use.map((x) => Math.round(x.d * 100) / 100),
     pairSec: use.map((x) => Math.round(x.sec * 1000) / 1000),
+    sdMs: Math.round(sdMs * 100) / 100,
+    p90DevMs: Math.round((devs[Math.min(devs.length - 1, Math.ceil(devs.length * 0.9) - 1)] ?? 0) * 100) / 100,
+    droppedPairs: bestOffsets.length - use.length,
   }
 }

@@ -29,14 +29,16 @@
  * and makes the whole cell vacuous — `toneReached` says if it did).
  */
 
-import { startMeasuredAudioCapture } from '@core/capture/measuredAudio'
+import { prewarmMeasuredAudio, startMeasuredAudioCapture } from '@core/capture/measuredAudio'
 
 const SILENCE_FLOOR = 1e-5
 
 export type LoadFamily = 'none' | 'cpu' | 'paint' | 'encode' | 'audiopeer' | 'all'
 
+export type TapKind = 'webaudio' | 'webaudio-playback' | 'mstp'
+
 export interface TapLane {
-  kind: 'webaudio' | 'mstp'
+  kind: TapKind
   /** Which track this lane tapped — the acquired one, or a clone of it. */
   source: 'original' | 'clone'
   frames: number
@@ -305,7 +307,7 @@ function pct(sorted: number[], p: number): number {
 }
 
 function finishLane(
-  kind: 'webaudio' | 'mstp',
+  kind: TapKind,
   source: 'original' | 'clone',
   c: LaneCollector,
   takeSec: number,
@@ -343,17 +345,17 @@ function finishLane(
 export async function runTapStarvation(opts?: {
   secs?: number
   load?: LoadFamily
-  /** Which tap gets the ACQUIRED track; the other gets a clone of it. */
-  originalTap?: 'webaudio' | 'mstp'
+  /** Which tap gets the ACQUIRED track; the others get clones of it. */
+  originalTap?: TapKind
   /** Run only one lane — the A/B is the point, but a control needs one lane. */
-  lanes?: ('webaudio' | 'mstp')[]
+  lanes?: TapKind[]
   screen?: { w: number; h: number; fps: number }
   camera?: { w: number; h: number; fps: number }
 }): Promise<TapStarvationReport> {
   const takeSec = Math.max(10, Math.round(opts?.secs ?? 180))
   const load = opts?.load ?? 'all'
   const originalTap = opts?.originalTap ?? 'webaudio'
-  const wantLanes = opts?.lanes ?? ['webaudio', 'mstp']
+  const wantLanes: TapKind[] = opts?.lanes ?? ['webaudio', 'mstp']
   const screen = opts?.screen ?? { w: 3024, h: 1964, fps: 30 }
   const camera = opts?.camera ?? { w: 1920, h: 1080, fps: 60 }
 
@@ -380,7 +382,8 @@ export async function runTapStarvation(opts?: {
   let encodeLoad: EncodeLoad | null = null
   let peer: { stream: MediaStream; stop: () => void } | null = null
   let peerHandle: Awaited<ReturnType<typeof startMeasuredAudioCapture>> | null = null
-  let handle: Awaited<ReturnType<typeof startMeasuredAudioCapture>> | null = null
+  const waHandles = new Map<TapKind, Awaited<ReturnType<typeof startMeasuredAudioCapture>>>()
+  const waCollectors = new Map<TapKind, LaneCollector>()
   let mstpTrack: MediaStreamTrack | null = null
   let mstpReader: ReadableStreamDefaultReader<AudioData> | null = null
   let latenessTimer: ReturnType<typeof setInterval> | null = null
@@ -417,38 +420,51 @@ export async function runTapStarvation(opts?: {
       )
     }
 
-    // ── the two taps, on ONE source ──
-    const webaudioTrack = originalTap === 'webaudio' ? track : track.clone()
-    const mstpSourceTrack = originalTap === 'mstp' ? track : track.clone()
-
-    const waCollector = newCollector(takeSec)
+    // ── the taps, all on ONE source ──
+    const trackFor = (kind: TapKind): MediaStreamTrack =>
+      kind === originalTap ? track : track.clone()
+    const mstpSourceTrack = trackFor('mstp')
     const mstpCollector = newCollector(takeSec)
 
-    if (wantLanes.includes('webaudio')) {
-      handle = await startMeasuredAudioCapture({
-        stream: new MediaStream([webaudioTrack]),
-        epoch,
-        label: 'tap-webaudio',
-        writer: {
-          write: async () => undefined,
-          close: async () => undefined,
-          abort: async () => undefined,
-        },
-        onPcm: (L, R, _startFrame, _startOffsetMs, sampleRate) => {
-          let maxAbs = 0
-          for (let i = 0; i < L.length; i++) {
-            const a = Math.abs(L[i]!)
-            if (a > maxAbs) maxAbs = a
-          }
-          if (R !== L) {
-            for (let i = 0; i < R.length; i++) {
-              const a = Math.abs(R[i]!)
+    for (const kind of wantLanes) {
+      if (kind !== 'webaudio' && kind !== 'webaudio-playback') continue
+      const collector = newCollector(takeSec)
+      waCollectors.set(kind, collector)
+      // THE ONE LEVER THAT NEEDS NO PRODUCTION CHANGE TO PRICE: the context's
+      // output buffer. 'interactive' is what production builds today (smallest
+      // buffer, tightest render deadline); 'playback' asks the platform for the
+      // largest, which is the whole difference between the two lanes.
+      const laneTrack = trackFor(kind)
+      waHandles.set(
+        kind,
+        await startMeasuredAudioCapture({
+          stream: new MediaStream([laneTrack]),
+          epoch,
+          label: `tap-${kind}`,
+          ...(kind === 'webaudio-playback'
+            ? { audioCtx: await prewarmMeasuredAudio(laneTrack, { latencyHint: 'playback' }) }
+            : {}),
+          writer: {
+            write: async () => undefined,
+            close: async () => undefined,
+            abort: async () => undefined,
+          },
+          onPcm: (L, R, _startFrame, _startOffsetMs, sampleRate) => {
+            let maxAbs = 0
+            for (let i = 0; i < L.length; i++) {
+              const a = Math.abs(L[i]!)
               if (a > maxAbs) maxAbs = a
             }
-          }
-          note(waCollector, performance.now() - epoch, maxAbs, L.length, sampleRate)
-        },
-      })
+            if (R !== L) {
+              for (let i = 0; i < R.length; i++) {
+                const a = Math.abs(R[i]!)
+                if (a > maxAbs) maxAbs = a
+              }
+            }
+            note(collector, performance.now() - epoch, maxAbs, L.length, sampleRate)
+          },
+        }),
+      )
     }
 
     if (wantLanes.includes('mstp')) {
@@ -542,10 +558,11 @@ export async function runTapStarvation(opts?: {
     if (encodeLoad) report.loadEncoded = await encodeLoad.stop()
     encodeLoad = null
 
-    if (wantLanes.includes('webaudio') && handle) {
-      const lane = finishLane('webaudio', originalTap === 'webaudio' ? 'original' : 'clone', waCollector, takeSec)
-      const res = await handle.stop().catch(() => null)
-      handle = null
+    for (const [kind, h] of waHandles) {
+      const collector = waCollectors.get(kind)
+      if (!collector) continue
+      const lane = finishLane(kind, kind === originalTap ? 'original' : 'clone', collector, takeSec)
+      const res = await h.stop().catch(() => null)
       if (res) {
         lane.paddedMs = Math.round(res.paddedMs)
         lane.trimmedMs = Math.round(res.trimmedMs)
@@ -555,6 +572,7 @@ export async function runTapStarvation(opts?: {
       }
       report.lanes.push(lane)
     }
+    waHandles.clear()
     if (wantLanes.includes('mstp') && mstpReader) {
       report.lanes.push(
         finishLane('mstp', originalTap === 'mstp' ? 'original' : 'clone', mstpCollector, takeSec),
@@ -593,7 +611,7 @@ export async function runTapStarvation(opts?: {
     if (encodeLoad) await encodeLoad.stop().catch(() => undefined)
     stopCpu?.()
     stopPaint?.()
-    await handle?.cancel().catch(() => undefined)
+    for (const h of waHandles.values()) await h.cancel().catch(() => undefined)
     await peerHandle?.cancel().catch(() => undefined)
     peer?.stop()
     await mstpReader?.cancel().catch(() => undefined)
