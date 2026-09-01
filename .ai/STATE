@@ -334,20 +334,30 @@ phase: MVP validation (2026-07-16)
   the segments either side keep their real positions and the zone keeps its real width. That half is
   R-RIPPLE in BACKLOG, and it is a piecewise timeline axis plus per-segment lane bars, not a style
   change.
-- THE FRAME CONTROL FLOATS ON THE STAGE, AND THE CAMERA HAS NO CROSS (2026-08-31, Robert: "why the
-  fuck cross on camera video on edit, remove it" + "move stuff ... from panel to float by right side
-  of video frame vertically"). `.pip__reset` faded in over the camera PiP's top-right and reset the
-  camera track; on a picture you are judging, a close button on the camera reads as delete-this-camera.
-  Gone — resetting the pose is now dragging it back, the same gesture that moved it. FrameBar left the
-  tools row and renders inside `.stage`, outside `.stage__view` (a zoom scales the picture, never the
-  chrome), as a vertical overlay strip pinned top-right. It stops pointerdown, or every press on a
-  swatch also started a zoom-pan drag of the picture underneath. TWO MEASUREMENTS SHAPED IT, both off
-  prod: centred and complete it was 279 px of a 317 px stage, standing on the camera. The four inset
-  steps and Shadow are `disabled` until a backdrop is picked, so they are now ABSENT until then — a
-  fresh take floats five swatches (91 px) and grows to 246 px only when those controls first mean
-  something — and it is anchored top-right rather than centred, the one corner of that edge nothing
-  else claims (the zoom pill is top-left), so on a real window (1440x900 → 497 px stage) the expanded
-  strip clears the camera entirely.
+- THE ZOOM AND FRAME CONTROLS ARE RAILS BESIDE THE PICTURE, AND THE CAMERA HAS NO CROSS (2026-08-31,
+  Robert, three reports: "why the fuck cross on camera video on edit, remove it", "move stuff ... from
+  panel to float by right side of video frame vertically", then "move zoom and frame setting outside
+  of screen, next to it" + "cant see now other stuff of frame, only colors, fix it").
+  `.pip__reset` faded in over the camera PiP's top-right and reset the camera track; on a picture you
+  are judging, a close button on the camera reads as delete-this-camera. Gone — resetting the pose is
+  dragging it back, the same gesture that moved it.
+  THE RAILS ARE OFF THE PICTURE, and the middle step is why: FrameBar moved from the tools row onto
+  the stage's right EDGE, where it grew onto the camera (whose home is the bottom-right), and the fix
+  I chose was to hide the four inset steps and Shadow while they were `disabled` — which is the "only
+  colors" report. Buying room on the picture by deleting controls from the screen is not a trade that
+  was ever available. Both controls now render as siblings of `.stage` inside `.player__stage`, a
+  wrapper that hugs the stage — `.player` is `height: 100%` and centres its column, so a rail anchored
+  to IT floats above the frame. `overflow: hidden` no longer clips them and the zoom rail no longer
+  needs telling not to scale with a zoom. The whole frame control is visible again, greyed until there
+  is a frame to inset, exactly as the tools row always showed it.
+  THE SPACE IS RESERVED, NOT BORROWED: `--rail: 88px` spent as `.editor__player` padding on both
+  sides, and subtracted from `--pane-w` — without that second half the timeline would be 176 px wider
+  than the picture it describes on any width-bound window. Floating them into whatever gutter was left
+  looks right on a wide window and clips on a narrow one. Verified on prod at 1280x720 (stage 677 wide,
+  rail at +10 px, camera clear), at 1000x980 where the WIDTH bound wins (stage and tools both 792, zero
+  mismatch, no horizontal scroll) and at 1000x760 where the HEIGHT bound wins. The 39 px stage/tools
+  mismatch in the height-bound case is older than this and untouched by it: `--pane-w` estimates the
+  stage's height bound as `100dvh - --below` while the stage itself uses the container's real `100cqh`.
 - NO PAUSE BUTTON; THE CONTROL IS "CONTINUE FROM THE PLAYHEAD", IN THE EDITOR (UI1 second pass).
   Robert: "no need for fucking pause button, record pressed - on editing appearing again left to play
   button, if pressed continues where dragger in timeline stands (if it cant work now put it in
