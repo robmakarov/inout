@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { MIN_SAMPLE_MS, STOP_SECONDS_LEFT, diskVerdict } from './diskGuard'
+import {
+  MIN_SAMPLE_MS,
+  PREFLIGHT_QUIET_MINUTES,
+  STOP_SECONDS_LEFT,
+  diskVerdict,
+  mbPerMinute,
+  preflightVerdict,
+} from './diskGuard'
 
 const GB = 1073741824
 
@@ -47,5 +54,61 @@ describe('room left, in the form a person can act on', () => {
   it('the stop threshold is below the warn one, or the warning never fires', () => {
     const v = diskVerdict({ ...base, usageBytes: 100 * GB - 100 * 1048576 * (STOP_SECONDS_LEFT / 60) })
     expect(v?.level).toBe('stop')
+  })
+})
+
+/**
+ * B5's other half. The in-take guard cannot speak for the first 8 s of a take
+ * and answers in "two minutes left"; the question before the press is "is there
+ * room for what I am about to record", and its unit is minutes OF RECORDING.
+ */
+describe('the pre-flight, before a take exists', () => {
+  // 2 MB/s ≈ 120 MB a minute, about what a screen + composite + audio take
+  // writes at the configured bitrates.
+  const rate = 2 * 1048576
+
+  it('says nothing at all on a healthy machine', () => {
+    const v = preflightVerdict({ usageBytes: 0, quotaBytes: 100 * GB, bytesPerSec: rate })
+    expect(v?.level).toBe('ok')
+    expect(v?.message).toBe('')
+  })
+
+  it('speaks in minutes of recording, not in gigabytes', () => {
+    const free = rate * 60 * 7
+    const v = preflightVerdict({ usageBytes: 100 * GB - free, quotaBytes: 100 * GB, bytesPerSec: rate })
+    expect(v?.level).toBe('low')
+    expect(v?.message).toContain('about 7 more minutes')
+    expect(v?.message).toContain('120 MB a minute')
+  })
+
+  it('stays quiet at the boundary and speaks one second below it', () => {
+    const quiet = rate * 60 * PREFLIGHT_QUIET_MINUTES
+    const q = 100 * GB
+    expect(preflightVerdict({ usageBytes: q - quiet, quotaBytes: q, bytesPerSec: rate })?.level).toBe('ok')
+    expect(
+      preflightVerdict({ usageBytes: q - quiet + rate, quotaBytes: q, bytesPerSec: rate })?.level,
+    ).toBe('low')
+  })
+
+  it('does not promise "0 minutes" — under a minute is said in words', () => {
+    const v = preflightVerdict({ usageBytes: 100 * GB - rate * 20, quotaBytes: 100 * GB, bytesPerSec: rate })
+    expect(v?.message).toContain('Under a minute')
+  })
+
+  it('a machine that reports no quota, or a take with no rate, gets no opinion', () => {
+    expect(preflightVerdict({ usageBytes: 0, quotaBytes: 0, bytesPerSec: rate })).toBeNull()
+    expect(preflightVerdict({ usageBytes: 0, quotaBytes: 100 * GB, bytesPerSec: 0 })).toBeNull()
+  })
+})
+
+describe('the rate a message quotes', () => {
+  it('keeps a decimal where a whole number would be more than 10 % wrong', () => {
+    // A take writing 3.4 a minute reads "3" when rounded — 12 % low, and B5's
+    // gate is 10 %.
+    expect(mbPerMinute((3.4 * 1048576) / 60)).toBe(3.4)
+  })
+
+  it('spends no decimal where it is noise — a max take writes ~140', () => {
+    expect(mbPerMinute((140 * 1048576) / 60)).toBe(140)
   })
 })

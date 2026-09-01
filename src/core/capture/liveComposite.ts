@@ -6,6 +6,7 @@
  * compositor. Geometry mirrors src/core/compose/layout.ts (decision #11).
  * v2 (WebCodecs + smart-cut) replaces this without changing the contract.
  */
+import { COMPOSITE_BITS } from './captureBitrate'
 import { adoptedFrame } from '@core/frame'
 import { blobStore } from '@core/store'
 import type { CameraPose, CompositeRecording } from '../types'
@@ -48,7 +49,6 @@ const W = 1920
 const H = 1080
 /** F13: how long the picture has to declare itself before the guess stands. */
 const ADOPT_BUDGET_MS = 700
-const VIDEO_BITS = 8_000_000
 /** How often each source's delivered frame rate is logged (evidence only). */
 const FPS_LOG_MS = 10_000
 /** rAF cadence watchdog: give up silently rather than tax a weak machine. */
@@ -397,7 +397,7 @@ export async function startLiveComposite(
   if (!mime) throw new Error('live composite: no supported mp4 mime')
   const recorder = new MediaRecorder(canvasStream, {
     mimeType: mime,
-    videoBitsPerSecond: VIDEO_BITS,
+    videoBitsPerSecond: COMPOSITE_BITS,
     audioBitsPerSecond: 128_000,
   })
   let chunks = 0
