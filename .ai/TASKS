@@ -401,6 +401,11 @@ step lands BEFORE loss. Build it as the product's ONE pressure instrument, not a
 heuristic — M1 inherits this exact detector as max's emergency floor, and its "loss minimal for
 seconds" bar is only reachable if the detector fires early. AUDIO LOSES NOTHING during any step,
 in either direction.
+TECH CANDIDATES FOR THE DETECTOR (audit 2026-09-01; CAPABILITY-PROBE ON ROBERT'S CHROME FIRST,
+never rank from memory): the Compute Pressure API — the browser's own leading CPU-pressure signal
+(nominal→critical), exactly the early input "predict, not autopsy" needs; and Long Animation
+Frames (LoAF) with script attribution — the modern replacement for the longtask counter G3 proved
+inverted, and it NAMES the contender. `scheduler.postTask`/`yield` are the F16b-side consumers.
 GATES: prod repro — a loaded sub-max take steps down AND back up, both events in the plan line,
 seams inside O16's bands · a max take under the same load never steps · units pin the ceiling ·
 responsiveness quoted (time from pressure to step, both directions) · a step costs zero audio
