@@ -271,6 +271,24 @@ export function CaptureScreen() {
           editState: edit,
           mode: 'editor',
         })
+        /**
+         * S1 — GRADE THE TAKE THAT JUST HAPPENED.
+         *
+         * After the hand-off, never before it, and never awaited: the editor is
+         * already open by the time this resolves, and a verdict must not be
+         * able to cost a take its hand-over. Imported here so the report module
+         * stays out of first paint (O7). It reads what is already persisted —
+         * nothing was sampled while the recorder ran.
+         */
+        void (async () => {
+          const [report, wedge] = await Promise.all([
+            import('@core/report'),
+            import('@core/capture/wedgeJournal'),
+          ])
+          const card = report.buildReportCard(rec, { wedgeJournal: wedge.readWedgeJournal() })
+          report.appendTakeReport(card)
+          console.info(`[capture] take report — ${card.line}`)
+        })().catch(() => undefined)
       }
     } catch (err) {
       console.error('stop failed', err)

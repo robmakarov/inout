@@ -40,6 +40,53 @@ createRoot(document.getElementById('root')!).render(
   support: evaluateSupport(),
 }
 
+/**
+ * S1 — THE TAKE REPORT CARD, OFF THE MACHINE, WITH ROBERT DOING NOTHING.
+ *
+ * `__inoutSupport` above is the precedent: one read-only global so an agent and
+ * a user's console see the same verdict the app itself computed. These are the
+ * same thing for takes. Everything is dynamically imported INSIDE the calls, so
+ * none of it — not the store, not the report module — is in the bytes between
+ * the user and the record button (O7).
+ *
+ *   await __inoutReport()          the newest take's card
+ *   await __inoutReport('rec_x')   that take's card
+ *   await __inoutReport(recording) any take object, without storing it
+ *   await __inoutReportAll()       every take still on this machine, newest first
+ *   __inoutTakeLog()               the verdict line of every take, including
+ *                                  ones since deleted (localStorage ring)
+ *
+ * The playbook is docs/TAKE_REPORT.md.
+ */
+{
+  const g = window as unknown as Record<string, unknown>
+  const evidence = async () => ({
+    wedgeJournal: (await import('@core/capture/wedgeJournal')).readWedgeJournal(),
+  })
+  g.__inoutReport = async (target?: unknown) => {
+    const { buildReportCard } = await import('@core/report')
+    if (target && typeof target === 'object') {
+      return buildReportCard(target as import('@core/types').Recording, await evidence())
+    }
+    const { recordingsRepo } = await import('@core/store')
+    const rows = await recordingsRepo.list()
+    const rec =
+      typeof target === 'string'
+        ? rows.find((r) => r.id === target)
+        : [...rows].sort((a, b) => b.createdAt - a.createdAt)[0]
+    return rec ? buildReportCard(rec, await evidence()) : null
+  }
+  g.__inoutReportAll = async () => {
+    const { buildReportCard } = await import('@core/report')
+    const { recordingsRepo } = await import('@core/store')
+    const ev = await evidence()
+    return (await recordingsRepo.list())
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map((r) => buildReportCard(r, ev))
+  }
+  g.__inoutTakeLog = async () => (await import('@core/report')).readTakeReports()
+}
+
 // Offline start (task P2). PRODUCTION ONLY: a service worker in front of the
 // dev server serves stale modules and makes every capture change a debugging
 // puzzle. Registration is deferred to `load` so it can never compete with the

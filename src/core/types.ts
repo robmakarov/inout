@@ -286,6 +286,37 @@ export interface Recording {
    * `core/types.ts` stays the leaf it is.
    */
   qualityStep?: string
+  /**
+   * S1 — WHAT ONLY THE LIVE SESSION COULD KNOW, SAMPLED AT STOP.
+   *
+   * The take report card grades memory, storage headroom and whether anything
+   * had to be given up to keep the frames coming. None of that survives the
+   * page, and none of it is worth one instruction while the recorder runs — so
+   * it is read ONCE, after the last byte is written, out of numbers the session
+   * already had. Absent on every take made before S1, which is why every
+   * dimension that reads this reports `unmeasured` rather than passing.
+   */
+  stopStats?: TakeStopStats
+}
+
+/** S1. Descriptive only — nothing here changes a capture decision. */
+export interface TakeStopStats {
+  /** `performance.memory.usedJSHeapSize` at stop (Chromium only). A point
+   *  sample at the end of the take, NOT a high-water mark: nothing samples
+   *  during a take and nothing should (the hour-scale slope is task H3). */
+  heapBytes?: number
+  heapLimitBytes?: number
+  /** The last `navigator.storage.estimate()` the disk guard took while this
+   *  take ran (B5 already polls it — this keeps the answer instead of
+   *  discarding it). */
+  storageUsageBytes?: number
+  storageQuotaBytes?: number
+  /** The frame rate this take asked its sources for (core/rate.ts ceiling). */
+  requestedFps?: number
+  /** Set when the take had to give something up to keep up — the rate ladder
+   *  stepped, or the live composite degraded. Absent on a take that carried
+   *  its plan the whole way. */
+  degradedWhy?: string
 }
 
 export interface ChannelEdit {
