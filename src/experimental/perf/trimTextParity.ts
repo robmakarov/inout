@@ -66,6 +66,7 @@
  *     flat slabs AND as thin glyphs. Slabs keep 99-101 %, glyphs 80-82 %: it is
  *     subsampling on thin glyphs, and 4:4:4 will deliver.
  */
+import { ALL_FORMATS, BlobSource, Input } from 'mediabunny'
 import { blobStore } from '@core/store'
 import { createCaptureSession } from '@core/capture/session'
 import {
@@ -105,6 +106,14 @@ import {
 const W = 1920
 const H = 1080
 const FPS = 30
+/**
+ * How far below a pair's BEST sampled instant a winning match may score and
+ * still count as a localisation (task B8). Measured spread of a real
+ * localisation across five takes: 41.3-43.1 dB, i.e. under 2 dB. The two
+ * instants that were not localisations scored 8.5 and 10.7 dB below their own
+ * pair's best.
+ */
+const LOCALISE_DB = 6
 
 export interface ExportLane {
   id: 'instant' | 'smartcut' | 'render'
@@ -133,6 +142,40 @@ export interface PairRow {
   alignFrames: number
   /** The glyph metric, at the winning alignment. */
   edge: TextEdgeMetric | null
+}
+
+/**
+ * WHERE ONE PAIR'S SECOND FILE PLACES THE PICTURE, AT EVERY SAMPLED INSTANT
+ * (task B8).
+ *
+ * `frames` is the whole measurement and the other three fields only summarise
+ * it, because the SHAPE of the list is what names the cause:
+ *   0 / -1 / 0 / -1   grid quantisation — the composite is frame-driven and the
+ *                     render is on a fixed grid, so a read at t can land one
+ *                     output frame apart. Not a defect; it is what comparing
+ *                     two different clocks costs.
+ *   -9 / -9 / -9 /-9  a CONSTANT placement error: the two paths disagree about
+ *                     when the take began (a declared startOffsetMs).
+ *   -6 /-14/-24/-33   a DRIFT: the two paths disagree about how fast it runs.
+ *                     Frames the live composite never encoded is one way in.
+ */
+export interface AlignCensus {
+  pair: string
+  atSec: number[]
+  frames: number[]
+  /** Match quality at each winning offset, dB. A uniformly poor best match is
+   *  itself evidence: no single offset explains the two files. */
+  db: number[]
+  /**
+   * Instants whose winning match scored so far below this pair's best that it
+   * is not a localisation at all. They are REPORTED and excluded from the
+   * summary, never silently averaged in — the number this task was filed on
+   * came from one of them. More than one of these is a failed measurement.
+   */
+  unlocalisedAtSec: number[]
+  /** Over the localised instants only. */
+  meanFrames: number | null
+  spreadFrames: number | null
 }
 
 /** One artifact in the chain, measured against the SOURCE rather than a sibling. */
@@ -184,6 +227,11 @@ export interface X15TrimReport {
   sampledAtSec: number[]
   lanes: ExportLane[]
   rows: PairRow[]
+  /** B8: where each pair's second file places the picture, at EVERY sampled
+   *  instant. The alignment gate reads this, not one sample. */
+  alignment: AlignCensus[]
+  /** B8: the take's own clocks, and what the stop path's clamp discarded. */
+  clocks: TakeClocks
   /**
    * What ONE re-encode of the instant lane's own frame costs it, over the same
    * screen rect. The floor instant↔render must beat to be about painters.
@@ -333,6 +381,122 @@ async function thumb(img: ImageData): Promise<string> {
   return `data:image/png;base64,${btoa(s)}`
 }
 
+/**
+ * THE TAKE'S OWN CLOCKS, AND WHAT THE STOP PATH DID TO THEM (task B8).
+ *
+ * A placement number says the two files disagree; it cannot say why. This does,
+ * from the take's own arithmetic, and it is why B8's answer is neither of the
+ * two candidates that task named.
+ *
+ * Every channel and the composite are placed on the recording timeline by
+ * `startOffsetMs`, and session.ts rebases them at stop so the earliest media is
+ * t=0. The composite's rebase is CLAMPED AT ZERO, on the stated reasoning that
+ * a composite reading earlier than the earliest channel is "measurement noise
+ * between two first-arrival stamps". It is not noise. The composite's origin is
+ * the first thing that reached the compositor worker — usually the mic's first
+ * audio batch — while a raw video channel's origin is its own first FRAME,
+ * which waits for a VideoEncoder to configure. Measured here: 190.7 ms apart on
+ * one 10 s take. Everything the clamp discards is a displacement of the copied
+ * picture against the audio the same export mixes from the raw channels.
+ *
+ * Read out of `[capture] composite v2 clock starts +Nms` and the B7 anchors
+ * line, both of which the session already prints and this rig already taps. A
+ * line that does not parse reads null and FAILS its gate — an unparsed log is
+ * not a take that was fine.
+ */
+export interface TakeClocks {
+  /** Pre-rebase, ms from the session epoch. */
+  compositeOriginMs: number | null
+  /** What the rebase subtracted: the earliest channel's own pre-rebase stamp. */
+  minChannelAnchorMs: number | null
+  /** What the composite's offset SHOULD be after the rebase. Negative = the
+   *  composite's clock began before any channel delivered. */
+  trueCompositeOffsetMs: number | null
+  /** What the take actually carries — Math.max(0, true). */
+  declaredCompositeOffsetMs: number | null
+  /** true − declared. Non-zero = the clamp fired and this much was discarded. */
+  clampedAwayMs: number | null
+  /** The displacement that discard puts on the copied picture, in frames. */
+  predictedAlignFrames: number | null
+  channels: { kind: string; startOffsetMs: number; rawAnchorMs: number | null }[]
+  /**
+   * READ OUT OF THE COMPOSITE FILE ITSELF, so the finding does not rest on a
+   * parsed log line. The worker's timeline begins at whatever reached it first
+   * — the mix, in every take measured here — and its VIDEO cannot begin until a
+   * source frame arrives, so this gap IS the lead the clamp discards. Both in
+   * the file's own ms.
+   */
+  compositeAudioStartsMs: number | null
+  compositeVideoStartsMs: number | null
+}
+
+async function compositeTrackStarts(
+  blob: Blob | null,
+): Promise<{ audioMs: number | null; videoMs: number | null }> {
+  if (!blob) return { audioMs: null, videoMs: null }
+  const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS })
+  try {
+    const v = await input.getPrimaryVideoTrack()
+    const a = await input.getPrimaryAudioTrack()
+    const videoMs = v ? Math.round((await v.getFirstTimestamp()) * 1000 * 10) / 10 : null
+    const audioMs = a ? Math.round((await a.getFirstTimestamp()) * 1000 * 10) / 10 : null
+    return { audioMs, videoMs }
+  } catch {
+    return { audioMs: null, videoMs: null }
+  } finally {
+    input.dispose()
+  }
+}
+
+function readClocks(
+  recording: Recording,
+  log: string[],
+  tracks: { audioMs: number | null; videoMs: number | null },
+): TakeClocks {
+  const originLine = log.find((l) => l.includes('composite v2 clock starts'))
+  const compositeOriginMs = originLine
+    ? (Number(/clock starts \+?(-?[\d.]+)ms/.exec(originLine)?.[1]) ?? NaN)
+    : NaN
+  const anchorLine = log.find((l) => l.includes('B7 anchors'))
+  const raw = new Map<string, number>()
+  if (anchorLine) {
+    for (const m of anchorLine.matchAll(/(\w+) off=(-?[\d.]+)ms raw=(-?[\d.]+)ms/g)) {
+      raw.set(m[1]!, Number(m[3]))
+    }
+  }
+  const channels = recording.channels.map((c) => ({
+    kind: c.kind,
+    startOffsetMs: c.startOffsetMs,
+    rawAnchorMs: raw.get(c.kind) ?? null,
+  }))
+  // The rebase subtracted one number from every channel, so ANY channel with a
+  // pre-rebase stamp recovers it: min = raw − offset. Video only — the mic's
+  // stamp is input-latency-adjusted after the raw one is printed, so it would
+  // recover a value ~10 ms off and quietly bias the whole finding.
+  const fromVideo = channels.filter(
+    (c) => (c.kind === 'screen' || c.kind === 'camera') && c.rawAnchorMs !== null,
+  )
+  const minChannelAnchorMs = fromVideo.length
+    ? Math.min(...fromVideo.map((c) => c.rawAnchorMs! - c.startOffsetMs))
+    : NaN
+  const declared = recording.composite?.startOffsetMs
+  const trueOffset = compositeOriginMs - minChannelAnchorMs
+  const ok = Number.isFinite(compositeOriginMs) && Number.isFinite(minChannelAnchorMs)
+  return {
+    compositeOriginMs: Number.isFinite(compositeOriginMs) ? compositeOriginMs : null,
+    minChannelAnchorMs: Number.isFinite(minChannelAnchorMs)
+      ? Math.round(minChannelAnchorMs * 10) / 10
+      : null,
+    trueCompositeOffsetMs: ok ? Math.round(trueOffset * 10) / 10 : null,
+    declaredCompositeOffsetMs: typeof declared === 'number' ? declared : null,
+    clampedAwayMs: ok && typeof declared === 'number' ? Math.round((declared - trueOffset) * 10) / 10 : null,
+    predictedAlignFrames: ok ? Math.round(Math.min(0, trueOffset) * (FPS / 1000)) : null,
+    channels,
+    compositeAudioStartsMs: tracks.audioMs,
+    compositeVideoStartsMs: tracks.videoMs,
+  }
+}
+
 export async function runTrimTextParity(
   opts: {
     takeSec?: number
@@ -385,6 +549,14 @@ export async function runTrimTextParity(
   const compositeBytes = recording.composite
     ? ((await blobStore.read(recording.composite.blobKey).catch(() => null))?.size ?? 0)
     : 0
+
+  const clocks = readClocks(
+    recording,
+    captureLog,
+    await compositeTrackStarts(
+      recording.composite ? await blobStore.read(recording.composite.blobKey).catch(() => null) : null,
+    ),
+  )
 
   const base = clampEditState(recording, defaultEditState(recording))
   // ONE FRAME off the tail. Leading trims move every later frame; this one does
@@ -456,6 +628,7 @@ export async function runTrimTextParity(
   }
 
   const rows: PairRow[] = []
+  const alignment: AlignCensus[] = []
   const pairFailures: string[] = []
   let encodeFloor: X15TrimReport['encodeFloor'] = null
   const chroma: ChromaStage[] = []
@@ -527,13 +700,59 @@ export async function runTrimTextParity(
         // flattered the pair. The camera PiP MOVES, so it is the one region that
         // can localise a file in time — its winning offset IS the placement
         // measurement, and it is reported rather than absorbed.
-        const camAnchor = firstFrame.get(a) ?? null
-        const found = camAnchor
-          ? await findOffsetSec(camAnchor, B, sampledAtSec[0]!, pipRect, {
-              spanSec: opts.searchSec ?? 1.5,
-            })
-          : null
-        const camOffsetSec = found?.offsetSec ?? 0
+        //
+        // B8: THE PLACEMENT IS LOCALISED AT EVERY SAMPLED INSTANT, NOT ONE.
+        // One sample cannot tell a CONSTANT placement error (the two files
+        // disagree about when the take started) from a DRIFTING one (they
+        // disagree about how fast it runs), and those have different causes and
+        // different fixes — the first is an offset, the second is dropped or
+        // re-paced frames. It also cannot tell either from grid quantisation,
+        // which is ±1 frame of jitter around zero and is not a defect at all.
+        // The single sample is what made this gate flip run to run on the same
+        // build (R1's finding (b), 2026-08-29): its bar was |align| ≤ 1 and the
+        // jitter sits at 0…−2. A census answers all three questions and does
+        // not flip, which is the same move G1/LC1 made on the sync gate — band
+        // location and dispersion, never one extreme sample against a constant.
+        const census: { atSec: number; frames: number; db: number }[] = []
+        for (const t of sampledAtSec) {
+          const anchor = t === sampledAtSec[0] ? (firstFrame.get(a) ?? null) : await A.at(t)
+          if (!anchor) continue
+          const hit = await findOffsetSec(anchor, B, t, pipRect, {
+            spanSec: opts.searchSec ?? 1.5,
+          })
+          if (hit) census.push({ atSec: t, frames: Math.round(hit.offsetSec * FPS), db: hit.db })
+        }
+        // A SEARCH THAT FOUND NO MATCH DID NOT MEASURE A PLACEMENT, and that
+        // distinction is this whole task. B8 was filed as "-15 frames (-0.5 s)"
+        // and the August build re-measured today reads -38 — both from ONE
+        // instant whose winning offset scored 23.6 / 30.9 dB while the same
+        // pair's other instants scored 41.5 and sat at -1 / -1 / 0. On a take
+        // whose live composite is dropping a third of its frames the PiP is
+        // momentarily frozen, nothing in the search window matches, and the
+        // winner is wherever the noise happened to be lowest. Scoring that as a
+        // placement is the error R1 spent a whole session removing from the
+        // chroma stages: a measurement that did not happen must not read as a
+        // number. The bar is RELATIVE to the pair's own best instant, because
+        // the absolute level belongs to the encode and not to the alignment.
+        const best = census.length ? Math.max(...census.map((c) => c.db)) : 0
+        const localised = census.filter((c) => c.db >= best - LOCALISE_DB)
+        alignment.push({
+          pair: `${a} ↔ ${b}`,
+          atSec: census.map((c) => c.atSec),
+          frames: census.map((c) => c.frames),
+          db: census.map((c) => Math.round(c.db * 10) / 10),
+          unlocalisedAtSec: census.filter((c) => c.db < best - LOCALISE_DB).map((c) => c.atSec),
+          // The systematic component: where the second file PLACES the picture.
+          meanFrames: mean(localised.map((c) => c.frames)),
+          // The scatter around it. Quantisation is small and bounded; a drift is
+          // large and monotonic, which the frames list shows by eye.
+          spreadFrames: localised.length
+            ? Math.max(...localised.map((c) => c.frames)) - Math.min(...localised.map((c) => c.frames))
+            : null,
+        })
+        // The row's own psnr keeps the FIRST instant's offset, unchanged, so
+        // every number this rig has ever committed stays comparable.
+        const camOffsetSec = (census.find((c) => c.atSec === sampledAtSec[0])?.frames ?? 0) / FPS
 
         for (const [regionName, region, offsetSec] of [
           ['screen TEXT', rect, 0],
@@ -900,12 +1119,73 @@ export async function runTrimTextParity(
       ? pairFailures.join(' · ')
       : `${rows.length} of 6 rows (3 pairs x 2 regions)${readerFailures.size ? ` · reader trouble: ${[...readerFailures].map(([k, v]) => `${k}: ${v}`).join('; ')}` : ''}`,
   }
+  // B8 — WHAT THIS GATE IS ALLOWED TO FORGIVE, AND WHY IT IS TWO NUMBERS.
+  //
+  // The instant lane's file is the LIVE COMPOSITE: its frames are stamped when
+  // a source frame arrived, so they sit on irregular instants. The render's are
+  // on an exact 1/fps grid. Reading both at the same t therefore lands on
+  // pictures up to one output frame apart, and the composite's own picture may
+  // itself hold a camera frame that arrived up to one camera interval earlier.
+  // That is arithmetic, not a defect, and it is BOUNDED — it cannot accumulate,
+  // and it is not signed one way.
+  //
+  // So the two things worth banding are the two things quantisation cannot do:
+  // a SYSTEMATIC displacement (the mean, i.e. the two paths disagree about when
+  // the take began) and a WIDE SCATTER (the spread, i.e. they disagree about
+  // how fast it runs). The old bar — one sample against |align| ≤ 1 — could see
+  // neither, and flipped on the jitter it was accidentally measuring instead.
+  //
+  // THE BANDS ARE THE MEASURED FLOOR, NOT A ROUND NUMBER. Five 10 s takes on one
+  // machine, 2026-09-01, instant ↔ render, over the LOCALISED instants: the two
+  // takes whose composite offset was NOT clamped read mean -1.00 and -1.25
+  // frames at spread 0 and 1; the three that were read -3, -6 and -6. The floor
+  // is one frame and it is SIGNED, because both of its terms lag — the copied
+  // file's frames sit on arrival instants and the render's on a 1/fps grid, and
+  // the composite paints the latest camera frame it holds, which can be one
+  // camera interval old. 2 frames is that floor with a frame of headroom, and
+  // 3 frames of spread is the same headroom on a scatter measured at 0-2. A
+  // DRIFT does not fit under either: it arrives in tens.
+  //
+  // IT IS DELIBERATELY THE LOOSER OF THE TWO GATES. The tight one is the CAUSE
+  // gate below: a placement error this cannot separate from quantisation is
+  // still named exactly, in ms, by the take's own clock arithmetic.
+  const PLACEMENT_FRAMES = 2
+  const SPREAD_FRAMES = 3
+  const censusComplete =
+    alignment.length === 3 &&
+    alignment.every(
+      (a) => a.frames.length === sampledAtSec.length && a.unlocalisedAtSec.length <= 1,
+    )
   gates['the export paths PLACE the picture in the same spot (alignment, not quality)'] = {
-    pass: rows.length > 0 && rows.every((r) => Math.abs(r.alignFrames) <= 1),
-    detail: rows
-      .filter((r) => r.region === 'screen TEXT')
-      .map((r) => `${r.pair}: ${r.alignFrames} frames`)
-      .join(' · ') || 'no rows',
+    pass:
+      censusComplete &&
+      alignment.every(
+        (a) =>
+          Math.abs(a.meanFrames ?? Infinity) <= PLACEMENT_FRAMES &&
+          (a.spreadFrames ?? Infinity) <= SPREAD_FRAMES,
+      ),
+    detail: alignment.length
+      ? `${alignment
+          .map(
+            (a) =>
+              `${a.pair}: mean ${a.meanFrames} frames, spread ${a.spreadFrames} [${a.frames.join(', ')}] at ${a.atSec.join('/')}s (${a.db.join('/')} dB)${a.unlocalisedAtSec.length ? ` — NOT LOCALISED at ${a.unlocalisedAtSec.join('/')}s, excluded` : ''}`,
+          )
+          .join(' · ')}${censusComplete ? '' : ` — CENSUS INCOMPLETE: ${alignment.length} of 3 pairs, and a pair the search could not localise is not a pair that agreed`}`
+      : 'NOT MEASURED — no pair could be localised at any instant',
+  }
+  // B8 — THE CAUSE, GATED SEPARATELY FROM THE SYMPTOM. The gate above says the
+  // two files disagree; this one says whether the take's own arithmetic already
+  // predicted it, and a placement finding that this gate does NOT explain is a
+  // different defect wearing the same number.
+  gates['the composite is placed where its clock actually starts (nothing clamped away)'] = {
+    pass:
+      clocks.clampedAwayMs !== null &&
+      Math.abs(clocks.clampedAwayMs) <= 1 &&
+      clocks.predictedAlignFrames !== null,
+    detail:
+      clocks.trueCompositeOffsetMs === null
+        ? 'NOT MEASURED — the capture log did not carry the composite origin or the B7 anchors, so nothing here was checked'
+        : `composite clock starts +${clocks.compositeOriginMs} ms · earliest channel +${clocks.minChannelAnchorMs} ms → true offset ${clocks.trueCompositeOffsetMs} ms, take carries ${clocks.declaredCompositeOffsetMs} ms (${clocks.clampedAwayMs} ms discarded by the Math.max(0, …) clamp in session.ts) → predicts ${clocks.predictedAlignFrames} frames; measured ${alignment.find((a) => a.pair === 'instant ↔ render')?.meanFrames ?? 'n/a'}. THE FILE ITSELF, independent of the log: composite audio starts ${clocks.compositeAudioStartsMs} ms, video ${clocks.compositeVideoStartsMs} ms — a lead of ${clocks.compositeAudioStartsMs !== null && clocks.compositeVideoStartsMs !== null ? Math.round((clocks.compositeVideoStartsMs - clocks.compositeAudioStartsMs) * 10) / 10 : 'n/a'} ms with no picture in it`,
   }
   gates['BACKLOG P1: instant and render draw the SAME text (X5’s parity bar, ≥60 dB)'] = {
     pass: (instRender?.psnrDb ?? 0) >= PARITY_DB,
@@ -1115,6 +1395,8 @@ export async function runTrimTextParity(
     sampledAtSec,
     lanes,
     rows,
+    alignment,
+    clocks,
     encodeFloor,
     chroma,
     thumbs,

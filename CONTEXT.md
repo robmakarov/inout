@@ -463,6 +463,14 @@ re-found by a later session instead of fixed. Twelve are now tasks with gates, i
   warning on a long take · "the device never connected" when it was really an OS permission with the
   answer on screen · the constant start-of-take offset · the two export paths disagreeing about
   *when* the camera picture belongs.
+  **That last one turned out to be something worse, and it is waiting on you (B9, 2026-09-01).** The
+  half-second we had filed was the measuring tool, not your video — one bad sample out of four. But
+  the tool built to check it found a real one underneath: on most takes the composite's clock starts
+  a fraction of a second before any channel delivers, we throw that fraction away when the take
+  stops, and the *fast* export paths — the unedited one and the trimmed one, i.e. nearly everything
+  you make — then put the picture that much late against its own sound. Measured at 64 to 198 ms on
+  five takes out of seven. The full render is the one that gets it right. The fix looks small, but it
+  moves where every fast export puts its frames, so it is your call before anyone touches it.
 - **G1–G4 — the instruments.** These go first when two sessions are free, because a gate that lies
   makes every other verdict cheap talk: the merge gate fails about half its cold runs for reasons
   nobody has measured · a load rig that cannot make its own source move and reads its own starvation

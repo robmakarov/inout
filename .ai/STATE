@@ -670,6 +670,20 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   which is what ONE re-encode of the same frame costs by itself. So the painters cost 2.8 dB and a
   doubling of visibly-wrong pixels, not max 156. And a TRIM does not reach the render at all: smart
   cut copies the composite's packets, so a trimmed export is BIT-IDENTICAL to the untrimmed one.
+- THE TWO PACKET-COPY EXPORTS PUT THE PICTURE LATE AGAINST THEIR OWN SOUND, ON MOST TAKES (B8's
+  diagnosis, 2026-09-01; the fix is B9 and it is ROBERT-GATED). `session.ts` rebases the composite at
+  stop with `Math.max(0, composite.startOffsetMs - minOffset)`. The composite's origin is whatever
+  reached the compositor worker first — the MIX — while a raw video channel's is its own first FRAME,
+  waiting on a VideoEncoder to configure, so the composite legitimately starts EARLIER: 64-198 ms on
+  five of seven measured takes. The clamp discards that, and instant.ts and smartCut.ts then place
+  the copied packets that late while mixing audio from the raw channels on the recording timeline.
+  Measured as -2.25 to -6 frames of PiP displacement against the render, tracking the discarded ms
+  take by take; the composite file corroborates (audio track starts 0 ms, video 133-300 ms). THE
+  RENDER IS THE ONE THAT IS RIGHT. The v2 oracle would band this and does not see it: 8 cold runs
+  read compOff 52-121 ms, positive every time — its rig has never built a composite that starts
+  before its earliest channel. Rig: `npm run exp -- x15c`, whose alignment gate is now a per-instant
+  census with the cause gated separately in ms (the old single-sample `alignFrames` is what produced
+  B8's phantom -0.5 s and what made that gate flip run to run).
 - exports STREAM TO DISK (O1): the muxer holds 4 MB regardless of length — a 30-min export peaks at
   39 MB live memory instead of 294 MB. ExportResult.blob is a disk-backed OPFS file.
 - NO DURATION CAP (Robert 2026-08-23). MAX_RECORDING_MS is `number | null` and is null; a take runs until

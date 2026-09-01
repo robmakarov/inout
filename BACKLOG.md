@@ -626,16 +626,19 @@ technical defects by severity. Done items get deleted, not archived.
   WHAT IS LEFT FOR ROBERT, not engineering: whether 2.8 dB of extra glyph fringe on the render path is worth
   anything. It also re-prices X5, whose refusal rested on the two painters disagreeing.
 
-- [P2 → ROADMAP B8] 2026-08-26, found while measuring X15(c), NOT chased: **the render places the camera PiP
-  about half a second away from where the instant path places it.** In the same take, on the same
-  output instants, the moving camera region best-matches at −15 frames (−0.5 s) and even there reads
-  only 23.6 dB (max 115), while the STILL screen region of the same two files matches at 37.1 dB.
-  So the two paths agree about pixels and disagree about WHEN: an edited export's PiP shows a
-  different moment than an unedited export's at the same timestamp. The oracle bands audio↔video
-  sync and would not see this, which is video↔video placement between two export paths.
-  NOT DIAGNOSED: it could be the camera channel's `startOffsetMs` against the composite's, or the
-  render resampling the camera onto its own grid. `npm run exp -- x15c` prints it as `alignFrames`
-  on the camera row; `{"thumbs":true}` dumps the frames, which is what made it visible.
+- [P0 → ROADMAP B9, ROBERT-GATED] 2026-09-01, and it replaces this slot's old B8 entry outright:
+  **an unedited or trimmed export writes its picture late against its own sound.** session.ts rebases
+  the composite at stop with `Math.max(0, composite.startOffsetMs - minOffset)`, so a composite whose
+  clock starts before the earliest channel loses that offset entirely — 64 to 198 ms on FIVE of seven
+  measured takes. instant.ts and smartCut.ts then place the copied packets that much late, while the
+  audio beside them is mixed from the RAW channels on the recording timeline. Measured as −2.25 to
+  −6 frames of PiP displacement against the render, tracking the discarded ms take by take, with the
+  composite file itself corroborating: its audio track starts at 0 ms and its video at 133–300 ms.
+  THE OLD B8 ENTRY HERE (“the render places the PiP −0.5 s away”) WAS THE INSTRUMENT and is deleted:
+  −15 was one badly-localised sample of a four-sample search, on a take whose live composite was
+  dropping a third of its frames. `npm run exp -- x15c` now reports the whole census, excludes an
+  instant it could not localise, and gates the CAUSE in milliseconds. Full diagnosis: B8's handoff
+  in `.ai/TASKS`.
 
 - [P2 → ROADMAP G3] 2026-08-26, found while writing X9's gate: **two of this repo's evidence gates are written
   in `longtask` counts, and a long-task count cannot fail here.** Anything in this codebase that

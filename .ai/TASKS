@@ -365,15 +365,26 @@ it is built combine-ready:
   8. M1   THE COMBINE — max + emergency elastic  [ROBERT-GATED + blocked on A1 and E1 · spec
           below] not started until Robert says so, even with both prerequisites perfect.
   9. O4-WebGPU + O5 remnants              [heavy] the render-floor levers, after F16b.
- 10. B8   PiP placement                   [light] correctness, parallel-safe filler.
+ 10. B8   PiP placement                   DONE 2026-09-01 — and it was not a placement task. The
+          filed -0.5 s was ONE badly-localised sample of a four-sample search on a take whose live
+          composite was dropping a third of its frames; the census that replaced it found a real
+          defect underneath, live on the default path. session.ts clamps the composite's rebase at
+          zero, so a composite whose clock starts before the earliest channel (64-198 ms, FIVE of
+          seven measured takes) has that offset discarded — and instant AND smart cut then write the
+          copied picture that much LATE against audio they mix from the raw channels. Handoff under
+          the task; the fix is B9 and it is ROBERT-GATED because it moves the default export path.
+ 11. B9   composite-origin-clamp          [medium · ROBERT'S YES FIRST · spec below] the fix for what
+          B8 found. Needs `oracle:long` (it touches both packet-copy paths) and it has no regression
+          gate but x15c until the oracle's rig can build the take at all — 8 cold runs never did.
 PARKED until the max60 record is perfect (Robert's ruling 4): F9 · F10 · F11 · F12 · D1 · X13 ·
 F17's sheet UI · O9/O10 remaining lanes · P5a (nothing expires — "TIME-SENSITIVE" meant
 ready-at-launch; runs whenever Robert is at the machine with the device). X1/X2/X3 ARE NOT AVAILABLE — all
 three were DONE 2026-08-26 (handoffs under their tasks); this line was stale when the priority
-order was written and cost a session a look. The light parallel-safe fillers left are B8 (needs
-`npm run exp -- x15c`, so not while another session is measuring under load) and B4 (absorbed by H4).
-STILL OWED ROBERT (unchanged): B2 listen · O6 4K re-verify · `?singlegen=capture` · O10a
-attenuation ruling · X5 text question · B7 video half (one command).
+order was written and cost a session a look. NO LIGHT PARALLEL-SAFE FILLER IS LEFT: B8 is done and
+B4 is absorbed by H4. B9 is not one — it is a default-path flip.
+STILL OWED ROBERT: B2 listen · O6 4K re-verify · `?singlegen=capture` · O10a attenuation ruling ·
+X5 text question · B7 video half (one command) · B9's yes (the picture is late against the sound on
+most takes; the fix is written up and unstarted).
 
 ## A1 tab-audio-starvation — the tap dies under max load and the take keeps going
    [heavy · P0 · capture integrity · authored 2026-09-01 from Robert's 50-min max take]
@@ -964,10 +975,14 @@ READY NOW (per-task context; ORDER SUPERSEDED by the 2026-09-01 priority above):
                                              the two alignment errors a synthetic rig CANNOT see,
                                              both pushing audio late. This task ships INSTRUMENTATION into
                                              the take's certification, not compensation.
-  B8   the two export paths disagree [light]  the render places the camera PiP -15 frames (-0.5 s) from
-       about WHEN                              where the instant path places it, on the same output
-                                             instants. The oracle bands audio-video sync and cannot see
-                                             video-video placement between paths.
+  B8   the two export paths disagree [DONE 2026-09-01 — handoff under the task. The -0.5 s was ONE
+       about WHEN                              badly-localised sample; the census built to check it
+                                             found the real defect, which is B9. The oracle CAN see
+                                             that one — its rig has just never built the take.]
+  B9   the copied picture is late    [medium · ROBERT'S YES FIRST]  the composite's rebase is clamped
+       against its own sound                   at zero, so a composite that starts before the earliest
+                                             channel (64-198 ms, 5 of 7 takes) loses that offset and
+                                             instant AND smart cut write the picture that late.
 
 BUG PACK (promoted from BACKLOG.md 2026-08-29 on Robert's "put bugs on roadmap"; all operating rules
 apply — own branch, gates pasted as numbers, `npm run oracle` green, no behaviour change without Robert).
@@ -2057,6 +2072,178 @@ BETWEEN two export paths, which nothing here measures.
 GATES: `npm run exp -- x15c` reads alignFrames 0 +-1 on the camera row · the screen row's dB is
 unchanged · instant and smart-cut paths are untouched, byte-identical · the diagnosis is stated (which
 of the two candidates it was), because the other one stays a hazard if it is not.
+
+── B8 HANDOFF (session of 2026-09-01) ──────────────────────────────────────
+THE NUMBER THIS TASK WAS FILED ON WAS THE INSTRUMENT, AND UNDERNEATH IT IS A
+REAL DEFECT THAT IS NEITHER OF THE TWO CANDIDATES AND IS NOT ABOUT THE PiP.
+Nothing outside `src/experimental/` changed. The fix is B9, below.
+
+1 · THE −0.5 s IS NOT A PLACEMENT. Re-run at df050c9 (X15's own commit, a
+worktree, same rig) the camera row reads −38 frames, worse than the filed −15 —
+and the census shows why both numbers exist. The four sampled instants of that
+same pair read:
+
+    −38 / −1 / −1 / 0 frames      at 30.9 / 41.6 / 41.5 / 41.3 dB
+
+ONE instant, and it is the only one whose winning match is 10 dB below its
+siblings. That take's live composite dropped 99 of 284 frames (129 of 286 on the
+first run of the day): the PiP freezes, nothing in the ±1.5 s window matches, and
+the search returns wherever the noise was lowest. The other three instants say
+the August build placed the picture within one frame — which is the floor. The
+filed −15, R1's −1 and −2, and today's −38 are all the same single sample
+wandering, which is exactly why the number never reproduced and why the gate
+built on it flipped run to run on one build (R1's finding (b), left open for
+this task).
+
+2 · THE CENSUS FOUND A DIFFERENT DEFECT, AND IT IS LIVE ON THE DEFAULT PATH.
+`session.ts` rebases every channel at stop so the earliest media is t=0, and
+gives the composite the same rebase CLAMPED AT ZERO:
+
+    composite.startOffsetMs = Math.max(0, composite.startOffsetMs - minOffset)
+
+on the stated reasoning that a composite reading earlier than the earliest
+channel is "measurement noise between two first-arrival stamps". It is not
+noise. The composite's origin is whatever reached the compositor worker first —
+the MIX, in every take measured here — while a raw video channel's origin is its
+own first FRAME, which waits on a VideoEncoder configuring. Measured on seven
+10 s takes through the product's own capture session, the composite began
+64–198 ms BEFORE the earliest channel on FIVE of them, and the clamp discarded
+every one of those milliseconds.
+
+Everything it discards displaces the copied picture. instant.ts places composite
+packets at `packet.timestamp + compOffsetSec` and mixes audio from the RAW
+channels on the recording timeline, so a composite declared 0 when it is really
+−157 ms writes its picture 157 ms LATE against its own sound. smartCut.ts reads
+the same value through the same helper and is displaced identically — which is
+why instant ↔ smartcut reads 99 dB / max 0 in every run: they are wrong
+together. The RENDER is the one that is right; it maps output → recording →
+channel-local through `channelSourceTimeAt`.
+
+3 · THE MEASUREMENT. Seven takes, one machine, `npm run exp -- x15c`,
+instant ↔ render, mean over the LOCALISED instants. Five of the seven were
+clamped, which is how routine this is:
+
+    clamped away   predicts   measured   spread   composite video track starts
+        0            0         −1.00 fr     0              0 ms
+        0            0         −1.25 fr     1              0 ms
+       64.5 ms      −2 fr      −2.25 fr     1            133.3 ms
+       77.6 ms      −2 fr      −3.00 fr     0            166.7 ms
+      157.2 ms      −5 fr      −6.00 fr     2            233.3 ms
+      164.7 ms      −5 fr      −6.00 fr     0            233.3 ms
+      197.9 ms      −6 fr      −6.00 fr     0            300.0 ms
+
+The error tracks the clamp across the whole range with a residual of 0 to −1.3
+frames, and that residual is the quantisation floor rather than a defect: the
+copied file's frames sit on arrival instants while the render's sit on a 1/fps
+grid, and the composite paints the latest camera frame it holds, which can be
+one camera interval old. Both terms lag, so the floor is signed; the search
+resolves whole frames, so a sub-frame lag lands as 0 or −1.
+AND THE FILE ITSELF SAYS IT, independent of any parsed log: on the clamped takes
+the composite's AUDIO track starts at 0 ms and its VIDEO track at 233.3 /
+166.7 ms — a lead with no picture in it, which is the span the rebase threw away.
+
+4 · BOTH CANDIDATES ARE REFUTED.
+  · "the camera channel's startOffsetMs against the composite's" — the camera's
+    is honest; measured video stamps it from the first frame that arrives. It is
+    the COMPOSITE's that is falsified, and by the stop path, not by capture.
+  · "the render resampling the camera onto its own grid" — real, and it is the
+    0-to-−1.3-frame residual. Bounded, does not accumulate, and on the worst
+    take here it explains 1 frame of 6.
+  · `?rawcodec=mediarecorder` was checked as a third suspect (X6's default
+    flipped to WebCodecs the same day X15 ran, 76fce52) and REFUTED: HEAD on
+    MediaRecorder reads −1 frame, startGap 26.2 ms.
+
+5 · WHY NO GATE CAUGHT IT — AND THIS TASK'S OWN ANSWER TO THAT IS WRONG. B8 says
+"the oracle bands audio-against-video sync. This is video-against-video
+placement". It is not: it is an audio-against-video displacement of the whole
+picture, which is precisely what the oracle bands. The oracle misses it because
+ITS RIG CANNOT PRODUCE THE TAKE — 8 cold runs, `compOff` = 99 / 52 / 56 / 65 /
+103 / 121 / 64 / 102 ms, positive every time, never once clamped, while the
+product's own capture session clamped 5 of 7. oracle/rig.ts:781 carries a copy
+of the same clamp but has never built a composite that starts before its
+earliest channel. A gate whose rig cannot reach the defect is note 17 in a third
+form, and it belongs to the G lane.
+A LEAD, NOT A CLAIM: the v2 oracle's `instant/trimmed export sync maxAbs > 90 ms`
+has been flaky for a week (BACKLOG; G1/LC1 attributed it to the statistic). A
+clamped take would add 64–198 ms to the instant lane alone. All 8 runs here
+passed at 48.9–77.0 ms with nothing clamped, so this settles nothing either way.
+Correlating `compOff = 0` against that lane's maxAbs is what would.
+
+6 · WHAT SHIPPED — THE INSTRUMENT ONLY (`experimental/perf/trimTextParity.ts`):
+  a. THE PLACEMENT IS A CENSUS. The alignment search runs at every sampled
+     instant and the report carries the whole list. One sample cannot separate a
+     constant displacement from a drift from quantisation, and that is the
+     entire reason this sat undiagnosed for a week.
+  b. A SEARCH THAT FOUND NO MATCH DOES NOT SCORE ONE. An instant whose winning
+     dB is more than 6 below its own pair's best reads NOT LOCALISED, is excluded
+     from the summary and named in the gate; more than one of them fails the
+     gate. Measured: a real localisation spans 41.3–43.1 dB, the two that were
+     not scored 8.5 and 10.7 dB below their pair's best.
+  c. THE CAUSE IS ITS OWN GATE. `clocks` reads the take's origin arithmetic and
+     the composite file's own track starts, and fails when the clamp fired,
+     naming the discarded ms and the frames they predict. A placement finding it
+     does NOT explain is a different defect wearing the same number.
+  d. THE BANDS ARE THE MEASURED FLOOR — |mean| ≤ 2 frames, spread ≤ 3 — from the
+     table in 3, replacing |one sample| ≤ 1. Deliberately the looser of the two
+     gates: the tight one is the cause gate, which is exact and in milliseconds.
+
+7 · GATES, AS RUN.
+  · `npm run exp -- x15c` reads alignFrames 0 ±1 on the camera row — NOT MET,
+    and the miss is the finding. −1.00 / −1.25 on the unclamped takes,
+    −2.25 / −3 / −6 / −6 / −6 on the clamped ones. It cannot be met without moving where the instant path
+    places its packets, which the NEXT LINE of this task's own GATES forbids.
+    That gate set was written on the premise that the fault was in the render.
+  · the screen row's dB is unchanged — MET. 38.4 / 39.1 dB against the committed
+    37.1–39.1, encode floor 39.8.
+  · instant and smart-cut paths untouched, byte-identical — MET. No file outside
+    `src/experimental/` changed.
+  · the diagnosis is stated, and which candidate it was — MET: neither.
+  · `npm run typecheck && npm test` — 79 files, 858 tests, green.
+  · `npm run oracle` — 8 of 8 PASS, sync 34.2–59.9 / 39.7–65.5 ms.
+  NOT RUN, and it does not apply: `npm run oracle:long`. It is mandatory before
+  a flip that touches the instant or smart-cut paths; this session flips nothing
+  there. B9 owes it.
+
+8 · MEASURED WHILE ANOTHER SESSION WAS EDITING THIS REPO. Its uncommitted
+capture changes were live in the primary worktree throughout, so every number
+above was taken in a detached worktree at b8898b4 and none of them saw that
+work. The oracle is a timing gate and that session's load is in it; the
+placement numbers are frame indices and are not.
+
+## B9 composite-origin-clamp — the copied picture is written late against its own sound
+   [medium · P0-adjacent · capture stop path + both packet-copy export paths · authored 2026-09-01
+    from B8's diagnosis; the evidence is B8's handoff above and is not repeated here]
+session.ts rebases the composite at stop with `Math.max(0, composite.startOffsetMs - minOffset)`.
+When the composite's clock starts BEFORE the earliest channel — five of seven measured takes, 64 to
+198 ms — the clamp discards a real, content-bearing offset, and instant.ts and smartCut.ts then write
+the copied picture that many ms LATE against audio they mix from the raw channels on the recording
+timeline. Measured as -2.25 to -6 frames of PiP displacement against the render; the render is the
+one that is right.
+WHY IT IS NOT ALREADY FIXED: it moves where every unedited and every trimmed export puts its packets,
+which is a behaviour change on the default path — ROBERT'S YES FIRST — and B8's own gate line forbade
+touching those paths.
+THE FIX IS PROBABLY SMALL AND MUST BE PROVED, NOT ARGUED: carry the true (signed) offset and let the
+packet placement use it for either sign — instant.ts currently shifts only when `compOffsetSec > 0`.
+It lands positive anyway, because the composite's video always begins after its own origin (measured:
+the video track starts 133-300 ms into a file whose audio track starts at 0), so nothing needs a
+negative timestamp. Verify that, do not assume it: any packet that would land before 0 is dropped,
+and the first kept packet must still be a keyframe.
+CHECK THE SIBLING BEFORE CLOSING: the composite's origin sits 64-198 ms before the mic channel's own
+first-sample anchor, and those are two anchorings of the SAME microphone (the worker stamps the mix's
+arrival, measuredAudio stamps the first sample). One of them is wrong about the take, and that is B7's
+territory rather than this fix's — but a fix that merely re-derives the wrong anchor moves the defect
+instead of removing it.
+GATES: `npm run exp -- x15c` reads |mean| <= 2 frames AND clampedAwayMs <= 1 ms on takes where the
+composite leads (force one — it happened 5 of 7 unaided) · the same rig on a take where it does not
+lead is unchanged · `npm run oracle` v2 AND `--engine=v1` green · `npm run oracle:long` quoted against
+the recorded baseline (MANDATORY, G4: this touches both packet-copy paths) · a take recorded BEFORE
+the fix still exports with exactly the packets it gets today (old takes cannot recover an origin
+nobody stored) · Robert's yes on the record.
+ALSO OWED, and it is the G lane's: THE ORACLE CANNOT PRODUCE THIS TAKE. 8 cold runs read compOff
+52-121 ms, positive every time; oracle/rig.ts:781 carries a copy of the same clamp and has never
+built a composite that starts before its earliest channel. Until its rig can, this fix has no
+regression gate but x15c.
+
 
 NEW TASKS (authored 2026-08-26 from Robert's answers; all operating rules apply):
 
