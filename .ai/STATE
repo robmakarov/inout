@@ -894,8 +894,9 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   share's video delivers a playing movie throughout and the mic lives: an AUDIO-ONLY tap death on
   a live share, the Chromium dead-MediaStreamSource / permanent-mute class, PROVEN.
   SHIPPED AGAINST (2): THE DEAD-TAP REVIVAL — measuredAudio rebuilds its source tap on a CLONE of
-  the track after 5 s of pure digital silence on a live unmuted track (5/10/20/40 s backoff, max 6
-  per run, reset by signal; muted/ended tracks are logged, not touched). Safe by construction (it
+  the track after 5 s of pure digital silence on a live unmuted track (5/10/20/40/80 s and then
+  ONE A MINUTE FOR AS LONG AS THE SILENCE LASTS, reset by signal; muted/ended tracks are logged,
+  not touched). Safe by construction (it
   acts only on already-silent input; the worklet keeps the timeline through the swap) and
   red/green-proven in-browser (silent live stream: revivals at 5.1/10.1/20.1 s, duration intact;
   audible stream: zero). AND THE WITNESSES NOW PERSIST: ChannelRecording.diagnostics (additive)
@@ -908,6 +909,23 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   (padded, so no drift), but content Chrome delivers under that load is mangled at the source —
   the lever is X6. Revival clones stop on pagehide (wedge-family insurance). The muted-forever
   case still has no app-side lever beyond a re-share surface (Robert's UI call). Detail in BACKLOG.
+  THE RESCUE USED TO RETIRE, AND THAT WAS THE WHOLE OF THE 2026-09-01 REPORT ("tab audio died at
+  23 minute of a 50 minute max-quality take, before it a lot of lag in sound"). Autopsied from the
+  take's own black box (rec_78ogcw052vdn, 3,026 s, quality=max, screen 3024x1964@30, no composite):
+  NO mute, NO unmute, NO ended, NO context state change — the track was live and unmuted for all
+  50 minutes — and 25 revive attempts in six bursts at 5.2/10.2/20.2/40.2/80.2/160.2 |
+  194.4…349.5 | 460.1…535.1 | 712.7 | 1333.4 | 1381.3…1536.4 s. Read them and the six-attempt
+  LIFETIME CAP convicts itself twice: the runs at 707.7 s and 1328.4 s took ONE attempt each and
+  no second was ever due, i.e. sound was back inside 5 s (the rescue works); the run at 189.4 s
+  burned all six by 349.5 s and sound returned on its own before 455.1 s, MORE THAN 105 s AFTER WE
+  STOPPED TRYING. The last run, from 1376.3 s, spent its six by 1536.4 s and the take ran 1,490 s
+  further with not one more attempt — silentTailMs 1,650,144 of 3,026,276, and a 14 MB tab-audio
+  file where the mic's is 48 MB. The gaps he calls "lag" are the same defect earlier in the take.
+  FIX: capture/reviveSchedule.ts (pure, 7 unit tests) — the gap to the next attempt doubles but
+  never exceeds a 60 s ceiling, so the ladder is 5/10/20/40/80/140/200/260… and NEVER RETIRES. Only
+  the sixth attempt moves (20 s earlier); everything else it changes happens on a channel that is
+  recording nothing at the time. What it cannot fix is why the tap dies six times in 23 minutes —
+  that is load, and load in `max` is Robert's own ruling (captureQuality.ts).
 - CAPTURE MEASURES THE MIX'S ENVELOPE ONCE, AND THE EXPORT STOPPED MEASURING IT AGAIN (X1,
   2026-08-26). O2 kept three scalars from the capture-time accumulator and SORTED the window series
   away; the series is now kept IN TIME ORDER on `Recording.loudness.envelope` (windowRms + windowPeak

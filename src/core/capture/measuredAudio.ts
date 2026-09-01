@@ -17,6 +17,7 @@ import {
   WebMOutputFormat,
   type StreamTargetChunk,
 } from 'mediabunny'
+import { ReviveSchedule } from './reviveSchedule'
 import { WallClockHold, compressInterleaved } from './wallClockHold'
 
 const WORKLET_NAME = 'inout-pcm-capture'
@@ -258,6 +259,16 @@ export async function startMeasuredAudioCapture(opts: {
    * with no numbers in it. Logs only — behaviour is unchanged.
    */
   const sinceEpochS = (): string => ((performance.now() - opts.epoch) / 1000).toFixed(1)
+  /**
+   * Built once the context's sample rate is known, which is several awaits
+   * below — and the track's own listeners are already live by then, so every
+   * touch from them is null-safe rather than a TDZ throw inside a listener.
+   */
+  let revive: ReviveSchedule | null = null
+  /** One explanation per silent run: the muted/ended branch now gets looked at
+   *  once a minute for as long as the take runs, and console work on the thread
+   *  carrying the PCM is exactly what a starved audio path cannot afford. */
+  let reviveSkipLogged = false
   /** PERSISTED with the take (ChannelRecording.diagnostics): the console dies
    *  with the tab, and no field report has ever arrived with one — the file is
    *  the only witness that reliably survives to be read. */
@@ -284,8 +295,8 @@ export async function startMeasuredAudioCapture(opts: {
     // Robert 2026-08-30: "after 1 minute … tab audio died completly" — the same
     // shape as the 2026-08-26 autopsy (rec_cjqcxsfhg02b, zeros from t=71 s
     // while the same share's video kept playing).
-    reviveAttempts = 0
-    silentRunStartFrame = null
+    revive?.reset()
+    reviveSkipLogged = false
   }
   const onTrackEndedEvidence = (): void => {
     noteEvent('ended')
@@ -441,7 +452,6 @@ export async function startMeasuredAudioCapture(opts: {
    *  apart after the fact — so the channel tracks where the last signal was.
    *  Below this floor nothing dithered or live ever sits; zeros do. */
   const SILENCE_FLOOR = 1e-5
-  let silentRunStartFrame: number | null = null
   /**
    * THE TAP IS REBUILT WHEN THE TAP IS DEAD (Robert 2026-08-26, autopsied take
    * rec_cjqcxsfhg02b: tab audio recorded pure zeros from t=71 s to the end of a
@@ -455,10 +465,12 @@ export async function startMeasuredAudioCapture(opts: {
    * genuinely silent source the swap just yields the same silence — so a false
    * positive costs nothing audible. A muted or ended track is NOT revivable
    * from here (Chrome owns the mute); that case is logged and left alone.
+   *
+   * WHEN it fires is reviveSchedule.ts, and it never stops firing — the six-
+   * attempt lifetime cap that shipped with this is what abandoned 25 minutes of
+   * Robert's 50-minute take (rec_78ogcw052vdn, autopsied there).
    */
-  const REVIVE_BASE_FRAMES = 5 * sampleRate
-  const REVIVE_MAX_ATTEMPTS = 6
-  let reviveAttempts = 0
+  revive = new ReviveSchedule({ sampleRate })
   let revivals = 0
   /** Last sample per channel of the previous batch — the fade-out needs a value. */
   const lastSample = new Float32Array(2)
@@ -645,36 +657,40 @@ export async function startMeasuredAudioCapture(opts: {
     // run at a time, closed by the first sample with signal in it. A run long
     // enough to be a dead tap (not a quiet moment) triggers the revival above.
     {
+      // Non-null by construction: the schedule is built from the context's
+      // sample rate, which is known long before this worklet exists.
+      const rev = revive!
       let maxAbs = 0
       for (let i = 0, n = frames * channels; i < n; i++) {
         const a = Math.abs(planar[i]!)
         if (a > maxAbs) maxAbs = a
       }
       if (maxAbs > SILENCE_FLOOR) {
-        silentRunStartFrame = null
-        reviveAttempts = 0
+        rev.reset()
+        reviveSkipLogged = false
       } else {
-        silentRunStartFrame ??= framesWritten
-        const silentFrames = framesWritten + frames - silentRunStartFrame
-        const dueFrames = REVIVE_BASE_FRAMES * 2 ** reviveAttempts
-        if (silentFrames >= dueFrames && reviveAttempts < REVIVE_MAX_ATTEMPTS) {
-          // THE BACKOFF ADVANCES ON EVERY CHECK, INCLUDING A SKIP — and it has
-          // to. Making only a real rebuild count (first cut of this fix,
-          // 2026-08-30) left `dueFrames` where it was, so a muted, silent track
-          // re-entered this branch on EVERY batch and warned on every one of
-          // them. Console work on the thread that carries the PCM is exactly
-          // what a starved audio path cannot afford: measured on the v2 oracle,
-          // interleaved against clean main, spur went -49.9/-34.9/-33.1 dB
-          // against main's -57.8/-40.2/-51.6 and failed 2 of 3 runs.
-          // The real fix for spending the rescue on a mute is onTrackUnmute
-          // resetting the count, which is where it belongs.
-          reviveAttempts++
+        // THE BACKOFF ADVANCES ON EVERY CHECK, INCLUDING A SKIP — and it has
+        // to. Making only a real rebuild count (first cut of this fix,
+        // 2026-08-30) left the due-point where it was, so a muted, silent track
+        // re-entered this branch on EVERY batch and warned on every one of
+        // them. Console work on the thread that carries the PCM is exactly
+        // what a starved audio path cannot afford: measured on the v2 oracle,
+        // interleaved against clean main, spur went -49.9/-34.9/-33.1 dB
+        // against main's -57.8/-40.2/-51.6 and failed 2 of 3 runs.
+        // The real fix for spending the rescue on a mute is onTrackUnmute
+        // resetting the ladder, which is where it belongs.
+        if (rev.silentBatch(framesWritten, frames)) {
+          const silentFrames = rev.silentFramesAt(framesWritten + frames)
+          const attempt = rev.attempts
           if (track.readyState !== 'live' || track.muted) {
             noteEvent(track.muted ? 'revive-skipped:muted' : 'revive-skipped:ended')
-            console.warn(
-              `[capture] ${label} audio silent ${(silentFrames / sampleRate).toFixed(0)}s but the track is ` +
-                `${track.muted ? 'MUTED — Chrome owns the mute, nothing to revive from here' : 'not live — the channel is over'}`,
-            )
+            if (!reviveSkipLogged) {
+              reviveSkipLogged = true
+              console.warn(
+                `[capture] ${label} audio silent ${(silentFrames / sampleRate).toFixed(0)}s but the track is ` +
+                  `${track.muted ? 'MUTED — Chrome owns the mute, nothing to revive from here' : 'not live — the channel is over'}`,
+              )
+            }
           } else {
             try {
               const clone = track.clone()
@@ -690,7 +706,7 @@ export async function startMeasuredAudioCapture(opts: {
               noteEvent('revive')
               console.warn(
                 `[capture] ${label} audio input dead (pure silence ${(silentFrames / sampleRate).toFixed(0)}s on a live, ` +
-                  `unmuted track) — rebuilt the source tap on a track clone (attempt ${reviveAttempts})`,
+                  `unmuted track) — rebuilt the source tap on a track clone (attempt ${attempt})`,
               )
             } catch (err) {
               noteEvent('revive-failed')
@@ -808,6 +824,7 @@ export async function startMeasuredAudioCapture(opts: {
             `to hold the timeline against the wall clock (the machine was starving this take)`,
         )
       }
+      const silentRunStartFrame = revive?.runStartFrame ?? null
       const silentTailMs =
         silentRunStartFrame !== null
           ? ((framesWritten - silentRunStartFrame) / sampleRate) * 1000

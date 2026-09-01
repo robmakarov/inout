@@ -44,6 +44,13 @@ technical defects by severity. Done items get deleted, not archived.
 
 ### Now
 
+- [P2 — OBSERVATION, from the 2026-09-01 autopsy, not yet a verdict] **the 720p camera PiP wrote
+  MORE bytes than the 3024x1964 screen.** Take rec_78ogcw052vdn, 3,026 s: camera 900 MB
+  (2.49 Mbps against a 2.5 Mbps request — on target) and screen 814 MB (2.25 Mbps against an
+  8 Mbps request — 28 % of it). Either the screen encoder could not be fed at max quality, or
+  50 minutes of a mostly-static screen legitimately compresses that far; `npm run exp -- bits`
+  on a screen-only max take decides which, and only the first one is a defect.
+
 - [P0 — EVIDENCE PHASE, the wedge] **the next stall convicts a suspect instead of adding to a
   count.** The verdict table, the playbook for whoever handles Robert's next report, and the whole
   case history live in ONE place: `docs/SCREEN_WEDGE.md` (rewritten 2026-08-30 — start at "WHEN
@@ -394,7 +401,8 @@ technical defects by severity. Done items get deleted, not archived.
   **SHIPPED against it (2026-08-26): THE DEAD-TAP REVIVAL + BLACK-BOX DIAGNOSTICS.**
     · measuredAudio watches its own input: after 5 s of PURE digital silence on a live, unmuted
       track it rebuilds the source tap on a CLONE of the track (cloning re-taps the capture),
-      with 5/10/20/40… s backoff, max 6 attempts per silent run, counter reset by any signal.
+      with 5/10/20/40/80 s backoff and then ONE ATTEMPT A MINUTE for as long as the silence
+      lasts, reset by any signal.
       Safe by construction: it only acts when the channel is already recording nothing, the
       worklet keeps the timeline sample-counted through the swap, and on a genuinely silent
       source the swap just yields the same silence. A muted or ended track is logged, not
@@ -420,6 +428,30 @@ technical defects by severity. Done items get deleted, not archived.
   HARDENING with it: revival clones are tracked and stopped on pagehide — a page dying mid-take
   (the wedge-refresh ritual) must not leave a clone holding a display-capture claim, which is the
   exact food of the screen-wedge family.
+  **THIRD AUTOPSY, 2026-09-01 — "tab audio died at 23 minute (50 min take, max quality), before it
+  a lot of lag in sound, other input all right". THE RESCUE WAS RETIRING, and that is the bug.**
+  Read off take rec_78ogcw052vdn's own black box (3,026 s, quality=max, screen 3024x1964@30, camera
+  1280x720, no composite): the track was LIVE AND UNMUTED for the whole 50 minutes — no mute, no
+  unmute, no ended, no AudioContext state change — and the tap died and was rescued repeatedly:
+  25 attempts in six bursts, 5.2/10.2/20.2/40.2/80.2/160.2 | 194.4…349.5 | 460.1…535.1 | 712.7 |
+  1333.4 | 1381.3…1536.4 s. The burst structure convicts the six-attempt LIFETIME CAP twice over:
+  the runs beginning 707.7 s and 1328.4 s each took ONE attempt and never a second, so sound was
+  back within 5 s — THE CLONE RESCUE WORKS; and the run beginning 189.4 s burned all six by 349.5 s
+  and sound came back on its own before 455.1 s, MORE THAN 105 s AFTER THE LADDER GAVE UP. The
+  final run began 1376.3 s (22.9 min — his "23 minute", exactly), spent its six attempts by
+  1536.4 s, and the take ran 1,490 s further with NOT ONE more attempt: silentTailMs 1,650,144 of
+  a 3,026,276 ms channel, 14 MB of opus where the mic wrote 48 MB. "A lot of lag in sound" before
+  it is the same defect earlier on: the four dropouts before the fatal one, two of them minutes
+  long because the ladder retired inside them.
+  FIXED: `capture/reviveSchedule.ts` (pure, 7 unit tests). The gap to the next attempt doubles but
+  never exceeds a 60 s CEILING — 5/10/20/40/80/140/200/260/… — and there is no cap, so a dead tap
+  is looked at once a minute for as long as the take runs. Cost on a channel with genuinely nothing
+  playing: one `track.clone()` + one source-node swap a minute, on input that is already silent.
+  The only shipped attempt that MOVES is the sixth (140 s instead of 160 s).
+  STILL OPEN, and it is load, not audio: the tap died SIX TIMES in 23 minutes on this machine.
+  `quality=max` disables every step-down by Robert's own ruling (captureQuality.ts), so the answer
+  there is X6, not a lever this file can pull. paddedMs was only 5,647 ms of 3,026 s (0.19 %), so
+  the AUDIO clock was not the thing starving — Chrome's display-audio tap was.
 
 - [P1 → FIXED AGAIN 2026-08-26, AWAITING ROBERT RECHECK] Robert: progressive audio desync — 08-25 report
   "sounds go faster than video" ~20 s in; 08-26 RECHECK FAILED: "mic and camera unsynch is about
