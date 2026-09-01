@@ -5,6 +5,7 @@ import { DEFAULT_FRAME_RATE, normalizeRate, sourceRateEnabled } from '@core/rate
 import { loadQualityStep } from '@core/qualityStep'
 import { singleGenCaptureEnabled } from '@core/singleGen'
 import { preemptiveRefusalAllowed, rateLadderAllowed } from './captureQuality'
+import { AUDIO_BITS, videoBitsFor } from './captureBitrate'
 import { diskVerdict } from './diskGuard'
 import {
   differsMeaningfully,
@@ -229,10 +230,6 @@ function pickMimeType(media: MediaKind): string {
 const COMPOSITE_WIDTH = 1920
 const COMPOSITE_HEIGHT = 1080
 
-function videoBitsFor(kind: ChannelKind, cameraIsPip: boolean): number {
-  return kind === 'screen' ? 8_000_000 : kind === 'camera' && cameraIsPip ? 2_500_000 : 4_000_000
-}
-
 function recorderOptions(
   kind: ChannelKind,
   media: MediaKind,
@@ -245,7 +242,7 @@ function recorderOptions(
   const bits =
     media === 'video'
       ? { videoBitsPerSecond: videoBitsFor(kind, cameraIsPip) }
-      : { audioBitsPerSecond: 128_000 }
+      : { audioBitsPerSecond: AUDIO_BITS }
   return mimeType ? { mimeType, ...bits } : bits
 }
 
@@ -420,6 +417,9 @@ class Session implements CaptureSession {
   private sizeDifferingSinceMs: number | null = null
   /** B5 — the disk is asked every few seconds, not every tick. */
   private lastDiskCheckMs = 0
+  /** B5 — the origin's storage usage at this take's FIRST sample, and when it
+   *  was taken. The growth since is what this take has actually consumed. */
+  private diskBaseline: { usageBytes: number; atMs: number } | null = null
   private diskWarned = false
   private lastResStepAtMs: number | null = null
   private resStepsTaken = 0
@@ -2008,7 +2008,7 @@ class Session implements CaptureSession {
     this.emit({ type: 'tick', elapsedMs, remainingMs })
     if (remainingMs !== null && remainingMs <= 0) return this.autoStop()
     this.watchScreenSize()
-    this.watchDisk(elapsedMs)
+    this.watchDisk()
   }
 
   /**
@@ -2023,7 +2023,7 @@ class Session implements CaptureSession {
    * Every few seconds, not every tick: `estimate()` is a real query and the
    * answer cannot move fast enough to be worth 250 ms.
    */
-  private watchDisk(elapsedMs: number): void {
+  private watchDisk(): void {
     const now = performance.now()
     if (now - this.lastDiskCheckMs < DISK_CHECK_MS) return
     this.lastDiskCheckMs = now
@@ -2032,15 +2032,39 @@ class Session implements CaptureSession {
       .estimate()
       .then((est) => {
         if (this.stateInternal !== 'recording') return
+        const usage = est.usage ?? 0
         // S1: the answer is already here — keep it for the report card instead
         // of throwing it away after the verdict below.
-        this.lastStorage = { usageBytes: est.usage ?? 0, quotaBytes: est.quota ?? 0 }
-        const takeBytes = this.channels.reduce((n, c) => n + c.bytes, 0)
+        this.lastStorage = { usageBytes: usage, quotaBytes: est.quota ?? 0 }
+        const baseline = (this.diskBaseline ??= { usageBytes: usage, atMs: now })
+        /**
+         * WHAT THIS TAKE HAS ACTUALLY WRITTEN — and the channel counters alone
+         * cannot say (found while gating B5, 2026-09-01).
+         *
+         * `rt.bytes` is accumulated in `ondataavailable`, which is the
+         * MediaRecorder path. The DEFAULT path has not been that for months:
+         * measured audio and X6's raw video both write through their own
+         * workers and report their size only when the handle STOPS. So on a
+         * normal take the sum below is zero or near it, `diskVerdict` refuses
+         * to judge a take with no rate, and this guard has been silently blind
+         * on the very takes it was built for — Robert's 1,138 MB one included.
+         * The composite was never counted on any path.
+         *
+         * The origin's own usage growth sees all of it, whoever wrote it. A
+         * parallel export writing OPFS scratch inflates it and the message then
+         * misattributes the rate — but the headroom it computes is still the
+         * true one, because that disk really is filling that fast. Erring
+         * toward "less room than you think" is the safe direction for a guard
+         * whose failure mode is a lost take.
+         */
+        const grown = Math.max(0, usage - baseline.usageBytes)
+        const counted = this.channels.reduce((n, c) => n + c.bytes, 0)
+        const takeBytes = Math.max(grown, counted)
         const v = diskVerdict({
-          usageBytes: est.usage ?? 0,
+          usageBytes: usage,
           quotaBytes: est.quota ?? 0,
           takeBytes,
-          takeMs: elapsedMs,
+          takeMs: now - baseline.atMs,
         })
         if (!v || v.level === 'ok') return
         if (v.level === 'warn') {

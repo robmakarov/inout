@@ -208,6 +208,16 @@ export function CaptureScreen() {
    * another tab while it happens and only sees this screen on the way back. */
   const [stalled, setStalled] = useState<ChannelKind[]>([])
   /**
+   * B5 — IS THERE ROOM FOR THE TAKE ABOUT TO BE MADE.
+   *
+   * Read on the IDLE screen only, never from the press: instant record start is
+   * a frozen constraint and this is a storage query plus an IndexedDB read. It
+   * re-asks when the answer could have changed — the quality step, the channels,
+   * or a take that just finished and consumed the space. A healthy machine sets
+   * nothing and shows nothing (app/lib/diskPreflight.ts).
+   */
+  const [diskNotice, setDiskNotice] = useState<string | null>(null)
+  /**
    * O4-polish: is the COMPOSITOR painting this preview? When it is, the two
    * <video> elements below come down and the sources stop being decoded a
    * second time. False is the normal answer on every engine but v2, and the
@@ -396,6 +406,34 @@ export function CaptureScreen() {
     }
     return eff
   }, [prefs, caps])
+
+  useEffect(() => {
+    if (session || arming) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const [{ recordingsRepo }, preflight, { singleGenCaptureEnabled }] = await Promise.all([
+          import('@core/store'),
+          import('@app/lib/diskPreflight'),
+          import('@core/singleGen'),
+        ])
+        const takes = await recordingsRepo.list()
+        const verdict = await preflight.readPreflight(takes, step, {
+          ...effectiveConfig,
+          composite: !singleGenCaptureEnabled(),
+        })
+        if (cancelled) return
+        setDiskNotice(verdict?.level === 'low' ? verdict.message : null)
+      } catch {
+        // A guard that cannot read the disk says nothing. It must never be the
+        // reason the capture screen fails to render.
+        if (!cancelled) setDiskNotice(null)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [session, arming, step, effectiveConfig])
 
   const cancelArming = () => {
     armAbortRef.current?.abort()
@@ -678,6 +716,14 @@ export function CaptureScreen() {
       {!session && wedgeNotice && (
         <div className="capture__unsupported" role="alert">
           {wedgeNotice}
+        </div>
+      )}
+      {/* B5: only when the machine cannot hold a normal take, and only when it
+          is not already saying something more urgent — the notice slot is one
+          absolutely-positioned strip and two of them would sit on each other. */}
+      {!session && !wedgeNotice && support.ok && diskNotice && (
+        <div className="capture__unsupported" role="alert">
+          {diskNotice}
         </div>
       )}
       {/* Every take you have, and a way back into one — Robert, 2026-08-30:
