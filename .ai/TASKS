@@ -332,7 +332,8 @@ it is built combine-ready:
   3. S1   the take report card            [light-medium · spec below] "perfect" becomes a VERDICT
           every take computes from its own black box — Robert's daily takes become the soak fleet.
   4. B5   disk guard                      [light] unlimited length makes disk the wall.
-     B1   size panel truth                [light] the only pre-render warning, wrong 2.15x.
+     B1   size panel truth                BUILT AND GATED 2026-09-01 on `task/B1`, UNMERGED — the
+          floor is in; the measurement convicted the PROBE at 3.0x, now B1b (handoff under the task).
   5. E1   elastic below max               [medium · spec below, EXTENDED: the detector must
           PREDICT — step before loss, not after — because M1 inherits it as max's floor].
   6. H1-H4 the unkillable-take pack       [light→medium · specs below] component death = a seam,
@@ -1201,6 +1202,55 @@ GATES: a unit test asserts the panel is MONOTONIC in pixel count in both the pro
 calibrated state · the 1440p re-render estimate measured against the file produced, on text content, at
 >=120 s, with the residual stated as a ratio · steps that are already exact are byte-identical to today
 · no change to which steps are instant.
+
+HANDOFF 2026-09-01 (task/B1, own worktree — another session held main). THE FIX IS IN; THE GATE'S
+OTHER HALF FOUND A BIGGER DEFECT AND IT IS NOT IN THE MODEL.
+THE FIX (`flooredByPixelOrder`, compose/quality.ts): walking up in pixel count, a PREDICTED step is
+raised to the largest number below it. An exact number is NEVER raised — it is a file on disk, and
+two files that disagree are two files. Unit-pinned on the case as filed (1080p 400 KB exact above
+1440p ~308 KB) and on order-independence; inert on an already-coherent ladder, confirmed live on two
+takes (9 s screen-only single-generation, and the 160 s text take below) where it changed nothing.
+THE RESIDUAL, MEASURED. 159.6 s, text content (the code-editor synthetic page), screen+camera+mic+tab
+audio, recorded at the 1440p step, source 1920x1080, exported at 1440p (2560x1440) — the file the
+export produced is 21,513,013 bytes:
+  · the MODEL:  19.92 MB → residual actual/estimate = 1.08 (8 % low, inside F7b's +-20 %)
+  · the PROBE:  64.92 MB → residual 0.33. THE PANEL PROMISES 3.0x THE FILE IT DELIVERS.
+The probe is what the panel shows, so the number Robert reads is the 3x one.
+THE MECHANISM, from the probe's own output: `calibrateSteps` samples TWO frames (a keyframe and one
+following delta) and models the file as keyframes every 5 s plus 30 deltas a second. At 1440p on this
+take it read meanKeyframeBytes 378,155 and meanDeltaBytes 10,687 → (378155/5 + 29.8x10687) x 159.6 s
+= 62.9 MB, which is the 64.9 it reported. A still page's REAL deltas collapse toward nothing once the
+encoder is in a steady state; a two-frame sample never sees that. It is worst exactly where F7c never
+looked (its -7/+6 % was measured on content that keeps moving, where deltas stay expensive).
+THE GATE I CANNOT MEET, AND WHY (operating rule: report it with measurements). "Monotonic in both
+states" is not reachable without falsifying a measured number: on the same take the probe puts 720p
+at 26.3 MB ABOVE an EXACT 1080p at 15.6 MB, and on a 9 s take 540p at ~76 KB above an exact ~62 KB.
+Flooring can only RAISE a prediction; capping one at an exact number above it would put a size on
+screen that the export will not deliver, which is the defect B1 exists to remove. The unit test
+therefore asserts what the fix guarantees — no predicted step is priced below a smaller step — and
+the remaining inversion is a symptom of the probe, filed as B1b. Fix the probe and the ladder is
+monotonic on its own.
+STEPS THAT ARE EXACT ARE UNTOUCHED (unit-pinned) and no step changed instant-ness — `copySourceForTier`
+is not read by this change.
+GATES: unit tests green (5 new) · oracle green (1/1 PASS, sync 73.5/79.1 ms) · typecheck clean · 805
+tests.
+
+## B1b the size probe prices a delta frame it never watched [light-medium · authored 2026-09-01 from
+##     B1's own gate · compose/sizeProbe.ts]
+`calibrateSteps` encodes TWO frames per step — a keyframe and the one delta after it — and multiplies
+that delta by the frame rate for the whole take. Measured on a 159.6 s text take at 1440p: predicted
+64.92 MB, produced 21.51 MB, 3.0x. Its inputs say why: meanDeltaBytes 10,687 x 29.8 a second is the
+whole error, because a still page's steady-state delta collapses toward nothing and a two-frame sample
+cannot see it. The MODEL it replaces read 19.92 MB on the same take (8 % low), so today the panel is
+LESS accurate with the probe than without it on still content — and it is still the 2.15x-low
+instrument on Robert's real 1440p take, so neither number can be trusted in either direction yet.
+THE FIX WITH A CHANCE: sample a CONTIGUOUS run (1-2 s of frames) instead of two, take the steady-state
+delta from its tail, and keep the keyframe cost from the first frame. Everything needed is already in
+`StepCalibration` (firstDelta vs laterDelta exist — they are one frame apart, which is the bug).
+GATES: the residual on the SAME fixture (159.6 s text, 1440p) inside +-20 % · a motion take's residual
+does not get worse than F7c's -7/+6 % · the ladder comes out monotonic in pixel count on both fixtures
+with no flooring needed · the probe's wall cost stays under ~2 s (it was 6.3 s for two frames) ·
+oracle green.
 
 ## B2 tab-audio-noises — Robert's bar is "i need them gone" [medium · playback + capture; two defects]
 "when video recorded and edit starts a lot of minor noises in tab audio, but after some time editing
