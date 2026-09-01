@@ -312,7 +312,81 @@ maxAbs, the v1 oracle's export throughput, the fidelity oracle's render lane, an
 explains the first: the packet-copy maxAbs sits ON the band, so at 6 s it is a coin toss and at 120 s
 it is simply red. G1 is now the highest-value instrument task left.
 
-READY NOW:
+── 2026-09-01 RE-PRIORITIZATION (Robert, this session — rulings in DECISIONS): "prioritize all for
+perfomance and optimization ... optimize max quality record 60 fps - hardest case ... untill we
+achieve perfect record unlimited length". THIS ORDER SUPERSEDES THE READY LIST BELOW; the list stays
+for its per-task context. The quality logic Robert restated is CONFIRMED SHIPPED (UI1): the chosen
+step binds capture and ceilings the export — max records max, sub-max records lighter and never
+offers more. F13-FLIP and F15-FLIP DISSOLVE (frame + 60 fps are what `max` means since UI1).
+
+PRIORITY ORDER — perf lane, integrity first:
+  1. A1   tab-audio starvation at max     [heavy · P0 · NEW, spec below] the CAUSE, not the rescue.
+          27 of 50 minutes of tab audio lost on a real max take; b5febbb fixed only the schedule.
+  2. G1   coin-flip merge gate            [medium · already on map] + LC1 the 120 s red cell
+          [promoted from BACKLOG P0, spec below]. The instruments that will judge A1's fix go
+          before the fix — a fix judged by a coin flip is not judged.
+  3. B5   disk guard                      [light] unlimited length makes disk the wall.
+     B1   size panel truth                [light] the only pre-render warning, wrong 2.15x.
+  4. E1   elastic below max               [medium · NEW, spec below] "up and down very fast and
+          responsive, never too much, make it perfect" — bounded by the chosen step, max exempt.
+  5. F16b prerender-at-stop, max+camera   [light-medium · NEW, spec below] instant-feel max with a
+          camera, paid AT STOP. A during-take max composite is a POST-A1 measured spike only.
+  6. O4-WebGPU + O5 remnants              [heavy] the render-floor levers, after F16b.
+  7. B4   dead channel says so · B8 PiP placement   [light] correctness, parallel-safe fillers.
+PARKED until the max60 record is perfect (Robert's ruling 4): F9 · F10 · F11 · F12 · D1 · X13 ·
+F17's sheet UI · O9/O10 remaining lanes · P5a (nothing expires — "TIME-SENSITIVE" meant
+ready-at-launch; runs whenever Robert is at the machine with the device). X1/X2/X3 stay available
+as light parallel fillers (X1 and X2 ARE perf).
+STILL OWED ROBERT (unchanged): B2 listen · O6 4K re-verify · `?singlegen=capture` · O10a
+attenuation ruling · X5 text question · B7 video half (one command).
+
+## A1 tab-audio-starvation — the tap dies under max load and the take keeps going
+   [heavy · P0 · capture integrity · authored 2026-09-01 from Robert's 50-min max take]
+THE EVIDENCE IS ALREADY IN A FILE: rec_78ogcw052vdn (3,026 s, quality=max, screen 3024x1964@30,
+camera+mic+tab audio) — track LIVE and UNMUTED throughout, dead-tap rescue fired 25 times in six
+bursts, silentTailMs 1,650,144, tab opus 14 MB where the mic wrote 48 MB. b5febbb fixed the RESCUE
+(reviveSchedule never retires); the CAUSE is untouched. paddedMs 5,647 of 3,026 s says the audio
+CLOCK was not starving — name what is. Constraint (Robert): quality=max disables every picture
+step-down, so the fix cannot be "degrade". Levers to MEASURE, not assume: what shares the
+PCM-carrying thread (console work already moved off it), tap/worklet buffer sizing, encoder and
+compositor contention at max60, whether the camera encoder or the preview is the contender.
+GATES: a starvation repro that fails before and passes after (rig or real machine, stated which) ·
+a >=50-min max60 take with camera + tab audio on prod: zero rescue bursts after warmup,
+silentTailMs < 1 s · oracle v2+v1 green · oracle:long quoted against the recorded baseline ·
+no behaviour change outside the starvation path without Robert's yes.
+
+## LC1 the 120 s red cell — promoted from BACKLOG P0 2026-09-01 [medium · instrument + copy path]
+G4's first-ever 120 s run: instant maxAbs 94.2-100.5 over five runs against the 90 ms band, where
+6 s reads 69.5-81.2 and always passes — the defect GROWS WITH LENGTH on the default packet-copy
+path, and Robert records 938-3,026 s. Find the growth mechanism; widening the band is refused.
+G1 is predicted to be this same defect sitting ON the band's edge at 6 s — measure that claim.
+GATES: mechanism named with numbers · 120 s instant/trimmed maxAbs inside the band on five cold
+runs · the 6 s numbers unmoved · G1's flip rate re-measured after and quoted.
+
+## E1 elastic-below-max [medium · authored 2026-09-01 · Robert: "it must go up and down very fast
+   and responsive, never too much, make it perfect"]
+The ladder runs ONLY under sub-max steps, hard-bounded by the chosen step (never above), and it
+RECOVERS: down on real pressure, up as soon as pressure clears, in the smallest steps that work —
+O16's segmenting (30 ms step, 69 ms seam, BUILT, off behind `?resstep=1`) is the up-path
+machinery; O15's budget keeps dropping the composite first (no picture cost). Max is exempt by
+ruling until unlimited-length is achieved.
+GATES: prod repro — a loaded sub-max take steps down AND back up, both events in the plan line,
+seams inside O16's bands · a max take under the same load never steps · units pin the ceiling ·
+responsiveness quoted (time from pressure to step, both directions) · oracle v2+v1 green.
+
+## F16b prerender-at-stop for max+camera [light-medium · extends shipped prerender.ts]
+A max take with a camera has no single file to copy; today it renders ON DEMAND and Robert calls
+it very slow. Start F16's existing pre-render job AT STOP for unedited max+camera takes (today it
+starts 1.2 s after an edit/rung settles in the editor). Short takes are ready before the panel
+opens; long ones show the dock's honest progress. Costs the take NOTHING — the machine is idle at
+stop by definition. A DURING-TAKE max composite encoder is the load family already starving the
+tap (A1) and is refused here; re-test it as a measured spike under O15's budget only after A1
+lands and a 50-min take holds its audio.
+GATES: unedited max+camera take — an export press JOINS the at-stop job (prod log line) · T2's
+lateness bands hold when the editor opens while the job runs · a screen-only max take still
+packet-copies and never starts a job · a sub-max take is untouched · oracle green.
+
+READY NOW (per-task context; ORDER SUPERSEDED by the 2026-09-01 priority above):
   R2   FIXED AND MERGED 2026-08-30 (0f8fefe). THE CAUSE WAS THE EXPORT ENCODER'S MISSING
        BACKPRESSURE — the custom constant-quality encoder took every frame synchronously for the
        whole take, so a 4-minute 60 fps render queued 14,400 GPU-backed VideoFrames inside one
@@ -340,13 +414,8 @@ READY NOW:
        record the rung you will export, so the export is a packet copy — plus the background
        transcode at stop. That is the next task, and it is the one both of Robert's requirements
        converge on.
-  F13-FLIP  Robert's own eye           [ROBERT OWED]  F13 IS BUILT, VERIFIED ON PROD AND OFF BY DEFAULT
-                                             (handoff under the task). Its last gate is yours:
-                                             open https://inout-kappa.vercel.app/?sourceframe=1 on
-                                             a PHONE, record yourself, and look at the export. If
-                                             it is right, the default flips and INOUT can make a
-                                             vertical video; if it is not, say what is wrong and
-                                             nothing has moved in the meantime.
+  F13-FLIP  DISSOLVED 2026-09-01 — since UI1 the frame follows the take everywhere (STATE), so
+            there is no separate flip decision left; F13's handoff stands as the record.
   ── DONE THIS SESSION 2026-08-29 (twentieth), all four merged and verified on prod. Handoffs are
      under each task; only the one-line verdict lives here.
   W1   the wedges go            DONE, SHIPPED ON. The safe-mode ladder climbs back (two good takes
@@ -385,14 +454,9 @@ READY NOW:
                                 efficiency lane, not for a resolution change. Corrected table is
                                 under F18.
 
-  F15-FLIP  Robert's own eye       [ROBERT OWED]  F15 IS BUILT, VERIFIED ON PROD AND OFF BY DEFAULT
-                                             (handoff under the task). Its last gate is yours:
-                                             open https://inout-kappa.vercel.app/?sourcefps=1,
-                                             record something that MOVES at 60 (a game, a scroll,
-                                             yourself), and say whether it is worth the bytes.
-                                             Measured on prod, same 8 s: 411 frames against 204,
-                                             2.0 MB against 1.3. If it is right the default flips;
-                                             if it is not, nothing has moved in the meantime.
+  F15-FLIP  DISSOLVED 2026-09-01 — since UI1, 60 fps is what the `max` step MEANS ("max - maximum
+            resolution, 60 fps, all maximum"); there is no separate flip decision left. F15's
+            handoff stands as the record; sub-max stays 30 by the same ruling.
   ORACLE-LOAD — ANSWERED BY G2 2026-08-29 (handoff under G2). The lead this entry carried is REFUTED:
                rAF runs at 120 Hz headless AND headed, and the raw phase's red was the rig handing all
                N takes to ONE page (run 2 stopped in 40-54 s where a fresh page stops in 0.8-3.9 s).
@@ -450,7 +514,7 @@ READY NOW:
 
   ── D1  vision + project data for an agent working on ANOTHER repo — Robert 2026-08-29, "i need
      real tool ... with minimal tokens, browser or not, find way how to do it with our recorder"
-  D1   inout-dev                   [medium · T0 spike first]  PULL, DO NOT PUSH — AI1's own numbers
+  D1   inout-dev  [PARKED 2026-09-01 — perf re-prioritization]  [medium · T0 spike first]  PULL, DO NOT PUSH — AI1's own numbers
                                              kill the file-shaped answer (167 pages = ~144k tokens for
                                              97 s). D1 ships MCP TOOLS over a take folder instead: a
                                              cheap text index, pixels one frame at a time, and a CROP
@@ -461,10 +525,10 @@ READY NOW:
                                              native gets frames + the engine's own log, tailed and
                                              wall-clock aligned. Spec below. T0 must beat
                                              screenshot+console on tokens AND turns, or it is deleted.
-  P5a  iOS SCK spike               [light]   UNBLOCKED 2026-08-26: Robert confirms Xcode 27 + a real
+  P5a  iOS SCK spike  [PARKED 2026-09-01 — runs whenever Robert is at the machine; nothing expires]  [light]   UNBLOCKED 2026-08-26: Robert confirms Xcode 27 + a real
                                              iOS 27 device are available. Needs Robert present (device
                                              plugged in, signing). TIME-SENSITIVE (iOS 27 ~Sept).
-  X13  local-adaptive-encoding     [heavy]   Robert 2026-08-26: "lets try". TIER 1 FIRST — NO model:
+  X13  local-adaptive-encoding  [PARKED 2026-09-01]  [heavy]   Robert 2026-08-26: "lets try". TIER 1 FIRST — NO model:
                                              deterministic per-5s-chunk features (luma-grid delta +
                                              edge density) steering bitrate. Changes the output →
                                              ships OPT-IN behind a flag; the default flip is a
@@ -473,7 +537,7 @@ READY NOW:
                                              UNBLOCKED 2026-08-26: X15 is done. Read its handoff
                                              first — bitrateMode is inert, quantizer mode is the one
                                              rate-control knob Chrome honours.
-  F9   per-channel gain slider     [light-medium]  Robert 2026-08-26: "mic is kinda too loud now, can
+  F9   per-channel gain slider  [PARKED 2026-09-01]  [light-medium]  Robert 2026-08-26: "mic is kinda too loud now, can
                                              we add slider?" Spec in NEW TASKS below. Run AFTER the
                                              live audio-fix session lands (shared mix area).
   P9   camera-1080 verify        [light]   RUN 2026-08-29 — answer PARTIAL and the missing half is
@@ -485,12 +549,12 @@ READY NOW:
                                              preserves 1080p end to end on a controlled source.
                                              TO CLOSE IT: `node scripts/camera-check.mjs` on any
                                              machine with a live camera. Exit 0 = the claim holds.
-  F10  mic noise removal           [medium]  Robert 2026-08-26: "i want noise removal". Local model,
+  F10  mic noise removal  [PARKED 2026-09-01]  [medium]  Robert 2026-08-26: "i want noise removal". Local model,
                                              zero tokens, export-time, raw channels untouched.
                                              Spec below. AFTER the live audio session lands.
-  F11  voice-aware tighten         [light-medium]  Robert 2026-08-26. A local VAD gates F5a's proposals
+  F11  voice-aware tighten  [PARKED 2026-09-01]  [light-medium]  Robert 2026-08-26. A local VAD gates F5a's proposals
                                              so cuts never land on speech. Spec below.
-  F12  super-resolution on zoom    [heavy]   Robert 2026-08-26: "only if zoom used". Render path only,
+  F12  super-resolution on zoom  [PARKED 2026-09-01]  [heavy]   Robert 2026-08-26: "only if zoom used". Render path only,
                                              zoomed spans only, opt-in. Spec below.
 
   ── BUGS — promoted from BACKLOG 2026-08-29 ("put bugs on roadmap"). Specs in BUG PACK below.

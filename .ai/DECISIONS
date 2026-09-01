@@ -425,3 +425,21 @@ localStorage (`wedgeJournal.ts`, `inout.wedgeJournal.v1`), where an agent reads 
 over the browser MCP with nothing asked of him. The rule this sets: a diagnostic that requires the
 user to do anything is worth zero, exactly like a remedy that does (decision (2)).
 2026-08-30 robert: exports become persistent background jobs ("rendering process shown in block ... in bottom of screen layout ... happening further if i switch app screen, independetly ... sirvive refresh and continue ... several rendering at the same time"). Press = persisted job (jobsRepo, own `inout-jobs` DB — bumping `inout` to v3 wedged prod: old tabs block versionchange forever and the open queue jams behind it; the `inout` version is frozen at 2) + dock row on every screen; AppMode lost 'exporting'; editor never locks (edit snapshotted at press). Refresh RESTARTS a running job from zero — muxer state is not checkpointable, restart is the honest "continue" — capped at 3 attempts; done/failed rows expire after 24h (file is already in Downloads). Parallel jobs uncapped by design; scratch sweep became age-gated (6h) because parallel workers each carry their own scratch.ts and were able to delete each other's live files. Cancel delivers nothing, checked after settle — the triggering bug was F16's join reporting a hard-coded "finalizing 0.99" with the claimer's cancel wired to nothing, so the render finished anyway and the download fired at Robert's cancel press.
+2026-09-01 robert — THE PERF RE-PRIORITIZATION, four rulings in one pass ("i need to prioritize all
+for perfomance and optimization ... optimize max quality record 60 fps - hardest case ... untill we
+achieve perfect record unlimited length"). (1) INTEGRITY FIRST: the unlimited-length max60 take must
+be perfect before export-speed work — the tab-audio starvation (rec_78ogcw052vdn, 27 of 50 minutes
+lost) is the P0 and its CAUSE is the task, the rescue having been fixed b5febbb. (2) THE CHOSEN
+QUALITY IS THE RECORDED QUALITY AND THE EXPORT CEILING (confirms UI1's shipped shape): max is
+recorded max with instant export; a sub-max take is prepared for its chosen step OR LESS, never
+more, so capture runs lighter when max is not needed. (3) ELASTIC BELOW MAX ONLY, and the bar is
+his sentence: "it must go up and down very fast and responsive, never too much, make it perfect" —
+bidirectional, minimal steps, fast recovery, hard-bounded by the chosen step; max stays exempt
+(elastic disabled there until unlimited-length is achieved). (4) FEATURES PARK until the max60
+record is perfect: F9/F10/F11/F12, D1, X13, F17's sheet UI, O9/O10 remaining lanes; P5a parks too —
+its "TIME-SENSITIVE" label meant ready-at-iOS-27-launch, nothing technically expires, runs whenever
+Robert is at the machine with the device. COROLLARY: F13-FLIP and F15-FLIP dissolve — since UI1,
+frame-follows-take and 60 fps are what `max` MEANS, so the flips are no longer separate decisions.
+Max+camera instant: answered at-stop, not during the take (F16b) — a second max60 encoder during
+capture is the load family already starving the tap; it may be re-tested as a measured spike only
+after A1 lands and a 50-min take holds its audio.
