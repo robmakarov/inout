@@ -592,6 +592,42 @@ warmup and silentTailMs < 1 s. Nothing is asked of Robert but "don't discard
 it". Until that reading exists A1 IS NOT MERGED-CLOSED, even though its code has
 been live on main since 9b6b224.
 
+## A2 shadow-audio — the take records its sound twice, and the cheap copy heals the dear one
+   [light-medium · capture, additive · READY — Robert "try it" 2026-09-01, DECISIONS robert (5)]
+Audio is KB/s against video's MB/s, so redundancy is nearly free: beside the measured path, an
+audio-only MediaRecorder (opus; it buffers in the browser process, where the load family that
+starves a page-side tap cannot reach it) records the SAME tracks for the whole take into its own
+OPFS key. At stop, where the take's own counters name bursts/gaps (S1's report card computes
+them), splice the missing spans from the shadow: aligned by the shared startOffset, refined by a
+<=1 s cross-correlation at each gap edge, resampled to the master clock — deterministic DSP, no
+ML. DIFFERENTIAL WITNESS, free: a gap present in BOTH paths is below the page (device/OS); a gap
+in the measured path only is ours — one take, two witnesses, every future audio loss arrives
+pre-diagnosed. Shadow bytes are deleted once the take grades green (a rescue, not an archive).
+SEQUENCING: does not replace A1's track tap — it is the floor under every cause not yet met.
+Touches capture/*, so both oracles per the standing rule.
+GATES: a take with induced bursts (tapstarve rig lane) exports with the gaps FILLED — envelope
+continuous across each splice, no click (spur gate holds), silentTail matching a clean control ·
+a clean take is byte-identical on the measured path and discards the shadow · splice alignment
+error quoted (<= 5 ms per seam) · shadow adds no measurable load at max60 (tapstarve table
+unchanged with it on) · oracle v2+v1 green · the report card names every splice.
+
+## J1 resumable-renders — a refresh continues the job instead of restarting it
+   [medium · export jobs only · Robert 2026-09-01: "must be" (verdict pass, idea 7) · PARKED
+   behind A1/E1 with export-speed work per the 09-01 priority ruling]
+R2 made renders persistent jobs; a refresh RESTARTS them from zero because a half-written flat
+MP4 is not a file. A half-written FRAGMENTED MP4 is one, up to the last flushed fragment — the
+shape the v2 capture path already writes. Export muxes fmp4 into the OPFS scratch via the
+positioned durable writer, plus a sidecar journal per fragment (last composed output ms, encoder
+configs, edit-snapshot key). Resume: re-open at the journal's cursor, re-seed encoders at the
+next GOP boundary, compose forward, append; finalize remuxes fmp4 → flat mp4, which is a packet
+copy. The journal's cursor is ALSO the natural upload cursor for the parked instant-link mode —
+one mechanism, two features; build the journal so an uploader can read it.
+GATES: kill the tab mid-render at three points (early/mid/late) → resume completes and the file
+is valid (demux whole, duration exact, certification present) · resumed output equals an
+unbroken control on the compare rig, or the difference bounded and stated · finalize time quoted
+(a copy, not a render) · a job whose edit was superseded resumes NOTHING (key check first —
+ruling 09-01 robert (4)) · attempts cap and 24 h expiry unchanged · capture untouched.
+
 ## LC1 the 120 s red cell — promoted from BACKLOG P0 2026-09-01 [medium · instrument + copy path]
 G4's first-ever 120 s run: instant maxAbs 94.2-100.5 over five runs against the 90 ms band, where
 6 s reads 69.5-81.2 and always passes — the defect GROWS WITH LENGTH on the default packet-copy
@@ -614,6 +650,11 @@ step lands BEFORE loss. Build it as the product's ONE pressure instrument, not a
 heuristic — M1 inherits this exact detector as max's emergency floor, and its "loss minimal for
 seconds" bar is only reachable if the detector fires early. AUDIO LOSES NOTHING during any step,
 in either direction.
+EXTENDED 2026-09-01 verdict pass (DECISIONS robert (5), item 4): THE ACTUATOR IS A DIAL, NOT A
+LADDER — "thats what i expect, smoothly like miliseconds, down and up, not steps". Shed
+continuously (a frame-admission rate the detector tunes every tick — small additive recovery,
+fast multiplicative back-off), rungs only where no continuous lever exists (resolution). Step
+events in the plan line become rate-change events; every band and gate above stands.
 TECH CANDIDATES FOR THE DETECTOR (audit 2026-09-01; CAPABILITY-PROBE ON ROBERT'S CHROME FIRST,
 never rank from memory): the Compute Pressure API — the browser's own leading CPU-pressure signal
 (nominal→critical), exactly the early input "predict, not autopsy" needs; and Long Animation
@@ -919,6 +960,14 @@ screen fps 60→30 → resolution, LAST. AUDIO IS NEVER SACRIFICED — audio is 
 MB/s and its loss is the one Robert hears; a starved system drops video frames before one audio
 buffer. Recovery is O16's segmenting, seconds later, automatic. The bar is his sentence: loss
 minimal, for seconds. DO NOT START on the dependencies alone — Robert says when.
+TECH CANDIDATE (2026-09-01 verdict pass, Robert: "add it to try for max elastic which is turned
+off for now"): temporal SVC — configure the max60 encoders L1T2 (30 fps base + 60 enhancement;
+CAPABILITY-PROBE isConfigSupported on Robert's Chrome FIRST, per codec, never rank from memory).
+Every chunk then carries metadata.svc.temporalLayerId, so the "camera fps → screen fps" sheds
+become MUX-TIME PACKET SELECTION: drop T1 chunks and the stream stays valid by construction,
+recovery is resuming the muxing — zero encoder surgery, zero keyframe stall, and a 30 fps export
+of a 60 take becomes a base-layer packet copy. Where the hardware refuses L1T2, today's rung
+mechanism stands.
 GATES: induced load spike on a max60 take → audio silentTail 0, picture loss lasts < 5 s,
 recovery automatic with seams inside O16 bands, every event in the certification and S1's report
 card · without the spike nothing engages (max byte-identical to before M1) · oracle v2+v1 green ·

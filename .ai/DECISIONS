@@ -495,3 +495,20 @@ band was set at 2.0 ms/s against a measured 1.62 and had to be moved to 4.0 befo
 Corollary two: a lane that matched one event passed on it, so every sync lane now needs a census
 (`matchedPairs ≥ max(3, half the flashes)`) — the third member of the anti-vacuity family already
 in oracle-gate.mjs, after "a path that declined" and "a path that ran unmeasured".
+2026-09-01 robert (5) — THE NINE-IDEA VERDICT PASS (this session's ideation list, his numbering).
+(1) audio tap off the render-deadline path: "whatever, try it" — ALREADY BUILT by A1
+(`?audiotap=track` default, handoff in TASKS); nothing new to author, gate 2 is his next long take.
+(2) dual-path shadow audio: "try it" → authored as A2 in TASKS. (3) temporal-SVC layers: "add it to
+try for max elastic which is turned off for now" → TECH CANDIDATE inside M1, probe-first. (4) the
+elastic actuator: "thats what i expect, smoothly like miliseconds, down and up, not steps" — a BAR
+on E1/M1: continuous shedding, a dial not a ladder; recorded in E1's spec. (5) capacity-based
+refusal: "refuse record? no" — RULING: the engine NEVER refuses a press; capacity knowledge may
+pre-shape a take or feed the pressure instrument, never decline one. (6) capture-time silence-edge
+keyframes (cuts export by packet copy): "idk, add to consider later" → BACKLOG Later. (7) resumable
+renders: "must be" → authored as J1 in TASKS, parked with export-speed work per the 09-01 priority
+ruling. (8) size panel learned from export history: "fuck it, bullshit guessing solution" — DEAD;
+B1b is untouched by this (it measures the take itself, it does not guess from other takes).
+(9) iframe-scoped display request (wedge lever) — NOT RULED; he asked for a plainer explanation
+before judging.
+Same pass, dictated shape for the parked multi-device item: no QR ceremony, ONE ACCOUNT is the
+pairing — recorded on the BACKLOG entry.

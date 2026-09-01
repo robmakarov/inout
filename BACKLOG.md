@@ -755,11 +755,12 @@ Protocol: say "roadmap" in any session → READY map → "go <id>".
 
 ### Later — deliberately inactive
 
-- [P3] Distributed multi-device capture: run the gated two-device sync spike with kill criteria before product work. One authoritative mic/scene; no sub-ms mixing claim. Robert 2026-08-22: "we'll need it eventually" — gating unchanged.
+- [P3] Distributed multi-device capture: run the gated two-device sync spike with kill criteria before product work. One authoritative mic/scene; no sub-ms mixing claim. Robert 2026-08-22: "we'll need it eventually" — gating unchanged. SHAPE DICTATED 2026-09-01 (Robert): no QR ceremony — ONE ACCOUNT is the pairing ("i open mac app - start record, open iphone app - on mac in inputs i see iphone camera and i start"). Same-account presence (supabase realtime, already in the stack) surfaces the signed-in phone as an input chip beside Screen/Camera/Mic — unavailable states ride the existing red-chip machinery. Under it, TWO streams device-to-device (LAN-direct WebRTC, cloud only introduces them): a rough low-latency monitor feed for framing/PiP placement, and the phone's OWN full-quality recording shipped as fragments seconds behind with retries — the take is built ONLY from the second, so network trouble degrades what you SEE, never what you KEEP. The composed frame streams back to the phone (it is a camera AND the director's monitor). Sync = clock pings + room-audio correlation with continuous drift fit (WallClockHold family); the finished take certifies its own sync bound. A remote-angle take re-renders on export (the monitor feed is never saved, so no packet copy). Phone must be unlocked, app foreground — Apple's rule; the phone's screen is the monitor anyway.
 - [P3] Cursor-excluded capture + vector cursor re-render (sharp at any zoom, click ripples) — Robert "maybe someday"; P4 designs the metadata track for it, builds nothing.
 - [P3] Local quality models (camera background blur, ML denoise) — Robert "maybe later". Boundary (ledger 08-22(3)): no AI product features ever; local quality models allowed when revisited; deterministic DSP ships first.
 - [P3] Server-side auth-user deletion hook (the client already deletes user-owned objects/rows).
 - [P3] Image/screenshot capture channel.
+- [P3] Pre-cut capture — the recording prepares itself to be edited: force a composite keyframe at each speech-onset-after-silence (the loudness tap already sees them, min-spaced against KEYFRAME_INTERVAL_SEC), so later cuts land on GOP boundaries and an edited export becomes packet copy of kept GOPs + re-encode of the rare seam GOP, instead of a full render. Byte cost priced by bits.ts before any default flip. Robert 2026-09-01: "idk, add to consider later".
 
 ## Project
 
