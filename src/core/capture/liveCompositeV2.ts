@@ -396,7 +396,7 @@ export async function startLiveCompositeV2(
   let pressureLevel: PressureLevel | null = null
   let pressureWhy: string | null = null
   let seriousSince: number | null = null
-  let nominalSince: number | null = null
+  let clearSince: number | null = null
   /** Lead-time evidence: the first instant each side of the question fired. */
   let firstSeriousAt: number | null = null
   let firstUnderFloorAt: number | null = null
@@ -418,15 +418,18 @@ export async function startLiveCompositeV2(
     if (reading.blind) {
       pressureLevel = null
       seriousSince = null
-      nominalSince = null
+      clearSince = null
       return
     }
     pressureLevel = reading.level
     pressureWhy = reading.leader ? `${reading.leader.signal}: ${reading.leader.detail}` : null
-    if (reading.level === 'serious' || reading.level === 'critical') seriousSince ??= now
-    else seriousSince = null
-    if (reading.level === 'nominal') nominalSince ??= now
-    else nominalSince = null
+    if (reading.level === 'serious' || reading.level === 'critical') {
+      seriousSince = seriousSince ?? now
+      clearSince = null
+    } else {
+      seriousSince = null
+      clearSince = clearSince ?? now
+    }
     evaluateLadder(now)
   }
 
@@ -452,7 +455,7 @@ export async function startLiveCompositeV2(
       currentFps,
       pressureLevel,
       pressureSeriousForMs: seriousSince === null ? 0 : now - seriousSince,
-      pressureNominalForMs: nominalSince === null ? 0 : now - nominalSince,
+      pressureClearForMs: clearSince === null ? 0 : now - clearSince,
       pressureWhy,
     })
     if (!verdict) return
@@ -461,7 +464,7 @@ export async function startLiveCompositeV2(
     underFloorSince = null
     aboveRecoverySince = null
     seriousSince = null
-    nominalSince = null
+    clearSince = null
     console.warn(
       `[capture] capture ladder ${verdict.direction === 'up' ? 'recovering' : 'backing off'} ` +
         `(${verdict.from}): ${verdict.reason}`,

@@ -194,8 +194,17 @@ export interface LadderInput {
   pressureLevel: PressureLevel | null
   /** How long pressure has been continuously at or above `serious`, ms. */
   pressureSeriousForMs: number
-  /** How long pressure has been continuously `nominal`, ms. */
-  pressureNominalForMs: number
+  /**
+   * How long pressure has been continuously BELOW `serious`, ms.
+   *
+   * Below serious and not `nominal`, and the difference is the whole rule.
+   * Measured in the real app 2026-09-01: a 1080p60 take with three encoders
+   * open reads `fair` in its STEADY STATE on this machine — 20.2 ms of work per
+   * 16.7 ms frame under load, and still above half a frame budget once the load
+   * lifts. Requiring `nominal` to climb meant a take that stepped down never
+   * came back up, which is worse than the hunting it was written to stop.
+   */
+  pressureClearForMs: number
   /** The leading signal's own words, for the reason line. */
   pressureWhy: string | null
 }
@@ -315,20 +324,19 @@ export function ladderVerdict(input: LadderInput): LadderVerdict | null {
   // delivery ruler reads HEALTHY at a reduced rate almost by definition — the
   // encoder is coping with half the frames — so on its own it climbs back into
   // a load that never went away. Measured: a control take went down at 17.0 s,
-  // UP at 24.0 s while still loaded, and down again at 27.0 s; a second, at
-  // 22.2 s, climbed on 6.2 s of healthy delivery while pressure was still
-  // reading fair, and fell back 3.1 s later. So when there IS a reading it has
-  // to be `nominal`, not merely "not serious": `fair` at the lower rate would
-  // be worse than fair at the higher one, which is the rung being asked for.
-  if (input.pressureLevel !== null && input.pressureLevel !== 'nominal') return null
+  // UP at 24.0 s WHILE STILL LOADED, and down again at 27.0 s.
+  //
+  // So the reading, when there is one, has a veto: never climb while pressure
+  // is at or above `serious`, and not for PRESSURE_CLEAR_MS after it last was.
+  // The bar is "below serious", NOT "nominal" — see pressureClearForMs.
+  if (input.pressureLevel !== null && atLeast(input.pressureLevel, 'serious')) return null
+  if (input.pressureLevel !== null && input.pressureClearForMs < PRESSURE_CLEAR_MS) return null
 
   // Rule 6's up-path: pressure clear AND delivery healthy climbs sooner than
-  // delivery alone. Never pressure alone — a detector that says nominal while
+  // delivery alone. Never pressure alone — a detector that reads clear while
   // frames are being lost would climb straight back into the loss.
   const clear =
-    input.pressureLevel === 'nominal' &&
-    input.pressureNominalForMs >= PRESSURE_CLEAR_MS &&
-    input.aboveRecoveryForMs >= PRESSURE_CLEAR_MS
+    input.pressureLevel !== null && input.aboveRecoveryForMs >= PRESSURE_CLEAR_MS
   if (!clear && input.aboveRecoveryForMs < RECOVERY_MS) return null
 
   return {
@@ -339,7 +347,7 @@ export function ladderVerdict(input: LadderInput): LadderVerdict | null {
       `encoded ${input.deliveredFps.toFixed(1)} of ${demandFps.toFixed(1)} arriving fps ` +
       `(${Math.round(ratio * 100)} % kept) for ${Math.round(input.aboveRecoveryForMs)} ms` +
       (clear
-        ? ` and pressure nominal for ${Math.round(input.pressureNominalForMs)} ms`
+        ? ` and pressure clear for ${Math.round(input.pressureClearForMs)} ms`
         : '') +
       ` → ${back.label}`,
   }

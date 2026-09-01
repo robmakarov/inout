@@ -41,7 +41,7 @@ const base: LadderInput = {
   // exactly as it did — which is what `?pressure=0` gives a user.
   pressureLevel: null,
   pressureSeriousForMs: 0,
-  pressureNominalForMs: 0,
+  pressureClearForMs: 0,
   pressureWhy: null,
 }
 
@@ -219,7 +219,7 @@ describe('the pressure path (E1)', () => {
       deliveredFps: 30,
       arrivedFps: 30,
       pressureLevel: 'nominal',
-      pressureNominalForMs: 60_000,
+      pressureClearForMs: 60_000,
       aboveRecoveryForMs: 60_000,
     }
     expect(ladderVerdict(at30)).toBeNull()
@@ -249,7 +249,7 @@ describe('the pressure path (E1)', () => {
       deliveredFps: 30,
       aboveRecoveryForMs: PRESSURE_CLEAR_MS,
       pressureLevel: 'nominal',
-      pressureNominalForMs: PRESSURE_CLEAR_MS,
+      pressureClearForMs: PRESSURE_CLEAR_MS,
     })
     expect(v?.direction).toBe('up')
     expect(v?.from).toBe('predicted')
@@ -265,7 +265,7 @@ describe('the pressure path (E1)', () => {
         deliveredFps: 10,
         aboveRecoveryForMs: 0,
         pressureLevel: 'nominal',
-        pressureNominalForMs: 60_000,
+        pressureClearForMs: 60_000,
       }),
     ).toBeNull()
   })
@@ -275,7 +275,7 @@ describe('the pressure path (E1)', () => {
     // take with a 0.00/6 queue, 15.9 ms of latency and ZERO dropped frames. The
     // source had slowed; the rate asked of it was never the problem.
     expect(
-      ladderVerdict({ ...failing, pressureLevel: 'nominal', pressureNominalForMs: 10_000 }),
+      ladderVerdict({ ...failing, pressureLevel: 'nominal', pressureClearForMs: 10_000 }),
     ).toBeNull()
   })
 
@@ -305,12 +305,24 @@ describe('the up-path needs the detector too (E1)', () => {
     aboveRecoveryForMs: RECOVERY_MS + 1,
   }
 
-  it('will not climb back into a load that is merely not-serious yet', () => {
-    expect(ladderVerdict({ ...recovered, pressureLevel: 'fair' })).toBeNull()
+  it('will not climb while pressure is serious', () => {
+    expect(
+      ladderVerdict({ ...recovered, pressureLevel: 'serious', pressureClearForMs: 0 }),
+    ).toBeNull()
   })
 
-  it('climbs when the reading is nominal', () => {
-    expect(ladderVerdict({ ...recovered, pressureLevel: 'nominal' })?.direction).toBe('up')
+  it('will not climb in the first seconds after pressure clears', () => {
+    expect(
+      ladderVerdict({ ...recovered, pressureLevel: 'nominal', pressureClearForMs: 500 }),
+    ).toBeNull()
+  })
+
+  it('climbs from FAIR once it has been clear a while — a busy steady state is not a veto', () => {
+    // Measured in the real app: a 1080p60 take with three encoders open reads
+    // `fair` at rest on this machine. Requiring `nominal` meant it never came
+    // back up after a step, which is worse than the hunting the veto stops.
+    const v = ladderVerdict({ ...recovered, pressureLevel: 'fair', pressureClearForMs: PRESSURE_CLEAR_MS })
+    expect(v?.direction).toBe('up')
   })
 
   it('and with no reading at all it is the shipped ladder', () => {
