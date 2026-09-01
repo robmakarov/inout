@@ -443,3 +443,15 @@ frame-follows-take and 60 fps are what `max` MEANS, so the flips are no longer s
 Max+camera instant: answered at-stop, not during the take (F16b) — a second max60 encoder during
 capture is the load family already starving the tap; it may be re-tested as a measured spike only
 after A1 lands and a 50-min take holds its audio.
+2026-09-01 robert (2) — THE COMBINE IS THE ENDGAME ("when max is perfect and elastic is perfect we
+will combine them too, so if loss will be there it will be minimal for seconds, be ready"). When A1
+(max integrity) and E1 (elastic below max) are both perfect, elastic becomes max's EMERGENCY FLOOR:
+never a quality ladder at max, but a predictive last resort whose loss is minimal and lasts seconds,
+with automatic recovery (O16 seams) and every event certified in the take. Standing consequences,
+so everything built before it is combine-ready: E1's detector must PREDICT starvation (step before
+loss, not after) because M1 inherits it as the product's one pressure instrument; the sacrifice
+order is composite → camera fps → screen fps → resolution LAST; AUDIO IS NEVER SACRIFICED — audio
+is KB/s against video's MB/s and its loss is the one Robert hears, so a starved system drops video
+frames before one audio buffer. M1 is the task; blocked on A1 + E1 AND ROBERT-GATED ("but not
+until i say", same message thread): even with both prerequisites perfect, the combine does not
+start until Robert says so.

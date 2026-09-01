@@ -319,20 +319,31 @@ for its per-task context. The quality logic Robert restated is CONFIRMED SHIPPED
 step binds capture and ceilings the export — max records max, sub-max records lighter and never
 offers more. F13-FLIP and F15-FLIP DISSOLVE (frame + 60 fps are what `max` means since UI1).
 
-PRIORITY ORDER — perf lane, integrity first:
-  1. A1   tab-audio starvation at max     [heavy · P0 · NEW, spec below] the CAUSE, not the rescue.
+PRIORITY ORDER — perf lane, integrity first. EXTENDED 2026-09-01 second pass (rulings in
+DECISIONS): THE COMBINE IS THE ENDGAME — when max is perfect and elastic is perfect they merge,
+elastic becoming max's emergency floor so any loss is minimal and lasts seconds. M1 is that task,
+it is ROBERT-GATED ("but not until i say") on top of its A1+E1 dependency, and everything before
+it is built combine-ready:
+  1. A1   tab-audio starvation at max     [heavy · P0 · spec below] the CAUSE, not the rescue.
           27 of 50 minutes of tab audio lost on a real max take; b5febbb fixed only the schedule.
   2. G1   coin-flip merge gate            [medium · already on map] + LC1 the 120 s red cell
           [promoted from BACKLOG P0, spec below]. The instruments that will judge A1's fix go
           before the fix — a fix judged by a coin flip is not judged.
-  3. B5   disk guard                      [light] unlimited length makes disk the wall.
+  3. S1   the take report card            [light-medium · spec below] "perfect" becomes a VERDICT
+          every take computes from its own black box — Robert's daily takes become the soak fleet.
+  4. B5   disk guard                      [light] unlimited length makes disk the wall.
      B1   size panel truth                [light] the only pre-render warning, wrong 2.15x.
-  4. E1   elastic below max               [medium · NEW, spec below] "up and down very fast and
-          responsive, never too much, make it perfect" — bounded by the chosen step, max exempt.
-  5. F16b prerender-at-stop, max+camera   [light-medium · NEW, spec below] instant-feel max with a
+  5. E1   elastic below max               [medium · spec below, EXTENDED: the detector must
+          PREDICT — step before loss, not after — because M1 inherits it as max's floor].
+  6. H1-H4 the unkillable-take pack       [light→medium · specs below] component death = a seam,
+          not a dead take · crash-loss bound stated at hour scale · memory slope flat at hour
+          scale · a device that dies mid-take is survived and said (absorbs B4).
+  7. F16b prerender-at-stop, max+camera   [light-medium · spec below] instant-feel max with a
           camera, paid AT STOP. A during-take max composite is a POST-A1 measured spike only.
-  6. O4-WebGPU + O5 remnants              [heavy] the render-floor levers, after F16b.
-  7. B4   dead channel says so · B8 PiP placement   [light] correctness, parallel-safe fillers.
+  8. M1   THE COMBINE — max + emergency elastic  [ROBERT-GATED + blocked on A1 and E1 · spec
+          below] not started until Robert says so, even with both prerequisites perfect.
+  9. O4-WebGPU + O5 remnants              [heavy] the render-floor levers, after F16b.
+ 10. B8   PiP placement                   [light] correctness, parallel-safe filler.
 PARKED until the max60 record is perfect (Robert's ruling 4): F9 · F10 · F11 · F12 · D1 · X13 ·
 F17's sheet UI · O9/O10 remaining lanes · P5a (nothing expires — "TIME-SENSITIVE" meant
 ready-at-launch; runs whenever Robert is at the machine with the device). X1/X2/X3 stay available
@@ -370,9 +381,18 @@ RECOVERS: down on real pressure, up as soon as pressure clears, in the smallest 
 O16's segmenting (30 ms step, 69 ms seam, BUILT, off behind `?resstep=1`) is the up-path
 machinery; O15's budget keeps dropping the composite first (no picture cost). Max is exempt by
 ruling until unlimited-length is achieved.
+EXTENDED 2026-09-01 second pass (the combine ruling): THE DETECTOR MUST PREDICT, NOT AUTOPSY.
+Today's ladder judges deliveredFps — a verdict on frames ALREADY lost. Fuse the leading signals
+(encoder queue depth, delivery jitter, main-thread lateness via perf/mainThreadWatch.ts) so the
+step lands BEFORE loss. Build it as the product's ONE pressure instrument, not a ladder-local
+heuristic — M1 inherits this exact detector as max's emergency floor, and its "loss minimal for
+seconds" bar is only reachable if the detector fires early. AUDIO LOSES NOTHING during any step,
+in either direction.
 GATES: prod repro — a loaded sub-max take steps down AND back up, both events in the plan line,
 seams inside O16's bands · a max take under the same load never steps · units pin the ceiling ·
-responsiveness quoted (time from pressure to step, both directions) · oracle v2+v1 green.
+responsiveness quoted (time from pressure to step, both directions) · a step costs zero audio
+(silentTail/gaps unchanged across the seam) · the detector's lead time quoted (pressure seen →
+frames would have been lost) · oracle v2+v1 green.
 
 ## F16b prerender-at-stop for max+camera [light-medium · extends shipped prerender.ts]
 A max take with a camera has no single file to copy; today it renders ON DEMAND and Robert calls
@@ -385,6 +405,62 @@ lands and a 50-min take holds its audio.
 GATES: unedited max+camera take — an export press JOINS the at-stop job (prod log line) · T2's
 lateness bands hold when the editor opens while the job runs · a screen-only max take still
 packet-copies and never starts a job · a sub-max take is untouched · oracle green.
+
+## S1 the take report card — "perfect" is a verdict, not a vibe [light-medium · instrument ·
+   authored 2026-09-01 second pass]
+The black box already records everything the verdict needs; nobody computes one. At stop (and on
+demand for any historical take) compute: every channel full-length (silentTailMs, gaps, paddedMs),
+revive/rescue events = 0 after warmup, sync anchors inside band (B7's numbers are in the cert),
+delivered fps vs promised over time, memory high-water, disk written vs the estimate, wedge/stall
+events. ONE verdict line naming the failing dimension. This is how "perfect record unlimited
+length" stops being argued: Robert's own daily takes BECOME the soak fleet, each one readable by
+an agent off the machine with nothing asked of him (the wedgeJournal precedent, DECISIONS
+2026-08-30 (4)). The hour-scale synthetic soak cell is NOT this task — it rides A1's verification.
+GATES: rec_78ogcw052vdn (the 50-min take) computes RED naming tab-audio and the six bursts · a
+clean short take computes GREEN · zero cost while recording (computed at stop/on demand) · an
+agent reads the verdict over the browser MCP with Robert doing nothing · oracle green.
+
+## H1 segment containment — a component death is a seam, not a dead take [medium]
+F6/O16 proved the machinery (own epoch anchors, 30-69 ms seams). Generalize: an encoder error, a
+worker death, a track ending mid-take closes the segment and opens the next with whatever still
+works, certifying what was lost and when. The take survives everything short of the tab dying.
+GATES: induced encoder kill mid-take → take completes, seam inside F6 bands, loss certified ·
+induced worker death likewise · nothing engages on a healthy take · oracle v2+v1 green.
+
+## H2 the crash-loss bound — kill it anywhere, lose seconds [light-medium · mostly measurement]
+Salvage exists; its bound at max60 hour scale has never been stated. SIGKILL the tab at sampled
+instants of a >=30-min max60 take → the salvaged take loses < N s; state N and what prices it
+(fragment/checkpoint cadence). If N is minutes anywhere, the cadence is the fix.
+GATES: the bound quoted from >=5 kill points · worst case < 5 s or the fix that makes it so ·
+salvage-path tests green · oracle green.
+
+## H3 memory slope at hour scale [light · rig cell · HEAVY RUN, announced, overnight]
+Nothing measures memory past minutes. One cell: synthetic max60 soak, 60 min, memory sampled per
+minute. Band: slope ~0 after warmup — this is the 8 GB machine's take-length ceiling in disguise.
+GATES: the curve in the handoff · a leak found becomes its own task, not a widened band · the
+cell is one command afterwards.
+
+## H4 a device that dies mid-take is survived and said [light · ABSORBS B4]
+B4 widened: not only "recorded nothing from the start" — a BT mic that dies at minute 40, a
+camera unplugged, a track that ends. The channel closes as a certified loss at its timestamp, the
+take CONTINUES, the UI says so live (the liveness path exists and was not checked — B4's finding).
+GATES: B4's original repro says so on screen · induced track-end mid-take → take completes, loss
+certified with timestamp, other channels full length · oracle green.
+
+## M1 THE COMBINE — max + emergency elastic [ROBERT-GATED ("but not until i say") + blocked on
+   A1 and E1 both perfect · Robert 2026-09-01: "when max is perfect and elastic is perfect we
+   will combine them too, so if loss will be there it will be minimal for seconds, be ready"]
+At max, elastic stays OFF as a quality ladder and arms as an EMERGENCY FLOOR: when E1's predictive
+detector says starvation is COMING (never after it arrives), sacrifice in this order, certifying
+every event in the take: composite encoder (free — O15's first move already) → camera fps →
+screen fps 60→30 → resolution, LAST. AUDIO IS NEVER SACRIFICED — audio is KB/s against video's
+MB/s and its loss is the one Robert hears; a starved system drops video frames before one audio
+buffer. Recovery is O16's segmenting, seconds later, automatic. The bar is his sentence: loss
+minimal, for seconds. DO NOT START on the dependencies alone — Robert says when.
+GATES: induced load spike on a max60 take → audio silentTail 0, picture loss lasts < 5 s,
+recovery automatic with seams inside O16 bands, every event in the certification and S1's report
+card · without the spike nothing engages (max byte-identical to before M1) · oracle v2+v1 green ·
+oracle:long quoted against baseline.
 
 READY NOW (per-task context; ORDER SUPERSEDED by the 2026-09-01 priority above):
   R2   FIXED AND MERGED 2026-08-30 (0f8fefe). THE CAUSE WAS THE EXPORT ENCODER'S MISSING
