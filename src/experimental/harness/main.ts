@@ -537,6 +537,26 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'tapstarve',
+    title: 'A1 — why the tab-audio tap dies under max load (webaudio vs MediaStreamTrackProcessor)',
+    detail:
+      'the tab plays ONE continuous tone and the SAME captured display-audio track is tapped two ways at once — the production AudioContext/AudioWorklet path and MediaStreamTrackProcessor — under a switchable max60-class load (real VideoEncoders at 3024x1964@30 + 1920x1080@60, every core spinning, 4K paints, a second measured channel). Any zero second is a defect, so a zero run in one lane and not the other names the layer that dies. Run with --keep-audio. {"secs":180,"load":"none|cpu|paint|encode|audiopeer|all"}.',
+    run: async (args) => {
+      const { runTapStarvation } = await import('../perf/tapStarvation')
+      return runTapStarvation({
+        secs: typeof args?.secs === 'number' ? args.secs : undefined,
+        load: typeof args?.load === 'string' ? (args.load as 'none') : undefined,
+        originalTap:
+          args?.originalTap === 'mstp' || args?.originalTap === 'webaudio'
+            ? args.originalTap
+            : undefined,
+        lanes: Array.isArray(args?.lanes) ? (args.lanes as ('webaudio' | 'mstp')[]) : undefined,
+        screen: (args?.screen as { w: number; h: number; fps: number }) ?? undefined,
+        camera: (args?.camera as { w: number; h: number; fps: number }) ?? undefined,
+      })
+    },
+  },
+  {
     id: 'syncload',
     title: 'A/V sync when the machine is BUSY (Robert 4K-game take)',
     detail:

@@ -80,6 +80,76 @@ function parseArgs(argv) {
   return { cold, headed, engine, composite, recordMs, trimMs }
 }
 
+
+/**
+ * THE DISTRIBUTION BEHIND A GATE NUMBER (task G1, 2026-09-01).
+ *
+ * `syncMaxAbs` is an EXTREME over the take's pairs and the band it is checked
+ * against is a constant, so two very different files read the same: a tight
+ * scatter sampled many times, and a genuine ramp. This reduces the per-pair
+ * offsets the analysis now carries to the numbers that separate them — spread
+ * (sd), the worst deviation from the mean, and the least-squares drift of
+ * offset against take time with its R². A ramp is slope-dominated with R² near
+ * 1; sampling noise is not.
+ */
+function dist(fs) {
+  if (!fs || !Array.isArray(fs.offsetsMs) || fs.offsetsMs.length === 0) return null
+  const d = fs.offsetsMs
+  const t = Array.isArray(fs.pairSec) && fs.pairSec.length === d.length ? fs.pairSec : null
+  const n = d.length
+  const mean = d.reduce((s, x) => s + x, 0) / n
+  const sd = n > 1 ? Math.sqrt(d.reduce((s, x) => s + (x - mean) ** 2, 0) / (n - 1)) : 0
+  const maxDev = Math.max(...d.map((x) => Math.abs(x - mean)))
+  let slopeMsPerSec = null
+  let r2 = null
+  if (t && n > 2) {
+    const tm = t.reduce((s, x) => s + x, 0) / n
+    const sxx = t.reduce((s, x) => s + (x - tm) ** 2, 0)
+    const sxy = t.reduce((s, x, i) => s + (x - tm) * (d[i] - mean), 0)
+    if (sxx > 0) {
+      slopeMsPerSec = sxy / sxx
+      const ssTot = d.reduce((s, x) => s + (x - mean) ** 2, 0)
+      const ssRes = d.reduce((s, x, i) => s + (x - (mean + slopeMsPerSec * (t[i] - tm))) ** 2, 0)
+      r2 = ssTot > 0 ? 1 - ssRes / ssTot : null
+    }
+  }
+  return {
+    n,
+    meanMs: Math.round(mean * 100) / 100,
+    sdMs: Math.round(sd * 100) / 100,
+    maxDevMs: Math.round(maxDev * 100) / 100,
+    minMs: Math.min(...d),
+    maxMs: Math.max(...d),
+    slopeMsPerSec: slopeMsPerSec === null ? null : Math.round(slopeMsPerSec * 1000) / 1000,
+    r2: r2 === null ? null : Math.round(r2 * 1000) / 1000,
+    spanSec: t ? Math.round((t[t.length - 1] - t[0]) * 100) / 100 : null,
+    offsetsMs: d,
+    pairSec: t,
+  }
+}
+
+/** The three lanes' distributions from one report. */
+function reportDists(report) {
+  return {
+    render: dist(report?.full?.flashSyncUnbiased ?? report?.full?.flashSync),
+    instant: dist(report?.instantFlashSync),
+    trimmed: dist(report?.trimmed?.flashSyncUnbiased ?? report?.trimmed?.flashSync),
+  }
+}
+
+function fmtDist(label, d) {
+  if (!d) return `${label}=n/a`
+  return (
+    `${label}[n=${d.n} sd=${d.sdMs.toFixed(1)} dev=${d.maxDevMs.toFixed(1)}` +
+    (d.slopeMsPerSec === null
+      ? ''
+      : ` drift=${d.slopeMsPerSec >= 0 ? '+' : ''}${d.slopeMsPerSec.toFixed(3)}ms/s r2=${
+          d.r2 === null ? 'n/a' : d.r2.toFixed(2)
+        }`) +
+    ']'
+  )
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 /** Bind port 0 to let the OS assign a free port, then release it for Vite. */
@@ -298,6 +368,13 @@ async function main() {
               : 'n/a'
           } (${elapsed}ms)`,
       )
+      // G1: the SHAPE of the samples, printed beside the extreme that gates them.
+      const dists = reportDists(run.report)
+      results[results.length - 1].dists = dists
+      console.error(
+        `      ${fmtDist('render', dists.render)} ${fmtDist('inst', dists.instant)} ` +
+          `${fmtDist('trim', dists.trimmed)}`,
+      )
       if (!gate.pass) {
         console.error('  failures:', gate.failures.join('; '))
         if (cold === 1) {
@@ -352,6 +429,9 @@ async function main() {
       instantSyncMaxAbsMs: results.map((r) => r.gate.metrics.instantSyncMaxAbsMs),
       trimmedSyncMaxAbsMs: results.map((r) => r.gate.metrics.trimmedSyncMaxAbsMs),
       compositeStartOffsetMs: results.map((r) => r.gate.metrics.compositeStartOffsetMs),
+      // G1: every run's per-pair offsets, so a verdict about the STATISTIC can
+      // be reached from one matrix instead of re-run and re-argued.
+      dists: results.map((r) => r.dists ?? null),
       // So a session can budget the cell instead of discovering its cost.
       elapsedMs: results.map((r) => r.elapsedMs),
       port,

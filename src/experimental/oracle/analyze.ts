@@ -95,6 +95,18 @@ export interface FlashSync {
   /** Same sign convention as SyncStats: positive = audio late vs video. */
   meanOffsetMs: number
   maxAbsOffsetMs: number
+  /**
+   * THE PER-SAMPLE OFFSETS THE TWO SUMMARY NUMBERS ARE MADE OF (task G1,
+   * 2026-09-01). Every sync verdict this repo has ever argued about was argued
+   * from `meanOffsetMs` and `maxAbsOffsetMs` — a mean and an EXTREME, with no
+   * way to tell a wide scatter from a steady ramp, and those two have opposite
+   * verdicts: one is the instrument, the other is the file. Both are here now,
+   * with the flash time of each pair, so the distribution is data instead of a
+   * reconstruction from three failing runs.
+   */
+  offsetsMs: number[]
+  /** Export-timeline second of the FLASH in each kept pair, same index order. */
+  pairSec: number[]
 }
 
 export interface AnalyzeOptions {
@@ -366,16 +378,16 @@ export function flashSyncStats(
    */
   const INLIER_MS = 60
 
-  /** One-to-one match under a proposed constant offset; returns the residuals. */
-  const matchUnder = (offsetMs: number): number[] => {
-    const out: number[] = []
+  /** One-to-one match under a proposed constant offset; residual + its flash time. */
+  const matchUnder = (offsetMs: number): { d: number; sec: number }[] => {
+    const out: { d: number; sec: number }[] = []
     let fi = 0
     for (const a of audio) {
       while (fi < flashes.length && (a - flashes[fi]!) * 1000 - offsetMs > INLIER_MS) fi++
       if (fi >= flashes.length) break
       const d = (a - flashes[fi]!) * 1000
       if (Math.abs(d - offsetMs) <= INLIER_MS) {
-        out.push(d)
+        out.push({ d, sec: flashes[fi]! })
         fi++
       }
     }
@@ -391,7 +403,7 @@ export function flashSyncStats(
   }
   if (candidates.length === 0) return null
 
-  let bestOffsets: number[] | null = null
+  let bestOffsets: { d: number; sec: number }[] | null = null
   let bestScore = -1
   let bestCentre = Infinity
   for (const c of candidates) {
@@ -399,7 +411,7 @@ export function flashSyncStats(
     if (offsets.length === 0) continue
     // Distance from the EXPECTATION, not from zero: with no expectation the two
     // are the same rule, and with one it is the rule that can be right.
-    const centre = Math.abs(offsets.reduce((s, x) => s + x, 0) / offsets.length - expected)
+    const centre = Math.abs(offsets.reduce((s, x) => s + x.d, 0) / offsets.length - expected)
     if (
       offsets.length > bestScore ||
       (offsets.length === bestScore && centre < bestCentre)
@@ -413,17 +425,19 @@ export function flashSyncStats(
   if (!bestOffsets || bestOffsets.length === 0) return null
 
   // Median consensus, then drop outliers — a spurious onset must not drag the mean.
-  const sorted = [...bestOffsets].sort((a, b) => a - b)
+  const sorted = [...bestOffsets].map((x) => x.d).sort((a, b) => a - b)
   const median = sorted[Math.floor(sorted.length / 2)]!
-  const kept = bestOffsets.filter((d) => Math.abs(d - median) <= outlierMs)
+  const kept = bestOffsets.filter((x) => Math.abs(x.d - median) <= outlierMs)
   const use = kept.length >= 1 ? kept : bestOffsets
-  const meanOffsetMs = use.reduce((s, x) => s + x, 0) / use.length
-  const maxAbsOffsetMs = Math.max(...use.map((d) => Math.abs(d)))
+  const meanOffsetMs = use.reduce((s, x) => s + x.d, 0) / use.length
+  const maxAbsOffsetMs = Math.max(...use.map((x) => Math.abs(x.d)))
 
   return {
     flashes: flashOnsetsSec.length,
     matchedPairs: use.length,
     meanOffsetMs,
     maxAbsOffsetMs,
+    offsetsMs: use.map((x) => Math.round(x.d * 100) / 100),
+    pairSec: use.map((x) => Math.round(x.sec * 1000) / 1000),
   }
 }

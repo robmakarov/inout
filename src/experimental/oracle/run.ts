@@ -20,7 +20,7 @@ import { getLastScratchStats } from '@core/compose/scratch'
 import { defaultEditState } from '@core/timeline'
 import { DEFAULT_EXPORT_SETTINGS, type EditState } from '@core/types'
 import { analyzeAudioIntegrity, type AudioIntegrityReport } from './audioIntegrity'
-import { analyzeExport, type ExportAnalysis } from './analyze'
+import { analyzeExport, type ExportAnalysis, type FlashSync } from './analyze'
 import { recordFiducialSession, sweepStaleOracleBlobs, type RecordOptions } from './rig'
 import { resolveScheduleSkewMeanMs } from './scheduleSkew'
 
@@ -82,6 +82,14 @@ export interface OracleReport {
   instantPath: ExportPath | null
   instantSyncMeanMs: number | null
   instantSyncMaxAbsMs: number | null
+  /**
+   * The instant lane's PER-PAIR offsets (task G1). `full` and `trimmed` carry
+   * their whole analysis into the report and the instant lane carried two
+   * summary numbers — so the one path an unedited export actually takes was
+   * the only one whose distribution could not be read after the fact. It can
+   * now, and at the same cost as the two it was measured beside.
+   */
+  instantFlashSync: FlashSync | null
   /**
    * Audio integrity of the INSTANT file (BACKLOG P0 2026-08-25): the packet
    * copy is the default export and its audio was never measured by anything —
@@ -289,6 +297,7 @@ export async function runOracle(
 
     let instantSyncMeanMs: number | null = null
     let instantSyncMaxAbsMs: number | null = null
+    let instantFlashSync: FlashSync | null = null
     let instantPath: ExportPath | null = null
     let instantPathDeclined: { path: ExportPath; reason: string }[] = []
     let audioIntegrityInstant: AudioIntegrityReport | null = null
@@ -306,6 +315,9 @@ export async function runOracle(
         const s = pathSync(inst)
         instantSyncMeanMs = s.meanMs
         instantSyncMaxAbsMs = s.maxAbsMs
+        // The distribution behind those two numbers — same estimator, same
+        // pairing, whichever rung pathSync landed on.
+        instantFlashSync = inst.flashSyncUnbiased ?? inst.flashSync
         // The audio-quality half of the same blind spot the sync fields fixed:
         // the file most takes actually get, through the integrity metric that
         // until now only ever saw the render (BACKLOG P0 2026-08-25).
@@ -350,6 +362,7 @@ export async function runOracle(
       instantPath,
       instantSyncMeanMs,
       instantSyncMaxAbsMs,
+      instantFlashSync,
       instantPathDeclined,
       audioIntegrityInstant,
       compositeFirstPacketSec,
