@@ -1007,14 +1007,23 @@ class Session implements CaptureSession {
     }
   }
 
-  private markCompositeUnusable(reason: string): void {
+  /**
+   * @param blameEncoder O15's budget files a permanent "this machine collapsed
+   * at N Mpx/s" mark against the plan, so an equal or larger take is bounded
+   * before it starts. That is right when the COMPOSITE gave up — "a composite
+   * that produces nothing in its first second never produces anything" — and
+   * wrong when a DEVICE died. Measured on prod 2026-09-01: a camera that
+   * delivered no frames filed `this machine collapsed at 99.1 Mpx/s`, and a
+   * shut laptop lid would have bounded every later take on that machine. The
+   * composite is still unusable either way (there is no picture to copy); it
+   * simply is not evidence about the encoder.
+   */
+  private markCompositeUnusable(reason: string, blameEncoder = true): void {
     if (this.compositeInvalid) return
     this.compositeInvalid = true
     console.info(`[capture] composite unusable (${reason}) — unedited export will render`)
-    // O15: the composite giving up IS the collapse this budget exists for —
-    // "a composite that produces nothing in its first second never produces
-    // anything". File it against the plan that produced it.
-    this.noteEncoderCollapse(`the composite degraded: ${reason}`)
+    if (blameEncoder) this.noteEncoderCollapse(`the composite degraded: ${reason}`)
+    else console.info(`[capture] not an encoder collapse (${reason}) — the budget is untouched`)
   }
 
   /**
@@ -1041,9 +1050,12 @@ class Session implements CaptureSession {
       // giving anything up), but it is certified from here and said on screen.
       if (this.stalledNow.has(kind)) return
       this.stalledNow.add(kind)
-      this.stalledEver.add(kind)
+      // NOT `stalledEver`. That set means "froze mid-take — those stretches are
+      // a still image", which the report card says in those words; a source
+      // that never delivered one frame did not freeze and has no still image
+      // in the file. The loss ledger is what carries this one.
       this.noteLoss(kind, 'never-delivered')
-      this.markCompositeUnusable(`${kind} never delivered a frame`)
+      this.markCompositeUnusable(`${kind} never delivered a frame`, false)
       this.emit({ type: 'channel-dead', kind })
       return
     }
@@ -1051,7 +1063,7 @@ class Session implements CaptureSession {
       if (this.stalledNow.has(kind)) return
       this.stalledNow.add(kind)
       this.stalledEver.add(kind)
-      this.markCompositeUnusable(`${kind} source stalled`)
+      this.markCompositeUnusable(`${kind} source stalled`, false)
       this.emit({ type: 'channel-stalled', kind })
     } else {
       if (!this.stalledNow.delete(kind)) return
@@ -2254,7 +2266,7 @@ class Session implements CaptureSession {
       this.noteLoss(rt.kind, 'ended')
     }
     if (rt.media === 'video' && this.stateInternal === 'recording') {
-      this.markCompositeUnusable(`${rt.kind} track ended`)
+      this.markCompositeUnusable(`${rt.kind} track ended`, false)
       this.stalledEver.add(rt.kind)
     }
     if (rt.useMeasured && rt.measured) {
@@ -2337,7 +2349,6 @@ class Session implements CaptureSession {
                */
               if (ch.media === 'video' && st && st.framesIn === 0) {
                 this.noteLoss(ch.kind, 'never-delivered')
-                this.stalledEver.add(ch.kind)
               }
               if (st?.outWidth && st.outHeight && (st.outWidth !== ch.width || st.outHeight !== ch.height)) {
                 console.info(
@@ -2690,6 +2701,10 @@ class Session implements CaptureSession {
     // of an encoder that had not started working yet.
     if (
       !this.collapseRecorded &&
+      // H4: and nothing DIED. A take whose camera delivered nothing ran an
+      // encoder that was never fed, and the machine carrying that is not
+      // evidence it can carry the plan.
+      this.losses.size === 0 &&
       this.encoderPlan &&
       recording.durationMs >= SUSTAINED_TAKE_MIN_MS
     ) {
@@ -2721,10 +2736,14 @@ class Session implements CaptureSession {
      */
     if (this.losses.size) {
       const shift = Number.isFinite(minOffset) ? minOffset : 0
-      // A channel that produced NO file at all is already `missing` above, and
-      // one failure gets one line: 'never-delivered' and 'missing' are the same
-      // sentence told twice.
-      recording.lost = [...this.losses.entries()].filter(([kind]) => !missing.includes(kind)).map(([kind, l]) => {
+      // THE LEDGER IS COMPLETE, INCLUDING KINDS THAT ARE ALSO `missing`. A
+      // camera that stayed connected and delivered nothing writes no file at
+      // all when it delivers literally zero frames, so it lands in BOTH — and
+      // the two sentences are not interchangeable: `missing` says "the device
+      // never connected", which is the wrong thing to tell someone whose lid
+      // is shut. The editor shows the specific one and drops the generic one;
+      // the report card reads both and says each once.
+      recording.lost = [...this.losses.entries()].map(([kind, l]) => {
         const atMs = l.reason === 'never-delivered' ? 0 : Math.max(0, Math.round(l.atMs - shift))
         return {
           kind,
@@ -2733,8 +2752,7 @@ class Session implements CaptureSession {
           lostMs: Math.max(0, Math.round(recording.durationMs - atMs)),
         }
       })
-      if (recording.lost.length === 0) delete recording.lost
-      else {
+      {
         console.warn(
           '[capture] H4 losses — ' +
             recording.lost

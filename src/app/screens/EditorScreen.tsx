@@ -65,6 +65,12 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
    * prod before this line existed.
    */
   const frameRate = takeRate(recording)
+  /** H4: the kinds whose only story is "it never arrived" — the ones the loss
+   *  ledger has a more specific sentence for are handled below. */
+  const missingOnly = useMemo(
+    () => (recording.missing ?? []).filter((k) => !(recording.lost ?? []).some((l) => l.kind === k)),
+    [recording],
+  )
   /**
    * UI1 — THE STEPS THIS TAKE MAY EXPORT AT, capped by what was chosen before
    * it was recorded. `tiersForTake` is the one place a step is resolved against
@@ -286,9 +292,14 @@ function Editor({ recording, edit }: { recording: Recording; edit: EditState }) 
     // F13: the take's own frame aspect, so the stage, the timeline and the
     // export panel are all the width of the picture this take will make.
     <div className="editor" style={{ '--stage-ar': frameAspect } as React.CSSProperties}>
-      {recording.missing?.length ? (
+      {/* H4: a kind that is BOTH missing and certified lost gets the specific
+          sentence only. "The device never connected" is the right line for a
+          camera that was never granted or never appeared, and the wrong one
+          for a camera that connected, stayed connected, and delivered nothing
+          — it sends the user to the cable when the lid is shut. */}
+      {missingOnly.length ? (
         <div className="editor__missing" role="alert">
-          {missingChannelsMessage(recording.missing, detectCapabilities())}
+          {missingChannelsMessage(missingOnly, detectCapabilities())}
         </div>
       ) : null}
       {/* H4 — WHAT THIS TAKE LOST WHILE IT RAN, AND WHEN. Not behind test mode,
