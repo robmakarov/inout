@@ -148,6 +148,12 @@ technical defects by severity. Done items get deleted, not archived.
   per-run dice roll; killing stray Chrome first is what preceded the clean five. At ~4 minutes a run
   that is 12 minutes lost, on the cell `.ai/TASKS` makes MANDATORY before any flip touching the
   instant or smart-cut paths — i.e. the tax is paid by every such task.
+  SHARPENED 2026-09-01, same session: it tracks the take's WEIGHT, not the clock. The `f7` cell died
+  the same way twice at ~50 s of a 120 s screen+camera+mic take ("Inspected target navigated or
+  closed", no error, mid-capture); the identical cell with the CAMERA OFF ran the full 120 s and
+  finished, peaking at 741 MB of Chrome renderer RSS (`--rss`, 641 samples). So the first move on a
+  long cell that keeps dying is to drop a channel, not to retry it — and the renderer's ceiling on
+  this 8 GB machine is the thing to measure, which is H3's cell.
 - [ROBERT OWED] 2026-08-29: **F13 is built, verified on prod and OFF** — `?sourceframe=1` and the
   output follows the take's shape instead of a landscape constant. Its last gate is Robert's eye:
   open https://inout-kappa.vercel.app/?sourceframe=1 on a PHONE, record, look at the export. Until
