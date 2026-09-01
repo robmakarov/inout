@@ -27,6 +27,10 @@ Doc rule: every doc holds CURRENT truth only — when state changes, rewrite/del
   launcher's process, so anything it spawns with this cwd dies on `EPERM: uv_cwd` before vite loads.
   Don't re-debug that. `node scripts/mirror-watch.mjs &` from Bash (which HAS the grant) live-syncs to
   `/tmp/inout-dev`, then `preview_start { name: "inout-tmp" }` serves it on 5174 with working HMR.
+  FROM A SECOND WORKTREE (parallel sessions): run mirror-watch from THAT worktree — it mirrors its own
+  root — and if you symlinked its `node_modules` back here, replace the mirrored symlink with a real
+  copy (`rsync -a "<main>/node_modules/" /tmp/inout-dev/node_modules/`), or the launcher follows the
+  link into `~/Downloads` and dies on the same EPERM.
   Deletable the day the repo moves out of `~/Downloads` (Robert's call), after which plain `npm run dev`
   works for agents too.
 - `proto/` is opened off disk and never served. Open `proto/style.html` with `file://` —
