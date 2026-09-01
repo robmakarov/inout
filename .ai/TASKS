@@ -355,8 +355,18 @@ it is built combine-ready:
           3.0x. B1b then made the probe encode the way the export encodes: 1.50x on text, 1.00x
           on motion, and it is FASTER. B1b's residual (still-content deltas) stays open — both
           handoffs are under their tasks.
-  5. E1   elastic below max               [medium · spec below, EXTENDED: the detector must
-          PREDICT — step before loss, not after — because M1 inherits it as max's floor].
+  5. E1   elastic below max               DONE 2026-09-01 (branch task/E1, not merged) — the
+          ladder predicts instead of autopsying. core/pressure.ts is the product's one
+          instrument; the step lands 985 ms BEFORE the first lost frame where the shipped
+          ladder's landed 1972 ms after it, recovery comes 442-576 ms after a load lifts
+          instead of 3000, and the hunting (down 17.0s, UP 24.0s while still loaded, down
+          27.0s) stops. Two candidates the audit named are REFUTED by probe: Compute
+          Pressure and LoAF are both silent in a hidden tab, which is every recording tab.
+          Two shipped-ladder defects fixed on the way (a healthy take stepped down on the
+          delivery ruler's own false positive; the climb-back-into-the-load). Handoff below.
+          FOR M1: max opens NO COMPOSITE, and every input this detector reads comes from the
+          compositor worker — so M1 must lift the same instrument into rawVideo.worker.ts.
+          readPressure is pure and unchanged by that; only the sampling moves.
   6. H1-H4 the unkillable-take pack       [light→medium · specs below] component death = a seam,
           not a dead take · crash-loss bound stated at hour scale · memory slope flat at hour
           scale · a device that dies mid-take is survived and said (absorbs B4).
@@ -607,6 +617,154 @@ seams inside O16's bands · a max take under the same load never steps · units 
 responsiveness quoted (time from pressure to step, both directions) · a step costs zero audio
 (silentTail/gaps unchanged across the seam) · the detector's lead time quoted (pressure seen →
 frames would have been lost) · oracle v2+v1 green.
+
+── E1 HANDOFF (session of 2026-09-01) ───────────────────────────────────────
+THE DETECTOR IS BUILT, IT LEADS THE LOSS, AND THE AUDIT'S TWO CANDIDATES ARE
+BOTH REFUTED BY MEASUREMENT. `src/core/pressure.ts` — deliberately NOT under
+capture/, because M1 inherits it and F16b prices a background render with it.
+
+THE CAPABILITY PROBE FIRST, because it changed the design. A take runs with
+this document HIDDEN — Robert presses record and switches to what he is
+recording — and measured there, on his own Chrome 151 and on Chromium 148:
+  PressureObserver      supported, knownSources ['cpu'], observe() resolved with
+                        NO error, 0 records in 74 s including a deliberate 4.0 s
+                        main-thread busy loop.
+  long-animation-frame  supported, 0 entries. longtask: supported, 0 entries.
+  main-thread ticker    16 ms setInterval -> 11 ticks in 12.9 s. A hidden tab
+                        clamps it to ~1 Hz: 984 ms late at IDLE, 3568 ms during
+                        the burn. It saw the stall, so the stimulus was real and
+                        on that thread — and it cannot tell that stall apart
+                        from being backgrounded.
+  WORKER ticker         the same 16 ms ticker in a dedicated worker of the SAME
+                        hidden page: 472 ticks in 8 s (59 Hz), max lateness
+                        27 ms, total 125 ms.
+So perf/mainThreadWatch.ts — the instrument the task pointed at — is unusable
+DURING a take, and the compositor worker is the thread that gets asked. That is
+also right on the merits: the compositor and the video encoder live in it.
+
+FOUR LEADING SIGNALS, WORST WINS, and every step names the one it saw: the
+encoder's queue depth at SUBMIT (the drop is `>= 6` on that very line, so the
+depth is literally distance-to-loss), encode->output latency, the worker's own
+scheduling lateness, and synchronous cost per frame. Posted from the worker
+four times a second; the 1 Hz stats event was a whole second of lost frames.
+
+THE BANDS WERE READ OFF THE MACHINE (`npm run exp -- pressure`), and the file
+was WRONG TWICE until the rig said so — both errors are this repo's own greatest
+hits repeating:
+  · encode latency normalised against ONE FRAME made an IDLE take read
+    critical. An encoder pipelines: a healthy 60 fps take measures 19.2 ms of
+    residence per 16.7 ms frame. The honest denominator is the pipeline it can
+    hold, queueCliff x frameBudget. Idle then reads 0.19, loaded 5.2.
+  · worker lateness scored on the WORST tick in a 250 ms window read 81 ms
+    against a 16.7 ms frame — strain 4.9 — on a machine doing NOTHING. That is
+    G1's defect exactly (an extreme banded against a constant). Scored on the
+    MEAN, which read 0.46 ms over the same ticks.
+IDLE POPULATION, three cells, ~350 samples, worst strain ever produced: 0.303.
+LOADED (three contending 1440p60 encoders), median strain: 2.85. FAIR_AT 0.5 /
+SERIOUS_AT 0.75 / CRITICAL_AT 1.0 sit in the empty band between them.
+
+GATE — LEAD TIME. Same load, a fresh Chrome per lane:
+  detector OFF (the ladder as it shipped): first lost frame 15039 ms, and the
+    ladder's own step at 17011 ms — 1972 ms AFTER the loss it exists to stop.
+  detector ON: step at 14406 ms (predicted), first lost frame 15391 ms — the
+    step landed 985 ms BEFORE it. A second cell: step 14874, first drop 15633
+    (759 ms). Against the OLD ladder's step, the lead is 2135 ms.
+An instantaneous load switch is harsher than anything real; when the two land
+in one 250 ms sample the instrument cannot separate them, and it says so.
+
+GATE — RESPONSIVENESS. Down 406-874 ms after the load switches on in the rig,
+1578 ms in the real app. Up 442-576 ms after it lifts, against 3000 ms for the
+delivery ruler alone. `critical` does not wait at all (PREDICT_CRITICAL_MS = 0):
+at 3.3x anything a healthy take has been seen to do, a confirmation window is
+just waiting for the thing to happen. `serious` is confirmed over 750 ms.
+
+GATE — A MAX TAKE UNDER THE SAME LOAD NEVER STEPS. Verified in the app: 45 s at
+`?quality=max`, 5 contending 1440p60 encoders for 22 s of it, NOT ONE ladder
+line. It paid the load in audio padding (24.2 s) instead, which is max's stated
+price. AND THE REASON IS STRONGER THAN THE FLAG, WHICH MATTERS FOR M1: max opens
+NO COMPOSITE (2 encoders, camera + screen), and every input this detector reads
+comes from the compositor worker. **M1 cannot inherit this detector as written —
+the same instrument has to be lifted into rawVideo.worker.ts, where max's
+encoders actually are.** That is new work M1 must budget for, and it is not
+hard: the signals are the same four and readPressure is already pure.
+
+GATE — A STEP COSTS ZERO AUDIO. Across every step in the clean cells,
+audioPaddedFrames and audioDroppedNotReady are IDENTICAL one second before and
+one second after (0 and 0, four windows). Largest hole between consecutive audio
+packets in the finished file: 21.33 ms — one AAC packet — located at 32.02 s,
+which is not where any step is. Cells whose MACHINE starved padded audio with
+and without steps alike, which is what tells the two apart.
+
+GATE — SEAMS INSIDE O16'S BANDS: there is no seam to measure, and that is the
+design rather than a miss. A rung is a RATE (captureLadder's rule 1); the size
+never moves, no segment is closed, no file boundary exists. O16's 30 ms/69 ms
+bands are for a SIZE step, which this cannot make. What a viewer could see is
+the encode gap, and the app's own step logged `display 60 -> 30 fps at
+1920x1080` with the geometry unchanged.
+
+TWO DEFECTS IN THE SHIPPED LADDER, FOUND BY THE INSTRUMENT AND FIXED:
+  · RULE 7 — the delivery floor stepped a HEALTHY take down. Measured under pure
+    CPU load: "encoded 34.0 of 60.0 arriving fps (57 % kept)" while that same
+    take's encoder queue was 0.00 of 6, its latency 15.9 ms of a 100 ms
+    pipeline, and it dropped ZERO frames. `demand` sums EVERY source's arrivals,
+    so a 60 fps screen beside a 30 fps camera makes it 60 while the composite
+    can only ever encode as fast as the screen delivers. Rule 4 ("a source that
+    sent NOTHING did not fail") only ever covered zero. The autopsy now needs
+    the detector to agree it is at least `fair` — and with no reading at all it
+    is untouched.
+  · THE HUNTING. The control lane went down at 17.0 s, UP at 24.0 s WHILE STILL
+    LOADED, and down again at 27.0 s, because the delivery ruler reads healthy
+    at a reduced rate almost by definition. The reading now vetoes a climb while
+    pressure is serious and for 2.5 s after. The bar is BELOW SERIOUS, not
+    nominal, and that correction came from the app: a 1080p60 take with three
+    encoders open reads `fair` in its STEADY STATE on this machine, so
+    requiring nominal meant a take that stepped down never came back up — worse
+    than the hunting the veto was written to stop.
+
+ONE THING THE INSTRUMENT DID TO ITSELF, AND THE FIX. The v2 oracle went red
+2 of 9 runs with the pressure ticker starting at t=0, both times with the
+composite's first frame at 733 and 1167 ms against 200-333 ms on every green
+run; main was 7/7 green over the same window. NOT PROVEN to be the cause — but
+nothing may act on a reading before the ladder's own 4 s warmup, so the ticker
+now holds off 1000 ms and the window closes. 5/5 green after, compT0 167-300 ms.
+
+THE LONG CELL, run because this change lands on the thread that writes the file
+the instant path packet-copies: `npm run oracle:long` PASS, 1/1, 184968 ms —
+sync 54.6/54.6 ms, instant 56.1 ms, smartcut 56.3 ms, tail 66 ms, export 6.18x,
+jump 0. Against the recorded 120 s baseline (instant maxAbs 94.2 / 94.2 / 95.3 /
+100.5) it is far below — but that baseline predates G1+LC1's re-banding of this
+very statistic, so the honest reading is "green, and nothing moved up", not a
+like-for-like improvement.
+
+ORACLE: v2 5/5 PASS after the delay (sync 39.5-66.1 ms, instant 47-83 ms,
+smartcut, tail 65-84 ms). v1 lane RED on `export` throughput — 0.90 / 0.83 /
+0.68x — AND `main` REPRODUCES IT IDENTICALLY on the same machine in the same
+hour (0.85 / 0.66x), with every sync gate green on both. That is the flaky
+throughput gate this file already filed, not E1.
+
+WHAT IS NOT PROVEN, said plainly:
+  · THE UP HALF WAS NEVER SEEN IN THE APP, only in the rig (repeatedly, both
+    `predicted` and `measured`). The app cell that stepped down was the run that
+    exposed the too-strict `nominal` rule; the runs after the fix did not
+    reproduce a down on that machine state. It is the first thing to watch when
+    this reaches prod.
+  · NOT VERIFIED ON THE VERCEL URL. There is no `gh` on this machine and a task
+    branch gets no preview alias I could find, so the app verification is the
+    production code path served from `npm run dev` on 5178, driven through the
+    real UI with `?synthetic=1`. `node scripts/verify-deploy.mjs` on merge.
+  · THE LOAD GENERATOR IS NOT DETERMINISTIC on this machine and the handoff
+    would be dishonest without it: six spinning cores plus 4K paints moved this
+    composite's encode latency from 11.0 ms to 13.4 — i.e. not at all — because
+    on Apple silicon the video encoder is its own block that CPU load does not
+    reach. Only other ENCODERS contend, which is also the real-world shape (what
+    starved Robert's take was his own max60 take). Even then the same nominal
+    load produced heavy pressure in some processes and none in others; drop
+    COUNTS are therefore not comparable across lanes and no claim here rests on
+    one. What is comparable is the ORDER of events within a single take.
+  · `?pressure=0` restores the shipped ladder exactly, and 883 unit tests
+    (25 new) pin that: every pre-E1 case runs with pressureLevel null.
+NEW: `npm run exp -- pressure` (src/experimental/perf/pressureLead.ts) is the
+cell, one command, three phases, two lanes. docs/FLAGS.md carries the flag.
 
 ## F16b prerender-at-stop for max+camera [light-medium · extends shipped prerender.ts]
 A max take with a camera has no single file to copy; today it renders ON DEMAND and Robert calls

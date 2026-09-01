@@ -33,6 +33,13 @@ import {
   ladderVerdict,
   type LadderRung,
 } from './captureLadder'
+import {
+  pressureDetectorEnabled,
+  readPressure,
+  type PressureLevel,
+  type PressureReading,
+  type PressureSignals,
+} from '../pressure'
 
 /**
  * The composite's rate when nothing says otherwise — what this engine wrote
@@ -180,7 +187,14 @@ export interface LiveCompositeV2Options {
    * constraint is applied there. Absent = the ladder never runs, which is the
    * default.
    */
-  onDegradeStep?: (rung: LadderRung, reason: string) => void
+  onDegradeStep?: (rung: LadderRung, reason: string, from: 'predicted' | 'measured') => void
+  /**
+   * E1 — every pressure sample, four times a second, as read. The product does
+   * not need this (the ladder consumes the reading in here); the RIG does, and
+   * the gate "quote the detector's lead time" is unanswerable without the raw
+   * series. Absent on every production take.
+   */
+  onPressure?: (reading: PressureReading, signals: PressureSignals) => void
   /**
    * The session epoch (performance.now()), so the composite can say WHERE ITS
    * OWN CLOCK STARTS on the recording timeline (P0-instant-sync). Omitted by
@@ -229,6 +243,14 @@ export interface LiveCompositeV2Handle {
   cancel(): Promise<void>
   /** Engine evidence — read by the session for the console line and by tests. */
   stats(): CompositorStats | null
+  /**
+   * E1's lead-time evidence, as two instants on this engine's own clock: when
+   * the leading signals first said 'serious', and when delivery first fell
+   * under the floor — i.e. when the OLD ladder would first have had a case.
+   * The gap between them is the lead. Read by the rig; nothing in the product
+   * consults it.
+   */
+  pressureMarks(): { firstSeriousAtMs: number | null; firstUnderFloorAtMs: number | null; startedAtMs: number }
   /**
    * Hand the compositor a canvas to paint the live preview into (O4-polish).
    * Resolves TRUE only once a frame has actually landed on it, so the caller
@@ -311,6 +333,8 @@ export async function startLiveCompositeV2(
         latestStats = reply.stats
         reportGeometry(reply.stats)
         checkWatchdog(reply.stats)
+      } else if (reply.event === 'pressure') {
+        notePressure(reply.signals)
       } else {
         workerError = reply.error
         console.warn('[capture] compositor worker error', reply.error)
@@ -363,9 +387,92 @@ export async function startLiveCompositeV2(
   let lastRealFrames = 0
   let lastInFrames = 0
   let lastStatsAt: number | null = null
+  // E1's pressure state. Delivery is sampled once a second by the stats event;
+  // pressure four times a second by its own. Both feed one verdict, so the
+  // last delivery reading is kept here rather than recomputed.
+  const pressureOn = pressureDetectorEnabled()
+  let lastDeliveredFps = 0
+  let lastArrivedFps = 0
+  let pressureLevel: PressureLevel | null = null
+  let pressureWhy: string | null = null
+  let seriousSince: number | null = null
+  let clearSince: number | null = null
+  /** Lead-time evidence: the first instant each side of the question fired. */
+  let firstSeriousAt: number | null = null
+  let firstUnderFloorAt: number | null = null
+
+  function notePressure(signals: PressureSignals): void {
+    const now = performance.now()
+    const reading = readPressure(signals)
+    options.onPressure?.(reading, signals)
+    // BEFORE the flag, deliberately. The lead-time gate is answered by a
+    // `?pressure=0` control run — the only take in which both instants exist,
+    // because a take that steps never reaches the floor — so the mark has to be
+    // taken whether or not the detector is allowed to act on it.
+    if (!reading.blind && (reading.level === 'serious' || reading.level === 'critical')) {
+      firstSeriousAt ??= now
+    }
+    if (!pressureOn) return
+    // A blind reading is not a nominal one — it is no reading at all, and
+    // feeding it in as 'nominal' would let the ladder climb on nothing.
+    if (reading.blind) {
+      pressureLevel = null
+      seriousSince = null
+      clearSince = null
+      return
+    }
+    pressureLevel = reading.level
+    pressureWhy = reading.leader ? `${reading.leader.signal}: ${reading.leader.detail}` : null
+    if (reading.level === 'serious' || reading.level === 'critical') {
+      seriousSince = seriousSince ?? now
+      clearSince = null
+    } else {
+      seriousSince = null
+      clearSince = clearSince ?? now
+    }
+    evaluateLadder(now)
+  }
+
+  /**
+   * ONE VERDICT, TWO CLOCKS (E1). Delivery is sampled once a second by the
+   * stats event; pressure four times a second by its own. Both call this, so a
+   * predictive step lands within a quarter second of the signals agreeing
+   * instead of waiting for the next stats tick — which was the difference
+   * between "responsive" and "a second late" before anything else was tuned.
+   */
+  function evaluateLadder(now: number): void {
+    if (!options.onDegradeStep || degraded) return
+    const verdict = ladderVerdict({
+      nowMs: now,
+      startedAtMs: startedAt,
+      firstOutputAtMs: firstOutputAt,
+      lastStepAtMs: lastStepAt,
+      underFloorForMs: underFloorSince === null ? 0 : now - underFloorSince,
+      aboveRecoveryForMs: aboveRecoverySince === null ? 0 : now - aboveRecoverySince,
+      deliveredFps: lastDeliveredFps,
+      arrivedFps: lastArrivedFps,
+      requestedFps: outFps,
+      currentFps,
+      pressureLevel,
+      pressureSeriousForMs: seriousSince === null ? 0 : now - seriousSince,
+      pressureClearForMs: clearSince === null ? 0 : now - clearSince,
+      pressureWhy,
+    })
+    if (!verdict) return
+    currentFps = verdict.rung.fps
+    lastStepAt = now
+    underFloorSince = null
+    aboveRecoverySince = null
+    seriousSince = null
+    clearSince = null
+    console.warn(
+      `[capture] capture ladder ${verdict.direction === 'up' ? 'recovering' : 'backing off'} ` +
+        `(${verdict.from}): ${verdict.reason}`,
+    )
+    options.onDegradeStep?.(verdict.rung, verdict.reason, verdict.from)
+  }
 
   function checkLadder(now: number, real: number, framesIn: number): void {
-    if (!options.onDegradeStep || degraded) return
     // Delivered fps over the interval between stats events, not since the
     // start: a take that recovers should stop being judged on how it began.
     if (lastStatsAt !== null && now > lastStatsAt) {
@@ -381,32 +488,20 @@ export async function startLiveCompositeV2(
       // it could never climb back.
       const demand = Math.min(inFps, currentFps)
       const ratio = demand > 0 ? fps / demand : 1
-      if (demand > 0 && ratio < LADDER_FLOOR) underFloorSince ??= now
-      else underFloorSince = null
+      lastDeliveredFps = fps
+      lastArrivedFps = inFps
+      void requested
+      if (demand > 0 && ratio < LADDER_FLOOR) {
+        underFloorSince ??= now
+        // Lead-time evidence: the instant the AUTOPSY would first have had a
+        // case. With the detector on, a step has usually already happened by
+        // here and this never fires — which is why the honest number comes off
+        // a `?pressure=0` control run, where both instants exist in one take.
+        firstUnderFloorAt ??= now
+      } else underFloorSince = null
       if (demand > 0 && ratio >= RECOVERY_RATIO) aboveRecoverySince ??= now
       else aboveRecoverySince = null
-      const verdict = ladderVerdict({
-        nowMs: now,
-        startedAtMs: startedAt,
-        firstOutputAtMs: firstOutputAt,
-        lastStepAtMs: lastStepAt,
-        underFloorForMs: underFloorSince === null ? 0 : now - underFloorSince,
-        aboveRecoveryForMs: aboveRecoverySince === null ? 0 : now - aboveRecoverySince,
-        deliveredFps: fps,
-        arrivedFps: inFps,
-        requestedFps: requested,
-        currentFps,
-      })
-      if (verdict) {
-        currentFps = verdict.rung.fps
-        lastStepAt = now
-        underFloorSince = null
-        aboveRecoverySince = null
-        console.warn(
-          `[capture] capture ladder ${verdict.direction === 'up' ? 'recovering' : 'backing off'}: ${verdict.reason}`,
-        )
-        options.onDegradeStep(verdict.rung, verdict.reason)
-      }
+      evaluateLadder(now)
     }
     lastStatsAt = now
     lastRealFrames = real
@@ -624,6 +719,11 @@ export async function startLiveCompositeV2(
 
   return {
     stats: () => latestStats,
+    pressureMarks: () => ({
+      firstSeriousAtMs: firstSeriousAt,
+      firstUnderFloorAtMs: firstUnderFloorAt,
+      startedAtMs: startedAt,
+    }),
 
     setCameraPose(pose: CameraPose | null): void {
       if (torndown || degraded || workerError) return

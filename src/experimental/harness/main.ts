@@ -559,6 +559,26 @@ const runners: Runner[] = [
     },
   },
   {
+    id: 'pressure',
+    title: 'E1 — does the pressure detector LEAD the loss, and by how much?',
+    detail:
+      'one composite take through three phases on the same machine — idle, max60-class load, idle again — reporting every leading signal per phase (encoder queue, encode latency, worker scheduling lateness, per-frame cost, stale arrivals) so the bands are read rather than chosen. Two lanes: {"lanes":["off"]} never steps, so the take reaches the old delivery floor and the gap between "pressure said serious" and "delivery fell under the floor" IS the lead; {"lanes":["on"]} steps, and reports responsiveness (load on -> step down, load off -> step up) and the frames the prediction saved. {"takeMs":45000,"loadOnAtMs":12000,"loadOffAtMs":28000,"fps":60,"load":"cpu|encode|all"}. HEAVY — it saturates the machine on purpose.',
+    run: async (args) => {
+      const { runPressureLead } = await import('../perf/pressureLead')
+      return runPressureLead({
+        takeMs: typeof args?.takeMs === 'number' ? args.takeMs : undefined,
+        loadOnAtMs: typeof args?.loadOnAtMs === 'number' ? args.loadOnAtMs : undefined,
+        loadOffAtMs: typeof args?.loadOffAtMs === 'number' ? args.loadOffAtMs : undefined,
+        width: typeof args?.width === 'number' ? args.width : undefined,
+        height: typeof args?.height === 'number' ? args.height : undefined,
+        fps: typeof args?.fps === 'number' ? args.fps : undefined,
+        load: (args?.load as 'none' | 'cpu' | 'encode' | 'all') ?? undefined,
+        warmupMs: typeof args?.warmupMs === 'number' ? args.warmupMs : undefined,
+        lanes: Array.isArray(args?.lanes) ? (args.lanes as ('on' | 'off')[]) : undefined,
+      })
+    },
+  },
+  {
     id: 'syncload',
     title: 'A/V sync when the machine is BUSY (Robert 4K-game take)',
     detail:
