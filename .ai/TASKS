@@ -348,8 +348,10 @@ it is built combine-ready:
  10. B8   PiP placement                   [light] correctness, parallel-safe filler.
 PARKED until the max60 record is perfect (Robert's ruling 4): F9 · F10 · F11 · F12 · D1 · X13 ·
 F17's sheet UI · O9/O10 remaining lanes · P5a (nothing expires — "TIME-SENSITIVE" meant
-ready-at-launch; runs whenever Robert is at the machine with the device). X1/X2/X3 stay available
-as light parallel fillers (X1 and X2 ARE perf).
+ready-at-launch; runs whenever Robert is at the machine with the device). X1/X2/X3 ARE NOT AVAILABLE — all
+three were DONE 2026-08-26 (handoffs under their tasks); this line was stale when the priority
+order was written and cost a session a look. The light parallel-safe fillers left are B8 (needs
+`npm run exp -- x15c`, so not while another session is measuring under load) and B4 (absorbed by H4).
 STILL OWED ROBERT (unchanged): B2 listen · O6 4K re-verify · `?singlegen=capture` · O10a
 attenuation ruling · X5 text question · B7 video half (one command).
 
