@@ -555,6 +555,15 @@ live. Two takes were on prod and they straddle it:
     the rescue's harmless false-positive case and is NOT counted as starvation
     evidence here.
 
+GATE 2 DISPOSITION (Robert, 2026-09-01, closing this session): "i'll take long
+video later" — the >=50-min max60 take with camera + tab audio is HIS, on prod,
+whenever he records one. No soak cell was run and none is wanted. What to do
+with it when it lands: read the take's own black box (ChannelRecording
+.diagnostics on the tab-audio and mic channels) and check revivals == 0 after
+warmup and silentTailMs < 1 s. Nothing is asked of Robert but "don't discard
+it". Until that reading exists A1 IS NOT MERGED-CLOSED, even though its code has
+been live on main since 9b6b224.
+
 ## LC1 the 120 s red cell — promoted from BACKLOG P0 2026-09-01 [medium · instrument + copy path]
 G4's first-ever 120 s run: instant maxAbs 94.2-100.5 over five runs against the 90 ms band, where
 6 s reads 69.5-81.2 and always passes — the defect GROWS WITH LENGTH on the default packet-copy
