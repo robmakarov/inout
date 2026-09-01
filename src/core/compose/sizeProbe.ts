@@ -80,6 +80,37 @@
  * emits and the model does not, the first GOP of a file costing more than a
  * middle one, or the audio term. Count them before modelling anything.
  *
+ *   6. THE PROBE WAS NOT ENCODING THE WAY THE EXPORT ENCODES, and had not been
+ *      since constant quality shipped (B1b, 2026-09-01). Two of its three
+ *      encoder inputs were wrong:
+ *        · BITRATE. It passed `tier.videoBitrate`, the DECLARED ceiling, while
+ *          every real export is configured through `settingsForTier`, which
+ *          bounds it by what this take needed (`cappedTierBitrate`). On the
+ *          fixture below those were 14.00 and 3.50 Mbps.
+ *        · RATE CONTROL. render.ts drops the bitrate target and drives the QP
+ *          (CQ_DEFAULT 20) through a CUSTOM encoder that mediabunny only uses
+ *          once `registerConstantQualityEncoder()` has been called. This file
+ *          never called it, so the probe priced a rate control the product
+ *          stopped using — a bitrate target SPENDS its budget where a
+ *          quantizer spends what the picture needs.
+ *      MEASURED against the file the export actually produced, at 1440p:
+ *                                   produced   probe before   probe after
+ *        still text, 159.6 s        21.52 MB      64.92 (3.02x)   32.32 (1.50x)
+ *        motion, 77.4 s              4.28 MB       4.24 (0.99x)    4.28 (1.00x)
+ *      The keyframe term went from 1.58x the render's own mean to 1.04x, the
+ *      probe got FASTER (6.6 s → 3.8 s on the text fixture), and the calibrated
+ *      ladder came out monotonic in pixel count with no flooring. Motion
+ *      content is unchanged, because there the two rate controls cost the same.
+ *      WHAT IS LEFT, and it is now the whole error: the delta term on still
+ *      content, 4,540 B against the render's own 2,357 B. Not a GOP-position
+ *      effect — with constant quality the first and later windows agree (4,429
+ *      vs 4,540) — so attempt 5's blend has nothing left to explain it. The
+ *      next attempt is about the 300 frames the probe encodes against the 4,789
+ *      the file has, or about the pixels those frames carry.
+ *      FOR SCALE, the model on the same two fixtures: 19.92 MB (0.93x) and
+ *      0.54 MB (7.96x). Neither instrument dominates; the probe's worst case is
+ *      now 1.5x where the model's is 8x.
+ *
  * Everything is in memory (BufferTarget), so a probe leaves nothing on disk.
  */
 import { BufferTarget, CanvasSource, Mp4OutputFormat, Output, type VideoSample } from 'mediabunny'
@@ -96,8 +127,19 @@ import {
 import type { EditState, Recording } from '@core/types'
 import { copySourceForTier } from './quality'
 import { AUDIO_BITRATE, KEYFRAME_INTERVAL_SEC, RENDER_ENCODER_OPTIONS } from '@core/compose/codecs'
+import {
+  constantQualityCodec,
+  constantQualityQp,
+  markConstantQuality,
+  registerConstantQualityEncoder,
+} from '@core/compose/constantQuality'
 import { drawVideoFrame, type FrameCanvas } from '@core/compose/layout'
-import { isDefaultTier, type QualityTier, type SizeEstimate } from '@core/compose/quality'
+import {
+  cappedTierBitrate,
+  isDefaultTier,
+  type QualityTier,
+  type SizeEstimate,
+} from '@core/compose/quality'
 import { openVideoChannel, type VideoChannelReader } from '@core/compose/video'
 
 export interface StepMeasurement {
@@ -303,7 +345,18 @@ export async function calibrateSteps(
         skippedExact.push(tier.id)
         continue
       }
-      const lane = openLane(tier, () => boundarySec)
+      const lane = openLane(
+        tier,
+        () => boundarySec,
+        await constantQualityFor(tier),
+        // B1b: THE BITRATE THE EXPORT WILL ACTUALLY BE GIVEN. `tier.videoBitrate`
+        // is the declared ceiling; every real export is configured with
+        // `settingsForTier`, which bounds it by what this take needed
+        // (cappedTierBitrate). On the take that exposed this the two were
+        // 14.00 and 3.50 Mbps — the probe was pricing a step at four times the
+        // budget the render gets.
+        cappedTierBitrate(tier, recording),
+      )
       if (lane) lanes.push(lane)
     }
     if (lanes.length === 0) return null
@@ -385,7 +438,50 @@ export async function calibrateSteps(
   }
 }
 
-function openLane(tier: QualityTier, boundary: () => number): TierLane | null {
+/**
+ * THE RATE CONTROL THE EXPORT ACTUALLY USES — B1b, 2026-09-01.
+ *
+ * The probe's own note says its encoder must be the export's encoder, and it
+ * stopped being one the day constant quality shipped: render.ts drops the
+ * bitrate target and drives the QP (CQ_DEFAULT 20), while this file kept
+ * configuring `bitrate: tier.videoBitrate`. Those are not two settings of one
+ * encoder, they are two different questions — a bitrate target SPENDS its
+ * budget, a quantizer spends what the picture needs — and the gap is whatever
+ * the content is easier than the budget.
+ *
+ * MEASURED, on a 159.6 s still-text take exported at 1440p: the probe promised
+ * 64.92 MB, the file came out 21.51 MB, 3.02x. The model it replaced said 19.92
+ * MB on the same take. So the panel was LESS accurate for having measured —
+ * priced by a rate control the product no longer uses.
+ *
+ * Resolved per tier, because the codec string is per resolution, and returned
+ * as the same two fields render.ts passes. Null everywhere constant quality is
+ * unavailable, which is exactly where the render also keeps its bitrate target.
+ */
+async function constantQualityFor(
+  tier: QualityTier,
+): Promise<{ fullCodecString: string; onEncoderConfig: (c: VideoEncoderConfig) => void } | null> {
+  const qp = constantQualityQp()
+  if (qp === null) return null
+  const codec = await constantQualityCodec('avc', tier.width, tier.height)
+  if (!codec) return null
+  // AND THE ENCODER ITSELF. Marking the config does nothing on its own: the QP
+  // is honoured by a CUSTOM encoder mediabunny only uses once it is registered,
+  // which render.ts does and this did not. Without this line the probe marked a
+  // config nobody read and encoded against the bitrate target — measured on the
+  // 159.6 s text take, that alone is the difference between a delta of 9,296 B
+  // and the render's own 2,357 B. Idempotent, and this module runs on the main
+  // thread while the render runs in a worker with its own registry.
+  registerConstantQualityEncoder()
+  return { fullCodecString: codec, onEncoderConfig: markConstantQuality(qp) }
+}
+
+function openLane(
+  tier: QualityTier,
+  boundary: () => number,
+  cq: { fullCodecString: string; onEncoderConfig: (c: VideoEncoderConfig) => void } | null,
+  bitrate: number,
+): TierLane | null {
   const canvas = new OffscreenCanvas(tier.width, tier.height)
   const ctx = canvas.getContext('2d', { alpha: false })
   if (!ctx) return null
@@ -407,12 +503,16 @@ function openLane(tier: QualityTier, boundary: () => number): TierLane | null {
   lane.output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() })
   lane.source = new CanvasSource(canvas, {
     codec: 'avc',
-    bitrate: tier.videoBitrate,
+    bitrate,
     // THE PROBE'S ENCODER MUST BE THE EXPORT'S ENCODER, and a hand-rolled
     // config is not: the render passes RENDER_ENCODER_OPTIONS. Pricing the same
     // pixels with a different encoder is the exact mistake F7b made with the
     // composite, one level down.
     ...RENDER_ENCODER_OPTIONS,
+    // B1b: and the same RATE CONTROL. The bitrate above stays as the fallback's
+    // target, exactly as render.ts keeps it; where constant quality is on, the
+    // QP is what decides the bytes and the probe has to be priced by it too.
+    ...(cq ?? {}),
     // Never let the encoder insert a keyframe of its own: this measurement
     // depends on knowing exactly which packet is which. A finite number, not
     // Infinity — mediabunny validates the field and throws on non-finite, which
