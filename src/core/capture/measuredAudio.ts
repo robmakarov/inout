@@ -564,6 +564,10 @@ export async function startMeasuredAudioCapture(opts: {
   let pendingFrames = 0
   let pendingChannels = 1
   let lastChunkTimeS = 0
+  /** One explanation per run. A chunk the reader cannot convert would otherwise
+   *  warn 344 times a second — console work on the thread carrying the PCM is
+   *  the exact cost this task exists to remove (see the revive-skip note). */
+  let chunkWarnLogged = false
 
   const onBatch = (
     frames: number,
@@ -837,7 +841,10 @@ export async function startMeasuredAudioCapture(opts: {
       } catch (err) {
         // A chunk we could not read is not silence — dropping it would splice
         // the timeline, so the wall-clock hold repays it as the loss it is.
-        console.warn(`[capture] ${label} audio chunk unreadable (skipped)`, err)
+        if (!chunkWarnLogged) {
+          chunkWarnLogged = true
+          console.warn(`[capture] ${label} audio chunk unreadable (skipped; logged once)`, err)
+        }
       } finally {
         data.close()
       }
@@ -846,6 +853,9 @@ export async function startMeasuredAudioCapture(opts: {
 
   /** A revival hands the reader a fresh clone; the old pump retires itself. */
   const swapTrackReader = (clone: MediaStreamTrack): void => {
+    // Hand over what the dying tap already delivered before the fresh one can
+    // push onto the same accumulator — two pumps must never interleave chunks.
+    flushTrackBatch()
     const next = trackPcmReader(clone)
     const old = trackReader
     trackReader = next

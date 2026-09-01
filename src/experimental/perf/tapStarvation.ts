@@ -29,7 +29,7 @@
  * and makes the whole cell vacuous — `toneReached` says if it did).
  */
 
-import { audioTapChoice } from '@core/capture/audioTap'
+import { audioTapChoice, canReadTrackPcm } from '@core/capture/audioTap'
 import { prewarmMeasuredAudio, startMeasuredAudioCapture } from '@core/capture/measuredAudio'
 
 const SILENCE_FLOOR = 1e-5
@@ -78,6 +78,15 @@ export interface TapStarvationReport {
    */
   productionTap: 'worklet' | 'track'
   displayAudioSettings: MediaTrackSettings | null
+  /**
+   * WHAT A SYNTHETIC AUDIO TRACK REPORTS. Every oracle and every ?synthetic=1
+   * run feeds capture from a MediaStreamAudioDestinationNode, and the track tap
+   * is gated on the track NAMING ITS RATE. If these settings carry no
+   * sampleRate then those runs exercise the worklet fallback, and no oracle
+   * number describes the shipped path — which is a finding, not a detail.
+   */
+  syntheticAudioSettings: MediaTrackSettings | null
+  syntheticTapEligible: boolean | null
   trackEvents: { atMs: number; type: string }[]
   lanes: TapLane[]
   /** setInterval(20ms) drift — is the MAIN THREAD the contender? */
@@ -376,6 +385,8 @@ export async function runTapStarvation(opts?: {
     toneReached: false,
     productionTap: audioTapChoice(),
     displayAudioSettings: null,
+    syntheticAudioSettings: null,
+    syntheticTapEligible: null,
     trackEvents: [],
     lanes: [],
     mainLatenessMsP50: 0,
@@ -433,7 +444,9 @@ export async function runTapStarvation(opts?: {
     // ── the taps, all on ONE source ──
     const trackFor = (kind: TapKind): MediaStreamTrack =>
       kind === originalTap ? track : track.clone()
-    const mstpSourceTrack = trackFor('mstp')
+    // Only clone for a lane that was actually asked for: an unused clone is a
+    // second live sink on the capture nothing ever stops.
+    const mstpSourceTrack = wantLanes.includes('mstp') ? trackFor('mstp') : null
     const mstpCollector = newCollector(takeSec)
 
     for (const kind of wantLanes) {
@@ -483,7 +496,7 @@ export async function runTapStarvation(opts?: {
       ).MediaStreamTrackProcessor
       if (!Processor) {
         report.verdict = 'VACUOUS: MediaStreamTrackProcessor unavailable — the A/B has one side'
-      } else {
+      } else if (mstpSourceTrack) {
         mstpTrack = mstpSourceTrack
         const proc = new Processor({ track: mstpTrack })
         mstpReader = proc.readable.getReader()
@@ -534,6 +547,11 @@ export async function runTapStarvation(opts?: {
     }
     if (load === 'audiopeer' || load === 'all') {
       peer = syntheticVoiceStream()
+      const peerTrack = peer.stream.getAudioTracks()[0]
+      if (peerTrack) {
+        report.syntheticAudioSettings = peerTrack.getSettings()
+        report.syntheticTapEligible = canReadTrackPcm(peerTrack)
+      }
       peerHandle = await startMeasuredAudioCapture({
         stream: peer.stream,
         epoch,
