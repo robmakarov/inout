@@ -2274,8 +2274,16 @@ class Session implements CaptureSession {
       this.noteLoss(rt.kind, 'ended')
     }
     if (rt.media === 'video' && this.stateInternal === 'recording') {
+      // The composite goes on repainting a dead track's last frame forever, so
+      // it can no longer be copied — that stays, and it is what keeps an
+      // unedited export honest.
       this.markCompositeUnusable(`${rt.kind} track ended`, false)
-      this.stalledEver.add(rt.kind)
+      // NOT `stalledEver`, which the report card renders as "froze mid-take —
+      // those stretches are a still image". There are no such stretches in
+      // anything that ships: the composite this describes is exactly the file
+      // the line above just disqualified, and the channel's own raw file
+      // correctly stops at the death. The ledger says what happened, with its
+      // instant, and does not need a second sentence contradicting the files.
     }
     if (rt.useMeasured && rt.measured) {
       void rt.measured
