@@ -412,7 +412,18 @@ RENDER stays absolute as priority; the mechanism is elasticity, not prohibition.
 background job (R2's persistent dock jobs included). A prerender may only ever SAVE time — every
 miss, failure, cancel and supersession falls through to the on-demand render (permanent
 contract). This is one more reason E1 precedes F16b: the job's elasticity rides E1's detector.
-GATES: unedited max+camera take — an export press JOINS the at-stop job (prod log line) · a max60
+AND AN EDIT BINDS THE ONGOING JOB (Robert 2026-09-01, DECISIONS (4)): a cut or delete landing
+while a job works takes effect IN the job, immediately — it stops spending work on the excluded
+span and its output can never contain it. Key-supersession already stops a stale file being
+SERVED; this is stronger: the stale work must not CONTINUE. What the job keeps is decided by
+validity — segment-level reuse where the seams allow, debounced restart otherwise (F16's own two
+options; measure which, don't pick by taste). Precedent to not repeat: the join bug where cancel
+was wired to nothing and the render finished anyway — a control that does not reach the running
+job is decoration, and an edit is a control.
+GATES: a cut landed mid-job → the job stops encoding the deleted span (log line with the edit's
+timestamp), the served file's duration and frame count match the POST-cut edit read out of the
+FILE, and an export pressed after the cut never joins a pre-cut job · unedited max+camera take —
+an export press JOINS the at-stop job (prod log line) · a max60
 take recorded WHILE a job works carries stats identical to a no-job control (delivered fps, audio
 silentTail, revive events — three-way: no job / job elastic / job wrongly unthrottled as the
 positive control) · under induced pressure the job throttles to zero inside the detector's lead

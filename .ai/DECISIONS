@@ -470,3 +470,13 @@ to a no-job control — delivered fps, audio silentTail, revive events); the edi
 lateness bands, measured on drags; a prerender may only ever SAVE time — every miss, failure,
 cancel or supersession falls through to the on-demand render. One more reason E1 precedes F16b:
 the job's elasticity rides E1's detector.
+2026-09-01 robert (4) — AN EDIT BINDS THE ONGOING RENDER ("when on edit user cut and deletes part
+from record make sure it excluded from ongoing render"). A cut or delete landing while a background
+render works takes effect IN the job, immediately: the job stops spending work on the excluded span
+and its output can never contain it. The shipped key-supersession (prerender keyed on
+recording+edit+settings whole) already guarantees a stale file is never SERVED; this ruling is
+stronger — the stale work must not CONTINUE either, and what the job keeps is decided by validity
+(segment-level reuse where the seams allow, debounced restart otherwise — F16's own two options,
+now with the choice gated by measurement, not taste). Family precedent: the F16 join bug where
+cancel was wired to nothing and the render finished anyway — a control that does not reach the
+running job is decoration; an edit is a control.
