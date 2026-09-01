@@ -355,7 +355,7 @@ it is built combine-ready:
           3.0x. B1b then made the probe encode the way the export encodes: 1.50x on text, 1.00x
           on motion, and it is FASTER. B1b's residual (still-content deltas) stays open — both
           handoffs are under their tasks.
-  5. E1   elastic below max               DONE 2026-09-01 (branch task/E1, not merged) — the
+  5. E1   elastic below max               DONE + MERGED 2026-09-01 (8c434d5 + 43579a9) — the
           ladder predicts instead of autopsying. core/pressure.ts is the product's one
           instrument; the step lands 985 ms BEFORE the first lost frame where the shipped
           ladder's landed 1972 ms after it, recovery comes 442-576 ms after a load lifts
@@ -367,6 +367,13 @@ it is built combine-ready:
           FOR M1: max opens NO COMPOSITE, and every input this detector reads comes from the
           compositor worker — so M1 must lift the same instrument into rawVideo.worker.ts.
           readPressure is pure and unchanged by that; only the sampling moves.
+          STILL OWED ON E1: the UP step has never been observed in the app, only in the rig.
+          It cannot be, from an agent's browser pane — that pane is a hidden document and a
+          hidden tab clamps setInterval to 1 Hz, so `?synthetic=1`'s canvas source delivers
+          ~2 fps and no rate test through it means anything. It needs a VISIBLE window:
+          Robert watching one loaded sub-max take go down and come back, or a headed rig.
+  5b. NEXT ON THIS LANE: H1-H4, the unkillable-take pack (item 6 below). E1 leaves READY;
+          M1 stays Robert-gated and now also carries E1's rawVideo.worker.ts lift.
   6. H1-H4 the unkillable-take pack       [light→medium · specs below] component death = a seam,
           not a dead take · crash-loss bound stated at hour scale · memory slope flat at hour
           scale · a device that dies mid-take is survived and said (absorbs B4).
