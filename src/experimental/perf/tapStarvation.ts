@@ -29,6 +29,7 @@
  * and makes the whole cell vacuous — `toneReached` says if it did).
  */
 
+import { audioTapChoice } from '@core/capture/audioTap'
 import { prewarmMeasuredAudio, startMeasuredAudioCapture } from '@core/capture/measuredAudio'
 
 const SILENCE_FLOOR = 1e-5
@@ -68,6 +69,14 @@ export interface TapStarvationReport {
   takeSec: number
   /** False = the cell is vacuous: the tone never reached the captured track. */
   toneReached: boolean
+  /**
+   * WHICH TAP THE `webaudio` LANES ACTUALLY RAN ON. Those lanes call the
+   * PRODUCTION function, and since A1 that function reads through the track tap
+   * by default — so a cell meaning to measure the worklet must be driven with
+   * `--query=audiotap=worklet`, and this field is how the report says which one
+   * it got instead of the lane name implying it.
+   */
+  productionTap: 'worklet' | 'track'
   displayAudioSettings: MediaTrackSettings | null
   trackEvents: { atMs: number; type: string }[]
   lanes: TapLane[]
@@ -365,6 +374,7 @@ export async function runTapStarvation(opts?: {
     load,
     takeSec,
     toneReached: false,
+    productionTap: audioTapChoice(),
     displayAudioSettings: null,
     trackEvents: [],
     lanes: [],

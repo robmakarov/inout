@@ -17,6 +17,7 @@ import {
   WebMOutputFormat,
   type StreamTargetChunk,
 } from 'mediabunny'
+import { audioTapChoice, canReadTrackPcm, trackPcmReader, trackPcmSampleRate } from './audioTap'
 import { ReviveSchedule } from './reviveSchedule'
 import { WallClockHold, compressInterleaved } from './wallClockHold'
 
@@ -206,9 +207,20 @@ export async function prewarmWorkletModule(): Promise<void> {
   }
 }
 
-export async function prewarmMeasuredAudio(track: MediaStreamTrack): Promise<AudioContext> {
+export async function prewarmMeasuredAudio(
+  track: MediaStreamTrack,
+  opts?: {
+    /** Output-buffer size hint. Production leaves it unset (Chrome's
+     *  'interactive' default); the A1 rig passes 'playback' to price whether a
+     *  bigger buffer is what the starving context needs. */
+    latencyHint?: AudioContextLatencyCategory
+  },
+): Promise<AudioContext> {
   const trackRate = track.getSettings().sampleRate
-  const audioCtx = new AudioContext(trackRate ? { sampleRate: trackRate } : undefined)
+  const audioCtx = new AudioContext({
+    ...(trackRate ? { sampleRate: trackRate } : {}),
+    ...(opts?.latencyHint ? { latencyHint: opts.latencyHint } : {}),
+  })
   await audioCtx.audioWorklet.addModule(workletModuleUrl())
   await audioCtx.resume()
   return audioCtx
@@ -313,11 +325,27 @@ export async function startMeasuredAudioCapture(opts: {
     track.removeEventListener('ended', onTrackEndedEvidence)
   }
 
+  /**
+   * WHICH TAP CARRIES THE PCM. The worklet tap loses ten per cent of a take's
+   * audio time on a machine whose cores are saturated — measured, see
+   * audioTap.ts — and the track tap loses none. Capability decides; a platform
+   * without MediaStreamTrackProcessor or without a rate on the track records
+   * through the unchanged worklet path.
+   */
+  const useTrackTap = audioTapChoice() === 'track' && canReadTrackPcm(track)
+  if (useTrackTap && opts.audioCtx && opts.audioCtx.state !== 'closed') {
+    // The arm phase prewarms a context for the worklet tap. This channel is not
+    // going to use one, and an AudioContext left open holds an output device
+    // for the length of the take for nothing.
+    void opts.audioCtx.close().catch(() => undefined)
+  }
+
   // BOUNDED init: AudioContext setup on wedged hardware can pend forever, and
   // session.stop() awaits this whole function — an unbounded hang here wedges
   // both start AND stop. Fail the channel loudly instead.
-  const audioCtx =
-    opts.audioCtx && opts.audioCtx.state !== 'closed'
+  const audioCtx: AudioContext | null = useTrackTap
+    ? null
+    : opts.audioCtx && opts.audioCtx.state !== 'closed'
       ? opts.audioCtx
       : await new Promise<AudioContext>((resolve, reject) => {
           let late = false
@@ -341,18 +369,23 @@ export async function startMeasuredAudioCapture(opts: {
           )
         })
 
+
   // The context's own life events are the third witness (mute and ended are
   // the other two): a default-output-device switch mid-take (AirPods
   // auto-switching) can suspend or interrupt a rendering context, and that
   // reads as "audio just stops" with a healthy track.
-  audioCtx.onstatechange = () => {
-    if (audioCtx.state !== 'closed') {
-      noteEvent(`ctx:${audioCtx.state}`)
-      console.warn(`[capture] ${label} AudioContext state → ${audioCtx.state} at +${sinceEpochS()}s`)
+  if (audioCtx) {
+    audioCtx.onstatechange = () => {
+      if (audioCtx.state !== 'closed') {
+        noteEvent(`ctx:${audioCtx.state}`)
+        console.warn(
+          `[capture] ${label} AudioContext state → ${audioCtx.state} at +${sinceEpochS()}s`,
+        )
+      }
     }
   }
 
-  const sampleRate = audioCtx.sampleRate
+  const sampleRate = audioCtx ? audioCtx.sampleRate : trackPcmSampleRate(track)
   /**
    * The anchor dates sample 0 from when its batch ARRIVES. Everything upstream
    * — device capture buffer, stream transport — happened before that and is
@@ -387,7 +420,7 @@ export async function startMeasuredAudioCapture(opts: {
   }
   const support = await AudioEncoder.isConfigSupported(config)
   if (!support.supported) {
-    if (!opts.audioCtx) await audioCtx.close().catch(() => undefined)
+    if (!opts.audioCtx && audioCtx) await audioCtx.close().catch(() => undefined)
     throw new Error('measured audio: opus AudioEncoder config unsupported')
   }
 
@@ -497,33 +530,48 @@ export async function startMeasuredAudioCapture(opts: {
   })
   encoder.configure(config)
 
-  let sourceNode = audioCtx.createMediaStreamSource(opts.stream)
+  let sourceNode: MediaStreamAudioSourceNode | null = null
   /** After a revival the source runs on a CLONE of the track; kept to stop it. */
   let sourceClone: MediaStreamTrack | null = null
-  const worklet = new AudioWorkletNode(audioCtx, WORKLET_NAME, {
-    numberOfInputs: 1,
-    // Safari stops rendering any capture subgraph that never reaches the
-    // destination: with numberOfOutputs:0 the worklet ran ~1s then went idle,
-    // truncating audio to a second while MediaRecorder video stayed full
-    // length. Give it a (silent) output so it can be routed to the destination
-    // through a zero-gain node below — keeps every browser pulling the graph.
-    numberOfOutputs: 1,
-    outputChannelCount: [numberOfChannels],
-    channelCount: numberOfChannels,
-  })
+  let worklet: AudioWorkletNode | null = null
+  if (audioCtx) {
+    sourceNode = audioCtx.createMediaStreamSource(opts.stream)
+    worklet = new AudioWorkletNode(audioCtx, WORKLET_NAME, {
+      numberOfInputs: 1,
+      // Safari stops rendering any capture subgraph that never reaches the
+      // destination: with numberOfOutputs:0 the worklet ran ~1s then went idle,
+      // truncating audio to a second while MediaRecorder video stayed full
+      // length. Give it a (silent) output so it can be routed to the destination
+      // through a zero-gain node below — keeps every browser pulling the graph.
+      numberOfOutputs: 1,
+      outputChannelCount: [numberOfChannels],
+      channelCount: numberOfChannels,
+    })
+  }
 
-  worklet.port.onmessage = (ev: MessageEvent) => {
-    if ((ev.data as { flushed?: boolean } | null)?.flushed) {
-      flushResolve?.()
-      return
-    }
+  /**
+   * THE TRACK TAP'S STATE. The reader is swapped WHOLE on a revival, so the
+   * pump loop below identity-checks the reader it was started with and retires
+   * itself the moment it is no longer the current one — two pumps must never
+   * both be feeding the timeline.
+   */
+  let trackReader: ReadableStreamDefaultReader<AudioData> | null = null
+  /** Chunks waiting to be batched. MediaStreamTrackProcessor delivers ~128
+   *  frames at a time (~3 ms); handing those straight on would be 344 encode
+   *  calls a second where the worklet's own batching costs 43. */
+  const TRACK_BATCH_FRAMES = 1024
+  let pending: Float32Array[][] = []
+  let pendingFrames = 0
+  let pendingChannels = 1
+  let lastChunkTimeS = 0
+
+  const onBatch = (
+    frames: number,
+    channels: number,
+    currentTime: number,
+    planar: Float32Array,
+  ): void => {
     if (stopped || fatalError) return
-    const { frames, channels, currentTime, planar } = ev.data as {
-      frames: number
-      channels: number
-      currentTime: number
-      planar: Float32Array
-    }
     // Anchor estimation: arrival wall time minus the audio-time of the frames
     // already received dates sample 0. Main-thread scheduling can only delay
     // arrival (one-sided error), so the MIN over many quanta converges on the
@@ -695,11 +743,17 @@ export async function startMeasuredAudioCapture(opts: {
             try {
               const clone = track.clone()
               trackClone(clone)
-              const next = audioCtx.createMediaStreamSource(new MediaStream([clone]))
-              next.connect(worklet)
-              sourceNode.disconnect()
               const old = sourceClone
-              sourceNode = next
+              if (audioCtx && worklet) {
+                const next = audioCtx.createMediaStreamSource(new MediaStream([clone]))
+                next.connect(worklet)
+                sourceNode?.disconnect()
+                sourceNode = next
+              } else {
+                // Same rescue, one layer down: a fresh processor on a fresh
+                // clone, and the pump on the dead one retires itself.
+                swapTrackReader(clone)
+              }
               sourceClone = clone
               dropClone(old)
               revivals++
@@ -734,49 +788,152 @@ export async function startMeasuredAudioCapture(opts: {
     }
   }
 
-  sourceNode.connect(worklet)
-  // Silent keep-alive: routes the (empty) worklet output to the destination at
-  // zero gain. Nothing is audible, but the graph now reaches destination, so
-  // Safari keeps pulling the worklet for the whole take (see note above).
-  const keepAlive = audioCtx.createGain()
-  keepAlive.gain.value = 0
-  worklet.connect(keepAlive)
-  keepAlive.connect(audioCtx.destination)
-  // resume() on an already-running (prewarmed) context is a no-op; on wedged
-  // hardware it can pend — never let it block the take, proceed regardless.
-  await Promise.race([
-    audioCtx.resume().catch(() => undefined),
-    new Promise<void>((r) => setTimeout(r, 2000)),
-  ])
+  /** Hand a completed batch on, in exactly the shape the worklet posts. */
+  const flushTrackBatch = (): void => {
+    if (!pendingFrames) return
+    const ch = pendingChannels
+    const total = pendingFrames
+    const planar = new Float32Array(ch * total)
+    let off = 0
+    for (const chunk of pending) {
+      const n = chunk[0]?.length ?? 0
+      for (let c = 0; c < ch; c++) planar.set(chunk[Math.min(c, chunk.length - 1)]!, c * total + off)
+      off += n
+    }
+    pending = []
+    pendingFrames = 0
+    onBatch(total, ch, lastChunkTimeS, planar)
+  }
+
+  const pumpTrackReader = async (
+    reader: ReadableStreamDefaultReader<AudioData>,
+  ): Promise<void> => {
+    for (;;) {
+      if (stopped || reader !== trackReader) return
+      let res: ReadableStreamReadResult<AudioData>
+      try {
+        res = await reader.read()
+      } catch {
+        return
+      }
+      if (res.done) return
+      const data = res.value
+      try {
+        if (stopped || reader !== trackReader) return
+        const n = data.numberOfFrames
+        if (!n) continue
+        const ch = Math.min(2, Math.max(1, data.numberOfChannels))
+        const planes: Float32Array[] = []
+        for (let c = 0; c < ch; c++) {
+          const buf = new Float32Array(n)
+          data.copyTo(buf, { planeIndex: c, format: 'f32-planar' })
+          planes.push(buf)
+        }
+        lastChunkTimeS = data.timestamp / 1_000_000
+        pendingChannels = Math.max(pendingChannels, ch)
+        pending.push(planes)
+        pendingFrames += n
+        if (pendingFrames >= TRACK_BATCH_FRAMES) flushTrackBatch()
+      } catch (err) {
+        // A chunk we could not read is not silence — dropping it would splice
+        // the timeline, so the wall-clock hold repays it as the loss it is.
+        console.warn(`[capture] ${label} audio chunk unreadable (skipped)`, err)
+      } finally {
+        data.close()
+      }
+    }
+  }
+
+  /** A revival hands the reader a fresh clone; the old pump retires itself. */
+  const swapTrackReader = (clone: MediaStreamTrack): void => {
+    const next = trackPcmReader(clone)
+    const old = trackReader
+    trackReader = next
+    void old?.cancel().catch(() => undefined)
+    void pumpTrackReader(next)
+  }
+
+  let keepAlive: GainNode | null = null
+  if (audioCtx && sourceNode && worklet) {
+    const node = worklet
+    node.port.onmessage = (ev: MessageEvent) => {
+      if ((ev.data as { flushed?: boolean } | null)?.flushed) {
+        flushResolve?.()
+        return
+      }
+      const d = ev.data as {
+        frames: number
+        channels: number
+        currentTime: number
+        planar: Float32Array
+      }
+      onBatch(d.frames, d.channels, d.currentTime, d.planar)
+    }
+    sourceNode.connect(node)
+    // Silent keep-alive: routes the (empty) worklet output to the destination at
+    // zero gain. Nothing is audible, but the graph now reaches destination, so
+    // Safari keeps pulling the worklet for the whole take (see note above).
+    keepAlive = audioCtx.createGain()
+    keepAlive.gain.value = 0
+    node.connect(keepAlive)
+    keepAlive.connect(audioCtx.destination)
+    // resume() on an already-running (prewarmed) context is a no-op; on wedged
+    // hardware it can pend — never let it block the take, proceed regardless.
+    await Promise.race([
+      audioCtx.resume().catch(() => undefined),
+      new Promise<void>((r) => setTimeout(r, 2000)),
+    ])
+  } else {
+    // MediaStreamTrackProcessor CONSUMES the track it is built on
+    // (measuredVideo.ts pays the same rule), so it reads a CLONE and the
+    // acquired track stays available to every other consumer of the stream.
+    const clone = track.clone()
+    trackClone(clone)
+    sourceClone = clone
+    trackReader = trackPcmReader(clone)
+    void pumpTrackReader(trackReader)
+    console.info(
+      `[capture] ${label} audio tap = track reader (no AudioContext) rate=${sampleRate} ch=${numberOfChannels}`,
+    )
+  }
 
   const teardownGraph = async (): Promise<void> => {
     dropTrackEvidence()
-    audioCtx.onstatechange = null
-    if (!stopped) {
+    if (audioCtx) audioCtx.onstatechange = null
+    if (!stopped && worklet) {
       // Drain the worklet's partial batch (<=21ms of tail audio) before teardown.
+      const node = worklet
       await new Promise<void>((resolve) => {
         flushResolve = resolve
         setTimeout(resolve, 150)
         try {
-          worklet.port.postMessage({ cmd: 'flush' })
+          node.port.postMessage({ cmd: 'flush' })
         } catch {
           resolve()
         }
       })
     }
+    // The track tap's tail is already in hand — emit it before `stopped` closes
+    // the gate, or the last <=23ms of every take is dropped.
+    if (!stopped && !worklet) flushTrackBatch()
     stopped = true
+    const reader = trackReader
+    trackReader = null
+    if (reader) void reader.cancel().catch(() => undefined)
     try {
-      sourceNode.disconnect()
-      worklet.disconnect()
-      keepAlive.disconnect()
+      sourceNode?.disconnect()
+      worklet?.disconnect()
+      keepAlive?.disconnect()
     } catch {
       /* already disconnected */
     }
     dropClone(sourceClone)
     sourceClone = null
-    worklet.port.onmessage = null
-    worklet.port.close()
-    if (audioCtx.state !== 'closed') await audioCtx.close().catch(() => undefined)
+    if (worklet) {
+      worklet.port.onmessage = null
+      worklet.port.close()
+    }
+    if (audioCtx && audioCtx.state !== 'closed') await audioCtx.close().catch(() => undefined)
   }
 
   const finishEncode = async (): Promise<void> => {
@@ -813,7 +970,7 @@ export async function startMeasuredAudioCapture(opts: {
       if (inputLatencyMs > 0) {
         console.info(
           `[capture] ${label} audio anchor ${rawOffset.toFixed(1)}ms − ${inputLatencyMs.toFixed(1)}ms reported input latency → ${offset.toFixed(1)}ms ` +
-            `(baseLatency ${((audioCtx as AudioContext & { baseLatency?: number }).baseLatency ?? 0) * 1000}ms)`,
+            `(baseLatency ${((audioCtx as (AudioContext & { baseLatency?: number }) | null)?.baseLatency ?? 0) * 1000}ms)`,
         )
       }
       if (paddedFrames > 0) {
