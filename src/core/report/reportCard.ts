@@ -248,7 +248,7 @@ export function buildReportCard(recording: Recording, evidence: ReportEvidence =
   {
     const missing = recording.missing ?? []
     const shortfall = Math.max(SHORT_CHANNEL_MS, take * SHORT_CHANNEL_RATIO)
-    const short = recording.channels.filter((c) => take - channelEnd(c) > shortfall)
+    const shortAll = recording.channels.filter((c) => take - channelEnd(c) > shortfall)
     /**
      * H4 — THE LOSS LEDGER CONVICTS HERE.
      *
@@ -263,7 +263,11 @@ export function buildReportCard(recording: Recording, evidence: ReportEvidence =
     const lost = recording.lost ?? []
     // A kind in BOTH says it once, in the more specific words: "never delivered
     // a byte" is true of a camera whose lid is shut and does not describe it.
+    // Same for the shortfall rule — "camera ended 23.6s before the take did"
+    // and "camera died at 14.9s and the take ran 23.6s without it" are the same
+    // fact, and the second one is the one that says WHY.
     const missingOnly = missing.filter((k) => !lost.some((l) => l.kind === k))
+    const short = shortAll.filter((c) => !lost.some((l) => l.kind === c.kind))
     const kinds = [...missingOnly, ...short.map((c) => c.kind), ...lost.map((l) => l.kind)]
     if (kinds.length) {
       dims.push({

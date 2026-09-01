@@ -183,6 +183,31 @@ describe('the report card cannot call a take with a dead channel green', () => {
     expect(ch.detail).toMatch(/died at .*30/)
   })
 
+  it('says a mid-take death ONCE, in the words that say why', () => {
+    // Measured on prod: "camera ended 23.6s before the take did" and "camera
+    // died at 14.9s and the take ran 23.6s without it" are the same fact.
+    const rec = base({
+      channels: [
+        {
+          id: 'c1',
+          kind: 'camera',
+          media: 'video',
+          mimeType: 'video/mp4',
+          blobKey: 'k1',
+          startOffsetMs: 0,
+          durationMs: 14_900,
+          bytes: 900_000,
+        },
+      ],
+      lost: [{ kind: 'camera', atMs: 14_900, reason: 'ended', lostMs: 23_600 }],
+    })
+    const ch = buildReportCard(rec).dimensions.find((d) => d.id === 'channels')!
+    expect(ch.status).toBe('fail')
+    expect(ch.detail).not.toContain('before the take did')
+    expect(ch.detail).toContain('died at')
+    expect(ch.kinds).toEqual(['camera'])
+  })
+
   it('still passes a take that lost nothing', () => {
     const card = buildReportCard(base({}))
     expect(card.dimensions.find((d) => d.id === 'channels')!.status).toBe('pass')

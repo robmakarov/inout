@@ -1044,6 +1044,14 @@ class Session implements CaptureSession {
    * the composite can't be copied and the user has to be told. */
   private onSourceLiveness(kind: ChannelKind, event: LivenessEvent): void {
     if (this.stateInternal !== 'recording') return
+    // A CHANNEL THAT HAS ENDED IS NOT FROZEN, AND SAYING SO SENDS THE USER TO
+    // THE WRONG FIX. Measured on prod 2026-09-01 with ?die=camera:14000: the
+    // track ends, `readyState` stops being 'live', the frozen-source rule reads
+    // that as a sick source and three seconds later the band says "Camera
+    // frozen — re-share your whole screen to fix it" over an unplugged camera.
+    // The end is already certified with its instant; the freeze rule has
+    // nothing left to add about a source that is gone.
+    if (this.channels.some((c) => c.kind === kind && c.ended)) return
     if (event === 'dead') {
       // H4/B4: live, unmuted, correctly negotiated — and not one frame. The
       // take goes on (the other channels are fine and this one was never
