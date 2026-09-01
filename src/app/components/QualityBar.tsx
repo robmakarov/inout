@@ -4,6 +4,7 @@ import {
   QUALITY_TIERS,
   copySourceForTier,
   estimateExportBytes,
+  flooredByPixelOrder,
   isDefaultTier,
   tiersForTake,
 } from '@core/compose/quality'
@@ -137,22 +138,30 @@ export function QualityBar({
 
   const estimates = useMemo(
     () =>
-      tiers.map((t) => {
-        const model = estimateExportBytes(recording, t, outputDurationMs)
-        // An exact step is a file already on disk — the composite copied, or
-        // (O3c) a single raw channel that already holds this tier's geometry —
-        // and no probe can improve on it.
-        const m = measured?.[t.id]
-        const size = model.exact ? model : (m ?? model)
-        return {
-          tier: t,
-          size,
-          // O3c: which steps are packet-copyable is the export ladder's own
-          // answer, per tier — the badge and the path can no longer disagree.
-          copy: copySourceForTier(recording, t),
-          confidence: sizeConfidence({ exact: size.exact, measured: !!m, probe }),
-        }
-      }),
+      // B1: the ladder is made coherent BEFORE the confidence is read off it,
+      // in both states — the probe's numbers are predictions too, and a
+      // measured 1440p below an exact 1080p is the same lie as a modelled one.
+      flooredByPixelOrder(
+        tiers.map((t) => {
+          const model = estimateExportBytes(recording, t, outputDurationMs)
+          // An exact step is a file already on disk — the composite copied, or
+          // (O3c) a single raw channel that already holds this tier's geometry —
+          // and no probe can improve on it.
+          const m = measured?.[t.id]
+          const size = model.exact ? model : (m ?? model)
+          return {
+            tier: t,
+            size,
+            // O3c: which steps are packet-copyable is the export ladder's own
+            // answer, per tier — the badge and the path can no longer disagree.
+            copy: copySourceForTier(recording, t),
+            measuredHere: !!m,
+          }
+        }),
+      ).map((e) => ({
+        ...e,
+        confidence: sizeConfidence({ exact: e.size.exact, measured: e.measuredHere, probe }),
+      })),
     [recording, tiers, outputDurationMs, measured, probe],
   )
   const notice = sizeNotice(estimates.map((e) => e.confidence))
