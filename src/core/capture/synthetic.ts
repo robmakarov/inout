@@ -34,6 +34,97 @@ export function parseSlowChannels(search: string): Map<ChannelKind, number> {
   return out
 }
 
+/**
+ * H4 HARNESS KNOB, `?dead=camera` — A CHANNEL THAT RECORDS NOTHING, WITH
+ * NOTHING WRONG WITH ITS TRACK.
+ *
+ * B4's evidence, four times on a real device: a camera whose track is live,
+ * unmuted and negotiated at 1920x1080@30 while the sensor is off (a closed lid
+ * does exactly this) records for the take's full length, delivers ZERO frames,
+ * and writes a 28-byte file. Nothing in the product is wrong-looking from the
+ * inside — `readyState` is 'live', `muted` is false, `getSettings()` reads
+ * 1920x1080@30 — which is precisely why the liveness detector, whose
+ * disambiguator IS `muted`, could never call it. Until now it could only be
+ * reproduced by closing a laptop lid mid-run, so it was never reproduced.
+ *
+ * Video kinds only: an audio source that delivers no samples is a different
+ * failure (silence, which measuredAudio already counts) and this is the
+ * zero-FRAME one.
+ */
+export function parseDeadChannels(search: string): Set<ChannelKind> {
+  const out = new Set<ChannelKind>()
+  const raw = new URLSearchParams(search).get('dead')
+  if (!raw) return out
+  for (const part of raw.split(',')) {
+    const kind = part.trim()
+    if (kind === 'screen' || kind === 'camera') out.add(kind)
+  }
+  return out
+}
+
+/**
+ * H4 HARNESS KNOB, `?die=camera:20000` — A DEVICE THAT DIES MID-TAKE.
+ *
+ * The BT mic that drops at minute 40, the camera someone unplugs, the shared
+ * window whose owner quits. All of them reach the page the same way: the track
+ * fires `ended` while the take runs on. Milliseconds are measured from the
+ * RECORD PRESS, not from the arm — the death has to land inside the take or it
+ * is testing arming instead.
+ *
+ * Note `track.stop()` deliberately does NOT fire `ended` (that event is
+ * reserved for an end the page did not ask for), so the rig stops the track
+ * AND dispatches the event, which is what a real unplug does.
+ */
+export function parseDyingChannels(search: string): Map<ChannelKind, number> {
+  const out = new Map<ChannelKind, number>()
+  const raw = new URLSearchParams(search).get('die')
+  if (!raw) return out
+  for (const part of raw.split(',')) {
+    const [kind, ms] = part.split(':')
+    const at = Number(ms)
+    if (
+      (kind === 'screen' || kind === 'camera' || kind === 'mic' || kind === 'system-audio') &&
+      Number.isFinite(at) &&
+      at >= 0
+    ) {
+      out.set(kind, at)
+    }
+  }
+  return out
+}
+
+/**
+ * Schedule the `?die=` deaths. Called by the session at the record press so the
+ * clock is the take's, and a no-op with no knob and outside synthetic mode.
+ * Returns the canceller, so a take that stops first kills its own timers.
+ */
+export function armSyntheticDeaths(
+  channels: readonly { kind: ChannelKind; track: MediaStreamTrack }[],
+): () => void {
+  if (typeof location === 'undefined') return () => undefined
+  const dying = parseDyingChannels(location.search)
+  if (dying.size === 0) return () => undefined
+  const timers: ReturnType<typeof setTimeout>[] = []
+  for (const ch of channels) {
+    const at = dying.get(ch.kind)
+    if (at === undefined) continue
+    timers.push(
+      setTimeout(() => {
+        console.warn(`[capture:harness] killing the ${ch.kind} track at +${at}ms (?die=)`)
+        try {
+          ch.track.stop()
+        } catch {
+          /* already stopped */
+        }
+        ch.track.dispatchEvent(new Event('ended'))
+      }, at),
+    )
+  }
+  return () => {
+    for (const t of timers) clearTimeout(t)
+  }
+}
+
 export interface SyntheticRig {
   channels: AcquiredChannel[]
   dispose: () => void
@@ -436,6 +527,36 @@ function syntheticCamera(): Generated {
   return { stream: canvas.captureStream(cameraFps), stop: loop.stop }
 }
 
+/**
+ * H4: the `?dead=` source. A canvas captured at rate 0 emits a frame ONLY on
+ * `requestFrame()`, which nothing here ever calls — so the track is live,
+ * unmuted, correctly sized and delivers not one frame for the whole take.
+ * `getSettings().frameRate` is then 0, which would be a tell no real dead
+ * camera gives; B4's camera reported 30 the whole time it delivered nothing,
+ * so the fixture reports it too.
+ */
+function syntheticDeadSource(size: { width: number; height: number }, fps: number): Generated {
+  const canvas = document.createElement('canvas')
+  canvas.width = size.width
+  canvas.height = size.height
+  // One paint BEFORE the capture starts, so the canvas is not a blank surface
+  // that never had content — the sensor-off camera has a real configuration,
+  // it simply produces nothing.
+  const g = get2d(canvas)
+  g.fillStyle = '#000000'
+  g.fillRect(0, 0, size.width, size.height)
+  const stream = canvas.captureStream(0)
+  const track = stream.getVideoTracks()[0]
+  if (track) {
+    const real = track.getSettings.bind(track)
+    Object.defineProperty(track, 'getSettings', {
+      configurable: true,
+      value: (): MediaTrackSettings => ({ ...real(), frameRate: fps }),
+    })
+  }
+  return { stream, stop: () => undefined }
+}
+
 /** Harness knob: `&quiet=0.05` scales synthetic audio down to e2e-test the
  * loudness normalization (reproduces a faint real-world mic capture). */
 export function parseQuietScale(search: string): number {
@@ -526,9 +647,13 @@ export function createSyntheticChannels(config: CaptureConfig): SyntheticRig {
 
   const liar =
     typeof location !== 'undefined' && new URLSearchParams(location.search).get('camlies') === '1'
-  if (config.screen) add('screen', 'video', syntheticScreen())
+  // H4: `?dead=` swaps the painter for a source that never delivers a frame.
+  const dead = typeof location !== 'undefined' ? parseDeadChannels(location.search) : new Set<ChannelKind>()
+  if (config.screen) {
+    add('screen', 'video', dead.has('screen') ? syntheticDeadSource(screenSize, screenFps) : syntheticScreen())
+  }
   if (config.camera) {
-    const cam = syntheticCamera()
+    const cam = dead.has('camera') ? syntheticDeadSource(cameraSize, cameraFps) : syntheticCamera()
     if (liar) {
       const t = cam.stream.getVideoTracks()[0]
       if (t) makeTrackLieAboutOrientation(t)

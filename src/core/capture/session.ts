@@ -70,7 +70,7 @@ import type { LadderRung } from './captureLadder'
 import { preferredCompositeEngine } from './engine'
 import { MixLoudnessAccumulator } from './loudnessAccumulator'
 import { clearPendingManifest, writePendingManifest } from './recovery'
-import { createSyntheticChannelsProgressive, isSyntheticMode } from './synthetic'
+import { armSyntheticDeaths, createSyntheticChannelsProgressive, isSyntheticMode } from './synthetic'
 
 export type { ArmingProgressHandler, ArmingTimelineEntry, ArmingStep } from './acquire'
 
@@ -436,6 +436,8 @@ class Session implements CaptureSession {
   private readonly stalledEver = new Set<ChannelKind>()
   /** Certified-mix loudness accumulated live (O2) — created on first PCM. */
   private loudness: MixLoudnessAccumulator | null = null
+  /** H4 harness (`?die=`): cancels the scheduled synthetic track deaths. */
+  private cancelDeaths: (() => void) | null = null
   private stopPromise: Promise<Recording> | null = null
   private cancelPromise: Promise<void> | null = null
   private cancelled = false
@@ -1038,6 +1040,9 @@ class Session implements CaptureSession {
     const notices = this.pendingNotices
     this.pendingNotices = []
     for (const n of notices) this.emit({ type: 'channel-notice', kind: n.kind, message: n.message })
+    // H4 harness (`?die=`): the deaths are scheduled from the PRESS, not the
+    // arm, so a death at +20 s lands inside the take instead of during arming.
+    if (isSyntheticMode()) this.cancelDeaths = armSyntheticDeaths(this.channels)
     this.tickTimer = setInterval(() => this.onTick(), TICK_MS)
     this.startComposite()
     this.acquireWakeLock()
@@ -1999,6 +2004,10 @@ class Session implements CaptureSession {
       clearInterval(this.tickTimer)
       this.tickTimer = null
     }
+    // H4 harness: a take that stops before a scheduled death takes its timers
+    // with it, so nothing kills a track belonging to the next take.
+    this.cancelDeaths?.()
+    this.cancelDeaths = null
   }
 
   private onTick(): void {
