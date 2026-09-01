@@ -494,11 +494,22 @@
      height cap (see .stage), so this number can only make the controls narrower
      or wider than the picture — never the picture wrong. */
   --below: 361px;
+  /* THE RAILS BESIDE THE PICTURE TAKE REAL WIDTH (Robert: "move zoom and frame
+     setting outside of screen, next to it"). Reserved on BOTH sides so the
+     stage stays centred, and wide enough for the frame strip (68 px) plus its
+     10 px gap. Floating them into whatever gutter happened to be left would
+     work on a wide window and clip on a narrow one; this cannot. */
+  --rail: 88px;
   /* The controls track the PICTURE's width, so the timeline lines up with the
      frame it describes — they used to be a flat 16:9 guess, which on a
      1728x1117 take left them 40 px narrower than the stage above them. Floored
-     at 520 px so a portrait take does not squeeze the timeline into a column. */
-  --pane-w: min(100%, max(520px, calc((100dvh - var(--below)) * var(--stage-ar, 16 / 9))));
+     at 520 px so a portrait take does not squeeze the timeline into a column.
+     The rails come off the width bound too, or on a narrow window the timeline
+     would be `--rail` * 2 wider than the picture it describes. */
+  --pane-w: min(
+    calc(100% - var(--rail) * 2),
+    max(520px, calc((100dvh - var(--below)) * var(--stage-ar, 16 / 9)))
+  );
 }
 
 .editor__player {
@@ -507,7 +518,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px 0;
+  /* The rails live in this padding, so the picture never sits under them. */
+  padding: 16px var(--rail);
   /* UI1: makes `cqh` below mean THIS box's real height, so the stage is bounded
      by the space that actually exists rather than by an estimate of it. */
   container-type: size;
@@ -527,6 +539,19 @@
   align-items: center;
   justify-content: center;
   gap: 14px;
+}
+
+/* Hugs the stage exactly. `.player` is `height: 100%` and centres its column,
+   so a rail anchored to IT would float above the picture; anchored to this it
+   is level with the frame's top edge. Nothing else about the stage's own
+   sizing moves — that rule still reads `100%` of this box, which is `.player`'s
+   width, which is the stage's width. */
+.player__stage {
+  position: relative;
+  flex: none;
+  width: 100%;
+  display: flex;
+  justify-content: center;
 }
 
 /* F13: the stage is the OUTPUT FRAME, and the output frame follows the take.
@@ -569,24 +594,31 @@
 .stage--zoomed:active {
   cursor: grabbing;
 }
-.stage__zoom-reset {
+/* THE ZOOM RAIL — outside the picture's left edge, level with its top corner.
+   It used to sit INSIDE that corner over the frame, which is the one place a
+   readout of how much of the frame you can see cannot be checked against the
+   frame. Same pill, moved out into the reserved rail. */
+.player__zoom {
   position: absolute;
-  top: 8px;
-  left: 8px;
+  top: 0;
+  right: 100%;
+  margin-right: 10px;
   z-index: 4;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 7px;
+  padding: 4px 8px;
   border-radius: var(--r-full);
-  background: var(--overlay, rgba(0, 0, 0, 0.55));
-  color: #fff;
+  background: var(--surface);
+  color: var(--text);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   line-height: 1;
+  white-space: nowrap;
+  transition: background var(--t-fast) var(--ease);
 }
-.stage__zoom-reset:hover {
-  background: rgba(0, 0, 0, 0.75);
+.player__zoom:hover {
+  background: var(--surface-2);
 }
 
 /* The live composite painted by the capture worker (O4-polish). Same box as
@@ -1847,17 +1879,17 @@
 .frame-bar {
   position: absolute;
   z-index: 4;
-  right: 10px;
-  /* TOP-RIGHT, NOT CENTRED. The camera PiP's home is the bottom-right corner,
-     which is the half of this edge a centred strip grows into: picking a
-     backdrop expands it from 5 controls to 10 and it landed on the camera.
-     Anchored at the top it grows DOWN from a corner nothing else claims (the
-     zoom pill is top-left), and on any stage taller than ~430 px — every real
-     window — the expanded strip stops above the camera entirely. */
-  top: 10px;
-  /* Never taller than the picture it sits on: a short stage scrolls the strip
-     instead of overflowing into a clipped column of half-buttons. */
-  max-height: calc(100% - 20px);
+  /* Outside the picture's right edge, in the reserved rail, level with its top
+     corner. It stood ON the edge before and grew onto the camera, whose home is
+     the bottom-right corner: a control cannot cover the thing it is there to
+     judge. Out here it costs the frame nothing, so it also stopped hiding half
+     of itself — the inset steps and Shadow are visible again (FrameBar). */
+  top: 0;
+  left: 100%;
+  margin-left: 10px;
+  /* Never taller than the picture beside it: a short stage scrolls the rail
+     instead of running past the frame into the timeline. */
+  max-height: 100%;
   overflow-y: auto;
   scrollbar-width: none;
   display: flex;
@@ -1866,20 +1898,11 @@
   gap: 5px;
   padding: 7px 6px;
   border-radius: var(--r-md);
-  background: var(--overlay);
+  background: var(--surface);
   border: 1px solid var(--surface-2);
-  backdrop-filter: blur(10px);
-  /* Present, but not competing with the frame for attention until it is
-     wanted (style rule 1 — one region dominates, and it is the picture). */
-  opacity: 0.55;
-  transition: opacity var(--t-fast) var(--ease);
 }
 .frame-bar::-webkit-scrollbar {
   display: none;
-}
-.frame-bar:hover,
-.frame-bar:focus-within {
-  opacity: 1;
 }
 .frame-bar__label {
   font-size: 10px;

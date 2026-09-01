@@ -617,6 +617,10 @@ export function Player({
 
   return (
     <div className="player">
+      {/* Hugs the stage exactly, so the rails beside it are anchored to the
+          PICTURE's top edge. `.player` is `height: 100%` and centres its
+          column, so anchoring to it would float them above the frame. */}
+      <div className="player__stage">
       <div
         ref={stageRef}
         className={`stage${zoom.zoomed ? ' stage--zoomed' : ''}${
@@ -706,27 +710,34 @@ export function Player({
           </div>
         )}
         </div>
-        {/* UI: THE FRAME CONTROL FLOATS ON THE PICTURE IT FRAMES. Robert:
-            "move stuff ... from panel to float by right side of video frame
-            vertically". It used to sit at the far right of the tools row under
-            the stage, which put the one control whose whole subject is the
-            edge of the picture furthest from that edge. Outside stage__view on
-            purpose: a zoomed stage scales the picture, never its chrome. */}
-        {hasScreen && <FrameBar edit={edit} onEdit={onEdit} />}
-        {zoom.active && (
-          <button
-            className="stage__zoom-reset"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation()
-              zoom.reset()
-            }}
-            title="Reset zoom"
-          >
-            {Math.round((1 / zoom.rect.widthFrac) * 10) / 10}× <Icon name="x" size={11} />
-          </button>
-        )}
       </div>
+
+      {/* THE RAILS — BESIDE THE PICTURE, NOT ON IT. Robert: "move zoom and
+          frame setting outside of screen, next to it". Both used to stand on
+          the stage: the zoom pill inside the top-left corner, the frame strip
+          down the right edge, where it grew onto the camera. A control that
+          covers the frame is a control that hides the thing it is there to
+          judge. They are siblings of `.stage` now, in a wrapper that hugs it,
+          so `overflow: hidden` no longer clips them and the space they sit in
+          is REAL — `.editor__player` reserves `--rail` on both sides and
+          `--pane-w` subtracts it, so the timeline still tracks the picture's
+          width and nothing can ever overlap. */}
+      {zoom.active && (
+        <button
+          className="player__zoom"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation()
+            zoom.reset()
+          }}
+          title="Reset zoom"
+        >
+          {Math.round((1 / zoom.rect.widthFrac) * 10) / 10}× <Icon name="x" size={11} />
+        </button>
+      )}
+      {hasScreen && <FrameBar edit={edit} onEdit={onEdit} />}
+      </div>
+
       <div className="transport">
         <button
           className="transport__back"
