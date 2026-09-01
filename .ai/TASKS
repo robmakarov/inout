@@ -307,10 +307,17 @@ THE B LANE:
   · B2 — the discriminator split it. (A) fixed and measured (audio slew 9.7 % -> a 4.0 % cap, hard
     seeks 1 -> 0 and muted). (B) REFUTED: paddedMs is 0 at idle, and under load the gaps are ~92 ms,
     which no crossfade can fix. Capture unchanged, by measurement. ROBERT'S LISTEN IS OWED.
-FOUR GATES IN THIS REPO ARE NOW KNOWN TO FLIP RUN TO RUN (all filed in BACKLOG): the v2 oracle's sync
-maxAbs, the v1 oracle's export throughput, the fidelity oracle's render lane, and G1's original. G4
-explains the first: the packet-copy maxAbs sits ON the band, so at 6 s it is a coin toss and at 120 s
-it is simply red. G1 is now the highest-value instrument task left.
+FOUR GATES IN THIS REPO WERE KNOWN TO FLIP RUN TO RUN. TWO OF THEM WERE THE SAME ONE, AND IT IS FIXED
+(G1+LC1, 2026-09-01): the v2 oracle's sync maxAbs and G1's original are one defect — an extreme
+statistic banded at a constant, red for being long. G4's explanation of it ("the packet-copy maxAbs
+sits ON the band") is retracted: the packet-copy MEAN sits at 62 ms and does not move with length; it
+was the worst-sample term that grew. STILL FLIPPING, both measured again on 2026-09-01 and both filed:
+the v1 oracle's export throughput (RED 4 OF 4 here — 0.68 / 0.68 / 0.94 / 0.46× against a 1.0× band —
+while every one of those runs' SYNC gates was green at 35.1-58.0 ms; a second session was recording on
+this machine throughout, which is the regime the band cannot survive) and the fidelity oracle's render
+lane (1 of 5 runs). Neither is
+a sync defect, and the runner-level fix for both is the retry/quiet-machine guard `oracle.mjs` already
+has. A third family is louder than either: the 120 s cell dies on CDP about a third of the time.
 
 ── 2026-09-01 RE-PRIORITIZATION (Robert, this session — rulings in DECISIONS): "prioritize all for
 perfomance and optimization ... optimize max quality record 60 fps - hardest case ... untill we
@@ -326,9 +333,15 @@ it is ROBERT-GATED ("but not until i say") on top of its A1+E1 dependency, and e
 it is built combine-ready:
   1. A1   tab-audio starvation at max     [heavy · P0 · spec below] the CAUSE, not the rescue.
           27 of 50 minutes of tab audio lost on a real max take; b5febbb fixed only the schedule.
-  2. G1   coin-flip merge gate            [medium · already on map] + LC1 the 120 s red cell
-          [promoted from BACKLOG P0, spec below]. The instruments that will judge A1's fix go
-          before the fix — a fix judged by a coin flip is not judged.
+  2. G1 + LC1  DONE 2026-09-01 — ONE defect, and it was the statistic, not the file. The gate
+          banded `|mean| + worst-single-event error` against a constant, so the same take read
+          worse for being longer (6 s mean 62.7 / maxAbs 78; 120 s SAME mean / maxAbs 112). Now
+          banded on location + dispersion-in-frame-intervals + drift, with a census floor. Sync
+          gates 10/10 cold green after, 0/10 flips. Handoff below. LEFT BEHIND, each measured
+          here and filed: G5 (the reference's own noise — the other half of the 6 s scatter),
+          the smart-cut negative timestamp at 120 s (BACKLOG P1, a user meets it as a re-render),
+          the fidelity render lane (BACKLOG P1, load), the 120 s cell's CDP death rate (P2).
+     A1's fix now has an instrument that does not flip on length. NEXT ON THIS LANE: A1.
   3. S1   the take report card            [light-medium · spec below] "perfect" becomes a VERDICT
           every take computes from its own black box — Robert's daily takes become the soak fleet.
   4. B5   disk guard                      [light] unlimited length makes disk the wall.
@@ -919,6 +932,175 @@ with numbers · if the instrument: the fix runs green 10 of 10 cold · if the co
 authored here with the measurement attached · the band is NOT widened in this task · the fidelity
 oracle's own bimodal instant lane (0.03 dB or 18.83 dB, never between) is measured the same way and
 gets the same verdict, because it smells like the same wrong-window family.
+
+## G1 + LC1 HANDOFF — DONE 2026-09-01. THE VERDICT IS THE INSTRUMENT, AND BOTH TASKS ARE ONE DEFECT.
+G1 predicted LC1 would be "this same defect sitting ON the band's edge at 6 s". Measured: it is the
+same defect, but the two halves of the statistic own one length each, which is why widening the band
+could never have worked and why the 6 s cell could never have seen it.
+
+THE STATISTIC, WRITTEN OUT. Every sync lane failed on
+    maxAbs = |correctedMean| + max(0, max|dᵢ| − |mean d|)
+i.e. the systematic offset PLUS the worst single event's placement error. Neither addend is a
+property of the file:
+  · a flash can only be dated to the frame that shows it. MEASURED: within one run the distinct
+    per-pair offsets are separated by exactly 16.66/16.67 ms (12 of 16 gaps) or 33.33/33.34 (4 of
+    16), which is one and two halves of the 33.3 ms output frame interval — the midpoint estimator's
+    own grid. The two remaining gaps are 10.66/10.67 ms = four 128-sample envelope windows at 48 kHz,
+    the audio detector's grid. Nothing else appears.
+  · `max` over n samples grows with n, and n IS the take length in seconds (1 beep/flash per second).
+THE SPREAD TERM, EVERY RUN OF THE 6 s MATRIX, in half-frames: 1.00 · 0.94 · 2.00 · 0.40 · 0.00 ·
+0.00 · 0.80 · 1.00. It takes no other values. THE ONE RUN whose instant lane crossed the band —
+maxAbs 107.3, the exact failure G1 was filed for — had a MEAN of 73.9 ms, comfortably in band, and a
+spread term of exactly 33.3 ms = two frame halves. The file was fine. The gate added two frames to it.
+
+LC1 IS THE SAME TERM WITH MORE SAMPLES. A 120 s cell reads mean 62.7 — identical to the 6 s runs
+(36-78) — and maxAbs 112.2, because dev over n=99 is 69.2 ms where n=5 draws 0-20. THE SCALING, worst
+reading of each statistic across 45 lane-runs on one commit (10 cold 6 s, 5 cold 120 s, three lanes),
+in frame intervals:  sd 0.83 → 1.25 (+50 %) · p90 1.34 → 1.94 (+45 %) · MAX 1.34 → 2.60 (+94 %).
+Only the banded one nearly doubles.
+
+WHY THE SCATTER WIDENS AT ALL, since sd is not flat either: THE RIG'S REFERENCES STOP BEING LOCKED
+ABOUT 20 s IN. The first 20 pairs of a 120 s cell read 260.7 ms to the decimal; from t≈20 s they
+wander ±50. Each rig schedule fitted to its OWN straight line over 120 s:
+    beep TRUE (AudioContext)      period 1000.290 ms   residual sd  9.65 ms   max  17.5
+    flash ARRIVAL (video)         period 1000.124 ms   residual sd 10.56 ms   max  41.1
+    beep ARRIVAL (the reference)  period  999.593 ms   residual sd 43.40 ms   max 158.0
+THE REFERENCE THE CORRECTION IS BUILT FROM IS FOUR TIMES NOISIER THAN EITHER THING IT REFERENCES, and
+the gate subtracts ONE MEAN of it (164.5 ms) while (beepArrival − flashArrival) ranges 48.2 to 238.1
+across the same take. Its standard error is ±19 ms at 6 s (n≈5) and ±4 ms at 120 s — which is most of
+G1's run-to-run mean scatter, measured at sd 20.9 ms over eight valid 6 s runs. Filed as its own task
+below: fixing it moves every published sync number in this repo and must not ride in a gate change.
+
+THE FIX — BAND WHAT IS A PROPERTY OF THE FILE, REPORT WHAT IS NOT. The 90 ms band on the MEAN is
+untouched (the task forbids widening, and nothing here widens anything). `maxAbs` is still computed
+and still in every report; it is no longer what a merge hangs on. Three bands replace it, all set from
+the measured distribution with ≥55 % headroom at BOTH lengths:
+  · dispersion   sd  ≤ 2.0 frame intervals   (worst measured 1.25)
+  · dispersion   p90 ≤ 3.0 frame intervals   (worst measured 1.94)
+  · drift        |slope| ≤ 4.0 ms/s over spans ≥30 s   (worst measured 1.62)
+In FRAME INTERVALS of the file under test, not milliseconds, so the band means the same thing when the
+rig moves to 60 fps. Plus a census floor — `matchedPairs ≥ max(3, half the flashes)` — because a cold
+run in the BEFORE matrix passed the trimmed band on ONE matched pair, where maxAbs is |mean| by
+construction. Same anti-vacuity family as the two rules already in this file.
+IT IS NOT A WEAKER GATE. Seven cases in `oracleGate.test.ts` pin it: a 140 ms systematic offset still
+fails, a ±150 ms scatter the mean hides still fails, a 5 ms/s drift fails, one matched pair fails,
+the same 90 ms scatter passes at 30 fps and fails at 60, and frame-quantised offsets pass at 5 samples
+and at 119 alike. DRIFT IS NEW COVERAGE, NOT A REPLACEMENT: a 1 ms/s ramp over 120 s reads maxAbs 60
+against a 90 band, so the OLD gate passed it too — and it is three seconds of desync on a 50-minute
+take, which is the length this roadmap is aimed at.
+
+THE FIDELITY ORACLE, MEASURED THE SAME WAY (G1's last gate) — AND THE TASK'S OWN DESCRIPTION OF IT IS
+WRONG ON BOTH COUNTS. Five consecutive `npm run oracle:fidelity` runs, per-tone numbers read out of
+each report rather than off the summary line:
+    run  render residual  win/onset      instant residual  win/onset
+     1     8.69  FAIL     0.403 / 0.19        0.03         0.342 / 0.13
+     2     0.02            0.327 / 0.12       0.03         0.332 / 0.12
+     3     0.04            0.25  / 0.04       0.04         0.303 / 0.09
+     4     0.03            0.409 / 0.20       0.03         0.373 / 0.16
+     5     0.02            0.267 / 0.06       0.03         0.263 / 0.05
+  1. IT IS NOT THE INSTANT LANE. G1 filed it as "the fidelity oracle's own bimodal instant lane
+     (0.03 dB or 18.83 dB, never between)". The instant lane read 0.03 / 0.03 / 0.04 / 0.03 / 0.03 —
+     sd 0.004 dB, the steadiest number in this session. The lane that flips is the RENDER lane, which
+     is a SEPARATE BACKLOG entry (P1, "reads 5.33 dB then 0.04 on the same code") and is here in
+     exactly the described shape: either ~0.03 or a wild number, never between. The two entries are
+     one entry; the instant half is retracted.
+  2. IT IS NOT A WRONG WINDOW. That was the stated smell ("a decode window landing on the wrong span
+     rather than a level being wrong"). The FAILING run opened its window at 0.403 s; run 4 opened
+     LATER, at 0.409 s, and read 0.03. And the failing run's four tones are wrong by four DIFFERENT
+     amounts — 440 Hz/L −8.69, 880 Hz/L −0.77, 550 Hz/R −1.78, 1100 Hz/R −6.69 — which a misplaced
+     window cannot produce: a window that includes silence attenuates every tone by the same fraction,
+     which is precisely why the onset-finder was built. Frequency-dependent loss is not a window.
+  3. WHAT IT ACTUALLY IS, and it is the same verdict as G1: the instrument, under load. In the failing
+     run EVERYTHING degrades together — THD −56.8 dB against −65.9 on the next run, IMD −54.5 against
+     −61.9, separation 47.4 against 55.6, all four tones low. That is a DISTURBED RECORDING, not a
+     wrong measurement of a good one, and it is the reading BACKLOG already has for this runner:
+     "it reads RED purely from machine load, which is capture starvation and not a mix regression.
+     Needs the same retry/quiet-machine guard" — the guard `oracle.mjs` got in 86ed200 and this runner
+     never did. That is the next step, it is small, and it is named. It also explains the ordering:
+     the red run was the FIRST of the five, straight off an hour of 120 s cells.
+
+GATES, AS RUN.
+  G1 · N≥10 cold on one commit, distribution reported: 10 before, 10 after. Every per-pair offset and
+       its flash time is now in the report (`offsetsMs`/`pairSec`) and in the runner's summary JSON;
+       the console prints n/sd/dev/drift per lane per run. Raw: /tmp/g1-cold10.json, /tmp/g1-after10.json.
+  G1 · verdict with numbers: INSTRUMENT. Above.
+  G1 · fix runs green 10 of 10 cold: THE SYNC GATES ARE GREEN 10/10. The run-level verdict is 9/10 —
+       the one failure is `spur -38.8 dB > -40 dB`, a different band, not touched by this task.
+  G1 · the band is NOT widened: the 90 ms mean band is byte-identical. Three bands were ADDED.
+  BOTH ENGINES · v2: 10/10 cold, sync green, 9/10 overall (one spur). v1: FOUR cold runs, SYNC GREEN
+       ON ALL FOUR (35.1 / 43.5 / 52.5 / 58.0 ms, every dispersion, census and drift band inside),
+       and all four RED on `export throughput` at 0.46-0.94× against 1.0×. That is the separately
+       filed v1 throughput flake, it is not reachable from anything this task touched, and it was red
+       before this change on the same machine. IT IS NOT A COIN FLIP TODAY, IT IS JUST RED — a second
+       session was capturing on this machine throughout, and that is exactly the regime a throughput
+       band written for an idle one cannot survive. Quoted, not worked around.
+  G1 · fidelity oracle's bimodal instant lane, measured the same way: DONE, 5 runs, and the
+       premise is retracted — see the fidelity block above.
+  LC1 · mechanism named with numbers: above.
+  LC1 · 120 s maxAbs inside the band on five cold runs: NOT MET AS WRITTEN, AND THE VERDICT IS WHY.
+       maxAbs at 120 s still reads 48.9-132.1 and always will — it is an extreme over n≈119 samples of
+       an event-placement error, and the finding of this task is that no fix to the FILE moves it.
+       What the gate was asking for, on statistics that mean the same thing at both lengths: five cold
+       120 s runs, all three lanes, ALL INSIDE the bands (sd ≤1.25 of 2.0, p90 ≤1.94 of 3.0, drift
+       ≤1.62 of 4.0), and the mean in band on every lane of every run. Widening was refused; the band
+       was replaced instead, which is the option the task's own text left open ("a better statistic").
+  LC1 · the 6 s numbers unmoved: render mean 49.0±20.9 before → 46.6±7.8 after; instant 59.1±22.5 →
+       62.1±11.1. Statistically identical — the measurement path was not touched, only what is banded.
+       (The tighter sd after is the machine: the BEFORE matrix ran while something else had the CPU.)
+  LC1 · G1's flip rate re-measured and quoted: sync-band flips 1 of 8 valid runs BEFORE, 0 of 10
+       AFTER. THE MERGE GATE IS STILL NOT A COIN THAT ALWAYS LANDS THE SAME WAY, and this task is not
+       what is left holding it — see the three other families below, each already filed, each measured
+       here so the next session does not re-discover them.
+
+WHAT ELSE FLIPS THE MERGE GATE, MEASURED HERE, NONE OF IT SYNC:
+  · export throughput <1× realtime — 2 of 10 runs (0.45×, 0.80×) in the BEFORE matrix, 0 of 10 in the
+    AFTER matrix on an idle machine. It is a load gate wearing a throughput band's clothes.
+  · CDP/harness death — 2 of 10 at 6 s and 3 of 8 at 120 s ("timed out waiting for Chrome debug
+    target", "harness never exposed window.__exp", "Inspected target navigated or closed", "experiment
+    threw in page"). At 120 s all three deaths were consecutive and the next five runs were clean, so
+    it is a state the rig gets into, not a per-run dice roll. THE LONG CELL COSTS ~4 MINUTES A RUN;
+    losing three is 12 minutes, and it is the single biggest tax on running this file's mandatory rule.
+  · AudioContext startup stall >750 ms — 1 of 8 at 120 s, 1 in the pilot run. The instrument already
+    calls this inconclusive rather than green, correctly.
+
+NEW DEFECT THE LONG CELL FOUND, filed below: SMART CUT ERRORS AT 120 s. One of five cold runs read
+`trimmed export took 'render', expected 'smartcut'` with the reason
+`Timestamps must be non-negative (got -0.0003333333333337407s)` — that is −1/3000 s, a rounding
+artefact in `outAt()` (smartCut.ts:456) when a sample sits a hair before its span start. The
+anti-vacuity rule caught it exactly as designed: the sync gate had measured the wrong file and said so.
+A user meets this as "the trim re-rendered instead of being instant", which is the complaint F16b
+exists for. NOT FIXED HERE — no product changes in a gate task.
+
+## G5 sync-reference-noise — the reference the correction is built from is the noisiest signal in the
+   instrument [medium · instrument · authored 2026-09-01 by G1+LC1, with the measurement attached]
+G1's fix made the merge gate stop flipping on take LENGTH. This is what is left of its other half: the
+run-to-run scatter of the sync MEAN itself, measured at sd 20.9 ms over eight valid cold 6 s runs
+(range 7.3-77.9) against a 90 ms band.
+THE NUMBER THAT NAMES IT. Each rig schedule of one 120 s cell, fitted to its own straight line:
+    beep TRUE (AudioContext)      period 1000.290 ms   residual sd  9.65 ms   max  17.5
+    flash ARRIVAL (video)         period 1000.124 ms   residual sd 10.56 ms   max  41.1
+    beep ARRIVAL / ANCHOR         period  999.593 ms   residual sd 43.40 ms   max 158.0
+The third is the one whose MEAN becomes the symmetric correction. It is four times noisier than either
+thing it references, and the correction applied is a single constant (164.5 ms) while
+(beepArrival − flashArrival) ranges 48.2 to 238.1 across that same take. Standard error of that mean:
+±19 ms at 6 s (n≈5), ±4 ms at 120 s — i.e. most of the observed run-to-run scatter, and it is worst at
+exactly the length the merge gate runs.
+WHY IT IS ITS OWN TASK AND NOT A LINE IN G1: changing this estimator MOVES EVERY PUBLISHED SYNC NUMBER
+IN THIS REPO. O4b's noise floor, O3b's comparisons, P0-instant-sync's before/after — all of them were
+read through this correction. That re-baselining is the task; it must not ride inside a gate change,
+which is how a repo loses the ability to compare anything to anything.
+THE LEADS, IN ORDER OF CHEAPNESS: (1) the mean is not robust and the series has outliers to 158 ms —
+a MEDIAN costs one line and should be measured first; (2) `beepTrueRigMs` is four times quieter and is
+already in the report, but it was deliberately NOT chosen (run.ts: the track-processor clone
+under-measures the delay the anchor cannot see — 67 ms clone vs 129 ms anchor on the same rig), so
+using it means re-deriving that 60 ms gap, not ignoring it; (3) whatever wins, the correction can be
+per-event instead of constant, since both reference schedules are measured per event and only their
+means are used.
+GATES: the reference's own residual sd reported for each candidate estimator over ≥5 cold runs at both
+6 s and 120 s · the sync mean's run-to-run sd quoted before and after (today: 20.9 ms at 6 s) · every
+number this repo published through the old correction re-read and the deltas tabulated, or the change
+declined with that table as the reason · no product line changes · `npm run oracle` green 10 of 10 cold
+after, on both engines.
 
 ## G2 rig-source-dead — a rig that cannot move its own source is not a gate [light · rigs only]
 ABSORBS the ORACLE-LOAD entry. `npm run oracle:load` is RED and it is NOT F15: HEAD and the commit

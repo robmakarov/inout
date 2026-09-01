@@ -480,3 +480,18 @@ stronger — the stale work must not CONTINUE either, and what the job keeps is 
 now with the choice gated by measurement, not taste). Family precedent: the F16 join bug where
 cancel was wired to nothing and the render finished anyway — a control that does not reach the
 running job is decoration; an edit is a control.
+2026-09-01 agent (G1+LC1) — A GATE MAY NOT BAND AN EXTREME. Both open sync-gate defects were one
+defect: `syncMaxAbs = |mean| + worst-single-event placement error`, banded at a constant 90 ms.
+Neither addend is a property of the file — the second is the video frame grid (measured: the
+per-pair offsets take values on a 16.67 ms lattice, one half of the 33.3 ms output frame interval,
+and nothing else), and `max` over n samples grows with n, which is the take length in seconds. Same
+build: 6 s reads mean 62-78 and 120 s reads the SAME mean with maxAbs 112. RULING: a merge gate
+bands statistics that mean the same thing at every take length — a location (the mean, band
+unchanged at 90 ms) and a dispersion (sd and p90 of the residual, expressed in FRAME INTERVALS of
+the file under test so the band survives the move to 60 fps). The extreme is still computed and
+still reported; it is no longer what a merge hangs on. Corollary, learned the same day: a band whose
+headroom over the measured worst case is under ~50 % is a coin flip waiting to happen — the drift
+band was set at 2.0 ms/s against a measured 1.62 and had to be moved to 4.0 before it shipped.
+Corollary two: a lane that matched one event passed on it, so every sync lane now needs a census
+(`matchedPairs ≥ max(3, half the flashes)`) — the third member of the anti-vacuity family already
+in oracle-gate.mjs, after "a path that declined" and "a path that ran unmeasured".
