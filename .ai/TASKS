@@ -372,11 +372,21 @@ it is built combine-ready:
           hidden tab clamps setInterval to 1 Hz, so `?synthetic=1`'s canvas source delivers
           ~2 fps and no rate test through it means anything. It needs a VISIBLE window:
           Robert watching one loaded sub-max take go down and come back, or a headed rig.
-  5b. NEXT ON THIS LANE: H1-H4, the unkillable-take pack (item 6 below). E1 leaves READY;
+  5b. NEXT ON THIS LANE: H1-H3, the unkillable-take pack (item 6 below; H4 is done). E1 leaves READY;
           M1 stays Robert-gated and now also carries E1's rawVideo.worker.ts lift.
-  6. H1-H4 the unkillable-take pack       [light→medium · specs below] component death = a seam,
-          not a dead take · crash-loss bound stated at hour scale · memory slope flat at hour
-          scale · a device that dies mid-take is survived and said (absorbs B4).
+  6. H1-H3 the unkillable-take pack       [light→medium · specs below] component death = a seam,
+          not a dead take · crash-loss bound stated at hour scale · memory slope flat at hour scale.
+          H4 IS DONE 2026-09-01 (handoff under the task) and it leaves READY. It absorbed B4, and
+          B4's own question is answered: the stalled chip never fired for a dead camera and never
+          could — `track.muted` stays false for a sensor that is off, so the 2026-08-25 rebuild had
+          nothing to convict with. Zero frames EVER is the discriminator a static screen cannot
+          trip. `Recording.lost` now carries kind/instant/reason/how-long-without, said live, in the
+          editor, and in the report card. FOR H1: `?dead=` and `?die=` are the induced-death knobs
+          its gates ask for, already built. FOR H2/H3: a take with anything in the loss ledger no
+          longer writes an encoder-budget mark in either direction, so a killed or dying take cannot
+          re-baseline the machine's throughput history under you.
+          STILL OWED: the WORDING of the four new sentences is Robert's (B4's gate); proposals are
+          in the handoff and only the words are open.
   7. F16b prerender-at-stop, max+camera   [light-medium · spec below] instant-feel max with a
           camera, paid AT STOP. A during-take max composite is a POST-A1 measured spike only.
   8. M1   THE COMBINE — max + emergency elastic  [ROBERT-GATED + blocked on A1 and E1 · spec
@@ -398,10 +408,11 @@ F17's sheet UI · O9/O10 remaining lanes · P5a (nothing expires — "TIME-SENSI
 ready-at-launch; runs whenever Robert is at the machine with the device). X1/X2/X3 ARE NOT AVAILABLE — all
 three were DONE 2026-08-26 (handoffs under their tasks); this line was stale when the priority
 order was written and cost a session a look. NO LIGHT PARALLEL-SAFE FILLER IS LEFT: B8 is done and
-B4 is absorbed by H4. B9 is not one — it is a default-path flip.
+B4 is absorbed by H4, which is DONE. B9 is not one — it is a default-path flip.
 STILL OWED ROBERT: B2 listen · O6 4K re-verify · `?singlegen=capture` · O10a attenuation ruling ·
 X5 text question · B7 video half (one command) · B9's yes (the picture is late against the sound on
-most takes; the fix is written up and unstarted).
+most takes; the fix is written up and unstarted) · H4's four sentences (a channel that died or never
+delivered now says so live and in the editor; the words are proposals, the paths are measured).
 
 ## A1 tab-audio-starvation — the tap dies under max load and the take keeps going
    [heavy · P0 · capture integrity · authored 2026-09-01 from Robert's 50-min max take]
@@ -949,6 +960,101 @@ camera unplugged, a track that ends. The channel closes as a certified loss at i
 take CONTINUES, the UI says so live (the liveness path exists and was not checked — B4's finding).
 GATES: B4's original repro says so on screen · induced track-end mid-take → take completes, loss
 certified with timestamp, other channels full length · oracle green.
+
+HANDOFF 2026-09-01 (task/H4, own worktree — another session held the main one). DONE, and B4's
+first question is answered: the stalled chip never fired, and it never could. A DETECTION bug.
+THE BEFORE, MEASURED ON PROD (093a0a2, knobs only, nothing else changed): `?synthetic=1&dead=camera`,
+45 s, four channels. Camera PiP black the whole take, camera lane full length in the editor, chip
+unchanged, no band, no toast — and the take report read `GREEN — 10 of 10 dimensions measured and
+inside band`. The console said `camera delivering 0.0 fps` and nothing acted on it.
+WHY IT COULD NOT FIRE: the frozen-source detector was rebuilt on 2026-08-25 around `track.muted`
+(Robert: "message about frozen screen is bullshit"), and Chrome leaves `muted` FALSE for a camera
+whose sensor is off. Frame silence alone was deliberately made unable to convict, so nothing could.
+THE ONE THING THAT SEPARATES A STATIC SCREEN FROM A DEAD CAMERA: a static screen delivers its FIRST
+frame and then goes quiet — it must, or the composite would have no picture of it to paint — while
+a dead source delivers nothing EVER. So the rule is zero frames ever, never frame silence, and the
+2026-08-25 contract is untouched: its own tests pass unchanged, plus a new one that walks a static
+screen through ten silent seconds and asserts the detector stays quiet.
+TWO DETECTORS, because the live one cannot run everywhere:
+  · LIVE — the composite's liveness tick, 5 s of no frames at all (SOURCE_NEVER_DELIVERED_MS) raises
+    `channel-dead`. Its OWN event with its own sentence: the frozen band's instruction ("re-share
+    your whole screen") cannot fix a camera whose lid is shut.
+  · AT STOP — the raw encoder's own counter, `framesIn === 0`. No threshold, no timing judgement,
+    and it runs where there is no composite at all.
+CERTIFIED WITH ITS TIMESTAMP. `Recording.lost`: kind · the instant on the take's own timeline ·
+'ended' | 'never-delivered' · how long the take ran on without it. `stalled` said WHICH and nothing
+else, and a mic lost at 40:00 of an hour is not the same take as one lost at 0:03.
+EVERY MEDIA KIND, not only video — a Bluetooth mic that drops ends its track exactly like an
+unplugged camera, and that half was recorded nowhere. A channel the USER switches off is excluded
+at the chokepoint (`suspended`): their own button is not a failure.
+SAID IN THREE PLACES: the live band (which now carries more than one sentence — a frozen screen and
+a dead camera can both be true), the editor after the take, and the S1 report card, folded into the
+`channels` dimension it was already asking rather than added as a new one.
+WORDING IS ROBERT'S (B4's gate says so) — these are proposals, and only the words are open:
+  · live, never delivered: "Camera is connected but sending no picture — nothing is being recorded
+    from it. Check the lid, the privacy shutter, or another app holding the camera."
+  · live, died mid-take:   "Camera & Mic have stopped — the take is still recording everything else."
+  · after, never delivered: "Camera was connected for the whole take and recorded nothing — there is
+    no camera in this take."
+  · after, died mid-take:  "Camera stopped at 0:07 and the take ran on for another 0:10 without it."
+GATES, all measured on the deployed build, `?synthetic=1`:
+  · B4'S REPRO SAYS SO ON SCREEN — `&dead=camera`: band live at +5 s, editor line, report card RED
+    (`camera stayed connected for the whole take and delivered no frames`). The saved take is B4's
+    file exactly: a 208-byte camera channel, `durationMs: 0`, KEPT (not `missing`), which is the
+    case the old code was completely silent about. Console: `raw video channel: 0 frames encoded of
+    0 in · 0 KB`.
+  · INDUCED TRACK-END MID-TAKE — `&die=camera:6000,mic:10000`, 17.3 s take: completes with all four
+    channels; `lost` = camera 'ended' at 6.9 s (10.4 s without it), mic 'ended' at 10.9 s (6.4 s);
+    screen and tab audio full length; the ledger agrees with the FILES to the tenth of a second
+    (`camera ended ... 6.9s of 17.3s`). One band, both names.
+  · NOTHING ENGAGES ON A HEALTHY TAKE — plain `?synthetic=1`, 15.9 s: no band at 15 s, no editor
+    alert, `GREEN — 10 of 10 dimensions measured and inside band`, stop→editor 978 ms.
+  · THE 5 S STOP TIMEOUT, B4's fifth symptom — REPRODUCED AND FIXED, not explained away. It is not
+    the encoder and not the frame pump (bounding the pump changed nothing, measured):
+    `startMeasuredVideo` awaits `handle.firstOffset` to stamp the offset, so `measuredStarting`
+    resolves only after the channel's FIRST FRAME and a source that never delivers one leaves it
+    pending for the whole take — and stop awaited it unbounded. Prod, before: `a recorder did not
+    stop in budget — recorder stop timed out after 5000ms`, 6.4 s to the editor. After: 2.98 s, no
+    warning, and the camera's own stats line now prints. Bounded at 1 s
+    (MEASURED_START_SETTLE_MS); the handle is built before that await, so there is always an encoder
+    to stop.
+  · oracle green on the shipped commit — 1/1 PASS, sync 51.9/68.5 ms, instant 67.5 ms, smartcut
+    66.2 ms · typecheck clean · 900 tests (15 new).
+FOUR FALSE SIGNALS FIXED ON THE WAY, all pre-existing on the frozen/track-ended paths this task
+generalises, all found by RUNNING it:
+  · A dead camera filed an ENCODER COLLAPSE. `markCompositeUnusable` notes O15's budget, so a source
+    that delivered no frames printed `this machine collapsed at 99.1 Mpx/s — remembered, so an equal
+    or larger take can be bounded before it starts`. A shut laptop lid would have bounded every
+    later take on that machine. Now `blameEncoder=false` on the three source-death reasons only.
+    Verified: budget cleared, one 14 s dead-camera take, budget still absent afterwards.
+  · And with the collapse gone it would have filed a SUSTAINED mark instead — the opposite error. An
+    encoder that was never fed is evidence of nothing, so a take with anything in the ledger records
+    neither.
+  · "camera froze mid-take — those stretches are a still image" on a camera that never delivered one,
+    and on one that was unplugged. Nothing that ships holds such a stretch: the still image is in the
+    composite, which the same code has already disqualified from being copied.
+  · The frozen BAND fired over an unplugged camera ("re-share your whole screen to fix it"), because
+    an ended track stops being `readyState: 'live'`. A channel that has ended is skipped by the
+    freeze rule now — its end is already certified with its instant.
+THE FIXTURE WAS WRONG ONCE AND MEASURING CAUGHT IT: a canvas captured at rate 0 emits ONE initial
+frame, which the raw channel encoded (`measured video camera first-frame +45ms 640x480@30`).
+`MediaStreamTrackGenerator` is live, unmuted, correctly dressed, and delivers exactly none — which
+is what B4's 28-byte file was.
+NOT PROVEN, AND IT IS THE ONE THING LEFT: the AT-STOP detector has never been isolated from the LIVE
+one. `noteLoss` is first-write-wins and the live detector wins by ~5 s, so on every run it is the one
+that filed. Two attempts to reach a composite-free configuration from a URL both FAILED to produce
+one on the deployed build — the max step over a 4K synthetic screen (`&screensize=3840x2160`, which
+did take the native-resolution path: the screen encoder came up `avc1.640033`) and
+`&singlegen=capture` — and `live composite engine v2` came up in both, with its liveness tick alive.
+So the premise this second detector was built on ("at max there is no composite, so nothing is
+watching") is NOT what the deployed build does on anything an agent can reach, and docs/FLAGS.md's
+"source-liveness detection is off with it" wants re-reading against a REAL 1080p-exact screen, which
+is what `singlegen=capture` needs to engage at all (O3c) and which no synthetic source here is.
+The at-stop rule is covered by unit test, and its input printed on every single dead run
+(`raw video channel: 0 frames encoded of 0 in · 0 KB`). What is unproven is that it fires ALONE.
+Worth ten minutes in whoever's next max session on real hardware.
+KNOBS: `?dead=<screen|camera>` and `?die=<kind>:<ms>` (from the record press, any kind, comma
+separated). docs/FLAGS.md carries both.
 
 ## M1 THE COMBINE — max + emergency elastic [ROBERT-GATED ("but not until i say") + blocked on
    A1 and E1 both perfect · Robert 2026-09-01: "when max is perfect and elastic is perfect we
