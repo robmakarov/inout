@@ -377,6 +377,14 @@ it is built combine-ready:
   6. H1-H4 the unkillable-take pack       [light→medium · specs below] component death = a seam,
           not a dead take · crash-loss bound stated at hour scale · memory slope flat at hour
           scale · a device that dies mid-take is survived and said (absorbs B4).
+     H2   the crash-loss bound            DONE 2026-09-01 — 2.1 s, and it does NOT grow with the
+          take (1.01 s at 60 s, 1.79 s at 31 min, five real SIGKILLs). Manifest and every channel
+          survived every kill; the salvaged take exports. `node scripts/crash-bound.mjs` re-runs
+          it in one command; docs/CRASH_BOUND.md is the playbook. Handoff under the task. It also
+          gave the production salvage path its first tests, and left one P1 observation in
+          BACKLOG about audio under a starved main thread — which is A1/H4's, not H2's.
+     H3   memory slope at hour scale      RUNNING overnight 2026-09-01 (Robert: "go h3, you are
+          working over night"). `scripts/memory-slope.mjs`, 60 min soak, sampled per minute.
   7. F16b prerender-at-stop, max+camera   [light-medium · spec below] instant-feel max with a
           camera, paid AT STOP. A during-take max composite is a POST-A1 measured spike only.
   8. M1   THE COMBINE — max + emergency elastic  [ROBERT-GATED + blocked on A1 and E1 · spec
@@ -936,6 +944,52 @@ instants of a >=30-min max60 take → the salvaged take loses < N s; state N and
 (fragment/checkpoint cadence). If N is minutes anywhere, the cadence is the fix.
 GATES: the bound quoted from >=5 kill points · worst case < 5 s or the fix that makes it so ·
 salvage-path tests green · oracle green.
+
+HANDOFF 2026-09-01 (task/H2, its own worktree). DONE, all four gates.
+THE BOUND IS 2.1 s, AND IT DOES NOT GROW WITH THE TAKE. Five `kill -9`s on Chrome's whole
+process group, one max60 take each on the deployed build, the take verified STILL RECORDING at
+the instant of the kill (11-371 liveness polls per cell). Worst channel behind the crash:
+  60 s -> 1.01 s · 5 min -> 2.12 s · 12 min -> 1.95 s · 20 min -> 1.47 s · 31 min -> 1.79 s
+The 31-minute kill loses no more than the 60-second one. Reference: a take STOPPED PROPERLY on
+the same machine ends 0.22-0.24 s behind the stop click, so a quarter-second of that trail is
+what any end-of-take costs and the crash adds one to two seconds on top. Video 0.48-2.12 s,
+audio 0.97-1.49 s. Full playbook and the per-channel table: docs/CRASH_BOUND.md.
+WHAT PRICES IT, and it is the muxer's cadence, not the disk's: every chunk is written AND
+flushed where the muxer says it goes, so nothing is lost between muxer and platter. Video is
+fragmented MP4 whose fragment closes only when it is >=1 s long AND a keyframe is queued on
+every track, against a 2 s GOP -> ~2 s in memory. Audio is WebM on ~1 s clusters
+(minimumClusterDuration default) -> ~1 s. Shortening either shortens the bound and costs bytes;
+neither is worth spending until 2.1 s is the complaint.
+WHAT SURVIVES: the pending manifest (localStorage `inout.pending`) survived all five kills —
+read off disk with script execution DISABLED, before the app was allowed to run, so the one
+look at the crash state is not the app's own account of it. Every channel survived at every
+length. The salvaged take EXPORTS, proven through the product's own buttons and not by probing
+the file. The composite does not survive and must not (2026-08-23): salvage deletes it, so a
+crashed take is its raw channels. S1's card reads INCOMPLETE on a salvaged take — 3 of 10
+dimensions, the other seven being evidence that died with the page — which is S1's rule working.
+THE INSTRUMENT: `scripts/crash-bound.mjs` (one command, exit 0 only on all four gates) on a new
+`scripts/lib/chrome.mjs` shared with H3's cell. A real SIGKILL and not a simulation, because
+three things the bound depends on live outside the page — whether OPFS keeps what
+SyncAccessHandle.flush() wrote, whether localStorage keeps the manifest, whether a fragmented
+MP4 whose last fragment never closed still demuxes — and the experimental rig that terminates a
+worker answers none of them.
+THE SALVAGE PATH HAD NO TEST until now: `src/core/capture/recovery.test.ts`, 10 cases pinning
+what the kills measured from underneath (offsets rebased but the gaps between channels kept, an
+unreadable channel costing only itself, the manifest one-shot so a throwing salvage cannot brick
+every later boot, the composite removed under both names, pendingBlobKeys naming exactly what the
+orphan sweep must leave alone). The only coverage before was the EXPERIMENTAL copy, a different
+function over a different orphan definition, which cannot fail when this one breaks.
+GATE EVIDENCE: 5 usable kill points · worst 2116 ms < 5000 · typecheck clean, 868 tests (10 new)
+· oracle 1/1 PASS sync 59.8/59.8 ms, instant 58.2 ms, smartcut 59.8 ms. No oracle:long: this
+task changed no product code at all — a rig, a doc and a test file — so no flip touches the
+instant or smart-cut paths.
+THE LOAD IS PART OF THE ANSWER, and the first matrix is the reason this one is trustworthy. Run
+at a synthetic 2560x1440@60 source, three of five takes were dead or dying before the kill
+arrived (screen delivery 44 -> 26 -> 10 -> 0.2 fps, both audio channels ending tens of seconds
+early) and the loss numbers read 21 s, 12 min, 19 min — none of them crash loss. That is what
+the liveness poll was added for. At 1920x1080@60 the same take holds 60.0 fps for five minutes
+and grades GREEN, and every point above is from a take that was alive. Filed to BACKLOG with its
+caveat: the rig's synthetic source is a canvas the PAGE paints, which a real screen share is not.
 
 ## H3 memory slope at hour scale [light · rig cell · HEAVY RUN, announced, overnight]
 Nothing measures memory past minutes. One cell: synthetic max60 soak, 60 min, memory sampled per
