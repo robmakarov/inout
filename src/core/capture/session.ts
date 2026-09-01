@@ -70,7 +70,8 @@ import type { LadderRung } from './captureLadder'
 import { preferredCompositeEngine } from './engine'
 import { MixLoudnessAccumulator } from './loudnessAccumulator'
 import { clearPendingManifest, writePendingManifest } from './recovery'
-import { createSyntheticChannelsProgressive, isSyntheticMode } from './synthetic'
+import { armSyntheticDeaths, createSyntheticChannelsProgressive, isSyntheticMode } from './synthetic'
+import type { LivenessEvent } from './sourceLiveness'
 
 export type { ArmingProgressHandler, ArmingTimelineEntry, ArmingStep } from './acquire'
 
@@ -143,6 +144,24 @@ const DISK_CHECK_MS = 5_000
  * recorder that never answers must not be able to freeze a finished take.
  */
 const STOP_BUDGET_MS = 5000
+/**
+ * H4/B4 — HOW LONG STOP WAITS FOR A CHANNEL'S START TO SETTLE.
+ *
+ * `measuredStarting` for a video channel resolves only after its FIRST FRAME
+ * (session.startMeasuredVideo awaits `handle.firstOffset` to stamp the offset),
+ * so a source that never delivers one leaves it pending for the life of the
+ * take. Stop awaited it unbounded, which is B4's "times the recorder stop out
+ * after 5 s" verbatim — measured on prod 2026-09-01 with `?dead=camera`:
+ * `a recorder did not stop in budget`, 6.4 s to the editor, while the healthy
+ * screen channel beside it returned its stats normally.
+ *
+ * The handle is built and assigned BEFORE that await, so by the time stop runs
+ * there is an encoder to stop whether or not a frame ever arrived. This wait is
+ * only for the case where the handle itself is still being constructed, which
+ * takes milliseconds. When it expires, stop proceeds with whatever exists — the
+ * outer STOP_BUDGET_MS is still there for anything genuinely stuck.
+ */
+const MEASURED_START_SETTLE_MS = 1000
 const COMPOSITE_START_BUDGET_MS = 4000
 /** The composite drains for up to 2 s and then waits on its own recorder's
  *  onstop — which, if that recorder never answers, used to be forever. */
@@ -434,6 +453,17 @@ class Session implements CaptureSession {
   /** Video sources frozen right now, and every one that froze at any point. */
   private readonly stalledNow = new Set<ChannelKind>()
   private readonly stalledEver = new Set<ChannelKind>()
+  /**
+   * H4 — THE LOSS LEDGER. One entry per channel that stopped being a source
+   * while the take ran: its track ended, or it never delivered a frame at all.
+   * Timestamped on the session clock here and rebased with the channels at
+   * stop, so `Recording.lost` reads on the same timeline as the files.
+   * FIRST WRITE WINS: a camera that is unplugged after it was already certified
+   * dead lost nothing new at that instant.
+   */
+  private readonly losses = new Map<ChannelKind, { atMs: number; reason: 'ended' | 'never-delivered' }>()
+  /** H4 harness (`?die=`): cancels the scheduled synthetic track deaths. */
+  private cancelDeaths: (() => void) | null = null
   /** Certified-mix loudness accumulated live (O2) — created on first PCM. */
   private loudness: MixLoudnessAccumulator | null = null
   private stopPromise: Promise<Recording> | null = null
@@ -995,26 +1025,71 @@ class Session implements CaptureSession {
     }
   }
 
-  private markCompositeUnusable(reason: string): void {
+  /**
+   * @param blameEncoder O15's budget files a permanent "this machine collapsed
+   * at N Mpx/s" mark against the plan, so an equal or larger take is bounded
+   * before it starts. That is right when the COMPOSITE gave up — "a composite
+   * that produces nothing in its first second never produces anything" — and
+   * wrong when a DEVICE died. Measured on prod 2026-09-01: a camera that
+   * delivered no frames filed `this machine collapsed at 99.1 Mpx/s`, and a
+   * shut laptop lid would have bounded every later take on that machine. The
+   * composite is still unusable either way (there is no picture to copy); it
+   * simply is not evidence about the encoder.
+   */
+  private markCompositeUnusable(reason: string, blameEncoder = true): void {
     if (this.compositeInvalid) return
     this.compositeInvalid = true
     console.info(`[capture] composite unusable (${reason}) — unedited export will render`)
-    // O15: the composite giving up IS the collapse this budget exists for —
-    // "a composite that produces nothing in its first second never produces
-    // anything". File it against the plan that produced it.
-    this.noteEncoderCollapse(`the composite degraded: ${reason}`)
+    if (blameEncoder) this.noteEncoderCollapse(`the composite degraded: ${reason}`)
+    else console.info(`[capture] not an encoder collapse (${reason}) — the budget is untouched`)
+  }
+
+  /**
+   * H4 — file one channel's death, once, on the session clock. `stalledEver`
+   * has always recorded WHICH channel; this records WHEN, which is the half
+   * that makes a take readable afterwards: a mic lost at minute 40 of an hour
+   * and one lost at second 3 are different takes and the files look the same.
+   */
+  private noteLoss(kind: ChannelKind, reason: 'ended' | 'never-delivered'): void {
+    if (this.losses.has(kind)) return
+    const atMs = reason === 'never-delivered' ? 0 : Math.max(0, performance.now() - this.epoch)
+    this.losses.set(kind, { atMs, reason })
+    console.warn(`[capture] ${kind} lost at +${Math.round(atMs)}ms (${reason}) — the take continues`)
   }
 
   /** A video source froze (or came back). The take continues — audio and the
    * other channels are unaffected — but the frozen stretch is a still image, so
    * the composite can't be copied and the user has to be told. */
-  private onSourceLiveness(kind: ChannelKind, event: 'stalled' | 'resumed'): void {
+  private onSourceLiveness(kind: ChannelKind, event: LivenessEvent): void {
     if (this.stateInternal !== 'recording') return
+    // A CHANNEL THAT HAS ENDED IS NOT FROZEN, AND SAYING SO SENDS THE USER TO
+    // THE WRONG FIX. Measured on prod 2026-09-01 with ?die=camera:14000: the
+    // track ends, `readyState` stops being 'live', the frozen-source rule reads
+    // that as a sick source and three seconds later the band says "Camera
+    // frozen — re-share your whole screen to fix it" over an unplugged camera.
+    // The end is already certified with its instant; the freeze rule has
+    // nothing left to add about a source that is gone.
+    if (this.channels.some((c) => c.kind === kind && c.ended)) return
+    if (event === 'dead') {
+      // H4/B4: live, unmuted, correctly negotiated — and not one frame. The
+      // take goes on (the other channels are fine and this one was never
+      // giving anything up), but it is certified from here and said on screen.
+      if (this.stalledNow.has(kind)) return
+      this.stalledNow.add(kind)
+      // NOT `stalledEver`. That set means "froze mid-take — those stretches are
+      // a still image", which the report card says in those words; a source
+      // that never delivered one frame did not freeze and has no still image
+      // in the file. The loss ledger is what carries this one.
+      this.noteLoss(kind, 'never-delivered')
+      this.markCompositeUnusable(`${kind} never delivered a frame`, false)
+      this.emit({ type: 'channel-dead', kind })
+      return
+    }
     if (event === 'stalled') {
       if (this.stalledNow.has(kind)) return
       this.stalledNow.add(kind)
       this.stalledEver.add(kind)
-      this.markCompositeUnusable(`${kind} source stalled`)
+      this.markCompositeUnusable(`${kind} source stalled`, false)
       this.emit({ type: 'channel-stalled', kind })
     } else {
       if (!this.stalledNow.delete(kind)) return
@@ -1038,6 +1113,9 @@ class Session implements CaptureSession {
     const notices = this.pendingNotices
     this.pendingNotices = []
     for (const n of notices) this.emit({ type: 'channel-notice', kind: n.kind, message: n.message })
+    // H4 harness (`?die=`): the deaths are scheduled from the PRESS, not the
+    // arm, so a death at +20 s lands inside the take instead of during arming.
+    if (isSyntheticMode()) this.cancelDeaths = armSyntheticDeaths(this.channels)
     this.tickTimer = setInterval(() => this.onTick(), TICK_MS)
     this.startComposite()
     this.acquireWakeLock()
@@ -1431,7 +1509,7 @@ class Session implements CaptureSession {
     // was never true, and a name that disagrees with the bytes is what made
     // every iPhone channel unplayable (see containerExt above).
     const key = `${this.recordingId}_composite.mp4`
-    const onSourceLiveness = (kind: 'screen' | 'camera', event: 'stalled' | 'resumed'): void =>
+    const onSourceLiveness = (kind: 'screen' | 'camera', event: LivenessEvent): void =>
       this.onSourceLiveness(kind, event)
 
     // v1 is the capability fallback and stays the whole story on Apple WebKit
@@ -1999,6 +2077,10 @@ class Session implements CaptureSession {
       clearInterval(this.tickTimer)
       this.tickTimer = null
     }
+    // H4 harness: a take that stops before a scheduled death takes its timers
+    // with it, so nothing kills a track belonging to the next take.
+    this.cancelDeaths?.()
+    this.cancelDeaths = null
   }
 
   private onTick(): void {
@@ -2199,9 +2281,27 @@ class Session implements CaptureSession {
     // the live composite goes on repainting its last frame — and an unedited
     // export would copy that still image for the whole remaining take while the
     // channel's own file correctly stopped. Render from the channels instead.
+    // H4: EVERY media kind, not only video. A Bluetooth mic that drops at
+    // minute 40 ends its track exactly like an unplugged camera, and the audio
+    // half of that was the half nothing recorded — the channel simply came back
+    // short and no surface said why. `suspended` is the exception and it is the
+    // whole exception: a channel the USER switched off mid-take arrives here
+    // through stopChannelNow, and reporting that as a loss would be calling the
+    // user's own button a failure.
+    if (this.stateInternal === 'recording' && !this.suspended.has(rt.kind)) {
+      this.noteLoss(rt.kind, 'ended')
+    }
     if (rt.media === 'video' && this.stateInternal === 'recording') {
-      this.markCompositeUnusable(`${rt.kind} track ended`)
-      this.stalledEver.add(rt.kind)
+      // The composite goes on repainting a dead track's last frame forever, so
+      // it can no longer be copied — that stays, and it is what keeps an
+      // unedited export honest.
+      this.markCompositeUnusable(`${rt.kind} track ended`, false)
+      // NOT `stalledEver`, which the report card renders as "froze mid-take —
+      // those stretches are a still image". There are no such stretches in
+      // anything that ships: the composite this describes is exactly the file
+      // the line above just disqualified, and the channel's own raw file
+      // correctly stops at the death. The ledger says what happened, with its
+      // instant, and does not need a second sentence contradicting the files.
     }
     if (rt.useMeasured && rt.measured) {
       void rt.measured
@@ -2257,7 +2357,15 @@ class Session implements CaptureSession {
         if (this.cancelled) continue
         void (async () => {
           try {
-            if (ch.measuredStarting) await ch.measuredStarting
+            // H4/B4: bounded — a channel whose first frame never arrived leaves
+            // this promise pending forever. See MEASURED_START_SETTLE_MS.
+            if (ch.measuredStarting) {
+              await withTimeout(
+                ch.measuredStarting,
+                MEASURED_START_SETTLE_MS,
+                `${ch.kind} measured start`,
+              ).catch(() => undefined)
+            }
             if (ch.measured) {
               const r = await ch.measured.stop()
               ch.bytes = r.bytes
@@ -2269,6 +2377,21 @@ class Session implements CaptureSession {
               // ChannelRecording.width/height (the single-generation copy, the
               // editor's PiP box) has to be told what was written.
               const st = 'stats' in r ? r.stats : null
+              /**
+               * H4 — THE AT-STOP VERDICT, AND THE ONLY ONE THAT WORKS EVERYWHERE.
+               *
+               * The live detector rides the composite's liveness tick, and at
+               * quality=max there IS no composite — so on the one path Robert
+               * actually records at, nothing was watching. This needs no
+               * threshold and no timing judgement: the encoder counted the
+               * frames that reached it, and zero in is zero in. `framesIn`
+               * rather than `framesEncoded`, because the raw worker synthesises
+               * keep-alive frames for a static source and those are output the
+               * source never produced.
+               */
+              if (ch.media === 'video' && st && st.framesIn === 0) {
+                this.noteLoss(ch.kind, 'never-delivered')
+              }
               if (st?.outWidth && st.outHeight && (st.outWidth !== ch.width || st.outHeight !== ch.height)) {
                 console.info(
                   `[capture] ${ch.kind} channel recorded ${st.outWidth}x${st.outHeight} (the track said ${ch.width}x${ch.height})`,
@@ -2620,6 +2743,10 @@ class Session implements CaptureSession {
     // of an encoder that had not started working yet.
     if (
       !this.collapseRecorded &&
+      // H4: and nothing DIED. A take whose camera delivered nothing ran an
+      // encoder that was never fed, and the machine carrying that is not
+      // evidence it can carry the plan.
+      this.losses.size === 0 &&
       this.encoderPlan &&
       recording.durationMs >= SUSTAINED_TAKE_MIN_MS
     ) {
@@ -2638,6 +2765,44 @@ class Session implements CaptureSession {
     if (missing.length) recording.missing = missing
 
     if (this.stalledEver.size) recording.stalled = [...this.stalledEver]
+
+    /**
+     * H4 — THE LOSSES, ON THE TAKE'S OWN TIMELINE.
+     *
+     * The ledger was stamped on the session clock (epoch-relative); the
+     * channels above have just been rebased so the earliest one sits at t=0, so
+     * these take the same shift or they would name the wrong instants. A
+     * 'never-delivered' channel is left at 0 — it was never there to lose at a
+     * later moment — and `lostMs` is how long the take ran on without it, which
+     * is the number that says whether this take is salvageable.
+     */
+    if (this.losses.size) {
+      const shift = Number.isFinite(minOffset) ? minOffset : 0
+      // THE LEDGER IS COMPLETE, INCLUDING KINDS THAT ARE ALSO `missing`. A
+      // camera that stayed connected and delivered nothing writes no file at
+      // all when it delivers literally zero frames, so it lands in BOTH — and
+      // the two sentences are not interchangeable: `missing` says "the device
+      // never connected", which is the wrong thing to tell someone whose lid
+      // is shut. The editor shows the specific one and drops the generic one;
+      // the report card reads both and says each once.
+      recording.lost = [...this.losses.entries()].map(([kind, l]) => {
+        const atMs = l.reason === 'never-delivered' ? 0 : Math.max(0, Math.round(l.atMs - shift))
+        return {
+          kind,
+          atMs,
+          reason: l.reason,
+          lostMs: Math.max(0, Math.round(recording.durationMs - atMs)),
+        }
+      })
+      {
+        console.warn(
+          '[capture] H4 losses — ' +
+            recording.lost
+              .map((l) => `${l.kind} ${l.reason} at ${l.atMs}ms (${l.lostMs}ms lost)`)
+              .join(' · '),
+        )
+      }
+    }
 
     // Capture-time loudness (O2): only valid when the stats cover EXACTLY the
     // audio channels the export will mix — otherwise the sum is a different
@@ -2770,7 +2935,14 @@ class Session implements CaptureSession {
       if (ch.useMeasured) {
         void (async () => {
           try {
-            if (ch.measuredStarting) await ch.measuredStarting
+            // H4/B4: bounded, same reason as the stop path above.
+            if (ch.measuredStarting) {
+              await withTimeout(
+                ch.measuredStarting,
+                MEASURED_START_SETTLE_MS,
+                `${ch.kind} measured start`,
+              ).catch(() => undefined)
+            }
             if (ch.measured) await ch.measured.cancel()
           } catch {
             /* discarding */

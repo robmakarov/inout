@@ -75,6 +75,10 @@ export interface MeasuredVideoHandle {
 
 const START_TIMEOUT_MS = 8_000
 const STOP_TIMEOUT_MS = 10_000
+/** H4: how long the frame pump may take to wind down before the stop goes
+ *  ahead without it. Shorter than the session's own 5 s stop budget on
+ *  purpose — the point is for that budget never to be what notices. */
+const END_PUMP_TIMEOUT_MS = 1_500
 
 function withDeadline<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -249,7 +253,30 @@ export async function startMeasuredVideoCapture(opts: {
       // session epoch and startOffsetMs live on. Read before endPump() so the
       // teardown's own duration is not counted as recorded material.
       const stopAtMs = performance.now()
-      await endPump()
+      /**
+       * H4 — BOUNDED, and MEASURED NOT TO BE THE CULPRIT.
+       *
+       * This was the first suspect for B4's "times the recorder stop out after
+       * 5 s": `reader.cancel()` on a MediaStreamTrackProcessor whose source
+       * never produced anything looked like an await nothing would settle. It
+       * is not — bounding it on prod produced no warning and no change, and the
+       * stall turned out to be one level up, in the session's own unbounded
+       * wait on `measuredStarting` (session.ts, MEASURED_START_SETTLE_MS).
+       *
+       * The bound stays because it is correct on its own terms: this is an
+       * unbounded await on a stop path whose whole job is to finish, racing the
+       * flush is what it exists to prevent, and a source with no frames in
+       * flight has nothing to race. A healthy channel resolves here in
+       * milliseconds and never sees the deadline.
+       */
+      const pumpEnd = performance.now()
+      await withDeadline(endPump(), END_PUMP_TIMEOUT_MS, 'raw video pump end').catch((err) => {
+        console.warn(
+          `[capture] raw ${opts.track.kind} pump did not end in ` +
+            `${Math.round(performance.now() - pumpEnd)}ms — stopping anyway`,
+          err,
+        )
+      })
       const done = new Promise<RawVideoReply>((resolve) => {
         settleStop = resolve
       })

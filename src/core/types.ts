@@ -265,6 +265,18 @@ export interface Recording {
    * silently. */
   stalled?: ChannelKind[]
   /**
+   * H4 — WHAT THIS TAKE LOST WHILE IT RAN, AND WHEN.
+   *
+   * `stalled` says WHICH channel went bad and nothing else; a take that lost
+   * its mic at minute 40 of an hour is not the same take as one that lost it
+   * at second 3, and the file cannot be told apart from a healthy one by
+   * looking. Each entry is a channel that stopped being a source mid-take —
+   * its track ended, or it never delivered a frame at all — stamped at the
+   * instant it happened on the SAME timeline as `channels[].startOffsetMs`.
+   * Absent on every take that lost nothing, and on every take made before H4.
+   */
+  lost?: ChannelLoss[]
+  /**
    * UI1 — WHERE THE CAMERA PiP WAS WHEN THE TAKE STOPPED, if it was moved
    * during capture. The composite holds this pose, so the editor has to open
    * with it or the preview stops predicting the file (the default export
@@ -297,6 +309,29 @@ export interface Recording {
    * dimension that reads this reports `unmeasured` rather than passing.
    */
   stopStats?: TakeStopStats
+}
+
+/**
+ * H4. One channel's death, certified. Descriptive only — the take already
+ * continued without it; this is what says so afterwards.
+ */
+export interface ChannelLoss {
+  kind: ChannelKind
+  /**
+   * Recording-timeline ms at which the channel stopped delivering. Rebased
+   * with the channels, so it is directly comparable to `startOffsetMs`.
+   * `0` on a 'never-delivered' channel: it was never there.
+   */
+  atMs: number
+  /**
+   * 'ended' — the track fired `ended` mid-take (unplugged, Bluetooth dropped,
+   * the shared window's owner quit, "Stop sharing").
+   * 'never-delivered' — the track stayed live and unmuted for the whole take
+   * and produced no frames at all (B4's sensor-off camera).
+   */
+  reason: 'ended' | 'never-delivered'
+  /** How long the take ran on after the loss. */
+  lostMs: number
 }
 
 /** S1. Descriptive only — nothing here changes a capture decision. */
@@ -512,6 +547,17 @@ export type CaptureEvent =
    *  it must stay said: the user is in another tab when this happens. */
   | { type: 'channel-stalled'; kind: ChannelKind }
   | { type: 'channel-resumed'; kind: ChannelKind }
+  /**
+   * H4 — A VIDEO SOURCE THAT HAS NEVER DELIVERED ONE FRAME. Not the same event
+   * as 'channel-stalled' and not the same sentence: a stall is a source that
+   * was working and stopped, and the fix for it is on the user's screen
+   * ("re-share your whole screen"). This is a source that was never alive —
+   * B4's closed-lid camera, live and unmuted and negotiated at 1920x1080@30,
+   * writing a 28-byte file — and nothing the user does to the shared surface
+   * changes it. Fires once per channel per take; 'channel-resumed' still
+   * closes it if frames ever start.
+   */
+  | { type: 'channel-dead'; kind: ChannelKind }
   /** Session lost its last channel (or hit MAX_RECORDING_MS, if a cap is ever
    *  set again) and began stopping itself. UI should call stop() to collect the
    *  Recording — stop() is idempotent and always returns the same promise. */

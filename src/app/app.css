@@ -140,6 +140,10 @@
   padding: 10px 16px;
   border-radius: var(--r-md, 12px);
   z-index: 7;
+  /* H4: the band can now carry more than one sentence at once (a frozen screen
+     and a dead camera are different failures and both can be true). */
+  display: grid;
+  gap: 6px;
 }
 
 /* Below-floor / missing-API notice (P3). Same geometry as the stalled band, but

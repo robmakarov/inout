@@ -51,6 +51,8 @@ The URL wins over the sticky value; the sticky value wins over the default.
 |---|---|---|
 | `?synthetic=1` | | Fake devices — no permission prompts. This is how agents drive the app. |
 | `?slow=` | `?synthetic=1&slow=mic:6000` | Delays a channel's arm, to reproduce a stuck arm without hardware. |
+| `?dead=` | `?synthetic=1&dead=camera` | The channel arms normally — track live, unmuted, correctly sized — and delivers **zero frames** for the whole take. B4's closed-lid camera, which wrote a 28-byte file while everything the product could see said it was healthy. Video kinds only. |
+| `?die=` | `?synthetic=1&die=mic:20000` | Ends a channel's track **mid-take**, N ms after the record press (the Bluetooth mic that drops at minute 40, the unplugged camera). Stops the track AND dispatches `ended`, which is what a real unplug does and what `track.stop()` alone does not. Any kind, comma-separated. |
 | `?quiet=` | `?synthetic=1&quiet=0.05` | Scales the synthetic audio down. |
 | `?camsize=` | `?synthetic=1&camsize=1080x1920` | The synthetic camera's size — how a PORTRAIT take is reproduced without a phone (default 640×480). |
 | `?camlies=1` | `?synthetic=1&sourceframe=1&camsize=1080x1920&camlies=1` | Makes the synthetic camera report its dimensions **transposed** — the one lie a real phone tells (`getSettings()` describes the sensor, the frames arrive rotated). This is how the phone bug is reproduced on a desktop. |

@@ -248,19 +248,43 @@ export function buildReportCard(recording: Recording, evidence: ReportEvidence =
   {
     const missing = recording.missing ?? []
     const shortfall = Math.max(SHORT_CHANNEL_MS, take * SHORT_CHANNEL_RATIO)
-    const short = recording.channels.filter((c) => take - channelEnd(c) > shortfall)
-    const kinds = [...missing, ...short.map((c) => c.kind)]
+    const shortAll = recording.channels.filter((c) => take - channelEnd(c) > shortfall)
+    /**
+     * H4 — THE LOSS LEDGER CONVICTS HERE.
+     *
+     * Measured on prod 2026-09-01, before this line existed: a take whose
+     * camera delivered nothing for 45 s read `GREEN — 10 of 10 dimensions
+     * measured and inside band`. It was not missing (the file exists, 28 bytes
+     * of container) and it was not short (a dead source still stamps a full
+     * duration), so every dimension above passed it honestly and the verdict
+     * was still wrong. Folded into THIS dimension rather than added as a new
+     * one: it is the same question these lines already ask.
+     */
+    const lost = recording.lost ?? []
+    // A kind in BOTH says it once, in the more specific words: "never delivered
+    // a byte" is true of a camera whose lid is shut and does not describe it.
+    // Same for the shortfall rule — "camera ended 23.6s before the take did"
+    // and "camera died at 14.9s and the take ran 23.6s without it" are the same
+    // fact, and the second one is the one that says WHY.
+    const missingOnly = missing.filter((k) => !lost.some((l) => l.kind === k))
+    const short = shortAll.filter((c) => !lost.some((l) => l.kind === c.kind))
+    const kinds = [...missingOnly, ...short.map((c) => c.kind), ...lost.map((l) => l.kind)]
     if (kinds.length) {
       dims.push({
         id: 'channels',
         status: 'fail',
         kinds,
         detail: list([
-          ...missing.map((k) => `${LABEL[k]} was requested and never delivered a byte`),
+          ...missingOnly.map((k) => `${LABEL[k]} was requested and never delivered a byte`),
           ...short.map(
             (c) =>
               `${LABEL[c.kind]} ended ${dur(take - channelEnd(c))} before the take did ` +
               `(${dur(c.durationMs)} of ${dur(take)})`,
+          ),
+          ...lost.map((l) =>
+            l.reason === 'never-delivered'
+              ? `${LABEL[l.kind]} stayed connected for the whole take and delivered no frames`
+              : `${LABEL[l.kind]} died at ${dur(l.atMs)} and the take ran ${dur(l.lostMs)} without it`,
           ),
         ]),
       })
