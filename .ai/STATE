@@ -2,6 +2,22 @@
 
 phase: MVP validation (2026-07-16)
 
+- EVERY TAKE GRADES ITSELF, AND THE VERDICT IS ONE LINE (S1, 2026-09-01, on `task/S1` —
+  gated, unmerged while another session held main). `core/report/reportCard.ts` computes ten
+  dimensions from what the take already carries — channels · audio continuity · audio clock ·
+  rescue bursts · picture · rate · sync anchors · storage · memory · wedges — at stop and on
+  demand for any take. `green` = every dimension measured and in band; `red` = one failed and
+  the line names it with numbers; `incomplete` = nothing failed but something could not be
+  measured, which is never a pass (R1's ruling generalised). AT STOP ONLY: on a fresh load the
+  report modules are first fetched 12 ms AFTER the take ends, so nothing of it exists in the
+  page while the recorder runs. Read it with `await __inoutReport()` / `__inoutReportAll()` /
+  `__inoutTakeLog()` (a 60-entry localStorage ring of verdict lines that outlives deleted
+  takes) — the wedgeJournal precedent, nothing asked of Robert. Playbook: docs/TAKE_REPORT.md.
+  Two additive changes carry it: `Recording.stopStats` (heap, storage headroom, requested rate,
+  what the take gave up — read once at stop) and measuredAudio writing its silence counters
+  even at zero, because a channel with no counter is indistinguishable from one nobody counted.
+  rec_78ogcw052vdn grades RED naming tab audio and its six bursts; a clean take grades GREEN.
+
 - ONE STUCK SCREEN REQUEST USED TO POISON EVERY PRESS AFTER IT (2026-08-30, Robert: four stalls in a
   row, two Chrome relaunches in between — "first time waiting for screen, second waiting for screen and
   microphone, third too, fourth too", "make this shit gone completly"). A wedged getDisplayMedia never

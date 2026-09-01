@@ -329,8 +329,9 @@ it is built combine-ready:
   2. G1   coin-flip merge gate            [medium · already on map] + LC1 the 120 s red cell
           [promoted from BACKLOG P0, spec below]. The instruments that will judge A1's fix go
           before the fix — a fix judged by a coin flip is not judged.
-  3. S1   the take report card            [light-medium · spec below] "perfect" becomes a VERDICT
-          every take computes from its own black box — Robert's daily takes become the soak fleet.
+  3. S1   the take report card            BUILT AND GATED 2026-09-01 on `task/S1`, UNMERGED —
+          another session held main in this worktree; fast-forward when it lands. Handoff and
+          all five gates are under the task below; docs/TAKE_REPORT.md is the playbook.
   4. B5   disk guard                      [light] unlimited length makes disk the wall.
      B1   size panel truth                [light] the only pre-render warning, wrong 2.15x.
   5. E1   elastic below max               [medium · spec below, EXTENDED: the detector must
@@ -430,6 +431,44 @@ an agent off the machine with nothing asked of him (the wedgeJournal precedent, 
 GATES: rec_78ogcw052vdn (the 50-min take) computes RED naming tab-audio and the six bursts · a
 clean short take computes GREEN · zero cost while recording (computed at stop/on demand) · an
 agent reads the verdict over the browser MCP with Robert doing nothing · oracle green.
+
+HANDOFF 2026-09-01 (task/S1, branch built in its own worktree — another session held main).
+DONE, all five gates, measured not argued. `src/core/report/` is the instrument: a pure
+buildReportCard(recording, evidence) over ten dimensions, a 60-entry localStorage ring of
+verdict lines (`inout.takeReport.v1`), and three globals beside `__inoutSupport`.
+  · GATE 1 — rec_78ogcw052vdn grades RED, live in a browser and as a pinned fixture:
+    "50.4 min · RED — audio-continuity: tab audio went to digital zeros 22.9 min in and never
+    came back — 27.5 min of 50.4 min (54.5%) · rescue: tab audio 6 revive bursts (25 attempts),
+    5 after warm-up — runs began 0.2s, 189.4s, 455.1s, 707.7s, 1328.4s, 1376.3s." The run
+    starts reproduce reviveSchedule.ts's own list to the decimal, from the events alone.
+  · GATE 2 — two synthetic prod-path takes at stop: "25.2s · GREEN — 10 of 10 dimensions
+    measured and inside band" and the same at 28.2s.
+  · GATE 3 — zero cost while recording, MEASURED: on a fresh load the report modules are first
+    fetched at 60,536 ms against a take that ran 32,275 → 60,524 ms. 12 ms AFTER stop; nothing
+    of this exists in the page while the recorder runs.
+  · GATE 4 — read over the browser MCP with nothing asked of Robert: `await __inoutReport()`,
+    `__inoutReportAll()`, `__inoutTakeLog()` (the fleet, which outlives deleted takes).
+  · GATE 5 — oracle green twice (1/1 PASS, sync 8.6/47.7 ms, instant 9.4 ms, smartcut 14.0 ms);
+    typecheck clean; 821 tests (24 new).
+WHAT THE VERDICT MEANS, and it is the R1 ruling generalised: `green` = every dimension measured
+and in band · `red` = one failed, and the LINE names it with its numbers · `incomplete` =
+nothing failed but something could not be measured. An unread dimension is never a passed one.
+TWO THINGS THIS CHANGED OUTSIDE THE INSTRUMENT, both additive:
+  · `Recording.stopStats` — heap, storage headroom, requested rate, and what the take gave up,
+    read ONCE at stop out of numbers the session already had (the disk guard's last sample is
+    now kept instead of discarded). Absent on older takes, which read `unmeasured`.
+  · measuredAudio writes paddedMs/trimmedMs/silentTailMs/revivals EVEN AT ZERO. A channel
+    carrying no counter is indistinguishable from one nobody counted — the MediaRecorder audio
+    lane writes the same container — and scoring that as "nothing was lost" is exactly the
+    measurement-not-taken R1 refused. Takes recorded before this read `unmeasured`, honestly.
+WHAT IT DELIBERATELY DOES NOT CLAIM: memory is a POINT SAMPLE AT STOP, not a high-water mark
+(nothing samples during a take and nothing should — H3 owns the hour-scale slope); and the
+delivered-fps-over-time the spec asked for is the WRITTEN rate plus the degrade reason, because
+no per-second cadence history is persisted and adding one would break gate 3. A packet-level
+cadence pass exists offline (scripts/forensics.mjs) if that is ever wanted on demand.
+NO UI. The card is an instrument, not a notice — the takes list keeps saying exactly what it
+said before. Surfacing a verdict to the user is Robert's call, not a side effect of S1.
+Playbook: docs/TAKE_REPORT.md. NOT MERGED — see the READY map note.
 
 ## H1 segment containment — a component death is a seam, not a dead take [medium]
 F6/O16 proved the machinery (own epoch anchors, 30-69 ms seams). Generalize: an encoder error, a
