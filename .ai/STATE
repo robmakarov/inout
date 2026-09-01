@@ -2,6 +2,28 @@
 
 phase: MVP validation (2026-07-16)
 
+- A CHANNEL THAT DIES, OR NEVER LIVED, IS NOW SAID AND STAMPED (H4, absorbs B4, 2026-09-01).
+  The frozen-source detector was rebuilt on 2026-08-25 around `track.muted`, and Chrome leaves
+  `muted` FALSE for a camera whose sensor is off — so B4's case (live, unmuted, negotiated at
+  1920x1080@30, 28-byte file) could never be convicted, and was not: measured on prod before the
+  fix, a 45 s take with a dead camera read `GREEN — 10 of 10 dimensions measured and inside band`
+  with nothing on screen at any point. The discriminator is ZERO FRAMES EVER, which a static screen
+  cannot trip because it delivers its first frame and only then goes quiet. Two detectors: the
+  composite's liveness tick at 5 s (`channel-dead`, its own event and its own sentence — "re-share
+  your whole screen" cannot fix a shut lid), and the raw encoder's own `framesIn === 0` at stop.
+  `Recording.lost` carries kind · instant on the take's timeline · 'ended' | 'never-delivered' ·
+  how long the take ran on without it, for EVERY media kind — a Bluetooth mic that drops at minute
+  40 ends its track exactly like an unplugged camera. Said live (a band that now holds more than
+  one sentence), in the editor, and in the report card's `channels` dimension. A channel the user
+  switches off is excluded at the chokepoint. FOUR FALSE SIGNALS WENT WITH IT, all pre-existing on
+  the frozen/track-ended paths: a dead device no longer files an O15 encoder collapse (a shut lid
+  would have bounded every later take on that machine) nor a sustained mark; an ended track is no
+  longer called frozen, live or in the card. AND B4's FIVE-SECOND STOP IS FIXED: `measuredStarting`
+  resolves only after a channel's FIRST frame (startMeasuredVideo awaits `handle.firstOffset`), so
+  a source that never delivers one left stop waiting unbounded — 6.4 s to the editor, now 2.98 s,
+  bounded at `MEASURED_START_SETTLE_MS`. Knobs: `?dead=<screen|camera>` (zero frames, a
+  MediaStreamTrackGenerator — a canvas at rate 0 emits ONE frame and was the wrong fixture) and
+  `?die=<kind>:<ms>` from the record press. WORDING OF THE FOUR NEW SENTENCES IS ROBERT'S, unruled.
 - THE EXPORT SIZE PANEL: THE LADDER IS COHERENT, AND THE NUMBER IS STILL WRONG — BY 3x, AND IT IS
   THE PROBE (B1, 2026-09-01). A predicted step is now raised to the
   largest number below it, so no step can promise a bigger picture for fewer bytes; an EXACT number
