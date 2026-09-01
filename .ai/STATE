@@ -2,6 +2,16 @@
 
 phase: MVP validation (2026-07-16)
 
+- THE EXPORT SIZE PANEL: THE LADDER IS COHERENT, AND THE NUMBER IS STILL WRONG — BY 3x, AND IT IS
+  THE PROBE (B1, 2026-09-01). A predicted step is now raised to the
+  largest number below it, so no step can promise a bigger picture for fewer bytes; an EXACT number
+  is never raised, because it is a file. Then the gate's own measurement went the other way: on a
+  159.6 s text take exported at 1440p the file came out 21.51 MB, the MODEL said 19.92 (8 % low,
+  inside the band) and the CALIBRATION PROBE — which is what the panel shows — said 64.92. The
+  probe encodes TWO frames per step and multiplies the single delta by the frame rate; a still
+  page's steady-state delta collapses toward nothing, so it never sees what it is extrapolating.
+  Today the panel is LESS accurate with the probe than without it on still content. Filed as B1b
+  with the fix that has a chance (sample a contiguous run, take the delta from its tail).
 - THE DISK GUARD NOW SEES THE BYTES IT GUARDS, AND ANSWERS BEFORE THE PRESS (B5, 2026-09-01).
   The during-take half had shipped
   BLIND: `rt.bytes` accumulates in `ondataavailable`, which is the MediaRecorder path, and the
