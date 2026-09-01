@@ -41,6 +41,17 @@ Audio-only becomes visualized video. UI: iOS-Camera simplicity, Final Cut timeli
 
 ## State (2026-08-26)
 
+**2026-09-01 — EVERY TAKE NOW GRADES ITSELF (S1).** "Perfect record, unlimited length" was an
+argument; it is a verdict now. At stop, every take reads its own black box across ten dimensions
+and writes one line: GREEN (everything measured and in band), RED (one thing failed, and the line
+names it with its numbers), or INCOMPLETE (nothing failed, but something could not be measured —
+never a pass). It costs the recording nothing: the code is not even loaded until the take has
+ended. Your ordinary daily recording is the soak fleet — an agent reads any take, or all of them,
+with `await __inoutReport()` and `__inoutTakeLog()` and asks you for nothing (docs/TAKE_REPORT.md).
+The 50-minute take that lost 27 minutes of tab audio grades RED naming tab audio and its six
+rescue bursts, while the audio CLOCK passes on the same take — which is the separation A1 starts
+from. Nothing in the app looks different; this is an instrument, not a notice.
+
 **2026-08-30 — QUALITY IS NOW ONE SLIDER, CHOSEN BEFORE THE TAKE (UI1).** Robert's eight-item UI
 pass. The through-line: quality was two decisions that could not see each other — capture ran at
 whatever the source offered, the export ladder was picked afterwards — so the encoders running
