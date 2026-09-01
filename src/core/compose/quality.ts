@@ -430,6 +430,48 @@ export interface SizeEstimate {
   /** True when this step IS the composite (the instant copy) and the number is
    *  therefore the file itself, not a prediction. */
   exact: boolean
+  /** B1: raised to a smaller step's number, because a bigger picture cannot
+   *  cost less than one it contains. The panel's own number, not a new
+   *  measurement — see `flooredByPixelOrder`. */
+  floored?: boolean
+}
+
+/**
+ * A BIGGER STEP CANNOT COST LESS THAN A SMALLER ONE (task B1).
+ *
+ * Seen on a 6 s take on the deployed build: `1080p 400 KB (exact)` sitting
+ * above `1440p ~308 KB`. 1440p is an UPSCALE of that very file — there is no
+ * arrangement of pixels in which it is smaller — and the ladder already had the
+ * evidence to know it, because the 1080p number was the composite's own bytes.
+ * Two independent predictions were being shown side by side as if they were a
+ * ladder, and a user reading them would pick the bigger picture to save space.
+ *
+ * The rule is one comparison and no new measurement: walking up in pixel count,
+ * a predicted step is raised to whatever the largest number below it is. AN
+ * EXACT NUMBER IS NEVER RAISED — it is a file on disk, and if two files
+ * genuinely disagree the file wins over the arithmetic. What this cannot do is
+ * make a wrong prediction right: it removes an incoherence, and the residual
+ * against the produced file is the other half of B1.
+ */
+export function flooredByPixelOrder<T extends { tier: QualityTier; size: SizeEstimate }>(
+  entries: readonly T[],
+): T[] {
+  const raised = new Map<T, SizeEstimate>()
+  let floor = 0
+  for (const e of [...entries].sort(
+    (a, b) => a.tier.width * a.tier.height - b.tier.width * b.tier.height,
+  )) {
+    if (e.size.exact) {
+      floor = Math.max(floor, e.size.bytes)
+      continue
+    }
+    if (e.size.bytes < floor) raised.set(e, { ...e.size, bytes: floor, floored: true })
+    else floor = e.size.bytes
+  }
+  return entries.map((e) => {
+    const fix = raised.get(e)
+    return fix ? { ...e, size: fix } : e
+  })
 }
 
 /**

@@ -5,6 +5,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { ChannelRecording, CompositeRecording, Recording } from '@core/types'
+import type { QualityTier, SizeEstimate } from './quality'
 import { setSingleGenRung } from '@core/singleGen'
 import { setSourceFrame } from '@core/frame'
 import { VIDEO_BITRATE } from './codecs'
@@ -12,6 +13,7 @@ import {
   QUALITY_TIERS,
   copySourceForTier,
   estimateExportBytes,
+  flooredByPixelOrder,
   resolveTier,
   settingsForTier,
   tiersForTake,
@@ -180,5 +182,69 @@ describe('the steps follow the take (F13)', () => {
     const copy = copySourceForTier(portrait, step)
     expect(copy?.origin).toBe('single-generation')
     expect([copy?.width, copy?.height]).toEqual([1080, 1920])
+  })
+})
+
+/**
+ * B1, the cheaper sibling of the 2.15x lie: on a 6 s take on prod the panel
+ * ranked `1440p ~308 KB` BELOW `1080p 400 KB (exact)` — an upscale of that very
+ * file, priced under it. Two predictions shown side by side as if they were a
+ * ladder.
+ */
+describe('the ladder cannot promise a bigger picture for fewer bytes', () => {
+  const step = (id: string, w: number, h: number) =>
+    ({ ...tier('1080p'), id, width: w, height: h }) as QualityTier
+  const size = (bytes: number, exact = false): SizeEstimate => ({ bytes, fromSource: true, exact })
+
+  it('raises a predicted step to the exact number of a step it contains', () => {
+    const out = flooredByPixelOrder([
+      { tier: step('1080p', 1920, 1080), size: size(400_000, true) },
+      { tier: step('1440p', 2560, 1440), size: size(308_000) },
+    ])
+    expect(out[1].size.bytes).toBe(400_000)
+    expect(out[1].size.floored).toBe(true)
+    // The exact number is untouched: it is a file, not arithmetic.
+    expect(out[0].size).toEqual(size(400_000, true))
+  })
+
+  it('leaves a ladder that is already monotonic exactly as it was', () => {
+    const entries = [
+      { tier: step('720p', 1280, 720), size: size(200_000) },
+      { tier: step('1080p', 1920, 1080), size: size(400_000, true) },
+      { tier: step('1440p', 2560, 1440), size: size(520_000) },
+    ]
+    expect(flooredByPixelOrder(entries)).toEqual(entries)
+  })
+
+  it('is monotonic in pixel count afterwards, whatever order it was given in', () => {
+    const out = flooredByPixelOrder([
+      { tier: step('1440p', 2560, 1440), size: size(90_000) },
+      { tier: step('540p', 960, 540), size: size(150_000) },
+      { tier: step('1080p', 1920, 1080), size: size(120_000) },
+      { tier: step('720p', 1280, 720), size: size(300_000) },
+    ])
+    const byPixels = [...out].sort(
+      (a, b) => a.tier.width * a.tier.height - b.tier.width * b.tier.height,
+    )
+    const bytes = byPixels.map((e) => e.size.bytes)
+    expect(bytes).toEqual([...bytes].sort((a, b) => a - b))
+    expect(bytes).toEqual([150_000, 300_000, 300_000, 300_000])
+  })
+
+  it('never raises one exact number to another — two files that disagree are two files', () => {
+    const out = flooredByPixelOrder([
+      { tier: step('1080p', 1920, 1080), size: size(400_000, true) },
+      { tier: step('source', 2560, 1440), size: size(380_000, true) },
+    ])
+    expect(out[1].size.bytes).toBe(380_000)
+    expect(out[1].size.floored).toBeUndefined()
+  })
+
+  it('a step BELOW an exact one is not dragged up to it', () => {
+    const out = flooredByPixelOrder([
+      { tier: step('540p', 960, 540), size: size(90_000) },
+      { tier: step('1080p', 1920, 1080), size: size(400_000, true) },
+    ])
+    expect(out[0].size.bytes).toBe(90_000)
   })
 })
