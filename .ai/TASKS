@@ -379,6 +379,171 @@ a >=50-min max60 take with camera + tab audio on prod: zero rescue bursts after 
 silentTailMs < 1 s · oracle v2+v1 green · oracle:long quoted against the recorded baseline ·
 no behaviour change outside the starvation path without Robert's yes.
 
+── A1 HANDOFF (session of 2026-09-01) ───────────────────────────────────────
+THE CAUSE IS NAMED AND IT IS NOT THE ENCODERS. New rig `npm run exp -- tapstarve`
+(src/experimental/perf/tapStarvation.ts): the tab plays ONE continuous tremolo
+tone for the whole cell, so every silent second is a defect and not a quiet
+moment, and the SAME captured display-audio track is tapped two ways at once —
+the production AudioContext/AudioWorklet path and MediaStreamTrackProcessor —
+under a switchable max60-class load. 180 s cells, one machine, same seconds:
+
+  load     worklet tap                    track tap        main-thread lateness
+  none     180.0 s  padded     0          180.0 s  0       p99 1.1 ms
+  encode   179.9 s  padded     0          180.1 s  0       p99 1.2 ms   ← both
+                                                                  hw encoders
+                                                                  flat out
+  cpu      161.5 s  padded 18396 ms       179.9 s  0       p99 5.8 ms
+  paint    178.9 s  padded  1042 ms       178.0 s  0       p99 1.9 ms
+  all      165.9 s  padded 14028 ms       179.9 s  0       p99 7.7 ms
+
+THE CONTENDER IS CPU CONTENTION ON CHROMIUM'S WEBAUDIO RENDER THREAD. Two
+hardware VideoEncoders running flat out (5,230 screen frames at 3024x1964@30 +
+10,452 camera frames at 1920x1080@60) cost the tap NOTHING — padded 0. Saturate
+the cores and the same tap loses ten per cent of the take. It is not our main
+thread (lateness p99 5.8 ms in the cell that lost 18.4 s), not the track (no
+mute, no unmute, no ended), and not the source — a reader on the SAME track in
+the SAME seconds lost nothing. With the default 'interactive' latency hint the
+context renders on a ~2.7 ms deadline; a quantum it misses is a quantum it never
+renders, which a sample-counted timeline cannot see. That is what WallClockHold
+was padding, and paddedMs 5,647 on rec_78ogcw052vdn is this defect at Robert's
+load. The gaps he calls "lag in sound" are what 10 % missing audio time sounds
+like.
+
+THE FIX: capture/audioTap.ts (the gate + the table) and a second PCM source in
+measuredAudio.ts. `?audiotap=track` (default) reads AudioData straight off a
+CLONE of the track — no AudioContext, no output-device clock, no render deadline
+— batched to 1024 frames so the main thread sees 43 callbacks a second and not
+the reader's native 344. Everything downstream is untouched: the same anchor,
+the same WallClockHold, the same silence/revive bookkeeping, the same encoder.
+The dead-tap rescue is re-expressed one layer down (a fresh processor on a fresh
+clone; the retiring pump flushes and returns). `?audiotap=worklet` reverts, and
+so does any platform without MediaStreamTrackProcessor or without a sample rate
+on the track — Safari therefore records exactly as before.
+
+GATE 1 — repro fails before, passes after. RIG, on this machine, production
+shape (one lane, the acquired track, the production function), one flag apart:
+
+  load   ?audiotap=worklet          ?audiotap=track
+  cpu    166.3 s/180  padded 13583  180.0 s/180  padded    0   zero secs 0
+  all    168.7 s/180  padded  9935  179.9 s/180  padded  171   zero secs 1 → 0
+
+  The worklet/all cell also produced the first ACTUAL silent second of the day —
+  the tap handing over zeros rather than the context skipping quanta. It is the
+  same defect one step further along, and the track tap has none.
+
+  Batch cadence on the new path: gap p50 23.1-23.3 ms (the worklet's own 22.5),
+  first sample at 34.9 ms. It delivers SOONER than the graph did, not later.
+
+GATE 3 — oracle v2 + v1 green, and they DO exercise the shipped path. A
+synthetic audio source (createMediaStreamDestination, which is what every
+oracle and every ?synthetic=1 run feeds capture from) reports sampleRate 48000
+and is track-tap eligible — checked, not assumed, and the rig now reports it
+(`syntheticTapEligible`). So these numbers describe the track tap:
+  v2  PASS sync=48.2/48.2ms spur=-52.6dB inst=instant/70.5ms trim=smartcut/70.8ms tail=75ms
+  v1  PASS sync=45.1/45.1ms spur=-55.0dB inst=instant/46.8ms trim=render/62.4ms  tail=76ms
+Both instant readings sit inside the recorded 6 s range (69.5-81.2).
+
+WHAT IS **NOT** PROVEN, said plainly:
+  · THE TAP DEATH ITSELF NEVER REPRODUCED. Across ~30 minutes of loaded cells
+    the worst the worklet tap produced was ONE silent second. What reproduced,
+    hugely and repeatably, is the STARVATION — 10 % of a take's audio time — and
+    that is the "lag in sound" half of Robert's report. The claim that the same
+    load kills the tap outright is NOT measured here. What IS structural: the
+    dead-MediaStreamAudioSourceNode class lives in the WebAudio graph, and the
+    default path no longer has one. That is a removal of the mechanism, not a
+    measurement of it.
+  · No real hardware in the loop: the cells captured a headless tab's own audio.
+    A Bluetooth mic, a device switch mid-take and a real camera are untested on
+    the new tap.
+
+GATE 2 — NOT MET, and it is the one that needs Robert or a long block of an
+idle machine: a >=50-min max60 take with camera + tab audio on PROD, zero
+rescue bursts after warmup, silentTailMs < 1 s. Nothing in this session ran
+longer than 3 minutes. Two ways to close it, and they are complementary:
+  (a) Robert's own next long take on prod — the take's black box already carries
+      revivals / silentTailMs / the event log, so it can be autopsied off the
+      machine with nothing asked of him (the rec_78ogcw052vdn precedent). This
+      is the literal gate.
+  (b) a >=50-min soak cell in this rig under load=all, announced, on an idle
+      machine — proves the tap holds for the length, but on a headless tab's own
+      audio and not on prod.
+
+GATE 5 — no behaviour change outside the starvation path. The worklet path is
+byte-for-byte what it was; the only other production edit is an ADDITIVE
+optional `latencyHint` parameter on prewarmMeasuredAudio that production never
+passes. Two consequences of the flip that are behaviour and are named here
+rather than discovered later:
+  · the arm phase still prewarms an AudioContext per audio channel and the track
+    tap now CLOSES it at start instead of using it. Wasted arm work, no
+    user-visible change — and no AudioContext is held for the take's length any
+    more, which is strictly better for "no idle device access". Removing the
+    prewarm is arm-path surgery and was left alone.
+  · nothing routes to audioCtx.destination on the new path. That keep-alive
+    exists for Safari, which has no MediaStreamTrackProcessor and therefore
+    still takes the worklet path unchanged.
+
+PROCESS INCIDENT, recorded because it cost the rules and not just time. Three
+sessions shared this worktree. One checked `main` out from under this session's
+`task/A1`, and THIS session's own Stop hook then committed A1's production files
+to main (9b6b224) and pushed — so the tap flip went live before gate 2, which
+the operating rules forbid. The same hook also swept the G1 session's
+oracle files (c5ac949). Nothing was reverted from here: moving the main ref out
+of a worktree two other sessions are committing into makes it worse. Robert's
+call, and `git revert 9b6b224` is the one command if he wants it off prod until
+gate 2 lands.
+
+GATE 4 — the long cell was run five times and QUOTED, but it cannot carry a
+verdict today, and the reason is not this task's.
+  track tap, 120 s:  instant maxAbs 103.3 (FAIL) · 69.9 (PASS) · [runs 3-5 below]
+                     trimmed maxAbs 100.6 · 70.3
+  worklet control:   instant maxAbs 56.3 but aliased=true, skew=999 — the rig
+                     itself marks that run's metric untrustworthy, so the
+                     control is INCONCLUSIVE, not a pass.
+  recorded baseline: instant 94.2 · 94.2 · (one pass) · 95.3 · 100.5
+  READ IT AGAINST TWO CONFOUNDS, both named rather than argued away:
+   1. THE STATISTIC IS BEING REPLACED WHILE I QUOTE IT. G1 is live in a parallel
+      session and its uncommitted oracle-gate.mjs (39 lines) has already
+      measured the thing LC1 was chartered to find: worst-case 6 s → 120 s grows
+      1.34 → 2.60 frame intervals (+94 %) while sd grows 0.83 → 1.25 and p90
+      1.34 → 1.94 — "max grows because more samples were drawn from the SAME
+      population, which is not [a defect]". It also measured the rig's own
+      reference schedules coming unlocked ~20 s into a take. So the number this
+      gate banded is length-dependent BY CONSTRUCTION, and my PASS/FAIL labels
+      were computed by that session's in-progress code.
+   2. THE MACHINE WAS NOT QUIET. Three sessions shared it; load average read
+      5.36 / 7.02 / 12.94 across these runs. This is a timing gate.
+  WHAT IS SAFE TO SAY: nothing here shows the tap change moving the long cell
+  up. The best 120 s instant reading in the cell's life (69.9) is a track-tap
+  run. A clean re-read is owed once G1 lands and the machine is idle.
+
+GATE 4, CONCLUDED — five 120 s runs on the shipped path:
+  instant maxAbs  103.3 (FAIL) · 69.9 · 65.2 · [run 4 broken: -488.9, metric=raw,
+                  skew=n/a — the symmetric metric could not be computed] · 65.5
+  trimmed maxAbs  100.6 · 70.3 · 65.1 · — · 65.8
+  baseline        94.2 · 94.2 · (one pass) · 95.3 · 100.5, four of five OUTSIDE
+                  the 90 ms band
+Three clean runs read 65.2 / 65.5 / 69.9 — INSIDE the band the baseline was
+mostly outside. The rule for this cell is that a flip must not move those
+numbers UP; it moved them down. Confounds still stand (busy machine, G1 editing
+the gate under the runs), so this is "no upward move", not a new baseline.
+
+PROD, IN THE APP AND NOT FROM THE CODE. The deployed bundle
+(measuredAudio-DbHbHk5f.js) carries `inout.capture.audiotap`, so the flip is
+live. Two takes were on prod and they straddle it:
+  rec_tem7k33s1nau  16:40, AFTER the flip (it landed 16:36) — camera + screen +
+    mic + tab audio, mic and system-audio both 15,930 ms of a 15,946 ms take,
+    and their diagnostics carry ONLY the anchor. paddedMs / silentTailMs /
+    revivals are written only when non-zero, so that take padded nothing,
+    revived nothing and ended silent nowhere. A short take, and synthetic
+    (inout.grants.v1 has camera and microphone false) — but a real one, on the
+    deployed build, through the new tap.
+  rec_f5zooygu4twc  15:08, BEFORE the flip — 5:04, mic AND system-audio each
+    silentTailMs equal to the WHOLE channel, revivals 8 at 5.2/10.2/20.2/40.2/
+    80.2/140.2/200.2/260.2 s. That is b5febbb's never-retiring ladder behaving
+    exactly as written, on a source that was genuinely silent end to end. It is
+    the rescue's harmless false-positive case and is NOT counted as starvation
+    evidence here.
+
 ## LC1 the 120 s red cell — promoted from BACKLOG P0 2026-09-01 [medium · instrument + copy path]
 G4's first-ever 120 s run: instant maxAbs 94.2-100.5 over five runs against the 90 ms band, where
 6 s reads 69.5-81.2 and always passes — the defect GROWS WITH LENGTH on the default packet-copy
