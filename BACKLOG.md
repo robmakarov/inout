@@ -541,20 +541,6 @@ technical defects by severity. Done items get deleted, not archived.
   is still owed — but it is owed on a build where the fix is actually in force, which no build before
   2026-08-26 was.
 
-- [P2 → ROADMAP B4] 2026-08-29, FOUND BY P9's RUNNER while it was failing for an unrelated reason:
-  **a camera that delivers no frames produces a silent empty recording.** Observed four times on a
-  real device whose track was live, unmuted and negotiated at 1920x1080@30 while the sensor was off
-  (a closed lid does this). What the user gets: the take records for its full length, the compositor
-  logs `camera delivering 0.0 fps`, the raw channel file is **28 bytes**, the recorder stop **times
-  out after 5 s**, and the saved recording has `durationMs: 0` and **zero channels** — with nothing
-  on screen to say any of that happened.
-  THE PIECES TO NOTICE IT ALREADY EXIST: `capture/sourceLiveness.ts` watches exactly this and emits
-  `channel-stalled`, and the UI already renders a stalled chip. Whether it fired here was not
-  established — the runner was not looking at the chips, and that is the first thing to check.
-  WHY IT IS P2 AND NOT P1: the trigger is a dead camera, which the user can usually see for
-  themselves in the preview. It becomes P1 if the preview looks fine while the file is empty.
-  Evidence: docs/qa/camera-1080-2026-08-29.json, and the console lines quoted in the P9 handoff.
-
 - [P1] 2026-08-26, FOUND BY ROBERT'S EYES on the X15 artifacts ("c shit is worse colors") and then
   measured: **coloured text loses about 30 % of its colour, all of it at capture, and the composite
   is responsible for a third of that.** Saturation kept against the canvas the source actually
@@ -762,10 +748,18 @@ technical defects by severity. Done items get deleted, not archived.
   is the expected size of the current build, not a regression. Levers unchanged: O9 quality-per-bit,
   O11d codec ladder, X13 (Robert-gated). while a 20-run headless oracle matrix hammered it — slow load / unresponsive modal / "waiting to connect" / mic-timeout likely environment artifacts. RETEST on clean prod build (serve main at localhost:4173). Rule going forward: Robert's QA only on a dedicated prod-build port; load tests spawn their own ephemeral server, never 5173.
 - [P1] Camera light at app load (Robert report, pre-any-click?) — if reproduced on the clean 4173 build this violates 'no idle device access, ever'. Note: light DURING the screen picker (after record click) is the approved concurrent-acquisition design; need Robert to distinguish which they saw.
-- [P2 → ROADMAP B4] Silent channel loss: mic acquisition timed out and the take completed with no mic and no unmissable warning — user discovered it only on playback. Needs loud post-record surface ('Mic missing from this take') + arming-timeout telemetry.
 - [P1] Fix tab/browser music recording quality — root-caused and shipped a 3-part fix (2026-07-15): tanh waveshaping distorted ALL rendered audio (now identity below 0.95 knee); composite hard limiter (−6dB/20:1) pumped music (now bypassed for single source, gentler −3dB/12:1 safety net for multi); unreported channelCount defaulted to mono downmix (now stereo). Awaiting Robert listen test on real tab music to close.
 
 ### Next
+
+- [P2] Oracle arrival probes date frames by READ time, not by the frame's own timestamp. Both
+  `probeBeepArrivals` and `probeFlashArrivals` (src/experimental/oracle/rig.ts) stamp
+  `performance.now()` when JS reads the AudioData/VideoFrame, so the reference carries the delivery
+  latency and main-thread scheduling on top of the media's own clock. G5 (2026-09-01) removed the
+  frame-phase lock that used to dominate the sync gate's run-to-run scatter and left 6.5 ms per run
+  that is nothing else in the chain: not the beep reference (residual sd 0.43 ms), not the estimator
+  (every candidate within 0.5 ms), not the event sets (aligning costs 0.0 ms). Record BOTH stampings
+  in the probes, report the difference, and the next reduction in this instrument's noise is visible.
 
 THE ROADMAP LIVES IN `.ai/TASKS` — not here. That file carries the READY map, every task with its
 gates, what a fresh session must know first, and the tooling index; it is rewritten on every merge.

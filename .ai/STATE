@@ -2,6 +2,28 @@
 
 phase: MVP validation (2026-07-16)
 
+- A CHANNEL THAT DIES, OR NEVER LIVED, IS NOW SAID AND STAMPED (H4, absorbs B4, 2026-09-01).
+  The frozen-source detector was rebuilt on 2026-08-25 around `track.muted`, and Chrome leaves
+  `muted` FALSE for a camera whose sensor is off — so B4's case (live, unmuted, negotiated at
+  1920x1080@30, 28-byte file) could never be convicted, and was not: measured on prod before the
+  fix, a 45 s take with a dead camera read `GREEN — 10 of 10 dimensions measured and inside band`
+  with nothing on screen at any point. The discriminator is ZERO FRAMES EVER, which a static screen
+  cannot trip because it delivers its first frame and only then goes quiet. Two detectors: the
+  composite's liveness tick at 5 s (`channel-dead`, its own event and its own sentence — "re-share
+  your whole screen" cannot fix a shut lid), and the raw encoder's own `framesIn === 0` at stop.
+  `Recording.lost` carries kind · instant on the take's timeline · 'ended' | 'never-delivered' ·
+  how long the take ran on without it, for EVERY media kind — a Bluetooth mic that drops at minute
+  40 ends its track exactly like an unplugged camera. Said live (a band that now holds more than
+  one sentence), in the editor, and in the report card's `channels` dimension. A channel the user
+  switches off is excluded at the chokepoint. FOUR FALSE SIGNALS WENT WITH IT, all pre-existing on
+  the frozen/track-ended paths: a dead device no longer files an O15 encoder collapse (a shut lid
+  would have bounded every later take on that machine) nor a sustained mark; an ended track is no
+  longer called frozen, live or in the card. AND B4's FIVE-SECOND STOP IS FIXED: `measuredStarting`
+  resolves only after a channel's FIRST frame (startMeasuredVideo awaits `handle.firstOffset`), so
+  a source that never delivers one left stop waiting unbounded — 6.4 s to the editor, now 2.98 s,
+  bounded at `MEASURED_START_SETTLE_MS`. Knobs: `?dead=<screen|camera>` (zero frames, a
+  MediaStreamTrackGenerator — a canvas at rate 0 emits ONE frame and was the wrong fixture) and
+  `?die=<kind>:<ms>` from the record press. WORDING OF THE FOUR NEW SENTENCES IS ROBERT'S, unruled.
 - THE EXPORT SIZE PANEL: THE LADDER IS COHERENT, AND THE NUMBER IS STILL WRONG — BY 3x, AND IT IS
   THE PROBE (B1, 2026-09-01). A predicted step is now raised to the
   largest number below it, so no step can promise a bigger picture for fewer bytes; an EXACT number
@@ -1125,6 +1147,18 @@ oracle), always spawns its own server. Bands as of 2026-08-23: sync ≤90 ms on 
 metric (see below — the old ≤60 ms band measured a different, ~31 ms optimistic quantity), spur ≥−40 dB,
 boundary jump ≤0.1, TAIL LOSS ≤400 ms with the last flash AND last click within 2000 ms of the end,
 export throughput ≥1× realtime. Typical run: sync 40-66 ms, tail 68-76 ms, export 5.0-5.2×, spur −50 dB.
+THE RIG'S EVENT GRID IS 987 ms, NOT 1000, AND THAT IS LOAD-BEARING (task G5, 2026-09-01). A flash is
+dated at the midpoint of the frames that show it, so the estimator is quantised to ±half an output
+frame; at 1000 ms — exactly 30 frames at 30 fps — every event in a run drew the SAME phase, so the
+error was one constant per run that averaging could not touch. Signature: the render lane's per-pair
+offsets read IDENTICAL TO THE DECIMAL (sd 0.00) on ten cold 6 s runs and on two 120 s runs of five
+with 118-120 pairs. 987 ms is 29.61 frames, so the phase walks. Measured, 10 cold 6 s each side:
+run-to-run sd of the sync mean 11.40 -> 8.32 ms, level 51.2 -> 51.7 (nothing to re-baseline),
+per-pair sd within a run 0.00 -> 12.6. O4b's published "instrument noise floor ~8-9 ms 1σ" WAS this
+lock (33.33/√12 = 9.6) and is retracted as a floor. The interval now travels in the report
+(`rigDebug.beepIntervalMs`); oracle-gate.mjs and scripts/syncref.mjs read it instead of keeping a
+copy. G5's own premise — the beep-arrival reference at residual sd 43.40 ms — does NOT reproduce:
+0.76 ms at 6 s and 1.98 at 120 s, the quietest of the three references at both lengths.
 THE COLD GATE WAS MEASURING PAST THE END OF ITS OWN RULER, AND IT IS FIXED (GATE-alias, 2026-08-25).
 `--cold=3` used to fail ~20 % of runs with a whole file scored a few hundred ms out. The cause was not
 the product and not, as first written here, an ambiguous pairing: a cold AudioContext's STARTUP STALL
@@ -1172,8 +1206,11 @@ gaps / in flight:
   an EXACT +18.00 ms detection bias (half a 30 fps frame + half a 128-sample envelope window; predicted
   18.00, measured 18.00 sd 0.00) and a 13.5 ms VIDEO reference delay the oracle never measured while
   faithfully correcting the audio one. True offset is ~45-63 ms, audio late. CI now gates the symmetric
-  metric at ≤90 ms (5/5 cold pass, 40.5-66.2 ms). The instrument's noise floor is ~8-9 ms 1σ, so no
-  band below that is measurable and the old ≤10 ms O4 gate was never achievable on this rig.
+  metric at ≤90 ms (5/5 cold pass, 40.5-66.2 ms). The "noise floor of ~8-9 ms 1σ" recorded here was
+  NOT a floor (G5, 2026-09-01): it was the flash-dating quantisation locked to one phase per run by a
+  1000 ms event grid on a 30 fps frame grid, and 33.33/√12 = 9.6 is where the number came from. The
+  grid is 987 ms now and the measured run-to-run sd is 8.3 ms at 6 s, of which ~5 is that term and
+  ~6.5 is a per-run term nothing yet names. The old ≤10 ms O4 gate is still not achievable today.
   CAUSE, measured by loopback: the measured-audio anchor dates sample 0 from when a worklet batch
   ARRIVES, so everything upstream (device + stream buffering) is invisible and audio lands late —
   +128.7 ms on the synthetic rig, sd 0.70. Dating from the audio clock instead moved it 1.1 ms, so the

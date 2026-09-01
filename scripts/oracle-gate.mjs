@@ -185,9 +185,9 @@ function gateSyncShape(label, prefix, flashSync, frameIntervalMs, failures, metr
 }
 /** How much shorter than the take the export may be. */
 const MAX_TAIL_LOSS_MS = 400
-/** The rig fires a flash+beep every second, so the last one is at most ~1 s
- *  plus a flash duration from the end; 2000 ms leaves room without hiding a
- *  dropped tail. */
+/** The rig fires a flash+beep once per beep interval (987 ms since G5), so the
+ *  last one is at most one interval plus a flash duration from the end;
+ *  2000 ms leaves room without hiding a dropped tail. */
 const MAX_LAST_EVENT_GAP_MS = 2000
 /** Export must not be slower than this multiple of realtime. */
 const MIN_EXPORT_REALTIME = 1.0
@@ -200,8 +200,19 @@ const MIN_EXPORT_REALTIME = 1.0
 const MAX_EXPORT_PEAK_OUTPUT_BYTES = 12 * 1024 * 1024
 const MAX_BOUNDARY_JUMP = 0.1
 const MAX_SPUR_DB = -40
-/** The rig's beep/flash grid period, ms — must match oracle/rig.ts. */
-const BEEP_INTERVAL_MS = 1000
+/**
+ * The rig's beep/flash grid period, ms. READ FROM THE REPORT, not kept here
+ * (task G5, 2026-09-01): this file used to carry its own copy of 1000 with a
+ * comment telling the reader it "must match oracle/rig.ts", which is a fact
+ * with two homes and no way to notice when they disagree — and G5 moved the
+ * rig's grid off 1000. The fallback is the old value, for reports recorded
+ * before the rig reported its own.
+ */
+const LEGACY_BEEP_INTERVAL_MS = 1000
+const beepIntervalOf = (report) =>
+  typeof report?.rigDebug?.beepIntervalMs === 'number' && report.rigDebug.beepIntervalMs > 0
+    ? report.rigDebug.beepIntervalMs
+    : LEGACY_BEEP_INTERVAL_MS
 
 /** True when gate metrics are missing/NaN — must not pass CI under load. */
 export function oracleMetricsIncomplete(metrics) {
@@ -428,11 +439,13 @@ export function gateOracleReport(report) {
    */
   const stall = report.rigDebug?.audioSkewMeanMs
   if (typeof stall === 'number') {
+    const grid = beepIntervalOf(report)
     metrics.audioStallMs = Math.round(stall)
-    if (Math.abs(stall) > 0.75 * BEEP_INTERVAL_MS) {
+    metrics.beepIntervalMs = grid
+    if (Math.abs(stall) > 0.75 * grid) {
       failures.push(
-        `AudioContext startup stall ${stall.toFixed(0)}ms is over ${0.75 * BEEP_INTERVAL_MS}ms of the ` +
-          `${BEEP_INTERVAL_MS}ms beep grid — past one full interval it wraps silently, so this run ` +
+        `AudioContext startup stall ${stall.toFixed(0)}ms is over ${Math.round(0.75 * grid)}ms of the ` +
+          `${grid}ms beep grid — past one full interval it wraps silently, so this run ` +
           'is inconclusive rather than green',
       )
     }

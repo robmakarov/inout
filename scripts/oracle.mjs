@@ -24,7 +24,7 @@
 
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
-import { writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { gateOracleReport, oracleMetricsIncomplete } from './oracle-gate.mjs'
@@ -50,6 +50,14 @@ function parseArgs(argv) {
   // longer cell needs a value with the same property (see --recordMs below).
   let recordMs = 6000
   let trimMs = 0
+  /**
+   * WHERE THE WHOLE REPORT GOES (task G5, 2026-09-01). A passing run used to
+   * throw its report away — only a FAILING one was dumped — so any question
+   * about the numbers BEHIND a green verdict (here: the rig's own reference
+   * schedules, which is what the correction is built from) cost a fresh matrix.
+   * `--dumpDir=` keeps every run, pass or fail.
+   */
+  let dumpDir = ''
   for (const a of argv) {
     if (a === '--no-composite') { composite = false; continue }
     if (a.startsWith('--cold=')) cold = Number(a.slice(7))
@@ -57,6 +65,7 @@ function parseArgs(argv) {
     else if (a.startsWith('--recordMs=')) recordMs = Number(a.slice(11))
     else if (a.startsWith('--trimMs=')) trimMs = Number(a.slice(9))
     else if (a.startsWith('--engine=')) engine = a.slice(9)
+    else if (a.startsWith('--dumpDir=')) dumpDir = a.slice(10)
     else if (a.startsWith('--port=')) {
       console.error(
         "oracle: --port is disabled (ephemeral server only; never share with Robert's QA)",
@@ -77,7 +86,7 @@ function parseArgs(argv) {
     console.error(`oracle: --trimMs=${trimMs} sits ON the 2 s keyframe grid — smart cut would not be exercised`)
     process.exit(2)
   }
-  return { cold, headed, engine, composite, recordMs, trimMs }
+  return { cold, headed, engine, composite, recordMs, trimMs, dumpDir }
 }
 
 
@@ -281,7 +290,11 @@ async function runOracleOnceGated(port, headed, engine, composite = true, record
 }
 
 async function main() {
-  const { cold, headed, engine, composite, recordMs, trimMs } = parseArgs(process.argv.slice(2))
+  const { cold, headed, engine, composite, recordMs, trimMs, dumpDir } = parseArgs(process.argv.slice(2))
+  if (dumpDir) {
+    mkdirSync(dumpDir, { recursive: true })
+    console.error(`oracle: every run's full report → ${dumpDir}/run-N.json`)
+  }
   // G4: the length is part of the verdict, so it is on the console before the
   // first number and in the JSON beside them. A session reading an old report
   // must never have to guess which cell it was.
@@ -315,9 +328,28 @@ async function main() {
   try {
     await waitForHttp(`http://${HOST}:${port}/experimental.html`, Date.now() + 60_000)
 
+    const dumpRun = (i, payload) => {
+      if (!dumpDir) return
+      try {
+        writeFileSync(join(dumpDir, `run-${i + 1}.json`), JSON.stringify(payload))
+      } catch (err) {
+        console.error(`  (could not dump run ${i + 1}: ${err?.message ?? err})`)
+      }
+    }
+
     for (let i = 0; i < cold; i++) {
       const run = await runOracleOnceGated(port, headed, engine, composite, recordMs, trimMs)
       const elapsed = run.elapsedMs ?? 0
+      dumpRun(i, {
+        run: i + 1,
+        recordMs,
+        trimMs,
+        engine: engine || 'default',
+        elapsedMs: elapsed,
+        error: run.error ?? null,
+        gate: run.gate ?? null,
+        report: run.report ?? null,
+      })
       if (run.error || !run.report || !run.gate) {
         results.push({
           run: i + 1,
