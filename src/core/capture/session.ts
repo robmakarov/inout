@@ -144,6 +144,24 @@ const DISK_CHECK_MS = 5_000
  * recorder that never answers must not be able to freeze a finished take.
  */
 const STOP_BUDGET_MS = 5000
+/**
+ * H4/B4 — HOW LONG STOP WAITS FOR A CHANNEL'S START TO SETTLE.
+ *
+ * `measuredStarting` for a video channel resolves only after its FIRST FRAME
+ * (session.startMeasuredVideo awaits `handle.firstOffset` to stamp the offset),
+ * so a source that never delivers one leaves it pending for the life of the
+ * take. Stop awaited it unbounded, which is B4's "times the recorder stop out
+ * after 5 s" verbatim — measured on prod 2026-09-01 with `?dead=camera`:
+ * `a recorder did not stop in budget`, 6.4 s to the editor, while the healthy
+ * screen channel beside it returned its stats normally.
+ *
+ * The handle is built and assigned BEFORE that await, so by the time stop runs
+ * there is an encoder to stop whether or not a frame ever arrived. This wait is
+ * only for the case where the handle itself is still being constructed, which
+ * takes milliseconds. When it expires, stop proceeds with whatever exists — the
+ * outer STOP_BUDGET_MS is still there for anything genuinely stuck.
+ */
+const MEASURED_START_SETTLE_MS = 1000
 const COMPOSITE_START_BUDGET_MS = 4000
 /** The composite drains for up to 2 s and then waits on its own recorder's
  *  onstop — which, if that recorder never answers, used to be forever. */
@@ -2339,7 +2357,15 @@ class Session implements CaptureSession {
         if (this.cancelled) continue
         void (async () => {
           try {
-            if (ch.measuredStarting) await ch.measuredStarting
+            // H4/B4: bounded — a channel whose first frame never arrived leaves
+            // this promise pending forever. See MEASURED_START_SETTLE_MS.
+            if (ch.measuredStarting) {
+              await withTimeout(
+                ch.measuredStarting,
+                MEASURED_START_SETTLE_MS,
+                `${ch.kind} measured start`,
+              ).catch(() => undefined)
+            }
             if (ch.measured) {
               const r = await ch.measured.stop()
               ch.bytes = r.bytes
@@ -2909,7 +2935,14 @@ class Session implements CaptureSession {
       if (ch.useMeasured) {
         void (async () => {
           try {
-            if (ch.measuredStarting) await ch.measuredStarting
+            // H4/B4: bounded, same reason as the stop path above.
+            if (ch.measuredStarting) {
+              await withTimeout(
+                ch.measuredStarting,
+                MEASURED_START_SETTLE_MS,
+                `${ch.kind} measured start`,
+              ).catch(() => undefined)
+            }
             if (ch.measured) await ch.measured.cancel()
           } catch {
             /* discarding */

@@ -254,18 +254,20 @@ export async function startMeasuredVideoCapture(opts: {
       // teardown's own duration is not counted as recorded material.
       const stopAtMs = performance.now()
       /**
-       * H4/B4 — BOUNDED, because a channel that never delivered a frame hangs
-       * here. B4's report: "times the recorder stop out after 5 s", reproduced
-       * on prod 2026-09-01 with ?dead=camera — the session's own 5 s budget
-       * fired ("a recorder did not stop in budget") while the healthy screen
-       * channel beside it returned its stats normally. The pump end is the
-       * first unbounded await on this path: `reader.cancel()` on a
-       * MediaStreamTrackProcessor whose source never produced anything has a
-       * read outstanding that nothing will ever settle.
+       * H4 — BOUNDED, and MEASURED NOT TO BE THE CULPRIT.
        *
-       * Racing the flush is what this await exists to prevent, and there is
-       * nothing to race for a source with no frames in flight. A healthy
-       * channel resolves here in milliseconds and never sees this deadline.
+       * This was the first suspect for B4's "times the recorder stop out after
+       * 5 s": `reader.cancel()` on a MediaStreamTrackProcessor whose source
+       * never produced anything looked like an await nothing would settle. It
+       * is not — bounding it on prod produced no warning and no change, and the
+       * stall turned out to be one level up, in the session's own unbounded
+       * wait on `measuredStarting` (session.ts, MEASURED_START_SETTLE_MS).
+       *
+       * The bound stays because it is correct on its own terms: this is an
+       * unbounded await on a stop path whose whole job is to finish, racing the
+       * flush is what it exists to prevent, and a source with no frames in
+       * flight has nothing to race. A healthy channel resolves here in
+       * milliseconds and never sees the deadline.
        */
       const pumpEnd = performance.now()
       await withDeadline(endPump(), END_PUMP_TIMEOUT_MS, 'raw video pump end').catch((err) => {
