@@ -66,14 +66,23 @@ const MAX_SYNC_ABS_SYMMETRIC_MS = 90
  * sets the floor — a band in milliseconds would silently mean something
  * different at 60 fps than at 30.
  *
- * Bands from the measured distribution across BOTH cells (6 s ×10 cold and
- * 120 s cold, three lanes each): sd reached 1.04 frame intervals and p90 of
- * |offset − mean| reached 1.53. Set at 2.0 and 2.5 — ≥60 % headroom over
- * everything measured, and still red on a real scatter, which the old extreme
- * could not distinguish from being long.
+ * BANDS FROM THE MEASURED DISTRIBUTION, 45 lane-runs on one commit (10 cold
+ * 6 s runs and 5 cold 120 s runs, three lanes each). Worst reading of each
+ * statistic, 6 s → 120 s, in frame intervals:
+ *     sd    0.83 → 1.25   (+50 %)
+ *     p90   1.34 → 1.94   (+45 %)
+ *     MAX   1.34 → 2.60   (+94 %)   ← the one that was banded
+ * Bands 2.0 and 3.0: ≥55 % headroom over everything measured, at both lengths.
+ * Note what this does and does not claim. sd and p90 are not FLAT across the
+ * lengths either — the scatter genuinely widens, because the rig's own
+ * reference schedules stop being locked about 20 s into a take (measured: the
+ * first 20 pairs of a 120 s cell read 260.7 ms to the decimal, then wander).
+ * They grow because the population changed, which is a thing worth reporting;
+ * `max` grows because more samples were drawn from the SAME population, which
+ * is not. That difference is the whole fix.
  */
 const MAX_SYNC_SPREAD_FRAMES = 2.0
-const MAX_SYNC_P90_DEV_FRAMES = 2.5
+const MAX_SYNC_P90_DEV_FRAMES = 3.0
 /**
  * A LANE THAT MATCHED ALMOST NOTHING MEASURED ALMOST NOTHING. Observed live on
  * a cold run that the summary counted GREEN: the trimmed lane paired ONE event
@@ -93,14 +102,18 @@ const NOMINAL_FRAME_INTERVAL_MS = 1000 / 30
  * failure that gets worse the longer the take is in a way that is about the
  * file: 2 ms/s is 6 seconds of desync on a 50-minute take, which is the length
  * this product is being aimed at.
- * MEASURED ON THIS RIG, and why the band is not tighter: a 120 s cell reads
- * -0.58 ms/s (SE 0.10), of which 0.166 is the FIXTURE's own AudioContext-vs-
- * vsync divergence, measured directly off the two reference schedules. The
- * residual is real and unexplained, is filed as its own task with the numbers,
- * and must not be smuggled into a band that would then fail every run before
- * anyone had decided what to do about it.
+ * MEASURED ON THIS RIG, and why the band is not tighter. One 120 s cell read
+ * -0.58 ms/s and looked like a real clock offset. Five did not: across 15
+ * lane-runs the slope is +0.40 ± 0.62 ms/s, range -0.35 to +1.62, SIGN
+ * INCONSISTENT — a real audio-vs-video clock mismatch does not change
+ * direction between takes, so this is the rig's reference wander and the
+ * first reading is retracted. 4.0 sits 5.8σ above that mean: it cannot flip
+ * on this noise, and it is still 12 seconds of desync across a 50-minute
+ * take. THE LIMIT, STATED: a real drift smaller than ~2 ms/s is currently
+ * BELOW this instrument's own noise at 120 s. Seeing one needs a longer cell,
+ * not a tighter band.
  */
-const MAX_SYNC_DRIFT_MS_PER_SEC = 2.0
+const MAX_SYNC_DRIFT_MS_PER_SEC = 4.0
 /** Below this span a slope is not estimable — a 6 s take fits noise. */
 const MIN_DRIFT_SPAN_SEC = 30
 
