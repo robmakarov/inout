@@ -333,7 +333,8 @@ it is built combine-ready:
           every take computes from its own black box — Robert's daily takes become the soak fleet.
   4. B5   disk guard                      [light] unlimited length makes disk the wall.
      B1   size panel truth                BUILT AND GATED 2026-09-01 on `task/B1`, UNMERGED — the
-          floor is in; the measurement convicted the PROBE at 3.0x, now B1b (handoff under the task).
+          floor is in; the measurement convicted the PROBE at 3.0x → B1b took it to 1.50x on text and
+          1.00x on motion (`task/B1b`, on top of B1); its residual is stated and still open.
   5. E1   elastic below max               [medium · spec below, EXTENDED: the detector must
           PREDICT — step before loss, not after — because M1 inherits it as max's floor].
   6. H1-H4 the unkillable-take pack       [light→medium · specs below] component death = a seam,
@@ -1251,6 +1252,37 @@ GATES: the residual on the SAME fixture (159.6 s text, 1440p) inside +-20 % · a
 does not get worse than F7c's -7/+6 % · the ladder comes out monotonic in pixel count on both fixtures
 with no flooring needed · the probe's wall cost stays under ~2 s (it was 6.3 s for two frames) ·
 oracle green.
+
+HANDOFF 2026-09-01 (task/B1b, same session as B1, built on top of it). PARTLY DONE — the worst case
+halves, the diagnosis is exact, and what is left is named with its number.
+THE DIAGNOSIS THIS TASK WAS AUTHORED WITH IS REFUTED, and I authored it: the probe does NOT price "a
+delta frame it never watched" — it encodes a whole GOP, twice. What it did was ENCODE DIFFERENTLY FROM
+THE EXPORT, in two ways, which its own docblock forbids:
+  · BITRATE — `tier.videoBitrate`, the declared ceiling (14.00 Mbps at 1440p), where every real export
+    is configured through `settingsForTier` → `cappedTierBitrate` (3.50 Mbps on this take).
+  · RATE CONTROL — render.ts drives the QP through a CUSTOM encoder mediabunny only uses after
+    `registerConstantQualityEncoder()`. The probe marked the config and never registered the encoder,
+    so the marking did nothing and it encoded against the bitrate target. Constant quality has been
+    the default since 2026-08-29; the probe never followed it. A bitrate target SPENDS its budget; a
+    quantizer spends what the picture needs, and the gap is whatever the content is easier than the
+    budget — which is why it was worst on still text and invisible on motion.
+MEASURED at 1440p against the file the export produced (not against another estimate):
+                          produced   probe before    probe after     model
+  still text, 159.6 s     21.52 MB   64.92 (3.02x)   32.32 (1.50x)   19.92 (0.93x)
+  motion, 77.4 s           4.28 MB    4.24 (0.99x)    4.28 (1.00x)    0.54 (7.96x)
+Keyframe term 1.58x → 1.04x of the render's own mean (bits audit: 245,507 B vs the probe's 255,992).
+Probe wall 6.6 s → 3.8 s on the text fixture. The calibrated ladder on that take is monotonic with NO
+flooring (10.38 / 14.73 / 15.58 exact / 32.32) — the state B1's gate asked for.
+GATES: motion no worse ✓ (0.99 → 1.00) · ladder monotonic on both fixtures ✓ · text residual inside
+±20 % ✗ (1.50x, from 3.02x) · wall under 2 s ✗ (3.8 s, from 6.6) · oracle FAIL then PASS on
+consecutive runs (aliased=true skew=877, then aliased=false skew=188) — the coin flip G1 exists to
+fix, on a machine running another session's rigs. Nothing here is on the oracle's path: the probe runs
+only when the quality panel is open.
+WHAT IS LEFT: the still-content DELTA, 4,540 B against the render's own 2,357. NOT a GOP-position
+effect any more — with constant quality the first and later windows agree (4,429 vs 4,540), so
+attempt 5's blend has nothing left to explain. What still differs is 300 encoded frames against the
+file's 4,789, and the pixels those frames carry. And note the MODEL is 7.96x LOW on motion, the same
+failure direction as Robert's original 2.15x report — "fall back to the model" is not a safe answer.
 
 ## B2 tab-audio-noises — Robert's bar is "i need them gone" [medium · playback + capture; two defects]
 "when video recorded and edit starts a lot of minor noises in tab audio, but after some time editing
