@@ -44,6 +44,25 @@ technical defects by severity. Done items get deleted, not archived.
 
 ### Now
 
+- [P1 — OBSERVATION with a caveat, H2's heavy cells, 2026-09-01] **under a starved main thread
+  BOTH measured-audio channels end tens of seconds early, on a CLEAN stop, and only the report
+  card notices.** A 300 s take at a synthetic 2560x1440@60 source (four channels, three encoders,
+  354.8 Mpx/s): screen delivery fell 44 -> 26 -> 17 -> 10 -> 2.4 -> 0.2 fps over the last minute,
+  and mic and tab audio BOTH ended at exactly 264,323 / 264,263 ms of a 303,235 ms take — 38.7 s
+  short, to the same instant, on a take that was stopped normally and drained normally
+  (`finishEncode` awaits encoder.flush, the encode chain, finalize and writer.close, so nothing
+  was left undrained). Two independent channels ending at one instant says one shared cause, and
+  the shared thing is the MAIN THREAD: since A1 the default tap is `MediaStreamTrackProcessor`
+  read on the main thread, so when the main thread stops, the audio simply stops arriving —
+  WallClockHold pads the gaps it survives (4,183 ms here) but a reader that stops delivering
+  produces no more batches to pad. THE CAVEAT, and it is why this is an observation and not a
+  verdict: the rig's synthetic source is a canvas the PAGE ITSELF paints at 2560x1440 sixty times
+  a second, which a real screen share does not cost, so part of the starvation is the rig's own.
+  Reproduce with `node scripts/crash-bound.mjs --control=300000 --screen=2560x1440`; the same
+  command at `--screen=1920x1080` holds 60.0 fps and grades GREEN, which bounds where the line is
+  on this machine. S1's card called it correctly and unprompted ("mic ended 38.7s before the take
+  did"), so the instrument for whoever picks this up already exists. Belongs to A1/E1/H4, not H2.
+
 - [P2 — OBSERVATION, from the 2026-09-01 autopsy, not yet a verdict] **the 720p camera PiP wrote
   MORE bytes than the 3024x1964 screen.** Take rec_78ogcw052vdn, 3,026 s: camera 900 MB
   (2.49 Mbps against a 2.5 Mbps request — on target) and screen 814 MB (2.25 Mbps against an
