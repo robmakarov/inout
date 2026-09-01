@@ -8,16 +8,19 @@ import {
 import { Icon } from '@app/components/Icon'
 
 /**
- * The background frame control (task F3), FLOATING ON THE RIGHT EDGE OF THE
- * STAGE — Robert: "move stuff ... from panel to float by right side of video
- * frame vertically". It used to be the tail of the tools row under the picture,
- * which is the one place a control about the picture's margin cannot be read
- * against: you set an inset here and measured it a screen away. Now the swatch
- * and the step sit against the edge they move, so choosing one is a comparison
- * rather than a guess.
+ * The background frame control (task F3), A VERTICAL RAIL BESIDE THE STAGE —
+ * Robert: "move stuff ... from panel to float by right side of video frame
+ * vertically", then "move zoom and frame setting outside of screen, next to
+ * it". It used to be the tail of the tools row under the picture, which is the
+ * one place a control about the picture's margin cannot be read against: you
+ * set an inset here and measured it a screen away. Now the swatch and the step
+ * sit level with the edge they move, so choosing one is a comparison rather
+ * than a guess — and beside the frame rather than on it, so it hides none of
+ * what it is there to judge.
  *
- * It renders INSIDE `.stage` but outside `.stage__view`, so a zoomed take
- * scales the picture and never this.
+ * It renders as a sibling of `.stage`, in the space `.editor__player` reserves
+ * for it (`--rail`), NOT as an overlay — the stage's `overflow: hidden` would
+ * clip it and a zoom would have to be told not to scale it.
  *
  * Every take starts full-bleed and stays that way until the user asks for
  * something — the frozen rule. So "None" is a real, reachable state and picking
@@ -68,9 +71,7 @@ export function FrameBar({
     'custom'
 
   return (
-    /* The stage owns pointerdown (zoom pan, F2). Without this, every press on a
-       swatch also began a drag of the picture underneath it. */
-    <div className="frame-bar" onPointerDown={(e) => e.stopPropagation()}>
+    <div className="frame-bar">
       <span className="frame-bar__label">Frame</span>
       <div className="frame-bar__swatches" role="radiogroup" aria-label="Background">
         {BACKGROUND_PRESETS.map((p) => (
@@ -91,41 +92,39 @@ export function FrameBar({
         ))}
       </div>
 
-      {/* THE INSET AND THE SHADOW ONLY EXIST ONCE THERE IS A FRAME TO INSET.
-          They were always `disabled` without one — five controls that do
-          nothing — and in a row under the picture that cost nothing but a grey
-          patch. Standing ON the picture it is different: the strip was 279 px
-          of a 317 px stage, most of it dead, covering the camera. So the
-          half that has no subject yet is absent rather than greyed, and the
-          float on a fresh take is the swatches and nothing else. No control is
-          lost: nothing here was reachable before a backdrop was picked. */}
-      {active && (
-        <>
-          <div className="frame-bar__rule" />
+      {/* THE WHOLE CONTROL IS ALWAYS ON SCREEN. Robert: "cant see now other
+          stuff of frame, only colors, fix it". They were hidden while
+          `disabled` — no backdrop, nothing to inset — because standing ON the
+          picture the strip cost 279 px of a 317 px stage and most of it was
+          dead. Beside the picture it costs nothing that belongs to the take, so
+          the reason is gone with the position: the inset steps and Shadow are
+          visible again, greyed until there is a frame to apply them to, which
+          is how the row under the timeline always showed them. */}
+      <div className="frame-bar__rule" />
 
-          <div className="frame-bar__steps" role="radiogroup" aria-label="Frame inset">
-            {PAD_STEPS.map((s) => (
-              <button
-                key={s.id}
-                role="radio"
-                aria-checked={s.id === padStepId}
-                className={`frame-bar__step${s.id === padStepId ? ' frame-bar__step--on' : ''}`}
-                onClick={() => apply({ padFrac: s.padFrac, radiusFrac: s.radiusFrac })}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-
+      <div className="frame-bar__steps" role="radiogroup" aria-label="Frame inset">
+        {PAD_STEPS.map((s) => (
           <button
-            className={`frame-bar__step frame-bar__step--shadow${current.shadow ? ' frame-bar__step--on' : ''}`}
-            aria-pressed={current.shadow}
-            onClick={() => apply({ shadow: !current.shadow })}
+            key={s.id}
+            role="radio"
+            aria-checked={s.id === padStepId}
+            disabled={!active}
+            className={`frame-bar__step${s.id === padStepId && active ? ' frame-bar__step--on' : ''}`}
+            onClick={() => apply({ padFrac: s.padFrac, radiusFrac: s.radiusFrac })}
           >
-            Shadow
+            {s.label}
           </button>
-        </>
-      )}
+        ))}
+      </div>
+
+      <button
+        className={`frame-bar__step frame-bar__step--shadow${active && current.shadow ? ' frame-bar__step--on' : ''}`}
+        disabled={!active}
+        aria-pressed={active && current.shadow}
+        onClick={() => apply({ shadow: !current.shadow })}
+      >
+        Shadow
+      </button>
     </div>
   )
 }
