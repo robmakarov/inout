@@ -75,6 +75,10 @@ export interface MeasuredVideoHandle {
 
 const START_TIMEOUT_MS = 8_000
 const STOP_TIMEOUT_MS = 10_000
+/** H4: how long the frame pump may take to wind down before the stop goes
+ *  ahead without it. Shorter than the session's own 5 s stop budget on
+ *  purpose — the point is for that budget never to be what notices. */
+const END_PUMP_TIMEOUT_MS = 1_500
 
 function withDeadline<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -249,7 +253,28 @@ export async function startMeasuredVideoCapture(opts: {
       // session epoch and startOffsetMs live on. Read before endPump() so the
       // teardown's own duration is not counted as recorded material.
       const stopAtMs = performance.now()
-      await endPump()
+      /**
+       * H4/B4 — BOUNDED, because a channel that never delivered a frame hangs
+       * here. B4's report: "times the recorder stop out after 5 s", reproduced
+       * on prod 2026-09-01 with ?dead=camera — the session's own 5 s budget
+       * fired ("a recorder did not stop in budget") while the healthy screen
+       * channel beside it returned its stats normally. The pump end is the
+       * first unbounded await on this path: `reader.cancel()` on a
+       * MediaStreamTrackProcessor whose source never produced anything has a
+       * read outstanding that nothing will ever settle.
+       *
+       * Racing the flush is what this await exists to prevent, and there is
+       * nothing to race for a source with no frames in flight. A healthy
+       * channel resolves here in milliseconds and never sees this deadline.
+       */
+      const pumpEnd = performance.now()
+      await withDeadline(endPump(), END_PUMP_TIMEOUT_MS, 'raw video pump end').catch((err) => {
+        console.warn(
+          `[capture] raw ${opts.track.kind} pump did not end in ` +
+            `${Math.round(performance.now() - pumpEnd)}ms — stopping anyway`,
+          err,
+        )
+      })
       const done = new Promise<RawVideoReply>((resolve) => {
         settleStop = resolve
       })
