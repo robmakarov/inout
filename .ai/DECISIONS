@@ -806,3 +806,21 @@ draw being 2 % is exactly what makes supersampling affordable. Four times the dr
 argues one task up and the other down. The 2026-08-24 premise stays unmeasured and gates any future
 WebGPU proposal: are transferred capture frames GPU-resident in the worker, or is every upload a
 readback?
+
+2026-09-02 robert (20) — PHASE 5's ENGINE HALF IS DISSOLVED INTO PHASE 1. Named them himself: "O9 AV1
+4:4:4 rung · O10 b/c/d · O11d codec ladder · O4 WebGPU backend · X11 audio mix to a worker · X14 sync
+toward 0 all of it up in phase 1". This overrules the 2 % measurement argued against O4 in (19), and
+that is his call to make: the ceiling ruling says a 2 % lever is still a lever, and "MVP" was never
+allowed to be the reason a capability sat in a later phase. What survives in Phase 5 is the idea list
+and the AI lane. The honest reading of two sessions of promotions: "engine experiments" had become the
+place capabilities went to be optional, which is exactly what robert (7) forbids.
+TWO OF THE SIX CANNOT START IN PHASE 1, and this is dependency, not scope — recorded so no session
+burns a week on them: O10d (cross-channel AEC) needs both the speaker and the mic stream at the OS
+layer with a shared clock, which the browser does not give — it is a P4 native-shell capability, and a
+WebAudio AEC would have to run on the very render thread A1 just moved off. O11d's gate is "every rung
+plays in Chrome + Safari + Firefox" and there is no Firefox in the oracle; unblocking is two commands
+and they are Robert's. Everything else is buildable now.
+THE COST OF THE PROMOTION IS A BOTTLENECK, NOT A SCHEDULE: six Phase-1 tasks now queue on
+measuredAudio.ts and the mix (B12, X11a, B13, X14, X11, A2, O10b/c), and one file cannot be worked by
+more sessions. Phase 1 got wider, and the audio lane got LONGER. Naming it here so nobody proposes
+parallel sessions against it and quietly clobbers a take path.
