@@ -750,3 +750,15 @@ settle first" answer is refused: find why the thing is not ready and make it rea
 removed the same day and replaced by warming the file through the OS page cache — measured 191 → 4 ms
 worst first-play on a real 124-minute channel, holding no memory at any length.) Reads with robert
 (14): no guessing, and now no waiting either.
+
+2026-09-02 robert (16) — THE EXPORT BYTE CEILING IS DELETED. Asked whether it is needed at all: "we
+need or not? if file gets to big you are just going fix it other ways". Ruling: NOT needed. The QP
+governor's size ceiling (constantQuality.ts:338, hanging off the undocumented VIDEO_BITRATE = 8_000_000
+at codecs.ts:11) goes; quantizer mode then means what its name says — quality is held, size follows the
+content. Size is never bought by silently degrading the picture mid-file. It is bought the ways that do
+not cost the user anything he did not choose: the quality slider he already owns · the codec lane
+(destination decides — HEVC/AV1 where the recipient is known) · single generation · the screen-content
+work (ideas 1/16) · and the disk guard, which is the only honest ceiling because it measures real
+storage instead of a typed constant. Consequence accepted by him: motion-heavy exports get bigger and
+render slower. Still content is unaffected (1.84 of 8 Mbps achieved) and the instant/smart-cut paths
+never touched this code. The cumulative-average defect in the same governor dies with the ceiling.
