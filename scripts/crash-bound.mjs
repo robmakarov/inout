@@ -72,6 +72,23 @@ function parseArgs(argv) {
     screen: '1920x1080',
     screenFps: 60,
     settleMs: 12_000,
+    /**
+     * HOW LONG THE APP IS LEFT ALONE BEFORE RECORD IS PRESSED — and it is a
+     * MEASUREMENT decision, added 2026-09-02 by H2b.
+     *
+     * This rig used to press the instant the button appeared, ~200 ms after the
+     * page's first paint. No user does that, and it changes what the early kill
+     * points measure: a Chrome process's first VideoEncoder pays a multi-second
+     * init (rawVideo.worker.ts, note 6), and the app's own encoder-warm probe
+     * is still running at that moment. Measured on prod that day, pressing
+     * immediately: NOTHING was on disk for any video channel at 2/3/4/5 s, and
+     * at 7 s all three files appeared at once carrying the whole take. Pressing
+     * ten seconds in, on the identical build: 1.0 s of decodable picture at a
+     * 2 s kill and 4.0 s at 5 s. The floor was Chrome warming up, not salvage.
+     *
+     * --settleBeforeRecordMs=0 reproduces the old, colder cell.
+     */
+    settleBeforeRecordMs: 10_000,
     exportCheck: false,
   }
   for (const a of argv) {
@@ -84,6 +101,7 @@ function parseArgs(argv) {
     else if (a.startsWith('--screen=')) o.screen = a.slice(9)
     else if (a.startsWith('--screenfps=')) o.screenFps = Number(a.slice(12))
     else if (a.startsWith('--settleMs=')) o.settleMs = Number(a.slice(11))
+    else if (a.startsWith('--settleBeforeRecordMs=')) o.settleBeforeRecordMs = Number(a.slice(23))
     else if (a.startsWith('--control=')) o.control = Number(a.slice(10))
     else if (a.startsWith('--killAt=')) o.killAt = a.slice(9).split(',').map(Number).filter((n) => n > 0)
     else {
@@ -460,6 +478,7 @@ async function runControl(ms) {
   try {
     s = await launchChromeRetrying({ bin, profile, url: takeUrl(opts.url), headed: opts.headed })
     if (!(await waitForCaptureScreen(s))) throw new Error('the app never reached the capture screen')
+    await sleep(opts.settleBeforeRecordMs)
     const startWall = await pressRecord(s)
     out.startWall = startWall
     // The manifest, read while the take is alive — the control needs the same
@@ -505,6 +524,9 @@ async function runKillPoint(killAtMs) {
   try {
     s = await launchChromeRetrying({ bin, profile, url: takeUrl(opts.url), headed: opts.headed })
     if (!(await waitForCaptureScreen(s))) throw new Error('the app never reached the capture screen')
+    // Not a convenience: see settleBeforeRecordMs. A cell that presses record
+    // into a cold encoder measures Chrome's warm-up, not the crash floor.
+    await sleep(opts.settleBeforeRecordMs)
     const startWall = await pressRecord(s)
     out.startWall = startWall
     // The take's own account of itself, taken while it still can speak. Nothing
@@ -606,6 +628,7 @@ const report = {
   task: 'H2',
   url: takeUrl(opts.url),
   headed: opts.headed,
+  settleBeforeRecordMs: opts.settleBeforeRecordMs,
   startedAt: new Date().toISOString(),
   chrome: bin,
   control: null,

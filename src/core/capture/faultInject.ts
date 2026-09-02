@@ -36,6 +36,19 @@
  * the thrash budget. To exercise the budget instead, name the same kind twice
  * at different instants (`?killenc=screen:6000&killworker=screen:12000`).
  *
+ *   ?slowstop=screen:9000     the channel's STOP REPLY is held back 9 s (H5).
+ *                             The take stops normally and the file is written
+ *                             normally; what is late is the message that says
+ *                             so, which is the one thing doStop() is bounded on
+ *                             (STOP_BUDGET_MS, 5 s). This is the failure H1's
+ *                             rig hit by accident under load — screen and
+ *                             camera missing from a take that had recorded them
+ *                             perfectly — and it could not be arranged on
+ *                             demand, which is exactly what this knob is for.
+ *                             UNLIKE the two above, the delay is measured from
+ *                             the STOP, not from the press: it has nothing to
+ *                             wait for until then.
+ *
  * NOT gated on `?synthetic=1`. The whole value of inducing a fault is being
  * able to do it to a REAL screen share on real hardware, which is where the
  * drain and the reopen actually cost something. A flag nobody types is inert.
@@ -43,7 +56,7 @@
 
 import type { ChannelKind } from '../types'
 
-export type FaultKnob = 'killenc' | 'killworker'
+export type FaultKnob = 'killenc' | 'killworker' | 'slowstop'
 
 const VIDEO_KINDS = new Set<ChannelKind>(['screen', 'camera'])
 const ALL_KINDS = new Set<ChannelKind>(['screen', 'camera', 'mic', 'system-audio'])
@@ -53,7 +66,7 @@ export function parseFaults(search: string, knob: FaultKnob): Map<ChannelKind, n
   const out = new Map<ChannelKind, number>()
   const raw = new URLSearchParams(search).get(knob)
   if (!raw) return out
-  const allowed = knob === 'killworker' ? VIDEO_KINDS : ALL_KINDS
+  const allowed: ReadonlySet<ChannelKind> = knob === 'killworker' ? VIDEO_KINDS : ALL_KINDS
   for (const part of raw.split(',')) {
     const [kind, ms] = part.split(':')
     const at = Number(ms)
@@ -70,9 +83,23 @@ export function parseFaults(search: string, knob: FaultKnob): Map<ChannelKind, n
  * take has run — the caller holds the epoch, this file holds no clock.
  */
 export function faultDelayMs(kind: ChannelKind, knob: FaultKnob, elapsedMs: number): number | null {
-  if (typeof location === 'undefined') return null
-  const at = parseFaults(location.search, knob).get(kind)
-  if (at === undefined) return null
+  return faultAtMs(kind, knob) === null ? null : delayFrom(faultAtMs(kind, knob)!, elapsedMs)
+}
+
+function delayFrom(at: number, elapsedMs: number): number | null {
   const delay = at - elapsedMs
   return delay > 0 ? delay : null
+}
+
+/**
+ * H5 — HOW LONG THIS KIND'S STOP REPLY IS HELD BACK, from the stop itself.
+ * Zero and absent are the same thing: no delay.
+ */
+export function slowStopMs(kind: ChannelKind): number {
+  return faultAtMs(kind, 'slowstop') ?? 0
+}
+
+function faultAtMs(kind: ChannelKind, knob: FaultKnob): number | null {
+  if (typeof location === 'undefined') return null
+  return parseFaults(location.search, knob).get(kind) ?? null
 }
