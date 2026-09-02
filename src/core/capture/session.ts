@@ -72,8 +72,9 @@ import { canLiveCompositeV2, startLiveCompositeV2 } from './liveCompositeV2'
 import type { LadderRung } from './captureLadder'
 import { preferredCompositeEngine } from './engine'
 import { MixLoudnessAccumulator } from './loudnessAccumulator'
-import { clearPendingManifest, writePendingManifest } from './recovery'
+import { clearPendingManifest, probeDurationMs, writePendingManifest } from './recovery'
 import { crashFloorEnabled, EARLY_FRAGMENT_S } from './crashFloor'
+import { keepChannel } from './keptOnDisk'
 import { armSyntheticDeaths, createSyntheticChannelsProgressive, isSyntheticMode } from './synthetic'
 import type { LivenessEvent } from './sourceLiveness'
 
@@ -188,6 +189,14 @@ const ARM_BUDGET_MS = 15_000
  */
 const CANCEL_STOP_BUDGET_MS = 5_000
 const WRITER_CLOSE_BUDGET_MS = 10_000
+/**
+ * H5 — how long the take may spend asking the FILE how long it is, for a
+ * channel whose stop reply never came. It is a demux of an index that is
+ * already on disk, so it is fast; the deadline exists because a truncated
+ * fragmented MP4 is exactly the kind of file a reader can get lost in, and a
+ * take that is otherwise finished must never wait on one.
+ */
+const DISK_TRUTH_BUDGET_MS = 5_000
 
 /** A/B hook for the O3a evidence run (kept so the MP4 rejection stays
  *  re-testable). Production stays on 'auto'. */
@@ -2763,6 +2772,54 @@ class Session implements CaptureSession {
     })()
   }
 
+  /**
+   * H5 — THE DISK IS THE WITNESS, NOT THE STOP REPLY. The rule and the reason
+   * live in keptOnDisk.ts; this is the part that has to touch a platter.
+   *
+   * A channel whose reply beat the budget is answered from memory and costs
+   * nothing. Only one that did not is asked twice — how big it is, and how long
+   * — which is the case that used to end with its file deleted.
+   */
+  private async keepWhatReachedDisk(): Promise<ChannelRuntime[]> {
+    const kept: ChannelRuntime[] = []
+    for (const ch of this.channels) {
+      if (ch.bytes > 0) {
+        kept.push(ch)
+        continue
+      }
+      const diskBytes = await blobStore.size(ch.blobKey).catch(() => 0)
+      // The probe is only ever run against bytes that exist, and it is bounded:
+      // a truncated fragmented MP4 is exactly the file a reader can get lost in.
+      const probedMs =
+        diskBytes > 0
+          ? await withTimeout(
+              probeDurationMs(ch.blobKey),
+              DISK_TRUTH_BUDGET_MS,
+              `${ch.kind} length probe`,
+            ).catch(() => 0)
+          : 0
+      const verdict = keepChannel({
+        replyBytes: ch.bytes,
+        diskBytes,
+        probedMs,
+        knownMs: ch.durationMs,
+        wallClockMs: ch.startAbs !== undefined ? performance.now() - ch.startAbs : 0,
+      })
+      if (!verdict.keep) {
+        void blobStore.remove(ch.blobKey).catch(() => undefined)
+        continue
+      }
+      ch.bytes = verdict.bytes
+      ch.durationMs = verdict.durationMs
+      console.warn(
+        `[capture] H5 ${ch.kind} never answered its stop, but ${(verdict.bytes / 1048576).toFixed(1)} MB ` +
+          `of it is on disk — kept at ${Math.round(verdict.durationMs)} ms (${verdict.source})`,
+      )
+      kept.push(ch)
+    }
+    return kept
+  }
+
   private async doStop(): Promise<Recording> {
     this.clearTick()
     this.releaseWakeLock()
@@ -2783,8 +2840,10 @@ class Session implements CaptureSession {
     this.stopRecorders(true, (c) => c.media === 'video')
     // Bounded, for the same reason arming's joins are (note 3): a recorder that
     // never fires onstop must not be able to hold a finished take open. What is
-    // already on disk is kept — a channel that never answered simply reports
-    // the length it had when its source stopped.
+    // already on disk is kept, and since H5 that sentence is literal:
+    // keepWhatReachedDisk() below reads the FILE for every channel whose reply
+    // never arrived, instead of believing the byte count that reply would have
+    // carried.
     try {
       await withTimeout(
         Promise.all(this.channels.map((c) => c.stopped)),
@@ -2792,7 +2851,10 @@ class Session implements CaptureSession {
         'recorder stop',
       )
     } catch (err) {
-      console.warn('[capture] a recorder did not stop in budget — keeping what reached disk', err)
+      console.warn(
+        '[capture] a recorder did not stop in budget — its file is read off disk and kept if it has bytes',
+        err,
+      )
     }
     // DEVICES OFF HERE — after the last consumer of a track, before the disk.
     // The composite reads the very same camera/mic tracks, so it goes first;
@@ -2814,10 +2876,7 @@ class Session implements CaptureSession {
       console.warn('[capture] a channel writer did not close in budget — using what it flushed', err)
     }
 
-    const kept = this.channels.filter((c) => c.bytes > 0)
-    for (const c of this.channels) {
-      if (c.bytes === 0) void blobStore.remove(c.blobKey).catch(() => undefined)
-    }
+    const kept = await this.keepWhatReachedDisk()
 
     const channels: ChannelRecording[] = kept.map((c) => {
       const rec: ChannelRecording = {
