@@ -529,3 +529,15 @@ per-event correction) were all refuted on the SAME takes by re-deriving each can
 arrays the runs already recorded — one matrix, every candidate, no re-runs. A candidate that is a
 function of recorded data never needs its own matrix, and the check that the offline arithmetic is
 the shipped estimator is that it reproduces the shipped number to the decimal.
+2026-09-02 robert — YES TO THE FIXES ("yes to fixes, put on roadmap"). Three approvals in one word,
+each previously held for him: (1) B9 composite-origin-clamp — the default export path may move: the
+copied picture stops being written 64-198 ms late against the sound (B8's census, five of seven
+takes); oracle:long mandatory, x15c is the regression gate until the oracle's rig can build the
+take. (2) H2b, both crash floors — the manifest goes through a writer with a real commit (durable
+positioned writer or IndexedDB) so a kill in the first ~5 s no longer erases the take's only
+pointer, and the first video fragment closes early so a young take has decodable picture; both
+additive (can only turn a lost take into a recovered one), both capability-gated with the current
+path as fallback per the frozen rule. (3) H5 (promoted from H1's rig finding, same word): a channel
+whose stop misses the 5 s budget keeps what reached disk — bytes are read off DISK before anything
+is deleted; the current code deletes megabytes under a warning that says the opposite, which is a
+data-loss bug and not a behaviour anyone chose.

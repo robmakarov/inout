@@ -449,9 +449,32 @@ it is built combine-ready:
           seven measured takes) has that offset discarded — and instant AND smart cut then write the
           copied picture that much LATE against audio they mix from the raw channels. Handoff under
           the task; the fix is B9 and it is ROBERT-GATED because it moves the default export path.
- 11. B9   composite-origin-clamp          [medium · ROBERT'S YES FIRST · spec below] the fix for what
-          B8 found. Needs `oracle:long` (it touches both packet-copy paths) and it has no regression
+ 11. B9   composite-origin-clamp          [medium · APPROVED 2026-09-02, READY · spec below] the fix
+          for what B8 found — the copied picture stops being 64-198 ms late against the sound.
+          Needs `oracle:long` (it touches both packet-copy paths) and it has no regression
           gate but x15c until the oracle's rig can build the take at all — 8 cold runs never did.
+          After it merges, the SAME session should take the smart-cut negative timestamp at 120 s
+          (BACKLOG P1) — same copy-path territory, same oracle:long, one owner.
+ 12. H2b  the two crash floors            [light-medium · APPROVED 2026-09-02, READY · additive,
+          capability-gated per the frozen rule · evidence in BACKLOG P1 2026-09-01] (a) the pending
+          manifest goes through a writer with a REAL COMMIT (durable positioned writer or
+          IndexedDB) instead of localStorage, so a kill in the first ~5 s no longer erases the only
+          pointer to the take's blobs; (b) the first video fragment closes early, so a ~5-7 s take
+          salvages with picture instead of audio-only. GATES: the same eight killAt cells
+          (`node scripts/crash-bound.mjs --killAt=2000,...,20000`) with NOTHING unrecoverable at
+          any instant and picture from <=5 s kills · the 2.1 s steady-state bound unmoved ·
+          fallback path proven (flag off = today's behaviour byte-for-byte) · oracle green.
+ 13. H5   stop keeps what reached disk    [light-medium · APPROVED 2026-09-02, READY · promoted
+          from H1's rig finding, evidence in BACKLOG P1 2026-09-02] `session.ts doStop` deletes a
+          channel whose stop reply missed the 5 s budget — megabytes on disk removed under a
+          warning that says "keeping what reached disk". Read the bytes off DISK before deleting
+          anything; keep any channel whose blob is non-empty. GATES: the contain-check cell that
+          caught it (fourth back-to-back Chrome, loaded) re-run until the timeout case fires and
+          the channel SURVIVES with its true length · a genuinely empty channel is still removed ·
+          the warning's words match what happens · oracle green.
+          RUN H2b AND H5 IN ONE SESSION, SEQUENTIALLY — both live in session.ts's stop/write
+          family and share the crash rigs; two worktrees editing that file is a conflict nobody
+          needs.
 PARKED until the max60 record is perfect (Robert's ruling 4): F9 · F10 · F11 · F12 · D1 · X13 ·
 F17's sheet UI · O9/O10 remaining lanes · P5a (nothing expires — "TIME-SENSITIVE" meant
 ready-at-launch; runs whenever Robert is at the machine with the device). X1/X2/X3 ARE NOT AVAILABLE — all
@@ -459,9 +482,10 @@ three were DONE 2026-08-26 (handoffs under their tasks); this line was stale whe
 order was written and cost a session a look. NO LIGHT PARALLEL-SAFE FILLER IS LEFT: B8 is done and
 B4 is absorbed by H4, which is DONE. B9 is not one — it is a default-path flip.
 STILL OWED ROBERT: B2 listen · O6 4K re-verify · `?singlegen=capture` · O10a attenuation ruling ·
-X5 text question · B7 video half (one command) · B9's yes (the picture is late against the sound on
-most takes; the fix is written up and unstarted) · H4's four sentences (a channel that died or never
-delivered now says so live and in the editor; the words are proposals, the paths are measured).
+X5 text question · B7 video half (one command) · H4's four sentences (a channel that died or never
+delivered now says so live and in the editor; the words are proposals, the paths are measured) ·
+the A1 long take · E1's watched up-step · M1's word. (B9's yes and the crash-floor yeses LANDED
+2026-09-02 — B9/H2b/H5 are READY above.)
 
 ## A1 tab-audio-starvation — the tap dies under max load and the take keeps going
    [heavy · P0 · capture integrity · authored 2026-09-01 from Robert's 50-min max take]
