@@ -744,6 +744,12 @@ const runners: Runner[] = [
           : undefined,
         camera: args?.camera === true,
         frame: args?.frame === true,
+        cq:
+          args?.cq === 'off'
+            ? 'off'
+            : typeof args?.cq === 'number'
+              ? args.cq
+              : undefined,
         rebuild: args?.rebuild === true,
         buildBudgetSec: typeof args?.buildBudgetSec === 'number' ? args.buildBudgetSec : undefined,
       })
