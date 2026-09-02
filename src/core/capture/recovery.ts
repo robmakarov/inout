@@ -247,7 +247,12 @@ function isRecordingDismissed(id: string): boolean {
   }
 }
 
-async function probeDurationMs(blobKey: string): Promise<number> {
+/**
+ * HOW LONG THE FILE ON DISK ACTUALLY IS. Salvage's own question, and since H5
+ * the stop path's too: a channel whose stop reply missed the budget knows its
+ * bytes only from the platter, and its length only from here.
+ */
+export async function probeDurationMs(blobKey: string): Promise<number> {
   const blob = await blobStore.read(blobKey)
   if (!blob.size) return 0
   const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS })
