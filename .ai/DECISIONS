@@ -583,3 +583,45 @@ ordinary track the live compositor draws; each device records locally at full qu
 the hardware is. Streaming is the same link with a different far end. Sequencing unchanged: max60
 perfect first, then governor bias, then J1, then the native core (macOS, Swift), then two devices on
 one network, then internet, then streaming.
+2026-09-02 robert (4) — THE FIVE-PART REVIEW VERDICTS (agent's numbering, his words quoted).
+PROCESS: "next fucking time do one question at the time" — one clarification per message, never a
+batch. "i dont read docs at all and no human will, dont keep this shit" — every repo doc is for
+agents only; CONTEXT.md and human narrative go (item 6 of the review, gated on his "we are done").
+COST/INFRA: "best ux with minimal cost for us"; any infrastructure "maximally optimized so we have
+minimal work, innovative engineering required". Paid cloud on Cloudflare-class storage with limits;
+egress/downloads must be made free; connecting users' own disks (Google Drive etc.) for free AND
+paid; free users get "some free minimal space too for marketing" but "calculated so we are safe",
+with rate limits on upload/download against bots. Encrypted so we never see users' files, "but no
+extra steps for users". Free users: p2p/manual pairing so they never touch our infra (QR is one
+option, not the only one); "p2p will be considered, but v2". Payments/auth: Google only "just for
+now, no limits here". Web app stays free with a paid upgrade; native apps maybe paid, decided later.
+TIERS: "local free for everyone, max for paid only"; DEFAULT QUALITY = high; MAX = paid only.
+MULTI-DEVICE UX (speculation, recorded for shape): your own devices' inputs appear in the inputs
+list; an invited person chooses what to activate; the inviter can moderate (turn off; turn on only
+with the user's permission); users may let another user save their recording directly into that
+user's cloud (UX-research example: link to participants and recorder, permission to save for later).
+PERFECT MAX60 = "all perfect, record, export, size, performance". Sync target: "perfect sync is
+target, 0 delay". No 30-minute limit, ever. Nothing parks: "no need to park it, if it can be
+batched with other effectively"; features "not parked, some of them just need to go in v2".
+PLATFORM ORDER: chrome, safari, quick tests on other browsers, iOS app, mac app, android app,
+windows/linux natives, other. "safari still holds and any system that give no permission, same ui
+anyway for everywhere, just more shit where we can use more". Browser breadth: "all majors,
+important locals for fucked up markets like russia, china etc, keep it broad", not every one.
+AI: "tool for agents, it will never use tokens"; AI-collaboration research runs in parallel, no
+vision yet; transcript possible only without tokens, later; product reshaping = "collaborator with
+ai, maybe some jira killer, will see". Agents in parallel: "just no more problem, make it perfect".
+Real-user data: he wants bugs; automatic if legal and at no cost to users; a settings toggle "auto
+report bugs" for paranoid people, no turning off for free users; open to ideas.
+UI-LESS FEATURES: pause/resume — "we need to make it work if it is there already" (UI wanted);
+elastic — "if some cool visualization of elastic possible would be cool"; bug/report data — not
+shown to users; test panel — "like backlog to me, it must be resolved in app or thrown away" (every
+flag becomes a product decision or is deleted, later); device picker, cloud sign-in, the rest —
+later, not rejected.
+IDEAS: idea 1 (screen is not a video) — "try it but skeptical": the For-AI keyframe picker dropped
+frames with big movement in small parts (cursor, text fields), so tile change detection must be
+designed together with the export-for-AI problem. The 45-idea list is kept for a separate session.
+ROADMAP ORDER: phase 1 perfect max60 + roadmap clarified + the browser floating on-top UI panel
+attempted earlier ("dont forget ui panel we tried for browsers that stays on top of ui, thats mvp
+too" — identity to confirm) → phase 4 features+UI → phase 2 paid/infra/bug collection → 3 native →
+5 engine experiments + AI collaboration → 6 reshaping. Phase-1 "done" is his call; phase 2 may run
+in parallel only when he says so.
