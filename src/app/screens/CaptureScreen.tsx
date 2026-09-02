@@ -58,9 +58,21 @@ import { lazy, Suspense } from 'react'
 const TestPanel = lazy(() =>
   import('@app/components/TestPanel').then((m) => ({ default: m.TestPanel })),
 )
+
+/**
+ * U1 — the on-top recorder window. Off first paint (O7) and warmed at mount, so
+ * the record press resolves it from the module cache instead of racing the
+ * click's 5 s activation window. One module owns the import (app/panelChunk.ts)
+ * so this lazy and that warm are the same chunk.
+ */
+let panelChunk: Promise<typeof import('@app/panelChunk')> | null = null
+const loadPanelChunk = (): Promise<typeof import('@app/panelChunk')> =>
+  (panelChunk ??= import('@app/panelChunk'))
+const RecorderPanel = lazy(() => loadPanelChunk().then((m) => ({ default: m.RecorderPanel })))
 import { RecordButton } from '@app/components/RecordButton'
 import { TimerPill } from '@app/components/TimerPill'
 import { AudioLevelRing } from '@app/components/AudioLevelRing'
+import type { PanelMode } from '@app/components/RecorderPanel'
 import { Icon } from '@app/components/Icon'
 
 function StreamVideo({
@@ -123,6 +135,11 @@ export function CaptureScreen() {
   // record click (acquire.ts starts them concurrently with the picker).
   useEffect(() => {
     warmCapturePipeline()
+    // U1: the panel's chunk, fetched now so the press never waits on a network
+    // round-trip inside the click's activation window. A browser that cannot
+    // open such a window still pays for this ~7 KB once, off the critical path
+    // and after first paint; a failed fetch simply means no panel (O7).
+    void loadPanelChunk().catch(() => undefined)
   }, [])
 
   /**
@@ -194,11 +211,23 @@ export function CaptureScreen() {
   const [elapsedMs, setElapsedMs] = useState(0)
   /** F6: the take is held, devices still armed. The elapsed counter simply
    *  stops advancing, because the session stops counting time nobody is
-   *  recording. UI1 removed the button that reached this from here (see the
-   *  control bar); the state is kept because the ENGINE can still pause — the
-   *  browser's own "Stop sharing" and the wedge paths both go through it — and
-   *  the timer must not run through a hold it did not ask for. */
-  const [, setPaused] = useState(false)
+   *  recording. UI1 removed the button that reached this from the CONTROL BAR
+   *  (Robert 2026-08-30: "no need for fucking pause button" on the capture
+   *  screen); U1 gave it the one home he did ask for — the on-top panel, where
+   *  the take is the only thing on screen. The browser's own "Stop sharing"
+   *  and the wedge paths reach this state too, and the timer must not run
+   *  through a hold it did not ask for. */
+  const [paused, setPaused] = useState(false)
+  /** U1 — the Document Picture-in-Picture recorder window, while it is open.
+   *  Null on every browser without it, on `?panel=0`, and after the user
+   *  closes it by hand — all of which are exactly the app before U1. */
+  const [panelWin, setPanelWin] = useState<Window | null>(null)
+  /** Held so the panel can be closed on the way out WITHOUT fetching a chunk
+   *  that was never needed — a browser with no such window loads nothing. */
+  const panelApi = useRef<typeof import('@app/panelChunk') | null>(null)
+  /** The take is stopping: files are draining. The panel says so instead of
+   *  counting seconds nobody is recording. */
+  const [finishing, setFinishing] = useState(false)
   const [remainingMs, setRemainingMs] = useState<number | null>(MAX_RECORDING_MS)
   /** Inputs turned off mid-take — by the user's chip OR by the browser's own
    *  "Stop sharing", which lands here through the same 'channel-ended' event. */
@@ -273,6 +302,7 @@ export function CaptureScreen() {
     const s = useAppStore.getState().session
     if (!s || finishingRef.current) return
     finishingRef.current = true
+    setFinishing(true)
     try {
       const rec = await s.stop()
       if (rec.channels.length === 0) {
@@ -372,6 +402,7 @@ export function CaptureScreen() {
       setSession(null)
     } finally {
       finishingRef.current = false
+      setFinishing(false)
       setArming(false)
       setArmingLabel(null)
       setElapsedMs(0)
@@ -530,6 +561,54 @@ export function CaptureScreen() {
     setArmingLabel('Cancelling…')
   }
 
+  /**
+   * U1 — open the panel for the press that is happening right now.
+   *
+   * Ordering, not timing: `whenDisplayDispatched` returns the moment acquire
+   * has registered its raw getDisplayMedia promise, and when a request is
+   * ALREADY pending acquire refuses this press and dispatches nothing — so
+   * either way there is no activation left to protect by the time this asks.
+   */
+  const openPanelForPress = async (wantsScreen: boolean): Promise<void> => {
+    const mod = await loadPanelChunk()
+    panelApi.current = mod
+    await mod.whenDisplayDispatched(wantsScreen)
+    const win = await mod.openRecorderPanel()
+    if (!win) return
+    // The user closing the panel is not a stop. The take runs on; the page's
+    // own record button is still the control it always was.
+    win.addEventListener('pagehide', () => setPanelWin((w) => (w === win ? null : w)), {
+      once: true,
+    })
+    // The arm died while the window was opening (cancelled press, refused
+    // share): a panel for a take that will never exist closes itself.
+    if (!useAppStore.getState().session && !armAbortRef.current) {
+      mod.closeRecorderPanel(win)
+      return
+    }
+    setPanelWin(win)
+  }
+
+  /** The panel belongs to the take. It closes when the take is over — and when
+   *  this screen goes away, which is what the hand-off to the editor is. */
+  useEffect(() => {
+    if (!panelWin) return
+    if (session || arming) return
+    panelApi.current?.closeRecorderPanel(panelWin)
+    setPanelWin(null)
+  }, [panelWin, session, arming])
+  useEffect(() => () => panelApi.current?.closeRecorderPanel(), [])
+
+  /** F6 from the panel — the SAME calls the engine has always exposed; the
+   *  'state' event is what moves the button's word, so it always reports what
+   *  the engine did rather than what was asked. */
+  const togglePause = () => {
+    const s = useAppStore.getState().session
+    if (!s) return
+    if (s.state === 'paused') s.resume()
+    else if (s.state === 'recording') s.pause()
+  }
+
   const startRecording = async () => {
     const ac = new AbortController()
     armAbortRef.current = ac
@@ -542,7 +621,7 @@ export function CaptureScreen() {
       // Already fetched by warmCapturePipeline() at mount — this resolves from
       // the module cache, so the click path gains no network round-trip (O7).
       const { createCaptureSession } = await loadCaptureEngine()
-      const s = await createCaptureSession(effectiveConfig, {
+      const pending = createCaptureSession(effectiveConfig, {
         signal: ac.signal,
         // Devices acquire concurrently, so the line has to name what is STILL
         // outstanding — setting it on 'start' alone showed whichever step
@@ -562,6 +641,21 @@ export function CaptureScreen() {
         // thing that already failed here once.
         onStall: (message) => setWedgeNotice(message),
       })
+      /**
+       * U1 — THE ON-TOP PANEL RIDES THIS PRESS, AND IT RIDES IT SECOND.
+       *
+       * `requestWindow()` CONSUMES the click's transient activation and
+       * `getDisplayMedia` does not (both measured — scripts/dpip-check.mjs), so
+       * one press pays for both in exactly one order: the screen request first,
+       * the panel after it is in flight. Reversed, the panel would spend the
+       * activation the screen needs and the take would die at the press.
+       *
+       * Fire-and-forget, and deliberately not awaited: nothing about arming a
+       * take may wait on a window, and every failure inside it is "exactly
+       * today" (app/lib/recorderPanel.ts).
+       */
+      void openPanelForPress(effectiveConfig.screen)
+      const s = await pending
       // From here the session HOLDS DEVICES and only the store can stop it.
       // Anything that goes wrong before setSession leaves it running with no
       // owner and no button that reaches it — the camera light and the
@@ -691,6 +785,15 @@ export function CaptureScreen() {
   const audioStream = session?.previewStreams.mic ?? session?.previewStreams['system-audio']
   const audioOnly = !!session && !screenStream && !cameraStream
   const recording = !!session
+  /** U1 — what the on-top panel is showing. 'arming' is the stretch where the
+   *  window exists and the take does not yet: the picker may still be open. */
+  const panelMode: PanelMode = finishing
+    ? 'finishing'
+    : session
+      ? paused
+        ? 'paused'
+        : 'recording'
+      : 'arming'
   /**
    * F13: the preview stage IS the composite, so it carries the composite's
    * shape. Read off the live tracks with the same precedence the session uses
@@ -900,6 +1003,27 @@ export function CaptureScreen() {
       )}
       {arming && armingLabel && <div className="capture__arming">{armingLabel}</div>}
       {session && <TimerPill elapsedMs={elapsedMs} remainingMs={remainingMs} />}
+      {/* U1 — the on-top recorder window. It renders into ANOTHER document
+          (a portal), so it draws nothing here and costs this screen nothing
+          on every browser that has no such window. */}
+      {panelWin && (
+        <Suspense fallback={null}>
+        <RecorderPanel
+          win={panelWin}
+          mode={panelMode}
+          elapsedMs={elapsedMs}
+          remainingMs={remainingMs}
+          audioStream={audioStream}
+          onStop={() => {
+            // The record button's own branch, verbatim: arming cancels,
+            // a live take stops. One path, two places to press it.
+            if (arming) cancelArming()
+            else if (session) void finishRecording()
+          }}
+          onTogglePause={session ? togglePause : undefined}
+        />
+        </Suspense>
+      )}
       {recording &&
         (stalled.length > 0 ||
           deadChannels.length > 0 ||
