@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { __resetWedgeJournal, appendWedgeJournal, readWedgeJournal, watchBootLiveness } from './wedgeJournal'
+import {
+  __resetWedgeJournal,
+  appendWedgeJournal,
+  noteBootPhase,
+  readWedgeJournal,
+  watchBootLiveness,
+} from './wedgeJournal'
 
 /**
  * The case file's blocker, 2026-08-30: everything a wedge knows was printed to
@@ -61,11 +67,15 @@ describe('boot liveness', () => {
     })
     let clock = 0
     watchBootLiveness(1_200, { now: () => clock })
+    // The warm-up names its step before each await; the block is filed under
+    // the last name, so the entry says WHERE the boot froze, not only how long.
+    noteBootPhase('warm:worklet')
     clock = 3_000 // the tick due at 500 ms ran at 3 s: 2.5 s of nothing
     vi.advanceTimersByTime(500)
     const blocks = readWedgeJournal().filter((e) => e.kind === 'block')
     expect(blocks).toHaveLength(1)
     expect(blocks[0]?.blockedMs).toBe(2_500)
+    expect(blocks[0]?.phase).toBe('warm:worklet')
     // Dated from the reload, not from the watch, so the entry says how long
     // after the refresh the app went away.
     expect(blocks[0]?.sinceReloadMs).toBe(4_200)

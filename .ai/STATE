@@ -222,6 +222,28 @@ phase: MVP validation (2026-07-16)
   running the second time, so it is not load-specific): reload-with-no-boot means the refresh never
   committed, script-with-no-mount means it came back and never painted, and block entries time the
   freeze. Read it over the browser MCP; ask him for nothing.
+  2026-09-02 MORNING, THE FLOOR WAS TESTED AND IT WEDGES. His journal, read off the machine ten
+  minutes after "i m getting chrome wedges": three wedges in a row ON RUNG 3 — bare `{video, audio}`,
+  count 10→12, `focus: lost-and-returned` each time, 8 good deliveries in the session before the
+  first — so OUR REQUEST CONTENTS ARE CLEARED as the trigger; the ladder has nothing left to drop.
+  The same read convicted two things that were ours, both fixed: (1) EVERY BOOT AFTER A WEDGE RELOAD
+  FROZE THE MAIN THREAD FOR 19.6–19.9 s, starting within 500 ms of mount, six of six across two days
+  — the warm-up's `prewarmWorkletModule` does `new AudioContext()`, and inside it Chromium waits
+  SYNCHRONOUSLY for output-device authorization from the browser process
+  (`AudioOutputDevice::GetOutputDeviceInfo` → `did_receive_auth_.Wait()`, `kMaxAuthorizationTimeout`
+  = 10 s, paid twice); after a wedged share that path does not answer. That is "after it refreshed
+  after wedge it goes unresponsive without any actions", timed and named. The prewarm now runs only
+  once `enumerateDevices()` — same path, asynchronous — has answered: ~10 ms on a healthy machine,
+  never on a stuck one, so nothing blocks and the take pays the ~100 ms compile at arm where it pays
+  it anyway. `block` entries carry the warm-up `phase` (`noteBootPhase`) so the next freeze names its
+  step. (2) THE 'STALE' REFUSAL WAS INSTANT AND THE TAKE STILL ARMED CAMERA + MIC: 'stale' journalled
+  08:53:03, the reload it promised 08:53:21 — their budgets and re-asks ran for a take session.ts
+  was always going to throw away. A held-back screen ('busy'/'stale') now starts nothing else
+  (`primaryRefused`, acquire.ts). `wedge` entries carry `channels` (his: screen+tab-audio+camera+mic,
+  every time). Evidence: unit (displayInflight, wedgeJournal) + typecheck; the freeze fix can only
+  be proven on his next wedge reload — the journal's next `block` (or its absence) is the proof.
+  Remaining moves are Robert's: the two endpoint levers, and the iframe-scoped request (DECISIONS
+  2026-09-01 (9), not ruled).
 
 - QUALITY IS ONE DECISION NOW, MADE BEFORE THE TAKE, AND IT BINDS BOTH HALVES (UI1, 2026-08-30,
   Robert's eight-item UI pass: "make chatgpt/claudecode effort-like slider for our quality choosing …

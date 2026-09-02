@@ -90,10 +90,13 @@ technical defects by severity. Done items get deleted, not archived.
   50 minutes of a mostly-static screen legitimately compresses that far; `npm run exp -- bits`
   on a screen-only max take decides which, and only the first one is a defect.
 
-- [P0 — EVIDENCE PHASE, the wedge] **the next stall convicts a suspect instead of adding to a
-  count.** The verdict table, the playbook for whoever handles Robert's next report, and the whole
-  case history live in ONE place: `docs/SCREEN_WEDGE.md` (rewritten 2026-08-30 — start at "WHEN
-  ROBERT REPORTS IT AGAIN"). Containment today: a wedge costs one press, never a take.
+- [P0 — the wedge, VERDICT LANDED 2026-09-02, waiting on Robert] **rung 3 wedges: our request is
+  cleared, Chrome's picker/capture path is the layer.** Three in a row on the bare request, read
+  off his journal. The page has no request-side move left; what remains is his ruling on the levers
+  (`docs/SCREEN_WEDGE.md`, last section — the held share he ruled out twice, the native layer, and
+  the iframe-scoped request he asked to have explained plainly, DECISIONS 2026-09-01 (9)). The
+  aftermath that was ours is fixed the same day: the 20 s boot freeze after the reload, and the
+  18 s 'stale' arm. Containment: a wedge costs one press, never a take, and the app comes back alive.
 - [~~P0~~ FIXED 2026-08-30] **"?sourcefps=1 - record froze on game tab again"** (Robert). NOT the game
   and NOT 60 fps. REPRODUCED ON A QUIET MACHINE WITH NO GAME, from his own configuration
   (`screensize=3024x1964`, sourcefps on, native res at its shipped default), against prod — and the

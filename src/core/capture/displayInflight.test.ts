@@ -135,6 +135,56 @@ describe('one outstanding screen request per document', () => {
     // The whole point: no second call, and no 30 s spent discovering that.
     expect(calls).toBe(1)
   })
+
+  /**
+   * ROBERT'S MACHINE, 2026-09-02: the 'stale' refusal was journalled at
+   * 08:53:03 and the reload it promised landed at 08:53:21. The screen was
+   * refused in a tick, as designed — and the take then started the camera and
+   * the mic anyway and ran their budgets and re-asks, for a take session.ts
+   * was always going to throw away (a timed-out primary fails the take). A
+   * wedge costs one press; it must not cost eighteen seconds of "Waiting for
+   * camera and microphone…" on top.
+   */
+  it('A REFUSED SCREEN ASKS FOR NOTHING ELSE — the reload is a tick away, not a budget', async () => {
+    vi.useFakeTimers()
+    let displayCalls = 0
+    let userMediaCalls = 0
+    vi.stubGlobal('MediaStream', StubStream)
+    vi.stubGlobal('MediaRecorder', StubRecorder)
+    vi.stubGlobal('navigator', {
+      mediaDevices: {
+        getDisplayMedia: () => {
+          displayCalls += 1
+          return new Promise(() => {})
+        },
+        getUserMedia: () => {
+          userMediaCalls += 1
+          return new Promise(() => {})
+        },
+      },
+      permissions: { query: () => Promise.resolve({ state: 'granted' }) },
+    })
+    const config = { screen: true, camera: true, mic: true, systemAudio: false }
+
+    const first = createCaptureSession(config).catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(90_000)
+    expect(((await first) as CaptureError).reason).toBe('wedged')
+    expect(displayCalls).toBe(1)
+    // The first press did ask for them — same tick as the picker, as always.
+    expect(userMediaCalls).toBeGreaterThan(0)
+
+    userMediaCalls = 0
+    const t0 = Date.now()
+    const second = createCaptureSession(config).catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(50)
+    const err = await second
+    expect(err).toBeInstanceOf(CaptureError)
+    expect((err as CaptureError).reason).toBe('stale')
+    expect(displayCalls).toBe(1)
+    // Nothing else was asked for, and the verdict took a tick, not a budget.
+    expect(userMediaCalls).toBe(0)
+    expect(Date.now() - t0).toBeLessThan(1_000)
+  })
 })
 
 describe('one screen request at a time — Chrome takes exactly one', () => {

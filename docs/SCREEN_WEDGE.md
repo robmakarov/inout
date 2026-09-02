@@ -1,36 +1,41 @@
 # The screen wedge — full case file
 
-**Status as of 2026-08-30 (evening): NOT prevented, contained to one press, and the
-instrumentation now writes where it can be read: `inout.wedgeJournal.v1` keeps the last
-24 wedges, reloads, boots and main-thread blocks on the machine, so the next occurrence
-is a verdict an agent reads in seconds with nothing asked of him. Two new facts landed this evening: a site-permission
-reset from inside Chrome CURES it (so the claim is origin-scoped, inside Chrome), and
-the ladder had silently reset itself to rung 0, so the floor experiment never ran.** Robert stalled four times in one run — across the app's own ritual reloads and
-two Chrome relaunches — which killed the two comfortable stories at once: a fresh document
-does not cure it and a fresh Chrome does not reliably cure it either. Everything that was
-OURS in the failure is fixed (the list below); what remains is a promise no page code can
-cancel, in a layer no page code can reach, and the forensics that will name that layer the
-next time it fires.
+**Status as of 2026-09-02 (morning): NOT prevented, and the floor has now been tested —
+three wedges in a row ON RUNG 3, the bare `{video, audio}` request, read off his journal
+ten minutes after his report (count 10 → 12, `focus: lost-and-returned` every time, 8 good
+deliveries in the session before the first). OUR REQUEST CONTENTS ARE CLEARED as the
+trigger; the ladder has nothing left to drop and is no longer an experiment. The same read
+convicted two things that were OURS, both fixed the same morning: every boot after a wedge
+reload froze the main thread for ~20 s (the warm-up's `new AudioContext()` waiting on
+Chrome's stuck media path — fact table), and the 'stale' refusal still armed camera + mic
+for 18 s before the reload it promised.** What remains is Chrome's picker/capture service
+on macOS (Chrome 151, macOS 26.6 at the time of reading), which no page code can cancel or
+pre-flight. The moves left are Robert's: the two endpoint levers at the end, and the
+iframe-scoped request (DECISIONS 2026-09-01 (9) — NOT RULED, he asked for a plainer
+explanation first).
 
 ## WHEN ROBERT REPORTS IT AGAIN — the playbook. Start here, do not re-derive.
 
 1. **Read the journal off his machine — ask him for nothing.** `inout.wedgeJournal.v1`
    (localStorage, `wedgeJournal.ts`) holds the last 24 dated entries and is the ONLY copy
    that survives in production: `wedge` (rung, lifetime count, stall class, focus story,
-   waited, deliveries, page age), `reload` (the ritual firing), `boot` (`script` = the
-   bundle ran · `mount` = the UI painted) and `block` (main thread gone while visible).
+   waited, deliveries, page age, `channels` = what the press asked for), `reload` (the
+   ritual firing), `boot` (`script` = the bundle ran · `mount` = the UI painted) and
+   `block` (main thread gone while visible, with the warm-up `phase` it was in).
    A `reload` with no `boot` after it = the refresh never committed. A `boot/script` with
    no `boot/mount` = it came back and never painted. `block` entries = the "goes
-   unresponsive after the refresh" report, timed. The console line
-   (`[capture:forensics] …`) still prints if he happens to have one open; the
-   `display_wedge` analytics event carries the same fields into a NOOP SINK in prod and
-   is worth nothing in the field.
+   unresponsive after the refresh" report, timed and, since 2026-09-02, named: a block
+   in `warm:worklet` is the AudioContext wait (fixed that day — gated on
+   `enumerateDevices()` answering); a block in any other phase is NEW and needs its own
+   read. The console line (`[capture:forensics] …`) still prints if he happens to have one
+   open; the `display_wedge` analytics event carries the same fields into a NOOP SINK in
+   prod and is worth nothing in the field.
 2. **Read the verdict:**
    | What the lines say | Verdict | What to do |
    |---|---|---|
-   | Wedges stopped once the ladder reached rung 3 | our request contents were the trigger | nothing — the ladder holds; note which rung cured it here |
+   | Wedges stopped once the ladder reached rung 3 | our request contents were the trigger | DID NOT HAPPEN — rung 3 wedged three times in a row on 2026-09-02. Row kept so nobody re-runs the experiment |
    | rung 3 + `focus never left` + `0 screen deliveries this session` | **below Chrome** — macOS SCK/replayd, incl. its periodic re-auth dialog that can open BEHIND every window | no web API can prevent it (getDisplayMedia has no abort, no silent pre-flight). Put the two endpoint levers to Robert — see the last section — and change nothing else |
-   | rung 3 + `focus left and came back` | Chrome's picker/capture service | file upstream (repro recipe below, attach `chrome://webrtc-internals` + the forensics line); containment already does the rest |
+   | rung 3 + `focus left and came back` | Chrome's picker/capture service | REACHED 2026-09-02. Containment holds (one press, instant refusal, one reload); the page has no request-side move left. Put the levers to Robert; file upstream if he wants (repro recipe below, attach `chrome://webrtc-internals` + the forensics line) |
 3. **Do NOT rebuild or re-propose what is already ruled**, it is all shipped or ruled out:
    containment = a wedge costs one press (instant stale-refusal + one auto-reload,
    `displayInflight.ts`); the ladder never climbs on good takes (day-probe only,
@@ -116,7 +121,11 @@ never settled at all.
 | **Resetting the site's permissions from inside Chrome clears it — no ⌘Q, no System Settings** | Robert, 2026-08-30. Three sessions had told him this was impossible; they were wrong, he is right. It is the strongest discriminator the case has: a claim that dies with ONE ORIGIN's permission entry lives in Chrome's per-origin permission/capture state — a machine-wide macOS SCK/replayd wedge could not be cured by resetting one site. Suspect 3 (Chrome) moves ahead of suspect 2 (macOS below Chrome) |
 | **The 2026-08-30 wedges did NOT happen on rung 3 — the ladder had reset itself to 0** | his stored record, read off the Chrome profile at 16:21 MSK: `{wedgedAt: 16:18 today, level:1, count:6, stalls:1, everDelivered:true}`. level 1 means the request that wedged was rung 0, the FULL one: the day-probe had walked the old mark down to 0 and cleared it (`count` survives that path, the rung does not), so the rung-3 migration never applied. The floor experiment has never run on his machine, and reading the playbook's verdict table below rung 3 is reading nothing |
 | **After the post-wedge reload the app goes unresponsive with NO user action** | Robert, 2026-08-30 — the second field report (first: the 2026-08-25 game-load ordering), and this one had no game running, so it is not load-specific. Unconvicted at the time, and unconvictable: console-only forensics, a noop analytics sink, and "i will not do anything in console". INSTRUMENTED the same evening — `wedgeJournal.ts` now records reload/boot-script/boot-mount/block on the machine, which separates "the reload never committed" from "it came back and never painted" from "it painted and then froze". The next one answers it |
-| **In the game-load wedge the refresh ritual DID NOT deliver: the app went unresponsive, no automatic reload Robert could see, and no message told him to quit/reload Chrome** | Robert, 2026-08-25 — contradicts the "what users get today" list below for this ordering. Candidate causes, unproven: the renderer itself is janked by the same GPU load so the reload never runs or paints; or the failure path taken under load never classifies as `wedged` so wedgeReload is never asked. Needs the arming timeline from a repro |
+| **In the game-load wedge the refresh ritual DID NOT deliver: the app went unresponsive, no automatic reload Robert could see, and no message told him to quit/reload Chrome** | Robert, 2026-08-25 — contradicts the "what users get today" list below for this ordering. Candidate causes, unproven: the renderer itself is janked by the same GPU load so the reload never runs or paints; or the failure path taken under load never classifies as `wedged` so wedgeReload is never asked. Needs the arming timeline from a repro. ANSWERED 2026-09-02 for the no-game case by the journal (next two rows): the reload committed and painted in ~250 ms, then froze for 20 s |
+| **RUNG 3 WEDGES. Three in a row on the bare `{video, audio}` request** | his journal, 2026-09-02 08:51–08:53 MSK: `wedge level:3 count:10/11/12`, `pending:1` (no collision of ours), `focus: lost-and-returned` (the picker was answered), `deliveries: 8` (eight good shares in that session first), `waitedMs` ≈ 11–12 s (8 s post-picker deadline). The first came 2.7 s into a fresh document, the next two right after the boot freeze below. Our options are cleared as the trigger; suspect 1 is closed |
+| **EVERY boot after a wedge reload froze the main thread for ~20 s — and it was ours** | the journal, six of six across 2026-09-01/02: `boot/script` at ~250 ms, `boot/mount` ~15 ms later, then `block blockedMs 19627–19854, vis: visible` beginning within 500 ms of mount. His two presses after that landed the instant the thread came back (`pageAgeMs` 20318 vs the block ending at 20368). Mechanism, from Chromium source: the warm-up's `prewarmWorkletModule` does `new AudioContext()`, whose constructor waits synchronously for the output device's authorization from the browser process (`AudioOutputDevice::GetOutputDeviceInfo` → `did_receive_auth_.Wait()`, capped by `kMaxAuthorizationTimeout` = 10 s in `audio_device_factory.cc`), paid twice; after a wedged share that path does not answer. In his Chrome ten minutes later the same constructor took 9 ms — it is the wedge aftermath, not the machine. FIXED: the prewarm runs only after `enumerateDevices()` (same path, asynchronous) has answered, and `block` entries now carry the warm-up phase |
+| **The 'stale' refusal was instant and the take still armed for 18 s** | the journal: `wedge stall:stale` at 08:53:03, `reload` at 08:53:21. The screen was refused in a tick; the camera and mic were then started anyway and ran their budgets and persistent-connect re-asks before session.ts could throw the failure it already knew about. FIXED: a held-back screen ('busy'/'stale') starts nothing else (`primaryRefused`, acquire.ts) |
+| **Every wedge on record rode with tab audio + camera + mic in the same press** | his prefs are the defaults (all four on). Unknown whether a bare screen-only press wedges at all; `wedge` entries now carry `channels` so the next one says |
 
 ## The attempts, in order, with honest outcomes
 
@@ -193,6 +202,18 @@ never settled at all.
    watched from dispatch; a stall prints one console line (focus story + deliveries this
    session + page age) and ships the same fields on `display_wedge`. This is what turns
    the NEXT wedge into a verdict — see the playbook at the top.
+16. **The boot no longer blocks on Chrome's audio path** (`prearm.ts`, 2026-09-02). The
+   worklet prewarm's `new AudioContext()` was the 20 s freeze after every wedge reload
+   (fact table). It now runs only once `enumerateDevices()` has answered — the same
+   browser-side media path, asked asynchronously — so a stuck machine skips the prewarm
+   instead of freezing on it, and a healthy one is unchanged. `block` journal entries
+   carry the warm-up phase (`noteBootPhase`), so if a boot ever freezes again the entry
+   names the step. **Fixes the aftermath, not the wedge.** Proof is his next wedge reload:
+   a `block` with no `phase: warm:worklet`, or no `block` at all.
+17. **A held-back screen starts nothing else** (`acquire.ts` `primaryRefused`, 2026-09-02).
+   The 'busy'/'stale' refusals were instant and the take still armed camera + mic for
+   18 s before the reload. Now they are marked `skipped` and the session throws at once.
+   **Containment only.**
 
 ## Ruled out
 
@@ -208,11 +229,14 @@ never settled at all.
 
 ## Still unknown — ranked
 
-1. **One of our getDisplayMedia options × the macOS native picker.** The ladder is the
-   experiment: if the wedges stop at a rung, the guilty option is named by construction.
-   2026-08-30 sharpened it: rung 2 was never actually bare (it still carried our three
-   raw-audio flags, and all five of his that day happened ON rung 2) — rung 3 is the
-   truly bare `{video, audio}` request. A stall there clears our options entirely.
+1. **CLOSED 2026-09-02 — one of our getDisplayMedia options × the macOS native picker.**
+   The ladder was the experiment; rung 3, the truly bare `{video, audio}` request, wedged
+   three times in a row on his machine. Our options are not the trigger. The ladder stays
+   (it costs nothing and a wedge still steps down), but no session may treat it as a
+   lead again. What the bare request still carries is the user's own `audio: true` (tab
+   audio) plus the same-tick camera + mic requests — see the last fact row; whether a
+   screen-only press wedges is the one request-side unknown left, and `channels` in the
+   journal answers it the day he records one.
 2. **DEMOTED 2026-08-30 by the site-permission cure — see the facts table.** A wedge that
    a per-origin permission reset clears is not machine-wide OS rot. Kept only because the
    two need not be the same failure: **macOS ScreenCaptureKit permission-state rot for

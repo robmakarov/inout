@@ -58,11 +58,16 @@ export interface WedgeJournalEntry {
   pageAgeMs?: number
   /** boot/block: ms since the reload that this document came back from. */
   sinceReloadMs?: number
-  /** boot: 'script' = the bundle ran · 'mount' = the UI mounted. */
+  /** boot: 'script' = the bundle ran · 'mount' = the UI mounted.
+   *  block: the warm-up step the boot was in when the thread went away
+   *  (noteBootPhase — prearm.ts names each awaited step). */
   phase?: string
   /** block: how long the main thread was unavailable, and where the tab was. */
   blockedMs?: number
   vis?: string
+  /** wedge: what the press asked for, e.g. 'screen+tab-audio+camera+mic' —
+   *  so a wedge can be told apart by what rode in the same request. */
+  channels?: string
   /** settle: a screen request that came back AFTER the take gave up on it —
    *  how late, what it brought, and whether anyone still wanted it. The one
    *  entry that decides whether an abandoned request can ever come back, or
@@ -113,11 +118,25 @@ export function readWedgeJournal(): readonly WedgeJournalEntry[] {
 /** Test seam — module state outlives test cases. */
 export function __resetWedgeJournal(): void {
   mem = null
+  bootPhase = ''
   try {
     localStorage.removeItem(KEY)
   } catch {
     /* nothing to clear */
   }
+}
+
+let bootPhase = ''
+
+/**
+ * WHAT THE BOOT WAS DOING WHEN THE THREAD WENT AWAY. The warm-up (prearm.ts)
+ * names each awaited step before it runs; a `block` entry carries the last
+ * name, so a freeze convicts a step instead of a duration. Six blocks of
+ * ~20 s were read off Robert's machine before this existed, and each could
+ * only say "after mount".
+ */
+export function noteBootPhase(phase: string): void {
+  bootPhase = phase
 }
 
 /**
@@ -181,6 +200,7 @@ export function watchBootLiveness(
         blockedMs: Math.round(late),
         sinceReloadMs: Math.round(sinceReloadMs + (at - started)),
         vis: 'visible',
+        ...(bootPhase ? { phase: bootPhase } : {}),
       })
     }
     if (at - started >= windowMs) {

@@ -206,6 +206,26 @@ export function primaryKindFor(config: CaptureConfig): ChannelKind | null {
   return null
 }
 
+/**
+ * What the press asked for, as one journal-sized word — so the next wedge says
+ * whether tab audio, the camera or the mic rode in the same request. Every
+ * wedge read off Robert's machine so far had all four on, and no entry could
+ * say so; a wedge that only ever happens with one of them present is a
+ * different bug from one that happens bare.
+ */
+export function askedChannels(config: CaptureConfig): string {
+  return (
+    [
+      config.screen && 'screen',
+      config.systemAudio && 'tab-audio',
+      config.camera && 'camera',
+      config.mic && 'mic',
+    ]
+      .filter(Boolean)
+      .join('+') || 'none'
+  )
+}
+
 export interface ProgressiveHandlers {
   /** Fired per channel the moment its stream is live. */
   onChannel: (ch: AcquiredChannel) => void
@@ -1106,6 +1126,10 @@ export function acquireChannelsProgressive(
   /** The live request's forensic watch — read again at the timeout, where its
    *  report is the only witness statement a wedge ever gives. */
   let displayForensics: ReturnType<typeof beginDisplayForensics> | null = null
+  /** The screen request was HELD BACK ('busy' / 'stale'): this take is already
+   *  dead — session.ts throws on a timed-out primary — so nothing else is
+   *  asked for it (see the stragglers below). */
+  let primaryRefused = false
   const canDisplay = typeof navigator.mediaDevices?.getDisplayMedia === 'function'
   // Which rung of the wedge ladder this request rides on — 0 unless this
   // machine has had a share taken and never delivered (displayWedge.ts). No
@@ -1120,6 +1144,7 @@ export function acquireChannelsProgressive(
      * free the moment Chrome is.
      */
     const refuseBusy = (why: string): void => {
+      primaryRefused = true
       const msg = displayStallMessage('busy', detectPlatform().browser, 'failed')
       console.warn(`[capture] not asking Chrome for the screen — ${why}`)
       appendWedgeJournal({
@@ -1128,6 +1153,7 @@ export function acquireChannelsProgressive(
         level: displayLevel,
         count: displayWedgeCount(),
         pending: unsettledDisplayRequests(),
+        channels: askedChannels(config),
       })
       fail({ kind: 'screen', message: msg, denied: false, timedOut: true, stall: 'busy' })
       mark('display', 'failed', why)
@@ -1165,7 +1191,14 @@ export function acquireChannelsProgressive(
       })
       // AND ON THE MACHINE, where somebody can actually read it later
       // (wedgeJournal.ts) — the sink above is a noop in production.
-      appendWedgeJournal({ kind: 'wedge', stall: 'stale', level: displayLevel, count: displayWedgeCount() })
+      appendWedgeJournal({
+        kind: 'wedge',
+        stall: 'stale',
+        level: displayLevel,
+        count: displayWedgeCount(),
+        channels: askedChannels(config),
+      })
+      primaryRefused = true
       fail({ kind: 'screen', message: msg, denied: false, timedOut: true, stall: 'stale' })
       mark('display', 'failed', 'a previous screen request is still outstanding')
       if (config.systemAudio) {
@@ -1448,6 +1481,7 @@ export function acquireChannelsProgressive(
           // Chrome takes one at a time: anything above 1 here (this request
           // included) means the take collided with one of ours.
           pending: unsettledDisplayRequests(),
+          channels: askedChannels(config),
           ...(witness
             ? {
                 focus: witness.focus,
@@ -1477,8 +1511,24 @@ export function acquireChannelsProgressive(
   // transient activation — only applies in front of getDisplayMedia, which by
   // here has either been dispatched already or was never requested.
   const parallel: Promise<void>[] = [...early]
-  if (config.camera && !camEarly) parallel.push(startCamera(isGranted('camera')))
-  if (config.mic && !micEarly) parallel.push(startMic(isGranted('microphone')))
+  if (primaryRefused) {
+    // A TAKE WHOSE SCREEN WAS HELD BACK IS ALREADY DEAD, AND IT USED TO ARM
+    // ANYWAY. The 'busy' / 'stale' refusals above are instant by design (a
+    // wedge costs one press) — but the camera and the mic were still started
+    // here, and the take then sat through their budgets and the persistent-
+    // connect re-asks before session.ts could throw the failure it already
+    // knew about. Read off Robert's machine, 2026-09-02: 'stale' journalled at
+    // 08:53:03, the reload it promised at 08:53:21 — eighteen seconds of
+    // "Waiting for camera and microphone…" for nothing. Not fail-fast: nothing
+    // that could have recorded is given up, because a timed-out primary fails
+    // the take and releases every device regardless (session.ts).
+    const why = 'the screen request was held back — nothing will record'
+    if (config.camera && !camEarly) mark('camera', 'skipped', why)
+    if (config.mic && !micEarly) mark('mic', 'skipped', why)
+  } else {
+    if (config.camera && !camEarly) parallel.push(startCamera(isGranted('camera')))
+    if (config.mic && !micEarly) parallel.push(startMic(isGranted('microphone')))
+  }
 
   if (parallel.length) await Promise.all(parallel)
 
