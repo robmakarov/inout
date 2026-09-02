@@ -84,16 +84,33 @@ phase: MVP validation (2026-07-16)
   keyframe on a 2 s GOP, audio is WebM on ~1 s clusters — and a take stopped PROPERLY still ends
   0.22-0.24 s behind its stop click, so only about a second and a half of that is the crash. The
   composite is deliberately not salvaged, so a crashed take is its raw channels, and S1's card reads
-  INCOMPLETE on one because seven of its ten dimensions died with the page. THE ONE PLACE "kill it
-  anywhere" IS NOT YET TRUE IS THE START: a crash at 2.8-4.2 s loses the WHOLE take (the pending
-  manifest lives in localStorage, which Chrome commits asynchronously), and at 5.4 s the take
-  salvages as audio only (no video fragment has closed yet). From 7.5 s on everything comes back.
-  Both floors have a cheap additive fix and both are BACKLOG P1, not shipped — they change what a
-  user sees after a crash. One command:
+  INCOMPLETE on one because seven of its ten dimensions died with the page. THE START IS NO LONGER
+  AN EXCEPTION (H2b, 2026-09-02, shipped on, `?crashfloor=0` reverts): eight kill points from 2.3 s
+  to 20.3 s, nothing unrecoverable at any of them, every channel back at every one, picture at every
+  one (2.03 s of it at a 2.3 s kill), worst trail 2.14 s. The manifest now has a second home with a
+  real commit — its own `inout-pending` IndexedDB database, `durability: 'strict'` — and in those
+  eight cells that copy survived every kill while localStorage survived none. One extra keyframe
+  closes the first video fragment at 1 s, ADDED to the 2 s GOP grid rather than inserted into it.
+  With `?crashfloor=0` the old floor is one URL away and still measures: nothing recoverable at
+  3.3 s / 4.3 s. One command:
   `node scripts/crash-bound.mjs --control=300000 --killAt=60000,300000,720000,1200000,1860000`
   (HEAVY, ~80 min, headed). Playbook: docs/CRASH_BOUND.md. The production salvage path also has its
   first tests (`src/core/capture/recovery.test.ts`); until now the only coverage was the
   experimental copy, which cannot fail when this one breaks.
+
+- A STOP THAT MISSES ITS BUDGET NO LONGER DELETES WHAT IT ALREADY WROTE (H5, 2026-09-02, shipped on,
+  no flag). `ch.bytes` comes from the reply a channel sends when it finishes stopping, and doStop is
+  bounded on that reply at 5 s — so a channel that missed the budget read as "recorded nothing", its
+  file was deleted and the report card said the device never delivered a byte. H1's rig hit it by
+  accident under load: screen AND camera missing from a take whose console had both armed at +120 ms
+  and delivering 1920x1080 throughout. The reply is now only the fast answer; a channel that did not
+  send one is asked of the DISK — `blobStore.size` for its bytes, the demux for its length, with the
+  demux outranking the wall clock because a timed-out stop may have left its tail unflushed. A file
+  the reader gets through and finds EMPTY (the 28-byte `ftyp` a dead camera writes) is still removed;
+  one it REFUSES is kept at the wall clock, never deleted on the word of a reader that gave up. The
+  rule is `keptOnDisk.ts` with nine cases on it. `?slowstop=kind:ms` holds a stop reply back on
+  purpose so the failure can be arranged rather than waited for, and two contain-check cells stand on
+  it: `node scripts/contain-check.mjs --only=slowstop,slowstop-empty`.
 
 - ONE STUCK SCREEN REQUEST USED TO POISON EVERY PRESS AFTER IT (2026-08-30, Robert: four stalls in a
   row, two Chrome relaunches in between — "first time waiting for screen, second waiting for screen and

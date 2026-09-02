@@ -30,38 +30,63 @@ The reference is a take **stopped properly** on the same machine: its channels e
 0.22–0.24 s behind the stop click. So roughly a quarter-second of the trail above is
 what any end-of-take costs, and the crash adds about one to two seconds on top.
 
-## The floor: a crash in the first five seconds loses everything
+## The floor: what a crash in the first seconds costs now
 
-The 2.1 s above is the bound for a take that has been running. It is not the bound at
-the very start, and this is the one place "kill it anywhere" is not yet true. Measured
-the same way, one kill per row:
+Task H2b, measured 2026-09-02 on the deployed build, `?crashfloor=1` (the default).
+H2 found this floor and did not fix it; these are the numbers after the two fixes.
+
+| killed at | manifest on disk | what came back | video |
+|---|---|---|---|
+| 2.3 s | yes (IndexedDB) | **everything** | 2.03 s |
+| 3.3 s | yes (IndexedDB) | everything | 2.00 s |
+| 4.3 s | yes (IndexedDB) | everything | 4.05 s |
+| 5.3 s | yes (IndexedDB) | everything | 4.02 s |
+| 7.3 s | yes (IndexedDB) | everything | 6.03 s |
+| 8.3 s | yes (IndexedDB) | everything | 8.07 s |
+| 10.3 s | yes (IndexedDB) | everything | 10.13 s |
+| 20.3 s | yes (IndexedDB) | everything | 20.07 s |
+
+Nothing is unrecoverable at any instant, every channel comes back at every instant,
+and the worst channel trail across the eight is 2.14 s — the same bound as the table
+above, now true from the second second of a take rather than from the eighth.
+
+**What it was before**, same rig, `?crashfloor=0`, which is still one URL away:
 
 | killed at | manifest on disk | what came back |
 |---|---|---|
 | 2.8 s | **no** | **nothing — the whole take** |
 | 3.3 s | **no** | **nothing** |
 | 4.2 s | **no** | **nothing** |
-| 5.4 s | yes | **audio only** — both video channels had nothing decodable yet |
-| 7.5 s | yes | everything, 0.44 s behind |
-| 8.3 s | yes | everything, 1.13 s behind |
-| 10.3 s | yes | everything, 1.63 s behind |
+| 5.4 s | localStorage | **audio only** — no video fragment had closed |
+| 7.5 s | localStorage | everything, 0.44 s behind |
 
-Two different floors, one after the other:
+Two floors, one after the other, and one fix each:
 
-- **Below ~5 s the pending manifest has not reached disk.** It is written to
-  `localStorage` at record start (`session.ts` `writeManifest`), and Chrome's storage
-  service commits localStorage asynchronously — a `kill -9` inside that window takes the
-  manifest with it, and the manifest is the only pointer to the take's blobs. Nothing is
-  recoverable, because nothing knows the take existed.
-- **Below ~7 s the video channels have no closed fragment.** The audio is already there
-  (~1 s clusters) but a fragmented-MP4 fragment needs both its minimum duration and the
-  next keyframe, so at 5.4 s the take salvages as audio only.
+- **The manifest had no commit.** It was written to `localStorage` at record start, and
+  Chrome's storage service commits localStorage asynchronously — a `kill -9` inside that
+  window took the only pointer to the take's blobs with it, so nothing knew the take had
+  existed. It now also goes to its own IndexedDB database with `durability: 'strict'`
+  (`recovery.ts`). In the eight cells above the IndexedDB copy survived every kill and
+  the localStorage copy survived none, which is the whole finding in one row.
+- **No video fragment had closed.** Audio rides ~1 s WebM clusters and already had
+  material; a fragmented-MP4 fragment needs its minimum duration AND the next keyframe,
+  against a 2 s GOP. One extra keyframe now closes the first fragment at 1 s
+  (`EARLY_FRAGMENT_S`). It is ADDED to the GOP grid, never inserted into it — fragments
+  close at 1, 2, 4, 6 s where they used to close at 2, 4, 6 — because letting it move
+  the grid brings the first fragment a second sooner and every later one a second later,
+  which measured WORSE at a 5 s kill (3.0–3.7 s of picture against the shipped 4.0 s).
 
-Both have an obvious remedy and neither is shipped, because both change what a user
-sees after a crash and that is Robert's call: write the manifest through the same
-durable path the channels use (or IndexedDB, which has a real transaction commit)
-instead of localStorage; and close the first video fragment early so a young take has
-something decodable. Filed to BACKLOG.
+## Press record into a cold Chrome and none of this applies
+
+Measured 2026-09-02, and it is why `crash-bound.mjs` now waits before pressing record
+(`--settleBeforeRecordMs`, default 10 s). Pressing the instant the button appears —
+~200 ms after first paint, which no user does — put NOTHING on disk for any video
+channel at 2, 3, 4 or 5 s, on the identical build; at 7 s all three files appeared at
+once carrying the whole take. A Chrome process's first `VideoEncoder` pays a
+multi-second init and the app's own encoder-warm probe is still running at that moment,
+so there are no encoded chunks to write and no fragment policy can help. The floor in
+that state is Chrome warming up, not salvage. It is a real user state — someone who
+presses record a second after the app loads — and it is filed to BACKLOG.
 
 ## What prices it
 
@@ -72,10 +97,11 @@ nothing is lost between the muxer and the platter. What is lost is what the muxe
 not yet handed over.
 
 - **Video — fragmented MP4, ~1–2 s.** mediabunny closes a fragment only when it is
-  already at least `minimumFragmentDuration` long (default 1 s) *and* a keyframe is
-  queued on every track. The raw channels use a 2 s GOP (`KEYFRAME_INTERVAL_S`), so a
-  fragment closes roughly every 2 s and everything since the last close is still in
-  memory when the process dies.
+  already at least `minimumFragmentDuration` long *and* a keyframe is queued on every
+  track. The raw channels use a 2 s GOP (`KEYFRAME_INTERVAL_S`), so a fragment closes
+  roughly every 2 s and everything since the last close is still in memory when the
+  process dies. H2b adds ONE keyframe at 1 s and halves the minimum so that first
+  fragment can close; after it, the cadence is the 2 s it always was.
 - **Audio — WebM, ~1 s.** The Matroska muxer starts a new cluster once the current one
   is 1 s long (`minimumClusterDuration` default) and flushes the writer after every
   batch, so audio sits about one cluster behind the live moment.
@@ -85,9 +111,12 @@ cluster headers) and neither is worth spending until 2.1 s is the complaint.
 
 ## What survives, and what does not
 
-- **The pending manifest survives.** It is the whole hinge — `localStorage`
-  `inout.pending`, written at record start — and it was present after all five kills,
-  read off disk before the app was allowed to run.
+- **The pending manifest survives.** It is the whole hinge, and since H2b it has two
+  homes: `localStorage['inout.pending']` and the `inout-pending` IndexedDB database,
+  both written at record start. One of the two was present after every kill in both
+  runs, read off disk before the app was allowed to run — through CDP, and
+  independently out of the profile's own LevelDB files. In the eight H2b cells the
+  IndexedDB copy was the one that survived, every time.
 - **Every channel survives.** No kill lost a channel outright at any length.
 - **The composite does not, by design.** A crash-truncated composite has an unknown
   tail and must never be packet-copied (2026-08-23), so salvage deletes it. A crashed
@@ -106,8 +135,19 @@ node scripts/crash-bound.mjs --control=300000 --killAt=60000,300000,720000,12000
 ```
 
 HEAVY: ~80 minutes of headed Chrome. Announce it, and do not run it while the machine
-is in use. Exit code is 0 only when all four gates hold (five usable points, every kill
-salvaged whole, the manifest survived every time, worst case under 5 s).
+is in use. Exit code is 0 only when all five gates hold (five usable points, every kill
+salvaged whole, the manifest survived every time, worst case under 5 s, and picture at
+every kill point).
+
+The floor is its own, much cheaper run:
+
+```bash
+node scripts/crash-bound.mjs --killAt=2000,3000,4000,5000,7000,8000,10000,20000
+```
+
+~18 minutes. Add `--url='https://inout-kappa.vercel.app/?crashfloor=0'` for the
+positive control — the same eight cells with both fixes off, which is the second table
+above.
 
 Useful flags: `--screen=2560x1440` for a heavier source, `--export` to prove the
 salvaged take exports, `--control=<ms>` for the clean-stop reference, `--keep-profile`

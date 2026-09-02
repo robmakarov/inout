@@ -407,14 +407,17 @@ export const blobStore = {
    */
   async size(key: string): Promise<number> {
     const dir = await blobsDir()
-    try {
-      const file = await dir.getFileHandle(assertKey(key))
-      return (await file.getFile()).size
-    } catch {
-      // Missing, unreadable, or locked by a writer that has not finished dying.
-      // None of the three is "empty", but all three are "nothing to keep yet".
-      return 0
-    }
+    // ABSENT AND UNREADABLE ARE NOT THE SAME ANSWER, and the caller acts on the
+    // difference: 0 means there is no such file, which is a channel that wrote
+    // nothing; a THROW means the entry is there and would not open — locked by a
+    // writer that has not finished dying, most likely — and nothing may be
+    // deleted on the strength of a question the disk refused to answer.
+    const file = await dir.getFileHandle(assertKey(key)).catch((err: unknown) => {
+      if (isNotFound(err)) return null
+      throw err
+    })
+    if (!file) return 0
+    return (await file.getFile()).size
   },
 
   /** Flat listing of stored keys (scratch sweeps, orphan scans). */

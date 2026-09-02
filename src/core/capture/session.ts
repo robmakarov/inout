@@ -2801,13 +2801,19 @@ class Session implements CaptureSession {
         kept.push(ch)
         continue
       }
-      const diskBytes = await blobStore.size(ch.blobKey).catch(() => 0)
+      // A REFUSAL AND A ZERO ARE KEPT APART at both steps — see
+      // DiskTruth.unreadable. Zero is "there is no such file"; a throw is "the
+      // disk would not answer", and nothing is deleted on the second.
+      let diskBytes = 0
+      let unreadable = false
+      try {
+        diskBytes = await blobStore.size(ch.blobKey)
+      } catch {
+        unreadable = true
+      }
       // The probe is only ever run against bytes that exist, and it is bounded:
       // a truncated fragmented MP4 is exactly the file a reader can get lost in.
-      // A REFUSAL AND A ZERO ARE KEPT APART — see DiskTruth.unreadable, which is
-      // the difference between a header and a take the reader gave up on.
       let probedMs = 0
-      let unreadable = false
       if (diskBytes > 0) {
         try {
           probedMs = await withTimeout(

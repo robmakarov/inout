@@ -24,18 +24,19 @@
 export interface DiskTruth {
   /** Bytes the stop REPLY claimed. Zero when the reply never came. */
   replyBytes: number
-  /** Bytes actually on the platter under this channel's key. */
+  /** Bytes actually on the platter under this channel's key. Zero means the
+   *  file is not there at all — see `unreadable` for "there but unanswerable". */
   diskBytes: number
   /** Length demuxed from those bytes. Zero when the file holds no media. */
   probedMs: number
   /**
-   * The demux REFUSED — it threw, or it ran past its deadline. Different from
-   * a zero length, and the difference decides the channel: a file that reads
-   * as empty IS empty (a 28-byte `ftyp` and nothing else is what a channel
-   * that never delivered a frame writes), while one that cannot be read at all
-   * may be megabytes of real take that a truncated last fragment confused the
-   * reader about. The first is removed; the second is never deleted on the
-   * word of a reader that gave up.
+   * THE DISK REFUSED TO ANSWER — the size read threw, or the demux threw, or
+   * the demux ran past its deadline. Different from a zero, and the difference
+   * decides the channel: a file that reads as empty IS empty (a 28-byte `ftyp`
+   * and nothing else is what a channel that never delivered a frame writes),
+   * while one that cannot be read at all may be megabytes of real take behind a
+   * lock or a truncated last fragment. The first is removed; the second is
+   * never deleted on the strength of a question nothing answered.
    */
   unreadable?: boolean
   /** Length the channel already knew — a reply, or a pre-stop wall-clock stamp. */
@@ -61,6 +62,17 @@ export function keepChannel(t: DiskTruth): KeepVerdict {
       source: 'reply',
     }
   }
+  if (t.unreadable && t.probedMs <= 0) {
+    // Bytes we cannot read are still bytes. Keep the channel at the best length
+    // anyone knows, and above all do not remove the file.
+    const fallback = t.knownMs && t.knownMs > 0 ? t.knownMs : t.wallClockMs
+    return {
+      keep: true,
+      bytes: t.diskBytes,
+      durationMs: Math.max(0, fallback),
+      source: 'wall clock',
+    }
+  }
   if (t.diskBytes > 0) {
     // THE PROBE OUTRANKS THE CLOCK, and the difference is not cosmetic: a stop
     // that timed out may have left its last seconds unflushed, so the wall
@@ -68,15 +80,6 @@ export function keepChannel(t: DiskTruth): KeepVerdict {
     // channel against this one. Demux first; fall back only when it REFUSED.
     if (t.probedMs > 0) {
       return { keep: true, bytes: t.diskBytes, durationMs: t.probedMs, source: 'demuxed' }
-    }
-    if (t.unreadable) {
-      const fallback = t.knownMs && t.knownMs > 0 ? t.knownMs : t.wallClockMs
-      return {
-        keep: true,
-        bytes: t.diskBytes,
-        durationMs: Math.max(0, fallback),
-        source: 'wall clock',
-      }
     }
   }
   // Nothing on disk, or a file the reader got through and found empty. Both are
