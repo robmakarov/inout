@@ -10,8 +10,8 @@ rewrite or delete the stale line; never append a log — git history is the arch
 Read first: `.ai/STATE` (what is true now), `.ai/ARCH` (how it is built), `.ai/TASKS` (roadmap, READY
 map, task specs, operating rules — evidence gates are mandatory). `BACKLOG.md` = bugs and ideas
 (Robert dumps to Inbox; whoever picks one up triages it; done items are deleted on sight).
-`docs/*.md` = agent playbooks (one per instrument); `docs/FLAGS.md` = every switch and its default —
-keep it current when a default moves.
+`docs/*.md` = agent playbooks, one per instrument, listed in `docs/INDEX.md`; `docs/FLAGS.md` = every
+switch and its default — keep it current when a default moves.
 
 Talking to Robert: he wants answers and a recommendation, not a menu. When something needs his call,
 ask through the AskUserQuestion UI (2-4 clickable options, recommended first), never a prose list of
