@@ -964,6 +964,11 @@ GATE 1 — AN EDIT BINDS THE ONGOING JOB. Local build, real app, `?synthetic=1&q
   POST-cut edit's kept span [0, 19.025 s] of a 38.388 s take. The deleted span is not in the file.
   An export after the cut cannot join the pre-cut job: that job was aborted at 25 % and its key is
   gone (pinned by test).
+VERIFIED ON PROD after the merge (1e9d593, verify-deploy OK, service worker busted first):
+  a 33.0 s max+camera take at 3024x1964 — "pre-render started AT STOP for a take whose export must
+  render — 33.0s, 3024x1964 (F16b)" → "pre-render ready after 23.4s — 2.4 MB waiting before it was
+  asked for" → the export press: "export served a render that was already made (F16)". The take
+  graded GREEN on its own report card.
 GATE 2 — THE JOIN. A 16.7 s max+camera take: "pre-render started AT STOP … 16.7s, 3024x1962" →
   "pre-render ready after 13.2s — 1.4 MB waiting before it was asked for" → "export served a render
   that was already made (F16)", export_complete **durationMs 14**, 1,514,099 bytes.
