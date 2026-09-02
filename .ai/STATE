@@ -744,20 +744,25 @@ works e2e (verified): capture 4ch (screen/camera/mic/tab-audio) → edit → exp
   which is what ONE re-encode of the same frame costs by itself. So the painters cost 2.8 dB and a
   doubling of visibly-wrong pixels, not max 156. And a TRIM does not reach the render at all: smart
   cut copies the composite's packets, so a trimmed export is BIT-IDENTICAL to the untrimmed one.
-- THE TWO PACKET-COPY EXPORTS PUT THE PICTURE LATE AGAINST THEIR OWN SOUND, ON MOST TAKES (B8's
-  diagnosis, 2026-09-01; the fix is B9 and it is ROBERT-GATED). `session.ts` rebases the composite at
-  stop with `Math.max(0, composite.startOffsetMs - minOffset)`. The composite's origin is whatever
-  reached the compositor worker first — the MIX — while a raw video channel's is its own first FRAME,
-  waiting on a VideoEncoder to configure, so the composite legitimately starts EARLIER: 64-198 ms on
-  five of seven measured takes. The clamp discards that, and instant.ts and smartCut.ts then place
-  the copied packets that late while mixing audio from the raw channels on the recording timeline.
-  Measured as -2.25 to -6 frames of PiP displacement against the render, tracking the discarded ms
-  take by take; the composite file corroborates (audio track starts 0 ms, video 133-300 ms). THE
-  RENDER IS THE ONE THAT IS RIGHT. The v2 oracle would band this and does not see it: 8 cold runs
-  read compOff 52-121 ms, positive every time — its rig has never built a composite that starts
-  before its earliest channel. Rig: `npm run exp -- x15c`, whose alignment gate is now a per-instant
-  census with the cause gated separately in ms (the old single-sample `alignFrames` is what produced
-  B8's phantom -0.5 s and what made that gate flip run to run).
+- THE COMPOSITE'S ORIGIN IS SIGNED, AND BOTH PACKET-COPY EXPORTS PLACE FOR EITHER SIGN (B9,
+  2026-09-02). The composite's origin is whatever reached the compositor worker first — the MIX —
+  while a raw video channel's is its own first FRAME, waiting on a VideoEncoder to configure, so the
+  composite legitimately starts EARLIER than every channel: 64-198 ms on five of seven takes B8
+  measured, 51-134 ms on the three of seventeen that led here. `session.ts` carries that lead
+  (`rebasedCompositeOffsetMs`, compose/compositeTime.ts, which owns the reason); instant.ts shifts
+  either way with the shift floored at the copied file's own first KEY packet, so nothing is asked to
+  land before output zero; smart cut converts rather than shifts and needed no change. A CompositeRecording
+  with a NEGATIVE startOffsetMs is normal — it is a take whose composite leads. Takes recorded before
+  this carry >= 0 or nothing and place exactly as they always did.
+  UNTIL B9 THIS WAS CLAMPED AT 0 and the copied picture landed that much late against audio mixed from
+  the raw channels: measured -4.5 frames on a 133.8 ms lead, against -1.00 for the same rig with the
+  lead carried. THE RENDER WAS ALWAYS THE ONE THAT IS RIGHT and still is.
+  THE GATE GAP THAT REMAINS: the v2 oracle would band this and cannot see it — compOff reads positive
+  in every run ever recorded from its rig (+52 to +354 ms), which has never built a composite that
+  starts before its earliest channel. The only regression gate is `npm run exp -- x15c`, whose
+  alignment gate is a per-instant census with the cause gated separately in ms, and whose leading take
+  is a lottery: roughly one run in six on a loaded machine. Building the take in the oracle rig is
+  owed and is the G lane's.
 - exports STREAM TO DISK (O1): the muxer holds 4 MB regardless of length — a 30-min export peaks at
   39 MB live memory instead of 294 MB. ExportResult.blob is a disk-backed OPFS file.
 - NO DURATION CAP (Robert 2026-08-23). MAX_RECORDING_MS is `number | null` and is null; a take runs until

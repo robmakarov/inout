@@ -448,13 +448,20 @@ it is built combine-ready:
           zero, so a composite whose clock starts before the earliest channel (64-198 ms, FIVE of
           seven measured takes) has that offset discarded — and instant AND smart cut then write the
           copied picture that much LATE against audio they mix from the raw channels. Handoff under
-          the task; the fix is B9 and it is ROBERT-GATED because it moves the default export path.
- 11. B9   composite-origin-clamp          [medium · APPROVED 2026-09-02, READY · spec below] the fix
-          for what B8 found — the copied picture stops being 64-198 ms late against the sound.
-          Needs `oracle:long` (it touches both packet-copy paths) and it has no regression
-          gate but x15c until the oracle's rig can build the take at all — 8 cold runs never did.
-          After it merges, the SAME session should take the smart-cut negative timestamp at 120 s
-          (BACKLOG P1) — same copy-path territory, same oracle:long, one owner.
+          the task; the fix is B9, DONE 2026-09-02.
+ 11. B9   composite-origin-clamp          DONE 2026-09-02. The stop path carries the composite's
+          origin with its sign; instant.ts places for either sign, floored at the copied file's own
+          first key packet; smart cut needed no change (it converted rather than shifted, and was
+          only starved). Measured on this machine both ways: with the clamp a 133.8 ms lead was
+          discarded and the picture landed -4.5 frames against the render; without it, leads of
+          70.9 and 51.2 ms are carried to the millisecond and both takes read -1.00 frames, spread
+          0 — the same floor a take that never leads reads. Non-leading takes unmoved. oracle v2 and
+          v1 green; `oracle:long` instant maxAbs 83.2 / trimmed 82.1, inside the band and below all
+          five recorded baseline runs. STILL OWED, and it is the G lane's: the oracle rig cannot
+          build a leading composite (compOff +94/+354/+144 ms here, positive as always), so x15c is
+          this fix's only regression gate and it reaches the case about one run in six.
+          NEXT, and it is the same territory: the smart-cut negative timestamp at 120 s (BACKLOG
+          P1) — same copy paths, same oracle:long, one owner.
  12. H2b  the two crash floors            [light-medium · APPROVED 2026-09-02, READY · additive,
           capability-gated per the frozen rule · evidence in BACKLOG P1 2026-09-01] (a) the pending
           manifest goes through a writer with a REAL COMMIT (durable positioned writer or
@@ -485,7 +492,7 @@ STILL OWED ROBERT: B2 listen · O6 4K re-verify · `?singlegen=capture` · O10a 
 X5 text question · B7 video half (one command) · H4's four sentences (a channel that died or never
 delivered now says so live and in the editor; the words are proposals, the paths are measured) ·
 the A1 long take · E1's watched up-step · M1's word. (B9's yes and the crash-floor yeses LANDED
-2026-09-02 — B9/H2b/H5 are READY above.)
+2026-09-02; B9 is DONE, the crash-floor tasks are above.)
 
 ## A1 tab-audio-starvation — the tap dies under max load and the take keeps going
    [heavy · P0 · capture integrity · authored 2026-09-01 from Robert's 50-min max take]
@@ -3042,6 +3049,150 @@ ALSO OWED, and it is the G lane's: THE ORACLE CANNOT PRODUCE THIS TAKE. 8 cold r
 52-121 ms, positive every time; oracle/rig.ts:781 carries a copy of the same clamp and has never
 built a composite that starts before its earliest channel. Until its rig can, this fix has no
 regression gate but x15c.
+
+── B9 HANDOFF (session of 2026-09-02) ─────────────────────────────────────
+THE CLAMP IS GONE, THE OFFSET IS CARRIED WITH ITS SIGN, AND THE COPIED PICTURE
+LANDS WHERE THE RENDER PUTS IT. Measured on this machine, both sides.
+
+1 · WHAT CHANGED, IN THREE PLACES.
+  a. `session.ts` stop: `Math.max(0, composite.startOffsetMs - minOffset)` →
+     `rebasedCompositeOffsetMs(...)`, which subtracts and does not clamp. A take
+     whose composite leads now says so, in the file and in one console line
+     (`[capture] B9 composite leads the earliest channel by 71ms — carried, not
+     clamped`).
+  b. `compose/compositeTime.ts` — already "the one place that knows what a
+     composite timestamp means" — gains the two pure functions and owns the
+     reason in prose: `rebasedCompositeOffsetMs` (the stop path's arithmetic)
+     and `copyPlacement` (how far a copied file may move, and what stops it).
+     Both unit-tested; the arithmetic is the whole fix, so it is the part that
+     gets tests.
+  c. `compose/instant.ts` places for EITHER sign. `compOffsetSec > 0` became
+     `!== 0`, and the shift is floored at the copied file's own first KEY
+     packet so nothing is ever asked to land before output zero. Packets that
+     would still land negative (only possible for a file whose samples precede
+     its own first sync sample — undecodable where they are) are dropped and
+     counted, which leaves that key packet first, which is what the muxed track
+     has to open with. On the takes measured the floor never bites: the
+     composite's video track starts 100-167 ms into a file that leads by
+     51-134 ms, so the whole declared lead is recovered and NOTHING is dropped.
+  SMART CUT NEEDED NO CHANGE, and that is a finding rather than luck: it never
+  shifted packets, it CONVERTS through `recordingToCompositeSec` and reads
+  further into the composite, so a negative offset was already handled — it was
+  starved by the clamp, not wrong about the sign. Its head re-encode already
+  guarantees the keyframe the instant path had to floor for.
+  THE ORACLE'S TWO COPIES of the same clamp (`oracle/rig.ts`,
+  `oracle/fidelityRun.ts`) now call the shared function. Inert there — that rig
+  has never built a leading composite — but the arithmetic is no longer
+  duplicated in three places, which is how this survived.
+
+2 · THE SAME MACHINE, BOTH SIDES, ONE RIG (`npm run exp -- x15c`, instant ↔
+render, mean over localised instants). BEFORE = the clamp put back for the
+measurement and taken out again; nothing else differs.
+
+  BEFORE (clamp in), 9 takes:
+     true offset   declared   discarded   predicts   measured   comp video starts
+       +15.6         16          0.4         0        -1.00           0 ms
+       +52.4         52         -0.4         0        -1.00           0 ms
+       +30.4         30         -0.4         0        -1.00           0 ms
+       +61.3         61         -0.3         0        -0.75           0 ms
+       +35.0         35          0.0         0        -2.25           0 ms
+       +13.2         13         -0.2         0        -2.00           0 ms
+       +18.2         18         -0.2         0        -0.50           0 ms
+      -133.8          0        133.8        -4        -4.50         166.7 ms   ← LEADS
+       +26.2         26         -0.2         0        -0.75           0 ms
+
+  AFTER (clamp out), 8 takes (one more discarded, see 5):
+       +45.9         46          0.1         0        -1.75           0 ms
+       +57.8         58          0.2         0        -0.75           0 ms
+       +52.8         53          0.2         0        -2.25           0 ms
+       -70.9        -71         -0.1         0        -1.00         100.0 ms   ← LEADS
+        +8.7          9          0.3         0        -1.25           0 ms
+       +13.4         13         -0.4         0        -0.75           0 ms
+       -51.2        -51          0.2         0        -1.00         100.0 ms   ← LEADS
+       +20.0         20          0.0         0         0.00           0 ms
+
+  THE ROW THAT IS THE TASK: with the clamp, a 133.8 ms lead was discarded whole,
+  the take carried 0, and the copied picture landed -4.5 frames against the
+  render — B8's table predicted -4 and the residual is its quantisation floor.
+  Without the clamp, leads of 70.9 and 51.2 ms are carried to the millisecond
+  (-71 and -51 stored) and BOTH read -1.00 frames, spread 0, all four instants
+  localised at 41.4-43.1 dB — the same floor the takes that never led read. The
+  displacement is gone, not reduced.
+  AND THE NON-LEADING TAKES DID NOT MOVE: -0.50 to -2.25 before, -0.75 to -2.25
+  after, straddling the committed -1.00/-1.25 in both populations. Those are the
+  same code path in both builds (see 4), and the two spreads say the rig's own
+  noise on a loaded machine is ±1 frame, which is worth knowing before anyone
+  reads a single x15c row as a verdict.
+
+3 · GATES, AS RUN.
+  · `npm run exp -- x15c` |mean| <= 2 frames AND clampedAwayMs <= 1 ms on a take
+    where the composite leads — MET TWICE. -1.00 frames / -0.1 ms discarded on
+    the -70.9 ms take, -1.00 / +0.2 ms on the -51.2 ms take. The rig's own cause
+    gate ("the composite is placed where its clock actually starts") PASSES on
+    both, and its line now reads `true offset -70.9 ms, take carries -71 ms`.
+  · the same rig on a take where it does not lead is unchanged — MET, table
+    above, and the placement predicate is provably identical over the whole
+    domain those takes can occupy (4).
+  · `npm run oracle` v2 — PASS. sync 48.3/61.7 ms · instant maxAbs 67.674 ·
+    trimmed maxAbs 67.993 · compOff +94 ms · inst=instant, trim=smartcut.
+  · `npm run oracle -- --engine=v1` — PASS. sync 39.8/53.2 ms · instant maxAbs
+    63.644 · trimmed 63.833 · compOff +354 ms.
+  · `npm run oracle:long` (MANDATORY, G4) — PASS, 183 s. sync 42.5/60.5 ms ·
+    **instant maxAbs 83.162 · trimmed maxAbs 82.148** · compOff +144 ms ·
+    jump 0.01 · render[n=121 sd=9.7] inst[n=121 sd=10.6] trim[n=91 sd=10.7].
+    AGAINST THE RECORDED BASELINE, which is the only way to read it: the
+    committed five runs read instant maxAbs 94.2 / 94.2 / 95.3 / 100.5 with one
+    inside the 90 ms band. This run reads 83.2, inside the band and below all
+    five. THE FLIP DID NOT MOVE THEM UP, which is what the rule catches. It is
+    ONE run against five and it does not prove the length defect shrank — and
+    this cell's compOff was +144 ms, so it never exercised the new path at all.
+  · a take recorded BEFORE the fix still exports with exactly the packets it
+    gets today — MET, and by construction rather than by hope (4).
+  · Robert's yes on the record — APPROVED 2026-09-02, in the READY map and in
+    DECISIONS.
+  · `npm run typecheck && npm test` — 86 files, 979 tests, green.
+
+4 · WHY AN OLD TAKE CANNOT BE HARMED, WHICH IS THE GATE THAT CANNOT BE MEASURED
+(the rig's takes are ephemeral and no take recorded before today survives in any
+profile an agent can reach). The clamp GUARANTEED that every offset ever stored
+is >= 0, and absent reads 0. Over exactly that domain the new placement
+predicate `shift !== 0` and the old `shift > 0` are the same predicate at the
+same shift — pinned by a test that sweeps 0, 0.4, 1, 12, 52, 99, 121, 180,
+244.8 and 5000 ms and asserts both the shift and the predicate. At shift 0 the
+loop hands the muxer the SAME PACKET OBJECT it always did, not a copy carrying
+the same numbers. A negative offset cannot appear on an old take because
+nothing could store one.
+
+5 · ONE RUN DISCARDED, AND WHY IT IS NOT A FINDING: on the seventh after-run
+neither the screen nor the camera ever delivered — the take is mic-only, the
+composite has no picture, and the rig said so rather than scoring it (`clocks`
+NOT MEASURED, alignment 8 dB). Machine, not product: load average sat between 4
+and 8 for this whole session with another agent's build and test runs in the
+same repo. THE SAME LOAD IS WHY THE LEADING TAKE IS A LOTTERY HERE. It needs the
+MIX to reach the compositor worker before either video channel's first frame,
+and the mic on this machine took 1.2-3.0 s to deliver in most runs; 3 leads in
+17 takes today against B8's 5 in 7. Nothing was forced: `?slow=` is DEAD CODE
+(`parseSlowChannels` has no caller outside its own test — filed to BACKLOG, not
+fixed here), so the leads are the real distribution, just a thinner slice of it.
+
+6 · THE ROW THIS DOES NOT CLOSE, unchanged from B8 and still the G lane's: THE
+ORACLE STILL CANNOT PRODUCE THIS TAKE. compOff read +94 / +354 / +144 ms across
+the three cells run here, positive every time, exactly as it has in every run
+ever recorded from that rig. B9 therefore ships with x15c as its only regression
+gate, and x15c reaches the defect roughly one run in six. The oracle rig's own
+copy of the arithmetic is now the shared function, so the day its rig can build
+a leading composite the gate is already correct — but building one is still owed.
+
+7 · THE SIBLING, CHECKED BEFORE CLOSING AS THE TASK REQUIRED. The composite's
+origin sits before the mic channel's own first-sample anchor — two anchorings of
+the SAME microphone — and this fix does not re-derive either. It carries the
+number the take already had. The leading takes here read 51.2 and 70.9 ms of
+lead against B8's 64-198, and the composite's video track starts 100-167 ms into
+those files with silence-only before it, which is the same signature B8 recorded
+(133-300 ms). Whether the mix's arrival stamp or measuredAudio's first-sample
+anchor is the honest one about the take is still B7's question and is still
+open; the defect this task removes is the DISCARD, which was wrong under either
+answer.
 
 
 NEW TASKS (authored 2026-08-26 from Robert's answers; all operating rules apply):

@@ -4,6 +4,7 @@ import { aspectOf, frameForAspect, sourceFrameEnabled, sourceResEnabled } from '
 import { DEFAULT_FRAME_RATE, normalizeRate, sourceRateEnabled } from '@core/rate'
 import { loadQualityStep } from '@core/qualityStep'
 import { noteTakeActive } from '@core/backgroundWork'
+import { rebasedCompositeOffsetMs } from '@core/compose/compositeTime'
 import { singleGenCaptureEnabled } from '@core/singleGen'
 import { preemptiveRefusalAllowed, rateLadderAllowed } from './captureQuality'
 import { AUDIO_BITS, videoBitsFor } from './captureBitrate'
@@ -3047,13 +3048,18 @@ class Session implements CaptureSession {
     if (this.compositeResult) {
       const composite = this.compositeResult
       // The composite sits on the SAME timeline as the channels, so it takes
-      // the same rebase (P0-instant-sync). Clamped at 0 because a composite
-      // that reads a few ms EARLIER than the earliest channel is measurement
-      // noise between two first-arrival stamps, not content before the take.
-      if (composite.startOffsetMs !== undefined && Number.isFinite(minOffset) && minOffset !== 0) {
-        composite.startOffsetMs = Math.max(0, composite.startOffsetMs - minOffset)
-      } else if (composite.startOffsetMs !== undefined) {
-        composite.startOffsetMs = Math.max(0, composite.startOffsetMs)
+      // the same rebase (P0-instant-sync) — SIGNED, since B9. The clamp that
+      // used to sit here called a composite reading earlier than the earliest
+      // channel "measurement noise"; it is a real lead of 64-198 ms on most
+      // takes, and discarding it wrote the copied picture that much late.
+      // `rebasedCompositeOffsetMs` (compose/compositeTime.ts) owns the reason.
+      if (composite.startOffsetMs !== undefined) {
+        composite.startOffsetMs = rebasedCompositeOffsetMs(composite.startOffsetMs, minOffset)
+        if (composite.startOffsetMs < 0) {
+          console.info(
+            `[capture] B9 composite leads the earliest channel by ${-composite.startOffsetMs}ms — carried, not clamped`,
+          )
+        }
       }
       recording.composite = composite
     }

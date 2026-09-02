@@ -158,6 +158,14 @@ export interface CompositeRecording {
    * ABSENT means 0, which is the old (wrong) assumption preserved on takes
    * recorded before this field existed: nothing can recover their origin now,
    * and guessing would be worse than the behaviour they were exported with.
+   *
+   * SIGNED (B9, 2026-09-02). NEGATIVE means the composite's clock started
+   * BEFORE the earliest raw channel delivered — routine, not noise: the
+   * composite's origin is whatever reached its worker first (the mix), a raw
+   * video channel's is its own first frame, and the second waits on a
+   * VideoEncoder configuring. Measured 64-198 ms of lead on five of seven
+   * takes. The stop path used to clamp it at 0 and both packet-copy paths then
+   * wrote the copied picture that much late against their own sound.
    */
   startOffsetMs?: number
   /**

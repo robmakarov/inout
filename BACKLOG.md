@@ -7,6 +7,13 @@ technical defects by severity. Done items get deleted, not archived.
 ## Inbox
 
 - (dump here)
+- **[P2 · technical] `?slow=` is dead code, and both CLAUDE.md and docs/FLAGS.md sell it as working.**
+  Found 2026-09-02 while B9 needed to force a cold channel: `parseSlowChannels` (src/core/capture/synthetic.ts)
+  has NO caller outside its own test — `?synthetic=1&slow=screen:600,camera:600` changed nothing,
+  measured (the channels' own anchors read 111 ms either way). docs/FLAGS.md line 55 and CLAUDE.md's
+  "add `&slow=mic:6000` to reproduce a stuck arm without hardware" both describe a knob that does
+  nothing. Either wire it back into the synthetic acquire path or delete it from the code AND both
+  docs; a flag nobody can reach is worse than no flag, because it costs the session that trusts it.
 
 ## Roadmap — asked for, on the UI, not wired
 

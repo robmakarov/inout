@@ -54,11 +54,15 @@ import {
 } from './audio'
 import { AUDIO_BITRATE, AUDIO_CHANNEL_COUNT, AUDIO_SAMPLE_RATE, VIDEO_BITRATE } from './codecs'
 import { chooseCopySource, type CopySource } from './copySource'
-import { compositeOffsetMs } from './compositeTime'
+import { compositeOffsetMs, copyPlacement } from './compositeTime'
 import { BitsAudit, formatBits } from './bits'
 import { buildCertification, certificationComment } from './certify'
 import { createExportScratch, type ExportScratch } from './scratch'
 import { exportFileName } from './fileName'
+
+/** B9: float slack when testing a placed packet against output zero. One
+ *  microsecond — finer than any timestamp this container can hold. */
+const PLACE_EPS_SEC = 1e-6
 
 /**
  * A channel's active window on the output timeline. Kept local (mirrors
@@ -169,15 +173,45 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
 
     // ---- audio: certified mixers over the (default) edit window ----
     // P0-instant-sync: the audio is mixed from the RAW channels, whose clock is
-    // the recording timeline, and the copied file's clock starts LATER than
-    // that — a composite's because it begins when its encoder does, a raw
-    // channel's because it begins at its own first frame. Both declare the
+    // the recording timeline, and the copied file's clock does not start where
+    // that one does — a composite's begins when the first thing reached its
+    // worker, a raw channel's at its own first frame. Both declare the
     // difference the same way (copySource.startOffsetMs). The output keeps the
     // recording's timeline — same convention as the render, which is the file
     // this one has to agree with — so the copied video is placed at its true
     // instant and the output covers the take from 0.
-    const compOffsetMs = compositeOffsetMs({ startOffsetMs: source.startOffsetMs })
-    const compOffsetSec = compOffsetMs / 1000
+    //
+    // B9 — THE OFFSET IS SIGNED, AND THE SHIFT IS FLOORED BY THE FILE ITSELF.
+    // A composite whose clock started before the earliest raw channel declares
+    // a NEGATIVE offset: its picture belongs EARLIER than where it sits in its
+    // own file, and the old `> 0` placement left every one of those takes with
+    // the picture 64-198 ms late against its own sound. The one thing that
+    // cannot be represented is a packet before output zero, so the shift is
+    // floored at the copied file's first KEY packet — which is also the first
+    // packet of a well-formed track, so in practice nothing is dropped and the
+    // whole declared lead is recovered (measured: the composite's video track
+    // starts 133-300 ms into a file that leads by 64-198 ms). Whatever a
+    // pathological file would push past that floor is given up here and said
+    // out loud, rather than silently absorbed the way the clamp absorbed it.
+    const declaredOffsetMs = compositeOffsetMs({ startOffsetMs: source.startOffsetMs })
+    const placement =
+      declaredOffsetMs < 0
+        ? copyPlacement(
+            declaredOffsetMs,
+            (await packetSink.getFirstKeyPacket({ metadataOnly: true }))?.timestamp ?? null,
+          )
+        : copyPlacement(declaredOffsetMs, null)
+    const compOffsetSec = placement.shiftSec
+    if (declaredOffsetMs < 0) {
+      console.info(
+        `[export] instant: ${source.origin} leads the take by ${-declaredOffsetMs}ms — placing its picture ` +
+          `${Math.round(-compOffsetSec * 1000)}ms earlier` +
+          (placement.unrepresentableMs > 0
+            ? ` (${placement.unrepresentableMs}ms unrepresentable, floored at the first key packet)`
+            : ''),
+      )
+    }
+    const compOffsetMs = compOffsetSec * 1000
     const outDurationMs = source.durationMs + compOffsetMs
     const durationSec = outDurationMs / 1000
     const totalAudioFrames = Math.round(durationSec * AUDIO_SAMPLE_RATE)
@@ -286,17 +320,29 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
     // Copy every video packet (decode order). The first add carries the decoder
     // config (avcC) so the muxer can describe the copied H.264 track.
     let first = true
+    let droppedBeforeZero = 0
     for await (const packet of packetSink.packets()) {
       throwIfAborted()
       // Bytes untouched — only the presentation time moves, and only when the
       // source declared an origin (old takes keep the exact packets they
-      // always got, including their offset; nothing can recover their origin).
+      // always got, including their offset; nothing can recover their origin —
+      // and a take that declares 0 keeps the very packet object it always got).
+      const placedSec = packet.timestamp + compOffsetSec
+      // B9: nothing may land before output zero. The shift was floored at the
+      // first key packet, so the only packets this can reach are ones that sit
+      // BEFORE their own track's first sync sample — undecodable where they
+      // are, and dropping them leaves that key packet first, which is what the
+      // muxed track has to open with.
+      if (placedSec < -PLACE_EPS_SEC) {
+        droppedBeforeZero++
+        continue
+      }
       const placed =
-        compOffsetSec > 0
+        compOffsetSec !== 0
           ? new EncodedPacket(
               packet.data,
               packet.type,
-              packet.timestamp + compOffsetSec,
+              Math.max(0, placedSec),
               packet.duration,
               packet.sequenceNumber,
             )
@@ -304,6 +350,11 @@ export async function exportInstant(opts: InstantExportOptions): Promise<ExportR
       bits.video(placed.byteLength, placed.type)
       await videoSource.add(placed, first && decoderConfig ? { decoderConfig } : undefined)
       first = false
+    }
+    if (droppedBeforeZero > 0) {
+      console.info(
+        `[export] instant: dropped ${droppedBeforeZero} packet(s) that fell before the take's t=0`,
+      )
     }
     videoSource.close()
     report('rendering', 0.5)

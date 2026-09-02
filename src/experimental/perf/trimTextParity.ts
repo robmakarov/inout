@@ -414,9 +414,12 @@ export interface TakeClocks {
   trueCompositeOffsetMs: number | null
   /** What the take actually carries — Math.max(0, true). */
   declaredCompositeOffsetMs: number | null
-  /** true − declared. Non-zero = the clamp fired and this much was discarded. */
+  /** declared − true. Non-zero = the take carries an origin that is not the
+   *  one it had, and this much of it was discarded. Zero since B9 removed the
+   *  clamp; a non-zero reading is now a NEW defect, not the known one. */
   clampedAwayMs: number | null
-  /** The displacement that discard puts on the copied picture, in frames. */
+  /** The displacement that discard puts on the copied picture, in frames.
+   *  Zero when nothing was discarded — which is the point of B9. */
   predictedAlignFrames: number | null
   channels: { kind: string; startOffsetMs: number; rawAnchorMs: number | null }[]
   /**
@@ -490,7 +493,12 @@ function readClocks(
     trueCompositeOffsetMs: ok ? Math.round(trueOffset * 10) / 10 : null,
     declaredCompositeOffsetMs: typeof declared === 'number' ? declared : null,
     clampedAwayMs: ok && typeof declared === 'number' ? Math.round((declared - trueOffset) * 10) / 10 : null,
-    predictedAlignFrames: ok ? Math.round(Math.min(0, trueOffset) * (FPS / 1000)) : null,
+    // B9: the picture is late by exactly what the take failed to carry, so the
+    // prediction is the DISCARD, not the offset. Identical to the old
+    // `min(0, trueOffset)` while the clamp existed and declared 0; with the
+    // clamp gone it correctly predicts nothing.
+    predictedAlignFrames:
+      ok && typeof declared === 'number' ? -Math.round((declared - trueOffset) * (FPS / 1000)) : null,
     channels,
     compositeAudioStartsMs: tracks.audioMs,
     compositeVideoStartsMs: tracks.videoMs,
@@ -1185,7 +1193,7 @@ export async function runTrimTextParity(
     detail:
       clocks.trueCompositeOffsetMs === null
         ? 'NOT MEASURED — the capture log did not carry the composite origin or the B7 anchors, so nothing here was checked'
-        : `composite clock starts +${clocks.compositeOriginMs} ms · earliest channel +${clocks.minChannelAnchorMs} ms → true offset ${clocks.trueCompositeOffsetMs} ms, take carries ${clocks.declaredCompositeOffsetMs} ms (${clocks.clampedAwayMs} ms discarded by the Math.max(0, …) clamp in session.ts) → predicts ${clocks.predictedAlignFrames} frames; measured ${alignment.find((a) => a.pair === 'instant ↔ render')?.meanFrames ?? 'n/a'}. THE FILE ITSELF, independent of the log: composite audio starts ${clocks.compositeAudioStartsMs} ms, video ${clocks.compositeVideoStartsMs} ms — a lead of ${clocks.compositeAudioStartsMs !== null && clocks.compositeVideoStartsMs !== null ? Math.round((clocks.compositeVideoStartsMs - clocks.compositeAudioStartsMs) * 10) / 10 : 'n/a'} ms with no picture in it`,
+        : `composite clock starts +${clocks.compositeOriginMs} ms · earliest channel +${clocks.minChannelAnchorMs} ms → true offset ${clocks.trueCompositeOffsetMs} ms, take carries ${clocks.declaredCompositeOffsetMs} ms (${clocks.clampedAwayMs} ms discarded — B9 removed the Math.max(0, …) clamp in session.ts, so anything but 0 here is new) → predicts ${clocks.predictedAlignFrames} frames; measured ${alignment.find((a) => a.pair === 'instant ↔ render')?.meanFrames ?? 'n/a'}. THE FILE ITSELF, independent of the log: composite audio starts ${clocks.compositeAudioStartsMs} ms, video ${clocks.compositeVideoStartsMs} ms — a lead of ${clocks.compositeAudioStartsMs !== null && clocks.compositeVideoStartsMs !== null ? Math.round((clocks.compositeVideoStartsMs - clocks.compositeAudioStartsMs) * 10) / 10 : 'n/a'} ms with no picture in it`,
   }
   gates['BACKLOG P1: instant and render draw the SAME text (X5’s parity bar, ≥60 dB)'] = {
     pass: (instRender?.psnrDb ?? 0) >= PARITY_DB,

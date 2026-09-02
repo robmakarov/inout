@@ -45,6 +45,7 @@ import {
 } from '@core/capture/liveComposite'
 import { canLiveCompositeV2, startLiveCompositeV2 } from '@core/capture/liveCompositeV2'
 import { preferredCompositeEngine } from '@core/capture/engine'
+import { rebasedCompositeOffsetMs } from '@core/compose/compositeTime'
 import { listProductionBlobs } from '../shared/opfs'
 import { encodeBits, FID_BLOCK, FID_BLOCK_COUNT, FID_MARGIN } from './fiducial'
 import { paintLoop } from '../rigPaint'
@@ -807,9 +808,16 @@ export async function recordFiducialSession(durationMs: number, opts?: RecordOpt
     }
     if (composite) {
       // The composite takes the same rebase as the channels — it is on the
-      // same timeline (P0-instant-sync); production does this in session.ts.
+      // same timeline (P0-instant-sync); production does this in session.ts,
+      // and since B9 the rebase is SIGNED there, so it is signed here. This rig
+      // has never once built a composite that starts before its earliest
+      // channel (8 cold runs, compOff +52 to +121 ms), which is exactly why the
+      // clamp survived here undetected — the arithmetic is shared now so the
+      // day it does, the oracle measures what production ships.
       if (composite.startOffsetMs !== undefined && Number.isFinite(minOffset)) {
-        composite.startOffsetMs = Math.max(0, Math.round(composite.startOffsetMs - minOffset))
+        composite.startOffsetMs = Math.round(
+          rebasedCompositeOffsetMs(composite.startOffsetMs, minOffset),
+        )
       }
       recording.composite = composite
     }

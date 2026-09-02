@@ -478,14 +478,18 @@ re-found by a later session instead of fixed. Twelve are now tasks with gates, i
   warning on a long take · "the device never connected" when it was really an OS permission with the
   answer on screen · the constant start-of-take offset · the two export paths disagreeing about
   *when* the camera picture belongs.
-  **That last one turned out to be something worse, and it is waiting on you (B9, 2026-09-01).** The
+  **That last one turned out to be something worse, and it is now fixed (B9, 2026-09-02).** The
   half-second we had filed was the measuring tool, not your video — one bad sample out of four. But
   the tool built to check it found a real one underneath: on most takes the composite's clock starts
-  a fraction of a second before any channel delivers, we throw that fraction away when the take
-  stops, and the *fast* export paths — the unedited one and the trimmed one, i.e. nearly everything
-  you make — then put the picture that much late against its own sound. Measured at 64 to 198 ms on
-  five takes out of seven. The full render is the one that gets it right. The fix looks small, but it
-  moves where every fast export puts its frames, so it is your call before anyone touches it.
+  a fraction of a second before any channel delivers, we threw that fraction away when the take
+  stopped, and the *fast* export paths — the unedited one and the trimmed one, i.e. nearly everything
+  you make — put the picture that much late against its own sound. You said go. We now keep that
+  fraction instead of discarding it. Measured on the same machine both ways: a take whose composite
+  led by 134 ms used to land the picture four and a half frames late; with the fix, takes leading by
+  51 and 71 ms land one frame off, which is the same as a take that never led — that last frame is
+  the measuring floor, not a defect. Takes that never led did not move, and takes you recorded before
+  today export exactly as they did. The full render was always the one that got it right; the fast
+  paths now agree with it.
 - **G1–G4 — the instruments.** These go first when two sessions are free, because a gate that lies
   makes every other verdict cheap talk: the merge gate fails about half its cold runs for reasons
   nobody has measured · a load rig that cannot make its own source move and reads its own starvation

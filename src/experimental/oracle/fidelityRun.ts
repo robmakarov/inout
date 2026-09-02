@@ -43,6 +43,7 @@ import {
 } from '@core/capture/liveComposite'
 import { canLiveCompositeV2, startLiveCompositeV2 } from '@core/capture/liveCompositeV2'
 import { preferredCompositeEngine } from '@core/capture/engine'
+import { rebasedCompositeOffsetMs } from '@core/compose/compositeTime'
 import { defaultEditState } from '@core/timeline'
 import { DEFAULT_EXPORT_SETTINGS } from '@core/types'
 import type { ChannelRecording, CompositeRecording, Recording } from '@core/types'
@@ -443,8 +444,11 @@ async function recordFidelityCompositeTake(durationMs: number): Promise<{
       channels,
     }
     if (composite) {
+      // Signed since B9, same as production's stop path and the sync rig's.
       if (composite.startOffsetMs !== undefined && Number.isFinite(minOffset)) {
-        composite.startOffsetMs = Math.max(0, Math.round(composite.startOffsetMs - minOffset))
+        composite.startOffsetMs = Math.round(
+          rebasedCompositeOffsetMs(composite.startOffsetMs, minOffset),
+        )
       }
       recording.composite = composite
     }
